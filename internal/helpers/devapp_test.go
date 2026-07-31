@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	stderrors "errors"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -648,6 +649,37 @@ func TestDevAppEventSubscribeUsesEventCodes(t *testing.T) {
 				t.Fatal("must not send singular eventCode")
 			}
 		})
+	}
+}
+
+type devAppFailingCountRunner struct {
+	calls int
+	err   error
+}
+
+func (r *devAppFailingCountRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
+	r.calls++
+	return executor.Result{Invocation: invocation}, r.err
+}
+
+func TestCrossPlatformCoverageDevAppEventSubscribeRunnerFailureIsNotRetried(t *testing.T) {
+	wantErr := stderrors.New("event subscription failed")
+	runner := &devAppFailingCountRunner{err: wantErr}
+	root := newDevAppTestRoot(runner)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"dev", "app", "event", "subscribe",
+		"--unified-app-id", "u-1",
+		"--event-codes", "a,b",
+		"--yes",
+	})
+
+	if err := root.Execute(); !stderrors.Is(err, wantErr) {
+		t.Fatalf("Execute() error = %v, want %v", err, wantErr)
+	}
+	if runner.calls != 1 {
+		t.Fatalf("runner calls = %d, want 1", runner.calls)
 	}
 }
 

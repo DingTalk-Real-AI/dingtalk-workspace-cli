@@ -292,6 +292,43 @@ func TestCallToolUsesJSONRPCMethod(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageCallToolDevAppEventSubscribeRetriesAreBounded(t *testing.T) {
+	attempts := 0
+	httpClient := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			attempts++
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Header:     make(http.Header),
+				Body:       http.NoBody,
+				Request:    req,
+			}, nil
+		}),
+	}
+	client := NewClient(httpClient)
+	client.sleep = func(context.Context, time.Duration) error { return nil }
+
+	_, err := client.CallTool(
+		context.Background(),
+		"https://mcp.example.test/dws",
+		"subscribe_dev_app_events",
+		map[string]any{
+			"unifiedAppId": "u-1",
+			"eventCodes":   []string{"event-a", "event-b"},
+		},
+	)
+	if err == nil {
+		t.Fatal("CallTool() succeeded after repeated HTTP 503 responses")
+	}
+	wantAttempts := client.MaxRetries + 1
+	if attempts != wantAttempts {
+		t.Fatalf("HTTP attempts = %d, want configured bound %d", attempts, wantAttempts)
+	}
+	if attempts > 2 {
+		t.Fatalf("dev app event subscribe HTTP attempts = %d, want at most 2 by default", attempts)
+	}
+}
+
 func TestCallToolInjectsAuthHeaders(t *testing.T) {
 	t.Parallel()
 

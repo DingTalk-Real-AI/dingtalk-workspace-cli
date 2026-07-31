@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
@@ -41,20 +42,23 @@ const (
 
 // Error is the structured repository-local error model for the Go rewrite.
 type Error struct {
-	Category       Category
-	Message        string
-	Operation      string
-	ServerKey      string
-	Retryable      bool
-	Reason         string
-	Hint           string
-	Actions        []string
-	AvailableFlags []string
-	Snapshot       string
-	RPCCode        int               `json:"rpc_code,omitempty"`
-	RPCData        json.RawMessage   `json:"rpc_data,omitempty"`
-	ServerDiag     ServerDiagnostics `json:"-"`
-	Cause          error             `json:"-"`
+	Category          Category
+	Message           string
+	Operation         string
+	ServerKey         string
+	Retryable         bool
+	RetryableSet      bool
+	RetryAfterSeconds *int64
+	NextRetryAt       *time.Time
+	Reason            string
+	Hint              string
+	Actions           []string
+	AvailableFlags    []string
+	Snapshot          string
+	RPCCode           int               `json:"rpc_code,omitempty"`
+	RPCData           json.RawMessage   `json:"rpc_data,omitempty"`
+	ServerDiag        ServerDiagnostics `json:"-"`
+	Cause             error             `json:"-"`
 }
 
 func (e *Error) Error() string {
@@ -107,6 +111,31 @@ func WithServerKey(serverKey string) Option {
 func WithRetryable(retryable bool) Option {
 	return func(err *Error) {
 		err.Retryable = retryable
+		err.RetryableSet = true
+	}
+}
+
+// WithRetryAfterSeconds records the server-recommended delay before a retry.
+// A zero delay is meaningful and is therefore preserved; negative values are
+// ignored as invalid server guidance.
+func WithRetryAfterSeconds(seconds int64) Option {
+	return func(err *Error) {
+		if seconds < 0 {
+			return
+		}
+		value := seconds
+		err.RetryAfterSeconds = &value
+	}
+}
+
+// WithNextRetryAt records the absolute time at which a retry may be attempted.
+func WithNextRetryAt(next time.Time) Option {
+	return func(err *Error) {
+		if next.IsZero() {
+			return
+		}
+		value := next.UTC()
+		err.NextRetryAt = &value
 	}
 }
 
@@ -266,8 +295,14 @@ func PrintJSON(w io.Writer, err error) error {
 		if typed.ServerKey != "" {
 			errorPayload["server_key"] = typed.ServerKey
 		}
-		if typed.Retryable {
-			errorPayload["retryable"] = true
+		if typed.RetryableSet {
+			errorPayload["retryable"] = typed.Retryable
+		}
+		if typed.RetryAfterSeconds != nil {
+			errorPayload["retry_after_seconds"] = *typed.RetryAfterSeconds
+		}
+		if typed.NextRetryAt != nil {
+			errorPayload["next_retry_at"] = typed.NextRetryAt.UTC().Format(time.RFC3339)
 		}
 		if typed.Hint != "" {
 			errorPayload["hint"] = typed.Hint
@@ -383,8 +418,14 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 	if line := formatAvailableFlagsHumanLine(typed.AvailableFlags); line != "" {
 		lines = append(lines, tui.Dim(line))
 	}
-	if typed.Retryable {
-		lines = append(lines, tui.Warning("Retryable: true"))
+	if typed.RetryableSet {
+		lines = append(lines, tui.Warning(fmt.Sprintf("Retryable: %t", typed.Retryable)))
+	}
+	if typed.RetryAfterSeconds != nil {
+		lines = append(lines, tui.Warning(fmt.Sprintf("Retry After: %ds", *typed.RetryAfterSeconds)))
+	}
+	if typed.NextRetryAt != nil {
+		lines = append(lines, tui.Warning("Next Retry At: "+typed.NextRetryAt.UTC().Format(time.RFC3339)))
 	}
 
 	// Always shown when present: Trace ID, Server Code

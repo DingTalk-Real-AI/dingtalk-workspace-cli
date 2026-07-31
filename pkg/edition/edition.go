@@ -21,6 +21,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/spf13/cobra"
 )
 
@@ -87,10 +88,10 @@ type Hooks struct {
 
 	// ClawTypeValue is the display identity carried only in message-send tool
 	// arguments (parameter clawType) so the IM server can render the
-	// "Send from AI" indicator on delivered messages. It is intentionally
-	// separate from the HTTP claw-type Agent Product header and is not
-	// overridden by DWS_AGENT_PRODUCT. Empty → DefaultOSSClawType; overlays
-	// set their own message-display value (e.g. "wukong").
+	// "Send from AI" indicator on delivered messages. A valid non-empty
+	// DWS_AGENT_PRODUCT overrides this display default, but never the separate
+	// HTTP claw-type routing/PAT header. Empty → DefaultOSSClawType; overlays
+	// set their own message-display default (e.g. "wukong").
 	ClawTypeValue string
 
 	// PersonalEventSourceID identifies the personal-event source channel
@@ -115,8 +116,8 @@ type Hooks struct {
 	MergeHeaders func(base map[string]string) map[string]string
 
 	// --- EnterpriseCredential HTTP headers ---
-	// This hook is only for credential material. It must not set claw-type;
-	// the core reasserts that Header after the hook returns.
+	// This hook is only for credential material. It must not set claw-type or
+	// x-dws-agent-product; the core reasserts both after the hook returns.
 	EnterpriseCredentialHeaders func(base map[string]string) map[string]string
 
 	// --- auth ---
@@ -206,16 +207,22 @@ func Override(h *Hooks) {
 	current = h
 }
 
-// ClawType returns the message-display identity for the active edition,
-// falling back to DefaultOSSClawType when the overlay does not set one.
-// Message-send helpers attach this value as the clawType tool argument so the
-// IM server can label delivered messages as sent via AI. It is a separate axis
-// from the HTTP claw-type header and is not affected by DWS_AGENT_PRODUCT.
+// ClawType returns the message-display identity for the active edition.
+// A valid non-empty DWS_AGENT_PRODUCT wins; otherwise the active edition's
+// ClawTypeValue (or DefaultOSSClawType) is used. Message-send helpers attach
+// this value as the clawType tool argument so the IM server can label delivered
+// messages as sent via AI. It never changes the HTTP claw-type routing/PAT
+// header.
 func ClawType() string {
-	if v := Get().ClawTypeValue; v != "" {
-		return v
+	fallback := Get().ClawTypeValue
+	if fallback == "" {
+		fallback = DefaultOSSClawType
 	}
-	return DefaultOSSClawType
+	value, err := agentproduct.ResolveFromEnv(fallback)
+	if err != nil {
+		return fallback
+	}
+	return value
 }
 
 // PersonalEventSourceID returns the source channel for user-level events.

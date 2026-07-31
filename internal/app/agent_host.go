@@ -33,7 +33,7 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:        envDWSAgentHost,
 		Category:    configmeta.CategoryExternal,
-		Description: "调用 DWS 的 Agent 运行形态标识；服务端可结合产品用于观测和 PAT 兼容策略",
+		Description: "调用 DWS 的 Agent 运行形态标识；作为 x-dws-agent-host 发送供下游观测，本客户端不使用该值改变 PAT、鉴权或路由",
 		Example:     "cloud",
 	})
 }

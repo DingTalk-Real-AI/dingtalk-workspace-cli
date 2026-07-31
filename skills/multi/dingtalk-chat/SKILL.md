@@ -20,7 +20,7 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-Complete public catalog index; every command uses the `dws chat` prefix. Each row keeps a Chinese intent cue. After selection, read the leaf Schema for parameters, constraints, risk, and confirmation. See “Shortcut 执行契约” below.
+Complete public catalog index; every command uses the `dws chat` prefix. Each row keeps a Chinese intent cue. Once selected, execute directly; read leaf Schema only when parameters, constraints, or safety are uncertain, and leaf Help only when flags are uncertain. See “Shortcut 执行契约” below.
 
 | Shortcut | 适用场景 |
 |---|---|
@@ -131,10 +131,11 @@ This is the only Shortcut entry point for multi/chat; `references/` documents
 atomic commands only. Routing priority:
 exact script/recipe > matching public Shortcut > atomic command.
 
-- Select a real `cli_path` from the table or
-  `dws shortcut list --service chat --format json`; never guess names.
-- Read `dws schema --cli-path "<cli_path>" --format json`, then verify flags
-  with leaf `--help`. If absent from Schema, use the same path in the full Catalog.
+- Select a real `cli_path` from the table; never guess names. Use
+  `dws shortcut list --service chat --format json` only if no row matches.
+- Once selected, execute directly. Read leaf Schema only when parameters,
+  constraints, or safety are uncertain; read leaf `--help` only when flags are
+  uncertain. If absent from Schema, use the same path in the full Catalog.
 - For `confirmation=user_required`, confirm before adding `--yes`. On source
   conflict, use the safer interpretation and report it.
 
@@ -204,9 +205,10 @@ contract conflict.
 
 After choosing atomic fallback, select a top-level branch. If sibling commands
 are ambiguous, read [intent-guide.md](references/intent-guide.md), then locate
-the leaf in [chat.md](references/chat.md#命令索引表). Before execution, read
-`dws schema --cli-path "chat <leaf>" --format json` for selection, parameters,
-constraints, and confirmation; verify Cobra flags with leaf `--help`.
+the leaf in [chat.md](references/chat.md#命令索引表). If parameters, constraints,
+or safety are uncertain, read
+`dws schema --cli-path "chat <leaf>" --format json`; use leaf `--help` only
+when Cobra flags are uncertain.
 
 ```text
 dws chat

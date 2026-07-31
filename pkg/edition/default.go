@@ -15,18 +15,18 @@ package edition
 
 import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata"
 
-// DefaultOSSClawType is the default wire value for request header claw-type
-// in the open-source build. DWS_AGENT_PRODUCT may explicitly override the
-// request identity; unrelated caller inputs such as DINGTALK_AGENT do not.
+// DefaultOSSClawType is the fixed wire value for request header claw-type in
+// the open-source build. It is intentionally independent of caller-provided
+// environment variables so PAT and routing behaviour stays predictable.
 const DefaultOSSClawType = "openClaw"
 
 // defaultHooks returns the open-source edition defaults.
 //
 // MergeHeaders is the only hook that ships with behaviour: it supplies
 // DefaultOSSClawType so every open-source MCP request has a stable default.
-// The core applies an optional DWS_AGENT_PRODUCT override after edition hooks.
-// All other fields are nil — the internal code interprets nil as "use
-// standard open-source behaviour".
+// DWS_AGENT_PRODUCT is sent through a separate observability Header and never
+// changes claw-type. All other fields are nil — the internal code interprets
+// nil as "use standard open-source behaviour".
 func defaultHooks() *Hooks {
 	return &Hooks{
 		Name: "open",

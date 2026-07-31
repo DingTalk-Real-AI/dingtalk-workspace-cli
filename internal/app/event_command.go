@@ -161,7 +161,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 						"subscribe-id", "rule", "event-types", "filter",
 						"foreground", "force", "debug-raw-events",
 					); err != nil {
-						return fmt.Errorf("event consume: %w", err)
+						return fmt.Errorf("event consume: %w", personalSubscriptionValidationError(err))
 					}
 				}
 				personalOpts.Common = commonConsumeOptions{

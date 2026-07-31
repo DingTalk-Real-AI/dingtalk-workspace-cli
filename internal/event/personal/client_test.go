@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestClientCreateSubscriptionDWSRequestAndArrayResponse(t *testing.T) {
@@ -282,11 +283,289 @@ func TestClientBusinessErrorHTTP200(t *testing.T) {
 		apiErr.Details["http_status"] != http.StatusOK || apiErr.Details["request_id"] != "req-1" {
 		t.Fatalf("details = %#v", apiErr.Details)
 	}
+	if apiErr.Retryable != nil {
+		t.Fatalf("retryable = %v, want unknown", *apiErr.Retryable)
+	}
+	if apiErr.HTTPStatus != http.StatusOK || apiErr.TraceID != "" {
+		t.Fatalf("HTTP diagnostics = status %d trace %q", apiErr.HTTPStatus, apiErr.TraceID)
+	}
 	out := logs.String()
 	for _, want := range []string{"/subscription/user", "INVALID_PARAM", "clientId is empty", "req-1", "request", "response"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("debug log missing %q: %s", want, out)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageClientBusinessErrorPreservesRetryContractAndClientHeaders(t *testing.T) {
+	nextRetryAt := "2026-07-30T04:05:06Z"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Cli-Version"); got != "1.2.3" {
+			t.Fatalf("X-Cli-Version = %q", got)
+		}
+		if got := r.Header.Get("User-Agent"); got != "dws-cli/1.2.3" {
+			t.Fatalf("User-Agent = %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success":           false,
+			"errorCode":         "RATE_LIMITED",
+			"errorMsg":          "slow down",
+			"retryable":         false,
+			"retryAfterSeconds": 30,
+			"nextRetryAt":       nextRetryAt,
+			"arguments":         []string{"portal-trace-1"},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+	c.ClientVersion = "1.2.3"
+	c.UserAgent = "dws-cli/1.2.3"
+	_, err := c.CreateSubscription(t.Context(), CreateSubscriptionRequest{
+		EventKey:  EventMention,
+		RuleType:  "at",
+		RuleParam: map[string]any{},
+	})
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %v, want *APIError", err)
+	}
+	if apiErr.Retryable == nil || *apiErr.Retryable {
+		t.Fatalf("retryable = %v, want explicit false", apiErr.Retryable)
+	}
+	if apiErr.RetryAfterSeconds == nil || *apiErr.RetryAfterSeconds != 30 {
+		t.Fatalf("retry_after_seconds = %v", apiErr.RetryAfterSeconds)
+	}
+	if apiErr.NextRetryAt == nil || apiErr.NextRetryAt.Format(time.RFC3339) != nextRetryAt {
+		t.Fatalf("next_retry_at = %v", apiErr.NextRetryAt)
+	}
+	if apiErr.TraceID != "portal-trace-1" || apiErr.HTTPStatus != http.StatusOK {
+		t.Fatalf("HTTP diagnostics = trace %q status %d", apiErr.TraceID, apiErr.HTTPStatus)
+	}
+	if _, exists := apiErr.Details["request_id"]; exists {
+		t.Fatalf("portal trace was mislabeled as request_id: %#v", apiErr.Details)
+	}
+}
+
+func TestCrossPlatformCoverageClientErrorDiagnosticIdentityPrecedence(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          map[string]any
+		headers       http.Header
+		wantTraceID   string
+		wantRequestID string
+	}{
+		{
+			name: "nested trace wins",
+			body: map[string]any{
+				"success":   false,
+				"requestId": "body-request",
+				"traceId":   "top-trace",
+				"arguments": []string{"portal-trace"},
+				"error": map[string]any{
+					"code":     "SYSTEM_ERROR",
+					"message":  "failed",
+					"trace_id": "nested-trace",
+				},
+			},
+			headers: http.Header{
+				"X-Trace-Id":   []string{"header-trace"},
+				"X-Request-Id": []string{"header-request"},
+			},
+			wantTraceID:   "nested-trace",
+			wantRequestID: "body-request",
+		},
+		{
+			name: "top-level trace wins over arguments and header",
+			body: map[string]any{
+				"success":   false,
+				"requestId": "body-request",
+				"traceId":   "top-trace",
+				"arguments": []string{"portal-trace"},
+				"error":     map[string]any{"code": "SYSTEM_ERROR", "message": "failed"},
+			},
+			headers:       http.Header{"X-Trace-Id": []string{"header-trace"}},
+			wantTraceID:   "top-trace",
+			wantRequestID: "body-request",
+		},
+		{
+			name: "portal argument wins over header",
+			body: map[string]any{
+				"success":   false,
+				"requestId": "body-request",
+				"arguments": []string{"portal-trace"},
+				"error":     map[string]any{"code": "SYSTEM_ERROR", "message": "failed"},
+			},
+			headers:       http.Header{"X-Trace-Id": []string{"header-trace"}},
+			wantTraceID:   "portal-trace",
+			wantRequestID: "body-request",
+		},
+		{
+			name: "headers are independent fallbacks",
+			body: map[string]any{
+				"success": false,
+				"error":   map[string]any{"code": "SYSTEM_ERROR", "message": "failed"},
+			},
+			headers: http.Header{
+				"X-Trace-Id":   []string{"header-trace"},
+				"X-Request-Id": []string{"header-request"},
+			},
+			wantTraceID:   "header-trace",
+			wantRequestID: "header-request",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				for key, values := range test.headers {
+					for _, value := range values {
+						w.Header().Add(key, value)
+					}
+				}
+				_ = json.NewEncoder(w).Encode(test.body)
+			}))
+			defer srv.Close()
+
+			client := NewClient(srv.URL, Identity{
+				AccessToken: "token",
+				ClientID:    "client",
+				SourceID:    "open",
+			})
+			_, err := client.CreateSubscription(t.Context(), CreateSubscriptionRequest{
+				EventKey:  EventMention,
+				RuleType:  "at",
+				RuleParam: map[string]any{},
+			})
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("error = %v, want *APIError", err)
+			}
+			if apiErr.TraceID != test.wantTraceID {
+				t.Fatalf("trace_id = %q, want %q", apiErr.TraceID, test.wantTraceID)
+			}
+			if got, _ := apiErr.Details["request_id"].(string); got != test.wantRequestID {
+				t.Fatalf("request_id = %q, want %q; details=%#v", got, test.wantRequestID, apiErr.Details)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageClientHTTPErrorPreservesRetryAfterAndHeaderTrace(t *testing.T) {
+	tests := []struct {
+		name            string
+		retryAfter      string
+		wantSeconds     int64
+		wantNextRetryAt string
+	}{
+		{name: "delta seconds", retryAfter: "45", wantSeconds: 45},
+		{name: "http date", retryAfter: "Thu, 30 Jul 2026 04:05:06 GMT", wantNextRetryAt: "2026-07-30T04:05:06Z"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			var calls int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				calls++
+				w.Header().Set("Retry-After", tt.retryAfter)
+				w.Header().Set("X-Trace-Id", "header-trace")
+				w.WriteHeader(http.StatusTooManyRequests)
+			}))
+			defer srv.Close()
+
+			c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+			_, err := c.CreateSubscription(t.Context(), CreateSubscriptionRequest{
+				EventKey:  EventMention,
+				RuleType:  "at",
+				RuleParam: map[string]any{},
+			})
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) {
+				t.Fatalf("error = %v, want *APIError", err)
+			}
+			if calls != 1 {
+				t.Fatalf("HTTP calls = %d, want one-shot client", calls)
+			}
+			if apiErr.Code != "HTTP_429" || apiErr.HTTPStatus != http.StatusTooManyRequests || apiErr.TraceID != "header-trace" {
+				t.Fatalf("API error = %#v", apiErr)
+			}
+			if apiErr.Retryable != nil {
+				t.Fatalf("retryable = %v, want unknown", apiErr.Retryable)
+			}
+			if tt.wantSeconds > 0 {
+				if apiErr.RetryAfterSeconds == nil || *apiErr.RetryAfterSeconds != tt.wantSeconds {
+					t.Fatalf("retry_after_seconds = %v", apiErr.RetryAfterSeconds)
+				}
+			}
+			if tt.wantNextRetryAt != "" {
+				if apiErr.NextRetryAt == nil || apiErr.NextRetryAt.Format(time.RFC3339) != tt.wantNextRetryAt {
+					t.Fatalf("next_retry_at = %v", apiErr.NextRetryAt)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageClientErrorDiagnosticHelpersHandleNilAndMalformedInputs(t *testing.T) {
+	if got := withHTTPResponseDetails(nil, http.MethodPost, "/subscription/user", nil, "request-1", "trace-1"); got != nil {
+		t.Fatalf("withHTTPResponseDetails(nil) = %#v, want nil", got)
+	}
+
+	apiErr := &APIError{Code: "SYSTEM_ERROR", Message: "failed"}
+	got := withHTTPResponseDetails(apiErr, http.MethodPost, "/subscription/user", nil, "request-1", " trace-1 ")
+	if got != apiErr {
+		t.Fatalf("withHTTPResponseDetails() returned a different error: got %#v, want %#v", got, apiErr)
+	}
+	if got.HTTPStatus != 0 || got.TraceID != "trace-1" {
+		t.Fatalf("diagnostics = status %d trace %q", got.HTTPStatus, got.TraceID)
+	}
+	if got.Details["request_id"] != "request-1" {
+		t.Fatalf("details = %#v", got.Details)
+	}
+
+	if got := firstArgumentString([]json.RawMessage{json.RawMessage(`{`)}); got != "" {
+		t.Fatalf("firstArgumentString(malformed) = %q, want empty", got)
+	}
+}
+
+func TestCrossPlatformCoverageClientCreateSubscriptionRejectsErrorsWithSubscribeID(t *testing.T) {
+	for _, code := range []string{
+		"SYSTEM_ERROR",
+		"DUP",
+		"DUPLICATE_SUBSCRIPTION",
+		"SUBSCRIPTION_ALREADY_EXISTS",
+		"SUBSCRIPTION_ALREADY_EXIST",
+		"ALREADY_SUBSCRIBED",
+		"DUPLICATE",
+	} {
+		t.Run(code, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]any{
+						"code":    code,
+						"message": "registration failed",
+						"details": map[string]any{"subscribe_id": "pending-sub"},
+					},
+				})
+			}))
+			defer srv.Close()
+
+			c := NewClient(srv.URL, Identity{AccessToken: "token", ClientID: "client", SourceID: "open"})
+			sub, err := c.CreateSubscription(t.Context(), CreateSubscriptionRequest{
+				EventKey:  EventMention,
+				RuleType:  "at",
+				RuleParam: map[string]any{},
+			})
+			if err == nil || sub != nil {
+				t.Fatalf("subscription = %#v, error = %v; API errors must stay failures", sub, err)
+			}
+			var apiErr *APIError
+			if !errors.As(err, &apiErr) || apiErr.Code != code {
+				t.Fatalf("error = %#v", err)
+			}
+		})
 	}
 }
 

@@ -77,6 +77,7 @@ func TestCrossPlatformCoveragePersonalEventRemainingSchemaAndSubscriptionCoverag
 func TestCrossPlatformCoveragePersonalEventRemainingConsumeCoverage(t *testing.T) {
 	oldIdentity := personalResolveEventIdentity
 	oldEnsure := personalEnsureSubscription
+	oldAttemptStore := personalNewSubscriptionAttemptStore
 	oldUpsert := personalUpsertRunState
 	oldDelete := personalDeleteSubscription
 	oldRemove := personalRemoveRunStates
@@ -88,6 +89,7 @@ func TestCrossPlatformCoveragePersonalEventRemainingConsumeCoverage(t *testing.T
 	t.Cleanup(func() {
 		personalResolveEventIdentity = oldIdentity
 		personalEnsureSubscription = oldEnsure
+		personalNewSubscriptionAttemptStore = oldAttemptStore
 		personalUpsertRunState = oldUpsert
 		personalDeleteSubscription = oldDelete
 		personalRemoveRunStates = oldRemove
@@ -97,6 +99,9 @@ func TestCrossPlatformCoveragePersonalEventRemainingConsumeCoverage(t *testing.T
 		personalNewStreamSource = oldNewSource
 		personalBusRun = oldBusRun
 	})
+	personalNewSubscriptionAttemptStore = func(string) personalSubscriptionAttemptStore {
+		return personalNoopAttemptStore{}
+	}
 
 	wantErr := errors.New("consume")
 	cmd := newPersonalCoverageCommand()
@@ -154,11 +159,11 @@ func TestCrossPlatformCoveragePersonalEventRemainingConsumeCoverage(t *testing.T
 	personalNewStreamSource = func(context.Context, personalStreamSourceOptions) (*source.PersonalSource, error) {
 		return nil, wantErr
 	}
-	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention, Common: commonConsumeOptions{Foreground: true}}); !errors.Is(err, wantErr) || deletes == 0 {
+	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention, Common: commonConsumeOptions{Foreground: true}}); !errors.Is(err, wantErr) || deletes != 0 {
 		t.Fatalf("foreground source error = %v deletes=%d", err, deletes)
 	}
 	before := deletes
-	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention, Ephemeral: true, Common: commonConsumeOptions{Foreground: true}}); !errors.Is(err, wantErr) || deletes == before {
+	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention, Ephemeral: true, Common: commonConsumeOptions{Foreground: true}}); !errors.Is(err, wantErr) || deletes != before {
 		t.Fatalf("ephemeral source error = %v deletes=%d", err, deletes)
 	}
 	personalNewStreamSource = func(context.Context, personalStreamSourceOptions) (*source.PersonalSource, error) { return nil, nil }

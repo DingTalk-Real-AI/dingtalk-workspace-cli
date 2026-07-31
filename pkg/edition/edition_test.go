@@ -13,9 +13,14 @@
 
 package edition
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
+)
 
 func TestClawTypeDefaultsToOSSValue(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "")
 	prev := Get()
 	defer Override(prev)
 
@@ -26,12 +31,35 @@ func TestClawTypeDefaultsToOSSValue(t *testing.T) {
 }
 
 func TestClawTypeUsesOverlayValue(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "")
 	prev := Get()
 	defer Override(prev)
 
 	Override(&Hooks{Name: "overlay", ClawTypeValue: "wukong"})
 	if got := ClawType(); got != "wukong" {
 		t.Fatalf("ClawType() = %q, want overlay value %q", got, "wukong")
+	}
+}
+
+func TestClawTypeUsesValidAgentProduct(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, " qwenwork ")
+	prev := Get()
+	defer Override(prev)
+
+	Override(&Hooks{Name: "overlay", ClawTypeValue: "wukong"})
+	if got := ClawType(); got != "qwenwork" {
+		t.Fatalf("ClawType() = %q, want qwenwork", got)
+	}
+}
+
+func TestClawTypeInvalidAgentProductFallsBackToOverlay(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "qwen work")
+	prev := Get()
+	defer Override(prev)
+
+	Override(&Hooks{Name: "overlay", ClawTypeValue: "wukong"})
+	if got := ClawType(); got != "wukong" {
+		t.Fatalf("ClawType() = %q, want overlay fallback wukong", got)
 	}
 }
 

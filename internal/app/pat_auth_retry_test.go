@@ -1007,11 +1007,11 @@ func TestHandlePatAuthCheck_HostControlledFlowIDPassthrough(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", tmpDir)
 	// Host-owned decision: driven ONLY by DINGTALK_DWS_AGENTCODE.
 	// DINGTALK_AGENT is set to demonstrate it does NOT leak into
-	// hostControl.clawType. With no DWS_AGENT_PRODUCT override the
-	// open-source edition default remains "openClaw".
+	// hostControl.clawType. DWS_AGENT_PRODUCT is also set to demonstrate
+	// that Product does not change the open-source fixed "openClaw" value.
 	t.Setenv(authpkg.AgentCodeEnv, "agt-sales")
 	t.Setenv("DINGTALK_AGENT", "sales-copilot")
-	t.Setenv(agentproduct.EnvName, "")
+	t.Setenv(agentproduct.EnvName, "qwenwork")
 
 	mock := &mockRunner{
 		runFunc: func(ctx context.Context, inv executor.Invocation) (executor.Result, error) {

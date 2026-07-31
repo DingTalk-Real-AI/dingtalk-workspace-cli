@@ -8,7 +8,7 @@ POLICY_GOTMPDIR ?= $(DWS_POLICY_TMPDIR)/go
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -30,6 +30,7 @@ help:
 	@printf "  make reset-interface-baseline - DANGEROUS: replace all CLI compatibility history\n"
 	@printf "  make schema-compatibility BASE_REF=<ref> - Check the complete Schema contract against the PR merge-base\n"
 	@printf "  make skill-command-integrity - Check dws commands referenced by skills exist\n"
+	@printf "  make skill-context-budget - Check generated Skill drift and common-path context budgets\n"
 	@printf "  make cli-smoke     - Verify help for every public top-level command\n"
 	@printf "  make mock-mcp-smoke - Verify HTTP and stdio MCP request/response transport\n"
 	@printf "  make test-schema-agent-examples - Contract-check all Agent examples and dry-run the eligible subset\n"
@@ -84,6 +85,7 @@ fmt:
 policy: test-auth-legacy-compat
 	@mkdir -p "$(POLICY_GOTMPDIR)"
 	@$(POLICY_ENV) ./scripts/policy/check-open-source-assets.sh
+	@$(POLICY_ENV) ./scripts/policy/check-skill-context-budget.sh
 	@$(POLICY_ENV) ./scripts/policy/check-schema-command-registry.sh
 	@$(POLICY_ENV) ./scripts/policy/check-command-surface.sh --strict
 	@$(POLICY_ENV) ./scripts/policy/check-generated-drift.sh
@@ -120,6 +122,9 @@ schema-compatibility:
 
 skill-command-integrity:
 	@./scripts/policy/check-skill-commands.sh
+
+skill-context-budget:
+	@./scripts/policy/check-skill-context-budget.sh
 
 cli-smoke:
 	@./scripts/policy/check-cli-smoke.sh

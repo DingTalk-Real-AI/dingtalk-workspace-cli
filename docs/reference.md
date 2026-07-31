@@ -5,8 +5,8 @@
 | Variable | Purpose / 用途 |
 |---------|---------|
 | `DWS_CONFIG_DIR` | Override default config directory / 覆盖默认配置目录 |
-| `DWS_AGENT_PRODUCT` | Optional, caller-declared Agent product sent through the existing HTTP `claw-type` header (for example `qwenwork`). Surrounding ASCII spaces/tabs are trimmed; the remaining value must be at most 64 bytes and match `^[A-Za-z0-9][A-Za-z0-9_-]*$`. Unset or empty values preserve the edition default (`openClaw` in the open-source build). / 可选、由调用方声明的 Agent 产品标识，经校验后覆盖 HTTP `claw-type` 请求头；未设置或为空时保持当前发行版默认值 |
-| `DWS_AGENT_HOST` | Optional, caller-declared Agent runtime form sent as `x-dws-agent-host` (for example `cloud` or `desktop`). Surrounding ASCII spaces/tabs are trimmed; the remaining value must be at most 64 bytes and match `^[a-z0-9][a-z0-9_-]*$`; unset values are omitted. / 可选、由调用方声明的 Agent 运行形态，经校验后作为 `x-dws-agent-host` 发送；未设置时省略 |
+| `DWS_AGENT_PRODUCT` | Optional, caller-declared Agent product sent as `x-dws-agent-product` (for example `qwenwork`) for downstream logs/BI and used as the IM `clawType` display label when `--ai-tag` is enabled. `--ai-tag` defaults to `true`, so a configured Product changes the displayed label by default. With `--ai-tag=false`, native `chat message send` / `reply` calls send an empty `clawType`, while shortcut calls omit the argument. Surrounding ASCII spaces/tabs are trimmed; the remaining value must be at most 64 bytes and match `^[A-Za-z0-9][A-Za-z0-9_-]*$`. Unset or empty values omit the Header and use the edition's IM display default. This client never uses Product to change the separate HTTP `claw-type` PAT/routing label. / 可选、由调用方声明的 Agent 产品标识，经校验后作为 `x-dws-agent-product` 发送，并用于 IM 小尾巴；`--ai-tag` 默认为 `true`，因此配置 Product 后默认会改变展示标签。使用 `--ai-tag=false` 时，原生 `chat message send` / `reply` 发送空的 `clawType`，shortcut 调用则省略该参数。未设置时省略请求头且 IM 使用发行版默认值；本客户端不会用 Product 修改独立的 HTTP `claw-type` |
+| `DWS_AGENT_HOST` | Optional, caller-declared Agent runtime form sent as `x-dws-agent-host` (for example `cloud` or `desktop`) for downstream logs/BI. Surrounding ASCII spaces/tabs are trimmed; the remaining value must be at most 64 bytes and match `^[a-z0-9][a-z0-9_-]*$`; unset values are omitted. This client does not use Host for PAT, authentication, Discovery, or MCP endpoint selection. / 可选、由调用方声明的 Agent 运行形态，经校验后作为 `x-dws-agent-host` 发送给下游日志/BI；本客户端不使用该值进行 PAT、鉴权、Discovery 或 MCP 端点选择，未设置时省略 |
 | `DWS_<PRODUCT>_MCP_URL` | Override a product MCP endpoint for local development / 本地开发时覆盖指定产品 MCP endpoint |
 | `DWS_CLIENT_ID` | OAuth client ID (DingTalk AppKey) |
 | `DWS_CLIENT_SECRET` | OAuth client secret (DingTalk AppSecret) |
@@ -14,23 +14,36 @@
 | `DWS_ALLOW_HTTP_ENDPOINTS` | Set `1` to allow HTTP for loopback during dev / 设为 `1` 允许回环地址 HTTP，仅用于开发调试 |
 | `DWS_DISABLE_KEYCHAIN` | macOS only. Set `1` to skip system Keychain for the encryption key and use file-based storage (same scheme as Linux). For sandboxed runtimes (e.g. Codex App) that block Keychain APIs. Weakens at-rest protection — DEK and ciphertext live in the same directory. / 仅 macOS。设为 `1` 时跳过系统 Keychain，密钥以文件形式存储（与 Linux 一致）。用于 Keychain API 被拦截的沙盒环境（如 Codex App）。代价是 DEK 与密文同目录，保护强度低于默认方案 |
 
-### Agent Product and Host trust model / Agent 产品与运行形态的信任模型
+### Agent Product, Host, and `claw-type` / Agent 产品、运行形态与 `claw-type`
 
-`DWS_AGENT_PRODUCT` and `DWS_AGENT_HOST` are caller-declared selection and
-observation signals. They are not credentials, attestations, or proof of the
-calling host's identity. DingTalk services may record them for logs/BI and may
-combine supported values with separately authenticated context for PAT
-compatibility, PAT identity/source derivation, or Discovery eligibility. A
-service must allowlist supported values and must never grant access, bypass
-authentication, or skip authorization solely because either Header claims a
-particular product or runtime form. They are not used to select ordinary MCP
-tool endpoints.
+`DWS_AGENT_PRODUCT` and `DWS_AGENT_HOST` are caller-declared observation
+signals. They are not credentials, attestations, or proof of the calling
+host's identity. The CLI validates and emits `x-dws-agent-product` and
+`x-dws-agent-host`, but does not use either value to derive its authentication,
+PAT mode, Discovery behaviour, or ordinary MCP endpoint selection. Downstream
+services own and must document their own contracts for these caller-declared
+Headers.
 
-`DWS_AGENT_PRODUCT` controls only the HTTP `claw-type` Header. The similarly
-named `clawType` tool argument on IM send operations is an independent
-message-display axis used for the “Send from AI” label. It remains controlled
-by the active edition's `ClawTypeValue` and `--ai-tag`; changing
-`DWS_AGENT_PRODUCT` does not change that message label.
+Service integrators should treat both Headers as untrusted input, allowlist
+expected values, and should not grant access, bypass authentication, or skip
+authorization solely because a Header claims a particular Product or Host.
+
+The HTTP `claw-type` Header is a separate, edition-fixed PAT/routing label:
+`openClaw` in the open-source build. `DWS_AGENT_PRODUCT` never changes it or
+PAT `hostControl.clawType`. On IM send/reply operations with `--ai-tag`,
+however, a valid non-empty Product value is used as the `clawType` tool
+argument so the delivered message carries the matching “Send from AI” label.
+Because `--ai-tag` defaults to `true`, this display change is enabled by
+default for callers that set Product. With `--ai-tag=false`, native
+`chat message send` / `reply` calls serialize `clawType: ""`, while shortcut
+calls omit the argument; this client does not assume downstream services treat
+an empty value and an absent key as equivalent. The display-value precedence
+when the tag is enabled is valid non-empty `DWS_AGENT_PRODUCT`, then the active
+edition's `ClawTypeValue`, then `openClaw`.
+
+Do not set arbitrary Product values that the target downstream and IM services
+have not explicitly enabled; an unknown value may be ignored or may not render
+the expected label.
 
 For QwenWork, report the dimensions separately:
 
@@ -39,16 +52,25 @@ DWS_AGENT_PRODUCT=qwenwork
 DWS_AGENT_HOST=cloud       # or desktop
 ```
 
-Do not set arbitrary product values that the target service has not explicitly
-enabled. Older combined Host labels such as `qwenwork_cloud` still satisfy the
-generic syntax for compatibility, but new integrations should use the
-two-dimensional convention above.
+Older combined Host labels such as `qwenwork_cloud` still satisfy the generic
+syntax for compatibility, but new integrations should use the two-dimensional
+convention above.
 
 `DWS_AGENT_PRODUCT` 和 `DWS_AGENT_HOST` 均由调用方声明，不是认证凭据，也不能证明
-真实宿主身份。服务端可以在独立认证上下文中将受支持值用于日志/BI、PAT 兼容策略、
-PAT 身份/来源派生或 Discovery 准入，但不得仅凭这两个 Header 放权、绕过认证或跳过
-授权。HTTP `claw-type` 与 IM 消息发送参数 `clawType` 是两个独立维度；后者仅控制
-“Send from AI”展示，仍由发行版 `ClawTypeValue` 和 `--ai-tag` 决定。
+真实宿主身份。CLI 只负责校验并发送 `x-dws-agent-product` 与 `x-dws-agent-host`，
+不会用它们派生本客户端的鉴权、PAT 模式、Discovery 行为或 MCP 端点；下游服务的
+使用契约由对应服务自行定义和说明。HTTP `claw-type` 是发行版固定的 PAT/路由标签，
+开源版固定为 `openClaw`，不受 `DWS_AGENT_PRODUCT` 影响。
+
+服务集成方应将这两个请求头视为不可信输入并对白名单值做校验，不应仅因请求头声明了
+某个 Product 或 Host 就授予访问、绕过认证或跳过鉴权。
+
+`--ai-tag` 默认为 `true`，因此配置合法非空 Product 后，默认发送的 IM 工具参数
+`clawType` 及小尾巴会随之改变。传入 `--ai-tag=false` 时，原生
+`chat message send` / `reply` 会发送 `clawType: ""`，shortcut 调用则省略该参数；
+本客户端不假定下游会将空值与键缺失等价处理。启用小尾巴时，展示值优先级依次为
+`DWS_AGENT_PRODUCT`、当前发行版的 `ClawTypeValue`、`openClaw`。不要传入目标下游及
+IM 服务未明确支持的 Product 值，否则可能被忽略或无法展示预期标签。
 
 ## Exit Codes / 退出码
 

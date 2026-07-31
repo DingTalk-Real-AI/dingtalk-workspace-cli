@@ -26,13 +26,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestUnsetAgentProductKeepsOpenSourceDefault(t *testing.T) {
+func TestUnsetAgentProductOmitsHeaderAndKeepsOpenSourceClawType(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	t.Setenv(agentproduct.EnvName, "")
 
 	headers := resolveIdentityHeaders()
-	if got := headers[agentproduct.HeaderName]; got != edition.DefaultOSSClawType {
-		t.Fatalf("%s = %q, want %q", agentproduct.HeaderName, got, edition.DefaultOSSClawType)
+	if got := headers["claw-type"]; got != edition.DefaultOSSClawType {
+		t.Fatalf("claw-type = %q, want %q", got, edition.DefaultOSSClawType)
+	}
+	if _, ok := headers[agentproduct.HeaderName]; ok {
+		t.Fatalf("unset Product must omit %s", agentproduct.HeaderName)
 	}
 }
 
@@ -59,37 +62,45 @@ func TestParseAgentProductReturnsStableValidationError(t *testing.T) {
 	}
 }
 
-func TestResolveIdentityHeadersAgentProductPrecedence(t *testing.T) {
+func TestResolveIdentityHeadersSeparatesAgentProductFromClawType(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 
 	oldEdition := edition.Get()
 	t.Cleanup(func() { edition.Override(oldEdition) })
 	edition.Override(&edition.Hooks{
 		MergeHeaders: func(headers map[string]string) map[string]string {
-			headers[agentproduct.HeaderName] = "wukong"
+			headers["claw-type"] = "wukong"
+			headers[agentproduct.HeaderName] = "merge-product-must-not-win"
 			headers["x-edition-header"] = "preserved"
 			return headers
 		},
 		EnterpriseCredentialHeaders: func(headers map[string]string) map[string]string {
-			headers[agentproduct.HeaderName] = "enterprise-default"
+			headers["claw-type"] = "credential-must-not-win"
+			headers[agentproduct.HeaderName] = "credential-product-must-not-win"
 			headers["x-enterprise-header"] = "preserved"
 			return headers
 		},
 	})
 
-	t.Run("unset keeps edition default", func(t *testing.T) {
+	t.Run("unset omits Product and keeps edition claw-type", func(t *testing.T) {
 		t.Setenv(agentproduct.EnvName, "")
 		headers := resolveIdentityHeaders()
-		if got := headers[agentproduct.HeaderName]; got != "wukong" {
-			t.Fatalf("%s = %q, want wukong", agentproduct.HeaderName, got)
+		if got := headers["claw-type"]; got != "wukong" {
+			t.Fatalf("claw-type = %q, want wukong", got)
+		}
+		if _, ok := headers[agentproduct.HeaderName]; ok {
+			t.Fatalf("unset Product must omit %s", agentproduct.HeaderName)
 		}
 	})
 
-	t.Run("valid override is final", func(t *testing.T) {
+	t.Run("valid Product is final without changing claw-type", func(t *testing.T) {
 		t.Setenv(agentproduct.EnvName, " qwenwork ")
 		headers := resolveIdentityHeaders()
 		if got := headers[agentproduct.HeaderName]; got != "qwenwork" {
 			t.Fatalf("%s = %q, want qwenwork", agentproduct.HeaderName, got)
+		}
+		if got := headers["claw-type"]; got != "wukong" {
+			t.Fatalf("claw-type = %q, want wukong", got)
 		}
 		if got := headers["x-edition-header"]; got != "preserved" {
 			t.Fatalf("edition header = %q, want preserved", got)
@@ -102,21 +113,48 @@ func TestResolveIdentityHeadersAgentProductPrecedence(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid library input falls back to edition", func(t *testing.T) {
+	t.Run("invalid library input omits Product and keeps edition claw-type", func(t *testing.T) {
 		t.Setenv(agentproduct.EnvName, "qwen work")
 		headers := resolveIdentityHeaders()
-		if got := headers[agentproduct.HeaderName]; got != "wukong" {
-			t.Fatalf("%s = %q, want wukong", agentproduct.HeaderName, got)
+		if got := headers["claw-type"]; got != "wukong" {
+			t.Fatalf("claw-type = %q, want wukong", got)
+		}
+		if _, ok := headers[agentproduct.HeaderName]; ok {
+			t.Fatalf("invalid Product must omit %s", agentproduct.HeaderName)
 		}
 	})
 }
 
-func TestApplyAgentProductOverrideAllocatesHeaders(t *testing.T) {
-	t.Setenv(agentproduct.EnvName, "qwenwork")
+func TestApplyAgentProductHeader(t *testing.T) {
+	t.Run("valid value allocates headers", func(t *testing.T) {
+		t.Setenv(agentproduct.EnvName, "qwenwork")
 
-	headers := applyAgentProductOverride(nil)
-	if got := headers[agentproduct.HeaderName]; got != "qwenwork" {
-		t.Fatalf("%s = %q, want qwenwork", agentproduct.HeaderName, got)
+		headers := applyAgentProductHeader(nil)
+		if got := headers[agentproduct.HeaderName]; got != "qwenwork" {
+			t.Fatalf("%s = %q, want qwenwork", agentproduct.HeaderName, got)
+		}
+	})
+
+	for _, tc := range []struct {
+		name  string
+		value string
+	}{
+		{name: "empty value", value: ""},
+		{name: "invalid value", value: "qwen work"},
+	} {
+		t.Run(tc.name+" removes inherited header", func(t *testing.T) {
+			t.Setenv(agentproduct.EnvName, tc.value)
+			headers := applyAgentProductHeader(map[string]string{
+				agentproduct.HeaderName: "must-not-leak",
+				"x-preserved":           "yes",
+			})
+			if _, ok := headers[agentproduct.HeaderName]; ok {
+				t.Fatalf("%s must be omitted", agentproduct.HeaderName)
+			}
+			if got := headers["x-preserved"]; got != "yes" {
+				t.Fatalf("x-preserved = %q, want yes", got)
+			}
+		})
 	}
 }
 
@@ -167,17 +205,17 @@ func TestEffectiveClawTypeDoesNotInvokeEnterpriseCredentialHeaders(t *testing.T)
 	hookCalled := false
 	edition.Override(&edition.Hooks{
 		MergeHeaders: func(headers map[string]string) map[string]string {
-			headers[agentproduct.HeaderName] = "wukong"
+			headers["claw-type"] = "wukong"
 			return headers
 		},
 		EnterpriseCredentialHeaders: func(headers map[string]string) map[string]string {
 			hookCalled = true
-			headers[agentproduct.HeaderName] = "enterprise-default"
+			headers["claw-type"] = "enterprise-default"
 			return headers
 		},
 	})
 
-	t.Setenv(agentproduct.EnvName, "")
+	t.Setenv(agentproduct.EnvName, "qwenwork")
 	if got := effectiveClawType(); got != "wukong" {
 		t.Fatalf("effectiveClawType() = %q, want wukong", got)
 	}
@@ -186,7 +224,7 @@ func TestEffectiveClawTypeDoesNotInvokeEnterpriseCredentialHeaders(t *testing.T)
 	}
 }
 
-func TestAgentProductHeaderIsSeparateFromMessageClawType(t *testing.T) {
+func TestAgentProductControlsObservabilityHeaderAndMessageClawTypeOnly(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	t.Setenv(agentproduct.EnvName, "qwenwork")
 
@@ -195,20 +233,24 @@ func TestAgentProductHeaderIsSeparateFromMessageClawType(t *testing.T) {
 	edition.Override(&edition.Hooks{
 		ClawTypeValue: "message-brand",
 		MergeHeaders: func(headers map[string]string) map[string]string {
-			headers[agentproduct.HeaderName] = "wukong"
+			headers["claw-type"] = "wukong"
 			return headers
 		},
 	})
 
-	if got := resolveIdentityHeaders()[agentproduct.HeaderName]; got != "qwenwork" {
+	headers := resolveIdentityHeaders()
+	if got := headers[agentproduct.HeaderName]; got != "qwenwork" {
 		t.Fatalf("HTTP %s = %q, want qwenwork", agentproduct.HeaderName, got)
 	}
-	if got := edition.ClawType(); got != "message-brand" {
-		t.Fatalf("message clawType = %q, want message-brand", got)
+	if got := headers["claw-type"]; got != "wukong" {
+		t.Fatalf("HTTP claw-type = %q, want wukong", got)
+	}
+	if got := edition.ClawType(); got != "qwenwork" {
+		t.Fatalf("message clawType = %q, want qwenwork", got)
 	}
 }
 
-func TestResolveIdentityHeadersRestoresAgentProductAfterNilCredentialHeaders(t *testing.T) {
+func TestResolveIdentityHeadersRestoresIdentityAfterNilCredentialHeaders(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	t.Setenv(agentproduct.EnvName, "qwenwork")
 
@@ -218,7 +260,7 @@ func TestResolveIdentityHeadersRestoresAgentProductAfterNilCredentialHeaders(t *
 	credentialHookCalled := false
 	edition.Override(&edition.Hooks{
 		MergeHeaders: func(headers map[string]string) map[string]string {
-			headers[agentproduct.HeaderName] = "wukong"
+			headers["claw-type"] = "wukong"
 			return headers
 		},
 		EnterpriseCredentialHeaders: func(map[string]string) map[string]string {
@@ -234,25 +276,49 @@ func TestResolveIdentityHeadersRestoresAgentProductAfterNilCredentialHeaders(t *
 	if got := headers[agentproduct.HeaderName]; got != "qwenwork" {
 		t.Fatalf("%s = %q, want qwenwork", agentproduct.HeaderName, got)
 	}
+	if got := headers["claw-type"]; got != "wukong" {
+		t.Fatalf("claw-type = %q, want wukong", got)
+	}
 }
 
-func TestEffectiveClawTypeUsesAgentProductOverride(t *testing.T) {
+func TestResolveIdentityHeadersRestoresDefaultsAfterNilMergeHeaders(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Setenv(agentproduct.EnvName, "")
+
+	oldEdition := edition.Get()
+	t.Cleanup(func() { edition.Override(oldEdition) })
+	edition.Override(&edition.Hooks{
+		MergeHeaders: func(map[string]string) map[string]string {
+			return nil
+		},
+	})
+
+	headers := resolveIdentityHeaders()
+	if got := headers["claw-type"]; got != edition.DefaultOSSClawType {
+		t.Fatalf("claw-type = %q, want %q", got, edition.DefaultOSSClawType)
+	}
+	if _, ok := headers[agentproduct.HeaderName]; ok {
+		t.Fatalf("unset Product must omit %s", agentproduct.HeaderName)
+	}
+}
+
+func TestEffectiveClawTypeIgnoresAgentProduct(t *testing.T) {
 	oldEdition := edition.Get()
 	t.Cleanup(func() { edition.Override(oldEdition) })
 	edition.Override(&edition.Hooks{
 		MergeHeaders: func(headers map[string]string) map[string]string {
-			headers[agentproduct.HeaderName] = "wukong"
+			headers["claw-type"] = "wukong"
 			return headers
 		},
 	})
 
 	t.Setenv(agentproduct.EnvName, "qwenwork")
-	if got := effectiveClawType(); got != "qwenwork" {
-		t.Fatalf("effectiveClawType() = %q, want qwenwork", got)
+	if got := effectiveClawType(); got != "wukong" {
+		t.Fatalf("effectiveClawType() = %q, want wukong", got)
 	}
 	t.Setenv(authpkg.AgentCodeEnv, "agent-code")
-	if got := apperrors.HostControlBlock()["clawType"]; got != "qwenwork" {
-		t.Fatalf("hostControl.clawType = %q, want qwenwork", got)
+	if got := apperrors.HostControlBlock()["clawType"]; got != "wukong" {
+		t.Fatalf("hostControl.clawType = %q, want wukong", got)
 	}
 
 	t.Setenv(agentproduct.EnvName, "")

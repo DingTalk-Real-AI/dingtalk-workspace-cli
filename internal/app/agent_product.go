@@ -24,8 +24,8 @@ func init() {
 	configmeta.Register(configmeta.ConfigItem{
 		Name:         agentproduct.EnvName,
 		Category:     configmeta.CategoryExternal,
-		Description:  "调用方声明的 Agent 产品标识；覆盖 HTTP claw-type，但不是认证凭据",
-		DefaultValue: "由当前发行版决定",
+		Description:  "调用方声明的 Agent 产品标识；作为 x-dws-agent-product 发送并用于 IM 小尾巴，本客户端不使用该值改变 HTTP claw-type/PAT",
+		DefaultValue: "未设置（请求头省略，IM 使用当前发行版默认值）",
 		Example:      "qwenwork",
 	})
 }
@@ -47,25 +47,26 @@ func invalidAgentProductError() error {
 	)
 }
 
-// resolveEffectiveAgentProduct resolves the request-header identity with one
-// shared precedence rule: a valid non-empty runtime override wins, otherwise
-// the edition's MergeHeaders value wins, otherwise the OSS default is used.
-// Invalid runtime input falls back here for library callers that bypass root
-// validation; normal CLI execution rejects it before network access.
-func resolveEffectiveAgentProduct(headers map[string]string) string {
-	fallback := edition.DefaultOSSClawType
-	if value := headers[agentproduct.HeaderName]; value != "" {
-		fallback = value
+// resolveEditionClawType resolves the fixed routing/PAT identity supplied by
+// the active edition. DWS_AGENT_PRODUCT is deliberately not consulted.
+func resolveEditionClawType(headers map[string]string) string {
+	if value := headers["claw-type"]; value != "" {
+		return value
 	}
-	value, err := agentproduct.ResolveFromEnv(fallback)
-	if err != nil {
-		return fallback
-	}
-	return value
+	return edition.DefaultOSSClawType
 }
 
-func applyAgentProductOverride(headers map[string]string) map[string]string {
-	value := resolveEffectiveAgentProduct(headers)
+// applyAgentProductHeader injects only a valid, non-empty caller-declared
+// product. Invalid values are omitted on library paths that bypass root
+// validation; normal CLI execution rejects them before network access.
+func applyAgentProductHeader(headers map[string]string) map[string]string {
+	value, err := agentproduct.ResolveFromEnv("")
+	if err != nil || value == "" {
+		if headers != nil {
+			delete(headers, agentproduct.HeaderName)
+		}
+		return headers
+	}
 	if headers == nil {
 		headers = make(map[string]string)
 	}

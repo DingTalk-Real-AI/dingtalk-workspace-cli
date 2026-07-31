@@ -51,5 +51,6 @@ jobs:
           path: |
             .tmp-bin/multi-profile-e2e.*/out
             .tmp-bin/multi-profile-e2e.log
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 3

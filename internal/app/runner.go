@@ -1005,9 +1005,8 @@ func resolveIdentityHeaders() map[string]string {
 
 	// Inject environment variable based headers for MCP gateway tracking.
 	// DINGTALK_AGENT, if set by the caller, is forwarded verbatim as the
-	// x-dingtalk-agent header. It does NOT influence claw-type (which comes
-	// from the edition default plus the explicit DWS_AGENT_PRODUCT override)
-	// and it does NOT influence the host-owned PAT decision (driven solely by
+	// x-dingtalk-agent header. It does NOT influence the edition-fixed
+	// claw-type or the host-owned PAT decision (driven solely by
 	// DINGTALK_DWS_AGENTCODE).
 	sessionID := os.Getenv(envDingtalkSessionID)
 	if sessionID == "" {
@@ -1068,22 +1067,30 @@ func resolveIdentityHeaders() map[string]string {
 	if fn := edition.Get().MergeHeaders; fn != nil {
 		headers = fn(headers)
 	}
-	// Resolve the Agent Product before credential injection. The credential
-	// hook has a separate contract and must not be able to replace the
-	// request identity used by PAT hostControl serialization.
-	headers = applyAgentProductOverride(headers)
-	agentProduct := headers[agentproduct.HeaderName]
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+
+	// claw-type is the edition-fixed routing/PAT identity. Agent Product is a
+	// separate caller-declared observability and IM-display dimension.
+	clawType := resolveEditionClawType(headers)
+	headers["claw-type"] = clawType
+	headers = applyAgentProductHeader(headers)
+	agentProduct, hasAgentProduct := headers[agentproduct.HeaderName]
 	if fn := edition.Get().EnterpriseCredentialHeaders; fn != nil {
 		headers = fn(headers)
 	}
 	if headers == nil {
 		headers = make(map[string]string)
 	}
-	// DWS_AGENT_PRODUCT is the explicit caller override for the existing
-	// claw-type wire header. Reassert the resolved product after credential
-	// injection so that hook cannot alter identity. Invalid values are ignored
-	// on this best-effort library path; root execution rejects them earlier.
-	headers[agentproduct.HeaderName] = agentProduct
+	// Credential hooks cannot alter either identity dimension. Restore the
+	// fixed claw-type and the validated Product Header (or its absence).
+	headers["claw-type"] = clawType
+	if hasAgentProduct {
+		headers[agentproduct.HeaderName] = agentProduct
+	} else {
+		delete(headers, agentproduct.HeaderName)
+	}
 	return headers
 }
 

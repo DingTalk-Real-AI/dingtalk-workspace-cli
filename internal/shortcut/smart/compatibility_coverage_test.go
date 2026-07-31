@@ -24,6 +24,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -99,6 +100,8 @@ func newPlatformCoverageRoot() *cobra.Command {
 }
 
 func TestCrossPlatformCoverageAIMessageTag(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "qwenwork")
+
 	tests := []struct {
 		name string
 		argv []string
@@ -125,8 +128,8 @@ func TestCrossPlatformCoverageAIMessageTag(t *testing.T) {
 			if send.product != "chat" || send.tool != "send_personal_message" {
 				t.Fatalf("last call = %s/%s, want chat/send_personal_message", send.product, send.tool)
 			}
-			if got := send.args["clawType"]; got != edition.ClawType() {
-				t.Fatalf("clawType = %#v, want %q", got, edition.ClawType())
+			if got := send.args["clawType"]; got != "qwenwork" {
+				t.Fatalf("clawType = %#v, want qwenwork", got)
 			}
 		})
 	}

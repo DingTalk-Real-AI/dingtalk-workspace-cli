@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // Package agentproduct defines the caller-provided Agent product identity
-// carried on outbound DWS requests.
+// used for outbound observability and IM message display.
 package agentproduct
 
 import (
@@ -25,8 +25,9 @@ import (
 const (
 	// EnvName is the runtime override for the Agent product identity.
 	EnvName = "DWS_AGENT_PRODUCT"
-	// HeaderName is the existing wire header used for the Agent product.
-	HeaderName = "claw-type"
+	// HeaderName is the observability header used for the Agent product.
+	// It is intentionally separate from the routing/PAT claw-type header.
+	HeaderName = "x-dws-agent-product"
 	// MaxValueBytes bounds the value because it is attached to every outbound
 	// MCP request. Supported values are ASCII, so bytes and characters match.
 	MaxValueBytes = 64

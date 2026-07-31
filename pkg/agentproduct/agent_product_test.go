@@ -103,3 +103,12 @@ func TestResolveFromEnv(t *testing.T) {
 		}
 	})
 }
+
+func TestHeaderNameIsSeparateFromClawType(t *testing.T) {
+	if HeaderName != "x-dws-agent-product" {
+		t.Fatalf("HeaderName = %q, want x-dws-agent-product", HeaderName)
+	}
+	if HeaderName == "claw-type" {
+		t.Fatal("Agent Product observability Header must not reuse claw-type")
+	}
+}

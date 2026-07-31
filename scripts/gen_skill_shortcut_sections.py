@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Generate shortcut discovery sections for DWS skills.
 
-Large product catalogs may use progressive discovery instead of embedding
-every shortcut in the always-loaded Skill. Runtime catalog and leaf help remain
-the current sources for selection, parameters, safety, and executable flags.
+Product skills may use either a compact full index or progressive discovery.
+Leaf Schema publishes the Agent contract, while leaf `--help` remains the
+source of truth for accepted flags.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -46,8 +47,6 @@ MONO_START = "<!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->"
 MONO_END = "<!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->"
 PRODUCT_START = "<!-- VISIBLE_SHORTCUTS_START -->"
 PRODUCT_END = "<!-- VISIBLE_SHORTCUTS_END -->"
-MONO_COMPACT_SERVICES = {"chat"}
-MULTI_DISCOVERY_ONLY_SERVICES: set[str] = set()
 MULTI_COMPACT_TABLE_SERVICES = {"chat"}
 
 # Keep the Chinese intent cue while shortening long, mechanical chat details.
@@ -68,7 +67,6 @@ CHAT_COMPACT_DESCRIPTIONS = {
     "+thread-replies": "拉取话题全部回复；project sender/text/time.",
     "+unread-chats": "列出未读会话；project name/count/chat ID.",
 }
-
 
 def md_escape(value: Any) -> str:
     text = str(value or "")
@@ -112,36 +110,21 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
         path = SERVICE_TO_SKILL.get(service)
         skill = "—"
         if path:
-            skill = next((part for part in path.parts if part.startswith("dingtalk-")), path.parent.name)
-        compact = " --compact" if service in MONO_COMPACT_SERVICES else ""
-        rows.append(f"| `{md_escape(service)}` | {count} | `{md_escape(skill)}` | `dws shortcut list --service {md_escape(service)}{compact} --format json` |")
+            skill = next((part for part in reversed(path.parts) if part.startswith("dingtalk-")), path.parent.name)
+        rows.append(f"| `{md_escape(service)}` | {count} | `{md_escape(skill)}` |")
     body = "\n".join(rows)
     return f"""{MONO_START}
 ## Shortcut 总览
 
-下面统计当前公开 catalog 中的 shortcut。mono 模式不展开 200+ 行明细，避免 skill 过重；需要执行时先按产品路由，再用 `dws shortcut list --service <service> --format json` 读取参数、约束、风险和示例，最后用 `dws <service> +<shortcut> --help` 核对当前 Cobra flags。multi 模式按产品规模提供明细表或动态发现协议。
+下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图应先按产品 Skill、意图表或任务 reference 选择唯一命令；命令已选中时直接执行，只在参数或安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service <service> --format json` 做最后回退；不要为已知高频意图加载完整产品 Catalog。
 
-| 服务 | shortcut 数 | multi skill | 发现命令 |
-|---|---:|---|---|
+| 服务 | shortcut 数 | multi skill |
+|---|---:|---|
 {body}
 {MONO_END}"""
 
 
 def product_section(service: str, rows: list[dict[str, Any]]) -> str:
-    if service in MULTI_DISCOVERY_ONLY_SERVICES:
-        return f"""{PRODUCT_START}
-## Shortcut 发现与选择
-
-本产品提供公开内建 `+shortcut`，但本 Skill 不静态枚举，避免与当前 CLI catalog 漂移。
-
-- 路由优先级：精确脚本 / recipe > 匹配的公开 shortcut > reference 中的原子命令。
-- 无精确脚本 / recipe 覆盖，或准备手工组合多个原子命令前，必须先运行 `dws shortcut list --service {service} --compact --format json`；当前 CLI 不接受 `--compact` 时去掉该 flag 重试。
-- 必须依据返回的 `intent`、`description` 和 `cli_path` 选择，不得猜测 `+` 命令名。
-- 选中后用 `dws schema --cli-path "<cli_path>" --format json` 读取完整契约；若该 leaf 暂未进入 Schema，则重新运行不带 `--compact` 的 catalog 命令并选取同一 `cli_path`。
-- 执行前始终用 `dws <cli_path> --help` 核对当前 Cobra flags；无匹配项时回退到意图表、reference 和原子命令。
-- `confirmation=user_required` 时先征得用户确认，再添加 `--yes`；Schema、catalog 与 Help 冲突时采用更安全的解释并报告契约漂移。
-{PRODUCT_END}"""
-
     if service in MULTI_COMPACT_TABLE_SERVICES:
         table = []
         for item in rows:
@@ -159,7 +142,7 @@ def product_section(service: str, rows: list[dict[str, Any]]) -> str:
         return f"""{PRODUCT_START}
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-Complete public catalog index; every command uses the `dws {service}` prefix. Each row keeps a Chinese intent cue. After selection, read the leaf Schema for parameters, constraints, risk, and confirmation. See “Shortcut 执行契约” below.
+Complete public catalog index; every command uses the `dws {service}` prefix. Each row keeps a Chinese intent cue. Once selected, execute directly; read leaf Schema only when parameters, constraints, or safety are uncertain, and leaf Help only when flags are uncertain. See “Shortcut 执行契约” below.
 
 | Shortcut | 适用场景 |
 |---|---|
@@ -177,7 +160,7 @@ Complete public catalog index; every command uses the `dws {service}` prefix. Ea
     return f"""{PRODUCT_START}
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 leaf Schema（例如 `dws schema --cli-path "{service} +<shortcut>" --format json`）读取 Agent 选择、参数、约束、风险和确认语义；用 `dws shortcut list --service {service} --format json` 批量发现；最后以 `dws {service} <shortcut> --help` 核对当前 Cobra flags。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 leaf Schema（例如 `dws schema --cli-path "{service} +<shortcut>" --format json`），在当前 Cobra flags 不确定时读取 `dws {service} <shortcut> --help`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service {service} --format json` 批量发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
@@ -185,33 +168,57 @@ Complete public catalog index; every command uses the `dws {service}` prefix. Ea
 {PRODUCT_END}"""
 
 
-def update_mono(items: list[dict[str, Any]]) -> None:
+def apply_update(path: Path, text: str, updated: str, check: bool) -> bool:
+    if updated == text:
+        return False
+    if check:
+        print(f"generated skill drift: {path.relative_to(ROOT)}", file=sys.stderr)
+    else:
+        path.write_text(updated, encoding="utf-8")
+    return True
+
+
+def update_mono(items: list[dict[str, Any]], check: bool) -> list[Path]:
     text = MONO_SKILL.read_text(encoding="utf-8")
     block = mono_overview(items)
     updated = replace_block(text, MONO_START, MONO_END, block, "## 产品总览")
-    MONO_SKILL.write_text(updated, encoding="utf-8")
+    return [MONO_SKILL] if apply_update(MONO_SKILL, text, updated, check) else []
 
 
-def update_product_skills(items: list[dict[str, Any]]) -> None:
+def update_product_skills(items: list[dict[str, Any]], check: bool) -> list[Path]:
     by_service: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for item in items:
         by_service[item["service"]].append(item)
+    changed = []
     for service, path in SERVICE_TO_SKILL.items():
-        if service not in by_service and service not in MULTI_DISCOVERY_ONLY_SERVICES:
+        if service not in by_service:
             continue
         if not path.exists():
             raise RuntimeError(f"skill file not found for {service}: {path}")
         text = path.read_text(encoding="utf-8")
-        block = product_section(service, by_service.get(service, []))
+        block = product_section(service, by_service[service])
         anchor = "## 概念地图" if service == "devapp" else "## 意图表"
         updated = replace_block(text, PRODUCT_START, PRODUCT_END, block, anchor)
-        path.write_text(updated, encoding="utf-8")
+        if apply_update(path, text, updated, check):
+            changed.append(path)
+    return changed
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify generated skill sections are current without rewriting files",
+    )
+    args = parser.parse_args()
+
     items = collect_visible()
-    update_mono(items)
-    update_product_skills(items)
+    changed = update_mono(items, args.check)
+    changed.extend(update_product_skills(items, args.check))
+    if args.check and changed:
+        print("run: python3 scripts/gen_skill_shortcut_sections.py", file=sys.stderr)
+        return 1
     print(f"visible_shortcuts={len(items)} services={len(set(item['service'] for item in items))}")
     return 0
 

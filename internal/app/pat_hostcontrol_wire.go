@@ -29,9 +29,8 @@ import (
 //   - Host-owned is triggered iff DINGTALK_DWS_AGENTCODE is non-empty.
 //   - When triggered, `clawType` in the emitted hostControl block MUST be the
 //     exact value the CLI actually injects on the wire. Each edition supplies
-//     its existing default and an optional valid DWS_AGENT_PRODUCT overrides
-//     it. Invalid input falls back here for library compatibility; root command
-//     execution rejects it before network access.
+//     its fixed value; DWS_AGENT_PRODUCT is a separate observability and IM
+//     message-display signal and never affects this PAT value.
 //   - When DINGTALK_DWS_AGENTCODE is empty the provider returns "" so
 //     HostControlBlock yields nil and no hostControl block is emitted.
 func init() {
@@ -59,5 +58,5 @@ func effectiveClawType() string {
 			headers = h.MergeHeaders(headers)
 		}
 	}
-	return resolveEffectiveAgentProduct(headers)
+	return resolveEditionClawType(headers)
 }
