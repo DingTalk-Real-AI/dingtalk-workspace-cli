@@ -73,6 +73,24 @@ func TestChatConversationDestructiveCommandsRequireConfirmation(t *testing.T) {
 	}
 }
 
+func TestChatConversationDestructiveCommandsRunAfterConfirmation(t *testing.T) {
+	for _, tc := range []struct {
+		args     []string
+		toolName string
+	}{
+		{[]string{"category", "delete", "--category-id", "42", "--yes"}, "delete_conv_category"},
+		{[]string{"clear-messages", "--conversation-id", "cid-1", "--yes"}, "clear_conversation_messages"},
+	} {
+		caller := &guardedMutationCaller{}
+		if err := executeGuardedMutationCommand(t, caller, newChatCommand, tc.args...); err != nil {
+			t.Fatalf("chat %v error = %v", tc.args, err)
+		}
+		if len(caller.calls) != 1 || caller.calls[0].toolName != tc.toolName {
+			t.Fatalf("chat %v calls = %#v, want one %s call", tc.args, caller.calls, tc.toolName)
+		}
+	}
+}
+
 type contractDefectCaller struct {
 	dryRun    bool
 	calls     []guardedMutationCall

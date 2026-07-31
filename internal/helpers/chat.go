@@ -3049,7 +3049,7 @@ func newChatCommand() *cobra.Command {
 		Use:   "delete",
 		Short: "删除用户自定义会话分组",
 		Long:  "删除用户自定义会话分组。该操作不可逆；必须先获得用户确认，再追加 --yes 执行。",
-		Example: `  dws chat category delete --category-id <分组ID> --yes
+		Example: `  dws chat category delete --category-id <分组ID>
   # 分组ID 可通过 dws chat category list 获取`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			categoryId, _ := cmd.Flags().GetInt64("category-id")
@@ -5059,8 +5059,8 @@ status 可选值:
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>`,
-		Example: `  dws chat clear-messages --conversation-id <openConversationId> --yes
-  dws chat clear-messages --id <openConversationId> --yes`,
+		Example: `  dws chat clear-messages --conversation-id <openConversationId>
+  dws chat clear-messages --id <openConversationId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
