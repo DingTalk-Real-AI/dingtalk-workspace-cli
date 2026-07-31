@@ -15,10 +15,9 @@ chat 命令由 Agent 执行时统一加 `--format json`。失败时优先读取�
 | `openConversationId is required` / 群不存在 | 群 ID 错误或缺失 | 执行 `chat search --query "<群名>" --format json`，从返回中取真实 `openConversationId` |
 | `userId is required` / 收件人无效 | 未先把人名解析为 ID | 执行 `aisearch person` 或 `contact user search`，取 `userId` / `openDingTalkId` |
 | 群成员命令提示 flag 不存在 | 把消息参数用于成员管理 | 改用 `group members --id <openConversationId>`；不要臆造 `members list` |
-| 消息搜索结果不符合关键词条件 | 错用了按时间拉取 | 优先改用 `chat +search-msg`；需要原始返回或未覆盖字段时才回退 `message search-advanced` |
-| Shortcut leaf Schema 未找到 | 该公开 Shortcut 尚在 Schema 排除列表 | 重新读取不带 `--compact` 的 Shortcut Catalog，定位同一 `cli_path`，再用叶子 `--help` 核对 flags；不要猜命令或参数 |
+| 消息搜索结果不符合关键词条件 | 错用了按时间拉取 | 改用 `message search-advanced` |
 | `confirmation_required` | 危险操作尚未通过运行时确认 | 停止并向用户说明目标与影响；只有用户明确同意后才用原命令加 `--yes` 重试一次 |
-| 消息 ID / 卡片 bizId 无效 | 使用了占位符或产品对象 ID | 从源会话消息或 `+messages-send-card` / `message send-card` 的真实返回中重新提取，不自行构造 |
+| 消息 ID / 卡片 bizId 无效 | 使用了占位符或产品对象 ID | 从源会话消息或 `message send-card` 的真实返回中重新提取，不自行构造 |
 | Webhook Token 无效 | token 错误或失效 | 停止并报告用户，要求确认 Webhook Token |
 | 添加/移除群成员失败 | ID 错误或无权限 | 先确认成员 ID；当前用户无管理权限则停止并报告 |
 | 机器人无法添加到群 | 当前用户非群管理员或机器人不可用 | 停止并报告用户，不改用普通用户身份代发 |
@@ -33,7 +32,7 @@ chat 命令由 Agent 执行时统一加 `--format json`。失败时优先读取�
 - 配额超限（例如群成员达到上限）。
 - 搜索返回多个同名用户或群，目标存在歧义。
 - 不可逆操作尚未获得用户明确确认。
-- Shortcut Catalog、Schema 与叶子 Help 冲突；采用更安全解释并报告契约漂移，不尝试绕过。
+- Schema 与叶子 Help 冲突；采用更安全解释并报告契约漂移，不尝试绕过。
 
 报告时包含原始错误、已验证的目标与仍缺少的信息。
 
@@ -42,6 +41,6 @@ chat 命令由 Agent 执行时统一加 `--format json`。失败时优先读取�
 1. `chat search --format json` 返回的 `openConversationId` 直接传给下一步群聊参数。
 2. `contact user search` / `aisearch person` 返回的 `openDingTalkId`、`userId` 分别传给对应 flag。
 3. `chat message list` / `search` 返回的 `openMessageId` 必须与所属 `openConversationId` 同源，再用于回复、转发、收藏、表情或置顶。
-4. `chat +messages-send-card` 未传 `--content`，或原子 `chat message send-card` 创建成功后返回的 `bizId`，只用于后续 `message update-card`。
+4. `chat message send-card` 创建成功后返回的 `bizId` 只用于后续 `message update-card`。
 
 不要自行构造 ID，也不要假设不同命令返回的字段可以互换。

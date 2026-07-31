@@ -46,7 +46,28 @@ MONO_START = "<!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->"
 MONO_END = "<!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->"
 PRODUCT_START = "<!-- VISIBLE_SHORTCUTS_START -->"
 PRODUCT_END = "<!-- VISIBLE_SHORTCUTS_END -->"
-DISCOVERY_ONLY_SERVICES = {"chat"}
+MONO_COMPACT_SERVICES = {"chat"}
+MULTI_DISCOVERY_ONLY_SERVICES: set[str] = set()
+MULTI_COMPACT_TABLE_SERVICES = {"chat"}
+
+# Keep the Chinese intent cue while shortening long, mechanical chat details.
+# Short Chinese descriptions are already token-efficient and stay source-owned.
+CHAT_COMPACT_DESCRIPTIONS = {
+    "+at-me": "查最近 @我；auto window, project sender/time/content/chat.",
+    "+bot-find": "搜索全部机器人；include others/official, return DM-ready openDingTalkId.",
+    "+broadcast": "多人单聊群发；resolve userId and send individually.",
+    "+chat-audit-join": "审批入群验证；approve/reject/delete/ignore/block.",
+    "+chat-members-list": "列出群成员；group users/bots, resolve chat name.",
+    "+chat-messages": "拉取会话消息；group/DM, project sender/text/time.",
+    "+conversation-clear-messages": "清空本人会话记录；current-user view only, irreversible.",
+    "+conversation-mark-read": "标记消息已读；includes all earlier messages.",
+    "+conversation-set-top": "批量置顶/取消；max 10 chats.",
+    "+messages-resource-download": "安全下载消息资源；image/video/audio/file.",
+    "+messages-update-card": "流式更新卡片；final `--flow-status` must be 3.",
+    "+send-to-group": "按群名发消息；resolve openConversationId.",
+    "+thread-replies": "拉取话题全部回复；project sender/text/time.",
+    "+unread-chats": "列出未读会话；project name/count/chat ID.",
+}
 
 
 def md_escape(value: Any) -> str:
@@ -92,7 +113,7 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
         skill = "—"
         if path:
             skill = next((part for part in path.parts if part.startswith("dingtalk-")), path.parent.name)
-        compact = " --compact" if service in DISCOVERY_ONLY_SERVICES else ""
+        compact = " --compact" if service in MONO_COMPACT_SERVICES else ""
         rows.append(f"| `{md_escape(service)}` | {count} | `{md_escape(skill)}` | `dws shortcut list --service {md_escape(service)}{compact} --format json` |")
     body = "\n".join(rows)
     return f"""{MONO_START}
@@ -107,7 +128,7 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
 
 
 def product_section(service: str, rows: list[dict[str, Any]]) -> str:
-    if service in DISCOVERY_ONLY_SERVICES:
+    if service in MULTI_DISCOVERY_ONLY_SERVICES:
         return f"""{PRODUCT_START}
 ## Shortcut 发现与选择
 
@@ -119,6 +140,32 @@ def product_section(service: str, rows: list[dict[str, Any]]) -> str:
 - 选中后用 `dws schema --cli-path "<cli_path>" --format json` 读取完整契约；若该 leaf 暂未进入 Schema，则重新运行不带 `--compact` 的 catalog 命令并选取同一 `cli_path`。
 - 执行前始终用 `dws <cli_path> --help` 核对当前 Cobra flags；无匹配项时回退到意图表、reference 和原子命令。
 - `confirmation=user_required` 时先征得用户确认，再添加 `--yes`；Schema、catalog 与 Help 冲突时采用更安全的解释并报告契约漂移。
+{PRODUCT_END}"""
+
+    if service in MULTI_COMPACT_TABLE_SERVICES:
+        table = []
+        for item in rows:
+            description = CHAT_COMPACT_DESCRIPTIONS.get(
+                item["command"], item["desc"]
+            )
+            table.append(
+                f"| `{md_escape(item['command'])}` | {md_escape(description)} |"
+            )
+        high_risk = [
+            f"`{md_escape(item['command'])}`"
+            for item in rows
+            if item["risk"] == "high-risk-write"
+        ]
+        return f"""{PRODUCT_START}
+## Shortcuts（无专用脚本/recipe 时优先）
+
+Complete public catalog index; every command uses the `dws {service}` prefix. Each row keeps a Chinese intent cue. After selection, read the leaf Schema for parameters, constraints, risk, and confirmation. See “Shortcut 执行契约” below.
+
+| Shortcut | 适用场景 |
+|---|---|
+{os.linesep.join(table)}
+
+`risk=high-risk-write`（高风险）: {", ".join(high_risk)}. Confirmation follows leaf Schema `confirmation` and the runtime gate; never infer it from risk.
 {PRODUCT_END}"""
 
     table = []
@@ -150,7 +197,7 @@ def update_product_skills(items: list[dict[str, Any]]) -> None:
     for item in items:
         by_service[item["service"]].append(item)
     for service, path in SERVICE_TO_SKILL.items():
-        if service not in by_service and service not in DISCOVERY_ONLY_SERVICES:
+        if service not in by_service and service not in MULTI_DISCOVERY_ONLY_SERVICES:
             continue
         if not path.exists():
             raise RuntimeError(f"skill file not found for {service}: {path}")

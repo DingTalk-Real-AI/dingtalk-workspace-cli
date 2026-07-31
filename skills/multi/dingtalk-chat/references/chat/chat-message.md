@@ -10,28 +10,11 @@
 
 - 发消息前必须核对接收对象、消息内容、@ 对象、附件路径和消息类型；不明确时先问用户。
 - `--group`、`--user`、`--open-dingtalk-id` 通常互斥，群聊用 `--group`，单聊用 `--user` 或 `--open-dingtalk-id`。
-- 发送本地文件、音频、视频优先用 `chat +messages-send --as user --msg-type file|audio|video --file <path>`；原子回退用 `chat message send --file-path`。`audio` / `video` 底层按 `file` 链路发送；已有 mediaId 的图片可用 `--msg-type image --media-id`。
+- 发送本地文件、音频、视频使用 `chat message send --msg-type file|audio|video --file-path <path>`。`audio` / `video` 底层按 `file` 链路发送；已有 mediaId 的图片可用 `--msg-type image --media-id`。
 - 发送位置消息前必须确认纬度、经度、地址名称；地图缩略图需先通过旧媒体上传链路拿到 mediaId。
 - 分享联系人名片前必须确认联系人 `openDingTalkId`，不要把 userId 直接当 `--contact-id`。
 - 消息内容按 Markdown 渲染，换行必须是真实换行符；需要换行效果时用空行、行尾两个空格或 `<br>`。
-- Shortcut 建议带 `--idempotency-key`，原子 `message send` 建议带 `--uuid`；失败重试复用同一个值。
-
-## Shortcut 首选
-
-先按 [chat.md 的 Shortcut 优先路由](../chat.md#shortcut-优先路由) 动态发现并读取当前契约；下文原子命令用于 Shortcut 未覆盖字段或需要原始返回结构时回退。
-
-| 场景 | 首选 Shortcut | 关键边界 |
-|---|---|---|
-| 普通发送 | `+messages-send` | `--as user/bot/webhook`；仅 user 支持已有 mediaId 图片和本地文件，bot/webhook 只发文本或 Markdown |
-| 单会话消息 | `+chat-messages` | `--group` / `--user` / `--open-dingtalk-id` 三选一；`--time` 可省略，`--direction` 为 `newer/older` |
-| 组合搜索 | `+search-msg` | 支持关键词、发送者、@、会话、消息类型和时间组合；`--page-all` 自动续页 |
-| @ 我的消息 | `+at-me` | 默认最近 7 天，可用 `--days`、`--limit`、`--cursor` |
-| 已知消息 ID 批量查询 | `+messages-mget --msg-ids ...` | 同时返回消息详情和 reaction，可用 `--no-reactions` |
-| 已知 thread/topic 全部回复 | `+thread-replies` | `--group` 必填，`--thread-id` / `--topic-id` 二选一 |
-| 单资源下载 | `+messages-resource-download` | mediaId 需要消息和会话上下文；fileId 不需要 |
-| 流式卡片 | `+messages-send-card` | 目标三选一；`--content` 可在创建后立即完成一次更新 |
-
-`+at-me`、`+chat-messages`、`+messages-mget`、`+search-msg`、`+thread-replies` 都支持 `--download-resources --output-dir ./downloads [--overwrite]`。它们是读操作，不要添加 `--yes`。
+- `message send` 建议带 `--uuid`；失败重试复用同一个值。
 
 ## 命令明细
 
@@ -107,12 +90,7 @@ dws chat message send --group <openConversationId> --msg-type profile --contact-
 
 ### 搜索消息
 
-常见组合搜索优先使用 `+search-msg`；需要 Shortcut 未覆盖的原始字段或底层返回结构时，再用 `message search-advanced`。后者是 `message search` 的严格超集。
-
-```bash
-dws chat +search-msg --query "周报" --senders <openDingTalkId> --days 3 --page-all --format json
-dws chat +search-msg --group <openConversationId> --message-type file --download-resources --output-dir ./downloads --format json
-```
+组合搜索使用 `message search-advanced`。它是 `message search` 的严格超集。
 
 ```bash
 dws chat message search-advanced --query "周报" --start "2026-04-01T00:00:00+08:00" --end "2026-04-15T00:00:00+08:00"
@@ -179,17 +157,10 @@ dws chat message edit --group <openConversationId> --msg-id <openMessageId> --co
 
 话题完整读取流程：
 
-1. 已知 thread/topic ID 时优先执行 `dws chat +thread-replies --group <openConversationId> --thread-id <threadId>` 或 `--topic-id <topicId>`。
-2. 未知 ID 时先拉主消息；如果返回 `openConvThreadId`，再将其作为 `--topic-id`。需要原始返回结构时回退 `message list-topic-replies`。
+1. 已知 thread/topic ID 时执行 `message list-topic-replies --group <openConversationId> --topic-id <topicId>`。
+2. 未知 ID 时先拉主消息；如果返回 `openConvThreadId`，再将其作为 `--topic-id`。
 
-Shortcut 可创建卡片并按需立即更新：
-
-```bash
-dws chat +messages-send-card --group <openConversationId> --content "任务已完成" --flow-status 3
-dws chat +messages-send-card --receiver <userId>
-```
-
-`--group`、`--receiver`（userId，会先解析联系人）和 `--receiver-open-dingtalk-id` 三选一。传 `--content` 时创建后立即更新；不传时返回 `bizId`，再用原子更新命令继续流式输出：
+原子卡片接口先创建，再用返回的 `bizId` 继续流式更新：
 
 ```bash
 dws chat message send-card --group <openConversationId>
@@ -252,19 +223,7 @@ dws chat text translate --query "Bonjour" --to ja_JP
 
 ### 文件与媒体
 
-读取消息时优先在查询 Shortcut 上加 `--download-resources`；只下载一个已知资源时用：
-
-```bash
-# mediaId：必须同时提供来源消息和会话
-dws chat +messages-resource-download --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/
-
-# fileId：不需要消息上下文
-dws chat +messages-resource-download --type fileId --resource-id <fileId> --output ./downloads/
-```
-
-`--type` 默认 `mediaId`。`--output` 必须是工作目录内相对路径，不能包含 `..`；默认拒绝覆盖，只有用户明确要求时才传 `--overwrite`。该 Shortcut 暂无 leaf Schema 时，从完整 Shortcut Catalog 读取同一 `cli_path`，再用 `--help` 核对 flags。
-
-需要原始下载接口时回退 `dws chat message download-media`：
+使用原子下载接口 `dws chat message download-media`：
 
 ```bash
 dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/
@@ -304,7 +263,7 @@ dws chat message search-advanced --message-type file --search-conv-type group_ch
 
 - 发送目标不唯一：先确认群/人；群用 `chat search`，单聊用 `aisearch person` + `conversation-info`。
 - `unknown flag`：立即执行对应命令 `--help`，不要猜参数。
-- 文件/音视频发送失败：确认本地路径可读且在允许的工作目录范围内；优先 `+messages-send --as user --msg-type file|audio|video --file`，原子回退用 `message send --file-path`。
+- 文件/音视频发送失败：确认本地路径可读且在允许的工作目录范围内，并使用 `message send --msg-type file|audio|video --file-path`。
 - 位置消息参数不完整：先确认经纬度、地址名称和缩略图 mediaId。
 - 名片发送失败：确认 `--contact-id` 是 openDingTalkId，不是 userId。
 - 话题回复缺失：检查是否只拉了主消息，需继续用 `list-topic-replies`。

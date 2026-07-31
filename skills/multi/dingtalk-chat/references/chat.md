@@ -4,42 +4,20 @@
 
 > 命令别名：`dws im` 等价于 `dws chat`。
 
-## Shortcut 优先路由
-
-精确脚本 / recipe 未覆盖时，常见 Agent 意图优先使用公开 `+` Shortcut；原子命令保留给需要特定原始返回结构、兼容参数或 Shortcut 未覆盖字段的场景。先尝试 `dws shortcut list --service chat --compact --format json` 动态发现；当前 CLI 报 `unknown flag: --compact` 时，立即去掉 `--compact` 重试。选中后读取 `dws schema --cli-path "<cli_path>" --format json`；若 leaf 暂未进入 Schema，则以完整 Catalog 中同一 `cli_path` 的契约为准，最后用 `dws <cli_path> --help` 核对真实 flags。
-
-| 意图 | 首选 |
-|---|---|
-| 以 current-user / bot / webhook 身份发消息 | `dws chat +messages-send --as <identity> ...` |
-| 拉取单个群聊或单聊的消息 | `dws chat +chat-messages ...` |
-| 按关键词、发送者、@对象、会话、类型或时间组合搜索 | `dws chat +search-msg ...` |
-| 查询 @ 我的消息 | `dws chat +at-me ...` |
-| 根据消息 ID 批量取详情与 reaction | `dws chat +messages-mget ...` |
-| 读取已知 thread/topic 的全部回复 | `dws chat +thread-replies ...` |
-| 下载单个 mediaId/fileId | `dws chat +messages-resource-download ...` |
-| 创建并按需立即更新流式卡片 | `dws chat +messages-send-card ...` |
-
-- `+messages-send` 只暴露下层真实支持的身份能力：user 支持文本/Markdown、已有 mediaId 图片、本地文件和幂等键；bot 支持群聊或批量单聊文本/Markdown；webhook 的目标由 token 所在群决定。
-- `+messages-send` 自动规范化并补齐对应身份的 @ 占位符。声明 `--at-*` / `--at-all` 即可，不要为统一 Shortcut 手工拼 `@10`。
-- `+search-msg --page-all` 连续翻页并默认按消息 ID 批量富化；续页或富化失败会保留已取得结果并返回逐项失败 ledger。
-- `+at-me`、`+chat-messages`、`+messages-mget`、`+search-msg`、`+thread-replies` 可用 `--download-resources` 下载资源。引用、回复、合并转发中的资源使用结果 `resourceRefs` 自带的子消息 `messageId`；仅当子消息缺会话 ID 时继承父消息 `openConversationId`。
-- 上述五个查询 Shortcut 与 `+messages-resource-download` 都是 `read/not_required`，不要添加 `--yes`。下载只允许工作目录内相对路径、默认不覆盖并原子落盘；需要覆盖时必须由用户显式传 `--overwrite`。
-- 下载器只接受经审查的钉钉与公网 OSS HTTPS 地址并逐跳校验重定向；跨主机时不会转发下层提供的请求头。
-
 ## 适用范围与安全硬约束
 
 `chat` 覆盖钉钉会话、群聊、群成员、会话消息、机器人消息、Webhook、会话状态和群身份管理。
 
 **发消息前参数审查（必须执行）**：
 
-- 发消息类命令包括 `chat +messages-send`、`+messages-send-card`，以及原子 `message send`、`send-by-bot`、`send-by-webhook`、`send-card`、`reply`、`forward`。
+- 发消息类原子命令包括 `message send`、`send-by-bot`、`send-by-webhook`、`send-card`、`reply`、`forward`。
 - 执行前必须逐项核对接收对象、群/人、消息内容、@ 对象、消息类型、附件路径，确认全部来自用户原始需求。
 - 用户没说发给谁、群名/人名可能匹配多个对象、消息文本由 Agent 组织、是否 @ 某人不明确时，必须先确认，严禁自行补全。
-- 重试发送时，Shortcut 复用同一个 `--idempotency-key`，原子命令复用同一个 `--uuid`，避免重复投递。
+- 重试 `message send` 时复用同一个 `--uuid`，避免重复投递。
 
 **文件、图片、音频、视频发送硬规则**：
 
-- 新场景发送本地文件、音频、视频优先用 `dws chat +messages-send --as user --msg-type file|audio|video --file <本地路径>`；原子回退用 `message send --file-path`。两条链路都由 CLI 完成上传和发送，`audio` / `video` 底层按 `file` 处理。
+- 发送本地文件、音频、视频使用 `message send --msg-type file|audio|video --file-path <本地路径>`；CLI 完成上传和发送，`audio` / `video` 底层按 `file` 处理。
 - 不要先走 `dt_media_upload`、`extract_media_id.py`、`drive upload`；`--msg-type image --media-id` 只保留给已有 mediaId 的旧链路。
 
 **Markdown 换行硬规则**：
@@ -84,7 +62,7 @@ dws chat bot --help
 | 群成员昵称 | `dws chat group members --id <openConversationId> --format json` | 返回中包含成员在群里的昵称/展示名；不要只查 contact 个人名 |
 | 消息 `openMessageId` / `openMsgId` | `dws chat message list ... --format json` | 撤回、已读状态、回复、转发、表情回应 |
 | 话题 `openConvThreadId` | `dws chat message list ... --format json` | 拉话题回复或往话题内回复；禁止自行拼接 |
-| 卡片 `bizId` | `dws chat +messages-send-card ... --format json`（不传 `--content`）或原子 `message send-card` | `message update-card --biz-id` |
+| 卡片 `bizId` | `dws chat message send-card ... --format json` | `message update-card --biz-id` |
 
 ## 易混淆路由
 
@@ -92,14 +70,14 @@ dws chat bot --help
 |------------|----------|------------|
 | “置顶会话” | `chat set-top` 或 `chat list-top-conversations` | 不要用 `message set-top-msg` |
 | “置顶某条消息” | `chat message set-top-msg` | 不要用 `chat set-top` |
-| “机器人发消息” | 优先 `chat +messages-send --as bot`；原子回退 `chat message send-by-bot` | 不要用当前用户身份代发 |
+| “机器人发消息” | `chat message send-by-bot` | 不要用当前用户身份代发 |
 | “给机器人发单聊” | `chat bot find` 取 openDingTalkId → `message send --open-dingtalk-id` | 不要用 `bot search`，它没有 openDingTalkId |
-| “发图片/文件/音频/视频” | 优先 `+messages-send --as user --msg-type file|audio|video --file`；原子回退用 `message send --file-path`；已有图片 mediaId 才用 `image` | 不要先 `drive upload` 或 `dt_media_upload` |
+| “发图片/文件/音频/视频” | `message send --msg-type file|audio|video --file-path`；已有图片 mediaId 才用 `image` | 不要先 `drive upload` 或 `dt_media_upload` |
 | “特别关注的人最近发了什么” | `message list-focused` | 不要先查 `contact relation list-my-followings` |
 | “某人发给我的消息” | `message list-by-sender` | 不要只查单聊，结果应覆盖群聊+单聊 |
-| “搜索消息” | 优先 `chat +search-msg`；需要原始返回或未覆盖字段时回退 `message search-advanced` | 不要在可组合条件下退回简单 `message search` |
-| “消息转待办” | 先用 `chat +chat-messages` / `+search-msg` 取消息内容，再调用 `dws todo task create` | 不要在 chat 内寻找“转待办”命令 |
-| “消息转日程” | 先用 `chat +chat-messages` / `+search-msg` 取消息内容，再调用 `dws calendar event create` | 不要在 chat 内寻找“转日程”命令 |
+| “搜索消息” | `message search-advanced` | 不要在可组合条件下退回简单 `message search` |
+| “消息转待办” | 先用 `message list` / `search-advanced` 取消息内容，再调用 `dws todo task create` | 不要在 chat 内寻找“转待办”命令 |
+| “消息转日程” | 先用 `message list` / `search-advanced` 取消息内容，再调用 `dws calendar event create` | 不要在 chat 内寻找“转日程”命令 |
 | “共同群” | `chat search-common --nicks` | 不要分别搜索群再手工求交 |
 | “拉取群文件 / 群文件列表” | `chat conversation-info --group <openConversationId>` 取 `spaceId` → `dws drive list --space-id <spaceId>` | 不要用 `chat file upload`，它只负责上传 |
 | “清空会话聊天记录” | `chat clear-messages` | 不要理解为删除群消息；它只影响当前用户视角 |
@@ -109,11 +87,11 @@ dws chat bot --help
 执行任何发送类命令前，至少检查：
 
 1. 接收对象明确：群聊必须有 `openConversationId`，单聊必须有 `userId` 或 `openDingTalkId`。
-2. 身份明确：统一 Shortcut 显式传 `--as user/bot/webhook`；原子回退分别使用 `message send`、`send-by-bot`、`send-by-webhook`。
+2. 身份明确：当前用户、应用机器人、Webhook 分别使用 `message send`、`send-by-bot`、`send-by-webhook`。
 3. 内容明确：消息正文、标题、附件、卡片内容都能从用户原始需求中找到依据。
 4. @ 对象明确：`--at-all`、`--at-user-ids`、`--at-open-dingtalk-ids` 不可自行追加。
-5. 文件路径明确：统一 Shortcut 用 `--file`，原子回退用 `--file-path`；并确认路径是用户提供或当前任务生成的目标文件。
-6. 重试策略明确：Shortcut 复用同一个 `--idempotency-key`，原子命令复用同一个 `--uuid`，避免重复投递。
+5. 文件路径明确：使用 `--file-path`，并确认路径是用户提供或当前任务生成的目标文件。
+6. 重试策略明确：`message send` 复用同一个 `--uuid`，避免重复投递。
 
 ## 高频一跳命令
 
@@ -125,19 +103,19 @@ dws chat bot --help
 | 建群 | `dws chat group create --name "群名" --users userId1,userId2 --format json` |
 | 看群成员 | `dws chat group members --id <openConversationId> --format json` |
 | 看群内昵称 | `dws chat group members --id <openConversationId> --format json` |
-| 发群文字 | `dws chat +messages-send --as user --chat-id <openConversationId> --text "内容" --idempotency-key <key> --format json` |
-| 发单聊文字 | `dws chat +messages-send --as user --user <userId> --text "内容" --idempotency-key <key> --format json` |
-| 发本地文件 | `dws chat +messages-send --as user --chat-id <openConversationId> --msg-type file --file ./file.pdf --format json` |
-| 发音频/视频 | `dws chat +messages-send --as user --chat-id <openConversationId> --msg-type audio --file ./voice.mp3 --format json` / `--msg-type video --file ./demo.mp4` |
+| 发群文字 | `dws chat message send --group <openConversationId> --text "内容" --uuid <uuid> --format json` |
+| 发单聊文字 | `dws chat message send --user <userId> --text "内容" --uuid <uuid> --format json` |
+| 发本地文件 | `dws chat message send --group <openConversationId> --msg-type file --file-path ./file.pdf --format json` |
+| 发音频/视频 | `dws chat message send --group <openConversationId> --msg-type audio --file-path ./voice.mp3 --format json` / `--msg-type video --file-path ./demo.mp4` |
 | 发位置/名片 | `dws chat message send --group <openConversationId> --msg-type location ...` / `--msg-type profile --contact-id <openDingTalkId>` |
-| 拉群消息 | `dws chat +chat-messages --group <openConversationId> --time "2026-03-10 00:00:00" --direction older --format json` |
-| 搜消息 | `dws chat +search-msg --query "关键词" --start <ISO> --end <ISO> --format json` |
-| 查 @ 我的消息 | `dws chat +at-me --days 7 --format json` |
+| 拉群消息 | `dws chat message list --group <openConversationId> --time "2026-03-10 00:00:00" --direction older --format json` |
+| 搜消息 | `dws chat message search-advanced --query "关键词" --start <ISO> --end <ISO> --format json` |
+| 查 @ 我的消息 | `dws chat message list-mentions --start <ISO> --end <ISO> --format json` |
 | 查未读会话 | `dws chat message list-unread-conversations --count 20 --format json` |
 | 撤回自己消息 | `dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId> --format json` |
 | 查我的机器人 | `dws chat bot search --name "机器人名" --format json` |
-| 机器人发群消息 | `dws chat +messages-send --as bot --robot-code <robot-code> --chat-id <openConversationId> --title "标题" --markdown "## 标题\n\n正文" --format json` |
-| Webhook 告警 | `dws chat +messages-send --as webhook --webhook-token <token> --title "告警" --text "内容" --format json` |
+| 机器人发群消息 | `dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --title "标题" --text "## 标题<br><br>正文" --format json` |
+| Webhook 告警 | `dws chat message send-by-webhook --token <token> --title "告警" --text "内容" --format json` |
 | 查单聊会话 ID | `dws chat conversation-info --user <userId> --format json` |
 | 查群钉盘空间 | `dws chat conversation-info --group <openConversationId> --format json` |
 | 发群公告 | `dws chat group notice create --group <openConversationId> --content "公告内容" --format json` |
@@ -250,26 +228,26 @@ dws chat bot --help
 
 | 用户说 | 路由 |
 |--------|------|
-| “发群消息 / 发到某群” | 优先 `chat +messages-send --as user --chat-id`，先用 `chat search` 找 `openConversationId` |
-| “发单聊 / 发给某人” | 优先 `chat +messages-send --as user --user/--open-dingtalk-id`，人员信息见 `dingtalk-contact` |
-| “发图片 / 发文件 / 发截图 / 发音频 / 发视频” | 优先 `chat +messages-send --as user --msg-type file|audio|video --file <本地路径>`；原子回退用 `message send --file-path` |
+| “发群消息 / 发到某群” | `chat message send --group`，先用 `chat search` 找 `openConversationId` |
+| “发单聊 / 发给某人” | `chat message send --user/--open-dingtalk-id`，人员信息见 `dingtalk-contact` |
+| “发图片 / 发文件 / 发截图 / 发音频 / 发视频” | `chat message send --msg-type file|audio|video --file-path <本地路径>` |
 | “发位置 / 分享地址” | `chat message send --msg-type location`，需经用户确认经纬度和地址名 |
 | “发联系人名片 / 分享联系人” | `chat message send --msg-type profile --contact-id <openDingTalkId>` |
-| “机器人发消息 / 机器人群发” | 单次优先 `chat +messages-send --as bot`；多群广播优先专用脚本；原子回退 `chat message send-by-bot` |
+| “机器人发消息 / 机器人群发” | 单次用 `chat message send-by-bot`；多群广播优先专用脚本 |
 | “撤回我发的消息” | `chat message recall` |
 | “撤回机器人发的消息” | `chat message recall-by-bot` |
-| “查某群聊天记录” | 单次优先 `chat +chat-messages --group`；完整导出优先专用脚本 |
-| “查和某人的单聊记录” | 单次优先 `chat +chat-messages --user/--open-dingtalk-id`；完整历史优先专用脚本 |
+| “查某群聊天记录” | 单次用 `chat message list --group`；完整导出优先专用脚本 |
+| “查和某人的单聊记录” | 单次用 `chat message list-direct --user/--open-dingtalk-id`；完整历史优先专用脚本 |
 | “某人发给我的消息 / 指定发送者消息” | `chat message list-by-sender`，跨单聊和群聊 |
 | “我今天/最近所有消息” | `chat message list-all --start <ISO> --end <ISO>` |
-| “@我的消息” | 优先 `chat +at-me`；组合过滤用 `chat +search-msg --at-me` |
+| “@我的消息” | `chat message list-mentions`；组合过滤用 `chat message search-advanced --at-me` |
 | “特别关注的人最近发了什么” | `chat message list-focused`，不要先查关注人员列表 |
-| “搜索消息里的关键词 / 多维度搜索” | 首选 `chat +search-msg`；原始接口字段未覆盖时回退 `chat message search-advanced` |
-| “只搜文件消息 / 只搜群聊 / 只看机器人消息” | `chat +search-msg --message-type file --conversation-type group_chat --only-robot` 按需组合 |
+| “搜索消息里的关键词 / 多维度搜索” | `chat message search-advanced` |
+| “只搜文件消息 / 只搜群聊 / 只看机器人消息” | `chat message search-advanced --message-type file --search-conv-type group_chat --only-robot-messages` 按需组合 |
 | “翻译这段文字” | `chat text translate --query <文本> --to <语言代码>` |
 | “把这条消息转待办 / 消息里提到的事项建待办” | 先取消息内容和相关人员，再按 `dingtalk-todo` 调 `dws todo task create`；标题、执行人、截止时间必须来自消息或用户确认 |
 | “把这条消息转日程 / 消息里约的会建日程” | 先取消息内容、时间、地点、参会人，再按 `dingtalk-calendar` 调 `dws calendar event create`；时间不明确必须先确认 |
-| “话题回复 / 往话题里回复” | 已知 thread/topic 时优先 `chat +thread-replies` 读取；发送回复仍用 `message send --group <openConvThreadId>` |
+| “话题回复 / 往话题里回复” | `message list-topic-replies` 读取；发送回复用 `message send --group <openConvThreadId>` |
 | “消息已读未读 / 谁看了消息” | `chat message read-status` |
 | “置顶某条消息 / 取消消息置顶” | `chat message set-top-msg` / `unset-top-msg` |
 
@@ -299,7 +277,7 @@ dws chat bot --help
 | “查看我的机器人 / 我创建的机器人” | `chat bot search` |
 | “找机器人 / 搜索全部可用机器人 / 给机器人发单聊” | `chat bot find`，需要 `openDingTalkId` |
 | “加机器人到群 / 从群移除机器人 / 群里有哪些机器人” | `group members add-bot` / `remove-bot` / `group bots` |
-| “Webhook 发告警” | 优先 `chat +messages-send --as webhook`；原子回退 `chat message send-by-webhook` |
+| “Webhook 发告警” | `chat message send-by-webhook` |
 
 ### 会话状态
 
@@ -312,7 +290,7 @@ dws chat bot --help
 | “隐藏会话” | `chat hide` |
 | “清红点 / 全部已读” | `chat clear-red-point` / `chat clear-all-red-point` |
 | “标记未读 / 标记已读” | `chat mark-unread` / `chat mark-read` |
-| “清空聊天记录” | 优先 `chat +conversation-clear-messages`；确认用户同意后才执行并传 `--yes`；原子回退 `chat clear-messages` |
+| “清空聊天记录” | `chat clear-messages`；按 leaf Schema 的确认语义执行 |
 | “会话分组” | `chat category *` |
 | “智能分组 / 按关键词或成员自动分组” | `chat category create-smart` |
 | “群文件 / 拉取群文件列表” | `chat conversation-info --group <openConversationId>` 取 `spaceId`，再按 `dingtalk-drive` 调 `dws drive list --space-id <spaceId>` |
@@ -390,8 +368,7 @@ dws chat bot --help
 - `chat group quit` 退出群聊，需传 --group（openConversationId）
 - `chat group update-icon` 更新群头像，需传 --group（openConversationId）和由可信上游提供的有效 --icon-media-id（mediaId）；DWS CLI 不能从本地图片生成该 ID
 - `chat group update-settings` 更新群设置，需传 --group（openConversationId）、--setting-key（设置项 key）、--status（0=关闭 1=开启）
-- `chat +messages-send-card` 的 `--group`、`--receiver`、`--receiver-open-dingtalk-id` 三选一；传 `--content` 时创建并立即更新，不传时返回 `bizId` 供后续 `message update-card` 使用；`--flow-status` 范围 1–5，默认 3
-- 原子 `chat message send-card` 创建卡片后仍用 `message update-card --biz-id` 更新内容
+- `chat message send-card` 的 `--group`、`--receiver`、`--receiver-open-dingtalk-id` 三选一；创建后用 `message update-card --biz-id` 更新内容
 - `chat message update-card` 流式更新卡片内容，需传 --biz-id（创建卡片返回的业务 ID）、--content、--flow-status
 - `chat message list-by-ids` 根据消息 ID 批量查询，--msg-ids 逗号分隔，最多 50 条
 - `chat message add-emoji` / `remove-emoji` 需传 --group（openConversationId）、--msg-id（openMsgId）、--emoji（表情名称）
@@ -423,7 +400,7 @@ dws chat bot --help
 - [contact](../../dingtalk-contact/references/contact.md) — 搜索人员，获取 `userId` / `openDingTalkId`。
 - [todo](../../dingtalk-todo/references/todo.md) — 消息转待办时使用；从 chat 消息内容提取标题、执行人、截止时间后调用 `dws todo task create`。
 - [calendar](../../dingtalk-calendar/references/calendar.md) — 消息转日程时使用；从 chat 消息内容提取标题、开始/结束时间、地点、参会人后调用 `dws calendar event create`。
-- [drive](../../dingtalk-drive/references/drive.md) — 云盘/群文件管理；拉群文件先用 `chat conversation-info` 取 `spaceId`，再用 `dws drive list --space-id <spaceId>`；chat 纯文件/音视频发送优先用 `chat +messages-send --as user --msg-type file|audio|video --file`。
+- [drive](../../dingtalk-drive/references/drive.md) — 云盘/群文件管理；拉群文件先用 `chat conversation-info` 取 `spaceId`，再用 `dws drive list --space-id <spaceId>`；chat 纯文件/音视频发送使用 `chat message send --msg-type file|audio|video --file-path`。
 - [aisearch](../../dingtalk-aisearch/references/aisearch.md) — 可用于人员、行为、历史信息搜索，但消息发送与会话管理仍走 `chat`。
 - [ding](../../dingtalk-misc/references/ding.md) — DING 通知与升级提醒，不等价于群聊消息。
 

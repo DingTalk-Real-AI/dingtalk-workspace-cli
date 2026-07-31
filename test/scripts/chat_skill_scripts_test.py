@@ -4,6 +4,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 import re
 import types
 import unittest
@@ -32,27 +33,82 @@ def load_script(name: str):
 
 
 class ChatSkillScriptPathTest(unittest.TestCase):
-    def test_shortcuts_use_progressive_discovery_without_static_catalog(self):
+    def test_shortcuts_are_self_contained_in_multi_skill(self):
         text = (MULTI_ROOT / 'SKILL.md').read_text(encoding='utf-8')
         block = text.split('<!-- VISIBLE_SHORTCUTS_START -->', 1)[1].split(
             '<!-- VISIBLE_SHORTCUTS_END -->', 1
         )[0]
-        self.assertNotRegex(block, r'\|\s*`dws chat \+')
+        catalog = json.loads(
+            (ROOT / 'docs' / 'shortcut-public-catalog.json').read_text(
+                encoding='utf-8'
+            )
+        )
+        chat_rows = [
+            row for row in catalog['results'] if row.get('service') == 'chat'
+        ]
+        table_rows = re.findall(
+            r'\|\s*`(\+[a-z0-9-]+)`\s*\|\s*([^|\n]+)\s*\|',
+            block,
+        )
+        self.assertEqual(
+            {row['command'] for row in chat_rows},
+            {command for command, _ in table_rows},
+        )
+        self.assertTrue(all(description.strip() for _, description in table_rows))
+        self.assertTrue(
+            all(
+                re.search(r'[\u4e00-\u9fff]', description)
+                for _, description in table_rows
+            ),
+            'every shortcut description must retain a Chinese intent cue',
+        )
+        self.assertIn('| Shortcut | 适用场景 |', block)
+        self.assertNotIn('| Shortcut | 风险 |', block)
+        self.assertNotIn('dws chat +', block)
         for required in (
-            '精确脚本 / recipe > 匹配的公开 shortcut > reference 中的原子命令',
-            'dws shortcut list --service chat --compact --format json',
-            '不接受 `--compact` 时去掉该 flag 重试',
-            '不得猜测 `+` 命令名',
-            '若该 leaf 暂未进入 Schema',
-            'dws <cli_path> --help',
-            'confirmation=user_required',
+            '+messages-send',
+            '+chat-messages',
+            '+search-msg',
+            '+conversation-clear-messages',
         ):
             self.assertIn(required, block)
-
-    def test_chat_references_track_remote_shortcut_contract(self):
-        chat_ref = (MULTI_ROOT / 'references' / 'chat.md').read_text(
-            encoding='utf-8'
+        high_risk = {
+            row['command']
+            for row in chat_rows
+            if row.get('risk') == 'high-risk-write'
+        }
+        high_risk_line = next(
+            line for line in block.splitlines()
+            if line.startswith('`risk=high-risk-write`')
         )
+        self.assertEqual(
+            high_risk,
+            set(re.findall(r'`(\+[a-z0-9-]+)`', high_risk_line)),
+        )
+        for required in (
+            'This is the only Shortcut entry point for multi/chat',
+            'exact script/recipe > matching public Shortcut > atomic command',
+            'dws shortcut list --service chat --format json',
+            'never guess names',
+            'confirmation=user_required',
+            '--idempotency-key',
+            '--download-resources',
+            '--receiver-open-dingtalk-id',
+        ):
+            self.assertIn(required, text)
+
+    def test_chat_references_are_atomic_only(self):
+        references = list((MULTI_ROOT / 'references').rglob('*.md'))
+        self.assertTrue(references)
+        for path in references:
+            text = path.read_text(encoding='utf-8')
+            with self.subTest(path=path.relative_to(MULTI_ROOT)):
+                self.assertNotRegex(text, r'(?i)\bshortcut\b')
+                self.assertNotRegex(text, r'\+[a-z][a-z0-9-]+')
+
+        chat_ref = (
+            MULTI_ROOT / 'references' / 'chat.md'
+        ).read_text(encoding='utf-8')
         message_ref = (
             MULTI_ROOT / 'references' / 'chat' / 'chat-message.md'
         ).read_text(encoding='utf-8')
@@ -61,27 +117,41 @@ class ChatSkillScriptPathTest(unittest.TestCase):
         ).read_text(encoding='utf-8')
 
         for required in (
-            'unknown flag: --compact',
-            '若 leaf 暂未进入 Schema',
-            '+messages-send --as <identity>',
-            '+messages-resource-download',
+            'message send --group',
+            'message search-advanced',
+            'message send-by-bot',
+            'message send-by-webhook',
         ):
             self.assertIn(required, chat_ref)
         for required in (
-            '--receiver-open-dingtalk-id',
-            '--content',
+            'message send-card',
+            'message update-card',
             '--flow-status',
-            '--download-resources',
-            '--overwrite',
-            'fileId：不需要消息上下文',
+            'message download-media',
+            '--file-path',
         ):
             self.assertIn(required, message_ref)
         for required in (
-            '+conversation-clear-messages',
-            '+category-delete',
-            '确认后才传 `--yes`',
+            'clear-messages',
+            'category delete',
+            '按 leaf Schema 的确认语义执行',
         ):
             self.assertIn(required, conversation_ref)
+
+    def test_documented_chat_commands_do_not_pass_literal_newline_escapes(self):
+        docs = [MULTI_ROOT / 'SKILL.md']
+        docs.extend((MULTI_ROOT / 'references').rglob('*.md'))
+        offenders = []
+        for path in docs:
+            for line_number, line in enumerate(
+                path.read_text(encoding='utf-8').splitlines(),
+                start=1,
+            ):
+                if 'dws chat ' in line and r'\n' in line:
+                    offenders.append(
+                        f'{path.relative_to(ROOT)}:{line_number}: {line}'
+                    )
+        self.assertEqual([], offenders)
 
     def test_markdown_python_links_resolve(self):
         link_re = re.compile(r'\[[^\]]+\.py\]\(([^)]+\.py)\)')

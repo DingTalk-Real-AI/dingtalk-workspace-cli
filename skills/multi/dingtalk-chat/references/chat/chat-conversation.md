@@ -67,9 +67,7 @@ dws chat hide --conversation-id <openConversationId>
 ```bash
 dws chat mark-unread --conversation-id <openConversationId>
 dws chat mark-read --conversation-id <openConversationId> --message-id <openMessageId>
-# 用户确认后执行；Shortcut 暂无 leaf Schema 时按 Catalog + Help 核对
-dws chat +conversation-clear-messages --conversation-id <openConversationId> --yes
-# 原子回退
+# 按 leaf Schema 的确认语义执行
 dws chat clear-messages --conversation-id <openConversationId> --yes
 ```
 
@@ -95,9 +93,7 @@ dws chat category batch-info --category-ids 123,456
 dws chat category create --title "工作群"
 dws chat category create-smart --name "重点群" --keywords "重点,项目" --members openDingTalkId1,openDingTalkId2
 dws chat category add-conv --group <openConversationId> --category-ids 123,456
-# 用户确认后执行
-dws chat +category-delete --category-id <categoryId> --yes
-# 原子回退
+# 按 leaf Schema 的确认语义执行
 dws chat category delete --category-id <categoryId> --yes
 ```
 
