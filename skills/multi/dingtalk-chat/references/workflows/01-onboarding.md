@@ -34,7 +34,7 @@ dws chat group members add --id <openConversationId> --users <userId> --format j
 ```bash
 dws chat message send --group <openConversationId> \
   --title "欢迎 <姓名> 加入" \
-  --text "@所有人 欢迎 <姓名> 加入项目组！入职待办和欢迎会已安排。" \
+  --text "欢迎 <姓名> 加入项目组！入职待办和欢迎会已安排。" \
   --at-all \
   --format json
 ```
