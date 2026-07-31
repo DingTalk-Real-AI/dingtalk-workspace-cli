@@ -69,6 +69,27 @@ func TestCalendarEventCreateHelpKeepsRoomsStringMetavar(t *testing.T) {
 	}
 }
 
+func TestChatAgentGuidanceRendersOnlyOnStdout(t *testing.T) {
+	cmd := NewRootCommand()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{"chat", "clear-messages", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("chat clear-messages --help: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+
+	for _, want := range []string{"Agent guidance:", "Outcome:", "Use when:", "Avoid when:", "Example:", "Output:"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("chat help stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+	if got := strings.TrimSpace(stderr.String()); got != "" {
+		t.Fatalf("chat help wrote guidance or warnings to stderr:\n%s", got)
+	}
+}
+
 func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 	root := NewRootCommand()
 	listDirect := mustFindCommand(t, root, "chat", "message", "list-direct")

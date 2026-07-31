@@ -62,7 +62,7 @@ func renderChatAgentSelectionHint(cmd *cobra.Command) {
 	}
 	selection := meta.Selection
 
-	w := cmd.ErrOrStderr()
+	w := cmd.OutOrStdout()
 	_, _ = fmt.Fprintln(w, "Agent guidance:")
 	if selection.AgentSummary != "" {
 		_, _ = fmt.Fprintf(w, "  Outcome: %s\n", selection.AgentSummary)
