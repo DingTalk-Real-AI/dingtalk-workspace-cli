@@ -168,10 +168,13 @@ dws chat text translate --query "你好世界" --to en_US --format json
 | `chat category create-smart` | 智能分组 ID/规则结果 | 后续查看或调整智能分组 |
 | `chat message send-card` | `bizId` | `message update-card --biz-id` |
 
-## 自动化脚本
+## 可选自动化脚本
 
-| 脚本 | 场景 | 用法 |
-|------|------|------|
+这些脚本仅用于已确认安装 Python 3 的环境；无 Python 环境时使用本页的
+`dws` 原生命令流程。
+
+| 脚本 | 可选场景 | 用法 |
+|------|----------|------|
 | [chat_export_messages.py](../../scripts/chat_export_messages.py) | 导出群聊消息到 JSON 文件 | `python3 scripts/chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
 | [chat_history_with_user.py](../../scripts/chat_history_with_user.py) | 查询与某人的单聊聊天记录 | `python3 scripts/chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
 

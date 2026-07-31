@@ -387,10 +387,13 @@ dws chat bot --help
 - `chat group-mute-member` 指定群成员禁言，需传 --group、--user/--users（userId，逗号分隔，CLI 自动解析为 openDingTalkId）、--mute-time（毫秒，仅禁言时必填，支持 300000/3600000/86400000/604800000/2592000000），传 --off 解除禁言；禁言群主会被服务端拒绝
 - `chat group set-admin` 设置/取消群管理员，需传 --group（openConversationId）、--user/--users（userId，逗号分隔），默认设为管理员，传 --off 取消
 
-## 自动化脚本
+## 可选自动化脚本
 
-| 脚本 | 场景 | 用法 |
-|------|------|------|
+这些脚本仅用于已确认安装 Python 3 的环境，不是默认或唯一执行路径；无
+Python 环境时直接使用上文的 `dws` 原生命令。
+
+| 脚本 | 可选场景 | 用法 |
+|------|----------|------|
 | [chat_export_messages.py](../scripts/chat_export_messages.py) | 导出群聊消息到 JSON 文件 | `python3 scripts/chat_export_messages.py --query "项目冲刺" --time "2026-03-10 00:00:00"` |
 | [chat_history_with_user.py](../scripts/chat_history_with_user.py) | 查询与某人的单聊聊天记录 | `python3 scripts/chat_history_with_user.py --name "张三" --time "2026-03-10 00:00:00"` |
 | [bot_broadcast.py](../scripts/bot_broadcast.py) | 使用同一机器人向多个群批量发送消息 | `python3 scripts/bot_broadcast.py --robot-code <code> --chats <id1>,<id2> --title "通知" --text "内容"` |

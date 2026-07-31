@@ -133,9 +133,9 @@ Load branch details on demand: [消息](references/chat/chat-message.md),
 
 ## 核心意图表
 
-Use this table only to disambiguate identity, chat type, operation, and three
-dedicated scripts. Except for exact script matches, commands are atomic
-fallbacks used only when no public Shortcut matches.
+Use this table to disambiguate identity, chat type, and operation. Prefer public
+Shortcuts; otherwise use atomic commands. Every Chat workflow must work without
+Python.
 
 | 用户说 | 分支 / 原子回退 |
 |---|---|
@@ -146,13 +146,11 @@ fallbacks used only when no public Shortcut matches.
 | “拉某个会话的消息” | Use `message list`; locate the chat and set time bounds first |
 | “搜消息关键词 / 组合搜索” | Use `message search` for keywords; `search-advanced` for sender/@/multi-chat filters |
 | “撤回用户消息 / 机器人消息” | Use `message recall` / `recall-by-bot`; their message IDs differ |
-| “群消息翻页导出” | `python3 scripts/chat_export_messages.py` |
-| “查和某人的聊天记录” | `python3 scripts/chat_history_with_user.py` |
-| “机器人多群广播” | `python3 scripts/bot_broadcast.py` |
+| “群消息翻页导出” | Use `+chat-messages`; follow pagination and save merged JSON if requested |
+| “查和某人的聊天记录” | Resolve the person, then use `+chat-messages` with one user ID |
+| “机器人多群广播” | Confirm once, then call `+messages-send-by-bot` per group |
 
-Script paths are relative to this Skill. For a script match, verify `python3`;
-if unavailable, use the matching atomic fallback in
-[01-messaging.md](references/01-messaging.md).
+Detailed native CLI loops are in [01-messaging.md](references/01-messaging.md).
 
 ## 关键 SOP
 

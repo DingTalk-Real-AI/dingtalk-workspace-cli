@@ -138,7 +138,7 @@ class ChatSkillScriptPathTest(unittest.TestCase):
                     missing.append(f'{doc.relative_to(ROOT)} -> {target}')
         self.assertEqual([], missing)
 
-    def test_documented_invocations_use_python3_and_skill_relative_paths(self):
+    def test_optional_python_invocations_use_python3_and_skill_relative_paths(self):
         docs = {
             MULTI_ROOT: (
                 MULTI_ROOT / 'SKILL.md',
@@ -165,6 +165,22 @@ class ChatSkillScriptPathTest(unittest.TestCase):
                             f'{doc.relative_to(ROOT)} -> {target} is missing'
                         )
         self.assertEqual([], errors)
+
+    def test_chat_workflows_do_not_require_python(self):
+        multi_skill = (MULTI_ROOT / 'SKILL.md').read_text(encoding='utf-8')
+        multi_recipes = (
+            MULTI_ROOT / 'references' / '01-messaging.md'
+        ).read_text(encoding='utf-8')
+        mono_recipes = (
+            MONO_ROOT / 'references' / 'best_practices' / '01-messaging.md'
+        ).read_text(encoding='utf-8')
+
+        self.assertRegex(multi_skill, r'must work without\s+Python')
+        self.assertNotRegex(multi_skill, r'\|\s*“[^”]+”\s*\|\s*`python3 ')
+        for recipes in (multi_recipes, mono_recipes):
+            self.assertNotRegex(recipes, r'\*\*优先\*\*[^\\n]*python3')
+            self.assertIn('chat message list', recipes)
+            self.assertIn('chat message send-by-bot', recipes)
 
     def test_mono_and_multi_script_copies_match(self):
         bad_python = re.compile(r'(?<![A-Za-z0-9_])python\s+')
