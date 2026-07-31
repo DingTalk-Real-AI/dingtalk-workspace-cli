@@ -44,10 +44,122 @@ func configureRootHelp(root *cobra.Command) {
 			defaultHelpFunc(cmd, args)
 			cli.RenderSafetyAnnotation(cmd)
 			renderChatAgentSelectionHint(cmd)
+			renderChatWorkbookHelpGuidance(cmd)
 			return
 		}
 		renderRootHelp(root)
 	})
+}
+
+type chatHelpGuidance struct {
+	reason  string
+	action  string
+	example string
+}
+
+var chatWorkbookHelpGuidance = map[string]chatHelpGuidance{
+	"chat group members": {
+		"群成员列表固定使用 --id 传群 openConversationId，不使用消息命令的 --group。",
+		"先查群 ID，再直接执行 members；不要追加多余的 list 子命令。",
+		`dws chat group members --id <openConversationId> --format json`,
+	},
+	"chat group members add": {
+		"添加群成员固定使用 --id 指定群、--users 指定成员。",
+		"先查询群 ID 和成员 userId/openDingTalkId，再执行添加。",
+		`dws chat group members add --id <openConversationId> --users <userId1>,<userId2> --format json`,
+	},
+	"chat group members remove": {
+		"移除群成员使用 --id 和 --users，且不能移除群主。",
+		"先确认成员和不可逆影响，检查群主身份后再执行。",
+		`dws chat group members remove --id <openConversationId> --users <userId> --format json`,
+	},
+	"chat group members add-bot": {
+		"添加机器人属于群成员管理，群参数沿用 --id，并需要 robot-code。",
+		"确认机器人编码和目标群后执行。",
+		`dws chat group members add-bot --id <openConversationId> --robot-code <robotCode> --format json`,
+	},
+	"chat group members remove-bot": {
+		"移除机器人固定使用 --id 指定群、--bot-id 指定群内机器人。",
+		"先列出群机器人取得 openBotId，再执行移除。",
+		`dws chat group members remove-bot --id <openConversationId> --bot-id <openBotId> --format json`,
+	},
+	"chat group members list-by-ids": {
+		"批量查询成员详情使用 --id + --users，users 为成员标识列表。",
+		"确认目标群和成员 ID 后再查询。",
+		`dws chat group members list-by-ids --id <openConversationId> --users <openDingTalkId1>,<openDingTalkId2> --format json`,
+	},
+	"chat group create": {
+		"建群使用 --users；创建结果中的群 ID 可继续传给 members add 和 rename。",
+		"先准备成员 userId，创建后保存返回的 openConversationId。",
+		`dws chat group create --name "项目群" --users <userId1>,<userId2> --format json`,
+	},
+	"chat group rename": {
+		"群改名只使用 --id + --name，不能使用 --group。",
+		"先通过 chat search 获取 openConversationId。",
+		`dws chat group rename --id <openConversationId> --name "新群名" --format json`,
+	},
+	"chat message list": {
+		"message list 按会话和时间拉取消息，不执行服务端关键词搜索。",
+		"按关键词查找时改用 message search；拉历史时提供会话和 time。",
+		`dws chat message list --group <openConversationId> --time "2026-07-30 23:59:59" --direction older --format json`,
+	},
+	"chat message search": {
+		"关键词审计应使用服务端搜索，并同时提供 query、start、end。",
+		"不要用 message list 拉全量后人工筛选。",
+		`dws chat message search --query "评审" --start "2026-07-01T00:00:00+08:00" --end "2026-07-31T23:59:59+08:00" --format json`,
+	},
+	"chat message search-advanced": {
+		"简单关键词优先 message search；只有组合人员、@、会话等条件时才使用 search-advanced。",
+		"至少提供一个真实搜索条件，分页参数不算搜索条件。",
+		`dws chat message search-advanced --query "评审" --conversation-ids <openConversationId> --format json`,
+	},
+	"chat message list-all": {
+		"list-all 按时间跨会话拉取消息，不执行关键词匹配。",
+		"需要关键词时改用 message search，并始终限制时间范围。",
+		`dws chat message list-all --start "2026-07-01T00:00:00+08:00" --end "2026-07-31T23:59:59+08:00" --format json`,
+	},
+	"chat message list-by-sender": {
+		"list-by-sender 的核心条件是发送者；核心条件是关键词时应使用 message search。",
+		"提供发送者 ID 和开始时间，按 nextCursor 翻页。",
+		`dws chat message list-by-sender --sender-user-id <userId> --start "2026-07-01T00:00:00+08:00" --format json`,
+	},
+}
+
+func renderChatWorkbookHelpGuidance(cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+	path := strings.TrimSpace(strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" "))
+	guide, ok := chatWorkbookHelpGuidance[path]
+	if !ok {
+		meta, metaOK := cli.ResolveMeta(path)
+		if !metaOK || meta.Identity.ProductID != "chat" {
+			return
+		}
+		reason := meta.Selection.AgentSummary
+		if reason == "" {
+			reason = "执行前需要确认该 Chat 命令的适用场景、必填参数和安全边界。"
+		}
+		action := "根据帮助正文补齐必填参数，并在实际执行时增加 --format json。"
+		if len(meta.Selection.UseWhen) > 0 {
+			action = meta.Selection.UseWhen[0]
+		}
+		example := "dws " + path + " --format json"
+		if len(meta.Selection.Examples) > 0 {
+			example = meta.Selection.Examples[0]
+			if !strings.Contains(example, "--format") {
+				example += " --format json"
+			}
+		}
+		guide = chatHelpGuidance{reason: reason, action: action, example: example}
+	}
+	w := cmd.ErrOrStderr()
+	_, _ = fmt.Fprintln(w, "错误信息：当前为执行前 guidance，不是运行失败")
+	_, _ = fmt.Fprintln(w, "原因："+guide.reason)
+	_, _ = fmt.Fprintln(w, "建议操作：")
+	_, _ = fmt.Fprintln(w, "1. "+guide.action)
+	_, _ = fmt.Fprintln(w, "示例：")
+	_, _ = fmt.Fprintln(w, "1. "+guide.example)
 }
 
 // renderChatAgentSelectionHint exposes the reviewed Chat selection contract in
