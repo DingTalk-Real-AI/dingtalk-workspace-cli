@@ -10,9 +10,13 @@ under the project [Apache License 2.0](./LICENSE).
 ## Before You Start
 
 1. Read `README.md`.
-2. Read the relevant docs under `docs/`.
-3. Inspect the code and tests for the area you will change.
-4. Decide the smallest safe change that satisfies the request.
+2. Normalize the task and select checks with
+   [`docs/coding-agent-guide.md`](./docs/coding-agent-guide.md).
+3. Read the relevant docs under `docs/`. CLI/Schema/Agent metadata work must
+   also follow
+   [`docs/schema-contributor-guide.md`](./docs/schema-contributor-guide.md).
+4. Inspect the code and tests for the area you will change.
+5. Decide the smallest safe change that satisfies the request.
 
 Maintainers and automation authors should also read
 `docs/automation.md` for repo-local release and agent workflow

@@ -8,7 +8,7 @@ POLICY_GOTMPDIR ?= $(DWS_POLICY_TMPDIR)/go
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy coding-agent-harness coding-agent-task edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -22,6 +22,8 @@ help:
 	@printf "  make format-check  - Check all repository Go source files with gofmt\n"
 	@printf "  make fmt           - Format all repository Go source files\n"
 	@printf "  make policy        - Check the built dws plus open-source and Schema policies\n"
+	@printf "  make coding-agent-harness - Validate coding-agent task intake, routing, and self-check contracts\n"
+	@printf "  make coding-agent-task TASK=<file> - Validate a filled coding-agent task contract\n"
 	@printf "  make interface-integrity - Check historical commands and help contracts still work\n"
 	@printf "  make authoritative-interface-integrity BASE_REF=<ref> - Check the Git-owned PR merge-base\n"
 	@printf "  make coverage-gate BASE_REF=<ref> - Enforce overall non-regression and 100%% changed-code coverage\n"
@@ -95,6 +97,13 @@ policy: test-auth-legacy-compat
 	@$(POLICY_ENV) ./scripts/policy/check-schema-catalog.sh
 	@$(POLICY_ENV) ./scripts/policy/check-schema-binary.sh
 	@$(POLICY_ENV) $(MAKE) test-schema-agent-examples
+
+coding-agent-harness:
+	@./scripts/policy/check-coding-agent-harness.sh
+
+coding-agent-task:
+	@test -n "$(TASK)" || { printf '%s\n' 'TASK is required, e.g. make coding-agent-task TASK=task.md' >&2; exit 2; }
+	@./scripts/policy/check-coding-agent-harness.sh -task "$(TASK)"
 
 edition-test:
 	$(GO) test -v -count=1 ./pkg/editiontest/...
