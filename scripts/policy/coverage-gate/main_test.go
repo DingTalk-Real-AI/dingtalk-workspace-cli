@@ -511,3 +511,108 @@ func TestEvaluateOverallTargetCanBeEnabled(t *testing.T) {
 		t.Fatalf("failures = %v, want overall target failure", result.Failures)
 	}
 }
+
+func TestExemptNonExecutableFiles(t *testing.T) {
+	changed := map[string][]lineRange{
+		"internal/cli/gen.go":  {{Start: 1, End: 5}},
+		"internal/cli/doc.go":  {{Start: 1, End: 2}},
+		"internal/cli/code.go": {{Start: 10, End: 12}},
+	}
+	filtered, exempted := exemptNonExecutableFiles(changed, func(path string) bool {
+		return path == "internal/cli/code.go"
+	})
+	want := map[string][]lineRange{"internal/cli/code.go": {{Start: 10, End: 12}}}
+	if !reflect.DeepEqual(filtered, want) {
+		t.Fatalf("filtered = %#v, want %#v", filtered, want)
+	}
+	// 豁免列表按字典序返回，供调用方日志化而非静默丢弃。
+	if !reflect.DeepEqual(exempted, []string{"internal/cli/doc.go", "internal/cli/gen.go"}) {
+		t.Fatalf("exempted = %v, want sorted exempted paths", exempted)
+	}
+}
+
+func TestFileHasExecutableStatements(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, source string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	cases := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{
+			name: "pragma-only file has no executable statements",
+			path: write("gen.go", "// Comment only.\npackage cli\n\n//go:generate echo hi\n"),
+			want: false,
+		},
+		{
+			name: "function body counts as executable",
+			path: write("code.go", "package cli\n\nfunc f() int { return 1 }\n"),
+			want: true,
+		},
+		{
+			name: "empty function body is not executable",
+			path: write("empty.go", "package cli\n\nfunc f() {}\n"),
+			want: false,
+		},
+		{
+			name: "package-level function literal counts as executable",
+			path: write("lit.go", "package cli\n\nvar f = func() int { return 1 }\n"),
+			want: true,
+		},
+		{
+			name: "missing file stays conservative",
+			path: filepath.Join(dir, "nonexistent.go"),
+			want: true,
+		},
+		{
+			name: "unparsable file stays conservative",
+			path: write("broken.go", "package cli\n\nfunc {{{\n"),
+			want: true,
+		},
+	}
+	for _, tc := range cases {
+		if got := fileHasExecutableStatements(tc.path); got != tc.want {
+			t.Errorf("%s: fileHasExecutableStatements() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestRunLogsExemptedNonExecutableFiles(t *testing.T) {
+	dir := t.TempDir()
+	pragmaOnly := filepath.Join(dir, "gen.go")
+	if err := os.WriteFile(pragmaOnly, []byte("// pragma carrier\npackage cli\n\n//go:generate echo hi\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profile := filepath.Join(dir, "coverage.out")
+	body := "mode: atomic\nexample.com/project/internal/a.go:10.1,12.2 5 1\n"
+	if err := os.WriteFile(profile, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{
+		"--overall-profile", profile,
+		"--diff-profile", profile,
+		"--base-ref", "base",
+		"--module", "example.com/project",
+		"--baseline-overall", "100",
+		"--target", "80",
+	}
+	loader := func(string) (map[string][]lineRange, error) {
+		return map[string][]lineRange{
+			"internal/a.go": {{Start: 10, End: 12}},
+			pragmaOnly:      {{Start: 1, End: 4}},
+		}, nil
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run(args, &stdout, &stderr, loader, nil); code != 0 {
+		t.Fatalf("run code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "exempting "+pragmaOnly) {
+		t.Fatalf("stderr = %q, want exemption log for pragma-only file", stderr.String())
+	}
+}

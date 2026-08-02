@@ -10,6 +10,9 @@ func publicCatalogKey(service, command string) string {
 }
 
 func applyPublicCatalog(s Shortcut) Shortcut {
+	if reviewed, ok := applyReviewedSemanticCatalog(s); ok {
+		return reviewed
+	}
 	if len(publicShortcutCatalog) == 0 {
 		return s
 	}
@@ -22,6 +25,9 @@ func applyPublicCatalog(s Shortcut) Shortcut {
 // InPublicCatalog reports whether a shortcut belongs to the generated public
 // shortcut surface used by help, listing, and skill generation.
 func InPublicCatalog(service, command string) bool {
+	if reviewed, ok := reviewedSemanticCatalog[publicCatalogKey(service, command)]; ok {
+		return reviewed.Public && reviewed.Availability == AvailabilityAvailable
+	}
 	_, ok := publicShortcutCatalog[publicCatalogKey(service, command)]
 	return ok
 }

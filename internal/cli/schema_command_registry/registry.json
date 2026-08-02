@@ -1,0 +1,4 @@
+{
+  "$schema": "./schema_command_registry.schema.json",
+  "version": 1
+}

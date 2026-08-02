@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-07-15T16:58:39.143193",
-  "count": 210,
+  "generated_at": "2026-07-29T00:06:19.285348",
+  "count": 265,
   "results": [
     {
       "suite": "read",
@@ -479,298 +479,974 @@
       "status": "real-ok"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+at-me",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "自动构造时间窗，分页拉取跨会话 @我 消息，并保留身份、引用、reaction、resourceRefs 与完整性。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+bot-find",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "仅绑定并投影全部可用机器人搜索；底层 leaf 已接受关键词和分页参数。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+bot-search",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "仅绑定并投影当前用户创建的机器人搜索；无跨工具编排，默认由 bot Schema leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "chat",
       "command": "+broadcast",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按多人姓名逐一解析目标、拒绝歧义、生成可执行 dry-run 计划并隔离单人发送失败。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+category-add-conversation",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "将会话加入分组是一对一关系写入；默认由 leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+category-create",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "创建会话分组是一对一写入；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "chat",
       "command": "+category-delete",
-      "risk": "write",
-      "status": "real-ok"
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "删除会话分组是一对一高风险写入；应直接使用带删除确认的 leaf。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+category-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "会话分组列表只做字段投影；底层 leaf 已可直接读取。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+category-list-conversations",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "按分组列会话是一对一分页读取；无跨工具编排。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+category-remove-conversation",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "将会话移出分组是一对一关系写入；默认由 leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+category-rename",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "重命名会话分组是一对一写入；无额外语义增益。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-add-bot",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人入群是一对一治理写入；尚无按名称解析机器人编排。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-audit-join",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "审批单条入群申请是一对一治理写入；应直接使用带动作枚举的 leaf。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-bots",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "群机器人列表只做字段投影；完整成员视图使用 +chat-members-list。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "自动解析当前用户并加入初始成员以满足群主约束，规范化创建结果，同时明确不支持 Lark-only owner/description/bot/visibility 语义。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-dismiss",
       "risk": "high-risk-write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "解散群聊不可逆且是一对一操作；应由 Runtime Schema leaf 的高风险门禁承载。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-get-by-id",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "按数字群号取群信息是一对一读取；与 openConversationId 不可互换。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-invite-url",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "群邀请链接是一对一读取；Shortcut 未增加生命周期或分享编排。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-list-all",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "与 +my-groups 重复；保留旧命令兼容，默认入口使用带类型过滤和完整性语义的 +my-groups。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-list-join-requests",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "入群申请列表是一对一分页读取；无额外审批编排。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-list-mine",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "群主/管理员群列表只做字段投影；精确角色筛选由底层 leaf 提供。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-members-get",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "按成员 ID 批量取详情是一对一读取；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-members-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "支持群名唯一解析或直接会话 ID，组合用户与机器人两个下层工具并分桶输出完整性。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-messages",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "统一群聊与两类单聊目标，输出稳定消息身份、引用、reaction、resourceRefs、时间边界翻页和可读正文。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-mute",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "全员禁言是一对一群治理操作；默认由 leaf 精确路由。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-mute-member",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "成员禁言是一对一群治理操作；默认由 leaf 精确路由。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-quit",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "退出群聊是一对一成员关系写入；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-remove-bot",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "移除群机器人是一对一高风险治理写入；默认由 leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-role-add",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "添加群身份是一对一写入；默认由 leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-role-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "群身份列表是一对一读取；无额外成员富化。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-role-query-user",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "查询成员群身份是一对一读取；无额外语义编排。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-role-remove",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "删除群身份是一对一高风险写入；默认由带确认的 leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-role-remove-user",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "移除成员指定群身份是一对一写入；默认由 leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-role-set-user",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "覆盖成员全部群身份是一对一高影响写入；默认由 leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-role-update",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新群身份是一对一写入；默认由 leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-search",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "群关键词搜索只做字段投影；底层 search_groups leaf 已提供分页。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-set-admin",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "管理员设置是一对一群治理操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-set-history",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "新成员历史可见范围是一对一群设置；无额外编排。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-transfer-owner",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "转让群主是一对一高影响治理操作；应直接使用精确 leaf 与安全确认。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "只发布 DWS 与 lark-cli 共有的群名称更新子集；不接受或静默忽略 description。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-update-alias",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新本人群备注是一对一写入；默认由 leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-update-icon",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新群头像是一对一媒体 ID 写入；尚无本地媒体解析编排。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+chat-update-nick",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新本人群昵称是一对一写入；默认由 leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+chat-update-settings",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "群 settingKey/status 是精确原子设置；Shortcut 未增加语义枚举。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+conversation-clear-all-red-point",
-      "risk": "high-risk-write",
-      "status": "real-ok"
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "全局清红点是一对一批量状态写入；高影响意图应直接选择带安全事实的 leaf。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+conversation-clear-messages",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "清空聊天记录不可逆且是一对一操作；应由 Runtime Schema leaf 的高风险门禁承载。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+conversation-clear-red-point",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "清除单会话红点是一对一操作；默认由 Runtime Schema leaf 精确选择。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+conversation-hide",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "隐藏会话是一对一写入；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+conversation-info",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一群聊 openConversationId 与单聊 openDingTalkId 两种目标，并路由到对应读取工具。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+conversation-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "会话分页列表只做字段投影；底层 leaf 已提供 limit/cursor/exclude-muted。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+conversation-list-top",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将下层 singleChat 规范化为 Agent 友好的 group/direct 类型，并支持 --type all|group|direct 本地过滤。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+conversation-mark-read",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "消息已读标记是一对一写入；无额外解析或编排。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+conversation-mark-unread",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "标记未读是一对一会话操作；Shortcut 未增加额外语义编排。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+conversation-mute",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "会话免打扰是一对一状态写入；无名称解析、编排或恢复增益。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+conversation-set-top",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把会话置顶扩展为最多 10 个目标的逐项写入，统一输出 requested/succeeded/failed ledger。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+dm",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "把自然语言姓名安全解析为唯一用户，再以当前用户身份发送并提供真实 dry-run 计划。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+feed-group-query-item",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "读取 DingTalk 会话分组后按多个 openConversationId 本地精确过滤；只有完整响应才判定 notFound，若下层仍有后续页但无可执行游标则返回 unresolved 与失败 ledger，且不伪造 Lark deleted_items。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+flag-cancel",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "批量取消当前用户的 DingTalk message favorite，并逐项报告失败；不伪造 Lark 的双层 best-effort 取消。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+flag-create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把 Lark Flag 意图忠实映射到 DingTalk message favorite，并为同会话最多 10 条消息提供逐项成功/失败 ledger；不改写 Pin、会话置顶或 feed-layer thread flag。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+flag-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "先创建真实 message favorite，再分别通过 native leaf 与 Shortcut 读取非空列表；两层返回相同收藏项且包含新建 Fixture，已完成非空结果证明。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+group-members",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "按群名列用户成员已由 +chat-members-list 覆盖；保留旧入口兼容。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-add-emoji",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "添加 emoji reaction 是精确原子操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-add-text-emotion",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "添加文字表情是精确原子操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-batch-recall-by-bot",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人单聊批量撤回是一对一批量操作；默认由 bot leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-batch-send-by-bot",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人批量单聊是一对一批量发送；默认由 bot leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-combine-forward",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "使用两个真实群、两条非空源消息分别完成 native leaf 与 Shortcut 双层回归，并以 mget 回读确认两条目标合并消息均实际存在且包含完整 forwarded 子消息。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-create-text-emotion",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "创建文字表情模板是一对一写入；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-forward",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "转发单条消息是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-forward-topic",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "话题转发是一对一消息操作；默认由 leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "群历史读取与 +chat-messages 重复；保留旧参数兼容，默认入口使用统一群/单聊投影。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+messages-list-direct",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "单聊历史读取与 +chat-messages 重复；保留 user/openDingTalkId 兼容，默认入口使用统一历史投影。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+messages-list-pin",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "Pin 列表只做字段投影；无额外语义编排。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+messages-list-unread-conversations",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "未读会话列表与 +unread-chats 重复；保留旧入口兼容，默认使用稳定投影入口。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+messages-mget",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按最多 50 个消息 ID 批量读取并输出稳定消息投影、reaction 与 resourceRefs；可用 --download-resources 复用 HTTPS、相对路径、无覆盖和原子落盘防护，逐资源返回下载失败 ledger。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+messages-query-send-status",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "发送状态查询是一对一读取；等待/轮询送达尚未形成语义编排。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+messages-read-status",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "已读状态查询是一对一读取；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-recall",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "当前用户撤回是一对一消息操作；默认由 leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-recall-by-bot",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人群消息撤回是一对一身份专用操作；默认由 bot leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-remove-emoji",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "移除 emoji reaction 是精确原子操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-remove-text-emotion",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "移除文字表情是精确原子操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-reply",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "提供当前用户纯文本引用回复的稳定入口、幂等键和 AI 标记，并通过 mget 自动补全原发送者；明确不支持 bot、富媒体或 thread writer。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-resource-download",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "把临时资源 URL 解析、工作目录内安全路径、默认不覆盖、临时文件下载和原子发布封装为结构化单步结果。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-resource-url",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "仅换取临时资源 URL；尚未提供安全落盘、去重和局部失败隔离，不作为默认 Semantic Shortcut。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-send",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "用统一 identity 参数路由 current-user、bot、webhook 文本/Markdown 发送；按身份校验目标与凭据，幂等键只在真实支持的 user 分支开放，媒体上传仍诚实留在 native leaf。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-send-by-bot",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人群发 Markdown 是一对一身份明确的发送；默认由 bot leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+messages-send-by-webhook",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "Webhook 发送是一对一 token 目标写入；默认由 bot leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-send-card",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "创建流式卡片是一对一写入；完整卡片生命周期需由 send/update leaf 明确编排。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-set-pin",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "Pin 消息是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-set-top",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "置顶消息是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-unset-pin",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "取消 Pin 是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+messages-unset-top",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "取消置顶消息是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+messages-update-card",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新流式卡片是一对一写入；默认由 Runtime Schema leaf 承担。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "chat",
       "command": "+my-groups",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "提供稳定群字段、本地类型过滤和可继续的分页完整性，替代重复群列表入口。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+search-msg",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型和机器人来源过滤；支持精确时间窗、page-all、50 条一组 mget 富化，并以 failure ledger 显式报告截断或富化失败。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+send-to-group",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按群名解析唯一会话、拒绝歧义并生成当前用户发送的真实 dry-run 计划。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "chat",
+      "command": "+thread-replies",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "接受消息列表直接返回的 threadId（兼容 topicId），拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文和时间边界分页。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "chat",
       "command": "+unread-chats",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把未读会话投影为会话身份、名称和未读计数，并保留下层分页完整性。",
+      "availability": "available"
     },
     {
       "suite": "read",

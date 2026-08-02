@@ -27,6 +27,7 @@ type crossPlatformCoverageCaller struct {
 	args   map[string]any
 	token  string
 	dryRun bool
+	reads  int
 }
 
 func (c *crossPlatformCoverageCaller) CallTool(_ context.Context, _, _ string, args map[string]any) (*edition.ToolResult, error) {
@@ -40,6 +41,16 @@ func (c *crossPlatformCoverageCaller) CallToolWithToken(
 	args map[string]any,
 ) (*edition.ToolResult, error) {
 	c.token = token
+	c.args = args
+	return &edition.ToolResult{}, nil
+}
+
+func (c *crossPlatformCoverageCaller) CallReadTool(
+	_ context.Context,
+	_, _ string,
+	args map[string]any,
+) (*edition.ToolResult, error) {
+	c.reads++
 	c.args = args
 	return &edition.ToolResult{}, nil
 }
@@ -128,6 +139,51 @@ func TestCrossPlatformCoverageRecordingToolCaller(t *testing.T) {
 		t.Fatalf("dry-run call must not be recorded: %#v", records)
 	}
 }
+
+func TestCrossPlatformCoverageRecordingReadToolCaller(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Setenv("DWS_USAGE_TRACKING", "1")
+
+	inner := &crossPlatformCoverageCaller{dryRun: true}
+	caller := newRecordingToolCaller(inner)
+	readCaller, ok := caller.(edition.ReadToolCaller)
+	if !ok {
+		t.Fatal("recording caller dropped read-only capability")
+	}
+	if _, err := readCaller.CallReadTool(
+		context.Background(),
+		"im",
+		"search_groups",
+		map[string]any{"open_conversation_id": "cid_x"},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if inner.reads != 1 || inner.args["open_conversation_id"] != "cid_x" {
+		t.Fatalf("read forwarding = reads %d args %#v", inner.reads, inner.args)
+	}
+	records, err := usage.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || !records[0].OK {
+		t.Fatalf("real read must be recorded as successful: %#v", records)
+	}
+
+	withoutRead := recordingToolCaller{inner: nonReadToolCaller{}}
+	if _, err := withoutRead.CallReadTool(context.Background(), "im", "search_groups", nil); err == nil {
+		t.Fatal("recording caller accepted an inner caller without read support")
+	}
+}
+
+type nonReadToolCaller struct{}
+
+func (nonReadToolCaller) CallTool(context.Context, string, string, map[string]any) (*edition.ToolResult, error) {
+	return &edition.ToolResult{}, nil
+}
+func (nonReadToolCaller) Format() string { return "json" }
+func (nonReadToolCaller) DryRun() bool   { return false }
+func (nonReadToolCaller) Fields() string { return "" }
+func (nonReadToolCaller) JQ() string     { return "" }
 
 func TestCrossPlatformCoverageRootPublishesShortcutCommands(t *testing.T) {
 	configDir := t.TempDir()

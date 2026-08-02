@@ -32,7 +32,7 @@
 | 错误现象 / summary | 原因 | 恢复动作 |
 |-------------------|------|---------|
 | `Failed to create field` | config 格式错误或必填项缺失 | 检查 [field-properties](./aitable-field-properties.md) 中该类型的必填 config |
-| `field not found` | field-id 不存在 | 用 `table get` 获取最新字段列表 |
+| `field not found` | field-id 不存在 | 用 `field get` 获取最新字段列表 |
 | formula 创建失败 | 公式语法错误或引用字段名不匹配 | 先 `field get` 确认字段精确名称，再检查公式语法（见 [formula-guide](./aitable-formula-guide.md)） |
 | 删除主字段失败 | 主字段（第一列）不可删除 | 改为更新字段名或类型，不能删除 |
 
@@ -56,7 +56,7 @@
 | 错误现象 / summary | 原因 | 恢复动作 |
 |-------------------|------|---------|
 | filters 无效被忽略 | 根节点不是 and/or，或 operands 格式错误 | 确保 filters 根节点是 `{"operator":"and"/"or", "operands":[...]}` 结构 |
-| sort 无效 | fieldId 不存在 | 先 `table get` 确认字段 ID |
+| sort 无效 | fieldId 不存在 | 先 `field get` 确认字段 ID |
 | 筛选结果为空 | 条件过严或字段值不匹配 | 放宽条件验证；注意 singleSelect 筛选值用 option name 或 id |
 
 ### 2.6 导入导出错误
@@ -120,7 +120,7 @@ dws aitable record create \
 
 ## 5. 错误预防最佳实践
 
-1. **写记录前先读字段结构** — `field get` 或 `table get` 确认字段类型和 ID
+1. **写记录前先读字段结构** — `field get` 确认字段类型和 ID
 2. **写字段前先读 field-properties** — 确认 config 的必填项和格式
 3. **formula 字段先确认引用字段名** — `[字段名]` 必须精确匹配
 4. **options 更新传完整列表** — 更新 singleSelect/multipleSelect 的 options 是全量覆盖

@@ -58,6 +58,7 @@ var Broadcast = shortcut.Shortcut{
 		var (
 			sent   []string
 			failed []string
+			plans  []map[string]any
 		)
 		for _, raw := range names {
 			name := strings.TrimSpace(raw)
@@ -67,7 +68,7 @@ var Broadcast = shortcut.Shortcut{
 
 			// Step 1 — resolve this name to a unique userId. On failure
 			// (unknown / ambiguous) record it and keep going.
-			user, err := resolveUser(rt, name)
+			user, err := resolveOpenDingTalkUser(rt, name)
 			if err != nil {
 				failed = append(failed, fmt.Sprintf("%s（%s）", name, err.Error()))
 				continue
@@ -81,6 +82,15 @@ var Broadcast = shortcut.Shortcut{
 			// --dry-run we still resolve names (a read) but never send: record the
 			// resolved recipient as "would send" and move on.
 			if rt.DryRun() {
+				plans = append(plans, map[string]any{
+					"recipient": user.name,
+					"tool":      "send_personal_message",
+					"arguments": rt.AddAIMessageTag(map[string]any{
+						"receiverOpenDingTalkId": user.openDingTalkID,
+						"msgType":                "markdown",
+						"content":                string(content),
+					}),
+				})
 				sent = append(sent, user.name)
 				continue
 			}
@@ -107,6 +117,14 @@ var Broadcast = shortcut.Shortcut{
 		}
 		if len(failed) > 0 {
 			result["failed"] = failed
+		}
+		if rt.DryRun() {
+			result["dry_run"] = true
+			result["executed"] = false
+			result["preview_kind"] = "plan"
+			result["tool"] = "send_personal_message"
+			result["actionCount"] = len(plans)
+			result["actions"] = plans
 		}
 		return rt.Output(result)
 	},

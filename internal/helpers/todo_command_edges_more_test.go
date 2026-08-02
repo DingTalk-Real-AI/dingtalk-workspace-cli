@@ -137,6 +137,8 @@ func TestCrossPlatformCoverageTodoUpdateReminderAndDetailEdges(t *testing.T) {
 		{"task", "update", "--task-id", "1", "--due", "bad"},
 		{"task", "add-reminder", "--task-id", "1", "--base-time", "customTime", "--reminder-time-stamp", "bad"},
 		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `[{"baseTime":"customTime","reminderTimeStamp":"bad"}]`},
+		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `not-json`},
+		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `[1,{"baseTime":"dueTime"},{"baseTime":"customTime","reminderTimeStamp":"` + validDate + `"}]`},
 	}
 	for _, args := range errorCases {
 		if err := executeTodoEdge(t, &scriptedToolCaller{}, args...); err == nil {
@@ -148,8 +150,6 @@ func TestCrossPlatformCoverageTodoUpdateReminderAndDetailEdges(t *testing.T) {
 		{"task", "update", "--task-id", "1", "--priority", "bad"},
 		{"task", "add-reminder", "--task-id", "1", "--base-time", "dueTime", "--due-date-offset", "-10"},
 		{"task", "add-reminder", "--task-id", "1", "--base-time", "customTime", "--reminder-time-stamp", validDate},
-		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `not-json`},
-		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `[1,{"baseTime":"dueTime"},{"baseTime":"customTime","reminderTimeStamp":"` + validDate + `"}]`},
 	}
 	for _, args := range validCases {
 		if err := executeTodoEdge(t, &scriptedToolCaller{}, args...); err != nil {

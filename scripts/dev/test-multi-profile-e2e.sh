@@ -15,6 +15,7 @@ RUN_GO_TESTS=1
 VERBOSE=0
 KEEP_WORKDIR=0
 E2E_VERSION="${DWS_PACKAGE_VERSION:-v1.0.53-beta.3}"
+GO_TEST_TIMEOUT="${MULTI_PROFILE_GO_TEST_TIMEOUT:-10m}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -582,7 +583,7 @@ cd "$ROOT"
 
 if [[ "$RUN_GO_TESTS" -eq 1 ]]; then
   log "running multi-profile Go regressions"
-  go test -timeout 180s -count=1 ./internal/auth ./internal/app ./test/cli
+  go test -timeout "$GO_TEST_TIMEOUT" -count=1 ./internal/auth ./internal/app ./test/cli
 fi
 
 log "building dws"

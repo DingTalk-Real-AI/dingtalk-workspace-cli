@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -28,6 +29,7 @@ var (
 	flagOrFallback                  = cmdutil.FlagOrFallback
 	mustFlagOrFallback              = cmdutil.MustFlagOrFallback
 	validateRequiredFlags           = cmdutil.ValidateRequiredFlags
+	missingRequiredFlagsError       = cmdutil.MissingRequiredFlagsError
 	validateRequiredFlagWithAliases = cmdutil.ValidateRequiredFlagWithAliases
 	parseISOTimeToMillis            = cmdutil.ParseISOTimeToMillis
 	validateTimeRange               = cmdutil.ValidateTimeRange
@@ -144,6 +146,59 @@ func callMCPToolReturnText(ctx context.Context, toolName string, args map[string
 
 func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
+	return parseMCPToolTextResult(serverID, toolName, result, err)
+}
+
+// CallMCPReadToolTextOnServer performs a read-only lookup needed to construct a
+// semantic Shortcut dry-run plan. Under ordinary execution it is identical to
+// CallMCPToolTextOnServer. Under --dry-run it requires the host's optional
+// ReadToolCaller capability; if unavailable, it fails closed instead of
+// returning a synthetic dry-run envelope that looks like business data.
+func CallMCPReadToolTextOnServer(serverID, toolName string, args map[string]any) (string, error) {
+	ctx := context.Background()
+	if !IsReadToolName(toolName) {
+		return "", &CLIError{
+			Code:    CodeMCPToolError,
+			Message: fmt.Sprintf("tool %q is not allowed on the dry-run read channel", toolName),
+		}
+	}
+	if deps == nil || deps.Caller == nil {
+		return "", &CLIError{
+			Code:    CodeMCPToolError,
+			Message: "MCP caller is not initialized",
+		}
+	}
+	if !deps.Caller.DryRun() {
+		return callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
+	}
+	readCaller, ok := deps.Caller.(edition.ReadToolCaller)
+	if !ok {
+		return "", &CLIError{
+			Code:    CodeMCPToolError,
+			Message: "当前运行时不支持在 --dry-run 下执行只读解析",
+		}
+	}
+	result, err := readCaller.CallReadTool(ctx, serverID, toolName, args)
+	return parseMCPToolTextResult(serverID, toolName, result, err)
+}
+
+// IsReadToolName is the fail-closed naming contract for the dry-run read
+// channel. Both the Shortcut runtime and the helper boundary enforce it so a
+// future direct helper caller cannot accidentally route a write tool through
+// ReadToolCaller.
+func IsReadToolName(toolName string) bool {
+	toolName = strings.TrimSpace(strings.ToLower(toolName))
+	for _, prefix := range []string{
+		"get_", "list_", "query_", "search_", "unread_",
+	} {
+		if strings.HasPrefix(toolName, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResult, err error) (string, error) {
 	if err != nil {
 		if patErr := reclassifyPATFromError(err); patErr != nil {
 			return "", patErr
@@ -152,6 +207,7 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 	}
 	for _, c := range result.Content {
 		if c.Type == "text" && c.Text != "" {
+			dumpRawToolResponse(serverID, toolName, c.Text)
 			var errBody map[string]any
 			if json.Unmarshal([]byte(c.Text), &errBody) == nil {
 				if _, ok := getDWSGatewayErrorCode(errBody); ok {
@@ -294,6 +350,7 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 	flagFormat := deps.Caller.Format()
 	for _, c := range result.Content {
 		if c.Type == "text" {
+			dumpRawToolResponse(serverID, toolName, c.Text)
 			// 尝试将返回文本解析为 JSON，进行错误分类
 			var errBody map[string]any
 			if json.Unmarshal([]byte(c.Text), &errBody) == nil {
@@ -344,6 +401,29 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 	}
 	// 无 text 类型内容时，将整个 result 对象序列化为 JSON 输出
 	return printJSON(result)
+}
+
+// dumpRawToolResponse emits one opt-in lower-layer record for live projection
+// audits. Responses may contain business data, so normal CLI runs never emit
+// this line; an auditor must explicitly set DWS_DUMP_RAW.
+func dumpRawToolResponse(serverID, toolName, text string) {
+	if strings.TrimSpace(os.Getenv("DWS_DUMP_RAW")) == "" {
+		return
+	}
+	fmt.Fprintln(os.Stderr, formatRawDumpLine(serverID, toolName, text))
+}
+
+func formatRawDumpLine(serverID, toolName, text string) string {
+	raw := json.RawMessage(strings.TrimSpace(text))
+	if json.Valid(raw) {
+		var compact bytes.Buffer
+		_ = json.Compact(&compact, raw)
+		raw = compact.Bytes()
+	} else {
+		encoded, _ := json.Marshal(text)
+		raw = encoded
+	}
+	return "DWSRAW\t" + serverID + "\t" + toolName + "\t" + string(raw)
 }
 
 // formatDevdocSearchTable formats devdoc search JSON results as a table.
@@ -489,7 +569,7 @@ func isBusinessError(body map[string]any) bool {
 	if v, ok := body["status"].(string); ok && strings.EqualFold(strings.TrimSpace(v), "error") {
 		return true
 	}
-	for _, key := range []string{"errorCode", "error_code", "code"} {
+	for _, key := range []string{"errorCode", "error_code", "errcode", "err_code", "code"} {
 		if isErrorCodeValue(body[key]) {
 			return true
 		}

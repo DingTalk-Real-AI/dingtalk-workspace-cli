@@ -688,6 +688,122 @@
         "skills/mono/references/best_practices/07-minutes.md",
         "live-dws-schema:minutes.update_minutes_title"
       ]
+    },
+    "minutes.shortcut_list_mine": {
+      "agent_summary": "查询我创建的听记列表",
+      "use_when": [
+        "当你想找回自己发起或录制的某次听记（会议纪要），却只记得大概的标题关键字时使用；可按关键字筛选并分页，返回自己创建的听记列表及其 taskUuid，便于后续查看摘要、转写或待办。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws minutes +list-mine --query \"周会\" --limit 10"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#minutes.shortcut_list_mine",
+        "cobra-help:dws minutes +list-mine",
+        "ShortcutRegistry:minutes +list-mine"
+      ]
+    },
+    "minutes.shortcut_list_shared": {
+      "agent_summary": "查询他人共享给我的听记列表",
+      "use_when": [
+        "当你要找同事分享给你的会议听记、想快速定位别人共享过来的纪要时使用；可按关键字筛选并分页，返回他人共享给你的听记列表及 taskUuid。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws minutes +list-shared --limit 20"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#minutes.shortcut_list_shared",
+        "cobra-help:dws minutes +list-shared",
+        "ShortcutRegistry:minutes +list-shared"
+      ]
+    },
+    "minutes.shortcut_list_all": {
+      "agent_summary": "查询我有权限访问的所有听记列表",
+      "use_when": [
+        "当你不确定某条听记是自己创建还是别人共享、想在所有可访问的听记中一次性检索时使用；合并「我创建的」和「共享给我的」，按关键字筛选并分页返回全部有权限的听记及 taskUuid。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws minutes +list-all --query \"周会\" --limit 20"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#minutes.shortcut_list_all",
+        "cobra-help:dws minutes +list-all",
+        "ShortcutRegistry:minutes +list-all"
+      ]
+    },
+    "minutes.shortcut_record_start": {
+      "agent_summary": "发起听记（开始录音）",
+      "use_when": [
+        "当你要开始一场实时会议/通话的 AI 听记、立刻启动录音并生成一条新听记任务时使用；可选传入 AI 助理会话 ID，会真实发起录音，返回新建听记的 taskUuid 供后续暂停/恢复/结束。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws minutes +record-start --session-id <sessionId>"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#minutes.shortcut_record_start",
+        "cobra-help:dws minutes +record-start",
+        "ShortcutRegistry:minutes +record-start"
+      ]
+    },
+    "minutes.shortcut_detail": {
+      "agent_summary": "一条命令聚合取一条妙记（听记）的多项产物（基础信息/摘要/关键词/逐字稿/待办）",
+      "use_when": [
+        "当你已经有某条听记的 taskUuid，想在一次操作里同时拿到它的基础信息、AI 摘要、关键词、逐字稿和待办，而不想分别敲 4~5 个子命令再自己拼时使用；内部按 --artifacts 选择要拉的产物（默认全部：basic/summary/keywords/transcript/todos），逐个调用对应的原子工具并聚合成一个结果，某一项失败不会中断整体（会以错误字符串记录在该项下）。这是纯只读操作，不会修改听记；--direction 仅影响逐字稿排序（0=正序默认，1=倒序）。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws minutes +detail --id <taskUuid>",
+        "dws minutes +detail --id <taskUuid> --artifacts summary,todos"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#minutes.shortcut_detail",
+        "cobra-help:dws minutes +detail",
+        "ShortcutRegistry:minutes +detail"
+      ]
+    },
+    "minutes.shortcut_replace_batch": {
+      "agent_summary": "对一条妙记（听记）批量执行多组文字替换（原文=>替换）",
+      "use_when": [
+        "当你要在同一条听记里一次性纠正多个词（如把多个错识别的人名/术语统一替换），而底层工具一次只能替换一组时使用；内部按多个 --pair \"原文=>替换\" 逐组调用替换工具，先在本地校验去重（同一个「原文」不能出现两次，避免两条规则互相打架），再逐组应用并聚合每组的成功/失败结果，某一组失败不会中断其余组。这是写操作，会实际修改听记文字内容，请确认 taskUuid 与替换规则无误。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws minutes +replace-batch --id <taskUuid> --pair \"张三=>张三丰\"",
+        "dws minutes +replace-batch --id <taskUuid> --pair \"Q2=>第二季度\" --pair \"PM=>产品经理\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#minutes.shortcut_replace_batch",
+        "cobra-help:dws minutes +replace-batch",
+        "ShortcutRegistry:minutes +replace-batch"
+      ]
     }
   },
   "products": {

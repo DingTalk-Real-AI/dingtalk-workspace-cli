@@ -69,7 +69,8 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 不传 --sheet-id 时默认返回第一个工作表。`,
 		Example: `  dws sheet info --node NODE_ID
   dws sheet info --node NODE_ID --sheet-id SHEET_ID
-  dws sheet info --node NODE_ID --sheet-id "Sheet1"`,
+  dws sheet info --node NODE_ID --sheet-id "Sheet1"
+  dws sheet info --node NODE_ID --sheet-id SHEET_ID --include row_heights,col_widths`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolArgs := map[string]any{
 				"nodeId": mustGetFlag(cmd, "node"),
@@ -77,11 +78,15 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			if v, _ := cmd.Flags().GetString("sheet-id"); v != "" {
 				toolArgs["sheetId"] = v
 			}
+			if v, _ := cmd.Flags().GetStringSlice("include"); len(v) > 0 {
+				toolArgs["include"] = v
+			}
 			return callMCPToolSheetInfo(toolArgs)
 		},
 	}
 	infoCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	infoCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (不传则返回第一个工作表)")
+	infoCmd.Flags().StringSlice("include", nil, "可选扩展信息，逗号分隔；支持 groups / row_heights / col_widths / hidden_rows / hidden_cols / frozen")
 
 	newCmd := &cobra.Command{
 		Use:   "new",

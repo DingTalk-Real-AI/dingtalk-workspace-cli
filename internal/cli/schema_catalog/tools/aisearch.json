@@ -1,0 +1,2333 @@
+{
+  "product": "aisearch",
+  "tools": {
+    "aisearch.enterprise_person_search": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "Cobra help: dws aisearch person --help",
+        "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_command_registry.json#aisearch.enterprise_person_search",
+        "internal/cli/schema_hints/metadata/aisearch.json",
+        "internal/cli/schema_hints/selection/aisearch.json",
+        "internal/cli/schema_mcp_metadata.json#tools.aisearch.enterprise_person_search",
+        "live-dws-schema:aisearch.enterprise_person_search",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/aisearch.md",
+        "skills/mono/references/products/mail.md"
+      ],
+      "agent_summary": "企业内找人：按姓名/部门/职位/职责/上下级/手机号/工号筛选",
+      "agent_summary_source": "dws-agent-selection/aisearch",
+      "availability": "available",
+      "avoid_when": [
+        "已有 userId 只需详情时用 contact user get",
+        "精确通讯录关键词搜同事/好友且不涉及职责语义时可用 contact user search",
+        "搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior"
+      ],
+      "canonical_path": "aisearch.enterprise_person_search",
+      "cli_name": "person",
+      "cli_path": "aisearch person",
+      "confirmation": "not_required",
+      "description": "通过关键词搜索企业内人员信息，支持按维度筛选。\n\n可选维度 (--dimension):\n  all          全部维度 (默认)\n  name         姓名\n  department   部门\n  position     职位\n  duty         职责/技能\n  supervisor   上级\n  subordinate  下级\n  phone        手机号\n  jobNumber    工号\n\n多个维度用逗号分隔。",
+      "display": "AI 搜问",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aisearch person --keyword \"张三\" --dimension name --format json",
+        "dws aisearch person --keyword \"五道\" --dimension supervisor --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": "企业内找人：按姓名/部门/职位/职责/上下级/手机号/工号筛选"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": "企业内找人：按姓名/部门/职位/职责/上下级/手机号/工号筛选"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.enterprise_person_search.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": [
+                "已有 userId 只需详情时用 contact user get",
+                "精确通讯录关键词搜同事/好友且不涉及职责语义时可用 contact user search",
+                "搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": [
+            "已有 userId 只需详情时用 contact user get",
+            "精确通讯录关键词搜同事/好友且不涉及职责语义时可用 contact user search",
+            "搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "aisearch person",
+              "value": "aisearch.enterprise_person_search"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "aisearch person",
+          "value": "aisearch.enterprise_person_search"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "通过关键词搜索企业内人员信息，支持按维度筛选。\n\n可选维度 (--dimension):\n  all          全部维度 (默认)\n  name         姓名\n  department   部门\n  position     职位\n  duty         职责/技能\n  supervisor   上级\n  subordinate  下级\n  phone        手机号\n  jobNumber    工号\n\n多个维度用逗号分隔。"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "企业内找人搜索工具，支持按姓名、部门、职位、技能、工作职责等多维度搜索企业内人员。\\n\\n**适用场景示例**：\\n- 找一下负责智能化的人\\n- 帮我找产品经理\\n- 技术部有哪些人\\n- 张三的领导是谁\\n- 李四手下有哪些人\\n- 帮我找下王芳\\n- 谁在做大模型相关的工作\\n- 公司有哪些架构师\\n- 市场部的同事有谁\\n- 有没有会Java的同事\\n- 研发部的负责人是谁\\n- 帮我找一下跟智能客服有关的人\\n- 做设计的同事有谁\\n- 谁是技术总监\\n- 张三在哪个部门\\n\\n"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "通过关键词搜索企业内人员信息，支持按维度筛选。\n\n可选维度 (--dimension):\n  all          全部维度 (默认)\n  name         姓名\n  department   部门\n  position     职位\n  duty         职责/技能\n  supervisor   上级\n  subordinate  下级\n  phone        手机号\n  jobNumber    工号\n\n多个维度用逗号分隔。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": [
+                "dws aisearch person --keyword \"张三\" --dimension name --format json",
+                "dws aisearch person --keyword \"五道\" --dimension supervisor --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": [
+            "dws aisearch person --keyword \"张三\" --dimension name --format json",
+            "dws aisearch person --keyword \"五道\" --dimension supervisor --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.enterprise_person_search.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "mcp_fallback",
+              "selected": true,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.enterprise_person_search.interface_ref",
+              "value": {
+                "product_id": "aisearch",
+                "rpc_name": "enterprise_person_search"
+              }
+            }
+          ],
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.enterprise_person_search.interface_ref",
+          "value": {
+            "product_id": "aisearch",
+            "rpc_name": "enterprise_person_search"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "搜索企业人员"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "enterprise_person_search"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "搜索企业人员"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": [
+                "找人、谁负责某事、查上级/下级、按手机号或工号定位人员",
+                "需要把维度词映射到 --dimension，关键词只保留目标实体"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": [
+            "找人、谁负责某事、查上级/下级、按手机号或工号定位人员",
+            "需要把维度词映射到 --dimension，关键词只保留目标实体"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "aisearch",
+        "rpc_name": "enterprise_person_search"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "enterprise_person_search",
+      "parameter_count": 2,
+      "parameters": {
+        "dimension": {
+          "default": "all",
+          "description": "查询维度: all/name/department/position/duty/supervisor/subordinate/phone/jobNumber，多个用逗号分隔",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "查询维度: all/name/department/position/duty/supervisor/subordinate/phone/jobNumber，多个用逗号分隔"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "查询维度，根据用户意图自动映射。可选值：\\n- all: 默认，全部维度\\n- name: 姓名（用户提到'姓名'、'叫什么'、'是谁'时使用）\\n- department: 部门（用户提到'部门'、'团队'时使用）\\n- position: 职位（用户提到'职位'、'岗位'时使用）\\n- duty: 职责/技能（用户提到'负责'、'职责'、'技能'时使用）\\n- supervisor: 上级（用户提到'上级'、'领导'、'主管'时使用）\\n- subordinate: 下级（用户提到'下级'、'下属'时使用）\\n- phone: 手机号（用户提到'手机号'、'电话'、'手机'时使用）\\n- jobNumber: 工号（用户提到'工号'、'员工编号'时使用）\\n\\n【重要】：从用户问题中识别维度词并映射到此字段，不要将维度词放入keyword中。"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "查询维度: all/name/department/position/duty/supervisor/subordinate/phone/jobNumber，多个用逗号分隔"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "array"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "array"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "dimension"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "dimension"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "查询维度，根据用户意图自动映射。可选值：\\n- all: 默认，全部维度\\n- name: 姓名（用户提到'姓名'、'叫什么'、'是谁'时使用）\\n- department: 部门（用户提到'部门'、'团队'时使用）\\n- position: 职位（用户提到'职位'、'岗位'时使用）\\n- duty: 职责/技能（用户提到'负责'、'职责'、'技能'时使用）\\n- supervisor: 上级（用户提到'上级'、'领导'、'主管'时使用）\\n- subordinate: 下级（用户提到'下级'、'下属'时使用）\\n- phone: 手机号（用户提到'手机号'、'电话'、'手机'时使用）\\n- jobNumber: 工号（用户提到'工号'、'员工编号'时使用）\\n\\n【重要】：从用户问题中识别维度词并映射到此字段，不要将维度词放入keyword中。",
+          "interface_type": "array",
+          "property": "dimension",
+          "required": false,
+          "type": "string"
+        },
+        "keyword": {
+          "description": "搜索关键词 (必填，如人名、技能关键词等)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "搜索关键词 (必填，如人名、技能关键词等)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "搜索关键词。仅填入实际的搜索目标（人名、技能关键词等），不包含查询维度词。 【关键词提取规则】： 以下维度词必须从keyword中排除，改为映射到dimension： - '上级'、'领导'、'主管' → dimension: ['supervisor'] - '下级'、'下属'、'团队成员' → dimension: ['subordinate'] - '部门'、'团队'、'组织' → dimension: ['department'] - '职位'、'岗位'、'职级' → dimension: ['position'] - '职责'、'负责'、'技能' → dimension: ['duty'] - '姓名'、'叫什么' → dimension: ['name'] 【示例】： - 用户问'五道的上级是谁' → keyword: '五道', dimension: ['supervisor'] - 用户问'张三负责什么' → keyword: '张三', dimension: ['duty'] - 用户问'AI搜问的负责人是谁' → keyword: 'AI搜问', dimension: ['duty'] - 用户问'产品部有谁' → keyword: '产品部', dimension: ['department'] - 用户问'李四是哪个部门的' → keyword: '李四', dimension: ['department']- 用户问'手机号13800138000是谁' → keyword: '13800138000', dimension: ['phone']\\n- 用户问'工号A12345是谁' → keyword: 'A12345', dimension: ['jobNumber']"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "搜索关键词 (必填，如人名、技能关键词等)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "keyword"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "keyword"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "typed_metadata",
+                  "selected": true,
+                  "source": "typed_parameter_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "typed_metadata",
+              "resolution": "highest_precedence",
+              "source": "typed_parameter_metadata",
+              "value": true
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "搜索关键词。仅填入实际的搜索目标（人名、技能关键词等），不包含查询维度词。 【关键词提取规则】： 以下维度词必须从keyword中排除，改为映射到dimension： - '上级'、'领导'、'主管' → dimension: ['supervisor'] - '下级'、'下属'、'团队成员' → dimension: ['subordinate'] - '部门'、'团队'、'组织' → dimension: ['department'] - '职位'、'岗位'、'职级' → dimension: ['position'] - '职责'、'负责'、'技能' → dimension: ['duty'] - '姓名'、'叫什么' → dimension: ['name'] 【示例】： - 用户问'五道的上级是谁' → keyword: '五道', dimension: ['supervisor'] - 用户问'张三负责什么' → keyword: '张三', dimension: ['duty'] - 用户问'AI搜问的负责人是谁' → keyword: 'AI搜问', dimension: ['duty'] - 用户问'产品部有谁' → keyword: '产品部', dimension: ['department'] - 用户问'李四是哪个部门的' → keyword: '李四', dimension: ['department']- 用户问'手机号13800138000是谁' → keyword: '13800138000', dimension: ['phone']\\n- 用户问'工号A12345是谁' → keyword: 'A12345', dimension: ['jobNumber']",
+          "property": "keyword",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "path": "aisearch.enterprise_person_search",
+      "primary_cli_path": "aisearch person",
+      "product_id": "aisearch",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "搜索企业人员",
+      "use_when": [
+        "找人、谁负责某事、查上级/下级、按手机号或工号定位人员",
+        "需要把维度词映射到 --dimension，关键词只保留目标实体"
+      ]
+    },
+    "aisearch.search_enterprise": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "Cobra help: dws aisearch enterprise --help",
+        "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_command_registry.json#aisearch.search_enterprise",
+        "internal/cli/schema_hints/metadata/aisearch.json",
+        "internal/cli/schema_hints/selection/aisearch.json",
+        "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise",
+        "live-dws-schema:aisearch.search_enterprise",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/aisearch.md"
+      ],
+      "agent_summary": "搜索企业内部知识与相关内容（文档/IM/日历/待办/纪要/日志/邮件等）",
+      "agent_summary_source": "dws-agent-selection/aisearch",
+      "availability": "available",
+      "avoid_when": [
+        "问“我发给谁/谁发给我/我创建过”等行为追溯时用 aisearch behavior",
+        "企业找人时用 aisearch person",
+        "已知具体资源 ID 要读写时改用对应产品命令"
+      ],
+      "canonical_path": "aisearch.search_enterprise",
+      "cli_name": "enterprise",
+      "cli_path": "aisearch enterprise",
+      "confirmation": "not_required",
+      "description": "检索企业内部知识内容，如文档、消息、日程、待办、听记、日志、图片、链接、AI 表格、企业百科、邮件等。\n\n普通“XX 相关消息/文档/邮件/日程/待办/纪要有哪些”属于企业内容搜索，使用本命令；queries 只放内容关键词，时间放到 --time-range，所有类型词放到 --types。汇总类场景可不传 queries，使用 --types all。\n\n不要把“最近搜索问题相关消息”截断成 --query \"搜索问题\"，也不要把“最近 OKR 相关邮件”写成 --query \"OKR 邮件\"；这会丢失时间和类型槽位。应显式写成 --queries + --types + --time-range。",
+      "display": "AI 搜问",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aisearch enterprise --queries \"智能化方案\" --types document --format json",
+        "dws aisearch enterprise --queries \"OKR\" --types mail --time-range \"最近\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": "搜索企业内部知识与相关内容（文档/IM/日历/待办/纪要/日志/邮件等）"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": "搜索企业内部知识与相关内容（文档/IM/日历/待办/纪要/日志/邮件等）"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": [
+                "问“我发给谁/谁发给我/我创建过”等行为追溯时用 aisearch behavior",
+                "企业找人时用 aisearch person",
+                "已知具体资源 ID 要读写时改用对应产品命令"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": [
+            "问“我发给谁/谁发给我/我创建过”等行为追溯时用 aisearch behavior",
+            "企业找人时用 aisearch person",
+            "已知具体资源 ID 要读写时改用对应产品命令"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "aisearch enterprise",
+              "value": "aisearch.search_enterprise"
+            },
+            {
+              "precedence": "reviewed_manual",
+              "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+              "selected": false,
+              "source": "reviewed_manual_hint",
+              "source_ref": "aisearch enterprise",
+              "value": "aisearch.search_enterprise"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "aisearch enterprise",
+          "value": "aisearch.search_enterprise"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": "not_required"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "检索企业内部知识内容，如文档、消息、日程、待办、听记、日志、图片、链接、AI 表格、企业百科、邮件等。\n\n普通“XX 相关消息/文档/邮件/日程/待办/纪要有哪些”属于企业内容搜索，使用本命令；queries 只放内容关键词，时间放到 --time-range，所有类型词放到 --types。汇总类场景可不传 queries，使用 --types all。\n\n不要把“最近搜索问题相关消息”截断成 --query \"搜索问题\"，也不要把“最近 OKR 相关邮件”写成 --query \"OKR 邮件\"；这会丢失时间和类型槽位。应显式写成 --queries + --types + --time-range。"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "企业内部知识搜索工具。用于检索企业内部的文档、消息、日程、会议纪要、工作日志、多维表、企业百科等知识内容，基于关键词语义匹配返回相关资料。支持自然语言时间表达式（如\"最近\"、\"上周\"、\"本季度\"）。适用场景：查找某个主题的资料、搜索包含特定关键词的文档、了解某项目/产品相关信息、准备汇报材料等内容检索需求。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "检索企业内部知识内容，如文档、消息、日程、待办、听记、日志、图片、链接、AI 表格、企业百科、邮件等。\n\n普通“XX 相关消息/文档/邮件/日程/待办/纪要有哪些”属于企业内容搜索，使用本命令；queries 只放内容关键词，时间放到 --time-range，所有类型词放到 --types。汇总类场景可不传 queries，使用 --types all。\n\n不要把“最近搜索问题相关消息”截断成 --query \"搜索问题\"，也不要把“最近 OKR 相关邮件”写成 --query \"OKR 邮件\"；这会丢失时间和类型槽位。应显式写成 --queries + --types + --time-range。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": [
+                "dws aisearch enterprise --queries \"智能化方案\" --types document --format json",
+                "dws aisearch enterprise --queries \"OKR\" --types mail --time-range \"最近\" --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": [
+            "dws aisearch enterprise --queries \"智能化方案\" --types document --format json",
+            "dws aisearch enterprise --queries \"OKR\" --types mail --time-range \"最近\" --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "mcp_fallback",
+              "selected": true,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise.interface_ref",
+              "value": {
+                "product_id": "aisearch",
+                "rpc_name": "search_enterprise"
+              }
+            }
+          ],
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise.interface_ref",
+          "value": {
+            "product_id": "aisearch",
+            "rpc_name": "search_enterprise"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "搜索企业内部知识内容和相关消息"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "search_enterprise"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "搜索企业内部知识内容和相关消息"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": [
+                "按主题找资料、方案、文档、消息、邮件等内容，且关注“有什么内容”",
+                "用户显式给出时间词或类型词时分别映射到 --time-range / --types"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": [
+            "按主题找资料、方案、文档、消息、邮件等内容，且关注“有什么内容”",
+            "用户显式给出时间词或类型词时分别映射到 --time-range / --types"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "aisearch",
+        "rpc_name": "search_enterprise"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "search_enterprise",
+      "parameter_count": 3,
+      "parameters": {
+        "queries": {
+          "description": "内容关键词列表，多个用逗号分隔；汇总类场景可留空",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "内容关键词列表，多个用逗号分隔；汇总类场景可留空"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "搜索关键词列表，只放**内容关键词**。 **排除规则**： - 时间信息 放到 timeRange 字段 - 类型关键词（日志/文档/消息/会议/日程/纪要等） 放到 searchTypes 字段 - 汇总类词汇（工作总结/日报总结/周报总结/月报总结） 不作为关键词，通过searchTypes=['all']触发全量搜索 示例： - '2025-12-06 ~ 2025-12-19工作总结' queries=[]（时间走timeRange，工作总结触发all类型） - '智能化方案' queries=['智能化方案']"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "内容关键词列表，多个用逗号分隔；汇总类场景可留空"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "array"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "array"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "queries"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "queries"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+              "source": "reviewed_manual_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "搜索关键词列表，只放**内容关键词**。 **排除规则**： - 时间信息 放到 timeRange 字段 - 类型关键词（日志/文档/消息/会议/日程/纪要等） 放到 searchTypes 字段 - 汇总类词汇（工作总结/日报总结/周报总结/月报总结） 不作为关键词，通过searchTypes=['all']触发全量搜索 示例： - '2025-12-06 ~ 2025-12-19工作总结' queries=[]（时间走timeRange，工作总结触发all类型） - '智能化方案' queries=['智能化方案']",
+          "interface_type": "array",
+          "property": "queries",
+          "required": false,
+          "type": "string"
+        },
+        "time-range": {
+          "description": "时间范围，仅当用户显式给出时间词时填写，如 今天/本周/9月/过去一周",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "时间范围，仅当用户显式给出时间词时填写，如 今天/本周/9月/过去一周"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "时间范围。**提取规则**：仅当用户query中**显式出现**时间词汇时才填写，否则**必须留空**。**可识别的时间词汇**：- 相对时间：今天、昨天、本周、上周、这周、本月、上个月、最近、近期- 具体时间：9月、10月份、Q3、本季度、上半年、2024年- 时间范围：过去一周、最近三天**重要**：不要根据语义推测时间。如果用户没有使用上述时间词汇，即使语境暗示是近期，也**不填写**此字段。**示例**：- '本周的OKR文档' → timeRange='本周'- '9月的项目方案' → timeRange='9月'- '智能化相关文档' → timeRange不填写（无时间词）,默认不填写"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "时间范围，仅当用户显式给出时间词时填写，如 今天/本周/9月/过去一周"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "timeRange"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "timeRange"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "The reviewed CLI supports an all-content search with default --types all, while --queries and --time-range are optional filters; imported MCP required markers must not turn them into mandatory CLI input.",
+              "source": "reviewed_manual_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "时间范围。**提取规则**：仅当用户query中**显式出现**时间词汇时才填写，否则**必须留空**。**可识别的时间词汇**：- 相对时间：今天、昨天、本周、上周、这周、本月、上个月、最近、近期- 具体时间：9月、10月份、Q3、本季度、上半年、2024年- 时间范围：过去一周、最近三天**重要**：不要根据语义推测时间。如果用户没有使用上述时间词汇，即使语境暗示是近期，也**不填写**此字段。**示例**：- '本周的OKR文档' → timeRange='本周'- '9月的项目方案' → timeRange='9月'- '智能化相关文档' → timeRange不填写（无时间词）,默认不填写",
+          "property": "timeRange",
+          "required": false,
+          "type": "string"
+        },
+        "types": {
+          "default": "all",
+          "description": "搜索类型: all/document/im/calendar/todo/minute/report/image/link/notable/baike/mail，多个用逗号分隔",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "搜索类型: all/document/im/calendar/todo/minute/report/image/link/notable/baike/mail，多个用逗号分隔"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "搜索类型列表，支持同时搜索多种类型。可选值：all-全部, document-文档, im-消息, calendar-日程, todo-待办, minute-会议纪要/闪记/听记, report-日志, image-图片, link-链接, notable-多维表/ai表格, baike-百科, mail-邮件。 **特殊规则**： 1. report类型仅在用户query中**显式且仅限出现'日志'**一词时触发，'周报/日报/月报/工作汇报'等不触发report 2. mail类型仅在用户query中**显式出现'邮件/邮箱/mail/email'**等词汇时触发 3. '工作总结'、'日报总结'、'周报总结'、'月报总结'等汇总类场景，需要聚合所有工作内容，应使用['all'] 示例： - '本周的日志' searchTypes=['report'] - '我收到的邮件' searchTypes=['mail'] - '工作总结' searchTypes=['all']（需汇总所有内容） - '周报总结' searchTypes=['all']（需汇总所有内容） - 不填或['all'] 搜索全部类型，默认是['all']"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "搜索类型: all/document/im/calendar/todo/minute/report/image/link/notable/baike/mail，多个用逗号分隔"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "array"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "array"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "searchTypes"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "types"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "searchTypes"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "搜索类型列表，支持同时搜索多种类型。可选值：all-全部, document-文档, im-消息, calendar-日程, todo-待办, minute-会议纪要/闪记/听记, report-日志, image-图片, link-链接, notable-多维表/ai表格, baike-百科, mail-邮件。 **特殊规则**： 1. report类型仅在用户query中**显式且仅限出现'日志'**一词时触发，'周报/日报/月报/工作汇报'等不触发report 2. mail类型仅在用户query中**显式出现'邮件/邮箱/mail/email'**等词汇时触发 3. '工作总结'、'日报总结'、'周报总结'、'月报总结'等汇总类场景，需要聚合所有工作内容，应使用['all'] 示例： - '本周的日志' searchTypes=['report'] - '我收到的邮件' searchTypes=['mail'] - '工作总结' searchTypes=['all']（需汇总所有内容） - '周报总结' searchTypes=['all']（需汇总所有内容） - 不填或['all'] 搜索全部类型，默认是['all']",
+          "interface_type": "array",
+          "property": "searchTypes",
+          "required": false,
+          "type": "string"
+        }
+      },
+      "path": "aisearch.search_enterprise",
+      "primary_cli_path": "aisearch enterprise",
+      "product_id": "aisearch",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "搜索企业内部知识内容和相关消息",
+      "use_when": [
+        "按主题找资料、方案、文档、消息、邮件等内容，且关注“有什么内容”",
+        "用户显式给出时间词或类型词时分别映射到 --time-range / --types"
+      ]
+    },
+    "aisearch.search_enterprise_behavior": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "Cobra help: dws aisearch behavior --help",
+        "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_command_registry.json#aisearch.search_enterprise_behavior",
+        "internal/cli/schema_hints/metadata/aisearch.json",
+        "internal/cli/schema_hints/selection/aisearch.json",
+        "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise_behavior",
+        "live-dws-schema:aisearch.search_enterprise_behavior",
+        "skills/mono/references/intent-guide.md",
+        "skills/mono/references/products/aisearch.md"
+      ],
+      "agent_summary": "搜索发送/创建/分享/编辑/接收等明确行为记录",
+      "agent_summary_source": "dws-agent-selection/aisearch",
+      "availability": "available",
+      "avoid_when": [
+        "只按主题找内容本身时用 aisearch enterprise",
+        "没有行为动作词时不要选用本工具"
+      ],
+      "canonical_path": "aisearch.search_enterprise_behavior",
+      "cli_name": "behavior",
+      "cli_path": "aisearch behavior",
+      "confirmation": "not_required",
+      "description": "仅当用户明确询问“我/某人发过、发给、收到、创建、分享、编辑过什么”等行为动作时，检索企业内部行为记录。\n\n普通“XX 相关消息/文档/邮件有哪些”不是行为记录，应使用 aisearch enterprise。behavior 的 queries 只放内容关键词；时间放到 --time-range，所有类型词放到 --types，行为动作放到 --behavior-type，人与人之间的流向放到 --direction。",
+      "display": "AI 搜问",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\" --format json",
+        "dws aisearch behavior --queries \"智能化方案\" --types document --behavior-type create --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": "搜索发送/创建/分享/编辑/接收等明确行为记录"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": "搜索发送/创建/分享/编辑/接收等明确行为记录"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise_behavior.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": [
+                "只按主题找内容本身时用 aisearch enterprise",
+                "没有行为动作词时不要选用本工具"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": [
+            "只按主题找内容本身时用 aisearch enterprise",
+            "没有行为动作词时不要选用本工具"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "aisearch behavior",
+              "value": "aisearch.search_enterprise_behavior"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "aisearch behavior",
+          "value": "aisearch.search_enterprise_behavior"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "仅当用户明确询问“我/某人发过、发给、收到、创建、分享、编辑过什么”等行为动作时，检索企业内部行为记录。\n\n普通“XX 相关消息/文档/邮件有哪些”不是行为记录，应使用 aisearch enterprise。behavior 的 queries 只放内容关键词；时间放到 --time-range，所有类型词放到 --types，行为动作放到 --behavior-type，人与人之间的流向放到 --direction。"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "业内部行为记录搜索工具。用于检索用户的操作行为记录，如文档的发送、创建、分享、编辑等历史操作，支持按人员、动作类型进行精确查询。适用场景：\"我给某人发过什么\"、\"我创建过哪些文档\"、\"某人发给我的消息\"、\"我分享过的资料\"等行为追溯需求。与知识搜索的区别：本工具关注\"谁对什么做了什么\"，而非内容本身。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "仅当用户明确询问“我/某人发过、发给、收到、创建、分享、编辑过什么”等行为动作时，检索企业内部行为记录。\n\n普通“XX 相关消息/文档/邮件有哪些”不是行为记录，应使用 aisearch enterprise。behavior 的 queries 只放内容关键词；时间放到 --time-range，所有类型词放到 --types，行为动作放到 --behavior-type，人与人之间的流向放到 --direction。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": [
+                "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\" --format json",
+                "dws aisearch behavior --queries \"智能化方案\" --types document --behavior-type create --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": [
+            "dws aisearch behavior --types mail --behavior-type send --direction \"我-\u003e汐峰\" --format json",
+            "dws aisearch behavior --queries \"智能化方案\" --types document --behavior-type create --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise_behavior.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "mcp_fallback",
+              "selected": true,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise_behavior.interface_ref",
+              "value": {
+                "product_id": "aisearch",
+                "rpc_name": "search_enterprise_behavior"
+              }
+            }
+          ],
+          "precedence": "mcp_fallback",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_mcp_metadata.json#tools.aisearch.search_enterprise_behavior.interface_ref",
+          "value": {
+            "product_id": "aisearch",
+            "rpc_name": "search_enterprise_behavior"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/aisearch.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/aisearch marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/aisearch.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "搜索明确的发送/创建/接收等行为记录"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "search_enterprise_behavior"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "搜索明确的发送/创建/接收等行为记录"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/aisearch.json",
+              "value": [
+                "用户明确问我/某人发过、发给、收到、创建、分享、编辑过什么"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/aisearch.json",
+          "value": [
+            "用户明确问我/某人发过、发给、收到、创建、分享、编辑过什么"
+          ]
+        }
+      },
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "aisearch",
+        "rpc_name": "search_enterprise_behavior"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "search_enterprise_behavior",
+      "parameter_count": 6,
+      "parameters": {
+        "behavior-type": {
+          "default": "all",
+          "description": "行为类型: all/send/create/share/edit/receive",
+          "enum": [
+            "all",
+            "send",
+            "create",
+            "share",
+            "edit",
+            "receive"
+          ],
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "行为类型: all/send/create/share/edit/receive"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "行为类型（可选）：all-全部, send-发送, create-创建, share-分享, edit-编辑, receive-接收"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "行为类型: all/send/create/share/edit/receive"
+            },
+            "enum": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": [
+                    "all",
+                    "send",
+                    "create",
+                    "share",
+                    "edit",
+                    "receive"
+                  ]
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": []
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": [
+                "all",
+                "send",
+                "create",
+                "share",
+                "edit",
+                "receive"
+              ]
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "behaviorType"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "behaviorType"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "行为类型（可选）：all-全部, send-发送, create-创建, share-分享, edit-编辑, receive-接收",
+          "property": "behaviorType",
+          "required": false,
+          "type": "string"
+        },
+        "chat-scope": {
+          "description": "消息所在会话/群范围，仅 IM 类型且用户明确指定群名时填写",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "消息所在会话/群范围，仅 IM 类型且用户明确指定群名时填写"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "消息所在的会话/群范围（可选），仅用于IM类型搜索。当用户指定群名/会话名时填写，系统会自动搜索群获取cid。 **填写条件**：用户query中出现具体群名/会话名 **不填写情况**：无明确会话范围时留空 **示例**： - '我在scrum群里发了什么' chatScope='scrum群' - '产品群里讨论了什么' chatScope='产品群' - '我发给汐峰的消息' chatScope不填写（用direction处理人际关系） - '我今天发了什么消息' chatScope不填写（无具体群名）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "消息所在会话/群范围，仅 IM 类型且用户明确指定群名时填写"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "chatScope"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "chatScope"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "消息所在的会话/群范围（可选），仅用于IM类型搜索。当用户指定群名/会话名时填写，系统会自动搜索群获取cid。 **填写条件**：用户query中出现具体群名/会话名 **不填写情况**：无明确会话范围时留空 **示例**： - '我在scrum群里发了什么' chatScope='scrum群' - '产品群里讨论了什么' chatScope='产品群' - '我发给汐峰的消息' chatScope不填写（用direction处理人际关系） - '我今天发了什么消息' chatScope不填写（无具体群名）",
+          "property": "chatScope",
+          "required": false,
+          "type": "string"
+        },
+        "direction": {
+          "description": "交互方向，如 \"我-\u003e汐峰\"、\"汐峰-\u003e我\"、\"我\u003c-\u003e汐峰\"",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "交互方向，如 \"我-\u003e汐峰\"、\"汐峰-\u003e我\"、\"我\u003c-\u003e汐峰\""
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "交互方向（可选），仅当用户query中**明确指定了交互对象（人名）**时填写。**格式**：'发起者-\u003e接收者' 或 '双向交互者\u003c-\u003e另一方'，'我'代表当前用户。**填写条件**：用户query中必须出现具体人名/对象**不填写情况**：无明确交互对象时留空，由behaviorType控制行为筛选**重要**：direction描述的是**内容流向**（谁发给谁），而非谁执行了动作。当用户没有指定具体人名时，即使behaviorType有方向性（如receive/send），也**不要**填写direction，更**不要**使用'我-\u003e*'或'*-\u003e我'这类通配符形式。**示例**：- '我发给汐峰的消息'  direction='我-\u003e汐峰'- '汐峰发给我的文档'  direction='汐峰-\u003e我'- '我和汐峰的聊天记录'  direction='我\u003c-\u003e汐峰'- '帮我总结今天干了什么'  direction不填写（无具体对象）- '我今天发的消息'  direction不填写（无具体对象）- '我接受了哪些日程'  direction不填写（无具体对象，用behaviorType=receive筛选）- '我创建了哪些文档'  direction不填写（无具体对象，用behaviorType=create筛选）"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "交互方向，如 \"我-\u003e汐峰\"、\"汐峰-\u003e我\"、\"我\u003c-\u003e汐峰\""
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "direction"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "direction"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "交互方向（可选），仅当用户query中**明确指定了交互对象（人名）**时填写。**格式**：'发起者-\u003e接收者' 或 '双向交互者\u003c-\u003e另一方'，'我'代表当前用户。**填写条件**：用户query中必须出现具体人名/对象**不填写情况**：无明确交互对象时留空，由behaviorType控制行为筛选**重要**：direction描述的是**内容流向**（谁发给谁），而非谁执行了动作。当用户没有指定具体人名时，即使behaviorType有方向性（如receive/send），也**不要**填写direction，更**不要**使用'我-\u003e*'或'*-\u003e我'这类通配符形式。**示例**：- '我发给汐峰的消息'  direction='我-\u003e汐峰'- '汐峰发给我的文档'  direction='汐峰-\u003e我'- '我和汐峰的聊天记录'  direction='我\u003c-\u003e汐峰'- '帮我总结今天干了什么'  direction不填写（无具体对象）- '我今天发的消息'  direction不填写（无具体对象）- '我接受了哪些日程'  direction不填写（无具体对象，用behaviorType=receive筛选）- '我创建了哪些文档'  direction不填写（无具体对象，用behaviorType=create筛选）",
+          "property": "direction",
+          "required": false,
+          "type": "string"
+        },
+        "queries": {
+          "description": "内容关键词列表，多个用逗号分隔；汇总类场景可留空",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "内容关键词列表，多个用逗号分隔；汇总类场景可留空"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "搜索关键词列表，只放**内容关键词**。 **排除规则**： - 时间信息 放到 timeRange 字段 - 类型关键词（日志/文档/消息/会议/日程/纪要等） 放到 searchTypes 字段 - 汇总类词汇（工作总结/日报总结/周报总结/月报总结） 不作为关键词，通过searchTypes=['all']触发全量搜索 示例： - '2025-12-06 ~ 2025-12-19工作总结' queries=[]（时间走timeRange，工作总结触发all类型） - '智能化方案' queries=['智能化方案']"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "内容关键词列表，多个用逗号分隔；汇总类场景可留空"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "array"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "array"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "queries"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "queries"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "搜索关键词列表，只放**内容关键词**。 **排除规则**： - 时间信息 放到 timeRange 字段 - 类型关键词（日志/文档/消息/会议/日程/纪要等） 放到 searchTypes 字段 - 汇总类词汇（工作总结/日报总结/周报总结/月报总结） 不作为关键词，通过searchTypes=['all']触发全量搜索 示例： - '2025-12-06 ~ 2025-12-19工作总结' queries=[]（时间走timeRange，工作总结触发all类型） - '智能化方案' queries=['智能化方案']",
+          "interface_type": "array",
+          "property": "queries",
+          "required": false,
+          "type": "string"
+        },
+        "time-range": {
+          "description": "时间范围，仅当用户显式给出时间词时填写，如 今天/本周/9月/过去一周",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "时间范围，仅当用户显式给出时间词时填写，如 今天/本周/9月/过去一周"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "时间范围。**提取规则**：仅当用户query中**显式出现**时间词汇时才填写，否则**必须留空**。**可识别的时间词汇**：- 相对时间：今天、昨天、本周、上周、这周、本月、上个月、最近、近期- 具体时间：9月、10月份、Q3、本季度、上半年、2024年- 时间范围：过去一周、最近三天**重要**：不要根据语义推测时间。如果用户没有使用上述时间词汇，即使语境暗示是近期，也**不填写**此字段。**示例**：- '本周的OKR文档'  timeRange='本周'- '9月的项目方案'  timeRange='9月'- '智能化相关文档'  timeRange不填写（无时间词），默认不填写"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "时间范围，仅当用户显式给出时间词时填写，如 今天/本周/9月/过去一周"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "timeRange"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "timeRange"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "default",
+              "resolution": "fallback",
+              "source": "default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "时间范围。**提取规则**：仅当用户query中**显式出现**时间词汇时才填写，否则**必须留空**。**可识别的时间词汇**：- 相对时间：今天、昨天、本周、上周、这周、本月、上个月、最近、近期- 具体时间：9月、10月份、Q3、本季度、上半年、2024年- 时间范围：过去一周、最近三天**重要**：不要根据语义推测时间。如果用户没有使用上述时间词汇，即使语境暗示是近期，也**不填写**此字段。**示例**：- '本周的OKR文档'  timeRange='本周'- '9月的项目方案'  timeRange='9月'- '智能化相关文档'  timeRange不填写（无时间词），默认不填写",
+          "property": "timeRange",
+          "required": false,
+          "type": "string"
+        },
+        "types": {
+          "default": "all",
+          "description": "搜索类型: all/document/im/calendar/todo/minute/report/image/link/notable/baike/mail，多个用逗号分隔",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "搜索类型: all/document/im/calendar/todo/minute/report/image/link/notable/baike/mail，多个用逗号分隔"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "searchTypes"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "搜索类型: all/document/im/calendar/todo/minute/report/image/link/notable/baike/mail，多个用逗号分隔"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "array"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "array"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "searchTypes"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "types"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "searchTypes"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "searchTypes",
+          "interface_type": "array",
+          "property": "searchTypes",
+          "required": false,
+          "type": "string"
+        }
+      },
+      "path": "aisearch.search_enterprise_behavior",
+      "primary_cli_path": "aisearch behavior",
+      "product_id": "aisearch",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "搜索明确的发送/创建/接收等行为记录",
+      "use_when": [
+        "用户明确问我/某人发过、发给、收到、创建、分享、编辑过什么"
+      ]
+    }
+  }
+}

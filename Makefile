@@ -8,7 +8,7 @@ POLICY_GOTMPDIR ?= $(DWS_POLICY_TMPDIR)/go
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema generate-schema-agent-metadata fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -30,6 +30,7 @@ help:
 	@printf "  make reset-interface-baseline - DANGEROUS: replace all CLI compatibility history\n"
 	@printf "  make schema-compatibility BASE_REF=<ref> - Check the complete Schema contract against the PR merge-base\n"
 	@printf "  make skill-command-integrity - Check dws commands referenced by skills exist\n"
+	@printf "  make skill-context-budget - Check generated Skill drift and common-path context budgets\n"
 	@printf "  make cli-smoke     - Verify help for every public top-level command\n"
 	@printf "  make mock-mcp-smoke - Verify HTTP and stdio MCP request/response transport\n"
 	@printf "  make test-schema-agent-examples - Contract-check all Agent examples and dry-run the eligible subset\n"
@@ -84,9 +85,13 @@ fmt:
 policy: test-auth-legacy-compat
 	@mkdir -p "$(POLICY_GOTMPDIR)"
 	@$(POLICY_ENV) ./scripts/policy/check-open-source-assets.sh
+	@$(POLICY_ENV) ./scripts/policy/check-skill-context-budget.sh
 	@$(POLICY_ENV) ./scripts/policy/check-schema-command-registry.sh
 	@$(POLICY_ENV) ./scripts/policy/check-command-surface.sh --strict
 	@$(POLICY_ENV) ./scripts/policy/check-generated-drift.sh
+	@$(POLICY_ENV) ./scripts/policy/check-param-concepts.sh
+	@$(POLICY_ENV) ./scripts/policy/check-param-alias-cooccurrence.sh
+	@$(POLICY_ENV) $(GO) test -count=1 ./internal/app -run '^(TestParamAlias(FixtureThroughEmbeddedDeliveryPath|ReadCommandFinalPayload|WriteCommandFinalPayload|CanonicalConflictFailsBeforeRunE|BlockedFlagReachesReviewedFinalError)|TestFlagConflictErrorFormattingIsDeterministic)$$'
 	@$(POLICY_ENV) ./scripts/policy/check-schema-catalog.sh
 	@$(POLICY_ENV) ./scripts/policy/check-schema-binary.sh
 	@$(POLICY_ENV) $(MAKE) test-schema-agent-examples
@@ -118,6 +123,9 @@ schema-compatibility:
 skill-command-integrity:
 	@./scripts/policy/check-skill-commands.sh
 
+skill-context-budget:
+	@./scripts/policy/check-skill-context-budget.sh
+
 cli-smoke:
 	@./scripts/policy/check-cli-smoke.sh
 
@@ -129,16 +137,36 @@ test-schema-agent-examples:
 
 generate-schema:
 	@set -e; \
-	registry_guard=$$(mktemp); \
+	registry_guard=$$(mktemp -d); \
+	concepts_guard=$$(mktemp); \
+	concepts_schema_guard=$$(mktemp); \
 	metadata_guard=$$(mktemp -d); \
 	selection_guard=$$(mktemp -d); \
-	trap 'rm -rf "$$registry_guard" "$$metadata_guard" "$$selection_guard"' EXIT HUP INT TERM; \
-	cp internal/cli/schema_command_registry.json "$$registry_guard"; \
+	trap 'rm -rf "$$registry_guard" "$$concepts_guard" "$$concepts_schema_guard" "$$metadata_guard" "$$selection_guard"' EXIT HUP INT TERM; \
+	cp -R internal/cli/schema_command_registry/ "$$registry_guard/"; \
+	cp internal/cli/param_concepts.json "$$concepts_guard"; \
+	cp internal/cli/param_concepts.schema.json "$$concepts_schema_guard"; \
 	cp -R internal/cli/schema_hints/metadata/. "$$metadata_guard/"; \
 	cp -R internal/cli/schema_hints/selection/. "$$selection_guard/"; \
 	$(GO) generate ./internal/cli; \
-	cmp -s internal/cli/schema_command_registry.json "$$registry_guard" || { \
-		printf '%s\n' 'generation modified reviewed input internal/cli/schema_command_registry.json' >&2; \
+	diff -qr internal/cli/schema_command_registry "$$registry_guard" >/dev/null || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/schema_command_registry/' >&2; \
+		exit 1; \
+	}; \
+	cmp -s internal/cli/param_concepts.json "$$concepts_guard" || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/param_concepts.json' >&2; \
+		exit 1; \
+	}; \
+	cmp -s internal/cli/param_concepts.schema.json "$$concepts_schema_guard" || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/param_concepts.schema.json' >&2; \
+		exit 1; \
+	}; \
+	cmp -s internal/cli/param_concepts.json "$$concepts_guard" || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/param_concepts.json' >&2; \
+		exit 1; \
+	}; \
+	cmp -s internal/cli/param_concepts.schema.json "$$concepts_schema_guard" || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/param_concepts.schema.json' >&2; \
 		exit 1; \
 	}; \
 	diff -qr internal/cli/schema_hints/metadata "$$metadata_guard" >/dev/null || { \
@@ -153,14 +181,18 @@ generate-schema:
 generate-schema-agent-metadata:
 	$(GO) run ./internal/generator/cmd_schema_agent_metadata \
 		-root . \
-		-registry internal/cli/schema_command_registry.json \
+		-registry internal/cli/schema_command_registry \
 		-output-dir internal/cli/schema_agent_metadata \
 		-audit-output internal/cli/schema_agent_metadata_audit.json
 
 generate-schema-catalog:
 	$(GO) run -a ./internal/generator/cmd_schema_catalog \
 		-root . \
-		-output internal/cli/schema_catalog.json
+		-output internal/cli/schema_catalog
+
+fetch-mcp-metadata:
+	@printf '  %sRefreshing MCP metadata from live server%s\n' "$(COLOR_RUN)" "$(COLOR_RESET)"
+	@./scripts/dev/fetch_mcp_metadata.sh
 
 package:
 	@version="$(if $(VERSION),$(VERSION),v0.0.0-SNAPSHOT)"; VERSION="$${version#v}" ./scripts/dev/build-all.sh

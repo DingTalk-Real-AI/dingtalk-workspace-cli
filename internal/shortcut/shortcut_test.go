@@ -15,6 +15,7 @@ package shortcut
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -40,16 +41,69 @@ func TestCrossPlatformCoverageRiskDefaultsToRead(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageConfirmRiskPromptsForStaticWrite(t *testing.T) {
+	cmd := &cobra.Command{}
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
+	rt := &RuntimeContext{cmd: cmd}
+	s := Shortcut{
+		Service: "chat",
+		Command: "+messages-send",
+		Risk:    RiskWrite,
+	}
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousStdin := os.Stdin
+	os.Stdin = reader
+	t.Cleanup(func() {
+		os.Stdin = previousStdin
+		_ = reader.Close()
+		_ = writer.Close()
+	})
+	if _, err := writer.WriteString("yes\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !confirmRisk(rt, s) {
+		t.Fatal("static write risk was not confirmed")
+	}
+	if got := stderr.String(); !strings.Contains(got, "chat +messages-send（write）") {
+		t.Fatalf("confirmation prompt = %q", got)
+	}
+}
+
 func TestCrossPlatformCoverageMountRegistersFlagsAndUse(t *testing.T) {
 	s := Shortcut{
 		Service:     "contact",
 		Command:     "+search-user",
 		Description: "search",
 		Flags: []Flag{
-			{Name: "query", Type: FlagString, Required: true},
+			{Name: "query", Type: FlagString, Required: true, Enum: []string{"name", "mobile"}},
 			{Name: "limit", Type: FlagInt, Default: "20"},
 			{Name: "verbose", Type: FlagBool},
-			{Name: "ids", Type: FlagStringSlice},
+			{Name: "ids", Type: FlagStringSlice, Default: "self,team"},
+			{Name: "mode", Type: FlagString},
+			{Name: "start", Type: FlagString},
+			{Name: "end", Type: FlagString},
+		},
+		Constraints: []Constraint{
+			{
+				Kind:  ConstraintExactlyOne,
+				Flags: []string{"query", "ids"},
+			},
+			{
+				Kind:  ConstraintAtLeastOne,
+				Flags: []string{"mode", "start"},
+			},
+			{
+				Kind:  ConstraintMutuallyExclusive,
+				Flags: []string{"start", "end"},
+			},
 		},
 	}
 	cmd := mount(s)
@@ -63,6 +117,53 @@ func TestCrossPlatformCoverageMountRegistersFlagsAndUse(t *testing.T) {
 	}
 	if v, _ := cmd.Flags().GetInt("limit"); v != 20 {
 		t.Errorf("limit default = %d, want 20", v)
+	}
+	if v, _ := cmd.Flags().GetStringSlice("ids"); strings.Join(v, ",") != "self,team" {
+		t.Errorf("ids default = %#v, want [self team]", v)
+	}
+	query := cmd.Flags().Lookup("query")
+	if got := query.Annotations["dws.schema.required"]; len(got) != 1 || got[0] != "true" {
+		t.Fatalf("required annotation = %#v", got)
+	}
+	if got := query.Annotations["x-cli-enum"]; strings.Join(got, ",") != "name,mobile" {
+		t.Fatalf("enum annotation = %#v", got)
+	}
+	if raw := cmd.Annotations["dws.schema.constraints"]; raw != `{"mutually_exclusive":[["query","ids"],["start","end"]],"require_one_of":[["query","ids"],["mode","start"]]}` {
+		t.Fatalf("constraints annotation = %q", raw)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaConstraintCollapsesHiddenAliases(t *testing.T) {
+	cmd := mount(Shortcut{
+		Service: "chat",
+		Command: "+search",
+		Flags: []Flag{
+			{Name: "query", Type: FlagString},
+			{Name: "keyword", Type: FlagString, Hidden: true},
+			{Name: "id", Type: FlagString},
+			{Name: "legacy-id", Type: FlagString, Hidden: true},
+		},
+		Constraints: []Constraint{
+			{
+				Kind:  ConstraintAtLeastOne,
+				Flags: []string{"query", "keyword"},
+			},
+			{
+				Kind:  ConstraintExactlyOne,
+				Flags: []string{"id", "legacy-id"},
+			},
+		},
+	})
+	query := cmd.Flags().Lookup("query")
+	if got := query.Annotations["dws.schema.required"]; len(got) != 1 || got[0] != "true" {
+		t.Fatalf("collapsed public requirement annotation = %#v", got)
+	}
+	id := cmd.Flags().Lookup("id")
+	if got := id.Annotations["dws.schema.required"]; len(got) != 1 || got[0] != "true" {
+		t.Fatalf("collapsed exact-one requirement annotation = %#v", got)
+	}
+	if raw := cmd.Annotations["dws.schema.constraints"]; raw != "" {
+		t.Fatalf("hidden compatibility alias leaked into public Schema constraints: %q", raw)
 	}
 }
 
@@ -307,7 +408,7 @@ func TestCrossPlatformCoverageCallMCPWriteDataRejectsDryRun(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageCallMCPDataRejectsLikelyWriteUnderDryRun(t *testing.T) {
+func TestCrossPlatformCoverageCallMCPDataDryRunReadNameFailsClosed(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	root.PersistentFlags().Bool("dry-run", false, "")
 	cmd := &cobra.Command{Use: "x"}
@@ -317,12 +418,26 @@ func TestCrossPlatformCoverageCallMCPDataRejectsLikelyWriteUnderDryRun(t *testin
 	}
 
 	rt := &RuntimeContext{cmd: cmd, shortcut: Shortcut{Service: "chat"}}
-	_, err := rt.CallMCPData("chat", "send_personal_message", map[string]any{"receiverUid": "u"})
-	if err == nil {
-		t.Fatal("expected likely write guard error")
+	for _, tool := range []string{"send_personal_message", "custom_operation"} {
+		_, err := rt.CallMCPData("chat", tool, map[string]any{"receiverUid": "u"})
+		if err == nil {
+			t.Fatalf("%s: expected dry-run read allowlist error", tool)
+		}
+		if !strings.Contains(err.Error(), "chat/"+tool) {
+			t.Fatalf("%s: error = %q, want tool name", tool, err.Error())
+		}
 	}
-	if !strings.Contains(err.Error(), "chat/send_personal_message") {
-		t.Fatalf("error = %q, want tool name", err.Error())
+
+	for _, tool := range []string{
+		"get_conversation_info",
+		"list_topic_replies",
+		"query_busy_status",
+		"search_groups",
+		"unread_message_conversation_list",
+	} {
+		if !looksReadTool(tool) {
+			t.Errorf("%s: expected read-only classification", tool)
+		}
 	}
 }
 

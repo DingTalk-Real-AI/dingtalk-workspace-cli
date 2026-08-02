@@ -36,6 +36,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -222,6 +223,24 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	}
 
 	return r.runSingle(ctx, invocation, true)
+}
+
+// RunReadOnly executes one already-classified read lookup for a semantic
+// Shortcut that is building a dry-run plan. It clones the runtime flags and
+// clears DryRun only on that clone: the process-wide caller and every ordinary
+// ToolCaller invocation retain the global execution barrier.
+func (r *runtimeRunner) RunReadOnly(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	if r == nil {
+		return executor.Result{}, fmt.Errorf("runtime runner is not configured")
+	}
+	clone := *r
+	if r.globalFlags != nil {
+		flags := *r.globalFlags
+		flags.DryRun = false
+		clone.globalFlags = &flags
+	}
+	invocation.DryRun = false
+	return clone.Run(ctx, invocation)
 }
 
 func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invocation, prefetchToken bool) (executor.Result, error) {
@@ -986,10 +1005,9 @@ func resolveIdentityHeaders() map[string]string {
 
 	// Inject environment variable based headers for MCP gateway tracking.
 	// DINGTALK_AGENT, if set by the caller, is forwarded verbatim as the
-	// x-dingtalk-agent header. It does NOT influence claw-type (which the
-	// open-source edition pins to edition.DefaultOSSClawType via the
-	// MergeHeaders hook below) and it does NOT influence the host-owned
-	// PAT decision (driven solely by DINGTALK_DWS_AGENTCODE).
+	// x-dingtalk-agent header. It does NOT influence the edition-fixed
+	// claw-type or the host-owned PAT decision (driven solely by
+	// DINGTALK_DWS_AGENTCODE).
 	sessionID := os.Getenv(envDingtalkSessionID)
 	if sessionID == "" {
 		sessionID = os.Getenv(envDWSSessionID)
@@ -1038,11 +1056,40 @@ func resolveIdentityHeaders() map[string]string {
 		headers["x-dws-channel"] = v
 	}
 
+	// DWS_AGENT_HOST is a caller-declared runtime-form signal. Root command
+	// execution validates it strictly in PersistentPreRunE. Library callers
+	// that bypass the root command keep this best-effort API contract: invalid
+	// values are omitted rather than changing the public function signature.
+	if agentHost, err := parseAgentHost(os.Getenv(envDWSAgentHost)); err == nil && agentHost != "" {
+		headers[headerDWSAgentHost] = agentHost
+	}
+
 	if fn := edition.Get().MergeHeaders; fn != nil {
 		headers = fn(headers)
 	}
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+
+	// claw-type is the edition-fixed routing/PAT identity. Agent Product is a
+	// separate caller-declared observability and IM-display dimension.
+	clawType := resolveEditionClawType(headers)
+	headers["claw-type"] = clawType
+	headers = applyAgentProductHeader(headers)
+	agentProduct, hasAgentProduct := headers[agentproduct.HeaderName]
 	if fn := edition.Get().EnterpriseCredentialHeaders; fn != nil {
 		headers = fn(headers)
+	}
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+	// Credential hooks cannot alter either identity dimension. Restore the
+	// fixed claw-type and the validated Product Header (or its absence).
+	headers["claw-type"] = clawType
+	if hasAgentProduct {
+		headers[agentproduct.HeaderName] = agentProduct
+	} else {
+		delete(headers, agentproduct.HeaderName)
 	}
 	return headers
 }

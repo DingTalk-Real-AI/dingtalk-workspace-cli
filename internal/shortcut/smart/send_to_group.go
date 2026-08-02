@@ -61,7 +61,7 @@ var SendToGroup = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		groups := extractGroupsForSend(data)
+		groups := preferExactGroupMatches(extractGroupsForSend(data), groupName)
 		switch {
 		case len(groups) == 0:
 			return apperrors.NewValidation(fmt.Sprintf(
@@ -130,6 +130,34 @@ func extractGroupsForSend(data map[string]any) []sendGroupMatch {
 		out = append(out, sendGroupMatch{id: id, name: name})
 	}
 	return out
+}
+
+// preferExactGroupMatches keeps name-based routing ambiguity-safe while
+// avoiding a common false ambiguity from substring search. If the server
+// returns exactly one group whose title equals the requested name, that exact
+// group wins over prefix/suffix matches. Duplicate rows for the same
+// openConversationId are collapsed before selection.
+func preferExactGroupMatches(groups []sendGroupMatch, query string) []sendGroupMatch {
+	unique := make([]sendGroupMatch, 0, len(groups))
+	seen := make(map[string]struct{}, len(groups))
+	for _, group := range groups {
+		if _, ok := seen[group.id]; ok {
+			continue
+		}
+		seen[group.id] = struct{}{}
+		unique = append(unique, group)
+	}
+	query = strings.TrimSpace(query)
+	exact := make([]sendGroupMatch, 0, 1)
+	for _, group := range unique {
+		if strings.EqualFold(strings.TrimSpace(group.name), query) {
+			exact = append(exact, group)
+		}
+	}
+	if len(exact) > 0 {
+		return exact
+	}
+	return unique
 }
 
 func sendGroupLabels(groups []sendGroupMatch) []string {

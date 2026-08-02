@@ -35,6 +35,17 @@ type contactUser struct {
 //   - errors with a clear message if nobody matches;
 //   - errors listing the candidates if the name is ambiguous (never guesses).
 func resolveUser(rt *shortcut.RuntimeContext, name string) (contactUser, error) {
+	return resolveUserByName(rt, name, false)
+}
+
+// resolveOpenDingTalkUser also accepts external / cross-org contacts that have
+// an openDingTalkId but no organization-scoped userId. Use it only for flows
+// whose downstream interface consumes openDingTalkId.
+func resolveOpenDingTalkUser(rt *shortcut.RuntimeContext, name string) (contactUser, error) {
+	return resolveUserByName(rt, name, true)
+}
+
+func resolveUserByName(rt *shortcut.RuntimeContext, name string, includeOpenIDOnly bool) (contactUser, error) {
 	data, err := rt.CallMCPData("contact", "search_contact_by_key_word", map[string]any{
 		"keyword": name,
 	})
@@ -42,16 +53,29 @@ func resolveUser(rt *shortcut.RuntimeContext, name string) (contactUser, error) 
 		return contactUser{}, err
 	}
 	users := extractUsers(data)
+	if !includeOpenIDOnly {
+		users = usersWithUserID(users)
+	}
 	switch {
 	case len(users) == 0:
 		return contactUser{}, apperrors.NewValidation(
 			fmt.Sprintf("通讯录里没找到叫 %q 的人；换个更完整的姓名再试。", name))
 	case len(users) > 1:
 		return contactUser{}, apperrors.NewValidation(fmt.Sprintf(
-			"%q 匹配到 %d 个人：%s。请用更精确的姓名，或直接用对应命令传 userId。",
+			"%q 匹配到 %d 个人：%s。请用更精确的姓名，或改用对应命令直接传用户 ID。",
 			name, len(users), strings.Join(userLabels(users), "、")))
 	}
 	return users[0], nil
+}
+
+func usersWithUserID(users []contactUser) []contactUser {
+	out := make([]contactUser, 0, len(users))
+	for _, user := range users {
+		if user.userID != "" {
+			out = append(out, user)
+		}
+	}
+	return out
 }
 
 // extractUsers pulls {userId, openDingTalkId, name} out of a
@@ -68,13 +92,26 @@ func extractUsers(data map[string]any) []contactUser {
 			continue
 		}
 		id, _ := m["userId"].(string)
-		if id == "" {
-			continue
-		}
-		nm, _ := m["name"].(string)
 		openID, _ := m["openDingTalkId"].(string)
 		if openID == "" {
 			openID, _ = m["openDingtalkId"].(string)
+		}
+		// External / cross-org contacts come back with an empty userId and only
+		// an openDingTalkId (verified live). Dropping them here made name→ID
+		// resolution miss those people, or collapse to the wrong single match
+		// when an in-org namesake also existed. Keep any row with at least one
+		// usable identity; downstream (e.g. +dm) can act on the openDingTalkId.
+		if id == "" && openID == "" {
+			continue
+		}
+		nm, _ := m["name"].(string)
+		if nm == "" {
+			for _, k := range []string{"nick", "showName", "flowerName", "staffName", "userName"} {
+				if v, _ := m[k].(string); v != "" {
+					nm = v
+					break
+				}
+			}
 		}
 		out = append(out, contactUser{userID: id, openDingTalkID: openID, name: nm})
 	}
@@ -84,7 +121,11 @@ func extractUsers(data map[string]any) []contactUser {
 func userLabels(users []contactUser) []string {
 	out := make([]string, 0, len(users))
 	for _, u := range users {
-		out = append(out, fmt.Sprintf("%s(%s)", u.name, u.userID))
+		id := u.userID
+		if id == "" {
+			id = u.openDingTalkID
+		}
+		out = append(out, fmt.Sprintf("%s(%s)", u.name, id))
 	}
 	return out
 }

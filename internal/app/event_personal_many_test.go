@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
@@ -251,7 +252,7 @@ func TestPreparePersonalMultiOptionsRejectsSingleOnlyFlags(t *testing.T) {
 	}
 }
 
-func TestEventConsumeMultiRejectsExplicitSingleOnlyFlagsEvenWhenEmpty(t *testing.T) {
+func TestCrossPlatformCoverageEventConsumeMultiRejectsExplicitSingleOnlyFlagsEvenWhenEmpty(t *testing.T) {
 	oldRun := eventRunPersonalConsume
 	defer func() { eventRunPersonalConsume = oldRun }()
 	eventRunPersonalConsume = func(*cobra.Command, personalConsumeOptions) error {
@@ -379,7 +380,158 @@ func TestRunPersonalEventConsumeManyRollsBackPartialCreation(t *testing.T) {
 	}
 }
 
-func TestRunPersonalEventConsumeManyRejectsInvalidSubscriptionResults(t *testing.T) {
+func TestCrossPlatformCoverageRunPersonalEventConsumeManyPersistsFailureBeforeRollback(t *testing.T) {
+	restore := installPersonalManySeams(t)
+	defer restore()
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+
+	var order []string
+	personalNewSubscriptionAttemptStore = func(string) personalSubscriptionAttemptStore {
+		return &personalOrderingAttemptStore{order: &order}
+	}
+	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+		return personal.Identity{
+			AccessToken:  "token",
+			ClientID:     "client",
+			SourceID:     "open",
+			LocalSubject: "subject",
+		}, nil
+	}
+	calls := 0
+	personalEnsureSubscription = func(
+		_ context.Context,
+		_ *personal.Client,
+		_ personal.Identity,
+		opts personalConsumeOptions,
+	) (*personal.Subscription, string, string, error) {
+		calls++
+		if calls == 2 {
+			return nil, "", "", errors.New("second subscription failed")
+		}
+		return &personal.Subscription{SubscribeID: "sub-first"}, opts.EventKey, "all", nil
+	}
+	personalUpsertRunState = func(string, personal.RunState) error { return nil }
+	personalDeleteSubscription = func(_ *personal.Client, _ context.Context, _ string) error {
+		order = append(order, "delete")
+		return nil
+	}
+	personalRemoveRunStates = func(string, []string) error { return nil }
+	personalValidateConsumeConfig = func(consume.Config) error { return nil }
+
+	err := runPersonalEventConsume(newPersonalCoverageCommand(), personalConsumeOptions{
+		EventKeys: []string{personal.EventMention, personal.EventAllSingleChat},
+	})
+	if err == nil {
+		t.Fatal("partial creation unexpectedly succeeded")
+	}
+	if !reflect.DeepEqual(order, []string{"complete_failure", "delete"}) {
+		t.Fatalf("failure/rollback order = %#v", order)
+	}
+}
+
+func TestCrossPlatformCoverageRunPersonalEventConsumeSinglePersistsLocalFailureBeforeRollback(t *testing.T) {
+	restore := installPersonalManySeams(t)
+	defer restore()
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+
+	var order []string
+	personalNewSubscriptionAttemptStore = func(string) personalSubscriptionAttemptStore {
+		return &personalOrderingAttemptStore{order: &order}
+	}
+	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+		return personal.Identity{
+			AccessToken:  "token",
+			ClientID:     "client",
+			SourceID:     "open",
+			LocalSubject: "subject",
+		}, nil
+	}
+	personalEnsureSubscription = func(
+		_ context.Context,
+		_ *personal.Client,
+		_ personal.Identity,
+		opts personalConsumeOptions,
+	) (*personal.Subscription, string, string, error) {
+		return &personal.Subscription{SubscribeID: "sub-one"}, opts.EventKey, "all", nil
+	}
+	personalUpsertRunState = func(string, personal.RunState) error {
+		return errors.New("state disk failed")
+	}
+	personalDeleteSubscription = func(_ *personal.Client, _ context.Context, _ string) error {
+		order = append(order, "delete")
+		return nil
+	}
+	personalRemoveRunStates = func(string, []string) error { return nil }
+	personalValidateConsumeConfig = func(consume.Config) error { return nil }
+
+	err := runPersonalEventConsume(newPersonalCoverageCommand(), personalConsumeOptions{
+		EventKey: personal.EventMention,
+	})
+	if err == nil {
+		t.Fatal("run-state failure unexpectedly succeeded")
+	}
+	if !reflect.DeepEqual(order, []string{"complete_failure", "delete"}) {
+		t.Fatalf("failure/rollback order = %#v", order)
+	}
+}
+
+func TestCrossPlatformCoverageRunPersonalEventConsumeManyCancellationReleasesBeforeCanceledCleanup(t *testing.T) {
+	restore := installPersonalManySeams(t)
+	defer restore()
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+
+	var order []string
+	personalNewSubscriptionAttemptStore = func(string) personalSubscriptionAttemptStore {
+		return &personalOrderingAttemptStore{order: &order}
+	}
+	personalResolveEventIdentity = func(context.Context, string, string) (personal.Identity, error) {
+		return personal.Identity{
+			AccessToken:  "token",
+			ClientID:     "client",
+			SourceID:     "open",
+			LocalSubject: "subject",
+		}, nil
+	}
+	calls := 0
+	personalEnsureSubscription = func(
+		_ context.Context,
+		_ *personal.Client,
+		_ personal.Identity,
+		opts personalConsumeOptions,
+	) (*personal.Subscription, string, string, error) {
+		calls++
+		if calls == 2 {
+			return nil, "", "", context.Canceled
+		}
+		return &personal.Subscription{SubscribeID: "sub-first"}, opts.EventKey, "all", nil
+	}
+	personalUpsertRunState = func(string, personal.RunState) error { return nil }
+	personalDeleteSubscription = func(_ *personal.Client, cleanupCtx context.Context, _ string) error {
+		if cleanupCtx.Err() == nil {
+			t.Fatal("cancellation cleanup received a live context")
+		}
+		order = append(order, "delete")
+		return cleanupCtx.Err()
+	}
+	personalRemoveRunStates = func(string, []string) error { return nil }
+	personalValidateConsumeConfig = func(consume.Config) error { return nil }
+
+	cmd := newPersonalCoverageCommand()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+	err := runPersonalEventConsume(cmd, personalConsumeOptions{
+		EventKeys: []string{personal.EventMention, personal.EventAllSingleChat},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation error = %v", err)
+	}
+	if !reflect.DeepEqual(order, []string{"release", "delete"}) {
+		t.Fatalf("release/canceled-cleanup order = %#v", order)
+	}
+}
+
+func TestCrossPlatformCoverageRunPersonalEventConsumeManyRejectsInvalidSubscriptionResults(t *testing.T) {
 	for _, test := range []struct {
 		name      string
 		ensure    func(int, personalConsumeOptions) *personal.Subscription
@@ -641,16 +793,21 @@ func installPersonalManySeams(t *testing.T) func() {
 	oldIdentity := personalResolveEventIdentity
 	oldLookup := personalLookupDefinition
 	oldEnsure := personalEnsureSubscription
+	oldAttemptStore := personalNewSubscriptionAttemptStore
 	oldUpsert := personalUpsertRunState
 	oldDelete := personalDeleteSubscription
 	oldRemove := personalRemoveRunStates
 	oldRunMany := personalConsumeRunMany
 	oldValidate := personalValidateConsumeConfig
 	oldConflict := personalValidateNoOutputConflict
+	personalNewSubscriptionAttemptStore = func(string) personalSubscriptionAttemptStore {
+		return personalNoopAttemptStore{}
+	}
 	return func() {
 		personalResolveEventIdentity = oldIdentity
 		personalLookupDefinition = oldLookup
 		personalEnsureSubscription = oldEnsure
+		personalNewSubscriptionAttemptStore = oldAttemptStore
 		personalUpsertRunState = oldUpsert
 		personalDeleteSubscription = oldDelete
 		personalRemoveRunStates = oldRemove
@@ -658,4 +815,69 @@ func installPersonalManySeams(t *testing.T) func() {
 		personalValidateConsumeConfig = oldValidate
 		personalValidateNoOutputConflict = oldConflict
 	}
+}
+
+type personalNoopAttemptStore struct{}
+
+func (personalNoopAttemptStore) Claim(specs []personal.AttemptSpec, _ time.Duration) (*personal.AttemptClaim, error) {
+	fingerprints := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		fingerprints = append(fingerprints, spec.Fingerprint)
+	}
+	return &personal.AttemptClaim{
+		AttemptID:    "test-attempt",
+		Fingerprints: fingerprints,
+	}, nil
+}
+
+func (personalNoopAttemptStore) CompleteSuccess(*personal.AttemptClaim) error {
+	return nil
+}
+
+func (personalNoopAttemptStore) CompleteFailure(
+	_ *personal.AttemptClaim,
+	_ []string,
+	failure personal.AttemptFailure,
+) (personal.AttemptHold, error) {
+	return personal.AttemptHold{
+		Fingerprint:  failure.Fingerprint,
+		Retryability: failure.Retryability,
+	}, nil
+}
+
+func (personalNoopAttemptStore) Release(*personal.AttemptClaim) error {
+	return nil
+}
+
+type personalOrderingAttemptStore struct {
+	order *[]string
+}
+
+func (s *personalOrderingAttemptStore) Claim(
+	specs []personal.AttemptSpec,
+	lease time.Duration,
+) (*personal.AttemptClaim, error) {
+	return personalNoopAttemptStore{}.Claim(specs, lease)
+}
+
+func (s *personalOrderingAttemptStore) CompleteSuccess(*personal.AttemptClaim) error {
+	*s.order = append(*s.order, "complete_success")
+	return nil
+}
+
+func (s *personalOrderingAttemptStore) CompleteFailure(
+	_ *personal.AttemptClaim,
+	_ []string,
+	failure personal.AttemptFailure,
+) (personal.AttemptHold, error) {
+	*s.order = append(*s.order, "complete_failure")
+	return personal.AttemptHold{
+		Fingerprint:  failure.Fingerprint,
+		Retryability: failure.Retryability,
+	}, nil
+}
+
+func (s *personalOrderingAttemptStore) Release(*personal.AttemptClaim) error {
+	*s.order = append(*s.order, "release")
+	return nil
 }

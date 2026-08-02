@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -87,12 +88,15 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 		},
 		{
 			name:      "advanced search",
-			args:      []string{"message", "search-advanced", "--query", "categoryName", "--conversation-ids", "cid-1,cid-2", "--start", start, "--end", end, "--limit", "100", "--cursor", "0"},
+			args:      []string{"message", "search-advanced", "--query", "categoryName", "--conversation-ids", "cid-1,cid-2", "--message-type", "text", "--only-robot", "--conversation-type", "group", "--start", start, "--end", end, "--limit", "100", "--cursor", "0"},
 			productID: "im",
 			toolName:  "search_messages",
 			wantToolArg: map[string]any{
 				"keyword":             "categoryName",
 				"openConversationIds": []string{"cid-1", "cid-2"},
+				"messageType":         "text",
+				"onlyRobotMessages":   true,
+				"searchConvType":      "group",
 				"startTime":           startTime.UnixMilli(),
 				"endTime":             endTime.UnixMilli(),
 				"limit":               100,
@@ -211,6 +215,73 @@ func TestCrossPlatformCoverageChatSendResolvesUserBeforeDispatch(t *testing.T) {
 	}
 	if _, leaked := caller.calls[1].args["receiverUid"]; leaked {
 		t.Fatalf("resolved send must not include receiverUid: %#v", caller.calls[1].args)
+	}
+}
+
+func TestChatSendAndReplyDefaultToAgentProductForIMClawType(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "qwenwork")
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "send",
+			args: []string{"message", "send", "--open-dingtalk-id", "D1", "--text", "hello"},
+		},
+		{
+			name: "reply",
+			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", "D1", "--text", "hello"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &chatChangedContractCaller{}
+			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			if got := caller.calls[0].args["clawType"]; got != "qwenwork" {
+				t.Fatalf("clawType = %#v, want qwenwork", got)
+			}
+		})
+	}
+}
+
+func TestChatSendAndReplyDisableAITagWithEmptyClawType(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "qwenwork")
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "send",
+			args: []string{"message", "send", "--open-dingtalk-id", "D1", "--text", "hello", "--ai-tag=false"},
+		},
+		{
+			name: "reply",
+			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", "D1", "--text", "hello", "--ai-tag=false"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &chatChangedContractCaller{}
+			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			got, present := caller.calls[0].args["clawType"]
+			if !present || got != "" {
+				t.Fatalf("clawType = %#v, present = %v; want present empty string", got, present)
+			}
+		})
 	}
 }
 

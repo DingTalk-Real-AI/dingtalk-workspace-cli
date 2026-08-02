@@ -22,9 +22,16 @@ import "testing"
 // behaviour (sender/text/encryption) is covered in the chatmsg package tests.
 func TestProjectChatMessageExpandsForwarded(t *testing.T) {
 	row := projectChatMessage(map[string]any{
-		"sender":     "hugozhu",
-		"content":    "hugozhu与opencode-agent的聊天记录\nopencode-agent:[卡片]",
-		"createTime": "2026-07-20 21:41:21",
+		"sender":             "hugozhu",
+		"openMessageId":      "msg-top",
+		"openConversationId": "cid-top",
+		"openConvThreadId":   "thread-top",
+		"msgType":            "text",
+		"content":            "hugozhu与opencode-agent的聊天记录\nopencode-agent:[卡片]",
+		"createTime":         "2026-07-20 21:41:21",
+		"emotionReplyList": []any{
+			map[string]any{"emoji": "赞", "replyUsers": []any{"D1"}},
+		},
 		"forwardMessages": []any{
 			map[string]any{"sender": "null", "content": "读下冬翔发给我的最近两条消息", "createTime": "2026-07-20 09:30:33"},
 			map[string]any{"sender": "冬翔", "content": "W29 工作总结", "createTime": "2026-07-19 23:35:40",
@@ -38,6 +45,15 @@ func TestProjectChatMessageExpandsForwarded(t *testing.T) {
 
 	if row["sender"] != "hugozhu" {
 		t.Fatalf("top sender = %v, want hugozhu", row["sender"])
+	}
+	if row["messageId"] != "msg-top" || row["conversationId"] != "cid-top" || row["messageType"] != "text" {
+		t.Errorf("stable identity = %#v", row)
+	}
+	if row["threadId"] != "thread-top" {
+		t.Errorf("thread identity = %#v", row)
+	}
+	if reactions, ok := row["reactions"].(map[string]any); !ok || len(reactions) == 0 {
+		t.Errorf("reactions = %#v", row["reactions"])
 	}
 	forwarded, ok := row["forwarded"].([]map[string]any)
 	if !ok || len(forwarded) != 2 {
@@ -58,5 +74,15 @@ func TestProjectChatMessageExpandsForwarded(t *testing.T) {
 	plain := projectChatMessage(map[string]any{"sender": "念晨", "content": "hi", "createTime": "t"})
 	if _, has := plain["forwarded"]; has {
 		t.Errorf("plain message unexpectedly has forwarded key: %#v", plain)
+	}
+
+	withoutReactions := projectChatMessageWithReactions(map[string]any{
+		"content": "hi",
+		"emotionReplyList": []any{
+			map[string]any{"emoji": "赞", "replyUsers": []any{"D1"}},
+		},
+	}, false)
+	if _, has := withoutReactions["reactions"]; has {
+		t.Errorf("no-reactions projection leaked reactions: %#v", withoutReactions)
 	}
 }

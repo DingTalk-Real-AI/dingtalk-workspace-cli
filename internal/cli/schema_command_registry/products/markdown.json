@@ -1,0 +1,21 @@
+{
+  "id": "markdown",
+  "tools": [
+    {
+      "canonical_path": "markdown.create",
+      "cli_path": "markdown create"
+    },
+    {
+      "canonical_path": "markdown.fetch",
+      "cli_path": "markdown fetch"
+    },
+    {
+      "canonical_path": "markdown.overwrite",
+      "cli_path": "markdown overwrite"
+    },
+    {
+      "canonical_path": "markdown.patch",
+      "cli_path": "markdown patch"
+    }
+  ]
+}

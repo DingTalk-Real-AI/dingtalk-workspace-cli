@@ -18,9 +18,15 @@
 
 ## DSL 入参格式与最小 Demo
 
-`workflow create/update` 的 `--dsl` 接收完整的 `workflow-dsl/v1` JSON object，不是局部 patch。支持内联 JSON、`@文件路径` 或 `-` 从 stdin 读取。
+`workflow create/update` 的 `--dsl` 接收钉钉 AI 表格 `workflow-dsl/v1` JSON object。当前同步范围只包含 create/update，没有新增 DSL 文档子命令；其他 Agent 可以直接使用下面的最小 Demo 理解调用格式。
 
-复杂工作流应先用 `table get` / `field get` / `view list` 确认真实 `sheetId`、`fieldId`、`viewId`，并检查所有 `next`、`loopEntry`、branch `to` 和 ref。下面是一个不依赖数据表字段的最小定时消息工作流：
+复杂工作流还应注意：
+
+1. 如果 Agent 运行环境直接提供 AI 表格 MCP 的 `get_workflow_dsl_docs`，可用它获取最新 DSL Guide、Schema 和示例。
+2. 涉及数据表、字段或视图的节点，先用 `table get` / `field get` / `view list` 确认真实 `sheetId`、`fieldId`、`viewId`。
+3. create 和 update 都提交完整的 workflow-dsl/v1 JSON object，并检查所有 `next`、`loopEntry`、branch `to` 和 ref。
+
+以下 Demo 表示“每天 09:00 触发，并向 Base 所有者发送消息”，不依赖数据表、字段或视图 ID：
 
 ```json
 {
@@ -42,18 +48,16 @@
       "type": "SendMessage",
       "data": {
         "title": "定时任务已触发",
-        "to": {"users": [{"ref": "$.system_node.ownerUserId"}]}
+        "to": {
+          "users": [{"ref": "$.system_node.ownerUserId"}]
+        }
       }
     }
   }
 }
 ```
 
-create 和 update 都必须同时满足 `status=success`、`data.valid=true`、`data.issues=[]` 才表示发布成功。
-
-## 命令详情
-
-### workflow create — 创建并发布工作流
+将上述 JSON 保存为 `workflow.json` 后创建工作流：
 
 ```bash
 dws aitable workflow create \
@@ -61,22 +65,69 @@ dws aitable workflow create \
   --dsl @workflow.json \
   --locale zh-CN \
   --format json
+```
 
+保存创建结果中的 `data.flowId`。更新时修改 `workflow.json` 中的完整目标定义，例如修改 `name`、`description` 或消息 `title`，然后调用：
+
+```bash
+dws aitable workflow update \
+  --base-id BASE_ID \
+  --workflow-id FLOW_ID \
+  --dsl @workflow.json \
+  --locale zh-CN \
+  --format json
+```
+
+create 和 update 都必须同时满足 `status=success`、`data.valid=true`、`data.issues=[]` 才表示发布成功；update 返回的 `data.flowId` 应与传入的 `FLOW_ID` 一致。以上仅为最小 Demo，复杂节点的 `type` 和 `data` 结构以钉钉 AI 表格 MCP 最新 DSL 文档为准。
+
+## 命令详情
+
+### workflow create — 创建并发布工作流
+
+```bash
+# 大 DSL 推荐从文件读取
+dws aitable workflow create \
+  --base-id BASE_ID \
+  --dsl @workflow.json \
+  --locale zh-CN \
+  --format json
+
+# 也支持 stdin
 cat workflow.json | dws aitable workflow create --base-id BASE_ID --dsl - --format json
 ```
 
 | flag | 必填 | 说明 |
 |------|------|------|
 | `--base-id` | 是 | 所属 Base ID |
-| `--dsl` | 是 | workflow-dsl/v1 JSON object；支持内联、`@filepath`、`-` stdin |
+| `--dsl` | 是 | workflow-dsl/v1 JSON object；支持内联 JSON、`@filepath`、`-` stdin |
 | `--locale` | 否 | 请求语言，如 `zh-CN` / `zh_CN` |
 
-`create` 非幂等，CLI 不自动重试。若网络中断导致结果不确定，先 `workflow list` 按名称确认是否已经创建，再决定是否重试。`status=success` 只说明服务正常返回；`data.valid=false` 仍是发布失败，必须读取 `issues`。
+创建成功返回发布结果：
+
+```json
+{
+  "status": "success",
+  "data": {
+    "valid": true,
+    "flowId": "G-FLOW-XXXXXX",
+    "flowSchema": {},
+    "stepNodeIds": {},
+    "referenceMap": {},
+    "issues": []
+  }
+}
+```
+
+关键语义：
+
+- `create` 非幂等，CLI 不自动重试。若网络中断导致结果不确定，先 `workflow list` 按名称确认是否已创建，再决定是否重试。
+- `status=success` 只说明 workflow-edit 正常返回；如果 `data.valid=false`，仍表示 DSL 未通过校验或发布，必须读取 `issues` 修正。
+- 创建并发布后，用 `workflow list` 确认 `status`；需要运行但状态为 `STOP` 时再调用 `workflow enable`。
 
 ### workflow update — 更新并发布工作流
 
 ```bash
-# 先留底，再提交完整目标 DSL
+# 先留底现有详情，再提交完整目标 DSL
 dws aitable workflow get --base-id BASE_ID --workflow-id WORKFLOW_ID --format json > /tmp/workflow-backup.json
 dws aitable workflow update \
   --base-id BASE_ID \
@@ -93,7 +144,7 @@ dws aitable workflow update \
 | `--dsl` | 是 | 完整目标 workflow-dsl/v1 JSON object；支持内联、`@filepath`、`-` stdin |
 | `--locale` | 否 | 请求语言，如 `zh-CN` / `zh_CN` |
 
-update 返回结构与 create 相同，并会对瞬态错误重试。成功时 `data.flowId` 应与传入的工作流 ID 一致；随后用 `workflow get/list` 验证发布结果和运行状态。
+返回结构与 create 相同，成功时 `flowId` 应为目标工作流。update 使用 AI 表格瞬态错误重试；最终仍必须检查 `data.valid` 和 `issues`，并用 `workflow get/list` 验证发布结果与运行状态。
 
 ### workflow list — 列出工作流
 
@@ -226,10 +277,14 @@ dws aitable workflow disable --base-id BASE_ID --workflow-id WORKFLOW_ID --yes -
 ### 创建并确认一个工作流
 
 ```bash
+# 1. 按本文 DSL Demo 生成 /tmp/workflow.json
 dws aitable workflow create --base-id BASE_ID --dsl @/tmp/workflow.json --locale zh-CN --format json \
   | tee /tmp/workflow-result.json
 
+# 2. valid 必须为 true；保存 flowId
 jq '{valid: .data.valid, flowId: .data.flowId, issues: .data.issues}' /tmp/workflow-result.json
+
+# 3. 确认运行状态，需要时显式启用
 FLOW_ID=$(jq -r '.data.flowId' /tmp/workflow-result.json)
 dws aitable workflow list --base-id BASE_ID --format json \
   | jq --arg id "$FLOW_ID" '.data.list[] | select(.flowId == $id) | {flowId, name, status}'
@@ -268,9 +323,10 @@ done
 ## 注意事项
 
 - `--workflow-id` 接受的就是 `list` 返回里的 `flowId`（同值，CLI 屏蔽了服务端字段名差异）。
-- create / update 的 `--dsl` 必须是 JSON object，不能传数组、二次字符串化 JSON 或 `flowSchema`。
+- create / update 的 `--dsl` 必须是 JSON object，不能传数组、字符串化的二次 JSON 或 FlowSchema。
+- 本文 Demo 可直接用于最小定时消息工作流；复杂节点应以钉钉 AI 表格 MCP 最新 DSL 文档为准。
 - `status=success` 且 `data.valid=false` 仍是 DSL 校验失败；`issues` 才是下一步修复依据。
-- create 不自动重试；update 仅对网络、5xx、`retryable:true` 等瞬态错误自动重试。
+- create 不自动重试；update 仅对网络/5xx/`retryable:true` 瞬态错误自动重试。
 - enable / disable 出参里的 `enabled` / `disabled` 是 **动作确认 flag**，不是当前状态字段。要确认真生效请走 `workflow list` 查 `status`。
 - `workflow get` 的 `flowSchema` 结构随触发器/动作类型变化，不要假设固定字段。
 - 删除、运行历史和手动触发当前仍未开放。

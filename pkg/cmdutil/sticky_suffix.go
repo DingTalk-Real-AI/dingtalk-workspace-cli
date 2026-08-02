@@ -40,7 +40,8 @@ func SuffixLooksLikeValue(suffix, typ, format string, enum []string) bool {
 		return startsWithNumericSuffix(suffix)
 
 	case "bool", "boolean":
-		return isBoolLiteralSuffix(suffix)
+		_, ok := NormalizeBoolLiteral(suffix)
+		return ok
 
 	case "duration":
 		return startsWithDigitSuffix(suffix) || startsWithSignSuffix(suffix)
@@ -110,12 +111,17 @@ func startsWithNumericSuffix(s string) bool {
 	return false
 }
 
-func isBoolLiteralSuffix(s string) bool {
-	switch strings.ToLower(s) {
-	case "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off", "y", "n":
-		return true
+// NormalizeBoolLiteral reduces model-friendly boolean spellings to the exact
+// values accepted by an unambiguous --flag=true/false pflag token.
+func NormalizeBoolLiteral(s string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "1", "t", "yes", "on", "y":
+		return "true", true
+	case "false", "0", "f", "no", "off", "n":
+		return "false", true
+	default:
+		return "", false
 	}
-	return false
 }
 
 func matchesEnumSuffix(s string, enum []string) bool {

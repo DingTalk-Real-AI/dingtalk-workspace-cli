@@ -1657,12 +1657,13 @@ func TestCrossPlatformCoveragePersonalEventCommandRuntimeCoverage(t *testing.T) 
 		CorpID: "corp", UserID: "user", ClientID: "client",
 	})
 	t.Setenv("DWS_CONFIG_DIR", configDir)
-	var cancelCount int
+	var subscribeCount, cancelCount int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/event/sublist":
 			_ = json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{{"subId": "sub", "eventKey": personal.EventMention, "ruleType": "at", "status": "active", "sourceId": "open"}}, "total": 1})
 		case "/subscription/user":
+			subscribeCount++
 			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": []string{"created"}})
 		case "/subscription/cancel":
 			cancelCount++
@@ -1697,8 +1698,8 @@ func TestCrossPlatformCoveragePersonalEventCommandRuntimeCoverage(t *testing.T) 
 	if err := runPersonalEventConsume(cmd, personalConsumeOptions{Common: commonConsumeOptions{Foreground: true}, EventKey: personal.EventMention, ControlBaseURL: server.URL, StreamTicketMode: "invalid"}); err == nil {
 		t.Fatal("invalid foreground consume succeeded")
 	}
-	if cancelCount == 0 {
-		t.Fatal("failed foreground consume did not clean up subscription")
+	if subscribeCount != 0 || cancelCount != 0 {
+		t.Fatalf("invalid local configuration reached subscription control: subscribe=%d cancel=%d", subscribeCount, cancelCount)
 	}
 
 	if err := runPersonalEventStop(cmd, personalStopOptions{SubscribeID: "sub", All: true, ControlBaseURL: server.URL}); err == nil {

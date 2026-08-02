@@ -15,8 +15,11 @@ package chat
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
 // ChatSearch searches groups by keyword (search_groups on the im server).
@@ -306,7 +309,9 @@ var ChatListMine = shortcut.Shortcut{
 			return err
 		}
 		groups := chatListMineProject(data)
-		return rt.Output(map[string]any{"count": len(groups), "groups": groups})
+		payload := map[string]any{"count": len(groups), "groups": groups}
+		chatmsg.ApplyPagination(payload, data)
+		return rt.Output(payload)
 	},
 }
 
@@ -370,12 +375,7 @@ var ChatListAll = shortcut.Shortcut{
 		}
 		groups := chatListAllProject(data)
 		payload := map[string]any{"count": len(groups), "groups": groups}
-		if v, ok := chatGroupFirst(data, "nextCursor", "next_cursor", "cursor"); ok {
-			payload["nextCursor"] = v
-		}
-		if v, ok := chatGroupFirst(data, "hasMore", "has_more"); ok {
-			payload["hasMore"] = v
-		}
+		chatmsg.ApplyPagination(payload, data)
 		return rt.Output(payload)
 	},
 }
@@ -681,6 +681,19 @@ var ChatMuteMember = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		userIDs, openIDs := splitIDs(rt.StrSlice("users"))
 		off := rt.Bool("off")
+		if len(userIDs) > 0 {
+			resolved, err := resolveMuteMemberOpenIDs(rt, rt.Str("group"), userIDs)
+			if err != nil {
+				return err
+			}
+			openIDs = append(openIDs, resolved...)
+			userIDs = nil
+		}
+		deduplicatedOpenIDs := make([]string, 0, len(openIDs))
+		for _, openID := range openIDs {
+			deduplicatedOpenIDs = appendUniqueShortcutString(deduplicatedOpenIDs, openID)
+		}
+		openIDs = deduplicatedOpenIDs
 		params := map[string]any{
 			"openConversationId": rt.Str("group"),
 			"cid":                rt.Str("group"),
@@ -700,6 +713,124 @@ var ChatMuteMember = shortcut.Shortcut{
 		}
 		return rt.CallMCP("set_group_member_mute_list", params)
 	},
+}
+
+// resolveMuteMemberOpenIDs mirrors the native group-mute-member compatibility
+// path. The service currently rejects its documented uids input with
+// "uids is required", while openDingTalkIds succeeds. Resolve userIds through
+// the directory and the target group's member list so the Shortcut's advertised
+// mixed-ID contract remains executable instead of forwarding a known-broken
+// parameter shape.
+func resolveMuteMemberOpenIDs(rt *shortcut.RuntimeContext, groupID string, userIDs []string) ([]string, error) {
+	contacts, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
+		"user_id_list": userIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("解析禁言成员 userId 失败: %w", err)
+	}
+
+	requested := make(map[string]struct{}, len(userIDs))
+	for _, userID := range userIDs {
+		requested[userID] = struct{}{}
+	}
+	nameByUserID := make(map[string]string, len(userIDs))
+	for _, item := range shortcutMapSlice(contacts["result"]) {
+		employee, _ := item["orgEmployeeModel"].(map[string]any)
+		userID := shortcutString(employee, "orgUserId", "userId")
+		if _, ok := requested[userID]; !ok {
+			continue
+		}
+		nameByUserID[userID] = shortcutString(employee, "orgUserName", "name")
+	}
+	for _, userID := range userIDs {
+		if strings.TrimSpace(nameByUserID[userID]) == "" {
+			return nil, fmt.Errorf("无法从通讯录解析成员 userId %q 的姓名；请改传 openDingTalkId", userID)
+		}
+	}
+
+	openIDsByName := map[string][]string{}
+	cursor := "0"
+	for page := 0; page < 50; page++ {
+		members, callErr := rt.CallMCPData("chat", "get_group_members", map[string]any{
+			"openconversation_id": groupID,
+			"cursor":              cursor,
+		})
+		if callErr != nil {
+			return nil, fmt.Errorf("读取目标群成员以解析 userId 失败: %w", callErr)
+		}
+		result, _ := members["result"].(map[string]any)
+		for _, member := range shortcutMapSlice(result["list"]) {
+			name := shortcutString(member, "memberEmpName", "empName", "name")
+			openID := shortcutString(member, "openDingtalkId", "openDingTalkId", "memberDingtalkId")
+			if name == "" || openID == "" {
+				continue
+			}
+			openIDsByName[name] = appendUniqueShortcutString(openIDsByName[name], openID)
+		}
+		hasMore, _ := result["hasMore"].(bool)
+		if !hasMore {
+			break
+		}
+		next := shortcutString(result, "nextCursor", "cursor")
+		if next == "" || next == cursor {
+			return nil, fmt.Errorf("群成员分页返回 hasMore=true 但缺少可继续的 cursor")
+		}
+		cursor = next
+		if page == 49 {
+			return nil, fmt.Errorf("群成员分页超过 50 页，无法安全解析禁言目标")
+		}
+	}
+
+	resolved := make([]string, 0, len(userIDs))
+	for _, userID := range userIDs {
+		name := nameByUserID[userID]
+		matches := openIDsByName[name]
+		if len(matches) != 1 {
+			return nil, fmt.Errorf(
+				"群内姓名 %q 对应 %d 个成员，无法把 userId %q 唯一解析为 openDingTalkId；请直接传 openDingTalkId",
+				name, len(matches), userID)
+		}
+		resolved = append(resolved, matches[0])
+	}
+	return resolved, nil
+}
+
+func shortcutMapSlice(value any) []map[string]any {
+	items, _ := value.([]any)
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if mapped, ok := item.(map[string]any); ok {
+			out = append(out, mapped)
+		}
+	}
+	return out
+}
+
+func shortcutString(value map[string]any, keys ...string) string {
+	for _, key := range keys {
+		switch typed := value[key].(type) {
+		case string:
+			if text := strings.TrimSpace(typed); text != "" {
+				return text
+			}
+		case float64:
+			return strconv.FormatFloat(typed, 'f', -1, 64)
+		case int:
+			return strconv.Itoa(typed)
+		case int64:
+			return strconv.FormatInt(typed, 10)
+		}
+	}
+	return ""
+}
+
+func appendUniqueShortcutString(values []string, candidate string) []string {
+	for _, value := range values {
+		if value == candidate {
+			return values
+		}
+	}
+	return append(values, candidate)
 }
 
 // ── group-role: 群身份管理 (im) ──────────────────────────────

@@ -4,23 +4,21 @@
 
 `export data` 为异步任务：首次调用可能只返回 `taskId`，需要继续轮询。
 
-> ⚠️ **两种 format 严格分工**：业务导出格式只用 `--export-format`（excel/attachment 等）；全局 `--format` 只控制 CLI 输出格式，推荐保持 `--format json`。旧写法 `--format excel` 仅用于兼容历史脚本，新调用不要使用。
+> ⚠️ **`--format` 冲突警告**：`export data` 的 `--format` 是**导出格式**（excel/attachment 等），不是全局输出格式。**此命令禁止追加全局 `--format json`**，否则会覆盖导出格式导致 `INVALID_EXPORT_FORMAT` 错误。输出默认就是 JSON，无需额外指定。
 
 ```bash
-# 第一步：创建任务；--export-format 是业务导出格式，--format json 是结构化输出格式
-dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --export-format excel --timeout-ms 1000 --format json
+# 第一步：创建任务（按 scope 传必要参数）——注意：不要加 --format json！
+dws aitable export data --base-id <BASE_ID> --scope table --table-id <TABLE_ID> --format excel --timeout-ms 1000
 
 # 第二步：拿 taskId 继续轮询，直到返回 downloadUrl
-dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 3000 --format json
+dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 3000
 ```
 
 ### 参数约束
 
-创建导出任务时统一必传 `--base-id`、`--scope` 和 `--export-format`；下表是不同 scope 的额外必传参数。使用 `--task-id` 轮询时不再传 scope/导出格式。
-
-| scope | 额外必传参数 |
+| scope | 必传参数 |
 |-------|----------|
-| `all` | 无 |
+| `all` | 只需 `--base-id` |
 | `table` | 必须 `--table-id` |
 | `view` | 必须 `--table-id` + `--view-id` |
 
@@ -113,32 +111,3 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 > **导入数据无法整体撤销**：文件一旦导入成功，数据即写入表中，没有"撤销导入"操作。如需清理导入的测试数据，只能手动通过 `record delete` 逐条或批量删除记录；如果是新建表模式导入的，可以直接 `table delete` 删除整张表。因此：
 > - 测试/验证场景建议导入到**独立的测试表或测试 Base**，用完后整体删除
 > - 如果用户明确表示不想导入测试数据或要求先预览内容再决定，应先解析文件内容展示给用户确认，而非直接导入
-
----
-
-## 导入数据：两条链路怎么选
-
-用户给文件让导入 AI 表格时，路径选择决定成败：
-
-> ⚠️ **`import upload` 没有 `--file` flag**（传了会报 unknown flag）。它只申请上传凭证，必填 `--file-name` + `--file-size`，拿到 `uploadUrl` 后要**自己 curl PUT 上传文件**（Content-Type 留空，见上文三步流程），再 `import data`。想省事直接用 `aitable_import_via_task.py` 脚本，它把这三步包好了。
-
-| 用户原话 | 链路 | 命令 / 脚本 | 行为 |
-|---------|------|------------|------|
-| "把这个 Excel 导入到 AI 表格"（无指定目标表） | **文件导入任务** | `python scripts/aitable_import_via_task.py <baseId> <file>`（推荐）或手动三步 `import upload --file-name x.xlsx --file-size <字节>` → curl PUT → `import data --import-id <ID>` | 服务端解析文件，**新建数据表**，自动识别表头 |
-| "把这个 Excel 导入新表 / 自动建表" | 同上 | 同上 | 同上 |
-| "把这批记录追加到已有的『成员表』里" | **记录批量写入** | `python scripts/import_records.py <baseId> <tableId> <file>` | 走 `record create`，**写入已有 tableId**，需要字段名匹配 |
-| "Excel 列名和表字段对不上但要追加" | 文件导入 + 追加 + 字段映射 | 三步导入后 `import data --import-id <ID> --table-id <TBL> --field-mapping '{"目标":"源"}'` | 服务端按映射追加 |
-
-## 大表 / 长任务超时续等
-
-单次等待窗口很短：`export data` 只有 `--timeout-ms`（默认且**上限 30000 = 30 秒**，没有 `--timeout-sec`，传了会报 unknown flag）；`import data` 用 `--timeout`（秒，默认且推荐最大值 30）。窗口内没跑完，命令会返回 `taskId` / `importId`，用同命令带 ID 反复续等即可：
-
-```bash
-# 续等导出：拿到 downloadUrl 后再 curl 下载（见下方警告）
-dws aitable export data --base-id <B> --task-id <ID> --timeout-ms 30000
-
-# 续等导入
-dws aitable import data --import-id <ID>
-```
-
-> ⚠️ **`--output` 不会保存导出的 xlsx**：`--output` 是隐藏的全局 flag，作用是把命令的 **JSON 输出**写到文件，实测只生成一个 0 字节文件，不会下载导出内容。正确做法是从 `export data` 返回里取 `downloadUrl`，再 `curl -L "<downloadUrl>" -o out.xlsx` 下载。想省事直接用 `aitable_export_via_task.py` 脚本（它负责轮询 + 下载）。

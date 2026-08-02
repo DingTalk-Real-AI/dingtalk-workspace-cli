@@ -14,12 +14,17 @@
 package smart
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -31,7 +36,9 @@ type platformCoverageCall struct {
 }
 
 type platformCoverageCaller struct {
-	calls []platformCoverageCall
+	calls               []platformCoverageCall
+	dry                 bool
+	contactSearchResult string
 }
 
 func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
@@ -39,15 +46,45 @@ func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool strin
 	text := `{"result":[]}`
 	switch product + "/" + tool {
 	case "contact/search_contact_by_key_word":
-		text = `{"result":[{"userId":"u1","name":"张三","openDingTalkId":"open1"}]}`
+		text = f.contactSearchResult
+		if text == "" {
+			text = `{"result":[{"userId":"u1","name":"张三","openDingTalkId":"open1"}]}`
+		}
+	case "contact/get_current_user_profile":
+		text = `{"result":{"userId":"u1"}}`
 	case "im/search_groups":
 		text = `{"result":[{"openConversationId":"cid-1","title":"项目冲刺"}]}`
 	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
 
+func (f *platformCoverageCaller) CallReadTool(ctx context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
+	return f.CallTool(ctx, product, tool, args)
+}
+
+func TestCrossPlatformCoverageExternalContactAmbiguity(t *testing.T) {
+	fake := &platformCoverageCaller{
+		contactSearchResult: `{"result":[
+			{"userId":"u1","name":"张三","openDingTalkId":"open1"},
+			{"openDingtalkId":"open-external","nick":"外部张三"}
+		]}`,
+	}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{"chat", "+dm", "--to", "张三", "--text", "你好", "--yes"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("ambiguous internal and external contacts unexpectedly resolved")
+	}
+	for _, want := range []string{"张三(u1)", "外部张三(open-external)"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("ambiguity error %q does not contain %q", err, want)
+		}
+	}
+}
+
 func (f *platformCoverageCaller) Format() string { return "json" }
-func (f *platformCoverageCaller) DryRun() bool   { return false }
+func (f *platformCoverageCaller) DryRun() bool   { return f.dry }
 func (f *platformCoverageCaller) Fields() string { return "" }
 func (f *platformCoverageCaller) JQ() string     { return "" }
 
@@ -63,6 +100,8 @@ func newPlatformCoverageRoot() *cobra.Command {
 }
 
 func TestCrossPlatformCoverageAIMessageTag(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "qwenwork")
+
 	tests := []struct {
 		name string
 		argv []string
@@ -89,8 +128,8 @@ func TestCrossPlatformCoverageAIMessageTag(t *testing.T) {
 			if send.product != "chat" || send.tool != "send_personal_message" {
 				t.Fatalf("last call = %s/%s, want chat/send_personal_message", send.product, send.tool)
 			}
-			if got := send.args["clawType"]; got != edition.ClawType() {
-				t.Fatalf("clawType = %#v, want %q", got, edition.ClawType())
+			if got := send.args["clawType"]; got != "qwenwork" {
+				t.Fatalf("clawType = %#v, want qwenwork", got)
 			}
 		})
 	}
@@ -110,26 +149,74 @@ func TestCrossPlatformCoverageAIMessageTag(t *testing.T) {
 	})
 }
 
+func TestCrossPlatformCoverageBroadcastDryRunPublishesExecutablePlan(t *testing.T) {
+	fake := &platformCoverageCaller{dry: true}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+broadcast",
+		"--to", "张三",
+		"--text", "你好",
+		"--dry-run",
+		"--yes",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 1 ||
+		fake.calls[0].product != "contact" ||
+		fake.calls[0].tool != "search_contact_by_key_word" {
+		t.Fatalf("dry-run calls = %#v, want one read-only contact lookup", fake.calls)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("decode dry-run output: %v\n%s", err, output.String())
+	}
+	if payload["dry_run"] != true ||
+		payload["executed"] != false ||
+		payload["preview_kind"] != "plan" ||
+		payload["tool"] != "send_personal_message" {
+		t.Fatalf("dry-run payload = %#v", payload)
+	}
+	actions, _ := payload["actions"].([]any)
+	if len(actions) != 1 {
+		t.Fatalf("dry-run actions = %#v", payload["actions"])
+	}
+	action, _ := actions[0].(map[string]any)
+	arguments, _ := action["arguments"].(map[string]any)
+	for _, key := range []string{"receiverOpenDingTalkId", "msgType", "content", "clawType"} {
+		if _, ok := arguments[key]; !ok {
+			t.Errorf("dry-run action arguments missing %q: %#v", key, arguments)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 	tests := []struct {
-		name       string
-		argv       []string
-		wantTool   string
-		wantArgs   map[string]any
-		wantAbsent []string
+		name        string
+		argv        []string
+		wantProduct string
+		wantTool    string
+		wantArgs    map[string]any
+		wantAbsent  []string
 	}{
 		{
-			name:       "chat messages id and size",
-			argv:       []string{"chat", "+chat-messages", "--id", "cid-1", "--size", "9", "--yes"},
-			wantTool:   "list_conversation_message_v2",
-			wantArgs:   map[string]any{"openconversation_id": "cid-1", "limit": 9},
-			wantAbsent: []string{"openCid", "cid"},
+			name:        "chat messages id and size",
+			argv:        []string{"chat", "+chat-messages", "--id", "cid-1", "--size", "9", "--yes"},
+			wantProduct: "chat",
+			wantTool:    "list_conversation_message_v2",
+			wantArgs:    map[string]any{"openconversation_id": "cid-1", "limit": 9},
+			wantAbsent:  []string{"openCid", "cid"},
 		},
 		{
-			name:     "search message id and keyword",
-			argv:     []string{"chat", "+search-msg", "--id", "cid-1", "--keyword", "树莓派", "--yes"},
-			wantTool: "search_messages_by_keyword",
-			wantArgs: map[string]any{"openConversationId": "cid-1", "keyword": "树莓派"},
+			name:        "search message id and keyword",
+			argv:        []string{"chat", "+search-msg", "--id", "cid-1", "--keyword", "树莓派", "--no-enrich", "--yes"},
+			wantProduct: "im",
+			wantTool:    "search_messages",
+			wantArgs:    map[string]any{"openConversationIds": []string{"cid-1"}, "keyword": "树莓派"},
 		},
 	}
 
@@ -143,11 +230,11 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 				t.Fatal(err)
 			}
 			call := fake.calls[len(fake.calls)-1]
-			if call.product != "chat" || call.tool != tc.wantTool {
-				t.Fatalf("call = %s/%s, want chat/%s", call.product, call.tool, tc.wantTool)
+			if call.product != tc.wantProduct || call.tool != tc.wantTool {
+				t.Fatalf("call = %s/%s, want %s/%s", call.product, call.tool, tc.wantProduct, tc.wantTool)
 			}
 			for key, want := range tc.wantArgs {
-				if got := call.args[key]; got != want {
+				if got := call.args[key]; !reflect.DeepEqual(got, want) {
 					t.Errorf("%s = %#v, want %#v", key, got, want)
 				}
 			}

@@ -32,11 +32,39 @@ func (c *helpersCoreCaller) DryRun() bool   { return c.dry }
 func (*helpersCoreCaller) Fields() string   { return "" }
 func (*helpersCoreCaller) JQ() string       { return "" }
 
+type helpersReadCaller struct {
+	*helpersCoreCaller
+	readResult *edition.ToolResult
+	readErr    error
+	readCalls  int
+}
+
+func (c *helpersReadCaller) CallReadTool(context.Context, string, string, map[string]any) (*edition.ToolResult, error) {
+	c.readCalls++
+	return c.readResult, c.readErr
+}
+
 func textToolResult(text string) *edition.ToolResult {
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}
 }
 
-func installHelpersCoreDeps(t *testing.T, caller *helpersCoreCaller) (*bytes.Buffer, *bytes.Buffer) {
+func TestCrossPlatformCoverageRawToolAuditLineIsSingleLineJSON(t *testing.T) {
+	if got, want := formatRawDumpLine("chat", "list_messages", "{\n  \"items\": []\n}"),
+		`DWSRAW	chat	list_messages	{"items":[]}`; got != want {
+		t.Fatalf("JSON raw dump = %q, want %q", got, want)
+	}
+	if got, want := formatRawDumpLine("chat", "plain", "line one\nline two"),
+		`DWSRAW	chat	plain	"line one\nline two"`; got != want {
+		t.Fatalf("text raw dump = %q, want %q", got, want)
+	}
+}
+
+func TestCrossPlatformCoverageRawToolAuditEnabled(t *testing.T) {
+	t.Setenv("DWS_DUMP_RAW", "1")
+	dumpRawToolResponse("im", "search_groups", `{"result":[]}`)
+}
+
+func installHelpersCoreDeps(t *testing.T, caller edition.ToolCaller) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	old := deps
 	t.Cleanup(func() { deps = old })
@@ -46,6 +74,58 @@ func installHelpersCoreDeps(t *testing.T, caller *helpersCoreCaller) (*bytes.Buf
 	deps.Out.w = out
 	deps.Out.errW = errOut
 	return out, errOut
+}
+
+func TestCrossPlatformCoverageDryRunReadLookupUsesExplicitCapability(t *testing.T) {
+	caller := &helpersReadCaller{
+		helpersCoreCaller: &helpersCoreCaller{
+			format: "json",
+			dry:    true,
+			result: textToolResult(
+				`{"dry_run":true,"request":{"name":"search_groups"}}`,
+			),
+		},
+		readResult: textToolResult(`{"success":true,"result":{"groups":[{"id":"g1"}]}}`),
+	}
+	installHelpersCoreDeps(t, caller)
+	got, err := CallMCPReadToolTextOnServer("im", "search_groups", map[string]any{"keyword": "x"})
+	if err != nil {
+		t.Fatalf("CallMCPReadToolTextOnServer() error = %v", err)
+	}
+	if !strings.Contains(got, `"groups"`) || caller.readCalls != 1 || caller.calls != 0 {
+		t.Fatalf("read result/calls = %q, read=%d regular=%d", got, caller.readCalls, caller.calls)
+	}
+
+	failClosed := &helpersCoreCaller{format: "json", dry: true}
+	installHelpersCoreDeps(t, failClosed)
+	if _, err := CallMCPReadToolTextOnServer("im", "search_groups", nil); err == nil {
+		t.Fatal("dry-run read lookup without explicit capability was accepted")
+	}
+	if failClosed.calls != 0 {
+		t.Fatalf("fail-closed lookup made %d regular calls", failClosed.calls)
+	}
+}
+
+func TestCrossPlatformCoverageReadLookupInitializationAndRegularExecution(t *testing.T) {
+	old := deps
+	t.Cleanup(func() { deps = old })
+	deps = nil
+	if _, err := CallMCPReadToolTextOnServer("im", "search_groups", nil); err == nil {
+		t.Fatal("uninitialized read lookup unexpectedly succeeded")
+	}
+
+	caller := &helpersCoreCaller{
+		format: "json",
+		result: textToolResult(`{"success":true,"result":{"groups":[]}}`),
+	}
+	installHelpersCoreDeps(t, caller)
+	got, err := CallMCPReadToolTextOnServer("im", "search_groups", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, `"groups"`) || caller.calls != 1 {
+		t.Fatalf("regular read result/calls = %q, %d", got, caller.calls)
+	}
 }
 
 func TestCrossPlatformCoverageSharedDependenciesRoutingAndWrappers(t *testing.T) {
@@ -106,6 +186,7 @@ func TestCrossPlatformCoverageMCPReturnTextClassification(t *testing.T) {
 		{"business-bool", `{"success":false,"message":"failed"}`},
 		{"business-string", `{"success":"false","errorMsg":"failed"}`},
 		{"business-error", `{"error":"failed"}`},
+		{"business-webhook-errcode", `{"errcode":300005,"errmsg":"token is not exist"}`},
 	}
 	for _, tc := range cases {
 		caller.result = textToolResult(tc.text)

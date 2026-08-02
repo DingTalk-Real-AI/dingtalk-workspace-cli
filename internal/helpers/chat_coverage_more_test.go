@@ -114,6 +114,18 @@ func TestCrossPlatformCoverageChatDirectionAndScalarCoverage(t *testing.T) {
 	for _, wrap := range []bool{true, false} {
 		_ = normalizeAtPlaceholders("hello @u1 <@u2>", []string{"", "u1", "u2"}, wrap)
 	}
+	if got := NormalizeMessageMentions("hello @u1", []string{"u1"}, true, true); got != "<@all> hello <@u1>" {
+		t.Fatalf("current-user mention normalization = %q", got)
+	}
+	if got := NormalizeMessageMentions("<@all> <@u1>", []string{"u1"}, true, false); got != "@all @u1" {
+		t.Fatalf("bot mention normalization = %q", got)
+	}
+	if got := NormalizeMessageMentions("@alliance hello", nil, true, false); got != "@all @alliance hello" {
+		t.Fatalf("bot @all token detection = %q", got)
+	}
+	if got := NormalizeMessageMentions("hello @all", nil, true, false); got != "hello @all" {
+		t.Fatalf("trailing bot @all detection = %q", got)
+	}
 }
 
 func TestCrossPlatformCoverageChatContactMappingCoverage(t *testing.T) {

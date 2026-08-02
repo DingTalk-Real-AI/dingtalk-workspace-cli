@@ -130,6 +130,131 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageEventSkillPinsSubscriptionRetryOrchestrationContract(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-im.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
+		filepath.Join(root, "docs", "event-subprocess-contract.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		normalizedText := strings.Join(strings.Fields(text), " ")
+		for _, required := range []string{
+			"16",
+			"--profile",
+			"Agent/host",
+			"0/2/1",
+			"retryable=false",
+			"max_additional_attempts=0",
+			"retryable=true",
+			"max_additional_attempts=2",
+			"retryable=unknown",
+			"max_additional_attempts=1",
+			"retry_after_seconds",
+			"next_retry_at",
+			"in_flight",
+			"cooldown",
+			"terminal_hold",
+			"subscribe_id",
+			"trace_id",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing subscription retry orchestration contract %q", path, required)
+			}
+		}
+		if path == filepath.Join(root, "docs", "event-subprocess-contract.md") {
+			for _, required := range []string{
+				"not a CLI-enforced persisted total-attempt cap",
+				"performs no in-process automatic retry",
+				"does not persist or enforce the Agent/host attempt count",
+			} {
+				if !strings.Contains(normalizedText, required) {
+					t.Errorf("%s overstates CLI retry enforcement; missing %q", path, required)
+				}
+			}
+			continue
+		}
+		for _, required := range []string{
+			"不是 CLI 持久化硬总次数上限",
+			"进程内不会自动重试",
+			"不持久化或计算跨调用的 Agent/host 尝试次数",
+		} {
+			if !strings.Contains(normalizedText, required) {
+				t.Errorf("%s overstates CLI retry enforcement; missing %q", path, required)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageEventSkillDocumentsSubscriptionGuardOperations(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-im.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
+		filepath.Join(root, "docs", "event-subprocess-contract.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		normalizedText := strings.Join(strings.Fields(text), " ")
+		for _, required := range []string{
+			"~/.dws/events/open/personal_stream/<identity_hash>/personal_subscription_attempts.json",
+			"DWS_CONFIG_DIR",
+			"personal_subscription_attempts.json",
+			"personal_subscription_attempts.lock",
+			"0700",
+			"0600",
+			"24h",
+			"1h",
+			"terminal_hold",
+			"next_retry_at",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing subscription guard operations %q", path, required)
+			}
+		}
+		if path == filepath.Join(root, "docs", "event-subprocess-contract.md") {
+			for _, required := range []string{
+				"Delete only",
+				"never the lock file",
+				"every protection record for that identity",
+			} {
+				if !strings.Contains(normalizedText, required) {
+					t.Errorf("%s missing emergency guard-clear warning %q", path, required)
+				}
+			}
+			continue
+		}
+		for _, required := range []string{
+			"只删除 `personal_subscription_attempts.json`",
+			"不要删除 lock 文件",
+			"该 identity 的全部保护记录",
+		} {
+			if !strings.Contains(normalizedText, required) {
+				t.Errorf("%s missing emergency guard-clear warning %q", path, required)
+			}
+		}
+	}
+}
+
 func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {

@@ -30,17 +30,16 @@ fi
 if [ ! -f internal/cli/schema_command_registry.schema.json ] ||
 	! jq -e '
 	  ."$schema" == "./schema_command_registry.schema.json" and
-	  .version == 1 and
-	  (.products | type) == "array" and
-	  (.products | length) > 0
-	' internal/cli/schema_command_registry.json >/dev/null; then
-	printf '%s\n' 'reviewed CommandRegistry is missing its local JSON Schema contract' >&2
+	  .version == 1
+	' internal/cli/schema_command_registry/registry.json >/dev/null ||
+	! ls internal/cli/schema_command_registry/products/*.json >/dev/null 2>&1; then
+	printf '%s\n' 'reviewed CommandRegistry is missing its local JSON Schema contract or product shards' >&2
 	exit 1
 fi
 
 # The registry argument is validation-only and all go:generate outputs must be
 # downstream assets. Reject any directive that targets the reviewed input.
-if ! grep -Eq '^//go:generate .*cmd_schema_agent_metadata .* -registry internal/cli/schema_command_registry\.json ' internal/cli/schema_agent_metadata.go; then
+if ! grep -Eq '^//go:generate .*cmd_schema_agent_metadata .* -registry internal/cli/schema_command_registry ' internal/cli/gen.go; then
 	printf '%s\n' 'go generate must validate the reviewed CommandRegistry explicitly' >&2
 	exit 1
 fi
@@ -110,4 +109,4 @@ go test ./internal/app \
 	-count=1
 
 printf 'schema CommandRegistry check: ok (%s reviewed commands)\n' \
-	"$(jq '[.products[].tools[]] | length' internal/cli/schema_command_registry.json)"
+	"$(cat internal/cli/schema_command_registry/products/*.json | jq -s '[.[].tools[]] | length')"

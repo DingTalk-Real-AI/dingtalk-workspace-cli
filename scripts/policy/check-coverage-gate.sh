@@ -6,7 +6,7 @@ BASE_REF=""
 OVERALL_PROFILE="coverage.txt"
 ADDITIONAL_DIFF_PROFILE="${COVERAGE_ADDITIONAL_DIFF_PROFILE:-${COVERAGE_ADDITIONAL_PROFILE:-}}"
 BASELINE_PROFILE="coverage-base.txt"
-DIFF_PROFILE="coverage-policy.txt"
+DIFF_PROFILE="${COVERAGE_DIFF_PROFILE-coverage-policy.txt}"
 TARGET="${COVERAGE_TARGET:-100}"
 OVERALL_TOLERANCE="${COVERAGE_OVERALL_TOLERANCE:-0}"
 ENFORCE_OVERALL="${COVERAGE_ENFORCE_OVERALL:-false}"
@@ -77,13 +77,15 @@ go build -o "$CHECKER" ./scripts/policy/coverage-gate
 
 module="$(go list -m -f '{{.Path}}')"
 set -- "$CHECKER" \
-  --diff-profile "$DIFF_PROFILE" \
   --base-ref "$BASE_REF" \
   --module "$module" \
   --overall-tolerance "$OVERALL_TOLERANCE" \
   --target "$TARGET" \
   --enforce-overall-target="$ENFORCE_OVERALL"
 
+if [ -n "$DIFF_PROFILE" ]; then
+  set -- "$@" --diff-profile "$DIFF_PROFILE"
+fi
 if [ "$CHANGED_ONLY" = "true" ]; then
   set -- "$@" --changed-only
 else

@@ -151,6 +151,7 @@ func newSheetCommand() *cobra.Command {
 	// Add all to root
 	root.AddCommand(standaloneCmds...)
 	root.AddCommand(rangeCmd, filterCmd, filterViewCmd, condFormatCmd, chartCmd, templateCmd, pivotTableCmd)
+	root.AddCommand(newSheetVersionCmd(), newSheetCommentCmd(), newSheetFormulaVerifyCmd())
 
 	// This is the reviewed runtime counterpart of the final Sheet Schema
 	// confirmation=user_required set. It is intentionally command-local: there
@@ -175,6 +176,8 @@ func newSheetCommand() *cobra.Command {
 		{path: "filter-view delete-criteria", operation: "删除筛选视图列条件", targetHint: "文档、工作表、筛选视图和列"},
 		{path: "range batch-clear", operation: "批量清除工作表区域", targetHint: "文档、工作表、清除范围和清除类型"},
 		{path: "range move-to", operation: "移动工作表区域", targetHint: "源工作表范围和目标位置"},
+		{path: "version revert", operation: "回滚表格版本", targetHint: "文档和目标版本号"},
+		{path: "comment delete", operation: "删除单元格评论", targetHint: "文档和评论 commentKey"},
 	}
 	for _, guard := range confirmationGuards {
 		attachSheetConfirmationGuard(root, guard.path, guard.operation, guard.targetHint)

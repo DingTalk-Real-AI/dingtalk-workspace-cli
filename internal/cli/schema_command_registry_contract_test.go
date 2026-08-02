@@ -34,8 +34,12 @@ func TestCommandRegistryJSONSchemaDocumentsClosedCommandSpec(t *testing.T) {
 	}
 
 	var source map[string]any
-	if err := json.Unmarshal(embeddedSchemaCommandRegistryJSON, &source); err != nil {
-		t.Fatalf("decode schema_command_registry.json: %v", err)
+	merged, err := EmbeddedCommandRegistryMergedJSON()
+	if err != nil {
+		t.Fatalf("EmbeddedCommandRegistryMergedJSON() error = %v", err)
+	}
+	if err := json.Unmarshal(merged, &source); err != nil {
+		t.Fatalf("decode merged registry: %v", err)
 	}
 	if source["$schema"] != commandRegistrySchemaRef {
 		t.Fatalf("registry source $schema = %#v, want %q", source["$schema"], commandRegistrySchemaRef)
@@ -93,6 +97,14 @@ func TestDecodeCommandRegistryEnforcesReviewedSourceConstraints(t *testing.T) {
 	}
 	if got := registry.ByCanonical["sample.run"].Visibility; got != SchemaVisibilityPublic {
 		t.Fatalf("default visibility = %q, want public", got)
+	}
+
+	shortcut, err := decodeCommandRegistry([]byte(wrap(`[{"id":"sample","tools":[{"canonical_path":"sample.shortcut_run","cli_path":"sample +run"}]}]`)))
+	if err != nil {
+		t.Fatalf("decode shortcut registry path: %v", err)
+	}
+	if got := shortcut.ByCanonical["sample.shortcut_run"].PrimaryCLIPath; got != "sample +run" {
+		t.Fatalf("shortcut primary path = %q, want sample +run", got)
 	}
 }
 

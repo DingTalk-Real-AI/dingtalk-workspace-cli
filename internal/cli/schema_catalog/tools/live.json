@@ -1,0 +1,360 @@
+{
+  "product": "live",
+  "tools": {
+    "live.get_my_lives": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=live.get_my_lives",
+        "Skill:skills/multi/dingtalk-live/SKILL.md",
+        "cobra-help:dws live stream list",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.live.prod.json#live.get_my_lives",
+        "internal/cli/schema_command_registry.json#live.get_my_lives",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/live.json",
+        "internal/cli/schema_hints/selection/live.json",
+        "internal/cli/schema_mcp_metadata.json#tools.live.get_my_lives",
+        "live-dws-schema:live.get_my_lives",
+        "skills/mono/references/products/live.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#live.get_my_lives",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#live.get_my_lives"
+      ],
+      "agent_summary": "查看当前用户发起的直播列表与基础统计",
+      "agent_summary_source": "dws-agent-selection/live",
+      "availability": "available",
+      "avoid_when": [
+        "需要创建/开播/结束直播时不要使用；当前公开面仅列表查询"
+      ],
+      "canonical_path": "live.get_my_lives",
+      "cli_name": "list",
+      "cli_path": "live stream list",
+      "confirmation": "not_required",
+      "description": "查看我的直播列表",
+      "display": "直播列表 / 信息",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws live stream list"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "value": "查看当前用户发起的直播列表与基础统计"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/live.json",
+          "value": "查看当前用户发起的直播列表与基础统计"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/live marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/live.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.live.get_my_lives.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/live marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/live.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "value": [
+                "需要创建/开播/结束直播时不要使用；当前公开面仅列表查询"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/live.json",
+          "value": [
+            "需要创建/开播/结束直播时不要使用；当前公开面仅列表查询"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "live stream list",
+              "value": "live.get_my_lives"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "live stream list",
+          "value": "live.get_my_lives"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "risk-default",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "查看我的直播列表"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "获取当前用户发起的直播列表，包含每场直播的基础信息与统计数据。返回字段包括：直播标题、封面图 URL、直播 ID、主播昵称、开始/结束时间戳、播放时长（毫秒）、观看量（UV）及直播状态（如已结束）。数据按分页返回，支持判断是否还有更多内容。适用于个人直播管理、历史记录查看等场景，仅展示当前用户有权限访问的直播内容。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "查看我的直播列表"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "value": [
+                "dws live stream list"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/live.json",
+          "value": [
+            "dws live stream list"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/live marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/live.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.live.get_my_lives.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/live marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/live.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "live",
+                "rpc_name": "get_my_lives"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.live.get_my_lives.interface_ref",
+              "value": "live.get_my_lives"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "live",
+            "rpc_name": "get_my_lives"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "dws-tool-metadata/live marks this tool as reviewed",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/live.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "dws-tool-metadata/live marks this tool as reviewed",
+          "source": "internal/cli/schema_hints/metadata/live.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "查看我的直播列表"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "获取当前用户发起的直播列表"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "查看我的直播列表"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/live.json",
+              "value": [
+                "用户要看自己发起过的直播、状态或观看量等列表信息"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/live.json",
+          "value": [
+            "用户要看自己发起过的直播、状态或观看量等列表信息"
+          ]
+        }
+      },
+      "group": "stream",
+      "has_parameters": false,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "live",
+        "rpc_name": "get_my_lives"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "get_my_lives",
+      "parameter_count": 0,
+      "parameters": {},
+      "path": "live.get_my_lives",
+      "primary_cli_path": "live stream list",
+      "product_id": "live",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "查看我的直播列表",
+      "use_when": [
+        "用户要看自己发起过的直播、状态或观看量等列表信息"
+      ]
+    }
+  }
+}

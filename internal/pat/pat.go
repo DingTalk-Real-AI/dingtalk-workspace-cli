@@ -55,10 +55,15 @@ Host-owned PAT 开关：
   由宿主处理全部 UI / 交互 / 回调节奏 / 重试逻辑，
   CLI 侧不再拉起任何本地浏览器 / 轮询。
 
-服务端路由标签 claw-type（开源构建硬编码）：
-  开源构建在所有出站 MCP 请求上恒定注入 claw-type: openClaw，
-  与 DINGTALK_AGENT / 宿主环境解耦，与历史 main 行为一致。
-  hostControl.clawType 也会回填该值，便于宿主侧审计/路由。
+服务端 PAT / 路由标签 claw-type：
+  开源构建固定在出站 MCP 请求中注入 claw-type: openClaw，
+  hostControl.clawType 会回填相同值。DWS_AGENT_PRODUCT 不会修改它。
+
+Agent 产品标识 DWS_AGENT_PRODUCT：
+  合法非空值作为 x-dws-agent-product 请求头发送，供下游日志 / BI 使用；
+  本客户端不使用该值派生或改变 PAT、鉴权或路由，下游使用契约由对应
+  服务自行定义。同时该值作为启用 --ai-tag 时 IM 消息小尾巴的 clawType
+  参数。未设置或为空时请求头省略，小尾巴回退发行版默认值。
 
 DINGTALK_AGENT（可选，仅供 x-dingtalk-agent 使用）：
   如设置，将原样注入 HTTP 请求头 x-dingtalk-agent，

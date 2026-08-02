@@ -1,0 +1,9 @@
+{
+  "id": "mcp",
+  "tools": [
+    {
+      "canonical_path": "mcp.url_get",
+      "cli_path": "mcp url get"
+    }
+  ]
+}

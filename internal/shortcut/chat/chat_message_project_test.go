@@ -28,7 +28,11 @@ func TestListMessageProjectOne(t *testing.T) {
 		"senderOpenDingTalkId": "DXYZ",
 		"msgType":              "text",
 		"createTime":           "2026-07-19 13:37:03",
+		"updateTime":           "2026-07-19 14:00:00",
 		"content":              testCipher,
+		"emotionReplyList": []any{
+			map[string]any{"emoji": "赞", "replyUsers": []any{"D1", "D2"}},
+		},
 		"forwardMessages": []any{
 			map[string]any{"openMessageId": "c1", "senderOpenDingTalkId": "DA", "content": "子消息", "createTime": "t"},
 		},
@@ -39,6 +43,12 @@ func TestListMessageProjectOne(t *testing.T) {
 	}
 	if row["createTime"] != "2026-07-19 13:37:03" {
 		t.Errorf("createTime = %v", row["createTime"])
+	}
+	if row["updateTime"] != "2026-07-19 14:00:00" {
+		t.Errorf("updateTime = %v", row["updateTime"])
+	}
+	if reactions, ok := row["reactions"].(map[string]any); !ok || len(reactions) == 0 {
+		t.Errorf("reactions = %#v", row["reactions"])
 	}
 	if s, _ := row["text"].(string); !strings.Contains(s, "加密消息") || strings.Contains(s, "||2||1||") {
 		t.Errorf("encrypted text = %v, want marker", row["text"])
@@ -52,5 +62,35 @@ func TestListMessageProjectOne(t *testing.T) {
 	row = listMessageProjectOne(map[string]any{"unrelated": 1})
 	if len(row) != 0 {
 		t.Errorf("empty message row = %#v, want no keys", row)
+	}
+
+	row = listMessageProjectOneWithReactions(map[string]any{
+		"openMessageId": "mid",
+		"emotionReplyList": []any{
+			map[string]any{"emoji": "赞", "replyUsers": []any{"D1"}},
+		},
+	}, false)
+	if _, ok := row["reactions"]; ok {
+		t.Errorf("no-reactions projection leaked reactions: %#v", row)
+	}
+}
+
+func TestListPinProjectPreservesThreadIdentity(t *testing.T) {
+	got := listPinProject(map[string]any{
+		"result": map[string]any{
+			"messages": []any{
+				map[string]any{
+					"openMessageId":      "msg-1",
+					"openConversationId": "cid-1",
+					"openConvThreadId":   "thread-1",
+				},
+			},
+		},
+	})
+	if len(got) != 1 {
+		t.Fatalf("pins = %#v", got)
+	}
+	if got[0]["messageId"] != "msg-1" || got[0]["threadId"] != "thread-1" {
+		t.Fatalf("pin identity = %#v", got[0])
 	}
 }

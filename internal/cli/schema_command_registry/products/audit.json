@@ -1,0 +1,17 @@
+{
+  "id": "audit",
+  "tools": [
+    {
+      "canonical_path": "audit.export",
+      "cli_path": "audit export"
+    },
+    {
+      "canonical_path": "audit.tail",
+      "cli_path": "audit tail"
+    },
+    {
+      "canonical_path": "audit.verify",
+      "cli_path": "audit verify"
+    }
+  ]
+}

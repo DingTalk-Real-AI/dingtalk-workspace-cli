@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -73,8 +74,16 @@ func installUnknownVerbFallback(group *cobra.Command) {
 				printUnknownSubcmdError(cmd, bad)
 				return
 			}
+			origHelp(cmd, args)
+			return
 		}
+		// For non-group commands, render base help then apply the safety
+		// annotation. Recursion safety hinges on NOT calling
+		// cmd.Root().HelpFunc(): in test trees calendar IS the root, so that
+		// would re-enter this wrapper. origHelp was captured before any
+		// wrapping and is the plain cobra renderer.
 		origHelp(cmd, args)
+		cli.RenderSafetyAnnotation(cmd)
 	})
 
 	prev := group.RunE

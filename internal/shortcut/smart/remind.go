@@ -21,7 +21,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
-// Remind: create a personal todo for YOURSELF with an optional due/reminder time,
+// Remind: create a personal todo for YOURSELF with an optional due time,
 // in one command. It resolves the current user and explicitly passes executorIds;
 // the real todo backend does not reliably default a missing executor to "me".
 //
@@ -35,13 +35,13 @@ var Remind = shortcut.Shortcut{
 	Service:     "todo",
 	Command:     "+remind",
 	Product:     "todo",
-	Description: "给自己创建一条带截止/提醒时间的待办",
-	Intent: "当你想给自己记一件事、并（可选）设一个截止/提醒时间，又不想先查自己的 userId 时使用；" +
-		"内部先解析当前登录用户的 userId，再显式设置 executorIds，--at 会按 ISO8601 解析为截止时间。会真实创建待办。",
+	Description: "给自己创建一条带可选截止时间的待办",
+	Intent: "当你想给自己记一件事、并（可选）设一个截止时间，又不想先查自己的 userId 时使用；" +
+		"内部先解析当前登录用户的 userId，再显式设置 executorIds，--at 只会按 ISO8601 写入截止时间 dueTime，不会创建独立提醒规则。会真实创建待办。",
 	Risk: shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "task", Type: shortcut.FlagString, Desc: "待办标题/内容", Required: true},
-		{Name: "at", Type: shortcut.FlagString, Desc: "截止/提醒时间（ISO8601，可选，如 2026-03-10T18:00:00+08:00）"},
+		{Name: "at", Type: shortcut.FlagString, Desc: "截止时间（ISO8601，可选，不是提醒时间；如 2026-03-10T18:00:00+08:00）"},
 	},
 	Tips: []string{`dws todo +remind --task "交周报" --at 2026-03-10T18:00:00+08:00`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -59,7 +59,7 @@ var Remind = shortcut.Shortcut{
 			"executorIds": []string{userID},
 		}
 
-		// Optional due/reminder time. The todo helper feeds --due through
+		// Optional due time. The todo helper feeds --due through
 		// parseISOTimeToMillis and stores dueTime as epoch milliseconds (int64),
 		// so we do the same here rather than passing a raw string.
 		if rt.Changed("at") {

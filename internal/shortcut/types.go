@@ -39,6 +39,27 @@ const (
 	RiskHighWrite Risk = "high-risk-write"
 )
 
+// SemanticDisposition records the reviewed relationship between a Shortcut and
+// the underlying Runtime Schema surface.
+type SemanticDisposition string
+
+const (
+	DispositionPrimarySmart    SemanticDisposition = "primary_smart"
+	DispositionSemanticAdapter SemanticDisposition = "semantic_adapter"
+	DispositionSchemaLeaf      SemanticDisposition = "schema_leaf"
+	DispositionAliasInternal   SemanticDisposition = "alias_internal"
+)
+
+// Availability is independent from live-account evidence. A missing fixture or
+// permission does not make an implemented command unavailable.
+type Availability string
+
+const (
+	AvailabilityAvailable   Availability = "available"
+	AvailabilityUnavailable Availability = "unavailable"
+	AvailabilityDeprecated  Availability = "deprecated"
+)
+
 // FlagType is the pflag value type a Flag registers as.
 type FlagType string
 
@@ -127,6 +148,21 @@ type Shortcut struct {
 	Tips []string
 	// Hidden hides the command from listings while keeping it invocable.
 	Hidden bool
+	// Disposition is the reviewed semantic relation to the Runtime Schema leaf
+	// surface. It determines default Agent discovery independently from live
+	// fixture evidence.
+	Disposition SemanticDisposition
+	// SemanticDelta explains the concrete value added beyond renaming a leaf.
+	SemanticDelta string
+	// Availability describes whether the implementation is shipped and
+	// callable; it does not encode the current account's permissions.
+	Availability Availability
+	// PrimaryCommand links aliases/internal compatibility entries to their
+	// preferred semantic entry.
+	PrimaryCommand string
+	// SemanticReviewed is true only when the disposition and visibility came
+	// from the reviewed semantic catalog.
+	SemanticReviewed bool
 	// UserDefined identifies shortcuts loaded from the user's config
 	// directory. Distribution-owned Schema and interface snapshots exclude
 	// these runtime extensions even if another root loaded them earlier.

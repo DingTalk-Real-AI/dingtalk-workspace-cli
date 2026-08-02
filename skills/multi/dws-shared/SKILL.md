@@ -1,73 +1,89 @@
 ---
 name: dws-shared
-description: dws 多 skill 模式的公共参考——认证、全局参数、Schema 命令发现、多组织 / --profile 规则、安全底线。所有 dingtalk-* 子 skill 执行前先读本 skill。命令前缀：dws。
-cli_version: ">=1.0.40"
+description: 钉钉(DingTalk) MultiSkill 的轻量共享入口。Use when 用户泛称 DWS/钉钉操作但未明确产品、请求跨产品编排、需要 URL 类型预检或产品边界消歧。清晰的单产品操作优先使用对应 dingtalk-* 子 skill；本 skill 只提供全局执行契约和按需 reference 导航，不承载产品命令全集。
 metadata:
-  category: productivity
-  stability: experimental
+  cli_version: ">=0.2.14"
+  category: shared
   requires:
     bins:
       - dws
 ---
 
-# DWS 公共参考（dws-shared）
+# DWS 共享执行契约
 
-> 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。
+把本文件作为所有 DWS 操作的轻量公共前置条件。明确单产品请求直接使用对应
+`dingtalk-*` skill；只有泛称 DWS、跨产品流程、URL 预检或意图不清时，才把本
+skill 作为入口进行二级路由。
 
-每个 dingtalk-* 子 skill 都把本 skill 列为 PREREQUISITE：执行任何产品命令前先读这里的认证、全局参数、Schema 命令发现与多组织规则。`dws` 必须在 PATH 上。
+## 所有 DWS 操作必须遵守
 
-## 认证
-- `dws auth login`（新账号新增 profile，同一 `corpId + userId` 重登只刷新该账号）；`--device` 无头 / SSH 登录
-- `dws auth status [--profile <selector>]` 查看组织当前账号或指定账号；会尝试刷新，失败时保留真实错误
-- macOS 出现 `ciphertext_key_mismatch` 且普通终端仍可登录时：先运行 `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run --format json`，通过后加 `--yes` 迁移；不要直接 `auth reset`
+- 只通过 `dws` CLI 操作钉钉产品；不要改用 curl、私有 HTTP API 或浏览器绕过。
+- 所有结构化机器读取命令使用 `--format json`，按真实返回字段判断结果。
+- 返回中的秒/毫秒时间戳必须转换为带时区的可读日期时间后再面向用户展示；默认使用
+  当前会话时区（本环境为 `Asia/Shanghai`），必要时同时保留原始值，禁止只把裸时间戳
+  交给 Agent 或用户判断具体日期。
+- 不要猜测命令、flag、字段名、UUID、nodeId、userId、邮箱、手机号或 URL。
+- 用户已明确产品内容意图时，意图优先于 URL 形态。`.md` 等本地格式文件按普通
+  文件走 `drive`：先 `dws drive download` 下载到本地处理，再用 `dws drive upload`
+  回传。
+- 命令或参数不确定时，先运行最接近层级的 `dws <path> --help`；禁止把自然语言
+  同义词直接拼成命令。
+- 后续步骤使用的 ID 必须来自前一步真实返回；多人同名、多目标或类型不明时先消歧。
+- 多账号场景只传组织时，使用该组织唯一 `isOrgCurrent=true` 的默认账号；多账号组织
+  没有默认账号时先让用户指定账号，禁止选择第一项、最近登录或最近使用账号。账号
+  选择与跨组织规则详见 `../dingtalk-profile/SKILL.md`。
+- 不输出、转述或记录 token、refresh token、appSecret 等凭据。宿主已注入认证时
+  不要求用户重新提供凭据。
+- 写入操作必须符合用户明确意图。删除、审批决策及其他不可逆/高影响操作，先展示
+  对象、动作和影响，获得明确同意后才追加 `--yes`；不得静默确认。
+- 创建、更新、发送等写操作后，按产品 skill 的要求回读或查询状态，不得仅凭退出码
+  宣称成功。
 
-## 全局参数
-- 所有命令加 `--format json` 取可解析输出
-- 全局 `--profile <selector>`：支持 `corpId:userId`、`corpId:userName`、`corpName:userId`、`corpName:userName`，也兼容单独的 corpId、唯一 corpName 和本地 profile 名；均不改默认 profile
-- 以 leaf Schema 的 `confirmation` 为准：`user_required` 才先确认并在同意后加 `--yes`；`not_required` 不得仅因 `effect=write` 自行升级确认要求
+## 渐进加载
 
-## 命令发现：Schema + --help
+只读取当前任务需要的文件，不要一次性加载全部 shared references：
 
-选择命令、读取参数映射/组合约束与安全语义时，优先渐进查询当前二进制内嵌的 leaf Schema；真正组装参数前，用 `--help` 确认 Cobra 当前接受的 flags：
+| 当前情况 | 必读内容 |
+|---|---|
+| 已明确单一产品 | 对应 `../dingtalk-*/SKILL.md`；不读路由 reference |
+| 泛称 DWS、需要选择产品 | [routing.md](references/routing.md) |
+| 跨产品、多步骤、汇总或报告 | [workflow-routing.md](references/workflow-routing.md) |
+| 输入含 alidocs、shanji 等钉钉 URL 且类型不明 | [url-patterns.md](references/url-patterns.md) |
+| 产品边界仍然难以判断 | [intent-guide.md](references/intent-guide.md) 的相关章节 |
+| 认证、全局 flag 或输出格式问题 | [global-reference.md](references/global-reference.md) |
+| 命令已经返回错误 | [error-codes.md](references/error-codes.md)；只查错误对应章节 |
+| 怀疑能力不支持 | [capability-limits.md](references/capability-limits.md) |
+| 批量/多源采集 | [conventions.md](references/best_practices/_common/conventions.md) |
+| 固定短流程 | [lite-recipes.md](references/best_practices/_common/lite-recipes.md) 对应章节 |
 
-本节适用于进入 Runtime Schema 的基础/原子命令。`+` shortcut 是明确例外，使用下方独立 shortcut catalog 契约。
+产品命令、脚本和字段细节位于对应产品 skill，不在 `dws-shared` 重复维护。
 
-```bash
-dws schema                                      # 产品概览
-dws schema calendar                             # 产品工具列表
-dws schema "calendar event"                     # 命令分组
-dws schema "calendar event create" --compact    # 完整 leaf 契约
-```
+## 本 skill 作为入口时的路由顺序
 
-`--all` 会导出全部工具的完整 leaf，输出很大。仅在用户明确要求全量导出，或执行 CI、Catalog 审计、参数防丢 baseline 时使用 `dws schema --all --format json`；普通业务任务必须渐进查询，不得把全量结果注入上下文。完整 baseline 不得使用会裁剪 provenance 的 `--all --compact`。
+1. 先识别明确的产品内容意图；明确意图直接进入对应产品。仅当输入包含钉钉 URL
+   且类型不明确或意图与链接类型可能冲突时，读取 `url-patterns.md` 识别节点类型。
+2. 请求包含多个时序步骤、跨产品数据传递或汇总报告：即使 URL 已识别，也要读取
+   `workflow-routing.md`，按行动指南组合需要的产品 skill；当前发布包不包含独立
+   scenario skill。
+3. 请求是单产品操作但产品不明确：读取 `routing.md`，再显式读取目标产品
+   `SKILL.md`。
+4. `doc/drive/wiki`、`aitable/sheet`、`calendar/conference/minutes` 等边界仍不清楚：
+   只读取 `intent-guide.md` 的对应章节。
+5. 仍无法判断时向用户追问，不要猜测产品或命令。
 
-| 要确认的信息 | 事实源 |
-|-------------|--------|
-| 命令是否存在、Cobra 接受哪些 flags | `dws <cli_path> --help` |
-| Agent 选命令、参数映射/约束、risk/confirmation（原子/基础命令） | `dws schema "<cli_path>"` |
-| shortcut 的参数、约束、risk/confirmation、示例 | `dws shortcut list --service <service> --format json` |
-| 钉钉中的文档、日程、消息等业务数据 | 真正执行对应的 `read` / `search` / `list` 命令 |
+## 跨 skill 执行
 
-Schema 与 Help 冲突属于契约漂移：参数只用 Help 接受的 flags，并报告漂移；安全语义冲突时采用更保守的确认方式。Schema 只描述命令契约，不能替代业务查询。
+- 正文中的相对 `Read` 链接是运行时依赖；`metadata.requires.skills` 不会自动加载。
+- 选择目标产品后，以目标 skill 的命令、参数和风险规则为准。
+- 多步骤流程按顺序传递真实返回值；可以并行的只读采集按对应 workflow/reference
+  执行，写操作默认串行并逐步验证。
+- 产品 skill 已内联的清晰操作直接执行；仅在遇到该 skill 未覆盖的参数或边界时读取
+  更深层 reference。
 
-## Shortcut 可用性
-- `shortcut` 是对常用操作的高层封装。先按产品 skill 的意图表、脚本和 recipe 路由：存在精确覆盖场景的专用脚本/recipe 时按其执行；否则可见 shortcut 优先于手写等价原子流程。
-- shortcut 有独立 catalog，按设计不进入 Runtime Schema。用 `dws shortcut list --service <service> --format json` 读取 flags、required/enum、跨参数 constraints、risk/confirmation 和 examples；不要对 `+` 路径调用 `dws schema`。
-- 真正组装参数前用叶子帮助 `dws <service> +<verb> --help` 核对 Cobra 接受的 flags；父级 `dws <service> --help` 只能用于发现子命令。
-- shortcut catalog 中 `confirmation=user_required` 时先获得用户确认，确认后才加 `--yes`；`not_required` 不额外确认。
-- 如果 shortcut 不在 help / list 中，改用产品参考里的原子命令、脚本或标准流程；不要猜测未展示的 `+` 命令。
+## 错误最短路径
 
-## 多组织 / --profile（关键规则）
-dws 可同时登录多个钉钉账号，同一组织也可保留多个账号。一个 profile 由 `corpId + userId` 唯一确定；`dws profile list --format json` 默认显示全部账号，稳定选择器读取每项 `profile`。
-
-- **选择规则**：名称只用于输入，自动化使用 `profile=corpId:userId`。名称重名时按报错候选改用稳定选择器，不得猜测。
-- **组织默认账号**：只传组织时使用唯一 `isOrgCurrent=true` 的账号。多账号组织没有默认账号时先让用户指定账号；禁止选择第一项、最近登录或最近使用账号。
-- **跨组织铁律**：任何读 / 搜在当前组织没命中、且按 `corpId` 去重后有 ≥2 个组织时，每个组织使用唯一组织默认账号的 `profile` 各搜一遍。禁止把同组织多个账号重复执行。
-- **单组织**：只有 1 个组织时按当前账号处理；用户明确指定账号时使用该账号的稳定 `profile`。
-- **安全护栏**：自动跨组织只对「读 / 搜」；写 / 发 / 删 / 撤回等操作默认只在当前组织做，确需带 `--profile` 跨组织写时先与用户确认目标组织；持久切换 `dws profile switch`（改默认组织）属写操作，未经用户明确要求不得执行。
-- 完整命令与跨组织聚合见 `dingtalk-profile` skill。
-
-## 错误处理
-- `unknown command` / `unknown flag`：先跑 `dws <path> --help` 查证再修正一次，别把自然语言当命令 / flag
-- 服务端 token 过期：提示用户 `dws auth login` 重新登录；本地密钥不匹配按上面的 macOS 迁移流程处理，不要混为 token 过期
-- 业务错误码 / 接口语义：用 `dws devdoc article search --query "<关键词>" --format json` 查官方文档，不编造原因
+1. `unknown command` / `unknown flag`：运行对应层级 `--help`，修正后最多重试一次。
+2. 认证或权限错误：读取 `global-reference.md` 与 `error-codes.md` 对应章节。
+3. 其他错误：加 `--verbose` 重试一次；仍失败则停止并报告真实错误，不连续尝试替代
+   命令。
+4. 明确不支持的能力：说明边界，不通过其他接口绕过。

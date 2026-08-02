@@ -17,6 +17,7 @@ import (
 	stderrors "errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExitCodeByCategory(t *testing.T) {
@@ -74,6 +75,99 @@ func TestPrintJSON(t *testing.T) {
 	}
 	if !strings.Contains(got, "\"snapshot_path\": \"/tmp/dws-recovery/snapshot.json\"") {
 		t.Fatalf("expected snapshot path in output, got %q", got)
+	}
+}
+
+func TestCrossPlatformCoverageRetryabilityTriStateAndRetryTiming(t *testing.T) {
+	t.Parallel()
+
+	next := time.Date(2026, time.July, 30, 4, 5, 6, 0, time.FixedZone("CST", 8*60*60))
+	tests := []struct {
+		name            string
+		err             error
+		wantRetryable   string
+		wantRetryAfter  bool
+		wantNextRetryAt bool
+	}{
+		{
+			name: "unknown is omitted",
+			err:  NewAPI("unknown"),
+		},
+		{
+			name:          "explicit false is preserved",
+			err:           NewValidation("terminal", WithRetryable(false)),
+			wantRetryable: `"retryable": false`,
+		},
+		{
+			name:            "explicit true with timing",
+			err:             NewAPI("transient", WithRetryable(true), WithRetryAfterSeconds(30), WithNextRetryAt(next)),
+			wantRetryable:   `"retryable": true`,
+			wantRetryAfter:  true,
+			wantNextRetryAt: true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var jsonOut strings.Builder
+			if err := PrintJSON(&jsonOut, tt.err); err != nil {
+				t.Fatalf("PrintJSON() error = %v", err)
+			}
+			gotJSON := jsonOut.String()
+			if tt.wantRetryable == "" {
+				if strings.Contains(gotJSON, `"retryable"`) {
+					t.Fatalf("unknown retryability must be omitted: %s", gotJSON)
+				}
+			} else if !strings.Contains(gotJSON, tt.wantRetryable) {
+				t.Fatalf("missing %s in %s", tt.wantRetryable, gotJSON)
+			}
+			if got := strings.Contains(gotJSON, `"retry_after_seconds": 30`); got != tt.wantRetryAfter {
+				t.Fatalf("retry_after_seconds presence = %v, want %v: %s", got, tt.wantRetryAfter, gotJSON)
+			}
+			if got := strings.Contains(gotJSON, `"next_retry_at": "2026-07-29T20:05:06Z"`); got != tt.wantNextRetryAt {
+				t.Fatalf("next_retry_at presence = %v, want %v: %s", got, tt.wantNextRetryAt, gotJSON)
+			}
+
+			var humanOut strings.Builder
+			if err := PrintHuman(&humanOut, tt.err); err != nil {
+				t.Fatalf("PrintHuman() error = %v", err)
+			}
+			gotHuman := humanOut.String()
+			if tt.wantRetryable == "" {
+				if strings.Contains(gotHuman, "Retryable:") {
+					t.Fatalf("unknown retryability must be omitted: %s", gotHuman)
+				}
+			} else {
+				want := "Retryable: true"
+				if strings.Contains(tt.wantRetryable, "false") {
+					want = "Retryable: false"
+				}
+				if !strings.Contains(gotHuman, want) {
+					t.Fatalf("missing %q in %s", want, gotHuman)
+				}
+			}
+			if tt.wantRetryAfter && !strings.Contains(gotHuman, "Retry After: 30s") {
+				t.Fatalf("missing retry delay in %s", gotHuman)
+			}
+			if tt.wantNextRetryAt && !strings.Contains(gotHuman, "Next Retry At: 2026-07-29T20:05:06Z") {
+				t.Fatalf("missing next retry time in %s", gotHuman)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageRetryTimingOptionsIgnoreInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	err := NewAPI(
+		"invalid timing",
+		WithRetryAfterSeconds(-1),
+		WithNextRetryAt(time.Time{}),
+	).(*Error)
+	if err.RetryAfterSeconds != nil || err.NextRetryAt != nil {
+		t.Fatalf("invalid retry timing was retained: %#v", err)
 	}
 }
 

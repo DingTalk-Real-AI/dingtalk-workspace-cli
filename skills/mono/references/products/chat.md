@@ -2,6 +2,27 @@
 
 ## 命令总览
 
+## Shortcut 优先路由
+
+常见 Agent 意图优先使用公开 `+` Shortcut；下面的原子命令章节保留给需要特定原始返回结构、兼容参数或 Shortcut 未覆盖字段的场景。执行前用 `dws schema --cli-path "chat +<shortcut>" --format json` 读取最终参数、约束和确认语义。
+
+| 意图 | 首选 |
+|---|---|
+| 以 current-user / bot / webhook 身份发消息 | `dws chat +messages-send --as <identity> ...` |
+| 拉取单个群聊或单聊的消息 | `dws chat +chat-messages ...` |
+| 按关键词、发送者、@对象、会话、类型或时间组合搜索 | `dws chat +search-msg ...` |
+| 查询 @我的消息 | `dws chat +at-me ...` |
+| 根据消息 ID 批量取详情与 reaction | `dws chat +messages-mget ...` |
+| 读取已知 thread/topic 的全部回复 | `dws chat +thread-replies ...` |
+| 下载单个 mediaId/fileId | `dws chat +messages-resource-download ...` |
+
+- `+messages-send` 只暴露下层真实支持的身份能力：user 支持文本/Markdown、已有 mediaId 图片、本地文件和幂等键；bot 支持群聊或批量单聊文本/Markdown；webhook 的目标由 token 所在群决定。
+- `+messages-send` 会自动规范化并补齐 @ 占位符。user 使用 `<@id>` / `<@all>`；bot/webhook 使用 `@id` / `@手机号` / `@all`。声明 `--at-*` / `--at-all` 即可，不要为统一 Shortcut 手工拼 `@10`。
+- `+search-msg --page-all` 连续翻页并默认按消息 ID 批量富化；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger。
+- `+at-me`、`+chat-messages`、`+messages-mget`、`+search-msg`、`+thread-replies` 可用 `--download-resources` 下载资源。引用、回复、合并转发中的资源使用结果 `resourceRefs` 自带的子消息 `messageId`；仅当子消息缺会话 ID 时继承父消息 `openConversationId`。
+- 上述五个查询 Shortcut 与 `+messages-resource-download` 都沿用安全本地下载的 `read/not_required` 契约，不应添加 `--yes` 或触发交互确认。下载只允许工作目录内相对路径、默认不覆盖并原子落盘；需要覆盖时必须由用户显式传 `--overwrite`。
+- 下载器仅接受经审查的钉钉与公网 OSS HTTPS 地址并逐跳校验重定向；跨主机时不会转发下层提供的请求头。新官方域名被拒绝时记录错误中的 host 供审查，不要放宽为任意 HTTPS。
+
 ### group (群组管理)
 
 #### 创建群 — 当前登录用户自动成为群主
@@ -1060,6 +1081,22 @@ Flags:
       --background-id string   背景 ID (必填)
 ```
 
+#### 原地更新消息的文字表情回应
+```
+Usage:
+  dws chat message update-text-emotion [flags]
+Example:
+  dws chat message update-text-emotion --conversation-id <openConversationId> --msg-id <openMsgId> --old-emotion-id <oldEmotionId> --emotion-id <emotionId> --emotion-name "处理中" --text "处理中 2 分钟" --background-id im_bg_5
+Flags:
+      --conversation-id string   会话 openConversationId (必填，支持单聊/群聊，别名: --group / --id / --chat)
+      --msg-id string            消息 openMsgId (必填)
+      --old-emotion-id string    待替换的原表情 ID (必填)
+      --emotion-id string        新表情 ID (必填，通过 create-text-emotion 获取)
+      --emotion-name string      新表情名称 (必填)
+      --text string              新文字内容 (必填)
+      --background-id string     新背景 ID (必填)
+```
+
 #### 移除消息的文字表情回应
 ```
 Usage:
@@ -1914,6 +1951,7 @@ Flags:
 用户说"emoji回应/表情回应/给消息加表情" → `chat message add-emoji`
 用户说"取消emoji回应/移除表情回应" → `chat message remove-emoji`
 用户说"文字表情回应/添加文字表情" → `chat message add-text-emotion`
+用户说"修改文字表情回应/更新消息状态文字" → `chat message update-text-emotion`
 用户说"取消文字表情回应/移除文字表情" → `chat message remove-text-emotion`
 用户说"创建文字表情/新建文字表情" → `chat message create-text-emotion`
 用户说"免打扰/消息免打扰/静音/开启免打扰/关闭免打扰" → `chat mute`
@@ -1976,7 +2014,7 @@ Flags:
 - `chat message list-by-ids` — 根据消息 ID 批量查询消息（最多 50 条）
 - `chat message add-emoji` / `remove-emoji` — 对消息添加/移除 emoji 表情回应
 - `chat message list-emotion-replies` — 批量拉取消息的表情回复和文字回复
-- `chat message add-text-emotion` / `remove-text-emotion` — 对消息添加/移除文字表情回应
+- `chat message add-text-emotion` / `update-text-emotion` / `remove-text-emotion` — 对消息添加、原地更新或移除文字表情回应
 - `chat message create-text-emotion` — 创建文字表情模板，返回 emotionId 供 add-text-emotion 使用
 - `chat category list` — 获取用户自定义会话分组列表
 - `chat category list-conversations` — 拉取指定分组下的会话列表

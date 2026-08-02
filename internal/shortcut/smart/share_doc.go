@@ -51,7 +51,7 @@ var ShareDoc = shortcut.Shortcut{
 		note := rt.Str("note")
 
 		// Step 1 — resolve the recipient name to a unique userId.
-		user, err := resolveUser(rt, rt.Str("to"))
+		user, err := resolveOpenDingTalkUser(rt, rt.Str("to"))
 		if err != nil {
 			return err
 		}

@@ -14,7 +14,7 @@ Flags:
       --table-id string    Table ID (必填)
 ```
 
-返回字段的完整配置（含 options 等）。在 table get 拿到字段目录后，按需展开少量字段的完整配置。
+返回字段的完整配置（含 options 等）。不要假设未指定 `--table-ids` 的 `table get` 枚举结果含字段；字段目录和配置以 `field get` 返回为准。
 
 ## field create — 创建字段
 
@@ -31,11 +31,31 @@ Example:
 Flags:
       --base-id string    Base ID (必填)
       --name string       要创建的单字段名称（与 --type 配合使用，替代 --fields）
-      --type string       要创建的单字段类型（参考 table create 字段类型）
-      --config string     单字段配置，如 options（可选）
-      --ai-config string  单字段 AI 配置 JSON（可选，用于创建 AI 字段）
-      --fields string     批量新增字段 JSON 数组，单次最多 15 个 (与 --name/--type 二选一)
+      --type string       要创建的单字段类型（需要配合 --name，参考 table create 的内置类型）
+      --config string     单字段配置 JSON（需要配合 --name/--type，结构参考 table create）
+      --ai-config string  单字段 AI 配置 JSON（需要配合 --name/--type）
+      --fields string     批量新增字段 JSON 数组，单次最多 15 个；每个字段的配置写在其 config/aiConfig 内
       --table-id string   Table ID (必填)
+```
+
+`field create` 有且只有两种输入模式：
+
+- 单字段模式：必须同时传 `--name` 和 `--type`；`--config`、`--ai-config` 只作为该字段的附加配置。
+- 批量模式：只传 `--fields`；字段配置写在数组内各对象的 `config` / `aiConfig` 中。
+
+两种模式严格互斥。`--fields` 不能与 `--name`、`--type`、`--config` 或 `--ai-config` 混用；单独传 `--config` 也会报错，不会被静默忽略。
+
+例如创建单选字段时，单字段模式的 `--config` 是一个配置对象；批量模式则把同一对象放入对应字段元素的 `config`：
+
+```bash
+# 单字段模式
+dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
+  --name "部门" --type singleSelect \
+  --config '{"options":[{"name":"技术部"},{"name":"产品部"}]}'
+
+# 批量模式
+dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
+  --fields '[{"fieldName":"部门","type":"singleSelect","config":{"options":[{"name":"技术部"},{"name":"产品部"}]}}]'
 ```
 
 允许部分成功，返回结果逐项标明成功/失败状态。

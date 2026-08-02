@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "source_hash": "sha256:d3beb782faf1fbdfc2596863dc1499d41dbfb0ade393a239242349ee2a1b3109",
-  "surface_hash": "sha256:8eef4235b4391a6a865c180ebd3a65ca3531a84c6985b37811f23fff9daf2e3a",
+  "source_hash": "sha256:9fd99457097485eb590ccef21b1d219c1b03416749491a98f749fbd69018cbf7",
+  "surface_hash": "sha256:60eee8e2f37d6d9d60689efce85082798eb9ad38b7ba7c0b471c3de676a85a16",
   "coverage": {
-    "surface_products": 25,
-    "products_with_metadata": 25,
-    "surface_tools": 603,
-    "tools_with_metadata": 603,
-    "tools_with_agent_summary": 603,
-    "tools_with_use_when": 603,
-    "tools_with_avoid_when": 603,
-    "tools_with_examples": 603,
-    "tools_with_interface_mode": 603,
+    "surface_products": 26,
+    "products_with_metadata": 26,
+    "surface_tools": 845,
+    "tools_with_metadata": 845,
+    "tools_with_agent_summary": 845,
+    "tools_with_use_when": 845,
+    "tools_with_avoid_when": 845,
+    "tools_with_examples": 845,
+    "tools_with_interface_mode": 845,
     "unmatched_skill_tools": 122,
     "unreviewed_skill_tools": 11
   },
@@ -583,6 +583,74 @@
       ],
       "use_when": [
         "创建/配置开放平台应用、机器人、权限、事件订阅或发布版本"
+      ]
+    },
+    "devapp": {
+      "agent_summary": "管理钉钉开放平台企业内部应用、成员、权限、机器人、事件与版本",
+      "agent_summary_source": "dws-agent-selection/devapp",
+      "avoid_when": [
+        "开放平台接口文档搜索使用 devdoc；普通钉钉业务数据使用对应产品命令"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "value": "管理钉钉开放平台企业内部应用、成员、权限、机器人、事件与版本",
+          "source": "internal/cli/schema_hints/selection/devapp.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": "管理钉钉开放平台企业内部应用、成员、权限、机器人、事件与版本",
+              "source": "internal/cli/schema_hints/selection/devapp.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "avoid_when": {
+          "value": [
+            "开放平台接口文档搜索使用 devdoc；普通钉钉业务数据使用对应产品命令"
+          ],
+          "source": "internal/cli/schema_hints/selection/devapp.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "开放平台接口文档搜索使用 devdoc；普通钉钉业务数据使用对应产品命令"
+              ],
+              "source": "internal/cli/schema_hints/selection/devapp.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        },
+        "use_when": {
+          "value": [
+            "请求涉及企业内部应用的查询、创建、配置、成员权限、机器人、事件订阅或版本管理"
+          ],
+          "source": "internal/cli/schema_hints/selection/devapp.json",
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "candidates": [
+            {
+              "value": [
+                "请求涉及企业内部应用的查询、创建、配置、成员权限、机器人、事件订阅或版本管理"
+              ],
+              "source": "internal/cli/schema_hints/selection/devapp.json",
+              "precedence": "reviewed_explicit",
+              "selected": true
+            }
+          ]
+        }
+      },
+      "source_refs": [
+        "CommandRegistry:product=devapp",
+        "internal/cli/schema_command_registry.json",
+        "internal/cli/schema_hints/selection/devapp.json",
+        "internal/shortcut/devapp"
+      ],
+      "use_when": [
+        "请求涉及企业内部应用的查询、创建、配置、成员权限、机器人、事件订阅或版本管理"
       ]
     },
     "devdoc": {
@@ -1806,6 +1874,7 @@
     "chat",
     "contact",
     "dev",
+    "devapp",
     "devdoc",
     "ding",
     "doc",

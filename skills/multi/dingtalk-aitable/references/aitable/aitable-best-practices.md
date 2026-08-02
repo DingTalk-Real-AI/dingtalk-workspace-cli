@@ -15,7 +15,7 @@
 1. **不要拉全量后在 context 里手动统计** — 优先用 `--filters` 在服务端过滤
 2. **has_more=true 时不能做全局结论** — 数据可能不完整
 3. **优先用 `--filters` 在服务端过滤** — 不要拉全量后在本地 jq/grep
-4. **字段名必须来自 `table get` 真实返回** — 不要猜测 fieldId
+4. **fieldId 必须来自 `field get` 真实返回** — 不要猜测 fieldId
 5. **减少响应体积** — 用 `--field-ids` 仅返回需要的字段
 
 ## 3. 任务选路
@@ -26,7 +26,7 @@
 | 全量拉取/统计 | `record query --all` | 不要手动循环 cursor |
 | 全量导出为文件 | `export data` | 不要 `--all` 拉全量再写文件 |
 | 批量写入 | `record create`（分批 100 条） | 不要一次传超过 100 条 |
-| 附件上传 | `attachment upload` + `record update` | 不要在 cells 里伪造附件值 |
+| 附件/图片上传 | `attachment upload` 获取 fileToken → `record create/update` 用 fileToken 写入 | **严禁直接传图片 URL 到附件字段**（服务端同步下载会超时） |
 | 文件级导入 | `import upload` + `import data` | 不要手动解析 xlsx 再逐条写入 |
 
 ## 4. 创建/修改后回读确认
@@ -36,7 +36,7 @@
 | 写操作 | 建议回读命令 | 确认内容 |
 |--------|-------------|----------|
 | `table create` | `table get --table-ids <新tableId>` | 表名、字段列表是否符合预期 |
-| `field create` | `table get --table-ids <tableId>` | 新字段是否出现在字段列表中 |
+| `field create` | `field get --table-id <tableId>` | 新字段是否出现在字段列表中 |
 | `record create/update` | `record query --record-ids <新recordId>` | 写入值是否正确 |
 
 ## 5. AI 字段注意事项

@@ -22,7 +22,14 @@ func TestCrossPlatformCoverageCommandRegistryLoaderErrorWrappers(t *testing.T) {
 	})
 
 	loadReviewedCommandRegistry = func() (CommandRegistry, error) { return CommandRegistry{}, errors.New("registry failed") }
-	if _, err := ValidateCommandRegistrySource(embeddedSchemaCommandRegistryJSON); err == nil || !strings.Contains(err.Error(), "registry failed") {
+	// ValidateCommandRegistrySource first decodes the input independently, then
+	// compares against embedded. The decode path succeeds even when the lazy
+	// accessor is broken, so this test catches the accessor failure.
+	merged, err := EmbeddedCommandRegistryMergedJSON()
+	if err != nil {
+		t.Fatalf("EmbeddedCommandRegistryMergedJSON() error = %v", err)
+	}
+	if _, err := ValidateCommandRegistrySource(merged); err == nil || !strings.Contains(err.Error(), "registry failed") {
 		t.Fatalf("ValidateCommandRegistrySource() error = %v", err)
 	}
 	if _, err := EmbeddedCommandRegistrySourceHash(); err == nil || !strings.Contains(err.Error(), "registry failed") {

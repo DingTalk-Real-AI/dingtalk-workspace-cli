@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
 // MyGroups: list the groups I've joined and project just the key fields
@@ -47,6 +48,8 @@ var MyGroups = shortcut.Shortcut{
 	Risk: shortcut.RiskRead,
 	Flags: []shortcut.Flag{
 		{Name: "type", Type: shortcut.FlagString, Desc: "按群类型过滤（可选，如返回中的 groupType/conversationType，大小写不敏感）", Required: false},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量（默认 200）", Default: "200"},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传上次的 nextCursor"},
 	},
 	Tips: []string{
 		`dws chat +my-groups`,
@@ -55,9 +58,11 @@ var MyGroups = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — list my groups. `limit` mirrors chat.go's list_my_groups_pagination
 		// call site (chat group list-all); pass a generous page size.
-		data, err := rt.CallMCPData("im", "list_my_groups_pagination", map[string]any{
-			"limit": 200,
-		})
+		params := map[string]any{"limit": rt.Int("limit")}
+		if cursor := strings.TrimSpace(rt.Str("cursor")); cursor != "" && cursor != "0" {
+			params["cursor"] = cursor
+		}
+		data, err := rt.CallMCPData("im", "list_my_groups_pagination", params)
 		if err != nil {
 			return err
 		}
@@ -78,10 +83,12 @@ var MyGroups = shortcut.Shortcut{
 			projected = append(projected, row)
 		}
 
-		return rt.Output(map[string]any{
+		payload := map[string]any{
 			"count":  len(projected),
 			"groups": projected,
-		})
+		}
+		chatmsg.ApplyPagination(payload, data)
+		return rt.Output(payload)
 	},
 }
 

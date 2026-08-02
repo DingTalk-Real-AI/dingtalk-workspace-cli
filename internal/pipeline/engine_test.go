@@ -168,6 +168,10 @@ func TestRunPhaseErrorAbortsChain(t *testing.T) {
 	if !strings.Contains(err.Error(), "fail") {
 		t.Errorf("error should contain handler name, got %q", err.Error())
 	}
+	var handlerErr *HandlerError
+	if !errors.As(err, &handlerErr) || handlerErr.Phase != PreParse || handlerErr.Handler != "fail" || handlerErr.Unwrap() != boom {
+		t.Fatalf("handler error = %#v, want pre-parse/fail wrapping boom", handlerErr)
+	}
 	if !h1.called {
 		t.Error("h1 should have been called")
 	}
@@ -237,6 +241,42 @@ func TestContextAddCorrection(t *testing.T) {
 	c := ctx.Corrections[0]
 	if c.Handler != "alias" || c.Original != "--userId" || c.Corrected != "--user-id" {
 		t.Errorf("first correction = %+v", c)
+	}
+}
+
+func TestContextFlagProtectionAndConflictError(t *testing.T) {
+	var nilContext *Context
+	nilContext.ProtectFlag("uid", FlagProtectionBlocked)
+	if nilContext.IsFlagProtected("uid") {
+		t.Fatal("nil context reported a protected flag")
+	}
+
+	ctx := &Context{}
+	ctx.ProtectFlag("", FlagProtectionBlocked)
+	if ctx.ProtectedFlags != nil {
+		t.Fatalf("empty flag initialized protection map: %#v", ctx.ProtectedFlags)
+	}
+	ctx.ProtectFlag("uid", FlagProtectionAmbiguous)
+	if !ctx.IsFlagProtected("uid") || ctx.IsFlagProtected("missing") {
+		t.Fatalf("protection lookup mismatch: %#v", ctx.ProtectedFlags)
+	}
+
+	err := (&FlagConflictError{
+		Command:   "dws demo run",
+		Canonical: "user",
+		Spellings: []string{"--user-id", "uid"},
+	}).Error()
+	if !strings.Contains(err, `for --user on "dws demo run": --user-id, --uid`) {
+		t.Fatalf("FlagConflictError.Error() = %q", err)
+	}
+
+	boolErr := (&BoolValueConflictError{
+		Command: "dws demo run",
+		Flag:    "--yes",
+		Values:  []string{"true", "false"},
+	}).Error()
+	if !strings.Contains(boolErr, `for --yes on "dws demo run": false, true`) {
+		t.Fatalf("BoolValueConflictError.Error() = %q", boolErr)
 	}
 }
 

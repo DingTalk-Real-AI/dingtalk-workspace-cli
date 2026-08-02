@@ -17,6 +17,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -346,6 +347,7 @@ func TestCrossPlatformCoverageOverlayRecoveryHostAndHelperRemainingCoverage(t *t
 		t.Fatal("host control enabled without agent code")
 	}
 	t.Setenv(authpkg.AgentCodeEnv, "agent")
+	t.Setenv(agentproduct.EnvName, "")
 	edition.Override(&edition.Hooks{MergeHeaders: func(headers map[string]string) map[string]string { return headers }})
 	if got := hostControlProviderFromEnv(); got != edition.DefaultOSSClawType {
 		t.Fatalf("default claw type = %q", got)

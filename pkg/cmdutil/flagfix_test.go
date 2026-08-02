@@ -54,6 +54,28 @@ func TestSuggestFlagFix_trueGlue_isoDateSuffix(t *testing.T) {
 	}
 }
 
+func TestSuggestFlagFix_boolGlueNeverAutoFixes(t *testing.T) {
+	cmd := &cobra.Command{Use: "delete"}
+	cmd.Flags().Bool("yes", false, "confirm destructive operation")
+
+	for _, test := range []struct {
+		body string
+		want string
+	}{
+		{body: "yesfalse", want: "--yes=false"},
+		{body: "yestrue", want: "--yes=true"},
+		{body: "yesno", want: "--yes=false"},
+	} {
+		fix := SuggestFlagFix(cmd, errUnknownFlag(test.body))
+		if fix.AutoFixFlag != "" || fix.AutoFixValue != "" {
+			t.Fatalf("SuggestFlagFix(%q) auto-fix = %q/%q, want none", test.body, fix.AutoFixFlag, fix.AutoFixValue)
+		}
+		if strings.Contains(fix.Suggestion, "Space required") || !strings.Contains(fix.Suggestion, test.want) {
+			t.Fatalf("SuggestFlagFix(%q) suggestion = %q, want safe inline %q", test.body, fix.Suggestion, test.want)
+		}
+	}
+}
+
 func TestSuggestFlagFix_levenshteinAddsUsage(t *testing.T) {
 	cmd := &cobra.Command{Use: "send"}
 	cmd.Flags().String("conversation-id", "", "Conversation id")

@@ -1,0 +1,141 @@
+{
+  "id": "dev",
+  "tools": [
+    {
+      "canonical_path": "dev.create_dev_app",
+      "cli_path": "dev app create"
+    },
+    {
+      "canonical_path": "dev.get_dev_app_credentials",
+      "cli_path": "dev app credentials get"
+    },
+    {
+      "canonical_path": "dev.delete_dev_app",
+      "cli_path": "dev app delete"
+    },
+    {
+      "canonical_path": "dev.disable_dev_app",
+      "cli_path": "dev app disable"
+    },
+    {
+      "canonical_path": "dev.enable_dev_app",
+      "cli_path": "dev app enable"
+    },
+    {
+      "canonical_path": "dev.list_dev_app_events",
+      "cli_path": "dev app event list"
+    },
+    {
+      "canonical_path": "dev.subscribe_dev_app_events",
+      "cli_path": "dev app event subscribe"
+    },
+    {
+      "canonical_path": "dev.unsubscribe_dev_app_events",
+      "cli_path": "dev app event unsubscribe"
+    },
+    {
+      "canonical_path": "dev.get_dev_app",
+      "cli_path": "dev app get"
+    },
+    {
+      "canonical_path": "dev.list_dev_app",
+      "cli_path": "dev app list"
+    },
+    {
+      "canonical_path": "dev.add_dev_app_members",
+      "cli_path": "dev app member add"
+    },
+    {
+      "canonical_path": "dev.list_dev_app_members",
+      "cli_path": "dev app member list"
+    },
+    {
+      "canonical_path": "dev.remove_dev_app_members",
+      "cli_path": "dev app member remove"
+    },
+    {
+      "canonical_path": "dev.apply_dev_app_permissions",
+      "cli_path": "dev app permission add"
+    },
+    {
+      "canonical_path": "dev.list_dev_app_permissions",
+      "cli_path": "dev app permission list"
+    },
+    {
+      "canonical_path": "dev.remove_dev_app_permissions",
+      "cli_path": "dev app permission remove"
+    },
+    {
+      "canonical_path": "dev.set_extension_robot_config",
+      "cli_path": "dev app robot config"
+    },
+    {
+      "canonical_path": "dev.disable_dev_app_robot",
+      "cli_path": "dev app robot disable"
+    },
+    {
+      "canonical_path": "dev.enable_dev_app_robot",
+      "cli_path": "dev app robot enable"
+    },
+    {
+      "canonical_path": "dev.get_extension_robot_config",
+      "cli_path": "dev app robot get"
+    },
+    {
+      "canonical_path": "dev.query_robot_create_result",
+      "cli_path": "dev app robot result"
+    },
+    {
+      "canonical_path": "dev.submit_robot_create_task",
+      "cli_path": "dev app robot submit"
+    },
+    {
+      "canonical_path": "dev.update_dev_app_security_config",
+      "cli_path": "dev app security config"
+    },
+    {
+      "canonical_path": "dev.update_dev_app",
+      "cli_path": "dev app update"
+    },
+    {
+      "canonical_path": "dev.create_dev_app_version",
+      "cli_path": "dev app version create"
+    },
+    {
+      "canonical_path": "dev.get_dev_app_version_detail",
+      "cli_path": "dev app version get"
+    },
+    {
+      "canonical_path": "dev.list_dev_app_versions",
+      "cli_path": "dev app version list"
+    },
+    {
+      "canonical_path": "dev.publish_dev_app_version",
+      "cli_path": "dev app version publish"
+    },
+    {
+      "canonical_path": "dev.get_dev_app_version_status",
+      "cli_path": "dev app version status"
+    },
+    {
+      "canonical_path": "dev.set_extension_webapp_config",
+      "cli_path": "dev app webapp config"
+    },
+    {
+      "canonical_path": "dev.get_extension_webapp_config",
+      "cli_path": "dev app webapp get"
+    },
+    {
+      "canonical_path": "dev.connect_status",
+      "cli_path": "dev connect status"
+    },
+    {
+      "canonical_path": "dev.connect_stop",
+      "cli_path": "dev connect stop"
+    },
+    {
+      "canonical_path": "dev.search_open_platform_docs_rag",
+      "cli_path": "dev doc search"
+    }
+  ]
+}

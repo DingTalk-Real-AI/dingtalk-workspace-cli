@@ -77,7 +77,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="通过文件导入任务导入 AI 表格")
     parser.add_argument("base_id", help="目标 AI 表格 baseId")
     parser.add_argument("file_path", help="待导入文件路径（.csv/.xlsx/.xls）")
-    parser.add_argument("--timeout-sec", type=int, default=300, help="CLI 内置轮询整体超时（秒），默认 300（5 分钟）")
+    parser.add_argument("--timeout", type=int, default=30, help="import_data 等待秒数，默认 30")
     parser.add_argument("--dws", default="dws", help="dws 可执行文件路径，默认 dws")
     args = parser.parse_args()
 
@@ -140,14 +140,12 @@ def main() -> None:
             "data",
             "--import-id",
             import_id,
-            # import data 的 --timeout 单位是秒、最大 30；脚本的 --timeout-sec
-            # 是整体子进程预算，不能直接透传，这里用 CLI 允许的最大值。
             "--timeout",
-            "30",
+            str(args.timeout),
             "--format",
             "json",
         ],
-        timeout_sec=max(120, args.timeout_sec + 30),
+        timeout_sec=max(120, args.timeout + 30),
     )
     if rc2 != 0:
         fail(f"import_data 调用失败: {err2 or out2}", rc2)

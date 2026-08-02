@@ -14,12 +14,66 @@
 package usage
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"reflect"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
+
+func TestCrossPlatformCoverageShortcutListDeclaresRuntimeSchemaDelivery(t *testing.T) {
+	cmd := newListCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs(nil)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute shortcut list: %v", err)
+	}
+	var payload struct {
+		RuntimeSchema bool `json:"runtime_schema"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("decode shortcut list: %v", err)
+	}
+	if !payload.RuntimeSchema {
+		t.Fatal("shortcut list must advertise delivery through Runtime Schema")
+	}
+}
+
+func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) {
+	shortcut.Register(shortcut.Shortcut{
+		Service: "coverage-usage",
+		Command: "+hidden",
+	})
+
+	execute := func(args ...string) map[string]any {
+		t.Helper()
+		cmd := newListCommand()
+		var stdout bytes.Buffer
+		cmd.SetOut(&stdout)
+		cmd.SetArgs(args)
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		return payload
+	}
+
+	publicRows := execute("--service", "coverage-usage")
+	allRows := execute("--service", "coverage-usage", "--all")
+	if publicRows["count"].(float64) != 0 || allRows["count"].(float64) != 1 {
+		t.Fatalf("hidden shortcuts were not filtered: public=%v all=%v", publicRows["count"], allRows["count"])
+	}
+	missing := execute("--service", "__missing__")
+	if missing["count"].(float64) != 0 {
+		t.Fatalf("missing service returned shortcuts: %#v", missing)
+	}
+}
 
 func TestCrossPlatformCoverageShortcutListRowPublishesCompleteContract(t *testing.T) {
 	row := newShortcutListRow(shortcut.Shortcut{

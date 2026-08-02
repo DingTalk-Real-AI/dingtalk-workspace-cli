@@ -380,7 +380,7 @@ func TestRootKeepsSVIPChatCompatibilityFlags(t *testing.T) {
 	}
 
 	searchAdvanced := mustFindCommand(t, root, "chat", "message", "search-advanced")
-	for _, flag := range []string{"sender", "senders", "sender-ids"} {
+	for _, flag := range []string{"sender", "senders", "sender-ids", "message-type", "only-robot", "conversation-type"} {
 		if searchAdvanced.Flags().Lookup(flag) == nil {
 			t.Fatalf("chat message search-advanced missing --%s", flag)
 		}

@@ -1,0 +1,81 @@
+{
+  "id": "devapp",
+  "tools": [
+    {
+      "canonical_path": "devapp.shortcut_list",
+      "cli_path": "devapp +list"
+    },
+    {
+      "canonical_path": "devapp.shortcut_get",
+      "cli_path": "devapp +get"
+    },
+    {
+      "canonical_path": "devapp.shortcut_create",
+      "cli_path": "devapp +create"
+    },
+    {
+      "canonical_path": "devapp.shortcut_update",
+      "cli_path": "devapp +update"
+    },
+    {
+      "canonical_path": "devapp.shortcut_delete",
+      "cli_path": "devapp +delete"
+    },
+    {
+      "canonical_path": "devapp.shortcut_enable",
+      "cli_path": "devapp +enable"
+    },
+    {
+      "canonical_path": "devapp.shortcut_disable",
+      "cli_path": "devapp +disable"
+    },
+    {
+      "canonical_path": "devapp.shortcut_webapp_get",
+      "cli_path": "devapp +webapp-get"
+    },
+    {
+      "canonical_path": "devapp.shortcut_webapp_config",
+      "cli_path": "devapp +webapp-config"
+    },
+    {
+      "canonical_path": "devapp.shortcut_permission_list",
+      "cli_path": "devapp +permission-list"
+    },
+    {
+      "canonical_path": "devapp.shortcut_member_list",
+      "cli_path": "devapp +member-list"
+    },
+    {
+      "canonical_path": "devapp.shortcut_member_add",
+      "cli_path": "devapp +member-add"
+    },
+    {
+      "canonical_path": "devapp.shortcut_member_remove",
+      "cli_path": "devapp +member-remove"
+    },
+    {
+      "canonical_path": "devapp.shortcut_robot_get",
+      "cli_path": "devapp +robot-get"
+    },
+    {
+      "canonical_path": "devapp.shortcut_event_list",
+      "cli_path": "devapp +event-list"
+    },
+    {
+      "canonical_path": "devapp.shortcut_version_list",
+      "cli_path": "devapp +version-list"
+    },
+    {
+      "canonical_path": "devapp.shortcut_version_get",
+      "cli_path": "devapp +version-get"
+    },
+    {
+      "canonical_path": "devapp.shortcut_version_check_approval",
+      "cli_path": "devapp +version-check-approval"
+    },
+    {
+      "canonical_path": "devapp.shortcut_version_status",
+      "cli_path": "devapp +version-status"
+    }
+  ]
+}

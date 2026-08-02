@@ -36,8 +36,8 @@
     },
     "cliPath": {
       "type": "string",
-      "pattern": "^(?!dws(?:\\s|$))(?!.*(?:^|\\s)--)(?!.*[*?\\[\\]])[A-Za-z0-9][A-Za-z0-9._:-]*(?: [A-Za-z0-9][A-Za-z0-9._:-]*)*$",
-      "description": "Exact Cobra command path without the leading 'dws', flags, wildcard characters, or surrounding/repeated whitespace."
+      "pattern": "^(?!dws(?:\\s|$))(?!.*(?:^|\\s)--)(?!.*[*?\\[\\]])(?:[A-Za-z0-9][A-Za-z0-9._:-]*|\\+[A-Za-z0-9][A-Za-z0-9._:-]*)(?: (?:[A-Za-z0-9][A-Za-z0-9._:-]*|\\+[A-Za-z0-9][A-Za-z0-9._:-]*))*$",
+      "description": "Exact Cobra command path without the leading 'dws', flags, wildcard characters, or surrounding/repeated whitespace. A token may use the reviewed '+' shortcut prefix."
     },
     "product": {
       "type": "object",

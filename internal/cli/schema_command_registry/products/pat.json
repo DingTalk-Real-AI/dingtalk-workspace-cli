@@ -1,0 +1,13 @@
+{
+  "id": "pat",
+  "tools": [
+    {
+      "canonical_path": "pat.browser_policy",
+      "cli_path": "pat browser-policy"
+    },
+    {
+      "canonical_path": "pat.batch_grant",
+      "cli_path": "pat chmod"
+    }
+  ]
+}

@@ -39,7 +39,7 @@
 | `dws mail thread batch-update` | 批量修改邮件会话的状态或标签（单次最多 100 个） |
 | `dws mail thread trash` | 将单个邮件会话移动到已删除文件夹（不会永久删除） |
 | `dws mail thread batch-trash` | 将多个邮件会话批量移动到已删除文件夹（单次最多 100 个，不会永久删除） |
-| `dws mail user search` | 搜索通讯录用户（**按姓名查他人邮箱**，不是搜邮件） |
+| `dws mail user search` | 搜索通讯录用户（**按姓名或工号查他人邮箱**，不是搜邮件） |
 | `dws mail template create` | 创建邮件模板 |
 | `dws mail template list` | 列举邮件模板 |
 | `dws mail template get` | 获取邮件模板详情 |
@@ -76,7 +76,7 @@
 **默认选择策略：**
 
 1. 调用 `dws mail mailbox list --format json` 获取当前用户的所有邮箱。
-2. 从返回的 `emailAccounts` 中**优先选择企业邮箱**（账号类型为企业邮箱、域名非 `@dingtalk.com` 的邮箱），将其作为 `--email` / `--from` 的默认值。
+2. 从返回的 `mailboxes` 中**优先选择企业邮箱**（账号类型为企业邮箱、域名非 `@dingtalk.com` 的邮箱），将其作为 `--email` / `--from` 的默认值。
 3. 仅当用户在指令中**明确指定**「用我的个人邮箱」「用 dingtalk.com 邮箱」「用我的私人邮箱」等表述时，才选择个人邮箱（`@dingtalk.com` 域名）。
 4. 若用户同时拥有多个企业邮箱（如分属多家公司），优先选择与当前会话上下文匹配的企业邮箱；若仍无法判断，向用户确认后再操作。
 5. 若用户**仅拥有个人邮箱**（无企业邮箱），可直接使用个人邮箱，但需注意 `mail user search` 等仅企业邮箱可用的命令会因权限报错，需走「查找他人邮箱地址」章节的替代路径。
@@ -102,7 +102,7 @@ Example:
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `emailAccounts` | `List[]` | 邮箱列表，每条包含 `email`（邮箱地址）、`orgName`（所属企业，个人邮箱为 null）、`type`（`ORG`=企业邮箱 / `PERSONAL`=个人邮箱） |
+| `mailboxes` | `List[]` | 邮箱列表，每条包含邮箱地址、账号类型、所属企业 |
 
 ### 获取用户邮箱信息
 
@@ -119,11 +119,15 @@ Flags:
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `email` | string | 邮箱地址 |
-| `emailAliases` | List[] | 邮件地址别名列表 |
-| `name` / `nickname` / `displayName` | string | 用户名、昵称、显示名 |
-| `mboxSize` / `mboxSizeUsed` | int64 | 邮箱容量与已用容量（字节） |
-| `createdTime` / `modifiedTime` | string | 创建时间与更新时间 |
+| `email` | `string` | 邮箱地址 |
+| `emailAliases` | `string[]` | 邮件地址别名列表 |
+| `name` | `string` | 用户名 |
+| `nickname` | `string` | 用户昵称 |
+| `displayName` | `string` | 用户显示名 |
+| `mboxSize` | `string` | 邮箱容量（字节） |
+| `mboxSizeUsed` | `string` | 已使用的邮箱容量（字节） |
+| `createdTime` | `string` | 创建时间 |
+| `modifiedTime` | `string` | 修改时间 |
 
 ### 查找他人邮箱地址（通讯录查人）
 
@@ -134,23 +138,19 @@ Flags:
 **三路并发查询流程：**
 
 ```bash
-# 同时发起以下三路，取最先返回有效邮箱的结果
-# 路径 1：aisearch + contact user get
+# 主路径：aisearch + contact user get
 dws aisearch person --keyword "姓名" --dimension name --format json
 # → 取 userId，再执行：
 dws contact user get --ids <userId> --format json
 # → 提取 orgAuthEmail 字段
 
-# 路径 2：mail user search（仅企业邮箱可用，个人邮箱会报权限错误可忽略）
+# orgAuthEmail 为空时的邮箱侧补查：mail user search（仅企业邮箱可用；已知工号时可用 --employee-no 替代 --keyword）
 dws mail user search --email <当前邮箱> --keyword "姓名" --format json
+# 或按工号查询：dws mail user search --email <当前邮箱> --employee-no "工号" --format json
 # → 提取 users[].email
-
-# 路径 3：contact user search
-dws contact user search --keyword "姓名" --format json
-# → 提取用户邮箱字段
 ```
 
-若三路均无有效邮箱，必须 `ask_human` 请用户手动提供，**严禁臆测**。
+若两步均无有效邮箱，必须 `ask_human` 请用户手动提供，**严禁臆测**。
 
 ### 列出文件夹中的邮件
 > **注意：** `message list` 用于按文件夹列出邮件；若需根据主题/发件人/日期等条件精确搜索，请使用 `message search`。
@@ -164,8 +164,8 @@ Example:
   dws mail message list --email user@company.com --cursor <nextCursor>
 Flags:
       --email string      邮件所属邮箱地址 (必填)
-      --folder-id string  文件夹 ID（1=已发送, 2=收件箱, 3=垃圾邮件, 5=草稿, 6=已删除），默认为收件箱
-      --limit string      每页返回数量(最大限制 100, 默认 20)
+      --folder-id string  文件夹 ID（1=已发送, 2=收件箱, 3=垃圾邮件, 5=草稿, 6=已删除），默认为收件箱，别名: --folder
+      --limit string      每页返回数量(最大限制 100, 默认 20)，别名: --size, --page-size
       --cursor string     邮件的起始偏移标识, 其值取自响应中的nextCursor字段。""表示从头开始
 ```
 
@@ -188,7 +188,7 @@ Flags:
       --cursor string   邮件的起始偏移标识, 其值取自响应中的nextCursor字段。""表示从头开始
       --email string    搜索目标邮箱地址 (必填)
       --query string    KQL 查询表达式 (必填), 其中 date 格式需遵循 ISO8601 规范
-      --limit string    每页返回数量(最大限制 100, 默认 20)
+      --limit string    每页返回数量(最大限制 100, 默认 20)，别名: --size, --page-size
 ```
 
 KQL 查询字段: date, size, tag, folderId, isRead, hasAttachments, subject, attachname, body, from, to
@@ -246,9 +246,7 @@ Flags:
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `message` | `object` | 邮件信息，含 subject/from/toRecipients/ccRecipients/markdownBody/conversationId/receivedDateTime/size 等 |
-
-> **注意：** 即使邮件确有附件，`message get` 返回的 `message` 对象也**不含** `attachments`/`isRead`/`tags` 字段（实测 keys 仅上表所列这些）。要取附件请另用 `dws mail attachment list`。
+| `message` | `object` | 邮件完整信息，包含主题、发件人、收件人、正文、附件等 |
 
 ### 批量获取邮件详情
 
@@ -263,7 +261,21 @@ Flags:
       --ids string     要获取的邮件 ID 列表，逗号分隔，最多 20 个 (必填)
 ```
 
-单次最多获取 20 封邮件。CLI 会逐个调用 `get_email_by_message_id`，并以 `messages` 数组聚合返回。
+单次最多获取 20 封邮件。
+
+**返回 JSON：**
+
+```json
+{
+  "success": true,
+  "messages": [
+    { "subject": "...", "from": "...", "to": [...], "body": "...", ... },
+    { "subject": "...", "from": "...", "to": [...], "body": "...", ... }
+  ]
+}
+```
+
+> **注意：** 如果某个邮件 ID 获取失败，整个命令会报错并中止。建议先通过 `message search` 或 `message list` 确认邮件 ID 有效后再批量获取。
 
 ### 发送邮件
 ```
@@ -281,7 +293,7 @@ Example:
   dws mail message send --from user@company.com --to colleague@company.com \
     --subject "带图文档" --content "见附件，图表：[inline:img.png]" --attachment ./doc.pdf --inline-attachment ./img.png
 Flags:
-      --content string                     邮件正文 (必填)
+      --content string                   邮件正文 (必填)，别名: --body
       --cc string                       抄送人列表
       --from string                     发件人邮箱 (必填)，别名: --sender
       --subject string                  邮件标题 (必填)
@@ -306,7 +318,7 @@ Flags:
 - 仅支持图片类型：`jpg` / `jpeg` / `png` / `gif` / `webp` / `bmp` / `svg`
 - CLI 自动生成 contentId，格式：`inline-{文件名(不含扩展名)}-{序号}@alimail.com`，例：`inline-chart-1@alimail.com`
 - 在 `--content` 中使用占位符 `[inline:文件名]` 引用图片，CLI 自动替换为 `<img src="cid:...">` 标签
-- 若 body 中没有对应占位符，内联图片会自动追加到正文末尾
+- 若 content 中没有对应占位符，内联图片会自动追加到正文末尾
 - 非图片类型（PDF、视频、音频等）请改用 `--attachment`
 
 ### 列举邮件文件夹
@@ -317,8 +329,8 @@ Example:
   dws mail folder list --email user@company.com
   dws mail folder list --email user@company.com --folder <folderId>
 Flags:
-      --email string    邮件所属邮箱地址 (必填)
-      --folder string   父文件夹唯一标识，不传则返回顶层文件夹 (可选)
+      --email string      邮件所属邮箱地址 (必填)
+      --folder string     父文件夹唯一标识，不传则返回顶层文件夹 (可选)，别名: --folder-id
 ```
 
 不传 `--folder` 返回顶层文件夹列表；传入则返回该文件夹的子文件夹列表。
@@ -400,7 +412,8 @@ Flags:
 
 ```json
 {
-  "success": true
+  "success": true,
+  "result": {}
 }
 ```
 
@@ -422,7 +435,8 @@ Flags:
 
 ```json
 {
-  "success": true
+  "success": true,
+  "result": {}
 }
 ```
 
@@ -448,7 +462,7 @@ Flags:
 |------|------|------|
 | `id` | `string` | 附件唯一标识 |
 | `name` | `string` | 附件文件名 |
-| `isInline` | `bool` | 是否为内联附件（`true`=正文内联图片，`false`=普通附件） |
+| `contentType` | `string` | 附件 MIME 类型 |
 | `size` | `int` | 附件大小（字节） |
 
 ### 下载邮件附件
@@ -568,7 +582,8 @@ Flags:
 
 ```json
 {
-  "success": true
+  "success": true,
+  "result": {}
 }
 ```
 
@@ -592,7 +607,8 @@ Flags:
 
 ```json
 {
-  "success": true
+  "success": true,
+  "result": {}
 }
 ```
 
@@ -672,10 +688,8 @@ Flags:
 | `senders` | `List[{email, name}]` | 会话发件人列表 |
 | `isRead` | `boolean` | 会话是否已读（全部已读/未读） |
 | `priority` | `string` | 会话重要性，取会话内邮件最高优先级（`PRY_HIGH` / `PRY_NORMAL`） |
+| `flag` | `string` | 会话标识，取会话内最近邮件的标识（`FLAG_NONE` / `FLAG_REPLY` / `FLAG_FORWARD`） |
 | `hasAttachments` | `boolean` | 会话是否包含附件（不含 inline 资源） |
-| `messages` | `List[]` | 会话内的邮件列表；默认即返回，但各邮件字段（正文、收件人等）多为 null，需在 `--select` 中额外指定才有值 |
-
-> **注意：** `thread get` 返回的 `conversation` **不含 `flag` 字段**（`flag` 仅出现在 `thread list` 的会话项中）。会话标识请从 `thread list` 获取。
 
 ### 修改邮件会话状态
 
@@ -703,11 +717,20 @@ Flags:
 | `addTags` | 给会话增加标签 | 是 |
 | `removeTags` | 从会话移除标签 | 是 |
 
+**常用标签 ID：**
+
+| 标签 ID | 名称 | 图标 |
+|---------|------|------|
+| `1` | 跟进事项 | 小红旗 |
+| `2` | 完成事项 | 绿色小勾 |
+| `11` | 重要 | 星标 |
+
 成功时返回：
 
 ```json
 {
-  "success": true
+  "success": true,
+  "result": {}
 }
 ```
 
@@ -732,7 +755,8 @@ Flags:
 
 ```json
 {
-  "success": true
+  "success": true,
+  "result": {}
 }
 ```
 
@@ -746,12 +770,12 @@ Example:
 Flags:
       --email string   会话所属邮箱地址 (必填)
       --id string      要删除的会话 ID (必填)
-      --yes            确认执行此危险操作 (必填)
+      --yes            跳过确认提示，直接执行 (可选)
 ```
 
 > ⚠️ **危险操作**：此命令会将邮件会话移动到已删除文件夹。建议先通过 `thread get` 确认目标会话后再执行。
 
-将指定邮件会话移动到已删除文件夹，不会永久删除邮件。`--id` 必须填写会话 ID，不是邮件 ID。执行前需向用户确认，确认后传入 `--yes` 执行。
+将指定邮件会话移动到已删除文件夹，不会永久删除邮件。`--id` 必须填写会话 ID，不是邮件 ID。默认需要用户确认，传入 `--yes` 可跳过确认。
 
 成功时返回：
 
@@ -772,12 +796,12 @@ Example:
 Flags:
       --email string   会话所属邮箱地址 (必填)
       --ids string     要删除的会话 ID 列表，多个用英文逗号分隔，最多 100 个 (必填)
-      --yes            确认执行此危险操作 (必填)
+      --yes            跳过确认提示，直接执行 (可选)
 ```
 
 > ⚠️ **危险操作**：此命令会批量将邮件会话移动到已删除文件夹。建议先通过 `thread list` 确认目标会话后再执行。
 
-将指定邮件会话批量移动到已删除文件夹，单次最多 100 个会话。不会永久删除邮件。`--ids` 必须填写会话 ID 列表，不是邮件 ID 列表。执行前需向用户确认，确认后传入 `--yes` 执行。
+将指定邮件会话批量移动到已删除文件夹，单次最多 100 个会话。不会永久删除邮件。`--ids` 必须填写会话 ID 列表，不是邮件 ID 列表。默认需要用户确认，传入 `--yes` 可跳过确认。
 
 成功时返回：
 
@@ -800,7 +824,7 @@ Flags:
       --to string                       收件人列表（可选）
       --id string                       要回复的邮件 ID (必填)
       --subject string                  回复邮件标题（可选）
-      --content string                     回复正文（可选）
+      --content string                  回复正文（可选），别名: --body
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
@@ -832,7 +856,7 @@ Flags:
       --to string                       收件人列表（可选，包含发件人及所有原始收件人）
       --id string                       要回复的邮件 ID (必填)
       --subject string                  回复邮件标题（可选）
-      --content string                     回复正文（可选）
+      --content string                  回复正文（可选），别名: --body
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
@@ -864,7 +888,7 @@ Flags:
       --to string                       转发收件人列表（可选）
       --id string                       要转发的邮件 ID (必填)
       --subject string                  转发邮件标题（可选）
-      --content string                     转发附言（可选）
+      --content string                  转发附言（可选），别名: --body
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
@@ -967,9 +991,7 @@ Flags:
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `message` | `object` | 邮件完整信息 |
-| `message.sendStatus` | `string` | 发送状态，**嵌在 `message` 对象内部**（非顶层字段），取值见下表 |
-
-> **注意：** 顶层只有 `message` 和 `success` 两个字段，`sendStatus` 位于 `message.sendStatus`，不是与 `message` 平级的顶层字段。
+| `sendStatus` | `string` | 发送状态，取值见下表 |
 
 **`sendStatus` 取值说明：**
 
@@ -996,15 +1018,16 @@ Flags:
       --yes             跳过确认提示，直接执行 (可选)
 ```
 
-> CAUTION: 此命令会撤回已发送邮件。仅支持撤回同组织内未读邮件，执行前必须确认目标邮件、主题和影响范围。
+> ⚠️ **危险操作**：此命令会撤回已发送的邮件。仅支持撤回同组织内未读邮件。
 
 **返回字段：**
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | string | 撤回任务 ID，可用于 `recall-detail` 查询进度 |
-| `success` | boolean | 接口调用是否成功 |
-| `errorCode` / `errorMsg` | string | 错误码和错误信息（仅失败时存在） |
+| `id` | `string` | 撤回任务 ID（可用于 recall-detail 查询进度） |
+| `success` | `boolean` | 接口调用是否成功 |
+| `errorCode` | `string` | 错误码（仅失败时存在） |
+| `errorMsg` | `string` | 错误信息（仅失败时存在） |
 
 ### 查询邮件撤回进度
 
@@ -1018,16 +1041,28 @@ Flags:
       --id string      撤回任务 ID (必填)，由 recall 命令返回
 ```
 
-根据撤回任务 ID 查询邮件撤回进度。任务状态包括 `UNINITED` / `SUBMITTED` / `RUNNING` / `FINISHED` / `CANCELED` / `FAILED`。
+根据撤回任务 ID 查询邮件撤回的详细进度。撤回任务 ID 来源：`sent-message recall` 命令返回值中的 `id` 字段。
 
 **返回字段：**
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | string | 撤回任务 ID |
-| `status` | string | 任务状态 |
-| `totalCount` / `succeededCount` / `failedCount` | int | 总数、成功数、失败数 |
-| `details` | List[] | 每封邮件的撤回结果 |
+| `success` | `boolean` | 调用是否成功 |
+| `id` | `string` | 任务 ID |
+| `status` | `string` | 任务状态（见下方枚举） |
+| `errorCode` | `string` | 错误码（仅失败时存在） |
+| `errorMsg` | `string` | 错误信息（仅失败时存在） |
+
+**任务状态枚举：**
+
+| 状态值 | 说明 |
+|--------|------|
+| `UNINITED` | 未初始化 |
+| `SUBMITTED` | 已提交 |
+| `RUNNING` | 执行中 |
+| `FINISHED` | 已完成 |
+| `CANCELED` | 已取消 |
+| `FAILED` | 失败 |
 
 ### 创建草稿
 ```
@@ -1046,7 +1081,7 @@ Flags:
       --subject string                  邮件标题 (必填)
       --to string                       收件人列表（可选，有确定收件人时才传）
       --cc string                       抄送人列表（可选，有确定抄送人时才传）
-      --content string                     邮件正文（可选，有正文内容时才传）
+      --content string                  邮件正文（可选，有正文内容时才传），别名: --body
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
@@ -1061,7 +1096,7 @@ Flags:
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `result.message.id` | `string` | 新建草稿的邮件 ID（**嵌在 `result.message` 内**，无顶层 `messageId` 字段）；`result.message` 还含 `internetMessageId`、`folderId`（草稿箱为 `5`）、`subject`、`from` 等 |
+| `messageId` | `string` | 新建草稿的邮件 ID |
 
 ### 更新草稿
 ```
@@ -1078,7 +1113,7 @@ Flags:
       --to string                       收件人列表（可选）
       --cc string                       抄送人列表（可选）
       --subject string                  邮件标题（可选）
-      --content string                     邮件正文（可选）
+      --content string                  邮件正文（可选），别名: --body
       --attachment stringArray          附件文件路径，可多次指定 (可选)
       --inline-attachment stringArray   内联图片路径，可多次指定，cid 自动生成 (可选)
 ```
@@ -1109,21 +1144,25 @@ Example:
   dws mail user search --email user@company.com --keyword "张三"
   dws mail user search --email user@company.com --keyword "alice" --limit 10
   dws mail user search --email user@company.com --keyword "alice" --cursor <nextCursor>
+  dws mail user search --email user@company.com --employee-no "E123456"
 Flags:
       --email string        搜索目标邮箱地址 (可选)
       --keyword string      搜索关键词（未提供 --employee-no 时为必填）
-      --employee-no string  按工号搜索用户；提供此参数时 keyword 不再必填 (可选)
+      --employee-no string  按工号搜索用户；提供此参数时 keyword 不再必填
       --cursor string       分页游标，取自响应中的 nextCursor 字段（可选）
-      --limit string        每页返回数量（可选）
+      --limit string        每页返回数量（可选），别名: --size
 ```
 
-> **重要区别：**
-> - `mail user search` — 搜索**通讯录联系人/邮箱用户**（按姓名/关键词找人），用于获取某人的邮箱地址
+> **重要区别（三个容易混淆的命令）：**
+> - `mail user search` — 搜索**企业通讯录用户**（按姓名/关键词或工号找人），用于获取某人的邮箱地址。需要企业邮箱权限。
+> - `mail contact list` — 列举**个人联系人**（用户自己保存/创建的联系人列表），不需要关键词，返回自己的联系人。
 > - `mail message search` — 搜索**邮件内容**（按 KQL 语法搜邮件，如主题、发件人、日期等）
 >
-> 不要混淆：查找"某人的邮箱地址"用 `user search`；查找"某封邮件"用 `message search`。
+> 不要混淆：查找"某人的邮箱地址"用 `user search`；查看"自己保存的联系人"用 `contact list`；查找"某封邮件"用 `message search`。
 >
 > 仅企业邮箱（非 `@dingtalk.com` 个人邮箱）可使用 `user search`；使用个人邮箱调用将因无权限而报错。
+>
+> `--keyword` 与 `--employee-no` 至少需要提供一个；当提供 `--employee-no` 时，`--keyword` 不再是必填字段。
 
 **返回字段：**
 
@@ -1156,7 +1195,7 @@ Flags:
       --email string      用户邮箱地址 (必填)
       --from string       模板发件人邮箱 (可选)
       --subject string    模板邮件标题 (必填)
-      --content string    模板邮件正文 (必填)
+      --content string    模板邮件正文 (必填)，别名: --body
       --name string       模板名称 (必填)
       --to string         模板收件人列表，逗号分隔 (可选)
       --cc string         模板抄送人列表，逗号分隔 (可选)
@@ -1164,10 +1203,6 @@ Flags:
 ```
 
 > **草稿模板说明：** 传入 `--is-draft` 创建的模板为草稿模板，草稿模板支持后续通过 `template update` 修改内容。**非草稿模板创建后不可修改**（`template update` 仅对草稿模板有效）。
->
-> **草稿模板不出现在 `template list`（重要）：** 实测 `template list` **只返回非草稿模板**；草稿模板（`--is-draft`）不在列表里，只能用 `template get --id <模板ID>` 直接获取。因此**不要用 `template list` 是否出现来判断草稿模板是否创建成功**——`template create` 返回 `success:true` 即已创建。
->
-> **模板 ID 前缀区分类型：** `template create` 返回的 `id` 前缀标识类型——非草稿模板为 `1:0:` 开头（如 `1:0:8bbeea56-...`），草稿模板为 `0:0:` 开头（如 `0:0:e3e2d134-...`）。
 
 ### 列举邮件模板
 ```
@@ -1179,7 +1214,7 @@ Example:
 Flags:
       --email string    用户邮箱地址 (必填)
       --cursor string   分页游标，取自响应中的 nextCursor 字段 (可选)
-      --limit string    每页返回数量 (必填)
+      --limit string    每页返回数量 (必填)，别名: --size
 ```
 
 ### 获取邮件模板详情
@@ -1195,8 +1230,6 @@ Flags:
 
 ### 更新邮件模板
 
-> ⚠️ 服务端限制：仅草稿模板（创建时带 `--is-draft`）可更新；非草稿模板更新会返回 1001 Invalid parameter。需要修改非草稿模板时，建议删除后用 `--is-draft` 重建。
-
 > **重要限制：** `template update` **仅对草稿模板有效**。只有通过 `template create --is-draft` 创建的草稿模板才支持更新，非草稿模板调用 update 会返回 `Invalid parameter` 错误。
 
 ```
@@ -1210,7 +1243,7 @@ Flags:
       --id string         模板唯一标识 (必填，必须是草稿模板的 ID)
       --from string       模板发件人邮箱 (可选)
       --subject string    模板邮件标题 (可选)
-      --content string    模板邮件正文 (可选)
+      --content string    模板邮件正文 (可选)，别名: --body
       --name string       模板名称 (可选)
       --to string         模板收件人列表，逗号分隔 (可选)
       --cc string         模板抄送人列表，逗号分隔 (可选)
@@ -1255,10 +1288,8 @@ Example:
 Flags:
       --email string    用户邮箱地址 (必填)
       --cursor string   分页游标，取自响应中的 nextCursor 字段 (可选)
-      --limit string    每页返回数量 (必填)
+      --limit string    每页返回数量 (必填)，别名: --size
 ```
-
-> **重要区别：** `contact list` 列举的是**个人联系人**（用户自己保存/创建的联系人列表），不需要关键词；搜索**企业通讯录用户**（按姓名找人查邮箱）请用 `user search`。
 
 ### 更新邮件联系人
 ```
@@ -1316,7 +1347,7 @@ Flags:
 
 ### 更新自动回复配置
 
-更新或设置用户的邮件自动回复配置。建议先通过 `auto-reply get` 获取当前配置，再传入需要修改的字段值。
+更新或设置用户的邮件自动回复配置。所有参数均为必填。建议先通过 `auto-reply get` 获取当前配置，再传入需要修改的字段值。
 
 ```
 Usage:
@@ -1337,36 +1368,107 @@ Flags:
       --content string     自动回复内容 (必填)
 ```
 
+**返回字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `success` | boolean | 更新是否成功 |
+| `result` | object | 更新结果，成功时为空对象 |
+| `errorCode` | string | 错误码（仅失败时存在） |
+| `errorMsg` | string | 错误信息（仅失败时存在） |
+
 ### 个人收信白名单管理
+
+#### 列出白名单
 
 ```
 Usage:
   dws mail allow-list list [flags]
-  dws mail allow-list add [flags]
-  dws mail allow-list remove [flags]
-Examples:
+Example:
   dws mail allow-list list --email user@company.com
-  dws mail allow-list add --email user@company.com --entries a@b.com,@example.com
-  dws mail allow-list remove --email user@company.com --entries a@b.com,@example.com
+Flags:
+      --email string   用户的邮箱地址 (必填)
+```
+
+**返回字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `total` | number | 白名单总数 |
+| `entries` | string[] | 白名单地址列表（邮件地址如 `123@domain.com`，域名如 `@domain.com`，域名前需加 `@`） |
+| `success` | boolean | 调用是否成功 |
+| `errorCode` | string | 错误码（仅失败时存在） |
+| `errorMsg` | string | 错误信息（仅失败时存在） |
+
+#### 添加白名单
+
+```
+Usage:
+  dws mail allow-list add [flags]
+Example:
+  dws mail allow-list add --email user@company.com --entries a@b.com,@spam.com
 Flags:
       --email string    用户的邮箱地址 (必填)
-      --entries string  逗号分隔的地址列表，支持邮件地址或 @domain.com 域名（add/remove 必填）
+      --entries string  逗号分隔的地址列表，支持邮件地址(如123@domain.com)或域名(如@domain.com)
+```
+
+#### 移除白名单
+
+```
+Usage:
+  dws mail allow-list remove [flags]
+Example:
+  dws mail allow-list remove --email user@company.com --entries a@b.com,@spam.com
+Flags:
+      --email string    用户的邮箱地址 (必填)
+      --entries string  逗号分隔的地址列表，支持邮件地址(如123@domain.com)或域名(如@domain.com)
 ```
 
 ### 个人收信黑名单管理
 
+#### 列出黑名单
+
 ```
 Usage:
   dws mail block-list list [flags]
-  dws mail block-list add [flags]
-  dws mail block-list remove [flags]
-Examples:
+Example:
   dws mail block-list list --email user@company.com
+Flags:
+      --email string   用户的邮箱地址 (必填)
+```
+
+**返回字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `total` | number | 黑名单总数 |
+| `entries` | string[] | 黑名单地址列表（邮件地址如 `123@domain.com`，域名如 `@domain.com`，域名前需加 `@`） |
+| `success` | boolean | 调用是否成功 |
+| `errorCode` | string | 错误码（仅失败时存在） |
+| `errorMsg` | string | 错误信息（仅失败时存在） |
+
+#### 添加黑名单
+
+```
+Usage:
+  dws mail block-list add [flags]
+Example:
   dws mail block-list add --email user@company.com --entries spam@bad.com,@junk.com
+Flags:
+      --email string    用户的邮箱地址 (必填)
+      --entries string  逗号分隔的地址列表，支持邮件地址(如123@domain.com)或域名(如@domain.com)
+```
+
+#### 移除黑名单
+
+```
+Usage:
+  dws mail block-list remove [flags]
+Example:
   dws mail block-list remove --email user@company.com --entries spam@bad.com,@junk.com
 Flags:
       --email string    用户的邮箱地址 (必填)
-      --entries string  逗号分隔的地址列表，支持邮件地址或 @domain.com 域名（add/remove 必填）
+      --entries string  逗号分隔的地址列表，支持邮件地址(如123@domain.com)或域名(如@domain.com)
 ```
 
 ### 收信规则管理
@@ -1395,7 +1497,7 @@ Flags:
 | `rules[].enabled` | bool | 是否启用 |
 | `rules[].conditions` | List[] | 规则条件列表 |
 | `rules[].actions` | List[] | 规则动作列表 |
-| `rules[].order` | null | 排序字段；实测存量与新建规则该字段**恒为 `null`**，不返回有效排序值，不要依赖它判断规则顺序 |
+| `rules[].order` | int | 规则排序 |
 
 #### 创建收信规则
 
@@ -1504,7 +1606,7 @@ Example:
   dws mail rule create --email user@company.com --name "VIP邮件标记" --enabled true \
     --conditions '[{"object":"from","or":[{"and":[{"operation":"include","keyword":"vip@company.com","ignoreCase":true}]}]}]' \
     --actions '[{"action":"ActFlagMail2","parameters":["asread"]}]'
-  dws mail rule create --email user@company.com --name "大附件归档" --enabled true \
+  dws mail rule create --email user@company.com --name "大附件归档" \
     --conditions '[{"object":"x-aliyun-size","or":[{"and":[{"operation":"greater","keyword":"10485760"}]}]}]' \
     --actions '[{"action":"ActSavetoFolder","parameters":["6"]}]'
 Flags:
@@ -1515,24 +1617,22 @@ Flags:
       --actions string     规则动作 JSON 数组 (必填)
 ```
 
-> **⚠️ 实测：** 尽管 `--help` 把 `--conditions` 标为(可选)，服务端实际要求它**非空**——省略或传空会返回 `209 SYS_UNKNOWN_ERROR(1001)` 失败，帮助文本承诺的"命中所有邮件"无条件匹配**不可用**。create 请始终传入有效条件。
-
 **返回字段：**
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `success` | bool | 创建是否成功 |
+| `errorCode` | string | 错误码 |
+| `errorMsg` | string | 错误消息 |
 | `id` | string | 新建规则 ID |
-
-> 实测 `rule create` 成功仅返回 `{id, success}`，**不返回** `errorCode` / `errorMsg`。
 
 #### 更新收信规则
 
-更新已有的收信规则。**所有参数（含 `--conditions`）均须传入有效值**——见下方警告。
+更新已有的收信规则。**除 `--conditions` 外所有参数均为必填**。
 
 > **建议工作流：** 先通过 `dws mail rule list` 获取当前规则的完整配置，再传入需要修改的字段值。
 >
-> **⚠️ 实测：** `--help` 称 `--conditions` 为空即命中所有邮件，但该无条件匹配**不可用**——省略或传空会返回 `209 SYS_UNKNOWN_ERROR(1001)` 失败。update 请始终传入有效条件。`--actions` 格式同 create 命令。
+> `--conditions` 为空或不传表示命中所有邮件（无条件匹配）。`--actions` 格式同 create 命令。
 
 ```
 Usage:
@@ -1552,16 +1652,14 @@ Flags:
       --actions string     规则动作 JSON 数组 (必填)
 ```
 
-> **⚠️ 实测：** 上方 `--conditions` 的"(可选，为空表示命中所有邮件)"是 `--help` 原文，但服务端实际要求它**非空**——省略或传空会返回 `209 SYS_UNKNOWN_ERROR(1001)` 失败。update 须传入有效条件。
-
 **返回字段：**
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `success` | bool | 更新是否成功 |
-| `result` | object | 更新结果（实测为空对象 `{}`） |
-
-> 实测 `rule update` 成功仅返回 `{result:{}, success}`，**不返回** `errorCode` / `errorMsg`。
+| `errorCode` | string | 错误码 |
+| `errorMsg` | string | 错误信息 |
+| `result` | object | 更新结果 |
 
 #### 删除收信规则
 
@@ -1582,9 +1680,9 @@ Flags:
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `success` | bool | 删除是否成功 |
-| `result` | object | 删除结果（实测为空对象 `{}`） |
-
-> 实测 `rule delete` 成功仅返回 `{result:{}, success}`，**不返回** `errorCode` / `errorMsg`。
+| `errorCode` | string | 错误码 |
+| `errorMsg` | string | 错误信息 |
+| `result` | object | 删除结果 |
 
 #### 调整收信规则排序
 
@@ -1607,9 +1705,9 @@ Flags:
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `success` | bool | 调整是否成功 |
-| `result` | object | 调整结果（实测为空对象 `{}`） |
-
-> 实测 `rule adjust` 成功仅返回 `{result:{}, success}`，**不返回** `errorCode` / `errorMsg`。
+| `errorCode` | string | 错误码 |
+| `errorMsg` | string | 错误消息 |
+| `result` | object | 调整结果 |
 
 ## 通用错误说明
 
@@ -1622,17 +1720,12 @@ Flags:
 ## 意图判断
 
 用户说"我的邮箱/邮箱地址" → `mailbox list`（**仅限查询自己的邮箱，不能查他人**）
-用户说"邮箱详情/邮箱容量/邮箱别名/邮箱 profile" → `mailbox profile --email <邮箱>`
 用户说"获取/查找/得到 某人的邮箱地址" → **不是 `mailbox list`**，走三路并发查询流程（见「查找他人邮箱地址」章节）
 用户说"找邮件/搜邮件/查邮件" → `message search`
 用户说"看邮件/打开邮件/邮件内容" → 先 `message search` 获取 messageId，再 `message get`
-用户说"批量查看邮件详情/批量打开这些邮件/按多个邮件ID取详情" → `message batch-get --ids <id1,id2,...>`（单次最多 20 个）
 用户说"发邮件/写邮件" → 先 `mailbox list` 获取发件地址，再 `message send`
 用户说“给(某人名字)发邮件” / “查询某人发给我的邮件” / “查询发给某人的邮件” / 任何涉及按人名查找邮箱的场景 →
-  **第一步**：并发同时发起以下三路查询，取最先返回有效邮箱的结果；若三路均无有效邮箱，ask_human 请用户提供，禁止臆测：
-    1. `aisearch person --keyword <姓名>` → `contact user get --ids <userId>`，提取 `orgAuthEmail`
-    2. `mail user search --email <当前邮箱> --keyword <姓名>`，提取 `users[].email`（仅企业邮箱可用）
-    3. `contact user search --keyword <姓名>`，提取用户邮箱字段
+  **第一步**：`aisearch person --keyword <姓名> --dimension name` → `contact user get --ids <userId>`，提取 `orgAuthEmail`；为空时再用 `mail user search --email <当前邮箱> --keyword <姓名>` 补查。仍无有效邮箱则 ask_human 请用户提供，禁止臆测。
   **第二步**：用获得的目标邮箱拼入 KQL（如 `from:<email>` 或 `to:<email>`）执行 `message search`，或用于 `message send`
 用户说"发带附件的邮件/发邮件附件" → 先 `mailbox list` 获取发件地址，再 `message send --attachment <文件路径>`
 用户说"给(某人名字)发邮件" → 先 `aisearch person` 获取 userId，再 `contact user get` 获取收件人邮箱，再 `message send`
@@ -1649,22 +1742,16 @@ Flags:
 用户说"删除邮件标签/删除邮箱标签/删除 label" → 先确认要删除的标签 ID；如果用户只给名称，先 `tag list` 找到 `tags[].id`，再 `tag delete --id <tagId>`
 用户说"重命名邮件标签/修改邮箱标签名称/更新 label 名称" → 先确认要更新的标签 ID；如果用户只给原名称，先 `tag list` 找到 `tags[].id`，再 `tag update --id <tagId> --name <新名称>`
 用户说"列出邮件会话/查看会话列表/查看某个文件夹里的邮件会话" → 先确认邮箱地址和文件夹 ID；如果只有文件夹名称，先 `folder list` 找到 `folders[].id`，再 `thread list --folder <folderId>`
+用户说"查看会话/获取会话/看这封邮件的会话详情" → 如果已有会话 ID，直接 `thread get`；如果只有邮件线索，先 `message search` 或 `message get` 获取 `conversationId`，再 `thread get`
 用户说"标记会话已读/未读/给会话加标签/移除会话标签" → 用 `thread update`；如果是多条会话，用 `thread batch-update`；标签操作必须先有标签 ID
 用户说"删除会话/把会话放入已删除/批量删除会话" → 单条用 `thread trash`，多条用 `thread batch-trash`；传入的是会话 ID，不是邮件 ID
-用户说"批量标记邮件已读/未读/给邮件加标签/移除邮件标签" → `message batch-update --action markRead/markUnread/addTags/removeTags`（操作对象是邮件 ID；会话级操作用 `thread update/batch-update`）
-用户说"邮件发出去了吗/查邮件发送状态/确认邮件是否发送成功/邮件投递结果" → 用发送类命令返回的 `internetMessageId`，调用 `message verify` 查询 `sendStatus`
-用户说"撤回邮件/撤回已发送邮件" → `sent-message recall --email <邮箱> --id <mailId> --subject "<主题>" --yes`（危险操作，先确认）
-用户说"查询邮件撤回进度/撤回任务状态" → `sent-message recall-detail --email <邮箱> --id <recallTaskId>`
-用户说"设置/更新/关闭自动回复" → `auto-reply update`（所有字段必填，先 `auto-reply get` 获取当前配置）
-用户说"收信白名单/添加白名单/移除白名单" → `allow-list list/add/remove`
-用户说"收信黑名单/添加黑名单/移除黑名单" → `block-list list/add/remove`
-用户说"查看会话/获取会话/看这封邮件的会话" → 先 `message search` 或 `message get` 获取邮件中的 `conversationId`，再 `thread get`
 用户说"搜索/查找/联系 邮箱用户/联系人/某人的邮箱地址" → `user search`（搜索通讯录人员，不是搜邮件内容）
 用户说"发送草稿/把草稿发出去/发这封草稿" → 先 `message search --query "folderId:5"` 找到草稿 messageId，再 `draft send`
+用户说"邮件发出去了吗/查邮件发送状态/确认邮件是否发送成功/邮件投递结果" → 用发送类命令返回的 `internetMessageId`，调用 `message verify` 查询 `sendStatus`
 用户说"翻页继续搜索联系人/通讯录" → `user search --cursor <nextCursor>`（注意：不是 `message search`）
 
 **`user search` vs `message search` 关键区别：**
-- `user search`：搜索的是**人**（通讯录联系人），入参是 `--keyword 姓名`，返回用户信息
+- `user search`：搜索的是**人**（通讯录联系人），入参是 `--keyword 姓名` 或 `--employee-no 工号`，返回用户信息
 - `message search`：搜索的是**邮件**（邮件内容），入参是 `--query KQL表达式`，返回邮件列表
 
 
@@ -1719,8 +1806,8 @@ dws mail thread list --email user@company.com --folder <folderId> --limit 10 --f
 # 1i. 修改或删除邮件会话 — 先通过 thread list 获取 conversationId
 dws mail thread update --email user@company.com --id <conversationId> --action markRead --format json
 dws mail thread batch-update --email user@company.com --ids <conversationId1>,<conversationId2> --action markUnread --format json
-dws mail thread trash --email user@company.com --id <conversationId> --yes --format json
-dws mail thread batch-trash --email user@company.com --ids <conversationId1>,<conversationId2> --yes --format json
+dws mail thread trash --email user@company.com --id <conversationId> --format json
+dws mail thread batch-trash --email user@company.com --ids <conversationId1>,<conversationId2> --format json
 
 # 2. 搜索邮件 — 提取 messageId
 dws mail message search --email user@company.com \
@@ -1756,17 +1843,14 @@ dws mail attachment list --email user@company.com --id <messageId> --format json
 dws mail attachment download --email user@company.com \
   --message-id <messageId> --attachment-id <attachmentId> --name report.pdf --output ~/invoices/
 
-# 5. 获取邮件所属会话详情（thread）
-# 步骤 5.1：先通过 message search 或 message get 获取邮件中的 conversationId
+# 6. 获取邮件所属会话详情（thread）
+# 步骤 6.1：先通过 message search 或 message get 获取邮件中的 conversationId
 dws mail message search --email user@company.com \
   --query "subject:\"周报\"" --limit 5 --format json
 # 从返回的邮件列表中提取 conversationId 字段
 
-# 步骤 5.2：用 conversationId 获取会话详情
+# 步骤 6.2：用 conversationId 获取会话详情
 dws mail thread get --email user@company.com --id <conversationId> --format json
-
-# 步骤 5.3（可选）：同时返回会话内所有邮件列表
-dws mail thread get --email user@company.com --id <conversationId> --select messages --format json
 ```
 
 ## 上下文传递表
@@ -1774,9 +1858,7 @@ dws mail thread get --email user@company.com --id <conversationId> --select mess
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
 | `mailbox list` | 邮箱地址 | message search/get/send/thread get 的 --email/--from |
-| `mailbox profile` | `emailAliases` / `mboxSize` / `mboxSizeUsed` | 展示邮箱别名与容量信息 |
 | `message search` | `messageId` | message get 的 --id |
-| `message search` | `messageId` | message batch-get 的 --ids |
 | `message search` | `conversationId` | thread get 的 --id |
 | `message search` | `messageId` | attachment list 的 --id |
 | `attachment list` | `attachments[].id` / `attachments[].name` | attachment download 的 --attachment-id / --name |
@@ -1785,14 +1867,12 @@ dws mail thread get --email user@company.com --id <conversationId> --select mess
 | `folder create` | `result.folder.id` | 后续创建子文件夹或移动邮件时作为 --folder；更新/删除该文件夹时作为 --id |
 | `folder list` | `folders[].id` | thread list 的 --folder |
 | `thread list` | `conversations[].id` | thread get/update/trash/batch-update/batch-trash 的 --id/--ids |
-| `tag list` | `tags[].id` | message batch-update 的 --tags；thread update/batch-update 的 --tag-ids |
+| `tag list` | `tags[].id` | thread update/batch-update 的 --tag-ids |
 | `tag list` | `tags[].id` | tag create 的 --parent-id；tag delete/update 的 --id |
 | `tag create` | `result.tag.id` | 后续创建子标签时作为 --parent-id；更新/删除该标签时作为 --id |
-| `aisearch person` → `contact user get` / `contact user search` / `mail user search` | 用户邮箱 (orgAuthEmail / email) | message send 的 --to/--cc（三路并发，取先到结果） |
+| `aisearch person` → `contact user get`；必要时 `mail user search` | 用户邮箱 (orgAuthEmail / email) | message send 的 --to/--cc |
 | `user search` | 用户邮箱 (email) | message send 的 --to/--cc |
 | `message send` / `draft send` / `message reply` / `message reply-all` / `message forward` | `internetMessageId` | `message verify` 的 --internet-message-id |
-| `sent-message recall` | `id` | sent-message recall-detail 的 --id |
-| `auto-reply get` | `enabled` / `startTime` / `endTime` / `scope` / `content` | auto-reply update 的当前配置基线 |
 
 ## 注意事项
 
@@ -1800,17 +1880,10 @@ dws mail thread get --email user@company.com --id <conversationId> --select mess
 - `message search` 返回邮件 ID 和元信息（不含正文），需 `message get` 获取完整内容
 - KQL 查询支持 AND/OR/NOT 组合，字段值含空格时需用双引号
 - `--cc` 抄送人支持多人，逗号分隔
-- 收件人邮箱获取：用户只知道同事名字时，**并发**同时执行以下三路查询，取最先返回有效邮箱的结果，无需等待其他路完成：
-  1. `dws aisearch person --keyword "名字" --dimension name` → `dws contact user get --ids <userId>`，提取 `orgAuthEmail`
-  2. `dws mail user search --email <发件人邮箱> --keyword "名字"`，提取 `users[].email`（仅企业邮箱账号可调用，个人 @dingtalk.com 邮箱会报权限错误可忽略）
-  3. `dws contact user search --keyword "名字"`，提取用户邮箱字段
-  若三路均无有效邮箱，必须 ask_human 请用户手动提供收件人邮箱，严禁臆测和假设
-- `thread get` 无法直接通过邮箱地址查询会话列表，**必须先有 conversationId**；conversationId 来自 `message search` 或 `message get` 返回的邮件字段 `conversationId`
-- `thread get` 默认即返回会话内 `messages` 列表，但列表中每封邮件的正文（`body`）、收件人（`toRecipients`）等字段默认为 null；需在 `--select` 中额外指定才有值，如 `--select messages,internetMessageId`（多个字段用英文逗号分隔）
-- `thread get` 返回的 `conversation` 不含 `flag` 字段，会话标识请从 `thread list` 获取
-- `user search` 仅支持企业邮箱（非 `@dingtalk.com` 个人邮箱），使用个人邮箱将因无权限报错；搜到的用户邮箱（`email` 字段）可直接用于 `message send` 的 `--to`/`--cc` 参数
+- 收件人邮箱获取：用户只知道同事名字时，先 `dws aisearch person --keyword "名字" --dimension name` 取得 userId，再 `dws contact user get --ids <userId>` 提取 `orgAuthEmail`。该字段为空时，可用 `dws mail user search --email <发件人邮箱> --keyword "名字"` 补查（仅企业邮箱账号可调用；若已知工号，可改用 `--employee-no <工号>`）。仍无有效邮箱时必须 ask_human，严禁臆测和假设
 - `thread list --folder` 的值必须是文件夹 ID，不是文件夹显示名称；不知道文件夹 ID 时，先调用 `folder list` 查 `folders[].id`
 - `thread get/update/trash/batch-update/batch-trash` 使用的是会话 ID（conversationId），不是邮件 ID；会话 ID 可来自 `thread list` 的 `conversations[].id`，也可来自 `message search` 或 `message get` 返回的 `conversationId`
 - `thread update` / `thread batch-update` 仅支持 `markRead`、`markUnread`、`addTags`、`removeTags`；标签操作必须传 `--tag-ids`
+- `user search` 仅支持企业邮箱（非 `@dingtalk.com` 个人邮箱），使用个人邮箱将因无权限报错；搜到的用户邮箱（`email` 字段）可直接用于 `message send` 的 `--to`/`--cc` 参数
 - `folder create --folder` 的值必须是父文件夹 ID，不是文件夹显示名称；不知道父文件夹 ID 时，先调用 `folder list` 查 `folders[].id`
 - `folder delete/update --id` 的值必须是目标文件夹 ID，不是文件夹显示名称；不知道目标文件夹 ID 时，先调用 `folder list` 查 `folders[].id`

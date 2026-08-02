@@ -849,7 +849,13 @@ func TestAssemblerUsesReviewedCommandVisibility(t *testing.T) {
 }
 
 func TestCommandRegistrySourceValidationIsFailClosed(t *testing.T) {
-	registry, err := ValidateCommandRegistrySource(embeddedSchemaCommandRegistryJSON)
+	// After splitting registry into per-product shards, tests use the merged
+	// JSON (reassembled from shards) for byte-level operations.
+	merged, err := EmbeddedCommandRegistryMergedJSON()
+	if err != nil {
+		t.Fatalf("EmbeddedCommandRegistryMergedJSON() error = %v", err)
+	}
+	registry, err := ValidateCommandRegistrySource(merged)
 	if err != nil {
 		t.Fatalf("ValidateCommandRegistrySource(embedded) error = %v", err)
 	}
@@ -861,8 +867,9 @@ func TestCommandRegistrySourceValidationIsFailClosed(t *testing.T) {
 		t.Fatalf("embedded hash = %q, decoded hash = %q", hash, registry.SourceHash())
 	}
 
-	drifted := strings.Replace(string(embeddedSchemaCommandRegistryJSON), `"cli_path": "aisearch person"`, `"cli_path": "aisearch people"`, 1)
-	if drifted == string(embeddedSchemaCommandRegistryJSON) {
+	// Match both pretty-printed ("cli_path": "...") and compact ("cli_path":"...") JSON.
+	drifted := strings.Replace(string(merged), `"aisearch person"`, `"aisearch people"`, 1)
+	if drifted == string(merged) {
 		t.Fatal("test fixture did not mutate embedded registry")
 	}
 	_, err = ValidateCommandRegistrySource([]byte(drifted))
@@ -870,7 +877,12 @@ func TestCommandRegistrySourceValidationIsFailClosed(t *testing.T) {
 		t.Fatalf("drift error = %v", err)
 	}
 
-	unknownField := strings.Replace(string(embeddedSchemaCommandRegistryJSON), `"version": 1`, `"version": 1, "unreviewed": true`, 1)
+	// Test unknown-field rejection: inject an unrecognized top-level key.
+	unknownField := strings.Replace(string(merged), `"version":1`, `"version":1,"unreviewed":true`, 1)
+	if unknownField == string(merged) {
+		// Try with space (pretty-printed format).
+		unknownField = strings.Replace(string(merged), `"version": 1`, `"version": 1, "unreviewed": true`, 1)
+	}
 	_, err = ValidateCommandRegistrySource([]byte(unknownField))
 	if err == nil || !strings.Contains(err.Error(), "unknown field") {
 		t.Fatalf("unknown-field error = %v", err)

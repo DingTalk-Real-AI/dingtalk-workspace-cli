@@ -25,7 +25,7 @@ func TestCrossPlatformCoverageDiagnosticsAndErrorRenderingEdges(t *testing.T) {
 		}),
 	)
 	typed := err.(*Error)
-	if typed.Retryable || typed.ServerDiag.TraceID != "trace" {
+	if typed.Retryable || !typed.RetryableSet || typed.ServerDiag.TraceID != "trace" {
 		t.Fatalf("diagnostics options = %#v", typed)
 	}
 	if (ServerDiagnostics{TraceID: "trace"}).IsEmpty() {

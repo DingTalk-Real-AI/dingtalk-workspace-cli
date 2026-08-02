@@ -19,7 +19,7 @@ Example:
   dws aisearch person --keyword "五道" --dimension supervisor --format json
   dws aisearch person --keyword "AI搜问" --dimension duty --format json
   dws aisearch person --keyword "李四" --dimension name,department --format json
-  dws aisearch person --keyword "13800138000" --dimension phone --format json
+  dws aisearch person --keyword "<手机号线索>" --dimension phone --format json
   dws aisearch person --keyword "W12345" --dimension jobNumber --format json
 Flags:
       --keyword string     搜索关键词 (必填，如人名、技能关键词等)
@@ -37,7 +37,7 @@ Flags:
 | `duty` | 职责/技能 | "负责什么"、"职责"、"技能"、"负责人" |
 | `supervisor` | 上级 | "上级"、"领导"、"主管" |
 | `subordinate` | 下级 | "下级"、"下属"、"团队成员" |
-| `phone` | 手机号 | "手机号是多少"、"电话"、"联系方式" |
+| `phone` | 手机号语义线索 | "电话线索"、"联系方式相关"；完整手机号精确反查走 `contact user search-mobile` |
 | `jobNumber` | 工号 | "工号"、"工号是多少"、"员工编号" |
 
 ### keyword 提取规则
@@ -51,7 +51,7 @@ Flags:
 | "AI搜问的负责人是谁" | AI搜问 | duty |
 | "产品部有谁" | 产品部 | department |
 | "李四是哪个部门的" | 李四 | department |
-| "13800138000是谁" | 13800138000 | phone |
+| "按手机号线索找人" | 用户提供的手机号线索 | phone |
 | "工号W12345是谁" | W12345 | jobNumber |
 
 ---
@@ -59,12 +59,13 @@ Flags:
 ## 意图判断
 
 - 用户说"搜人/找人/谁负责/上级是谁/哪个部门的人" → `aisearch person`
+- 用户提供完整手机号精确反查 → `contact user search-mobile`
 - 用户说"搜资料/找方案/查文档/搜企业知识/项目相关内容/工作总结/周报总结" → `aisearch enterprise`
 - 用户说"最近/本周/今天 + XX相关消息/文档/邮件有哪些" → `aisearch enterprise`，时间词进 `--time-range`，类型词进 `--types`
 - 用户说"我发过/谁发给我/创建过/分享过/收到过/今天我干了什么" → `aisearch behavior`
-- 用户说"搜同事/查部门/查通讯录" → `contact`（通讯录）
+- 用户说"搜同事" → `aisearch person`；查部门详情/部门成员/通讯录精确信息 → `contact`
 
-**关键区分**：`aisearch person`（AI 语义搜人，支持职责/手机号/上级/下级等维度）vs `aisearch enterprise`（按内容找企业内部知识）vs `aisearch behavior`（按动作找发送/创建/分享/编辑/接收记录）vs `contact`（通讯录精确查询：userId/部门成员列表）
+**关键区分**：`aisearch person`（姓名模糊、工号、职责、手机号线索、上下级等搜索）vs `aisearch enterprise`（按内容找企业内部知识）vs `aisearch behavior`（按动作找发送/创建/分享/编辑/接收记录）vs `contact`（完整手机号反查、已知 userId 详情、部门成员列表）
 
 ### 高优先级抽取规则
 
@@ -98,7 +99,7 @@ Flags:
 
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
-| `aisearch person` | `userId`（用户ID，= `meta.staffId`/`meta.jobNumber`）、`author`（真实姓名，= `meta.name`）；`title` 是花名/显示名，不一定等于姓名 | 展示搜索结果、后续操作（发消息/建待办等） |
+| `aisearch person` | `userId`（用户ID）、`title`（姓名） | 展示搜索结果、后续操作（发消息/建待办等） |
 
 ## 重名消歧
 

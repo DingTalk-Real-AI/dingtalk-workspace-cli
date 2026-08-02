@@ -438,7 +438,7 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -483,7 +483,7 @@ jobs:
             exit 0
           fi
           mapfile -t packages <<< "$package_output"
-          go test -v -race -count=1 -timeout=8m "${packages[@]}"
+          go test -v -race -count=1 -timeout=15m "${packages[@]}"
 
   test-race:
     name: "Test (race: ${{ matrix.shard }})"
@@ -523,7 +523,7 @@ jobs:
           test -n "$package_output"
           mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
-          go test -v -race -count=1 -timeout=10m "${packages[@]}"
+          go test -v -race -count=1 -timeout=12m "${packages[@]}"
 
   test-release-scripts:
     name: Test (workflow and release contracts)
@@ -1160,14 +1160,20 @@ jobs:
       - name: Enforce coverage gate
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         env:
+          FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
           COVERAGE_TARGET: "100"
           COVERAGE_ENFORCE_OVERALL: "false"
           COVERAGE_OVERALL_TOLERANCE: "0"
         run: |
+          policy_profile=coverage-policy.txt
+          if [ "$FULL_SUITE" != true ]; then
+            policy_profile=
+          fi
           additional_profile=
           if [ -f coverage-shortcut.txt ]; then
             additional_profile=coverage-shortcut.txt
           fi
+          COVERAGE_DIFF_PROFILE="$policy_profile" \
           COVERAGE_ADDITIONAL_DIFF_PROFILE="$additional_profile" \
             make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
 

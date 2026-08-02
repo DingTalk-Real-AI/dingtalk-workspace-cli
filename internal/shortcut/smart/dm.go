@@ -49,7 +49,7 @@ var DM = shortcut.Shortcut{
 		text := rt.Str("text")
 
 		// Step 1 — resolve the recipient name to a unique userId.
-		user, err := resolveUser(rt, rt.Str("to"))
+		user, err := resolveOpenDingTalkUser(rt, rt.Str("to"))
 		if err != nil {
 			return err
 		}

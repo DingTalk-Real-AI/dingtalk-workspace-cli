@@ -184,7 +184,7 @@ dws doc block delete --node DOC_ID --block-id UUID
 
 | 从返回中提取 | 用于 |
 |-------------|------|
-| `blocks[].blockId` | `block insert` 的 `--ref-block`、`block update/delete` 的 `--block-id` |
+| element 模式的 `blocks[].element.id`；JSONML 模式的 `blocks[].blockId` | `block insert` 的 `--ref-block`、`block update/delete` 的 `--block-id`；空文档占位空段落不要作为 `--ref-block` |
 | `blocks[].element.id` | [`./doc-comment.md`](./doc-comment.md) `comment create-inline` 的 `--block-id` |
 | `blocks[].element.paragraph.text` | 计算 [`./doc-comment.md`](./doc-comment.md) `comment create-inline` 的 `--start` / `--end` 偏移量 |
 | attachment 块的 `resourceId` | [`./doc-media.md`](./doc-media.md) `media download` 的 `--resource-id` |

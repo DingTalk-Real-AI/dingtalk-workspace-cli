@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -141,11 +142,15 @@ func (rt *RuntimeContext) CallMCP(tool string, params map[string]any) error {
 // The product is explicit (not the shortcut's own) because smart shortcuts
 // routinely cross services — e.g. resolve a name via `contact` then act via
 // `chat`. Reads run even under --dry-run so a preview can still resolve inputs.
-// Write tools that need parsed responses must use CallMCPWriteData instead; as
-// a backstop, obvious write-like tool names are rejected here under --dry-run.
+// Write tools that need parsed responses must use CallMCPWriteData instead.
+// Under --dry-run this path fails closed unless the tool name belongs to the
+// narrow read-only naming contract used by the current MCP registry.
 func (rt *RuntimeContext) CallMCPData(product, tool string, params map[string]any) (map[string]any, error) {
-	if rt.DryRun() && looksWriteTool(tool) {
-		return nil, dryRunWriteError(product, tool)
+	if rt.DryRun() {
+		if !looksReadTool(tool) {
+			return nil, dryRunWriteError(product, tool)
+		}
+		return rt.callMCPReadData(product, tool, params)
 	}
 	return rt.callMCPData(product, tool, params)
 }
@@ -162,23 +167,12 @@ func (rt *RuntimeContext) CallMCPWriteData(product, tool string, params map[stri
 
 func dryRunWriteError(product, tool string) error {
 	return apperrors.NewValidation(fmt.Sprintf(
-		"--dry-run 下禁止执行写操作 %s/%s；请在 shortcut 中输出 preview 后返回", product, tool))
+		"--dry-run 下禁止执行未明确分类为只读的工具 %s/%s；请在 shortcut 中输出 preview 后返回",
+		product, tool))
 }
 
-func looksWriteTool(tool string) bool {
-	tool = strings.TrimSpace(strings.ToLower(tool))
-	for _, prefix := range []string{
-		"add_", "append_", "approve_", "archive_", "cancel_", "create_",
-		"delete_", "disable_", "enable_", "grant_", "import_", "insert_",
-		"invite_", "move_", "publish_", "reject_", "remove_", "replace_",
-		"respond", "revoke_", "send_", "set_", "submit_", "update_",
-		"upload_", "write_",
-	} {
-		if strings.HasPrefix(tool, prefix) {
-			return true
-		}
-	}
-	return false
+func looksReadTool(tool string) bool {
+	return helpers.IsReadToolName(tool)
 }
 
 func (rt *RuntimeContext) callMCPData(product, tool string, params map[string]any) (map[string]any, error) {
@@ -186,6 +180,24 @@ func (rt *RuntimeContext) callMCPData(product, tool string, params map[string]an
 		params = map[string]any{}
 	}
 	text, err := helpers.CallMCPToolTextOnServer(product, tool, params)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(text) == "" {
+		return map[string]any{}, nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", tool, err))
+	}
+	return out, nil
+}
+
+func (rt *RuntimeContext) callMCPReadData(product, tool string, params map[string]any) (map[string]any, error) {
+	if params == nil {
+		params = map[string]any{}
+	}
+	text, err := helpers.CallMCPReadToolTextOnServer(product, tool, params)
 	if err != nil {
 		return nil, err
 	}
@@ -219,6 +231,7 @@ func mount(s Shortcut) *cobra.Command {
 		cmd.Example = "  " + strings.Join(s.Tips, "\n  ")
 	}
 	registerFlags(cmd, s.Flags)
+	annotateRuntimeSchemaContract(cmd, s)
 
 	cmd.RunE = func(c *cobra.Command, _ []string) error {
 		rt := &RuntimeContext{cmd: c, shortcut: s}
@@ -244,6 +257,58 @@ func mount(s Shortcut) *cobra.Command {
 	return cmd
 }
 
+// annotateRuntimeSchemaContract projects the declarative shortcut invocation
+// contract onto its real Cobra leaf. Stable identity still comes exclusively
+// from the reviewed CommandRegistry; these annotations only preserve parameter
+// and constraint facts that Cobra cannot represent by itself.
+func annotateRuntimeSchemaContract(cmd *cobra.Command, s Shortcut) {
+	publicFlags := make(map[string]bool, len(s.Flags))
+	requiredFlags := make([]string, 0)
+	for _, flag := range s.Flags {
+		if flag.Hidden {
+			continue
+		}
+		publicFlags[flag.Name] = true
+		if flag.Required {
+			requiredFlags = append(requiredFlags, flag.Name)
+		}
+		if len(flag.Enum) > 0 {
+			cli.AnnotateRuntimeFlagEnum(cmd, flag.Name, flag.Enum...)
+		}
+	}
+
+	var constraints cli.RuntimeSchemaConstraints
+	for _, constraint := range s.Constraints {
+		flags := make([]string, 0, len(constraint.Flags))
+		for _, flagName := range constraint.Flags {
+			if publicFlags[flagName] {
+				flags = append(flags, flagName)
+			}
+		}
+		switch constraint.Kind {
+		case ConstraintAtLeastOne:
+			if len(flags) == 1 {
+				requiredFlags = append(requiredFlags, flags[0])
+			} else if len(flags) > 1 {
+				constraints.RequireOneOf = append(constraints.RequireOneOf, flags)
+			}
+		case ConstraintExactlyOne:
+			if len(flags) == 1 {
+				requiredFlags = append(requiredFlags, flags[0])
+			} else if len(flags) > 1 {
+				constraints.RequireOneOf = append(constraints.RequireOneOf, flags)
+				constraints.MutuallyExclusive = append(constraints.MutuallyExclusive, flags)
+			}
+		case ConstraintMutuallyExclusive:
+			if len(flags) > 1 {
+				constraints.MutuallyExclusive = append(constraints.MutuallyExclusive, flags)
+			}
+		}
+	}
+	cli.AnnotateRuntimeRequiredFlags(cmd, requiredFlags...)
+	cli.AnnotateRuntimeConstraints(cmd, constraints)
+}
+
 // registerFlags declares each Flag on the command with its type/default/desc.
 func registerFlags(cmd *cobra.Command, flags []Flag) {
 	for _, f := range flags {
@@ -254,7 +319,11 @@ func registerFlags(cmd *cobra.Command, flags []Flag) {
 		case FlagInt:
 			cmd.Flags().Int(f.Name, atoiDefault(f.Default), desc)
 		case FlagStringSlice:
-			cmd.Flags().StringSlice(f.Name, nil, desc)
+			var defaults []string
+			if value := strings.TrimSpace(f.Default); value != "" {
+				defaults = strings.Split(value, ",")
+			}
+			cmd.Flags().StringSlice(f.Name, defaults, desc)
 		default: // FlagString and empty
 			cmd.Flags().String(f.Name, f.Default, desc)
 		}
@@ -392,10 +461,11 @@ func validateConstraints(rt *RuntimeContext, s Shortcut) error {
 // --dry-run is set. Read-only shortcuts never prompt. Returns false when the
 // user declines.
 func confirmRisk(rt *RuntimeContext, s Shortcut) bool {
-	if s.risk() == RiskRead || rt.DryRun() || rt.Yes() {
+	risk := s.risk()
+	if risk == RiskRead || rt.DryRun() || rt.Yes() {
 		return true
 	}
-	fmt.Fprintf(rt.cmd.ErrOrStderr(), "即将执行 %s %s（%s），确认继续？(yes/no): ", s.Service, s.Command, s.risk())
+	fmt.Fprintf(rt.cmd.ErrOrStderr(), "即将执行 %s %s（%s），确认继续？(yes/no): ", s.Service, s.Command, risk)
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')
 	answer = strings.TrimSpace(strings.ToLower(answer))

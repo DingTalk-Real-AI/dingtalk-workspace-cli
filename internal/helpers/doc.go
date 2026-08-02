@@ -925,9 +925,7 @@ func newDocCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return callMCPTool("get_document_info", map[string]any{
-				"nodeId": nodeID,
-			})
+			return callMCPTool("get_document_info", map[string]any{"nodeId": nodeID})
 		},
 	}
 
@@ -1740,7 +1738,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 
 	// rename
 	renameCmd.Flags().String("node", "", "文档/文件 ID 或 URL (必填)")
-	renameCmd.Flags().String("name", "", "新名称 (必填)")
+	renameCmd.Flags().String("name", "", "新名称 (必填；原样传给服务端，不做扩展名规范化；如需根据节点类型和当前后缀规范化，请使用 drive rename)")
 
 	// delete
 	deleteCmd.Flags().String("node", "", "文档/文件 ID 或 URL (必填)")
@@ -2709,15 +2707,17 @@ CLI 内部自动完成全部流程:
 				return fmt.Errorf("flag --version is required")
 			}
 			version, _ := cmd.Flags().GetInt("version")
-			exists, err := docVersionExists(cmd.Context(), nodeID, version)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return fmt.Errorf("文档版本 %d 不存在，已停止回滚；请先执行 dws doc version list --node %s --format json 获取可回滚版本", version, nodeID)
-			}
-			if !confirmDangerousAction(cmd, fmt.Sprintf("revert document to version %d", version), nodeID) {
-				return nil
+			if !commandDryRun(cmd) {
+				exists, err := docVersionExists(cmd.Context(), nodeID, version)
+				if err != nil {
+					return err
+				}
+				if !exists {
+					return fmt.Errorf("文档版本 %d 不存在，已停止回滚；请先执行 dws doc version list --node %s --format json 获取可回滚版本", version, nodeID)
+				}
+				if !confirmDangerousAction(cmd, fmt.Sprintf("revert document to version %d", version), nodeID) {
+					return nil
+				}
 			}
 			return callMCPToolOnServer("doc", "revert_doc_version", map[string]any{
 				"nodeId":  nodeID,
@@ -2901,7 +2901,7 @@ CLI 内部自动完成全部流程:
 	folderCmd.Hidden = true
 	permissionCmd.Hidden = true
 
-	root.AddCommand(searchCmd, listCmd, infoCmd, readCmd, createCmd, updateCmd, uploadCmd, downloadCmd, copyCmd, moveCmd, renameCmd, deleteCmd, fileCmd, folderCmd, blockCmd, commentCmd, mediaCmd, permissionCmd, exportCmd, importCmd, versionCmd, templateCmd)
+	root.AddCommand(searchCmd, listCmd, infoCmd, readCmd, createCmd, updateCmd, uploadCmd, downloadCmd, copyCmd, moveCmd, renameCmd, deleteCmd, fileCmd, folderCmd, blockCmd, commentCmd, mediaCmd, permissionCmd, exportCmd, importCmd, versionCmd, templateCmd, newDocStyleCommand())
 
 	return root
 }

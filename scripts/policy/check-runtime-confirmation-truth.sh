@@ -8,7 +8,6 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
 
 metadata_dir="internal/cli/schema_hints/metadata"
-catalog="internal/cli/schema_catalog.json"
 
 if [ ! -d "$metadata_dir" ]; then
 	printf '%s\n' "missing agent metadata directory: $metadata_dir" >&2
@@ -17,6 +16,11 @@ fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+
+# The release Catalog is committed as a per-product split; reassemble it into
+# the single-document shape these jq queries consume.
+catalog="$tmp/catalog-combined.json"
+scripts/policy/with-catalog.sh >"$catalog"
 
 jq -r '
   .tools

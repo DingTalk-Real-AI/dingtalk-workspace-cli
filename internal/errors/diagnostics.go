@@ -44,6 +44,7 @@ func WithServerDiag(diag ServerDiagnostics) Option {
 		// Override retryable if server explicitly specified.
 		if diag.ServerRetryable != nil {
 			e.Retryable = *diag.ServerRetryable
+			e.RetryableSet = true
 		}
 	}
 }

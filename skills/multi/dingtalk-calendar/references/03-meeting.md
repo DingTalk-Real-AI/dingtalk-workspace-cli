@@ -1,7 +1,7 @@
 # 会议管理（日程与会议室）
 
-> **lite 速查表**含 `list-today-meetings`、`check-users-busy`；视频会议 `start-conference` 当前 CLI 不支持。列表类操作须遵循 [calendar.md](./calendar.md) **「CLI 命令树与黄金路径」**，禁止无子命令的 `dws calendar` 或臆造 `calendar list`（见该文 **「反模式（禁止）」**）。**`schedule-meeting` 不做内联**：须读本文件 **「两准则」「搜房失败硬门禁」** 及下表 **schedule-meeting** 行全文。
-> **听记、会后待办、摘要分享** 见 `dingtalk-minutes` sub-skill 的 `references/07-minutes.md`。
+> lite recipe（`list-today-meetings`、`check-users-busy`）见 [lite-recipes.md](./lite-recipes.md)；`start-conference`、`invite-participant`、`share-screen` 见 `dingtalk-misc`（`references/conference.md`）。列表类操作须遵循 [calendar.md](./calendar.md) **「CLI 命令树与黄金路径」**，禁止无子命令的 `dws calendar` 或臆造 `calendar list`（见该文 **「反模式（禁止）」**）。**`schedule-meeting` 不做内联**：须读本文件 **「两准则」「搜房失败硬门禁」** 及下表 **schedule-meeting** 行全文。
+> **听记、会后待办、摘要分享** 见 `dingtalk-minutes/references/07-minutes.md`。
 
 ## 日程与会议室两准则（强制）
 
@@ -22,7 +22,7 @@
 
 ### 搜房失败硬门禁（园区/范围搜尽仍无 roomId）
 
-在用户限定的园区、楼宇、楼层或评测固定分组内，已按早停规则**逐组 `room search` 查完**仍得不到任何有效 `rooms[].roomId`（或无任何空闲房）→ **立即停止**，向用户**明确报错/失败结论**（例如：该时段在指定范围内未检索到可预订会议室或无法获得 roomId），**本回合订房流程结束**。
+在用户限定的园区、楼宇、楼层或固定分组内，已按早停规则**逐组 `room search` 查完**仍得不到任何有效 `rooms[].roomId`（或无任何空闲房）→ **立即停止**，向用户**明确报错/失败结论**（例如：该时段在指定范围内未检索到可预订会议室或无法获得 roomId），**本回合订房流程结束**。
 
 **用户汇报硬门禁**：一旦触发上面的失败条件，**下一条对外输出必须直接面向用户汇报结果**，不得继续在会话里自言自语式地延长推理。允许的后续只有两类：
 1. **失败汇报**：明确说明“指定范围/指定会议室在该时段未找到可预订会议室，因此当前无法完成预订”
@@ -47,10 +47,10 @@
 | 2 | **要限范围/具名**：先 `list-groups` 解析允许的 `group-id`。若用户说的是同一地点（同园区/楼栋/楼层），应优先锁定**最相关的承载 group** 并只查它；该 group 无结果即可按该地点无房收束，不再试别的无关 group。仅当用户明确给出多个允许地点时，才分别对这些 group 各 **1 次** `room search --available` 再 `room add` |
 | 3 | **禁止**：无新信息时反复 `--verbose`、反复切 `--available`、父组子组试探、在最相关 group 无结果后改搜别的同级/异地 group、超 100 条后仍根分组或未授权区域全量搜；**禁止**对 `room search` 使用不存在的 `--query` |
 | 4 | **`roomId` 门禁**：`room add --rooms` **只能**填 `room search` 返回 JSON 中的 `rooms[].roomId`；**禁止**将用户说的会议室名、编号文案、或「假 UUID / 试数字」当作 `roomId` |
-| 5 | **全量无结果即收束**：在用户允许的搜索范围内（含**整园/全 campus** 若用户或评测要求已逐组查尽）仍无任何可用会议室或有效 `roomId` → **直接报错/告知失败并结束订房**，且**下一条消息必须汇报给用户**；**不得**假设 ID、不得用 `room add` 试探、不得绕路查日程、不得继续自说自话分析 Mock/测试环境 |
+| 5 | **全量无结果即收束**：在用户允许的搜索范围内（含**整园/全 campus** 若用户要求已逐组查尽）仍无任何可用会议室或有效 `roomId` → **直接报错/告知失败并结束订房**，且**下一条消息必须汇报给用户**；**不得**假设 ID、不得用 `room add` 试探、不得绕路查日程、不得继续自说自话分析 Mock/测试环境 |
 | 6 | **失败触发回读**：连续 2 次空结果、任意一次 `roomId invalid`、或开始换园区/绕路时 → **必须回读本节**；回读后只允许「报错收束」或「向用户确认是否放宽条件」 |
 
 | Recipe             | 行动指南（固定路线） |
 | ------------------ | ------------------- |
-| schedule-meeting   | **见上文「两准则」**、**「搜房失败硬门禁」**。**未给时段且仅说「发起/开个会」**→ 不走本 recipe；当前 CLI 不支持实时视频会议，告知用户请在钉钉客户端操作。**未给时段但有预约意图**（"安排""约""定"等词）：追问具体开始/结束时间。**已有时段后**，按固定顺序执行：1. `dws calendar event create` 建日程；2. 有参会人则 `dws calendar attendee add`；3. 再处理会议室。**无明确会议室范围**：可直接 `python scripts/calendar_schedule_meeting.py --title "<主题>" --start "<起始>" --end "<结束>" [--users <userIds>] [--book-room] [--dry-run]`。**有明确范围（某楼/层）**：先 `dws calendar room list-groups`，锁定该地点**最相关的承载 group**；若只有一个地点，`--room-group-id` 应只传这个最相关 group，**不要**把同楼内多个楼层 group 打包传入碰运气。只有用户明确给出多个允许地点时，才把这些 `group-id` 一并传给 `python scripts/calendar_schedule_meeting.py ... --book-room --room-group-id "<id1,id2,...>"`。**用户点名具体会议室**：须手工 `dws calendar room search --start "<ISO>" --end "<ISO>" --group-id <GROUP_ID> [--available] --format json`（**无** `--query`），在 JSON 中匹配名称取 **`rooms[].roomId` 唯一真值** → `dws calendar room add --event <eventId> --rooms <roomId>`；**不得**把用户输入的会议室名当 `roomId`。**一旦连续 2 次空结果 / 任意一次 `roomId invalid`**：**必须回读本节并立即收束判断**；若整园/限定范围内搜尽仍无 roomId 或无空房 → **下一条消息必须直接向用户汇报失败结论**；否则只能向用户确认是否放宽范围/改时间。**禁止**假设 roomId、禁止无 ID 调用 `room add`、禁止用日程详情绕路、禁止继续猜测 Mock/测试环境。细则见「会议室搜索早停」。 |
+| schedule-meeting   | **见上文「两准则」**、**「搜房失败硬门禁」**。**未给时段且仅说「发起/开个会」**→ 不走本 recipe，走 lite recipe `start-conference`。**未给时段但有预约意图**（"安排""约""定"等词）：追问具体开始/结束时间。**已有时段后**，按固定顺序执行：1. `dws calendar event create` 建日程；2. 有参会人则 `dws calendar participant add`；3. 再处理会议室。**无明确会议室范围**：可直接 `python scripts/calendar_schedule_meeting.py --title "<主题>" --start "<起始>" --end "<结束>" [--users <userIds>] [--book-room] [--dry-run]`。**有明确范围（某楼/层）**：先 `dws calendar room list-groups`，锁定该地点**最相关的承载 group**；若只有一个地点，`--room-group-id` 应只传这个最相关 group，**不要**把同楼内多个楼层 group 打包传入碰运气。只有用户明确给出多个允许地点时，才把这些 `group-id` 一并传给 `python scripts/calendar_schedule_meeting.py ... --book-room --room-group-id "<id1,id2,...>"`。**用户点名具体会议室**：须手工 `dws calendar room search --start "<ISO>" --end "<ISO>" --group-id <GROUP_ID> [--available] --format json`（**无** `--query`），在 JSON 中匹配名称取 **`rooms[].roomId` 唯一真值** → `dws calendar room add --event <eventId> --rooms <roomId>`；**不得**把用户输入的会议室名当 `roomId`。**一旦连续 2 次空结果 / 任意一次 `roomId invalid`**：**必须回读本节并立即收束判断**；若整园/限定范围内搜尽仍无 roomId 或无空房 → **下一条消息必须直接向用户汇报失败结论**；否则只能向用户确认是否放宽范围/改时间。**禁止**假设 roomId、禁止无 ID 调用 `room add`、禁止用日程详情绕路、禁止继续猜测 Mock/测试环境。细则见「会议室搜索早停」。 |
 | reschedule-meeting | 1. `calendar event list --start "<起始ISO>" --end "<结束ISO>"` → 取 `eventId` 2. `calendar event update --id <eventId> --start "<新起始ISO>" --end "<新结束ISO>"` 更新时间 3. `chat search --query "<群名>"` → 取 `openConversationId` → `chat message send --group <openConversationId> --text "<变更通知>"` 通知变更 |

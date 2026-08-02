@@ -144,11 +144,12 @@ func (f *Formatter) PrintTable(headers []string, rows [][]string) {
 	fmt.Fprintf(f.w, "共 %d 条\n", len(rows))
 }
 
-func (f *Formatter) PrintSuccess(msg string) { fmt.Fprintf(f.w, "[OK] %s\n", msg) }
-func (f *Formatter) PrintError(msg string)   { fmt.Fprintf(f.w, "[ERROR] %s\n", msg) }
-func (f *Formatter) PrintWarning(msg string) { fmt.Fprintf(f.errW, "[WARN] %s\n", msg) }
-func (f *Formatter) PrintInfo(msg string)    { fmt.Fprintf(f.w, "[INFO] %s\n", msg) }
-func (f *Formatter) PrintDim(msg string)     { fmt.Fprintf(f.w, "  %s\n", msg) }
+func (f *Formatter) PrintSuccess(msg string)  { fmt.Fprintf(f.w, "[OK] %s\n", msg) }
+func (f *Formatter) PrintError(msg string)    { fmt.Fprintf(f.w, "[ERROR] %s\n", msg) }
+func (f *Formatter) PrintWarning(msg string)  { fmt.Fprintf(f.errW, "[WARN] %s\n", msg) }
+func (f *Formatter) PrintInfo(msg string)     { fmt.Fprintf(f.w, "[INFO] %s\n", msg) }
+func (f *Formatter) PrintProgress(msg string) { fmt.Fprintf(f.errW, "%s\n", msg) }
+func (f *Formatter) PrintDim(msg string)      { fmt.Fprintf(f.w, "  %s\n", msg) }
 
 func (f *Formatter) PrintKeyValue(key, value string) {
 	fmt.Fprintf(f.w, "%-16s%s\n", key+":", value)

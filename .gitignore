@@ -66,3 +66,6 @@ dwsbin
 # Local coverage artifacts
 coverage-shortcut.txt
 coverage-*.txt
+
+# stray compiled generator binary (source lives in internal/generator/cmd_param_aliases/)
+/cmd_param_aliases

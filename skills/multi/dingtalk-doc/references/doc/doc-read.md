@@ -4,7 +4,7 @@
 > 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
 > 2. [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) — 仅当使用 `--content-format jsonml` 时必读
 >
-> **同任务常配合**：[`doc-info.md`](./doc-info.md)（先解析 URL，确认 contentType=ALIDOC、extension=adoc）/ [`doc-update.md`](./doc-update.md)（读后改写）/ [`doc-block.md`](./doc-block.md)（块级精修前先读结构）
+> **同任务常配合**：[`doc-info.md`](doc-info.md)（先解析 URL，确认 extension=adoc）/ [`doc-update.md`](doc-update.md)（读后改写）/ [`doc-block.md`](doc-block.md)（块级精修前先读结构）
 
 ## 命令格式
 
@@ -20,11 +20,11 @@ Flags:
       --node string     文档 ID 或 URL (必填)
       --content-format string   输出格式: 默认为 markdown，可选 jsonml（返回完整 JSONML 结构）
       --output string   输出到本地文件路径（仅 --content-format jsonml 时生效）
-      --scope string    JSONML 节点范围: outline / range / section / tags
-      --tags string     自定义 JSONML tag 列表，逗号分隔；仅 --scope tags 使用且必填
-      --max-depth int   筛选遍历最大深度，0 表示不限
-      --start-block-id string   range / section 起始块 UUID
-      --end-block-id string     range 结束块 UUID；空或 "-1" 表示到文档末尾
+      --scope string    按 scope 筛选节点(需 --content-format jsonml): outline(全部 h1-h6 标题)/range(区间)/section(单块)/tags(配合 --tags 自定义); 详见下方 §scope/tags 节点筛选
+      --tags string     自定义 JSONML tag 列表(逗号分隔, 如 h1,h2,table); 仅在 --scope tags 时使用且必填
+      --max-depth int   筛选遍历最大深度, 0 表示不限(仅 --content-format jsonml + --scope/--tags 时生效)
+      --start-block-id string   range/section 起始块 ID(节点 uuid); scope=range/section 时必填
+      --end-block-id string     range 结束块 ID(节点 uuid); "-1"或空=到文档末尾(仅 scope=range 生效)
 ```
 
 ## 关键说明
@@ -48,28 +48,32 @@ Flags:
 
 ## scope/tags 节点筛选（返回 JSONML fragment）
 
-只读取文档大纲、一个块或一段区间时，用 `--scope` 避免拉取整篇。筛选仅适用于 JSONML，必须同时传 `--content-format jsonml`。
+当只想读取文档的**部分节点**（如大纲、某区间、某个块）时，用 `--scope` 筛选，避免拉取整篇。**筛选是 JSONML 链路能力，MUST 配合 `--content-format jsonml`**（缺失会报错 `--scope/--tags requires --content-format jsonml`）。**`--scope` 必须显式指定为 `outline`|`range`|`section`|`tags` 之一**；`--tags` 仅在 `--scope tags` 时使用（其他组合会报错）：
 
-- `--scope outline`：返回全部 `h1` 到 `h6` 标题。
-- `--scope tags --tags h1,table`：返回指定 tag；`--tags` 只能与 `scope=tags` 一起使用。
-- `--scope range --start-block-id <UUID> [--end-block-id <UUID>]`：返回顶层闭区间；结束 ID 为空或 `-1` 时读到文末。
-- `--scope section --start-block-id <UUID>`：返回该块及其完整子树。
-- `--max-depth` 可限制筛选遍历深度，`0` 表示不限制。
+- **tag 类**（outline / tags）：按节点类型筛选。`outline`=全部 h1-h6 标题预设；`--scope tags --tags h1,table` 按自定义 tag 子集筛选（tables/images/code 预设已下线，改用 `--scope tags --tags table`/`img`/`code`）。
+- **锚点类**（range/section）：按位置截取。`range`=顶层 `[start,end]` 闭区间（`--end-block-id "-1"` 或留空=到文末）；`section`=只取 `--start-block-id` 指向的单块（完整子树）。块 ID（节点 uuid）可从 [`doc-block.md`](./doc-block.md) 的 `list_document_blocks` 或 JSONML 节点的 `uuid` 属性获得；`scope=range/section` 时 `--start-block-id` 必填。
 
-块 UUID 可从 [`doc-block.md`](./doc-block.md) 的块列表或完整 JSONML 节点的 `uuid` 属性取得。
+### 返回：JSONML fragment 容器（MUST 剥壳消费）
 
-筛选结果是查询用的虚拟 fragment 容器：
+筛选结果是一个 **JSONML fragment 容器**（承载在 `jsonml` 字段）：
 
 ```json
-["fragment", {"source": "outline"}, ["h1", {"uuid": "h1a"}, "一级标题"]]
+["fragment", {"source": "outline"}, ["h1", {"uuid": "h1a"}, "一级标题"], ["h2", {"uuid": "h2a"}, "二级标题"]]
 ```
 
-消费时必须剥掉 `"fragment"` 和属性对象，只取后面的 children。不得把 fragment 容器整体写回文档。
+- `source` 标识产生结果的操作（range/section/outline/tags）。
+- fragment 是**查询结果虚拟容器**，仅用于读出：
+  - **消费时 MUST 剥掉 fragment 外层**（跳过 index 0 的 `"fragment"` 与 index 1 的 attrs 对象），取其后的 children 使用。
+  - **MUST NOT 把 fragment 整体写回文档**（如透传给 `doc update --content-format jsonml`）——服务端 JSONML 写校验会拦截。若要写回，只写剥壳后的 children。
 
 ```bash
+# 读文档大纲（目录）
 dws doc read --node <DOC_ID> --content-format jsonml --scope outline
-dws doc read --node <DOC_ID> --content-format jsonml --scope range --start-block-id <UUID_A> --end-block-id <UUID_B>
+# 读某区间（从块 A 到块 B）的 JSONML
+dws doc read --node <DOC_ID> --scope range --start-block-id <UUID_A> --end-block-id <UUID_B> --content-format jsonml
+# 读单个块及其子树
 dws doc read --node <DOC_ID> --content-format jsonml --scope section --start-block-id <UUID>
+# 按自定义 tag 读取（如所有表格 / 图片）
 dws doc read --node <DOC_ID> --content-format jsonml --scope tags --tags table,img
 ```
 
@@ -78,8 +82,8 @@ dws doc read --node <DOC_ID> --content-format jsonml --scope tags --tags table,i
 | 从返回中提取 | 用于 |
 |-------------|------|
 | Markdown 正文 | 用户可读输出 / 二次处理 |
-| JSONML `jsonml`（完整 body，无 scope） | [`doc-update.md`](./doc-update.md) 的 `--content-file` + `--content-format jsonml` |
-| JSONML fragment（scope 筛选） | 剥掉 fragment 外层后消费 children；不得整体写回 |
+| JSONML `jsonml`（完整 body，无 scope/tags 时） | [`doc-update.md`](./doc-update.md) 的 `--content-file` + `--content-format jsonml`（可整体写回） |
+| JSONML `jsonml`（fragment，scope/tags 筛选时） | 剥掉 fragment 外层取 children 使用；**MUST NOT 整体写回** |
 | JSONML `revision` | [`doc-update.md`](./doc-update.md) 的 `--revision`（可选；担心被并发覆盖时使用） |
 | 附件链接中的 `resourceId` | [`doc-media.md`](./doc-media.md) 的 `--resource-id`（链接过期后续期） |
 

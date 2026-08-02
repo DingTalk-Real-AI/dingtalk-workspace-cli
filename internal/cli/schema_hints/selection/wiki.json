@@ -354,6 +354,25 @@
         "structured-hint:internal/cli/schema_hints/products/wiki.json",
         "live-mcp:dws schema wiki.update_member"
       ]
+    },
+    "wiki.shortcut_space_search": {
+      "agent_summary": "搜索知识库",
+      "use_when": [
+        "当你只记得知识库名称的部分关键词、想快速按名称定位某个知识库时使用；输入关键词返回匹配的知识库列表，比逐页 +space-list 更快找到目标 workspaceId。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws wiki +space-search --query \"产品文档\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#wiki.shortcut_space_search",
+        "cobra-help:dws wiki +space-search",
+        "ShortcutRegistry:wiki +space-search"
+      ]
     }
   },
   "products": {

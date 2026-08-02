@@ -104,14 +104,26 @@ func ValidateRequiredFlags(cmd *cobra.Command, names ...string) error {
 	for _, name := range names {
 		v, _ := cmd.Flags().GetString(name)
 		if v == "" {
-			missing = append(missing, "--"+name)
+			missing = append(missing, name)
 		}
 	}
-	if len(missing) == 0 {
+	return MissingRequiredFlagsError(cmd, missing...)
+}
+
+// MissingRequiredFlagsError formats the unified "missing required flag(s)"
+// error for the given flag names, or returns nil when none are missing. Use
+// this when the caller has already determined which flags are missing (e.g.
+// after alias/env fallback resolution).
+func MissingRequiredFlagsError(cmd *cobra.Command, names ...string) error {
+	if len(names) == 0 {
 		return nil
 	}
+	flags := make([]string, 0, len(names))
+	for _, name := range names {
+		flags = append(flags, "--"+name)
+	}
 	return fmt.Errorf("missing required flag(s): %s\n  usage: %s\n  example:\n%s",
-		strings.Join(missing, ", "), cmd.UseLine(), cmd.Example)
+		strings.Join(flags, ", "), cmd.UseLine(), cmd.Example)
 }
 
 // ValidateRequiredFlagWithAliases checks that at least one of the primary flag

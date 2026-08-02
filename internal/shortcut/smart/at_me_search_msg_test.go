@@ -26,11 +26,22 @@ func TestAtMeProject(t *testing.T) {
 		"sender":             map[string]any{"name": "念晨"},
 		"createTime":         "2026-07-19 13:37:03",
 		"content":            "普通消息",
+		"openMessageId":      "msg-1",
+		"msgType":            "text",
 		"conversationTitle":  "群A",
 		"openConversationId": "cid1",
+		"emotionReplyList": []any{
+			map[string]any{"emoji": "赞", "replyUsers": []any{"D1"}},
+		},
 	})
 	if row["sender"] != "念晨" || row["text"] != "普通消息" || row["conversation"] != "群A" {
 		t.Fatalf("atMeProject nested = %#v", row)
+	}
+	if row["messageId"] != "msg-1" || row["conversationId"] != "cid1" || row["messageType"] != "text" {
+		t.Errorf("atMeProject stable identity = %#v", row)
+	}
+	if reactions, ok := row["reactions"].(map[string]any); !ok || len(reactions) == 0 {
+		t.Errorf("atMeProject reactions = %#v", row["reactions"])
 	}
 
 	// encrypted content → marked (never leaked); id-only sender fallback; a
@@ -64,6 +75,15 @@ func TestAtMeProject(t *testing.T) {
 	}
 	if _, has := row["forwarded"]; has {
 		t.Errorf("atMeProject plain unexpectedly has forwarded")
+	}
+
+	row = atMeProjectWithReactions(map[string]any{
+		"emotionReplyList": []any{
+			map[string]any{"emoji": "赞", "replyUsers": []any{"D1"}},
+		},
+	}, false)
+	if _, has := row["reactions"]; has {
+		t.Errorf("atMeProject no-reactions leaked reactions: %#v", row)
 	}
 }
 

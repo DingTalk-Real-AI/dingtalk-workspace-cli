@@ -1,0 +1,762 @@
+{
+  "product": "devdoc",
+  "tools": {
+    "devdoc.search_open_platform_docs_rag": {
+      "agent_metadata_source": "embedded-skill-metadata",
+      "agent_source_refs": [
+        "CommandRegistry:canonical_path=devdoc.search_open_platform_docs_rag",
+        "Skill:skills/mono/references/products/devdoc.md",
+        "cobra-help:dws devdoc article search",
+        "dws-wukong-envelope@4574f7022c32:dws-wukong-discovery.devdoc.prod.json#devdoc.search_open_platform_docs",
+        "internal/cli/schema_command_registry.json#devdoc.search_open_platform_docs_rag",
+        "internal/cli/schema_hints/imported/wukong.json",
+        "internal/cli/schema_hints/metadata/devdoc.json",
+        "internal/cli/schema_hints/selection/devdoc.json",
+        "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_open_platform_docs_rag",
+        "live-dws-schema:devdoc.search_open_platform_docs_rag",
+        "skills/mono/references/products/devdoc.md",
+        "skills/mono/references/products/simple.md",
+        "structured-hint:internal/cli/schema_hints/imported/wukong.json#devdoc.search_open_platform_docs_rag",
+        "structured-hint:internal/cli/schema_hints/selection-review.json#devdoc.search_open_platform_docs_rag"
+      ],
+      "agent_summary": "搜索钉钉开放平台开发文档，返回资料与链接（不生成分析答案）",
+      "agent_summary_source": "dws-agent-selection/devdoc",
+      "availability": "available",
+      "avoid_when": [
+        "搜索用户业务文档用 drive/wiki/doc，不要用 devdoc",
+        "要执行开放平台应用配置变更时用 dev"
+      ],
+      "canonical_path": "devdoc.search_open_platform_docs_rag",
+      "cli_name": "search",
+      "cli_path": "devdoc article search",
+      "confirmation": "not_required",
+      "constraints": {
+        "require_one_of": [
+          [
+            "query",
+            "keyword"
+          ]
+        ]
+      },
+      "description": "按关键词搜索 open.dingtalk.com 文档，支持分页。默认表格输出，可用 -f json 获取完整响应。",
+      "display": "开放平台文档搜索",
+      "effect": "read",
+      "effect_source": "command-verb",
+      "examples": [
+        "dws devdoc article search --query \"OAuth2 接入\" --format json",
+        "dws devdoc article search --query \"errcode 40078\" --format json"
+      ],
+      "field_provenance": {
+        "agent_summary": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/devdoc.json",
+              "value": "搜索钉钉开放平台开发文档，返回资料与链接（不生成分析答案）"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/devdoc.json",
+          "value": "搜索钉钉开放平台开发文档，返回资料与链接（不生成分析答案）"
+        },
+        "availability": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/devdoc.json",
+              "value": "available"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_open_platform_docs_rag.interface_ref",
+              "value": "available"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+          "source": "internal/cli/schema_hints/metadata/devdoc.json",
+          "value": "available"
+        },
+        "avoid_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/devdoc.json",
+              "value": [
+                "搜索用户业务文档用 drive/wiki/doc，不要用 devdoc",
+                "要执行开放平台应用配置变更时用 dev"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/devdoc.json",
+          "value": [
+            "搜索用户业务文档用 drive/wiki/doc，不要用 devdoc",
+            "要执行开放平台应用配置变更时用 dev"
+          ]
+        },
+        "canonical_path": {
+          "candidates": [
+            {
+              "precedence": "command_registry",
+              "selected": true,
+              "source": "reviewed_command_registry",
+              "source_ref": "devdoc article search",
+              "value": "devdoc.search_open_platform_docs_rag"
+            },
+            {
+              "precedence": "reviewed_manual",
+              "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+              "selected": false,
+              "source": "reviewed_manual_hint",
+              "source_ref": "devdoc article search",
+              "value": "devdoc.search_open_platform_docs_rag"
+            }
+          ],
+          "precedence": "command_registry",
+          "resolution": "registry_identity",
+          "source": "reviewed_command_registry",
+          "source_ref": "devdoc article search",
+          "value": "devdoc.search_open_platform_docs_rag"
+        },
+        "confirmation": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/devdoc.json",
+              "value": "not_required"
+            },
+            {
+              "precedence": "inference_or_default",
+              "selected": false,
+              "source": "risk-default",
+              "value": "not_required"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+          "source": "internal/cli/schema_hints/metadata/devdoc.json",
+          "value": "not_required"
+        },
+        "description": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "按关键词搜索 open.dingtalk.com 文档，支持分页。默认表格输出，可用 -f json 获取完整响应。"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "根据关键词搜索钉钉开放平台的开发文档，返回匹配的文档条目列表，包含标题、摘要、文档链接和相关标签。搜索结果按相关性排序。适用于开发者在集成或调试过程中快速查找 API 说明、接入指南、错误码解释等技术资料。"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "按关键词搜索 open.dingtalk.com 文档，支持分页。默认表格输出，可用 -f json 获取完整响应。"
+        },
+        "effect": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "command-verb",
+              "value": "read"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "command-verb",
+          "value": "read"
+        },
+        "examples": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/devdoc.json",
+              "value": [
+                "dws devdoc article search --query \"OAuth2 接入\" --format json",
+                "dws devdoc article search --query \"errcode 40078\" --format json"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/devdoc.json",
+          "value": [
+            "dws devdoc article search --query \"OAuth2 接入\" --format json",
+            "dws devdoc article search --query \"errcode 40078\" --format json"
+          ]
+        },
+        "idempotency": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "idempotent"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "idempotent"
+        },
+        "interface_mode": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/devdoc.json",
+              "value": "mcp"
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_open_platform_docs_rag.interface_ref",
+              "value": "mcp"
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+          "source": "internal/cli/schema_hints/metadata/devdoc.json",
+          "value": "mcp"
+        },
+        "interface_ref": {
+          "candidates": [
+            {
+              "precedence": "imported",
+              "selected": true,
+              "source": "internal/cli/schema_hints/imported/wukong.json",
+              "value": {
+                "product_id": "devdoc",
+                "rpc_name": "search_open_platform_docs"
+              }
+            },
+            {
+              "precedence": "mcp_fallback",
+              "selected": false,
+              "source": "internal/cli/schema_mcp_metadata.json#tools.devdoc.search_open_platform_docs_rag.interface_ref",
+              "value": "devdoc.search_open_platform_docs"
+            }
+          ],
+          "precedence": "imported",
+          "resolution": "highest_precedence",
+          "source": "internal/cli/schema_hints/imported/wukong.json",
+          "value": {
+            "product_id": "devdoc",
+            "rpc_name": "search_open_platform_docs"
+          }
+        },
+        "metadata_source": {
+          "candidates": [
+            {
+              "precedence": "derived_resolution",
+              "selected": true,
+              "source": "metadata_source_resolution",
+              "value": "embedded-mcp-metadata"
+            }
+          ],
+          "precedence": "derived_resolution",
+          "resolution": "highest_precedence",
+          "source": "metadata_source_resolution",
+          "value": "embedded-mcp-metadata"
+        },
+        "reviewed": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+              "selected": true,
+              "source": "internal/cli/schema_hints/metadata/devdoc.json",
+              "value": true
+            },
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": false,
+              "source": "internal/cli/schema_hints/selection/devdoc.json",
+              "value": true
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+          "source": "internal/cli/schema_hints/metadata/devdoc.json",
+          "value": true
+        },
+        "risk": {
+          "candidates": [
+            {
+              "precedence": "inference_or_default",
+              "selected": true,
+              "source": "effect-default",
+              "value": "low"
+            }
+          ],
+          "precedence": "inference_or_default",
+          "resolution": "highest_precedence",
+          "source": "effect-default",
+          "value": "low"
+        },
+        "title": {
+          "candidates": [
+            {
+              "precedence": "cobra_help",
+              "selected": true,
+              "source": "cobra_help",
+              "value": "搜索开放平台文档"
+            },
+            {
+              "precedence": "mcp_metadata",
+              "selected": false,
+              "source": "mcp_metadata",
+              "value": "search_open_platform_docs"
+            }
+          ],
+          "precedence": "cobra_help",
+          "resolution": "highest_precedence",
+          "source": "cobra_help",
+          "value": "搜索开放平台文档"
+        },
+        "use_when": {
+          "candidates": [
+            {
+              "precedence": "reviewed_explicit",
+              "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+              "selected": true,
+              "source": "internal/cli/schema_hints/selection/devdoc.json",
+              "value": [
+                "查 OpenAPI、字段、错误码、OAuth2、接入指南等开放平台开发问题"
+              ]
+            }
+          ],
+          "precedence": "reviewed_explicit",
+          "resolution": "highest_precedence",
+          "review_reason": "人工依据实时 dws schema（或 Skill/Cobra/pinned MCP 对照）决策化选型文案与门禁；不改写命令身份与参数契约；示例不含 --yes。",
+          "source": "internal/cli/schema_hints/selection/devdoc.json",
+          "value": [
+            "查 OpenAPI、字段、错误码、OAuth2、接入指南等开放平台开发问题"
+          ]
+        }
+      },
+      "group": "article",
+      "has_parameters": true,
+      "idempotency": "idempotent",
+      "interface_mode": "mcp",
+      "interface_ref": {
+        "product_id": "devdoc",
+        "rpc_name": "search_open_platform_docs"
+      },
+      "is_alias": false,
+      "metadata_source": "embedded-mcp-metadata",
+      "name": "search_open_platform_docs_rag",
+      "parameter_count": 3,
+      "parameters": {
+        "page": {
+          "default": "1",
+          "description": "页码，默认 1",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "页码，默认 1"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "分页页码"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "页码，默认 1"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "page"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "page"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "分页页码",
+          "interface_type": "number",
+          "property": "page",
+          "required": false,
+          "type": "string"
+        },
+        "query": {
+          "description": "搜索关键词 (必填)",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "搜索关键词 (必填)"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "搜索关键词"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "搜索关键词 (必填)"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "versioned_binding",
+                  "selected": true,
+                  "source": "versioned_parameter_binding",
+                  "value": "keyword"
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "flag_name_inference",
+                  "value": "query"
+                }
+              ],
+              "precedence": "versioned_binding",
+              "resolution": "highest_precedence",
+              "source": "versioned_parameter_binding",
+              "value": "keyword"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "reviewed_manual",
+                  "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+                  "selected": true,
+                  "source": "reviewed_manual_hint",
+                  "value": false
+                },
+                {
+                  "precedence": "command_constraint",
+                  "selected": false,
+                  "source": "require_one_of_constraint",
+                  "value": false
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": true
+                },
+                {
+                  "precedence": "inference",
+                  "selected": false,
+                  "source": "usage_required_inference",
+                  "value": true
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "reviewed_manual",
+              "resolution": "highest_precedence",
+              "review_reason": "Search text may be supplied as positional keyword or public --query; hidden --keyword remains a runtime compatibility alias and is intentionally not published as a parameter. The versioned binding owns query -\u003e keyword.",
+              "source": "reviewed_manual_hint",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "搜索关键词",
+          "property": "keyword",
+          "required": false,
+          "type": "string"
+        },
+        "size": {
+          "default": "10",
+          "description": "每页数量，默认 10",
+          "field_provenance": {
+            "description": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_usage",
+                  "value": "每页数量，默认 10"
+                },
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": false,
+                  "source": "mcp_metadata",
+                  "value": "分页大小"
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_usage",
+              "value": "每页数量，默认 10"
+            },
+            "interface_type": {
+              "candidates": [
+                {
+                  "precedence": "mcp_metadata",
+                  "selected": true,
+                  "source": "mcp_metadata",
+                  "value": "number"
+                },
+                {
+                  "precedence": "fallback",
+                  "selected": false,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "mcp_metadata",
+              "resolution": "highest_precedence",
+              "source": "mcp_metadata",
+              "value": "number"
+            },
+            "property": {
+              "candidates": [
+                {
+                  "precedence": "inference",
+                  "selected": true,
+                  "source": "flag_name_inference",
+                  "value": "size"
+                }
+              ],
+              "precedence": "inference",
+              "resolution": "highest_precedence",
+              "source": "flag_name_inference",
+              "value": "size"
+            },
+            "required": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_nonzero_default",
+                  "value": false
+                },
+                {
+                  "precedence": "default",
+                  "selected": false,
+                  "source": "default",
+                  "value": false
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_nonzero_default",
+              "value": false
+            },
+            "required_when": {
+              "candidates": [
+                {
+                  "precedence": "default",
+                  "selected": true,
+                  "source": "default",
+                  "value": ""
+                }
+              ],
+              "precedence": "default",
+              "resolution": "highest_precedence",
+              "source": "default",
+              "value": ""
+            },
+            "type": {
+              "candidates": [
+                {
+                  "precedence": "cobra_contract",
+                  "selected": true,
+                  "source": "cobra_flag_type",
+                  "value": "string"
+                }
+              ],
+              "precedence": "cobra_contract",
+              "resolution": "highest_precedence",
+              "source": "cobra_flag_type",
+              "value": "string"
+            }
+          },
+          "interface_description": "分页大小",
+          "interface_type": "number",
+          "property": "size",
+          "required": false,
+          "type": "string"
+        }
+      },
+      "path": "devdoc.search_open_platform_docs_rag",
+      "positionals": [
+        {
+          "description": "搜索关键词；也可通过 --query 传入",
+          "index": 0,
+          "name": "keyword",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "primary_cli_path": "devdoc article search",
+      "product_id": "devdoc",
+      "reviewed": true,
+      "risk": "low",
+      "source": "reviewed_command_registry",
+      "title": "搜索开放平台文档",
+      "use_when": [
+        "查 OpenAPI、字段、错误码、OAuth2、接入指南等开放平台开发问题"
+      ]
+    }
+  }
+}

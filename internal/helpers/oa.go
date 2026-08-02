@@ -129,7 +129,7 @@ func newOaCommand() *cobra.Command {
 				return err
 			}
 			instanceId := mustGetFlag(cmd, "instance-id")
-			if !confirmDelete("审批实例", instanceId) {
+			if !commandDryRun(cmd) && !confirmDelete("审批实例", instanceId) {
 				return nil
 			}
 			argsMap := map[string]any{

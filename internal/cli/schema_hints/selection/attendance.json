@@ -886,6 +886,367 @@
         "skills/mono/references/products/attendance-vacation.md",
         "live-dws-schema:attendance.vacation_update_type"
       ]
+    },
+    "attendance.shortcut_check_result": {
+      "agent_summary": "查询用户打卡结果（迟到/早退/缺卡等）",
+      "use_when": [
+        "当你需要批量统计一批员工在某段时间的打卡结果（正常/迟到/早退/缺卡等判定结论）时使用，例如做月度考勤汇总或异常人员排查；输入多个 userId（最多 100 人）和不超过 1 个月的日期区间，返回每人每天的打卡结果状态，支持分页。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +check-result --users userId1,userId2 --start 2026-04-01 --end 2026-04-30 --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_check_result",
+        "cobra-help:dws attendance +check-result",
+        "ShortcutRegistry:attendance +check-result"
+      ]
+    },
+    "attendance.shortcut_check_record": {
+      "agent_summary": "查询用户打卡流水（打卡时间/地点/定位方式）",
+      "use_when": [
+        "当你要查看员工每一次实际打卡的原始记录（具体打卡时刻、打卡地点、定位/Wifi/蓝牙等方式）而不是判定结论时使用，例如核实某人是否在指定地点打卡；输入 userId 列表和不超过 1 个月的日期区间，返回逐条打卡流水。与 +check-result 的区别是这里返回明细流水而非迟到早退结论。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +check-record --users userId1 --start 2026-04-01 --end 2026-04-30"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_check_record",
+        "cobra-help:dws attendance +check-record",
+        "ShortcutRegistry:attendance +check-record"
+      ]
+    },
+    "attendance.shortcut_list_approve": {
+      "agent_summary": "查询用户考勤审批单（补卡/加班/请假/出差外出）",
+      "use_when": [
+        "当你想查看某些员工已提交的考勤类审批单（加班、请假、出差外出、补卡）时使用，例如核对某人这段时间请了几次假或有没有补卡审批；输入 userId 列表、审批类型（overtime/加班、leave/请假、trip/出差外出、patch/补卡）和日期区间，返回匹配的审批单记录。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +list-approve --users userId1 --types overtime,leave --start 2026-04-01 --end 2026-04-30"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_list_approve",
+        "cobra-help:dws attendance +list-approve",
+        "ShortcutRegistry:attendance +list-approve"
+      ]
+    },
+    "attendance.shortcut_get_approve_template": {
+      "agent_summary": "查询补卡/请假/加班/外出/出差审批提交链接",
+      "use_when": [
+        "当用户想自己发起一条考勤审批（补卡、请假、加班、外出、出差）、需要拿到对应审批表单的提交入口链接时使用；输入审批类型（如 leave/请假），返回可直接打开填写并提交的审批链接。本命令只返回链接、不代替用户提交审批。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +get-approve-template --type leave"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_get_approve_template",
+        "cobra-help:dws attendance +get-approve-template",
+        "ShortcutRegistry:attendance +get-approve-template"
+      ]
+    },
+    "attendance.shortcut_get_schedule": {
+      "agent_summary": "获取指定用户一段时间内的排班记录",
+      "use_when": [
+        "当你要查看排班制考勤组下员工在某段时间的排班记录（含排班 id、班次、是否休息）时使用，尤其是需要拿到排班 id 用于后续 BOSS 改签打卡（+boss-check）的场景；输入 userId 列表和起止时间，返回逐日排班明细。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +get-schedule --users user001,user002 --start 2026-04-01 --end 2026-04-30"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_get_schedule",
+        "cobra-help:dws attendance +get-schedule",
+        "ShortcutRegistry:attendance +get-schedule"
+      ]
+    },
+    "attendance.shortcut_search_class": {
+      "agent_summary": "查询当前用户可管理的班次详情列表",
+      "use_when": [
+        "当你要浏览或按名称查找当前用户能管理的班次、以便拿到班次 ID 用于建组、排班或改班次时使用；可选按班次名关键字模糊搜索、按 ALL/我负责的过滤并分页，返回班次列表及详情。要看某个具体班次的完整配置用 +get-class。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +search-class --query \"早班\" --filter-type MINE_OWN"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_search_class",
+        "cobra-help:dws attendance +search-class",
+        "ShortcutRegistry:attendance +search-class"
+      ]
+    },
+    "attendance.shortcut_get_adjustment_rule": {
+      "agent_summary": "根据补卡规则主键 ID 查询补卡规则详情",
+      "use_when": [
+        "当你已知某条补卡规则的主键 ID、想查看它的具体规则内容（每月可补卡次数、时限、适用范围等）时使用；输入 adjustmentId，返回该补卡规则的完整详情。不知道 ID 时先用 +search-adjustment-rule 列出。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +get-adjustment-rule --adjustment-id 12345"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_get_adjustment_rule",
+        "cobra-help:dws attendance +get-adjustment-rule",
+        "ShortcutRegistry:attendance +get-adjustment-rule"
+      ]
+    },
+    "attendance.shortcut_search_adjustment_rule": {
+      "agent_summary": "查询当前用户可管理的补卡规则列表",
+      "use_when": [
+        "当你要浏览或按名称查找当前用户可管理的补卡规则、以便拿到规则 ID 做进一步查看时使用；可选按规则名关键字模糊搜索并分页，返回补卡规则列表。要看某条规则的完整内容用 +get-adjustment-rule。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +search-adjustment-rule --query \"标准\" --page 1 --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_search_adjustment_rule",
+        "cobra-help:dws attendance +search-adjustment-rule",
+        "ShortcutRegistry:attendance +search-adjustment-rule"
+      ]
+    },
+    "attendance.shortcut_get_overtime_rule": {
+      "agent_summary": "根据加班规则主键 ID 查询加班规则详情",
+      "use_when": [
+        "当你已知某条加班规则的主键 ID、想查看它的具体内容（工作日/休息日/节假日加班计算方式、适用范围等）时使用；输入 overtimeId，返回该加班规则的完整详情。不知道 ID 时先用 +search-overtime-rule 列出。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +get-overtime-rule --overtime-id 12345"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_get_overtime_rule",
+        "cobra-help:dws attendance +get-overtime-rule",
+        "ShortcutRegistry:attendance +get-overtime-rule"
+      ]
+    },
+    "attendance.shortcut_search_overtime_rule": {
+      "agent_summary": "查询当前用户可管理的加班规则列表",
+      "use_when": [
+        "当你要浏览或按名称查找当前用户可管理的加班规则、以便拿到规则 ID 做进一步查看时使用；可选按规则名关键字模糊搜索并分页，返回加班规则列表。要看某条规则的完整内容用 +get-overtime-rule。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +search-overtime-rule --query \"节假日\" --page 1 --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_search_overtime_rule",
+        "cobra-help:dws attendance +search-overtime-rule",
+        "ShortcutRegistry:attendance +search-overtime-rule"
+      ]
+    },
+    "attendance.shortcut_search_group": {
+      "agent_summary": "查询当前用户可管理的考勤组列表",
+      "use_when": [
+        "当你要浏览或按名称查找当前用户可管理的考勤组、以便拿到考勤组 ID 用于查看详情、改成员或改配置时使用；可选按名称关键字、考勤组类型（固定班制/排班制/自由工时）过滤，并可选带出定位/Wifi/蓝牙信息，分页返回考勤组简要列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +search-group --query \"研发\" --type FIXED --limit 50"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_search_group",
+        "cobra-help:dws attendance +search-group",
+        "ShortcutRegistry:attendance +search-group"
+      ]
+    },
+    "attendance.shortcut_get_summary": {
+      "agent_summary": "查询某个人的考勤统计摘要（周/月）",
+      "use_when": [
+        "当你想快速了解某个人一周或一月的考勤汇总（出勤天数、迟到早退次数、加班、请假时长等统计口径）而不是逐天明细时使用；输入 userId、所在周期内的任意日期和统计类型（week/month），返回该周期的考勤统计摘要。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +get-summary --user USER_ID --date 2026-03-12 --stats-type week"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_get_summary",
+        "cobra-help:dws attendance +get-summary",
+        "ShortcutRegistry:attendance +get-summary"
+      ]
+    },
+    "attendance.shortcut_get_self_setting": {
+      "agent_summary": "查询个人规则设置（打卡提醒/极速打卡/缺卡提醒等）",
+      "use_when": [
+        "当你想查看某个用户在指定场景下的个人考勤规则开关配置（如打卡提醒、极速打卡、缺卡提醒、考勤结果通知等是否开启）时使用；输入设置场景 settingScene 和用户 userId，返回该用户对应场景的个人设置。查企业全局设置用 +get-global-setting。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +get-self-setting --setting-scene checkRemind --user USER_ID"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_get_self_setting",
+        "cobra-help:dws attendance +get-self-setting",
+        "ShortcutRegistry:attendance +get-self-setting"
+      ]
+    },
+    "attendance.shortcut_query_report_data": {
+      "agent_summary": "根据字段查询考勤报表数据（仅管理员）",
+      "use_when": [
+        "当你要按指定考勤字段导出/查询一批员工在某时间段的报表数值（如各人的出勤天数、迟到次数、加班时长）时使用，常用于做考勤汇总或核算；输入 userId 列表（最多 20 人）、字段 ID 列表（来自 +list-report-columns）和不超过 32 天的时间区间，返回对应字段的数据。仅管理员可用。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +query-report-data --users userId1,userId2 --columns 1001,1002 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_query_report_data",
+        "cobra-help:dws attendance +query-report-data",
+        "ShortcutRegistry:attendance +query-report-data"
+      ]
+    },
+    "attendance.shortcut_list_leave_types": {
+      "agent_summary": "查询当前用户可用的假期规则列表",
+      "use_when": [
+        "当你想知道企业有哪些假期类型（年假、事假、病假等）及其对应的假期编码 code、单位、是否带薪时使用，通常是查余额或改假期规则前先拿到 leaveCode；无需参数，返回当前用户可用的假期规则列表。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +list-leave-types"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_list_leave_types",
+        "cobra-help:dws attendance +list-leave-types",
+        "ShortcutRegistry:attendance +list-leave-types"
+      ]
+    },
+    "attendance.shortcut_get_leave_records": {
+      "agent_summary": "查询指定员工的假期余额变更记录",
+      "use_when": [
+        "当你想追溯某个员工假期额度的变动流水（何时发放、扣减、因请假消耗多少）以核对余额来龙去脉时使用；输入单个 userId、日期区间，可选假期 code（不传查所有假期），返回该员工在该时间段的余额变更记录。只想看当前余额用 +get-leave-balance。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +get-leave-records --user USER_ID --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --start 2026-04-01 --end 2026-04-22"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_get_leave_records",
+        "cobra-help:dws attendance +get-leave-records",
+        "ShortcutRegistry:attendance +get-leave-records"
+      ]
+    },
+    "attendance.shortcut_get_checkin_record": {
+      "agent_summary": "查询指定员工一段时间内的签到记录",
+      "use_when": [
+        "当你要查看员工的外勤/移动办公签到记录（signin/checkin，区别于考勤打卡）时使用，例如核实业务员的拜访签到轨迹；需提供操作者企业 ID 与员工 ID、目标员工 ID 列表（最多 100 人）以及不超过 7 天的时间区间，返回这些人的签到明细。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +get-checkin-record --operator-corp-id dingXXX --operator-staff-id op001 --staff-ids user001,user002 --start \"2026-04-01 00:00:00\" --end \"2026-04-07 00:00:00\""
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_get_checkin_record",
+        "cobra-help:dws attendance +get-checkin-record",
+        "ShortcutRegistry:attendance +get-checkin-record"
+      ]
+    },
+    "attendance.shortcut_my_attendance": {
+      "agent_summary": "查我今天的考勤打卡记录（打卡流水，自动解析当前用户）",
+      "use_when": [
+        "当你想快速看自己今天的打卡流水（几点上下班打卡、打卡地址/定位方式）、又不想先查自己的 userId 再手动填写今天的起止时间时使用；内部先取当前登录用户的 userId，再按本地时区算出今天 00:00 到次日 00:00 的时间窗，最后查询你今天的打卡流水记录。只读操作，不会修改任何考勤数据；今天若还没有任何打卡则返回空结果。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +my-attendance"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_my_attendance",
+        "cobra-help:dws attendance +my-attendance",
+        "ShortcutRegistry:attendance +my-attendance"
+      ]
+    },
+    "attendance.shortcut_this_month": {
+      "agent_summary": "查我本月的考勤打卡记录（打卡流水，自动解析当前用户）",
+      "use_when": [
+        "当你想快速看自己本月的打卡流水（几点上下班打卡、打卡地址/定位方式）、又不想先查自己的 userId 再手动填写本月的起止时间时使用；内部先取当前登录用户的 userId，再按本地时区算出本月 1 号 00:00 到下月 1 号 00:00 的时间窗，最后查询你本月的打卡流水记录。只读操作，不会修改任何考勤数据；本月若还没有任何打卡则返回空结果。"
+      ],
+      "avoid_when": [
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+      ],
+      "examples": [
+        "dws attendance +this-month"
+      ],
+      "reviewed": true,
+      "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
+      "source_refs": [
+        "internal/cli/schema_command_registry.json#attendance.shortcut_this_month",
+        "cobra-help:dws attendance +this-month",
+        "ShortcutRegistry:attendance +this-month"
+      ]
     }
   },
   "products": {

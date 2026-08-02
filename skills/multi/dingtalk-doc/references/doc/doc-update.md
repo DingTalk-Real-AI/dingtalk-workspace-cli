@@ -170,7 +170,7 @@ dws doc update --node <DOC_ID> --content-file <tmp> --mode overwrite --content-f
 dws doc update --node <nodeId> --content-file <part> --mode append --content-format markdown
 ```
 
-> **注意**：分块 append 存在静默失败风险（部分片段返回 success 但实际未写入），执行前**必须**向用户发出截断风险提示并等待确认。完整规范见 [`../../best_practices/04-document.md` «分块 append 截断风险提示»](../../best_practices/04-document.md)。
+> **注意**：分块 append 存在静默失败风险（部分片段返回 success 但实际未写入），执行前**必须**向用户发出截断风险提示并等待确认。完整规范见 [`../../best_practices/04-document.md` «分块 append 截断风险提示»](../04-document.md)。
 
 ### stdin 变体
 

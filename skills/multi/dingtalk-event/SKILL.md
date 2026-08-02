@@ -74,6 +74,26 @@ description: 钉钉个人 IM 事件长连接监听、订阅与消费，覆盖消
 - `--debug-raw-events` 只用于联调确认服务端推送是否到达本地连接；正常任务不要使用。它和 `--flatten` 互斥，`-f raw` 也不能与 `--flatten` 同时使用。
 - 排查：consume 报 bus 启动失败 → 报错已带真实原因，先查 `dws --profile <x> auth status`（非默认组织带对 `--profile`）；本地日志见 `~/.dws/events/<edition>/personal_stream/<hash>/bus.log`（`hash` 见 `dws event status` 的 Workdir）；有残留先用 `dws event stop --all --dry-run` 预览，确认后加 `--yes` 清理。看着"挂住"无输出多是误加了 `--foreground`（那是跑 bus、不打印事件），去掉即可。
 
+## 订阅创建失败与重试预算
+
+以下约束适用于上表全部 16 个事件以及多事件命令中的每一项，只治理 `[event] ready` 之前的订阅创建；ready 之后的 Stream 断线由长连接重连机制处理。
+
+- `0/2/1` 是 **Agent/host 编排约束**，不是 CLI 持久化硬总次数上限。每次 `dws event consume` 调用对每个逻辑订阅最多发送一次订阅创建 HTTP 请求，进程内不会自动重试。CLI 本地状态只持久化 `in_flight`、`cooldown`、`terminal_hold` 三种保护状态，不持久化或计算跨调用的 Agent/host 尝试次数。
+- 解析人名或群名、执行 `event consume` 以及后续 `event status/stop` 必须使用同一个 `--profile`。不得把其它 profile 下解析出的 userId、openDingtalkId 或 openConversationId 直接带入当前 profile 的订阅。
+- 同一逻辑订阅由当前 profile / 身份、event key、rule type、目标和过滤条件共同确定。`subscribe_id`、`trace_id` 以及重新启动进程都只是诊断或执行信息，不会生成新的逻辑操作；Agent/host 必须自行延续原编排预算。
+- Agent/host 收到 `retryable=false`：`max_additional_attempts=0`，立即停止，不得自动重跑。
+- Agent/host 收到 `retryable=true`：`max_additional_attempts=2`，初次失败后最多再尝试 2 次；错误若给出 `retry_after_seconds` 或 `next_retry_at`，不得提前重试。
+- 未返回 `retryable`（即 `retryable=unknown`）：Agent/host 使用 `max_additional_attempts=1`，最多补偿尝试 1 次；仍无法确认时停止并上报错误与 trace。
+- `in_flight` 表示同一逻辑订阅已有请求执行中；`cooldown` 或 `terminal_hold` 表示当前被退避或终态保护。遇到这些状态不得递归调用 `event consume`、并行启动相同订阅或通过新 subId / trace 绕过；等待原请求或保护时间结束，同时由 Agent/host 继续维护自己的编排次数。
+- 多事件命令必须作为同一次原始操作治理。不得把失败事件拆成新的单事件命令、调整顺序或反复重启来重置预算；启动中任一项失败时，由 CLI 回滚本次已经创建的订阅。
+
+### 本地保护状态运维
+
+- open 版默认状态文件为 `~/.dws/events/open/personal_stream/<identity_hash>/personal_subscription_attempts.json`。设置 `DWS_CONFIG_DIR` 后配置根目录随之变化；其它 edition 使用对应 edition 目录，不固定为 `open`。
+- identity 目录权限为 `0700`；`personal_subscription_attempts.json` 与 `personal_subscription_attempts.lock` 权限均为 `0600`。
+- 连续 24h 没有失败后失败计数重置；`terminal_hold` 持续 1h。正常处理优先等待错误中的 `next_retry_at`，不要把删状态文件当成常规重试手段。
+- 紧急恢复时，先确认该 identity 没有正在创建订阅的进程；只删除 `personal_subscription_attempts.json`，不要删除 lock 文件。删除 JSON 会清空该 identity 的全部保护记录，不只影响一个事件。
+
 ## Call flow
 
 1. 从用户意图选择事件码；人名或群名先解析成必填 ID。
