@@ -29509,7 +29509,7 @@
       ]
     },
     "chat message reply": {
-      "agent_summary": "引用指定消息发送个人回复",
+      "agent_summary": "引用指定消息发送个人回复，可同时 @指定成员",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
@@ -29519,18 +29519,18 @@
       "effect": "write",
       "effect_source": "agent-hint",
       "examples": [
-        "dws chat message reply --conversation-id \u003copenConversationId\u003e --ref-msg-id \u003copenMessageId\u003e --ref-sender \u003copenDingTalkId\u003e --text \"收到\""
+        "dws chat message reply --conversation-id \u003copenConversationId\u003e --ref-msg-id \u003copenMessageId\u003e --ref-sender \u003copenDingTalkId\u003e --text \"@userId 收到\" --at-users userId"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "引用指定消息发送个人回复",
+          "value": "引用指定消息发送个人回复，可同时 @指定成员",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "candidates": [
             {
-              "value": "引用指定消息发送个人回复",
+              "value": "引用指定消息发送个人回复，可同时 @指定成员",
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -29620,7 +29620,7 @@
         },
         "examples": {
           "value": [
-            "dws chat message reply --conversation-id \u003copenConversationId\u003e --ref-msg-id \u003copenMessageId\u003e --ref-sender \u003copenDingTalkId\u003e --text \"收到\""
+            "dws chat message reply --conversation-id \u003copenConversationId\u003e --ref-msg-id \u003copenMessageId\u003e --ref-sender \u003copenDingTalkId\u003e --text \"@userId 收到\" --at-users userId"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -29629,7 +29629,7 @@
           "candidates": [
             {
               "value": [
-                "dws chat message reply --conversation-id \u003copenConversationId\u003e --ref-msg-id \u003copenMessageId\u003e --ref-sender \u003copenDingTalkId\u003e --text \"收到\""
+                "dws chat message reply --conversation-id \u003copenConversationId\u003e --ref-msg-id \u003copenMessageId\u003e --ref-sender \u003copenDingTalkId\u003e --text \"@userId 收到\" --at-users userId"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -29739,7 +29739,8 @@
         },
         "use_when": {
           "value": [
-            "用户要针对某条已有消息进行引用回复时"
+            "用户要针对某条已有消息进行引用回复时",
+            "引用回复时需要通过 --at-users 提醒原发送者或其他成员时"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -29748,7 +29749,8 @@
           "candidates": [
             {
               "value": [
-                "用户要针对某条已有消息进行引用回复时"
+                "用户要针对某条已有消息进行引用回复时",
+                "引用回复时需要通过 --at-users 提醒原发送者或其他成员时"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -29776,7 +29778,8 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "用户要针对某条已有消息进行引用回复时"
+        "用户要针对某条已有消息进行引用回复时",
+        "引用回复时需要通过 --at-users 提醒原发送者或其他成员时"
       ]
     },
     "chat message search": {

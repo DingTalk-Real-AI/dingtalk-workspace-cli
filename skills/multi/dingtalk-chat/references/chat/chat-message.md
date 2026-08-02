@@ -152,6 +152,15 @@ dws chat message edit --group <openConversationId> --msg-id <openMessageId> --co
 | `message combine-forward` | 多条消息合并为一条转发 | `--src-conversation-id` `--msg-ids` `--dest-conversation-id`，可选 `--uuid` |
 | `message forward-topic` | 转发话题消息 | `--src-msg-id` `--src-conversation-id` `--src-thread-id` `--dest-conversation-id` |
 
+`message reply` 可选 `--at-users`，传逗号分隔的 userId 或 openDingTalkId：
+
+```bash
+dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "@userId 收到" --at-users userId
+```
+
+- userId 会自动解析为 openDingTalkId，正文中的 @ 标识同步转换。
+- `--text` 需包含对应的 `@userId`、`<@userId>` 或 `<@openDingTalkId>` 标识，否则不会真正 @ 到人。
+
 ### 话题与卡片
 
 话题完整读取流程：

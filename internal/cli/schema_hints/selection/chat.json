@@ -903,15 +903,16 @@
       ]
     },
     "chat.reply_personal_message": {
-      "agent_summary": "引用指定消息发送个人回复",
+      "agent_summary": "引用指定消息发送个人回复，可同时 @指定成员",
       "use_when": [
-        "用户要针对某条已有消息进行引用回复时"
+        "用户要针对某条已有消息进行引用回复时",
+        "引用回复时需要通过 --at-users 提醒原发送者或其他成员时"
       ],
       "avoid_when": [
         "无需引用上下文的普通消息使用 chat message send"
       ],
       "examples": [
-        "dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text \"收到\""
+        "dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text \"@userId 收到\" --at-users userId"
       ],
       "reviewed": true,
       "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",

@@ -1,12 +1,12 @@
 {
   "version": 1,
   "surface_hash": "sha256:60eee8e2f37d6d9d60689efce85082798eb9ad38b7ba7c0b471c3de676a85a16",
-  "source_hash": "sha256:862734fb976a4c9c78d010b7391c74822f37805f5acc650551f4ac60f701c13a",
+  "source_hash": "sha256:a59a66a1c06c00d0205e9ee1efdbd66ca16813835473b41fd73d156fa6f6afcd",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:670ca810a83bf2aa6f387a18c3af746393d5ea9de24570cbcebbcf994eb7b613",
+      "source_hash": "sha256:9fd99457097485eb590ccef21b1d219c1b03416749491a98f749fbd69018cbf7",
       "surface_hash": "sha256:60eee8e2f37d6d9d60689efce85082798eb9ad38b7ba7c0b471c3de676a85a16",
       "surface_products": 26,
       "surface_tools": 845,
@@ -9238,7 +9238,7 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "引用指定消息发送个人回复",
+            "agent_summary": "引用指定消息发送个人回复，可同时 @指定成员",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
@@ -9248,7 +9248,7 @@
             "cli_name": "reply",
             "cli_path": "chat message reply",
             "confirmation": "not_required",
-            "description": "以当前用户身份引用某条消息并回复。需要指定会话 ID、被引用消息 ID、原消息发送者 openDingTalkId，以及回复内容。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e\n          （人员信息可通过 dws contact user search --keyword \"姓名\" --format json 获取）",
+            "description": "以当前用户身份引用某条消息并回复。需要指定会话 ID、被引用消息 ID、原消息发送者 openDingTalkId，以及回复内容。可通过 --at-users 传入逗号分隔的 userId 或 openDingTalkId；userId 会自动解析为 openDingTalkId，回复正文中的对应 @ 标识也会同步转换为 \u003c@openDingTalkId\u003e。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e\n          （人员信息可通过 dws contact user search --keyword \"姓名\" --format json 获取）",
             "effect": "write",
             "group": "message",
             "idempotency": "unknown",
@@ -9264,7 +9264,8 @@
             "risk": "medium",
             "title": "引用回复消息（支持单聊/群聊）",
             "use_when": [
-              "用户要针对某条已有消息进行引用回复时"
+              "用户要针对某条已有消息进行引用回复时",
+              "引用回复时需要通过 --at-users 提醒原发送者或其他成员时"
             ]
           },
           {

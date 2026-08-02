@@ -2,8 +2,8 @@
   "version": 3,
   "baseline": {
     "manifest": "schema-parameter-bindings-v3",
-    "sha256": "sha256:ff0f76145dd27da5429434a348344c9cdf74c44eaf6f4ea5411d29d904a9066f",
-    "reason": "Reviewed v3 baseline after binding sheet.info --include to the include property while porting the wukong sheet info expansion flag.",
+    "sha256": "sha256:817c42482368d9e87c66c7968e4221e9c8229a246781809320a3373c7a75cb4f",
+    "reason": "Reviewed v3 baseline for the complete active canonical/flag/property manifest after adding the chat reply at-users mapping.",
     "reviewed": true
   },
   "removals": {
@@ -397,6 +397,7 @@
     },
     "chat.reply_personal_message": {
       "ai-tag": "clawType",
+      "at-users": "atOpenDingTalkIds",
       "conversation-id": "openConversationId"
     },
     "chat.search_at_me_message": {
