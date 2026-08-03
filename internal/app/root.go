@@ -657,9 +657,6 @@ func rewordRequiredFlagError(err error) error {
 // 装在 root 的 FlagErrorFunc 通过 cobra 的 parent fallback 机制覆盖全命令树
 // （cobra.Command.FlagErrorFunc 沿 c.parent 递归向上查找）。
 func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
-	if enriched := enrichChatWorkbookError(cmd, err); enriched != err {
-		return enriched
-	}
 	errMsg := err.Error()
 	// 尾部 hint：换行 + See '...' for usage.
 	// JSON 输出时 \n 会被序列化为字面 \n，文本输出时换行；
@@ -681,6 +678,9 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 			apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 			apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
 		)
+	}
+	if enriched := enrichChatWorkbookError(cmd, err); enriched != err {
+		return enriched
 	}
 
 	// Common flag aliases and suggestions

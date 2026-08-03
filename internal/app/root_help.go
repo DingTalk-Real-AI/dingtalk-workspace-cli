@@ -44,7 +44,6 @@ func configureRootHelp(root *cobra.Command) {
 			defaultHelpFunc(cmd, args)
 			cli.RenderSafetyAnnotation(cmd)
 			renderChatAgentSelectionHint(cmd)
-			renderChatWorkbookHelpGuidance(cmd)
 			return
 		}
 		renderRootHelp(root)
