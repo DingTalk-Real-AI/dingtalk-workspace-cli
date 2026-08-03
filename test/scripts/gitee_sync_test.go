@@ -49,6 +49,48 @@ func TestSyncGiteeTagSkipsAnAlreadyAlignedImmutableTag(t *testing.T) {
 	}
 }
 
+func TestSyncGiteeTagRetriesATransientPushFailure(t *testing.T) {
+	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
+	root := t.TempDir()
+	workDir := filepath.Join(root, "work")
+	remoteDir := filepath.Join(root, "gitee.git")
+	seedTaggedRepository(t, workDir, "v1.2.3")
+	mustRun(t, root, "git", "init", "--bare", remoteDir)
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("LookPath(git) error = %v", err)
+	}
+	wrapperDir := t.TempDir()
+	pushCountPath := filepath.Join(root, "push-count")
+	wrapper := fmt.Sprintf(`#!/bin/sh
+set -eu
+if [ "$1" = "push" ]; then
+  count=0
+  [ ! -f "$GIT_PUSH_COUNT" ] || count="$(cat "$GIT_PUSH_COUNT")"
+  count=$((count + 1))
+  printf '%%s\n' "$count" >"$GIT_PUSH_COUNT"
+  [ "$count" -gt 1 ] || exit 1
+fi
+exec %q "$@"
+`, realGit)
+	mustWriteFile(t, filepath.Join(wrapperDir, "git"), []byte(wrapper), 0o755)
+
+	output := runGiteeTagSync(
+		t, scriptPath, workDir, remoteDir, "v1.2.3", true,
+		"PATH="+wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GIT_PUSH_COUNT="+pushCountPath,
+		"GITEE_TAG_PUSH_ATTEMPTS=2",
+		"GITEE_TAG_PUSH_RETRY_DELAY=0",
+	)
+	if !strings.Contains(output, "attempt 1/2") ||
+		!strings.Contains(output, "retrying") ||
+		!strings.Contains(output, "attempt 2/2") ||
+		!strings.Contains(output, "is aligned") {
+		t.Fatalf("transient tag push was not retried safely:\n%s", output)
+	}
+}
+
 func TestSyncGiteeTagRefusesToMoveAnExistingTag(t *testing.T) {
 	scriptPath := mustAbs(t, filepath.Join("..", "..", "scripts", "release", "sync-gitee-tag.sh"))
 	root := t.TempDir()

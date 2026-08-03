@@ -5,8 +5,10 @@ set -euo pipefail
 
 VERSION="${VERSION:-}"
 GITEE_REPO="${GITEE_REPO:-}"
-GITEE_GIT_TIMEOUT_SECONDS="${GITEE_GIT_TIMEOUT_SECONDS:-180}"
-GITEE_TAG_TIMEOUT_SECONDS="${GITEE_TAG_TIMEOUT_SECONDS:-300}"
+GITEE_GIT_TIMEOUT_SECONDS="${GITEE_GIT_TIMEOUT_SECONDS:-75}"
+GITEE_TAG_TIMEOUT_SECONDS="${GITEE_TAG_TIMEOUT_SECONDS:-360}"
+GITEE_TAG_PUSH_ATTEMPTS="${GITEE_TAG_PUSH_ATTEMPTS:-3}"
+GITEE_TAG_PUSH_RETRY_DELAY="${GITEE_TAG_PUSH_RETRY_DELAY:-5}"
 GITEE_TAG_VERIFY_ATTEMPTS="${GITEE_TAG_VERIFY_ATTEMPTS:-12}"
 GITEE_TAG_VERIFY_DELAY="${GITEE_TAG_VERIFY_DELAY:-5}"
 GITEE_SOURCE_REMOTE="${GITEE_SOURCE_REMOTE-origin}"
@@ -35,9 +37,11 @@ require_nonnegative_integer() {
 for setting in \
   GITEE_GIT_TIMEOUT_SECONDS \
   GITEE_TAG_TIMEOUT_SECONDS \
+  GITEE_TAG_PUSH_ATTEMPTS \
   GITEE_TAG_VERIFY_ATTEMPTS; do
   require_positive_integer "$setting" "${!setting}"
 done
+require_nonnegative_integer GITEE_TAG_PUSH_RETRY_DELAY "$GITEE_TAG_PUSH_RETRY_DELAY"
 require_nonnegative_integer GITEE_TAG_VERIFY_DELAY "$GITEE_TAG_VERIFY_DELAY"
 if [ -n "$GITEE_PARENT_DEADLINE_EPOCH" ]; then
   require_positive_integer GITEE_PARENT_DEADLINE_EPOCH "$GITEE_PARENT_DEADLINE_EPOCH"
@@ -200,17 +204,29 @@ if [ -n "$remote_commit" ]; then
   err "Gitee tag ${VERSION} already points to ${remote_commit}; refusing to move it to ${target_commit}"
 fi
 
-echo "   Pushing missing Gitee tag ${VERSION} -> ${target_commit}"
-if ! run_bounded git push "$GITEE_GIT_REMOTE" \
-  "refs/tags/${VERSION}:refs/tags/${VERSION}" >/dev/null; then
-  # A concurrent mirror may have created the same immutable tag while the push
-  # was in flight. Accept only the exact expected commit.
+push_attempt=1
+while [ "$push_attempt" -le "$GITEE_TAG_PUSH_ATTEMPTS" ]; do
+  echo "   Pushing missing Gitee tag ${VERSION} -> ${target_commit} (attempt ${push_attempt}/${GITEE_TAG_PUSH_ATTEMPTS})"
+  if run_bounded git push "$GITEE_GIT_REMOTE" \
+    "refs/tags/${VERSION}:refs/tags/${VERSION}" >/dev/null; then
+    break
+  fi
+
+  # A concurrent mirror or a timed-out push may have created the immutable tag
+  # even though git did not observe a successful response. Accept only the exact
+  # expected commit before deciding whether another push is safe.
   if remote_commit="$(remote_tag_commit 2>/dev/null)" && [ "$remote_commit" = "$target_commit" ]; then
     echo "   Gitee tag ${VERSION} became aligned concurrently — continue."
     exit 0
   fi
-  err "failed to push missing Gitee tag ${VERSION}"
-fi
+  if [ "$push_attempt" -ge "$GITEE_TAG_PUSH_ATTEMPTS" ]; then
+    err "failed to push missing Gitee tag ${VERSION} after ${GITEE_TAG_PUSH_ATTEMPTS} attempts"
+  fi
+  echo "   Gitee tag push attempt ${push_attempt} failed; retrying after ${GITEE_TAG_PUSH_RETRY_DELAY}s."
+  sleep_within_deadline "$GITEE_TAG_PUSH_RETRY_DELAY" \
+    || err "Gitee tag synchronization deadline exhausted before push retry"
+  push_attempt=$((push_attempt + 1))
+done
 
 attempt=1
 remote_commit=""
