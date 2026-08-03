@@ -130,6 +130,72 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			wantArgs:    map[string]any{"openConversationId": "cid-1"},
 		},
 		{
+			name:        "chat update id and title aliases",
+			argv:        []string{"chat", "+chat-update", "--open-conversation-id", "cid-1", "--title", "新群名", "--yes"},
+			wantProduct: "chat",
+			wantTool:    "update_group_name",
+			wantArgs:    map[string]any{"openconversation_id": "cid-1", "group_name": "新群名"},
+		},
+		{
+			name:        "member get id and users aliases",
+			argv:        []string{"chat", "+chat-members-get", "--conversation-id", "cid-1", "--open-dingtalk-ids", "D1,D2"},
+			wantProduct: "im",
+			wantTool:    "list_group_member_by_ids",
+			wantArgs: map[string]any{
+				"openConversationId":    "cid-1",
+				"memberOpenDingTalkIds": []string{"D1", "D2"},
+			},
+		},
+		{
+			name:        "invite url id alias",
+			argv:        []string{"chat", "+chat-invite-url", "--chat-id", "cid-1"},
+			wantProduct: "im",
+			wantTool:    "get_group_invite_url",
+			wantArgs:    map[string]any{"openConversationId": "cid-1"},
+		},
+		{
+			name:        "chat bots id alias",
+			argv:        []string{"chat", "+chat-bots", "--id", "cid-1"},
+			wantProduct: "bot",
+			wantTool:    "list_group_bots",
+			wantArgs:    map[string]any{"openConversationId": "cid-1"},
+		},
+		{
+			name:        "recall message aliases",
+			argv:        []string{"chat", "+messages-recall", "--chat-id", "cid-1", "--message-id", "msg-1", "--yes"},
+			wantProduct: "im",
+			wantTool:    "recall_message",
+			wantArgs:    map[string]any{"openConversationId": "cid-1", "openMessageId": "msg-1"},
+		},
+		{
+			name:        "message mget message id alias",
+			argv:        []string{"chat", "+messages-mget", "--message-id", "msg-1,msg-2"},
+			wantProduct: "im",
+			wantTool:    "list_messages_by_ids",
+			wantArgs:    map[string]any{"openMsgIds": []string{"msg-1", "msg-2"}},
+		},
+		{
+			name:        "send status task id alias",
+			argv:        []string{"chat", "+messages-query-send-status", "--task-id", "task-1"},
+			wantProduct: "im",
+			wantTool:    "query_message_send_status",
+			wantArgs:    map[string]any{"openTaskId": "task-1"},
+		},
+		{
+			name:        "conversation top aliases",
+			argv:        []string{"chat", "+conversation-set-top", "--open-conversation-id", "cid-1", "--top=false", "--yes"},
+			wantProduct: "im",
+			wantTool:    "set_top_conversation",
+			wantArgs:    map[string]any{"openConversationId": "cid-1", "top": false},
+		},
+		{
+			name:        "favorite list limit alias",
+			argv:        []string{"chat", "+flag-list", "--limit", "7"},
+			wantProduct: "im",
+			wantTool:    "list_message_favorites",
+			wantArgs:    map[string]any{"size": "7"},
+		},
+		{
 			name:        "at all mute matches live MCP schema",
 			argv:        []string{"chat", "+conversation-mute-at-all", "--conversation-id", "cid-1", "--yes"},
 			wantProduct: "im",
@@ -190,7 +256,7 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 				t.Fatalf("call = %s/%s, want %s/%s", fake.product, fake.tool, tc.wantProduct, tc.wantTool)
 			}
 			for key, want := range tc.wantArgs {
-				if got := fake.args[key]; got != want {
+				if got := fake.args[key]; !reflect.DeepEqual(got, want) {
 					t.Errorf("%s = %#v, want %#v", key, got, want)
 				}
 			}

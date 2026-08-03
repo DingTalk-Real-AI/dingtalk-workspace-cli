@@ -147,14 +147,23 @@ var MessagesRecall = shortcut.Shortcut{
 	Intent:      "当你想撤回当前用户刚发出的某条消息时使用；会实际撤回消息，需传会话 openConversationId 和消息 openMessageId。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
-		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
-		{Name: "msg-id", Type: shortcut.FlagString, Desc: "消息 openMessageId", Required: true},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId（必填）"},
+		{Name: "group", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "chat-id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "msg-id", Type: shortcut.FlagString, Desc: "消息 openMessageId（必填）"},
+		{Name: "message-id", Type: shortcut.FlagString, Desc: "--msg-id 的兼容别名", Hidden: true},
+		{Name: "open-message-id", Type: shortcut.FlagString, Desc: "--msg-id 的兼容别名", Hidden: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"conversation-id", "group", "chat-id", "open-conversation-id"}},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"msg-id", "message-id", "open-message-id"}},
 	},
 	Tips: []string{`dws chat +messages-recall --conversation-id <openConversationId> --msg-id <openMessageId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("recall_message", map[string]any{
-			"openConversationId": rt.Str("conversation-id"),
-			"openMessageId":      rt.Str("msg-id"),
+			"openConversationId": rt.StrFirst("conversation-id", "group", "chat-id", "open-conversation-id"),
+			"openMessageId":      rt.StrFirst("msg-id", "message-id", "open-message-id"),
 		})
 	},
 }
@@ -529,26 +538,30 @@ var MessagesMget = shortcut.Shortcut{
 	Intent:      "当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。",
 	Risk:        shortcut.RiskRead,
 	Flags: append([]shortcut.Flag{
-		{Name: "msg-ids", Type: shortcut.FlagStringSlice, Desc: "消息 openMsgId 列表；--msg-ids 去重后必须包含 1-50 条消息 ID", Required: true},
+		{Name: "msg-ids", Type: shortcut.FlagStringSlice, Desc: "消息 openMsgId 列表；--msg-ids 去重后必须包含 1-50 条消息 ID（必填）"},
+		{Name: "message-id", Type: shortcut.FlagStringSlice, Desc: "--msg-ids 的兼容别名", Hidden: true},
+		{Name: "message-ids", Type: shortcut.FlagStringSlice, Desc: "--msg-ids 的兼容别名", Hidden: true},
+		{Name: "open-message-ids", Type: shortcut.FlagStringSlice, Desc: "--msg-ids 的兼容别名", Hidden: true},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
 	}, MessageResourceDownloadFlags()...),
 	Constraints: append([]shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"msg-ids", "message-id", "message-ids", "open-message-ids"}},
 		{
 			Kind:        shortcut.ConstraintCustom,
-			Flags:       []string{"msg-ids"},
+			Flags:       []string{"msg-ids", "message-id", "message-ids", "open-message-ids"},
 			Description: "--msg-ids 去重后必须包含 1-50 条消息 ID",
 		},
 	}, MessageResourceDownloadConstraints()...),
 	Tips: []string{`dws chat +messages-mget --msg-ids msgId1,msgId2`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
-		ids := uniqueShortcutStrings(rt.StrSlice("msg-ids"))
+		ids := messageMgetIDs(rt)
 		if len(ids) < 1 || len(ids) > 50 {
 			return fmt.Errorf("--msg-ids 去重后必须包含 1-50 条消息 ID，当前 %d 条", len(ids))
 		}
 		return ValidateMessageResourceDownload(rt)
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		ids := uniqueShortcutStrings(rt.StrSlice("msg-ids"))
+		ids := messageMgetIDs(rt)
 		data, err := rt.CallMCPData("im", "list_messages_by_ids", map[string]any{"openMsgIds": ids})
 		if err != nil {
 			return err
@@ -579,6 +592,10 @@ var MessagesMget = shortcut.Shortcut{
 		}
 		return rt.Output(payload)
 	},
+}
+
+func messageMgetIDs(rt *shortcut.RuntimeContext) []string {
+	return uniqueShortcutStrings(rt.StrSliceFirst("msg-ids", "message-id", "message-ids", "open-message-ids"))
 }
 
 // MessageResourceDownloadFlags returns the common opt-in resource workflow used
@@ -833,11 +850,15 @@ var MessagesQuerySendStatus = shortcut.Shortcut{
 	Intent:      "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "open-task-id", Type: shortcut.FlagString, Desc: "发送消息时返回的 openTaskId", Required: true},
+		{Name: "open-task-id", Type: shortcut.FlagString, Desc: "发送消息时返回的 openTaskId（必填）"},
+		{Name: "task-id", Type: shortcut.FlagString, Desc: "--open-task-id 的兼容别名", Hidden: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"open-task-id", "task-id"}},
 	},
 	Tips: []string{`dws chat +messages-query-send-status --open-task-id <openTaskId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("query_message_send_status", map[string]any{"openTaskId": rt.Str("open-task-id")})
+		return rt.CallMCP("query_message_send_status", map[string]any{"openTaskId": rt.StrFirst("open-task-id", "task-id")})
 	},
 }
 

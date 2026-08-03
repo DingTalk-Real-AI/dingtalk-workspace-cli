@@ -50,8 +50,9 @@ PRODUCT_START = "<!-- VISIBLE_SHORTCUTS_START -->"
 PRODUCT_END = "<!-- VISIBLE_SHORTCUTS_END -->"
 
 # Large, high-frequency product skills should route known intents directly and
-# keep their full shortcut inventory in Runtime Catalog/Schema. Add services
-# here only after verifying that the product skill has its own reviewed routing
+# keep their full shortcut inventory in the Runtime Shortcut Catalog. Curated
+# entries may additionally be queried through leaf Schema. Add services here
+# only after verifying that the product skill has its own reviewed routing
 # section and intent table; compacting a sparse skill without an alternative
 # route would make its shortcuts harder to discover.
 COMPACT_PRODUCT_SERVICES = {"chat"}
@@ -137,7 +138,7 @@ def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
     return f"""{PRODUCT_START}
 ## Shortcut 发现（按需）
 
-`{md_escape(service)}` 当前有 {len(rows)} 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+`{md_escape(service)}` 当前有 {len(rows)} 条公开 shortcut。完整清单保留在 Runtime Shortcut Catalog；已完成 Schema curation 的子集可通过 leaf Schema 查询。高频产品根 Skill 不重复展开完整清单。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
 
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service {md_escape(service)} --compact --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 {PRODUCT_END}"""

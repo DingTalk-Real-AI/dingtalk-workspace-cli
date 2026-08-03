@@ -46,10 +46,45 @@ class ChatSkillScriptPathTest(unittest.TestCase):
         chat_rows = [
             row for row in catalog['results'] if row.get('service') == 'chat'
         ]
+        schema_catalog = json.loads(
+            (
+                ROOT
+                / 'internal'
+                / 'cli'
+                / 'schema_catalog'
+                / 'tools'
+                / 'chat.json'
+            ).read_text(encoding='utf-8')
+        )
+        schema_shortcuts = [
+            path
+            for path in schema_catalog['tools']
+            if path.startswith('chat.shortcut_')
+        ]
+        exclusions = json.loads(
+            (
+                ROOT / 'internal' / 'cli' / 'schema_command_exclusions.json'
+            ).read_text(encoding='utf-8')
+        )
+        pending_shortcuts = next(
+            group['commands']
+            for group in exclusions['groups']
+            if group['id'] == 'chat-shortcuts-pending-schema-curation'
+        )
         self.assertEqual(97, len(chat_rows))
+        self.assertEqual(47, len(schema_shortcuts))
+        self.assertEqual(50, len(pending_shortcuts))
+        self.assertEqual(
+            len(chat_rows), len(schema_shortcuts) + len(pending_shortcuts)
+        )
         self.assertIn('## Shortcut 发现（按需）', block)
         self.assertIn('`chat` 当前有 97 条公开 shortcut', block)
-        self.assertIn('Runtime Catalog 与 Schema', block)
+        self.assertIn(
+            '完整清单保留在 Runtime Shortcut Catalog；已完成 Schema curation '
+            '的子集可通过 leaf Schema 查询。',
+            block,
+        )
+        self.assertNotIn('Runtime Catalog 与 Schema', block)
         self.assertIn(
             'dws shortcut list --service chat --compact --format json',
             block,

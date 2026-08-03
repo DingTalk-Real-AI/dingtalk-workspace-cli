@@ -40,16 +40,21 @@ var DM = shortcut.Shortcut{
 		"内部先按姓名搜通讯录解析出唯一用户，并用其 openDingTalkId 发送，姓名匹配到多人时会列出候选让你区分。会真实发出消息。",
 	Risk: shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
-		{Name: "to", Type: shortcut.FlagString, Desc: "收件人姓名/花名", Required: true},
+		{Name: "to", Type: shortcut.FlagString, Desc: "收件人姓名/花名（必填）"},
+		{Name: "name", Type: shortcut.FlagString, Desc: "--to 的兼容别名", Hidden: true},
+		{Name: "keyword", Type: shortcut.FlagString, Desc: "--to 的兼容别名", Hidden: true},
 		{Name: "text", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown）", Required: true},
 		shortcut.AIMessageTagFlag(),
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"to", "name", "keyword"}},
 	},
 	Tips: []string{`dws chat +dm --to 张三 --text "周报发我一下"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		text := rt.Str("text")
 
 		// Step 1 — resolve the recipient name to a unique userId.
-		user, err := resolveOpenDingTalkUser(rt, rt.Str("to"))
+		user, err := resolveOpenDingTalkUser(rt, rt.StrFirst("to", "name", "keyword"))
 		if err != nil {
 			return err
 		}

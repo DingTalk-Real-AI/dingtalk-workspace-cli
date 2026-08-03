@@ -68516,7 +68516,7 @@
       "cli_name": "+bot-find",
       "cli_path": "chat +bot-find",
       "confirmation": "not_required",
-      "description": "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。\n\n参数约束：\n  - --query、--keyword 至少指定一个",
+      "description": "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。",
       "display": "群聊 / 消息 / 机器人",
       "effect": "read",
       "effect_source": "agent-hint",
@@ -68614,13 +68614,13 @@
               "precedence": "cobra_help",
               "selected": true,
               "source": "cobra_help",
-              "value": "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。\n\n参数约束：\n  - --query、--keyword 至少指定一个"
+              "value": "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。"
             }
           ],
           "precedence": "cobra_help",
           "resolution": "highest_precedence",
           "source": "cobra_help",
-          "value": "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。\n\n参数约束：\n  - --query、--keyword 至少指定一个"
+          "value": "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。"
         },
         "effect": {
           "candidates": [
@@ -74874,7 +74874,7 @@
           ]
         ]
       },
-      "description": "当你想快速看某个会话里的消息（谁在什么时间说了什么），而不想拿到一大坨原始消息字段时使用；群聊传 --group（群会话 ID，openConversationId），单聊传 --user（对方 userId），两者互斥且必须二选一。省略 --time 时默认从当前时间向前读取最近消息；也可指定时间边界并用 --direction newer/older 控制方向。内部据此调用群聊或单聊的消息列表接口，再在本地投影出每条消息的发言人、文本和时间。默认只读且不会发送或修改任何消息；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。\n\n参数约束：\n  - --group、--conversation-id、--id、--user、--open-dingtalk-id 必须且只能指定一个\n  - --output-dir 必须是工作目录内的相对路径，不允许绝对路径或 .. 逃逸",
+      "description": "当你想快速看某个会话里的消息（谁在什么时间说了什么），而不想拿到一大坨原始消息字段时使用；群聊传 --group（群会话 ID，openConversationId），单聊传 --user（对方 userId），两者互斥且必须二选一。省略 --time 时默认从当前时间向前读取最近消息；也可指定时间边界并用 --direction newer/older 控制方向。内部据此调用群聊或单聊的消息列表接口，再在本地投影出每条消息的发言人、文本和时间。默认只读且不会发送或修改任何消息；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。\n\n参数约束：\n  - --group、--user、--open-dingtalk-id 必须且只能指定一个\n  - --output-dir 必须是工作目录内的相对路径，不允许绝对路径或 .. 逃逸",
       "display": "群聊 / 消息 / 机器人",
       "effect": "read",
       "effect_source": "agent-hint",
@@ -74973,13 +74973,13 @@
               "precedence": "cobra_help",
               "selected": true,
               "source": "cobra_help",
-              "value": "当你想快速看某个会话里的消息（谁在什么时间说了什么），而不想拿到一大坨原始消息字段时使用；群聊传 --group（群会话 ID，openConversationId），单聊传 --user（对方 userId），两者互斥且必须二选一。省略 --time 时默认从当前时间向前读取最近消息；也可指定时间边界并用 --direction newer/older 控制方向。内部据此调用群聊或单聊的消息列表接口，再在本地投影出每条消息的发言人、文本和时间。默认只读且不会发送或修改任何消息；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。\n\n参数约束：\n  - --group、--conversation-id、--id、--user、--open-dingtalk-id 必须且只能指定一个\n  - --output-dir 必须是工作目录内的相对路径，不允许绝对路径或 .. 逃逸"
+              "value": "当你想快速看某个会话里的消息（谁在什么时间说了什么），而不想拿到一大坨原始消息字段时使用；群聊传 --group（群会话 ID，openConversationId），单聊传 --user（对方 userId），两者互斥且必须二选一。省略 --time 时默认从当前时间向前读取最近消息；也可指定时间边界并用 --direction newer/older 控制方向。内部据此调用群聊或单聊的消息列表接口，再在本地投影出每条消息的发言人、文本和时间。默认只读且不会发送或修改任何消息；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。\n\n参数约束：\n  - --group、--user、--open-dingtalk-id 必须且只能指定一个\n  - --output-dir 必须是工作目录内的相对路径，不允许绝对路径或 .. 逃逸"
             }
           ],
           "precedence": "cobra_help",
           "resolution": "highest_precedence",
           "source": "cobra_help",
-          "value": "当你想快速看某个会话里的消息（谁在什么时间说了什么），而不想拿到一大坨原始消息字段时使用；群聊传 --group（群会话 ID，openConversationId），单聊传 --user（对方 userId），两者互斥且必须二选一。省略 --time 时默认从当前时间向前读取最近消息；也可指定时间边界并用 --direction newer/older 控制方向。内部据此调用群聊或单聊的消息列表接口，再在本地投影出每条消息的发言人、文本和时间。默认只读且不会发送或修改任何消息；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。\n\n参数约束：\n  - --group、--conversation-id、--id、--user、--open-dingtalk-id 必须且只能指定一个\n  - --output-dir 必须是工作目录内的相对路径，不允许绝对路径或 .. 逃逸"
+          "value": "当你想快速看某个会话里的消息（谁在什么时间说了什么），而不想拿到一大坨原始消息字段时使用；群聊传 --group（群会话 ID，openConversationId），单聊传 --user（对方 userId），两者互斥且必须二选一。省略 --time 时默认从当前时间向前读取最近消息；也可指定时间边界并用 --direction newer/older 控制方向。内部据此调用群聊或单聊的消息列表接口，再在本地投影出每条消息的发言人、文本和时间。默认只读且不会发送或修改任何消息；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。\n\n参数约束：\n  - --group、--user、--open-dingtalk-id 必须且只能指定一个\n  - --output-dir 必须是工作目录内的相对路径，不允许绝对路径或 .. 逃逸"
         },
         "effect": {
           "candidates": [
@@ -79253,7 +79253,7 @@
       "cli_name": "+chat-search",
       "cli_path": "chat +chat-search",
       "confirmation": "not_required",
-      "description": "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。\n\n参数约束：\n  - --query、--keyword 至少指定一个",
+      "description": "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。",
       "display": "群聊 / 消息 / 机器人",
       "effect": "read",
       "effect_source": "agent-hint",
@@ -79351,13 +79351,13 @@
               "precedence": "cobra_help",
               "selected": true,
               "source": "cobra_help",
-              "value": "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。\n\n参数约束：\n  - --query、--keyword 至少指定一个"
+              "value": "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。"
             }
           ],
           "precedence": "cobra_help",
           "resolution": "highest_precedence",
           "source": "cobra_help",
-          "value": "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。\n\n参数约束：\n  - --query、--keyword 至少指定一个"
+          "value": "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。"
         },
         "effect": {
           "candidates": [
@@ -88290,7 +88290,7 @@
       "cli_name": "+messages-read-status",
       "cli_path": "chat +messages-read-status",
       "confirmation": "not_required",
-      "description": "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。\n\n参数约束：\n  - --conversation-id、--group、--id 必须且只能指定一个",
+      "description": "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。",
       "display": "群聊 / 消息 / 机器人",
       "effect": "read",
       "effect_source": "agent-hint",
@@ -88388,13 +88388,13 @@
               "precedence": "cobra_help",
               "selected": true,
               "source": "cobra_help",
-              "value": "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。\n\n参数约束：\n  - --conversation-id、--group、--id 必须且只能指定一个"
+              "value": "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。"
             }
           ],
           "precedence": "cobra_help",
           "resolution": "highest_precedence",
           "source": "cobra_help",
-          "value": "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。\n\n参数约束：\n  - --conversation-id、--group、--id 必须且只能指定一个"
+          "value": "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。"
         },
         "effect": {
           "candidates": [

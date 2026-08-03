@@ -119,14 +119,24 @@ var ChatUpdate = shortcut.Shortcut{
 	Intent:      "当你只需要修改群名称时使用；这是 lark-cli +chat-update 的诚实子集，只接受群 openConversationId 和新名称。修改群 description、个人备注、群昵称或其他群设置时不要使用。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
-		{Name: "name", Type: shortcut.FlagString, Desc: "新的群名称", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（必填）"},
+		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "chat-id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "name", Type: shortcut.FlagString, Desc: "新的群名称（必填）"},
+		{Name: "title", Type: shortcut.FlagString, Desc: "--name 的兼容别名", Hidden: true},
+		{Name: "new-title", Type: shortcut.FlagString, Desc: "--name 的兼容别名", Hidden: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "id", "chat-id", "conversation-id", "open-conversation-id"}},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"name", "title", "new-title"}},
 	},
 	Tips: []string{`dws chat +chat-update --group <openConversationId> --name "新群名"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("update_group_name", map[string]any{
-			"openconversation_id": rt.Str("group"),
-			"group_name":          rt.Str("name"),
+			"openconversation_id": rt.StrFirst("group", "id", "chat-id", "conversation-id", "open-conversation-id"),
+			"group_name":          rt.StrFirst("name", "title", "new-title"),
 		})
 	},
 }
@@ -391,6 +401,8 @@ var FlagList = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "cursor", Type: shortcut.FlagInt, Default: "0", Desc: "数字分页游标，首次传 0"},
 		{Name: "size", Type: shortcut.FlagInt, Default: "20", Desc: "每页数量，范围 1-100"},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "--size 的兼容别名", Hidden: true},
+		{Name: "max", Type: shortcut.FlagInt, Desc: "--size 的兼容别名", Hidden: true},
 	},
 	Constraints: []shortcut.Constraint{{
 		Kind:        shortcut.ConstraintCustom,
@@ -402,7 +414,7 @@ var FlagList = shortcut.Shortcut{
 		if rt.Int("cursor") < 0 {
 			return apperrors.NewValidation("--cursor 必须大于等于 0")
 		}
-		if size := rt.Int("size"); size < 1 || size > 100 {
+		if size := rt.IntFirst("size", "limit", "max"); size < 1 || size > 100 {
 			return apperrors.NewValidation("--size 必须在 1-100 之间")
 		}
 		return nil
@@ -410,7 +422,7 @@ var FlagList = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("list_message_favorites", map[string]any{
 			"cursor": rt.Int("cursor"),
-			"size":   strconv.Itoa(rt.Int("size")),
+			"size":   strconv.Itoa(rt.IntFirst("size", "limit", "max")),
 		})
 	},
 }

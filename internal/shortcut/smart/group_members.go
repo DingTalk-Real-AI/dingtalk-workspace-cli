@@ -109,17 +109,20 @@ var ChatMembersList = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名称（与 --conversation-id 二选一）"},
 		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "群 openConversationId（与 --group 二选一）"},
+		{Name: "id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "chat-id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
 		{Name: "member-types", Type: shortcut.FlagStringSlice, Desc: "成员类型：user,bot；不传则同时返回"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "conversation-id"}},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "conversation-id", "id", "chat-id", "open-conversation-id"}},
 	},
 	Tips: []string{
 		`dws chat +chat-members-list --group "项目冲刺"`,
 		`dws chat +chat-members-list --conversation-id <openConversationId> --member-types user,bot`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		groupID := strings.TrimSpace(rt.Str("conversation-id"))
+		groupID := strings.TrimSpace(rt.StrFirst("conversation-id", "id", "chat-id", "open-conversation-id"))
 		groupName := strings.TrimSpace(rt.Str("group"))
 		if groupID == "" {
 			resolved, err := resolveGroupName(rt, groupName)

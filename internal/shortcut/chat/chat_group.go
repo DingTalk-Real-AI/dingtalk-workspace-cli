@@ -69,15 +69,25 @@ var ChatMembersGet = shortcut.Shortcut{
 	Intent:      "当你已有若干成员的 openDingTalkId、需要批量获取他们在该群内的详情（群昵称、角色等）时使用；只读，需传群 openConversationId 和成员 openDingTalkId 列表。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "id", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
-		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "成员 openDingTalkId 列表", Required: true},
+		{Name: "id", Type: shortcut.FlagString, Desc: "群 openConversationId（必填）"},
+		{Name: "group", Type: shortcut.FlagString, Desc: "--id 的兼容别名", Hidden: true},
+		{Name: "chat-id", Type: shortcut.FlagString, Desc: "--id 的兼容别名", Hidden: true},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "--id 的兼容别名", Hidden: true},
+		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "--id 的兼容别名", Hidden: true},
+		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "成员 openDingTalkId 列表（必填）"},
+		{Name: "open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "--users 的兼容别名", Hidden: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"id", "group", "chat-id", "conversation-id", "open-conversation-id"}},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"users", "open-dingtalk-ids"}},
 	},
 	Tips: []string{`dws chat +chat-members-get --id <openConversationId> --users odid1,odid2`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		conversationID := rt.StrFirst("id", "group", "chat-id", "conversation-id", "open-conversation-id")
 		return rt.CallMCP("list_group_member_by_ids", map[string]any{
-			"openConversationId":    rt.Str("id"),
-			"cid":                   rt.Str("id"),
-			"memberOpenDingTalkIds": rt.StrSlice("users"),
+			"openConversationId":    conversationID,
+			"cid":                   conversationID,
+			"memberOpenDingTalkIds": rt.StrSliceFirst("users", "open-dingtalk-ids"),
 		})
 	},
 }
@@ -122,14 +132,22 @@ var ChatInviteURL = shortcut.Shortcut{
 	Intent:      "当你想拿到一条群邀请链接分享给别人加群时使用；只读生成链接，需传群 openConversationId，可用 --expires-seconds 设置有效期（0 表示永久）。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（必填）"},
+		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "chat-id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
 		{Name: "expires-seconds", Type: shortcut.FlagInt, Desc: "链接有效期（秒），0 表示永久"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "id", "chat-id", "conversation-id", "open-conversation-id"}},
 	},
 	Tips: []string{`dws chat +chat-invite-url --group <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		conversationID := rt.StrFirst("group", "id", "chat-id", "conversation-id", "open-conversation-id")
 		params := map[string]any{
-			"openConversationId": rt.Str("group"),
-			"cid":                rt.Str("group"),
+			"openConversationId": conversationID,
+			"cid":                conversationID,
 		}
 		if rt.Changed("expires-seconds") {
 			params["expiresSeconds"] = rt.Int("expires-seconds")
@@ -552,11 +570,20 @@ var ChatBots = shortcut.Shortcut{
 	Intent:      "当你想查看某个群里已添加了哪些机器人时使用；需传群 openConversationId，只读返回群内机器人列表（含 openBotId，供后续移除）。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（必填）"},
+		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "chat-id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "--group 的兼容别名", Hidden: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "id", "chat-id", "conversation-id", "open-conversation-id"}},
 	},
 	Tips: []string{`dws chat +chat-bots --group <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		data, err := rt.CallMCPData("bot", "list_group_bots", map[string]any{"openConversationId": rt.Str("group")})
+		data, err := rt.CallMCPData("bot", "list_group_bots", map[string]any{
+			"openConversationId": rt.StrFirst("group", "id", "chat-id", "conversation-id", "open-conversation-id"),
+		})
 		if err != nil {
 			return err
 		}

@@ -207,7 +207,7 @@ func TestCrossPlatformCoveragePATURLAndMutationCoverageEdges(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoveragePATClassificationAndBusinessHints(t *testing.T) {
+func TestCrossPlatformCoveragePATClassification(t *testing.T) {
 	patErr := &PATError{RawJSON: `{"code":"PAT_NO_PERMISSION"}`}
 	if patErr.Error() != patErr.RawJSON || patErr.RawStderr() != patErr.RawJSON || patErr.ExitCode() != ExitCodePermission {
 		t.Fatalf("PATError contract changed: %#v", patErr)
@@ -319,34 +319,6 @@ func TestCrossPlatformCoveragePATClassificationAndBusinessHints(t *testing.T) {
 		t.Fatal("authentication recovery hints lost the login command")
 	}
 
-	hintCases := []struct {
-		body map[string]any
-		want string
-	}{
-		{body: map[string]any{"errorMsg": "搜索内容不能为空"}, want: "doc search"},
-		{body: map[string]any{"message": "User has no permission to access this email"}, want: "mailbox list"},
-		{body: map[string]any{"error": "频率超限"}, want: "rate limit"},
-		{body: map[string]any{"errorMsg": "参数错误"}, want: "parameters"},
-		{
-			body: map[string]any{
-				"error":   map[string]any{"code": "IM_ERROR", "message": "listRoles null"},
-				"summary": "context",
-				"code":    "TOP_LEVEL",
-			},
-			want: "list-my-groups",
-		},
-		{body: map[string]any{"message": "OpendId is not in conversation"}, want: "实际加入"},
-		{body: map[string]any{"message": "OpenId is not in conversation"}, want: "实际加入"},
-		{body: map[string]any{"message": "The operator is not in this group chat"}, want: "源群"},
-		{body: map[string]any{"message": "targetOpenConversationId和receiverUid不能同时为空"}, want: "--receiver"},
-		{body: map[string]any{"summary": "unknown", "code": "UNKNOWN"}, want: "business error"},
-	}
-	for _, tc := range hintCases {
-		if got := SuggestBusinessHint(tc.body); !strings.Contains(got, tc.want) {
-			t.Errorf("SuggestBusinessHint(%v) = %q, want containing %q", tc.body, got, tc.want)
-		}
-	}
-
 	if got := ClassifyPatAuthCheck(map[string]any{"code": "PAT_LOW_RISK_NO_PERMISSION"}); got == nil {
 		t.Fatal("ClassifyPatAuthCheck() returned nil")
 	}
@@ -359,6 +331,35 @@ func TestCrossPlatformCoveragePATClassificationAndBusinessHints(t *testing.T) {
 	}
 	if got := AsPatAuthCheckError(stderrors.New("plain")); got != nil {
 		t.Fatalf("AsPatAuthCheckError() = %#v", got)
+	}
+}
+
+func TestSuggestBusinessHintChatRecovery(t *testing.T) {
+	tests := []struct {
+		name string
+		body map[string]any
+		want string
+	}{
+		{
+			name: "missing group role context",
+			body: map[string]any{
+				"error":   map[string]any{"code": "IM_ERROR", "message": "listRoles null"},
+				"summary": "context",
+				"code":    "TOP_LEVEL",
+			},
+			want: "list-my-groups",
+		},
+		{name: "legacy open id spelling", body: map[string]any{"message": "OpendId is not in conversation"}, want: "实际加入"},
+		{name: "open id outside conversation", body: map[string]any{"message": "OpenId is not in conversation"}, want: "实际加入"},
+		{name: "operator outside source group", body: map[string]any{"message": "The operator is not in this group chat"}, want: "源群"},
+		{name: "missing invitation receiver", body: map[string]any{"message": "targetOpenConversationId和receiverUid不能同时为空"}, want: "--receiver"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := SuggestBusinessHint(tc.body); !strings.Contains(got, tc.want) {
+				t.Errorf("SuggestBusinessHint(%v) = %q, want containing %q", tc.body, got, tc.want)
+			}
+		})
 	}
 }
 

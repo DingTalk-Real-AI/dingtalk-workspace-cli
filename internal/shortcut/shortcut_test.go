@@ -16,6 +16,7 @@ package shortcut
 import (
 	"bytes"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -137,6 +138,7 @@ func TestCrossPlatformCoverageSchemaConstraintCollapsesHiddenAliases(t *testing.
 	cmd := mount(Shortcut{
 		Service: "chat",
 		Command: "+search",
+		Intent:  "搜索消息",
 		Flags: []Flag{
 			{Name: "query", Type: FlagString},
 			{Name: "keyword", Type: FlagString, Hidden: true},
@@ -165,6 +167,11 @@ func TestCrossPlatformCoverageSchemaConstraintCollapsesHiddenAliases(t *testing.
 	if raw := cmd.Annotations["dws.schema.constraints"]; raw != "" {
 		t.Fatalf("hidden compatibility alias leaked into public Schema constraints: %q", raw)
 	}
+	for _, hidden := range []string{"--keyword", "--legacy-id"} {
+		if strings.Contains(cmd.Long, hidden) {
+			t.Fatalf("hidden compatibility alias leaked into long help: %q", cmd.Long)
+		}
+	}
 }
 
 func TestCrossPlatformCoverageAliasAndAIMessageTagHelpers(t *testing.T) {
@@ -179,6 +186,8 @@ func TestCrossPlatformCoverageAliasAndAIMessageTagHelpers(t *testing.T) {
 		Flags: []Flag{
 			{Name: "query", Type: FlagString},
 			{Name: "keyword", Type: FlagString},
+			{Name: "ids", Type: FlagStringSlice},
+			{Name: "legacy-ids", Type: FlagStringSlice},
 			{Name: "limit", Type: FlagInt, Default: "20"},
 			{Name: "size", Type: FlagInt},
 			aiTag,
@@ -192,6 +201,12 @@ func TestCrossPlatformCoverageAliasAndAIMessageTagHelpers(t *testing.T) {
 	}
 	if got := rt.StrFirst("query", "keyword"); got != "树莓派" {
 		t.Fatalf("StrFirst() = %q, want 树莓派", got)
+	}
+	if err := cmd.Flags().Set("legacy-ids", "a,b"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rt.StrSliceFirst("ids", "legacy-ids"); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("StrSliceFirst() = %#v, want [a b]", got)
 	}
 	if got := rt.IntFirst("limit", "size"); got != 20 {
 		t.Fatalf("IntFirst() default = %d, want 20", got)

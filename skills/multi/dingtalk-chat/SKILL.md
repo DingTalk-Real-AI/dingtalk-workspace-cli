@@ -20,7 +20,7 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
 
-`chat` 当前有 97 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+`chat` 当前有 97 条公开 shortcut。完整清单保留在 Runtime Shortcut Catalog；已完成 Schema curation 的子集可通过 leaf Schema 查询。高频产品根 Skill 不重复展开完整清单。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
 
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service chat --compact --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
@@ -37,24 +37,25 @@ Skip a script if its interpreter (for example, `python3`) is unavailable.
   reviewed route matches.
 - Once selected, execute directly. Read leaf Schema only when parameters,
   constraints, or safety are uncertain; read leaf `--help` only when flags are
-  uncertain. If absent from Schema, use the same path in the full Catalog.
+  uncertain. If absent from Schema, use the same path in the Runtime Shortcut
+  Catalog.
 - For `confirmation=user_required`, confirm before adding `--yes`. On source
   conflict, use the safer interpretation and report it.
 
-### 高频选择
+### 高频直接执行骨架
 
-| 用户意图 | 首选 Shortcut | 关键边界 |
-|---|---|---|
-| 当前用户 / 应用机器人 / Webhook 发消息 | `+messages-send --as user|bot|webhook` | Never mix identities |
-| 按姓名发单聊 / 按群名发群消息 | `+dm` / `+send-to-group` | Resolves real person/chat IDs |
-| 拉单个群聊或单聊消息 | `+chat-messages` | Choose one of `--group`, `--user`, `--open-dingtalk-id` |
-| 组合搜索消息 | `+search-msg` | Keyword, sender, @, chat, type, time, `--page-all` |
-| 查询 @ 我的消息 | `+at-me` | Defaults to 7 days; window and pagination are adjustable |
-| 按消息 ID 批量取详情与 reaction | `+messages-mget` | Max 50; supports `--no-reactions` |
-| 读取已知 thread/topic 的全部回复 | `+thread-replies` | `--group` required; choose thread or topic ID |
-| 下载单个 mediaId/fileId | `+messages-resource-download` | mediaId needs message/chat context; fileId does not |
-| 创建并按需立即更新流式卡片 | `+messages-send-card` | Choose one target; `--content` controls immediate update |
-| 清空会话消息 / 删除分组 / 解散群 | `+conversation-clear-messages` / `+category-delete` / `+chat-dismiss` | 高风险; add `--yes` only after Schema confirmation |
+命中后照抄参数名，不先调用 `--help`。
+
+| 用户意图 | 精确 Shortcut 骨架 |
+|---|---|
+| 姓名发单聊 / 群名发群消息 | `+dm --to <姓名> --text <内容>` / `+send-to-group --group <群名> --text <内容>` |
+| 三种身份发消息 | `+messages-send --as user|bot|webhook`；按下方身份模板补参数 |
+| 改群名 | `+chat-update --group <openConversationId> --name <新群名>` |
+| 列成员 / 批查成员 | `+chat-members-list --group <群名>` 或 `--conversation-id <cid>` / `+chat-members-get --id <cid> --users <odid,...>` |
+| 消息详情 / 撤回 / 发送状态 | `+messages-mget --msg-ids <mid,...>` / `+messages-recall --conversation-id <cid> --msg-id <mid>` / `+messages-query-send-status --open-task-id <tid>` |
+| 查 @ 我的消息 | 全局用 `+at-me --days <N>`；限定群用 `+search-msg --at-me --group <cid>`，不要给 `+at-me` 猜群参数 |
+| 群邀请链接 / 群机器人 | 先 `+chat-search --query <群名>` 取 cid，再 `+chat-invite-url --group <cid>` / `+chat-bots --group <cid>` |
+| 会话置顶 / 收藏列表 | `+conversation-set-top --conversation-id <cid> [--off]` / `+flag-list --size <1-100>` |
 
 ### 统一发送
 
@@ -132,65 +133,28 @@ Load branch details on demand: [消息](references/chat/chat-message.md),
 [机器人与 Webhook](references/chat/chat-bot.md), and
 [会话状态与分组](references/chat/chat-conversation.md).
 
-## 核心意图表
+## 核心意图与执行边界
 
 Use this table to disambiguate identity, chat type, and operation. Prefer public
-Shortcuts; otherwise use atomic commands. Every Chat workflow must work without
-Python.
+Shortcuts; otherwise use the atomic fallback. Apply the shared `--format json`
+rule and take every downstream ID from actual output. Every Chat workflow
+must work without Python.
 
-| 用户说 | 分支 / 原子回退 |
-|---|---|
-| “发给某人” | Current-user DM: resolve `openDingTalkId` / `userId`, then `message send` |
-| “发到某群” | Current-user group message: `chat search`, then `message send --group` |
-| “用应用机器人发” | Use `message send-by-bot`; never impersonate the current user |
-| “Webhook 推送” | Use `message send-by-webhook`; mention text and @ flags must agree |
-| “拉某个会话的消息” | Use `message list`; locate the chat and set time bounds first |
-| “搜消息关键词 / 组合搜索” | Use `message search` for keywords; `search-advanced` for sender/@/multi-chat filters |
-| “撤回用户消息 / 机器人消息” | Use `message recall` / `recall-by-bot`; their message IDs differ |
-| “群消息翻页导出” | Use `+chat-messages`; follow pagination and save merged JSON if requested |
-| “查和某人的聊天记录” | Resolve the person, then use `+chat-messages` with one user ID |
-| “机器人多群广播” | Confirm once, then call `+messages-send-by-bot` per group |
+| 用户说 | 首选路由 / 原子回退 | 必须保留的执行边界 |
+|---|---|---|
+| “发给某人” | `+dm --to <姓名> --text <内容>` / `message send --open-dingtalk-id` | Resolve one real person; never pass a name as an ID |
+| “发到某群” | `+send-to-group --group <群名> --text <内容>` / `chat search` → `message send --group` | Resolve one real cid; mentions/`@all` use `+messages-send` with that cid |
+| “用应用机器人发” | `+messages-send --as bot` / `message send-by-bot` | Never impersonate the current user; keep robot and target IDs from real output |
+| “Webhook 推送” | `+messages-send --as webhook` / `message send-by-webhook` | Webhook identity is separate; mention text and `--at-*` flags must agree |
+| “建群 / 拉人进群” | `+chat-create --name <群名> --users <uid,...>` / `group members add` | Resolve every member to a real `userId`; extract the new cid before follow-up actions |
+| “拉某个会话的消息” | `+chat-messages` / `message list` | Choose one group or DM target and use the user's time range or an explicitly narrowed boundary |
+| “搜消息关键词 / 组合搜索” | `+search-msg --query <关键词>`；群内 @我用 `--at-me --group <cid>` | Add only real filters; use `--page-all` only when complete pagination is needed |
+| “撤回用户消息 / 机器人消息” | `+messages-recall --conversation-id <cid> --msg-id <mid>` / `recall-by-bot` | Only on explicit recall; IDs must come from the same identity and conversation |
+| “群消息翻页导出” | `+chat-messages`; save merged JSON if requested | Follow pagination to completion and report partial results instead of claiming a complete export |
+| “查和某人的聊天记录” | Resolve the person, then use `+chat-messages` with one user ID | Stop for ambiguous people; do not merge different users with the same name |
+| “机器人多群广播” | Call `+messages-send-by-bot` once per resolved group | Confirm the recipient set once, preserve one message body, and return a per-group success/failure ledger |
 
 Detailed native CLI loops are in [01-messaging.md](references/01-messaging.md).
-
-## 关键 SOP
-
-These SOPs constrain identity, IDs, time bounds, and success checks without
-overriding Shortcut priority. Follow a matching leaf; otherwise use the atomic
-commands below. Add `--format json` to structured calls and take downstream
-IDs from actual output.
-
-### 发消息
-
-1. Resolve a person with
-   `dws aisearch person --keyword "<姓名>" --dimension name`; prefer
-   `openDingTalkId`, otherwise `userId`. Resolve a chat with
-   `dws chat search --query "<群名>"` to get `openConversationId`.
-2. Without a matching Shortcut, use `message send --open-dingtalk-id`
-   (`--user` if needed) for DMs and `message send --group` for groups. Local
-   files/audio/video use `--msg-type file|audio|video --file-path`.
-3. Judge success from structured output. `openTaskId` queries send status; it
-   is not the message ID required for recall.
-
-### 建群或拉人
-
-1. Resolve every member to a real `userId` with `aisearch person`; never pass
-   names as member arguments.
-2. Without a matching Shortcut, create with
-   `group create --name "<群名>" --users <userId...>` or add members with
-   `group members add --id <openConversationId> --users <userId...>`.
-3. Extract `openConversationId` from creation output. Confirm ambiguous chat
-   names or members.
-
-### 拉取或撤回消息
-
-1. Resolve a group with `chat search`; resolve a DM target to `userId` or
-   `openDingTalkId`.
-2. Without a matching Shortcut, run `message list` only with the user's time
-   range or an explicitly narrowed boundary.
-3. Only on an explicit recall request, take the real `openMessageId` from the
-   message list, then call
-   `message recall --conversation-id <openConversationId> --msg-id <openMessageId>`.
 
 ## 低频操作原子回退入口
 
