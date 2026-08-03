@@ -47,6 +47,12 @@ var GroupMembers = shortcut.Shortcut{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名称（搜群关键词，用群名里连续的核心词）", Required: true},
 	},
 	Tips: []string{`dws chat +group-members --group 项目冲刺`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if looksLikeOpenConversationID(rt.Str("group")) {
+			return localChatOptionError("group_name_expected", "+group-members 的 --group 需要群名，当前值像 openConversationId", "--group")
+		}
+		return nil
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		groupName := rt.Str("group")
 
@@ -121,6 +127,7 @@ var ChatMembersList = shortcut.Shortcut{
 		`dws chat +chat-members-list --group "项目冲刺"`,
 		`dws chat +chat-members-list --conversation-id <openConversationId> --member-types user,bot`,
 	},
+	Validate: validateChatMembersList,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		groupID := strings.TrimSpace(rt.StrFirst("conversation-id", "id", "chat-id", "open-conversation-id"))
 		groupName := strings.TrimSpace(rt.Str("group"))
@@ -192,6 +199,25 @@ var ChatMembersList = shortcut.Shortcut{
 		}
 		return rt.Output(payload)
 	},
+}
+
+func validateChatMembersList(rt *shortcut.RuntimeContext) error {
+	groupName := strings.TrimSpace(rt.Str("group"))
+	groupID := strings.TrimSpace(rt.StrFirst("conversation-id", "id", "chat-id", "open-conversation-id"))
+	if groupName != "" && looksLikeOpenConversationID(groupName) {
+		return localChatOptionError("conversation_id_used_as_group_name", "+chat-members-list 的 --group 需要群名，当前值像 openConversationId", "--group")
+	}
+	if groupID != "" && looksLikeHumanGroupName(groupID) {
+		flag := changedConversationIDFlag(rt)
+		return localChatOptionError("group_name_used_as_conversation_id", "+chat-members-list 的 "+flag+" 需要 openConversationId，当前值像群名", flag)
+	}
+	if rt.Changed("member-types") {
+		users, bots, err := resolveMemberTypes(rt.StrSlice("member-types"))
+		if err != nil || (!users && !bots) {
+			return localChatOptionError("invalid_member_types", "+chat-members-list 的 --member-types 包含不支持的值", "--member-types")
+		}
+	}
+	return nil
 }
 
 func resolveGroupName(rt *shortcut.RuntimeContext, groupName string) (string, error) {

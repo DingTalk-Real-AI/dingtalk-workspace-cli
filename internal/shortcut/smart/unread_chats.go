@@ -59,6 +59,12 @@ var UnreadChats = shortcut.Shortcut{
 		`dws chat +unread-chats --count 20`,
 		`dws chat +unread-chats --exclude-muted`,
 	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Changed("count") && rt.Int("count") <= 0 {
+			return localChatOptionError("invalid_page_size", "+unread-chats 的 --count 必须大于 0", "--count")
+		}
+		return nil
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Build params exactly like chatMessageListUnreadConversationsCmd: count is
 		// only sent when > 0, excludeMuted only when true.

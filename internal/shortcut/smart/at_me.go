@@ -65,7 +65,7 @@ var AtMe = shortcut.Shortcut{
 		`dws chat +at-me`,
 		`dws chat +at-me --days 3`,
 	},
-	Validate: chatshortcut.ValidateMessageResourceDownload,
+	Validate: validateAtMe,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — look-back window [now-Nd, now] in epoch millis. days defaults
 		// to 7; guard against non-positive overrides so the window stays sane.
@@ -107,6 +107,23 @@ var AtMe = shortcut.Shortcut{
 		}
 		return rt.Output(payload)
 	},
+}
+
+func validateAtMe(rt *shortcut.RuntimeContext) error {
+	if err := chatshortcut.ValidateMessageResourceDownload(rt); err != nil {
+		return err
+	}
+	days := rt.Int("days")
+	if days <= 0 {
+		return localChatOptionError("invalid_lookback_window", "+at-me 的 --days 必须大于 0", "--days")
+	}
+	if days > 3650 {
+		return localChatOptionError("lookback_window_too_large", "+at-me 的 --days 超出支持范围 1-3650", "--days")
+	}
+	if rt.Int("limit") <= 0 {
+		return localChatOptionError("invalid_page_size", "+at-me 的 --limit 必须大于 0", "--limit")
+	}
+	return nil
 }
 
 // atMeMessageItems locates the message list inside a search_at_me_message

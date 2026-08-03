@@ -22,6 +22,22 @@ func TestPreferExactGroupMatches(t *testing.T) {
 	}
 }
 
+func TestLooksLikeOpenConversationID(t *testing.T) {
+	for _, value := range []string{
+		"cidayZx5r0T+UiMi6NrO1048A==",
+		"cidr0zKX5dvj/c0wDO+wupqyg==",
+	} {
+		if !looksLikeOpenConversationID(value) {
+			t.Errorf("looksLikeOpenConversationID(%q) = false", value)
+		}
+	}
+	for _, value := range []string{"项目冲刺", "cid项目群", "city project"} {
+		if looksLikeOpenConversationID(value) {
+			t.Errorf("looksLikeOpenConversationID(%q) = true", value)
+		}
+	}
+}
+
 func TestResolveMemberTypes(t *testing.T) {
 	users, bots, err := resolveMemberTypes(nil)
 	if err != nil || !users || !bots {

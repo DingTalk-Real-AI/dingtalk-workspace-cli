@@ -45,9 +45,12 @@ var SendToGroup = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群名称（搜群关键词，用群名里连续的核心词）", Required: true},
 		{Name: "text", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown）", Required: true},
+		{Name: "at-all", Type: shortcut.FlagBool, Desc: "不支持；需要 @所有人时改用 +messages-send", Hidden: true},
+		{Name: "idempotency-key", Type: shortcut.FlagString, Desc: "不支持；需要幂等键时改用 +messages-send", Hidden: true},
 		shortcut.AIMessageTagFlag(),
 	},
-	Tips: []string{`dws chat +send-to-group --group 项目冲刺 --text "今天 5 点前提交进度"`},
+	Tips:     []string{`dws chat +send-to-group --group 项目冲刺 --text "今天 5 点前提交进度"`},
+	Validate: validateSendToGroup,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		groupName := rt.Str("group")
 		text := rt.Str("text")
@@ -80,6 +83,35 @@ var SendToGroup = shortcut.Shortcut{
 			"content":            string(content),
 		}))
 	},
+}
+
+func validateSendToGroup(rt *shortcut.RuntimeContext) error {
+	group := rt.Str("group")
+	if looksLikeOpenConversationID(group) {
+		return apperrors.NewValidation(
+			"+send-to-group 的 --group 只接受群名关键词，不能传 openConversationId",
+			apperrors.WithReason("conversation_id_used_as_group_name"),
+			apperrors.WithActions("已有群 openConversationId 时改用 chat +messages-send --chat-id"),
+			apperrors.WithExamples(`dws chat +messages-send --chat-id <openConversationId> --text "消息内容" --format json`),
+		)
+	}
+	if rt.Changed("at-all") || rt.Changed("idempotency-key") {
+		unsupported := make([]string, 0, 2)
+		if rt.Changed("at-all") {
+			unsupported = append(unsupported, "--at-all")
+		}
+		if rt.Changed("idempotency-key") {
+			unsupported = append(unsupported, "--idempotency-key")
+		}
+		flagText := strings.Join(unsupported, "、")
+		return apperrors.NewValidation(
+			"+send-to-group 不支持当前使用的发送选项："+flagText,
+			apperrors.WithReason("unsupported_send_to_group_option"),
+			apperrors.WithActions("移除 "+flagText+"，或改用支持该选项的消息发送命令"),
+			apperrors.WithExamples(`dws chat +messages-send --help`),
+		)
+	}
+	return nil
 }
 
 // sendGroupMatch is a single group candidate resolved from a name search.

@@ -2238,7 +2238,7 @@ func newChatCommand() *cobra.Command {
 			hasCondition := false
 			for _, name := range []string{
 				"query", "keyword", "user", "users", "userId", "sender-ids", "senders", "sender",
-				"at-ids", "conversation-ids", "groups", "group", "message-type",
+				"at-ids", "conversation-ids", "conversation-id", "groups", "group", "message-type",
 				"conversation-type", "search-conv-type", "start", "end",
 			} {
 				if value, _ := cmd.Flags().GetString(name); strings.TrimSpace(value) != "" {
@@ -2290,6 +2290,8 @@ func newChatCommand() *cobra.Command {
 			// conversation-ids / groups / group -> openConversationIds
 			convIds := ""
 			if v, _ := cmd.Flags().GetString("conversation-ids"); v != "" {
+				convIds = v
+			} else if v, _ := cmd.Flags().GetString("conversation-id"); v != "" {
 				convIds = v
 			} else if v, _ := cmd.Flags().GetString("groups"); v != "" {
 				convIds = v
@@ -2816,6 +2818,8 @@ func newChatCommand() *cobra.Command {
 	chatMessageSearchAdvancedCmd.Flags().Bool("at-me", false, "只搜索 @我 的消息（可选，默认 false）")
 	chatMessageSearchAdvancedCmd.Flags().String("at-ids", "", "@指定人的 openDingTalkId 列表，逗号分隔（可选）")
 	chatMessageSearchAdvancedCmd.Flags().String("conversation-ids", "", "会话 openConversationId 列表，逗号分隔（可选，群聊或单聊均可，不传则搜索所有会话）")
+	chatMessageSearchAdvancedCmd.Flags().String("conversation-id", "", "--conversation-ids 的单值兼容别名")
+	_ = chatMessageSearchAdvancedCmd.Flags().MarkHidden("conversation-id")
 	chatMessageSearchAdvancedCmd.Flags().String("groups", "", "--conversation-ids 的别名")
 	_ = chatMessageSearchAdvancedCmd.Flags().MarkHidden("groups")
 	chatMessageSearchAdvancedCmd.Flags().String("group", "", "")

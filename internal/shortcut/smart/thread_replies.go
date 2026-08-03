@@ -14,6 +14,8 @@
 package smart
 
 import (
+	"strings"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	chatshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
@@ -63,7 +65,7 @@ var ThreadReplies = shortcut.Shortcut{
 		`dws chat +thread-replies --group <openconversationId> --thread-id <threadId>`,
 		`dws chat +thread-replies --group <openconversationId> --thread-id <threadId> --time "2025-03-01 00:00:00" --limit 20`,
 	},
-	Validate: chatshortcut.ValidateMessageResourceDownload,
+	Validate: validateThreadReplies,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — fetch the topic replies. Param keys (openconversationId /
 		// topicId / startTime / pageSize) are copied verbatim from chat.go's
@@ -103,6 +105,22 @@ var ThreadReplies = shortcut.Shortcut{
 		}
 		return rt.Output(payload)
 	},
+}
+
+func validateThreadReplies(rt *shortcut.RuntimeContext) error {
+	if err := chatshortcut.ValidateMessageResourceDownload(rt); err != nil {
+		return err
+	}
+	if looksLikeHumanGroupName(rt.Str("group")) {
+		return localChatOptionError("group_name_used_as_conversation_id", "+thread-replies 的 --group 需要 openConversationId，当前值像群名", "--group")
+	}
+	if rt.Changed("limit") && rt.Int("limit") <= 0 {
+		return localChatOptionError("invalid_page_size", "+thread-replies 的 --limit 必须大于 0", "--limit")
+	}
+	if value := strings.TrimSpace(rt.Str("time")); value != "" && !validChatTime(value) {
+		return localChatOptionError("invalid_time_boundary", "+thread-replies 的 --time 格式无效", "--time")
+	}
+	return nil
 }
 
 // threadReplyItems defensively unwraps the reply list from the response,

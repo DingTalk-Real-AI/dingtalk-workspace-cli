@@ -260,3 +260,117 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 		})
 	}
 }
+
+func TestSendToGroupRejectsNonNameInputsBeforeMCP(t *testing.T) {
+	tests := []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{
+			name: "conversation id used as group name",
+			argv: []string{"chat", "+send-to-group", "--group", "cidayZx5r0T+UiMi6NrO1048A==", "--text", "你好", "--yes"},
+			want: "只接受群名关键词",
+		},
+		{
+			name: "at all belongs to messages send",
+			argv: []string{"chat", "+send-to-group", "--group", "项目冲刺", "--text", "你好", "--at-all", "--yes"},
+			want: "--at-all",
+		},
+		{
+			name: "idempotency belongs to messages send",
+			argv: []string{"chat", "+send-to-group", "--group", "项目冲刺", "--text", "你好", "--idempotency-key", "case-1", "--yes"},
+			want: "--idempotency-key",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &platformCoverageCaller{}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tc.argv)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Execute() error = %v, want %q", err, tc.want)
+			}
+			if len(fake.calls) != 0 {
+				t.Fatalf("MCP calls = %#v, want none", fake.calls)
+			}
+		})
+	}
+}
+
+func TestChatMessagesBeforeAliasAndPageAllGuard(t *testing.T) {
+	t.Run("before maps to time and older", func(t *testing.T) {
+		fake := &platformCoverageCaller{}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+chat-messages", "--group", "cid-1", "--before", "2026-07-30 16:51:39"})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		call := fake.calls[len(fake.calls)-1]
+		if call.args["time"] != "2026-07-30 16:51:39" || call.args["forward"] != false {
+			t.Fatalf("args = %#v", call.args)
+		}
+	})
+
+	t.Run("page all is blocked before MCP", func(t *testing.T) {
+		fake := &platformCoverageCaller{}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+chat-messages", "--group", "cid-1", "--page-all"})
+		err := root.Execute()
+		if err == nil || !strings.Contains(err.Error(), "暂不支持 --page-all") {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		if len(fake.calls) != 0 {
+			t.Fatalf("MCP calls = %#v, want none", fake.calls)
+		}
+	})
+}
+
+func TestRelatedChatOptionsRejectBeforeMCP(t *testing.T) {
+	tests := []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{"group members rejects cid as name", []string{"chat", "+group-members", "--group", "cidayZx5r0T+UiMi6NrO1048A=="}, "--group"},
+		{"members list rejects cid as name", []string{"chat", "+chat-members-list", "--group", "cidayZx5r0T+UiMi6NrO1048A=="}, "--group"},
+		{"members list rejects name as cid", []string{"chat", "+chat-members-list", "--conversation-id", "测试群"}, "--conversation-id"},
+		{"members list reports id alias", []string{"chat", "+chat-members-list", "--id", "测试群"}, "--id"},
+		{"members list rejects unknown member type", []string{"chat", "+chat-members-list", "--group", "测试群", "--member-types", "admin"}, "--member-types"},
+		{"unread chats rejects nonpositive count", []string{"chat", "+unread-chats", "--count", "0"}, "--count"},
+		{"messages rejects time and before", []string{"chat", "+chat-messages", "--group", "cid", "--time", "2026-08-01", "--before", "2026-08-02"}, "--time"},
+		{"messages rejects before newer", []string{"chat", "+chat-messages", "--group", "cid", "--before", "2026-08-02", "--direction", "newer"}, "--direction"},
+		{"messages rejects group name as cid", []string{"chat", "+chat-messages", "--group", "测试群"}, "--group"},
+		{"messages rejects nonpositive limit", []string{"chat", "+chat-messages", "--group", "cid", "--limit", "0"}, "--limit"},
+		{"messages reports size alias", []string{"chat", "+chat-messages", "--group", "cid", "--size", "0"}, "--size"},
+		{"messages rejects invalid time", []string{"chat", "+chat-messages", "--group", "cid", "--time", "yesterday-ish"}, "--time"},
+		{"messages reports before alias", []string{"chat", "+chat-messages", "--group", "cid", "--before", "yesterday-ish"}, "--before"},
+		{"messages reports conversation id alias", []string{"chat", "+chat-messages", "--conversation-id", "测试群"}, "--conversation-id"},
+		{"thread replies rejects group name as cid", []string{"chat", "+thread-replies", "--group", "测试群", "--thread-id", "thread-1"}, "--group"},
+		{"thread replies rejects nonpositive limit", []string{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread-1", "--limit", "0"}, "--limit"},
+		{"thread replies rejects invalid time", []string{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread-1", "--time", "last-week"}, "--time"},
+		{"at me rejects nonpositive days", []string{"chat", "+at-me", "--days", "0"}, "--days"},
+		{"at me rejects oversized days", []string{"chat", "+at-me", "--days", "3651"}, "--days"},
+		{"at me rejects nonpositive limit", []string{"chat", "+at-me", "--limit", "0"}, "--limit"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &platformCoverageCaller{}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tc.argv)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Execute() error = %v, want %q", err, tc.want)
+			}
+			if len(fake.calls) != 0 {
+				t.Fatalf("MCP calls = %#v, want none", fake.calls)
+			}
+		})
+	}
+}

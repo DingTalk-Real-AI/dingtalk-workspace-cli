@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	chatshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
@@ -66,8 +67,10 @@ var ChatMessages = shortcut.Shortcut{
 		{Name: "user", Type: shortcut.FlagString, Desc: "单聊对方的 userId，与 --group 互斥"},
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊对方的 openDingTalkId，与 --group/--user 互斥"},
 		{Name: "time", Type: shortcut.FlagString, Desc: "时间边界，如 \"2025-03-01 00:00:00\"；省略时从当前时间向前读取最近消息"},
+		{Name: "before", Type: shortcut.FlagString, Desc: "--time <值> --direction older 的兼容写法", Hidden: true},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页拉取的消息条数（可选）"},
 		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "暂不支持；请按返回游标显式翻页", Hidden: true},
 		{Name: "direction", Type: shortcut.FlagString, Enum: []string{"newer", "older"}, Desc: "时间方向 newer/older；省略时为 older，从时间边界向前读取"},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
 	}, chatshortcut.MessageResourceDownloadFlags()...),
@@ -79,7 +82,7 @@ var ChatMessages = shortcut.Shortcut{
 		`dws chat +chat-messages --user <userId> --time "2025-03-01 00:00:00" --limit 50`,
 		`dws chat +chat-messages --group <openconversation_id> --direction older`,
 	},
-	Validate: chatshortcut.ValidateMessageResourceDownload,
+	Validate: validateChatMessages,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Step 1 — build params and pick the right tool. Param keys
 		// (openconversation_id / userId / time / forward / limit) match the MCP server
@@ -88,8 +91,8 @@ var ChatMessages = shortcut.Shortcut{
 		params := map[string]any{}
 		fallbackConversationID := ""
 
-		if rt.Changed("time") && rt.Str("time") != "" {
-			params["time"] = rt.Str("time")
+		if boundary := rt.StrFirst("time", "before"); boundary != "" {
+			params["time"] = boundary
 		} else {
 			params["time"] = formatDingTalkMessageBoundary(time.Now())
 		}
@@ -99,7 +102,9 @@ var ChatMessages = shortcut.Shortcut{
 		// direction newer/older maps to the tools' boolean `forward` param
 		// (newer -> forward=true, older -> forward=false), matching chat.go's
 		// resolveMessageForward.
-		if rt.Changed("direction") {
+		if rt.Changed("before") {
+			params["forward"] = false
+		} else if rt.Changed("direction") {
 			switch strings.TrimSpace(strings.ToLower(rt.Str("direction"))) {
 			case "newer":
 				params["forward"] = true
@@ -146,6 +151,45 @@ var ChatMessages = shortcut.Shortcut{
 		}
 		return rt.Output(payload)
 	},
+}
+
+func validateChatMessages(rt *shortcut.RuntimeContext) error {
+	if err := chatshortcut.ValidateMessageResourceDownload(rt); err != nil {
+		return err
+	}
+	if rt.Changed("time") && rt.Changed("before") {
+		return localChatOptionError("conflicting_time_options", "+chat-messages 的 --time 与 --before 不能同时使用", "--time", "--before")
+	}
+	if rt.Changed("before") && rt.Changed("direction") && strings.ToLower(rt.Str("direction")) != "older" {
+		return localChatOptionError("incompatible_time_direction", "+chat-messages 的 --before 不能与 --direction newer 同时使用", "--before", "--direction")
+	}
+	if groupID := rt.StrFirst("group", "conversation-id", "id"); groupID != "" && looksLikeHumanGroupName(groupID) {
+		flag := changedConversationIDFlag(rt)
+		return localChatOptionError("group_name_used_as_conversation_id", "+chat-messages 的 "+flag+" 需要 openConversationId，当前值像群名", flag)
+	}
+	if (rt.Changed("limit") && rt.Int("limit") <= 0) || (rt.Changed("size") && rt.Int("size") <= 0) {
+		flag := "--limit"
+		if rt.Changed("size") {
+			flag = "--size"
+		}
+		return localChatOptionError("invalid_page_size", "+chat-messages 的 "+flag+" 必须大于 0", flag)
+	}
+	if boundary := rt.StrFirst("time", "before"); boundary != "" && !validChatTime(boundary) {
+		flag := "--time"
+		if rt.Changed("before") {
+			flag = "--before"
+		}
+		return localChatOptionError("invalid_time_boundary", "+chat-messages 的 "+flag+" 格式无效", flag)
+	}
+	if rt.Bool("page-all") {
+		return apperrors.NewValidation(
+			"+chat-messages 暂不支持 --page-all",
+			apperrors.WithReason("page_all_not_supported"),
+			apperrors.WithActions("先执行单页查询，再使用返回的游标继续翻页"),
+			apperrors.WithExamples(`dws chat +chat-messages --group <openConversationId> --time "2026-07-30 16:51:39" --direction older --format json`),
+		)
+	}
+	return nil
 }
 
 // chatMessageItems defensively unwraps the message list from the response,

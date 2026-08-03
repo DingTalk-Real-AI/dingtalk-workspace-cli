@@ -1099,7 +1099,7 @@ var generatedParamAliases = []ParamAliasEntry{
 			"open-conversation-ids": "conversation-ids",
 			"user-ids":              "users",
 		},
-		Blocked: []string{"at-user-ids", "chat-id", "conversation-id", "group-id", "group-ids", "open-conversation-id", "staff-id", "uid", "userid"},
+		Blocked: []string{"at-user-ids", "chat-id", "group-id", "group-ids", "open-conversation-id", "staff-id", "uid", "userid"},
 	},
 	{
 		CLIPath: "chat message send",
