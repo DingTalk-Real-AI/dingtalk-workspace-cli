@@ -1,12 +1,12 @@
 {
   "version": 1,
   "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
-  "source_hash": "sha256:113dbc3507c5e4d871802d567e960c4947b8066472c28fb8a6dc64e9fef36da9",
+  "source_hash": "sha256:a862c8d93ff1e66de35a0148aeea6e269cf19587b12bebfb53f4fff8a4a71cc6",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:eedf9163f496888aa3a065bdbd85647e3702a73ce74703f27083059e22a74098",
+      "source_hash": "sha256:7111ced2e1cd0764338aacce792d95603734177a82deea4a4642626691940485",
       "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
       "surface_products": 26,
       "surface_tools": 875,
@@ -11579,7 +11579,8 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "只想读取一个已知会话的连续历史时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget"
+              "只想读取一个已知会话的连续历史时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget",
+              "按群名找群或解析群 openConversationId 时不要使用；改用 +chat-search"
             ],
             "canonical_path": "chat.shortcut_search_msg",
             "cli_name": "+search-msg",

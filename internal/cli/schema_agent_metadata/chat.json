@@ -11145,7 +11145,8 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "只想读取一个已知会话的连续历史时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget"
+        "只想读取一个已知会话的连续历史时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget",
+        "按群名找群或解析群 openConversationId 时不要使用；改用 +chat-search"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -11189,7 +11190,8 @@
         },
         "avoid_when": {
           "value": [
-            "只想读取一个已知会话的连续历史时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget"
+            "只想读取一个已知会话的连续历史时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget",
+            "按群名找群或解析群 openConversationId 时不要使用；改用 +chat-search"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -11198,7 +11200,8 @@
           "candidates": [
             {
               "value": [
-                "只想读取一个已知会话的连续历史时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget"
+                "只想读取一个已知会话的连续历史时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget",
+                "按群名找群或解析群 openConversationId 时不要使用；改用 +chat-search"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",

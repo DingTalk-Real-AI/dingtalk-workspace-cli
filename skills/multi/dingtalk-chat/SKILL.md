@@ -86,6 +86,7 @@ dws chat +messages-send --as webhook --webhook-token <token> --title "告警" --
 
 ## 查询、资源与卡片
 
+- `+search-msg` 只搜索消息内容；禁止用于按群名找群或解析群 CID。
 - `+search-msg --page-all` paginates and enriches in batches; use it only when complete pagination is required.
 - Preserve primary results on partial failure and return a per-item ledger; never claim an incomplete result is complete.
 - If a sender name is absent, keep the real sender ID; do not guess a name or expand into an unrequested directory lookup.
