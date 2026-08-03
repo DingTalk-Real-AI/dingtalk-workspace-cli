@@ -128,7 +128,9 @@ dws chat group user-settings set --items '[{"openConversationId":"cid1","top":tr
 
 ```bash
 dws chat group notice create --group <openConversationId> --content "今晚 22 点系统维护，请提前保存工作内容"
-dws chat group notice create --group <openConversationId> --content "# 重要通知\n\n请大家查收" --sticky --send-ding
+dws chat group notice create --group <openConversationId> --content "# 重要通知
+
+请大家查收" --sticky --send-ding
 dws chat group notice create --group <openConversationId> --content "明早九点例会" --run-at "2026-07-03T09:00:00+08:00"
 dws chat group notice list --group <openConversationId> --limit 20 --cursor <nextPageCursor>
 dws chat group notice get --group <openConversationId> --notice-id <dataId>
@@ -195,7 +197,9 @@ dws chat group members add --id <openConversationId> --users userId3,userId4 --f
 
 ```bash
 dws chat group share-invite --source <sourceOpenConversationId> --target <targetOpenConversationId> --format json
-dws chat group notice create --group <openConversationId> --content "# 项目公告\n\n请大家关注最新安排" --send-ding --format json
+dws chat group notice create --group <openConversationId> --content "# 项目公告
+
+请大家关注最新安排" --send-ding --format json
 ```
 
 ### 设置管理员并禁言成员

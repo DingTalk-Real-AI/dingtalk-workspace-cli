@@ -1,7 +1,8 @@
 ---
 name: dws
 description: 管理钉钉产品能力(AI表格/AI搜问/日历/通讯录/群聊与机器人/待办/审批/考勤/日志/DING消息/开放平台文档/钉钉文档/钉钉云盘/原生Markdown文件/AI听记/邮箱/在线电子表格/知识库等)。当用户需要操作表格数据、管理日程会议、模糊找人/查谁负责某事项、查询通讯录、管理群聊、机器人发消息、创建待办、提交审批、查看考勤、提交日报周报（钉钉日志模版）、读写钉钉文档、上传下载云盘文件、读取或修改原生.md文件、查询听记纪要、收发邮件、读写在线电子表格(axls)、管理钉钉知识库，或订阅个人 IM 事件、实时监听群成员加入、群成员退出、群改名和群解散时使用。
-cli_version: ">=1.0.15"
+metadata:
+  cli_version: ">=1.0.15"
 ---
 
 # 钉钉全产品 Skill
@@ -21,15 +22,15 @@ cli_version: ">=1.0.15"
 - 危险操作必须先向用户确认，用户同意后才加 `--yes` 执行
 - 单次批量操作不超过 30 条记录
 - 所有命令必须**严格遵循**对应产品参考文档里面规定的参数格式（如：如果有参数值，则参数和参数值之间至少用一个空格隔开）
-- **脚本优先**：[scripts/](./scripts/) 下的 `python scripts/<name>.py` 已封装翻页/轮询/批量逻辑，遇到对应场景（如 AI 表格批量导入导出、AI 应用创建轮询、文档创建后写内容、钉盘目录树等）**优先调用脚本**而非手写多步命令。脚本均支持 `--dry-run` 预览、`--format json` 输出，失败时回退到手动步骤
+- **CLI 路径必须独立可用**：不要假定用户环境安装了 Python。优先使用 `dws` 原生命令或 Shortcut；[scripts/](./scripts/) 仅在对应运行时已确认可用且能明显简化翻页、轮询或批量操作时作为可选加速项。脚本不可用时直接执行同场景的原生命令流程，不得把缺少 Python 当成能力阻塞
 - **实时个人消息事件例外**：用户要监听消息、订阅事件、自动回复消息或事件驱动 Agent 时，必须走 `dws event consume ... --flatten` 长连接，不要写脚本轮询消息历史
 
 ## Shortcut 与原子命令的使用原则
 
 `shortcut` 是对常用操作的高层封装，适合优先承担用户意图；产品参考文档和本 skill 负责判断意图、风险、跨产品流程和复杂参数，CLI 帮助负责声明当前版本真正可调用的命令。
 
-- 先按产品参考、意图表和 recipe 路由。存在精确覆盖场景的专用脚本/recipe 时继续遵循“脚本优先”；否则用户意图可由可见 shortcut 满足时，优先使用 `dws <service> +<verb> ... --format json`，不要手写等价的多步原子命令。
-- 公开内建 shortcut 同时进入 Runtime Schema。用 `dws schema --cli-path "<service> +<verb>" --format json` 读取 Agent 选择、参数、跨参数约束、risk/confirmation 与接口语义；`dws shortcut list --service <service> --format json` 只作为轻量批量发现入口。
+- 先按产品参考、意图表和 recipe 路由。精确 recipe 或对应解释器（如 `python3`）已可用的专用脚本优先；解释器不可用时直接跳过脚本，不得阻塞任务。否则用户意图可由可见 shortcut 满足时，优先使用 `dws <service> +<verb> ... --format json`，不要手写等价的多步原子命令。
+- 公开内建 shortcut 以 `dws shortcut list --service <service> --format json` 为动态 catalog；已进入 Runtime Schema 的 leaf 用 `dws schema --cli-path "<service> +<verb>" --format json` 读取 Agent 选择、参数、跨参数约束、risk/confirmation 与接口语义。若 leaf 暂未进入 Schema，则使用 catalog 中同一 `cli_path` 的完整契约。
 - 真正组装参数前用叶子帮助 `dws <service> +<verb> --help` 核对当前 Cobra 接受的 flags。父级 `dws <service> --help` 只能发现子命令，不能替代叶子参数帮助。
 - shortcut catalog 中 `confirmation=user_required` 时，必须先获得用户确认，确认后才加 `--yes`；`not_required` 不额外确认。
 - 如果 shortcut 不在 help / list 中，改用产品参考里的原子命令、脚本或标准流程；不要猜测未展示的 `+` 命令。

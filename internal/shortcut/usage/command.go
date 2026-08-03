@@ -28,7 +28,7 @@ import (
 
 // NewShortcutCommand builds the `dws shortcut` management command tree:
 //
-//	dws shortcut list [--service x]   # list built-in shortcuts
+//	dws shortcut list [--service x] [--compact] # list built-in shortcuts
 //	dws shortcut stats [--top N]      # high-frequency usage aggregation
 //	dws shortcut stats --purge        # clear the usage log
 func NewShortcutCommand() *cobra.Command {
@@ -51,6 +51,7 @@ func newListCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			svc, _ := cmd.Flags().GetString("service")
 			includeHidden, _ := cmd.Flags().GetBool("all")
+			compact, _ := cmd.Flags().GetBool("compact")
 			rows := make([]shortcutListRow, 0)
 			for _, s := range shortcut.All() {
 				if svc != "" && s.Service != svc {
@@ -61,17 +62,35 @@ func newListCommand() *cobra.Command {
 				}
 				rows = append(rows, newShortcutListRow(s))
 			}
-			return output.WriteCommandPayload(cmd, map[string]any{
+			payload := map[string]any{
 				"catalog":        "shortcut",
 				"runtime_schema": true,
 				"count":          len(rows),
 				"shortcuts":      rows,
-			}, output.FormatJSON)
+			}
+			if compact {
+				compactRows := make([]shortcutCompactListRow, 0, len(rows))
+				for _, row := range rows {
+					compactRows = append(compactRows, row.compact())
+				}
+				payload["compact"] = true
+				payload["shortcuts"] = compactRows
+			}
+			return output.WriteCommandPayload(cmd, payload, output.FormatJSON)
 		},
 	}
 	cmd.Flags().String("service", "", "只列出指定服务的 shortcut")
 	cmd.Flags().Bool("all", false, "包含当前未进入公开 Catalog、但仍可直接调用的 shortcut")
+	cmd.Flags().Bool("compact", false, "仅返回发现和安全决策所需字段；选中后再查 leaf Schema 或完整 catalog")
 	return cmd
+}
+
+type shortcutCompactListRow struct {
+	CLIPath      string `json:"cli_path"`
+	Risk         string `json:"risk"`
+	Confirmation string `json:"confirmation"`
+	Description  string `json:"description"`
+	Intent       string `json:"intent,omitempty"`
 }
 
 type shortcutListRow struct {
@@ -92,6 +111,16 @@ type shortcutListRow struct {
 	Availability  string                `json:"availability,omitempty"`
 	Primary       string                `json:"primary,omitempty"`
 	Reviewed      bool                  `json:"reviewed"`
+}
+
+func (r shortcutListRow) compact() shortcutCompactListRow {
+	return shortcutCompactListRow{
+		CLIPath:      r.CLIPath,
+		Risk:         r.Risk,
+		Confirmation: r.Confirmation,
+		Description:  r.Description,
+		Intent:       r.Intent,
+	}
 }
 
 func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {

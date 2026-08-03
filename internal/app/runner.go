@@ -742,7 +742,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			apperrors.WithOperation("tools/call"),
 			apperrors.WithReason("mcp_tool_error"),
 			apperrors.WithServerKey(invocation.CanonicalProduct),
-			apperrors.WithHint("MCP tool returned a business error; check tool parameters and refer to skill documentation."),
+			apperrors.WithHint(apperrors.SuggestBusinessHint(callResult.Content)),
 			apperrors.WithServerDiag(diag),
 		)
 		// PAT scope error in business response: offer human-readable output and retry
@@ -767,7 +767,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			apperrors.WithOperation("tools/call"),
 			apperrors.WithReason("business_error"),
 			apperrors.WithServerKey(invocation.CanonicalProduct),
-			apperrors.WithHint("The API returned a business-level error. Check required parameters and values."),
+			apperrors.WithHint(apperrors.SuggestBusinessHint(callResult.Content)),
 			apperrors.WithServerDiag(diag),
 		)
 	}

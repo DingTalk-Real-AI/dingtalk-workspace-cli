@@ -1,18 +1,18 @@
 {
   "version": 1,
-  "surface_hash": "sha256:60eee8e2f37d6d9d60689efce85082798eb9ad38b7ba7c0b471c3de676a85a16",
-  "source_hash": "sha256:862734fb976a4c9c78d010b7391c74822f37805f5acc650551f4ac60f701c13a",
+  "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
+  "source_hash": "sha256:113dbc3507c5e4d871802d567e960c4947b8066472c28fb8a6dc64e9fef36da9",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:670ca810a83bf2aa6f387a18c3af746393d5ea9de24570cbcebbcf994eb7b613",
-      "surface_hash": "sha256:60eee8e2f37d6d9d60689efce85082798eb9ad38b7ba7c0b471c3de676a85a16",
+      "source_hash": "sha256:eedf9163f496888aa3a065bdbd85647e3702a73ce74703f27083059e22a74098",
+      "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
       "surface_products": 26,
-      "surface_tools": 845,
-      "tools_with_agent_summary": 845,
-      "tools_with_metadata": 845,
-      "unmatched_skill_tools": 122,
+      "surface_tools": 875,
+      "tools_with_agent_summary": 875,
+      "tools_with_metadata": 875,
+      "unmatched_skill_tools": 96,
       "version": 1
     },
     "count": 26,
@@ -7722,8 +7722,35 @@
         "id": "chat",
         "name": "群聊 / 消息 / 机器人",
         "runtime": true,
-        "tool_count": 129,
+        "tool_count": 159,
         "tools": [
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "把一个会话加入一个或多个现有自定义分组",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "创建新分组使用 category create；移出分组使用 category remove-conv"
+            ],
+            "canonical_path": "chat.add_conv_to_categories",
+            "cli_name": "add-conv",
+            "cli_path": "chat category add-conv",
+            "confirmation": "not_required",
+            "description": "将某个会话添加到一批用户自定义会话分组中。需指定会话 openConversationId 和目标分组 ID 列表。",
+            "effect": "write",
+            "group": "category",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI owns validation and calls a remote helper absent from the pinned MCP snapshot.",
+            "name": "add_conv_to_categories",
+            "primary_cli_path": "chat category add-conv",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "将会话移动到指定的自定义分组中",
+            "use_when": [
+              "已从 category list 取得真实 categoryId，并要把当前账号可访问的会话归入这些分组时"
+            ]
+          },
           {
             "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "在群聊中创建自定义角色",
@@ -7909,6 +7936,33 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "审批一条群聊入群验证记录",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "列出申请使用 list-join-validations；服务端不支持 AuditIgnore、AuditRefuse 或 AuditBlock"
+            ],
+            "canonical_path": "chat.audit_join_group",
+            "cli_name": "audit-join-validation",
+            "cli_path": "chat group audit-join-validation",
+            "confirmation": "not_required",
+            "description": "审批入群验证。真机实测服务端仅接受 AuditApprove / AuditDelete，其余状态会被拒绝（unsupported audit status）。\n\nstatus 可选值:\n  AuditApprove — 通过（可用）\n  AuditDelete  — 删除（可用）\n  AuditIgnore  — 忽略（服务端拒绝，不可用）\n  AuditRefuse  — 拒绝（服务端拒绝，不可用）\n  AuditBlock   — 拒绝且不再接受该用户的申请（服务端拒绝，不可用）",
+            "effect": "write",
+            "group": "group",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI validates supported audit statuses before calling a remote helper absent from the pinned MCP snapshot.",
+            "name": "audit_join_group",
+            "primary_cli_path": "chat group audit-join-validation",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "审批入群验证（通过、拒绝、删除）",
+            "use_when": [
+              "已从 list-join-validations 取得真实记录、申请人和邀请人 ID，需要执行 AuditApprove 或 AuditDelete 时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "批量查询当前用户自己的群会话设置（置顶/免打扰/群昵称/群备注）",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -7963,6 +8017,84 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "清除当前用户所有会话的未读红点",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "只处理一个会话时使用 clear-red-point；本命令不会删除聊天记录"
+            ],
+            "canonical_path": "chat.clear_all_red_point",
+            "cli_name": "clear-all-red-point",
+            "cli_path": "chat clear-all-red-point",
+            "confirmation": "not_required",
+            "description": "一键清除当前用户所有会话的未读红点，等效于“全部已读”。",
+            "effect": "write",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote helper absent from the pinned MCP snapshot.",
+            "name": "clear_all_red_point",
+            "primary_cli_path": "chat clear-all-red-point",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "清除所有会话红点（全部已读）",
+            "use_when": [
+              "用户明确要求全部会话一键已读或清除所有红点时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "清空当前用户在指定会话中的聊天记录",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "仅清除未读红点使用 clear-red-point；未确认真实 openConversationId 时不要执行"
+            ],
+            "canonical_path": "chat.clear_conversation_messages",
+            "cli_name": "clear-messages",
+            "cli_path": "chat clear-messages",
+            "confirmation": "user_required",
+            "description": "清空当前用户在指定会话中的聊天记录。仅清空当前用户视角的消息，不影响其他成员。该操作不可逆；必须先获得用户确认，再追加 --yes 执行。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e",
+            "effect": "destructive",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote conversation-clear helper absent from the pinned MCP snapshot.",
+            "name": "clear_conversation_messages",
+            "primary_cli_path": "chat clear-messages",
+            "reviewed": true,
+            "risk": "high",
+            "title": "清空当前用户指定会话的聊天记录",
+            "use_when": [
+              "用户明确要求清空某个已知会话的本地聊天记录时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "清除指定会话的未读红点",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "全部会话一键已读使用 clear-all-red-point；本命令不会删除消息"
+            ],
+            "canonical_path": "chat.clear_conversation_red_point",
+            "cli_name": "clear-red-point",
+            "cli_path": "chat clear-red-point",
+            "confirmation": "not_required",
+            "description": "清除指定会话的未读红点。支持群聊和单聊。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e",
+            "effect": "write",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote helper absent from the pinned MCP snapshot.",
+            "name": "clear_conversation_red_point",
+            "primary_cli_path": "chat clear-red-point",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "清除会话红点",
+            "use_when": [
+              "用户只要求把某个已知会话标为已读或清除红点时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "把多条消息合并转发到目标会话",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -7994,11 +8126,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "创建并向群聊或单聊发送互动卡片",
+            "agent_summary": "创建并向群聊或单聊发送通用流式卡片",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "只发送普通文本时使用 send 或 send-by-bot"
+              "只发送普通文本时使用 send 或 send-by-bot；转发现有审批、日历、待办等原生产品卡片时应先取得真实 openMessageId，再使用 message forward"
             ],
             "canonical_path": "chat.create_and_send_card",
             "cli_name": "send-card",
@@ -8020,7 +8152,34 @@
             "risk": "medium",
             "title": "创建并推送流式卡片",
             "use_when": [
-              "需要卡片式交互且已准备接收会话或用户时"
+              "需要通用流式卡片交互且已准备接收会话或用户时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "创建用户自定义会话分组",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "按关键词或成员自动归类应使用 category create-smart；不得静默截断、缩写或改写用户名称"
+            ],
+            "canonical_path": "chat.create_conv_category",
+            "cli_name": "create",
+            "cli_path": "chat category create",
+            "confirmation": "not_required",
+            "description": "创建用户自定义会话分组",
+            "effect": "write",
+            "group": "category",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI owns title validation and calls a remote helper absent from the pinned MCP snapshot.",
+            "name": "create_conv_category",
+            "primary_cli_path": "chat category create",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "创建用户自定义会话分组",
+            "use_when": [
+              "用户明确要新建手工管理的会话分组，且名称不超过 15 个字符时"
             ]
           },
           {
@@ -8054,6 +8213,33 @@
             "use_when": [
               "需要新建内部/外部群或话题圈，并带上初始成员",
               "用户明确要建群且已给出群名与成员标识"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "在指定群聊发布即时或定时群公告",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "普通聊天消息使用 message send；修改已有公告使用 group notice edit"
+            ],
+            "canonical_path": "chat.create_group_notice",
+            "cli_name": "create",
+            "cli_path": "chat group notice create",
+            "confirmation": "not_required",
+            "description": "在指定群聊中发布群公告，正文为 Markdown 格式。\n支持标题、加粗、斜体、删除线、行内代码、链接、代码块、有序/无序/任务列表、表格、引用、分割线、图片、段落、换行。\n定时发布：传 --run-at 指定执行时间点，ISO-8601 格式（建议带时区偏移，不带时按北京时区处理）。",
+            "effect": "write",
+            "group": "group.notice",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI assembles notice scheduling and notification arguments for a remote helper absent from the pinned MCP snapshot.",
+            "name": "create_group_notice",
+            "primary_cli_path": "chat group notice create",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "发布群公告",
+            "use_when": [
+              "用户明确要发布群公告，并已给出群和 Markdown 正文时"
             ]
           },
           {
@@ -8116,6 +8302,33 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "删除指定的用户自定义会话分组",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "只想把会话移出分组时使用 category remove-conv；目标不明确时不要删除"
+            ],
+            "canonical_path": "chat.delete_conv_category",
+            "cli_name": "delete",
+            "cli_path": "chat category delete",
+            "confirmation": "user_required",
+            "description": "删除用户自定义会话分组。该操作不可逆；必须先获得用户确认，再追加 --yes 执行。",
+            "effect": "destructive",
+            "group": "category",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote category-delete helper absent from the pinned MCP snapshot.",
+            "name": "delete_conv_category",
+            "primary_cli_path": "chat category delete",
+            "reviewed": true,
+            "risk": "high",
+            "title": "删除用户自定义会话分组",
+            "use_when": [
+              "用户明确要删除已知 categoryId 的自定义分组时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "永久解散指定群聊（不可恢复，仅群主）",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -8154,7 +8367,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "只查看文本消息内容时使用对应消息查询命令"
+              "只查看文本消息内容时使用对应消息查询命令；本命令不是发送附件的前置步骤，本地文件发送直接使用 message send --msg-type file --file-path"
             ],
             "canonical_path": "chat.download_media",
             "cli_name": "download-media",
@@ -8176,6 +8389,33 @@
             "title": "下载消息中的资源（图片/视频/语音等）到本地",
             "use_when": [
               "已知消息、会话和资源 ID，需要保存媒体文件时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "整体替换指定群公告的正文与可选状态",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "发布新公告使用 group notice create；只查看内容使用 group notice get"
+            ],
+            "canonical_path": "chat.edit_group_notice",
+            "cli_name": "edit",
+            "cli_path": "chat group notice edit",
+            "confirmation": "not_required",
+            "description": "修改指定群聊中的群公告，正文为 Markdown 格式，会整体替换原公告内容。",
+            "effect": "write",
+            "group": "group.notice",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI assembles notice update arguments for a remote helper absent from the pinned MCP snapshot.",
+            "name": "edit_group_notice",
+            "primary_cli_path": "chat group notice edit",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "修改群公告",
+            "use_when": [
+              "已从公告列表取得真实 dataId，需要修改现有群公告时"
             ]
           },
           {
@@ -8211,7 +8451,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "合并转发多条消息时使用 chat message combine-forward"
+              "合并转发多条消息时使用 chat message combine-forward；OA 实例 ID、日历事件 ID、待办任务 ID 等产品对象 ID 不能代替消息 ID"
             ],
             "canonical_path": "chat.forward_message",
             "cli_name": "forward",
@@ -8233,7 +8473,7 @@
             "risk": "medium",
             "title": "转发单条消息（源/目标会话均支持单聊/群聊）",
             "use_when": [
-              "已知源消息与源、目标会话 ID 时"
+              "已知同一源会话中的真实 openMessageId 与源、目标会话 ID，需要保留原消息或原生产品卡片时"
             ]
           },
           {
@@ -8352,7 +8592,7 @@
             "risk": "low",
             "title": "获取会话基础信息",
             "use_when": [
-              "已知群 ID 或用户标识并需要解析会话详情时"
+              "已知群 ID 或单聊用户标识并需要解析会话详情时；--group、--user、--open-dingtalk-id 只能选择一个"
             ]
           },
           {
@@ -8415,6 +8655,165 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "读取指定群公告的详情",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "不知道 dataId 时先用 group notice list；不要使用占位符公告 ID"
+            ],
+            "canonical_path": "chat.get_group_notice",
+            "cli_name": "get",
+            "cli_path": "chat group notice get",
+            "confirmation": "not_required",
+            "description": "查看指定群公告的详情，包含正文摘要、吊顶状态、发布者、已读人数、点赞/评论数等信息。",
+            "effect": "read",
+            "group": "group.notice",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI validates notice IDs before calling a remote helper absent from the pinned MCP snapshot.",
+            "name": "get_group_notice",
+            "primary_cli_path": "chat group notice get",
+            "reviewed": true,
+            "risk": "low",
+            "title": "查看群公告详情",
+            "use_when": [
+              "已知群和真实公告 dataId，需要查看正文、发布者或统计信息时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "发起 chat 跨组织数据读取授权",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "发送、撤回和群管理授权使用 chat chmod；普通同组织查询不要预先授权"
+            ],
+            "canonical_path": "chat.grant_cross_org_data_access",
+            "cli_name": "cross-org",
+            "cli_path": "chat data-auth cross-org",
+            "confirmation": "not_required",
+            "description": "授予跨组织 chat 数据访问权限。\n\n该命令调用与 dws chat chmod 相同的授权工具，但固定使用数据授权类别：\n\t  scope: chat.data:cross-org\n\t  grantCategory: data\n\t  grantParams: {\"targetOrgId\":\"\u003c目标组织ID\u003e\"} 或 {\"targetOrgId\":\"*\"}",
+            "effect": "write",
+            "group": "data-auth",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed cross-organization permission adapter: the executable CLI assembles scoped chat_permission_grant arguments.",
+            "name": "grant_cross_org_data_access",
+            "primary_cli_path": "chat data-auth cross-org",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "授予跨组织 chat 数据访问权限",
+            "use_when": [
+              "跨组织拉取聊天数据因 data scope 缺失，需要为目标组织或全部组织授权时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "为指定 chat scope 和业务参数发起高风险操作授权",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "不要把它当作实际发送、撤回或群管理命令；跨组织数据读取授权使用 data-auth cross-org"
+            ],
+            "canonical_path": "chat.grant_permission",
+            "cli_name": "chmod",
+            "cli_path": "chat chmod",
+            "confirmation": "not_required",
+            "description": "授予指定命令参数维度的 chat 操作权限。\n\n该命令用于触发悟空宿主应用的授权确认弹窗。chat.* scope 每次执行都需要用户在宿主 UI 中确认，模型无法静默绕过。\n\n授权维度：\n  --permParam        授权原始业务参数，可重复传入 key=value，例如 --permParam openCid=xxx --permParam msgType=text\n\n兼容目标选择（三选一）：\n  --conversation-id   群聊 openConversationId\n  --open-dingtalk-id  单聊目标 openDingTalkId\n  --user              单聊目标 userId，由服务端按 Diamond 映射解析为授权维度",
+            "effect": "write",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed permission adapter: the executable CLI normalizes grant scope and parameters before calling chat_permission_grant.",
+            "name": "grant_permission",
+            "primary_cli_path": "chat chmod",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "授予 chat 高风险操作权限",
+            "use_when": [
+              "目标 chat 操作因行为授权缺失而需要按 scope、目标和时效发起授权时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "从当前用户的会话列表隐藏指定会话",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "免打扰使用 chat mute；退出群聊使用 group quit；本命令不会删除消息"
+            ],
+            "canonical_path": "chat.hide_conversation",
+            "cli_name": "hide",
+            "cli_path": "chat hide",
+            "confirmation": "not_required",
+            "description": "在会话列表中隐藏指定会话（支持单聊/群聊）。隐藏后会话不再显示在列表中，收到新消息时会重新出现。",
+            "effect": "write",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote conversation visibility helper absent from the pinned MCP snapshot.",
+            "name": "hide_conversation",
+            "primary_cli_path": "chat hide",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "会话列表中隐藏会话",
+            "use_when": [
+              "用户明确要隐藏一个已知会话，接受收到新消息后可能再次出现时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "分页获取当前用户的全部单聊和群聊会话",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "只看置顶会话使用 list-top-conversations；只看群聊使用 group list-all"
+            ],
+            "canonical_path": "chat.list_all_conversations",
+            "cli_name": "list-all-conversations",
+            "cli_path": "chat list-all-conversations",
+            "confirmation": "not_required",
+            "description": "分页获取当前用户的全部会话列表（包含单聊和群聊）。--limit 指定每页数量（1-100，默认 100），--cursor 传分页游标（首次不传或传 0）。\n返回 hasMore=true 时用 nextCursor 作为下次 --cursor 继续翻页。",
+            "effect": "read",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a paginated remote helper absent from the pinned MCP snapshot.",
+            "name": "list_all_conversations",
+            "primary_cli_path": "chat list-all-conversations",
+            "reviewed": true,
+            "risk": "low",
+            "title": "分页获取当前用户的全部会话列表",
+            "use_when": [
+              "需要完整枚举会话并沿用 nextCursor 翻页时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "分页拉取当前用户相关的入群验证记录",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "执行审批使用 audit-join-validation；普通群成员列表使用 group members"
+            ],
+            "canonical_path": "chat.list_apply_join_group_records",
+            "cli_name": "list-join-validations",
+            "cli_path": "chat group list-join-validations",
+            "confirmation": "not_required",
+            "description": "分页拉取当前用户的所有入群验证记录，包括自己被拒绝的记录以及作为审批者的记录。\n支持分页，每页最多返回 50 条。",
+            "effect": "read",
+            "group": "group",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a paginated remote helper absent from the pinned MCP snapshot.",
+            "name": "list_apply_join_group_records",
+            "primary_cli_path": "chat group list-join-validations",
+            "reviewed": true,
+            "risk": "low",
+            "title": "分页拉取入群验证记录",
+            "use_when": [
+              "需要查看待处理或历史入群申请，并取得后续审核所需记录 ID 时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "查询指定会话所属的自定义会话分组",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -8446,7 +8845,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "跨全部会话按时间查询时使用 chat message list-all"
+              "跨全部会话按时间查询时使用 chat message list-all；关键词搜索或审计应使用 message search，不要拉最近消息后在本地筛选"
             ],
             "canonical_path": "chat.list_conversation_message_v2",
             "cli_name": "list",
@@ -8566,6 +8965,60 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "按成员 openDingTalkId 批量查询群成员详情",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "列出整个群成员直接使用 group members --id；不要臆造 members list 子命令"
+            ],
+            "canonical_path": "chat.list_group_member_by_ids",
+            "cli_name": "list-by-ids",
+            "cli_path": "chat group members list-by-ids",
+            "confirmation": "not_required",
+            "description": "根据群 openConversationId 和成员 openDingTalkId 列表，批量查询群成员详情信息。",
+            "effect": "read",
+            "group": "group.members",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote member lookup helper absent from the pinned MCP snapshot.",
+            "name": "list_group_member_by_ids",
+            "primary_cli_path": "chat group members list-by-ids",
+            "reviewed": true,
+            "risk": "low",
+            "title": "根据成员 ID 批量查询群成员详情",
+            "use_when": [
+              "已知群 openConversationId 和一组成员 openDingTalkId，需要批量取成员详情时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "分页读取指定群的已发布或定时公告",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "读取单条已知公告使用 group notice get；普通群消息使用 message list"
+            ],
+            "canonical_path": "chat.list_group_notices",
+            "cli_name": "list",
+            "cli_path": "chat group notice list",
+            "confirmation": "not_required",
+            "description": "分页查看指定群聊的群公告列表。默认查询已发布公告，传 --scheduled 查询定时公告列表。\n支持游标分页，hasMore=true 时用返回的 nextPageCursor 作为下次 --cursor。",
+            "effect": "read",
+            "group": "group.notice",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a paginated remote helper absent from the pinned MCP snapshot.",
+            "name": "list_group_notices",
+            "primary_cli_path": "chat group notice list",
+            "reviewed": true,
+            "risk": "low",
+            "title": "查看群公告列表",
+            "use_when": [
+              "需要列出群公告并取得后续详情或编辑使用的 dataId 时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "读取与指定用户的单聊消息记录",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -8593,6 +9046,33 @@
             "title": "拉取单聊会话消息",
             "use_when": [
               "用户明确要求查看和某人的一对一聊天时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "批量读取多条消息的 emoji 与文字表情回应",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "添加或移除回应使用 add/remove-emoji 或 add/remove-text-emotion；不要传占位符 ID"
+            ],
+            "canonical_path": "chat.list_message_emotion_replies",
+            "cli_name": "list-emotion-replies",
+            "cli_path": "chat message list-emotion-replies",
+            "confirmation": "not_required",
+            "description": "批量拉取消息的表情回复和文字回复",
+            "effect": "read",
+            "group": "message",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote emotion-reply helper absent from the pinned MCP snapshot.",
+            "name": "list_message_emotion_replies",
+            "primary_cli_path": "chat message list-emotion-replies",
+            "reviewed": true,
+            "risk": "low",
+            "title": "批量拉取消息的表情回复和文字回复",
+            "use_when": [
+              "已从消息查询取得一组真实 openMessageId，需要汇总回应信息时"
             ]
           },
           {
@@ -8651,6 +9131,33 @@
             "title": "根据消息 ID 批量查询消息",
             "use_when": [
               "已经持有一组 msgId 并需要精确取回消息时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "分页拉取当前用户加入的全部群聊",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "只查我创建或管理的群使用 group list-my-groups；按关键词找群使用 chat search"
+            ],
+            "canonical_path": "chat.list_my_groups_pagination",
+            "cli_name": "list-all",
+            "cli_path": "chat group list-all",
+            "confirmation": "not_required",
+            "description": "分页获取当前用户加入的所有群聊列表。\n支持分页，每次最多返回 200 个群。",
+            "effect": "read",
+            "group": "group",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a paginated remote helper absent from the pinned MCP snapshot.",
+            "name": "list_my_groups_pagination",
+            "primary_cli_path": "chat group list-all",
+            "reviewed": true,
+            "risk": "low",
+            "title": "分页拉取我所有群列表",
+            "use_when": [
+              "需要完整分页列出我加入的所有群，并沿用 nextCursor 继续读取时"
             ]
           },
           {
@@ -8840,6 +9347,58 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "把指定会话标记为未读",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "清除红点使用 clear-red-point；查询未读会话使用 message list-unread-conversations"
+            ],
+            "canonical_path": "chat.mark_conversation_unread",
+            "cli_name": "mark-unread",
+            "cli_path": "chat mark-unread",
+            "confirmation": "not_required",
+            "description": "将指定会话标记为未读状态。支持群聊和单聊。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e",
+            "effect": "write",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote read-state helper absent from the pinned MCP snapshot.",
+            "name": "mark_conversation_unread",
+            "primary_cli_path": "chat mark-unread",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "标记会话为未读",
+            "use_when": [
+              "用户要稍后处理某个已知会话并将其重新标为未读时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "把指定消息及之前的消息标记为已读",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "只清除会话红点使用 clear-red-point；查询他人是否已读使用 message read-status"
+            ],
+            "canonical_path": "chat.mark_message_read",
+            "cli_name": "mark-read",
+            "cli_path": "chat mark-read",
+            "confirmation": "not_required",
+            "description": "标记指定会话中某条消息为已读。该消息及之前的所有消息都会被标记为已读。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e\n如何获取 openMessageId：\n  - dws chat message list --group \u003copenConversationId\u003e --time \"2025-03-01 00:00:00\"",
+            "effect": "write",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote read-state helper absent from the pinned MCP snapshot.",
+            "name": "mark_message_read",
+            "primary_cli_path": "chat mark-read",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "标记消息已读",
+            "use_when": [
+              "已知同一会话中的真实 openMessageId，需要推进已读位置时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "查询指定群成员的自定义角色",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -8875,7 +9434,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "没有 openTaskId 或只需查消息内容时不要使用"
+              "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId"
             ],
             "canonical_path": "chat.query_message_send_status",
             "cli_name": "query-send-status",
@@ -9020,6 +9579,33 @@
             "title": "机器人撤回消息（--group 群聊 / 不传为单聊）",
             "use_when": [
               "持有 robotCode 和发送结果 key，需要撤回机器人消息时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "把一个会话从一个或多个自定义分组移出",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "删除整个分组使用 category delete；加入分组使用 category add-conv"
+            ],
+            "canonical_path": "chat.remove_conv_from_categories",
+            "cli_name": "remove-conv",
+            "cli_path": "chat category remove-conv",
+            "confirmation": "not_required",
+            "description": "将某个会话从一批用户自定义会话分组中移出。需指定会话 openConversationId 和目标分组 ID 列表。",
+            "effect": "write",
+            "group": "category",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI owns validation and calls a remote helper absent from the pinned MCP snapshot.",
+            "name": "remove_conv_from_categories",
+            "primary_cli_path": "chat category remove-conv",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "将会话从指定的自定义分组中移出",
+            "use_when": [
+              "已知会话和真实 categoryId，需要解除现有分组归属时"
             ]
           },
           {
@@ -9238,6 +9824,33 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "重命名用户自定义会话分组",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "不得为绕过长度限制而截断、缩写或改写；创建新分组使用 category create"
+            ],
+            "canonical_path": "chat.rename_conv_category",
+            "cli_name": "rename",
+            "cli_path": "chat category rename",
+            "confirmation": "not_required",
+            "description": "更新用户自定义会话分组的名称",
+            "effect": "write",
+            "group": "category",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI owns title validation and calls a remote helper absent from the pinned MCP snapshot.",
+            "name": "rename_conv_category",
+            "primary_cli_path": "chat category rename",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "更新用户自定义会话分组的名称",
+            "use_when": [
+              "已知 categoryId，且用户给出了不超过 15 个字符的新名称时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "引用指定消息发送个人回复",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -9264,7 +9877,7 @@
             "risk": "medium",
             "title": "引用回复消息（支持单聊/群聊）",
             "use_when": [
-              "用户要针对某条已有消息进行引用回复时"
+              "用户要针对某条已有消息进行引用回复，且 conversationId、openMessageId、senderOpenDingTalkId 来自同一条消息时"
             ]
           },
           {
@@ -9584,7 +10197,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "机器人身份或 Webhook 发送应使用对应命令"
+              "机器人身份或 Webhook 发送应使用对应命令；发送审批、日历或待办摘要不会创建对应产品对象"
             ],
             "canonical_path": "chat.send_personal_message",
             "cli_name": "send",
@@ -9606,7 +10219,7 @@
             "risk": "medium",
             "title": "以当前用户身份发送消息（--group 群聊 / --user 或 --open-dingtalk-id 单聊）",
             "use_when": [
-              "用户明确要以个人身份发送文本或媒体消息时"
+              "用户明确要以个人身份发送消息时；文本用 --text，图片仅在已有有效 mediaId 时用 --msg-type image --media-id，本地 PDF/DOCX/XLSX 等文件用 --msg-type file --file-path"
             ]
           },
           {
@@ -9790,6 +10403,60 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "把指定消息置顶到会话顶部",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "置顶整个会话使用 chat set-top；钉住消息使用 message set-pin-msg"
+            ],
+            "canonical_path": "chat.set_top_message",
+            "cli_name": "set-top-msg",
+            "cli_path": "chat message set-top-msg",
+            "confirmation": "not_required",
+            "description": "将指定消息设置为置顶状态。需要指定会话 ID 和消息 ID。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e",
+            "effect": "write",
+            "group": "message",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote message-top helper absent from the pinned MCP snapshot.",
+            "name": "set_top_message",
+            "primary_cli_path": "chat message set-top-msg",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "置顶消息",
+            "use_when": [
+              "已从目标会话取得真实且同源的 openMessageId，需要设置消息置顶时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "把一个群的邀请链接分享到目标会话或单聊用户",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "只获取邀请链接使用 group invite-url；--target 与 --receiver 只能选择一个"
+            ],
+            "canonical_path": "chat.share_group_invite_url",
+            "cli_name": "share-invite",
+            "cli_path": "chat group share-invite",
+            "confirmation": "not_required",
+            "description": "将指定群的邀请链接分享到另一个会话或单聊用户。--target 和 --receiver 二选一：--target 指定目标会话，--receiver 指定单聊用户。",
+            "effect": "write",
+            "group": "group",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI enforces target/receiver exclusivity before calling a remote helper absent from the pinned MCP snapshot.",
+            "name": "share_group_invite_url",
+            "primary_cli_path": "chat group share-invite",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "分享群聊链接到会话",
+            "use_when": [
+              "当前用户已加入源群，且要把邀请链接发给一个目标会话或一个接收人时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "查最近 @我 的消息（自动算时间窗，投影发送人/时间/内容/会话）",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -9826,7 +10493,7 @@
             "cli_name": "+bot-find",
             "cli_path": "chat +bot-find",
             "confirmation": "not_required",
-            "description": "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。\n\n参数约束：\n  - --query、--keyword 至少指定一个",
+            "description": "当你想找到平台上任意可用机器人（含他人创建或官方助手，例如某个日报/审批机器人）以便与其发起单聊时使用；输入关键词，返回含 openDingTalkId 的机器人列表。",
             "effect": "read",
             "idempotency": "idempotent",
             "interface_mode": "composite",
@@ -10164,7 +10831,7 @@
             "cli_name": "+chat-messages",
             "cli_path": "chat +chat-messages",
             "confirmation": "not_required",
-            "description": "当你想快速看某个会话里的消息（谁在什么时间说了什么），而不想拿到一大坨原始消息字段时使用；群聊传 --group（群会话 ID，openConversationId），单聊传 --user（对方 userId），两者互斥且必须二选一。省略 --time 时默认从当前时间向前读取最近消息；也可指定时间边界并用 --direction newer/older 控制方向。内部据此调用群聊或单聊的消息列表接口，再在本地投影出每条消息的发言人、文本和时间。默认只读且不会发送或修改任何消息；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。\n\n参数约束：\n  - --group、--conversation-id、--id、--user、--open-dingtalk-id 必须且只能指定一个\n  - --output-dir 必须是工作目录内的相对路径，不允许绝对路径或 .. 逃逸",
+            "description": "当你想快速看某个会话里的消息（谁在什么时间说了什么），而不想拿到一大坨原始消息字段时使用；群聊传 --group（群会话 ID，openConversationId），单聊传 --user（对方 userId），两者互斥且必须二选一。省略 --time 时默认从当前时间向前读取最近消息；也可指定时间边界并用 --direction newer/older 控制方向。内部据此调用群聊或单聊的消息列表接口，再在本地投影出每条消息的发言人、文本和时间。默认只读且不会发送或修改任何消息；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘，按既有安全下载约定无需交互确认。\n\n参数约束：\n  - --group、--user、--open-dingtalk-id 必须且只能指定一个\n  - --output-dir 必须是工作目录内的相对路径，不允许绝对路径或 .. 逃逸",
             "effect": "read",
             "idempotency": "idempotent",
             "interface_mode": "composite",
@@ -10346,7 +11013,7 @@
             "cli_name": "+chat-search",
             "cli_path": "chat +chat-search",
             "confirmation": "not_required",
-            "description": "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。\n\n参数约束：\n  - --query、--keyword 至少指定一个",
+            "description": "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。",
             "effect": "read",
             "idempotency": "idempotent",
             "interface_mode": "composite",
@@ -10762,7 +11429,7 @@
             "cli_name": "+messages-read-status",
             "cli_path": "chat +messages-read-status",
             "confirmation": "not_required",
-            "description": "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。\n\n参数约束：\n  - --conversation-id、--group、--id 必须且只能指定一个",
+            "description": "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。",
             "effect": "read",
             "idempotency": "idempotent",
             "interface_mode": "composite",
@@ -11043,6 +11710,33 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "把指定聊天文本翻译成目标语言",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "翻译文档或文件内容应使用对应产品能力；本命令只处理传入文本"
+            ],
+            "canonical_path": "chat.translate",
+            "cli_name": "translate",
+            "cli_path": "chat text translate",
+            "confirmation": "not_required",
+            "description": "将指定文本翻译成目标语言。\n支持的目标语言代码: en_US, zh_CN, zh_TW, zh_HK, ja_JP, ko_KR, vi_VN, th_TH,\nid_ID, ms_MY, es_419, fr_FR, pt_BR, tr_TR, ru_RU, de_DE, hi_IN, hu_HU,\npl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT",
+            "effect": "read",
+            "group": "text",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote translation helper absent from the pinned MCP snapshot.",
+            "name": "translate",
+            "primary_cli_path": "chat text translate",
+            "reviewed": true,
+            "risk": "low",
+            "title": "翻译文本内容",
+            "use_when": [
+              "用户给出文本并明确要求翻译为支持的语言代码时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "列出当前用户存在未读消息的会话",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -11101,6 +11795,59 @@
             "title": "取消钉住消息（Unpin）",
             "use_when": [
               "需要移除一条已知置顶消息时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "取消指定会话中的消息置顶",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "取消会话置顶使用 chat set-top --off；取消 Pin 使用 message unset-pin-msg"
+            ],
+            "canonical_path": "chat.unset_top_message",
+            "cli_name": "unset-top-msg",
+            "cli_path": "chat message unset-top-msg",
+            "confirmation": "not_required",
+            "description": "取消指定消息的置顶状态。需要指定会话 ID 和消息 ID。\n\n如何获取 openConversationId（如果上层已有则直接使用，不必再查）：\n  - 群聊：dws chat search --query \"群名\"\n  - 单聊：dws chat conversation-info --open-dingtalk-id \u003copenDingTalkId\u003e",
+            "effect": "write",
+            "group": "message",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote message-top helper absent from the pinned MCP snapshot.",
+            "name": "unset_top_message",
+            "primary_cli_path": "chat message unset-top-msg",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "取消置顶消息",
+            "use_when": [
+              "已知同源的会话和真实 openMessageId，需要取消消息置顶时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "关闭或恢复指定会话的 @所有人通知",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "关闭全部会话通知使用 chat mute；红包通知偏好使用 mute-red-envelope"
+            ],
+            "canonical_path": "chat.update_at_all_notification_off",
+            "cli_name": "mute-at-all",
+            "cli_path": "chat mute-at-all",
+            "confirmation": "not_required",
+            "description": "关闭或开启会话中 @所有人的消息通知。默认关闭通知，传 --off 则恢复接收通知。",
+            "effect": "write",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote notification preference helper absent from the pinned MCP snapshot.",
+            "name": "update_at_all_notification_off",
+            "primary_cli_path": "chat mute-at-all",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "关闭/开启 @所有人消息提醒",
+            "use_when": [
+              "用户只想调整某个会话的 @所有人提醒偏好时"
             ]
           },
           {
@@ -11224,7 +11971,7 @@
             "risk": "medium",
             "title": "更新群名称",
             "use_when": [
-              "需要给已有群聊重命名时"
+              "需要把已有群聊改成用户指定的准确名称时；名称不得擅自加前缀、截断或改写，复合任务中重命名后继续完成后续步骤"
             ]
           },
           {
@@ -11317,6 +12064,32 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "关闭或恢复指定会话的红包通知",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "关闭全部会话通知使用 chat mute；@所有人通知偏好使用 mute-at-all"
+            ],
+            "canonical_path": "chat.update_red_env_notification_off",
+            "cli_name": "mute-red-envelope",
+            "cli_path": "chat mute-red-envelope",
+            "confirmation": "not_required",
+            "description": "关闭或开启会话中的红包消息通知。默认关闭通知，传 --off 则恢复接收通知。",
+            "effect": "write",
+            "idempotency": "idempotent",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote notification preference helper absent from the pinned MCP snapshot.",
+            "name": "update_red_env_notification_off",
+            "primary_cli_path": "chat mute-red-envelope",
+            "reviewed": true,
+            "risk": "medium",
+            "title": "关闭/开启红包消息提醒",
+            "use_when": [
+              "用户只想调整某个会话的红包消息提醒偏好时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
             "agent_summary": "设置新成员可见的群历史消息范围",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
@@ -11352,7 +12125,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "创建新卡片时使用 chat message send-card"
+              "创建新卡片时使用 chat message send-card；openMessageId、OA 实例 ID、日历事件 ID或待办任务 ID 不能代替 bizId"
             ],
             "canonical_path": "chat.update_streaming_card",
             "cli_name": "update-card",
@@ -11374,7 +12147,7 @@
             "risk": "medium",
             "title": "流式更新卡片内容",
             "use_when": [
-              "已有 bizId 并需要追加内容或结束流式输出时"
+              "已有 message send-card 真实返回的 bizId，并需要追加内容或结束流式输出时；最后一次更新使用完成状态"
             ]
           },
           {
@@ -11403,6 +12176,33 @@
             "title": "更新消息的文字表情回应",
             "use_when": [
               "需要更新消息的状态文字或表情，并避免先移除再添加造成闪烁和两次网络调用时"
+            ]
+          },
+          {
+            "agent_metadata_source": "embedded-skill-metadata",
+            "agent_summary": "设置仅当前用户可见的群备注",
+            "agent_summary_source": "dws-agent-selection/chat",
+            "availability": "available",
+            "avoid_when": [
+              "修改所有成员看到的群名使用 group rename；修改自己群昵称使用 group update-nick"
+            ],
+            "canonical_path": "chat.update_user_group_alias",
+            "cli_name": "update-alias",
+            "cli_path": "chat group update-alias",
+            "confirmation": "not_required",
+            "description": "设置当前用户对指定群聊的备注名称（仅自己可见）。",
+            "effect": "write",
+            "group": "group",
+            "idempotency": "unknown",
+            "interface_mode": "composite",
+            "interface_reason": "Reviewed unpinned IM adapter: the executable CLI calls a remote personal-alias helper absent from the pinned MCP snapshot.",
+            "name": "update_user_group_alias",
+            "primary_cli_path": "chat group update-alias",
+            "reviewed": true,
+            "risk": "low",
+            "title": "设置群备注",
+            "use_when": [
+              "用户要修改自己看到的群备注，而不是修改群的公开名称时"
             ]
           },
           {
@@ -26644,6 +27444,6 @@
       }
     ],
     "source": "embedded-command-catalog",
-    "tool_count": 845
+    "tool_count": 875
   }
 }

@@ -42,23 +42,24 @@ const (
 
 // Error is the structured repository-local error model for the Go rewrite.
 type Error struct {
-	Category          Category
-	Message           string
-	Operation         string
-	ServerKey         string
-	Retryable         bool
+	Category       Category
+	Message        string
+	Operation      string
+	ServerKey      string
+	Retryable      bool
 	RetryableSet      bool
 	RetryAfterSeconds *int64
 	NextRetryAt       *time.Time
-	Reason            string
-	Hint              string
-	Actions           []string
-	AvailableFlags    []string
-	Snapshot          string
-	RPCCode           int               `json:"rpc_code,omitempty"`
-	RPCData           json.RawMessage   `json:"rpc_data,omitempty"`
-	ServerDiag        ServerDiagnostics `json:"-"`
-	Cause             error             `json:"-"`
+	Reason         string
+	Hint           string
+	Actions        []string
+	Examples       []string
+	AvailableFlags []string
+	Snapshot       string
+	RPCCode        int               `json:"rpc_code,omitempty"`
+	RPCData        json.RawMessage   `json:"rpc_data,omitempty"`
+	ServerDiag     ServerDiagnostics `json:"-"`
+	Cause          error             `json:"-"`
 }
 
 func (e *Error) Error() string {
@@ -165,6 +166,22 @@ func WithActions(actions ...string) Option {
 		}
 		if len(out) > 0 {
 			err.Actions = out
+		}
+	}
+}
+
+// WithExamples records copyable command examples for recovery.
+func WithExamples(examples ...string) Option {
+	return func(err *Error) {
+		out := make([]string, 0, len(examples))
+		for _, example := range examples {
+			if strings.TrimSpace(example) == "" {
+				continue
+			}
+			out = append(out, example)
+		}
+		if len(out) > 0 {
+			err.Examples = out
 		}
 	}
 }
@@ -309,7 +326,12 @@ func PrintJSON(w io.Writer, err error) error {
 		}
 		if len(typed.Actions) > 0 {
 			errorPayload["actions"] = typed.Actions
+			errorPayload["suggested_actions"] = typed.Actions
 		}
+		if len(typed.Examples) > 0 {
+			errorPayload["examples"] = typed.Examples
+		}
+		errorPayload["error_message"] = typed.Message
 		if len(typed.AvailableFlags) > 0 {
 			errorPayload["available_flags"] = typed.AvailableFlags
 		}
@@ -385,6 +407,23 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 	var typed *Error
 	if !stderrors.As(err, &typed) {
 		_, writeErr := fmt.Fprintf(w, "%s %s\n", tui.StateMark("error"), tui.Danger("Error: "+err.Error()))
+		return writeErr
+	}
+
+	if len(typed.Examples) > 0 {
+		lines := []string{
+			"错误信息：" + typed.Message,
+			"原因：" + typed.Reason,
+			"建议操作：",
+		}
+		for i, action := range typed.Actions {
+			lines = append(lines, fmt.Sprintf("%d. %s", i+1, action))
+		}
+		lines = append(lines, "示例：")
+		for i, example := range typed.Examples {
+			lines = append(lines, fmt.Sprintf("%d. %s", i+1, example))
+		}
+		_, writeErr := fmt.Fprintln(w, strings.Join(lines, "\n"))
 		return writeErr
 	}
 

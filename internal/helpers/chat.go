@@ -56,11 +56,20 @@ const maxConversationCategoryTitleRunes = 15
 func validatedConversationCategoryTitle(raw string) (string, error) {
 	title := strings.TrimSpace(raw)
 	if title == "" {
-		return "", apperrors.NewValidation("--title 不能为空")
+		return "", apperrors.NewValidation(
+			"--title 不能为空",
+			apperrors.WithReason("invalid_category_title"),
+			apperrors.WithHint("请提供 1 到 15 个字符的分组标题，并保持用户指定原文。"),
+			apperrors.WithActions("补充非空 --title", "运行当前命令 --help 查看示例"),
+		)
 	}
-	if utf8.RuneCountInString(title) > maxConversationCategoryTitleRunes {
-		return "", apperrors.NewValidation(fmt.Sprintf(
-			"--title 最多 %d 个字符", maxConversationCategoryTitleRunes))
+	if count := utf8.RuneCountInString(title); count > maxConversationCategoryTitleRunes {
+		return "", apperrors.NewValidation(
+			fmt.Sprintf("--title 当前 %d 个字符，最多 %d 个字符", count, maxConversationCategoryTitleRunes),
+			apperrors.WithReason("category_title_too_long"),
+			apperrors.WithHint("不得静默截断、缩写或改写用户指定名称；请让用户提供合法标题后重试。"),
+			apperrors.WithActions("请用户将标题缩短到 15 个字符以内", "使用用户确认后的标题原文重试"),
+		)
 	}
 	return title, nil
 }
@@ -329,6 +338,25 @@ func containsMessageMention(text, placeholder string) bool {
 		}
 		searchFrom = end
 	}
+}
+
+func chatGuidanceError(message, reason string, actions, examples []string) error {
+	return apperrors.NewValidation(
+		message,
+		apperrors.WithReason(reason),
+		apperrors.WithActions(actions...),
+		apperrors.WithExamples(examples...),
+	)
+}
+
+func isLikelyPlaceholderID(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	return normalized == "" ||
+		normalized == "0" ||
+		strings.Contains(normalized, "placeholder") ||
+		strings.HasPrefix(normalized, "test_") ||
+		strings.HasPrefix(normalized, "test-") ||
+		strings.HasPrefix(normalized, "<")
 }
 
 func resolveOpenDingTalkID(ctx context.Context, value string) (string, error) {
@@ -1681,7 +1709,27 @@ func newChatCommand() *cobra.Command {
 				if atAll && !strings.Contains(text, "<@all>") {
 					text = "<@all> " + text
 				}
-				// 用户身份发消息要求 @ 占位符为 <@openDingTalkId>；模型若写成裸 @id 自动补全，已有 <@id> 不变
+				var addedMentions []string
+				for _, rawID := range atOpenIds {
+					id := strings.TrimSpace(rawID)
+					if id == "" {
+						continue
+					}
+					wrapped := "<@" + id + ">"
+					if !containsMessageMention(text, wrapped) && !containsMessageMention(text, "@"+id) {
+						addedMentions = append(addedMentions, wrapped)
+					}
+				}
+				if len(addedMentions) > 0 {
+					text = strings.Join(addedMentions, " ") + " " + text
+					fmt.Fprintf(
+						os.Stderr,
+						"错误信息：检测到 --at-open-dingtalk-ids，但正文缺少对应 @ 占位符；CLI 已自动补齐\n原因：钉钉群消息只有正文包含 <@openDingTalkId> 时才会真正展示 @ 提醒\n建议操作：\n1. 后续命令请在 --text 中显式写入对应占位符\n示例：\n1. dws chat message send --group <openConversationId> --at-open-dingtalk-ids %s --text %q --format json\n",
+						atOpenIdsStr,
+						text,
+					)
+				}
+				// 用户身份发消息要求 @ 占位符为 <@openDingTalkId>；模型若写成裸 @id 自动补全，已有 <@id> 保持不变
 				text = normalizeAtPlaceholders(text, atOpenIds, true)
 				// 群聊统一走 openDingTalkId @ 人接口。
 				contentJSON, _ := marshalJSONRaw(map[string]string{"title": title, "text": text})
@@ -1991,7 +2039,12 @@ func newChatCommand() *cobra.Command {
 				return fmt.Errorf("--sender-user-id and --sender-open-dingtalk-id are mutually exclusive, specify exactly one")
 			}
 			if senderUserID == "" && senderOpenDingTalkID == "" {
-				return fmt.Errorf("--sender-user-id or --sender-open-dingtalk-id is required")
+				return chatGuidanceError(
+					"缺少消息发送者标识",
+					"list-by-sender 查询的是指定对方发送的消息，必须提供对方的 userId 或 openDingTalkId",
+					[]string{"使用 --sender-user-id 传入对方 userId", "或使用 --sender-open-dingtalk-id 传入对方 openDingTalkId"},
+					[]string{`dws chat message list-by-sender --sender-user-id <对方userId> --start "2026-07-14T00:00:00+08:00" --format json`},
+				)
 			}
 			startMs, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
 			if err != nil {
@@ -2182,6 +2235,25 @@ func newChatCommand() *cobra.Command {
   # 查询单聊会话 ID: dws chat conversation-info --user <userId>
   # 查询人员: dws contact user search --keyword "姓名" --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			hasCondition := false
+			for _, name := range []string{
+				"query", "keyword", "user", "users", "userId", "sender-ids", "senders", "sender",
+				"at-ids", "conversation-ids", "groups", "group", "message-type",
+				"conversation-type", "search-conv-type", "start", "end",
+			} {
+				if value, _ := cmd.Flags().GetString(name); strings.TrimSpace(value) != "" {
+					hasCondition = true
+					break
+				}
+			}
+			if !hasCondition {
+				atMe, _ := cmd.Flags().GetBool("at-me")
+				hasCondition = atMe || cmd.Flags().Changed("only-robot") || cmd.Flags().Changed("only-robot-messages")
+			}
+			if !hasCondition {
+				return apperrors.NewValidation("at least one search condition is required")
+			}
+
 			toolArgs := map[string]any{}
 
 			// The CLI primary is --query; the IM MCP field is still named "keyword".
@@ -2976,12 +3048,21 @@ func newChatCommand() *cobra.Command {
 	chatCategoryDeleteCmd := &cobra.Command{
 		Use:   "delete",
 		Short: "删除用户自定义会话分组",
+		Long:  "删除用户自定义会话分组。该操作不可逆；必须先获得用户确认，再追加 --yes 执行。",
 		Example: `  dws chat category delete --category-id <分组ID>
   # 分组ID 可通过 dws chat category list 获取`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			categoryId, _ := cmd.Flags().GetInt64("category-id")
 			if categoryId == 0 {
 				return fmt.Errorf("flag --category-id is required")
+			}
+			if !commandBoolFlag(cmd, "yes") {
+				return apperrors.NewValidation(
+					"删除会话分组不可逆；获得用户确认后加 --yes 执行",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("先确认目标分组及影响范围；用户明确同意后以相同参数追加 --yes"),
+					apperrors.WithActions("确认目标会话分组", "获得用户确认后使用 --yes 执行"),
+				)
 			}
 			return callMCPToolOnServer("im", "delete_conv_category", map[string]any{
 				"categoryId": categoryId,
@@ -3058,6 +3139,16 @@ func newChatCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("--category-ids: %w", err)
 			}
+			for _, categoryID := range categoryIds {
+				if categoryID > 0 && categoryID < 1000 {
+					return chatGuidanceError(
+						"会话分组 ID 看起来仍是示例占位值",
+						"--category-ids 必须来自 chat category list 返回的真实分组 ID；123、456 等短示例值不能直接用于移出操作",
+						[]string{"先查询当前用户的会话分组", "从结果读取真实 categoryId 后再执行移出"},
+						[]string{`dws chat category list --format json`, `dws chat category remove-conv --group <openConversationId> --category-ids <categoryId> --format json`},
+					)
+				}
+			}
 			return callMCPToolOnServer("im", "remove_conv_from_categories", map[string]any{
 				"openConversationId": groupID,
 				"categoryIds":        categoryIds,
@@ -3129,6 +3220,16 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			msgIds := parseCSVValues(mustGetFlag(cmd, "msg-ids"))
+			for _, msgID := range msgIds {
+				if isLikelyPlaceholderID(msgID) {
+					return chatGuidanceError(
+						"消息 ID 仍是占位符，无法查询真实消息",
+						"--msg-ids 必须来自消息列表返回的真实 openMsgId，test_msg_id_placeholder 等示例值不会命中消息",
+						[]string{"先执行 chat message list 获取目标消息", "从结果读取 openMsgId 后替换占位符"},
+						[]string{`dws chat message list-by-ids --msg-ids <openMsgId> --format json`},
+					)
+				}
+			}
 			if len(msgIds) > 50 {
 				return fmt.Errorf("--msg-ids 最多支持 50 条，当前 %d 条", len(msgIds))
 			}
@@ -3151,6 +3252,14 @@ func newChatCommand() *cobra.Command {
 			}
 			if err := validateRequiredFlags(cmd, "msg-id", "emoji"); err != nil {
 				return err
+			}
+			if msgID := mustGetFlag(cmd, "msg-id"); isLikelyPlaceholderID(msgID) {
+				return chatGuidanceError(
+					"消息 ID 仍是占位符，无法添加表情回应",
+					"--msg-id 必须是目标消息真实的 openMsgId，不能使用测试占位符",
+					[]string{"先拉取目标会话消息", "读取目标消息的 openMsgId 后重试"},
+					[]string{`dws chat message add-emoji --conversation-id <openConversationId> --msg-id <openMsgId> --emoji "赞" --format json`},
+				)
 			}
 			return callMCPToolOnServer("im", "add_emoji_reaction", map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
@@ -3434,6 +3543,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			conversationID := mustGetFlag(cmd, "open-conversation-id")
 			messageID := mustGetFlag(cmd, "message-id")
 			outputPath := mustGetFlag(cmd, "output")
+			if isLikelyPlaceholderID(resourceID) || isLikelyPlaceholderID(messageID) {
+				return chatGuidanceError(
+					"媒体资源参数仍包含占位符",
+					"--resource-id 和 --message-id 必须来自同一条真实消息，不能使用 test-media 或 test_msg_id_placeholder",
+					[]string{"先拉取包含媒体的目标消息", "从同一条消息读取 mediaId、openMessageId 和 openConversationId"},
+					[]string{`dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/ --format json`},
+				)
+			}
 
 			switch resourceType {
 			case "mediaId":
@@ -3546,7 +3663,12 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				newOwner = newOwnerUserID
 			}
 			if newOwner == "" {
-				return fmt.Errorf("flag --new-owner or --user is required")
+				return chatGuidanceError(
+					"缺少新群主标识",
+					"--new-owner 接收新群主 openDingTalkId，--user 接收新群主 userId，二者必须选择一个",
+					[]string{"先查询新群主的人员标识", "使用 --new-owner 或 --user 之一"},
+					[]string{`dws chat group transfer-owner --group <openConversationId> --new-owner <openDingTalkId> --format json`},
+				)
 			}
 			if !isOpenDingTalkID(newOwner) {
 				return callMCPToolOnServer("im", "transfer_group_owner", map[string]any{
@@ -3696,9 +3818,36 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return fmt.Errorf("flag --status is required (0=关闭, 1=开启)")
 			}
 			status, _ := cmd.Flags().GetInt("status")
+			settingKey := mustGetFlag(cmd, "setting-key")
+			validSettingKeys := map[string]bool{
+				"authority": true, "joinValidation": true, "onlyAdminCanAtAll": true,
+				"searchable": true, "addFriendForbidden": true, "toolbarStatus": true,
+				"pluginCustomizeVerify": true, "onlyAdminCanDING": true,
+				"allMembersCanCreateMcsConf": true, "onlyAdminCanSetMsgTop": true,
+				"onlyAdminCanPinMsg": true, "onlyAdminCanSendFile": true,
+				"allMembersCanCreateCalendar": true, "groupEmailDisabled": true,
+				"groupRedEnvelopeSwitch": true, "groupLiveAuthority": true,
+				"groupBillAuthority": true,
+			}
+			if !validSettingKeys[settingKey] {
+				return chatGuidanceError(
+					"不支持的群设置项："+settingKey,
+					"--setting-key 必须使用当前接口支持的精确枚举值，on 不是设置项名称",
+					[]string{"从 --help 列表选择合法 setting-key", "开启或关闭通过 --status 1/0 表达"},
+					[]string{`dws chat group update-settings --group <openConversationId> --setting-key searchable --status 1 --format json`},
+				)
+			}
+			if status != 0 && status != 1 {
+				return chatGuidanceError(
+					"群设置值只能是 0 或 1",
+					"--status 表示开关状态：0=关闭，1=开启；其他整数不会被服务端接受",
+					[]string{"关闭设置时传 --status 0", "开启设置时传 --status 1"},
+					[]string{`dws chat group update-settings --group <openConversationId> --setting-key searchable --status 1 --format json`},
+				)
+			}
 			return callMCPToolOnServer("im", "update_group_settings", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),
-				"settingKey":         mustGetFlag(cmd, "setting-key"),
+				"settingKey":         settingKey,
 				"status":             status,
 			})
 		},
@@ -3786,6 +3935,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "src-conversation-id", "msg-id", "dest-conversation-id"); err != nil {
 				return err
+			}
+			if msgID := mustGetFlag(cmd, "msg-id"); isLikelyPlaceholderID(msgID) {
+				return chatGuidanceError(
+					"转发消息 ID 仍是占位符",
+					"--msg-id 必须是源会话中真实消息的 openMessageId",
+					[]string{"先拉取源会话消息", "确认消息属于 --src-conversation-id 后读取 openMessageId"},
+					[]string{`dws chat message forward --src-conversation-id <源会话ID> --msg-id <openMessageId> --dest-conversation-id <目标会话ID> --format json`},
+				)
 			}
 			toolArgs := map[string]any{
 				"srcOpenCid":       mustGetFlag(cmd, "src-conversation-id"),
@@ -3931,7 +4088,21 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if !off {
 				muteTime, _ := cmd.Flags().GetInt64("mute-time")
 				if muteTime <= 0 {
-					return fmt.Errorf("--mute-time is required when muting (supported: 300000/3600000/86400000/604800000/2592000000)")
+					return chatGuidanceError(
+						"禁言时必须提供 --mute-time",
+						"--mute-time 的单位是毫秒，仅支持 5 分钟、1 小时、1 天、7 天或 30 天对应的固定值",
+						[]string{"选择支持的毫秒值之一", "取消禁言时改用 --off"},
+						[]string{`dws chat group-mute-member --group <openConversationId> --user <userId> --mute-time 300000 --format json`},
+					)
+				}
+				validMuteTimes := map[int64]bool{300000: true, 3600000: true, 86400000: true, 604800000: true, 2592000000: true}
+				if !validMuteTimes[muteTime] {
+					return chatGuidanceError(
+						"不支持的禁言时长",
+						"--mute-time 使用毫秒且只支持 300000、3600000、86400000、604800000、2592000000；300 表示的时间不在支持范围内",
+						[]string{"5 分钟使用 300000", "从支持的五档时长中选择"},
+						[]string{`dws chat group-mute-member --group <openConversationId> --user <userId> --mute-time 300000 --format json`},
+					)
 				}
 				toolArgs["muteTime"] = muteTime
 			}
@@ -4097,6 +4268,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "group", "role-id", "name"); err != nil {
 				return err
+			}
+			if roleID := mustGetFlag(cmd, "role-id"); isLikelyPlaceholderID(roleID) {
+				return chatGuidanceError(
+					"群身份 ID 仍是占位符",
+					"--role-id 必须来自 chat group-role list 返回的真实 openRoleId，0 不是有效群身份 ID",
+					[]string{"先列出目标群的群身份", "从结果读取 openRoleId 后重试"},
+					[]string{`dws chat group-role list --group <openConversationId> --format json`, `dws chat group-role update --group <openConversationId> --role-id <openRoleId> --name "新名称" --format json`},
+				)
 			}
 			return callMCPToolOnServer("im", "update_custom_group_role", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),
@@ -4392,9 +4571,28 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "src-conversation-id", "msg-ids", "dest-conversation-id"); err != nil {
 				return err
 			}
+			msgIDs := parseCSVValues(mustGetFlag(cmd, "msg-ids"))
+			if len(msgIDs) < 2 {
+				return chatGuidanceError(
+					"合并转发至少需要两条消息",
+					"--msg-ids 只有一条消息时不构成合并转发；单条消息应使用 message forward",
+					[]string{"提供至少两个来自同一源会话的 openMessageId", "只有一条时改用 message forward"},
+					[]string{`dws chat message combine-forward --src-conversation-id <源会话ID> --msg-ids <id1>,<id2> --dest-conversation-id <目标会话ID> --format json`},
+				)
+			}
+			for _, msgID := range msgIDs {
+				if isLikelyPlaceholderID(msgID) {
+					return chatGuidanceError(
+						"合并转发消息列表包含占位符",
+						"--msg-ids 必须全部是源会话中的真实 openMessageId",
+						[]string{"先拉取源会话消息", "选择至少两个真实消息 ID"},
+						[]string{`dws chat message combine-forward --src-conversation-id <源会话ID> --msg-ids <id1>,<id2> --dest-conversation-id <目标会话ID> --format json`},
+					)
+				}
+			}
 			toolArgs := map[string]any{
 				"srcOpenCid":        mustGetFlag(cmd, "src-conversation-id"),
-				"srcOpenMessageIds": parseCSVValues(mustGetFlag(cmd, "msg-ids")),
+				"srcOpenMessageIds": msgIDs,
 				"destOpenCid":       mustGetFlag(cmd, "dest-conversation-id"),
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
@@ -4429,6 +4627,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "src-msg-id", "src-conversation-id", "src-thread-id", "dest-conversation-id"); err != nil {
 				return err
+			}
+			if msgID := mustGetFlag(cmd, "src-msg-id"); isLikelyPlaceholderID(msgID) {
+				return chatGuidanceError(
+					"话题转发的源消息 ID 仍是占位符",
+					"--src-msg-id 必须来自源话题中的真实 openMessageId，并与源会话和 thread-id 对应",
+					[]string{"先拉取源会话的话题消息", "从同一条消息读取 openMessageId 和 openConvThreadId"},
+					[]string{`dws chat message forward-topic --src-msg-id <openMessageId> --src-conversation-id <源会话ID> --src-thread-id <openConvThreadId> --dest-conversation-id <目标会话ID> --format json`},
+				)
 			}
 			toolArgs := map[string]any{
 				"srcOpenMessageId":       mustGetFlag(cmd, "src-msg-id"),
@@ -4708,12 +4914,21 @@ status 可选值:
 			if err != nil {
 				return fmt.Errorf("--record-id must be a valid integer: %w", err)
 			}
+			status := mustGetFlag(cmd, "status")
+			if status != "AuditApprove" && status != "AuditDelete" {
+				return chatGuidanceError(
+					"不支持的入群审批状态："+status,
+					"当前服务端仅接受大小写完全一致的 AuditApprove 或 AuditDelete；AuditRefuse 和 approve 均不可用",
+					[]string{"通过申请使用 AuditApprove", "拒绝或删除申请使用 AuditDelete，并可补充 --description"},
+					[]string{`dws chat group audit-join-validation --group <openConversationId> --record-id <recordId> --applicant <userId> --inviter <userId> --status AuditApprove --format json`},
+				)
+			}
 			toolArgs := map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),
 				"applyRecordId":      recordID,
 				"applicantUid":       mustGetFlag(cmd, "applicant"),
 				"inviterUid":         mustGetFlag(cmd, "inviter"),
-				"status":             mustGetFlag(cmd, "status"),
+				"status":             status,
 			}
 			if v, _ := cmd.Flags().GetString("description"); v != "" {
 				toolArgs["auditDescription"] = v
@@ -4839,7 +5054,7 @@ status 可选值:
 	chatClearMessagesCmd := &cobra.Command{
 		Use:   "clear-messages",
 		Short: "清空当前用户指定会话的聊天记录",
-		Long: `清空当前用户在指定会话中的聊天记录。仅清空当前用户视角的消息，不影响其他成员。
+		Long: `清空当前用户在指定会话中的聊天记录。仅清空当前用户视角的消息，不影响其他成员。该操作不可逆；必须先获得用户确认，再追加 --yes 执行。
 
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
@@ -4850,6 +5065,14 @@ status 可选值:
 			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat clear-messages --conversation-id <openConversationId>")
+			}
+			if !commandBoolFlag(cmd, "yes") {
+				return apperrors.NewValidation(
+					"清空会话聊天记录不可逆；获得用户确认后加 --yes 执行",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("先确认目标会话及影响范围；用户明确同意后以相同参数追加 --yes"),
+					apperrors.WithActions("确认目标会话", "获得用户确认后使用 --yes 执行"),
+				)
 			}
 			return callMCPToolOnServer("im", "clear_conversation_messages", map[string]any{
 				"openConversationId": convID,
@@ -5193,6 +5416,14 @@ status 可选值:
 			if err := validateRequiredFlags(cmd, "group", "notice-id"); err != nil {
 				return err
 			}
+			if noticeID := mustGetFlag(cmd, "notice-id"); isLikelyPlaceholderID(noticeID) {
+				return chatGuidanceError(
+					"群公告 ID 仍是占位符",
+					"--notice-id 必须来自 chat group notice list 返回的真实 dataId，0 不是有效公告 ID",
+					[]string{"先查询目标群公告列表", "从结果读取 dataId 后重试；查询操作不需要 --dry-run"},
+					[]string{`dws chat group notice list --group <openConversationId> --format json`, `dws chat group notice get --group <openConversationId> --notice-id <dataId> --format json`},
+				)
+			}
 			return callMCPToolOnServer("im", "get_group_notice", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),
 				"dataId":             mustGetFlag(cmd, "notice-id"),
@@ -5254,7 +5485,12 @@ status 可选值:
 			target, _ := cmd.Flags().GetString("target")
 			receiver, _ := cmd.Flags().GetString("receiver")
 			if target == "" && receiver == "" {
-				return fmt.Errorf("--target or --receiver is required")
+				return chatGuidanceError(
+					"缺少群邀请链接的接收目标",
+					"--target 表示接收分享的目标会话，--receiver 表示接收分享的单聊用户，二者必须选择一个",
+					[]string{"分享到群或会话时使用 --target", "分享到个人时使用 --receiver openDingTalkId"},
+					[]string{`dws chat group share-invite --source <源群ID> --target <目标会话ID> --format json`},
+				)
 			}
 			if target != "" && receiver != "" {
 				return fmt.Errorf("--target and --receiver are mutually exclusive")

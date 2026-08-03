@@ -75,6 +75,57 @@ func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) 
 	}
 }
 
+func TestCrossPlatformCoverageShortcutListCompactPublishesDiscoveryContract(t *testing.T) {
+	shortcut.Register(shortcut.Shortcut{
+		Service:     "chat",
+		Command:     "+messages-send",
+		Description: "发送一条消息",
+		Intent:      "用户要求发送消息",
+		Risk:        shortcut.RiskWrite,
+		Flags: []shortcut.Flag{
+			{Name: "text", Required: true},
+		},
+		Tips: []string{"dws chat +messages-send --text hello"},
+	})
+
+	cmd := newListCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"--service", "chat", "--compact"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	var payload struct {
+		Compact   bool             `json:"compact"`
+		Count     int              `json:"count"`
+		Shortcuts []map[string]any `json:"shortcuts"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !payload.Compact || payload.Count != 1 || len(payload.Shortcuts) != 1 {
+		t.Fatalf("unexpected compact payload: %#v", payload)
+	}
+	row := payload.Shortcuts[0]
+	for key, want := range map[string]any{
+		"cli_path":     "chat +messages-send",
+		"description":  "发送一条消息",
+		"intent":       "用户要求发送消息",
+		"risk":         "write",
+		"confirmation": "user_required",
+	} {
+		if got := row[key]; got != want {
+			t.Fatalf("compact row %s = %#v, want %#v", key, got, want)
+		}
+	}
+	for _, omitted := range []string{"flags", "constraints", "examples", "primary", "reviewed"} {
+		if _, ok := row[omitted]; ok {
+			t.Fatalf("compact row unexpectedly contains %q: %#v", omitted, row)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageShortcutListRowPublishesCompleteContract(t *testing.T) {
 	row := newShortcutListRow(shortcut.Shortcut{
 		Service: "chat",

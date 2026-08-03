@@ -10,11 +10,11 @@
 
 - 发消息前必须核对接收对象、消息内容、@ 对象、附件路径和消息类型；不明确时先问用户。
 - `--group`、`--user`、`--open-dingtalk-id` 通常互斥，群聊用 `--group`，单聊用 `--user` 或 `--open-dingtalk-id`。
-- 发送本地文件、音频、视频统一用 `chat message send --msg-type file|audio|video --file-path <path>`；`audio` / `video` 底层按 `file` 链路发送；旧图片链路 `--msg-type image --media-id` 仅在已有 mediaId 时使用。
+- 发送本地文件、音频、视频使用 `chat message send --msg-type file|audio|video --file-path <path>`。`audio` / `video` 底层按 `file` 链路发送；已有 mediaId 的图片可用 `--msg-type image --media-id`。
 - 发送位置消息前必须确认纬度、经度、地址名称；地图缩略图需先通过旧媒体上传链路拿到 mediaId。
 - 分享联系人名片前必须确认联系人 `openDingTalkId`，不要把 userId 直接当 `--contact-id`。
 - 消息内容按 Markdown 渲染，换行必须是真实换行符；需要换行效果时用空行、行尾两个空格或 `<br>`。
-- 建议发送时带 `--uuid`，失败重试复用同一个值。
+- `message send` 建议带 `--uuid`；失败重试复用同一个值。
 
 ## 命令明细
 
@@ -72,6 +72,7 @@ dws chat message send --group <openConversationId> --msg-type profile --contact-
 | 命令 | 用途 | 示例与要点 |
 |------|------|------------|
 | `message list` | 拉取指定群聊或单聊消息 | `dws chat message list --group <cid> --time "2025-03-01 00:00:00" --direction older`；目标三选一，`--direction newer/older` 优先于旧 `--forward` |
+| `message list-direct` | 拉取与指定用户的单聊消息 | `--user` / `--open-dingtalk-id` 二选一，`--time` 必填 |
 | `message list-all` | 时间范围内全部会话消息 | `dws chat message list-all --start <ISO> --end <ISO> --limit 100 --cursor 0`；四个参数每次请求都传，翻页用 `nextCursor` |
 | `message list-by-sender` | 查指定发送者消息 | `--sender-user-id` 与 `--sender-open-dingtalk-id` 二选一，跨单聊+群聊 |
 | `message list-mentions` | 查 @ 我的消息 | 可传 `--group` 限定群，不传查全部 |
@@ -89,7 +90,7 @@ dws chat message send --group <openConversationId> --msg-type profile --contact-
 
 ### 搜索消息
 
-优先使用 `message search-advanced`，它是 `message search` 的严格超集。
+组合搜索使用 `message search-advanced`。它是 `message search` 的严格超集。
 
 ```bash
 dws chat message search-advanced --query "周报" --start "2026-04-01T00:00:00+08:00" --end "2026-04-15T00:00:00+08:00"
@@ -156,10 +157,10 @@ dws chat message edit --group <openConversationId> --msg-id <openMessageId> --co
 
 话题完整读取流程：
 
-1. `dws chat message list --group <openConversationId> --time ...` 获取话题主消息。
-2. 如果返回 `openConvThreadId`，执行 `dws chat message list-topic-replies --group <openConversationId> --topic-id <openConvThreadId>`。
+1. 已知 thread/topic ID 时执行 `message list-topic-replies --group <openConversationId> --topic-id <topicId>`。
+2. 未知 ID 时先拉主消息；如果返回 `openConvThreadId`，再将其作为 `--topic-id`。
 
-流式卡片必须 `send-card` 与 `update-card` 搭配：
+原子卡片接口先创建，再用返回的 `bizId` 继续流式更新：
 
 ```bash
 dws chat message send-card --group <openConversationId>
@@ -222,7 +223,7 @@ dws chat text translate --query "Bonjour" --to ja_JP
 
 ### 文件与媒体
 
-#### `dws chat message download-media`
+使用原子下载接口 `dws chat message download-media`：
 
 ```bash
 dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/
@@ -232,7 +233,7 @@ dws chat message download-media --type mediaId --resource-id <mediaId> --message
 
 ## 常见工作流
 
-### 群聊发文字与文件
+### 原子回退：群聊发文字与文件
 
 ```bash
 dws chat search --query "项目冲刺" --format json
@@ -262,7 +263,7 @@ dws chat message search-advanced --message-type file --search-conv-type group_ch
 
 - 发送目标不唯一：先确认群/人；群用 `chat search`，单聊用 `aisearch person` + `conversation-info`。
 - `unknown flag`：立即执行对应命令 `--help`，不要猜参数。
-- 文件/音视频发送失败：确认本地路径可读；新链路使用 `--msg-type file|audio|video --file-path`。
+- 文件/音视频发送失败：确认本地路径可读且在允许的工作目录范围内，并使用 `message send --msg-type file|audio|video --file-path`。
 - 位置消息参数不完整：先确认经纬度、地址名称和缩略图 mediaId。
 - 名片发送失败：确认 `--contact-id` 是 openDingTalkId，不是 userId。
 - 话题回复缺失：检查是否只拉了主消息，需继续用 `list-topic-replies`。

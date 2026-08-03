@@ -192,6 +192,46 @@ func TestPrintJSON_AvailableFlags(t *testing.T) {
 	}
 }
 
+func TestPrintJSON_FourPartGuidance(t *testing.T) {
+	t.Parallel()
+
+	var b strings.Builder
+	if err := PrintJSON(&b, NewValidation(
+		"缺少参数",
+		WithReason("必须提供时间范围"),
+		WithActions("补充开始时间", "补充结束时间"),
+		WithExamples(`dws chat message list-all --start "..." --end "..." --format json`),
+	)); err != nil {
+		t.Fatalf("PrintJSON() error = %v", err)
+	}
+	got := b.String()
+	for _, want := range []string{`"error_message"`, `"reason"`, `"suggested_actions"`, `"examples"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("four-part JSON output missing %s: %q", want, got)
+		}
+	}
+}
+
+func TestPrintHuman_FourPartGuidance(t *testing.T) {
+	t.Parallel()
+
+	var b strings.Builder
+	if err := PrintHuman(&b, NewValidation(
+		"缺少参数",
+		WithReason("必须提供时间范围"),
+		WithActions("补充开始和结束时间"),
+		WithExamples(`dws chat message list-all --start "..." --end "..."`),
+	)); err != nil {
+		t.Fatalf("PrintHuman() error = %v", err)
+	}
+	got := b.String()
+	for _, want := range []string{"错误信息：", "原因：", "建议操作：", "示例："} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("four-part human output missing %q: %q", want, got)
+		}
+	}
+}
+
 func TestPrintHuman(t *testing.T) {
 	t.Parallel()
 

@@ -21,7 +21,7 @@ shortcut_rows="$(
 	awk '
 		/<!-- VISIBLE_SHORTCUTS_START -->/ { in_block = 1; next }
 		/<!-- VISIBLE_SHORTCUTS_END -->/ { in_block = 0 }
-		in_block && /^\| `dws chat \+/ { count++ }
+		in_block && /^\|[[:space:]]*`/ { count++ }
 		END { print count + 0 }
 	' "$chat_skill"
 )"

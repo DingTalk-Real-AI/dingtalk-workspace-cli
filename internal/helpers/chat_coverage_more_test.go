@@ -114,6 +114,20 @@ func TestCrossPlatformCoverageChatDirectionAndScalarCoverage(t *testing.T) {
 	for _, wrap := range []bool{true, false} {
 		_ = normalizeAtPlaceholders("hello @u1 <@u2>", []string{"", "u1", "u2"}, wrap)
 	}
+	for _, tc := range []struct {
+		value string
+		want  bool
+	}{
+		{value: "0", want: true},
+		{value: "test_msg_id_placeholder", want: true},
+		{value: "test-media", want: true},
+		{value: "<openMsgId>", want: true},
+		{value: "real-message-id", want: false},
+	} {
+		if got := isLikelyPlaceholderID(tc.value); got != tc.want {
+			t.Fatalf("isLikelyPlaceholderID(%q) = %v, want %v", tc.value, got, tc.want)
+		}
+	}
 	if got := NormalizeMessageMentions("hello @u1", []string{"u1"}, true, true); got != "<@all> hello <@u1>" {
 		t.Fatalf("current-user mention normalization = %q", got)
 	}

@@ -96,6 +96,17 @@ func (rt *RuntimeContext) StrSlice(name string) []string {
 	return v
 }
 
+// StrSliceFirst returns the first non-empty string-slice value across a
+// primary flag and its compatibility aliases.
+func (rt *RuntimeContext) StrSliceFirst(names ...string) []string {
+	for _, name := range names {
+		if v := rt.StrSlice(name); hasNonEmptyString(v) {
+			return v
+		}
+	}
+	return nil
+}
+
 // Changed reports whether the user explicitly set the flag on the command line.
 func (rt *RuntimeContext) Changed(name string) bool {
 	f := rt.cmd.Flags().Lookup(name)
@@ -358,9 +369,27 @@ func shortcutLongHelp(s Shortcut) string {
 	if len(s.Constraints) == 0 {
 		return long
 	}
+	publicFlags := make(map[string]bool, len(s.Flags))
+	for _, flag := range s.Flags {
+		publicFlags[flag.Name] = !flag.Hidden
+	}
 	lines := make([]string, 0, len(s.Constraints))
 	for _, constraint := range s.Constraints {
-		lines = append(lines, "  - "+constraintHelp(constraint))
+		visible := constraint
+		visible.Flags = make([]string, 0, len(constraint.Flags))
+		for _, flag := range constraint.Flags {
+			if publicFlags[flag] {
+				visible.Flags = append(visible.Flags, flag)
+			}
+		}
+		if len(visible.Flags) == 0 ||
+			(visible.Kind != ConstraintCustom && len(visible.Flags) < 2) {
+			continue
+		}
+		lines = append(lines, "  - "+constraintHelp(visible))
+	}
+	if len(lines) == 0 {
+		return long
 	}
 	return long + "\n\n参数约束：\n" + strings.Join(lines, "\n")
 }

@@ -62,13 +62,18 @@ var ConversationSetTop = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "单个会话 openConversationId"},
 		{Name: "conversation-ids", Type: shortcut.FlagStringSlice, Desc: "多个会话 openConversationId（最多 10 个）"},
+		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "chat-id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "chat-ids", Type: shortcut.FlagStringSlice, Desc: "--conversation-ids 的兼容别名", Hidden: true},
 		{Name: "off", Type: shortcut.FlagBool, Desc: "取消置顶（不传则设置置顶）"},
+		{Name: "top", Type: shortcut.FlagBool, Default: "true", Desc: "置顶状态兼容参数", Hidden: true},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"conversation-id", "conversation-ids"}},
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"conversation-id", "conversation-ids", "open-conversation-id", "chat-id", "chat-ids"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"off", "top"}},
 		{
 			Kind:        shortcut.ConstraintCustom,
-			Flags:       []string{"conversation-id", "conversation-ids"},
+			Flags:       []string{"conversation-id", "conversation-ids", "open-conversation-id", "chat-id", "chat-ids"},
 			Description: "会话 ID 去重后必须为 1-10 个",
 		},
 	},
@@ -85,6 +90,10 @@ var ConversationSetTop = shortcut.Shortcut{
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		ids := conversationSetTopIDs(rt)
+		top := !rt.Bool("off")
+		if rt.Changed("top") {
+			top = rt.Bool("top")
+		}
 		items := make([]shortcutBatchWrite, 0, len(ids))
 		for _, id := range ids {
 			items = append(items, shortcutBatchWrite{
@@ -92,7 +101,7 @@ var ConversationSetTop = shortcut.Shortcut{
 				arguments: map[string]any{
 					"openConversationId": id,
 					"cid":                id,
-					"top":                !rt.Bool("off"),
+					"top":                top,
 				},
 			})
 		}
@@ -102,8 +111,11 @@ var ConversationSetTop = shortcut.Shortcut{
 
 func conversationSetTopIDs(rt *shortcut.RuntimeContext) []string {
 	values := append([]string{}, rt.StrSlice("conversation-ids")...)
-	if value := rt.Str("conversation-id"); value != "" {
-		values = append(values, value)
+	values = append(values, rt.StrSlice("chat-ids")...)
+	for _, name := range []string{"conversation-id", "open-conversation-id", "chat-id"} {
+		if value := rt.Str(name); value != "" {
+			values = append(values, value)
+		}
 	}
 	return uniqueShortcutStrings(values)
 }

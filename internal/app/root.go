@@ -24,6 +24,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -112,6 +113,16 @@ func Execute() (exitCode int) {
 	root := rootNewRootCommandWithEngine(ctx, engine)
 	timing.Record("cmd_init", time.Since(initStart))
 
+	if err := validateChatWorkbookRawArgs(os.Args[1:]); err != nil {
+		if rawArgsRequestJSON(os.Args[1:]) {
+			_ = apperrors.PrintJSON(os.Stderr, err)
+		} else {
+			_ = apperrors.PrintHumanAt(os.Stderr, err, resolveVerbosity(root))
+		}
+		return apperrors.ExitCode(err)
+	}
+	suppressJSONDeprecationPreamble(root, os.Args[1:])
+
 	// Run PreParse handlers on raw argv before Cobra parses flags.
 	// This corrects model-generated errors like --userId → --user-id
 	// and --limit100 → --limit 100.
@@ -127,6 +138,7 @@ func Execute() (exitCode int) {
 			executed = root
 		}
 		err = rewordRequiredFlagError(err)
+		err = enrichChatWorkbookError(executed, err)
 		if isUnknownCommandError(err) {
 			executed.SetOut(os.Stderr)
 			_ = executed.Help()
@@ -139,6 +151,453 @@ func Execute() (exitCode int) {
 		return apperrors.ExitCode(err)
 	}
 	return 0
+}
+
+func suppressJSONDeprecationPreamble(root *cobra.Command, args []string) {
+	if root == nil || !rawArgsRequestJSON(args) || len(args) < 3 {
+		return
+	}
+	if args[0] != "chat" || args[1] != "media" || args[2] != "upload" {
+		return
+	}
+	if cmd, _, err := root.Find([]string{"chat", "media", "upload"}); err == nil && cmd != nil {
+		cmd.Deprecated = ""
+	}
+}
+
+func validateChatWorkbookRawArgs(args []string) error {
+	path := strings.Join(args, " ")
+	switch {
+	case strings.HasPrefix(path, "chat message send ") && rawArgsFlagValue(args, "msg-type") == "file" &&
+		rawArgsContainFlag(args, "media-id"):
+		return apperrors.NewValidation(
+			"文件消息不能使用 --media-id",
+			apperrors.WithReason("PDF、DOCX、XLSX 和本地图片等文件通过 --file-path 上传发送；mediaId 仅用于已有媒体标识的 image 消息"),
+			apperrors.WithActions("移除 --media-id", "补充 --file-path 并保留 --msg-type file"),
+			apperrors.WithExamples(`dws chat message send --group <openConversationId> --msg-type file --file-path ./report.pdf --format json`),
+		)
+	case strings.HasPrefix(path, "chat message send ") && rawArgsContainFlag(args, "media-id") &&
+		rawArgsFlagValue(args, "msg-type") == "":
+		return apperrors.NewValidation(
+			"检测到 --media-id，但没有指定媒体消息类型",
+			apperrors.WithReason("未指定 --msg-type 时命令会进入文本分支，可能把文件名当成普通文字发送"),
+			apperrors.WithActions("已有图片 mediaId 时补充 --msg-type image", "发送 PDF/DOCX/XLSX 时移除 --media-id，改用 --msg-type file --file-path"),
+			apperrors.WithExamples(`dws chat message send --group <openConversationId> --msg-type image --media-id <mediaId> --format json`, `dws chat message send --group <openConversationId> --msg-type file --file-path ./thesis.pdf --format json`),
+		)
+	case strings.HasPrefix(path, "chat message send ") && rawArgsFlagValue(args, "msg-type") == "image" &&
+		rawArgsContainFlag(args, "file-path") && !rawArgsContainFlag(args, "media-id"):
+		filePath := rawArgsFlagValue(args, "file-path")
+		return apperrors.NewValidation(
+			"image 消息不能直接使用 --file-path",
+			apperrors.WithReason("msg-type=image 只接受已有 mediaId；本地图片路径不能自动转换为 mediaId"),
+			apperrors.WithActions("发送本地图片时改用 --msg-type file", "保留原路径并通过 --file-path 发送为文件附件"),
+			apperrors.WithExamples(fmt.Sprintf(`dws chat message send --group <openConversationId> --msg-type file --file-path %q --format json`, filePath)),
+		)
+	case strings.HasPrefix(path, "chat message send ") && rawArgsFlagValue(args, "msg-type") == "image" &&
+		!rawArgsContainFlag(args, "media-id"):
+		return apperrors.NewValidation(
+			"图片消息缺少 --media-id",
+			apperrors.WithReason("msg-type=image 只接受上游已经获得的有效 mediaId，不能把本地文件名当作 mediaId"),
+			apperrors.WithActions("已有 mediaId 时补充 --media-id", "发送本地图片时改用 --msg-type file --file-path"),
+			apperrors.WithExamples(`dws chat message send --group <openConversationId> --msg-type image --media-id <mediaId> --format json`, `dws chat message send --group <openConversationId> --msg-type file --file-path ./image.png --format json`),
+		)
+	case strings.HasPrefix(path, "chat message send "):
+		msgType := rawArgsFlagValue(args, "msg-type")
+		switch msgType {
+		case "", "text", "markdown", "image", "file", "audio", "video", "location", "profile":
+		default:
+			return apperrors.NewValidation(
+				"不支持指定的 --msg-type："+msgType,
+				apperrors.WithReason("当前命令不支持 sticker/card 等消息类型；文本或 Markdown 消息无需传 --msg-type"),
+				apperrors.WithActions("文本消息移除 --msg-type 并使用 --text", "媒体消息使用 image、file、audio、video、location 或 profile"),
+				apperrors.WithExamples(`dws chat message send --group <openConversationId> --text "hi" --format json`),
+			)
+		}
+	case strings.HasPrefix(path, "chat group get-by-group-id "):
+		value := rawArgsFlagValue(args, "group-id")
+		if value != "" {
+			if _, err := strconv.ParseInt(value, 10, 64); err != nil {
+				return apperrors.NewValidation(
+					"--group-id 必须是数字群号",
+					apperrors.WithReason("cid 开头的值是 openConversationId，不是 get-by-group-id 所需的数字群号"),
+					apperrors.WithActions("如果已有 openConversationId，请改用接受 --group 的群查询命令", "只有拿到数字群号时才调用 get-by-group-id"),
+					apperrors.WithExamples(`dws chat group get-by-group-id --group-id 12345678 --format json`),
+				)
+			}
+		}
+	case strings.HasPrefix(path, "chat group dismiss ") && rawArgsContainFlag(args, "group"):
+		value := rawArgsFlagValue(args, "group")
+		if _, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return apperrors.NewValidation(
+				"解散群命令需要 openConversationId，不是数字群号",
+				apperrors.WithReason("--group 应传 cid 开头或服务端返回的 openConversationId；数字群号只用于 get-by-group-id"),
+				apperrors.WithActions("先通过 chat search 获取 openConversationId", "确认目标群及不可逆影响后再执行解散"),
+				apperrors.WithExamples(`dws chat group dismiss --group <openConversationId> --format json`),
+			)
+		}
+	case strings.HasPrefix(path, "chat group members ") && rawArgsContainFlag(args, "group"):
+		return apperrors.NewValidation(
+			"群成员列表命令路径或群参数不正确",
+			apperrors.WithReason("群成员列表的可执行命令是 chat group members，群 ID 参数名为 --id；不存在 members list --group 这一组合"),
+			apperrors.WithActions("移除多余的 list 子命令", "将 --group 改为 --id"),
+			apperrors.WithExamples(`dws chat group members --id <openConversationId> --format json`),
+		)
+	case strings.HasPrefix(path, "chat group rename ") && rawArgsContainFlag(args, "group"):
+		return apperrors.NewValidation(
+			"群重命名命令不支持 --group",
+			apperrors.WithReason("chat group rename 使用 --id 接收群 openConversationId，而不是 --group"),
+			apperrors.WithActions("将 --group 改为 --id", "群 ID 不确定时先用 chat search 查询"),
+			apperrors.WithExamples(`dws chat group rename --id <openConversationId> --name "新群名" --format json`),
+		)
+	}
+	return nil
+}
+
+func rawArgsContainFlag(args []string, name string) bool {
+	prefix := "--" + name
+	for _, arg := range args {
+		if arg == prefix || strings.HasPrefix(arg, prefix+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func rawArgsFlagValue(args []string, name string) string {
+	prefix := "--" + name
+	for i, arg := range args {
+		if strings.HasPrefix(arg, prefix+"=") {
+			return strings.TrimPrefix(arg, prefix+"=")
+		}
+		if arg == prefix && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+func rawArgsRequestJSON(args []string) bool {
+	for i, arg := range args {
+		if arg == "--format=json" || arg == "-f=json" {
+			return true
+		}
+		if (arg == "--format" || arg == "-f") && i+1 < len(args) && strings.EqualFold(args[i+1], "json") {
+			return true
+		}
+	}
+	return false
+}
+
+type chatWorkbookGuidance struct {
+	message  string
+	reason   string
+	actions  []string
+	examples []string
+}
+
+var chatRequiredGuidance = map[string]chatWorkbookGuidance{
+	"chat message send-by-webhook": {
+		"Webhook 发送参数不完整",
+		"Webhook 消息必须同时提供机器人地址中的 access_token、标题和正文；不能降级为普通群消息",
+		[]string{"从自定义机器人 Webhook 地址提取 token", "同时补齐 --title 和 --text，并确保包含机器人安全关键词"},
+		[]string{`dws chat message send-by-webhook --token <access_token> --title "dws测试通知" --text "dws测试：评测结果已出" --format json`},
+	},
+	"chat group rename": {
+		"群重命名缺少群 ID 或新名称", "--id 必须是群 openConversationId，--name 是新的群名称",
+		[]string{"先用 chat search 获取群 openConversationId", "同时提供 --id 和 --name"},
+		[]string{`dws chat group rename --id <openConversationId> --name "新群名" --format json`},
+	},
+	"chat group dismiss": {
+		"解散群缺少目标群 ID", "解散群不可逆且需要群主权限，--group 必须是 openConversationId",
+		[]string{"先确认目标群和影响范围", "获取 openConversationId 后再执行，并按运行时要求确认"},
+		[]string{`dws chat group dismiss --group <openConversationId> --format json`},
+	},
+	"chat group quit": {
+		"退出群缺少目标群 ID", "quit 表示当前用户退出群聊，不会解散整个群；--group 必须是 openConversationId",
+		[]string{"确认你要退出而不是解散群", "先获取目标群 openConversationId"},
+		[]string{`dws chat group quit --group <openConversationId> --format json`},
+	},
+	"chat group set-admin": {
+		"设置群管理员参数不完整", "需要目标群以及一个或多个成员；默认设为管理员，--off 表示取消管理员",
+		[]string{"补充 --group", "通过 --user 或 --users 指定成员，取消管理员时增加 --off"},
+		[]string{`dws chat group set-admin --group <openConversationId> --users <userId1>,<userId2> --format json`},
+	},
+	"chat group transfer-owner": {
+		"转让群主参数不完整", "--group 指定群，--new-owner 使用 openDingTalkId，--user 使用 userId",
+		[]string{"补充群 openConversationId", "在 --new-owner 和 --user 中选择一个新群主标识"},
+		[]string{`dws chat group transfer-owner --group <openConversationId> --new-owner <openDingTalkId> --format json`},
+	},
+	"chat group update-nick": {
+		"修改本人群昵称参数不完整", "update-nick 只修改当前登录用户在指定群里的昵称，需要群 ID 和新昵称",
+		[]string{"补充 --group openConversationId", "补充新的昵称参数"},
+		[]string{`dws chat group update-nick --group <openConversationId> --nick "新昵称" --format json`},
+	},
+	"chat group update-icon": {
+		"更新群头像参数不完整", "需要群 openConversationId 和上游已经获得的有效图片 mediaId",
+		[]string{"补充 --group", "从上游媒体能力获取 mediaId 后传入 --icon-media-id"},
+		[]string{`dws chat group update-icon --group <openConversationId> --icon-media-id <mediaId> --format json`},
+	},
+	"chat group share-invite": {
+		"分享群邀请参数不完整", "--source 是被分享群，--target 是接收分享的会话，--receiver 是接收分享的单聊用户",
+		[]string{"补充 --source", "在 --target 和 --receiver 中选择一个接收目标"},
+		[]string{`dws chat group share-invite --source <源群ID> --target <目标会话ID> --format json`},
+	},
+	"chat message reply": {
+		"引用回复参数不完整", "会话 ID、原消息 ID、原发送者和回复正文必须来自或对应同一条原消息",
+		[]string{"先拉取目标消息", "补齐 conversation-id、ref-msg-id、ref-sender 和 text"},
+		[]string{`dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到" --format json`},
+	},
+	"chat message forward": {
+		"转发消息参数不完整", "消息 ID 必须属于源会话，并需要明确源会话和目标会话",
+		[]string{"先从源会话拉取真实消息 ID", "确认 src 和 dest 没有写反"},
+		[]string{`dws chat message forward --src-conversation-id <源会话ID> --msg-id <openMessageId> --dest-conversation-id <目标会话ID> --format json`},
+	},
+	"chat message recall": {
+		"撤回消息参数不完整", "用户消息撤回需要会话 ID 和本人发送的消息 ID；机器人消息应使用 recall-by-bot",
+		[]string{"确认消息由当前用户发送", "补齐 conversation-id 和 msg-id"},
+		[]string{`dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId> --format json`},
+	},
+	"chat message read-status": {
+		"查询消息已读状态参数不完整", "只能查询当前用户发出消息的已读状态，需要会话和消息标识",
+		[]string{"补齐会话和消息 ID", "人员筛选时区分 userId 与 openDingTalkId"},
+		[]string{`dws chat message read-status --conversation-id <openConversationId> --message-id <openMessageId> --format json`},
+	},
+	"chat message list-by-ids": {
+		"缺少消息 ID 列表", "--msg-ids 使用逗号分隔的真实 openMessageId，单次最多 50 条",
+		[]string{"先拉取真实消息 ID", "将不超过 50 条 ID 用逗号连接"},
+		[]string{`dws chat message list-by-ids --msg-ids <id1>,<id2> --format json`},
+	},
+	"chat message download-media": {
+		"媒体下载参数不完整", "type、resource-id、message-id、open-conversation-id 和 output 必须完整，且资源与消息来自同一条消息",
+		[]string{"先拉取目标媒体消息", "从同一条消息取得资源、消息和会话标识"},
+		[]string{`dws chat message download-media --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId> --output ./downloads/ --format json`},
+	},
+	"chat message add-emoji": {
+		"添加表情回应参数不完整", "需要真实会话 ID、消息 ID 和 emoji 名称",
+		[]string{"先拉取目标消息", "补齐 conversation-id、msg-id 和 emoji"},
+		[]string{`dws chat message add-emoji --conversation-id <openConversationId> --msg-id <openMessageId> --emoji "赞" --format json`},
+	},
+	"chat message remove-emoji": {
+		"移除表情回应参数不完整", "只能移除当前用户已添加的同名回应，需要会话、消息和 emoji 名称完全匹配",
+		[]string{"确认当前用户添加过该回应", "补齐 conversation-id、msg-id 和 emoji"},
+		[]string{`dws chat message remove-emoji --conversation-id <openConversationId> --msg-id <openMessageId> --emoji "赞" --format json`},
+	},
+	"chat message list-by-sender": {
+		"按发送者查询参数不完整", "必须提供开始时间以及发送者 userId/openDingTalkId 二选一，可选 end 和 cursor",
+		[]string{"补充 --start", "在 sender-user-id 和 sender-open-dingtalk-id 中选择一个"},
+		[]string{`dws chat message list-by-sender --sender-user-id <userId> --start "2026-07-14T00:00:00+08:00" --format json`},
+	},
+	"chat message query-send-status": {
+		"缺少发送任务 ID", "--open-task-id 来自 message send 返回的 openTaskId，不是消息 ID",
+		[]string{"先执行 message send", "从发送结果读取 openTaskId"},
+		[]string{`dws chat message query-send-status --open-task-id <openTaskId> --format json`},
+	},
+}
+
+func enrichChatWorkbookError(cmd *cobra.Command, err error) error {
+	if cmd == nil || err == nil {
+		return err
+	}
+	path := cmd.CommandPath()
+	if fields := strings.Fields(path); len(fields) > 1 {
+		path = strings.Join(fields[1:], " ")
+	}
+	message := err.Error()
+	var guide chatWorkbookGuidance
+	switch {
+	case path == "chat message send" &&
+		(strings.Contains(message, "unknown flag: --at-user-ids") ||
+			strings.Contains(message, "unknown flag: --at-users") ||
+			strings.Contains(message, "unknown flag: --mention")):
+		guide = chatWorkbookGuidance{
+			"群消息 @成员参数不正确",
+			"当前用户身份发送群消息时使用 --at-open-dingtalk-ids，参数值必须是成员的 openDingTalkId；--at-user-ids、--at-users、--mention 均不是有效参数",
+			[]string{"先查询目标成员的 openDingTalkId", "改用 --at-open-dingtalk-ids，并在正文中写入 <@openDingTalkId>"},
+			[]string{`dws chat message send --group <openConversationId> --at-open-dingtalk-ids <openDingTalkId> --text "<@openDingTalkId> 请关注" --format json`},
+		}
+	case path == "chat media upload":
+		guide = chatWorkbookGuidance{
+			"chat media upload 已下线",
+			"当前 CLI 不再通过该命令把本地文件转换为 mediaId，本地图片和文件统一由 message send 的 file 路径上传并发送",
+			[]string{"发送本地图片或文件时使用 --msg-type file --file-path", "只有上游已提供 mediaId 时才使用 --msg-type image --media-id"},
+			[]string{`dws chat message send --group <openConversationId> --msg-type file --file-path ./image.png --format json`},
+		}
+	case path == "chat group members" && strings.Contains(message, "unknown flag: --group"):
+		guide = chatWorkbookGuidance{
+			"群成员列表命令路径或群参数不正确",
+			"群成员列表的可执行命令是 chat group members，群 ID 参数名为 --id；不存在 members list --group 这一组合",
+			[]string{"移除多余的 list 子命令", "将 --group 改为 --id"},
+			[]string{`dws chat group members --id <openConversationId> --format json`},
+		}
+	case path == "chat group rename" && strings.Contains(message, "unknown flag: --group"):
+		guide = chatWorkbookGuidance{
+			"群重命名命令不支持 --group",
+			"chat group rename 使用 --id 接收群 openConversationId，而不是 --group",
+			[]string{"将 --group 改为 --id", "群 ID 不确定时先用 chat search 查询"},
+			[]string{`dws chat group rename --id <openConversationId> --name "新群名" --format json`},
+		}
+	case path == "chat group create" && strings.Contains(message, "unknown flag: --members"):
+		guide = chatWorkbookGuidance{
+			"建群命令不支持 --members",
+			"chat group create 使用 --users 接收逗号分隔的成员 userId；--members 是其他命令的参数名",
+			[]string{"将 --members 改为 --users", "成员标识不确定时先查询 userId"},
+			[]string{`dws chat group create --name "V2评审小组" --users 489149,550582 --format json`},
+		}
+	case path == "chat group bots" && strings.Contains(message, "unknown flag: --id"):
+		guide = chatWorkbookGuidance{
+			"群机器人列表命令不支持 --id",
+			"chat group bots 使用 --group 接收群 openConversationId；该参数名与 members、rename 命令不同",
+			[]string{"将 --id 改为 --group", "群 ID 不确定时先用 chat search 查询"},
+			[]string{`dws chat group bots --group <openConversationId> --format json`},
+		}
+	case path == "chat message list-mentions" && strings.Contains(message, "required flag"):
+		guide = chatWorkbookGuidance{
+			"缺少必填参数：--start、--end",
+			"查询 @我 消息必须同时提供 ISO-8601 格式的开始和结束时间；只提供分页参数不能确定查询范围",
+			[]string{"同时补充 --start 和 --end，不要逐个参数反复试错", "按本地时区设置明确的查询时间窗"},
+			[]string{`dws chat message list-mentions --start "2026-07-23T00:00:00+08:00" --end "2026-07-30T23:59:59+08:00" --limit 50 --format json`},
+		}
+	case path == "chat message send" && strings.Contains(message, "--group, --user or --open-dingtalk-id is required"):
+		guide = chatWorkbookGuidance{
+			"缺少消息接收目标",
+			"发送消息必须在 --group、--user、--open-dingtalk-id 中选择且只选择一个接收目标",
+			[]string{"发群消息时先查询并传入群 openConversationId", "发单聊时先查询并传入 userId 或 openDingTalkId"},
+			[]string{`dws chat message send --group <openConversationId> --text "评测消息" --format json`, `dws chat message send --open-dingtalk-id <openDingTalkId> --text "评测消息" --format json`},
+		}
+	case path == "chat search" && strings.Contains(message, "query"):
+		guide = chatWorkbookGuidance{
+			"缺少群聊搜索关键词：--query",
+			"群聊搜索需要关键词才能定位候选群，不能使用空查询",
+			[]string{"使用 --query 传入群名称或名称片段", "从结果中读取 openConversationId 供后续群命令使用"},
+			[]string{`dws chat search --query "项目群" --format json`},
+		}
+	case path == "chat message search-advanced":
+		guide = chatWorkbookGuidance{
+			"高级消息搜索至少需要一个搜索条件",
+			"空条件搜索无法限定目标消息，必须提供关键词、人员、@我状态或会话范围中的至少一种",
+			[]string{"按内容搜索时传入 --query", "也可通过 --user、--at-me 或 --conversation-ids 缩小范围"},
+			[]string{`dws chat message search-advanced --query "评审" --format json`},
+		}
+	case path == "chat message search" && strings.Contains(message, "required flag"):
+		guide = chatWorkbookGuidance{
+			"关键词消息搜索缺少完整查询条件",
+			"关键词消息搜索需要 --query、--start 和 --end；当前命令没有提供完整的关键词和时间范围",
+			[]string{"补充搜索关键词", "同时提供 ISO-8601 格式的开始和结束时间"},
+			[]string{`dws chat message search --query "评审" --start "2026-07-23T00:00:00+08:00" --end "2026-07-30T23:59:59+08:00" --format json`},
+		}
+	case path == "chat message list-all" && strings.Contains(message, "required flag"):
+		guide = chatWorkbookGuidance{
+			"跨会话消息查询缺少时间范围",
+			"拉取全部会话消息必须使用 --start 和 --end 限定范围，避免无边界查询历史消息",
+			[]string{"同时补充 --start 和 --end", "结果存在 hasMore 时使用 nextCursor 继续翻页"},
+			[]string{`dws chat message list-all --start "2026-07-23T00:00:00+08:00" --end "2026-07-30T23:59:59+08:00" --limit 50 --format json`},
+		}
+	case path == "chat message list-topic-replies" && strings.Contains(message, "topic-id"):
+		guide = chatWorkbookGuidance{
+			"缺少话题定位参数：--topic-id",
+			"topic-id 不能臆造，必须来自同一群聊消息列表中目标话题消息的 openConvThreadId",
+			[]string{"先执行 chat message list 拉取目标群消息", "从目标话题消息读取 openConvThreadId 并作为 --topic-id"},
+			[]string{`dws chat message list --group <openConversationId> --time "2026-07-30 23:59:59" --direction older --format json`, `dws chat message list-topic-replies --group <openConversationId> --topic-id <openConvThreadId> --limit 50 --format json`},
+		}
+	case path == "chat message send-by-bot" && strings.Contains(message, "required flag"):
+		guide = chatWorkbookGuidance{
+			"机器人发送消息缺少必填参数",
+			"机器人发送需要 robotCode、标题、正文以及群聊或单聊目标，当前参数不完整",
+			[]string{"补充 --robot-code 和 --title", "通过 --group 或用户参数指定接收目标"},
+			[]string{`dws chat message send-by-bot --robot-code <robotCode> --group <openConversationId> --title "通知" --text "hello" --format json`},
+		}
+	case path == "chat message recall-by-bot" && strings.Contains(message, "required flag"):
+		guide = chatWorkbookGuidance{
+			"机器人撤回消息缺少 robotCode 或 processQueryKey",
+			"--keys 的 processQueryKey 来自机器人发送消息的返回结果，不能凭空构造",
+			[]string{"补充发送该消息的 --robot-code", "从发送结果读取 processQueryKey 并传给 --keys"},
+			[]string{`dws chat message recall-by-bot --robot-code <robotCode> --group <openConversationId> --keys <processQueryKey> --format json`},
+		}
+	case path == "chat message list" && strings.Contains(message, "required flag") && strings.Contains(message, "--time"):
+		guide = chatWorkbookGuidance{
+			"拉取会话消息缺少时间锚点：--time",
+			"消息列表按时间向前或向后拉取，必须提供一个明确的时间锚点",
+			[]string{"补充格式为 YYYY-MM-DD HH:mm:ss 的 --time", "使用 --direction older 或 newer 明确查询方向"},
+			[]string{`dws chat message list --group <openConversationId> --time "2026-07-30 10:00:00" --direction older --format json`},
+		}
+	case path == "chat message list" && strings.Contains(message, "--group, --user or --open-dingtalk-id is required"):
+		guide = chatWorkbookGuidance{
+			"拉取消息时缺少会话目标",
+			"必须在群聊 openConversationId、单聊 userId、单聊 openDingTalkId 中选择且只选择一个目标",
+			[]string{"群聊先用 chat search 获取 openConversationId", "单聊先查询人员标识，再传 --user 或 --open-dingtalk-id"},
+			[]string{`dws chat message list --group <openConversationId> --time "2026-07-15 10:00:00" --format json`},
+		}
+	case path == "chat message send" && strings.Contains(message, "media-id is required"):
+		guide = chatWorkbookGuidance{
+			"图片消息缺少 --media-id",
+			"msg-type=image 只接受上游已经获得的有效 mediaId，不能把本地文件名当作 mediaId",
+			[]string{"已有 mediaId 时补充 --media-id", "发送本地图片时改用 --msg-type file --file-path"},
+			[]string{`dws chat message send --group <openConversationId> --msg-type image --media-id <mediaId> --format json`, `dws chat message send --group <openConversationId> --msg-type file --file-path ./image.png --format json`},
+		}
+	case path == "chat message send" && strings.Contains(message, "readable local --file-path is required"):
+		guide = chatWorkbookGuidance{
+			"文件消息缺少可读的本地文件",
+			"file、audio、video 消息需要可读的 --file-path；旧版 dentry 参数则必须成组提供",
+			[]string{"优先传入当前机器上可读的 --file-path", "使用旧参数时同时提供 dentry-id、space-id 和 file-name"},
+			[]string{`dws chat message send --group <openConversationId> --msg-type file --file-path ./report.pdf --format json`},
+		}
+	case path == "chat message send" && strings.Contains(message, "--file-path must be a readable local file"):
+		guide = chatWorkbookGuidance{
+			"--file-path 指向的文件不可读",
+			"指定路径不存在、不是普通文件或当前进程没有读取权限，因此无法上传并发送",
+			[]string{"检查路径拼写并确认文件存在", "改用当前用户可读取的绝对路径或工作目录相对路径"},
+			[]string{`dws chat message send --group <openConversationId> --msg-type file --file-path ./report.pdf --format json`},
+		}
+	case path == "chat message send" && strings.Contains(message, "unsupported --msg-type"):
+		guide = chatWorkbookGuidance{
+			"不支持指定的 --msg-type",
+			"card 不是当前命令支持的消息类型；文本或 Markdown 消息无需传 --msg-type",
+			[]string{"文本消息移除 --msg-type 并使用 --text", "媒体消息仅使用 image、file、audio、video、location 或 profile"},
+			[]string{`dws chat message send --group <openConversationId> --text "消息正文" --format json`},
+		}
+	case path == "chat message send" && strings.Contains(message, "message content required"):
+		guide = chatWorkbookGuidance{
+			"群消息缺少正文内容",
+			"未提供 --text 或位置参数，同时也没有选择需要专用参数的媒体消息类型",
+			[]string{"发送文字时补充 --text", "发送文件时使用 --msg-type file --file-path"},
+			[]string{`dws chat message send --group <openConversationId> --text "消息正文" --format json`},
+		}
+	}
+	if guide.message == "" {
+		if required, ok := chatRequiredGuidance[path]; ok &&
+			(strings.Contains(message, "required") || strings.Contains(message, "缺少")) {
+			guide = required
+		} else if strings.HasPrefix(path, "chat ") &&
+			(strings.Contains(message, "required") ||
+				strings.Contains(message, "invalid") ||
+				strings.Contains(message, "unsupported") ||
+				strings.Contains(message, "unknown flag") ||
+				strings.Contains(message, "must be")) {
+			example := fmt.Sprintf("dws %s --help", path)
+			if meta, ok := cli.ResolveMeta(path); ok && len(meta.Selection.Examples) > 0 {
+				example = meta.Selection.Examples[0]
+				if !strings.Contains(example, "--format") {
+					example += " --format json"
+				}
+			}
+			guide = chatWorkbookGuidance{
+				"Chat 命令参数校验失败",
+				message,
+				[]string{"根据错误补齐或修正参数", fmt.Sprintf("运行 dws %s --help 核对当前命令参数", path)},
+				[]string{example},
+			}
+		} else {
+			return err
+		}
+	}
+	return apperrors.NewValidation(
+		guide.message,
+		apperrors.WithReason(guide.reason),
+		apperrors.WithHint(guide.actions[0]),
+		apperrors.WithActions(guide.actions...),
+		apperrors.WithExamples(guide.examples...),
+		apperrors.WithCause(err),
+	)
 }
 
 // newPreParseValidationError keeps pipeline handler identity in internal logs
@@ -219,6 +678,9 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 			apperrors.WithActions(fmt.Sprintf("Run '%s --help' for valid flags", cmd.CommandPath())),
 			apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
 		)
+	}
+	if enriched := enrichChatWorkbookError(cmd, err); enriched != err {
+		return enriched
 	}
 
 	// Common flag aliases and suggestions

@@ -218,6 +218,20 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			wantTool:    "search_messages",
 			wantArgs:    map[string]any{"openConversationIds": []string{"cid-1"}, "keyword": "树莓派"},
 		},
+		{
+			name:        "dm name alias",
+			argv:        []string{"chat", "+dm", "--name", "张三", "--text", "你好", "--yes"},
+			wantProduct: "chat",
+			wantTool:    "send_personal_message",
+			wantArgs:    map[string]any{"receiverOpenDingTalkId": "open1"},
+		},
+		{
+			name:        "chat members list id alias",
+			argv:        []string{"chat", "+chat-members-list", "--chat-id", "cid-1", "--member-types", "user"},
+			wantProduct: "chat",
+			wantTool:    "get_group_members",
+			wantArgs:    map[string]any{"openconversation_id": "cid-1"},
+		},
 	}
 
 	for _, tc := range tests {

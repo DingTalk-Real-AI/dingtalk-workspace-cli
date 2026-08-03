@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -669,15 +670,7 @@ func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
 // suggestForBusinessError returns a user-facing suggestion for known business
 // error patterns in a parsed JSON body, or "" if no specific suggestion applies.
 func suggestForBusinessError(body map[string]any) string {
-	msg := ""
-	if v, ok := body["errorMsg"].(string); ok {
-		msg = v
-	} else if v, ok := body["message"].(string); ok {
-		msg = v
-	} else if v, ok := body["error"].(string); ok {
-		msg = v
-	}
-	return suggestForBusinessErrorText(msg)
+	return apperrors.SuggestBusinessHint(body)
 }
 
 // confirmDelete is a convenience wrapper around cmdutil.ConfirmDelete that

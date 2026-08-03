@@ -8,7 +8,8 @@
 
 ## 必读约束
 
-- 用户明确要求“用机器人/机器人身份/robot”发送时，必须用 `chat message send-by-bot`，严禁改用 `chat message send`。
+- 用户明确要求“用机器人/机器人身份/robot”发送时使用 `chat message send-by-bot`；严禁改用当前用户身份。
+- 用户明确要求 Webhook 时使用 `chat message send-by-webhook`。
 - `chat bot search` 只返回我创建的机器人，没有 `openDingTalkId`；给机器人发单聊必须用 `chat bot find`。
 - 机器人发群消息前需确认机器人已在群中；报“机器人不存在”时先 `group members add-bot`。
 - `send-by-bot --text` 支持 Markdown；需要稳定换行时用空行分隔段落。若以转义形式组织文本，写 `\n\n`，不要只写 `\n`。
@@ -37,7 +38,11 @@ dws chat bot find --query "日报" --limit 20 --cursor <nextCursor>
 
 ```bash
 # 群聊
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --title "日报" --text "## 今日完成\n\n- 事项 A\n\n- 事项 B"
+dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --title "日报" --text "## 今日完成
+
+- 事项 A
+
+- 事项 B"
 
 # 单聊 userId
 dws chat message send-by-bot --robot-code <robot-code> --users userId1,userId2 --title "提醒" --text "请提交周报"
@@ -105,7 +110,11 @@ dws chat group members remove-bot --id <openConversationId> --bot-id <openBotId>
 
 ```bash
 dws chat bot search --name "日报" --format json
-dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --title "日报" --text "## 今日完成\n\n- 事项 A\n\n- 事项 B" --format json
+dws chat message send-by-bot --robot-code <robot-code> --group <openConversationId> --title "日报" --text "## 今日完成
+
+- 事项 A
+
+- 事项 B" --format json
 dws chat message recall-by-bot --robot-code <robot-code> --group <openConversationId> --keys <processQueryKey> --format json
 ```
 
