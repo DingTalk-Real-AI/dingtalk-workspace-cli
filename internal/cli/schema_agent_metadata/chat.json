@@ -9301,11 +9301,11 @@
       ]
     },
     "chat +messages-query-send-status": {
-      "agent_summary": "查询消息发送状态",
+      "agent_summary": "查询消息发送任务的业务终态，只有 sendStatus=SUCCESS 才表示真正发送成功",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令；不要把 openTaskId 当 openMessageId 做 Pin、置顶或表情操作"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -9315,14 +9315,14 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询消息发送状态",
+          "value": "查询消息发送任务的业务终态，只有 sendStatus=SUCCESS 才表示真正发送成功",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "candidates": [
             {
-              "value": "查询消息发送状态",
+              "value": "查询消息发送任务的业务终态，只有 sendStatus=SUCCESS 才表示真正发送成功",
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -9348,7 +9348,7 @@
         },
         "avoid_when": {
           "value": [
-            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令；不要把 openTaskId 当 openMessageId 做 Pin、置顶或表情操作"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -9357,7 +9357,7 @@
           "candidates": [
             {
               "value": [
-                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令；不要把 openTaskId 当 openMessageId 做 Pin、置顶或表情操作"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -9523,7 +9523,7 @@
         },
         "use_when": {
           "value": [
-            "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。"
+            "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id；FAILED 必须如实报告，不能因外层 success=true 宣称成功。"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -9532,7 +9532,7 @@
           "candidates": [
             {
               "value": [
-                "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。"
+                "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id；FAILED 必须如实报告，不能因外层 success=true 宣称成功。"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -9555,7 +9555,7 @@
         "internal/cli/schema_hints/selection/chat.json"
       ],
       "use_when": [
-        "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。"
+        "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id；FAILED 必须如实报告，不能因外层 success=true 宣称成功。"
       ]
     },
     "chat +messages-read-status": {
@@ -20567,7 +20567,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "移除机器人时使用 chat group members remove-bot"
+        "移除机器人时使用 chat group members remove-bot；不要把建群者或群主加入 --users，也不要为了清理成员而转让群主"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -20616,7 +20616,7 @@
         },
         "avoid_when": {
           "value": [
-            "移除机器人时使用 chat group members remove-bot"
+            "移除机器人时使用 chat group members remove-bot；不要把建群者或群主加入 --users，也不要为了清理成员而转让群主"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -20625,7 +20625,7 @@
           "candidates": [
             {
               "value": [
-                "移除机器人时使用 chat group members remove-bot"
+                "移除机器人时使用 chat group members remove-bot；不要把建群者或群主加入 --users，也不要为了清理成员而转让群主"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -20804,7 +20804,7 @@
         },
         "use_when": {
           "value": [
-            "群管理员明确要移除一个或多个普通成员时"
+            "群管理员明确要移除一个或多个普通成员时；清理临时群只传本次加入的普通成员"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -20813,7 +20813,7 @@
           "candidates": [
             {
               "value": [
-                "群管理员明确要移除一个或多个普通成员时"
+                "群管理员明确要移除一个或多个普通成员时；清理临时群只传本次加入的普通成员"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -20844,7 +20844,7 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "群管理员明确要移除一个或多个普通成员时"
+        "群管理员明确要移除一个或多个普通成员时；清理临时群只传本次加入的普通成员"
       ]
     },
     "chat group members remove-bot": {
@@ -24064,7 +24064,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "没有真实可用 mediaId 时先完成媒体上传"
+        "本地图片路径、钉盘 dentryId、聊天文件 uploadKey 都不能代替 icon-media-id；当前 CLI 无本地图片转群头像 mediaId 的能力，缺少 mediaId 时应如实报告能力边界"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -24113,7 +24113,7 @@
         },
         "avoid_when": {
           "value": [
-            "没有真实可用 mediaId 时先完成媒体上传"
+            "本地图片路径、钉盘 dentryId、聊天文件 uploadKey 都不能代替 icon-media-id；当前 CLI 无本地图片转群头像 mediaId 的能力，缺少 mediaId 时应如实报告能力边界"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -24122,7 +24122,7 @@
           "candidates": [
             {
               "value": [
-                "没有真实可用 mediaId 时先完成媒体上传"
+                "本地图片路径、钉盘 dentryId、聊天文件 uploadKey 都不能代替 icon-media-id；当前 CLI 无本地图片转群头像 mediaId 的能力，缺少 mediaId 时应如实报告能力边界"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -24268,7 +24268,7 @@
         },
         "use_when": {
           "value": [
-            "已有上传后的头像 mediaId 并要修改群头像时"
+            "已有可用于群头像接口的真实 mediaId 并要修改群头像时"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -24277,7 +24277,7 @@
           "candidates": [
             {
               "value": [
-                "已有上传后的头像 mediaId 并要修改群头像时"
+                "已有可用于群头像接口的真实 mediaId 并要修改群头像时"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -24306,7 +24306,7 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "已有上传后的头像 mediaId 并要修改群头像时"
+        "已有可用于群头像接口的真实 mediaId 并要修改群头像时"
       ]
     },
     "chat group update-nick": {
@@ -24602,7 +24602,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "全员禁言和成员禁言使用专门的 mute 命令"
+        "全员禁言和成员禁言使用专门的 mute 命令；当前用户自己的会话置顶或免打扰使用 group user-settings set"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -24651,7 +24651,7 @@
         },
         "avoid_when": {
           "value": [
-            "全员禁言和成员禁言使用专门的 mute 命令"
+            "全员禁言和成员禁言使用专门的 mute 命令；当前用户自己的会话置顶或免打扰使用 group user-settings set"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -24660,7 +24660,7 @@
           "candidates": [
             {
               "value": [
-                "全员禁言和成员禁言使用专门的 mute 命令"
+                "全员禁言和成员禁言使用专门的 mute 命令；当前用户自己的会话置顶或免打扰使用 group user-settings set"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -24806,7 +24806,7 @@
         },
         "use_when": {
           "value": [
-            "需要调整 searchable、入群验证或群权限等设置时"
+            "需要调整 searchable、入群验证、@所有人权限等群级设置时；修改后用群信息或设置查询核对终态"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -24815,7 +24815,7 @@
           "candidates": [
             {
               "value": [
-                "需要调整 searchable、入群验证或群权限等设置时"
+                "需要调整 searchable、入群验证、@所有人权限等群级设置时；修改后用群信息或设置查询核对终态"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -24844,7 +24844,7 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "需要调整 searchable、入群验证或群权限等设置时"
+        "需要调整 searchable、入群验证、@所有人权限等群级设置时；修改后用群信息或设置查询核对终态"
       ]
     },
     "chat group upgrade-to-external": {
@@ -25112,7 +25112,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "管理员级群功能开关用 chat group update-settings"
+        "管理员级群功能开关用 chat group update-settings；查询结果是当前用户视角，不代表群级设置"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -25155,7 +25155,7 @@
         },
         "avoid_when": {
           "value": [
-            "管理员级群功能开关用 chat group update-settings"
+            "管理员级群功能开关用 chat group update-settings；查询结果是当前用户视角，不代表群级设置"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -25164,7 +25164,7 @@
           "candidates": [
             {
               "value": [
-                "管理员级群功能开关用 chat group update-settings"
+                "管理员级群功能开关用 chat group update-settings；查询结果是当前用户视角，不代表群级设置"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -25330,7 +25330,7 @@
         },
         "use_when": {
           "value": [
-            "用户说 看下这些群我的置顶和免打扰设置"
+            "用户说看下这些群中我自己的置顶和免打扰设置；修改前先查询并保存原值用于恢复"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -25339,7 +25339,7 @@
           "candidates": [
             {
               "value": [
-                "用户说 看下这些群我的置顶和免打扰设置"
+                "用户说看下这些群中我自己的置顶和免打扰设置；修改前先查询并保存原值用于恢复"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -25362,7 +25362,7 @@
         "wukong-develop:wukong/products"
       ],
       "use_when": [
-        "用户说 看下这些群我的置顶和免打扰设置"
+        "用户说看下这些群中我自己的置顶和免打扰设置；修改前先查询并保存原值用于恢复"
       ]
     },
     "chat group user-settings set": {
@@ -25370,7 +25370,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "单个群昵称优先 chat group update-nick"
+        "单个群昵称优先 chat group update-nick；不要用本命令修改 searchable、@所有人权限等群级开关；临时测试结束时按修改前 query 的真实值恢复"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -25413,7 +25413,7 @@
         },
         "avoid_when": {
           "value": [
-            "单个群昵称优先 chat group update-nick"
+            "单个群昵称优先 chat group update-nick；不要用本命令修改 searchable、@所有人权限等群级开关；临时测试结束时按修改前 query 的真实值恢复"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -25422,7 +25422,7 @@
           "candidates": [
             {
               "value": [
-                "单个群昵称优先 chat group update-nick"
+                "单个群昵称优先 chat group update-nick；不要用本命令修改 searchable、@所有人权限等群级开关；临时测试结束时按修改前 query 的真实值恢复"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -25588,7 +25588,7 @@
         },
         "use_when": {
           "value": [
-            "用户说 把这些群都设为免打扰/置顶"
+            "用户说把这些群都设为免打扰或置顶；items 中只写需要改变的当前用户设置，完成后再次 query 验证"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -25597,7 +25597,7 @@
           "candidates": [
             {
               "value": [
-                "用户说 把这些群都设为免打扰/置顶"
+                "用户说把这些群都设为免打扰或置顶；items 中只写需要改变的当前用户设置，完成后再次 query 验证"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -25620,7 +25620,7 @@
         "wukong-develop:wukong/products"
       ],
       "use_when": [
-        "用户说 把这些群都设为免打扰/置顶"
+        "用户说把这些群都设为免打扰或置顶；items 中只写需要改变的当前用户设置，完成后再次 query 验证"
       ]
     },
     "chat group-mute": {
@@ -29273,11 +29273,11 @@
       ]
     },
     "chat message add-emoji": {
-      "agent_summary": "给指定消息添加表情回应",
+      "agent_summary": "使用同一会话中真实的 openMessageId 给指定消息添加表情回应",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "发送文本消息或文字表情时不要使用"
+        "发送文本消息或文字表情时不要使用；不要把 openTaskId 当作 msg-id"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -29287,14 +29287,14 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "给指定消息添加表情回应",
+          "value": "使用同一会话中真实的 openMessageId 给指定消息添加表情回应",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "candidates": [
             {
-              "value": "给指定消息添加表情回应",
+              "value": "使用同一会话中真实的 openMessageId 给指定消息添加表情回应",
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -29326,7 +29326,7 @@
         },
         "avoid_when": {
           "value": [
-            "发送文本消息或文字表情时不要使用"
+            "发送文本消息或文字表情时不要使用；不要把 openTaskId 当作 msg-id"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -29335,7 +29335,7 @@
           "candidates": [
             {
               "value": [
-                "发送文本消息或文字表情时不要使用"
+                "发送文本消息或文字表情时不要使用；不要把 openTaskId 当作 msg-id"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -29489,7 +29489,7 @@
         },
         "use_when": {
           "value": [
-            "需要对已有消息添加一个 emoji reaction 时"
+            "需要对已有消息添加一个 emoji reaction 时；conversation-id 与 msg-id 必须来自同一条真实消息"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -29498,7 +29498,7 @@
           "candidates": [
             {
               "value": [
-                "需要对已有消息添加一个 emoji reaction 时"
+                "需要对已有消息添加一个 emoji reaction 时；conversation-id 与 msg-id 必须来自同一条真实消息"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -29526,7 +29526,7 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "需要对已有消息添加一个 emoji reaction 时"
+        "需要对已有消息添加一个 emoji reaction 时；conversation-id 与 msg-id 必须来自同一条真实消息"
       ]
     },
     "chat message add-favorite": {
@@ -34634,11 +34634,11 @@
       ]
     },
     "chat message query-send-status": {
-      "agent_summary": "查询异步消息发送任务的状态",
+      "agent_summary": "查询异步消息发送任务的业务终态，并按 sendStatus 判断是否真正投递成功",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId"
+        "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId；FAILED 不得当作接口成功"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -34648,14 +34648,14 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "查询异步消息发送任务的状态",
+          "value": "查询异步消息发送任务的业务终态，并按 sendStatus 判断是否真正投递成功",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "candidates": [
             {
-              "value": "查询异步消息发送任务的状态",
+              "value": "查询异步消息发送任务的业务终态，并按 sendStatus 判断是否真正投递成功",
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -34687,7 +34687,7 @@
         },
         "avoid_when": {
           "value": [
-            "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId"
+            "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId；FAILED 不得当作接口成功"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -34696,7 +34696,7 @@
           "candidates": [
             {
               "value": [
-                "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId"
+                "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId；FAILED 不得当作接口成功"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -34842,7 +34842,7 @@
         },
         "use_when": {
           "value": [
-            "发送命令返回 openTaskId 后需要确认投递结果时"
+            "发送命令返回 openTaskId 后需要确认投递结果时；只有 sendStatus=SUCCESS 才能宣称消息发送成功"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -34851,7 +34851,7 @@
           "candidates": [
             {
               "value": [
-                "发送命令返回 openTaskId 后需要确认投递结果时"
+                "发送命令返回 openTaskId 后需要确认投递结果时；只有 sendStatus=SUCCESS 才能宣称消息发送成功"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -34880,7 +34880,7 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "发送命令返回 openTaskId 后需要确认投递结果时"
+        "发送命令返回 openTaskId 后需要确认投递结果时；只有 sendStatus=SUCCESS 才能宣称消息发送成功"
       ]
     },
     "chat message read-status": {
@@ -35691,11 +35691,11 @@
       ]
     },
     "chat message remove-emoji": {
-      "agent_summary": "移除指定消息上的表情回应",
+      "agent_summary": "从同一条真实消息移除此前添加的同名表情回应",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "移除文字表情时使用 chat message remove-text-emotion"
+        "移除文字表情时使用 chat message remove-text-emotion；不要猜测新的消息 ID 或表情名称"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -35705,14 +35705,14 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "移除指定消息上的表情回应",
+          "value": "从同一条真实消息移除此前添加的同名表情回应",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "candidates": [
             {
-              "value": "移除指定消息上的表情回应",
+              "value": "从同一条真实消息移除此前添加的同名表情回应",
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -35744,7 +35744,7 @@
         },
         "avoid_when": {
           "value": [
-            "移除文字表情时使用 chat message remove-text-emotion"
+            "移除文字表情时使用 chat message remove-text-emotion；不要猜测新的消息 ID 或表情名称"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -35753,7 +35753,7 @@
           "candidates": [
             {
               "value": [
-                "移除文字表情时使用 chat message remove-text-emotion"
+                "移除文字表情时使用 chat message remove-text-emotion；不要猜测新的消息 ID 或表情名称"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -35907,7 +35907,7 @@
         },
         "use_when": {
           "value": [
-            "需要取消此前添加的 emoji reaction 时"
+            "需要取消此前添加的 emoji reaction 时；复用添加时的 conversation-id、msg-id 和 emoji"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -35916,7 +35916,7 @@
           "candidates": [
             {
               "value": [
-                "需要取消此前添加的 emoji reaction 时"
+                "需要取消此前添加的 emoji reaction 时；复用添加时的 conversation-id、msg-id 和 emoji"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -35944,7 +35944,7 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "需要取消此前添加的 emoji reaction 时"
+        "需要取消此前添加的 emoji reaction 时；复用添加时的 conversation-id、msg-id 和 emoji"
       ]
     },
     "chat message remove-favorite": {
@@ -38319,11 +38319,11 @@
       ]
     },
     "chat message set-pin-msg": {
-      "agent_summary": "把指定消息设为会话置顶消息",
+      "agent_summary": "使用同源的 openConversationId 和 openMessageId 把指定消息设为 Pin",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "取消置顶使用 chat message unset-pin-msg"
+        "取消 Pin 使用 chat message unset-pin-msg；置顶到会话顶部使用 set-top-msg，置顶整个会话使用 chat set-top"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -38333,14 +38333,14 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "把指定消息设为会话置顶消息",
+          "value": "使用同源的 openConversationId 和 openMessageId 把指定消息设为 Pin",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "candidates": [
             {
-              "value": "把指定消息设为会话置顶消息",
+              "value": "使用同源的 openConversationId 和 openMessageId 把指定消息设为 Pin",
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -38372,7 +38372,7 @@
         },
         "avoid_when": {
           "value": [
-            "取消置顶使用 chat message unset-pin-msg"
+            "取消 Pin 使用 chat message unset-pin-msg；置顶到会话顶部使用 set-top-msg，置顶整个会话使用 chat set-top"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -38381,7 +38381,7 @@
           "candidates": [
             {
               "value": [
-                "取消置顶使用 chat message unset-pin-msg"
+                "取消 Pin 使用 chat message unset-pin-msg；置顶到会话顶部使用 set-top-msg，置顶整个会话使用 chat set-top"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -38527,7 +38527,7 @@
         },
         "use_when": {
           "value": [
-            "需要在会话中置顶一条已知消息时"
+            "需要在会话中钉住一条已知消息时；若发送只返回 openTaskId，先确认发送终态，再从消息查询结果取得真实 openMessageId"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -38536,7 +38536,7 @@
           "candidates": [
             {
               "value": [
-                "需要在会话中置顶一条已知消息时"
+                "需要在会话中钉住一条已知消息时；若发送只返回 openTaskId，先确认发送终态，再从消息查询结果取得真实 openMessageId"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -38565,7 +38565,7 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "需要在会话中置顶一条已知消息时"
+        "需要在会话中钉住一条已知消息时；若发送只返回 openTaskId，先确认发送终态，再从消息查询结果取得真实 openMessageId"
       ]
     },
     "chat message set-top-msg": {
@@ -38854,11 +38854,11 @@
       ]
     },
     "chat message unset-pin-msg": {
-      "agent_summary": "取消指定消息的会话置顶",
+      "agent_summary": "使用设置 Pin 时的同源会话和消息 ID 取消指定消息的 Pin",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "新增置顶使用 chat message set-pin-msg"
+        "新增 Pin 使用 chat message set-pin-msg；不要改用 unset-top-msg 或 chat set-top --off"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -38868,14 +38868,14 @@
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "取消指定消息的会话置顶",
+          "value": "使用设置 Pin 时的同源会话和消息 ID 取消指定消息的 Pin",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "candidates": [
             {
-              "value": "取消指定消息的会话置顶",
+              "value": "使用设置 Pin 时的同源会话和消息 ID 取消指定消息的 Pin",
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
               "selected": true,
@@ -38907,7 +38907,7 @@
         },
         "avoid_when": {
           "value": [
-            "新增置顶使用 chat message set-pin-msg"
+            "新增 Pin 使用 chat message set-pin-msg；不要改用 unset-top-msg 或 chat set-top --off"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -38916,7 +38916,7 @@
           "candidates": [
             {
               "value": [
-                "新增置顶使用 chat message set-pin-msg"
+                "新增 Pin 使用 chat message set-pin-msg；不要改用 unset-top-msg 或 chat set-top --off"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -39062,7 +39062,7 @@
         },
         "use_when": {
           "value": [
-            "需要移除一条已知置顶消息时"
+            "需要移除一条已知 Pin 消息时；复用 set-pin-msg 成功时的 openConversationId 和 openMessageId"
           ],
           "source": "internal/cli/schema_hints/selection/chat.json",
           "precedence": "reviewed_explicit",
@@ -39071,7 +39071,7 @@
           "candidates": [
             {
               "value": [
-                "需要移除一条已知置顶消息时"
+                "需要移除一条已知 Pin 消息时；复用 set-pin-msg 成功时的 openConversationId 和 openMessageId"
               ],
               "source": "internal/cli/schema_hints/selection/chat.json",
               "precedence": "reviewed_explicit",
@@ -39100,7 +39100,7 @@
         "skills/mono/references/products/chat.md"
       ],
       "use_when": [
-        "需要移除一条已知置顶消息时"
+        "需要移除一条已知 Pin 消息时；复用 set-pin-msg 成功时的 openConversationId 和 openMessageId"
       ]
     },
     "chat message unset-top-msg": {

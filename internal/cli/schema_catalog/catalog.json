@@ -1,12 +1,12 @@
 {
   "version": 1,
   "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
-  "source_hash": "sha256:113dbc3507c5e4d871802d567e960c4947b8066472c28fb8a6dc64e9fef36da9",
+  "source_hash": "sha256:2bdcd3ac9d59f625cd4ed1e97938357b68ac483ef213a9e739baac67e3a1db3b",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:eedf9163f496888aa3a065bdbd85647e3702a73ce74703f27083059e22a74098",
+      "source_hash": "sha256:add7be57e9ed6b69783be5df6d321c83ebe3b9c71a934e9991d91ee41fea23f4",
       "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
       "surface_products": 26,
       "surface_tools": 875,
@@ -7784,11 +7784,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "给指定消息添加表情回应",
+            "agent_summary": "使用同一会话中真实的 openMessageId 给指定消息添加表情回应",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "发送文本消息或文字表情时不要使用"
+              "发送文本消息或文字表情时不要使用；不要把 openTaskId 当作 msg-id"
             ],
             "canonical_path": "chat.add_emoji_reaction",
             "cli_name": "add-emoji",
@@ -7810,7 +7810,7 @@
             "risk": "medium",
             "title": "对消息添加 emoji 表情回应",
             "use_when": [
-              "需要对已有消息添加一个 emoji reaction 时"
+              "需要对已有消息添加一个 emoji reaction 时；conversation-id 与 msg-id 必须来自同一条真实消息"
             ]
           },
           {
@@ -7967,7 +7967,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "管理员级群功能开关用 chat group update-settings"
+              "管理员级群功能开关用 chat group update-settings；查询结果是当前用户视角，不代表群级设置"
             ],
             "canonical_path": "chat.batch_query_group_chat_settings",
             "cli_name": "query",
@@ -7985,7 +7985,7 @@
             "risk": "low",
             "title": "批量查询当前用户的群会话设置",
             "use_when": [
-              "用户说 看下这些群我的置顶和免打扰设置"
+              "用户说看下这些群中我自己的置顶和免打扰设置；修改前先查询并保存原值用于恢复"
             ]
           },
           {
@@ -7994,7 +7994,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "单个群昵称优先 chat group update-nick"
+              "单个群昵称优先 chat group update-nick；不要用本命令修改 searchable、@所有人权限等群级开关；临时测试结束时按修改前 query 的真实值恢复"
             ],
             "canonical_path": "chat.batch_update_group_chat_settings",
             "cli_name": "set",
@@ -8012,7 +8012,7 @@
             "risk": "medium",
             "title": "批量更新当前用户的群会话设置",
             "use_when": [
-              "用户说 把这些群都设为免打扰/置顶"
+              "用户说把这些群都设为免打扰或置顶；items 中只写需要改变的当前用户设置，完成后再次 query 验证"
             ]
           },
           {
@@ -9430,11 +9430,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询异步消息发送任务的状态",
+            "agent_summary": "查询异步消息发送任务的业务终态，并按 sendStatus 判断是否真正投递成功",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId"
+              "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId；FAILED 不得当作接口成功"
             ],
             "canonical_path": "chat.query_message_send_status",
             "cli_name": "query-send-status",
@@ -9456,7 +9456,7 @@
             "risk": "low",
             "title": "查询消息发送状态",
             "use_when": [
-              "发送命令返回 openTaskId 后需要确认投递结果时"
+              "发送命令返回 openTaskId 后需要确认投递结果时；只有 sendStatus=SUCCESS 才能宣称消息发送成功"
             ]
           },
           {
@@ -9672,11 +9672,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "移除指定消息上的表情回应",
+            "agent_summary": "从同一条真实消息移除此前添加的同名表情回应",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "移除文字表情时使用 chat message remove-text-emotion"
+              "移除文字表情时使用 chat message remove-text-emotion；不要猜测新的消息 ID 或表情名称"
             ],
             "canonical_path": "chat.remove_emoji_reaction",
             "cli_name": "remove-emoji",
@@ -9698,7 +9698,7 @@
             "risk": "medium",
             "title": "移除消息的 emoji 表情回应",
             "use_when": [
-              "需要取消此前添加的 emoji reaction 时"
+              "需要取消此前添加的 emoji reaction 时；复用添加时的 conversation-id、msg-id 和 emoji"
             ]
           },
           {
@@ -9707,7 +9707,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "移除机器人时使用 chat group members remove-bot"
+              "移除机器人时使用 chat group members remove-bot；不要把建群者或群主加入 --users，也不要为了清理成员而转让群主"
             ],
             "canonical_path": "chat.remove_group_member",
             "cli_name": "remove",
@@ -9729,7 +9729,7 @@
             "risk": "medium",
             "title": "移除群成员",
             "use_when": [
-              "群管理员明确要移除一个或多个普通成员时"
+              "群管理员明确要移除一个或多个普通成员时；清理临时群只传本次加入的普通成员"
             ]
           },
           {
@@ -10342,11 +10342,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "把指定消息设为会话置顶消息",
+            "agent_summary": "使用同源的 openConversationId 和 openMessageId 把指定消息设为 Pin",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "取消置顶使用 chat message unset-pin-msg"
+              "取消 Pin 使用 chat message unset-pin-msg；置顶到会话顶部使用 set-top-msg，置顶整个会话使用 chat set-top"
             ],
             "canonical_path": "chat.set_pin_message",
             "cli_name": "set-pin-msg",
@@ -10368,7 +10368,7 @@
             "risk": "medium",
             "title": "钉住消息（Pin）",
             "use_when": [
-              "需要在会话中置顶一条已知消息时"
+              "需要在会话中钉住一条已知消息时；若发送只返回 openTaskId，先确认发送终态，再从消息查询结果取得真实 openMessageId"
             ]
           },
           {
@@ -11393,11 +11393,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询消息发送状态",
+            "agent_summary": "查询消息发送任务的业务终态，只有 sendStatus=SUCCESS 才表示真正发送成功",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令；不要把 openTaskId 当 openMessageId 做 Pin、置顶或表情操作"
             ],
             "canonical_path": "chat.shortcut_messages_query_send_status",
             "cli_name": "+messages-query-send-status",
@@ -11414,7 +11414,7 @@
             "risk": "low",
             "title": "查询消息发送状态",
             "use_when": [
-              "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。"
+              "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id；FAILED 必须如实报告，不能因外层 success=true 宣称成功。"
             ]
           },
           {
@@ -11768,11 +11768,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "取消指定消息的会话置顶",
+            "agent_summary": "使用设置 Pin 时的同源会话和消息 ID 取消指定消息的 Pin",
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "新增置顶使用 chat message set-pin-msg"
+              "新增 Pin 使用 chat message set-pin-msg；不要改用 unset-top-msg 或 chat set-top --off"
             ],
             "canonical_path": "chat.unset_pin_message",
             "cli_name": "unset-pin-msg",
@@ -11794,7 +11794,7 @@
             "risk": "medium",
             "title": "取消钉住消息（Unpin）",
             "use_when": [
-              "需要移除一条已知置顶消息时"
+              "需要移除一条已知 Pin 消息时；复用 set-pin-msg 成功时的 openConversationId 和 openMessageId"
             ]
           },
           {
@@ -11918,7 +11918,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "没有真实可用 mediaId 时先完成媒体上传"
+              "本地图片路径、钉盘 dentryId、聊天文件 uploadKey 都不能代替 icon-media-id；当前 CLI 无本地图片转群头像 mediaId 的能力，缺少 mediaId 时应如实报告能力边界"
             ],
             "canonical_path": "chat.update_group_icon",
             "cli_name": "update-icon",
@@ -11940,7 +11940,7 @@
             "risk": "medium",
             "title": "更新群头像",
             "use_when": [
-              "已有上传后的头像 mediaId 并要修改群头像时"
+              "已有可用于群头像接口的真实 mediaId 并要修改群头像时"
             ]
           },
           {
@@ -12007,7 +12007,7 @@
             "agent_summary_source": "dws-agent-selection/chat",
             "availability": "available",
             "avoid_when": [
-              "全员禁言和成员禁言使用专门的 mute 命令"
+              "全员禁言和成员禁言使用专门的 mute 命令；当前用户自己的会话置顶或免打扰使用 group user-settings set"
             ],
             "canonical_path": "chat.update_group_settings",
             "cli_name": "update-settings",
@@ -12029,7 +12029,7 @@
             "risk": "medium",
             "title": "更新群设置",
             "use_when": [
-              "需要调整 searchable、入群验证或群权限等设置时"
+              "需要调整 searchable、入群验证、@所有人权限等群级设置时；修改后用群信息或设置查询核对终态"
             ]
           },
           {
@@ -18283,6 +18283,7 @@
             "agent_summary_source": "dws-agent-selection/drive",
             "availability": "available",
             "avoid_when": [
+              "用户要把文件发送到群聊或单聊时使用 chat message send --msg-type file --file-path；drive upload 不会发送聊天消息",
               "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
               "要把文件作为文档正文附件插入改用 dws doc media insert",
               "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
@@ -18307,6 +18308,7 @@
             "title": "上传本地文件到钉盘或文档空间",
             "use_when": [
               "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
+              "用户明确要求只上传或暂存附件、暂时不要发送到任何聊天会话时",
               "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
               "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
             ]

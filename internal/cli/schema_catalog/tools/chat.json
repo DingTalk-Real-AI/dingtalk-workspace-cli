@@ -1158,11 +1158,11 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/chat.md"
       ],
-      "agent_summary": "给指定消息添加表情回应",
+      "agent_summary": "使用同一会话中真实的 openMessageId 给指定消息添加表情回应",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "发送文本消息或文字表情时不要使用"
+        "发送文本消息或文字表情时不要使用；不要把 openTaskId 当作 msg-id"
       ],
       "canonical_path": "chat.add_emoji_reaction",
       "cli_name": "add-emoji",
@@ -1193,14 +1193,14 @@
               "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
-              "value": "给指定消息添加表情回应"
+              "value": "使用同一会话中真实的 openMessageId 给指定消息添加表情回应"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
-          "value": "给指定消息添加表情回应"
+          "value": "使用同一会话中真实的 openMessageId 给指定消息添加表情回应"
         },
         "availability": {
           "candidates": [
@@ -1232,7 +1232,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "发送文本消息或文字表情时不要使用"
+                "发送文本消息或文字表情时不要使用；不要把 openTaskId 当作 msg-id"
               ]
             }
           ],
@@ -1241,7 +1241,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "发送文本消息或文字表情时不要使用"
+            "发送文本消息或文字表情时不要使用；不要把 openTaskId 当作 msg-id"
           ]
         },
         "canonical_path": {
@@ -1479,7 +1479,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "需要对已有消息添加一个 emoji reaction 时"
+                "需要对已有消息添加一个 emoji reaction 时；conversation-id 与 msg-id 必须来自同一条真实消息"
               ]
             }
           ],
@@ -1488,7 +1488,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "需要对已有消息添加一个 emoji reaction 时"
+            "需要对已有消息添加一个 emoji reaction 时；conversation-id 与 msg-id 必须来自同一条真实消息"
           ]
         }
       },
@@ -2220,7 +2220,7 @@
       "source": "reviewed_command_registry",
       "title": "对消息添加 emoji 表情回应",
       "use_when": [
-        "需要对已有消息添加一个 emoji reaction 时"
+        "需要对已有消息添加一个 emoji reaction 时；conversation-id 与 msg-id 必须来自同一条真实消息"
       ]
     },
     "chat.add_group_member": {
@@ -6372,7 +6372,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "管理员级群功能开关用 chat group update-settings"
+        "管理员级群功能开关用 chat group update-settings；查询结果是当前用户视角，不代表群级设置"
       ],
       "canonical_path": "chat.batch_query_group_chat_settings",
       "cli_name": "query",
@@ -6426,7 +6426,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "管理员级群功能开关用 chat group update-settings"
+                "管理员级群功能开关用 chat group update-settings；查询结果是当前用户视角，不代表群级设置"
               ]
             }
           ],
@@ -6435,7 +6435,7 @@
           "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "管理员级群功能开关用 chat group update-settings"
+            "管理员级群功能开关用 chat group update-settings；查询结果是当前用户视角，不代表群级设置"
           ]
         },
         "canonical_path": {
@@ -6645,7 +6645,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "用户说 看下这些群我的置顶和免打扰设置"
+                "用户说看下这些群中我自己的置顶和免打扰设置；修改前先查询并保存原值用于恢复"
               ]
             }
           ],
@@ -6654,7 +6654,7 @@
           "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "用户说 看下这些群我的置顶和免打扰设置"
+            "用户说看下这些群中我自己的置顶和免打扰设置；修改前先查询并保存原值用于恢复"
           ]
         }
       },
@@ -6773,7 +6773,7 @@
       "source": "reviewed_command_registry",
       "title": "批量查询当前用户的群会话设置",
       "use_when": [
-        "用户说 看下这些群我的置顶和免打扰设置"
+        "用户说看下这些群中我自己的置顶和免打扰设置；修改前先查询并保存原值用于恢复"
       ]
     },
     "chat.batch_update_group_chat_settings": {
@@ -6789,7 +6789,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "单个群昵称优先 chat group update-nick"
+        "单个群昵称优先 chat group update-nick；不要用本命令修改 searchable、@所有人权限等群级开关；临时测试结束时按修改前 query 的真实值恢复"
       ],
       "canonical_path": "chat.batch_update_group_chat_settings",
       "cli_name": "set",
@@ -6843,7 +6843,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "单个群昵称优先 chat group update-nick"
+                "单个群昵称优先 chat group update-nick；不要用本命令修改 searchable、@所有人权限等群级开关；临时测试结束时按修改前 query 的真实值恢复"
               ]
             }
           ],
@@ -6852,7 +6852,7 @@
           "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "单个群昵称优先 chat group update-nick"
+            "单个群昵称优先 chat group update-nick；不要用本命令修改 searchable、@所有人权限等群级开关；临时测试结束时按修改前 query 的真实值恢复"
           ]
         },
         "canonical_path": {
@@ -7062,7 +7062,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "用户说 把这些群都设为免打扰/置顶"
+                "用户说把这些群都设为免打扰或置顶；items 中只写需要改变的当前用户设置，完成后再次 query 验证"
               ]
             }
           ],
@@ -7071,7 +7071,7 @@
           "review_reason": "人工审阅：对照悟空 develop 同名命令实现、Cobra Long/Example 与 Runtime 确认门禁移植；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "用户说 把这些群都设为免打扰/置顶"
+            "用户说把这些群都设为免打扰或置顶；items 中只写需要改变的当前用户设置，完成后再次 query 验证"
           ]
         }
       },
@@ -7190,7 +7190,7 @@
       "source": "reviewed_command_registry",
       "title": "批量更新当前用户的群会话设置",
       "use_when": [
-        "用户说 把这些群都设为免打扰/置顶"
+        "用户说把这些群都设为免打扰或置顶；items 中只写需要改变的当前用户设置，完成后再次 query 验证"
       ]
     },
     "chat.clear_all_red_point": {
@@ -38313,11 +38313,11 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ],
-      "agent_summary": "查询异步消息发送任务的状态",
+      "agent_summary": "查询异步消息发送任务的业务终态，并按 sendStatus 判断是否真正投递成功",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId"
+        "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId；FAILED 不得当作接口成功"
       ],
       "canonical_path": "chat.query_message_send_status",
       "cli_name": "query-send-status",
@@ -38338,14 +38338,14 @@
               "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
-              "value": "查询异步消息发送任务的状态"
+              "value": "查询异步消息发送任务的业务终态，并按 sendStatus 判断是否真正投递成功"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
-          "value": "查询异步消息发送任务的状态"
+          "value": "查询异步消息发送任务的业务终态，并按 sendStatus 判断是否真正投递成功"
         },
         "availability": {
           "candidates": [
@@ -38377,7 +38377,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId"
+                "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId；FAILED 不得当作接口成功"
               ]
             }
           ],
@@ -38386,7 +38386,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId"
+            "没有 message send 真实返回的 openTaskId 时不要使用；openMessageId 和会话 ID 都不能代替 openTaskId；FAILED 不得当作接口成功"
           ]
         },
         "canonical_path": {
@@ -38608,7 +38608,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "发送命令返回 openTaskId 后需要确认投递结果时"
+                "发送命令返回 openTaskId 后需要确认投递结果时；只有 sendStatus=SUCCESS 才能宣称消息发送成功"
               ]
             }
           ],
@@ -38617,7 +38617,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "发送命令返回 openTaskId 后需要确认投递结果时"
+            "发送命令返回 openTaskId 后需要确认投递结果时；只有 sendStatus=SUCCESS 才能宣称消息发送成功"
           ]
         }
       },
@@ -38767,7 +38767,7 @@
       "source": "reviewed_command_registry",
       "title": "查询消息发送状态",
       "use_when": [
-        "发送命令返回 openTaskId 后需要确认投递结果时"
+        "发送命令返回 openTaskId 后需要确认投递结果时；只有 sendStatus=SUCCESS 才能宣称消息发送成功"
       ]
     },
     "chat.query_msg_read_status": {
@@ -43352,11 +43352,11 @@
         "skills/mono/SKILL.md",
         "skills/mono/references/products/chat.md"
       ],
-      "agent_summary": "移除指定消息上的表情回应",
+      "agent_summary": "从同一条真实消息移除此前添加的同名表情回应",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "移除文字表情时使用 chat message remove-text-emotion"
+        "移除文字表情时使用 chat message remove-text-emotion；不要猜测新的消息 ID 或表情名称"
       ],
       "canonical_path": "chat.remove_emoji_reaction",
       "cli_name": "remove-emoji",
@@ -43387,14 +43387,14 @@
               "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
-              "value": "移除指定消息上的表情回应"
+              "value": "从同一条真实消息移除此前添加的同名表情回应"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
-          "value": "移除指定消息上的表情回应"
+          "value": "从同一条真实消息移除此前添加的同名表情回应"
         },
         "availability": {
           "candidates": [
@@ -43426,7 +43426,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "移除文字表情时使用 chat message remove-text-emotion"
+                "移除文字表情时使用 chat message remove-text-emotion；不要猜测新的消息 ID 或表情名称"
               ]
             }
           ],
@@ -43435,7 +43435,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "移除文字表情时使用 chat message remove-text-emotion"
+            "移除文字表情时使用 chat message remove-text-emotion；不要猜测新的消息 ID 或表情名称"
           ]
         },
         "canonical_path": {
@@ -43673,7 +43673,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "需要取消此前添加的 emoji reaction 时"
+                "需要取消此前添加的 emoji reaction 时；复用添加时的 conversation-id、msg-id 和 emoji"
               ]
             }
           ],
@@ -43682,7 +43682,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "需要取消此前添加的 emoji reaction 时"
+            "需要取消此前添加的 emoji reaction 时；复用添加时的 conversation-id、msg-id 和 emoji"
           ]
         }
       },
@@ -44414,7 +44414,7 @@
       "source": "reviewed_command_registry",
       "title": "移除消息的 emoji 表情回应",
       "use_when": [
-        "需要取消此前添加的 emoji reaction 时"
+        "需要取消此前添加的 emoji reaction 时；复用添加时的 conversation-id、msg-id 和 emoji"
       ]
     },
     "chat.remove_group_member": {
@@ -44435,7 +44435,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "移除机器人时使用 chat group members remove-bot"
+        "移除机器人时使用 chat group members remove-bot；不要把建群者或群主加入 --users，也不要为了清理成员而转让群主"
       ],
       "canonical_path": "chat.remove_group_member",
       "cli_name": "remove",
@@ -44495,7 +44495,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "移除机器人时使用 chat group members remove-bot"
+                "移除机器人时使用 chat group members remove-bot；不要把建群者或群主加入 --users，也不要为了清理成员而转让群主"
               ]
             }
           ],
@@ -44504,7 +44504,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "移除机器人时使用 chat group members remove-bot"
+            "移除机器人时使用 chat group members remove-bot；不要把建群者或群主加入 --users，也不要为了清理成员而转让群主"
           ]
         },
         "canonical_path": {
@@ -44759,7 +44759,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "群管理员明确要移除一个或多个普通成员时"
+                "群管理员明确要移除一个或多个普通成员时；清理临时群只传本次加入的普通成员"
               ]
             }
           ],
@@ -44768,7 +44768,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "群管理员明确要移除一个或多个普通成员时"
+            "群管理员明确要移除一个或多个普通成员时；清理临时群只传本次加入的普通成员"
           ]
         }
       },
@@ -45075,7 +45075,7 @@
       "source": "reviewed_command_registry",
       "title": "移除群成员",
       "use_when": [
-        "群管理员明确要移除一个或多个普通成员时"
+        "群管理员明确要移除一个或多个普通成员时；清理临时群只传本次加入的普通成员"
       ]
     },
     "chat.remove_message_favorite": {
@@ -65014,11 +65014,11 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ],
-      "agent_summary": "把指定消息设为会话置顶消息",
+      "agent_summary": "使用同源的 openConversationId 和 openMessageId 把指定消息设为 Pin",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "取消置顶使用 chat message unset-pin-msg"
+        "取消 Pin 使用 chat message unset-pin-msg；置顶到会话顶部使用 set-top-msg，置顶整个会话使用 chat set-top"
       ],
       "canonical_path": "chat.set_pin_message",
       "cli_name": "set-pin-msg",
@@ -65039,14 +65039,14 @@
               "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
-              "value": "把指定消息设为会话置顶消息"
+              "value": "使用同源的 openConversationId 和 openMessageId 把指定消息设为 Pin"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
-          "value": "把指定消息设为会话置顶消息"
+          "value": "使用同源的 openConversationId 和 openMessageId 把指定消息设为 Pin"
         },
         "availability": {
           "candidates": [
@@ -65078,7 +65078,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "取消置顶使用 chat message unset-pin-msg"
+                "取消 Pin 使用 chat message unset-pin-msg；置顶到会话顶部使用 set-top-msg，置顶整个会话使用 chat set-top"
               ]
             }
           ],
@@ -65087,7 +65087,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "取消置顶使用 chat message unset-pin-msg"
+            "取消 Pin 使用 chat message unset-pin-msg；置顶到会话顶部使用 set-top-msg，置顶整个会话使用 chat set-top"
           ]
         },
         "canonical_path": {
@@ -65309,7 +65309,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "需要在会话中置顶一条已知消息时"
+                "需要在会话中钉住一条已知消息时；若发送只返回 openTaskId，先确认发送终态，再从消息查询结果取得真实 openMessageId"
               ]
             }
           ],
@@ -65318,7 +65318,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "需要在会话中置顶一条已知消息时"
+            "需要在会话中钉住一条已知消息时；若发送只返回 openTaskId，先确认发送终态，再从消息查询结果取得真实 openMessageId"
           ]
         }
       },
@@ -65598,7 +65598,7 @@
       "source": "reviewed_command_registry",
       "title": "钉住消息（Pin）",
       "use_when": [
-        "需要在会话中置顶一条已知消息时"
+        "需要在会话中钉住一条已知消息时；若发送只返回 openTaskId，先确认发送终态，再从消息查询结果取得真实 openMessageId"
       ]
     },
     "chat.set_top_conversation": {
@@ -87865,11 +87865,11 @@
         "internal/cli/schema_hints/metadata/chat.json",
         "internal/cli/schema_hints/selection/chat.json"
       ],
-      "agent_summary": "查询消息发送状态",
+      "agent_summary": "查询消息发送任务的业务终态，只有 sendStatus=SUCCESS 才表示真正发送成功",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令；不要把 openTaskId 当 openMessageId 做 Pin、置顶或表情操作"
       ],
       "canonical_path": "chat.shortcut_messages_query_send_status",
       "cli_name": "+messages-query-send-status",
@@ -87890,14 +87890,14 @@
               "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
-              "value": "查询消息发送状态"
+              "value": "查询消息发送任务的业务终态，只有 sendStatus=SUCCESS 才表示真正发送成功"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/chat.json",
-          "value": "查询消息发送状态"
+          "value": "查询消息发送任务的业务终态，只有 sendStatus=SUCCESS 才表示真正发送成功"
         },
         "availability": {
           "candidates": [
@@ -87923,7 +87923,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令；不要把 openTaskId 当 openMessageId 做 Pin、置顶或表情操作"
               ]
             }
           ],
@@ -87932,7 +87932,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令；不要把 openTaskId 当 openMessageId 做 Pin、置顶或表情操作"
           ]
         },
         "canonical_path": {
@@ -88142,7 +88142,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。"
+                "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id；FAILED 必须如实报告，不能因外层 success=true 宣称成功。"
               ]
             }
           ],
@@ -88151,7 +88151,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。"
+            "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id；FAILED 必须如实报告，不能因外层 success=true 宣称成功。"
           ]
         }
       },
@@ -88268,7 +88268,7 @@
       "source": "reviewed_command_registry",
       "title": "查询消息发送状态",
       "use_when": [
-        "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。"
+        "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id；FAILED 必须如实报告，不能因外层 success=true 宣称成功。"
       ]
     },
     "chat.shortcut_messages_read_status": {
@@ -101127,11 +101127,11 @@
         "skills/mono/references/intent-guide.md",
         "skills/mono/references/products/chat.md"
       ],
-      "agent_summary": "取消指定消息的会话置顶",
+      "agent_summary": "使用设置 Pin 时的同源会话和消息 ID 取消指定消息的 Pin",
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "新增置顶使用 chat message set-pin-msg"
+        "新增 Pin 使用 chat message set-pin-msg；不要改用 unset-top-msg 或 chat set-top --off"
       ],
       "canonical_path": "chat.unset_pin_message",
       "cli_name": "unset-pin-msg",
@@ -101152,14 +101152,14 @@
               "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
-              "value": "取消指定消息的会话置顶"
+              "value": "使用设置 Pin 时的同源会话和消息 ID 取消指定消息的 Pin"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
-          "value": "取消指定消息的会话置顶"
+          "value": "使用设置 Pin 时的同源会话和消息 ID 取消指定消息的 Pin"
         },
         "availability": {
           "candidates": [
@@ -101191,7 +101191,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "新增置顶使用 chat message set-pin-msg"
+                "新增 Pin 使用 chat message set-pin-msg；不要改用 unset-top-msg 或 chat set-top --off"
               ]
             }
           ],
@@ -101200,7 +101200,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "新增置顶使用 chat message set-pin-msg"
+            "新增 Pin 使用 chat message set-pin-msg；不要改用 unset-top-msg 或 chat set-top --off"
           ]
         },
         "canonical_path": {
@@ -101422,7 +101422,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "需要移除一条已知置顶消息时"
+                "需要移除一条已知 Pin 消息时；复用 set-pin-msg 成功时的 openConversationId 和 openMessageId"
               ]
             }
           ],
@@ -101431,7 +101431,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "需要移除一条已知置顶消息时"
+            "需要移除一条已知 Pin 消息时；复用 set-pin-msg 成功时的 openConversationId 和 openMessageId"
           ]
         }
       },
@@ -101711,7 +101711,7 @@
       "source": "reviewed_command_registry",
       "title": "取消钉住消息（Unpin）",
       "use_when": [
-        "需要移除一条已知置顶消息时"
+        "需要移除一条已知 Pin 消息时；复用 set-pin-msg 成功时的 openConversationId 和 openMessageId"
       ]
     },
     "chat.unset_top_message": {
@@ -104378,7 +104378,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "没有真实可用 mediaId 时先完成媒体上传"
+        "本地图片路径、钉盘 dentryId、聊天文件 uploadKey 都不能代替 icon-media-id；当前 CLI 无本地图片转群头像 mediaId 的能力，缺少 mediaId 时应如实报告能力边界"
       ],
       "canonical_path": "chat.update_group_icon",
       "cli_name": "update-icon",
@@ -104438,7 +104438,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "没有真实可用 mediaId 时先完成媒体上传"
+                "本地图片路径、钉盘 dentryId、聊天文件 uploadKey 都不能代替 icon-media-id；当前 CLI 无本地图片转群头像 mediaId 的能力，缺少 mediaId 时应如实报告能力边界"
               ]
             }
           ],
@@ -104447,7 +104447,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "没有真实可用 mediaId 时先完成媒体上传"
+            "本地图片路径、钉盘 dentryId、聊天文件 uploadKey 都不能代替 icon-media-id；当前 CLI 无本地图片转群头像 mediaId 的能力，缺少 mediaId 时应如实报告能力边界"
           ]
         },
         "canonical_path": {
@@ -104669,7 +104669,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "已有上传后的头像 mediaId 并要修改群头像时"
+                "已有可用于群头像接口的真实 mediaId 并要修改群头像时"
               ]
             }
           ],
@@ -104678,7 +104678,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "已有上传后的头像 mediaId 并要修改群头像时"
+            "已有可用于群头像接口的真实 mediaId 并要修改群头像时"
           ]
         }
       },
@@ -105000,7 +105000,7 @@
       "source": "reviewed_command_registry",
       "title": "更新群头像",
       "use_when": [
-        "已有上传后的头像 mediaId 并要修改群头像时"
+        "已有可用于群头像接口的真实 mediaId 并要修改群头像时"
       ]
     },
     "chat.update_group_name": {
@@ -106217,7 +106217,7 @@
       "agent_summary_source": "dws-agent-selection/chat",
       "availability": "available",
       "avoid_when": [
-        "全员禁言和成员禁言使用专门的 mute 命令"
+        "全员禁言和成员禁言使用专门的 mute 命令；当前用户自己的会话置顶或免打扰使用 group user-settings set"
       ],
       "canonical_path": "chat.update_group_settings",
       "cli_name": "update-settings",
@@ -106277,7 +106277,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "全员禁言和成员禁言使用专门的 mute 命令"
+                "全员禁言和成员禁言使用专门的 mute 命令；当前用户自己的会话置顶或免打扰使用 group user-settings set"
               ]
             }
           ],
@@ -106286,7 +106286,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "全员禁言和成员禁言使用专门的 mute 命令"
+            "全员禁言和成员禁言使用专门的 mute 命令；当前用户自己的会话置顶或免打扰使用 group user-settings set"
           ]
         },
         "canonical_path": {
@@ -106508,7 +106508,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/chat.json",
               "value": [
-                "需要调整 searchable、入群验证或群权限等设置时"
+                "需要调整 searchable、入群验证、@所有人权限等群级设置时；修改后用群信息或设置查询核对终态"
               ]
             }
           ],
@@ -106517,7 +106517,7 @@
           "review_reason": "AI 生成并复核的 Agent 选择语义，依据精确 CommandRegistry identity、真实 Cobra help 与产品参考，不改写执行、安全或接口事实。",
           "source": "internal/cli/schema_hints/selection/chat.json",
           "value": [
-            "需要调整 searchable、入群验证或群权限等设置时"
+            "需要调整 searchable、入群验证、@所有人权限等群级设置时；修改后用群信息或设置查询核对终态"
           ]
         }
       },
@@ -106921,7 +106921,7 @@
       "source": "reviewed_command_registry",
       "title": "更新群设置",
       "use_when": [
-        "需要调整 searchable、入群验证或群权限等设置时"
+        "需要调整 searchable、入群验证、@所有人权限等群级设置时；修改后用群信息或设置查询核对终态"
       ]
     },
     "chat.update_notification_off": {

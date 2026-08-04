@@ -90,6 +90,56 @@ func TestChatAgentGuidanceRendersOnlyOnStdout(t *testing.T) {
 	}
 }
 
+func TestCandidateAlignmentChatGuidance(t *testing.T) {
+	tests := []struct {
+		args  []string
+		wants []string
+	}{
+		{[]string{"chat", "message", "query-send-status", "--help"}, []string{"sendStatus=SUCCESS", "FAILED"}},
+		{[]string{"chat", "+messages-query-send-status", "--help"}, []string{"sendStatus=SUCCESS", "openTaskId"}},
+		{[]string{"chat", "message", "set-pin-msg", "--help"}, []string{"openTaskId", "set-top-msg", "chat set-top"}},
+		{[]string{"chat", "message", "unset-pin-msg", "--help"}, []string{"复用", "unset-top-msg"}},
+		{[]string{"chat", "message", "add-emoji", "--help"}, []string{"同一条真实消息", "openTaskId"}},
+		{[]string{"chat", "message", "remove-emoji", "--help"}, []string{"复用", "表情名称"}},
+		{[]string{"chat", "group", "members", "remove", "--help"}, []string{"群主", "转让群主"}},
+		{[]string{"chat", "group", "update-icon", "--help"}, []string{"dentryId", "能力边界"}},
+		{[]string{"chat", "group", "update-settings", "--help"}, []string{"群级设置", "user-settings set"}},
+		{[]string{"chat", "group", "user-settings", "query", "--help"}, []string{"当前用户视角", "保存原值"}},
+		{[]string{"chat", "group", "user-settings", "set", "--help"}, []string{"再次 query", "真实值恢复"}},
+	}
+	for _, tc := range tests {
+		cmd := NewRootCommand()
+		var stdout bytes.Buffer
+		cmd.SetOut(&stdout)
+		cmd.SetErr(io.Discard)
+		cmd.SetArgs(tc.args)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("%v: %v", tc.args, err)
+		}
+		for _, want := range tc.wants {
+			if !strings.Contains(stdout.String(), want) {
+				t.Fatalf("%v help missing %q:\n%s", tc.args, want, stdout.String())
+			}
+		}
+	}
+}
+
+func TestCandidateAlignmentDriveUploadSchemaGuidance(t *testing.T) {
+	cmd := NewRootCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"schema", "drive.upload", "--format", "json"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("drive.upload schema: %v", err)
+	}
+	for _, want := range []string{"暂时不要发送", "不会发送聊天消息"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("drive.upload schema missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
 func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 	root := NewRootCommand()
 	listDirect := mustFindCommand(t, root, "chat", "message", "list-direct")

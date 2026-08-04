@@ -10478,6 +10478,7 @@
       "agent_summary_source": "dws-agent-selection/drive",
       "availability": "available",
       "avoid_when": [
+        "用户要把文件发送到群聊或单聊时使用 chat message send --msg-type file --file-path；drive upload 不会发送聊天消息",
         "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
         "要把文件作为文档正文附件插入改用 dws doc media insert",
         "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
@@ -10525,6 +10526,7 @@
         },
         "avoid_when": {
           "value": [
+            "用户要把文件发送到群聊或单聊时使用 chat message send --msg-type file --file-path；drive upload 不会发送聊天消息",
             "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
             "要把文件作为文档正文附件插入改用 dws doc media insert",
             "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
@@ -10537,6 +10539,7 @@
           "candidates": [
             {
               "value": [
+                "用户要把文件发送到群聊或单聊时使用 chat message send --msg-type file --file-path；drive upload 不会发送聊天消息",
                 "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
                 "要把文件作为文档正文附件插入改用 dws doc media insert",
                 "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
@@ -10733,6 +10736,7 @@
         "use_when": {
           "value": [
             "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
+            "用户明确要求只上传或暂存附件、暂时不要发送到任何聊天会话时",
             "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
             "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
           ],
@@ -10744,6 +10748,7 @@
             {
               "value": [
                 "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
+                "用户明确要求只上传或暂存附件、暂时不要发送到任何聊天会话时",
                 "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
                 "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
               ],
@@ -10774,6 +10779,7 @@
       ],
       "use_when": [
         "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
+        "用户明确要求只上传或暂存附件、暂时不要发送到任何聊天会话时",
         "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
         "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
       ]

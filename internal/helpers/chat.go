@@ -462,9 +462,12 @@ func guardGroupOwnerRemoval(ctx context.Context, openConversationID string, remo
 	if err != nil || ownerOpenID == "" {
 		return nil
 	}
-	ownerErr := fmt.Errorf(
-		"refusing to remove the group owner: 被移除列表包含群主，移出群主将导致群无群主（孤儿群）\n  hint: 先执行 dws chat group transfer-owner --group %s --user <newOwnerUserId> 转让群主后再移除",
-		openConversationID,
+	ownerErr := apperrors.NewValidation(
+		"被移除列表包含群主，不能直接移出群主",
+		apperrors.WithReason("group_owner_in_remove_list"),
+		apperrors.WithHint("清理临时群成员时应从 --users 中移除群主，只移除本次加入的普通成员；只有用户明确要求变更群主时才单独执行 transfer-owner。"),
+		apperrors.WithActions("从 --users 中移除群主后重试", "若用户明确要求转让群主，先确认新群主再单独执行 transfer-owner"),
+		apperrors.WithExamples(fmt.Sprintf("dws chat group members remove --id %s --users <普通成员userId列表> --format json", openConversationID)),
 	)
 	userIDs, openDingTalkIDs := splitChatIDValues(removeValues)
 	for _, id := range openDingTalkIDs {

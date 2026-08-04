@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -406,7 +407,13 @@ func TestCrossPlatformCoverageGuardGroupOwnerRemovalCoverage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &scriptedToolCaller{steps: tc.steps}
 			installScriptedCaller(t, caller)
-			_ = guardGroupOwnerRemoval(context.Background(), "group", tc.remove)
+			err := guardGroupOwnerRemoval(context.Background(), "group", tc.remove)
+			if tc.name == "owner-open" {
+				var typed *apperrors.Error
+				if !errors.As(err, &typed) || typed.Reason != "group_owner_in_remove_list" || !strings.Contains(typed.Hint, "从 --users 中移除群主") || strings.Contains(typed.Hint, "先执行 dws chat group transfer-owner") {
+					t.Fatalf("owner removal hint = %v", err)
+				}
+			}
 		})
 	}
 	caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}}}
