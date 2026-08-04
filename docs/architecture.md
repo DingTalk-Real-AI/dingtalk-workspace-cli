@@ -2,6 +2,29 @@
 
 `dws` is a Go CLI with a versioned, static command surface for DingTalk MCP capabilities. Cobra help serves humans; the embedded Command Catalog serves AI agents.
 
+## Change Rules
+
+Prescriptive layering for new code. Keep descriptions here concise; scoped
+guides own the details.
+
+1. Dependencies point inward: `cmd` → `internal/app` → `internal/helpers` →
+   shared layers (`executor`, `transport`, `output`, `errors`, `safety`,
+   `cobracmd`). Shared layers never import `helpers` or `app`.
+2. New product commands go to `internal/helpers` following
+   [`helpers-structure-guide.md`](helpers-structure-guide.md); do not add
+   product logic to `internal/app`, `internal/cli`, or transport.
+3. New shared behavior joins the existing shared package that owns the
+   contract; do not create a new shared package for a single caller.
+4. Schema/Agent metadata changes start from reviewed inputs in `internal/cli`
+   per [`schema-contributor-guide.md`](schema-contributor-guide.md); never
+   hand-edit generated Catalog output.
+5. Bundled skill content under `skills/` follows
+   [`skill-authoring-guide.md`](skill-authoring-guide.md); skills are embedded
+   via `skills/embed.go` and ship with the binary.
+6. A new top-level package (under `internal/` or `pkg/`) requires a stated
+   boundary reason in its PR and an update to the Repository Structure list
+   below.
+
 ## High-Level Flow
 
 1. `cmd` is the CLI entrypoint, invoking `internal/app` to build the root Cobra command tree.

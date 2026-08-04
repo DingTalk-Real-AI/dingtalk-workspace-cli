@@ -16,6 +16,7 @@ var guideLineLimits = map[string]int{
 	"AGENTS.md":                  80,
 	"internal/cli/AGENTS.md":     80,
 	"internal/helpers/AGENTS.md": 100,
+	"skills/AGENTS.md":           80,
 }
 
 var markdownLinkPattern = regexp.MustCompile(`\[[^]]+\]\(([^)]+)\)`)
@@ -53,6 +54,9 @@ var guideContracts = []fileContract{
 			"docs/coding-agent-task-template.md",
 			"docs/schema-contributor-guide.md",
 			"docs/helpers-structure-guide.md",
+			"docs/architecture.md",
+			"docs/skill-authoring-guide.md",
+			"skills/AGENTS.md",
 			"internal/helpers/AGENTS.md",
 			"docs/automation.md",
 			"docs/agent-code.md",
@@ -90,6 +94,41 @@ var guideContracts = []fileContract{
 			"## 5. Pre-handoff self-check",
 			"Outcome: what is now true",
 			"Validation: exact commands and results",
+		},
+	},
+	{
+		path: "docs/architecture.md",
+		required: []string{
+			"## Change Rules",
+			"helpers-structure-guide.md",
+			"skill-authoring-guide.md",
+			"schema-contributor-guide.md",
+			"## Repository Structure",
+			"internal/helpers",
+			"skills/",
+		},
+	},
+	{
+		path: "docs/skill-authoring-guide.md",
+		required: []string{
+			"skills/mono/",
+			"skills/multi/dingtalk-<product>/",
+			"dws-shared",
+			"SAFETY_PREAMBLE_INJECT",
+			"Dual-write rule",
+			"make skill-command-integrity",
+			"schema-contributor-guide.md",
+		},
+	},
+	{
+		path: "skills/AGENTS.md",
+		required: []string{
+			"../docs/coding-agent-guide.md",
+			"../docs/skill-authoring-guide.md",
+			"../docs/schema-contributor-guide.md",
+			"SAFETY_PREAMBLE_INJECT",
+			"make skill-command-integrity",
+			"Dual-write",
 		},
 	},
 	{

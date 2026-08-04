@@ -20,8 +20,10 @@ file as a repository wiki.
 |---|---|
 | Any implementation or review | [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/coding-agent-guide.md`](docs/coding-agent-guide.md) |
 | Writing a task for a coding agent | [`docs/coding-agent-task-template.md`](docs/coding-agent-task-template.md) |
+| Overall architecture or package layering | [`docs/architecture.md`](docs/architecture.md) |
 | Product command handler behavior | [`internal/helpers/AGENTS.md`](internal/helpers/AGENTS.md) |
 | Helpers package/file layout or megafile splits | [`docs/helpers-structure-guide.md`](docs/helpers-structure-guide.md) |
+| Bundled skill authoring (`skills/`) | [`skills/AGENTS.md`](skills/AGENTS.md) and [`docs/skill-authoring-guide.md`](docs/skill-authoring-guide.md) |
 | CLI paths, flags, Schema, Agent metadata, or generated Catalog | [`docs/schema-contributor-guide.md`](docs/schema-contributor-guide.md) |
 | CI, release, packaging, or repository automation | [`docs/automation.md`](docs/automation.md) |
 | Agent identification headers or host integration | [`docs/agent-code.md`](docs/agent-code.md) |
