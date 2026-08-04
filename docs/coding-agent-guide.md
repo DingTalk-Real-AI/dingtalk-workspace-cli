@@ -36,6 +36,10 @@ intents or stop with the exact conflict.
 
 - Go behavior belongs in the package that owns the contract, with focused
   tests beside it.
+- Product handlers under `internal/helpers` follow
+  [`helpers-structure-guide.md`](helpers-structure-guide.md): thin
+  `{product}.go` wiring plus `{product}_{resource}.go` files; do not enlarge
+  megafiles such as `chat.go`.
 - Public CLI paths and flags must match the live Cobra tree and compatibility
   policies.
 - Schema and Agent-facing changes start from reviewed source inputs; generated
@@ -70,8 +74,9 @@ and live services are not prerequisites for ordinary unit tests; never turn a
 missing credential into permission to skip deterministic checks.
 
 The guide contract itself is executable. Run `make coding-agent-harness` after
-changing `AGENTS.md`, this guide, the Schema contributor guide, or their routed
-commands and paths. This remains a local, opt-in check and is not wired into CI.
+changing `AGENTS.md`, this guide, the Schema contributor guide, helpers
+structure guide, or their routed commands and paths. This remains a local,
+opt-in agent aid and is not wired into CI.
 
 ## Design references
 

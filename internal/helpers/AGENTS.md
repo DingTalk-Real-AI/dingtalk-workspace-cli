@@ -3,6 +3,9 @@
 This file applies to `internal/helpers/`. Read the root `AGENTS.md`,
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md), and
 [`docs/coding-agent-guide.md`](../../docs/coding-agent-guide.md) first.
+For package/file layout, read
+[`docs/helpers-structure-guide.md`](../../docs/helpers-structure-guide.md)
+before adding or moving product leaves.
 
 ## Scope and routing
 
@@ -13,6 +16,7 @@ the owning product file and its closest tests before editing.
 |---|---|
 | Root/static command wiring or plugin loading | `internal/app` |
 | Product command flags and handler behavior | `internal/helpers` |
+| Helpers file layout / megafile splits | [`docs/helpers-structure-guide.md`](../../docs/helpers-structure-guide.md) |
 | Shared Cobra construction | `internal/cobracmd` |
 | Invocation and transport | `internal/executor`, `internal/transport` |
 | Structured failures and recovery hints | `internal/errors`, `internal/recovery` |
@@ -23,6 +27,18 @@ the owning product file and its closest tests before editing.
 Do not modify `internal/app` or shared layers merely to register an ordinary
 product leaf when the existing helper construction already owns it. Cross the
 package boundary only when the task changes that shared contract.
+
+## File layout (hard rules)
+
+- Stay in flat `package helpers`; do not add `helpers/{product}` subpackages by
+  default.
+- Product root `{product}.go` owns `new{Product}Command()` and wires subgroups.
+- Put leaves in `{product}_{resource}.go` by CLI resource (see `sheet_*.go`).
+- Do not grow megafiles such as `chat.go` or `aitable.go`; extract or add the
+  resource file instead.
+- Mechanical splits must be behavior-neutral and keep registration symbols
+  stable. Details and size guides:
+  [`docs/helpers-structure-guide.md`](../../docs/helpers-structure-guide.md).
 
 ## Command contract
 
