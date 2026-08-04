@@ -2583,7 +2583,6 @@ func newChatCommand() *cobra.Command {
 	_ = chatGroupMemberRemoveCmd.MarkFlagRequired("users")
 
 	chatGroupCmd.AddCommand(chatGroupCreateCmd, chatGroupMembersCmd, chatGroupRenameCmd)
-	chatGroupCmd.AddCommand(hintSubCmd("search", "use: dws chat search --query <关键词>"))
 	chatGroupMembersCmd.AddCommand(chatGroupMemberAddCmd, chatGroupMemberRemoveCmd, chatGroupMembersAddBotCmd)
 
 	// message 子命令 flags
@@ -5739,11 +5738,6 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageAddFavoriteCmd, chatMessageRemoveFavoriteCmd, chatMessageListFavoritesCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd, chatMessageListEmotionRepliesCmd)
 
 	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd)
-
-	// hint: dws chat send → dws chat message send
-	root.AddCommand(hintSubCmd("send", "use: dws chat message send"))
-	// hint: dws chat history → dws chat message list
-	root.AddCommand(hintSubCmd("history", "use: dws chat message list --group <GROUP_OPEN_CONVERSATION_ID>"))
 
 	return root
 }

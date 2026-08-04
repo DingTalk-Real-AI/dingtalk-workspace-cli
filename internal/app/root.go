@@ -168,6 +168,27 @@ func suppressJSONDeprecationPreamble(root *cobra.Command, args []string) {
 func validateChatWorkbookRawArgs(args []string) error {
 	path := strings.Join(args, " ")
 	switch {
+	case len(args) >= 3 && args[0] == "chat" && args[1] == "group" && args[2] == "search":
+		return apperrors.NewValidation(
+			"chat group 下不存在 search 子命令",
+			apperrors.WithReason("unknown_subcommand"),
+			apperrors.WithActions("群聊搜索使用 dws chat search，而不是 dws chat group search", "移除路径中的 group 后重试"),
+			apperrors.WithExamples(`dws chat search --query <群名关键词> --format json`),
+		)
+	case len(args) >= 2 && args[0] == "chat" && args[1] == "send":
+		return apperrors.NewValidation(
+			"chat 下不存在 send 子命令",
+			apperrors.WithReason("unknown_subcommand"),
+			apperrors.WithActions("发送消息使用 dws chat message send，而不是 dws chat send", "在路径中补充 message 后重试"),
+			apperrors.WithExamples(`dws chat message send --group <openConversationId> --text <消息正文> --format json`),
+		)
+	case len(args) >= 2 && args[0] == "chat" && args[1] == "history":
+		return apperrors.NewValidation(
+			"chat 下不存在 history 子命令",
+			apperrors.WithReason("unknown_subcommand"),
+			apperrors.WithActions("查询会话消息使用 dws chat message list，而不是 dws chat history", "改用 message list 并按帮助补充目标和时间参数"),
+			apperrors.WithExamples(`dws chat message list --group <openConversationId> --time <YYYY-MM-DD HH:mm:ss> --format json`),
+		)
 	case strings.HasPrefix(path, "chat message send ") && rawArgsFlagValue(args, "msg-type") == "file" &&
 		rawArgsContainFlag(args, "media-id"):
 		return apperrors.NewValidation(
@@ -441,7 +462,7 @@ func enrichChatWorkbookError(cmd *cobra.Command, err error) error {
 			"建群命令不支持 --members",
 			"chat group create 使用 --users 接收逗号分隔的成员 userId；--members 是其他命令的参数名",
 			[]string{"将 --members 改为 --users", "成员标识不确定时先查询 userId"},
-			[]string{`dws chat group create --name "V2评审小组" --users 489149,550582 --format json`},
+			[]string{`dws chat group create --name "<群名称>" --users <userId1>,<userId2> --format json`},
 		}
 	case path == "chat group bots" && strings.Contains(message, "unknown flag: --id"):
 		guide = chatWorkbookGuidance{

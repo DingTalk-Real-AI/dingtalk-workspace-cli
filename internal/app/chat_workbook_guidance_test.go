@@ -15,10 +15,74 @@ package app
 
 import (
 	stderrors "errors"
+	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
+
+func TestChatGroupCreateMembersGuidanceUsesGenericExample(t *testing.T) {
+	root := NewRootCommand()
+	cmd := mustFindCommand(t, root, "chat", "group", "create")
+	err := enrichChatWorkbookError(cmd, stderrors.New("unknown flag: --members"))
+
+	var typed *apperrors.Error
+	if !stderrors.As(err, &typed) {
+		t.Fatalf("error = %T, want *errors.Error", err)
+	}
+	joined := strings.Join(typed.Examples, "\n")
+	for _, unwanted := range []string{"V2评审小组", "489149", "550582"} {
+		if strings.Contains(joined, unwanted) {
+			t.Fatalf("example is fitted to evaluation data %q: %s", unwanted, joined)
+		}
+	}
+	for _, want := range []string{"<群名称>", "<userId1>,<userId2>"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("generic example missing %q: %s", want, joined)
+		}
+	}
+}
+
+func TestChatHintPathsAreReportedAsUnknownSubcommandsBeforeFlagParsing(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		args    []string
+		message string
+		flag    string
+	}{
+		{name: "group search", args: []string{"chat", "group", "search", "--query", "1", "--format", "json"}, message: "chat group 下不存在 search 子命令", flag: "--query"},
+		{name: "send", args: []string{"chat", "send", "--group", "cid", "--text", "hi", "--format", "json"}, message: "chat 下不存在 send 子命令", flag: "--group"},
+		{name: "history", args: []string{"chat", "history", "--group", "cid", "--time", "2026-08-03 10:00:00", "--format", "json"}, message: "chat 下不存在 history 子命令", flag: "--group"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateChatWorkbookRawArgs(tc.args)
+			var typed *apperrors.Error
+			if !stderrors.As(err, &typed) {
+				t.Fatalf("error = %T, want *errors.Error", err)
+			}
+			if typed.Message != tc.message || typed.Reason != "unknown_subcommand" {
+				t.Fatalf("guidance = %#v", typed)
+			}
+			if strings.Contains(typed.Message, tc.flag) || strings.Contains(typed.Reason, "unknown flag") {
+				t.Fatalf("subcommand error was misreported as a flag error: %#v", typed)
+			}
+		})
+	}
+
+	root := NewRootCommand()
+	chat := mustFindCommand(t, root, "chat")
+	for _, child := range chat.Commands() {
+		if child.Name() == "send" || child.Name() == "history" {
+			t.Fatalf("chat %s must not be registered as a hint subcommand", child.Name())
+		}
+	}
+	group := mustFindCommand(t, root, "chat", "group")
+	for _, child := range group.Commands() {
+		if child.Name() == "search" {
+			t.Fatal("chat group search must not be registered as a hint subcommand")
+		}
+	}
+}
 
 func TestValidateChatWorkbookRawArgs(t *testing.T) {
 	t.Parallel()
