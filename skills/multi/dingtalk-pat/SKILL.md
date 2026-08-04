@@ -16,8 +16,6 @@ metadata:
 
 > **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, Schema discovery, error handling, and safety rules. The `dws` binary must be on PATH.
 
-<!-- SAFETY_PREAMBLE_INJECT -->
-
 > 命令参考：[pat.md](references/pat.md)。
 
 ## 意图表

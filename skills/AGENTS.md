@@ -13,8 +13,8 @@ is the scoped summary.
 - Keep `SKILL.md` concise: frontmatter (`name`, `description` with triggers +
   `Distinct from` + 命令前缀, `cli_version`), routing prose, and pointers.
   Long references go to `references/`, recipes to `scripts/`.
-- Never remove the `<!-- SAFETY_PREAMBLE_INJECT -->` marker or hand-write the
-  injected preamble.
+- Write safety rules as concise prose; no injected-preamble mechanism exists
+  in this repository.
 - Every referenced `dws` command must exist in the current binary; run
   `make skill-command-integrity` before handoff.
 - Dual-write: CLI behavior changes update skill prose in the same change;

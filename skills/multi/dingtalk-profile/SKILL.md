@@ -16,8 +16,6 @@ metadata:
 
 > **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, URL preflight, error codes, and safety rules. The `dws` binary must be on PATH.
 
-<!-- SAFETY_PREAMBLE_INJECT -->
-
 dws 可同时登录多个钉钉账号，同一组织也可保留多个账号。一个 profile = 一个 `corpId + userId` 身份；当前 profile 决定本次命令注入哪个身份。
 
 ## 触发条件（命中任一即用本 skill）

@@ -43,8 +43,8 @@ metadata:
 
 Body rules:
 
-- Keep the `<!-- SAFETY_PREAMBLE_INJECT -->` marker; the safety preamble is
-  injected at build/setup time, never pasted by hand.
+- State the safety rules directly in concise prose; there is no injected
+  preamble mechanism in this repository.
 - State the `dws-shared` prerequisite for multi skills.
 - Route by intent: shortcuts table first when one covers the scenario, then
   scripts/recipes, then atomic commands with `dws schema` / `--help`.
