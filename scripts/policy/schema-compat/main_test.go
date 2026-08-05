@@ -596,6 +596,67 @@ func TestCrossPlatformCoverageSchemaCompatMCPRetirementAndConstraintExpansion(t 
 	}
 }
 
+func TestCrossPlatformCoverageSchemaCompatReviewedPropertyCorrection(t *testing.T) {
+	if !compatibleReviewedPropertyCorrection(
+		"doc/doc.whiteboard_insert", "ref-block", "refBlock", "referenceBlockId",
+	) {
+		t.Fatal("reviewed whiteboard ref-block correction must be accepted")
+	}
+	if !compatibleReviewedPropertyCorrection(
+		"doc/doc.whiteboard_insert", "parent-block", "parentBlock", "referenceBlockId",
+	) {
+		t.Fatal("reviewed whiteboard parent-block correction must be accepted")
+	}
+	if compatibleReviewedPropertyCorrection(
+		"doc/doc.whiteboard_insert", "ref-block", "refBlock", "otherProperty",
+	) {
+		t.Fatal("non-reviewed new property must remain incompatible")
+	}
+	if compatibleReviewedPropertyCorrection(
+		"doc/doc.create", "title", "title", "subject",
+	) {
+		t.Fatal("unlisted tool/param remap must remain incompatible")
+	}
+
+	baseline := schemaContract{
+		Products: map[string]productSchema{
+			"doc": {Tools: map[string]toolSchema{
+				"doc.whiteboard_insert": {
+					PrimaryCLIPath: "doc whiteboard insert",
+					InterfaceMode:  "composite",
+					Availability:   "available",
+					Effect:         "write",
+					Risk:           "medium",
+					Confirmation:   "user_required",
+					Idempotency:    "unknown",
+					Parameters: map[string]parameterSchema{
+						"ref-block":    {Type: "string", Property: "refBlock"},
+						"parent-block": {Type: "string", Property: "parentBlock"},
+					},
+				},
+			}},
+		},
+	}
+	corrected := cloneContract(baseline)
+	corrected.Products["doc"].Tools["doc.whiteboard_insert"].Parameters["ref-block"] = parameterSchema{
+		Type: "string", Property: "referenceBlockId",
+	}
+	corrected.Products["doc"].Tools["doc.whiteboard_insert"].Parameters["parent-block"] = parameterSchema{
+		Type: "string", Property: "referenceBlockId",
+	}
+	if failures := checkCompatibility(baseline, corrected); len(failures) != 0 {
+		t.Fatalf("reviewed property corrections should pass: %v", failures)
+	}
+
+	broken := cloneContract(baseline)
+	broken.Products["doc"].Tools["doc.whiteboard_insert"].Parameters["ref-block"] = parameterSchema{
+		Type: "string", Property: "subject",
+	}
+	if failures := checkCompatibility(baseline, broken); !strings.Contains(strings.Join(failures, "\n"), "changed property") {
+		t.Fatalf("unreviewed property remap should fail: %v", failures)
+	}
+}
+
 func TestCrossPlatformCoverageSchemaCompatAdditiveConstraintEvolution(t *testing.T) {
 	oldTool := toolSchema{
 		Parameters: map[string]parameterSchema{

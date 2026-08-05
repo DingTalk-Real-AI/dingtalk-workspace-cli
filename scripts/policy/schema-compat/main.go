@@ -730,7 +730,6 @@ func checkParameterCompatibility(toolPath, name string, oldParameter, newParamet
 		new  string
 	}{
 		{name: "type", old: oldParameter.Type, new: newParameter.Type},
-		{name: "property", old: oldParameter.Property, new: newParameter.Property},
 		{name: "default", old: oldParameter.Default, new: newParameter.Default},
 		{name: "interface_default", old: oldParameter.InterfaceDefault, new: newParameter.InterfaceDefault},
 		{name: "format", old: oldParameter.Format, new: newParameter.Format},
@@ -738,6 +737,13 @@ func checkParameterCompatibility(toolPath, name string, oldParameter, newParamet
 		if field.old != field.new {
 			failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed %s", toolPath, name, field.name))
 		}
+	}
+	// Property remaps are incompatible unless a reviewed correction replaces
+	// flag-name inference with the ParamDecl-declared MCP field. Arbitrary
+	// non-empty A→B remaps remain a contract break.
+	if oldParameter.Property != newParameter.Property &&
+		!compatibleReviewedPropertyCorrection(toolPath, name, oldParameter.Property, newParameter.Property) {
+		failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed property", toolPath, name))
 	}
 	// Clearing interface_type is accepted as compatible: a deliberate,
 	// wire-visible policy decision taken with the pinned MCP metadata
@@ -777,6 +783,48 @@ func enumNarrowed(oldValues, newValues []string) bool {
 	current := stringSet(newValues)
 	for _, value := range oldValues {
 		if !current[value] {
+			return true
+		}
+	}
+	return false
+}
+
+// reviewedPropertyCorrection is an exact allowlist entry for replacing a
+// historical wire property (typically flag-name inference) with the MCP field
+// declared on leaf ParamDecl.Property. Do not use this to bless arbitrary
+// remaps: each entry must name tool path, parameter, old property, and new
+// property exactly.
+type reviewedPropertyCorrection struct {
+	toolPath    string
+	param       string
+	oldProperty string
+	newProperty string
+}
+
+// Keep this list tiny and evidence-backed. Prefer ParamDecl declaration; only
+// add an entry when schema-compat would otherwise freeze a wrong inferred
+// property that agents bind against.
+var reviewedPropertyCorrections = []reviewedPropertyCorrection{
+	{
+		toolPath:    "doc/doc.whiteboard_insert",
+		param:       "parent-block",
+		oldProperty: "parentBlock",
+		newProperty: "referenceBlockId",
+	},
+	{
+		toolPath:    "doc/doc.whiteboard_insert",
+		param:       "ref-block",
+		oldProperty: "refBlock",
+		newProperty: "referenceBlockId",
+	},
+}
+
+func compatibleReviewedPropertyCorrection(toolPath, param, oldProperty, newProperty string) bool {
+	for _, entry := range reviewedPropertyCorrections {
+		if entry.toolPath == toolPath &&
+			entry.param == param &&
+			entry.oldProperty == oldProperty &&
+			entry.newProperty == newProperty {
 			return true
 		}
 	}
