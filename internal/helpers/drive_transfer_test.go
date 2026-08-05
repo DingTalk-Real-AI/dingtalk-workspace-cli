@@ -2836,6 +2836,28 @@ func TestCrossPlatformCoverageDriveDownloadCancelNoResume(t *testing.T) {
 	}
 }
 
+// 覆盖率补全：drive download cancel + --part-size（可续传）分支。
+func TestCrossPlatformCoverageDriveDownloadCancelWithResumeHint(t *testing.T) {
+	// partSize != "" && !noResume → 「已保存断点」提示；CI 上偶发漏盖会拖低 overall。
+	oldGet := httpGetFile
+	httpGetFile = func(_ context.Context, _ string, _ map[string]string, _ string) error {
+		return context.Canceled
+	}
+	t.Cleanup(func() { httpGetFile = oldGet })
+
+	dest := filepath.Join(t.TempDir(), "cancel-resume.bin")
+	mcpResp := `{"resourceUrl":"https://fake.invalid/f.bin","fileSize":100}`
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: mcpResp},
+	}}
+
+	err := executeDriveEdge(t, caller,
+		"download", "--node", "node-1", "--output", dest, "--part-size", "1MB")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("应返回 context.Canceled, got: %v", err)
+	}
+}
+
 // ──────────────────────────────────────────────────────────
 // 覆盖率补全：drive.go:652 download-version 命令 cancel + --no-resume else 分支
 // ──────────────────────────────────────────────────────────

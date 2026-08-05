@@ -78,6 +78,29 @@ type releaseTestRepo struct {
 	verify     string
 }
 
+// releaseTempDir is like t.TempDir but retries RemoveAll. Bare git remotes can
+// briefly leave remote.git/objects non-empty on Linux CI, and testing.T's
+// TempDir cleanup then fails the test after assertions already passed.
+func releaseTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "dws-release-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() {
+		var last error
+		for i := 0; i < 20; i++ {
+			last = os.RemoveAll(dir)
+			if last == nil {
+				return
+			}
+			time.Sleep(time.Duration(i+1) * 25 * time.Millisecond)
+		}
+		t.Logf("releaseTempDir cleanup after retries: %v", last)
+	})
+	return dir
+}
+
 func newReleaseTestRepo(t *testing.T) *releaseTestRepo {
 	t.Helper()
 	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
@@ -85,7 +108,7 @@ func newReleaseTestRepo(t *testing.T) *releaseTestRepo {
 		t.Fatalf("Abs(repo root) error = %v", err)
 	}
 
-	base := t.TempDir()
+	base := releaseTempDir(t)
 	root := filepath.Join(base, "work")
 	remote := filepath.Join(base, "remote.git")
 	mustRun(t, base, "git", "init", "--bare", remote)
