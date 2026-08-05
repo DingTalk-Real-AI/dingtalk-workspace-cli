@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -312,6 +313,35 @@ func TestDocWhiteboardInsertSoftSucceedsWhenBlockNotYetVisible(t *testing.T) {
 	}
 	if result["blockId"] == "" || result["blockId"] == nil {
 		t.Fatalf("output = %#v, want blockId preserved on soft success", payload)
+	}
+}
+
+// 定位 flag 必须声明为 MCP referenceBlockId，不能退化成 Cobra 名推断的
+// refBlock / parentBlock，否则 Schema 会误导 Agent 绑参。
+func TestDocWhiteboardInsertDeclaresReferenceBlockProperties(t *testing.T) {
+	cmd, remaining, err := newDocWhiteboardCommand().Find([]string{"insert"})
+	if err != nil || len(remaining) != 0 {
+		t.Fatalf("find doc whiteboard insert: command=%v remaining=%v err=%v", cmd, remaining, err)
+	}
+	final, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok {
+		t.Fatal("doc whiteboard insert must publish ContractFinal")
+	}
+	want := map[string]string{
+		"node":         "nodeId",
+		"ref-block":    "referenceBlockId",
+		"where":        "where",
+		"parent-block": "referenceBlockId",
+		"index":        "index",
+	}
+	got := map[string]string{}
+	for _, p := range final.Parameters {
+		got[p.Name] = p.Property
+	}
+	for name, property := range want {
+		if got[name] != property {
+			t.Fatalf("ParamDecl %q Property = %q, want %q (all=%#v)", name, got[name], property, got)
+		}
 	}
 }
 

@@ -275,6 +275,12 @@ CLI 生成卡片块 UUID 与白板资源 ID，插入后按块 UUID 回查并验�
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "node", Property: "nodeId", Required: boolPtr(true)},
+				// 与 doc block insert 对齐：同级/容器定位都映射到 MCP referenceBlockId，
+				// 避免 Cobra 名推断成 refBlock/parentBlock 误导 Agent 绑参。
+				{Name: "ref-block", Property: "referenceBlockId"},
+				{Name: "where", Property: "where"},
+				{Name: "parent-block", Property: "referenceBlockId"},
+				{Name: "index", Property: "index", InterfaceType: "integer"},
 			},
 		},
 	})
