@@ -26,29 +26,31 @@
 
 **未读以上文件就改写已有文档会导致富结构丢失、参数错误或样式不达标。其他命令（阅读 / 评论 / 权限 / 附件 / 下载导出 / 文件操作）按需查下方 §命令索引表跳转对应子文件加载，不必提前加载。**
 
-## 查询命令帮助
+## Atomic 命令加载契约
 
-当你不确定某个命令的具体参数、格式或可选项时，**优先执行 `--help` 查询**，不要猜测参数名或凭记忆编造。
+本文件只负责 atomic branch 路由；公开 Shortcut 的选择与发现只在根
+[`SKILL.md`](../SKILL.md) 维护，不在 references 重复列出。
+
+命令已经选中且参数清楚时直接执行，不做重复发现。参数、约束或安全语义不确定时，
+先查询精确 leaf Schema；只有当前 Cobra flag 不确定时才查询精确 leaf `--help`。
+不要加载产品级全量 Schema，也不要猜测参数名。
 
 ```bash
-# 查看 doc 下所有子命令
-dws doc --help
+# 参数、约束或安全语义不确定
+dws schema --cli-path "doc update" --format json
 
-# 查看具体命令的完整参数说明
+# 仅 Cobra flag 不确定
 dws doc read --help
 dws doc create --help
 dws doc block insert --help
-
-# 查看子命令组下的所有命令
-dws doc block --help
-dws doc media --help
 ```
 
 规则：
 
-- 参数名不确定时 → 先 `--help`，再调用
-- 报错 "unknown flag" 时 → `--help` 确认正确的 flag 名称
-- 不确定某个功能是否存在时 → `dws doc --help` 查看命令列表
+- 参数、约束、安全不确定 → leaf Schema
+- `unknown flag` 或当前 Cobra flag 不确定 → leaf `--help`，修正一次
+- 能力或分支未知 → 先用下方场景/命令索引；仍无法定位才回根 Skill 的 Runtime Shortcut Catalog
+- Schema 与 Help 冲突 → 采用更安全解释并报告契约漂移
 
 ## 命令索引表
 

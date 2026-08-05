@@ -10,10 +10,11 @@
 | "参照这个生成同样的 / 按模板生成 / 复刻 X / 同样的模板 X 月份的" + 已有 alidocs URL | 模板保形生成同形态变体 | `drive copy + drive rename + doc block update` → 见 [best_practices/04-document.md `template-based-generation`](../../dingtalk-doc/references/04-document.md#template-based-generation) | `doc read + doc create`（重写链） | adoc → markdown 是有损投影，read+create 会丢行高/单元格背景色/字号；copy 在 adoc 层保形复制后只在副本上局部修改 |
 | "这个 alidocs 表格链接帮我看下"（粘贴原始 URL） | 先 probe 节点类型 | `dws drive info --node` → 按 `extension` 路由 | 直接调 `sheet` | `alidocs/i/nodes/{id}` 可能是文档/axls/able/xlsx 等，禁止凭 URL 猜类型 |
 | "帮我记一下明天要做的事" | 创建个人待办 | `todo` | `doc` | 个人待办提醒，非文档内容 |
-| "在知识库里创建一个文档" | 创建空文件实体 | `wiki node create --type adoc` | `doc create` | 空间内创建节点归 wiki；doc create 是向已有文档写入内容，不是创建文件节点 |
+| "在这个知识库里写一篇/创建带内容的文档" | 在已知知识库根创建 adoc 并写入正文 | `doc create --workspace <workspaceId> --name ... --content-file ...` | 先建空 wiki 节点再重复写入 | `doc create` 的真实 Cobra/Schema 支持 `--workspace`，适合一步创建带内容 adoc |
+| "只在知识库里建一个空文档节点/整理节点层级" | 创建或管理知识库节点实体 | `wiki node create --type adoc` | `doc create` | 空节点与目录层级归 wiki；正文创作归 doc |
 | "帮我看看收到的日报" | 收到的日志 | `report` | `doc` | 钉钉日志系统（日报/周报），不是文档 |
 | "整理一下XX项目的所有讨论" | 跨源主题归档 | #5 generate-topic-report | #4 write-doc | #4 侧重单篇文档创作；按主题跨听记/群消息汇总属于工作汇报 |
 | "搜一下智能化方案/最近 OKR 相关邮件/最近发版相关消息" | 搜企业知识内容 | `aisearch enterprise` | `doc search` / `mail search` / `chat message search` | 跨文档、消息、日程、听记、邮件等企业内容语义检索走 enterprise；具体 `queries/types/time-range` 抽槽见 `aisearch.md` |
 | "我发给某人的消息/邮件/文档/今天我干了什么" | 搜行为记录 | `aisearch behavior` | `chat` / `mail` / `doc` / `report` | 关注“谁对什么做过什么”，走 behavior；具体 `behavior-type/direction/chat-scope` 抽槽见 `aisearch.md` |
 | "把这段文字翻译成英文/translate this" | 通用文本翻译 | `chat text translate` | `doc` / `aisearch` | 纯文本翻译，不是文档编辑或语义搜索 |
-| "帮我把这个文档翻译成日文" | 文档内容翻译 | 先 `doc get` 再 `chat text translate` | `chat text translate` 直接传文件 | translate 仅支持纯文本，需先提取文档内容 |
+| "帮我把这个文档翻译成日文" | 文档内容翻译 | 先 `doc read --node <nodeId>` 再 `chat text translate` | `chat text translate` 直接传文件 | translate 仅支持纯文本，需先读取 adoc 正文 |

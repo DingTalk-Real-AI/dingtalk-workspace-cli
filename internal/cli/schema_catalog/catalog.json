@@ -1,12 +1,12 @@
 {
   "version": 1,
   "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
-  "source_hash": "sha256:2bdcd3ac9d59f625cd4ed1e97938357b68ac483ef213a9e739baac67e3a1db3b",
+  "source_hash": "sha256:399dcd69d9f98e98ef9668edb6d965b59f5f61f9964f9546fb5796fee9b08865",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
-      "source_hash": "sha256:add7be57e9ed6b69783be5df6d321c83ebe3b9c71a934e9991d91ee41fea23f4",
+      "source_hash": "sha256:709741e6cd06537bcf0c4bfb6a8930a14f9a43108128e1064b712bd9e2fbaa42",
       "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
       "surface_products": 26,
       "surface_tools": 875,
@@ -15377,13 +15377,13 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "创建一篇新的在线文档",
+            "agent_summary": "在默认根目录、文档文件夹或知识库根创建带可选初始内容的 adoc",
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
               "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
-              "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-              "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+              "只管理知识库空节点或层级时用 wiki node create；本命令侧重创建并写入 adoc",
+              "导入本地 Word/Markdown 并保留服务端转换语义时用 dws doc import；不要用自写分片脚本替代原生 create"
             ],
             "canonical_path": "doc.create_document",
             "cli_name": "create",
@@ -15404,8 +15404,8 @@
             "risk": "medium",
             "title": "创建文档",
             "use_when": [
-              "用户要新建一篇文字在线文档(adoc)，可空文档或带初始 Markdown 时",
-              "创建到指定文件夹 --folder、知识库根 --workspace，或默认「我的文档」根目录时"
+              "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入 Markdown/JSONML 时",
+              "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片"
             ]
           },
           {
@@ -15665,7 +15665,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "非 adoc（表格/多维表/普通文件）不要用本命令；先 doc info 再路由",
+              "原始 alidocs URL 类型未知或目标不是 adoc 时先用 drive info 探测并路由；表格/多维表/普通文件不要用本命令",
               "要元信息用 doc info；要块结构用 doc block list",
               "Markdown 为有损投影：保形复制模板请用 doc copy，不要 read→create"
             ],
@@ -15688,20 +15688,21 @@
             "risk": "low",
             "title": "读取文档内容 (Markdown)",
             "use_when": [
-              "用户要读取钉钉在线文字文档(adoc)正文（Markdown）时",
-              "用户直接粘贴文档 URL 且无其他指令时（默认读内容）",
+              "已由 drive info 确认 extension=adoc，用户要读取正文（Markdown）时",
+              "用户提供已知 adoc nodeId/URL，且要读取内容或抽取指定章节时",
               "只需标题大纲、指定块区间/单块或特定 JSONML tags 时使用 --content-format jsonml 与 --scope"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取文档元信息（标题/类型/创建者/权限等）",
+            "agent_summary": "在已确认是 ALIDOC 后读取文档专属元信息",
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "已确认是 adoc 且只要正文改用 dws doc read",
+              "原始 alidocs URL 的类型探测、extension 路由或可靠 fileSize 使用 dws drive info；不要先猜是文档",
+              "已确认是 adoc 且只要正文时改用 dws doc read",
               "只要目录列表改用 dws drive list / wiki node list",
-              "需要可靠文件大小 fileSize 时改用 dws drive info；文档元信息接口可能不返回大小"
+              "普通文件、电子表格或 AI 表格不使用本命令"
             ],
             "canonical_path": "doc.get_document_info",
             "cli_name": "info",
@@ -15722,8 +15723,8 @@
             "risk": "low",
             "title": "获取文档元信息",
             "use_when": [
-              "用户要查看文档/节点元信息（标题、类型、创建者、权限）时",
-              "准备读内容前必须先看 contentType/extension 以路由到 read/sheet/aitable/download 时"
+              "drive info 已确认是 ALIDOC，用户还要标题、创建者、权限或 docUrl 等文档专属元信息时",
+              "创建响应只有 nodeId、缺少 docUrl，需要补查文档链接时"
             ]
           },
           {
@@ -16244,7 +16245,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "常规文件管理优先 drive copy；要搬走原件用 move；复制后必须从真实返回取副本 nodeId，禁止继续编辑源文档"
             ],
             "canonical_path": "doc.shortcut_copy",
             "cli_name": "+copy",
@@ -16270,7 +16271,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "长、多行、表格或文件内容使用 doc update --mode append --content-file；指定位置或富结构使用 block insert；不要跳过 user_required 确认"
             ],
             "canonical_path": "doc.shortcut_doc_append",
             "cli_name": "+doc-append",
@@ -16322,7 +16323,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "用户要直接拿到本地 docx/markdown/pdf 文件时使用一体化 dws doc export；不要默认手工编排 submit/get 轮询"
             ],
             "canonical_path": "doc.shortcut_export_submit",
             "cli_name": "+export-submit",
@@ -16348,7 +16349,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "需要最近访问、extension/时间/创建者等组合过滤时使用 +search；目标已给 nodeId/URL 时直接进入 info/read，不再搜索"
             ],
             "canonical_path": "doc.shortcut_find_doc",
             "cli_name": "+find-doc",
@@ -16374,7 +16375,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "全局或钉盘目录浏览优先 drive list，知识库节点树优先 wiki node list；本 Shortcut 只列已知 doc folder/workspace 的直接子节点"
             ],
             "canonical_path": "doc.shortcut_list",
             "cli_name": "+list",
@@ -16400,7 +16401,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "常规文件管理优先 drive move；要保留原位置副本用 copy；目标位置不明确或未确认时不要移动"
             ],
             "canonical_path": "doc.shortcut_move",
             "cli_name": "+move",
@@ -16426,7 +16427,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "只有一个关键词且只要紧凑标题/URL/type/token 投影时优先 +find-doc；目标已给 nodeId/URL 时不要再搜索"
             ],
             "canonical_path": "doc.shortcut_search",
             "cli_name": "+search",
@@ -16452,7 +16453,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "同名人员未消歧、缺少真实文档 URL 或用户未确认时不要发送；本命令不授予文档权限，授权应走 drive permission"
             ],
             "canonical_path": "doc.shortcut_share_doc",
             "cli_name": "+share-doc",
@@ -16556,7 +16557,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "只查看历史用 +version-list，只保存当前快照用 +version-save；版本号未核实、用户未确认或只需改单块时不要回滚"
             ],
             "canonical_path": "doc.shortcut_version_revert",
             "cli_name": "+version-revert",
@@ -16820,13 +16821,14 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新文档内容（追加 / 覆盖；覆盖需 --yes）",
+            "agent_summary": "用原生自动分片管道追加或整篇覆盖 adoc 内容",
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "目标不是 adoc 或只要改单个块时改用 doc block update",
+              "只在末尾补一小段纯文本优先 +doc-append；只改一个块用 doc block update",
+              "目标不是 adoc 时按 drive info 的 extension 切对应产品",
               "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
-              "创建新文档用 doc create，不要用 update 冒充创建"
+              "创建新文档用 doc create；不要预先手工分片或循环重试覆盖"
             ],
             "canonical_path": "doc.update_document",
             "cli_name": "update",
@@ -16847,7 +16849,7 @@
             "risk": "medium",
             "title": "更新文档内容",
             "use_when": [
-              "用户要向已有 adoc 追加内容时用 --mode append（更安全）",
+              "用户要向已有 adoc 追加长、多行或文件内容时用 --mode append + --content-file；CLI 自动分片",
               "用户明确要求整篇覆盖替换时用 --mode overwrite（破坏性）",
               "append 且要插到第 N 个 block 前时加 --index N（先 block list）"
             ]

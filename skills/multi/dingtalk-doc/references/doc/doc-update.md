@@ -75,7 +75,7 @@ Flags:
 
 ## 内容写入管道（create / update 共用）
 
-> **关键原则**：CLI 内置自动分片。超长内容（>30000 字符）自动按 markdown 结构切分后逐片写入，对调用方透明。写入完成后由调用方自行决定是否回读确认。
+> **关键原则**：CLI 内置自动分片。Markdown 超过 10,000 个 Unicode 字符时自动按结构切分后逐片写入，对调用方透明。调用方必须在写入后回读确认。
 
 ### 输入方式选择
 
@@ -88,9 +88,9 @@ Flags:
 
 ### 自动分片行为
 
-当内容超过 30000 字符时，CLI 自动执行：
+当 Markdown 内容超过 10,000 个 Unicode 字符时，CLI 自动执行：
 
-1. **create**: 先创建空文档拿 `nodeId`，再按 markdown 标题边界切分后逐片 append
+1. **create**: 第一片随 create 写入并取得 `nodeId`，后续片 append
 2. **update (overwrite)**: 第一片用 overwrite，后续片用 append
 3. **update (append)**: 所有片段用 append
 
@@ -124,13 +124,13 @@ CLI **不会**自动执行回读验证。**你必须在文档写入完成后主�
 ### 进度输出示例
 
 ```
-[INFO] 内容较长 (45000 字符)，自动分片写入...
-[INFO] 已创建空文档 (nodeId=abc123)，开始分片写入...
-[INFO] 写入分片 (1/3)，15000 字符...
-[INFO] 写入分片 (2/3)，15000 字符...
-[INFO] 写入分片 (3/3)，15000 字符...
+[INFO] 内容较长 (25000 字符)，自动分片写入...
+[INFO] 写入分片 (1/3)，10000 字符 (create)...
+[INFO] 文档已创建 (nodeId=abc123)
+[INFO] 写入分片 (2/3)，10000 字符...
+[INFO] 写入分片 (3/3)，5000 字符...
 [INFO] 全部 3 个分片写入完成
-{"success": true, "nodeId": "abc123", "chunksWritten": 3}
+{"success":true,"nodeId":"abc123","chunksWritten":3}
 ```
 
 ### CONTENT_TRUNCATED 错误
@@ -153,24 +153,16 @@ CLI **不会**自动执行回读验证。**你必须在文档写入完成后主�
 | `--content -` | 从 stdin 读取（可配合 heredoc/pipe） |
 | `--content-file path` | 从文件读取（UTF-8），推荐 |
 
-### 短/中等长度（< 200KB）— 单步写入
+### 单一原生命令（所有长度默认路径）
 
 ```bash
 # 1. 把内容写入 UTF-8 文本文件：
 #    Linux/Mac: /tmp/<name>.md；Windows: %TEMP%\<name>.md
-# 2. 一步写入：
+# 2. 一次调用；CLI 按需自动分片：
 dws doc update --node <DOC_ID> --content-file <tmp> --mode overwrite --content-format markdown
 ```
 
-### 超长（> 200KB 兜底）— 分片追加
-
-```bash
-# 1. 按 markdown 标题或段落边界切成 ≤200KB 的片段（不要切断表格）
-# 2. 逐个追加：
-dws doc update --node <nodeId> --content-file <part> --mode append --content-format markdown
-```
-
-> **注意**：分块 append 存在静默失败风险（部分片段返回 success 但实际未写入），执行前**必须**向用户发出截断风险提示并等待确认。完整规范见 [`../../best_practices/04-document.md` «分块 append 截断风险提示»](../04-document.md)。
+只有命令返回 `CONTENT_TRUNCATED`、被中断或回读确认缺失时，才先读取已写入内容定位断点，再用一次 `doc update --mode append --content-file <missing.md>` 补缺失部分。不要在调用原生命令前复制一套手工分片循环。
 
 ### stdin 变体
 
