@@ -14,4 +14,7 @@
 | "列出钉盘团队空间" | 列出钉盘空间 | `wiki space list --type orgSpace` | `drive list-spaces` | 空间管理归 wiki，drive list-spaces 已 deprecated |
 | "在知识库里搜方案" | 空间内搜索 | `wiki node search --workspace` | `drive search` | 指定了空间上下文 → wiki node search |
 | "搜一下有没有叫XX的文件" | 全局搜索 | `drive search` | `wiki node search` | 未指定空间 → drive search 全局聚合搜索 |
+| "钉盘里最新的日报是哪份" | 范围内按修改时间取最新 | `drive list --pattern "*日报*" --latest 1` | `report inbox list` | 出现"钉盘/知识库/文件"等载体词时，"日报"是文件名而非钉钉日志模版 |
+| "这个知识库最近改过的 5 个文档" | 知识库按修改时间取最新 | `drive list --workspace <id> --latest 5` | `drive list --limit 50` 后自行排序 | 知识库无服务端排序，`--latest` 已内建全量扫描 + Top-N，自行排序会漏掉未翻到的页 |
+| "我最近看过/改过哪些文档" | 个人访问记录 | `drive recent` | `drive list --latest` | recent 按个人访问记录跨空间；`--latest` 需要先框定范围 |
 | "整理一下XX项目的所有讨论" | 跨源主题归档 | #5 generate-topic-report | #4 write-doc | #4 侧重单篇文档创作；按主题跨听记/群消息汇总属于工作汇报 |

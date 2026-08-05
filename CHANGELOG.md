@@ -6,6 +6,20 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **`drive list --latest N`** — returns the N most recently modified files (1–50) in one command,
+  replacing the "fetch everything and sort client-side" workaround. Combines with `--pattern`
+  ("newest N among name matches"), `--folder` / `--space-id`, `--workspace` (Knowledge Base), and
+  `--depth`. The DingTalk Drive single-layer route uses server-side `orderBy=modifyTime&order=desc`
+  and stops as soon as N is filled (typically one request); the Knowledge Base and recursive routes
+  reuse the existing BFS walk and sort client-side. Folders never enter the Top-N. Mutually
+  exclusive with `--order-by` / `--order` / `--limit` / `--cursor` / `--versions`, and every
+  exclusivity error carries the equivalent rewrite. When a recursive scan hits the 2000-item cap the
+  command **fails** with `LATEST_SCAN_TRUNCATED` and empty stdout rather than emitting a Top-N that
+  may not be globally newest; falling short of N is not a failure (exit 0 plus a stderr hint).
+  See [docs/drive-list-latest-design.md](docs/drive-list-latest-design.md).
+
 ### Changed
 
 - **Pinned MCP metadata retired** — deletes `internal/cli/schema_mcp_metadata.json` and removes its embed/loader/fallback role from Schema assembly. Catalog now assembles from Contract/ParamDecl/Interface + Cobra only; `make fetch-mcp-metadata` remains an optional diagnostic dump under `artifacts/` and refuses the retired pin path. Policy bans the pin from reappearing.

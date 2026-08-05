@@ -330,8 +330,9 @@ Flags:
 用户说"有什么日志模版" → `template list` 或 `template get`
 用户说"我发过的日志/我创建的日志" → `outbox list`
 用户说"别人发给我的日志/我收到的日志" → `inbox list`
+用户说"钉盘/知识库里最新的日报（文件）" → **不是 report**，走 `drive list --pattern "*日报*" --latest 1`
 
-关键区分: report(钉钉日志模版汇报，含提交) vs doc(文档编辑) vs todo(待办任务)
+关键区分: report(钉钉日志模版汇报，含提交) vs drive(作为文件存在的日报/周报，用 `drive list --latest`) vs doc(文档编辑) vs todo(待办任务)
 
 ## 核心工作流
 

@@ -34,6 +34,7 @@
 | "给张三发一条机器人单聊消息" | 机器人单聊 | `chat +messages-send --as bot --users` | `chat message send-by-bot --users` | 机器人批量单聊，先查 userId |
 | "CPU 超过 90% 自动告警" | Webhook 告警 | `chat +messages-send --as webhook` | `chat message send-by-webhook` | 系统告警场景，需自定义 Webhook token |
 | "帮我看看收到的日报" | 收到的日志 | `report` | `doc` | 钉钉日志系统（日报/周报），不是文档 |
+| "钉盘里最新的日报是哪份" | 范围内按修改时间取最新 | `drive list --pattern "*日报*" --latest 1` | `report inbox list` | 出现"钉盘/知识库/文件"等载体词时，"日报"是文件名而非钉钉日志模版 |
 | "帮我创建一个待办提醒" | 个人待办 | `todo` | `report` | 个人任务提醒，不是日志汇报 |
 | "拉取一下上周项目群的聊天记录" | 拉取会话消息 | `chat +chat-messages` | `chat message list` | Shortcut 投影发言人/文本/时间并可处理资源 |
 | "看看张三发给我的消息" | 按发送者查询消息 | `chat message list-by-sender` | `chat message list --user` | 用户未明确说"单聊"时优先用 list-by-sender（跨单聊/群聊） |
@@ -250,6 +251,9 @@ alidocs 链接表面长得一样（`https://alidocs.dingtalk.com/i/nodes/{id}`�
 - "列出钉盘文件" → `drive list`
 - "列出知识库里的文件" → `drive list --workspace <id>` 或 `wiki node list --workspace <id>`
 - "列出所有空间" → `wiki space list`
+- "钉盘里最新的日报是哪份" → `drive list --pattern "*日报*" --latest 1`（范围已知 + 按修改时间取最新）
+- "这个知识库最近改过的 5 个文档" → `drive list --workspace <id> --latest 5`
+- "我最近看过/改过哪些文档" → `drive recent`（按个人访问记录跨空间，不是按范围取最新）
 
 ---
 
@@ -338,16 +342,20 @@ dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --msg-type
 - "有什么日志模版" — 查看模版 (`report template list`)
 - "看看这个日志的已读统计" — 阅读状态 (`report entry stats`)
 - "我发过的日志有哪些" — 发件箱列表 (`report outbox list`)
-- 用户提到"日报"、"周报"、"日志"
+- 用户提到"日报"、"周报"、"日志"，**且未指向具体文件载体**（没提钉盘/知识库/文件/文档/附件，也没给文件名后缀）
 
 **用 `doc` 的场景**：
 - "帮我写个项目总结文档" — 长文本创作（钉钉在线文档，非日志模版）
+
+**用 `drive` 的场景**（"日报"是文件名而非日志模版）：
+- "钉盘里最新的日报是哪份" / "知识库里最近改的那份周报" — `drive list --pattern "*日报*" --latest 1`
+- 判别信号：出现"钉盘/知识库/文件夹/文件/附件/`.xlsx`/`.docx`"等载体词，或"最新/最近改的**那个文件**"
 
 **用 `todo` 的场景**：
 - "记一下这周要做的事" — 个人任务管理
 - "创建一个待办提醒" — 仍归 `todo`：先创建待办，再用 `task add-reminder` 写入；需说明上游不支持读取 reminderRules，不能写后读回核验
 
-**判断关键**：钉钉日志系统(日报/周报模版，含按模版创建汇报)→ `report`；文档/知识库长文→ `doc`；任务清单→ `todo`
+**判断关键**：钉钉日志系统(日报/周报模版，含按模版创建汇报)→ `report`；作为**文件**存在的日报/周报（钉盘或知识库里的）→ `drive list --latest`；文档/知识库长文→ `doc`；任务清单→ `todo`
 
 ---
 

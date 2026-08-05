@@ -34,6 +34,9 @@ Usage:
 Example:
   dws drive list --limit 20
   dws drive list --limit 20 --folder <dentryUuid> --order-by name --order asc
+  dws drive list --pattern "*日报*" --latest 3
+  dws drive list --workspace <workspaceId> --latest 5
+  dws drive list --depth 3 --pattern "*.xlsx"
 Flags:
       --limit int           每页返回数量，默认 20，最大 50 (可选)
       --cursor string       分页游标，首次不传 (可选)
@@ -43,9 +46,33 @@ Flags:
       --space-id string     钉盘空间 ID (纯数字)，不传则使用「我的文件」对应 spaceId (可选)
       --workspace string    文档空间/知识库 ID (加密 string 或 URL)，传入则路由到文档空间 (可选)
       --thumbnail           是否返回缩略图信息 (可选，仅钉盘)
+      --depth int           递归列出子目录层级，默认 1(仅当前层)，最大 5；与 --cursor/--limit 互斥 (可选)
+      --pattern string      按名称通配过滤结果，如 "*日报*" (客户端过滤) (可选)
+      --latest int          按修改时间取最新 N 个文件（1~50）；与 --order-by/--order/--limit/--cursor 互斥 (可选)
+      --quiet               关闭递归/扫描进度输出(stderr)，不影响 stdout JSON (可选)
 ```
 
 > 统一入口：默认列钉盘空间（`--space-id` 纯数字）；传 `--workspace` 时路由到文档空间/知识库列表。
+
+> **`--depth` 递归语义**：`--depth N` 逐层 BFS 展开子目录，返回项附带 `depth`（层级，根级为 1）、
+> `parentId`、`rel_path`（相对根的路径）三个字段，输出按 `rel_path` 树序排列。
+> 全局最多返回 2000 条，触顶时返回 `truncated: true`；单个目录读取失败不中断整体，
+> 失败记录进 `errors[]`（含 `folderId` / `reason` / `message`）。`--pattern` 是**先递归后过滤**：
+> 过滤只作用于输出项，不阻止文件夹继续下钻。递归途中 Ctrl-C 会输出已收集的部分结果并以退出码 130 结束。
+
+> **`--latest` 语义**：取「按修改时间排序后最新的 N 个**文件**」，文件夹不参与排序也不出现在结果里。
+> 输出按修改时间倒序（第 1 条最新），不再保持 `rel_path` 树序。
+> - 与 `--pattern` 组合 = 「名称匹配的文件中最新 N 个」，例如 `--pattern "*日报*" --latest 3`
+> - 与 `--workspace` / `--depth` 均可组合；`--depth 1`（默认）时输出不带 `depth`/`rel_path` 装饰字段，与普通 `list` 一致
+> - 与 `--order-by` / `--order` / `--limit` / `--cursor` **互斥**：Top-N 的排序语义由 `--latest` 独占。
+>   需要自定义排序或翻更早的页时改用原语：`--order-by modifyTime --order desc --limit N`
+> - 钉盘单层借服务端排序，凑够 N 条即停，最多扫描 1000 条；凑不满 N 不算失败（退出码 0），
+>   stderr 会给出缩小范围的建议
+> - 递归扫描触到 2000 条全局上限时**直接报错**（`LATEST_SCAN_TRUNCATED`）而不是返回部分结果：
+>   未扫描区域可能含更新的文件，此时的 Top-N 不是全局最新。按提示用 `--folder` 缩小范围或降低 `--depth`
+
+> **三者路由**：只记得名字关键词、不知在哪 → `drive search`；「我最近看过/改过的文档」（跨空间、按个人
+> 访问记录） → `drive recent`；范围已知（某空间/文件夹/知识库）、要按修改时间取最新 → `drive list --latest`。
 
 ### 获取钉盘空间列表
 

@@ -14,6 +14,19 @@
 
 `drive list --workspace <WS_ID>` 或 `wiki node list --workspace <WS_ID>`
 
+### find-latest-file
+
+「最近改的那份 XX」——范围已知时用 `--latest` 一步到位，不要拉全量自己比时间。
+
+1. 框定范围：钉盘用 `--space-id` / `--folder`；知识库用 `--workspace <WS_ID>`
+2. 取最新：`dws drive list --pattern "*日报*" --latest 1 --format json`
+   （知识库：`dws drive list --workspace <WS_ID> --latest 5 --format json`）
+3. 结果按修改时间倒序，第 1 条即最新；文件夹不计入
+4. 找不到足够条数时 CLI 仍返回 0，stderr 会提示放宽 `--pattern` 或换范围
+5. 报 `LATEST_SCAN_TRUNCATED` 说明扫描触到 2000 条上限、Top-N 不可信：用 `--folder` 缩小范围或降低 `--depth` 重试
+
+> 只记得名字、不知道在哪 → 改用 `drive search`；"我最近看过/改过的" → 改用 `drive recent`。
+
 ### import-file
 
 将本地文件导入为钉钉在线文档。**一条命令完成上传+格式转换+创建**，无需先读取文件内容。

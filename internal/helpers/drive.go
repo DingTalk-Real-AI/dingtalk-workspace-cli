@@ -316,20 +316,29 @@ func newDriveCommand() *cobra.Command {
 		Example: `  dws drive list --limit 20
   dws drive list --folder <dentryUuid> --order-by name --order asc
   dws drive list --workspace <workspaceId>
-  dws drive list --workspace <workspaceId> --folder <folderId>`,
+  dws drive list --workspace <workspaceId> --folder <folderId>
+  dws drive list --pattern "*日报*" --latest 3
+  dws drive list --workspace <workspaceId> --latest 5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pattern, _ := cmd.Flags().GetString("pattern")
 
 			depth, _ := cmd.Flags().GetInt("depth")
+			latest, _ := cmd.Flags().GetInt("latest")
 
 			// --versions 模式：列出文件历史版本（仅普通文件）
-			// 先于 --depth 校验执行：versions 模式合法使用 --limit，
+			// 先于 --depth/--latest 校验执行：versions 模式合法使用 --limit，
 			// 不应被「--limit 与 --depth 不兼容」的误导性报错拦截。
 			if cmd.Flags().Changed("versions") {
 				if cmd.Flags().Changed("depth") && depth > 1 {
 					return &CLIError{
 						Code:    CodeInvalidParam,
 						Message: "--versions 与 --depth 不能同时使用",
+					}
+				}
+				if cmd.Flags().Changed("latest") {
+					return &CLIError{
+						Code:    CodeInvalidParam,
+						Message: "--versions 与 --latest 不能同时使用：版本列表按版本序返回，无跨文件 Top-N 语义",
 					}
 				}
 				if pattern != "" {
@@ -358,12 +367,21 @@ func newDriveCommand() *cobra.Command {
 				}
 			}
 
+			if cmd.Flags().Changed("latest") {
+				if err := validateDriveListLatest(cmd, latest); err != nil {
+					return err
+				}
+			}
+
 			// 如果指定了 --workspace，路由到文档空间（doc MCP server）
 			workspaceID := flagOrFallback(cmd, "workspace", "workspace-id")
 			if workspaceID != "" {
 				// depth>1 时 --pattern 放开（先递归后过滤）；--order-by/--space-id/--thumbnail
 				// 知识库无对应参数，静默忽略。
-				if depth > 1 {
+				// latest>0 且 depth==1：知识库无服务端排序须拉全量，复用 BFS maxDepth=1
+				//（限流补偿/页数防线现成），后置处理器在发射函数内取 Top-N 并剥装饰字段；
+				// pattern 同样在 BFS 发射函数内过滤，不再拒绝。
+				if depth > 1 || latest > 0 {
 					quiet, _ := cmd.Flags().GetBool("quiet")
 					baseArgs := map[string]any{"workspaceId": workspaceID}
 					rootFolder := docFolderFlag(cmd, "node", "file-id")
@@ -372,7 +390,7 @@ func newDriveCommand() *cobra.Command {
 							return err
 						}
 					}
-					return runDriveListDepth(cmd, newDocDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet)
+					return runDriveListDepth(cmd, newDocDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest)
 				}
 				if pattern != "" {
 					return &CLIError{
@@ -417,7 +435,27 @@ func newDriveCommand() *cobra.Command {
 						return err
 					}
 				}
-				return runDriveListDepth(cmd, newDrivePanDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet)
+				return runDriveListDepth(cmd, newDrivePanDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest)
+			}
+
+			if latest > 0 {
+				// 钉盘单层 latest：服务端支持 orderBy=modifyTime&order=desc，凑够 N 即停，
+				// 不复用 BFS（否则最高频路径从 O(1) 退化为 O(目录大小)），走独立扫描循环。
+				quiet, _ := cmd.Flags().GetBool("quiet")
+				baseArgs := map[string]any{}
+				if v, _ := cmd.Flags().GetString("space-id"); v != "" {
+					baseArgs["spaceId"] = v
+				}
+				if v, _ := cmd.Flags().GetBool("thumbnail"); v {
+					baseArgs["withThumbnail"] = true
+				}
+				rootFolder := flagOrFallback(cmd, "folder", "parent-id")
+				if rootFolder != "" {
+					if err := validateDriveParentID(rootFolder); err != nil {
+						return err
+					}
+				}
+				return runDriveListLatest(cmd, baseArgs, rootFolder, latest, pattern, quiet)
 			}
 
 			// 默认路由：钉盘文件列表
@@ -1052,7 +1090,8 @@ func newDriveCommand() *cobra.Command {
 	driveListCmd.Flags().String("node", "", "文件 ID (dentryUuid) 或 URL (--versions 模式下必填)")
 	driveListCmd.Flags().String("pattern", "", "按名称通配过滤结果，如 \"*日报*\" (客户端过滤) (可选)")
 	driveListCmd.Flags().Int("depth", 1, "递归列出子目录层级，默认 1(仅当前层)，最大 5；与 --cursor/--limit 互斥；与 --workspace 组合时走知识库递归 (可选)")
-	driveListCmd.Flags().Bool("quiet", false, "关闭递归进度输出(stderr)，不影响 stdout JSON (仅 --depth>1 时有效) (可选)")
+	driveListCmd.Flags().Int("latest", 0, "按修改时间取最新 N 个文件（1~50）；与 --pattern 组合时表示\"名称匹配的文件中最新 N 个\"；可与 --workspace/--depth 组合（扫描触 2000 条上限时报错）；与 --order-by/--order/--limit/--cursor 互斥 (可选)")
+	driveListCmd.Flags().Bool("quiet", false, "关闭递归进度输出(stderr)，不影响 stdout JSON (--depth>1 或 --latest 多页扫描时有效) (可选)")
 
 	driveInfoCmd.Flags().String("node", "", "节点 ID (dentryUuid) (必填)")
 	driveInfoCmd.Flags().String("space-id", "", "节点所属空间 ID (可选)")
