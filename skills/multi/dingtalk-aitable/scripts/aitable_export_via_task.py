@@ -54,15 +54,20 @@ def parse_json_output(raw: str) -> Optional[Dict[str, Any]]:
 
 
 def normalize_download_url(url: str) -> str:
-    if url.startswith("http://") or url.startswith("https://"):
-        return url
-    return f"https://{url}"
+    normalized = url if "://" in url else f"https://{url}"
+    parsed = urlparse(normalized)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise ValueError("downloadUrl 必须是有效的 HTTPS URL")
+    return normalized
 
 
 def download_file(url: str, output_path: Path) -> Tuple[bool, str]:
     req = Request(url, method="GET")
     try:
         with urlopen(req, timeout=180) as resp:
+            redirected = urlparse(resp.geturl())
+            if redirected.scheme != "https" or not redirected.hostname:
+                return False, "download redirect is not HTTPS"
             if resp.status != 200:
                 return False, f"download http status: {resp.status}"
             output_path.write_bytes(resp.read())
@@ -77,6 +82,20 @@ def download_file(url: str, output_path: Path) -> Tuple[bool, str]:
 def fail(msg: str, code: int = 1) -> None:
     print(f"错误：{msg}", file=sys.stderr)
     sys.exit(code)
+
+
+def resolve_output_path(value: Optional[str], file_name: str, overwrite: bool) -> Path:
+    root = Path.cwd().resolve()
+    candidate = Path(value) if value else Path(file_name).name
+    output_path = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+    try:
+        output_path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("输出路径必须位于当前工作目录内") from exc
+    if output_path.exists() and not overwrite:
+        raise ValueError(f"输出文件已存在：{output_path}；如需覆盖请显式传 --overwrite")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    return output_path
 
 
 def build_start_args(args: argparse.Namespace) -> list[str]:
@@ -113,6 +132,7 @@ def main() -> None:
     parser.add_argument("--output", help="本地保存路径（不传则按 fileName 保存到当前目录）")
     parser.add_argument("--dws", default="dws", help="dws 可执行文件路径，默认 dws")
     parser.add_argument("--no-download", action="store_true", help="仅返回 downloadUrl，不下载文件")
+    parser.add_argument("--overwrite", action="store_true", help="允许覆盖当前工作目录内的已有输出文件")
     args = parser.parse_args()
 
     if not validate_resource_id(args.base_id):
@@ -121,6 +141,10 @@ def main() -> None:
         fail("scope=table/view 时必须传 --table-id")
     if args.scope == "view" and not args.view_id:
         fail("scope=view 时必须传 --view-id")
+    if args.table_id and not validate_resource_id(args.table_id):
+        fail("无效的 tableId 格式")
+    if args.view_id and not validate_resource_id(args.view_id):
+        fail("无效的 viewId 格式")
 
     print("[1/2] start export task", file=sys.stderr)
     rc, out, err = run_dws(args.dws, build_start_args(args), timeout_sec=120)
@@ -132,7 +156,7 @@ def main() -> None:
 
     data = obj.get("data", {}) or {}
     status = obj.get("status")
-    if status == "error":
+    if status != "success":
         fail(f"export_data 返回失败: {json.dumps(obj, ensure_ascii=False)}")
 
     download_url = data.get("downloadUrl")
@@ -163,7 +187,7 @@ def main() -> None:
         obj2 = parse_json_output(out2)
         if not obj2:
             fail(f"export_data 轮询返回非 JSON: {out2[:300]}")
-        if obj2.get("status") == "error":
+        if obj2.get("status") != "success":
             fail(f"export_data 轮询返回失败: {json.dumps(obj2, ensure_ascii=False)}")
         d2 = obj2.get("data", {}) or {}
         download_url = d2.get("downloadUrl") or download_url
@@ -194,8 +218,11 @@ def main() -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
-    norm_url = normalize_download_url(download_url)
-    output_path = Path(args.output).expanduser().resolve() if args.output else Path.cwd() / file_name
+    try:
+        norm_url = normalize_download_url(download_url)
+        output_path = resolve_output_path(args.output, file_name, args.overwrite)
+    except ValueError as exc:
+        fail(str(exc))
     ok, dl_err = download_file(norm_url, output_path)
     if not ok:
         fail(f"downloadUrl 下载失败: {dl_err}")

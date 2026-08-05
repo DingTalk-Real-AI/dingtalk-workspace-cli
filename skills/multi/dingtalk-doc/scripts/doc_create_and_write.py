@@ -1,181 +1,179 @@
 #!/usr/bin/env python3
-"""
-在指定目录创建文档并写入 Markdown 内容（一键完成）
+"""用原生 dws 写入管道创建文档，并回读验证。"""
 
-用法:
-    python doc_create_and_write.py \
-        --name "项目周报" \
-        --content "# 本周总结\n\n## 完成事项\n- 任务A"
+from __future__ import annotations
 
-    python doc_create_and_write.py \
-        --name "会议纪要" \
-        --content-file notes.md
-
-    python doc_create_and_write.py \
-        --name "知识库文档" --content "# 内容" --folder FOLDER_ID
-
-    python doc_create_and_write.py --name "test" --content "hello" --dry-run
-"""
-
-import sys
-import json
-import time
-import subprocess
 import argparse
+import json
+import shlex
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
-from typing import List, Any, Optional
+from typing import Any, Optional, Sequence
 
 
-def run_dws(
-    args: List[str], dry_run: bool = False,
-) -> Optional[Any]:
-    cmd = ['dws'] + args
+class ScriptError(RuntimeError):
+    """可预期的脚本执行错误。"""
+
+
+def decode_json_output(output: str) -> Any:
+    """解析 JSON；兼容长内容写入前置的进度行。"""
+    text = output.strip()
+    if not text:
+        raise ScriptError("dws 未返回 JSON")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        for offset, character in enumerate(text):
+            if character not in "[{":
+                continue
+            try:
+                value, end = decoder.raw_decode(text, offset)
+            except json.JSONDecodeError:
+                continue
+            if not text[end:].strip():
+                return value
+    raise ScriptError("dws 返回的不是合法 JSON")
+
+
+def run_dws(args: Sequence[str], dry_run: bool = False) -> Any:
+    """执行一条 dws 命令，并把命令/业务失败统一转成 ScriptError。"""
+    command = ["dws", *args]
     if dry_run:
-        print(f"[dry-run] {' '.join(cmd)}")
-        return {'dry_run': True}
+        print(f"[dry-run] {shlex.join(command)}")
+        return {"dry_run": True}
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60
+            command,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
         )
-        if result.returncode != 0:
-            print(f"  ✗ 错误：{result.stderr.strip()}")
-            return None
-        return json.loads(result.stdout)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError,
-            FileNotFoundError) as e:
-        print(f"  ✗ 错误：{e}")
-        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        raise ScriptError(f"执行 dws 失败：{exc}") from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise ScriptError(
+            f"dws 命令失败：{detail or f'退出码 {result.returncode}'}"
+        )
+    data = decode_json_output(result.stdout)
+    if isinstance(data, dict) and data.get("success") is False:
+        detail = data.get("errorMsg") or data.get("message") or "未知错误"
+        raise ScriptError(f"dws 业务调用失败：{detail}")
+    return data
 
 
-def run_dws_with_retry(
-    args: List[str],
-    dry_run: bool = False,
-    max_retries: int = 3,
-    retry_delay: float = 1.0,
-) -> Optional[Any]:
-    """带重试机制的 dws 命令执行"""
-    last_error = None
-    for attempt in range(1, max_retries + 1):
-        result = run_dws(args, dry_run=dry_run)
-        if result is not None:
-            return result
-        if attempt < max_retries:
-            print(f"  ⚠️  第 {attempt} 次尝试失败，{retry_delay}秒后重试...")
-            time.sleep(retry_delay)
-            retry_delay *= 1.5  # 指数退避
-    return None
+def first_value(payload: Any, keys: Sequence[str]) -> str:
+    """从嵌套响应中提取第一个非空稳定字段。"""
+    if isinstance(payload, dict):
+        for key in keys:
+            value = payload.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip()
+        for value in payload.values():
+            found = first_value(value, keys)
+            if found:
+                return found
+    elif isinstance(payload, list):
+        for value in payload:
+            found = first_value(value, keys)
+            if found:
+                return found
+    return ""
 
 
-def main():
+def run(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description='创建文档并写入内容'
+        description="使用 dws doc create 创建文档并回读验证"
     )
-    parser.add_argument('--name', required=True, help='文档名称')
-    parser.add_argument('--content', default='', help='Markdown 内容')
-    parser.add_argument('--content-file', default='', help='内容文件')
-    parser.add_argument('--folder', default='', help='目标文件夹 ID 或 URL')
-    parser.add_argument('--workspace', default='', help='目标知识库 ID')
-    parser.add_argument(
-        '--mode', default='append', choices=['overwrite', 'append'],
-        help='写入模式: overwrite=覆盖, append=追加 (默认 append)',
+    parser.add_argument("--name", required=True, help="文档名称")
+    content_group = parser.add_mutually_exclusive_group(required=True)
+    content_group.add_argument("--content", help="Markdown 内容")
+    content_group.add_argument("--content-file", help="UTF-8 Markdown 文件")
+    location_group = parser.add_mutually_exclusive_group()
+    location_group.add_argument(
+        "--folder", default="", help="目标文档文件夹 ID 或 URL"
     )
-    parser.add_argument(
-        '--max-retries', type=int, default=3,
-        help='每块写入失败时的最大重试次数 (默认 3)',
+    location_group.add_argument(
+        "--workspace", default="", help="目标知识库 ID 或 URL"
     )
-    parser.add_argument('--dry-run', action='store_true')
-    args = parser.parse_args()
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
 
-    content = args.content
+    supplied_path: Optional[Path] = None
+    temporary_path: Optional[Path] = None
     if args.content_file:
-        p = Path(args.content_file)
-        if not p.exists():
-            print(f"错误：文件不存在: {p}")
-            sys.exit(1)
-        content = p.read_text(encoding='utf-8')
-    if not content:
-        print('错误：需要 --content 或 --content-file')
-        sys.exit(1)
-    chunk_size = 10000
+        supplied_path = Path(args.content_file)
+        if not supplied_path.is_file():
+            raise ScriptError(f"内容文件不存在：{supplied_path}")
+    elif not args.content or not args.content.strip():
+        raise ScriptError("--content 不能为空")
 
-    create_args = ['doc', 'create', '--name', args.name, '--format', 'json']
-    if args.folder:
-        create_args.extend(['--folder', args.folder])
-    if args.workspace:
-        create_args.extend(['--workspace', args.workspace])
+    try:
+        if supplied_path is None and not args.dry_run:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", suffix=".md", delete=False
+            ) as handle:
+                handle.write(args.content)
+                temporary_path = Path(handle.name)
+            supplied_path = temporary_path
 
-    print(f'\n📝 创建文档: {args.name}')
-    create_data = run_dws(create_args, dry_run=args.dry_run)
+        content_path = str(supplied_path) if supplied_path else "<TEMP_CONTENT.md>"
+        create_args = [
+            "doc", "create",
+            "--name", args.name,
+            "--content-file", content_path,
+            "--content-format", "markdown",
+            "--format", "json",
+        ]
+        if args.folder:
+            create_args.extend(["--folder", args.folder])
+        if args.workspace:
+            create_args.extend(["--workspace", args.workspace])
 
-    node_id = None
-    if not args.dry_run:
-        if not create_data:
-            sys.exit(1)
-        node_id = (create_data.get('nodeId')
-                   or create_data.get('dentryUuid')
-                   or create_data.get('id', ''))
-        print(f"  ✓ 文档已创建 (ID: {node_id})")
+        created = run_dws(create_args, dry_run=args.dry_run)
+        node_id = "<NODE_ID>" if args.dry_run else first_value(
+            created, ("nodeId", "dentryUuid")
+        )
+        if not node_id:
+            raise ScriptError("文档创建响应缺少 nodeId，无法验证")
 
-    if len(content) <= chunk_size:
-        mode_label = '追加' if args.mode == 'append' else '覆盖'
-        print(f'\n✍️  写入内容 (模式: {mode_label}, {len(content)} 字符)...')
-        write_data = run_dws([
-            'doc', 'update',
-            '--node', node_id or '<NODE_ID>',
-            '--content', content,
-            '--mode', args.mode,
-            '--format', 'json',
-        ], dry_run=args.dry_run)
-        if write_data:
-            print(f"  ✓ 内容已写入 ({len(content)} 字符)")
-    else:
-        chunks = []
-        pos = 0
-        while pos < len(content):
-            end = min(pos + chunk_size, len(content))
-            if end < len(content):
-                newline_pos = content.rfind('\n', pos, end)
-                if newline_pos > pos:
-                    end = newline_pos + 1
-            chunks.append(content[pos:end])
-            pos = end
+        info = run_dws(
+            ["doc", "info", "--node", node_id, "--format", "json"],
+            dry_run=args.dry_run,
+        )
+        run_dws(
+            ["doc", "read", "--node", node_id, "--format", "json"],
+            dry_run=args.dry_run,
+        )
+        if args.dry_run:
+            return 0
 
-        total_chunks = len(chunks)
-        print(f'\n✍️  内容较长 ({len(content)} 字符), 分 {total_chunks} 块写入...')
-
-        success_chunks = 0
-        for idx, chunk in enumerate(chunks):
-            chunk_mode = args.mode if idx == 0 else 'append'
-            write_data = run_dws_with_retry(
-                [
-                    'doc', 'update',
-                    '--node', node_id or '<NODE_ID>',
-                    '--content', chunk,
-                    '--mode', chunk_mode,
-                    '--format', 'json',
-                ],
-                dry_run=args.dry_run,
-                max_retries=args.max_retries,
-            )
-            if write_data:
-                print(f"  ✓ 块 {idx + 1}/{total_chunks} 已写入 ({len(chunk)} 字符)")
-                success_chunks += 1
-            elif not args.dry_run:
-                # 写入失败，报告部分写入状态
-                print(f"\n❌ 块 {idx + 1}/{total_chunks} 写入失败（已重试 {args.max_retries} 次）")
-                print(f"\n⚠️  文档处于部分写入状态:")
-                print(f"   - 文档 ID: {node_id}")
-                print(f"   - 已写入: {success_chunks}/{total_chunks} 块")
-                print(f"   - 失败位置: 第 {idx + 1} 块")
-                if args.mode == 'overwrite':
-                    print(f"   - 模式: 覆盖模式，文档可能包含不完整内容")
-                    print(f"   - 建议: 手动检查文档内容，或删除后重新创建")
-                else:
-                    print(f"   - 模式: 追加模式，已写入内容已保存")
-                    print(f"   - 建议: 可手动补充剩余内容，或重新运行脚本")
-                sys.exit(1)
-    print('\n✅ 完成!')
+        summary = {
+            "success": True,
+            "nodeId": node_id,
+            "docUrl": first_value(info, ("docUrl", "documentUrl", "url"))
+            or first_value(created, ("docUrl", "documentUrl", "url")),
+            "chunksWritten": first_value(created, ("chunksWritten",)),
+            "verified": True,
+        }
+        print(json.dumps(summary, ensure_ascii=False))
+        return 0
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
-if __name__ == '__main__':
+def main() -> None:
+    try:
+        raise SystemExit(run())
+    except ScriptError as exc:
+        print(f"错误：{exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+
+if __name__ == "__main__":
     main()

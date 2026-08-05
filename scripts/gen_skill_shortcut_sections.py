@@ -55,7 +55,12 @@ PRODUCT_END = "<!-- VISIBLE_SHORTCUTS_END -->"
 # only after verifying that the product skill has its own reviewed routing
 # section and intent table; compacting a sparse skill without an alternative
 # route would make its shortcuts harder to discover.
-COMPACT_PRODUCT_SERVICES = {"chat"}
+COMPACT_PRODUCT_SERVICES = {"aitable", "chat", "doc"}
+
+# These compact products have every public Shortcut curated into Runtime
+# Schema. Keep this separate from COMPACT_PRODUCT_SERVICES because Chat still
+# has reviewed exclusions pending curation.
+FULLY_CURATED_COMPACT_PRODUCT_SERVICES = {"doc"}
 
 def md_escape(value: Any) -> str:
     text = str(value or "")
@@ -135,10 +140,22 @@ def product_section(service: str, rows: list[dict[str, Any]]) -> str:
 
 
 def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
+    if service in FULLY_CURATED_COMPACT_PRODUCT_SERVICES:
+        inventory = (
+            f"`{md_escape(service)}` 当前有 {len(rows)} 条公开 Shortcut，"
+            "已全部进入 Runtime Schema。完整清单保留在 Runtime Shortcut "
+            "Catalog，根 Skill 不重复展开；单条参数与安全契约按需查询 leaf Schema。"
+        )
+    else:
+        inventory = (
+            f"`{md_escape(service)}` 当前有 {len(rows)} 条公开 shortcut。"
+            "完整清单保留在 Runtime Shortcut Catalog；已完成 Schema curation "
+            "的子集可通过 leaf Schema 查询。高频产品根 Skill 不重复展开完整清单。"
+        )
     return f"""{PRODUCT_START}
 ## Shortcut 发现（按需）
 
-`{md_escape(service)}` 当前有 {len(rows)} 条公开 shortcut。完整清单保留在 Runtime Shortcut Catalog；已完成 Schema curation 的子集可通过 leaf Schema 查询。高频产品根 Skill 不重复展开完整清单。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+{inventory}已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
 
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service {md_escape(service)} --compact --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 {PRODUCT_END}"""

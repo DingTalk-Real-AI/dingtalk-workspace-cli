@@ -1,6 +1,10 @@
 {
   "version": 1,
+<<<<<<< HEAD
   "source_hash": "sha256:36b1189bb92154252ca0cfcac9922367d8f03e9534814119d19ea03abe382ae8",
+=======
+  "source_hash": "sha256:b3c33641f91b69b73f3e319e0927e8654b6ba1e24f99071e22ee813a4e9f861d",
+>>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
   "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
   "coverage": {
     "surface_products": 26,
@@ -88,20 +92,20 @@
       ]
     },
     "aitable": {
-      "agent_summary": "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+      "agent_summary": "管理 AI 表格的 Base、Table、Field、Record、视图表单、仪表盘、权限、导入导出与自动化工作流。",
       "agent_summary_source": "dws-agent-selection/aitable",
       "avoid_when": [
-        "目标是在线电子表格单元格读写时用 sheet；普通文档用 doc"
+        "在线电子表格工作表、单元格或公式用 sheet；普通文档用 doc；钉盘普通文件用 drive；类型不明的 alidocs URL 先做类型预检"
       ],
       "field_provenance": {
         "agent_summary": {
-          "value": "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+          "value": "管理 AI 表格的 Base、Table、Field、Record、视图表单、仪表盘、权限、导入导出与自动化工作流。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "candidates": [
             {
-              "value": "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+              "value": "管理 AI 表格的 Base、Table、Field、Record、视图表单、仪表盘、权限、导入导出与自动化工作流。",
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "precedence": "reviewed_explicit",
               "selected": true
@@ -110,7 +114,7 @@
         },
         "avoid_when": {
           "value": [
-            "目标是在线电子表格单元格读写时用 sheet；普通文档用 doc"
+            "在线电子表格工作表、单元格或公式用 sheet；普通文档用 doc；钉盘普通文件用 drive；类型不明的 alidocs URL 先做类型预检"
           ],
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "precedence": "reviewed_explicit",
@@ -118,7 +122,7 @@
           "candidates": [
             {
               "value": [
-                "目标是在线电子表格单元格读写时用 sheet；普通文档用 doc"
+                "在线电子表格工作表、单元格或公式用 sheet；普通文档用 doc；钉盘普通文件用 drive；类型不明的 alidocs URL 先做类型预检"
               ],
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "precedence": "reviewed_explicit",
@@ -128,7 +132,7 @@
         },
         "use_when": {
           "value": [
-            "需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时"
+            "目标是 AI 表格/多维表中的结构化 Base、数据表、字段、记录、视图、权限、文件导入导出或自动化工作流时"
           ],
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "precedence": "reviewed_explicit",
@@ -136,7 +140,7 @@
           "candidates": [
             {
               "value": [
-                "需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时"
+                "目标是 AI 表格/多维表中的结构化 Base、数据表、字段、记录、视图、权限、文件导入导出或自动化工作流时"
               ],
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "precedence": "reviewed_explicit",
@@ -153,10 +157,11 @@
         "internal/cli/schema_hints/selection/aitable.json",
         "skills/mono/SKILL.md",
         "skills/mono/references/intent-guide.md",
-        "skills/mono/references/products/aitable.md"
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable.md"
       ],
       "use_when": [
-        "需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时"
+        "目标是 AI 表格/多维表中的结构化 Base、数据表、字段、记录、视图、权限、文件导入导出或自动化工作流时"
       ]
     },
     "attendance": {

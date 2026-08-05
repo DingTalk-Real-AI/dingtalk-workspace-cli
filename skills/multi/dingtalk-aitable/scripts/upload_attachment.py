@@ -18,6 +18,7 @@
       --records '[{"cells":{"fldAttachId":[{"fileToken":"ft_xxx"}]}}]' --format json
 """
 
+import argparse
 import sys
 import json
 import subprocess
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 
 RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
@@ -43,16 +45,24 @@ def detect_mime_type(file_path: Path) -> str:
     return mime_type or 'application/octet-stream'
 
 
-def run_dws(args: list) -> Optional[Dict[str, Any]]:
+def run_dws(args: list, dws_bin: str = 'dws') -> Optional[Dict[str, Any]]:
     """调用 dws 命令并返回解析后的 JSON 结果。"""
-    cmd = ['dws'] + args
+    cmd = [dws_bin] + args
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if result.returncode != 0:
             print(f"错误：dws 命令失败: {result.stderr.strip()}", file=sys.stderr)
             return None
         try:
-            return json.loads(result.stdout)
+            payload = json.loads(result.stdout)
+            if not isinstance(payload, dict):
+                print('错误：dws 响应 JSON 不是对象', file=sys.stderr)
+                return None
+            if payload.get('status') != 'success':
+                detail = payload.get('summary') or payload.get('error') or payload
+                print(f"错误：dws 业务失败: {detail}", file=sys.stderr)
+                return None
+            return payload
         except json.JSONDecodeError:
             print(f"错误：无法解析 dws 响应: {result.stdout[:300]}", file=sys.stderr)
             return None
@@ -66,6 +76,10 @@ def run_dws(args: list) -> Optional[Dict[str, Any]]:
 
 def upload_to_oss(upload_url: str, file_path: Path, mime_type: str) -> bool:
     """通过 HTTP PUT 上传文件到 OSS。"""
+    parsed = urlparse(upload_url)
+    if parsed.scheme != 'https' or not parsed.hostname:
+        print('错误：uploadUrl 必须是有效的 HTTPS URL', file=sys.stderr)
+        return False
     file_data = file_path.read_bytes()
     req = Request(upload_url, data=file_data, method='PUT')
     req.add_header('Content-Type', mime_type)
@@ -84,7 +98,9 @@ def upload_to_oss(upload_url: str, file_path: Path, mime_type: str) -> bool:
         return False
 
 
-def upload_attachment(base_id: str, file_path_str: str) -> Optional[Dict[str, Any]]:
+def upload_attachment(
+    base_id: str, file_path_str: str, dws_bin: str = 'dws'
+) -> Optional[Dict[str, Any]]:
     """
     执行完整的附件上传流程:
       1. prepare_attachment_upload → uploadUrl + fileToken
@@ -121,7 +137,7 @@ def upload_attachment(base_id: str, file_path_str: str) -> Optional[Dict[str, An
         '--mime-type', mime_type,
         '--format', 'json',
     ]
-    result = run_dws(dws_args)
+    result = run_dws(dws_args, dws_bin)
     if not result:
         return None
 
@@ -157,27 +173,20 @@ def upload_attachment(base_id: str, file_path_str: str) -> Optional[Dict[str, An
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(__doc__)
-        print('用法:')
-        print('  python upload_attachment.py <baseId> <filePath>')
-        print()
-        print('示例:')
-        print('  python upload_attachment.py G1DKw2zgV2bEk6PMSBooNxlEVB5r9YAn ./report.pdf')
-        print()
-        print('然后在 record create 中使用返回的 fileToken:')
-        print('  dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \\')
-        print('    --records \'[{"cells":{"fldAttachId":[{"fileToken":"ft_xxx"}]}}]\' --format json')
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('base_id')
+    parser.add_argument('file_path')
+    parser.add_argument('--dws', default='dws', help='dws 可执行文件路径')
+    args = parser.parse_args()
 
-    base_id = sys.argv[1]
-    file_path = sys.argv[2]
+    base_id = args.base_id
+    file_path = args.file_path
 
     if not validate_resource_id(base_id):
         print('错误：无效的 baseId 格式', file=sys.stderr)
-        sys.exit(1)
+        parser.error('无效的 baseId 格式')
 
-    result = upload_attachment(base_id, file_path)
+    result = upload_attachment(base_id, file_path, args.dws)
     if result is None:
         sys.exit(1)
 

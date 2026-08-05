@@ -14,7 +14,7 @@ Flags:
       --table-id string    Table ID (必填)
 ```
 
-返回字段的完整配置（含 options 等）。不要假设未指定 `--table-ids` 的 `table get` 枚举结果含字段；字段目录和配置以 `field get` 返回为准。
+返回字段的完整配置（含 options 等）。`table get` 会返回精简字段目录，但写入、筛选或修改前需要类型相关完整 `config` 时，以 `field get` 返回为准。
 
 ## field create — 创建字段
 

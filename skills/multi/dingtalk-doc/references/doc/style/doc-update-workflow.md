@@ -99,7 +99,7 @@ JSONML 模式下这些元素的节点结构见 [doc-jsonml-schema.md](../format/
 | 整篇按新骨架重写 | overwrite 全文（优先 JSONML；纯文本可用 markdown） | §4.5 |
 | 段落转表格 / 表格转段落 | block update --content-format jsonml；或 markdown overwrite 单段 | §4.4 / §4.1 |
 | 插入附件 / 图片 | doc media insert | §4.3 |
-| 一次追加 >200KB 内容 | 分块 append + 用户风险确认 + 逐片记录 | §4.6 |
+| 长 Markdown 追加 | 单一 `doc update --content-file`，由 CLI 自动分片；失败时再按真实断点恢复 | §4.6 |
 | 兜底：纯文本快速替换某段 | doc update --content overwrite（markdown） | §4.1 |
 
 ---
@@ -254,17 +254,11 @@ dws doc update --node <nodeId> --content-file /tmp/<name>-full.md --mode overwri
 
 **写入后必须回读**（§6）。如果发现旧内容残留，按 §6 的修复路径处理。
 
-### 4.6 超长内容追加（分块 append）
+### 4.6 长 Markdown 追加与失败恢复
 
-当一次性追加内容 **超过 200KB** 时，必须拆分为多片 `--mode append`，并在执行第一片**之前**向用户发出截断风险提示等待确认。
+默认只执行一条 `doc update --node <nodeId> --mode append --content-file <long.md>`。CLI 在超过 10,000 个 Unicode 字符时自动按结构分片，并在超时后缩小分片重试；不要预先手工拆片。
 
-完整规范（提示话术模板、触发条件、失败处理）见 [04-document.md «分块 append 截断风险提示»](../../04-document.md)。
-
-update 场景下的额外约束：
-
-1. 按段落/标题边界切分，**禁止**在表格、代码块、列表内部截断
-2. 每写一片记录已写入的最后一个标题/段落标记，供 §6 回读比对
-3. 与既有内容衔接位置不能产生悬空标题或断列表
+只有返回 `CONTENT_TRUNCATED`、中断或 §6 回读发现缺失时，才按 [04-document.md «自动分片失败恢复»](../../04-document.md) 从最后一个真实完整段落补写缺失后缀。补写前报告已完成范围，补写后再次回读；同一缺失后缀最多自动校正一次。
 
 ---
 

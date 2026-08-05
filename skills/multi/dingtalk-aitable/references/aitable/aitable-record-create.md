@@ -47,6 +47,8 @@ dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 创建成功以 `data.newRecordIds[]` 为 ID 来源；不要把整个 `data` 当作单个 recordId，也不要只以退出码作为写入成功证据。
 
+批量追加本地 JSON/CSV 到已有表时可使用 `python3 scripts/import_records.py <baseId> <tableId> <file> [batch_size]`。脚本会逐批检查业务状态、收集 `newRecordIds` 并按 ID 回读；任何批次失败或回读不完整都会输出 ledger 并以非零状态结束，已有成功批次仍会保留在结果中。
+
 ## cells 写入格式
 
 各字段类型的写入格式见 [aitable-cell-value.md](./aitable-cell-value.md)。

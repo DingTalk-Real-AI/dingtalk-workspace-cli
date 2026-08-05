@@ -32,6 +32,7 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 ```
 
 > `uploadUrl` 有时效性（`expiresAt`），脚本会自动在获取后立即上传。
+> 脚本只接受成功的业务响应和 HTTPS `uploadUrl`；它返回 `fileToken` 不等于记录已经写入，后续仍需执行 record create/update 并按 recordId 回读。
 
 ## 手动流程（不使用脚本）
 

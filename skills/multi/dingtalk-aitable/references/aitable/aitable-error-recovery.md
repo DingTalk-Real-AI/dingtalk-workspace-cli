@@ -15,6 +15,7 @@
 - `status: "error"` 表示操作失败
 - `summary` 包含错误摘要信息
 - `trace_id` 用于问题追踪
+- 命令退出码为 0 但 `status != "success"`、必需 ID 缺失或逐项结果含失败，也属于业务失败
 
 ## 2. 常见错误与恢复动作
 
@@ -42,7 +43,7 @@
 |-------------------|------|---------|
 | `base not found` | base-id 错误或无权限 | 确认 base-id 正确；尝试 `base list` 或 `base search` 重新定位 |
 | `table not found` | table-id 错误 | 用 `table get --base-id <baseId>` 不带 table-ids 查看所有表 |
-| 表名重复 | 同 Base 下已存在同名表 | 系统会自动续号（如"原名 1"），无需额外处理 |
+| 表名重复 | 同 Base 下已存在同名表 | 使用创建返回的真实 `tableId/tableName`；禁止继续按原名猜测目标 |
 
 ### 2.4 视图操作错误
 
@@ -57,7 +58,7 @@
 |-------------------|------|---------|
 | filters 无效被忽略 | 根节点不是 and/or，或 operands 格式错误 | 确保 filters 根节点是 `{"operator":"and"/"or", "operands":[...]}` 结构 |
 | sort 无效 | fieldId 不存在 | 先 `field get` 确认字段 ID |
-| 筛选结果为空 | 条件过严或字段值不匹配 | 放宽条件验证；注意 singleSelect 筛选值用 option name 或 id |
+| 筛选结果为空 | 条件过严或字段值不匹配 | 放宽条件验证；singleSelect/multipleSelect 筛选值使用 option name 字面量 |
 
 ### 2.6 导入导出错误
 
@@ -65,6 +66,7 @@
 |-------------------|------|---------|
 | 导出任务超时 | 数据量大，异步任务未完成 | 用 `export data --task-id <taskId>` 轮询直到完成 |
 | 导入文件格式错误 | 不支持的文件格式或文件损坏 | 确认文件为 .xlsx 格式且未加密 |
+| 批处理只成功一部分 | 某批或某个字段返回失败 | 保留成功 ID，输出失败 batch/item ledger，以非零状态结束；不要整批重放 |
 
 ## 3. 重试策略
 
@@ -105,18 +107,6 @@ dws aitable record create \
 ```
 
 `--verbose` 会输出请求/响应的详细信息，帮助定位问题。
-
-### 4.2 使用 --dry-run 预览
-
-```bash
-dws aitable record create \
-  --base-id <baseId> \
-  --table-id <tableId> \
-  --records '[...]' \
-  --dry-run --format json
-```
-
-`--dry-run` 只预览不执行，适合在不确定参数是否正确时先验证。
 
 ## 5. 错误预防最佳实践
 

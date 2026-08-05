@@ -1,12 +1,20 @@
 {
   "version": 1,
   "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
+<<<<<<< HEAD
   "source_hash": "sha256:b3c04a9c98aca29718dabe8c52464a1ffadf6cc2da04bed37701e1651150ec37",
+=======
+  "source_hash": "sha256:3246b6b86cec02dd90b7cd093310667d926d62d3237d3408cfccc13ad3751b45",
+>>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
+<<<<<<< HEAD
       "source_hash": "sha256:36b1189bb92154252ca0cfcac9922367d8f03e9534814119d19ea03abe382ae8",
+=======
+      "source_hash": "sha256:b3c33641f91b69b73f3e319e0927e8654b6ba1e24f99071e22ee813a4e9f861d",
+>>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
       "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
       "surface_products": 26,
       "surface_tools": 875,
@@ -225,12 +233,13 @@
           "internal/cli/schema_hints/selection/aitable.json",
           "skills/mono/SKILL.md",
           "skills/mono/references/intent-guide.md",
-          "skills/mono/references/products/aitable.md"
+          "skills/multi/dingtalk-aitable/SKILL.md",
+          "skills/multi/dingtalk-aitable/references/aitable.md"
         ],
-        "agent_summary": "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+        "agent_summary": "管理 AI 表格的 Base、Table、Field、Record、视图表单、仪表盘、权限、导入导出与自动化工作流。",
         "agent_summary_source": "dws-agent-selection/aitable",
         "avoid_when": [
-          "目标是在线电子表格单元格读写时用 sheet；普通文档用 doc"
+          "在线电子表格工作表、单元格或公式用 sheet；普通文档用 doc；钉盘普通文件用 drive；类型不明的 alidocs URL 先做类型预检"
         ],
         "description": "AI 表格操作",
         "field_provenance": {
@@ -240,13 +249,13 @@
                 "precedence": "reviewed_explicit",
                 "selected": true,
                 "source": "internal/cli/schema_hints/selection/aitable.json",
-                "value": "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。"
+                "value": "管理 AI 表格的 Base、Table、Field、Record、视图表单、仪表盘、权限、导入导出与自动化工作流。"
               }
             ],
             "precedence": "reviewed_explicit",
             "resolution": "highest_precedence",
             "source": "internal/cli/schema_hints/selection/aitable.json",
-            "value": "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。"
+            "value": "管理 AI 表格的 Base、Table、Field、Record、视图表单、仪表盘、权限、导入导出与自动化工作流。"
           },
           "avoid_when": {
             "candidates": [
@@ -255,7 +264,7 @@
                 "selected": true,
                 "source": "internal/cli/schema_hints/selection/aitable.json",
                 "value": [
-                  "目标是在线电子表格单元格读写时用 sheet；普通文档用 doc"
+                  "在线电子表格工作表、单元格或公式用 sheet；普通文档用 doc；钉盘普通文件用 drive；类型不明的 alidocs URL 先做类型预检"
                 ]
               }
             ],
@@ -263,7 +272,7 @@
             "resolution": "highest_precedence",
             "source": "internal/cli/schema_hints/selection/aitable.json",
             "value": [
-              "目标是在线电子表格单元格读写时用 sheet；普通文档用 doc"
+              "在线电子表格工作表、单元格或公式用 sheet；普通文档用 doc；钉盘普通文件用 drive；类型不明的 alidocs URL 先做类型预检"
             ]
           },
           "use_when": {
@@ -273,7 +282,7 @@
                 "selected": true,
                 "source": "internal/cli/schema_hints/selection/aitable.json",
                 "value": [
-                  "需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时"
+                  "目标是 AI 表格/多维表中的结构化 Base、数据表、字段、记录、视图、权限、文件导入导出或自动化工作流时"
                 ]
               }
             ],
@@ -281,7 +290,7 @@
             "resolution": "highest_precedence",
             "source": "internal/cli/schema_hints/selection/aitable.json",
             "value": [
-              "需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时"
+              "目标是 AI 表格/多维表中的结构化 Base、数据表、字段、记录、视图、权限、文件导入导出或自动化工作流时"
             ]
           }
         },
@@ -726,11 +735,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。",
+            "agent_summary": "底层按名称搜索 AI 表格 Base，返回原始候选列表。",
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"
+              "普通按名称解析唯一 baseId 优先用 +resolve-base；只要候选列表用 +base-search；最近访问用 +base-list；电子表格 axls 用 sheet"
             ],
             "canonical_path": "aitable.base_search",
             "cli_name": "search",
@@ -752,7 +761,7 @@
             "risk": "low",
             "title": "搜索 AI 表格",
             "use_when": [
-              "用户要找某个 AI 表格/多维表，按名称检索时优先使用"
+              "需要 Shortcut 未公开的底层参数、原始 search_bases 响应或自定义候选处理时"
             ]
           },
           {
@@ -1375,11 +1384,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取字段完整配置。",
+            "agent_summary": "底层获取字段完整类型与 config。",
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "表级字段目录也可用 table get；创建字段用 field create；不可用本命令改类型"
+              "正常按字段 ID 展开类型/config 优先用 +field-get；精简字段目录用 +table-get；创建字段用 field create"
             ],
             "canonical_path": "aitable.field_get",
             "cli_name": "get",
@@ -1401,7 +1410,7 @@
             "risk": "low",
             "title": "获取字段详情",
             "use_when": [
-              "需要字段类型/config（选项、公式等）详情时"
+              "需要 +field-get 未公开的底层参数、原始响应或不同执行语义时"
             ]
           },
           {
@@ -1948,14 +1957,14 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "查询/搜索记录（filters/sort/分页/--all；cells 键为 fieldId）。",
+            "agent_summary": "底层查询/搜索记录，额外支持原子命令的完整分页控制。",
             "agent_summary_source": "dws-agent-selection/aitable",
             "aliases": [
               "aitable record list"
             ],
             "availability": "available",
             "avoid_when": [
-              "已知 recordId 窄查可用 record get；空行用 query-empty；写入用 create/update；电子表格单元格用 sheet"
+              "普通按 ID、关键词、filters、sort 或 cursor 查询优先用 +record-query；空行用 +record-query-empty；写入用 create/update；电子表格单元格用 sheet"
             ],
             "canonical_path": "aitable.query_records",
             "cli_name": "query",
@@ -1977,7 +1986,7 @@
             "risk": "low",
             "title": "获取行记录",
             "use_when": [
-              "查看、筛选、全文搜索或遍历记录时的主入口"
+              "需要 +record-query 未公开的 --all/--page-limit、底层原始响应或不同执行语义时"
             ]
           },
           {
@@ -2009,11 +2018,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "新增记录（cells 的 key 必须是 fieldId）。",
+            "agent_summary": "新增记录；使用 fieldId 写入并从 newRecordIds 回读验证。",
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "更新已有行用 record update；有则更无则增用 upsert；批量同 patch 用 batch-update"
+              "未核对字段类型时先 field get；更新已有行用 record update；有则更无则增用 upsert；本地 CSV/JSON 批量追加可用已评审脚本"
             ],
             "canonical_path": "aitable.record_create",
             "cli_name": "create",
@@ -2035,7 +2044,7 @@
             "risk": "medium",
             "title": "新增记录",
             "use_when": [
-              "需要插入新行数据时"
+              "已取得 baseId/tableId 与字段完整配置，需要插入一条或多条新记录并回读时"
             ]
           },
           {
@@ -2257,11 +2266,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新已有记录字段（先 query 拿 recordId；只传需改字段）。",
+            "agent_summary": "更新已有记录字段；先 query 拿 recordId，使用 fieldId 写入并回读。",
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+              "未定位 recordId 或字段配置时先 query/field get；新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
             ],
             "canonical_path": "aitable.record_update",
             "cli_name": "update",
@@ -2283,7 +2292,7 @@
             "risk": "medium",
             "title": "更新记录",
             "use_when": [
-              "需要修改已有记录若干字段时"
+              "已查询得到真实 recordId 并核对字段类型，需要修改每条记录各自的 cells 时"
             ]
           },
           {
@@ -2596,7 +2605,7 @@
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "知道名称并要解析唯一 baseId 用 +resolve-base；按关键词要完整候选用 +base-search；不要把最近访问列表描述成全部 Base"
             ],
             "canonical_path": "aitable.shortcut_base_list",
             "cli_name": "+base-list",
@@ -2622,7 +2631,7 @@
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "只需唯一 baseId 用 +resolve-base；浏览最近访问用 +base-list；需要未公开底层参数或原始响应才用 base search"
             ],
             "canonical_path": "aitable.shortcut_base_search",
             "cli_name": "+base-search",
@@ -2752,7 +2761,7 @@
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "只需精简 fieldId/type 目录用 +table-get；创建或修改字段用 field create/update；需要未公开底层语义才用 field get"
             ],
             "canonical_path": "aitable.shortcut_field_get",
             "cli_name": "+field-get",
@@ -2934,7 +2943,7 @@
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "完全空行扫描用 +record-query-empty；变更历史用 +record-history-list；需要 --all/--page-limit 或未公开底层语义才用 record query"
             ],
             "canonical_path": "aitable.shortcut_record_query",
             "cli_name": "+record-query",
@@ -3038,7 +3047,7 @@
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "多候选时必须让用户消歧；只要完整候选列表用 +base-search；浏览最近访问用 +base-list；已知 baseId 不再重复搜索"
             ],
             "canonical_path": "aitable.shortcut_resolve_base",
             "cli_name": "+resolve-base",
@@ -3055,7 +3064,7 @@
             "risk": "low",
             "title": "按名称搜索多维表 Base 并解析出唯一 baseId（只读）",
             "use_when": [
-              "当你只知道某个多维表 Base 的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 baseId 时使用；内部按 --name 关键词调用 search_bases 搜索 Base，再在本地投影出每个候选的 baseId 和 name。如果只命中一个 Base 就直接返回它的 baseId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何 Base。"
+              "只知道 Base 名称或关键词，需要解析成唯一 baseId 供后续 Table/Record 操作时"
             ]
           },
           {
@@ -3064,7 +3073,7 @@
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "多候选时必须让用户消歧；需要所有表及字段/视图目录用 +table-get；已知 tableId 不再重复解析"
             ],
             "canonical_path": "aitable.shortcut_resolve_table",
             "cli_name": "+resolve-table",
@@ -3081,7 +3090,7 @@
             "risk": "low",
             "title": "在某个多维表 Base 内按名称解析出唯一的数据表 tableId（只读）",
             "use_when": [
-              "当你已经知道某个多维表 Base 的 baseId、又只记得里面某张数据表(table)的名称或名称关键词、想把它解析成可直接用于后续工具的 tableId 时使用；内部先用 get_tables（只传 baseId）列出该 Base 下的全部数据表，再在本地把每张表投影成 tableId、name，并按 --name 关键词做大小写不敏感的包含匹配来筛选候选。如果只命中一张表就直接返回它的 tableId；如果命中多张则列出全部候选让你消歧，绝不替你瞎猜；如果一张都没命中则提示未找到。这是纯只读操作，只做列举、本地匹配与投影，不会创建、修改或删除任何数据表。"
+              "已有真实 baseId、只知道数据表名称或关键词，需要解析成唯一 tableId 时"
             ]
           },
           {
@@ -3168,7 +3177,7 @@
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "只知道表名并要解析唯一 tableId 用 +resolve-table；需要字段完整 config 用 +field-get；需要未公开底层语义才用 table get"
             ],
             "canonical_path": "aitable.shortcut_table_get",
             "cli_name": "+table-get",
@@ -3382,11 +3391,11 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取数据表结构（字段+视图目录）。",
+            "agent_summary": "底层获取数据表结构、精简字段目录与视图目录。",
             "agent_summary_source": "dws-agent-selection/aitable",
             "availability": "available",
             "avoid_when": [
-              "只关心 Base 级 tables 列表可先 base get；字段完整配置也可用 field get"
+              "正常获取表、精简字段和视图目录优先用 +table-get；按表名解析 ID 用 +resolve-table；完整字段 config 用 +field-get"
             ],
             "canonical_path": "aitable.table_get",
             "cli_name": "get",
@@ -3408,7 +3417,7 @@
             "risk": "low",
             "title": "获取数据表",
             "use_when": [
-              "需要字段 fieldId 或视图目录以继续 record/field 操作时优先 table get"
+              "需要 +table-get 未公开的底层参数、原始 get_tables 响应或不同执行语义时"
             ]
           },
           {
@@ -4571,7 +4580,7 @@
           }
         ],
         "use_when": [
-          "需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时"
+          "目标是 AI 表格/多维表中的结构化 Base、数据表、字段、记录、视图、权限、文件导入导出或自动化工作流时"
         ]
       },
       {
@@ -15377,13 +15386,18 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "创建一篇新的在线文档",
+            "agent_summary": "在默认根目录、文档文件夹或知识库根创建带可选初始内容的 adoc",
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
               "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
+<<<<<<< HEAD
               "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
               "导入本地 Word/Markdown 为在线文档用 dws doc import，并显式提供 --folder 或 --workspace；不要用已迁移的 doc upload --convert"
+=======
+              "只管理知识库空节点或层级时用 wiki node create；本命令侧重创建并写入 adoc",
+              "导入本地 Word/Markdown 并保留服务端转换语义时用 dws doc import；不要用自写分片脚本替代原生 create"
+>>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
             ],
             "canonical_path": "doc.create_document",
             "cli_name": "create",
@@ -15404,8 +15418,8 @@
             "risk": "medium",
             "title": "创建文档",
             "use_when": [
-              "用户要新建一篇文字在线文档(adoc)，可空文档或带初始 Markdown 时",
-              "创建到指定文件夹 --folder、知识库根 --workspace，或默认「我的文档」根目录时"
+              "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入 Markdown/JSONML 时",
+              "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片"
             ]
           },
           {
@@ -15666,7 +15680,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "非 adoc（表格/多维表/普通文件）不要用本命令；先 doc info 再路由",
+              "原始 alidocs URL 类型未知或目标不是 adoc 时先用 drive info 探测并路由；表格/多维表/普通文件不要用本命令",
               "要元信息用 doc info；要块结构用 doc block list",
               "Markdown 为有损投影：保形复制模板请用 doc copy，不要 read→create"
             ],
@@ -15689,20 +15703,21 @@
             "risk": "low",
             "title": "读取文档内容 (Markdown)",
             "use_when": [
-              "用户要读取钉钉在线文字文档(adoc)正文（Markdown）时",
-              "用户直接粘贴文档 URL 且无其他指令时（默认读内容）",
+              "已由 drive info 确认 extension=adoc，用户要读取正文（Markdown）时",
+              "用户提供已知 adoc nodeId/URL，且要读取内容或抽取指定章节时",
               "只需标题大纲、指定块区间/单块或特定 JSONML tags 时使用 --content-format jsonml 与 --scope"
             ]
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "获取文档元信息（标题/类型/创建者/权限等）",
+            "agent_summary": "在已确认是 ALIDOC 后读取文档专属元信息",
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "已确认是 adoc 且只要正文改用 dws doc read",
+              "原始 alidocs URL 的类型探测、extension 路由或可靠 fileSize 使用 dws drive info；不要先猜是文档",
+              "已确认是 adoc 且只要正文时改用 dws doc read",
               "只要目录列表改用 dws drive list / wiki node list",
-              "需要可靠文件大小 fileSize 时改用 dws drive info；文档元信息接口可能不返回大小"
+              "普通文件、电子表格或 AI 表格不使用本命令"
             ],
             "canonical_path": "doc.get_document_info",
             "cli_name": "info",
@@ -15723,8 +15738,8 @@
             "risk": "low",
             "title": "获取文档元信息",
             "use_when": [
-              "用户要查看文档/节点元信息（标题、类型、创建者、权限）时",
-              "准备读内容前必须先看 contentType/extension 以路由到 read/sheet/aitable/download 时"
+              "drive info 已确认是 ALIDOC，用户还要标题、创建者、权限或 docUrl 等文档专属元信息时",
+              "创建响应只有 nodeId、缺少 docUrl，需要补查文档链接时"
             ]
           },
           {
@@ -16248,7 +16263,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "常规文件管理优先 drive copy；要搬走原件用 move；复制后必须从真实返回取副本 nodeId，禁止继续编辑源文档"
             ],
             "canonical_path": "doc.shortcut_copy",
             "cli_name": "+copy",
@@ -16274,7 +16289,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "长、多行、表格或文件内容使用 doc update --mode append --content-file；指定位置或富结构使用 block insert；不要跳过 user_required 确认"
             ],
             "canonical_path": "doc.shortcut_doc_append",
             "cli_name": "+doc-append",
@@ -16326,7 +16341,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "用户要直接拿到本地 docx/markdown/pdf 文件时使用一体化 dws doc export；不要默认手工编排 submit/get 轮询"
             ],
             "canonical_path": "doc.shortcut_export_submit",
             "cli_name": "+export-submit",
@@ -16352,7 +16367,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "需要最近访问、extension/时间/创建者等组合过滤时使用 +search；目标已给 nodeId/URL 时直接进入 info/read，不再搜索"
             ],
             "canonical_path": "doc.shortcut_find_doc",
             "cli_name": "+find-doc",
@@ -16378,7 +16393,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "全局或钉盘目录浏览优先 drive list，知识库节点树优先 wiki node list；本 Shortcut 只列已知 doc folder/workspace 的直接子节点"
             ],
             "canonical_path": "doc.shortcut_list",
             "cli_name": "+list",
@@ -16404,7 +16419,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "常规文件管理优先 drive move；要保留原位置副本用 copy；目标位置不明确或未确认时不要移动"
             ],
             "canonical_path": "doc.shortcut_move",
             "cli_name": "+move",
@@ -16430,7 +16445,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "只有一个关键词且只要紧凑标题/URL/type/token 投影时优先 +find-doc；目标已给 nodeId/URL 时不要再搜索"
             ],
             "canonical_path": "doc.shortcut_search",
             "cli_name": "+search",
@@ -16456,7 +16471,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "同名人员未消歧、缺少真实文档 URL 或用户未确认时不要发送；本命令不授予文档权限，授权应走 drive permission"
             ],
             "canonical_path": "doc.shortcut_share_doc",
             "cli_name": "+share-doc",
@@ -16560,7 +16575,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+              "只查看历史用 +version-list，只保存当前快照用 +version-save；版本号未核实、用户未确认或只需改单块时不要回滚"
             ],
             "canonical_path": "doc.shortcut_version_revert",
             "cli_name": "+version-revert",
@@ -16824,14 +16839,21 @@
           },
           {
             "agent_metadata_source": "embedded-skill-metadata",
-            "agent_summary": "更新文档内容（追加 / 覆盖；覆盖需 --yes）",
+            "agent_summary": "用原生自动分片管道追加或整篇覆盖 adoc 内容",
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
+<<<<<<< HEAD
               "目标不是 adoc 或只要改单个块时改用 doc block update",
               "覆盖模式用户未确认前不要执行；先 --dry-run 预览，确认后再加 --yes",
               "--content 与 --content-file 二选一；--index 仅用于 mode=append",
               "创建新文档用 doc create，不要用 update 冒充创建"
+=======
+              "只在末尾补一小段纯文本优先 +doc-append；只改一个块用 doc block update",
+              "目标不是 adoc 时按 drive info 的 extension 切对应产品",
+              "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
+              "创建新文档用 doc create；不要预先手工分片或循环重试覆盖"
+>>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
             ],
             "canonical_path": "doc.update_document",
             "cli_name": "update",
@@ -16852,7 +16874,7 @@
             "risk": "medium",
             "title": "更新文档内容",
             "use_when": [
-              "用户要向已有 adoc 追加内容时用 --mode append（更安全）",
+              "用户要向已有 adoc 追加长、多行或文件内容时用 --mode append + --content-file；CLI 自动分片",
               "用户明确要求整篇覆盖替换时用 --mode overwrite（破坏性）",
               "append 且要插到第 N 个 block 前时加 --index N（先 block list）",
               "长文本、多行内容或表格优先写入 UTF-8 文件并使用 --content-file，避免 shell 转义损坏"
