@@ -289,12 +289,12 @@
       ]
     },
     "aitable.base_search": {
-      "agent_summary": "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。",
+      "agent_summary": "底层按名称搜索 AI 表格 Base，返回原始候选列表。",
       "use_when": [
-        "用户要找某个 AI 表格/多维表，按名称检索时优先使用"
+        "需要 Shortcut 未公开的底层参数、原始 search_bases 响应或自定义候选处理时"
       ],
       "avoid_when": [
-        "只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"
+        "普通按名称解析唯一 baseId 优先用 +resolve-base；只要候选列表用 +base-search；最近访问用 +base-list；电子表格 axls 用 sheet"
       ],
       "examples": [
         "dws aitable base search --query \"项目\""
@@ -304,7 +304,8 @@
       "source_refs": [
         "internal/cli/schema_command_registry.json",
         "cobra-help:dws aitable base search --help",
-        "skills/mono/references/products/aitable.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable.md",
         "dws-schema-live:aitable.search_bases"
       ]
     },
@@ -710,12 +711,12 @@
       ]
     },
     "aitable.field_get": {
-      "agent_summary": "获取字段完整配置。",
+      "agent_summary": "底层获取字段完整类型与 config。",
       "use_when": [
-        "需要字段类型/config（选项、公式等）详情时"
+        "需要 +field-get 未公开的底层参数、原始响应或不同执行语义时"
       ],
       "avoid_when": [
-        "表级字段目录也可用 table get；创建字段用 field create；不可用本命令改类型"
+        "正常按字段 ID 展开类型/config 优先用 +field-get；精简字段目录用 +table-get；创建字段用 field create"
       ],
       "examples": [
         "dws aitable field get --base-id <BASE_ID> --table-id <TABLE_ID>"
@@ -725,7 +726,8 @@
       "source_refs": [
         "internal/cli/schema_command_registry.json",
         "cobra-help:dws aitable field get --help",
-        "skills/mono/references/products/aitable.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable/aitable-field.md",
         "dws-schema-live:aitable.get_fields"
       ]
     },
@@ -1110,12 +1112,12 @@
       ]
     },
     "aitable.query_records": {
-      "agent_summary": "查询/搜索记录（filters/sort/分页/--all；cells 键为 fieldId）。",
+      "agent_summary": "底层查询/搜索记录，额外支持原子命令的完整分页控制。",
       "use_when": [
-        "查看、筛选、全文搜索或遍历记录时的主入口"
+        "需要 +record-query 未公开的 --all/--page-limit、底层原始响应或不同执行语义时"
       ],
       "avoid_when": [
-        "已知 recordId 窄查可用 record get；空行用 query-empty；写入用 create/update；电子表格单元格用 sheet"
+        "普通按 ID、关键词、filters、sort 或 cursor 查询优先用 +record-query；空行用 +record-query-empty；写入用 create/update；电子表格单元格用 sheet"
       ],
       "examples": [
         "dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID>"
@@ -1125,7 +1127,8 @@
       "source_refs": [
         "internal/cli/schema_command_registry.json",
         "cobra-help:dws aitable record query --help",
-        "skills/mono/references/products/aitable.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable/aitable-record-query.md",
         "dws-schema-live:aitable.query_records"
       ]
     },
@@ -1150,12 +1153,12 @@
       ]
     },
     "aitable.record_create": {
-      "agent_summary": "新增记录（cells 的 key 必须是 fieldId）。",
+      "agent_summary": "新增记录；使用 fieldId 写入并从 newRecordIds 回读验证。",
       "use_when": [
-        "需要插入新行数据时"
+        "已取得 baseId/tableId 与字段完整配置，需要插入一条或多条新记录并回读时"
       ],
       "avoid_when": [
-        "更新已有行用 record update；有则更无则增用 upsert；批量同 patch 用 batch-update"
+        "未核对字段类型时先 field get；更新已有行用 record update；有则更无则增用 upsert；本地 CSV/JSON 批量追加可用已评审脚本"
       ],
       "examples": [
         "dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{\"cells\":{\"fldXXX\":\"值\"}}]'"
@@ -1165,7 +1168,8 @@
       "source_refs": [
         "internal/cli/schema_command_registry.json",
         "cobra-help:dws aitable record create --help",
-        "skills/mono/references/products/aitable.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable/aitable-record-create.md",
         "dws-schema-live:aitable.create_records"
       ]
     },
@@ -1310,12 +1314,12 @@
       ]
     },
     "aitable.record_update": {
-      "agent_summary": "更新已有记录字段（先 query 拿 recordId；只传需改字段）。",
+      "agent_summary": "更新已有记录字段；先 query 拿 recordId，使用 fieldId 写入并回读。",
       "use_when": [
-        "需要修改已有记录若干字段时"
+        "已查询得到真实 recordId 并核对字段类型，需要修改每条记录各自的 cells 时"
       ],
       "avoid_when": [
-        "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+        "未定位 recordId 或字段配置时先 query/field get；新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
       ],
       "examples": [
         "dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> --records '[{\"recordId\":\"recXXX\",\"cells\":{\"fldYYY\":\"新值\"}}]'"
@@ -1325,7 +1329,8 @@
       "source_refs": [
         "internal/cli/schema_command_registry.json",
         "cobra-help:dws aitable record update --help",
-        "skills/mono/references/products/aitable.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable/aitable-record-update.md",
         "dws-schema-live:aitable.update_records"
       ]
     },
@@ -1550,12 +1555,12 @@
       ]
     },
     "aitable.table_get": {
-      "agent_summary": "获取数据表结构（字段+视图目录）。",
+      "agent_summary": "底层获取数据表结构、精简字段目录与视图目录。",
       "use_when": [
-        "需要字段 fieldId 或视图目录以继续 record/field 操作时优先 table get"
+        "需要 +table-get 未公开的底层参数、原始 get_tables 响应或不同执行语义时"
       ],
       "avoid_when": [
-        "只关心 Base 级 tables 列表可先 base get；字段完整配置也可用 field get"
+        "正常获取表、精简字段和视图目录优先用 +table-get；按表名解析 ID 用 +resolve-table；完整字段 config 用 +field-get"
       ],
       "examples": [
         "dws aitable table get --base-id BASE_ID"
@@ -1565,7 +1570,8 @@
       "source_refs": [
         "internal/cli/schema_command_registry.json",
         "cobra-help:dws aitable table get --help",
-        "skills/mono/references/products/aitable.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable.md",
         "dws-schema-live:aitable.get_tables"
       ]
     },
@@ -2335,7 +2341,7 @@
         "当你不知道具体 baseId、想先浏览自己最近用过或可访问的 AI 表格清单以便定位目标时使用；支持游标分页，返回 Base 列表及其 baseId。"
       ],
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "知道名称并要解析唯一 baseId 用 +resolve-base；按关键词要完整候选用 +base-search；不要把最近访问列表描述成全部 Base"
       ],
       "examples": [
         "dws aitable +base-list",
@@ -2355,7 +2361,7 @@
         "当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。"
       ],
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "只需唯一 baseId 用 +resolve-base；浏览最近访问用 +base-list；需要未公开底层参数或原始响应才用 base search"
       ],
       "examples": [
         "dws aitable +base-search --query \"项目管理\""
@@ -2393,7 +2399,7 @@
         "当你已进入某个 Base、需要了解其中某些数据表有哪些字段（拿 fieldId）、有哪些视图（拿 viewId）以便读写数据时使用；批量返回表信息、字段目录和视图目录。"
       ],
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "只知道表名并要解析唯一 tableId 用 +resolve-table；需要字段完整 config 用 +field-get；需要未公开底层语义才用 table get"
       ],
       "examples": [
         "dws aitable +table-get --base-id BASE_ID",
@@ -2413,7 +2419,7 @@
         "当你需要查看字段的完整类型配置（如单选选项、关联表设置、AI 配置）以便正确写入数据或改配置时使用；批量返回字段详情。"
       ],
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "只需精简 fieldId/type 目录用 +table-get；创建或修改字段用 field create/update；需要未公开底层语义才用 field get"
       ],
       "examples": [
         "dws aitable +field-get --base-id B --table-id T"
@@ -2432,7 +2438,7 @@
         "当你要读取表格里的行数据——按 recordId 精确取、按结构化条件筛选、按关键词全文搜索或分页遍历时使用；返回匹配记录及其单元格值。"
       ],
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "完全空行扫描用 +record-query-empty；变更历史用 +record-history-list；需要 --all/--page-limit 或未公开底层语义才用 record query"
       ],
       "examples": [
         "dws aitable +record-query --base-id B --table-id T --query \"关键词\" --limit 50"
@@ -2849,10 +2855,10 @@
     "aitable.shortcut_resolve_base": {
       "agent_summary": "按名称搜索多维表 Base 并解析出唯一 baseId（只读）",
       "use_when": [
-        "当你只知道某个多维表 Base 的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 baseId 时使用；内部按 --name 关键词调用 search_bases 搜索 Base，再在本地投影出每个候选的 baseId 和 name。如果只命中一个 Base 就直接返回它的 baseId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何 Base。"
+        "只知道 Base 名称或关键词，需要解析成唯一 baseId 供后续 Table/Record 操作时"
       ],
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "多候选时必须让用户消歧；只要完整候选列表用 +base-search；浏览最近访问用 +base-list；已知 baseId 不再重复搜索"
       ],
       "examples": [
         "dws aitable +resolve-base --name 项目管理"
@@ -2868,10 +2874,10 @@
     "aitable.shortcut_resolve_table": {
       "agent_summary": "在某个多维表 Base 内按名称解析出唯一的数据表 tableId（只读）",
       "use_when": [
-        "当你已经知道某个多维表 Base 的 baseId、又只记得里面某张数据表(table)的名称或名称关键词、想把它解析成可直接用于后续工具的 tableId 时使用；内部先用 get_tables（只传 baseId）列出该 Base 下的全部数据表，再在本地把每张表投影成 tableId、name，并按 --name 关键词做大小写不敏感的包含匹配来筛选候选。如果只命中一张表就直接返回它的 tableId；如果命中多张则列出全部候选让你消歧，绝不替你瞎猜；如果一张都没命中则提示未找到。这是纯只读操作，只做列举、本地匹配与投影，不会创建、修改或删除任何数据表。"
+        "已有真实 baseId、只知道数据表名称或关键词，需要解析成唯一 tableId 时"
       ],
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "多候选时必须让用户消歧；需要所有表及字段/视图目录用 +table-get；已知 tableId 不再重复解析"
       ],
       "examples": [
         "dws aitable +resolve-table --base B --name 任务"
@@ -2887,18 +2893,19 @@
   },
   "products": {
     "aitable": {
-      "agent_summary": "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
+      "agent_summary": "管理 AI 表格的 Base、Table、Field、Record、视图表单、仪表盘、权限、导入导出与自动化工作流。",
       "use_when": [
-        "需要读取或管理 AI 表格中的结构、数据、视图、权限、导入导出或工作流时"
+        "目标是 AI 表格/多维表中的结构化 Base、数据表、字段、记录、视图、权限、文件导入导出或自动化工作流时"
       ],
       "avoid_when": [
-        "目标是在线电子表格单元格读写时用 sheet；普通文档用 doc"
+        "在线电子表格工作表、单元格或公式用 sheet；普通文档用 doc；钉盘普通文件用 drive；类型不明的 alidocs URL 先做类型预检"
       ],
       "reviewed": true,
-      "review_reason": "人工结合实时 MCP/Skill/Cobra 审阅产品级选择边界。",
+      "review_reason": "人工结合多产品边界、根 Skill 的渐进加载顺序、真实 Cobra/Shortcut 路径与 MCP 语义审阅产品级选择边界。",
       "source_refs": [
         "internal/cli/schema_command_registry.json",
-        "skills/mono/references/products/aitable.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable.md",
         "dws-schema-live:product-index"
       ]
     }

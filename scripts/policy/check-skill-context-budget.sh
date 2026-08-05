@@ -7,15 +7,24 @@ cd "$ROOT"
 python3 scripts/gen_skill_shortcut_sections.py --check
 
 chat_skill="skills/multi/dingtalk-chat/SKILL.md"
+aitable_skill="skills/multi/dingtalk-aitable/SKILL.md"
 doc_skill="skills/multi/dingtalk-doc/SKILL.md"
 mono_skill="skills/mono/SKILL.md"
 chat_max_bytes=14000
+aitable_max_bytes=11000
 doc_max_bytes=9500
 
 chat_bytes="$(wc -c < "$chat_skill" | tr -d ' ')"
 if [ "$chat_bytes" -gt "$chat_max_bytes" ]; then
 	printf '%s\n' \
 		"skill context budget exceeded: $chat_skill is ${chat_bytes} bytes (max ${chat_max_bytes})" >&2
+	exit 1
+fi
+
+aitable_bytes="$(wc -c < "$aitable_skill" | tr -d ' ')"
+if [ "$aitable_bytes" -gt "$aitable_max_bytes" ]; then
+	printf '%s\n' \
+		"skill context budget exceeded: $aitable_skill is ${aitable_bytes} bytes (max ${aitable_max_bytes})" >&2
 	exit 1
 fi
 
@@ -40,6 +49,20 @@ if [ "$shortcut_rows" -ne 0 ]; then
 	exit 1
 fi
 
+aitable_shortcut_rows="$(
+	awk '
+		/<!-- VISIBLE_SHORTCUTS_START -->/ { in_block = 1; next }
+		/<!-- VISIBLE_SHORTCUTS_END -->/ { in_block = 0 }
+		in_block && /^\|[[:space:]]*`/ { count++ }
+		END { print count + 0 }
+	' "$aitable_skill"
+)"
+if [ "$aitable_shortcut_rows" -ne 0 ]; then
+	printf '%s\n' \
+		"skill context budget exceeded: $aitable_skill re-expanded $aitable_shortcut_rows shortcut rows" >&2
+	exit 1
+fi
+
 doc_shortcut_rows="$(
 	awk '
 		/<!-- VISIBLE_SHORTCUTS_START -->/ { in_block = 1; next }
@@ -61,4 +84,4 @@ if grep -Fq "充分阅读产品参考文件" "$mono_skill"; then
 fi
 
 printf '%s\n' \
-	"skill context budget: ok (chat_bytes=$chat_bytes max=$chat_max_bytes shortcut_rows=$shortcut_rows; doc_bytes=$doc_bytes max=$doc_max_bytes shortcut_rows=$doc_shortcut_rows)"
+	"skill context budget: ok (chat_bytes=$chat_bytes max=$chat_max_bytes shortcut_rows=$shortcut_rows; aitable_bytes=$aitable_bytes max=$aitable_max_bytes shortcut_rows=$aitable_shortcut_rows; doc_bytes=$doc_bytes max=$doc_max_bytes shortcut_rows=$doc_shortcut_rows)"

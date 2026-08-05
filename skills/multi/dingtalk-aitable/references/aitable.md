@@ -2,6 +2,8 @@
 
 > **渐进式文档**：本文件为路由层（索引 + 意图判断），各命令的详细参数、示例和踩坑说明在 [aitable/](./aitable/) 目录下按需加载。
 
+已知高频意图优先使用根 Skill 的精确 Shortcut/脚本骨架；本文件只在需要完整一级命令索引、对象 URL 或低频分支导航时加载。参数与安全不确定时读 leaf Schema，Cobra flag 不确定时才读 leaf Help，不要把本文件当作参数事实源。
+
 ## 文档地址 (URI)
 
 | 资源 | URI 格式 |
@@ -35,7 +37,7 @@
 
 | 命令 | 用途 | 必填参数 | 路由提醒 |
 |------|------|----------|----------|
-| `table get` | 获取数据表/视图目录 | `--base-id` | 不传 `--table-ids` 枚举全部表，但不返回字段；字段目录使用 `field get` |
+| `table get` | 获取表级信息、字段目录与视图目录 | `--base-id` | 不传 `--table-ids` 枚举全部表并返回精简 `fields[]`/`views[]`；字段完整 config 使用 `field get` |
 | `table create` | 创建数据表 | `--base-id` `--name` `--fields` | fields 为 JSON 数组，至少 1 个 |
 | `table update` | 修改表名 / 备注 / 行命名规则 | `--base-id` `--table-id` + 三选一(`--name` / `--description` / `--record-name-key`) | `--record-name-key` 是固定枚举（如 task/project/event/customer/ji_lu 等），非字段 ID |
 | `table delete` | 删除表 | `--base-id` `--table-id` | 不可逆 |
@@ -427,17 +429,18 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 ## 核心工作流
 
 ```bash
-# 1. 搜索/列出 Base — 提取 baseId
-dws aitable base search --query "项目" --format json
+# 1. 按名称解析唯一 Base — 提取 baseId；多候选必须消歧
+dws aitable +resolve-base --name "项目" --format json
 
-# 2. 获取 Base 信息 — 提取 tableId
-dws aitable base get --base-id <BASE_ID> --format json
+# 2. 按名称解析唯一 Table — 提取 tableId
+dws aitable +resolve-table --base <BASE_ID> --name "任务" --format json
 
-# 3. 获取字段目录 — 提取 fieldId
-dws aitable field get --base-id <BASE_ID> --table-id <TABLE_ID> --format json
+# 3. 获取字段目录；需要完整类型 config 时再调用 field get
+dws aitable +table-get --base-id <BASE_ID> --table-ids <TABLE_ID> --format json
+dws aitable +field-get --base-id <BASE_ID> --table-id <TABLE_ID> --format json
 
 # 4. 查询记录
-dws aitable record query --base-id <BASE_ID> --table-id <TABLE_ID> --format json
+dws aitable +record-query --base-id <BASE_ID> --table-id <TABLE_ID> --format json
 
 # 5. 新增记录 (cells 用 fieldId 作 key)
 dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
@@ -452,8 +455,8 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 | `base create` | `baseId` | 后续命令 + 文档 URI |
 | `base get` | `tables[].tableId` | --table-id，拼接指定数据表 URI |
 | `table create` | `tableId` | 后续命令 + 拼接指定数据表 URI |
-| `table get` | `tables[].tableId`、视图目录 | 定位数据表和视图；字段需继续调用 `field get` |
-| `field get` | `fields[].fieldId` | record 操作的 cells key, field update/delete |
+| `table get` | `tables[].tableId`、精简 `fields[]`、`views[]` | 定位数据表、字段目录和视图；完整字段 config 再用 `field get` |
+| `field get` | `fields[].fieldId/type/config` | record 操作的 cells key、类型校验、field update/delete |
 | `record query` | `recordId` | record update/delete；按 ID 反查字段值用 `record get` |
 | `template search` | `templateId` | base create --template-id，拼接模板预览 URI |
 
@@ -480,6 +483,7 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 |------|------|
 | [bulk_add_fields.py](../scripts/bulk_add_fields.py) | 批量添加字段 |
 | [import_records.py](../scripts/import_records.py) | 从 JSON/CSV 批量导入记录 |
+| [aitable_import_via_task.py](../scripts/aitable_import_via_task.py) | 导入 CSV/XLS/XLSX 并新建数据表（prepare + PUT + import） |
 | [aitable_export_via_task.py](../scripts/aitable_export_via_task.py) | 文件导出（export_data 轮询 + 下载） |
 | [upload_attachment.py](../scripts/upload_attachment.py) | 上传附件到 AI 表格记录 |
 

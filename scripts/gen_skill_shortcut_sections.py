@@ -55,7 +55,7 @@ PRODUCT_END = "<!-- VISIBLE_SHORTCUTS_END -->"
 # only after verifying that the product skill has its own reviewed routing
 # section and intent table; compacting a sparse skill without an alternative
 # route would make its shortcuts harder to discover.
-COMPACT_PRODUCT_SERVICES = {"chat", "doc"}
+COMPACT_PRODUCT_SERVICES = {"aitable", "chat", "doc"}
 
 # These compact products have every public Shortcut curated into Runtime
 # Schema. Keep this separate from COMPACT_PRODUCT_SERVICES because Chat still

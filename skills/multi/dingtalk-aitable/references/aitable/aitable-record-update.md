@@ -17,23 +17,17 @@ Flags:
 
 只需传入需修改的字段，未传入的保持原值。每条记录必须含 recordId 和 cells。
 
-## cells key：优先使用 fieldId，也支持唯一字段名
+## cells key：自动化与 Agent 路径使用 fieldId
 
-`cells` 的 key 有两种写法：
+公开稳定的 Agent/自动化写法是 `fieldId`：它不受字段重命名或重名影响，并可通过 `field get` 获取。
 
-- fieldId（推荐）：不受字段重命名或重名影响，通过 `field get` 获取。
-- 当前表内唯一的字段名：按名称精确匹配；如果存在同名字段，必须改用 fieldId。
-
-同一字段同时通过 fieldId 和字段名传入时，fieldId 对应的值优先。
+Runtime 仍兼容当前表内唯一字段名，但这属于便捷兼容路径：重名或重命名会改变解析结果，不能用于脚本、跨步骤调用或从旧上下文重放。字段名与 fieldId 同时出现时也不要依赖覆盖顺序。
 
 ```bash
 # 推荐：fieldId
 dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> \
   --records '[{"recordId":"recXXX","cells":{"fldStatusId":"已完成"}}]' --format json
 
-# 便捷写法：当前表内唯一字段名
-dws aitable record update --base-id <BASE_ID> --table-id <TABLE_ID> \
-  --records '[{"recordId":"recXXX","cells":{"状态":"已完成"}}]' --format json
 ```
 
 ## 推荐参数形式

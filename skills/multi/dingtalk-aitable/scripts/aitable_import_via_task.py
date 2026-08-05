@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
@@ -52,6 +53,9 @@ def parse_json_output(raw: str) -> Optional[Dict[str, Any]]:
 
 
 def put_file(upload_url: str, file_path: Path) -> Tuple[bool, str]:
+    parsed = urlparse(upload_url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False, "uploadUrl must be a valid HTTPS URL"
     payload = file_path.read_bytes()
     req = Request(upload_url, data=payload, method="PUT")
     # 关键：清空 Content-Type，避免 SignatureDoesNotMatch。

@@ -8704,13 +8704,15 @@
         "internal/cli/schema_hints/metadata/aitable.json",
         "internal/cli/schema_hints/selection/aitable.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.base_search",
-        "skills/mono/references/products/aitable.md"
+        "skills/mono/references/products/aitable.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable.md"
       ],
-      "agent_summary": "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。",
+      "agent_summary": "底层按名称搜索 AI 表格 Base，返回原始候选列表。",
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"
+        "普通按名称解析唯一 baseId 优先用 +resolve-base；只要候选列表用 +base-search；最近访问用 +base-list；电子表格 axls 用 sheet"
       ],
       "canonical_path": "aitable.base_search",
       "cli_name": "search",
@@ -8731,14 +8733,14 @@
               "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
-              "value": "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。"
+              "value": "底层按名称搜索 AI 表格 Base，返回原始候选列表。"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
-          "value": "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。"
+          "value": "底层按名称搜索 AI 表格 Base，返回原始候选列表。"
         },
         "availability": {
           "candidates": [
@@ -8770,7 +8772,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"
+                "普通按名称解析唯一 baseId 优先用 +resolve-base；只要候选列表用 +base-search；最近访问用 +base-list；电子表格 axls 用 sheet"
               ]
             }
           ],
@@ -8779,7 +8781,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"
+            "普通按名称解析唯一 baseId 优先用 +resolve-base；只要候选列表用 +base-search；最近访问用 +base-list；电子表格 axls 用 sheet"
           ]
         },
         "canonical_path": {
@@ -9009,7 +9011,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "用户要找某个 AI 表格/多维表，按名称检索时优先使用"
+                "需要 Shortcut 未公开的底层参数、原始 search_bases 响应或自定义候选处理时"
               ]
             }
           ],
@@ -9018,7 +9020,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "用户要找某个 AI 表格/多维表，按名称检索时优先使用"
+            "需要 Shortcut 未公开的底层参数、原始 search_bases 响应或自定义候选处理时"
           ]
         }
       },
@@ -9237,7 +9239,7 @@
       "source": "reviewed_command_registry",
       "title": "搜索 AI 表格",
       "use_when": [
-        "用户要找某个 AI 表格/多维表，按名称检索时优先使用"
+        "需要 Shortcut 未公开的底层参数、原始 search_bases 响应或自定义候选处理时"
       ]
     },
     "aitable.base_update": {
@@ -23545,13 +23547,15 @@
         "internal/cli/schema_hints/selection/aitable.json",
         "internal/cli/schema_mcp_metadata.json#tools.aitable.field_get",
         "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-field.md"
+        "skills/mono/references/products/aitable/aitable-field.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable/aitable-field.md"
       ],
-      "agent_summary": "获取字段完整配置。",
+      "agent_summary": "底层获取字段完整类型与 config。",
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "表级字段目录也可用 table get；创建字段用 field create；不可用本命令改类型"
+        "正常按字段 ID 展开类型/config 优先用 +field-get；精简字段目录用 +table-get；创建字段用 field create"
       ],
       "canonical_path": "aitable.field_get",
       "cli_name": "get",
@@ -23572,14 +23576,14 @@
               "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
-              "value": "获取字段完整配置。"
+              "value": "底层获取字段完整类型与 config。"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
-          "value": "获取字段完整配置。"
+          "value": "底层获取字段完整类型与 config。"
         },
         "availability": {
           "candidates": [
@@ -23611,7 +23615,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "表级字段目录也可用 table get；创建字段用 field create；不可用本命令改类型"
+                "正常按字段 ID 展开类型/config 优先用 +field-get；精简字段目录用 +table-get；创建字段用 field create"
               ]
             }
           ],
@@ -23620,7 +23624,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "表级字段目录也可用 table get；创建字段用 field create；不可用本命令改类型"
+            "正常按字段 ID 展开类型/config 优先用 +field-get；精简字段目录用 +table-get；创建字段用 field create"
           ]
         },
         "canonical_path": {
@@ -23848,7 +23852,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要字段类型/config（选项、公式等）详情时"
+                "需要 +field-get 未公开的底层参数、原始响应或不同执行语义时"
               ]
             }
           ],
@@ -23857,7 +23861,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要字段类型/config（选项、公式等）详情时"
+            "需要 +field-get 未公开的底层参数、原始响应或不同执行语义时"
           ]
         }
       },
@@ -24201,7 +24205,7 @@
       "source": "reviewed_command_registry",
       "title": "获取字段详情",
       "use_when": [
-        "需要字段类型/config（选项、公式等）详情时"
+        "需要 +field-get 未公开的底层参数、原始响应或不同执行语义时"
       ]
     },
     "aitable.field_list": {
@@ -38119,16 +38123,18 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.query_records",
         "skills/mono/references/products/aitable-record-ops.md",
         "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-record-query.md"
+        "skills/mono/references/products/aitable/aitable-record-query.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable/aitable-record-query.md"
       ],
-      "agent_summary": "查询/搜索记录（filters/sort/分页/--all；cells 键为 fieldId）。",
+      "agent_summary": "底层查询/搜索记录，额外支持原子命令的完整分页控制。",
       "agent_summary_source": "dws-agent-selection/aitable",
       "aliases": [
         "aitable record list"
       ],
       "availability": "available",
       "avoid_when": [
-        "已知 recordId 窄查可用 record get；空行用 query-empty；写入用 create/update；电子表格单元格用 sheet"
+        "普通按 ID、关键词、filters、sort 或 cursor 查询优先用 +record-query；空行用 +record-query-empty；写入用 create/update；电子表格单元格用 sheet"
       ],
       "canonical_path": "aitable.query_records",
       "cli_name": "query",
@@ -38149,14 +38155,14 @@
               "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
-              "value": "查询/搜索记录（filters/sort/分页/--all；cells 键为 fieldId）。"
+              "value": "底层查询/搜索记录，额外支持原子命令的完整分页控制。"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
-          "value": "查询/搜索记录（filters/sort/分页/--all；cells 键为 fieldId）。"
+          "value": "底层查询/搜索记录，额外支持原子命令的完整分页控制。"
         },
         "availability": {
           "candidates": [
@@ -38188,7 +38194,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "已知 recordId 窄查可用 record get；空行用 query-empty；写入用 create/update；电子表格单元格用 sheet"
+                "普通按 ID、关键词、filters、sort 或 cursor 查询优先用 +record-query；空行用 +record-query-empty；写入用 create/update；电子表格单元格用 sheet"
               ]
             }
           ],
@@ -38197,7 +38203,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "已知 recordId 窄查可用 record get；空行用 query-empty；写入用 create/update；电子表格单元格用 sheet"
+            "普通按 ID、关键词、filters、sort 或 cursor 查询优先用 +record-query；空行用 +record-query-empty；写入用 create/update；电子表格单元格用 sheet"
           ]
         },
         "canonical_path": {
@@ -38447,7 +38453,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "查看、筛选、全文搜索或遍历记录时的主入口"
+                "需要 +record-query 未公开的 --all/--page-limit、底层原始响应或不同执行语义时"
               ]
             }
           ],
@@ -38456,7 +38462,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "查看、筛选、全文搜索或遍历记录时的主入口"
+            "需要 +record-query 未公开的 --all/--page-limit、底层原始响应或不同执行语义时"
           ]
         }
       },
@@ -39699,7 +39705,7 @@
       "source": "reviewed_command_registry",
       "title": "获取行记录",
       "use_when": [
-        "查看、筛选、全文搜索或遍历记录时的主入口"
+        "需要 +record-query 未公开的 --all/--page-limit、底层原始响应或不同执行语义时"
       ]
     },
     "aitable.record_batch_update": {
@@ -40397,13 +40403,15 @@
         "skills/mono/references/products/aitable-record-ops.md",
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-attachment.md",
-        "skills/mono/references/products/aitable/aitable-record-create.md"
+        "skills/mono/references/products/aitable/aitable-record-create.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable/aitable-record-create.md"
       ],
-      "agent_summary": "新增记录（cells 的 key 必须是 fieldId）。",
+      "agent_summary": "新增记录；使用 fieldId 写入并从 newRecordIds 回读验证。",
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "更新已有行用 record update；有则更无则增用 upsert；批量同 patch 用 batch-update"
+        "未核对字段类型时先 field get；更新已有行用 record update；有则更无则增用 upsert；本地 CSV/JSON 批量追加可用已评审脚本"
       ],
       "canonical_path": "aitable.record_create",
       "cli_name": "create",
@@ -40424,14 +40432,14 @@
               "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
-              "value": "新增记录（cells 的 key 必须是 fieldId）。"
+              "value": "新增记录；使用 fieldId 写入并从 newRecordIds 回读验证。"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
-          "value": "新增记录（cells 的 key 必须是 fieldId）。"
+          "value": "新增记录；使用 fieldId 写入并从 newRecordIds 回读验证。"
         },
         "availability": {
           "candidates": [
@@ -40463,7 +40471,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "更新已有行用 record update；有则更无则增用 upsert；批量同 patch 用 batch-update"
+                "未核对字段类型时先 field get；更新已有行用 record update；有则更无则增用 upsert；本地 CSV/JSON 批量追加可用已评审脚本"
               ]
             }
           ],
@@ -40472,7 +40480,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "更新已有行用 record update；有则更无则增用 upsert；批量同 patch 用 batch-update"
+            "未核对字段类型时先 field get；更新已有行用 record update；有则更无则增用 upsert；本地 CSV/JSON 批量追加可用已评审脚本"
           ]
         },
         "canonical_path": {
@@ -40700,7 +40708,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要插入新行数据时"
+                "已取得 baseId/tableId 与字段完整配置，需要插入一条或多条新记录并回读时"
               ]
             }
           ],
@@ -40709,7 +40717,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要插入新行数据时"
+            "已取得 baseId/tableId 与字段完整配置，需要插入一条或多条新记录并回读时"
           ]
         }
       },
@@ -41156,7 +41164,7 @@
       "source": "reviewed_command_registry",
       "title": "新增记录",
       "use_when": [
-        "需要插入新行数据时"
+        "已取得 baseId/tableId 与字段完整配置，需要插入一条或多条新记录并回读时"
       ]
     },
     "aitable.record_delete": {
@@ -46549,13 +46557,15 @@
         "internal/cli/schema_mcp_metadata.json#tools.aitable.record_update",
         "skills/mono/references/products/aitable-record-ops.md",
         "skills/mono/references/products/aitable.md",
-        "skills/mono/references/products/aitable/aitable-attachment.md"
+        "skills/mono/references/products/aitable/aitable-attachment.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable/aitable-record-update.md"
       ],
-      "agent_summary": "更新已有记录字段（先 query 拿 recordId；只传需改字段）。",
+      "agent_summary": "更新已有记录字段；先 query 拿 recordId，使用 fieldId 写入并回读。",
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+        "未定位 recordId 或字段配置时先 query/field get；新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
       ],
       "canonical_path": "aitable.record_update",
       "cli_name": "update",
@@ -46576,14 +46586,14 @@
               "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
-              "value": "更新已有记录字段（先 query 拿 recordId；只传需改字段）。"
+              "value": "更新已有记录字段；先 query 拿 recordId，使用 fieldId 写入并回读。"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
-          "value": "更新已有记录字段（先 query 拿 recordId；只传需改字段）。"
+          "value": "更新已有记录字段；先 query 拿 recordId，使用 fieldId 写入并回读。"
         },
         "availability": {
           "candidates": [
@@ -46615,7 +46625,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+                "未定位 recordId 或字段配置时先 query/field get；新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
               ]
             }
           ],
@@ -46624,7 +46634,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
+            "未定位 recordId 或字段配置时先 query/field get；新建用 create；多条共用同一 cells patch 用 batch-update；混合创建/更新用 upsert"
           ]
         },
         "canonical_path": {
@@ -46852,7 +46862,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要修改已有记录若干字段时"
+                "已查询得到真实 recordId 并核对字段类型，需要修改每条记录各自的 cells 时"
               ]
             }
           ],
@@ -46861,7 +46871,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要修改已有记录若干字段时"
+            "已查询得到真实 recordId 并核对字段类型，需要修改每条记录各自的 cells 时"
           ]
         }
       },
@@ -47308,7 +47318,7 @@
       "source": "reviewed_command_registry",
       "title": "更新记录",
       "use_when": [
-        "需要修改已有记录若干字段时"
+        "已查询得到真实 recordId 并核对字段类型，需要修改每条记录各自的 cells 时"
       ]
     },
     "aitable.record_upsert": {
@@ -53447,7 +53457,7 @@
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "知道名称并要解析唯一 baseId 用 +resolve-base；按关键词要完整候选用 +base-search；不要把最近访问列表描述成全部 Base"
       ],
       "canonical_path": "aitable.shortcut_base_list",
       "cli_name": "+base-list",
@@ -53502,7 +53512,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+                "知道名称并要解析唯一 baseId 用 +resolve-base；按关键词要完整候选用 +base-search；不要把最近访问列表描述成全部 Base"
               ]
             }
           ],
@@ -53511,7 +53521,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+            "知道名称并要解析唯一 baseId 用 +resolve-base；按关键词要完整候选用 +base-search；不要把最近访问列表描述成全部 Base"
           ]
         },
         "canonical_path": {
@@ -53943,7 +53953,7 @@
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "只需唯一 baseId 用 +resolve-base；浏览最近访问用 +base-list；需要未公开底层参数或原始响应才用 base search"
       ],
       "canonical_path": "aitable.shortcut_base_search",
       "cli_name": "+base-search",
@@ -53997,7 +54007,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+                "只需唯一 baseId 用 +resolve-base；浏览最近访问用 +base-list；需要未公开底层参数或原始响应才用 base search"
               ]
             }
           ],
@@ -54006,7 +54016,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+            "只需唯一 baseId 用 +resolve-base；浏览最近访问用 +base-list；需要未公开底层参数或原始响应才用 base search"
           ]
         },
         "canonical_path": {
@@ -56196,7 +56206,7 @@
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "只需精简 fieldId/type 目录用 +table-get；创建或修改字段用 field create/update；需要未公开底层语义才用 field get"
       ],
       "canonical_path": "aitable.shortcut_field_get",
       "cli_name": "+field-get",
@@ -56250,7 +56260,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+                "只需精简 fieldId/type 目录用 +table-get；创建或修改字段用 field create/update；需要未公开底层语义才用 field get"
               ]
             }
           ],
@@ -56259,7 +56269,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+            "只需精简 fieldId/type 目录用 +table-get；创建或修改字段用 field create/update；需要未公开底层语义才用 field get"
           ]
         },
         "canonical_path": {
@@ -60316,7 +60326,7 @@
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "完全空行扫描用 +record-query-empty；变更历史用 +record-history-list；需要 --all/--page-limit 或未公开底层语义才用 record query"
       ],
       "canonical_path": "aitable.shortcut_record_query",
       "cli_name": "+record-query",
@@ -60370,7 +60380,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+                "完全空行扫描用 +record-query-empty；变更历史用 +record-history-list；需要 --all/--page-limit 或未公开底层语义才用 record query"
               ]
             }
           ],
@@ -60379,7 +60389,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+            "完全空行扫描用 +record-query-empty；变更历史用 +record-history-list；需要 --all/--page-limit 或未公开底层语义才用 record query"
           ]
         },
         "canonical_path": {
@@ -63485,7 +63495,7 @@
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "多候选时必须让用户消歧；只要完整候选列表用 +base-search；浏览最近访问用 +base-list；已知 baseId 不再重复搜索"
       ],
       "canonical_path": "aitable.shortcut_resolve_base",
       "cli_name": "+resolve-base",
@@ -63539,7 +63549,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+                "多候选时必须让用户消歧；只要完整候选列表用 +base-search；浏览最近访问用 +base-list；已知 baseId 不再重复搜索"
               ]
             }
           ],
@@ -63548,7 +63558,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+            "多候选时必须让用户消歧；只要完整候选列表用 +base-search；浏览最近访问用 +base-list；已知 baseId 不再重复搜索"
           ]
         },
         "canonical_path": {
@@ -63758,7 +63768,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "当你只知道某个多维表 Base 的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 baseId 时使用；内部按 --name 关键词调用 search_bases 搜索 Base，再在本地投影出每个候选的 baseId 和 name。如果只命中一个 Base 就直接返回它的 baseId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何 Base。"
+                "只知道 Base 名称或关键词，需要解析成唯一 baseId 供后续 Table/Record 操作时"
               ]
             }
           ],
@@ -63767,7 +63777,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "当你只知道某个多维表 Base 的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 baseId 时使用；内部按 --name 关键词调用 search_bases 搜索 Base，再在本地投影出每个候选的 baseId 和 name。如果只命中一个 Base 就直接返回它的 baseId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何 Base。"
+            "只知道 Base 名称或关键词，需要解析成唯一 baseId 供后续 Table/Record 操作时"
           ]
         }
       },
@@ -63884,7 +63894,7 @@
       "source": "reviewed_command_registry",
       "title": "按名称搜索多维表 Base 并解析出唯一 baseId（只读）",
       "use_when": [
-        "当你只知道某个多维表 Base 的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 baseId 时使用；内部按 --name 关键词调用 search_bases 搜索 Base，再在本地投影出每个候选的 baseId 和 name。如果只命中一个 Base 就直接返回它的 baseId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何 Base。"
+        "只知道 Base 名称或关键词，需要解析成唯一 baseId 供后续 Table/Record 操作时"
       ]
     },
     "aitable.shortcut_resolve_table": {
@@ -63900,7 +63910,7 @@
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "多候选时必须让用户消歧；需要所有表及字段/视图目录用 +table-get；已知 tableId 不再重复解析"
       ],
       "canonical_path": "aitable.shortcut_resolve_table",
       "cli_name": "+resolve-table",
@@ -63954,7 +63964,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+                "多候选时必须让用户消歧；需要所有表及字段/视图目录用 +table-get；已知 tableId 不再重复解析"
               ]
             }
           ],
@@ -63963,7 +63973,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+            "多候选时必须让用户消歧；需要所有表及字段/视图目录用 +table-get；已知 tableId 不再重复解析"
           ]
         },
         "canonical_path": {
@@ -64173,7 +64183,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "当你已经知道某个多维表 Base 的 baseId、又只记得里面某张数据表(table)的名称或名称关键词、想把它解析成可直接用于后续工具的 tableId 时使用；内部先用 get_tables（只传 baseId）列出该 Base 下的全部数据表，再在本地把每张表投影成 tableId、name，并按 --name 关键词做大小写不敏感的包含匹配来筛选候选。如果只命中一张表就直接返回它的 tableId；如果命中多张则列出全部候选让你消歧，绝不替你瞎猜；如果一张都没命中则提示未找到。这是纯只读操作，只做列举、本地匹配与投影，不会创建、修改或删除任何数据表。"
+                "已有真实 baseId、只知道数据表名称或关键词，需要解析成唯一 tableId 时"
               ]
             }
           ],
@@ -64182,7 +64192,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "当你已经知道某个多维表 Base 的 baseId、又只记得里面某张数据表(table)的名称或名称关键词、想把它解析成可直接用于后续工具的 tableId 时使用；内部先用 get_tables（只传 baseId）列出该 Base 下的全部数据表，再在本地把每张表投影成 tableId、name，并按 --name 关键词做大小写不敏感的包含匹配来筛选候选。如果只命中一张表就直接返回它的 tableId；如果命中多张则列出全部候选让你消歧，绝不替你瞎猜；如果一张都没命中则提示未找到。这是纯只读操作，只做列举、本地匹配与投影，不会创建、修改或删除任何数据表。"
+            "已有真实 baseId、只知道数据表名称或关键词，需要解析成唯一 tableId 时"
           ]
         }
       },
@@ -64395,7 +64405,7 @@
       "source": "reviewed_command_registry",
       "title": "在某个多维表 Base 内按名称解析出唯一的数据表 tableId（只读）",
       "use_when": [
-        "当你已经知道某个多维表 Base 的 baseId、又只记得里面某张数据表(table)的名称或名称关键词、想把它解析成可直接用于后续工具的 tableId 时使用；内部先用 get_tables（只传 baseId）列出该 Base 下的全部数据表，再在本地把每张表投影成 tableId、name，并按 --name 关键词做大小写不敏感的包含匹配来筛选候选。如果只命中一张表就直接返回它的 tableId；如果命中多张则列出全部候选让你消歧，绝不替你瞎猜；如果一张都没命中则提示未找到。这是纯只读操作，只做列举、本地匹配与投影，不会创建、修改或删除任何数据表。"
+        "已有真实 baseId、只知道数据表名称或关键词，需要解析成唯一 tableId 时"
       ]
     },
     "aitable.shortcut_role_list": {
@@ -65656,7 +65666,7 @@
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+        "只知道表名并要解析唯一 tableId 用 +resolve-table；需要字段完整 config 用 +field-get；需要未公开底层语义才用 table get"
       ],
       "canonical_path": "aitable.shortcut_table_get",
       "cli_name": "+table-get",
@@ -65711,7 +65721,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+                "只知道表名并要解析唯一 tableId 用 +resolve-table；需要字段完整 config 用 +field-get；需要未公开底层语义才用 table get"
               ]
             }
           ],
@@ -65720,7 +65730,7 @@
           "review_reason": "Agent-authored and reviewed from the built-in Shortcut intent, executable Cobra path, and declared outcome; it affects selection only and does not alter execution or safety facts.",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"
+            "只知道表名并要解析唯一 tableId 用 +resolve-table；需要字段完整 config 用 +field-get；需要未公开底层语义才用 table get"
           ]
         },
         "canonical_path": {
@@ -70522,13 +70532,15 @@
         "skills/mono/references/products/aitable.md",
         "skills/mono/references/products/aitable/aitable-advperm.md",
         "skills/mono/references/products/aitable/aitable-primary-doc.md",
-        "skills/mono/references/products/aitable/aitable-record-create.md"
+        "skills/mono/references/products/aitable/aitable-record-create.md",
+        "skills/multi/dingtalk-aitable/SKILL.md",
+        "skills/multi/dingtalk-aitable/references/aitable.md"
       ],
-      "agent_summary": "获取数据表结构（字段+视图目录）。",
+      "agent_summary": "底层获取数据表结构、精简字段目录与视图目录。",
       "agent_summary_source": "dws-agent-selection/aitable",
       "availability": "available",
       "avoid_when": [
-        "只关心 Base 级 tables 列表可先 base get；字段完整配置也可用 field get"
+        "正常获取表、精简字段和视图目录优先用 +table-get；按表名解析 ID 用 +resolve-table；完整字段 config 用 +field-get"
       ],
       "canonical_path": "aitable.table_get",
       "cli_name": "get",
@@ -70549,14 +70561,14 @@
               "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
-              "value": "获取数据表结构（字段+视图目录）。"
+              "value": "底层获取数据表结构、精简字段目录与视图目录。"
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
-          "value": "获取数据表结构（字段+视图目录）。"
+          "value": "底层获取数据表结构、精简字段目录与视图目录。"
         },
         "availability": {
           "candidates": [
@@ -70588,7 +70600,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "只关心 Base 级 tables 列表可先 base get；字段完整配置也可用 field get"
+                "正常获取表、精简字段和视图目录优先用 +table-get；按表名解析 ID 用 +resolve-table；完整字段 config 用 +field-get"
               ]
             }
           ],
@@ -70597,7 +70609,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "只关心 Base 级 tables 列表可先 base get；字段完整配置也可用 field get"
+            "正常获取表、精简字段和视图目录优先用 +table-get；按表名解析 ID 用 +resolve-table；完整字段 config 用 +field-get"
           ]
         },
         "canonical_path": {
@@ -70825,7 +70837,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/aitable.json",
               "value": [
-                "需要字段 fieldId 或视图目录以继续 record/field 操作时优先 table get"
+                "需要 +table-get 未公开的底层参数、原始 get_tables 响应或不同执行语义时"
               ]
             }
           ],
@@ -70834,7 +70846,7 @@
           "review_reason": "人工结合实时 dws schema MCP 描述（或 helper 无 live 时用 Skill/Cobra）、兄弟命令分流与 Runtime 确认门禁审阅选型语义。",
           "source": "internal/cli/schema_hints/selection/aitable.json",
           "value": [
-            "需要字段 fieldId 或视图目录以继续 record/field 操作时优先 table get"
+            "需要 +table-get 未公开的底层参数、原始 get_tables 响应或不同执行语义时"
           ]
         }
       },
@@ -71081,7 +71093,7 @@
       "source": "reviewed_command_registry",
       "title": "获取数据表",
       "use_when": [
-        "需要字段 fieldId 或视图目录以继续 record/field 操作时优先 table get"
+        "需要 +table-get 未公开的底层参数、原始 get_tables 响应或不同执行语义时"
       ]
     },
     "aitable.table_list": {
