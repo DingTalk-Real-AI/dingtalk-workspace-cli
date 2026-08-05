@@ -420,8 +420,7 @@ func executeMessagesSendUserFile(
 	if err != nil {
 		return err
 	}
-	targetArgs := map[string]any{}
-	addMessagesSendUserTarget(targetArgs, group, openID)
+	targetArgs := messagesSendUploadTarget(group, openID)
 	idempotencyKey := messagesSendIdempotencyKey(rt)
 	if rt.DryRun() {
 		return rt.Output(map[string]any{
@@ -488,6 +487,13 @@ func executeMessagesSendUserFile(
 		},
 		"result": data,
 	})
+}
+
+func messagesSendUploadTarget(group, openID string) map[string]any {
+	if group != "" {
+		return map[string]any{"openConversationId": group}
+	}
+	return map[string]any{"openDingTalkId": openID}
 }
 
 func addMessagesSendUserTarget(params map[string]any, group, openID string) {

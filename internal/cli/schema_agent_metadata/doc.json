@@ -4713,7 +4713,8 @@
       "availability": "available",
       "avoid_when": [
         "整篇追加 Markdown 优先 doc update --mode append",
-        "插入本地文件附件优先 doc media insert",
+        "插入本地文件附件优先 doc media insert；不要为普通附件手写 attachment JSON",
+        "整段 Markdown 或长内容优先 doc update --mode append，不要拆成大量 block insert",
         "删块用 block delete；改已有块用 block update"
       ],
       "confirmation": "not_required",
@@ -4765,7 +4766,8 @@
         "avoid_when": {
           "value": [
             "整篇追加 Markdown 优先 doc update --mode append",
-            "插入本地文件附件优先 doc media insert",
+            "插入本地文件附件优先 doc media insert；不要为普通附件手写 attachment JSON",
+            "整段 Markdown 或长内容优先 doc update --mode append，不要拆成大量 block insert",
             "删块用 block delete；改已有块用 block update"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
@@ -4776,7 +4778,8 @@
             {
               "value": [
                 "整篇追加 Markdown 优先 doc update --mode append",
-                "插入本地文件附件优先 doc media insert",
+                "插入本地文件附件优先 doc media insert；不要为普通附件手写 attachment JSON",
+                "整段 Markdown 或长内容优先 doc update --mode append，不要拆成大量 block insert",
                 "删块用 block delete；改已有块用 block update"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
@@ -4925,7 +4928,8 @@
         },
         "use_when": {
           "value": [
-            "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
+            "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON",
+            "相对插入时先 block list 获取真实 blockId，再同时传 --ref-block 与 --where before|after"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -4934,7 +4938,8 @@
           "candidates": [
             {
               "value": [
-                "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
+                "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON",
+                "相对插入时先 block list 获取真实 blockId，再同时传 --ref-block 与 --where before|after"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -4968,7 +4973,8 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#doc.insert_document_block"
       ],
       "use_when": [
-        "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
+        "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON",
+        "相对插入时先 block list 获取真实 blockId，再同时传 --ref-block 与 --where before|after"
       ]
     },
     "doc block list": {
@@ -5248,7 +5254,8 @@
       "availability": "available",
       "avoid_when": [
         "插入新块用 block insert；删除用 block delete",
-        "改文档显示名用 rename；整篇覆盖用 update overwrite"
+        "改文档显示名用 rename；整篇覆盖用 update overwrite",
+        "不要跨文档复用 blockId，也不要把 nodeId/commentKey 当作 blockId"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -5298,7 +5305,8 @@
         "avoid_when": {
           "value": [
             "插入新块用 block insert；删除用 block delete",
-            "改文档显示名用 rename；整篇覆盖用 update overwrite"
+            "改文档显示名用 rename；整篇覆盖用 update overwrite",
+            "不要跨文档复用 blockId，也不要把 nodeId/commentKey 当作 blockId"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -5308,7 +5316,8 @@
             {
               "value": [
                 "插入新块用 block insert；删除用 block delete",
-                "改文档显示名用 rename；整篇覆盖用 update overwrite"
+                "改文档显示名用 rename；整篇覆盖用 update overwrite",
+                "不要跨文档复用 blockId，也不要把 nodeId/commentKey 当作 blockId"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -5454,7 +5463,7 @@
         },
         "use_when": {
           "value": [
-            "修改已有块的文本/标题/样式（已知 blockId）时"
+            "修改已有块的文本/标题/样式时；blockId 必须来自目标文档本次 block list 结果"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -5463,7 +5472,7 @@
           "candidates": [
             {
               "value": [
-                "修改已有块的文本/标题/样式（已知 blockId）时"
+                "修改已有块的文本/标题/样式时；blockId 必须来自目标文档本次 block list 结果"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -5497,7 +5506,7 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#doc.update_document_block"
       ],
       "use_when": [
-        "修改已有块的文本/标题/样式（已知 blockId）时"
+        "修改已有块的文本/标题/样式时；blockId 必须来自目标文档本次 block list 结果"
       ]
     },
     "doc comment create": {
@@ -6644,7 +6653,8 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "新建评论用 create/create-inline；删评论用 delete"
+        "新建评论用 create/create-inline；删评论用 delete",
+        "不要把 commentId、blockId 或示例占位符传给 --comment-key"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -6694,7 +6704,8 @@
         },
         "avoid_when": {
           "value": [
-            "新建评论用 create/create-inline；删评论用 delete"
+            "新建评论用 create/create-inline；删评论用 delete",
+            "不要把 commentId、blockId 或示例占位符传给 --comment-key"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -6703,7 +6714,8 @@
           "candidates": [
             {
               "value": [
-                "新建评论用 create/create-inline；删评论用 delete"
+                "新建评论用 create/create-inline；删评论用 delete",
+                "不要把 commentId、blockId 或示例占位符传给 --comment-key"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -6897,7 +6909,7 @@
         },
         "use_when": {
           "value": [
-            "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
+            "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 必须来自本次 list/create 返回"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -6906,7 +6918,7 @@
           "candidates": [
             {
               "value": [
-                "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
+                "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 必须来自本次 list/create 返回"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -6941,7 +6953,7 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#doc.reply_comment"
       ],
       "use_when": [
-        "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
+        "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 必须来自本次 list/create 返回"
       ]
     },
     "doc comment update": {
@@ -7501,7 +7513,7 @@
       "avoid_when": [
         "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
         "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-        "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+        "导入本地 Word/Markdown 为在线文档用 dws doc import，并显式提供 --folder 或 --workspace；不要用已迁移的 doc upload --convert"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -7553,7 +7565,7 @@
           "value": [
             "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
             "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-            "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+            "导入本地 Word/Markdown 为在线文档用 dws doc import，并显式提供 --folder 或 --workspace；不要用已迁移的 doc upload --convert"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -7564,7 +7576,7 @@
               "value": [
                 "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
                 "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-                "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+                "导入本地 Word/Markdown 为在线文档用 dws doc import，并显式提供 --folder 或 --workspace；不要用已迁移的 doc upload --convert"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -7775,7 +7787,7 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "常规文件删除优先 dws drive delete；本入口仅为兼容",
+        "常规文件删除使用 dws drive delete；不要继续选择已弃用的 doc delete 兼容入口",
         "用户未确认或目标不清时不要删",
         "删块用 doc block delete；删评论用 doc comment delete"
       ],
@@ -7826,7 +7838,7 @@
         },
         "avoid_when": {
           "value": [
-            "常规文件删除优先 dws drive delete；本入口仅为兼容",
+            "常规文件删除使用 dws drive delete；不要继续选择已弃用的 doc delete 兼容入口",
             "用户未确认或目标不清时不要删",
             "删块用 doc block delete；删评论用 doc comment delete"
           ],
@@ -7837,7 +7849,7 @@
           "candidates": [
             {
               "value": [
-                "常规文件删除优先 dws drive delete；本入口仅为兼容",
+                "常规文件删除使用 dws drive delete；不要继续选择已弃用的 doc delete 兼容入口",
                 "用户未确认或目标不清时不要删",
                 "删块用 doc block delete；删评论用 doc comment delete"
               ],
@@ -9095,7 +9107,7 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+        "发起导入用 doc import；不要先调用 import get，也不要使用示例占位 taskId"
       ],
       "confirmation": "not_required",
       "effect": "write",
@@ -9138,7 +9150,7 @@
         },
         "avoid_when": {
           "value": [
-            "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+            "发起导入用 doc import；不要先调用 import get，也不要使用示例占位 taskId"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -9147,7 +9159,7 @@
           "candidates": [
             {
               "value": [
-                "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+                "发起导入用 doc import；不要先调用 import get，也不要使用示例占位 taskId"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -9337,7 +9349,7 @@
         },
         "use_when": {
           "value": [
-            "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+            "仅在 doc import 已返回真实 taskId 且自动轮询超时/中断后，查询导入任务结果时"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -9346,7 +9358,7 @@
           "candidates": [
             {
               "value": [
-                "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+                "仅在 doc import 已返回真实 taskId 且自动轮询超时/中断后，查询导入任务结果时"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -9373,7 +9385,7 @@
         "structured-hint:internal/cli/schema_hints/products/doc.json"
       ],
       "use_when": [
-        "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+        "仅在 doc import 已返回真实 taskId 且自动轮询超时/中断后，查询导入任务结果时"
       ]
     },
     "doc info": {
@@ -9919,7 +9931,8 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "下载钉盘普通文件用 drive download；导出在线文档用 doc export"
+        "下载钉盘普通文件用 drive download；导出在线文档用 doc export",
+        "不要把 blockId/nodeId 当作 resourceId，也不要编造 --output：本命令返回临时 downloadUrl"
       ],
       "confirmation": "not_required",
       "effect": "read",
@@ -9968,7 +9981,8 @@
         },
         "avoid_when": {
           "value": [
-            "下载钉盘普通文件用 drive download；导出在线文档用 doc export"
+            "下载钉盘普通文件用 drive download；导出在线文档用 doc export",
+            "不要把 blockId/nodeId 当作 resourceId，也不要编造 --output：本命令返回临时 downloadUrl"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -9977,7 +9991,8 @@
           "candidates": [
             {
               "value": [
-                "下载钉盘普通文件用 drive download；导出在线文档用 doc export"
+                "下载钉盘普通文件用 drive download；导出在线文档用 doc export",
+                "不要把 blockId/nodeId 当作 resourceId，也不要编造 --output：本命令返回临时 downloadUrl"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -10123,7 +10138,7 @@
         },
         "use_when": {
           "value": [
-            "获取文档正文中附件的临时下载 URL（resourceId 来自 block list attachment）时"
+            "获取文档正文中附件的临时下载 URL 时；resourceId 必须来自本次 block list 返回的 attachment 块"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -10132,7 +10147,7 @@
           "candidates": [
             {
               "value": [
-                "获取文档正文中附件的临时下载 URL（resourceId 来自 block list attachment）时"
+                "获取文档正文中附件的临时下载 URL 时；resourceId 必须来自本次 block list 返回的 attachment 块"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -10164,7 +10179,7 @@
         "structured-hint:internal/cli/schema_hints/selection-review.json#doc.download_doc_attachment"
       ],
       "use_when": [
-        "获取文档正文中附件的临时下载 URL（resourceId 来自 block list attachment）时"
+        "获取文档正文中附件的临时下载 URL 时；resourceId 必须来自本次 block list 返回的 attachment 块"
       ]
     },
     "doc media insert": {
@@ -14670,7 +14685,8 @@
       "availability": "available",
       "avoid_when": [
         "目标不是 adoc 或只要改单个块时改用 doc block update",
-        "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
+        "覆盖模式用户未确认前不要执行；先 --dry-run 预览，确认后再加 --yes",
+        "--content 与 --content-file 二选一；--index 仅用于 mode=append",
         "创建新文档用 doc create，不要用 update 冒充创建"
       ],
       "confirmation": "not_required",
@@ -14722,7 +14738,8 @@
         "avoid_when": {
           "value": [
             "目标不是 adoc 或只要改单个块时改用 doc block update",
-            "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
+            "覆盖模式用户未确认前不要执行；先 --dry-run 预览，确认后再加 --yes",
+            "--content 与 --content-file 二选一；--index 仅用于 mode=append",
             "创建新文档用 doc create，不要用 update 冒充创建"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
@@ -14733,7 +14750,8 @@
             {
               "value": [
                 "目标不是 adoc 或只要改单个块时改用 doc block update",
-                "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
+                "覆盖模式用户未确认前不要执行；先 --dry-run 预览，确认后再加 --yes",
+                "--content 与 --content-file 二选一；--index 仅用于 mode=append",
                 "创建新文档用 doc create，不要用 update 冒充创建"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
@@ -14914,7 +14932,8 @@
           "value": [
             "用户要向已有 adoc 追加内容时用 --mode append（更安全）",
             "用户明确要求整篇覆盖替换时用 --mode overwrite（破坏性）",
-            "append 且要插到第 N 个 block 前时加 --index N（先 block list）"
+            "append 且要插到第 N 个 block 前时加 --index N（先 block list）",
+            "长文本、多行内容或表格优先写入 UTF-8 文件并使用 --content-file，避免 shell 转义损坏"
           ],
           "source": "internal/cli/schema_hints/selection/doc.json",
           "precedence": "reviewed_explicit",
@@ -14925,7 +14944,8 @@
               "value": [
                 "用户要向已有 adoc 追加内容时用 --mode append（更安全）",
                 "用户明确要求整篇覆盖替换时用 --mode overwrite（破坏性）",
-                "append 且要插到第 N 个 block 前时加 --index N（先 block list）"
+                "append 且要插到第 N 个 block 前时加 --index N（先 block list）",
+                "长文本、多行内容或表格优先写入 UTF-8 文件并使用 --content-file，避免 shell 转义损坏"
               ],
               "source": "internal/cli/schema_hints/selection/doc.json",
               "precedence": "reviewed_explicit",
@@ -14964,7 +14984,8 @@
       "use_when": [
         "用户要向已有 adoc 追加内容时用 --mode append（更安全）",
         "用户明确要求整篇覆盖替换时用 --mode overwrite（破坏性）",
-        "append 且要插到第 N 个 block 前时加 --index N（先 block list）"
+        "append 且要插到第 N 个 block 前时加 --index N（先 block list）",
+        "长文本、多行内容或表格优先写入 UTF-8 文件并使用 --content-file，避免 shell 转义损坏"
       ]
     },
     "doc upload": {

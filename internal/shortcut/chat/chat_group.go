@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
@@ -82,6 +84,18 @@ var ChatMembersGet = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"users", "open-dingtalk-ids"}},
 	},
 	Tips: []string{`dws chat +chat-members-get --id <openConversationId> --users odid1,odid2`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		for _, value := range rt.StrSliceFirst("users", "open-dingtalk-ids") {
+			value = strings.TrimSpace(value)
+			if value == "" || !isOpenID(value) {
+				return apperrors.NewValidation(fmt.Sprintf(
+					"--users/--open-dingtalk-ids 只接受成员 openDingTalkId；%q 不是 openDingTalkId。请先查询人员并传返回的 openDingTalkId",
+					value,
+				))
+			}
+		}
+		return nil
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		conversationID := rt.StrFirst("id", "group", "chat-id", "conversation-id", "open-conversation-id")
 		return rt.CallMCP("list_group_member_by_ids", map[string]any{
@@ -186,6 +200,12 @@ var ChatUpdateIcon = shortcut.Shortcut{
 		{Name: "icon-media-id", Type: shortcut.FlagString, Desc: "群头像 mediaId（以 @ 开头）", Required: true},
 	},
 	Tips: []string{`dws chat +chat-update-icon --group <openConversationId> --icon-media-id <mediaId>`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := helpers.ValidateChatMediaID(rt.Str("icon-media-id")); err != nil {
+			return apperrors.NewValidation("invalid --icon-media-id: " + err.Error())
+		}
+		return nil
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("update_group_icon", map[string]any{
 			"openConversationId": rt.Str("group"),
@@ -207,7 +227,8 @@ var ChatUpdateSettings = shortcut.Shortcut{
 		{Name: "setting-key", Type: shortcut.FlagString, Desc: "群设置项 key，如 searchable / onlyAdminCanAtAll", Required: true},
 		{Name: "status", Type: shortcut.FlagInt, Desc: "设置值：0=关闭，1=开启", Required: true},
 	},
-	Tips: []string{`dws chat +chat-update-settings --group <openConversationId> --setting-key searchable --status 1`},
+	Tips:     []string{`dws chat +chat-update-settings --group <openConversationId> --setting-key searchable --status 1`},
+	Validate: validateChatUpdateSettings,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("update_group_settings", map[string]any{
 			"openConversationId": rt.Str("group"),
@@ -215,6 +236,27 @@ var ChatUpdateSettings = shortcut.Shortcut{
 			"status":             rt.Int("status"),
 		})
 	},
+}
+
+var supportedChatSettingKeys = map[string]struct{}{
+	"authority": {}, "joinValidation": {}, "onlyAdminCanAtAll": {}, "searchable": {},
+	"addFriendForbidden": {}, "toolbarStatus": {}, "pluginCustomizeVerify": {},
+	"onlyAdminCanDING": {}, "allMembersCanCreateMcsConf": {}, "onlyAdminCanSetMsgTop": {},
+	"onlyAdminCanPinMsg": {}, "onlyAdminCanSendFile": {}, "allMembersCanCreateCalendar": {},
+	"groupEmailDisabled": {}, "groupRedEnvelopeSwitch": {}, "groupLiveAuthority": {},
+	"groupBillAuthority": {},
+}
+
+func validateChatUpdateSettings(rt *shortcut.RuntimeContext) error {
+	key := strings.TrimSpace(rt.Str("setting-key"))
+	if _, ok := supportedChatSettingKeys[key]; !ok {
+		return apperrors.NewValidation(fmt.Sprintf("不支持的 --setting-key %q；请使用 chat group update-settings --help 中列出的设置项", key))
+	}
+	status := rt.Int("status")
+	if status != 0 && status != 1 {
+		return apperrors.NewValidation("--status 只允许 0（关闭）或 1（开启）")
+	}
+	return nil
 }
 
 // ChatDismiss dismisses (destroys) a group (dismiss_group, im).

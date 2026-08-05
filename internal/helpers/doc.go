@@ -1652,7 +1652,8 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	updateCmd.Flags().String("markdown", "", "已弃用，请使用 --content 代替")
 	_ = updateCmd.Flags().MarkHidden("markdown")
 	updateCmd.Flags().String("mode", "", "更新模式: overwrite=覆盖, append=追加 (必填)")
-	_ = updateCmd.MarkFlagRequired("mode")
+	// Kept out of Cobra's generic required-flag validator so doc local
+	// preflight can return a structured, actionable error before MCP dispatch.
 	updateCmd.Flags().Int("index", -1, "插入位置（从 0 开始），仅在 mode=append 时生效。指定将内容插入到文档第几个 block 之前。不传时追加到末尾")
 	updateCmd.Flags().Bool("yes", false, "确认执行破坏性写入 (仅 --mode overwrite 需要)")
 	updateCmd.Flags().Bool("dry-run", false, "预览覆盖写入差异，不调用远端 update")
@@ -2902,6 +2903,7 @@ CLI 内部自动完成全部流程:
 	permissionCmd.Hidden = true
 
 	root.AddCommand(searchCmd, listCmd, infoCmd, readCmd, createCmd, updateCmd, uploadCmd, downloadCmd, copyCmd, moveCmd, renameCmd, deleteCmd, fileCmd, folderCmd, blockCmd, commentCmd, mediaCmd, permissionCmd, exportCmd, importCmd, versionCmd, templateCmd, newDocStyleCommand())
+	attachDocLocalPreflight(root)
 
 	return root
 }

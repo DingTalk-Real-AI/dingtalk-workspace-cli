@@ -363,6 +363,24 @@ func TestSuggestBusinessHintChatRecovery(t *testing.T) {
 	}
 }
 
+func TestSuggestBusinessHintDocRecovery(t *testing.T) {
+	cases := []struct{ message, want string }{
+		{"nodeId not found", "drive search"},
+		{"blockId 不存在", "block list"},
+		{"commentKey invalid", "comment list/create"},
+		{"resourceId not found", "attachment"},
+		{"workspaceId invalid", "wiki space list"},
+		{"folderId invalid", "dentryId"},
+		{"templateId not found", "template search"},
+		{"version 不存在", "version list"},
+	}
+	for _, tc := range cases {
+		if got := SuggestBusinessHint(map[string]any{"message": tc.message}); !strings.Contains(got, tc.want) {
+			t.Errorf("SuggestBusinessHint(%q) = %q, want containing %q", tc.message, got, tc.want)
+		}
+	}
+}
+
 func TestCrossPlatformCoveragePATSerializationAndPolicyEdges(t *testing.T) {
 	oldHost := hostControlProvider
 	oldBrowser := patBrowserProvider

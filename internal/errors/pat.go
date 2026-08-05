@@ -340,6 +340,22 @@ func suggestForBusinessErrorText(body map[string]any) string {
 	switch {
 	case strings.Contains(msg, "搜索内容不能为空"):
 		return "请提供非空搜索关键词: dws doc search --query \"关键词\""
+	case strings.Contains(msg, "nodeId") && (strings.Contains(msg, "not found") || strings.Contains(msg, "不存在")):
+		return "目标文档 nodeId 不存在或当前账号不可见。请用 dws drive search 或 dws wiki node search 重新获取真实 nodeId；不要复用示例占位符。"
+	case strings.Contains(msg, "blockId") && (strings.Contains(msg, "not found") || strings.Contains(msg, "不存在")):
+		return "目标 blockId 不存在或已变化。请重新执行 dws doc block list --node <DOC_ID> --format json，并从本次结果取 blockId。"
+	case strings.Contains(msg, "commentKey") && (strings.Contains(msg, "invalid") || strings.Contains(msg, "不存在") || strings.Contains(msg, "not found")):
+		return "commentKey 无效或评论已不存在。请从 dws doc comment list/create 的当前返回结果中提取 commentKey，不要使用 commentId 或占位符。"
+	case strings.Contains(msg, "resourceId") && (strings.Contains(msg, "invalid") || strings.Contains(msg, "不存在") || strings.Contains(msg, "not found")):
+		return "resourceId 无效。请用 dws doc block list 查找 attachment 块并读取真实 resourceId；不要把 blockId 当作 resourceId。"
+	case strings.Contains(msg, "workspaceId") && (strings.Contains(msg, "invalid") || strings.Contains(msg, "不存在") || strings.Contains(msg, "not found")):
+		return "workspaceId 无效或无权访问。请用 dws wiki space list --type myWikiSpace --format json 获取当前账号可用的 workspaceId。"
+	case strings.Contains(msg, "folderId") && (strings.Contains(msg, "invalid") || strings.Contains(msg, "不存在") || strings.Contains(msg, "not found")):
+		return "folderId 无效。doc 的 --folder 需要文档文件夹 nodeId/URL，不是 drive 的纯数字 dentryId；请重新列出目标空间节点。"
+	case strings.Contains(msg, "templateId") && (strings.Contains(msg, "invalid") || strings.Contains(msg, "不存在") || strings.Contains(msg, "not found")):
+		return "templateId 无效或模板不可见。请先用 dws doc template search --query <关键词> --format json 获取当前账号可用的真实 templateId。"
+	case strings.Contains(msg, "version") && (strings.Contains(msg, "不存在") || strings.Contains(msg, "not found")):
+		return "目标版本不存在。请先执行 dws doc version list --node <DOC_ID> --format json，并从当前版本列表选择可回滚版本。"
 	case strings.Contains(msg, "User has no permission to access this email"):
 		return "请确认邮箱地址正确，查看可用邮箱: dws mail mailbox list"
 	case strings.Contains(msg, "频率超限") || strings.Contains(msg, "rate limit"):

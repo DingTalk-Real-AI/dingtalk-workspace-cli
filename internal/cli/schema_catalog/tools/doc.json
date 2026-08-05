@@ -2322,7 +2322,7 @@
       "avoid_when": [
         "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
         "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-        "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+        "导入本地 Word/Markdown 为在线文档用 dws doc import，并显式提供 --folder 或 --workspace；不要用已迁移的 doc upload --convert"
       ],
       "canonical_path": "doc.create_document",
       "cli_name": "create",
@@ -2385,7 +2385,7 @@
               "value": [
                 "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
                 "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-                "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+                "导入本地 Word/Markdown 为在线文档用 dws doc import，并显式提供 --folder 或 --workspace；不要用已迁移的 doc upload --convert"
               ]
             }
           ],
@@ -2396,7 +2396,7 @@
           "value": [
             "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
             "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
-            "导入本地 Word/Markdown 为在线文档改用 dws doc import（若可用）或 upload --convert"
+            "导入本地 Word/Markdown 为在线文档用 dws doc import，并显式提供 --folder 或 --workspace；不要用已迁移的 doc upload --convert"
           ]
         },
         "canonical_path": {
@@ -6450,7 +6450,7 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "常规文件删除优先 dws drive delete；本入口仅为兼容",
+        "常规文件删除使用 dws drive delete；不要继续选择已弃用的 doc delete 兼容入口",
         "用户未确认或目标不清时不要删",
         "删块用 doc block delete；删评论用 doc comment delete"
       ],
@@ -6512,7 +6512,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "常规文件删除优先 dws drive delete；本入口仅为兼容",
+                "常规文件删除使用 dws drive delete；不要继续选择已弃用的 doc delete 兼容入口",
                 "用户未确认或目标不清时不要删",
                 "删块用 doc block delete；删评论用 doc comment delete"
               ]
@@ -6523,7 +6523,7 @@
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "常规文件删除优先 dws drive delete；本入口仅为兼容",
+            "常规文件删除使用 dws drive delete；不要继续选择已弃用的 doc delete 兼容入口",
             "用户未确认或目标不清时不要删",
             "删块用 doc block delete；删评论用 doc comment delete"
           ]
@@ -7557,7 +7557,8 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "下载钉盘普通文件用 drive download；导出在线文档用 doc export"
+        "下载钉盘普通文件用 drive download；导出在线文档用 doc export",
+        "不要把 blockId/nodeId 当作 resourceId，也不要编造 --output：本命令返回临时 downloadUrl"
       ],
       "canonical_path": "doc.download_doc_attachment",
       "cli_name": "download",
@@ -7617,7 +7618,8 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "下载钉盘普通文件用 drive download；导出在线文档用 doc export"
+                "下载钉盘普通文件用 drive download；导出在线文档用 doc export",
+                "不要把 blockId/nodeId 当作 resourceId，也不要编造 --output：本命令返回临时 downloadUrl"
               ]
             }
           ],
@@ -7626,7 +7628,8 @@
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "下载钉盘普通文件用 drive download；导出在线文档用 doc export"
+            "下载钉盘普通文件用 drive download；导出在线文档用 doc export",
+            "不要把 blockId/nodeId 当作 resourceId，也不要编造 --output：本命令返回临时 downloadUrl"
           ]
         },
         "canonical_path": {
@@ -7848,7 +7851,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "获取文档正文中附件的临时下载 URL（resourceId 来自 block list attachment）时"
+                "获取文档正文中附件的临时下载 URL 时；resourceId 必须来自本次 block list 返回的 attachment 块"
               ]
             }
           ],
@@ -7857,7 +7860,7 @@
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "获取文档正文中附件的临时下载 URL（resourceId 来自 block list attachment）时"
+            "获取文档正文中附件的临时下载 URL 时；resourceId 必须来自本次 block list 返回的 attachment 块"
           ]
         }
       },
@@ -8095,7 +8098,7 @@
       "source": "reviewed_command_registry",
       "title": "下载文档附件",
       "use_when": [
-        "获取文档正文中附件的临时下载 URL（resourceId 来自 block list attachment）时"
+        "获取文档正文中附件的临时下载 URL 时；resourceId 必须来自本次 block list 返回的 attachment 块"
       ]
     },
     "doc.download_file": {
@@ -10939,7 +10942,7 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+        "发起导入用 doc import；不要先调用 import get，也不要使用示例占位 taskId"
       ],
       "canonical_path": "doc.import_get",
       "cli_name": "get",
@@ -10996,7 +10999,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+                "发起导入用 doc import；不要先调用 import get，也不要使用示例占位 taskId"
               ]
             }
           ],
@@ -11005,7 +11008,7 @@
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "发起导入用 doc import（若入口可用）；不要用本命令代替导入"
+            "发起导入用 doc import；不要先调用 import get，也不要使用示例占位 taskId"
           ]
         },
         "canonical_path": {
@@ -11261,7 +11264,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+                "仅在 doc import 已返回真实 taskId 且自动轮询超时/中断后，查询导入任务结果时"
               ]
             }
           ],
@@ -11270,7 +11273,7 @@
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+            "仅在 doc import 已返回真实 taskId 且自动轮询超时/中断后，查询导入任务结果时"
           ]
         }
       },
@@ -11389,7 +11392,7 @@
       "source": "reviewed_command_registry",
       "title": "查询导入任务结果（手动兜底）",
       "use_when": [
-        "查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"
+        "仅在 doc import 已返回真实 taskId 且自动轮询超时/中断后，查询导入任务结果时"
       ]
     },
     "doc.insert_document_block": {
@@ -11414,7 +11417,8 @@
       "availability": "available",
       "avoid_when": [
         "整篇追加 Markdown 优先 doc update --mode append",
-        "插入本地文件附件优先 doc media insert",
+        "插入本地文件附件优先 doc media insert；不要为普通附件手写 attachment JSON",
+        "整段 Markdown 或长内容优先 doc update --mode append，不要拆成大量 block insert",
         "删块用 block delete；改已有块用 block update"
       ],
       "canonical_path": "doc.insert_document_block",
@@ -11486,7 +11490,8 @@
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
                 "整篇追加 Markdown 优先 doc update --mode append",
-                "插入本地文件附件优先 doc media insert",
+                "插入本地文件附件优先 doc media insert；不要为普通附件手写 attachment JSON",
+                "整段 Markdown 或长内容优先 doc update --mode append，不要拆成大量 block insert",
                 "删块用 block delete；改已有块用 block update"
               ]
             }
@@ -11497,7 +11502,8 @@
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "整篇追加 Markdown 优先 doc update --mode append",
-            "插入本地文件附件优先 doc media insert",
+            "插入本地文件附件优先 doc media insert；不要为普通附件手写 attachment JSON",
+            "整段 Markdown 或长内容优先 doc update --mode append，不要拆成大量 block insert",
             "删块用 block delete；改已有块用 block update"
           ]
         },
@@ -11722,7 +11728,8 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
+                "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON",
+                "相对插入时先 block list 获取真实 blockId，再同时传 --ref-block 与 --where before|after"
               ]
             }
           ],
@@ -11731,7 +11738,8 @@
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
+            "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON",
+            "相对插入时先 block list 获取真实 blockId，再同时传 --ref-block 与 --where before|after"
           ]
         }
       },
@@ -12873,7 +12881,8 @@
       "source": "reviewed_command_registry",
       "title": "插入块元素",
       "use_when": [
-        "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
+        "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON",
+        "相对插入时先 block list 获取真实 blockId，再同时传 --ref-block 与 --where before|after"
       ]
     },
     "doc.list_comments": {
@@ -19702,7 +19711,8 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "新建评论用 create/create-inline；删评论用 delete"
+        "新建评论用 create/create-inline；删评论用 delete",
+        "不要把 commentId、blockId 或示例占位符传给 --comment-key"
       ],
       "canonical_path": "doc.reply_comment",
       "cli_name": "reply",
@@ -19763,7 +19773,8 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "新建评论用 create/create-inline；删评论用 delete"
+                "新建评论用 create/create-inline；删评论用 delete",
+                "不要把 commentId、blockId 或示例占位符传给 --comment-key"
               ]
             }
           ],
@@ -19772,7 +19783,8 @@
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "新建评论用 create/create-inline；删评论用 delete"
+            "新建评论用 create/create-inline；删评论用 delete",
+            "不要把 commentId、blockId 或示例占位符传给 --comment-key"
           ]
         },
         "canonical_path": {
@@ -20050,7 +20062,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
+                "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 必须来自本次 list/create 返回"
               ]
             }
           ],
@@ -20059,7 +20071,7 @@
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
+            "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 必须来自本次 list/create 返回"
           ]
         }
       },
@@ -20720,7 +20732,7 @@
       "source": "reviewed_command_registry",
       "title": "回复评论",
       "use_when": [
-        "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 来自 list/create"
+        "回复已有评论（文字、可 @用户/@群，或 --emoji 表情）；commentKey 必须来自本次 list/create 返回"
       ]
     },
     "doc.search_documents": {
@@ -38103,7 +38115,8 @@
       "availability": "available",
       "avoid_when": [
         "目标不是 adoc 或只要改单个块时改用 doc block update",
-        "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
+        "覆盖模式用户未确认前不要执行；先 --dry-run 预览，确认后再加 --yes",
+        "--content 与 --content-file 二选一；--index 仅用于 mode=append",
         "创建新文档用 doc create，不要用 update 冒充创建"
       ],
       "canonical_path": "doc.update_document",
@@ -38180,7 +38193,8 @@
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
                 "目标不是 adoc 或只要改单个块时改用 doc block update",
-                "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
+                "覆盖模式用户未确认前不要执行；先 --dry-run 预览，确认后再加 --yes",
+                "--content 与 --content-file 二选一；--index 仅用于 mode=append",
                 "创建新文档用 doc create，不要用 update 冒充创建"
               ]
             }
@@ -38191,7 +38205,8 @@
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "目标不是 adoc 或只要改单个块时改用 doc block update",
-            "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
+            "覆盖模式用户未确认前不要执行；先 --dry-run 预览，确认后再加 --yes",
+            "--content 与 --content-file 二选一；--index 仅用于 mode=append",
             "创建新文档用 doc create，不要用 update 冒充创建"
           ]
         },
@@ -38448,7 +38463,8 @@
               "value": [
                 "用户要向已有 adoc 追加内容时用 --mode append（更安全）",
                 "用户明确要求整篇覆盖替换时用 --mode overwrite（破坏性）",
-                "append 且要插到第 N 个 block 前时加 --index N（先 block list）"
+                "append 且要插到第 N 个 block 前时加 --index N（先 block list）",
+                "长文本、多行内容或表格优先写入 UTF-8 文件并使用 --content-file，避免 shell 转义损坏"
               ]
             }
           ],
@@ -38459,7 +38475,8 @@
           "value": [
             "用户要向已有 adoc 追加内容时用 --mode append（更安全）",
             "用户明确要求整篇覆盖替换时用 --mode overwrite（破坏性）",
-            "append 且要插到第 N 个 block 前时加 --index N（先 block list）"
+            "append 且要插到第 N 个 block 前时加 --index N（先 block list）",
+            "长文本、多行内容或表格优先写入 UTF-8 文件并使用 --content-file，避免 shell 转义损坏"
           ]
         }
       },
@@ -39074,23 +39091,8 @@
           "type": "integer"
         },
         "mode": {
-          "cli_required": true,
           "description": "更新模式: overwrite=覆盖, append=追加 (必填)",
           "field_provenance": {
-            "cli_required": {
-              "candidates": [
-                {
-                  "precedence": "cobra_contract",
-                  "selected": true,
-                  "source": "cobra_hard_required",
-                  "value": true
-                }
-              ],
-              "precedence": "cobra_contract",
-              "resolution": "highest_precedence",
-              "source": "cobra_hard_required",
-              "value": true
-            },
             "description": {
               "candidates": [
                 {
@@ -39134,14 +39136,8 @@
             "required": {
               "candidates": [
                 {
-                  "precedence": "cobra_contract",
-                  "selected": true,
-                  "source": "cobra_hard_required",
-                  "value": true
-                },
-                {
                   "precedence": "inference",
-                  "selected": false,
+                  "selected": true,
                   "source": "usage_required_inference",
                   "value": true
                 },
@@ -39152,9 +39148,9 @@
                   "value": false
                 }
               ],
-              "precedence": "cobra_contract",
+              "precedence": "inference",
               "resolution": "highest_precedence",
-              "source": "cobra_hard_required",
+              "source": "usage_required_inference",
               "value": true
             },
             "required_when": {
@@ -39520,7 +39516,8 @@
       "use_when": [
         "用户要向已有 adoc 追加内容时用 --mode append（更安全）",
         "用户明确要求整篇覆盖替换时用 --mode overwrite（破坏性）",
-        "append 且要插到第 N 个 block 前时加 --index N（先 block list）"
+        "append 且要插到第 N 个 block 前时加 --index N（先 block list）",
+        "长文本、多行内容或表格优先写入 UTF-8 文件并使用 --content-file，避免 shell 转义损坏"
       ]
     },
     "doc.update_document_block": {
@@ -39545,7 +39542,8 @@
       "availability": "available",
       "avoid_when": [
         "插入新块用 block insert；删除用 block delete",
-        "改文档显示名用 rename；整篇覆盖用 update overwrite"
+        "改文档显示名用 rename；整篇覆盖用 update overwrite",
+        "不要跨文档复用 blockId，也不要把 nodeId/commentKey 当作 blockId"
       ],
       "canonical_path": "doc.update_document_block",
       "cli_name": "update",
@@ -39615,7 +39613,8 @@
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
                 "插入新块用 block insert；删除用 block delete",
-                "改文档显示名用 rename；整篇覆盖用 update overwrite"
+                "改文档显示名用 rename；整篇覆盖用 update overwrite",
+                "不要跨文档复用 blockId，也不要把 nodeId/commentKey 当作 blockId"
               ]
             }
           ],
@@ -39625,7 +39624,8 @@
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "插入新块用 block insert；删除用 block delete",
-            "改文档显示名用 rename；整篇覆盖用 update overwrite"
+            "改文档显示名用 rename；整篇覆盖用 update overwrite",
+            "不要跨文档复用 blockId，也不要把 nodeId/commentKey 当作 blockId"
           ]
         },
         "canonical_path": {
@@ -39847,7 +39847,7 @@
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "修改已有块的文本/标题/样式（已知 blockId）时"
+                "修改已有块的文本/标题/样式时；blockId 必须来自目标文档本次 block list 结果"
               ]
             }
           ],
@@ -39856,7 +39856,7 @@
           "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "修改已有块的文本/标题/样式（已知 blockId）时"
+            "修改已有块的文本/标题/样式时；blockId 必须来自目标文档本次 block list 结果"
           ]
         }
       },
@@ -40698,7 +40698,7 @@
       "source": "reviewed_command_registry",
       "title": "更新块元素",
       "use_when": [
-        "修改已有块的文本/标题/样式（已知 blockId）时"
+        "修改已有块的文本/标题/样式时；blockId 必须来自目标文档本次 block list 结果"
       ]
     },
     "doc.update_permission": {

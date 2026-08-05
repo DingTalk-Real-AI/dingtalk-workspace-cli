@@ -54,6 +54,15 @@ func TestMessagesSendPublishesCompleteIdentityConstraintInputs(t *testing.T) {
 	}
 }
 
+func TestMessagesSendUploadTargetUsesUploadInterfaceFields(t *testing.T) {
+	if got := messagesSendUploadTarget("cid-1", ""); !reflect.DeepEqual(got, map[string]any{"openConversationId": "cid-1"}) {
+		t.Fatalf("group upload target = %#v", got)
+	}
+	if got := messagesSendUploadTarget("", "D-open-1"); !reflect.DeepEqual(got, map[string]any{"openDingTalkId": "D-open-1"}) {
+		t.Fatalf("direct upload target = %#v", got)
+	}
+}
+
 func TestCrossPlatformCoverageSafeResourceDownloadsStayReadOnly(t *testing.T) {
 	for _, command := range []shortcut.Shortcut{MessagesMget, MessagesResourceDownload} {
 		if command.Risk != shortcut.RiskRead {
@@ -155,6 +164,9 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileFlow(t *testing.T)
 		fake.calls[2].tool != "send_personal_message" {
 		t.Fatalf("file flow calls = %#v", fake.calls)
 	}
+	if fake.calls[0].args["openConversationId"] != "cid" || fake.calls[1].args["openConversationId"] != "cid" {
+		t.Fatalf("upload target args = %#v / %#v, want openConversationId", fake.calls[0].args, fake.calls[1].args)
+	}
 	send := fake.calls[2]
 	if send.args["msgType"] != "file" || send.args["openConversationId"] != "cid" ||
 		send.args["uuid"] != "file-key" {
@@ -174,6 +186,32 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileFlow(t *testing.T)
 	}
 	if payload["requestedMessageType"] != "audio" || payload["effectiveMessageType"] != "file" {
 		t.Fatalf("file output = %#v", payload)
+	}
+}
+
+func TestChatShortcutInvalidInputsStopBeforeMCP(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "member numeric user id", args: []string{"chat", "+chat-members-get", "--id", "cid", "--users", "489149"}},
+		{name: "icon local path", args: []string{"chat", "+chat-update-icon", "--group", "cid", "--icon-media-id", "./logo.png", "--yes"}},
+		{name: "setting unknown key", args: []string{"chat", "+chat-update-settings", "--group", "cid", "--setting-key", "unknown", "--status", "1", "--yes"}},
+		{name: "setting invalid status", args: []string{"chat", "+chat-update-settings", "--group", "cid", "--setting-key", "searchable", "--status", "2", "--yes"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tc.args)
+			if err := root.Execute(); err == nil {
+				t.Fatal("invalid command succeeded, want validation error")
+			}
+			if len(fake.calls) != 0 {
+				t.Fatalf("MCP calls = %#v, want zero", fake.calls)
+			}
+		})
 	}
 }
 

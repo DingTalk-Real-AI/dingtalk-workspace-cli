@@ -85,6 +85,22 @@ func TestCrossPlatformCoverageChatGroupUpdateIconRejectsBlankMediaID(t *testing.
 	}
 }
 
+func TestCrossPlatformCoverageChatGroupUpdateIconRejectsLocalPathBeforeMCP(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	caller := &productExampleCaller{}
+	err := runChatCoverageCommand(t, caller,
+		"group", "update-icon", "--group=cid", "--icon-media-id=./logo.png")
+	if err == nil {
+		t.Fatal("update group icon with local path succeeded, want validation error")
+	}
+	if caller.calls != 0 {
+		t.Fatalf("tool calls = %d, want 0", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageChatCommandValidationAndSuccessEdges(t *testing.T) {
 	previousDeps, previousArgs := deps, os.Args
 	os.Args = []string{"dws", "chat"}

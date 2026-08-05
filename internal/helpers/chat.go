@@ -3776,8 +3776,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			iconMediaID := strings.TrimSpace(mustGetFlag(cmd, "icon-media-id"))
-			if iconMediaID == "" {
-				return fmt.Errorf("invalid --icon-media-id: mediaId 不能为空\n  hint: 请使用上游媒体上传能力返回的有效 mediaId；DWS CLI 不提供本地文件到 mediaId 的上传命令")
+			if err := ValidateChatMediaID(iconMediaID); err != nil {
+				return fmt.Errorf("invalid --icon-media-id: %w", err)
 			}
 			return callMCPToolOnServer("im", "update_group_icon", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "group"),
