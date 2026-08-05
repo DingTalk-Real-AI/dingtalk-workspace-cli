@@ -2858,6 +2858,38 @@ func TestCrossPlatformCoverageDriveDownloadCancelWithResumeHint(t *testing.T) {
 	}
 }
 
+// deprecated folder create 警告路径 + publish set 缺 node 校验，补 overall 缓冲。
+func TestCrossPlatformCoverageDriveFolderCreateDeprecatedAndPublishSetValidate(t *testing.T) {
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"ok":true}`}}}
+	if err := executeDriveEdge(t, caller, "folder", "create", "--name", "tmp-folder"); err != nil {
+		t.Fatalf("deprecated folder create should still run: %v", err)
+	}
+
+	err := executeDriveEdge(t, &scriptedToolCaller{}, "publish", "set")
+	if err == nil {
+		t.Fatal("publish set without node should fail validation")
+	}
+}
+
+// download-version cancel + --part-size（可续传）提示，额外 overall 缓冲。
+func TestCrossPlatformCoverageDriveDownloadVersionCancelWithResumeHint(t *testing.T) {
+	oldGet := httpGetFile
+	httpGetFile = func(_ context.Context, _ string, _ map[string]string, _ string) error {
+		return context.Canceled
+	}
+	t.Cleanup(func() { httpGetFile = oldGet })
+
+	dest := filepath.Join(t.TempDir(), "ver-cancel-resume.bin")
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"downloadUrl":"https://fake.invalid/f.bin","fileSize":100}`},
+	}}
+	err := executeDriveEdge(t, caller,
+		"download-version", "--node", "node-1", "--version", "3", "--output", dest, "--part-size", "1MB")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("应返回 context.Canceled, got: %v", err)
+	}
+}
+
 // ──────────────────────────────────────────────────────────
 // 覆盖率补全：drive.go:652 download-version 命令 cancel + --no-resume else 分支
 // ──────────────────────────────────────────────────────────
