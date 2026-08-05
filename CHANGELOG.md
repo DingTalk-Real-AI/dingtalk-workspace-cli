@@ -6,6 +6,53 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.57-beta.1] - 2026-08-05
+
+This beta starts the v1.0.57 line on top of v1.0.56. It packages the unified
+command-contract and runtime Schema architecture, complete Multi IM Chat
+coverage, document whiteboard and OA approval workflows, Wiki activity feeds,
+and compatibility and CI reliability fixes.
+
+### Added
+
+- **Contact personal-status updates** (#872) — adds `contact user update-ownness`
+  (alias `set-ownness`) for updating a user's personal status text. The write
+  operation maps reviewed `userId` and `ownnessText` parameters to the service
+  contract and requires confirmation unless `--yes` is explicitly supplied.
+- **Document whiteboard workflows** (#861) — adds `doc whiteboard insert`,
+  `whiteboard query/update`, and `doc media upload`. These commands support
+  confirmed document-embedded whiteboard creation and updates, structured
+  OpenNodes reads, and preparation of node-bound Vector/SVG resources.
+- **Complete Multi IM Chat coverage** (#860) — hardens deterministic group and
+  stable-ID resolution, sending, querying, downloading, pagination, and JSON
+  export. The remaining reviewed Chat Shortcuts enter Schema coverage, with
+  destructive delete and clear operations aligned to confirmation gates.
+- **OA approval form workflows** (#853) — adds OA form-schema lookup,
+  process forecast, and confirmed approval-instance creation, supporting both
+  simple flags and complete `--request` payloads.
+- **Wiki activity-feed queries** (#862) — adds `wiki feed list` to retrieve
+  workspace document activity, with cursor paging and optional file exclusion.
+
+### Changed
+
+- **Unified command and Schema contract framework** (#830) — Leaf commands and
+  Shortcuts now use the shared typed `corecmd` base for flags, constraints,
+  confirmation, Help, and runtime Schema projection. Schema delivery assembles
+  from leaf Contract declarations at runtime; the retired hint overlays,
+  pinned MCP metadata, and committed Catalog artifacts are no longer delivery
+  authorities.
+- **Faster macOS CI without reducing native coverage** (#857) — narrows the
+  macOS race suite to Keychain, codesign, and Darwin-only tests while adding a
+  reachability contract that prevents native-only tests from being silently
+  excluded.
+
+### Fixed
+
+- **Chat media-download JSON compatibility** (#854) — restores parseable
+  `success`, `downloadUrl`, and `output` fields for
+  `chat message download-media --format json` after a successful download,
+  without progress output corrupting JSON stdout.
+
 ### Added
 
 - **Document-embedded whiteboard workflows** — adds `doc whiteboard insert` for confirmed creation and part-ID verification, `whiteboard query/update` for structured OpenNodes reads and confirmed writes, and `doc media upload` for preparing node-bound Vector/SVG resources. The public adapter uses an explicit helper-only whiteboard endpoint, validates update envelopes locally, decodes `resultJson`, and publishes the full command, Schema, Skill, and safety contract migrated from `dws-wukong@e2da8ab947c6`.
