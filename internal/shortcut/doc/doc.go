@@ -982,6 +982,11 @@ var TemplateApply = shortcut.Shortcut{
 }
 
 func init() {
+	// Expert/recovery leaves remain callable without entering Agent discovery.
+	CommentCreateInline.Contract = corecmd.ContractDecl{}
+	TemplateApply.Contract = corecmd.ContractDecl{}
+	canonicalizeHistoryShortcuts()
+	canonicalizeCommentShortcuts()
 	shortcut.Register(
 		Search,
 		List,
@@ -993,6 +998,9 @@ func init() {
 		CommentCreateInline,
 		ExportSubmit,
 		ExportGet,
+		legacyVersionSave,
+		legacyVersionList,
+		legacyVersionRevert,
 		VersionSave,
 		VersionList,
 		VersionRevert,

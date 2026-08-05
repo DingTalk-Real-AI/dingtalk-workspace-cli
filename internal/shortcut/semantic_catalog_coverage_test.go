@@ -137,6 +137,29 @@ func TestCrossPlatformCoverageSemanticCatalogRejectsInvalidRecords(t *testing.T)
 	}
 }
 
+func TestCrossPlatformCoverageSemanticCatalogRejectsCrossSourceDuplicates(t *testing.T) {
+	valid := []byte(`{
+		"version": 1,
+		"service": "duplicate-test",
+		"default_availability": "available",
+		"shortcuts": {
+			"+same": {
+				"disposition": "semantic_adapter",
+				"semantic_delta": "reviewed",
+				"risk": "read",
+				"public": true,
+				"reviewed": true
+			}
+		}
+	}`)
+	defer func() {
+		if recover() == nil {
+			t.Fatal("duplicate semantic records did not panic")
+		}
+	}()
+	_ = mustLoadSemanticCatalogs(valid, valid)
+}
+
 func TestCrossPlatformCoveragePublicCatalogSemanticAndGeneratedLookups(t *testing.T) {
 	if !InPublicCatalog("chat", "+messages-send") {
 		t.Fatal("reviewed public semantic shortcut is missing")

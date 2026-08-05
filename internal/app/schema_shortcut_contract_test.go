@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	publicShortcutCount = 266
+	publicShortcutCount = 294
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including hidden leaves such as minutes.shortcut_minutes_search.
-	schemaPublishedShortcutCount = 267
+	schemaPublishedShortcutCount = 295
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 266
+	publiclyDeliveredShortcutCount = 294
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
@@ -194,17 +194,9 @@ func assertDeliveryShortcutSafetyAndInterface(
 	canonical string,
 ) {
 	t.Helper()
-	risk := declared.Risk
-	if risk == "" {
-		risk = shortcut.RiskRead
-	}
-	wantEffect, wantRisk, wantConfirmation, wantIdempotency := "read", "low", "not_required", "idempotent"
-	switch risk {
-	case shortcut.RiskWrite:
-		wantEffect, wantRisk, wantConfirmation, wantIdempotency = "write", "medium", "user_required", "unknown"
-	case shortcut.RiskHighWrite:
-		wantEffect, wantRisk, wantConfirmation, wantIdempotency = "destructive", "high", "user_required", "unknown"
-	}
+	safety := shortcut.EffectiveSafety(declared)
+	wantEffect, wantRisk := safety.Effect, safety.Risk
+	wantConfirmation, wantIdempotency := safety.Confirmation, safety.Idempotency
 	for field, want := range map[string]string{
 		"effect":         wantEffect,
 		"risk":           wantRisk,
@@ -234,6 +226,15 @@ func assertDeliveryShortcutParameters(
 	for _, flag := range declared.Flags {
 		if !flag.Hidden {
 			publicFlags = append(publicFlags, flag)
+			if flag.AliasesVisible {
+				for _, alias := range flag.Aliases {
+					aliasFlag := flag
+					aliasFlag.Name = alias
+					aliasFlag.Default = ""
+					aliasFlag.Aliases = nil
+					publicFlags = append(publicFlags, aliasFlag)
+				}
+			}
 		}
 	}
 	if got, want := len(parameters), len(publicFlags); got != want {
@@ -298,6 +299,13 @@ func shortcutSchemaRequired(declared shortcut.Shortcut, flagName string) bool {
 	for _, flag := range declared.Flags {
 		if flag.Name == flagName && flag.Required {
 			return true
+		}
+		if flag.Required && flag.AliasesVisible {
+			for _, alias := range flag.Aliases {
+				if alias == flagName {
+					return true
+				}
+			}
 		}
 	}
 	public := make(map[string]bool, len(declared.Flags))

@@ -18,7 +18,10 @@ GO_PATH = ROOT / "internal" / "shortcut" / "public_catalog_generated.go"
 CATALOG_PATH = ROOT / "docs" / "shortcut-public-catalog.json"
 FOLLOWUP_MD_PATH = ROOT / "docs" / "shortcut-real-test-followups.md"
 FOLLOWUP_JSON_PATH = ROOT / "docs" / "shortcut-real-test-followups.json"
-SEMANTIC_PATH = ROOT / "internal" / "shortcut" / "semantic_catalog.json"
+SEMANTIC_PATHS = [
+    ROOT / "internal" / "shortcut" / "semantic_catalog.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_doc.json",
+]
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -107,44 +110,46 @@ def collect() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     # whether the current account happened to have a fixture for a real run.
     # Keep the real-run rows as evidence/follow-ups, but publish Chat entries
     # exclusively from the reviewed semantic catalog.
-    semantic = load(SEMANTIC_PATH)
-    service = semantic.get("service") or ""
-    if service != "chat":
-        raise ValueError(f"unexpected semantic catalog service: {service!r}")
-    public = [row for row in evidence_public if row["service"] != service]
-    for command, record in semantic.get("shortcuts", {}).items():
-        if not record.get("public"):
-            continue
-        if not record.get("reviewed"):
-            raise ValueError(f"public semantic shortcut is not reviewed: {command}")
-        availability = (
-            record.get("availability")
-            or semantic.get("default_availability")
-            or ""
-        )
-        if availability != "available":
-            raise ValueError(
-                f"public semantic shortcut is not available: {command}={availability}"
+    semantics = [load(path) for path in SEMANTIC_PATHS]
+    semantic_services = {semantic.get("service") or "" for semantic in semantics}
+    if "" in semantic_services or len(semantic_services) != len(semantics):
+        raise ValueError(f"invalid or duplicate semantic catalog services: {semantic_services!r}")
+    public = [row for row in evidence_public if row["service"] not in semantic_services]
+    for semantic in semantics:
+        service = semantic["service"]
+        for command, record in semantic.get("shortcuts", {}).items():
+            if not record.get("public"):
+                continue
+            if not record.get("reviewed"):
+                raise ValueError(f"public semantic shortcut is not reviewed: {service} {command}")
+            availability = (
+                record.get("availability")
+                or semantic.get("default_availability")
+                or ""
             )
-        observed = evidence_by_key.get((service, command), {})
-        risk = record.get("risk") or ""
-        if not risk:
-            raise ValueError(f"public semantic shortcut lacks reviewed risk: {command}")
-        if observed.get("risk") and observed["risk"] != risk:
-            raise ValueError(
-                f"semantic shortcut risk drift: {command}: "
-                f"reviewed={risk} observed={observed['risk']}"
-            )
-        public.append({
-            "suite": "semantic",
-            "service": service,
-            "command": command,
-            "risk": risk,
-            "status": "reviewed_available",
-            "disposition": record.get("disposition") or "",
-            "semantic_delta": record.get("semantic_delta") or "",
-            "availability": availability,
-        })
+            if availability != "available":
+                raise ValueError(
+                    f"public semantic shortcut is not available: {service} {command}={availability}"
+                )
+            observed = evidence_by_key.get((service, command), {})
+            risk = record.get("risk") or ""
+            if not risk:
+                raise ValueError(f"public semantic shortcut lacks reviewed risk: {service} {command}")
+            if observed.get("risk") and observed["risk"] != risk:
+                raise ValueError(
+                    f"semantic shortcut risk drift: {service} {command}: "
+                    f"reviewed={risk} observed={observed['risk']}"
+                )
+            public.append({
+                "suite": "semantic",
+                "service": service,
+                "command": command,
+                "risk": risk,
+                "status": "reviewed_available",
+                "disposition": record.get("disposition") or "",
+                "semantic_delta": record.get("semantic_delta") or "",
+                "availability": availability,
+            })
     public.sort(key=lambda r: (r["service"], r["command"]))
     followups.sort(key=lambda r: (r["suite"], r["service"], r["command"]))
     return public, followups

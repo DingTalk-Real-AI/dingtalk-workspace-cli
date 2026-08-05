@@ -116,5 +116,6 @@ func shareDocBuildText(url, note string) string {
 }
 
 func init() {
-	shortcut.Register(ShareDoc)
+	canonicalizeShareDoc()
+	shortcut.Register(legacyShareDoc, ShareDoc)
 }

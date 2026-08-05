@@ -27,7 +27,7 @@ import (
 // TestCmdcoreMountPreservesEveryBuiltInShortcutSurface is the differential
 // guard for the live mount migration. It derives the historical Cobra surface
 // directly from each Shortcut declaration and checks the command-built tree.
-func TestCmdcoreMountPreservesEveryBuiltInShortcutSurface(t *testing.T) {
+func TestCrossPlatformCoverageCmdcoreMountPreservesEveryBuiltInShortcutSurface(t *testing.T) {
 	mounted := map[string]*cobra.Command{}
 	for _, service := range builtin.BaseCommands() {
 		for _, command := range service.Commands() {
@@ -83,6 +83,18 @@ func TestCmdcoreMountPreservesEveryBuiltInShortcutSurface(t *testing.T) {
 					spec.Service, spec.Command, flag.Name, got.Hidden, flag.Hidden)
 			}
 			assertShortcutDefault(t, command, spec, flag)
+			for _, alias := range flag.Aliases {
+				declaredFlags[alias] = flag
+				gotAlias := command.Flags().Lookup(alias)
+				if gotAlias == nil {
+					t.Errorf("%s %s: flag alias --%s is not mounted", spec.Service, spec.Command, alias)
+					continue
+				}
+				wantHidden := !flag.AliasesVisible
+				if gotAlias.Hidden != wantHidden {
+					t.Errorf("%s %s: flag alias --%s hidden = %v, want %v", spec.Service, spec.Command, alias, gotAlias.Hidden, wantHidden)
+				}
+			}
 		}
 		command.Flags().VisitAll(func(flag *pflag.Flag) {
 			if flag.Name == "help" {

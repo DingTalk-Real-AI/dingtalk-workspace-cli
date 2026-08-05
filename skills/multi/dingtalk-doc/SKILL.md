@@ -34,20 +34,44 @@ metadata:
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
+| `dws doc +access-change` | write | 预检已有协作者后变更文档角色 |
+| `dws doc +access-grant` | write | 按姓名解析后批量授予文档权限 |
+| `dws doc +access-revoke` | high-risk-write | 预检并移除指定协作者的文档权限 |
+| `dws doc +background-delete` | write | 清除文档背景色 |
+| `dws doc +background-update` | write | 设置文档 #RRGGBB 背景纯色 |
+| `dws doc +checkpoint-update` | write | 先保存可回滚版本，再更新并读回验证 |
 | `dws doc +comment-create` | write | 在文档上创建一条评论 |
+| `dws doc +comment-delete` | high-risk-write | 永久删除指定文档评论 |
 | `dws doc +comment-list` | read | 查询文档评论列表 |
 | `dws doc +comment-reply` | write | 回复文档中的一条评论 |
+| `dws doc +comment-update` | write | 更新指定文档评论正文和 mention |
 | `dws doc +copy` | write | 复制文档/文件到指定文件夹或知识库 |
+| `dws doc +create` | write | 从 Markdown 或 JSONML 创建在线文字文档 |
+| `dws doc +create-from-template` | write | 按 templateId 直达或搜索消歧后创建文档 |
 | `dws doc +doc-append` | write | 在文档末尾追加一段文本（安全追加，不改动原有内容） |
+| `dws doc +export` | read | 提交、轮询并安全下载在线文档导出文件 |
 | `dws doc +export-get` | read | 根据 jobId 查询文档导出任务结果 |
 | `dws doc +export-submit` | read | 提交在线文档导出任务 (docx/markdown/pdf)，返回 jobId |
+| `dws doc +fetch` | read | 读取完整或局部文档内容，并按 detail 控制保真度 |
 | `dws doc +find-doc` | read | 按关键词搜索云文档并投影关键字段（只读） |
+| `dws doc +grant-and-share` | write | 确保目标角色后按姓名逐人发送文档链接 |
+| `dws doc +import` | write | 上传本地文件并等待转换成在线文档对象 |
+| `dws doc +inspect` | read | 聚合文档元信息，并按需附带样式、权限、历史、媒体和评论 |
 | `dws doc +list` | read | 列出文件夹或知识库下的直接子节点 |
+| `dws doc +media-download` | read | 安全下载文档正文附件到工作目录 |
+| `dws doc +media-insert` | write | 上传本地图片或文件并插入文档正文 |
+| `dws doc +media-list` | read | 列出文档正文中的图片和附件资源 |
+| `dws doc +media-preview` | read | 下载正文媒体到受控临时目录并返回预览路径 |
 | `dws doc +move` | write | 移动文档/文件到指定文件夹或知识库 |
+| `dws doc +resource-delete` | high-risk-write | 幂等清除文档封面 |
+| `dws doc +resource-download` | read | 读取并安全下载当前文档封面 |
+| `dws doc +resource-update` | write | 从本地图片或 HTTPS URL 设置文档封面 |
+| `dws doc +review` | read | 聚合未解决评论、引用原文和块上下文 |
 | `dws doc +search` | read | 按关键词搜索有权限的文档 (不传则返回最近访问) |
 | `dws doc +share-doc` | write | 按姓名把文档链接私信发给某人（自动解析 userId） |
 | `dws doc +template-list` | read | 获取文档模板列表 |
 | `dws doc +template-search` | read | 根据关键词搜索文档模板 |
+| `dws doc +update` | write | 追加、覆盖或按 block 精确更新文档内容 |
 | `dws doc +version-list` | read | 查看文档历史版本列表 |
 | `dws doc +version-revert` | high-risk-write | 回滚文档到指定历史版本 |
 | `dws doc +version-save` | write | 手动保存文档版本快照 |

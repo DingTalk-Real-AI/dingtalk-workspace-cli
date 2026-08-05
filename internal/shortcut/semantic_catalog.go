@@ -13,6 +13,9 @@ import (
 //go:embed semantic_catalog.json
 var semanticCatalogJSON []byte
 
+//go:embed semantic_catalog_doc.json
+var docSemanticCatalogJSON []byte
+
 type semanticCatalogFile struct {
 	Version      int                              `json:"version"`
 	Service      string                           `json:"service"`
@@ -30,17 +33,34 @@ type semanticCatalogRecord struct {
 	Reviewed      bool                `json:"reviewed"`
 }
 
-var reviewedSemanticCatalog = mustLoadSemanticCatalog()
+var reviewedSemanticCatalog = mustLoadSemanticCatalogs(
+	semanticCatalogJSON,
+	docSemanticCatalogJSON,
+)
 
+func mustLoadSemanticCatalogs(sources ...[]byte) map[string]semanticCatalogRecord {
+	out := make(map[string]semanticCatalogRecord)
+	for _, raw := range sources {
+		loadSemanticCatalog(raw, out)
+	}
+	return out
+}
+
+// mustLoadSemanticCatalog is retained for focused validation tests of the
+// legacy single-source loader. Production loads every reviewed product source
+// through mustLoadSemanticCatalogs above.
 func mustLoadSemanticCatalog() map[string]semanticCatalogRecord {
+	return mustLoadSemanticCatalogs(semanticCatalogJSON)
+}
+
+func loadSemanticCatalog(raw []byte, out map[string]semanticCatalogRecord) {
 	var source semanticCatalogFile
-	if err := json.Unmarshal(semanticCatalogJSON, &source); err != nil {
+	if err := json.Unmarshal(raw, &source); err != nil {
 		panic(fmt.Sprintf("invalid shortcut semantic catalog: %v", err))
 	}
 	if source.Version != 1 || strings.TrimSpace(source.Service) == "" {
 		panic("invalid shortcut semantic catalog header")
 	}
-	out := make(map[string]semanticCatalogRecord, len(source.Shortcuts))
 	for command, record := range source.Shortcuts {
 		if !strings.HasPrefix(command, "+") {
 			panic(fmt.Sprintf("semantic catalog command %q lacks + prefix", command))
@@ -76,9 +96,12 @@ func mustLoadSemanticCatalog() map[string]semanticCatalogRecord {
 			panic(fmt.Sprintf("semantic catalog command %q cannot be public with availability %q",
 				command, record.Availability))
 		}
-		out[publicCatalogKey(source.Service, command)] = record
+		key := publicCatalogKey(source.Service, command)
+		if _, exists := out[key]; exists {
+			panic(fmt.Sprintf("duplicate shortcut semantic catalog entry %s %s", source.Service, command))
+		}
+		out[key] = record
 	}
-	return out
 }
 
 func applyReviewedSemanticCatalog(s Shortcut) (Shortcut, bool) {

@@ -20,19 +20,24 @@ type smartCoverageCaller struct {
 	responses map[string][]string
 	failAt    map[string]int
 	counts    map[string]int
+	arguments map[string][]map[string]any
 }
 
 func (c *smartCoverageCaller) CallTool(
 	_ context.Context,
 	product, tool string,
-	_ map[string]any,
+	args map[string]any,
 ) (*edition.ToolResult, error) {
 	if c.counts == nil {
 		c.counts = map[string]int{}
 	}
+	if c.arguments == nil {
+		c.arguments = map[string][]map[string]any{}
+	}
 	key := product + "/" + tool
 	c.counts[key]++
-	if c.failAt[key] == c.counts[key] {
+	c.arguments[key] = append(c.arguments[key], args)
+	if c.failAt[key] == -1 || c.failAt[key] == c.counts[key] {
 		return nil, errors.New("fixture failure")
 	}
 	responses := c.responses[key]

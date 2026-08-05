@@ -77,11 +77,28 @@ func FromShortcut(s Shortcut) corecmd.Spec {
 }
 
 func fromShortcutPostMount(s Shortcut) func(*cobra.Command) {
-	if len(s.Aliases) == 0 && strings.TrimSpace(s.SinglePositionalAliasFor) == "" {
+	hasVisibleFlagAliases := false
+	for _, flag := range s.Flags {
+		if flag.AliasesVisible && len(flag.Aliases) > 0 {
+			hasVisibleFlagAliases = true
+			break
+		}
+	}
+	if len(s.Aliases) == 0 && strings.TrimSpace(s.SinglePositionalAliasFor) == "" && !hasVisibleFlagAliases {
 		return nil
 	}
 	return func(cmd *cobra.Command) {
 		cmd.Aliases = append([]string(nil), s.Aliases...)
+		for _, flag := range s.Flags {
+			if !flag.AliasesVisible {
+				continue
+			}
+			for _, alias := range flag.Aliases {
+				if mounted := cmd.Flags().Lookup(alias); mounted != nil {
+					mounted.Hidden = false
+				}
+			}
+		}
 		name := strings.TrimSpace(s.SinglePositionalAliasFor)
 		if name == "" {
 			return
@@ -115,6 +132,16 @@ func safetySpecDeclared(safety contract.SafetySpec) bool {
 		strings.TrimSpace(safety.Risk) != "" ||
 		strings.TrimSpace(safety.Confirmation) != "" ||
 		strings.TrimSpace(safety.Idempotency) != ""
+}
+
+// EffectiveSafety returns the exact safety declaration used by the runtime and
+// ContractFinal. Management/listing projections must use this instead of
+// re-inferring confirmation from the legacy Risk enum.
+func EffectiveSafety(s Shortcut) contract.SafetySpec {
+	if safetySpecDeclared(s.Safety) {
+		return s.Safety
+	}
+	return shortcutSafetySpec(s.risk())
 }
 
 func shortcutExamples(tips []string) string {
@@ -188,6 +215,7 @@ func fromShortcutFlags(flags []Flag) []corecmd.FlagSpec {
 			ValidationMode: corecmd.ValidationShortcut,
 			RequiredError:  fmt.Sprintf("缺少必填参数 --%s：%s", f.Name, f.Desc),
 			Enum:           append([]string(nil), f.Enum...),
+			Aliases:        append([]string(nil), f.Aliases...),
 		})
 	}
 	return out
