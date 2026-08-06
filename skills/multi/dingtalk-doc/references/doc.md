@@ -482,6 +482,26 @@ dws doc version revert --node <DOC_ID> --version <N> --yes --format json  # 3. �
 | `import` | `documentUrl` / `documentName` / `documentType` | 导入完成后的在线文档地址和名称 |
 | `import`（中断后） | `taskId` | `import get` 的 `--task-id`（查询后取结果获取文档地址） |
 
+## 白板卡片与白板媒体资源
+
+创建文档内空白板前先确认目标文档，获得用户确认后执行：
+
+```bash
+dws doc whiteboard insert --node <DOC_ID> --yes --format json
+```
+
+返回的 `blockId` 用于 `doc block delete`，`whiteboardId` 是白板 partId，用于
+`dws whiteboard query/update`。两者不可混用。为白板 Vector/SVG 准备资源时：
+
+```bash
+dws doc media upload --node <DOC_ID> --file ./icon.svg \
+  --mime-type image/svg+xml --yes --format json
+```
+
+上传与后续白板更新必须使用同一 nodeId；仅使用稳定返回的 `resourceId` 和
+`resourceUrl`，禁止使用临时 uploadUrl 或跨文档复用资源。白板内容协议与更新
+流程见 `dingtalk-misc` 的 `references/whiteboard.md`。
+
 ## 相关产品
 
 - [wiki](../../dingtalk-wiki/references/wiki.md) — 知识库空间级管理（创建/查询/列出/搜索知识库），doc 中的文档存储在 wiki 知识库中

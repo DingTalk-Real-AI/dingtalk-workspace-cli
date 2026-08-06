@@ -123,16 +123,11 @@ func TestCrossPlatformCoverageAgentExampleRemainingBranches(t *testing.T) {
 	t.Run("disposition narrows dry_run capability", func(t *testing.T) {
 		bound, registry := crossPlatformAgentExampleFixture(t, func(_ *cobra.Command, payload *contract.ContractFinalPayload) {
 			payload.DryRun = &contract.DryRunSpec{PreviewKind: "plan"}
-		})
-		t.Cleanup(restoreSelection)
-		agentExampleSelectionFn = func(cmd *cobra.Command) AgentToolSelection {
-			selection := contractFinalToolSelection(cmd)
-			selection.ExampleDispositions = []AgentExampleDisposition{{
-				Index: idx(0), Mode: AgentExampleModeContractOnly, Reviewed: true,
-				Reason: "cannot dry-run safely", ReasonCode: AgentExampleReasonStatefulPreflight,
+			payload.Selection.ExampleDispositions = []contract.ExampleDisposition{{
+				Index: idx(0), Mode: contract.ExampleDispositionModeContractOnly, Reviewed: true,
+				Reason: "cannot dry-run safely", ReasonCode: contract.ExampleDispositionReasonStatefulPreflight,
 			}}
-			return selection
-		}
+		})
 		plan, err := BuildAgentExampleExecutionPlan(bound, registry)
 		if err != nil {
 			t.Fatalf("plan error = %v", err)
@@ -146,16 +141,12 @@ func TestCrossPlatformCoverageAgentExampleRemainingBranches(t *testing.T) {
 	})
 
 	t.Run("disposition without dry_run capability fails", func(t *testing.T) {
-		bound, registry := crossPlatformAgentExampleFixture(t, nil)
-		t.Cleanup(restoreSelection)
-		agentExampleSelectionFn = func(cmd *cobra.Command) AgentToolSelection {
-			selection := contractFinalToolSelection(cmd)
-			selection.ExampleDispositions = []AgentExampleDisposition{{
-				Index: idx(0), Mode: AgentExampleModeContractOnly, Reviewed: true,
-				Reason: "no dry run", ReasonCode: AgentExampleReasonLocalState,
+		bound, registry := crossPlatformAgentExampleFixture(t, func(_ *cobra.Command, payload *contract.ContractFinalPayload) {
+			payload.Selection.ExampleDispositions = []contract.ExampleDisposition{{
+				Index: idx(0), Mode: contract.ExampleDispositionModeContractOnly, Reviewed: true,
+				Reason: "no dry run", ReasonCode: contract.ExampleDispositionReasonLocalState,
 			}}
-			return selection
-		}
+		})
 		_, err := BuildAgentExampleExecutionPlan(bound, registry)
 		if err == nil || !strings.Contains(err.Error(), "narrows no explicit dry_run") {
 			t.Fatalf("error = %v", err)

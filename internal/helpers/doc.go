@@ -816,6 +816,8 @@ func newDocCommand() *cobra.Command {
   dws doc create                        创建文档
   dws doc update                        更新文档内容
   dws doc block [list|insert|update|delete]  块级编辑
+  dws doc whiteboard insert             插入空白板卡片 (返回 blockId 与白板 partId)
+  dws doc media [upload|download]       文档媒体资源 (上传可复用资源 / 下载附件)
   dws doc comment [list|create|reply|update|delete|create-inline]  文档评论管理
   dws doc export                        导出在线文档 (支持 docx / markdown / pdf，自动完成提交→轮询→下载)
   dws doc export get                    查询导出任务结果 (手动兜底)
@@ -2525,6 +2527,54 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 	mediaDownloadCmd.Flags().String("node", "", "目标文档的标识，支持传入 URL 或 ID (必填)")
 	mediaDownloadCmd.Flags().String("resource-id", "", "附件资源 ID，可通过 dws doc block list 获取 (必填)")
 
+	mediaUploadCmd := &cobra.Command{
+		Use:   "upload",
+		Short: "上传可复用的文档媒体资源",
+		Long: `将本地文件上传为绑定到目标 nodeId 的文档媒体资源，但不插入文档正文。
+
+成功输出稳定的 resourceId 和 resourceUrl，可供同一 nodeId 下的白板 Vector/SVG
+等后续写入使用；临时 uploadUrl 不会输出。`,
+		Example: `  dws doc media upload --node DOC_ID --file ./icon.svg --mime-type image/svg+xml --format json`,
+		RunE:    runDocMediaUpload,
+	}
+	DeclareLeafMetadata(mediaUploadCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "doc",
+				Name:           "media_upload",
+				CanonicalPath:  "doc.media_upload",
+				CLIPath:        "doc media upload",
+				PrimaryCLIPath: "doc media upload",
+			},
+			Description: "上传可复用的文档媒体资源",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "request", RemoteReads: false},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "命令先获取临时文档上传凭证，再在本地执行 OSS PUT，并仅暴露稳定的 node 绑定资源契约，不能绑定为单一 interface_ref",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "经用户确认后上传绑定到文档 nodeId 的可复用媒体资源而不插入正文",
+				UseWhen:      []string{"为同一文档内白板的 Vector/SVG 写入准备 resourceId 和 resourceUrl 时"},
+				AvoidWhen:    []string{"需要把附件直接插入文档正文时用 doc media insert；不要跨 nodeId 复用资源"},
+				Examples:     []string{"dws doc media upload --node <DOC_ID> --file ./icon.svg --mime-type image/svg+xml --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId", Required: boolPtr(true)},
+				{Name: "file", Required: boolPtr(true)},
+			},
+		},
+	})
+	mediaUploadCmd.Flags().String("node", "", "绑定媒体资源的文档标识，支持传入 URL 或 ID (必填)")
+	mediaUploadCmd.Flags().String("file", "", "本地文件路径 (必填)")
+	mediaUploadCmd.Flags().String("name", "", "资源文件名 (默认使用本地文件名)")
+	mediaUploadCmd.Flags().String("mime-type", "", "文件 MIME 类型 (默认根据扩展名推断)")
+	mediaUploadCmd.Flags().Bool("yes", false, "确认上传可复用文档媒体资源")
+
 	mediaInsertCmd := &cobra.Command{
 		Use:   "insert",
 		Short: "上传附件并插入文档",
@@ -2587,7 +2637,7 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 	mediaInsertCmd.Flags().String("ref-block", "", "参考块 ID (配合 --where)")
 
 	// media 子命令的 --node 隐藏别名
-	mediaNodeAliasCmds := []*cobra.Command{mediaDownloadCmd, mediaInsertCmd}
+	mediaNodeAliasCmds := []*cobra.Command{mediaDownloadCmd, mediaUploadCmd, mediaInsertCmd}
 	for _, c := range mediaNodeAliasCmds {
 		c.Flags().String("url", "", "--node 的别名")
 		c.Flags().String("id", "", "--node 的别名")
@@ -2601,7 +2651,7 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 		_ = c.Flags().MarkHidden("file-id")
 	}
 
-	mediaCmd.AddCommand(mediaDownloadCmd, mediaInsertCmd)
+	mediaCmd.AddCommand(mediaDownloadCmd, mediaUploadCmd, mediaInsertCmd)
 
 	// ── comment (文档评论) ──────────────────────────────────
 	commentCmd := &cobra.Command{
@@ -4227,7 +4277,7 @@ CLI 内部自动完成全部流程:
 	folderCmd.Hidden = true
 	permissionCmd.Hidden = true
 
-	root.AddCommand(searchCmd, listCmd, infoCmd, readCmd, createCmd, updateCmd, uploadCmd, downloadCmd, copyCmd, moveCmd, renameCmd, deleteCmd, fileCmd, folderCmd, blockCmd, commentCmd, mediaCmd, permissionCmd, exportCmd, importCmd, versionCmd, templateCmd, newDocStyleCommand())
+	root.AddCommand(searchCmd, listCmd, infoCmd, readCmd, createCmd, updateCmd, uploadCmd, downloadCmd, copyCmd, moveCmd, renameCmd, deleteCmd, fileCmd, folderCmd, blockCmd, commentCmd, mediaCmd, permissionCmd, exportCmd, importCmd, versionCmd, templateCmd, newDocStyleCommand(), newDocWhiteboardCommand())
 
 	return root
 }

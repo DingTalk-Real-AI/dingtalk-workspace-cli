@@ -55,6 +55,11 @@ func openSupplementServers() []ServerInfo {
 			Name:     "MCP 元服务",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/89833ea5debf30c260a07ffcb5127ffa3bf0c830cd76babadb293d9861485d44",
 		},
+		{
+			ID:       "whiteboard",
+			Name:     "钉钉白板",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/whiteboard",
+		},
 	}
 }
 

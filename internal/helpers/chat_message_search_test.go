@@ -15,6 +15,7 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"reflect"
@@ -280,6 +281,150 @@ func TestChatSendAndReplyDisableAITagWithEmptyClawType(t *testing.T) {
 			got, present := caller.calls[0].args["clawType"]
 			if !present || got != "" {
 				t.Fatalf("clawType = %#v, present = %v; want present empty string", got, present)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) {
+	tests := []struct {
+		name         string
+		args         []string
+		contentField string
+		wantContent  string
+		wantAtAll    bool
+		wantOpenIDs  []string
+	}{
+		{
+			name: "send",
+			args: []string{
+				"message", "send", "--group", "cid",
+				"--text", "收到 @D-target 和 <@D-second>",
+				"--at-open-dingtalk-ids", "D-target,D-second",
+				"--at-all",
+			},
+			contentField: "text",
+			wantContent:  "<@all> 收到 <@D-target> 和 <@D-second>",
+			wantAtAll:    true,
+			wantOpenIDs:  []string{"D-target", "D-second"},
+		},
+		{
+			name: "send keeps missing member placeholders unchanged",
+			args: []string{
+				"message", "send", "--group", "cid",
+				"--text", "DWS 发消息自测",
+				"--at-open-dingtalk-ids", "D-target",
+			},
+			contentField: "text",
+			wantContent:  "DWS 发消息自测",
+			wantOpenIDs:  []string{"D-target"},
+		},
+		{
+			name: "reply",
+			args: []string{
+				"message", "reply",
+				"--conversation-id", "cid",
+				"--ref-msg-id", "mid",
+				"--ref-sender", "D-sender",
+				"--text", "收到 @D-target 和 <@D-second>",
+				"--at-open-dingtalk-ids", "D-target,D-second",
+				"--at-all",
+			},
+			contentField: "content",
+			wantContent:  "<@all> 收到 <@D-target> 和 <@D-second>",
+			wantAtAll:    true,
+			wantOpenIDs:  []string{"D-target", "D-second"},
+		},
+		{
+			name: "reply adds missing member placeholders",
+			args: []string{
+				"message", "reply",
+				"--conversation-id", "cid",
+				"--ref-msg-id", "mid",
+				"--ref-sender", "D-sender",
+				"--text", "DWS 回复艾特前津（非主用）自测",
+				"--at-open-dingtalk-ids", "D-target,D-second,D-target",
+			},
+			contentField: "content",
+			wantContent:  "<@D-target> <@D-second> DWS 回复艾特前津（非主用）自测",
+			wantOpenIDs:  []string{"D-target", "D-second", "D-target"},
+		},
+		{
+			name: "reply adds missing member placeholders after at-all",
+			args: []string{
+				"message", "reply",
+				"--conversation-id", "cid",
+				"--ref-msg-id", "mid",
+				"--ref-sender", "D-sender",
+				"--text", "请大家确认",
+				"--at-open-dingtalk-ids", "D-target",
+				"--at-all",
+			},
+			contentField: "content",
+			wantContent:  "<@all> <@D-target> 请大家确认",
+			wantAtAll:    true,
+			wantOpenIDs:  []string{"D-target"},
+		},
+		{
+			name: "reply at-all preserves alliance word",
+			args: []string{
+				"message", "reply",
+				"--conversation-id", "cid",
+				"--ref-msg-id", "mid",
+				"--ref-sender", "D-sender",
+				"--text", "联系 @alliance",
+				"--at-all",
+			},
+			contentField: "content",
+			wantContent:  "<@all> 联系 @alliance",
+			wantAtAll:    true,
+		},
+		{
+			name: "reply without at flags preserves alliance word",
+			args: []string{
+				"message", "reply",
+				"--conversation-id", "cid",
+				"--ref-msg-id", "mid",
+				"--ref-sender", "D-sender",
+				"--text", "联系 @alliance",
+			},
+			contentField: "content",
+			wantContent:  "联系 @alliance",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &chatChangedContractCaller{}
+			if err := executeChatChangedContract(t, caller, tc.args...); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			args := caller.calls[0].args
+			gotAtAll, hasAtAll := args["atAll"]
+			if tc.wantAtAll {
+				if !hasAtAll || gotAtAll != true {
+					t.Fatalf("atAll = %#v, present = %v; want true", gotAtAll, hasAtAll)
+				}
+			} else if hasAtAll {
+				t.Fatalf("atAll = %#v; want absent", gotAtAll)
+			}
+			gotOpenIDs, hasOpenIDs := args["atOpenDingTalkIds"]
+			if len(tc.wantOpenIDs) > 0 {
+				if !hasOpenIDs || !reflect.DeepEqual(gotOpenIDs, tc.wantOpenIDs) {
+					t.Fatalf("atOpenDingTalkIds = %#v, present = %v; want %#v", gotOpenIDs, hasOpenIDs, tc.wantOpenIDs)
+				}
+			} else if hasOpenIDs {
+				t.Fatalf("atOpenDingTalkIds = %#v; want absent", gotOpenIDs)
+			}
+			var content map[string]string
+			if err := json.Unmarshal([]byte(args["content"].(string)), &content); err != nil {
+				t.Fatal(err)
+			}
+			if got := content[tc.contentField]; got != tc.wantContent {
+				t.Fatalf("content[%q] = %q; want %q", tc.contentField, got, tc.wantContent)
 			}
 		})
 	}

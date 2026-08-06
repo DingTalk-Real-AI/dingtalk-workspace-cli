@@ -1245,8 +1245,11 @@ Usage:
   dws chat message reply [flags]
 Example:
   dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"
+  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "请看一下" --at-open-dingtalk-ids <mentionedOpenDingTalkId>
   # 被引用消息的 openMessageId、发送者 openDingTalkId 通过 dws chat message list 获取
 Flags:
+      --at-all                   @所有人（仅群聊时生效；正文缺少 <@all> 时自动补齐）
+      --at-open-dingtalk-ids string  @指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效；正文缺少对应 <@id> 时自动补齐）
       --conversation-id string   会话 openConversationId (必填，支持单聊/群聊)
       --ref-msg-id string        被引用的消息 openMessageId (必填)
       --ref-sender string        被引用消息的发送者 openDingTalkId (必填)
@@ -1256,6 +1259,7 @@ Flags:
 
 注意:
   - 以当前用户身份引用回复，语义同 chat message send；目前回复类型仅支持 text
+  - 群聊 @指定成员时，正文缺少对应 <@openDingTalkId> 会自动补齐，已有裸 @openDingTalkId 会规范化；--at-all 会自动补齐 <@all>
 ```
 
 #### 转发单条消息 — 将一条消息从源会话转发到目标会话（源/目标均支持单聊/群聊）

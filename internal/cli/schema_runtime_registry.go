@@ -332,6 +332,10 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		reviewed := true
 		selection.Reviewed = &reviewed
 	}
+	// Example dispositions control only the policy gate's execution eligibility.
+	// They remain on ContractFinal for BuildAgentExampleExecutionPlan and are not
+	// part of the public ToolSpec / Schema wire contract.
+	selection.ExampleDispositions = nil
 
 	provenance := contractFinalProvenance(identity, title, description, titleProv, descriptionProv, safety, interfaceSpec, selection, final.DryRun)
 

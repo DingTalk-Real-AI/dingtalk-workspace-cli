@@ -30,38 +30,29 @@ import (
 // remains a precise reviewed exception for such a capability whose runtime
 // preconditions cannot be exercised safely and deterministically in the
 // isolated test process.
-type AgentExampleMode string
+type AgentExampleMode = contract.ExampleDispositionMode
 
 const (
-	AgentExampleModeContract     AgentExampleMode = "contract"
-	AgentExampleModeDryRun       AgentExampleMode = "dry_run"
-	AgentExampleModeContractOnly AgentExampleMode = "contract_only"
+	AgentExampleModeContract     = contract.ExampleDispositionModeContract
+	AgentExampleModeDryRun       = contract.ExampleDispositionModeDryRun
+	AgentExampleModeContractOnly = contract.ExampleDispositionModeContractOnly
 )
 
 // AgentExampleReasonCode is a closed taxonomy for reviewed contract-only
 // exceptions to an explicit dry-run capability.
-type AgentExampleReasonCode string
+type AgentExampleReasonCode = contract.ExampleDispositionReasonCode
 
 const (
-	AgentExampleReasonLocalState        AgentExampleReasonCode = "local_state"
-	AgentExampleReasonStatefulPreflight AgentExampleReasonCode = "stateful_preflight"
+	AgentExampleReasonLocalState        = contract.ExampleDispositionReasonLocalState
+	AgentExampleReasonStatefulPreflight = contract.ExampleDispositionReasonStatefulPreflight
 )
 
 // AgentExampleDisposition narrows one exact example with an explicit
 // typed dry-run capability to contract-only. Index is a pointer so a missing
 // field cannot silently select example zero.
 //
-// Dispositions are authored as an in-test / future ContractFinal extension
-// surface; production ContractFinal Selection currently does not declare them,
-// so the delivery plan treats every example as default-typed (contract or
-// dry_run from ToolSpec.DryRun).
-type AgentExampleDisposition struct {
-	Index      *int                   `json:"index"`
-	Mode       AgentExampleMode       `json:"mode"`
-	ReasonCode AgentExampleReasonCode `json:"reason_code"`
-	Reason     string                 `json:"reason"`
-	Reviewed   bool                   `json:"reviewed"`
-}
+// Dispositions are authored on the owning ContractFinal Selection.
+type AgentExampleDisposition = contract.ExampleDisposition
 
 // AgentExampleExecution is one resolved example and its effective test mode.
 type AgentExampleExecution struct {

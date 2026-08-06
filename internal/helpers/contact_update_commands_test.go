@@ -48,6 +48,7 @@ func TestCrossPlatformCoverageContactUpdateCommandsExposeExpectedFlags(t *testin
 		{[]string{"dept", "update"}, []string{"dept", "name", "parent"}},
 		{[]string{"user", "update"}, []string{"user-id", "org-user-name", "depts", "master-user-id"}},
 		{[]string{"user", "update-self"}, []string{"nick", "avatar-file-id"}},
+		{[]string{"user", "update-ownness"}, []string{"user-id", "ownness-text"}},
 		{[]string{"account", "update"}, []string{"user-id", "org-user-name", "depts", "master-user-id", "nick", "avatar-file-id"}},
 	}
 	for _, tc := range cases {
@@ -99,6 +100,18 @@ func TestCrossPlatformCoverageContactUpdateCommandsMapMCPArguments(t *testing.T)
 			wantArgs: map[string]any{"nick": "新昵称", "avatarFileId": "file-1"},
 		},
 		{
+			name:     "update user ownness",
+			args:     []string{"user", "update-ownness", "--user-id", "user-1", "--ownness-text", "居家办公中", "--yes"},
+			toolName: "user_ownness_update",
+			wantArgs: map[string]any{"userId": "user-1", "ownnessText": "居家办公中"},
+		},
+		{
+			name:     "update user ownness with aliases",
+			args:     []string{"user", "set-ownness", "--userId", "user-1", "--ownnessText", "专注开发中", "--yes"},
+			toolName: "user_ownness_update",
+			wantArgs: map[string]any{"userId": "user-1", "ownnessText": "专注开发中"},
+		},
+		{
 			name:     "update enterprise account",
 			args:     []string{"account", "edit", "--user-id", "user-2", "--org-user-name", "李四", "--depts", `[{"deptId":2}]`, "--master-user-id", "manager-2", "--nick", "小李", "--avatar-file-id", "file-2", "--yes"},
 			toolName: "exclusive_account_user_update",
@@ -139,6 +152,7 @@ func TestCrossPlatformCoverageContactUpdateCommandsRequireConfirmation(t *testin
 		{"dept", "update", "--dept", "7", "--name", "研发中心"},
 		{"user", "update", "--user-id", "user-1", "--org-user-name", "张三"},
 		{"user", "update-self", "--nick", "新昵称"},
+		{"user", "update-ownness", "--user-id", "user-1", "--ownness-text", "居家办公中"},
 		{"account", "update", "--user-id", "user-2", "--nick", "小李"},
 	}
 	for _, args := range tests {
@@ -174,6 +188,10 @@ func TestCrossPlatformCoverageContactUpdateCommandsValidateInput(t *testing.T) {
 		{"employee no changes", []string{"user", "update", "--user-id", "user-1", "--org-user-name", " ", "--depts", " ", "--master-user-id", " ", "--yes"}, "至少需要一个修改项"},
 		{"employee invalid departments", []string{"user", "update", "--user-id", "user-1", "--depts", "bad", "--yes"}, "--depts JSON 解析失败"},
 		{"self no changes", []string{"user", "update-self", "--nick", " ", "--avatar-file-id", " ", "--yes"}, "至少需要一个修改项"},
+		{"ownness missing id", []string{"user", "update-ownness", "--ownness-text", "居家办公中", "--yes"}, "required"},
+		{"ownness blank id", []string{"user", "update-ownness", "--user-id", " ", "--ownness-text", "居家办公中", "--yes"}, "不能为空"},
+		{"ownness missing text", []string{"user", "update-ownness", "--user-id", "user-1", "--yes"}, "required"},
+		{"ownness blank text", []string{"user", "update-ownness", "--user-id", "user-1", "--ownness-text", " ", "--yes"}, "不能为空"},
 		{"account missing id", []string{"account", "update", "--nick", "小李", "--yes"}, "required"},
 		{"account blank id", []string{"account", "update", "--user-id", " ", "--nick", "小李", "--yes"}, "不能为空"},
 		{"account no changes", []string{"account", "update", "--user-id", "user-2", "--nick", " ", "--yes"}, "至少需要一个修改项"},

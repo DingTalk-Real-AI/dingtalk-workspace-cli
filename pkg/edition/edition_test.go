@@ -105,17 +105,27 @@ func TestOpenVisibleProductsExcludesCompatibilityOnlyCommands(t *testing.T) {
 
 func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	servers := openSupplementServers()
+	foundMCPMeta := false
+	foundWhiteboard := false
 	for _, server := range servers {
+		if server.ID == "whiteboard" {
+			foundWhiteboard = server.Endpoint == "https://mcp-gw.dingtalk.com/server/whiteboard"
+		}
 		if server.ID != "mcp-meta" {
 			continue
 		}
+		foundMCPMeta = true
 		if server.Endpoint == "" {
 			t.Fatal("mcp-meta has empty endpoint")
 		}
 		if len(server.Prefixes) != 0 {
 			t.Fatal("mcp-meta must remain helper-only without command prefixes")
 		}
-		return
 	}
-	t.Fatal("openSupplementServers() missing mcp-meta")
+	if !foundMCPMeta {
+		t.Fatal("openSupplementServers() missing mcp-meta")
+	}
+	if !foundWhiteboard {
+		t.Fatal("openSupplementServers() missing helper-only whiteboard endpoint")
+	}
 }

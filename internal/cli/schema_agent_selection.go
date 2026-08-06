@@ -178,6 +178,7 @@ func contractFinalToolSelection(command *cobra.Command) AgentToolSelection {
 	out.UseWhen = selection.UseWhen
 	out.AvoidWhen = selection.AvoidWhen
 	out.Examples = selection.Examples
+	out.ExampleDispositions = selection.ExampleDispositions
 	return out
 }
 

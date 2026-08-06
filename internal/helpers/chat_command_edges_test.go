@@ -81,24 +81,33 @@ func TestCrossPlatformCoverageEvaluationRegressionChatSearchSpellingsAndNaturalB
 	})
 }
 
-func TestCrossPlatformCoverageChatMisroutedPathsRemainUnknownSubcommands(t *testing.T) {
+func TestCrossPlatformCoverageChatStableCompatibilityHintsRemainAvailable(t *testing.T) {
+	root := newChatCommand()
+	if len(root.Aliases) != 1 || root.Aliases[0] != "im" {
+		t.Fatalf("chat aliases = %v, want [im]", root.Aliases)
+	}
 	for _, tc := range []struct {
 		path string
-		flag string
+		args []string
+		hint string
 	}{
-		{path: "send", flag: "--group"},
-		{path: "history", flag: "--group"},
+		{path: "send", args: []string{"send", "--group", "cid-stable", "--text", "hello"}, hint: "dws chat message send"},
+		{path: "history", args: []string{"history", "--group", "cid-stable", "--limit", "20"}, hint: "dws chat message list --group <GROUP_OPEN_CONVERSATION_ID>"},
 	} {
-		caller := &productExampleCaller{}
-		err := runChatCoverageCommand(t, caller, tc.path, tc.flag, "cid")
-		if err == nil || !strings.Contains(err.Error(), "unknown command") || !strings.Contains(err.Error(), tc.path) {
-			t.Fatalf("chat %s error = %v, want unknown command", tc.path, err)
+		command, remaining, err := root.Find([]string{tc.path})
+		if err != nil {
+			t.Fatalf("find chat %s: %v", tc.path, err)
 		}
-		if strings.Contains(err.Error(), "unknown flag") {
-			t.Fatalf("chat %s was misreported as a flag error: %v", tc.path, err)
+		if len(remaining) != 0 || command.Name() != tc.path {
+			t.Fatalf("find chat %s = command %q, remaining %v", tc.path, command.Name(), remaining)
 		}
-		if caller.calls != 0 {
-			t.Fatalf("chat %s tool calls = %d, want 0", tc.path, caller.calls)
+		if !command.Hidden || !command.Runnable() {
+			t.Fatalf("chat %s compatibility contract: hidden=%v runnable=%v", tc.path, command.Hidden, command.Runnable())
+		}
+		root.SetArgs(tc.args)
+		err = root.ExecuteContext(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "ambiguous command") || !strings.Contains(err.Error(), tc.hint) {
+			t.Fatalf("chat %s with legacy flags error = %v, want migration hint %q", tc.path, err, tc.hint)
 		}
 	}
 }

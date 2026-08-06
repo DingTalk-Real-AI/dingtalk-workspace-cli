@@ -66,6 +66,8 @@ var (
 	driveFileStat     = (*os.File).Stat
 )
 
+var driveWorkerContextErr = func(ctx context.Context) error { return ctx.Err() }
+
 // ──────────────────────────────────────────────────────────
 // HTTP 状态错误
 // ──────────────────────────────────────────────────────────
@@ -629,7 +631,7 @@ func downloadRangedParts(ctx context.Context, creds *driveCredentialState, destP
 		go func() {
 			defer wg.Done()
 			for part := range jobs {
-				if runCtx.Err() != nil {
+				if driveWorkerContextErr(runCtx) != nil {
 					return
 				}
 				if err := downloadOnePart(runCtx, creds, f, part, totalSize); err != nil {

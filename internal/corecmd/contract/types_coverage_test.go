@@ -75,9 +75,14 @@ func TestCrossPlatformCoverageInterfaceSpecAgentExecutableAndValidate(t *testing
 }
 
 func TestCrossPlatformCoverageSelectionSpecNormalizedAndProvenanceHelpers(t *testing.T) {
+	exampleIndex := 0
 	normalized := (SelectionSpec{
-		UseWhen:    []string{" one ", "one", ""},
-		AvoidWhen:  []string{"avoid"},
+		UseWhen:   []string{" one ", "one", ""},
+		AvoidWhen: []string{"avoid"},
+		ExampleDispositions: []ExampleDisposition{{
+			Index: &exampleIndex, Mode: ExampleDispositionModeContractOnly,
+			ReasonCode: ExampleDispositionReasonLocalState, Reason: "local file", Reviewed: true,
+		}},
 		SourceRefs: []string{"b", "a", "b"},
 	}).Normalized()
 	if len(normalized.UseWhen) != 1 || normalized.UseWhen[0] != "one" {
@@ -85,6 +90,16 @@ func TestCrossPlatformCoverageSelectionSpecNormalizedAndProvenanceHelpers(t *tes
 	}
 	if normalized.SourceRefs[0] != "a" || normalized.SourceRefs[1] != "b" {
 		t.Fatalf("SourceRefs = %#v", normalized.SourceRefs)
+	}
+	if len(normalized.ExampleDispositions) != 1 || normalized.ExampleDispositions[0].Index == nil || *normalized.ExampleDispositions[0].Index != 0 {
+		t.Fatalf("ExampleDispositions = %#v", normalized.ExampleDispositions)
+	}
+	exampleIndex = 1
+	if *normalized.ExampleDispositions[0].Index != 0 {
+		t.Fatal("ExampleDispositions index was not cloned")
+	}
+	if got := cloneExampleDispositions(nil); got != nil {
+		t.Fatalf("cloneExampleDispositions(nil) = %#v", got)
 	}
 	if got := stableUniqueStrings(nil); got != nil {
 		t.Fatalf("stableUniqueStrings(nil) = %#v", got)

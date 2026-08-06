@@ -1,33 +1,33 @@
 class DingtalkWorkspaceCliBeta < Formula
   desc "Automate DingTalk workspace tasks from the terminal (beta channel)"
   homepage "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli"
-  version "1.0.56-beta.4"
+  version "1.0.57-beta.2"
   license "Apache-2.0"
   keg_only "it is the beta channel and conflicts with dingtalk-workspace-cli"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.56-beta.4/dws-darwin-arm64.tar.gz"
-      sha256 "f1f9b6394137edbd0b08d632aab34e92a0f3f81d80107a47de1bec9b384f0515"
+      url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.57-beta.2/dws-darwin-arm64.tar.gz"
+      sha256 "2119754d4c6f6be2b4856ab559ad44ac582a3b3abc76ff907927f62c7a4a3d29"
     else
-      url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.56-beta.4/dws-darwin-amd64.tar.gz"
-      sha256 "cd3c64d20723c420e2490405d0bf8eecfd7e2b8fc352f63f23de5847a1d38f55"
+      url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.57-beta.2/dws-darwin-amd64.tar.gz"
+      sha256 "a453341d6df1a78b7d74bd624842503d857a41f73fa1ac36394e4594e4961e8d"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.56-beta.4/dws-linux-arm64.tar.gz"
-      sha256 "910918d88074534e680a2e320d3cb364ad092e96b9c422f9e75d11c9c0815dd8"
+      url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.57-beta.2/dws-linux-arm64.tar.gz"
+      sha256 "734df2c7f34ca36aa48151fda2b18e1c2c90fe812fb5ab13e8c00e074cca43af"
     else
-      url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.56-beta.4/dws-linux-amd64.tar.gz"
-      sha256 "172fe0d84443be953d0c6f2c2433540e4b972fbe7776cff1417ec9c73723552b"
+      url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.57-beta.2/dws-linux-amd64.tar.gz"
+      sha256 "f602a63ab6afd2e24db7b7dabfddb0cdcf3a7bd55b0cc60a99013bac5cacc56f"
     end
   end
 
   resource "skills" do
-    url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.56-beta.4/dws-skills.zip"
-    sha256 "a3457befe858cbf3fe85848428b630bfd3a5f626256ed6b49415267948915152"
+    url "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases/download/v1.0.57-beta.2/dws-skills.zip"
+    sha256 "486f5ef30a88a293c14df1ff0768760284179993c51f898fa2bee2c9391d8607"
   end
 
   def install

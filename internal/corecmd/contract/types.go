@@ -200,6 +200,10 @@ type SelectionSpec struct {
 	Tips               []string
 	WorkflowRefs       []string
 	Examples           []string
+	// ExampleDispositions narrows an exact example with a reviewed local or
+	// stateful precondition from dry-run execution to contract validation.
+	// It does not change the command's declared DryRun capability.
+	ExampleDispositions []ExampleDisposition
 	// Reviewed is a legacy-path (hints/registry) marker only. The Contract
 	// declaration path must not set it: declared selection is final by
 	// construction, and assembly rejects a declared payload carrying it.
@@ -219,7 +223,51 @@ func (s SelectionSpec) Normalized() SelectionSpec {
 	out.Tips = stableUniqueStrings(s.Tips)
 	out.WorkflowRefs = stableUniqueStrings(s.WorkflowRefs)
 	out.Examples = stableUniqueStrings(s.Examples)
+	out.ExampleDispositions = cloneExampleDispositions(s.ExampleDispositions)
 	out.SourceRefs = sortedUniqueStrings(s.SourceRefs)
+	return out
+}
+
+// ExampleDispositionMode controls how an already contract-validated example
+// is exercised by the Agent example gate.
+type ExampleDispositionMode string
+
+const (
+	ExampleDispositionModeContract     ExampleDispositionMode = "contract"
+	ExampleDispositionModeDryRun       ExampleDispositionMode = "dry_run"
+	ExampleDispositionModeContractOnly ExampleDispositionMode = "contract_only"
+)
+
+// ExampleDispositionReasonCode is the closed taxonomy for reviewed
+// contract-only exceptions to an explicit dry-run capability.
+type ExampleDispositionReasonCode string
+
+const (
+	ExampleDispositionReasonLocalState        ExampleDispositionReasonCode = "local_state"
+	ExampleDispositionReasonStatefulPreflight ExampleDispositionReasonCode = "stateful_preflight"
+)
+
+// ExampleDisposition narrows one exact example to contract-only validation.
+// Index is a pointer so a missing index cannot silently select example zero.
+type ExampleDisposition struct {
+	Index      *int                         `json:"index"`
+	Mode       ExampleDispositionMode       `json:"mode"`
+	ReasonCode ExampleDispositionReasonCode `json:"reason_code"`
+	Reason     string                       `json:"reason"`
+	Reviewed   bool                         `json:"reviewed"`
+}
+
+func cloneExampleDispositions(in []ExampleDisposition) []ExampleDisposition {
+	if len(in) == 0 {
+		return nil
+	}
+	out := append([]ExampleDisposition(nil), in...)
+	for i := range out {
+		if out[i].Index != nil {
+			index := *out[i].Index
+			out[i].Index = &index
+		}
+	}
 	return out
 }
 

@@ -1071,6 +1071,19 @@ EOF
 - `comment create` 是全文评论；`comment create-inline` 是划词评论，必须先 `block list` 拿到 `blockId` 并确定 `--start` / `--end` 偏移（按块内纯文本字符算，从 0 开始）
 - 全文评论 `create` / `reply` / `update` 支持通过 `--mentioned-open-conversation-id` @群；划词评论 `create-inline` 不支持 @群
 
+## 白板卡片与白板媒体资源
+
+```bash
+dws doc whiteboard insert --node <DOC_ID> --yes --format json
+dws doc media upload --node <DOC_ID> --file ./icon.svg \
+  --mime-type image/svg+xml --yes --format json
+```
+
+两个命令都是远端写入，必须先获得用户确认。insert 返回的 `whiteboardId` 是
+`dws whiteboard query/update` 使用的 partId；`blockId` 只用于文档块定位/删除。
+media upload 返回的 `resourceId` / `resourceUrl` 只能用于同一 nodeId 下的白板
+Vector/SVG。完整协议见 [whiteboard.md](./whiteboard.md)。
+
 ## 自动化脚本
 
 | 脚本 | 场景 | 用法 |

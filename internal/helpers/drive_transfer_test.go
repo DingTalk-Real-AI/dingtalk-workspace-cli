@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -2868,48 +2870,32 @@ func TestCrossPlatformCoverageDriveDownloadVersionCancelNoResume(t *testing.T) {
 
 func TestCrossPlatformCoverageDriveTransferWorkerCtxCancelBeforeProcess(t *testing.T) {
 	// 目标：覆盖 downloadRangedParts worker 中 "if runCtx.Err() != nil { return }"。
-	// 策略：让 workers 正常处理分片，通过 context timeout 在处理过程中过期。
-	//        当 worker 完成某个分片后循环回来收到新 job 时，发现 runCtx 已取消。
-	//        transport 每次请求加 50μs 延迟，使总处理时间接近 timeout，最大化命中率。
-
-	totalSize := int64(200)
-	content := makeTestContent(int(totalSize))
-
-	origClient := driveRangeClient
-	t.Cleanup(func() { driveRangeClient = origClient })
-
-	driveRangeClient = &http.Client{
+	// 通过结构化 seam 让 worker 在收到唯一分片后确定性观察到取消状态；
+	// 不再依赖微秒级 timeout 与 goroutine 调度概率。
+	var checks atomic.Int32
+	testseam.Swap(t, &driveWorkerContextErr, func(context.Context) error {
+		checks.Add(1)
+		return context.Canceled
+	})
+	var requests atomic.Int32
+	testseam.Swap(t, &driveRangeClient, &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			// 每次请求加小延迟，让总处理时间接近 deadline
-			time.Sleep(50 * time.Microsecond)
-			var start, end int64
-			if _, err := fmt.Sscanf(req.Header.Get("Range"), "bytes=%d-%d", &start, &end); err != nil {
-				return &http.Response{StatusCode: 400, Body: io.NopCloser(strings.NewReader("bad"))}, nil
-			}
-			if end >= int64(len(content)) {
-				end = int64(len(content)) - 1
-			}
-			resp := &http.Response{
-				StatusCode: http.StatusPartialContent,
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(string(content[start : end+1]))),
-			}
-			resp.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(content)))
-			return resp, nil
+			requests.Add(1)
+			return nil, errors.New("worker context guard did not stop the request")
 		}),
+	})
+
+	creds := &driveCredentialState{url: "http://127.0.0.1:1/fake"}
+	dest := filepath.Join(t.TempDir(), "worker-context-guard.bin")
+	opts := driveDownloadOptions{partSize: 1, parallel: 1, resume: false, knownSize: 1}
+	if err := downloadRangedParts(context.Background(), creds, dest, 1, opts); err != nil {
+		t.Fatalf("downloadRangedParts context guard: %v", err)
 	}
-
-	// 多次尝试以确保覆盖（goroutine 调度非确定性）
-	for attempt := 0; attempt < 50; attempt++ {
-		// timeout 设为约为总处理时间的50%，确保在处理过程中过期
-		// 40分片/4workers=10轮*50μs=500μs，timeout设300μs使其在中间过期
-		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Microsecond)
-
-		creds := &driveCredentialState{url: "http://127.0.0.1:1/fake"}
-		dest := filepath.Join(t.TempDir(), fmt.Sprintf("wkr-%d.bin", attempt))
-		opts := driveDownloadOptions{partSize: 5, parallel: 4, resume: false, knownSize: totalSize}
-		_ = downloadRangedParts(ctx, creds, dest, totalSize, opts)
-		cancel()
+	if checks.Load() != 1 {
+		t.Fatalf("worker context checks = %d, want 1", checks.Load())
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("worker requests = %d, want 0", requests.Load())
 	}
 }
 

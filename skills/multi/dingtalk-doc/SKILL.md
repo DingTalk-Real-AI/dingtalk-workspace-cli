@@ -1,6 +1,6 @@
 ---
 name: dingtalk-doc
-description: 钉钉文档（adoc）：创建、读取、编辑、块、评论、附件、导出、版本及Markdown/JSONML写入。原生 .md→dingtalk-misc；文件→dingtalk-drive；知识库→dingtalk-wiki；axls→dingtalk-misc，able→dingtalk-aitable。
+description: 钉钉文档（adoc）：创建、读取、编辑、块、评论、附件、白板卡片、导出、版本及Markdown/JSONML写入。原生 .md→dingtalk-misc；文件→dingtalk-drive；知识库→dingtalk-wiki；axls→dingtalk-misc，able→dingtalk-aitable。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -25,6 +25,7 @@ metadata:
 - 文档内容只用 `--content` / `--content-file`，不要写 `--markdown`。
 - 复杂内容（换行、表格、代码块、长 Markdown）先写临时 `.md`，再用 `--content-file`，不要把大段 Markdown 塞进命令行。
 - 每次 `create` / `update` / `block insert` / `media insert` 后必须 `dws doc read` 或 `dws doc block list` 回读关键内容。
+- `doc whiteboard insert`、`doc media upload` 属于远端写入；必须先获得用户确认，再加 `--yes`。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
@@ -66,6 +67,8 @@ metadata:
 | "导入本地文件为在线文档" | `dws doc import --file <path> --folder <FOLDER_NODE_ID> --name "<标题>" --format json`（详见 `references/doc/doc-import.md`） |
 | "查模板 / 套用模板创建文档" | `dws doc template list|search|apply`（详见 `references/doc.md` 模板管理） |
 | "保存 / 查看 / 回滚在线文字文档（adoc）版本" | `dws doc version save/list/revert` |
+| "在文档里创建空白板" | `dws doc whiteboard insert --node <nodeId> --yes --format json` |
+| "为白板上传 SVG/Vector 资源" | `dws doc media upload --node <nodeId> --file <path> --yes --format json` |
 
 ## 标准 SOP（必遵流程）
 

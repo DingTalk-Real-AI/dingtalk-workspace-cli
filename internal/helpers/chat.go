@@ -54,6 +54,14 @@ func resolveMessageForward(cmd *cobra.Command, defaultForward bool) (bool, error
 	}
 }
 
+func chatCompatibilityHintSubCmd(use, hint string) *cobra.Command {
+	command := hintSubCmd(use, hint)
+	// Legacy callers may still pass the old command's flags. Let the migration
+	// command consume them so Cobra reaches RunE and returns the replacement path.
+	command.DisableFlagParsing = true
+	return command
+}
+
 type nativeChatTargetReader struct{}
 
 func (nativeChatTargetReader) CallMCPData(product, tool string, params map[string]any) (map[string]any, error) {
@@ -394,6 +402,50 @@ func NormalizeMessageMentions(text string, ids []string, atAll, wrapAngle bool) 
 		text = allPlaceholder + " " + text
 	}
 	return text
+}
+
+// applyCurrentUserGroupMentions keeps the body placeholders and
+// send_personal_message mention arguments aligned for send and reply.
+func applyCurrentUserGroupMentions(params map[string]any, text, rawOpenIDs string, atAll bool) string {
+	var atOpenIDs []string
+	if rawOpenIDs != "" {
+		atOpenIDs = strings.Split(rawOpenIDs, ",")
+	}
+	if atAll && !strings.Contains(text, "<@all>") {
+		text = "<@all> " + text
+	}
+	text = normalizeAtPlaceholders(text, atOpenIDs, true)
+	if atAll {
+		params["atAll"] = true
+	}
+	if len(atOpenIDs) > 0 {
+		params["atOpenDingTalkIds"] = atOpenIDs
+	}
+	return text
+}
+
+func addMissingCurrentUserMentionPlaceholders(text, rawOpenIDs string) string {
+	if rawOpenIDs == "" {
+		return text
+	}
+	missing := make([]string, 0)
+	probeText := text
+	for _, id := range parseCSVValues(rawOpenIDs) {
+		placeholder := "<@" + id + ">"
+		if strings.Contains(probeText, placeholder) {
+			continue
+		}
+		missing = append(missing, placeholder)
+		probeText += placeholder
+	}
+	if len(missing) == 0 {
+		return text
+	}
+	prefix := strings.Join(missing, " ")
+	if strings.HasPrefix(text, "<@all> ") {
+		return "<@all> " + prefix + " " + strings.TrimPrefix(text, "<@all> ")
+	}
+	return prefix + " " + text
 }
 
 func containsMessageMention(text, placeholder string) bool {
@@ -2029,29 +2081,15 @@ func newChatCommand() *cobra.Command {
 			if groupID != "" {
 				atAll, _ := cmd.Flags().GetBool("at-all")
 				atOpenIdsStr, _ := cmd.Flags().GetString("at-open-dingtalk-ids")
-				var atOpenIds []string
-				if atOpenIdsStr != "" {
-					atOpenIds = strings.Split(atOpenIdsStr, ",")
-				}
-				if atAll && !strings.Contains(text, "<@all>") {
-					text = "<@all> " + text
-				}
-				// 用户身份发消息要求 @ 占位符为 <@openDingTalkId>；模型若写成裸 @id 自动补全，已有 <@id> 不变
-				text = normalizeAtPlaceholders(text, atOpenIds, true)
 				// 群聊统一走 openDingTalkId @ 人接口。
-				contentJSON, _ := marshalJSONRaw(map[string]string{"title": title, "text": text})
 				newParams := map[string]any{
 					"openConversationId": groupID,
 					"msgType":            "markdown",
-					"content":            string(contentJSON),
 					"clawType":           clawType,
 				}
-				if atAll {
-					newParams["atAll"] = true
-				}
-				if len(atOpenIds) > 0 {
-					newParams["atOpenDingTalkIds"] = atOpenIds
-				}
+				text = applyCurrentUserGroupMentions(newParams, text, atOpenIdsStr, atAll)
+				contentJSON, _ := marshalJSONRaw(map[string]string{"title": title, "text": text})
+				newParams["content"] = string(contentJSON)
 				if msgUuid != "" {
 					newParams["uuid"] = msgUuid
 				}
@@ -5368,13 +5406,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatMessageReplyCmd := &cobra.Command{
 		Use:   "reply",
 		Short: "引用回复消息（支持单聊/群聊）",
-		Long: `以当前用户身份引用某条消息并回复。需要指定会话 ID、被引用消息 ID、原消息发送者 openDingTalkId，以及回复内容。
+		Long: `以当前用户身份引用某条消息并回复。需要指定会话 ID、被引用消息 ID、原消息发送者 openDingTalkId，以及回复内容。群聊回复可通过 --at-open-dingtalk-ids @指定成员，或通过 --at-all @所有人；正文中的裸 @openDingTalkId 会自动规范化为 <@openDingTalkId>，缺少对应成员或 <@all> 占位符时会自动补齐。
 
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>
           （人员信息可通过 dws contact user search --keyword "姓名" --format json 获取）`,
-		Example: `  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"`,
+		Example: `  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"
+  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "请看一下" --at-open-dingtalk-ids <mentionedOpenDingTalkId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "conversation-id", "ref-msg-id", "ref-sender", "text"); err != nil {
 				return err
@@ -5387,13 +5426,6 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				}
 				refSender = resolved
 			}
-			replyContent := map[string]string{
-				"referenceOpenMessageId":   mustGetFlag(cmd, "ref-msg-id"),
-				"srcMsgSendOpenDingTalkId": refSender,
-				"replyMsgType":             "text",
-				"content":                  mustGetFlag(cmd, "text"),
-			}
-			contentJSON, _ := marshalJSONRaw(replyContent)
 			clawType := ""
 			aiTag, _ := cmd.Flags().GetBool("ai-tag")
 			if aiTag {
@@ -5402,9 +5434,25 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			toolArgs := map[string]any{
 				"openConversationId": mustGetFlag(cmd, "conversation-id"),
 				"msgType":            "reply",
-				"content":            string(contentJSON),
 				"clawType":           clawType,
 			}
+			atAll, _ := cmd.Flags().GetBool("at-all")
+			atOpenIDs := mustGetFlag(cmd, "at-open-dingtalk-ids")
+			replyText := applyCurrentUserGroupMentions(
+				toolArgs,
+				mustGetFlag(cmd, "text"),
+				atOpenIDs,
+				atAll,
+			)
+			replyText = addMissingCurrentUserMentionPlaceholders(replyText, atOpenIDs)
+			replyContent := map[string]string{
+				"referenceOpenMessageId":   mustGetFlag(cmd, "ref-msg-id"),
+				"srcMsgSendOpenDingTalkId": refSender,
+				"replyMsgType":             "text",
+				"content":                  replyText,
+			}
+			contentJSON, _ := marshalJSONRaw(replyContent)
+			toolArgs["content"] = string(contentJSON)
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v
 			}
@@ -5438,6 +5486,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "ai-tag", Property: "clawType", InterfaceType: "string"},
+				{Name: "at-all", Property: "atAll", Required: boolPtr(false), InterfaceType: "boolean"},
+				{Name: "at-open-dingtalk-ids", Property: "atOpenDingTalkIds", Required: boolPtr(false), InterfaceType: "array"},
 				{Name: "conversation-id", Property: "openConversationId"},
 			},
 		},
@@ -5452,6 +5502,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	_ = chatMessageReplyCmd.MarkFlagRequired("text")
 	chatMessageReplyCmd.Flags().String("uuid", "", "幂等键（可选）")
 	chatMessageReplyCmd.Flags().Bool("ai-tag", true, "消息是否带 AI 发送角标（默认 true）")
+	chatMessageReplyCmd.Flags().Bool("at-all", false, "@所有人（仅群聊时生效；正文缺少 <@all> 时自动补齐）")
+	chatMessageReplyCmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效；正文缺少对应 <@id> 时自动补齐，裸 @id 自动规范化）")
 	cli.AttachRuntimeSchema(chatMessageReplyCmd, "chat", "reply_personal_message", "hardcoded:chat")
 
 	// ── message forward: 转发单条消息 ────────────────────────
@@ -8165,6 +8217,12 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageAddFavoriteCmd, chatMessageRemoveFavoriteCmd, chatMessageListFavoritesCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd, chatMessageListEmotionRepliesCmd)
 
 	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd)
+
+	// Keep the v1.0.56 command surface recognizable while directing callers to
+	// the supported nested commands. The chat root's "im" alias makes these
+	// compatibility hints available through both chat and im.
+	root.AddCommand(chatCompatibilityHintSubCmd("send", "use: dws chat message send"))
+	root.AddCommand(chatCompatibilityHintSubCmd("history", "use: dws chat message list --group <GROUP_OPEN_CONVERSATION_ID>"))
 
 	return root
 }
