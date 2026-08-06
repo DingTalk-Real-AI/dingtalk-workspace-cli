@@ -131,7 +131,6 @@ Flags:
 - 划词评论的 `--start` / `--end` 是块内文本字符偏移量，从 0 开始；通过 [`./doc-block.md`](./doc-block.md) `block list` 取 `paragraph.text` 后人工或脚本计算。
 - `reply` 加 `--emoji` 时 `--content` 填表情名称（如 `比心`、`赞`），不是文字内容。
 - `reply --emoji` 不能同时 @群。
-- `comment create/reply/update/delete` 的退出码 0 不等于业务成功。响应为 `null`、空对象或缺少可核验字段时，立即执行 `comment list` 回查目标 `commentKey`。若 update 后正文仍是旧值，必须判定“更新未生效”；即使其他步骤成功或评论随后被删除，也只能报告部分完成，禁止写“全部完成”。
 
 ## 上下文传递
 

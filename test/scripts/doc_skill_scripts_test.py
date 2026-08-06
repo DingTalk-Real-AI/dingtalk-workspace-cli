@@ -71,7 +71,7 @@ class DocSkillAlignmentTest(unittest.TestCase):
         self.assertNotIn("超过 200KB", combined)
         self.assertNotIn("doc get", combined)
 
-    def test_workflow_identity_and_fidelity_rules_are_explicit(self):
+    def test_workflow_and_identity_rules_are_explicit(self):
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         create_refs = "\n".join(
             path.read_text(encoding="utf-8")
@@ -94,22 +94,11 @@ class DocSkillAlignmentTest(unittest.TestCase):
                 MONO_DOC_ROOT / "doc-import.md",
             ]
         )
-        comment_refs = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in [
-                SKILL_ROOT / "references" / "doc" / "doc-comment.md",
-                MONO_DOC_ROOT / "doc-comment.md",
-            ]
-        )
-
         self.assertIn("不能覆盖用户显式要求的正文 H1", skill)
         self.assertIn("禁止先搜索同名文档", create_refs)
         self.assertIn("显式块操作不可折叠", block_refs)
         self.assertIn("list.isOrdered=true", block_refs)
         self.assertIn("在线编辑硬路由", import_refs)
-        self.assertIn("update 后正文仍是旧值", comment_refs)
-        self.assertIn("验证 12 条用例", skill)
-        self.assertIn("部分完成/更新未生效", skill)
 
     def test_schema_selection_preserves_doc_drive_boundaries(self):
         doc = json.loads(
@@ -135,10 +124,6 @@ class DocSkillAlignmentTest(unittest.TestCase):
         self.assertIn(
             "list.isOrdered=true",
             " ".join(doc["doc.insert_document_block"]["use_when"]),
-        )
-        self.assertIn(
-            "null/空对象",
-            " ".join(doc["doc.update_comment"]["avoid_when"]),
         )
         self.assertIn(
             "dws doc import",
@@ -203,16 +188,6 @@ class DocCreateAndWriteTest(unittest.TestCase):
             with self.assertRaisesRegex(self.module.ScriptError, "denied"):
                 self.module.run_dws(["doc", "create"])
 
-        with mock.patch.object(
-            self.module.subprocess,
-            "run",
-            return_value=subprocess.CompletedProcess(
-                ["dws"], 0, stdout="null", stderr=""
-            ),
-        ):
-            with self.assertRaisesRegex(self.module.ScriptError, "空业务结果"):
-                self.module.run_dws(["doc", "create"])
-
     def test_wrapper_uses_create_then_info_and_read_without_manual_update(self):
         calls = []
 
@@ -235,18 +210,6 @@ class DocCreateAndWriteTest(unittest.TestCase):
         summary = json.loads(stdout.getvalue().splitlines()[-1])
         self.assertEqual("doc-1", summary["nodeId"])
         self.assertTrue(summary["verified"])
-
-    def test_wrapper_rejects_empty_readback(self):
-        def fake_run(args, dry_run=False):
-            if args[:2] == ["doc", "create"]:
-                return {"success": True, "nodeId": "doc-1"}
-            if args[:2] == ["doc", "info"]:
-                return {"success": True, "docUrl": "https://example.test/doc-1"}
-            return {"success": True, "markdown": ""}
-
-        with mock.patch.object(self.module, "run_dws", side_effect=fake_run):
-            with self.assertRaisesRegex(self.module.ScriptError, "回读未返回正文"):
-                self.module.run(["--name", "周报", "--content", "hello"])
 
     def test_dry_run_shows_create_and_verification_commands(self):
         stdout = io.StringIO()

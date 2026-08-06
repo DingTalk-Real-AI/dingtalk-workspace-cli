@@ -37251,8 +37251,7 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "删除评论用 delete；回复用 reply",
-        "响应为 null/空对象或回查仍是旧正文时不能判成功，必须报告更新未生效或部分完成"
+        "删除评论用 delete；回复用 reply"
       ],
       "canonical_path": "doc.update_comment",
       "cli_name": "update",
@@ -37271,7 +37270,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": "更新指定文档评论的文字内容和可选 @用户/@群。"
@@ -37279,7 +37278,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": "更新指定文档评论的文字内容和可选 @用户/@群。"
         },
@@ -37303,22 +37302,20 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "删除评论用 delete；回复用 reply",
-                "响应为 null/空对象或回查仍是旧正文时不能判成功，必须报告更新未生效或部分完成"
+                "删除评论用 delete；回复用 reply"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "删除评论用 delete；回复用 reply",
-            "响应为 null/空对象或回查仍是旧正文时不能判成功，必须报告更新未生效或部分完成"
+            "删除评论用 delete；回复用 reply"
           ]
         },
         "canonical_path": {
@@ -37407,7 +37404,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
@@ -37418,7 +37415,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"已按最新数据修正\" --format json",
@@ -37506,7 +37503,7 @@
             },
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
               "selected": false,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": true
@@ -37558,20 +37555,20 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id；执行后必须用 comment list 回查同一 commentKey 的目标字段"
+                "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id；执行后必须用 comment list 回查同一 commentKey 的目标字段"
+            "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
           ]
         }
       },
@@ -38096,7 +38093,7 @@
       "source": "reviewed_command_registry",
       "title": "更新文档评论",
       "use_when": [
-        "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id；执行后必须用 comment list 回查同一 commentKey 的目标字段"
+        "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
       ]
     },
     "doc.update_document": {

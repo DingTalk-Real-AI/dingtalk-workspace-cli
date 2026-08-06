@@ -72,8 +72,6 @@ metadata:
 - 已有 callout、分栏、样式、@人、图片或附件时，先读 JSONML；局部改动优先 `block update`，不要用 Markdown 整篇重写。
 - `block insert` 默认追加；只有明确相对位置时才传真实 `--ref-block` / `--parent-block`。`block delete` 和评论删除必须确认。
 - 写后按对象验证：正文用 `doc read`，块/附件用 `doc block list`，元信息/链接用 `doc info`，版本用 `version list`。
-- 工具退出码 0、`success=true`、空对象或 `null` 都不能单独证明成功。每个写步骤必须同时有非空业务结果和针对目标字段的回查；例如 comment update 返回 `null` 且 list 仍是旧内容时，该步骤失败，最终必须报告“部分完成/更新未生效”，不得以“全部完成”开头。
-- 汇总和改写只能重组用户给出的事实，不得增强确定性或新增任务：“验证 12 条用例”不能写成“12 条全部通过”，“整理问题清单”不能扩写成“输出根因分析”。数字、状态、结论和承诺逐项保持原义。
 
 ## 低频 atomic 路由
 
