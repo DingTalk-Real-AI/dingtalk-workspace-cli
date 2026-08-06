@@ -326,6 +326,7 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	documentType, _ := result["documentType"].(string)
 	finalResult := map[string]any{
 		"success":      true,
+		"status":       "completed",
 		"taskId":       taskID,
 		"documentUrl":  documentURL,
 		"documentName": documentName,

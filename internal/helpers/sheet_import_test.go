@@ -181,7 +181,7 @@ func TestCrossPlatformCoverageSheetImportRunsSharedDocImportFlow(t *testing.T) {
 	if err := json.Unmarshal([]byte(output), &payload); err != nil {
 		t.Fatalf("sheet import stdout must be one JSON document: %v\n%s", err, output)
 	}
-	if payload["nodeId"] != "node-1" || payload["success"] != true {
+	if payload["nodeId"] != "node-1" || payload["success"] != true || payload["status"] != "completed" {
 		t.Fatalf("output missing success contract: %#v", payload)
 	}
 }

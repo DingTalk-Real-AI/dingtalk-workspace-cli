@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -30,12 +31,29 @@ type docCommentMutationCall struct {
 }
 
 type docCommentMutationCaller struct {
-	calls []docCommentMutationCall
+	calls    []docCommentMutationCall
+	response string
 }
 
 func (c *docCommentMutationCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, docCommentMutationCall{productID: productID, toolName: toolName, args: args})
-	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{}`}}}, nil
+	response := c.response
+	if response == "" {
+		response = `{}`
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: response}}}, nil
+}
+
+func TestDocCommentUpdateRejectsNullAcknowledgement(t *testing.T) {
+	caller := &docCommentMutationCaller{response: `null`}
+	err := executeDocCommentMutationCommand(t, caller, []string{"dws", "doc"},
+		"comment", "update", "--node", "doc-1", "--comment-key", "comment-1", "--content", "updated")
+	if err == nil || !strings.Contains(err.Error(), "未返回可验证的更新结果") {
+		t.Fatalf("error = %v, want unverifiable update error", err)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("remote calls = %d, want 1", len(caller.calls))
+	}
 }
 
 func (*docCommentMutationCaller) Format() string { return "json" }

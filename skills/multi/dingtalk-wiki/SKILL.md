@@ -68,7 +68,7 @@ metadata:
 **触发**：在知识库建文档/页面。
 
 1. **执行（必须）**：`dws wiki node create --workspace <workspaceId> --type adoc --name "<名称>" --format json`（按需 `--parent-id <父节点>`）；返回取 `nodeId`。
-2. **写内容（必须）**：节点内容编辑切 `dingtalk-doc`，用 `dws doc update --node <nodeId> --mode overwrite|append --content-file <tmp.md> --yes`；写后 `doc read` 回读。
+2. **写内容（必须）**：节点内容编辑切 `dingtalk-doc`。追加用 `dws doc update --node <nodeId> --mode append --content-file <tmp.md>`；只有用户确认整篇覆盖后才用 `dws doc update --node <nodeId> --mode overwrite --content-file <tmp.md> --yes`。写后都要 `doc read` 回读。
 3. **验证（必须）**：`dws wiki node list --workspace <workspaceId> --format json` 复核节点已建。
 
 **禁止**：在 wiki 内直接拼内容（应切 doc 写）、建后不回读。

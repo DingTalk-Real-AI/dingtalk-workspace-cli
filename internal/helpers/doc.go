@@ -33,6 +33,27 @@ func SetHTTPPutFile(fn func(ctx context.Context, url string, headers map[string]
 	httpPutFile = fn
 }
 
+func callDocCommentUpdate(toolArgs map[string]any) error {
+	text, err := callMCPToolReturnTextOnServer(context.Background(), "doc-comment", "update_comment", toolArgs)
+	if err != nil {
+		return err
+	}
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" || trimmed == "null" {
+		return &CLIError{
+			Code:       CodeMCPToolError,
+			Message:    "评论更新接口未返回可验证的更新结果，不能判定为成功",
+			Suggestion: "请用 dws doc comment list --node <DOC_ID> --format json 回查评论内容；若未变化，保留原 commentKey 并重试",
+		}
+	}
+	var payload any
+	if json.Unmarshal([]byte(trimmed), &payload) == nil {
+		return deps.Out.PrintJSON(payload)
+	}
+	deps.Out.PrintRaw(text)
+	return nil
+}
+
 func docVersionExists(ctx context.Context, nodeID string, version int) (bool, error) {
 	// 注意: 不传 maxResults —— 服务端实际接受的上限小于 schema 声明的 1-50，
 	// 传大值会直接报错 (与悟空实现一致: 默认分页大小 + 游标翻页)。
@@ -2047,7 +2068,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 			if err := appendCommentGroupMentions(cmd, toolArgs); err != nil {
 				return err
 			}
-			return callMCPToolOnServer("doc-comment", "update_comment", toolArgs)
+			return callDocCommentUpdate(toolArgs)
 		},
 	}
 	commentUpdateCmd.Flags().String("node", "", "目标文档的标识，支持传入 URL 或 ID (必填)")
