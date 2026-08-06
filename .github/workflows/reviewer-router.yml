@@ -61,6 +61,9 @@ jobs:
             }
             const author = pullRequest.user.login.toLowerCase();
             const headSha = pullRequest.head.sha;
+            const isReleaseSeal = /^docs: seal v[^\s]+ changelog$/i.test(
+              pullRequest.title,
+            );
             const latestPusher =
               context.payload.action === 'synchronize'
                 ? context.payload.sender?.login?.toLowerCase()
@@ -214,6 +217,12 @@ jobs:
             }
 
             async function enableAutoMerge() {
+              if (isReleaseSeal) {
+                core.info(
+                  `PR #${pullNumber} is a release seal; auto-merge stays disabled for its required human merge.`,
+                );
+                return;
+              }
               try {
                 const currentPull = await getReadyEventPull('auto-merge enable');
                 if (!currentPull) {
