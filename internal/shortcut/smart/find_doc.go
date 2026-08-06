@@ -170,5 +170,7 @@ func shortcutFindDocStr(m map[string]any, keys ...string) string {
 }
 
 func init() {
+	// Keep the historical command and Schema identity alongside the richer
+	// canonical doc +search surface for backwards compatibility.
 	shortcut.Register(FindDoc)
 }

@@ -46,11 +46,11 @@ cli_version: ">=1.0.15"
 | `aitable` | 29 | `dingtalk-aitable` |
 | `attendance` | 19 | `dingtalk-misc` |
 | `calendar` | 20 | `dingtalk-calendar` |
-| `chat` | 97 | `dingtalk-chat` |
+| `chat` | 98 | `dingtalk-chat` |
 | `contact` | 14 | `dingtalk-contact` |
 | `devapp` | 19 | `dingtalk-dev` |
 | `ding` | 4 | `dingtalk-misc` |
-| `doc` | 17 | `dingtalk-doc` |
+| `doc` | 41 | `dingtalk-doc` |
 | `drive` | 7 | `dingtalk-drive` |
 | `mail` | 10 | `dingtalk-mail` |
 | `minutes` | 6 | `dingtalk-minutes` |

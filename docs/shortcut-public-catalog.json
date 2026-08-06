@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-07-29T00:06:19.285348",
-  "count": 265,
+  "generated_at": "2026-08-05T22:43:52.497190",
+  "count": 294,
   "results": [
     {
       "suite": "read",
@@ -485,7 +485,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "自动构造时间窗，分页拉取跨会话 @我 消息，并保留身份、引用、reaction、resourceRefs 与完整性。",
+      "semantic_delta": "自动构造时间窗，分页拉取跨会话 @我 消息，并保留身份、引用、reaction、resourceRefs 与完整性；可选对资源去重后安全落盘并返回逐项失败 ledger。",
       "availability": "available"
     },
     {
@@ -661,6 +661,16 @@
     {
       "suite": "semantic",
       "service": "chat",
+      "command": "+chat-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "对齐 lark-cli +chat-list：默认仅群聊，支持 --types group/p2p、--exclude-muted、page-size/page-token 别名，并投影 openConversationId/name/conversationType；不宣称 sort 或 bot 身份 p2p 剥离。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "chat",
       "command": "+chat-list-all",
       "risk": "read",
       "status": "reviewed_available",
@@ -715,7 +725,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "统一群聊与两类单聊目标，输出稳定消息身份、引用、reaction、resourceRefs、时间边界翻页和可读正文。",
+      "semantic_delta": "统一群聊与两类单聊目标；省略时间时自动以当前时间向前读取最近消息，并输出稳定消息身份、引用、reaction、resourceRefs、时间边界翻页和可读正文；可选对列表内资源去重后安全落盘并返回逐项失败 ledger。",
       "availability": "available"
     },
     {
@@ -1215,7 +1225,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "按最多 50 个消息 ID 批量读取并输出稳定消息投影、reaction 与 resourceRefs；可用 --download-resources 复用 HTTPS、相对路径、无覆盖和原子落盘防护，逐资源返回下载失败 ledger。",
+      "semantic_delta": "按最多 50 个消息 ID 批量读取并输出稳定消息投影、reaction 与 resourceRefs；可用 --download-resources 统一下载 mediaId 与 fileId，复用受信任下载域、相对路径、无覆盖和原子落盘防护，对重复资源去重并逐资源返回下载失败 ledger；安全本地下载沿用 read/not_required 契约，不产生非交互确认盲区。",
       "availability": "available"
     },
     {
@@ -1295,7 +1305,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "把临时资源 URL 解析、工作目录内安全路径、默认不覆盖、临时文件下载和原子发布封装为结构化单步结果。",
+      "semantic_delta": "统一承接消息 mediaId 与钉盘 fileId：分别复用 IM 临时资源 URL 和 drive.download_file，只允许钉钉/OSS HTTPS 下载域且重定向复验并隔离跨域凭据，再通过工作目录内安全路径、默认不覆盖、临时文件下载和原子发布输出结构化结果。",
       "availability": "available"
     },
     {
@@ -1315,7 +1325,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "用统一 identity 参数路由 current-user、bot、webhook 文本/Markdown 发送；按身份校验目标与凭据，幂等键只在真实支持的 user 分支开放，媒体上传仍诚实留在 native leaf。",
+      "semantic_delta": "用统一 identity 参数路由 current-user、bot、webhook 发送；current-user 支持文本、Markdown、mediaId 图片、安全相对路径本地文件上传、userId 姓名解析与幂等键，bot/webhook 仍只暴露下层真实支持的文本/Markdown 能力。",
       "availability": "available"
     },
     {
@@ -1344,8 +1354,8 @@
       "command": "+messages-send-card",
       "risk": "write",
       "status": "reviewed_available",
-      "disposition": "schema_leaf",
-      "semantic_delta": "创建流式卡片是一对一写入；完整卡片生命周期需由 send/update leaf 明确编排。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "既可只创建流式卡片，也可在一次调用中创建、提取 bizId、写入内容并设置流式状态；dry-run 输出两步执行计划，更新失败时保留已创建的 bizId。",
       "availability": "available"
     },
     {
@@ -1415,7 +1425,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型和机器人来源过滤；支持精确时间窗、page-all、50 条一组 mget 富化，并以 failure ledger 显式报告截断或富化失败。",
+      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型和机器人来源过滤；展开下层按会话分组的 conversationMessagesList，支持精确时间窗、page-all、50 条一组 mget 富化，可选安全下载命中消息资源，并以 failure ledger 显式报告截断、富化或下载失败。",
       "availability": "available"
     },
     {
@@ -1435,7 +1445,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "接受消息列表直接返回的 threadId（兼容 topicId），拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文和时间边界分页。",
+      "semantic_delta": "接受消息列表直接返回的 threadId（兼容 topicId），拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文和时间边界分页；可选对回复资源去重后安全落盘并返回逐项失败 ledger。",
       "availability": "available"
     },
     {
@@ -1708,123 +1718,454 @@
       "status": "real-ok"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+access-change",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "读取当前权限后再变更角色，避免把不存在的协作者当作成功更新。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+access-grant",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "在第一次写入前解析全部接收人，再批量授予文档权限并输出逐项 ledger。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+access-revoke",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "预检目标协作者权限后移除并输出逐项结果。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+background-delete",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "以 clear 语义移除文档背景色。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+background-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "校验并设置 #RRGGBB 文档背景纯色。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+checkpoint-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "写入前保存版本快照，更新后读回验证并输出逐步 ledger。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+comment-create",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "无 selection 创建全文评论，有 selection 时定位文本并创建划词评论。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+comment-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "永久删除指定评论，并由静态安全契约强制确认。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+comment-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一评论类型、解决状态与分页过滤。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "doc",
       "command": "+comment-reply",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一评论回复、表情回复和 mention 参数。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+comment-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "更新指定评论正文与 mention。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+copy",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "旧 Doc 复制入口，仅为兼容保留；新的文件复制应使用 Drive 命令。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一 Markdown/JSONML 内容输入、目标位置与创建后保真写入。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+create-from-template",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "支持 templateId 直达或按名称搜索消歧后创建文档。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+doc-append",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史文档末尾追加命令及其稳定 Schema identity；新场景优先使用 +update。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+export",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "一体化提交、轮询导出任务并按 no-clobber 策略安全下载到本地。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+export-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "按 jobId 查询导出状态的恢复入口；常规场景使用一体化 +export。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "doc",
       "command": "+export-submit",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "导出中断恢复所需的专家入口；常规场景使用一体化 +export。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+fetch",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一 simple/with-ids/full 细节层级与 full/outline/range/section/keyword/tags 局部读取。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+find-doc",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史文档搜索命令及其稳定 Schema identity；新场景优先使用 +search。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+grant-and-share",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "先确保目标角色，再发送链接；消息失败保留逐人 ledger，并以非零退出报告 failed/partial_success。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+history-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一历史版本分页参数并返回可用于回滚的版本列表。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+history-revert",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "先验证目标版本存在，再执行回滚并读回当前文档状态。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+history-save",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "以文档历史语义命名手动版本快照，避免暴露底层 RPC 命名。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+import",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "一体化创建会话、上传、确认转换并轮询导入结果。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+inspect",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "聚合文档元信息，并按需读取样式、权限、历史、媒体和评论。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "旧 Doc 导航入口，仅为兼容保留；新的文件树导航应使用 Drive 命令。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+media-download",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "解析附件临时链接并通过受控相对路径、no-clobber、原子发布安全下载。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+media-insert",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "组合本地文件校验、上传凭证、OSS PUT、插块和验证。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+media-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "从文档块中提取图片、附件及其 block/resource 标识。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+media-preview",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "将正文媒体下载到受控临时目录并返回本地预览 artifact。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+move",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "旧 Doc 移动入口，仅为兼容保留；新的文件移动应使用 Drive 命令。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+resource-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "以幂等 clear 语义移除当前文档封面。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+resource-download",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "读取当前文档封面配置并安全下载资源到本地。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+resource-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "支持本地图片或 HTTPS 图片转存后设置文档封面。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+review",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "聚合未解决评论、划词引用和确定性上下文，不调用模型生成总结。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+search",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一关键词、最近访问、过滤、分页和稳定精简投影，作为文档定位的 canonical 入口。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+share",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按姓名解析唯一用户后发送文档链接，不改变文档权限。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+share-doc",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史单人文档分享命令及其稳定 Schema identity；新场景优先使用 +share。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "doc",
       "command": "+template-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一 MY/PUBLIC 模板浏览和分页参数。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "doc",
       "command": "+template-search",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按名称检索模板并返回可继续创建的 templateId。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "统一追加、覆盖和 block 级精确修改，并集中处理内容输入、定位和确认。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "doc",
       "command": "+version-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史版本列表命令及其稳定 Schema identity；新场景优先使用 +history-list。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "doc",
       "command": "+version-revert",
       "risk": "high-risk-write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史版本回滚命令及其稳定 Schema identity；新场景优先使用 +history-revert。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "doc",
       "command": "+version-save",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史版本快照命令及其稳定 Schema identity；新场景优先使用 +history-save。",
+      "availability": "available"
     },
     {
       "suite": "write",

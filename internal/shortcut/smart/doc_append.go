@@ -102,5 +102,7 @@ var DocAppend = shortcut.Shortcut{
 }
 
 func init() {
+	// Keep the historical command and Schema identity alongside the richer
+	// canonical doc +update surface for backwards compatibility.
 	shortcut.Register(DocAppend)
 }

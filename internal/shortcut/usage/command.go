@@ -103,10 +103,7 @@ func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {
 	if risk == "" {
 		risk = string(shortcut.RiskRead)
 	}
-	confirmation := "not_required"
-	if risk != string(shortcut.RiskRead) {
-		confirmation = "user_required"
-	}
+	confirmation := shortcut.EffectiveSafety(s).Confirmation
 	flags := make([]shortcut.Flag, 0, len(s.Flags))
 	for _, flag := range s.Flags {
 		if flag.Hidden {

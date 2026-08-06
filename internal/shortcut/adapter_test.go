@@ -66,6 +66,13 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 		cs.Safety.Confirmation != "user_required" || cs.Safety.Idempotency != "unknown" {
 		t.Fatalf("adapter safety = %#v, want destructive/high/user_required/unknown", cs.Safety)
 	}
+	if got := EffectiveSafety(Shortcut{Risk: RiskWrite}); got.Effect != "write" || got.Confirmation != "user_required" {
+		t.Fatalf("legacy effective safety = %#v", got)
+	}
+	explicit := contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"}
+	if got := EffectiveSafety(Shortcut{Risk: RiskHighWrite, Safety: explicit}); got != explicit {
+		t.Fatalf("explicit effective safety = %#v, want %#v", got, explicit)
+	}
 	if cs.Orchestrate == nil {
 		t.Fatal("multi-step Execute must project into Orchestrate")
 	}
@@ -142,7 +149,7 @@ func TestCrossPlatformCoverageFromShortcutAliasesAndPositionalAlias(t *testing.T
 				ProductID: "chat", Name: "shortcut_search", CanonicalPath: "chat.shortcut_search", CLIPath: "chat +search", PrimaryCLIPath: "chat +search",
 			},
 		},
-		Flags:   []Flag{{Name: "query", Desc: "关键词", Required: true}},
+		Flags:   []Flag{{Name: "query", Desc: "关键词", Required: true, Aliases: []string{"keyword"}, AliasesVisible: true}},
 		Execute: func(rt *RuntimeContext) error { executed = rt.Str("query"); return nil },
 	}
 	spec := FromShortcut(s)
@@ -152,6 +159,9 @@ func TestCrossPlatformCoverageFromShortcutAliasesAndPositionalAlias(t *testing.T
 	cmd := mount(s)
 	if !cmd.HasAlias("+search-group") {
 		t.Fatalf("cobra aliases = %#v", cmd.Aliases)
+	}
+	if alias := cmd.Flags().Lookup("keyword"); alias == nil || alias.Hidden {
+		t.Fatalf("historically public flag alias = %#v, want visible", alias)
 	}
 	cmd.SetArgs([]string{"项目群"})
 	if err := cmd.Execute(); err != nil || executed != "项目群" {

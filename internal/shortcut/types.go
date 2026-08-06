@@ -100,6 +100,12 @@ type Flag struct {
 	Enum []string `json:"enum"`
 	// Hidden hides the flag from --help while keeping it usable.
 	Hidden bool `json:"-"`
+	// Aliases are hidden executable flag spellings for compatibility. They do
+	// not create additional Schema parameters; validation and value fallback
+	// remain attached to the canonical Name. AliasesVisible is a narrow
+	// compatibility escape hatch for aliases that were historically public.
+	Aliases        []string `json:"-"`
+	AliasesVisible bool     `json:"-"`
 }
 
 // ConstraintKind is a machine-readable cross-parameter or custom validation

@@ -22,6 +22,29 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
   than emitting a Top-N that may not be globally newest; falling short of N is not a failure
   (exit 0 plus a stderr hint). Internal sort state never reaches the output contract.
 
+## [1.0.57] - 2026-08-06
+
+This stable release promotes the fully delivered `v1.0.57-beta.3` baseline.
+It includes reviewed document shortcuts and chat reply mentions, together with
+the v1.0.57 beta-line command-contract, document, chat, OA, Wiki, compatibility,
+and CI reliability improvements validated through the prerelease channel.
+
+- **Promote v1.0.57-beta.3** — publishes the validated prerelease baseline as
+  the stable `v1.0.57` release without adding post-beta product changes.
+
+## [1.0.57-beta.3] - 2026-08-06
+
+### Added
+
+- **Reviewed document shortcuts** (#880) — adds public document shortcuts for
+  safe local downloads, content and history, review, media and style, and
+  document access/sharing workflows, while retaining reviewed compatibility
+  identities and confirmation safeguards for writes.
+- **Mentions in chat replies** (#881) — `chat message reply` now supports
+  `--at-open-dingtalk-ids` and `--at-all`, forwarding reply mention fields and
+  adding any required mention placeholders without changing existing send
+  behavior.
+
 ## [1.0.57-beta.2] - 2026-08-05
 
 ### Fixed
