@@ -343,6 +343,35 @@ func TestCrossPlatformCoverageDriveLatestFolderFailureRefusesTopN(t *testing.T) 
 	}
 }
 
+// 根目录读取失败的 folder 名回落：根入队时不带 name（driveDepthFolder{id, depth:0}），
+// 拒绝产出的消息若直接用 folderName 就成了 "folder=" 空洞提示。未指定 --folder 时
+// id 也为空，须一路回落到 <root>。
+func TestCrossPlatformCoverageDriveLatestRootPageFailureNamesRoot(t *testing.T) {
+	useDriveLatestArgs(t)
+	_, err := runDepthBFSRaw(t, driveLatestRootPageFailureCaller(), newDrivePanDepthRoute(), "", 2, "", 5)
+	cliErr, ok := err.(*CLIError)
+	if !ok || cliErr.Code != CodeContentTruncated {
+		t.Fatalf("error = %#v", err)
+	}
+	if !strings.Contains(cliErr.Message, "folder=<root>") {
+		t.Fatalf("message should name the root folder: %s", cliErr.Message)
+	}
+}
+
+// 指定了 --folder：folderName 仍为空，回落到 folderId 而不是 <root>，
+// 否则用户无法知道是哪个目录读不到。
+func TestCrossPlatformCoverageDriveLatestRootPageFailureFallsBackToFolderID(t *testing.T) {
+	useDriveLatestArgs(t)
+	_, err := runDepthBFSRaw(t, driveLatestRootPageFailureCaller(), newDrivePanDepthRoute(), "rootFolder", 2, "", 5)
+	cliErr, ok := err.(*CLIError)
+	if !ok || cliErr.Code != CodeContentTruncated {
+		t.Fatalf("error = %#v", err)
+	}
+	if !strings.Contains(cliErr.Message, "folder=rootFolder") {
+		t.Fatalf("message should fall back to the folder id: %s", cliErr.Message)
+	}
+}
+
 // 护栏：同一场景不带 latest 时行为不变（partial + errors[] + 退出码 0）。
 func TestCrossPlatformCoverageDriveDepthFolderFailureWithoutLatestKeepsPartial(t *testing.T) {
 	useDriveDepthArgs(t)
@@ -386,6 +415,15 @@ func driveLatestFolderFailureCaller() *scriptedToolCaller {
 		{text: `{"items":[
 			{"fileId":"fA","name":"dirA","type":"FOLDER","modifyTime":1700000009000},
 			{"fileId":"fX","name":"x.txt","type":"FILE","modifyTime":1700000001000}]}`},
+		{text: `{"errorCode":"forbidden.noPermission","errorMsg":"denied"}`},
+	}}
+}
+
+// 根目录首页有收获、第 2 页 403：depth==0 不触发「零收获直返」，失败落进 errors[]，
+// 于是 latest 下由 driveLatestIncompleteError 报告一个 folderName 为空的失败目录。
+func driveLatestRootPageFailureCaller() *scriptedToolCaller {
+	return &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"items":[{"fileId":"fX","name":"x.txt","type":"FILE","modifyTime":1700000001000}],"nextToken":"page2"}`},
 		{text: `{"errorCode":"forbidden.noPermission","errorMsg":"denied"}`},
 	}}
 }
