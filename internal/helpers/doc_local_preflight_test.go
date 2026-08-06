@@ -88,6 +88,9 @@ func TestDocLocalPreflightSecondBatchRejectsBeforeMCP(t *testing.T) {
 		{"read-scope-format", []string{"read", "--node", "n", "--scope", "outline"}, "content-format jsonml"},
 		{"read-tags-missing", []string{"read", "--node", "n", "--content-format", "jsonml", "--scope", "tags"}, "--tags"},
 		{"read-tags-wrong-scope", []string{"read", "--node", "n", "--content-format", "jsonml", "--scope", "outline", "--tags", "h1"}, "--tags only works"},
+		{"read-range-start-missing", []string{"read", "--node", "n", "--content-format", "jsonml", "--scope", "range"}, "--start-block-id"},
+		{"read-section-start-missing", []string{"read", "--node", "n", "--content-format", "jsonml", "--scope", "section"}, "--start-block-id"},
+		{"read-markdown-output", []string{"read", "--node", "n", "--content-format", "markdown", "--output", "body.json"}, "仅支持 --content-format jsonml"},
 		{"create-whitespace-name", []string{"create", "--name", "   "}, "--name"},
 		{"update-empty-content", []string{"update", "--node", "n", "--content", "   ", "--mode", "append"}, "非空内容"},
 		{"update-dry-run-append", []string{"update", "--node", "n", "--content", "x", "--mode", "append", "--dry-run"}, "仅用于预览 overwrite"},
@@ -112,8 +115,8 @@ func TestDocLocalPreflightSecondBatchRejectsBeforeMCP(t *testing.T) {
 		{"permission-filter-role", []string{"permission", "list", "--node", "n", "--filter-role", "ADMIN"}, "非法角色"},
 		{"export-format", []string{"export", "--node", "n", "--output", "x", "--export-format", "html"}, "docx"},
 	}
-	if len(cases) != 36 {
-		t.Fatalf("second batch has %d cases, want 36", len(cases))
+	if len(cases) != 39 {
+		t.Fatalf("second batch has %d cases, want 39", len(cases))
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
