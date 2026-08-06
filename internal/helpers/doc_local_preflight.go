@@ -191,7 +191,7 @@ func validateDocLocalArgs(cmd *cobra.Command) error {
 			return docLocalError(cmd, CodeMissingParam, "--scope "+scope+" 必须提供 --start-block-id", "先用 dws doc block list --node <DOC_ID> --format json 获取真实 blockId")
 		}
 		if cmd.Flags().Changed("output") && format != "jsonml" {
-			return docLocalError(cmd, CodeInvalidParam, "--output 仅支持 --content-format jsonml", "Markdown 请读取 stdout 或使用 shell 重定向；JSONML 示例: dws doc read --node <DOC_ID> --content-format jsonml --output ./body.json")
+			return docLocalError(cmd, CodeInvalidParam, "--output 仅支持 --content-format jsonml", "Markdown 内容会直接显示在终端；如需保存为文件，请执行: dws doc read --node <DOC_ID> --content-format markdown --format raw > body.md")
 		}
 		if (scope != "" || tags != "") && format != "jsonml" {
 			return docLocalError(cmd, CodeInvalidParam, "--scope/--tags requires --content-format jsonml", "示例: dws doc read --node <DOC_ID> --content-format jsonml --scope tags --tags h1,h2")

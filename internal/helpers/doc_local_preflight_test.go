@@ -90,7 +90,7 @@ func TestDocLocalPreflightSecondBatchRejectsBeforeMCP(t *testing.T) {
 		{"read-tags-wrong-scope", []string{"read", "--node", "n", "--content-format", "jsonml", "--scope", "outline", "--tags", "h1"}, "--tags only works"},
 		{"read-range-start-missing", []string{"read", "--node", "n", "--content-format", "jsonml", "--scope", "range"}, "--start-block-id"},
 		{"read-section-start-missing", []string{"read", "--node", "n", "--content-format", "jsonml", "--scope", "section"}, "--start-block-id"},
-		{"read-markdown-output", []string{"read", "--node", "n", "--content-format", "markdown", "--output", "body.json"}, "仅支持 --content-format jsonml"},
+		{"read-markdown-output", []string{"read", "--node", "n", "--content-format", "markdown", "--output", "body.json"}, "Markdown 内容会直接显示在终端"},
 		{"create-whitespace-name", []string{"create", "--name", "   "}, "--name"},
 		{"update-empty-content", []string{"update", "--node", "n", "--content", "   ", "--mode", "append"}, "非空内容"},
 		{"update-dry-run-append", []string{"update", "--node", "n", "--content", "x", "--mode", "append", "--dry-run"}, "仅用于预览 overwrite"},
