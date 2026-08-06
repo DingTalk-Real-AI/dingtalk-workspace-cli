@@ -6,6 +6,8 @@
 > **支持的文件格式**：docx, doc, xlsx, xls, md, txt, xmind, mark
 > **文件大小限制**：20MB
 
+> **在线编辑硬路由**：用户说“上传后在线编辑/大家直接在线改/转成钉钉文档”时必须使用 `doc import`。`drive upload` 只保留原始 `.docx/.xlsx/...` 普通文件，不能据此宣称已可在线编辑。若用户明确要同时保留原文件和在线版，才先 `drive upload`，再单独 `doc import`，并分别验证两个返回节点。
+
 ---
 
 ## doc import（一体化命令）
@@ -63,6 +65,7 @@ Flags:
 ## 关键说明
 
 - `import` 是一体化命令，一条命令自动完成创建会话→上传→确认→轮询，**无需手动编排**。CLI 内部使用渐进式退避轮询（最多约 5 分钟）。
+- 导入完成后必须用返回的 `documentUrl`/`nodeId` 执行 `drive info` 或 `doc info`，确认 `extension=adoc`（Word/文本）或对应在线类型，并确认目标 `folderId`；只有验证后才能说“可直接在线编辑”。
 - `import` 超时或中断后，CLI 会输出 `taskId`，可用 `dws doc import get --task-id <taskId>` 手动查询任务状态。
 - 支持的文件格式：docx, doc, xlsx, xls, md, txt, xmind, mark（共 8 种）。
 - 文件大小限制：20MB。超过限制时 CLI 会直接报错，不会发起网络请求。

@@ -1,26 +1,18 @@
 {
   "version": 1,
   "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
-<<<<<<< HEAD
-  "source_hash": "sha256:b3c04a9c98aca29718dabe8c52464a1ffadf6cc2da04bed37701e1651150ec37",
-=======
-  "source_hash": "sha256:3246b6b86cec02dd90b7cd093310667d926d62d3237d3408cfccc13ad3751b45",
->>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
+  "source_hash": "sha256:63baeebf24225e9e3adef0ee609a41df0c64c479440c14360ce715ae3f701f66",
   "catalog": {
     "agent_metadata": {
       "products_with_metadata": 26,
       "source": "embedded-skill-metadata",
-<<<<<<< HEAD
-      "source_hash": "sha256:36b1189bb92154252ca0cfcac9922367d8f03e9534814119d19ea03abe382ae8",
-=======
-      "source_hash": "sha256:b3c33641f91b69b73f3e319e0927e8654b6ba1e24f99071e22ee813a4e9f861d",
->>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
+      "source_hash": "sha256:3e4c1e7738dc039b264f7f807ba089df367caa8a11e14e2852d5bc7a1c178c62",
       "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
       "surface_products": 26,
       "surface_tools": 875,
       "tools_with_agent_summary": 875,
       "tools_with_metadata": 875,
-      "unmatched_skill_tools": 96,
+      "unmatched_skill_tools": 97,
       "version": 1
     },
     "count": 26,
@@ -15391,13 +15383,8 @@
             "availability": "available",
             "avoid_when": [
               "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
-<<<<<<< HEAD
               "在知识库建空节点实体也可用 wiki node create；本命令侧重可写初始内容的 adoc",
               "导入本地 Word/Markdown 为在线文档用 dws doc import，并显式提供 --folder 或 --workspace；不要用已迁移的 doc upload --convert"
-=======
-              "只管理知识库空节点或层级时用 wiki node create；本命令侧重创建并写入 adoc",
-              "导入本地 Word/Markdown 并保留服务端转换语义时用 dws doc import；不要用自写分片脚本替代原生 create"
->>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
             ],
             "canonical_path": "doc.create_document",
             "cli_name": "create",
@@ -15418,8 +15405,8 @@
             "risk": "medium",
             "title": "创建文档",
             "use_when": [
-              "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入 Markdown/JSONML 时",
-              "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片"
+              "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入明确要求的初始 Markdown/JSONML；用户显式要求正文 H1 时必须保留，不能用 --name 替代",
+              "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片；返回 nodeId 绑定同一请求的后续 list/insert/export，后续可观察操作仍须分别执行"
             ]
           },
           {
@@ -15805,7 +15792,7 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "整篇追加 Markdown 优先 doc update --mode append",
+              "仅在用户没有指定块操作、只要整篇追加 Markdown 时优先 doc update --mode append；显式 insert/标题块/列表块不能折叠",
               "插入本地文件附件优先 doc media insert；不要为普通附件手写 attachment JSON",
               "整段 Markdown 或长内容优先 doc update --mode append，不要拆成大量 block insert",
               "删块用 block delete；改已有块用 block update"
@@ -15830,7 +15817,8 @@
             "risk": "medium",
             "title": "插入块元素",
             "use_when": [
-              "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON",
+              "用户明确要求在文档中插入新块（段落/标题/列表等）时；简单段落/标题用 --text/--heading，复杂块用 --element JSON",
+              "用户要求有序列表块时使用 JSONML p.list.isOrdered=true（同一 listId）或等价原生 orderedList 结构，不能用普通 Markdown 代替",
               "相对插入时先 block list 获取真实 blockId，再同时传 --ref-block 与 --where before|after"
             ]
           },
@@ -15894,7 +15882,7 @@
             "risk": "low",
             "title": "查询块元素",
             "use_when": [
-              "查看文档一级块结构、拿 blockId，供 insert/update/delete 或划词评论定位时"
+              "查看文档一级块结构、拿 blockId，供 insert/update/delete 或划词评论定位时；用户在显式工作流中点名 list 时必须真实执行并使用返回结果"
             ]
           },
           {
@@ -16816,7 +16804,8 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-              "删除评论用 delete；回复用 reply"
+              "删除评论用 delete；回复用 reply",
+              "响应为 null/空对象或回查仍是旧正文时不能判成功，必须报告更新未生效或部分完成"
             ],
             "canonical_path": "doc.update_comment",
             "cli_name": "update",
@@ -16834,7 +16823,7 @@
             "risk": "medium",
             "title": "更新文档评论",
             "use_when": [
-              "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
+              "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id；执行后必须用 comment list 回查同一 commentKey 的目标字段"
             ]
           },
           {
@@ -16843,17 +16832,10 @@
             "agent_summary_source": "dws-agent-selection/doc",
             "availability": "available",
             "avoid_when": [
-<<<<<<< HEAD
               "目标不是 adoc 或只要改单个块时改用 doc block update",
               "覆盖模式用户未确认前不要执行；先 --dry-run 预览，确认后再加 --yes",
               "--content 与 --content-file 二选一；--index 仅用于 mode=append",
               "创建新文档用 doc create，不要用 update 冒充创建"
-=======
-              "只在末尾补一小段纯文本优先 +doc-append；只改一个块用 doc block update",
-              "目标不是 adoc 时按 drive info 的 extension 切对应产品",
-              "覆盖模式用户未确认前不要执行；可先 --dry-run 预览",
-              "创建新文档用 doc create；不要预先手工分片或循环重试覆盖"
->>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
             ],
             "canonical_path": "doc.update_document",
             "cli_name": "update",
@@ -18315,6 +18297,7 @@
               "用户要把文件发送到群聊或单聊时使用 chat message send --msg-type file --file-path；drive upload 不会发送聊天消息",
               "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
               "要把文件作为文档正文附件插入改用 dws doc media insert",
+              "Word/Excel/Markdown 要求上传后在线编辑、大家直接在线改或转钉钉文档时改用 dws doc import；普通 drive upload 返回 docx/xlsx 文件不能宣称可在线编辑",
               "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
               "用户没有明确同意替换目标文件时不要使用 --node；新建上传应使用 --folder 或目标根目录"
             ],
@@ -18338,7 +18321,7 @@
             "use_when": [
               "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
               "用户明确要求只上传或暂存附件、暂时不要发送到任何聊天会话时",
-              "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
+              "用户只要保留原始文件供存储或下载时使用；上传到知识库/文档空间时可加 --workspace",
               "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
             ]
           }

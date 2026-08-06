@@ -135,6 +135,7 @@ Flags:
 - `reply` 加 `--emoji` 时 `--content` 填表情名称（如 `比心`、`赞`），不是文字内容。
 - `reply --emoji` 与群 mention 冲突；CLI 会在调用服务端前报错，不会静默忽略。
 - `delete` 是不可逆操作；AI Agent 必须先让用户确认，再追加 `--yes`，避免 CLI 进入交互等待。
+- `comment create/reply/update/delete` 的退出码 0 不等于业务成功。响应为 `null`、空对象或缺少可核验字段时，立即执行 `comment list` 回查目标 `commentKey`。若 update 后正文仍是旧值，必须判定“更新未生效”；即使其他步骤成功或评论随后被删除，也只能报告部分完成，禁止写“全部完成”。
 
 ## 上下文传递
 

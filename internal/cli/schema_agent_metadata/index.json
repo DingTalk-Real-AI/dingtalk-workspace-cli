@@ -1,10 +1,6 @@
 {
   "version": 1,
-<<<<<<< HEAD
-  "source_hash": "sha256:36b1189bb92154252ca0cfcac9922367d8f03e9534814119d19ea03abe382ae8",
-=======
-  "source_hash": "sha256:b3c33641f91b69b73f3e319e0927e8654b6ba1e24f99071e22ee813a4e9f861d",
->>>>>>> 31cec9efa71be8d72fbb5035d7271a1c1c2dd057
+  "source_hash": "sha256:3e4c1e7738dc039b264f7f807ba089df367caa8a11e14e2852d5bc7a1c178c62",
   "surface_hash": "sha256:4897d582a472d9d3596f88fb4546e7795d6b9bc334d020712f5d895ce894f7a7",
   "coverage": {
     "surface_products": 26,
@@ -16,8 +12,8 @@
     "tools_with_avoid_when": 875,
     "tools_with_examples": 875,
     "tools_with_interface_mode": 875,
-    "unmatched_skill_tools": 96,
-    "unreviewed_skill_tools": 11
+    "unmatched_skill_tools": 97,
+    "unreviewed_skill_tools": 12
   },
   "products": {
     "aisearch": {

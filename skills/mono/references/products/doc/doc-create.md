@@ -40,7 +40,7 @@ Flags:
 
 ## 关键说明
 
-- **`--name` 是 H1**：正文从 `##` 开始；正文内不要再写 `#` 一级标题（除非确需且已说明动机）。
+- **标题优先级**：`--name` 是文档外壳标题，默认可视作 H1；但它不能替代用户显式要求的正文一级标题。用户说“正文写 `# ...`”“正文先起个一级标题”时，必须在初始内容中保留该 `#` H1；用户未要求正文 H1 时，正文默认从 `##` 开始以避免重复。
 - 不传 `--folder` 和 `--workspace` 时，默认创建在「我的文档」根目录。
 - `--folder` 仅接受文档文件夹 `nodeId` / `dentryUuid` / alidocs 文件夹 URL；**禁止**传入 drive `dentryId`、`parentId`、`spaceId` 这类纯数字 ID。
 - 输入方式选择见 [`./doc-update.md` §内容写入管道](./doc-update.md#内容写入管道createupdate-共用)（与 update 共用）。短文本字面量可 `--content`，多行/表格/特殊字符必须 `--content-file` 或 `--content -`。
@@ -53,6 +53,12 @@ Flags:
 | `nodeId` | [`./doc-update.md`](./doc-update.md) / [`./doc-block.md`](./doc-block.md) / [`./doc-media.md`](./doc-media.md) 的 `--node` |
 | `docUrl` | 最终交付给用户的链接；缺失时用 [`./doc-info.md`](./doc-info.md) 补查 |
 | `chunksWritten` | 判断是否触发自动分片；> 1 时重点检查章节顺序 |
+
+同一请求后续出现“这篇/刚才那篇/上次那篇”时，直接续用本次 create 返回的 `nodeId`；禁止先搜索同名文档再把后续操作指向旧节点。
+
+## 显式操作序列
+
+用户点名 `block list`、插入、追加、更新等后续动作时，必须按原顺序逐项执行。`doc create` 只写用户指定的初始内容，不能为了减少调用把后续标题、列表或段落提前塞进 create。例：`创建 → 查看块结构 → 末尾插入段落` 必须真实执行 create、block list、block insert 三步。
 
 ## 回读验收（必读）
 

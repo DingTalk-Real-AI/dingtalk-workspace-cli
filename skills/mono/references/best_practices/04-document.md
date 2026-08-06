@@ -2,6 +2,13 @@
 
 > 通用规范见 [_common/conventions.md](_common/conventions.md)。
 
+## 显式工作流与事实保真
+
+- 用户点名的 `create → list → insert/append/update` 是可观察命令链，必须保持顺序逐项执行；create 只承载明确的初始正文。有序列表块必须验证回读结构中的 `list.isOrdered=true`。
+- `--name` 不替代用户显式要求的正文 H1；新建资源返回 ID 后，同一请求的指代绑定该新资源，禁止搜索同名旧资源替换。
+- Word/Excel 需要“在线编辑/直接在线改”时使用 `doc import`，普通 `drive upload` 只保留原文件。
+- 汇总时保留证据强度：验证数量不等于通过数量，整理问题不等于根因分析。任一步骤返回 `null`/空结果或回查不一致时只能报告部分完成。
+
 | Recipe | 行动指南（固定路线） |
 |--------|-------------------|
 | write-doc | 1. 按[「多源并行采集」](_common/conventions.md#多源并行采集公共模式)执行<br>2. **先把内容写入临时文件**（Linux/Mac `/tmp/<name>.md`，Windows `%TEMP%\<name>.md`）—— 含多行/表格/长文本必须走文件，不要把 markdown 直接作为命令行字符串<br>3. **单步创建**（< 200KB）：`doc create --name "<文档名>" --content-file <tmp> [--folder <DOC_FOLDER_NODE_ID>] [--workspace <WS_ID>]`（`--folder` 只传文档文件夹 nodeId / alidocs 文件夹 URL，不传数字 dentryId）<br>4. **超长兜底**（> 200KB）：**必须先向用户提示截断风险**（详见下方「分块 append 截断风险提示」），用户确认后再执行：`doc create --name "<文档名>" [--folder/--workspace]` → `nodeId` → 按段落切 ≤200KB 片段（不断表格） → 每片 `doc update --node <nodeId> --content-file <part> --mode append`<br>5. **回读校验**（必须）：所有写入完成后，执行 `doc read --node <nodeId>` 回读文档，校验关键标题/段落是否完整写入（详见下方「doc update 回读校验规范」）<br>备选（仅短内容 <2KB 且无换行/表格）：`doc create --name "..." --content "..."` |

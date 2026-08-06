@@ -10,6 +10,8 @@
 
 > **改写已有文档优先 JSONML**：保真度最高、callout / 分栏 / 表格 / @人 / 附件 / 颜色 / 嵌套都能 1:1 round-trip；写入端有 validator 兜底。详见 [`./style/doc-update-workflow.md` §1.3 编辑形态优先级](./style/doc-update-workflow.md)。
 
+> **显式块操作不可折叠**：用户说“先 create，再 list/insert/update/append”时按原顺序真实调用；不能因为最终正文相似，就把后续块操作合并进 create 或一次 Markdown 写入。
+
 ---
 
 ## doc block list（查询块元素）
@@ -173,7 +175,8 @@ dws doc block delete --node DOC_ID --block-id UUID
 
 - **块类型**：paragraph、heading、blockquote、callout、columns、orderedList、unorderedList、table、sheet、attachment、slot。
 - **快捷 vs --element**：`block insert` 优先使用 `--text` 或 `--heading` 快捷方式；复杂块类型（table、callout、columns 等）使用 `--element` JSON 或 `--content-format jsonml`。
-- **简单内容追加**：建议用 [`./doc-update.md`](./doc-update.md) `--mode append`，不必走 block insert。
+- **有序列表块**：用户明确要求 ordered list / 有序列表块时，必须用 JSONML `p` 节点的 `list.isOrdered=true`（同一 `listId`；仅首项设 `start:1`）或等价原生 orderedList element；带 `1.` 前缀的普通段落、普通 Markdown 或一次 create 不满足要求。
+- **简单内容追加**：用户只说追加纯文本且不强调块操作时可用 [`./doc-update.md`](./doc-update.md) `--mode append`；用户明确说 block insert / 插入段落 / 插入标题 / 插入列表块时必须走 block insert。
 - **JSONML validator**（写入端默认行为）：
   - 裸字符串、缺 uuid 等结构错误会被 validator 抦下并返回带 path 的错误（如 `$[2][2]: paragraph child must be span wrapper, got raw string.`）。
   - `--fix-jsonml` 开启 JSON 语法修复，推荐 agent 调用。
@@ -240,6 +243,12 @@ dws doc block list --node <DOC_ID> --content-format jsonml --block-id <UUID>
 # 插入段落（同级定位）
 dws doc block insert --node <DOC_ID> --content-format jsonml --ref-block <UUID> --where after \
   --element '["p",{},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"新段落"]]]'
+
+# 插入有序列表块（3 项共用 listId，仅首项有 start）
+dws doc block insert --node <DOC_ID> --content-format jsonml \
+  --element '["p",{"uuid":"ol1","list":{"listId":"actions","level":0,"isOrdered":true,"start":1}},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"第一项"]]]'
+dws doc block insert --node <DOC_ID> --content-format jsonml \
+  --element '["p",{"uuid":"ol2","list":{"listId":"actions","level":0,"isOrdered":true}},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"第二项"]]]'
 
 # 插入 callout（colorBlocks）
 dws doc block insert --node <DOC_ID> --content-format jsonml --ref-block <UUID> --where after \

@@ -6,6 +6,8 @@
 
 不要先读取文件内容再调用 `doc create` 或 `doc update`。`doc import` 会按文件格式走导入任务，保留更完整的原始结构。
 
+> **在线编辑硬路由**：用户说“上传后在线编辑/大家直接在线改/转成钉钉文档”时必须使用 `doc import`。`drive upload` 只保留原始 `.docx/.xlsx/...` 普通文件，不能据此宣称已可在线编辑。若用户明确要同时保留原文件和在线版，才先 `drive upload`，再单独 `doc import`，并分别验证两个返回节点。
+
 ## 命令
 
 ```bash
@@ -38,6 +40,7 @@ dws doc import get --task-id <TASK_ID> --format json
 3. 执行 `dws doc import --file ... --format json`。
 4. 正常情况下 CLI 会自动提交、上传并轮询导入任务。
 5. 如果命令超时或中断，从输出中提取 `taskId`，再执行 `dws doc import get --task-id <TASK_ID> --format json`。
+6. 用返回的 `documentUrl`/`nodeId` 执行 `drive info` 或 `doc info`，确认在线类型和目标文件夹；验证通过后才能说“可直接在线编辑”。
 
 ## 上下文传递
 

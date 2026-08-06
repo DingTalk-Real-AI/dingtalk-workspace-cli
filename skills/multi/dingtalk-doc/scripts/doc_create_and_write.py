@@ -60,6 +60,8 @@ def run_dws(args: Sequence[str], dry_run: bool = False) -> Any:
             f"dws 命令失败：{detail or f'退出码 {result.returncode}'}"
         )
     data = decode_json_output(result.stdout)
+    if data is None or data == {}:
+        raise ScriptError("dws 返回空业务结果，无法确认操作成功")
     if isinstance(data, dict) and data.get("success") is False:
         detail = data.get("errorMsg") or data.get("message") or "未知错误"
         raise ScriptError(f"dws 业务调用失败：{detail}")
@@ -145,12 +147,14 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             ["doc", "info", "--node", node_id, "--format", "json"],
             dry_run=args.dry_run,
         )
-        run_dws(
+        readback = run_dws(
             ["doc", "read", "--node", node_id, "--format", "json"],
             dry_run=args.dry_run,
         )
         if args.dry_run:
             return 0
+        if not first_value(readback, ("markdown", "jsonml", "content")):
+            raise ScriptError("文档回读未返回正文，无法确认写入成功")
 
         summary = {
             "success": True,
