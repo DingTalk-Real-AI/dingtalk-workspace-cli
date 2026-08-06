@@ -175,6 +175,38 @@ func TestCrossPlatformCoverageStripDriveDepthDecorations(t *testing.T) {
 	}
 }
 
+// assertDriveLatestSuggestion 逐子句校验拒绝产出建议的自洽性：约定每个「；」子句把
+// 可照抄的命令写在句尾，于是「让用户去掉 --latest」的子句里，命令本身就不能再带 --latest
+// ——否则用户照抄示例必然复现同一个错误。只断言 Suggestion != "" 盖不住这种矛盾。
+func assertDriveLatestSuggestion(t *testing.T, suggestion string, latest int) {
+	t.Helper()
+	if suggestion == "" {
+		t.Fatal("latest refusal must carry a suggestion")
+	}
+	sawLatestExample := false
+	for _, clause := range strings.Split(suggestion, "；") {
+		idx := strings.Index(clause, "dws ")
+		if idx < 0 {
+			continue
+		}
+		prose, command := clause[:idx], clause[idx:]
+		if !strings.HasPrefix(command, "dws drive list") {
+			t.Fatalf("clause command must be a dws drive list invocation: %q", command)
+		}
+		keepsLatest := strings.Contains(command, "--latest")
+		if strings.Contains(command, fmt.Sprintf("--latest %d", latest)) {
+			sawLatestExample = true
+		}
+		if strings.Contains(prose, "去掉 --latest") && keepsLatest {
+			t.Fatalf("clause tells the user to drop --latest but its command keeps it: %q", clause)
+		}
+	}
+	// 缩小范围后仍能取 Top-N 是首选出路，不能只剩「去掉 --latest」这条退路。
+	if !sawLatestExample {
+		t.Fatalf("suggestion lost the --latest %d retry example: %q", latest, suggestion)
+	}
+}
+
 func TestCrossPlatformCoverageDriveLatestTruncatedRefusesTopN(t *testing.T) {
 	useDriveLatestArgs(t)
 	// 每页 50 条（1 文件夹 + 49 文件）且始终有 nextToken：40 页打满全局 2000 上限。
@@ -192,9 +224,7 @@ func TestCrossPlatformCoverageDriveLatestTruncatedRefusesTopN(t *testing.T) {
 	if !strings.Contains(cliErr.Message, "LATEST_SCAN_TRUNCATED") {
 		t.Fatalf("message = %q", cliErr.Message)
 	}
-	if cliErr.Suggestion == "" {
-		t.Fatal("truncation error must carry a suggestion")
-	}
+	assertDriveLatestSuggestion(t, cliErr.Suggestion, 5)
 	// 拒绝即不产出：截断集上的 Top-N 不是全局最新，stdout 必须为空。
 	if out.Len() != 0 {
 		t.Fatalf("stdout should be empty, got %q", out.String())
@@ -213,6 +243,7 @@ func TestCrossPlatformCoverageDocLatestTruncatedRefusesTopN(t *testing.T) {
 	if !ok || cliErr.Code != CodeContentTruncated {
 		t.Fatalf("error = %#v", err)
 	}
+	assertDriveLatestSuggestion(t, cliErr.Suggestion, 5)
 	if out.Len() != 0 {
 		t.Fatalf("stdout should be empty, got %q", out.String())
 	}
@@ -335,9 +366,7 @@ func TestCrossPlatformCoverageDriveLatestFolderFailureRefusesTopN(t *testing.T) 
 			t.Fatalf("message lacks %q: %s", want, cliErr.Message)
 		}
 	}
-	if cliErr.Suggestion == "" {
-		t.Fatal("incomplete error must carry a suggestion")
-	}
+	assertDriveLatestSuggestion(t, cliErr.Suggestion, 5)
 	if out.Len() != 0 {
 		t.Fatalf("stdout should be empty, got %q", out.String())
 	}
@@ -356,6 +385,7 @@ func TestCrossPlatformCoverageDriveLatestRootPageFailureNamesRoot(t *testing.T) 
 	if !strings.Contains(cliErr.Message, "folder=<root>") {
 		t.Fatalf("message should name the root folder: %s", cliErr.Message)
 	}
+	assertDriveLatestSuggestion(t, cliErr.Suggestion, 5)
 }
 
 // 指定了 --folder：folderName 仍为空，回落到 folderId 而不是 <root>，
@@ -370,6 +400,7 @@ func TestCrossPlatformCoverageDriveLatestRootPageFailureFallsBackToFolderID(t *t
 	if !strings.Contains(cliErr.Message, "folder=rootFolder") {
 		t.Fatalf("message should fall back to the folder id: %s", cliErr.Message)
 	}
+	assertDriveLatestSuggestion(t, cliErr.Suggestion, 5)
 }
 
 // 护栏：同一场景不带 latest 时行为不变（partial + errors[] + 退出码 0）。

@@ -521,15 +521,18 @@ func newDriveCommand() *cobra.Command {
 					"用户要浏览「我的文件」/钉盘/网盘某目录下有哪些文件或文件夹时",
 					"已知父文件夹 dentryUuid，要列出其子项以便继续 download/copy/move 时",
 					"传 --workspace 时要列出文档空间/知识库根或子目录（与 wiki node list 场景重叠时，用户说钉盘/我的文件优先本命令）",
+					"范围已知（当前目录/--folder/--workspace 知识库）、要按文件修改时间取最新 N 个文件时用 --latest N（可叠加 --pattern 限名、--depth 递归）",
 				},
 				AvoidWhen: []string{
 					"只记得关键词、不知道所在目录时改用 dws drive search",
 					"明确要在某个知识库内按目录浏览且已有 workspaceId 时可用 dws wiki node list",
-					"要找最近打开/编辑过的文档改用 dws drive recent",
+					"要看「我最近看过/改过的」跨空间个人访问记录改用 dws drive recent；范围已知、按文件修改时间取最新用本命令 --latest",
 				},
+				// 门禁限定最多 2 条示例（schema_agent_examples.go），--latest 只能替换掉
+				// 原第 2 条的 --limit：--limit 仍由第 1 条示范，--folder 由第 2 条继续示范。
 				Examples: []string{
 					"dws drive list --limit 20 --format json",
-					"dws drive list --folder <dentryUuid> --limit 20 --format json",
+					"dws drive list --folder <dentryUuid> --latest 5 --format json",
 				},
 			},
 		},
@@ -2861,6 +2864,7 @@ func newDriveCommand() *cobra.Command {
 				AvoidWhen: []string{
 					"按关键词全局搜文件改用 dws drive search",
 					"浏览某目录内容改用 dws drive list",
+					"范围已知（某文件夹/知识库）、要按文件修改时间取最新 N 个改用 dws drive list --latest N（本命令按个人访问记录、跨空间，与文件修改时间不是一回事）",
 				},
 				Examples: []string{
 					"dws drive recent --format json",

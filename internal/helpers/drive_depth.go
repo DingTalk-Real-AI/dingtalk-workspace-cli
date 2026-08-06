@@ -421,6 +421,8 @@ bfs:
 // driveLatestIncompleteError 排序基不完整时的拒绝产出错误。截断与目录失败共用
 // CodeContentTruncated（→ ExitAPI），但 token 分开，便于消费方区分「范围太大」与「读不到」。
 // 拒绝产出后 errors[] 不再进 stdout，失败详情必须落在错误消息里，否则用户完全瞎。
+// Suggestion 的每个子句把可照抄的命令写在句尾，且必须与该子句正文一致——让用户
+// 「去掉 --latest」的子句若示例仍带 --latest，照抄就复现同一个错误。
 func driveLatestIncompleteError(latest int, truncated bool, errs []driveDepthError) error {
 	// len(errs)==0 只可能来自截断分支：调用点已保证二者至少一真。
 	if truncated || len(errs) == 0 {
@@ -442,7 +444,9 @@ func driveLatestIncompleteError(latest int, truncated bool, errs []driveDepthErr
 		Code: CodeContentTruncated,
 		Message: fmt.Sprintf("LATEST_SCAN_INCOMPLETE: %d 个目录未读全（首个失败 folder=%s depth=%d reason=%s: %s），未扫描区域可能含更新文件，拒绝输出不完整的 Top-%d",
 			len(errs), folder, first.Depth, first.Reason, first.Message, latest),
-		Suggestion: fmt.Sprintf("确认目录权限后重试，或用 --folder 指定可读子目录缩小范围；需要失败明细与已扫到的部分结果时去掉 --latest 重跑（partial + errors[] 照旧输出），如 dws drive list --folder <子目录ID> --latest %d", latest),
+		// partial + errors[] 的承诺限定在 --depth>1：单层（含知识库 maxDepth=1）去掉 --latest
+		// 会路由回普通单层 list，本就没有 errors[] 契约，无条件承诺即是另一种不准确。
+		Suggestion: fmt.Sprintf("确认目录权限后重试；或用 --folder 缩小到可读子目录后重取 Top-%d：dws drive list --folder <可读子目录ID> --latest %d；需要看失败明细请去掉 --latest 按原范围重跑（--depth>1 时同时输出已扫到的 partial 与 errors[] 明细）：dws drive list --folder <目录ID> --depth <原层数>", latest, latest),
 	}
 }
 

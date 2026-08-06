@@ -21,7 +21,6 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
   the walk fails to read (`LATEST_SCAN_INCOMPLETE`) the command **fails** with empty stdout rather
   than emitting a Top-N that may not be globally newest; falling short of N is not a failure
   (exit 0 plus a stderr hint). Internal sort state never reaches the output contract.
-  See [docs/drive-list-latest-design.md](docs/drive-list-latest-design.md).
 
 ## [1.0.57-beta.2] - 2026-08-05
 
