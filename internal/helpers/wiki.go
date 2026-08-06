@@ -1,10 +1,13 @@
 package helpers
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
@@ -1322,10 +1325,13 @@ ORG 类型授权不会出现在查询结果中。`,
 
 通过 --workspace 指定知识库，支持传入知识库 ID 或知识库 URL。
 支持分页，通过 --cursor 传入上次返回的 nextToken 获取下一页。
-
-权限要求：调用者需具备知识库的成员权限，非成员会被拒绝访问。`,
+使用 --exclude-file 可排除文件相关动态（文档创建/文档更新等），仅保留文档操作（创建/更新/评论/点赞等）。
+当用户要求"只看文档操作""排除文件上传"等意图时，必须使用此 flag，
+禁止在客户端自行过滤。`,
 		Example: `  dws wiki feed list --workspace <workspaceId>
   dws wiki feed list --workspace <workspaceId> --limit 10
+  dws wiki feed list --workspace <workspaceId> --exclude-file
+  dws wiki feed list --workspace <workspaceId> --limit 10 --exclude-file
   dws wiki feed list --workspace <workspaceId> --cursor <nextToken>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID, err := mustFlagOrFallback(cmd, "workspace", "workspace-id")
@@ -1345,7 +1351,14 @@ ORG 类型授权不会出现在查询结果中。`,
 				v, _ := cmd.Flags().GetBool("exclude-file")
 				toolArgs["excludeFile"] = v
 			}
-			return callMCPTool("list_workspace_feeds", toolArgs)
+			// 调用后对 feeds[].time 毫秒时间戳做本地化格式化，
+			// 使 Agent 直接看到可读时间，无需自行转换
+			text, err := callMCPToolReturnText(context.Background(), "list_workspace_feeds", toolArgs)
+			if err != nil {
+				return err
+			}
+			deps.Out.PrintJSON(formatFeedTime(text))
+			return nil
 		},
 	}
 	DeclareLeafMetadata(feedListCmd, LeafSpec{
@@ -1391,9 +1404,9 @@ ORG 类型授权不会出现在查询结果中。`,
 		},
 	})
 	feedListCmd.Flags().String("workspace", "", "知识库 ID 或 URL (必填)")
-	feedListCmd.Flags().Int("limit", 0, "每页数量 (默认 20，最大 50)")
+	feedListCmd.Flags().Int("limit", 0, "每页数量 (默认 10，最大 20)")
 	feedListCmd.Flags().String("cursor", "", "分页游标 (首页留空)")
-	feedListCmd.Flags().Bool("exclude-file", false, "是否排除文件相关的动态 (默认 false)")
+	feedListCmd.Flags().Bool("exclude-file", false, "排除文件相关动态（文档创建/更新/评论/点赞等），仅保留文档操作。用户要求排除文件/只看文档创建/更新/评论/点赞时必须使用此flag，禁止客户端过滤")
 	feedListCmd.Flags().String("workspace-id", "", "")
 	_ = feedListCmd.Flags().MarkHidden("workspace-id")
 	RegisterCrossProductAliases(feedListCmd)
@@ -1429,4 +1442,108 @@ ORG 类型授权不会出现在查询结果中。`,
 	root.AddCommand(docGroup)
 
 	return root
+}
+
+// beijingLoc 用于将时间戳格式化为北京时间（UTC+8）
+var beijingLoc = time.FixedZone("CST", 8*3600)
+
+// formatFeedTime 将知识库动态 feeds[].time 毫秒时间戳转为可读时间字符串，
+// 同时保留原始毫秒值至 timeMs 字段。解析失败时原样返回，不阻断输出。
+// 同时裁剪冗余字段（avatarUrl、docKey、parentDoc 等），减小输出体积，
+// 避免 Agent 因 JSON 过大而在后续处理中产生长耗时 echo 命令。
+func formatFeedTime(raw string) any {
+	var result map[string]any
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return raw
+	}
+	feeds, ok := result["feeds"].([]any)
+	if !ok {
+		return result
+	}
+	for _, f := range feeds {
+		item, ok := f.(map[string]any)
+		if !ok {
+			continue
+		}
+		ms, ok := item["time"].(float64)
+		if !ok || ms <= 0 {
+			continue
+		}
+		item["timeMs"] = ms
+		item["time"] = time.UnixMilli(int64(ms)).In(beijingLoc).Format("2006-01-02 15:04")
+		trimFeedFields(item)
+	}
+	return result
+}
+
+// trimFeedFields 裁剪单条 feed 中对 Agent 无用的冗余字段，
+// 大幅减小 JSON 输出体积，避免 Agent 二次处理时产生超长 echo 命令。
+func trimFeedFields(item map[string]any) {
+	// 移除大块冗余字段
+	delete(item, "parentDoc")
+	delete(item, "userInfo")
+
+	// 将 type 数字映射为可读标签，使 Agent 无需查表即可直接展示
+	if typeNum, ok := item["type"].(float64); ok {
+		if label, known := feedTypeLabels[int(typeNum)]; known {
+			item["typeLabel"] = label
+		}
+	}
+
+	// 裁剪 users：仅保留 nick
+	if users, ok := item["users"].([]any); ok {
+		for _, u := range users {
+			if user, ok := u.(map[string]any); ok {
+				nick := user["nick"]
+				for k := range user {
+					delete(user, k)
+				}
+				if nick != nil {
+					user["nick"] = nick
+				}
+			}
+		}
+	}
+
+	// 裁剪 content：仅保留 content.doc.name 和 content.doc.extension
+	// extension 区分文档类型（adoc=文档, asheet=表格等），Agent 需要用来区分更新对象
+	if content, ok := item["content"].(map[string]any); ok {
+		if doc, ok := content["doc"].(map[string]any); ok {
+			name := doc["name"]
+			extension := doc["extension"]
+			for k := range doc {
+				delete(doc, k)
+			}
+			if name != nil {
+				doc["name"] = name
+			}
+			if extension != nil {
+				doc["extension"] = extension
+			}
+		}
+		// 移除 content 中除 doc 外的其他字段（如 dentryKey / workspaceKey 等）
+		for k := range content {
+			if k != "doc" {
+				delete(content, k)
+			}
+		}
+	}
+}
+
+// feedTypeLabels 将知识库动态 type 数字映射为可读中文标签，
+// 与 lippi-combo OpenFeedItemDTO.type 枚举对齐。
+var feedTypeLabels = map[int]string{
+	0:  "创建文档",
+	1:  "更新文档",
+	2:  "评论文档",
+	3:  "点赞文档",
+	4:  "加入团队空间",
+	5:  "表格选区数据变更",
+	6:  "更新 office 文件",
+	7:  "上传普通文件",
+	8:  "上传媒体文件",
+	9:  "上传文件夹",
+	10: "上传文件夹",
+	11: "加入团队",
+	12: "创建知识库",
 }
