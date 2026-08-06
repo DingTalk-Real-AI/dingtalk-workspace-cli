@@ -40,6 +40,7 @@ metadata:
 | 块 | `blockId` / JSONML `uuid` 必须来自 `block list`，更新节点的 uuid 必须与目标块一致 |
 | 评论 | `commentKey` 来自评论 list/create；划词评论还需同一块的真实 `start/end` |
 | 异步任务 | 导出 `jobId` 与导入 `taskId` 只查询对应任务，不能替代 nodeId |
+| 新建资源续用 | 同一请求中 create/mkdir/import/copy 返回的新 `nodeId` / `fileId` 立即成为后续“这篇/刚才那篇/上次那篇/这个文件夹”的目标；禁止再按同名搜索并改用旧资源 |
 | 内容格式 | Markdown 适合线性正文；已有富结构优先 JSONML/块级编辑，禁止用 Markdown overwrite 误称保真 |
 | 普通文件 | adoc 才用 `doc read/export`；`.md`、axls、able 和普通文件按真实 `extension` 切对应 Skill |
 
@@ -52,22 +53,27 @@ metadata:
 | 按名称找文档 | `+find-doc --query <关键词>`；需最近访问/扩展名/创建者等过滤用 `+search` | 候选不唯一先消歧；随后 `drive info --node <nodeId>` 判 `extension` |
 | 读取 adoc | `drive info --node <nodeId>` → `doc read --node <nodeId>` | 用户已给 nodeId/URL 时不再搜索；非 adoc 不调用 `doc read` |
 | 创建文档 | `doc create --name <标题> --content-file <tmp.md> [--folder <folder> | --workspace <ws>]` | 原生写入管道自动分片；取 `nodeId` 后 `doc read`，缺链接再 `doc info` |
+| 显式块工作流 | 按用户原顺序执行 `create → block list → block insert/update/...` | 用户点名的 list/insert/append/update 是可观察要求，不得把后续动作折叠进一次 create；“插入/追加一个标题或列表块”走 block insert |
 | 末尾补短文本 | `+doc-append --doc <nodeId> --text <内容>` | 该 Shortcut 为 write/user_required；确认后执行并 `doc read` 核对 |
 | 改写正文 | `doc read --content-format jsonml` → `block update` 或 `doc update --content-format jsonml --mode overwrite` | 单块优先块级编辑；整篇 overwrite 先预览/确认，Markdown overwrite 不保富结构 |
 | 评论与回复 | `+comment-list --node <nodeId>` → `+comment-create` / `+comment-reply` | `commentKey` 来自真实结果；写 Shortcut 先确认；划词评论走 atomic `comment create-inline` |
-| 导入 / 导出 | `doc import --file <path> ...` / `doc export --node <nodeId> --export-format <fmt> --output <path>` | 一体化命令优先；仅超时/中断后用 `import get` / `export get` |
+| 导入 / 导出 | `doc import --file <path> ...` / `doc export --node <nodeId> --export-format <fmt> --output <path>` | Word/Excel 等本地文件要求“在线编辑/转在线文档”必须 import；drive upload 只保留普通文件。仅超时/中断后用 `import get` / `export get` |
 | 版本操作 | `+version-list --node <nodeId>` → `+version-save` / `+version-revert --version <N>` | save/revert 先确认；revert 版本号必须来自 list，完成后回读 |
 | 模板创建 | `+template-list` / `+template-search --query <词>` → atomic `template apply --template-id <id>` | templateId 来自真实列表；要复刻已有文档形态时用 drive copy + 副本块级更新 |
 | 分享链接给某人 | `+share-doc --to <姓名> --url <docUrl> [--note <附言>]` | 会真实发消息，确认后执行；同名人员必须消歧，不改变文档权限 |
 
 ## 写入与验证边界
 
+- `--name` 是文档外壳标题，但不能覆盖用户显式要求的正文 H1。用户说“正文写 `# ...` / 先起一级标题 / 插入一级标题”时，必须原样创建正文 H1；只有用户未要求正文 H1 时才默认从 H2 开始以避免重复。
+- 用户显式列出的操作是验收步骤：create 只能承载明确要求的初始内容；后续 `list`、`insert`、`append`、`update` 必须逐项真实调用。若要求“有序列表块”，必须写入 JSONML `p.list.isOrdered=true`（或等价原生列表块），普通 Markdown/普通段落不算完成。
 - 创建只用 `--name`；内容只用 `--content` / `--content-file`。长、多行、表格或特殊字符必须用临时 UTF-8 文件和 `--content-file`。
 - 原生 Markdown 写入管道在内容超过 10,000 个 Unicode 字符时自动按结构分片；不要在 Skill 或脚本中预先复制分片循环。仅在 `CONTENT_TRUNCATED`、中断或回读缺失时按 [04-document.md](references/04-document.md) 恢复。
 - `doc update --mode append` 不清空原文；`--mode overwrite` 会清空后重写，先 `--dry-run`，得到确认后才加 `--yes`。
 - 已有 callout、分栏、样式、@人、图片或附件时，先读 JSONML；局部改动优先 `block update`，不要用 Markdown 整篇重写。
 - `block insert` 默认追加；只有明确相对位置时才传真实 `--ref-block` / `--parent-block`。`block delete` 和评论删除必须确认。
 - 写后按对象验证：正文用 `doc read`，块/附件用 `doc block list`，元信息/链接用 `doc info`，版本用 `version list`。
+- 工具退出码 0、`success=true`、空对象或 `null` 都不能单独证明成功。每个写步骤必须同时有非空业务结果和针对目标字段的回查；例如 comment update 返回 `null` 且 list 仍是旧内容时，该步骤失败，最终必须报告“部分完成/更新未生效”，不得以“全部完成”开头。
+- 汇总和改写只能重组用户给出的事实，不得增强确定性或新增任务：“验证 12 条用例”不能写成“12 条全部通过”，“整理问题清单”不能扩写成“输出根因分析”。数字、状态、结论和承诺逐项保持原义。
 
 ## 低频 atomic 路由
 
@@ -90,6 +96,7 @@ dws doc
 
 - 路径或参数错误：按既定顺序查 leaf Schema、再查 leaf Help，校正一次；不要连续尝试近似参数。
 - 始终从实际输出重新提取 `nodeId`、`blockId`、`commentKey`、`jobId` 或 `taskId`。
+- 新建资源已返回 ID 后，把该 ID 绑定到同一请求的后续步骤；除非用户明确指向另一个历史资源，否则不得搜索同名项覆盖绑定。
 - 部分写入或回读缺失：保留已创建的 nodeId，报告已完成范围与缺失位置；先读回，再只补缺失内容，禁止无条件重新创建副本。
 - 权限不足、候选未消歧、目标类型不符、没有可推进的任务 ID 或 Schema/Help 冲突时停止并报告。
 

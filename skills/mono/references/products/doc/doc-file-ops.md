@@ -32,6 +32,7 @@ Flags:
 - `upload` 是三步自动完成的流程（获取凭证 → OSS 上传 → 提交入库），无需手动分步操作。
 - 支持上传任意类型文件（PDF、Office、图片等）到钉钉文档空间或知识库。
 - `--convert` 可将 Office 文件转换为钉钉在线文档。
+- **在线编辑硬路由**：用户说“大家直接在线改/上传后在线编辑/转成钉钉文档”时使用 [`./doc-import.md`](./doc-import.md) `doc import`，并回查在线类型；普通 `doc/drive upload` 只用于保留文件，不能据此承诺可在线编辑。
 - **`doc upload` vs `drive upload`**：用户提到「知识库 / 文档空间 / workspace」→ `doc upload`；提到「钉盘 / 网盘 / 我的文件」→ `drive upload`；未明确目标时默认 `drive upload`。
 - 与 [`./doc-media.md`](./doc-media.md) `media insert` 的区别：`upload` 上传到文档空间作为**独立文件**；`media insert` 作为**附件块插入到文档正文中**。
 

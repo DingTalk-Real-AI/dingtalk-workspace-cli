@@ -51,6 +51,7 @@ Flags:
 
 ## 关键说明
 
+- 同一请求中刚执行 create/copy/import 并紧接着说“这篇/刚才那篇/上次那篇”时，`--node` 必须使用该写操作真实返回的新 `nodeId`；不得预先搜索同名文档，也不得用搜索结果中的旧节点替换它。
 - `export` 是一体化命令，一条命令自动完成提交→轮询→下载，**无需手动编排轮询**。CLI 内部使用渐进式退避轮询（最多约 5 分钟）。
 - `export` 超时或中断后，CLI 会输出 `jobId`，可用 `dws doc export get --job-id <jobId>` 手动查询任务状态。
 - `export` 支持钉钉在线文档（alidocs，`contentType=ALIDOC`）导出为 `docx`、`markdown` 或 `pdf`，**在线表格导出请使用其他命令**。

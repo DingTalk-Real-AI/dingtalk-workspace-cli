@@ -10481,6 +10481,7 @@
         "用户要把文件发送到群聊或单聊时使用 chat message send --msg-type file --file-path；drive upload 不会发送聊天消息",
         "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
         "要把文件作为文档正文附件插入改用 dws doc media insert",
+        "Word/Excel/Markdown 要求上传后在线编辑、大家直接在线改或转钉钉文档时改用 dws doc import；普通 drive upload 返回 docx/xlsx 文件不能宣称可在线编辑",
         "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
         "用户没有明确同意替换目标文件时不要使用 --node；新建上传应使用 --folder 或目标根目录"
       ],
@@ -10497,14 +10498,14 @@
           "source": "internal/cli/schema_hints/selection/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐普通文件存储与在线文档导入边界：在线编辑需求硬路由 doc import，drive upload 不承诺转换结果；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": "上传本地文件到钉盘或文档空间，或按节点 ID 确认覆盖已有文件",
               "source": "internal/cli/schema_hints/selection/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工对齐普通文件存储与在线文档导入边界：在线编辑需求硬路由 doc import，drive upload 不承诺转换结果；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -10529,26 +10530,28 @@
             "用户要把文件发送到群聊或单聊时使用 chat message send --msg-type file --file-path；drive upload 不会发送聊天消息",
             "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
             "要把文件作为文档正文附件插入改用 dws doc media insert",
+            "Word/Excel/Markdown 要求上传后在线编辑、大家直接在线改或转钉钉文档时改用 dws doc import；普通 drive upload 返回 docx/xlsx 文件不能宣称可在线编辑",
             "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
             "用户没有明确同意替换目标文件时不要使用 --node；新建上传应使用 --folder 或目标根目录"
           ],
           "source": "internal/cli/schema_hints/selection/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐普通文件存储与在线文档导入边界：在线编辑需求硬路由 doc import，drive upload 不承诺转换结果；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
                 "用户要把文件发送到群聊或单聊时使用 chat message send --msg-type file --file-path；drive upload 不会发送聊天消息",
                 "常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
                 "要把文件作为文档正文附件插入改用 dws doc media insert",
+                "Word/Excel/Markdown 要求上传后在线编辑、大家直接在线改或转钉钉文档时改用 dws doc import；普通 drive upload 返回 docx/xlsx 文件不能宣称可在线编辑",
                 "用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
                 "用户没有明确同意替换目标文件时不要使用 --node；新建上传应使用 --folder 或目标根目录"
               ],
               "source": "internal/cli/schema_hints/selection/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工对齐普通文件存储与在线文档导入边界：在线编辑需求硬路由 doc import，drive upload 不承诺转换结果；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -10604,7 +10607,7 @@
           "source": "internal/cli/schema_hints/selection/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐普通文件存储与在线文档导入边界：在线编辑需求硬路由 doc import，drive upload 不承诺转换结果；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
@@ -10614,7 +10617,7 @@
               "source": "internal/cli/schema_hints/selection/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工对齐普通文件存储与在线文档导入边界：在线编辑需求硬路由 doc import，drive upload 不承诺转换结果；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -10707,7 +10710,7 @@
               "source": "internal/cli/schema_hints/selection/drive.json",
               "precedence": "reviewed_explicit",
               "selected": false,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工对齐普通文件存储与在线文档导入边界：在线编辑需求硬路由 doc import，drive upload 不承诺转换结果；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         },
@@ -10737,25 +10740,25 @@
           "value": [
             "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
             "用户明确要求只上传或暂存附件、暂时不要发送到任何聊天会话时",
-            "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
+            "用户只要保留原始文件供存储或下载时使用；上传到知识库/文档空间时可加 --workspace",
             "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
           ],
           "source": "internal/cli/schema_hints/selection/drive.json",
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐普通文件存储与在线文档导入边界：在线编辑需求硬路由 doc import，drive upload 不承诺转换结果；不改变命令身份、参数契约或接口绑定。",
           "candidates": [
             {
               "value": [
                 "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
                 "用户明确要求只上传或暂存附件、暂时不要发送到任何聊天会话时",
-                "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
+                "用户只要保留原始文件供存储或下载时使用；上传到知识库/文档空间时可加 --workspace",
                 "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
               ],
               "source": "internal/cli/schema_hints/selection/drive.json",
               "precedence": "reviewed_explicit",
               "selected": true,
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。"
+              "review_reason": "人工对齐普通文件存储与在线文档导入边界：在线编辑需求硬路由 doc import，drive upload 不承诺转换结果；不改变命令身份、参数契约或接口绑定。"
             }
           ]
         }
@@ -10780,7 +10783,7 @@
       "use_when": [
         "用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
         "用户明确要求只上传或暂存附件、暂时不要发送到任何聊天会话时",
-        "上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
+        "用户只要保留原始文件供存储或下载时使用；上传到知识库/文档空间时可加 --workspace",
         "用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认"
       ]
     },

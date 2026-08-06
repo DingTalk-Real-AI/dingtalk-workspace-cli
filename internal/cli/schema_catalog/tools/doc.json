@@ -2341,7 +2341,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、doc Skill 渐进路由与 workspace/folder 边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
+              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、显式正文 H1、同请求新 nodeId 绑定和可观察块操作边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": "在默认根目录、文档文件夹或知识库根创建带可选初始内容的 adoc"
@@ -2349,7 +2349,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工对齐当前 Cobra 原生内容写入管道、doc Skill 渐进路由与 workspace/folder 边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
+          "review_reason": "人工对齐当前 Cobra 原生内容写入管道、显式正文 H1、同请求新 nodeId 绑定和可观察块操作边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": "在默认根目录、文档文件夹或知识库根创建带可选初始内容的 adoc"
         },
@@ -2379,7 +2379,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、doc Skill 渐进路由与 workspace/folder 边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
+              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、显式正文 H1、同请求新 nodeId 绑定和可观察块操作边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
@@ -2391,7 +2391,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工对齐当前 Cobra 原生内容写入管道、doc Skill 渐进路由与 workspace/folder 边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
+          "review_reason": "人工对齐当前 Cobra 原生内容写入管道、显式正文 H1、同请求新 nodeId 绑定和可观察块操作边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "创建表格/脑图/白板/多维表/演示改用 dws wiki node create --type \u003ctype\u003e（勿用 doc create）",
@@ -2467,7 +2467,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、doc Skill 渐进路由与 workspace/folder 边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
+              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、显式正文 H1、同请求新 nodeId 绑定和可观察块操作边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
@@ -2478,7 +2478,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工对齐当前 Cobra 原生内容写入管道、doc Skill 渐进路由与 workspace/folder 边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
+          "review_reason": "人工对齐当前 Cobra 原生内容写入管道、显式正文 H1、同请求新 nodeId 绑定和可观察块操作边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "dws doc create --name \"项目周报\" --format json",
@@ -2572,7 +2572,7 @@
             },
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、doc Skill 渐进路由与 workspace/folder 边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
+              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、显式正文 H1、同请求新 nodeId 绑定和可观察块操作边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
               "selected": false,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": true
@@ -2622,22 +2622,22 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、doc Skill 渐进路由与 workspace/folder 边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
+              "review_reason": "人工对齐当前 Cobra 原生内容写入管道、显式正文 H1、同请求新 nodeId 绑定和可观察块操作边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入 Markdown/JSONML 时",
-                "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片"
+                "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入明确要求的初始 Markdown/JSONML；用户显式要求正文 H1 时必须保留，不能用 --name 替代",
+                "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片；返回 nodeId 绑定同一请求的后续 list/insert/export，后续可观察操作仍须分别执行"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工对齐当前 Cobra 原生内容写入管道、doc Skill 渐进路由与 workspace/folder 边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
+          "review_reason": "人工对齐当前 Cobra 原生内容写入管道、显式正文 H1、同请求新 nodeId 绑定和可观察块操作边界；强调长内容无需外部分片，不改变命令身份、参数或安全事实。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入 Markdown/JSONML 时",
-            "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片"
+            "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入明确要求的初始 Markdown/JSONML；用户显式要求正文 H1 时必须保留，不能用 --name 替代",
+            "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片；返回 nodeId 绑定同一请求的后续 list/insert/export，后续可观察操作仍须分别执行"
           ]
         }
       },
@@ -3335,8 +3335,8 @@
       "source": "reviewed_command_registry",
       "title": "创建文档",
       "use_when": [
-        "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入 Markdown/JSONML 时",
-        "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片"
+        "用户要新建文字在线文档(adoc)，可空文档或用 --content-file 写入明确要求的初始 Markdown/JSONML；用户显式要求正文 H1 时必须保留，不能用 --name 替代",
+        "已知目标文档文件夹 --folder 或知识库 --workspace；长 Markdown 仍直接使用本命令，由原生写入管道自动分片；返回 nodeId 绑定同一请求的后续 list/insert/export，后续可观察操作仍须分别执行"
       ]
     },
     "doc.create_file": {
@@ -11416,7 +11416,7 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "整篇追加 Markdown 优先 doc update --mode append",
+        "仅在用户没有指定块操作、只要整篇追加 Markdown 时优先 doc update --mode append；显式 insert/标题块/列表块不能折叠",
         "插入本地文件附件优先 doc media insert",
         "删块用 block delete；改已有块用 block update"
       ],
@@ -11446,7 +11446,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐显式 block insert 的可观察操作语义和有序列表原生结构；不改变命令身份、参数契约、接口绑定或 Runtime 门禁。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": "向文档插入块元素"
@@ -11454,7 +11454,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐显式 block insert 的可观察操作语义和有序列表原生结构；不改变命令身份、参数契约、接口绑定或 Runtime 门禁。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": "向文档插入块元素"
         },
@@ -11484,11 +11484,11 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐显式 block insert 的可观察操作语义和有序列表原生结构；不改变命令身份、参数契约、接口绑定或 Runtime 门禁。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "整篇追加 Markdown 优先 doc update --mode append",
+                "仅在用户没有指定块操作、只要整篇追加 Markdown 时优先 doc update --mode append；显式 insert/标题块/列表块不能折叠",
                 "插入本地文件附件优先 doc media insert",
                 "删块用 block delete；改已有块用 block update"
               ]
@@ -11496,10 +11496,10 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐显式 block insert 的可观察操作语义和有序列表原生结构；不改变命令身份、参数契约、接口绑定或 Runtime 门禁。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "整篇追加 Markdown 优先 doc update --mode append",
+            "仅在用户没有指定块操作、只要整篇追加 Markdown 时优先 doc update --mode append；显式 insert/标题块/列表块不能折叠",
             "插入本地文件附件优先 doc media insert",
             "删块用 block delete；改已有块用 block update"
           ]
@@ -11572,7 +11572,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐显式 block insert 的可观察操作语义和有序列表原生结构；不改变命令身份、参数契约、接口绑定或 Runtime 门禁。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
@@ -11583,7 +11583,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐显式 block insert 的可观察操作语义和有序列表原生结构；不改变命令身份、参数契约、接口绑定或 Runtime 门禁。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "dws doc block insert --node \u003cDOC_ID\u003e --text \"这是一段文字\" --format json",
@@ -11671,7 +11671,7 @@
             },
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐显式 block insert 的可观察操作语义和有序列表原生结构；不改变命令身份、参数契约、接口绑定或 Runtime 门禁。",
               "selected": false,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": true
@@ -11721,20 +11721,22 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐显式 block insert 的可观察操作语义和有序列表原生结构；不改变命令身份、参数契约、接口绑定或 Runtime 门禁。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
+                "用户明确要求在文档中插入新块（段落/标题/列表等）时；简单段落/标题用 --text/--heading，复杂块用 --element JSON",
+                "用户要求有序列表块时使用 JSONML p.list.isOrdered=true（同一 listId）或等价原生 orderedList 结构，不能用普通 Markdown 代替"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐显式 block insert 的可观察操作语义和有序列表原生结构；不改变命令身份、参数契约、接口绑定或 Runtime 门禁。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
+            "用户明确要求在文档中插入新块（段落/标题/列表等）时；简单段落/标题用 --text/--heading，复杂块用 --element JSON",
+            "用户要求有序列表块时使用 JSONML p.list.isOrdered=true（同一 listId）或等价原生 orderedList 结构，不能用普通 Markdown 代替"
           ]
         }
       },
@@ -12876,7 +12878,8 @@
       "source": "reviewed_command_registry",
       "title": "插入块元素",
       "use_when": [
-        "在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"
+        "用户明确要求在文档中插入新块（段落/标题/列表等）时；简单段落/标题用 --text/--heading，复杂块用 --element JSON",
+        "用户要求有序列表块时使用 JSONML p.list.isOrdered=true（同一 listId）或等价原生 orderedList 结构，不能用普通 Markdown 代替"
       ]
     },
     "doc.list_comments": {
@@ -13811,7 +13814,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐 block list 的显式可观察步骤和真实 blockId 上下文传递；不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": "查询文档一级块元素列表"
@@ -13819,7 +13822,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐 block list 的显式可观察步骤和真实 blockId 上下文传递；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": "查询文档一级块元素列表"
         },
@@ -13849,7 +13852,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐 block list 的显式可观察步骤和真实 blockId 上下文传递；不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
@@ -13860,7 +13863,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐 block list 的显式可观察步骤和真实 blockId 上下文传递；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "只要全文 Markdown 用 doc read",
@@ -13935,7 +13938,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐 block list 的显式可观察步骤和真实 blockId 上下文传递；不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
@@ -13946,7 +13949,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐 block list 的显式可观察步骤和真实 blockId 上下文传递；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "dws doc block list --node \u003cDOC_ID\u003e --format json",
@@ -14040,7 +14043,7 @@
             },
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐 block list 的显式可观察步骤和真实 blockId 上下文传递；不改变命令身份、参数契约或接口绑定。",
               "selected": false,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": true
@@ -14090,20 +14093,20 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐 block list 的显式可观察步骤和真实 blockId 上下文传递；不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "查看文档一级块结构、拿 blockId，供 insert/update/delete 或划词评论定位时"
+                "查看文档一级块结构、拿 blockId，供 insert/update/delete 或划词评论定位时；用户在显式工作流中点名 list 时必须真实执行并使用返回结果"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐 block list 的显式可观察步骤和真实 blockId 上下文传递；不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "查看文档一级块结构、拿 blockId，供 insert/update/delete 或划词评论定位时"
+            "查看文档一级块结构、拿 blockId，供 insert/update/delete 或划词评论定位时；用户在显式工作流中点名 list 时必须真实执行并使用返回结果"
           ]
         }
       },
@@ -14747,7 +14750,7 @@
       "source": "reviewed_command_registry",
       "title": "查询块元素",
       "use_when": [
-        "查看文档一级块结构、拿 blockId，供 insert/update/delete 或划词评论定位时"
+        "查看文档一级块结构、拿 blockId，供 insert/update/delete 或划词评论定位时；用户在显式工作流中点名 list 时必须真实执行并使用返回结果"
       ]
     },
     "doc.list_nodes": {
@@ -37236,7 +37239,8 @@
       "agent_summary_source": "dws-agent-selection/doc",
       "availability": "available",
       "avoid_when": [
-        "删除评论用 delete；回复用 reply"
+        "删除评论用 delete；回复用 reply",
+        "响应为 null/空对象或回查仍是旧正文时不能判成功，必须报告更新未生效或部分完成"
       ],
       "canonical_path": "doc.update_comment",
       "cli_name": "update",
@@ -37255,7 +37259,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": "更新指定文档评论的文字内容和可选 @用户/@群。"
@@ -37263,7 +37267,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": "更新指定文档评论的文字内容和可选 @用户/@群。"
         },
@@ -37287,20 +37291,22 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "删除评论用 delete；回复用 reply"
+                "删除评论用 delete；回复用 reply",
+                "响应为 null/空对象或回查仍是旧正文时不能判成功，必须报告更新未生效或部分完成"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "删除评论用 delete；回复用 reply"
+            "删除评论用 delete；回复用 reply",
+            "响应为 null/空对象或回查仍是旧正文时不能判成功，必须报告更新未生效或部分完成"
           ]
         },
         "canonical_path": {
@@ -37389,7 +37395,7 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
@@ -37400,7 +37406,7 @@
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
             "dws doc comment update --node \u003cDOC_ID\u003e --comment-key \u003cCOMMENT_KEY\u003e --content \"已按最新数据修正\" --format json",
@@ -37488,7 +37494,7 @@
             },
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
               "selected": false,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": true
@@ -37540,20 +37546,20 @@
           "candidates": [
             {
               "precedence": "reviewed_explicit",
-              "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+              "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
               "selected": true,
               "source": "internal/cli/schema_hints/selection/doc.json",
               "value": [
-                "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
+                "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id；执行后必须用 comment list 回查同一 commentKey 的目标字段"
               ]
             }
           ],
           "precedence": "reviewed_explicit",
           "resolution": "highest_precedence",
-          "review_reason": "人工审阅：结合本机 dws schema 实时 MCP description/parameters（经 interface_ref）、产品 Skill、Cobra Long 与 Runtime 确认门禁，按飞书风格重写选型文案；不改变命令身份、参数契约或接口绑定。",
+          "review_reason": "人工对齐评论更新的业务结果与 comment list 回查语义；null/空响应不能单独证明成功，不改变命令身份、参数契约或接口绑定。",
           "source": "internal/cli/schema_hints/selection/doc.json",
           "value": [
-            "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
+            "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id；执行后必须用 comment list 回查同一 commentKey 的目标字段"
           ]
         }
       },
@@ -38078,7 +38084,7 @@
       "source": "reviewed_command_registry",
       "title": "更新文档评论",
       "use_when": [
-        "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id"
+        "修改已有评论正文；可选更新 --mention 或 --mentioned-open-conversation-id；执行后必须用 comment list 回查同一 commentKey 的目标字段"
       ]
     },
     "doc.update_document": {

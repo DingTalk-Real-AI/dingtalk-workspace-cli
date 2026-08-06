@@ -665,8 +665,8 @@ Flags:
 - 知识库内 → `dws wiki node create --workspace <WS_ID> --type folder`（`doc folder create` / `doc file create --type folder` 已弃用）
 
 用户说"上传文件/传文件/上传到文档/上传到知识库":
-- 上传 → `upload`（需本地文件路径）
-- 上传并转换 → `upload --convert`
+- 仅保留原始文件用于存储/下载 → `drive upload`（需本地文件路径）
+- 用户明确要求“在线编辑/大家直接在线改/转在线文档” → `doc import --file <本地路径>`；不得用普通 upload 的成功响应宣称可在线编辑
 
 用户说"导入文件/导入为在线文档/导入 Word/导入 Excel/导入 xmind/导入 Markdown/把本地文件转在线文档":
 - 导入并转换为在线文档 → `doc import --file <本地路径>`
@@ -742,8 +742,8 @@ Flags:
 关键区分: doc(文档编辑/阅读) vs aitable(数据表格操作) vs drive(钉盘文件管理)
 
 用户说"上传文件/传文件/上传到文档/上传到知识库":
-- 上传 → `upload`（需本地文件路径）
-- 上传并转换 → `upload --convert`
+- 仅保留原始文件用于存储/下载 → `drive upload`（需本地文件路径）
+- 要转换为可在线编辑文档 → `doc import --file <本地路径>`，导入后验证在线类型与目标文件夹
 
 用户说"下载文件/导出文件/下载到本地":
 - 下载 → `download`（需文件节点 ID 或 URL）
@@ -1050,14 +1050,18 @@ EOF
 - `read` 返回的内容中，文档里的附件会以 OSS 临时下载链接形式给出（如 `https://alidocs2.oss-cn-zhangjiakou.aliyuncs.com/res/.../att/<resourceId>.ext?Expires=...`），该链接会过期。链接过期后，可从 URL 路径中提取 `<resourceId>`（即 `/att/` 后、扩展名前的 UUID 部分），然后使用 `media download --node <DOC_ID> --resource-id <resourceId>` 重新获取下载链接
 - `create` 不传 `--folder` 和 `--workspace` 时，默认创建在"我的文档"根目录
 - `create` 只能建"文档"（adoc）；要建表格/脑图/白板/多维表/演示，用 `dws wiki node create --workspace <id> --type <type>`（`doc file create` 已弃用）；建普通文件夹用 `dws drive mkdir`
-- `block list/insert/update/delete` 是块级精细编辑，适合结构化修改；简单内容追加建议用 `update --mode append`
+- `block list/insert/update/delete` 是块级精细编辑，适合结构化修改；只有用户未指定块操作的纯文本追加才建议 `update --mode append`。用户点名 list/insert/update/append 时必须逐项真实调用，不得折叠进 create
 - `block insert` 优先使用 `--text` 或 `--heading` 快捷方式；复杂块类型 (table, callout 等) 使用 `--element` JSON
+- 用户要求“有序列表块”时必须写真实列表结构（JSONML `p.list.isOrdered=true` 或等价 orderedList element），普通 Markdown/数字前缀段落不算完成
 - `--content` 参数中的换行必须使用**真实换行符**（即实际的换行字符，Unicode `U+000A`），而不是字面量字符串 `\n`（反斜杠加字母 n）。在通过程序或大模型构造此参数时，请确保字符串在发送前已正确反转义。如果传入的是两个字符的字面量 `\n`，所有内容将渲染在同一行，导致标题、段落和表格格式全部错乱。**含多行/表格/长文本时优先用 `--content-file path.md` 或 `--content -`（stdin），不经过 shell escape，换行和表格都保持原样**（详见下方「长 Markdown 写入」）。
 - 块类型包括: paragraph, heading, blockquote, callout, columns, orderedList, unorderedList, table, sheet, attachment, slot
 - 关键区分: doc(文档内容级操作) vs wiki(知识库空间级管理) vs aitable(数据表格操作) vs drive(钉盘文件管理)
 - wiki 是知识库容器，doc 是知识库中的文档内容；需要 `workspaceId` 时，先用 `dws wiki space list/search` 获取，再传给 doc 的 `--workspace` 参数
-- `doc upload vs drive upload`：用户提到"知识库/文档空间/workspace" → `doc upload`；提到"钉盘/网盘/我的文件" → `drive upload`；未明确目标时默认 `drive upload`
-- `upload` 支持上传任意类型文件 (PDF、Office、图片等) 到钉钉文档空间或知识库；`--convert` 可将 Office 文件转换为钉钉在线文档
+- `drive upload` / `doc upload` 是普通文件存储路径；用户要求 Word/Excel “在线编辑/直接在线改”时硬路由到 `doc import`，并验证导入后的在线类型和文件夹。只有用户明确同时要原文件与在线版时才分别 upload + import
+- 同一请求中新建、复制或导入返回的 `nodeId` 必须绑定后续“这篇/刚才那篇/上次那篇”；禁止搜索同名旧资源覆盖绑定
+- `--name` 只是文档外壳标题，不能替代用户显式要求的正文 H1；用户说“正文先起一级标题”时必须写入或插入真实 H1
+- 汇总只能保持用户事实强度：“验证 12 条”不等于“12 条全部通过”，“整理问题清单”不等于“输出根因分析”
+- 写操作响应为 `null`/空对象或回查未变化时，该步骤失败；必须报告部分完成，禁止用其他成功步骤把整体说成“全部完成”
 - `upload` 是三步自动完成的流程 (获取凭证 → OSS 上传 → 提交入库)，无需手动分步操作
 - `download` 是两步自动完成的流程 (获取下载链接 → HTTP GET 下载)，支持自动推断文件名；`--output` 可指定文件路径或目录
 - `media insert` 是三步自动完成的流程 (获取附件上传凭证 → OSS 上传 → 插入附件块到文档)，无需手动分步操作
