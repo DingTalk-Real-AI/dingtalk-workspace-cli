@@ -57,11 +57,13 @@ Flags:
 > 输出按修改时间倒序（第 1 条最新）。
 > - 与 `--pattern` 组合 = 「名称匹配的文件中最新 N 个」，如 `--pattern "*日报*" --latest 3`
 > - 与 `--workspace` / `--depth` 均可组合；`--depth 1`（默认）时输出不带 `depth`/`rel_path` 装饰字段
-> - 与 `--order-by` / `--order` / `--limit` / `--cursor` **互斥**；需要自定义排序或翻更早的页时改用原语
+> - 与 `--order-by` / `--order` / `--limit` / `--cursor` **互斥**（含 `--page-size` / `--page-token` /
+>   `--next-token` / `--max` 等隐藏别名）；需要自定义排序或翻更早的页时改用原语
 >   `--order-by modifyTime --order desc --limit N`
 > - 钉盘单层借服务端排序，凑够 N 条即停，最多扫描 1000 条；凑不满 N 不算失败（退出码 0），stderr 给出建议
-> - 递归扫描触到 2000 条上限时**直接报错**（`LATEST_SCAN_TRUNCATED`）而不返回部分结果：未扫描区域可能
->   含更新的文件，此时的 Top-N 不是全局最新。按提示用 `--folder` 缩小范围或降低 `--depth`
+> - 递归扫描触到 2000 条上限（`LATEST_SCAN_TRUNCATED`）、或递归途中目录读取失败
+>   （`LATEST_SCAN_INCOMPLETE`）时**直接报错**而不返回部分结果：未扫描区域可能含更新的文件，此时的
+>   Top-N 不是全局最新。按提示用 `--folder` 缩小范围或降低 `--depth`；需要部分结果时去掉 `--latest` 重跑
 
 > **三者路由**：只记得名字关键词、不知在哪 → `drive search`；「我最近看过/改过的文档」（跨空间、按个人
 > 访问记录） → `drive recent`；范围已知（某空间/文件夹/知识库）、要按修改时间取最新 → `drive list --latest`。

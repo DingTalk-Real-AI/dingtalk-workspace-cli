@@ -280,6 +280,114 @@ func TestCrossPlatformCoverageDocLatestMultiLayerKeepsDecorations(t *testing.T) 
 	if items[0].(map[string]any)["rel_path"] != "folder/inner.doc" {
 		t.Fatalf("rel_path = %#v", items[0])
 	}
+	// sortTime 是内部排序字段，depth>1 保留装饰字段也不得把它带出去。
+	if _, ok := items[0].(map[string]any)["sortTime"]; ok {
+		t.Fatalf("sortTime leaked into multi-layer output: %#v", items[0])
+	}
+}
+
+// 不带 latest 的普通递归：装饰字段照旧输出，内部 sortTime 一个都不能漏。
+func TestCrossPlatformCoverageDriveDepthNeverLeaksSortTime(t *testing.T) {
+	useDriveDepthArgs(t)
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"items":[{"fileId":"f1","name":"a.txt","type":"FILE","modifyTime":1700000001000}]}`},
+	}}
+	result, err := runDepthBFS(t, caller, newDrivePanDepthRoute(), "", 2, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := result["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items = %#v", items)
+	}
+	first := items[0].(map[string]any)
+	if _, ok := first["sortTime"]; ok {
+		t.Fatalf("sortTime leaked into plain depth output: %#v", first)
+	}
+	// depth/parentId/rel_path 是 depth>1 的公开契约，不能被一起删掉。
+	for _, key := range []string{"depth", "parentId", "rel_path"} {
+		if _, ok := first[key]; !ok {
+			t.Fatalf("%s missing from depth output: %#v", key, first)
+		}
+	}
+	if first["modifyTime"] == nil || first["name"] != "a.txt" {
+		t.Fatalf("business fields lost: %#v", first)
+	}
+}
+
+// 递归途中目录读失败 → 排序基不完整，与截断同一条防线：非零退出 + 不产出 Top-N。
+func TestCrossPlatformCoverageDriveLatestFolderFailureRefusesTopN(t *testing.T) {
+	useDriveLatestArgs(t)
+	out, err := runDepthBFSRaw(t, driveLatestFolderFailureCaller(), newDrivePanDepthRoute(), "", 3, "", 5)
+	if err == nil {
+		t.Fatal("incomplete scan returned nil error")
+	}
+	cliErr, ok := err.(*CLIError)
+	if !ok || cliErr.Code != CodeContentTruncated {
+		t.Fatalf("error = %#v", err)
+	}
+	if !strings.Contains(cliErr.Message, "LATEST_SCAN_INCOMPLETE") {
+		t.Fatalf("message = %q", cliErr.Message)
+	}
+	// errors[] 不再进 stdout，失败详情必须落在消息里，否则用户完全瞎。
+	for _, want := range []string{"dirA", "permission_denied", "denied"} {
+		if !strings.Contains(cliErr.Message, want) {
+			t.Fatalf("message lacks %q: %s", want, cliErr.Message)
+		}
+	}
+	if cliErr.Suggestion == "" {
+		t.Fatal("incomplete error must carry a suggestion")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should be empty, got %q", out.String())
+	}
+}
+
+// 护栏：同一场景不带 latest 时行为不变（partial + errors[] + 退出码 0）。
+func TestCrossPlatformCoverageDriveDepthFolderFailureWithoutLatestKeepsPartial(t *testing.T) {
+	useDriveDepthArgs(t)
+	result, err := runDepthBFSLatest(t, driveLatestFolderFailureCaller(), newDrivePanDepthRoute(), "", 3, "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items := result["items"].([]any); len(items) != 2 {
+		t.Fatalf("partial items = %#v", items)
+	}
+	errs := result["errors"].([]any)
+	if len(errs) != 1 || errs[0].(map[string]any)["folderId"] != "fA" {
+		t.Fatalf("errors = %#v", errs)
+	}
+}
+
+// 不可恢复错误（auth/网络）+ latest：不吐 partial，直接回根因错误码。
+func TestCrossPlatformCoverageDriveLatestUnrecoverableRefusesTopN(t *testing.T) {
+	useDriveLatestArgs(t)
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"items":[
+			{"fileId":"fA","name":"dirA","type":"FOLDER"},
+			{"fileId":"fX","name":"x.txt","type":"FILE","modifyTime":1700000001000}]}`},
+		{text: `{"errorCode":"DWS_SERVICE_UNAUTHORIZED"}`},
+	}}
+	out, err := runDepthBFSRaw(t, caller, newDrivePanDepthRoute(), "", 3, "", 5)
+	// 根因（token 过期）比通用截断 token 更可操作，原样上抛。
+	cliErr, ok := err.(*CLIError)
+	if !ok || cliErr.Code != CodeAuthTokenExpired {
+		t.Fatalf("error = %T %v", err, err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should be empty, got %q", out.String())
+	}
+	// 对应的 latest=0 partial 护栏见 TestCrossPlatformCoverageRunDriveListDepthUnrecoverable。
+}
+
+// 根目录成功（1 文件夹 + 1 文件），子目录 403：可恢复失败进 errors[]。
+func driveLatestFolderFailureCaller() *scriptedToolCaller {
+	return &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"items":[
+			{"fileId":"fA","name":"dirA","type":"FOLDER","modifyTime":1700000009000},
+			{"fileId":"fX","name":"x.txt","type":"FILE","modifyTime":1700000001000}]}`},
+		{text: `{"errorCode":"forbidden.noPermission","errorMsg":"denied"}`},
+	}}
 }
 
 func TestCrossPlatformCoverageRunDriveListLatestDryRun(t *testing.T) {

@@ -99,9 +99,11 @@ runDriveListDepth(route=newDocDepthRoute(), maxDepth=1)   ← 整段复用，零
 防线沿用 BFS 既有上限（全局 2000 条 + 单文件夹页数上限），不引入独立扫描常量——
 「1000 条 / 20 页」只属于钉盘单层的提前终止循环。
 
-`depth == 1` 时后置处理器剥掉 `depth` / `parentId` / `rel_path` / `sortTime` 装饰字段，
+`depth == 1` 时后置处理器剥掉 `depth` / `parentId` / `rel_path` 装饰字段，
 使两条路由的单层 latest 输出结构一致，也与不带 latest 的普通 `list` 一致（装饰字段仅
-`--depth > 1` 时出现，维持现有契约）。
+`--depth > 1` 时出现，维持现有契约）。内部排序字段 `sortTime` 是另一回事：它仅在
+`--latest` 时写入，且在**所有**输出路径（含不带 latest 的普通递归）发射前统一删除，
+任何层级都不进输出契约。
 
 ### 3.3 递归（`depth > 1`）：BFS 后置排序
 
@@ -130,16 +132,21 @@ sortTime desc  →  rel_path asc  →  fileId/nodeId asc
 |---|---|---|
 | 钉盘单层扫满 1000 条未凑满 N | 输出已找到部分，stderr 提示「已扫描 1000 条，找到 X/N 条，建议 --folder 缩小范围」 | 0 |
 | 知识库单层 / 递归触 2000 条全局上限 | **拒绝产出 Top-N**：`LATEST_SCAN_TRUNCATED`，stdout 为空 | 非 0 |
+| 递归途中目录读失败（`errors[]` 非空：403 / 分页异常 / 限流重试仍失败） | **拒绝产出 Top-N**：`LATEST_SCAN_INCOMPLETE`，stdout 为空；失败目录数与首个失败详情落在错误消息里（`errors[]` 已不进 stdout） | 非 0 |
+| 递归途中不可恢复错误（token 过期 / 网络不可达） | **不吐 partial**，原样上抛根因错误（`AUTH_TOKEN_EXPIRED` 等），stdout 为空 | 非 0 |
 | SIGINT 中断 | 沿用 depth 既定语义：partial 照吐（`truncated=true`） | 130 |
 | 0 条匹配 | 空 `items[]`，与现有 list 空结果一致 | 0 |
 
-这两条看似矛盾的处理，分界线是**排序基是否完整**：
+这几条看似矛盾的处理，分界线是**排序基是否完整**：
 
 - 钉盘单层「凑不满 N」是**结果不满**而非任务失败。服务端已按时间有序，已扫描的 1000 条
   就是最新的 1000 条，Top-N 依然正确，部分结果对「找最新文档」仍然可用 → 退出码 0。
-- 触到 2000 条上限是**结果可能错误**。BFS 的目录序与修改时间无关，未扫描区域完全可能含
-  更新的文件，截断集上的 Top-N 不是全局最新，与命令承诺的「最近修改的 N 个文件」语义不符
-  → 报错，且 stdout 必须为空。输出一个看起来正常、实际可能错的 Top-N 比报错危险得多。
+- 触到 2000 条上限、或递归途中有目录没读全，都是**结果可能错误**。BFS 的目录序与修改时间
+  无关，未扫描 / 未读全的区域完全可能含更新的文件，这种集合上的 Top-N 不是全局最新，与命令
+  承诺的「最近修改的 N 个文件」语义不符 → 报错，且 stdout 必须为空。输出一个看起来正常、
+  实际可能错的 Top-N 比报错危险得多。截断与目录失败因此同属一条防线，只是 token 分开
+  （`LATEST_SCAN_TRUNCATED` / `LATEST_SCAN_INCOMPLETE`），便于消费方区分「范围太大」与「读不到」。
+- SIGINT 不在这条防线内：退出码 130 本身已显式标记结果不完整。
 
 不带 `--latest` 的递归仍沿用 `truncated: true` + partial 语义、退出码 0——那里没有全局
 排序承诺，部分结果是诚实的。这条回归护栏有独立测试锁定。
@@ -149,7 +156,8 @@ stderr 提示不止说明发生了什么，还要给出可直接执行的后续�
 
 ## 5. 输出契约
 
-- 结构与普通 `drive list` 相同（`items[]`），不新增业务字段
+- 结构与普通 `drive list` 相同（`items[]`），不新增业务字段；内部排序字段 `sortTime`
+  在任何输出路径都不出现（含不带 `--latest` 的普通递归）
 - 带 `--latest` 时按修改时间 desc 排列（第 1 条最新）；`rel_path` 树序仅在不带 latest 时保持
 - `depth > 1` 时每条仍带 `depth` / `parentId` / `rel_path`；单层剥除
 - 已知信封差异：钉盘单层 latest 顶层仅 `{items}`；知识库单层与两条路由的 `depth > 1` 走
@@ -169,10 +177,10 @@ stderr 提示不止说明发生了什么，还要给出可直接执行的后续�
 
 | 新增 / 改动 | 复用来源 |
 |---|---|
-| flag 注册 + `validateDriveListLatest`（互斥 / 边界 / 引导文案） | `validateDriveListDepth` / `driveDepthExclusiveError` 同构 |
+| flag 注册 + `validateDriveListLatest`（互斥 / 边界 / 引导文案） | `validateDriveListDepth` / `driveDepthExclusiveError` 同构；分页互斥两者共用 `driveListLimitConflict` / `driveListCursorConflict`，别名清单从 `crossProductAliasPeers` 按语义组取，不手写枚举 |
 | `runDriveListLatest` 钉盘单层扫描循环（唯一新循环） | 页大小 / 分页解析 / pattern 匹配全部复用现有 helper |
 | 知识库单层拉取 | `runDriveListDepth(maxDepth=1)` + `newDocDepthRoute` 整段复用，零新写 |
-| `applyDriveListLatest` 后置处理器 | 新写一份，三处共享（知识库单层 / 钉盘 depth>1 / 知识库 depth>1），挂在现有 BFS 输出组装点，BFS 主循环仅新增一行 `sortTime` 写入 |
+| `applyDriveListLatest` 后置处理器 | 新写一份，三处共享（知识库单层 / 钉盘 depth>1 / 知识库 depth>1），挂在现有 BFS 输出组装点，BFS 主循环仅新增一行「`--latest` 时写 `sortTime`」 |
 | `driveModifiedMillis` / `driveToMillis` 时间归一 | 新写，纯函数无副作用 |
 | pattern 匹配 | 现有 `matchDriveNamePattern`，零改动 |
 | 不带 `--latest` 的路径 | 字节级不变 |
@@ -190,9 +198,12 @@ Go 单测，全部 `TestCrossPlatformCoverage*` 前缀（覆盖率门禁选择�
 | 3 | `--depth 2 --latest 3` | 走 BFS，不注入服务端排序 |
 | 4 | `--workspace --latest` | 路由到 `list_nodes`，单层剥装饰字段、多层保留 `rel_path` |
 | 5 | 互斥 | `--order-by` / `--order` / `--limit` / `--cursor` / `--versions` 各自报错 + 等效改写文案 |
+| 5b | 互斥覆盖隐藏别名 | 用真实 `newDriveCommand` 构造：`--page-size` / `--page-token` / `--next-token` / `--max` 同样报错且点名用户实际传的 flag；`--cursor ""` 空值模板不误伤；`--depth` 侧同规则 |
 | 6 | 边界 | `--latest 0` / `51` → `CodeInvalidParam` |
 | 7 | 截断即拒绝 | `LATEST_SCAN_TRUNCATED` + **stdout 为空** + 请求次数恰为 2000/50 + 未访问的文件夹从未被请求 |
-| 8 | 无 latest 的截断回归 | `truncated: true` + 满额 partial（护栏，防止 7 的实现污染既有语义） |
+| 7b | 目录失败即拒绝 | `errors[]` 非空 → `LATEST_SCAN_INCOMPLETE` + **stdout 为空** + 失败目录名/原因进错误消息；不可恢复错误 → 原样上抛根因码 + stdout 为空 |
+| 8 | 无 latest 的截断 / 失败回归 | `truncated: true` + 满额 partial、目录失败照吐 partial + `errors[]`（护栏，防止 7/7b 的实现污染既有语义） |
+| 8b | `sortTime` 不泄露 | 不带 latest 的 `--depth 2` 输出无 `sortTime` 且 `depth`/`parentId`/`rel_path` 仍在；多层 latest 输出同样无 `sortTime` |
 | 9 | 凑不满 N | 退出码 0 + stderr 提示 |
 | 10 | 扫描上限兜底 | 全是文件夹时靠 1000 条上限停机，不无限翻页 |
 | 11 | 时间归一 | 四种输入类型 + 无效值 + key 优先级 + 靠前 key 不可解析时的回落 |

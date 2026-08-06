@@ -48,6 +48,28 @@ var crossProductAliases = []crossProductAliasGroup{
 	{semantic: "内容文件路径", names: []string{"content-file", "content-path"}},
 }
 
+// crossProductAliasPeers 返回与 name 同语义组的其余 flag 名（不含 name 自身）。
+// 互斥/冲突校验用它枚举 RegisterCrossProductAliases 自动注册的隐藏别名，
+// 避免手写枚举漏掉自动别名（如 --limit 语义组的 --page-size）。
+// name 不属于任何语义组时返回 nil。
+func crossProductAliasPeers(name string) []string {
+	for _, group := range crossProductAliases {
+		for _, candidate := range group.names {
+			if candidate != name {
+				continue
+			}
+			peers := make([]string, 0, len(group.names)-1)
+			for _, peer := range group.names {
+				if peer != name {
+					peers = append(peers, peer)
+				}
+			}
+			return peers
+		}
+	}
+	return nil
+}
+
 // RegisterCrossProductAliases automatically registers hidden alias flags for
 // cross-product compatibility. Call this once after all primary flags are registered.
 //

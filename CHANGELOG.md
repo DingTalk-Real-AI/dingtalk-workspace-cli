@@ -14,10 +14,13 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
   `--depth`. The DingTalk Drive single-layer route uses server-side `orderBy=modifyTime&order=desc`
   and stops as soon as N is filled (typically one request); the Knowledge Base and recursive routes
   reuse the existing BFS walk and sort client-side. Folders never enter the Top-N. Mutually
-  exclusive with `--order-by` / `--order` / `--limit` / `--cursor` / `--versions`, and every
-  exclusivity error carries the equivalent rewrite. When a recursive scan hits the 2000-item cap the
-  command **fails** with `LATEST_SCAN_TRUNCATED` and empty stdout rather than emitting a Top-N that
-  may not be globally newest; falling short of N is not a failure (exit 0 plus a stderr hint).
+  exclusive with `--order-by` / `--order` / `--limit` / `--cursor` / `--versions` — including the
+  auto-registered hidden aliases `--page-size` / `--page-token` / `--next-token` / `--max`, and the
+  error names the flag you actually passed — and every exclusivity error carries the equivalent
+  rewrite. When a recursive scan hits the 2000-item cap (`LATEST_SCAN_TRUNCATED`) or any folder in
+  the walk fails to read (`LATEST_SCAN_INCOMPLETE`) the command **fails** with empty stdout rather
+  than emitting a Top-N that may not be globally newest; falling short of N is not a failure
+  (exit 0 plus a stderr hint). Internal sort state never reaches the output contract.
   See [docs/drive-list-latest-design.md](docs/drive-list-latest-design.md).
 
 ## [1.0.57-beta.2] - 2026-08-05

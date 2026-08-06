@@ -87,13 +87,50 @@ func validateDriveListDepth(cmd *cobra.Command, depth int) error {
 		return nil
 	}
 	// --workspace 不互斥：depth>1 时作为路由开关切到知识库 BFS。
-	if v := flagOrFallback(cmd, "cursor", "next-token"); v != "" {
-		return driveDepthExclusiveError("cursor", "depth>1 时多文件夹合成一份清单，无连续游标")
+	if name := driveListCursorConflict(cmd); name != "" {
+		return driveDepthExclusiveError(name, "depth>1 时多文件夹合成一份清单，无连续游标")
 	}
-	if cmd.Flags().Changed("limit") || cmd.Flags().Changed("max") {
-		return driveDepthExclusiveError("limit", "递归模式数据量由全局上限 2000 与 --depth 层数控制")
+	if name := driveListLimitConflict(cmd); name != "" {
+		return driveDepthExclusiveError(name, "递归模式数据量由全局上限 2000 与 --depth 层数控制")
 	}
 	return nil
+}
+
+// driveListLimitConflict / driveListCursorConflict 返回用户实际传入的那个分页 flag 名
+// （含 RegisterCrossProductAliases 自动注册的隐藏别名，如 --page-size / --page-token），
+// 无冲突返回 ""。报错点名用户真正传的名字而非语义组主名，否则传 --page-size 却被
+// 告知「不能与 --limit 同时使用」会让人无从下手。
+// max 手写保留：它由 drive 单独注册，不在 crossProductAliases 表内。
+func driveListLimitConflict(cmd *cobra.Command) string {
+	return driveListFirstProvidedFlag(cmd, append([]string{"limit", "max"}, crossProductAliasPeers("limit")...))
+}
+
+func driveListCursorConflict(cmd *cobra.Command) string {
+	return driveListFirstProvidedFlag(cmd, append([]string{"cursor"}, crossProductAliasPeers("cursor")...))
+}
+
+func driveListFirstProvidedFlag(cmd *cobra.Command, names []string) string {
+	for _, name := range names {
+		if driveListFlagProvided(cmd, name) {
+			return name
+		}
+	}
+	return ""
+}
+
+// driveListFlagProvided 判定用户是否真的传了该 flag：string 型按值判定（空串视为未传，
+// 兼容 Agent 的 --cursor "$CURSOR" 首页空值模板），其余类型按 Changed 判定
+// （--limit 是 int，显式传入默认值 20 也算冲突）。这两条规则与改造前
+// flagOrFallback / Changed 的既有行为逐字等价，只是覆盖面扩到了全部别名。
+func driveListFlagProvided(cmd *cobra.Command, name string) bool {
+	flag := cmd.Flags().Lookup(name)
+	if flag == nil {
+		return false
+	}
+	if flag.Value.Type() == "string" {
+		return flag.Value.String() != ""
+	}
+	return flag.Changed
 }
 
 func driveDepthExclusiveError(flag, reason string) error {
@@ -117,11 +154,11 @@ func validateDriveListLatest(cmd *cobra.Command, latest int) error {
 			return driveLatestExclusiveError(f, latest)
 		}
 	}
-	if cmd.Flags().Changed("limit") || cmd.Flags().Changed("max") {
-		return driveLatestExclusiveError("limit", latest)
+	if name := driveListLimitConflict(cmd); name != "" {
+		return driveLatestExclusiveError(name, latest)
 	}
-	if v := flagOrFallback(cmd, "cursor", "next-token"); v != "" {
-		return driveLatestExclusiveError("cursor", latest)
+	if name := driveListCursorConflict(cmd); name != "" {
+		return driveLatestExclusiveError(name, latest)
 	}
 	return nil
 }
@@ -284,12 +321,12 @@ bfs:
 				item["depth"] = folder.depth + 1
 				item["parentId"] = folder.id // 根级为空串
 				item["rel_path"] = rel       // 不保证唯一，组树以 parentId 为准
-				// 时间戳归一：钉盘 modifyTime / 知识库 updateTime 统一为 sortTime（毫秒 int64），
-				// 供 --latest 后置处理器跨路由排序；无时间字段时填 0（排末尾）。
-				if ms, ok := driveModifiedMillis(item); ok {
+				if latest > 0 {
+					// 时间戳归一：钉盘 modifyTime / 知识库 updateTime 统一为内部 sortTime
+					// （毫秒 int64，无时间字段填 0 排末尾），仅供 --latest 后置处理器跨路由
+					// 排序；emit 前一律删除，不进输出契约。
+					ms, _ := driveModifiedMillis(item)
 					item["sortTime"] = ms
-				} else {
-					item["sortTime"] = int64(0)
 				}
 				collected = append(collected, item)
 				if len(collected) >= driveDepthMaxItems {
@@ -331,6 +368,11 @@ bfs:
 
 		if folderErr != nil {
 			if driveDepthUnrecoverable(folderErr) {
+				if latest > 0 {
+					// 不完整集合上的 Top-N 会被误读为全局最新：latest 下不吐 partial，
+					// 直接回根因错误（auth 过期 / 网络不可达比通用 token 更可操作）。
+					return folderErr
+				}
 				// partial 照吐 stdout，错误详情走 stderr，非零退出
 				errs = append(errs, newDriveDepthError(folder, folderErr))
 				if emitErr := emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth); emitErr != nil {
@@ -366,17 +408,42 @@ bfs:
 		}
 	}
 
-	// BFS 序与修改时间无关，截断集上的 Top-N 不是全局最新，拒绝以成功状态产出；
+	// BFS 序与修改时间无关：截断与递归途中目录失败都让未扫区域可能含更新文件，
+	// 此时的 Top-N 不是全局最新，两者同属一条防线——拒绝以成功状态产出。
 	// SIGINT 部分结果路径不在此拦截（退出码 130 已显式标记不完整）。
-	if truncated && latest > 0 {
+	if latest > 0 && (truncated || len(errs) > 0) {
+		return driveLatestIncompleteError(latest, truncated, errs)
+	}
+
+	return emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth)
+}
+
+// driveLatestIncompleteError 排序基不完整时的拒绝产出错误。截断与目录失败共用
+// CodeContentTruncated（→ ExitAPI），但 token 分开，便于消费方区分「范围太大」与「读不到」。
+// 拒绝产出后 errors[] 不再进 stdout，失败详情必须落在错误消息里，否则用户完全瞎。
+func driveLatestIncompleteError(latest int, truncated bool, errs []driveDepthError) error {
+	// len(errs)==0 只可能来自截断分支：调用点已保证二者至少一真。
+	if truncated || len(errs) == 0 {
 		return &CLIError{
 			Code:       CodeContentTruncated,
 			Message:    fmt.Sprintf("LATEST_SCAN_TRUNCATED: 扫描在全局上限 %d 条处截断，未扫描区域可能含更新文件，拒绝输出不完整的 Top-%d", driveDepthMaxItems, latest),
 			Suggestion: fmt.Sprintf("缩小扫描范围后重试：--folder 指定子目录，或降低 --depth 层数，如 dws drive list --folder <子目录ID> --latest %d", latest),
 		}
 	}
-
-	return emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth)
+	first := errs[0]
+	folder := first.FolderName
+	if folder == "" {
+		folder = first.FolderID
+	}
+	if folder == "" {
+		folder = "<root>"
+	}
+	return &CLIError{
+		Code: CodeContentTruncated,
+		Message: fmt.Sprintf("LATEST_SCAN_INCOMPLETE: %d 个目录未读全（首个失败 folder=%s depth=%d reason=%s: %s），未扫描区域可能含更新文件，拒绝输出不完整的 Top-%d",
+			len(errs), folder, first.Depth, first.Reason, first.Message, latest),
+		Suggestion: fmt.Sprintf("确认目录权限后重试，或用 --folder 指定可读子目录缩小范围；需要失败明细与已扫到的部分结果时去掉 --latest 重跑（partial + errors[] 照旧输出），如 dws drive list --folder <子目录ID> --latest %d", latest),
+	}
 }
 
 func emitDriveDepthCancelled(items []map[string]any, errs []driveDepthError, pattern string, latest, reqDepth int) error {
@@ -421,6 +488,11 @@ func emitDriveDepthResult(items []map[string]any, errs []driveDepthError, trunca
 		if d, ok := item["depth"].(int); ok && d > maxDepth {
 			maxDepth = d
 		}
+	}
+	// sortTime 是内部排序字段（applyDriveListLatest 已用完），任何输出路径都不得泄露；
+	// depth / parentId / rel_path 按 depth>1 的既有契约保留。
+	for _, item := range items {
+		delete(item, "sortTime")
 	}
 	if latest > 0 && reqDepth == 1 {
 		// 知识库单层 latest：输出与普通单层 list 对齐，剥 BFS 装饰字段（maxDepth 已先统计）。

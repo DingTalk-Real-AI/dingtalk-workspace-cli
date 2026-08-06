@@ -47,17 +47,64 @@ func TestCrossPlatformCoverageDriveListLatestRejectsOutOfRange(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageDriveListLatestRejectsExclusiveFlags(t *testing.T) {
+	// 用真实 newDriveCommand 构造：RegisterCrossProductAliases 自动注册的隐藏别名
+	// （--page-size / --page-token / --next-token）必须同样被互斥校验拦住。
 	for _, extra := range [][]string{
 		{"--limit", "5"},
+		{"--max", "5"},
+		{"--page-size", "5"},
 		{"--order-by", "name"},
 		{"--order", "asc"},
 		{"--cursor", "c1"},
+		{"--page-token", "t1"},
+		{"--next-token", "t1"},
 	} {
 		caller := &guardedMutationCaller{}
 		args := append([]string{"list", "--latest", "3"}, extra...)
 		err := executeGuardedMutationCommand(t, caller, newDriveCommand, args...)
-		if err == nil || !strings.Contains(err.Error(), "--latest 不能与") {
-			t.Fatalf("%v err = %v", extra, err)
+		// 报错点名用户实际传的那个 flag，而不是语义组主名。
+		want := "--latest 不能与 " + extra[0] + " 同时使用"
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("%v err = %v, want %q", extra, err, want)
+		}
+		if len(caller.calls) != 0 {
+			t.Fatalf("%v calls = %#v", extra, caller.calls)
+		}
+	}
+}
+
+// Agent 常用 --cursor "$CURSOR" 模板，首页展开为空串：空值不算「传了」，不得误伤。
+func TestCrossPlatformCoverageDriveListLatestAllowsEmptyCursorTemplate(t *testing.T) {
+	useDriveLatestArgs(t)
+	caller := &depthArgsRecordingCaller{steps: []scriptedToolStep{
+		{text: `{"items":[{"fileId":"f1","name":"a.txt","type":"FILE","modifyTime":1700000001000}]}`},
+	}}
+	err := executeDriveCommand(t, caller,
+		"list", "--latest", "1", "--cursor", "", "--page-token", "", "--next-token", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("calls = %#v, want 1", caller.calls)
+	}
+}
+
+// --depth 的分页互斥同样按语义组覆盖隐藏别名（此前 --page-size/--page-token 被静默忽略）。
+func TestCrossPlatformCoverageDriveListDepthRejectsPaginationAliases(t *testing.T) {
+	for _, extra := range [][]string{
+		{"--limit", "10"},
+		{"--max", "10"},
+		{"--page-size", "10"},
+		{"--cursor", "c1"},
+		{"--page-token", "t1"},
+		{"--next-token", "t1"},
+	} {
+		caller := &guardedMutationCaller{}
+		args := append([]string{"list", "--depth", "2"}, extra...)
+		err := executeGuardedMutationCommand(t, caller, newDriveCommand, args...)
+		want := "--depth 不能与 " + extra[0] + " 同时使用"
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("%v err = %v, want %q", extra, err, want)
 		}
 		if len(caller.calls) != 0 {
 			t.Fatalf("%v calls = %#v", extra, caller.calls)
