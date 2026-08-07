@@ -30,13 +30,34 @@ var paramAliasCompleteCommands = map[string][]string{
 	"attendance +check-result":                 {"attendance", "+check-result", "--users", "user-1,user-2", "--start", "2026-03-01", "--end", "2026-03-02"},
 	"calendar event list":                      {"calendar", "event", "list", "--start", "2026-03-10T14:00:00+08:00", "--end", "2026-03-10T18:00:00+08:00", "--calendar-id", "primary", "--cursor", "cursor-1", "--limit", "7"},
 	"chat +chat-messages":                      {"chat", "+chat-messages", "--group", "fixture-conversation"},
+	"chat +chat-add-bot":                       {"chat", "+chat-add-bot", "--id", "fixture-conversation", "--robot-code", "robot-1", "--yes"},
+	"chat +chat-audit-join":                    {"chat", "+chat-audit-join", "--group", "fixture-conversation", "--record-id", "7", "--applicant", "user-1", "--inviter", "user-2", "--status", "AuditApprove", "--yes"},
+	"chat +chat-members-get":                   {"chat", "+chat-members-get", "--id", "fixture-conversation", "--users", "D-user-1,D-user-2"},
+	"chat +chat-members-list":                  {"chat", "+chat-members-list", "--conversation-id", "fixture-conversation", "--member-types", "user,bot"},
+	"chat +chat-mute-member":                   {"chat", "+chat-mute-member", "--group", "fixture-conversation", "--users", "D-user-1,D-user-2", "--mute-time", "3600000", "--yes"},
+	"chat +chat-remove-bot":                    {"chat", "+chat-remove-bot", "--id", "fixture-conversation", "--bot-id", "bot-1", "--yes"},
+	"chat +chat-role-remove-user":              {"chat", "+chat-role-remove-user", "--group", "fixture-conversation", "--user", "D-user-1", "--role-ids", "role-1", "--yes"},
+	"chat +chat-transfer-owner":                {"chat", "+chat-transfer-owner", "--group", "fixture-conversation", "--new-owner", "D-user-1", "--yes"},
+	"chat +chat-update":                        {"chat", "+chat-update", "--group", "fixture-conversation", "--name", "Fixture Renamed Group", "--yes"},
 	"chat +bot-find":                           {"chat", "+bot-find", "--query", "fixture", "--limit", "7"},
 	"chat +bot-search":                         {"chat", "+bot-search", "--name", "Fixture Bot", "--page", "2", "--size", "7"},
 	"chat +category-create":                    {"chat", "+category-create", "--title", "Fixture Cat", "--yes"},
 	"chat +category-rename":                    {"chat", "+category-rename", "--category-id", "7", "--title", "Renamed Cat", "--yes"},
 	"chat +group-members":                      {"chat", "+group-members", "--group", "Fixture Group"},
+	"chat +conversation-set-top":               {"chat", "+conversation-set-top", "--conversation-id", "fixture-conversation", "--yes"},
+	"chat +feed-group-query-item":              {"chat", "+feed-group-query-item", "--category-id", "7", "--conversation-ids", "fixture-conversation"},
+	"chat +flag-cancel":                        {"chat", "+flag-cancel", "--conversation-id", "fixture-conversation", "--message-id", "message-1", "--yes"},
+	"chat +flag-create":                        {"chat", "+flag-create", "--conversation-id", "fixture-conversation", "--message-id", "message-1", "--yes"},
+	"chat +flag-list":                          {"chat", "+flag-list", "--cursor", "0", "--size", "7"},
+	"chat +messages-combine-forward":           {"chat", "+messages-combine-forward", "--src-conversation-id", "fixture-source", "--msg-ids", "message-1,message-2", "--dest-conversation-id", "fixture-destination", "--yes"},
+	"chat +messages-forward":                   {"chat", "+messages-forward", "--src-conversation-id", "fixture-source", "--msg-id", "message-1", "--dest-conversation-id", "fixture-destination", "--yes"},
+	"chat +messages-forward-topic":             {"chat", "+messages-forward-topic", "--src-msg-id", "message-1", "--src-conversation-id", "fixture-source", "--src-thread-id", "convThread-fixture", "--dest-conversation-id", "fixture-destination", "--yes"},
+	"chat +messages-list":                      {"chat", "+messages-list", "--group", "fixture-conversation", "--time", "2026-03-10 00:00:00", "--limit", "7"},
 	"chat +messages-list-direct":               {"chat", "+messages-list-direct", "--user", "user-1", "--time", "2026-03-10 00:00:00", "--limit", "7"},
 	"chat +messages-list-unread-conversations": {"chat", "+messages-list-unread-conversations", "--count", "7", "--exclude-muted"},
+	"chat +messages-reply":                     {"chat", "+messages-reply", "--conversation-id", "fixture-conversation", "--ref-msg-id", "message-1", "--ref-sender", "D-sender", "--text", "hello fixture", "--yes"},
+	"chat +messages-resource-download":         {"chat", "+messages-resource-download", "--resource-id", "resource-1", "--message-id", "message-1", "--open-conversation-id", "fixture-conversation", "--output", "downloads/fixture.bin"},
+	"chat +messages-set-pin":                   {"chat", "+messages-set-pin", "--open-conversation-id", "fixture-conversation", "--msg-id", "message-1", "--yes"},
 	"chat +messages-send-by-webhook":           {"chat", "+messages-send-by-webhook", "--token", "fixture-token", "--title", "Fixture Alert", "--text", "fixture", "--at-users", "user-1,user-2", "--yes"},
 	"chat +search-msg":                         {"chat", "+search-msg", "--group", "fixture-conversation", "--query", "fixture", "--start", "2026-03-10T00:00:00+08:00", "--end", "2026-03-11T00:00:00+08:00", "--no-enrich"},
 	"chat +send-to-group":                      {"chat", "+send-to-group", "--group", "Fixture Group", "--text", "hello fixture", "--yes"},
@@ -81,9 +102,36 @@ var paramAliasCompleteCommands = map[string][]string{
 	"ding +receiver-status":                    {"ding", "+receiver-status", "--ding-id", "ding-1"},
 	"ding message receiver-status":             {"ding", "message", "receiver-status", "--ding-id", "ding-1"},
 	"ding message send":                        {"ding", "message", "send", "--robot-code", "robot-1", "--content", "fixture", "--users", "user-1", "--yes"},
+	"doc +comment-create":                      {"doc", "+comment-create", "--node", "node-1", "--content", "fixture comment", "--yes"},
+	"doc +comment-list":                        {"doc", "+comment-list", "--node", "node-1", "--limit", "7", "--cursor", "cursor-1"},
+	"doc +comment-reply":                       {"doc", "+comment-reply", "--node", "node-1", "--comment-key", "comment-1", "--content", "fixture reply", "--yes"},
+	"doc +access-grant":                        {"doc", "+access-grant", "--node", "node-1", "--to", "Fixture User", "--role", "READER", "--workspace", "workspace-1", "--yes"},
+	"doc +copy":                                {"doc", "+copy", "--node", "node-1", "--workspace", "workspace-1", "--yes"},
+	"doc +create":                              {"doc", "+create", "--name", "Fixture Document", "--content", "fixture body", "--doc-format", "markdown"},
+	"doc +create-from-template":                {"doc", "+create-from-template", "--query", "fixture template", "--name", "Fixture From Template", "--folder", "folder-1", "--workspace", "workspace-1"},
+	"doc +doc-append":                          {"doc", "+doc-append", "--doc", "node-1", "--text", "fixture appendix", "--yes"},
+	"doc +export-submit":                       {"doc", "+export-submit", "--node", "node-1", "--export-format", "docx"},
+	"doc +fetch":                               {"doc", "+fetch", "--node", "node-1", "--scope", "section", "--start-block-id", "block-1"},
+	"doc +find-doc":                            {"doc", "+find-doc", "--query", "fixture", "--limit", "7"},
+	"doc +history-revert":                      {"doc", "+history-revert", "--node", "node-1", "--version", "3", "--yes"},
+	"doc +inspect":                             {"doc", "+inspect", "--node", "node-1", "--include-history"},
+	"doc +list":                                {"doc", "+list", "--folder", "folder-1", "--cursor", "cursor-1"},
+	"doc +move":                                {"doc", "+move", "--node", "node-1", "--folder", "folder-1", "--yes"},
+	"doc +search":                              {"doc", "+search", "--query", "fixture", "--limit", "7", "--cursor", "cursor-1"},
+	"doc +template-list":                       {"doc", "+template-list", "--source", "MY", "--limit", "7", "--cursor", "cursor-1"},
 	"doc +template-search":                     {"doc", "+template-search", "--query", "fixture", "--source", "MY", "--limit", "7"},
+	"doc +version-list":                        {"doc", "+version-list", "--node", "node-1", "--limit", "7", "--cursor", "cursor-1"},
+	"doc +version-revert":                      {"doc", "+version-revert", "--node", "node-1", "--version", "3", "--yes"},
+	"doc +version-save":                        {"doc", "+version-save", "--node", "node-1", "--yes"},
+	"doc +update":                              {"doc", "+update", "--node", "node-1", "--command", "append", "--content", "fixture body", "--expected-revision", "1", "--yes"},
 	"doc block insert":                         {"doc", "block", "insert", "--node", "node-1", "--text", "fixture paragraph", "--yes"},
 	"doc block update":                         {"doc", "block", "update", "--node", "node-1", "--block-id", "block-1", "--text", "fixture paragraph", "--yes"},
+	"doc comment create":                       {"doc", "comment", "create", "--node", "node-1", "--content", "fixture comment", "--yes"},
+	"doc comment create-inline":                {"doc", "comment", "create-inline", "--node", "node-1", "--block-id", "block-1", "--start", "0", "--end", "7", "--content", "fixture comment", "--yes"},
+	"doc comment delete":                       {"doc", "comment", "delete", "--node", "node-1", "--comment-key", "comment-1", "--yes"},
+	"doc comment reply":                        {"doc", "comment", "reply", "--node", "node-1", "--comment-key", "comment-1", "--content", "fixture reply", "--mentioned-open-conversation-id", "cid-1,cid-2", "--yes"},
+	"doc comment update":                       {"doc", "comment", "update", "--node", "node-1", "--comment-key", "comment-1", "--content", "fixture update", "--yes"},
+	"doc version revert":                       {"doc", "version", "revert", "--node", "node-1", "--version", "3", "--yes"},
 	"drive info":                               {"drive", "info", "--node", "node-1", "--space-id", "space-1"},
 	"drive list":                               {"drive", "list", "--folder", "folder-1", "--limit", "7"},
 	"mail +find-mail-user":                     {"mail", "+find-mail-user", "--query", "fixture", "--limit", "7"},
@@ -101,6 +149,13 @@ var paramAliasCompleteCommands = map[string][]string{
 // that case the shared command template above cannot contain every canonical
 // flag at once, so select a fixture-specific complete invocation here.
 var paramAliasCompleteCommandVariants = map[string]map[string][]string{
+	"doc +copy": {
+		"folder":    {"doc", "+copy", "--node", "node-1", "--folder", "folder-1", "--yes"},
+		"workspace": {"doc", "+copy", "--node", "node-1", "--workspace", "workspace-1", "--yes"},
+	},
+	"doc block insert": {
+		"parent-block": {"doc", "block", "insert", "--node", "node-1", "--parent-block", "parent-block-1", "--index", "0", "--text", "fixture paragraph", "--yes"},
+	},
 	"chat message list": {
 		"user": {"chat", "message", "list", "--user", "user-1", "--time", "2026-03-10 00:00:00", "--limit", "7"},
 	},
@@ -110,6 +165,9 @@ var paramAliasCompleteCommandVariants = map[string]map[string][]string{
 	"chat message send": {
 		"group":     {"chat", "message", "send", "--group", "fixture-conversation", "--text", "hello fixture", "--uuid", "param-alias-equivalence-group", "--yes"},
 		"file-path": {"chat", "message", "send", "--group", "fixture-conversation", "--msg-type", "file", "--file-path", "../../go.mod", "--dentry-id", "1", "--space-id", "2", "--uuid", "param-alias-equivalence-file", "--yes"},
+	},
+	"chat +conversation-set-top": {
+		"conversation-ids": {"chat", "+conversation-set-top", "--conversation-ids", "fixture-conversation-1,fixture-conversation-2", "--yes"},
 	},
 }
 
@@ -149,6 +207,38 @@ var paramAliasNewIMCases = []struct {
 	{command: "chat message send", emitted: "file", canonical: "file-path"},
 	{command: "chat message send-by-bot", emitted: "at-users", canonical: "at-user-ids"},
 	{command: "chat message send-by-webhook", emitted: "at-user-ids", canonical: "at-users"},
+	{command: "chat +chat-update", emitted: "chat-id", canonical: "group"},
+	{command: "chat +chat-update", emitted: "conversation-id", canonical: "group"},
+	{command: "chat +chat-update", emitted: "open-conversation-id", canonical: "group"},
+	{command: "chat +chat-update", emitted: "title", canonical: "name"},
+	{command: "chat +chat-update", emitted: "new-title", canonical: "name"},
+	{command: "chat +flag-list", emitted: "limit", canonical: "size"},
+	{command: "chat +chat-members-list", emitted: "chat-id", canonical: "conversation-id"},
+	{command: "chat +chat-members-list", emitted: "id", canonical: "conversation-id"},
+	{command: "chat +conversation-set-top", emitted: "open-conversation-id", canonical: "conversation-id"},
+	{command: "chat +conversation-set-top", emitted: "chat-ids", canonical: "conversation-ids"},
+	{command: "chat +chat-members-get", emitted: "conversation-id", canonical: "id"},
+	{command: "chat +chat-members-get", emitted: "open-dingtalk-ids", canonical: "users"},
+	{command: "chat +chat-members-get", emitted: "chat", canonical: "id"},
+	{command: "chat +messages-list", emitted: "start", canonical: "time"},
+	{command: "chat +messages-reply", emitted: "msg-id", canonical: "ref-msg-id"},
+	{command: "chat +messages-reply", emitted: "chat", canonical: "conversation-id"},
+	{command: "chat +flag-cancel", emitted: "group", canonical: "conversation-id"},
+	{command: "chat +flag-cancel", emitted: "chat", canonical: "conversation-id"},
+	{command: "chat +flag-create", emitted: "group", canonical: "conversation-id"},
+	{command: "chat +chat-add-bot", emitted: "conversation-id", canonical: "id"},
+	{command: "chat +chat-add-bot", emitted: "robot", canonical: "robot-code"},
+	{command: "chat +chat-audit-join", emitted: "applicant-user-id", canonical: "applicant"},
+	{command: "chat +chat-mute-member", emitted: "user-ids", canonical: "users"},
+	{command: "chat +chat-remove-bot", emitted: "open-bot-id", canonical: "bot-id"},
+	{command: "chat +chat-role-remove-user", emitted: "open-dingtalk-id", canonical: "user"},
+	{command: "chat +chat-transfer-owner", emitted: "user-id", canonical: "new-owner"},
+	{command: "chat +feed-group-query-item", emitted: "chat-ids", canonical: "conversation-ids"},
+	{command: "chat +messages-combine-forward", emitted: "src-open-cid", canonical: "src-conversation-id"},
+	{command: "chat +messages-forward", emitted: "source-message-id", canonical: "msg-id"},
+	{command: "chat +messages-forward-topic", emitted: "src-open-message-id", canonical: "src-msg-id"},
+	{command: "chat +messages-resource-download", emitted: "conversation-id", canonical: "open-conversation-id"},
+	{command: "chat +messages-set-pin", emitted: "conversation-id", canonical: "open-conversation-id"},
 }
 
 // paramAliasRepresentativePayloadCases keeps final transport coverage across
@@ -163,14 +253,33 @@ var paramAliasNewIMCases = []struct {
 // That duplicated command construction was enough to push the pre-existing
 // macOS app suite beyond its package-level 10-minute timeout.
 var paramAliasRepresentativePayloadCases = map[string]bool{
-	paramAliasPayloadCaseKey("aitable +record-query", "base"):         true, // concept alias on a shortcut read
-	paramAliasPayloadCaseKey("attendance check result", "user-ids"):   true, // list-valued concept alias
-	paramAliasPayloadCaseKey("calendar event list", "date"):           true, // time concept alias
-	paramAliasPayloadCaseKey("chat message add-favorite", "msg-id"):   true, // scoped IM identifier alias
-	paramAliasPayloadCaseKey("contact user profile get", "user-id"):   true, // native compatibility flag
-	paramAliasPayloadCaseKey("devdoc article search", "current-page"): true, // command override
-	paramAliasPayloadCaseKey("mail folder update", "folder-id"):       true, // write-command identifier alias
-	paramAliasPayloadCaseKey("report list", "from-date"):              true, // date-range concept alias
+	paramAliasPayloadCaseKey("aitable +record-query", "base"):                        true, // concept alias on a shortcut read
+	paramAliasPayloadCaseKey("attendance check result", "user-ids"):                  true, // list-valued concept alias
+	paramAliasPayloadCaseKey("calendar event list", "date"):                          true, // time concept alias
+	paramAliasPayloadCaseKey("chat message add-favorite", "msg-id"):                  true, // scoped IM identifier alias
+	paramAliasPayloadCaseKey("contact user profile get", "user-id"):                  true, // native compatibility flag
+	paramAliasPayloadCaseKey("devdoc article search", "current-page"):                true, // command override
+	paramAliasPayloadCaseKey("doc +comment-create", "body"):                          true, // write shortcut content alias
+	paramAliasPayloadCaseKey("doc +copy", "parent-folder-id"):                        true, // Doc folder role on a write shortcut
+	paramAliasPayloadCaseKey("doc +create", "content-format"):                        true, // shortcut format alias preserves markdown/jsonml enum
+	paramAliasPayloadCaseKey("doc +create-from-template", "keyword"):                 true, // template search alias composes with a write workflow
+	paramAliasPayloadCaseKey("doc +create-from-template", "workspace-id"):            true, // template target workspace identifier
+	paramAliasPayloadCaseKey("doc +create-from-template", "parent-folder-id"):        true, // template target folder identifier
+	paramAliasPayloadCaseKey("doc +export-submit", "doc-id"):                         true, // Doc node identifier alias
+	paramAliasPayloadCaseKey("doc +fetch", "start-block"):                            true, // section boundary role remains exact
+	paramAliasPayloadCaseKey("doc +history-revert", "version-number"):                true, // destructive history version alias keeps confirmation
+	paramAliasPayloadCaseKey("doc +inspect", "include-versions"):                     true, // boolean section alias preserves value
+	paramAliasPayloadCaseKey("doc +template-list", "next-token"):                     true, // Doc cursor alias on a read shortcut
+	paramAliasPayloadCaseKey("doc +update", "mode"):                                  true, // write operation selector alias
+	paramAliasPayloadCaseKey("doc +update", "revision"):                              true, // optimistic edit revision alias
+	paramAliasPayloadCaseKey("doc +access-grant", "doc-id"):                          true, // permission write keeps document identity
+	paramAliasPayloadCaseKey("doc +version-revert", "version-number"):                true, // high-write version role with canonical confirmation
+	paramAliasPayloadCaseKey("doc block insert", "content"):                          true, // block write content alias
+	paramAliasPayloadCaseKey("doc block insert", "parent-block-id"):                  true, // scoped block-role alias
+	paramAliasPayloadCaseKey("doc comment delete", "comment-id"):                     true, // destructive comment-key alias
+	paramAliasPayloadCaseKey("doc comment reply", "mentioned-open-conversation-ids"): true, // list-valued group mention role
+	paramAliasPayloadCaseKey("mail folder update", "folder-id"):                      true, // write-command identifier alias
+	paramAliasPayloadCaseKey("report list", "from-date"):                             true, // date-range concept alias
 }
 
 func TestCrossPlatformCoverageReviewedParamAliasesHaveCompleteTemplatesAndRepresentativeFinalPayloads(t *testing.T) {
@@ -273,8 +382,9 @@ func TestCrossPlatformCoverageNewIMParamAliasesReachCanonicalEquivalentFinalPayl
 			}
 
 			canonicalCaller := &paramAliasCaptureCaller{}
-			if _, err := executeParamAliasPayloadE2E(t, canonicalCaller, canonicalArgs...); err != nil {
-				t.Fatalf("complete canonical command failed: %v\nargs=%v\ncalls=%#v", err, canonicalArgs, canonicalCaller.calls)
+			_, canonicalErr := executeParamAliasPayloadE2E(t, canonicalCaller, canonicalArgs...)
+			if canonicalErr != nil && !paramAliasExpectedCaptureBoundaryError(test.command, canonicalErr) {
+				t.Fatalf("complete canonical command failed: %v\nargs=%v\ncalls=%#v", canonicalErr, canonicalArgs, canonicalCaller.calls)
 			}
 			if len(canonicalCaller.calls) == 0 {
 				t.Fatalf("complete canonical command reached no final transport payload: args=%v", canonicalArgs)
@@ -290,12 +400,15 @@ func TestCrossPlatformCoverageNewIMParamAliasesReachCanonicalEquivalentFinalPayl
 			}
 			activeAliases++
 			aliasCaller := &paramAliasCaptureCaller{}
-			ctx, err := executeParamAliasPayloadE2E(t, aliasCaller, aliasArgs...)
-			if err != nil {
-				t.Fatalf("complete alias command failed: %v\nargs=%v\ncalls=%#v", err, aliasArgs, aliasCaller.calls)
+			ctx, aliasErr := executeParamAliasPayloadE2E(t, aliasCaller, aliasArgs...)
+			if aliasErr != nil && !paramAliasExpectedCaptureBoundaryError(test.command, aliasErr) {
+				t.Fatalf("complete alias command failed: %v\nargs=%v\ncalls=%#v", aliasErr, aliasArgs, aliasCaller.calls)
 			}
 			if ctx == nil {
 				t.Fatal("complete alias command skipped PreParse")
+			}
+			if (canonicalErr == nil) != (aliasErr == nil) || (canonicalErr != nil && canonicalErr.Error() != aliasErr.Error()) {
+				t.Fatalf("canonical and alias completion errors differ: canonical=%v alias=%v", canonicalErr, aliasErr)
 			}
 			normalizeParamAliasVolatileDefaults(test.command, canonicalCaller, aliasCaller)
 			if !reflect.DeepEqual(aliasCaller.calls, canonicalCaller.calls) {
@@ -306,6 +419,16 @@ func TestCrossPlatformCoverageNewIMParamAliasesReachCanonicalEquivalentFinalPayl
 	if activeAliases != len(paramAliasNewIMCases) {
 		t.Fatalf("new IM aliases active in embedded table = %d, want %d", activeAliases, len(paramAliasNewIMCases))
 	}
+}
+
+// Resource download deliberately continues from the transport call into a
+// local HTTPS download. The generic capture caller returns an empty object, so
+// this command's stable post-transport validation error is the expected test
+// boundary; canonical and alias calls must still produce the same request and
+// the same error.
+func paramAliasExpectedCaptureBoundaryError(command string, err error) bool {
+	return command == "chat +messages-resource-download" && err != nil &&
+		strings.Contains(err.Error(), "资源下载接口未返回合法的 HTTPS 下载地址")
 }
 
 // +chat-messages supplies the current wall-clock time when callers omit

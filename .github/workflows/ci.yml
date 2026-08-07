@@ -111,6 +111,7 @@ jobs:
                 filename.startsWith('internal/app/') ||
                 filename.startsWith('internal/cli/') ||
                 filename.startsWith('internal/cobracmd/') ||
+                filename.startsWith('internal/corecmd/') ||
                 filename.startsWith('internal/helpers/') ||
                 filename.startsWith('internal/i18n/') ||
                 filename.startsWith('internal/interfacesnapshot/') ||
@@ -1384,6 +1385,13 @@ jobs:
             make authoritative-interface-integrity \
               BASE_REF="$COMPATIBILITY_STABLE_REF"
           fi
+
+      - name: Check complete CLI command compatibility
+        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
+        run: |
+          ./scripts/policy/check-command-compatibility.sh \
+            --base-ref "$COMPATIBILITY_BASE_REF" \
+            --stable-ref "$COMPATIBILITY_STABLE_REF"
 
       - name: Check complete Schema compatibility
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}

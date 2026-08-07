@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -59,6 +60,22 @@ func TestNewEngine(t *testing.T) {
 	}
 	if got := e.HandlerCount(); got != 0 {
 		t.Errorf("HandlerCount = %d, want 0", got)
+	}
+}
+
+func TestCrossPlatformCoverageCommandPathFallbackLookupHandlesNilEngine(t *testing.T) {
+	var engine *Engine
+	engine.SetCommandPathFallbackLookup(func(string) (CommandPathFallback, bool) {
+		t.Fatal("nil engine installed or called fallback lookup")
+		return CommandPathFallback{}, false
+	})
+	if entry, ok := engine.lookupCommandPathFallback("chat +bad"); ok || !reflect.DeepEqual(entry, CommandPathFallback{}) {
+		t.Fatalf("nil engine lookup = %#v, %v", entry, ok)
+	}
+
+	engine = NewEngine()
+	if entry, ok := engine.lookupCommandPathFallback("chat +bad"); ok || !reflect.DeepEqual(entry, CommandPathFallback{}) {
+		t.Fatalf("unset engine lookup = %#v, %v", entry, ok)
 	}
 }
 

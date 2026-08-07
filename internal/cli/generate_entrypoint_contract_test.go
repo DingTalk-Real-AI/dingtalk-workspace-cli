@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func TestGoGenerateDirectivesStayInUnifiedEntryPoint(t *testing.T) {
+func TestCrossPlatformCoverageGoGenerateDirectivesStayInUnifiedEntryPoint(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatalf("read internal/cli: %v", err)
@@ -50,6 +50,7 @@ func TestGoGenerateDirectivesStayInUnifiedEntryPoint(t *testing.T) {
 	for _, generator := range []string{
 		"cmd_schema_catalog",
 		"cmd_param_aliases",
+		"cmd_command_path_fallbacks",
 	} {
 		if !bytes.Contains(content, []byte("//go:generate go run")) || !bytes.Contains(content, []byte(generator)) {
 			t.Errorf("gen.go does not register %s", generator)

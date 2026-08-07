@@ -135,6 +135,9 @@ func Execute() (exitCode int) {
 // newPreParseValidationError keeps pipeline handler identity in internal logs
 // while exposing only the underlying parameter-domain error to CLI users.
 func newPreParseValidationError(err error) error {
+	if structured, ok := err.(*apperrors.Error); ok {
+		return structured
+	}
 	userErr := err
 	var handlerErr *pipeline.HandlerError
 	if stderrors.As(err, &handlerErr) && handlerErr.Unwrap() != nil {
@@ -1324,6 +1327,18 @@ func registerPluginAuthFromHeaders(srv mcptypes.ServerDescriptor) {
 //   - PostResponse: after transport returns, before stdout (canonical RunE)
 func newPipelineEngine() *pipeline.Engine {
 	engine := pipeline.NewEngine()
+	engine.SetCommandPathFallbackLookup(func(path string) (pipeline.CommandPathFallback, bool) {
+		entry, ok := cli.LookupCommandPathFallback(path)
+		if !ok {
+			return pipeline.CommandPathFallback{}, false
+		}
+		return pipeline.CommandPathFallback{
+			From:       entry.From,
+			Mode:       string(entry.Mode),
+			To:         entry.To,
+			Candidates: append([]string(nil), entry.Candidates...),
+		}, true
+	})
 	engine.RegisterAll(
 		// Register handler runs during command tree building.
 		handlers.RegisterHandler{},

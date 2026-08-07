@@ -151,9 +151,13 @@ generate-schema:
 	@set -e; \
 	concepts_guard=$$(mktemp); \
 	concepts_schema_guard=$$(mktemp); \
-	trap 'rm -rf "$$concepts_guard" "$$concepts_schema_guard"' EXIT HUP INT TERM; \
+	command_fallbacks_guard=$$(mktemp); \
+	command_fallbacks_schema_guard=$$(mktemp); \
+	trap 'rm -f "$$concepts_guard" "$$concepts_schema_guard" "$$command_fallbacks_guard" "$$command_fallbacks_schema_guard"' EXIT HUP INT TERM; \
 	cp internal/cli/param_concepts.json "$$concepts_guard"; \
 	cp internal/cli/param_concepts.schema.json "$$concepts_schema_guard"; \
+	cp internal/cli/command_path_fallbacks.json "$$command_fallbacks_guard"; \
+	cp internal/cli/command_path_fallbacks.schema.json "$$command_fallbacks_schema_guard"; \
 	$(GO) generate ./internal/cli; \
 	rm -rf internal/cli/schema_agent_metadata internal/cli/schema_agent_metadata_audit.json; \
 	rm -f internal/cli/schema_meta_index.json; \
@@ -167,6 +171,14 @@ generate-schema:
 	}; \
 	cmp -s internal/cli/param_concepts.schema.json "$$concepts_schema_guard" || { \
 		printf '%s\n' 'generation modified reviewed input internal/cli/param_concepts.schema.json' >&2; \
+		exit 1; \
+	}; \
+	cmp -s internal/cli/command_path_fallbacks.json "$$command_fallbacks_guard" || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/command_path_fallbacks.json' >&2; \
+		exit 1; \
+	}; \
+	cmp -s internal/cli/command_path_fallbacks.schema.json "$$command_fallbacks_schema_guard" || { \
+		printf '%s\n' 'generation modified reviewed input internal/cli/command_path_fallbacks.schema.json' >&2; \
 		exit 1; \
 	}; \
 	if [ -e internal/cli/schema_hints ]; then \

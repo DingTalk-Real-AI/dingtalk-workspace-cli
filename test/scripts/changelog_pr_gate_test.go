@@ -384,6 +384,61 @@ func TestReleaseChangelogExtractionAllowsLowercaseTodoProductName(t *testing.T) 
 	}
 }
 
+func TestInterfaceIntegrityWorkflowContract(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile(ci.yml) error = %v", err)
+	}
+	workflow := string(data)
+	interfaceStart := strings.Index(workflow, "\n  interface-integrity:\n")
+	interfaceEnd := strings.Index(workflow, "\n  cli-smoke:\n")
+	if interfaceStart < 0 || interfaceEnd <= interfaceStart {
+		t.Fatal("Code Admission workflow missing Interface Integrity job boundaries")
+	}
+	interfaceJob := workflow[interfaceStart:interfaceEnd]
+	for _, want := range []string{
+		"name: Check complete CLI command compatibility",
+		"./scripts/policy/check-command-compatibility.sh",
+		`--base-ref "$COMPATIBILITY_BASE_REF"`,
+		`--stable-ref "$COMPATIBILITY_STABLE_REF"`,
+	} {
+		if !strings.Contains(interfaceJob, want) {
+			t.Errorf("Interface Integrity job missing release-equivalent compatibility contract %q", want)
+		}
+	}
+}
+
+func TestInterfaceSensitiveClassificationCoversCoreCommandFramework(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile(ci.yml) error = %v", err)
+	}
+	workflow := string(data)
+	start := strings.Index(workflow, "            const isInterfaceSensitive =")
+	end := strings.Index(workflow, "            const isMCPSensitive =")
+	if start < 0 || end <= start {
+		t.Fatal("Code Admission workflow missing interface-sensitive classifier boundaries")
+	}
+	classifier := strings.TrimSpace(workflow[start:end])
+	probe := classifier + `
+if (!isInterfaceSensitive("internal/corecmd/corecmd.go")) {
+  throw new Error("existing corecmd files must trigger Interface Integrity");
+}
+`
+	cmd := exec.Command("node", "-e", probe)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("interface-sensitive classifier rejected corecmd change: %v\n%s", err, output)
+	}
+}
+
 func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

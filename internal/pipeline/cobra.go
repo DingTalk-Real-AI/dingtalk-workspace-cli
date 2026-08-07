@@ -32,9 +32,10 @@ import (
 // SetArgs so that Cobra's subsequent ExecuteC uses the corrected
 // values.
 //
-// If the target command cannot be resolved (e.g. the user typed a
-// non-existent command), PreParse is skipped silently and Cobra will
-// handle the error.
+// Explicit +shortcut tokens and annotated group subcommands are validated
+// before flag parsing so an unknown command cannot be misreported as an
+// unknown flag on its nearest parent. Other unresolved paths remain Cobra's
+// responsibility.
 func RunPreParse(root *cobra.Command, engine *Engine) error {
 	_, err := RunPreParseArgs(root, engine, os.Args[1:])
 	return err
@@ -45,12 +46,16 @@ func RunPreParse(root *cobra.Command, engine *Engine) error {
 // exact same command traversal, FlagInfo extraction, handler chain, and
 // root.SetArgs delivery path.
 func RunPreParseArgs(root *cobra.Command, engine *Engine, rawArgs []string) (*Context, error) {
-	if engine == nil || !engine.HasHandlers(PreParse) {
-		return nil, nil
-	}
-
 	if len(rawArgs) == 0 {
 		return nil, nil
+	}
+	normalizedArgs, commandCorrection, fallbackErr := normalizeCommandPathFallback(root, engine, rawArgs)
+	if fallbackErr != nil {
+		ctx := &Context{Args: append([]string{}, rawArgs...)}
+		if presentationErr := primeEarlyErrorPresentation(root, root, rawArgs); presentationErr != nil {
+			slog.Debug("pipeline command-fallback presentation flags", "error", presentationErr)
+		}
+		return ctx, fallbackErr
 	}
 
 	// Cobra's Traverse does not merge root persistent flags before deciding
@@ -59,37 +64,52 @@ func RunPreParseArgs(root *cobra.Command, engine *Engine, rawArgs []string) (*Co
 	// the unrelated root command `event list`. Remove only known root-persistent
 	// flags from the traversal copy; the original argv remains intact for the
 	// handlers and Cobra's real parse.
-	target, _, err := root.Traverse(argsForCommandTraversal(root, rawArgs))
+	target, remaining, err := root.Traverse(argsForCommandTraversal(root, normalizedArgs))
 	if err != nil {
 		return nil, nil
+	}
+	if err := validateUnresolvedCommand(target, remaining); err != nil {
+		ctx := &Context{
+			Args:    append([]string{}, normalizedArgs...),
+			Command: target.CommandPath(),
+		}
+		if presentationErr := primeEarlyErrorPresentation(root, target, ctx.Args); presentationErr != nil {
+			slog.Debug("pipeline command-resolution presentation flags", "error", presentationErr)
+		}
+		return ctx, err
 	}
 
 	// Build FlagInfo from the target command's registered flags.
 	flagInfos := FlagInfoFromCommand(target)
-	if len(flagInfos) == 0 {
+	if (engine == nil || !engine.HasHandlers(PreParse) || len(flagInfos) == 0) && commandCorrection == nil {
 		return nil, nil
 	}
 
 	ctx := &Context{
-		Args: append([]string{}, rawArgs...),
+		Args: append([]string{}, normalizedArgs...),
 		// target.CommandPath() still carries the "dws" prefix; PreParse
 		// handlers that key off a command (e.g. the semantic-alias table)
 		// normalize it themselves, so the runtime key matches the build key.
 		Command:   target.CommandPath(),
 		FlagSpecs: flagInfos,
 	}
+	if commandCorrection != nil {
+		ctx.Corrections = append(ctx.Corrections, *commandCorrection)
+	}
 
-	if err := engine.RunPhase(PreParse, ctx); err != nil {
-		// Cobra has not parsed persistent flags yet, but this error is rendered
-		// immediately by app.Execute. Prime only the presentation controls so
-		// --format/--debug/--verbose affect this early error exactly as they do
-		// errors returned after Cobra parsing. No credentials, profiles, output
-		// paths, or execution controls are applied here.
-		if presentationErr := primeEarlyErrorPresentation(root, target, ctx.Args); presentationErr != nil {
-			slog.Debug("pipeline pre-parse presentation flags", "error", presentationErr)
+	if engine != nil && engine.HasHandlers(PreParse) && len(flagInfos) > 0 {
+		if err := engine.RunPhase(PreParse, ctx); err != nil {
+			// Cobra has not parsed persistent flags yet, but this error is rendered
+			// immediately by app.Execute. Prime only the presentation controls so
+			// --format/--debug/--verbose affect this early error exactly as they do
+			// errors returned after Cobra parsing. No credentials, profiles, output
+			// paths, or execution controls are applied here.
+			if presentationErr := primeEarlyErrorPresentation(root, target, ctx.Args); presentationErr != nil {
+				slog.Debug("pipeline pre-parse presentation flags", "error", presentationErr)
+			}
+			slog.Debug("pipeline pre-parse", "error", err)
+			return ctx, err
 		}
-		slog.Debug("pipeline pre-parse", "error", err)
-		return ctx, err
 	}
 
 	// Only set corrected args if PreParse actually changed something.
@@ -109,25 +129,43 @@ func RunPreParseArgs(root *cobra.Command, engine *Engine, rawArgs []string) (*Co
 }
 
 func argsForCommandTraversal(root *cobra.Command, rawArgs []string) []string {
+	args, _ := argsForCommandTraversalWithPositions(root, rawArgs)
+	return args
+}
+
+func argsForCommandTraversalWithPositions(root *cobra.Command, rawArgs []string) ([]string, []int) {
 	if root == nil || len(rawArgs) == 0 {
-		return rawArgs
+		positions := make([]int, len(rawArgs))
+		for index := range positions {
+			positions[index] = index
+		}
+		return rawArgs, positions
 	}
 	flags := root.PersistentFlags()
 	if flags == nil || !flags.HasFlags() {
-		return rawArgs
+		positions := make([]int, len(rawArgs))
+		for index := range positions {
+			positions[index] = index
+		}
+		return rawArgs, positions
 	}
 
 	matcher := newFlagTokenMatcher(flags)
 	out := make([]string, 0, len(rawArgs))
+	positions := make([]int, 0, len(rawArgs))
 	for index := 0; index < len(rawArgs); index++ {
 		argument := rawArgs[index]
 		if argument == "--" {
 			out = append(out, rawArgs[index:]...)
+			for position := index; position < len(rawArgs); position++ {
+				positions = append(positions, position)
+			}
 			break
 		}
 		flag, inlineValue, matched := matcher.matchTraversalToken(argument)
 		if !matched {
 			out = append(out, argument)
+			positions = append(positions, index)
 			continue
 		}
 		if index+1 < len(rawArgs) {
@@ -140,7 +178,7 @@ func argsForCommandTraversal(root *cobra.Command, rawArgs []string) []string {
 			index++
 		}
 	}
-	return out
+	return out, positions
 }
 
 // separatedBoolValue recognises model-friendly `--flag false` and exact

@@ -25,6 +25,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const hintOnlyCommandAnnotation = "dws.command.hint_only"
+
 // GroupRunE is a reusable RunE for parent (group) commands that have no
 // business logic of their own. With args it returns an error listing available
 // subcommands; without args it shows help.
@@ -45,13 +47,21 @@ func GroupRunE(cmd *cobra.Command, args []string) error {
 // HintSubCmd creates a hidden subcommand that only prints a disambiguation hint.
 func HintSubCmd(use, hint string) *cobra.Command {
 	return &cobra.Command{
-		Use:    use,
-		Hidden: true,
+		Use:         use,
+		Hidden:      true,
+		Annotations: map[string]string{hintOnlyCommandAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("ambiguous command %q for %q\n  hint: %s",
 				use, cmd.Parent().CommandPath(), hint)
 		},
 	}
+}
+
+// IsHintOnlyCommand reports whether cmd is a hidden compatibility prompt that
+// has no business execution of its own. Reviewed command-path fallbacks may
+// supersede these nodes, but must still reject collisions with real commands.
+func IsHintOnlyCommand(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Annotations[hintOnlyCommandAnnotation] == "true"
 }
 
 // MustGetFlag retrieves a string flag value, checking both local and inherited flags.
