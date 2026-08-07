@@ -41,7 +41,7 @@ func TestCrossPlatformCoverageDiagnosticsAndErrorRenderingEdges(t *testing.T) {
 		t.Fatalf("PrintJSON friendly diagnostics = %q, %v", out.String(), err)
 	}
 	out.Reset()
-	if err := PrintHumanAt(&out, err, VerbosityVerbose); err != nil || !strings.Contains(out.String(), "开启地址") {
+	if err := PrintHumanAt(&out, err, VerbosityVerbose); err != nil || !strings.Contains(out.String(), "处理入口") {
 		t.Fatalf("PrintHuman friendly diagnostics = %q, %v", out.String(), err)
 	}
 	out.Reset()

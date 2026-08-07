@@ -110,6 +110,24 @@ func TestExtractServerDiagnosticsFromMapNestedBusinessCode(t *testing.T) {
 	}
 }
 
+func TestExtractServerDiagnosticsFromMapNestedDiagnosticEnvelope(t *testing.T) {
+	t.Parallel()
+	content := map[string]any{
+		"result": map[string]any{
+			"data": map[string]any{
+				"requestId":       "request-nested",
+				"technicalDetail": "nested detail",
+				"serverRetryable": false,
+			},
+		},
+	}
+	diag := ExtractServerDiagnosticsFromMap(content)
+	if diag.TraceID != "request-nested" || diag.TechnicalDetail != "nested detail" ||
+		diag.ServerRetryable == nil || *diag.ServerRetryable {
+		t.Fatalf("nested diagnostics = %#v", diag)
+	}
+}
+
 func TestExtractServerDiagnosticsFromMap_Empty(t *testing.T) {
 	t.Parallel()
 	diag := ExtractServerDiagnosticsFromMap(nil)

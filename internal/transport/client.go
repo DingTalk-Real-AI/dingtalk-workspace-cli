@@ -1047,6 +1047,7 @@ func authActions(snapshotPath string) []string {
 func runtimeActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查认证、权限和参数后重试原命令"),
+		i18n.T("运行 dws doctor 检查登录态、网络和本地环境；持续失败时保留 Trace ID 和 Server Code"),
 	}
 	_ = snapshotPath
 	return actions
@@ -1056,6 +1057,7 @@ func networkActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查网络、代理和 DNS 配置后重试原命令"),
 		i18n.T("确认 MCP 服务可访问；若持续失败请稍后重试"),
+		i18n.T("运行 dws doctor 获取可共享的环境诊断结果"),
 	}
 	_ = snapshotPath
 	return actions

@@ -16,6 +16,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"reflect"
@@ -23,8 +24,10 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/spf13/cobra"
 )
 
 type chatMessageSearchCall struct {
@@ -34,12 +37,36 @@ type chatMessageSearchCall struct {
 }
 
 type chatMessageSearchCaller struct {
-	calls []chatMessageSearchCall
+	calls           []chatMessageSearchCall
+	searchResponse  string
+	searchResponses []string
+	searchCalls     int
+	failPreflight   bool
+	preflightError  error
 }
 
 func (c *chatMessageSearchCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, chatMessageSearchCall{productID: productID, toolName: toolName, args: args})
-	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{}`}}}, nil
+	text := `{}`
+	if toolName == "get_conversation_info" {
+		if c.preflightError != nil {
+			return nil, c.preflightError
+		}
+		if c.failPreflight {
+			return nil, errors.New("conversation not found")
+		}
+		text = `{"result":{"openConversationId":"` + args["openConversationId"].(string) + `"}}`
+	}
+	if toolName == "search_messages_by_keyword" || toolName == "search_messages" {
+		text = `{"result":{"messages":[],"hasMore":false}}`
+		if c.searchCalls < len(c.searchResponses) {
+			text = c.searchResponses[c.searchCalls]
+		} else if c.searchResponse != "" {
+			text = c.searchResponse
+		}
+		c.searchCalls++
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
 
 func (*chatMessageSearchCaller) Format() string { return "json" }
@@ -72,6 +99,7 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 		productID   string
 		toolName    string
 		wantToolArg map[string]any
+		preflight   []string
 	}{
 		{
 			name:      "keyword search",
@@ -79,13 +107,13 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 			productID: "chat",
 			toolName:  "search_messages_by_keyword",
 			wantToolArg: map[string]any{
-				"keyword":            "categoryName",
-				"openConversationId": "cid-1",
-				"startTime":          startTime.UnixMilli(),
-				"endTime":            endTime.UnixMilli(),
-				"limit":              100,
-				"cursor":             "0",
+				"keyword":   "categoryName",
+				"startTime": startTime.UnixMilli(),
+				"endTime":   endTime.UnixMilli(),
+				"limit":     100,
+				"cursor":    "0",
 			},
+			preflight: []string{"cid-1"},
 		},
 		{
 			name:      "advanced search",
@@ -93,16 +121,16 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 			productID: "im",
 			toolName:  "search_messages",
 			wantToolArg: map[string]any{
-				"keyword":             "categoryName",
-				"openConversationIds": []string{"cid-1", "cid-2"},
-				"messageType":         "text",
-				"onlyRobotMessages":   true,
-				"searchConvType":      "group",
-				"startTime":           startTime.UnixMilli(),
-				"endTime":             endTime.UnixMilli(),
-				"limit":               100,
-				"cursor":              "0",
+				"keyword":           "categoryName",
+				"messageType":       "text",
+				"onlyRobotMessages": true,
+				"searchConvType":    "group",
+				"startTime":         startTime.UnixMilli(),
+				"endTime":           endTime.UnixMilli(),
+				"limit":             100,
+				"cursor":            "0",
 			},
+			preflight: []string{"cid-1", "cid-2"},
 		},
 	}
 
@@ -116,14 +144,21 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 			cmd := newChatCommand()
 			cmd.SilenceErrors = true
 			cmd.SilenceUsage = true
+			cmd.SetOut(io.Discard)
 			cmd.SetArgs(tt.args)
 			if err := cmd.Execute(); err != nil {
 				t.Fatalf("chat search returned error: %v", err)
 			}
-			if len(caller.calls) != 1 {
-				t.Fatalf("tool call count = %d, want 1", len(caller.calls))
+			if len(caller.calls) != len(tt.preflight)+1 {
+				t.Fatalf("tool calls = %#v", caller.calls)
 			}
-			call := caller.calls[0]
+			for index, conversationID := range tt.preflight {
+				call := caller.calls[index]
+				if call.productID != "chat" || call.toolName != "get_conversation_info" || call.args["openConversationId"] != conversationID {
+					t.Fatalf("preflight[%d] = %#v", index, call)
+				}
+			}
+			call := caller.calls[len(caller.calls)-1]
 			if call.productID != tt.productID || call.toolName != tt.toolName {
 				t.Fatalf("tool call = %s/%s, want %s/%s", call.productID, call.toolName, tt.productID, tt.toolName)
 			}
@@ -131,6 +166,220 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 				t.Fatalf("tool args = %#v, want %#v", call.args, tt.wantToolArg)
 			}
 		})
+	}
+}
+
+func executeNativeScopedSearch(t *testing.T, caller *chatMessageSearchCaller, args ...string) (map[string]any, error) {
+	t.Helper()
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+	cmd := newChatCommand()
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	var output strings.Builder
+	cmd.SetOut(&output)
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output.String()), &payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func TestNativeScopedSearchFiltersGlobalResultsForBothEntries(t *testing.T) {
+	start := "2026-07-09T00:00:00+08:00"
+	end := "2026-07-11T00:00:00+08:00"
+	for _, tt := range []struct {
+		name       string
+		args       []string
+		tool       string
+		scopeParam string
+	}{
+		{
+			name:       "keyword search",
+			args:       []string{"message", "search", "--query", "周报", "--group", "cid-target", "--start", start, "--end", end},
+			tool:       "search_messages_by_keyword",
+			scopeParam: "openConversationId",
+		},
+		{
+			name:       "advanced search",
+			args:       []string{"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target"},
+			tool:       "search_messages",
+			scopeParam: "openConversationIds",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &chatMessageSearchCaller{searchResponse: `{
+				"result": {
+					"conversationMessagesList": [
+						{"openConversationId":"cid-target","title":"目标群","messages":[{"openMessageId":"m-target","content":"目标"}]},
+						{"openConversationId":"cid-other","title":"其他群","messages":[{"openMessageId":"m-other","content":"越界"}]}
+					],
+					"hasMore": false
+				}
+			}`}
+			payload, err := executeNativeScopedSearch(t, caller, tt.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, _ := payload["result"].(map[string]any)
+			groups, _ := result["conversationMessagesList"].([]any)
+			if len(groups) != 1 {
+				t.Fatalf("result = %#v", result)
+			}
+			group, _ := groups[0].(map[string]any)
+			if group["openConversationId"] != "cid-target" {
+				t.Fatalf("group = %#v", group)
+			}
+			scope, _ := payload["scope"].(map[string]any)
+			if scope["targetsValidated"] != true || scope["resultsWithinScope"] != true || scope["filterMode"] != "client" {
+				t.Fatalf("scope = %#v", scope)
+			}
+			searchCall := caller.calls[len(caller.calls)-1]
+			if searchCall.toolName != tt.tool {
+				t.Fatalf("search call = %#v", searchCall)
+			}
+			if _, exists := searchCall.args[tt.scopeParam]; exists {
+				t.Fatalf("global fallback unexpectedly forwarded %s: %#v", tt.scopeParam, searchCall.args)
+			}
+		})
+	}
+}
+
+func TestNativeScopedSearchInvalidCIDStopsBeforeSearch(t *testing.T) {
+	caller := &chatMessageSearchCaller{failPreflight: true}
+	_, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-invalid")
+	if err == nil {
+		t.Fatal("invalid CID unexpectedly succeeded")
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "search_conversation_scope_invalid" {
+		t.Fatalf("error = %#v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].toolName != "get_conversation_info" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+}
+
+func TestNativeScopedSearchPreservesPreflightAuthError(t *testing.T) {
+	want := &CLIError{Code: CodeAuthNotConfigured, Message: "当前未登录"}
+	caller := &chatMessageSearchCaller{preflightError: want}
+	_, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+	if err == nil {
+		t.Fatal("auth failure unexpectedly succeeded")
+	}
+	var cliErr *CLIError
+	if !errors.As(err, &cliErr) || cliErr.Code != CodeAuthNotConfigured {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestNativeScopedSearchScansUntilTargetConversationAppears(t *testing.T) {
+	caller := &chatMessageSearchCaller{searchResponses: []string{
+		`{"result":{"conversationMessagesList":[{"openConversationId":"cid-other","messages":[{"openMessageId":"m-other"}]}],"hasMore":true,"nextCursor":"c2"}}`,
+		`{"result":{"conversationMessagesList":[{"openConversationId":"cid-target","messages":[{"openMessageId":"m-target"}]}],"hasMore":false}}`,
+	}}
+	payload, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, _ := payload["result"].(map[string]any)
+	if result["pagesFetched"] != float64(2) || result["complete"] != true {
+		t.Fatalf("result = %#v", result)
+	}
+	groups, _ := result["conversationMessagesList"].([]any)
+	if len(groups) != 1 {
+		t.Fatalf("groups = %#v", groups)
+	}
+	searchCalls := make([]chatMessageSearchCall, 0, 2)
+	for _, call := range caller.calls {
+		if call.toolName == "search_messages" {
+			searchCalls = append(searchCalls, call)
+		}
+	}
+	if len(searchCalls) != 2 || searchCalls[1].args["cursor"] != "c2" {
+		t.Fatalf("search calls = %#v", searchCalls)
+	}
+}
+
+func TestNativeScopedSearchMissingConversationIdentityFailsClosed(t *testing.T) {
+	caller := &chatMessageSearchCaller{searchResponse: `{"result":{"messages":[{"openMessageId":"m1"}],"hasMore":false}}`}
+	_, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-target")
+	if err == nil {
+		t.Fatal("unverifiable scoped result unexpectedly succeeded")
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "search_conversation_scope_unverified" {
+		t.Fatalf("error = %#v", err)
+	}
+}
+
+func TestNativeScopedSearchValidEmptyResultIsComplete(t *testing.T) {
+	caller := &chatMessageSearchCaller{searchResponse: `{"result":{"messages":[],"hasMore":false}}`}
+	payload, err := executeNativeScopedSearch(t, caller,
+		"message", "search-advanced", "--query", "周报", "--conversation-ids", "cid-empty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, _ := payload["result"].(map[string]any)
+	if result["complete"] != true || result["hasMore"] != false {
+		t.Fatalf("result = %#v", result)
+	}
+	scope, _ := payload["scope"].(map[string]any)
+	if scope["targetsValidated"] != true || scope["sourceComplete"] != true {
+		t.Fatalf("scope = %#v", scope)
+	}
+}
+
+func TestNativeScopedSearchDryRunShowsCompositePlanWithoutCallingTools(t *testing.T) {
+	caller := &chatMessageSearchCaller{}
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+	InitDeps(caller)
+	cmd := &cobra.Command{Use: "search"}
+	cmd.Flags().Bool("dry-run", true, "")
+	var output strings.Builder
+	cmd.SetOut(&output)
+	err := runConversationScopedMessageSearch(
+		cmd,
+		"im",
+		"search_messages",
+		"openConversationIds",
+		map[string]any{
+			"keyword":             "周报",
+			"openConversationIds": []string{"cid-target"},
+			"limit":               100,
+			"cursor":              "0",
+		},
+		[]string{"cid-target"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("dry-run made calls: %#v", caller.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output.String()), &payload); err != nil {
+		t.Fatal(err)
+	}
+	plan, _ := payload["plan"].([]any)
+	if payload["dry_run"] != true || payload["executed"] != false || len(plan) != 3 {
+		t.Fatalf("payload = %#v", payload)
+	}
+	searchStage, _ := plan[1].(map[string]any)
+	arguments, _ := searchStage["arguments"].(map[string]any)
+	if _, exists := arguments["openConversationIds"]; exists {
+		t.Fatalf("dry-run global search still carries scope: %#v", searchStage)
 	}
 }
 
@@ -160,9 +409,12 @@ func executeChatChangedContract(t *testing.T, caller *chatChangedContractCaller,
 	InitDeps(caller)
 	deps.Out.w = io.Discard
 	cmd := newChatCommand()
+	if cmd.PersistentFlags().Lookup("yes") == nil {
+		cmd.PersistentFlags().Bool("yes", false, "skip confirmation")
+	}
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
-	cmd.SetArgs(args)
+	cmd.SetArgs(append(append([]string(nil), args...), "--yes"))
 	return cmd.Execute()
 }
 

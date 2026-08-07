@@ -25,7 +25,7 @@ func runChatCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...str
 	root.SilenceUsage = true
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs(args)
+	root.SetArgs(append(append([]string(nil), args...), "--yes"))
 	return root.ExecuteContext(context.Background())
 }
 

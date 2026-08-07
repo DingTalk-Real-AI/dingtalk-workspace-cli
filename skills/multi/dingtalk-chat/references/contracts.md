@@ -12,7 +12,7 @@
 <!-- DWS_MESSAGE_RESULT_CONTRACT_START -->
 - `version`: `im.message-list.v1`
 - `message_fields`: `messageId`, `conversationId`, `threadId`, `sender`, `senderId`, `senderType`, `messageType`, `text`, `createTime`, `updateTime`, `reactions`, `quotedMessage`, `forwarded`, `resourceRefs`
-- `envelope_fields`: `contractVersion`, `messages`, `count`, `pagesFetched`, `paginationKnown`, `complete`, `hasMore`, `nextPage`, `stopReason`, `truncatedByPageLimit`, `truncatedByResultLimit`, `failedCount`, `failures`, `partial`, `resourceDownloads`
+- `envelope_fields`: `contractVersion`, `messages`, `count`, `pagesFetched`, `paginationKnown`, `complete`, `hasMore`, `nextPage`, `stopReason`, `truncatedByPageLimit`, `truncatedByResultLimit`, `failedCount`, `failures`, `partial`, `scope`, `resourceDownloads`
 <!-- DWS_MESSAGE_RESULT_CONTRACT_END -->
 
 当 `complete=false` 时不能称为全量成功。`nextPage` 只能来自真实 lower boundary；

@@ -74,6 +74,8 @@ func (f *larkAlignmentCaller) CallTool(_ context.Context, product, tool string, 
 		text = string(payload)
 	case "im/create_group_conversation":
 		text = `{"result":{"cid":"internal-cid","openCid":"open-cid"}}`
+	case "im/create_and_send_card":
+		text = `{"result":{"bizId":"biz-created"}}`
 	case "im/list_messages_by_ids":
 		text = `{"result":[{"openMessageId":"msg","openConversationId":"cid","senderOpenDingTalkId":"D-inferred","content":"{\"mediaId\":\"@image\"}"}]}`
 	case "im/list_conversations_by_category":

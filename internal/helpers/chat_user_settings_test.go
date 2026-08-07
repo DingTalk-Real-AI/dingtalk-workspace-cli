@@ -101,7 +101,7 @@ func TestCrossPlatformCoverageChatMessageSendLocation(t *testing.T) {
 	caller = &guardedMutationCaller{}
 	err = executeGuardedMutationCommand(t, caller, newChatCommand,
 		"message", "send", "--group", "cid1", "--msg-type", "location",
-		"--latitude", "39.9", "--longitude", "116.4", "--location-name", "国贸", "--map-thumbnail-url", "@media1")
+		"--latitude", "39.9", "--longitude", "116.4", "--location-name", "国贸", "--map-thumbnail-url", "@media1", "--yes")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestCrossPlatformCoverageChatMessageSendProfile(t *testing.T) {
 
 	caller = &guardedMutationCaller{}
 	err = executeGuardedMutationCommand(t, caller, newChatCommand,
-		"message", "send", "--group", "cid1", "--msg-type", "profile", "--contact-id", "od123")
+		"message", "send", "--group", "cid1", "--msg-type", "profile", "--contact-id", "od123", "--yes")
 	if err != nil {
 		t.Fatal(err)
 	}
