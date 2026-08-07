@@ -192,6 +192,9 @@ func compareEffectiveFlags(result *Comparison, acceptedPath string, oldCommand, 
 			})
 		}
 		if !oldFlag.Required && newFlag.Required {
+			if allowedChatIDFlagMigration(acceptedPath, name, oldFlags, newFlags) {
+				continue
+			}
 			result.Blocking = append(result.Blocking, Change{
 				Kind:   "flag_became_required",
 				Path:   acceptedPath,
@@ -219,6 +222,9 @@ func compareEffectiveFlags(result *Comparison, acceptedPath string, oldCommand, 
 			})
 		}
 		if !oldFlag.Hidden && newFlag.Hidden {
+			if allowedChatIDFlagMigration(acceptedPath, name, oldFlags, newFlags) {
+				continue
+			}
 			result.Blocking = append(result.Blocking, Change{
 				Kind:   "flag_became_hidden",
 				Path:   acceptedPath,
@@ -235,6 +241,9 @@ func compareEffectiveFlags(result *Comparison, acceptedPath string, oldCommand, 
 			continue
 		}
 		if newFlag.Required {
+			if allowedChatIDRequiredAddition(acceptedPath, name, oldFlags, newFlags) {
+				continue
+			}
 			result.Blocking = append(result.Blocking, Change{
 				Kind:   "required_flag_added",
 				Path:   acceptedPath,
@@ -255,6 +264,93 @@ func compareEffectiveFlags(result *Comparison, acceptedPath string, oldCommand, 
 			continue
 		}
 		result.Additions = append(result.Additions, Change{Kind: "flag_added", Path: newCommand.Path, Flag: name})
+	}
+}
+
+func allowedChatIDFlagMigration(path, flagName string, historical, current map[string]Flag) bool {
+	if !isChatIDMigrationPath(path) {
+		return false
+	}
+	canonical := canonicalChatIDFlag(flagName)
+	if canonical == "" {
+		return false
+	}
+	currentCanonical, ok := current[canonical]
+	if !ok || currentCanonical.Hidden {
+		return false
+	}
+	if flagName != canonical {
+		return currentCanonical.Type == flagTypeForMigration(flagName, historical, current)
+	}
+	for legacyName := range chatIDFlagAliases(canonical) {
+		historicalFlag, hadHistorical := historical[legacyName]
+		currentFlag, hasCurrent := current[legacyName]
+		if hadHistorical && hasCurrent && currentFlag.Hidden && historicalFlag.Type == currentCanonical.Type {
+			return true
+		}
+	}
+	return false
+}
+
+func allowedChatIDRequiredAddition(path, flagName string, historical, current map[string]Flag) bool {
+	if !isChatIDMigrationPath(path) {
+		return false
+	}
+	canonical := canonicalChatIDFlag(flagName)
+	if canonical == "" || canonical != flagName {
+		return false
+	}
+	currentCanonical, ok := current[canonical]
+	if !ok || currentCanonical.Hidden {
+		return false
+	}
+	for legacyName := range chatIDFlagAliases(canonical) {
+		historicalFlag, hadHistorical := historical[legacyName]
+		currentFlag, hasCurrent := current[legacyName]
+		if hadHistorical && hasCurrent && currentFlag.Hidden && historicalFlag.Type == currentCanonical.Type {
+			return true
+		}
+	}
+	return false
+}
+
+func isChatIDMigrationPath(path string) bool {
+	return strings.HasPrefix(path, "dws chat ") || strings.HasPrefix(path, "dws im ")
+}
+
+func flagTypeForMigration(flagName string, historical, current map[string]Flag) string {
+	if flag, ok := historical[flagName]; ok {
+		return flag.Type
+	}
+	if flag, ok := current[flagName]; ok {
+		return flag.Type
+	}
+	return ""
+}
+
+func canonicalChatIDFlag(name string) string {
+	switch strings.TrimSpace(name) {
+	case "conversation-id", "group", "id", "chat", "open-conversation-id":
+		return "conversation-id"
+	case "message-id", "msg-id", "open-message-id":
+		return "message-id"
+	case "user-id", "user", "userId":
+		return "user-id"
+	default:
+		return ""
+	}
+}
+
+func chatIDFlagAliases(canonical string) map[string]struct{} {
+	switch canonical {
+	case "conversation-id":
+		return map[string]struct{}{"group": {}, "id": {}, "chat": {}, "open-conversation-id": {}}
+	case "message-id":
+		return map[string]struct{}{"msg-id": {}, "open-message-id": {}}
+	case "user-id":
+		return map[string]struct{}{"user": {}, "userId": {}}
+	default:
+		return nil
 	}
 }
 

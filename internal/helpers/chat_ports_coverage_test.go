@@ -6,7 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -116,6 +120,153 @@ func TestCrossPlatformCoverageChatIDFlagSchemaUsesCanonicalNames(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageChatIDHelperBranches(t *testing.T) {
+	root := &cobra.Command{Use: "root"}
+	root.PersistentFlags().String("group", "", "")
+	_ = root.PersistentFlags().Set("group", " inherited ")
+	child := &cobra.Command{Use: "child"}
+	root.AddCommand(child)
+	if got := chatFlagOrFallback(child, "conversation-id", "group"); got != "inherited" {
+		t.Fatalf("inherited alias value = %q, want inherited", got)
+	}
+	if got := chatFlagOrFallback(child, "conversation-id"); got != "" {
+		t.Fatalf("missing flag value = %q, want empty", got)
+	}
+	inheritedOnly := &cobra.Command{Use: "inherited"}
+	inheritedOnly.InheritedFlags().String("conversation-id", "", "")
+	_ = inheritedOnly.InheritedFlags().Set("conversation-id", " inherited-direct ")
+	if got := chatFlagOrFallback(inheritedOnly, "conversation-id"); got != "inherited-direct" {
+		t.Fatalf("direct inherited flag value = %q, want inherited-direct", got)
+	}
+
+	if err := chatValidateRequiredFlagWithAliases(child, "conversation-id", "group"); err != nil {
+		t.Fatalf("inherited alias should satisfy required group: %v", err)
+	}
+	empty := &cobra.Command{Use: "empty"}
+	if err := chatValidateRequiredFlagWithAliases(empty, "group", "id"); err == nil ||
+		!strings.Contains(err.Error(), "conversation-id") {
+		t.Fatalf("required alias error = %v, want canonical name", err)
+	}
+
+	if got := rewriteChatIDFlagRefs("use --group and --id2 and --msg-id"); got != "use --conversation-id and --id2 and --message-id" {
+		t.Fatalf("rewritten refs = %q", got)
+	}
+	if !isChatFlagRefBoundary("--group", len("--group")) {
+		t.Fatal("end of string should be a flag boundary")
+	}
+
+	merged := mergeChatCanonicalParamDecl(contract.ParamDecl{}, contract.ParamDecl{Property: "openConversationId"})
+	if merged.Property != "openConversationId" {
+		t.Fatalf("merged property = %q, want openConversationId", merged.Property)
+	}
+	canonicalCmd := &cobra.Command{Use: "canonical"}
+	canonicalCmd.Flags().String("conversation-id", "", "")
+	canonicalCmd.Flags().String("other", "", "")
+	_ = canonicalCmd.Flags().MarkHidden("other")
+	if got := chatCanonicalFlagNameForCommand(canonicalCmd, "other"); got != "other" {
+		t.Fatalf("hidden unrelated flag canonical = %q, want other", got)
+	}
+}
+
+func TestCrossPlatformCoverageChatContractAndConstraintRewriteBranches(t *testing.T) {
+	cmd := &cobra.Command{Use: "edit"}
+	cmd.Flags().String("conversation-id", "", "")
+	cmd.Flags().String("id", "", "")
+	_ = cmd.Flags().MarkHidden("id")
+	cmd.Flags().String("chat", "", "")
+	_ = cmd.Flags().MarkHidden("chat")
+
+	required := true
+	contractfinal.RegisterRuntimeContractFinal(cmd, contract.ContractFinalPayload{
+		Selection: &contract.SelectionSpec{Examples: []string{"dws chat edit --group cid"}},
+		Parameters: []contract.ParamDecl{
+			{Name: "", Description: "--group ignored"},
+			{Name: "id", Property: "openConversationId"},
+			{Name: "chat", Required: &required, Description: "--chat value", RequiredWhen: "--group set", Enum: []string{"cid"}},
+		},
+	})
+	rewriteChatContractFlagRefs(cmd)
+	payload, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok {
+		t.Fatal("missing rewritten contract")
+	}
+	if len(payload.Parameters) != 1 || payload.Parameters[0].Name != "conversation-id" ||
+		payload.Parameters[0].Property != "openConversationId" ||
+		payload.Parameters[0].Required == nil || !*payload.Parameters[0].Required ||
+		payload.Parameters[0].Description != "--conversation-id value" ||
+		payload.Parameters[0].RequiredWhen != "--conversation-id set" ||
+		!reflect.DeepEqual(payload.Parameters[0].Enum, []string{"cid"}) {
+		t.Fatalf("rewritten params = %#v", payload.Parameters)
+	}
+	if payload.Selection == nil || payload.Selection.Examples[0] != "dws chat edit --conversation-id cid" {
+		t.Fatalf("rewritten selection = %#v", payload.Selection)
+	}
+
+	runtimeannotate.AnnotateRuntimeConstraints(cmd, runtimeannotate.RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"group", "id", "conversation-id"}},
+	})
+	rewriteChatConstraintFlagRefs(cmd)
+	if got := runtimeannotate.CommandConstraints(cmd).RequireOneOf; !reflect.DeepEqual(got, [][]string{{"conversation-id", "id"}}) {
+		t.Fatalf("rewritten constraints = %#v", got)
+	}
+
+	delete(cmd.Annotations, runtimeannotate.AnnotationConstraints)
+	runtimeannotate.AnnotateRuntimeConstraints(cmd, runtimeannotate.RuntimeSchemaConstraints{
+		RequireTogether: [][]string{{"group", "chat"}},
+	})
+	rewriteChatConstraintFlagRefs(cmd)
+	if _, ok := cmd.Annotations[runtimeannotate.AnnotationConstraints]; ok {
+		t.Fatalf("empty canonical constraints annotation still present: %#v", cmd.Annotations)
+	}
+}
+
+func TestCrossPlatformCoverageChatAliasPreRunBranches(t *testing.T) {
+	cmd := &cobra.Command{Use: "edit"}
+	cmd.Flags().String("conversation-id", "", "")
+	cmd.Flags().String("group", "", "")
+	_ = cmd.Flags().Set("conversation-id", "cid-1")
+	preRunCalled := false
+	cmd.PreRun = func(*cobra.Command, []string) { preRunCalled = true }
+	installChatAliasSync(cmd)
+	cmd.PreRun(cmd, nil)
+	if !preRunCalled {
+		t.Fatal("old PreRun was not called")
+	}
+	if got, _ := cmd.Flags().GetString("group"); got != "cid-1" {
+		t.Fatalf("synced group = %q, want cid-1", got)
+	}
+
+	preRunECalled := false
+	cmdWithE := &cobra.Command{Use: "edit"}
+	cmdWithE.Flags().String("conversation-id", "", "")
+	cmdWithE.Flags().String("group", "", "")
+	_ = cmdWithE.Flags().Set("group", "cid-2")
+	cmdWithE.PreRunE = func(*cobra.Command, []string) error { preRunECalled = true; return nil }
+	installChatAliasSync(cmdWithE)
+	if err := cmdWithE.PreRunE(cmdWithE, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !preRunECalled {
+		t.Fatal("old PreRunE was not called")
+	}
+	if got, _ := cmdWithE.Flags().GetString("conversation-id"); got != "cid-2" {
+		t.Fatalf("synced conversation-id = %q, want cid-2", got)
+	}
+
+	fallbackCalled := false
+	cmdFallback := &cobra.Command{Use: "edit"}
+	cmdFallback.Flags().String("conversation-id", "", "")
+	cmdFallback.Flags().String("group", "", "")
+	cmdFallback.PreRun = func(*cobra.Command, []string) { fallbackCalled = true }
+	installChatAliasSync(cmdFallback)
+	if err := cmdFallback.PreRunE(cmdFallback, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !fallbackCalled {
+		t.Fatal("PreRunE wrapper did not fall back to old PreRun")
 	}
 }
 
