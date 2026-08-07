@@ -18,11 +18,14 @@ import (
 	"context"
 	"encoding/json"
 	stderrors "errors"
+	"math"
 	"os"
 	"testing"
+	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -147,8 +150,9 @@ func (*chatMessagesPagingCaller) Fields() string { return "" }
 func (*chatMessagesPagingCaller) JQ() string     { return "" }
 
 func TestCrossPlatformCoverageChatMessagesPageAllUsesTypedBoundaryAndDeduplicates(t *testing.T) {
+	const cursorMillis int64 = 1767225600123
 	caller := &chatMessagesPagingCaller{responses: []string{
-		`{"result":{"hasMore":true,"messages":[{"openMessageId":"m2","createTime":"2026-01-02 00:00:00"},{"openMessageId":"m1","createTime":"2026-01-01 00:00:00"}]}}`,
+		`{"result":{"hasMore":true,"nextCursor":1767225600123,"messages":[{"openMessageId":"m2","createTime":"2026-01-02 00:00:00"},{"openMessageId":"m1","createTime":"2026-01-01 00:00:00"}]}}`,
 		`{"result":{"hasMore":false,"messages":[{"openMessageId":"m1","createTime":"2026-01-01 00:00:00"},{"openMessageId":"m0","createTime":"2025-12-31 00:00:00"}]}}`,
 	}}
 	helpers.InitDeps(caller)
@@ -162,7 +166,8 @@ func TestCrossPlatformCoverageChatMessagesPageAllUsesTypedBoundaryAndDeduplicate
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(caller.args) != 2 || caller.args[1]["time"] != "2026-01-01 00:00:00" {
+	wantBoundary := time.UnixMilli(cursorMillis).UTC().Format(time.RFC3339Nano)
+	if len(caller.args) != 2 || caller.args[1]["time"] != wantBoundary {
 		t.Fatalf("pagination calls = %#v", caller.args)
 	}
 	var payload map[string]any
@@ -176,9 +181,158 @@ func TestCrossPlatformCoverageChatMessagesPageAllUsesTypedBoundaryAndDeduplicate
 	}
 }
 
-func TestCrossPlatformCoverageChatMessagesPageAllPublishesBoundedContinuation(t *testing.T) {
+func TestCrossPlatformCoverageChatMessagesMillisecondCursorDoesNotSkipSameSecondRows(t *testing.T) {
+	const cursorMillis int64 = 1785919699136
 	caller := &chatMessagesPagingCaller{responses: []string{
-		`{"result":{"hasMore":true,"messages":[{"openMessageId":"m1","createTime":"2026-01-01 00:00:00"}]}}`,
+		`{"result":{"hasMore":true,"nextCursor":1785919699136,"messages":[{"openMessageId":"m4","createTime":"2026-08-05 16:48:19"},{"openMessageId":"m3","createTime":"2026-08-05 16:48:19"},{"openMessageId":"m2","createTime":"2026-08-05 16:48:19"}]}}`,
+		`{"result":{"hasMore":false,"messages":[{"openMessageId":"m1","createTime":"2026-08-05 16:48:19"}]}}`,
+	}}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+chat-messages", "--conversation-id", "cid", "--time", "2026-08-05 16:49:00",
+		"--page-size", "3", "--page-all", "--page-limit", "5",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	wantBoundary := time.UnixMilli(cursorMillis).UTC().Format(time.RFC3339Nano)
+	if len(caller.args) != 2 || caller.args[1]["time"] != wantBoundary {
+		t.Fatalf("pagination calls = %#v", caller.args)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(4) || payload["complete"] != true || payload["pagesFetched"] != float64(2) {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesDescendingRangeStopsAtInclusiveStart(t *testing.T) {
+	const cursorMillis int64 = 1767312000456
+	caller := &chatMessagesPagingCaller{responses: []string{
+		`{"result":{"hasMore":true,"nextCursor":1767312000456,"messages":[{"openMessageId":"m3","createTime":"2026-01-03 00:00:00"},{"openMessageId":"m2","createTime":"2026-01-02 00:00:00"}]}}`,
+		`{"result":{"hasMore":true,"messages":[{"openMessageId":"m1","createTime":"2026-01-01 12:00:00"},{"openMessageId":"m0","createTime":"2026-01-01 11:59:59"}]}}`,
+	}}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+chat-messages", "--conversation-id", "cid",
+		"--start", "2026-01-01 12:00:00", "--end", "2026-01-04 00:00:00",
+		"--order", "desc", "--page-all", "--page-limit", "5",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	wantBoundary := time.UnixMilli(cursorMillis).UTC().Format(time.RFC3339Nano)
+	if len(caller.args) != 2 || caller.args[0]["time"] != "2026-01-04 00:00:00" ||
+		caller.args[0]["forward"] != false || caller.args[1]["time"] != wantBoundary {
+		t.Fatalf("range calls = %#v", caller.args)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["complete"] != true || payload["hasMore"] != false ||
+		payload["count"] != float64(3) || payload["stopReason"] != "range_start" {
+		t.Fatalf("range payload = %#v", payload)
+	}
+	messages := payload["messages"].([]any)
+	if messages[0].(map[string]any)["messageId"] != "m3" ||
+		messages[2].(map[string]any)["messageId"] != "m1" {
+		t.Fatalf("descending messages = %#v", messages)
+	}
+	rangeMeta := payload["queryRange"].(map[string]any)
+	if rangeMeta["semantics"] != "[start,end)" || rangeMeta["order"] != "desc" {
+		t.Fatalf("queryRange = %#v", rangeMeta)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesAscendingRangeStopsAtExclusiveEnd(t *testing.T) {
+	caller := &chatMessagesPagingCaller{responses: []string{
+		`{"result":{"hasMore":true,"messages":[{"openMessageId":"m1","createTime":"2026-01-01 12:00:00"},{"openMessageId":"m2","createTime":"2026-01-02 00:00:00"},{"openMessageId":"m-end","createTime":"2026-01-03 00:00:00"}]}}`,
+	}}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+chat-messages", "--conversation-id", "cid",
+		"--start-time", "2026-01-01 12:00:00", "--end-time", "2026-01-03 00:00:00",
+		"--sort", "asc", "--page-all",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.args) != 1 || caller.args[0]["time"] != "2026-01-01 12:00:00" ||
+		caller.args[0]["forward"] != true {
+		t.Fatalf("ascending call = %#v", caller.args)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["complete"] != true || payload["hasMore"] != false ||
+		payload["count"] != float64(2) || payload["stopReason"] != "range_end" {
+		t.Fatalf("ascending payload = %#v", payload)
+	}
+	messages := payload["messages"].([]any)
+	if messages[0].(map[string]any)["messageId"] != "m1" ||
+		messages[1].(map[string]any)["messageId"] != "m2" {
+		t.Fatalf("ascending messages = %#v", messages)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesFirstReadFailureSkipsOptionalSenderResolution(t *testing.T) {
+	caller := &chatMessagesPagingCaller{
+		responses: []string{`{"result":[]}`},
+		failAt:    1,
+	}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	root.SetOut(&bytes.Buffer{})
+	root.SetArgs([]string{
+		"chat", "+chat-messages", "--conversation-id", "cid", "--page-all",
+		"--sender-query", "张三",
+	})
+	if err := root.Execute(); err == nil {
+		t.Fatal("first-page failure unexpectedly succeeded")
+	}
+	if len(caller.args) != 1 {
+		t.Fatalf("calls after first read failure = %#v, want only the message read", caller.args)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesRangeValidationStopsBeforeRead(t *testing.T) {
+	for _, args := range [][]string{
+		{"--start", "2026-01-02", "--end", "2026-01-01"},
+		{"--end", "2026-01-02", "--order", "asc"},
+		{"--time", "2026-01-02", "--start", "2026-01-01"},
+		{"--direction", "newer", "--start", "2026-01-01"},
+		{"--start", "2026-01-01", "--start-time", "2026-01-01"},
+	} {
+		caller := &chatMessagesPagingCaller{responses: []string{`{"result":{"hasMore":false,"messages":[]}}`}}
+		helpers.InitDeps(caller)
+		root := newPlatformCoverageRoot()
+		root.SetArgs(append([]string{"chat", "+chat-messages", "--conversation-id", "cid"}, args...))
+		if err := root.Execute(); err == nil {
+			t.Errorf("invalid range succeeded: %v", args)
+		}
+		if len(caller.args) != 0 {
+			t.Errorf("invalid range reached message read: %v calls=%#v", args, caller.args)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesPageAllPublishesBoundedContinuation(t *testing.T) {
+	const cursorMillis int64 = 1767225600123
+	caller := &chatMessagesPagingCaller{responses: []string{
+		`{"result":{"hasMore":true,"nextCursor":1767225600123,"messages":[{"openMessageId":"m1","createTime":"2026-01-01 00:00:00"}]}}`,
 	}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
@@ -196,9 +350,10 @@ func TestCrossPlatformCoverageChatMessagesPageAllPublishesBoundedContinuation(t 
 		t.Fatal(err)
 	}
 	next, _ := payload["nextPage"].(map[string]any)
+	wantBoundary := time.UnixMilli(cursorMillis).UTC().Format(time.RFC3339Nano)
 	if payload["complete"] != false || payload["hasMore"] != true ||
 		payload["truncatedByPageLimit"] != true || payload["stopReason"] != "page_limit" ||
-		next["time"] != "2026-01-01 00:00:00" {
+		next["time"] != wantBoundary || next["nextCursor"] != float64(cursorMillis) {
 		t.Fatalf("bounded payload = %#v", payload)
 	}
 }
@@ -233,7 +388,7 @@ func TestCrossPlatformCoverageChatMessagesFailedPageDoesNotExportPartialLedger(t
 	t.Chdir(t.TempDir())
 	caller := &chatMessagesPagingCaller{
 		responses: []string{
-			`{"result":{"hasMore":true,"messages":[{"openMessageId":"m1","createTime":"2026-01-01 00:00:00"}]}}`,
+			`{"result":{"hasMore":true,"nextCursor":1767225600123,"messages":[{"openMessageId":"m1","createTime":"2026-01-01 00:00:00"}]}}`,
 		},
 		failAt: 2,
 	}
@@ -331,4 +486,177 @@ func TestCrossPlatformCoverageChatMessagesExportRejectsNonJSONPlaceholder(t *tes
 	if _, err := os.Lstat("{}"); !os.IsNotExist(err) {
 		t.Fatalf("placeholder output was created: %v", err)
 	}
+}
+
+func chatMessagesRuntimeForTest(t *testing.T, values map[string]string) *shortcut.RuntimeContext {
+	t.Helper()
+	root := newPlatformCoverageRoot()
+	cmd, _, err := root.Find([]string{"chat", "+chat-messages"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range values {
+		if err := cmd.Flags().Set(name, value); err != nil {
+			t.Fatalf("set --%s=%q: %v", name, value, err)
+		}
+	}
+	return shortcut.RuntimeContextForTest(cmd, ChatMessages)
+}
+
+func TestCrossPlatformCoverageChatMessagesAdditionalValidationAndHelpers(t *testing.T) {
+	for _, values := range []map[string]string{
+		{"time": "2026-01-01", "start": "2026-01-01"},
+		{"direction": "older", "start": "2026-01-01"},
+	} {
+		if err := validateChatMessages(chatMessagesRuntimeForTest(t, values)); err == nil {
+			t.Fatalf("direct validation unexpectedly accepted %#v", values)
+		}
+	}
+	if _, err := resolveChatMessagesRequest(chatMessagesRuntimeForTest(t, map[string]string{
+		"conversation-id": "cid", "start": "not-a-time",
+	})); err == nil {
+		t.Fatal("invalid direct request range unexpectedly succeeded")
+	}
+
+	helpers.InitDeps(&platformCoverageCaller{
+		contactSearchResult: `{"result":[{"name":"测试用户甲"}]}`,
+	})
+	filter := resolveOptionalChatMessagesSenderFilter(chatMessagesRuntimeForTest(t, map[string]string{
+		"sender-query": "测试用户甲",
+	}))
+	if filter.applied || filter.failure == nil {
+		t.Fatalf("identity-free sender resolution = %#v", filter)
+	}
+
+	for _, tc := range []struct {
+		name      string
+		value     any
+		wantError bool
+	}{
+		{name: "int", value: int(1234)},
+		{name: "int32", value: int32(1234)},
+		{name: "int64", value: int64(1234)},
+		{name: "float32", value: float32(1024)},
+		{name: "float64", value: float64(1234)},
+		{name: "string", value: "1234"},
+		{name: "float32 nan", value: float32(math.NaN()), wantError: true},
+		{name: "float32 infinity", value: float32(math.Inf(1)), wantError: true},
+		{name: "float64 fractional", value: 1.5, wantError: true},
+		{name: "bad string", value: "opaque", wantError: true},
+		{name: "missing", value: nil, wantError: true},
+		{name: "zero", value: 0, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := chatMessagesNextCursorBoundary(tc.value)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("value=%#v err=%v wantError=%v", tc.value, err, tc.wantError)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesAdditionalCollectionEdges(t *testing.T) {
+	runtimeWith := func(t *testing.T, caller *chatMessagesPagingCaller, values map[string]string) *shortcut.RuntimeContext {
+		t.Helper()
+		helpers.InitDeps(caller)
+		return chatMessagesRuntimeForTest(t, values)
+	}
+	start := time.Date(2026, 1, 2, 0, 0, 0, 0, dingTalkMessageLocation)
+	configuredRange := chatMessageTimeRange{configured: true, start: &start, order: "desc"}
+
+	t.Run("single-page range failures and terminal", func(t *testing.T) {
+		caller := &chatMessagesPagingCaller{responses: []string{
+			`{"result":{"hasMore":true,"nextCursor":1234,"messages":[{"openMessageId":"bad","createTime":"invalid"}]}}`,
+		}}
+		payload, _, err := collectOneChatMessagesPage(
+			runtimeWith(t, caller, nil),
+			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older", timeRange: configuredRange},
+		)
+		if err != nil || payload["stopReason"] != "time_filter_error" || payload["queryRange"] == nil {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+
+		caller = &chatMessagesPagingCaller{responses: []string{
+			`{"result":{"hasMore":true,"nextCursor":1234,"messages":[{"openMessageId":"old","createTime":"2026-01-01 00:00:00"}]}}`,
+		}}
+		payload, _, err = collectOneChatMessagesPage(
+			runtimeWith(t, caller, nil),
+			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older", timeRange: configuredRange},
+		)
+		if err != nil || payload["complete"] != true || payload["stopReason"] != "range_start" {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+	})
+
+	t.Run("default page size and time-filter failure", func(t *testing.T) {
+		caller := &chatMessagesPagingCaller{responses: []string{
+			`{"result":{"hasMore":false,"messages":[]}}`,
+		}}
+		payload, _, err := collectAllChatMessages(
+			runtimeWith(t, caller, nil),
+			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older"},
+		)
+		if err != nil || payload["complete"] != true || caller.args[0]["limit"] != chatMessagesAllPageSize {
+			t.Fatalf("payload=%#v calls=%#v err=%v", payload, caller.args, err)
+		}
+
+		caller = &chatMessagesPagingCaller{responses: []string{
+			`{"result":{"hasMore":false,"messages":[{"openMessageId":"bad","createTime":"invalid"}]}}`,
+		}}
+		payload, _, err = collectAllChatMessages(
+			runtimeWith(t, caller, nil),
+			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older", timeRange: configuredRange},
+		)
+		if err == nil || payload["stopReason"] != "time_filter_error" {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+	})
+
+	t.Run("terminal result limit and unsafe continuation", func(t *testing.T) {
+		caller := &chatMessagesPagingCaller{responses: []string{
+			`{"result":{"hasMore":true,"messages":[{"openMessageId":"m2","createTime":"2026-01-03 00:00:00"},{"openMessageId":"m1","createTime":"2026-01-02 00:00:00"},{"openMessageId":"old","createTime":"2026-01-01 00:00:00"}]}}`,
+		}}
+		payload, _, err := collectAllChatMessages(
+			runtimeWith(t, caller, map[string]string{"max-results": "1"}),
+			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older", timeRange: configuredRange},
+		)
+		if err != nil || payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+
+		caller = &chatMessagesPagingCaller{responses: []string{
+			`{"result":{"hasMore":true,"messages":[{"openMessageId":"m1","createTime":"2026-01-03 00:00:00"}]}}`,
+		}}
+		payload, _, err = collectAllChatMessages(
+			runtimeWith(t, caller, map[string]string{"max-results": "1"}),
+			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older"},
+		)
+		if err == nil || payload["stopReason"] != "pagination_error" {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+	})
+
+	t.Run("stalled cursor", func(t *testing.T) {
+		caller := &chatMessagesPagingCaller{responses: []string{
+			`{"result":{"hasMore":true,"nextCursor":1234,"messages":[{"openMessageId":"m2"}]}}`,
+			`{"result":{"hasMore":true,"nextCursor":1234,"messages":[{"openMessageId":"m1"}]}}`,
+		}}
+		payload, _, err := collectAllChatMessages(
+			runtimeWith(t, caller, nil),
+			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older"},
+		)
+		if err == nil || payload["stopReason"] != "pagination_error" || len(caller.args) != 2 {
+			t.Fatalf("payload=%#v calls=%#v err=%v", payload, caller.args, err)
+		}
+	})
+
+	t.Run("first failure ledger output error", func(t *testing.T) {
+		helpers.InitDeps(&chatMessagesPagingCaller{failAt: 1})
+		root := newPlatformCoverageRoot()
+		root.SetOut(chatMessagesFailWriter{})
+		root.SetArgs([]string{"chat", "+chat-messages", "--conversation-id", "cid", "--page-all"})
+		if err := root.Execute(); err == nil || err.Error() != "fixture output failure" {
+			t.Fatalf("error=%v", err)
+		}
+	})
 }

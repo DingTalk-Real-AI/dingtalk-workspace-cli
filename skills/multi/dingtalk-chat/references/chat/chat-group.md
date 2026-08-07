@@ -25,7 +25,7 @@
 
 | 命令 | 用途 | 示例与要点 |
 |------|------|------------|
-| `+chat-search` | 按关键词搜索群聊 | `dws chat +chat-search --query "项目冲刺" --limit 20 --cursor 0`；多候选必须消歧 |
+| `+chat-search` | 按关键词搜索群聊 | 默认一页；要求全部候选时用 `dws chat +chat-search --query "项目冲刺" --page-all`；可用 `--page-size/--page-token` 或兼容的 `--limit/--cursor`，并检查完整性 ledger；多候选必须消歧 |
 | `chat search-common` | 搜索共同群 | `dws chat search-common --nicks "风雷,山乔" --match-mode AND --limit 20 --cursor 0` |
 | `chat group get-by-group-id` | 数字群号转 openConversationId | `dws chat group get-by-group-id --group-id 12345678` |
 | `+chat-bots` | 查看群内所有机器人 | `dws chat +chat-bots --group <群名或openConversationId>`；内部唯一解析自然群名 |

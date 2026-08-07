@@ -29,6 +29,7 @@ const (
 
 const (
 	chatResolutionPageSize       = 10
+	chatResolutionMaxWindowSize  = 100
 	chatResolutionPageLimit      = 40
 	userSearchDefaultResultLimit = 20
 )
@@ -192,13 +193,15 @@ func ResolveChat(rt Reader, query string) (ChatResolution, error) {
 		)
 	}
 	cursor := "0"
+	requestPageSize := chatResolutionPageSize
+	maxWindowProbeUsed := false
 	seenCursors := map[string]bool{cursor: true}
 	chats := make([]Chat, 0)
 	complete := false
 	for pageNumber := 1; pageNumber <= chatResolutionPageLimit; pageNumber++ {
 		data, err := rt.CallMCPData("im", "search_groups", map[string]any{
 			"keyword": query,
-			"limit":   chatResolutionPageSize,
+			"limit":   requestPageSize,
 			"cursor":  cursor,
 		})
 		if err != nil {
@@ -209,12 +212,25 @@ func ResolveChat(rt Reader, query string) (ChatResolution, error) {
 		page := extractChatPagination(data)
 		switch {
 		case page.hasMoreKnown && !page.hasMore:
+			if len(rows) >= requestPageSize && page.nextCursor == "" &&
+				(pageNumber == 1 || (maxWindowProbeUsed && pageNumber == 2)) {
+				if cursor == "0" && !maxWindowProbeUsed && requestPageSize < chatResolutionMaxWindowSize && pageNumber < chatResolutionPageLimit {
+					requestPageSize = chatResolutionMaxWindowSize
+					maxWindowProbeUsed = true
+					continue
+				}
+				return ChatResolution{}, newIncompleteChatResolutionError(
+					query,
+					dedupeChats(chats),
+					"群搜索返回满页并声明 hasMore=false，但没有可用 nextCursor，无法证明候选完整",
+				)
+			}
 			complete = true
 		case page.hasMoreKnown && page.hasMore:
 			// A usable cursor is required below.
 		case page.nextCursor != "":
 			// Some versions omit hasMore but still publish a continuation cursor.
-		case len(rows) < chatResolutionPageSize:
+		case len(rows) < requestPageSize:
 			// Compatibility for older responses that return a short bare array
 			// without pagination metadata.
 			complete = true

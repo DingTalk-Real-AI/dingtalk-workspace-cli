@@ -14,14 +14,21 @@
 package smart
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
+)
+
+const (
+	myGroupsDefaultPageLimit = 50
+	myGroupsHardPageLimit    = 500
 )
 
 // MyGroups: list the groups I've joined and project just the key fields
@@ -79,48 +86,204 @@ var MyGroups = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "type", Type: shortcut.FlagString, Desc: "按群类型过滤（可选，如返回中的 groupType/conversationType，大小写不敏感）", Required: false},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量（默认 200）", Default: "200"},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量（默认 200）；--limit 必须在 1-200 之间", Default: "200"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传上次的 nextCursor"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 nextCursor 自动读取全部已加入群；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-200 之间"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 	},
 	Tips: []string{
 		`dws chat +my-groups`,
 		`dws chat +my-groups --type group`,
+		`dws chat +my-groups --page-all --page-limit 50`,
 	},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		// Step 1 — list my groups. `limit` mirrors chat.go's list_my_groups_pagination
-		// call site (chat group list-all); pass a generous page size.
-		params := map[string]any{"limit": rt.Int("limit")}
-		if cursor := strings.TrimSpace(rt.Str("cursor")); cursor != "" && cursor != "0" {
-			params["cursor"] = cursor
+	Validate: validateMyGroups,
+	Execute:  executeMyGroups,
+}
+
+func validateMyGroups(rt *shortcut.RuntimeContext) error {
+	if limit := rt.Int("limit"); limit < 1 || limit > 200 {
+		return apperrors.NewValidation("--limit 必须在 1-200 之间")
+	}
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if rt.Bool("page-all") {
+		if limit := rt.Int("page-limit"); limit < 1 || limit > myGroupsHardPageLimit {
+			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
+		}
+	}
+	return nil
+}
+
+func executeMyGroups(rt *shortcut.RuntimeContext) error {
+	// Step 1 — list my groups. `limit` mirrors chat.go's list_my_groups_pagination
+	// call site (chat group list-all); pass a generous page size.
+	params := map[string]any{"limit": rt.Int("limit")}
+	if cursor := strings.TrimSpace(rt.Str("cursor")); cursor != "" && cursor != "0" {
+		params["cursor"] = cursor
+	}
+	if rt.Bool("page-all") {
+		payload, err := readAllMyGroups(rt, params)
+		if outputErr := rt.Output(payload); outputErr != nil {
+			return outputErr
+		}
+		return err
+	}
+	data, err := rt.CallMCPData("im", "list_my_groups_pagination", params)
+	if err != nil {
+		return err
+	}
+	payload := myGroupsPayload(rt, myGroupsExtract(data))
+	chatmsg.ApplyPagination(payload, data)
+	payload["pagesFetched"] = 1
+	if payload["complete"] == true {
+		payload["stopReason"] = "source_complete"
+	} else {
+		payload["stopReason"] = "single_page"
+	}
+	return rt.Output(payload)
+}
+
+func myGroupsPayload(rt *shortcut.RuntimeContext, groups []map[string]any) map[string]any {
+	typeFilter := strings.TrimSpace(rt.Str("type"))
+	projected := make([]map[string]any, 0, len(groups))
+	for _, group := range groups {
+		row := myGroupsProject(group)
+		if typeFilter != "" {
+			groupType, _ := row["type"].(string)
+			if !strings.EqualFold(strings.TrimSpace(groupType), typeFilter) {
+				continue
+			}
+		}
+		projected = append(projected, row)
+	}
+	return map[string]any{"count": len(projected), "groups": projected}
+}
+
+func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (map[string]any, error) {
+	pageLimit := defaultChatPageLimit(rt.Int("page-limit"), myGroupsDefaultPageLimit)
+	cursorValue := baseParams["cursor"]
+	cursorKey := myGroupsCursorString(cursorValue)
+	if cursorKey == "" {
+		cursorKey = "0"
+	}
+	seenCursors := map[string]bool{cursorKey: true}
+	seenGroups := map[string]bool{}
+	allGroups := make([]map[string]any, 0)
+	failures := make([]map[string]any, 0)
+	pagesFetched := 0
+	complete := false
+	hasMore := false
+	stopReason := "source_complete"
+	truncatedByPageLimit := false
+	var nextCursor any
+
+	for pagesFetched < pageLimit {
+		params := map[string]any{"limit": baseParams["limit"]}
+		if cursorKey != "0" {
+			params["cursor"] = cursorValue
 		}
 		data, err := rt.CallMCPData("im", "list_my_groups_pagination", params)
 		if err != nil {
-			return err
-		}
-
-		// Step 2 — project key fields defensively.
-		groups := myGroupsExtract(data)
-		typeFilter := strings.TrimSpace(rt.Str("type"))
-
-		projected := make([]map[string]any, 0, len(groups))
-		for _, g := range groups {
-			row := myGroupsProject(g)
-			if typeFilter != "" {
-				gt, _ := row["type"].(string)
-				if !strings.EqualFold(strings.TrimSpace(gt), typeFilter) {
-					continue
-				}
+			if pagesFetched == 0 {
+				return nil, err
 			}
-			projected = append(projected, row)
+			failures = append(failures, map[string]any{
+				"page": pagesFetched + 1, "stage": "read", "cursor": cursorKey, "error": err.Error(),
+			})
+			stopReason = "read_failure"
+			break
+		}
+		pagesFetched++
+		pageGroups := myGroupsExtract(data)
+		for _, group := range pageGroups {
+			id := myGroupsStr(group, "openConversationId", "openConversationID", "conversationId", "openCid", "cid", "id")
+			if id != "" && seenGroups[id] {
+				continue
+			}
+			if id != "" {
+				seenGroups[id] = true
+			}
+			allGroups = append(allGroups, group)
 		}
 
-		payload := map[string]any{
-			"count":  len(projected),
-			"groups": projected,
+		page := chatmsg.Pagination(data)
+		pageHasMore, known := page["hasMore"].(bool)
+		if !known {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "我的群列表下层未返回可靠的 hasMore，无法证明结果完整",
+			})
+			stopReason = "pagination_error"
+			break
 		}
-		chatmsg.ApplyPagination(payload, data)
-		return rt.Output(payload)
-	},
+		hasMore = pageHasMore
+		if !hasMore {
+			complete = true
+			nextCursor = nil
+			stopReason = "source_complete"
+			break
+		}
+		nextCursor = page["nextCursor"]
+		nextKey := myGroupsCursorString(nextCursor)
+		if nextKey == "" || seenCursors[nextKey] {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "我的群列表下层返回 hasMore=true，但 nextCursor 缺失、无效或未前进",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		seenCursors[nextKey] = true
+		cursorKey = nextKey
+		cursorValue = nextCursor
+	}
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+		truncatedByPageLimit = true
+		stopReason = "page_limit"
+	}
+
+	payload := myGroupsPayload(rt, allGroups)
+	payload["pagesFetched"] = pagesFetched
+	payload["paginationKnown"] = true
+	payload["complete"] = complete && len(failures) == 0
+	payload["hasMore"] = hasMore
+	payload["stopReason"] = stopReason
+	payload["truncatedByPageLimit"] = truncatedByPageLimit
+	payload["failedCount"] = len(failures)
+	payload["failures"] = failures
+	payload["partial"] = len(failures) > 0 && len(allGroups) > 0
+	if hasMore && nextCursor != nil {
+		payload["nextCursor"] = nextCursor
+	}
+	if len(failures) == 0 {
+		return payload, nil
+	}
+	return payload, apperrors.NewAPI(
+		fmt.Sprintf("我的群列表分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+		apperrors.WithOperation("im/list_my_groups_pagination"),
+		apperrors.WithReason("my_groups_incomplete"),
+		apperrors.WithOrigin("mcp_gateway"),
+		apperrors.WithFailureStage("pagination"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(true),
+		apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
+	)
+}
+
+func myGroupsCursorString(value any) string {
+	if value == nil {
+		return ""
+	}
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" || text == "0" {
+		return ""
+	}
+	return text
 }
 
 // myGroupsExtract walks a list_my_groups_pagination response and returns its

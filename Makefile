@@ -89,6 +89,7 @@ policy: test-auth-legacy-compat
 	@$(POLICY_ENV) ./scripts/policy/check-open-source-assets.sh
 	@$(POLICY_ENV) ./scripts/policy/check-skill-context-budget.sh
 	@$(POLICY_ENV) ./scripts/policy/check-multi-im-skill-chain.sh
+	@python3 scripts/run_chat_shortcut_live_audit_test.py
 	@$(POLICY_ENV) ./scripts/policy/check-command-surface.sh --strict
 	@$(POLICY_ENV) ./scripts/policy/check-generated-drift.sh
 	@$(POLICY_ENV) ./scripts/policy/check-param-concepts.sh

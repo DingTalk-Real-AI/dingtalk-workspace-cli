@@ -37,11 +37,13 @@ type platformCoverageCall struct {
 }
 
 type platformCoverageCaller struct {
-	calls               []platformCoverageCall
-	dry                 bool
-	contactSearchResult string
-	aisearchResult      string
-	failTool            string
+	calls                []platformCoverageCall
+	dry                  bool
+	contactSearchResult  string
+	aisearchResult       string
+	chatMessagesResult   string
+	searchMessagesResult string
+	failTool             string
 }
 
 func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
@@ -65,6 +67,14 @@ func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool strin
 		text = `{"result":{"userId":"u1"}}`
 	case "im/search_groups":
 		text = `{"result":[{"openConversationId":"cid-1","title":"项目冲刺"}]}`
+	case "chat/list_conversation_message_v2":
+		if f.chatMessagesResult != "" {
+			text = f.chatMessagesResult
+		}
+	case "im/search_messages":
+		if f.searchMessagesResult != "" {
+			text = f.searchMessagesResult
+		}
 	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
@@ -153,6 +163,8 @@ func TestCrossPlatformCoverageIMObservedCompatibilityAliasesConflictWithCanonica
 	for _, args := range [][]string{
 		{"chat", "+chat-messages", "--limit", "5", "--page-size", "5", "--conversation-id", "cid"},
 		{"chat", "+search-msg", "--query", "评测", "--text", "评测", "--no-enrich"},
+		{"chat", "+search-msg", "--query", "评测", "--start", "2026-01-01T00:00:00+08:00", "--start-time", "2026-01-01T00:00:00+08:00", "--end", "2026-01-02T00:00:00+08:00", "--no-enrich"},
+		{"chat", "+search-msg", "--query", "评测", "--order", "asc", "--sort", "asc", "--no-enrich"},
 	} {
 		fake := &platformCoverageCaller{}
 		helpers.InitDeps(fake)
@@ -296,7 +308,7 @@ func TestCrossPlatformCoverageBroadcastUsesEnterpriseAliasAndUserIDFallback(t *t
 		dry: true,
 		aisearchResult: `{"result":[{
 			"userId":"user-alias",
-			"meta":{"name":"柏荣","nick":"大柚"}
+			"meta":{"name":"测试用户甲","nick":"测试花名甲"}
 		}]}`,
 	}
 	helpers.InitDeps(fake)

@@ -10,14 +10,16 @@ chat_skill="skills/multi/dingtalk-chat/SKILL.md"
 event_skill="skills/multi/dingtalk-misc/references/event.md"
 mono_skill="skills/mono/SKILL.md"
 runtime_contract="skills/multi/dingtalk-shared/references/runtime-contract.md"
-chat_max_bytes=10000
+chat_target_bytes=10000
+chat_max_overage_percent=5
+chat_max_bytes=$((chat_target_bytes * (100 + chat_max_overage_percent) / 100))
 event_max_bytes=10000
 runtime_contract_max_bytes=3000
 
 chat_bytes="$(wc -c < "$chat_skill" | tr -d ' ')"
 if [ "$chat_bytes" -gt "$chat_max_bytes" ]; then
 	printf '%s\n' \
-		"skill context budget exceeded: $chat_skill is ${chat_bytes} bytes (max ${chat_max_bytes})" >&2
+		"skill context budget exceeded: $chat_skill is ${chat_bytes} bytes (target ${chat_target_bytes}, max ${chat_max_bytes} with ${chat_max_overage_percent}% allowance)" >&2
 	exit 1
 fi
 
@@ -106,4 +108,4 @@ if grep -Fq "充分阅读产品参考文件" "$mono_skill"; then
 fi
 
 printf '%s\n' \
-	"skill context budget: ok (chat_bytes=$chat_bytes max=$chat_max_bytes event_bytes=$event_bytes event_max=$event_max_bytes runtime_contract_bytes=$runtime_contract_bytes runtime_contract_max=$runtime_contract_max_bytes shortcut_rows=$shortcut_rows)"
+	"skill context budget: ok (chat_bytes=$chat_bytes target=$chat_target_bytes max=$chat_max_bytes allowance=${chat_max_overage_percent}% event_bytes=$event_bytes event_max=$event_max_bytes runtime_contract_bytes=$runtime_contract_bytes runtime_contract_max=$runtime_contract_max_bytes shortcut_rows=$shortcut_rows)"

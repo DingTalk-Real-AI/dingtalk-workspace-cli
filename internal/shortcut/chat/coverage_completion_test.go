@@ -316,7 +316,7 @@ func TestCrossPlatformCoverageFlagAndMgetValidation(t *testing.T) {
 	cases := [][]string{
 		{"chat", "+flag-create", "--message-ids", strings.Join(tooMany, ","), "--conversation-id", "cid", "--yes"},
 		{"chat", "+flag-list", "--cursor", "-1"},
-		{"chat", "+flag-list", "--size", "101"},
+		{"chat", "+flag-list", "--size", "31"},
 		{"chat", "+messages-mget", "--msg-ids", strings.Join(makeIDs(51), ",")},
 		{"chat", "+messages-mget", "--msg-ids", "msg", "--download-resources", "--output-dir", "../escape"},
 	}

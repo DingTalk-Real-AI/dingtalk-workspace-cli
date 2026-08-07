@@ -8,10 +8,12 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Changed
 
+- **IM natural-target and history alignment** — Chat shortcuts can resolve natural user/group targets before execution, and message-history workflows expose bounded time ranges, ordering, explicit all-page controls, continuation ledgers, safe local export, and thread-reply pagination without treating empty or incomplete reads as successful results. Bundled mono/multi Skills and intent routing now describe the same executable surface.
 - **Sheet CSV formula writes** — `dws sheet csv-put` and batch `csv-put` now expose the service contract that CSV fields beginning with `=` are written as formulas. Prefix the field with an apostrophe to write literal text beginning with `=`; CSV content continues to pass through unchanged.
 
 ### Fixed
 
+- **Fail-closed IM pagination and audit evidence** — `+chat-messages`, `+search-msg`, `+thread-replies`, `+at-me`, `+my-groups`, conversation lists, and favorites preserve partial-read failures, reject missing or stalled continuation state, deduplicate page boundaries, and publish completion evidence. The live-audit regression suite now rejects empty projections and incomplete reads instead of promoting them to passing results.
 - **Sheet formula verification** (#873) — `dws sheet formula-verify` now calls
   the registered remote tool name `verify_formula`; the previous
   `formula_verify` name failed at gateway dispatch.
@@ -149,6 +151,7 @@ and compatibility and CI reliability fixes.
 
 ### Fixed
 
+- **Fail-closed IM pagination and audit evidence** — `+chat-messages`, `+search-msg`, `+thread-replies`, `+at-me`, `+my-groups`, conversation lists, and favorites preserve partial-read failures, reject missing or stalled continuation state, deduplicate page boundaries, and publish completion evidence. The live-audit regression suite now rejects empty projections and incomplete reads instead of promoting them to passing results.
 - **Unified command safety and Shortcut runtime (H0)** — Shortcut leaves now execute through `corecmd.New`, sharing the same typed Safety confirmation gate as Leaf commands. EOF / closed stdin returns `confirmation_required`, and interactive `no` returns the existing non-zero cancellation validation error instead of reporting success for an operation that did not run. Pass `--yes` or `--dry-run` to skip the prompt.
 - **Constraint "provided" for `at_least_one` / `exactly_one` (H0)** — a flag set to an empty string (`--flag ""`) no longer counts as provided; previously bare Cobra `Changed` satisfied the constraint. Pass a non-blank value for a member of the group.
 - **Chat media download JSON compatibility** — `dws chat message download-media --format json` once again returns a clean `{success, downloadUrl, output}` result after the file is saved, preserving the temporary URL and resolved local path without progress text corrupting JSON stdout.

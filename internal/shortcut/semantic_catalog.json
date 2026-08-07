@@ -698,7 +698,7 @@
     },
     "+thread-replies": {
       "disposition": "primary_smart",
-      "semantic_delta": "接受消息列表直接返回的 threadId（兼容 topicId），拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文和时间边界分页；可选对回复资源去重后安全落盘并返回逐项失败 ledger。",
+      "semantic_delta": "接受话题主消息 ID 并通过只读消息详情自动解析 conversation/thread，也接受显式 group + threadId（兼容 topicId）；拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文，使用下层毫秒级 nextCursor 安全分页以避免同秒回复漏读，并支持全量结果 asc/desc；可选对回复资源去重后安全落盘并返回逐项失败 ledger。",
       "risk": "read",
       "public": true,
       "reviewed": true

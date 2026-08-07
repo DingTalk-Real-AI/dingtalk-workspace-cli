@@ -6,7 +6,6 @@ package smart
 
 import (
 	"strings"
-	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
@@ -19,13 +18,8 @@ func defaultChatPageLimit(value, fallback int) int {
 }
 
 func validChatTime(value string) bool {
-	value = strings.TrimSpace(value)
-	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02"} {
-		if _, err := time.Parse(layout, value); err == nil {
-			return true
-		}
-	}
-	return false
+	_, err := parseDingTalkMessageTime(strings.TrimSpace(value))
+	return err == nil
 }
 
 func localChatOptionError(reason, message string, flags ...string) error {

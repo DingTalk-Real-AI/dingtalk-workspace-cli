@@ -6,6 +6,8 @@ package chat
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -213,6 +215,19 @@ func TestCrossPlatformCoverageChatListProjectionHelpers(t *testing.T) {
 	if _, err := normalizeChatListTypes([]string{"bad"}); err == nil {
 		t.Fatal("invalid type accepted")
 	}
+	var tuple map[string]any
+	if err := json.Unmarshal([]byte(`{"result":[[{"openConversationId":"tuple"}],2,true]}`), &tuple); err != nil {
+		t.Fatal(err)
+	}
+	page, err := chatListPagination(tuple)
+	if err != nil || page["nextCursor"] != float64(2) || page["hasMore"] != true || len(chatListProject(tuple)) != 1 {
+		t.Fatalf("tuple normalization rows=%#v page=%#v err=%v", chatListProject(tuple), page, err)
+	}
+	ordinary := map[string]any{"result": []any{map[string]any{"openConversationId": "ordinary"}}}
+	page, err = chatListPagination(ordinary)
+	if err != nil || page != nil || len(chatListProject(ordinary)) != 1 {
+		t.Fatalf("ordinary list rows=%#v page=%#v err=%v", chatListProject(ordinary), page, err)
+	}
 }
 
 func TestCrossPlatformCoverageChatListExecuteAndHelperEdges(t *testing.T) {
@@ -315,5 +330,312 @@ func TestCrossPlatformCoverageChatListCursorAndPageSizeDirect(t *testing.T) {
 	}
 	if err := executeChatList(shortcut.RuntimeContextForTest(cursorCmd, ChatList)); err == nil {
 		t.Fatal("expected executeChatList cursor error")
+	}
+}
+
+func TestCrossPlatformCoverageChatListPageAllMergesBeforeTypeFilter(t *testing.T) {
+	fake := &larkAlignmentCaller{sequenceResponses: map[string][]string{
+		"im/list_all_conversations": {
+			`{"result":{"conversations":[{"openConversationId":"direct-1","title":"单聊","singleChat":true}],"hasMore":true,"nextCursor":2}}`,
+			`{"result":{"conversations":[{"openConversationId":"direct-1","title":"重复单聊","singleChat":true},{"openConversationId":"group-1","title":"项目群","singleChat":false}],"hasMore":false}}`,
+		},
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+chat-list", "--types", "group", "--page-size", "1", "--page-all", "--page-limit", "5"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 2 || fake.calls[1].args["cursor"] != 2 {
+		t.Fatalf("calls = %#v", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["pagesFetched"] != float64(2) || payload["complete"] != true || payload["hasMore"] != false {
+		t.Fatalf("payload = %#v", payload)
+	}
+	chat := payload["chats"].([]any)[0].(map[string]any)
+	if chat["openConversationId"] != "group-1" || chat["conversationType"] != "group" {
+		t.Fatalf("chat = %#v", chat)
+	}
+}
+
+func TestCrossPlatformCoverageChatListProbesMaximumWindowWhenBackendFalselyEndsFullFirstPage(t *testing.T) {
+	fake := &larkAlignmentCaller{sequenceResponses: map[string][]string{
+		"im/list_all_conversations": {
+			`{"result":{"conversations":[{"openConversationId":"group-1","title":"项目一群","singleChat":false}],"hasMore":false}}`,
+			`{"result":{"conversations":[{"openConversationId":"group-1","title":"项目一群","singleChat":false},{"openConversationId":"group-2","title":"项目二群","singleChat":false}],"hasMore":false}}`,
+		},
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+chat-list", "--page-size", "1", "--page-all", "--page-limit", "5"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 2 || fake.calls[0].args["limit"] != 1 || fake.calls[1].args["limit"] != 100 {
+		t.Fatalf("calls = %#v", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(2) || payload["complete"] != true || payload["paginationKnown"] != false ||
+		payload["completionEvidence"] != "max_window_short_page" || payload["stopReason"] != "max_window_short_page" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatListPageLimitPublishesContinuation(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_all_conversations": `{"result":{"conversations":[{"openConversationId":"group-1","title":"项目群","singleChat":false}],"hasMore":true,"nextCursor":9}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+chat-list", "--page-all", "--page-limit", "1"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["complete"] != false || payload["hasMore"] != true || payload["nextCursor"] != float64(9) ||
+		payload["truncatedByPageLimit"] != true || payload["stopReason"] != "page_limit" || payload["failedCount"] != float64(0) {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatListLaterPageFailureKeepsPartialLedger(t *testing.T) {
+	fake := &larkAlignmentCaller{
+		sequenceResponses: map[string][]string{
+			"im/list_all_conversations": {`{"result":{"conversations":[{"openConversationId":"group-1","title":"项目群","singleChat":false}],"hasMore":true,"nextCursor":2}}`},
+		},
+		failProductToolAt: map[string]int{"im/list_all_conversations": 2},
+	}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+chat-list", "--page-all"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected later-page error")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["complete"] != false || payload["partial"] != true ||
+		payload["failedCount"] != float64(1) || payload["stopReason"] != "read_failure" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatListPaginationValidation(t *testing.T) {
+	for _, args := range [][]string{
+		{"--page-limit", "2"},
+		{"--page-all", "--page-limit", "0"},
+		{"--page-all", "--page-limit", "501"},
+	} {
+		helpers.InitDeps(&larkAlignmentCaller{})
+		root := newPlatformCoverageRoot()
+		root.SetArgs(append([]string{"chat", "+chat-list"}, args...))
+		if err := root.Execute(); err == nil {
+			t.Fatalf("invalid args succeeded: %v", args)
+		}
+	}
+
+	if _, err := chatListNextCursor(float64(1.5)); err == nil {
+		t.Fatal("fractional cursor unexpectedly accepted")
+	}
+	if _, err := chatListNextCursor(struct{}{}); err == nil {
+		t.Fatal("unsupported cursor unexpectedly accepted")
+	}
+}
+
+func TestCrossPlatformCoverageChatListAdditionalPaginationEdges(t *testing.T) {
+	run := func(t *testing.T, fake *larkAlignmentCaller, args ...string) (map[string]any, error) {
+		t.Helper()
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs(append([]string{"chat", "+chat-list"}, args...))
+		err := root.Execute()
+		if output.Len() == 0 {
+			return nil, err
+		}
+		var payload map[string]any
+		if decodeErr := json.Unmarshal(output.Bytes(), &payload); decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		return payload, err
+	}
+
+	t.Run("first read failure", func(t *testing.T) {
+		_, err := run(t, &larkAlignmentCaller{failProductToolAt: map[string]int{"im/list_all_conversations": 1}})
+		if err == nil {
+			t.Fatal("first read failure unexpectedly succeeded")
+		}
+	})
+
+	t.Run("cursor without hasMore continues", func(t *testing.T) {
+		payload, err := run(t, &larkAlignmentCaller{sequenceResponses: map[string][]string{
+			"im/list_all_conversations": {
+				`{"result":{"conversations":[{"openConversationId":"g1"}],"nextCursor":2}}`,
+				`{"result":{"conversations":[],"hasMore":false}}`,
+			},
+		}}, "--page-all")
+		if err != nil || payload["complete"] != true || payload["pagesFetched"] != float64(2) {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+	})
+
+	t.Run("gateway tuple preserves continuation metadata", func(t *testing.T) {
+		fake := &larkAlignmentCaller{sequenceResponses: map[string][]string{
+			"im/list_all_conversations": {
+				`{"result":[[{"openConversationId":"g1","singleChat":false}],2,true]}`,
+				`{"result":[[{"openConversationId":"g2","singleChat":false}],0,false]}`,
+			},
+		}}
+		payload, err := run(t, fake, "--page-size", "1", "--page-all")
+		if err != nil {
+			t.Fatalf("tuple pagination payload=%#v calls=%#v err=%v", payload, fake.calls, err)
+		}
+		if len(fake.calls) != 2 || fake.calls[1].args["cursor"] != 2 {
+			t.Fatalf("tuple pagination calls = %#v", fake.calls)
+		}
+		if payload["count"] != float64(2) || payload["pagesFetched"] != float64(2) ||
+			payload["complete"] != true || payload["hasMore"] != false || payload["stopReason"] != "source_complete" {
+			t.Fatalf("tuple pagination payload = %#v", payload)
+		}
+	})
+
+	for name, response := range map[string]string{
+		"missing metadata": `{"result":[[{"openConversationId":"g1"}]]}`,
+		"invalid hasMore":  `{"result":[[{"openConversationId":"g1"}],2,"true"]}`,
+	} {
+		t.Run("malformed gateway tuple "+name, func(t *testing.T) {
+			payload, err := run(t, &larkAlignmentCaller{responses: map[string]string{
+				"im/list_all_conversations": response,
+			}}, "--page-all")
+			if err == nil || payload["failedCount"] != float64(1) || payload["stopReason"] != "pagination_error" {
+				t.Fatalf("malformed tuple payload=%#v err=%v", payload, err)
+			}
+		})
+	}
+
+	t.Run("full legacy page without pagination fails closed", func(t *testing.T) {
+		payload, err := run(t, &larkAlignmentCaller{responses: map[string]string{
+			"im/list_all_conversations": `{"result":{"conversations":[{"openConversationId":"g1"}]}}`,
+		}}, "--page-size", "1")
+		if err == nil || payload["failedCount"] != float64(1) || payload["stopReason"] != "pagination_error" {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+	})
+
+	t.Run("single full page is untrusted", func(t *testing.T) {
+		payload, err := run(t, &larkAlignmentCaller{responses: map[string]string{
+			"im/list_all_conversations": `{"result":{"conversations":[{"openConversationId":"g1"}],"hasMore":false}}`,
+		}}, "--page-size", "1")
+		if err != nil || payload["complete"] != false || payload["stopReason"] != "single_page_full_untrusted" {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+	})
+
+	t.Run("bounded probe reports page limit", func(t *testing.T) {
+		payload, err := run(t, &larkAlignmentCaller{responses: map[string]string{
+			"im/list_all_conversations": `{"result":{"conversations":[{"openConversationId":"g1"}],"hasMore":false}}`,
+		}}, "--page-size", "1", "--page-all", "--page-limit", "1")
+		if err != nil || payload["truncatedByPageLimit"] != true || payload["stopReason"] != "page_limit" {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+	})
+
+	t.Run("full maximum probe fails closed", func(t *testing.T) {
+		chats := make([]map[string]any, chatListMaxWindowSize)
+		for i := range chats {
+			chats[i] = map[string]any{"openConversationId": fmt.Sprintf("probe-%d", i)}
+		}
+		second, marshalErr := json.Marshal(map[string]any{"result": map[string]any{"conversations": chats, "hasMore": false}})
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		payload, err := run(t, &larkAlignmentCaller{sequenceResponses: map[string][]string{
+			"im/list_all_conversations": {
+				`{"result":{"conversations":[{"openConversationId":"first"}],"hasMore":false}}`,
+				string(second),
+			},
+		}}, "--page-size", "1", "--page-all")
+		if err == nil || payload["failedCount"] != float64(1) || payload["stopReason"] != "pagination_error" {
+			t.Fatalf("payload=%#v err=%v", payload, err)
+		}
+	})
+
+	for _, tc := range []struct {
+		name     string
+		response string
+		wantErr  bool
+		stop     string
+	}{
+		{name: "missing continuation", response: `{"result":{"conversations":[{"openConversationId":"g1"}],"hasMore":true}}`, wantErr: true, stop: "pagination_error"},
+		{name: "single page continuation", response: `{"result":{"conversations":[{"openConversationId":"g1"}],"hasMore":true,"nextCursor":2}}`, stop: "single_page"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := run(t, &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": tc.response}})
+			if (err != nil) != tc.wantErr || payload["stopReason"] != tc.stop {
+				t.Fatalf("payload=%#v err=%v", payload, err)
+			}
+		})
+	}
+
+	t.Run("exclude muted and output errors", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/list_all_conversations": `{"result":{"conversations":[],"hasMore":false}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetOut(chatOutputErrorWriter{err: errors.New("fixture output")})
+		root.SetArgs([]string{"chat", "+chat-list", "--exclude-muted"})
+		if err := root.Execute(); err == nil || fake.calls[0].args["excludeMuted"] != true {
+			t.Fatalf("calls=%#v err=%v", fake.calls, err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageChatListCursorTypeEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value any
+		ok    bool
+	}{
+		{name: "nil", value: nil, ok: true},
+		{name: "int", value: int(1), ok: true},
+		{name: "negative int", value: int(-1)},
+		{name: "int64", value: int64(2), ok: true},
+		{name: "negative int64", value: int64(-1)},
+		{name: "float64", value: float64(3), ok: true},
+		{name: "negative float64", value: float64(-1)},
+		{name: "json number", value: json.Number("4"), ok: true},
+		{name: "invalid json number", value: json.Number("bad")},
+		{name: "empty string", value: "", ok: true},
+		{name: "string", value: "5", ok: true},
+		{name: "invalid string", value: "bad"},
+		{name: "unsupported", value: struct{}{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := chatListNextCursor(tc.value)
+			if (err == nil) != tc.ok {
+				t.Fatalf("value=%#v err=%v", tc.value, err)
+			}
+		})
 	}
 }

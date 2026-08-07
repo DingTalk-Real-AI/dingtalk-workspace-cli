@@ -94,7 +94,10 @@ func resolveNativeChatTarget(raw string) (string, error) {
 	return resolved.Selected.OpenConversationID, nil
 }
 
-const maxConversationCategoryTitleRunes = 15
+const (
+	maxConversationCategoryTitleRunes = 15
+	chatFavoritesMaxPageSize          = 30
+)
 
 func validatedConversationCategoryTitle(raw string) (string, error) {
 	title := strings.TrimSpace(raw)
@@ -7919,16 +7922,16 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 首次请求可省略分页参数，CLI 会按 Open 服务契约传 cursor=0、size="20"。
 返回 hasMore=true 时，将 nextCursor 作为下一次的 --cursor。`,
 		Example: `  dws chat message list-favorites
-  dws chat message list-favorites --size 50
-  dws chat message list-favorites --cursor 20 --size 20`,
+	  dws chat message list-favorites --size 30
+	  dws chat message list-favorites --cursor 20 --size 20`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cursor, _ := cmd.Flags().GetInt64("cursor")
 			if cursor < 0 {
 				return apperrors.NewValidation("--cursor must be greater than or equal to 0")
 			}
 			size, _ := cmd.Flags().GetInt("size")
-			if size < 1 || size > 100 {
-				return apperrors.NewValidation("--size must be between 1 and 100")
+			if size < 1 || size > chatFavoritesMaxPageSize {
+				return apperrors.NewValidation("--size must be between 1 and 30")
 			}
 			return callMCPToolOnServer("im", "list_message_favorites", map[string]any{
 				"cursor": cursor,
@@ -7967,7 +7970,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		},
 	})
 	chatMessageListFavoritesCmd.Flags().Int64("cursor", 0, "数字分页游标（默认 0；翻页时传上次返回的 nextCursor）")
-	chatMessageListFavoritesCmd.Flags().Int("size", 20, "一次拉取的收藏数量（默认 20，范围 1-100）")
+	chatMessageListFavoritesCmd.Flags().Int("size", 20, "一次拉取的收藏数量（默认 20，范围 1-30）")
 
 	// ── group list-my-groups: 拉取我创建/管理的群 ──────────────
 

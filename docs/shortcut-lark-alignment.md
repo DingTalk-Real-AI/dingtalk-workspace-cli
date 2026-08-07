@@ -70,16 +70,17 @@
 
 > 已落地：minutes `+detail`（✅ smart `+detail`）、minutes `+word-replace`（✅ smart `+replace-batch`，批量+去重）、base `+record-share-link-create`（✅ smart `+record-share-links`，>20 去重+分片+合并）、im `+threads-messages-list`（✅ smart `chat +thread-replies`，list_topic_replies + 投影）、im `+chat-list`（✅ smart `chat +chat-list`）、task `+get-related-tasks`（✅ smart `todo +related-tasks`，三角色并集+去重+投影）。
 
-### im → chat（5）
+### im → chat（7）
 
 | lark 命令 | risk | 保真度差距（钉钉有 tool，缺什么智能） |
 |---|---|---|
-| `+chat-list` ✅ | read | **已建 smart `chat +chat-list`**：`list_all_conversations` + 默认仅群聊 + `--types group/p2p` 当前页过滤 + `--exclude-muted` + page-size/page-token 别名 + openConversationId/name/conversationType 投影。剩余未做：sort/sort-type、bot 身份 p2p 剥离（DWS 无对应身份模型） |
-| `+chat-messages-list` ✅ | read | **已建 smart `chat +chat-messages`**：群/单聊 list_conversation_message_v2 / list_individual_chat_message 互斥 + sender/text/time 投影。剩余未做：reactions 富化、资源下载 |
-| `+chat-search` | read | dws 无群名模糊搜索v2对应 tool(search_common_groups/find 语义不同)，缺 query规范化、mode映射、mute过滤、meta投影 |
+| `+chat-list` ✅ | read | **已建 smart `chat +chat-list`**：`list_all_conversations` + 默认仅群聊 + `--types group/p2p` + `--exclude-muted` + page-size/page-token 别名 + `--page-all/--page-limit` 数字 cursor 自动翻页、跨页去重、合并后类型过滤和完整性 ledger。剩余未做：sort/sort-type、bot 身份 p2p 剥离（DWS 无对应身份模型） |
+| `+chat-messages-list` ✅ | read | **已建 smart `chat +chat-messages`**：群/单聊互斥解析、时间范围、asc/desc、时间边界全量翻页、reaction、资源下载与完整性 ledger |
+| `+chat-search` ✅ | read | **已建 smart `chat +chat-search`**：真实 `search_groups` 关键词搜索 + page-size/page-token 别名 + `--page-all/--page-limit` 不透明 cursor 自动翻页、跨页去重和完整性 ledger。Lark v2 的 member/type/mode/manager/sort 过滤没有可验证的钉钉对应参数，未伪造 |
+| `+flag-list` ✅ | read | **已建 smart `chat +flag-list`**：真实 `list_message_favorites` 的 `items + hasMore + 数字 nextCursor`，支持 page-size/page-token、`--page-all/--page-limit`、跨页去重和完整性 ledger；仅对齐 message favorite，不模拟 Lark Feed thread flag |
 | `+messages-resources-download` | write | dws download-media 走 get_resource_download_url 拿URL，缺分片Range下载/重试/扩展名推断/安全落盘路径校验 |
-| `+messages-search` | read | dws 有 search_messages_by_keyword/by_time_range/by_sender/at_me 多个原子 tool，但各自单点，缺统一多维filter编排+mget+chat上下文富化+跨字段Validate |
-| `+threads-messages-list` ✅ | read | **已建 smart `chat +thread-replies`**：list_topic_replies + sender/text/time 投影。剩余未做：reactions 富化、资源下载 |
+| `+messages-search` ✅ | read | **已建 smart `chat +search-msg`**：统一多维过滤、精确时间范围、asc/desc、cursor 全量翻页、mget 富化、reaction、资源下载与完整性 ledger。剩余差异是 Lark chat 上下文和部分 sender/attachment 类型过滤 |
+| `+threads-messages-list` ✅ | read | **已建 smart `chat +thread-replies`**：支持主消息 ID 自动只读解析 conversation/thread，也支持显式 group + thread/topic ID；list_topic_replies + sender/text/time/reaction/resource 投影 + 下层毫秒级 nextCursor 有界自动翻页、跨页去重、完整性 ledger，以及全量结果 asc/desc。与 Lark 的剩余差异是钉钉底层没有服务端 asc 单页，因此 DWS 的 asc 明确要求 `--page-all`，避免伪全局排序 |
 
 ### task → todo（3）
 

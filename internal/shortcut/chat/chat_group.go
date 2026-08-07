@@ -21,9 +21,16 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
+)
+
+const (
+	chatSearchHardPageLimit  = 500
+	chatSearchMaxWindowSize  = 100
+	chatListAllHardPageLimit = 500
 )
 
 // ChatSearch searches groups by keyword (search_groups on the im server).
@@ -33,8 +40,8 @@ var ChatSearch = shortcut.Shortcut{
 	Aliases:                  []string{"+chat-group-search", "+search-group"},
 	SinglePositionalAliasFor: "query",
 	Product:                  "im",
-	Description:              "按关键词搜索群聊",
-	Intent:                   "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。",
+	Description:              "按关键词分页搜索群聊，支持有界自动翻页和完整性检查",
+	Intent:                   "当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；默认读取一页，明确要求全部候选时加 --page-all，并用 --page-limit 保持有界。结果按 openConversationId 去重，并公开 complete、hasMore、nextCursor、stopReason 和 failures，避免把截断或失败结果误当完整候选集。",
 	Risk:                     shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -48,15 +55,15 @@ var ChatSearch = shortcut.Shortcut{
 			CLIPath:        "chat +chat-search",
 			PrimaryCLIPath: "chat +chat-search",
 		},
-		Description: "按关键词搜索群聊",
+		Description: "按关键词分页搜索群聊，支持有界自动翻页和完整性检查",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "按关键词搜索群聊",
-			UseWhen:      []string{"当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；按群名模糊搜索，只读分页返回匹配的群列表。"},
+			AgentSummary: "按关键词分页搜索群聊，支持有界自动翻页和完整性检查",
+			UseWhen:      []string{"当你只记得群名称关键词、需要拿到群 openConversationId 以便发消息或管理该群时使用；默认读取一页，明确要求全部候选时加 --page-all，并用 --page-limit 保持有界。结果按 openConversationId 去重，并公开 complete、hasMore、nextCursor、stopReason 和 failures，避免把截断或失败结果误当完整候选集。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws chat +chat-search --query \"项目冲刺\""},
 		},
@@ -64,30 +71,327 @@ var ChatSearch = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "群名称关键词"},
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "--query 的别名", Hidden: true},
-		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页返回数量"},
+		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页返回数量；显式页大小必须在 1-100 之间"},
+		{Name: "page-size", Type: shortcut.FlagInt, Desc: "--limit 的 Lark 对齐别名；显式页大小必须在 1-100 之间"},
 		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
 		{Name: "cursor", Type: shortcut.FlagString, Default: "0", Desc: "分页游标，翻页传 nextCursor"},
+		{Name: "page-token", Type: shortcut.FlagString, Desc: "--cursor 的 Lark 对齐别名"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取全部群搜索分页；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已设置免打扰的群聊"},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"query", "keyword"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"limit", "page-size", "size"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"cursor", "page-token"}},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit", "page-size"}, Description: "显式页大小必须在 1-100 之间"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 	},
-	Tips: []string{`dws chat +chat-search --query "项目冲刺"`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		query := rt.Str("query")
-		if query == "" {
-			query = rt.Str("keyword")
-		}
-		params := map[string]any{
-			"keyword": query,
-			"limit":   rt.IntFirst("limit", "size"),
-			"cursor":  rt.Str("cursor"),
-		}
-		if rt.Bool("exclude-muted") {
-			params["excludeMuted"] = true
-		}
-		return rt.CallMCP("search_groups", params)
+	Tips: []string{
+		`dws chat +chat-search --query "项目冲刺"`,
+		`dws chat +chat-search --query "项目" --page-size 100 --page-all --page-limit 20`,
 	},
+	Validate: validateChatSearch,
+	Execute:  executeChatSearch,
+}
+
+func validateChatSearch(rt *shortcut.RuntimeContext) error {
+	if size := chatSearchPageSize(rt); size < 1 || size > 100 {
+		return apperrors.NewValidation("--limit/--page-size/--size 必须在 1-100 之间")
+	}
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if rt.Bool("page-all") {
+		if limit := rt.Int("page-limit"); limit < 1 || limit > chatSearchHardPageLimit {
+			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
+		}
+	}
+	return nil
+}
+
+func chatSearchPageSize(rt *shortcut.RuntimeContext) int {
+	if rt.Changed("page-size") {
+		return rt.Int("page-size")
+	}
+	if rt.Changed("size") {
+		return rt.Int("size")
+	}
+	return rt.Int("limit")
+}
+
+func chatSearchStartCursor(rt *shortcut.RuntimeContext) string {
+	if rt.Changed("page-token") {
+		if value := strings.TrimSpace(rt.Str("page-token")); value != "" {
+			return value
+		}
+	}
+	if value := strings.TrimSpace(rt.Str("cursor")); value != "" {
+		return value
+	}
+	return "0"
+}
+
+func chatSearchRequestParams(query string, pageSize int, cursor string, excludeMuted bool) map[string]any {
+	params := map[string]any{
+		"keyword": query,
+		"limit":   pageSize,
+		"cursor":  cursor,
+	}
+	if excludeMuted {
+		params["excludeMuted"] = true
+	}
+	return params
+}
+
+func executeChatSearch(rt *shortcut.RuntimeContext) error {
+	query := strings.TrimSpace(rt.StrFirst("query", "keyword"))
+	pageSize := chatSearchPageSize(rt)
+	requestPageSize := pageSize
+	pageLimit := 1
+	if rt.Bool("page-all") {
+		pageLimit = rt.Int("page-limit")
+	}
+	cursor := chatSearchStartCursor(rt)
+	if rt.DryRun() {
+		return rt.CallMCP("search_groups", chatSearchRequestParams(query, pageSize, cursor, rt.Bool("exclude-muted")))
+	}
+	initialCursor := cursor
+	seenCursors := map[string]bool{cursor: true}
+	seenChats := map[string]bool{}
+	chats := make([]map[string]any, 0)
+	failures := make([]map[string]any, 0)
+	pagesFetched := 0
+	paginationKnown := true
+	complete := false
+	hasMore := false
+	nextCursor := ""
+	stopReason := "source_complete"
+	truncatedByPageLimit := false
+	maxWindowProbeUsed := false
+	completionEvidence := ""
+
+	for pagesFetched < pageLimit {
+		params := chatSearchRequestParams(query, requestPageSize, cursor, rt.Bool("exclude-muted"))
+		data, err := rt.CallMCPData("im", "search_groups", params)
+		if err != nil {
+			if pagesFetched == 0 {
+				return err
+			}
+			failures = append(failures, map[string]any{
+				"page": pagesFetched + 1, "stage": "read", "cursor": cursor, "error": err.Error(),
+			})
+			stopReason = "read_failure"
+			break
+		}
+		pagesFetched++
+		pageItems := chatSearchItems(data)
+		for _, chat := range pageItems {
+			id := strings.TrimSpace(fmt.Sprint(chat["openConversationId"]))
+			if id != "" && id != "<nil>" && seenChats[id] {
+				continue
+			}
+			if id != "" && id != "<nil>" {
+				seenChats[id] = true
+			}
+			chats = append(chats, chat)
+		}
+
+		page := chatmsg.Pagination(data)
+		pageHasMore, hasMoreKnown := page["hasMore"].(bool)
+		nextCursor = chatSearchCursorString(page["nextCursor"])
+		if !hasMoreKnown {
+			switch {
+			case nextCursor != "":
+				pageHasMore = true
+			case len(pageItems) < requestPageSize:
+				paginationKnown = false
+				complete = true
+				hasMore = false
+				stopReason = "legacy_short_page"
+			default:
+				paginationKnown = false
+				failures = append(failures, map[string]any{
+					"page": pagesFetched, "stage": "pagination",
+					"error": "群搜索返回满页结果但缺少 hasMore/nextCursor，无法证明结果完整",
+				})
+				stopReason = "pagination_error"
+			}
+			if complete || len(failures) > 0 {
+				break
+			}
+		}
+		hasMore = pageHasMore
+		if !hasMore {
+			// A full first page with hasMore=false/no cursor is the live legacy
+			// shape that can hide additional rows. Once a prior page supplied a
+			// valid continuation cursor, its terminal hasMore=false is trustworthy.
+			fullPageWithoutCursor := len(pageItems) >= requestPageSize && nextCursor == "" &&
+				(pagesFetched == 1 || (maxWindowProbeUsed && pagesFetched == 2))
+			if fullPageWithoutCursor {
+				paginationKnown = false
+				if rt.Bool("page-all") && initialCursor == "0" && !maxWindowProbeUsed && requestPageSize < chatSearchMaxWindowSize && pagesFetched < pageLimit {
+					maxWindowProbeUsed = true
+					requestPageSize = chatSearchMaxWindowSize
+					cursor = initialCursor
+					stopReason = "max_window_probe"
+					continue
+				}
+				if !rt.Bool("page-all") {
+					complete = false
+					stopReason = "single_page_full_untrusted"
+					break
+				}
+				if pagesFetched >= pageLimit && requestPageSize < chatSearchMaxWindowSize {
+					truncatedByPageLimit = true
+					complete = false
+					stopReason = "page_limit"
+					break
+				}
+				failures = append(failures, map[string]any{
+					"page": pagesFetched, "stage": "pagination",
+					"error": "群搜索在最大窗口仍返回满页且没有可用 nextCursor，无法证明结果完整",
+				})
+				complete = false
+				stopReason = "pagination_error"
+				break
+			}
+			complete = true
+			nextCursor = ""
+			if maxWindowProbeUsed {
+				paginationKnown = false
+				completionEvidence = "max_window_short_page"
+				stopReason = "max_window_short_page"
+			} else {
+				completionEvidence = "backend_has_more_false_short_page"
+				stopReason = "source_complete"
+			}
+			break
+		}
+		if nextCursor == "" || seenCursors[nextCursor] {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "群搜索返回 hasMore=true，但 nextCursor 缺失或未前进",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		if !rt.Bool("page-all") {
+			stopReason = "single_page"
+			break
+		}
+		seenCursors[nextCursor] = true
+		cursor = nextCursor
+	}
+
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+		truncatedByPageLimit = rt.Bool("page-all")
+		if truncatedByPageLimit {
+			stopReason = "page_limit"
+		}
+	}
+	payload := map[string]any{
+		"query":                query,
+		"count":                len(chats),
+		"chats":                chats,
+		"pagesFetched":         pagesFetched,
+		"paginationKnown":      paginationKnown,
+		"complete":             complete && len(failures) == 0,
+		"hasMore":              hasMore,
+		"nextCursor":           nextCursor,
+		"stopReason":           stopReason,
+		"truncatedByPageLimit": truncatedByPageLimit,
+		"failedCount":          len(failures),
+		"failures":             failures,
+		"partial":              len(failures) > 0 && len(chats) > 0,
+		"requestedPageSize":    pageSize,
+		"effectivePageSize":    requestPageSize,
+	}
+	if completionEvidence != "" {
+		payload["completionEvidence"] = completionEvidence
+	}
+	if rt.Bool("exclude-muted") {
+		payload["filter"] = map[string]any{"excludeMuted": true}
+	}
+	if err := rt.Output(payload); err != nil {
+		return err
+	}
+	if len(failures) > 0 {
+		return apperrors.NewAPI(
+			fmt.Sprintf("群搜索分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+			apperrors.WithOperation("im/search_groups"),
+			apperrors.WithReason("chat_search_incomplete"),
+			apperrors.WithOrigin("mcp_gateway"),
+			apperrors.WithFailureStage("pagination"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(true),
+			apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
+		)
+	}
+	return nil
+}
+
+func chatSearchItems(data map[string]any) []map[string]any {
+	if data == nil {
+		return []map[string]any{}
+	}
+	scopes := []map[string]any{data}
+	for _, key := range []string{"result", "data"} {
+		if nested, ok := data[key].(map[string]any); ok {
+			scopes = append(scopes, nested)
+		}
+	}
+	for _, scope := range scopes {
+		for _, key := range []string{"groups", "chats", "items", "list", "result"} {
+			if raw, ok := scope[key].([]any); ok {
+				return projectChatSearchItems(raw)
+			}
+		}
+	}
+	return []map[string]any{}
+}
+
+func projectChatSearchItems(raw []any) []map[string]any {
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		group, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		projected := make(map[string]any, len(group)+1)
+		for key, value := range group {
+			projected[key] = value
+		}
+		if _, exists := projected["openConversationId"]; !exists {
+			for _, key := range []string{"conversationId", "chatId", "id"} {
+				if value, ok := group[key]; ok {
+					projected["openConversationId"] = value
+					break
+				}
+			}
+		}
+		if _, exists := projected["name"]; !exists {
+			for _, key := range []string{"title", "conversationName"} {
+				if value, ok := group[key]; ok {
+					projected["name"] = value
+					break
+				}
+			}
+		}
+		out = append(out, projected)
+	}
+	return out
+}
+
+func chatSearchCursorString(value any) string {
+	if value == nil {
+		return ""
+	}
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" || text == "0" {
+		return ""
+	}
+	return text
 }
 
 // ChatMembersList lists members of a group (get_group_members, chat server).
@@ -575,27 +879,190 @@ var ChatListAll = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "limit", Type: shortcut.FlagInt, Default: "100", Desc: "每页返回数量（最大 200）"},
+		{Name: "limit", Type: shortcut.FlagInt, Default: "100", Desc: "每页返回数量；--limit 必须在 1-200 之间"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传 nextCursor"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 nextCursor 自动读取全部已加入群；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 	},
-	Tips: []string{`dws chat +chat-list-all --limit 50`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{}
-		if rt.Int("limit") > 0 {
-			params["limit"] = rt.Int("limit")
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-200 之间"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+	},
+	Tips: []string{
+		`dws chat +chat-list-all --limit 50`,
+		`dws chat +chat-list-all --limit 200 --page-all --page-limit 50`,
+	},
+	Validate: validateChatListAll,
+	Execute:  executeChatListAll,
+}
+
+func validateChatListAll(rt *shortcut.RuntimeContext) error {
+	if limit := rt.Int("limit"); limit < 1 || limit > 200 {
+		return apperrors.NewValidation("--limit 必须在 1-200 之间")
+	}
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if rt.Bool("page-all") {
+		if limit := rt.Int("page-limit"); limit < 1 || limit > chatListAllHardPageLimit {
+			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 		}
-		if c := rt.Str("cursor"); c != "" && c != "0" {
-			params["cursor"] = c
+	}
+	return nil
+}
+
+func executeChatListAll(rt *shortcut.RuntimeContext) error {
+	params := map[string]any{}
+	if rt.Int("limit") > 0 {
+		params["limit"] = rt.Int("limit")
+	}
+	if c := rt.Str("cursor"); c != "" && c != "0" {
+		params["cursor"] = c
+	}
+	if rt.Bool("page-all") {
+		payload, err := readAllChatListAll(rt, params)
+		if outputErr := rt.Output(payload); outputErr != nil {
+			return outputErr
+		}
+		return err
+	}
+	data, err := rt.CallMCPData("im", "list_my_groups_pagination", params)
+	if err != nil {
+		return err
+	}
+	groups := chatListAllProject(data)
+	payload := map[string]any{"count": len(groups), "groups": groups}
+	chatmsg.ApplyPagination(payload, data)
+	payload["pagesFetched"] = 1
+	if payload["complete"] == true {
+		payload["stopReason"] = "source_complete"
+	} else {
+		payload["stopReason"] = "single_page"
+	}
+	return rt.Output(payload)
+}
+
+func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) (map[string]any, error) {
+	pageLimit := rt.Int("page-limit")
+	cursorValue := baseParams["cursor"]
+	cursorKey := chatListAllCursorString(cursorValue)
+	if cursorKey == "" {
+		cursorKey = "0"
+	}
+	seenCursors := map[string]bool{cursorKey: true}
+	seenGroups := map[string]bool{}
+	allGroups := make([]map[string]any, 0)
+	failures := make([]map[string]any, 0)
+	pagesFetched := 0
+	complete := false
+	hasMore := false
+	stopReason := "source_complete"
+	truncatedByPageLimit := false
+	var nextCursor any
+
+	for pagesFetched < pageLimit {
+		params := map[string]any{"limit": baseParams["limit"]}
+		if cursorKey != "0" {
+			params["cursor"] = cursorValue
 		}
 		data, err := rt.CallMCPData("im", "list_my_groups_pagination", params)
 		if err != nil {
-			return err
+			if pagesFetched == 0 {
+				return nil, err
+			}
+			failures = append(failures, map[string]any{
+				"page": pagesFetched + 1, "stage": "read", "cursor": cursorKey, "error": err.Error(),
+			})
+			stopReason = "read_failure"
+			break
 		}
-		groups := chatListAllProject(data)
-		payload := map[string]any{"count": len(groups), "groups": groups}
-		chatmsg.ApplyPagination(payload, data)
-		return rt.Output(payload)
-	},
+		pagesFetched++
+		pageGroups := chatListAllProject(data)
+		for _, group := range pageGroups {
+			id := strings.TrimSpace(fmt.Sprint(group["openConversationId"]))
+			if id == "<nil>" {
+				id = ""
+			}
+			if id != "" && seenGroups[id] {
+				continue
+			}
+			if id != "" {
+				seenGroups[id] = true
+			}
+			allGroups = append(allGroups, group)
+		}
+
+		page := chatmsg.Pagination(data)
+		pageHasMore, known := page["hasMore"].(bool)
+		if !known {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "已加入群列表下层未返回可靠的 hasMore，无法证明结果完整",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		hasMore = pageHasMore
+		if !hasMore {
+			complete = true
+			nextCursor = nil
+			stopReason = "source_complete"
+			break
+		}
+		nextCursor = page["nextCursor"]
+		nextKey := chatListAllCursorString(nextCursor)
+		if nextKey == "" || seenCursors[nextKey] {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "已加入群列表下层返回 hasMore=true，但 nextCursor 缺失、无效或未前进",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		seenCursors[nextKey] = true
+		cursorKey = nextKey
+		cursorValue = nextCursor
+	}
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+		truncatedByPageLimit = true
+		stopReason = "page_limit"
+	}
+
+	payload := map[string]any{
+		"count": len(allGroups), "groups": allGroups,
+		"pagesFetched": pagesFetched, "paginationKnown": true,
+		"complete": complete && len(failures) == 0, "hasMore": hasMore,
+		"stopReason": stopReason, "truncatedByPageLimit": truncatedByPageLimit,
+		"failedCount": len(failures), "failures": failures,
+		"partial": len(failures) > 0 && len(allGroups) > 0,
+	}
+	if hasMore && nextCursor != nil {
+		payload["nextCursor"] = nextCursor
+	}
+	if len(failures) == 0 {
+		return payload, nil
+	}
+	return payload, apperrors.NewAPI(
+		fmt.Sprintf("已加入群列表分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+		apperrors.WithOperation("im/list_my_groups_pagination"),
+		apperrors.WithReason("chat_list_all_incomplete"),
+		apperrors.WithOrigin("mcp_gateway"),
+		apperrors.WithFailureStage("pagination"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(true),
+		apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
+	)
+}
+
+func chatListAllCursorString(value any) string {
+	if value == nil {
+		return ""
+	}
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" || text == "0" {
+		return ""
+	}
+	return text
 }
 
 // chatListAllProject reshapes list_my_groups_pagination into a clean group list

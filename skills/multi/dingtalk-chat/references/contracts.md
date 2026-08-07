@@ -12,11 +12,17 @@
 <!-- DWS_MESSAGE_RESULT_CONTRACT_START -->
 - `version`: `im.message-list.v1`
 - `message_fields`: `messageId`, `conversationId`, `threadId`, `sender`, `senderId`, `senderType`, `messageType`, `text`, `createTime`, `updateTime`, `reactions`, `quotedMessage`, `forwarded`, `resourceRefs`
-- `envelope_fields`: `contractVersion`, `messages`, `count`, `pagesFetched`, `paginationKnown`, `complete`, `hasMore`, `nextPage`, `stopReason`, `truncatedByPageLimit`, `truncatedByResultLimit`, `failedCount`, `failures`, `partial`, `resourceDownloads`
+- `envelope_fields`: `contractVersion`, `messages`, `count`, `resolvedFilters`, `queryRange`, `pagesFetched`, `paginationKnown`, `complete`, `hasMore`, `nextPage`, `stopReason`, `truncatedByPageLimit`, `truncatedByResultLimit`, `failedCount`, `failures`, `partial`, `resourceDownloads`
 <!-- DWS_MESSAGE_RESULT_CONTRACT_END -->
 
 当 `complete=false` 时不能称为全量成功。`nextPage` 只能来自真实 lower boundary；
 `failedCount/failures`、`partial` 和两个 truncated 字段必须原样保留。
+当 Runtime 解析并应用自然发送者条件时，`resolvedFilters.senders[]` 保留原查询及选中的
+`userId/openDingTalkId`。消息展示名可以与通讯录姓名不同；只能用稳定 `senderId` 与解析结果关联，
+不得重新做姓名字符串比较。
+
+当查询声明时间范围或顺序时，`queryRange` 保留规范化的 `startTime`、`endTime`、`order` 与
+`semantics=[start,end)`。排序只覆盖本次实际取得的 `messages`；`complete=false` 时不得把它描述为完整范围的全局排序。
 
 ## `+messages-send` 身份矩阵
 

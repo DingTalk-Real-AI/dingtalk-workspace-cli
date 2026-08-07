@@ -16,9 +16,12 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -26,6 +29,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
+
+const directMessagesHardPageLimit = 500
 
 // MessagesSend sends a text/markdown message as the current user
 // (send_personal_message, chat server). Media/file variants are not covered.
@@ -283,8 +288,8 @@ var MessagesList = shortcut.Shortcut{
 		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
 		{Name: "time", Type: shortcut.FlagString, Desc: "起始时间，如 \"2025-03-01 00:00:00\"", Required: true},
 		{Name: "forward", Type: shortcut.FlagBool, Default: "true", Desc: "true=从给定时间往现在拉，false=往以前拉"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量"},
-		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量；显式页大小必须大于 0"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名；显式页大小必须大于 0", Hidden: true},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
 	},
 	Constraints: []shortcut.Constraint{
@@ -407,16 +412,6 @@ func listMessagesResolveMaps(data map[string]any) []map[string]any {
 	return out
 }
 
-// listMessagesFirst returns the first present candidate key's value.
-func listMessagesFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
-		}
-	}
-	return nil, false
-}
-
 // MessagesListDirect pulls messages of a single chat (list_individual_chat_message, chat server).
 var MessagesListDirect = shortcut.Shortcut{
 	Service:     "chat",
@@ -454,40 +449,246 @@ var MessagesListDirect = shortcut.Shortcut{
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "对方 openDingTalkId（与 --user 二选一）"},
 		{Name: "time", Type: shortcut.FlagString, Desc: "起始时间，如 \"2025-03-01 00:00:00\"", Required: true},
 		{Name: "forward", Type: shortcut.FlagBool, Default: "true", Desc: "true=往现在拉，false=往以前拉"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量"},
-		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量；显式页大小必须大于 0"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名；显式页大小必须大于 0", Hidden: true},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿毫秒级 nextCursor 自动读取全部单聊消息；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
 	},
-	Tips: []string{`dws chat +messages-list-direct --user <userId> --time "2025-03-01 00:00:00"`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"time":    rt.Str("time"),
-			"forward": rt.Bool("forward"),
+	Tips: []string{
+		`dws chat +messages-list-direct --user <userId> --time "2025-03-01 00:00:00"`,
+		`dws chat +messages-list-direct --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --forward=false --page-all`,
+	},
+	Execute: executeMessagesListDirect,
+}
+
+func validateMessagesListDirectPagination(rt *shortcut.RuntimeContext) error {
+	// This existing command shipped without formal Schema constraints. Keep its
+	// published constraint set stable and validate the new pagination options at
+	// runtime so adding --page-all remains backwards compatible for consumers.
+	for _, name := range []string{"limit", "size"} {
+		if rt.Changed(name) && rt.Int(name) <= 0 {
+			return apperrors.NewValidation("--" + name + " 必须大于 0")
 		}
-		switch {
-		case rt.Str("open-dingtalk-id") != "":
-			params["openDingTalkId"] = rt.Str("open-dingtalk-id")
-		case rt.Str("user") != "":
-			params["userId"] = rt.Str("user")
-		default:
-			return fmt.Errorf("--user 或 --open-dingtalk-id 必填其一")
+	}
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if rt.Bool("page-all") {
+		if limit := rt.Int("page-limit"); limit < 1 || limit > directMessagesHardPageLimit {
+			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 		}
-		if limit := rt.IntFirst("limit", "size"); limit > 0 {
-			params["limit"] = limit
+	}
+	return nil
+}
+
+func executeMessagesListDirect(rt *shortcut.RuntimeContext) error {
+	if err := validateMessagesListDirectPagination(rt); err != nil {
+		return err
+	}
+	params := map[string]any{
+		"time":    rt.Str("time"),
+		"forward": rt.Bool("forward"),
+	}
+	switch {
+	case rt.Str("open-dingtalk-id") != "":
+		params["openDingTalkId"] = rt.Str("open-dingtalk-id")
+	case rt.Str("user") != "":
+		params["userId"] = rt.Str("user")
+	default:
+		return fmt.Errorf("--user 或 --open-dingtalk-id 必填其一")
+	}
+	if limit := rt.IntFirst("limit", "size"); limit > 0 {
+		params["limit"] = limit
+	}
+	if rt.Bool("page-all") {
+		payload, err := readAllDirectMessages(rt, params)
+		if outputErr := rt.Output(payload); outputErr != nil {
+			return outputErr
 		}
+		return err
+	}
+	data, err := rt.CallMCPData("chat", "list_individual_chat_message", params)
+	if err != nil {
+		return err
+	}
+	messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+	payload := map[string]any{"count": len(messages), "messages": messages}
+	direction := "older"
+	if rt.Bool("forward") {
+		direction = "newer"
+	}
+	chatmsg.ApplyMessagePagination(payload, data, listMessagesResolveMaps(data), direction)
+	if payload["complete"] == true {
+		payload["stopReason"] = "source_complete"
+	} else {
+		payload["stopReason"] = "single_page"
+	}
+	return rt.Output(payload)
+}
+
+func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (map[string]any, error) {
+	pageLimit := rt.Int("page-limit")
+	direction := "older"
+	if rt.Bool("forward") {
+		direction = "newer"
+	}
+	seenCursors := map[string]bool{}
+	seenMessages := map[string]bool{}
+	allItems := make([]map[string]any, 0)
+	failures := make([]map[string]any, 0)
+	pagesFetched := 0
+	complete := false
+	hasMore := false
+	stopReason := "source_complete"
+	truncatedByPageLimit := false
+	var nextPage map[string]any
+
+	for pagesFetched < pageLimit {
 		data, err := rt.CallMCPData("chat", "list_individual_chat_message", params)
 		if err != nil {
-			return err
+			if pagesFetched == 0 {
+				return nil, err
+			}
+			failures = append(failures, map[string]any{
+				"page": pagesFetched + 1, "stage": "read", "error": err.Error(),
+			})
+			stopReason = "read_failure"
+			break
 		}
-		messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
-		payload := map[string]any{"count": len(messages), "messages": messages}
-		direction := "older"
-		if rt.Bool("forward") {
-			direction = "newer"
+		pagesFetched++
+		pageItems := listMessagesResolveMaps(data)
+		for _, item := range pageItems {
+			id := chatmsg.StableMessageID(item)
+			if id != "" && seenMessages[id] {
+				continue
+			}
+			if id != "" {
+				seenMessages[id] = true
+			}
+			allItems = append(allItems, item)
 		}
-		chatmsg.ApplyMessagePagination(payload, data, listMessagesResolveMaps(data), direction)
-		return rt.Output(payload)
-	},
+
+		page := chatmsg.Pagination(data)
+		pageHasMore, known := page["hasMore"].(bool)
+		if !known {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "单聊消息下层未返回可靠的 hasMore，无法证明结果完整",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		hasMore = pageHasMore
+		if !hasMore {
+			complete = true
+			nextPage = nil
+			stopReason = "source_complete"
+			break
+		}
+		if len(pageItems) == 0 {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "单聊消息下层返回 hasMore=true 但当前页没有消息",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		cursorKey, boundary, cursorErr := directMessageCursorBoundary(page["nextCursor"])
+		if cursorErr != nil {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "单聊消息下层返回 hasMore=true，但 nextCursor 无效: " + cursorErr.Error(),
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		if seenCursors[cursorKey] {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "单聊消息毫秒 nextCursor 停滞",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		seenCursors[cursorKey] = true
+		nextPage = map[string]any{
+			"direction": direction, "time": boundary, "nextCursor": page["nextCursor"],
+		}
+		params["time"] = boundary
+	}
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+		truncatedByPageLimit = true
+		stopReason = "page_limit"
+	}
+
+	messages := make([]map[string]any, 0, len(allItems))
+	for _, item := range allItems {
+		messages = append(messages, listMessageProjectOneWithReactions(item, !rt.Bool("no-reactions")))
+	}
+	payload := chatmsg.NewMessageListPayload(messages)
+	payload["pagesFetched"] = pagesFetched
+	payload["paginationKnown"] = true
+	payload["complete"] = complete && len(failures) == 0
+	payload["hasMore"] = hasMore
+	payload["stopReason"] = stopReason
+	payload["truncatedByPageLimit"] = truncatedByPageLimit
+	payload["failedCount"] = len(failures)
+	payload["failures"] = failures
+	payload["partial"] = len(failures) > 0 && len(messages) > 0
+	if hasMore && nextPage != nil {
+		payload["nextPage"] = nextPage
+	}
+	if len(failures) == 0 {
+		return payload, nil
+	}
+	return payload, apperrors.NewAPI(
+		fmt.Sprintf("单聊消息分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+		apperrors.WithOperation("chat/list_individual_chat_message"),
+		apperrors.WithReason("messages_list_direct_incomplete"),
+		apperrors.WithOrigin("mcp_gateway"),
+		apperrors.WithFailureStage("pagination"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(true),
+		apperrors.WithHint("请根据 failures 和 nextPage 重试"),
+	)
+}
+
+func directMessageCursorBoundary(value any) (string, string, error) {
+	var millis int64
+	switch typed := value.(type) {
+	case int:
+		millis = int64(typed)
+	case int32:
+		millis = int64(typed)
+	case int64:
+		millis = typed
+	case float32:
+		asFloat := float64(typed)
+		if math.IsNaN(asFloat) || math.IsInf(asFloat, 0) || asFloat <= 0 || math.Trunc(asFloat) != asFloat || asFloat > math.MaxInt64 {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = int64(asFloat)
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed <= 0 || math.Trunc(typed) != typed || typed > math.MaxInt64 {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = int64(typed)
+	case string:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+		if err != nil {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = parsed
+	default:
+		return "", "", fmt.Errorf("缺少毫秒级分页游标")
+	}
+	if millis <= 0 {
+		return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+	}
+	key := strconv.FormatInt(millis, 10)
+	boundary := time.UnixMilli(millis).UTC().Format(time.RFC3339Nano)
+	return key, boundary, nil
 }
 
 // MessagesListTopicReplies pulls topic replies (list_topic_replies, chat server).

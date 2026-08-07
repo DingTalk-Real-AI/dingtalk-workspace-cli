@@ -1411,11 +1411,11 @@ Usage:
   dws chat message list-favorites [flags]
 Example:
   dws chat message list-favorites
-  dws chat message list-favorites --size 50
+  dws chat message list-favorites --size 30
   dws chat message list-favorites --cursor 20 --size 20
 Flags:
       --cursor int   数字分页游标，默认 0；翻页时传上次返回的 nextCursor
-      --size int     一次拉取的收藏数量，默认 20，范围 1-100
+      --size int     一次拉取的收藏数量，默认 20，范围 1-30
 
 注意:
   - 首次请求可省略分页参数，CLI 会自动向 Open 服务传入 cursor=0、size="20"

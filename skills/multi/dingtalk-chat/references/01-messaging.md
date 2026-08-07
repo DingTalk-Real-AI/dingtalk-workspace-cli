@@ -11,7 +11,13 @@
 
 ## 群聊消息
 
-<!-- dws-intent: chat.read.conversation -->读取指定群聊或单聊默认使用 `dws chat +chat-messages`；它负责目标唯一解析、稳定消息投影和完整性 ledger。
+<!-- dws-intent: chat.read.conversation -->读取或导出指定群聊/单聊的消息记录时使用 `dws chat +chat-messages`。可附带非必填的 `--sender-query <姓名>`：没有稳定 ID 时保留全部消息，唯一解析成功后按 userId/openDingTalkId 筛选同一次读取结果并返回 `resolvedFilters`，不要补跑 `+search-msg`。
+
+用户以发送者、关键词、@对象或消息类型为主要条件直接检索时优先使用 `+search-msg`；范围可以是单个、多个或全部会话。
+
+指定会话按时间读取时，`+chat-messages` 使用公开可选的 `--start/--end/--order`，范围固定为
+`[start,end)`；仅开始时间表示到本次执行当前时间，仅结束时间只支持 `desc`，升序必须有开始时间。
+兼容别名为 `--start-time/--end-time/--sort`。旧 `--time/--direction` 只用于单边界兼容模式，不能混用。
 
 已知群 ID 时直接读取：
 
@@ -26,6 +32,12 @@ dws chat +chat-messages --group <openConversationId> \
   --page-all --page-limit 50 \
   --output ./exports/messages.json \
   --format json
+```
+
+```bash
+dws chat +chat-messages --group <openConversationId> \
+  --start "2026-08-01T00:00:00+08:00" --end "2026-08-02T00:00:00+08:00" \
+  --order asc --page-all --format json
 ```
 
 必须检查 `complete/hasMore/nextPage/stopReason/failures`；达到页数或结果上限不是来源完整。
