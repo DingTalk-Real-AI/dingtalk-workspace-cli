@@ -2042,6 +2042,11 @@ func newChatCommand() *cobra.Command {
 纯文本 / Markdown 消息（默认）：
   无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。
 
+返回值与后续操作：
+  发送后会返回 openTaskId。如需编辑或撤回刚发送的消息，使用
+  dws chat message query-send-status --open-task-id <openTaskId>
+  获取 openMessageId 和 openConversationId，无需再按消息内容反查。
+
 本地图片 / 文件消息：
   统一使用 --msg-type file --file-path <本地路径>。CLI 会完成上传并按 file 消息发送；
   .png/.jpg 也会显示为可下载的文件附件，不会生成 mediaId 或渲染成内联图片。
@@ -3304,7 +3309,10 @@ func newChatCommand() *cobra.Command {
 	chatMessageQuerySendStatusCmd := &cobra.Command{
 		Use:   "query-send-status",
 		Short: "查询消息发送状态",
-		Long:  `查询以当前用户身份发送的消息的发送状态。需要传入发送消息时返回的 openTaskId。`,
+		Long: `查询以当前用户身份发送的消息的发送状态。需要传入 chat message send 返回的 openTaskId。
+
+发送成功后，查询结果会返回 openMessageId 和 openConversationId，可直接作为
+chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`,
 		Example: `  dws chat message query-send-status --open-task-id <openTaskId>
   # openTaskId 由 dws chat message send 返回`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -3351,8 +3359,11 @@ func newChatCommand() *cobra.Command {
 		Short: "撤回用户发送的消息",
 		Long:  `撤回当前用户发送的消息。需要指定会话 ID 和消息 ID。`,
 		Example: `  dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>
-  # 查询会话 ID: dws chat search --query "群名"
-  # 消息 ID 可通过 dws chat message list 获取`,
+
+  # 发送后撤回：send -> query-send-status -> recall
+  dws chat message send --group <openConversationId> --text "待撤回的内容"
+  dws chat message query-send-status --open-task-id <上一步返回的openTaskId>
+  dws chat message recall --conversation-id <上一步返回的openConversationId> --msg-id <上一步返回的openMessageId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
@@ -3409,12 +3420,16 @@ func newChatCommand() *cobra.Command {
 推荐使用 --text 和可选 --title，CLI 会按 Markdown 消息规则生成 content：{"title":"标题","text":"正文"}。
 也可以直接使用 --content 传入完整 Markdown content JSON。--text 和 --content 二选一。`,
 		Example: `  dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "更新后的内容"
+
+  # 发送后编辑：send -> query-send-status -> edit
+  dws chat message send --group <openConversationId> --text "原始内容"
+  dws chat message query-send-status --open-task-id <上一步返回的openTaskId>
+  dws chat message edit --conversation-id <上一步返回的openConversationId> --msg-id <上一步返回的openMessageId> --text "更新后的内容"
+
   dws chat message edit --group <openConversationId> --msg-id <openMessageId> --title "标题" --text "更新后的内容"
   dws chat message edit --group <openConversationId> --msg-id <openMessageId> --text "<@all> 请查看" --at-all
   dws chat message edit --group <openConversationId> --msg-id <openMessageId> --text "<@openDingTalkId1> 请查看" --at-open-dingtalk-ids <openDingTalkId1>
-  dws chat message edit --group <openConversationId> --msg-id <openMessageId> --content '{"title":"标题","text":"更新后的内容"}'
-  # 查询会话 ID: dws chat search --query "群名"
-  # 消息 ID 可通过 dws chat message list 获取`,
+  dws chat message edit --group <openConversationId> --msg-id <openMessageId> --content '{"title":"标题","text":"更新后的内容"}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err

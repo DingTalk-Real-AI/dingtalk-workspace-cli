@@ -653,6 +653,8 @@ dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file
 #### 查询消息发送状态 — 查询以当前用户身份发送的消息的发送状态
 
 查询以当前用户身份发送的消息的发送状态。需要传入发送消息时返回的 openTaskId。
+
+发送成功时返回 openMessageId 和 openConversationId，可直接用于后续编辑或撤回。
 ```
 Usage:
   dws chat message query-send-status [flags]
@@ -666,6 +668,23 @@ Flags:
   - openTaskId 由 `dws chat message send` 发送消息成功后返回
   - 用于确认消息是否已成功发送或获取发送失败的原因
   - 返回结果中含发送成功消息的 openMessageId，可用于后续 recall（撤回）、read-status（查已读）等命令
+  - 返回结果同时含 openConversationId；与 openMessageId 组合后可直接用于 edit（编辑）或 recall（撤回）
+```
+
+发送后编辑/撤回时，优先使用下列 ID 链，无需按消息内容反查：
+
+```bash
+# 1. 发送后保留 openTaskId
+dws chat message send --group <openConversationId> --text "原始内容"
+# 2. 查询得到 openMessageId 和 openConversationId
+dws chat message query-send-status --open-task-id <openTaskId>
+# 3. 编辑消息
+dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "更新后的内容"
+
+# 发送后撤回使用同一 ID 链
+dws chat message send --group <openConversationId> --text "待撤回的内容"
+dws chat message query-send-status --open-task-id <openTaskId>
+dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>
 ```
 
 #### 撤回消息 — 撤回当前用户自己发出的消息
@@ -676,15 +695,13 @@ Usage:
   dws chat message recall [flags]
 Example:
   dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>
-  # 查询会话 ID: dws chat search --query "群名"
-  # 消息 ID 可通过 dws chat message list 获取
 Flags:
       --conversation-id string   会话 openConversationId (必填，支持单聊/群聊，别名: --group / --id / --chat)
       --msg-id string            消息 openMessageId (必填)
 
 注意:
   - --conversation-id 的别名: --group, --id, --chat (均可替代 --conversation-id)
-  - 消息 ID 可通过 `dws chat message list` 命令获取
+  - 刚由 `chat message send` 发出的消息，使用 `query-send-status` 返回的 openConversationId 和 openMessageId；只有历史消息或已丢失 openTaskId 时才通过消息拉取/搜索获取 ID
   - 仅支持撤回当前用户以个人身份发出的消息，不能撤回他人发送的消息，也不能撤回机器人发出的消息
   - 与 `recall-by-bot` 的区别：本命令通过 IM 接口撤回用户自己发出的消息（需要 openConversationId + openMessageId），`recall-by-bot` 通过机器人接口撤回机器人发出的消息（需要 robot-code + processQueryKey）
 ```
@@ -2373,7 +2390,8 @@ Flags:
 | `chat bot find` | `botOpenDingTalkId` | 给机器人发单聊消息（send --open-dingtalk-id；字段名是 botOpenDingTalkId，非 openDingTalkId） |
 | `chat message send-by-bot` | `processQueryKey` | recall-by-bot 的 --keys |
 | `chat message send` | `openTaskId` | query-send-status 的 --open-task-id |
-| `chat message list` | `openMessageId` | recall 的 --msg-id |
+| `chat message query-send-status` | `openMessageId` + `openConversationId` | 刚发送消息的 edit / recall |
+| `chat message list` | `openMessageId` | 历史消息或已丢失 openTaskId 时的 recall |
 | `chat message search` | `nextCursor` | 下次 message search 的 --cursor |
 | `chat message search-advanced` | `nextCursor` | 下次 message search-advanced 的 --cursor |
 | `chat search-common` | `openConversationId` | message send/list 等的 --group |
