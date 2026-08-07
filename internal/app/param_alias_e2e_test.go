@@ -173,6 +173,24 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	return ctx, preview, append([]executor.Invocation(nil), rejectRunner.attempts...), executeErr
 }
 
+func TestCrossPlatformCoverageFlagListDryRunStopsBeforeReadDispatch(t *testing.T) {
+	_, preview, attempts, err := executeParamAliasDryRunE2E(t,
+		"chat", "+flag-list", "--page-size", "20", "--cursor", "0", "--dry-run",
+	)
+	if err != nil {
+		t.Fatalf("flag-list dry-run error = %v", err)
+	}
+	if len(attempts) != 0 {
+		t.Fatalf("flag-list dry-run crossed dispatch boundary: %#v", attempts)
+	}
+	if !preview.DryRun || preview.Executed || preview.Tool != "list_message_favorites" {
+		t.Fatalf("flag-list dry-run preview = %#v", preview)
+	}
+	if preview.Arguments["cursor"] != float64(0) || preview.Arguments["size"] != "20" {
+		t.Fatalf("flag-list dry-run arguments = %#v", preview.Arguments)
+	}
+}
+
 func executeParamAliasE2E(t *testing.T, caller *paramAliasCaptureCaller, args ...string) (*pipeline.Context, error) {
 	t.Helper()
 	originalArgs := os.Args
@@ -491,23 +509,26 @@ func TestCrossPlatformCoverageIMUserIDHallucinationRoutes(t *testing.T) {
 		command string
 		want    string
 	}{
-		// IM user identifiers now keep --user-id as the canonical public route;
-		// older --user / --userId spellings remain command-owned hidden aliases.
+		// These paths are reduced by the reviewed user_id concept.
 		{command: "chat +chat-role-query-user", want: "user"},
 		{command: "chat +chat-role-set-user", want: "user"},
 		{command: "chat +messages-list-direct", want: "user"},
-		{command: "chat chmod", want: "user-id"},
-		{command: "chat message list", want: "user-id"},
-		{command: "chat message send", want: "user-id"},
-		{command: "chat conversation-info", want: "user-id"},
-		{command: "chat group transfer-owner", want: "user-id"},
-		{command: "chat group-role query-user", want: "user-id"},
-		{command: "chat group-role remove-user", want: "user-id"},
-		{command: "chat group-role set-user", want: "user-id"},
-		{command: "chat group set-admin", want: "user-id"},
-		{command: "chat group-mute-member", want: "user-id"},
-		{command: "chat message read-status", want: "user-id"},
-		{command: "chat message search-advanced", want: "user-id"},
+		{command: "chat chmod", want: "user"},
+		{command: "chat message list", want: "user"},
+		{command: "chat message send", want: "user"},
+
+		// These commands already own a hidden --userId compatibility flag.
+		// The format/spelling handler rewrites --user-id to that real flag, and
+		// the command's existing flagOrFallback wiring preserves its semantics.
+		{command: "chat conversation-info", want: "userId"},
+		{command: "chat group transfer-owner", want: "userId"},
+		{command: "chat group-role query-user", want: "userId"},
+		{command: "chat group-role remove-user", want: "userId"},
+		{command: "chat group-role set-user", want: "userId"},
+		{command: "chat group set-admin", want: "userId"},
+		{command: "chat group-mute-member", want: "userId"},
+		{command: "chat message read-status", want: "userId"},
+		{command: "chat message search-advanced", want: "userId"},
 	}
 
 	for _, test := range tests {
@@ -556,8 +577,8 @@ func TestCrossPlatformCoverageHiddenIMListDirectRemainsOutsideCentralAliasTable(
 		t.Fatal("RunPreParseArgs returned nil context")
 	}
 	flagArgs := ctx.Args[len(strings.Fields(command)):]
-	if err := leaf.ParseFlags(flagArgs); err != nil {
-		t.Fatalf("hidden command ParseFlags(%v) error = %v, want nil", flagArgs, err)
+	if err := leaf.ParseFlags(flagArgs); err == nil || !strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("hidden command ParseFlags(%v) error = %v, want unknown flag", flagArgs, err)
 	}
 }
 

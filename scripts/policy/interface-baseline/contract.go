@@ -324,17 +324,11 @@ func checkCompatibility(root *cobra.Command, baseline interfaceContract) []strin
 				))
 			}
 			if expectedFlag.RequiredSet && !expectedFlag.Required && isRequiredFlag(actual) {
-				if allowedChatIDFlagMigration(path, expectedFlag.Name, expected.Flags, effectiveFlagsByName(cmd)) {
-					continue
-				}
 				failures = append(failures, fmt.Sprintf(
 					"%q flag --%s became required", displayPath(path), expectedFlag.Name,
 				))
 			}
 			if expectedFlag.HiddenSet && !expectedFlag.Hidden && actual.Hidden {
-				if allowedChatIDFlagMigration(path, expectedFlag.Name, expected.Flags, effectiveFlagsByName(cmd)) {
-					continue
-				}
 				failures = append(failures, fmt.Sprintf(
 					"%q flag --%s became hidden", displayPath(path), expectedFlag.Name,
 				))
@@ -355,84 +349,12 @@ func checkCompatibility(root *cobra.Command, baseline interfaceContract) []strin
 			if _, existed := expected.Flags[actualFlag.Name]; existed || !actualFlag.Required {
 				continue
 			}
-			if allowedChatIDFlagMigration(path, actualFlag.Name, expected.Flags, effectiveFlagsByName(cmd)) {
-				continue
-			}
 			failures = append(failures, fmt.Sprintf(
 				"%q added required flag --%s", displayPath(path), actualFlag.Name,
 			))
 		}
 	}
 	return failures
-}
-
-func effectiveFlagsByName(cmd *cobra.Command) map[string]flagContract {
-	flags := map[string]flagContract{}
-	for _, flag := range effectiveFlags(cmd) {
-		flags[flag.Name] = flag
-	}
-	return flags
-}
-
-func allowedChatIDFlagMigration(path, flagName string, historical, current map[string]flagContract) bool {
-	if !strings.HasPrefix(path, "chat.") {
-		return false
-	}
-	canonical := canonicalChatIDFlag(flagName)
-	if canonical == "" {
-		return false
-	}
-	currentCanonical, ok := current[canonical]
-	if !ok || currentCanonical.Hidden {
-		return false
-	}
-	if flagName != canonical {
-		return currentCanonical.Type == flagTypeForMigration(flagName, historical, current)
-	}
-	for legacyName := range chatIDFlagAliases(canonical) {
-		historicalFlag, hadHistorical := historical[legacyName]
-		currentFlag, hasCurrent := current[legacyName]
-		if hadHistorical && hasCurrent && currentFlag.Hidden && historicalFlag.Type == currentCanonical.Type {
-			return true
-		}
-	}
-	return false
-}
-
-func flagTypeForMigration(flagName string, historical, current map[string]flagContract) string {
-	if flag, ok := historical[flagName]; ok {
-		return flag.Type
-	}
-	if flag, ok := current[flagName]; ok {
-		return flag.Type
-	}
-	return ""
-}
-
-func canonicalChatIDFlag(name string) string {
-	switch strings.TrimSpace(name) {
-	case "conversation-id", "group", "id", "chat", "open-conversation-id":
-		return "conversation-id"
-	case "message-id", "msg-id", "open-message-id":
-		return "message-id"
-	case "user-id", "user", "userId":
-		return "user-id"
-	default:
-		return ""
-	}
-}
-
-func chatIDFlagAliases(canonical string) map[string]struct{} {
-	switch canonical {
-	case "conversation-id":
-		return map[string]struct{}{"group": {}, "id": {}, "chat": {}, "open-conversation-id": {}}
-	case "message-id":
-		return map[string]struct{}{"msg-id": {}, "open-message-id": {}}
-	case "user-id":
-		return map[string]struct{}{"user": {}, "userId": {}}
-	default:
-		return nil
-	}
 }
 
 func resolveCommand(root *cobra.Command, path string) (*cobra.Command, bool) {
@@ -514,10 +436,6 @@ func mergeContracts(historical, current interfaceContract) (interfaceContract, [
 			oldFlag, exists := target.Flags[name]
 			if !exists {
 				if existed && newFlag.Required {
-					if allowedChatIDFlagMigration(path, name, target.Flags, addition.Flags) {
-						target.Flags[name] = newFlag
-						continue
-					}
 					failures = append(failures, fmt.Sprintf("%q added required flag --%s", displayPath(path), name))
 					continue
 				}
@@ -542,22 +460,10 @@ func mergeContracts(historical, current interfaceContract) (interfaceContract, [
 				oldFlag.Shorthand = newFlag.Shorthand
 			}
 			if oldFlag.RequiredSet && !oldFlag.Required && newFlag.Required {
-				if allowedChatIDFlagMigration(path, name, target.Flags, addition.Flags) {
-					oldFlag.Required = newFlag.Required
-					oldFlag.RequiredSet = newFlag.RequiredSet
-					target.Flags[name] = oldFlag
-					continue
-				}
 				failures = append(failures, fmt.Sprintf("%q flag --%s became required", displayPath(path), name))
 				continue
 			}
 			if oldFlag.HiddenSet && !oldFlag.Hidden && newFlag.Hidden {
-				if allowedChatIDFlagMigration(path, name, target.Flags, addition.Flags) {
-					oldFlag.Hidden = newFlag.Hidden
-					oldFlag.HiddenSet = newFlag.HiddenSet
-					target.Flags[name] = oldFlag
-					continue
-				}
 				failures = append(failures, fmt.Sprintf("%q flag --%s became hidden", displayPath(path), name))
 				continue
 			}

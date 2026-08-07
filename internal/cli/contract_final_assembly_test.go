@@ -79,41 +79,6 @@ func TestCrossPlatformCoverageRuntimeToolSpecFromContractFinalPassThrough(t *tes
 	}
 }
 
-func TestCrossPlatformCoverageRuntimeToolSpecFromContractFinalProjectsDeclaredHiddenParameter(t *testing.T) {
-	cmd := &cobra.Command{Use: "create", Short: "s", Long: "l"}
-	t.Cleanup(func() { contractfinal.ClearRuntimeContractFinalForTest(cmd) })
-	cmd.Flags().String("legacy", "", "legacy alias")
-	cmd.Flags().String("internal", "", "internal flag")
-	_ = cmd.Flags().MarkHidden("legacy")
-	_ = cmd.Flags().MarkHidden("internal")
-	contractfinal.RegisterRuntimeContractFinal(cmd, contract.ContractFinalPayload{
-		Description: "create thing",
-		Identity: &contract.ToolIdentitySpec{
-			ProductID: "dev", Name: "create_thing", CanonicalPath: "dev.create_thing",
-			CLIPath: "dev create", PrimaryCLIPath: "dev create",
-		},
-		Parameters: []contract.ParamDecl{{Name: "legacy", Property: "legacyId"}},
-	})
-
-	entry := runtimeSchemaEntry{
-		ProductID:      "dev",
-		ToolName:       "create_thing",
-		CLIName:        "create",
-		CLIPath:        "dev create",
-		PrimaryCLIPath: "dev create",
-		ProductName:    "Dev",
-		Command:        cmd,
-		Source:         "test",
-	}
-	spec, err := runtimeToolSpecFromContractFinal(entry, mustFinal(t, cmd), runtimeSchemaMetadataSources{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(spec.Parameters) != 1 || spec.Parameters[0].Name != "legacy" || spec.Parameters[0].Property != "legacyId" {
-		t.Fatalf("parameters = %#v, want declared hidden legacy only", spec.Parameters)
-	}
-}
-
 func TestCrossPlatformCoverageRuntimeToolSpecFromContractFinalIdentityMismatchFails(t *testing.T) {
 	entry := runtimeSchemaEntry{
 		ProductID:      "dev",
