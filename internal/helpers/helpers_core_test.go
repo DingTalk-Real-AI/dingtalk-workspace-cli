@@ -214,7 +214,7 @@ func TestCrossPlatformCoverageMCPReturnTextClassification(t *testing.T) {
 
 func TestCrossPlatformCoverageMCPOutputModesAndDevdocFormatting(t *testing.T) {
 	caller := &helpersCoreCaller{format: "json", result: textToolResult(`{"url":"https://example.test/?a=1&b=2"}`)}
-	out, _ := installHelpersCoreDeps(t, caller)
+	out, errOut := installHelpersCoreDeps(t, caller)
 	if err := callMCPToolInternalOpts("server", "tool", map[string]any{"x": 1}, true); err != nil {
 		t.Fatalf("unescaped JSON output: %v", err)
 	}
@@ -239,8 +239,16 @@ func TestCrossPlatformCoverageMCPOutputModesAndDevdocFormatting(t *testing.T) {
 		t.Fatalf("devdoc table = %q", out.String())
 	}
 	out.Reset()
-	if !formatDevdocSearchTable(`{"Result":{"Items":[]}}`) || !strings.Contains(out.String(), "no matching") {
-		t.Fatalf("empty devdoc table = %q", out.String())
+	errOut.Reset()
+	if !formatDevdocSearchTable(`{"Result":{"Items":[]}}`) {
+		t.Fatal("empty devdoc table did not format")
+	}
+	// PrintInfo 走 stderr（流向纪律 §5.1）：提示行落 errW，stdout 保持零字节。
+	if !strings.Contains(errOut.String(), "no matching") {
+		t.Fatalf("empty devdoc hint = %q, want \"no matching\" on stderr", errOut.String())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("empty devdoc hint must not touch stdout, got %q", out.String())
 	}
 	if formatDevdocSearchTable("{") {
 		t.Fatal("invalid devdoc JSON should not format")

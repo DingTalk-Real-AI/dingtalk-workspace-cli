@@ -320,7 +320,7 @@ func TestCrossPlatformCoverageCallToolDevAppEventSubscribeRetriesAreBounded(t *t
 	if err == nil {
 		t.Fatal("CallTool() succeeded after repeated HTTP 503 responses")
 	}
-	wantAttempts := client.MaxRetries + 1
+	wantAttempts := 1 // tools/call is never replayed automatically
 	if attempts != wantAttempts {
 		t.Fatalf("HTTP attempts = %d, want configured bound %d", attempts, wantAttempts)
 	}

@@ -257,18 +257,11 @@ func TestReasonForMethod(t *testing.T) {
 
 // ─── doWithRetry (via CallTool) ────────────────────────────────────────
 
-func TestCallTool_RetriesOn502(t *testing.T) {
+func TestCallTool_DoesNotRetryOn502(t *testing.T) {
 	attempts := 0
 	srv := newMockMCPServer(t, func(w http.ResponseWriter, r *http.Request) {
 		attempts++
-		if attempts <= 2 {
-			w.WriteHeader(http.StatusBadGateway)
-			return
-		}
-		result := map[string]any{
-			"content": []any{map[string]any{"type": "text", "text": `{"ok":true}`}},
-		}
-		w.Write(jsonRPCResponse(3, result))
+		w.WriteHeader(http.StatusBadGateway)
 	})
 	c := NewClient(srv.Client())
 	c.TrustedDomains = []string{"*"}
@@ -277,15 +270,12 @@ func TestCallTool_RetriesOn502(t *testing.T) {
 	c.RetryMaxDelay = 10 * time.Millisecond
 	c.sleep = func(ctx context.Context, d time.Duration) error { return nil }
 
-	result, err := c.CallTool(context.Background(), srv.URL, "test", nil)
-	if err != nil {
-		t.Fatalf("expected success after retries, got: %v", err)
+	_, err := c.CallTool(context.Background(), srv.URL, "test", nil)
+	if err == nil {
+		t.Fatal("expected 502 error")
 	}
-	if result.Content == nil {
-		t.Fatal("expected content")
-	}
-	if attempts <= 2 {
-		t.Fatalf("expected at least 3 attempts, got %d", attempts)
+	if attempts != 1 {
+		t.Fatalf("tools/call attempts=%d, want 1", attempts)
 	}
 }
 
@@ -306,5 +296,56 @@ func TestHttpStatusError_WithSnapshot(t *testing.T) {
 	err := httpStatusError("initialize", "https://api.example.com", 500, "/tmp/snap.json", "")
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// ─── parseRetryAfter 钳制上限参数化（B197） ─────────────────────────────
+
+// TestParseRetryAfterWithMaxClamps 验证 parseRetryAfterWithMax 的新增上限参数：
+// 服务端 Retry-After 超过 maxDelay 时被钳制到 maxDelay；maxDelay<=0 时保持
+// 原值（默认行为零变化，与 parseRetryAfter 一致）。
+func TestParseRetryAfterWithMaxClamps(t *testing.T) {
+	t.Parallel()
+
+	t.Run("seconds clamps to max", func(t *testing.T) {
+		d, ok := parseRetryAfterWithMax("30", 5*time.Second)
+		if !ok || d != 5*time.Second {
+			t.Fatalf("parseRetryAfterWithMax(30s, 5s) = %v/%v, want 5s/true", d, ok)
+		}
+	})
+	t.Run("seconds below max preserved", func(t *testing.T) {
+		d, ok := parseRetryAfterWithMax("3", 5*time.Second)
+		if !ok || d != 3*time.Second {
+			t.Fatalf("parseRetryAfterWithMax(3s, 5s) = %v/%v, want 3s/true", d, ok)
+		}
+	})
+	t.Run("zero max preserves original value", func(t *testing.T) {
+		// maxDelay=0 表示不钳制：与 parseRetryAfter 行为一致（B197 默认值零变化）。
+		d, ok := parseRetryAfterWithMax("120", 0)
+		if !ok || d != 120*time.Second {
+			t.Fatalf("parseRetryAfterWithMax(120s, 0) = %v/%v, want 120s/true", d, ok)
+		}
+	})
+	t.Run("http date clamps to max", func(t *testing.T) {
+		future := time.Now().Add(10 * time.Minute).UTC().Format(http.TimeFormat)
+		d, ok := parseRetryAfterWithMax(future, 2*time.Second)
+		if !ok || d != 2*time.Second {
+			t.Fatalf("parseRetryAfterWithMax(in 10m, 2s) = %v/%v, want 2s/true", d, ok)
+		}
+	})
+	t.Run("invalid raw rejected", func(t *testing.T) {
+		if _, ok := parseRetryAfterWithMax("not-a-number", 5*time.Second); ok {
+			t.Fatal("invalid raw must be rejected")
+		}
+	})
+}
+
+// TestParseRetryAfterLegacyUnchanged 验证 parseRetryAfter 原签名行为零变化
+// （B197 默认值不变）：委托 parseRetryAfterWithMax(raw, 0) 不引入钳制。
+func TestParseRetryAfterLegacyUnchanged(t *testing.T) {
+	t.Parallel()
+	d, ok := parseRetryAfter("120")
+	if !ok || d != 120*time.Second {
+		t.Fatalf("parseRetryAfter(120) = %v/%v, want 120s/true", d, ok)
 	}
 }

@@ -1,0 +1,5 @@
+{
+  "ok": true,
+  "outcome": "success",
+  "data": "colored [31mtext[0m leaked into json stdout"
+}

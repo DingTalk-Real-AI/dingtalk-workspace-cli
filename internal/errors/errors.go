@@ -29,6 +29,16 @@ import (
 
 var marshalErrorJSON = jsonutil.MarshalIndent
 
+// outcomeFailure 是错误通道的结果标记（契约规范 §2.5 outcome 四值枚举的
+// failure 值，B169）。字面量与 internal/output OutcomeFailure 同源同值；
+// 不跨包引用是因为 output 已导入 errors，反向引用会形成导入环。
+const outcomeFailure = "failure"
+
+// subtypeConfirmationRequired 是门禁拦截的 failure 子类标记（契约规范 §2.4，
+// B170）。字面量与 internal/output subtypeConfirmationRequired 及 runtime
+// WithReason("confirmation_required") 形态三方同源。
+const subtypeConfirmationRequired = "confirmation_required"
+
 // Category represents a stable error class with a documented exit code.
 type Category string
 
@@ -38,6 +48,47 @@ const (
 	CategoryValidation Category = "validation"
 	CategoryDiscovery  Category = "discovery"
 	CategoryInternal   Category = "internal"
+
+	// CategoryPartial 是部分成功（partial_failure）在 errors 侧的同源投影
+	// （B142，AC-04）：退出码经 ExitCodePartial 与 outcome/信封通道的
+	// partial_failure 共享 7（契约规范 §4）。批量操作走 apperrors 通道汇报
+	// 部分成功时使用本类别；成功信封主通道仍是 internal/output 的
+	// OutcomePartialFailure（ExitCodeForEnvelope partial 分支 → 7）。
+	CategoryPartial Category = "partial_failure"
+)
+
+// 退出码表（规划 v1.2 OQ-1 定案；契约规范 §4；轮10裁决⑬——保留现行码表，
+// 仅新增 partial_failure 专用码，不做 wire 破坏性重排）：
+//
+//	0  success / pending（异步受理不是失败）
+//	1  api            （CategoryAPI）
+//	2  auth           （CategoryAuth）
+//	3  validation     （CategoryValidation；confirmation_required 子类共享此码，
+//	                   以 reason/subtype 区分，AC-13）
+//	4  PAT            （PATError 专属，见 pat.go ExitCodePermission；Category 不占用）
+//	5  internal       （CategoryInternal 与兜底：非结构化错误、panic 收敛均归 5）
+//	6  discovery      （CategoryDiscovery）
+//	7  partial_failure（部分成功专用码，见 ExitCodePartial）
+//
+// ExitCodePartial 是 partial_failure（部分成功）的专用退出码（B142，AC-04，
+// 规划 WS2 第4项）。partial_failure 首先是 outcome/信封通道的结果类别
+// （internal/output ExitCodeForEnvelope partial 分支 → 7）；errors 侧以
+// CategoryPartial 提供同源投影，经本包 ExitCode 的 partial 分支同样得 7。
+// 本常量与 internal/output emitter.go 的 exitCodePartial=7（B33）跨包同源：
+// 值相等由两侧测试分别锁定（本包 errors_homology_test.go 与 output 侧
+// TestExitCodeForEnvelopeSameSourceAsErrorsExitCode/B209），防单边漂移。
+const ExitCodePartial = 7
+
+// 类别专属退出码常量（B171/B172，权威 = 规划 v1.2 OQ-1 定案，契约规范 §4）。
+// ExitCode() 的 switch 用内联字面量，本组常量由 exitcodes.go 的
+// exitCodeByCategory 映射表引用，值与内联字面量一一对应（同源不双轨）。
+// 修改任一值必须先同步 ExitCode() 的 switch 分支与 internal/output 侧码表。
+const (
+	ExitCodeAPI        = 1
+	ExitCodeAuth       = 2
+	ExitCodeValidation = 3
+	ExitCodeDiscovery  = 6
+	ExitCodeInternal   = 5
 )
 
 // Error is the structured repository-local error model for the Go rewrite.
@@ -82,6 +133,13 @@ type Option func(*Error)
 // ExitCodePermission and the exit-code table in docs/reference.md);
 // Discovery therefore uses 6 so hosts can tell "catalog lookup broke"
 // apart from "PAT permission insufficient".
+//
+// confirmation_required 是 validation 的子类而非独立类别（B171，AC-13，
+// 规划 v1.2 OQ-1 定案）：门禁拦截错误挂 CategoryValidation 并以
+// reason=confirmation_required 区分，与 validation 共享 rc=3。信封侧
+// internal/output exitCodeForErrorInfo 的「subtype 优先于 type、
+// confirmation_required 恒 3」规则与本表同源（轮10裁决⑬；远期独立码
+// 保留于规划 OQ-9，落地前不得双轨）。
 func (e *Error) ExitCode() int {
 	switch e.Category {
 	case CategoryAPI:
@@ -92,6 +150,8 @@ func (e *Error) ExitCode() int {
 		return 3
 	case CategoryDiscovery:
 		return 6
+	case CategoryPartial:
+		return ExitCodePartial
 	default:
 		return 5
 	}
@@ -148,6 +208,11 @@ func WithRetryable(retryable bool) Option {
 // WithRetryAfterSeconds records the server-recommended delay before a retry.
 // A zero delay is meaningful and is therefore preserved; negative values are
 // ignored as invalid server guidance.
+//
+// 本通道只存原值、不钳制（B195/B199，AC-24）：服务端给多少存多少，wire 上
+// retry_after_seconds 原样透传。transport 侧的 RetryMaxDelay 钳制只作用于
+// 重试延迟选择（retryDelayForAttempt），不得回写或截断本字段（B196 草案：
+// 钳制上限可配置化后仍须保持「钳制延迟、不钳制透传」双通道分离）。
 func WithRetryAfterSeconds(seconds int64) Option {
 	return func(err *Error) {
 		if seconds < 0 {
@@ -322,17 +387,32 @@ func ExitCode(err error) int {
 }
 
 // PrintJSON writes a machine-readable JSON error object.
+// wire 键与 internal/output Envelope.Error（契约规范 §2.4）对称：
+// `category` 为 legacy 兼容键（auth_refresh_retry_runner_test 等既有消费方
+// 依赖，B173 保留），`type` 为与 output 侧 ErrorInfo.Type 对齐的规范键
+// （B173，category→type 映射：值同源 = category(err)）；两者值恒等。
+// `outcome` 恒为 "failure"（错误信封恒是失败结果，B169）；`subtype` 在
+// Reason 已知时投影（B170，confirmation_required/rate_limit 等）。
 func PrintJSON(w io.Writer, err error) error {
 	errorPayload := map[string]any{
 		"code":     ExitCode(err),
 		"category": category(err),
+		"type":     category(err),
 		"message":  err.Error(),
+	}
+	if err != nil {
+		// 错误信封是失败结果：outcome 恒为 failure（B169，契约 §1/§2.5）。
+		errorPayload["outcome"] = outcomeFailure
 	}
 
 	var typed *Error
 	if stderrors.As(err, &typed) {
 		if typed.Reason != "" {
 			errorPayload["reason"] = typed.Reason
+			// Reason→subtype 投影（B170，契约 §2.4）：reason 值即 subtype
+			// 规范值（confirmation_required/rate_limit 等），与 output 侧
+			// ErrorInfo.Subtype 对称。仅当 Reason 非空时投影（omitempty）。
+			errorPayload["subtype"] = typed.Reason
 		}
 		if typed.Operation != "" {
 			errorPayload["operation"] = typed.Operation
@@ -553,6 +633,12 @@ func serverGuidance(diag ServerDiagnostics) (string, string) {
 		}
 	}
 	return friendlyHint, actionURL
+}
+
+// ServerGuidance exposes the same recovery projection to repository-local
+// adapters so legacy JSON and Framework 2.0 errors stay semantically aligned.
+func ServerGuidance(diag ServerDiagnostics) (string, string) {
+	return serverGuidance(diag)
 }
 
 func category(err error) string {

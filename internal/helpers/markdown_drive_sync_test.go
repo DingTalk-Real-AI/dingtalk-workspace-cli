@@ -205,7 +205,7 @@ func TestDriveUploadOverwriteRoutesAndConfirms(t *testing.T) {
 		} {
 			t.Run(route.name, func(t *testing.T) {
 				caller := &markdownDriveCaller{format: "raw", dryRun: true}
-				stdout, _ := installMarkdownDriveDeps(t, caller)
+				stdout, stderr := installMarkdownDriveDeps(t, caller)
 				path := writeMarkdownDriveFixture(t, "payload.md", "body")
 				args := []string{"drive", "upload", "--file", path, "--node", "file-1"}
 				args = append(args, route.routeArgs...)
@@ -215,8 +215,13 @@ func TestDriveUploadOverwriteRoutesAndConfirms(t *testing.T) {
 				if len(caller.calls) != 0 {
 					t.Fatalf("human dry run made MCP calls: %#v", caller.calls)
 				}
-				if text := stdout.String(); !strings.Contains(text, route.wantTarget) || !strings.Contains(text, "file-1") {
+				// PrintKeyValue 走 stderr（流向纪律 §5.1，B51）：人读 dry-run
+				// 预览落诊断流，stdout 保持零字节。
+				if text := stderr.String(); !strings.Contains(text, route.wantTarget) || !strings.Contains(text, "file-1") {
 					t.Fatalf("human dry-run output = %q", text)
+				}
+				if stdout.Len() != 0 {
+					t.Fatalf("human dry-run preview must not touch stdout, got %q", stdout.String())
 				}
 			})
 		}
@@ -919,7 +924,7 @@ func TestMarkdownPublishesTypedConstraints(t *testing.T) {
 
 func TestMarkdownContentSourcesAndHumanDiffs(t *testing.T) {
 	caller := &markdownDriveCaller{format: "raw"}
-	stdout, _ := installMarkdownDriveDeps(t, caller)
+	stdout, stderr := installMarkdownDriveDeps(t, caller)
 	cmd := &cobra.Command{Use: "source"}
 	cmd.SetIn(strings.NewReader("from stdin"))
 
@@ -953,11 +958,16 @@ func TestMarkdownContentSourcesAndHumanDiffs(t *testing.T) {
 		t.Fatalf("human patch diff = %q", text)
 	}
 	stdout.Reset()
+	stderr.Reset()
 	if err := printMarkdownDryRun(map[string]any{"operation": "fetch"}, "获取 Markdown 内容", "node-1"); err != nil {
 		t.Fatal(err)
 	}
-	if text := stdout.String(); !strings.Contains(text, "获取 Markdown 内容") || !strings.Contains(text, "node-1") {
+	// PrintKeyValue 走 stderr（流向纪律 §5.1，B51）：人读 dry-run 预览落诊断流。
+	if text := stderr.String(); !strings.Contains(text, "获取 Markdown 内容") || !strings.Contains(text, "node-1") {
 		t.Fatalf("human dry-run output = %q", text)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("human dry-run preview must not touch stdout, got %q", stdout.String())
 	}
 	if markdownRouteName(false) != "drive" || markdownRouteName(true) != "doc" {
 		t.Fatal("route names are incorrect")

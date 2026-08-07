@@ -271,12 +271,15 @@ func TestCrossPlatformCoverageSmallHandlerAndFormatterCoverage(t *testing.T) {
 	_ = newHrmregisterCommand()
 	_ = newPatCommand()
 
-	var out bytes.Buffer
-	f := &Formatter{w: &out, errW: io.Discard}
+	var out, errOut bytes.Buffer
+	f := &Formatter{w: &out, errW: &errOut}
 	f.PrintSuccess("ok")
 	f.PrintError("bad")
-	if out.Len() == 0 {
-		t.Fatal("formatter output is empty")
+	if errOut.Len() == 0 {
+		t.Fatal("formatter stderr output is empty")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("progress/status output must go to stderr, stdout got %q", out.String())
 	}
 
 	parent := &cobra.Command{Use: "sheet"}

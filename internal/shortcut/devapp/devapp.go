@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -1584,35 +1585,45 @@ var VersionStatus = shortcut.Shortcut{
 
 func init() {
 	shortcut.Register(
-		ListApp,
-		GetApp,
-		CreateApp,
-		UpdateApp,
-		DeleteApp,
-		EnableApp,
-		DisableApp,
-		GetCredentials,
-		WebappGet,
-		WebappConfig,
-		PermissionList,
-		PermissionAdd,
-		PermissionRemove,
-		MemberList,
-		MemberAdd,
-		MemberRemove,
-		SecurityConfig,
-		RobotGet,
-		RobotConfig,
-		RobotEnable,
-		RobotDisable,
-		EventList,
-		EventSubscribe,
-		EventUnsubscribe,
-		VersionCreate,
-		VersionList,
-		VersionGet,
-		VersionCheckApproval,
-		VersionPublish,
-		VersionStatus,
+		frameworkDualValidate(ListApp),
+		frameworkV2(GetApp),
+		frameworkDualValidate(CreateApp),
+		frameworkDualValidate(UpdateApp),
+		frameworkDualValidate(DeleteApp),
+		frameworkDualValidate(EnableApp),
+		frameworkDualValidate(DisableApp),
+		frameworkV2(GetCredentials),
+		frameworkV2(WebappGet),
+		frameworkDualValidate(WebappConfig),
+		frameworkDualValidate(PermissionList),
+		frameworkDualValidate(PermissionAdd),
+		frameworkDualValidate(PermissionRemove),
+		frameworkDualValidate(MemberList),
+		frameworkDualValidate(MemberAdd),
+		frameworkDualValidate(MemberRemove),
+		frameworkDualValidate(SecurityConfig),
+		frameworkV2(RobotGet),
+		frameworkDualValidate(RobotConfig),
+		frameworkDualValidate(RobotEnable),
+		frameworkDualValidate(RobotDisable),
+		frameworkDualValidate(EventList),
+		frameworkDualValidate(EventSubscribe),
+		frameworkDualValidate(EventUnsubscribe),
+		frameworkDualValidate(VersionCreate),
+		frameworkDualValidate(VersionList),
+		frameworkV2(VersionGet),
+		frameworkV2(VersionCheckApproval),
+		frameworkDualValidate(VersionPublish),
+		frameworkV2(VersionStatus),
 	)
+}
+
+func frameworkV2(item shortcut.Shortcut) shortcut.Shortcut {
+	item.OutputRollout = output.RolloutV2Active
+	return item
+}
+
+func frameworkDualValidate(item shortcut.Shortcut) shortcut.Shortcut {
+	item.OutputRollout = output.RolloutDualValidate
+	return item
 }

@@ -1,0 +1,11 @@
+{
+  "ok": false,
+  "outcome": "failure",
+  "error": {
+    "type": "api",
+    "message": "rate limited"
+  },
+  "errcode": 90018,
+  "errorCode": 90018,
+  "error_code": 90018
+}

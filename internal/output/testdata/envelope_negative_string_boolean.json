@@ -1,0 +1,14 @@
+{
+  "ok": "true",
+  "outcome": "success",
+  "dry_run": "true",
+  "data": {
+    "id": "a",
+    "name": "alpha"
+  },
+  "meta": {
+    "pagination": {
+      "endpoint_exhausted": "false"
+    }
+  }
+}

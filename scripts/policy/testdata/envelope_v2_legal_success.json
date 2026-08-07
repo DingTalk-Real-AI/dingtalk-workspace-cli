@@ -1,0 +1,8 @@
+{
+  "contract_version": "dws.output.v2",
+  "ok": true,
+  "outcome": "success",
+  "data": {
+    "id": "a"
+  }
+}

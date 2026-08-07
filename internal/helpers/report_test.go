@@ -412,7 +412,7 @@ func TestCrossPlatformCoverageReportContentsSourcesAndSafePaths(t *testing.T) {
 
 func TestCrossPlatformCoverageReportDispatchHintsAndDeprecation(t *testing.T) {
 	caller := &reportTestCaller{format: "table"}
-	out, _ := installReportTestDeps(t, caller)
+	out, errOut := installReportTestDeps(t, caller)
 	for _, operation := range []string{"template-list", "template-detail", "detail", "stats", "list", "sent", "create", "unknown"} {
 		_ = reportDispatchHint(operation, "")
 		_ = reportDispatchHint(operation, "parameter error")
@@ -420,8 +420,15 @@ func TestCrossPlatformCoverageReportDispatchHintsAndDeprecation(t *testing.T) {
 	if reportDispatchHint("create", "PARAM_ERROR") == "" || reportDispatchHint("unknown", "bad") != "" {
 		t.Fatal("dispatch hint routing changed")
 	}
-	if err := withReportDispatchHint("list", nil); err != nil || !strings.Contains(out.String(), "可复用") {
-		t.Fatalf("successful dispatch hint = %q, %v", out.String(), err)
+	if err := withReportDispatchHint("list", nil); err != nil {
+		t.Fatalf("successful dispatch hint error = %v", err)
+	}
+	// PrintDim 走 stderr（流向纪律 §5.1）：可复用提示落 errW，stdout 保持零字节。
+	if !strings.Contains(errOut.String(), "可复用") {
+		t.Fatalf("successful dispatch hint = %q, want \"可复用\" on stderr", errOut.String())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("dispatch hint must not touch stdout, got %q", out.String())
 	}
 	caller.format = "json"
 	if err := withReportDispatchHint("list", nil); err != nil {
@@ -442,12 +449,12 @@ func TestCrossPlatformCoverageReportDispatchHintsAndDeprecation(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{Use: "old"}
-	errOut := &bytes.Buffer{}
-	cmd.SetErr(errOut)
+	depErrOut := &bytes.Buffer{}
+	cmd.SetErr(depErrOut)
 	called := false
 	run := withReportDeprecationWarning("old", "new", func(*cobra.Command, []string) error { called = true; return nil })
-	if err := run(cmd, nil); err != nil || !called || !strings.Contains(errOut.String(), "deprecated") {
-		t.Fatalf("deprecation wrapper = %q, %v, %v", errOut.String(), called, err)
+	if err := run(cmd, nil); err != nil || !called || !strings.Contains(depErrOut.String(), "deprecated") {
+		t.Fatalf("deprecation wrapper = %q, %v, %v", depErrOut.String(), called, err)
 	}
 	if got := parseReportUserIDs(" a, ,b "); len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Fatalf("parseReportUserIDs = %#v", got)

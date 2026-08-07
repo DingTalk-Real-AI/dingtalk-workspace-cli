@@ -265,9 +265,21 @@ func TestDaemonStatusJSON(t *testing.T) {
 	if err := daemonStatus(&buf, "j", true); err != nil {
 		t.Fatalf("daemonStatus json: %v", err)
 	}
-	var report connectHealthReport
-	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+	var env struct {
+		OK      bool            `json:"ok"`
+		Outcome string          `json:"outcome"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &env); err != nil {
 		t.Fatalf("output is not valid JSON: %v\n%s", err, buf.String())
+	}
+	// 统一输出试点（B111）：--json 输出完整信封，健康报告进 data。
+	if !env.OK || env.Outcome != "success" {
+		t.Fatalf("envelope ok/outcome = %v/%q, want true/success: %s", env.OK, env.Outcome, buf.String())
+	}
+	var report connectHealthReport
+	if err := json.Unmarshal(env.Data, &report); err != nil {
+		t.Fatalf("data is not a health report: %v\n%s", err, buf.String())
 	}
 	if report.State != healthHealthy {
 		t.Errorf("state = %q, want %q", report.State, healthHealthy)
@@ -281,7 +293,7 @@ func TestDaemonStopNotRunning(t *testing.T) {
 	connectDaemonDirOverride = t.TempDir()
 	t.Cleanup(func() { connectDaemonDirOverride = "" })
 	var buf bytes.Buffer
-	if err := daemonStop(&buf, "ghost"); err != nil {
+	if _, err := daemonStop(&buf, "ghost"); err != nil {
 		t.Fatalf("daemonStop: %v", err)
 	}
 	if !strings.Contains(buf.String(), "not running") {
@@ -295,7 +307,7 @@ func TestDaemonStopStaleCleansPidFile(t *testing.T) {
 	dir, _ := connectDaemonDir("stalestop")
 	writeDaemonState(dir, daemonState{Pid: deadPid(t), StartUnix: time.Now().Unix(), DirKey: "stalestop"})
 	var buf bytes.Buffer
-	if err := daemonStop(&buf, "stalestop"); err != nil {
+	if _, err := daemonStop(&buf, "stalestop"); err != nil {
 		t.Fatalf("daemonStop: %v", err)
 	}
 	if _, err := os.Stat(daemonPidPath(dir)); !os.IsNotExist(err) {

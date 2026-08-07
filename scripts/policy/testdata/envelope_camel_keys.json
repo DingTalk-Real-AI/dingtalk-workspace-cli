@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "outcome": "pending",
+  "meta": {
+    "timedOut": false,
+    "nextCommand": "dws dev app robot result --unified-app-id fixture"
+  },
+  "data": {}
+}

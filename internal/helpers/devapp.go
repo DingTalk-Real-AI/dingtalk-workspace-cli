@@ -22,6 +22,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
@@ -863,6 +864,7 @@ func newDevAppPermissionListCommand(runner executor.Runner) *cobra.Command {
 				CanonicalPath:  "dev.list_dev_app_permissions",
 				CLIPath:        "dev app permission list",
 				PrimaryCLIPath: "dev app permission list",
+				Aliases:        []string{"dev app permission search"},
 			},
 			Description: "查询开放平台应用权限列表",
 			DryRun:      devAppDryRun,
@@ -1596,8 +1598,23 @@ func newDevAppVersionCheckApprovalCommand(runner executor.Runner) *cobra.Command
 			{Name: "version-id", Usage: "版本 ID (必填)", Bind: "versionId", Trim: true, Required: true, RequiredHint: "--version-id 为必填"},
 		},
 		ConstParams: map[string]any{"precheckOnly": true},
-		Call:        devAppCall(runner),
-		PostMount:   devAppMeta(devAppVersionPublishTool),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID: "dev", Name: "version_check_approval", CanonicalPath: "dev.version_check_approval",
+				CLIPath: "dev app version check-approval", PrimaryCLIPath: "dev app version check-approval",
+			},
+			Description: "预检版本发布是否需要审批，不执行发布",
+			DryRun:      devAppDryRun,
+			Interface:   devAppCompositeInterface(),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "预检应用版本的审批要求和候选审批人",
+				UseWhen:      []string{"发布版本前确认是否需要审批及候选审批人"},
+				AvoidWhen:    []string{"实际发布版本时使用 dev app version publish"},
+				Examples:     []string{"dws dev app version check-approval --unified-app-id <unifiedAppId> --version-id <versionId>"},
+			},
+		},
+		Call:      devAppCall(runner),
+		PostMount: devAppMeta(devAppVersionPublishTool),
 	})
 }
 
@@ -1703,6 +1720,9 @@ func devAppLeafMeta(cmd *cobra.Command, tool string) {
 	cmd.DisableAutoGenTag = true
 	preferLegacyLeaf(cmd)
 	annotateDevAppTool(cmd, tool)
+	// This leaf has migrated to Framework 2.0. Consumers keep using --format;
+	// the active contract is a release property, not an Agent-selected flag.
+	output.SetCommandRollout(cmd, output.RolloutV2Active)
 }
 
 // devAppCall 返回统一派发闭包（替代各命令重复的 Call: runDevAppTool 透传）。
@@ -1783,7 +1803,315 @@ func runDevAppTool(runner executor.Runner, cmd *cobra.Command, tool string, para
 	if devAppPrettyWanted(cmd) {
 		devAppPrettyAnnotate(tool, result.Response)
 	}
-	return writeCommandPayload(cmd, result)
+	return writeDevAppEnvelope(cmd, result)
+}
+
+func devAppCommandResult(result executor.Result) output.CommandResult {
+	data := devAppEnvelopeData(result)
+	if result.Invocation.DryRun {
+		return output.Success(data, output.WithDryRun())
+	}
+	if content, ok := data.(map[string]any); ok {
+		if partial := devAppMultiProfileResult(content); partial != nil {
+			return partial
+		}
+		if failure := devAppFailureResult(content); failure != nil {
+			return failure
+		}
+		if pending := devAppPendingResult(content); pending != nil {
+			return pending
+		}
+	}
+	if meta := devAppPaginationMeta(data); meta != nil {
+		return output.Success(data, output.WithMeta(meta))
+	}
+	return output.Success(data)
+}
+
+// DevAppCommandResultFromPayload is the shared dingtalk-dev outcome mapper for
+// the native `dev ...` tree and the existing `devapp +...` shortcut tree. Both
+// entry points must classify the same upstream payload into the same v2
+// outcome; only command routing and projection differ.
+func DevAppCommandResultFromPayload(tool string, payload any, dryRun bool) output.CommandResult {
+	response := map[string]any{"content": payload}
+	if object, ok := payload.(map[string]any); ok {
+		if _, wrapped := object["content"]; wrapped {
+			response = object
+		}
+	}
+	result := executor.Result{
+		Invocation: executor.Invocation{
+			Implemented: true,
+			Kind:        "helper_invocation",
+			DryRun:      dryRun,
+		},
+		Response: response,
+	}
+	result = normalizeDevAppServiceResult(result)
+	if strings.TrimSpace(tool) != "" {
+		result = normalizeDevAppToolResult(tool, result)
+	}
+	return devAppCommandResult(result)
+}
+
+// writeDevRolloutResult is the gradual migration seam shared by dingtalk-dev.
+// The operation is executed exactly once; only the renderer changes. Legacy is
+// remains active only for commands that have not advanced to v2_active.
+func writeDevRolloutResult(cmd *cobra.Command, result output.CommandResult, legacy *output.Envelope, fallback output.Format) error {
+	if output.UsesV2(cmd) {
+		return output.StoreResult(cmd.Context(), result)
+	}
+	if output.CommandRollout(cmd) == output.RolloutDualValidate {
+		// Shadow-build/validate v2 without a second business invocation and
+		// without changing stdout. Metrics can be added around this seam later.
+		if err := output.ValidateResult(result); err != nil {
+			return err
+		}
+	}
+	return output.WriteEnvelope(cmd, legacy, fallback)
+}
+
+// writeDevAppEnvelope 是 dev app 全树的统一信封出口（统一输出 dev 域试点，
+// 队列 Phase F）。成功 → ok:true/outcome:success + data；--dry-run →
+// ok:true/outcome:success + dry_run:true：dry-run 是已完成的预演，不是异步未终态。
+// exit 0，参数非法仍走 validation 报错——错误路径继续由 apperrors 通道承载）。
+// json（默认）输出完整信封（唯一 JSON 契约）；其余 format 渲染业务数据。
+// 复用 internal/output 的权威 Envelope 类型与 WriteEnvelope 出口函数。
+func writeDevAppEnvelope(cmd *cobra.Command, result executor.Result) error {
+	env := &output.Envelope{
+		OK:      true,
+		Outcome: output.OutcomeSuccess,
+		Data:    devAppEnvelopeData(result),
+	}
+	if result.Invocation.DryRun {
+		env.DryRun = true
+	} else {
+		env.Meta = devAppPaginationMeta(env.Data)
+	}
+	return writeDevRolloutResult(cmd, devAppCommandResult(result), env, output.FormatJSON)
+}
+
+// devAppEnvelopeData 从工具调用结果中提取业务载荷（L2）：已实现的
+// helper/compat 调用把载荷放在 response.content 下；其余形态（如 dry-run
+// 预演的 Result 整体）原样透传，与 output.unwrapCompatRuntimePayload 的
+// 解包规则保持一致，保证 data 即既有消费方看到的载荷。
+func devAppEnvelopeData(result executor.Result) any {
+	if result.Invocation.Implemented {
+		switch result.Invocation.Kind {
+		case "compat_invocation", "helper_invocation":
+			if content, ok := result.Response["content"]; ok {
+				return content
+			}
+		}
+	}
+	return result
+}
+
+// devAppPaginationMeta 把列表载荷里的 cursor 分页字段投影到 meta.pagination
+// （契约规范 §3：分页元数据挂 meta 层）。透传语义不变：CLI 只观察服务端
+// 返回的 hasMore/nextCursor，不做合成。hasMore=true 且带 nextCursor →
+// endpoint_exhausted:false + next_token（可续跑）；hasMore=false →
+// endpoint_exhausted:true。hasMore=true 却无 cursor 时不产出分页元数据，
+// 避免违反「endpoint_exhausted:false 必须携带 next_token」。本批只投影、
+// 不从 data 剥离原字段（剥离属三期强类型 handler 的职责，记入 findings）。
+func devAppPaginationMeta(payload any) *output.Meta {
+	m, ok := payload.(map[string]any)
+	if !ok {
+		return nil
+	}
+	hasMore, hasFlag := m["hasMore"].(bool)
+	cursor := ""
+	if v, ok := m["nextCursor"].(string); ok {
+		cursor = strings.TrimSpace(v)
+	}
+	if !hasFlag && cursor == "" {
+		return nil
+	}
+	pg := &output.Pagination{}
+	switch {
+	case hasMore && cursor != "":
+		pg.EndpointExhausted = false
+		pg.NextToken = cursor
+	case hasFlag && !hasMore:
+		pg.EndpointExhausted = true
+	case !hasFlag && cursor != "":
+		pg.EndpointExhausted = false
+		pg.NextToken = cursor
+	default:
+		return nil
+	}
+	return &output.Meta{Pagination: pg}
+}
+
+func devAppMultiProfileResult(content map[string]any) output.CommandResult {
+	if !devAppContentBool(content, "multiProfile") {
+		return nil
+	}
+	profiles, ok := content["profiles"].([]any)
+	if !ok || len(profiles) == 0 {
+		return nil
+	}
+	succeeded := make([]any, 0, len(profiles))
+	failed := make([]output.PartialFailedEntry, 0)
+	unknown := make([]output.PartialUnknownEntry, 0)
+	for i, raw := range profiles {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			unknown = append(unknown, output.PartialUnknownEntry{
+				ID:     fmt.Sprintf("profile-%d", i+1),
+				Reason: "profile result is malformed; terminal state cannot be confirmed",
+			})
+			continue
+		}
+		id := devAppFirstContentString(entry, "selector", "profile")
+		if id == "" {
+			id = fmt.Sprintf("profile-%d", i+1)
+		}
+		if devAppContentBool(entry, "ok") {
+			preserved := make(map[string]any, len(entry)+1)
+			for key, value := range entry {
+				preserved[key] = value
+			}
+			if _, exists := preserved["id"]; !exists {
+				preserved["id"] = id
+			}
+			succeeded = append(succeeded, preserved)
+			continue
+		}
+		errorInfo := &output.ErrorInfo{Type: "api", Message: "profile execution failed"}
+		if errorMap, ok := entry["error"].(map[string]any); ok {
+			errorInfo = devAppErrorInfo(errorMap, "profile execution failed")
+			if category := devAppFirstContentString(errorMap, "type", "category"); category != "" {
+				errorInfo.Type = category
+			}
+			errorInfo.Subtype = devAppFirstContentString(errorMap, "subtype", "reason")
+			errorInfo.Stage = devAppFirstContentString(errorMap, "stage")
+			errorInfo.Hint = devAppFirstContentString(errorMap, "hint")
+			if retryable, present := errorMap["retryable"].(bool); present {
+				errorInfo.Retryable = retryable
+			}
+			if actions, present := errorMap["actions"].([]string); present {
+				errorInfo.Actions = append([]string(nil), actions...)
+			} else if rawActions, present := errorMap["actions"].([]any); present {
+				for _, rawAction := range rawActions {
+					if action, ok := rawAction.(string); ok {
+						errorInfo.Actions = append(errorInfo.Actions, action)
+					}
+				}
+			}
+			if details, present := errorMap["details"].(map[string]any); present {
+				errorInfo.Details = details
+			}
+		}
+		failed = append(failed, output.PartialFailedEntry{ID: id, Error: errorInfo})
+	}
+	if len(failed) == 0 && len(unknown) == 0 {
+		return nil
+	}
+	if len(succeeded) == 0 {
+		details := make([]any, 0, len(failed)+len(unknown))
+		for _, entry := range failed {
+			details = append(details, map[string]any{"id": entry.ID, "error": entry.Error})
+		}
+		for _, entry := range unknown {
+			details = append(details, map[string]any{"id": entry.ID, "unknown_reason": entry.Reason})
+		}
+		return output.Failure(&output.ErrorInfo{
+			Type:    "api",
+			Message: "no selected profile has a confirmed success",
+			Details: map[string]any{"profiles": details},
+		})
+	}
+	partial, err := output.NewPartialData(len(profiles), succeeded, failed, unknown)
+	if err != nil {
+		return output.Failure(&output.ErrorInfo{Type: "internal", Message: err.Error()})
+	}
+	return output.Partial(partial)
+}
+
+func devAppFailureResult(content map[string]any) output.CommandResult {
+	status := strings.ToUpper(devAppFirstContentString(content, "status", "taskStatus", "versionStatus", "processStatus"))
+	if success, present := content["success"].(bool); present && !success {
+		return output.Failure(devAppErrorInfo(content, "dev operation failed"))
+	}
+	if status == "FAIL" || status == "FAILED" || status == "EXPIRED" {
+		return output.Failure(devAppErrorInfo(content, "dev operation "+strings.ToLower(status)))
+	}
+	return nil
+}
+
+func devAppErrorInfo(content map[string]any, fallback string) *output.ErrorInfo {
+	message := devAppFirstContentString(content, "errorMsg", "errorMessage", "message")
+	if message == "" {
+		message = fallback
+	}
+	info := &output.ErrorInfo{Type: "api", Message: message}
+	if code, ok := content["errorCode"]; ok {
+		info.UpstreamCode = code
+	} else if code, ok := content["code"]; ok {
+		info.UpstreamCode = code
+	}
+	return info
+}
+
+func devAppPendingResult(content map[string]any) output.CommandResult {
+	state := strings.ToUpper(devAppFirstContentString(content,
+		"completionState", "status", "taskStatus", "versionStatus", "processStatus", "approvalStatus"))
+	nonTerminal := !devAppContentBool(content, "terminal") && (devAppContentBool(content, "mustContinue") || devAppContentBool(content, "mustAskUser"))
+	approvalPending := devAppContentBool(content, "approvalSubmitted") && !devAppContentBool(content, "published")
+	isPendingState := state == "WAITING" || state == "PENDING" || state == "PROCESSING" || state == "AUDIT" ||
+		state == "UNDER_REVIEW" || strings.HasPrefix(state, "WAITING_") || strings.HasPrefix(state, "BLOCKED_BY_")
+	if !isPendingState && !nonTerminal && !approvalPending {
+		return nil
+	}
+	if state == "" {
+		state = "WAITING_FOR_ACTION"
+	}
+	id := devAppFirstContentString(content, "taskId", "versionId", "unifiedAppId", "requestId")
+	if id == "" {
+		return output.Failure(&output.ErrorInfo{Type: "internal", Message: "non-terminal dev response is missing an operation identifier"})
+	}
+	next := devAppFirstNextCommand(content)
+	if next == "" {
+		next = devAppRecoveryCommand(content)
+	}
+	if next == "" {
+		return output.Failure(&output.ErrorInfo{Type: "internal", Message: "non-terminal dev response is missing a recovery command"})
+	}
+	return output.Pending(content, &output.OperationInfo{ID: id, State: strings.ToLower(state), NextCommand: next})
+}
+
+func devAppRecoveryCommand(content map[string]any) string {
+	if taskID := devAppFirstContentString(content, "taskId"); taskID != "" {
+		return fmt.Sprintf("dws dev app robot result --task-id %s --format json", taskID)
+	}
+	appID := devAppFirstContentString(content, "unifiedAppId")
+	versionID := devAppFirstContentString(content, "versionId")
+	if appID != "" && versionID != "" {
+		return fmt.Sprintf("dws dev app version status --unified-app-id %s --version-id %s --format json", appID, versionID)
+	}
+	return ""
+}
+
+func devAppFirstNextCommand(content map[string]any) string {
+	steps, ok := content["nextSteps"].([]map[string]any)
+	if ok {
+		for _, step := range steps {
+			if command := devAppFirstContentString(step, "command", "dryRunCommand"); command != "" {
+				return command
+			}
+		}
+	}
+	if rawSteps, ok := content["nextSteps"].([]any); ok {
+		for _, raw := range rawSteps {
+			if step, ok := raw.(map[string]any); ok {
+				if command := devAppFirstContentString(step, "command", "dryRunCommand"); command != "" {
+					return command
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // normalizeDevAppServiceResult unwraps the op-app ServiceResult envelope

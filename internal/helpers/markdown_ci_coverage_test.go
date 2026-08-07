@@ -343,15 +343,23 @@ func TestMarkdownCICoveragePatchEdges(t *testing.T) {
 			format: "raw",
 			steps:  []markdownDriveStep{{text: `{"downloadUrl":"https://download.test/current.md","fileName":"current.md"}`}},
 		}
-		stdout, _ := installMarkdownDriveDeps(t, caller)
+		stdout, stderr := installMarkdownDriveDeps(t, caller)
 		installMarkdownHTTPGet(t, "alpha beta")
 		if err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
 			"markdown", "patch", "--node", "node-1", "--space-id", "space-1",
 			"--pattern", "missing", "--content", "new", "--yes"); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(stdout.String(), "未找到匹配内容") || !strings.Contains(stdout.String(), "匹配数") {
-			t.Fatalf("stdout = %q", stdout.String())
+		// Progress lines and key/value summary both go to stderr (流向纪律
+		// §5.1/B51：PrintKeyValue 是人读状态行，stdout 只承载机器可读载荷)。
+		if !strings.Contains(stderr.String(), "未找到匹配内容") {
+			t.Fatalf("stderr = %q", stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "匹配数") {
+			t.Fatalf("stderr = %q, want 匹配数 summary", stderr.String())
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("zero-match summary must not touch stdout, got %q", stdout.String())
 		}
 	})
 
@@ -492,7 +500,7 @@ func TestMarkdownCICoveragePatchEdges(t *testing.T) {
 				{text: `{"updated":true}`},
 			},
 		}
-		stdout, _ := installMarkdownDriveDeps(t, caller)
+		_, stderr := installMarkdownDriveDeps(t, caller)
 		installMarkdownHTTPGet(t, "old value")
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
 		if err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
@@ -500,8 +508,8 @@ func TestMarkdownCICoveragePatchEdges(t *testing.T) {
 			"--pattern", "old", "--content", "new", "--yes"); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(stdout.String(), "内容已更新") {
-			t.Fatalf("stdout = %q", stdout.String())
+		if !strings.Contains(stderr.String(), "内容已更新") {
+			t.Fatalf("stderr = %q", stderr.String())
 		}
 	})
 }

@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "outcome": "success",
+  "data": [],
+  "meta": {
+    "count": 0,
+    "pagination": {
+      "endpoint_exhausted": false,
+      "next_token": "fixture-next"
+    }
+  }
+}

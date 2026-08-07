@@ -6,9 +6,13 @@
 |--------|------|
 | `dev app` | 应用生命周期（创建/查询/更新/删除/凭证/权限/成员/安全/网页/机器人/**建号**/版本/事件订阅） |
 | `dev connect` | **建联**：把现成机器人接到当前本地 agent（起 Stream，不建号） |
-| `dev doc` | 开放平台开发文档搜索入口（当前网关未注册该工具键，`dev doc search` 会报「未找到指定工具」不可用；文档搜索一律走 `dws devdoc article search --query <关键词>`） |
+| `dev doc` | 开放平台官方文档搜索入口：`dws dev doc search --query <关键词> --format json`；`devdoc article search` 作为兼容入口保留 |
 
 > ⚠️ **关键区分**：`dws chat bot search/find` 只查询已有机器人（IM 视角）；**创建/建号**机器人走 `dws dev app robot submit`；**建联**走 `dws dev connect`。"创建机器人"/"建联"一律走 `dev`，禁止走 `chat`。
+
+## 统一结果契约
+
+Agent 继续只使用既有的 `--format json`，不传协议选择参数。已经迁移的可终结 `dev` 命令直接返回 `contract_version: "dws.output.v2"`，顶层 `ok/outcome` 和进程退出码同源；`pending` 表示业务尚未终结，`partial_failure` 必须检查逐项明细。`dev connect` 前台模式是长驻 Stream，继续按流式会话处理；其可终结子命令使用统一结果契约。
 
 ---
 
@@ -145,8 +149,8 @@ dws dev connect --channel opencode \
 dws dev connect --daemon \
   --robot-client-id <clientId> --robot-client-secret <clientSecret>
 
-# 查看/停止后台连接器（status/list 忽略全局 --format，出 JSON 用专属 --json）
-dws dev connect status --json
+# 查看/停止后台连接器
+dws dev connect status --format json
 dws dev connect stop
 ```
 

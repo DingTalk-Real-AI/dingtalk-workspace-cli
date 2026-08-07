@@ -1,0 +1,10 @@
+[INFO] connecting to gateway...
+[INFO] token refreshed, retrying request
+{
+  "ok": true,
+  "outcome": "success",
+  "data": {
+    "id": "a",
+    "name": "alpha"
+  }
+}

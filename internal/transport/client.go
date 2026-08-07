@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -83,6 +84,7 @@ var supportedProtocolVersions = []string{
 
 type Client struct {
 	HTTPClient       *http.Client
+	RequestTimeout   time.Duration
 	MaxRetries       int
 	RetryDelay       time.Duration
 	RetryMaxDelay    time.Duration
@@ -232,13 +234,25 @@ func defaultTransport() *http.Transport {
 }
 
 func NewClient(httpClient *http.Client) *Client {
+	requestTimeout := time.Duration(0)
 	if httpClient == nil {
+		requestTimeout = defaultHTTPTimeout
 		httpClient = &http.Client{
-			Timeout:       defaultHTTPTimeout,
+			Timeout:       0,
 			Transport:     defaultTransport(),
 			CheckRedirect: safeRedirectPolicy,
 		}
 	} else {
+		// Preserve the caller's timeout semantics as a request context deadline
+		// and keep the shared client timeout at zero. In particular, Timeout==0
+		// remains unbounded; callers that provide their own client are not silently
+		// changed to the framework's 30-second default.
+		clone := *httpClient
+		httpClient = &clone
+		if httpClient.Timeout > 0 {
+			requestTimeout = httpClient.Timeout
+		}
+		httpClient.Timeout = 0
 		if httpClient.Transport == nil {
 			httpClient.Transport = defaultTransport()
 		}
@@ -247,10 +261,11 @@ func NewClient(httpClient *http.Client) *Client {
 		}
 	}
 	return &Client{
-		HTTPClient:    httpClient,
-		MaxRetries:    defaultMaxRetries,
-		RetryDelay:    defaultRetryDelay,
-		RetryMaxDelay: defaultRetryMaxDelay,
+		HTTPClient:     httpClient,
+		RequestTimeout: requestTimeout,
+		MaxRetries:     defaultMaxRetries,
+		RetryDelay:     defaultRetryDelay,
+		RetryMaxDelay:  defaultRetryMaxDelay,
 	}
 }
 
@@ -276,6 +291,7 @@ func safeRedirectPolicy(req *http.Request, via []*http.Request) error {
 func (c *Client) WithAuth(token string, headers map[string]string) *Client {
 	return &Client{
 		HTTPClient:       c.HTTPClient,
+		RequestTimeout:   c.RequestTimeout,
 		MaxRetries:       c.MaxRetries,
 		RetryDelay:       c.RetryDelay,
 		RetryMaxDelay:    c.RetryMaxDelay,
@@ -402,6 +418,16 @@ func cloneAnyMap(src map[string]any) map[string]any {
 }
 
 func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request requestEnvelope, expectResponse bool, out any) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if c.RequestTimeout > 0 {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, c.RequestTimeout)
+			defer cancel()
+		}
+	}
 	body, err := json.Marshal(request)
 	if err != nil {
 		return apperrors.NewInternal("failed to encode JSON-RPC request")
@@ -444,7 +470,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		logging.LogResponseBody(c.FileLogger, request.Method, c.ExecutionId, resp.StatusCode, data, headerTraceID)
-		return httpStatusError(request.Method, endpoint, resp.StatusCode, snapshotPath, headerTraceID)
+		return httpStatusErrorWithHeader(request.Method, endpoint, resp.StatusCode, snapshotPath, headerTraceID, resp.Header)
 	}
 
 	if !expectResponse {
@@ -499,8 +525,15 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 	if operation == "" {
 		operation = "jsonrpc"
 	}
+	maxRetries := c.MaxRetries
+	// Tool calls may be writes and the transport does not own enough schema
+	// context to prove idempotency. Never replay them automatically. Discovery
+	// requests remain bounded-retry operations.
+	if operation == "tools/call" {
+		maxRetries = 0
+	}
 	var lastErr error
-	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
+	for attempt := 0; attempt <= maxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
 			return nil, apperrors.NewDiscovery(
@@ -548,14 +581,14 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 			if isTimeoutError(err) {
 				break
 			}
-		} else if !retryable(resp.StatusCode) || attempt == c.MaxRetries {
+		} else if !retryable(resp.StatusCode) || attempt == maxRetries {
 			return resp, nil
 		} else {
 			lastErr = fmt.Errorf("retryable HTTP %d", resp.StatusCode)
 			resp.Body.Close()
 		}
 
-		if attempt < c.MaxRetries {
+		if attempt < maxRetries {
 			retryAfter := ""
 			statusForLog := 0
 			if resp != nil {
@@ -563,7 +596,7 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 				statusForLog = resp.StatusCode
 			}
 			delay := c.retryDelayForAttempt(attempt, retryAfter)
-			logging.LogRetryAttempt(c.FileLogger, operation, c.ExecutionId, attempt, c.MaxRetries, statusForLog, delay, lastErr)
+			logging.LogRetryAttempt(c.FileLogger, operation, c.ExecutionId, attempt, maxRetries, statusForLog, delay, lastErr)
 			if err := c.sleepForRetry(ctx, delay); err != nil {
 				opts := []apperrors.Option{
 					apperrors.WithOperation(operation),
@@ -584,6 +617,11 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 		}
 	}
 	reason, hint := classifyRequestFailure(lastErr)
+	// A tools/call request may have reached a mutating upstream before the
+	// response was lost. Transport does not know the command's safety or
+	// idempotency, so it must not tell an Agent that replay is safe. Discovery
+	// requests are read-only and may retain retry guidance.
+	agentRetryable := operation != "tools/call" && !errors.Is(lastErr, context.Canceled)
 	category := apperrors.CategoryDiscovery
 	actions := discoveryActions("")
 	if operation == "tools/call" {
@@ -592,17 +630,22 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 	}
 	logging.LogErrorClassified(c.FileLogger, operation, c.ExecutionId,
 		string(category), reason, 0, 0,
-		!isTimeoutError(lastErr), "")
+		agentRetryable, "")
 	opts := []apperrors.Option{
 		apperrors.WithOperation(operation),
 		apperrors.WithReason(reason),
-		apperrors.WithRetryable(!isTimeoutError(lastErr)),
 		apperrors.WithHint(hint),
 		apperrors.WithActions(actions...),
 		apperrors.WithCause(&CallError{
 			Stage: CallStageRequest,
 			Cause: lastErr,
 		}),
+	}
+	if operation != "tools/call" {
+		// retryable describes whether the caller/Agent may retry; it does not
+		// trigger an in-process replay. Ambiguous tool calls intentionally omit
+		// it because the write may already have happened.
+		opts = append(opts, apperrors.WithRetryable(agentRetryable))
 	}
 	message := fmt.Sprintf("request to %s failed: %v", RedactURL(endpoint), lastErr)
 	if category == apperrors.CategoryAPI {
@@ -714,10 +757,7 @@ func (c *Client) retryDelayForAttempt(attempt int, retryAfter string) time.Durat
 	if maxDelay <= 0 {
 		maxDelay = base * 8
 	}
-	if delay, ok := parseRetryAfter(retryAfter); ok {
-		if delay > maxDelay {
-			return maxDelay
-		}
+	if delay, ok := parseRetryAfterWithMax(retryAfter, maxDelay); ok {
 		if delay > 0 {
 			return delay
 		}
@@ -744,12 +784,21 @@ func (c *Client) sleepForRetry(ctx context.Context, delay time.Duration) error {
 }
 
 func parseRetryAfter(raw string) (time.Duration, bool) {
+	return parseRetryAfterWithMax(raw, 0)
+}
+
+// parseRetryAfterWithMax 是 parseRetryAfter 的钳制上限参数化变体（B197，
+// AC-24/AC-29）：新增 maxDelay 上限参数，把服务端 Retry-After 解析结果钳制到
+// [0, maxDelay] 区间。maxDelay<=0 表示不钳制（保持原值透传），与 parseRetryAfter
+// 行为完全一致（默认值零变化）。钳制只作用于重试延迟选择，不截断错误信封
+// retry_after_seconds 的透传原值（B196 草案：钳制延迟、不钳制透传双通道分离）。
+func parseRetryAfterWithMax(raw string, maxDelay time.Duration) (time.Duration, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return 0, false
 	}
 	if seconds, err := time.ParseDuration(raw + "s"); err == nil && seconds > 0 {
-		return seconds, true
+		return clampRetryDelay(seconds, maxDelay), true
 	}
 	deadline, err := http.ParseTime(raw)
 	if err != nil {
@@ -759,7 +808,18 @@ func parseRetryAfter(raw string) (time.Duration, bool) {
 	if delay < 0 {
 		return 0, true
 	}
-	return delay, true
+	return clampRetryDelay(delay, maxDelay), true
+}
+
+// clampRetryDelay 把 delay 钳制到 [0, maxDelay]（maxDelay<=0 时不钳制）。
+func clampRetryDelay(delay, maxDelay time.Duration) time.Duration {
+	if maxDelay > 0 && delay > maxDelay {
+		return maxDelay
+	}
+	if delay < 0 {
+		return 0
+	}
+	return delay
 }
 
 // isEndpointTrusted checks whether the endpoint is HTTPS and belongs to a
@@ -856,11 +916,14 @@ func sanitizeBearerToken(raw string) string {
 }
 
 func httpStatusError(method, endpoint string, statusCode int, snapshotPath, headerTraceID string) error {
+	return httpStatusErrorWithHeader(method, endpoint, statusCode, snapshotPath, headerTraceID, nil)
+}
+
+func httpStatusErrorWithHeader(method, endpoint string, statusCode int, snapshotPath, headerTraceID string, header http.Header) error {
 	message := fmt.Sprintf("request to %s returned HTTP %d", RedactURL(endpoint), statusCode)
 	opts := []apperrors.Option{
 		apperrors.WithOperation(method),
 		apperrors.WithReason(fmt.Sprintf("http_%d", statusCode)),
-		apperrors.WithRetryable(retryable(statusCode)),
 		apperrors.WithSnapshot(snapshotPath),
 		apperrors.WithTraceID(headerTraceID),
 		apperrors.WithCause(&CallError{
@@ -869,6 +932,16 @@ func httpStatusError(method, endpoint string, statusCode int, snapshotPath, head
 			TraceID:    headerTraceID,
 			Cause:      errors.New(message),
 		}),
+	}
+	// A 5xx/408 response to tools/call is ambiguous: the mutating operation may
+	// already have started upstream. Do not advertise a safe Agent replay. 429
+	// is the explicit pre-execution rejection exception and carries Retry-After.
+	if method != "tools/call" || statusCode == http.StatusTooManyRequests {
+		opts = append(opts, apperrors.WithRetryable(retryable(statusCode)))
+	}
+	if delay, ok := parseRetryAfter(header.Get("Retry-After")); ok {
+		seconds := int64(math.Ceil(delay.Seconds()))
+		opts = append(opts, apperrors.WithRetryAfterSeconds(seconds))
 	}
 
 	switch {

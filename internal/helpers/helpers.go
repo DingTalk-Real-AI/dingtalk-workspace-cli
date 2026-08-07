@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -254,6 +256,27 @@ func CallMCPToolTextOnServer(serverID, toolName string, args map[string]any) (st
 	return callMCPToolReturnTextOnServer(context.Background(), serverID, toolName, args)
 }
 
+// CallMCPToolDataOnServer invokes one tool without printing and decodes its
+// JSON text payload. Framework renderers use this seam so the business request
+// is executed exactly once and presentation remains a separate step.
+func CallMCPToolDataOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	text, err := callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(text) == "" {
+		return map[string]any{}, nil
+	}
+	var data any
+	if err := json.Unmarshal([]byte(text), &data); err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", toolName, err))
+	}
+	return data, nil
+}
+
 // callMCPTool 是通用的 MCP 工具调用入口：自动路由 → 调用 → 格式化输出。
 // 通过 resolveProductID() 自动确定目标 MCP Server，JSON 输出使用默认的 HTML 转义。
 func callMCPTool(toolName string, args map[string]any) error {
@@ -388,6 +411,16 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 			if toolName == "search_open_platform_docs" && flagFormat == "table" {
 				if formatted := formatDevdocSearchTable(c.Text); formatted {
 					return nil
+				}
+			}
+			// 统一输出试点（A3）：非 json 的结构化格式（table/pretty/csv/ndjson）
+			// 经 output.WriteFiltered 分发渲染——table/pretty 出视图，csv/ndjson
+			// 对单对象自动降级为键值表/单行 JSON。文本可解析为 JSON 才分发，
+			// 否则落到下方原文透传，保持向后兼容；json 与未知值不走本分支。
+			if format := output.ParseFormat(flagFormat, output.FormatJSON); format != output.FormatJSON && format != output.FormatRaw {
+				var parsed any
+				if err := json.Unmarshal([]byte(c.Text), &parsed); err == nil {
+					return output.WriteFiltered(deps.Out.w, format, parsed, deps.Caller.Fields(), deps.Caller.JQ())
 				}
 			}
 			// 默认：原样输出文本内容。

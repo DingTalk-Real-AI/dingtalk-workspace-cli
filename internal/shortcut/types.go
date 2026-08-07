@@ -28,6 +28,7 @@ package shortcut
 import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 )
 
 // Risk classifies the side effect of running a shortcut. It drives whether a
@@ -138,6 +139,10 @@ type Constraint struct {
 // The framework injects the global --format/--dry-run/--jq/--yes flags from the
 // root command, so shortcuts must not redeclare them.
 type Shortcut struct {
+	// OutputRollout selects the single active output contract for this exact
+	// command in the current release. It is internal release metadata, never a
+	// user/Agent flag.
+	OutputRollout output.RolloutState
 	// Service is the top-level command group, e.g. "contact". Multiple
 	// shortcuts sharing a Service are mounted under the same parent command.
 	Service string

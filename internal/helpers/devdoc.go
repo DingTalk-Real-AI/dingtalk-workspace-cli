@@ -4,9 +4,12 @@ import (
 	"strconv"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/spf13/cobra"
-
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/spf13/cobra"
 )
 
 func newDevdocCommand() *cobra.Command {
@@ -129,7 +132,11 @@ func newDevdocArticleSearchCommand() *cobra.Command {
 // newDevDocSearchCommand is the `dws dev doc search` surface — same execution
 // body as devdoc article search, but ContractFinal examples must use the
 // reviewed primary path for canonical dev.search_open_platform_docs_rag.
-func newDevDocSearchCommand() *cobra.Command {
+func newDevDocSearchCommand(runners ...executor.Runner) *cobra.Command {
+	var runner executor.Runner
+	if len(runners) > 0 {
+		runner = runners[0]
+	}
 	cmd := &cobra.Command{
 		Use:   "search [keyword]",
 		Short: "搜索开放平台文档",
@@ -152,11 +159,23 @@ func newDevDocSearchCommand() *cobra.Command {
 			if size < 1 {
 				size = 10
 			}
-			return callMCPTool("search_open_platform_docs", map[string]any{
+			params := map[string]any{
 				"keyword": flagOrFallback(cmd, "query", "keyword"),
 				"page":    page,
 				"size":    size,
-			})
+			}
+			if runner == nil {
+				return apperrors.NewInternal("dev doc search requires an executor runner")
+			}
+			invocation := executor.NewHelperInvocation(
+				cobracmd.LegacyCommandPath(cmd), "devdoc", "search_open_platform_docs", params,
+			)
+			result, err := runner.Run(cmd.Context(), invocation)
+			if err != nil {
+				return err
+			}
+			result = normalizeDevAppServiceResult(result)
+			return output.StoreResult(cmd.Context(), devAppCommandResult(result))
 		},
 	}
 	cmd.Flags().String("query", "", "搜索关键词 (必填)")
@@ -172,6 +191,7 @@ func newDevDocSearchCommand() *cobra.Command {
 		Index:       0,
 	})
 	DeclareLeafMetadata(cmd, LeafSpec{
+		OutputRollout: output.RolloutV2Active,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",
@@ -191,9 +211,9 @@ func newDevDocSearchCommand() *cobra.Command {
 				Ref:          &contract.InterfaceRefSpec{ProductID: "devdoc", RPCName: "search_open_platform_docs"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "通过 dev 兼容入口搜索开放平台文档",
-				UseWhen:      []string{"明确需要验证或使用 dev doc search 入口时"},
-				AvoidWhen:    []string{"常规开放平台文档检索优先使用可用的 devdoc article search"},
+				AgentSummary: "搜索钉钉开放平台官方文档",
+				UseWhen:      []string{"需要查询开放平台 API、参数、权限点或错误码时"},
+				AvoidWhen:    []string{"已有确定义务命令可直接完成任务时"},
 				Examples:     []string{"dws dev doc search --query \"MCP\" --size 10"},
 			},
 			Parameters: []contract.ParamDecl{

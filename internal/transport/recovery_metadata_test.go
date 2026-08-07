@@ -99,8 +99,10 @@ func TestCallToolRequestFailureUsesAPIClassification(t *testing.T) {
 	}
 }
 
-func TestCallToolRetryCancellationUsesAPIClassification(t *testing.T) {
+func TestCallToolDoesNotReplayAmbiguousOperation(t *testing.T) {
+	attempts := 0
 	client := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		attempts++
 		return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: http.NoBody}, nil
 	})})
 	client.MaxRetries = 1
@@ -121,8 +123,17 @@ func TestCallToolRetryCancellationUsesAPIClassification(t *testing.T) {
 	if typed.Operation != "tools/call" {
 		t.Fatalf("Operation = %q, want tools/call", typed.Operation)
 	}
-	if typed.Reason != "request_cancelled" {
-		t.Fatalf("Reason = %q, want request_cancelled", typed.Reason)
+	if typed.Reason != "http_503" {
+		t.Fatalf("Reason = %q, want http_503", typed.Reason)
+	}
+	if attempts != 1 {
+		t.Fatalf("tools/call attempts=%d, want exactly one", attempts)
+	}
+	if typed.RetryableSet || typed.Retryable {
+		t.Fatalf("ambiguous tools/call 503 advertised safe replay: set=%v value=%v", typed.RetryableSet, typed.Retryable)
+	}
+	if typed.ExecutionStarted != nil {
+		t.Fatalf("ambiguous tools/call must keep execution_started unknown, got %v", *typed.ExecutionStarted)
 	}
 	actions := strings.Join(typed.Actions, "\n")
 	if strings.Contains(actions, "internal/syncdata") || strings.Contains(actions, "sync-oss") {

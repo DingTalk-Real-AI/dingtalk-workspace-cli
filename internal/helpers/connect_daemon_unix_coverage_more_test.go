@@ -37,7 +37,7 @@ func TestCrossPlatformCoverageDaemonUnixStatusAndStopEdges(t *testing.T) {
 			return aliveChecks < 3
 		}
 		var out bytes.Buffer
-		if err := daemonStop(&out, "orphan"); err != nil {
+		if _, err := daemonStop(&out, "orphan"); err != nil {
 			t.Fatal(err)
 		}
 		select {
@@ -65,7 +65,7 @@ func TestCrossPlatformCoverageDaemonUnixStatusAndStopEdges(t *testing.T) {
 			return base.Add(time.Duration(calls) * (daemonStopTimeout + time.Second))
 		}
 		helperSleep = func(time.Duration) {}
-		if err := daemonStop(&bytes.Buffer{}, "orphan-force"); err != nil {
+		if _, err := daemonStop(&bytes.Buffer{}, "orphan-force"); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -87,7 +87,7 @@ func TestCrossPlatformCoverageDaemonUnixStatusAndStopEdges(t *testing.T) {
 			aliveCalls++
 			return aliveCalls == 1
 		}
-		if err := daemonStop(&bytes.Buffer{}, "live"); err != nil {
+		if _, err := daemonStop(&bytes.Buffer{}, "live"); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -101,7 +101,7 @@ func TestCrossPlatformCoverageDaemonUnixStatusAndStopEdges(t *testing.T) {
 		}
 		daemonProcessAlive = func(int) bool { return true }
 		daemonFindProcess = func(int) (*os.Process, error) { return os.FindProcess(-1) }
-		if err := daemonStop(&bytes.Buffer{}, "signal-error"); err == nil {
+		if _, err := daemonStop(&bytes.Buffer{}, "signal-error"); err == nil {
 			t.Fatal("signal process error was ignored")
 		}
 	})
@@ -130,7 +130,7 @@ func TestCrossPlatformCoverageDaemonUnixStatusAndStopEdges(t *testing.T) {
 		}
 		helperSleep = func(time.Duration) { advanced = true }
 		var out bytes.Buffer
-		if err := daemonStop(&out, "force"); err != nil {
+		if _, err := daemonStop(&out, "force"); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(out.String(), "SIGKILL") {

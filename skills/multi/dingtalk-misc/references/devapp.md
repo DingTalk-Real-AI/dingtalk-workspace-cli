@@ -1,6 +1,6 @@
 # 开放平台应用管理（dev / devapp）
 
-> **渐进式文档**：本文件为路由层（MUST DO / 概念地图 / 产品索引）；各命令组的详细参数与流程在 [dev/](./dev/) 目录下按需加载。命令前缀：`dws dev`（原子）与 `dws devapp +create` 等 `+` shortcut。
+> **渐进式文档**：本文件为路由层（MUST DO / 概念地图 / 产品索引）；各命令组的详细参数与流程在 [dev/](./dev/) 目录下按需加载。现有 `dws dev`与 `dws devapp +...` 前缀均保持不变。
 
 ## MUST DO
 
@@ -17,10 +17,17 @@
 9. `version check-approval` 若返回 `completionState=WAITING_FOR_APPROVER_SELECTION`，选择题原样展示 `approvalPromptText`（或 `approvalOptions[].label`），不得把姓名丢成泛化“候选审批人”
 10. `robot result` 若缺 `unifiedAppId` 或返回 `completionState=BLOCKED_BY_MISSING_UNIFIED_APP_ID`，必须停下要求明确的 `unifiedAppId`；禁止用 `clientId/appKey` 自动反查后继续执行版本写操作
 
+### 统一结果契约
+
+- Agent 始终只使用既有的 `--format json`，不选择输出协议版本。
+- 已迁移的可终结 `dev` 命令会直接返回 `contract_version: "dws.output.v2"`；按 `ok/outcome` 解析，`partial_failure` 和 `pending` 不得当作完整终态成功。
+- `dev connect` 前台模式是长驻 Stream，继续按流式会话处理；status/stop/restart/list 等可终结子命令使用统一结果契约。
+- 命令迁移和回滚由 CLI 发布完成，不把兼容责任转交给 Skill 或 Agent。
+
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "devapp +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws devapp <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service devapp --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先。命令已选中时直接执行，不改写 `devapp` / `dev` 前缀。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
@@ -109,7 +116,7 @@
 - 失败：`ServiceResult.success=false` 原样透传 `errorCode/errorMsg`，不编造解释，解读走下方文档 RAG。
 
 ## 开放平台文档 RAG / 错误码排查
-- dev 命令执行中，只要用户问开放平台 API、接口参数、字段含义、权限点、回调、SDK、配额、错误码，或命令返回上游 OpenAPI/SDK 错误，必须先用 `dws devdoc article search --query "<关键词>" --format json` 做官方文档 RAG（`dev doc search` 当前网关未注册该工具键，会报「未找到指定工具」，一律走 `devdoc article search`；flag 是 `--query` 不是 `--keyword`）。
+- dev 命令执行中，只要用户问开放平台 API、接口参数、字段含义、权限点、回调、SDK、配额、错误码，或命令返回上游 OpenAPI/SDK 错误，优先用 `dws dev doc search --query "<关键词>" --format json` 做官方文档 RAG；兼容入口 `dws devdoc article search` 仍可用。
 - 业务错误（`ServiceResult.success=false`）原样透传 `errorCode/errorMsg`，不要编造解释；需要解读错误含义时走 devdoc RAG。
 - 查询词优先保留原始 API 名、能力名、权限点、完整错误码和 message；首轮形如 `errcode <code> <message>`，无结果再换 `<产品/场景> <错误码>`、`<接口名> 参数`。
 - 本地 CLI 错误（如 `unknown command` / `unknown flag` / 认证）仍按 root `dws` / `dingtalk-shared` 的错误处理执行；`devdoc` 用于开放平台业务错误码和接口语义排查。

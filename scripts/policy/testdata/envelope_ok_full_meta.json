@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "outcome": "success",
+  "identity": "user:scan-fixture",
+  "data": {
+    "items": [
+      {
+        "name": "fixture",
+        "unifiedAppId": "00000000-0000-0000-0000-000000000000"
+      }
+    ]
+  },
+  "meta": {
+    "count": 1,
+    "pagination": {
+      "endpoint_exhausted": false,
+      "next_token": "fixture-token"
+    }
+  }
+}

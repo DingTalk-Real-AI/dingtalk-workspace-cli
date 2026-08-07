@@ -1,0 +1,5 @@
+{
+  "success": true,
+  "authenticated": false,
+  "message": "legacy non-envelope shape (pre-migration json output)"
+}

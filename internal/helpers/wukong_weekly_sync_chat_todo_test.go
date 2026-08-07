@@ -533,13 +533,18 @@ func TestCrossPlatformCoverageWukongWeeklyTodoQueryAllMappings(t *testing.T) {
 			if test.queryAll {
 				args = append(args, "--query-all")
 			}
-			stdout, _, err := executeWukongWeeklySyncCommand(t, "todo", caller, newTodoCommand, args...)
+			stdout, stderrText, err := executeWukongWeeklySyncCommand(t, "todo", caller, newTodoCommand, args...)
 			if err != nil {
 				t.Fatalf("auto-page dry-run returned error: %v", err)
 			}
 			requireWukongWeeklySyncNoCalls(t, caller)
-			if !strings.Contains(stdout, test.tool) {
-				t.Fatalf("auto-page dry-run output = %q, want tool %s", stdout, test.tool)
+			// PrintKeyValue 走 stderr（流向纪律 §5.1，B51）：dry-run 预览行
+			// （Tool/预计请求次数）落诊断流，stdout 保持零字节。
+			if !strings.Contains(stderrText, test.tool) {
+				t.Fatalf("auto-page dry-run output = %q, want tool %s", stderrText, test.tool)
+			}
+			if stdout != "" {
+				t.Fatalf("dry-run preview must not touch stdout, got %q", stdout)
 			}
 		})
 	}

@@ -1,0 +1,82 @@
+{
+  "failure": {
+    "ok": false,
+    "outcome": "failure",
+    "error": {
+      "type": "api",
+      "subtype": "rate_limit",
+      "code": 90018,
+      "message": "rate limited",
+      "retryable": true,
+      "retry_after_seconds": 30
+    }
+  },
+  "partial_failure": {
+    "ok": false,
+    "outcome": "partial_failure",
+    "data": {
+      "total": 3,
+      "succeeded": [
+        {
+          "id": "a",
+          "messageId": "m_1"
+        }
+      ],
+      "failed": [
+        {
+          "id": "b",
+          "error": {
+            "type": "api",
+            "code": 40001,
+            "message": "invalid recipient"
+          }
+        }
+      ],
+      "unknown": [
+        {
+          "id": "c",
+          "reason": "timeout after submit"
+        }
+      ]
+    }
+  },
+  "pending": {
+    "ok": true,
+    "outcome": "pending",
+    "data": {
+      "accepted": true,
+      "taskId": "t_9001"
+    },
+    "meta": {
+      "operation": {
+        "id": "t_9001",
+        "state": "processing",
+        "timed_out": true,
+        "next_command": "dws op get t_9001"
+      }
+    }
+  },
+  "success": {
+    "ok": true,
+    "outcome": "success",
+    "data": [
+      {
+        "id": "a",
+        "name": "alpha"
+      },
+      {
+        "id": "b",
+        "name": "beta"
+      }
+    ],
+    "meta": {
+      "count": 2,
+      "pagination": {
+        "endpoint_exhausted": false,
+        "pages": 2,
+        "items": 50,
+        "next_token": "cursor_abc"
+      }
+    }
+  }
+}

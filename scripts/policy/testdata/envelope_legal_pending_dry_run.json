@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "outcome": "pending",
+  "dry_run": true,
+  "data": {
+    "invocation": {
+      "kind": "helper_invocation",
+      "stage": "helper_override",
+      "implemented": false,
+      "dry_run": true,
+      "canonical_product": "devapp",
+      "tool": "create_dev_app",
+      "canonical_path": "devapp.create_dev_app",
+      "legacy_path": "dev app create",
+      "params": {
+        "desc": "probe",
+        "name": "ProbeApp"
+      }
+    },
+    "response": {
+      "dry_run": true,
+      "note": "execution skipped by --dry-run",
+      "request": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "method": "tools/call",
+        "params": {
+          "arguments": {
+            "desc": "probe",
+            "name": "ProbeApp"
+          },
+          "name": "create_dev_app"
+        }
+      }
+    }
+  }
+}

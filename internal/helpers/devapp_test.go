@@ -12,19 +12,52 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
 func newDevAppTestRoot(runner executor.Runner) *cobra.Command {
+	ctx, _ := output.WithResultStore(context.Background())
 	root := &cobra.Command{
 		Use:               "dws",
 		DisableAutoGenTag: true,
+		SilenceErrors:     true,
+		SilenceUsage:      true,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			return output.ValidateV2Format(cmd)
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
+			_, _, err := output.EmitStoredResult(cmd)
+			return err
+		},
 	}
+	root.SetContext(ctx)
 	root.PersistentFlags().Bool("dry-run", false, "dry run")
 	root.PersistentFlags().Bool("yes", false, "yes")
 	root.PersistentFlags().String("format", "json", "format")
 	root.AddCommand(devHandler{}.Command(runner))
 	return root
+}
+
+func prepareFrameworkV2TestCommand(cmd *cobra.Command) *cobra.Command {
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	if cmd.Flags().Lookup("format") == nil {
+		cmd.Flags().String("format", "json", "format")
+	}
+	if cmd.Flags().Lookup("dry-run") == nil {
+		cmd.Flags().Bool("dry-run", false, "dry run")
+	}
+	if cmd.Flags().Lookup("yes") == nil {
+		cmd.Flags().Bool("yes", false, "yes")
+	}
+	cmd.PersistentPostRunE = func(executed *cobra.Command, _ []string) error {
+		_, _, err := output.EmitStoredResult(executed)
+		return err
+	}
+	return cmd
 }
 
 type devAppResponseRunner struct {
@@ -1128,10 +1161,7 @@ func TestDevAppUnwrapsSuccessfulServiceResult(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	var rendered map[string]any
-	if err := json.Unmarshal(out.Bytes(), &rendered); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
-	}
+	rendered := unwrapDevAppEnvelopeData(t, out.Bytes())
 	if _, ok := rendered["success"]; ok {
 		t.Fatalf("output kept ServiceResult wrapper: %#v", rendered)
 	}
@@ -1180,10 +1210,7 @@ func TestDevAppVersionCheckApprovalPreservesApprovalCandidateNames(t *testing.T)
 	if precheckOnly, _ := runner.last.Params["precheckOnly"].(bool); !precheckOnly {
 		t.Fatalf("precheckOnly = %#v, want true", runner.last.Params["precheckOnly"])
 	}
-	var rendered map[string]any
-	if err := json.Unmarshal(out.Bytes(), &rendered); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
-	}
+	rendered := unwrapDevAppEnvelopeData(t, out.Bytes())
 	candidates, ok := rendered["approvalCandidates"].([]any)
 	if !ok || len(candidates) != 2 {
 		t.Fatalf("approvalCandidates = %#v, want two candidates", rendered["approvalCandidates"])
@@ -1516,11 +1543,30 @@ func runDevAppRobotResultOutput(t *testing.T, result map[string]any) map[string]
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	var rendered map[string]any
-	if err := json.Unmarshal(out.Bytes(), &rendered); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
-	}
+	rendered := unwrapDevAppEnvelopeData(t, out.Bytes())
 	return rendered
+}
+
+// unwrapDevAppEnvelopeData 解析 dev app 树统一信封输出并返回 data 层
+// （统一输出 dev 域试点，队列 Phase F）：既有断言直接消费裸载荷，
+// 信封化后先校验 ok/outcome，再返回 data（业务载荷形状不变）。
+func unwrapDevAppEnvelopeData(t *testing.T, raw []byte) map[string]any {
+	t.Helper()
+	var env struct {
+		OK      bool           `json:"ok"`
+		Outcome string         `json:"outcome"`
+		Data    map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, raw)
+	}
+	if !env.OK || env.Outcome != "success" {
+		t.Fatalf("envelope ok/outcome = %v/%q, want true/success: %s", env.OK, env.Outcome, raw)
+	}
+	if env.Data == nil {
+		t.Fatalf("envelope data is nil: %s", raw)
+	}
+	return env.Data
 }
 
 func devAppRenderedSteps(t *testing.T, rendered map[string]any) []any {

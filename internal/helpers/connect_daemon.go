@@ -31,6 +31,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/tui"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/spf13/cobra"
@@ -334,9 +335,36 @@ func startDaemon(cmd *cobra.Command, dirKey, clientID, unifiedAppID, channel, no
 	// Release the child so the parent can exit without leaving a zombie.
 	pid := child.Process.Pid
 	_ = child.Process.Release()
+	if !output.UsesV2(cmd) {
+		writeConnectDaemonStarted(cmd.OutOrStdout(), pid, logPath, clientID, dirKey)
+		return nil
+	}
 
-	writeConnectDaemonStarted(cmd.OutOrStdout(), pid, logPath, clientID, dirKey)
-	return nil
+	// 统一输出 dev 域试点（队列 B110）：人读提示行走 stderr，stdout 由
+	// 结果信封承载（pid/日志路径等机器事实进 data，ok:true + outcome:success）。
+	writeConnectDaemonStarted(cmd.ErrOrStderr(), pid, logPath, clientID, dirKey)
+	env := &output.Envelope{
+		OK:      true,
+		Outcome: output.OutcomeSuccess,
+		Data: &connectDaemonStartedResult{
+			Status:   "started",
+			Pid:      pid,
+			LogPath:  logPath,
+			DirKey:   dirKey,
+			ClientID: clientID,
+		},
+	}
+	return writeDevRolloutResult(cmd, output.Success(env.Data), env, output.FormatJSON)
+}
+
+// connectDaemonStartedResult 是 `dev connect --daemon` 父进程的结果 DTO
+// （队列 B110）：pid/日志路径等机器事实进成功信封的 data 层。
+type connectDaemonStartedResult struct {
+	Status   string `json:"status"`
+	Pid      int    `json:"pid"`
+	LogPath  string `json:"logPath,omitempty"`
+	DirKey   string `json:"dirKey,omitempty"`
+	ClientID string `json:"clientId,omitempty"`
 }
 
 func writeConnectDaemonStarted(w io.Writer, pid int, logPath, clientID, dirKey string) {
@@ -525,27 +553,47 @@ func superviseWait(ctx context.Context, worker *exec.Cmd) error {
 // connector heartbeat (is the connection live and receiving — see
 // connect_health.go). jsonOut emits the machine-readable health report an
 // external supervisor (launchd/systemd/pm2/cron) consumes to decide restarts.
-func daemonStatus(w io.Writer, dirKey string, jsonOut bool) error {
+type daemonStatusSnapshot struct {
+	Report     connectHealthReport
+	Heartbeat  *connectHeartbeat
+	Supervised bool
+	Dir        string
+}
+
+func readDaemonStatus(dirKey string) (*daemonStatusSnapshot, error) {
 	dir, err := connectDaemonDir(dirKey)
 	if err != nil {
-		return apperrors.NewInternal("resolve daemon dir: " + err.Error())
+		return nil, apperrors.NewInternal("resolve daemon dir: " + err.Error())
 	}
 	st, err := readDaemonState(dir)
 	if err != nil {
-		return apperrors.NewInternal(err.Error())
+		return nil, apperrors.NewInternal(err.Error())
 	}
 	supervised := st != nil && st.Pid > 0 && daemonProcessAlive(st.Pid)
 
 	hb, err := readConnectHeartbeat(dir)
 	if err != nil {
-		return apperrors.NewInternal("read connector heartbeat: " + err.Error())
+		return nil, apperrors.NewInternal("read connector heartbeat: " + err.Error())
 	}
 	report := deriveConnectHealth(hb, supervised, daemonNow())
+	return &daemonStatusSnapshot{Report: report, Heartbeat: hb, Supervised: supervised, Dir: dir}, nil
+}
+
+func daemonStatus(w io.Writer, dirKey string, jsonOut bool) error {
+	snapshot, err := readDaemonStatus(dirKey)
+	if err != nil {
+		return err
+	}
+	report := snapshot.Report
+	hb := snapshot.Heartbeat
+	supervised := snapshot.Supervised
+	dir := snapshot.Dir
 
 	if jsonOut {
-		data, _ := json.MarshalIndent(report, "", "  ")
-		fmt.Fprintln(w, string(data))
-		return nil
+		// 统一输出 dev 域试点（队列 B111）：--json 输出完整信封，
+		// 健康报告进 data（契约规范 §2.1）。
+		env := &output.Envelope{OK: true, Outcome: output.OutcomeSuccess, Data: report}
+		return output.WriteEnvelopeTo(w, env, output.FormatJSON, "", "")
 	}
 
 	var lines []string
@@ -587,21 +635,31 @@ func supervisedLabel(supervised bool) string {
 	return "none (foreground or external)"
 }
 
+// connectStopResult 是 `dev connect stop` 的结果 DTO（统一输出 dev 域试点，
+// 队列 B112）：进成功信封的 data 层。status 是机器可分支的终态枚举。
+type connectStopResult struct {
+	Status string `json:"status"`
+	Pid    int    `json:"pid,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
 // daemonStop gracefully stops the connector daemon: SIGTERM the supervisor (it
 // forwards to the worker, which releases the lock and Stream connection), poll
 // until it exits, escalate to SIGKILL on timeout, and clean up the pid file.
-func daemonStop(w io.Writer, dirKey string) error {
+// 人读进度行写 w（调用方传 stderr）；机器可消费的结果作为返回值由 RunE 层
+// 包进统一信封写 stdout（契约规范 §5.1：stdout 只承载数据）。
+func daemonStop(w io.Writer, dirKey string) (*connectStopResult, error) {
 	dir, err := connectDaemonDir(dirKey)
 	if err != nil {
-		return apperrors.NewInternal("resolve daemon dir: " + err.Error())
+		return nil, apperrors.NewInternal("resolve daemon dir: " + err.Error())
 	}
 	st, err := readDaemonState(dir)
 	if err != nil {
-		return apperrors.NewInternal(err.Error())
+		return nil, apperrors.NewInternal(err.Error())
 	}
 	if st == nil || st.Pid <= 0 {
 		fmt.Fprintf(w, "connect daemon: not running (nothing to stop)\n")
-		return nil
+		return &connectStopResult{Status: "not_running", Detail: "no daemon record found"}, nil
 	}
 	if !daemonProcessAlive(st.Pid) {
 		_ = os.Remove(daemonPidPath(dir))
@@ -625,17 +683,17 @@ func daemonStop(w io.Writer, dirKey string) error {
 				}
 			}
 			fmt.Fprintf(w, "connect daemon: orphan worker stopped (pid %d)\n", hb.Pid)
-			return nil
+			return &connectStopResult{Status: "orphan_worker_stopped", Pid: hb.Pid, Detail: "supervisor was dead; orphan worker stopped"}, nil
 		}
 		fmt.Fprintf(w, "connect daemon: was not running (cleaned up stale pid file for pid %d)\n", st.Pid)
-		return nil
+		return &connectStopResult{Status: "cleaned_stale", Pid: st.Pid, Detail: "cleaned up stale pid file"}, nil
 	}
 	proc, err := daemonFindProcess(st.Pid)
 	if err != nil {
-		return apperrors.NewInternal(fmt.Sprintf("find daemon process %d: %v", st.Pid, err))
+		return nil, apperrors.NewInternal(fmt.Sprintf("find daemon process %d: %v", st.Pid, err))
 	}
 	if err := daemonSignalProcess(proc, syscall.SIGTERM); err != nil {
-		return apperrors.NewInternal(fmt.Sprintf("signal daemon %d: %v", st.Pid, err))
+		return nil, apperrors.NewInternal(fmt.Sprintf("signal daemon %d: %v", st.Pid, err))
 	}
 	fmt.Fprintf(w, "sent SIGTERM to connect daemon (pid %d), waiting for graceful stop...\n", st.Pid)
 
@@ -644,7 +702,7 @@ func daemonStop(w io.Writer, dirKey string) error {
 		if !daemonProcessAlive(st.Pid) {
 			_ = os.Remove(daemonPidPath(dir))
 			fmt.Fprintf(w, "connect daemon stopped (pid %d)\n", st.Pid)
-			return nil
+			return &connectStopResult{Status: "stopped", Pid: st.Pid}, nil
 		}
 		helperSleep(200 * time.Millisecond)
 	}
@@ -653,7 +711,7 @@ func daemonStop(w io.Writer, dirKey string) error {
 	helperSleep(200 * time.Millisecond)
 	_ = os.Remove(daemonPidPath(dir))
 	fmt.Fprintf(w, "connect daemon did not stop in %s; sent SIGKILL (pid %d)\n", daemonStopTimeout, st.Pid)
-	return nil
+	return &connectStopResult{Status: "force_killed", Pid: st.Pid, Detail: "graceful stop timed out; SIGKILL sent"}, nil
 }
 
 // newDevAppRobotConnectStatusCommand implements `dws devapp robot connect
@@ -670,6 +728,13 @@ func newDevAppRobotConnectStatusCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if output.UsesV2(cmd) {
+				snapshot, err := readDaemonStatus(dirKey)
+				if err != nil {
+					return err
+				}
+				return output.StoreResult(cmd.Context(), output.Success(snapshot.Report))
+			}
 			jsonOut, _ := cmd.Flags().GetBool("json")
 			return daemonStatus(cmd.OutOrStdout(), dirKey, jsonOut)
 		},
@@ -679,9 +744,10 @@ func newDevAppRobotConnectStatusCommand() *cobra.Command {
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID（当未用 clientId 起守护进程时定位）")
 	cmd.Flags().Bool("json", false, "以 JSON 输出健康报告（供 launchd/systemd/pm2/cron 判断是否重启）")
 	DeclareLeafMetadata(cmd, LeafSpec{
+		OutputRollout: output.RolloutV2Active,
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -701,7 +767,7 @@ func newDevAppRobotConnectStatusCommand() *cobra.Command {
 				AgentSummary: "查看后台连接器守护进程状态",
 				UseWhen:      []string{"需要确认本地 connect 守护进程是否在跑、pid/日志路径"},
 				AvoidWhen:    []string{"要停止守护进程时用 dev connect stop"},
-				Examples:     []string{"dws dev connect status --unified-app-id <unifiedAppId> --json"},
+				Examples:     []string{"dws dev connect status --unified-app-id <unifiedAppId> --format json"},
 			},
 		},
 	})
@@ -722,16 +788,35 @@ func newDevAppRobotConnectStopCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return daemonStop(cmd.OutOrStdout(), dirKey)
+			if commandDryRun(cmd) {
+				preview := &connectStopResult{
+					Status: "preview",
+					Detail: "would send SIGTERM to the selected daemon and escalate to SIGKILL only after the graceful timeout",
+				}
+				env := &output.Envelope{OK: true, Outcome: output.OutcomeSuccess, DryRun: true, Data: preview}
+				return writeDevRolloutResult(cmd, output.Success(preview, output.WithDryRun()), env, output.FormatJSON)
+			}
+			result, err := daemonStop(cmd.ErrOrStderr(), dirKey)
+			if err != nil {
+				return err
+			}
+			// 统一输出 dev 域试点（队列 B112）：结果信封化（ok:true + data）。
+			env := &output.Envelope{OK: true, Outcome: output.OutcomeSuccess, Data: result}
+			return writeDevRolloutResult(cmd, output.Success(result), env, output.FormatJSON)
 		},
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("robot-client-id", "", "机器人 clientId（定位守护进程）")
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID（当未用 clientId 起守护进程时定位）")
 	DeclareLeafMetadata(cmd, LeafSpec{
+		OutputRollout: output.RolloutV2Active,
 		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Effect: "destructive", Risk: "high",
+			Confirmation: "user_required", Idempotency: "idempotent",
+		},
+		Validate: func(c *cobra.Command, _ []string) error {
+			_, err := connectDaemonDirKeyFromFlags(c)
+			return err
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -742,6 +827,7 @@ func newDevAppRobotConnectStopCommand() *cobra.Command {
 				PrimaryCLIPath: "dev connect stop",
 			},
 			Description: "优雅停止后台连接器守护进程",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan, RemoteReads: false},
 			Interface: &contract.InterfaceSpec{
 				Mode:         "local",
 				Availability: "available",
@@ -751,11 +837,45 @@ func newDevAppRobotConnectStopCommand() *cobra.Command {
 				AgentSummary: "优雅停止后台连接器守护进程",
 				UseWhen:      []string{"用户明确要求停止本地 Stream/连接器守护进程"},
 				AvoidWhen:    []string{"只想查看状态时用 dev connect status"},
-				Examples:     []string{"dws dev connect stop --unified-app-id <unifiedAppId>"},
+				Examples:     []string{"dws dev connect stop --unified-app-id <unifiedAppId>", "dws dev connect stop --unified-app-id <unifiedAppId> --dry-run --format json"},
 			},
 		},
 	})
 	return cmd
+}
+
+// connectRestartResult 是 `dev connect restart` 的结果 DTO（队列 B113）：
+// 进成功信封的 data 层。pid 是重启后新守护进程的 pid（从刷新后的
+// daemon-state.json 回读；子进程自身的结果信封由本命令信封取代，不转发）。
+type connectRestartResult struct {
+	Status       string `json:"status"`
+	Pid          int    `json:"pid,omitempty"`
+	DirKey       string `json:"dirKey,omitempty"`
+	UnifiedAppID string `json:"unifiedAppId,omitempty"`
+	Channel      string `json:"channel,omitempty"`
+	Command      string `json:"command,omitempty"`
+}
+
+func validateConnectRestart(cmd *cobra.Command) error {
+	dirKey, err := connectDaemonDirKeyFromFlags(cmd)
+	if err != nil {
+		return err
+	}
+	dir, err := connectDaemonDir(dirKey)
+	if err != nil {
+		return apperrors.NewInternal("resolve daemon dir: " + err.Error())
+	}
+	st, err := readDaemonState(dir)
+	if err != nil {
+		return apperrors.NewInternal(err.Error())
+	}
+	if st == nil {
+		return apperrors.NewValidation("未找到连接器记录（没有 daemon.pid）；请用 `dws dev connect --daemon` 首次启动")
+	}
+	if st.UnifiedAppID == "" {
+		return apperrors.NewValidation("该连接器未持久化 unifiedAppId（可能是用 --robot-client-id/--robot-client-secret 直接启动的，无法安全重启：clientSecret 不落盘）；请停掉后用 `dws dev connect --daemon --unified-app-id <uappid>` 重新启动，之后 restart 就能自动从 credentials get 拉密钥、命令行不出现 secret")
+	}
+	return nil
 }
 
 // newDevAppRobotConnectRestartCommand implements `dws devapp robot connect
@@ -788,10 +908,23 @@ func newDevAppRobotConnectRestartCommand() *cobra.Command {
 			if unifiedAppID == "" {
 				return apperrors.NewValidation("该连接器未持久化 unifiedAppId（可能是用 --robot-client-id/--robot-client-secret 直接启动的，无法安全重启：clientSecret 不落盘）；请停掉后用 `dws dev connect --daemon --unified-app-id <uappid>` 重新启动，之后 restart 就能自动从 credentials get 拉密钥、命令行不出现 secret")
 			}
+			if commandDryRun(cmd) {
+				preview := &connectRestartResult{
+					Status:       "preview",
+					DirKey:       dirKey,
+					UnifiedAppID: unifiedAppID,
+					Channel:      st.Channel,
+					Command:      fmt.Sprintf("dws dev connect --daemon --unified-app-id %s", unifiedAppID),
+				}
+				env := &output.Envelope{OK: true, Outcome: output.OutcomeSuccess, DryRun: true, Data: preview}
+				return writeDevRolloutResult(cmd, output.Success(preview, output.WithDryRun()), env, output.FormatJSON)
+			}
 			// Stop the running daemon first (ignore "not running" — that's fine).
-			fmt.Fprintln(cmd.OutOrStdout(), "stopping existing daemon...")
-			if err := daemonStop(cmd.OutOrStdout(), dirKey); err != nil {
-				fmt.Fprintf(cmd.OutOrStderr(), "warning: stop returned %v (continuing with restart)\n", err)
+			// 统一输出 dev 域试点（队列 B113）：stopping/restarting 进度行改走
+			// stderr，stdout 只承载最终结果信封（契约规范 §5.1）。
+			fmt.Fprintln(cmd.ErrOrStderr(), "stopping existing daemon...")
+			if _, err := daemonStop(cmd.ErrOrStderr(), dirKey); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: stop returned %v (continuing with restart)\n", err)
 			}
 			// Re-exec dws dev connect --daemon with the stored flags. An explicit
 			// --profile on this invocation overrides the persisted one.
@@ -816,24 +949,51 @@ func newDevAppRobotConnectRestartCommand() *cobra.Command {
 			if st.AlwaysOn {
 				args = append(args, "--alwayson")
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "restarting connector: dws %s\n", strings.Join(args, " "))
+			fmt.Fprintf(cmd.ErrOrStderr(), "restarting connector: dws %s\n", strings.Join(args, " "))
 			// Run synchronously: `--daemon` itself detaches the supervisor and
 			// returns quickly, so waiting here costs nothing and lets a failed
 			// relaunch (e.g. credential fetch error) surface as a non-zero exit
-			// instead of a silent success.
+			// instead of a silent success. 子进程自己的输出（含它自己的结果
+			// 信封）不再转发到本命令的 stdout——由本命令的信封统一承载结果，
+			// 避免两个 JSON 文档拼接破坏 `| jq`（契约规范 §5.1）。
 			restartCmd := daemonCommand(exe, args...)
-			restartCmd.Stdout = cmd.OutOrStdout()
-			restartCmd.Stderr = cmd.OutOrStderr()
+			restartCmd.Stdout = cmd.ErrOrStderr()
+			restartCmd.Stderr = cmd.ErrOrStderr()
 			restartCmd.Stdin = nil
 			if err := restartCmd.Run(); err != nil {
 				return apperrors.NewInternal(fmt.Sprintf("重启失败（旧守护进程已停止，连接器记录已清除）；恢复请手动执行: dws %s", strings.Join(args, " ")))
 			}
-			return nil
+			// 回读刷新后的 daemon-state.json 拿新 supervisor pid（restart 是同步
+			// re-exec，子进程落盘早于返回；读不到则 pid 缺席，status 仍诚实）。
+			result := &connectRestartResult{
+				Status:       "restarted",
+				DirKey:       dirKey,
+				UnifiedAppID: unifiedAppID,
+				Channel:      st.Channel,
+				Command:      "dws " + strings.Join(args, " "),
+			}
+			if fresh, rerr := readDaemonState(dir); rerr == nil && fresh != nil {
+				result.Pid = fresh.Pid
+			}
+			env := &output.Envelope{OK: true, Outcome: output.OutcomeSuccess, Data: result}
+			return writeDevRolloutResult(cmd, output.Success(result), env, output.FormatJSON)
 		},
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().String("robot-client-id", "", "机器人 clientId（定位守护进程）")
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID（当未用 clientId 起守护进程时定位）")
+	DeclareLeafMetadata(cmd, LeafSpec{
+		OutputRollout: output.RolloutV2Active,
+		Safety:        contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
+		Validate:      func(c *cobra.Command, _ []string) error { return validateConnectRestart(c) },
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "dev", Name: "connect_restart", CanonicalPath: "dev.connect_restart", CLIPath: "dev connect restart", PrimaryCLIPath: "dev connect restart"},
+			Description: "使用持久化配置重启本地连接器守护进程",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan, RemoteReads: false},
+			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "命令组合本地守护进程管理与远端凭证重新获取，不对应单一 MCP 接口"},
+			Selection:   contract.SelectionSpec{AgentSummary: "重启本地连接器守护进程", UseWhen: []string{"连接器需要恢复或重载配置"}, AvoidWhen: []string{"仅查看状态时使用 dev connect status"}, Examples: []string{"dws dev connect restart --unified-app-id <unifiedAppId>", "dws dev connect restart --unified-app-id <unifiedAppId> --dry-run --format json"}},
+		},
+	})
 	return cmd
 }
 
@@ -853,21 +1013,48 @@ func newDevAppRobotConnectListCommand(runner executor.Runner) *cobra.Command {
 				return apperrors.NewInternal(err.Error())
 			}
 			resolveAppNames(cmd, runner, reports)
-			w := cmd.OutOrStdout()
-			if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
-				data, _ := json.MarshalIndent(reports, "", "  ")
-				fmt.Fprintln(w, string(data))
-				return nil
+			// 统一输出 dev 域试点（队列 B114/B115）：JSON 契约路径输出完整
+			// 信封——数组入 data、条数入 meta.count；空结果 data:[] + count:0
+			// （AC-06：不暗示"无连接器=异常"，禁止输出 null）。
+			if reports == nil {
+				reports = []connectHealthReport{}
 			}
-			if len(reports) == 0 {
-				fmt.Fprintln(w, "no connectors found")
-				return nil
+			env := &output.Envelope{
+				OK:      true,
+				Outcome: output.OutcomeSuccess,
+				Data:    reports,
+				Meta:    &output.Meta{Count: output.NewCount(len(reports))},
 			}
-			return writeConnectListTable(w, reports)
+			jsonOut, _ := cmd.Flags().GetBool("json")
+			format := output.ResolveFormat(cmd, output.FormatJSON)
+			if output.UsesV2(cmd) {
+				return output.StoreResult(cmd.Context(), output.Success(reports, output.WithMeta(env.Meta)))
+			}
+			if jsonOut || format == output.FormatJSON {
+				return output.WriteEnvelope(cmd, env, output.FormatJSON)
+			}
+			if format == output.FormatTable {
+				if len(reports) == 0 {
+					fmt.Fprintln(cmd.OutOrStdout(), "no connectors found")
+					return nil
+				}
+				return writeConnectListTable(cmd.OutOrStdout(), reports)
+			}
+			return output.WriteEnvelope(cmd, env, format)
 		},
 	}
 	preferLegacyLeaf(cmd)
 	cmd.Flags().Bool("json", false, "以 JSON 数组输出（供脚本消费）")
+	DeclareLeafMetadata(cmd, LeafSpec{
+		OutputRollout: output.RolloutV2Active,
+		Safety:        contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "dev", Name: "connect_list", CanonicalPath: "dev.connect_list", CLIPath: "dev connect list", PrimaryCLIPath: "dev connect list"},
+			Description: "列出本机连接器及其健康状态",
+			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "命令组合本地连接器状态与可选远端应用名称解析，不对应单一 MCP 接口"},
+			Selection:   contract.SelectionSpec{AgentSummary: "列出本机全部连接器及健康状态", UseWhen: []string{"需要查看本机连接器清单"}, AvoidWhen: []string{"只检查一个连接器时使用 dev connect status"}, Examples: []string{"dws dev connect list --format json"}},
+		},
+	})
 	return cmd
 }
 

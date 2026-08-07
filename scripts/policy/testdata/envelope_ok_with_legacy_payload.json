@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "outcome": "success",
+  "data": {
+    "hasMore": false,
+    "items": [
+      {
+        "success": "true",
+        "errorCode": "BUSINESS_FIELD_NOT_ENVELOPE",
+        "timedOut": false,
+        "name": "business payload is not envelope structure"
+      }
+    ]
+  }
+}

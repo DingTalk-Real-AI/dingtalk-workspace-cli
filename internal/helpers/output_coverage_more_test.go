@@ -3,6 +3,7 @@ package helpers
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -47,4 +48,43 @@ func TestCrossPlatformCoverageFormatterRemainingFilterBranches(t *testing.T) {
 		t.Fatalf("rune width=%d", got)
 	}
 	f.PrintTable([]string{"name"}, nil)
+}
+
+// TestFormatterStatusLinesNeverReachDataStream is the B56 total-flow assertion
+// (AC-07/AC-11): with the data and diagnostic streams separated, every
+// human-readable status line ([OK]/[INFO]/[ERROR]/[WARN]/key-value/table
+// summary/progress) must land on the diagnostic stream, leaving the data
+// stream free of status noise. The data payload (JSON/table rows/raw) is the
+// only thing allowed on the data stream.
+func TestFormatterStatusLinesNeverReachDataStream(t *testing.T) {
+	var out, errOut bytes.Buffer
+	f := NewFormatterWithWriters(&out, &errOut)
+
+	f.PrintSuccess("done")
+	f.PrintInfo("checking")
+	f.PrintError("broken")
+	f.PrintWarning("careful")
+	f.PrintProgress("step 1/2")
+	f.PrintDim("hint")
+	f.PrintKeyValue("Tool", "create_todo")
+	f.PrintTable([]string{"name"}, [][]string{{"alice"}})
+
+	// Table body (header/rows) is payload and belongs on the data stream;
+	// every status token must be absent from it.
+	dataStream := out.String()
+	for _, banned := range []string{"[OK]", "[INFO]", "[ERROR]", "[WARN]", "Tool:", "共", "step 1/2"} {
+		if strings.Contains(dataStream, banned) {
+			t.Fatalf("status token %q leaked to data stream: %q", banned, dataStream)
+		}
+	}
+	if !strings.Contains(dataStream, "alice") {
+		t.Fatalf("table data row missing from data stream: %q", dataStream)
+	}
+
+	diagnostic := errOut.String()
+	for _, token := range []string{"[OK]", "[INFO]", "[ERROR]", "[WARN]", "Tool:", "共 1 条", "step 1/2"} {
+		if !strings.Contains(diagnostic, token) {
+			t.Fatalf("diagnostic stream missing %q: %q", token, diagnostic)
+		}
+	}
 }

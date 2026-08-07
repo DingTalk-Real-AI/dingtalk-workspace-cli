@@ -15,6 +15,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"io"
@@ -33,6 +34,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
@@ -40,6 +42,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline/handlers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/usage"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -76,10 +79,43 @@ var (
 
 // Execute runs the root command and returns the process exit code.
 func Execute() (exitCode int) {
+	var (
+		root     *cobra.Command
+		executed *cobra.Command
+	)
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Fprintf(os.Stderr, "Error: internal panic: %v\n", r)
-			exitCode = 5
+			target := executed
+			if target == nil && root != nil {
+				if found, _, err := root.Find(os.Args[1:]); err == nil {
+					target = found
+				}
+			}
+			if target != nil && output.UsesV2(target) {
+				info := &output.ErrorInfo{Type: "internal", ExitCode: 5, Message: fmt.Sprintf("internal panic: %v", r)}
+				if code, err := output.EmitResult(target, output.Failure(info)); err == nil {
+					exitCode = code
+				} else {
+					fmt.Fprintf(os.Stderr, "Error: internal panic: %v\n", r)
+					exitCode = 5
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: internal panic: %v\n", r)
+				exitCode = 5
+			}
+			if executed == nil {
+				executed = target
+			}
+		}
+		CloseFileLogger()
+		if executed != nil {
+			// The result envelope has already established the command outcome.
+			// A late sink-close failure is diagnostic only: emitting a second
+			// envelope or changing the exit code would violate the one-result
+			// contract and make stdout impossible for Agents to branch on.
+			if err := closeOutputSink(executed); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: close output sink: %v\n", err)
+			}
 		}
 	}()
 
@@ -100,10 +136,11 @@ func Execute() (exitCode int) {
 
 	// Attach timing collector to context for use by child components
 	ctx = WithTimingCollector(ctx, timing)
+	ctx, resultStore := output.WithResultStore(ctx)
 
 	initStart := time.Now()
 	engine := newPipelineEngine()
-	root := rootNewRootCommandWithEngine(ctx, engine)
+	root = rootNewRootCommandWithEngine(ctx, engine)
 	timing.Record("cmd_init", time.Since(initStart))
 
 	// Run PreParse handlers on raw argv before Cobra parses flags.
@@ -111,16 +148,36 @@ func Execute() (exitCode int) {
 	// and --limit100 → --limit 100.
 	if err := rootRunPreParse(root, engine); err != nil {
 		err = newPreParseValidationError(err)
+		if target, _, findErr := root.Find(os.Args[1:]); findErr == nil && target != nil && output.UsesV2(target) {
+			code, emitErr := output.EmitResult(target, output.Failure(errorInfoFromExecutionError(err)))
+			if emitErr == nil {
+				return code
+			}
+		}
 		_ = printExecutionError(root, os.Stdout, os.Stderr, err)
 		return apperrors.ExitCode(err)
 	}
 
-	executed, err := rootExecuteCommand(root)
+	var err error
+	executed, err = rootExecuteCommand(root)
 	if err != nil {
 		if executed == nil {
 			executed = root
 		}
+		if code, emitted := output.StoredExitCode(resultStore); emitted {
+			fmt.Fprintf(executed.ErrOrStderr(), "Warning: command hook failed after result emission: %v\n", err)
+			return code
+		}
 		err = rewordRequiredFlagError(err)
+		var raw apperrors.RawStderrError
+		if output.UsesV2(executed) && !stderrors.As(err, &raw) {
+			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
+			code, emitErr := output.EmitResult(executed, result)
+			if emitErr == nil {
+				return code
+			}
+			err = apperrors.NewInternal("emit failure result: "+emitErr.Error(), apperrors.WithCause(emitErr))
+		}
 		if isUnknownCommandError(err) {
 			executed.SetOut(os.Stderr)
 			_ = executed.Help()
@@ -129,7 +186,102 @@ func Execute() (exitCode int) {
 		_ = printExecutionError(executed, os.Stdout, os.Stderr, err)
 		return apperrors.ExitCode(err)
 	}
+	if code, emitted := output.StoredExitCode(resultStore); emitted {
+		return code
+	}
 	return 0
+}
+
+// errorInfoFromExecutionError projects the repository error model into the v2
+// failure body. Exit code and category are derived from the same error value,
+// preventing the wire and process status from drifting apart.
+func errorInfoFromExecutionError(err error) *output.ErrorInfo {
+	exitCode := apperrors.ExitCode(err)
+	info := &output.ErrorInfo{
+		Type:     errorTypeForExitCode(exitCode),
+		ExitCode: exitCode,
+		Message:  err.Error(),
+	}
+	var cliErr *helpers.CLIError
+	if stderrors.As(err, &cliErr) && cliErr != nil {
+		info.UpstreamCode = cliErr.Code
+		info.Hint = cliErr.Suggestion
+		info.Operation = cliErr.Operation
+	}
+	var callErr *transport.CallError
+	if stderrors.As(err, &callErr) && callErr != nil {
+		info.HTTPStatus = callErr.HTTPStatus
+		info.RPCCode = callErr.RPCCode
+		info.Stage = string(callErr.Stage)
+		if callErr.RequestID != "" {
+			info.RequestID = callErr.RequestID
+		} else if callErr.TraceID != "" {
+			info.RequestID = callErr.TraceID
+		}
+	}
+	var typed *apperrors.Error
+	if !stderrors.As(err, &typed) || typed == nil {
+		return info
+	}
+	info.Type = string(typed.Category)
+	info.Subtype = typed.Reason
+	if typed.Hint != "" {
+		info.Hint = typed.Hint
+	}
+	info.Actions = append([]string(nil), typed.Actions...)
+	info.Retryable = typed.RetryableSet && typed.Retryable
+	info.RetryAfterSeconds = typed.RetryAfterSeconds
+	if typed.RPCCode != 0 {
+		info.RPCCode = typed.RPCCode
+	}
+	if typed.ServerDiag.TraceID != "" {
+		info.RequestID = typed.ServerDiag.TraceID
+	}
+	info.Operation = typed.Operation
+	info.ServerKey = typed.ServerKey
+	info.Origin = typed.Origin
+	if typed.FailureStage != "" {
+		info.Stage = typed.FailureStage
+	}
+	info.ExecutionStarted = typed.ExecutionStarted
+	if typed.NextRetryAt != nil {
+		info.NextRetryAt = typed.NextRetryAt.UTC().Format(time.RFC3339)
+	}
+	info.AvailableFlags = append([]string(nil), typed.AvailableFlags...)
+	info.SnapshotPath = typed.Snapshot
+	info.Details = typed.Details
+	if len(typed.RPCData) > 0 {
+		var rpcData any
+		if json.Unmarshal(typed.RPCData, &rpcData) == nil {
+			info.RPCData = rpcData
+		}
+	}
+	info.TechnicalDetail = typed.ServerDiag.TechnicalDetail
+	info.FriendlyHint, info.ActionURL = apperrors.ServerGuidance(typed.ServerDiag)
+	if typed.Cause != nil {
+		info.Cause = typed.Cause.Error()
+	}
+	if typed.ServerDiag.ServerErrorCode != "" {
+		info.UpstreamCode = typed.ServerDiag.ServerErrorCode
+	}
+	return info
+}
+
+func errorTypeForExitCode(code int) string {
+	switch code {
+	case 1:
+		return "api"
+	case 2:
+		return "auth"
+	case 3:
+		return "validation"
+	case 4:
+		return "permission"
+	case 6:
+		return "discovery"
+	default:
+		return "internal"
+	}
 }
 
 // newPreParseValidationError keeps pipeline handler identity in internal logs
@@ -414,6 +566,9 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 			return cmd.Help()
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := output.ValidateV2Format(cmd); err != nil {
+				return apperrors.NewValidation(err.Error(), apperrors.WithReason("unsupported_format"))
+			}
 			// Validate caller-provided identity labels before any edition hook
 			// or command network activity can run. Header-only library callers
 			// use the best-effort path in resolveIdentityHeaders instead.
@@ -445,10 +600,16 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 			return nil
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			_, emitted, emitErr := output.EmitStoredResult(cmd)
 			StopAllStdioClients()
 			CloseAuditSink()
-			CloseFileLogger()
-			return closeOutputSink(cmd)
+			if emitErr != nil {
+				return apperrors.NewInternal("emit command result: "+emitErr.Error(), apperrors.WithCause(emitErr))
+			}
+			if output.UsesV2(cmd) && !emitted {
+				return apperrors.NewInternal("framework 2.0 command returned without a CommandResult")
+			}
+			return nil
 		},
 	}
 
@@ -876,6 +1037,9 @@ func configureOutputSink(cmd *cobra.Command) error {
 }
 
 func closeOutputSink(cmd *cobra.Command) error {
+	if cmd == nil || cmd.Context() == nil {
+		return nil
+	}
 	file, ok := cmd.Context().Value(outputFileContextKey{}).(*os.File)
 	if !ok || file == nil {
 		return nil

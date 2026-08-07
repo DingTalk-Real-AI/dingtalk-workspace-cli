@@ -63,6 +63,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 )
 
@@ -224,11 +225,12 @@ const (
 // construction time. corecmd stays dispatch-agnostic and never calls a backend:
 // the adapters (FromLeafSpec / FromShortcut) supply the body.
 type Spec struct {
-	Use     string
-	Short   string
-	Long    string
-	Example string
-	Hidden  bool
+	Use           string
+	Short         string
+	Long          string
+	Example       string
+	Hidden        bool
+	OutputRollout output.RolloutState
 
 	Flags       []FlagSpec
 	Constraints []Constraint
@@ -266,6 +268,8 @@ type Spec struct {
 	RunE func(cmd *cobra.Command, args []string) error
 	// Invoke executes a single-step command with the assembled toolArgs.
 	Invoke func(c *Ctx, toolArgs map[string]any) error
+	// ResultInvoke executes once and returns an immutable framework 2.0 result.
+	ResultInvoke func(c *Ctx, toolArgs map[string]any) (output.CommandResult, error)
 	// Orchestrate executes a multi-step command; it assembles whatever payloads
 	// it needs from the Ctx.
 	Orchestrate func(c *Ctx) error
@@ -385,6 +389,9 @@ func New(spec Spec) *cobra.Command {
 	if spec.PostMount != nil {
 		spec.PostMount(cmd)
 	}
+	if spec.OutputRollout != "" {
+		output.SetCommandRollout(cmd, spec.OutputRollout)
+	}
 	if spec.ConfirmFirst {
 		if cmd.Annotations == nil {
 			cmd.Annotations = map[string]string{}
@@ -429,6 +436,16 @@ func New(spec Spec) *cobra.Command {
 			if err := ConfirmSafety(cmd, spec.Safety); err != nil {
 				return err
 			}
+		}
+		if spec.ResultInvoke != nil {
+			result, err := spec.ResultInvoke(ctx, toolArgs)
+			if err != nil {
+				return err
+			}
+			if !output.UsesV2(cmd) {
+				return fmt.Errorf("command %q uses ResultInvoke without an active Framework 2.0 rollout", cmd.CommandPath())
+			}
+			return output.StoreResult(cmd.Context(), result)
 		}
 		return spec.Invoke(ctx, toolArgs)
 	}
@@ -486,12 +503,15 @@ func validateDispatchDecl(spec Spec) {
 	if spec.Invoke != nil {
 		declared++
 	}
+	if spec.ResultInvoke != nil {
+		declared++
+	}
 	if spec.Orchestrate != nil {
 		declared++
 	}
 	if declared != 1 {
 		panic(fmt.Sprintf(
-			"command %q must declare exactly one of RunE/Invoke/Orchestrate, got %d",
+			"command %q must declare exactly one of RunE/Invoke/Orchestrate, got %d (ResultInvoke is also a dispatcher)",
 			spec.Use, declared))
 	}
 	// ConfirmFirst only changes the ordering of a declared confirmation gate.
@@ -669,7 +689,7 @@ func ValidateRequired(cmd *cobra.Command, flags []FlagSpec) error {
 			if hint == "" {
 				hint = fmt.Sprintf("flag --%s is required", flag.Name)
 			}
-			return fmt.Errorf("%s", hint)
+			return apperrors.NewValidation(hint)
 		}
 	}
 	return nil

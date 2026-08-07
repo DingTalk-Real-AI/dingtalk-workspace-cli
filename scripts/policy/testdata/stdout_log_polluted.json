@@ -1,0 +1,10 @@
+[INFO] 正在加载连接器记录...
+{
+  "ok": true,
+  "outcome": "success",
+  "data": [],
+  "meta": {
+    "count": 0
+  }
+}
+[WARN] cache miss
