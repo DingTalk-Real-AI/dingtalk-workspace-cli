@@ -641,13 +641,15 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, cons
 	params := make([]ParameterSpec, 0)
 	var resolveErr error
 	metadata := runtimeSchemaParameterMetadataByCanonical[canonicalPath]
+	declaredParameters := runtimeContractFinalParameterNames(cmd)
 	bindingSnapshot, err := schemaParameterBindingData()
 	if err != nil {
 		return nil, fmt.Errorf("load reviewed Schema parameter bindings: %w", err)
 	}
 	inherited := metadata.Inherited
 	visitRuntimeCommandFlags(cmd, inherited, func(flag *pflag.Flag) {
-		if resolveErr != nil || flag == nil || flag.Hidden || flag.Name == "help" || isGenericPayloadFlag(flag) {
+		if resolveErr != nil || flag == nil || flag.Name == "help" || isGenericPayloadFlag(flag) ||
+			(flag.Hidden && !declaredParameters[flag.Name]) {
 			return
 		}
 		bindingProperty, excludedProperty, err := runtimeSchemaParameterMappingCandidates(bindingSnapshot, canonicalPath, flag.Name)
@@ -793,6 +795,21 @@ func runtimeCommandParameterSpecs(cmd *cobra.Command, canonicalPath string, cons
 	}
 	sort.Slice(params, func(i, j int) bool { return params[i].Name < params[j].Name })
 	return params, nil
+}
+
+func runtimeContractFinalParameterNames(cmd *cobra.Command) map[string]bool {
+	final, ok := RuntimeContractFinal(cmd)
+	if !ok || len(final.Parameters) == 0 {
+		return nil
+	}
+	names := make(map[string]bool, len(final.Parameters))
+	for _, parameter := range final.Parameters {
+		name := strings.TrimSpace(parameter.Name)
+		if name != "" {
+			names[name] = true
+		}
+	}
+	return names
 }
 
 func runtimeSchemaJSONString(value string) json.RawMessage {
