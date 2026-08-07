@@ -163,6 +163,7 @@ type ErrorInfo struct {
 	RetryAfterSeconds *int64 `json:"retry_after_seconds,omitempty"`
 
 	RequestID        string         `json:"request_id,omitempty"`
+	TraceID          string         `json:"trace_id,omitempty"`
 	Operation        string         `json:"operation,omitempty"`
 	ServerKey        string         `json:"server_key,omitempty"`
 	Origin           string         `json:"origin,omitempty"`

@@ -85,7 +85,7 @@ one invocation emits exactly one primary result
 - 原子命令与 shortcut 共用同一个 dingtalk-dev payload-to-CommandResult 分类器，避免相同上游结果在两入口被判成不同 outcome。
 - 带分页投影的 `+list/+permission-list/+event-list/+version-list` 在保留 `hasMore/nextCursor` 并完成对拍前不得晋级 v2_active。
 - `dws dev connect` 同时承载前台 stream 与 `--daemon`，整条命令暂留 legacy；`status/stop/restart/list` 独立迁移。daemon start 如需 v2，应先拆独立 terminal command。
-- `connect stop/restart` 是高风险本地副作用：无确认不得发信号，dry-run 必须无副作用。
+- `connect stop/restart` 保持旧版直接执行行为，不要求 `--yes` 或交互确认；两者仍声明为高风险本地副作用，dry-run 必须无副作用。
 
 ## 7. 对齐原则
 

@@ -49,11 +49,9 @@ const (
 	CategoryDiscovery  Category = "discovery"
 	CategoryInternal   Category = "internal"
 
-	// CategoryPartial 是部分成功（partial_failure）在 errors 侧的同源投影
-	// （B142，AC-04）：退出码经 ExitCodePartial 与 outcome/信封通道的
-	// partial_failure 共享 7（契约规范 §4）。批量操作走 apperrors 通道汇报
-	// 部分成功时使用本类别；成功信封主通道仍是 internal/output 的
-	// OutcomePartialFailure（ExitCodeForEnvelope partial 分支 → 7）。
+	// CategoryPartial is retained for source compatibility, but an error cannot
+	// reconstruct the per-item data required by a partial result. It therefore
+	// fails closed as internal; callers must use output.Partial for exit code 7.
 	CategoryPartial Category = "partial_failure"
 )
 
@@ -70,13 +68,9 @@ const (
 //	6  discovery      （CategoryDiscovery）
 //	7  partial_failure（部分成功专用码，见 ExitCodePartial）
 //
-// ExitCodePartial 是 partial_failure（部分成功）的专用退出码（B142，AC-04，
-// 规划 WS2 第4项）。partial_failure 首先是 outcome/信封通道的结果类别
-// （internal/output ExitCodeForEnvelope partial 分支 → 7）；errors 侧以
-// CategoryPartial 提供同源投影，经本包 ExitCode 的 partial 分支同样得 7。
-// 本常量与 internal/output emitter.go 的 exitCodePartial=7（B33）跨包同源：
-// 值相等由两侧测试分别锁定（本包 errors_homology_test.go 与 output 侧
-// TestExitCodeForEnvelopeSameSourceAsErrorsExitCode/B209），防单边漂移。
+// ExitCodePartial is the partial-result exit code shared with internal/output.
+// It is not returned for CategoryPartial errors because they lack the typed
+// succeeded/failed/unknown payload required for an honest partial result.
 const ExitCodePartial = 7
 
 // 类别专属退出码常量（B171/B172，权威 = 规划 v1.2 OQ-1 定案，契约规范 §4）。
@@ -151,7 +145,9 @@ func (e *Error) ExitCode() int {
 	case CategoryDiscovery:
 		return 6
 	case CategoryPartial:
-		return ExitCodePartial
+		// An error has no per-item succeeded/failed/unknown data and therefore
+		// cannot truthfully represent partial_failure. Fail closed as internal.
+		return ExitCodeInternal
 	default:
 		return 5
 	}
@@ -400,11 +396,6 @@ func PrintJSON(w io.Writer, err error) error {
 		"type":     category(err),
 		"message":  err.Error(),
 	}
-	if err != nil {
-		// 错误信封是失败结果：outcome 恒为 failure（B169，契约 §1/§2.5）。
-		errorPayload["outcome"] = outcomeFailure
-	}
-
 	var typed *Error
 	if stderrors.As(err, &typed) {
 		if typed.Reason != "" {
@@ -484,7 +475,7 @@ func PrintJSON(w io.Writer, err error) error {
 			errorPayload["cause"] = typed.Cause.Error()
 		}
 	}
-	payload := map[string]any{"error": errorPayload}
+	payload := map[string]any{"outcome": outcomeFailure, "error": errorPayload}
 
 	data, marshalErr := marshalErrorJSON(payload, "", "  ")
 	if marshalErr != nil {
@@ -644,6 +635,9 @@ func ServerGuidance(diag ServerDiagnostics) (string, string) {
 func category(err error) string {
 	var typed *Error
 	if stderrors.As(err, &typed) {
+		if typed.Category == CategoryPartial {
+			return string(CategoryInternal)
+		}
 		return string(typed.Category)
 	}
 	return string(CategoryInternal)

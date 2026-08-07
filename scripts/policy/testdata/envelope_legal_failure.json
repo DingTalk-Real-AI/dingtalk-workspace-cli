@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "outcome": "failure",
+  "error": {
+    "type": "unauthorized",
+    "message": "fixture",
+    "retryable": false
+  }
+}

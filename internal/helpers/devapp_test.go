@@ -388,7 +388,7 @@ func TestDevAppRobotAndVersionWritesRequireGuard(t *testing.T) {
 
 func TestDevAppListBuildsListByConditionParams(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := prepareFrameworkV2TestCommand(newDevAppCommand(runner))
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
@@ -414,7 +414,7 @@ func TestDevAppListBuildsListByConditionParams(t *testing.T) {
 
 func TestCrossPlatformCoverageDevAppGetBuildsDetailParams(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := prepareFrameworkV2TestCommand(newDevAppCommand(runner))
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
@@ -434,7 +434,7 @@ func TestCrossPlatformCoverageDevAppGetBuildsDetailParams(t *testing.T) {
 
 func TestCrossPlatformCoverageDevAppGetBuildsDetailParamsByAppKey(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := prepareFrameworkV2TestCommand(newDevAppCommand(runner))
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
@@ -454,7 +454,7 @@ func TestCrossPlatformCoverageDevAppGetBuildsDetailParamsByAppKey(t *testing.T) 
 
 func TestCrossPlatformCoverageDevAppGetPrefersUnifiedAppIDWhenBothPresent(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := prepareFrameworkV2TestCommand(newDevAppCommand(runner))
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
@@ -1492,31 +1492,44 @@ func TestDevAppRobotResultSuccessWithoutUnifiedAppIDBlocksForUserInput(t *testin
 	assertDevAppStepCommandsDoNotContain(t, steps, "secret-client")
 }
 
-func TestDevAppRobotResultFailAndExpiredAddRetrySteps(t *testing.T) {
+func TestDevAppRobotResultFailAndExpiredAreTerminalFailures(t *testing.T) {
 	cases := []struct {
-		name           string
-		status         string
-		wantTaskIDFlag bool
+		name   string
+		status string
 	}{
-		{name: "fail reuses task id", status: "FAIL", wantTaskIDFlag: true},
-		{name: "expired resubmits without task id", status: "EXPIRED", wantTaskIDFlag: false},
+		{name: "fail", status: "FAIL"},
+		{name: "expired", status: "EXPIRED"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rendered := runDevAppRobotResultOutput(t, map[string]any{
-				"status": tc.status,
-				"taskId": "t-retry",
-			})
-			steps := devAppRenderedSteps(t, rendered)
-			retry := devAppStepByID(t, steps, "retry_robot_submit")
-			command, _ := retry["command"].(string)
-			hasTaskID := strings.Contains(command, "--task-id t-retry")
-			if hasTaskID != tc.wantTaskIDFlag {
-				t.Fatalf("retry command = %q, has task id %v, want %v", command, hasTaskID, tc.wantTaskIDFlag)
+			runner := &devAppResponseRunner{response: map[string]any{
+				"content": map[string]any{
+					"success": true,
+					"result":  map[string]any{"status": tc.status, "taskId": "t-retry"},
+				},
+			}}
+			root := newDevAppTestRoot(runner)
+			var out bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&out)
+			root.SetArgs([]string{"dev", "app", "robot", "result", "--task-id", "t-1", "--format", "json"})
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
-			if dryRun, _ := retry["dryRunCommand"].(string); !strings.Contains(dryRun, "--dry-run") {
-				t.Fatalf("retry dryRunCommand = %q, want --dry-run", dryRun)
+			var env struct {
+				OK      bool   `json:"ok"`
+				Outcome string `json:"outcome"`
+				Error   *struct {
+					Type    string `json:"type"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
+			}
+			if env.OK || env.Outcome != "failure" || env.Error == nil || env.Error.Type != "api" {
+				t.Fatalf("terminal %s envelope = %+v, want API failure", tc.status, env)
 			}
 		})
 	}
@@ -1543,8 +1556,28 @@ func runDevAppRobotResultOutput(t *testing.T, result map[string]any) map[string]
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	rendered := unwrapDevAppEnvelopeData(t, out.Bytes())
-	return rendered
+	var env struct {
+		OK      bool           `json:"ok"`
+		Outcome string         `json:"outcome"`
+		Data    map[string]any `json:"data"`
+		Meta    *struct {
+			Operation *struct {
+				ID          string `json:"id"`
+				State       string `json:"state"`
+				NextCommand string `json:"next_command"`
+			} `json:"operation"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.Bytes())
+	}
+	if !env.OK || env.Outcome != "pending" || env.Data == nil || env.Meta == nil || env.Meta.Operation == nil {
+		t.Fatalf("async envelope = %+v, want pending with data and operation", env)
+	}
+	if env.Meta.Operation.ID == "" || env.Meta.Operation.State == "" || env.Meta.Operation.NextCommand == "" {
+		t.Fatalf("pending operation = %+v, want id/state/next_command", env.Meta.Operation)
+	}
+	return env.Data
 }
 
 // unwrapDevAppEnvelopeData 解析 dev app 树统一信封输出并返回 data 层

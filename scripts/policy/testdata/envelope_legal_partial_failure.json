@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "outcome": "partial_failure",
+  "data": {
+    "succeeded": [{"id": "one"}],
+    "failed": [{"id": "two", "error": {"type": "remote"}}],
+    "unknown": []
+  }
+}

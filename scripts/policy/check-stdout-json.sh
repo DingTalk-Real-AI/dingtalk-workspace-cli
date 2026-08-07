@@ -64,6 +64,8 @@ output_contract_parse_args "$@"
 self_test_cases() {
 	printf 'envelope_legal_success.json|envelope|pass\n'
 	printf 'envelope_legal_pending_dry_run.json|envelope|pass\n'
+	printf 'envelope_legal_partial_failure.json|envelope|pass\n'
+	printf 'envelope_legal_failure.json|envelope|pass\n'
 	printf 'envelope_ok_full_meta.json|envelope|pass\n'
 	printf 'stdout_polluted_info.json|envelope|fail\n'
 	printf 'stdout_log_polluted.json|envelope|fail\n'

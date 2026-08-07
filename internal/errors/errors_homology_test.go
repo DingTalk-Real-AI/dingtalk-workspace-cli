@@ -50,7 +50,7 @@ func TestErrorsExitCodeConstantsEqualMap(t *testing.T) {
 		CategoryValidation: ExitCodeValidation,
 		CategoryDiscovery:  ExitCodeDiscovery,
 		CategoryInternal:   ExitCodeInternal,
-		CategoryPartial:    ExitCodePartial,
+		CategoryPartial:    ExitCodeInternal,
 	}
 	for cat, wantCode := range want {
 		if got := exitCodeByCategory[cat]; got != wantCode {

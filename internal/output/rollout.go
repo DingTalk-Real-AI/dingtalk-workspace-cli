@@ -119,24 +119,8 @@ func ActiveContract(cmd *cobra.Command) ContractMode {
 
 func UsesV2(cmd *cobra.Command) bool { return ActiveContract(cmd) == ContractV2 }
 
-// ValidateV2Format rejects unsupported presentation values before the handler
-// runs. Legacy commands retain their historical fallback behaviour.
+// ValidateV2Format is retained for compatibility. All commands normalize an
+// unknown presentation value to their fallback and emit a diagnostic warning.
 func ValidateV2Format(cmd *cobra.Command) error {
-	if !UsesV2(cmd) {
-		return nil
-	}
-	raw := ""
-	if cmd != nil {
-		if flag := cmd.Flags().Lookup("format"); flag != nil {
-			raw = flag.Value.String()
-		} else if flag := cmd.InheritedFlags().Lookup("format"); flag != nil {
-			raw = flag.Value.String()
-		}
-	}
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", string(FormatJSON), string(FormatTable), string(FormatPretty), string(FormatRaw), string(FormatNDJSON), string(FormatCSV):
-		return nil
-	default:
-		return fmt.Errorf("unsupported --format %q for framework 2.0 output", raw)
-	}
+	return nil
 }

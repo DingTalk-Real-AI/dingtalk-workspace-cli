@@ -16,6 +16,7 @@ package shortcut
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -155,21 +156,50 @@ func (rt *RuntimeContext) CallMCP(tool string, params map[string]any) error {
 			if err := output.ValidateResult(rt.resultForPayload(tool, preview)); err != nil {
 				return err
 			}
-			return output.WriteCommandPayload(rt.cmd, preview, output.FormatJSON)
+			// The legacy caller owns dry-run presentation (including its human
+			// preview for non-JSON formats) and does not cross the business-call
+			// boundary. Keep using it so dual validation changes no bytes.
+			return helpers.CallMCPToolOnServer(rt.shortcut.product(), tool, params)
 		}
-		data, err := helpers.CallMCPToolDataOnServer(rt.cmd.Context(), rt.shortcut.product(), tool, params)
+		text, err := helpers.CallMCPToolTextOnServer(rt.shortcut.product(), tool, params)
 		if err != nil {
 			return err
 		}
+		data := legacyMCPPayload(text)
 		if err := output.ValidateResult(rt.resultForPayload(tool, data)); err != nil {
 			return err
 		}
 		// dual_validate changes no external bytes: it renders the once-fetched
 		// payload through the established legacy projection after validating the
 		// shadow v2 result.
+		if _, unstructured := data.(string); unstructured {
+			return writeLegacyRaw(rt.cmd.OutOrStdout(), text)
+		}
+		if output.ResolveFormat(rt.cmd, output.FormatJSON) == output.FormatRaw {
+			return writeLegacyRaw(rt.cmd.OutOrStdout(), text)
+		}
 		return output.WriteCommandPayload(rt.cmd, data, output.FormatJSON)
 	}
 	return helpers.CallMCPToolOnServer(rt.shortcut.product(), tool, params)
+}
+
+func legacyMCPPayload(text string) any {
+	var data any
+	if err := json.Unmarshal([]byte(text), &data); err == nil {
+		return data
+	}
+	return text
+}
+
+func writeLegacyRaw(w io.Writer, text string) error {
+	if _, err := fmt.Fprint(w, text); err != nil {
+		return err
+	}
+	if !strings.HasSuffix(text, "\n") {
+		_, err := fmt.Fprintln(w)
+		return err
+	}
+	return nil
 }
 
 // CallMCPData dispatches a read-only tool call to an explicit MCP product and

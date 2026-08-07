@@ -83,14 +83,16 @@ func WriteEnvelopeTo(w io.Writer, env *Envelope, format Format, fields, jq strin
 // conventional stderr path. The result is validated before any byte is
 // rendered, and the returned exit code comes from the same immutable result.
 func EmitResult(cmd *cobra.Command, result CommandResult) (int, error) {
-	if err := ValidateV2Format(cmd); err != nil {
-		return exitCodeValidation, err
-	}
+	code, _, err := emitResult(cmd, result)
+	return code, err
+}
+
+func emitResult(cmd *cobra.Command, result CommandResult) (int, bool, error) {
 	if err := ValidateResult(result); err != nil {
-		return exitCodeInternal, err
+		return exitCodeInternal, false, err
 	}
 	env := result.envelope()
-	format := ResolveFormat(cmd, FormatJSON)
+	format, warning := resolveFormatWithWarning(cmd, FormatJSON)
 	fields, jq := ResolveFields(cmd), ResolveJQ(cmd)
 	stdout, stderr := io.Writer(io.Discard), io.Writer(io.Discard)
 	if cmd != nil {
@@ -104,12 +106,13 @@ func EmitResult(cmd *cobra.Command, result CommandResult) (int, error) {
 		}
 		var buf bytes.Buffer
 		if _, err := fmt.Fprintln(&buf, "Error: "+message); err != nil {
-			return exitCodeInternal, err
+			return exitCodeInternal, false, err
 		}
-		if err := writeAll(stderr, buf.Bytes()); err != nil {
-			return exitCodeInternal, err
+		n, err := writeAllCount(stderr, buf.Bytes())
+		if err != nil {
+			return exitCodeInternal, n > 0, err
 		}
-		return result.ExitCode(), nil
+		return result.ExitCode(), n > 0, nil
 	}
 
 	// Failure bypasses jq/fields so a filter cannot erase the typed error.
@@ -118,12 +121,18 @@ func EmitResult(cmd *cobra.Command, result CommandResult) (int, error) {
 	}
 	var buf bytes.Buffer
 	if err := renderEnvelope(&buf, stderr, env, format, fields, jq); err != nil {
-		return exitCodeInternal, err
+		return exitCodeInternal, false, err
 	}
-	if err := writeAll(stdout, buf.Bytes()); err != nil {
-		return exitCodeInternal, err
+	n, err := writeAllCount(stdout, buf.Bytes())
+	if err != nil {
+		return exitCodeInternal, n > 0, err
 	}
-	return result.ExitCode(), nil
+	if warning != "" {
+		// The primary result is already complete. Diagnostics are best-effort
+		// and must not reverse its outcome when stderr is unavailable.
+		_, _ = fmt.Fprintln(stderr, "[WARN] "+warning)
+	}
+	return result.ExitCode(), n > 0, nil
 }
 
 // nilFallbackEnvelope 构造 nil 信封的兜底信封（B208，轮6裁决⑨）。保留
@@ -243,14 +252,19 @@ func renderEnvelopeInto(buf *bytes.Buffer, errW io.Writer, env *Envelope, format
 // writeAll 把 p 一次性写入 w；短写（接受了部分字节却未写全）报
 // io.ErrShortWrite——与 Emitter.writeOnce 同一短写纪律，绝不把截断输出当成功。
 func writeAll(w io.Writer, p []byte) error {
+	_, err := writeAllCount(w, p)
+	return err
+}
+
+func writeAllCount(w io.Writer, p []byte) (int, error) {
 	n, err := w.Write(p)
 	if err != nil {
-		return err
+		return n, err
 	}
 	if n < len(p) {
-		return io.ErrShortWrite
+		return n, io.ErrShortWrite
 	}
-	return nil
+	return n, nil
 }
 
 // renderMetaSummary 把信封 meta 层渲染为人读摘要行（§5.2：table/pretty 输出

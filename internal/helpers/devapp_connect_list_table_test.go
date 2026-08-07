@@ -20,9 +20,8 @@ import (
 	"testing"
 )
 
-// TestDevConnectListTableView 是队列 B127 的 `dev connect list` table 断言：
-// 该命令走 writeConnectListTable 专用路径（不经 WriteEnvelope），-f table 下
-// 渲染为带 STATE/APP NAME/CLIENT/PID/CHANNEL/UPTIME 列头的表视图；-f json 走
+// TestDevConnectListTableView 是 `dev connect list` 的 Framework 2.0 table 断言：
+// v2 emitter 从业务数据生成通用表格；-f json 走
 // 信封通道（data 数组 + meta.count）。本测试在临时 connect 目录写入两个
 // 心跳（healthy + down），验证列头与行值。--format 是生产根命令的持久 flag，
 // 故经 newDevAppTestRoot（注册 --format/--dry-run/--yes）挂 dev 子树端到端执行。
@@ -49,14 +48,14 @@ func TestDevConnectListTableView(t *testing.T) {
 		StartUnix: 1_000_000, ConnectedUnix: 1_000_010, UpdatedUnix: 2_000_000,
 	})
 
-	// -f table：专用表视图，列头齐全。
+	// -f table：v2 通用表视图保留结构化字段。
 	root := newDevAppTestRoot(&captureRunner{})
 	tableOut, tableErr, err := runRootBuffered(t, root, "dev", "connect", "list", "--format", "table")
 	if err != nil {
 		t.Fatalf("connect list -f table error = %v\nstderr:\n%s", err, tableErr.String())
 	}
 	table := tableOut.String()
-	for _, header := range []string{"STATE", "APP NAME", "CLIENT", "PID", "CHANNEL", "UPTIME"} {
+	for _, header := range []string{"state", "clientId", "pid", "channel", "uptimeSec"} {
 		if !strings.Contains(table, header) {
 			t.Fatalf("-f table missing column header %q:\n%s", header, table)
 		}
@@ -66,7 +65,7 @@ func TestDevConnectListTableView(t *testing.T) {
 			t.Fatalf("-f table missing row value %q:\n%s", val, table)
 		}
 	}
-	// 信封外壳不得出现（专用表路径不经 WriteEnvelope）。
+	// table 只渲染 data，不带信封外壳。
 	if strings.Contains(table, `"outcome"`) || strings.Contains(table, `"ok"`) {
 		t.Fatalf("-f table leaked envelope shell:\n%s", table)
 	}
@@ -106,21 +105,20 @@ func decodePhaseFConnListEnvelope(t *testing.T, raw []byte) *struct {
 	return &env
 }
 
-// TestDevConnectListTableEmptyState 是队列 B127 的空态 table 断言：无任何
-// 连接器时 -f table 输出 "no connectors found"（专用路径空态合法文案），
-// -f json 输出 data:[] + count:0 信封（AC-06）。
+// TestDevConnectListTableEmptyState 验证空数组仍由 v2 通用 table emitter
+// 渲染，并保留 count:0；JSON 输出 data:[] + count:0 信封（AC-06）。
 func TestDevConnectListTableEmptyState(t *testing.T) {
 	connectDaemonDirOverride = t.TempDir()
 	t.Cleanup(func() { connectDaemonDirOverride = "" })
 
-	// -f table 空态：人读文案。
+	// -f table 空态：通用 emitter 不回退到 legacy 专用文案。
 	tableRoot := newDevAppTestRoot(&captureRunner{})
 	tableOut, tableErr, err := runRootBuffered(t, tableRoot, "dev", "connect", "list", "--format", "table")
 	if err != nil {
 		t.Fatalf("connect list empty -f table error = %v\nstderr:\n%s", err, tableErr.String())
 	}
-	if !strings.Contains(tableOut.String(), "no connectors found") {
-		t.Fatalf("-f table empty state = %q, want 'no connectors found'", tableOut.String())
+	if !strings.Contains(tableOut.String(), "value") || !strings.Contains(tableOut.String(), "count: 0") {
+		t.Fatalf("-f table empty state must be a generic empty table with count:0: %q", tableOut.String())
 	}
 
 	// -f json 空态：data:[] + count:0 信封。

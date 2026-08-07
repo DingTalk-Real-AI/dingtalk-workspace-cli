@@ -35,7 +35,7 @@ make build            # 先构建 ./dws（脚本消费真实二进制）
 | scope | 样本 | 说明 |
 |---|---|---|
 | `dev`（默认） | `dev connect list`、`dev connect status`、`dev connect stop --dry-run` | 全部是**离线确定性** v2 terminal 样本：隔离新建 HOME + `DWS_DISABLE_KEYCHAIN=1`，无需登录、无网络、无副作用。`dev connect` 根同时承载 stream 与 daemon start，当前整体 legacy，不纳入 v2 信封样本。 |
-| `all` | dev 档 + `dev app list` + `schema list` + `auth status` + `version` | `dev app list` 需要登录态（继承真实 HOME）；后三个是**未迁移的非信封 json 输出**（legacy class），只做可解析性与字符串布尔检查，**不做信封形状检查**（那是迁移前已知形态，不是回归） |
+| `all` | dev 档 + `dev app list` + `devapp +list` + `schema list` + `auth status` + `version` | 两个 devapp 入口需要登录态（继承真实 HOME），并覆盖原子命令与 shortcut adapter；后三个是**未迁移的非信封 json 输出**（legacy class），只做可解析性与字符串布尔检查，**不做信封形状检查**（那是迁移前已知形态，不是回归） |
 
 样本分两类（`output_contract_samples()` 首列）：
 
@@ -46,8 +46,10 @@ make build            # 先构建 ./dws（脚本消费真实二进制）
 
 扫描纪律（硬纪律 3 落点）：
 
-- 每个样本**失败自动重试一次**再下结论（并行在途改动可能造成偶发异常）；
-  两次均失败则该样本记 `[skip]` 并打印 stderr 尾部，不参与判定。
+- 每个样本**失败自动重试一次**再下结论（并行在途改动可能造成偶发异常）。
+  非零退出但 stdout 非空时仍扫描该文档（v2 `failure` / `partial_failure` 本来就
+  使用非零退出码）；仅非零退出且 stdout 为空时视为环境/鉴权不可用，记
+  `[skip]` 并打印 stderr 尾部。
 - **至少一个样本成功验证**，否则脚本拒绝通过（防止空跑假绿）。
 - `DWS_SCAN_HOME` 环境变量可覆盖样本 HOME（运维/CI 定制环境用）。
 
@@ -58,7 +60,8 @@ make build            # 先构建 ./dws（脚本消费真实二进制）
 1. **`--scope dev`（默认档）**：当前扫描 3 个离线 v2 terminal 样本。样本真实输出形态核对：`dev connect list` 输出
    `{ok,outcome,data:[],meta.count:0}` 信封；`status`/`stop` 对一次性
    probe id 输出 `{ok:true,outcome:success,...}`；stop 使用 dry-run 预览，保证策略扫描不发进程信号。
-2. **`--scope all`**：8/8 样本验证成功，三个脚本均 `check: ok`，零误报。
+2. **`--scope all`**：覆盖 9 个样本，包含 `dev app list` 原子入口与
+   `devapp +list` shortcut 入口。三个脚本均对非零 v2 结果继续扫描 stdout。
    legacy 样本（`schema list`/`auth status`/`version`）顶层含 `success` 等
    非信封键，被 legacy class 正确豁免信封形状检查；`dev app list` 信封
    （含 `meta.pagination.endpoint_exhausted:true`）全规则通过。
@@ -85,8 +88,9 @@ legacy 命名业务字段（如服务端返回的 `hasMore`/`success` 业务字�
    `version` 是未迁移输出，豁免信封形状检查而非删除样本——保留其可解析性与
    字符串布尔检查，等 Phase F/E 迁移完成后这些样本升级为 envelope class，
    豁免自然消失。
-3. **失败重试一次 + skip 机制**：对齐硬纪律 3；skip 计数显式打印在结果行，
-   全 skip 时拒绝通过。
+3. **失败重试一次 + 有限 skip 机制**：对齐硬纪律 3；非零且有 stdout 的 v2
+   结果必须扫描，只有无 stdout 的环境/鉴权失败可 skip。skip 计数显式打印在
+   结果行，全 skip 时拒绝通过。
 
 ## 接入 make policy 的挂点设计草案（B167）
 

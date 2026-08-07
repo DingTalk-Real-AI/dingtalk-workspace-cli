@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -93,6 +94,9 @@ func TestCallToolRequestFailureUsesAPIClassification(t *testing.T) {
 	if typed.Reason != "connection_refused" {
 		t.Fatalf("Reason = %q, want connection_refused", typed.Reason)
 	}
+	if typed.ExecutionStarted == nil || *typed.ExecutionStarted {
+		t.Fatalf("pre-submission connection refusal execution_started = %v, want false", typed.ExecutionStarted)
+	}
 	actions := strings.Join(typed.Actions, "\n")
 	if strings.Contains(actions, "internal/syncdata") || strings.Contains(actions, "sync-oss") {
 		t.Fatalf("runtime network failure contains discovery-only actions: %q", actions)
@@ -106,6 +110,7 @@ func TestCallToolDoesNotReplayAmbiguousOperation(t *testing.T) {
 		return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: http.NoBody}, nil
 	})})
 	client.MaxRetries = 1
+	client.ExecutionId = "exec-recovery-503"
 	client.sleep = func(context.Context, time.Duration) error { return context.Canceled }
 
 	_, err := client.CallTool(context.Background(), "https://mcp.dingtalk.com/server", "search_messages", nil)
@@ -132,12 +137,50 @@ func TestCallToolDoesNotReplayAmbiguousOperation(t *testing.T) {
 	if typed.RetryableSet || typed.Retryable {
 		t.Fatalf("ambiguous tools/call 503 advertised safe replay: set=%v value=%v", typed.RetryableSet, typed.Retryable)
 	}
-	if typed.ExecutionStarted != nil {
-		t.Fatalf("ambiguous tools/call must keep execution_started unknown, got %v", *typed.ExecutionStarted)
+	if typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
+		t.Fatalf("ambiguous tools/call execution_started = %v, want true", typed.ExecutionStarted)
+	}
+	if typed.Details["execution_id"] != "exec-recovery-503" {
+		t.Fatalf("recovery execution_id = %#v, want exec-recovery-503", typed.Details["execution_id"])
 	}
 	actions := strings.Join(typed.Actions, "\n")
+	if !strings.Contains(actions, "execution_id") || !strings.Contains(actions, "避免重复") {
+		t.Fatalf("ambiguous tools/call lacks recovery guidance: %q", actions)
+	}
 	if strings.Contains(actions, "internal/syncdata") || strings.Contains(actions, "sync-oss") {
 		t.Fatalf("runtime retry cancellation contains discovery-only actions: %q", actions)
+	}
+}
+
+func TestCallToolNetworkLossCarriesAmbiguousRecoveryMetadata(t *testing.T) {
+	client := NewClient(&http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, io.ErrUnexpectedEOF
+	})})
+	client.ExecutionId = "exec-network-loss"
+
+	_, err := client.CallTool(context.Background(), "https://mcp.dingtalk.com/server", "send_message", nil)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) {
+		t.Fatalf("CallTool() error = %T, want *errors.Error", err)
+	}
+	if typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
+		t.Fatalf("network-loss execution_started = %v, want true", typed.ExecutionStarted)
+	}
+	if typed.Details["execution_id"] != "exec-network-loss" {
+		t.Fatalf("recovery execution_id = %#v, want exec-network-loss", typed.Details["execution_id"])
+	}
+}
+
+func TestAmbiguousCallHTTPStatusesCarryExecutionStarted(t *testing.T) {
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+		err := httpStatusError("tools/call", "https://mcp.dingtalk.com/server", status, "", "trace-recovery")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) {
+			t.Fatalf("HTTP %d error = %T, want *errors.Error", status, err)
+		}
+		if typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
+			t.Errorf("HTTP %d execution_started = %v, want true", status, typed.ExecutionStarted)
+		}
 	}
 }
 

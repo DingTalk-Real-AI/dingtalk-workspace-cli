@@ -80,8 +80,9 @@ var (
 // Execute runs the root command and returns the process exit code.
 func Execute() (exitCode int) {
 	var (
-		root     *cobra.Command
-		executed *cobra.Command
+		root        *cobra.Command
+		executed    *cobra.Command
+		resultStore *output.ResultStore
 	)
 	defer func() {
 		if r := recover(); r != nil {
@@ -91,7 +92,12 @@ func Execute() (exitCode int) {
 					target = found
 				}
 			}
-			if target != nil && output.UsesV2(target) {
+			if code, attempted, _, _ := output.StoredEmissionState(resultStore); attempted {
+				exitCode = code
+				if target != nil {
+					fmt.Fprintf(target.ErrOrStderr(), "Warning: command panicked after result emission attempt: %v\n", r)
+				}
+			} else if target != nil && output.UsesV2(target) {
 				info := &output.ErrorInfo{Type: "internal", ExitCode: 5, Message: fmt.Sprintf("internal panic: %v", r)}
 				if code, err := output.EmitResult(target, output.Failure(info)); err == nil {
 					exitCode = code
@@ -136,7 +142,7 @@ func Execute() (exitCode int) {
 
 	// Attach timing collector to context for use by child components
 	ctx = WithTimingCollector(ctx, timing)
-	ctx, resultStore := output.WithResultStore(ctx)
+	ctx, resultStore = output.WithResultStore(ctx)
 
 	initStart := time.Now()
 	engine := newPipelineEngine()
@@ -164,7 +170,7 @@ func Execute() (exitCode int) {
 		if executed == nil {
 			executed = root
 		}
-		if code, emitted := output.StoredExitCode(resultStore); emitted {
+		if code, attempted, _, _ := output.StoredEmissionState(resultStore); attempted {
 			fmt.Fprintf(executed.ErrOrStderr(), "Warning: command hook failed after result emission: %v\n", err)
 			return code
 		}
@@ -223,7 +229,13 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	if !stderrors.As(err, &typed) || typed == nil {
 		return info
 	}
-	info.Type = string(typed.Category)
+	if typed.Category == apperrors.CategoryPartial {
+		// An error lacks the item-level data required by partial_failure.
+		// Callers must use output.Partial; fail closed consistently otherwise.
+		info.Type = string(apperrors.CategoryInternal)
+	} else {
+		info.Type = string(typed.Category)
+	}
 	info.Subtype = typed.Reason
 	if typed.Hint != "" {
 		info.Hint = typed.Hint
@@ -235,7 +247,7 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 		info.RPCCode = typed.RPCCode
 	}
 	if typed.ServerDiag.TraceID != "" {
-		info.RequestID = typed.ServerDiag.TraceID
+		info.TraceID = typed.ServerDiag.TraceID
 	}
 	info.Operation = typed.Operation
 	info.ServerKey = typed.ServerKey
@@ -520,6 +532,7 @@ func NewRootCommand(ctx ...context.Context) *cobra.Command {
 	if len(ctx) > 0 && ctx[0] != nil {
 		rootCtx = ctx[0]
 	}
+	rootCtx, _ = output.WithResultStore(rootCtx)
 	return newRootCommandWithEngine(rootCtx, nil, true, false)
 }
 
@@ -542,6 +555,7 @@ func NewSchemaSourceRootCommand(ctx ...context.Context) *cobra.Command {
 // no pipeline processing is applied.
 func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) *cobra.Command {
 	registerSchemaRuntimeDelivery()
+	rootCtx, _ = output.WithResultStore(rootCtx)
 	return newRootCommandWithEngine(rootCtx, engine, true, false)
 }
 
@@ -594,8 +608,14 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 			if err := configureOutputSink(cmd); err != nil {
 				return err
 			}
+			installOutputSinkErrorCleanup(cmd)
 			if fn := edition.Get().AfterPersistentPreRun; fn != nil {
-				return fn(cmd, args)
+				if err := fn(cmd, args); err != nil {
+					if closeErr := closeOutputSink(cmd); closeErr != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Warning: close output sink: %v\n", closeErr)
+					}
+					return err
+				}
 			}
 			return nil
 		},
@@ -604,10 +624,21 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 			StopAllStdioClients()
 			CloseAuditSink()
 			if emitErr != nil {
+				if closeErr := closeOutputSink(cmd); closeErr != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: close output sink: %v\n", closeErr)
+				}
 				return apperrors.NewInternal("emit command result: "+emitErr.Error(), apperrors.WithCause(emitErr))
 			}
 			if output.UsesV2(cmd) && !emitted {
+				_ = closeOutputSink(cmd)
 				return apperrors.NewInternal("framework 2.0 command returned without a CommandResult")
+			}
+			if closeErr := closeOutputSink(cmd); closeErr != nil {
+				if output.UsesV2(cmd) && emitted {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: close output sink: %v\n", closeErr)
+					return nil
+				}
+				return closeErr
 			}
 			return nil
 		},
@@ -1009,6 +1040,12 @@ func deduplicateCommands(root *cobra.Command) {
 	}
 }
 
+type outputSinkState struct {
+	mu     sync.Mutex
+	file   *os.File
+	closed bool
+}
+
 func configureOutputSink(cmd *cobra.Command) error {
 	if local := cmd.LocalFlags().Lookup("output"); local != nil {
 		return nil
@@ -1032,19 +1069,51 @@ func configureOutputSink(cmd *cobra.Command) error {
 		return apperrors.NewInternal(fmt.Sprintf("failed to create output file: %v", err))
 	}
 	cmd.SetOut(file)
-	cmd.SetContext(context.WithValue(cmd.Context(), outputFileContextKey{}, file))
+	cmd.SetContext(context.WithValue(cmd.Context(), outputFileContextKey{}, &outputSinkState{file: file}))
 	return nil
+}
+
+func installOutputSinkErrorCleanup(cmd *cobra.Command) {
+	if cmd == nil || cmd.RunE == nil {
+		return
+	}
+	if _, ok := cmd.Context().Value(outputFileContextKey{}).(*outputSinkState); !ok {
+		return
+	}
+	original := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				if closeErr := closeOutputSink(cmd); closeErr != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: close output sink: %v\n", closeErr)
+				}
+				panic(r)
+			}
+			if err != nil {
+				if closeErr := closeOutputSink(cmd); closeErr != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: close output sink: %v\n", closeErr)
+				}
+			}
+		}()
+		return original(cmd, args)
+	}
 }
 
 func closeOutputSink(cmd *cobra.Command) error {
 	if cmd == nil || cmd.Context() == nil {
 		return nil
 	}
-	file, ok := cmd.Context().Value(outputFileContextKey{}).(*os.File)
-	if !ok || file == nil {
+	state, ok := cmd.Context().Value(outputFileContextKey{}).(*outputSinkState)
+	if !ok || state == nil || state.file == nil {
 		return nil
 	}
-	if err := rootCloseFile(file); err != nil {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.closed {
+		return nil
+	}
+	state.closed = true
+	if err := rootCloseFile(state.file); err != nil {
 		return apperrors.NewInternal(fmt.Sprintf("failed to close output file: %v", err))
 	}
 	return nil

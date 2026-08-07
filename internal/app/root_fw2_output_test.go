@@ -123,8 +123,8 @@ func TestRootHumanErrorToStderrOnly(t *testing.T) {
 }
 
 // TestRootExecuteOutcomeToExitCode 是 B185 的 Execute 出口断言：Execute 把
-// 命令返回的 error 类别映射为进程退出码（apperrors.ExitCode）。ok→0、partial
-// →7（CategoryPartial）、confirmation/validation→3、panic→5。
+// 命令返回的 error 类别映射为进程退出码（apperrors.ExitCode）。ok→0、
+// confirmation/validation→3、panic 与 unrepresentable partial error→5。
 func TestRootExecuteOutcomeToExitCode(t *testing.T) {
 	oldNormalize := rootNormalizeProcessProfileArgs
 	oldExecute := rootExecuteCommand
@@ -154,12 +154,12 @@ func TestRootExecuteOutcomeToExitCode(t *testing.T) {
 		t.Fatalf("success Execute code = %d, want 0", code)
 	}
 
-	// partial_failure → 7（CategoryPartial）
+	// An error cannot carry partial succeeded/failed data and fails closed.
 	rootExecuteCommand = func(*cobra.Command) (*cobra.Command, error) {
 		return nil, &apperrors.Error{Category: apperrors.CategoryPartial, Message: "partial"}
 	}
-	if code := Execute(); code != 7 {
-		t.Fatalf("partial Execute code = %d, want 7", code)
+	if code := Execute(); code != 5 {
+		t.Fatalf("partial error Execute code = %d, want 5", code)
 	}
 
 	// confirmation_required（validation 子类）→ 3

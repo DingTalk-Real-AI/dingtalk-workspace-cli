@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -48,5 +49,35 @@ func TestExistingContextDeadlineIsNotExtended(t *testing.T) {
 	_, _ = client.Initialize(ctx, "https://mcp.example.test")
 	if remaining := <-seen; remaining > 15*time.Millisecond {
 		t.Fatalf("existing deadline was extended: remaining=%s", remaining)
+	}
+}
+
+func TestClientTimeoutWinsOverLongerCallerDeadline(t *testing.T) {
+	requestTimeout := 10 * time.Minute
+	callerDeadline := time.Now().Add(time.Hour)
+	seen := make(chan time.Time, len(supportedProtocolVersions))
+	httpClient := &http.Client{
+		Timeout: requestTimeout,
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			deadline, ok := req.Context().Deadline()
+			if !ok {
+				t.Fatal("request context has no deadline")
+			}
+			seen <- deadline
+			return nil, errors.New("stop after observing deadline")
+		}),
+	}
+	client := NewClient(httpClient)
+	ctx, cancel := context.WithDeadline(context.Background(), callerDeadline)
+	defer cancel()
+
+	_, _ = client.Initialize(ctx, "https://mcp.example.test")
+	requestDeadline := <-seen
+	if !requestDeadline.Before(callerDeadline.Add(-time.Minute)) {
+		t.Fatalf("request deadline=%s, want client timeout earlier than caller deadline=%s", requestDeadline, callerDeadline)
+	}
+	remaining := time.Until(requestDeadline)
+	if remaining < requestTimeout-time.Second || remaining > requestTimeout {
+		t.Fatalf("request deadline remaining=%s, want about %s", remaining, requestTimeout)
 	}
 }

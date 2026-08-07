@@ -1,0 +1,16 @@
+{
+  "ok": false,
+  "outcome": "failure",
+  "error": {
+    "type": "remote",
+    "message": "fixture",
+    "details": {
+      "retryAfter": 3
+    }
+  },
+  "meta": {
+    "operation": {
+      "progress": [{"nextCommand": "dws fixture result"}]
+    }
+  }
+}

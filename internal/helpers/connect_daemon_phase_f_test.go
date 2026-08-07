@@ -18,8 +18,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/spf13/cobra"
 )
+
+func TestConnectStopAndRestartDoNotRequireConfirmation(t *testing.T) {
+	for _, cmd := range []*cobra.Command{
+		newDevAppRobotConnectStopCommand(),
+		newDevAppRobotConnectRestartCommand(),
+	} {
+		final, ok := contractfinal.RuntimeContractFinal(cmd)
+		if !ok || final.Safety == nil {
+			t.Fatalf("%s missing final safety declaration", cmd.Name())
+		}
+		if got := final.Safety.Confirmation; got != "not_required" {
+			t.Fatalf("%s confirmation = %q, want not_required", cmd.Name(), got)
+		}
+	}
+}
 
 // TestConnectDaemonFamilyMissingDaemonErrorPaths 是队列 B116 的「daemon 不存在
 // 错误路径」分支：对不存在的守护进程，status/stop 不得把它当成失败（空态是合法
@@ -53,7 +69,7 @@ func TestConnectDaemonFamilyMissingDaemonErrorPaths(t *testing.T) {
 	var stopOut, stopErr bytes.Buffer
 	stop.SetOut(&stopOut)
 	stop.SetErr(&stopErr)
-	stop.SetArgs([]string{"--unified-app-id", "ghost", "--yes"})
+	stop.SetArgs([]string{"--unified-app-id", "ghost"})
 	if err := stop.Execute(); err != nil {
 		t.Fatalf("stop on missing daemon must not error, got %v\nstderr:\n%s", err, stopErr.String())
 	}

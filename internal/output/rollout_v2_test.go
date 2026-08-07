@@ -2,6 +2,9 @@ package output
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -119,18 +122,93 @@ func TestPartialRequiresTypedPerItemError(t *testing.T) {
 	}
 }
 
-func TestEmitResultRejectsUnknownFormatAndKeepsOutputEmpty(t *testing.T) {
+func TestEmitResultUnknownFormatDegradesToJSONWithWarning(t *testing.T) {
 	cmd := &cobra.Command{Use: "sample"}
-	output := new(bytes.Buffer)
-	cmd.SetOut(output)
-	cmd.SetErr(new(bytes.Buffer))
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
 	cmd.Flags().String("format", "bogus", "")
 	SetCommandRollout(cmd, RolloutV2Active)
 	code, err := EmitResult(cmd, Success(map[string]any{"id": "a"}))
-	if err == nil || code != 3 || !strings.Contains(err.Error(), "unsupported --format") {
-		t.Fatalf("EmitResult code=%d err=%v, want validation", code, err)
+	if err != nil || code != 0 {
+		t.Fatalf("EmitResult code=%d err=%v, want successful JSON fallback", code, err)
 	}
-	if output.Len() != 0 {
-		t.Fatalf("invalid format leaked output: %q", output.String())
+	if !strings.Contains(stdout.String(), `"outcome": "success"`) {
+		t.Fatalf("fallback output is not a success envelope: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "[WARN]") || !strings.Contains(stderr.String(), "bogus") {
+		t.Fatalf("fallback warning missing: %q", stderr.String())
+	}
+}
+
+func TestPendingWithMetaDoesNotMutateCallerMetadata(t *testing.T) {
+	callerOperation := &OperationInfo{ID: "original", State: "waiting", NextCommand: "dws original"}
+	meta := &Meta{Operation: callerOperation}
+	want := &OperationInfo{ID: "new", State: "processing", NextCommand: "dws status"}
+	result := Pending(nil, want, WithMeta(meta))
+
+	if meta.Operation != callerOperation || meta.Operation.ID != "original" {
+		t.Fatalf("Pending mutated caller metadata: %+v", meta.Operation)
+	}
+	env, err := EnvelopeFromResult(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env.Meta.Operation.ID != "new" {
+		t.Fatalf("result operation=%+v, want new operation", env.Meta.Operation)
+	}
+}
+
+type writeThenError struct {
+	accepted int
+	writes   int
+	full     bool
+}
+
+func (w *writeThenError) Write(p []byte) (int, error) {
+	w.writes++
+	n := len(p)
+	if !w.full {
+		n /= 2
+	}
+	w.accepted += n
+	return n, io.ErrClosedPipe
+}
+
+func TestEmitStoredResultRecordsAttemptAndByteRiskOnWriteError(t *testing.T) {
+	for _, full := range []bool{false, true} {
+		t.Run(fmt.Sprintf("full=%t", full), func(t *testing.T) {
+			ctx, store := WithResultStore(context.Background())
+			cmd := &cobra.Command{Use: "sample"}
+			SetCommandRollout(cmd, RolloutV2Active)
+			writer := &writeThenError{full: full}
+			cmd.SetOut(writer)
+			cmd.SetErr(io.Discard)
+			cmd.SetContext(ctx)
+			if err := StoreResult(ctx, Success(map[string]any{"id": "a"})); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := EmitStoredResult(cmd); err == nil {
+				t.Fatal("write error was not returned")
+			}
+			code, attempted, emitted, bytesRisk := StoredEmissionState(store)
+			if code != exitCodeInternal || !attempted || emitted || !bytesRisk {
+				t.Fatalf("state=(%d,%t,%t,%t), want (%d,true,false,true)", code, attempted, emitted, bytesRisk, exitCodeInternal)
+			}
+			if _, _, err := EmitStoredResult(cmd); err != nil {
+				t.Fatalf("second call should report existing state without writing: %v", err)
+			}
+			if writer.writes != 1 {
+				t.Fatalf("writer called %d times, want one emission attempt", writer.writes)
+			}
+		})
+	}
+}
+
+func TestWithResultStoreIsIdempotent(t *testing.T) {
+	ctx, first := WithResultStore(context.Background())
+	ctxAgain, second := WithResultStore(ctx)
+	if ctxAgain != ctx || second != first {
+		t.Fatal("WithResultStore replaced an existing store")
 	}
 }

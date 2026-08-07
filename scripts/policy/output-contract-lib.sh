@@ -84,10 +84,41 @@ output_contract_samples() {
 	printf 'envelope\tdev-connect-stop-preview\tdev connect stop --unified-app-id dws-policy-scan-probe --dry-run --format json\n'
 	if [ "$SCOPE" = "all" ]; then
 		printf 'envelope\tdev-app-list\tdev app list --format json\n'
+		printf 'envelope\tdevapp-shortcut-list\tdevapp +list --format json\n'
 		printf 'legacy\tschema-list\tschema list -f json\n'
 		printf 'legacy\tauth-status\tauth status --format json\n'
 		printf 'legacy\tversion\tversion --format json\n'
 	fi
+}
+
+# A v2 failure or partial result intentionally exits nonzero but still owns one
+# JSON envelope on stdout. Only a nonzero command with no stdout is unavailable
+# to these scanners (for example, failure before output initialization).
+output_contract_should_scan_result() {
+	result_rc="$1"
+	result_out="$2"
+	if [ "$result_rc" -eq 0 ] || [ -s "$result_out" ]; then
+		return 0
+	fi
+	return 1
+}
+
+output_contract_self_test_harness() {
+	harness_test_tmp="$1"
+	harness_test_fail=0
+	: >"$harness_test_tmp/no-stdout"
+	if ! output_contract_should_scan_result 7 "$OC_TESTDATA/envelope_legal_partial_failure.json"; then
+		printf 'self-test MISMATCH: nonzero v2 envelope was skipped\n' >&2
+		harness_test_fail=1
+	fi
+	if output_contract_should_scan_result 1 "$harness_test_tmp/no-stdout"; then
+		printf 'self-test MISMATCH: empty nonzero result was not skipped\n' >&2
+		harness_test_fail=1
+	fi
+	if [ "$harness_test_fail" -eq 0 ]; then
+		printf 'self-test ok: harness scans nonzero stdout and skips unavailable empty output\n'
+	fi
+	return "$harness_test_fail"
 }
 
 output_contract_require_jq() {
@@ -113,6 +144,9 @@ output_contract_run_self_test() {
 	trap 'rm -rf "$self_test_tmp"' EXIT HUP INT TERM
 	self_test_cases >"$self_test_tmp/cases"
 	self_test_fail=0
+	if ! output_contract_self_test_harness "$self_test_tmp"; then
+		self_test_fail=1
+	fi
 	while IFS='|' read -r self_test_fixture self_test_class self_test_expect; do
 		if [ -z "$self_test_fixture" ]; then
 			continue
@@ -201,16 +235,22 @@ output_contract_scan_samples() {
 				HOME="$scan_home" "$OC_BIN" $scan_argv \
 					>"$scan_out" 2>"$scan_err" </dev/null || scan_rc=$?
 			fi
-			if [ "$scan_rc" -eq 0 ]; then
+			# A nonzero v2 result is still a completed sample. Preserve its first
+			# envelope instead of retrying and potentially overwriting it.
+			if [ "$scan_rc" -eq 0 ] || [ -s "$scan_out" ]; then
 				break
 			fi
 			scan_attempt=$((scan_attempt + 1))
 		done
-		if [ "$scan_rc" -ne 0 ]; then
+		if ! output_contract_should_scan_result "$scan_rc" "$scan_out"; then
 			scan_skipped=$((scan_skipped + 1))
-			printf '  [skip] %s: exited rc=%s after retry; stderr tail: %s\n' \
+			printf '  [skip] %s: exited rc=%s with no stdout after retry; stderr tail: %s\n' \
 				"$scan_label" "$scan_rc" "$(tail -c 160 "$scan_err" 2>/dev/null | tr '\n' ' ')"
 			continue
+		fi
+		if [ "$scan_rc" -ne 0 ]; then
+			printf '  [scan] %s: exited rc=%s with stdout; validating expected v2 failure/partial output\n' \
+				"$scan_label" "$scan_rc"
 		fi
 		scan_verified=$((scan_verified + 1))
 		"$scan_process_fn" "$scan_class" "$scan_label" "$scan_out" "$scan_err"

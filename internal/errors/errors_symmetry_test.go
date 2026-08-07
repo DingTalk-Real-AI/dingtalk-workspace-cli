@@ -14,6 +14,7 @@
 package errors
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -72,9 +73,16 @@ func TestErrorsPrintJSONOutcomeFailure(t *testing.T) {
 	if err := PrintJSON(&b, NewAuth("token expired")); err != nil {
 		t.Fatalf("PrintJSON() error = %v", err)
 	}
-	// outcome 位于顶层 error 对象之外（信封层），与 output 侧 Envelope 对齐。
-	if !strings.Contains(b.String(), `"outcome": "failure"`) {
-		t.Fatalf("expected outcome=failure in error envelope, got %q", b.String())
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(b.String()), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["outcome"] != "failure" {
+		t.Fatalf("top-level outcome=%v, want failure", payload["outcome"])
+	}
+	errorPayload := payload["error"].(map[string]any)
+	if _, nested := errorPayload["outcome"]; nested {
+		t.Fatalf("outcome must be a sibling of error: %s", b.String())
 	}
 }
 
@@ -137,25 +145,22 @@ func TestErrorsConfirmationSharesValidationExitCode(t *testing.T) {
 	}
 }
 
-// TestErrorsPartialFailureExitCode 是 B172 的断言：partial_failure → 退出码 7
-// 纳入 ExitCode 文档表（契约 §4），CategoryPartial 经 ExitCode 得 ExitCodePartial。
-func TestErrorsPartialFailureExitCode(t *testing.T) {
+func TestErrorsPartialCategoryFailsClosedAsInternal(t *testing.T) {
 	t.Parallel()
 
 	err := &Error{Category: CategoryPartial, Message: "partial"}
-	if got := ExitCode(err); got != ExitCodePartial {
-		t.Fatalf("ExitCode(partial) = %d, want %d", got, ExitCodePartial)
+	if got := ExitCode(err); got != ExitCodeInternal {
+		t.Fatalf("ExitCode(partial error) = %d, want internal %d", got, ExitCodeInternal)
 	}
 	if ExitCodePartial != 7 {
 		t.Fatalf("ExitCodePartial = %d, want 7", ExitCodePartial)
 	}
-	// 与 internal/output ExitCodeForEnvelope partial 分支同源（B209 跨包锁定）
 	var b strings.Builder
 	if err := PrintJSON(&b, err); err != nil {
 		t.Fatalf("PrintJSON() error = %v", err)
 	}
-	if !strings.Contains(b.String(), `"code": 7`) {
-		t.Fatalf("expected partial code 7 in output, got %q", b.String())
+	if !strings.Contains(b.String(), `"code": 5`) || !strings.Contains(b.String(), `"type": "internal"`) {
+		t.Fatalf("partial error must not masquerade as a partial result: %q", b.String())
 	}
 }
 

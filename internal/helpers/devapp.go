@@ -1818,8 +1818,13 @@ func devAppCommandResult(result executor.Result) output.CommandResult {
 		if failure := devAppFailureResult(content); failure != nil {
 			return failure
 		}
-		if pending := devAppPendingResult(content); pending != nil {
-			return pending
+		// check-approval reports what a later publish would require; it does not
+		// itself accept an asynchronous operation.
+		precheckOnly, _ := result.Invocation.Params["precheckOnly"].(bool)
+		if !precheckOnly {
+			if pending := devAppPendingResult(content); pending != nil {
+				return pending
+			}
 		}
 	}
 	if meta := devAppPaginationMeta(data); meta != nil {

@@ -203,7 +203,7 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 		t.Fatal(err)
 	}
 	cmd := &cobra.Command{Use: "close"}
-	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, file))
+	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, &outputSinkState{file: file}))
 	rootCloseFile = func(*os.File) error { return wantErr }
 	if err := closeOutputSink(cmd); err == nil {
 		t.Fatal("close failure succeeded")
@@ -216,7 +216,7 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, file))
+	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, &outputSinkState{file: file}))
 	if err := closeOutputSink(cmd); err != nil {
 		t.Fatalf("close success = %v", err)
 	}

@@ -324,8 +324,6 @@ func TestWriteEnvelopeFailureBypassesJQAtAssemblyExit(t *testing.T) {
 	}
 }
 
-// --- Framework 2.0 未知 format 严格拒绝（执行前 validation）---
-
 func TestUnknownFormatFullChainDegradesOverDevAppCommand(t *testing.T) {
 	out, errBuf, err := runDevAppFamily(t,
 		devAppFamilyContentRunner(map[string]any{
@@ -334,10 +332,14 @@ func TestUnknownFormatFullChainDegradesOverDevAppCommand(t *testing.T) {
 			"appStatus":    "ENABLED",
 		}),
 		"dev", "app", "get", "--unified-app-id", "u-1", "--format", "bogus")
-	if err == nil || !strings.Contains(err.Error(), "unsupported --format") {
-		t.Fatalf("Execute() error = %v, want unsupported format\nstdout:\n%s\nstderr:\n%s", err, out.String(), errBuf.String())
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want JSON fallback\nstdout:\n%s\nstderr:\n%s", err, out.String(), errBuf.String())
 	}
-	if out.Len() != 0 {
-		t.Fatalf("handler must not emit data for invalid format: %q", out.String())
+	var env map[string]any
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil || env["ok"] != true {
+		t.Fatalf("fallback output is not a successful JSON envelope: %v\n%s", err, out.String())
+	}
+	if warning := errBuf.String(); !strings.Contains(warning, "[WARN]") || !strings.Contains(warning, "bogus") || !strings.Contains(warning, "json") {
+		t.Fatalf("fallback warning missing or malformed: %q", warning)
 	}
 }

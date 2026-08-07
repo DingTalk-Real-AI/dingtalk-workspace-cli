@@ -47,7 +47,7 @@ func WithDryRun() ResultOption {
 }
 
 func WithMeta(meta *Meta) ResultOption {
-	return ResultOption{apply: func(env *Envelope) { env.Meta = meta }}
+	return ResultOption{apply: func(env *Envelope) { env.Meta = cloneMeta(meta) }}
 }
 
 // Success constructs an immutable success result.
@@ -119,22 +119,7 @@ func newCommandResultWithExitCode(outcome Outcome, data any, info *ErrorInfo, ov
 
 func cloneEnvelope(source Envelope) Envelope {
 	out := source
-	if source.Meta != nil {
-		meta := *source.Meta
-		if source.Meta.Count != nil {
-			count := *source.Meta.Count
-			meta.Count = &count
-		}
-		if source.Meta.Operation != nil {
-			op := *source.Meta.Operation
-			meta.Operation = &op
-		}
-		if source.Meta.Pagination != nil {
-			pagination := *source.Meta.Pagination
-			meta.Pagination = &pagination
-		}
-		out.Meta = &meta
-	}
+	out.Meta = cloneMeta(source.Meta)
 	out.Error = cloneErrorInfo(source.Error)
 	out.Data = cloneResultData(source.Data)
 	if partial, ok := source.Data.(*PartialData); ok && partial != nil {
@@ -155,6 +140,26 @@ func cloneEnvelope(source Envelope) Envelope {
 		out.Data = copyPartial
 	}
 	return out
+}
+
+func cloneMeta(source *Meta) *Meta {
+	if source == nil {
+		return nil
+	}
+	meta := *source
+	if source.Count != nil {
+		count := *source.Count
+		meta.Count = &count
+	}
+	if source.Operation != nil {
+		op := *source.Operation
+		meta.Operation = &op
+	}
+	if source.Pagination != nil {
+		pagination := *source.Pagination
+		meta.Pagination = &pagination
+	}
+	return &meta
 }
 
 func cloneResultData(value any) any {
@@ -317,10 +322,12 @@ func ValidateResult(result CommandResult) error {
 // pretending it is an error. The root PersistentPostRunE emits the result
 // before closing output sinks, so normal cleanup always runs.
 type ResultStore struct {
-	mu       sync.Mutex
-	result   CommandResult
-	emitted  bool
-	exitCode int
+	mu            sync.Mutex
+	result        CommandResult
+	emitAttempted bool
+	bytesRisk     bool
+	emitted       bool
+	exitCode      int
 }
 
 type resultStoreContextKey struct{}
@@ -328,6 +335,9 @@ type resultStoreContextKey struct{}
 func WithResultStore(ctx context.Context) (context.Context, *ResultStore) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if store, ok := resultStoreFromContext(ctx); ok {
+		return ctx, store
 	}
 	store := &ResultStore{}
 	return context.WithValue(ctx, resultStoreContextKey{}, store), store
@@ -370,19 +380,38 @@ func EmitStoredResult(cmd *cobra.Command) (int, bool, error) {
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	if store.result == nil || store.emitted {
+	if store.result == nil || store.emitAttempted {
 		return store.exitCode, store.emitted, nil
 	}
 	if !UsesV2(cmd) {
 		return 0, false, fmt.Errorf("output: legacy command %q produced a framework v2 result", cmd.CommandPath())
 	}
-	code, err := EmitResult(cmd, store.result)
+	store.emitAttempted = true
+	store.exitCode = store.result.ExitCode()
+	code, bytesRisk, err := emitResult(cmd, store.result)
+	store.bytesRisk = bytesRisk
 	if err != nil {
-		return 0, false, err
+		// Never report the original success code after an output failure. Do not
+		// attempt a second envelope: an io.Writer may have consumed bytes even
+		// when it reported n == 0 or returned a rendering-adjacent error.
+		store.exitCode = exitCodeInternal
+		return store.exitCode, false, err
 	}
 	store.exitCode = code
 	store.emitted = true
 	return code, true, nil
+}
+
+// StoredEmissionState reports whether result emission was attempted. Once an
+// attempt starts, callers must not try another envelope because a writer may
+// have accepted bytes even when it returned an error.
+func StoredEmissionState(store *ResultStore) (exitCode int, attempted, emitted, bytesRisk bool) {
+	if store == nil {
+		return 0, false, false, false
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.exitCode, store.emitAttempted, store.emitted, store.bytesRisk
 }
 
 // StoredExitCode returns the code produced by PersistentPostRunE.

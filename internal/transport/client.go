@@ -25,10 +25,12 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -422,11 +424,11 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 		ctx = context.Background()
 	}
 	if c.RequestTimeout > 0 {
-		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, c.RequestTimeout)
-			defer cancel()
-		}
+		// WithTimeout keeps an earlier parent deadline while enforcing a shorter
+		// client timeout when the caller supplied a longer deadline.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.RequestTimeout)
+		defer cancel()
 	}
 	body, err := json.Marshal(request)
 	if err != nil {
@@ -454,14 +456,25 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
 	logging.LogResponse(c.FileLogger, request.Method, endpoint, c.ExecutionId, resp.StatusCode, len(data), time.Since(callStart), err)
 	if err != nil {
-		return apperrors.NewDiscovery(
-			"failed to read JSON-RPC response",
+		opts := []apperrors.Option{
 			apperrors.WithOperation(request.Method),
 			apperrors.WithReason(reasonForMethod(request.Method, "response_read_failed")),
+			apperrors.WithTraceID(headerTraceID),
+		}
+		if request.Method == "tools/call" {
+			opts = append(opts,
+				apperrors.WithExecutionStarted(true),
+				apperrors.WithHint(ambiguousCallHint()),
+				apperrors.WithActions(ambiguousCallActions("")...),
+			)
+			opts = appendRecoveryIdentity(opts, c.ExecutionId, headerTraceID)
+			return apperrors.NewAPI("failed to read JSON-RPC response", opts...)
+		}
+		opts = append(opts,
 			apperrors.WithHint(i18n.T("检查服务连通性后重试；如持续失败，请确认 MCP 服务响应正常。")),
 			apperrors.WithActions(discoveryActions("")...),
-			apperrors.WithTraceID(headerTraceID),
 		)
+		return apperrors.NewDiscovery("failed to read JSON-RPC response", opts...)
 	}
 	snapshotPath := ""
 	if c.SnapshotRecorder != nil && (expectResponse || resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices || len(bytes.TrimSpace(data)) > 0) {
@@ -470,7 +483,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		logging.LogResponseBody(c.FileLogger, request.Method, c.ExecutionId, resp.StatusCode, data, headerTraceID)
-		return httpStatusErrorWithHeader(request.Method, endpoint, resp.StatusCode, snapshotPath, headerTraceID, resp.Header)
+		return httpStatusErrorWithRecovery(request.Method, endpoint, resp.StatusCode, snapshotPath, headerTraceID, c.ExecutionId, resp.Header)
 	}
 
 	if !expectResponse {
@@ -479,6 +492,12 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 
 	var envelope responseEnvelope
 	if err := json.Unmarshal(data, &envelope); err != nil {
+		if request.Method == "tools/call" {
+			return c.ambiguousToolCallResponseError(
+				fmt.Sprintf("unexpected protocol response from %s", RedactURL(endpoint)),
+				reasonForMethod(request.Method, "invalid_response"), snapshotPath, headerTraceID,
+			)
+		}
 		return apperrors.NewDiscovery(
 			fmt.Sprintf("unexpected protocol response from %s", RedactURL(endpoint)),
 			apperrors.WithOperation(request.Method),
@@ -494,6 +513,12 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 		return jsonrpcEnvelopeError(request.Method, envelope.Error, snapshotPath, headerTraceID)
 	}
 	if len(envelope.Result) == 0 {
+		if request.Method == "tools/call" {
+			return c.ambiguousToolCallResponseError(
+				fmt.Sprintf("JSON-RPC %s returned an empty result payload", request.Method),
+				reasonForMethod(request.Method, "empty_result"), snapshotPath, headerTraceID,
+			)
+		}
 		return apperrors.NewDiscovery(
 			fmt.Sprintf("JSON-RPC %s returned an empty result payload", request.Method),
 			apperrors.WithOperation(request.Method),
@@ -507,6 +532,12 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 		return nil
 	}
 	if err := json.Unmarshal(envelope.Result, out); err != nil {
+		if request.Method == "tools/call" {
+			return c.ambiguousToolCallResponseError(
+				fmt.Sprintf("failed to decode JSON-RPC %s result", request.Method),
+				reasonForMethod(request.Method, "result_decode_failed"), snapshotPath, headerTraceID,
+			)
+		}
 		return apperrors.NewDiscovery(
 			fmt.Sprintf("failed to decode JSON-RPC %s result", request.Method),
 			apperrors.WithOperation(request.Method),
@@ -517,6 +548,20 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 		)
 	}
 	return nil
+}
+
+func (c *Client) ambiguousToolCallResponseError(message, reason, snapshotPath, traceID string) error {
+	opts := []apperrors.Option{
+		apperrors.WithOperation("tools/call"),
+		apperrors.WithReason(reason),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithHint(ambiguousCallHint()),
+		apperrors.WithActions(ambiguousCallActions(snapshotPath)...),
+		apperrors.WithSnapshot(snapshotPath),
+		apperrors.WithTraceID(traceID),
+	}
+	opts = appendRecoveryIdentity(opts, c.ExecutionId, traceID)
+	return apperrors.NewAPI(message, opts...)
 }
 
 func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, method string) (*http.Response, error) {
@@ -533,20 +578,37 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 		maxRetries = 0
 	}
 	var lastErr error
+	var lastRequestWritten atomic.Bool
+	lastRequestKnownUnsent := false
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
-			return nil, apperrors.NewDiscovery(
-				"failed to create JSON-RPC request",
+			opts := []apperrors.Option{
 				apperrors.WithOperation(operation),
 				apperrors.WithReason("request_build_failed"),
 				apperrors.WithHint(i18n.T("请检查服务 endpoint 是否为空或格式不合法。")),
 				apperrors.WithCause(&CallError{
-					Stage: CallStageRequest,
-					Cause: err,
+					Stage:     CallStageRequest,
+					RequestID: c.ExecutionId,
+					Cause:     err,
 				}),
+			}
+			if operation == "tools/call" {
+				opts = append(opts, apperrors.WithExecutionStarted(false))
+				return nil, apperrors.NewAPI("failed to create JSON-RPC request", opts...)
+			}
+			return nil, apperrors.NewDiscovery(
+				"failed to create JSON-RPC request",
+				opts...,
 			)
 		}
+		lastRequestWritten.Store(false)
+		trace := &httptrace.ClientTrace{WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err == nil {
+				lastRequestWritten.Store(true)
+			}
+		}}
+		req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", "application/json")
 		// Set security headers for request tracing
@@ -575,9 +637,11 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 			)
 		}
 
+		lastRequestKnownUnsent = ctx.Err() != nil
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
 			lastErr = err
+			lastRequestKnownUnsent = lastRequestKnownUnsent || knownPreSubmissionFailure(err)
 			if isTimeoutError(err) {
 				break
 			}
@@ -637,11 +701,23 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 		apperrors.WithHint(hint),
 		apperrors.WithActions(actions...),
 		apperrors.WithCause(&CallError{
-			Stage: CallStageRequest,
-			Cause: lastErr,
+			Stage:     CallStageRequest,
+			RequestID: c.ExecutionId,
+			Cause:     lastErr,
 		}),
 	}
-	if operation != "tools/call" {
+	if operation == "tools/call" {
+		if lastRequestWritten.Load() || !lastRequestKnownUnsent {
+			opts = append(opts,
+				apperrors.WithExecutionStarted(true),
+				apperrors.WithHint(ambiguousCallHint()),
+				apperrors.WithActions(ambiguousCallActions("")...),
+			)
+			opts = appendRecoveryIdentity(opts, c.ExecutionId, "")
+		} else {
+			opts = append(opts, apperrors.WithExecutionStarted(false))
+		}
+	} else {
 		// retryable describes whether the caller/Agent may retry; it does not
 		// trigger an in-process replay. Ambiguous tool calls intentionally omit
 		// it because the write may already have happened.
@@ -652,6 +728,22 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 		return nil, apperrors.NewAPI(message, opts...)
 	}
 	return nil, apperrors.NewDiscovery(message, opts...)
+}
+
+func knownPreSubmissionFailure(err error) bool {
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && opErr.Op == "dial" {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "connection refused") ||
+		strings.Contains(message, "no such host") ||
+		strings.Contains(message, "tls handshake") ||
+		strings.Contains(message, "certificate")
 }
 
 func sanitizeJSONRPCEndpoint(endpoint string) string {
@@ -920,7 +1012,12 @@ func httpStatusError(method, endpoint string, statusCode int, snapshotPath, head
 }
 
 func httpStatusErrorWithHeader(method, endpoint string, statusCode int, snapshotPath, headerTraceID string, header http.Header) error {
+	return httpStatusErrorWithRecovery(method, endpoint, statusCode, snapshotPath, headerTraceID, "", header)
+}
+
+func httpStatusErrorWithRecovery(method, endpoint string, statusCode int, snapshotPath, headerTraceID, executionID string, header http.Header) error {
 	message := fmt.Sprintf("request to %s returned HTTP %d", RedactURL(endpoint), statusCode)
+	ambiguousWrite := method == "tools/call" && (statusCode == http.StatusRequestTimeout || statusCode >= http.StatusInternalServerError)
 	opts := []apperrors.Option{
 		apperrors.WithOperation(method),
 		apperrors.WithReason(fmt.Sprintf("http_%d", statusCode)),
@@ -930,8 +1027,13 @@ func httpStatusErrorWithHeader(method, endpoint string, statusCode int, snapshot
 			Stage:      CallStageHTTP,
 			HTTPStatus: statusCode,
 			TraceID:    headerTraceID,
+			RequestID:  recoveryIdentity(executionID, headerTraceID),
 			Cause:      errors.New(message),
 		}),
+	}
+	if ambiguousWrite {
+		opts = append(opts, apperrors.WithExecutionStarted(true))
+		opts = appendRecoveryIdentity(opts, executionID, headerTraceID)
 	}
 	// A 5xx/408 response to tools/call is ambiguous: the mutating operation may
 	// already have started upstream. Do not advertise a safe Agent replay. 429
@@ -958,6 +1060,13 @@ func httpStatusErrorWithHeader(method, endpoint string, statusCode int, snapshot
 		)
 		return apperrors.NewAuth(message, opts...)
 	case statusCode >= http.StatusBadRequest && statusCode < http.StatusInternalServerError:
+		if ambiguousWrite {
+			opts = append(opts,
+				apperrors.WithHint(ambiguousCallHint()),
+				apperrors.WithActions(ambiguousCallActions(snapshotPath)...),
+			)
+			return apperrors.NewAPI(message, opts...)
+		}
 		opts = append(opts,
 			apperrors.WithHint(i18n.T("请求被上游服务拒绝；请检查参数、认证和权限配置。")),
 			apperrors.WithActions(runtimeActions(snapshotPath)...),
@@ -968,15 +1077,56 @@ func httpStatusErrorWithHeader(method, endpoint string, statusCode int, snapshot
 		}
 		return apperrors.NewAPI(message, opts...)
 	default:
-		opts = append(opts,
-			apperrors.WithHint(i18n.T("上游服务异常；可稍后重试。")),
-			apperrors.WithActions(actionsForMethod(method, snapshotPath)...),
-		)
+		if ambiguousWrite {
+			opts = append(opts,
+				apperrors.WithHint(ambiguousCallHint()),
+				apperrors.WithActions(ambiguousCallActions(snapshotPath)...),
+			)
+		} else {
+			opts = append(opts,
+				apperrors.WithHint(i18n.T("上游服务异常；可稍后重试。")),
+				apperrors.WithActions(actionsForMethod(method, snapshotPath)...),
+			)
+		}
 		if method == "tools/call" {
 			return apperrors.NewAPI(message, opts...)
 		}
 		return apperrors.NewDiscovery(message, opts...)
 	}
+}
+
+func appendRecoveryIdentity(opts []apperrors.Option, executionID, traceID string) []apperrors.Option {
+	details := map[string]any{}
+	if executionID = strings.TrimSpace(executionID); executionID != "" {
+		details["execution_id"] = executionID
+	}
+	if traceID = strings.TrimSpace(traceID); traceID != "" {
+		details["trace_id"] = traceID
+	}
+	if len(details) == 0 {
+		return opts
+	}
+	return append(opts, apperrors.WithDetails(details))
+}
+
+func recoveryIdentity(executionID, traceID string) string {
+	if executionID = strings.TrimSpace(executionID); executionID != "" {
+		return executionID
+	}
+	return strings.TrimSpace(traceID)
+}
+
+func ambiguousCallHint() string {
+	return i18n.T("工具调用可能已在上游执行，但响应未能确认；请先核对执行结果，再决定是否重试。")
+}
+
+func ambiguousCallActions(snapshotPath string) []string {
+	actions := []string{
+		i18n.T("使用 execution_id 或 trace_id 查询并核对原调用状态"),
+		i18n.T("确认原调用未生效后再重试，避免重复执行写操作"),
+	}
+	_ = snapshotPath
+	return actions
 }
 
 func jsonrpcEnvelopeError(method string, rpcErr *RPCError, snapshotPath, headerTraceID string) error {
