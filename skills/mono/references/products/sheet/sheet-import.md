@@ -6,7 +6,7 @@
 
 - 支持本地 `xlsx` / `xls`，文件上限 20MB
 - `--folder-token` 与 `--workspace` 至少提供一个
-- CLI 内部完成创建会话、OSS 上传、确认转换和轮询，Agent 不要自行拆分或重试
+- CLI 内部完成创建会话、上传文件、确认转换和轮询，Agent 不要自行拆分或重试
 - `drive upload` 只上传二进制文件，不会转换为可编辑的在线表格，不能替代本命令
 
 ## 命令
@@ -71,6 +71,6 @@ dws sheet import get --task-id <TASK_ID> --format json
 ## 边界
 
 - 本命令接受的是本地文件路径；它把 xlsx/xls 转换成新的 axls 在线表格
-- 已经存在于钉盘或文档中的 xlsx 节点不能直接传给工作表/单元格命令；先用 `doc download` 下载，需要在线编辑时再执行 `sheet import create`
+- 已经存在于钉盘或文档中的 xlsx 节点不能直接传给工作表/单元格命令；先用 `drive download` 下载，需要在线编辑时再执行 `sheet import create`
 - 向已有在线表格写数据应使用 `range update`、`append`、`csv-put` 或 `table-put`
 - md/doc/docx 等文字文档导入使用 `dws doc import`

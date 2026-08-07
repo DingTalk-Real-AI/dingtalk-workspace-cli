@@ -10,7 +10,7 @@
 |---------|---------|
 | 在线电子表格（`axls`） | 走 `sheet` 全部命令 |
 | `xlsx` / `xls` / `xlsm` / `csv` | `dws drive download --node <ID> --output <路径>` 下载到本地处理，禁止调用任何 `sheet` 子命令 |
-| 本地 xlsx/xls 导入为在线表格 | `dws sheet import --file <路径>`（单命令一站式：创建会话→上传→确认→轮询，产出在线电子表格） |
+| 本地 xlsx/xls 导入为在线表格 | `dws sheet import create --file <路径>`（单命令一站式：创建会话→上传→确认→轮询，产出在线电子表格；`sheet import` 保留兼容） |
 | 在线表格导出为 xlsx | `dws sheet export`（axls → xlsx 格式转换） |
 
 用户贴原始 `alidocs` URL 时必须先 probe：`dws drive info --node <URL> --format json`，按 [链接规范](../../dingtalk-shared/references/url-patterns.md#alidocs-url-类型探测流程) 校验：
@@ -29,7 +29,7 @@
 ## Agent 编辑总则
 
 1. **先定位再编辑**：未知 `sheet-id` 时必须先 `dws sheet list --node <ID> --format json`，禁止猜 `Sheet1` / `sheet1` / `0` / `default`。用户只给工作表名称时，也先用 `list` 确认真实名称或 ID。
-2. **先读结构再动结构**：合并、冻结、行列分组、行高列宽、隐藏行列、最后非空边界都属于工作表结构信息，先读 `dws sheet info --node <ID> --sheet-id <SHEET_ID> --format json`。
+2. **先读结构再动结构**：合并、冻结、行列分组、行高列宽、隐藏行列、最后非空边界都属于工作表结构信息，先读 `dws sheet info --node <ID> --sheet-id <SHEET_ID> --format json`；分组回读加 `--include groups`，行高、列宽和隐藏行列按需加 `--include row_heights,col_widths,hidden_rows,hidden_cols`。
 3. **按目的选择读取方式**：快速看值和大表分批用 `csv-get`；需要 `columns` / `data` / `dtypes` / `formats` 用 `table-get`；需要公式、样式、数据验证、超链接、富文本等 per-cell 元数据用 `range read`。
 4. **写返回不等于完成**：任何写操作完成后都要用独立读命令回读确认。值写入用 `csv-get` / `range read` / `table-get`，结构变更用 `sheet info`，对象类操作用对应 `list` / `get`。
 5. **大批量 CSV 值/公式不要拼大 JSON**：超过 5 行或 20 个单元格、且不需要富格式对象时优先 `csv-put`；字段值以 `=` 开头按公式解析，前加单引号写入以 `=` 开头的字面文本；需要 table/dataframe 语义时用 `table-put`。
@@ -68,7 +68,7 @@
 
 | Reference | 描述 |
 |-----------|------|
-| [sheet-workbook](sheet/sheet-workbook.md) | 管理表格文档与工作表。当用户说"创建表格"、"有哪些工作表"、"新建/重命名/隐藏/冻结/复制/删除工作表"、"显示/隐藏网格线"时使用；`info` 可回读冻结行列等工作表结构信息。命令：`create`/`list`/`info`/`new`/`update`/`copy`/`delete-sheet`/`show-gridline`/`hide-gridline` |
+| [sheet-workbook](sheet/sheet-workbook.md) | 管理表格文档与工作表。当用户说"创建表格"、"有哪些工作表"、"新建/重命名/隐藏/冻结/复制/删除工作表"、"显示/隐藏网格线"时使用；`info` 可回读冻结行列，`--include groups` 回读分组，其他行列结构按需使用对应 `--include`。命令：`create`/`list`/`info`/`new`/`update`/`copy`/`delete-sheet`/`show-gridline`/`hide-gridline` |
 | [sheet-read-data](sheet/sheet-read-data.md) | 读取工作表数据。当用户说"读数据"、"看表格内容"、"查看数据"时使用。推荐 `csv-get`（CSV 格式、token 低、防爆保护）；需按 table/dataframe 结构读取列名、data、dtypes、formats 时用 `table-get`；需 value + dataValidation / hyperlink / richText / cellStyles 等 per-cell 元数据时用 `range read`。大范围数据建议分页读取（单次 ≤5000 单元格）。命令：`csv-get`/`table-get`/`range read` |
 | [sheet-write-data](sheet/sheet-write-data.md) | 写入数据到工作表。当用户说"写数据"、"填表"、"更新单元格"、"写公式"、"超链接"、"写值同时设样式/数据验证"、"追加数据"、"导入CSV"、"写入结构化 table"时使用。大批量 CSV 值/公式（>5行或>20单元格，且无需富格式）必须用 `csv-put` 而非 `range update`；结构化 table/dataframe 输入用 `table-put`。命令：`range update`/`append`/`csv-put`/`table-put` |
 | [sheet-formula](sheet/sheet-formula.md) | 公式写入、文本回读、错误聚合与结果抽样。当用户说"写公式"、"计算列"、"辅助列"、"总计/占比/增长率/查找计算"、"校验公式"、"检查公式错误"时使用。命令：`range update` / `csv-put` / `range read --value-render-option formula/raw_value` / `formula-verify` |
@@ -82,8 +82,8 @@
 | [sheet-filter](sheet/sheet-filter.md) | 全局筛选。当用户说"筛选"、"过滤"、"只看某些行"（未说"筛选视图"）时使用。禁止用"删除不符合条件的行"代替筛选。命令：`filter get`/`create`/`delete`/`update`/`clear-criteria`/`sort` |
 | [sheet-filter-view](sheet/sheet-filter-view.md) | 筛选视图（个人化，不影响协作者）。当用户明确说"筛选视图"时使用，与全局筛选相互独立。命令：`filter-view list`/`create`/`update`/`delete`/`info`/`update-criteria`/`delete-criteria`/`list-criteria`/`get-criteria` |
 | [sheet-conditional-format](sheet/sheet-conditional-format.md) | 条件格式规则。触发词：标红/标黄/高亮/突出/标记/数据条/色阶/颜色随数据变 → **强制**走条件格式，禁止 `range set-style` 静态样式替代。命令：`cond-format list`/`create`/`update`/`delete` |
-| [sheet-export](sheet/sheet-export.md) | 导出表格为 xlsx。当用户说“导出”、“下载xlsx”、“存为Excel”时使用。单命令一站式，CLI 内部自动轮询，禁止 Agent 侧重试。命令：`export` / `export get` |
-| [sheet-import](sheet/sheet-import.md) | 导入本地表格文件为在线电子表格。当用户说“导入表格”、“把xlsx传成在线表格”、“上传Excel变在线表格”时使用。单命令一站式，CLI 内部自动轮询，禁止 Agent 侧重试，禁止用 `drive upload` 代替。命令：`import`/`import get` |
+| [sheet-export](sheet/sheet-export.md) | 导出表格为 xlsx。当用户说“导出”、“下载xlsx”、“存为Excel”时使用。单命令一站式，CLI 内部自动轮询，禁止 Agent 侧重试。命令：`export` |
+| [sheet-import](sheet/sheet-import.md) | 导入本地表格文件为在线电子表格。当用户说“导入表格”、“把xlsx传成在线表格”、“上传Excel变在线表格”时使用。Agent 入口为 `import create`，`import` 保留兼容；超时后只用 `import get` 续查，禁止重新创建或用 `drive upload` 代替。命令：`import create`/`import get` |
 | [sheet-chart](sheet/sheet-chart.md) | 浮动图表管理。当用户说“画图/数据可视化/趋势图/对比图/占比图/柱形图/折线图/饼图”时使用。禁止用本地脚本生成静态图片替代。命令：`chart list`/`create`/`update`/`delete` |
 | [sheet-pivot-table](sheet/sheet-pivot-table.md) | 透视表管理。当用户说“透视表/分组汇总/交叉分析/按X统计Y”时使用。禁止用公式拼汇总表替代。命令：`pivot-table list`/`create`/`update`/`delete` |
 | [sheet-comment](sheet/sheet-comment.md) | 单元格评论管理。当用户说“给单元格加评论/批注”、“看某格的评论”、“回复/更新/删除评论”、“@某人讨论这个数据”时使用。评论锚定单元格（`--sheet-id`+`--range`），禁止把评论写进单元格值。命令：`comment list`/`create`/`reply`/`update`/`delete` |
@@ -95,7 +95,7 @@
 1. **`--sheet-id` 禁止臆测**：未知时必须 `dws sheet list --node <ID> --format json` 查询，禁止编造 `Sheet1`/`sheet1`/`0`/`default`
 2. **合并单元格是结构信息**：`dws sheet info --node <ID> --sheet-id <SHEET_ID> --format json` 返回 `mergedRanges`（如 `["C7:D11"]`）；不要在 `range read` / `csv-get` 里寻找合并信息
 3. **冻结行列是工作表元数据**：`sheet info` 顶层返回 `frozenRowCount` / `frozenColumnCount`，分别表示从顶部第 1 行、左侧第 A 列开始冻结的数量；`0` 表示未冻结。不要在 `range read` / `csv-get` 里寻找冻结信息
-4. **结构变更后回读**：创建/取消分组、调整行高列宽或隐藏行列后，用 `dws sheet info --node <ID> --sheet-id <SHEET_ID> --format json` 回读工作表结构确认。
+4. **结构变更后按需 include 回读**：创建/取消分组后，用 `dws sheet info --node <ID> --sheet-id <SHEET_ID> --include groups --format json` 回读 `rowGroups` / `columnGroups`；行高、列宽、隐藏行列分别使用 `--include row_heights` / `col_widths` / `hidden_rows` / `hidden_cols`。裸 `sheet info` 不承诺返回这些可选结构字段。
 5. **最后非空坐标只用 A1 语义**：`sheet info` 通过 `nonEmptyRange` 返回 A1/UI 边界；优先使用 `nonEmptyRange.range`，需要追加行/列时使用 `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn`。不要使用旧的 0-based 字段 `lastNonEmptyRow` / `lastNonEmptyColumn`
 6. **`range update` 维度校验**：`--values` 行列数必须与 `--range` 完全一致；只接 `--values` 一个数据参数，cell `type` 仅支持 `text` / `richText`；整格超链接通过 cell-level `hyperlink` 表达，富文本片段链接才使用 `richText.texts[].type="link"`
 7. **dataValidation 三语义**：不传 `dataValidation` 字段=保留原 DV；`dataValidation:{type:"none"}`=显式清除；`dataValidation:{type:"dropdown"/"checkbox",...}`=覆盖。`{}` 跳过亦保留原 DV
@@ -104,7 +104,7 @@
 10. **用专用命令不用组合模拟**：搜索→`find`、替换→`replace`、清空→`range clear`、排序→`range sort`、填充→`range fill`、复制区域→`range copy-to`、移动区域→`range move-to`、移动行列→`move-dimension`
 11. **大批量 CSV 值/公式用 `csv-put`**（>5 行或 >20 单元格，且无需富格式），不用 `range update`；需要 dataframe/table 语义（列名、dtypes、formats、跨 sheet specs）时用 `table-get` / `table-put`
 12. **单元格图片用 `write-image`**（`range update` 不支持图片参数）
-13. **`export` / `import` 禁止自行轮询**（CLI 内部已完成渐进式退避，最多 30 次约 5 分钟）;`export get` / `import get`为单次查询，非终态时可手动再次调用
+13. **`export` / `import create` 禁止自行轮询**（CLI 内部已完成渐进式退避，最多 30 次约 5 分钟）；导入超时只按返回的 `next_command` 调用 `import get`，导出失败或超时直接转述，不自动重调
 14. **单次调用上限**：`range update` / `set-style` 行数 ≤ 1000，单元格总数建议 ≤ 5000（硬限 30000）
 15. **大整数精度保护**：超过 `9007199254740991` 的整数和长数字标识符必须按文本写入；`table-put` 中不要使用 JSON number 或 `int64` / `uint64` dtype，改用字符串值 + `object` dtype + `formats`/`cellStyles` 的 `@`
 16. **批量写操作推荐用 `batch-update`**：对多个区域重复调用同一写入工具时，推荐合并为单次原子请求（详见 [sheet-batch-operations](./sheet/sheet-batch-operations.md)）；逐个调用非原子，中途失败会留下半成品。结构化 table 例外，`table-put` 不进 `batch-update`
@@ -116,7 +116,7 @@
 - **视觉规范**：当前不维护独立的表格视觉方案文档；样式、条件格式、图表分别按对应子文档执行。
 - **结构化 table**：`table-get` / `table-put` 是 table/dataframe 语义入口，不嵌入 `batch-update`；需要原子组合时只组合已支持的单元格/结构写操作。
 - **历史版本**：支持通过 `version save`/`list`/`revert` 手动保存快照、查看版本列表、回滚到指定版本（底层复用 doc 域版本能力）；回滚为危险操作，需二次确认。
-- **单元格评论**：支持通过 `comment create`/`list`/`reply`/`update`/`delete` 管理单元格评论（锚定 `--sheet-id`+`--range`，内容复用 `doc-comment` 服务、与前端评论同桶，单元格位置由 flex-table-app 承载并以 `customCategory`(cmt-*) 关联），详见 [sheet-comment](sheet/sheet-comment.md)。
+- **单元格评论**：支持通过 `comment create`/`list`/`reply`/`update`/`delete` 管理锚定在 `--sheet-id` + `--range` 的评论；评论与单元格值相互独立，详见 [sheet-comment](sheet/sheet-comment.md)。
 - **未暴露或未确认能力**：迷你图、历史 changeset 等能力未在本入口承诺；只有出现稳定 DWS 命令和可回读语义后再补充。
 
 ## URL 粘贴场景
@@ -132,16 +132,16 @@
 
 ## 导入本地表格
 
-用户说"导入Excel/把xlsx转为在线表格/上传表格并在线编辑"时，用 `dws sheet import`（单命令一站式，详见 [sheet-import](./sheet/sheet-import.md)）：
+用户说"导入Excel/把xlsx转为在线表格/上传表格并在线编辑"时，用 `dws sheet import create`（单命令一站式；`sheet import` 保留兼容，详见 [sheet-import](./sheet/sheet-import.md)）：
 ```bash
 # 导入本地表格文件为在线电子表格（默认表格名取文件名）
-dws sheet import --file ./data.xlsx
+dws sheet import create --file ./data.xlsx
 
 # 指定目标文件夹与导入后表格名
-dws sheet import --file ./report.xls --folder-token <FOLDER_TOKEN> --name "月度报表"
+dws sheet import create --file ./report.xls --folder-token <FOLDER_TOKEN> --name "月度报表"
 
 # 导入到指定知识库
-dws sheet import --file ./data.xls --workspace <WORKSPACE_ID>
+dws sheet import create --file ./data.xls --workspace <WORKSPACE_ID>
 ```
 - 支持 `.xlsx` / `.xls`，固定产出**在线电子表格**；只新建、不覆盖已有表格
 - CLI 内部自动完成「创建会话→上传→确认→渐进式退避轮询」（最多 30 次约 5 分钟），**禁止 Agent 侧再实现轮询或重试**

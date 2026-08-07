@@ -142,10 +142,19 @@ omit_global:
     disposition: covered_by
     reason: "AI 表格字段规则已下沉到 dingtalk-aitable；G3/coverage 不强制全局同名"
 
-# Byte-identical pairs (content surfaces that must stay in sync).
+# Reviewed file pairs. Most are byte-identical; layout-only link differences use an explicit normalization mode.
 paired_files:
+  - mono: references/products/sheet.md
+    multi: dingtalk-misc/references/sheet.md
+    mode: shared-link-normalized
   - mono: references/products/whiteboard/recipes.md
     multi: dingtalk-misc/references/whiteboard/recipes.md
+    mode: identical
+
+# Directory pairs whose relative file sets and contents must stay byte-identical.
+paired_trees:
+  - mono: references/products/sheet
+    multi: dingtalk-misc/references/sheet
     mode: identical
 
 # Scripts under skills/multi/*/scripts not referenced by any .md in that skill tree.

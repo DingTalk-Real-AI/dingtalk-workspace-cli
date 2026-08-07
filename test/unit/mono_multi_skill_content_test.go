@@ -45,6 +45,11 @@ type monoMultiQAContract struct {
 		Multi string `yaml:"multi"`
 		Mode  string `yaml:"mode"`
 	} `yaml:"paired_files"`
+	PairedTrees []struct {
+		Mono  string `yaml:"mono"`
+		Multi string `yaml:"multi"`
+		Mode  string `yaml:"mode"`
+	} `yaml:"paired_trees"`
 	OrphanScriptsAllowlist []struct {
 		Path        string `yaml:"path"`
 		Disposition string `yaml:"disposition"`
@@ -260,8 +265,63 @@ func TestMonoMultiSkillContentG4Drift(t *testing.T) {
 			if !bytes.Equal(monoData, multiData) {
 				t.Errorf("G4: paired files differ: mono %s vs multi %s", pair.Mono, pair.Multi)
 			}
+		case "shared-link-normalized":
+			monoLink := []byte("../url-patterns.md")
+			multiLink := []byte("../../dingtalk-shared/references/url-patterns.md")
+			if bytes.Count(monoData, monoLink) != 1 || bytes.Count(multiData, multiLink) != 1 {
+				t.Errorf("G4: normalized shared-link pair must contain exactly one layout-specific URL-pattern link: mono %s vs multi %s", pair.Mono, pair.Multi)
+				continue
+			}
+			marker := []byte("__DWS_SHARED_URL_PATTERNS__")
+			monoNormalized := bytes.Replace(monoData, monoLink, marker, 1)
+			multiNormalized := bytes.Replace(multiData, multiLink, marker, 1)
+			if !bytes.Equal(monoNormalized, multiNormalized) {
+				t.Errorf("G4: paired files differ after shared-link normalization: mono %s vs multi %s", pair.Mono, pair.Multi)
+			}
 		default:
 			t.Errorf("G4: unknown paired mode %q", mode)
+		}
+	}
+
+	for _, pair := range c.PairedTrees {
+		if pair.Mono == "" || pair.Multi == "" {
+			t.Fatalf("G4: paired tree requires mono and multi paths: %+v", pair)
+		}
+		mode := pair.Mode
+		if mode == "" {
+			mode = "identical"
+		}
+		if mode != "identical" {
+			t.Errorf("G4: unknown paired tree mode %q", mode)
+			continue
+		}
+
+		monoDir := filepath.Join(root, "skills", "mono", filepath.FromSlash(pair.Mono))
+		multiDir := filepath.Join(multiRoot, filepath.FromSlash(pair.Multi))
+		monoFiles, err := readRelativeFileTree(monoDir)
+		if err != nil {
+			t.Errorf("G4: paired mono tree %s: %v", pair.Mono, err)
+			continue
+		}
+		multiFiles, err := readRelativeFileTree(multiDir)
+		if err != nil {
+			t.Errorf("G4: paired multi tree %s: %v", pair.Multi, err)
+			continue
+		}
+		for rel, monoData := range monoFiles {
+			multiData, ok := multiFiles[rel]
+			if !ok {
+				t.Errorf("G4: paired multi tree %s missing %s from mono %s", pair.Multi, rel, pair.Mono)
+				continue
+			}
+			if !bytes.Equal(monoData, multiData) {
+				t.Errorf("G4: paired tree file differs: mono %s/%s vs multi %s/%s", pair.Mono, rel, pair.Multi, rel)
+			}
+		}
+		for rel := range multiFiles {
+			if _, ok := monoFiles[rel]; !ok {
+				t.Errorf("G4: paired mono tree %s missing %s from multi %s", pair.Mono, rel, pair.Multi)
+			}
 		}
 	}
 
@@ -316,6 +376,29 @@ func TestMonoMultiSkillContentG4Drift(t *testing.T) {
 			t.Errorf("G4: orphan allowlist path missing on disk: %s", path)
 		}
 	}
+}
+
+func readRelativeFileTree(root string) (map[string][]byte, error) {
+	files := map[string][]byte{}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(rel)] = data
+		return nil
+	})
+	return files, err
 }
 
 type skillFrontmatter struct {

@@ -5,7 +5,7 @@
 `batch-update` 把多次写入打包成单次请求，但每个子操作仍受编辑类任务硬性默认规则约束：
 
 1. **目标 range 必须落在用户授权范围内**：除用户明示要修改的区域外，子操作禁止扩张到无关单元格 / 列 / 工作表。规划 range 时先确认每个子操作的边界。
-2. **批次完成后必须回读校验**：整个 `batch-update` 执行成功后，单元格值用 `range read` 或 `csv-get` 抽样回读受影响区域；合并、行列分组等结构元数据用 `sheet info` 回读校验。
+2. **批次完成后必须回读校验**：整个 `batch-update` 执行成功后，单元格值用 `range read` 或 `csv-get` 抽样回读受影响区域；合并用裸 `sheet info`，行列分组用 `sheet info --include groups` 回读校验。
 3. **预期条数前置断言**：涉及"批量填充 N 行"或"对 M 个区域分别写入"时，先把 N、M 硬编码进代码，回读后断言实际等于预期；不一致就再发一轮 `batch-update` 补齐，禁止交付半成品。
 
 ## 使用场景
@@ -29,7 +29,7 @@
 用户说"批量创建行列分组/批量取消行列分组/同时调整尺寸并分组":
 - 连续行/列分组 → `group-dimension`
 - 取消连续行/列分组 → `ungroup-dimension`
-- 分组回读用 `sheet info`
+- 分组回读用 `sheet info --include groups`
 - `group-dimension` 在 batch 中只适合默认展开分组；需要创建后立即折叠时，用独立 `dws sheet group-dimension --group-state fold`
 
 **何时推荐使用 `batch-update`**：
@@ -236,7 +236,7 @@ Cause: The requested resource was not found by the identifier 'NonExistentSheet'
 
 ### 批量创建/取消行列分组
 
-分组属于工作表结构元数据，批次完成后用 `sheet info` 回读 `rowGroups` / `columnGroups`，不要用 `range read` 校验。回读项中的 `level` 是 1-based，`collapsed` 表示当前折叠状态。
+分组属于工作表结构元数据，批次完成后用 `sheet info --include groups` 回读 `rowGroups` / `columnGroups`，不要用裸 `sheet info` 或 `range read` 校验。回读项中的 `level` 是 1-based，`collapsed` 表示当前折叠状态。
 
 ```jsonc
 [
@@ -263,7 +263,7 @@ Cause: The requested resource was not found by the identifier 'NonExistentSheet'
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
 | `list` | 工作表的 `sheetId` | batch-clear 的 --ranges sheet 前缀 / batch-update 子操作 input 的 sheet-id |
-| `batch-update` | 各子操作的执行结果 | 回读校验（值用 range read / csv-get；合并、分组等结构用 sheet info） |
+| `batch-update` | 各子操作的执行结果 | 回读校验（值用 range read / csv-get；合并用 sheet info；分组用 sheet info --include groups） |
 
 ## 注意事项
 
@@ -273,5 +273,5 @@ Cause: The requested resource was not found by the identifier 'NonExistentSheet'
 - ★ **table 写入不进 batch-update**：当前 `batch-update` 不支持结构化 table 写入；结构化 table 请直接调用 `dws sheet table-put`
 - ★ **批次完成后必须回读校验**：值写入用 `range read` 或 `csv-get` 抽样回读受影响区域；结构变更用 `sheet info` 回读
 - ★ **`batch-update` 不支持嵌套**：`--operations` 中的 `toolName` 必须是原子操作，不可再嵌套 `batch-update`
-- `batch-update` 支持 `group-dimension` / `ungroup-dimension`；分组结果用 `sheet info` 回读
+- `batch-update` 支持 `group-dimension` / `ungroup-dimension`；分组结果用 `sheet info --include groups` 回读
 - `batch-update` 中 `group-dimension` 只适合默认展开分组；需要 `fold` 初始状态时使用独立 `group-dimension`

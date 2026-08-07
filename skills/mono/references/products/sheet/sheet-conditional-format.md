@@ -64,14 +64,13 @@
 
 **正确做法（两步走）**：
 ```bash
-# Step 1: 用 range update 在新列写判断公式（形成"是/否"辅助列）
-# 每个单元格必须是 object，公式写在 text（以 = 开头）；不支持裸字符串
-dws sheet range update --node NODE_ID --sheet-id SHEET_ID --range "H2:H100" \
-  --values '[[{"type":"text","text":"=IF(A2>B2,\"是\",\"否\")"}],...]'
+# Step 1: 用 range update 在新列写判断公式（形成"是/否"辅助列，以 H2:H4 为例）
+dws sheet range update --node NODE_ID --sheet-id SHEET_ID --range "H2:H4" \
+  --values '[[{"type":"text","text":"=IF(A2>B2,\"是\",\"否\")"}],[{"type":"text","text":"=IF(A3>B3,\"是\",\"否\")"}],[{"type":"text","text":"=IF(A4>B4,\"是\",\"否\")"}]]'
 
 # Step 2: 基于辅助列值做条件格式（用 formulaCondition 引用辅助列）
 dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID \
-  --ranges '["A2:H100"]' \
+  --ranges '["A2:H4"]' \
   --condition '{"formulaCondition":{"formula":"=$H2=\"是\""}}' \
   --cell-style '{"backgroundColor":"#FFECEC"}'
 ```
@@ -143,8 +142,7 @@ Flags:
 
 - **用途**：查看指定工作表中已有的条件格式规则，或获取单个规则的详情。
 - **场景**：创建/更新/删除条件格式前后验证规则状态；获取 ruleId 供后续 update/delete 使用。
-- **返回**：`rules` 数组，每条规则包含 id、type、ranges、条件参数、cellStyle/dataBarStyle 等。
-- **判空要看 `message`，不要看数组长度**：无规则时 `rules` 数组里仍会带 1 个全 null 的幽灵元素（`colorScaleCondition`/`dataBarStyle`/`iconSetCondition` 全 null，无 id），`message` 会是「No conditional formatting rules found.」。该命令**没有 `totalCount` 字段**，判空以 message 为准，或过滤掉没有 `id` 的元素。
+- **返回**：rules 数组，每条规则包含 id、type、ranges、条件参数、cellStyle/dataBarStyle 等。
 
 ### 创建条件格式规则
 ```
@@ -271,4 +269,3 @@ Flags:
 - **辅助列+条件格式两步走**：用户明确要求"辅助列"时，必须按两步走（先建辅助列 → 再基于辅助列做条件格式），禁止直接用 `formulaCondition` 一步绕过
 - **大数据量优势**：当数据量 > 1000 行时，条件格式是首选——它由服务端自身渲染，不需要逐行调用 `range set-style`，性能远优于静态样式写入
 - **判断标准**：交付后 `cond-format list` 必须能返回该规则；否则视为违规
-- ⚠️ **`cond-format list` 判空看 `message` 不看数组长度**：无规则时 `rules` 仍含 1 个全 null 幽灵元素（无 id），`message` 为「No conditional formatting rules found.」。该命令无 `totalCount`，判空以 message 为准或过滤无 `id` 的元素

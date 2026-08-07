@@ -8,6 +8,10 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Changed
 
+- **Sheet mono/multi Skill alignment** — replaces the oversized mono Sheet
+  reference with the progressive routing layout, aligns all 20 Sheet topic
+  references across the mono and multi bundles, and adds a content-policy guard
+  that prevents the paired topic trees from drifting again.
 - **Sheet CSV formula writes** — `dws sheet csv-put` and batch `csv-put` now expose the service contract that CSV fields beginning with `=` are written as formulas. Prefix the field with an apostrophe to write literal text beginning with `=`; CSV content continues to pass through unchanged.
 
 ### Fixed

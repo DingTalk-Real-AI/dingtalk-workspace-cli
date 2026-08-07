@@ -29,7 +29,7 @@
 用户说"创建行分组/创建列分组/新建分组并折叠/新建分组并展开/取消分组":
 - 创建连续行/列分组 → `group-dimension`
 - 取消连续行/列分组 → `ungroup-dimension`
-- 分组创建后用 `sheet info` 回读 `rowGroups` / `columnGroups`
+- 分组创建后用 `sheet info --include groups` 回读 `rowGroups` / `columnGroups`
 - 仅创建分组时可用 `--group-state expand|fold` 指定初始展开/折叠；当前没有单独调整已有分组折叠状态的命令
 - 用户要求"折叠/展开已有分组"时，当前不支持直接修改已有分组的 `collapsed` 状态，不能承诺可用 `group-dimension` 完成
 
@@ -205,7 +205,7 @@ Flags:
 
 创建后用以下命令回读：
 ```bash
-dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --format json
+dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --include groups --format json
 ```
 
 回读字段为 `rowGroups` / `columnGroups`，单项包含 `range`、起止行列、`count`、`level`、`collapsed`。`collapsed=true` 表示当前分组折叠。
@@ -226,7 +226,7 @@ Flags:
       --range string      整行或整列范围，A1 表示法 (必填)。行如 "3:7"，列如 "C:F"
 ```
 
-取消指定连续整行或整列范围上的分组。取消后同样用 `sheet info` 回读确认目标 `range` 已从 `rowGroups` / `columnGroups` 中移除。
+取消指定连续整行或整列范围上的分组。取消后同样用 `sheet info --include groups` 回读确认目标 `range` 已从 `rowGroups` / `columnGroups` 中移除。
 
 `group-dimension` / `ungroup-dimension` 可以放进 `batch-update` 做原子组合；但 batch 中的 `group-dimension` 只适合默认展开分组。需要创建后立即折叠时，请使用独立 `dws sheet group-dimension --group-state fold`。
 
@@ -335,6 +335,6 @@ dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> \
 - `add-dimension` 的 `--length` 必须为正整数（>= 1），行列均不超过 5000
 - `group-dimension` / `ungroup-dimension` 的 `--range` 只接受整行或整列范围，不接受普通单元格矩形
 - `group-dimension` 输出使用 `level`，且为 1-based；不要使用旧的 `depth` 字段
-- `sheet info` 是分组回读入口；`range read` / `csv-get` 不返回行列分组
+- `sheet info --include groups` 是分组回读入口；裸 `sheet info`、`range read` 和 `csv-get` 不承诺返回行列分组
 - 当前不能直接调整已有分组的 `collapsed` 状态；`--group-state fold` 只在创建分组时生效
 - `batch-update` 支持 `group-dimension` / `ungroup-dimension`，但不适合创建后立即折叠；需要 `fold` 时使用独立 `group-dimension`
