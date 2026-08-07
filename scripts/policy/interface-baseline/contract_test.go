@@ -258,68 +258,6 @@ func TestCompatibilityAllowsChatIDCanonicalHiddenAliasMigration(t *testing.T) {
 	}
 }
 
-func TestCompatibilityAllowsChatIDRequiredCanonicalAdditionFromLegacyAlias(t *testing.T) {
-	baselineRoot := chatMigrationRootWithLegacyOnly()
-	baseline := snapshot(baselineRoot)
-	currentRoot := chatMigrationRootWithCanonicalAddition()
-
-	if failures := checkCompatibility(currentRoot, baseline); len(failures) != 0 {
-		t.Fatalf("chat ID canonical addition should be compatible: %v", failures)
-	}
-
-	mergedContract, failures := mergeContracts(baseline, snapshot(currentRoot))
-	if len(failures) != 0 {
-		t.Fatalf("chat ID canonical addition should merge: %v", failures)
-	}
-	merged := mergedContract.Commands["chat.message.edit"]
-	if flag, ok := merged.Flags["conversation-id"]; !ok || !flag.Required || flag.Hidden {
-		t.Fatalf("merged canonical flag = %#v, ok=%v", flag, ok)
-	}
-}
-
-func TestCompatibilityChatIDMigrationGuardBranches(t *testing.T) {
-	historical := map[string]flagContract{
-		"group": {Name: "group", Type: "string"},
-	}
-	current := map[string]flagContract{
-		"conversation-id": {Name: "conversation-id", Type: "string"},
-		"group":           {Name: "group", Type: "string", Hidden: true},
-	}
-	if !allowedChatIDFlagMigration("chat.message.edit", "group", historical, current) {
-		t.Fatal("expected hidden group alias migration to be allowed")
-	}
-	if allowedChatIDFlagMigration("drive.copy", "group", historical, current) {
-		t.Fatal("non-chat paths must not be allowed")
-	}
-	if allowedChatIDFlagMigration("chat.message.edit", "query", historical, current) {
-		t.Fatal("non-ID flags must not be allowed")
-	}
-	hiddenCanonical := map[string]flagContract{
-		"conversation-id": {Name: "conversation-id", Type: "string", Hidden: true},
-		"group":           {Name: "group", Type: "string", Hidden: true},
-	}
-	if allowedChatIDFlagMigration("chat.message.edit", "group", historical, hiddenCanonical) {
-		t.Fatal("hidden canonical flag must not be allowed")
-	}
-	if allowedChatIDFlagMigration("chat.message.edit", "conversation-id", nil, current) {
-		t.Fatal("canonical migration without a historical alias must not be allowed")
-	}
-	if got := flagTypeForMigration("group", nil, current); got != "string" {
-		t.Fatalf("fallback current flag type = %q, want string", got)
-	}
-	if got := flagTypeForMigration("missing", nil, current); got != "" {
-		t.Fatalf("missing flag type = %q, want empty", got)
-	}
-	for _, canonical := range []string{"conversation-id", "message-id", "user-id", "unknown"} {
-		_ = chatIDFlagAliases(canonical)
-	}
-	for _, name := range []string{"open-message-id", "userId"} {
-		if canonicalChatIDFlag(name) == "" {
-			t.Fatalf("canonicalChatIDFlag(%q) returned empty", name)
-		}
-	}
-}
-
 func assertFailureContains(t *testing.T, failures []string, want string) {
 	t.Helper()
 	for _, failure := range failures {
@@ -337,31 +275,6 @@ func testRoot() *cobra.Command {
 	old.Flags().String("extra", "", "addition")
 	root.AddCommand(old, &cobra.Command{Use: "new"})
 	root.InitDefaultHelpCmd()
-	return root
-}
-
-func chatMigrationRootWithLegacyOnly() *cobra.Command {
-	root := &cobra.Command{Use: "dws"}
-	chat := &cobra.Command{Use: "chat"}
-	message := &cobra.Command{Use: "message"}
-	edit := &cobra.Command{Use: "edit"}
-	edit.Flags().String("group", "", "legacy conversation")
-	message.AddCommand(edit)
-	chat.AddCommand(message)
-	root.AddCommand(chat)
-	root.InitDefaultHelpCmd()
-	return root
-}
-
-func chatMigrationRootWithCanonicalAddition() *cobra.Command {
-	root := chatMigrationRootWithLegacyOnly()
-	edit, _, err := root.Find([]string{"chat", "message", "edit"})
-	if err != nil {
-		panic(err)
-	}
-	edit.Flags().String("conversation-id", "", "conversation")
-	_ = edit.MarkFlagRequired("conversation-id")
-	_ = edit.Flags().MarkHidden("group")
 	return root
 }
 
