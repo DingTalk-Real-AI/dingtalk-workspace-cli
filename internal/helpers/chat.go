@@ -263,102 +263,26 @@ func rewriteChatContractFlagRefs(cmd *cobra.Command) {
 		}
 		payload.Selection = &selection
 	}
-	parameters := make([]contract.ParamDecl, 0, len(payload.Parameters))
-	seen := map[string]int{}
-	addParameter := func(parameter contract.ParamDecl) {
-		parameter.Name = strings.TrimSpace(parameter.Name)
-		if parameter.Name == "" {
-			return
-		}
-		if index, ok := seen[parameter.Name]; ok {
-			parameters[index] = mergeChatCanonicalParamDecl(parameters[index], parameter)
-			return
-		}
-		seen[parameter.Name] = len(parameters)
-		parameters = append(parameters, parameter)
-	}
-	for _, parameter := range payload.Parameters {
-		originalName := strings.TrimSpace(parameter.Name)
-		parameter.Name = originalName
-		addParameter(parameter)
-		canonicalName := chatCanonicalFlagNameForCommand(cmd, originalName)
-		if canonicalName == "" || canonicalName == originalName {
-			continue
-		}
-		canonical := parameter
-		canonical.Name = canonicalName
-		canonical.Description = rewriteChatIDFlagRefs(canonical.Description)
-		canonical.RequiredWhen = rewriteChatIDFlagRefs(canonical.RequiredWhen)
-		addParameter(canonical)
-	}
-	for _, parameter := range chatLegacySchemaCompatParamDecls(cmd, payload, parameters, seen) {
-		addParameter(parameter)
-	}
-	payload.Parameters = parameters
-	contractfinal.RegisterRuntimeContractFinal(cmd, payload)
-}
-
-func chatLegacySchemaCompatParamDecls(cmd *cobra.Command, payload contract.ContractFinalPayload, parameters []contract.ParamDecl, seen map[string]int) []contract.ParamDecl {
-	if cmd == nil {
-		return nil
-	}
-	canonicalPath := ""
-	if payload.Identity != nil {
-		canonicalPath = strings.TrimSpace(payload.Identity.CanonicalPath)
-	}
-	out := make([]contract.ParamDecl, 0)
-	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-		if flag == nil || !flag.Hidden {
-			return
-		}
-		if _, ok := seen[flag.Name]; ok {
-			return
-		}
-		canonicalName := chatCanonicalFlagNameForCommand(cmd, flag.Name)
-		if canonicalName == "" || canonicalName == flag.Name || cmd.Flags().Lookup(canonicalName) == nil {
-			return
-		}
-		parameter := contract.ParamDecl{Name: flag.Name}
-		if index, ok := seen[canonicalName]; ok {
-			parameter = parameters[index]
-			parameter.Name = flag.Name
-		} else {
-			parameter.Property = chatSchemaCompatPropertyForCanonical(canonicalName)
-		}
-		parameter.Property = chatLegacySchemaCompatProperty(canonicalPath, flag.Name, parameter.Property)
-		if parameter.Description == "" {
-			parameter.Description = rewriteChatIDFlagRefs(flag.Usage)
-		}
-		if parameter.Required == nil {
-			if canonicalFlag := cmd.Flags().Lookup(canonicalName); canonicalFlag != nil && isChatRequiredFlag(canonicalFlag) {
-				parameter.Required = boolPtr(true)
+	if len(payload.Parameters) > 0 {
+		parameters := make([]contract.ParamDecl, 0, len(payload.Parameters))
+		seen := map[string]int{}
+		for _, parameter := range payload.Parameters {
+			parameter.Name = chatCanonicalFlagNameForCommand(cmd, parameter.Name)
+			parameter.Description = rewriteChatIDFlagRefs(parameter.Description)
+			parameter.RequiredWhen = rewriteChatIDFlagRefs(parameter.RequiredWhen)
+			if parameter.Name == "" {
+				continue
 			}
+			if index, ok := seen[parameter.Name]; ok {
+				parameters[index] = mergeChatCanonicalParamDecl(parameters[index], parameter)
+				continue
+			}
+			seen[parameter.Name] = len(parameters)
+			parameters = append(parameters, parameter)
 		}
-		out = append(out, parameter)
-	})
-	return out
-}
-
-func chatLegacySchemaCompatProperty(canonicalPath, flagName, fallback string) string {
-	switch canonicalPath + " --" + flagName {
-	case "chat.send_robot_message --group", "chat.recall_robot_message --group":
-		return "group"
-	default:
-		return fallback
+		payload.Parameters = parameters
 	}
-}
-
-func chatSchemaCompatPropertyForCanonical(canonicalName string) string {
-	switch canonicalName {
-	case "conversation-id":
-		return "openConversationId"
-	case "user-id":
-		return "userId"
-	case "message-id":
-		return "openMessageId"
-	default:
-		return ""
-	}
+	contractfinal.RegisterRuntimeContractFinal(cmd, payload)
 }
 
 func mergeChatCanonicalParamDecl(current, next contract.ParamDecl) contract.ParamDecl {
@@ -390,9 +314,9 @@ func rewriteChatConstraintFlagRefs(cmd *cobra.Command) {
 	if runtimeannotate.ConstraintsEmpty(constraints) {
 		return
 	}
-	constraints.MutuallyExclusive = expandChatConstraintGroups(cmd, constraints.MutuallyExclusive)
-	constraints.RequireOneOf = expandChatConstraintGroups(cmd, constraints.RequireOneOf)
-	constraints.RequireTogether = expandChatConstraintGroups(cmd, constraints.RequireTogether)
+	constraints.MutuallyExclusive = rewriteChatConstraintGroups(constraints.MutuallyExclusive)
+	constraints.RequireOneOf = rewriteChatConstraintGroups(constraints.RequireOneOf)
+	constraints.RequireTogether = rewriteChatConstraintGroups(constraints.RequireTogether)
 	constraints = runtimeannotate.NormalizeConstraints(constraints)
 	if runtimeannotate.ConstraintsEmpty(constraints) {
 		delete(cmd.Annotations, runtimeannotate.AnnotationConstraints)
@@ -414,31 +338,6 @@ func rewriteChatConstraintGroups(groups [][]string) [][]string {
 			}
 			seen[name] = true
 			next = append(next, name)
-		}
-		out = append(out, next)
-	}
-	return out
-}
-
-func expandChatConstraintGroups(cmd *cobra.Command, groups [][]string) [][]string {
-	out := make([][]string, 0, len(groups))
-	for _, group := range groups {
-		next := make([]string, 0, len(group)*2)
-		seen := map[string]bool{}
-		add := func(name string) {
-			name = strings.TrimSpace(name)
-			if name == "" || seen[name] {
-				return
-			}
-			seen[name] = true
-			next = append(next, name)
-		}
-		for _, name := range group {
-			add(name)
-			canonical := chatCanonicalFlagNameForCommand(cmd, name)
-			if canonical != name {
-				add(canonical)
-			}
 		}
 		out = append(out, next)
 	}

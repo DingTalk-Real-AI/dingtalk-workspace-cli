@@ -81,18 +81,18 @@ func TestCrossPlatformCoverageChatIDFlagsExposeCanonicalNames(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageChatIDFlagSchemaKeepsLegacyAndCanonicalNames(t *testing.T) {
+func TestCrossPlatformCoverageChatIDFlagSchemaUsesCanonicalNames(t *testing.T) {
 	tests := []struct {
-		path []string
-		want []string
+		path      []string
+		forbidden []string
 	}{
 		{
-			path: []string{"message", "list"},
-			want: []string{"conversation-id", "group"},
+			path:      []string{"message", "list"},
+			forbidden: []string{"group", "id", "chat", "user", "open-conversation-id"},
 		},
 		{
-			path: []string{"message", "update-text-emotion"},
-			want: []string{"conversation-id", "group", "id", "chat", "message-id", "msg-id"},
+			path:      []string{"message", "update-text-emotion"},
+			forbidden: []string{"group", "id", "chat", "msg-id", "open-message-id"},
 		},
 	}
 	for _, test := range tests {
@@ -109,9 +109,9 @@ func TestCrossPlatformCoverageChatIDFlagSchemaKeepsLegacyAndCanonicalNames(t *te
 			for _, parameter := range payload.Parameters {
 				names[parameter.Name] = true
 			}
-			for _, name := range test.want {
-				if !names[name] {
-					t.Fatalf("schema parameter --%s missing; got %#v", name, names)
+			for _, name := range test.forbidden {
+				if names[name] {
+					t.Fatalf("schema parameter --%s leaked; got %#v", name, names)
 				}
 			}
 		})
@@ -192,10 +192,8 @@ func TestCrossPlatformCoverageChatContractAndConstraintRewriteBranches(t *testin
 	for _, parameter := range payload.Parameters {
 		names[parameter.Name] = parameter
 	}
-	legacy := names["id"]
 	canonical := names["conversation-id"]
-	if len(payload.Parameters) != 3 ||
-		legacy.Property != "openConversationId" ||
+	if len(payload.Parameters) != 1 ||
 		canonical.Property != "openConversationId" ||
 		canonical.Required == nil || !*canonical.Required ||
 		canonical.Description != "--conversation-id value" ||
@@ -211,7 +209,7 @@ func TestCrossPlatformCoverageChatContractAndConstraintRewriteBranches(t *testin
 		RequireOneOf: [][]string{{"group", "id", "conversation-id"}},
 	})
 	rewriteChatConstraintFlagRefs(cmd)
-	if got := runtimeannotate.CommandConstraints(cmd).RequireOneOf; !reflect.DeepEqual(got, [][]string{{"group", "conversation-id", "id"}}) {
+	if got := runtimeannotate.CommandConstraints(cmd).RequireOneOf; !reflect.DeepEqual(got, [][]string{{"conversation-id", "id"}}) {
 		t.Fatalf("constraints = %#v", got)
 	}
 
@@ -220,8 +218,8 @@ func TestCrossPlatformCoverageChatContractAndConstraintRewriteBranches(t *testin
 		RequireTogether: [][]string{{"group", "chat"}},
 	})
 	rewriteChatConstraintFlagRefs(cmd)
-	if got := runtimeannotate.CommandConstraints(cmd).RequireTogether; !reflect.DeepEqual(got, [][]string{{"group", "conversation-id", "chat"}}) {
-		t.Fatalf("constraints = %#v", got)
+	if _, ok := cmd.Annotations[runtimeannotate.AnnotationConstraints]; ok {
+		t.Fatalf("empty canonical constraints annotation still present: %#v", cmd.Annotations)
 	}
 }
 
