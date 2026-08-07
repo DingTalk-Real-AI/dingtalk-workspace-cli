@@ -194,7 +194,7 @@ func TestCrossPlatformCoverageWukongWeeklyChatMessageEditValidation(t *testing.T
 		{
 			name:    "missing message",
 			args:    []string{"message", "edit", "--group", "cid-1", "--text", "body"},
-			wantErr: "msg-id",
+			wantErr: "message-id",
 		},
 		{
 			name:    "missing content",
@@ -314,7 +314,7 @@ func TestCrossPlatformCoverageWukongWeeklyChatUpdateNickClearSemantics(t *testin
 	caller := &wukongWeeklySyncCaller{}
 	_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
 		"group", "update-nick")
-	if err == nil || !strings.Contains(err.Error(), "group") {
+	if err == nil || !strings.Contains(err.Error(), "conversation-id") {
 		t.Fatalf("missing group error = %v", err)
 	}
 	requireWukongWeeklySyncNoCalls(t, caller)
@@ -369,7 +369,7 @@ func TestCrossPlatformCoverageWukongWeeklyChatUpgradeValidationAndSafety(t *test
 		{
 			name:    "missing group",
 			args:    []string{"group", "upgrade-to-external", "--yes"},
-			wantErr: "group",
+			wantErr: "conversation-id",
 		},
 		{
 			name:    "invalid JSON",
