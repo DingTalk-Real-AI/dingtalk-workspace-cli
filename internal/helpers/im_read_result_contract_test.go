@@ -35,6 +35,7 @@ type imReadResultCall struct {
 type imReadResultCaller struct {
 	responses map[string]string
 	calls     []imReadResultCall
+	dryRun    bool
 }
 
 func (c *imReadResultCaller) CallTool(_ context.Context, productID, toolName string, _ map[string]any) (*edition.ToolResult, error) {
@@ -43,7 +44,7 @@ func (c *imReadResultCaller) CallTool(_ context.Context, productID, toolName str
 }
 
 func (*imReadResultCaller) Format() string { return "json" }
-func (*imReadResultCaller) DryRun() bool   { return false }
+func (c *imReadResultCaller) DryRun() bool { return c.dryRun }
 func (*imReadResultCaller) Fields() string { return "" }
 func (*imReadResultCaller) JQ() string     { return "" }
 
@@ -159,7 +160,6 @@ func TestCrossPlatformCoverageChatMessageSearchProjectsStableFieldsAndPreservesL
 				"title": "项目群",
 				"messages": [{"openMessageId":"msg-search-1","messageId":"legacy-conflict","content":{"richText":"发布计划"},"createTime":201}]
 			}],
-			"hasMore": true,
 			"nextCursor": "cursor-2"
 		}
 	}`
@@ -180,6 +180,9 @@ func TestCrossPlatformCoverageChatMessageSearchProjectsStableFieldsAndPreservesL
 	}
 	if result["contractVersion"] != "im.message-list.v1" || result["count"] != float64(1) || result["nextCursor"] != "cursor-2" {
 		t.Fatalf("search envelope = %#v", result)
+	}
+	if result["hasMore"] != true || result["paginationKnown"] != true {
+		t.Fatalf("cursor-only search pagination = %#v", result)
 	}
 	messages, ok := result["messages"].([]any)
 	if !ok || len(messages) != 1 {
@@ -253,6 +256,9 @@ func TestCrossPlatformCoverageChatMessageListPreservesTopLevelMessageFields(t *t
 			"msgType": "text",
 			"senderName": "张三",
 			"extensionField": {"source": "legacy"}
+		}, {
+			"messageId": "msg-top-2",
+			"text": "稳定正文"
 		}],
 		"count": 99,
 		"partial": true,
@@ -272,7 +278,7 @@ func TestCrossPlatformCoverageChatMessageListPreservesTopLevelMessageFields(t *t
 		t.Fatalf("decode command output: %v\noutput: %s", err, got)
 	}
 	messages, ok := result["messages"].([]any)
-	if !ok || len(messages) != 1 {
+	if !ok || len(messages) != 2 {
 		t.Fatalf("messages = %#v", result["messages"])
 	}
 	message, ok := messages[0].(map[string]any)
@@ -288,12 +294,36 @@ func TestCrossPlatformCoverageChatMessageListPreservesTopLevelMessageFields(t *t
 	if extension, ok := message["extensionField"].(map[string]any); !ok || extension["source"] != "legacy" {
 		t.Fatalf("extensionField = %#v", message["extensionField"])
 	}
+	stableOnly, ok := messages[1].(map[string]any)
+	if !ok || stableOnly["openMessageId"] != "msg-top-2" || stableOnly["content"] != "稳定正文" {
+		t.Fatalf("legacy aliases from stable fields = %#v", messages[1])
+	}
 	if result["count"] != float64(99) || result["partial"] != true || result["failedCount"] != float64(1) {
 		t.Fatalf("legacy top-level envelope fields = %#v", result)
 	}
 	failures, ok := result["failures"].([]any)
 	if !ok || len(failures) != 1 || failures[0].(map[string]any)["stage"] != "legacy" {
 		t.Fatalf("legacy failures = %#v", result["failures"])
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListDryRunKeepsPreviewPath(t *testing.T) {
+	caller := &imReadResultCaller{dryRun: true}
+
+	got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "list", "--group", "cid-1", "--time", "2026-07-14 00:00:00")
+	if err != nil {
+		t.Fatalf("chat message list dry-run returned error: %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("dry-run calls = %#v, want none", caller.calls)
+	}
+	var preview map[string]any
+	if err := json.Unmarshal([]byte(got), &preview); err != nil {
+		t.Fatalf("decode dry-run output: %v\noutput: %s", err, got)
+	}
+	if preview["dry_run"] != true || preview["executed"] != false || preview["tool"] != "list_conversation_message_v2" {
+		t.Fatalf("dry-run preview = %#v", preview)
 	}
 }
 

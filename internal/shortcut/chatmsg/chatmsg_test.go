@@ -541,6 +541,9 @@ func TestCrossPlatformCoverageForwarded(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageListMessageItemsUnwrapsCommonEnvelope(t *testing.T) {
+	if ListMessageItems(nil) != nil {
+		t.Fatal("nil list envelope returned messages")
+	}
 	items := ListMessageItems(map[string]any{
 		"result": map[string]any{
 			"messages": []any{
@@ -555,6 +558,9 @@ func TestCrossPlatformCoverageListMessageItemsUnwrapsCommonEnvelope(t *testing.T
 }
 
 func TestCrossPlatformCoverageSearchMessageItemsFlattensConversationGroups(t *testing.T) {
+	if SearchMessageItems(nil) != nil {
+		t.Fatal("nil search envelope returned messages")
+	}
 	items := SearchMessageItems(map[string]any{
 		"result": map[string]any{
 			"conversationMessagesList": []any{
