@@ -119,6 +119,111 @@ func NewMessageListPayload(messages []map[string]any) map[string]any {
 	}
 }
 
+// ListMessageItems returns message rows from the common list response envelopes.
+func ListMessageItems(data map[string]any) []map[string]any {
+	if data == nil {
+		return nil
+	}
+	scopes := []map[string]any{data}
+	for _, wrapper := range []string{"result", "data"} {
+		if inner, ok := data[wrapper].(map[string]any); ok {
+			scopes = append(scopes, inner)
+		}
+	}
+	for _, scope := range scopes {
+		for _, key := range []string{"messages", "list", "items", "records", "data", "result"} {
+			if rows, ok := scope[key].([]any); ok {
+				items := messageMaps(rows)
+				if len(items) > 0 {
+					return items
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// SearchMessageItems flattens grouped search results into stable message rows.
+func SearchMessageItems(data map[string]any) []map[string]any {
+	if data == nil {
+		return nil
+	}
+	for _, root := range []map[string]any{data, childMap(data, "result")} {
+		if root == nil {
+			continue
+		}
+		if groups, ok := root["conversationMessagesList"].([]any); ok {
+			return flattenSearchMessageGroups(groups)
+		}
+	}
+	for _, key := range []string{"list", "messages", "messageList", "items", "data", "records", "result"} {
+		if rows, ok := data[key].([]any); ok {
+			return messageMaps(rows)
+		}
+		if inner, ok := data[key].(map[string]any); ok {
+			for _, nestedKey := range []string{"list", "messages", "messageList", "items", "data", "records"} {
+				if rows, ok := inner[nestedKey].([]any); ok {
+					return messageMaps(rows)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func childMap(data map[string]any, key string) map[string]any {
+	value, _ := data[key].(map[string]any)
+	return value
+}
+
+func flattenSearchMessageGroups(groups []any) []map[string]any {
+	items := make([]map[string]any, 0)
+	for _, rawGroup := range groups {
+		group, ok := rawGroup.(map[string]any)
+		if !ok {
+			continue
+		}
+		messages, ok := group["messages"].([]any)
+		if !ok {
+			continue
+		}
+		conversationID := strings.TrimSpace(fmt.Sprint(group["openConversationId"]))
+		conversationTitle := strings.TrimSpace(fmt.Sprint(group["title"]))
+		singleChat, hasSingleChat := group["singleChat"]
+		for _, rawMessage := range messages {
+			message, ok := rawMessage.(map[string]any)
+			if !ok {
+				continue
+			}
+			item := make(map[string]any, len(message)+3)
+			for key, value := range message {
+				item[key] = value
+			}
+			if _, exists := item["openConversationId"]; !exists && conversationID != "" && conversationID != "<nil>" {
+				item["openConversationId"] = conversationID
+			}
+			if _, exists := item["conversationTitle"]; !exists && conversationTitle != "" && conversationTitle != "<nil>" {
+				item["conversationTitle"] = conversationTitle
+			}
+			if _, exists := item["singleChat"]; !exists && hasSingleChat {
+				item["singleChat"] = singleChat
+			}
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+func messageMaps(rows []any) []map[string]any {
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		if item, ok := row.(map[string]any); ok {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
 // StableMessageID returns the normalized message identity used for
 // cross-page deduplication. An empty value means the lower response did not
 // publish a stable identity; callers must keep that row rather than guessing.
@@ -179,7 +284,7 @@ func senderDisplayName(m map[string]any) string {
 // Text reads a message's textual content (tolerating common text keys and one
 // level of nesting) and runs it through CleanText.
 func Text(m map[string]any) any {
-	for _, key := range []string{"text", "content", "msgContent", "message", "body", "plainText"} {
+	for _, key := range []string{"text", "content", "msgContent", "message", "msg", "body", "plainText"} {
 		v, ok := m[key]
 		if !ok || v == nil {
 			continue
@@ -190,7 +295,7 @@ func Text(m map[string]any) any {
 				return CleanText(t)
 			}
 		case map[string]any:
-			for _, inner := range []string{"text", "content", "value"} {
+			for _, inner := range []string{"text", "content", "richText", "title", "value"} {
 				if s, ok := t[inner].(string); ok && s != "" {
 					return CleanText(s)
 				}
@@ -870,6 +975,9 @@ func paginationValuePresent(value any) bool {
 	switch typed := value.(type) {
 	case nil:
 		return false
+	case json.Number:
+		number, err := typed.Float64()
+		return err != nil || number != 0
 	case string:
 		return strings.TrimSpace(typed) != "" && strings.TrimSpace(typed) != "0"
 	case int:

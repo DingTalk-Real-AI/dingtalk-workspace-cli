@@ -84,7 +84,7 @@ var ChatMessages = shortcut.Shortcut{
 			AvoidWhen: []string{"要跨多个会话按关键词、发送者或消息类型检索时使用 +search-msg；已有一批精确消息 ID 时使用 +messages-mget"},
 			Examples: []string{
 				"dws chat +chat-messages --group <openConversationId> --direction older",
-				"dws chat +chat-messages --open-dingtalk-id <openDingTalkId> --download-resources --output-dir ./downloads",
+				"dws chat +chat-messages --group <openConversationId> --direction older --jq '.messages[] | {messageId, text}'",
 			},
 		},
 	},
@@ -125,6 +125,7 @@ var ChatMessages = shortcut.Shortcut{
 		`dws chat +chat-messages --group <openconversation_id> --time "2025-03-01 00:00:00"`,
 		`dws chat +chat-messages --user <userId> --time "2025-03-01 00:00:00" --page-all --page-limit 50`,
 		`dws chat +chat-messages --group <openconversation_id> --direction older --page-all --output ./exports/messages.json`,
+		`dws chat +chat-messages --group <openconversation_id> --direction older --jq '.messages[] | {messageId, text}'`,
 	},
 	Validate: validateChatMessages,
 	Execute:  executeChatMessages,
@@ -471,31 +472,7 @@ func messageNextPage(message map[string]any, direction string) map[string]any {
 // tolerating the common container keys and one level of nesting under a
 // "result"/"data" wrapper.
 func chatMessageItems(data map[string]any) []map[string]any {
-	if data == nil {
-		return nil
-	}
-	scopes := []map[string]any{data}
-	for _, wrap := range []string{"result", "data"} {
-		if inner, ok := data[wrap].(map[string]any); ok {
-			scopes = append(scopes, inner)
-		}
-	}
-	for _, scope := range scopes {
-		for _, key := range []string{"messages", "list", "items", "records", "data", "result"} {
-			if raw, ok := scope[key].([]any); ok {
-				out := make([]map[string]any, 0, len(raw))
-				for _, e := range raw {
-					if m, ok := e.(map[string]any); ok {
-						out = append(out, m)
-					}
-				}
-				if len(out) > 0 {
-					return out
-				}
-			}
-		}
-	}
-	return nil
+	return chatmsg.ListMessageItems(data)
 }
 
 // projectChatMessage reshapes one raw message into the clean

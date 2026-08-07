@@ -233,7 +233,7 @@ func TestCrossPlatformCoverageSearchMsgFlattensRealGroupedResponse(t *testing.T)
 	if _, mutated := original["openConversationId"]; mutated {
 		t.Fatalf("source message mutated: %#v", original)
 	}
-	if searchMsgChildMap(map[string]any{"result": "invalid"}, "result") != nil {
+	if searchMsgItems(map[string]any{"result": "invalid"}) != nil {
 		t.Fatal("non-map child was accepted")
 	}
 }

@@ -114,6 +114,9 @@ func TestCrossPlatformCoveragePaginationVariants(t *testing.T) {
 		want  bool
 	}{
 		{nil, false},
+		{json.Number("0"), false},
+		{json.Number("0.0"), false},
+		{json.Number("9007199254740993"), true},
 		{" ", false},
 		{"0", false},
 		{"cursor", true},

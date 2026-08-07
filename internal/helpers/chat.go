@@ -18,12 +18,92 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
+
+func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool, direction string) error {
+	if deps.Caller.DryRun() {
+		return callMCPToolOnServer("chat", toolName, args)
+	}
+	text, err := callMCPToolReturnTextOnServer(cmd.Context(), "chat", toolName, args)
+	if err != nil {
+		return err
+	}
+	data := map[string]any{}
+	if strings.TrimSpace(text) != "" {
+		if err := unmarshalJSONUseNumber(text, &data); err != nil {
+			deps.Out.PrintRaw(text)
+			return nil
+		}
+	}
+
+	items := chatmsg.ListMessageItems(data)
+	if search {
+		items = chatmsg.SearchMessageItems(data)
+	}
+	messages := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		projected := make(map[string]any, len(item)+8)
+		for key, value := range item {
+			projected[key] = value
+		}
+		for key, value := range chatmsg.ProjectMessageV1(item, true) {
+			projected[key] = value
+		}
+		if value, exists := item["openMessageId"]; exists {
+			projected["openMessageId"] = value
+		} else if value, exists := projected["messageId"]; exists {
+			projected["openMessageId"] = value
+		}
+		if value, exists := item["content"]; exists {
+			projected["content"] = value
+		} else if value, exists := projected["text"]; exists {
+			projected["content"] = value
+		}
+		messages = append(messages, projected)
+	}
+
+	standard := chatmsg.NewMessageListPayload(messages)
+	if search {
+		standard["pagesFetched"] = 1
+		page := chatmsg.Pagination(data)
+		chatmsg.ApplyPagination(standard, data)
+		_, paginationKnown := page["hasMore"]
+		if !paginationKnown {
+			nextCursor := strings.TrimSpace(fmt.Sprint(page["nextCursor"]))
+			if nextCursor != "" && nextCursor != "<nil>" {
+				paginationKnown = true
+				standard["hasMore"] = true
+			} else {
+				standard["failedCount"] = 1
+				standard["failures"] = []map[string]any{{
+					"stage": "pagination",
+					"error": "下层未返回 hasMore 或 nextCursor，无法证明结果完整",
+				}}
+			}
+		}
+		standard["paginationKnown"] = paginationKnown
+	} else {
+		chatmsg.ApplyMessagePagination(standard, data, items, direction)
+	}
+
+	payload := make(map[string]any, len(data)+len(standard))
+	for key, value := range data {
+		payload[key] = value
+	}
+	for key, value := range standard {
+		if _, exists := payload[key]; !exists {
+			payload[key] = value
+		}
+	}
+	payload["messages"] = messages
+	return writeCommandPayload(cmd, payload)
+}
 
 func resolveMessageForward(cmd *cobra.Command, defaultForward bool) (bool, error) {
 	forwardStr, _ := cmd.Flags().GetString("forward")
@@ -1848,11 +1928,12 @@ func newChatCommand() *cobra.Command {
 	chatMessageListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "拉取会话消息内容",
-		Long:  `拉取指定群聊或单聊的会话消息内容。--group 指定群聊，--user 指定单聊用户（userId），--open-dingtalk-id 指定单聊用户（openDingTalkId），三者互斥。推荐使用 --direction newer/older 控制时间方向：newer 表示从给定时间往现在拉，older 表示从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。引用回复消息会返回 quotedMessage 引用上下文；被引用的原消息是合并转发或图片时，对应的类型与内容也会随引用上下文返回。如果返回的会话消息中包含 openConvThreadId 字段，说明是话题消息，可以调用 dws chat message list-topic-replies 拉取话题回复消息列表，openConvThreadId 作为 topic-id 参数。`,
+		Long:  `拉取指定群聊或单聊的会话消息内容。输出顶层 messages，稳定字段为 messageId 和 text；兼容保留 openMessageId 和 content。--group 指定群聊，--user 指定单聊用户（userId），--open-dingtalk-id 指定单聊用户（openDingTalkId），三者互斥。推荐使用 --direction newer/older 控制时间方向：newer 表示从给定时间往现在拉，older 表示从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。引用回复消息会返回 quotedMessage 引用上下文；被引用的原消息是合并转发或图片时，对应的类型与内容也会随引用上下文返回。如果返回的会话消息中包含 openConvThreadId 字段，说明是话题消息，可以调用 dws chat message list-topic-replies 拉取话题回复消息列表，openConvThreadId 作为 topic-id 参数。`,
 		Example: `  dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00"
   dws chat message list --user <userId> --time "2025-03-01 00:00:00" --limit 50
   dws chat message list --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --limit 50
   dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --direction older
+  dws chat message list --group <openconversation_id> --time "2025-03-01 00:00:00" --jq '.messages[] | {messageId, text}'
   # 查询群 ID: dws chat search --query "群名"
   # 查询 userId: dws contact user search --query "姓名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1886,6 +1967,10 @@ func newChatCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			direction := "newer"
+			if !forward {
+				direction = "older"
+			}
 			timeVal := mustGetFlag(cmd, "time")
 			if groupID != "" {
 				toolArgs := map[string]any{
@@ -1896,7 +1981,7 @@ func newChatCommand() *cobra.Command {
 				if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 					toolArgs["limit"] = v
 				}
-				return callMCPTool("list_conversation_message_v2", toolArgs)
+				return callProjectedChatMessages(cmd, "list_conversation_message_v2", toolArgs, false, direction)
 			}
 			toolArgs := map[string]any{
 				"time":    timeVal,
@@ -1910,7 +1995,7 @@ func newChatCommand() *cobra.Command {
 			if v := chatIntFlagOrFallback(cmd, "limit", "size"); v > 0 {
 				toolArgs["limit"] = v
 			}
-			return callMCPTool("list_individual_chat_message", toolArgs)
+			return callProjectedChatMessages(cmd, "list_individual_chat_message", toolArgs, false, direction)
 		},
 	}
 	DeclareLeafMetadata(chatMessageListCmd, LeafSpec{
@@ -1936,7 +2021,10 @@ func newChatCommand() *cobra.Command {
 				AgentSummary: "分页读取指定会话消息及其引用上下文",
 				UseWhen:      []string{"用户明确指定某个会话，并要读取消息或追溯引用回复中的原消息上下文时"},
 				AvoidWhen:    []string{"跨全部会话按时间查询时使用 chat message list-all"},
-				Examples:     []string{"dws chat message list --group <openConversationId> --time \"2026-07-01 00:00:00\" --limit 50"},
+				Examples: []string{
+					"dws chat message list --group <openConversationId> --time \"2026-07-01 00:00:00\" --limit 50",
+					"dws chat message list --group <openConversationId> --time \"2026-07-01 00:00:00\" --limit 50 --jq '.messages[] | {messageId, text}'",
+				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "direction", Property: "forward"},
@@ -3066,10 +3154,11 @@ func newChatCommand() *cobra.Command {
 	chatMessageSearchCmd := &cobra.Command{
 		Use:   "search",
 		Short: "按关键词搜索消息",
-		Long:  `在当前用户的会话中按关键词搜索消息。--query 指定搜索关键词（必填）。可选 --group 限定搜索某个会话，不传则搜索所有会话。时间参数 --start/--end（ISO-8601）限定搜索时间范围。分页参数 --limit（默认 100）和 --cursor（默认 "0"）始终传递；hasMore=true 时用返回的 nextCursor 作为下次 --cursor 继续翻页。`,
+		Long:  `在当前用户的会话中按关键词搜索消息。输出顶层 messages，稳定字段为 messageId 和 text；兼容保留 openMessageId 和 content。--query 指定搜索关键词（必填）。可选 --group 限定搜索某个会话，不传则搜索所有会话。时间参数 --start/--end（ISO-8601）限定搜索时间范围。分页参数 --limit（默认 100）和 --cursor（默认 "0"）始终传递；hasMore=true 时用返回的 nextCursor 作为下次 --cursor 继续翻页。`,
 		Example: `  dws chat message search --query "changefree" --start "2026-04-01T00:00:00+08:00" --end "2026-04-15T00:00:00+08:00" --limit 50 --cursor 0
   dws chat message search --query "codereview" --group <openconversation_id> --start "2026-04-01T00:00:00+08:00" --end "2026-04-15T00:00:00+08:00" --limit 100 --cursor 0
   dws chat message search --query "链接" --start "2026-04-15T00:00:00+08:00" --end "2026-04-16T00:00:00+08:00" --limit 100 --cursor <nextCursor>
+  dws chat message search --query "发布计划" --start "2026-07-01T00:00:00+08:00" --end "2026-07-10T00:00:00+08:00" --jq '.messages[] | {messageId, text}'
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "query", "keyword"); err != nil {
@@ -3102,7 +3191,7 @@ func newChatCommand() *cobra.Command {
 			if groupID != "" {
 				toolArgs["openConversationId"] = groupID
 			}
-			return callMCPTool("search_messages_by_keyword", toolArgs)
+			return callProjectedChatMessages(cmd, "search_messages_by_keyword", toolArgs, true, "")
 		},
 	}
 	DeclareLeafMetadata(chatMessageSearchCmd, LeafSpec{
@@ -3128,7 +3217,10 @@ func newChatCommand() *cobra.Command {
 				AgentSummary: "按关键词和时间范围搜索消息",
 				UseWhen:      []string{"需要用关键词查找消息且过滤条件较简单时"},
 				AvoidWhen:    []string{"需要多会话、发送者或 @维度组合时使用 search-advanced"},
-				Examples:     []string{"dws chat message search --query \"发布计划\" --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-10T00:00:00+08:00\""},
+				Examples: []string{
+					"dws chat message search --query \"发布计划\" --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-10T00:00:00+08:00\"",
+					"dws chat message search --query \"发布计划\" --start \"2026-07-01T00:00:00+08:00\" --end \"2026-07-10T00:00:00+08:00\" --jq '.messages[] | {messageId, text}'",
+				},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "end", Property: "endTime"},
@@ -7221,16 +7313,16 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				CLIPath:        "chat message set-pin-msg",
 				PrimaryCLIPath: "chat message set-pin-msg",
 			},
-			Description: "把指定消息设为会话置顶消息",
+			Description: "钉住指定消息（Pin）",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "set_pin_message"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "把指定消息设为会话置顶消息",
-				UseWhen:      []string{"需要在会话中置顶一条已知消息时"},
-				AvoidWhen:    []string{"取消置顶使用 chat message unset-pin-msg"},
+				AgentSummary: "钉住指定消息（Pin）",
+				UseWhen:      []string{"需要在会话中钉住一条已知消息时"},
+				AvoidWhen:    []string{"取消 Pin 使用 chat message unset-pin-msg"},
 				Examples:     []string{"dws chat message set-pin-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
@@ -7275,16 +7367,16 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				CLIPath:        "chat message unset-pin-msg",
 				PrimaryCLIPath: "chat message unset-pin-msg",
 			},
-			Description: "取消指定消息的会话置顶",
+			Description: "取消钉住指定消息（Unpin）",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "unset_pin_message"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "取消指定消息的会话置顶",
-				UseWhen:      []string{"需要移除一条已知置顶消息时"},
-				AvoidWhen:    []string{"新增置顶使用 chat message set-pin-msg"},
+				AgentSummary: "取消钉住指定消息（Unpin）",
+				UseWhen:      []string{"需要取消一条已知消息的 Pin 状态时"},
+				AvoidWhen:    []string{"设置 Pin 使用 chat message set-pin-msg"},
 				Examples:     []string{"dws chat message unset-pin-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{

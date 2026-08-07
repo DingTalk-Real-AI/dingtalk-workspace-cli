@@ -539,3 +539,41 @@ func TestCrossPlatformCoverageForwarded(t *testing.T) {
 		t.Errorf("nested forwarded = %#v", fwd[1]["forwarded"])
 	}
 }
+
+func TestCrossPlatformCoverageListMessageItemsUnwrapsCommonEnvelope(t *testing.T) {
+	items := ListMessageItems(map[string]any{
+		"result": map[string]any{
+			"messages": []any{
+				map[string]any{"openMessageId": "msg-1"},
+				"invalid",
+			},
+		},
+	})
+	if len(items) != 1 || items[0]["openMessageId"] != "msg-1" {
+		t.Fatalf("items = %#v", items)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMessageItemsFlattensConversationGroups(t *testing.T) {
+	items := SearchMessageItems(map[string]any{
+		"result": map[string]any{
+			"conversationMessagesList": []any{
+				map[string]any{
+					"openConversationId": "cid-1",
+					"title":              "项目群",
+					"singleChat":         false,
+					"messages": []any{
+						map[string]any{"openMessageId": "msg-1"},
+					},
+				},
+			},
+		},
+	})
+	if len(items) != 1 || items[0]["openConversationId"] != "cid-1" ||
+		items[0]["conversationTitle"] != "项目群" || items[0]["singleChat"] != false {
+		t.Fatalf("items = %#v", items)
+	}
+	if SearchMessageItems(map[string]any{"result": "invalid"}) != nil {
+		t.Fatal("non-map result was accepted")
+	}
+}

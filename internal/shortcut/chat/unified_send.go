@@ -44,7 +44,7 @@ var MessagesSend = shortcut.Shortcut{
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
-		Confirmation: "user_required", Idempotency: "unknown",
+		Confirmation: "not_required", Idempotency: "unknown",
 	},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
