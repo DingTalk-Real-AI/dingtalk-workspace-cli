@@ -20,7 +20,7 @@
 ### 统一结果契约
 
 - Agent 始终只使用既有的 `--format json`，不选择输出协议版本。
-- 已迁移的可终结 `dev` 命令会直接返回 `contract_version: "dws.output.v2"`；按 `ok/outcome` 解析，`partial_failure` 和 `pending` 不得当作完整终态成功。
+- 已迁移的可终结 `dev` 命令直接返回统一的 `ok/outcome/data|error/meta` 信封；按 `ok/outcome` 解析，`partial_failure` 和 `pending` 不得当作完整终态成功。
 - `dev connect` 前台模式是长驻 Stream，继续按流式会话处理；status/stop/restart/list 等可终结子命令使用统一结果契约。
 - 命令迁移和回滚由 CLI 发布完成，不把兼容责任转交给 Skill 或 Agent。
 

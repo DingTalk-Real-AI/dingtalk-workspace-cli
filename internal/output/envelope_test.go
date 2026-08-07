@@ -125,7 +125,6 @@ func TestEnvelopeJSONTagsMatchFieldTable(t *testing.T) {
 		tag     string
 		omitted bool // true = 契约要求 omitempty
 	}{
-		{"ContractVersion", "contract_version", true},
 		{"OK", "ok", false},
 		{"Outcome", "outcome", false},
 		{"Identity", "identity", true},

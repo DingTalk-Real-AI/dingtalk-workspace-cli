@@ -69,10 +69,6 @@ func ParseOutcome(s string) (Outcome, error) {
 // 字段声明顺序对齐 §2.5 字段总表；Go 序列化按声明顺序输出，
 // 由此得到稳定的顶层键顺序（golden 断言的前提）。
 type Envelope struct {
-	// ContractVersion is present only for framework 2.0 results. Legacy envelope
-	// rendering omits it, which allows both contracts to coexist during rollout.
-	ContractVersion string `json:"contract_version,omitempty"`
-
 	// OK 为框架计算值：ok == (outcome ∈ {success, pending})（不变量 I1）。
 	// 恒序列化（无 omitempty），类型为 bool，禁止字符串布尔。
 	OK bool `json:"ok"`

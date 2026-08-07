@@ -55,7 +55,7 @@ func TestDevAppV2ActiveExecutesOnceAndReturnsFrameworkResult(t *testing.T) {
 	if runner.calls != 1 {
 		t.Fatalf("runner calls=%d, want exactly 1", runner.calls)
 	}
-	if !bytes.Contains(stdout.Bytes(), []byte(output.ContractVersionV2)) || !bytes.Contains(stdout.Bytes(), []byte(`"id": "dev-1"`)) {
+	if !bytes.Contains(stdout.Bytes(), []byte(`"outcome": "success"`)) || !bytes.Contains(stdout.Bytes(), []byte(`"id": "dev-1"`)) {
 		t.Fatalf("stdout=%s", stdout.String())
 	}
 }
@@ -73,7 +73,7 @@ func TestMigratedDevAppDefaultsToFrameworkV2(t *testing.T) {
 	if runner.calls != 1 {
 		t.Fatalf("runner calls=%d, want 1", runner.calls)
 	}
-	if !bytes.Contains(stdout.Bytes(), []byte(`"contract_version"`)) {
+	if !bytes.Contains(stdout.Bytes(), []byte(`"outcome": "success"`)) || bytes.Contains(stdout.Bytes(), []byte(`"contract_version"`)) {
 		t.Fatalf("migrated dev command did not use v2 by default: %s", stdout.String())
 	}
 }
@@ -90,7 +90,7 @@ func TestDevDocSearchV2UsesInjectedRunnerOnce(t *testing.T) {
 	if runner.calls != 1 {
 		t.Fatalf("runner calls=%d, want 1", runner.calls)
 	}
-	if !bytes.Contains(stdout.Bytes(), []byte(output.ContractVersionV2)) {
+	if !bytes.Contains(stdout.Bytes(), []byte(`"outcome": "success"`)) || bytes.Contains(stdout.Bytes(), []byte(`"contract_version"`)) {
 		t.Fatalf("stdout=%s", stdout.String())
 	}
 }

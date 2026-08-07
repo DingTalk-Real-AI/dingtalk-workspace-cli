@@ -73,8 +73,8 @@ func TestExecuteEmitsStoredV2ResultAtSingleRootExit(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr=%q, want diagnostics only/empty", stderr.String())
 	}
-	if !strings.Contains(stdout.String(), `"contract_version"`) || !strings.Contains(stdout.String(), output.ContractVersionV2) {
-		t.Fatalf("stdout missing v2 envelope: %s", stdout.String())
+	if !strings.Contains(stdout.String(), `"outcome": "success"`) || strings.Contains(stdout.String(), `"contract_version"`) {
+		t.Fatalf("stdout does not match the unified envelope: %s", stdout.String())
 	}
 }
 

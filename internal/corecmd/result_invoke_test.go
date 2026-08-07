@@ -42,7 +42,7 @@ func TestResultInvokeCarriesOneFrameworkResult(t *testing.T) {
 	if code, emitted := output.StoredExitCode(store); !emitted || code != 0 {
 		t.Fatalf("stored code/emitted=%d/%v", code, emitted)
 	}
-	if !strings.Contains(stdout.String(), output.ContractVersionV2) {
+	if !strings.Contains(stdout.String(), `"outcome": "success"`) || strings.Contains(stdout.String(), `"contract_version"`) {
 		t.Fatalf("stdout=%s", stdout.String())
 	}
 	if output.CommandRollout(cmd) != output.RolloutV2Active {

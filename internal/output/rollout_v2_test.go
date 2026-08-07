@@ -38,8 +38,8 @@ func TestAdaptMCPUsesSameEnvelope(t *testing.T) {
 	if mcp.IsError {
 		t.Fatal("success must not set MCP isError")
 	}
-	if got := mcp.StructuredContent["contract_version"]; got != ContractVersionV2 {
-		t.Fatalf("contract_version=%v", got)
+	if _, exists := mcp.StructuredContent["contract_version"]; exists {
+		t.Fatalf("structured content must not expose contract_version: %#v", mcp.StructuredContent)
 	}
 	if got := mcp.StructuredContent["outcome"]; got != string(OutcomeSuccess) {
 		t.Fatalf("outcome=%v", got)

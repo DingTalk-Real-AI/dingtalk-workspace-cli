@@ -12,7 +12,7 @@
 
 ## 统一结果契约
 
-Agent 继续只使用既有的 `--format json`，不传协议选择参数。已经迁移的可终结 `dev` 命令直接返回 `contract_version: "dws.output.v2"`，顶层 `ok/outcome` 和进程退出码同源；`pending` 表示业务尚未终结，`partial_failure` 必须检查逐项明细。`dev connect` 前台模式是长驻 Stream，继续按流式会话处理；其可终结子命令使用统一结果契约。
+Agent 继续只使用既有的 `--format json`，不传协议选择参数。已经迁移的可终结 `dev` 命令直接返回统一的顶层 `ok/outcome/data|error/meta` 信封，且 `ok/outcome` 和进程退出码同源；`pending` 表示业务尚未终结，`partial_failure` 必须检查逐项明细。`dev connect` 前台模式是长驻 Stream，继续按流式会话处理；其可终结子命令使用统一结果契约。
 
 ---
 

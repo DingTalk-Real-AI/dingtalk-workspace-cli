@@ -4,7 +4,7 @@ set -eu
 # B163 Phase I prototype: non-standard envelope key scan (G1).
 #
 # Contract anchor: the envelope top-level key set is fixed —
-# contract_version / ok / outcome / identity / dry_run / data / meta / error / _notice
+# ok / outcome / identity / dry_run / data / meta / error / _notice
 # (snake_case). This scan flags historical variants on envelope-class output:
 #   - legacy status keys at the top level: success / errcode / error_code /
 #     errorCode / err_code / isSuccess / is_success
@@ -60,7 +60,7 @@ envelope_keys_scan() {
 
 	# Top-level key set: only the fixed envelope keys are allowed.
 	envelope_keys_extra="$(jq -r '
-		["contract_version", "ok", "outcome", "identity", "dry_run", "data", "meta", "error", "_notice"] as $allowed |
+		["ok", "outcome", "identity", "dry_run", "data", "meta", "error", "_notice"] as $allowed |
 		if type == "object" then
 			keys_unsorted[] | select(. as $k | $allowed | index($k) | not)
 		else empty end' <"$envelope_keys_out")" || envelope_keys_extra=""
@@ -96,7 +96,6 @@ output_contract_init "$ROOT"
 output_contract_parse_args "$@"
 
 self_test_cases() {
-	printf 'envelope_v2_legal_success.json|envelope|pass\n'
 	printf 'envelope_legal_success.json|envelope|pass\n'
 	printf 'envelope_legal_pending_dry_run.json|envelope|pass\n'
 	printf 'envelope_ok_full_meta.json|envelope|pass\n'

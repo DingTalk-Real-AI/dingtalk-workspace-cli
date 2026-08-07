@@ -42,7 +42,6 @@ JSON 基本形态：
 
 ```json
 {
-  "contract_version": "dws.output.v2",
   "ok": true,
   "outcome": "success",
   "data": {}

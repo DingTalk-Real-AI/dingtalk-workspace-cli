@@ -52,7 +52,7 @@ Framework 2.0 解决的是协议层和执行框架层问题：
 
 ### 3.1 目标
 
-- 所有 v2 JSON 结果具有稳定的 `contract_version: "dws.output.v2"`。
+- 所有统一 JSON 结果具有稳定的 `ok/outcome/data|error/meta` 信封，协议版本不进入运行时业务结果。
 - 同一命令的一次执行只产生一个 primary result。
 - `ok`、`outcome`、exit code 三者不可分叉。
 - 失败、部分成功、异步受理、分页停止均可被 Agent 可靠分支。
@@ -152,7 +152,7 @@ I1: ok == (outcome in {success, pending})
 I2: process_exit_code == 0 <=> ok == true
 I3: top-level error is present <=> outcome == failure
 I4: one invocation emits exactly one primary result
-I5: v2 JSON contract_version == "dws.output.v2"
+I5: top-level keys do not expose a runtime contract selector or version marker
 ```
 
 `partial_failure` 没有顶层 `error`；逐项错误位于 `data.failed[].error`。任何无法通过严格校验的结果都按 framework internal error 处理，禁止输出半合法信封。
@@ -221,7 +221,6 @@ Framework 2.0 也不新增 `--json` 别名。历史命令自带的局部 `--json
 
 ```json
 {
-  "contract_version": "dws.output.v2",
   "ok": true,
   "outcome": "success",
   "data": {},
@@ -232,7 +231,7 @@ Framework 2.0 也不新增 `--json` 别名。历史命令自带的局部 `--json
 稳定顶层键为：
 
 ```text
-contract_version, ok, outcome, identity, dry_run, data, meta, error, _notice
+ok, outcome, identity, dry_run, data, meta, error, _notice
 ```
 
 空的可选字段省略，不输出 `null`。`ok`、`dry_run`、`retryable`、`timed_out`、`endpoint_exhausted` 必须是 JSON boolean，禁止字符串布尔。
@@ -250,7 +249,6 @@ contract_version, ok, outcome, identity, dry_run, data, meta, error, _notice
 
 ```json
 {
-  "contract_version": "dws.output.v2",
   "ok": true,
   "outcome": "success",
   "data": {
@@ -271,7 +269,6 @@ contract_version, ok, outcome, identity, dry_run, data, meta, error, _notice
 
 ```json
 {
-  "contract_version": "dws.output.v2",
   "ok": true,
   "outcome": "pending",
   "data": {
@@ -294,7 +291,6 @@ contract_version, ok, outcome, identity, dry_run, data, meta, error, _notice
 
 ```json
 {
-  "contract_version": "dws.output.v2",
   "ok": false,
   "outcome": "partial_failure",
   "data": {
@@ -334,7 +330,6 @@ contract_version, ok, outcome, identity, dry_run, data, meta, error, _notice
 
 ```json
 {
-  "contract_version": "dws.output.v2",
   "ok": false,
   "outcome": "failure",
   "error": {
@@ -365,7 +360,7 @@ contract_version, ok, outcome, identity, dry_run, data, meta, error, _notice
 | table/pretty/raw/csv | presentation data | 诊断；人读 failure 可写此处 |
 | legacy | 保持旧行为 | 保持旧行为 |
 
-`--format json` 是 Agent 的唯一规范模式。NDJSON/CSV/table/pretty/raw 是 presentation，不另定义 output contract；成功 NDJSON 的裸记录不保证携带顶层 `contract_version`。
+`--format json` 是 Agent 的唯一规范模式。NDJSON/CSV/table/pretty/raw 是 presentation，不另定义 output contract；运行时结果不携带协议版本选择或版本标记。
 
 JSON/NDJSON 的 failure 绕过 `--jq` 和 `--fields`，避免过滤器擦除 typed error。日志、`[INFO]`、进度和 ANSI 控制字符不得进入机器 stdout。
 
@@ -494,7 +489,7 @@ dws devapp +list ...
 因此本 RFC 当前只承诺 CLI adapter。MCP 后续接入必须：
 
 - 从同一个 `CommandResult` 投影，禁止重建第二套业务信封；
-- 验证 `structuredContent.contract_version`；
+- 验证 `structuredContent` 与 CLI 使用同一 `ok/outcome/data|error/meta` 信封；
 - 明确 MCP transport error 与业务 `outcome` 的映射；
 - 增加真实 server/stdio E2E；
 - 在完成前，文档不得宣称 CLI/MCP 已同构上线。
@@ -516,7 +511,7 @@ dws devapp +list ...
 
 每个迁移命令至少覆盖：
 
-1. success JSON 恰好一个 document，带 `contract_version`；
+1. success JSON 恰好一个 document，且不带运行时协议版本字段；
 2. validation/API/auth failure 为 typed v2 JSON，rc 与 `error.exit_code` 相等；
 3. stdout 零日志、stderr 不含第二份 primary result；
 4. `--format json | jq` 成功和失败都可解析；
@@ -547,7 +542,7 @@ DWS_PACKAGE_VERSION=0.0.0-test go test ./...
 
 - 纳入 `make policy`；
 - 允许并检查非零 rc 的 failure/partial 样本，不能把它们全部 skip；
-- allowed envelope key 包含 `contract_version`；
+- allowed envelope key 与 `ok/outcome/identity/dry_run/data/meta/error/_notice` 一致；
 - 动态样本使用 `--format json`；
 - 同时覆盖 `dev` 和 `devapp +`；
 - 失败时不得 vacuous pass。
@@ -560,7 +555,7 @@ DWS_PACKAGE_VERSION=0.0.0-test go test ./...
 - 迁移命令：release notes 明确该 command path 从 legacy 切换到 v2。
 - 命令名、前缀、参数和安全语义不因输出迁移而改变。
 - `devapp +...` 不因存在 `dev ...` 而被移除、隐藏或 redirect。
-- consumer 使用 `--format json`，通过响应内 `contract_version` 识别 v2；不传 selector。
+- consumer 只使用 `--format json`；命令在当前 release 的唯一 active contract 由命令声明决定，不通过响应字段协商。
 - `v2_only` 只删除该命令内部 legacy renderer，不删除命令入口。
 
 ### 13.2 回滚
@@ -617,7 +612,7 @@ Framework 2.0 的 dingtalk-dev 阶段在以下条件同时满足后验收：
 ### P1
 
 - 把 rollout transition 与生成式 ledger 接入 CI。
-- 把统一输出 policy scripts 接入 `make policy`，覆盖非零 rc 和 `contract_version`。
+- 把统一输出 policy scripts 接入 `make policy`，覆盖非零 rc 和非标准顶层字段。
 - 完善 typed error 投影，保留 HTTP/RPC/upstream code、hint、request id 和 retry metadata。
 - 严格校验 `failed[].error`、非负 count/pages/items。
 

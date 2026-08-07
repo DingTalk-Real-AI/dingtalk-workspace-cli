@@ -13,7 +13,7 @@
 #            booleans ("true"/"false") are violations.
 #   - AC-11  json-mode stdout carries zero log bytes and exactly one primary
 #            result document for success, pending, partial, or failure.
-#   - Envelope top-level key set is fixed: contract_version/ok/outcome/identity/dry_run/data/
+#   - Envelope top-level key set is fixed: ok/outcome/identity/dry_run/data/
 #            meta/error/_notice (snake_case); historical variants such as
 #            errcode/error_code/errorCode/success are violations.
 #

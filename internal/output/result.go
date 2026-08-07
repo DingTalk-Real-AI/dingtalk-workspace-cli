@@ -99,7 +99,7 @@ func newCommandResult(outcome Outcome, data any, info *ErrorInfo, opts ...Result
 }
 
 func newCommandResultWithExitCode(outcome Outcome, data any, info *ErrorInfo, override int, hasOverride bool, opts ...ResultOption) CommandResult {
-	env := Envelope{ContractVersion: ContractVersionV2, Outcome: outcome, Data: data, Error: info}
+	env := Envelope{Outcome: outcome, Data: data, Error: info}
 	env.OK = outcome == OutcomeSuccess || outcome == OutcomePending
 	for _, opt := range opts {
 		if opt.apply != nil {
@@ -275,9 +275,6 @@ func ValidateResult(result CommandResult) error {
 		return fmt.Errorf("output: nil command result")
 	}
 	env := result.envelope()
-	if env.ContractVersion != ContractVersionV2 {
-		return fmt.Errorf("output: result contract_version=%q, want %q", env.ContractVersion, ContractVersionV2)
-	}
 	if err := env.Validate(); err != nil {
 		return err
 	}

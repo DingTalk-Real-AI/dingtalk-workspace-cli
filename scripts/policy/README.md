@@ -14,7 +14,7 @@
 
 - **不接入 `make policy`**，不是 CI 强制门禁；接入方式见文末「接入 make policy 的挂点设计草案」（B167，仅设计稿）。
 - 脚本自带 `--self-test` 模式，用 `testdata/` fixture 验证扫描逻辑本身（合法样例必须 pass、违规样例必须 fail），这是原型阶段的主要回归手段。
-- 契约锚点：AC-02（ok/success 类布尔恒为 JSON 布尔）、AC-11（json 模式 stdout 零日志字节、primary result 恰为一个可解析 JSON 文档）、信封顶层键集合固化（`contract_version/ok/outcome/identity/dry_run/data/meta/error/_notice` snake_case；`errcode/error_code/errorCode/success` 等历史形态违规，camelCase wire 键形态违规）。
+- 契约锚点：AC-02（ok/success 类布尔恒为 JSON 布尔）、AC-11（json 模式 stdout 零日志字节、primary result 恰为一个可解析 JSON 文档）、信封顶层键集合固化（`ok/outcome/identity/dry_run/data/meta/error/_notice` snake_case；`contract_version/errcode/error_code/errorCode/success` 等非标准顶层形态违规，camelCase wire 键形态违规）。
 
 ## 用法
 
@@ -57,7 +57,7 @@ make build            # 先构建 ./dws（脚本消费真实二进制）
 
 1. **`--scope dev`（默认档）**：当前扫描 3 个离线 v2 terminal 样本。样本真实输出形态核对：`dev connect list` 输出
    `{ok,outcome,data:[],meta.count:0}` 信封；`status`/`stop` 对一次性
-   probe id 输出 `{contract_version:"dws.output.v2",ok:true,outcome:success,...}`；stop 使用 dry-run 预览，保证策略扫描不发进程信号。
+   probe id 输出 `{ok:true,outcome:success,...}`；stop 使用 dry-run 预览，保证策略扫描不发进程信号。
 2. **`--scope all`**：8/8 样本验证成功，三个脚本均 `check: ok`，零误报。
    legacy 样本（`schema list`/`auth status`/`version`）顶层含 `success` 等
    非信封键，被 legacy class 正确豁免信封形状检查；`dev app list` 信封

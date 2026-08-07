@@ -10,9 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ContractVersionV2 is the stable wire identifier of framework 2.0 results.
-const ContractVersionV2 = "dws.output.v2"
-
 // ContractMode is an internal renderer identity. It is deliberately not a CLI
 // flag: one command has exactly one externally active contract in one release.
 type ContractMode string
