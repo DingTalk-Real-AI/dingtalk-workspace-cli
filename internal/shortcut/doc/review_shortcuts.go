@@ -4,6 +4,7 @@
 package doc
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf16"
@@ -60,13 +61,17 @@ var CommentUpdate = shortcut.Shortcut{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "comment-key", Type: shortcut.FlagString, Desc: "评论 commentKey", Required: true},
 		{Name: "content", Type: shortcut.FlagString, Desc: "更新后的评论正文", Required: true},
-		{Name: "mention", Type: shortcut.FlagStringSlice, Desc: "被 @ 的用户 uid 列表"},
+		{Name: "mention", Type: shortcut.FlagStringSlice, Desc: "被 @ 的用户 uid，多个值用逗号分隔；不要传 JSON 数组"},
 	},
 	Tips: []string{`dws doc +comment-update --node <DOC_ID> --comment-key <COMMENT_KEY> --content "已按最新数据修正"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{"nodeId": rt.Str("node"), "commentKey": rt.Str("comment-key"), "content": rt.Str("content")}
 		if rt.Changed("mention") {
-			params["mentionedUserIds"] = rt.StrSlice("mention")
+			mentions, err := normalizeMentionUserIDs(rt.StrSlice("mention"))
+			if err != nil {
+				return err
+			}
+			params["mentionedUserIds"] = mentions
 		}
 		return rt.CallMCP("update_comment", params)
 	},
@@ -113,14 +118,29 @@ func validateCommentCreate(rt *shortcut.RuntimeContext) error {
 func executeCommentCreate(rt *shortcut.RuntimeContext) error {
 	params := map[string]any{"nodeId": rt.Str("node"), "content": rt.Str("content")}
 	if rt.Changed("mention") {
-		params["mentionedUserIds"] = rt.StrSlice("mention")
+		mentions, err := normalizeMentionUserIDs(rt.StrSlice("mention"))
+		if err != nil {
+			return err
+		}
+		params["mentionedUserIds"] = mentions
 	}
 	if rt.Str("block-id") != "" {
-		params["blockId"], params["start"], params["end"] = rt.Str("block-id"), rt.Int("start"), rt.Int("end")
-		if rt.Str("selected-text") != "" {
-			params["selectedText"] = rt.Str("selected-text")
+		blockID, start, end := rt.Str("block-id"), rt.Int("start"), rt.Int("end")
+		blocks, err := rt.CallMCPData(productDoc, "list_document_blocks", map[string]any{"nodeId": rt.Str("node"), "blockId": blockID, "format": "element"})
+		if err != nil {
+			return err
 		}
-		return rt.CallMCP("create_inline_comment", params)
+		blockText := map[string]string{}
+		collectBlockText(blocks, "", blockText)
+		selectedText, ok := sliceUTF16Range(blockText[blockID], start, end)
+		if !ok {
+			return apperrors.NewValidation(fmt.Sprintf("INVALID_SELECTION_RANGE: block %s 的 UTF-16 范围 [%d,%d) 无效", blockID, start, end))
+		}
+		if supplied := rt.Str("selected-text"); supplied != "" && supplied != selectedText {
+			return apperrors.NewValidation("SELECTED_TEXT_MISMATCH: --selected-text 与 block/start/end 对应的真实原文不一致")
+		}
+		params["blockId"], params["start"], params["end"], params["selectedText"] = blockID, start, end, selectedText
+		return executeCommentWrite(rt, "create_inline_comment", "inline", params)
 	}
 	if selection := rt.Str("selection"); selection != "" {
 		blocks, err := rt.CallMCPData(productDoc, "list_document_blocks", map[string]any{"nodeId": rt.Str("node"), "format": "element"})
@@ -136,9 +156,62 @@ func executeCommentCreate(rt *shortcut.RuntimeContext) error {
 			return apperrors.NewValidation(fmt.Sprintf("AMBIGUOUS_SELECTION: selection 需要唯一匹配，实际 %d 处；候选=%v", len(matches), candidates))
 		}
 		params["blockId"], params["start"], params["end"], params["selectedText"] = matches[0].blockID, matches[0].start, matches[0].end, matches[0].selected
-		return rt.CallMCP("create_inline_comment", params)
+		return executeCommentWrite(rt, "create_inline_comment", "inline", params)
 	}
-	return rt.CallMCP("create_comment", params)
+	return executeCommentWrite(rt, "create_comment", "global", params)
+}
+
+func normalizeMentionUserIDs(values []string) ([]string, error) {
+	if len(values) == 1 && strings.HasPrefix(strings.TrimSpace(values[0]), "[") {
+		var decoded []any
+		decoder := json.NewDecoder(strings.NewReader(values[0]))
+		decoder.UseNumber()
+		if err := decoder.Decode(&decoded); err != nil {
+			return nil, apperrors.NewValidation(fmt.Sprintf("--mention JSON 数组解析失败: %v", err))
+		}
+		values = make([]string, 0, len(decoded))
+		for _, value := range decoded {
+			switch typed := value.(type) {
+			case string:
+				values = append(values, typed)
+			case json.Number:
+				values = append(values, typed.String())
+			default:
+				return nil, apperrors.NewValidation("--mention JSON 数组只接受字符串或数字 uid")
+			}
+		}
+	}
+	values = stringSliceNonEmpty(values)
+	if len(values) == 0 {
+		return nil, apperrors.NewValidation("--mention 至少包含一个非空用户 uid")
+	}
+	return values, nil
+}
+
+func executeCommentWrite(rt *shortcut.RuntimeContext, tool, commentType string, params map[string]any) error {
+	result, err := rt.CallMCPWriteData(productComment, tool, params)
+	if err != nil {
+		return docUnknownWriteError("doc.comment_create", tool, rt.Str("node"), err)
+	}
+	return rt.Output(docEnvelope("doc.comment_create", map[string]any{
+		"nodeId": rt.Str("node"), "commentType": commentType, "result": result,
+	}, map[string]any{"name": tool, "status": "success"}))
+}
+
+func sliceUTF16Range(text string, start, end int) (string, bool) {
+	units := utf16.Encode([]rune(text))
+	if start < 0 || end <= start || end > len(units) {
+		return "", false
+	}
+	isHigh := func(value uint16) bool { return value >= 0xD800 && value <= 0xDBFF }
+	isLow := func(value uint16) bool { return value >= 0xDC00 && value <= 0xDFFF }
+	if start > 0 && start < len(units) && isHigh(units[start-1]) && isLow(units[start]) {
+		return "", false
+	}
+	if end > 0 && end < len(units) && isHigh(units[end-1]) && isLow(units[end]) {
+		return "", false
+	}
+	return string(utf16.Decode(units[start:end])), true
 }
 
 type selectionMatch struct {

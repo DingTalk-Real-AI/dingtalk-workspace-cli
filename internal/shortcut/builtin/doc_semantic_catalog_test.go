@@ -71,8 +71,8 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 	}
 
 	wantPrimaries := map[string]string{
-		"+find-doc": "+search", "+doc-append": "+update", "+version-save": "+history-save",
-		"+version-list": "+history-list", "+version-revert": "+history-revert", "+share-doc": "+share",
+		"+find-doc": "+search", "+doc-append": "+update", "+history-save": "+version-save",
+		"+history-list": "+version-list", "+history-revert": "+version-revert", "+share-doc": "+share",
 	}
 	for command, primary := range wantPrimaries {
 		item := registered[command]

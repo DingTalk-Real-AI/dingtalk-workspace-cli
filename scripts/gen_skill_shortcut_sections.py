@@ -59,7 +59,7 @@ RUNTIME_CONTRACT_END = "<!-- DWS_RUNTIME_CONTRACT_END -->"
 # here only after verifying that the product skill has its own reviewed routing
 # section and intent table; compacting a sparse skill without an alternative
 # route would make its shortcuts harder to discover.
-COMPACT_PRODUCT_SERVICES = {"chat"}
+COMPACT_PRODUCT_SERVICES = {"chat", "doc"}
 
 
 def md_escape(value: Any) -> str:
@@ -121,7 +121,10 @@ def runtime_contract_block() -> str:
 
 
 def mono_overview(items: list[dict[str, Any]]) -> str:
-    counts = Counter(item["service"] for item in items)
+    # The source collector cannot see a small number of commands whose final
+    # canonical names are normalized at runtime. Overview counts come from the
+    # reviewed public catalog so they cannot under-report those declarations.
+    counts = Counter(service for service, _ in load_public_catalog())
     rows = []
     for service, count in sorted(counts.items()):
         path = SERVICE_TO_SKILL.get(service)
@@ -163,10 +166,18 @@ def product_section(service: str, rows: list[dict[str, Any]]) -> str:
 
 
 def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
+    # Compact skills intentionally do not depend on the source parser's ability
+    # to recover every runtime-normalized declaration. The reviewed public
+    # catalog is the count authority for this non-enumerating overview.
+    public_count = sum(1 for item_service, _ in load_public_catalog() if item_service == service)
+    if service == "doc":
+        discovery = """已知意图按下方路由。"""
+    else:
+        discovery = """已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。"""
     return f"""{PRODUCT_START}
 ## Shortcut 发现（按需）
 
-`{md_escape(service)}` 当前有 {len(rows)} 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+`{md_escape(service)}` 当前有 {public_count} 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。{discovery}
 
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service {md_escape(service)} --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 {PRODUCT_END}"""
@@ -194,6 +205,7 @@ def update_runtime_contract(check: bool) -> list[Path]:
     changed = []
     targets = [
         ROOT / "skills" / "multi" / "dingtalk-chat" / "SKILL.md",
+        ROOT / "skills" / "multi" / "dingtalk-doc" / "SKILL.md",
         SHARED_SKILL,
     ]
     for path in targets:

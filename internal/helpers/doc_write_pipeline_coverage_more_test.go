@@ -40,10 +40,12 @@ func TestCrossPlatformCoverageDocWritePipelineStrategyRemainingCoverage(t *testi
 		t.Fatalf("long literal single write: %v", err)
 	}
 
-	fallback := strings.Repeat("x", minChunkSize+100)
-	installScriptedCaller(t, &scriptedToolCaller{steps: []scriptedToolStep{{err: errors.New("timeout")}, {text: `{}`}, {text: `{}`}}})
-	if err := docWritePipeline(docWriteCoverageCommand(), "update_document", map[string]any{"nodeId": "node", "mode": "overwrite", "markdown": fallback}, fallback, "update"); err != nil {
-		t.Fatalf("single timeout fallback: %v", err)
+	fallback := strings.Repeat("x", 5100)
+	timeoutCaller := &scriptedToolCaller{steps: []scriptedToolStep{{err: errors.New("timeout")}, {text: `{}`}}}
+	installScriptedCaller(t, timeoutCaller)
+	err := docWritePipeline(docWriteCoverageCommand(), "update_document", map[string]any{"nodeId": "node", "mode": "overwrite", "markdown": fallback}, fallback, "update")
+	if err == nil || !strings.Contains(err.Error(), "提交状态未知") || timeoutCaller.calls != 1 {
+		t.Fatalf("single timeout must stop without replay: err=%v calls=%d", err, timeoutCaller.calls)
 	}
 
 	chunked := strings.Repeat("x", initialChunkSize+100)
@@ -58,9 +60,10 @@ func TestCrossPlatformCoverageChunkedWriteAdaptiveRetryRemainingCoverage(t *test
 	os.Args = []string{"dws", "doc"}
 	t.Cleanup(func() { os.Args = oldArgs })
 	markdown := strings.Repeat("x", 24000)
-	installScriptedCaller(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}, {err: errors.New("HSFTimeoutException")}, {text: `{}`}}})
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{}`}, {err: errors.New("HSFTimeoutException")}, {text: `{}`}}}
+	installScriptedCaller(t, caller)
 	_, written, _, err := chunkedWrite(context.Background(), "update_document", map[string]any{"nodeId": "node"}, markdown, "update", 10000)
-	if err != nil || written < 3 {
-		t.Fatalf("adaptive retry written=%d err=%v", written, err)
+	if err == nil || written != 1 || caller.calls != 2 || !strings.Contains(err.Error(), "提交状态未知") {
+		t.Fatalf("timeout must stop without replay: written=%d calls=%d err=%v", written, caller.calls, err)
 	}
 }

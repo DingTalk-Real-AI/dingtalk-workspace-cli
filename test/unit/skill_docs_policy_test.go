@@ -283,6 +283,117 @@ func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageDocSkillPinsExactVersionRoutesAndHelpBudget(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-doc", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-doc", "references", "doc.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "doc.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"dws doc +version-save --node",
+			"dws doc +version-list --node",
+			"dws doc +version-revert --node",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing exact version route %q", path, required)
+			}
+		}
+		if strings.Contains(text, "dws doc +history-") {
+			t.Errorf("%s recommends a history compatibility route", path)
+		}
+	}
+
+	rootSkill, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"Help 不参与选路", "unknown flag", "只查一次 shortcut 清单", "禁止试探后缀"} {
+		if !strings.Contains(string(rootSkill), required) {
+			t.Errorf("Doc root Skill missing Help budget rule %q", required)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDocSkillPinsTemplateSearchRequiredQuery(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	path := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", "skills", "multi", "dingtalk-doc", "SKILL.md"))
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	for _, route := range []string{
+		"dws doc +template-list [--source MY\\|PUBLIC]",
+		"dws doc +template-search --query <名称或关键词>",
+		"dws doc +create-from-template --template-id <唯一ID>",
+	} {
+		if !strings.Contains(text, route) {
+			t.Errorf("Doc Golden Route does not publish mutually exclusive template route %q", route)
+		}
+	}
+	if strings.Contains(text, "`dws doc +template-search` →") {
+		t.Fatal("Doc Golden Route still recommends template-search without --query")
+	}
+	for _, required := range []string{
+		"准备 Help 时，本轮仅查一次",
+		"--fields use_when,avoid_when,parameters,constraints,confirmation",
+		"禁用产品级/`--all`",
+		"Help 不参与选路",
+		"禁止靠失败探测门禁",
+		"已有或临时文件先暂存到 cwd",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("Doc root Skill missing bounded Schema/input protocol %q", required)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDocSkillReferenceLoadingBudget(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-doc", "SKILL.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "doc.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"禁止读取 reference",
+			"最多读取一个",
+			"复杂 JSONML",
+			"append/overwrite",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing bounded Reference rule %q", path, required)
+			}
+		}
+		if strings.Contains(text, "只在任务命中时读取一个精确 reference") {
+			t.Errorf("%s restores task-match-driven Reference loading", path)
+		}
+	}
+}
+
 func hasAny(s string, needles []string) bool {
 	for _, needle := range needles {
 		if strings.Contains(s, needle) {

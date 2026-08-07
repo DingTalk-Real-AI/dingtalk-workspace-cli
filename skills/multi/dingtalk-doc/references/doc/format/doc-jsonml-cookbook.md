@@ -1,13 +1,13 @@
 # JSONML Cookbook
 
-> 本文档提供 `dws doc create/update --content-format jsonml` 和 `dws doc block insert/update --content-format jsonml` 的**完整可用范例**。
+> 本文档提供 JSONML **结构范例**。正常执行入口是 `+create --content @./相对文件 --doc-format jsonml` 与 `+update --content @./相对文件 --doc-format jsonml`；原子 `doc create/update/block` 仅用于 shortcut 未公开字段的专家路径，使用前读取精确 leaf Schema。
 > 所有示例均基于真实文档 serialize 输出验证。节点结构详细定义见 [doc-jsonml-schema.md](./doc-jsonml-schema.md)。
 > 合法节点类型和属性的权威参考为 `wukong/products/jsonml-schema-v2.json`。
 
 ## 决策型文档骨架范例（doc create 用）
 
 以下是一个"方案对比汇报"的完整 JSONML 文件内容，展示摘要 callout + 彩色表格 + 状态高亮。
-**可直接复制到 `/tmp/<name>.json` 后用 `dws doc create --name "..." --content-file /tmp/<name>.json --content-format jsonml` 创建。**
+**可保存到工作目录内的 `./drafts/<name>.json`，再用 `dws doc +create --name "..." --content @./drafts/<name>.json --doc-format jsonml` 创建。**
 
 ```json
 ["root", {},
