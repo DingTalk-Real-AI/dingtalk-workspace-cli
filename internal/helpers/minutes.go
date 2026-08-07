@@ -1346,7 +1346,7 @@ func newMinutesCommand() *cobra.Command {
 		Short: "批量删除个人热词",
 		Long: `批量删除听记个人热词。
 支持一次删除多个热词（逗号分隔）。删除后对应热词不再参与后续语音识别优化。`,
-		Example: `  dws minutes hot-word delete --words "钉钉"
+		Example: `  dws minutes hot-word delete --words "天气"
   dws minutes hot-word delete --words "OKR,钉钉,Copilot"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "words"); err != nil {
@@ -1384,7 +1384,7 @@ func newMinutesCommand() *cobra.Command {
 					"不确定现有热词时先用 hot-word list",
 				},
 				Examples: []string{
-					"dws minutes hot-word delete --words \"钉钉\"",
+					"dws minutes hot-word delete --words \"天气\"",
 					"dws minutes hot-word delete --words \"OKR,钉钉,Copilot\"",
 				},
 			},
@@ -1883,11 +1883,12 @@ func newMinutesCommand() *cobra.Command {
 			if err := validateRequiredFlagWithAliases(cmd, "id", "url", "task-uuid", "uuid"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "policy"); err != nil {
-				return err
+			// 手动校验必填参数（避免 validateRequiredFlags 对 Int 的误判）
+			if !cmd.Flags().Changed("policy") {
+				return fmt.Errorf("missing required flag --policy")
 			}
 
-			policyID, err := strconv.ParseInt(mustGetFlag(cmd, "policy"), 10, 64)
+			policyID, err := cmd.Flags().GetInt("policy")
 			if err != nil || policyID < 2 || policyID > 4 {
 				return fmt.Errorf("flag --policy must be an integer between 2 and 4 (2=可编辑, 3=可查看/下载, 4=仅查看)")
 			}
@@ -1942,7 +1943,7 @@ func newMinutesCommand() *cobra.Command {
 	_ = permissionApplyCmd.Flags().MarkHidden("task-uuid")
 	permissionApplyCmd.Flags().String("uuid", "", "--id 的别名")
 	_ = permissionApplyCmd.Flags().MarkHidden("uuid")
-	permissionApplyCmd.Flags().String("policy", "", "权限类型: 2=可编辑, 3=可查看/下载, 4=仅查看 (必填)")
+	permissionApplyCmd.Flags().Int("policy", 0, "权限类型: 2=可编辑, 3=可查看/下载, 4=仅查看 (必填)")
 
 	permissionCmd.AddCommand(permissionAddCmd, permissionRemoveCmd, permissionApplyCmd)
 

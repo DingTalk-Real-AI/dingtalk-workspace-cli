@@ -9,6 +9,15 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 ### Changed
 
 - **Sheet CSV formula writes** — `dws sheet csv-put` and batch `csv-put` now expose the service contract that CSV fields beginning with `=` are written as formulas. Prefix the field with an apostrophe to write literal text beginning with `=`; CSV content continues to pass through unchanged.
+- **Minutes `permission apply --policy` type** — `--policy` is now declared as
+  an `int` flag and its required check uses `Flags().Changed`, matching the
+  numeric-parameter convention. `--help` reports `int` instead of `string`;
+  accepted values (2/3/4) and gateway behavior are unchanged.
+- **Minutes skill references** — document `hot-word delete` and
+  `permission apply`, list both in the command trees, add intent routing for
+  `permission apply`, and use a neutral hot-word example in the delete samples.
+  `hot-word delete` intentionally gets no intent routing while its leaf still
+  declares `confirmation: not_required`.
 
 ### Fixed
 

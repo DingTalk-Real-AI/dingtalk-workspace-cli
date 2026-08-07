@@ -91,6 +91,21 @@ func TestCrossPlatformCoverageMinutesNewSurfaces(t *testing.T) {
 			t.Fatal("expected missing policy")
 		}
 	})
+	t.Run("permission apply policy flag is int", func(t *testing.T) {
+		// 数值参数声明为 int 类型 flag；必填校验走 cmd.Flags().Changed，
+		// 不能用 validateRequiredFlags（它把 int 零值当成未传）。
+		cmd, _, err := newMinutesCommand().Find([]string{"permission", "apply"})
+		if err != nil {
+			t.Fatalf("find permission apply: %v", err)
+		}
+		flag := cmd.Flags().Lookup("policy")
+		if flag == nil {
+			t.Fatal("flag --policy not found")
+		}
+		if flag.Value.Type() != "int" {
+			t.Fatalf("flag --policy type = %q, want %q", flag.Value.Type(), "int")
+		}
+	})
 
 	t.Run("audio-memo list default", func(t *testing.T) {
 		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"items":[]}`}}}
