@@ -1354,13 +1354,13 @@ func TestDeliveryCatalogChatParamDeclsFrom87910880Reviewed(t *testing.T) {
 		interfaceType string
 	}{
 		{"chat message edit", "conversation-id", "openConversationId", true, ""},
-		{"chat message edit", "msg-id", "openMessageId", true, ""},
+		{"chat message edit", "message-id", "openMessageId", true, ""},
 		{"chat message edit", "at-open-dingtalk-ids", "atOpenDingTalkIds", false, "array"},
-		{"chat message update-text-emotion", "msg-id", "openMsgId", true, ""},
+		{"chat message update-text-emotion", "message-id", "openMsgId", true, ""},
 		{"chat message update-text-emotion", "old-emotion-id", "oldEmotionId", true, ""},
 		{"chat category batch-info", "category-ids", "categoryIds", true, "array"},
-		{"chat category list-by-conv", "group", "openConversationId", true, ""},
-		{"chat group update-nick", "group", "openConversationId", true, ""},
+		{"chat category list-by-conv", "conversation-id", "openConversationId", true, ""},
+		{"chat group update-nick", "conversation-id", "openConversationId", true, ""},
 		{"chat group upgrade-to-external", "extension", "extension", false, "object"},
 		{"chat +messages-send-card", "receiver-open-dingtalk-id", "receiverOpenDingTalkId", false, ""},
 		{"chat message list-favorites", "size", "", false, "string"},
@@ -1410,7 +1410,7 @@ func TestDeliveryCatalogChatParamDeclsFrom87910880Reviewed(t *testing.T) {
 		t.Fatal(err)
 	}
 	listParams := schemaMap(listByConv["parameters"])
-	for _, hidden := range []string{"conversation-id", "id"} {
+	for _, hidden := range []string{"group", "id"} {
 		if _, ok := listParams[hidden]; ok {
 			t.Fatalf("chat category list-by-conv unexpectedly publishes hidden alias --%s", hidden)
 		}

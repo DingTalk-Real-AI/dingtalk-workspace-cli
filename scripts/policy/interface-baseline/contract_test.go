@@ -229,6 +229,35 @@ func TestCompatibilityRejectsNewRequiredFlag(t *testing.T) {
 	assertFailureContains(t, checkCompatibility(currentRoot, baseline), "added required flag")
 }
 
+func TestCompatibilityAllowsChatIDCanonicalHiddenAliasMigration(t *testing.T) {
+	baselineRoot := chatMigrationRoot(false)
+	baseline := snapshot(baselineRoot)
+
+	currentRoot := chatMigrationRoot(true)
+	if failures := checkCompatibility(currentRoot, baseline); len(failures) != 0 {
+		t.Fatalf("chat ID canonical migration should be compatible: %v", failures)
+	}
+
+	var merged bytes.Buffer
+	mergedContract, failures := mergeContracts(baseline, snapshot(currentRoot))
+	if len(failures) != 0 {
+		t.Fatalf("chat ID canonical migration should merge: %v", failures)
+	}
+	if err := renderContract(&merged, mergedContract); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"--conversation-id:string|required=true|hidden=false",
+		"--group:string|required=false|hidden=true",
+		"--message-id:string|required=true|hidden=false",
+		"--msg-id:string|required=false|hidden=true",
+	} {
+		if !strings.Contains(merged.String(), want) {
+			t.Fatalf("merged contract missing %q:\n%s", want, merged.String())
+		}
+	}
+}
+
 func assertFailureContains(t *testing.T, failures []string, want string) {
 	t.Helper()
 	for _, failure := range failures {
@@ -245,6 +274,28 @@ func testRoot() *cobra.Command {
 	old.Flags().StringP("name", "n", "", "name")
 	old.Flags().String("extra", "", "addition")
 	root.AddCommand(old, &cobra.Command{Use: "new"})
+	root.InitDefaultHelpCmd()
+	return root
+}
+
+func chatMigrationRoot(migrated bool) *cobra.Command {
+	root := &cobra.Command{Use: "dws"}
+	chat := &cobra.Command{Use: "chat"}
+	message := &cobra.Command{Use: "message"}
+	edit := &cobra.Command{Use: "edit"}
+	edit.Flags().String("conversation-id", "", "conversation")
+	edit.Flags().String("group", "", "legacy conversation")
+	edit.Flags().String("message-id", "", "message")
+	edit.Flags().String("msg-id", "", "legacy message")
+	if migrated {
+		_ = edit.MarkFlagRequired("conversation-id")
+		_ = edit.MarkFlagRequired("message-id")
+		_ = edit.Flags().MarkHidden("group")
+		_ = edit.Flags().MarkHidden("msg-id")
+	}
+	message.AddCommand(edit)
+	chat.AddCommand(message)
+	root.AddCommand(chat)
 	root.InitDefaultHelpCmd()
 	return root
 }

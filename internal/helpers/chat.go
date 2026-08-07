@@ -262,20 +262,48 @@ func rewriteChatContractFlagRefs(cmd *cobra.Command) {
 	}
 	if len(payload.Parameters) > 0 {
 		parameters := make([]contract.ParamDecl, 0, len(payload.Parameters))
-		seen := map[string]bool{}
+		seen := map[string]int{}
 		for _, parameter := range payload.Parameters {
 			parameter.Name = chatCanonicalFlagNameForCommand(cmd, parameter.Name)
 			parameter.Description = rewriteChatIDFlagRefs(parameter.Description)
 			parameter.RequiredWhen = rewriteChatIDFlagRefs(parameter.RequiredWhen)
-			if parameter.Name == "" || seen[parameter.Name] {
+			if parameter.Name == "" {
 				continue
 			}
-			seen[parameter.Name] = true
+			if index, ok := seen[parameter.Name]; ok {
+				parameters[index] = mergeChatCanonicalParamDecl(parameters[index], parameter)
+				continue
+			}
+			seen[parameter.Name] = len(parameters)
 			parameters = append(parameters, parameter)
 		}
 		payload.Parameters = parameters
 	}
 	contractfinal.RegisterRuntimeContractFinal(cmd, payload)
+}
+
+func mergeChatCanonicalParamDecl(current, next contract.ParamDecl) contract.ParamDecl {
+	if current.Property == "" {
+		current.Property = next.Property
+	}
+	if current.Required == nil {
+		current.Required = next.Required
+	} else if next.Required != nil && *next.Required {
+		current.Required = next.Required
+	}
+	if current.InterfaceType == "" {
+		current.InterfaceType = next.InterfaceType
+	}
+	if current.Description == "" {
+		current.Description = next.Description
+	}
+	if current.RequiredWhen == "" {
+		current.RequiredWhen = next.RequiredWhen
+	}
+	if len(current.Enum) == 0 && len(next.Enum) > 0 {
+		current.Enum = next.Enum
+	}
+	return current
 }
 
 func rewriteChatConstraintFlagRefs(cmd *cobra.Command) {
