@@ -1,12 +1,6 @@
 # doc update（更新文档内容）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md) — 改写流程（编辑形态优先级、分片 append、回读验收）
-> 3. [`./style/doc-style-guideline.md`](./style/doc-style-guideline.md) — 排版规范
-> 4. [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) — 仅当使用 `--content-format jsonml` 时必读
->
-> **同任务常配合**：[`doc-read.md`](./doc-read.md)（改写前必读，jsonml 模式拿当前结构；担心被并发覆盖时再取 revision）/ [`doc-block.md`](./doc-block.md)（单 block 改写优先；本命令更适合追加 / 整篇 overwrite）
+> 本文件自包含普通 append/overwrite 契约，不要递归预读路由或 style reference。纯文本 append 可直接执行；overwrite 先 read/dry-run/确认。只有保真改写或复杂 JSONML 才读取 [`doc-update-workflow.md`](./style/doc-update-workflow.md) 与 cookbook；单块修改改用 [`doc-block.md`](./doc-block.md)。
 
 ## 命令格式
 

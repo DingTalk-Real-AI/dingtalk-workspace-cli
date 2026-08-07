@@ -1,8 +1,6 @@
 # doc info（获取文档元信息 + URL 解析）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`url-patterns.md`](../../../dws-shared/references/url-patterns.md) — 仅当用户原始 `alidocs` URL 需要 probe 时
+> 本文件自包含已知 nodeId/URL 的 info 契约。只有原始 alidocs URL 类型仍不明确时，才读取 [`url-patterns.md`](../../../dws-shared/references/url-patterns.md)；不要递归读取 `doc.md`。
 >
 > **探测入口变更**：alidocs URL 的类型探测现在统一走 `dws drive info`（详见 [链接规范](../../../dws-shared/references/url-patterns.md#alidocs-url-类型探测流程)）。`drive info` 检测到 `extension=adoc/axls/able` 时会自动调用 `doc info` 返回更详细的文档信息。**仅在 `drive info` 已确认是 ALIDOC 类型后**，才需要直接使用 `doc info`。
 >

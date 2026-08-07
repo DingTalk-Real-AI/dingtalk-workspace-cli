@@ -1,7 +1,6 @@
 # doc export（在线文档导出为 docx）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
+> 本文件自包含 export 契约。已有当前请求返回的 adoc nodeId 时直接导出；目标类型未知时只执行一次 info 检查，不要递归读取 `doc.md`。
 
 > **路由前置判断**：用户说「下载/导出」时**必须**先用 [`./doc-info.md`](./doc-info.md) `info --node <ID> --format json` 查 `contentType`：
 > - `contentType` 为 `ALIDOC`（在线文档）→ **必须用 `export`**，禁止用 `download`

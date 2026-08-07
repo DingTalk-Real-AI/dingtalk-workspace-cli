@@ -4,11 +4,9 @@
 
 > 改写已有文档见 [doc-update-workflow.md](./doc-update-workflow.md)。排版规范见 [doc-style-guideline.md](./doc-style-guideline.md)。
 
-## 前置必读
+## 按需使用
 
-> **同时读取 [doc-style-guideline.md](./doc-style-guideline.md)：**
-> - **§2.0 类型判断决策表** → 锁定文档类型（决策型 / 执行型 / 说明型 / 知识沉淀型）和骨架
-> - **§1 硬规则** → 全程生效（用户显式正文 H1 优先、不编造 URL、Markdown 草稿不写 callout 等）
+普通 Markdown 创建不需要先读本文件或 style guideline。只有用户要求设计文档骨架或复杂版式时，才查看下方对应章节；实际选择 JSONML 后再读取 cookbook。需要按文档类型选骨架时，按需读取 [doc-style-guideline.md](./doc-style-guideline.md) 的对应一节，不要通读。
 
 ### 关键词速查（用户意图 → 起稿路径）
 
@@ -45,7 +43,7 @@
 
 | 项目 | 要求 |
 |------|------|
-| 标题 | 用 `--name` 传入；正文不要再重复同名一级标题 |
+| 标题 | 用 `--name` 传入；用户显式要求正文 H1 时原样保留，未要求时正文默认从 H2 开始 |
 | 位置 | 默认创建到我的文档；指定目录时只接受文档文件夹 `nodeId` 或 alidocs 文件夹 URL |
 | 正文 | 多行、表格、代码块、特殊字符或长度 >= 2KB 时必须写入 UTF-8 临时 `.md` 文件 |
 | 格式 | 按 §JSONML 起稿判定 决定起稿路径：命中 JSONML 起稿条件时**直接用 JSONML 构造**（跳过 markdown）；未命中时用 Markdown 起稿，创建后按 [doc-update-workflow.md](./doc-update-workflow.md) 精修 |
@@ -226,7 +224,7 @@ callout 可通过 `"showstk": true, "sticker": "图标名"` 配置顶部贴纸�
 
 > **脚手架策略警示**：Markdown 无法表达分栏/callout/色彩表头，拉回的 JSONML 只有纯文本骨架。精修阶段不是“在现有结构上加色”，而是“参照 RFC/Spec 重组结构”。
 
-> **MUST READ**：动手写 JSONML 前，必须先用 Read 工具读取 [doc-jsonml-cookbook.md](../format/doc-jsonml-cookbook.md) — 其中 §决策型文档骨架范例 有可直接复制修改的完整模板。
+> **JSONML 条件加载**：仅在确定使用 JSONML 后读取 [doc-jsonml-cookbook.md](../format/doc-jsonml-cookbook.md)；其中“决策型文档骨架范例”可直接改写。
 > 节点类型和属性的权威定义见 [doc-jsonml-schema.md](../format/doc-jsonml-schema.md)。
 
 ### ⚠️ JSONML 降级约束

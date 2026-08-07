@@ -71,6 +71,31 @@ class DocSkillAlignmentTest(unittest.TestCase):
         self.assertNotIn("超过 200KB", combined)
         self.assertNotIn("doc get", combined)
 
+    def test_common_routes_do_not_require_recursive_reference_loading(self):
+        skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        branch_names = [
+            "doc-create.md",
+            "doc-block.md",
+            "doc-comment.md",
+            "doc-import.md",
+            "doc-export.md",
+            "doc-media.md",
+            "doc-read.md",
+            "doc-update.md",
+            "doc-info.md",
+        ]
+        for name in branch_names:
+            text = (
+                SKILL_ROOT / "references" / "doc" / name
+            ).read_text(encoding="utf-8")
+            self.assertNotIn("前置条件（MUST READ）", text, name)
+            self.assertNotIn("必须先用 Read 工具读取以下文件", text, name)
+
+        self.assertIn("不超过 5 个确定性 DWS 操作", skill)
+        self.assertIn("不创建 Todo", skill)
+        self.assertIn("按“先/再/然后”切分操作阶段", skill)
+        self.assertLessEqual(len(skill.encode("utf-8")), 9500)
+
     def test_workflow_identity_and_fidelity_rules_are_explicit(self):
         skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         create_refs = "\n".join(
@@ -235,6 +260,25 @@ class DocCreateAndWriteTest(unittest.TestCase):
         summary = json.loads(stdout.getvalue().splitlines()[-1])
         self.assertEqual("doc-1", summary["nodeId"])
         self.assertTrue(summary["verified"])
+
+    def test_wrapper_preserves_explicit_body_h1(self):
+        seen_content = []
+
+        def fake_run(args, dry_run=False):
+            if args[:2] == ["doc", "create"]:
+                content_path = Path(args[args.index("--content-file") + 1])
+                seen_content.append(content_path.read_text(encoding="utf-8"))
+                return {"success": True, "nodeId": "doc-1", "chunksWritten": 1}
+            if args[:2] == ["doc", "info"]:
+                return {"success": True, "docUrl": "https://example.test/doc-1"}
+            return {"success": True, "markdown": "# 周报"}
+
+        with mock.patch.object(self.module, "run_dws", side_effect=fake_run):
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = self.module.run(["--name", "周报", "--content", "# 周报"])
+
+        self.assertEqual(0, code)
+        self.assertEqual(["# 周报"], seen_content)
 
     def test_wrapper_rejects_empty_readback(self):
         def fake_run(args, dry_run=False):

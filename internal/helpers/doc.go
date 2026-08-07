@@ -1070,9 +1070,6 @@ func newDocCommand() *cobra.Command {
 				})
 			}
 			if md != "" {
-				if name, ok := toolArgs["name"].(string); ok && name != "" {
-					md = stripDuplicateTitle(md, name)
-				}
 				toolArgs["markdown"] = md
 			}
 			if md != "" {
@@ -3216,53 +3213,6 @@ func pollDocExportJob(ctx context.Context, jobID string) (downloadURL string, er
 	}
 
 	return "", fmt.Errorf("导出任务超时：已轮询 %d 次仍在处理中 (jobId=%s)，请稍后使用 dws doc export get --job-id %s 手动查询", maxPolls, jobID, jobID)
-}
-
-// stripDuplicateTitle removes the leading H1 heading from markdown content
-// when it matches the document name (set via --name). This prevents the title
-// from appearing twice: once as document metadata and once in the body.
-func stripDuplicateTitle(markdown, name string) string {
-	trimmed := strings.TrimLeft(markdown, " \t\n\r")
-	if !strings.HasPrefix(trimmed, "# ") {
-		return markdown
-	}
-	newlineIdx := strings.Index(trimmed, "\n")
-	var headingRaw string
-	if newlineIdx < 0 {
-		headingRaw = trimmed[2:]
-	} else {
-		headingRaw = trimmed[2:newlineIdx]
-	}
-
-	if normalizeHeadingText(headingRaw) != normalizeHeadingText(name) {
-		return markdown
-	}
-
-	if newlineIdx < 0 {
-		return ""
-	}
-	rest := trimmed[newlineIdx+1:]
-	rest = strings.TrimLeft(rest, "\n")
-	return rest
-}
-
-// normalizeHeadingText strips trailing ATX hashes, inline markdown formatting
-// markers, then returns a lowercased, trimmed string for comparison.
-func normalizeHeadingText(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	if i := strings.LastIndexByte(s, ' '); i >= 0 {
-		suffix := s[i+1:]
-		if len(suffix) > 0 && strings.Trim(suffix, "#") == "" {
-			s = strings.TrimSpace(s[:i])
-		}
-	}
-	for _, m := range []string{"**", "__", "~~", "*", "_", "`"} {
-		s = strings.ReplaceAll(s, m, "")
-	}
-	return strings.TrimSpace(strings.ToLower(s))
 }
 
 // parseCommentMentionIds splits a comma-separated string of user IDs into a slice.
