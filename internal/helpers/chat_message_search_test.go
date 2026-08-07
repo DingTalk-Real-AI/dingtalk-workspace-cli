@@ -160,6 +160,7 @@ func executeChatChangedContract(t *testing.T, caller *chatChangedContractCaller,
 	InitDeps(caller)
 	deps.Out.w = io.Discard
 	cmd := newChatCommand()
+	installExampleGlobalFlags(cmd)
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetArgs(args)

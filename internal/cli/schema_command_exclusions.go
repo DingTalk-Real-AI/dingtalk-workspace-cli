@@ -118,8 +118,6 @@ var reviewedRuntimeSchemaExclusionGroups = []runtimeSchemaExclusionGroup{
 			"chat mark-read",
 			"chat mark-unread",
 			"chat message list-emotion-replies",
-			"chat message set-top-msg",
-			"chat message unset-top-msg",
 			"chat mute-at-all",
 			"chat mute-red-envelope",
 			"chat text translate",

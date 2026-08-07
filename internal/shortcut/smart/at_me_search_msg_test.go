@@ -99,6 +99,16 @@ func TestCrossPlatformCoverageSearchMsgProject(t *testing.T) {
 		t.Fatalf("searchMsgProject = %#v", row)
 	}
 
+	// Canonical ID precedence and rich-text extraction must match typed search.
+	row = searchMsgProject(map[string]any{
+		"openMessageId": "open-id",
+		"messageId":     "legacy-conflict",
+		"content":       map[string]any{"richText": "富文本消息"},
+	})
+	if row["messageId"] != "open-id" || row["text"] != "富文本消息" {
+		t.Fatalf("searchMsgProject canonical fields = %#v", row)
+	}
+
 	// encrypted → marker; id-only sender; forwarded "null" sender nulled.
 	row = searchMsgProject(map[string]any{
 		"senderId":      "DAAA",
@@ -115,7 +125,7 @@ func TestCrossPlatformCoverageSearchMsgProject(t *testing.T) {
 		t.Errorf("searchMsgProject encrypted text = %v, want marker", row["text"])
 	}
 	fwd, ok := row["forwarded"].([]map[string]any)
-	if !ok || len(fwd) != 1 || fwd[0]["sender"] != nil {
+	if !ok || len(fwd) != 1 || fwd[0]["sender"] != nil || fwd[0]["time"] != "t" {
 		t.Errorf("searchMsgProject forwarded = %#v", row["forwarded"])
 	}
 
