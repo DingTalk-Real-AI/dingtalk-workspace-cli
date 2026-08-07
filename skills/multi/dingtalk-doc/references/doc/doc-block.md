@@ -1,12 +1,6 @@
 # doc block（块级精细编辑：list / insert / update / delete）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`./style/doc-update-workflow.md`](./style/doc-update-workflow.md) — 改写流程（编辑形态优先级、JSONML validator 行为）
-> 3. [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) — JSONML 范例（含 callout / 分栏 / 表格 / 标题等节点的完整命令）
-> 4. [`./format/doc-jsonml-schema.md`](./format/doc-jsonml-schema.md) — JSONML 节点结构字段定义
->
-> **同任务常配合**：[`doc-update.md`](./doc-update.md)（整篇 overwrite / 末尾追加纯文本）/ [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md)（JSONML 复制范例）
+> 本文件自包含简单 list/insert/update/delete 契约，不要递归预读路由或 style reference。只有实际构造复杂 JSONML 节点时，才读取 [`doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md)；字段仍不确定时再查 [`doc-jsonml-schema.md`](./format/doc-jsonml-schema.md)。整篇 overwrite 或纯文本 append 才转读 [`doc-update.md`](./doc-update.md)。
 
 > **改写已有文档优先 JSONML**：保真度最高、callout / 分栏 / 表格 / @人 / 附件 / 颜色 / 嵌套都能 1:1 round-trip；写入端有 validator 兜底。详见 [`./style/doc-update-workflow.md` §1.3 编辑形态优先级](./style/doc-update-workflow.md)。
 

@@ -1,7 +1,6 @@
 # doc media（附件 / 图片：download / insert）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
+> 本文件自包含 media insert/download 契约。nodeId、文件路径或 resourceId 已知时直接执行；只在需要相对块定位且 blockId 未知时读取 [`doc-block.md`](./doc-block.md)。
 
 > ⚠️ **图片插入硬规则**：
 > - 图片来源如果是钉盘/文档空间中的文件，**必须先下载到本地**（`dws drive download --node <图片nodeId> --output /tmp/xxx.png`），再执行 `media insert`

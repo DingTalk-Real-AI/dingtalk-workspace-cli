@@ -1,8 +1,6 @@
 # doc info（获取文档元信息 + URL 解析）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`../../url-patterns.md`](../../url-patterns.md) — 仅当用户原始 `alidocs` URL 需要 probe 时
+> 本文件自包含已知 nodeId/URL 的 info 契约。只有原始 alidocs URL 类型仍不明确时，才读取 [`url-patterns.md`](../../url-patterns.md)；不要递归读取 `doc.md`。
 >
 > **同任务常配合**：`dws drive search` / `dws wiki node search`（先定位 nodeId）/ [`doc-read.md`](./doc-read.md)（确认是 ALIDOC 后读正文）
 

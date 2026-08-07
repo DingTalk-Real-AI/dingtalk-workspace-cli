@@ -1,11 +1,6 @@
 # doc create（创建文档）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`./style/doc-create-workflow.md`](./style/doc-create-workflow.md) — 创建工作流（标题、位置、骨架、回读校验）
-> 3. [`./style/doc-style-guideline.md`](./style/doc-style-guideline.md) — 排版规范（草稿元素清单、骨架样板）
-> 4. [`./doc-update.md` §内容写入管道](./doc-update.md#内容写入管道createupdate-共用) — 长内容自动分片、`--content-file` vs `--content` 选择
-> 5. [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) — 仅当使用 `--content-format jsonml` 时必读
+> 本文件自包含普通 Markdown 创建契约，不要递归预读 `doc.md`、style 或 update reference。仅当用户要求复杂版式并实际选择 JSONML 时，读取 [`doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md)；需要文档骨架建议时才读取对应 style 章节。
 
 ## 创建路由前置判断（必看）
 

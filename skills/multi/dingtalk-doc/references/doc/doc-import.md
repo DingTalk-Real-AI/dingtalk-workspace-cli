@@ -1,7 +1,6 @@
 # doc import（本地文件导入为在线文档）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
+> 本文件自包含 import 契约。文件、目标 folder/workspace 与参数已知时直接执行；只有参数或安全语义不确定时查询精确 leaf Schema，不要递归读取 `doc.md`。
 
 > **支持的文件格式**：docx, doc, xlsx, xls, md, txt, xmind, mark
 > **文件大小限制**：20MB

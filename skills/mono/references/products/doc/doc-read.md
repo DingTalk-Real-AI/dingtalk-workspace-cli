@@ -1,10 +1,6 @@
 # doc read（读取文档内容）
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-> 2. [`./format/doc-jsonml-cookbook.md`](./format/doc-jsonml-cookbook.md) — 仅当使用 `--content-format jsonml` 时必读
->
-> **同任务常配合**：[`doc-info.md`](./doc-info.md)（先解析 URL，确认 contentType=ALIDOC、extension=adoc）/ [`doc-update.md`](./doc-update.md)（读后改写）/ [`doc-block.md`](./doc-block.md)（块级精修前先读结构）
+> 本文件自包含普通 read 契约。用户已给当前 adoc nodeId/URL 时直接读取；类型未知时才先执行 info。选择 JSONML 只为获取结构，不要求预读 cookbook；实际构造 JSONML 写入时再按需加载。
 
 ## 命令格式
 

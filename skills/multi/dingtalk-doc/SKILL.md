@@ -11,11 +11,9 @@ metadata:
 
 # 钉钉文档 Skill
 
-## Preconditions
+## 执行入口
 
-> **CRITICAL — Before any `dws` operation, MUST fully read [`dws-shared`](../dws-shared/SKILL.md).** It defines the global execution contract, safety floor, and on-demand shared-reference routing. Do not preload all references.
-
-> Atomic command router: [doc.md](references/doc.md); document workflows: [04-document.md](references/04-document.md).
+执行前完整读取 [`dws-shared`](../dws-shared/SKILL.md)。高频意图用本文件骨架；仅特殊参数、复杂格式或边界不明时读取一个 branch reference。优先级：`骨架/recipe > Shortcut > atomic fallback`。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
@@ -25,11 +23,7 @@ metadata:
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service doc --compact --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
 
-## Atomic 回退与执行契约
-
-没有 Shortcut 时，才按需读取 [doc.md](references/doc.md) 指向的一个 atomic branch reference。路由优先级为 `已评审直接骨架/精确 recipe > 匹配的公开 Shortcut > atomic fallback`。`doc_create_and_write.py` 只在用户明确需要可复用本地包装器且 `python3` 可用时使用；普通创建直接调用 `dws doc create`。
-
-命令确定且参数清楚时直接执行，不重复发现。只使用真实 `cli_path`，不猜参数。`confirmation=user_required` 时先确认，再添加 `--yes`；来源冲突时采用更安全解释并报告契约漂移。
+命令和参数清楚时直接执行。只用真实 `cli_path`；`confirmation=user_required` 时先确认再加 `--yes`。普通创建直接调用 `dws doc create`，仅用户要求本地包装器时用 `doc_create_and_write.py`。
 
 ## 核心对象、位置与格式
 
@@ -40,20 +34,26 @@ metadata:
 | 块 | `blockId` / JSONML `uuid` 必须来自 `block list`，更新节点的 uuid 必须与目标块一致 |
 | 评论 | `commentKey` 来自评论 list/create；划词评论还需同一块的真实 `start/end` |
 | 异步任务 | 导出 `jobId` 与导入 `taskId` 只查询对应任务，不能替代 nodeId |
-| 新建资源续用 | 同一请求中 create/mkdir/import/copy 返回的新 `nodeId` / `fileId` 立即成为后续“这篇/刚才那篇/上次那篇/这个文件夹”的目标；禁止再按同名搜索并改用旧资源 |
+| 新建资源续用 | create/mkdir/import/copy 返回的新 `nodeId` / `fileId` 立即绑定后续“这篇/刚才那篇/这个文件夹”；禁止同名搜索改用旧资源 |
 | 内容格式 | Markdown 适合线性正文；已有富结构优先 JSONML/块级编辑，禁止用 Markdown overwrite 误称保真 |
 | 普通文件 | adoc 才用 `doc read/export`；`.md`、axls、able 和普通文件按真实 `extension` 切对应 Skill |
 
 ## 核心意图与执行骨架
 
-所有结构化命令加 `--format json`，下游 ID 只取真实输出。创建、更新、块、附件和样式写入后回读；返回成功但未回读，不能宣称内容完整。
+结构化命令加 `--format json`，ID 只取真实输出。写入后回读；未回读不能宣称内容完整。
+
+### 短链路 Fast Path
+
+- 不超过 5 个确定性 DWS 操作时，不创建 Todo、不逐步汇报、不预读 Reference；保存真实 ID 连续执行，最终回查后答复。
+- 按“先/再/然后”切分操作阶段。阶段中的 `insert/插入`、`append/追加/补一段`、`update/改成`、`list/查看块`、`delete/删除` 必须映射为对应真实命令，不能提前折叠进 create。
+- create 只承载首阶段的初始正文，后续续用其 `nodeId`。当前请求将先创建资源时，禁止预先搜索同名资源解析“这篇/那篇”。
 
 | 用户意图 | 精确骨架 | 必须保留的执行边界 |
 |---|---|---|
 | 按名称找文档 | `+find-doc --query <关键词>`；需最近访问/扩展名/创建者等过滤用 `+search` | 候选不唯一先消歧；随后 `drive info --node <nodeId>` 判 `extension` |
 | 读取 adoc | `drive info --node <nodeId>` → `doc read --node <nodeId>` | 用户已给 nodeId/URL 时不再搜索；非 adoc 不调用 `doc read` |
 | 创建文档 | `doc create --name <标题> --content-file <tmp.md> [--folder <folder> | --workspace <ws>]` | 原生写入管道自动分片；取 `nodeId` 后 `doc read`，缺链接再 `doc info` |
-| 显式块工作流 | 按用户原顺序执行 `create → block list → block insert/update/...` | 用户点名的 list/insert/append/update 是可观察要求，不得把后续动作折叠进一次 create；“插入/追加一个标题或列表块”走 block insert |
+| 显式块工作流 | 按用户原顺序执行 `create → block insert/list/update/delete` | 每个阶段是真实调用；标题、段落、列表等显式插入走 block insert |
 | 末尾补短文本 | `+doc-append --doc <nodeId> --text <内容>` | 该 Shortcut 为 write/user_required；确认后执行并 `doc read` 核对 |
 | 改写正文 | `doc read --content-format jsonml` → `block update` 或 `doc update --content-format jsonml --mode overwrite` | 单块优先块级编辑；整篇 overwrite 先预览/确认，Markdown overwrite 不保富结构 |
 | 评论与回复 | `+comment-list --node <nodeId>` → `+comment-create` / `+comment-reply` | `commentKey` 来自真实结果；写 Shortcut 先确认；划词评论走 atomic `comment create-inline` |
@@ -73,36 +73,17 @@ metadata:
 - `block insert` 默认追加；只有明确相对位置时才传真实 `--ref-block` / `--parent-block`。`block delete` 和评论删除必须确认。
 - 写后按对象验证：正文用 `doc read`，块/附件用 `doc block list`，元信息/链接用 `doc info`，版本用 `version list`。
 
-## 低频 atomic 路由
+## 低频 Reference
 
-```text
-dws doc
-├── info / read
-├── create / update
-├── block     # list, insert, update, delete
-├── comment   # list, create, reply, update, delete, create-inline
-├── media     # insert, download
-├── import / export
-├── template / version / style
-├── +shortcut
-└── deprecated file operations → drive/wiki
-```
-
-按需读取，不要预加载：定位与 URL 边界读 [doc-info.md](references/doc/doc-info.md)；创建/改写读 [doc.md](references/doc.md) 的场景索引所列文件组；块、评论、附件、导入、导出分别读对应 branch reference。JSONML schema/cookbook 仅在实际选择 JSONML 写入后加载。
+[doc.md](references/doc.md) 只是 atomic 分支索引。每次只读一个对应 branch reference；JSONML workflow/cookbook/schema 仅在构造复杂 JSONML 后加载，不递归预读。
 
 ## 错误恢复
 
 - 路径或参数错误：按既定顺序查 leaf Schema、再查 leaf Help，校正一次；不要连续尝试近似参数。
-- 始终从实际输出重新提取 `nodeId`、`blockId`、`commentKey`、`jobId` 或 `taskId`。
-- 新建资源已返回 ID 后，把该 ID 绑定到同一请求的后续步骤；除非用户明确指向另一个历史资源，否则不得搜索同名项覆盖绑定。
+- 始终从实际输出提取并续用 `nodeId`、`blockId`、`commentKey`、`jobId` 或 `taskId`，不得搜索同名项覆盖当前请求的新 ID。
 - 部分写入或回读缺失：保留已创建的 nodeId，报告已完成范围与缺失位置；先读回，再只补缺失内容，禁止无条件重新创建副本。
 - 权限不足、候选未消歧、目标类型不符、没有可推进的任务 ID 或 Schema/Help 冲突时停止并报告。
 
 ## 跨产品协作
 
-- 原生 `.md` 文件内容 → `dingtalk-markdown`。
-- 普通文件存储、搜索、复制、移动、重命名、删除、上传下载与权限 → `dingtalk-drive`。
-- 知识库空间、节点和成员管理 → `dingtalk-wiki`；`doc create --workspace` 可直接在已知知识库根创建带内容的 adoc。
-- 在线电子表格 / AI 表格 → `dingtalk-sheet` / `dingtalk-aitable`。
-- 人名消歧 → `dingtalk-aisearch` 或 `dingtalk-contact`；文档评论 mention 使用真实 userId。
-- 局部意图边界见 [intent-guide.md](references/intent-guide.md)，固定短流程见 [lite-recipes.md](references/lite-recipes.md)。
+`.md` 走 `dingtalk-markdown`；普通文件走 `dingtalk-drive`；知识库走 `dingtalk-wiki`；表格走 `dingtalk-sheet` / `dingtalk-aitable`；评论 userId 走人员 Skill。边界读 [intent-guide.md](references/intent-guide.md)，固定流程读 [lite-recipes.md](references/lite-recipes.md)。
