@@ -14,6 +14,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -35,6 +36,10 @@ func TestCrossPlatformCoverageRuntimeToolSpecFromContractFinalPassThrough(t *tes
 			Effect: "write", Confirmation: "user_required", Idempotency: "none",
 		},
 		DryRun: &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewInvocation},
+		Result: &contract.ResultSpec{
+			Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+			DataSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}}}`),
+		},
 		Selection: &contract.SelectionSpec{
 			AgentSummary: "from contract",
 			UseWhen:      []string{"create things"},
@@ -67,6 +72,9 @@ func TestCrossPlatformCoverageRuntimeToolSpecFromContractFinalPassThrough(t *tes
 	}
 	if spec.DryRun == nil || spec.DryRun.PreviewKind != contract.DryRunPreviewInvocation {
 		t.Fatalf("dry_run = %#v", spec.DryRun)
+	}
+	if spec.Result == nil || string(spec.Result.DataSchema) != `{"properties":{"id":{"type":"string"}},"type":"object"}` {
+		t.Fatalf("result = %#v", spec.Result)
 	}
 	if spec.Selection.AgentSummary != "from contract" {
 		t.Fatalf("selection = %#v", spec.Selection)

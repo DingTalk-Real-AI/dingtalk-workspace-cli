@@ -30,6 +30,7 @@ type ContractFinalPayload struct {
 	Parameters  []ParamDecl
 	Safety      *SafetySpec
 	DryRun      *DryRunSpec
+	Result      *ResultSpec
 	Interface   *InterfaceSpec
 	Selection   *SelectionSpec
 	Identity    *ToolIdentitySpec

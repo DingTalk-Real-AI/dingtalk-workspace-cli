@@ -79,6 +79,7 @@ var schemaCatalogToolOptionalKeys = []string{
 	"interface_ref",
 	"metadata_source",
 	"positionals",
+	"result",
 }
 
 var schemaCatalogToolEnums = map[string][]string{
@@ -237,6 +238,11 @@ func validateCatalogToolEntry(toolID string, entry map[string]any, violations *[
 	}
 
 	validateCatalogInterface(toolID, entry, violations)
+	if result, exists := entry["result"]; exists {
+		if _, ok := result.(map[string]any); !ok {
+			report("field %q must be an object", "result")
+		}
+	}
 	for paramName, raw := range parameters {
 		param, ok := raw.(map[string]any)
 		if !ok {

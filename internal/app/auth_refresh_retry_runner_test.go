@@ -17,17 +17,21 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/authretry"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
+	"github.com/spf13/cobra"
 )
 
 func installAuthRefreshRunnerSeams(t *testing.T) {
@@ -350,5 +354,66 @@ func TestCrossPlatformCoverageRunnerRetriesPreflightEditionMarkerOnce(t *testing
 	}
 	if preflightCalls != 2 || toolCalls != 1 || refreshCalls != 1 {
 		t.Fatalf("preflights=%d tools=%d refreshes=%d", preflightCalls, toolCalls, refreshCalls)
+	}
+}
+
+func TestAuthRefreshReplaySafetyMatrix(t *testing.T) {
+	tests := []struct {
+		name               string
+		safety             *contract.SafetySpec
+		requestDidNotBegin bool
+		declared           bool
+		wantReplay         bool
+	}{
+		{name: "read ambiguous execution", safety: &contract.SafetySpec{Effect: "read", Idempotency: "non_idempotent"}, declared: true, wantReplay: true},
+		{name: "idempotent write ambiguous execution", safety: &contract.SafetySpec{Effect: "write", Idempotency: "idempotent"}, declared: true, wantReplay: true},
+		{name: "non-idempotent write ambiguous execution", safety: &contract.SafetySpec{Effect: "write", Idempotency: "non_idempotent"}, declared: true, wantReplay: false},
+		{name: "unknown write ambiguous execution", safety: &contract.SafetySpec{Effect: "write", Idempotency: "unknown"}, declared: true, wantReplay: false},
+		{name: "mutating safety unavailable", declared: true, wantReplay: false},
+		{name: "non-idempotent write proved not begun", safety: &contract.SafetySpec{Effect: "write", Idempotency: "non_idempotent"}, requestDidNotBegin: true, declared: true, wantReplay: true},
+		{name: "legacy invocation", wantReplay: true},
+	}
+
+	for i, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			installAuthRefreshRunnerSeams(t)
+			canonical := fmt.Sprintf("auth_retry_matrix.%d", i)
+			invocation := authRefreshTestInvocation()
+			invocation.CanonicalPath = canonical
+			if tc.declared {
+				cmd := &cobra.Command{Use: "matrix"}
+				contractfinal.RegisterRuntimeContractFinal(cmd, contract.ContractFinalPayload{
+					Identity: &contract.ToolIdentitySpec{CanonicalPath: canonical},
+					Safety:   tc.safety,
+				})
+				t.Cleanup(func() { contractfinal.ClearRuntimeContractFinalForTest(cmd) })
+			}
+
+			refreshes := 0
+			replays := 0
+			runnerForceRefreshRejectedAccessToken = func(context.Context, string, string) (string, error) {
+				refreshes++
+				return "new-access", nil
+			}
+			runnerExecuteAuthRetry = func(*runtimeRunner, context.Context, string, executor.Invocation) (executor.Result, error) {
+				replays++
+				return executor.Result{Response: map[string]any{"ok": true}}, nil
+			}
+			cause := errors.New("access token rejected")
+			result, err, handled := authRefreshTestRunner(nil).retryAuthRefreshRequired(
+				context.Background(), "https://example.test", invocation, "old-access",
+				&authretry.AuthRefreshRequired{Cause: cause}, false, tc.requestDidNotBegin,
+			)
+			if !handled || refreshes != 1 {
+				t.Fatalf("handled=%v refreshes=%d", handled, refreshes)
+			}
+			if tc.wantReplay {
+				if err != nil || replays != 1 || result.Response["ok"] != true {
+					t.Fatalf("replay result=%#v err=%v replays=%d", result, err, replays)
+				}
+			} else if !errors.Is(err, cause) || replays != 0 {
+				t.Fatalf("suppressed err=%v replays=%d", err, replays)
+			}
+		})
 	}
 }

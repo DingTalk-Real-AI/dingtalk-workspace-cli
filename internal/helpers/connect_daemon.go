@@ -758,6 +758,10 @@ func newDevAppRobotConnectStatusCommand() *cobra.Command {
 				PrimaryCLIPath: "dev connect status",
 			},
 			Description: "查看后台连接器守护进程状态",
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","properties":{"state":{"type":"string","enum":["healthy","degraded","down","not_running"]},"pid":{"type":"integer"},"channel":{"type":"string"},"clientId":{"type":"string"},"unifiedAppId":{"type":"string"},"supervised":{"type":"boolean"},"lastError":{"type":"string"}},"required":["state","supervised"],"additionalProperties":true}`),
+			},
 			Interface: &contract.InterfaceSpec{
 				Mode:         "local",
 				Availability: "available",
@@ -1051,8 +1055,12 @@ func newDevAppRobotConnectListCommand(runner executor.Runner) *cobra.Command {
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: "dev", Name: "connect_list", CanonicalPath: "dev.connect_list", CLIPath: "dev connect list", PrimaryCLIPath: "dev connect list"},
 			Description: "列出本机连接器及其健康状态",
-			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "命令组合本地连接器状态与可选远端应用名称解析，不对应单一 MCP 接口"},
-			Selection:   contract.SelectionSpec{AgentSummary: "列出本机全部连接器及健康状态", UseWhen: []string{"需要查看本机连接器清单"}, AvoidWhen: []string{"只检查一个连接器时使用 dev connect status"}, Examples: []string{"dws dev connect list --format json"}},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"array","items":{"type":"object","properties":{"state":{"type":"string","enum":["healthy","degraded","down","not_running"]},"pid":{"type":"integer"},"channel":{"type":"string"},"clientId":{"type":"string"},"unifiedAppId":{"type":"string"},"supervised":{"type":"boolean"}},"required":["state","supervised"],"additionalProperties":true}}`),
+			},
+			Interface: &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "命令组合本地连接器状态与可选远端应用名称解析，不对应单一 MCP 接口"},
+			Selection: contract.SelectionSpec{AgentSummary: "列出本机全部连接器及健康状态", UseWhen: []string{"需要查看本机连接器清单"}, AvoidWhen: []string{"只检查一个连接器时使用 dev connect status"}, Examples: []string{"dws dev connect list --format json"}},
 		},
 	})
 	return cmd

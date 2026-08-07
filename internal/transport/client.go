@@ -662,10 +662,11 @@ func (c *Client) doWithRetry(ctx context.Context, endpoint string, body []byte, 
 			delay := c.retryDelayForAttempt(attempt, retryAfter)
 			logging.LogRetryAttempt(c.FileLogger, operation, c.ExecutionId, attempt, maxRetries, statusForLog, delay, lastErr)
 			if err := c.sleepForRetry(ctx, delay); err != nil {
+				reason, hint := classifyRequestFailure(err)
 				opts := []apperrors.Option{
 					apperrors.WithOperation(operation),
-					apperrors.WithReason("request_cancelled"),
-					apperrors.WithHint(i18n.T("请求在重试过程中被取消；请检查调用侧超时设置。")),
+					apperrors.WithReason(reason),
+					apperrors.WithHint(hint),
 					apperrors.WithCause(&CallError{
 						Stage: CallStageRequest,
 						Cause: err,
@@ -807,7 +808,7 @@ func classifyRequestFailure(err error) (reason, hint string) {
 
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
-		return "request_timeout",
+		return "deadline_exceeded",
 			i18n.T("请求超时（上下文截止时间已到）。可通过 --timeout 增大超时时间，或检查网络连接。")
 	case errors.Is(err, context.Canceled):
 		return "request_cancelled",

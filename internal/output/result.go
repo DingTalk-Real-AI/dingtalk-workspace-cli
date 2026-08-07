@@ -122,6 +122,7 @@ func cloneEnvelope(source Envelope) Envelope {
 	out.Meta = cloneMeta(source.Meta)
 	out.Error = cloneErrorInfo(source.Error)
 	out.Data = cloneResultData(source.Data)
+	out.Notice = cloneResultData(source.Notice)
 	if partial, ok := source.Data.(*PartialData); ok && partial != nil {
 		copyPartial := &PartialData{
 			Total:     partial.Total,

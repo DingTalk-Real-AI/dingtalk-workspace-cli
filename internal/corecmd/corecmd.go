@@ -1368,6 +1368,13 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 		d.PreviewKind = strings.TrimSpace(d.PreviewKind)
 		payload.DryRun = &d
 	}
+	if decl.Result != nil {
+		result, err := contract.NormalizeResultSpec(decl.Result, decl.Identity.CanonicalPath)
+		if err != nil {
+			panic(fmt.Sprintf("command %q has invalid Contract.Result: %v", cmd.Name(), err))
+		}
+		payload.Result = result
+	}
 	if decl.Interface != nil {
 		iface := &contract.InterfaceSpec{
 			Mode:         strings.TrimSpace(decl.Interface.Mode),

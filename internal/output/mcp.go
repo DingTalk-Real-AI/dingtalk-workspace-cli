@@ -24,6 +24,7 @@ func AdaptMCP(result CommandResult) (*MCPResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	env = redactEnvelope(env)
 	raw, err := json.Marshal(env)
 	if err != nil {
 		return nil, fmt.Errorf("output: marshal MCP result: %w", err)

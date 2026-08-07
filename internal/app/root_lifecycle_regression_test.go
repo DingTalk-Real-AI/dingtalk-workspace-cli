@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestPublicRootDirectExecuteHasResultStoreAndClosesV2Sink(t *testing.T) {
+func TestPublicRootDirectExecuteFailsWhenV2SinkCannotPublish(t *testing.T) {
 	oldClose := rootCloseFile
 	t.Cleanup(func() { rootCloseFile = oldClose })
 	closeCalls := 0
@@ -36,22 +36,17 @@ func TestPublicRootDirectExecuteHasResultStoreAndClosesV2Sink(t *testing.T) {
 	}
 	output.SetCommandRollout(leaf, output.RolloutV2Active)
 	root.AddCommand(leaf)
-	var stderr bytes.Buffer
-	root.SetErr(&stderr)
 	root.SetArgs([]string{"lifecycle-v2", "--output", filepath.Join(t.TempDir(), "result.json")})
 
 	executed, err := root.ExecuteC()
-	if err != nil {
-		t.Fatalf("direct ExecuteC returned diagnostic close error: %v", err)
+	if err == nil || apperrors.ExitCode(err) != 5 {
+		t.Fatalf("direct ExecuteC error=%v, want publication failure with exit 5", err)
 	}
 	if executed != leaf {
 		t.Fatalf("executed=%v, want lifecycle leaf", executed)
 	}
 	if closeCalls != 1 {
 		t.Fatalf("output sink close calls=%d, want 1", closeCalls)
-	}
-	if !strings.Contains(stderr.String(), "late close diagnostic") {
-		t.Fatalf("v2 close diagnostic missing from stderr: %q", stderr.String())
 	}
 }
 

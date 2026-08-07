@@ -403,7 +403,16 @@ func newDevAppListCommand(runner executor.Runner) *cobra.Command {
 			},
 			Description: "查询开放平台企业内部应用列表",
 			DryRun:      devAppDryRun,
-			Interface:   devAppCompositeInterface(),
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeFailure, contract.ResultOutcomeSuccess},
+				DataSchema: json.RawMessage(`{"type":"object","properties":{"items":{"type":"array","items":{"type":"object","properties":{"unifiedAppId":{"type":"string"},"name":{"type":"string"},"appKey":{"type":"string"}},"additionalProperties":true}},"hasMore":{"type":"boolean"},"nextCursor":{"type":"string"}},"required":["items"],"additionalProperties":true}`),
+				NDJSON: &contract.ResultNDJSONSpec{
+					RecordPath:   "items",
+					RecordSchema: json.RawMessage(`{"type":"object","properties":{"unifiedAppId":{"type":"string"},"name":{"type":"string"},"appKey":{"type":"string"}},"additionalProperties":true}`),
+				},
+				Pagination: &contract.ResultPaginationSpec{CursorPath: "nextCursor", ExhaustionPath: "hasMore", ExhaustedWhen: false},
+			},
+			Interface: devAppCompositeInterface(),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按条件分页查询开放平台应用",
 				UseWhen:      []string{"需要按名称、创建人或应用键筛选应用时"},
@@ -446,7 +455,11 @@ func newDevAppGetCommand(runner executor.Runner) *cobra.Command {
 			},
 			Description: "查询开放平台企业内部应用详情",
 			DryRun:      devAppDryRun,
-			Interface:   devAppCompositeInterface(),
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{"type":"object","properties":{"unifiedAppId":{"type":"string"},"name":{"type":"string"},"appKey":{"type":"string"},"agentId":{},"status":{}},"required":["unifiedAppId"],"additionalProperties":true}`),
+			},
+			Interface: devAppCompositeInterface(),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "获取指定开放平台应用详情",
 				UseWhen:      []string{"已知 unifiedAppId 或 appKey 并需要核对应用配置或状态时"},
@@ -566,7 +579,12 @@ func newDevAppCredentialsGetCommand(runner executor.Runner) *cobra.Command {
 			},
 			Description: "读取开放平台应用凭证",
 			DryRun:      devAppDryRun,
-			Interface:   devAppCompositeInterface(),
+			Result: &contract.ResultSpec{
+				Outcomes:       []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema:     json.RawMessage(`{"type":"object","properties":{"clientId":{"type":"string"},"clientSecret":{"type":"string"},"appKey":{"type":"string"},"appSecret":{"type":"string"}},"additionalProperties":true}`),
+				SensitivePaths: []string{"appSecret", "clientSecret"},
+			},
+			Interface: devAppCompositeInterface(),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "读取指定应用的客户端凭证",
 				UseWhen:      []string{"已知 unifiedAppId 且需要 clientId 或 clientSecret 时"},
@@ -1678,7 +1696,11 @@ func newDevAppVersionStatusCommand(runner executor.Runner) *cobra.Command {
 			},
 			Description: "查询版本发布/审批状态",
 			DryRun:      devAppDryRun,
-			Interface:   devAppCompositeInterface(),
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomePending, contract.ResultOutcomeFailure, contract.ResultOutcomeSuccess},
+				DataSchema: json.RawMessage(`{"type":"object","properties":{"unifiedAppId":{"type":"string"},"versionId":{"type":"string"},"status":{"type":"string"},"versionStatus":{"type":"string"},"approvalStatus":{"type":"string"},"nextCommand":{"type":"string"}},"required":["versionId"],"additionalProperties":true}`),
+			},
+			Interface: devAppCompositeInterface(),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定应用版本的发布或审批状态",
 				UseWhen:      []string{"需要判断版本是否已发布、审核中或受阻时"},

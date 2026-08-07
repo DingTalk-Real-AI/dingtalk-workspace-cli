@@ -92,6 +92,7 @@ func emitResult(cmd *cobra.Command, result CommandResult) (int, bool, error) {
 		return exitCodeInternal, false, err
 	}
 	env := result.envelope()
+	env = redactEnvelope(env)
 	format, warning := resolveFormatWithWarning(cmd, FormatJSON)
 	fields, jq := ResolveFields(cmd), ResolveJQ(cmd)
 	stdout, stderr := io.Writer(io.Discard), io.Writer(io.Discard)
@@ -182,6 +183,10 @@ func renderEnvelope(w io.Writer, errW io.Writer, env *Envelope, format Format, f
 	if errW == nil {
 		errW = io.Discard
 	}
+	if env == nil {
+		env = nilFallbackEnvelope()
+	}
+	env = redactEnvelope(env)
 	var buf bytes.Buffer
 	if err := renderEnvelopeInto(&buf, errW, env, format, fields, jq); err != nil {
 		return err

@@ -100,6 +100,21 @@ func TestValidateCatalogStructureAcceptsValidEntry(t *testing.T) {
 	}
 }
 
+func TestValidateCatalogStructureAcceptsOptionalResultObject(t *testing.T) {
+	entry := validCatalogToolEntry()
+	entry["result"] = map[string]any{
+		"outcomes":    []any{"success", "failure"},
+		"data_schema": map[string]any{"type": "object"},
+	}
+	if err := ValidateCatalogStructure(catalogPayload(t, entry)); err != nil {
+		t.Fatalf("ValidateCatalogStructure() error = %v", err)
+	}
+	entry["result"] = "invalid"
+	if err := ValidateCatalogStructure(catalogPayload(t, entry)); err == nil || !strings.Contains(err.Error(), `field "result" must be an object`) {
+		t.Fatalf("invalid result error = %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageValidateCatalogStructureRejectsViolations(t *testing.T) {
 	cases := []struct {
 		name   string

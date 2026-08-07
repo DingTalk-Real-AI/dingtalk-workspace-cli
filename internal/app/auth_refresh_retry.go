@@ -20,6 +20,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
@@ -102,6 +103,7 @@ func (r *runtimeRunner) retryAuthRefreshRequired(
 	rejectedAccessToken string,
 	markerErr error,
 	hasPluginAuth bool,
+	requestDidNotBegin bool,
 ) (executor.Result, error, bool) {
 	marker, marked := authretry.As(markerErr)
 	if !marked {
@@ -156,8 +158,37 @@ func (r *runtimeRunner) retryAuthRefreshRequired(
 		"product", invocation.CanonicalProduct,
 		"tool", invocation.Tool,
 	)
+	if !authRefreshReplayAllowed(invocation, requestDidNotBegin) {
+		authRefreshLogger().Warn("auth.runtime.refresh.replay_suppressed",
+			"product", invocation.CanonicalProduct,
+			"tool", invocation.Tool,
+		)
+		return executor.Result{}, cause, true
+	}
 	result, err := runnerExecuteAuthRetry(r, withAuthRetrying(ctx), endpoint, invocation)
 	return result, err, true
+}
+
+func authRefreshReplayAllowed(invocation executor.Invocation, requestDidNotBegin bool) bool {
+	if requestDidNotBegin {
+		return true
+	}
+	canonicalPath := strings.TrimSpace(invocation.CanonicalPath)
+	if canonicalPath == "" && strings.TrimSpace(invocation.CanonicalProduct) != "" && strings.TrimSpace(invocation.Tool) != "" {
+		canonicalPath = strings.TrimSpace(invocation.CanonicalProduct) + "." + strings.TrimSpace(invocation.Tool)
+	}
+	safety, declared, ok := contractfinal.ResolveRuntimeSafety(canonicalPath, invocation.LegacyPath)
+	if !declared {
+		// Invocations without ContractFinal identity are legacy/overlay paths.
+		return true
+	}
+	if !ok {
+		return false
+	}
+	if safety.Effect == "read" {
+		return true
+	}
+	return safety.Idempotency == "idempotent"
 }
 
 // isRefreshableTransportAuthError deliberately excludes HTTP/RPC 403 and

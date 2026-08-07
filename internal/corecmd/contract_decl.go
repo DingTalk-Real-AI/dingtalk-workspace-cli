@@ -42,6 +42,7 @@ type ContractDecl struct {
 	Positionals []contract.RuntimeSchemaPositional
 	Parameters  []contract.ParamDecl
 	DryRun      *contract.DryRunSpec
+	Result      *contract.ResultSpec
 	Interface   *contract.InterfaceSpec
 	Selection   contract.SelectionSpec
 	Identity    contract.ToolIdentitySpec
@@ -142,6 +143,9 @@ func (s ContractDecl) empty() bool {
 		return false
 	}
 	if s.DryRun != nil && strings.TrimSpace(s.DryRun.PreviewKind) != "" {
+		return false
+	}
+	if s.Result != nil {
 		return false
 	}
 	if s.Interface != nil {

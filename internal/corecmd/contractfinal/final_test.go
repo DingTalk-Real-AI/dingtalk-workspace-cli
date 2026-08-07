@@ -24,6 +24,11 @@ import (
 func TestContractFinalTypedRegistryNoJSON(t *testing.T) {
 	cmd := &cobra.Command{Use: "x"}
 	t.Cleanup(func() { ClearRuntimeContractFinalForTest(cmd) })
+	result := &contract.ResultSpec{
+		Outcomes:       []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+		DataSchema:     []byte(`{"type":"object"}`),
+		SensitivePaths: []string{"token"},
+	}
 
 	RegisterRuntimeContractFinal(cmd, contract.ContractFinalPayload{
 		Title: "T",
@@ -32,7 +37,11 @@ func TestContractFinalTypedRegistryNoJSON(t *testing.T) {
 		},
 		Selection: &contract.SelectionSpec{AgentSummary: "sum", UseWhen: []string{"u"}},
 		Identity:  &contract.ToolIdentitySpec{ProductID: "p", Name: "n"},
+		Result:    result,
 	})
+	result.Outcomes[0] = contract.ResultOutcomeFailure
+	result.DataSchema[0] = '['
+	result.SensitivePaths[0] = "changed"
 	if cmd.Annotations != nil {
 		if _, ok := cmd.Annotations["dws.schema.final"]; ok {
 			t.Fatal("must not write JSON annotation dws.schema.final")
@@ -44,6 +53,14 @@ func TestContractFinalTypedRegistryNoJSON(t *testing.T) {
 	}
 	if got.Selection == nil || got.Selection.Reviewed != nil {
 		t.Fatalf("selection must not carry reviewed fields: %#v", got.Selection)
+	}
+	if got.Result == nil || got.Result.Outcomes[0] != contract.ResultOutcomeSuccess || got.Result.DataSchema[0] != '{' || got.Result.SensitivePaths[0] != "token" {
+		t.Fatalf("stored result aliases registration input: %#v", got.Result)
+	}
+	got.Result.Outcomes[0] = contract.ResultOutcomeFailure
+	again, _ := RuntimeContractFinal(cmd)
+	if again.Result.Outcomes[0] != contract.ResultOutcomeSuccess {
+		t.Fatal("RuntimeContractFinal result aliases stored payload")
 	}
 }
 
@@ -135,5 +152,39 @@ func TestCrossPlatformCoverageRuntimeContractFinalRejectsForeignStoredValue(t *t
 	StoreRuntimeContractFinalRawForTest(cmd, (*contract.ContractFinalPayload)(nil))
 	if _, ok := RuntimeContractFinal(cmd); ok {
 		t.Fatal("typed nil payload must not decode as contract.ContractFinalPayload")
+	}
+}
+
+func TestResolveRuntimeSafetyUsesCanonicalOrCLIIdentityAndRejectsUnavailable(t *testing.T) {
+	read := &cobra.Command{Use: "read"}
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(read) })
+	RegisterRuntimeContractFinal(read, contract.ContractFinalPayload{
+		Identity: &contract.ToolIdentitySpec{CanonicalPath: "sample.read", PrimaryCLIPath: "sample get"},
+		Safety:   &contract.SafetySpec{Effect: " read ", Idempotency: " idempotent "},
+	})
+
+	for _, lookup := range []struct {
+		canonical string
+		cli       string
+	}{
+		{canonical: "sample.read"},
+		{canonical: "different.rpc", cli: "dws sample get"},
+	} {
+		safety, declared, ok := ResolveRuntimeSafety(lookup.canonical, lookup.cli)
+		if !declared || !ok || safety.Effect != "read" || safety.Idempotency != "idempotent" {
+			t.Fatalf("ResolveRuntimeSafety(%q, %q) = %#v, %v, %v", lookup.canonical, lookup.cli, safety, declared, ok)
+		}
+	}
+
+	missingSafety := &cobra.Command{Use: "write"}
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(missingSafety) })
+	RegisterRuntimeContractFinal(missingSafety, contract.ContractFinalPayload{
+		Identity: &contract.ToolIdentitySpec{CanonicalPath: "sample.write"},
+	})
+	if _, declared, ok := ResolveRuntimeSafety("sample.write", ""); !declared || ok {
+		t.Fatalf("missing safety = declared %v ok %v, want true false", declared, ok)
+	}
+	if _, declared, ok := ResolveRuntimeSafety("legacy.call", "legacy call"); declared || ok {
+		t.Fatalf("legacy lookup = declared %v ok %v, want false false", declared, ok)
 	}
 }

@@ -14,10 +14,12 @@
 package helpers
 
 import (
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/spf13/cobra"
 )
@@ -33,6 +35,66 @@ func collectDevLeafCommands(cmd *cobra.Command, out *[]*cobra.Command) {
 	}
 	for _, sub := range cmd.Commands() {
 		collectDevLeafCommands(sub, out)
+	}
+}
+
+func TestDevRepresentativeResultContractsReachContractFinal(t *testing.T) {
+	root := newDevAppTestRoot(&captureRunner{})
+	var leaves []*cobra.Command
+	collectDevLeafCommands(root, &leaves)
+	finals := make(map[string]contract.ContractFinalPayload)
+	for _, leaf := range leaves {
+		final, ok := contractfinal.RuntimeContractFinal(leaf)
+		if ok && final.Identity != nil {
+			finals[final.Identity.CanonicalPath] = final
+		}
+	}
+
+	tests := []struct {
+		canonical string
+		outcomes  []contract.ResultOutcome
+		check     func(*testing.T, *contract.ResultSpec)
+	}{
+		{
+			canonical: "dev.list_dev_app",
+			outcomes:  []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+			check: func(t *testing.T, result *contract.ResultSpec) {
+				if result.NDJSON == nil || result.NDJSON.RecordPath != "items" || result.Pagination == nil ||
+					result.Pagination.CursorPath != "nextCursor" || result.Pagination.ExhaustionPath != "hasMore" || result.Pagination.ExhaustedWhen {
+					t.Fatalf("paginated list result = %#v", result)
+				}
+			},
+		},
+		{canonical: "dev.get_dev_app", outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}},
+		{
+			canonical: "dev.get_dev_app_credentials",
+			outcomes:  []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+			check: func(t *testing.T, result *contract.ResultSpec) {
+				if want := []string{"appSecret", "clientSecret"}; !reflect.DeepEqual(result.SensitivePaths, want) {
+					t.Fatalf("sensitive paths = %#v, want %#v", result.SensitivePaths, want)
+				}
+			},
+		},
+		{canonical: "dev.get_dev_app_version_status", outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomePending, contract.ResultOutcomeFailure}},
+		{canonical: "dev.connect_status", outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}},
+		{canonical: "dev.connect_list", outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}},
+	}
+	for _, test := range tests {
+		t.Run(test.canonical, func(t *testing.T) {
+			final, ok := finals[test.canonical]
+			if !ok || final.Result == nil {
+				t.Fatalf("representative leaf %s has no final Result", test.canonical)
+			}
+			if !reflect.DeepEqual(final.Result.Outcomes, test.outcomes) {
+				t.Fatalf("outcomes = %#v, want %#v", final.Result.Outcomes, test.outcomes)
+			}
+			if len(final.Result.DataSchema) == 0 {
+				t.Fatal("data_schema is empty")
+			}
+			if test.check != nil {
+				test.check(t, final.Result)
+			}
+		})
 	}
 }
 
