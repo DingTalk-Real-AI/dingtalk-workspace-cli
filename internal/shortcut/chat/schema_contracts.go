@@ -80,27 +80,6 @@ var reviewedChatShortcutContractCommands = map[string]struct{}{
 	"+messages-unset-top":           {},
 }
 
-// reviewedChatShortcutNoConfirmation keeps the established native command
-// behavior for the equivalent message operations.
-var reviewedChatShortcutNoConfirmation = map[string]struct{}{
-	"+messages-add-emoji":           {},
-	"+messages-add-text-emotion":    {},
-	"+messages-combine-forward":     {},
-	"+messages-create-text-emotion": {},
-	"+messages-forward":             {},
-	"+messages-forward-topic":       {},
-	"+messages-recall":              {},
-	"+messages-recall-by-bot":       {},
-	"+messages-remove-emoji":        {},
-	"+messages-remove-text-emotion": {},
-	"+messages-reply":               {},
-	"+messages-send-by-bot":         {},
-	"+messages-set-pin":             {},
-	"+messages-set-top":             {},
-	"+messages-unset-pin":           {},
-	"+messages-unset-top":           {},
-}
-
 // withReviewedChatShortcutContracts ports the previously reviewed Chat Schema
 // records into #830's typed declaration model. Existing explicit Contracts are
 // preserved. Missing Contracts must be listed in the exact ledger above.
@@ -114,26 +93,18 @@ func withReviewedChatShortcutContracts(values ...shortcut.Shortcut) []shortcut.S
 		if _, reviewed := reviewedChatShortcutContractCommands[value.Command]; !reviewed {
 			continue
 		}
-		out[i].Safety = reviewedChatShortcutSafety(value.Command, value.Risk)
+		out[i].Safety = reviewedChatShortcutSafety(value.Risk)
 		out[i].Contract = reviewedChatShortcutContract(value)
 	}
 	return out
 }
 
-func reviewedChatShortcutSafety(command string, risk shortcut.Risk) contract.SafetySpec {
+func reviewedChatShortcutSafety(risk shortcut.Risk) contract.SafetySpec {
 	switch risk {
 	case shortcut.RiskWrite:
-		confirmation := "user_required"
-		if _, ok := reviewedChatShortcutNoConfirmation[command]; ok {
-			confirmation = "not_required"
-		}
-		idempotency := "unknown"
-		if command == "+messages-set-top" || command == "+messages-unset-top" {
-			idempotency = "idempotent"
-		}
 		return contract.SafetySpec{
 			Effect: "write", Risk: "medium",
-			Confirmation: confirmation, Idempotency: idempotency,
+			Confirmation: "user_required", Idempotency: "unknown",
 		}
 	case shortcut.RiskHighWrite:
 		return contract.SafetySpec{

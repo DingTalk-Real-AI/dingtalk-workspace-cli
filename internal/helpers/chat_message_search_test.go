@@ -220,42 +220,6 @@ func TestCrossPlatformCoverageChatSendResolvesUserBeforeDispatch(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageChatMessageSendPreservesNoConfirmation(t *testing.T) {
-	caller := &chatChangedContractCaller{}
-	if err := executeChatChangedContract(t, caller, "message", "send", "--group", "cid-1", "--text", "hello"); err != nil {
-		t.Fatalf("send without --yes returned error: %v", err)
-	}
-	if len(caller.calls) != 1 || caller.calls[0].toolName != "send_personal_message" {
-		t.Fatalf("send calls = %#v", caller.calls)
-	}
-}
-
-func TestCrossPlatformCoverageChatPinAndTopPreserveNoConfirmation(t *testing.T) {
-	tests := []struct {
-		name     string
-		command  string
-		toolName string
-	}{
-		{name: "set pin", command: "set-pin-msg", toolName: "set_pin_message"},
-		{name: "unset pin", command: "unset-pin-msg", toolName: "unset_pin_message"},
-		{name: "set top", command: "set-top-msg", toolName: "set_top_message"},
-		{name: "unset top", command: "unset-top-msg", toolName: "unset_top_message"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			caller := &chatChangedContractCaller{}
-			args := []string{"message", test.command, "--open-conversation-id", "cid-1", "--msg-id", "mid-1"}
-			if err := executeChatChangedContract(t, caller, args...); err != nil {
-				t.Fatalf("command without --yes returned error: %v", err)
-			}
-			if len(caller.calls) != 1 || caller.calls[0].toolName != test.toolName {
-				t.Fatalf("calls = %#v, want %s", caller.calls, test.toolName)
-			}
-		})
-	}
-}
-
 func TestChatSendAndReplyDefaultToAgentProductForIMClawType(t *testing.T) {
 	t.Setenv(agentproduct.EnvName, "qwenwork")
 

@@ -115,7 +115,7 @@ var MessagesSendByWebhook = shortcut.Shortcut{
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
-		Confirmation: "not_required", Idempotency: "unknown",
+		Confirmation: "user_required", Idempotency: "unknown",
 	},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
@@ -1243,7 +1243,7 @@ var MessagesSendCard = shortcut.Shortcut{
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
-		Confirmation: "not_required", Idempotency: "unknown",
+		Confirmation: "user_required", Idempotency: "unknown",
 	},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
@@ -1439,7 +1439,7 @@ var MessagesUpdateCard = shortcut.Shortcut{
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
-		Confirmation: "not_required", Idempotency: "unknown",
+		Confirmation: "user_required", Idempotency: "unknown",
 	},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
