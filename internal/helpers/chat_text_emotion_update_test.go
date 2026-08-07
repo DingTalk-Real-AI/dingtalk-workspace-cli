@@ -58,7 +58,7 @@ func TestCrossPlatformCoverageChatMessageUpdateTextEmotionRequiresEveryBusinessP
 		args []string
 	}{
 		{name: "conversation-id", args: []string{"--group", "cid"}},
-		{name: "msg-id", args: []string{"--msg-id", "mid"}},
+		{name: "message-id", args: []string{"--msg-id", "mid"}},
 		{name: "old-emotion-id", args: []string{"--old-emotion-id", "old-emotion"}},
 		{name: "emotion-id", args: []string{"--emotion-id", "new-emotion"}},
 		{name: "emotion-name", args: []string{"--emotion-name", "赞"}},

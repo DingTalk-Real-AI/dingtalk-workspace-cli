@@ -21,8 +21,11 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 )
 
 func resolveMessageForward(cmd *cobra.Command, defaultForward bool) (bool, error) {
@@ -116,8 +119,328 @@ func chatIntFlagOrFallback(cmd *cobra.Command, primary string, aliases ...string
 	return v
 }
 
+func chatCanonicalFlagNames(names ...string) []string {
+	preferred := make([]string, 0, len(names)+1)
+	seen := map[string]bool{}
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		preferred = append(preferred, name)
+	}
+	for _, name := range names {
+		switch name {
+		case "group", "chat", "open-conversation-id":
+			add("conversation-id")
+		case "user", "userId":
+			add("user-id")
+		case "msg-id", "open-message-id":
+			add("message-id")
+		}
+	}
+	for _, name := range names {
+		add(name)
+	}
+	return preferred
+}
+
+func chatFlagOrFallback(cmd *cobra.Command, primary string, aliases ...string) string {
+	names := append([]string{primary}, aliases...)
+	for _, name := range chatCanonicalFlagNames(names...) {
+		if f := cmd.Flags().Lookup(name); f != nil {
+			if v, _ := cmd.Flags().GetString(name); strings.TrimSpace(v) != "" {
+				return strings.TrimSpace(v)
+			}
+		}
+		if f := cmd.InheritedFlags().Lookup(name); f != nil {
+			if v, _ := cmd.InheritedFlags().GetString(name); strings.TrimSpace(v) != "" {
+				return strings.TrimSpace(v)
+			}
+		}
+	}
+	return ""
+}
+
+func chatMustGetFlag(cmd *cobra.Command, name string) string {
+	return chatFlagOrFallback(cmd, name)
+}
+
+func chatValidateRequiredFlagWithAliases(cmd *cobra.Command, primary string, aliases ...string) error {
+	if chatFlagOrFallback(cmd, primary, aliases...) != "" {
+		return nil
+	}
+	names := chatCanonicalFlagNames(append([]string{primary}, aliases...)...)
+	return fmt.Errorf("at least one of the flags in the group [%s] is required", strings.Join(names, " "))
+}
+
+func normalizeChatIDFlags(root *cobra.Command) {
+	var walk func(*cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		normalizeChatAliasFlag(cmd, "group", "conversation-id", "会话 openConversationId")
+		normalizeChatAliasFlag(cmd, "open-conversation-id", "conversation-id", "会话 openConversationId")
+		normalizeChatAliasFlag(cmd, "id", "conversation-id", "会话 openConversationId")
+		if cmd.Flags().Lookup("conversation-id") != nil {
+			normalizeChatAliasFlag(cmd, "chat", "conversation-id", "会话 openConversationId")
+		}
+		normalizeChatAliasFlag(cmd, "user", "user-id", "用户 userId")
+		normalizeChatAliasFlag(cmd, "userId", "user-id", "用户 userId")
+		normalizeChatAliasFlag(cmd, "msg-id", "message-id", "消息 openMessageId")
+		normalizeChatAliasFlag(cmd, "open-message-id", "message-id", "消息 openMessageId")
+		rewriteChatHelpFlagRefs(cmd)
+		rewriteChatContractFlagRefs(cmd)
+		rewriteChatConstraintFlagRefs(cmd)
+		for _, child := range cmd.Commands() {
+			walk(child)
+		}
+	}
+	walk(root)
+}
+
+func rewriteChatHelpFlagRefs(cmd *cobra.Command) {
+	cmd.Long = rewriteChatIDFlagRefs(cmd.Long)
+	cmd.Example = rewriteChatIDFlagRefs(cmd.Example)
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		flag.Usage = rewriteChatIDFlagRefs(flag.Usage)
+	})
+}
+
+func rewriteChatIDFlagRefs(s string) string {
+	if s == "" {
+		return s
+	}
+	replacements := [][2]string{
+		{"--open-conversation-id", "--conversation-id"},
+		{"--open-message-id", "--message-id"},
+		{"--msg-id", "--message-id"},
+		{"--userId", "--user-id"},
+		{"--user", "--user-id"},
+		{"--group", "--conversation-id"},
+		{"--chat", "--conversation-id"},
+		{"--id", "--conversation-id"},
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		replaced := false
+		for _, replacement := range replacements {
+			oldFlag := replacement[0]
+			if strings.HasPrefix(s[i:], oldFlag) && isChatFlagRefBoundary(s, i+len(oldFlag)) {
+				b.WriteString(replacement[1])
+				i += len(oldFlag)
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			b.WriteByte(s[i])
+			i++
+		}
+	}
+	return b.String()
+}
+
+func isChatFlagRefBoundary(s string, index int) bool {
+	if index >= len(s) {
+		return true
+	}
+	ch := s[index]
+	return !(ch == '-' || ch >= '0' && ch <= '9' || ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z')
+}
+
+func rewriteChatContractFlagRefs(cmd *cobra.Command) {
+	payload, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok {
+		return
+	}
+	if payload.Selection != nil {
+		selection := *payload.Selection
+		for i := range selection.Examples {
+			selection.Examples[i] = rewriteChatIDFlagRefs(selection.Examples[i])
+		}
+		payload.Selection = &selection
+	}
+	if len(payload.Parameters) > 0 {
+		parameters := make([]contract.ParamDecl, 0, len(payload.Parameters))
+		seen := map[string]bool{}
+		for _, parameter := range payload.Parameters {
+			parameter.Name = chatCanonicalFlagNameForCommand(cmd, parameter.Name)
+			parameter.Description = rewriteChatIDFlagRefs(parameter.Description)
+			parameter.RequiredWhen = rewriteChatIDFlagRefs(parameter.RequiredWhen)
+			if parameter.Name == "" || seen[parameter.Name] {
+				continue
+			}
+			seen[parameter.Name] = true
+			parameters = append(parameters, parameter)
+		}
+		payload.Parameters = parameters
+	}
+	contractfinal.RegisterRuntimeContractFinal(cmd, payload)
+}
+
+func rewriteChatConstraintFlagRefs(cmd *cobra.Command) {
+	constraints := runtimeannotate.CommandConstraints(cmd)
+	if runtimeannotate.ConstraintsEmpty(constraints) {
+		return
+	}
+	constraints.MutuallyExclusive = rewriteChatConstraintGroups(constraints.MutuallyExclusive)
+	constraints.RequireOneOf = rewriteChatConstraintGroups(constraints.RequireOneOf)
+	constraints.RequireTogether = rewriteChatConstraintGroups(constraints.RequireTogether)
+	constraints = runtimeannotate.NormalizeConstraints(constraints)
+	if runtimeannotate.ConstraintsEmpty(constraints) {
+		delete(cmd.Annotations, runtimeannotate.AnnotationConstraints)
+		return
+	}
+	encoded, _ := json.Marshal(constraints)
+	runtimeannotate.SetCommandAnnotation(cmd, runtimeannotate.AnnotationConstraints, string(encoded))
+}
+
+func rewriteChatConstraintGroups(groups [][]string) [][]string {
+	out := make([][]string, 0, len(groups))
+	for _, group := range groups {
+		next := make([]string, 0, len(group))
+		seen := map[string]bool{}
+		for _, name := range group {
+			name = chatCanonicalFlagName(name)
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			next = append(next, name)
+		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func chatCanonicalFlagName(name string) string {
+	switch strings.TrimSpace(name) {
+	case "group", "chat", "open-conversation-id":
+		return "conversation-id"
+	case "user", "userId":
+		return "user-id"
+	case "msg-id", "open-message-id":
+		return "message-id"
+	default:
+		return strings.TrimSpace(name)
+	}
+}
+
+func chatCanonicalFlagNameForCommand(cmd *cobra.Command, name string) string {
+	canonical := chatCanonicalFlagName(name)
+	if canonical != name {
+		return canonical
+	}
+	flag := cmd.Flags().Lookup(name)
+	if flag == nil || !flag.Hidden || cmd.Flags().Lookup("conversation-id") == nil {
+		return strings.TrimSpace(name)
+	}
+	switch strings.TrimSpace(name) {
+	case "id", "chat":
+		return "conversation-id"
+	default:
+		return strings.TrimSpace(name)
+	}
+}
+
+func normalizeChatAliasFlag(cmd *cobra.Command, legacy, canonical, canonicalUsage string) {
+	flags := cmd.Flags()
+	legacyFlag := flags.Lookup(legacy)
+	if legacyFlag == nil || legacyFlag.Hidden {
+		return
+	}
+	if flags.Lookup(canonical) == nil {
+		flags.String(canonical, "", canonicalUsage)
+	}
+	canonicalFlag := flags.Lookup(canonical)
+	if canonicalFlag != nil {
+		canonicalFlag.Hidden = false
+		if canonicalFlag.Usage == "" || strings.Contains(canonicalFlag.Usage, "--"+legacy) {
+			canonicalFlag.Usage = canonicalUsage
+		}
+		if isChatRequiredFlag(legacyFlag) {
+			_ = cmd.MarkFlagRequired(canonical)
+			clearChatRequiredFlag(legacyFlag)
+		}
+		installChatAliasSync(cmd)
+	}
+	legacyFlag.Hidden = true
+}
+
+const chatAliasSyncAnnotation = "dws.chat.alias_sync"
+
+func installChatAliasSync(cmd *cobra.Command) {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	if cmd.Annotations[chatAliasSyncAnnotation] == "true" {
+		return
+	}
+	cmd.Annotations[chatAliasSyncAnnotation] = "true"
+	oldPreRun := cmd.PreRun
+	cmd.PreRun = func(cmd *cobra.Command, args []string) {
+		syncChatCanonicalAliasValues(cmd)
+		if oldPreRun != nil {
+			oldPreRun(cmd, args)
+		}
+	}
+	oldPreRunE := cmd.PreRunE
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		syncChatCanonicalAliasValues(cmd)
+		if oldPreRunE != nil {
+			return oldPreRunE(cmd, args)
+		}
+		if oldPreRun != nil {
+			oldPreRun(cmd, args)
+		}
+		return nil
+	}
+}
+
+func syncChatCanonicalAliasValues(cmd *cobra.Command) {
+	pairs := [][2]string{
+		{"conversation-id", "group"},
+		{"conversation-id", "id"},
+		{"conversation-id", "chat"},
+		{"conversation-id", "open-conversation-id"},
+		{"user-id", "user"},
+		{"user-id", "userId"},
+		{"message-id", "msg-id"},
+		{"message-id", "open-message-id"},
+	}
+	for _, pair := range pairs {
+		syncChatAliasValue(cmd, pair[0], pair[1])
+	}
+}
+
+func syncChatAliasValue(cmd *cobra.Command, canonical, legacy string) {
+	flags := cmd.Flags()
+	canonicalFlag := flags.Lookup(canonical)
+	legacyFlag := flags.Lookup(legacy)
+	if canonicalFlag == nil || legacyFlag == nil {
+		return
+	}
+	if canonicalFlag.Changed && !legacyFlag.Changed {
+		_ = flags.Set(legacy, canonicalFlag.Value.String())
+		return
+	}
+	if legacyFlag.Changed && !canonicalFlag.Changed {
+		_ = flags.Set(canonical, legacyFlag.Value.String())
+	}
+}
+
+func isChatRequiredFlag(flag *pflag.Flag) bool {
+	annotations := flag.Annotations
+	required, ok := annotations[cobra.BashCompOneRequiredFlag]
+	return ok && len(required) > 0 && required[0] == "true"
+}
+
+func clearChatRequiredFlag(flag *pflag.Flag) {
+	delete(flag.Annotations, cobra.BashCompOneRequiredFlag)
+}
+
 func runChatGroupSearch(cmd *cobra.Command, args []string) error {
-	keyword := flagOrFallback(cmd, "query", "keyword", "name", "group")
+	keyword := chatFlagOrFallback(cmd, "query", "keyword", "name", "group")
 	if len(args) == 1 {
 		if keyword != "" {
 			return apperrors.NewValidation("群搜索位置参数与 --query/--keyword 不能同时指定")
@@ -175,7 +498,7 @@ func runChatSearchCommon(cmd *cobra.Command, _ []string) error {
 	if err := validateRequiredFlags(cmd, "nicks"); err != nil {
 		return err
 	}
-	nicks := parseCSVValues(mustGetFlag(cmd, "nicks"))
+	nicks := parseCSVValues(chatMustGetFlag(cmd, "nicks"))
 	limit := chatIntFlagOrFallback(cmd, "limit", "size")
 	cursor, _ := cmd.Flags().GetString("cursor")
 	matchMode, _ := cmd.Flags().GetString("match-mode")
@@ -802,9 +1125,9 @@ func stringFromJSONScalar(value any) string {
 }
 
 func buildConversationTargetArgs(cmd *cobra.Command) (map[string]any, error) {
-	groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+	groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 	rawOpenDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
-	rawUserID := flagOrFallback(cmd, "user", "userId")
+	rawUserID := chatFlagOrFallback(cmd, "user", "userId")
 
 	// All three params are passed through to the server; the server decides which to use.
 	userID := rawUserID
@@ -859,7 +1182,7 @@ func buildChatGrantBaseArgs(cmd *cobra.Command, scope string) (map[string]any, e
 		return nil, fmt.Errorf("--session-id is required when --grant-type is session")
 	}
 	toolArgs := map[string]any{
-		"agentCode": mustGetFlag(cmd, "agentCode"),
+		"agentCode": chatMustGetFlag(cmd, "agentCode"),
 		"scope":     scope,
 		"grantType": grantType,
 	}
@@ -884,7 +1207,7 @@ func buildChatChmodArgs(cmd *cobra.Command, scope string) (map[string]any, error
 }
 
 func buildChatCrossOrgDataAuthArgs(cmd *cobra.Command) (map[string]any, error) {
-	targetOrgID := strings.TrimSpace(mustGetFlag(cmd, "target-org-id"))
+	targetOrgID := strings.TrimSpace(chatMustGetFlag(cmd, "target-org-id"))
 	all, _ := cmd.Flags().GetBool("all")
 	if targetOrgID == "" && !all {
 		return nil, fmt.Errorf("--target-org-id or --all is required")
@@ -1468,7 +1791,7 @@ func newChatCommand() *cobra.Command {
 				return fmt.Errorf("invalid --type %q, supported: INTERNAL, EXTERNAL, NORMAL", groupType)
 			}
 
-			memberUserIds := parseCSVValues(mustGetFlag(cmd, "users"))
+			memberUserIds := parseCSVValues(chatMustGetFlag(cmd, "users"))
 
 			// 钉钉要求：群主(owner)必须是 useridlist 的成员之一。当前登录用户作为群主，须加入成员列表。
 			currentUserID, err := getCurrentUserID(ctx)
@@ -1486,7 +1809,7 @@ func newChatCommand() *cobra.Command {
 			}
 
 			toolArgs := map[string]any{
-				"groupName":    mustGetFlag(cmd, "name"),
+				"groupName":    chatMustGetFlag(cmd, "name"),
 				"groupMembers": allMembers,
 				"groupType":    groupType,
 			}
@@ -1622,7 +1945,7 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			toolArgs := map[string]any{
-				"openconversation_id": mustGetFlag(cmd, "id"),
+				"openconversation_id": chatMustGetFlag(cmd, "id"),
 			}
 			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
 				toolArgs["cursor"] = v
@@ -1643,8 +1966,8 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			return callMCPToolOnServer("bot", "add_robot_to_group", map[string]any{
-				"robotCode":          mustGetFlag(cmd, "robot-code"),
-				"openConversationId": mustGetFlag(cmd, "id"),
+				"robotCode":          chatMustGetFlag(cmd, "robot-code"),
+				"openConversationId": chatMustGetFlag(cmd, "id"),
 			})
 		},
 	}
@@ -1692,8 +2015,8 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			return callMCPTool("update_group_name", map[string]any{
-				"openconversation_id": mustGetFlag(cmd, "id"),
-				"group_name":          mustGetFlag(cmd, "name"),
+				"openconversation_id": chatMustGetFlag(cmd, "id"),
+				"group_name":          chatMustGetFlag(cmd, "name"),
 			})
 		},
 	}
@@ -1743,9 +2066,9 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			toolArgs := map[string]any{
-				"openconversation_id": mustGetFlag(cmd, "id"),
+				"openconversation_id": chatMustGetFlag(cmd, "id"),
 			}
-			appendChatIDArgs(toolArgs, parseCSVValues(mustGetFlag(cmd, "users")), "userId", "openDingtalkIds")
+			appendChatIDArgs(toolArgs, parseCSVValues(chatMustGetFlag(cmd, "users")), "userId", "openDingtalkIds")
 			return callMCPTool("add_group_member", toolArgs)
 		},
 	}
@@ -1792,8 +2115,8 @@ func newChatCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "id", "users"); err != nil {
 				return err
 			}
-			groupID := mustGetFlag(cmd, "id")
-			removeValues := parseCSVValues(mustGetFlag(cmd, "users"))
+			groupID := chatMustGetFlag(cmd, "id")
+			removeValues := parseCSVValues(chatMustGetFlag(cmd, "users"))
 			// 群主防护：移出群主会产生无群主的孤儿群，先在客户端拦截。
 			if err := guardGroupOwnerRemoval(cmd.Context(), groupID, removeValues); err != nil {
 				return err
@@ -1859,7 +2182,7 @@ func newChatCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "time"); err != nil {
 				return err
 			}
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			userID, _ := cmd.Flags().GetString("user")
 			openDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
 			specified := 0
@@ -1886,7 +2209,7 @@ func newChatCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			timeVal := mustGetFlag(cmd, "time")
+			timeVal := chatMustGetFlag(cmd, "time")
 			if groupID != "" {
 				toolArgs := map[string]any{
 					"openconversation_id": groupID,
@@ -2062,7 +2385,7 @@ func newChatCommand() *cobra.Command {
 # 查询用户 ID: dws contact user search --query "姓名"`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			userID, _ := cmd.Flags().GetString("user")
 			openDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
 			msgUuid, _ := cmd.Flags().GetString("uuid")
@@ -2209,7 +2532,7 @@ func newChatCommand() *cobra.Command {
 			}
 
 			// ── 文本/Markdown 消息 ──
-			text := flagOrFallback(cmd, "text", "content", "body", "message", "markdown")
+			text := chatFlagOrFallback(cmd, "text", "content", "body", "message", "markdown")
 			if text == "" && len(args) > 0 {
 				text = args[0]
 			}
@@ -2306,11 +2629,11 @@ func newChatCommand() *cobra.Command {
   # 查询 userId: dws contact user search --query "姓名"
   # robot-code: $DINGTALK_CHAT_ROBOT_CODE`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			msgType := strings.TrimSpace(mustGetFlag(cmd, "msg-type"))
-			title := mustGetFlag(cmd, "title")
-			text := mustGetFlag(cmd, "text")
-			imageURL := strings.TrimSpace(mustGetFlag(cmd, "image-url"))
-			filePath := mustGetFlag(cmd, "file-path")
+			msgType := strings.TrimSpace(chatMustGetFlag(cmd, "msg-type"))
+			title := chatMustGetFlag(cmd, "title")
+			text := chatMustGetFlag(cmd, "text")
+			imageURL := strings.TrimSpace(chatMustGetFlag(cmd, "image-url"))
+			filePath := chatMustGetFlag(cmd, "file-path")
 
 			if err := validateRequiredFlags(cmd, "robot-code"); err != nil {
 				return err
@@ -2342,7 +2665,7 @@ func newChatCommand() *cobra.Command {
 			}
 			isMarkdownMessage := msgType == "markdown"
 
-			chatID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			chatID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			usersStr, _ := cmd.Flags().GetString("users")
 			openDingtalkIdsStr, _ := cmd.Flags().GetString("open-dingtalk-ids")
 			hasDirectTarget := usersStr != "" || openDingtalkIdsStr != ""
@@ -2370,7 +2693,7 @@ func newChatCommand() *cobra.Command {
 
 			buildRobotMessageArgs := func(markdown string) map[string]any {
 				toolArgs := map[string]any{
-					"robotCode": mustGetFlag(cmd, "robot-code"),
+					"robotCode": chatMustGetFlag(cmd, "robot-code"),
 				}
 				switch msgType {
 				case "image":
@@ -2499,23 +2822,23 @@ func newChatCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "robot-code", "keys"); err != nil {
 				return err
 			}
-			keysStr := mustGetFlag(cmd, "keys")
+			keysStr := chatMustGetFlag(cmd, "keys")
 			var processQueryKeys []string
 			for _, k := range strings.Split(keysStr, ",") {
 				if s := strings.TrimSpace(k); s != "" {
 					processQueryKeys = append(processQueryKeys, s)
 				}
 			}
-			chatID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			chatID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			if chatID != "" {
 				return callMCPToolOnServer("bot", "recall_robot_group_message", map[string]any{
-					"robotCode":          mustGetFlag(cmd, "robot-code"),
+					"robotCode":          chatMustGetFlag(cmd, "robot-code"),
 					"openConversationId": chatID,
 					"processQueryKeys":   processQueryKeys,
 				})
 			}
 			return callMCPToolOnServer("bot", "batch_recall_robot_users_msg", map[string]any{
-				"robotCode":        mustGetFlag(cmd, "robot-code"),
+				"robotCode":        chatMustGetFlag(cmd, "robot-code"),
 				"processQueryKeys": processQueryKeys,
 			})
 		},
@@ -2561,9 +2884,9 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			toolArgs := map[string]any{
-				"robotToken": mustGetFlag(cmd, "token"),
-				"title":      mustGetFlag(cmd, "title"),
-				"text":       mustGetFlag(cmd, "text"),
+				"robotToken": chatMustGetFlag(cmd, "token"),
+				"title":      chatMustGetFlag(cmd, "title"),
+				"text":       chatMustGetFlag(cmd, "text"),
 			}
 			if v, _ := cmd.Flags().GetBool("at-all"); v {
 				toolArgs["isAtAll"] = true
@@ -2656,15 +2979,15 @@ func newChatCommand() *cobra.Command {
   dws chat message list-topic-replies --group <openconversation_id> --topic-id <topicId> --time "2025-03-01 00:00:00" --limit 20
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "group", "conversation-id", "id", "chat"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "group", "conversation-id", "id", "chat"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "topic-id"); err != nil {
 				return err
 			}
 			toolArgs := map[string]any{
-				"openconversationId": flagOrFallback(cmd, "group", "conversation-id", "id", "chat"),
-				"topicId":            mustGetFlag(cmd, "topic-id"),
+				"openconversationId": chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat"),
+				"topicId":            chatMustGetFlag(cmd, "topic-id"),
 			}
 			if v, _ := cmd.Flags().GetString("time"); v != "" {
 				toolArgs["startTime"] = v
@@ -2727,8 +3050,8 @@ func newChatCommand() *cobra.Command {
 			limit := chatIntFlagOrFallback(cmd, "limit", "size")
 			cursor, _ := cmd.Flags().GetString("cursor")
 			toolArgs := map[string]any{
-				"startTime": mustGetFlag(cmd, "start"),
-				"endTime":   mustGetFlag(cmd, "end"),
+				"startTime": chatMustGetFlag(cmd, "start"),
+				"endTime":   chatMustGetFlag(cmd, "end"),
 				"limit":     limit,
 				"cursor":    cursor,
 			}
@@ -2781,7 +3104,7 @@ func newChatCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "start"); err != nil {
 				return err
 			}
-			senderUserID := flagOrFallback(cmd, "sender-user-id", "sender")
+			senderUserID := chatFlagOrFallback(cmd, "sender-user-id", "sender")
 			senderOpenDingTalkID, _ := cmd.Flags().GetString("sender-open-dingtalk-id")
 			if senderUserID != "" && senderOpenDingTalkID != "" {
 				return fmt.Errorf("--sender-user-id and --sender-open-dingtalk-id are mutually exclusive, specify exactly one")
@@ -2789,7 +3112,7 @@ func newChatCommand() *cobra.Command {
 			if senderUserID == "" && senderOpenDingTalkID == "" {
 				return fmt.Errorf("--sender-user-id or --sender-open-dingtalk-id is required")
 			}
-			startMs, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
+			startMs, err := parseISOTimeToMillis("start", chatMustGetFlag(cmd, "start"))
 			if err != nil {
 				return err
 			}
@@ -2866,11 +3189,11 @@ func newChatCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "start", "end"); err != nil {
 				return err
 			}
-			startMs, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
+			startMs, err := parseISOTimeToMillis("start", chatMustGetFlag(cmd, "start"))
 			if err != nil {
 				return err
 			}
-			endMs, err := parseISOTimeToMillis("end", mustGetFlag(cmd, "end"))
+			endMs, err := parseISOTimeToMillis("end", chatMustGetFlag(cmd, "end"))
 			if err != nil {
 				return err
 			}
@@ -2885,7 +3208,7 @@ func newChatCommand() *cobra.Command {
 				"limit":     limit,
 				"cursor":    cursor,
 			}
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			if groupID != "" {
 				toolArgs["openConversationId"] = groupID
 			}
@@ -3072,17 +3395,17 @@ func newChatCommand() *cobra.Command {
   dws chat message search --query "链接" --start "2026-04-15T00:00:00+08:00" --end "2026-04-16T00:00:00+08:00" --limit 100 --cursor <nextCursor>
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "query", "keyword"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "query", "keyword"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "start", "end"); err != nil {
 				return err
 			}
-			startMs, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
+			startMs, err := parseISOTimeToMillis("start", chatMustGetFlag(cmd, "start"))
 			if err != nil {
 				return err
 			}
-			endMs, err := parseISOTimeToMillis("end", mustGetFlag(cmd, "end"))
+			endMs, err := parseISOTimeToMillis("end", chatMustGetFlag(cmd, "end"))
 			if err != nil {
 				return err
 			}
@@ -3092,13 +3415,13 @@ func newChatCommand() *cobra.Command {
 			limit := chatIntFlagOrFallback(cmd, "limit", "size")
 			cursor, _ := cmd.Flags().GetString("cursor")
 			toolArgs := map[string]any{
-				"keyword":   flagOrFallback(cmd, "query", "keyword"),
+				"keyword":   chatFlagOrFallback(cmd, "query", "keyword"),
 				"startTime": startMs,
 				"endTime":   endMs,
 				"limit":     limit,
 				"cursor":    cursor,
 			}
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			if groupID != "" {
 				toolArgs["openConversationId"] = groupID
 			}
@@ -3159,17 +3482,17 @@ func newChatCommand() *cobra.Command {
 			toolArgs := map[string]any{}
 
 			// The CLI primary is --query; the IM MCP field is still named "keyword".
-			if v := flagOrFallback(cmd, "query", "keyword"); v != "" {
+			if v := chatFlagOrFallback(cmd, "query", "keyword"); v != "" {
 				toolArgs["keyword"] = v
 			}
 
 			// --user/--userId are the preferred userId inputs for sender filtering.
-			if v := flagOrFallback(cmd, "users", "user", "userId"); v != "" {
+			if v := chatFlagOrFallback(cmd, "users", "user", "userId"); v != "" {
 				appendChatIDArgs(toolArgs, parseCSVValues(v), "senderUserIds", "senderOpenDingTakIds")
 			}
 
 			// sender-ids -> senderOpenDingTakIds / senderUserIds（注意：MCP 入参字段名缺少字母 l）
-			if v := flagOrFallback(cmd, "sender-ids", "senders", "sender"); v != "" {
+			if v := chatFlagOrFallback(cmd, "sender-ids", "senders", "sender"); v != "" {
 				ids := parseCSVValues(v)
 				if len(ids) > 0 {
 					appendChatIDArgs(toolArgs, ids, "senderUserIds", "senderOpenDingTakIds")
@@ -3218,7 +3541,7 @@ func newChatCommand() *cobra.Command {
 			} else if cmd.Flags().Changed("only-robot-messages") {
 				toolArgs["onlyRobotMessages"], _ = cmd.Flags().GetBool("only-robot-messages")
 			}
-			if v := flagOrFallback(cmd, "conversation-type", "search-conv-type"); v != "" {
+			if v := chatFlagOrFallback(cmd, "conversation-type", "search-conv-type"); v != "" {
 				toolArgs["searchConvType"] = v
 			}
 
@@ -3309,7 +3632,7 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			return callMCPToolOnServer("im", "query_message_send_status", map[string]any{
-				"openTaskId": mustGetFlag(cmd, "open-task-id"),
+				"openTaskId": chatMustGetFlag(cmd, "open-task-id"),
 			})
 		},
 	}
@@ -3351,15 +3674,15 @@ func newChatCommand() *cobra.Command {
   # 查询会话 ID: dws chat search --query "群名"
   # 消息 ID 可通过 dws chat message list 获取`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "msg-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "recall_message", map[string]any{
-				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openConversationId": chatFlagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMessageId":      chatMustGetFlag(cmd, "msg-id"),
 			})
 		},
 	}
@@ -3413,7 +3736,7 @@ func newChatCommand() *cobra.Command {
   # 查询会话 ID: dws chat search --query "群名"
   # 消息 ID 可通过 dws chat message list 获取`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "msg-id"); err != nil {
@@ -3429,9 +3752,9 @@ func newChatCommand() *cobra.Command {
 			}
 
 			atAll, _ := cmd.Flags().GetBool("at-all")
-			atOpenIDs := parseCSVValues(mustGetFlag(cmd, "at-open-dingtalk-ids"))
+			atOpenIDs := parseCSVValues(chatMustGetFlag(cmd, "at-open-dingtalk-ids"))
 			if text != "" {
-				title := mustGetFlag(cmd, "title")
+				title := chatMustGetFlag(cmd, "title")
 				if title == "" {
 					title = sanitizeTitleFromText(text)
 				}
@@ -3444,8 +3767,8 @@ func newChatCommand() *cobra.Command {
 			}
 
 			toolArgs := map[string]any{
-				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openConversationId": chatFlagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMessageId":      chatMustGetFlag(cmd, "msg-id"),
 				"content":            content,
 			}
 			if atAll {
@@ -3509,17 +3832,17 @@ func newChatCommand() *cobra.Command {
   # 查询 openMessageId: dws chat message list --group <openConversationId> --time "2025-03-01 00:00:00"
   # 查询人员: dws contact user search --keyword "姓名" --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "message-id"); err != nil {
 				return err
 			}
 			toolArgs := map[string]any{
-				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMessageId":      mustGetFlag(cmd, "message-id"),
+				"openConversationId": chatFlagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMessageId":      chatMustGetFlag(cmd, "message-id"),
 			}
-			if usersStr := flagOrFallback(cmd, "users", "user", "userId"); usersStr != "" {
+			if usersStr := chatFlagOrFallback(cmd, "users", "user", "userId"); usersStr != "" {
 				appendChatIDArgs(toolArgs, parseCSVValues(usersStr), "targetUserIds", "targetOpenDingTalkIds")
 			}
 			if usersStr, _ := cmd.Flags().GetString("target-open-dingtalk-ids"); usersStr != "" {
@@ -4025,9 +4348,9 @@ func newChatCommand() *cobra.Command {
   dws chat conversation-info --user <userId> --format json
   dws chat conversation-info --open-dingtalk-id <openDingTalkId> --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			rawOpenDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
-			rawUserID := flagOrFallback(cmd, "user", "userId")
+			rawUserID := chatFlagOrFallback(cmd, "user", "userId")
 			specified := 0
 			for _, value := range []string{groupID, rawUserID, rawOpenDingTalkID} {
 				if value != "" {
@@ -4249,7 +4572,7 @@ func newChatCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "title"); err != nil {
 				return err
 			}
-			title, err := validatedConversationCategoryTitle(mustGetFlag(cmd, "title"))
+			title, err := validatedConversationCategoryTitle(chatMustGetFlag(cmd, "title"))
 			if err != nil {
 				return err
 			}
@@ -4358,7 +4681,7 @@ func newChatCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "title"); err != nil {
 				return err
 			}
-			title, err := validatedConversationCategoryTitle(mustGetFlag(cmd, "title"))
+			title, err := validatedConversationCategoryTitle(chatMustGetFlag(cmd, "title"))
 			if err != nil {
 				return err
 			}
@@ -4408,14 +4731,14 @@ func newChatCommand() *cobra.Command {
   # 分组ID 可通过 dws chat category list 获取
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id")
 			if groupID == "" {
 				return fmt.Errorf("flag --group is required")
 			}
 			if err := validateRequiredFlags(cmd, "category-ids"); err != nil {
 				return err
 			}
-			categoryIds, err := parseCSVInt64(mustGetFlag(cmd, "category-ids"))
+			categoryIds, err := parseCSVInt64(chatMustGetFlag(cmd, "category-ids"))
 			if err != nil {
 				return fmt.Errorf("--category-ids: %w", err)
 			}
@@ -4467,14 +4790,14 @@ func newChatCommand() *cobra.Command {
   # 分组ID 可通过 dws chat category list 获取
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id")
 			if groupID == "" {
 				return fmt.Errorf("flag --group is required")
 			}
 			if err := validateRequiredFlags(cmd, "category-ids"); err != nil {
 				return err
 			}
-			categoryIds, err := parseCSVInt64(mustGetFlag(cmd, "category-ids"))
+			categoryIds, err := parseCSVInt64(chatMustGetFlag(cmd, "category-ids"))
 			if err != nil {
 				return fmt.Errorf("--category-ids: %w", err)
 			}
@@ -4525,7 +4848,7 @@ func newChatCommand() *cobra.Command {
 		Example: `  dws chat category list-by-conv --group <openConversationId>
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id")
 			if groupID == "" {
 				return fmt.Errorf("flag --group is required")
 			}
@@ -4577,7 +4900,7 @@ func newChatCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "category-ids"); err != nil {
 				return err
 			}
-			categoryIDs, err := parseCSVInt64(mustGetFlag(cmd, "category-ids"))
+			categoryIDs, err := parseCSVInt64(chatMustGetFlag(cmd, "category-ids"))
 			if err != nil {
 				return fmt.Errorf("--category-ids: %w", err)
 			}
@@ -4670,7 +4993,7 @@ func newChatCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "msg-ids"); err != nil {
 				return err
 			}
-			msgIds := parseCSVValues(mustGetFlag(cmd, "msg-ids"))
+			msgIds := parseCSVValues(chatMustGetFlag(cmd, "msg-ids"))
 			if len(msgIds) > 50 {
 				return fmt.Errorf("--msg-ids 最多支持 50 条，当前 %d 条", len(msgIds))
 			}
@@ -4718,16 +5041,16 @@ func newChatCommand() *cobra.Command {
 		Example: `  dws chat message add-emoji --conversation-id <openConversationId> --msg-id <openMsgId> --emoji "赞"
   # 查询会话 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "msg-id", "emoji"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "add_emoji_reaction", map[string]any{
-				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
-				"emojiName":          mustGetFlag(cmd, "emoji"),
+				"openConversationId": chatFlagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMsgId":          chatMustGetFlag(cmd, "msg-id"),
+				"emojiName":          chatMustGetFlag(cmd, "emoji"),
 			})
 		},
 	}
@@ -4779,16 +5102,16 @@ func newChatCommand() *cobra.Command {
 		Example: `  dws chat message remove-emoji --conversation-id <openConversationId> --msg-id <openMsgId> --emoji "赞"
   # 查询会话 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "msg-id", "emoji"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "remove_emoji_reaction", map[string]any{
-				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
-				"emojiName":          mustGetFlag(cmd, "emoji"),
+				"openConversationId": chatFlagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMsgId":          chatMustGetFlag(cmd, "msg-id"),
+				"emojiName":          chatMustGetFlag(cmd, "emoji"),
 			})
 		},
 	}
@@ -4839,19 +5162,19 @@ func newChatCommand() *cobra.Command {
 		Short:   "对消息添加文字表情回应",
 		Example: `  dws chat message add-text-emotion --conversation-id <openConversationId> --msg-id <openMsgId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id im_bg_5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "msg-id", "emotion-id", "emotion-name", "text", "background-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "add_text_emotion", map[string]any{
-				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
-				"emotionId":          mustGetFlag(cmd, "emotion-id"),
-				"emotionName":        mustGetFlag(cmd, "emotion-name"),
-				"text":               mustGetFlag(cmd, "text"),
-				"backgroundId":       mustGetFlag(cmd, "background-id"),
+				"openConversationId": chatFlagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMsgId":          chatMustGetFlag(cmd, "msg-id"),
+				"emotionId":          chatMustGetFlag(cmd, "emotion-id"),
+				"emotionName":        chatMustGetFlag(cmd, "emotion-name"),
+				"text":               chatMustGetFlag(cmd, "text"),
+				"backgroundId":       chatMustGetFlag(cmd, "background-id"),
 			})
 		},
 	}
@@ -4904,19 +5227,19 @@ func newChatCommand() *cobra.Command {
 		Short:   "移除消息的文字表情回应",
 		Example: `  dws chat message remove-text-emotion --conversation-id <openConversationId> --msg-id <openMsgId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id <backgroundId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "msg-id", "emotion-id", "emotion-name", "text", "background-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "remove_text_emotion", map[string]any{
-				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
-				"emotionId":          mustGetFlag(cmd, "emotion-id"),
-				"emotionName":        mustGetFlag(cmd, "emotion-name"),
-				"text":               mustGetFlag(cmd, "text"),
-				"backgroundId":       mustGetFlag(cmd, "background-id"),
+				"openConversationId": chatFlagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMsgId":          chatMustGetFlag(cmd, "msg-id"),
+				"emotionId":          chatMustGetFlag(cmd, "emotion-id"),
+				"emotionName":        chatMustGetFlag(cmd, "emotion-name"),
+				"text":               chatMustGetFlag(cmd, "text"),
+				"backgroundId":       chatMustGetFlag(cmd, "background-id"),
 			})
 		},
 	}
@@ -4969,17 +5292,17 @@ func newChatCommand() *cobra.Command {
 		Short:   "更新消息的文字表情回应",
 		Example: `  dws chat message update-text-emotion --conversation-id <openConversationId> --msg-id <openMsgId> --old-emotion-id <oldEmotionId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id im_bg_5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "update_text_emotion", map[string]any{
-				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
-				"oldEmotionId":       mustGetFlag(cmd, "old-emotion-id"),
-				"emotionId":          mustGetFlag(cmd, "emotion-id"),
-				"emotionName":        mustGetFlag(cmd, "emotion-name"),
-				"text":               mustGetFlag(cmd, "text"),
-				"backgroundId":       mustGetFlag(cmd, "background-id"),
+				"openConversationId": chatFlagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
+				"openMsgId":          chatMustGetFlag(cmd, "msg-id"),
+				"oldEmotionId":       chatMustGetFlag(cmd, "old-emotion-id"),
+				"emotionId":          chatMustGetFlag(cmd, "emotion-id"),
+				"emotionName":        chatMustGetFlag(cmd, "emotion-name"),
+				"text":               chatMustGetFlag(cmd, "text"),
+				"backgroundId":       chatMustGetFlag(cmd, "background-id"),
 			})
 		},
 	}
@@ -5053,8 +5376,8 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			params := map[string]any{
-				"emotionName": mustGetFlag(cmd, "emotion-name"),
-				"text":        mustGetFlag(cmd, "text"),
+				"emotionName": chatMustGetFlag(cmd, "emotion-name"),
+				"text":        chatMustGetFlag(cmd, "text"),
 			}
 			if v, _ := cmd.Flags().GetString("background-id"); v != "" {
 				params["backgroundId"] = v
@@ -5111,7 +5434,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   # 查询群 ID: dws chat search --query "群名"
   # 查询人员: dws contact user search --keyword "姓名" --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			receiver, _ := cmd.Flags().GetString("receiver")
 			if groupID == "" && receiver == "" {
 				return fmt.Errorf("--group or --receiver is required")
@@ -5185,8 +5508,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			}
 			flowStatus, _ := cmd.Flags().GetInt("flow-status")
 			return callMCPToolOnServer("im", "update_streaming_card", map[string]any{
-				"bizId":      mustGetFlag(cmd, "biz-id"),
-				"msgContent": mustGetFlag(cmd, "content"),
+				"bizId":      chatMustGetFlag(cmd, "biz-id"),
+				"msgContent": chatMustGetFlag(cmd, "content"),
 				"flowStatus": flowStatus,
 			})
 		},
@@ -5269,11 +5592,11 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 
-			resourceType := mustGetFlag(cmd, "type")
-			resourceID := mustGetFlag(cmd, "resource-id")
-			conversationID := mustGetFlag(cmd, "open-conversation-id")
-			messageID := mustGetFlag(cmd, "message-id")
-			outputPath := mustGetFlag(cmd, "output")
+			resourceType := chatMustGetFlag(cmd, "type")
+			resourceID := chatMustGetFlag(cmd, "resource-id")
+			conversationID := chatMustGetFlag(cmd, "open-conversation-id")
+			messageID := chatMustGetFlag(cmd, "message-id")
+			outputPath := chatMustGetFlag(cmd, "output")
 			jsonMode := deps.Caller.Format() == "json"
 
 			switch resourceType {
@@ -5417,7 +5740,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			newOwnerOpenDingTalkID, _ := cmd.Flags().GetString("new-owner")
-			newOwnerUserID := flagOrFallback(cmd, "user", "userId")
+			newOwnerUserID := chatFlagOrFallback(cmd, "user", "userId")
 			if newOwnerOpenDingTalkID != "" && newOwnerUserID != "" {
 				return fmt.Errorf("--new-owner and --user are mutually exclusive, specify exactly one")
 			}
@@ -5430,12 +5753,12 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			}
 			if !isOpenDingTalkID(newOwner) {
 				return callMCPToolOnServer("im", "transfer_group_owner", map[string]any{
-					"openConversationId": mustGetFlag(cmd, "group"),
+					"openConversationId": chatMustGetFlag(cmd, "group"),
 					"newOwnerUid":        newOwner,
 				})
 			}
 			return callMCPToolOnServer("im", "transfer_group_owner", map[string]any{
-				"openConversationId":     mustGetFlag(cmd, "group"),
+				"openConversationId":     chatMustGetFlag(cmd, "group"),
 				"newOwnerOpenDingTalkId": newOwner,
 			})
 		},
@@ -5491,7 +5814,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 			}
 			if v, _ := cmd.Flags().GetInt64("expires-seconds"); v >= 0 && cmd.Flags().Changed("expires-seconds") {
 				toolArgs["expiresSeconds"] = v
@@ -5542,7 +5865,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   # 查询群 ID: dws chat search --query "群名"
   # 查询单聊会话 ID: dws chat conversation-info --user <userId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
+			convID := chatFlagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat mute --conversation-id <openConversationId>")
 			}
@@ -5604,7 +5927,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "quit_group", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 			})
 		},
 	}
@@ -5654,12 +5977,12 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "group", "icon-media-id"); err != nil {
 				return err
 			}
-			iconMediaID := strings.TrimSpace(mustGetFlag(cmd, "icon-media-id"))
+			iconMediaID := strings.TrimSpace(chatMustGetFlag(cmd, "icon-media-id"))
 			if iconMediaID == "" {
 				return fmt.Errorf("invalid --icon-media-id: mediaId 不能为空\n  hint: 请使用上游媒体上传能力返回的有效 mediaId；DWS CLI 不提供本地文件到 mediaId 的上传命令")
 			}
 			return callMCPToolOnServer("im", "update_group_icon", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 				"iconMediaId":        iconMediaID,
 			})
 		},
@@ -5734,8 +6057,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			}
 			status, _ := cmd.Flags().GetInt("status")
 			return callMCPToolOnServer("im", "update_group_settings", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
-				"settingKey":         mustGetFlag(cmd, "setting-key"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
+				"settingKey":         chatMustGetFlag(cmd, "setting-key"),
 				"status":             status,
 			})
 		},
@@ -5795,7 +6118,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "conversation-id", "ref-msg-id", "ref-sender", "text"); err != nil {
 				return err
 			}
-			refSender := mustGetFlag(cmd, "ref-sender")
+			refSender := chatMustGetFlag(cmd, "ref-sender")
 			if !isOpenDingTalkID(refSender) {
 				resolved, err := resolveOpenDingTalkID(cmd.Context(), refSender)
 				if err != nil {
@@ -5809,21 +6132,21 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				clawType = edition.ClawType()
 			}
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "conversation-id"),
+				"openConversationId": chatMustGetFlag(cmd, "conversation-id"),
 				"msgType":            "reply",
 				"clawType":           clawType,
 			}
 			atAll, _ := cmd.Flags().GetBool("at-all")
-			atOpenIDs := mustGetFlag(cmd, "at-open-dingtalk-ids")
+			atOpenIDs := chatMustGetFlag(cmd, "at-open-dingtalk-ids")
 			replyText := applyCurrentUserGroupMentions(
 				toolArgs,
-				mustGetFlag(cmd, "text"),
+				chatMustGetFlag(cmd, "text"),
 				atOpenIDs,
 				atAll,
 			)
 			replyText = addMissingCurrentUserMentionPlaceholders(replyText, atOpenIDs)
 			replyContent := map[string]string{
-				"referenceOpenMessageId":   mustGetFlag(cmd, "ref-msg-id"),
+				"referenceOpenMessageId":   chatMustGetFlag(cmd, "ref-msg-id"),
 				"srcMsgSendOpenDingTalkId": refSender,
 				"replyMsgType":             "text",
 				"content":                  replyText,
@@ -5900,9 +6223,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			toolArgs := map[string]any{
-				"srcOpenCid":       mustGetFlag(cmd, "src-conversation-id"),
-				"srcOpenMessageId": mustGetFlag(cmd, "msg-id"),
-				"destOpenCid":      mustGetFlag(cmd, "dest-conversation-id"),
+				"srcOpenCid":       chatMustGetFlag(cmd, "src-conversation-id"),
+				"srcOpenMessageId": chatMustGetFlag(cmd, "msg-id"),
+				"destOpenCid":      chatMustGetFlag(cmd, "dest-conversation-id"),
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v
@@ -5969,7 +6292,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			}
 			off, _ := cmd.Flags().GetBool("off")
 			return callMCPToolOnServer("im", "set_top_conversation", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "conversation-id"),
+				"openConversationId": chatMustGetFlag(cmd, "conversation-id"),
 				"top":                !off,
 			})
 		},
@@ -6021,7 +6344,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "get_group_mute_config", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 			})
 		},
 	}
@@ -6065,7 +6388,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   dws chat group-mute --group <openConversationId> --off
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			if groupID == "" {
 				return fmt.Errorf("flag --group is required\n  hint: dws chat group-mute --group <openConversationId>")
 			}
@@ -6130,11 +6453,11 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   # 查询群 ID: dws chat search --query "群名"
   # 查询人员: dws contact user search --keyword "姓名" --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id", "chat")
 			if groupID == "" {
 				return fmt.Errorf("flag --group is required\n  hint: dws chat group-mute-member --group <openConversationId> --user <userIds> --mute-time <ms>")
 			}
-			usersRaw := flagOrFallback(cmd, "users", "user", "userId")
+			usersRaw := chatFlagOrFallback(cmd, "users", "user", "userId")
 			if usersRaw == "" {
 				return fmt.Errorf("flag --users or --user is required")
 			}
@@ -6232,14 +6555,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "group"); err != nil {
 				return err
 			}
-			usersRaw := flagOrFallback(cmd, "users", "user", "userId")
+			usersRaw := chatFlagOrFallback(cmd, "users", "user", "userId")
 			if usersRaw == "" {
 				return fmt.Errorf("flag --users or --user is required")
 			}
 			userIDs, openDingTalkIDs := splitChatIDValues(parseCSVValues(usersRaw))
 			off, _ := cmd.Flags().GetBool("off")
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 				"admin":              !off,
 			}
 			if len(userIDs) > 0 {
@@ -6356,7 +6679,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 		Example: `  dws chat group-role list --group <openConversationId>
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			groupID := flagOrFallback(cmd, "group", "conversation-id", "id")
+			groupID := chatFlagOrFallback(cmd, "group", "conversation-id", "id")
 			if groupID == "" {
 				return fmt.Errorf("flag --group is required\n  hint: dws chat group-role list --group <openConversationId>")
 			}
@@ -6407,8 +6730,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "add_custom_group_role", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
-				"name":               mustGetFlag(cmd, "name"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
+				"name":               chatMustGetFlag(cmd, "name"),
 			})
 		},
 	}
@@ -6456,9 +6779,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "update_custom_group_role", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
-				"openRoleId":         mustGetFlag(cmd, "role-id"),
-				"name":               mustGetFlag(cmd, "name"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
+				"openRoleId":         chatMustGetFlag(cmd, "role-id"),
+				"name":               chatMustGetFlag(cmd, "name"),
 			})
 		},
 	}
@@ -6509,8 +6832,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "remove_custom_group_role", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
-				"openRoleId":         mustGetFlag(cmd, "role-id"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
+				"openRoleId":         chatMustGetFlag(cmd, "role-id"),
 			})
 		},
 	}
@@ -6560,13 +6883,13 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "group", "role-ids"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlagWithAliases(cmd, "user", "userId"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "user", "userId"); err != nil {
 				return err
 			}
-			roleIDs := parseCSVValues(mustGetFlag(cmd, "role-ids"))
-			user := flagOrFallback(cmd, "user", "userId")
+			roleIDs := parseCSVValues(chatMustGetFlag(cmd, "role-ids"))
+			user := chatFlagOrFallback(cmd, "user", "userId")
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 				"openRoleIds":        roleIDs,
 			}
 			if isOpenDingTalkID(user) {
@@ -6625,13 +6948,13 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "group", "role-ids"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlagWithAliases(cmd, "user", "userId"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "user", "userId"); err != nil {
 				return err
 			}
-			roleIDs := parseCSVValues(mustGetFlag(cmd, "role-ids"))
-			user := flagOrFallback(cmd, "user", "userId")
+			roleIDs := parseCSVValues(chatMustGetFlag(cmd, "role-ids"))
+			user := chatFlagOrFallback(cmd, "user", "userId")
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 				"openRoleIds":        roleIDs,
 			}
 			if isOpenDingTalkID(user) {
@@ -6690,12 +7013,12 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "group"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlagWithAliases(cmd, "user", "userId"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "user", "userId"); err != nil {
 				return err
 			}
-			user := flagOrFallback(cmd, "user", "userId")
+			user := chatFlagOrFallback(cmd, "user", "userId")
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 			}
 			if isOpenDingTalkID(user) {
 				toolArgs["openDingTalkId"] = user
@@ -6764,7 +7087,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "group"); err != nil {
 				return err
 			}
-			groupID, err := resolveNativeChatTarget(mustGetFlag(cmd, "group"))
+			groupID, err := resolveNativeChatTarget(chatMustGetFlag(cmd, "group"))
 			if err != nil {
 				return err
 			}
@@ -6818,8 +7141,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("bot", "remove_robot_in_group", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "id"),
-				"openBotId":          mustGetFlag(cmd, "bot-id"),
+				"openConversationId": chatMustGetFlag(cmd, "id"),
+				"openBotId":          chatMustGetFlag(cmd, "bot-id"),
 			})
 		},
 	}
@@ -6881,11 +7204,11 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   dws chat bot find --query "日报" --limit 20
   # 拿到 openDingTalkId 后可用于给机器人发单聊消息`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlagWithAliases(cmd, "query", "keyword"); err != nil {
+			if err := chatValidateRequiredFlagWithAliases(cmd, "query", "keyword"); err != nil {
 				return err
 			}
 			toolArgs := map[string]any{
-				"keyword": flagOrFallback(cmd, "query", "keyword"),
+				"keyword": chatFlagOrFallback(cmd, "query", "keyword"),
 			}
 			if v, err := cmd.Flags().GetInt("limit"); err == nil && v > 0 {
 				toolArgs["limit"] = v
@@ -6946,7 +7269,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "dismiss_group", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 			})
 		},
 	}
@@ -7004,14 +7327,14 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "group", "option"); err != nil {
 				return err
 			}
-			option := mustGetFlag(cmd, "option")
+			option := chatMustGetFlag(cmd, "option")
 			switch option {
 			case "FORBIDDEN", "RECENT_100", "ALL":
 			default:
 				return fmt.Errorf("--option must be one of FORBIDDEN | RECENT_100 | ALL, got %q", option)
 			}
 			return callMCPToolOnServer("im", "update_show_history_msg_option", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 				"option":             option,
 			})
 		},
@@ -7067,9 +7390,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			toolArgs := map[string]any{
-				"srcOpenCid":        mustGetFlag(cmd, "src-conversation-id"),
-				"srcOpenMessageIds": parseCSVValues(mustGetFlag(cmd, "msg-ids")),
-				"destOpenCid":       mustGetFlag(cmd, "dest-conversation-id"),
+				"srcOpenCid":        chatMustGetFlag(cmd, "src-conversation-id"),
+				"srcOpenMessageIds": parseCSVValues(chatMustGetFlag(cmd, "msg-ids")),
+				"destOpenCid":       chatMustGetFlag(cmd, "dest-conversation-id"),
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v
@@ -7137,10 +7460,10 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			toolArgs := map[string]any{
-				"srcOpenMessageId":       mustGetFlag(cmd, "src-msg-id"),
-				"srcOpenConversationId":  mustGetFlag(cmd, "src-conversation-id"),
-				"srcOpenConvThreadId":    mustGetFlag(cmd, "src-thread-id"),
-				"destOpenConversationId": mustGetFlag(cmd, "dest-conversation-id"),
+				"srcOpenMessageId":       chatMustGetFlag(cmd, "src-msg-id"),
+				"srcOpenConversationId":  chatMustGetFlag(cmd, "src-conversation-id"),
+				"srcOpenConvThreadId":    chatMustGetFlag(cmd, "src-thread-id"),
+				"destOpenConversationId": chatMustGetFlag(cmd, "dest-conversation-id"),
 			}
 			return callMCPToolOnServer("im", "forward_topic", toolArgs)
 		},
@@ -7203,8 +7526,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "set_pin_message", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openConversationId": chatMustGetFlag(cmd, "open-conversation-id"),
+				"openMessageId":      chatMustGetFlag(cmd, "msg-id"),
 			})
 		},
 	}
@@ -7257,8 +7580,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "unset_pin_message", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openConversationId": chatMustGetFlag(cmd, "open-conversation-id"),
+				"openMessageId":      chatMustGetFlag(cmd, "msg-id"),
 			})
 		},
 	}
@@ -7313,7 +7636,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
+				"openConversationId": chatMustGetFlag(cmd, "open-conversation-id"),
 			}
 			if v, _ := cmd.Flags().GetString("cursor"); v != "" {
 				toolArgs["cursor"] = v
@@ -7373,8 +7696,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "add_message_favorite", map[string]any{
-				"openMessageId":      mustGetFlag(cmd, "open-message-id"),
-				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
+				"openMessageId":      chatMustGetFlag(cmd, "open-message-id"),
+				"openConversationId": chatMustGetFlag(cmd, "open-conversation-id"),
 			})
 		},
 	}
@@ -7422,8 +7745,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				return err
 			}
 			return callMCPToolOnServer("im", "remove_message_favorite", map[string]any{
-				"openMessageId":      mustGetFlag(cmd, "open-message-id"),
-				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
+				"openMessageId":      chatMustGetFlag(cmd, "open-message-id"),
+				"openConversationId": chatMustGetFlag(cmd, "open-conversation-id"),
 			})
 		},
 	}
@@ -7710,16 +8033,16 @@ status 可选值:
 			if err := validateRequiredFlags(cmd, "group", "record-id", "applicant", "inviter", "status"); err != nil {
 				return err
 			}
-			recordID, err := strconv.ParseInt(mustGetFlag(cmd, "record-id"), 10, 64)
+			recordID, err := strconv.ParseInt(chatMustGetFlag(cmd, "record-id"), 10, 64)
 			if err != nil {
 				return fmt.Errorf("--record-id must be a valid integer: %w", err)
 			}
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 				"applyRecordId":      recordID,
-				"applicantUid":       mustGetFlag(cmd, "applicant"),
-				"inviterUid":         mustGetFlag(cmd, "inviter"),
-				"status":             mustGetFlag(cmd, "status"),
+				"applicantUid":       chatMustGetFlag(cmd, "applicant"),
+				"inviterUid":         chatMustGetFlag(cmd, "inviter"),
+				"status":             chatMustGetFlag(cmd, "status"),
 			}
 			if v, _ := cmd.Flags().GetString("description"); v != "" {
 				toolArgs["auditDescription"] = v
@@ -7787,7 +8110,7 @@ status 可选值:
 		Example: `  dws chat mark-unread --conversation-id <openConversationId>
   dws chat mark-unread --id <openConversationId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
+			convID := chatFlagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat mark-unread --conversation-id <openConversationId>")
 			}
@@ -7847,7 +8170,7 @@ status 可选值:
 		Example: `  dws chat clear-red-point --conversation-id <openConversationId>
   dws chat clear-red-point --id <openConversationId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
+			convID := chatFlagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat clear-red-point --conversation-id <openConversationId>")
 			}
@@ -8011,7 +8334,7 @@ status 可选值:
 		Example: `  dws chat clear-messages --conversation-id <openConversationId>
   dws chat clear-messages --id <openConversationId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
+			convID := chatFlagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat clear-messages --conversation-id <openConversationId>")
 			}
@@ -8081,7 +8404,7 @@ status 可选值:
 		Example: `  dws chat mark-read --conversation-id <openConversationId> --message-id <openMessageId>
   dws chat mark-read --id <openConversationId> --message-id <openMessageId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
+			convID := chatFlagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat mark-read --conversation-id <openConversationId> --message-id <openMessageId>")
 			}
@@ -8090,7 +8413,7 @@ status 可选值:
 			}
 			return callMCPToolOnServer("im", "mark_message_read", map[string]any{
 				"openConversationId": convID,
-				"openMessageId":      mustGetFlag(cmd, "message-id"),
+				"openMessageId":      chatMustGetFlag(cmd, "message-id"),
 			})
 		},
 	}
@@ -8151,8 +8474,8 @@ status 可选值:
 				return err
 			}
 			return callMCPToolOnServer("im", "set_top_message", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openConversationId": chatMustGetFlag(cmd, "open-conversation-id"),
+				"openMessageId":      chatMustGetFlag(cmd, "msg-id"),
 			})
 		},
 	}
@@ -8208,8 +8531,8 @@ status 可选值:
 				return err
 			}
 			return callMCPToolOnServer("im", "unset_top_message", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openConversationId": chatMustGetFlag(cmd, "open-conversation-id"),
+				"openMessageId":      chatMustGetFlag(cmd, "msg-id"),
 			})
 		},
 	}
@@ -8267,7 +8590,7 @@ status 可选值:
 			}
 			nick, _ := cmd.Flags().GetString("nick")
 			return callMCPToolOnServer("im", "update_group_nick", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 				"nick":               nick,
 			})
 		},
@@ -8323,8 +8646,8 @@ status 可选值:
 				return err
 			}
 			return callMCPToolOnServer("im", "update_user_group_alias", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
-				"aliasTitle":         mustGetFlag(cmd, "alias-title"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
+				"aliasTitle":         chatMustGetFlag(cmd, "alias-title"),
 			})
 		},
 	}
@@ -8375,7 +8698,7 @@ status 可选值:
   # 查询群 ID: dws chat search --query "群名"
   # 查询单聊会话 ID: dws chat conversation-info --user <userId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
+			convID := chatFlagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat hide --conversation-id <openConversationId>")
 			}
@@ -8432,7 +8755,7 @@ status 可选值:
   dws chat mute-at-all --conversation-id <openConversationId> --off
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
+			convID := chatFlagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat mute-at-all --conversation-id <openConversationId>")
 			}
@@ -8493,7 +8816,7 @@ status 可选值:
   dws chat mute-red-envelope --conversation-id <openConversationId> --off
   # 查询群 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			convID := flagOrFallback(cmd, "conversation-id", "id", "chat")
+			convID := chatFlagOrFallback(cmd, "conversation-id", "id", "chat")
 			if convID == "" {
 				return fmt.Errorf("flag --conversation-id is required\n  hint: dws chat mute-red-envelope --conversation-id <openConversationId>")
 			}
@@ -8557,9 +8880,9 @@ status 可选值:
 			if err := validateRequiredFlags(cmd, "id", "users"); err != nil {
 				return err
 			}
-			users := parseCSVValues(mustGetFlag(cmd, "users"))
+			users := parseCSVValues(chatMustGetFlag(cmd, "users"))
 			return callMCPToolOnServer("im", "list_group_member_by_ids", map[string]any{
-				"openConversationId":    mustGetFlag(cmd, "id"),
+				"openConversationId":    chatMustGetFlag(cmd, "id"),
 				"memberOpenDingTalkIds": users,
 			})
 		},
@@ -8618,8 +8941,8 @@ status 可选值:
 				return err
 			}
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
-				"content":            mustGetFlag(cmd, "content"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
+				"content":            chatMustGetFlag(cmd, "content"),
 			}
 			if v, _ := cmd.Flags().GetBool("sticky"); v {
 				toolArgs["sticky"] = true
@@ -8688,9 +9011,9 @@ status 可选值:
 				return err
 			}
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
-				"dataId":             mustGetFlag(cmd, "notice-id"),
-				"content":            mustGetFlag(cmd, "content"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
+				"dataId":             chatMustGetFlag(cmd, "notice-id"),
+				"content":            chatMustGetFlag(cmd, "content"),
 			}
 			if v, _ := cmd.Flags().GetBool("sticky"); v {
 				toolArgs["sticky"] = true
@@ -8755,8 +9078,8 @@ status 可选值:
 				return err
 			}
 			return callMCPToolOnServer("im", "get_group_notice", map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
-				"dataId":             mustGetFlag(cmd, "notice-id"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
+				"dataId":             chatMustGetFlag(cmd, "notice-id"),
 			})
 		},
 	}
@@ -8810,7 +9133,7 @@ status 可选值:
 				return err
 			}
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 			}
 			if v, _ := cmd.Flags().GetInt("limit"); v > 0 {
 				toolArgs["limit"] = v
@@ -8885,7 +9208,7 @@ status 可选值:
 				return fmt.Errorf("--target and --receiver are mutually exclusive")
 			}
 			toolArgs := map[string]any{
-				"sourceOpenConversationId": mustGetFlag(cmd, "source"),
+				"sourceOpenConversationId": chatMustGetFlag(cmd, "source"),
 			}
 			if target != "" {
 				toolArgs["targetOpenConversationId"] = target
@@ -8959,9 +9282,9 @@ status 可选值:
 				return err
 			}
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "group"),
+				"openConversationId": chatMustGetFlag(cmd, "group"),
 			}
-			if rawExtension := mustGetFlag(cmd, "extension"); rawExtension != "" {
+			if rawExtension := chatMustGetFlag(cmd, "extension"); rawExtension != "" {
 				var rawValues map[string]any
 				if err := json.Unmarshal([]byte(rawExtension), &rawValues); err != nil {
 					return fmt.Errorf("--extension must be a JSON object with string values: %w", err)
@@ -9026,7 +9349,7 @@ status 可选值:
   dws chat category create-smart --name "团队群" --members openDingTalkId1,openDingTalkId2
   dws chat category create-smart --name "重点群" --keywords "重点" --members openDingTalkId1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := strings.TrimSpace(mustGetFlag(cmd, "name"))
+			name := strings.TrimSpace(chatMustGetFlag(cmd, "name"))
 			if name == "" {
 				return apperrors.NewValidation("--name must not be blank")
 			}
@@ -9034,14 +9357,14 @@ status 可选值:
 				"categoryName": name,
 			}
 			if cmd.Flags().Changed("keywords") {
-				values := parseCSVValues(mustGetFlag(cmd, "keywords"))
+				values := parseCSVValues(chatMustGetFlag(cmd, "keywords"))
 				if len(values) == 0 {
 					return apperrors.NewValidation("--keywords must contain at least one non-empty value")
 				}
 				toolArgs["groupNameKeywords"] = values
 			}
 			if cmd.Flags().Changed("members") {
-				values := parseCSVValues(mustGetFlag(cmd, "members"))
+				values := parseCSVValues(chatMustGetFlag(cmd, "members"))
 				if len(values) == 0 {
 					return apperrors.NewValidation("--members must contain at least one non-empty value")
 				}
@@ -9095,7 +9418,7 @@ status 可选值:
 			if err := validateRequiredFlags(cmd, "msg-ids"); err != nil {
 				return err
 			}
-			msgIds := parseCSVValues(mustGetFlag(cmd, "msg-ids"))
+			msgIds := parseCSVValues(chatMustGetFlag(cmd, "msg-ids"))
 			return callMCPToolOnServer("im", "list_message_emotion_replies", map[string]any{
 				"openMessageIds": msgIds,
 			})
@@ -9158,12 +9481,12 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 			if err := validateRequiredFlags(cmd, "query", "to"); err != nil {
 				return err
 			}
-			toLang := mustGetFlag(cmd, "to")
+			toLang := chatMustGetFlag(cmd, "to")
 			if !supportedTranslateLanguages[toLang] {
 				return fmt.Errorf("unsupported target language: %s", toLang)
 			}
 			return callMCPToolOnServer("im", "translate", map[string]any{
-				"query": mustGetFlag(cmd, "query"),
+				"query": chatMustGetFlag(cmd, "query"),
 				"to":    toLang,
 			})
 		},
@@ -9221,7 +9544,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 			if err := validateRequiredFlags(cmd, "groups"); err != nil {
 				return err
 			}
-			convIds := parseCSVValues(mustGetFlag(cmd, "groups"))
+			convIds := parseCSVValues(chatMustGetFlag(cmd, "groups"))
 			if len(convIds) == 0 {
 				return fmt.Errorf("--groups must not be empty")
 			}
@@ -9269,7 +9592,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 			if err := validateRequiredFlags(cmd, "items"); err != nil {
 				return err
 			}
-			itemsJSON := mustGetFlag(cmd, "items")
+			itemsJSON := chatMustGetFlag(cmd, "items")
 			var items []map[string]any
 			if err := json.Unmarshal([]byte(itemsJSON), &items); err != nil {
 				return fmt.Errorf("--items JSON parse error: %w", err)
@@ -9335,5 +9658,6 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	root.AddCommand(chatCompatibilityHintSubCmd("send", "use: dws chat message send"))
 	root.AddCommand(chatCompatibilityHintSubCmd("history", "use: dws chat message list --group <GROUP_OPEN_CONVERSATION_ID>"))
 
+	normalizeChatIDFlags(root)
 	return root
 }

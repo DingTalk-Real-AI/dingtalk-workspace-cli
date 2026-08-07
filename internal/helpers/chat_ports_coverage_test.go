@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -21,6 +22,101 @@ func executeChatPortsCoverageCommand(t *testing.T, caller edition.ToolCaller, ar
 	root.SilenceUsage = true
 	root.SetArgs(args)
 	return root.Execute()
+}
+
+func TestCrossPlatformCoverageChatIDFlagsExposeCanonicalNames(t *testing.T) {
+	tests := []struct {
+		path      []string
+		visible   []string
+		hidden    []string
+		notHidden []string
+	}{
+		{
+			path:      []string{"message", "list"},
+			visible:   []string{"conversation-id", "user-id"},
+			hidden:    []string{"group", "id", "chat", "user"},
+			notHidden: []string{"conversation-id", "user-id", "open-dingtalk-id"},
+		},
+		{
+			path:      []string{"message", "update-text-emotion"},
+			visible:   []string{"conversation-id", "message-id"},
+			hidden:    []string{"group", "id", "chat", "msg-id"},
+			notHidden: []string{"conversation-id", "message-id"},
+		},
+		{
+			path:      []string{"group", "get-mute-config"},
+			visible:   []string{"conversation-id"},
+			hidden:    []string{"group"},
+			notHidden: []string{"conversation-id"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(strings.Join(test.path, " "), func(t *testing.T) {
+			cmd, _, err := newChatCommand().Find(test.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range test.visible {
+				flag := cmd.Flags().Lookup(name)
+				if flag == nil {
+					t.Fatalf("flag --%s missing on %s", name, strings.Join(test.path, " "))
+				}
+			}
+			for _, name := range test.hidden {
+				flag := cmd.Flags().Lookup(name)
+				if flag == nil || !flag.Hidden {
+					t.Fatalf("flag --%s hidden = %v, want true", name, flag != nil && flag.Hidden)
+				}
+			}
+			for _, name := range test.notHidden {
+				flag := cmd.Flags().Lookup(name)
+				if flag == nil || flag.Hidden {
+					t.Fatalf("flag --%s hidden = %v, want false", name, flag != nil && flag.Hidden)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatIDFlagSchemaUsesCanonicalNames(t *testing.T) {
+	tests := []struct {
+		path      []string
+		forbidden []string
+	}{
+		{
+			path:      []string{"message", "list"},
+			forbidden: []string{"group", "id", "chat", "user", "open-conversation-id"},
+		},
+		{
+			path:      []string{"message", "update-text-emotion"},
+			forbidden: []string{"group", "id", "chat", "msg-id", "open-message-id"},
+		},
+		{
+			path:      []string{"group", "get-mute-config"},
+			forbidden: []string{"group", "open-conversation-id"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(strings.Join(test.path, " "), func(t *testing.T) {
+			cmd, _, err := newChatCommand().Find(test.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload, ok := contractfinal.RuntimeContractFinal(cmd)
+			if !ok {
+				t.Fatalf("missing RuntimeContractFinal for %s", strings.Join(test.path, " "))
+			}
+			names := map[string]bool{}
+			for _, parameter := range payload.Parameters {
+				names[parameter.Name] = true
+			}
+			for _, name := range test.forbidden {
+				if names[name] {
+					t.Fatalf("schema parameter --%s leaked; got %#v", name, names)
+				}
+			}
+		})
+	}
 }
 
 func TestCrossPlatformCoverageChatUpdateTextEmotion(t *testing.T) {
@@ -144,7 +240,7 @@ func TestCrossPlatformCoverageChatUpdateTextEmotionRequiredFlags(t *testing.T) {
 				"--emotion-name", "like",
 				"--text", "nice",
 			},
-			wantErr: `required flag(s) "background-id", "msg-id" not set`,
+			wantErr: `required flag(s) "background-id", "message-id" not set`,
 		},
 	}
 	for _, test := range tests {
