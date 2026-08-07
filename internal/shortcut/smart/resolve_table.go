@@ -20,8 +20,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
 )
 
 // ResolveTable: resolve a 数据表 (table) inside one Base by name keyword into a
@@ -47,11 +47,10 @@ var ResolveTable = shortcut.Shortcut{
 	Command:     "+resolve-table",
 	Product:     "aitable",
 	Description: "在某个多维表 Base 内按名称解析出唯一的数据表 tableId（只读）",
-	Intent: "当你已经知道某个多维表 Base 的 baseId、又只记得里面某张数据表(table)的名称或名称关键词、" +
+	Intent: "当你已经知道某个多维表 Base 的 baseId、又只记得里面某张数据表(table)的名称、" +
 		"想把它解析成可直接用于后续工具的 tableId 时使用；" +
-		"内部先用 get_tables（只传 baseId）列出该 Base 下的全部数据表，再在本地把每张表投影成 tableId、name，" +
-		"并按 --name 关键词做大小写不敏感的包含匹配来筛选候选。" +
-		"如果只命中一张表就直接返回它的 tableId；如果命中多张则列出全部候选让你消歧，绝不替你瞎猜；如果一张都没命中则提示未找到。" +
+		"内部先列出全部数据表并优先做大小写不敏感的精确名称匹配，只有显式 --fuzzy 才允许包含匹配。" +
+		"0 个或多个候选都会以结构化错误失败并返回候选，绝不替你猜选。" +
 		"这是纯只读操作，只做列举、本地匹配与投影，不会创建、修改或删除任何数据表。",
 	Risk: shortcut.RiskRead,
 	Safety: contract.SafetySpec{
@@ -74,65 +73,32 @@ var ResolveTable = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "在某个多维表 Base 内按名称解析出唯一的数据表 tableId（只读）",
-			UseWhen:      []string{"当你已经知道某个多维表 Base 的 baseId、又只记得里面某张数据表(table)的名称或名称关键词、想把它解析成可直接用于后续工具的 tableId 时使用；内部先用 get_tables（只传 baseId）列出该 Base 下的全部数据表，再在本地把每张表投影成 tableId、name，并按 --name 关键词做大小写不敏感的包含匹配来筛选候选。如果只命中一张表就直接返回它的 tableId；如果命中多张则列出全部候选让你消歧，绝不替你瞎猜；如果一张都没命中则提示未找到。这是纯只读操作，只做列举、本地匹配与投影，不会创建、修改或删除任何数据表。"},
+			UseWhen:      []string{"当你已经知道某个多维表 Base 的 baseId、又只记得里面某张数据表(table)的名称、想把它解析成可直接用于后续工具的 tableId 时使用；内部先列出全部数据表并优先做大小写不敏感的精确名称匹配，只有显式 --fuzzy 才允许包含匹配。0 个或多个候选都会以结构化错误失败并返回候选，绝不替你猜选。这是纯只读操作，只做列举、本地匹配与投影，不会创建、修改或删除任何数据表。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws aitable +resolve-table --base B --name 任务"},
 		},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "base", Type: shortcut.FlagString, Desc: "Base ID（要在其内解析数据表的多维表）", Required: true},
-		{Name: "name", Type: shortcut.FlagString, Desc: "要匹配的数据表名称关键词（必填）", Required: true},
+		{Name: "name", Type: shortcut.FlagString, Desc: "要解析的数据表名称", Required: true},
+		{Name: "fuzzy", Type: shortcut.FlagBool, Default: "false", Desc: "精确名称无结果时允许包含匹配"},
 	},
 	Tips: []string{
 		`dws aitable +resolve-table --base B --name 任务`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		// baseId mirrors list_tables / helpers tableGetCmd (get_tables). Omitting
-		// tableIds asks the server for every table in the base.
-		data, err := rt.CallMCPData("aitable", "get_tables", map[string]any{
-			"baseId": rt.Str("base"),
-		})
+		resolution, err := aitabletarget.ResolveTableName(rt, rt.Str("base"), rt.Str("name"), rt.Bool("fuzzy"))
 		if err != nil {
 			return err
 		}
-
-		// Project every table to {tableId, name}, defensively unwrapping the list.
-		items := resolveTableItems(data)
-		all := make([]map[string]any, 0, len(items))
-		for _, t := range items {
-			all = append(all, map[string]any{
-				"tableId": resolveTableID(t),
-				"name":    resolveTableName(t),
-			})
-		}
-
-		// Filter locally by case-insensitive substring match on name.
-		needle := strings.ToLower(rt.Str("name"))
-		candidates := make([]map[string]any, 0, len(all))
-		for _, c := range all {
-			name, _ := c["name"].(string)
-			if strings.Contains(strings.ToLower(name), needle) {
-				candidates = append(candidates, c)
-			}
-		}
-
-		switch len(candidates) {
-		case 0:
-			return apperrors.NewValidation("Base 内没有名称包含 " + rt.Str("name") + " 的数据表")
-		case 1:
-			return rt.Output(map[string]any{
-				"resolved": true,
-				"tableId":  candidates[0]["tableId"],
-				"name":     candidates[0]["name"],
-				"base":     rt.Str("base"),
-			})
-		default:
-			return rt.Output(map[string]any{
-				"resolved":   false,
-				"count":      len(candidates),
-				"candidates": candidates,
-			})
-		}
+		return rt.Output(map[string]any{
+			"resolved":  true,
+			"status":    resolution.Status,
+			"matchType": resolution.MatchType,
+			"tableId":   resolution.Selected.ID,
+			"name":      resolution.Selected.Name,
+			"base":      rt.Str("base"),
+		})
 	},
 }
 

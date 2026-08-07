@@ -21,6 +21,7 @@ FOLLOWUP_JSON_PATH = ROOT / "docs" / "shortcut-real-test-followups.json"
 SEMANTIC_PATHS = [
     ROOT / "internal" / "shortcut" / "semantic_catalog.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_doc.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_aitable.json",
 ]
 
 

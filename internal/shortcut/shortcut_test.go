@@ -671,12 +671,17 @@ func TestCrossPlatformCoverageCallMCPWriteDataRejectsDryRun(t *testing.T) {
 	}
 
 	rt := &RuntimeContext{cmd: cmd, shortcut: Shortcut{Service: "calendar"}}
-	_, err := rt.CallMCPWriteData("calendar", "create_calendar_event", map[string]any{"summary": "x"})
-	if err == nil {
-		t.Fatal("expected dry-run write guard error")
-	}
-	if !strings.Contains(err.Error(), "calendar/create_calendar_event") {
-		t.Fatalf("error = %q, want tool name", err.Error())
+	for name, call := range map[string]func(string, string, map[string]any) (map[string]any, error){
+		"legacy": rt.CallMCPWriteData,
+		"strict": rt.CallMCPWriteDataStrict,
+	} {
+		_, err := call("calendar", "create_calendar_event", map[string]any{"summary": "x"})
+		if err == nil {
+			t.Fatalf("%s: expected dry-run write guard error", name)
+		}
+		if !strings.Contains(err.Error(), "calendar/create_calendar_event") {
+			t.Fatalf("%s: error = %q, want tool name", name, err.Error())
+		}
 	}
 }
 

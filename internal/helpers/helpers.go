@@ -210,8 +210,16 @@ func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResul
 		}
 		return "", WrapError(err)
 	}
+	if result == nil {
+		return "", &CLIError{
+			Code:       CodeMCPToolError,
+			Message:    "MCP 工具返回 nil result，无法判断操作结果",
+			Suggestion: "不要把空回复当作成功；请重试并携带 operation/trace 信息排查服务端",
+			Operation:  serverID + "/" + toolName,
+		}
+	}
 	for _, c := range result.Content {
-		if c.Type == "text" && c.Text != "" {
+		if c.Type == "text" && strings.TrimSpace(c.Text) != "" {
 			dumpRawToolResponse(serverID, toolName, c.Text)
 			var errBody map[string]any
 			if json.Unmarshal([]byte(c.Text), &errBody) == nil {
@@ -243,6 +251,12 @@ func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResul
 			return c.Text, nil
 		}
 	}
+	// Some legacy tools intentionally use an empty text response as an
+	// acknowledgement. This low-level parser cannot know the business contract,
+	// so preserve that representation. Data-returning callers must validate the
+	// operation-specific shape (for example records/tables/valid) before they
+	// report success. Orchestrators whose contract requires a business result use
+	// CallMCPWriteDataStrict and may prove an unknown effect by independent read-back.
 	return "", nil
 }
 

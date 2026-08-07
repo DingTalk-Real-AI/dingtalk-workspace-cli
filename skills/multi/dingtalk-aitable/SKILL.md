@@ -24,35 +24,98 @@ metadata:
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
+| `dws aitable +advperm-disable` | high-risk-write | 关闭指定 Base 的高级权限总开关（所有自定义角色失效） |
+| `dws aitable +advperm-enable` | write | 开启指定 Base 的高级权限总开关 |
+| `dws aitable +attachment-put` | write | 准备凭证、实际 PUT 本地文件、写入 attachment 单元格并读回验证 |
+| `dws aitable +attachment-remove` | high-risk-write | 从 attachment 字段清空全部或按文件名移除，写前确保剩余项具有可重写 fileToken，并读回验证 |
+| `dws aitable +attachment-upload` | write | 为 attachment 字段申请 OSS 直传地址（uploadUrl / fileToken） |
+| `dws aitable +base-bootstrap` | write | 一次创建 Base、数据表和字段，逐层读回验证并在中断时报告已知副作用 |
+| `dws aitable +base-copy` | write | 复制 AI 表格到指定目录（可仅复制结构） |
+| `dws aitable +base-delete` | high-risk-write | 删除指定 Base（不可逆） |
 | `dws aitable +base-get` | read | 获取指定 Base 的目录信息（tables / dashboards summary） |
+| `dws aitable +base-get-primary-doc-id` | read | 根据 baseId/tableId/recordId 获取主键文档的 dentryUuid |
 | `dws aitable +base-list` | read | 获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页） |
+| `dws aitable +base-schema-snapshot` | read | 读取 Base、全部数据表、字段和视图的可复用结构快照，并严格校验每层响应 |
 | `dws aitable +base-search` | read | 按名称关键词搜索 AI 表格 Base |
+| `dws aitable +base-update` | write | 更新 Base 名称（可选备注） |
+| `dws aitable +chart-delete` | high-risk-write | 删除指定 chart 及其布局项（不可逆） |
 | `dws aitable +chart-get` | read | 获取指定 chart 的详细信息 |
+| `dws aitable +chart-share-get` | read | 查询 chart 的分享配置 |
+| `dws aitable +chart-share-update` | write | 开启/关闭 chart 分享并可设置分享类型 |
+| `dws aitable +chart-update` | write | 更新指定 chart 的配置或布局（--config 必填） |
 | `dws aitable +chart-widgets-example` | read | 获取所有图表类型的 widget config 示例 |
+| `dws aitable +dashboard-arrange` | write | 对指定仪表盘做服务端智能布局重排 |
 | `dws aitable +dashboard-config-example` | read | 获取 dashboard config 的结构示例 |
+| `dws aitable +dashboard-delete` | high-risk-write | 删除指定 dashboard（级联删除其 chart，不可逆） |
 | `dws aitable +dashboard-get` | read | 获取指定 dashboard 的详细信息（含 charts summary） |
+| `dws aitable +dashboard-share-get` | read | 查询 dashboard 的分享配置 |
+| `dws aitable +dashboard-share-update` | write | 开启/关闭 dashboard 分享并可设置分享类型 |
+| `dws aitable +dashboard-update` | write | 更新指定 dashboard 的配置 |
+| `dws aitable +export-data` | read | 导出 AI 表格数据（创建导出任务或按 taskId 续等） |
+| `dws aitable +field-delete` | high-risk-write | 删除指定字段（不可逆） |
 | `dws aitable +field-get` | read | 批量获取字段详情（含类型相关完整配置） |
+| `dws aitable +field-update` | write | 更新字段名称 / 配置 / AI 配置（类型不可改） |
 | `dws aitable +find-record` | read | 在指定多维表里按关键词查记录（只读） |
+| `dws aitable +form-delete` | high-risk-write | 删除指定表单视图（不可逆） |
+| `dws aitable +form-field-hide` | write | 切换表单字段的隐藏/显示状态 |
 | `dws aitable +form-field-list` | read | 列出表单视图当前可见的字段及其配置 |
+| `dws aitable +form-field-update` | write | 更新表单字段的必填状态或描述 |
 | `dws aitable +form-list` | read | 列出指定数据表下的所有表单视图 |
 | `dws aitable +form-share-get` | read | 读取视图当前的分享表单配置 |
+| `dws aitable +form-share-update` | write | 开启或关闭指定视图的分享表单 |
+| `dws aitable +form-update` | write | 更新表单标题 / 描述 |
+| `dws aitable +import-data` | write | 将已上传文件导入 AI 表格（新建表或追加到已有表） |
+| `dws aitable +import-upload` | write | 为导入任务申请 OSS 直传地址（uploadUrl / importId） |
 | `dws aitable +list-tables` | read | 列出某个多维表(base)里的所有数据表（只读，投影 tableId/tableName） |
+| `dws aitable +record-bulk-patch` | high-risk-write | 完整查询目标记录后批量合并同一组 cells，自动分片并逐条读回验证 |
+| `dws aitable +record-delete` | high-risk-write | 批量删除记录（不可逆），自动按 100 条分片并逐批确认记录已不存在 |
 | `dws aitable +record-history-list` | read | 按 recordId 查询单条记录的变更历史 |
+| `dws aitable +record-primary-doc-create` | write | 为记录创建主键文档（幂等），fieldId 须为 primaryDoc 类型 |
+| `dws aitable +record-primary-doc-get` | read | 查询记录关联的主键文档 nodeId |
 | `dws aitable +record-query` | read | 查询表格记录（按 ID 取 / 条件筛选 / 关键词 / 分页） |
 | `dws aitable +record-query-empty` | read | 扫描并过滤出完全没填用户字段的空行 |
 | `dws aitable +record-share-links` | read | 批量（可 >20 条）获取多维表记录分享链接：去重+分片+合并 |
 | `dws aitable +record-share-url` | read | 按 recordId 批量获取记录分享链接，单次最多 20 条 |
+| `dws aitable +record-update` | write | 批量更新记录，自动按 100 条分片并逐批读回验证 |
+| `dws aitable +record-upsert` | write | 按 recordId 自动拆分 create/update，按 100 条分片并读回验证 |
+| `dws aitable +record-upsert-by-key` | write | 按唯一字段值有则更新、无则创建记录，并读回验证 |
 | `dws aitable +resolve-base` | read | 按名称搜索多维表 Base 并解析出唯一 baseId（只读） |
 | `dws aitable +resolve-table` | read | 在某个多维表 Base 内按名称解析出唯一的数据表 tableId（只读） |
+| `dws aitable +role-create` | write | 在指定 Base 下创建自定义角色 |
+| `dws aitable +role-delete` | high-risk-write | 删除 Base 下指定的自定义角色（不可逆） |
+| `dws aitable +role-get` | read | 获取单个角色的完整配置 |
 | `dws aitable +role-list` | read | 列出指定 Base 下的全部角色 |
+| `dws aitable +role-update` | write | 按 PATCH 语义增量更新自定义角色 |
+| `dws aitable +section-create` | write | 在指定 Base 下创建文件夹（组织 table / dashboard） |
+| `dws aitable +section-delete` | high-risk-write | 删除指定文件夹（不可逆） |
 | `dws aitable +section-list-empty` | read | 列出指定 Base 下所有没有子节点的空文件夹 |
 | `dws aitable +section-list-nodes` | read | 列出指定 Base 当前版本下的全部 nsheet 节点 |
+| `dws aitable +section-move-node` | write | 把任意 nsheet 节点移动到目标文件夹下（可选调整位置） |
+| `dws aitable +section-rename` | write | 重命名指定文件夹 |
+| `dws aitable +section-reorder` | write | 在当前父文件夹下调整文件夹的展示顺序 |
+| `dws aitable +table-copy` | write | 跨 Base 同步复制一张表的可创建字段结构，并可同步复制全部记录 |
+| `dws aitable +table-delete` | high-risk-write | 删除指定数据表（不可逆） |
 | `dws aitable +table-get` | read | 批量获取指定数据表的表级信息、字段目录与视图目录 |
+| `dws aitable +table-update` | write | 更新数据表名称 / 备注 / 行命名规则 |
 | `dws aitable +template-search` | read | 按名称关键词搜索 AI 表格模板 |
+| `dws aitable +url-resolve` | read | 解析 AI 表格 URL 中的 baseId/tableId/viewId/recordId |
+| `dws aitable +view-delete` | high-risk-write | 删除指定视图（不可逆） |
+| `dws aitable +view-duplicate` | write | 复制视图，生成配置相同的新视图 |
 | `dws aitable +view-get` | read | 获取视图完整信息（列顺序、筛选、排序、分组等） |
 | `dws aitable +view-get-frozen-cols` | read | 获取视图当前冻结的左侧列数 |
 | `dws aitable +view-get-lock` | read | 获取视图锁定状态 |
 | `dws aitable +view-get-row-height` | read | 获取视图单元格行高（像素） |
+| `dws aitable +view-lock` | write | 锁定视图（默认）或解锁（--off） |
+| `dws aitable +view-preset-apply` | write | 按视图精确名称幂等创建或更新预设，并读回校验类型和 config |
+| `dws aitable +view-set-fill-color-rule` | write | 全量覆盖 Grid 视图的条件填色规则（传 '[]' 清空） |
+| `dws aitable +view-set-frozen-cols` | write | 设置视图冻结列数（0 表示取消冻结） |
+| `dws aitable +view-set-row-height` | write | 设置视图单元格行高（像素，合法档位 32/56/88/128） |
+| `dws aitable +view-update` | write | 更新视图名称 / 描述 / 配置（visibleFieldIds、filter、sort、group 等） |
+| `dws aitable +workflow-deploy` | write | 创建或更新完整 workflow-dsl/v1，强制检查 valid/flowId，并可启用后验证 RUNNING 状态 |
+| `dws aitable +workflow-disable` | high-risk-write | 禁用指定 Base 中的自动化工作流（影响业务自动化） |
+| `dws aitable +workflow-enable` | write | 启用指定 Base 中的自动化工作流 |
+| `dws aitable +workflow-get` | read | 获取单个自动化工作流的详细信息 |
+| `dws aitable +workflow-list` | read | 列出指定 Base 中的自动化工作流（分页） |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## 意图表

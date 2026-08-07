@@ -16,8 +16,8 @@ package smart
 import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitabletarget"
 )
 
 // ResolveBase: resolve a 多维表 Base by name keyword into a single baseId.
@@ -41,9 +41,9 @@ var ResolveBase = shortcut.Shortcut{
 	Command:     "+resolve-base",
 	Product:     "aitable",
 	Description: "按名称搜索多维表 Base 并解析出唯一 baseId（只读）",
-	Intent: "当你只知道某个多维表 Base 的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 baseId 时使用；" +
-		"内部按 --name 关键词调用 search_bases 搜索 Base，再在本地投影出每个候选的 baseId 和 name。" +
-		"如果只命中一个 Base 就直接返回它的 baseId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。" +
+	Intent: "当你只知道某个多维表 Base 的名称、想把它解析成可直接用于后续工具的 baseId 时使用；" +
+		"内部完整分页搜索并优先做大小写不敏感的精确名称匹配，只有显式 --fuzzy 才允许关键词包含匹配。" +
+		"0 个或多个候选都会以结构化错误失败并返回候选，绝不替你猜选。" +
 		"这是纯只读操作，只做搜索与本地投影，不会修改任何 Base。",
 	Risk: shortcut.RiskRead,
 	Safety: contract.SafetySpec{
@@ -66,53 +66,30 @@ var ResolveBase = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按名称搜索多维表 Base 并解析出唯一 baseId（只读）",
-			UseWhen:      []string{"当你只知道某个多维表 Base 的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 baseId 时使用；内部按 --name 关键词调用 search_bases 搜索 Base，再在本地投影出每个候选的 baseId 和 name。如果只命中一个 Base 就直接返回它的 baseId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何 Base。"},
+			UseWhen:      []string{"当你只知道某个多维表 Base 的名称、想把它解析成可直接用于后续工具的 baseId 时使用；内部完整分页搜索并优先做大小写不敏感的精确名称匹配，只有显式 --fuzzy 才允许关键词包含匹配。0 个或多个候选都会以结构化错误失败并返回候选，绝不替你猜选。这是纯只读操作，只做搜索与本地投影，不会修改任何 Base。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws aitable +resolve-base --name 项目管理"},
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "name", Type: shortcut.FlagString, Desc: "要搜索的 Base 名称关键词（必填）", Required: true},
+		{Name: "name", Type: shortcut.FlagString, Desc: "要解析的 Base 名称", Required: true},
+		{Name: "fuzzy", Type: shortcut.FlagBool, Default: "false", Desc: "精确名称无结果时允许包含匹配"},
 	},
 	Tips: []string{
 		`dws aitable +resolve-base --name 项目管理`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		// Search Bases by name. tool "search_bases" + arg "query" are taken
-		// verbatim from helpers base search (callAitableTool → server aitable).
-		data, err := rt.CallMCPData("aitable", "search_bases", map[string]any{
-			"query": rt.Str("name"),
-		})
+		resolution, err := aitabletarget.ResolveBaseName(rt, rt.Str("name"), rt.Bool("fuzzy"))
 		if err != nil {
 			return err
 		}
-
-		// Project candidates to {baseId, name}, defensively unwrapping the list.
-		items := resolveBaseItems(data)
-		candidates := make([]map[string]any, 0, len(items))
-		for _, b := range items {
-			candidates = append(candidates, map[string]any{
-				"baseId": resolveBaseID(b),
-				"name":   resolveBaseName(b),
-			})
-		}
-
-		switch len(candidates) {
-		case 0:
-			return apperrors.NewValidation("没有找到名称包含 " + rt.Str("name") + " 的 Base")
-		case 1:
-			return rt.Output(map[string]any{
-				"resolved": true,
-				"baseId":   candidates[0]["baseId"],
-				"name":     candidates[0]["name"],
-			})
-		default:
-			return rt.Output(map[string]any{
-				"resolved":   false,
-				"count":      len(candidates),
-				"candidates": candidates,
-			})
-		}
+		return rt.Output(map[string]any{
+			"resolved":  true,
+			"status":    resolution.Status,
+			"matchType": resolution.MatchType,
+			"baseId":    resolution.Selected.ID,
+			"name":      resolution.Selected.Name,
+		})
 	},
 }
 

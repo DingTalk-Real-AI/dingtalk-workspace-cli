@@ -196,7 +196,11 @@ func TestCrossPlatformCoverageMCPReturnTextClassification(t *testing.T) {
 	}
 	caller.result = &edition.ToolResult{Content: []edition.ContentBlock{{Type: "image", Text: "ignored"}, {Type: "text"}}}
 	if got, err := callMCPToolReturnTextOnServer(context.Background(), "server", "tool", nil); err != nil || got != "" {
-		t.Fatalf("empty text result = %q, %v", got, err)
+		t.Fatalf("low-level empty text representation = %q, %v", got, err)
+	}
+	caller.result = nil
+	if _, err := callMCPToolReturnTextOnServer(context.Background(), "server", "tool", nil); err == nil {
+		t.Fatal("nil result must fail")
 	}
 	caller.result = textToolResult("shortcut result")
 	if got, err := CallMCPToolTextOnServer("server", "tool", nil); err != nil || got != "shortcut result" {

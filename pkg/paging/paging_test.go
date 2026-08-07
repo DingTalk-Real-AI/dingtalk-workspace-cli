@@ -6,6 +6,7 @@ package paging
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -32,19 +33,19 @@ func (s *stubFetcher) Fetch(ctx context.Context, cursor string) (Page, error) {
 	return s.pages[idx], nil
 }
 
-func TestFetchAll_SinglePage(t *testing.T) {
+func TestCrossPlatformCoverageFetchAllSinglePage(t *testing.T) {
 	s := &stubFetcher{
 		pages: []Page{
 			{Records: []any{"a", "b", "c"}, NextCursor: ""},
 		},
 	}
 	got := FetchAll(context.Background(), s.Fetch, Options{InterPageDelay: 1 * time.Millisecond})
-	if got.HasMore || got.Pages != 1 || len(got.Records) != 3 {
+	if got.HasMore || !got.Complete || got.StopReason != StopComplete || got.Pages != 1 || got.Attempts != 1 || len(got.Records) != 3 {
 		t.Fatalf("single page: got=%+v", got)
 	}
 }
 
-func TestFetchAll_MultiPage(t *testing.T) {
+func TestCrossPlatformCoverageFetchAllMultiPage(t *testing.T) {
 	s := &stubFetcher{
 		pages: []Page{
 			{Records: []any{1, 2}, NextCursor: "c1"},
@@ -53,12 +54,12 @@ func TestFetchAll_MultiPage(t *testing.T) {
 		},
 	}
 	got := FetchAll(context.Background(), s.Fetch, Options{InterPageDelay: 1 * time.Millisecond})
-	if got.HasMore || got.Pages != 3 || len(got.Records) != 5 {
+	if got.HasMore || !got.Complete || got.Pages != 3 || got.Attempts != 3 || len(got.Records) != 5 {
 		t.Fatalf("multi page: got=%+v", got)
 	}
 }
 
-func TestFetchAll_PageLimit(t *testing.T) {
+func TestCrossPlatformCoverageFetchAllPageLimit(t *testing.T) {
 	s := &stubFetcher{
 		pages: []Page{
 			{Records: []any{1}, NextCursor: "c1"},
@@ -80,9 +81,12 @@ func TestFetchAll_PageLimit(t *testing.T) {
 	if len(got.Records) != 2 {
 		t.Fatalf("page limit records: got=%v", got.Records)
 	}
+	if got.Complete || got.Partial || got.StopReason != StopPageLimit {
+		t.Fatalf("page limit completeness: got=%+v", got)
+	}
 }
 
-func TestFetchAll_MidErrorPartial(t *testing.T) {
+func TestCrossPlatformCoverageFetchAllMidErrorPartial(t *testing.T) {
 	upstreamErr := errors.New("502 bad gateway")
 	s := &stubFetcher{
 		pages: []Page{
@@ -100,9 +104,12 @@ func TestFetchAll_MidErrorPartial(t *testing.T) {
 	if !got.HasMore {
 		t.Fatalf("partial should signal HasMore=true so caller can retry")
 	}
+	if got.Pages != 1 || got.Attempts != 2 || got.StopReason != StopFetchError {
+		t.Fatalf("partial counters: got=%+v", got)
+	}
 }
 
-func TestFetchAll_InitialCursorResume(t *testing.T) {
+func TestCrossPlatformCoverageFetchAllInitialCursorResume(t *testing.T) {
 	s := &stubFetcher{
 		pages: []Page{
 			{Records: []any{"resumed"}, NextCursor: ""},
@@ -117,7 +124,7 @@ func TestFetchAll_InitialCursorResume(t *testing.T) {
 	}
 }
 
-func TestFetchAll_ContextCancel(t *testing.T) {
+func TestCrossPlatformCoverageFetchAllContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // 立即取消
 	s := &stubFetcher{pages: []Page{{Records: []any{1}, NextCursor: "c1"}}}
@@ -130,11 +137,9 @@ func TestFetchAll_ContextCancel(t *testing.T) {
 	}
 }
 
-func TestFetchAll_UnlimitedPageLimit(t *testing.T) {
-	// PageLimit 显式置 -1 时（约定为"不限"），翻完为止
-	// （当前实现 PageLimit==0 用默认值 50；要真正无限制需另设特殊值，
-	// 这里测试默认 50 上限内能完成全量）
-	pages := make([]Page, 10)
+func TestCrossPlatformCoverageFetchAllUnlimitedPageLimit(t *testing.T) {
+	// 无限分页必须由哨兵值显式选择；用超过默认安全阀的页数证明它生效。
+	pages := make([]Page, DefaultPageLimit+1)
 	for i := range pages {
 		next := ""
 		if i < len(pages)-1 {
@@ -144,10 +149,87 @@ func TestFetchAll_UnlimitedPageLimit(t *testing.T) {
 	}
 	s := &stubFetcher{pages: pages}
 	got := FetchAll(context.Background(), s.Fetch, Options{
-		PageLimit:      100, // 高于实际页数
+		PageLimit:      UnlimitedPageLimit,
 		InterPageDelay: 1 * time.Millisecond,
 	})
-	if got.HasMore || got.Pages != 10 || len(got.Records) != 10 {
+	if got.HasMore || !got.Complete || got.Pages != len(pages) || len(got.Records) != len(pages) {
 		t.Fatalf("unlimited: got=%+v", got)
+	}
+}
+
+func TestCrossPlatformCoverageFetchAllZeroValueUsesDefaultPageLimit(t *testing.T) {
+	pages := make([]Page, DefaultPageLimit+1)
+	for i := range pages {
+		pages[i] = Page{Records: []any{i}, NextCursor: fmt.Sprintf("cursor-%d", i+1)}
+	}
+	s := &stubFetcher{pages: pages}
+	got := FetchAll(context.Background(), s.Fetch, Options{InterPageDelay: time.Nanosecond})
+	if got.Pages != DefaultPageLimit || got.Attempts != DefaultPageLimit || len(got.Records) != DefaultPageLimit {
+		t.Fatalf("zero-value page limit = %+v", got)
+	}
+	if !got.HasMore || got.Complete || got.Partial || got.StopReason != StopPageLimit || !errors.Is(got.Err, ErrPageLimitReached) {
+		t.Fatalf("zero-value safety result = %+v", got)
+	}
+	if s.calls != DefaultPageLimit {
+		t.Fatalf("zero-value fetch calls = %d, want %d", s.calls, DefaultPageLimit)
+	}
+}
+
+func TestCrossPlatformCoverageFetchAllUnsupportedNegativeUsesDefaultPageLimit(t *testing.T) {
+	calls := 0
+	got := FetchAll(context.Background(), func(context.Context, string) (Page, error) {
+		calls++
+		return Page{NextCursor: fmt.Sprintf("cursor-%d", calls)}, nil
+	}, Options{PageLimit: -2, InterPageDelay: time.Nanosecond})
+	if calls != DefaultPageLimit || got.StopReason != StopPageLimit {
+		t.Fatalf("unsupported negative page limit = %+v calls:%d", got, calls)
+	}
+}
+
+func TestCrossPlatformCoverageFetchAllPreservesServerTotalCount(t *testing.T) {
+	total := 123
+	s := &stubFetcher{pages: []Page{{Records: []any{1, 2}, TotalCount: &total}}}
+	got := FetchAll(context.Background(), s.Fetch, Options{InterPageDelay: time.Millisecond})
+	if got.TotalCount == nil || *got.TotalCount != total {
+		t.Fatalf("server total count lost: got=%+v", got)
+	}
+}
+
+func TestCrossPlatformCoverageFetchAllStopsOnCursorCycle(t *testing.T) {
+	s := &stubFetcher{pages: []Page{
+		{Records: []any{1}, NextCursor: "c1"},
+		{Records: []any{2}, NextCursor: "c1"},
+	}}
+	got := FetchAll(context.Background(), s.Fetch, Options{InterPageDelay: time.Millisecond})
+	if !got.Partial || got.Complete || got.StopReason != StopCursorCycle || !errors.Is(got.Err, ErrCursorCycle) {
+		t.Fatalf("cursor cycle: got=%+v", got)
+	}
+	if got.Pages != 2 || got.Attempts != 2 || got.LastCursor != "c1" || len(got.Records) != 2 {
+		t.Fatalf("cursor cycle progress: got=%+v", got)
+	}
+}
+
+func TestCrossPlatformCoverageFetchAllCancellationDuringDelay(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := 0
+	got := FetchAll(ctx, func(context.Context, string) (Page, error) {
+		calls++
+		time.AfterFunc(10*time.Millisecond, cancel)
+		return Page{Records: []any{"first"}, NextCursor: "next"}, nil
+	}, Options{InterPageDelay: time.Second})
+	if calls != 1 || got.StopReason != StopCanceled || !errors.Is(got.Err, context.Canceled) || got.LastCursor != "next" {
+		t.Fatalf("delay cancellation = %+v calls:%d", got, calls)
+	}
+}
+
+func TestCrossPlatformCoverageFetchAllStopsOnPriorCursorCycle(t *testing.T) {
+	s := &stubFetcher{pages: []Page{
+		{Records: []any{1}, NextCursor: "c1"},
+		{Records: []any{2}, NextCursor: "c2"},
+		{Records: []any{3}, NextCursor: "c1"},
+	}}
+	got := FetchAll(context.Background(), s.Fetch, Options{InterPageDelay: time.Millisecond})
+	if got.StopReason != StopCursorCycle || got.Pages != 3 || got.LastCursor != "c1" || !errors.Is(got.Err, ErrCursorCycle) {
+		t.Fatalf("prior cursor cycle = %+v", got)
 	}
 }
