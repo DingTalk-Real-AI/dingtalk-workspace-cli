@@ -295,6 +295,11 @@ bfs:
 
 		if folderErr != nil {
 			if driveDepthUnrecoverable(folderErr) {
+				if latest > 0 {
+					// 不完整集合上的 Top-N 会被误读为全局最新：latest 下不吐 partial，
+					// 直接回根因错误（auth 过期 / 网络不可达比通用 token 更可操作）。
+					return folderErr
+				}
 				// partial 照吐 stdout，错误详情走 stderr，非零退出
 				errs = append(errs, newDriveDepthError(folder, folderErr))
 				if emitErr := emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth); emitErr != nil {
@@ -330,15 +335,42 @@ bfs:
 		}
 	}
 
-	if truncated && latest > 0 {
+	// BFS 序与修改时间无关：截断与递归途中目录失败都让未扫区域可能含更新文件，
+	// 此时的 Top-N 不是全局最新，两者同属一条防线——拒绝以成功状态产出。
+	if latest > 0 && (truncated || len(errs) > 0) {
+		return driveLatestIncompleteError(latest, truncated, errs)
+	}
+
+	return emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth)
+}
+
+// driveLatestIncompleteError 是排序基不完整时的拒绝产出错误。截断与目录失败共用
+// CodeContentTruncated（→ ExitAPI），但 token 分开，便于消费方区分「范围太大」与「读不到」。
+// 拒绝产出后 errors[] 不再进 stdout，失败详情必须落在错误消息里，否则用户完全瞎。
+func driveLatestIncompleteError(latest int, truncated bool, errs []driveDepthError) error {
+	if truncated || len(errs) == 0 { // len==0 只可能来自截断分支；调用点已保证二者至少一真
 		return &CLIError{
 			Code:       CodeContentTruncated,
 			Message:    fmt.Sprintf("LATEST_SCAN_TRUNCATED: 扫描在全局上限 %d 条处截断，未扫描区域可能含更新文件，拒绝输出不完整的 Top-%d", driveDepthMaxItems, latest),
 			Suggestion: fmt.Sprintf("缩小扫描范围后重试：--folder 指定子目录，或降低 --depth 层数，如 dws drive list --folder <子目录ID> --latest %d", latest),
 		}
 	}
-
-	return emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth)
+	first := errs[0]
+	folder := first.FolderName
+	if folder == "" {
+		folder = first.FolderID
+	}
+	if folder == "" {
+		folder = "<root>"
+	}
+	return &CLIError{
+		Code: CodeContentTruncated,
+		Message: fmt.Sprintf("LATEST_SCAN_INCOMPLETE: %d 个目录未读全（首个失败 folder=%s depth=%d reason=%s: %s），未扫描区域可能含更新文件，拒绝输出不完整的 Top-%d",
+			len(errs), folder, first.Depth, first.Reason, first.Message, latest),
+		// partial+errors[] 承诺限定 --depth>1：单层去掉 --latest 会路由回普通单层 list，本就无 errors[] 契约。
+		// 每个子句的示例命令与该子句正文一致——「去掉 --latest」的子句示例不带 --latest（否则照抄复现同一错误）。
+		Suggestion: fmt.Sprintf("确认目录权限后重试；或用 --folder 缩小到可读子目录后重取 Top-%d：dws drive list --folder <可读子目录ID> --latest %d；需要看失败明细请去掉 --latest 按原范围重跑（--depth>1 时同时输出已扫到的 partial 与 errors[] 明细）：dws drive list --folder <目录ID> --depth <原层数>", latest, latest),
+	}
 }
 
 func emitDriveDepthCancelled(items []map[string]any, errs []driveDepthError, pattern string, latest, reqDepth int) error {
@@ -382,6 +414,11 @@ func emitDriveDepthResult(items []map[string]any, errs []driveDepthError, trunca
 		if d, ok := item["depth"].(int); ok && d > maxDepth {
 			maxDepth = d
 		}
+	}
+	// sortTime 是内部排序字段（applyDriveListLatest 排序时已用完），任何输出路径都不得泄露进契约；
+	// depth/parentId/rel_path 按 depth>1 的既有契约保留（stripDriveDepthDecorations 仅在单层 latest 剥）。
+	for _, item := range items {
+		delete(item, "sortTime")
 	}
 	if latest > 0 && reqDepth == 1 {
 		stripDriveDepthDecorations(items)

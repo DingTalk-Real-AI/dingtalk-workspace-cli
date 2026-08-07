@@ -12,6 +12,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Fixed
 
+- **Drive list `--latest` 不完整扫描防护** — `dws drive list --latest` 在递归途中目录读取失败（403/接口错误等）时，此前仍以退出码 0 输出「Top-N」，让不完整集合冒充全局最新；现与扫描触发 2000 条上限一样拒绝产出（`LATEST_SCAN_INCOMPLETE` / `LATEST_SCAN_TRUNCATED`）。同时修复内部排序字段 `sortTime` 泄露进 `drive list --depth` 输出契约的问题。
 - **Sheet formula verification** (#873) — `dws sheet formula-verify` now calls
   the registered remote tool name `verify_formula`; the previous
   `formula_verify` name failed at gateway dispatch.
