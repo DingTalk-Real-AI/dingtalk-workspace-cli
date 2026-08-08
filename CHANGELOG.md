@@ -6,6 +6,13 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Fixed
+
+- **Fail-closed devapp list pagination** (#917) — `dws devapp +list` now
+  preserves `hasMore` and `nextCursor` with each single-page result, forwards
+  opaque cursors unchanged, and rejects malformed or ambiguous pagination
+  pages and app items instead of emitting terminal-looking partial results.
+
 ## [1.0.58-beta.1] - 2026-08-07
 
 ### Added
