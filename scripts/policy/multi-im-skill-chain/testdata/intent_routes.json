@@ -2,7 +2,7 @@
   "version": 3,
   "marker_roots": [
     "skills/multi/dingtalk-chat",
-    "skills/multi/dingtalk-misc/references"
+    "skills/multi/dingtalk-event"
   ],
   "retired_scripts": [
     "skills/multi/dingtalk-chat/scripts/_chat_message_export_common.py",
@@ -15,7 +15,7 @@
     "skills/mono/scripts/bot_broadcast.py"
   ],
   "contract_reference": "skills/multi/dingtalk-chat/references/contracts.md",
-  "handoff_reference": "skills/multi/dingtalk-misc/references/event-im-output.md",
+  "handoff_reference": "skills/multi/dingtalk-event/references/event-im-output.md",
   "intents": [
     {
       "id": "chat.send.dm",
@@ -148,8 +148,19 @@
         "event.consume"
       ],
       "references": [
-        "skills/multi/dingtalk-misc/references/event.md",
-        "skills/multi/dingtalk-misc/references/event-im.md"
+        "skills/multi/dingtalk-event/SKILL.md",
+        "skills/multi/dingtalk-event/references/event-im.md"
+      ]
+    },
+    {
+      "id": "event.listen.oa",
+      "preferred_tool": "event.consume",
+      "forbidden_default_tools": [
+        "event.listen_im"
+      ],
+      "references": [
+        "skills/multi/dingtalk-event/SKILL.md",
+        "skills/multi/dingtalk-event/references/event-oa.md"
       ]
     }
   ]

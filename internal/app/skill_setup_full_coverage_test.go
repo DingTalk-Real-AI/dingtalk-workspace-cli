@@ -126,6 +126,7 @@ func TestCrossPlatformCoverageSkillSetupLowLevelRemainingCoverage(t *testing.T) 
 	oldExecutable, oldGetwd, oldHome := skillSetupExecutable, skillSetupGetwd, skillSetupUserHomeDir
 	oldRemove, oldMkdir := skillSetupRemoveAll, skillSetupMkdirAll
 	oldCopyDir, oldWalk, oldRel := skillSetupCopyDir, skillSetupWalk, skillSetupRel
+	oldMkdirTemp, oldRename := skillSetupMkdirTemp, skillSetupRename
 	oldReadlink, oldOpen, oldOpenFile, oldCopy := skillSetupReadlink, skillSetupOpen, skillSetupOpenFile, skillSetupCopy
 	t.Cleanup(func() {
 		skillSetupRunForm, skillSetupInteractive = oldRunForm, oldInteractive
@@ -133,6 +134,7 @@ func TestCrossPlatformCoverageSkillSetupLowLevelRemainingCoverage(t *testing.T) 
 		skillSetupExecutable, skillSetupGetwd, skillSetupUserHomeDir = oldExecutable, oldGetwd, oldHome
 		skillSetupRemoveAll, skillSetupMkdirAll = oldRemove, oldMkdir
 		skillSetupCopyDir, skillSetupWalk, skillSetupRel = oldCopyDir, oldWalk, oldRel
+		skillSetupMkdirTemp, skillSetupRename = oldMkdirTemp, oldRename
 		skillSetupReadlink, skillSetupOpen, skillSetupOpenFile, skillSetupCopy = oldReadlink, oldOpen, oldOpenFile, oldCopy
 	})
 	fail := errors.New("failure")

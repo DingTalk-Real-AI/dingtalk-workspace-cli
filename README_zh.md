@@ -465,7 +465,7 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 <details>
 <summary><strong>个人事件订阅</strong> — 实时接收钉钉消息，驱动事件触发的 Agent</summary>
 
-`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应，以及群标题变更和群解散事件。
+`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应、群生命周期，以及六个 OA 审批任务/实例事件。
 
 默认 `ndjson`、`json`、`pretty` 输出保留兼容 transport envelope（`type`、`event_type`、字符串 `data`、`headers`），`compact` 继续沿用原 processor。Agent 或新脚本显式加 `--flatten` 后，输出稳定的顶层业务字段。`--format` 控制 JSON 序列化，`--flatten` 控制数据结构，且不能与 `-f raw` 或 `--debug-raw-events` 同时使用。
 
@@ -475,28 +475,33 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-event.sh | sh
+
+# 或在已有 dws 环境中安装独立的 multi skill
+dws skill setup --mode multi -s event
 ```
 
 ```bash
 # 查看公开个人事件目录和 schema
 dws event list
 dws event schema user_im_message_receive_o2o --flatten
+dws event list --category oa
+dws event schema user_oa_approval_task_created --flatten
 
 # 监听当前用户被 @ 的消息
-dws event consume user_im_message_receive_at --flatten -f ndjson
+dws event +listen-im --kind at-me -f ndjson
 
-# 监听与指定用户的单聊消息
-dws event consume user_im_message_receive_o2o --user <userId> --flatten -f ndjson
+# 监听指定发送人的消息
+dws event +listen-im --kind sender --user <userId> -f ndjson
 
 # 使用 openDingtalkId 监听外部联系人、机器人或跨组织身份
-dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId> --flatten -f ndjson
+dws event +listen-im --kind sender --open-dingtalk-id <openDingtalkId> -f ndjson
 
 # 监听指定群的消息
-dws event consume user_im_message_receive_group --group <openConversationId> --flatten -f ndjson
+dws event +listen-im --kind group --chat-id <openConversationId> -f ndjson
 
 # 监听所有单聊或所有群消息
-dws event consume user_im_message_receive_o2o_all --flatten -f ndjson
-dws event consume user_im_message_receive_group_all --flatten -f ndjson
+dws event +listen-im --kind all-direct -f ndjson
+dws event +listen-im --kind all-group -f ndjson
 
 # 监听指定群标题变更、成员进退群或群解散
 dws event consume user_im_group_updated --group <openConversationId> --flatten -f ndjson
@@ -504,14 +509,19 @@ dws event consume user_im_group_member_added --group <openConversationId> --flat
 dws event consume user_im_group_member_exited --group <openConversationId> --flatten -f ndjson
 dws event consume user_im_group_disbanded --group <openConversationId> --flatten -f ndjson
 
-# 一个进程监听同一用户的多个事件
+# 一个进程监听同一发送人的消息、已读和撤回
+dws event +listen-im --kind sender --user <userId> \
+  --events message,read,recall -f ndjson
+
+# 一个进程监听全部六个公开 OA 审批事件
 dws event consume \
-  user_im_message_receive_o2o \
-  user_im_message_read_o2o \
-  user_im_message_recall_o2o \
-  --user <userId> \
-  --flatten \
-  -f ndjson
+  user_oa_approval_task_created \
+  user_oa_approval_task_finished \
+  user_oa_approval_task_redirected \
+  user_oa_approval_instance_started \
+  user_oa_approval_instance_terminated \
+  user_oa_approval_instance_finished \
+  --flatten -f ndjson
 
 # 查看本地 consume，并取消指定订阅
 dws event status
@@ -530,7 +540,7 @@ dws event stop <subscribe_id>
 | 状态可观测 | `status` 同时显示服务端订阅、personal bus 和本地 consumers |
 | 跨平台 | macOS/Linux 使用 Unix Socket，Windows 使用 Named Pipe |
 
-Agent 工作流和事件参数详见 `skills/multi/dingtalk-misc/references/event.md`。
+Agent 工作流和事件参数详见 `skills/multi/dingtalk-event/SKILL.md`。
 
 </details>
 

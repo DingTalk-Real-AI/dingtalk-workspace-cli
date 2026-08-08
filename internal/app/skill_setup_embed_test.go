@@ -58,8 +58,9 @@ func TestMaterializeEmbeddedSkillSourceMono(t *testing.T) {
 }
 
 // TestMaterializeEmbeddedSkillSourceMulti verifies that the peer multi bundle
-// contains both the shared routing skill and misc (including folded PAT docs). Structured
-// Schema hints are build inputs and must not become a third installable mode.
+// contains the standalone Event skill, shared routing skill, and clean misc
+// (including PAT docs). Structured Schema hints are build inputs and must not
+// become a third installable mode.
 func TestMaterializeEmbeddedSkillSourceMulti(t *testing.T) {
 	dir, cleanup, err := materializeEmbeddedSkillSource(skillSetupModeMulti)
 	if err != nil {
@@ -71,6 +72,8 @@ func TestMaterializeEmbeddedSkillSourceMulti(t *testing.T) {
 		t.Fatalf("extracted dir %s is not a valid multi skill source root", dir)
 	}
 	for _, rel := range []string{
+		filepath.Join("dingtalk-event", "SKILL.md"),
+		filepath.Join("dingtalk-event", "references", "event-oa.md"),
 		filepath.Join("dingtalk-shared", "SKILL.md"),
 		filepath.Join("dingtalk-misc", "SKILL.md"),
 		filepath.Join("dingtalk-misc", "references", "pat.md"),
@@ -78,6 +81,11 @@ func TestMaterializeEmbeddedSkillSourceMulti(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
 			t.Errorf("expected embedded multi skill to contain %s: %v", rel, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "dingtalk-misc", "references", "event.md")); err == nil {
+		t.Fatal("embedded misc must not retain the folded personal Event reference")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat embedded misc event reference: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "schema-hints")); err == nil {
 		t.Fatal("embedded multi skill must not contain build-only schema-hints")

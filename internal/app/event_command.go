@@ -80,12 +80,12 @@ func newEventCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "event",
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "订阅/消费个人消息、动作与群生命周期事件，并管理订阅生命周期",
+			AgentSummary: "实时监听当前用户相关的个人 IM 与 OA 审批事件，并管理订阅生命周期",
 			UseWhen: []string{
-				"需要实时监听个人消息接收、全量消息、已读、撤回、表情回应或群生命周期事件，或管理个人事件订阅生命周期",
+				"需要实时监听未来发生的个人消息、消息动作、群生命周期或 OA 审批任务/实例事件，或管理个人事件订阅生命周期",
 			},
 			AvoidWhen: []string{
-				"查历史聊天或主动发消息分别用 chat 查询/发送命令",
+				"查历史聊天或主动发消息用 chat；查询或处理审批实例/任务用 oa；配置开放平台应用事件回调用 dev app event",
 			},
 		},
 	})
@@ -333,7 +333,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 	f.BoolVar(&force, "force", false,
 		"仅 --foreground 模式生效：跳过单实例锁 (慎用：会让云事件被随机切分)")
 	f.BoolVar(&dryRun, "dry-run", false,
-		"仅打印解析后的配置，不连接 bus / 云端")
+		"仅打印解析后的配置；不创建订阅、不连接 bus；复用 --subscribe-id 时会只读查询控制面")
 	f.BoolVar(&foreground, "foreground", false,
 		"当前进程直接跑 bus 服务、不 fork、不打印事件（给 systemd/k8s 托管用）；读事件不要用它")
 	f.StringVar(&personalOpts.SubscribeID, "subscribe-id", "",
@@ -398,22 +398,21 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 				Reason:       "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "订阅并持续消费一个或多个兼容的个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
+				AgentSummary: "消费 OA、群生命周期或需要底层控制的个人事件流；Agent 通常使用 --flatten 输出 NDJSON",
 				UseWhen: []string{
-					"需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
-					"用户明确要求监听当前身份的所有单聊或所有群消息",
-					"需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
+					"需要监听六个公开 OA 审批任务/实例 EventKey 中的一个或多个事件",
 					"需要监听指定群的标题变更、成员进退群或群解散事件",
-					"监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标",
-					"同一目标、同一过滤条件需要同时监听多个兼容事件",
+					"用户显式给出原始 EventKey、Filter DSL、subscribe_id，要求原始 transport envelope，或需要普通 IM facade 不提供的高级多事件控制",
 				},
 				AvoidWhen: []string{
+					"普通 @我、指定发送人/群、全部单聊/群聊及 message/reaction/read/recall 监听优先使用 event +listen-im",
 					"只查历史聊天记录时用 chat 查询命令",
+					"查询、同意、拒绝、转交、撤销或发起审批时用 oa；配置应用事件回调时用 dev app event",
 					"只看事件目录/字段时用 event list / event schema",
 				},
 				Examples: []string{
-					"dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
-					"dws event consume user_im_message_receive_o2o user_im_message_read_o2o --user test-user-001 --flatten --max-events 2 --format ndjson",
+					"dws event consume user_oa_approval_task_created user_oa_approval_instance_finished --flatten --duration 10m --format ndjson",
+					"dws event consume user_im_group_member_added --group cid-example --flatten --max-events 1 --format ndjson",
 				},
 			},
 		},

@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -201,12 +202,15 @@ func newEventSchemaCommand() *cobra.Command {
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
-				UseWhen:      []string{"已知任一公开个人 IM event_key，消费前需要理解输出字段或保守 payload 契约"},
+				UseWhen:      []string{"已知任一公开个人 IM 或 OA event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
 				AvoidWhen: []string{
 					"查询 CLI 命令参数契约时用顶层 dws schema",
 					"要实际收事件时用 event consume",
 				},
-				Examples: []string{"dws event schema user_im_message_receive_at --flatten --format json"},
+				Examples: []string{
+					"dws event schema user_im_message_receive_at --flatten --format json",
+					"dws event schema user_oa_approval_task_created --flatten --format json",
+				},
 			},
 		},
 	})
@@ -262,6 +266,9 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return personalSubscriptionValidationError(err)
 	}
+	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
+	}
 	rawFormat := ""
 	if f := c.Flags().Lookup("format"); f != nil && f.Changed {
 		rawFormat = opts.Common.FormatRaw
@@ -290,11 +297,18 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
 	if opts.Common.DryRun {
 		if strings.TrimSpace(opts.SubscribeID) == "" {
 			if err := validatePersonalSubscriptionOptions(opts); err != nil {
 				return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 			}
+		} else {
+			_, eventKey, _, err := personalEnsureSubscription(ctx, client, identity, opts)
+			if err != nil {
+				return fmt.Errorf("event consume --as user: %w", err)
+			}
+			opts.EventKey = eventKey
 		}
 		cfg := consume.Config{
 			WorkDir:        workDir,
@@ -369,7 +383,6 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		}
 	}
 
-	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
 	var attempt *personalSubscriptionAttemptReservation
 	if strings.TrimSpace(opts.SubscribeID) == "" {
 		attempt, err = reservePersonalSubscriptionAttempts(
@@ -408,9 +421,17 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		)
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
-	cleanup := func(cleanupCtx context.Context) {
-		_ = personalDeleteSubscription(client, cleanupCtx, sub.SubscribeID)
-		_ = personalRemoveRunStates(workDir, []string{sub.SubscribeID})
+	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
+	ownsSubscription := selfCreated || opts.Ephemeral
+	var cleanupOnce sync.Once
+	cleanupOwnedSubscription := func(cleanupCtx context.Context) {
+		if !ownsSubscription {
+			return
+		}
+		cleanupOnce.Do(func() {
+			_ = personalDeleteSubscription(client, cleanupCtx, sub.SubscribeID)
+			_ = personalRemoveRunStates(workDir, []string{sub.SubscribeID})
+		})
 	}
 	if err := personalUpsertRunState(workDir, personal.RunState{
 		SubscribeID:  sub.SubscribeID,
@@ -421,19 +442,19 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		IdentityHash: identityHash,
 	}); err != nil {
 		wrapped := fmt.Errorf("save run state: %w", err)
+		cleanupCtx := context.Background()
+		if personalSubscriptionCanceled(ctx, wrapped) {
+			cleanupCtx = ctx
+		}
 		if attempt != nil {
-			cleanupCtx := context.Background()
-			if personalSubscriptionCanceled(ctx, wrapped) {
-				cleanupCtx = ctx
-			}
 			classification := personalSubscriptionLocalFailure()
 			wrapped = attempt.completeFailure(ctx, 0, 0, wrapped, &classification)
-			cleanup(cleanupCtx)
 		}
+		cleanupOwnedSubscription(cleanupCtx)
 		return fmt.Errorf("event consume --as user: %w", wrapped)
 	}
 	if err := attempt.completeSuccess(); err != nil {
-		cleanup(context.Background())
+		cleanupOwnedSubscription(context.Background())
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
 	// Ownership-based cleanup: a subscription this run CREATED is
@@ -442,9 +463,8 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	// leaks server-side. A subscription REUSED via --subscribe-id is left
 	// intact — the caller owns its lifecycle. --ephemeral forces cleanup
 	// either way.
-	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
-	if opts.Ephemeral || selfCreated {
-		defer cleanup(context.Background())
+	if ownsSubscription {
+		defer cleanupOwnedSubscription(context.Background())
 	}
 
 	cfg.EventKey = eventKey
@@ -466,17 +486,9 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 			Source:       foregroundSource,
 		}
 		bus.ApplyEnvTuning(&busCfg)
-		err = personalBusRun(ctx, busCfg)
-		if err != nil && !opts.Ephemeral {
-			cleanup(context.Background())
-		}
-		return err
+		return personalBusRun(ctx, busCfg)
 	}
-	err = personalConsumeRun(ctx, cfg)
-	if err != nil && !opts.Ephemeral {
-		cleanup(context.Background())
-	}
-	return err
+	return personalConsumeRun(ctx, cfg)
 }
 
 type personalMultiSubscription struct {
@@ -688,6 +700,9 @@ func preparePersonalMultiOptions(opts personalConsumeOptions) ([]personalConsume
 		if !def.Public {
 			return nil, personal.PublicAvailabilityError(eventKey)
 		}
+		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+			return nil, err
+		}
 		switch def.RuleType {
 		case "singleChat", "sender":
 			hasUserScope = true
@@ -814,6 +829,9 @@ func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOption
 }
 
 func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
+	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+		return err
+	}
 	if _, _, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
 		RuleType:       opts.Rule,
 		UserID:         opts.UserID,
@@ -824,6 +842,37 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 	}
 	_, _, err := personal.BuildFilter(opts.FilterJSON, opts.QueryCSV)
 	return err
+}
+
+func validatePersonalOAOptions(eventKey string, opts personalConsumeOptions) error {
+	changed := personalOAOptionNames(opts)
+	if len(changed) == 0 {
+		return nil
+	}
+	def, ok := personalLookupDefinition(strings.TrimSpace(eventKey))
+	if !ok || def.Category != "oa" {
+		return nil
+	}
+	return fmt.Errorf("%s not supported for OA event %s", strings.Join(changed, ", "), eventKey)
+}
+
+func personalOAOptionNames(opts personalConsumeOptions) []string {
+	var changed []string
+	for _, item := range []struct {
+		name  string
+		value string
+	}{
+		{name: "--user", value: opts.UserID},
+		{name: "--open-dingtalk-id", value: opts.OpenDingTalkID},
+		{name: "--group", value: opts.GroupID},
+		{name: "--query", value: opts.QueryCSV},
+		{name: "--filter-json", value: opts.FilterJSON},
+	} {
+		if strings.TrimSpace(item.value) != "" {
+			changed = append(changed, item.name)
+		}
+	}
+	return changed
 }
 
 type personalPreparedSubscription struct {
@@ -837,6 +886,9 @@ func preparePersonalSubscription(identity personal.Identity, opts personalConsum
 		return personalPreparedSubscription{}, fmt.Errorf("event_key is required unless --subscribe-id is provided")
 	}
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
+		return personalPreparedSubscription{}, err
+	}
+	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
 		return personalPreparedSubscription{}, err
 	}
 	ruleType, ruleParam, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
@@ -885,11 +937,30 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		if err != nil {
 			return nil, "", "", err
 		}
-		eventKey := firstNonEmptyPersonalString(opts.EventKey, sub.EventKey)
+		if sub == nil {
+			return nil, "", "", errors.New("personal event: server returned an empty subscription")
+		}
+		requestedEventKey := strings.TrimSpace(opts.EventKey)
+		actualEventKey := strings.TrimSpace(sub.EventKey)
+		if requestedEventKey != "" && actualEventKey != "" && requestedEventKey != actualEventKey {
+			return nil, "", "", fmt.Errorf(
+				"event_key %q does not match reused subscription %q event_key %q",
+				requestedEventKey,
+				strings.TrimSpace(opts.SubscribeID),
+				actualEventKey,
+			)
+		}
+		eventKey := actualEventKey
+		if eventKey == "" {
+			eventKey = requestedEventKey
+		}
 		if eventKey == "" {
 			return nil, "", "", fmt.Errorf("event_key is required when --subscribe-id lookup returns no event_key")
 		}
 		if err := ensurePublicPersonalEvent(eventKey); err != nil {
+			return nil, "", "", err
+		}
+		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
 			return nil, "", "", err
 		}
 		ruleType := firstNonEmptyPersonalString(sub.RuleType, opts.Rule)

@@ -52,7 +52,7 @@ metadata:
 | 查看全部会话 | `dws chat +conversation-list --page-all` | 检查 `complete` / `failures` |
 | 读取并下载消息资源 | 查询命令加 `--download-resources` | 不另起手工下载循环；下载失败项保留在结果中 |
 | <!-- dws-intent: chat.conversation.list-top -->查看置顶会话 | `dws chat +conversation-list-top` | 会话 Top 与消息 Pin、消息 Top、Favorite 不同 |
-| 监听 IM 事件 | 切换 `dingtalk-misc` → [event.md](../dingtalk-misc/references/event.md) | 由事件参考选择确定的 EventKey 和生命周期 |
+| 监听未来 IM 事件 | [`dingtalk-event`](../dingtalk-event/SKILL.md) | 常规监听走 `+listen-im`；生命周期/高级控制走 `consume` |
 
 以下次级入口在意图明确时直接使用，不需要先加载完整 Catalog：
 

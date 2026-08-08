@@ -1271,7 +1271,7 @@ func newChatCommand() *cobra.Command {
 				"请求涉及群聊管理、聊天记录、消息发送、会话设置或群机器人",
 			},
 			AvoidWhen: []string{
-				"邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
+				"实时监听未来 IM 事件用 event +listen-im；邮件用 mail；开放平台应用/机器人建号发布用 dev；企业语义找人优先 aisearch person",
 			},
 		},
 	})

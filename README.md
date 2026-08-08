@@ -471,7 +471,7 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 <details>
 <summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
 
-`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, and group title/disband lifecycle events.
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, and six OA approval task/instance events.
 
 The default `ndjson`, `json`, and `pretty` output preserves the transport envelope (`type`, `event_type`, string `data`, and `headers`) for existing scripts; `compact` retains its existing processor. Add `--flatten` to emit the stable top-level business fields used by Agent workflows. `--format` controls JSON serialization; `--flatten` controls the data structure and cannot be combined with `-f raw` or `--debug-raw-events`.
 
@@ -481,28 +481,33 @@ For an event-focused installation, use the official convenience installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-event.sh | sh
+
+# Or install the standalone multi skill from an existing dws installation
+dws skill setup --mode multi -s event
 ```
 
 ```bash
 # Inspect the public personal event catalog and schema
 dws event list
 dws event schema user_im_message_receive_o2o --flatten
+dws event list --category oa
+dws event schema user_oa_approval_task_created --flatten
 
 # Listen for messages that mention the current user
-dws event consume user_im_message_receive_at --flatten -f ndjson
+dws event +listen-im --kind at-me -f ndjson
 
-# Listen for one-to-one messages with a specified user
-dws event consume user_im_message_receive_o2o --user <userId> --flatten -f ndjson
+# Listen for messages from a specified sender
+dws event +listen-im --kind sender --user <userId> -f ndjson
 
 # Listen by openDingtalkId (external contact, bot, or cross-organization identity)
-dws event consume user_im_message_receive_o2o --open-dingtalk-id <openDingtalkId> --flatten -f ndjson
+dws event +listen-im --kind sender --open-dingtalk-id <openDingtalkId> -f ndjson
 
 # Listen for messages in a specified group
-dws event consume user_im_message_receive_group --group <openConversationId> --flatten -f ndjson
+dws event +listen-im --kind group --chat-id <openConversationId> -f ndjson
 
 # Listen for all one-to-one or all group messages
-dws event consume user_im_message_receive_o2o_all --flatten -f ndjson
-dws event consume user_im_message_receive_group_all --flatten -f ndjson
+dws event +listen-im --kind all-direct -f ndjson
+dws event +listen-im --kind all-group -f ndjson
 
 # Listen for a specified group's title changes, member changes, or disband event
 dws event consume user_im_group_updated --group <openConversationId> --flatten -f ndjson
@@ -510,14 +515,19 @@ dws event consume user_im_group_member_added --group <openConversationId> --flat
 dws event consume user_im_group_member_exited --group <openConversationId> --flatten -f ndjson
 dws event consume user_im_group_disbanded --group <openConversationId> --flatten -f ndjson
 
-# Listen for multiple events for the same user in one process
+# Listen for messages, reads, and recalls from the same sender in one process
+dws event +listen-im --kind sender --user <userId> \
+  --events message,read,recall -f ndjson
+
+# Listen for all six public OA approval events in one process
 dws event consume \
-  user_im_message_receive_o2o \
-  user_im_message_read_o2o \
-  user_im_message_recall_o2o \
-  --user <userId> \
-  --flatten \
-  -f ndjson
+  user_oa_approval_task_created \
+  user_oa_approval_task_finished \
+  user_oa_approval_task_redirected \
+  user_oa_approval_instance_started \
+  user_oa_approval_instance_terminated \
+  user_oa_approval_instance_finished \
+  --flatten -f ndjson
 
 # Inspect local consumers and cancel a subscription
 dws event status
@@ -536,7 +546,7 @@ For one-to-one and specified-sender events, use exactly one target identity: `--
 | Observability | `status` shows remote subscriptions, the personal bus, and local consumers |
 | Cross-platform | Unix Socket on macOS/Linux, Windows Named Pipe on Windows |
 
-See `skills/multi/dingtalk-misc/references/event.md` for the Agent workflow and supported event parameters.
+See `skills/multi/dingtalk-event/SKILL.md` for the Agent workflow and supported event parameters.
 
 </details>
 

@@ -633,6 +633,33 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	if !foundDingtalk {
 		t.Fatalf("multi/ does not contain any dingtalk-* skill: %v", multiEntries)
 	}
+
+	// Personal IM/OA events are owned by the standalone dingtalk-event Skill.
+	// Keep the release archive layout explicit so a future refactor cannot
+	// silently fold the Event entry point back into dingtalk-misc.
+	for _, rel := range []string{
+		filepath.Join("multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join("multi", "dingtalk-event", "references", "event-oa.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(extractDir, rel)); err != nil {
+			t.Fatalf("zip missing %s: %v", rel, err)
+		}
+	}
+	for _, rel := range []string{
+		filepath.Join("multi", "dingtalk-misc", "references", "event.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-keys.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-lifecycle.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-operations.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-output.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-oa.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(extractDir, rel)); err == nil {
+			t.Fatalf("zip unexpectedly contains retired misc Event reference %s", rel)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("Stat(%s) error = %v", rel, err)
+		}
+	}
 }
 
 func readReleaseWorkflow(t *testing.T) string {

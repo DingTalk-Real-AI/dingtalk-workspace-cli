@@ -10,6 +10,7 @@
 | AI 表格、多维表、字段、记录、视图、仪表盘 | [`dingtalk-aitable`](../../dingtalk-aitable/SKILL.md) |
 | 日程、参会人、会议室、闲忙 | [`dingtalk-calendar`](../../dingtalk-calendar/SKILL.md) |
 | 群聊、消息、机器人、Webhook、群成员 | [`dingtalk-chat`](../../dingtalk-chat/SKILL.md) |
+| 实时监听未来 IM 消息、reaction、已读、撤回、群生命周期或 OA 审批变化 | [`dingtalk-event`](../../dingtalk-event/SKILL.md) |
 | 已有 userId 的用户详情、部门、角色、组织关系 | [`dingtalk-contact`](../../dingtalk-contact/SKILL.md) |
 | 文档正文读取、创建、更新、块编辑、媒体和导出 | [`dingtalk-doc`](../../dingtalk-doc/SKILL.md) |
 | 文件搜索、上传下载、复制移动、重命名、权限 | [`dingtalk-drive`](../../dingtalk-drive/SKILL.md) |
@@ -23,7 +24,7 @@
 | 组织大脑、人才池、员工档案专项、职业历程、绩效、结构化人才搜索 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`hrbrain.md`](../../dingtalk-misc/references/hrbrain.md) |
 | PAT 行为授权、scope 授权、授权浏览器策略 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`pat.md`](../../dingtalk-misc/references/pat.md) |
 | 切换组织、跨组织、多组织、profile 管理 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`profile.md`](../../dingtalk-misc/references/profile.md) |
-| 审批、考勤、会议、电子表格、日志、DING、直播、开放平台应用、技能市场安装、个人 IM 事件等长尾产品 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) |
+| 审批查询与处理、考勤、会议、电子表格、日志、DING、直播、开放平台应用、技能市场安装等长尾产品 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) |
 | 宜搭 / AI 应用创建脚本 / 财务辅助脚本（无稳定产品面） | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`unsupported-scripts.md`](../../dingtalk-misc/references/unsupported-scripts.md)；默认说明未产品化，勿当正式 CLI |
 
 选择 `dingtalk-misc` 后，先读取其 `SKILL.md` 产品索引，再只读取命中产品的单个
@@ -41,10 +42,11 @@ reference，不要加载全部长尾产品文档。
 - `calendar`：日历事件、参会人和会议室；视频会议（conference）当前 CLI 不支持，请在钉钉客户端操作；
   `minutes`：会后听记内容。
 - `report`：钉钉日志系统中的日报/周报；`doc`：普通文档创作；`todo`：个人任务。
-- `chat`：普通会话和消息；`event`：个人 IM 事件长连接监听；`ding`：强提醒。
-  `event` 与 `ding` 位于 `dingtalk-misc`。
+- `chat`：发送消息、读取历史消息和主动群操作；独立的 `event`：未来个人 IM/OA 事件长连接监听；
+  `ding`：强提醒，位于 `dingtalk-misc`。
 - `hrbrain` / `markdown` / `pat` / `profile` 均位于 `dingtalk-misc`。
-- 请假、加班、外出、出差、补卡等考勤业务审批优先走 `attendance`；其他通用审批
-  走 `oa`。两者均位于 `dingtalk-misc`。
+- 请假、加班、外出、出差、补卡等考勤业务审批优先走 `attendance`；其他通用审批查询、同意、
+  拒绝、转交和撤销走 `oa`。两者均位于 `dingtalk-misc`；未来审批任务或实例变化的实时通知走
+  独立的 `dingtalk-event`。
 
 边界仍无法判断时，只读取 [intent-guide.md](intent-guide.md) 的对应章节。

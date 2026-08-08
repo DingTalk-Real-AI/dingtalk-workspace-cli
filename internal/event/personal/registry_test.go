@@ -46,9 +46,44 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventGroupMemberAdded,
 		EventGroupMemberExited,
 		EventGroupDisbanded,
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
 	}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("keys = %#v, want %#v", keys, want)
+	}
+}
+
+func TestOAEventCatalogDefinitions(t *testing.T) {
+	items := Catalog("oa", true, false)
+	wantKeys := []string{
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
+	}
+	if len(items) != len(wantKeys) {
+		t.Fatalf("Catalog(oa) = %#v, want %d events", items, len(wantKeys))
+	}
+	for i, item := range items {
+		if item.EventKey != wantKeys[i] {
+			t.Fatalf("Catalog(oa)[%d].event_key = %q, want %q", i, item.EventKey, wantKeys[i])
+		}
+		if item.Category != "oa" || item.RuleType != "all" || item.Status != StatusEnabled || !item.Public {
+			t.Fatalf("Catalog(oa)[%d] = %#v, want public enabled oa/all event", i, item)
+		}
+		if len(item.RequiredParams) != 0 || item.Constraints != nil {
+			t.Fatalf("Catalog(oa)[%d] parameters = %#v/%#v, want none", i, item.RequiredParams, item.Constraints)
+		}
+		if item.Auth["identity"] != "user" {
+			t.Fatalf("Catalog(oa)[%d].auth = %#v, want user identity", i, item.Auth)
+		}
 	}
 }
 
@@ -119,6 +154,12 @@ func TestSchemaDocumentsDefaultToTransportEnvelope(t *testing.T) {
 		EventGroupMemberAdded,
 		EventGroupMemberExited,
 		EventGroupDisbanded,
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
 	} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
@@ -433,6 +474,96 @@ func TestGroupLifecycleSchemaDocumentsUseConservativePayload(t *testing.T) {
 	}
 }
 
+func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
+	tests := []struct {
+		eventKey   string
+		properties []string
+	}{
+		{
+			eventKey: EventOAApprovalTaskCreated,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "task_id", "title", "status", "create_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalTaskFinished,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "task_id", "title", "status", "result", "create_time",
+				"finish_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalTaskRedirected,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "task_id", "title", "status", "result", "create_time",
+				"finish_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalInstanceStarted,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "title", "status", "create_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalInstanceTerminated,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "title", "status", "create_time", "finish_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalInstanceFinished,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "title", "status", "result", "create_time", "finish_time",
+				"event_time",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.eventKey, func(t *testing.T) {
+			def, ok := Lookup(tt.eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", tt.eventKey)
+			}
+			doc := BuildSchemaDocumentForMode(def, true)
+			if doc.JQRootPath != "." {
+				t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
+			}
+			props, ok := doc.Schema["properties"].(map[string]any)
+			if !ok || len(props) != len(tt.properties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d fields", doc.Schema["properties"], len(tt.properties))
+			}
+			for _, name := range tt.properties {
+				if _, ok := props[name].(map[string]any); !ok {
+					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
+			}
+			eventType := props["type"].(map[string]any)
+			if !reflect.DeepEqual(eventType["enum"], []string{tt.eventKey}) {
+				t.Fatalf("schema.properties.type.enum = %#v, want %q", eventType["enum"], tt.eventKey)
+			}
+			if _, ok := props["payload"]; ok {
+				t.Fatalf("schema.properties exposed generic payload: %#v", props)
+			}
+			for _, name := range []string{"timestamp", "create_time", "finish_time", "event_time"} {
+				property, exists := props[name].(map[string]any)
+				if !exists {
+					continue
+				}
+				if property["type"] != "integer" || property["format"] != "timestamp_ms" {
+					t.Fatalf("schema.properties.%s = %#v, want timestamp_ms integer", name, property)
+				}
+			}
+		})
+	}
+}
+
 func TestGroupMemberSchemaDocumentsMatchOutputDTO(t *testing.T) {
 	wantProperties := []string{
 		"type", "event_id", "timestamp", "subscribe_id", "conversation_id",
@@ -495,7 +626,16 @@ func TestBuildRuleParamMention(t *testing.T) {
 }
 
 func TestBuildRuleParamAllEvents(t *testing.T) {
-	for _, eventKey := range []string{EventAllSingleChat, EventAllGroupChat} {
+	for _, eventKey := range []string{
+		EventAllSingleChat,
+		EventAllGroupChat,
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
+	} {
 		t.Run(eventKey, func(t *testing.T) {
 			rule, param, err := BuildRuleParam(eventKey, RuleOptions{})
 			if err != nil {
@@ -701,6 +841,12 @@ func TestSupportsMessageFilter(t *testing.T) {
 		EventReadO2O,
 		EventReactionGroup,
 		EventGroupUpdated,
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
 		"unknown_event",
 	} {
 		if SupportsMessageFilter(eventKey) {

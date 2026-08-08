@@ -94,7 +94,7 @@ func newDevAppCommand(runner executor.Runner) *cobra.Command {
 				"请求涉及企业内部应用的查询、创建、配置、成员权限、机器人、事件订阅或版本管理",
 			},
 			AvoidWhen: []string{
-				"开放平台接口文档搜索使用 devdoc；普通钉钉业务数据使用对应产品命令",
+				"个人 IM/OA 实时事件监听使用 event；开放平台接口文档搜索使用 devdoc；普通钉钉业务数据使用对应产品命令",
 			},
 		},
 	})
@@ -293,7 +293,7 @@ func newDevAppEventListCommand(runner executor.Runner) *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出或搜索应用可订阅的事件",
 				UseWhen:      []string{"需要查事件码、事件名称或当前事件列表时"},
-				AvoidWhen:    []string{"订阅或退订事件使用对应写命令"},
+				AvoidWhen:    []string{"订阅或退订应用回调事件使用对应写命令；监听当前用户个人 IM/OA 事件使用 event"},
 				Examples:     []string{`dws dev app event list --unified-app-id <unifiedAppId> --keyword "审批" --page-size 20`},
 			},
 		},
@@ -329,7 +329,7 @@ func newDevAppEventSubscribeCommand(runner executor.Runner) *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "为应用订阅指定事件码",
 				UseWhen:      []string{"已确认事件码并需要新增事件订阅时"},
-				AvoidWhen:    []string{"查询事件码或已有订阅时先使用 dev app event list"},
+				AvoidWhen:    []string{"查询事件码或已有订阅时先使用 dev app event list；个人 IM/OA 事件长连接监听使用 event"},
 				Examples:     []string{"dws dev app event subscribe --unified-app-id <unifiedAppId> --event-codes bpms_task_change --dry-run"},
 			},
 		},
@@ -365,7 +365,7 @@ func newDevAppEventUnsubscribeCommand(runner executor.Runner) *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "取消应用的指定事件订阅",
 				UseWhen:      []string{"需要停止接收一个或多个已订阅事件时"},
-				AvoidWhen:    []string{"只是查看事件订阅时使用 dev app event list"},
+				AvoidWhen:    []string{"只是查看应用事件订阅时使用 dev app event list；停止个人事件监听使用 event stop"},
 				Examples:     []string{"dws dev app event unsubscribe --unified-app-id <unifiedAppId> --event-codes bpms_task_change --dry-run"},
 			},
 		},

@@ -2,8 +2,8 @@
 
 ## Summary
 
-- **Total Test Cases**: 244
-- **Passed**: 244
+- **Total Test Cases**: 276
+- **Passed**: 276
 - **Failed**: 0
 - **Pass Rate**: 100.0%
 
@@ -19,7 +19,7 @@
 | dev | 25 | 25 | 0 | 100.0% |
 | devdoc | 9 | 9 | 0 | 100.0% |
 | ding | 5 | 5 | 0 | 100.0% |
-| event | 8 | 8 | 0 | 100.0% |
+| event | 40 | 40 | 0 | 100.0% |
 | report | 26 | 26 | 0 | 100.0% |
 | routing | 3 | 3 | 0 | 100.0% |
 | todo | 30 | 30 | 0 | 100.0% |
@@ -1100,7 +1100,7 @@
 
 - Prompt: 搜索开放平台应用，应用名是 DemoApp
 - Expected: `dws dev app list --name DemoApp --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app list)
 - Flags: PASS (1 flags validated)
 
@@ -1108,7 +1108,7 @@
 
 - Prompt: 分页查询开放平台应用，第 2 页，每页 10 条，按修改时间倒序
 - Expected: `dws dev app list --page 2 --page-size 10 --sort gmt_modified --order desc --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app list)
 - Flags: PASS (4 flags validated)
 
@@ -1116,7 +1116,7 @@
 
 - Prompt: 在开发者后台搜索企业内部应用 DemoApp
 - Expected: `dws dev app list --name DemoApp --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app list)
 - Flags: PASS (1 flags validated)
 
@@ -1124,31 +1124,31 @@
 
 - Prompt: 查看统一应用 UNIFIED_APP_ID 的应用详情
 - Expected: `dws dev app get --unified-app-id UNIFIED_APP_ID --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app get)
 - Flags: PASS (1 flags validated)
 
 **dev_app_get_002** ✅ PASS
 
-- Prompt: agentId 为 123456 的开放平台应用是哪个
-- Expected: `dws dev app get --agent-id 123456 --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Prompt: 按 appKey dingxxx 查开放平台应用详情
+- Expected: `dws dev app get --app-key dingxxx --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app get)
 - Flags: PASS (1 flags validated)
 
 **dev_app_get_003** ✅ PASS
 
 - Prompt: 查开放平台应用 DemoApp 的 appKey、clientId 和 agentId
-- Expected: `dws dev app get --name DemoApp --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
-- Command path: PASS (dev app get)
+- Expected: `dws dev app list --name DemoApp --format json`
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
+- Command path: PASS (dev app list)
 - Flags: PASS (1 flags validated)
 
 **dev_app_create_001** ✅ PASS
 
 - Prompt: 创建一个企业内部应用，名称 DemoApp，描述是内部应用
 - Expected: `dws dev app create --name DemoApp --desc "内部应用" --type internal --dry-run --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app create)
 - Flags: PASS (3 flags validated)
 
@@ -1156,7 +1156,7 @@
 
 - Prompt: 已确认创建企业内部应用 DemoApp
 - Expected: `dws dev app create --name DemoApp --type internal --yes --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app create)
 - Flags: PASS (2 flags validated)
 
@@ -1164,7 +1164,7 @@
 
 - Prompt: 把应用 UNIFIED_APP_ID 的描述改成 新描述
 - Expected: `dws dev app update --unified-app-id UNIFIED_APP_ID --desc "新描述" --dry-run --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app update)
 - Flags: PASS (2 flags validated)
 
@@ -1172,7 +1172,7 @@
 
 - Prompt: 删除开放平台应用 UNIFIED_APP_ID，先给我预览
 - Expected: `dws dev app delete --unified-app-id UNIFIED_APP_ID --dry-run --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app delete)
 - Flags: PASS (1 flags validated)
 
@@ -1180,7 +1180,7 @@
 
 - Prompt: 查询应用 UNIFIED_APP_ID 的开放平台凭证
 - Expected: `dws dev app credentials get --unified-app-id UNIFIED_APP_ID --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app credentials get)
 - Flags: PASS (1 flags validated)
 
@@ -1188,7 +1188,7 @@
 
 - Prompt: 查询 AgentId AGENT_ID 对应应用的开放平台凭证
 - Expected: `dws dev app credentials get --agent-id AGENT_ID --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app credentials get)
 - Flags: PASS (1 flags validated)
 
@@ -1196,7 +1196,7 @@
 
 - Prompt: 查看开放平台应用 UNIFIED_APP_ID 的成员
 - Expected: `dws dev app member list --unified-app-id UNIFIED_APP_ID --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app member list)
 - Flags: PASS (1 flags validated)
 
@@ -1204,7 +1204,7 @@
 
 - Prompt: 给开放平台应用 UNIFIED_APP_ID 添加开发者成员 userId1,userId2，先预览
 - Expected: `dws dev app member add --unified-app-id UNIFIED_APP_ID --user-ids userId1,userId2 --member-type DEVELOPER --dry-run --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app member add)
 - Flags: PASS (3 flags validated)
 
@@ -1212,7 +1212,7 @@
 
 - Prompt: 已确认，从开放平台应用 UNIFIED_APP_ID 移除开发者成员 userId1
 - Expected: `dws dev app member remove --unified-app-id UNIFIED_APP_ID --user-ids userId1 --member-type DEVELOPER --yes --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app member remove)
 - Flags: PASS (4 flags validated)
 
@@ -1220,7 +1220,7 @@
 
 - Prompt: 给开放平台应用 UNIFIED_APP_ID 配置 IP 白名单 192.0.2.10，先预览
 - Expected: `dws dev app security config --unified-app-id UNIFIED_APP_ID --ip-whitelist 192.0.2.10 --dry-run --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app security config)
 - Flags: PASS (2 flags validated)
 
@@ -1228,7 +1228,7 @@
 
 - Prompt: 查询应用 UNIFIED_APP_ID 已开通和未开通的全部 APP、SNS 权限
 - Expected: `dws dev app permission list --unified-app-id UNIFIED_APP_ID --status all --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app permission list)
 - Flags: PASS (2 flags validated)
 
@@ -1236,7 +1236,7 @@
 
 - Prompt: 搜索应用 UNIFIED_APP_ID 里机器人发送消息相关的未开通权限
 - Expected: `dws dev app permission list --unified-app-id UNIFIED_APP_ID --keyword "机器人发送消息" --status unauthed --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app permission list)
 - Flags: PASS (3 flags validated)
 
@@ -1244,7 +1244,7 @@
 
 - Prompt: 看一下权限 qyapi_robot_sendmsg 覆盖哪些 API
 - Expected: `dws dev app permission list --unified-app-id UNIFIED_APP_ID --scope qyapi_robot_sendmsg --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app permission list)
 - Flags: PASS (2 flags validated)
 
@@ -1252,7 +1252,7 @@
 
 - Prompt: 给开放平台应用 UNIFIED_APP_ID 搜索手机号权限，应用权限和个人权限都要展示
 - Expected: `dws dev app permission list --unified-app-id UNIFIED_APP_ID --keyword "手机号" --status all --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app permission list)
 - Flags: PASS (3 flags validated)
 
@@ -1260,7 +1260,7 @@
 
 - Prompt: 给应用 UNIFIED_APP_ID 申请 qyapi_robot_sendmsg 权限，先预览
 - Expected: `dws dev app permission add --unified-app-id UNIFIED_APP_ID --permissions qyapi_robot_sendmsg --dry-run --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app permission add)
 - Flags: PASS (2 flags validated)
 
@@ -1268,7 +1268,7 @@
 
 - Prompt: 已确认，给应用 UNIFIED_APP_ID 申请 Contact.User.mobile 权限
 - Expected: `dws dev app permission add --unified-app-id UNIFIED_APP_ID --permissions Contact.User.mobile --yes --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app permission add)
 - Flags: PASS (2 flags validated)
 
@@ -1276,7 +1276,7 @@
 
 - Prompt: 从应用 UNIFIED_APP_ID 移除 qyapi_robot_sendmsg 权限，先预览
 - Expected: `dws dev app permission remove --unified-app-id UNIFIED_APP_ID --permission qyapi_robot_sendmsg --dry-run --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app permission remove)
 - Flags: PASS (2 flags validated)
 
@@ -1284,7 +1284,7 @@
 
 - Prompt: 查询应用 UNIFIED_APP_ID 的事件订阅配置
 - Expected: `dws dev app event list --unified-app-id UNIFIED_APP_ID --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app event list)
 - Flags: PASS (1 flags validated)
 
@@ -1292,7 +1292,7 @@
 
 - Prompt: 已确认，发布应用 UNIFIED_APP_ID 的版本 VERSION_ID，审批人是 USERID
 - Expected: `dws dev app version publish --unified-app-id UNIFIED_APP_ID --version-id VERSION_ID --approver USERID --yes --format json`
-- Skill Reference: references/products/skills/multi/dingtalk-dev/SKILL.md
+- Skill Reference: references/products/skills/multi/dingtalk-misc/references/devapp.md
 - Command path: PASS (dev app version publish)
 - Flags: PASS (3 flags validated)
 
@@ -1417,51 +1417,323 @@
 **event_event_consume_at_001** ✅ PASS
 
 - Prompt: 监听有人 @ 我的消息
-- Expected: `dws event consume user_im_message_receive_at -f ndjson`
-- Skill Reference: references/products/event.md
-- Command path: PASS (event consume user_im_message_receive_at -f ndjson)
-- Flags: N/A (no flags specified)
+- Expected: `dws event +listen-im --kind at-me`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (1 flags validated)
 
 **event_event_consume_o2o_001** ✅ PASS
 
-- Prompt: 监听我和 userId test-user-001 的单聊消息
-- Expected: `dws event consume user_im_message_receive_o2o --user test-user-001 -f ndjson`
-- Skill Reference: references/products/event.md
+- Prompt: 用原始 EventKey user_im_message_receive_o2o 监听我和 userId test-user-001 的单聊消息
+- Expected: `dws event consume user_im_message_receive_o2o --user test-user-001 --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_im_message_receive_o2o)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_o2o_open_id_001** ✅ PASS
+
+- Prompt: 用原始 EventKey user_im_message_receive_o2o 监听我和 openDingtalkId abc 的单聊消息
+- Expected: `dws event consume user_im_message_receive_o2o --open-dingtalk-id abc --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
 - Command path: PASS (event consume user_im_message_receive_o2o)
 - Flags: PASS (1 flags validated)
 
 **event_event_consume_o2o_003** ✅ PASS
 
 - Prompt: 监听我的个人单聊消息
-- Expected: `dws event consume user_im_message_receive_o2o -f ndjson`
-- Skill Reference: references/products/event.md
-- Command path: PASS (event consume user_im_message_receive_o2o -f ndjson)
+- Expected: `dws event +listen-im`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
 - Flags: N/A (no flags specified)
 - Note: [ASK_USER] case - only command path validated
+
+**event_event_consume_o2o_auto_reply_001** ✅ PASS
+
+- Prompt: 监听 userId test-user-001 发给我的消息，并对方发什么自动回复什么
+- Expected: `dws event +listen-im --kind sender --user test-user-001`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (2 flags validated)
 
 **event_event_consume_group_001** ✅ PASS
 
 - Prompt: 监听 openConversationId cid123 的群消息
-- Expected: `dws event consume user_im_message_receive_group --group cid123 -f ndjson`
-- Skill Reference: references/products/event.md
-- Command path: PASS (event consume user_im_message_receive_group)
+- Expected: `dws event +listen-im --kind group --chat-id cid123`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (2 flags validated)
+
+**event_event_consume_user_001** ✅ PASS
+
+- Prompt: 监听 userId test-user-001 发给我的消息，包括单聊和群聊
+- Expected: `dws event +listen-im --kind sender --user test-user-001`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (2 flags validated)
+
+**event_event_consume_user_open_id_001** ✅ PASS
+
+- Prompt: 监听 openDingtalkId abc 发给我的消息，包括单聊和群聊
+- Expected: `dws event +listen-im --kind sender --open-dingtalk-id abc`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (2 flags validated)
+
+**event_event_consume_o2o_all_001** ✅ PASS
+
+- Prompt: 监听我收到的所有单聊消息
+- Expected: `dws event +listen-im --kind all-direct`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_group_all_001** ✅ PASS
+
+- Prompt: 监听我所在的所有群消息
+- Expected: `dws event +listen-im --kind all-group`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_read_o2o_001** ✅ PASS
+
+- Prompt: 监听我发给 userId test-user-001 的单聊消息是否已读
+- Expected: `dws event +listen-im --kind sender --events read --user test-user-001`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (3 flags validated)
+
+**event_event_consume_read_group_001** ✅ PASS
+
+- Prompt: 监听 openConversationId cid123 群里我发的消息是否已读
+- Expected: `dws event +listen-im --kind group --events read --chat-id cid123`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (3 flags validated)
+
+**event_event_consume_recall_o2o_001** ✅ PASS
+
+- Prompt: 监听我和 userId test-user-001 的单聊消息撤回事件
+- Expected: `dws event +listen-im --kind sender --events recall --user test-user-001`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (3 flags validated)
+
+**event_event_consume_recall_group_001** ✅ PASS
+
+- Prompt: 监听 openConversationId cid123 的群消息撤回事件
+- Expected: `dws event +listen-im --kind group --events recall --chat-id cid123`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (3 flags validated)
+
+**event_event_consume_reaction_o2o_001** ✅ PASS
+
+- Prompt: 监听我和 userId test-user-001 的单聊消息贴表情事件
+- Expected: `dws event +listen-im --kind sender --events reaction --user test-user-001`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (3 flags validated)
+
+**event_event_consume_reaction_o2o_open_id_001** ✅ PASS
+
+- Prompt: 监听我和 openDingtalkId abc 的单聊消息贴表情事件
+- Expected: `dws event +listen-im --kind sender --events reaction --open-dingtalk-id abc`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (3 flags validated)
+
+**event_event_consume_reaction_group_001** ✅ PASS
+
+- Prompt: 监听 openConversationId cid123 的群消息表情回应事件
+- Expected: `dws event +listen-im --kind group --events reaction --chat-id cid123`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (3 flags validated)
+
+**event_event_consume_group_updated_001** ✅ PASS
+
+- Prompt: 监听 openConversationId cid123 群的群标题变更
+- Expected: `dws event consume user_im_group_updated --group cid123 --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_im_group_updated)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_group_member_added_001** ✅ PASS
+
+- Prompt: 监听有人加入 openConversationId cid123 群
+- Expected: `dws event consume user_im_group_member_added --group cid123 --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_im_group_member_added)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_group_member_exited_001** ✅ PASS
+
+- Prompt: 监听有人退出 openConversationId cid123 群
+- Expected: `dws event consume user_im_group_member_exited --group cid123 --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_im_group_member_exited)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_group_disbanded_001** ✅ PASS
+
+- Prompt: 监听 openConversationId cid-test-disbanded 测试群被解散
+- Expected: `dws event consume user_im_group_disbanded --group cid-test-disbanded --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_im_group_disbanded)
 - Flags: PASS (1 flags validated)
 
 **event_lookup_group_001** ✅ PASS
 
 - Prompt: 监听项目群的消息
 - Expected: `dws chat search --query "项目群" --format json`
-- Skill Reference: references/products/event.md
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
 - Command path: PASS (chat search)
 - Flags: PASS (1 flags validated)
 
-**event_lookup_sender_001** ✅ PASS
+**event_event_consume_many_user_001** ✅ PASS
 
-- Prompt: 监听张三发给我的消息
-- Expected: `dws aisearch person --keyword "张三" --dimension name --format json`
-- Skill Reference: references/products/event.md
-- Command path: PASS (aisearch person)
+- Prompt: 同时监听 userId test-user-001 发给我的消息，以及我和他的单聊已读、撤回事件
+- Expected: `dws event +listen-im --kind sender --events message,read,recall --user test-user-001`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event +listen-im)
+- Flags: PASS (3 flags validated)
+
+**event_event_consume_many_group_001** ✅ PASS
+
+- Prompt: 同时监听 openConversationId cid123 的群消息、群改名和群解散事件
+- Expected: `dws event consume user_im_message_receive_group user_im_group_updated user_im_group_disbanded --group cid123 --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_im_message_receive_group user_im_group_updated user_im_group_disbanded)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_oa_task_created_001** ✅ PASS
+
+- Prompt: 有新的待我审批任务创建时实时通知我
+- Expected: `dws event consume user_oa_approval_task_created --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_oa_approval_task_created)
+- Flags: N/A (no flags specified)
+
+**event_event_consume_oa_task_finished_001** ✅ PASS
+
+- Prompt: 我的审批任务完成时实时通知我
+- Expected: `dws event consume user_oa_approval_task_finished --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_oa_approval_task_finished)
+- Flags: N/A (no flags specified)
+
+**event_event_consume_oa_task_redirected_001** ✅ PASS
+
+- Prompt: 待我处理的审批任务被转交时实时通知我
+- Expected: `dws event consume user_oa_approval_task_redirected --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_oa_approval_task_redirected)
+- Flags: N/A (no flags specified)
+
+**event_event_consume_oa_instance_started_001** ✅ PASS
+
+- Prompt: 有和我相关的审批实例发起时实时通知我
+- Expected: `dws event consume user_oa_approval_instance_started --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_oa_approval_instance_started)
+- Flags: N/A (no flags specified)
+
+**event_event_consume_oa_instance_terminated_001** ✅ PASS
+
+- Prompt: 和我相关的审批实例终止时实时通知我
+- Expected: `dws event consume user_oa_approval_instance_terminated --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_oa_approval_instance_terminated)
+- Flags: N/A (no flags specified)
+
+**event_event_consume_oa_instance_finished_001** ✅ PASS
+
+- Prompt: 我发起的审批实例完成时实时通知我
+- Expected: `dws event consume user_oa_approval_instance_finished --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_oa_approval_instance_finished)
+- Flags: N/A (no flags specified)
+
+**event_event_consume_raw_envelope_001** ✅ PASS
+
+- Prompt: 用原始 EventKey user_im_message_receive_at 监听，并输出原始 transport envelope
+- Expected: `dws event consume user_im_message_receive_at --max-events 1 -f raw`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_im_message_receive_at)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_filter_dsl_001** ✅ PASS
+
+- Prompt: 用 Filter DSL 监听内容等于 urgent 的 @我消息
+- Expected: `dws event consume user_im_message_receive_at --filter-json '{"field":"content","op":"eq","value":"urgent"}' --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume user_im_message_receive_at)
+- Flags: PASS (1 flags validated)
+
+**event_event_consume_subscribe_id_001** ✅ PASS
+
+- Prompt: 复用个人事件订阅 subId-existing 继续消费十分钟
+- Expected: `dws event consume --subscribe-id subId-existing --duration 10m --flatten -f ndjson`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event consume)
 - Flags: PASS (2 flags validated)
+
+**event_event_schema_im_001** ✅ PASS
+
+- Prompt: 查看 user_im_message_receive_at 的扁平输出字段
+- Expected: `dws event schema user_im_message_receive_at --flatten -f json`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event schema user_im_message_receive_at)
+- Flags: N/A (no flags specified)
+
+**event_event_schema_oa_001** ✅ PASS
+
+- Prompt: 查看 user_oa_approval_task_created 的扁平输出字段
+- Expected: `dws event schema user_oa_approval_task_created --flatten -f json`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event schema user_oa_approval_task_created)
+- Flags: N/A (no flags specified)
+
+**event_negative_history_chat_001** ✅ PASS
+
+- Prompt: 查看 cid123 群从 2026-08-01 00:00:00 开始的历史消息
+- Expected: `dws chat message list --group cid123 --time "2026-08-01 00:00:00" --format json`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (chat message list)
+- Flags: PASS (2 flags validated)
+
+**event_negative_oa_crud_001** ✅ PASS
+
+- Prompt: 查询 8 月第一周待我处理的审批单
+- Expected: `dws oa approval list-pending --start "2026-08-01T00:00:00+08:00" --end "2026-08-08T00:00:00+08:00" --format json`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (oa approval list-pending)
+- Flags: PASS (2 flags validated)
+
+**event_negative_devapp_event_001** ✅ PASS
+
+- Prompt: 查看开放平台应用 app123 已配置的回调事件
+- Expected: `dws dev app event list --unified-app-id app123 --format json`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (dev app event list)
+- Flags: PASS (1 flags validated)
+
+**event_event_status_001** ✅ PASS
+
+- Prompt: 查看指定单聊个人事件订阅状态
+- Expected: `dws event status --event user_im_message_receive_o2o`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event status)
+- Flags: PASS (1 flags validated)
+
+**event_event_stop_001** ✅ PASS
+
+- Prompt: 停止个人事件订阅 subId-abc123
+- Expected: `dws event stop subId-abc123`
+- Skill Reference: skills/multi/dingtalk-event/SKILL.md
+- Command path: PASS (event stop subId-abc123)
+- Flags: N/A (no flags specified)
 
 ### report
 
