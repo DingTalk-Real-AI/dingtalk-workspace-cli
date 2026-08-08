@@ -184,7 +184,7 @@ Example:
   dws wiki feed list --workspace <workspaceId> --limit 10 --cursor <nextToken> --format json
 Flags:
       --workspace string   知识库 ID 或 URL (必填)
-      --limit int          每页数量 (默认 10，最大 20)
+      --limit int          每页数量 (默认 10，最大 20)。用户未明确要求条数时禁止加此 flag，让服务端走默认 10
       --cursor string      分页游标 (首页留空)
       --exclude-file       排除文件相关动态（上传/更新 office 等），仅保留文档操作 (默认 false)
 ```

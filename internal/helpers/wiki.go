@@ -1404,7 +1404,7 @@ ORG 类型授权不会出现在查询结果中。`,
 		},
 	})
 	feedListCmd.Flags().String("workspace", "", "知识库 ID 或 URL (必填)")
-	feedListCmd.Flags().Int("limit", 0, "每页数量 (默认 10，最大 20)")
+	feedListCmd.Flags().Int("limit", 0, "每页数量 (默认 10，最大 20)。用户未明确要求条数时禁止加此 flag，让服务端走默认 10")
 	feedListCmd.Flags().String("cursor", "", "分页游标 (首页留空)")
 	feedListCmd.Flags().Bool("exclude-file", false, "排除文件相关动态（文档创建/更新/评论/点赞等），仅保留文档操作。用户要求排除文件/只看文档创建/更新/评论/点赞时必须使用此flag，禁止客户端过滤")
 	feedListCmd.Flags().String("workspace-id", "", "")
