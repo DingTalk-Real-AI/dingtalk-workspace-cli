@@ -10,13 +10,52 @@ import (
 func newWorkbookCmds() []*cobra.Command {
 	createCmd := &cobra.Command{
 		Use:   "create",
-		Short: "创建钉钉表格文档",
-		Long: `创建一篇新的钉钉在线电子表格，支持创建空表格。
+		Short: "创建钉钉表格文档（可带初始数据）",
+		Long: `创建一篇新的钉钉在线电子表格，支持创建空表格或创建时写入初始数据。
 
-创建位置优先级: --folder > --workspace > 默认 (我的文档根目录)`,
+创建位置优先级: --folder > --workspace > 默认 (我的文档根目录)
+
+初始数据（--values 与 --sheets 二选一，均为可选）：
+  --values   二维 JSON 数组，裸值写入默认工作表 A1 起（单表快速建表，无表头/类型语义，
+             复用 csv-put 通道，自动识别数字/布尔）。单元格只能是字符串/数字/布尔/null；
+             上限 30000 单元格、编码为 CSV 后 2000000 字符
+  --sheets   typed table 数组，多工作表一次写入（复用 table-put 通道）。每个条目形如
+             {"name":"表名","columns":["列1","列2"],"data":[[...]],"dtypes":{...},"formats":{...},"cellStyles":[...]}
+             name、columns 必填；第一个条目写入默认工作表（自动重命名为其 name），其余按 name 自动新建。
+             字段名为 camelCase，只接受 name / columns / data / dtypes / formats / cellStyles /
+             startCell / mode / header / allowOverwrite（写错的键会被服务端静默丢弃，故一律拒绝；
+             不接受 sheetId：文档尚未创建）。data 每行长度须等于 columns，单元格只能是
+             字符串/数字/布尔/null；dtypes、formats 的键须是 columns 里的列名（按 trim 后比较）。
+             单表写入上限 30000 单元格（含表头行）。
+
+样式配置（--styles，可选，需与 --values 或 --sheets 搭配；顶层键对齐飞书 snake_case，
+列表项内字段兼容 camelCase；两级都拒绝未知键，避免写错的键被静默丢弃导致样式只应用一半）：
+  {"styles":[{"name":"表名",
+    "cell_styles":[{"range":"A1:D1","font_weight":"bold","background_color":"#FFF2CC",
+                    "font_family":"微软雅黑","number_format":"@",
+                    "border_styles":{"bottom":{"style":"medium"}}}],
+    "row_sizes":[{"range":"1:1","type":"pixel","size":28}],
+    "col_sizes":[{"range":"A:D","type":"pixel","size":120}],
+    "cell_merges":[{"range":"A1:B1","merge_type":"all"}]}]}
+  - 每项至少给 cell_styles / row_sizes / col_sizes / cell_merges 之一
+  - 配 --sheets 时 styles 的项数/顺序/name 必须与 --sheets 子表一一对应；配 --values 时只给 1 项（name 忽略）
+  - 数据写入后按 cell_styles → row_sizes → col_sizes → cell_merges 顺序执行（非原子）
+  - row_sizes 的 type：pixel（需 size）/ standard（恢复默认行高）/ auto（按内容自适应）
+  - col_sizes 的 type：pixel（需 size）/ standard（恢复默认列宽）——与飞书一致，列宽不提供 auto
+  - merge_type 取 all/rows/columns`,
 		Example: `  dws sheet create --name "销售数据"
   dws sheet create --name "Q1 数据" --folder FOLDER_ID
-  dws sheet create --name "知识库表格" --workspace WS_ID`,
+  dws sheet create --name "知识库表格" --workspace WS_ID
+
+  # 创建并写入初始数据（默认工作表，裸二维值）
+  dws sheet create --name "名单" --values '[["姓名","分数"],["张三","90"]]'
+
+  # 创建多个带数据的工作表（typed table）
+  dws sheet create --name "报表" --sheets '[{"name":"一月","columns":["项目","金额"],"data":[["房租",5000]]},{"name":"二月","columns":["项目","金额"],"data":[["房租",5000]]}]'
+
+  # 创建 + 写数据 + 一并应用样式（表头加粗黄底、行高、列宽、合并）
+  dws sheet create --name "带样式" --values '[["姓名","分数"],["张三","90"]]' \
+    --styles '{"styles":[{"name":"Sheet1","cell_styles":[{"range":"A1:B1","font_weight":"bold","background_color":"#FFF2CC"}],"row_sizes":[{"range":"1:1","type":"pixel","size":28}],"col_sizes":[{"range":"A:B","type":"pixel","size":120}]}]}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolArgs := map[string]any{
 				"name": mustGetFlag(cmd, "name"),
@@ -27,7 +66,21 @@ func newWorkbookCmds() []*cobra.Command {
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
 			}
-			return callMCPTool("create_workspace_sheet", toolArgs)
+
+			valuesStr, _ := cmd.Flags().GetString("values")
+			sheetsStr, _ := cmd.Flags().GetString("sheets")
+			stylesStr, _ := cmd.Flags().GetString("styles")
+			if valuesStr == "" && sheetsStr == "" {
+				if stylesStr != "" {
+					return fmt.Errorf("--styles 需与 --values 或 --sheets 搭配使用")
+				}
+				// 无初始数据：保持原行为（创建空表并直接输出结果）
+				return callMCPTool("create_workspace_sheet", toolArgs)
+			}
+			if valuesStr != "" && sheetsStr != "" {
+				return fmt.Errorf("--values 与 --sheets 二选一，不能同时指定")
+			}
+			return runCreateSheetWithData(cmd, toolArgs, valuesStr, sheetsStr, stylesStr)
 		},
 	}
 	DeclareLeafMetadata(createCmd, LeafSpec{
@@ -44,6 +97,12 @@ func newWorkbookCmds() []*cobra.Command {
 				PrimaryCLIPath: "sheet create",
 			},
 			Description: "创建钉钉在线电子表格文档（axls），返回 nodeId。",
+			// interface_ref 声明主工具 create_workspace_sheet，与 main 一致。带
+			// --values / --sheets / --styles 时 CLI 会在建文档后编排 get_all_sheets /
+			// update_sheet / table_put / set_range_from_csv / get_range_as_csv /
+			// set_cell_range / update_dimension / merge_cells，但这些是建文档之后的
+			// 实现细节。沿用既有的「声明主工具」惯例（参见 doc.create_document 同样在
+			// create 后追加 update_document 却声明 mcp），不将 create 改判为 composite。
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
@@ -69,6 +128,9 @@ func newWorkbookCmds() []*cobra.Command {
 	createCmd.Flags().String("name", "", "表格名称 (必填)")
 	createCmd.Flags().String("folder", "", "目标文件夹 ID 或 URL")
 	createCmd.Flags().String("workspace", "", "目标知识库 ID")
+	createCmd.Flags().String("values", "", "初始数据，二维 JSON 数组，写入默认工作表 (与 --sheets 二选一)")
+	createCmd.Flags().String("sheets", "", `多工作表 typed table JSON，如 '[{"name":"表名","columns":[...],"data":[[...]]}]' (与 --values 二选一)`)
+	createCmd.Flags().String("styles", "", `建表时一并应用的视觉处理 JSON（对齐飞书）：{"styles":[{"name":"表名","cell_styles":[{"range":"A1:D1","font_weight":"bold"}],"row_sizes":[{"range":"1:1","type":"pixel","size":28}],"col_sizes":[{"range":"A:D","type":"pixel","size":120}],"cell_merges":[{"range":"A1:B1","merge_type":"all"}]}]}`)
 
 	listCmd := &cobra.Command{
 		Use:   "list",

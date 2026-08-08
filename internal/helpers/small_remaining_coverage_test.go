@@ -12,7 +12,7 @@ import (
 )
 
 func TestCrossPlatformCoverageSheetAndMinutesSmallRemainingBranches(t *testing.T) {
-	if err := applyStyleSpec(&styleSpec{FontColorsJSON: "{"}, 1, 1, map[string]any{}); err == nil {
+	if _, err := buildStyleCells(&styleSpec{FontColorsJSON: "{"}, 1, 1); err == nil {
 		t.Fatal("invalid font colors JSON returned nil")
 	}
 

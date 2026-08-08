@@ -141,16 +141,22 @@ func newSheetCommand() *cobra.Command {
 				CLIPath:        "sheet export",
 				PrimaryCLIPath: "sheet export",
 			},
-			Description: "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
+			Description: "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载），或用 --export-format csv 同步导出单个工作表。",
 			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
+			// interface_ref 声明 xlsx 主路径的 submit_export_job，与 main 一致。
+			// 已知取舍：--export-format csv 是互斥分支，直接读 get_range_as_csv，
+			// 该分支下 submit_export_job 不执行，因此本声明未覆盖 csv 分支的后端接口。
+			// 保持 mcp 是为了不改动 main 已有的声明（interface_ref 为审计元数据、
+			// 运行时不消费，实测改成任意值仍按 CLI 源码正确路由），csv 分支的接口
+			// 归属另行处理，不在本次改动范围内。
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "submit_export_job"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
-				UseWhen:      []string{"需要把在线电子表格导出为 Excel 文件或拿到 downloadUrl 时"},
+				AgentSummary: "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载），或用 --export-format csv 同步导出单个工作表。",
+				UseWhen:      []string{"需要把在线电子表格导出为 Excel 文件、CSV 或拿到 downloadUrl 时"},
 				AvoidWhen:    []string{"禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download；Agent 不要外层再轮询"},
 				Examples:     []string{"dws sheet export --node <NODE_ID> --output ./report.xlsx"},
 			},

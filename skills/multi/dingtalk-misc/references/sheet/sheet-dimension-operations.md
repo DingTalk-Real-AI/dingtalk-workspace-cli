@@ -14,7 +14,7 @@
 
 用户说"隐藏行/隐藏列/显示行/显示列/设置行高/设置列宽/调整行高/调整列宽/行列属性":
 - 隐藏/显示行或列 → `update-dimension --hidden` / `--hidden=false`
-- 设置行高/列宽 → `update-dimension --pixel-size`
+- 设置行高/列宽 → `update-dimension --pixel-size`；恢复默认尺寸 → `--size-type standard`；行高按内容自适应 → `--size-type auto`（列宽不提供 auto）
 - 同时修改尺寸与显隐 → `update-dimension --pixel-size --hidden`
 
 用户说"移动行/移动列/调整行顺序/调整列顺序/行列拖拽/把第N行移到第M行":
@@ -29,7 +29,7 @@
 用户说"创建行分组/创建列分组/新建分组并折叠/新建分组并展开/取消分组":
 - 创建连续行/列分组 → `group-dimension`
 - 取消连续行/列分组 → `ungroup-dimension`
-- 分组创建后用 `sheet info` 回读 `rowGroups` / `columnGroups`
+- 分组创建后用 `sheet info --include groups` 回读 `rowGroups` / `columnGroups`
 - 仅创建分组时可用 `--group-state expand|fold` 指定初始展开/折叠；当前没有单独调整已有分组折叠状态的命令
 - 用户要求"折叠/展开已有分组"时，当前不支持直接修改已有分组的 `collapsed` 状态，不能承诺可用 `group-dimension` 完成
 
@@ -117,6 +117,12 @@ Example:
 
   # 使用工作表前缀（忽略 --sheet-id）
   dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index "Sheet1!3" --length 2 --hidden
+
+  # 恢复第 2~3 行为默认行高（无需 --pixel-size）
+  dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index "2" --length 2 --size-type standard
+
+  # 第 2~3 行按内容自适应行高
+  dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index "2" --length 2 --size-type auto
 Flags:
       --node string          表格文档 ID 或 URL (必填)
       --sheet-id string      工作表 ID 或名称 (必填)
@@ -125,13 +131,24 @@ Flags:
       --length string        更新数量，正整数 (必填)，最大 5000
       --hidden               是否隐藏 (true=隐藏, false=显示)，与 --pixel-size 至少填其一
       --pixel-size int       行高或列宽（像素），ROWS 时为行高，COLUMNS 时为列宽，与 --hidden 至少填其一
+      --size-type string     尺寸模式: pixel(默认,用 --pixel-size) / standard(恢复默认行高列宽) / auto(按内容自适应行高，仅 ROWS；列宽无此选项)
 ```
 
 批量更新钉钉表格指定工作表中连续多行/多列的属性，支持设置显隐状态（hidden）与行高/列宽（pixelSize）。
 `--dimension ROWS` 时，`--start-index` 为 1-based 行号字符串；`--dimension COLUMNS` 时，`--start-index` 为列字母。
 支持在 `--start-index` 中携带工作表前缀（如 `Sheet1!3`），此时忽略 `--sheet-id`。
-`--hidden` 与 `--pixel-size` 至少必须提供一个。当同时提供时，将先应用尺寸再应用显隐，任一失败整体失败。
+`--hidden` 与 `--pixel-size` 至少必须提供一个（或用 `--size-type standard/auto` 让服务端决定尺寸）。当同时提供时，将先应用尺寸再应用显隐，任一失败整体失败。
 `--pixel-size` 单位为像素，`dimension=ROWS` 时表示行高、`dimension=COLUMNS` 时表示列宽。
+
+`--size-type` 尺寸模式（对齐飞书 row_sizes/col_sizes 的 type）：
+
+| 值 | 行为 | ROWS | COLUMNS | 是否需要 --pixel-size |
+|----|------|------|---------|----------------------|
+| `pixel`（默认） | 使用 `--pixel-size` 指定的像素值 | 支持 | 支持 | 需要 |
+| `standard` | 恢复为工作表默认行高/列宽 | 支持 | 支持 | 不需要 |
+| `auto` | 按内容自适应行高 | 支持 | 不提供 | 不需要 |
+
+列宽不提供 `auto`（与飞书 `col_sizes` 的 type 枚举一致，只有 `pixel` / `standard`）。需要控制列宽时用 `--pixel-size` 指定，或用 `--size-type standard` 恢复默认列宽。
 
 ### 移动行或列
 ```
@@ -205,7 +222,7 @@ Flags:
 
 创建后用以下命令回读：
 ```bash
-dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --format json
+dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --include groups --format json
 ```
 
 回读字段为 `rowGroups` / `columnGroups`，单项包含 `range`、起止行列、`count`、`level`、`collapsed`。`collapsed=true` 表示当前分组折叠。
@@ -226,7 +243,7 @@ Flags:
       --range string      整行或整列范围，A1 表示法 (必填)。行如 "3:7"，列如 "C:F"
 ```
 
-取消指定连续整行或整列范围上的分组。取消后同样用 `sheet info` 回读确认目标 `range` 已从 `rowGroups` / `columnGroups` 中移除。
+取消指定连续整行或整列范围上的分组。取消后同样用 `sheet info --include groups` 回读确认目标 `range` 已从 `rowGroups` / `columnGroups` 中移除。
 
 `group-dimension` / `ungroup-dimension` 可以放进 `batch-update` 做原子组合；但 batch 中的 `group-dimension` 只适合默认展开分组。需要创建后立即折叠时，请使用独立 `dws sheet group-dimension --group-state fold`。
 
@@ -334,7 +351,7 @@ dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> \
 - `add-dimension` 追加的是空行/空列，与 `append`（追加带数据的行）不同
 - `add-dimension` 的 `--length` 必须为正整数（>= 1），行列均不超过 5000
 - `group-dimension` / `ungroup-dimension` 的 `--range` 只接受整行或整列范围，不接受普通单元格矩形
-- `group-dimension` 输出使用 `level`，且为 1-based；不要使用旧的 `depth` 字段
-- `sheet info` 是分组回读入口；`range read` / `csv-get` 不返回行列分组
+- `group-dimension` 输出和 `sheet info --include groups` 回读均使用 `level`，且为 1-based；不要使用旧的 `depth` 字段
+- `sheet info --include groups` 是分组回读入口；`range read` / `csv-get` 不返回行列分组
 - 当前不能直接调整已有分组的 `collapsed` 状态；`--group-state fold` 只在创建分组时生效
 - `batch-update` 支持 `group-dimension` / `ungroup-dimension`，但不适合创建后立即折叠；需要 `fold` 时使用独立 `group-dimension`

@@ -14,6 +14,22 @@ import (
 )
 
 func runSheetExport(cmd *cobra.Command, _ []string) error {
+	format, _ := cmd.Flags().GetString("export-format")
+	switch format {
+	case "", "xlsx":
+		// xlsx 异步流程不消费 csv 专属选择器，静默忽略它们最危险的场景是自动化漏写
+		// --export-format csv：用户要的 --range 被丢掉，导出的却是整篇工作簿，而命令
+		// 仍报成功。显式传了就直接拒。
+		if used := changedCsvOnlyExportFlags(cmd); len(used) > 0 {
+			return fmt.Errorf("%s 仅在 --export-format csv 下生效，xlsx 导出会忽略它们（会导出整篇工作簿）；"+
+				"请补上 --export-format csv，或去掉这些参数", strings.Join(used, " / "))
+		}
+	case "csv":
+		return runSheetExportCsv(cmd)
+	default:
+		return fmt.Errorf("--export-format 仅支持 xlsx 或 csv，当前值: %s", format)
+	}
+
 	nodeID := mustGetFlag(cmd, "node")
 	if nodeID == "" {
 		return fmt.Errorf("flag --node is required")
@@ -246,8 +262,16 @@ func inferSheetExportFilename(rawURL string) string {
 func newExportCmd() *cobra.Command {
 	exportCmd := &cobra.Command{
 		Use:   "export",
-		Short: "导出表格为 xlsx（异步任务一站式）",
-		Long: `将钉钉在线电子表格导出为 Office xlsx 格式（单命令一站式）。
+		Short: "导出表格为 xlsx（异步一站式）或 CSV（单表同步）",
+		Long: `将钉钉在线电子表格导出为 Office xlsx 或 CSV。
+
+格式（--export-format）:
+  xlsx（默认）  整篇表格导出为 xlsx，异步任务一站式（提交+轮询+下载，见下方流程）
+  csv           导出单个工作表为纯 RFC4180 CSV（同步）。用 --sheet-id 指定工作表、
+                --range 限定范围、--value-render-option 选择取值模式；--output 落盘，
+                不传则打印到 stdout。超大表会截断并给出警告，请用 --range 分块或改用 xlsx。
+
+以下为 xlsx 异步流程：
 
 执行流程（全程自动，无需 Agent 介入轮询）:
   1. 提交导出任务（submit_export_job），获取 jobId
@@ -280,10 +304,171 @@ func newExportCmd() *cobra.Command {
   dws sheet export --node NODE_ID --output ./report.xlsx
 
   # --output 为目录时，自动按下载链接里的文件名保存
-  dws sheet export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --output ./`,
+  dws sheet export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --output ./
+
+  # 导出单个工作表为 CSV 文件
+  dws sheet export --node NODE_ID --export-format csv --sheet-id SHEET_ID --output ./data.csv
+
+  # 导出 CSV 到 stdout（可管道处理）
+  dws sheet export --node NODE_ID --export-format csv --sheet-id SHEET_ID`,
 		RunE: runSheetExport,
 	}
 	exportCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	exportCmd.Flags().String("output", "", "本地保存路径（可选，支持文件路径或目录）")
+	// 注意：不要把这个 flag 叫 --format。根级已有 persistent 的 -f/--format（输出格式），
+	// 同名局部 flag 会在 cobra 的 flag 合并中把它整个挤掉，导致 -f 变成未知简写、
+	// 且 --format 被这里吞掉（命名与 aitable export-data 的 --export-format 一致）。
+	exportCmd.Flags().String("export-format", "xlsx", "导出格式: xlsx(默认,异步任务) / csv(单个工作表,同步)")
+	exportCmd.Flags().String("sheet-id", "", "工作表 ID 或名称（--export-format csv 时指定要导出的工作表，不传则第一个）")
+	exportCmd.Flags().String("range", "", "导出范围，A1 表示法（仅 --export-format csv，不传则整表；大表可用此分块导出）")
+	exportCmd.Flags().String("value-render-option", "", "取值模式（仅 --export-format csv）: formatted_value(默认) / raw_value / formula")
+	exportCmd.Flags().Bool("allow-truncated", false, "允许 CSV 被截断时仍然导出（仅 --export-format csv）。默认截断即报错并不写文件，避免不完整数据被当成完整导出")
 	return exportCmd
+}
+
+// valueRenderOptionEnum 是 --value-render-option 的合法取值（仅 csv 路径生效）。
+var valueRenderOptionEnum = map[string]bool{
+	"formatted_value": true, "raw_value": true, "formula": true,
+}
+
+// csvOnlyExportFlags 是只有 --export-format csv 分支会读取的 flag。
+// 新增 csv 专属 flag 必须同步登记（TestCsvOnlyExportFlagsMatchBoundFlags 会盯住漂移）。
+var csvOnlyExportFlags = []string{"sheet-id", "range", "value-render-option", "allow-truncated"}
+
+// changedCsvOnlyExportFlags 返回用户显式设置过的 csv 专属 flag（带 -- 前缀，顺序稳定）。
+func changedCsvOnlyExportFlags(cmd *cobra.Command) []string {
+	var out []string
+	for _, name := range csvOnlyExportFlags {
+		if cmd.Flags().Changed(name) {
+			out = append(out, "--"+name)
+		}
+	}
+	return out
+}
+
+// runSheetExportCsv 导出单个工作表为纯 CSV（同步，复用 get_range_as_csv，annotateRowNumbers=false）。
+func runSheetExportCsv(cmd *cobra.Command) error {
+	nodeID := mustGetFlag(cmd, "node")
+	if nodeID == "" {
+		return fmt.Errorf("flag --node is required")
+	}
+	sheetID, _ := cmd.Flags().GetString("sheet-id")
+	rangeAddr, _ := cmd.Flags().GetString("range")
+	valueRenderOption, _ := cmd.Flags().GetString("value-render-option")
+	valueRenderOption = strings.ToLower(strings.TrimSpace(valueRenderOption))
+	if valueRenderOption != "" && !valueRenderOptionEnum[valueRenderOption] {
+		return fmt.Errorf("--value-render-option 必须为 formatted_value / raw_value / formula，当前值: %s", valueRenderOption)
+	}
+	outputPath, _ := cmd.Flags().GetString("output")
+	allowTruncated, _ := cmd.Flags().GetBool("allow-truncated")
+
+	if deps.Caller.DryRun() {
+		deps.Out.PrintKeyValue("操作", "导出工作表为 CSV")
+		deps.Out.PrintKeyValue("节点", nodeID)
+		if sheetID != "" {
+			deps.Out.PrintKeyValue("工作表", sheetID)
+		}
+		if outputPath != "" {
+			deps.Out.PrintKeyValue("输出", outputPath)
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	toolArgs := map[string]any{
+		"nodeId":             nodeID,
+		"annotateRowNumbers": false,
+	}
+	if sheetID != "" {
+		toolArgs["sheetId"] = sheetID
+	}
+	if rangeAddr != "" {
+		toolArgs["range"] = rangeAddr
+	}
+	if valueRenderOption != "" {
+		toolArgs["valueRenderOption"] = valueRenderOption
+	}
+
+	// CSV 正文走 stdout，进度/警告一律不能污染它。
+	text, err := callMCPToolReturnText(ctx, "get_range_as_csv", toolArgs)
+	if err != nil {
+		return fmt.Errorf("读取 CSV 失败: %w", err)
+	}
+
+	csvContent, hasMore, err := parseGetRangeAsCsvResult(text)
+	if err != nil {
+		return err
+	}
+
+	// 截断必须 fail-closed：只打 stderr 警告然后照常落盘 + 报"导出完成" + 退出码 0，
+	// 会让自动化调用方（和没留意 stderr 的人）把不完整文件当成完整导出，且若目标
+	// 文件已存在还会被截断数据覆盖。默认在写文件/输出之前就失败，要接受不完整结果
+	// 必须显式加 --allow-truncated。
+	if hasMore && !allowTruncated {
+		return fmt.Errorf("表格数据超出单次读取上限，CSV 会被截断，已中止导出（未写入 %s）；"+
+			"请用 --range 分块导出（如 --range A1:Z1000、A1001:Z2000 ...）、改用 --export-format xlsx 导出完整表格，"+
+			"或确认可接受不完整数据后加 --allow-truncated",
+			firstNonEmpty(outputPath, "stdout"))
+	}
+	if hasMore {
+		deps.Out.PrintWarning("表格数据超出单次读取上限，CSV 已被截断（--allow-truncated 已显式放行）。" +
+			"请用 --range 分块导出（如 --range A1:Z1000、A1001:Z2000 ...），或改用 --export-format xlsx 导出完整表格。")
+	}
+
+	if outputPath == "" {
+		deps.Out.PrintRaw(csvContent)
+		return nil
+	}
+	if fi, statErr := os.Stat(outputPath); statErr == nil && fi.IsDir() {
+		outputPath = filepath.Join(outputPath, "sheet-export.csv")
+	}
+	// 必须原子替换：os.WriteFile 会先把已存在的 CSV 截断，写入中途失败（磁盘满、
+	// 配额、I/O 错误）就把用户的原文件毁掉了。AtomicWrite 写同目录临时文件再 rename，
+	// 失败时原文件保持不变。
+	// AtomicWrite 会 MkdirAll 父目录，先探一次，保持与 xlsx 分支一致的「父目录不存在
+	// 即报错」语义，避免把拼错的路径悄悄建成目录。
+	if _, statErr := os.Stat(filepath.Dir(outputPath)); statErr != nil {
+		return fmt.Errorf("写入 CSV 文件失败: %w", statErr)
+	}
+	if err := AtomicWrite(outputPath, []byte(csvContent), 0o644); err != nil {
+		return fmt.Errorf("写入 CSV 文件失败: %w", err)
+	}
+	if hasMore {
+		deps.Out.PrintInfo(fmt.Sprintf("导出完成（数据已截断，不是完整表格）: %s", outputPath))
+		return nil
+	}
+	deps.Out.PrintInfo(fmt.Sprintf("导出完成: %s", outputPath))
+	return nil
+}
+
+// parseGetRangeAsCsvResult 从 get_range_as_csv 的 MCP 响应中提取 csv 文本与 hasMore 标志。
+//
+// csv 字段缺失或类型不对，必须报错而不是当成空表：调用方会把空内容写进
+// --output，用 0 字节覆盖已有文件并打印"导出完成"，等于静默数据丢失。
+// 「字段存在且为空串」是合法的（真的空区域），与「字段缺失」区分开。
+func parseGetRangeAsCsvResult(text string) (csv string, hasMore bool, err error) {
+	var data map[string]any
+	if e := json.Unmarshal([]byte(text), &data); e != nil {
+		return "", false, fmt.Errorf("解析 get_range_as_csv 响应失败: %w", e)
+	}
+	if raw, wrapped := data["result"]; wrapped {
+		result, ok := raw.(map[string]any)
+		if !ok {
+			return "", false, fmt.Errorf("解析 get_range_as_csv 响应失败: result 不是对象，响应: %s", text)
+		}
+		data = result
+	}
+	raw, exists := data["csv"]
+	if !exists {
+		return "", false, fmt.Errorf("解析 get_range_as_csv 响应失败: 缺少 csv 字段，响应: %s", text)
+	}
+	csvVal, ok := raw.(string)
+	if !ok {
+		return "", false, fmt.Errorf("解析 get_range_as_csv 响应失败: csv 字段不是字符串（%T），响应: %s", raw, text)
+	}
+	csv = csvVal
+	if hm, ok := data["hasMore"].(bool); ok {
+		hasMore = hm
+	}
+	return csv, hasMore, nil
 }

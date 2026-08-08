@@ -34,7 +34,7 @@ func TestReviewedRoutedInterfacesReachFinalSchema(t *testing.T) {
 		{
 			canonical: "sheet.range_batch_set_style",
 			mode:      "composite",
-			reason:    "The CLI reads a local batch file and performs multiple sheet/update_range calls with local continue-on-error control; the workflow has no single direct MCP interface.",
+			reason:    "The CLI assembles style cell matrices locally from --ranges or a local batch file and submits them as one sheet/batch_update operations array; no single direct MCP interface represents the wrapper input shape.",
 		},
 		{
 			canonical: "sheet.range_read",

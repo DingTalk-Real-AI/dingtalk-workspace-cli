@@ -11,6 +11,11 @@
 - 禁止用 `range read` 全量读取后自行拼接 xlsx 来模拟导出，必须使用 `export` 命令（服务端原子导出，保留格式/合并/公式等属性）
 - 禁止在 AI Agent 侧实现轮询或重试，CLI 内部已按渐进式退避策略完成（最多 30 次约 5 分钟）
 
+用户说"导出 CSV/存成 csv/导出这个工作表为 csv":
+- 导出单个工作表为纯 CSV → `export --export-format csv`（**同步**，不走异步任务）
+- 用 `--sheet-id` 指定工作表（不传取第一个）、`--range` 限定范围、`--value-render-option` 选取值模式
+- 不传 `--output` 时 CSV 正文打印到 stdout，可直接管道处理
+
 ## 命令详细参考
 
 ### 导出表格为 xlsx（异步任务一站式）
@@ -29,8 +34,13 @@ Example:
   dws sheet export --node <NODE_ID> --output ./
 
 Flags:
-      --node string     表格文档 ID 或 URL (必填)
-      --output string   本地保存路径（可选，支持文件路径或目录）
+      --node string                  表格文档 ID 或 URL (必填)
+      --output string                本地保存路径（可选，支持文件路径或目录）
+      --export-format string         导出格式: xlsx(默认,异步任务) / csv(单个工作表,同步) (default "xlsx")
+      --sheet-id string              工作表 ID 或名称（仅 --export-format csv，不传则第一个）
+      --range string                 导出范围，A1 表示法（仅 --export-format csv，不传则整表；大表可用此分块导出）
+      --value-render-option string   取值模式（仅 --export-format csv）: formatted_value(默认) / raw_value / formula
+      --allow-truncated              允许 CSV 被截断时仍然导出（仅 --export-format csv）。默认截断即报错且不写文件
 ```
 
 将钉钉在线电子表格导出为 Office xlsx 格式。**单命令一站式**：命令内部自动完成「提交任务 → 渐进式退避轮询 → （可选）下载文件」全流程，AI Agent 无需自行拆分步骤或实现轮询。
@@ -39,6 +49,33 @@ Flags:
 1. 调 `submit_export_job` 获取 `jobId`
 2. 按渐进式退避策略轮询 `query_export_job` 直至任务终态或超时
 3. 任务成功后取得 `downloadUrl`；若指定了 `--output`，自动 HTTP GET 下载 xlsx 到本地文件
+
+**`--export-format csv`（同步路径）**：不走异步任务，直接读取单个工作表并输出 RFC4180 CSV。仅 `--sheet-id` / `--range` / `--value-render-option` / `--output` / `--allow-truncated` 生效。不传 `--output` 时 CSV 正文打印到 stdout。
+
+**csv 专属参数漏写 `--export-format csv` 会直接报错**：`--sheet-id` / `--range` / `--value-render-option` / `--allow-truncated` 只在 csv 分支生效，传给 xlsx 分支时命令报错而不是静默忽略——否则本想按 `--range` 导一小块，实际会拿到整篇工作簿且报成功。
+
+**`--output` 落盘是原子替换**：CSV 先写同目录临时文件、成功后再替换目标，写入失败时已有文件保持原样（父目录不存在仍按错误处理，不会自动创建）。
+
+**超大表默认 fail-closed**：数据超出单次读取上限（服务端返回 `hasMore`）时，命令**直接报错并以非 0 退出，既不打印 CSV 也不写文件**（已存在的目标文件不会被截断数据覆盖）。处理方式：
+- 用 `--range` 分块导出（如 `--range A1:Z1000`、`A1001:Z2000` …）
+- 改用默认的 `--export-format xlsx` 导出完整表格
+- 确认可以接受不完整数据时，显式加 `--allow-truncated`；此时才会照常输出/落盘，并在 stderr 给出「已被截断」警告，成功提示也会写明"数据已截断，不是完整表格"
+
+```bash
+# 落盘到本地
+dws sheet export --node <NODE_ID> --export-format csv --sheet-id <SHEET_ID> --output ./data.csv
+
+# 输出到 stdout 便于管道处理
+dws sheet export --node <NODE_ID> --export-format csv --sheet-id <SHEET_ID>
+
+# 大表分块导出（避免截断；不分块时默认会因截断而报错）
+dws sheet export --node <NODE_ID> --export-format csv --sheet-id <SHEET_ID> --range "A1:Z1000" --output ./part1.csv
+
+# 明确接受不完整数据（否则截断即失败）
+dws sheet export --node <NODE_ID> --export-format csv --sheet-id <SHEET_ID> --allow-truncated --output ./partial.csv
+```
+
+注意：CSV 只写纯值，不保留样式/合并/公式；需要完整属性请用默认的 xlsx。
 
 **内置轮询策略（CLI 内实现，无需关心）**：
 - 第 1~5 次：每次间隔 2 秒

@@ -3,11 +3,20 @@ package helpers
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
+
+// sizeTypeEnumHint 返回该维度支持的尺寸模式列表（行高含 auto，列宽不含，与飞书一致）。
+func sizeTypeEnumHint(dimension string) string {
+	if dimension == "ROWS" {
+		return "pixel / standard / auto"
+	}
+	return "pixel / standard"
+}
 
 // newDimensionCmds creates dimension-related commands: insert/delete/update/move/add-dimension,
 // merge-cells, unmerge-cells, and dropdown commands (set/get/delete-dropdown).
@@ -43,8 +52,11 @@ func newDimensionCmds() []*cobra.Command {
 				return fmt.Errorf("--dimension 必须为 ROWS 或 COLUMNS，当前值: %s", dimension)
 			}
 			lengthStr := mustGetFlag(cmd, "length")
-			var length int
-			if _, err := fmt.Sscanf(lengthStr, "%d", &length); err != nil || length < 1 {
+			// strconv.Atoi 要求整个字符串都是合法整数。fmt.Sscanf("%d") 只消费前缀
+			// 数字，会把 "3x" / "3foo" 静默当成 3，从而对错误的行列数执行插入/删除/
+			// 调整——删除方向不可回滚。
+			length, lengthErr := strconv.Atoi(lengthStr)
+			if lengthErr != nil || length < 1 {
 				return fmt.Errorf("--length 必须为正整数（>= 1），当前值: %s", lengthStr)
 			}
 			if length > 5000 {
@@ -428,8 +440,11 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 				return fmt.Errorf("--dimension 必须为 ROWS 或 COLUMNS，当前值: %s", dimension)
 			}
 			lengthStr := mustGetFlag(cmd, "length")
-			var length int
-			if _, err := fmt.Sscanf(lengthStr, "%d", &length); err != nil || length < 1 {
+			// strconv.Atoi 要求整个字符串都是合法整数。fmt.Sscanf("%d") 只消费前缀
+			// 数字，会把 "3x" / "3foo" 静默当成 3，从而对错误的行列数执行插入/删除/
+			// 调整——删除方向不可回滚。
+			length, lengthErr := strconv.Atoi(lengthStr)
+			if lengthErr != nil || length < 1 {
 				return fmt.Errorf("--length 必须为正整数（>= 1），当前值: %s", lengthStr)
 			}
 			if length > 5000 {
@@ -490,8 +505,14 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
   --dimension COLUMNS 时，--start-index 为列字母，如 "A" 表示从 A 列开始、"AB" 表示从 AB 列开始
 
 支持在 --start-index 中携带工作表前缀（如 "Sheet1!3" / "Sheet1!A"），此时将忽略 --sheet-id。
---hidden 与 --pixel-size 至少必须提供一个。当同时提供时，将先应用尺寸再应用显隐，任一失败整体失败。
+--hidden 与 --pixel-size 至少必须提供一个（或用 --size-type standard/auto 让服务端决定尺寸）。
+当同时提供时，将先应用尺寸再应用显隐，任一失败整体失败。
 --pixel-size 单位为像素，dimension=ROWS 时表示行高、dimension=COLUMNS 时表示列宽。
+
+尺寸模式（--size-type，对齐飞书）:
+  pixel     默认，按 --pixel-size 指定的像素值设置
+  standard  恢复默认行高/列宽，无需 --pixel-size
+  auto      按内容自适应行高，仅 ROWS 支持（列宽不提供自适应），无需 --pixel-size
 
 常见场景：隐藏/显示指定连续行或列、批量调整行高/列宽、在同一次调用中同时修改尺寸与显隐。`,
 		Example: `  # 隐藏第 3~4 行
@@ -517,8 +538,11 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 				return fmt.Errorf("--dimension 必须为 ROWS 或 COLUMNS，当前值: %s", dimension)
 			}
 			lengthStr := mustGetFlag(cmd, "length")
-			var length int
-			if _, err := fmt.Sscanf(lengthStr, "%d", &length); err != nil || length < 1 {
+			// strconv.Atoi 要求整个字符串都是合法整数。fmt.Sscanf("%d") 只消费前缀
+			// 数字，会把 "3x" / "3foo" 静默当成 3，从而对错误的行列数执行插入/删除/
+			// 调整——删除方向不可回滚。
+			length, lengthErr := strconv.Atoi(lengthStr)
+			if lengthErr != nil || length < 1 {
 				return fmt.Errorf("--length 必须为正整数（>= 1），当前值: %s", lengthStr)
 			}
 			if length > 5000 {
@@ -526,8 +550,30 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			}
 			hiddenChanged := cmd.Flags().Changed("hidden")
 			pixelSizeChanged := cmd.Flags().Changed("pixel-size")
-			if !hiddenChanged && !pixelSizeChanged {
-				return fmt.Errorf("--hidden 与 --pixel-size 至少必须提供一个")
+			sizeType, _ := cmd.Flags().GetString("size-type")
+			sizeType = strings.ToLower(strings.TrimSpace(sizeType))
+			// 尺寸模式枚举按维度区分（与飞书一致）：行高有 auto，列宽只有 pixel / standard
+			switch {
+			case sizeType == "" || sizeType == "pixel" || sizeType == "standard":
+			case sizeType == "auto" && dimension == "ROWS":
+			case sizeType == "auto":
+				return fmt.Errorf("--size-type 对 COLUMNS 仅支持 pixel / standard（列宽不提供自适应）")
+			default:
+				return fmt.Errorf("--size-type 必须为 %s，当前值: %s", sizeTypeEnumHint(dimension), sizeType)
+			}
+			// standard/auto 由服务端决定尺寸，无需 --pixel-size
+			sizeTypeDrivesSize := sizeType == "standard" || sizeType == "auto"
+			if !hiddenChanged && !pixelSizeChanged && !sizeTypeDrivesSize {
+				return fmt.Errorf("--hidden 与 --pixel-size 至少必须提供一个（或用 --size-type standard/auto 让服务端决定尺寸）")
+			}
+			// standard/auto 说"尺寸交给服务端"，--pixel-size 又指定固定像素，
+			// 两者语义直接冲突；同时下发会得到依赖服务端实现的结果，故先拒。
+			if sizeTypeDrivesSize && pixelSizeChanged {
+				return fmt.Errorf("--size-type %s 表示尺寸由服务端决定，不能同时指定 --pixel-size；要指定固定像素请用 --size-type pixel（或省略 --size-type）", sizeType)
+			}
+			// 反向：显式声明 pixel 模式却不给像素值，同样是不完整的请求。
+			if sizeType == "pixel" && !pixelSizeChanged {
+				return fmt.Errorf("--size-type pixel 必须配合 --pixel-size 指定像素值；若本次只改显隐，请省略 --size-type")
 			}
 			toolArgs := map[string]any{
 				"nodeId":     mustGetFlag(cmd, "node"),
@@ -546,6 +592,9 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 					return fmt.Errorf("--pixel-size 必须为非负整数，当前值: %d", pixelSize)
 				}
 				toolArgs["pixelSize"] = pixelSize
+			}
+			if sizeType != "" {
+				toolArgs["sizeType"] = sizeType
 			}
 			return callMCPTool("update_dimension", toolArgs)
 		},
@@ -587,6 +636,7 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 	updateDimensionCmd.Flags().String("length", "", "更新数量，正整数 (必填)，最大 5000")
 	updateDimensionCmd.Flags().Bool("hidden", false, "是否隐藏 (true=隐藏, false=显示)")
 	updateDimensionCmd.Flags().Int("pixel-size", 0, "行高或列宽（像素），ROWS 时为行高，COLUMNS 时为列宽")
+	updateDimensionCmd.Flags().String("size-type", "", "尺寸模式（对齐飞书）: pixel(默认,用 --pixel-size) / standard(恢复默认行高列宽) / auto(按内容自适应行高，仅 ROWS；列宽无此选项)")
 
 	groupDimensionCmd := &cobra.Command{
 		Use:   "group-dimension",

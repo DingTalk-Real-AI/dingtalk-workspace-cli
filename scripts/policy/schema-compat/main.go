@@ -18,6 +18,18 @@ import (
 
 const schemaContractVersion = 3
 
+// propertySourceReviewedMappingExclusion is the provenance source a parameter
+// reports when its property is deliberately omitted through the reviewed
+// mapping exclusion table (internal/cli/schema_parameter_mapping_ledger.go).
+// Only this source qualifies for the property-clearing carve-out in
+// checkParameterCompatibility.
+const propertySourceReviewedMappingExclusion = "reviewed_mapping_exclusion"
+
+// interfaceModeMCP is the interface_mode of a tool backed by exactly one RPC.
+// Only a tool that is mcp on both sides can qualify for the interface_ref
+// redirect carve-out in compatibleInterfaceRefRedirect.
+const interfaceModeMCP = "mcp"
+
 type schemaContract struct {
 	Version  int                      `json:"version"`
 	Products map[string]productSchema `json:"products"`
@@ -53,6 +65,7 @@ type positionalSchema struct {
 type parameterSchema struct {
 	Type             string   `json:"type"`
 	Property         string   `json:"property,omitempty"`
+	PropertySource   string   `json:"property_source,omitempty"`
 	InterfaceType    string   `json:"interface_type,omitempty"`
 	Required         bool     `json:"required,omitempty"`
 	CLIRequired      bool     `json:"cli_required,omitempty"`
@@ -361,6 +374,11 @@ func normalizeParameter(raw json.RawMessage) (parameterSchema, error) {
 		InterfaceDefault json.RawMessage `json:"interface_default"`
 		Format           string          `json:"format"`
 		Enum             []string        `json:"enum"`
+		FieldProvenance  struct {
+			Property struct {
+				Source string `json:"source"`
+			} `json:"property"`
+		} `json:"field_provenance"`
 	}
 	if err := json.Unmarshal(raw, &parameter); err != nil {
 		return parameterSchema{}, err
@@ -388,6 +406,7 @@ func normalizeParameter(raw json.RawMessage) (parameterSchema, error) {
 	return parameterSchema{
 		Type:             parameterType,
 		Property:         strings.TrimSpace(parameter.Property),
+		PropertySource:   strings.TrimSpace(parameter.FieldProvenance.Property.Source),
 		InterfaceType:    strings.TrimSpace(parameter.InterfaceType),
 		Required:         parameter.Required,
 		CLIRequired:      parameter.CLIRequired,
@@ -479,7 +498,6 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	}{
 		{name: "primary_cli_path", old: oldTool.PrimaryCLIPath, new: newTool.PrimaryCLIPath},
 		{name: "interface_mode", old: oldTool.InterfaceMode, new: newTool.InterfaceMode},
-		{name: "interface_ref", old: oldTool.InterfaceRef, new: newTool.InterfaceRef},
 		{name: "availability", old: oldTool.Availability, new: newTool.Availability},
 		{name: "effect", old: oldTool.Effect, new: newTool.Effect},
 		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
@@ -510,8 +528,82 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		}
 		failures = append(failures, checkParameterCompatibility(toolPath, parameter, oldParameter, newParameter)...)
 	}
+
+	// interface_ref is evaluated last, because the redirect carve-out below is
+	// conditional on every other check for this tool having passed.
+	if oldTool.InterfaceRef != newTool.InterfaceRef &&
+		!compatibleInterfaceRefRedirect(toolPath, oldTool, newTool, failures) {
+		failures = append(failures, fmt.Sprintf("schema tool %q changed interface_ref", toolPath))
+	}
 	sort.Strings(failures)
 	return failures
+}
+
+// reviewedInterfaceRefRedirect enumerates the exact, individually reviewed
+// backend RPC migrations this gate accepts. Schema shape alone cannot prove two
+// RPCs share business semantics, permissions, error behaviour, or side effects,
+// so a redirect is only accepted when the specific tool and the specific
+// old→new pair appear here. Any other ref change is still reported.
+//
+// Keyed by tool path ("<product>/<tool id>"), then by the previous
+// interface_ref, with the value being the single accepted new ref. Both refs are
+// the canonicalized interface_ref JSON exactly as parseTool produces it (see
+// canonicalRawJSON) — not a bare RPC name. Adding an entry is a contract
+// decision and belongs in review, not in a feature change.
+var reviewedInterfaceRefRedirect = map[string]map[string]string{
+	// The style surface moved from update_range (which writes values) to
+	// set_cell_range's cellStyles payload (style-only, preserving values). This
+	// is the only channel that can express italic / underline / strike-through /
+	// font family / borders. Same product, same target range semantics, same
+	// permission scope; the flat style properties it loses are accepted
+	// separately as reviewed mapping exclusions.
+	"sheet/sheet.range_set_style": {
+		`{"product_id":"sheet","rpc_name":"update_range"}`: `{"product_id":"sheet","rpc_name":"set_cell_range"}`,
+	},
+}
+
+// compatibleInterfaceRefRedirect accepts repointing a tool at a different
+// backing RPC when the migration is an explicitly reviewed entry in
+// reviewedInterfaceRefRedirect **and** the CLI-facing contract is provably
+// unchanged.
+//
+// interface_ref is audit and traceability metadata: it records which RPC backs a
+// leaf. Nothing reads it at runtime — the tool a leaf invokes is decided in the
+// CLI source, so a stale ref does not misroute a call, it only misinforms a
+// reader. When the backing RPC genuinely moves, the honest options are to update
+// the ref or to keep publishing a name that no longer matches the request being
+// sent.
+//
+// Being audit-only is why a reviewed redirect can be accepted at all; it is not
+// a reason to accept redirects in general. Two RPCs with compatible Schema
+// parameters may still differ in permissions, quota, error taxonomy, or side
+// effects, none of which this gate can see. Hence the allowlist below, plus:
+//
+//   - interface_mode is unchanged and stays "mcp". A move to or from
+//     "composite" is a change in kind, not a redirect, and is still reported.
+//   - both refs are non-empty. Removing a ref is not a redirect.
+//   - no other compatibility failure was recorded for this tool. This is the
+//     operative meaning of "the CLI contract is unchanged": no parameter was
+//     lost, none became required, no type / default / format / enum moved, no
+//     constraint tightened, no positional or dry_run change. Any one of those
+//     re-reports the redirect, so the exemption cannot smuggle a surface change
+//     in behind a backend move.
+//
+// A cleared property that resolved through a reviewed mapping exclusion is
+// already accepted by checkParameterCompatibility and so does not block this;
+// that pairing is expected, since a leaf moving to a nested payload loses its
+// flat property names in the same change.
+func compatibleInterfaceRefRedirect(toolPath string, oldTool, newTool toolSchema, otherFailures []string) bool {
+	if oldTool.InterfaceMode != newTool.InterfaceMode || newTool.InterfaceMode != interfaceModeMCP {
+		return false
+	}
+	if oldTool.InterfaceRef == "" || newTool.InterfaceRef == "" {
+		return false
+	}
+	if reviewedInterfaceRefRedirect[toolPath][oldTool.InterfaceRef] != newTool.InterfaceRef {
+		return false
+	}
+	return len(otherFailures) == 0
 }
 
 // compatibleAdditiveConstraintEvolution accepts constraint evolution that
@@ -730,7 +822,6 @@ func checkParameterCompatibility(toolPath, name string, oldParameter, newParamet
 		new  string
 	}{
 		{name: "type", old: oldParameter.Type, new: newParameter.Type},
-		{name: "property", old: oldParameter.Property, new: newParameter.Property},
 		{name: "default", old: oldParameter.Default, new: newParameter.Default},
 		{name: "interface_default", old: oldParameter.InterfaceDefault, new: newParameter.InterfaceDefault},
 		{name: "format", old: oldParameter.Format, new: newParameter.Format},
@@ -738,6 +829,36 @@ func checkParameterCompatibility(toolPath, name string, oldParameter, newParamet
 		if field.old != field.new {
 			failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed %s", toolPath, name, field.name))
 		}
+	}
+	// Clearing property is accepted as compatible only when the new value is
+	// omitted through a reviewed mapping exclusion. This is the same shape as
+	// the interface_type carve-out below: a declaration that the flag has no
+	// single top-level RPC property, replacing a value that is no longer true.
+	//
+	// It exists because a leaf whose backing RPC gains a nested payload has no
+	// honest flat property to publish. The alternative outcomes are both worse:
+	// keep naming a field the request no longer contains, or let assembly fall
+	// back to flag_name_inference and publish a name that appears in no request
+	// at all.
+	//
+	// The predicate is deliberately narrow:
+	//   - old non-empty AND new empty (a redirect to a different non-empty
+	//     value stays a contract break)
+	//   - the new value resolved through reviewed_mapping_exclusion, so an
+	//     accidental or silent drop is still reported
+	//
+	// The exclusion table cannot be abused to wave through arbitrary clearing:
+	// internal/cli/schema_parameter_bindings.go verifies that every parameter
+	// claiming an exclusion really does deliver an empty property, and every
+	// entry carries a non-empty reviewed reason.
+	//
+	// Consumers must treat a missing property as "no direct mapping" and read
+	// the provenance reason for where the value actually lands. Re-populating a
+	// property requires an explicit ParamDecl declaration.
+	if oldParameter.Property != newParameter.Property &&
+		!(oldParameter.Property != "" && newParameter.Property == "" &&
+			newParameter.PropertySource == propertySourceReviewedMappingExclusion) {
+		failures = append(failures, fmt.Sprintf("schema tool %q parameter %q changed property", toolPath, name))
 	}
 	// Clearing interface_type is accepted as compatible: a deliberate,
 	// wire-visible policy decision taken with the pinned MCP metadata

@@ -170,7 +170,6 @@ func TestCrossPlatformCoverageChartMailAndSheetPureHelpersCoverage(t *testing.T)
 		_ = isEmptyDataValidation(value)
 		_ = isEmptyHyperlink(value)
 	}
-	_ = fillIntMatrix(2, 3, 4)
 	_ = maxColLenStr([][]string{{"a"}, {"b", "c"}})
 	_ = maxColLen2D([][]int{{1}, {2, 3}})
 	_ = checkMatrixShape(1, 2, 1, 2, "x")
@@ -213,7 +212,7 @@ func TestCrossPlatformCoverageChartMailAndSheetPureHelpersCoverage(t *testing.T)
 		{styleSpec{}, 1, 1},
 	}
 	for _, style := range styles {
-		_ = applyStyleSpec(&style.spec, style.rows, style.cols, map[string]any{})
+		_, _ = buildStyleCells(&style.spec, style.rows, style.cols)
 	}
 	for _, tc := range []struct {
 		scalar, raw string
@@ -227,7 +226,9 @@ func TestCrossPlatformCoverageChartMailAndSheetPureHelpersCoverage(t *testing.T)
 		{"", `[[""]]`, hAlignEnum},
 		{"", `[["left"]]`, hAlignEnum},
 	} {
-		_ = apply2DString(tc.scalar, tc.raw, 1, 1, "align", "alignments", tc.enum, map[string]any{})
+		if get, err := strGrid(tc.scalar, tc.raw, "align", tc.enum, 1, 1); err == nil && get != nil {
+			_, _ = get(0, 0)
+		}
 	}
 	views := []map[string]any{{"id": "one"}, {"filterViewId": "two"}}
 	_, _ = findFilterViewByID(views, "one")

@@ -6,6 +6,20 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+### Added
+
+- **`sheet create` 支持建表即写入数据与样式** — 新增 `--values`（二维数组写默认表）/ `--sheets`（typed table 多工作表）/ `--styles`（`cell_styles` / `row_sizes` / `col_sizes` / `cell_merges`，顶层键对齐飞书 snake_case、列表项内字段兼容 camelCase）。所有结构、字段类型与枚举在创建文档之前校验，非法配置不会留下白建的空文档：`--sheets` 按 `table_put` 的输入契约逐字段校验（`columns` 必填且列名非空不重复、`data` 为二维且行宽与 `columns` 一致、单元格仅限字符串/数字/布尔/null、`dtypes`/`formats` 的键须是列名、`mode`/`header`/`allowOverwrite`/`startCell` 类型与取值、单表 30000 单元格上限），并拒绝未知键、snake_case 变体、`{"sheets":"bad"}` 这类畸形包装与 `sheetId`（服务端会静默丢弃写错的键，导致"只写了表头却报成功"的静默丢数据）；`--values` 校验单元格为标量并受 30000 单元格 / 2000000 字符上限约束；`--styles` 的顶层键与列表项内字段同样拒绝未知键，避免样式只应用一半。写入后回读校验按 `startCell` / `header` / `mode` 推算的首个预期非空单元格，而非固定 A1。
+- **`sheet export --export-format csv`** — 同步导出单个工作表为 RFC4180 CSV，支持 `--sheet-id` 选表、`--range` 限定范围、`--value-render-option` 选取值模式；`--output` 落盘（为目录时按 `sheet-export.csv` 命名，落盘走 `AtomicWrite` 原子替换，写入失败时已有文件保持原样），不传则打印到 stdout。数据超出单次读取上限时默认报错且不写文件，需 `--allow-truncated` 显式接受不完整结果。csv 专属参数（`--sheet-id` / `--range` / `--value-render-option` / `--allow-truncated`）传给 xlsx 分支时直接报错，不再静默忽略——漏写 `--export-format csv` 时用户要的 `--range` 会被丢掉而导出整篇工作簿。已知限制：该分支实际读 `get_range_as_csv`，但 `sheet export` 叶子仍声明 `interface_ref: submit_export_job`，通过 Schema 查询 csv 能力会得到不准确的后端接口（仅影响审计元数据，不影响执行）。
+- **`sheet update-dimension --size-type`** — `pixel` / `standard`（恢复默认行高列宽）/ `auto`（按内容自适应行高，仅 ROWS）。
+- **`sheet replace --match-formula`** — 在公式文本中查找替换。
+- **`sheet range set-style` 扩展样式维度** — 新增 `--font-style`（斜体）/ `--font-line`（下划线、删除线）/ `--font-family` / `--border-styles-json`（四边边框；每条边只接受 `style` / `color`，未知键与非字符串 `color` 直接报错，不再静默忽略而画出无颜色的边框，`set-style` / `batch-set-style` / `create --styles` 三条路径同源校验）。
+- **`sheet range batch-set-style --ranges`** — 一组样式刷多个带工作表前缀的区域，组装为一次原子 `batch_update`。
+
+### Changed
+
+- **`sheet range set-style` 后端切换为 `set_cell_range`** — 样式统一走 cellStyles 路径（仅设样式、保留原值），这是斜体/下划线删除线/字体族/边框唯一可用的通道。`interface_ref` 由 `update_range` 变为 `set_cell_range`，12 个样式 flag 改为 reviewed mapping exclusion。CLI 用法向后兼容、无 flag 删除；schema-compatibility 经 reviewed 豁免判定为兼容（0 changed fields）。
+- **`sheet range batch-set-style` 改为单次原子提交** — 由本地循环多次 `update_range` 改为一次 `batch_update`，任一项失败默认整批回滚；`--continue-on-error` 由本地控制改为透传服务端。新增批量上限：最多 100 个区域且累计不超过 200000 个单元格。
+
 ## [1.0.58-beta.1] - 2026-08-07
 
 ### Added
