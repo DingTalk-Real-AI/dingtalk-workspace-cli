@@ -9,9 +9,10 @@ import (
 )
 
 type changelogGateRepo struct {
-	root string
-	gate string
-	base string
+	root           string
+	gate           string
+	fragmentPolicy string
+	base           string
 }
 
 const changelogGateBase = `# Changelog
@@ -69,8 +70,10 @@ func newChangelogGateRepo(t *testing.T) *changelogGateRepo {
 	}
 	for _, path := range []string{
 		"scripts/policy/check-changelog-pr.sh",
+		"scripts/policy/check-release-fragments.sh",
 		"scripts/policy/open-source-audit.sh",
 		"scripts/release/release-lib.sh",
+		"scripts/release/render-release-fragments.sh",
 	} {
 		data, err := os.ReadFile(filepath.Join(sourceRoot, path))
 		if err != nil {
@@ -91,10 +94,19 @@ func newChangelogGateRepo(t *testing.T) *changelogGateRepo {
 	changelogGateGit(t, root, "commit", "-m", "seed repository")
 
 	return &changelogGateRepo{
-		root: root,
-		gate: filepath.Join(root, "scripts", "policy", "check-changelog-pr.sh"),
-		base: strings.TrimSpace(changelogGateGit(t, root, "rev-parse", "HEAD")),
+		root:           root,
+		gate:           filepath.Join(root, "scripts", "policy", "check-changelog-pr.sh"),
+		fragmentPolicy: filepath.Join(root, "scripts", "policy", "check-release-fragments.sh"),
+		base:           strings.TrimSpace(changelogGateGit(t, root, "rev-parse", "HEAD")),
 	}
+}
+
+func (r *changelogGateRepo) runFragmentPolicy(t *testing.T, base, head string) (string, error) {
+	t.Helper()
+	cmd := exec.Command("sh", r.fragmentPolicy, base, head)
+	cmd.Dir = r.root
+	output, err := cmd.CombinedOutput()
+	return string(output), err
 }
 
 func changelogGateWrite(t *testing.T, root, path, content string, mode os.FileMode) {
@@ -203,22 +215,110 @@ func TestChangelogPRGateAcceptsTargetedChanges(t *testing.T) {
 	}
 }
 
-func TestChangelogPRContentOnlyAllowsOtherFiles(t *testing.T) {
+func TestChangelogPRContentOnlyRejectsOrdinaryChangesAlongsideChangelog(t *testing.T) {
 	repo := newChangelogGateRepo(t)
 	changelogGateWrite(t, repo.root, "CHANGELOG.md", changelogGateValidRelease, 0o644)
 	changelogGateWrite(t, repo.root, "internal/change.go", "package internal\n", 0o644)
 	repo.commit(t, "change code with release notes")
 
 	output, err := repo.runMode(t, "--content-only")
-	if err != nil {
-		t.Fatalf("content-only gate error = %v\noutput:\n%s", err, output)
-	}
-	if !strings.Contains(output, "CHANGELOG PR check: ok (mode=content-only") {
-		t.Fatalf("content-only gate output missing success marker:\n%s", output)
+	if err == nil || !strings.Contains(output, "may accompany only release-fragment archival") {
+		t.Fatalf("content-only gate accepted ordinary source change: err=%v\noutput:\n%s", err, output)
 	}
 }
 
-func TestChangelogPRContentOnlyStillValidatesContentWithOtherFiles(t *testing.T) {
+func TestChangelogPRContentOnlyAcceptsReleaseFragmentArchival(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	changelogGateWrite(t, repo.root, ".changes/1234-chat.md", "---\ncategory: Added\n---\n\n- Chat reply mentions.\n", 0o644)
+	repo.commit(t, "add release fragment")
+	sealBase := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+	changelogGateWrite(t, repo.root, "CHANGELOG.md", `# Changelog
+
+## [Unreleased]
+
+## [1.0.1-beta.1] - 2026-07-17
+
+### Added
+
+- Chat reply mentions.
+
+## [1.0.0] - 2026-07-01
+
+### Added
+
+- Initial release.
+`, 0o644)
+	if err := os.MkdirAll(filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1"), 0o755); err != nil {
+		t.Fatalf("MkdirAll archive: %v", err)
+	}
+	if err := os.Rename(filepath.Join(repo.root, ".changes", "1234-chat.md"), filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1", "1234-chat.md")); err != nil {
+		t.Fatalf("Rename release fragment: %v", err)
+	}
+	repo.commit(t, "seal release notes")
+
+	output, err := repo.runMode(t, "--content-only")
+	if err != nil {
+		t.Fatalf("content-only release seal error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "CHANGELOG PR check: ok (mode=content-only") {
+		t.Fatalf("content-only release seal output missing success marker:\n%s", output)
+	}
+	if output, err := repo.runFragmentPolicy(t, sealBase, "HEAD"); err != nil {
+		t.Fatalf("release fragment policy rejected matching seal: %v\noutput:\n%s", err, output)
+	}
+}
+
+func TestReleaseFragmentPolicyRejectsInvalidActiveFragmentAndWrongArchiveVersion(t *testing.T) {
+	t.Run("invalid active fragment", func(t *testing.T) {
+		repo := newChangelogGateRepo(t)
+		changelogGateWrite(t, repo.root, ".changes/1234-invalid.md", "---\ncategory: Added\n---\n\n- TODO: fill this in.\n", 0o644)
+		repo.commit(t, "add invalid fragment")
+		output, err := repo.runFragmentPolicy(t, repo.base, "HEAD")
+		if err == nil || !strings.Contains(output, "must not contain TODO/TBD") {
+			t.Fatalf("invalid active fragment passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("archive version differs from changelog", func(t *testing.T) {
+		repo := newChangelogGateRepo(t)
+		changelogGateWrite(t, repo.root, ".changes/1234-chat.md", "---\ncategory: Added\n---\n\n- Chat reply mentions.\n", 0o644)
+		repo.commit(t, "add release fragment")
+		sealBase := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+		changelogGateWrite(t, repo.root, "CHANGELOG.md", changelogGateValidRelease, 0o644)
+		if err := os.MkdirAll(filepath.Join(repo.root, ".changes", "released", "1.0.2-beta.1"), 0o755); err != nil {
+			t.Fatalf("MkdirAll archive: %v", err)
+		}
+		if err := os.Rename(filepath.Join(repo.root, ".changes", "1234-chat.md"), filepath.Join(repo.root, ".changes", "released", "1.0.2-beta.1", "1234-chat.md")); err != nil {
+			t.Fatalf("Rename release fragment: %v", err)
+		}
+		repo.commit(t, "archive under wrong release")
+		output, err := repo.runFragmentPolicy(t, sealBase, "HEAD")
+		if err == nil || !strings.Contains(output, "unchanged R100 moves") {
+			t.Fatalf("wrong archive version passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("archive notes differ from rendered fragment", func(t *testing.T) {
+		repo := newChangelogGateRepo(t)
+		changelogGateWrite(t, repo.root, ".changes/1234-chat.md", "---\ncategory: Added\n---\n\n- Chat reply mentions.\n", 0o644)
+		repo.commit(t, "add release fragment")
+		sealBase := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+		changelogGateWrite(t, repo.root, "CHANGELOG.md", changelogGateValidRelease, 0o644)
+		if err := os.MkdirAll(filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1"), 0o755); err != nil {
+			t.Fatalf("MkdirAll archive: %v", err)
+		}
+		if err := os.Rename(filepath.Join(repo.root, ".changes", "1234-chat.md"), filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1", "1234-chat.md")); err != nil {
+			t.Fatalf("Rename release fragment: %v", err)
+		}
+		repo.commit(t, "seal mismatched release notes")
+		output, err := repo.runFragmentPolicy(t, sealBase, "HEAD")
+		if err == nil || !strings.Contains(output, "does not exactly match") {
+			t.Fatalf("mismatched release notes passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+}
+
+func TestChangelogPRContentOnlyStillValidatesReleaseNotes(t *testing.T) {
 	tests := []struct {
 		name       string
 		changelog  string
@@ -250,7 +350,6 @@ func TestChangelogPRContentOnlyStillValidatesContentWithOtherFiles(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			repo := newChangelogGateRepo(t)
 			changelogGateWrite(t, repo.root, "CHANGELOG.md", test.changelog, 0o644)
-			changelogGateWrite(t, repo.root, "internal/change.go", "package internal\n", 0o644)
 			repo.commit(t, test.name)
 
 			output, err := repo.runMode(t, "--content-only")
