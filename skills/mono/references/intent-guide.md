@@ -15,6 +15,7 @@
 | "这个 alidocs 表格链接帮我看下"（粘贴原始 URL） | 先 probe 节点类型 | `dws doc info --node` → 按 `extension` 路由 | 直接调 `sheet` | `alidocs/i/nodes/{id}` 可能是文档/axls/able/xlsx 等，禁止凭 URL 猜类型 |
 | "读一下这个 xlsx 的数据" / xlsx 节点链接 | 下载本地表格文件 | `dws drive download --node` | `sheet range read` | xlsx / xls / xlsm / csv 是上传的本地文件（`contentType=DOCUMENT`），sheet 命令只支持在线表格，必须下载后本地解析 |
 | "把这个在线表格导出为 xlsx 文件" | 在线表格格式转换 | `dws sheet export` | `dws drive download` | `export` 是 axls → xlsx 的导出转换；`download` 只能下载已有的 xlsx 节点 |
+| "把这个 html 文件放到钉钉/导入 html 页面" | HTML 文件上钉 | `drive upload`（钉盘）或 `doc import`（文档空间/知识库，自动改走上传链路） | `doc read + doc create` 重写链 | `doc import` 对白名单外格式（html/pdf/zip 等）不报错，自动改走文件上传原样入库（stderr 有改道提示）；用户明确要"可编辑在线文档"时先把 HTML 转 md 再 import |
 | "帮我记一下明天要做的事" | 创建个人待办 | `todo` | `doc` / `aitable` | 个人待办提醒，非文档内容或数据表 |
 | "给自己留一个明天下午的时间块/建个个人日程" | 创建个人日程 | `calendar event create` | `todo` | 个人 schedule 仍属于日历事件，不是待办 |
 | "帮我把这个文件传到网盘" | 钉盘上传 | `drive upload` | — | 文件上传是存储层操作，归 drive |

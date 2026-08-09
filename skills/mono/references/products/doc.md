@@ -142,7 +142,7 @@ Flags:
 
 ### 导入本地文件为在线文档
 
-详见 [doc/doc-import.md](./doc/doc-import.md)。
+详见 [doc/doc-import.md](./doc/doc-import.md)。白名单外格式（html/pdf/zip/无扩展名等）不报错，自动改走文件上传原样入库，JSON 结果带 `fallback=upload`、`converted=false` 标记。
 
 ```
 Usage:
@@ -671,6 +671,7 @@ Flags:
 用户说"导入文件/导入为在线文档/导入 Word/导入 Excel/导入 xmind/导入 Markdown/把本地文件转在线文档":
 - 导入并转换为在线文档 → `doc import --file <本地路径>`
 - 支持 docx/doc/xlsx/xls/md/txt/xmind/mark，文件大小不超过 20MB
+- 白名单外格式（html/pdf/zip/无扩展名等）不报错：自动改走文件上传链路原样入库（stderr 有改道提示），JSON 结果带 `fallback=upload`、`converted=false` 标记，产出的是文件对象而非在线文档，不得报告为"已转换"；要"可编辑在线文档"时先把内容转为 md 再导入
 - 如果用户指定知识库或文件夹，补充 `--workspace` 或 `--folder`
 - 不要把本地文件内容先读出来再 `doc create/update`；应直接使用 `doc import`
 

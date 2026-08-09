@@ -10,7 +10,7 @@
     "+update": {"disposition":"primary_smart","semantic_delta":"统一追加、覆盖和 block 级精确修改，并集中处理内容输入、定位和确认。","risk":"write","public":true,"reviewed":true},
     "+checkpoint-update": {"disposition":"primary_smart","semantic_delta":"写入前保存版本快照，更新后读回验证并输出逐步 ledger。","risk":"write","public":true,"reviewed":true},
     "+export": {"disposition":"primary_smart","semantic_delta":"一体化提交、轮询导出任务并按 no-clobber 策略安全下载到本地。","risk":"read","public":true,"reviewed":true},
-    "+import": {"disposition":"primary_smart","semantic_delta":"一体化创建会话、上传、确认转换并轮询导入结果。","risk":"write","public":true,"reviewed":true},
+    "+import": {"disposition":"primary_smart","semantic_delta":"一体化创建会话、上传、确认转换并轮询导入结果；白名单外格式自动改走文件上传原样入库（fallback=upload、converted=false）。","risk":"write","public":true,"reviewed":true},
     "+history-save": {"disposition":"semantic_adapter","semantic_delta":"以文档历史语义命名手动版本快照，避免暴露底层 RPC 命名。","risk":"write","public":true,"reviewed":true},
     "+history-list": {"disposition":"semantic_adapter","semantic_delta":"统一历史版本分页参数并返回可用于回滚的版本列表。","risk":"read","public":true,"reviewed":true},
     "+history-revert": {"disposition":"primary_smart","semantic_delta":"先验证目标版本存在，再执行回滚并读回当前文档状态。","risk":"high-risk-write","public":true,"reviewed":true},

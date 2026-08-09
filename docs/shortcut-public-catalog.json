@@ -2681,7 +2681,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "一体化创建会话、上传、确认转换并轮询导入结果。",
+      "semantic_delta": "一体化创建会话、上传、确认转换并轮询导入结果；白名单外格式自动改走文件上传原样入库（fallback=upload、converted=false）。",
       "availability": "available"
     },
     {
