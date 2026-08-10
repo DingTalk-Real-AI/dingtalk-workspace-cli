@@ -6,7 +6,7 @@
 
 | 方式 | 命令 / 字段 | 适用场景 | 粒度 |
 |------|------------|---------|------|
-| **`set-style` / `batch-set-style`** | `dws sheet range set-style` | 批量刷整片区域的统一样式（表头加粗居中、数字格式等） | range 级别（2D 数组或全 range 统一值） |
+| **`set-style` / `batch-set-style`** | `dws sheet range set-style` / `batch-set-style` | 批量刷整片区域的统一样式（表头加粗居中、数字格式等）；多区域批量走 `batch-set-style`（服务端原子事务） | range 级别（2D 数组或全 range 统一值） |
 | **`cellStyles`**（`range update` 内） | `--values` 中每个 cell 的 `cellStyles` 字段 | 写值同时附带样式，少量 cell 一步到位 | per-cell 级别 |
 | **`style`**（richText 片段样式） | `--values` 中 richText 子项（`text`/`link`）的 `style` | 同一单元格内不同文字有不同字体样式 | 文本片段级别 |
 
@@ -26,7 +26,8 @@
 
 用户说"设置样式/改颜色/设背景色/加粗/居中/换行/字体颜色/字号":
 - 仅设样式不改值 → `range set-style`
-- 批量设置不同 range 的样式 → `range batch-set-style --batch ./styles.json`（内部顺序循环调 `update_range`）
+- 多个区域刷同一组样式（可跨工作表）→ `range batch-set-style --ranges '["Sheet1!A1:B2","Sheet2!D1:D10"]' + 样式 flag`（一次原子提交）
+- 各区域样式不同 → `range batch-set-style --batch ./styles.json`（同样一次原子提交）
 - 写值同时附带样式 → `range update --values` 中使用 `cellStyles` 字段（参见 sheet-write-data.md）
 - 请勿用 `range update --values` 写空/重写来模拟纯样式变更
 
@@ -59,6 +60,14 @@ Example:
 
   # 整片 range 启用自动换行
   dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:E10" --word-wrap autoWrap
+
+  # 斜体 + 下划线 + 指定字体（整个 range 共用）
+  dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:A10" \
+    --font-style italic --font-line underline --font-family "微软雅黑"
+
+  # 给 A1:D10 加四周实线边框（每格四边=网格线）
+  dws sheet range set-style --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D10" \
+    --border-styles-json '{"top":{"style":"solid","color":"#000"},"bottom":{"style":"solid","color":"#000"},"left":{"style":"solid","color":"#000"},"right":{"style":"solid","color":"#000"}}'
 Flags:
       --node string                 表格文档 ID 或 URL (必填)
       --sheet-id string             工作表 ID 或名称 (必填)
@@ -77,25 +86,48 @@ Flags:
       --font-weights-json string    字体粗细二维 JSON 数组
       --word-wrap string            换行方式：overflow/clip/autoWrap（整个 range 共用）
       --number-format string        数字格式代码，如 General/@/#,##0/#,##0.00/0%/0.00%/yyyy/m/d/h:mm:ss
+      --font-style string           字体样式：normal/italic（斜体，整个 range 共用）
+      --font-line string            字体线条：none/underline/line-through（下划线/删除线，单选，整个 range 共用）
+      --font-family string          字体族，如 Arial / 微软雅黑（整个 range 共用）
+      --border-styles-json string   四边边框 JSON，如 '{"top":{"style":"solid","color":"#000"},"bottom":{"style":"medium"}}'
 ```
 
 **特性说明**：
-- 每个样式维度提供两种写法，二选一：`--xxx`（单值刷整个 range，CLI 本地展开为二维数组）vs `--xxx-json`（逐单元格指定，维度需与 `--range` 完全一致）
-- 至少需传入一个样式参数。单次调用建议：行数 ≤ 1000，单元格总数 ≤ 5000
-- 枚举值按驼峰书写：`autoWrap`、`bold`、`normal`、`center` 等
+- 每个可逐格样式维度（bg-color/font-size/h-align/v-align/font-color/font-weight）提供两种写法，二选一：`--xxx`（单值刷整个 range，CLI 本地展开为二维数组）vs `--xxx-json`（逐单元格指定，维度需与 `--range` 完全一致）
+- 整区共用的标量样式（无 `*-json` 形式）：`--word-wrap` / `--number-format` / `--font-style` / `--font-line` / `--font-family` / `--border-styles-json`
+- `--border-styles-json`：四边 `{top/bottom/left/right}`，每边 `{style, color?}`；`style` 取 `solid/medium/thick/dashed/dotted/double/hair/none` 等（**粗细已含在 style 内**：`solid`=细、`medium`=中、`thick`=粗，无独立 weight 字段）；只传的边生效、未传的边保留原状（按边合并）。每条边**只接受 `style` / `color` 两个键**，写错的键（如 `colour`）或非字符串的 `color` 直接报错而不是静默忽略（否则会画出一条没有颜色的边框却报成功）；**逐格应用**：对整个 range 每个单元格都画指定的边 = 网格效果（非仅最外框）
+- `--font-line` 为单选：`underline` 置下划线、`line-through` 置删除线、`none` 清除两者
+- 至少需传入一个样式参数。单次调用建议：行数 ≤ 1000，单元格总数 ≤ 5000（服务端硬限 30000）
+- 枚举值按驼峰书写：`autoWrap`、`bold`、`normal`、`center`、`italic` 等
+- 底层走 `set_cell_range` 的 `cellStyles`（仅设样式、保留原值），因此**纯样式设置可直接作用于含合并单元格的区域**，无需先取消合并
 
-### 批量设置单元格样式
+### 批量设置单元格样式（服务端原子事务）
 ```
 Usage:
   dws sheet range batch-set-style [flags]
 Example:
+  # 同一组样式刷多个区域（可跨工作表），一次原子提交
+  dws sheet range batch-set-style --node <NODE_ID> \
+    --ranges '["Sheet1!A1:B2","Sheet2!D1:D10"]' \
+    --bg-color "#FFF2CC" --font-weight bold --font-family "微软雅黑"
+
+  # 每项不同样式：用配置文件
   dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json
   dws sheet range batch-set-style --node <NODE_ID> --batch ./styles.json --continue-on-error
 Flags:
       --node string               表格文档 ID 或 URL (必填)
-      --batch string              批次配置 JSON 文件路径 (必填)
-      --continue-on-error         遇到失败时继续执行后续条目（默认遇错即停）
+      --ranges string             目标区域 JSON 数组，每项须带工作表前缀，最多 100 项（与 --batch 二选一，同一组样式应用到所有区域）
+      --batch string              批次配置 JSON 文件路径（与 --ranges 二选一，每项可用不同样式）
+      --continue-on-error         遇到失败时继续执行其余项（默认严格事务，整批回滚）
+      （其余样式 flag 与 set-style 完全一致，配合 --ranges 使用）
 ```
+
+两种入口，二选一：
+
+| 入口 | 适用 | 说明 |
+|------|------|------|
+| `--ranges` | 同一组样式刷多个区域 | 对齐飞书 `+cells-batch-set-style`；每项须带工作表前缀（`"Sheet1!A1:B2"`），**支持跨工作表**，最多 100 项；样式用与 `set-style` 相同的 flag |
+| `--batch <file>` | 各区域样式不同 | JSON 数组，每项含 `sheetId` + `range` + 该项自己的样式字段 |
 
 配置文件格式（JSON 数组，每个元素一条批次项）：
 ```json
@@ -109,6 +141,10 @@ Flags:
     "vAlign":       "middle",
     "fontColor":    "#333333",
     "fontWeight":   "bold",
+    "fontStyle":    "italic",
+    "fontLine":     "underline",
+    "fontFamily":   "Arial",
+    "borderStylesJson": "{\"top\":{\"style\":\"solid\",\"color\":\"#000\"}}",
     "wordWrap":     "autoWrap",
     "numberFormat": "General"
   },
@@ -121,9 +157,11 @@ Flags:
 ```
 
 **特性说明**：
-- CLI 侧顺序循环逐条调用 `update_range`（非服务端批量），运行时输出 `[N/M]` 进度
-- 每条记录执行与 `set-style` 一致的校验：至少一项样式字段 + rows ≤ 1000 + rows×cols ≤ 30000 + 枚举合法
-- 默认遇错即停（返回非 0），`--continue-on-error` 时所有条目跑完再返回首个错误
+- CLI 把所有区域组装为**一次** `batch_update` 调用，由**服务端原子执行**：默认严格事务，任一项失败则**整批回滚**（不会出现部分区域已改、部分未改）
+- 所有项在下发前先做本地校验（每项与 `set-style` 一致：至少一项样式字段 + rows ≤ 1000 + rows×cols ≤ 30000 + 枚举合法），**任一项校验不过即整批不下发**
+- 批量上限：最多 **100 个区域**，且**所有区域累计不超过 200000 个单元格**（一次请求要把全部单元格矩阵建好，累计量才是真正的峰值约束）。超限同样是下发前本地报错、整批不执行；请拆成多次调用
+- `--continue-on-error` 透传给服务端：遇失败继续执行其余项（软批量）
+- 底层每项走 `set_cell_range` 的 `cellStyles`/`borderStyles`，因此纯样式批量同样可作用于含合并单元格的区域
 
 ### 合并单元格
 ```
@@ -219,7 +257,7 @@ Flags:
 ```bash
 # ── 工作流 4: 写入数据并设置样式 ──
 
-# 1. 写入数据（每个单元格必须是 object；数字也写成字符串）
+# 1. 写入数据
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:C3" \
   --values '[[{"type":"text","text":"商品"},{"type":"text","text":"单价"},{"type":"text","text":"数量"}],[{"type":"text","text":"苹果"},{"type":"text","text":"5.5"},{"type":"text","text":"100"}],[{"type":"text","text":"香蕉"},{"type":"text","text":"3.2"},{"type":"text","text":"200"}]]' --format json
 
@@ -264,7 +302,9 @@ dws sheet merge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:C3" --m
 
 - ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
 - ★ `range update` / `range set-style` / `range batch-set-style` 单次调用上限（强制）：行数 ≤ 1000，单元格总数（行×列）建议≤ 5000（服务端硬限 30000）；超限请拆分多次调用。CLI 会在调用前做本地预校验，服务端超 30000 会直接报错
-- `range set-style` / `range batch-set-style` 的样式枚举按驼峰书写：`wordWrap` 取 `overflow`/`clip`/`autoWrap`，`fontWeight` 取 `bold`/`normal`，`hAlign` 取 `left`/`center`/`right`/`general`，`vAlign` 取 `top`/`middle`/`bottom`；背景色/字体颜色统一使用 `#RRGGBB` 格式
+- `range set-style` / `range batch-set-style` 的样式枚举按驼峰书写：`wordWrap` 取 `overflow`/`clip`/`autoWrap`，`fontWeight` 取 `bold`/`normal`，`hAlign` 取 `left`/`center`/`right`/`general`，`vAlign` 取 `top`/`middle`/`bottom`，`fontStyle` 取 `normal`/`italic`；背景色/字体颜色统一使用 `#RRGGBB` 格式
+- `--font-line` 取 `none`/`underline`/`line-through`（单选，非驼峰）：`underline` 置下划线、`line-through` 置删除线、`none` 同时清除；`--font-family` 传字体族名（如 `Arial`/`微软雅黑`）；`--font-style`/`--font-line`/`--font-family` 均为整区共用标量，无 `*-json` 逐格形式
+- `range set-style` / `range batch-set-style` 底层走 `set_cell_range` 的 `cellStyles`（仅设样式、保留原值）；纯样式设置可直接作用于**含合并单元格**的区域，无需先取消合并（写值到合并区仍会被拦截）
 - `range update` 支持通过 `cellStyles` 在写值时附带 per-cell 样式，适合少量单元格写值 + 样式一步到位的场景。批量设置整片区域的统一样式时，仍应使用 `set-style` / `batch-set-style`
 - `merge-cells` 合并时只保留左上角单元格的值，其他单元格的值会被丢弃
 - `merge-cells` 的 `--merge-type` 不传时默认为 `mergeAll`（合并所有单元格）

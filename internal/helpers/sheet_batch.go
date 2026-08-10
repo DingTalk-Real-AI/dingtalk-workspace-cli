@@ -517,12 +517,12 @@ func newRangeBatchClearCmd() *cobra.Command {
 			}
 			operations := make([]any, 0, len(ranges))
 			for i, rng := range ranges {
-				idx := strings.Index(rng, "!")
-				if idx <= 0 || idx == len(rng)-1 {
-					return fmt.Errorf("--ranges[%d] (%q) 必须包含工作表前缀，格式为 \"SheetName!A1:B3\"", i, rng)
+				// 与 batch-set-style 共用同一个拆分器：此前这里自己拆，且只按原始串里
+				// ! 的位置判断，" !A1:B2" 会拆出空工作表名并带着 sheetId:"" 下发。
+				sheetName, rangeAddr, err := splitSheetPrefixedRange(rng, i)
+				if err != nil {
+					return err
 				}
-				sheetName := strings.TrimSpace(rng[:idx])
-				rangeAddr := strings.TrimSpace(rng[idx+1:])
 				operations = append(operations, map[string]any{
 					"toolName": "clear_range",
 					"input": map[string]any{
