@@ -125,6 +125,9 @@ func TestCrossPlatformCoverageParamAliasFixtureThroughEmbeddedDeliveryPath(t *te
 					t.Fatalf("%q on %q lost its value: args=%v", c.Emitted, c.Command, ctx.Args)
 				}
 				switch {
+				case cmdutil.Morph(gotBare) == morphed && commandHasRealFlagByMorph(leaf, morphed):
+					// (2) not rewritten — only valid if the command natively
+					// accepts the emitted synonym as a real flag.
 				case gotBare == c.Expect:
 					// (1) rewritten; the embedded table must agree.
 					if !hasEntry {
@@ -133,9 +136,6 @@ func TestCrossPlatformCoverageParamAliasFixtureThroughEmbeddedDeliveryPath(t *te
 					if canon, hit := entry.ResolveAlias(morphed); !hit || canon != c.Expect {
 						t.Fatalf("embedded table ResolveAlias(%q) on %q = %q (hit=%v), want %q", morphed, c.Command, canon, hit, c.Expect)
 					}
-				case cmdutil.Morph(gotBare) == morphed && commandHasRealFlagByMorph(leaf, morphed):
-					// (2) not rewritten — only valid if the command natively
-					// accepts the emitted synonym as a real flag.
 				default:
 					t.Fatalf("%q on %q reduced to unexpected %q, want --%s or native --%s (args=%v)", c.Emitted, c.Command, got, c.Expect, c.Emitted, ctx.Args)
 				}

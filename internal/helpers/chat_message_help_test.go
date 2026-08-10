@@ -51,7 +51,7 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsPostSendIDChain(t *testing
 			contains: []string{
 				"send -> query-send-status -> edit",
 				"query-send-status --open-task-id <上一步返回的openTaskId>",
-				"edit --conversation-id <上一步返回的openConversationId> --msg-id <上一步返回的openMessageId>",
+				"edit --conversation-id <上一步返回的openConversationId> --message-id <上一步返回的openMessageId>",
 			},
 			notContain: "chat message list",
 		},
@@ -61,7 +61,7 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsPostSendIDChain(t *testing
 			contains: []string{
 				"send -> query-send-status -> recall",
 				"query-send-status --open-task-id <上一步返回的openTaskId>",
-				"recall --conversation-id <上一步返回的openConversationId> --msg-id <上一步返回的openMessageId>",
+				"recall --conversation-id <上一步返回的openConversationId> --message-id <上一步返回的openMessageId>",
 			},
 			notContain: "chat message list",
 		},
