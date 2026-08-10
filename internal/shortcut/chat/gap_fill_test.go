@@ -609,7 +609,7 @@ func TestCrossPlatformCoverageMessagesSendTextModesAndExecuteGuard(t *testing.T)
 
 func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
-		"im/create_and_send_card":  `{"result":{"card":{"biz_id":"biz-1"}}}`,
+		"im/create_and_send_card":  `{"result":{"card":{"biz_id":"biz-1","atTag":"<a atId=D-one>甲</a> <a atId=D-two>乙</a> "}}}`,
 		"im/update_streaming_card": `{"result":{"updated":true}}`,
 	}}
 	helpers.InitDeps(fake)
@@ -619,6 +619,8 @@ func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 	root.SetArgs([]string{
 		"chat", "+messages-send-card",
 		"--group", "cid",
+		"--at-open-dingtalk-ids", "D-one,D-two,D-one",
+		"--at-all",
 		"--content", "完成",
 		"--flow-status", "3",
 		"--yes",
@@ -630,7 +632,20 @@ func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 		fake.calls[1].tool != "update_streaming_card" {
 		t.Fatalf("card calls = %#v", fake.calls)
 	}
-	if fake.calls[1].args["bizId"] != "biz-1" || fake.calls[1].args["msgContent"] != "完成" ||
+	if got, want := fake.calls[0].args["atOpenDingTalkIds"], []string{"D-one", "D-two"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("card create atOpenDingTalkIds = %#v, want %#v", got, want)
+	}
+	if fake.calls[0].args["atAll"] != true {
+		t.Fatalf("card create atAll = %#v", fake.calls[0].args["atAll"])
+	}
+	if _, exists := fake.calls[1].args["atOpenDingTalkIds"]; exists {
+		t.Fatalf("card update leaked atOpenDingTalkIds: %#v", fake.calls[1].args)
+	}
+	if _, exists := fake.calls[1].args["atAll"]; exists {
+		t.Fatalf("card update leaked atAll: %#v", fake.calls[1].args)
+	}
+	if fake.calls[1].args["bizId"] != "biz-1" ||
+		fake.calls[1].args["msgContent"] != "<a atId=D-one>甲</a> <a atId=D-two>乙</a> 完成" ||
 		fake.calls[1].args["flowStatus"] != 3 {
 		t.Fatalf("card update args = %#v", fake.calls[1].args)
 	}
@@ -640,6 +655,49 @@ func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 	}
 	if payload["bizId"] != "biz-1" || payload["ok"] != true {
 		t.Fatalf("card output = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageMessagesSendCardKeepsContentWithoutAtTag(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/create_and_send_card":  `{"result":{"bizId":"biz-no-mention"}}`,
+		"im/update_streaming_card": `{"result":{"updated":true}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"chat", "+messages-send-card",
+		"--group", "cid",
+		"--content", "正文",
+		"--yes",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 2 || fake.calls[1].args["msgContent"] != "正文" {
+		t.Fatalf("card calls = %#v", fake.calls)
+	}
+}
+
+func TestCrossPlatformCoverageMessagesSendCardRejectsMissingRequestedAtTag(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/create_and_send_card": `{"result":{"bizId":"biz-missing-at-tag"}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"chat", "+messages-send-card",
+		"--group", "cid",
+		"--at-open-dingtalk-ids", "D-mentioned",
+		"--content", "正文",
+		"--yes",
+	})
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "biz-missing-at-tag") || !strings.Contains(err.Error(), "atTag") {
+		t.Fatalf("error = %v, want recoverable missing-atTag error containing bizId", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != "create_and_send_card" {
+		t.Fatalf("card calls = %#v, want create only", fake.calls)
 	}
 }
 
@@ -748,6 +806,50 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		}
 	})
 
+	t.Run("dry run mentions only in create", func(t *testing.T) {
+		fake := &larkAlignmentCaller{}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{
+			"chat", "+messages-send-card",
+			"--group", "cid",
+			"--at-open-dingtalk-ids", "D-mentioned",
+			"--at-all",
+			"--content", "处理中",
+			"--dry-run",
+			"--yes",
+		})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		if len(fake.calls) != 0 {
+			t.Fatalf("card group dry-run calls = %#v", fake.calls)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		actions, _ := payload["actions"].([]any)
+		create, _ := actions[0].(map[string]any)
+		createArguments, _ := create["arguments"].(map[string]any)
+		update, _ := actions[1].(map[string]any)
+		updateArguments, _ := update["arguments"].(map[string]any)
+		if !reflect.DeepEqual(createArguments["atOpenDingTalkIds"], []any{"D-mentioned"}) || createArguments["atAll"] != true {
+			t.Fatalf("card create dry-run mentions = %#v", createArguments)
+		}
+		if _, exists := updateArguments["atOpenDingTalkIds"]; exists {
+			t.Fatalf("card update dry-run leaked atOpenDingTalkIds: %#v", updateArguments)
+		}
+		if _, exists := updateArguments["atAll"]; exists {
+			t.Fatalf("card update dry-run leaked atAll: %#v", updateArguments)
+		}
+		if updateArguments["msgContent"] != "<atTag from create_and_send_card>处理中" {
+			t.Fatalf("card update dry-run content = %#v", updateArguments["msgContent"])
+		}
+	})
+
 	t.Run("receiver resolution error", func(t *testing.T) {
 		fake := &larkAlignmentCaller{failProductTool: "contact/search_contact_by_key_word"}
 		helpers.InitDeps(fake)
@@ -815,6 +917,8 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		{"--group", "cid", "--flow-status", "2"},
 		{"--group", "cid", "--receiver-open-dingtalk-id", "D-direct"},
 		{"--receiver", "user-id", "--receiver-open-dingtalk-id", "D-direct"},
+		{"--receiver", "user-id", "--at-open-dingtalk-ids", "D-mentioned"},
+		{"--receiver-open-dingtalk-id", "D-direct", "--at-all"},
 	} {
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
@@ -854,6 +958,24 @@ func TestCrossPlatformCoverageFindCardBizIDResponseShapes(t *testing.T) {
 	} {
 		if got := findCardBizID(tc.value); got != tc.want {
 			t.Errorf("findCardBizID(%#v) = %q, want %q", tc.value, got, tc.want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageFindCardAtTagResponseShapes(t *testing.T) {
+	for _, tc := range []struct {
+		value any
+		want  string
+	}{
+		{map[string]any{"atTag": "<a atId=D-direct>甲</a> "}, "<a atId=D-direct>甲</a> "},
+		{map[string]any{"result": map[string]any{"atTag": "<a atId=D-nested>乙</a> "}}, "<a atId=D-nested>乙</a> "},
+		{`{"result":{"card":{"atTag":"<a atId=D-json>丙</a> "}}}`, "<a atId=D-json>丙</a> "},
+		{map[string]any{"atTag": "  "}, ""},
+		{map[string]any{"atTag": 42}, ""},
+		{map[string]any{"result": map[string]any{"created": true}}, ""},
+	} {
+		if got := findCardAtTag(tc.value); got != tc.want {
+			t.Errorf("findCardAtTag(%#v) = %q, want %q", tc.value, got, tc.want)
 		}
 	}
 }
