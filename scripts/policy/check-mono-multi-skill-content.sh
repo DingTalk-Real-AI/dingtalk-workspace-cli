@@ -1,5 +1,5 @@
 #!/bin/sh
-# Mono↔multi skill content QA (G1–G4). See docs/skill-mono-multi-qa.md
+# Mono↔multi skill content QA (G1–G5). See docs/skill-mono-multi-qa.md
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"

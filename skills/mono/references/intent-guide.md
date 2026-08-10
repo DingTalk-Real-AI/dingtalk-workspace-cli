@@ -46,6 +46,7 @@
 | "查看这条话题的所有回复" | 话题回复 | `chat +thread-replies` | `chat message list-topic-replies` | 已知 threadId/topicId 时自动投影回复人、正文和时间 |
 | "把这些消息里的附件下载下来" | 消息资源下载 | 查询 Shortcut 的 `--download-resources` | `resourceRefs.shortcut` 返回的下载命令 | 先用查询结果的 resourceRefs；单资源再执行返回的可运行参数 |
 | "消息发没发成功/查询消息发送状态" | 查询消息发送状态 | `chat message query-send-status` | — | 需要 send 返回的 openTaskId |
+| "编辑/撤回我刚发的消息" | 发后编辑/撤回 | `send` → `query-send-status` → `edit` / `recall` | 按消息内容反查 | 使用 send 返回的 openTaskId 直接获取两个后续 ID |
 | "撤回我发的消息/撤回消息" | 撤回个人消息 | `chat message recall` | `chat message recall-by-bot` | recall 撤回个人消息，recall-by-bot 撤回机器人消息 |
 | "未读消息会话/未读会话列表/我的未读会话" | 未读会话列表 | `chat message list-unread-conversations` | `chat message read-status` | list-unread-conversations 查哪些会话有未读；read-status 查具体消息的已读状态 |
 | "谁看了这条消息/消息已读未读/查读状态" | 查询消息已读状态 | `chat message read-status` | `chat message list-unread-conversations` | read-status 查具体消息的已读人员；list-unread-conversations 查未读会话列表 |
@@ -312,6 +313,7 @@ dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --msg-type
 
 用 `chat message query-send-status` 的场景：
 - "消息发没发成功/查询消息发送状态" — 查询个人发送消息的状态，需要 send 返回的 openTaskId
+- 发送成功时返回 openMessageId 和 openConversationId，可直接用于 edit/recall
 
 用 `chat +search-msg` 的场景（推荐首选）：
 - "按发送者搜索消息/指定多个群搜索/@我的消息多维度搜" — 支持关键词、发送者、@我、@指定人、多个会话等维度组合搜索
@@ -325,7 +327,7 @@ dws chat +messages-send --as user --open-dingtalk-id <openDingTalkId> --msg-type
 上述五个查询 Shortcut 与 `+messages-resource-download` 都沿用安全本地下载的 `read/not_required` 契约，不应添加 `--yes` 或触发交互确认。输出只允许工作目录内相对路径、默认不覆盖并原子落盘；需要覆盖时必须由用户显式传 `--overwrite`。
 
 **不支持的场景**：
-- "撤回我刚发的消息"（但不知道消息 ID） — 需先通过消息拉取或搜索接口（如 `chat message list`、`chat message search-advanced` 等）获取 openMessageId，再调用 `chat message recall`
+- "撤回历史消息"（且已丢失发送返回的 openTaskId） — 通过消息拉取或搜索接口获取 openMessageId，再调用 `chat message recall`
 
 判断关键：普通发送统一走 `+messages-send` 并显式选择 `--as`；个人撤回→ `recall`；机器人撤回→ `recall-by-bot`；查发送状态→ `query-send-status`；消息搜索类意图优先路由到 `+search-msg`，仅在不适用时降级到原子命令。
 

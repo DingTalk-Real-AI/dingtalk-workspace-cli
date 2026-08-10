@@ -93,7 +93,7 @@ metadata:
 | 场景 | Reference |
 |---|---|
 | 复杂发送、跨会话转发、共同群或组合流程 | [01-messaging.md](references/01-messaging.md) |
-| 引用、转发、卡片、reaction、Pin/Top/Favorite | [chat-message.md](references/chat/chat-message.md) |
+| 编辑/撤回/引用/转发/卡片/reaction/Pin/Top/Favorite | [chat-message.md](references/chat/chat-message.md) |
 | 建群、成员、管理员、群公告、群设置 | [chat-group.md](references/chat/chat-group.md) |
 | Bot 搜索、入群、群发和撤回 | [chat-bot.md](references/chat/chat-bot.md) |
 | 会话置顶、分类、红点、免打扰和隐藏 | [chat-conversation.md](references/chat/chat-conversation.md) |
