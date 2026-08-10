@@ -621,6 +621,61 @@ func enrichChatWorkbookError(cmd *cobra.Command, err error) error {
 	)
 }
 
+// enrichDocFlagError turns common native/shortcut parameter-family mixups into
+// actionable local errors. It only uses the current Cobra command path and
+// parse error, so it always runs before any helper RunE or MCP dispatch.
+func enrichDocFlagError(cmd *cobra.Command, err error) error {
+	if cmd == nil || err == nil {
+		return err
+	}
+	path := cmd.CommandPath()
+	if fields := strings.Fields(path); len(fields) > 1 {
+		path = strings.Join(fields[1:], " ")
+	}
+	message := err.Error()
+	var guide chatWorkbookGuidance
+	switch {
+	case path == "doc +create" && (strings.Contains(message, "unknown flag: --content-file") || strings.Contains(message, "unknown flag: --content-format")):
+		guide = chatWorkbookGuidance{
+			"文档创建命令与参数不属于同一组",
+			"+create 是精简 Shortcut，不支持 --content-file/--content-format；需要从文件写入或指定 Markdown/JSONML 时应使用原生命令 doc create",
+			[]string{"改用 dws doc create，并保留 --content-file/--content-format", "只创建短文本时才继续使用 +create 的 --content"},
+			[]string{`dws doc create --name "<标题>" --content-file ./body.md --content-format markdown --format json`},
+		}
+	case path == "doc +inspect" && strings.Contains(message, "unknown flag: --include-info"):
+		guide = chatWorkbookGuidance{
+			"+inspect 不需要 --include-info",
+			"文档基本信息会由 +inspect 默认返回；移除 --include-info，只按需增加真实存在的 --include-history、--include-media、--include-comments、--include-permissions 或 --include-style",
+			[]string{"移除 --include-info", "只保留任务需要的 --include-* 参数"},
+			[]string{`dws doc +inspect --node <DOC_ID> --format json`},
+		}
+	case path == "doc +inspect" && strings.Contains(message, "unknown flag: --include-versions"):
+		guide = chatWorkbookGuidance{
+			"+inspect 不支持 --include-versions",
+			"版本历史对应的参数名是 --include-history；如果只需要版本列表，也可以使用 dws doc version list",
+			[]string{"将 --include-versions 改为 --include-history", "只查询版本时使用 doc version list"},
+			[]string{`dws doc +inspect --node <DOC_ID> --include-history --format json`, `dws doc version list --node <DOC_ID> --format json`},
+		}
+	case path == "doc +inspect" && strings.Contains(message, "unknown flag: --include"):
+		guide = chatWorkbookGuidance{
+			"+inspect 没有通用 --include 参数",
+			"请直接使用具体开关：--include-history、--include-media、--include-comments、--include-permissions 或 --include-style；文档块请使用 doc block list",
+			[]string{"把 --include <类型> 改成对应的具体 --include-* 开关", "需要 blockId 时改用 doc block list"},
+			[]string{`dws doc +inspect --node <DOC_ID> --include-history --format json`, `dws doc block list --node <DOC_ID> --format json`},
+		}
+	default:
+		return err
+	}
+	return apperrors.NewValidation(
+		guide.message+": "+guide.reason,
+		apperrors.WithReason("doc_parameter_family_mismatch"),
+		apperrors.WithHint(guide.actions[0]),
+		apperrors.WithActions(guide.actions...),
+		apperrors.WithExamples(guide.examples...),
+		apperrors.WithCause(err),
+	)
+}
+
 // newPreParseValidationError keeps pipeline handler identity in internal logs
 // while exposing only the underlying parameter-domain error to CLI users.
 func newPreParseValidationError(err error) error {
@@ -701,6 +756,9 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 		)
 	}
 	if enriched := enrichChatWorkbookError(cmd, err); enriched != err {
+		return enriched
+	}
+	if enriched := enrichDocFlagError(cmd, err); enriched != err {
 		return enriched
 	}
 

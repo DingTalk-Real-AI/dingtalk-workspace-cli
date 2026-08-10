@@ -82,6 +82,74 @@ func TestFlagErrorWithSuggestions_unknownFlagHintAndFlags(t *testing.T) {
 	}
 }
 
+func TestFlagErrorWithSuggestionsDocParameterFamilies(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		path     []string
+		flag     string
+		wantHint string
+		wantText string
+	}{
+		{"shortcut-create-file", []string{"doc", "+create"}, "content-file", "doc create", "--content-file"},
+		{"inspect-info", []string{"doc", "+inspect"}, "include-info", "移除 --include-info", "默认返回"},
+		{"inspect-versions", []string{"doc", "+inspect"}, "include-versions", "--include-history", "版本历史"},
+		{"inspect-generic", []string{"doc", "+inspect"}, "include", "具体 --include-*", "block list"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := &cobra.Command{Use: "dws"}
+			parent := root
+			for _, name := range tc.path {
+				child := &cobra.Command{Use: name}
+				parent.AddCommand(child)
+				parent = child
+			}
+			cmd := parent
+			err := flagErrorWithSuggestions(cmd, fmt.Errorf("unknown flag: --%s", tc.flag))
+			var typed *apperrors.Error
+			if !stderrors.As(err, &typed) {
+				t.Fatalf("want structured validation, got %T: %v", err, err)
+			}
+			if typed.Reason != "doc_parameter_family_mismatch" || !strings.Contains(typed.Hint, tc.wantHint) || !strings.Contains(typed.Message, tc.wantText) {
+				t.Fatalf("error = reason %q hint %q message %q", typed.Reason, typed.Hint, typed.Message)
+			}
+		})
+	}
+}
+
+func TestDocParameterFamilyErrorsStopBeforeDispatch(t *testing.T) {
+	for _, tc := range []struct {
+		path []string
+		flag string
+	}{
+		{[]string{"doc", "+create"}, "content-file"},
+		{[]string{"doc", "+inspect"}, "include-info"},
+		{[]string{"doc", "+inspect"}, "include-versions"},
+		{[]string{"doc", "+inspect"}, "include"},
+	} {
+		t.Run(strings.Join(tc.path, "/")+"/"+tc.flag, func(t *testing.T) {
+			calls := 0
+			root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+			root.SetFlagErrorFunc(flagErrorWithSuggestions)
+			parent := root
+			for _, name := range tc.path {
+				child := &cobra.Command{Use: name}
+				parent.AddCommand(child)
+				parent = child
+			}
+			parent.RunE = func(*cobra.Command, []string) error { calls++; return nil }
+			root.SetArgs(append(tc.path, "--"+tc.flag))
+			err := root.Execute()
+			var typed *apperrors.Error
+			if !stderrors.As(err, &typed) || typed.Reason != "doc_parameter_family_mismatch" {
+				t.Fatalf("error = %#v", err)
+			}
+			if calls != 0 {
+				t.Fatalf("dispatch calls = %d, want 0", calls)
+			}
+		})
+	}
+}
+
 // TestFlagErrorWithSuggestions_fallbackTailHint 验证 fallback 路径（非 unknown flag 类错误，
 // 如 missing required flag / ambiguous shorthand）也带尾部 See '<cmd> --help' for usage.
 // 这是 wukong / docker / kubectl 的通用 UX——任何 flag 解析错误都给用户一条 help 入口。
