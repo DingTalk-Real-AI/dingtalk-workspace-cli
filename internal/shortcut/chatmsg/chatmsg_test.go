@@ -16,6 +16,7 @@ package chatmsg
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCrossPlatformCoverageSender(t *testing.T) {
@@ -217,6 +218,46 @@ func TestCrossPlatformCoverageMessageLedgerNilAndCursorOnlyBoundaries(t *testing
 	ApplyMessagePagination(payload, map[string]any{"result": map[string]any{"nextCursor": "next"}}, nil, "older")
 	if payload["paginationKnown"] != false || payload["failedCount"] != 1 {
 		t.Fatalf("cursor-only pagination = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageMessagePaginationCursorTypeEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value any
+		ok    bool
+	}{
+		{name: "int", value: int(1), ok: true},
+		{name: "int32", value: int32(2), ok: true},
+		{name: "float32", value: float32(3), ok: true},
+		{name: "float64", value: float64(4), ok: true},
+		{name: "string", value: "5", ok: true},
+		{name: "fractional float32", value: float32(1.5)},
+		{name: "negative float64", value: float64(-1)},
+		{name: "invalid string", value: "not-a-cursor"},
+		{name: "unsupported", value: true},
+		{name: "zero", value: int64(0)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			key, boundary, err := messagePaginationCursorBoundary(tc.value)
+			if tc.ok {
+				if err != nil || key == "" || boundary == "" {
+					t.Fatalf("cursor = (%q, %q, %v)", key, boundary, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("invalid cursor unexpectedly succeeded: (%q, %q)", key, boundary)
+			}
+		})
+	}
+
+	payload := NewMessageListPayload(nil)
+	ApplyMessagePagination(payload, map[string]any{
+		"result": map[string]any{"hasMore": true, "nextCursor": int64(1)},
+	}, nil, "older")
+	if payload["failedCount"] != 1 || payload["complete"] != false {
+		t.Fatalf("empty continuing page = %#v", payload)
 	}
 }
 
@@ -423,23 +464,38 @@ func TestCrossPlatformCoverageApplyPaginationReadsNestedEnvelope(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageApplyMessagePaginationUsesExecutableTimeBoundary(t *testing.T) {
+func TestCrossPlatformCoverageApplyMessagePaginationUsesAuthoritativeMillisecondCursor(t *testing.T) {
+	const cursorMillis int64 = 1785919699136
 	payload := map[string]any{}
 	ApplyMessagePagination(payload, map[string]any{
 		"result": map[string]any{
 			"hasMore":    true,
-			"nextCursor": "not-a-message-list-cli-flag",
+			"nextCursor": cursorMillis,
 		},
 	}, []map[string]any{
 		{"createTime": "2026-07-28 10:00:00"},
 		{"createTime": "2026-07-28 09:00:00"},
 	}, "older")
 	if _, leaked := payload["nextCursor"]; leaked {
-		t.Fatalf("message pagination exposed unusable cursor: %#v", payload)
+		t.Fatalf("message pagination exposed cursor outside nextPage: %#v", payload)
 	}
+	wantBoundary := time.UnixMilli(cursorMillis).UTC().Format(time.RFC3339Nano)
 	next, ok := payload["nextPage"].(map[string]any)
-	if !ok || next["time"] != "2026-07-28 09:00:00" || next["direction"] != "older" {
+	if !ok || next["time"] != wantBoundary || next["nextCursor"] != cursorMillis || next["direction"] != "older" {
 		t.Fatalf("message nextPage = %#v", payload["nextPage"])
+	}
+}
+
+func TestCrossPlatformCoverageApplyMessagePaginationStopsWhenComplete(t *testing.T) {
+	payload := map[string]any{}
+	ApplyMessagePagination(payload, map[string]any{
+		"result": map[string]any{"hasMore": false},
+	}, nil, "older")
+	if payload["paginationKnown"] != true || payload["hasMore"] != false || payload["complete"] != true {
+		t.Fatalf("completed message pagination = %#v", payload)
+	}
+	if _, ok := payload["nextPage"]; ok {
+		t.Fatalf("completed message pagination unexpectedly exposed nextPage: %#v", payload)
 	}
 }
 

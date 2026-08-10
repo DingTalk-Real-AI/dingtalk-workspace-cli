@@ -221,6 +221,43 @@ func runDocUpload(cmd *cobra.Command, _ []string) error {
 	return callMCPTool("commit_uploaded_file", commitArgs)
 }
 
+// docSpaceUploadCommitText 执行文档空间三步上传（凭证 → PUT → 入库）并
+// 返回 commit 响应原文，供 doc import 的白名单外回退链路组装结构化结果。
+// 与 runDocUpload 的区别：不打印输出、不携带 doc upload 的 --workspace
+// 兼容告警，调用方负责结果投影。
+func docSpaceUploadCommitText(ctx context.Context, filePath, fileName string, fileSize int64, folder, workspace string) (string, error) {
+	step1Args := map[string]any{}
+	if folder != "" {
+		step1Args["folderId"] = folder
+	}
+	if workspace != "" {
+		step1Args["workspaceId"] = workspace
+	}
+	text, err := callMCPToolReturnText(ctx, "get_file_upload_info", step1Args)
+	if err != nil {
+		return "", err
+	}
+	resourceURL, uploadKey, ossHeaders, err := parseUploadInfo(text)
+	if err != nil {
+		return "", err
+	}
+	if err := httpPutFile(ctx, resourceURL, ossHeaders, filePath, fileSize); err != nil {
+		return "", err
+	}
+	commitArgs := map[string]any{
+		"uploadKey": uploadKey,
+		"name":      fileName,
+		"fileSize":  float64(fileSize),
+	}
+	if folder != "" {
+		commitArgs["folderId"] = folder
+	}
+	if workspace != "" {
+		commitArgs["workspaceId"] = workspace
+	}
+	return callMCPToolReturnText(ctx, "commit_uploaded_file", commitArgs)
+}
+
 // parseUploadInfo extracts resourceUrl, uploadKey and headers from the MCP tool response.
 func parseUploadInfo(text string) (resourceURL, uploadKey string, headers map[string]string, err error) {
 	var data map[string]any
@@ -3764,6 +3801,9 @@ CLI 内部自动完成全部流程：
   xlsx, xls   → 电子表格
   md, txt     → 文字文档
   xmind, mark → 脑图
+  其他格式（html/pdf/zip 等）→ 不做在线文档转换，自动改走文件上传链路，
+  以原文件形式存入 --folder/--workspace 指定位置；如需在线文档请先转换
+  为 md；上传到钉盘请用 dws drive upload
 
 文件大小限制: 20MB
 

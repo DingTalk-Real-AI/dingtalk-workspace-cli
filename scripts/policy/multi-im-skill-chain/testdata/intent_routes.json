@@ -77,7 +77,7 @@
       ]
     },
     {
-      "id": "chat.search.cross-conversation",
+      "id": "chat.search.filtered",
       "preferred_tool": "chat.shortcut_search_msg",
       "allowed_fallbacks": [
         {

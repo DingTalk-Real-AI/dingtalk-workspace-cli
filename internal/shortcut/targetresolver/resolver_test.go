@@ -370,6 +370,31 @@ func TestCrossPlatformCoverageResolveChatFailsClosedWhenPaginationCannotAdvance(
 	}
 }
 
+func TestCrossPlatformCoverageResolveChatRejectsFullMaximumProbeWithoutCursor(t *testing.T) {
+	page := func(size int, prefix string) []any {
+		rows := make([]any, size)
+		for i := range rows {
+			rows[i] = map[string]any{
+				"openConversationId": fmt.Sprintf("%s-%d", prefix, i),
+				"title":              fmt.Sprintf("项目群候选-%s-%d", prefix, i),
+			}
+		}
+		return rows
+	}
+	reader := &chatResolutionReader{responses: []map[string]any{
+		{"result": page(chatResolutionPageSize, "first"), "hasMore": false},
+		{"result": page(chatResolutionMaxWindowSize, "probe"), "hasMore": false},
+	}}
+	_, err := ResolveChat(reader, "项目群")
+	var typed *apperrors.Error
+	if !stderrors.As(err, &typed) || typed.Reason != "resolution_incomplete" {
+		t.Fatalf("error = %#v", err)
+	}
+	if len(reader.calls) != 2 || reader.calls[1]["limit"] != chatResolutionMaxWindowSize {
+		t.Fatalf("calls = %#v", reader.calls)
+	}
+}
+
 func TestCrossPlatformCoverageResolveChatAcceptsShortLegacyPageWithoutPaginationMetadata(t *testing.T) {
 	reader := &chatResolutionReader{responses: []map[string]any{{
 		"result": []any{
@@ -379,6 +404,33 @@ func TestCrossPlatformCoverageResolveChatAcceptsShortLegacyPageWithoutPagination
 	resolved, err := ResolveChat(reader, "项目群")
 	if err != nil || resolved.Selected.OpenConversationID != "c1" {
 		t.Fatalf("resolved = %#v, err = %v", resolved, err)
+	}
+}
+
+func TestCrossPlatformCoverageResolveChatProbesMaximumWindowBeforeSelecting(t *testing.T) {
+	firstPage := make([]any, chatResolutionPageSize)
+	for i := range firstPage {
+		firstPage[i] = map[string]any{
+			"openConversationId": fmt.Sprintf("archive-%d", i),
+			"title":              fmt.Sprintf("项目群-归档-%d", i),
+		}
+	}
+	reader := &chatResolutionReader{responses: []map[string]any{
+		{"result": map[string]any{"groups": firstPage, "hasMore": false}},
+		{"result": map[string]any{"groups": []any{
+			map[string]any{"openConversationId": "active", "title": "项目群"},
+		}, "hasMore": false}},
+	}}
+	resolved, err := ResolveChat(reader, "项目群")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Selected.OpenConversationID != "active" || resolved.MatchType != "exact" {
+		t.Fatalf("resolved = %#v", resolved)
+	}
+	if len(reader.calls) != 2 || reader.calls[0]["limit"] != chatResolutionPageSize ||
+		reader.calls[1]["limit"] != chatResolutionMaxWindowSize || reader.calls[1]["cursor"] != "0" {
+		t.Fatalf("calls = %#v", reader.calls)
 	}
 }
 

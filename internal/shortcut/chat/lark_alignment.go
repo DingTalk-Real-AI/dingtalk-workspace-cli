@@ -7,6 +7,7 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,13 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
+)
+
+const (
+	flagListHardPageLimit = 500
+	flagListMaxPageSize   = 30
+	chatListHardPageLimit = 500
+	chatListMaxWindowSize = 100
 )
 
 // ChatCreate creates a DingTalk group after resolving every natural member and
@@ -499,34 +507,291 @@ var FlagList = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+flag-list",
 	Product:     "im",
-	Description: "分页查询当前用户收藏的消息",
-	Intent:      "当你要查看当前用户的 DingTalk message favorite 列表时使用；返回下层分页结果，不把 message favorite 与 Pin、会话置顶或 Lark feed-layer thread flag 混为一谈。",
+	Description: "分页查询当前用户收藏的消息，支持有界自动翻页",
+	Intent:      "当你要查看当前用户的 DingTalk message favorite 列表时使用；默认读取一页，明确要求全部收藏时加 --page-all，并用 --page-limit 保持有界。底层实际使用数字 cursor，结果按 openMessageId 去重并公开 complete、hasMore、nextCursor、stopReason 和 failures；它不把 message favorite 与 Pin、会话置顶或 Lark feed-layer thread flag 混为一谈。",
 	Risk:        shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "cursor", Type: shortcut.FlagInt, Default: "0", Desc: "数字分页游标；--cursor 必须大于等于 0，--size 必须在 1-100 之间"},
-		{Name: "size", Type: shortcut.FlagInt, Default: "20", Desc: "每页数量；--cursor 必须大于等于 0，--size 必须在 1-100 之间"},
+		{Name: "page-size", Type: shortcut.FlagInt, Default: "20", Desc: "每页数量；下游真实上限为 30，显式页大小必须在 1-30 之间"},
+		{Name: "size", Type: shortcut.FlagInt, Default: "20", Desc: "--page-size 的兼容别名；下游真实上限为 30，显式页大小必须在 1-30 之间"},
+		{Name: "page-token", Type: shortcut.FlagString, Desc: "Lark 对齐的起始分页参数；起始 cursor 必须是非负整数"},
+		{Name: "cursor", Type: shortcut.FlagInt, Default: "0", Desc: "钉钉数字分页游标；起始 cursor 必须是非负整数"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取全部收藏分页；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "20", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 	},
-	Constraints: []shortcut.Constraint{{
-		Kind:        shortcut.ConstraintCustom,
-		Flags:       []string{"cursor", "size"},
-		Description: "--cursor 必须大于等于 0，--size 必须在 1-100 之间",
-	}},
-	Tips: []string{`dws chat +flag-list --cursor 0 --size 20`},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		if rt.Int("cursor") < 0 {
-			return apperrors.NewValidation("--cursor 必须大于等于 0")
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"page-size", "size"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"page-token", "cursor"}},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-size", "size"}, Description: "显式页大小必须在 1-30 之间"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-token", "cursor"}, Description: "起始 cursor 必须是非负整数"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+	},
+	Tips: []string{
+		`dws chat +flag-list --cursor 0 --page-size 20`,
+		`dws chat +flag-list --page-size 30 --page-all --page-limit 20`,
+	},
+	Validate: validateFlagList,
+	Execute:  executeFlagList,
+}
+
+func validateFlagList(rt *shortcut.RuntimeContext) error {
+	if size := flagListPageSize(rt); size < 1 || size > flagListMaxPageSize {
+		return apperrors.NewValidation("--page-size/--size 必须在 1-30 之间")
+	}
+	if _, err := flagListStartCursor(rt); err != nil {
+		return err
+	}
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if rt.Bool("page-all") {
+		if limit := rt.Int("page-limit"); limit < 1 || limit > flagListHardPageLimit {
+			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 		}
-		if size := rt.Int("size"); size < 1 || size > 100 {
-			return apperrors.NewValidation("--size 必须在 1-100 之间")
+	}
+	return nil
+}
+
+func flagListPageSize(rt *shortcut.RuntimeContext) int {
+	if rt.Changed("size") {
+		return rt.Int("size")
+	}
+	return rt.Int("page-size")
+}
+
+func flagListStartCursor(rt *shortcut.RuntimeContext) (int, error) {
+	if rt.Changed("page-token") {
+		token := strings.TrimSpace(rt.Str("page-token"))
+		if token == "" || token == "0" {
+			return 0, nil
 		}
-		return nil
-	},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("list_message_favorites", map[string]any{
-			"cursor": rt.Int("cursor"),
-			"size":   strconv.Itoa(rt.Int("size")),
-		})
-	},
+		value, err := strconv.Atoi(token)
+		if err != nil || value < 0 {
+			return 0, apperrors.NewValidation("--page-token 必须是非负整数")
+		}
+		return value, nil
+	}
+	if value := rt.Int("cursor"); value < 0 {
+		return 0, apperrors.NewValidation("--cursor 必须大于等于 0")
+	}
+	return rt.Int("cursor"), nil
+}
+
+func executeFlagList(rt *shortcut.RuntimeContext) error {
+	pageSize := flagListPageSize(rt)
+	cursor, _ := flagListStartCursor(rt) // Validate has already accepted the cursor.
+	if rt.DryRun() {
+		return rt.CallMCP("list_message_favorites", flagListRequestParams(cursor, pageSize))
+	}
+	pageLimit := 1
+	if rt.Bool("page-all") {
+		pageLimit = rt.Int("page-limit")
+	}
+	seenCursors := map[int]bool{cursor: true}
+	seenMessages := map[string]bool{}
+	items := make([]map[string]any, 0)
+	failures := make([]map[string]any, 0)
+	pagesFetched := 0
+	paginationKnown := true
+	complete := false
+	hasMore := false
+	nextCursor := 0
+	var cursorErr error
+	stopReason := "source_complete"
+	truncatedByPageLimit := false
+
+	for pagesFetched < pageLimit {
+		data, callErr := rt.CallMCPData("im", "list_message_favorites", flagListRequestParams(cursor, pageSize))
+		if callErr != nil {
+			if pagesFetched == 0 {
+				return callErr
+			}
+			failures = append(failures, map[string]any{
+				"page": pagesFetched + 1, "stage": "read", "cursor": cursor, "error": callErr.Error(),
+			})
+			stopReason = "read_failure"
+			break
+		}
+		pagesFetched++
+		pageItems := flagListItems(data)
+		for _, item := range pageItems {
+			messageID := firstNonEmptyMapString(item, "openMessageId", "messageId", "itemId", "id")
+			if messageID != "" && seenMessages[messageID] {
+				continue
+			}
+			if messageID != "" {
+				seenMessages[messageID] = true
+			}
+			items = append(items, item)
+		}
+
+		page := chatmsg.Pagination(data)
+		pageHasMore, hasMoreKnown := page["hasMore"].(bool)
+		nextCursor, cursorErr = flagListNextCursor(page["nextCursor"])
+		if !hasMoreKnown {
+			switch {
+			case nextCursor > 0:
+				pageHasMore = true
+			case len(pageItems) < pageSize:
+				paginationKnown = false
+				complete = true
+				hasMore = false
+				stopReason = "legacy_short_page"
+			default:
+				paginationKnown = false
+				failures = append(failures, map[string]any{
+					"page": pagesFetched, "stage": "pagination",
+					"error": "收藏列表返回满页结果但缺少 hasMore/nextCursor，无法证明结果完整",
+				})
+				stopReason = "pagination_error"
+			}
+			if complete || len(failures) > 0 {
+				break
+			}
+		}
+		hasMore = pageHasMore
+		if !hasMore {
+			complete = true
+			nextCursor = 0
+			stopReason = "source_complete"
+			break
+		}
+		if cursorErr != nil || nextCursor <= 0 || seenCursors[nextCursor] {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "收藏列表返回 hasMore=true，但数字 nextCursor 缺失、无效或未前进",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		if !rt.Bool("page-all") {
+			stopReason = "single_page"
+			break
+		}
+		seenCursors[nextCursor] = true
+		cursor = nextCursor
+	}
+
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+		truncatedByPageLimit = rt.Bool("page-all")
+		if truncatedByPageLimit {
+			stopReason = "page_limit"
+		}
+	}
+	payload := map[string]any{
+		"count":                len(items),
+		"items":                items,
+		"pagesFetched":         pagesFetched,
+		"paginationKnown":      paginationKnown,
+		"complete":             complete && len(failures) == 0,
+		"hasMore":              hasMore,
+		"nextCursor":           nextCursor,
+		"stopReason":           stopReason,
+		"truncatedByPageLimit": truncatedByPageLimit,
+		"failedCount":          len(failures),
+		"failures":             failures,
+		"partial":              len(failures) > 0 && len(items) > 0,
+	}
+	if outputErr := rt.Output(payload); outputErr != nil {
+		return outputErr
+	}
+	if len(failures) > 0 {
+		return apperrors.NewAPI(
+			fmt.Sprintf("收藏消息分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+			apperrors.WithOperation("im/list_message_favorites"),
+			apperrors.WithReason("flag_list_incomplete"),
+			apperrors.WithOrigin("mcp_gateway"),
+			apperrors.WithFailureStage("pagination"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(true),
+			apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
+		)
+	}
+	return nil
+}
+
+func flagListRequestParams(cursor, pageSize int) map[string]any {
+	return map[string]any{
+		"cursor": cursor,
+		"size":   strconv.Itoa(pageSize),
+	}
+}
+
+func flagListItems(data map[string]any) []map[string]any {
+	if data == nil {
+		return []map[string]any{}
+	}
+	scopes := []map[string]any{data}
+	for _, key := range []string{"result", "data"} {
+		if nested, ok := data[key].(map[string]any); ok {
+			scopes = append(scopes, nested)
+		}
+	}
+	for _, scope := range scopes {
+		for _, key := range []string{"items", "favorites", "messageFavorites", "list"} {
+			raw, ok := scope[key].([]any)
+			if !ok {
+				continue
+			}
+			out := make([]map[string]any, 0, len(raw))
+			for _, item := range raw {
+				if value, ok := item.(map[string]any); ok {
+					out = append(out, value)
+				}
+			}
+			return out
+		}
+	}
+	return []map[string]any{}
+}
+
+func flagListNextCursor(value any) (int, error) {
+	switch typed := value.(type) {
+	case nil:
+		return 0, nil
+	case int:
+		if typed < 0 {
+			return 0, fmt.Errorf("negative cursor")
+		}
+		return typed, nil
+	case int64:
+		if typed < 0 || int64(int(typed)) != typed {
+			return 0, fmt.Errorf("cursor out of range")
+		}
+		return int(typed), nil
+	case float64:
+		if typed < 0 || math.Trunc(typed) != typed || typed > float64(int(^uint(0)>>1)) {
+			return 0, fmt.Errorf("invalid numeric cursor")
+		}
+		return int(typed), nil
+	case json.Number:
+		parsed, err := strconv.ParseInt(typed.String(), 10, 64)
+		if err != nil || parsed < 0 || int64(int(parsed)) != parsed {
+			return 0, fmt.Errorf("invalid json cursor")
+		}
+		return int(parsed), nil
+	case string:
+		text := strings.TrimSpace(typed)
+		if text == "" || text == "0" {
+			return 0, nil
+		}
+		parsed, err := strconv.Atoi(text)
+		if err != nil || parsed < 0 {
+			return 0, fmt.Errorf("invalid string cursor")
+		}
+		return parsed, nil
+	default:
+		return 0, fmt.Errorf("unsupported cursor type %T", value)
+	}
+}
+
+func firstNonEmptyMapString(item map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value := strings.TrimSpace(fmt.Sprint(item[key]))
+		if value != "" && value != "<nil>" {
+			return value
+		}
+	}
+	return ""
 }
 
 // FeedGroupQueryItem is a client-side exact filter over a DingTalk conversation
@@ -615,18 +880,18 @@ func feedGroupQueryProject(conversations []map[string]any, requestedIDs []string
 
 // ChatList is the lark-cli +chat-list alignment for DingTalk. It lists the
 // current user's conversations through list_all_conversations, defaults to
-// groups only (lark omit-types behavior), and applies --types / --exclude-muted
-// as an honest client-side subset over the current page. Sort order and bot
+// groups only (lark omit-types behavior), and applies --types after all fetched
+// pages have been merged. Sort order and bot
 // identity p2p stripping are intentionally omitted: DingTalk has no matching
 // sort_type parameter here, and DWS shortcuts run as the signed-in user.
 var ChatList = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+chat-list",
 	Product:     "im",
-	Description: "列出当前用户加入的会话（默认群聊；可选包含单聊）",
+	Description: "分页列出当前用户加入的会话（默认群聊；可选包含单聊）",
 	Intent: "当你要像 lark-cli +chat-list 一样列出当前用户加入的会话时使用；默认只返回群聊，" +
 		"--types 可追加 p2p（钉钉投影为 conversationType=direct）。" +
-		"--exclude-muted 交给下层 excludeMuted；--types 过滤发生在当前页本地，不会伪造跨页完整性。" +
+		"--exclude-muted 交给下层 excludeMuted；默认读取一页，明确要求全部时加 --page-all，合并并去重所有已读取页面后再执行 --types 过滤，结果公开完整性 ledger。" +
 		"不支持 lark 的 sort/sort-type，也不模拟 bot 身份剥离 p2p。",
 	Risk: shortcut.RiskRead,
 	Flags: []shortcut.Flag{
@@ -635,6 +900,8 @@ var ChatList = shortcut.Shortcut{
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "--page-size 的别名，必须在 1-100 之间"},
 		{Name: "page-token", Type: shortcut.FlagString, Desc: "分页游标；若提供则必须是非负整数"},
 		{Name: "cursor", Type: shortcut.FlagInt, Desc: "--page-token 的整数别名"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取全部会话分页；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已免打扰会话"},
 	},
 	Constraints: []shortcut.Constraint{
@@ -655,10 +922,12 @@ var ChatList = shortcut.Shortcut{
 			Flags:       []string{"page-token"},
 			Description: "若提供则必须是非负整数",
 		},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 	},
 	Tips: []string{
 		`dws chat +chat-list`,
 		`dws chat +chat-list --types group,p2p --exclude-muted --page-size 50`,
+		`dws chat +chat-list --types group --page-size 100 --page-all --page-limit 20`,
 	},
 	Validate: validateChatList,
 	Execute:  executeChatList,
@@ -675,6 +944,14 @@ func validateChatList(rt *shortcut.RuntimeContext) error {
 	if _, err := chatListCursor(rt); err != nil {
 		return err
 	}
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if rt.Bool("page-all") {
+		if limit := rt.Int("page-limit"); limit < 1 || limit > chatListHardPageLimit {
+			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
+		}
+	}
 	return nil
 }
 
@@ -690,28 +967,269 @@ func executeChatList(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		return err
 	}
-	params := map[string]any{"limit": chatListPageSize(rt)}
-	if cursor > 0 {
-		params["cursor"] = cursor
+	pageSize := chatListPageSize(rt)
+	requestPageSize := pageSize
+	initialCursor := cursor
+	pageLimit := 1
+	if rt.Bool("page-all") {
+		pageLimit = rt.Int("page-limit")
 	}
-	if rt.Bool("exclude-muted") {
-		params["excludeMuted"] = true
+	seenCursors := map[int]bool{cursor: true}
+	seenChats := map[string]bool{}
+	allChats := make([]map[string]any, 0)
+	failures := make([]map[string]any, 0)
+	pagesFetched := 0
+	paginationKnown := true
+	complete := false
+	hasMore := false
+	nextCursor := 0
+	stopReason := "source_complete"
+	truncatedByPageLimit := false
+	maxWindowProbeUsed := false
+	completionEvidence := ""
+
+	for pagesFetched < pageLimit {
+		params := map[string]any{"limit": requestPageSize}
+		if cursor > 0 {
+			params["cursor"] = cursor
+		}
+		if rt.Bool("exclude-muted") {
+			params["excludeMuted"] = true
+		}
+		data, callErr := rt.CallMCPData("im", "list_all_conversations", params)
+		if callErr != nil {
+			if pagesFetched == 0 {
+				return callErr
+			}
+			failures = append(failures, map[string]any{
+				"page": pagesFetched + 1, "stage": "read", "cursor": cursor, "error": callErr.Error(),
+			})
+			stopReason = "read_failure"
+			break
+		}
+		pagesFetched++
+		pageItems := chatListProject(data)
+		for _, chat := range pageItems {
+			id := firstNonEmptyMapString(chat, "openConversationId")
+			if id != "" && seenChats[id] {
+				continue
+			}
+			if id != "" {
+				seenChats[id] = true
+			}
+			allChats = append(allChats, chat)
+		}
+
+		page, paginationErr := chatListPagination(data)
+		if paginationErr != nil {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination", "error": paginationErr.Error(),
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		pageHasMore, hasMoreKnown := page["hasMore"].(bool)
+		nextCursor, err = chatListNextCursor(page["nextCursor"])
+		if !hasMoreKnown {
+			switch {
+			case nextCursor > 0:
+				pageHasMore = true
+			case len(pageItems) < requestPageSize:
+				paginationKnown = false
+				complete = true
+				hasMore = false
+				stopReason = "legacy_short_page"
+			default:
+				paginationKnown = false
+				failures = append(failures, map[string]any{
+					"page": pagesFetched, "stage": "pagination",
+					"error": "会话列表返回满页结果但缺少 hasMore/nextCursor，无法证明结果完整",
+				})
+				stopReason = "pagination_error"
+			}
+			if complete || len(failures) > 0 {
+				break
+			}
+		}
+		hasMore = pageHasMore
+		if !hasMore {
+			// A full first page with hasMore=false/no cursor is the live legacy
+			// shape that can hide additional rows. Once a prior page supplied a
+			// valid continuation cursor, its terminal hasMore=false is trustworthy.
+			fullPageWithoutCursor := len(pageItems) >= requestPageSize && nextCursor <= 0 &&
+				(pagesFetched == 1 || (maxWindowProbeUsed && pagesFetched == 2))
+			if fullPageWithoutCursor {
+				paginationKnown = false
+				if rt.Bool("page-all") && initialCursor == 0 && !maxWindowProbeUsed && requestPageSize < chatListMaxWindowSize && pagesFetched < pageLimit {
+					maxWindowProbeUsed = true
+					requestPageSize = chatListMaxWindowSize
+					cursor = initialCursor
+					stopReason = "max_window_probe"
+					continue
+				}
+				if !rt.Bool("page-all") {
+					complete = false
+					stopReason = "single_page_full_untrusted"
+					break
+				}
+				if pagesFetched >= pageLimit && requestPageSize < chatListMaxWindowSize {
+					truncatedByPageLimit = true
+					complete = false
+					stopReason = "page_limit"
+					break
+				}
+				failures = append(failures, map[string]any{
+					"page": pagesFetched, "stage": "pagination",
+					"error": "会话列表在最大窗口仍返回满页且没有可用 nextCursor，无法证明结果完整",
+				})
+				complete = false
+				stopReason = "pagination_error"
+				break
+			}
+			complete = true
+			nextCursor = 0
+			if maxWindowProbeUsed {
+				paginationKnown = false
+				completionEvidence = "max_window_short_page"
+				stopReason = "max_window_short_page"
+			} else {
+				completionEvidence = "backend_has_more_false_short_page"
+				stopReason = "source_complete"
+			}
+			break
+		}
+		if err != nil || nextCursor <= 0 || seenCursors[nextCursor] {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "会话列表返回 hasMore=true，但数字 nextCursor 缺失、无效或未前进",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		if !rt.Bool("page-all") {
+			stopReason = "single_page"
+			break
+		}
+		seenCursors[nextCursor] = true
+		cursor = nextCursor
 	}
-	data, err := rt.CallMCPData("im", "list_all_conversations", params)
-	if err != nil {
-		return err
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+		truncatedByPageLimit = rt.Bool("page-all")
+		if truncatedByPageLimit {
+			stopReason = "page_limit"
+		}
 	}
-	chats := chatListFilterTypes(chatListProject(data), types)
+	chats := chatListFilterTypes(allChats, types)
 	payload := map[string]any{
-		"count":          len(chats),
-		"chats":          chats,
-		"requestedTypes": types,
+		"count":                len(chats),
+		"chats":                chats,
+		"requestedTypes":       types,
+		"pagesFetched":         pagesFetched,
+		"paginationKnown":      paginationKnown,
+		"complete":             complete && len(failures) == 0,
+		"hasMore":              hasMore,
+		"nextCursor":           nextCursor,
+		"stopReason":           stopReason,
+		"truncatedByPageLimit": truncatedByPageLimit,
+		"failedCount":          len(failures),
+		"failures":             failures,
+		"partial":              len(failures) > 0 && len(chats) > 0,
+		"requestedPageSize":    pageSize,
+		"effectivePageSize":    requestPageSize,
+	}
+	if completionEvidence != "" {
+		payload["completionEvidence"] = completionEvidence
 	}
 	if rt.Bool("exclude-muted") {
 		payload["filter"] = map[string]any{"excludeMuted": true}
 	}
-	chatmsg.ApplyPagination(payload, data)
-	return rt.Output(payload)
+	if outputErr := rt.Output(payload); outputErr != nil {
+		return outputErr
+	}
+	if len(failures) > 0 {
+		return apperrors.NewAPI(
+			fmt.Sprintf("会话列表分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+			apperrors.WithOperation("im/list_all_conversations"),
+			apperrors.WithReason("chat_list_incomplete"),
+			apperrors.WithOrigin("mcp_gateway"),
+			apperrors.WithFailureStage("pagination"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(true),
+			apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
+		)
+	}
+	return nil
+}
+
+// chatListPagination preserves the shared map/envelope pagination formats and
+// supplements them with the list_all_conversations gateway tuple:
+// result:[conversationList,nextCursor,hasMore]. Tuple positions are specific to
+// this RPC, so they are normalized here instead of broadening chatmsg.Pagination
+// for unrelated Chat shortcuts.
+func chatListPagination(data map[string]any) (map[string]any, error) {
+	page := chatmsg.Pagination(data)
+	for _, key := range []string{"result", "data"} {
+		values, ok := data[key].([]any)
+		if !ok || len(values) == 0 {
+			continue
+		}
+		if _, tuple := values[0].([]any); !tuple {
+			continue
+		}
+		if len(values) < 3 {
+			return nil, fmt.Errorf("会话列表 tuple 分页元数据不完整：期望 [conversationList,nextCursor,hasMore]")
+		}
+		hasMore, ok := values[2].(bool)
+		if !ok {
+			return nil, fmt.Errorf("会话列表 tuple 的 hasMore 必须是布尔值")
+		}
+		return map[string]any{
+			"nextCursor": values[1],
+			"hasMore":    hasMore,
+			"complete":   !hasMore,
+		}, nil
+	}
+	return page, nil
+}
+
+func chatListNextCursor(value any) (int, error) {
+	switch typed := value.(type) {
+	case nil:
+		return 0, nil
+	case int:
+		if typed < 0 {
+			return 0, fmt.Errorf("negative cursor")
+		}
+		return typed, nil
+	case int64:
+		if typed < 0 || int64(int(typed)) != typed {
+			return 0, fmt.Errorf("cursor out of range")
+		}
+		return int(typed), nil
+	case float64:
+		if typed < 0 || math.Trunc(typed) != typed || typed > float64(int(^uint(0)>>1)) {
+			return 0, fmt.Errorf("invalid numeric cursor")
+		}
+		return int(typed), nil
+	case json.Number:
+		parsed, err := strconv.ParseInt(typed.String(), 10, 64)
+		if err != nil || parsed < 0 || int64(int(parsed)) != parsed {
+			return 0, fmt.Errorf("invalid json cursor")
+		}
+		return int(parsed), nil
+	case string:
+		text := strings.TrimSpace(typed)
+		if text == "" || text == "0" {
+			return 0, nil
+		}
+		parsed, err := strconv.Atoi(text)
+		if err != nil || parsed < 0 {
+			return 0, fmt.Errorf("invalid string cursor")
+		}
+		return parsed, nil
+	default:
+		return 0, fmt.Errorf("unsupported cursor type %T", value)
+	}
 }
 
 func chatListPageSize(rt *shortcut.RuntimeContext) int {

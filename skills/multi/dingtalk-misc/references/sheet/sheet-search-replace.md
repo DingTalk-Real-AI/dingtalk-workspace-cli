@@ -13,6 +13,7 @@
 - 查找替换 → `replace`
 - 精确匹配后替换（只替换内容完全等于的单元格） → `replace --match-entire-cell`
 - 正则替换 → `replace --use-regexp`
+- 替换公式文本（改公式源码而非显示值） → `replace --match-formula`
 - 删除匹配内容 → `replace --replacement ""`
 - 请勿用 `find` + `range update`、`range read` + `range update` 等组合来模拟替换，`replace` 是服务端原子操作，效率更高且返回替换计数
 
@@ -68,6 +69,7 @@ Flags:
       --match-case             区分大小写 (默认 false)
       --match-entire-cell      完整单元格匹配
       --use-regexp             启用正则表达式匹配
+      --match-formula          在公式文本中查找替换（默认 false，替换公式源码而非显示值）
       --include-hidden         包含隐藏行/列
 ```
 

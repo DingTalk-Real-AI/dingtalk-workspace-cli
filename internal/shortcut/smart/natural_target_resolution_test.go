@@ -5,12 +5,81 @@
 package smart
 
 import (
+	"bytes"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
+
+func TestCrossPlatformCoverageNaturalSearchAndSenderFlagsStayPublicOptional(t *testing.T) {
+	tests := []struct {
+		name  string
+		flags []shortcut.Flag
+		want  []string
+	}{
+		{name: "search natural adapters", flags: SearchMsg.Flags, want: []string{"chat-query", "sender-query"}},
+		{name: "chat messages natural adapters", flags: ChatMessages.Flags, want: []string{"chat-query", "sender-query"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, name := range tc.want {
+				found := false
+				for _, flag := range tc.flags {
+					if flag.Name != name {
+						continue
+					}
+					found = true
+					if flag.Hidden {
+						t.Fatalf("--%s unexpectedly became hidden", name)
+					}
+					if flag.Required {
+						t.Fatalf("--%s unexpectedly became required", name)
+					}
+					break
+				}
+				if !found {
+					t.Fatalf("public optional flag --%s is missing", name)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMessageTimeAlignmentFlagsStayPublicOptional(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		flags []shortcut.Flag
+	}{
+		{name: "search message", flags: SearchMsg.Flags},
+		{name: "conversation message", flags: ChatMessages.Flags},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, name := range []string{"start", "start-time", "end", "end-time", "order", "sort"} {
+				found := false
+				for _, flag := range tc.flags {
+					if flag.Name != name {
+						continue
+					}
+					found = true
+					if flag.Hidden || flag.Required {
+						t.Fatalf("--%s must stay public and optional: %#v", name, flag)
+					}
+					if (name == "order" || name == "sort") && !reflect.DeepEqual(flag.Enum, []string{"asc", "desc"}) {
+						t.Fatalf("--%s enum = %#v", name, flag.Enum)
+					}
+					break
+				}
+				if !found {
+					t.Fatalf("public optional flag --%s is missing", name)
+				}
+			}
+		})
+	}
+}
 
 func TestCrossPlatformCoverageChatMessagesResolvesNaturalChatAndUserTargets(t *testing.T) {
 	tests := []struct {
@@ -73,6 +142,103 @@ func TestCrossPlatformCoverageChatMessagesStableGroupBypassesNaturalResolution(t
 	if len(fake.calls) != 1 || fake.calls[0].tool != "list_conversation_message_v2" ||
 		fake.calls[0].args["openconversation_id"] != "cid-fixture-chat-0001" {
 		t.Fatalf("calls = %#v", fake.calls)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesOptionallyFiltersResolvedSenderByEitherStableID(t *testing.T) {
+	fake := &platformCoverageCaller{
+		contactSearchResult: `{"result":[{"name":"测试用户甲","userId":"uid-fixture-sender-1","openDingTalkId":"D1"}]}`,
+		chatMessagesResult: `{"result":{"hasMore":false,"messages":[
+			{"openMessageId":"m-open","sender":"群昵称甲","senderOpenDingTalkId":"D1","content":"open id match"},
+			{"openMessageId":"m-user","sender":"群昵称甲","senderUserId":"uid-fixture-sender-1","content":"user id match"},
+			{"openMessageId":"m-other","sender":"其他人","senderOpenDingTalkId":"D2","content":"other"}
+		]}}`,
+	}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
+		"--sender-query", "测试用户甲", "--page-all",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 2 || fake.calls[0].tool != "list_conversation_message_v2" ||
+		fake.calls[1].tool != "search_contact_by_key_word" {
+		t.Fatalf("calls = %#v, want message read followed by optional sender resolve", fake.calls)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, output.String())
+	}
+	if payload["complete"] != true || payload["count"] != float64(2) {
+		t.Fatalf("filtered payload = %#v", payload)
+	}
+	filters, ok := payload["resolvedFilters"].(map[string]any)
+	if !ok {
+		t.Fatalf("resolvedFilters missing: %#v", payload)
+	}
+	senders, ok := filters["senders"].([]any)
+	if !ok || len(senders) != 1 {
+		t.Fatalf("resolved senders = %#v", filters["senders"])
+	}
+	selected := senders[0].(map[string]any)["selected"].(map[string]any)
+	if selected["userId"] != "uid-fixture-sender-1" || selected["openDingTalkId"] != "D1" {
+		t.Fatalf("selected identity = %#v", selected)
+	}
+	messages, ok := payload["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("messages = %#v", payload["messages"])
+	}
+	for _, raw := range messages {
+		message := raw.(map[string]any)
+		if message["sender"] != "群昵称甲" || message["senderId"] == "D2" {
+			t.Fatalf("unexpected filtered message = %#v", message)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesSenderResolutionFailureKeepsUnfilteredMessages(t *testing.T) {
+	fake := &platformCoverageCaller{
+		contactSearchResult: `{"result":[]}`,
+		chatMessagesResult: `{"result":{"hasMore":false,"messages":[
+			{"openMessageId":"m1","sender":"群昵称甲","senderOpenDingTalkId":"D1","content":"仍然返回"}
+		]}}`,
+	}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
+		"--sender-query", "不存在的人", "--page-all",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("optional sender failure stopped message read: %v", err)
+	}
+	if len(fake.calls) != 2 || fake.calls[0].tool != "list_conversation_message_v2" ||
+		fake.calls[1].tool != "search_contact_by_key_word" {
+		t.Fatalf("calls = %#v, want message read followed by non-blocking failed resolve", fake.calls)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, output.String())
+	}
+	if payload["count"] != float64(1) || payload["complete"] != false ||
+		payload["partial"] != true || payload["failedCount"] != float64(1) ||
+		payload["stopReason"] != "sender_resolution_failed" {
+		t.Fatalf("unfiltered fallback payload = %#v", payload)
+	}
+	if _, exists := payload["resolvedFilters"]; exists {
+		t.Fatalf("failed resolution unexpectedly published resolvedFilters: %#v", payload)
+	}
+	failures, ok := payload["failures"].([]any)
+	if !ok || len(failures) != 1 || failures[0].(map[string]any)["stage"] != "sender_resolution" {
+		t.Fatalf("resolution failures = %#v", payload["failures"])
 	}
 }
 
@@ -169,6 +335,47 @@ func TestCrossPlatformCoverageSearchMsgResolvesNaturalChatAndSenderBeforeSearch(
 	}
 	if got, want := search.args["senderOpenDingTakIds"], []string{"D1"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("senderOpenDingTakIds = %#v, want %#v", got, want)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgPreservesResolvedSenderWhenDisplayNameDiffers(t *testing.T) {
+	fake := &platformCoverageCaller{
+		contactSearchResult:  `{"result":[{"name":"测试用户甲","userId":"uid-fixture-sender-1","openDingTalkId":"D1"}]}`,
+		searchMessagesResult: `{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","sender":"群昵称甲","senderOpenDingTalkId":"D1","content":"评测消息"}],"hasMore":false}}`,
+	}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+search-msg", "--sender-query", "测试用户甲", "--no-enrich"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, output.String())
+	}
+	filters, ok := payload["resolvedFilters"].(map[string]any)
+	if !ok {
+		t.Fatalf("resolvedFilters missing: %#v", payload)
+	}
+	senders, ok := filters["senders"].([]any)
+	if !ok || len(senders) != 1 {
+		t.Fatalf("resolved senders = %#v", filters["senders"])
+	}
+	resolution := senders[0].(map[string]any)
+	selected := resolution["selected"].(map[string]any)
+	if resolution["query"] != "测试用户甲" || selected["openDingTalkId"] != "D1" {
+		t.Fatalf("sender resolution = %#v", resolution)
+	}
+	messages, ok := payload["messages"].([]any)
+	if !ok || len(messages) != 1 {
+		t.Fatalf("messages = %#v", payload["messages"])
+	}
+	message := messages[0].(map[string]any)
+	if message["sender"] != "群昵称甲" || message["senderId"] != "D1" {
+		t.Fatalf("projected message = %#v", message)
 	}
 }
 

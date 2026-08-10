@@ -14,6 +14,7 @@
 package smart
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -21,10 +22,16 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	chatshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
+)
+
+const (
+	atMeDefaultPageLimit = 50
+	atMeHardPageLimit    = 500
 )
 
 // AtMe: pull the messages that recently @-mentioned ME across chats in one step.
@@ -93,74 +100,96 @@ var AtMe = shortcut.Shortcut{
 		{Name: "days", Type: shortcut.FlagInt, Desc: "回溯天数（默认 7）；--days 必须在 1-3650 之间", Default: "7", Required: false},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量（默认 50）；--limit 必须大于 0", Default: "50"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传上次的 nextCursor", Default: "0"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 nextCursor 自动读取全部 @我 消息；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
 	}, chatshortcut.MessageResourceDownloadFlags()...),
 	Constraints: append([]shortcut.Constraint{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"group", "chat-query", "group-query"}},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"days"}, Description: "--days 必须在 1-3650 之间"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须大于 0"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 	}, chatshortcut.MessageResourceDownloadConstraints()...),
 	Tips: []string{
 		`dws chat +at-me`,
 		`dws chat +at-me --days 3`,
 		`dws chat +at-me --group "项目群"`,
+		`dws chat +at-me --days 30 --page-all --page-limit 50`,
 	},
 	Validate: validateAtMe,
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		groupID := ""
-		directTarget := strings.TrimSpace(rt.Str("group"))
-		queryTarget := strings.TrimSpace(rt.StrFirst("chat-query", "group-query"))
-		if directTarget != "" || queryTarget != "" {
-			resolved, err := targetresolver.ResolveChatTarget(rt, directTarget, queryTarget)
-			if err != nil {
-				return err
-			}
-			groupID = resolved.Selected.OpenConversationID
-		}
+	Execute:  executeAtMe,
+}
 
-		// Step 1 — look-back window [now-Nd, now] in epoch millis. days defaults
-		// to 7; guard against non-positive overrides so the window stays sane.
-		days := rt.Int("days")
-		if days <= 0 {
-			days = 7
+func executeAtMe(rt *shortcut.RuntimeContext) error {
+	groupID := ""
+	directTarget := strings.TrimSpace(rt.Str("group"))
+	queryTarget := strings.TrimSpace(rt.StrFirst("chat-query", "group-query"))
+	if directTarget != "" || queryTarget != "" {
+		resolved, err := targetresolver.ResolveChatTarget(rt, directTarget, queryTarget)
+		if err != nil {
+			return err
 		}
-		now := time.Now()
-		startMs := now.AddDate(0, 0, -days).UnixMilli()
-		endMs := now.UnixMilli()
+		groupID = resolved.Selected.OpenConversationID
+	}
 
-		// Step 2 — search @me messages. startTime/endTime/limit/cursor and the
-		// first-page defaults (limit 50, cursor "0") mirror
-		// helpers.chatMessageListMentionsCmd's search_at_me_message call.
-		params := map[string]any{
-			"startTime": startMs,
-			"endTime":   endMs,
-			"limit":     rt.Int("limit"),
-			"cursor":    rt.Str("cursor"),
+	// Step 1 — look-back window [now-Nd, now] in epoch millis. Validation has
+	// already constrained days to the published 1-3650 range.
+	days := rt.Int("days")
+	now := time.Now()
+	startMs := now.AddDate(0, 0, -days).UnixMilli()
+	endMs := now.UnixMilli()
+
+	// Step 2 — search @me messages. startTime/endTime/limit/cursor and the
+	// first-page defaults (limit 50, cursor "0") mirror
+	// helpers.chatMessageListMentionsCmd's search_at_me_message call.
+	params := map[string]any{
+		"startTime": startMs,
+		"endTime":   endMs,
+		"limit":     rt.Int("limit"),
+		"cursor":    rt.Str("cursor"),
+	}
+	if groupID != "" {
+		params["openConversationId"] = groupID
+	}
+	var items []map[string]any
+	var payload map[string]any
+	var readErr error
+	if rt.Bool("page-all") {
+		payload, items, readErr = readAllAtMePages(rt, params)
+		if payload == nil {
+			return readErr
 		}
-		if groupID != "" {
-			params["openConversationId"] = groupID
-		}
+	} else {
 		data, err := rt.CallMCPData("chat", "search_at_me_message", params)
 		if err != nil {
 			return err
 		}
-
-		// Step 3 — always publish the stable list envelope, including for an empty
-		// or newly-shaped response. This keeps common .messages[]/.items[] jq
-		// projections deterministic instead of turning absence into null.
-		items := atMeMessageItems(data)
-		results := make([]map[string]any, 0, len(items))
-		for _, m := range items {
-			results = append(results, atMeProjectWithReactions(m, !rt.Bool("no-reactions")))
-		}
-		payload := chatmsg.NewMessageListPayload(results)
-		payload["items"] = atMeCompatibilityItems(results)
+		items = atMeMessageItems(data)
+		payload = atMePayload(items, !rt.Bool("no-reactions"))
 		chatmsg.ApplyPagination(payload, data)
-		if rt.Bool("download-resources") {
-			payload["resourceDownloads"] = chatshortcut.DownloadMessageResources(rt, items, groupID)
+		payload["pagesFetched"] = 1
+		if payload["complete"] == true {
+			payload["stopReason"] = "source_complete"
+		} else {
+			payload["stopReason"] = "single_page"
 		}
-		return rt.Output(payload)
-	},
+	}
+
+	results := make([]map[string]any, 0, len(items))
+	if projected, ok := payload["messages"].([]map[string]any); ok {
+		results = projected
+	}
+	if rt.Bool("download-resources") && readErr == nil {
+		payload["resourceDownloads"] = chatshortcut.DownloadMessageResources(rt, items, groupID)
+	}
+	if len(results) == 0 {
+		payload["messages"] = []map[string]any{}
+		payload["items"] = []map[string]any{}
+	}
+	if err := rt.Output(payload); err != nil {
+		return err
+	}
+	return readErr
 }
 
 func validateAtMe(rt *shortcut.RuntimeContext) error {
@@ -174,7 +203,145 @@ func validateAtMe(rt *shortcut.RuntimeContext) error {
 	if rt.Int("limit") <= 0 {
 		return localChatOptionError("invalid_page_size", "+at-me 的 --limit 必须大于 0", "--limit")
 	}
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if rt.Bool("page-all") {
+		if limit := rt.Int("page-limit"); limit < 1 || limit > atMeHardPageLimit {
+			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
+		}
+	}
 	return nil
+}
+
+func atMePayload(items []map[string]any, includeReactions bool) map[string]any {
+	results := make([]map[string]any, 0, len(items))
+	for _, message := range items {
+		results = append(results, atMeProjectWithReactions(message, includeReactions))
+	}
+	payload := chatmsg.NewMessageListPayload(results)
+	payload["items"] = atMeCompatibilityItems(results)
+	return payload
+}
+
+func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (map[string]any, []map[string]any, error) {
+	pageLimit := defaultChatPageLimit(rt.Int("page-limit"), atMeDefaultPageLimit)
+	cursor := strings.TrimSpace(fmt.Sprint(baseParams["cursor"]))
+	if cursor == "" || cursor == "<nil>" {
+		cursor = "0"
+	}
+	seenCursors := map[string]bool{cursor: true}
+	seenMessages := map[string]bool{}
+	allItems := make([]map[string]any, 0)
+	failures := make([]map[string]any, 0)
+	pagesFetched := 0
+	complete := false
+	hasMore := false
+	nextCursor := ""
+	stopReason := "source_complete"
+	truncatedByPageLimit := false
+
+	for pagesFetched < pageLimit {
+		params := make(map[string]any, len(baseParams))
+		for key, value := range baseParams {
+			params[key] = value
+		}
+		params["cursor"] = cursor
+		data, err := rt.CallMCPData("chat", "search_at_me_message", params)
+		if err != nil {
+			if pagesFetched == 0 {
+				return nil, nil, err
+			}
+			failures = append(failures, map[string]any{
+				"page": pagesFetched + 1, "stage": "read", "cursor": cursor, "error": err.Error(),
+			})
+			stopReason = "read_failure"
+			break
+		}
+		pagesFetched++
+		pageItems := atMeMessageItems(data)
+		for _, item := range pageItems {
+			id := chatmsg.StableMessageID(item)
+			if id != "" && seenMessages[id] {
+				continue
+			}
+			if id != "" {
+				seenMessages[id] = true
+			}
+			allItems = append(allItems, item)
+		}
+
+		page := chatmsg.Pagination(data)
+		pageHasMore, known := page["hasMore"].(bool)
+		if !known {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "@我消息下层未返回可靠的 hasMore，无法证明结果完整",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		hasMore = pageHasMore
+		if !hasMore {
+			complete = true
+			nextCursor = ""
+			stopReason = "source_complete"
+			break
+		}
+		nextCursor = atMeCursorString(page["nextCursor"])
+		if nextCursor == "" || seenCursors[nextCursor] {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "@我消息下层返回 hasMore=true，但 nextCursor 缺失、无效或未前进",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		seenCursors[nextCursor] = true
+		cursor = nextCursor
+	}
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+		truncatedByPageLimit = true
+		stopReason = "page_limit"
+	}
+
+	payload := atMePayload(allItems, !rt.Bool("no-reactions"))
+	payload["pagesFetched"] = pagesFetched
+	payload["paginationKnown"] = true
+	payload["complete"] = complete && len(failures) == 0
+	payload["hasMore"] = hasMore
+	payload["stopReason"] = stopReason
+	payload["truncatedByPageLimit"] = truncatedByPageLimit
+	payload["failedCount"] = len(failures)
+	payload["failures"] = failures
+	payload["partial"] = len(failures) > 0 && len(allItems) > 0
+	if hasMore && nextCursor != "" {
+		payload["nextCursor"] = nextCursor
+	}
+	if len(failures) == 0 {
+		return payload, allItems, nil
+	}
+	return payload, allItems, apperrors.NewAPI(
+		fmt.Sprintf("@我消息分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+		apperrors.WithOperation("chat/search_at_me_message"),
+		apperrors.WithReason("at_me_incomplete"),
+		apperrors.WithOrigin("mcp_gateway"),
+		apperrors.WithFailureStage("pagination"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(true),
+		apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
+	)
+}
+
+func atMeCursorString(value any) string {
+	if value == nil {
+		return ""
+	}
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" || text == "0" {
+		return ""
+	}
+	return text
 }
 
 // atMeCompatibilityItems preserves the common list/items projection used by

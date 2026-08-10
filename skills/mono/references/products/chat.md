@@ -653,6 +653,8 @@ dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file
 #### 查询消息发送状态 — 查询以当前用户身份发送的消息的发送状态
 
 查询以当前用户身份发送的消息的发送状态。需要传入发送消息时返回的 openTaskId。
+
+发送成功时返回 openMessageId 和 openConversationId，可直接用于后续编辑或撤回。
 ```
 Usage:
   dws chat message query-send-status [flags]
@@ -666,6 +668,23 @@ Flags:
   - openTaskId 由 `dws chat message send` 发送消息成功后返回
   - 用于确认消息是否已成功发送或获取发送失败的原因
   - 返回结果中含发送成功消息的 openMessageId，可用于后续 recall（撤回）、read-status（查已读）等命令
+  - 返回结果同时含 openConversationId；与 openMessageId 组合后可直接用于 edit（编辑）或 recall（撤回）
+```
+
+发送后编辑/撤回时，优先使用下列 ID 链，无需按消息内容反查：
+
+```bash
+# 1. 发送后保留 openTaskId
+dws chat message send --group <openConversationId> --text "原始内容"
+# 2. 查询得到 openMessageId 和 openConversationId
+dws chat message query-send-status --open-task-id <openTaskId>
+# 3. 编辑消息
+dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "更新后的内容"
+
+# 发送后撤回使用同一 ID 链
+dws chat message send --group <openConversationId> --text "待撤回的内容"
+dws chat message query-send-status --open-task-id <openTaskId>
+dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>
 ```
 
 #### 撤回消息 — 撤回当前用户自己发出的消息
@@ -676,15 +695,13 @@ Usage:
   dws chat message recall [flags]
 Example:
   dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>
-  # 查询会话 ID: dws chat search --query "群名"
-  # 消息 ID 可通过 dws chat message list 获取
 Flags:
       --conversation-id string   会话 openConversationId (必填，支持单聊/群聊，别名: --group / --id / --chat)
       --msg-id string            消息 openMessageId (必填)
 
 注意:
   - --conversation-id 的别名: --group, --id, --chat (均可替代 --conversation-id)
-  - 消息 ID 可通过 `dws chat message list` 命令获取
+  - 刚由 `chat message send` 发出的消息，使用 `query-send-status` 返回的 openConversationId 和 openMessageId；只有历史消息或已丢失 openTaskId 时才通过消息拉取/搜索获取 ID
   - 仅支持撤回当前用户以个人身份发出的消息，不能撤回他人发送的消息，也不能撤回机器人发出的消息
   - 与 `recall-by-bot` 的区别：本命令通过 IM 接口撤回用户自己发出的消息（需要 openConversationId + openMessageId），`recall-by-bot` 通过机器人接口撤回机器人发出的消息（需要 robot-code + processQueryKey）
 ```
@@ -1411,11 +1428,11 @@ Usage:
   dws chat message list-favorites [flags]
 Example:
   dws chat message list-favorites
-  dws chat message list-favorites --size 50
+  dws chat message list-favorites --size 30
   dws chat message list-favorites --cursor 20 --size 20
 Flags:
       --cursor int   数字分页游标，默认 0；翻页时传上次返回的 nextCursor
-      --size int     一次拉取的收藏数量，默认 20，范围 1-100
+      --size int     一次拉取的收藏数量，默认 20，范围 1-30
 
 注意:
   - 首次请求可省略分页参数，CLI 会自动向 Open 服务传入 cursor=0、size="20"
@@ -1884,6 +1901,108 @@ Flags:
   - record-id、applicant、inviter 可通过 dws chat group list-join-validations 查询获得
 ```
 
+### toolbar (快捷栏管理)
+
+快捷栏（toolbar）是会话级快捷入口管理能力，支持查询、添加、隐藏、排序及自定义入口 CRUD。与 `internal/shortcut/` 下的智能快捷方式框架是两套独立能力。
+
+#### 查询快捷栏入口列表
+```
+Usage:
+  dws chat toolbar list [flags]
+Example:
+  dws chat toolbar list --conversation-id <cid>
+Flags:
+      --conversation-id string  会话 openConversationId (必填)
+```
+
+#### 将入口添加到快捷栏可见区
+```
+Usage:
+  dws chat toolbar add [flags]
+Example:
+  dws chat toolbar add --conversation-id <cid> --shortcut-ids 101,102
+Flags:
+      --conversation-id string  会话 openConversationId (必填)
+      --shortcut-ids string     入口 ID 列表，逗号分隔 (必填)
+```
+
+#### 将入口从快捷栏可见区隐藏
+```
+Usage:
+  dws chat toolbar hide [flags]
+Example:
+  dws chat toolbar hide --conversation-id <cid> --shortcut-ids 101,102
+Flags:
+      --conversation-id string  会话 openConversationId (必填)
+      --shortcut-ids string     入口 ID 列表，逗号分隔 (必填)
+```
+
+#### 排序快捷栏入口
+```
+Usage:
+  dws chat toolbar sort [flags]
+Example:
+  dws chat toolbar sort --conversation-id <cid> --sorted-ids 101,102,103
+  dws chat toolbar sort --conversation-id <cid> --sorted-ids 101,102 --unsorted-ids 103,104
+Flags:
+      --conversation-id string  会话 openConversationId (必填)
+      --sorted-ids string       排序后的入口 ID 列表，逗号分隔 (必填)
+      --unsorted-ids string     不参与排序放在末尾的入口 ID 列表，逗号分隔
+```
+注意：`--sorted-ids` 与 `--unsorted-ids` 不能有交集。
+
+#### 创建自定义快捷栏入口
+```
+Usage:
+  dws chat toolbar create-custom [flags]
+Example:
+  dws chat toolbar create-custom --conversation-id <cid> --title "周报" --url "https://example.com" --icon-url "https://example.com/icon.png" --pc-url "https://example.com"
+Flags:
+      --conversation-id string  会话 openConversationId (必填)
+      --title string            入口标题 (必填)
+      --url string              入口跳转链接 (必填)
+      --icon-url string         入口图标 URL (必填)
+      --pc-url string           PC 端跳转链接 (必填)
+      --extension stringArray   扩展信息，格式 key=value，可重复使用
+      --desc string             入口描述（为空时使用 --title）
+      --tag string              入口标签
+      --sort-index int          排序权重
+```
+
+#### 删除自定义快捷栏入口
+```
+Usage:
+  dws chat toolbar remove-custom [flags]
+Example:
+  dws chat toolbar remove-custom --conversation-id <cid> --shortcut-id 123
+Flags:
+      --conversation-id string  会话 openConversationId (必填)
+      --shortcut-id int         自定义入口 ID (必填)
+      --yes                     确认执行删除操作
+```
+注意：删除操作不可逆，必须先获得用户确认后加 `--yes` 执行。
+
+#### 更新自定义快捷栏入口
+```
+Usage:
+  dws chat toolbar update-custom [flags]
+Example:
+  dws chat toolbar update-custom --conversation-id <cid> --shortcut-id 123 --title "周报" --url "https://example.com" --icon-url "https://example.com/icon.png" --pc-url "https://example.com"
+Flags:
+      --conversation-id string  会话 openConversationId (必填)
+      --shortcut-id int         自定义入口 ID (必填)
+      --title string            入口标题 (必填)
+      --url string              入口跳转链接 (必填)
+      --icon-url string         入口图标 URL (必填)
+      --pc-url string           PC 端跳转链接 (必填)
+      --extension stringArray   扩展信息，格式 key=value，可重复使用
+      --desc string             入口描述
+      --tag string              入口标签
+      --sort-index int          排序权重
+```
+
+入口 ID 可通过 `dws chat toolbar list --conversation-id <cid>` 获取。
+
 ## 意图判断
 
 用户说"我特别关注的人最近发了什么消息/关注的人最近聊了啥/星标联系人最近的动态" → `chat message list-focused`（零参数一行命令）
@@ -2271,7 +2390,8 @@ Flags:
 | `chat bot find` | `botOpenDingTalkId` | 给机器人发单聊消息（send --open-dingtalk-id；字段名是 botOpenDingTalkId，非 openDingTalkId） |
 | `chat message send-by-bot` | `processQueryKey` | recall-by-bot 的 --keys |
 | `chat message send` | `openTaskId` | query-send-status 的 --open-task-id |
-| `chat message list` | `openMessageId` | recall 的 --msg-id |
+| `chat message query-send-status` | `openMessageId` + `openConversationId` | 刚发送消息的 edit / recall |
+| `chat message list` | `openMessageId` | 历史消息或已丢失 openTaskId 时的 recall |
 | `chat message search` | `nextCursor` | 下次 message search 的 --cursor |
 | `chat message search-advanced` | `nextCursor` | 下次 message search-advanced 的 --cursor |
 | `chat search-common` | `openConversationId` | message send/list 等的 --group |

@@ -13,10 +13,10 @@
 | <!-- dws-intent: chat.send.dm -->按姓名发送简单文本/Markdown | `dws chat +dm` |
 | <!-- dws-intent: chat.send.group -->按群名发送简单文本/Markdown | `dws chat +send-to-group` |
 | <!-- dws-intent: chat.send.advanced -->文件、Bot、Webhook、复杂 @、已知 ID 或幂等发送 | `dws chat +messages-send` |
-| <!-- dws-intent: chat.read.conversation -->读取一个指定群聊或单聊 | `dws chat +chat-messages` |
-| <!-- dws-intent: chat.search.cross-conversation -->跨会话、多条件或全量翻页搜索 | `dws chat +search-msg` |
+| <!-- dws-intent: chat.read.conversation -->读取或导出指定群聊/单聊，可附带发送者姓名 | `dws chat +chat-messages`；姓名用非必填 `--sender-query` |
+| <!-- dws-intent: chat.search.filtered -->直接按发送者、关键词、@对象或消息类型搜索，可限定单个或跨多个会话 | `dws chat +search-msg` |
 | <!-- dws-intent: chat.reply.quote -->引用回复已有消息 | `dws chat +messages-reply` |
-| 查看指定群内 @我的消息 | `dws chat +at-me --group <群名>` |
+| 查看指定群内 @我的消息 | `dws chat +at-me --group <群名> --page-all` |
 | 撤回当前用户消息 | `dws chat +messages-recall --msg-id <openMessageId>` |
 
 以下原子命令只用于 Shortcut 未暴露的底层字段、原始响应或精确分页控制。不得把它们重新写成
@@ -36,6 +36,9 @@
 - 建议发送时带 `--uuid`，失败重试复用同一个值。
 - Bot/Webhook 只支持文本/Markdown；Bot 多群使用 `+messages-send --groups/--groups-file` 的逐项
   ledger。不要把 user 文件/图片能力外推到 Bot。
+- `+at-me` 和 `+messages-list-direct` 要求全量时使用 `--page-all`，并检查 `complete`、
+  `hasMore`、`stopReason` 和 `failures`；`+messages-list-direct` 的续页时间来自下层毫秒
+  `nextCursor`，不得用只有秒精度的消息展示时间手工拼接。
 
 ## 原子 fallback 命令明细
 
@@ -90,12 +93,57 @@ dws chat message send --group <openConversationId> --msg-type profile --contact-
 `+messages-forward-topic` 转发；不要把它作为普通 `--group` 猜测写入。引用回复使用
 `+messages-reply`，但这不等于 Thread 内新增回复。
 
+读取话题回复可直接传话题主消息 `--message-id`，CLI 会先通过只读消息详情解析出
+`conversationId/threadId`；也可显式传 `--group` 加 `--thread-id/--topic-id`。前一种模式如果同时传
+`--group`，会校验它与消息解析出的会话一致；解析失败只会报错，不会错误转去查询通讯录。
+
+默认只读一页；完整读取必须显式加 `--page-all`。可用
+`--limit/--page-size` 控制每页条数、用 `--page-limit` 限制最大页数；自动续页使用下层返回的
+毫秒级 `nextCursor` 无损生成下一次 `startTime`，不能使用只有秒级精度的回复 `createTime`。
+输出默认 `--order desc`（兼容 `--sort`）。由于下层的 `newer/older` 表示读取方向而不是结果排序，
+`asc` 只允许与 `--page-all` 一起使用：完整拉取后对整体结果升序排列，避免把单个“最新页”的本地反转
+伪装为全局升序。结果中的 `orderScope=complete_result` 表示完整结果排序；读取被页数上限或错误截断时为
+`fetched_pages`，并仍须结合完整性 ledger 判断。
+必须检查 `complete`、`hasMore`、`stopReason` 和
+`failures`，`complete=false` 时不得声称已经拿到全部回复。
+
+```bash
+dws chat +thread-replies --message-id <rootOpenMessageId> --page-all --order asc
+dws chat +thread-replies --group <openConversationId> --thread-id <openConvThreadId> --page-all --page-limit 50
+```
+
 ### 拉取消息的底层 fallback
 
 默认使用 `dws chat +chat-messages`。群聊的 `--group` 可传群名或 openConversationId；
 也可用 `--chat-query` 显式按群名解析、用 `--conversation-id` 显式传稳定 ID。全量读取加 `--page-all`，必要时用 `--page-limit`、
 `--max-results` 控制边界，用 `--output <相对.json>` 原子导出。只有需要原始响应或显式手工
 continuation 时才使用下表；原子 `message list` 不代表自动全量分页。
+
+可附带非必填的 `--sender-query <姓名>` 做读取后筛选。未传姓名时正常返回全部；姓名未解析出稳定 ID 时保留全部并记录失败；唯一解析出 userId/openDingTalkId 后按消息 `senderId` 筛选，覆盖最终 `messages/count` 并返回 `resolvedFilters`。该调用已经完成读取、解析与筛选，不要补跑 `+search-msg`。
+
+时间范围参数同样公开但非必填：`--start`（包含）、`--end`（不包含）、`--order asc|desc`，
+兼容别名为 `--start-time/--end-time/--sort`。范围固定为 `[start,end)`；仅开始时间表示到本次执行当前时间，
+仅结束时间只支持 `desc`，`asc` 必须提供开始时间。旧 `--time/--direction` 保持兼容但不能和范围模式混用。
+
+```bash
+dws chat +chat-messages --group "项目群" --sender-query "测试用户甲" --page-all --format json
+dws chat +chat-messages --group "项目群" --start "2026-08-01T00:00:00+08:00" --end "2026-08-02T00:00:00+08:00" --order asc --page-all --format json
+```
+
+当会话已经确定、任务只需要完整读取结果中可由消息字段判断的子集时，不新增按条件专用的
+Shortcut 参数。在同一次 `+chat-messages` 调用中使用全局 `--jq`，让 Runtime 完成读取后、
+在 stdout 前筛选；表达式必须保留根信封、用筛选结果覆盖 `messages` 并同步重算 `count`，
+不得丢失 `complete`、`hasMore`、`failures` 等完整性 ledger。不要先输出全量 JSON，再由
+Agent 或另一条命令二次处理。
+
+```bash
+# 例：读取完整会话后，只返回存在 reaction 的消息
+dws chat +chat-messages --group "项目群" --page-all --format json \
+  --jq '. as $root | [.messages[] | select((.reactions // []) | length > 0)] as $matched | $root | .messages = $matched | .count = ($matched | length)'
+```
+
+发送者姓名不是普通结果字段条件：仍用 `--sender-query <姓名>` 先解析稳定身份，再按
+`senderId` 筛选，不能用 `--jq` 对展示名做字符串匹配。
 
 | 命令 | 用途 | 示例与要点 |
 |------|------|------------|
@@ -117,9 +165,29 @@ continuation 时才使用下表；原子 `message list` 不代表自动全量分
 
 ### 搜索消息的底层 fallback
 
-默认使用 `dws chat +search-msg`；搜索内容使用 canonical `--query`，群名和发送者姓名分别使用
-`--chat-query` / `--sender-query`。需要 Shortcut 未暴露的原始过滤字段或响应时，才评估
-`message search-advanced`。它是原子 `message search` 的严格超集，但不是 Agent 高频默认入口。
+直接按发送者、关键词、@对象或消息类型检索时优先使用 `dws chat +search-msg`；搜索范围可以是单个、多个或全部会话。若已选择 `+chat-messages` 读取指定会话，可由其非必填 `--sender-query` 在同一次调用完成姓名解析和筛选。
+
+- 搜索内容使用公开参数 `--query`。
+- 已知稳定会话 ID 使用 `--group` / `--groups`；已知稳定发送者 ID 使用 `--senders`。
+- 只有群名时使用非必填参数 `--chat-query`，由 CLI 唯一解析会话。
+- 只有发送者姓名时使用非必填参数 `--sender-query`，由 CLI 唯一解析人员。
+- 不要把群名传给只接受稳定 ID 的会话参数，也不要把姓名传给 `--senders`。零命中或多候选时停止，不选择第一项。
+- 不传会话过滤时搜索全部会话；`--page-all` 只翻完当前时间范围内的游标页，默认时间范围是最近 7 天。
+- 精确范围使用成对的 `--start/--end`（兼容 `--start-time/--end-time`）；`--order`（兼容 `--sort`）稳定排列本次实际取得的结果。未 `--page-all` 或 `complete=false` 时不能称为完整范围的全局排序。
+
+需要 Shortcut 未暴露的原始过滤字段或响应时，才评估 `message search-advanced`。它是原子 `message search` 的严格超集，但不是 Agent 高频默认入口。
+
+```bash
+# 单群 + 发送者姓名
+dws chat +search-msg --chat-query "项目群" --sender-query "测试用户甲" --page-all --format json
+
+# 单群 + 关键词
+dws chat +search-msg --chat-query "项目群" --query "发布计划" --page-all --format json
+
+# 跨全部会话 + 发送者姓名
+dws chat +search-msg --sender-query "测试用户甲" --page-all --format json
+dws chat +search-msg --query "发布计划" --start-time "2026-08-01T00:00:00+08:00" --end-time "2026-08-02T00:00:00+08:00" --sort asc --page-all --format json
+```
 
 ```bash
 dws chat message search-advanced --query "周报" --start "2026-04-01T00:00:00+08:00" --end "2026-04-15T00:00:00+08:00"
@@ -158,6 +226,22 @@ dws chat message search --query "codereview" --group <openConversationId> --star
 | `+messages-recall` | 撤回当前用户消息 | `--msg-id`；可选 `--conversation-id`，省略时 CLI 从消息详情补齐；兼容单值 `--message-ids` |
 | `message edit` | 编辑已发送消息内容 | `--conversation-id` `--msg-id`，并在 `--text` / `--content` 中二选一；可选 `--title` `--at-all` `--at-open-dingtalk-ids` |
 | `message read-status` | 查消息已读/未读状态 | `--group` `--message-id`；可选目标用户 |
+
+刚由 `message send` 发出的消息会返回 `openTaskId`。先用 `message query-send-status` 查询，成功结果中的 `openMessageId` 和 `openConversationId` 可直接传给 `message edit` 或 `message recall`，无需再按消息内容从列表反查 ID。
+
+```bash
+# 1. 发送后保留 openTaskId
+dws chat message send --group <openConversationId> --text "原始内容"
+# 2. 查询得到 openMessageId 和 openConversationId
+dws chat message query-send-status --open-task-id <openTaskId>
+# 3. 编辑消息
+dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "更新后的内容"
+
+# 发送后撤回使用同一 ID 链
+dws chat message send --group <openConversationId> --text "待撤回的内容"
+dws chat message query-send-status --open-task-id <openTaskId>
+dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>
+```
 
 `+messages-recall` 与 `recall-by-bot` 不同：前者使用 `openMessageId`，缺少会话 ID 时先只读查询消息详情；后者撤回机器人消息，需要 `robot-code + processQueryKey`。不要把 `processQueryKey` 当 `openMessageId`。
 
@@ -220,8 +304,10 @@ dws chat +messages-update-card --biz-id <bizId> --content "最终内容" --flow-
 | `message set-top-msg` / `unset-top-msg` | 置顶/取消置顶会话内某条消息 | `--open-conversation-id` `--msg-id` |
 | `message add-favorite` | 收藏消息 | `--open-message-id` `--open-conversation-id` |
 | `message remove-favorite` | 取消收藏消息 | `--open-message-id` `--open-conversation-id` |
-| `message list-favorites` | 查询收藏消息列表 | 可选 `--cursor` `--size` |
+| `+flag-list` | 查询收藏消息列表的默认 Shortcut | 默认一页；要求全部时加 `--page-all`；`--page-size/--size` 范围为 1-30，可用 `--page-token` 或兼容的 `--cursor` 续页，检查 `complete` / `failures` |
+| `message list-favorites` | 原始单页收藏结果 fallback | 可选 `--cursor` `--size` |
 
+`+flag-list` 查询钉钉 message favorite，底层使用数字 cursor；它与消息 Pin、消息 Top 和会话置顶属于不同对象层级。
 消息置顶 `set-top-msg` 与会话置顶 `chat set-top` 不同：前者置顶会话内消息，后者置顶整个会话。
 
 ### 表情回应

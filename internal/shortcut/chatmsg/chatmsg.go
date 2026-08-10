@@ -32,10 +32,13 @@ package chatmsg
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // MessageListContractVersion identifies the additive, compatibility-preserving
@@ -75,6 +78,8 @@ var messageResultContractV1 = MessageResultContract{
 		"contractVersion",
 		"messages",
 		"count",
+		"resolvedFilters",
+		"queryRange",
 		"pagesFetched",
 		"paginationKnown",
 		"complete",
@@ -774,10 +779,10 @@ func ApplyPagination(payload, data map[string]any) {
 	}
 }
 
-// ApplyMessagePagination publishes message-list completeness without claiming
-// the lower response's nextCursor is a valid CLI input. DingTalk's executable
-// message-list contract paginates with the boundary message createTime, so the
-// resume object uses exactly that accepted parameter.
+// ApplyMessagePagination publishes message-list completeness and converts the
+// authoritative millisecond nextCursor into the RFC3339Nano time boundary
+// accepted by the executable message-list command. Projected createTime is
+// deliberately not used because it is only second precision.
 func ApplyMessagePagination(payload, data map[string]any, messages []map[string]any, direction string) {
 	payload["contractVersion"] = MessageListContractVersion
 	payload["pagesFetched"] = 1
@@ -812,23 +817,68 @@ func ApplyMessagePagination(payload, data map[string]any, messages []map[string]
 		payload["complete"] = value
 	}
 	hasMore, _ := page["hasMore"].(bool)
-	if !hasMore || len(messages) == 0 {
+	if !hasMore {
 		return
 	}
-	boundary := CreateTime(messages[len(messages)-1])
-	if boundary == nil {
+	if len(messages) == 0 {
 		payload["failedCount"] = 1
 		payload["failures"] = []map[string]any{{
 			"stage": "pagination",
-			"error": "下层返回 hasMore=true，但末条消息缺少可继续读取的 createTime",
+			"error": "下层返回 hasMore=true 但当前页没有消息",
 		}}
 		return
 	}
-	next := map[string]any{"time": boundary}
+	_, boundary, err := messagePaginationCursorBoundary(page["nextCursor"])
+	if err != nil {
+		payload["failedCount"] = 1
+		payload["failures"] = []map[string]any{{
+			"stage": "pagination",
+			"error": "下层返回 hasMore=true，但 nextCursor 无效: " + err.Error(),
+		}}
+		return
+	}
+	next := map[string]any{"time": boundary, "nextCursor": page["nextCursor"]}
 	if strings.TrimSpace(direction) != "" {
 		next["direction"] = direction
 	}
 	payload["nextPage"] = next
+}
+
+func messagePaginationCursorBoundary(value any) (string, string, error) {
+	var millis int64
+	switch typed := value.(type) {
+	case int:
+		millis = int64(typed)
+	case int32:
+		millis = int64(typed)
+	case int64:
+		millis = typed
+	case float32:
+		asFloat := float64(typed)
+		if math.IsNaN(asFloat) || math.IsInf(asFloat, 0) || asFloat <= 0 || math.Trunc(asFloat) != asFloat || asFloat > math.MaxInt64 {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = int64(asFloat)
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed <= 0 || math.Trunc(typed) != typed || typed > math.MaxInt64 {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = int64(typed)
+	case string:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+		if err != nil {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = parsed
+	default:
+		return "", "", fmt.Errorf("缺少毫秒级分页游标")
+	}
+	if millis <= 0 {
+		return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+	}
+	key := strconv.FormatInt(millis, 10)
+	boundary := time.UnixMilli(millis).UTC().Format(time.RFC3339Nano)
+	return key, boundary, nil
 }
 
 // Pagination extracts hasMore/nextCursor from the response root or a common

@@ -8,8 +8,8 @@
 
 - <!-- dws-intent: chat.conversation.list-top -->查看置顶会话默认使用 `dws chat +conversation-list-top`；
   原子 `list-top-conversations` 只在需要原始响应时作为 fallback。
-- <!-- dws-intent: chat.read.conversation -->取得目标会话后读取消息默认使用 `dws chat +chat-messages`；
-  不要回到原子 `message list` 作为普通路线。
+- <!-- dws-intent: chat.read.conversation -->取得目标会话后读取或导出消息记录，默认使用 `dws chat +chat-messages`；
+  可附带非必填的 `--sender-query` 解析姓名：无稳定 ID 返回全部，唯一解析成功后按 `senderId` 筛选同一次读取结果。不要回到原子 `message list`，也不要补跑 `+search-msg`。直接条件检索优先使用 `+search-msg`。
 
 ## 必读约束
 
@@ -35,12 +35,16 @@ dws chat conversation-info --open-dingtalk-id <openDingTalkId> --format json
 | 命令 | 用途 | 参数 |
 |------|------|------|
 | `+conversation-list` | 获取当前用户会话 | 要求“全部”时加 `--page-all`；检查 `complete` / `failures` |
+| `+chat-list` | 列出当前用户会话（默认群聊，可选单聊） | 默认只返回群聊；`--types group,p2p` 可包含单聊；要求全部时加 `--page-all`，合并去重后再过滤类型 |
+| `+chat-list-all` | 获取当前用户加入的全部群 | 要求全部时加 `--page-all`；沿数字 `nextCursor` 去重聚合 |
+| `+my-groups` | 获取并投影当前用户加入的群 | 要求全部时加 `--page-all`；读完后再应用 `--type` 本地过滤 |
 | `+conversation-list-top` | 获取置顶会话列表 | 可选 `--limit` `--cursor` `--exclude-muted`；使用稳定 `conversations[]` |
 | `message list-unread-conversations` | 获取未读会话列表 | 可选 `--count` `--exclude-muted` |
 | `clear-red-point` | 清除指定会话红点 | `--conversation-id`，别名 `--id` / `--chat` |
 | `clear-all-red-point` | 清除所有会话红点，一键全部已读 | 无参数 |
 
-翻页时，`hasMore=true` 用返回的 `nextCursor` 作为下次 `--cursor`。
+翻页时，`hasMore=true` 用返回的 `nextCursor` 作为下次 `--cursor`。Shortcut 全量读取应检查
+`complete`、`stopReason` 和 `failures`；达到 `--page-limit` 时会保留可继续的 `nextCursor`。
 
 ### 会话置顶与通知
 

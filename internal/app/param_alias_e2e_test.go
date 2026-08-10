@@ -173,6 +173,24 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	return ctx, preview, append([]executor.Invocation(nil), rejectRunner.attempts...), executeErr
 }
 
+func TestCrossPlatformCoverageFlagListDryRunStopsBeforeReadDispatch(t *testing.T) {
+	_, preview, attempts, err := executeParamAliasDryRunE2E(t,
+		"chat", "+flag-list", "--page-size", "20", "--cursor", "0", "--dry-run",
+	)
+	if err != nil {
+		t.Fatalf("flag-list dry-run error = %v", err)
+	}
+	if len(attempts) != 0 {
+		t.Fatalf("flag-list dry-run crossed dispatch boundary: %#v", attempts)
+	}
+	if !preview.DryRun || preview.Executed || preview.Tool != "list_message_favorites" {
+		t.Fatalf("flag-list dry-run preview = %#v", preview)
+	}
+	if preview.Arguments["cursor"] != float64(0) || preview.Arguments["size"] != "20" {
+		t.Fatalf("flag-list dry-run arguments = %#v", preview.Arguments)
+	}
+}
+
 func executeParamAliasE2E(t *testing.T, caller *paramAliasCaptureCaller, args ...string) (*pipeline.Context, error) {
 	t.Helper()
 	originalArgs := os.Args

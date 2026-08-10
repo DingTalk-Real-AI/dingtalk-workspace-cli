@@ -433,6 +433,10 @@ jobs:
         if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
+      - name: Test reviewer routing policy
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        run: node .github/reviewer-routing.test.js
+
   test-focused:
     name: Test (changed packages)
     needs: lint

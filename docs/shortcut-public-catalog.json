@@ -1,209 +1,926 @@
 {
-  "generated_at": "2026-08-05T22:43:52.497190",
-  "count": 294,
+  "generated_at": "2026-08-06T21:08:26.697858",
+  "count": 357,
   "results": [
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+advperm-disable",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "关闭高级权限会使自定义角色失效，显式发布高风险事实。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+advperm-enable",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "开启 Base 高级权限总开关的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+attachment-put",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "完整执行 prepare、HTTP PUT、attachment cell 覆盖和读回验证；空写回包只有最终附件可证明时成功。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+attachment-remove",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "清空或按文件名移除附件；若读回缺剩余 fileToken，会在写前明确停止而不破坏其他附件。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+attachment-upload",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "申请附件 OSS 直传地址和 fileToken；只负责上传准备，不伪造文件已上传。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+base-bootstrap",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "声明式创建 Base、表和字段，字段自动分片，逐层读回验证并报告部分副作用。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+base-copy",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一完整复制与仅结构复制意图，并把目标目录映射为可执行参数。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+base-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "不可逆删除整个 Base 的兼容入口，显式发布高风险确认事实。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+base-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "保留 Base 目录读取的 Shortcut 兼容入口；底层 leaf 已提供同等读取能力。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+base-get-primary-doc-id",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "已知 base/table/record 时读取主键文档 dentryUuid 的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+base-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把最近访问 Base 响应稳定投影为 baseId/baseName 列表，作为未知 baseId 时的浏览入口。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+base-schema-snapshot",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "完整读取 Base、tables、fields、views，逐层区分合法空集合与缺失响应契约。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+base-search",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按名称关键词定位 Base，并稳定投影可继续操作的 baseId/baseName。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+base-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新 Base 名称和备注的一对一写入，复用统一确认门。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+chart-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "删除图表及布局项，显式发布不可逆高风险事实。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+chart-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取指定图表完整配置的一对一入口。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+chart-share-get",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取图表分享配置的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+chart-share-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一开启、关闭和设置图表分享类型。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+chart-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一更新图表配置或布局，并要求显式 config 输入。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+chart-widgets-example",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "返回所有图表类型的 widget config 示例，供构造合法图表配置。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+dashboard-arrange",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "触发服务端智能布局重排并保留统一写入确认。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+dashboard-config-example",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "返回 dashboard config 的服务端结构示例，供后续写入构造合法参数。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+dashboard-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "级联删除仪表盘及图表，显式发布不可逆高风险事实。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+dashboard-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "读取仪表盘详情及 charts summary，作为图表操作导航入口。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+dashboard-share-get",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取仪表盘分享配置的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+dashboard-share-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一开启、关闭和设置仪表盘分享类型。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+dashboard-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新仪表盘配置的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+export-data",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "统一创建导出任务与按 taskId 续等，直到得到可下载的导出结果或明确失败。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+field-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "不可逆删除字段的一对一入口，显式发布数据丢失风险。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+field-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "批量获取字段完整类型配置，避免仅返回名称的损失投影。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+field-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一字段名称、类型配置和 AI 配置的增量更新输入。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+find-record",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将关键词查询投影为稳定的 recordId/cells 结果，适合先定位再写入。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+form-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "不可逆删除表单视图的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+form-field-hide",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "用隐藏/显示布尔语义切换表单字段可见性。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+form-field-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "列出表单当前字段顺序、可见性、必填和描述配置。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+form-field-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一更新表单字段必填状态与描述。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+form-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "从表的视图中稳定筛出表单视图并返回表单目录。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "aitable",
       "command": "+form-share-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取当前视图分享表单配置的一对一入口。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+form-share-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一开启或关闭指定视图的分享表单。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+form-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一更新表单标题和描述。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+import-data",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一将已上传文件导入新表或追加到已有表的目标语义。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+import-upload",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "申请导入 OSS 直传地址和 importId；只负责上传准备，不伪造导入完成。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+list-tables",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把 Base 目录稳定投影为 tableId/tableName 列表，隐藏非表节点。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+record-bulk-patch",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "先完整解析显式选择范围和 max-matches，再将同一 cells patch 自动分片写入并逐条读回验证。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+record-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "自动按 100 条分片删除；每批仅在所有目标 recordId 读回均不存在时成功，失败提供 nextOffset。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+record-history-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "按 recordId 查询变更历史的一对一只读入口。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+record-primary-doc-create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "以幂等意图为 primaryDoc 字段创建关联文档。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+record-primary-doc-get",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取记录主键文档 nodeId 的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+record-query",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一 ID、筛选、关键词和分页查询，并投影稳定的 records/count/cursor 结果。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "aitable",
       "command": "+record-query-empty",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "扫描记录并按用户字段为空的语义过滤空行，避免调用方手工判断 cells。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "aitable",
       "command": "+record-share-links",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "对超过 20 条 recordId 去重分片调用并合并分享链接及逐批结果。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "aitable",
       "command": "+record-share-url",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将最多 20 个 recordId 统一映射为可分享链接列表。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+record-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "自动按 100 条分片更新并逐条读回验证；失败返回可续跑的 nextOffset。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+record-upsert",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按 recordId 拆分 create/update，自动按 100 条分片；创建必须返回新 recordId，全部结果读回验证。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+record-upsert-by-key",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "先按唯一 fieldId/value 完整查询，0 条创建、1 条更新、2 条以上停止，并读回验证最终 cells。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+resolve-base",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按名称搜索并要求唯一匹配，0 或多结果时显式失败而不猜 baseId。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "aitable",
       "command": "+resolve-table",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "在 Base 内按名称要求唯一匹配，0 或多结果时显式失败而不猜 tableId。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+role-create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一角色名称、成员与权限配置的创建输入。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+role-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "不可逆删除自定义角色的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+role-get",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取单个角色完整权限配置的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+role-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "列出 Base 全部自定义角色的一对一入口。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+role-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按 PATCH 语义增量更新角色配置，未提供字段保持不变。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+section-create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "在 Base 目录树创建用于组织表和仪表盘的文件夹。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+section-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "不可逆删除目录文件夹的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+section-list-empty",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "扫描目录树并只返回没有子节点的空文件夹。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "aitable",
       "command": "+section-list-nodes",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "列出当前版本全部 nsheet 节点，提供表、仪表盘和文件夹统一目录。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+section-move-node",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一移动任意 nsheet 节点到文件夹或 Base 根目录，并可指定位置。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+section-rename",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "重命名目录文件夹的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+section-reorder",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按当前父目录语义调整文件夹展示顺序。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+table-copy",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "在没有服务端 table-copy task 的情况下，本地重建安全字段、映射 fieldId，并可分片复制及读回验证全部记录。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+table-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "不可逆删除数据表的一对一入口，显式发布高风险确认事实。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+table-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "批量读取表级信息、字段和视图目录，为后续 Schema 与记录操作提供 ID。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+table-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "统一表名、备注和行命名规则的 PATCH 风格更新。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+template-search",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按名称关键词搜索 AI 表格模板并返回可用于创建的 templateId。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+url-resolve",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "严格解析 alidocs AI 表格 URL 的 base/table/view/record ID，并可通过最深层只读接口验证目标存在。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+view-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "不可逆删除视图的一对一入口，显式发布高风险确认事实。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+view-duplicate",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "复制现有视图配置并生成新视图的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "aitable",
       "command": "+view-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "读取视图完整列顺序、筛选、排序和分组配置。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "aitable",
       "command": "+view-get-frozen-cols",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取 Grid 视图冻结列数的一对一入口。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "aitable",
       "command": "+view-get-lock",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取视图锁定状态的一对一入口。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "aitable",
       "command": "+view-get-row-height",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取视图行高像素值的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+view-lock",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "用默认锁定与 --off 解锁统一表达视图锁状态切换。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+view-preset-apply",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按精确名称幂等创建或更新视图预设，拒绝同名歧义和类型漂移，并读回校验 config。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+view-set-fill-color-rule",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "以全量覆盖语义设置条件填色规则，并用空数组明确清空。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+view-set-frozen-cols",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "设置冻结列数并以 0 明确表达取消冻结。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+view-set-row-height",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把行高限制为服务支持的 32/56/88/128 像素档位后写入。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+view-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一视图名称、描述、可见列、筛选、排序和分组配置更新。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+workflow-deploy",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "创建或更新完整 workflow-dsl/v1，强制 valid=true/flowId，并可启用后从 list 验证 RUNNING。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+workflow-disable",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "禁用工作流会影响业务自动化，显式发布高风险确认事实。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+workflow-enable",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "启用指定自动化工作流的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+workflow-get",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取单个自动化工作流详情的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+workflow-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "分页列出 Base 自动化工作流的一对一入口。",
+      "availability": "available"
     },
     {
       "suite": "read",
@@ -1964,7 +2681,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "一体化创建会话、上传、确认转换并轮询导入结果。",
+      "semantic_delta": "一体化创建会话、上传、确认转换并轮询导入结果；白名单外格式自动改走文件上传原样入库（fallback=upload、converted=false）。",
       "availability": "available"
     },
     {

@@ -55,7 +55,7 @@ metadata:
 | `dws doc +fetch` | read | 读取完整或局部文档内容，并按 detail 控制保真度 |
 | `dws doc +find-doc` | read | 按关键词搜索云文档并投影关键字段（只读） |
 | `dws doc +grant-and-share` | write | 确保目标角色后按姓名逐人发送文档链接 |
-| `dws doc +import` | write | 上传本地文件并等待转换成在线文档对象 |
+| `dws doc +import` | write | 上传本地文件并等待转换成在线文档对象；白名单外格式自动改走文件上传原样入库 |
 | `dws doc +inspect` | read | 聚合文档元信息，并按需附带样式、权限、历史、媒体和评论 |
 | `dws doc +list` | read | 列出文件夹或知识库下的直接子节点 |
 | `dws doc +media-download` | read | 安全下载文档正文附件到工作目录 |

@@ -143,39 +143,42 @@ func leafSpecCompositeLits(t *testing.T) []leafSpecLit {
 	}
 	dir := filepath.Dir(file)
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, dir, func(info os.FileInfo) bool {
-		name := info.Name()
-		return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go")
-	}, 0)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatalf("parse helpers: %v", err)
+		t.Fatalf("read helpers dir: %v", err)
 	}
 	var out []leafSpecLit
-	for _, pkg := range pkgs {
-		for _, f := range pkg.Files {
-			ast.Inspect(f, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
-				fun, ok := call.Fun.(*ast.Ident)
-				if !ok || fun.Name != "NewLeafCommand" || len(call.Args) != 1 {
-					return true
-				}
-				lit, ok := call.Args[0].(*ast.CompositeLit)
-				if !ok {
-					return true
-				}
-				if typ, ok := lit.Type.(*ast.Ident); !ok || typ.Name != "LeafSpec" {
-					return true
-				}
-				out = append(out, leafSpecLit{
-					pos: fset.Position(lit.Pos()).String(),
-					lit: lit,
-				})
-				return true
-			})
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
 		}
+		parsed, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
+		if err != nil {
+			t.Fatalf("parse helpers file %s: %v", name, err)
+		}
+		ast.Inspect(parsed, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			fun, ok := call.Fun.(*ast.Ident)
+			if !ok || fun.Name != "NewLeafCommand" || len(call.Args) != 1 {
+				return true
+			}
+			lit, ok := call.Args[0].(*ast.CompositeLit)
+			if !ok {
+				return true
+			}
+			if typ, ok := lit.Type.(*ast.Ident); !ok || typ.Name != "LeafSpec" {
+				return true
+			}
+			out = append(out, leafSpecLit{
+				pos: fset.Position(lit.Pos()).String(),
+				lit: lit,
+			})
+			return true
+		})
 	}
 	if len(out) == 0 {
 		t.Fatal("no NewLeafCommand(LeafSpec{...}) literals found")

@@ -292,15 +292,15 @@ func TestCrossPlatformCoverageAitableToolResponseAndPaginationHelpers(t *testing
 		t.Fatalf("update view top-level: %v", err)
 	}
 
-	caller = &aitableTestCaller{responses: []string{`{"data":{"records":[{"id":1}],"nextCursor":"next"}}`}}
+	caller = &aitableTestCaller{responses: []string{`{"data":{"records":[{"id":1}],"totalCount":17}}`}}
 	out = installAitableDeps(t, caller)
-	if err := recordQueryFetchAll(map[string]any{}, 1); err != nil || !strings.Contains(out.String(), "totalCount") {
+	if err := recordQueryFetchAll(map[string]any{}, 1); err != nil || !strings.Contains(out.String(), `"totalCount": 17`) || !strings.Contains(out.String(), `"fetchedCount": 1`) {
 		t.Fatalf("paginated records = %q, %v", out.String(), err)
 	}
 	caller = &aitableTestCaller{responses: []string{"not-json"}}
 	out = installAitableDeps(t, caller)
-	if err := recordQueryFetchAll(map[string]any{}, 1); err != nil || !strings.Contains(out.String(), "not-json") {
-		t.Fatalf("raw first page = %q, %v", out.String(), err)
+	if err := recordQueryFetchAll(map[string]any{}, 1); err == nil || out.Len() != 0 {
+		t.Fatalf("invalid first page must fail without success output = %q, %v", out.String(), err)
 	}
 	caller = &aitableTestCaller{responses: []string{`{"records":[{"id":1}]}`}}
 	installAitableDeps(t, caller)

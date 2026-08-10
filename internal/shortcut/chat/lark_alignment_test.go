@@ -24,6 +24,7 @@ type larkAlignmentCall struct {
 
 type larkAlignmentCaller struct {
 	calls             []larkAlignmentCall
+	dryRun            bool
 	failTarget        string
 	failProductTool   string
 	failProductToolAt map[string]int
@@ -97,7 +98,7 @@ func (f *larkAlignmentCaller) CallReadTool(ctx context.Context, product, tool st
 }
 
 func (f *larkAlignmentCaller) Format() string { return "json" }
-func (f *larkAlignmentCaller) DryRun() bool   { return false }
+func (f *larkAlignmentCaller) DryRun() bool   { return f.dryRun }
 func (f *larkAlignmentCaller) Fields() string { return "" }
 func (f *larkAlignmentCaller) JQ() string     { return "" }
 
@@ -409,12 +410,12 @@ func TestCrossPlatformCoverageLarkAlignmentWriteMappings(t *testing.T) {
 		},
 		{
 			name:    "flag-list",
-			args:    []string{"chat", "+flag-list", "--cursor", "3", "--size", "50"},
+			args:    []string{"chat", "+flag-list", "--cursor", "3", "--size", "30"},
 			product: "im",
 			tool:    "list_message_favorites",
 			wantArgs: map[string]any{
 				"cursor": 3,
-				"size":   "50",
+				"size":   "30",
 			},
 		},
 	}
@@ -705,7 +706,7 @@ func TestCrossPlatformCoverageFindMessageSenderOpenDingTalkIDIgnoresUnrelatedNes
 	}
 }
 
-func TestChatListDefaultsToGroupsAndSupportsLarkAliases(t *testing.T) {
+func TestCrossPlatformCoverageChatListDefaultsToGroupsAndSupportsLarkAliases(t *testing.T) {
 	fake := &larkAlignmentCaller{
 		responses: map[string]string{
 			"im/list_all_conversations": `{
@@ -755,7 +756,7 @@ func TestChatListDefaultsToGroupsAndSupportsLarkAliases(t *testing.T) {
 	}
 }
 
-func TestChatListIncludesP2PAndRejectsInvalidTypes(t *testing.T) {
+func TestCrossPlatformCoverageChatListIncludesP2PAndRejectsInvalidTypes(t *testing.T) {
 	fake := &larkAlignmentCaller{
 		responses: map[string]string{
 			"im/list_all_conversations": `{
@@ -798,7 +799,7 @@ func TestChatListIncludesP2PAndRejectsInvalidTypes(t *testing.T) {
 	}
 }
 
-func TestChatListP2POnlyDropsGroups(t *testing.T) {
+func TestCrossPlatformCoverageChatListP2POnlyDropsGroups(t *testing.T) {
 	fake := &larkAlignmentCaller{
 		responses: map[string]string{
 			"im/list_all_conversations": `{

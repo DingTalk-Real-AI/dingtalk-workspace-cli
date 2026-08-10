@@ -50,6 +50,23 @@ func TestReviewerRouterWorkflowContract(t *testing.T) {
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
 		t.Fatalf("yaml.Unmarshal(%s) error = %v", path, err)
 	}
+	policyPath := filepath.Join(filepath.Dir(filepath.Dir(path)), "reviewer-routing.js")
+	policy, err := os.ReadFile(policyPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", policyPath, err)
+	}
+	for _, want := range []string{
+		"'wxianfeng'",
+		"'typefield'",
+		"'haofeng0705'",
+		"'hlzjsong'",
+		"resolveReviewRouting",
+		"unknown_paths",
+	} {
+		if !strings.Contains(string(policy), want) {
+			t.Errorf("reviewer routing policy is missing contract marker %q", want)
+		}
+	}
 
 	if len(workflow.On) != 1 {
 		t.Fatalf("workflow triggers = %v, want pull_request_target only", workflow.On)
@@ -84,18 +101,18 @@ func TestReviewerRouterWorkflowContract(t *testing.T) {
 	if job.If != "github.event.pull_request.draft == false" {
 		t.Fatalf("route.if = %q, want non-draft guard", job.If)
 	}
+	const checkoutSHA = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
 	const githubScriptSHA = "actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b"
-	if len(job.Steps) != 1 || job.Steps[0].Uses != githubScriptSHA {
-		t.Fatalf("route steps = %#v, want one pinned base-owned github-script step", job.Steps)
+	if len(job.Steps) != 2 || job.Steps[0].Uses != checkoutSHA || job.Steps[0].With["ref"] != "${{ github.event.pull_request.base.sha }}" || job.Steps[0].With["persist-credentials"] != "false" || job.Steps[1].Uses != githubScriptSHA {
+		t.Fatalf("route steps = %#v, want trusted base checkout followed by pinned github-script", job.Steps)
 	}
 
-	script := job.Steps[0].With["script"]
+	script := job.Steps[1].With["script"]
 	for _, want := range []string{
-		"'sczheng189'",
-		"'shangguanxuan633-lab'",
-		"'audanye-sudo'",
-		"'wxianfeng'",
+		"REVIEWER_POOL",
+		"resolveReviewRouting",
 		"github.rest.pulls.get",
+		"github.rest.pulls.listFiles",
 		"currentPull.head.sha !== eventHeadSha",
 		"currentPull.state !== 'open'",
 		"currentPull.draft",
@@ -107,9 +124,10 @@ func TestReviewerRouterWorkflowContract(t *testing.T) {
 		"reviewer.toLowerCase() !== author",
 		"reviewer.toLowerCase() !== latestPusher",
 		"pullRequest.requested_reviewers",
-		"pullRequest.requested_teams",
+		"existingRequestedReviewers",
 		"github.rest.pulls.listReviews",
 		"['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes",
+		"currentHeadReviewers",
 		"review.commit_id === headSha",
 		"['APPROVED', 'CHANGES_REQUESTED'].includes(review.state)",
 		"review.state === 'CHANGES_REQUESTED'",
@@ -117,7 +135,10 @@ func TestReviewerRouterWorkflowContract(t *testing.T) {
 		"state: 'open'",
 		"loads.set(candidate, loads.get(candidate) + 1)",
 		"loads.get(left) - loads.get(right)",
-		"for (const reviewer of ranked)",
+		"routing.requiredReviewers",
+		"reviewerCandidates",
+		"requestReviewersWithFallback",
+		"satisfiedReviewers",
 		"github.rest.pulls.requestReviewers",
 		"trying the next candidate",
 		"Reviewer routing hit an unexpected error",
@@ -131,7 +152,6 @@ func TestReviewerRouterWorkflowContract(t *testing.T) {
 	}
 
 	for _, forbidden := range []string{
-		"actions/checkout",
 		"['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED']",
 		"PeterGuy326",
 		"core.setFailed",

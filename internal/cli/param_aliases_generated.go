@@ -568,9 +568,9 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "chat +flag-list",
 		Aliases: map[string]string{
-			"limit": "size",
+			"limit": "page-size",
 		},
-		Blocked: []string{"count", "max", "max-results", "max-size", "page", "page-size", "per-page"},
+		Blocked: []string{"count", "max", "max-results", "max-size", "page", "per-page"},
 	},
 	{
 		CLIPath: "chat +group-members",

@@ -458,11 +458,11 @@ func TestCrossPlatformCoverageChatMessagesValidationAndFailureBoundaries(t *test
 	}{
 		{name: "single read failure", failAt: 1, args: []string{"--group", "cid123456789"}, wantError: true},
 		{name: "all first read failure", failAt: 1, args: []string{"--group", "cid123456789", "--page-all"}, wantError: true},
-		{name: "all later read failure", responses: []string{`{"result":{"messages":[{"openMessageId":"m1","createTime":"2"}],"hasMore":true}}`}, failAt: 2, args: []string{"--group", "cid123456789", "--page-all"}, wantError: true},
+		{name: "all later read failure", responses: []string{`{"result":{"messages":[{"openMessageId":"m1","createTime":"2"}],"hasMore":true,"nextCursor":1767225600123}}`}, failAt: 2, args: []string{"--group", "cid123456789", "--page-all"}, wantError: true},
 		{name: "missing pagination", responses: []string{`{"result":{"messages":[]}}`}, args: []string{"--group", "cid123456789", "--page-all"}, wantError: true},
 		{name: "empty page with continuation", responses: []string{`{"result":{"messages":[],"hasMore":true}}`}, args: []string{"--group", "cid123456789", "--page-all"}, wantError: true},
 		{name: "result limit without boundary", responses: []string{`{"result":{"messages":[{"openMessageId":"m1"},{"openMessageId":"m2"}],"hasMore":true}}`}, args: []string{"--group", "cid123456789", "--page-all", "--max-results", "1"}, wantError: true},
-		{name: "result limit with boundary", responses: []string{`{"result":{"messages":[{"openMessageId":"m1","createTime":"2"},{"openMessageId":"m2","createTime":"1"}],"hasMore":true}}`}, args: []string{"--group", "cid123456789", "--page-all", "--max-results", "1"}},
+		{name: "result limit with boundary", responses: []string{`{"result":{"messages":[{"openMessageId":"m1","createTime":"2"}],"hasMore":true,"nextCursor":1767225600123}}`}, args: []string{"--group", "cid123456789", "--page-all", "--max-results", "1"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &smartCoverageCaller{

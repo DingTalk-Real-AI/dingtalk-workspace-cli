@@ -190,23 +190,23 @@ func TestChatListFavoritesSuppliesOpenDefaults(t *testing.T) {
 func TestChatListFavoritesMapsExplicitPagination(t *testing.T) {
 	caller := &chatFavoritesCaller{}
 	err := executeChatFavoritesCommand(t, caller,
-		"message", "list-favorites", "--cursor", "42", "--size", "50")
+		"message", "list-favorites", "--cursor", "42", "--size", "30")
 	if err != nil {
 		t.Fatalf("list-favorites returned error: %v", err)
 	}
 
-	want := map[string]any{"cursor": int64(42), "size": "50"}
+	want := map[string]any{"cursor": int64(42), "size": "30"}
 	if len(caller.calls) != 1 || caller.calls[0].productID != "im" || caller.calls[0].toolName != "list_message_favorites" || !reflect.DeepEqual(caller.calls[0].args, want) {
 		t.Fatalf("calls = %#v, want im/list_message_favorites %#v", caller.calls, want)
 	}
 }
 
 func TestChatListFavoritesRejectsInvalidSize(t *testing.T) {
-	for _, size := range []string{"-1", "0", "101"} {
+	for _, size := range []string{"-1", "0", "31"} {
 		t.Run(size, func(t *testing.T) {
 			caller := &chatFavoritesCaller{}
 			err := executeChatFavoritesCommand(t, caller, "message", "list-favorites", "--size", size)
-			if err == nil || !strings.Contains(err.Error(), "--size must be between 1 and 100") {
+			if err == nil || !strings.Contains(err.Error(), "--size must be between 1 and 30") {
 				t.Fatalf("error = %v, want size validation error", err)
 			}
 			if got := apperrors.ExitCode(err); got != 3 {

@@ -9,8 +9,8 @@
 | 给姓名发简单文本 | `+dm` | 先查人再原子发送 |
 | 给群名发简单文本 | `+send-to-group` | 先搜群再原子发送 |
 | 文件、Bot、Webhook、复杂 @、幂等 | `+messages-send` | 为不同身份各走一套原子入口 |
-| 浏览指定会话 | `+chat-messages` | 跨会话搜索命令 |
-| 跨会话或多维过滤 | `+search-msg` | 单会话浏览命令 |
+| 读取或导出指定会话，可附带发送者姓名 | `+chat-messages`；姓名用非必填 `--sender-query` | 无稳定 ID 返回全部，有则读后筛选；不补跑搜索 |
+| 直接按发送者、关键词、@对象或消息类型搜索 | `+search-msg` | 条件检索优先，可限定单个或跨多个会话 |
 | 已知消息 IDs 取详情 | `+messages-mget` | 重新搜索关键词 |
 | @我的消息 | `+at-me` | 全量消息后本地猜测 @ |
 | 已知 thread/topic ID 的回复 | `+thread-replies` | 普通消息列表 |

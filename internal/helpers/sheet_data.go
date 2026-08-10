@@ -129,6 +129,7 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
   --match-case           区分大小写（默认 false）
   --match-entire-cell    完整单元格匹配（默认 false）
   --use-regexp           使用正则表达式匹配（默认 false）
+  --match-formula        在公式文本中查找替换（默认 false，替换公式源码而非显示值）
   --include-hidden       包含隐藏行/列（默认 false）
   --range                限定替换范围，A1 表示法（不传时在整个工作表中替换）
 
@@ -166,6 +167,8 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			toolArgs["matchEntireCell"] = matchEntireCell
 			useRegExp, _ := cmd.Flags().GetBool("use-regexp")
 			toolArgs["useRegExp"] = useRegExp
+			matchFormula, _ := cmd.Flags().GetBool("match-formula")
+			toolArgs["matchFormulaText"] = matchFormula
 			includeHidden, _ := cmd.Flags().GetBool("include-hidden")
 			toolArgs["includeHidden"] = includeHidden
 			return callMCPTool("replace_all", toolArgs)
@@ -198,6 +201,7 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "find", Property: "text"},
+				{Name: "match-formula", Property: "matchFormulaText"},
 				{Name: "node", Property: "nodeId"},
 				{Name: "replacement", Property: "replaceText"},
 				{Name: "use-regexp", Property: "useRegExp"},
@@ -212,6 +216,7 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 	replaceCmd.Flags().Bool("match-case", false, "区分大小写 (默认 false)")
 	replaceCmd.Flags().Bool("match-entire-cell", false, "完整单元格匹配")
 	replaceCmd.Flags().Bool("use-regexp", false, "启用正则表达式匹配")
+	replaceCmd.Flags().Bool("match-formula", false, "在公式文本中查找替换（默认 false）")
 	replaceCmd.Flags().Bool("include-hidden", false, "包含隐藏行/列")
 
 	appendCmd := &cobra.Command{

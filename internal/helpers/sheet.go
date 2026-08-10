@@ -44,6 +44,7 @@ func newSheetCommand() *cobra.Command {
 
 命令结构:
   dws sheet create                              创建钉钉表格文档
+  dws sheet create-with-data                     创建表格文档并写入初始数据（可选样式）
   dws sheet list                                获取全部工作表列表
   dws sheet info                                获取指定工作表详情
   dws sheet new                                 新建工作表
@@ -110,6 +111,7 @@ func newSheetCommand() *cobra.Command {
   dws sheet chart update                         更新浮动图表
   dws sheet chart delete                         删除浮动图表
   dws sheet export                              导出表格为 xlsx（异步任务一站式：提交→轮询→可选下载）
+  dws sheet export-csv                          导出单个工作表为纯 CSV（同步，可落盘）
   dws sheet import                              导入 xlsx/xls 为在线电子表格
   dws sheet template list                       获取表格模板列表
   dws sheet template search                     搜索表格模板
@@ -159,6 +161,10 @@ func newSheetCommand() *cobra.Command {
 			},
 		},
 	})
+	// 建表带初始数据、csv 同步导出都是与既有叶子不同的接口种类（一条 composite
+	// 编排、一条 get_range_as_csv 直连），各自独立成叶子，不挂到 create / export 上。
+	createWithDataCmd := newSheetCreateWithDataCmd()
+	exportCsvCmd := newSheetExportCsvCmd()
 	importCmd := newSheetImportCmd()
 	templateCmd := newSheetTemplateCmd()
 	tableCmds := newTableCmds()
@@ -238,7 +244,7 @@ func newSheetCommand() *cobra.Command {
 	standaloneCmds = append(standaloneCmds, mediaCmds...)
 	standaloneCmds = append(standaloneCmds, floatImageCmds...)
 	standaloneCmds = append(standaloneCmds, tableCmds...)
-	standaloneCmds = append(standaloneCmds, exportCmd, importCmd, batchUpdateCmd)
+	standaloneCmds = append(standaloneCmds, exportCmd, exportCsvCmd, importCmd, batchUpdateCmd, createWithDataCmd)
 
 	// Register cross-product aliases
 	for _, cmd := range standaloneCmds {

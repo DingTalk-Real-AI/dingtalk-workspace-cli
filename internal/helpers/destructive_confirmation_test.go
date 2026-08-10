@@ -81,6 +81,53 @@ func requireTypedConfirmationError(t *testing.T, err error) {
 	}
 }
 
+func TestChatChmodRequiresConfirmationBeforeRemoteCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newChatCommand,
+		"chmod", "chat.message:send",
+		"--agentCode", "wukong",
+		"--grant-type", "timed",
+		"--ttl", "24h",
+		"--conversation-id", "cidX",
+	)
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("expected 0 MCP calls before --yes, got %d: %+v", len(caller.calls), caller.calls)
+	}
+}
+
+func TestChatChmodCallsRemoteWithExactArgsWhenConfirmed(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newChatCommand,
+		"chmod", "chat.message:send",
+		"--agentCode", "wukong",
+		"--grant-type", "timed",
+		"--ttl", "24h",
+		"--conversation-id", "cidX",
+		"--yes",
+	)
+	if err != nil {
+		t.Fatalf("chat chmod with --yes returned error: %v", err)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("expected exactly 1 MCP call, got %d: %+v", len(caller.calls), caller.calls)
+	}
+	call := caller.calls[0]
+	if call.productID != "im" || call.toolName != "chat_permission_grant" {
+		t.Fatalf("tool call = %s/%s, want im/chat_permission_grant", call.productID, call.toolName)
+	}
+	wantArgs := map[string]any{
+		"agentCode":   "wukong",
+		"scope":       "chat.message:send",
+		"grantType":   "timed",
+		"ttl":         "24h",
+		"grantParams": `{"conversationId":"cidX","openCid":"cidX","openConversationId":"cidX"}`,
+	}
+	if !reflect.DeepEqual(call.args, wantArgs) {
+		t.Fatalf("tool args = %#v, want %#v", call.args, wantArgs)
+	}
+}
+
 type guardedStepCaller struct {
 	calls  []guardedMutationCall
 	steps  []string

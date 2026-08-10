@@ -5,6 +5,7 @@
 
 > **支持的文件格式**：docx, doc, xlsx, xls, md, txt, xmind, mark
 > **文件大小限制**：20MB
+> **不支持转换的格式**：白名单外的所有格式（html/pdf/zip/无扩展名等）不报错，CLI 自动改走文件上传链路，以原文件形式存入 `--folder`/`--workspace` 指定的文档空间/知识库位置（同样受 20MB 上限约束）；JSON 结果带 `fallback=upload`、`converted=false` 标记，表示产出文件对象而非在线文档；需要"可编辑在线文档"时先把内容转为 md 再导入；目标是钉盘时直接用 `dws drive upload`。
 
 ---
 
@@ -65,6 +66,7 @@ Flags:
 - `import` 是一体化命令，一条命令自动完成创建会话→上传→确认→轮询，**无需手动编排**。CLI 内部使用渐进式退避轮询（最多约 5 分钟）。
 - `import` 超时或中断后，CLI 会输出 `taskId`，可用 `dws doc import get --task-id <taskId>` 手动查询任务状态。
 - 支持的文件格式：docx, doc, xlsx, xls, md, txt, xmind, mark（共 8 种）。
+- 白名单外格式（html/pdf/zip/无扩展名等）不报错：自动改走文件上传链路，以原文件形式存入目标文档空间/知识库（stderr 有改道提示，同样受 20MB 上限约束），JSON 结果带 `fallback=upload`、`converted=false` 标记——返回文件对象而非在线文档，不得报告为"已转换"；要"可编辑在线文档"时先转 md 再导入，目标是钉盘时用 `dws drive upload`。
 - 文件大小限制：20MB。超过限制时 CLI 会直接报错，不会发起网络请求。
 - `--folder` 和 `--workspace` 至少传一个，不传会报错。如需导入到"我的文档"根目录，请先获取 workspaceId：`dws wiki space list --type myWikiSpace --format json`，然后传 `--workspace <workspaceId>`。
 - `--folder` 优先级高于 `--workspace`：两者都传时以 `--folder` 为准。

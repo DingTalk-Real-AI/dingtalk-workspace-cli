@@ -3,7 +3,8 @@
 ## 使用场景
 
 用户说"创建表格/新建电子表格":
-- 创建表格文档 → `create`
+- 创建空表格文档 → `create`
+- 创建并写入初始数据（可选样式）→ `create-with-data`（`--values` / `--sheets` 必须给一个）
 
 用户说"看工作表/有哪些工作表/表格结构":
 - 列出工作表 → `list`
@@ -52,6 +53,76 @@ Flags:
 ```
 
 > **ID 格式约束**：`--folder` 只接受 UUID 格式的 `fileId`（如 `ZgpG2NdyVXYOR2D5UGDok65MJMwvDqPk`）或 alidocs 文件夹 URL。`drive list` 返回中有 `dentryId`（纯数字，如 `218595998810`）和 `fileId`（UUID 格式）两个字段，**必须使用 `fileId`，禁止使用 `dentryId`**，传入纯数字会导致命令失败。
+
+### 创建表格文档并写入初始数据
+```
+Usage:
+  dws sheet create-with-data [flags]
+Example:
+  dws sheet create-with-data --name "名单" --values '[["姓名","分数"],["张三","90"]]'
+  dws sheet create-with-data --name "报表" --sheets '[{"name":"一月","columns":["项目","金额"],"data":[["房租",5000]]}]'
+Flags:
+      --name string        表格名称 (必填)
+      --folder string      目标文件夹 ID (dentryUuid 格式) 或 URL；禁止传入纯数字 dentryId
+      --workspace string   目标知识库 ID
+      --values string      初始数据，二维 JSON 数组，写入默认工作表 (与 --sheets 二选一)
+      --sheets string      多工作表 typed table JSON (与 --values 二选一)
+      --styles string      建表时一并应用的视觉处理 JSON（需与 --values 或 --sheets 搭配）
+```
+
+建表并写入初始数据的多步编排：建文档 → 探活 → 定位默认工作表 → 写数据 → 回读校验 →（可选）应用样式。**只要一个空表格请用 `dws sheet create`**（单次调用）；本命令必须给数据。
+
+**写入初始数据**（`--values` 与 `--sheets` **二选一，必须给一个**）：
+
+- `--values`：二维 JSON 数组，裸值写入默认工作表 A1 起。适合单表快速建表，无表头/类型语义，内部复用 csv-put 通道，自动识别数字/布尔。单元格只能是字符串/数字/布尔/null；上限 30000 单元格、编码为 CSV 后 2000000 字符。
+- `--sheets`：typed table 数组，一次创建多个带数据的工作表，内部复用 table-put 通道。每项形如
+  `{"name":"表名","columns":["列1","列2"],"data":[[...]],"dtypes":{...},"formats":{...},"cellStyles":[...]}`；
+  `name`、`columns` **必填**。第一个条目写入默认工作表（自动重命名为其 `name`，避免残留空表），其余按 `name` 自动新建。
+  - 字段名为 camelCase，只接受 `name` / `columns` / `data` / `dtypes` / `formats` / `cellStyles` / `startCell` / `mode`(`overwrite`|`append`) / `header` / `allowOverwrite`；**未知键与 snake_case 变体一律拒绝**（服务端会静默丢弃写错的键，`{"datas":[...]}` 会写出一张只有表头的表却报成功）
+  - **不接受 `sheetId`**：文档此刻还不存在，工作表只能用 `name` 指定
+  - `columns` 为非空字符串数组、列名不可为空/重复（按 trim 后比较）；`data` 每行长度须等于 `columns`，单元格只能是字符串/数字/布尔/null
+  - `dtypes` / `formats` 的键须是 `columns` 里的列名（服务端按列名查表，写错既不报错也不生效）
+  - 单表写入上限 30000 单元格（写表头时含表头行）
+
+**建表时一并应用样式**（`--styles`，顶层键对齐飞书 snake_case，列表项内字段兼容 camelCase；两级都拒绝未知键）：
+
+```json
+{"styles":[{"name":"表名",
+  "cell_styles":[{"range":"A1:D1","font_weight":"bold","background_color":"#FFF2CC","number_format":"@"}],
+  "row_sizes":[{"range":"1:1","type":"pixel","size":28}],
+  "col_sizes":[{"range":"A:D","type":"pixel","size":120}],
+  "cell_merges":[{"range":"A1:B1","merge_type":"all"}]}]}
+```
+
+- 每项至少给 `cell_styles` / `row_sizes` / `col_sizes` / `cell_merges` 之一
+- 配 `--sheets` 时 styles 的**项数/顺序/name 必须与子表一一对应**；配 `--values` 时只给 1 项（`name` 被忽略）
+- 数据写入后按 `cell_styles` → `row_sizes` → `col_sizes` → `cell_merges` 顺序执行（**非原子**）
+- `row_sizes.type`：`pixel`（需 `size`）/ `standard`（恢复默认行高）/ `auto`（按内容自适应）
+- `col_sizes.type`：`pixel`（需 `size`）/ `standard`（恢复默认列宽）——与飞书一致，**列宽不提供 `auto`**
+- `size` 必须是正整数（小数会被拒绝而不是静默取整，避免得到与配置不符的行高列宽）；`row_sizes.range` 形如 `"1:3"`、`col_sizes.range` 形如 `"A:C"`，带多余字符一律拒绝
+- `merge_type` 取 `all` / `rows` / `columns`
+
+**行为要点**：
+- 所有 JSON 结构、字段类型与枚举都在**创建文档之前**校验（`--sheets` 按 table-put 的输入契约逐字段校验），非法配置直接失败，不会留下白建的空文档
+- 创建后 CLI 会先探活（新建文档服务端仍在初始化，此时写入可能返回成功但不落盘），再写数据
+- 写完会回读**首个预期非空单元格**校验确实落盘（不是死盯 A1：`--sheets` 会按 `startCell` / `header` / `mode` 推算实际写入位置）；若未落盘会报错并提示用 `csv-put` / `range update` / `table-put` 补写
+- 报错信息里始终带上已创建的 `nodeId`，便于在部分成功时继续操作同一份文档
+
+示例：
+
+```bash
+# 创建并写入初始数据（默认工作表，裸二维值）
+dws sheet create-with-data --name "名单" --values '[["姓名","分数"],["张三","90"]]'
+
+# 创建多个带数据的工作表
+dws sheet create-with-data --name "报表" --sheets '[{"name":"一月","columns":["项目","金额"],"data":[["房租",5000]]},{"name":"二月","columns":["项目","金额"],"data":[["房租",5000]]}]'
+
+# 创建 + 写数据 + 一并应用样式（表头加粗黄底、行高、列宽）
+dws sheet create-with-data --name "带样式" --values '[["姓名","分数"],["张三","90"]]' \
+  --styles '{"styles":[{"name":"Sheet1","cell_styles":[{"range":"A1:B1","font_weight":"bold","background_color":"#FFF2CC"}],"row_sizes":[{"range":"1:1","type":"pixel","size":28}],"col_sizes":[{"range":"A:B","type":"pixel","size":120}]}]}'
+```
+
+> `--folder` / `--workspace` 的 ID 格式约束与 `dws sheet create` 完全一致（只接受 UUID 格式的 `fileId` 或 alidocs URL）。
 
 ### 获取全部工作表列表
 ```
