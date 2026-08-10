@@ -27,7 +27,6 @@ func runDingCoverageCommand(t *testing.T, caller *productExampleCaller, args ...
 
 func TestCrossPlatformCoverageDingOpenDingIDFlagsUseDingID(t *testing.T) {
 	for _, path := range [][]string{
-		{"message", "receiver-status"},
 		{"message", "recall-personal"},
 		{"message", "recall"},
 	} {
@@ -50,7 +49,6 @@ func TestCrossPlatformCoverageDingOpenDingIDFlagsUseDingID(t *testing.T) {
 
 func TestCrossPlatformCoverageDingHelpHidesLegacyID(t *testing.T) {
 	for _, path := range [][]string{
-		{"message", "receiver-status"},
 		{"message", "recall-personal"},
 		{"message", "recall"},
 	} {
@@ -82,14 +80,6 @@ func TestCrossPlatformCoverageDingIDAliasCompatibilityAndConflict(t *testing.T) 
 	}
 	if caller.calls != 1 {
 		t.Fatalf("legacy calls = %d, want 1", caller.calls)
-	}
-
-	caller = &productExampleCaller{}
-	if err := runDingCoverageCommand(t, caller, "message", "receiver-status", "--id=ding-legacy"); err != nil {
-		t.Fatalf("receiver-status legacy --id failed: %v", err)
-	}
-	if caller.calls != 1 {
-		t.Fatalf("receiver-status legacy calls = %d, want 1", caller.calls)
 	}
 
 	caller = &productExampleCaller{}

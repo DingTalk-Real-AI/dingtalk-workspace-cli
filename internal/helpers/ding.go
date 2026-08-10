@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
@@ -305,7 +304,6 @@ func newDingCommand() *cobra.Command {
 	dingMessageListCmd.Flags().Int64("cursor", 0, "分页游标（首次传 0，翻页传返回的 nextCursor）")
 	dingMessageListCmd.Flags().String("type", "ALL", "消息类型: ALL / UNREAD / SEND / NEW_COMMENT / DELETED（必填，服务端不接受空值；默认 ALL 全部）")
 	dingMessageReceiverStatusCmd.Flags().String("ding-id", "", "DING 消息 openDingId (必填)")
-	installDingIDAlias(dingMessageReceiverStatusCmd)
 	_ = dingMessageReceiverStatusCmd.MarkFlagRequired("ding-id")
 	dingMessageSendPersonalCmd.Flags().String("users", "", "接收者 openDingTalkId 列表，逗号分隔 (必填)")
 	_ = dingMessageSendPersonalCmd.MarkFlagRequired("users")
@@ -330,15 +328,10 @@ func newDingCommand() *cobra.Command {
 }
 
 func installDingIDAlias(cmd *cobra.Command) {
-	corecmd.RegisterFlagAliases(cmd, corecmd.FlagSpec{
-		Name:    "ding-id",
-		Kind:    corecmd.KindString,
-		Usage:   "DING 消息 openDingId (必填)",
-		Aliases: []string{"id"},
-	})
+	registerHelperFlagAliases(cmd, "ding-id", "id")
 	oldPreRunE := cmd.PreRunE
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if err := corecmd.SyncFlagAliases(cmd); err != nil {
+		if err := syncHelperFlagAliases(cmd); err != nil {
 			return err
 		}
 		if oldPreRunE != nil {

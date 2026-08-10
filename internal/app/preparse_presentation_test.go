@@ -58,8 +58,8 @@ func TestCrossPlatformCoverageLeadingPersistentFlagVariantsReachTheRealCommand(t
 func TestCrossPlatformCoveragePreParseConflictHonorsErrorPresentationFlags(t *testing.T) {
 	root := NewSchemaSourceRootCommand()
 	args := []string{
-		"chat", "chmod",
-		"--user-id", "123", "--staff-id", "456",
+		"chat", "message", "send",
+		"--user-id", "123", "--user", "456", "--text", "hi",
 		"--format", "table", "--debug",
 	}
 	_, err := pipeline.RunPreParseArgs(root, newPipelineEngine(), args)

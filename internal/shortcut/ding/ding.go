@@ -97,7 +97,7 @@ var ReceiverStatus = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "ding-id", Type: shortcut.FlagString, Desc: "openDingId", Required: true, Aliases: []string{"id"}},
+		{Name: "ding-id", Type: shortcut.FlagString, Desc: "openDingId", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("list_ding_receiver_status", map[string]any{
@@ -202,15 +202,15 @@ var RecallPersonal = shortcut.Shortcut{
 			AgentSummary: "撤回本人发起的 DING",
 			UseWhen:      []string{"当你以本人身份发出的某条 DING 发错人或内容有误、想收回时使用（对应 send-personal/send-by-message 发出的 DING）；需提供该 DING 的 openDingId，会真实撤回它，接收人将不再看到该提醒。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws ding +recall-personal --ding-id <DING_ID>"},
+			Examples:     []string{"dws ding +recall-personal --id <ID>"},
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "ding-id", Type: shortcut.FlagString, Desc: "openDingId", Required: true, Aliases: []string{"id"}},
+		{Name: "id", Type: shortcut.FlagString, Desc: "openDingId", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("recall_personal_ding", map[string]any{
-			"openDingId": rt.Str("ding-id"),
+			"openDingId": rt.Str("id"),
 		})
 	},
 }

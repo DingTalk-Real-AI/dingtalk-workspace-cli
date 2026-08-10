@@ -513,21 +513,22 @@ func TestCrossPlatformCoverageIMUserIDHallucinationRoutes(t *testing.T) {
 		{command: "chat +chat-role-query-user", want: "user"},
 		{command: "chat +chat-role-set-user", want: "user"},
 		{command: "chat +messages-list-direct", want: "user"},
-		{command: "chat chmod", want: "user-id"},
-		{command: "chat message list", want: "user-id"},
-		{command: "chat message send", want: "user-id"},
+		{command: "chat chmod", want: "user"},
+		{command: "chat message list", want: "user"},
+		{command: "chat message send", want: "user"},
 
-		// These helper commands keep --user/--userId as hidden runtime aliases,
-		// while the public spelling remains canonical for Agent-visible inputs.
-		{command: "chat conversation-info", want: "user-id"},
-		{command: "chat group transfer-owner", want: "user-id"},
-		{command: "chat group-role query-user", want: "user-id"},
-		{command: "chat group-role remove-user", want: "user-id"},
-		{command: "chat group-role set-user", want: "user-id"},
-		{command: "chat group set-admin", want: "user-id"},
-		{command: "chat group-mute-member", want: "user-id"},
-		{command: "chat message read-status", want: "user-id"},
-		{command: "chat message search-advanced", want: "user-id"},
+		// These commands already own a hidden --userId compatibility flag.
+		// The format/spelling handler rewrites --user-id to that real flag, and
+		// the command's existing flagOrFallback wiring preserves its semantics.
+		{command: "chat conversation-info", want: "userId"},
+		{command: "chat group transfer-owner", want: "userId"},
+		{command: "chat group-role query-user", want: "userId"},
+		{command: "chat group-role remove-user", want: "userId"},
+		{command: "chat group-role set-user", want: "userId"},
+		{command: "chat group set-admin", want: "userId"},
+		{command: "chat group-mute-member", want: "userId"},
+		{command: "chat message read-status", want: "userId"},
+		{command: "chat message search-advanced", want: "userId"},
 	}
 
 	for _, test := range tests {
@@ -576,11 +577,8 @@ func TestCrossPlatformCoverageHiddenIMListDirectRemainsOutsideCentralAliasTable(
 		t.Fatal("RunPreParseArgs returned nil context")
 	}
 	flagArgs := ctx.Args[len(strings.Fields(command)):]
-	if len(flagArgs) != 2 || flagArgs[0] != "--user-id" || flagArgs[1] != "fixture-user" {
-		t.Fatalf("hidden command args = %v, want canonical --user-id fixture-user without central alias rewrite", flagArgs)
-	}
-	if err := leaf.ParseFlags(flagArgs); err != nil {
-		t.Fatalf("hidden command ParseFlags(%v) error = %v", flagArgs, err)
+	if err := leaf.ParseFlags(flagArgs); err == nil || !strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("hidden command ParseFlags(%v) error = %v, want unknown flag", flagArgs, err)
 	}
 }
 

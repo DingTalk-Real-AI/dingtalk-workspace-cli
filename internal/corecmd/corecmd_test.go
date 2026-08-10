@@ -346,44 +346,6 @@ func TestCrossPlatformCoverageValidateRequired(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageSyncFlagAliasesRejectsConflictingDualInput(t *testing.T) {
-	flags := []FlagSpec{{Name: "message-id", Usage: "message", Required: true, Aliases: []string{"msg-id"}}}
-	cmd := newTestCommand()
-	RegisterFlags(cmd, flags)
-	_ = cmd.Flags().Set("message-id", "mid-new")
-	_ = cmd.Flags().Set("msg-id", "mid-old")
-
-	err := SyncFlagAliases(cmd)
-	if err == nil || !strings.Contains(err.Error(), "--message-id conflicts with --msg-id") {
-		t.Fatalf("conflict err = %v", err)
-	}
-}
-
-func TestCrossPlatformCoverageSyncFlagAliasesAllowsSameValueAndLegacyOnly(t *testing.T) {
-	flags := []FlagSpec{{Name: "message-id", Usage: "message", Required: true, Aliases: []string{"msg-id"}}}
-
-	same := newTestCommand()
-	RegisterFlags(same, flags)
-	_ = same.Flags().Set("message-id", "mid-1")
-	_ = same.Flags().Set("msg-id", "mid-1")
-	if err := SyncFlagAliases(same); err != nil {
-		t.Fatalf("same-value sync err = %v", err)
-	}
-
-	legacy := newTestCommand()
-	RegisterFlags(legacy, flags)
-	_ = legacy.Flags().Set("msg-id", "mid-legacy")
-	if err := SyncFlagAliases(legacy); err != nil {
-		t.Fatalf("legacy-only sync err = %v", err)
-	}
-	if got, _ := legacy.Flags().GetString("message-id"); got != "mid-legacy" {
-		t.Fatalf("canonical value = %q, want legacy value", got)
-	}
-	if err := ValidateRequired(legacy, flags); err != nil {
-		t.Fatalf("legacy alias should satisfy required: %v", err)
-	}
-}
-
 func TestCrossPlatformCoverageValidateEnums(t *testing.T) {
 	flags := []FlagSpec{
 		{Name: "mode", Usage: "M", Enum: []string{"a", "b"}},

@@ -79,7 +79,7 @@ func TestCrossPlatformCoveragePATRetryRemainingPureAndWaitCoverage(t *testing.T)
 	if ok, err := WaitForPatAuthorization(context.Background(), "", &out); err != nil || ok {
 		t.Fatalf("timed out authorization = %v, %v", ok, err)
 	}
-	patAuthorizationTimeout = 50 * time.Millisecond
+	patAuthorizationTimeout = 5 * time.Millisecond
 	patAuthorizationPollInterval = time.Millisecond
 	patResolveAccessToken = func(context.Context, string, string) (string, error) {
 		return "", authpkg.ErrTokenDataNotFound

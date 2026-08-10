@@ -23,7 +23,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
@@ -381,6 +380,9 @@ func normalizeChatAliasFlag(cmd *cobra.Command, legacy, canonical, canonicalUsag
 	if legacyFlag == nil {
 		return
 	}
+	if legacy == "user" && canonical == "user-id" && flags.Lookup("sender-user-id") != nil {
+		return
+	}
 	if flags.Lookup(canonical) == nil {
 		flags.String(canonical, "", canonicalUsage)
 	}
@@ -394,12 +396,7 @@ func normalizeChatAliasFlag(cmd *cobra.Command, legacy, canonical, canonicalUsag
 			_ = cmd.MarkFlagRequired(canonical)
 			clearChatRequiredFlag(legacyFlag)
 		}
-		corecmd.RegisterFlagAliases(cmd, corecmd.FlagSpec{
-			Name:    canonical,
-			Kind:    corecmd.KindString,
-			Usage:   canonicalFlag.Usage,
-			Aliases: []string{legacy},
-		})
+		registerHelperFlagAliases(cmd, canonical, legacy)
 		installChatAliasSync(cmd)
 	}
 	legacyFlag.Hidden = true
@@ -417,14 +414,14 @@ func installChatAliasSync(cmd *cobra.Command) {
 	cmd.Annotations[chatAliasSyncAnnotation] = "true"
 	oldPreRun := cmd.PreRun
 	cmd.PreRun = func(cmd *cobra.Command, args []string) {
-		_ = corecmd.SyncFlagAliases(cmd)
+		_ = syncHelperFlagAliases(cmd)
 		if oldPreRun != nil {
 			oldPreRun(cmd, args)
 		}
 	}
 	oldPreRunE := cmd.PreRunE
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if err := corecmd.SyncFlagAliases(cmd); err != nil {
+		if err := syncHelperFlagAliases(cmd); err != nil {
 			return err
 		}
 		if oldPreRunE != nil {
