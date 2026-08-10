@@ -36,25 +36,10 @@ import (
 
 const productDevApp = "devapp"
 
-// applyCursor forwards --cursor/--page-size into params, matching the helper's
-// pass-through pagination (pageSize defaults to 20, cursor omitted on page 1).
-func applyCursor(rt *shortcut.RuntimeContext, params map[string]any) {
-	if rt.Changed("cursor") {
-		if cur := rt.Str("cursor"); cur != "" {
-			params["cursor"] = cur
-		}
-	}
-	size := rt.Int("page-size")
-	if size < 1 {
-		size = 20
-	}
-	params["pageSize"] = size
-}
-
-// applyListAppCursor preserves list_dev_app's opaque cursor byte-for-byte while
-// leaving the shared cursor helper (and every other devapp shortcut) unchanged.
-func applyListAppCursor(rt *shortcut.RuntimeContext, params map[string]any) string {
-	applyCursor(rt, params)
+// applyCursor forwards --cursor/--page-size into params and returns the opaque
+// request cursor for response-contract validation. pageSize defaults to 20 and
+// cursor is omitted on page 1.
+func applyCursor(rt *shortcut.RuntimeContext, params map[string]any) string {
 	requestCursor := listAppRequestCursor(rt)
 	if rt.Changed("cursor") {
 		if requestCursor == "" {
@@ -63,6 +48,11 @@ func applyListAppCursor(rt *shortcut.RuntimeContext, params map[string]any) stri
 			params["cursor"] = requestCursor
 		}
 	}
+	size := rt.Int("page-size")
+	if size < 1 {
+		size = 20
+	}
+	params["pageSize"] = size
 	return requestCursor
 }
 
@@ -129,7 +119,7 @@ var ListApp = shortcut.Shortcut{
 	}, cursorFlags...),
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}
-		requestCursor := applyListAppCursor(rt, params)
+		requestCursor := applyCursor(rt, params)
 		if rt.Changed("name") {
 			params["name"] = rt.Str("name")
 		}
@@ -178,7 +168,9 @@ var ListApp = shortcut.Shortcut{
 	},
 }
 
-var listAppCollectionKeys = []string{"list", "items", "apps", "appList", "result", "data"}
+var listAppCollectionKeys = []string{
+	"list", "items", "apps", "appList", "permissions", "events", "versions", "result", "data",
+}
 
 type listAppPage struct {
 	apps       []any
@@ -196,44 +188,58 @@ type listAppPageCandidate struct {
 // must come from that same map; otherwise callers cannot safely distinguish a
 // terminal page from a truncated or conflicting response.
 func listAppParsePage(data map[string]any, requestCursor string) (listAppPage, error) {
+	return devAppListParsePage(data, requestCursor, "list_dev_app")
+}
+
+func devAppListParsePage(data map[string]any, requestCursor, tool string) (listAppPage, error) {
 	candidates, invalid := listAppPageCandidates(data)
 	if invalid || len(candidates) != 1 {
-		return listAppPage{}, listAppPaginationContractError()
+		return listAppPage{}, devAppPaginationContractError(tool)
 	}
 
 	candidate := candidates[0]
 	hasMoreValue, ok := candidate.envelope["hasMore"]
 	if !ok {
-		return listAppPage{}, listAppPaginationContractError()
+		return listAppPage{}, devAppPaginationContractError(tool)
 	}
 	hasMore, ok := hasMoreValue.(bool)
 	if !ok {
-		return listAppPage{}, listAppPaginationContractError()
+		return listAppPage{}, devAppPaginationContractError(tool)
 	}
 	nextCursorValue, ok := candidate.envelope["nextCursor"]
-	if !ok {
-		return listAppPage{}, listAppPaginationContractError()
-	}
-	nextCursor, ok := nextCursorValue.(string)
-	if !ok {
-		return listAppPage{}, listAppPaginationContractError()
-	}
 
 	if hasMore {
+		if !ok {
+			return listAppPage{}, devAppPaginationContractError(tool)
+		}
+		nextCursor, ok := nextCursorValue.(string)
+		if !ok {
+			return listAppPage{}, devAppPaginationContractError(tool)
+		}
 		if nextCursor == "" || nextCursor == requestCursor {
-			return listAppPage{}, listAppPaginationContractError()
+			return listAppPage{}, devAppPaginationContractError(tool)
 		}
-	} else {
-		if nextCursor != "" {
-			return listAppPage{}, listAppPaginationContractError()
+		return listAppPage{
+			apps:       candidate.apps,
+			hasMore:    true,
+			nextCursor: nextCursor,
+		}, nil
+	}
+
+	// Deployed devapp providers use hasMore as the terminal authority and may
+	// omit nextCursor or return null, an empty string, or the last observed
+	// cursor on a terminal page. Normalize all provider-compatible forms to an
+	// empty public cursor.
+	if ok && nextCursorValue != nil {
+		if _, ok := nextCursorValue.(string); !ok {
+			return listAppPage{}, devAppPaginationContractError(tool)
 		}
-		nextCursor = ""
 	}
 
 	return listAppPage{
 		apps:       candidate.apps,
-		hasMore:    hasMore,
-		nextCursor: nextCursor,
+		hasMore:    false,
+		nextCursor: "",
 	}, nil
 }
 
@@ -345,8 +351,12 @@ func listAppHasPageEvidence(envelope map[string]any) bool {
 }
 
 func listAppPaginationContractError() error {
+	return devAppPaginationContractError("list_dev_app")
+}
+
+func devAppPaginationContractError(tool string) error {
 	return apperrors.NewAPI(
-		"list_dev_app returned an invalid pagination contract",
+		tool+" returned an invalid pagination contract",
 		apperrors.WithReason("devapp_pagination_contract_invalid"),
 	)
 }
@@ -848,13 +858,22 @@ var PermissionList = shortcut.Shortcut{
 		if rt.Changed("api-status") {
 			params["apiStatus"] = rt.Str("api-status")
 		}
-		applyCursor(rt, params)
+		requestCursor := applyCursor(rt, params)
 		data, err := rt.CallMCPData(productDevApp, "list_dev_app_permissions", params)
 		if err != nil {
 			return err
 		}
-		permissions := permissionListProject(data)
-		return rt.Output(map[string]any{"count": len(permissions), "permissions": permissions})
+		page, err := devAppListParsePage(data, requestCursor, "list_dev_app_permissions")
+		if err != nil {
+			return err
+		}
+		permissions := permissionListProject(map[string]any{"items": page.apps})
+		return rt.Output(map[string]any{
+			"count":       len(permissions),
+			"permissions": permissions,
+			"hasMore":     page.hasMore,
+			"nextCursor":  page.nextCursor,
+		})
 	},
 }
 
@@ -1326,13 +1345,22 @@ var EventList = shortcut.Shortcut{
 		if rt.Changed("keyword") {
 			params["keyword"] = rt.Str("keyword")
 		}
-		applyCursor(rt, params)
+		requestCursor := applyCursor(rt, params)
 		data, err := rt.CallMCPData(productDevApp, "list_dev_app_events", params)
 		if err != nil {
 			return err
 		}
-		events := eventListProject(data)
-		return rt.Output(map[string]any{"count": len(events), "events": events})
+		page, err := devAppListParsePage(data, requestCursor, "list_dev_app_events")
+		if err != nil {
+			return err
+		}
+		events := eventListProject(map[string]any{"events": page.apps})
+		return rt.Output(map[string]any{
+			"count":      len(events),
+			"events":     events,
+			"hasMore":    page.hasMore,
+			"nextCursor": page.nextCursor,
+		})
 	},
 }
 
@@ -1513,13 +1541,22 @@ var VersionList = shortcut.Shortcut{
 	}, cursorFlags...),
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{"unifiedAppId": rt.Str("unified-app-id")}
-		applyCursor(rt, params)
+		requestCursor := applyCursor(rt, params)
 		data, err := rt.CallMCPData(productDevApp, "list_dev_app_versions", params)
 		if err != nil {
 			return err
 		}
-		versions := versionListProject(data)
-		return rt.Output(map[string]any{"count": len(versions), "versions": versions})
+		page, err := devAppListParsePage(data, requestCursor, "list_dev_app_versions")
+		if err != nil {
+			return err
+		}
+		versions := versionListProject(map[string]any{"items": page.apps})
+		return rt.Output(map[string]any{
+			"count":      len(versions),
+			"versions":   versions,
+			"hasMore":    page.hasMore,
+			"nextCursor": page.nextCursor,
+		})
 	},
 }
 
