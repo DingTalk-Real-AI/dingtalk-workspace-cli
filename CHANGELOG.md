@@ -11,10 +11,12 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 - **Fail-closed devapp list pagination** (#917) — the paginated `dws devapp`
   list shortcuts (`+list`, `+permission-list`, `+event-list`, and
   `+version-list`) now preserve `hasMore` and `nextCursor` with each single-page
-  result, forward opaque cursors unchanged, normalize deployed providers'
-  terminal missing, null, empty, or last-observed cursor to `nextCursor: ""`,
-  and reject malformed or ambiguous pagination pages instead of emitting
+  result, forward opaque cursors byte-for-byte (including surrounding or
+  whitespace-only values), normalize deployed providers' terminal missing,
+  null, empty, or last-observed cursor to `nextCursor: ""`, and reject malformed
+  or ambiguous pagination pages and unprojectable app items instead of emitting
   terminal-looking partial results.
+
 ## [1.0.58-beta.2] - 2026-08-10
 
 ### Added

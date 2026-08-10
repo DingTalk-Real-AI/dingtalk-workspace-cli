@@ -28,6 +28,10 @@ import (
 )
 
 func executeDevAppListRoot(t *testing.T, args ...string) (string, string, error) {
+	return executeDevAppRoot(t, "+list", args...)
+}
+
+func executeDevAppRoot(t *testing.T, command string, args ...string) (string, string, error) {
 	t.Helper()
 	helpers.InitDepsForTest(t, helpers.GetCaller())
 	root := NewRootCommand()
@@ -35,9 +39,44 @@ func executeDevAppListRoot(t *testing.T, args ...string) (string, string, error)
 	var stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs(append([]string{"devapp", "+list"}, args...))
+	root.SetArgs(append([]string{"devapp", command}, args...))
 	err := root.Execute()
 	return stdout.String(), stderr.String(), err
+}
+
+func TestCrossPlatformCoverageDevAppPaginatedShortcutsMock(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		command    string
+		collection string
+		args       []string
+	}{
+		{name: "apps", command: "+list", collection: "apps"},
+		{name: "permissions", command: "+permission-list", collection: "permissions", args: []string{"--unified-app-id", "X"}},
+		{name: "events", command: "+event-list", collection: "events", args: []string{"--unified-app-id", "X"}},
+		{name: "versions", command: "+version-list", collection: "versions", args: []string{"--unified-app-id", "X"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			args := append(append([]string(nil), test.args...), "--mock", "--format", "json")
+			stdout, stderr, err := executeDevAppRoot(t, test.command, args...)
+			if err != nil {
+				t.Fatalf("mock %s error = %v, stderr=%q", test.command, err, stderr)
+			}
+			if stderr != "" {
+				t.Fatalf("mock %s stderr = %q", test.command, stderr)
+			}
+
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+				t.Fatalf("decode mock %s output: %v, output=%q", test.command, err, stdout)
+			}
+			items, ok := payload[test.collection].([]any)
+			if len(payload) != 4 || !ok || len(items) != 0 || payload["count"] != float64(0) ||
+				payload["hasMore"] != false || payload["nextCursor"] != "" {
+				t.Fatalf("mock %s payload = %#v", test.command, payload)
+			}
+		})
+	}
 }
 
 func TestCrossPlatformCoverageDevAppListMockPaginationFormats(t *testing.T) {

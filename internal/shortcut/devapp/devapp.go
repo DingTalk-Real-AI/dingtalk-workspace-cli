@@ -42,9 +42,7 @@ const productDevApp = "devapp"
 func applyCursor(rt *shortcut.RuntimeContext, params map[string]any) string {
 	requestCursor := listAppRequestCursor(rt)
 	if rt.Changed("cursor") {
-		if requestCursor == "" {
-			delete(params, "cursor")
-		} else {
+		if requestCursor != "" {
 			params["cursor"] = requestCursor
 		}
 	}
@@ -350,6 +348,9 @@ func listAppHasPageEvidence(envelope map[string]any) bool {
 	return false
 }
 
+// DEC-DWS-917-R1B treats an unprojectable app item as a page-integrity failure:
+// silently dropping it could turn a real app into a false terminal "not found".
+// Keep the issue's frozen page-contract reason for both envelope and item failures.
 func listAppPaginationContractError() error {
 	return devAppPaginationContractError("list_dev_app")
 }

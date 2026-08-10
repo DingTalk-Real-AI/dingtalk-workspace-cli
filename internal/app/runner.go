@@ -590,11 +590,19 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	if r.globalFlags != nil && r.globalFlags.Mock {
 		invocation.Implemented = true
 		result := any([]any{})
-		if invocation.CanonicalProduct == "devapp" && invocation.Tool == "list_dev_app" {
-			result = map[string]any{
-				"apps":       []any{},
-				"hasMore":    false,
-				"nextCursor": "",
+		if invocation.CanonicalProduct == "devapp" {
+			collectionKey := map[string]string{
+				"list_dev_app":             "apps",
+				"list_dev_app_permissions": "items",
+				"list_dev_app_events":      "events",
+				"list_dev_app_versions":    "items",
+			}[invocation.Tool]
+			if collectionKey != "" {
+				result = map[string]any{
+					collectionKey: []any{},
+					"hasMore":     false,
+					"nextCursor":  "",
+				}
 			}
 		}
 		return executor.Result{
