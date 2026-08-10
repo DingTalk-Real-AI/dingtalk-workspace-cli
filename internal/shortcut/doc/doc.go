@@ -17,8 +17,11 @@
 package doc
 
 import (
+	"strings"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -77,6 +80,9 @@ var Search = shortcut.Shortcut{
 		{Name: "workspace-ids", Type: shortcut.FlagStringSlice, Desc: "按知识库 ID 过滤"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 10，最大 30)"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标 (上次结果的 nextPageToken)"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "有界读取全部后续页"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "20", Desc: "--page-all 最大页数"},
+		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "最多返回文档数"},
 	},
 	Tips: []string{`dws doc +search --query "会议纪要"`, `dws doc +search --extensions pdf,docx`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -111,18 +117,17 @@ var Search = shortcut.Shortcut{
 		if rt.Changed("workspace-ids") {
 			params["workspaceIds"] = rt.StrSlice("workspace-ids")
 		}
-		if rt.Changed("limit") {
-			params["pageSize"] = rt.Int("limit")
+		pageSize := rt.Int("limit")
+		if pageSize == 0 {
+			pageSize = 10
 		}
-		if rt.Changed("cursor") {
-			params["pageToken"] = rt.Str("cursor")
-		}
-		data, err := rt.CallMCPData(productDoc, "search_documents", params)
+		result, err := collectDocPages(rt, "search_documents", "documents", params, searchDocsProject, docPageOptions{
+			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: rt.Int("max-items"), Cursor: rt.Str("cursor"),
+		})
 		if err != nil {
 			return err
 		}
-		docs := searchDocsProject(data)
-		return rt.Output(map[string]any{"count": len(docs), "documents": docs})
+		return rt.Output(result)
 	},
 }
 
@@ -241,6 +246,9 @@ var List = shortcut.Shortcut{
 		{Name: "workspace", Type: shortcut.FlagString, Desc: "知识库 ID"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 50，最大 50)"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标 (上次结果的 nextPageToken)"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "有界读取全部后续页"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "20", Desc: "--page-all 最大页数"},
+		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "最多返回节点数"},
 	},
 	Tips: []string{`dws doc +list --folder DOC_FOLDER_NODE_ID`, `dws doc +list --workspace WS_ID --limit 20`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -251,18 +259,17 @@ var List = shortcut.Shortcut{
 		if rt.Changed("workspace") {
 			params["workspaceId"] = rt.Str("workspace")
 		}
-		if rt.Changed("limit") {
-			params["pageSize"] = rt.Int("limit")
+		pageSize := rt.Int("limit")
+		if pageSize == 0 {
+			pageSize = 50
 		}
-		if rt.Changed("cursor") {
-			params["pageToken"] = rt.Str("cursor")
-		}
-		data, err := rt.CallMCPData(productDoc, "list_nodes", params)
+		result, err := collectDocPages(rt, "list_nodes", "nodes", params, listNodesProject, docPageOptions{
+			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: rt.Int("max-items"), Cursor: rt.Str("cursor"),
+		})
 		if err != nil {
 			return err
 		}
-		nodes := listNodesProject(data)
-		return rt.Output(map[string]any{"count": len(nodes), "nodes": nodes})
+		return rt.Output(result)
 	},
 }
 
@@ -414,7 +421,7 @@ var CommentList = shortcut.Shortcut{
 	Command:     "+comment-list",
 	Product:     productComment,
 	Description: "查询文档评论列表",
-	Intent:      "当你想查看某篇文档上已有的评论、了解有哪些反馈或待处理意见（可按全文/划词、已解决/未解决过滤）时使用；输入 node，返回评论列表及其 commentKey 以便后续回复。",
+	Intent:      "当你想查看某篇文档上已有的评论、了解有哪些反馈或待处理意见（可按全文/划词、已解决/未解决过滤）时使用；输入 node，可用 --limit/--cursor 分页，返回评论列表及其 commentKey 以便后续回复。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -436,26 +443,26 @@ var CommentList = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "查询文档评论列表",
-			UseWhen:      []string{"当你想查看某篇文档上已有的评论、了解有哪些反馈或待处理意见（可按全文/划词、已解决/未解决过滤）时使用；输入 node，返回评论列表及其 commentKey 以便后续回复。"},
+			UseWhen:      []string{"当你想查看某篇文档上已有的评论、了解有哪些反馈或待处理意见（可按全文/划词、已解决/未解决过滤）时使用；输入 node，可用 --limit/--cursor 分页，返回评论列表及其 commentKey 以便后续回复。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples: []string{
-				"dws doc +comment-list --node DOC_ID",
-				"dws doc +comment-list --node DOC_ID --type inline --resolve-status unresolved",
+				"dws doc +comment-list --node DOC_ID --limit 20",
+				"dws doc +comment-list --node DOC_ID --limit 20 --cursor NEXT_TOKEN",
 			},
 		},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 50，最大 50)"},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 50，最大 50)", Aliases: []string{"page-size"}},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标 (上一页返回的 nextToken)"},
 		{Name: "type", Type: shortcut.FlagString, Desc: "评论类型: global (全文) / inline (划词)", Enum: []string{"global", "inline"}},
 		{Name: "resolve-status", Type: shortcut.FlagString, Desc: "解决状态: resolved / unresolved", Enum: []string{"resolved", "unresolved"}},
 	},
-	Tips: []string{`dws doc +comment-list --node DOC_ID`, `dws doc +comment-list --node DOC_ID --type inline --resolve-status unresolved`},
+	Tips: []string{`dws doc +comment-list --node DOC_ID --limit 20`, `dws doc +comment-list --node DOC_ID --limit 20 --cursor NEXT_TOKEN`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{"nodeId": rt.Str("node")}
-		if rt.Changed("limit") {
-			params["pageSize"] = rt.Int("limit")
+		if rt.Changed("limit") || rt.Changed("page-size") {
+			params["pageSize"] = rt.IntFirst("limit", "page-size")
 		}
 		if v := rt.Str("cursor"); v != "" {
 			params["nextToken"] = v
@@ -470,54 +477,44 @@ var CommentList = shortcut.Shortcut{
 	},
 }
 
+const commentCreateTargetConstraint = "selection 与 block-id/start/end 高级通道互斥；block-id/start/end 必须一起提供；selection 必须唯一匹配"
+
 var CommentCreate = shortcut.Shortcut{
 	Service:     "doc",
 	Command:     "+comment-create",
 	Product:     productComment,
-	Description: "在文档上创建一条评论",
-	Intent:      "当你想对整篇文档留一条全文评论、给出反馈或 @ 相关同事时使用；输入 node 与评论 content（可带 mention），会实际在文档上发布一条新评论。",
+	Description: "创建全文评论，或按 selection 创建划词评论",
+	Intent:      "当用户要对整篇文档留言，或针对文档中唯一匹配的一段文字创建精确划词评论时使用；已知 block/start/end 时也可直接走高级通道。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
 		Confirmation: "user_required", Idempotency: "unknown",
 	},
-	Contract: corecmd.ContractDecl{
-		Identity: contract.ToolIdentitySpec{
-			ProductID:      "doc",
-			Name:           "shortcut_comment_create",
-			CanonicalPath:  "doc.shortcut_comment_create",
-			CLIPath:        "doc +comment-create",
-			PrimaryCLIPath: "doc +comment-create",
-		},
-		Description: "在文档上创建一条评论",
-		Interface: &contract.InterfaceSpec{
-			Mode:         "composite",
-			Availability: "available",
-			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
-		},
-		Selection: contract.SelectionSpec{
-			AgentSummary: "在文档上创建一条评论",
-			UseWhen:      []string{"当你想对整篇文档留一条全文评论、给出反馈或 @ 相关同事时使用；输入 node 与评论 content（可带 mention），会实际在文档上发布一条新评论。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws doc +comment-create --node DOC_ID --content \"这里需要修改\""},
-		},
-	},
+	Contract: docContract("+comment-create", "创建全文评论，或按 selection 创建划词评论",
+		"当用户要对整篇文档留言，或针对文档中唯一匹配的一段文字创建精确划词评论时使用；已知 block/start/end 时也可直接走高级通道。",
+		[]string{`dws doc +comment-create --node <DOC_ID> --content "请补充数据来源"`, `dws doc +comment-create --node <DOC_ID> --selection "计划下周发布" --content "请确认日期"`},
+		contract.ParamDecl{Name: "node", Property: "nodeId"},
+		contract.ParamDecl{Name: "content", Property: "content"},
+		contract.ParamDecl{Name: "selection", Property: "selection"},
+		contract.ParamDecl{Name: "block-id", Property: "blockId"},
+		contract.ParamDecl{Name: "start", Property: "start"},
+		contract.ParamDecl{Name: "end", Property: "end"},
+		contract.ParamDecl{Name: "selected-text", Property: "selectedText"},
+		contract.ParamDecl{Name: "mention", Property: "mentionedUserIds"}),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
-		{Name: "content", Type: shortcut.FlagString, Desc: "评论文字内容 (纯文本)", Required: true},
-		{Name: "mention", Type: shortcut.FlagStringSlice, Desc: "被 @ 的用户 uid 列表"},
+		{Name: "content", Type: shortcut.FlagString, Desc: "评论文字内容", Required: true},
+		{Name: "selection", Type: shortcut.FlagString, Desc: "完整文字或 前缀...后缀；" + commentCreateTargetConstraint},
+		{Name: "block-id", Type: shortcut.FlagString, Desc: "高级通道 block ID；" + commentCreateTargetConstraint},
+		{Name: "start", Type: shortcut.FlagInt, Desc: "块内 UTF-16 起始偏移；" + commentCreateTargetConstraint},
+		{Name: "end", Type: shortcut.FlagInt, Desc: "块内 UTF-16 结束偏移；" + commentCreateTargetConstraint},
+		{Name: "selected-text", Type: shortcut.FlagString, Desc: "可选引用原文；CLI 会从 block 回读并交叉校验"},
+		{Name: "mention", Type: shortcut.FlagStringSlice, Desc: "被 @ 的用户 uid，多个值用逗号分隔；不要传 JSON 数组"},
 	},
-	Tips: []string{`dws doc +comment-create --node DOC_ID --content "这里需要修改"`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"nodeId":  rt.Str("node"),
-			"content": rt.Str("content"),
-		}
-		if rt.Changed("mention") {
-			params["mentionedUserIds"] = rt.StrSlice("mention")
-		}
-		return rt.CallMCP("create_comment", params)
-	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"selection", "block-id", "start", "end"}, Description: commentCreateTargetConstraint}},
+	Tips:        []string{`dws doc +comment-create --node <DOC_ID> --content "请补充数据来源"`, `dws doc +comment-create --node <DOC_ID> --selection "计划下周发布" --content "请确认日期"`},
+	Validate:    validateCommentCreate,
+	Execute:     executeCommentCreate,
 }
 
 var CommentReply = shortcut.Shortcut{
@@ -557,7 +554,7 @@ var CommentReply = shortcut.Shortcut{
 		{Name: "content", Type: shortcut.FlagString, Desc: "回复文字内容 (表情回复时填表情名称)", Required: true},
 		{Name: "comment-key", Type: shortcut.FlagString, Desc: "被回复评论的 commentKey (从 list/create 获取)", Required: true},
 		{Name: "emoji", Type: shortcut.FlagBool, Desc: "作为表情贴图回复"},
-		{Name: "mention", Type: shortcut.FlagStringSlice, Desc: "被 @ 的用户 uid 列表"},
+		{Name: "mention", Type: shortcut.FlagStringSlice, Desc: "被 @ 的用户 uid，多个值用逗号分隔；不要传 JSON 数组"},
 	},
 	Tips: []string{`dws doc +comment-reply --node DOC_ID --comment-key COMMENT_KEY --content "同意"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -570,7 +567,11 @@ var CommentReply = shortcut.Shortcut{
 			params["emoji"] = true
 		}
 		if rt.Changed("mention") {
-			params["mentionedUserIds"] = rt.StrSlice("mention")
+			mentions, err := normalizeMentionUserIDs(rt.StrSlice("mention"))
+			if err != nil {
+				return err
+			}
+			params["mentionedUserIds"] = mentions
 		}
 		return rt.CallMCP("reply_comment", params)
 	},
@@ -580,9 +581,10 @@ var CommentCreateInline = shortcut.Shortcut{
 	Service:     "doc",
 	Command:     "+comment-create-inline",
 	Product:     productComment,
-	Description: "在文档选中文本区域上创建划词评论",
-	Intent:      "当你想针对文档里某段具体文字（而非整篇）留评论、做精确批注时使用；需先用 +block-list 定位块，再输入 node、block-id 及该块内的 start/end 字符偏移量，会实际在选中文本上创建划词评论。",
+	Description: "兼容入口：按 block/start/end 创建划词评论",
+	Intent:      "仅兼容既有调用；新任务统一使用 +comment-create 的 selection 或 block/start/end 通道。",
 	Risk:        shortcut.RiskWrite,
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "content", Type: shortcut.FlagString, Desc: "评论文字内容 (纯文本)", Required: true},
@@ -590,25 +592,12 @@ var CommentCreateInline = shortcut.Shortcut{
 		{Name: "start", Type: shortcut.FlagInt, Desc: "块内文本起始字符偏移量 (从 0 开始)", Required: true},
 		{Name: "end", Type: shortcut.FlagInt, Desc: "块内文本结束字符偏移量 (须大于 start)", Required: true},
 		{Name: "selected-text", Type: shortcut.FlagString, Desc: "选中文本内容 (展示引用原文)"},
-		{Name: "mention", Type: shortcut.FlagStringSlice, Desc: "被 @ 的用户 uid 列表"},
+		{Name: "mention", Type: shortcut.FlagStringSlice, Desc: "被 @ 的用户 uid，多个值用逗号分隔；不要传 JSON 数组"},
 	},
-	Tips: []string{`dws doc +comment-create-inline --node DOC_ID --block-id BLOCK_ID --start 0 --end 10 --content "这里需要修改"`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"nodeId":  rt.Str("node"),
-			"content": rt.Str("content"),
-			"blockId": rt.Str("block-id"),
-			"start":   rt.Int("start"),
-			"end":     rt.Int("end"),
-		}
-		if v := rt.Str("selected-text"); v != "" {
-			params["selectedText"] = v
-		}
-		if rt.Changed("mention") {
-			params["mentionedUserIds"] = rt.StrSlice("mention")
-		}
-		return rt.CallMCP("create_inline_comment", params)
-	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"block-id", "start", "end"}, Description: "block-id/start/end 必须一起提供，CLI 回读并校验 selectedText"}},
+	Tips:        []string{`dws doc +comment-create --node DOC_ID --block-id BLOCK_ID --start 0 --end 10 --content "这里需要修改"`},
+	Validate:    validateCommentCreate,
+	Execute:     executeCommentCreate,
 }
 
 // ── 协作权限 ─────────────────────────────────────────────────
@@ -620,7 +609,7 @@ var ExportSubmit = shortcut.Shortcut{
 	Command:     "+export-submit",
 	Product:     productDoc,
 	Description: "提交在线文档导出任务 (docx/markdown/pdf)，返回 jobId",
-	Intent:      "当你想把在线文档导出成 docx/markdown/pdf 文件（例如离线保存或外发）时使用；这是异步任务的第一步，输入 node 与 export-format 提交导出，返回 jobId，随后用 +export-get 轮询结果。",
+	Intent:      "仅当用户明确要求手工接管异步导出 job，且不需要当前命令下载文件时使用；返回 jobId 后只能用 +export-get 恢复。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -642,25 +631,25 @@ var ExportSubmit = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "提交在线文档导出任务 (docx/markdown/pdf)，返回 jobId",
-			UseWhen:      []string{"当你想把在线文档导出成 docx/markdown/pdf 文件（例如离线保存或外发）时使用；这是异步任务的第一步，输入 node 与 export-format 提交导出，返回 jobId，随后用 +export-get 轮询结果。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			UseWhen:      []string{"仅当用户明确要求手工接管异步导出 job，且不需要当前命令下载文件时使用；返回 jobId 后只能用 +export-get 恢复。"},
+			AvoidWhen:    []string{"正常导出和保存本地文件使用 doc +export；不要手工编排 submit/get，也不要用它绕过 +export 的安全下载"},
 			Examples:     []string{"dws doc +export-submit --node DOC_ID --export-format markdown"},
 		},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "要导出的文档 ID 或 URL", Required: true},
-		{Name: "export-format", Type: shortcut.FlagString, Default: "docx", Desc: "导出格式", Enum: []string{"docx", "markdown", "pdf"}},
+		{Name: "export-format", Type: shortcut.FlagString, Desc: "导出格式；必须显式指定", Required: true, Enum: []string{"docx", "markdown", "pdf"}},
 	},
 	Tips: []string{`dws doc +export-submit --node DOC_ID --export-format markdown`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		format := rt.Str("export-format")
-		if format == "" {
-			format = "docx"
-		}
-		return rt.CallMCP("submit_export_job", map[string]any{
+		result, err := rt.CallMCPWriteData(productDoc, "submit_export_job", map[string]any{
 			"nodeId":       rt.Str("node"),
-			"exportFormat": format,
+			"exportFormat": rt.Str("export-format"),
 		})
+		if err != nil {
+			return docUnknownWriteError("doc.export_submit", "submit_export_job", rt.Str("node"), err)
+		}
+		return rt.Output(docEnvelope("doc.export_submit", map[string]any{"nodeId": rt.Str("node"), "result": result}, map[string]any{"name": "submit_export_job", "status": "success"}))
 	},
 }
 
@@ -669,7 +658,7 @@ var ExportGet = shortcut.Shortcut{
 	Command:     "+export-get",
 	Product:     productDoc,
 	Description: "根据 jobId 查询文档导出任务结果",
-	Intent:      "当你已用 +export-submit 提交了导出任务、想查询它是否完成并拿到导出文件的下载链接时使用；输入上一步返回的 job-id，返回任务状态与结果。",
+	Intent:      "当 +export 已返回 jobId 但轮询、中断或下载失败时使用；复用同一 job 查询，给 output 时通过 CLI 安全下载，禁止重新提交或 curl 临时链接。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -691,18 +680,24 @@ var ExportGet = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "根据 jobId 查询文档导出任务结果",
-			UseWhen:      []string{"当你已用 +export-submit 提交了导出任务、想查询它是否完成并拿到导出文件的下载链接时使用；输入上一步返回的 job-id，返回任务状态与结果。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws doc +export-get --job-id JOB_ID"},
+			UseWhen:      []string{"当 +export 已返回 jobId 但轮询、中断或下载失败时使用；复用同一 job 查询，给 output 时通过 CLI 安全下载，禁止重新提交或 curl 临时链接。"},
+			AvoidWhen:    []string{"尚未提交导出或没有真实 jobId 时不要使用；正常首次导出使用 doc +export"},
+			Examples:     []string{"dws doc +export-get --job-id JOB_ID", "dws doc +export-get --job-id JOB_ID --output ./exports/"},
 		},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "job-id", Type: shortcut.FlagString, Desc: "导出任务 ID", Required: true},
+		{Name: "output", Type: shortcut.FlagString, Desc: "可选：任务完成后安全下载到工作目录内相对路径"},
 	},
-	Tips: []string{`dws doc +export-get --job-id JOB_ID`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("query_export_job", map[string]any{"jobId": rt.Str("job-id")})
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Str("output") == "" {
+			return nil
+		}
+		return localio.ValidateOutput(rt.Str("output"))
 	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"output"}, Description: "提供 --output 时必须是工作目录内相对路径；默认 no-clobber"}},
+	Tips:        []string{`dws doc +export-get --job-id JOB_ID`, `dws doc +export-get --job-id JOB_ID --output ./exports/`},
+	Execute:     executeExportGet,
 }
 
 // ── 历史版本 (server: doc) ───────────────────────────────────
@@ -938,17 +933,57 @@ var TemplateSearch = shortcut.Shortcut{
 	},
 	Tips: []string{`dws doc +template-search --query "周报"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"searchName": rt.Str("query")}
+		pageSize := rt.Int("limit")
+		if pageSize <= 0 {
+			pageSize = 50
+		}
+		params := map[string]any{"searchName": rt.Str("query"), "maxResults": pageSize}
 		if v := rt.Str("source"); v != "" {
 			params["templateSource"] = v
-		}
-		if rt.Changed("limit") {
-			params["maxResults"] = rt.Int("limit")
 		}
 		if v := rt.Str("cursor"); v != "" {
 			params["nextCursor"] = v
 		}
-		return rt.CallMCP("search_doc_templates", params)
+		found, err := rt.CallMCPData(productDoc, "search_doc_templates", params)
+		if err != nil {
+			return err
+		}
+		candidates := collectTemplateCandidates(found)
+		hasMore, hasMoreKnown, nextCursor := docPageState(found)
+		nextCursor = strings.TrimSpace(nextCursor)
+		complete := hasMoreKnown && !hasMore
+		if !hasMoreKnown && nextCursor == "" && len(candidates) < pageSize {
+			complete = true
+		}
+		globalComplete := complete && rt.Str("cursor") == ""
+		status := "selection_required"
+		if globalComplete && len(candidates) == 0 {
+			status = "not_found"
+		} else if globalComplete && len(candidates) == 1 {
+			status = "resolved"
+		}
+		selectedTemplateID := ""
+		if status == "resolved" {
+			selectedTemplateID = candidates[0]["templateId"].(string)
+		}
+		nextAction := map[string]string{"resolved": "create_once", "not_found": "stop", "selection_required": "ask_user"}[status]
+		if !complete {
+			nextAction = "continue_search"
+		}
+		return rt.Output(docEnvelope("doc.template_search", map[string]any{
+			"query":      rt.Str("query"),
+			"source":     rt.Str("source"),
+			"count":      len(candidates),
+			"candidates": candidates,
+			"complete":   complete,
+			"hasMore":    !complete,
+			"nextCursor": nextCursor,
+			"selection": map[string]any{
+				"status":     status,
+				"templateId": selectedTemplateID,
+				"nextAction": nextAction,
+			},
+		}))
 	},
 }
 
@@ -986,7 +1021,6 @@ func init() {
 	CommentCreateInline.Contract = corecmd.ContractDecl{}
 	TemplateApply.Contract = corecmd.ContractDecl{}
 	canonicalizeHistoryShortcuts()
-	canonicalizeCommentShortcuts()
 	shortcut.Register(
 		Search,
 		List,
@@ -998,9 +1032,9 @@ func init() {
 		CommentCreateInline,
 		ExportSubmit,
 		ExportGet,
-		legacyVersionSave,
-		legacyVersionList,
-		legacyVersionRevert,
+		compatHistorySave,
+		compatHistoryList,
+		compatHistoryRevert,
 		VersionSave,
 		VersionList,
 		VersionRevert,

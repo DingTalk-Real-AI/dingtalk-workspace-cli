@@ -5,95 +5,145 @@ package doc
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 var (
-	legacyVersionSave   shortcut.Shortcut
-	legacyVersionList   shortcut.Shortcut
-	legacyVersionRevert shortcut.Shortcut
+	compatHistorySave   shortcut.Shortcut
+	compatHistoryList   shortcut.Shortcut
+	compatHistoryRevert shortcut.Shortcut
 )
 
 func canonicalizeHistoryShortcuts() {
-	legacyVersionSave = VersionSave
-	legacyVersionList = VersionList
-	legacyVersionRevert = VersionRevert
-
-	VersionSave.Command = "+history-save"
+	VersionSave.Command = "+version-save"
 	VersionSave.Aliases = nil
 	VersionSave.Description = "手动保存当前文档版本快照"
-	VersionSave.Intent = "当用户要在重要修改前后手动建立一个可回滚的文档历史快照时使用；保存快照本身无需交互确认。"
+	VersionSave.Intent = "当用户要求保存、创建或建立当前文档版本快照时使用；只保存快照，不更新正文。"
 	VersionSave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
-	VersionSave.Contract = docContract("+history-save", VersionSave.Description, VersionSave.Intent, []string{`dws doc +history-save --node <DOC_ID>`})
-	VersionSave.Tips = []string{`dws doc +history-save --node <DOC_ID>`}
+	VersionSave.Contract = versionSaveContract()
+	VersionSave.Tips = []string{`dws doc +version-save --node <DOC_ID>`}
 
-	VersionList.Command = "+history-list"
+	VersionList.Command = "+version-list"
 	VersionList.Aliases = nil
 	VersionList.Description = "分页列出文档历史版本"
 	VersionList.Intent = "当用户要查看文档已有版本、选择回滚目标或审计版本时间线时使用；返回版本号和分页游标。"
-	VersionList.Contract = docContract("+history-list", VersionList.Description, VersionList.Intent, []string{`dws doc +history-list --node <DOC_ID>`, `dws doc +history-list --node <DOC_ID> --page-size 20`})
+	VersionList.Contract = versionListContract()
 	VersionList.Flags = []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
-		{Name: "page-size", Type: shortcut.FlagInt, Desc: "每页版本数量"},
-		{Name: "page-token", Type: shortcut.FlagString, Desc: "分页游标"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "--page-size 的兼容别名"},
-		{Name: "cursor", Type: shortcut.FlagString, Desc: "--page-token 的兼容别名"},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "返回版本数量上限", Aliases: []string{"page-size"}},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标", Aliases: []string{"page-token"}},
 	}
-	VersionList.Tips = []string{`dws doc +history-list --node <DOC_ID>`, `dws doc +history-list --node <DOC_ID> --page-size 20`}
+	VersionList.Tips = []string{`dws doc +version-list --node <DOC_ID>`, `dws doc +version-list --node <DOC_ID> --limit 20`}
 	VersionList.Execute = func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{"nodeId": rt.Str("node")}
-		if size := rt.IntFirst("page-size", "limit"); size > 0 {
+		if size := rt.IntFirst("limit", "page-size"); size > 0 {
 			params["maxResults"] = size
 		}
-		if token := rt.StrFirst("page-token", "cursor"); token != "" {
+		if token := rt.StrFirst("cursor", "page-token"); token != "" {
 			params["nextCursor"] = token
 		}
 		return rt.CallMCP("list_doc_versions", params)
 	}
 
-	VersionRevert.Command = "+history-revert"
+	VersionRevert.Command = "+version-revert"
 	VersionRevert.Aliases = nil
 	VersionRevert.Description = "预检并回滚文档到指定历史版本"
 	VersionRevert.Intent = "当用户明确要把整篇文档恢复到某个历史版本时使用；先确认目标版本存在，再执行高风险回滚并读回验证。"
-	VersionRevert.Contract = docContract("+history-revert", VersionRevert.Description, VersionRevert.Intent, []string{`dws doc +history-revert --node <DOC_ID> --version 3`})
-	VersionRevert.Tips = []string{`dws doc +history-revert --node <DOC_ID> --version 3`}
+	VersionRevert.Contract = versionRevertContract()
+	VersionRevert.Tips = []string{`dws doc +version-revert --node <DOC_ID> --version 3`}
 	VersionRevert.Execute = executeHistoryRevert
 
+	compatHistorySave = compatibilityHistoryShortcut(VersionSave, "+history-save", "+version-save")
+	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
+	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
+
 	TemplateList.Description = "浏览当前用户可用的 MY/PUBLIC 文档模板"
-	TemplateList.Intent = "当用户要浏览自己的或公开的文档模板并获取 templateId 时使用；若已知名称可改用 template-search。"
-	TemplateList.Contract = docContract("+template-list", TemplateList.Description, TemplateList.Intent, []string{`dws doc +template-list --source PUBLIC`})
-	TemplateSearch.Description = "按名称检索文档模板"
-	TemplateSearch.Intent = "当用户知道模板名称关键词、要快速定位唯一 templateId 后继续创建文档时使用。"
-	TemplateSearch.Contract = docContract("+template-search", TemplateSearch.Description, TemplateSearch.Intent, []string{`dws doc +template-search --query "周报"`})
+	TemplateList.Intent = "当用户没有明确模板名称或关键词，只要浏览自己的或公开模板并获取 templateId 时使用。"
+	TemplateList.Contract = templateListContract()
+	TemplateSearch.Description = "按名称或关键词检索文档模板"
+	TemplateSearch.Intent = "当用户已提供明确模板名称或关键词时使用；返回结构化候选和 resolved/not_found/selection_required 状态，零命中或多候选时停止创建。"
+	TemplateSearch.Contract = templateSearchContract()
 }
 
-func canonicalizeCommentShortcuts() {
-	// Preserve the historical confirmation contract for comment writes. The
-	// richer canonical implementations must not silently weaken that gate.
-	CommentCreate.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"}
-	CommentReply.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"}
-	CommentCreate.Description = "创建全文评论，或按 selection 创建划词评论"
-	CommentCreate.Intent = "当用户要对整篇文档留言，或针对文档中唯一匹配的一段文字创建精确划词评论时使用；已知 block/start/end 时也可直接走高级通道。"
-	CommentCreate.Contract = docContract("+comment-create", CommentCreate.Description, CommentCreate.Intent, []string{`dws doc +comment-create --node <DOC_ID> --content "请补充数据来源"`, `dws doc +comment-create --node <DOC_ID> --selection "计划下周发布" --content "请确认日期"`})
-	CommentCreate.Flags = []shortcut.Flag{
-		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
-		{Name: "content", Type: shortcut.FlagString, Desc: "评论文字内容", Required: true},
-		{Name: "selection", Type: shortcut.FlagString, Desc: "完整文字或 前缀...后缀 selection；使用时不能为空且必须唯一匹配"},
-		{Name: "block-id", Type: shortcut.FlagString, Desc: "高级通道 block ID；使用时不能为空且须与 start/end 一起提供"},
-		{Name: "start", Type: shortcut.FlagInt, Desc: "块内起始字符偏移；高级通道参数不能为空且须一起提供"},
-		{Name: "end", Type: shortcut.FlagInt, Desc: "块内结束字符偏移；高级通道参数不能为空且须一起提供"},
-		{Name: "selected-text", Type: shortcut.FlagString, Desc: "高级通道引用原文"},
-		{Name: "mention", Type: shortcut.FlagStringSlice, Desc: "被 @ 的用户 uid 列表"},
+func versionSaveContract() corecmd.ContractDecl {
+	decl := docContract("+version-save", VersionSave.Description, VersionSave.Intent, []string{`dws doc +version-save --node <DOC_ID>`})
+	decl.Selection.AvoidWhen = []string{
+		"只查看历史版本时使用 doc +version-list；需要恢复历史内容时使用 doc +version-revert",
+		"需要保存恢复点后继续修改正文时使用 doc +checkpoint-update",
 	}
-	CommentCreate.Constraints = []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"selection", "block-id", "start", "end"}, Description: "selection/高级通道参数不能为空；selection 必须唯一匹配，block-id/start/end 必须一起提供"}}
-	CommentCreate.Validate = validateCommentCreate
-	CommentCreate.Execute = executeCommentCreate
-	CommentCreate.Tips = []string{`dws doc +comment-create --node <DOC_ID> --content "请补充数据来源"`, `dws doc +comment-create --node <DOC_ID> --selection "计划下周发布" --content "请确认日期"`}
+	return decl
+}
+
+func versionListContract() corecmd.ContractDecl {
+	decl := docContract("+version-list", VersionList.Description, VersionList.Intent, []string{`dws doc +version-list --node <DOC_ID>`, `dws doc +version-list --node <DOC_ID> --limit 20`})
+	decl.Selection.AvoidWhen = []string{
+		"需要创建当前版本快照时使用 doc +version-save",
+		"已经明确目标版本并要求恢复正文时使用 doc +version-revert",
+	}
+	return decl
+}
+
+func versionRevertContract() corecmd.ContractDecl {
+	decl := docContract("+version-revert", VersionRevert.Description, VersionRevert.Intent, []string{`dws doc +version-revert --node <DOC_ID> --version 3`})
+	decl.Selection.AvoidWhen = []string{
+		"只需要创建当前版本快照时使用 doc +version-save",
+		"尚未确定目标版本号时先使用 doc +version-list",
+	}
+	return decl
+}
+
+func compatibilityHistoryShortcut(source shortcut.Shortcut, command, canonical string) shortcut.Shortcut {
+	result := source
+	result.Command = command
+	result.Aliases = nil
+	result.Description = fmt.Sprintf("兼容入口：%s", source.Description)
+	result.Intent = fmt.Sprintf("仅当调用方明确使用既有 doc %s 路径时兼容执行。", command)
+	result.Contract = docContract(command, result.Description, result.Intent, []string{fmt.Sprintf("dws doc %s --node <DOC_ID>", command)})
+	result.Contract.Selection.AvoidWhen = []string{fmt.Sprintf("新的 Agent 任务统一使用 doc %s；不要因自然语言版本意图选择本兼容入口", canonical)}
+	result.Tips = []string{fmt.Sprintf("dws doc %s --node <DOC_ID>", command)}
+	if command == "+history-revert" {
+		result.Contract.Selection.Examples = []string{`dws doc +history-revert --node <DOC_ID> --version 3`}
+		result.Tips = []string{`dws doc +history-revert --node <DOC_ID> --version 3`}
+	}
+	return result
+}
+
+func templateSearchContract() corecmd.ContractDecl {
+	decl := docContract("+template-search", TemplateSearch.Description, TemplateSearch.Intent, []string{`dws doc +template-search --query "周报"`})
+	decl.Selection.AvoidWhen = []string{
+		"没有明确模板名称或关键词、只是浏览可用模板时使用 doc +template-list",
+		"已经拿到唯一 templateId 时不要重复搜索，直接使用 doc +create-from-template --template-id",
+		"不要为了预览多个候选而逐个创建文档；多候选必须让用户选择",
+	}
+	return decl
+}
+
+func templateListContract() corecmd.ContractDecl {
+	decl := docContract("+template-list", TemplateList.Description, TemplateList.Intent, []string{`dws doc +template-list --source PUBLIC`})
+	decl.Selection.AvoidWhen = []string{
+		"已经有明确模板名称或关键词时使用 doc +template-search --query",
+		"已经拿到 templateId 且要创建文档时使用 doc +create-from-template --template-id",
+	}
+	return decl
+}
+
+func createFromTemplateContract() corecmd.ContractDecl {
+	decl := docContract("+create-from-template", "使用已选定的 templateId 创建文档",
+		"当模板搜索已经唯一解析或用户明确提供 templateId 时使用；只创建一次并返回稳定 nodeId。",
+		[]string{`dws doc +create-from-template --template-id <TEMPLATE_ID> --name "我的周报"`})
+	decl.Selection.AvoidWhen = []string{
+		"只有模板名称或关键词时先使用 doc +template-search；零命中或多候选时停止并让用户选择",
+		"没有模板名称、关键词或 templateId，只想浏览可用模板时使用 doc +template-list",
+		"不要通过创建多个候选文档来预览模板，也不要反复改写关键词自动重试",
+	}
+	return decl
 }
 
 func executeHistoryRevert(rt *shortcut.RuntimeContext) error {
@@ -167,39 +217,53 @@ var CreateFromTemplate = shortcut.Shortcut{
 	Service:     "doc",
 	Command:     "+create-from-template",
 	Product:     productDoc,
-	Description: "按 templateId 直达或搜索消歧后创建文档",
-	Intent:      "当用户要基于文档模板创建新文档时使用；可直接给 template-id，或给 query 搜索且只在唯一命中时继续创建。",
+	Description: "使用已选定的 templateId 创建文档",
+	Intent:      "当模板搜索已经唯一解析或用户明确提供 templateId 时使用；只创建一次并返回稳定 nodeId。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
-	Contract: docContract("+create-from-template", "按 templateId 直达或搜索消歧后创建文档",
-		"当用户要基于文档模板创建新文档时使用；可直接给 template-id，或给 query 搜索且只在唯一命中时继续创建。",
-		[]string{`dws doc +create-from-template --template-id <TEMPLATE_ID> --name "我的周报"`, `dws doc +create-from-template --query "会议纪要" --name "项目例会"`}),
+	Contract:    createFromTemplateContract(),
 	Flags: []shortcut.Flag{
 		{Name: "template-id", Type: shortcut.FlagString, Desc: "模板 ID"},
-		{Name: "query", Type: shortcut.FlagString, Desc: "模板搜索名称"},
+		{Name: "query", Type: shortcut.FlagString, Desc: "兼容入口：先搜索且仅唯一命中时创建；新的 Agent 流程应先调用 +template-search"},
 		{Name: "source", Type: shortcut.FlagString, Desc: "模板来源", Enum: []string{"MY", "PUBLIC"}},
 		{Name: "name", Type: shortcut.FlagString, Desc: "新文档名称"},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"},
 		{Name: "workspace", Type: shortcut.FlagString, Desc: "目标知识库 ID"},
 	},
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"template-id", "query"}, Description: "--template-id 与 --query 必须且只能提供一个"}},
-	Tips:        []string{`dws doc +create-from-template --template-id <TEMPLATE_ID> --name "我的周报"`, `dws doc +create-from-template --query "会议纪要" --name "项目例会"`},
+	Tips:        []string{`dws doc +create-from-template --template-id <TEMPLATE_ID> --name "我的周报"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		templateID := rt.Str("template-id")
 		if templateID == "" {
-			params := map[string]any{"searchName": rt.Str("query")}
-			if rt.Str("source") != "" {
-				params["templateSource"] = rt.Str("source")
-			}
-			found, err := rt.CallMCPData(productDoc, "search_doc_templates", params)
+			candidates, err := searchTemplateCandidatesForCreate(rt, rt.Str("query"), rt.Str("source"))
 			if err != nil {
 				return err
 			}
-			ids := collectTemplateIDs(found)
-			if len(ids) != 1 {
-				return apperrors.NewValidation(fmt.Sprintf("模板搜索需要唯一命中，实际 %d 个候选: %v", len(ids), ids))
+			if len(candidates) != 1 {
+				status := "selection_required"
+				message := fmt.Sprintf("模板搜索返回 %d 个候选，必须先选择唯一 templateId", len(candidates))
+				actions := []string{"运行 dws doc +template-search 查看结构化候选", "让用户选择后使用 --template-id 创建一次"}
+				if len(candidates) == 0 {
+					status = "not_found"
+					message = "模板搜索没有命中；已停止创建"
+					actions = []string{"检查模板来源或请用户提供更准确的模板名", "不要自动变换关键词循环搜索"}
+				}
+				return apperrors.NewValidation(message,
+					apperrors.WithOperation("doc.create_from_template"),
+					apperrors.WithReason("template_"+status),
+					apperrors.WithExecutionStarted(false),
+					apperrors.WithRetryable(false),
+					apperrors.WithActions(actions...),
+					apperrors.WithDetails(map[string]any{
+						"contractVersion": "doc.template-selection.v1",
+						"status":          status,
+						"query":           rt.Str("query"),
+						"source":          rt.Str("source"),
+						"candidates":      candidates,
+					}),
+				)
 			}
-			templateID = ids[0]
+			templateID = candidates[0]["templateId"].(string)
 		}
 		params := map[string]any{"templateId": templateID}
 		for flag, property := range map[string]string{"name": "name", "folder": "folderId", "workspace": "workspaceId"} {
@@ -212,10 +276,149 @@ var CreateFromTemplate = shortcut.Shortcut{
 		}
 		result, err := rt.CallMCPWriteData(productDoc, "apply_doc_template", params)
 		if err != nil {
-			return err
+			return docUnknownWriteError("doc.create_from_template", "apply_template", "", err)
 		}
-		return rt.Output(docEnvelope("doc.create_from_template", result, map[string]any{"name": "apply_template", "status": "success"}))
+		return rt.Output(docEnvelope("doc.create_from_template", map[string]any{"templateId": templateID, "result": result}, map[string]any{"name": "apply_template", "status": "success"}))
 	},
+}
+
+func searchTemplateCandidatesForCreate(rt *shortcut.RuntimeContext, query, source string) ([]map[string]any, error) {
+	const (
+		pageSize = 2
+		maxPages = 20
+	)
+	cursor := ""
+	seenCursors := map[string]bool{}
+	seenCandidates := map[string]bool{}
+	candidates := make([]map[string]any, 0, pageSize)
+	for page := 1; page <= maxPages; page++ {
+		params := map[string]any{"searchName": query, "maxResults": pageSize}
+		if source != "" {
+			params["templateSource"] = source
+		}
+		if cursor != "" {
+			params["nextCursor"] = cursor
+		}
+		found, err := rt.CallMCPData(productDoc, "search_doc_templates", params)
+		if err != nil {
+			return nil, err
+		}
+		pageCandidates := collectTemplateCandidates(found)
+		for _, candidate := range pageCandidates {
+			id, _ := candidate["templateId"].(string)
+			if id == "" || seenCandidates[id] {
+				continue
+			}
+			seenCandidates[id] = true
+			candidates = append(candidates, candidate)
+		}
+
+		hasMore, hasMoreKnown, next := docPageState(found)
+		next = strings.TrimSpace(next)
+		if len(candidates) > 1 {
+			return sortedTemplateCandidates(candidates), nil
+		}
+		complete := hasMoreKnown && !hasMore
+		if !hasMoreKnown && next == "" && len(pageCandidates) < pageSize {
+			complete = true
+		}
+		if complete {
+			return sortedTemplateCandidates(candidates), nil
+		}
+		if next == "" {
+			return nil, templatePaginationError("missing_next_cursor", page, cursor, candidates)
+		}
+		if next == cursor || seenCursors[next] {
+			return nil, templatePaginationError("stalled_cursor", page, next, candidates)
+		}
+		seenCursors[next] = true
+		cursor = next
+	}
+	return nil, templatePaginationError("max_pages", maxPages, cursor, candidates)
+}
+
+func templatePaginationError(reason string, page int, cursor string, candidates []map[string]any) error {
+	return apperrors.NewAPI(
+		"模板搜索分页未完整结束；为避免基于非唯一候选创建文档，已停止执行",
+		apperrors.WithOperation("doc.create_from_template"),
+		apperrors.WithReason("template_pagination_"+reason),
+		apperrors.WithFailureStage("template_search"),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithRetryable(false),
+		apperrors.WithActions("使用 dws doc +template-search 分页查看候选", "选择唯一 templateId 后重新执行创建"),
+		apperrors.WithDetails(map[string]any{
+			"contractVersion": "doc.template-selection.v1",
+			"status":          "pagination_incomplete",
+			"reason":          reason,
+			"page":            page,
+			"nextCursor":      cursor,
+			"candidates":      sortedTemplateCandidates(candidates),
+		}),
+	)
+}
+
+func sortedTemplateCandidates(candidates []map[string]any) []map[string]any {
+	out := append([]map[string]any(nil), candidates...)
+	sort.SliceStable(out, func(i, j int) bool {
+		leftName, _ := out[i]["name"].(string)
+		rightName, _ := out[j]["name"].(string)
+		if leftName != rightName {
+			return leftName < rightName
+		}
+		leftID, _ := out[i]["templateId"].(string)
+		rightID, _ := out[j]["templateId"].(string)
+		return leftID < rightID
+	})
+	return out
+}
+
+func collectTemplateCandidates(value any) []map[string]any {
+	seen := map[string]bool{}
+	var out []map[string]any
+	var walk func(any)
+	walk = func(current any) {
+		switch typed := current.(type) {
+		case map[string]any:
+			id := directTemplateString(typed, "templateId", "template_id")
+			if id != "" && !seen[id] {
+				seen[id] = true
+				candidate := map[string]any{"templateId": id}
+				if name := directTemplateString(typed, "templateName", "name", "title"); name != "" {
+					candidate["name"] = name
+				}
+				if source := directTemplateString(typed, "templateSource", "source"); source != "" {
+					candidate["source"] = source
+				}
+				if description := directTemplateString(typed, "description", "summary"); description != "" {
+					candidate["description"] = description
+				}
+				out = append(out, candidate)
+			}
+			keys := make([]string, 0, len(typed))
+			for key := range typed {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				walk(typed[key])
+			}
+		case []any:
+			for _, child := range typed {
+				walk(child)
+			}
+		}
+	}
+	walk(value)
+	return sortedTemplateCandidates(out)
+}
+
+func directTemplateString(value map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if text, ok := value[key].(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
 }
 
 func collectTemplateIDs(value any) []string {

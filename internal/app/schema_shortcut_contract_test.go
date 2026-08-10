@@ -129,6 +129,75 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 	}
 }
 
+func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "doc +update")
+	if got, want := schemaContractString(leaf["confirmation"]), "user_required"; got != want {
+		t.Fatalf("confirmation = %q, want %q", got, want)
+	}
+	parameters := schemaContractMap(leaf["parameters"])
+	if got, want := len(parameters), 11; got != want {
+		t.Fatalf("parameter count = %d, want %d: %#v", got, want, parameters)
+	}
+	for _, name := range []string{"node", "command"} {
+		if required, _ := parameters[name]["required"].(bool); !required {
+			t.Errorf("--%s required = %#v, want true", name, parameters[name]["required"])
+		}
+	}
+	wantProperties := map[string]string{
+		"node": "nodeId", "doc": "nodeId", "command": "command", "content": "content", "text": "content", "doc-format": "format",
+		"block-id": "blockId", "after-block-id": "referenceBlockId", "old": "old", "new": "new",
+		"expected-revision": "revision",
+	}
+	for name, want := range wantProperties {
+		if got := schemaContractString(parameters[name]["property"]); got != want {
+			t.Errorf("--%s property = %q, want %q", name, got, want)
+		}
+	}
+	wantRequiredWhen := map[string]string{
+		"content":        "--command=append|overwrite|block_insert_after|block_replace",
+		"block-id":       "--command=block_replace|block_delete|block_copy_insert_after",
+		"after-block-id": "--command=block_insert_after|block_copy_insert_after",
+		"old":            "--command=str_replace",
+		"new":            "--command=str_replace",
+	}
+	for name, want := range wantRequiredWhen {
+		parameter := parameters[name]
+		if required, _ := parameter["required"].(bool); required {
+			t.Errorf("--%s required = true, want conditional requirement", name)
+		}
+		if got := schemaContractString(parameter["required_when"]); got != want {
+			t.Errorf("--%s required_when = %q, want %q", name, got, want)
+		}
+	}
+	if constraints, exists := leaf["constraints"]; exists && constraints != nil {
+		t.Fatalf("enum-discriminated requirements must not be mispublished as relationship constraints: %#v", constraints)
+	}
+}
+
+func TestDeliveryDocCommentExportImportContractsAreCanonical(t *testing.T) {
+	comment := executeShortcutSchemaQuery(t, "--cli-path", "doc +comment-create")
+	commentParameters := schemaContractMap(comment["parameters"])
+	for _, name := range []string{"node", "content", "selection", "block-id", "start", "end", "selected-text", "mention"} {
+		if _, ok := commentParameters[name]; !ok {
+			t.Errorf("comment-create missing --%s: %#v", name, commentParameters)
+		}
+	}
+
+	export := executeShortcutSchemaQuery(t, "--cli-path", "doc +export")
+	exportFormat := schemaContractMap(export["parameters"])["export-format"]
+	if required, _ := exportFormat["required"].(bool); !required {
+		t.Fatalf("export --export-format required = %#v, want true", exportFormat["required"])
+	}
+	if defaultValue := schemaContractString(exportFormat["default"]); defaultValue != "" {
+		t.Fatalf("export --export-format default = %q, want empty", defaultValue)
+	}
+
+	importLeaf := executeShortcutSchemaQuery(t, "--cli-path", "doc +import")
+	if constraints := schemaContractMap(importLeaf["constraints"]); len(constraints) != 0 {
+		t.Fatalf("root import must not require folder/workspace: %#v", constraints)
+	}
+}
+
 func executeShortcutSchemaQuery(t testing.TB, args ...string) map[string]any {
 	t.Helper()
 	root := NewRootCommand()

@@ -17,6 +17,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/docresolver"
 )
 
 var (
@@ -48,7 +49,7 @@ var Create = shortcut.Shortcut{
 	),
 	Flags: []shortcut.Flag{
 		{Name: "name", Type: shortcut.FlagString, Desc: "新文档名称", Required: true},
-		{Name: "content", Type: shortcut.FlagString, Desc: "内容字面量、@工作目录相对文件或 - 表示 stdin"},
+		{Name: "content", Type: shortcut.FlagString, Desc: docContentInputDescription},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "目标文档文件夹 ID"},
 		{Name: "workspace", Type: shortcut.FlagString, Desc: "目标知识库 ID"},
@@ -73,29 +74,31 @@ var Create = shortcut.Shortcut{
 		if rt.Str("workspace") != "" {
 			params["workspaceId"] = rt.Str("workspace")
 		}
+		contentChunks := []string{content}
 		if format == "markdown" && content != "" {
-			params["markdown"] = content
+			contentChunks = splitDocMarkdown(content, 10000)
+			params["markdown"] = contentChunks[0]
 		}
 		if rt.DryRun() {
 			return rt.Output(docEnvelope("doc.create", map[string]any{"executed": false, "previewKind": "plan", "create": params, "docFormat": format, "contentBytes": len(content)}))
 		}
 		created, err := rt.CallMCPWriteData(productDoc, "create_document", params)
 		if err != nil {
-			return err
+			return docUnknownWriteError("doc.create", "create_document", "", err)
 		}
 		nodeID := nestedString(created, "nodeId", "documentId", "id")
 		steps := []map[string]any{{"name": "create_document", "status": "success"}}
+		if nodeID == "" {
+			return docPartialWriteError(
+				"doc.create", "doc_create_missing_node_id", "resolve_created_document",
+				"创建文档成功但响应缺少 nodeId；无法验证新文档，请先在钉钉中定位，不要直接重试",
+				nil,
+				map[string]any{"nodeId": "", "docFormat": format, "verified": false},
+				append(steps, map[string]any{"name": "verify", "status": "not_started"}),
+				map[string]any{"available": false, "reason": "create_document did not return nodeId; locate the new document in DingTalk"},
+			)
+		}
 		if format == "jsonml" && content != "" {
-			if nodeID == "" {
-				return docPartialWriteError(
-					"doc.create", "doc_create_missing_node_id", "resolve_created_document",
-					"创建文档成功但响应缺少 nodeId；JSONML 尚未写入，请先在钉钉中定位新文档，不要直接重试",
-					nil,
-					map[string]any{"nodeId": "", "docFormat": format},
-					append(steps, map[string]any{"name": "write_jsonml", "status": "not_started"}),
-					map[string]any{"available": false, "reason": "create_document did not return nodeId; locate the new document in DingTalk"},
-				)
-			}
 			if _, err := rt.CallMCPWriteData(productDoc, "update_document", map[string]any{"nodeId": nodeID, "format": "jsonml", "jsonml": content, "mode": "overwrite"}); err != nil {
 				return docPartialWriteError(
 					"doc.create", "doc_create_initial_content_failed", "write_jsonml",
@@ -108,7 +111,34 @@ var Create = shortcut.Shortcut{
 			}
 			steps = append(steps, map[string]any{"name": "write_jsonml", "status": "success"})
 		}
-		return rt.Output(docEnvelope("doc.create", map[string]any{"nodeId": nodeID, "result": created}, steps...))
+		if format == "markdown" && len(contentChunks) > 1 {
+			for index, chunk := range contentChunks[1:] {
+				stepName := fmt.Sprintf("append_chunk_%d", index+2)
+				if _, err := rt.CallMCPWriteData(productDoc, "update_document", map[string]any{"nodeId": nodeID, "markdown": chunk, "mode": "append"}); err != nil {
+					return docPartialWriteError(
+						"doc.create", "doc_create_chunk_commit_unknown", stepName,
+						fmt.Sprintf("文档已创建，但第 %d/%d 个内容分片失败或提交状态未知；请先回读，不要重试整个创建", index+2, len(contentChunks)),
+						err,
+						map[string]any{"nodeId": nodeID, "chunksWritten": index + 1, "chunksTotal": len(contentChunks), "verified": false},
+						append(steps, map[string]any{"name": stepName, "status": "unknown"}),
+						map[string]any{"available": false, "reason": "inspect the current document and resume only confirmed missing content"},
+					)
+				}
+				steps = append(steps, map[string]any{"name": stepName, "status": "success"})
+			}
+		}
+		verifyTool := "get_document_info"
+		verifyParams := map[string]any{"nodeId": nodeID}
+		if content != "" {
+			verifyTool = "get_document_content"
+			verifyParams["format"] = format
+		}
+		verification, err := rt.CallMCPData(productDoc, verifyTool, verifyParams)
+		if err != nil {
+			return docVerificationError("doc.create", "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		}
+		steps = append(steps, map[string]any{"name": "verify", "status": "success"})
+		return rt.Output(docEnvelope("doc.create", map[string]any{"nodeId": nodeID, "result": created, "verified": true, "verification": verification}, steps...))
 	},
 }
 
@@ -117,17 +147,19 @@ var Fetch = shortcut.Shortcut{
 	Command:     "+fetch",
 	Product:     productDoc,
 	Description: "读取完整或局部文档内容，并按 detail 控制保真度",
-	Intent:      "当用户要读取在线文字文档正文，或需要 block ID、JSONML、outline/range/section/keyword/tags 局部内容用于精确编辑和评论时使用；非最新历史 revision 会明确拒绝。",
+	Intent:      "当用户要按 node/URL 直接读取在线文字文档，或只知道唯一标题并希望一次完成解析和读取时使用；支持 outline/range/section/keyword/tags 局部内容用于精确编辑和评论。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract(
 		"+fetch", "读取完整或局部文档内容，并按 detail 控制保真度",
-		"当用户要读取在线文字文档正文，或需要 block ID、JSONML、outline/range/section/keyword/tags 局部内容用于精确编辑和评论时使用；非最新历史 revision 会明确拒绝。",
-		[]string{`dws doc +fetch --node <DOC_ID>`, `dws doc +fetch --node <DOC_ID> --detail with-ids --scope keyword --keyword "结论"`},
+		"当用户要按 node/URL 直接读取在线文字文档，或只知道唯一标题并希望一次完成解析和读取时使用；支持 outline/range/section/keyword/tags 局部内容用于精确编辑和评论。",
+		[]string{`dws doc +fetch --node <DOC_ID>`, `dws doc +fetch --query "项目周报" --scope keyword --keyword "结论"`},
 		contract.ParamDecl{Name: "node", Property: "nodeId"},
+		contract.ParamDecl{Name: "query", Property: "keyword"},
 	),
 	Flags: []shortcut.Flag{
-		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
+		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL；与 --query 二选一"},
+		{Name: "query", Type: shortcut.FlagString, Desc: "文档标题或关键词；跨页唯一解析后读取，与 --node 二选一"},
 		{Name: "detail", Type: shortcut.FlagString, Default: "simple", Desc: "输出细节", Enum: []string{"simple", "with-ids", "full"}},
 		{Name: "scope", Type: shortcut.FlagString, Default: "full", Desc: "读取范围；keyword 时 --keyword 不能为空", Enum: []string{"full", "outline", "range", "section", "keyword", "tags"}},
 		{Name: "start-block-id", Type: shortcut.FlagString, Desc: "range/section 起始块 ID"},
@@ -139,7 +171,7 @@ var Fetch = shortcut.Shortcut{
 		{Name: "max-depth", Type: shortcut.FlagInt, Desc: "outline/section 最大深度"},
 		{Name: "revision", Type: shortcut.FlagInt, Desc: "只接受当前最新版；历史 revision 暂不支持"},
 	},
-	Tips: []string{`dws doc +fetch --node <DOC_ID>`, `dws doc +fetch --node <DOC_ID> --detail with-ids --scope keyword --keyword "结论"`},
+	Tips: []string{`dws doc +fetch --node <DOC_ID>`, `dws doc +fetch --query "项目周报" --scope keyword --keyword "结论"`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		if rt.Changed("revision") {
 			return apperrors.NewValidation("HISTORICAL_READ_UNSUPPORTED: 当前接口不能读取指定历史 revision")
@@ -149,13 +181,20 @@ var Fetch = shortcut.Shortcut{
 		}
 		return nil
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"scope", "keyword"}, Description: "--scope keyword 时 --keyword 不能为空"}},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"node", "query"}, Description: "--node 与 --query 必须且只能提供一个"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"scope", "keyword"}, Description: "--scope keyword 时 --keyword 不能为空"},
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		target, err := docresolver.Resolve(rt, rt.Str("node"), rt.Str("query"))
+		if err != nil {
+			return err
+		}
 		format := "markdown"
 		if rt.Str("detail") != "simple" || rt.Str("scope") != "full" {
 			format = "jsonml"
 		}
-		params := map[string]any{"nodeId": rt.Str("node"), "format": format}
+		params := map[string]any{"nodeId": target.Selected.CanonicalID, "format": format}
 		scope := rt.Str("scope")
 		if scope != "keyword" && scope != "full" {
 			params["scope"] = scope
@@ -176,10 +215,17 @@ var Fetch = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
+		content := any(data)
 		if scope == "keyword" {
-			return rt.Output(projectKeywordMatches(data, rt.Str("keyword"), rt.Int("context-before"), rt.Int("context-after")))
+			content = projectKeywordMatches(data, rt.Str("keyword"), rt.Int("context-before"), rt.Int("context-after"))
 		}
-		return rt.Output(data)
+		return rt.Output(map[string]any{
+			"contractVersion": "doc.content.v1",
+			"status":          "success",
+			"complete":        true,
+			"target":          target.Selected,
+			"content":         content,
+		})
 	},
 }
 
@@ -221,17 +267,64 @@ var Inspect = shortcut.Shortcut{
 			{"include-media", "media", productDoc, "list_document_blocks", map[string]any{"nodeId": node, "format": "jsonml"}},
 			{"include-comments", "comments", productComment, "list_comments", map[string]any{"nodeId": node}},
 		}
+		type inspectResult struct {
+			index     int
+			key, tool string
+			value     map[string]any
+			err       error
+		}
+		selected := 0
+		results := make(chan inspectResult, len(reads))
+		sem := make(chan struct{}, 3)
 		for _, read := range reads {
 			if !rt.Bool(read.flag) {
 				continue
 			}
-			value, callErr := rt.CallMCPData(read.product, read.tool, read.params)
-			if callErr != nil {
-				return callErr
-			}
-			result[read.key] = value
+			index := selected
+			selected++
+			read := read
+			go func() {
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				value, callErr := rt.CallMCPReadData(read.product, read.tool, read.params)
+				results <- inspectResult{index: index, key: read.key, tool: read.tool, value: value, err: callErr}
+			}()
 		}
-		return rt.Output(docEnvelope("doc.inspect", result, map[string]any{"name": "inspect", "status": "success"}))
+		steps := []map[string]any{{"name": "get_document_info", "status": "success"}}
+		failures := []map[string]any{}
+		ordered := make([]inspectResult, selected)
+		for i := 0; i < selected; i++ {
+			readResult := <-results
+			ordered[readResult.index] = readResult
+		}
+		for _, readResult := range ordered {
+			if readResult.err != nil {
+				failures = append(failures, map[string]any{"tool": readResult.tool, "error": readResult.err.Error()})
+				steps = append(steps, map[string]any{"name": readResult.tool, "status": "failed"})
+				continue
+			}
+			result[readResult.key] = readResult.value
+			steps = append(steps, map[string]any{"name": readResult.tool, "status": "success"})
+		}
+		if len(failures) > 0 {
+			return apperrors.NewAPI(
+				"文档聚合检查只完成了部分读取",
+				apperrors.WithOperation("doc.inspect"),
+				apperrors.WithReason("doc_inspect_partial"),
+				apperrors.WithFailureStage("optional_reads"),
+				apperrors.WithExecutionStarted(false),
+				apperrors.WithRetryable(true),
+				apperrors.WithDetails(map[string]any{
+					"contractVersion": "doc.operation.v1",
+					"status":          "partial_success",
+					"complete":        false,
+					"data":            result,
+					"steps":           steps,
+					"failures":        failures,
+				}),
+			)
+		}
+		return rt.Output(docEnvelope("doc.inspect", result, steps...))
 	},
 }
 
@@ -246,42 +339,64 @@ var Update = shortcut.Shortcut{
 	Contract: docContract("+update", "追加、覆盖或按 block 精确更新文档内容",
 		"当用户要修改已有在线文字文档时使用；支持整篇 append/overwrite、block 插入/替换/删除，以及受限的唯一纯文本 str_replace，所有模式统一经过静态确认门禁。",
 		[]string{`dws doc +update --node <DOC_ID> --command append --content "补充说明"`, `dws doc +update --node <DOC_ID> --command block_replace --block-id <BLOCK_ID> --content "新内容"`},
-		contract.ParamDecl{Name: "doc", Property: "node"},
+		contract.ParamDecl{Name: "node", Property: "nodeId"},
+		contract.ParamDecl{Name: "command", Property: "command"},
+		contract.ParamDecl{Name: "content", Property: "content"},
+		contract.ParamDecl{Name: "doc-format", Property: "format"},
+		contract.ParamDecl{Name: "block-id", Property: "blockId"},
+		contract.ParamDecl{Name: "after-block-id", Property: "referenceBlockId"},
+		contract.ParamDecl{Name: "old", Property: "old"},
+		contract.ParamDecl{Name: "new", Property: "new"},
+		contract.ParamDecl{Name: "expected-revision", Property: "revision"},
+		contract.ParamDecl{Name: "doc", Property: "nodeId"},
 		contract.ParamDecl{Name: "text", Property: "content"}),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true, Aliases: []string{"doc"}, AliasesVisible: true},
-		{Name: "command", Type: shortcut.FlagString, Desc: "更新动作；不能为空", Enum: []string{"append", "overwrite", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}},
-		{Name: "content", Type: shortcut.FlagString, Desc: "内容字面量、@相对文件或 - 表示 stdin；相关动作要求时不能为空", Aliases: []string{"text"}, AliasesVisible: true},
+		{Name: "command", Type: shortcut.FlagString, Desc: "更新动作；不能为空", Required: true, Enum: []string{"append", "overwrite", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}},
+		{Name: "content", Type: shortcut.FlagString, Desc: docRequiredContentInputDescription, RequiredWhen: "--command=append|overwrite|block_insert_after|block_replace", Aliases: []string{"text"}, AliasesVisible: true},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
-		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空"},
-		{Name: "after-block-id", Type: shortcut.FlagString, Desc: "插入位置参考 block ID"},
-		{Name: "old", Type: shortcut.FlagString, Desc: "str_replace 原文字，不能为空"},
-		{Name: "new", Type: shortcut.FlagString, Desc: "str_replace 新文字；--old 不能为空，新值可为空但参数必须显式提供"},
-		{Name: "expected-revision", Type: shortcut.FlagInt, Desc: "best-effort 乐观 revision 检查"},
+		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空", RequiredWhen: "--command=block_replace|block_delete|block_copy_insert_after"},
+		{Name: "after-block-id", Type: shortcut.FlagString, Desc: "插入位置参考 block ID；相关动作要求时不能为空", RequiredWhen: "--command=block_insert_after|block_copy_insert_after"},
+		{Name: "old", Type: shortcut.FlagString, Desc: "str_replace 原文字，不能为空", RequiredWhen: "--command=str_replace"},
+		{Name: "new", Type: shortcut.FlagString, Desc: "str_replace 新文字；--old 不能为空，新值可为空但参数必须显式提供", RequiredWhen: "--command=str_replace"},
+		{Name: "expected-revision", Type: shortcut.FlagInt, Desc: "仅 overwrite+jsonml：传给服务端执行原子 revision 条件写"},
 	},
 	Tips: []string{`dws doc +update --node <DOC_ID> --command append --content "补充说明"`, `dws doc +update --node <DOC_ID> --command block_replace --block-id <BLOCK_ID> --content "新内容"`},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		command := rt.Str("command")
-		if command == "" {
-			return apperrors.NewValidation("缺少 --command")
-		}
 		if rt.StrFirst("node", "doc") == "" {
 			return apperrors.NewValidation("缺少 --node")
 		}
-		if command == "append" || command == "overwrite" || command == "block_insert_after" || command == "block_replace" {
+		switch command {
+		case "append", "overwrite", "block_insert_after", "block_replace":
 			if rt.StrFirst("content", "text") == "" {
 				return apperrors.NewValidation("该更新动作的 --content 不能为空")
 			}
 		}
-		if strings.HasPrefix(command, "block_") && command != "block_insert_after" && rt.Str("block-id") == "" {
-			return apperrors.NewValidation("该 block 操作必须提供 --block-id")
+		switch command {
+		case "block_replace", "block_delete", "block_copy_insert_after":
+			if rt.Str("block-id") == "" {
+				return apperrors.NewValidation("该 block 操作必须提供 --block-id")
+			}
+		}
+		switch command {
+		case "block_insert_after", "block_copy_insert_after":
+			if rt.Str("after-block-id") == "" {
+				return apperrors.NewValidation("该 block 操作必须提供 --after-block-id")
+			}
 		}
 		if command == "str_replace" && (rt.Str("old") == "" || !rt.Changed("new")) {
 			return apperrors.NewValidation("--command str_replace 必须同时提供 --old 和 --new")
 		}
+		if command == "append" && rt.Str("doc-format") == "jsonml" {
+			return apperrors.NewValidation("JSONML 当前不支持 append")
+		}
+		if rt.Changed("expected-revision") && (command != "overwrite" || rt.Str("doc-format") != "jsonml") {
+			return apperrors.NewValidation("--expected-revision 仅支持 --command overwrite --doc-format jsonml；其他写入接口没有服务端原子 revision 契约")
+		}
 		return nil
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"command", "content", "block-id", "old", "new"}, Description: "依 command 校验，所需文本参数不能为空"}},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"command", "content", "block-id", "after-block-id", "old", "new"}, Description: "依 command 校验，所需文本或 block 参数不能为空"}},
 	Execute:     executeUpdate,
 }
 
@@ -299,7 +414,7 @@ var CheckpointUpdate = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "mode", Type: shortcut.FlagString, Default: "append", Desc: "更新模式", Enum: []string{"append", "overwrite"}},
-		{Name: "content", Type: shortcut.FlagString, Desc: "内容字面量、@相对文件或 - 表示 stdin", Required: true},
+		{Name: "content", Type: shortcut.FlagString, Desc: docContentInputDescription, Required: true},
 	},
 	Tips: []string{`dws doc +checkpoint-update --node <DOC_ID> --mode append --content @section.md`, `dws doc +checkpoint-update --node <DOC_ID> --mode overwrite --content @document.md`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -323,13 +438,17 @@ var CheckpointUpdate = shortcut.Shortcut{
 				append(steps, map[string]any{"name": "update", "status": "failed"}, map[string]any{"name": "verify", "status": "not_started"}))
 		}
 		steps = append(steps, map[string]any{"name": "update", "status": "success"})
-		verified, err := rt.CallMCPData(productDoc, "get_document_content", map[string]any{"nodeId": rt.Str("node"), "format": "markdown"})
+		verification, err := rt.CallMCPData(productDoc, "get_document_content", map[string]any{"nodeId": rt.Str("node"), "format": "markdown"})
 		if err != nil {
 			return checkpointPartialWriteError(rt.Str("node"), checkpoint, "verify", "doc_checkpoint_verification_failed", err,
 				append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
+		if !verifyUpdatedDocumentContent(verification, content, rt.Str("mode"), "markdown") {
+			return checkpointPartialWriteError(rt.Str("node"), checkpoint, "verify", "doc_checkpoint_verification_failed", fmt.Errorf("回读结果未匹配预期变更"),
+				append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		}
 		steps = append(steps, map[string]any{"name": "verify", "status": "success"})
-		return rt.Output(docEnvelope("doc.checkpoint_update", map[string]any{"verified": verified}, steps...))
+		return rt.Output(docEnvelope("doc.checkpoint_update", map[string]any{"nodeId": rt.Str("node"), "verified": true, "verification": verification}, steps...))
 	},
 }
 
@@ -338,15 +457,15 @@ var Export = shortcut.Shortcut{
 	Command:     "+export",
 	Product:     productDoc,
 	Description: "提交、轮询并安全下载在线文档导出文件",
-	Intent:      "当用户要把在线文档导出成 docx、markdown 或 PDF 并保存到工作目录时使用；自动完成 job 提交、轮询与 no-clobber 原子下载。",
+	Intent:      "当用户要把在线文档导出成 docx、markdown 或 PDF 并保存到工作目录时使用；自动完成 job 提交、轮询与 no-clobber 原子下载；失败后保留 jobId 通过 +export-get 恢复，不改用 curl 或本地生成。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract("+export", "提交、轮询并安全下载在线文档导出文件",
-		"当用户要把在线文档导出成 docx、markdown 或 PDF 并保存到工作目录时使用；自动完成 job 提交、轮询与 no-clobber 原子下载。",
+		"当用户要把在线文档导出成 docx、markdown 或 PDF 并保存到工作目录时使用；自动完成 job 提交、轮询与 no-clobber 原子下载；失败后保留 jobId 通过 +export-get 恢复，不改用 curl 或本地生成。",
 		[]string{`dws doc +export --node <DOC_ID> --export-format docx --output ./exports/`, `dws doc +export --node <DOC_ID> --export-format markdown --output ./document.md`}),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
-		{Name: "export-format", Type: shortcut.FlagString, Default: "docx", Desc: "导出格式", Enum: []string{"docx", "markdown", "pdf"}},
+		{Name: "export-format", Type: shortcut.FlagString, Desc: "导出格式；必须显式指定，不能用全局 --format 代替", Required: true, Enum: []string{"docx", "markdown", "pdf"}},
 		{Name: "output", Type: shortcut.FlagString, Default: ".", Desc: "工作目录内相对路径（文件或目录）"},
 		{Name: "max-polls", Type: shortcut.FlagInt, Default: "30", Desc: "最大轮询次数"},
 	},
@@ -361,21 +480,29 @@ var Import = shortcut.Shortcut{
 	Command:     "+import",
 	Product:     productDoc,
 	Description: "上传本地文件并等待转换成在线文档对象；白名单外格式自动改走文件上传原样入库",
-	Intent:      "当用户要把工作区内的 doc/docx/xls/xlsx/md/txt/xmind/mark 文件导入为钉钉在线对象，并可指定目标文件夹或知识库时使用。白名单外格式（html/pdf 等）不报错，自动按原文件上传入库，结果带 fallback=upload、converted=false 标记。",
+	Intent:      "当用户要把工作目录内的 doc/docx/xls/xlsx/md/txt/xmind/mark 相对路径文件导入为钉钉在线对象，并可指定目标文件夹或知识库时使用；白名单外格式（html/pdf 等）自动按原文件上传入库，结果带 fallback=upload、converted=false 标记。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
 	Contract: docContract("+import", "上传本地文件并等待转换成在线文档对象；白名单外格式自动改走文件上传原样入库",
-		"当用户要把工作区内的 doc/docx/xls/xlsx/md/txt/xmind/mark 文件导入为钉钉在线对象，并可指定目标文件夹或知识库时使用。白名单外格式（html/pdf 等）不报错，自动按原文件上传入库，结果带 fallback=upload、converted=false 标记。",
+		"当用户要把工作目录内的 doc/docx/xls/xlsx/md/txt/xmind/mark 相对路径文件导入为钉钉在线对象，并可指定目标文件夹或知识库时使用；白名单外格式（html/pdf 等）自动按原文件上传入库，结果带 fallback=upload、converted=false 标记。",
 		[]string{`dws doc +import --file ./report.docx --folder <FOLDER_ID>`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`}),
 	Flags: []shortcut.Flag{
-		{Name: "file", Type: shortcut.FlagString, Desc: "本地文件路径", Required: true},
+		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内已存在文件的相对路径", Required: true},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"},
 		{Name: "workspace", Type: shortcut.FlagString, Desc: "目标知识库 ID"},
 		{Name: "name", Type: shortcut.FlagString, Desc: "导入后名称"},
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"folder", "workspace"}, Description: "--folder 与 --workspace 至少提供一个导入目标"}},
-	Tips:        []string{`dws doc +import --file ./report.docx --folder <FOLDER_ID>`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`},
-	Execute:     func(rt *shortcut.RuntimeContext) error { return helpers.RunDocImportShortcut(rt.Command()) },
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内已存在且不通过符号链接逃逸的相对路径"},
+	},
+	Tips:     []string{`dws doc +import --file ./report.docx`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`},
+	Validate: func(rt *shortcut.RuntimeContext) error { return validateWorkspaceInputPath("file", rt.Str("file")) },
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		if err := helpers.RunDocImportShortcut(rt.Command()); err != nil {
+			return docUnknownWriteError("doc.import", "import", "", err)
+		}
+		return nil
+	},
 }
 
 func executeUpdate(rt *shortcut.RuntimeContext) error {
@@ -395,26 +522,10 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		}
 	}
 	nodeID := rt.StrFirst("node", "doc")
-	currentRevision := 0
-	if rt.Changed("expected-revision") {
-		current, revisionErr := rt.CallMCPData(productDoc, "get_document_content", map[string]any{"nodeId": nodeID, "format": "jsonml"})
-		if revisionErr != nil {
-			return revisionErr
-		}
-		var found bool
-		currentRevision, found = nestedRevision(current)
-		if !found {
-			return apperrors.NewAPI("REVISION_CONFLICT: 服务响应缺少当前 revision，无法安全执行乐观更新")
-		}
-		if expected := rt.Int("expected-revision"); currentRevision != expected {
-			return apperrors.NewValidation(fmt.Sprintf("REVISION_CONFLICT: 期望 revision %d，当前为 %d", expected, currentRevision))
-		}
-	}
 	plan := map[string]any{"nodeId": nodeID, "command": command, "blockId": rt.Str("block-id"), "afterBlockId": rt.Str("after-block-id"), "contentBytes": len(content)}
 	if rt.Changed("expected-revision") {
 		plan["expectedRevision"] = rt.Int("expected-revision")
-		plan["currentRevision"] = currentRevision
-		plan["optimisticCheck"] = "best_effort"
+		plan["optimisticCheck"] = "server_enforced"
 	}
 	if rt.DryRun() {
 		plan["executed"] = false
@@ -429,10 +540,13 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 				return apperrors.NewValidation("JSONML 当前不支持 append")
 			}
 			params["format"], params["jsonml"] = "jsonml", content
+			if rt.Changed("expected-revision") {
+				params["revision"] = rt.Int("expected-revision")
+			}
 		} else {
 			params["markdown"] = content
 		}
-		return rt.CallMCP("update_document", params)
+		return executeVerifiedDocContentMutation(rt, params, node, content, command, rt.Str("doc-format"))
 	case "block_insert_after":
 		params := map[string]any{"nodeId": node, "referenceBlockId": rt.Str("after-block-id"), "where": "after"}
 		if rt.Str("doc-format") == "jsonml" {
@@ -440,17 +554,30 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		} else {
 			params["element"] = map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": content}}
 		}
-		return rt.CallMCP("insert_document_block", params)
+		referenceBlockID := rt.Str("after-block-id")
+		return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block", params, node,
+			"list_document_blocks", map[string]any{"nodeId": node, "format": "element"},
+			func(result, data map[string]any) bool {
+				return verifyInsertedBlock(result, data, referenceBlockID, content, rt.Str("doc-format"))
+			})
 	case "block_replace":
+		blockID := rt.Str("block-id")
 		params := map[string]any{"nodeId": node, "blockId": rt.Str("block-id")}
 		if rt.Str("doc-format") == "jsonml" {
 			params["format"], params["jsonml"] = "jsonml", content
 		} else {
 			params["element"] = map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": content}}
 		}
-		return rt.CallMCP("update_document_block", params)
+		return executeVerifiedDocMutation(rt, "doc.update", "update_document_block", params, node,
+			"list_document_blocks", map[string]any{"nodeId": node, "blockId": blockID, "format": "element"},
+			func(_, data map[string]any) bool {
+				return blockContentEquals(data, blockID, content, rt.Str("doc-format"))
+			})
 	case "block_delete":
-		return rt.CallMCP("delete_document_block", map[string]any{"nodeId": node, "blockId": rt.Str("block-id")})
+		blockID := rt.Str("block-id")
+		return executeVerifiedDocMutation(rt, "doc.update", "delete_document_block", map[string]any{"nodeId": node, "blockId": blockID}, node,
+			"list_document_blocks", map[string]any{"nodeId": node, "format": "element"},
+			func(_, data map[string]any) bool { return findBlock(data, blockID) == nil })
 	case "str_replace":
 		return executePlainTextReplace(rt, node)
 	case "block_copy_insert_after":
@@ -529,7 +656,11 @@ func executePlainTextReplace(rt *shortcut.RuntimeContext, nodeID string) error {
 		return apperrors.NewValidation(fmt.Sprintf("UNSAFE_RICH_TEXT_REPLACE: 需要唯一普通文本块匹配，实际 %d 处", len(matches)))
 	}
 	updated := strings.Replace(matches[0].text, oldText, rt.Str("new"), 1)
-	return rt.CallMCP("update_document_block", map[string]any{"nodeId": nodeID, "blockId": matches[0].blockID, "element": map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": updated}}})
+	blockID := matches[0].blockID
+	return executeVerifiedDocMutation(rt, "doc.update", "update_document_block",
+		map[string]any{"nodeId": nodeID, "blockId": blockID, "element": map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": updated}}}, nodeID,
+		"list_document_blocks", map[string]any{"nodeId": nodeID, "blockId": blockID, "format": "element"},
+		func(_, data map[string]any) bool { return blockContentEquals(data, blockID, updated, "markdown") })
 }
 
 func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID string) error {
@@ -544,8 +675,351 @@ func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID string) error {
 	if containsResourceReference(block) {
 		return apperrors.NewValidation("UNSUPPORTED_RESOURCE_TYPE: 含资源引用的 block 暂不支持复制")
 	}
+	expectedContent := canonicalBlockContent(block, "markdown")
 	stripBlockIDs(block)
-	return rt.CallMCP("insert_document_block", map[string]any{"nodeId": nodeID, "referenceBlockId": rt.Str("after-block-id"), "where": "after", "element": block})
+	referenceBlockID := rt.Str("after-block-id")
+	return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block",
+		map[string]any{"nodeId": nodeID, "referenceBlockId": referenceBlockID, "where": "after", "element": block}, nodeID,
+		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element"},
+		func(result, data map[string]any) bool {
+			return verifyInsertedCanonicalBlock(result, data, referenceBlockID, expectedContent, "markdown")
+		})
+}
+
+func executeVerifiedDocMutation(
+	rt *shortcut.RuntimeContext,
+	operation, tool string,
+	params map[string]any,
+	nodeID, verifyTool string,
+	verifyParams map[string]any,
+	verify func(map[string]any, map[string]any) bool,
+) error {
+	steps := []map[string]any{{"name": tool, "status": "started"}}
+	result, err := rt.CallMCPWriteData(productDoc, tool, params)
+	if err != nil {
+		return docUnknownWriteError(operation, tool, nodeID, err)
+	}
+	steps[0]["status"] = "success"
+	verification, err := rt.CallMCPData(productDoc, verifyTool, verifyParams)
+	if err != nil {
+		return docVerificationError(operation, "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
+	}
+	if verify != nil && !verify(result, verification) {
+		return docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
+	}
+	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
+	return rt.Output(docEnvelope(operation, map[string]any{
+		"nodeId":       nodeID,
+		"verified":     true,
+		"result":       result,
+		"verification": verification,
+	}, steps...))
+}
+
+func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams map[string]any, nodeID, content, mode, format string) error {
+	chunks := []string{content}
+	if format == "markdown" {
+		chunks = splitDocMarkdown(content, 10000)
+		firstParams["markdown"] = chunks[0]
+	}
+	steps := make([]map[string]any, 0, len(chunks)+1)
+	for index, chunk := range chunks {
+		params := firstParams
+		if index > 0 {
+			params = map[string]any{"nodeId": nodeID, "mode": "append", "markdown": chunk}
+		}
+		stepName := "update_document"
+		if len(chunks) > 1 {
+			stepName = fmt.Sprintf("write_chunk_%d", index+1)
+		}
+		result, err := rt.CallMCPWriteData(productDoc, "update_document", params)
+		if err != nil {
+			if index == 0 {
+				return docUnknownWriteError("doc.update", stepName, nodeID, err)
+			}
+			return docPartialWriteError(
+				"doc.update", "doc_update_chunk_commit_unknown", stepName,
+				fmt.Sprintf("文档已写入 %d/%d 个分片，但当前分片失败或提交状态未知；请先回读，不要重放已完成分片", index, len(chunks)),
+				err,
+				map[string]any{"nodeId": nodeID, "mode": mode, "chunksWritten": index, "chunksTotal": len(chunks), "lastResult": result, "verified": false},
+				append(steps, map[string]any{"name": stepName, "status": "unknown"}),
+				map[string]any{"available": false, "reason": "inspect current content before resuming from a confirmed missing boundary"},
+			)
+		}
+		steps = append(steps, map[string]any{"name": stepName, "status": "success"})
+	}
+	verification, err := rt.CallMCPData(productDoc, "get_document_content", map[string]any{"nodeId": nodeID, "format": format})
+	if err != nil {
+		return docVerificationError("doc.update", "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
+	}
+	if !verifyUpdatedDocumentContent(verification, content, mode, format) {
+		return docVerificationError("doc.update", "verify", nodeID, fmt.Errorf("回读结果未包含预期内容"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
+	}
+	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
+	return rt.Output(docEnvelope("doc.update", map[string]any{
+		"nodeId": nodeID, "mode": mode, "chunksWritten": len(chunks), "verified": true, "verification": verification,
+	}, steps...))
+}
+
+func splitDocMarkdown(content string, maxRunes int) []string {
+	if maxRunes <= 0 {
+		return []string{content}
+	}
+	runes := []rune(content)
+	if len(runes) <= maxRunes {
+		return []string{content}
+	}
+	chunks := make([]string, 0, (len(runes)+maxRunes-1)/maxRunes)
+	for start := 0; start < len(runes); {
+		end := start + maxRunes
+		if end >= len(runes) {
+			end = len(runes)
+		} else {
+			for split := end; split > start; split-- {
+				if runes[split-1] == '\n' {
+					end = split
+					break
+				}
+			}
+		}
+		chunks = append(chunks, string(runes[start:end]))
+		start = end
+	}
+	return chunks
+}
+
+func containsText(value any, needle string) bool {
+	if needle == "" {
+		return true
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.Contains(typed, needle)
+	case map[string]any:
+		for _, child := range typed {
+			if containsText(child, needle) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if containsText(child, needle) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool {
+	expected = normalizeDocumentContentForVerification(expected, format)
+	for _, candidate := range documentContentCandidates(value, format) {
+		actual := normalizeDocumentContentForVerification(candidate, format)
+		if mode == "overwrite" {
+			if actual == expected {
+				return true
+			}
+			continue
+		}
+		if actual == expected || strings.HasSuffix(actual, "\n"+expected) {
+			return true
+		}
+	}
+	return false
+}
+
+func verifyInsertedBlock(result, data map[string]any, referenceBlockID, expected, format string) bool {
+	return verifyInsertedCanonicalBlock(result, data, referenceBlockID, normalizeDocumentContentForVerification(expected, format), format)
+}
+
+func verifyInsertedCanonicalBlock(result, data map[string]any, referenceBlockID, expected, format string) bool {
+	if insertedID := nestedString(result, "blockId", "elementId", "id"); insertedID != "" {
+		if blockContentEquals(data, insertedID, expected, format) {
+			return true
+		}
+	}
+	blocks := orderedDocumentBlocks(data)
+	for index, block := range blocks {
+		if blockIdentity(block, "") != referenceBlockID || index+1 >= len(blocks) {
+			continue
+		}
+		return canonicalBlockContent(blocks[index+1], format) == expected
+	}
+	return false
+}
+
+func blockContentEquals(data map[string]any, blockID, expected, format string) bool {
+	block := findBlock(data, blockID)
+	if block == nil {
+		return false
+	}
+	return canonicalBlockContent(block, format) == normalizeDocumentContentForVerification(expected, format)
+}
+
+func canonicalBlockContent(value any, format string) string {
+	if format == "jsonml" {
+		if values, ok := value.(map[string]any); ok {
+			if encoded, ok := values["jsonml"].(string); ok {
+				return normalizeJSONMLForVerification(encoded)
+			}
+		}
+		if encoded, ok := value.(string); ok {
+			return normalizeJSONMLForVerification(encoded)
+		}
+		if encoded, err := json.Marshal(value); err == nil {
+			return normalizeJSONMLForVerification(string(encoded))
+		}
+	}
+	texts := make([]string, 0, 4)
+	var walk func(any)
+	walk = func(current any) {
+		switch typed := current.(type) {
+		case map[string]any:
+			if text, ok := typed["text"].(string); ok {
+				texts = append(texts, text)
+				return
+			}
+			for key, child := range typed {
+				if key == "id" || key == "blockId" || key == "uuid" {
+					continue
+				}
+				walk(child)
+			}
+		case []any:
+			start := 0
+			if len(typed) > 0 {
+				if _, isTag := typed[0].(string); isTag {
+					start = 1
+				}
+			}
+			for _, child := range typed[start:] {
+				walk(child)
+			}
+		case string:
+			texts = append(texts, typed)
+		}
+	}
+	walk(value)
+	return normalizeMarkdownForVerification(strings.Join(texts, "\n"))
+}
+
+func orderedDocumentBlocks(value any) []map[string]any {
+	blocks := []map[string]any{}
+	var walk func(any)
+	walk = func(current any) {
+		switch typed := current.(type) {
+		case map[string]any:
+			if blockIdentity(typed, "") != "" {
+				blocks = append(blocks, typed)
+				return
+			}
+			for _, child := range typed {
+				walk(child)
+			}
+		case []any:
+			for _, child := range typed {
+				walk(child)
+			}
+		}
+	}
+	walk(value)
+	return blocks
+}
+
+func documentContentCandidates(value any, format string) []string {
+	wanted := map[string]bool{"content": true}
+	if format == "jsonml" {
+		wanted["jsonml"] = true
+	} else {
+		wanted["markdown"] = true
+	}
+	var candidates []string
+	var walk func(any, bool)
+	walk = func(current any, root bool) {
+		switch typed := current.(type) {
+		case string:
+			if root {
+				candidates = append(candidates, typed)
+			}
+		case map[string]any:
+			for key, child := range typed {
+				normalizedKey := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
+				if text, ok := child.(string); ok && wanted[normalizedKey] {
+					candidates = append(candidates, text)
+				}
+				walk(child, false)
+			}
+		case []any:
+			for _, child := range typed {
+				walk(child, false)
+			}
+		}
+	}
+	walk(value, true)
+	return candidates
+}
+
+func normalizeDocumentContentForVerification(raw, format string) string {
+	if format == "jsonml" {
+		return normalizeJSONMLForVerification(raw)
+	}
+	return normalizeMarkdownForVerification(raw)
+}
+
+func normalizeMarkdownForVerification(raw string) string {
+	raw = strings.ReplaceAll(strings.ReplaceAll(raw, "\r\n", "\n"), "\r", "\n")
+	lines := make([]string, 0, strings.Count(raw, "\n")+1)
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.Contains(line, "|") {
+			parts := strings.Split(line, "|")
+			for index := range parts {
+				parts[index] = strings.Join(strings.Fields(parts[index]), " ")
+			}
+			line = strings.Join(parts, "|")
+		} else {
+			line = strings.Join(strings.Fields(line), " ")
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func normalizeJSONMLForVerification(raw string) string {
+	var value any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return normalizeMarkdownForVerification(raw)
+	}
+	var tokens []string
+	var walk func(any)
+	walk = func(current any) {
+		switch typed := current.(type) {
+		case []any:
+			start := 0
+			if len(typed) > 0 {
+				if tag, ok := typed[0].(string); ok {
+					tokens = append(tokens, "<"+strings.ToLower(strings.TrimSpace(tag))+">")
+					start = 1
+				}
+			}
+			for _, child := range typed[start:] {
+				walk(child)
+			}
+		case map[string]any:
+			// JSONML maps contain element attributes. Server-generated UUIDs and
+			// default attributes do not change the authored document content.
+			return
+		case string:
+			if text := normalizeMarkdownForVerification(typed); text != "" {
+				tokens = append(tokens, text)
+			}
+		}
+	}
+	walk(value)
+	return strings.Join(tokens, "\n")
 }
 
 func executeExport(rt *shortcut.RuntimeContext) error {
@@ -555,13 +1029,13 @@ func executeExport(rt *shortcut.RuntimeContext) error {
 		plan["steps"] = []string{"submit_export_job", "query_export_job", "safe_atomic_download"}
 		return rt.Output(docEnvelope("doc.export", plan))
 	}
-	submit, err := rt.CallMCPData(productDoc, "submit_export_job", map[string]any{"nodeId": rt.Str("node"), "exportFormat": rt.Str("export-format")})
+	submit, err := rt.CallMCPWriteData(productDoc, "submit_export_job", map[string]any{"nodeId": rt.Str("node"), "exportFormat": rt.Str("export-format")})
 	if err != nil {
-		return err
+		return docUnknownWriteError("doc.export", "submit_export_job", rt.Str("node"), err)
 	}
 	jobID := nestedString(submit, "jobId", "jobID")
 	if jobID == "" {
-		return apperrors.NewAPI("导出任务响应缺少 jobId")
+		return docExportRecoveryError("doc_export_missing_job_id", "submit", "导出任务已提交但响应缺少 jobId；禁止重新提交", "", nil)
 	}
 	maxPolls := rt.Int("max-polls")
 	if maxPolls <= 0 {
@@ -571,29 +1045,29 @@ func executeExport(rt *shortcut.RuntimeContext) error {
 	for attempt := 1; attempt <= maxPolls; attempt++ {
 		query, err = rt.CallMCPData(productDoc, "query_export_job", map[string]any{"jobId": jobID})
 		if err != nil {
-			return err
+			return docExportRecoveryError("doc_export_poll_failed", "poll", "导出任务轮询失败；请使用现有 jobId 恢复查询，不要重新提交", jobID, err)
 		}
 		status := strings.ToUpper(nestedString(query, "status"))
 		if status == "SUCCESS" {
 			break
 		}
-		if status != "PROCESSING" {
-			return apperrors.NewAPI(fmt.Sprintf("导出任务失败 (jobId=%s, status=%s): %s", jobID, status, nestedString(query, "message")))
+		if !docExportStatusPollable(status) {
+			return docExportRecoveryError("doc_export_job_failed", "poll", fmt.Sprintf("导出任务失败 (status=%s): %s", status, nestedString(query, "message")), jobID, nil)
 		}
 		if attempt == maxPolls {
-			return apperrors.NewAPI(fmt.Sprintf("导出任务超时 (jobId=%s)，可用 doc +export-get 恢复查询", jobID))
+			return docExportRecoveryError("doc_export_poll_timeout", "poll", "导出任务仍在处理中；请使用现有 jobId 恢复查询，不要重新提交", jobID, nil)
 		}
 		timer := time.NewTimer(time.Duration(min(attempt, 5)) * time.Second)
 		select {
 		case <-rt.Command().Context().Done():
 			timer.Stop()
-			return rt.Command().Context().Err()
+			return docExportRecoveryError("doc_export_poll_cancelled", "poll", "导出等待被中断；请使用现有 jobId 恢复查询，不要重新提交", jobID, rt.Command().Context().Err())
 		case <-timer.C:
 		}
 	}
 	downloadURL := nestedString(query, "downloadUrl", "resourceUrl")
 	if downloadURL == "" {
-		return apperrors.NewAPI(fmt.Sprintf("导出成功但响应缺少 downloadUrl (jobId=%s)", jobID))
+		return docExportRecoveryError("doc_export_missing_download_url", "download", "导出任务已完成但响应缺少下载地址；请使用现有 jobId 重新查询", jobID, nil)
 	}
 	cwd, err := docGetwd()
 	if err != nil {
@@ -603,10 +1077,100 @@ func executeExport(rt *shortcut.RuntimeContext) error {
 	preferred := "document" + ext
 	result, err := docDownload(rt.Command().Context(), downloadURL, localio.DownloadOptions{BaseDir: cwd, Output: rt.Str("output"), PreferredName: preferred})
 	if err != nil {
-		return err
+		return docExportRecoveryError("doc_export_download_failed", "download", fmt.Sprintf("导出任务已完成但安全下载失败（output=%s）", rt.Str("output")), jobID, err)
 	}
 	return rt.Output(docEnvelope("doc.export", map[string]any{"jobId": jobID, "localPath": result.RelativePath, "sizeBytes": result.SizeBytes},
 		map[string]any{"name": "submit", "status": "success"}, map[string]any{"name": "poll", "status": "success"}, map[string]any{"name": "download", "status": "success"}))
+}
+
+func docExportStatusPollable(status string) bool {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "INIT", "PROCESSING":
+		return true
+	default:
+		return false
+	}
+}
+
+func executeExportGet(rt *shortcut.RuntimeContext) error {
+	jobID := rt.Str("job-id")
+	query, err := rt.CallMCPData(productDoc, "query_export_job", map[string]any{"jobId": jobID})
+	if err != nil {
+		return docExportRecoveryError("doc_export_query_failed", "query", "查询导出任务失败；保留 jobId 后停止", jobID, err)
+	}
+	status := strings.ToUpper(nestedString(query, "status"))
+	if status == "" {
+		status = "UNKNOWN"
+	}
+	if status == "FAILED" || status == "CANCELLED" {
+		return docExportRecoveryError("doc_export_job_failed", "query", fmt.Sprintf("导出任务状态为 %s: %s", status, nestedString(query, "message")), jobID, nil)
+	}
+	if rt.Str("output") == "" || status != "SUCCESS" {
+		return rt.Output(map[string]any{
+			"contractVersion": "doc.operation.v1",
+			"ok":              true,
+			"status":          strings.ToLower(status),
+			"complete":        status == "SUCCESS",
+			"operation":       "doc.export_get",
+			"data":            map[string]any{"jobId": jobID, "result": query},
+		})
+	}
+	downloadURL := nestedString(query, "downloadUrl", "resourceUrl")
+	if downloadURL == "" {
+		return docExportRecoveryError("doc_export_missing_download_url", "download", "导出任务已完成但响应缺少下载地址", jobID, nil)
+	}
+	cwd, err := docGetwd()
+	if err != nil {
+		return err
+	}
+	result, err := docDownload(rt.Command().Context(), downloadURL, localio.DownloadOptions{
+		BaseDir: cwd, Output: rt.Str("output"), PreferredName: "document",
+	})
+	if err != nil {
+		return docExportRecoveryError("doc_export_download_failed", "download", fmt.Sprintf("导出任务已完成但安全下载失败（output=%s）", rt.Str("output")), jobID, err)
+	}
+	return rt.Output(docEnvelope("doc.export_get", map[string]any{
+		"jobId": jobID, "localPath": result.RelativePath, "sizeBytes": result.SizeBytes, "verified": result.SizeBytes > 0,
+	}, map[string]any{"name": "query", "status": "success"}, map[string]any{"name": "download", "status": "success"}))
+}
+
+func docExportRecoveryError(reason, stage, message, jobID string, cause error) error {
+	status := "incomplete"
+	if jobID == "" {
+		status = "unknown"
+	}
+	details := map[string]any{
+		"contractVersion": "doc.operation.v1",
+		"status":          status,
+		"jobId":           jobID,
+		"stage":           stage,
+	}
+	options := []apperrors.Option{
+		apperrors.WithOperation("doc.export"),
+		apperrors.WithReason(reason),
+		apperrors.WithFailureStage(stage),
+		apperrors.WithRetryable(false),
+		apperrors.WithDetails(details),
+	}
+	if jobID != "" {
+		options = append(options,
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithActions(
+				fmt.Sprintf("dws doc +export-get --job-id %s", jobID),
+				"需要保存文件时给 +export-get 追加工作目录内的 --output 相对路径",
+				"不要重新提交导出，不要 curl 临时下载地址，不要安装本地转换依赖",
+			),
+		)
+	} else {
+		options = append(options,
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithActions("先检查文档空间中是否已有导出任务；不要直接重新提交"),
+		)
+	}
+	if cause != nil {
+		options = append(options, apperrors.WithCause(cause))
+	}
+	return apperrors.NewAPI(message, options...)
 }
 
 func projectKeywordMatches(data map[string]any, rawQuery string, before, after int) map[string]any {

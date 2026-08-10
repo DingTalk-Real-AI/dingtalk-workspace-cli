@@ -12,10 +12,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
@@ -26,6 +28,7 @@ import (
 )
 
 type docCoverageCaller struct {
+	mu        sync.Mutex
 	failAt    int
 	calls     int
 	responses map[string][]map[string]any
@@ -43,6 +46,8 @@ type docCoverageErrorReader struct{}
 func (docCoverageErrorReader) Read([]byte) (int, error) { return 0, errors.New("stdin failed") }
 
 func (f *docCoverageCaller) CallTool(_ context.Context, _, tool string, params map[string]any) (*edition.ToolResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls++
 	f.history = append(f.history, docCoverageCall{tool: tool, params: params})
 	if f.failAt == f.calls {
@@ -70,9 +75,9 @@ func docCoveragePayload(tool string) map[string]any {
 	case "create_document":
 		return map[string]any{"data": map[string]any{"nodeId": "node-1"}}
 	case "get_document_content":
-		return map[string]any{"data": map[string]any{"revision": 1, "jsonml": `["root",{},["p",{"uuid":"block-1"},"alpha beta"]]`}}
+		return map[string]any{"data": map[string]any{"revision": 1, "markdown": "alpha beta x body gamma legacy []", "jsonml": `["root",{},["p",{"uuid":"block-1"},"alpha beta x body gamma legacy []"]]`}}
 	case "list_document_blocks":
-		return map[string]any{"blocks": []any{map[string]any{"element": map[string]any{"id": "block-1", "paragraph": map[string]any{"text": "alpha beta"}}}}}
+		return map[string]any{"blocks": []any{map[string]any{"element": map[string]any{"id": "block-1", "paragraph": map[string]any{"text": "alpha beta x body gamma []"}}}}}
 	case "submit_export_job":
 		return map[string]any{"jobId": "job-1"}
 	case "query_export_job":
@@ -156,6 +161,224 @@ func TestCrossPlatformCoverageRevisionSelectionAndKeywordUseLiveShapes(t *testin
 	}
 }
 
+func TestCrossPlatformCoverageFetchResolvesUniqueTitleBeforeRead(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"search_documents": {{
+			"documents": []any{map[string]any{"nodeId": "resolved-node", "name": "项目周报", "docType": "adoc"}},
+			"hasMore":   false,
+		}},
+	}}
+	if err := runDocCoverage(t, Fetch, caller, "--query", "项目周报"); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.history) != 2 || caller.history[0].tool != "search_documents" || caller.history[1].tool != "get_document_content" {
+		t.Fatalf("fetch resolution calls = %#v", caller.history)
+	}
+	if caller.history[1].params["nodeId"] != "resolved-node" {
+		t.Fatalf("resolved fetch params = %#v", caller.history[1].params)
+	}
+
+	ambiguous := &docCoverageCaller{responses: map[string][]map[string]any{
+		"search_documents": {{
+			"documents": []any{
+				map[string]any{"nodeId": "a", "name": "项目周报", "docType": "adoc"},
+				map[string]any{"nodeId": "b", "name": "项目周报", "docType": "adoc"},
+			},
+			"hasMore": false,
+		}},
+	}}
+	if err := runDocCoverage(t, Fetch, ambiguous, "--query", "项目周报"); err == nil {
+		t.Fatal("ambiguous title unexpectedly succeeded")
+	}
+	if len(ambiguous.history) != 1 || ambiguous.history[0].tool != "search_documents" {
+		t.Fatalf("ambiguous fetch reached content read: %#v", ambiguous.history)
+	}
+}
+
+func TestCrossPlatformCoverageTemplateGoldenRouteStopsBeforeAmbiguousCreate(t *testing.T) {
+	payload := map[string]any{
+		"templates": []any{
+			map[string]any{"templateId": "template-b", "templateName": "团队周报", "templateSource": "PUBLIC"},
+			map[string]any{"templateId": "template-a", "templateName": "运营周报", "templateSource": "PUBLIC"},
+		},
+	}
+	candidates := collectTemplateCandidates(payload)
+	if len(candidates) != 2 || candidates[0]["templateId"] != "template-b" || candidates[1]["templateId"] != "template-a" {
+		t.Fatalf("template candidates = %#v", candidates)
+	}
+
+	search := &docCoverageCaller{responses: map[string][]map[string]any{"search_doc_templates": {payload}}}
+	if err := runDocCoverage(t, TemplateSearch, search, "--query", "周报", "--source", "PUBLIC"); err != nil {
+		t.Fatal(err)
+	}
+	if len(search.history) != 1 || search.history[0].tool != "search_doc_templates" {
+		t.Fatalf("template search calls = %#v", search.history)
+	}
+
+	ambiguous := &docCoverageCaller{responses: map[string][]map[string]any{"search_doc_templates": {payload}}}
+	err := runDocCoverage(t, CreateFromTemplate, ambiguous, "--query", "周报", "--source", "PUBLIC")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "template_selection_required" || typed.ExecutionStarted == nil || *typed.ExecutionStarted || !typed.RetryableSet || typed.Retryable {
+		t.Fatalf("ambiguous template error = %#v", err)
+	}
+	if len(ambiguous.history) != 1 || ambiguous.history[0].tool != "search_doc_templates" {
+		t.Fatalf("ambiguous template reached write: %#v", ambiguous.history)
+	}
+	if got, ok := typed.Details["candidates"].([]map[string]any); !ok || len(got) != 2 {
+		t.Fatalf("ambiguous template details = %#v", typed.Details)
+	}
+
+	notFound := &docCoverageCaller{responses: map[string][]map[string]any{"search_doc_templates": {{"templates": []any{}}}}}
+	err = runDocCoverage(t, CreateFromTemplate, notFound, "--query", "不存在")
+	if !errors.As(err, &typed) || typed.Reason != "template_not_found" {
+		t.Fatalf("not-found template error = %#v", err)
+	}
+
+	if selection := CreateFromTemplate.Contract.Selection; len(selection.AvoidWhen) < 2 || !strings.Contains(strings.Join(selection.AvoidWhen, " "), "+template-search") {
+		t.Fatalf("create-from-template selection = %#v", selection)
+	}
+	mutualRoutes := []struct {
+		name      string
+		selection contract.SelectionSpec
+		siblings  []string
+	}{
+		{name: "+template-list", selection: TemplateList.Contract.Selection, siblings: []string{"+template-search", "+create-from-template"}},
+		{name: "+template-search", selection: TemplateSearch.Contract.Selection, siblings: []string{"+template-list", "+create-from-template"}},
+		{name: "+create-from-template", selection: CreateFromTemplate.Contract.Selection, siblings: []string{"+template-list", "+template-search"}},
+	}
+	for _, route := range mutualRoutes {
+		avoid := strings.Join(route.selection.AvoidWhen, " ")
+		for _, sibling := range route.siblings {
+			if !strings.Contains(avoid, sibling) {
+				t.Errorf("%s Selection does not exclude sibling %s: %#v", route.name, sibling, route.selection)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageTemplateCreateProvesUniquenessAcrossPages(t *testing.T) {
+	firstPage := map[string]any{
+		"templates":  []any{map[string]any{"templateId": "template-a", "templateName": "周报"}},
+		"hasMore":    true,
+		"nextCursor": "page-2",
+	}
+
+	ambiguous := &docCoverageCaller{responses: map[string][]map[string]any{
+		"search_doc_templates": {
+			firstPage,
+			{"templates": []any{map[string]any{"templateId": "template-b", "templateName": "周报二"}}, "hasMore": false},
+		},
+	}}
+	err := runDocCoverage(t, CreateFromTemplate, ambiguous, "--query", "周报")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "template_selection_required" {
+		t.Fatalf("cross-page ambiguity = %#v", err)
+	}
+	if len(ambiguous.history) != 2 || ambiguous.history[1].params["nextCursor"] != "page-2" {
+		t.Fatalf("cross-page search calls = %#v", ambiguous.history)
+	}
+
+	unique := &docCoverageCaller{responses: map[string][]map[string]any{
+		"search_doc_templates": {
+			firstPage,
+			{"templates": []any{}, "hasMore": false},
+		},
+	}}
+	if err := runDocCoverage(t, CreateFromTemplate, unique, "--query", "周报"); err != nil {
+		t.Fatal(err)
+	}
+	if len(unique.history) != 3 || unique.history[2].tool != "apply_doc_template" || unique.history[2].params["templateId"] != "template-a" {
+		t.Fatalf("unique cross-page create calls = %#v", unique.history)
+	}
+
+	missingCursor := &docCoverageCaller{responses: map[string][]map[string]any{"search_doc_templates": {firstPage}}}
+	missingCursor.responses["search_doc_templates"][0] = map[string]any{
+		"templates": []any{map[string]any{"templateId": "template-a"}},
+		"hasMore":   true,
+	}
+	err = runDocCoverage(t, CreateFromTemplate, missingCursor, "--query", "周报")
+	if !errors.As(err, &typed) || typed.Reason != "template_pagination_missing_next_cursor" || len(missingCursor.history) != 1 {
+		t.Fatalf("missing template cursor = %#v history=%#v", err, missingCursor.history)
+	}
+}
+
+func TestCrossPlatformCoverageExportRecoveryReusesJobAndSafeDownloader(t *testing.T) {
+	for _, status := range []string{"INIT", "init", " PROCESSING "} {
+		if !docExportStatusPollable(status) {
+			t.Errorf("export status %q should remain pollable", status)
+		}
+	}
+	for _, status := range []string{"", "FAILED", "CANCELLED", "SUCCESS"} {
+		if docExportStatusPollable(status) {
+			t.Errorf("export status %q should not remain pollable", status)
+		}
+	}
+	init := &docCoverageCaller{responses: map[string][]map[string]any{"query_export_job": {{"status": "INIT"}}}}
+	err := runDocCoverage(t, Export, init, "--node", "n", "--export-format", "docx", "--output", "export.docx", "--max-polls", "1")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "doc_export_poll_timeout" {
+		t.Fatalf("INIT export status = %#v, want poll timeout", err)
+	}
+
+	pollFailure := &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{}}
+	err = runDocCoverage(t, Export, pollFailure, "--node", "n", "--export-format", "docx", "--output", "export.docx")
+	if !errors.As(err, &typed) || typed.Reason != "doc_export_poll_failed" || typed.Details["jobId"] != "job-1" || typed.ExecutionStarted == nil || !*typed.ExecutionStarted {
+		t.Fatalf("export poll error = %#v", err)
+	}
+	if !strings.Contains(strings.Join(typed.Actions, " "), "+export-get --job-id job-1") {
+		t.Fatalf("export recovery actions = %#v", typed.Actions)
+	}
+
+	t.Chdir(t.TempDir())
+	testseam.Swap(t, &docDownload, func(_ context.Context, _ string, opts localio.DownloadOptions) (localio.DownloadResult, error) {
+		if opts.Output != "recovered.docx" {
+			t.Fatalf("recovery output = %#v", opts)
+		}
+		return localio.DownloadResult{RelativePath: "recovered.docx", SizeBytes: 42}, nil
+	})
+	recovery := &docCoverageCaller{responses: map[string][]map[string]any{
+		"query_export_job": {{"status": "SUCCESS", "downloadUrl": "https://download.dingtalk.com/recovered.docx"}},
+	}}
+	if err := runDocCoverage(t, ExportGet, recovery, "--job-id", "job-1", "--output", "recovered.docx"); err != nil {
+		t.Fatal(err)
+	}
+	if len(recovery.history) != 1 || recovery.history[0].tool != "query_export_job" {
+		t.Fatalf("export recovery calls = %#v", recovery.history)
+	}
+	if err := runDocCoverage(t, ExportGet, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--job-id", "job-1", "--output", "/tmp/unsafe.docx"); err == nil {
+		t.Fatal("absolute recovery output unexpectedly accepted")
+	}
+}
+
+func TestCrossPlatformCoverageCommentListPaginationFlagsAndAlias(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
+	if err := runDocCoverage(t, CommentList, caller, "--node", "n", "--page-size", "20", "--cursor", "next-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.history) != 1 || caller.history[0].tool != "list_comments" || caller.history[0].params["pageSize"] != 20 || caller.history[0].params["nextToken"] != "next-1" {
+		t.Fatalf("comment pagination call = %#v", caller.history)
+	}
+}
+
+func TestCrossPlatformCoverageMediaFailuresKeepStableIDsAndForbidPathEscape(t *testing.T) {
+	if err := runDocCoverage(t, MediaInsert, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--file", "/tmp/media.bin", "--dry-run", "--yes"); err == nil {
+		t.Fatal("absolute media input unexpectedly accepted")
+	}
+	if err := runDocCoverage(t, Import, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--file", "/tmp/report.docx", "--workspace", "workspace-1"); err == nil {
+		t.Fatal("absolute import input unexpectedly accepted")
+	}
+
+	resolveFailure := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}
+	err := runDocCoverage(t, MediaDownload, resolveFailure, "--node", "node-1", "--resource-id", "resource-1", "--output", "media.bin")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "doc_media_resolve_failed" || typed.Details["nodeId"] != "node-1" || typed.Details["resourceId"] != "resource-1" {
+		t.Fatalf("media recovery error = %#v", err)
+	}
+	if !strings.Contains(strings.Join(typed.Actions, " "), "不要 curl/wget") {
+		t.Fatalf("media recovery actions = %#v", typed.Actions)
+	}
+}
+
 func TestCrossPlatformCoverageDocCompositePartialWriteContracts(t *testing.T) {
 	assertPartial := func(t *testing.T, err error, reason, stage, nodeID string, wantSteps int) *apperrors.Error {
 		t.Helper()
@@ -184,7 +407,7 @@ func TestCrossPlatformCoverageDocCompositePartialWriteContracts(t *testing.T) {
 	}
 
 	create := &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{}}
-	err := runDocCoverage(t, Create, create, "--name", "n", "--content", `[]`, "--doc-format", "jsonml")
+	err := runDocCoverage(t, Create, create, "--name", "n", "--content", `["root",{}]`, "--doc-format", "jsonml")
 	typed := assertPartial(t, err, "doc_create_initial_content_failed", "write_jsonml", "node-1", 2)
 	compensation, _ := typed.Details["compensation"].(map[string]any)
 	if compensation["available"] != true || compensation["nodeId"] != "node-1" || len(create.history) != 2 {
@@ -206,6 +429,13 @@ func TestCrossPlatformCoverageDocCompositePartialWriteContracts(t *testing.T) {
 	err = runDocCoverage(t, CheckpointUpdate, checkpointVerify, "--node", "n", "--content", "body", "--yes")
 	assertPartial(t, err, "doc_checkpoint_verification_failed", "verify", "n", 3)
 
+	checkpointMismatch := &docCoverageCaller{responses: map[string][]map[string]any{
+		"save_doc_version":     {{"version": 8.0}},
+		"get_document_content": {{"markdown": "different content"}},
+	}}
+	err = runDocCoverage(t, CheckpointUpdate, checkpointMismatch, "--node", "n", "--content", "body", "--yes")
+	assertPartial(t, err, "doc_checkpoint_verification_failed", "verify", "n", 3)
+
 	historyVerify := &docCoverageCaller{failAt: 3, responses: map[string][]map[string]any{}}
 	err = runDocCoverage(t, VersionRevert, historyVerify, "--node", "n", "--version", "3", "--yes")
 	assertPartial(t, err, "doc_history_revert_verification_failed", "verify", "n", 3)
@@ -215,22 +445,31 @@ func TestCrossPlatformCoverageDocUpdateAliasReachesNestedBranches(t *testing.T) 
 	tests := []struct {
 		name      string
 		args      []string
+		responses map[string][]map[string]any
 		wantTools []string
 	}{
 		{
-			name:      "plain text replace",
-			args:      []string{"--doc", "alias-node", "--command", "str_replace", "--old", "alpha", "--new", "gamma", "--yes"},
-			wantTools: []string{"list_document_blocks", "update_document_block"},
+			name: "plain text replace",
+			args: []string{"--doc", "alias-node", "--command", "str_replace", "--old", "alpha", "--new", "gamma", "--yes"},
+			responses: map[string][]map[string]any{"list_document_blocks": {
+				{"blocks": []any{map[string]any{"element": map[string]any{"id": "block-1", "paragraph": map[string]any{"text": "alpha beta"}}}}},
+				{"blocks": []any{map[string]any{"element": map[string]any{"id": "block-1", "paragraph": map[string]any{"text": "gamma beta"}}}}},
+			}},
+			wantTools: []string{"list_document_blocks", "update_document_block", "list_document_blocks"},
 		},
 		{
-			name:      "block copy",
-			args:      []string{"--doc", "alias-node", "--command", "block_copy_insert_after", "--block-id", "block-1", "--after-block-id", "after", "--yes"},
-			wantTools: []string{"list_document_blocks", "insert_document_block"},
+			name: "block copy",
+			args: []string{"--doc", "alias-node", "--command", "block_copy_insert_after", "--block-id", "block-1", "--after-block-id", "after", "--yes"},
+			responses: map[string][]map[string]any{"list_document_blocks": {
+				{"blocks": []any{map[string]any{"element": map[string]any{"id": "block-1", "paragraph": map[string]any{"text": "alpha"}}}}},
+				{"blocks": []any{map[string]any{"element": map[string]any{"id": "id-1", "paragraph": map[string]any{"text": "alpha"}}}}},
+			}},
+			wantTools: []string{"list_document_blocks", "insert_document_block", "list_document_blocks"},
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
+			caller := &docCoverageCaller{responses: tc.responses}
 			if err := runDocCoverage(t, Update, caller, tc.args...); err != nil {
 				t.Fatal(err)
 			}
@@ -243,6 +482,122 @@ func TestCrossPlatformCoverageDocUpdateAliasReachesNestedBranches(t *testing.T) 
 				}
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageDocWritesStopOnUnknownCommitAndRequireVerification(t *testing.T) {
+	unknown := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}
+	err := runDocCoverage(t, Update, unknown, "--node", "n", "--command", "append", "--content", "x", "--yes")
+	var typed *apperrors.Error
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_write_commit_unknown" || !typed.RetryableSet || typed.Retryable {
+		t.Fatalf("unknown write error = %#v", err)
+	}
+	if len(unknown.history) != 1 || unknown.history[0].tool != "update_document" {
+		t.Fatalf("unknown write was replayed or verified: %#v", unknown.history)
+	}
+
+	verificationFailure := &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{}}
+	err = runDocCoverage(t, Update, verificationFailure, "--node", "n", "--command", "append", "--content", "x", "--yes")
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_write_verification_failed" || typed.Details["status"] != "partial_success" {
+		t.Fatalf("verification failure = %#v", err)
+	}
+	if len(verificationFailure.history) != 2 || verificationFailure.history[1].tool != "get_document_content" {
+		t.Fatalf("verification calls = %#v", verificationFailure.history)
+	}
+}
+
+func TestCrossPlatformCoverageDocWriteErrorStateMachine(t *testing.T) {
+	tests := []struct {
+		name       string
+		cause      error
+		wantState  string
+		wantReason string
+		wantRetry  bool
+	}{
+		{
+			name:       "permission is terminal",
+			cause:      apperrors.NewAuth("forbidden", apperrors.WithReason("http_403"), apperrors.WithRetryable(false)),
+			wantState:  "failed",
+			wantReason: "permission_denied",
+		},
+		{
+			name: "confirmed not started may retry",
+			cause: apperrors.NewAPI("rate limited", apperrors.WithReason("http_429"),
+				apperrors.WithExecutionStarted(false), apperrors.WithRetryable(true)),
+			wantState:  "retryable",
+			wantReason: "http_429",
+			wantRetry:  true,
+		},
+		{
+			name:       "unknown write never replays",
+			cause:      errors.New("connection reset"),
+			wantState:  "unknown",
+			wantReason: "doc_write_commit_unknown",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := docUnknownWriteError("doc.update", "update_document", "n", tc.cause)
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("error = %#v", err)
+			}
+			if typed.Details["state"] != tc.wantState || typed.Reason != tc.wantReason || typed.Retryable != tc.wantRetry {
+				t.Fatalf("transition = reason=%q retry=%v details=%#v", typed.Reason, typed.Retryable, typed.Details)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocLongWritesChunkOnceAndVerify(t *testing.T) {
+	long := strings.Repeat("段落😀", 4000)
+	chunks := splitDocMarkdown(long, 10000)
+	if len(chunks) < 2 || strings.Join(chunks, "") != long {
+		t.Fatalf("split chunks=%d roundtrip=%v", len(chunks), strings.Join(chunks, "") == long)
+	}
+
+	update := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": long}},
+	}}
+	if err := runDocCoverage(t, Update, update, "--node", "n", "--command", "overwrite", "--content", long, "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	if len(update.history) != len(chunks)+1 || update.history[0].params["mode"] != "overwrite" || update.history[1].params["mode"] != "append" || update.history[len(update.history)-1].tool != "get_document_content" {
+		t.Fatalf("long update calls = %#v", update.history)
+	}
+
+	partial := &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{}}
+	err := runDocCoverage(t, Update, partial, "--node", "n", "--command", "append", "--content", long, "--yes")
+	var typed *apperrors.Error
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_update_chunk_commit_unknown" || len(partial.history) != 2 {
+		t.Fatalf("partial long update err=%#v calls=%#v", err, partial.history)
+	}
+
+	create := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": long}},
+	}}
+	if err := runDocCoverage(t, Create, create, "--name", "long", "--content", long); err != nil {
+		t.Fatal(err)
+	}
+	if len(create.history) != len(chunks)+1 || create.history[0].tool != "create_document" || create.history[1].tool != "update_document" || create.history[len(create.history)-1].tool != "get_document_content" {
+		t.Fatalf("long create calls = %#v", create.history)
+	}
+}
+
+func TestCrossPlatformCoverageUpdateVerificationNormalizesMarkdownRoundTrip(t *testing.T) {
+	expected := "# 值班表\r\n\r\n| 姓名 | 班次 |\r\n| --- | --- |\r\n| 小王 | 早班 |\r\n"
+	serverMarkdown := "#  值班表\n\n|姓名|班次|\n|---|---|\n|小王|早班|\n"
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"data": map[string]any{"markdown": serverMarkdown}}},
+	}}
+	if err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "overwrite", "--content", expected, "--yes"); err != nil {
+		t.Fatalf("normalized Markdown verification failed: %v", err)
+	}
+	if !verifyUpdatedDocumentContent(map[string]any{"markdown": "已有内容\n" + serverMarkdown}, expected, "append", "markdown") {
+		t.Fatal("normalized append verification did not find the appended content")
+	}
+	if verifyUpdatedDocumentContent(map[string]any{"markdown": "# 值班表\n|姓名|班次|"}, expected, "overwrite", "markdown") {
+		t.Fatal("incomplete overwrite content passed normalized verification")
 	}
 }
 
@@ -378,20 +733,20 @@ func TestCrossPlatformCoverageDocContentCommandsAndFailureBoundaries(t *testing.
 		{"inspect base", Inspect, []string{"--node", "n"}},
 		{"inspect all", Inspect, []string{"--node", "n", "--include-style", "--include-permissions", "--include-history", "--include-media", "--include-comments"}},
 		{"update append", Update, []string{"--node", "n", "--command", "append", "--content", "x", "--yes"}},
-		{"update overwrite jsonml", Update, []string{"--node", "n", "--command", "overwrite", "--content", `[]`, "--doc-format", "jsonml", "--yes"}},
+		{"update overwrite jsonml", Update, []string{"--node", "n", "--command", "overwrite", "--content", `["root",{}]`, "--doc-format", "jsonml", "--yes"}},
 		{"update insert text", Update, []string{"--node", "n", "--command", "block_insert_after", "--after-block-id", "b", "--content", "x", "--yes"}},
-		{"update insert jsonml", Update, []string{"--node", "n", "--command", "block_insert_after", "--after-block-id", "b", "--content", `[]`, "--doc-format", "jsonml", "--yes"}},
+		{"update insert jsonml", Update, []string{"--node", "n", "--command", "block_insert_after", "--after-block-id", "b", "--content", `["p",{},"x"]`, "--doc-format", "jsonml", "--yes"}},
 		{"update replace text", Update, []string{"--node", "n", "--command", "block_replace", "--block-id", "b", "--content", "x", "--yes"}},
-		{"update replace jsonml", Update, []string{"--node", "n", "--command", "block_replace", "--block-id", "b", "--content", `[]`, "--doc-format", "jsonml", "--yes"}},
+		{"update replace jsonml", Update, []string{"--node", "n", "--command", "block_replace", "--block-id", "b", "--content", `["p",{},"x"]`, "--doc-format", "jsonml", "--yes"}},
 		{"update delete", Update, []string{"--node", "n", "--command", "block_delete", "--block-id", "b", "--yes"}},
 		{"update replace", Update, []string{"--node", "n", "--command", "str_replace", "--old", "alpha", "--new", "gamma", "--yes"}},
 		{"update copy", Update, []string{"--node", "n", "--command", "block_copy_insert_after", "--block-id", "block-1", "--after-block-id", "b", "--yes"}},
-		{"update revision", Update, []string{"--node", "n", "--command", "append", "--content", "x", "--expected-revision", "1", "--yes"}},
+		{"update revision", Update, []string{"--node", "n", "--command", "overwrite", "--content", `["root",{}]`, "--doc-format", "jsonml", "--expected-revision", "1", "--yes"}},
 		{"update dry", Update, []string{"--node", "n", "--command", "append", "--content", "x", "--dry-run", "--yes"}},
 		{"checkpoint dry", CheckpointUpdate, []string{"--node", "n", "--content", "x", "--dry-run", "--yes"}},
 		{"checkpoint success", CheckpointUpdate, []string{"--node", "n", "--content", "x", "--yes"}},
-		{"export dry", Export, []string{"--node", "n", "--output", "out.docx", "--dry-run"}},
-		{"export success", Export, []string{"--node", "n", "--output", "out.docx"}},
+		{"export dry", Export, []string{"--node", "n", "--export-format", "docx", "--output", "out.docx", "--dry-run"}},
+		{"export success", Export, []string{"--node", "n", "--export-format", "docx", "--output", "out.docx"}},
 	}
 
 	testseam.Swap(t, &docDownload, func(_ context.Context, _ string, _ localio.DownloadOptions) (localio.DownloadResult, error) {
@@ -400,6 +755,35 @@ func TestCrossPlatformCoverageDocContentCommandsAndFailureBoundaries(t *testing.
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
+			if tc.name == "update overwrite jsonml" || tc.name == "update revision" {
+				caller.responses["get_document_content"] = []map[string]any{{"jsonml": `["root",{}]`}}
+			}
+			switch tc.name {
+			case "update append":
+				caller.responses["get_document_content"] = []map[string]any{{"markdown": "existing\nx"}}
+			case "update insert text":
+				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "text": "reference"}, map[string]any{"id": "id-1", "text": "x"}}}}
+			case "update insert jsonml":
+				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "text": "reference"}, map[string]any{"id": "id-1", "jsonml": `["p",{},"x"]`}}}}
+			case "update replace text":
+				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "text": "x"}}}}
+			case "update replace jsonml":
+				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "jsonml": `["p",{},"x"]`}}}}
+			case "update delete":
+				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "other", "text": "x"}}}}
+			case "update replace":
+				caller.responses["list_document_blocks"] = []map[string]any{
+					{"items": []any{map[string]any{"id": "block-1", "text": "alpha beta"}}},
+					{"items": []any{map[string]any{"id": "block-1", "text": "gamma beta"}}},
+				}
+			case "update copy":
+				caller.responses["list_document_blocks"] = []map[string]any{
+					{"items": []any{map[string]any{"id": "block-1", "text": "alpha beta"}}},
+					{"items": []any{map[string]any{"id": "b", "text": "reference"}, map[string]any{"id": "id-1", "text": "alpha beta"}}},
+				}
+			case "checkpoint success":
+				caller.responses["get_document_content"] = []map[string]any{{"markdown": "existing\nx"}}
+			}
 			var err error
 			if tc.name == "create stdin" {
 				err = runDocCoverageInput(t, tc.cmd, caller, strings.NewReader("stdin body"), tc.args...)
@@ -415,15 +799,73 @@ func TestCrossPlatformCoverageDocContentCommandsAndFailureBoundaries(t *testing.
 	for _, command := range []shortcut.Shortcut{Create, Fetch, Inspect, Update, CheckpointUpdate, Export} {
 		for failAt := 1; failAt <= 7; failAt++ {
 			args := map[string][]string{
-				"+create":            {"--name", "n", "--content", `[]`, "--doc-format", "jsonml"},
+				"+create":            {"--name", "n", "--content", `["root",{}]`, "--doc-format", "jsonml"},
 				"+fetch":             {"--node", "n", "--scope", "keyword", "--keyword", "x"},
 				"+inspect":           {"--node", "n", "--include-style", "--include-permissions", "--include-history", "--include-media", "--include-comments"},
-				"+update":            {"--node", "n", "--command", "append", "--content", "x", "--expected-revision", "1", "--yes"},
+				"+update":            {"--node", "n", "--command", "overwrite", "--content", `["root",{}]`, "--doc-format", "jsonml", "--expected-revision", "1", "--yes"},
 				"+checkpoint-update": {"--node", "n", "--content", "x", "--yes"},
-				"+export":            {"--node", "n", "--output", "out.docx"},
+				"+export":            {"--node", "n", "--export-format", "docx", "--output", "out.docx"},
 			}[command.Command]
 			_ = runDocCoverage(t, command, &docCoverageCaller{failAt: failAt, responses: map[string][]map[string]any{}}, args...)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageUpdateContractAndPreflight(t *testing.T) {
+	flags := make(map[string]shortcut.Flag, len(Update.Flags))
+	for _, flag := range Update.Flags {
+		flags[flag.Name] = flag
+	}
+	if !flags["node"].Required || !flags["command"].Required {
+		t.Fatalf("unconditional required flags: node=%v command=%v", flags["node"].Required, flags["command"].Required)
+	}
+	wantRequiredWhen := map[string]string{
+		"content":        "--command=append|overwrite|block_insert_after|block_replace",
+		"block-id":       "--command=block_replace|block_delete|block_copy_insert_after",
+		"after-block-id": "--command=block_insert_after|block_copy_insert_after",
+		"old":            "--command=str_replace",
+		"new":            "--command=str_replace",
+	}
+	for name, want := range wantRequiredWhen {
+		if got := flags[name].RequiredWhen; got != want {
+			t.Errorf("--%s RequiredWhen = %q, want %q", name, got, want)
+		}
+	}
+	cmd := corecmd.New(shortcut.FromShortcut(Update))
+	for _, alias := range []string{"doc", "text"} {
+		flag := cmd.Flags().Lookup(alias)
+		if flag == nil {
+			t.Errorf("compatibility alias --%s is not mounted", alias)
+		}
+	}
+
+	invalid := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing command", args: []string{"--node", "n"}, want: "--command"},
+		{name: "insert missing reference", args: []string{"--node", "n", "--command", "block_insert_after", "--content", "x"}, want: "--after-block-id"},
+		{name: "copy missing reference", args: []string{"--node", "n", "--command", "block_copy_insert_after", "--block-id", "b"}, want: "--after-block-id"},
+		{name: "jsonml append", args: []string{"--node", "n", "--command", "append", "--content", `["root",{}]`, "--doc-format", "jsonml"}, want: "JSONML 当前不支持 append"},
+		{name: "revision without server CAS path", args: []string{"--node", "n", "--command", "append", "--content", "x", "--expected-revision", "1"}, want: "仅支持 --command overwrite --doc-format jsonml"},
+	}
+	for _, test := range invalid {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
+			err := runDocCoverage(t, Update, caller, test.args...)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+			if strings.Contains(err.Error(), "confirmation_required") || caller.calls != 0 {
+				t.Fatalf("invalid input reached confirmation or execution: err=%v calls=%d", err, caller.calls)
+			}
+		})
+	}
+
+	if err := runDocCoverage(t, Update, &docCoverageCaller{responses: map[string][]map[string]any{}},
+		"--node", "n", "--command", "str_replace", "--old", "x", "--new", "", "--dry-run"); err != nil {
+		t.Fatalf("explicit empty --new should satisfy str_replace contract: %v", err)
 	}
 }
 
@@ -442,6 +884,8 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 		{Create, []string{"--name", "n", "--content", "@/absolute"}},
 		{Create, []string{"--name", "n", "--content", "not-json", "--doc-format", "jsonml"}},
 		{Create, []string{"--name", "n", "--content", `{}`, "--doc-format", "jsonml"}},
+		{Create, []string{"--name", "n", "--content", `[]`, "--doc-format", "jsonml"}},
+		{Create, []string{"--name", "n", "--content", `[["p",{},"x"]]`, "--doc-format", "jsonml"}},
 		{Fetch, []string{"--node", "n", "--revision", "1"}},
 		{Fetch, []string{"--node", "n", "--scope", "keyword"}},
 		{Update, []string{"--node", "n"}},
@@ -449,25 +893,28 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 		{Update, []string{"--node", "n", "--command", "append", "--yes"}},
 		{Update, []string{"--node", "n", "--command", "block_delete", "--yes"}},
 		{Update, []string{"--node", "n", "--command", "str_replace", "--old", "x", "--yes"}},
-		{Update, []string{"--node", "n", "--command", "append", "--content", `[]`, "--doc-format", "jsonml", "--yes"}},
+		{Update, []string{"--node", "n", "--command", "append", "--content", `["root",{}]`, "--doc-format", "jsonml", "--yes"}},
 	}
 	for _, tc := range badCases {
 		if err := runDocCoverage(t, tc.cmd, &docCoverageCaller{responses: map[string][]map[string]any{}}, tc.args...); err == nil {
 			t.Errorf("%s %#v unexpectedly succeeded", tc.cmd.Command, tc.args)
 		}
 	}
+	absoluteInputErr := runDocCoverage(t, Create, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--name", "n", "--content", "@/absolute")
+	if absoluteInputErr == nil || !strings.Contains(absoluteInputErr.Error(), "暂存到工作目录") || !strings.Contains(absoluteInputErr.Error(), "stdin") {
+		t.Fatalf("absolute @file guidance = %v", absoluteInputErr)
+	}
 
 	createNoNode := &docCoverageCaller{responses: map[string][]map[string]any{"create_document": {{"ok": true}}}}
-	if err := runDocCoverage(t, Create, createNoNode, "--name", "n", "--content", `[]`, "--doc-format", "jsonml"); err == nil {
+	if err := runDocCoverage(t, Create, createNoNode, "--name", "n", "--content", `["root",{}]`, "--doc-format", "jsonml"); err == nil {
 		t.Fatal("jsonml create without node id succeeded")
 	}
-	conflict := &docCoverageCaller{responses: map[string][]map[string]any{"get_document_content": {{"revision": 2}}}}
-	if err := runDocCoverage(t, Update, conflict, "--node", "n", "--command", "append", "--content", "x", "--expected-revision", "1", "--yes"); err == nil {
-		t.Fatal("revision conflict succeeded")
+	revision := &docCoverageCaller{responses: map[string][]map[string]any{"get_document_content": {{"jsonml": `["root",{}]`}}}}
+	if err := runDocCoverage(t, Update, revision, "--node", "n", "--command", "overwrite", "--content", `["root",{}]`, "--doc-format", "jsonml", "--expected-revision", "7", "--yes"); err != nil {
+		t.Fatalf("server revision update failed: %v", err)
 	}
-	missingRevision := &docCoverageCaller{responses: map[string][]map[string]any{"get_document_content": {{"ok": true}}}}
-	if err := runDocCoverage(t, Update, missingRevision, "--node", "n", "--command", "append", "--content", "x", "--expected-revision", "1", "--yes"); err == nil {
-		t.Fatal("missing revision succeeded")
+	if len(revision.history) < 1 || revision.history[0].tool != "update_document" || revision.history[0].params["revision"] != 7 {
+		t.Fatalf("expected revision was not forwarded atomically: %#v", revision.history)
 	}
 
 	for _, value := range []any{
@@ -481,6 +928,9 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 	}
 	if _, err := validateJSONML(`{}`); err == nil {
 		t.Fatal("object jsonml succeeded")
+	}
+	if _, err := validateJSONML(`[["p",{},"x"]]`); err == nil {
+		t.Fatal("nested element-array jsonml succeeded")
 	}
 	if nestedMap(map[string]any{"result": map[string]any{"data": map[string]any{"x": 1}}})["x"] != 1 {
 		t.Fatal("nestedMap did not unwrap")
@@ -496,8 +946,11 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 	_ = containsResourceReference([]any{map[string]any{"x": "y"}})
 	stripBlockIDs(blocks)
 
-	if err := runDocCoveragePath(t, Update, &docCoverageCaller{responses: map[string][]map[string]any{}}, strings.NewReader(""), "+update", "--doc", "n", "--command", "append", "--text", "legacy", "--yes"); err != nil {
-		t.Fatalf("visible update flag aliases: %v", err)
+	aliasCaller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": "legacy"}},
+	}}
+	if err := runDocCoveragePath(t, Update, aliasCaller, strings.NewReader(""), "+update", "--doc", "n", "--command", "append", "--text", "legacy", "--yes"); err != nil {
+		t.Fatalf("compatibility aliases --doc/--text must remain executable: %v", err)
 	}
 	missingNode := Update
 	missingNode.Flags = append([]shortcut.Flag(nil), Update.Flags...)
@@ -562,19 +1015,19 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 		{"jobId": "j"},
 	} {
 		caller := &docCoverageCaller{responses: map[string][]map[string]any{"submit_export_job": {response}, "query_export_job": {{"status": "FAILED", "message": "bad"}}}}
-		_ = runDocCoverage(t, Export, caller, "--node", "n", "--output", "x", "--max-polls", "1")
+		_ = runDocCoverage(t, Export, caller, "--node", "n", "--export-format", "docx", "--output", "x", "--max-polls", "1")
 	}
 	timeout := &docCoverageCaller{responses: map[string][]map[string]any{"query_export_job": {{"status": "PROCESSING"}}}}
-	_ = runDocCoverage(t, Export, timeout, "--node", "n", "--output", "x", "--max-polls", "1")
+	_ = runDocCoverage(t, Export, timeout, "--node", "n", "--export-format", "docx", "--output", "x", "--max-polls", "1")
 	processingThenSuccess := &docCoverageCaller{responses: map[string][]map[string]any{"query_export_job": {{"status": "PROCESSING"}, {"status": "SUCCESS", "downloadUrl": "https://download.dingtalk.com/x"}}}}
-	_ = runDocCoverage(t, Export, processingThenSuccess, "--node", "n", "--output", "x", "--max-polls", "2")
+	_ = runDocCoverage(t, Export, processingThenSuccess, "--node", "n", "--export-format", "docx", "--output", "x", "--max-polls", "2")
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 	cancelledCaller := &docCoverageCaller{ctx: cancelled, responses: map[string][]map[string]any{"query_export_job": {{"status": "PROCESSING"}}}}
-	_ = runDocCoverage(t, Export, cancelledCaller, "--node", "n", "--output", "x", "--max-polls", "2")
-	_ = runDocCoverage(t, Export, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--output", "x", "--max-polls", "0")
+	_ = runDocCoverage(t, Export, cancelledCaller, "--node", "n", "--export-format", "docx", "--output", "x", "--max-polls", "2")
+	_ = runDocCoverage(t, Export, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--export-format", "docx", "--output", "x", "--max-polls", "0")
 	missingURL := &docCoverageCaller{responses: map[string][]map[string]any{"query_export_job": {{"status": "SUCCESS"}}}}
-	_ = runDocCoverage(t, Export, missingURL, "--node", "n", "--output", "x")
+	_ = runDocCoverage(t, Export, missingURL, "--node", "n", "--export-format", "docx", "--output", "x")
 }
 
 func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
@@ -596,7 +1049,7 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 		{CommentUpdate, []string{"--node", "n", "--comment-key", "c", "--content", "x", "--mention", "u"}},
 		{CommentDelete, []string{"--node", "n", "--comment-key", "c", "--dry-run", "--yes"}},
 		{CommentCreate, []string{"--node", "n", "--content", "x", "--yes"}},
-		{CommentCreate, []string{"--node", "n", "--content", "x", "--block-id", "b", "--start", "0", "--end", "1", "--selected-text", "a", "--mention", "u", "--yes"}},
+		{CommentCreate, []string{"--node", "n", "--content", "x", "--block-id", "block-1", "--start", "0", "--end", "1", "--selected-text", "a", "--mention", "u", "--yes"}},
 		{CommentCreate, []string{"--node", "n", "--content", "x", "--selection", "alpha", "--yes"}},
 		{MediaList, []string{"--node", "n"}},
 		{MediaPreview, []string{"--node", "n", "--resource-id", "r"}},
@@ -620,7 +1073,7 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 
 	for _, declaration := range []shortcut.Shortcut{VersionRevert, CreateFromTemplate, Review, MediaList, MediaDownload, ResourceDownload} {
 		args := map[string][]string{
-			"+history-revert":       {"--node", "n", "--version", "3", "--yes"},
+			"+version-revert":       {"--node", "n", "--version", "3", "--yes"},
 			"+create-from-template": {"--query", "q"},
 			"+review":               {"--node", "n"},
 			"+media-list":           {"--node", "n"},
@@ -676,6 +1129,27 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 	_ = runDocCoverage(t, MediaInsert, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--file", "media.bin", "--dry-run", "--yes")
 	_ = runDocCoverage(t, ResourceUpdate, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--image", "https://example.com/cover.png", "--dry-run", "--yes")
 	_ = runDocCoverage(t, Import, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--file", "media.bin", "--folder", "f", "--dry-run")
+	if err := runDocCoverage(t, Import, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--file", "media.bin", "--dry-run"); err != nil && strings.Contains(err.Error(), "folder") && strings.Contains(err.Error(), "workspace") {
+		t.Fatalf("root import still requires folder/workspace: %v", err)
+	}
+	if err := runDocCoverage(t, Export, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--output", "out.docx"); err == nil {
+		t.Fatal("export without --export-format succeeded")
+	}
+	if selected, ok := sliceUTF16Range("A😀B", 1, 3); !ok || selected != "😀" {
+		t.Fatalf("UTF-16 selection = %q/%v", selected, ok)
+	}
+	if _, ok := sliceUTF16Range("A😀B", 2, 3); ok {
+		t.Fatal("selection splitting a surrogate pair succeeded")
+	}
+	for _, raw := range []string{`["550582"]`, `[550582]`} {
+		mentions, err := normalizeMentionUserIDs([]string{raw})
+		if err != nil || len(mentions) != 1 || mentions[0] != "550582" {
+			t.Fatalf("mention normalization %q = %#v/%v", raw, mentions, err)
+		}
+	}
+	if _, err := normalizeMentionUserIDs([]string{`[{"uid":"550582"}]`}); err == nil {
+		t.Fatal("object mention unexpectedly succeeded")
+	}
 
 	resourceOnly := &docCoverageCaller{responses: map[string][]map[string]any{"get_document_style": {{"resourceId": "r"}}}}
 	_ = runDocCoverage(t, ResourceDownload, resourceOnly, "--node", "n", "--output", "cover.png")
@@ -704,6 +1178,50 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 	})
 }
 
+func TestCrossPlatformCoverageVersionRoutesAreCanonicalAndHistoryRoutesAreCompatible(t *testing.T) {
+	registered := map[string]shortcut.Shortcut{}
+	for _, item := range shortcut.All() {
+		if item.Service == "doc" {
+			registered[item.Command] = item
+		}
+	}
+
+	pairs := map[string]string{
+		"+history-save":   "+version-save",
+		"+history-list":   "+version-list",
+		"+history-revert": "+version-revert",
+	}
+	for compatibility, canonical := range pairs {
+		compatItem, ok := registered[compatibility]
+		if !ok {
+			t.Fatalf("missing compatibility route %s", compatibility)
+		}
+		canonicalItem, ok := registered[canonical]
+		if !ok {
+			t.Fatalf("missing canonical route %s", canonical)
+		}
+		if compatItem.Disposition != shortcut.DispositionAliasInternal || compatItem.PrimaryCommand != canonical {
+			t.Errorf("%s routing = %s/%s, want alias_internal/%s", compatibility, compatItem.Disposition, compatItem.PrimaryCommand, canonical)
+		}
+		if !strings.Contains(strings.Join(compatItem.Contract.Selection.AvoidWhen, " "), canonical) {
+			t.Errorf("%s compatibility Selection does not route Agent to %s", compatibility, canonical)
+		}
+		if canonicalItem.Contract.Selection.UseWhen[0] != canonicalItem.Intent {
+			t.Errorf("%s UseWhen and Intent drifted", canonical)
+		}
+		if strings.Contains(strings.Join(canonicalItem.Contract.Selection.AvoidWhen, " "), "+history-") {
+			t.Errorf("%s canonical Selection routes back to history compatibility commands", canonical)
+		}
+	}
+
+	if VersionSave.Command != "+version-save" || VersionSave.Safety.Confirmation != "not_required" {
+		t.Errorf("version-save command/confirmation = %s/%s", VersionSave.Command, VersionSave.Safety.Confirmation)
+	}
+	if VersionRevert.Command != "+version-revert" || VersionRevert.Execute == nil {
+		t.Errorf("version-revert canonical smart route is incomplete")
+	}
+}
+
 func TestCrossPlatformCoverageDocDownloadAndWorkingDirectoryErrors(t *testing.T) {
 	t.Chdir(t.TempDir())
 	testseam.Swap(t, &docDownload, func(_ context.Context, _ string, _ localio.DownloadOptions) (localio.DownloadResult, error) {
@@ -713,7 +1231,7 @@ func TestCrossPlatformCoverageDocDownloadAndWorkingDirectoryErrors(t *testing.T)
 		decl shortcut.Shortcut
 		args []string
 	}{
-		{Export, []string{"--node", "n", "--output", "out.docx"}},
+		{Export, []string{"--node", "n", "--export-format", "docx", "--output", "out.docx"}},
 		{MediaDownload, []string{"--node", "n", "--resource-id", "r", "--output", "out.bin"}},
 		{ResourceDownload, []string{"--node", "n", "--output", "out.png"}},
 	} {
@@ -727,7 +1245,7 @@ func TestCrossPlatformCoverageDocDownloadAndWorkingDirectoryErrors(t *testing.T)
 		decl shortcut.Shortcut
 		args []string
 	}{
-		{Export, []string{"--node", "n", "--output", "out.docx"}},
+		{Export, []string{"--node", "n", "--export-format", "docx", "--output", "out.docx"}},
 		{MediaDownload, []string{"--node", "n", "--resource-id", "r", "--output", "out.bin"}},
 		{ResourceDownload, []string{"--node", "n", "--output", "out.png"}},
 	} {

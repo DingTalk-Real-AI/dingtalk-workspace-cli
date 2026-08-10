@@ -1,6 +1,6 @@
 # 钉钉文档改写流程
 
-本文只处理一件事：用户给已有 nodeId 或 alidocs 链接，需要改写、润色、补充章节、转换段落形态时，按本文操作。从零创建新文档见 [doc-create-workflow.md](./doc-create-workflow.md)。
+本文只处理已有文档的结构和排版策略。普通执行入口固定为 `+fetch`、`+update` 或 `+checkpoint-update`；这些 shortcut 统一确认、写入与验证。原子 `doc read/update/block` 只保留给 shortcut 未公开参数的 JSONML 专家路径，使用前必须读取精确 leaf Schema。
 
 ## 适用边界
 
@@ -64,7 +64,7 @@ JSONML 模式下这些元素的节点结构见 [doc-jsonml-schema.md](../format/
 - **分块 append 内容截断**：超长文档分片写入时部分片段丢失或顺序错乱
 - **编码/通道问题**：特殊终端下 UTF-8 内容传输乱码
 
-因此 **每次 `doc update` 后必须回读校验**（见 §6）。整篇 overwrite 大文档前还要先向用户提示风险并等待确认。
+因此写入必须通过带确认与验证的 shortcut。`+update/+checkpoint-update` 返回的验证结果是主证据；禁止无条件追加一次原子 `doc read`，只有 partial/unknown 或需要定点结构检查时才用 `+fetch`。
 
 ---
 
@@ -75,9 +75,9 @@ JSONML 模式下这些元素的节点结构见 [doc-jsonml-schema.md](../format/
 | 用户需求 | 读取方式 | 定位方法 |
 |----------|----------|----------|
 | 单块精修（首选）| `doc block list --node <id> --content-format jsonml` → 拿 uuid → `doc block list --node <id> --content-format jsonml --block-id <uuid>` 读子树 | 节点结构见 [doc-jsonml-schema.md](../format/doc-jsonml-schema.md) |
-| 多处保真改写 / 改 root sectPr | `doc read --node <id> --content-format jsonml --output /tmp/doc.json` | 解析 JSON，按 schema 操作；担心并发覆盖时记下 `revision` 供 update 透传 |
-| 整篇按新骨架重写（纯文本场景）| `doc read --node <id>`（markdown 输出）| 直接处理 markdown 全文，定位用 `grep -n "<章节关键词>"` |
-| 末尾追加纯文本章节 | 不必读全文，直接 §4.2 append | 必要时 `doc read` 看末尾衔接 |
+| 多处保真改写 / 改 root sectPr | `+fetch --node <id> --detail full` | 解析 JSONML；担心并发覆盖时记下 revision |
+| 整篇按新骨架重写（纯文本场景）| `+fetch --node <id>` | 直接处理 markdown 全文 |
+| 末尾追加纯文本章节 | 不必读全文，直接 §4.2 append | 必要时 `+fetch --scope section` 看末尾衔接 |
 | 老接口快速找 BLOCK_ID（无需 jsonml 时）| `doc block list --node <id>` | 默认输出 JSON；用 `grep -B2 -A2 "<关键词>"` 在 children 里定位（结构 `{"blocks":[{...,"children":[...]}]}`，jq 需 `..\|.text? // empty` 递归查文本） |
 
 读取后，把改写计划告诉用户（要改哪几节、走 JSONML 还是 markdown、改成什么形态），等用户确认后再写。
@@ -113,13 +113,13 @@ JSONML 模式下这些元素的节点结构见 [doc-jsonml-schema.md](../format/
 > 适用范围：**纯文本**改写一段或替换某节内容。若该段含 callout / 分栏 / 颜色 / @人 / 附件 / 嵌套结构，**改走 §4.4 路径 B**——markdown 还原会丢失这些元素。
 
 ```bash
-dws doc update --node <nodeId> --content "<新内容>" --mode overwrite --content-format markdown
+dws doc +update --node <nodeId> --command overwrite --content "<新内容>" --doc-format markdown
 ```
 
 或写入临时文件：
 
 ```bash
-dws doc update --node <nodeId> --content-file /tmp/<name>-section.md --mode overwrite --content-format markdown
+dws doc +update --node <nodeId> --command overwrite --content @./drafts/<name>-section.md --doc-format markdown
 ```
 
 > ⚠️ **overwrite 须用户确认**——尤其是整篇文档 overwrite。
@@ -129,7 +129,7 @@ dws doc update --node <nodeId> --content-file /tmp/<name>-section.md --mode over
 > 适用范围：在文档末尾加 X 章 / 补充纯文本段落。追加内容若含 callout / 分栏等富结构，先用本节 append 一个占位段落，再用 §4.4 路径 B 的 `block insert --content-format jsonml` 替换/精修。
 
 ```bash
-dws doc update --node <nodeId> --content-file /tmp/<name>-append.md --mode append --content-format markdown
+dws doc +update --node <nodeId> --command append --content @./drafts/<name>-append.md --doc-format markdown
 ```
 
 按 [doc-style-guideline.md](./doc-style-guideline.md) 的元素选择规则准备追加内容。
@@ -187,16 +187,16 @@ dws doc block insert --node <nodeId> --ref-block <BLOCK_UUID> --where after --co
 
 ```bash
 # 1. 读出完整 JSONML 结构（输出含 revision，普通改写场景下不需要）
-dws doc read --node <nodeId> --content-format jsonml --output /tmp/doc.json
+dws doc +fetch --node <nodeId> --detail full --format json
 
 # 2. 解析 JSON，修改 jsonml 数组中的目标节点
 #    节点结构见 doc-jsonml-schema.md，可复制范例见 doc-jsonml-cookbook.md
 
-# 3. 写回临时文件 /tmp/doc_modified.json，格式 {"jsonml": [...]}
+# 3. 写回工作目录内相对文件 ./drafts/doc_modified.json，格式 {"jsonml": [...]}
 
 # 4. 提交修改（默认直接覆盖，不做并发检查）
-dws doc update --node <nodeId> --content-file /tmp/doc_modified.json \
-  --content-format jsonml --mode overwrite
+dws doc +update --node <nodeId> --command overwrite --content @./drafts/doc_modified.json \
+  --doc-format jsonml
 ```
 
 > **并发安全模式（担心被并发覆盖时使用）**：如果担心多 agent 同时改这篇文档，可以把第 1 步 read 返回的 `revision` 通过 `--revision <N>` 透传给第 4 步：服务端会做并发检查，版本不一致返回 `VersionConflict`，此时回到第 1 步重读重写即可。普通单 agent 改写场景默认不传 `--revision`。
@@ -249,10 +249,10 @@ Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your tex
 得到确认后执行（markdown 兜底路径）：
 
 ```bash
-dws doc update --node <nodeId> --content-file /tmp/<name>-full.md --mode overwrite --content-format markdown
+dws doc +checkpoint-update --node <nodeId> --mode overwrite --content @./drafts/<name>-full.md
 ```
 
-**写入后必须回读**（§6）。如果发现旧内容残留，按 §6 的修复路径处理。
+读取 `+checkpoint-update` 的 checkpoint、write、verify 步骤；只有 partial/unknown 时才按 §6 恢复。
 
 ### 4.6 超长内容追加（分块 append）
 
@@ -281,11 +281,7 @@ update 场景下的额外约束：
 
 ## 六、回读验收
 
-**所有 `doc update` 完成后都必须回读**，无论 overwrite 还是 append：
-
-```bash
-dws doc read --node <nodeId> --content-format jsonml
-```
+`+update/+checkpoint-update` 已统一确认与验证。正常成功禁止额外整篇读取；partial/unknown 或确需检查富结构时，使用最小范围 `+fetch`。
 
 校验要点：
 

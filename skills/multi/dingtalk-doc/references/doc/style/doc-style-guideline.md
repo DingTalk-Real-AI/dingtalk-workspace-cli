@@ -2,7 +2,7 @@
 
 本文规定 DWS 创建或编辑钉钉文档时的排版判断方法。核心流程：**确定文档类型 → 选骨架 → 按读者任务选元素 → 按视觉语义统一表达 → 软约束自检**。
 
-> 写入流程见 [doc-create-workflow.md](./doc-create-workflow.md)。改写老文档见 [doc-update-workflow.md](./doc-update-workflow.md)。callout / 分栏等块的字段以 [doc.md](../../doc.md) 与 [doc-jsonml-schema.md](../format/doc-jsonml-schema.md) 为准。
+> 本文只定义内容结构和视觉规范，不定义命令路由。写入统一使用 `+create/+update/+checkpoint-update`，读取使用 `+fetch`，媒体使用 `+media-*`；原子命令仅用于精确 Schema 支持的专家路径。流程见 [doc-create-workflow.md](./doc-create-workflow.md) 和 [doc-update-workflow.md](./doc-update-workflow.md)。
 
 ## 快速入口
 
@@ -30,7 +30,7 @@
 3. **Markdown 草稿阶段只用稳定元素**：标题、段落、列表、checklist、表格、代码块；callout / 分栏 / 附件 / 复杂嵌套留到创建后用 `doc block insert` / `doc media insert` 精修
 4. **引用块只用于原文**：用户原话、会议摘录、外部材料原文；不许包装作者自己的结论
 5. **不编造 URL**：图片、链接、文档 ID 不确定时留 TODO 占位，向用户求证
-6. **写入后必须回读**：见 [doc-create-workflow.md «回读验收»](./doc-create-workflow.md) 与 [doc-update-workflow.md §6](./doc-update-workflow.md)
+6. **以 shortcut 内置验证为准**：正常成功不追加整篇回读；partial/unknown 或富结构定点检查才使用最小范围 `+fetch`
 
 ---
 
@@ -236,7 +236,7 @@
 
 ~~~~markdown
 ```bash
-dws doc read --node abc123
+dws doc +fetch --node abc123
 ```
 ~~~~
 
@@ -307,13 +307,13 @@ dws doc block insert --node <nodeId> --content-format element \
 ### 4.9 附件与图片
 
 ```bash
-dws doc media insert --node <nodeId> --file ./diagram.png
+dws doc +media-insert --node <nodeId> --file ./diagram.png
 ```
 
 - 插入后在前后用一句话说明它支持哪个结论
 - 插入后用 `doc block list` 验证存在
 - **禁止**在 Markdown 里编造无法访问的图片 URL
-- **禁止**把 `alidocs.dingtalk.com/i/nodes/...`、`alidocs.dingtalk.com/i/document/...` 或任何文档/节点页面 URL 当作图片 src——这些是页面链接，不是图片资源，写入后无法渲染。图片必须先下载到本地，再通过 `dws doc media insert --node <docId> --file <本地路径>` 插入
+- **禁止**把 `alidocs.dingtalk.com/i/nodes/...`、`alidocs.dingtalk.com/i/document/...` 或任何文档/节点页面 URL 当作图片 src。图片必须位于工作目录内，再通过 `dws doc +media-insert --node <docId> --file ./相对路径` 插入
 - 何时主动建议用户提供图见 §6
 
 ---
@@ -360,7 +360,7 @@ dws doc media insert --node <nodeId> --file ./diagram.png
 1. 关键流程/架构/趋势能图示就图示，不用纯文本承载
 2. **禁止**在 Markdown 里编造图片 URL（如 `![](https://example.com/diagram.png)`）
 3. 正文里留占位（如 `📌 待补充：架构图`），向用户主动询问能否提供截图
-4. 用户提供后用 `dws doc media insert --node <id> --file ./xxx.png` 插入，并在图前后补一句说明
+4. 用户提供后用 `dws doc +media-insert --node <id> --file ./xxx.png` 插入，并在图前后补一句说明
 
 ---
 

@@ -153,6 +153,20 @@ func (rt *RuntimeContext) CallMCPData(product, tool string, params map[string]an
 	return rt.callMCPData(product, tool, params)
 }
 
+// CallMCPReadData dispatches a tool whose name is explicitly classified as
+// read-only without consulting Cobra state. It is safe for bounded concurrent
+// read orchestration after the Execute hook has already completed local flag
+// parsing. Write-shaped tool names fail closed.
+func (rt *RuntimeContext) CallMCPReadData(product, tool string, params map[string]any) (map[string]any, error) {
+	if !looksReadTool(tool) {
+		return nil, apperrors.NewValidation(fmt.Sprintf(
+			"并发只读入口拒绝写工具 %s/%s；写操作必须使用 CallMCPWriteData",
+			product, tool,
+		))
+	}
+	return rt.callMCPReadData(product, tool, params)
+}
+
 // CallMCPWriteData dispatches a write tool call and returns its parsed response.
 // Unlike CallMCPData, it refuses to run under --dry-run so smart shortcuts cannot
 // accidentally perform writes while rendering a preview. For compatibility with

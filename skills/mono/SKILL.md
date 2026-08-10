@@ -50,7 +50,7 @@ cli_version: ">=1.0.15"
 | `contact` | 14 | `dingtalk-contact` |
 | `devapp` | 19 | `dingtalk-misc` |
 | `ding` | 4 | `dingtalk-misc` |
-| `doc` | 41 | `dingtalk-doc` |
+| `doc` | 45 | `dingtalk-doc` |
 | `drive` | 7 | `dingtalk-drive` |
 | `mail` | 10 | `dingtalk-mail` |
 | `minutes` | 6 | `dingtalk-minutes` |

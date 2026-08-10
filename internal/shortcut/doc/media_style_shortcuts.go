@@ -17,11 +17,11 @@ import (
 var MediaList = shortcut.Shortcut{
 	Service: "doc", Command: "+media-list", Product: productDoc,
 	Description: "列出文档正文中的图片和附件资源",
-	Intent:      "当用户要发现文档内可下载或可定位的图片、附件及其 blockId/resourceId 时使用；只读取并投影媒体节点。",
+	Intent:      "当用户要发现文档内可下载或可定位的图片、附件及其 blockId/resourceId 时使用；先取得稳定 ID，再交给 +media-download，禁止提取临时 URL 后 curl。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract("+media-list", "列出文档正文中的图片和附件资源",
-		"当用户要发现文档内可下载或可定位的图片、附件及其 blockId/resourceId 时使用；只读取并投影媒体节点。",
+		"当用户要发现文档内可下载或可定位的图片、附件及其 blockId/resourceId 时使用；先取得稳定 ID，再交给 +media-download，禁止提取临时 URL 后 curl。",
 		[]string{`dws doc +media-list --node <DOC_ID>`}),
 	Flags: []shortcut.Flag{{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true}},
 	Tips:  []string{`dws doc +media-list --node <DOC_ID>`},
@@ -31,40 +31,42 @@ var MediaList = shortcut.Shortcut{
 			return err
 		}
 		items := collectMediaItems(data)
-		return rt.Output(map[string]any{"count": len(items), "media": items})
+		return rt.Output(docEnvelope("doc.media_list", map[string]any{"nodeId": rt.Str("node"), "count": len(items), "media": items}))
 	},
 }
 
 var MediaInsert = shortcut.Shortcut{
 	Service: "doc", Command: "+media-insert", Product: productDoc,
 	Description: "上传本地图片或文件并插入文档正文",
-	Intent:      "当用户要把本地图片或附件作为正文 block 插入在线文档时使用；组合本地校验、上传凭证、OSS PUT 和插块，失败时不会伪造完整回滚。",
+	Intent:      "当用户要把工作目录内的本地图片或附件作为正文 block 插入在线文档时使用；组合本地校验、上传凭证、OSS PUT 和插块，失败后保留稳定 ID，禁止改走手写 HTTP。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: withDryRun(docContract("+media-insert", "上传本地图片或文件并插入文档正文",
-		"当用户要把本地图片或附件作为正文 block 插入在线文档时使用；组合本地校验、上传凭证、OSS PUT 和插块，失败时不会伪造完整回滚。",
+		"当用户要把工作目录内的本地图片或附件作为正文 block 插入在线文档时使用；组合本地校验、上传凭证、OSS PUT 和插块，失败后保留稳定 ID，禁止改走手写 HTTP。",
 		[]string{`dws doc +media-insert --node <DOC_ID> --file ./report.pdf`, `dws doc +media-insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where after`}), contract.DryRunPreviewPlan, false),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
-		{Name: "file", Type: shortcut.FlagString, Desc: "本地文件路径", Required: true},
+		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内已存在的相对文件路径", Required: true},
 		{Name: "name", Type: shortcut.FlagString, Desc: "显示名称"},
 		{Name: "mime-type", Type: shortcut.FlagString, Desc: "MIME 类型"},
 		{Name: "index", Type: shortcut.FlagInt, Desc: "顶层插入索引"},
 		{Name: "where", Type: shortcut.FlagString, Desc: "相对参考块的位置", Enum: []string{"before", "after"}},
 		{Name: "ref-block", Type: shortcut.FlagString, Desc: "参考 block ID"},
 	},
-	Tips:    []string{`dws doc +media-insert --node <DOC_ID> --file ./report.pdf`, `dws doc +media-insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where after`},
-	Execute: func(rt *shortcut.RuntimeContext) error { return helpers.RunDocMediaInsertShortcut(rt.Command()) },
+	Validate:    func(rt *shortcut.RuntimeContext) error { return validateWorkspaceInputPath("file", rt.Str("file")) },
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内存在且不能经符号链接逃逸的相对文件"}},
+	Tips:        []string{`dws doc +media-insert --node <DOC_ID> --file ./report.pdf`, `dws doc +media-insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where after`},
+	Execute:     func(rt *shortcut.RuntimeContext) error { return helpers.RunDocMediaInsertShortcut(rt.Command()) },
 }
 
 var MediaDownload = shortcut.Shortcut{
 	Service: "doc", Command: "+media-download", Product: productDoc,
 	Description: "安全下载文档正文附件到工作目录",
-	Intent:      "当用户已从 media-list 或 block 数据拿到 resourceId，要把正文附件保存到本地时使用；默认拒绝覆盖并原子发布文件。",
+	Intent:      "当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖。",
 	Risk:        shortcut.RiskRead,
 	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 	Contract: docContract("+media-download", "安全下载文档正文附件到工作目录",
-		"当用户已从 media-list 或 block 数据拿到 resourceId，要把正文附件保存到本地时使用；默认拒绝覆盖并原子发布文件。",
+		"当用户已从 +media-list 拿到真实 resourceId，要把正文附件保存到工作目录时使用；CLI 内部换取临时链接并原子下载，默认拒绝覆盖。",
 		[]string{`dws doc +media-download --node <DOC_ID> --resource-id <RESOURCE_ID> --output ./downloads/`}),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
@@ -97,7 +99,7 @@ var MediaPreview = shortcut.Shortcut{
 		}
 		data, err := rt.CallMCPData(productDoc, "download_doc_attachment", map[string]any{"nodeId": rt.Str("node"), "resourceId": rt.Str("resource-id")})
 		if err != nil {
-			return err
+			return docMediaRecoveryError("doc_media_resolve_failed", "resolve_download", rt.Str("node"), rt.Str("resource-id"), err)
 		}
 		dir, err := docMkdirTemp("", "dws-doc-preview-*")
 		if err != nil {
@@ -106,9 +108,13 @@ var MediaPreview = shortcut.Shortcut{
 		result, err := downloadResolvedResource(rt, data, dir, ".")
 		if err != nil {
 			_ = docRemoveAll(dir)
-			return err
+			return docMediaRecoveryError("doc_media_preview_failed", "download", rt.Str("node"), rt.Str("resource-id"), err)
 		}
-		return rt.Output(docEnvelope("doc.media_preview", map[string]any{"previewPath": result.AbsolutePath, "sizeBytes": result.SizeBytes}))
+		if result.SizeBytes <= 0 {
+			_ = docRemoveAll(dir)
+			return docMediaRecoveryError("doc_media_empty_download", "verify", rt.Str("node"), rt.Str("resource-id"), fmt.Errorf("下载结果为空"))
+		}
+		return rt.Output(docEnvelope("doc.media_preview", map[string]any{"nodeId": rt.Str("node"), "resourceId": rt.Str("resource-id"), "previewPath": result.AbsolutePath, "sizeBytes": result.SizeBytes, "verified": true}))
 	},
 }
 
@@ -124,11 +130,20 @@ var ResourceUpdate = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "image", Type: shortcut.FlagString, Desc: "HTTPS 封面图片 URL"},
-		{Name: "file", Type: shortcut.FlagString, Desc: "本地封面图片"},
+		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内已存在封面图片的相对路径"},
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"image", "file"}, Description: "--image 与 --file 必须且只能提供一个"}},
-	Tips:        []string{`dws doc +resource-update --node <DOC_ID> --image https://example.com/cover.png`, `dws doc +resource-update --node <DOC_ID> --file ./cover.png`},
-	Execute:     func(rt *shortcut.RuntimeContext) error { return helpers.RunDocResourceUpdateShortcut(rt.Command()) },
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Str("file") == "" {
+			return nil
+		}
+		return validateWorkspaceInputPath("file", rt.Str("file"))
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"image", "file"}, Description: "--image 与 --file 必须且只能提供一个"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "提供 --file 时必须是工作目录内已存在且不通过符号链接逃逸的相对路径"},
+	},
+	Tips:    []string{`dws doc +resource-update --node <DOC_ID> --image https://example.com/cover.png`, `dws doc +resource-update --node <DOC_ID> --file ./cover.png`},
+	Execute: func(rt *shortcut.RuntimeContext) error { return helpers.RunDocResourceUpdateShortcut(rt.Command()) },
 }
 
 var ResourceDownload = shortcut.Shortcut{
@@ -225,7 +240,7 @@ func executeMediaDownload(rt *shortcut.RuntimeContext) error {
 	}
 	data, err := rt.CallMCPData(productDoc, "download_doc_attachment", map[string]any{"nodeId": rt.Str("node"), "resourceId": rt.Str("resource-id")})
 	if err != nil {
-		return err
+		return docMediaRecoveryError("doc_media_resolve_failed", "resolve_download", rt.Str("node"), rt.Str("resource-id"), err)
 	}
 	cwd, err := docGetwd()
 	if err != nil {
@@ -233,9 +248,35 @@ func executeMediaDownload(rt *shortcut.RuntimeContext) error {
 	}
 	result, err := downloadResolvedResource(rt, data, cwd, rt.Str("output"))
 	if err != nil {
-		return err
+		return docMediaRecoveryError("doc_media_download_failed", "download", rt.Str("node"), rt.Str("resource-id"), err)
 	}
-	return rt.Output(docEnvelope("doc.media_download", map[string]any{"resourceId": rt.Str("resource-id"), "localPath": result.RelativePath, "sizeBytes": result.SizeBytes}))
+	if result.SizeBytes <= 0 {
+		return docMediaRecoveryError("doc_media_empty_download", "verify", rt.Str("node"), rt.Str("resource-id"), fmt.Errorf("下载结果为空"))
+	}
+	return rt.Output(docEnvelope("doc.media_download", map[string]any{"nodeId": rt.Str("node"), "resourceId": rt.Str("resource-id"), "localPath": result.RelativePath, "sizeBytes": result.SizeBytes, "verified": true}))
+}
+
+func docMediaRecoveryError(reason, stage, nodeID, resourceID string, cause error) error {
+	return apperrors.NewAPI(
+		"文档媒体操作未完成；已保留 nodeId/resourceId，请稍后重试同一 shortcut，禁止改用临时 URL 或手写 HTTP",
+		apperrors.WithOperation("doc.media_download"),
+		apperrors.WithReason(reason),
+		apperrors.WithFailureStage(stage),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithRetryable(true),
+		apperrors.WithActions(
+			fmt.Sprintf("dws doc +media-download --node %s --resource-id %s --output <工作目录相对路径>", nodeID, resourceID),
+			"不要 curl/wget 临时 OSS URL，不要安装本地下载或文档转换依赖",
+		),
+		apperrors.WithDetails(map[string]any{
+			"contractVersion": "doc.operation.v1",
+			"status":          "incomplete",
+			"nodeId":          nodeID,
+			"resourceId":      resourceID,
+			"stage":           stage,
+		}),
+		apperrors.WithCause(cause),
+	)
 }
 
 func executeResourceDownload(rt *shortcut.RuntimeContext) error {

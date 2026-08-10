@@ -39,7 +39,7 @@ func (c *paramAliasCaptureCaller) CallTool(_ context.Context, server, tool strin
 		copyArgs[key] = value
 	}
 	c.calls = append(c.calls, paramAliasToolCall{server: server, tool: tool, args: copyArgs})
-	text := paramAliasResponseForTool(tool)
+	text := c.paramAliasResponseForTool(tool)
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
 
@@ -48,7 +48,7 @@ func (c *paramAliasCaptureCaller) CallTool(_ context.Context, server, tool strin
 // print the transport result and need an empty object; smart shortcuts that
 // inspect a read response receive the smallest shape that lets their full RunE
 // complete without falling back to a validation error.
-func paramAliasResponseForTool(tool string) string {
+func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string {
 	switch tool {
 	case "list_calendar_events":
 		return `{"result":{"events":[]}}`
@@ -64,7 +64,18 @@ func paramAliasResponseForTool(tool string) string {
 		return `{"result":{"items":[{"version":3}]}}`
 	case "search_doc_templates":
 		return `{"result":[{"templateId":"fixture-template-id"}]}`
+	case "create_document":
+		return `{"nodeId":"fixture-node"}`
 	case "get_document_content":
+		for index := len(c.calls) - 2; index >= 0; index-- {
+			call := c.calls[index]
+			for _, key := range []string{"jsonml", "markdown"} {
+				if content, ok := call.args[key].(string); ok {
+					encoded, _ := json.Marshal(map[string]any{"revision": 1, key: content})
+					return string(encoded)
+				}
+			}
+		}
 		return `{"revision":1}`
 	default:
 		return `{}`

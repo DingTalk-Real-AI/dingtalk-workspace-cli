@@ -685,6 +685,14 @@ func TestCrossPlatformCoverageCallMCPWriteDataRejectsDryRun(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageCallMCPReadDataRejectsWriteName(t *testing.T) {
+	rt := &RuntimeContext{}
+	_, err := rt.CallMCPReadData("doc", "update_document", map[string]any{"nodeId": "n"})
+	if err == nil || !strings.Contains(err.Error(), "doc/update_document") {
+		t.Fatalf("read-only guard error = %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageCallMCPDataDryRunReadNameFailsClosed(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	root.PersistentFlags().Bool("dry-run", false, "")

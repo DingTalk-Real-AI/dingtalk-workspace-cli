@@ -532,16 +532,21 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	fileSize := fileInfo.Size()
 
 	if deps.Caller.DryRun() {
-		deps.Out.PrintKeyValue("操作", "上传附件并插入文档")
-		deps.Out.PrintKeyValue("文档", nodeID)
-		deps.Out.PrintKeyValue("文件", filePath)
-		deps.Out.PrintKeyValue("名称", fileName)
-		deps.Out.PrintKeyValue("类型", mimeType)
-		deps.Out.PrintKeyValue("大小", fmt.Sprintf("%d bytes", fileSize))
-		return nil
+		return deps.Out.PrintJSON(map[string]any{
+			"contractVersion": "doc.operation.v1",
+			"ok":              true,
+			"status":          "success",
+			"complete":        true,
+			"operation":       "doc.media_insert",
+			"data": map[string]any{
+				"executed": false, "nodeId": nodeID, "file": filePath,
+				"fileName": fileName, "mimeType": mimeType, "sizeBytes": fileSize,
+			},
+			"steps": []map[string]any{{"name": "validate_local_file", "status": "success"}},
+		})
 	}
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Step 1: get upload credentials (uploadUrl + resourceId)
 	deps.Out.PrintInfo(fmt.Sprintf("[1/3] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
@@ -568,7 +573,20 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		"Content-Type": mimeType,
 	}
 	if err := httpPutFile(ctx, uploadURL, ossHeaders, filePath, fileSize); err != nil {
-		return err
+		return apperrors.NewAPI(
+			"附件上传结果未知；尚未确认正文 block 已插入，请先检查文档媒体列表，禁止改用手写 HTTP",
+			apperrors.WithOperation("doc.media_insert"),
+			apperrors.WithReason("doc_media_upload_unknown"),
+			apperrors.WithFailureStage("upload_oss"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(false),
+			apperrors.WithActions("运行 dws doc +media-list 检查当前文档", "确认没有对应媒体后才重新执行 +media-insert", "不要 curl 上传地址或安装本地依赖"),
+			apperrors.WithDetails(map[string]any{
+				"contractVersion": "doc.operation.v1", "status": "unknown", "nodeId": nodeID,
+				"resourceId": resourceID, "fileName": fileName, "stage": "upload_oss",
+			}),
+			apperrors.WithCause(err),
+		)
 	}
 
 	// Step 3: insert block into document
@@ -625,15 +643,43 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	if err := callMCPTool("insert_document_block", insertArgs); err != nil {
-		return err
+		return apperrors.NewAPI(
+			"附件已上传，但正文 block 插入结果未知；请先检查媒体列表，不要重复上传或插入",
+			apperrors.WithOperation("doc.media_insert"),
+			apperrors.WithReason("doc_media_insert_partial"),
+			apperrors.WithFailureStage("insert_block"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(false),
+			apperrors.WithActions("运行 dws doc +media-list 检查 resourceId/blockId", "不要直接重试 +media-insert，不要使用 resourceUrl 手写请求"),
+			apperrors.WithDetails(map[string]any{
+				"contractVersion": "doc.operation.v1", "status": "partial_success", "nodeId": nodeID,
+				"resourceId": resourceID, "resourceUrl": resourceURL, "fileName": fileName,
+				"steps": []map[string]any{
+					{"name": "resolve_upload", "status": "success"},
+					{"name": "upload_oss", "status": "success"},
+					{"name": "insert_block", "status": "unknown"},
+				},
+			}),
+			apperrors.WithCause(err),
+		)
 	}
 
-	if strings.HasPrefix(mimeType, "image/") {
-		deps.Out.PrintInfo(fmt.Sprintf("图片已插入文档: %s (resourceUrl=%s)", fileName, resourceURL))
-	} else {
-		deps.Out.PrintInfo(fmt.Sprintf("附件已插入文档: %s (resourceId=%s)", fileName, resourceID))
-	}
-	return nil
+	return deps.Out.PrintJSON(map[string]any{
+		"contractVersion": "doc.operation.v1",
+		"ok":              true,
+		"status":          "success",
+		"complete":        true,
+		"operation":       "doc.media_insert",
+		"data": map[string]any{
+			"nodeId": nodeID, "resourceId": resourceID, "resourceUrl": resourceURL,
+			"fileName": fileName, "mimeType": mimeType, "sizeBytes": fileSize, "inserted": true,
+		},
+		"steps": []map[string]any{
+			{"name": "resolve_upload", "status": "success"},
+			{"name": "upload_oss", "status": "success"},
+			{"name": "insert_block", "status": "success"},
+		},
+	})
 }
 
 // parseAttachmentUploadInfo extracts uploadUrl, resourceId and resourceUrl from the MCP tool response.
@@ -3831,8 +3877,8 @@ CLI 内部自动完成全部流程:
 		},
 	}
 	importCmd.Flags().String("file", "", "本地文件路径 (必填)")
-	importCmd.Flags().String("folder", "", "目标文件夹 ID 或 URL (可选，与 --workspace 至少传一个)")
-	importCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL (可选，与 --folder 至少传一个)")
+	importCmd.Flags().String("folder", "", "目标文件夹 ID 或 URL (可选；folder/workspace 都不传时导入到默认根目录)")
+	importCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL (可选；folder/workspace 都不传时导入到默认根目录)")
 	importCmd.Flags().StringP("name", "n", "", "导入后文档名称 (可选，默认取文件名)")
 	importCmd.Flags().String("folder-id", "", "")
 	_ = importCmd.Flags().MarkHidden("folder-id")

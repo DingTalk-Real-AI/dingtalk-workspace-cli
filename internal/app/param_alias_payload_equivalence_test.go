@@ -123,7 +123,7 @@ var paramAliasCompleteCommands = map[string][]string{
 	"doc +version-list":                        {"doc", "+version-list", "--node", "node-1", "--limit", "7", "--cursor", "cursor-1"},
 	"doc +version-revert":                      {"doc", "+version-revert", "--node", "node-1", "--version", "3", "--yes"},
 	"doc +version-save":                        {"doc", "+version-save", "--node", "node-1", "--yes"},
-	"doc +update":                              {"doc", "+update", "--node", "node-1", "--command", "append", "--content", "fixture body", "--expected-revision", "1", "--yes"},
+	"doc +update":                              {"doc", "+update", "--node", "node-1", "--command", "overwrite", "--content", `["root",{}]`, "--doc-format", "jsonml", "--expected-revision", "1", "--yes"},
 	"doc block insert":                         {"doc", "block", "insert", "--node", "node-1", "--text", "fixture paragraph", "--yes"},
 	"doc block update":                         {"doc", "block", "update", "--node", "node-1", "--block-id", "block-1", "--text", "fixture paragraph", "--yes"},
 	"doc comment create":                       {"doc", "comment", "create", "--node", "node-1", "--content", "fixture comment", "--yes"},

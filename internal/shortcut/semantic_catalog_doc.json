@@ -11,11 +11,11 @@
     "+checkpoint-update": {"disposition":"primary_smart","semantic_delta":"写入前保存版本快照，更新后读回验证并输出逐步 ledger。","risk":"write","public":true,"reviewed":true},
     "+export": {"disposition":"primary_smart","semantic_delta":"一体化提交、轮询导出任务并按 no-clobber 策略安全下载到本地。","risk":"read","public":true,"reviewed":true},
     "+import": {"disposition":"primary_smart","semantic_delta":"一体化创建会话、上传、确认转换并轮询导入结果；白名单外格式自动改走文件上传原样入库（fallback=upload、converted=false）。","risk":"write","public":true,"reviewed":true},
-    "+history-save": {"disposition":"semantic_adapter","semantic_delta":"以文档历史语义命名手动版本快照，避免暴露底层 RPC 命名。","risk":"write","public":true,"reviewed":true},
-    "+history-list": {"disposition":"semantic_adapter","semantic_delta":"统一历史版本分页参数并返回可用于回滚的版本列表。","risk":"read","public":true,"reviewed":true},
-    "+history-revert": {"disposition":"primary_smart","semantic_delta":"先验证目标版本存在，再执行回滚并读回当前文档状态。","risk":"high-risk-write","public":true,"reviewed":true},
+    "+version-save": {"disposition":"semantic_adapter","semantic_delta":"版本快照的 Agent 主入口；只保存当前快照，不隐式修改正文。","risk":"write","public":true,"reviewed":true},
+    "+version-list": {"disposition":"semantic_adapter","semantic_delta":"版本浏览的 Agent 主入口；统一分页参数并返回可用于回滚的版本号。","risk":"read","public":true,"reviewed":true},
+    "+version-revert": {"disposition":"primary_smart","semantic_delta":"版本回滚的 Agent 主入口；先验证目标版本存在，再回滚并读回当前状态。","risk":"high-risk-write","public":true,"reviewed":true},
     "+template-list": {"disposition":"semantic_adapter","semantic_delta":"统一 MY/PUBLIC 模板浏览和分页参数。","risk":"read","public":true,"reviewed":true},
-    "+template-search": {"disposition":"semantic_adapter","semantic_delta":"按名称检索模板并返回可继续创建的 templateId。","risk":"read","public":true,"reviewed":true},
+    "+template-search": {"disposition":"semantic_adapter","semantic_delta":"按名称或关键词检索模板并返回可消歧候选和 templateId。","risk":"read","public":true,"reviewed":true},
     "+create-from-template": {"disposition":"primary_smart","semantic_delta":"支持 templateId 直达或按名称搜索消歧后创建文档。","risk":"write","public":true,"reviewed":true},
     "+media-list": {"disposition":"semantic_adapter","semantic_delta":"从文档块中提取图片、附件及其 block/resource 标识。","risk":"read","public":true,"reviewed":true},
     "+media-insert": {"disposition":"primary_smart","semantic_delta":"组合本地文件校验、上传凭证、OSS PUT、插块和验证。","risk":"write","public":true,"reviewed":true},
@@ -40,9 +40,9 @@
 
     "+find-doc": {"disposition":"alias_internal","semantic_delta":"保留历史文档搜索命令及其稳定 Schema identity；新场景优先使用 +search。","risk":"read","primary":"+search","public":true,"reviewed":true},
     "+doc-append": {"disposition":"alias_internal","semantic_delta":"保留历史文档末尾追加命令及其稳定 Schema identity；新场景优先使用 +update。","risk":"write","primary":"+update","public":true,"reviewed":true},
-    "+version-save": {"disposition":"alias_internal","semantic_delta":"保留历史版本快照命令及其稳定 Schema identity；新场景优先使用 +history-save。","risk":"write","primary":"+history-save","public":true,"reviewed":true},
-    "+version-list": {"disposition":"alias_internal","semantic_delta":"保留历史版本列表命令及其稳定 Schema identity；新场景优先使用 +history-list。","risk":"read","primary":"+history-list","public":true,"reviewed":true},
-    "+version-revert": {"disposition":"alias_internal","semantic_delta":"保留历史版本回滚命令及其稳定 Schema identity；新场景优先使用 +history-revert。","risk":"high-risk-write","primary":"+history-revert","public":true,"reviewed":true},
+    "+history-save": {"disposition":"alias_internal","semantic_delta":"保留既有历史快照路径及稳定 Schema identity；新的 Agent 场景统一使用 +version-save。","risk":"write","primary":"+version-save","public":true,"reviewed":true},
+    "+history-list": {"disposition":"alias_internal","semantic_delta":"保留既有历史列表路径及稳定 Schema identity；新的 Agent 场景统一使用 +version-list。","risk":"read","primary":"+version-list","public":true,"reviewed":true},
+    "+history-revert": {"disposition":"alias_internal","semantic_delta":"保留既有历史回滚路径及稳定 Schema identity；新的 Agent 场景统一使用 +version-revert。","risk":"high-risk-write","primary":"+version-revert","public":true,"reviewed":true},
     "+share-doc": {"disposition":"alias_internal","semantic_delta":"保留历史单人文档分享命令及其稳定 Schema identity；新场景优先使用 +share。","risk":"write","primary":"+share","public":true,"reviewed":true},
 
     "+list": {"disposition":"alias_internal","semantic_delta":"旧 Doc 导航入口，仅为兼容保留；新的文件树导航应使用 Drive 命令。","risk":"read","primary":"drive list","public":true,"reviewed":true},
@@ -50,7 +50,7 @@
     "+move": {"disposition":"alias_internal","semantic_delta":"旧 Doc 移动入口，仅为兼容保留；新的文件移动应使用 Drive 命令。","risk":"write","primary":"drive move","public":true,"reviewed":true},
     "+export-submit": {"disposition":"alias_internal","semantic_delta":"导出中断恢复所需的专家入口；常规场景使用一体化 +export。","risk":"read","primary":"+export","public":true,"reviewed":true},
     "+export-get": {"disposition":"alias_internal","semantic_delta":"按 jobId 查询导出状态的恢复入口；常规场景使用一体化 +export。","risk":"read","primary":"+export","public":true,"reviewed":true},
-    "+comment-create-inline": {"disposition":"alias_internal","semantic_delta":"已知 block/start/end 时使用的低级批注入口；常规场景使用 +comment-create。","risk":"write","primary":"+comment-create","public":false,"reviewed":true},
+    "+comment-create-inline": {"disposition":"alias_internal","semantic_delta":"仅兼容既有调用；selection 与 block/start/end 新场景都统一使用 +comment-create。","risk":"write","primary":"+comment-create","public":false,"reviewed":true},
     "+template-apply": {"disposition":"alias_internal","semantic_delta":"已知 templateId 时使用的低级入口；常规场景使用 +create-from-template。","risk":"write","primary":"+create-from-template","public":false,"reviewed":true}
   }
 }

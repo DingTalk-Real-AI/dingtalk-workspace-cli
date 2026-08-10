@@ -1,6 +1,6 @@
 ---
 name: dingtalk-doc
-description: 钉钉文档（adoc）：创建、读取、编辑、块、评论、附件、白板卡片、导出、版本及Markdown/JSONML写入。原生 .md→dingtalk-misc；文件→dingtalk-drive；知识库→dingtalk-wiki；axls→dingtalk-misc，able→dingtalk-aitable。
+description: 钉钉在线文字文档（adoc）的查找、读取、创建、编辑、块、评论、附件、导入导出、模板、版本和权限协作。普通文件走 dingtalk-drive，知识库空间走 dingtalk-wiki。命令前缀：dws doc。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -11,179 +11,95 @@ metadata:
 
 # 钉钉文档 Skill
 
-## 前置条件 — 执行操作前必读
+<!-- DWS_RUNTIME_CONTRACT_START -->
+## 最小 DWS 执行契约
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
-
-> 命令参考：[doc.md](references/doc.md)；剧本：[04-document.md](references/04-document.md)。
-
-## 参数硬约束
-
-- 创建文档只用 `--name`，不要写 `--title`。
-- 目标文件夹只用 `--folder <文档文件夹nodeId或URL>`，不要写 `--parent` / `--parent-node` / `--parent-id`。
-- 目标知识库只用 `--workspace <workspaceId或URL>`，不要写 `--space-id` / `--spaceId`。
-- 文档内容只用 `--content` / `--content-file`，不要写 `--markdown`。
-- 复杂内容（换行、表格、代码块、长 Markdown）先写临时 `.md`，再用 `--content-file`，不要把大段 Markdown 塞进命令行。
-- 每次 `create` / `update` / `block insert` / `media insert` 后必须 `dws doc read` 或 `dws doc block list` 回读关键内容。
-- `doc whiteboard insert`、`doc media upload` 属于远端写入；必须先获得用户确认，再加 `--yes`。
+- 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
+- 已知命令直接执行。只有 leaf 参数或安全语义不确定时读取精确 Schema，只有 Cobra flag 不确定时读取精确 leaf Help；不要加载产品级 Catalog 代替选路。
+- 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
+- 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
+- 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
+- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；需要确认时先说明对象、动作与影响，再追加 `--yes`。
+- 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
+- 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
+- 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
+<!-- DWS_RUNTIME_CONTRACT_END -->
 
 <!-- VISIBLE_SHORTCUTS_START -->
-## Shortcuts（无专用脚本/recipe 时优先）
+## Shortcut 发现（按需）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "doc +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws doc <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service doc --format json` 批量发现。
+`doc` 当前有 45 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图按下方路由。
 
-| Shortcut | 风险 | 适用场景 |
-|---|---|---|
-| `dws doc +access-change` | write | 预检已有协作者后变更文档角色 |
-| `dws doc +access-grant` | write | 按姓名解析后批量授予文档权限 |
-| `dws doc +access-revoke` | high-risk-write | 预检并移除指定协作者的文档权限 |
-| `dws doc +background-delete` | write | 清除文档背景色 |
-| `dws doc +background-update` | write | 设置文档 #RRGGBB 背景纯色 |
-| `dws doc +checkpoint-update` | write | 先保存可回滚版本，再更新并读回验证 |
-| `dws doc +comment-create` | write | 在文档上创建一条评论 |
-| `dws doc +comment-delete` | high-risk-write | 永久删除指定文档评论 |
-| `dws doc +comment-list` | read | 查询文档评论列表 |
-| `dws doc +comment-reply` | write | 回复文档中的一条评论 |
-| `dws doc +comment-update` | write | 更新指定文档评论正文和 mention |
-| `dws doc +copy` | write | 复制文档/文件到指定文件夹或知识库 |
-| `dws doc +create` | write | 从 Markdown 或 JSONML 创建在线文字文档 |
-| `dws doc +create-from-template` | write | 按 templateId 直达或搜索消歧后创建文档 |
-| `dws doc +doc-append` | write | 在文档末尾追加一段文本（安全追加，不改动原有内容） |
-| `dws doc +export` | read | 提交、轮询并安全下载在线文档导出文件 |
-| `dws doc +export-get` | read | 根据 jobId 查询文档导出任务结果 |
-| `dws doc +export-submit` | read | 提交在线文档导出任务 (docx/markdown/pdf)，返回 jobId |
-| `dws doc +fetch` | read | 读取完整或局部文档内容，并按 detail 控制保真度 |
-| `dws doc +find-doc` | read | 按关键词搜索云文档并投影关键字段（只读） |
-| `dws doc +grant-and-share` | write | 确保目标角色后按姓名逐人发送文档链接 |
-| `dws doc +import` | write | 上传本地文件并等待转换成在线文档对象；白名单外格式自动改走文件上传原样入库 |
-| `dws doc +inspect` | read | 聚合文档元信息，并按需附带样式、权限、历史、媒体和评论 |
-| `dws doc +list` | read | 列出文件夹或知识库下的直接子节点 |
-| `dws doc +media-download` | read | 安全下载文档正文附件到工作目录 |
-| `dws doc +media-insert` | write | 上传本地图片或文件并插入文档正文 |
-| `dws doc +media-list` | read | 列出文档正文中的图片和附件资源 |
-| `dws doc +media-preview` | read | 下载正文媒体到受控临时目录并返回预览路径 |
-| `dws doc +move` | write | 移动文档/文件到指定文件夹或知识库 |
-| `dws doc +resource-delete` | high-risk-write | 幂等清除文档封面 |
-| `dws doc +resource-download` | read | 读取并安全下载当前文档封面 |
-| `dws doc +resource-update` | write | 从本地图片或 HTTPS URL 设置文档封面 |
-| `dws doc +review` | read | 聚合未解决评论、引用原文和块上下文 |
-| `dws doc +search` | read | 按关键词搜索有权限的文档 (不传则返回最近访问) |
-| `dws doc +share-doc` | write | 按姓名把文档链接私信发给某人（自动解析 userId） |
-| `dws doc +template-list` | read | 获取文档模板列表 |
-| `dws doc +template-search` | read | 根据关键词搜索文档模板 |
-| `dws doc +update` | write | 追加、覆盖或按 block 精确更新文档内容 |
-| `dws doc +version-list` | read | 查看文档历史版本列表 |
-| `dws doc +version-revert` | high-risk-write | 回滚文档到指定历史版本 |
-| `dws doc +version-save` | write | 手动保存文档版本快照 |
+仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service doc --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
 
-## 意图表
+## Golden Route
 
-| 用户说 | 命令 |
-|--------|------|
-| "创建文档（短内容）" | `dws doc create --name "<标题>" --content "<内容>"` |
-| "创建+写入（长内容自动分块）" | `python scripts/doc_create_and_write.py --name "<标题>" --content "<内容>" [--mode append\|overwrite]` |
-| "搜在线文字文档 / 找在线文字文档" | `dws drive search --query "<关键词>" --format json` → `dws drive info --node <nodeId> --format json` → 仅 `extension=adoc` 使用 `dws doc read --node <nodeId> --format json` |
-| "读在线文字文档（adoc）内容" | `dws doc read --node <nodeId> --format json` |
-| "更新文档内容 / 分块追加" | `dws doc update --node <nodeId> --content "<分块>" --mode append` |
-| "删除块" | `dws doc block delete`（需用户确认） |
-| "导出 docx / markdown / pdf" | `dws doc export --node <nodeId> --export-format <docx|markdown|pdf> --output <path>` |
-| "导入本地文件为在线文档" | `dws doc import --file <path> --folder <FOLDER_NODE_ID> --name "<标题>" --format json`（详见 `references/doc/doc-import.md`） |
-| "查模板 / 套用模板创建文档" | `dws doc template list|search|apply`（详见 `references/doc.md` 模板管理） |
-| "保存 / 查看 / 回滚在线文字文档（adoc）版本" | `dws doc version save/list/revert` |
-| "在文档里创建空白板" | `dws doc whiteboard insert --node <nodeId> --yes --format json` |
-| "为白板上传 SVG/Vector 资源" | `dws doc media upload --node <nodeId> --file <path> --yes --format json` |
+选择最小入口。ID/URL 直用；只有标题时先搜索，唯一候选后执行，禁止默认第一项。
 
-## 标准 SOP（必遵流程）
+| 用户意图 | 唯一推荐入口 | 关键边界 |
+|---|---|---|
+| 按标题或主题定位文档 | `dws doc +search --query <关键词>` | 检查候选类型与分页；需要正文时再用真实 `nodeId` 执行 `+fetch` |
+| 已知 ID/URL 读取正文或局部内容 | `dws doc +fetch --node <ID或URL>` | `--scope keyword/section/range` 可减少无关正文；非 adoc 切换对应产品 |
+| 聚合查看信息、权限、版本、媒体或评论 | `dws doc +inspect --node <ID或URL>` | 仅打开任务所需的 `--include-*`，不要默认全取 |
+| 新建在线文字文档并写入内容 | `dws doc +create --name <标题> --content @<相对文件>` | 长或复杂 Markdown 使用 `@file`/stdin；根据结果验证真实 `nodeId` |
+| 追加、覆盖或精确编辑 block | `dws doc +update --node <ID或URL> --command <动作>` | `--expected-revision` 仅用于 JSONML 原子覆盖；先消费 Schema confirmation |
+| 重要内容更新且需要恢复点 | `dws doc +checkpoint-update` | 自动保存版本、更新并回读；检查 `steps` 和 `compensation` |
+| 版本操作 | `dws doc +version-save --node` / `dws doc +version-list --node` / `dws doc +version-revert --node --version` | 快照/列表/回滚 |
+| 导出为 docx/markdown/pdf | `dws doc +export --export-format <格式>` | 格式必须显式指定；普通文件下载切 `dingtalk-drive` |
+| 导入本地文件为在线对象 | `dws doc +import --file <相对路径>` | folder/workspace 可选，缺省导入默认根；纯上传切 `dingtalk-drive` |
+| 浏览模板 | `dws doc +template-list [--source MY\|PUBLIC]` | 没有名称/关键词时使用；不调用 search/create |
+| 搜索模板 | `dws doc +template-search --query <名称或关键词>` | 有查询词才使用；零或多候选停止 |
+| 从模板创建 | `dws doc +create-from-template --template-id <唯一ID>` | 已有唯一 templateId 才创建；不重复 list/search |
+| 创建评论或聚合待处理评论 | `dws doc +comment-create [--selection]` / `+review` | 划词统一用 `+comment-create`；后续操作使用真实 `commentKey` |
+| 添加/调整/移除协作者权限 | `dws doc +access-grant/+access-change/+access-revoke` | 先读取现有权限；姓名歧义或 profile 不一致时禁止写入 |
+| 授权后向多人分享链接 | `dws doc +grant-and-share` | 返回逐人执行账本；部分失败不等于整体成功 |
+| 插入或下载正文媒体 | `dws doc +media-insert/+media-download` | 本地路径必须位于工作目录；下载默认 no-clobber |
 
-> 命中以下意图**必须**按对应 SOP 顺序执行；**禁止**跳步、替换命令、编造 nodeId/blockId。结构化命令必须带 `--format json`，执行后必须按"验证"步回读真实字段。文件类操作（上传/下载/复制/移动）切 `dingtalk-drive`；知识库节点管理切 `dingtalk-wiki`。
+## 关键结果语义
 
-### SOP-1 查找并读取文档（query-doc）
+- 保留真实 `nodeId`、URL、资源类型和容器；标题不能替代稳定 ID。
+- 按状态恢复：`partial_success` 只补未完成步骤；`unknown` 先回读且不重试写入；`retryable` 仅限明确未开始；权限、参数、认证失败停止。
+- 仅在结果明确且关键内容回读匹配后报告写入完成。
+- 搜索、列表和批量结果必须检查 `complete`、`hasMore`、continuation 和失败项；单页结果不得表述为完整集合。
+- 导出/下载仅用工作目录相对路径，默认不覆盖并原子落盘。
 
-**触发**：查文档/读文档/某文档在哪/搜文档内容。
+## 参数与安全边界
 
-1. **定位（必须）**：用户已提供 URL / `nodeId` 时直接使用原值；未提供目标时才执行 `dws drive search --query "<关键词>" --format json`，再取候选结果的真实 `nodeId`。
-2. **探测（必须）**：对选中的候选执行 `dws drive info --node <nodeId> --format json`，从真实返回读取 `extension`；不得因为搜索结果标题像“文档”就跳过探测。
-3. **按类型读取（必须）**：
-   - `extension=adoc`：`dws doc read --node <nodeId> --format json`；大文档只抽取用户需要的章节。
-   - `extension=md`：切到 `dingtalk-misc` 的 `references/markdown.md`，用 `dws markdown fetch --node <nodeId> --format json` 读取原文；仅需文件实体下载时切 `dingtalk-drive` 用 `drive download`。
-   - `extension=axls`：切到 `dingtalk-misc`，读取 `references/sheet.md` 后按电子表格意图执行。
-   - `extension=able`：切到 `dingtalk-aitable`。
-   - `extension=xlsx` / `xls` / `xlsm` / `csv` 或其他普通文件：切到 `dingtalk-drive`；不得执行 `dws doc read`。
+- `@file` 统一协议：已有或临时文件先暂存到 cwd 后传 `@相对路径`；单次生成文本优先 `--content -` (stdin)；禁止绝对路径和 `..`。
+- `doc +update` 的动作由 `--command` 指定；block 操作的 ID 必须来自 `+fetch --detail with-ids` 或真实 block 列表。
+- Schema 门禁：已知只读路由且参数明确时直接执行；写命令或 selection/参数不清、准备 Help 时，本轮仅查一次 `dws schema --cli-path "doc +<leaf>" --compact --fields use_when,avoid_when,parameters,constraints,confirmation -f json`；禁用产品级/`--all`。
+- 执行前消费其中的 `confirmation`：`user_required` 且用户已确认同一目标/动作/参数才加 `--yes`，否则预览/询问；禁止靠失败探测门禁。
+- JSONML 顶层必须是单个非空元素；禁止 `[[...]]` 元素数组包裹。
 
-**禁止**：用户未提供目标时跳过搜索并猜 nodeId、未探测类型就执行 `doc read`、把整篇文档原样贴给用户。
+## 按需加载
 
-### SOP-2 创建文档并写入（create-doc）
+Golden Route 已给出命令且参数足够时，禁止读取 reference。其余仅在下列语义不明确时，才最多读取一个 reference：
 
-**触发**：新建文档/写一篇/建文字文档。
+| 触发条件 | Reference |
+|---|---|
+| 低频/无 shortcut 意图消歧 | [intent-guide.md](references/intent-guide.md) / [doc.md](references/doc.md) 对应章节 |
+| 分页、`partial_success`、`status=unknown` 或恢复 | [contracts.md](references/contracts.md) |
+| 复杂 JSONML/非默认操作 | [create](references/doc/doc-create.md) / [read](references/doc/doc-read.md) / [update](references/doc/doc-update.md) |
+| block/划词评论/媒体高级参数 | [block](references/doc/doc-block.md) / [comment](references/doc/doc-comment.md) / [media](references/doc/doc-media.md) |
+| 导出/导入失败恢复 | [export](references/doc/doc-export.md) / [import](references/doc/doc-import.md) |
 
-1. **执行（必须）**：`dws doc create --name "<标题>" --content-file <tmp.md> [--folder <FOLDER_NODE_ID> | --workspace <WORKSPACE_ID>] --format json`（长/多行内容用 `--content-file`，不要用 `--content` 拼长串；用户未指定位置时省略两个位置参数，创建到“我的文档”根目录）。
-2. **验证（必须）**：从返回取 `nodeId`，立即 `dws doc info --node <nodeId> --format json` 回读确认。
+`+create`、`+fetch`、`+update` append/overwrite、`+export`、`+import` 禁止读取 reference；禁止预加载或连读。
 
-**禁止**：创建后不回读就答复"已创建"、把 `--folder` 当成空间 ID 传入。
+## 错误最短路径
 
-### SOP-3 覆盖/追加内容（write-content）
+1. 零命中、多候选、类型不明或分页不完整：停止后续写入，展示候选或 continuation；禁止默认第一项。
+2. Help 不参与选路；按上方门禁先消费一次精确 leaf Schema。只有真实 `unknown flag`/契约漂移后才查一次 leaf Help；`unknown command` 只查一次 shortcut 清单，禁止试探后缀和 `dws doc --help | grep/head`。
+3. `REVISION_CONFLICT`：重新读取当前 revision，展示差异；未经用户确认不得改成无 revision 覆盖。
+4. `partial_success`：保留已完成步骤，优先执行补偿或从 checkpoint 继续，不重放成功步骤。
+5. `doc_write_commit_unknown`：先回读文档确认状态；禁止自动重试创建或追加。
+6. 认证、权限或 profile 错误：只读取 `dingtalk-shared` 对应 reference；不要尝试同义底层命令绕过。
+7. 导出或媒体失败：保留 `jobId/resourceId/nodeId` 后停止；禁止 `curl`、安装依赖、Python 文档库或手写 HTTP 兜底。
 
-**触发**：覆盖写/追加内容/改文档正文。
+## 跨产品边界
 
-1. **执行（必须）**：覆盖先执行 `dws doc update --node <nodeId> --mode overwrite --content-file <tmp.md> --dry-run --format json` 预览，用户确认后改用 `--yes` 实际覆盖；追加执行 `dws doc update --node <nodeId> --mode append --content-file <tmp.md> --format json`。
-2. **验证（必须）**：写后 `dws doc read --node <nodeId> --format json` 抽取受影响段落核对。
-
-**禁止**：不加 `--yes` 反复重试覆盖、跳过 `--dry-run` 直接覆盖未确认的长文档。
-
-### SOP-4 导出 / 下载（export-doc）
-
-**触发**：导出文档/下载文档/转 PDF·Markdown。
-
-1. **判类型（必须）**：先 `dws drive info --node <nodeId> --format json`；`extension=adoc` → `dws doc export --node <nodeId> --export-format <pdf|markdown|docx> --output <path> --format json`；普通文件 → 切 `dingtalk-drive` 用 `dws drive download --node <nodeId> --output <path> --format json`。
-
-**禁止**：不分类型一律走 `doc export`（普通文件会失败）、跳过 `drive info` 判断。
-
-### SOP-5 块级编辑（block-edit）
-
-**触发**：插引用块/代码块/表格/分栏/图片/附件，或删除某块。
-
-1. **先列块（必须）**：`dws doc block list --node <nodeId> --format json`，当前响应的可操作块 ID 位于 `blocks[].element.id`（部分版本可能回显为 `blockId`）；必须从目标内容对应项读取，不得编造。空文档的占位空段落可能不能作为 `--ref-block`。
-2. **按动作执行（必须）**：
-   - 插入：默认追加用 `dws doc block insert --node <nodeId> --text "<内容>" --format json`；只有明确要求相对位置时才加 `--ref-block <非空参照块ID> --where before|after`，容器内插入使用 `--parent-block <父块ID> --index <位置>`。插入命令**不接受** `--block-id`。
-   - 更新：`dws doc block update --node <nodeId> --block-id <目标blockId> --text "<新内容>" --format json`。
-   - 删除：用户确认后执行 `dws doc block delete --node <nodeId> --block-id <目标blockId> --yes --format json`。
-3. **验证（必须）**：再次执行 `dws doc block list --node <nodeId> --format json` 核对插入、更新或删除结果。
-4. **复杂块（必须）**：插入引用/代码/表格/分栏/附件/图片前，**必须**先读 [doc.md](references/doc.md) 对应小节，**禁止**只停在"准备查看 help"——说"我将插入..."后必须立即执行命令。
-
-**禁止**：编造 blockId、未确认就删除、把完整 `--help` 输出当成最终结果答复用户。
-### SOP-6 导入本地文件为在线文档（import-file）
-
-**触发**：导入 Word / Excel / Markdown / 本地文件为在线文档。
-
-1. **判类型（必须）**：确认用户意图是“导入为在线文档”，不是“上传到钉盘”。仅上传存储时切 `dingtalk-drive`。
-2. **执行（必须）**：`dws doc import --file <path> --folder <FOLDER_NODE_ID> --name "<标题>" --format json`；复杂参数和限制见 [doc-import.md](references/doc/doc-import.md)。
-3. **验证（必须）**：拿到返回 `nodeId` 后执行 `dws doc info --node <nodeId> --format json`，必要时 `dws doc read --node <nodeId> --format json` 抽样核对内容。
-
-**禁止**：把上传文件到钉盘误当成 doc import；不知道目标文件夹 nodeId 时先切 `dingtalk-drive`/`dingtalk-wiki` 查询。
-
-## 多步文档短路径
-
-- 在目标文件夹创建文字文档：`dws doc create --name "<标题>" --folder <FOLDER_NODE_ID> --content-file <tmp.md> --format json`。拿到 `nodeId` 后立即回读。
-- 块级编辑固定顺序：`doc block list --node <nodeId>` → 插入用 `--ref-block`/`--parent-block`，更新或删除用 `--block-id` → `doc block list` 验证。删除块必须已有用户明确删除意图或二次确认。
-- 插入引用块、代码块、表格、分栏、附件、图片时，优先读 [doc.md](references/doc.md) 对应小节，不要只停在"准备查看 help"。说出"我将插入..."后必须立即执行对应 terminal 调用。
-- 用户要求多个子文档/附件/块操作时，按 checklist 串行完成；最后一条 assistant 消息不能停在"接下来我要..."，必须有实际工具调用或明确失败原因。
-- 用户说“读取并下载/导出”时，先 `drive info --node ... --format json` 按
-  `extension` 判断类型：`adoc` 用 `doc export`，普通文件切到
-  `dingtalk-drive` 用 `drive download`。
-- 所有结构化 dws 命令带 `--format json`。仅参数不确定时查 `--help`，不要把完整 help 当成最终结果。
-
-## 危险操作
-
-`block delete` 不可逆，必须确认再加 `--yes`。
-
-## 跨产品协作
-
-- 文件存储 / 上传下载 → 切到 `dingtalk-drive`
-- 知识库空间管理 → 切到 `dingtalk-wiki`
-- 数据表 → 切到 `dingtalk-aitable`
-- 原生 `.md` 文件读取、创建、全量覆盖或局部替换 → 切到 `dingtalk-misc` 的 `references/markdown.md`
-- 长篇报告生成（多源采集 + 写文档）→ 此 skill 提供 `doc_create_and_write.py` 脚本
-## 局部意图与短流程
-
-- [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。
+- 普通文件、目录、纯上传下载、节点存储权限 → `dingtalk-drive`
+- 知识库空间、节点层级和成员管理 → `dingtalk-wiki`
+- 原生 `.md` 文件读取和编辑 → `dingtalk-misc`
+- `axls` / `able` → 对应电子表格或多维表 Skill
+- 持续监听文档事件 → `dingtalk-misc`

@@ -1,27 +1,20 @@
 # 文档 (doc) 命令参考
 
-## 查询命令帮助
+## 路由与帮助预算
 
-当你不确定某个命令的具体参数、格式或可选项时，**优先执行 `--help` 查询**，不要猜测参数名或凭记忆编造。
+已知精确命令和参数时直接执行，禁止预调用 Help。参数语义不确定时先查精确 leaf Schema；真实返回 `unknown flag` 后最多读取一次该 leaf Help。`unknown command` 只执行一次 `dws shortcut list --service doc --format json`，禁止试探候选后缀或执行产品级 `dws doc --help | grep/head`。
+
+本页已给出精确命令且参数足够时，禁止读取 reference 子页。只有复杂 JSONML、block/划词评论高级参数、分页或部分成功恢复仍无法由本页和精确 leaf Schema处理时，才最多读取一个对应子 reference；普通创建、全文读取、append/overwrite、导出和导入直接执行。
+
+版本快照、列表和恢复的 Agent 主入口固定为：
 
 ```bash
-# 查看 doc 下所有子命令
-dws doc --help
-
-# 查看具体命令的完整参数说明
-dws doc read --help
-dws doc create --help
-dws doc block insert --help
-
-# 查看子命令组下的所有命令
-dws doc block --help
-dws doc permission --help
+dws doc +version-save --node <DOC_ID>
+dws doc +version-list --node <DOC_ID> --limit 20
+dws doc +version-revert --node <DOC_ID> --version <N>
 ```
 
-规则：
-- 参数名不确定时 → 先 `--help`，再调用
-- 报错 "unknown flag" 时 → `--help` 确认正确的 flag 名称
-- 不确定某个功能是否存在时 → `dws doc --help` 查看命令列表
+`+history-*` 仅兼容已有调用，不用于新的 Agent 选路。
 
 ## 命令总览
 
@@ -1005,25 +998,24 @@ dws doc read --node "https://alidocs.dingtalk.com/document/preview?cid=749936706
 | `--content -` | 从 stdin 读取（可配合 heredoc/pipe） |
 | `--content-file path` | 从文件读取（UTF-8），推荐 |
 
-### 短/中等长度（< 200KB）— 单步创建
+### 创建并写入 — Runtime 自动分片
 
 ```bash
 # 1. 把内容写入 UTF-8 文本文件：
 #    Linux/Mac: /tmp/<name>.md；Windows: %TEMP%\<name>.md
-# 2. 一步创建+写入：
-dws doc create --name "<文档名>" --content-file <tmp> [--folder <ID>] [--workspace <ID>]
+# 2. 一步创建、必要时自动分片并回读验证：
+dws doc +create --name "<文档名>" --content @<工作目录相对文件> [--folder <ID>] [--workspace <ID>]
 ```
 
-### 超长（> 200KB 兜底）— 创建空文档 + 分片追加
+`+create` 会按安全边界拆分长 Markdown，首片创建、后续片追加，每个写调用最多执行一次。若返回 `partial_success` 或 `unknown`，先按返回的 `nodeId/steps` 回读文档，不得重跑整个创建。
+
+### 更新并验证
 
 ```bash
-# 1. 创建空文档拿 nodeId
-dws doc create --name "<文档名>" [--folder/--workspace]  # → nodeId
-
-# 2. 按 markdown 标题或段落边界切成 ≤200KB 的片段（不要切断表格）
-# 3. 逐个追加：
-dws doc update --node <nodeId> --content-file <part> --mode append
+dws doc +update --node <nodeId> --command append --content @<工作目录相对文件>
 ```
+
+Runtime 自动分片并在最后回读验证。重要覆盖使用 `+checkpoint-update`；不要自行编写重试循环，创建和追加在超时后可能已经提交。
 
 ### stdin 变体
 
@@ -1084,12 +1076,6 @@ dws doc media upload --node <DOC_ID> --file ./icon.svg \
 `dws whiteboard query/update` 使用的 partId；`blockId` 只用于文档块定位/删除。
 media upload 返回的 `resourceId` / `resourceUrl` 只能用于同一 nodeId 下的白板
 Vector/SVG。完整协议见 [whiteboard.md](./whiteboard.md)。
-
-## 自动化脚本
-
-| 脚本 | 场景 | 用法 |
-|------|------|------|
-| [doc_create_and_write.py](../../scripts/doc_create_and_write.py) | 创建文档并写入 Markdown 内容 | `python doc_create_and_write.py --name "周报" --content "# 本周总结"` |
 
 ## 相关产品
 
