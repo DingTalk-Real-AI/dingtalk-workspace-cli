@@ -589,13 +589,29 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	// Mock mode: return predefined mock response without network call.
 	if r.globalFlags != nil && r.globalFlags.Mock {
 		invocation.Implemented = true
+		result := any([]any{})
+		if invocation.CanonicalProduct == "devapp" {
+			collectionKey := map[string]string{
+				"list_dev_app":             "apps",
+				"list_dev_app_permissions": "items",
+				"list_dev_app_events":      "events",
+				"list_dev_app_versions":    "items",
+			}[invocation.Tool]
+			if collectionKey != "" {
+				result = map[string]any{
+					collectionKey: []any{},
+					"hasMore":     false,
+					"nextCursor":  "",
+				}
+			}
+		}
 		return executor.Result{
 			Invocation: invocation,
 			Response: map[string]any{
 				"endpoint": transport.RedactURL(endpoint),
 				"content": map[string]any{
 					"success": true,
-					"result":  []any{},
+					"result":  result,
 					"_mock":   true,
 					"_tool":   invocation.Tool,
 				},

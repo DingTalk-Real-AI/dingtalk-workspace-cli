@@ -30,17 +30,20 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
 const productDevApp = "devapp"
 
-// applyCursor forwards --cursor/--page-size into params, matching the helper's
-// pass-through pagination (pageSize defaults to 20, cursor omitted on page 1).
-func applyCursor(rt *shortcut.RuntimeContext, params map[string]any) {
+// applyCursor forwards --cursor/--page-size into params and returns the opaque
+// request cursor for response-contract validation. pageSize defaults to 20 and
+// cursor is omitted on page 1.
+func applyCursor(rt *shortcut.RuntimeContext, params map[string]any) string {
+	requestCursor := listAppRequestCursor(rt)
 	if rt.Changed("cursor") {
-		if cur := rt.Str("cursor"); cur != "" {
-			params["cursor"] = cur
+		if requestCursor != "" {
+			params["cursor"] = requestCursor
 		}
 	}
 	size := rt.Int("page-size")
@@ -48,6 +51,15 @@ func applyCursor(rt *shortcut.RuntimeContext, params map[string]any) {
 		size = 20
 	}
 	params["pageSize"] = size
+	return requestCursor
+}
+
+func listAppRequestCursor(rt *shortcut.RuntimeContext) string {
+	if rt == nil || rt.Command() == nil {
+		return ""
+	}
+	value, _ := rt.Command().Flags().GetString("cursor")
+	return value
 }
 
 var cursorFlags = []shortcut.Flag{
@@ -105,7 +117,7 @@ var ListApp = shortcut.Shortcut{
 	}, cursorFlags...),
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}
-		applyCursor(rt, params)
+		requestCursor := applyCursor(rt, params)
 		if rt.Changed("name") {
 			params["name"] = rt.Str("name")
 		}
@@ -137,23 +149,229 @@ var ListApp = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		apps := listAppProject(data)
-		return rt.Output(map[string]any{"count": len(apps), "apps": apps})
+		page, err := listAppParsePage(data, requestCursor)
+		if err != nil {
+			return err
+		}
+		apps, err := listAppProject(page.apps)
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{
+			"count":      len(apps),
+			"apps":       apps,
+			"hasMore":    page.hasMore,
+			"nextCursor": page.nextCursor,
+		})
 	},
+}
+
+var listAppCollectionKeys = []string{
+	"list", "items", "apps", "appList", "permissions", "events", "versions", "result", "data",
+}
+
+type listAppPage struct {
+	apps       []any
+	hasMore    bool
+	nextCursor string
+}
+
+type listAppPageCandidate struct {
+	envelope map[string]any
+	apps     []any
+}
+
+// listAppParsePage accepts one page at the response top level or under exactly
+// one existing one-level list envelope. The app list and both pagination facts
+// must come from that same map; otherwise callers cannot safely distinguish a
+// terminal page from a truncated or conflicting response.
+func listAppParsePage(data map[string]any, requestCursor string) (listAppPage, error) {
+	return devAppListParsePage(data, requestCursor, "list_dev_app")
+}
+
+func devAppListParsePage(data map[string]any, requestCursor, tool string) (listAppPage, error) {
+	candidates, invalid := listAppPageCandidates(data)
+	if invalid || len(candidates) != 1 {
+		return listAppPage{}, devAppPaginationContractError(tool)
+	}
+
+	candidate := candidates[0]
+	hasMoreValue, ok := candidate.envelope["hasMore"]
+	if !ok {
+		return listAppPage{}, devAppPaginationContractError(tool)
+	}
+	hasMore, ok := hasMoreValue.(bool)
+	if !ok {
+		return listAppPage{}, devAppPaginationContractError(tool)
+	}
+	nextCursorValue, ok := candidate.envelope["nextCursor"]
+
+	if hasMore {
+		if !ok {
+			return listAppPage{}, devAppPaginationContractError(tool)
+		}
+		nextCursor, ok := nextCursorValue.(string)
+		if !ok {
+			return listAppPage{}, devAppPaginationContractError(tool)
+		}
+		if nextCursor == "" || nextCursor == requestCursor {
+			return listAppPage{}, devAppPaginationContractError(tool)
+		}
+		return listAppPage{
+			apps:       candidate.apps,
+			hasMore:    true,
+			nextCursor: nextCursor,
+		}, nil
+	}
+
+	// Deployed devapp providers use hasMore as the terminal authority and may
+	// omit nextCursor or return null, an empty string, or the last observed
+	// cursor on a terminal page. Normalize all provider-compatible forms to an
+	// empty public cursor.
+	if ok && nextCursorValue != nil {
+		if _, ok := nextCursorValue.(string); !ok {
+			return listAppPage{}, devAppPaginationContractError(tool)
+		}
+	}
+
+	return listAppPage{
+		apps:       candidate.apps,
+		hasMore:    false,
+		nextCursor: "",
+	}, nil
+}
+
+// listAppPageCandidates enumerates only the response map and supported maps
+// directly beneath it. Candidate collection keys that have a wrong type,
+// multiple list-bearing maps, multiple lists in one map, pagination metadata
+// without its sibling list, or a second nested envelope all fail closed.
+func listAppPageCandidates(data map[string]any) ([]listAppPageCandidate, bool) {
+	if data == nil {
+		return nil, true
+	}
+
+	type envelope struct {
+		value map[string]any
+		depth int
+	}
+	envelopes := []envelope{{value: data}}
+	for key, value := range data {
+		inner, ok := value.(map[string]any)
+		if ok && listAppIsCollectionKey(key) {
+			envelopes = append(envelopes, envelope{value: inner, depth: 1})
+		}
+	}
+
+	candidates := make([]listAppPageCandidate, 0, 1)
+	for _, current := range envelopes {
+		for key, value := range current.value {
+			if listAppIsCollectionKey(key) {
+				continue
+			}
+			inner, ok := value.(map[string]any)
+			if ok && listAppHasPageEvidence(inner) {
+				return nil, true
+			}
+		}
+
+		lists := make([][]any, 0, 1)
+		invalidCollection := false
+		for _, key := range listAppCollectionKeys {
+			value, exists := current.value[key]
+			if !exists {
+				continue
+			}
+			switch typed := value.(type) {
+			case []any:
+				lists = append(lists, typed)
+			case map[string]any:
+				if current.depth > 0 {
+					invalidCollection = true
+				}
+			default:
+				invalidCollection = true
+			}
+		}
+
+		_, hasHasMore := current.value["hasMore"]
+		_, hasNextCursor := current.value["nextCursor"]
+		hasPageEvidence := len(lists) > 0 || hasHasMore || hasNextCursor || invalidCollection
+		if !hasPageEvidence {
+			continue
+		}
+		if invalidCollection || len(lists) != 1 {
+			return nil, true
+		}
+		candidates = append(candidates, listAppPageCandidate{
+			envelope: current.value,
+			apps:     lists[0],
+		})
+	}
+
+	return candidates, false
+}
+
+func listAppIsCollectionKey(candidate string) bool {
+	for _, key := range listAppCollectionKeys {
+		if candidate == key {
+			return true
+		}
+	}
+	return false
+}
+
+func listAppHasPageEvidence(envelope map[string]any) bool {
+	if _, ok := envelope["hasMore"]; ok {
+		return true
+	}
+	if _, ok := envelope["nextCursor"]; ok {
+		return true
+	}
+	for _, key := range listAppCollectionKeys {
+		value, ok := envelope[key]
+		if !ok {
+			continue
+		}
+		switch typed := value.(type) {
+		case []any:
+			return true
+		case map[string]any:
+			if key == "apps" || key == "appList" || listAppHasPageEvidence(typed) {
+				return true
+			}
+		default:
+			if key == "apps" || key == "appList" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// DEC-DWS-917-R1B treats an unprojectable app item as a page-integrity failure:
+// silently dropping it could turn a real app into a false terminal "not found".
+// Keep the issue's frozen page-contract reason for both envelope and item failures.
+func listAppPaginationContractError() error {
+	return devAppPaginationContractError("list_dev_app")
+}
+
+func devAppPaginationContractError(tool string) error {
+	return apperrors.NewAPI(
+		tool+" returned an invalid pagination contract",
+		apperrors.WithReason("devapp_pagination_contract_invalid"),
+	)
 }
 
 // listAppProject reshapes list_dev_app into a clean app list
 // ({unifiedAppId, name, appKey, agentId, status, gmtModified}) — output-projection
-// clean output projection. The list container and per-item field names are probed
-// defensively across candidate keys, so an unknown/empty shape yields an empty
-// list rather than a crash or fabricated data.
-func listAppProject(data map[string]any) []map[string]any {
-	raw := listAppFindList(data)
+// clean output projection. The page container has already passed the strict
+// same-envelope pagination contract; per-item field aliases remain compatible.
+func listAppProject(raw []any) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return nil, listAppPaginationContractError()
 		}
 		row := map[string]any{}
 		if v, ok := listAppFirst(m, "unifiedAppId", "unified_app_id"); ok {
@@ -174,36 +392,12 @@ func listAppProject(data map[string]any) []map[string]any {
 		if v, ok := listAppFirst(m, "gmtModified", "gmt_modified", "modifyTime", "modified_time"); ok {
 			row["gmtModified"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
+		if len(row) == 0 {
+			return nil, listAppPaginationContractError()
 		}
+		out = append(out, row)
 	}
-	return out
-}
-
-// listAppFindList locates the app list payload, tolerating a bare top-level
-// array or nesting one level under a common envelope key.
-func listAppFindList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, k := range []string{"list", "items", "apps", "appList", "result", "data"} {
-		v, ok := data[k]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "apps", "appList", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+	return out, nil
 }
 
 // listAppFirst returns the first present candidate key's value.
@@ -665,13 +859,22 @@ var PermissionList = shortcut.Shortcut{
 		if rt.Changed("api-status") {
 			params["apiStatus"] = rt.Str("api-status")
 		}
-		applyCursor(rt, params)
+		requestCursor := applyCursor(rt, params)
 		data, err := rt.CallMCPData(productDevApp, "list_dev_app_permissions", params)
 		if err != nil {
 			return err
 		}
-		permissions := permissionListProject(data)
-		return rt.Output(map[string]any{"count": len(permissions), "permissions": permissions})
+		page, err := devAppListParsePage(data, requestCursor, "list_dev_app_permissions")
+		if err != nil {
+			return err
+		}
+		permissions := permissionListProject(map[string]any{"items": page.apps})
+		return rt.Output(map[string]any{
+			"count":       len(permissions),
+			"permissions": permissions,
+			"hasMore":     page.hasMore,
+			"nextCursor":  page.nextCursor,
+		})
 	},
 }
 
@@ -1143,13 +1346,22 @@ var EventList = shortcut.Shortcut{
 		if rt.Changed("keyword") {
 			params["keyword"] = rt.Str("keyword")
 		}
-		applyCursor(rt, params)
+		requestCursor := applyCursor(rt, params)
 		data, err := rt.CallMCPData(productDevApp, "list_dev_app_events", params)
 		if err != nil {
 			return err
 		}
-		events := eventListProject(data)
-		return rt.Output(map[string]any{"count": len(events), "events": events})
+		page, err := devAppListParsePage(data, requestCursor, "list_dev_app_events")
+		if err != nil {
+			return err
+		}
+		events := eventListProject(map[string]any{"events": page.apps})
+		return rt.Output(map[string]any{
+			"count":      len(events),
+			"events":     events,
+			"hasMore":    page.hasMore,
+			"nextCursor": page.nextCursor,
+		})
 	},
 }
 
@@ -1330,13 +1542,22 @@ var VersionList = shortcut.Shortcut{
 	}, cursorFlags...),
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{"unifiedAppId": rt.Str("unified-app-id")}
-		applyCursor(rt, params)
+		requestCursor := applyCursor(rt, params)
 		data, err := rt.CallMCPData(productDevApp, "list_dev_app_versions", params)
 		if err != nil {
 			return err
 		}
-		versions := versionListProject(data)
-		return rt.Output(map[string]any{"count": len(versions), "versions": versions})
+		page, err := devAppListParsePage(data, requestCursor, "list_dev_app_versions")
+		if err != nil {
+			return err
+		}
+		versions := versionListProject(map[string]any{"items": page.apps})
+		return rt.Output(map[string]any{
+			"count":      len(versions),
+			"versions":   versions,
+			"hasMore":    page.hasMore,
+			"nextCursor": page.nextCursor,
+		})
 	},
 }
 
