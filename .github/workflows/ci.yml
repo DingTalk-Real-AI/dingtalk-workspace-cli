@@ -1370,36 +1370,47 @@ jobs:
           if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
             base_ref="$(git rev-parse HEAD^)"
           fi
+          candidate_ref="$(git rev-parse 'HEAD^{commit}')"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$candidate_ref" != "$PR_HEAD_SHA" ]; then
+            echo "Compatibility checkout $candidate_ref does not match PR head $PR_HEAD_SHA" >&2
+            exit 1
+          fi
           git rev-parse --verify "${base_ref}^{commit}" >/dev/null
-          stable_ref="$(git tag --merged "$base_ref" --list 'v[0-9]*' --sort=-version:refname | awk 'index($0, "-") == 0 { print; exit }')"
+          . ./scripts/release/release-lib.sh
+          stable_ref=""
+          for tag in $(git tag --merged "$base_ref" --list 'v*' --sort=-version:refname); do
+            release_is_stable_version "$tag" || continue
+            if git rev-parse --verify --quiet "refs/tags/withdrawn/$tag" >/dev/null; then
+              continue
+            fi
+            stable_ref="$tag"
+            break
+          done
           if [ -z "$stable_ref" ]; then
             echo "No stable release tag is reachable from compatibility base $base_ref" >&2
             exit 1
           fi
           git rev-parse --verify "${stable_ref}^{commit}" >/dev/null
-          echo "COMPATIBILITY_BASE_REF=$base_ref" >> "$GITHUB_ENV"
-          echo "COMPATIBILITY_STABLE_REF=$stable_ref" >> "$GITHUB_ENV"
+          printf '%s\n' \
+            "COMPATIBILITY_BASE_REF=$base_ref" \
+            "COMPATIBILITY_STABLE_REF=$stable_ref" \
+            "COMPATIBILITY_CANDIDATE_REF=$candidate_ref" >> "$GITHUB_ENV"
 
-      - name: Check historical commands and help compatibility
+      - name: Check historical commands, help, and complete CLI compatibility
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: |
           make authoritative-interface-integrity \
-            BASE_REF="$COMPATIBILITY_BASE_REF"
-          if [ "$(git rev-parse "${COMPATIBILITY_BASE_REF}^{commit}")" != "$(git rev-parse "${COMPATIBILITY_STABLE_REF}^{commit}")" ]; then
-            make authoritative-interface-integrity \
-              BASE_REF="$COMPATIBILITY_STABLE_REF"
-          fi
-
-      - name: Check complete CLI command compatibility
-        if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
-        run: |
-          ./scripts/policy/check-command-compatibility.sh \
-            --base-ref "$COMPATIBILITY_BASE_REF" \
-            --stable-ref "$COMPATIBILITY_STABLE_REF"
+            BASE_REF="$COMPATIBILITY_BASE_REF" \
+            STABLE_REF="$COMPATIBILITY_STABLE_REF" \
+            CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"
 
       - name: Check complete Schema compatibility
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
-        run: make schema-compatibility BASE_REF="$COMPATIBILITY_BASE_REF"
+        run: |
+          make schema-compatibility \
+            BASE_REF="$COMPATIBILITY_BASE_REF" \
+            STABLE_REF="$COMPATIBILITY_STABLE_REF" \
+            CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"
 
       - name: Check skill command references
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}

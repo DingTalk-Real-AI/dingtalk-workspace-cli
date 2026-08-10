@@ -229,6 +229,15 @@ func compareEffectiveFlags(result *Comparison, acceptedPath string, oldCommand, 
 				After:  newFlag.NoOpt,
 			})
 		}
+		if oldFlag.AliasOf != "" && newFlag.AliasOf != oldFlag.AliasOf {
+			result.Blocking = append(result.Blocking, Change{
+				Kind:   "flag_alias_target_changed",
+				Path:   acceptedPath,
+				Flag:   name,
+				Before: oldFlag.AliasOf,
+				After:  newFlag.AliasOf,
+			})
+		}
 		if !oldFlag.Hidden && newFlag.Hidden {
 			result.Blocking = append(result.Blocking, Change{
 				Kind:   "flag_became_hidden",

@@ -401,13 +401,152 @@ func TestInterfaceIntegrityWorkflowContract(t *testing.T) {
 	}
 	interfaceJob := workflow[interfaceStart:interfaceEnd]
 	for _, want := range []string{
-		"name: Check complete CLI command compatibility",
-		"./scripts/policy/check-command-compatibility.sh",
-		`--base-ref "$COMPATIBILITY_BASE_REF"`,
-		`--stable-ref "$COMPATIBILITY_STABLE_REF"`,
+		"name: Check historical commands, help, and complete CLI compatibility",
+		"make authoritative-interface-integrity",
+		`BASE_REF="$COMPATIBILITY_BASE_REF"`,
+		`STABLE_REF="$COMPATIBILITY_STABLE_REF"`,
+		`CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"`,
 	} {
 		if !strings.Contains(interfaceJob, want) {
 			t.Errorf("Interface Integrity job missing release-equivalent compatibility contract %q", want)
+		}
+	}
+	for _, want := range []string{
+		`candidate_ref="$(git rev-parse 'HEAD^{commit}')"`,
+		`[ "$candidate_ref" != "$PR_HEAD_SHA" ]`,
+		`"COMPATIBILITY_BASE_REF=$base_ref"`,
+		`"COMPATIBILITY_STABLE_REF=$stable_ref"`,
+		`"COMPATIBILITY_CANDIDATE_REF=$candidate_ref" >> "$GITHUB_ENV"`,
+	} {
+		if got := strings.Count(interfaceJob, want); got != 1 {
+			t.Errorf("Interface Integrity job contract %q count = %d, want exactly one definition", want, got)
+		}
+	}
+	if got := strings.Count(interfaceJob, `>> "$GITHUB_ENV"`); got != 1 {
+		t.Errorf("Interface Integrity job must append its compatibility refs to GITHUB_ENV once, got %d writes", got)
+	}
+	if strings.Count(interfaceJob, "make authoritative-interface-integrity") != 1 {
+		t.Errorf("Interface Integrity job must have exactly one compatibility decision seam")
+	}
+	if strings.Contains(interfaceJob, "./scripts/policy/check-command-compatibility.sh") {
+		t.Error("Interface Integrity job must not bypass the authoritative Make seam")
+	}
+	if strings.Contains(interfaceJob, "check-interface-baseline.sh") {
+		t.Error("Interface Integrity job must not reintroduce the legacy fixture checker")
+	}
+
+	schemaStart := strings.Index(interfaceJob, "\n      - name: Check complete Schema compatibility\n")
+	if schemaStart < 0 {
+		t.Fatal("Interface Integrity job missing complete Schema compatibility step")
+	}
+	schemaRemainder := interfaceJob[schemaStart+1:]
+	schemaEnd := strings.Index(schemaRemainder, "\n      - name:")
+	if schemaEnd < 0 {
+		t.Fatal("complete Schema compatibility step has no workflow boundary")
+	}
+	schemaStep := schemaRemainder[:schemaEnd]
+	for _, want := range []string{
+		"make schema-compatibility",
+		`BASE_REF="$COMPATIBILITY_BASE_REF"`,
+		`STABLE_REF="$COMPATIBILITY_STABLE_REF"`,
+		`CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"`,
+	} {
+		if !strings.Contains(schemaStep, want) {
+			t.Errorf("Schema compatibility step missing authoritative contract %q", want)
+		}
+	}
+}
+
+func TestLocalInterfaceIntegrityUsesAuthoritativeSeam(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatalf("ReadFile(Makefile) error = %v", err)
+	}
+	makefile := string(data)
+	interfaceStart := strings.Index(makefile, "\ninterface-integrity:\n")
+	authoritativeStart := strings.Index(makefile, "\nauthoritative-interface-integrity:\n")
+	coverageStart := strings.Index(makefile, "\ncoverage-gate:\n")
+	if interfaceStart < 0 || authoritativeStart <= interfaceStart || coverageStart <= authoritativeStart {
+		t.Fatal("Makefile missing interface-integrity target boundaries")
+	}
+	interfaceTarget := makefile[interfaceStart:authoritativeStart]
+	for _, want := range []string{
+		"./scripts/policy/check-authoritative-interface-baselines.sh",
+		`base_ref="origin/main"`,
+		`candidate_ref="HEAD"`,
+		`--base-ref "$$base_ref"`,
+		`--stable-ref "$(STABLE_REF)"`,
+		`--candidate-ref "$$candidate_ref"`,
+	} {
+		if !strings.Contains(interfaceTarget, want) {
+			t.Errorf("interface-integrity target missing authoritative contract %q", want)
+		}
+	}
+	if strings.Contains(interfaceTarget, "check-interface-baseline.sh") {
+		t.Error("interface-integrity target still invokes the legacy fixture checker")
+	}
+	authoritativeTarget := makefile[authoritativeStart:coverageStart]
+	for _, want := range []string{
+		"./scripts/policy/check-authoritative-interface-baselines.sh",
+		`candidate_ref="HEAD"`,
+		`--base-ref "$(BASE_REF)"`,
+		`--stable-ref "$(STABLE_REF)"`,
+		`--candidate-ref "$$candidate_ref"`,
+	} {
+		if !strings.Contains(authoritativeTarget, want) {
+			t.Errorf("authoritative-interface-integrity target missing contract %q", want)
+		}
+	}
+
+	if got := strings.Count(makefile, "./scripts/policy/check-interface-baseline.sh"); got != 2 {
+		t.Fatalf("legacy fixture helper invocation count = %d, want update/reset only", got)
+	}
+	for _, target := range []string{"update-interface-baseline", "reset-interface-baseline"} {
+		marker := "\n" + target + ":\n"
+		start := strings.Index(makefile, marker)
+		if start < 0 {
+			t.Fatalf("Makefile missing %s target", target)
+		}
+		end := strings.Index(makefile[start+len(marker):], "\n\n")
+		if end < 0 {
+			t.Fatalf("Makefile %s target has no boundary", target)
+		}
+		block := makefile[start : start+len(marker)+end]
+		if !strings.Contains(block, "./scripts/policy/check-interface-baseline.sh") {
+			t.Errorf("%s target must retain the legacy fixture helper", target)
+		}
+	}
+}
+
+func TestLocalSchemaCompatibilityUsesAuthoritativeCandidateSeam(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatalf("ReadFile(Makefile) error = %v", err)
+	}
+	makefile := string(data)
+	schemaStart := strings.Index(makefile, "\nschema-compatibility:\n")
+	skillStart := strings.Index(makefile, "\nskill-command-integrity:\n")
+	if schemaStart < 0 || skillStart <= schemaStart {
+		t.Fatal("Makefile missing schema-compatibility target boundaries")
+	}
+	schemaTarget := makefile[schemaStart:skillStart]
+	for _, want := range []string{
+		"./scripts/policy/check-authoritative-schema-compatibility.sh",
+		`candidate_ref="HEAD"`,
+		`--base-ref "$(BASE_REF)"`,
+		`--stable-ref "$(STABLE_REF)"`,
+		`--candidate-ref "$$candidate_ref"`,
+	} {
+		if !strings.Contains(schemaTarget, want) {
+			t.Errorf("schema-compatibility target missing authoritative contract %q", want)
 		}
 	}
 }

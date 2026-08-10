@@ -24,13 +24,13 @@ help:
 	@printf "  make format-check  - Check all repository Go source files with gofmt\n"
 	@printf "  make fmt           - Format all repository Go source files\n"
 	@printf "  make policy        - Check the built dws plus open-source and Schema policies\n"
-	@printf "  make interface-integrity - Check historical commands and help contracts still work\n"
-	@printf "  make authoritative-interface-integrity BASE_REF=<ref> - Check the Git-owned PR merge-base\n"
+	@printf "  make interface-integrity [BASE_REF=<ref>] [STABLE_REF=<tag>] [CANDIDATE_REF=<ref>] - Check authoritative CLI history\n"
+	@printf "  make authoritative-interface-integrity BASE_REF=<ref> [STABLE_REF=<tag>] [CANDIDATE_REF=<ref>] - Check Git-owned CLI history\n"
 	@printf "  make coverage-gate BASE_REF=<ref> - Enforce overall non-regression and 100%% changed-code coverage\n"
 	@printf "  make coverage-gate-platform BASE_REF=<ref> PROFILE=<file> - Enforce 100%% native changed-code coverage\n"
-	@printf "  make update-interface-baseline - Add new CLI contracts without removing history\n"
-	@printf "  make reset-interface-baseline - DANGEROUS: replace all CLI compatibility history\n"
-	@printf "  make schema-compatibility BASE_REF=<ref> - Check the complete Schema contract against the PR merge-base\n"
+	@printf "  make update-interface-baseline - Update the non-authoritative CLI smoke fixture\n"
+	@printf "  make reset-interface-baseline - DANGEROUS: replace the non-authoritative CLI smoke fixture\n"
+	@printf "  make schema-compatibility BASE_REF=<ref> [STABLE_REF=<tag>] [CANDIDATE_REF=<ref>] - Check the authoritative Schema history\n"
 	@printf "  make skill-command-integrity - Check dws commands referenced by skills exist\n"
 	@printf "  make skill-context-budget - Check generated Skill drift and common-path context budgets\n"
 	@printf "  make multi-im-skill-chain-integrity - Check reviewed IM intents keep one default Skill route\n"
@@ -103,10 +103,22 @@ edition-test:
 	$(GO) test -v -count=1 ./pkg/editiontest/...
 
 interface-integrity:
-	@./scripts/policy/check-interface-baseline.sh
+	@base_ref="$(BASE_REF)"; \
+	candidate_ref="$(CANDIDATE_REF)"; \
+	if [ -z "$$base_ref" ]; then base_ref="origin/main"; fi; \
+	if [ -z "$$candidate_ref" ]; then candidate_ref="HEAD"; fi; \
+	./scripts/policy/check-authoritative-interface-baselines.sh \
+		--base-ref "$$base_ref" \
+		--stable-ref "$(STABLE_REF)" \
+		--candidate-ref "$$candidate_ref"
 
 authoritative-interface-integrity:
-	@./scripts/policy/check-authoritative-interface-baselines.sh --base-ref "$(BASE_REF)"
+	@candidate_ref="$(CANDIDATE_REF)"; \
+	if [ -z "$$candidate_ref" ]; then candidate_ref="HEAD"; fi; \
+	./scripts/policy/check-authoritative-interface-baselines.sh \
+		--base-ref "$(BASE_REF)" \
+		--stable-ref "$(STABLE_REF)" \
+		--candidate-ref "$$candidate_ref"
 
 coverage-gate:
 	@./scripts/policy/check-coverage-gate.sh --base-ref "$(BASE_REF)" --scope-buildable
@@ -121,7 +133,12 @@ reset-interface-baseline:
 	@./scripts/policy/check-interface-baseline.sh --reset
 
 schema-compatibility:
-	@./scripts/policy/check-authoritative-schema-compatibility.sh --base-ref "$(BASE_REF)"
+	@candidate_ref="$(CANDIDATE_REF)"; \
+	if [ -z "$$candidate_ref" ]; then candidate_ref="HEAD"; fi; \
+	./scripts/policy/check-authoritative-schema-compatibility.sh \
+		--base-ref "$(BASE_REF)" \
+		--stable-ref "$(STABLE_REF)" \
+		--candidate-ref "$$candidate_ref"
 
 skill-command-integrity:
 	@./scripts/policy/check-skill-commands.sh

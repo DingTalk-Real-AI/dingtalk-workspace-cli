@@ -157,14 +157,30 @@ expected to repeat every CI job locally:
 ```sh
 make build
 make policy
-make interface-integrity
-make authoritative-interface-integrity BASE_REF=<merge-base>
-make schema-compatibility BASE_REF=<merge-base>
+make interface-integrity BASE_REF=<merge-base> STABLE_REF=<stable-tag> CANDIDATE_REF=<candidate-sha>
+make schema-compatibility BASE_REF=<merge-base> STABLE_REF=<stable-tag> CANDIDATE_REF=<candidate-sha>
 make skill-command-integrity
 make cli-smoke
 make mock-mcp-smoke
 go test -v -count=1 ./pkg/editiontest/...
 ```
+
+CI 先解析并核对精确的 merge-base、最近可达且未撤回的 stable GA tag 和已提交的 candidate
+SHA，再调用 `make authoritative-interface-integrity`。本地 `make interface-integrity`
+与该 CI target 都只委托给同一个 modern authoritative wrapper，不存在第二个比较
+入口。省略 `BASE_REF` 时本地 target 默认比较 `origin/main`，省略 `STABLE_REF` 时自动
+选择该 base 可达且未撤回的最近 stable GA tag，省略 `CANDIDATE_REF` 时比较已提交的 `HEAD`。
+需要逐字复现某次 CI 时，应显式传入该次运行记录的 merge-base、stable tag 和
+candidate SHA。
+
+`make update-interface-baseline` / `make reset-interface-baseline` 只维护
+`test/fixtures/cli-interface-baseline.txt` 这一份非权威 CLI Smoke fixture。底层旧
+`check-interface-baseline.sh` 不再作为本地或 CI 的兼容性审批入口，也不能用于批准
+flag 迁移。
+
+Schema compatibility 使用同一组 base、stable、candidate refs 和同一份 base-owned flag
+migration ledger。它只把已通过 Interface lifecycle 的 exact rename 规范化到历史 Schema
+副本后再运行原 checker；不会维护第二份 allowlist，也不会放宽其他 Schema 历史字段。
 
 For an exact CHANGELOG-only branch:
 
@@ -186,11 +202,24 @@ are evaluated by the same block-deduplicating checker; supporting policy and
 shortcut profiles contribute to changed-code coverage only. The checked-in
 badge is presentation only and is never read as a gate input.
 
-Compatibility checks derive authoritative Interface snapshots from the PR
-merge-base and the latest reachable stable release. The candidate cannot bless
-a breaking change by editing a fixture. Schema additions are allowed;
-historical products, tools, parameters, mappings, positional execution fields,
-constraints, and safety semantics remain protected.
+CLI 兼容检查只使用 modern Interface Snapshot 这一处权威比较 seam，并从 PR
+merge-base 和最近的可达 stable release 生成权威快照。本治理机制合入后，
+merge-base 拥有生成器、比较器和已审批迁移清单，因此 candidate 不能通过修改
+helper、fixture 或在同一 PR 新增 self-approval 记录来放行 breaking change。首次
+bootstrap 仍由 merge-base 已有的 modern helper 做无豁免比较，并只接受 candidate
+提交中的规范空清单；完整边界见下方治理文档。
+
+精确的两阶段 flag 迁移生命周期见
+[CLI flag 兼容迁移治理](cli-interface-flag-migrations.md)。治理 PR 只能在
+surface 未变化时新增 `pending`；后续产品 PR 达到审批的精确 surface 后，才能
+消费 base-owned 记录并改为 `consumed`。在 main 与 stable 都达到 after 状态前
+必须保留该回执，之后再由单独 PR 清理。机制只放行记录中的 legacy
+visible-to-hidden，以及 canonical required 新增或提升；删除、type、scope、
+shorthand、no-opt 和任何无关漂移仍然阻塞。Schema 可以新增；历史 product、
+tool、parameter、mapping、positional execution、constraint 与 safety 语义继续
+受保护。`alias_of` 只是一项由 `FlagSpec.Aliases` 产生的框架关系证据，不是 payload
+等价证明；产品 PR 仍须证明 canonical 与 legacy 的最终运行 payload 等价并在 transport
+前拒绝冲突输入。当前迁移清单为空，不授权 PR #904。
 
 ## Required GitHub repository settings
 

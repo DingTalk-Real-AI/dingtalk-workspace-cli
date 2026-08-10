@@ -68,9 +68,17 @@ coverage is additionally selected for platform-sensitive code.
 3. Include both the commands/results and user-visible or contract-level
    behavior evidence in the PR description.
 4. Run `./scripts/policy/check-command-surface.sh --strict` when command
-   paths/flags change. CI also runs
-   `./scripts/policy/check-command-compatibility.sh --base-ref <main-ref> --stable-ref <latest-GA-tag>`
-   against both the target branch and latest stable release.
+   paths/flags change. CI resolves the exact merge-base, latest reachable
+   non-withdrawn stable GA tag, and committed candidate SHA, then enters the single compatibility
+   decision seam through
+   `make authoritative-interface-integrity BASE_REF=<merge-base> STABLE_REF=<latest-GA-tag> CANDIDATE_REF=<candidate-sha>`.
+   The Make target delegates to the authoritative wrapper; CI does not invoke a
+   second comparator or the legacy fixture checker. See
+   [CLI flag compatibility migration governance](docs/cli-interface-flag-migrations.md)
+   for the reviewed two-stage `pending` → `consumed` lifecycle.
+   Agent-visible flag migrations must also run
+   `make schema-compatibility BASE_REF=<merge-base> STABLE_REF=<latest-GA-tag> CANDIDATE_REF=<candidate-sha>`;
+   it consumes the same base-owned ledger rather than a second exception list.
 5. Run `./scripts/policy/check-generated-drift.sh` when generated artifacts may
    change.
 6. Run `./scripts/release/verify-package-managers.sh` when packaging or

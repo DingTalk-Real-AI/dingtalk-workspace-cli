@@ -558,6 +558,18 @@ func RegisterFlags(cmd *cobra.Command, flags []FlagSpec) {
 		for _, alias := range flag.Aliases {
 			RegisterFlag(cmd, flag.Kind, alias, "", flag.Usage+" (alias)")
 			_ = cmd.Flags().MarkHidden(alias)
+			if registered := cmd.Flags().Lookup(alias); registered != nil {
+				runtimeannotate.SetFlagAnnotation(
+					registered,
+					runtimeannotate.AnnotationFlagAliasOf,
+					flag.Name,
+				)
+				runtimeannotate.SetFlagAnnotation(
+					registered,
+					runtimeannotate.AnnotationFlagAliasOrigin,
+					runtimeannotate.FlagAliasOriginCorecmdV1,
+				)
+			}
 		}
 		if flag.MarkRequired {
 			_ = cmd.MarkFlagRequired(flag.Name)

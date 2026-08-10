@@ -22,11 +22,16 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-const SchemaVersion = 1
+const SchemaVersion = 2
+
+// FlagAliasOfAnnotation records a framework-originated reviewed relationship
+// between a retained compatibility flag and an exact canonical Cobra flag.
+const FlagAliasOfAnnotation = runtimeannotate.AnnotationFlagAliasOf
 
 var (
 	// Framework-owned command subtrees are deliberately excluded. They are
@@ -80,6 +85,12 @@ type Flag struct {
 	Required   bool   `json:"required"`
 	Hidden     bool   `json:"hidden"`
 	Deprecated string `json:"deprecated,omitempty"`
+	AliasOf    string `json:"alias_of,omitempty"`
+
+	// Capture cannot return an error, so it preserves malformed or non-framework
+	// relation evidence here for Validate/Write to reject. Valid snapshots never
+	// serialize this implementation detail.
+	malformedAliasEvidence bool
 }
 
 // Capture walks root without rendering help or executing any command. Both
@@ -193,6 +204,9 @@ func (s Snapshot) Validate() error {
 		if err := validateFlags(command.Path, "inherited", command.InheritedFlags); err != nil {
 			return err
 		}
+		if err := validateFlagAliases(command); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -206,19 +220,44 @@ func captureFlags(set *pflag.FlagSet) []Flag {
 		if flag == nil || excludedFlags[flag.Name] {
 			return
 		}
+		aliasOf, malformedAliasEvidence := captureFlagAliasOf(flag)
 		flags = append(flags, Flag{
-			Name:       flag.Name,
-			Shorthand:  flag.Shorthand,
-			Type:       flag.Value.Type(),
-			Default:    flag.DefValue,
-			NoOpt:      flag.NoOptDefVal,
-			Required:   isRequired(flag),
-			Hidden:     flag.Hidden,
-			Deprecated: strings.TrimSpace(flag.Deprecated),
+			Name:                   flag.Name,
+			Shorthand:              flag.Shorthand,
+			Type:                   flag.Value.Type(),
+			Default:                flag.DefValue,
+			NoOpt:                  flag.NoOptDefVal,
+			Required:               isRequired(flag),
+			Hidden:                 flag.Hidden,
+			Deprecated:             strings.TrimSpace(flag.Deprecated),
+			AliasOf:                aliasOf,
+			malformedAliasEvidence: malformedAliasEvidence,
 		})
 	})
 	sort.Slice(flags, func(i, j int) bool { return flags[i].Name < flags[j].Name })
 	return flags
+}
+
+func captureFlagAliasOf(flag *pflag.Flag) (string, bool) {
+	aliasOf, aliasMalformed := exactFlagAnnotation(flag, FlagAliasOfAnnotation)
+	origin, originMalformed := exactFlagAnnotation(flag, runtimeannotate.AnnotationFlagAliasOrigin)
+	if aliasOf == "" && origin == "" && !aliasMalformed && !originMalformed {
+		return "", false
+	}
+	malformed := aliasMalformed || originMalformed || aliasOf == "" ||
+		origin != runtimeannotate.FlagAliasOriginCorecmdV1
+	return aliasOf, malformed
+}
+
+func exactFlagAnnotation(flag *pflag.Flag, key string) (string, bool) {
+	values, exists := flag.Annotations[key]
+	if !exists {
+		return "", false
+	}
+	if len(values) != 1 || values[0] == "" || values[0] != strings.TrimSpace(values[0]) {
+		return "", true
+	}
+	return values[0], false
 }
 
 func isRequired(flag *pflag.Flag) bool {
@@ -265,6 +304,76 @@ func validateFlags(path, scope string, flags []Flag) error {
 			return fmt.Errorf("command %q contains duplicate %s flag %q", path, scope, flag.Name)
 		}
 		seen[flag.Name] = true
+	}
+	return nil
+}
+
+func validateFlagAliases(command Command) error {
+	flags := make(map[string]Flag, len(command.LocalFlags)+len(command.InheritedFlags))
+	ordered := make([]Flag, 0, len(command.LocalFlags)+len(command.InheritedFlags))
+	for _, flag := range command.LocalFlags {
+		flags[flag.Name] = flag
+		ordered = append(ordered, flag)
+	}
+	for _, flag := range command.InheritedFlags {
+		if _, exists := flags[flag.Name]; exists {
+			return fmt.Errorf("command %q contains flag %q in both local and inherited scopes", command.Path, flag.Name)
+		}
+		flags[flag.Name] = flag
+		ordered = append(ordered, flag)
+	}
+
+	for _, flag := range ordered {
+		if flag.malformedAliasEvidence {
+			return fmt.Errorf(
+				"command %q flag --%s must declare one exact %q value and framework origin %q",
+				command.Path,
+				flag.Name,
+				FlagAliasOfAnnotation,
+				runtimeannotate.FlagAliasOriginCorecmdV1,
+			)
+		}
+		if flag.AliasOf == "" {
+			continue
+		}
+		if !isExactFlagName(flag.AliasOf) {
+			return fmt.Errorf(
+				"command %q flag --%s has non-exact alias_of target %q",
+				command.Path,
+				flag.Name,
+				flag.AliasOf,
+			)
+		}
+		if flag.AliasOf == flag.Name {
+			return fmt.Errorf("command %q flag --%s cannot alias itself", command.Path, flag.Name)
+		}
+		target, exists := flags[flag.AliasOf]
+		if !exists {
+			return fmt.Errorf(
+				"command %q flag --%s aliases missing flag --%s",
+				command.Path,
+				flag.Name,
+				flag.AliasOf,
+			)
+		}
+		if target.AliasOf != "" {
+			return fmt.Errorf(
+				"command %q flag --%s aliases --%s, which is itself an alias",
+				command.Path,
+				flag.Name,
+				flag.AliasOf,
+			)
+		}
+		if flag.Type != target.Type {
+			return fmt.Errorf(
+				"command %q alias flags --%s and --%s have different types %q and %q",
+				command.Path,
+				flag.Name,
+				flag.AliasOf,
+				flag.Type,
+				target.Type,
+			)
+		}
 	}
 	return nil
 }

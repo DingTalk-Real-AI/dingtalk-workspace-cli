@@ -14,6 +14,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/interfacesnapshot"
 )
 
 const schemaContractVersion = 3
@@ -82,12 +84,19 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	var normalizePath, checkPath, mergePath, currentPath string
+	var approvedFlagMigrationsPath, candidateFlagMigrationsPath string
+	var migrationCurrentSnapshotPath, migrationBaseSnapshotPath, migrationStableSnapshotPath string
 	flags := flag.NewFlagSet("schema-compat", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.StringVar(&normalizePath, "normalize", "", "normalize a raw complete Schema response")
 	flags.StringVar(&checkPath, "check", "", "check against a normalized historical baseline")
 	flags.StringVar(&mergePath, "merge", "", "merge additions into a normalized historical baseline")
 	flags.StringVar(&currentPath, "current", "", "raw current complete Schema response")
+	flags.StringVar(&approvedFlagMigrationsPath, "approved-flag-migrations", "", "base-owned approved flag migration manifest")
+	flags.StringVar(&candidateFlagMigrationsPath, "candidate-flag-migrations", "", "detached candidate flag migration manifest")
+	flags.StringVar(&migrationCurrentSnapshotPath, "migration-current-snapshot", "", "current interface snapshot used for migration authorization")
+	flags.StringVar(&migrationBaseSnapshotPath, "migration-base-snapshot", "", "merge-base interface snapshot used for migration authorization")
+	flags.StringVar(&migrationStableSnapshotPath, "migration-stable-snapshot", "", "stable interface snapshot used for migration authorization")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -100,6 +109,27 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if modes != 1 {
 		fmt.Fprintln(stderr, "exactly one of --normalize, --check, or --merge is required")
+		return 2
+	}
+	migrationInputs := []string{
+		approvedFlagMigrationsPath,
+		candidateFlagMigrationsPath,
+		migrationCurrentSnapshotPath,
+		migrationBaseSnapshotPath,
+		migrationStableSnapshotPath,
+	}
+	migrationInputCount := 0
+	for _, path := range migrationInputs {
+		if path != "" {
+			migrationInputCount++
+		}
+	}
+	if migrationInputCount != 0 && migrationInputCount != len(migrationInputs) {
+		fmt.Fprintln(stderr, "Schema flag migration authorization requires all five migration inputs")
+		return 2
+	}
+	if migrationInputCount != 0 && checkPath == "" {
+		fmt.Fprintln(stderr, "Schema flag migration authorization is only valid with --check")
 		return 2
 	}
 
@@ -127,6 +157,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			fmt.Fprintf(stderr, "read schema baseline: %v\n", err)
 			return 2
+		}
+		if migrationInputCount != 0 {
+			migrations, err := authorizeSchemaFlagMigrations(
+				approvedFlagMigrationsPath,
+				candidateFlagMigrationsPath,
+				migrationCurrentSnapshotPath,
+				migrationBaseSnapshotPath,
+				migrationStableSnapshotPath,
+			)
+			if err != nil {
+				fmt.Fprintf(stderr, "authorize Schema flag migrations: %v\n", err)
+				return 2
+			}
+			baseline, err = normalizeSchemaFlagMigrations(baseline, current, migrations)
+			if err != nil {
+				fmt.Fprintf(stderr, "normalize approved Schema flag migrations: %v\n", err)
+				return 2
+			}
 		}
 		failures := checkCompatibility(baseline, current)
 		if len(failures) > 0 {
@@ -157,6 +205,57 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	return 0
+}
+
+func authorizeSchemaFlagMigrations(
+	approvedManifestPath string,
+	candidateManifestPath string,
+	currentSnapshotPath string,
+	baseSnapshotPath string,
+	stableSnapshotPath string,
+) ([]interfacesnapshot.FlagMigration, error) {
+	approved, err := readFlagMigrationManifestFile(approvedManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read approved flag migrations: %w", err)
+	}
+	candidate, err := readFlagMigrationManifestFile(candidateManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read candidate flag migrations: %w", err)
+	}
+	current, err := readInterfaceSnapshotFile(currentSnapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("read migration current snapshot: %w", err)
+	}
+	base, err := readInterfaceSnapshotFile(baseSnapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("read migration base snapshot: %w", err)
+	}
+	stable, err := readInterfaceSnapshotFile(stableSnapshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("read migration stable snapshot: %w", err)
+	}
+	return interfacesnapshot.AuthorizeFlagMigrations(
+		current,
+		map[string]interfacesnapshot.Snapshot{"merge-base": base, "stable": stable},
+		approved,
+		candidate,
+	)
+}
+
+func readFlagMigrationManifestFile(path string) (interfacesnapshot.FlagMigrationManifest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return interfacesnapshot.FlagMigrationManifest{}, err
+	}
+	return interfacesnapshot.ReadFlagMigrationManifest(bytes.NewReader(data))
+}
+
+func readInterfaceSnapshotFile(path string) (interfacesnapshot.Snapshot, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return interfacesnapshot.Snapshot{}, err
+	}
+	return interfacesnapshot.Read(bytes.NewReader(data))
 }
 
 func normalizeRawFile(path string) (schemaContract, error) {
@@ -917,6 +1016,334 @@ func cloneContract(source schemaContract) schemaContract {
 	var cloned schemaContract
 	_ = json.Unmarshal(data, &cloned)
 	return cloned
+}
+
+type schemaToolRef struct {
+	productID string
+	toolID    string
+}
+
+// normalizeSchemaFlagMigrations projects only an already-authorized CLI flag
+// rename onto a cloned historical Schema contract. The ordinary compatibility
+// checker still makes the final decision; this adapter never drops findings by
+// matching their rendered text.
+func normalizeSchemaFlagMigrations(
+	baseline schemaContract,
+	current schemaContract,
+	migrations []interfacesnapshot.FlagMigration,
+) (schemaContract, error) {
+	normalized := cloneContract(baseline)
+	renamesByTool := map[schemaToolRef]map[string]string{}
+
+	for _, migration := range migrations {
+		primaryPath := strings.TrimPrefix(migration.Command, "dws ")
+		matches := schemaToolsByPrimaryPath(baseline, primaryPath)
+		if len(matches) == 0 {
+			// A reviewed CLI-only command has no Schema compatibility surface.
+			continue
+		}
+		if len(matches) != 1 {
+			return schemaContract{}, fmt.Errorf(
+				"approved flag migration %q matches %d historical Schema tools",
+				migration.Command,
+				len(matches),
+			)
+		}
+
+		ref := matches[0]
+		oldTool := baseline.Products[ref.productID].Tools[ref.toolID]
+		newProduct, productExists := current.Products[ref.productID]
+		newTool, toolExists := newProduct.Tools[ref.toolID]
+		if !productExists || !toolExists || newTool.PrimaryCLIPath != primaryPath {
+			// Preserve the original baseline so the ordinary checker reports the
+			// missing tool or changed primary_cli_path.
+			continue
+		}
+		oldLegacy, legacyExisted := oldTool.Parameters[migration.Legacy.Name]
+		oldCanonical, canonicalExisted := oldTool.Parameters[migration.Canonical.Name]
+		if !legacyExisted && !canonicalExisted {
+			// A CLI migration is not evidence that an unrelated Schema surface
+			// published either name. In particular, it must not authorize a
+			// constraints rewrite with no historical parameter to rename.
+			continue
+		}
+
+		if _, exists := newTool.Parameters[migration.Legacy.Name]; exists {
+			return schemaContract{}, fmt.Errorf(
+				"approved flag migration %q still publishes legacy Schema parameter %q",
+				migration.Command,
+				migration.Legacy.Name,
+			)
+		}
+		newCanonical, exists := newTool.Parameters[migration.Canonical.Name]
+		if !exists {
+			return schemaContract{}, fmt.Errorf(
+				"approved flag migration %q does not publish canonical Schema parameter %q",
+				migration.Command,
+				migration.Canonical.Name,
+			)
+		}
+		if migration.Canonical.After.Required && (!newCanonical.Required || !newCanonical.CLIRequired) {
+			return schemaContract{}, fmt.Errorf(
+				"approved flag migration %q canonical Schema parameter %q must be required and cli_required",
+				migration.Command,
+				migration.Canonical.Name,
+			)
+		}
+		if !legacyExisted {
+			// A consumed receipt may be evaluated after the merge-base Schema has
+			// already reached the canonical-only state. In that case the ordinary
+			// checker needs no projection. More importantly, a CLI migration is not
+			// authority to promote a canonical-only historical Schema parameter from
+			// optional to required: without legacy Schema evidence there is no rename.
+			continue
+		}
+
+		normalizedProduct := normalized.Products[ref.productID]
+		normalizedTool := normalizedProduct.Tools[ref.toolID]
+		if err := validateRenamedSchemaParameter(migration, oldLegacy, newCanonical); err != nil {
+			return schemaContract{}, err
+		}
+		delete(normalizedTool.Parameters, migration.Legacy.Name)
+		if canonicalExisted {
+			if err := validateRenamedSchemaParameter(migration, oldCanonical, newCanonical); err != nil {
+				return schemaContract{}, err
+			}
+			normalizedCanonical := normalizedTool.Parameters[migration.Canonical.Name]
+			normalizedCanonical.Required = newCanonical.Required
+			normalizedCanonical.CLIRequired = newCanonical.CLIRequired
+			normalizedTool.Parameters[migration.Canonical.Name] = normalizedCanonical
+		} else {
+			normalizedTool.Parameters[migration.Canonical.Name] = newCanonical
+		}
+		normalizedProduct.Tools[ref.toolID] = normalizedTool
+		normalized.Products[ref.productID] = normalizedProduct
+
+		if renamesByTool[ref] == nil {
+			renamesByTool[ref] = map[string]string{}
+		}
+		if existing, ok := renamesByTool[ref][migration.Legacy.Name]; ok && existing != migration.Canonical.Name {
+			return schemaContract{}, fmt.Errorf(
+				"approved flag migration %q maps Schema parameter %q to both %q and %q",
+				migration.Command,
+				migration.Legacy.Name,
+				existing,
+				migration.Canonical.Name,
+			)
+		}
+		renamesByTool[ref][migration.Legacy.Name] = migration.Canonical.Name
+	}
+
+	for ref, renames := range renamesByTool {
+		oldTool := baseline.Products[ref.productID].Tools[ref.toolID]
+		newTool := current.Products[ref.productID].Tools[ref.toolID]
+		if oldTool.Constraints == newTool.Constraints {
+			continue
+		}
+		oldConstraints, oldOK := canonicalizeMigratedConstraints(oldTool.Constraints, renames)
+		newConstraints, newOK := canonicalizeMigratedConstraints(newTool.Constraints, nil)
+		if !oldOK || !newOK || oldConstraints != newConstraints {
+			// Keep the historical constraints unchanged. The ordinary checker
+			// will report every non-rename constraint change.
+			continue
+		}
+		product := normalized.Products[ref.productID]
+		tool := product.Tools[ref.toolID]
+		tool.Constraints = newTool.Constraints
+		product.Tools[ref.toolID] = tool
+		normalized.Products[ref.productID] = product
+	}
+
+	return normalized, nil
+}
+
+func schemaToolsByPrimaryPath(contract schemaContract, primaryPath string) []schemaToolRef {
+	var matches []schemaToolRef
+	for productID, product := range contract.Products {
+		for toolID, tool := range product.Tools {
+			if tool.PrimaryCLIPath == primaryPath {
+				matches = append(matches, schemaToolRef{productID: productID, toolID: toolID})
+			}
+		}
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].productID != matches[j].productID {
+			return matches[i].productID < matches[j].productID
+		}
+		return matches[i].toolID < matches[j].toolID
+	})
+	return matches
+}
+
+func validateRenamedSchemaParameter(
+	migration interfacesnapshot.FlagMigration,
+	oldParameter parameterSchema,
+	newParameter parameterSchema,
+) error {
+	if oldParameter.Type != newParameter.Type ||
+		oldParameter.Property != newParameter.Property ||
+		oldParameter.InterfaceType != newParameter.InterfaceType ||
+		oldParameter.RequiredWhen != newParameter.RequiredWhen ||
+		oldParameter.Default != newParameter.Default ||
+		oldParameter.InterfaceDefault != newParameter.InterfaceDefault ||
+		oldParameter.Format != newParameter.Format ||
+		!equalStringSlices(oldParameter.Enum, newParameter.Enum) {
+		return fmt.Errorf(
+			"approved flag migration %q Schema parameter %q -> %q changed a non-migration field",
+			migration.Command,
+			migration.Legacy.Name,
+			migration.Canonical.Name,
+		)
+	}
+	if oldParameter.Required && !newParameter.Required {
+		return fmt.Errorf(
+			"approved flag migration %q Schema parameter %q -> %q became optional",
+			migration.Command,
+			migration.Legacy.Name,
+			migration.Canonical.Name,
+		)
+	}
+	if oldParameter.CLIRequired && !newParameter.CLIRequired {
+		return fmt.Errorf(
+			"approved flag migration %q Schema parameter %q -> %q stopped being cli_required",
+			migration.Command,
+			migration.Legacy.Name,
+			migration.Canonical.Name,
+		)
+	}
+	return nil
+}
+
+func equalStringSlices(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func canonicalizeMigratedConstraints(raw string, renames map[string]string) (string, bool) {
+	groups, ok := parseMigrationConstraintsStrict(raw)
+	if !ok {
+		return "", false
+	}
+	normalized := map[string][][]string{}
+	for _, kind := range []string{"mutually_exclusive", "require_one_of", "require_together"} {
+		for _, group := range groups[kind] {
+			members := make([]string, 0, len(group))
+			for _, member := range group {
+				if replacement := renames[member]; replacement != "" {
+					member = replacement
+				}
+				members = append(members, member)
+			}
+			sort.Strings(members)
+			members = compactConstraintStrings(members)
+			normalized[kind] = append(normalized[kind], members)
+		}
+		sort.Slice(normalized[kind], func(i, j int) bool {
+			return strings.Join(normalized[kind][i], "\x00") < strings.Join(normalized[kind][j], "\x00")
+		})
+		normalized[kind] = compactConstraintGroups(normalized[kind])
+		if len(normalized[kind]) == 0 {
+			delete(normalized, kind)
+		}
+	}
+	if len(normalized) == 0 {
+		return "", true
+	}
+	encoded, err := json.Marshal(normalized)
+	return string(encoded), err == nil
+}
+
+func parseMigrationConstraintsStrict(raw string) (map[string][][]string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return map[string][][]string{}, true
+	}
+	decoder := json.NewDecoder(strings.NewReader(trimmed))
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return nil, false
+	}
+	groups := map[string][][]string{}
+	for decoder.More() {
+		fieldToken, err := decoder.Token()
+		if err != nil {
+			return nil, false
+		}
+		// encoding/json guarantees that an object member name is a string token.
+		field := fieldToken.(string)
+		switch field {
+		case "mutually_exclusive", "require_one_of", "require_together":
+		default:
+			return nil, false
+		}
+		if _, duplicate := groups[field]; duplicate {
+			return nil, false
+		}
+		var encodedGroups json.RawMessage
+		if err := decoder.Decode(&encodedGroups); err != nil {
+			return nil, false
+		}
+		encodedGroups = bytes.TrimSpace(encodedGroups)
+		if len(encodedGroups) == 0 || encodedGroups[0] != '[' {
+			return nil, false
+		}
+		var fieldGroups [][]string
+		if err := json.Unmarshal(encodedGroups, &fieldGroups); err != nil {
+			return nil, false
+		}
+		for _, group := range fieldGroups {
+			if len(group) == 0 {
+				return nil, false
+			}
+			for _, member := range group {
+				if member == "" || member != strings.TrimSpace(member) {
+					return nil, false
+				}
+			}
+		}
+		groups[field] = fieldGroups
+	}
+	closing, err := decoder.Token()
+	if err != nil || closing != json.Delim('}') {
+		return nil, false
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, false
+	}
+	return groups, true
+}
+
+func compactConstraintStrings(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+	out := values[:1]
+	for _, value := range values[1:] {
+		if value != out[len(out)-1] {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func compactConstraintGroups(groups [][]string) [][]string {
+	if len(groups) < 2 {
+		return groups
+	}
+	out := groups[:1]
+	for _, group := range groups[1:] {
+		if !equalStringSlices(group, out[len(out)-1]) {
+			out = append(out, group)
+		}
+	}
+	return out
 }
 
 func writeContract(w io.Writer, contract schemaContract) error {

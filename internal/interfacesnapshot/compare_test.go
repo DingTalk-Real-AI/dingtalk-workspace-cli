@@ -533,6 +533,261 @@ func TestCrossPlatformCoverageReviewedFlagTypeTableMatchesInterfaceBaseline(t *t
 	}
 }
 
+func TestCrossPlatformCoverageCompareAllWithFlagMigrationsAuthorizesOnlyTheExactTransition(t *testing.T) {
+	before := testFlagMigrationSnapshot(false, true)
+	authority := testFlagMigrationManifest(FlagMigrationPending)
+	candidate := testFlagMigrationManifest(FlagMigrationConsumed)
+
+	report, err := CompareAllWithFlagMigrations(
+		testFlagMigrationSnapshot(true, true),
+		map[string]Snapshot{
+			"merge-base": before,
+			"stable":     before,
+		},
+		authority,
+		candidate,
+	)
+	if err != nil {
+		t.Fatalf("exact base-owned migration was rejected: %v", err)
+	}
+	if !report.Compatible {
+		t.Fatalf("exact migration remained incompatible: %#v", report.Comparisons)
+	}
+	for _, comparison := range report.Comparisons {
+		if len(comparison.Blocking) != 0 {
+			t.Fatalf("reference %q retained blocking changes: %#v", comparison.Reference, comparison.Blocking)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageCompareAllWithFlagMigrationsRejectsInvalidLifecycleTransitions(t *testing.T) {
+	empty := testEmptyFlagMigrationManifest()
+	pending := testFlagMigrationManifest(FlagMigrationPending)
+	consumed := testFlagMigrationManifest(FlagMigrationConsumed)
+	before := testFlagMigrationSnapshot(false, true)
+	after := testFlagMigrationSnapshot(true, true)
+
+	partial := testFlagMigrationSnapshot(false, true)
+	partial.Commands[1].LocalFlags[0].Hidden = true
+	partial.Commands[1].LocalFlags[0].Required = false
+	partial.Commands[1].LocalFlags[0].AliasOf = "message-id"
+
+	typeDrift := testFlagMigrationSnapshot(true, true)
+	typeDrift.Commands[1].LocalFlags[0].Type = "stringSlice"
+	noOptDrift := testFlagMigrationSnapshot(true, true)
+	noOptDrift.Commands[1].LocalFlags[0].NoOpt = ""
+	shorthandDrift := testFlagMigrationSnapshot(true, true)
+	shorthandDrift.Commands[1].LocalFlags[0].Shorthand = "x"
+
+	tests := []struct {
+		name      string
+		current   Snapshot
+		authority FlagMigrationManifest
+		candidate FlagMigrationManifest
+	}{
+		{
+			name:      "candidate-added pending record cannot approve its own surface change",
+			current:   after,
+			authority: empty,
+			candidate: pending,
+		},
+		{
+			name:      "candidate-added consumed record cannot approve its own surface change",
+			current:   after,
+			authority: empty,
+			candidate: consumed,
+		},
+		{
+			name:      "partial migration is rejected",
+			current:   partial,
+			authority: pending,
+			candidate: consumed,
+		},
+		{
+			name:      "pending record cannot be falsely consumed before the surface changes",
+			current:   before,
+			authority: pending,
+			candidate: consumed,
+		},
+		{
+			name:      "completed surface change must consume its pending record",
+			current:   after,
+			authority: pending,
+			candidate: pending,
+		},
+		{
+			name:      "legacy type drift is outside the approval",
+			current:   typeDrift,
+			authority: pending,
+			candidate: consumed,
+		},
+		{
+			name:      "legacy no-opt drift is outside the approval",
+			current:   noOptDrift,
+			authority: pending,
+			candidate: consumed,
+		},
+		{
+			name:      "legacy shorthand drift is outside the approval",
+			current:   shorthandDrift,
+			authority: pending,
+			candidate: consumed,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			report, err := CompareAllWithFlagMigrations(
+				test.current,
+				map[string]Snapshot{
+					"merge-base": before,
+					"stable":     before,
+				},
+				test.authority,
+				test.candidate,
+			)
+			if err == nil {
+				t.Fatalf("invalid transition passed: %#v", report)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageCompareAllWithFlagMigrationsAllowsApprovalCreationBeforeSurfaceChange(t *testing.T) {
+	before := testFlagMigrationSnapshot(false, true)
+	report, err := CompareAllWithFlagMigrations(
+		before,
+		map[string]Snapshot{
+			"merge-base": before,
+			"stable":     before,
+		},
+		testEmptyFlagMigrationManifest(),
+		testFlagMigrationManifest(FlagMigrationPending),
+	)
+	if err != nil {
+		t.Fatalf("pending approval creation was rejected before the surface changed: %v", err)
+	}
+	if !report.Compatible {
+		t.Fatalf("pending approval creation changed compatibility: %#v", report.Comparisons)
+	}
+}
+
+func TestCrossPlatformCoverageCompareAllWithFlagMigrationsKeepsUnrelatedBreakageBlocking(t *testing.T) {
+	before := testFlagMigrationSnapshot(false, true)
+	pending := testFlagMigrationManifest(FlagMigrationPending)
+	consumed := testFlagMigrationManifest(FlagMigrationConsumed)
+
+	tests := []struct {
+		name   string
+		mutate func(*Snapshot)
+		kind   string
+		flag   string
+	}{
+		{
+			name: "unrelated flag removal",
+			mutate: func(snapshot *Snapshot) {
+				snapshot.Commands[1].LocalFlags = snapshot.Commands[1].LocalFlags[:2]
+			},
+			kind: "flag_removed",
+			flag: "format",
+		},
+		{
+			name: "unrelated flag type change",
+			mutate: func(snapshot *Snapshot) {
+				snapshot.Commands[1].LocalFlags[2].Type = "stringSlice"
+			},
+			kind: "flag_type_changed",
+			flag: "format",
+		},
+		{
+			name: "unrelated flag no-opt change",
+			mutate: func(snapshot *Snapshot) {
+				snapshot.Commands[1].LocalFlags[2].NoOpt = ""
+			},
+			kind: "flag_no_opt_changed",
+			flag: "format",
+		},
+		{
+			name: "unrelated flag shorthand change",
+			mutate: func(snapshot *Snapshot) {
+				snapshot.Commands[1].LocalFlags[2].Shorthand = ""
+			},
+			kind: "flag_shorthand_changed",
+			flag: "format",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			current := testFlagMigrationSnapshot(true, true)
+			test.mutate(&current)
+			report, err := CompareAllWithFlagMigrations(
+				current,
+				map[string]Snapshot{
+					"merge-base": before,
+					"stable":     before,
+				},
+				pending,
+				consumed,
+			)
+			if err != nil {
+				t.Fatalf("valid migration with unrelated breakage returned a lifecycle error: %v", err)
+			}
+			if report.Compatible {
+				t.Fatalf("unrelated breakage was hidden by migration approval: %#v", report)
+			}
+			for _, comparison := range report.Comparisons {
+				if !hasFlagChange(comparison.Blocking, test.kind, "dws chat send", test.flag) {
+					t.Fatalf("reference %q blocking=%#v, want %s for --%s", comparison.Reference, comparison.Blocking, test.kind, test.flag)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageCompareAllWithFlagMigrationsRetainsConsumedReceiptUntilStableCatchesUp(t *testing.T) {
+	before := testFlagMigrationSnapshot(false, true)
+	after := testFlagMigrationSnapshot(true, true)
+	consumed := testFlagMigrationManifest(FlagMigrationConsumed)
+
+	report, err := CompareAllWithFlagMigrations(
+		after,
+		map[string]Snapshot{
+			"merge-base": after,
+			"stable":     before,
+		},
+		consumed,
+		consumed,
+	)
+	if err != nil {
+		t.Fatalf("consumed receipt was rejected while stable still needed it: %v", err)
+	}
+	if !report.Compatible {
+		t.Fatalf("stable comparison did not honor the consumed receipt: %#v", report.Comparisons)
+	}
+}
+
+func TestCrossPlatformCoverageCompareAllWithFlagMigrationsRequiresCleanupAfterAllReferencesCatchUp(t *testing.T) {
+	after := testFlagMigrationSnapshot(true, true)
+	consumed := testFlagMigrationManifest(FlagMigrationConsumed)
+	references := map[string]Snapshot{
+		"merge-base": after,
+		"stable":     after,
+	}
+
+	if report, err := CompareAllWithFlagMigrations(after, references, consumed, consumed); err == nil {
+		t.Fatalf("stale consumed receipt was accepted after every reference caught up: %#v", report)
+	}
+
+	report, err := CompareAllWithFlagMigrations(after, references, consumed, testEmptyFlagMigrationManifest())
+	if err != nil {
+		t.Fatalf("cleanup of stale consumed receipt was rejected: %v", err)
+	}
+	if !report.Compatible {
+		t.Fatalf("cleanup-only candidate was incompatible: %#v", report.Comparisons)
+	}
+}
+
 func testSnapshot(commands ...Command) Snapshot {
 	return Snapshot{
 		SchemaVersion: SchemaVersion,
@@ -569,6 +824,92 @@ func testCommandWithFlagScopes(path string, local, inherited []Flag) Command {
 
 func testFlag(name, flagType string, required bool) Flag {
 	return Flag{Name: name, Type: flagType, Required: required}
+}
+
+func testFlagMigrationSnapshot(after, includeUnrelated bool) Snapshot {
+	legacy := Flag{
+		Name:      "legacy-id",
+		Shorthand: "l",
+		Type:      "string",
+		NoOpt:     "auto",
+		Required:  true,
+	}
+	flags := []Flag{legacy}
+	if after {
+		legacy.Required = false
+		legacy.Hidden = true
+		legacy.AliasOf = "message-id"
+		flags = []Flag{
+			legacy,
+			{
+				Name:     "message-id",
+				Type:     "string",
+				Required: true,
+			},
+		}
+	}
+	if includeUnrelated {
+		flags = append(flags, Flag{
+			Name:      "format",
+			Shorthand: "f",
+			Type:      "string",
+			NoOpt:     "json",
+		})
+	}
+	return testSnapshot(
+		testCommand("dws"),
+		testCommand("dws chat send", flags...),
+	)
+}
+
+func testFlagMigrationManifest(state string) FlagMigrationManifest {
+	return FlagMigrationManifest{
+		Version: FlagMigrationManifestVersion,
+		Migrations: []FlagMigration{
+			{
+				Command: "dws chat send",
+				Legacy: FlagMigrationSide{
+					Name: "legacy-id",
+					Before: FlagMigrationState{
+						Present:   true,
+						Type:      "string",
+						Required:  true,
+						Shorthand: "l",
+						NoOpt:     "auto",
+						Scope:     "local",
+					},
+					After: FlagMigrationState{
+						Present:   true,
+						Type:      "string",
+						Hidden:    true,
+						Shorthand: "l",
+						NoOpt:     "auto",
+						Scope:     "local",
+						AliasOf:   "message-id",
+					},
+				},
+				Canonical: FlagMigrationSide{
+					Name:   "message-id",
+					Before: FlagMigrationState{},
+					After: FlagMigrationState{
+						Present:  true,
+						Type:     "string",
+						Required: true,
+						Scope:    "local",
+					},
+				},
+				State:  state,
+				Reason: "rename the public flag while preserving the executable legacy alias",
+			},
+		},
+	}
+}
+
+func testEmptyFlagMigrationManifest() FlagMigrationManifest {
+	return FlagMigrationManifest{
+		Version:    FlagMigrationManifestVersion,
+		Migrations: []FlagMigration{},
+	}
 }
 
 func hasChangeKind(changes []Change, kind string) bool {
