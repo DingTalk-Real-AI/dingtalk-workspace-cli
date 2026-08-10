@@ -359,7 +359,7 @@ func StoreResult(ctx context.Context, result CommandResult) error {
 	}
 	store, ok := resultStoreFromContext(ctx)
 	if !ok {
-		return fmt.Errorf("output: command context has no result store")
+		return fmt.Errorf("output: command context has no result store; install output.WithResultStore at the root execution boundary before calling StoreResult")
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -384,8 +384,8 @@ func EmitStoredResult(cmd *cobra.Command) (int, bool, error) {
 	if store.result == nil || store.emitAttempted {
 		return store.exitCode, store.emitted, nil
 	}
-	if !UsesV2(cmd) {
-		return 0, false, fmt.Errorf("output: legacy command %q produced a framework v2 result", cmd.CommandPath())
+	if !UsesUnifiedResult(cmd) {
+		return 0, false, fmt.Errorf("output: legacy command %q produced a unified framework result", cmd.CommandPath())
 	}
 	store.emitAttempted = true
 	store.exitCode = store.result.ExitCode()

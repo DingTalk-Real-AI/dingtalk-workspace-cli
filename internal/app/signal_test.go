@@ -19,7 +19,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func installSignalExecuteSeams(t *testing.T, v2 bool, stdout, stderr io.Writer) {
+func installSignalExecuteSeams(t *testing.T, unified bool, stdout, stderr io.Writer) {
 	t.Helper()
 	testseam.Protect(t, &os.Args)
 	os.Args = []string{"dws"}
@@ -28,8 +28,8 @@ func installSignalExecuteSeams(t *testing.T, v2 bool, stdout, stderr io.Writer) 
 	testseam.Swap(t, &rootStopAllStdioClients, func() {})
 	testseam.Swap(t, &rootNewRootCommandWithEngine, func(ctx context.Context, _ *pipeline.Engine) *cobra.Command {
 		cmd := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
-		if v2 {
-			output.SetCommandRollout(cmd, output.RolloutV2Active)
+		if unified {
+			output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
 		}
 		cmd.SetContext(ctx)
 		cmd.SetOut(stdout)
@@ -45,7 +45,7 @@ func signalSelf(t *testing.T, sig syscall.Signal) {
 	}
 }
 
-func TestExecuteSignalEmitsOneTypedV2Failure(t *testing.T) {
+func TestExecuteSignalEmitsOneTypedUnifiedFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		signal  syscall.Signal

@@ -98,7 +98,7 @@ func Execute() (exitCode int) {
 				if target != nil {
 					fmt.Fprintf(target.ErrOrStderr(), "Warning: command panicked after result emission attempt: %v\n", r)
 				}
-			} else if target != nil && output.UsesV2(target) {
+			} else if target != nil && output.UsesUnifiedResult(target) {
 				info := &output.ErrorInfo{Type: "internal", ExitCode: 5, Message: fmt.Sprintf("internal panic: %v", r)}
 				if code, err := output.EmitResult(target, output.Failure(info)); err == nil {
 					exitCode = code
@@ -159,7 +159,7 @@ func Execute() (exitCode int) {
 		if interrupted, _ := signalState.outcome(); interrupted != nil {
 			err = interrupted
 		}
-		if target, _, findErr := root.Find(os.Args[1:]); findErr == nil && target != nil && output.UsesV2(target) {
+		if target, _, findErr := root.Find(os.Args[1:]); findErr == nil && target != nil && output.UsesUnifiedResult(target) {
 			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
 			code, emitErr := output.EmitResult(target, result)
 			if emitErr == nil {
@@ -197,7 +197,7 @@ func Execute() (exitCode int) {
 		}
 		err = rewordRequiredFlagError(err)
 		var raw apperrors.RawStderrError
-		if output.UsesV2(executed) && !stderrors.As(err, &raw) {
+		if output.UsesUnifiedResult(executed) && !stderrors.As(err, &raw) {
 			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
 			code, emitErr := output.EmitResult(executed, result)
 			if emitErr == nil {
@@ -219,7 +219,7 @@ func Execute() (exitCode int) {
 	return 0
 }
 
-// errorInfoFromExecutionError projects the repository error model into the v2
+// errorInfoFromExecutionError projects the repository error model into the unified
 // failure body. Exit code and category are derived from the same error value,
 // preventing the wire and process status from drifting apart.
 func errorInfoFromExecutionError(err error) *output.ErrorInfo {
@@ -610,7 +610,7 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 			return cmd.Help()
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := output.ValidateV2Format(cmd); err != nil {
+			if err := output.ValidateUnifiedFormat(cmd); err != nil {
 				return apperrors.NewValidation(err.Error(), apperrors.WithReason("unsupported_format"))
 			}
 			// Cobra performs these checks after persistent pre-run hooks. Run
@@ -671,7 +671,7 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 			if emitErr != nil {
 				return apperrors.NewInternal("emit command result: "+emitErr.Error(), apperrors.WithCause(emitErr))
 			}
-			if output.UsesV2(cmd) && !emitted {
+			if output.UsesUnifiedResult(cmd) && !emitted {
 				return apperrors.NewInternal("framework 2.0 command returned without a CommandResult")
 			}
 			if closeErr := closeOutputSink(cmd); closeErr != nil {

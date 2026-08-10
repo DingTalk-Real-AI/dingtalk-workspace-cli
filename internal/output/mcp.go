@@ -16,7 +16,7 @@ type MCPResult struct {
 	IsError           bool           `json:"isError,omitempty"`
 }
 
-// AdaptMCP projects the exact v2 envelope into MCP structuredContent. Failure
+// AdaptMCP projects the exact unified envelope into MCP structuredContent. Failure
 // and partial failure set isError, while pending remains a successfully
 // accepted request whose terminal operation state is carried in the envelope.
 func AdaptMCP(result CommandResult) (*MCPResult, error) {

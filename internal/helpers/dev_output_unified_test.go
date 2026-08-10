@@ -10,11 +10,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type countingDevV2Runner struct {
+type countingDevUnifiedRunner struct {
 	calls int
 }
 
-func (r *countingDevV2Runner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
+func (r *countingDevUnifiedRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
 	r.calls++
 	invocation.Implemented = true
 	return executor.Result{
@@ -26,7 +26,7 @@ func (r *countingDevV2Runner) Run(_ context.Context, invocation executor.Invocat
 	}, nil
 }
 
-func newDevV2Root(runner executor.Runner) *cobra.Command {
+func newDevUnifiedRoot(runner executor.Runner) *cobra.Command {
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	ctx, _ := output.WithResultStore(context.Background())
 	root.SetContext(ctx)
@@ -43,9 +43,9 @@ func newDevV2Root(runner executor.Runner) *cobra.Command {
 	return root
 }
 
-func TestDevAppV2ActiveExecutesOnceAndReturnsFrameworkResult(t *testing.T) {
-	runner := &countingDevV2Runner{}
-	root := newDevV2Root(runner)
+func TestDevAppUnifiedActiveExecutesOnceAndReturnsFrameworkResult(t *testing.T) {
+	runner := &countingDevUnifiedRunner{}
+	root := newDevUnifiedRoot(runner)
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetArgs([]string{"dev", "app", "list"})
@@ -60,9 +60,9 @@ func TestDevAppV2ActiveExecutesOnceAndReturnsFrameworkResult(t *testing.T) {
 	}
 }
 
-func TestMigratedDevAppDefaultsToFrameworkV2(t *testing.T) {
-	runner := &countingDevV2Runner{}
-	root := newDevV2Root(runner)
+func TestMigratedDevAppDefaultsToUnifiedFramework(t *testing.T) {
+	runner := &countingDevUnifiedRunner{}
+	root := newDevUnifiedRoot(runner)
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&bytes.Buffer{})
@@ -74,13 +74,13 @@ func TestMigratedDevAppDefaultsToFrameworkV2(t *testing.T) {
 		t.Fatalf("runner calls=%d, want 1", runner.calls)
 	}
 	if !bytes.Contains(stdout.Bytes(), []byte(`"outcome": "success"`)) || bytes.Contains(stdout.Bytes(), []byte(`"contract_version"`)) {
-		t.Fatalf("migrated dev command did not use v2 by default: %s", stdout.String())
+		t.Fatalf("migrated dev command did not use unified output by default: %s", stdout.String())
 	}
 }
 
-func TestDevDocSearchV2UsesInjectedRunnerOnce(t *testing.T) {
-	runner := &countingDevV2Runner{}
-	root := newDevV2Root(runner)
+func TestDevDocSearchUnifiedUsesInjectedRunnerOnce(t *testing.T) {
+	runner := &countingDevUnifiedRunner{}
+	root := newDevUnifiedRoot(runner)
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetArgs([]string{"dev", "doc", "search", "MCP"})
@@ -95,8 +95,8 @@ func TestDevDocSearchV2UsesInjectedRunnerOnce(t *testing.T) {
 	}
 }
 
-func TestAllTerminalDevBusinessSurfacesDeclareV2Active(t *testing.T) {
-	root := newDevV2Root(&countingDevV2Runner{})
+func TestAllTerminalDevBusinessSurfacesDeclareUnifiedActive(t *testing.T) {
+	root := newDevUnifiedRoot(&countingDevUnifiedRunner{})
 	dev, _, err := root.Find([]string{"dev"})
 	if err != nil {
 		t.Fatal(err)
@@ -105,8 +105,8 @@ func TestAllTerminalDevBusinessSurfacesDeclareV2Active(t *testing.T) {
 	walk = func(cmd *cobra.Command) {
 		children := cmd.Commands()
 		if cmd.Runnable() && len(children) == 0 {
-			if got := output.CommandRollout(cmd); got != output.RolloutV2Active {
-				t.Errorf("%s rollout=%s, want %s", cmd.CommandPath(), got, output.RolloutV2Active)
+			if got := output.CommandRollout(cmd); got != output.RolloutUnifiedActive {
+				t.Errorf("%s rollout=%s, want %s", cmd.CommandPath(), got, output.RolloutUnifiedActive)
 			}
 		}
 		if cmd.CommandPath() == "dws dev connect" && output.CommandRollout(cmd) != output.RolloutLegacyOnly {

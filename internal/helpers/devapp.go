@@ -1744,7 +1744,7 @@ func devAppLeafMeta(cmd *cobra.Command, tool string) {
 	annotateDevAppTool(cmd, tool)
 	// This leaf has migrated to Framework 2.0. Consumers keep using --format;
 	// the active contract is a release property, not an Agent-selected flag.
-	output.SetCommandRollout(cmd, output.RolloutV2Active)
+	output.SetCommandRollout(cmd, output.RolloutUnifiedActive)
 }
 
 // devAppCall 返回统一派发闭包（替代各命令重复的 Call: runDevAppTool 透传）。
@@ -1857,7 +1857,7 @@ func devAppCommandResult(result executor.Result) output.CommandResult {
 
 // DevAppCommandResultFromPayload is the shared dingtalk-dev outcome mapper for
 // the native `dev ...` tree and the existing `devapp +...` shortcut tree. Both
-// entry points must classify the same upstream payload into the same v2
+// entry points must classify the same upstream payload into the same unified
 // outcome; only command routing and projection differ.
 func DevAppCommandResultFromPayload(tool string, payload any, dryRun bool) output.CommandResult {
 	response := map[string]any{"content": payload}
@@ -1882,14 +1882,14 @@ func DevAppCommandResultFromPayload(tool string, payload any, dryRun bool) outpu
 }
 
 // writeDevRolloutResult is the gradual migration seam shared by dingtalk-dev.
-// The operation is executed exactly once; only the renderer changes. Legacy is
-// remains active only for commands that have not advanced to v2_active.
+// The operation is executed exactly once; only the renderer changes. Legacy
+// remains active only for commands that have not advanced to unified_active.
 func writeDevRolloutResult(cmd *cobra.Command, result output.CommandResult, legacy *output.Envelope, fallback output.Format) error {
-	if output.UsesV2(cmd) {
+	if output.UsesUnifiedResult(cmd) {
 		return output.StoreResult(cmd.Context(), result)
 	}
 	if output.CommandRollout(cmd) == output.RolloutDualValidate {
-		// Shadow-build/validate v2 without a second business invocation and
+		// Shadow-build/validate the unified result without a second business invocation and
 		// without changing stdout. Metrics can be added around this seam later.
 		if err := output.ValidateResult(result); err != nil {
 			return err

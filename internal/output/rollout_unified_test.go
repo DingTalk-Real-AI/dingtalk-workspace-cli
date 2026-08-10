@@ -18,12 +18,12 @@ func TestValidateRolloutTransition(t *testing.T) {
 		wantErr  bool
 	}{
 		{RolloutLegacyOnly, RolloutDualValidate, false, false},
-		{RolloutDualValidate, RolloutV2Active, false, false},
-		{RolloutV2Active, RolloutV2Stable, false, false},
-		{RolloutV2Stable, RolloutV2Only, false, false},
-		{RolloutLegacyOnly, RolloutV2Active, false, true},
-		{RolloutV2Stable, RolloutV2Active, false, true},
-		{RolloutV2Stable, RolloutV2Active, true, false},
+		{RolloutDualValidate, RolloutUnifiedActive, false, false},
+		{RolloutUnifiedActive, RolloutUnifiedStable, false, false},
+		{RolloutUnifiedStable, RolloutUnifiedOnly, false, false},
+		{RolloutLegacyOnly, RolloutUnifiedActive, false, true},
+		{RolloutUnifiedStable, RolloutUnifiedActive, false, true},
+		{RolloutUnifiedStable, RolloutUnifiedActive, true, false},
 	}
 	for _, tc := range cases {
 		if err := ValidateRolloutTransition(tc.from, tc.to, tc.rollback); (err != nil) != tc.wantErr {
@@ -128,7 +128,7 @@ func TestEmitResultUnknownFormatDegradesToJSONWithWarning(t *testing.T) {
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	cmd.Flags().String("format", "bogus", "")
-	SetCommandRollout(cmd, RolloutV2Active)
+	SetCommandRollout(cmd, RolloutUnifiedActive)
 	code, err := EmitResult(cmd, Success(map[string]any{"id": "a"}))
 	if err != nil || code != 0 {
 		t.Fatalf("EmitResult code=%d err=%v, want successful JSON fallback", code, err)
@@ -180,7 +180,7 @@ func TestEmitStoredResultRecordsAttemptAndByteRiskOnWriteError(t *testing.T) {
 		t.Run(fmt.Sprintf("full=%t", full), func(t *testing.T) {
 			ctx, store := WithResultStore(context.Background())
 			cmd := &cobra.Command{Use: "sample"}
-			SetCommandRollout(cmd, RolloutV2Active)
+			SetCommandRollout(cmd, RolloutUnifiedActive)
 			writer := &writeThenError{full: full}
 			cmd.SetOut(writer)
 			cmd.SetErr(io.Discard)
@@ -210,5 +210,13 @@ func TestWithResultStoreIsIdempotent(t *testing.T) {
 	ctxAgain, second := WithResultStore(ctx)
 	if ctxAgain != ctx || second != first {
 		t.Fatal("WithResultStore replaced an existing store")
+	}
+}
+
+func TestStoreResultWithoutExecutionBoundaryHasActionableDiagnostic(t *testing.T) {
+	err := StoreResult(context.Background(), Success(map[string]any{"id": "a"}))
+	if err == nil || !strings.Contains(err.Error(), "output.WithResultStore") ||
+		!strings.Contains(err.Error(), "root execution boundary") {
+		t.Fatalf("StoreResult diagnostic = %v, want execution-boundary repair hint", err)
 	}
 }

@@ -148,7 +148,7 @@ func HasRuntimeContractFinal(cmd *cobra.Command) bool {
 
 // ResolveRuntimeSafety finds the live ContractFinal safety declaration for an
 // invocation identity. declared distinguishes a matched declaration whose
-// safety is unavailable or conflicting from a legacy invocation with no v2
+// safety is unavailable or conflicting from a legacy invocation with no unified
 // declaration context. Repeated equivalent command-tree registrations are
 // accepted; conflicting matches fail closed with ok=false.
 func ResolveRuntimeSafety(canonicalPath, cliPath string) (safety contract.SafetySpec, declared, ok bool) {

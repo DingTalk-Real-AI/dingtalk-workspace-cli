@@ -267,11 +267,11 @@ var completeKeyResiduePatterns = []*regexp.Regexp{
 }
 
 // TestCompleteKeyResidueScan 扫描 internal/output 与 internal/helpers 的输出
-// 相关 Go 源文件：弃用的 complete 键（AC-06）不得以 JSON 键形态残留。
-// 注：本测试只读 internal/helpers 源文件做断言，不修改（硬纪律：编辑面仍
-// 限 internal/output/）。
+// 统一输出实现：弃用的 complete 键（AC-06）不得以 JSON 键形态残留。
+// Legacy 产品命令尚未全部迁移，不能用框架单测跨包禁止其历史 wire；每条
+// 命令晋级时由产品 contract test 检查 endpoint_exhausted 投影。
 func TestCompleteKeyResidueScan(t *testing.T) {
-	dirs := []string{".", filepath.Join("..", "helpers")}
+	dirs := []string{"."}
 	scanned := 0
 	for _, dir := range dirs {
 		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {

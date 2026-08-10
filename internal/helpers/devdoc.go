@@ -191,7 +191,7 @@ func newDevDocSearchCommand(runners ...executor.Runner) *cobra.Command {
 		Index:       0,
 	})
 	DeclareLeafMetadata(cmd, LeafSpec{
-		OutputRollout: output.RolloutV2Active,
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",

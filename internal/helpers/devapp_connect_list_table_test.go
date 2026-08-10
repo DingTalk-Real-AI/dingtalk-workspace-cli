@@ -21,7 +21,7 @@ import (
 )
 
 // TestDevConnectListTableView 是 `dev connect list` 的 Framework 2.0 table 断言：
-// v2 emitter 从业务数据生成通用表格；-f json 走
+// 统一 emitter 从业务数据生成通用表格；-f json 走
 // 信封通道（data 数组 + meta.count）。本测试在临时 connect 目录写入两个
 // 心跳（healthy + down），验证列头与行值。--format 是生产根命令的持久 flag，
 // 故经 newDevAppTestRoot（注册 --format/--dry-run/--yes）挂 dev 子树端到端执行。
@@ -48,7 +48,7 @@ func TestDevConnectListTableView(t *testing.T) {
 		StartUnix: 1_000_000, ConnectedUnix: 1_000_010, UpdatedUnix: 2_000_000,
 	})
 
-	// -f table：v2 通用表视图保留结构化字段。
+	// -f table：统一通用表视图保留结构化字段。
 	root := newDevAppTestRoot(&captureRunner{})
 	tableOut, tableErr, err := runRootBuffered(t, root, "dev", "connect", "list", "--format", "table")
 	if err != nil {
@@ -105,7 +105,7 @@ func decodePhaseFConnListEnvelope(t *testing.T, raw []byte) *struct {
 	return &env
 }
 
-// TestDevConnectListTableEmptyState 验证空数组仍由 v2 通用 table emitter
+// TestDevConnectListTableEmptyState 验证空数组仍由统一 table emitter
 // 渲染，并保留 count:0；JSON 输出 data:[] + count:0 信封（AC-06）。
 func TestDevConnectListTableEmptyState(t *testing.T) {
 	connectDaemonDirOverride = t.TempDir()

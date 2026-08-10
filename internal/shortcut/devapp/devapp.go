@@ -1586,14 +1586,14 @@ var VersionStatus = shortcut.Shortcut{
 func init() {
 	shortcut.Register(
 		frameworkDualValidate(ListApp),
-		frameworkV2(GetApp),
+		frameworkUnified(GetApp),
 		frameworkDualValidate(CreateApp),
 		frameworkDualValidate(UpdateApp),
 		frameworkDualValidate(DeleteApp),
 		frameworkDualValidate(EnableApp),
 		frameworkDualValidate(DisableApp),
-		frameworkV2(GetCredentials),
-		frameworkV2(WebappGet),
+		frameworkUnified(GetCredentials),
+		frameworkUnified(WebappGet),
 		frameworkDualValidate(WebappConfig),
 		frameworkDualValidate(PermissionList),
 		frameworkDualValidate(PermissionAdd),
@@ -1602,7 +1602,7 @@ func init() {
 		frameworkDualValidate(MemberAdd),
 		frameworkDualValidate(MemberRemove),
 		frameworkDualValidate(SecurityConfig),
-		frameworkV2(RobotGet),
+		frameworkUnified(RobotGet),
 		frameworkDualValidate(RobotConfig),
 		frameworkDualValidate(RobotEnable),
 		frameworkDualValidate(RobotDisable),
@@ -1611,15 +1611,15 @@ func init() {
 		frameworkDualValidate(EventUnsubscribe),
 		frameworkDualValidate(VersionCreate),
 		frameworkDualValidate(VersionList),
-		frameworkV2(VersionGet),
-		frameworkV2(VersionCheckApproval),
+		frameworkUnified(VersionGet),
+		frameworkUnified(VersionCheckApproval),
 		frameworkDualValidate(VersionPublish),
-		frameworkV2(VersionStatus),
+		frameworkUnified(VersionStatus),
 	)
 }
 
-func frameworkV2(item shortcut.Shortcut) shortcut.Shortcut {
-	item.OutputRollout = output.RolloutV2Active
+func frameworkUnified(item shortcut.Shortcut) shortcut.Shortcut {
+	item.OutputRollout = output.RolloutUnifiedActive
 	return item
 }
 

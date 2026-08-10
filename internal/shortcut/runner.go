@@ -130,7 +130,7 @@ func (rt *RuntimeContext) CallMCP(tool string, params map[string]any) error {
 	if params == nil {
 		params = map[string]any{}
 	}
-	if output.UsesV2(rt.cmd) {
+	if output.UsesUnifiedResult(rt.cmd) {
 		if rt.DryRun() {
 			return rt.Output(map[string]any{
 				"dry_run":   true,
@@ -171,7 +171,7 @@ func (rt *RuntimeContext) CallMCP(tool string, params map[string]any) error {
 		}
 		// dual_validate changes no external bytes: it renders the once-fetched
 		// payload through the established legacy projection after validating the
-		// shadow v2 result.
+		// shadow unified result.
 		if _, unstructured := data.(string); unstructured {
 			return writeLegacyRaw(rt.cmd.OutOrStdout(), text)
 		}
@@ -319,7 +319,7 @@ func (rt *RuntimeContext) callMCPWriteData(product, tool string, params map[stri
 // composed result instead of the raw MCP response — the output-projection
 // output-formatting capability.
 func (rt *RuntimeContext) Output(payload any) error {
-	if output.UsesV2(rt.cmd) {
+	if output.UsesUnifiedResult(rt.cmd) {
 		return output.StoreResult(rt.cmd.Context(), rt.resultForPayload("", payload))
 	}
 	if output.CommandRollout(rt.cmd) == output.RolloutDualValidate {
@@ -342,7 +342,43 @@ func (rt *RuntimeContext) resultForPayload(tool string, payload any) output.Comm
 	if rt.DryRun() {
 		options = append(options, output.WithDryRun())
 	}
-	return shortcutCommandResult(payload, options...)
+	result := shortcutCommandResult(payload, options...)
+	if tool != "" && !rt.DryRun() && rt.isWriteShortcut() &&
+		result.Outcome() == output.OutcomeSuccess && !hasExplicitShortcutSuccess(payload) {
+		started := true
+		return output.Failure(&output.ErrorInfo{
+			Type:             "api",
+			Subtype:          "projection_unknown",
+			Message:          "write shortcut response has no reviewed terminal success evidence",
+			Hint:             "核查目标资源状态后再决定是否重试；为该命令使用专属结果投影表达成功证据。",
+			Operation:        rt.shortcut.product() + "/" + tool,
+			Origin:           "mcp_gateway",
+			Stage:            "response_projection",
+			ExecutionStarted: &started,
+		})
+	}
+	return result
+}
+
+func (rt *RuntimeContext) isWriteShortcut() bool {
+	effect := strings.TrimSpace(rt.shortcut.Safety.Effect)
+	if effect == "write" || effect == "destructive" {
+		return true
+	}
+	return rt.shortcut.Risk == RiskWrite || rt.shortcut.Risk == RiskHighWrite
+}
+
+func hasExplicitShortcutSuccess(payload any) bool {
+	object, ok := payload.(map[string]any)
+	if !ok {
+		return false
+	}
+	status := object
+	if content, ok := object["content"].(map[string]any); ok {
+		status = content
+	}
+	success, present := status["success"].(bool)
+	return present && success
 }
 
 func shortcutCommandResult(payload any, options ...output.ResultOption) output.CommandResult {
@@ -351,7 +387,20 @@ func shortcutCommandResult(payload any, options ...output.ResultOption) output.C
 		if content, ok := object["content"].(map[string]any); ok {
 			status = content
 		}
-		if success, present := status["success"].(bool); present && !success {
+		if rawSuccess, present := status["success"]; present {
+			success, isBool := rawSuccess.(bool)
+			if !isBool {
+				return output.Failure(&output.ErrorInfo{
+					Type:      "api",
+					Subtype:   "invalid_success_type",
+					Message:   "shortcut response success field must be a JSON boolean",
+					Hint:      "写操作先核查目标状态；读取操作保留脱敏响应证据后排查上游。",
+					Operation: "shortcut.response_projection",
+				}, options...)
+			}
+			if success {
+				return output.Success(payload, options...)
+			}
 			message := "shortcut operation failed"
 			for _, key := range []string{"errorMsg", "errorMessage", "message"} {
 				if value, ok := status[key].(string); ok && strings.TrimSpace(value) != "" {

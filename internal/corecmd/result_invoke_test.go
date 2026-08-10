@@ -16,7 +16,7 @@ func TestResultInvokeCarriesOneFrameworkResult(t *testing.T) {
 	ctx, store := output.WithResultStore(context.Background())
 	cmd := New(Spec{
 		Use:           "result",
-		OutputRollout: output.RolloutV2Active,
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
 		},
@@ -45,7 +45,7 @@ func TestResultInvokeCarriesOneFrameworkResult(t *testing.T) {
 	if !strings.Contains(stdout.String(), `"outcome": "success"`) || strings.Contains(stdout.String(), `"contract_version"`) {
 		t.Fatalf("stdout=%s", stdout.String())
 	}
-	if output.CommandRollout(cmd) != output.RolloutV2Active {
+	if output.CommandRollout(cmd) != output.RolloutUnifiedActive {
 		t.Fatalf("rollout=%s", output.CommandRollout(cmd))
 	}
 }

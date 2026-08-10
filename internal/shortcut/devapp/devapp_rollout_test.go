@@ -24,7 +24,7 @@ func TestDevAppShortcutsRollOutPerTerminalCommand(t *testing.T) {
 		seen[item.Command] = true
 		want := output.RolloutDualValidate
 		if active[item.Command] {
-			want = output.RolloutV2Active
+			want = output.RolloutUnifiedActive
 		}
 		if item.OutputRollout != want {
 			t.Errorf("%s rollout=%s, want %s", item.Command, item.OutputRollout, want)

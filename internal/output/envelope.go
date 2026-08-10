@@ -277,8 +277,17 @@ func (e *ErrorInfo) Validate() error {
 	if e == nil {
 		return fmt.Errorf("output: failure error is nil")
 	}
-	if strings.TrimSpace(e.Type) == "" {
+	errorType := strings.TrimSpace(e.Type)
+	if errorType == "" {
 		return fmt.Errorf("output: failure error.type is required")
+	}
+	// error.type is a wire-stable Agent branch key, not an open-ended label.
+	// Keep this set aligned with exitCodeForErrorInfo. "permission" is the
+	// compatibility projection for PAT failures (rc=4).
+	switch errorType {
+	case "api", "auth", "validation", "permission", "discovery", "internal":
+	default:
+		return fmt.Errorf("output: unsupported failure error.type %q", e.Type)
 	}
 	if e.ExitCode < 0 {
 		return fmt.Errorf("output: failure error.exit_code must not be negative")

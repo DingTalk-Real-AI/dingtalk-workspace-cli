@@ -62,7 +62,7 @@ type DryRunSpec struct {
 	RemoteReads bool   `json:"remote_reads,omitempty"`
 }
 
-// ResultOutcome is one closed output-v2 envelope outcome.
+// ResultOutcome is one closed unified-output envelope outcome.
 type ResultOutcome string
 
 const (
@@ -96,7 +96,7 @@ type ResultPaginationSpec struct {
 
 // ResultSpec is the reviewed return-value contract for one command. DataSchema
 // and RecordSchema are canonical JSON Schema objects; all paths are relative to
-// the output-v2 envelope data value.
+// the unified-output envelope data value.
 type ResultSpec struct {
 	Outcomes       []ResultOutcome       `json:"outcomes"`
 	DataSchema     json.RawMessage       `json:"data_schema"`

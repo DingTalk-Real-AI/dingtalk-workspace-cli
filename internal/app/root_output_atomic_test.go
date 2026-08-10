@@ -150,7 +150,7 @@ func TestOutputSinkSyncAndCloseFailuresPreserveTarget(t *testing.T) {
 	}
 }
 
-func TestOutputSinkV2PublicationFailureFailsAndLeavesNoFinalFile(t *testing.T) {
+func TestOutputSinkUnifiedPublicationFailureFailsAndLeavesNoFinalFile(t *testing.T) {
 	testseam.Swap(t, &rootRenameFile, func(string, string) error {
 		return errors.New("rename failed")
 	})
@@ -159,16 +159,16 @@ func TestOutputSinkV2PublicationFailureFailsAndLeavesNoFinalFile(t *testing.T) {
 
 	root := NewRootCommand()
 	leaf := &cobra.Command{
-		Use: "atomic-output-v2",
+		Use: "atomic-output-unified",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return output.StoreResult(cmd.Context(), output.Success(map[string]any{"id": "ok"}))
 		},
 	}
-	output.SetCommandRollout(leaf, output.RolloutV2Active)
+	output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
 	root.AddCommand(leaf)
-	root.SetArgs([]string{"atomic-output-v2", "--output", target})
+	root.SetArgs([]string{"atomic-output-unified", "--output", target})
 	if _, err := root.ExecuteC(); err == nil {
-		t.Fatal("v2 ExecuteC succeeded without publishing its output")
+		t.Fatal("unified ExecuteC succeeded without publishing its output")
 	} else if code := apperrors.ExitCode(err); code != 5 {
 		t.Fatalf("publication exit code=%d, want 5: %v", code, err)
 	}
@@ -195,7 +195,7 @@ func TestOutputSinkEmissionFailurePreservesTarget(t *testing.T) {
 			return cmd.OutOrStdout().(*os.File).Close()
 		},
 	}
-	output.SetCommandRollout(leaf, output.RolloutV2Active)
+	output.SetCommandRollout(leaf, output.RolloutUnifiedActive)
 	root.AddCommand(leaf)
 	root.SetArgs([]string{"atomic-emission-failure", "--output", target})
 	if _, err := root.ExecuteC(); err == nil {

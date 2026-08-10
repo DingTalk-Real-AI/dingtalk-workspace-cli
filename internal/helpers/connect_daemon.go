@@ -335,7 +335,7 @@ func startDaemon(cmd *cobra.Command, dirKey, clientID, unifiedAppID, channel, no
 	// Release the child so the parent can exit without leaving a zombie.
 	pid := child.Process.Pid
 	_ = child.Process.Release()
-	if !output.UsesV2(cmd) {
+	if !output.UsesUnifiedResult(cmd) {
 		writeConnectDaemonStarted(cmd.OutOrStdout(), pid, logPath, clientID, dirKey)
 		return nil
 	}
@@ -728,7 +728,7 @@ func newDevAppRobotConnectStatusCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if output.UsesV2(cmd) {
+			if output.UsesUnifiedResult(cmd) {
 				snapshot, err := readDaemonStatus(dirKey)
 				if err != nil {
 					return err
@@ -744,7 +744,7 @@ func newDevAppRobotConnectStatusCommand() *cobra.Command {
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID（当未用 clientId 起守护进程时定位）")
 	cmd.Flags().Bool("json", false, "以 JSON 输出健康报告（供 launchd/systemd/pm2/cron 判断是否重启）")
 	DeclareLeafMetadata(cmd, LeafSpec{
-		OutputRollout: output.RolloutV2Active,
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
 			Confirmation: "not_required", Idempotency: "idempotent",
@@ -813,7 +813,7 @@ func newDevAppRobotConnectStopCommand() *cobra.Command {
 	cmd.Flags().String("robot-client-id", "", "机器人 clientId（定位守护进程）")
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID（当未用 clientId 起守护进程时定位）")
 	DeclareLeafMetadata(cmd, LeafSpec{
-		OutputRollout: output.RolloutV2Active,
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety: contract.SafetySpec{
 			Effect: "destructive", Risk: "high",
 			Confirmation: "not_required", Idempotency: "idempotent",
@@ -987,7 +987,7 @@ func newDevAppRobotConnectRestartCommand() *cobra.Command {
 	cmd.Flags().String("robot-client-id", "", "机器人 clientId（定位守护进程）")
 	cmd.Flags().String("unified-app-id", "", "统一应用 ID（当未用 clientId 起守护进程时定位）")
 	DeclareLeafMetadata(cmd, LeafSpec{
-		OutputRollout: output.RolloutV2Active,
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "not_required", Idempotency: "unknown"},
 		Validate:      func(c *cobra.Command, _ []string) error { return validateConnectRestart(c) },
 		Contract: LeafContract{
@@ -1031,7 +1031,7 @@ func newDevAppRobotConnectListCommand(runner executor.Runner) *cobra.Command {
 			}
 			jsonOut, _ := cmd.Flags().GetBool("json")
 			format := output.ResolveFormat(cmd, output.FormatJSON)
-			if output.UsesV2(cmd) {
+			if output.UsesUnifiedResult(cmd) {
 				return output.StoreResult(cmd.Context(), output.Success(reports, output.WithMeta(env.Meta)))
 			}
 			if jsonOut || format == output.FormatJSON {
@@ -1050,7 +1050,7 @@ func newDevAppRobotConnectListCommand(runner executor.Runner) *cobra.Command {
 	preferLegacyLeaf(cmd)
 	cmd.Flags().Bool("json", false, "以 JSON 数组输出（供脚本消费）")
 	DeclareLeafMetadata(cmd, LeafSpec{
-		OutputRollout: output.RolloutV2Active,
+		OutputRollout: output.RolloutUnifiedActive,
 		Safety:        contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: "dev", Name: "connect_list", CanonicalPath: "dev.connect_list", CLIPath: "dev connect list", PrimaryCLIPath: "dev connect list"},

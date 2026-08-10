@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestExecuteEmitsStoredV2ResultAtSingleRootExit(t *testing.T) {
+func TestExecuteEmitsStoredUnifiedResultAtSingleRootExit(t *testing.T) {
 	oldNormalize := rootNormalizeProcessProfileArgs
 	oldExecute := rootExecuteCommand
 	oldNewRoot := rootNewRootCommandWithEngine
@@ -54,7 +54,7 @@ func TestExecuteEmitsStoredV2ResultAtSingleRootExit(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	executed := &cobra.Command{Use: "leaf"}
-	output.SetCommandRollout(executed, output.RolloutV2Active)
+	output.SetCommandRollout(executed, output.RolloutUnifiedActive)
 	executed.SetOut(&stdout)
 	executed.SetErr(&stderr)
 	rootExecuteCommand = func(root *cobra.Command) (*cobra.Command, error) {

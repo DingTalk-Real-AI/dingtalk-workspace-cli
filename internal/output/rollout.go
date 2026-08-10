@@ -16,7 +16,10 @@ type ContractMode string
 
 const (
 	ContractLegacy ContractMode = "legacy"
-	ContractV2     ContractMode = "v2"
+	// ContractUnified is the single framework-owned result shape. It is not a
+	// consumer-selectable protocol version: a command either still renders its
+	// historical legacy shape or has been promoted to the unified result.
+	ContractUnified ContractMode = "unified"
 )
 
 // RolloutState is internal release metadata. Consumers never select it. A
@@ -25,11 +28,11 @@ const (
 type RolloutState string
 
 const (
-	RolloutLegacyOnly   RolloutState = "legacy_only"
-	RolloutDualValidate RolloutState = "dual_validate"
-	RolloutV2Active     RolloutState = "v2_active"
-	RolloutV2Stable     RolloutState = "v2_stable"
-	RolloutV2Only       RolloutState = "v2_only"
+	RolloutLegacyOnly    RolloutState = "legacy_only"
+	RolloutDualValidate  RolloutState = "dual_validate"
+	RolloutUnifiedActive RolloutState = "unified_active"
+	RolloutUnifiedStable RolloutState = "unified_stable"
+	RolloutUnifiedOnly   RolloutState = "unified_only"
 )
 
 const rolloutAnnotation = "dws.output.rollout"
@@ -37,15 +40,15 @@ const rolloutAnnotation = "dws.output.rollout"
 func ParseRolloutState(raw string) (RolloutState, error) {
 	state := RolloutState(strings.TrimSpace(raw))
 	switch state {
-	case RolloutLegacyOnly, RolloutDualValidate, RolloutV2Active, RolloutV2Stable, RolloutV2Only:
+	case RolloutLegacyOnly, RolloutDualValidate, RolloutUnifiedActive, RolloutUnifiedStable, RolloutUnifiedOnly:
 		return state, nil
 	default:
 		return "", fmt.Errorf("invalid output rollout state %q", raw)
 	}
 }
 
-// ValidateRolloutTransition protects the release order. It is consumed by CI
-// against the checked-in migration ledger; it is not an end-user capability.
+// ValidateRolloutTransition defines the release order for rollout tooling. It
+// is not an end-user capability. CI/ledger enforcement is wired separately.
 func ValidateRolloutTransition(from, to RolloutState, rollback bool) error {
 	if _, err := ParseRolloutState(string(from)); err != nil {
 		return err
@@ -72,11 +75,11 @@ func rolloutRank(state RolloutState) int {
 		return 0
 	case RolloutDualValidate:
 		return 1
-	case RolloutV2Active:
+	case RolloutUnifiedActive:
 		return 2
-	case RolloutV2Stable:
+	case RolloutUnifiedStable:
 		return 3
-	case RolloutV2Only:
+	case RolloutUnifiedOnly:
 		return 4
 	default:
 		return -1
@@ -110,17 +113,17 @@ func CommandRollout(cmd *cobra.Command) RolloutState {
 // ActiveContract is the only contract exposed by a command in this release.
 func ActiveContract(cmd *cobra.Command) ContractMode {
 	switch CommandRollout(cmd) {
-	case RolloutV2Active, RolloutV2Stable, RolloutV2Only:
-		return ContractV2
+	case RolloutUnifiedActive, RolloutUnifiedStable, RolloutUnifiedOnly:
+		return ContractUnified
 	default:
 		return ContractLegacy
 	}
 }
 
-func UsesV2(cmd *cobra.Command) bool { return ActiveContract(cmd) == ContractV2 }
+func UsesUnifiedResult(cmd *cobra.Command) bool { return ActiveContract(cmd) == ContractUnified }
 
-// ValidateV2Format is retained for compatibility. All commands normalize an
+// ValidateUnifiedFormat is retained for compatibility. All commands normalize an
 // unknown presentation value to their fallback and emit a diagnostic warning.
-func ValidateV2Format(cmd *cobra.Command) error {
+func ValidateUnifiedFormat(cmd *cobra.Command) error {
 	return nil
 }

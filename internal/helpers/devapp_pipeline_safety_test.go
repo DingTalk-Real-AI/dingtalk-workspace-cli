@@ -127,7 +127,7 @@ func TestDevPipelineSafetyFailureEnvelopeJSONOnStderr(t *testing.T) {
 	cmd.SilenceUsage = true
 	cmd.SetOut(cmdOut)
 	cmd.SetErr(cmdErr)
-	failEnv := output.NewFailureEnvelope(&output.ErrorInfo{Type: "confirmation", Subtype: "confirmation_required", Message: "need confirmation"})
+	failEnv := output.NewFailureEnvelope(&output.ErrorInfo{Type: "permission", Subtype: "confirmation_required", Message: "need confirmation"})
 	if werr := writeEnvelope(cmd, failEnv); werr != nil {
 		t.Fatalf("writeEnvelope failure envelope error = %v", werr)
 	}

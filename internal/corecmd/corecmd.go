@@ -442,7 +442,7 @@ func New(spec Spec) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !output.UsesV2(cmd) {
+			if !output.UsesUnifiedResult(cmd) {
 				return fmt.Errorf("command %q uses ResultInvoke without an active Framework 2.0 rollout", cmd.CommandPath())
 			}
 			return output.StoreResult(cmd.Context(), result)

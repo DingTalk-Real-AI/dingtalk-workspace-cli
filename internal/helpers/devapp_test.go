@@ -24,7 +24,7 @@ func newDevAppTestRoot(runner executor.Runner) *cobra.Command {
 		SilenceErrors:     true,
 		SilenceUsage:      true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			return output.ValidateV2Format(cmd)
+			return output.ValidateUnifiedFormat(cmd)
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
 			_, _, err := output.EmitStoredResult(cmd)

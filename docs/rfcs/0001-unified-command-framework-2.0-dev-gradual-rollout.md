@@ -4,7 +4,7 @@
 - 日期：2026-08-07
 - 适用仓库：`dingtalk-workspace-cli`
 - 首个迁移域：`dingtalk-dev`（`dws dev ...` 与 `dws devapp +...`）
-- 结果协议：`dws.output.v2`
+- 结果协议：统一结果信封（无运行时版本字段）
 
 ## 1. 摘要
 
@@ -13,18 +13,18 @@ Framework 2.0 将命令的声明、执行结果、序列化、stdout/stderr 和�
 本 RFC 的核心裁决是：
 
 1. **不公开 `--output-contract`，也不增加等价别名。** Agent 始终使用已有的 `--format json`。
-2. **每条命令在每个 release 中只有一个 active contract。** 已迁移命令默认输出 v2；未迁移命令保持 legacy。
+2. **每条命令在每个 release 中只有一个 active contract。** 已迁移命令默认输出统一结果；未迁移命令保持 legacy。
 3. contract 选择是命令声明和 release 的属性，不由用户、Agent、会话能力协商或环境变量决定。
 4. 内部迁移状态固定为：
 
    ```text
-   legacy_only -> dual_validate -> v2_active -> v2_stable -> v2_only
+   legacy_only -> dual_validate -> unified_active -> unified_stable -> unified_only
    ```
 
 5. 回滚通过修改内部 rollout 状态并重新发布完成，不给消费者增加切换参数。
 6. `dws dev ...` 与 `dws devapp +...` 都是既有稳定入口。两套前缀均保留、原位迁移，不互相改名、合并为 alias 或强制 redirect。
-7. 当前 Agent 使用的 `devapp +...` shortcut 必须在原命令路径接入 v2。两套命令可声明同一能力关系和各自适用条件，以消除 Agent 选择歧义，但显式输入哪个路径就执行哪个路径。
-8. `dws dev connect` 同一 Cobra 命令同时承载前台长连接与 `--daemon`，因此整条命令（含 daemon start）暂留 legacy；`status/stop/restart/list` 等独立终态子命令进入 v2。后续若要迁移 daemon start，先拆成独立 terminal command 或另立 mode-aware stream RFC。
+7. 当前 Agent 使用的 `devapp +...` shortcut 必须在原命令路径接入统一结果。两套命令可声明同一能力关系和各自适用条件，以消除 Agent 选择歧义，但显式输入哪个路径就执行哪个路径。
+8. `dws dev connect` 同一 Cobra 命令同时承载前台长连接与 `--daemon`，因此整条命令（含 daemon start）暂留 legacy；`status/stop/restart/list` 等独立终态子命令进入统一结果。后续若要迁移 daemon start，先拆成独立 terminal command 或另立 mode-aware stream RFC。
 
 一句话边界：**框架保证结果被统一、诚实地表达，但不自动推断业务真实终态。**
 
@@ -38,7 +38,7 @@ Framework 2.0 解决的是协议层和执行框架层问题：
 - 统一 typed error 与退出码；
 - 统一 `--format`、`--jq`、`--fields` 和输出流；
 - 把异步未完成、分页未耗尽和批量部分成功保留下来；
-- 让 Agent 可以只解析一种 v2 JSON 信封；
+- 让 Agent 可以只解析一种统一 JSON 信封；
 - 通过逐命令 rollout 控制兼容风险。
 
 它不把下列业务判断伪装成框架能力：
@@ -63,13 +63,13 @@ Framework 2.0 解决的是协议层和执行框架层问题：
 
 ### 3.2 非目标
 
-- 不提供 `--output-contract legacy|v2`。
+- 不提供任何 output contract 选择参数。
 - 不做会话级 contract negotiation。
 - 不要求消费者把 `devapp +...` 改成 `dev ...`，也不做前缀 redirect。
 - 不在本 RFC 中定义通用 `changed/verified` 自动校验。
 - 不在本 RFC 中修复服务端“报错但已写入”、索引假阴或目录死条目。
 - 不把 `dws dev connect` 前台事件流强塞进单结果 JSON 信封。
-- 不宣称 MCP 已完成 v2 接入；当前只有 adapter 原型。
+- 不宣称 MCP 已完成统一结果接入；当前只有 adapter 原型。
 
 ## 4. 与 Lark CLI、GWS 的对齐
 
@@ -77,13 +77,13 @@ Framework 2.0 解决的是协议层和执行框架层问题：
 
 | 主题 | Lark CLI | GWS | DWS Framework 2.0 |
 |---|---|---|---|
-| 机器输出 | 统一 envelope 和 emitter | 成功、错误、下载元数据均为结构化 JSON | JSON 使用固定 v2 envelope |
+| 机器输出 | 统一 envelope 和 emitter | 成功、错误、下载元数据均为结构化 JSON | JSON 使用固定统一信封 |
 | contract 选择 | 框架决定 | CLI 固定输出，不要求消费者协商协议 | 每条命令、每个 release 唯一 active contract |
 | 部分成功 | 一等 partial 通道 | 无统一四 outcome 模型 | `partial_failure` + 三通道 + rc 7 |
 | 异步未完成 | task/ready/next command | 依具体 API | `pending + operation + next_command` |
 | 分页 | complete 仅指 endpoint exhausted | Discovery/API 分页 | 显式 `endpoint_exhausted + next_token` |
 | 格式入口 | 框架统一 format | 结构化 JSON/NDJSON | Agent 只用 `--format json`；其他 format 是 presentation |
-| 机器错误流 | Lark 的 typed error 通常写 stderr | 所有结果保持结构化 JSON | v2 JSON/NDJSON primary result 统一写 stdout |
+| 机器错误流 | Lark 的 typed error 通常写 stderr | 所有结果保持结构化 JSON | 统一 JSON/NDJSON primary result 写 stdout |
 | 发现模型 | typed shortcut + runtime introspection | Discovery 动态生成 | DWS 声明式 ContractFinal + 运行时 Catalog |
 
 DWS 借鉴 Lark 的结果语义、强类型 DTO、部分成功和异步恢复模型；借鉴 GWS 的“机器结果是结构化 JSON、日志走 stderr、消费者不选协议”原则。DWS 不照抄两者：它保留自己的静态 Agent Schema、安全声明和四 outcome 信封。
@@ -133,7 +133,7 @@ LeafSpec / Shortcut / bare Cobra migration adapter
 | 职责 | 当前路径 |
 |---|---|
 | 统一命令构建与 per-command rollout | `internal/corecmd/corecmd.go` |
-| v2 envelope 与不变量 | `internal/output/envelope.go` |
+| 统一 envelope 与不变量 | `internal/output/envelope.go` |
 | immutable result / ResultStore | `internal/output/result.go` |
 | emitter、format、流与退出码 | `internal/output/emitter.go` |
 | rollout state / active contract | `internal/output/rollout.go` |
@@ -162,16 +162,16 @@ I5: top-level keys do not expose a runtime contract selector or version marker
 - product command 只构造业务 DTO 或 `CommandResult`。
 - 框架计算 `ok` 和 exit code，业务代码不能覆盖。
 - `CommandResult` 在构造和取出时深拷贝可变 DTO，避免业务代码在入库后修改 wire 结果。
-- `ResultStore` 一次只接受一个结果；重复写入和 v2 命令无结果都视为 internal error。
+- `ResultStore` 一次只接受一个结果；重复写入和统一结果命令无结果都视为 internal error。
 - emitter 先在 buffer 内完整渲染，再一次写出，避免半截 JSON。
 - 输出 sink 的关闭失败不得把已经发出的 success 改成 failure，也不得造成第二次 legacy error 输出。
-- v2 命令 panic 时由 root 转为一个 `failure/internal` 结果；不得先写 success 再 panic 后双发。
+- 统一结果命令 panic 时由 root 转为一个 `failure/internal` 结果；不得先写 success 再 panic 后双发。
 
 ## 6. 唯一 active contract 与内部 rollout
 
 ### 6.1 用户和 Agent 表面
 
-v2 命令的标准调用只有：
+统一结果命令的标准调用只有：
 
 ```bash
 dws dev app list --format json
@@ -183,7 +183,7 @@ dws devapp +list --format json
 ```text
 --output-contract
 --contract-version
---v2
+任何协议选择 flag
 --legacy-output
 ```
 
@@ -194,10 +194,10 @@ Framework 2.0 也不新增 `--json` 别名。历史命令自带的局部 `--json
 | 状态 | active contract | 行为 |
 |---|---|---|
 | `legacy_only` | legacy | 仅 legacy renderer；保存原 golden |
-| `dual_validate` | legacy | 业务只执行一次；后台构造并校验 v2；stdout 仍是 legacy |
-| `v2_active` | v2 | 本 release 默认 v2；收集 consumer/contract 指标 |
-| `v2_stable` | v2 | 通过 soak、回归和兼容门禁 |
-| `v2_only` | v2 | 删除该命令的 legacy renderer；命令路径不变 |
+| `dual_validate` | legacy | 业务只执行一次；后台构造并校验统一结果；stdout 仍是 legacy |
+| `unified_active` | unified | 本 release 默认统一结果；收集 consumer/contract 指标 |
+| `unified_stable` | unified | 通过 soak、回归和兼容门禁 |
+| `unified_only` | unified | 删除该命令的 legacy renderer；命令路径不变 |
 
 合法前进只能逐级进行。回退必须附带显式审批和原因，但仍通过代码/发布完成。运行时没有双 contract 分支，也没有会话协商。
 
@@ -210,12 +210,12 @@ Framework 2.0 也不新增 `--json` 别名。历史命令自带的局部 `--json
 1. CI 从真实 Cobra tree 导出排序后的 `cli_path -> rollout_state -> active_contract` inventory。
 2. CI 与 merge base 的 inventory 比较，调用 `ValidateRolloutTransition` 拒绝跳级或无审批回退。
 3. transition evidence 只记录 owner、测试报告、兼容样本、观测窗口和回滚人，不手写重复的 current state。
-4. release artifact 保存 inventory，便于定位“哪个 release 把哪条命令切到 v2”。
-5. `dual_validate` 失败或 v2 指标恶化时，阻止晋级；不能用用户 flag 绕过。
+4. release artifact 保存 inventory，便于定位“哪个 release 把哪条命令切到统一结果”。
+5. `dual_validate` 失败或统一结果指标恶化时，阻止晋级；不能用用户 flag 绕过。
 
 现有 `ValidateRolloutTransition` 只有库函数和单测，尚未接入真实 CI ledger；`scripts/policy/` 下的统一输出扫描仍是 prototype。两项是 RFC 落地门槛，不得在文档中宣称已完成。
 
-## 7. v2 统一结果契约
+## 7. 统一结果契约
 
 ### 7.1 顶层信封
 
@@ -354,9 +354,9 @@ ok, outcome, identity, dry_run, data, meta, error, _notice
 
 | 场景 | stdout | stderr |
 |---|---|---|
-| v2 JSON success/pending/partial/failure | 唯一 primary JSON result | 诊断、warning、progress |
-| v2 NDJSON success | 裸 records，一行一条 | 分页诊断等 |
-| v2 NDJSON failure | 单行完整 failure envelope | 诊断 |
+| 统一 JSON success/pending/partial/failure | 唯一 primary JSON result | 诊断、warning、progress |
+| 统一 NDJSON success | 裸 records，一行一条 | 分页诊断等 |
+| 统一 NDJSON failure | 单行完整 failure envelope | 诊断 |
 | table/pretty/raw/csv | presentation data | 诊断；人读 failure 可写此处 |
 | legacy | 保持旧行为 | 保持旧行为 |
 
@@ -379,7 +379,7 @@ JSON/NDJSON 的 failure 绕过 `--jq` 和 `--fields`，避免过滤器擦除 typ
 
 实现 `ExitCoder` 的既有特殊状态（例如用户中断 130）必须保留原 rc，并把相同值写入 `error.exit_code`。禁止 envelope rc 与进程 rc 分叉。
 
-PAT 的 raw stderr JSON 是兼容性例外：`RawStderrError` 在完成专门迁移前保持原始 stderr 与 rc 4，不得被二次包装或打印两次。它属于认证宿主协议，不代表 MCP/v2 输出已完成统一。
+PAT 的 raw stderr JSON 是兼容性例外：`RawStderrError` 在完成专门迁移前保持原始 stderr 与 rc 4，不得被二次包装或打印两次。它属于认证宿主协议，不代表 MCP 输出已完成统一。
 
 ## 9. pagination、dry-run、retry 与 timeout
 
@@ -438,7 +438,7 @@ dws devapp +list ...
 - `devapp +...` 通常提供精选参数、投影或多步编排；
 - 每条命令拥有自己的 identity、Safety、Selection、Schema 和 rollout state；
 - 用户显式选择的前缀永远有效；
-- 输出 v2 迁移不改变 argv。
+- 统一输出迁移不改变 argv。
 
 为避免 Agent 在相近入口间摇摆，声明层记录同一 capability relation，同时保留各自 `UseWhen/AvoidWhen/SemanticDelta/PrimaryCommand`。该关系只影响选择说明，不合并 identity，不自动改写命令。语义不完全等价时禁止声明为 alias。
 
@@ -446,11 +446,11 @@ dws devapp +list ...
 
 | command family | 当前/目标 | 说明 |
 |---|---|---|
-| `dev app ...` terminal leaves | v2 | `devAppLeafMeta` 已按 leaf 标记 rollout |
-| `dev doc search` | v2 | 单结果终态命令 |
-| `dev connect status/stop/restart/list` | v2 | 本地终态、可表达为单结果 |
+| `dev app ...` terminal leaves | unified | `devAppLeafMeta` 已按 leaf 标记 rollout |
+| `dev doc search` | unified | 单结果终态命令 |
+| `dev connect status/stop/restart/list` | unified | 本地终态、可表达为单结果 |
 | `dev connect` foreground stream | legacy | 长连接事件流，等待 stream contract |
-| `devapp +...` shortcuts | 逐命令原位迁入 v2 | 需要 Shortcut adapter 支持 per-command rollout/result |
+| `devapp +...` shortcuts | 逐命令原位迁入统一结果 | 需要 Shortcut adapter 支持 per-command rollout/result |
 
 兼容裁决：`dev connect stop/restart` 保持旧版无需确认即可执行的 argv 与运行时行为。两条命令的 `confirmation` 均声明为 `not_required`，调用不需要 `--yes`；`--dry-run` 仍必须无副作用。输出迁移不得借安全元数据改变这一既有行为。
 
@@ -458,7 +458,7 @@ dws devapp +list ...
 
 1. 声明独立 `OutputRollout`；
 2. 在原路径接入 `CommandResult/ResultStore`；
-3. 通过 v2 contract tests；
+3. 通过统一结果 contract tests；
 4. 从 exclusion 组按精确路径移除；
 5. 保持既有命令名和参数兼容。
 
@@ -468,17 +468,17 @@ dws devapp +list ...
 
 - 增加 per-command `OutputRollout` 声明；
 - `FromShortcut` 把状态透传到 `corecmd.Spec`；
-- `RuntimeContext.Output(payload)` 在 v2 active 时包装为 `Success(payload)` 并 `StoreResult`，legacy 时保持旧 renderer；
+- `RuntimeContext.Output(payload)` 在 unified active 时包装为 `Success(payload)` 并 `StoreResult`，legacy 时保持旧 renderer；
 - 增加显式 `OutputResult(CommandResult)`，供 partial/pending 等非普通 success 使用；
-- `dual_validate` 业务执行一次，只 shadow-build/validate v2；
+- `dual_validate` 业务执行一次，只 shadow-build/validate 统一结果；
 - 未声明状态 fail closed 为 `legacy_only`。
 
-禁止通过“所有 shortcut 自动 v2”完成迁移；每条 terminal command 都要有独立 golden、Schema 和风险评审。
+禁止通过“所有 shortcut 自动统一”完成迁移；每条 terminal command 都要有独立 golden、Schema 和风险评审。
 
 ### 10.4 推荐迁移批次
 
 1. **框架闭环**：root 单结果出口、严格校验、stdout/stderr、sink cleanup、panic/PAT/custom rc。
-2. **已有 dev 终态命令**：固定 `dev app`、`dev doc search`、connect 管理子命令的 v2 golden。
+2. **已有 dev 终态命令**：固定 `dev app`、`dev doc search`、connect 管理子命令的统一结果 golden。
 3. **Agent 已使用的 devapp read shortcuts**：`+list/+get/+event-list/+member-list/+permission-list/+version-*` 等原位迁移。
 4. **devapp write shortcuts**：`+create/+update/+enable/+disable/+delete/+member-*`，先锁定 confirmation/dry-run/idempotency。
 5. **复杂和异步命令**：引入 pending/partial/unknown，不把超时伪装成 failure 或 success。
@@ -501,9 +501,9 @@ dws devapp +list ...
 ### 12.1 静态门禁
 
 - Schema/help 不得出现 `--output-contract` 或任何 contract selector。
-- Agent skill 中 v2 示例只允许 `--format json`，不得新增 `--json`。
-- v2 handler 禁止直接写 stdout、手拼 envelope 或字符串布尔。
-- active v2 command 必须存在 `CommandResult` 生产路径。
+- Agent skill 中统一结果示例只允许 `--format json`，不得新增 `--json`。
+- 统一结果 handler 禁止直接写 stdout、手拼 envelope 或字符串布尔。
+- active unified command 必须存在 `CommandResult` 生产路径。
 - `Shortcut.OutputRollout` 与 `LeafSpec.OutputRollout` 都必须逐 command 声明。
 - live rollout inventory 必须通过合法状态迁移检查。
 - `dev` 与 `devapp +` capability relation 不得被登记成 CLI alias。
@@ -514,11 +514,11 @@ dws devapp +list ...
 每个迁移命令至少覆盖：
 
 1. success JSON 恰好一个 document，且不带运行时协议版本字段；
-2. validation/API/auth failure 为 typed v2 JSON，rc 与 `error.exit_code` 相等；
+2. validation/API/auth failure 为 typed unified JSON，rc 与 `error.exit_code` 相等；
 3. stdout 零日志、stderr 不含第二份 primary result；
 4. `--format json | jq` 成功和失败都可解析；
 5. `--output` file sink 下仍只有一个结果，close error 不反转已发 outcome；
-6. active v2 命令未 StoreResult 时 fail closed；
+6. active unified 命令未 StoreResult 时 fail closed；
 7. panic 只产生一个 internal failure；
 8. PAT RawStderr 保持 rc 4 且不双重包装；
 9. custom exit code（如 130）不丢失；
@@ -529,7 +529,7 @@ dws devapp +list ...
 14. NDJSON 一行一条、failure 单行合法；
 15. timeout 不覆盖已有 deadline，`HTTPClient.Timeout==0`；
 16. `tools/call` 不自动重放，Retry-After 可透传；
-17. `dws dev ...` 和对应 `dws devapp +...` 均保持原 argv 可执行并独立返回 v2。
+17. `dws dev ...` 和对应 `dws devapp +...` 均保持原 argv 可执行并独立返回统一结果。
 
 ### 12.3 发布门禁
 
@@ -554,17 +554,17 @@ DWS_PACKAGE_VERSION=0.0.0-test go test ./...
 ### 13.1 兼容原则
 
 - 未迁移命令：legacy byte golden 不变。
-- 迁移命令：release notes 明确该 command path 从 legacy 切换到 v2。
+- 迁移命令：release notes 明确该 command path 从 legacy 切换到统一结果。
 - 命令名、前缀、参数和安全语义不因输出迁移而改变。
 - `dev connect stop/restart` 保持无需 `--yes` 或交互确认的旧行为。
 - `devapp +...` 不因存在 `dev ...` 而被移除、隐藏或 redirect。
 - consumer 只使用 `--format json`；命令在当前 release 的唯一 active contract 由命令声明决定，不通过响应字段协商。
-- `v2_only` 只删除该命令内部 legacy renderer，不删除命令入口。
+- `unified_only` 只删除该命令内部 legacy renderer，不删除命令入口。
 
 ### 13.2 回滚
 
 1. 指标或 consumer 回归触发 rollback review。
-2. 将目标命令状态从 `v2_active/stable` 显式回退到已批准状态。
+2. 将目标命令状态从 `unified_active/stable` 显式回退到已批准状态。
 3. 重新发布；同一 binary 内仍只有一个 active contract。
 4. ledger 记录原因、受影响版本、owner 和恢复条件。
 5. 不向用户下发临时 `--legacy` 参数，也不依赖会话协商。
@@ -575,13 +575,13 @@ DWS_PACKAGE_VERSION=0.0.0-test go test ./...
 |---|---|
 | 输出变化破坏存量 parser | 逐命令 rollout、legacy golden、release notes、可发布回滚 |
 | 同一能力存在 `dev`/`devapp +` 两个入口导致 Agent 摇摆 | capability relation + 精确 UseWhen/AvoidWhen/SemanticDelta；不假冒 alias |
-| shortcut 绕过 v2 ResultStore | 为 Shortcut 增加对称 per-command rollout 和 OutputResult |
+| shortcut 绕过统一 ResultStore | 为 Shortcut 增加对称 per-command rollout 和 OutputResult |
 | 已发 success 后 cleanup 失败导致 rc 非零/双输出 | sink lifecycle 纳入 root 单一出口测试；已发结果不可反转 |
 | failure 被 jq/fields 擦除 | failure 绕过过滤器，完整 typed envelope 输出 |
 | 自动重试产生重复写 | `tools/call` 默认零重放；仅显式幂等命令 opt-in |
 | 分页耗尽被误解为业务完整 | 使用 `endpoint_exhausted`，不承诺 coverage/index health |
 | 长连接污染单结果 stdout | foreground connect 暂留 legacy，另立 stream contract |
-| CLI 已 v2 被误写成 MCP 也完成 | 文档明确 `AdaptMCP` 尚未生产接入，单独 E2E gate |
+| CLI 已统一而被误写成 MCP 也完成 | 文档明确 `AdaptMCP` 尚未生产接入，单独 E2E gate |
 | rollout state 多处重复 | live declaration 唯一权威；ledger 由命令树生成 |
 
 ## 15. 验收标准
@@ -591,25 +591,25 @@ Framework 2.0 的 dingtalk-dev 阶段在以下条件同时满足后验收：
 - [ ] 无公开 `--output-contract`、别名、环境变量或 session negotiation。
 - [ ] Agent 文档统一使用 `--format json`。
 - [ ] 每个 terminal command 在一个 release 只有一个 active contract。
-- [ ] 已迁移命令默认返回 `dws.output.v2`；未迁移命令保持 legacy。
-- [ ] `dev` 和 Agent 当前使用的 `devapp +` 命令均在原路径独立完成 v2 迁移。
+- [ ] 已迁移命令默认返回统一结果信封；未迁移命令保持 legacy。
+- [ ] `dev` 和 Agent 当前使用的 `devapp +` 命令均在原路径独立完成统一结果迁移。
 - [ ] 两套前缀均保留；无消费者改名前置要求，无 redirect。
-- [ ] foreground `dev connect` 明确保持 legacy，管理子命令 v2。
+- [ ] foreground `dev connect` 明确保持 legacy，管理子命令使用统一结果。
 - [ ] success/pending/partial/failure、stream、exit code 全矩阵通过。
 - [ ] partial/pending/pagination/dry-run/retry/timeout 的严格测试通过。
-- [ ] active v2 无结果、重复结果、panic、sink close、PAT、custom rc 都有 root E2E。
+- [ ] active unified 无结果、重复结果、panic、sink close、PAT、custom rc 都有 root E2E。
 - [ ] live rollout ledger 和 transition CI 已接入，policy 不再是 prototype。
 - [ ] Agent 使用的 devapp shortcut 已从 Schema exclusion 精确移除。
-- [ ] legacy golden、v2 golden、Lark/GWS 对齐矩阵和 release note 完整。
+- [ ] legacy golden、统一结果 golden、Lark/GWS 对齐矩阵和 release note 完整。
 - [ ] MCP 未接入的限制仍被准确说明；不得用 CLI 验收替代 MCP E2E。
 
 ## 16. 待实现清单（基于当前代码）
 
 ### P0
 
-- 完成 Shortcut 的 per-command `OutputRollout`、`OutputResult` 和 ResultStore 接入；把 Agent 当前使用的 `devapp +...` 原位迁入 v2。
+- 完成 Shortcut 的 per-command `OutputRollout`、`OutputResult` 和 ResultStore 接入；把 Agent 当前使用的 `devapp +...` 原位迁入统一结果。
 - 收口 root 的 emit/cleanup/panic 顺序，保证 `--output` 下仍恰好一个结果且 rc 不反转。
-- 为 v2 failure、partial、pending、PAT RawStderr、custom rc 增加真实 root E2E。
+- 为统一 failure、partial、pending、PAT RawStderr、custom rc 增加真实 root E2E。
 - 修订 Schema exclusion：迁移一个 `devapp +...` 就精确移除一个，不做整组前缀隐藏。
 
 ### P1

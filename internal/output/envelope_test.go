@@ -1066,6 +1066,20 @@ func TestNewFailureEnvelopeShape(t *testing.T) {
 	}
 }
 
+func TestErrorInfoValidateRejectsUnknownWireType(t *testing.T) {
+	for _, errorType := range []string{"network", "confirmation", "mystery"} {
+		info := &ErrorInfo{Type: errorType, Message: "must use a governed type"}
+		if err := info.Validate(); err == nil || !strings.Contains(err.Error(), "unsupported failure error.type") {
+			t.Fatalf("ErrorInfo.Validate(%q) = %v, want unsupported type error", errorType, err)
+		}
+	}
+	for _, errorType := range []string{"api", "auth", "validation", "permission", "discovery", "internal"} {
+		if err := (&ErrorInfo{Type: errorType}).Validate(); err != nil {
+			t.Fatalf("ErrorInfo.Validate(%q) = %v, want governed type accepted", errorType, err)
+		}
+	}
+}
+
 func TestNewPartialEnvelopeShape(t *testing.T) {
 	data := map[string]any{
 		"total":     3,
