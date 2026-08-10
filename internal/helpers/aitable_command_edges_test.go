@@ -88,6 +88,87 @@ func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T
 	}
 }
 
+func TestAitableTableCreateInvalidFieldContractDoesNotDispatchMCP(t *testing.T) {
+	oldDeps, oldArgs := deps, os.Args
+	t.Cleanup(func() { deps, os.Args = oldDeps, oldArgs })
+
+	longName := strings.Repeat("字", 101)
+	manyFields := make([]string, 16)
+	for i := range manyFields {
+		manyFields[i] = fmt.Sprintf(`{"fieldName":"F%d","type":"text"}`, i)
+	}
+	cases := []struct {
+		name   string
+		fields string
+		hint   string
+	}{
+		{"field must be object", `[1]`, "must be a JSON object"},
+		{"fieldType key", `[{"fieldName":"状态","fieldType":"singleSelect"}]`, "fieldName + type"},
+		{"missing fieldName", `[{"type":"text"}]`, "fieldName must be"},
+		{"empty fieldName", `[{"fieldName":" ","type":"text"}]`, "fieldName must be"},
+		{"fieldName line break", `[{"fieldName":"任务\n名称","type":"text"}]`, "must not contain line breaks"},
+		{"fieldName too long", fmt.Sprintf(`[{"fieldName":%q,"type":"text"}]`, longName), "maximum is 100"},
+		{"missing type", `[{"fieldName":"任务"}]`, "type must be"},
+		{"unknown type", `[{"fieldName":"任务","type":"string"}]`, "type \"string\" is unsupported"},
+		{"select alias", `[{"fieldName":"状态","type":"select"}]`, "singleSelect"},
+		{"too many fields", `[` + strings.Join(manyFields, ",") + `]`, "at most 15"},
+		{"config scalar", `[{"fieldName":"任务","type":"text","config":"bad"}]`, "config must be a JSON object"},
+		{"single select missing options", `[{"fieldName":"状态","type":"singleSelect"}]`, "config.options is required"},
+		{"select options not array", `[{"fieldName":"状态","type":"singleSelect","config":{"options":{}}}]`, "non-empty JSON array"},
+		{"select options empty", `[{"fieldName":"状态","type":"singleSelect","config":{"options":[]}}]`, "non-empty JSON array"},
+		{"select option scalar", `[{"fieldName":"状态","type":"singleSelect","config":{"options":["高"]}}]`, "must be a JSON object"},
+		{"select option empty name", `[{"fieldName":"状态","type":"singleSelect","config":{"options":[{"name":""}]}}]`, "name must be a non-empty string"},
+		{"number formatter", `[{"fieldName":"金额","type":"number","config":{"formatter":"CURRENCY_YUAN"}}]`, "invalid for number"},
+		{"date formatter", `[{"fieldName":"日期","type":"date","config":{"formatter":"MM-DD-YYYY"}}]`, "invalid for date"},
+		{"currency formatter", `[{"fieldName":"金额","type":"currency","config":{"formatter":"THOUSAND"}}]`, "invalid for currency"},
+		{"currency type", `[{"fieldName":"金额","type":"currency","config":{"currencyType":"RMB"}}]`, "currencyType \"RMB\" is unsupported"},
+		{"progress formatter", `[{"fieldName":"进度","type":"progress","config":{"formatter":"PERCENT_FLOAT"}}]`, "invalid for progress"},
+		{"rating max", `[{"fieldName":"评分","type":"rating","config":{"max":11}}]`, "between 1 and 10"},
+		{"multiple must be boolean", `[{"fieldName":"负责人","type":"user","config":{"multiple":"false"}}]`, "must be true or false"},
+		{"formula missing formula", `[{"fieldName":"总价","type":"formula","config":{}}]`, "config.formula is required"},
+		{"link missing table", `[{"fieldName":"关联","type":"unidirectionalLink","config":{"multiple":true}}]`, "linkedTableId is required"},
+		{"primary doc not first", `[{"fieldName":"名称","type":"text"},{"fieldName":"文档","type":"primaryDoc"}]`, "only as --fields[0]"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			for _, args := range [][]string{
+				{"table", "create", "--base-id=b", "--name=n", "--fields=" + test.fields},
+				{"field", "create", "--base-id=b", "--table-id=t", "--fields=" + test.fields},
+			} {
+				caller := &aitableTestCaller{}
+				err := runAitableCoverageCommand(t, caller, args...)
+				if err == nil || !strings.Contains(err.Error(), test.hint) {
+					t.Fatalf("invalid fields error = %v, want hint %q", err, test.hint)
+				}
+				if len(caller.calls) != 0 {
+					t.Fatalf("invalid fields dispatched %d MCP call(s), want zero", len(caller.calls))
+				}
+			}
+		})
+	}
+	for _, test := range []struct {
+		name string
+		args []string
+		hint string
+	}{
+		{"typed unknown type", []string{"field", "create", "--base-id=b", "--table-id=t", "--name=字段", "--type=string"}, "type \"string\" is unsupported"},
+		{"typed select alias", []string{"field", "create", "--base-id=b", "--table-id=t", "--name=状态", "--type=select"}, "singleSelect"},
+		{"typed select no options", []string{"field", "create", "--base-id=b", "--table-id=t", "--name=状态", "--type=singleSelect"}, "config.options is required"},
+		{"typed invalid formatter", []string{"field", "create", "--base-id=b", "--table-id=t", "--name=金额", "--type=number", `--config={"formatter":"CURRENCY_YUAN"}`}, "invalid for number"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &aitableTestCaller{}
+			err := runAitableCoverageCommand(t, caller, test.args...)
+			if err == nil || !strings.Contains(err.Error(), test.hint) {
+				t.Fatalf("typed field error = %v, want hint %q", err, test.hint)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("typed invalid field dispatched %d MCP call(s), want zero", len(caller.calls))
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageAitableCommandValidationEdges(t *testing.T) {
 	oldDeps, oldArgs, oldStdin, oldSleep := deps, os.Args, os.Stdin, helperSleep
 	t.Cleanup(func() {

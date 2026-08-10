@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
@@ -132,6 +133,8 @@ func recordQueryFetchAll(toolArgs map[string]any, pageLimit int) error {
 	var allRecords []any
 	page := 0
 	lastCursor := ""
+	seenCursors := map[string]struct{}{}
+	stopReason := ""
 
 	for {
 		page++
@@ -201,6 +204,19 @@ func recordQueryFetchAll(toolArgs map[string]any, pageLimit int) error {
 			lastCursor = ""
 			break
 		}
+		if current, _ := toolArgs["cursor"].(string); cursor == current {
+			lastCursor = cursor
+			stopReason = "cursor_not_advanced"
+			fmt.Fprintf(os.Stderr, "[pagination] cursor did not advance (%q), stopping to avoid an infinite loop. Resume with --cursor %q after checking the service response.\n", cursor, cursor)
+			break
+		}
+		if _, exists := seenCursors[cursor]; exists {
+			lastCursor = cursor
+			stopReason = "cursor_cycle_detected"
+			fmt.Fprintf(os.Stderr, "[pagination] cursor cycle detected (%q), stopping to avoid an infinite loop. Resume with --cursor %q after checking the service response.\n", cursor, cursor)
+			break
+		}
+		seenCursors[cursor] = struct{}{}
 
 		// Check page limit (0 = unlimited)
 		if pageLimit > 0 && page >= pageLimit {
@@ -223,6 +239,10 @@ func recordQueryFetchAll(toolArgs map[string]any, pageLimit int) error {
 	if lastCursor != "" {
 		mergedData["cursor"] = lastCursor
 		mergedData["hasMore"] = true
+		if stopReason != "" {
+			mergedData["incomplete"] = true
+			mergedData["stopReason"] = stopReason
+		}
 	} else {
 		mergedData["hasMore"] = false
 	}
@@ -781,6 +801,20 @@ func isAitableRetryableError(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 
+	// 确定性业务错误优先于外层 category/retryable 标记，避免对不存在的资源、
+	// 参数错误或权限错误做无意义重试。部分 MCP 响应会同时携带
+	// "category: internal" 或 "retryable: true"，因此必须先判定终止类错误。
+	nonRetryablePatterns := []string{
+		"input_error", "user_error", "auth_error", "permission denied",
+		"invalid parameter", "invalid argument", "bad request",
+		"not found", "no record", "does not exist", "不存在",
+	}
+	for _, p := range nonRetryablePatterns {
+		if strings.Contains(msg, p) {
+			return false
+		}
+	}
+
 	// 网络瞬态错误
 	retryablePatterns := []string{
 		"timeout", "deadline exceeded", "connection reset",
@@ -814,15 +848,152 @@ func isAitableRetryableError(err error) bool {
 func parseFieldsJSON(raw string) ([]any, error) {
 	var fields []any
 	if err := json.Unmarshal([]byte(raw), &fields); err == nil {
-		return fields, nil
+		return validateAitableCreateFields(fields)
 	}
 	var wrapper map[string]any
 	if err := json.Unmarshal([]byte(raw), &wrapper); err == nil {
 		if arr, ok := wrapper["fields"].([]any); ok {
-			return arr, nil
+			return validateAitableCreateFields(arr)
 		}
 	}
 	return nil, fmt.Errorf("--fields JSON parse failed: expect a JSON array [...]\n  hint: example: '[{\"fieldName\":\"名称\",\"type\":\"text\"}]'")
+}
+
+// validateAitableCreateFields catches stable field-contract mistakes before MCP dispatch
+// and returns a directly actionable correction. It intentionally does not normalize aliases:
+// silently changing a field type can alter business semantics.
+func validateAitableCreateFields(fields []any) ([]any, error) {
+	if len(fields) > 15 {
+		return nil, fmt.Errorf("--fields contains %d items; AI Table accepts at most 15 fields per request\n  hint: split the fields into batches of 15 or fewer", len(fields))
+	}
+	for i, rawField := range fields {
+		field, ok := rawField.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("--fields[%d] must be a JSON object\n  hint: example: {\"fieldName\":\"状态\",\"type\":\"singleSelect\"}", i)
+		}
+		if _, hasAlias := field["fieldType"]; hasAlias {
+			return nil, fmt.Errorf("--fields[%d] uses unsupported key fieldType\n  hint: use fieldName + type, for example {\"fieldName\":\"状态\",\"type\":\"singleSelect\"}", i)
+		}
+		fieldName, nameOK := field["fieldName"].(string)
+		if !nameOK || strings.TrimSpace(fieldName) == "" {
+			return nil, fmt.Errorf("--fields[%d].fieldName must be a non-empty string\n  hint: example: {\"fieldName\":\"任务名称\",\"type\":\"text\"}", i)
+		}
+		if strings.ContainsAny(fieldName, "\r\n") {
+			return nil, fmt.Errorf("--fields[%d].fieldName must not contain line breaks\n  hint: use a single-line field name with at most 100 characters", i)
+		}
+		if utf8.RuneCountInString(fieldName) > 100 {
+			return nil, fmt.Errorf("--fields[%d].fieldName is %d characters; maximum is 100\n  hint: shorten the field name before retrying", i, utf8.RuneCountInString(fieldName))
+		}
+		fieldType, typeOK := field["type"].(string)
+		fieldType = strings.TrimSpace(fieldType)
+		if !typeOK || fieldType == "" {
+			return nil, fmt.Errorf("--fields[%d].type must be a non-empty string\n  hint: common types: text, number, singleSelect, multipleSelect, date, user, attachment", i)
+		}
+		if strings.EqualFold(strings.TrimSpace(fieldType), "select") {
+			return nil, fmt.Errorf("--fields[%d].type %q is not a valid AI Table field type\n  hint: use \"singleSelect\" for single choice or \"multipleSelect\" for multiple choice; do not use \"select\"", i, fieldType)
+		}
+		if !aitableFieldTypes[fieldType] {
+			return nil, fmt.Errorf("--fields[%d].type %q is unsupported\n  hint: use a documented type such as text, number, singleSelect, multipleSelect, date, user, attachment, url, or richText", i, fieldType)
+		}
+		if fieldType == "primaryDoc" && i != 0 {
+			return nil, fmt.Errorf("--fields[%d] uses primaryDoc outside the first column\n  hint: primaryDoc is allowed only as --fields[0]", i)
+		}
+		config, hasConfig := field["config"]
+		var configMap map[string]any
+		if hasConfig {
+			var configOK bool
+			configMap, configOK = config.(map[string]any)
+			if !configOK {
+				return nil, fmt.Errorf("--fields[%d].config must be a JSON object\n  hint: example: {\"options\":[{\"name\":\"高\"},{\"name\":\"低\"}]}", i)
+			}
+		}
+		if err := validateAitableFieldConfig(i, fieldType, configMap); err != nil {
+			return nil, err
+		}
+	}
+	return fields, nil
+}
+
+var aitableFieldTypes = map[string]bool{
+	"text": true, "number": true, "singleSelect": true, "multipleSelect": true, "date": true,
+	"currency": true, "user": true, "department": true, "group": true, "progress": true,
+	"rating": true, "checkbox": true, "attachment": true, "url": true, "richText": true,
+	"telephone": true, "email": true, "idCard": true, "barcode": true, "geolocation": true,
+	"address": true, "primaryDoc": true, "formula": true, "filterUp": true, "lookup": true,
+	"unidirectionalLink": true, "bidirectionalLink": true, "creator": true, "lastModifier": true,
+	"createdTime": true, "lastModifiedTime": true,
+}
+
+func validateAitableFieldConfig(index int, fieldType string, config map[string]any) error {
+	if fieldType == "singleSelect" || fieldType == "multipleSelect" {
+		if config == nil {
+			return fmt.Errorf("--fields[%d].config.options is required for %s\n  hint: use {\"options\":[{\"name\":\"选项A\"},{\"name\":\"选项B\"}]}", index, fieldType)
+		}
+		options, ok := config["options"].([]any)
+		if !ok || len(options) == 0 {
+			return fmt.Errorf("--fields[%d].config.options must be a non-empty JSON array\n  hint: example: {\"options\":[{\"name\":\"高\"},{\"name\":\"低\"}]}", index)
+		}
+		for optionIndex, rawOption := range options {
+			option, ok := rawOption.(map[string]any)
+			if !ok {
+				return fmt.Errorf("--fields[%d].config.options[%d] must be a JSON object\n  hint: each option must look like {\"name\":\"选项名\"}", index, optionIndex)
+			}
+			name, ok := option["name"].(string)
+			if !ok || strings.TrimSpace(name) == "" {
+				return fmt.Errorf("--fields[%d].config.options[%d].name must be a non-empty string\n  hint: example: {\"name\":\"高\"}", index, optionIndex)
+			}
+		}
+	}
+	if config == nil {
+		if fieldType == "formula" {
+			return fmt.Errorf("--fields[%d].config.formula is required for formula\n  hint: example: {\"formula\":\"[单价] * [数量]\"}", index)
+		}
+		if fieldType == "unidirectionalLink" || fieldType == "bidirectionalLink" {
+			return fmt.Errorf("--fields[%d].config.linkedTableId is required for %s\n  hint: get the target table ID first, then use {\"linkedTableId\":\"<TABLE_ID>\",\"multiple\":true}", index, fieldType)
+		}
+		return nil
+	}
+	if formatter, ok := config["formatter"].(string); ok && formatter != "" {
+		allowed := map[string]map[string]bool{
+			"number":   {"INT": true, "FLOAT_1": true, "FLOAT_2": true, "FLOAT_3": true, "FLOAT_4": true, "THOUSAND": true, "THOUSAND_FLOAT": true, "PERCENT": true, "PERCENT_FLOAT": true},
+			"date":     {"YYYY-MM-DD": true, "YYYY-MM-DD HH:mm": true, "YYYY-MM-DD HH:mm:ss": true, "YYYY/MM/DD": true, "YYYY/MM/DD HH:mm": true},
+			"currency": {"INT": true, "FLOAT_1": true, "FLOAT_2": true, "FLOAT_3": true, "FLOAT_4": true},
+			"progress": {"PERCENT": true},
+		}
+		if typeAllowed, applies := allowed[fieldType]; applies && !typeAllowed[formatter] {
+			return fmt.Errorf("--fields[%d].config.formatter %q is invalid for %s\n  hint: run 'dws aitable table create --help' and use a formatter listed for %s", index, formatter, fieldType, fieldType)
+		}
+	}
+	if fieldType == "currency" {
+		currency, _ := config["currencyType"].(string)
+		currencies := map[string]bool{"CNY": true, "HKD": true, "USD": true, "EUR": true, "GBP": true, "MOP": true, "VND": true, "JPY": true, "KRW": true, "AED": true, "AUD": true, "BRL": true, "CAD": true, "CHF": true, "INR": true, "IDR": true, "MXN": true, "MYR": true, "PHP": true, "PLN": true, "RUB": true, "SGD": true, "THB": true, "TRY": true, "TWD": true}
+		if currency != "" && !currencies[currency] {
+			return fmt.Errorf("--fields[%d].config.currencyType %q is unsupported\n  hint: use an ISO currency from table create --help, for example CNY, USD, EUR, JPY, or HKD", index, currency)
+		}
+	}
+	if fieldType == "rating" {
+		if max, ok := config["max"].(float64); ok && (max < 1 || max > 10) {
+			return fmt.Errorf("--fields[%d].config.max must be between 1 and 10 for rating\n  hint: example: {\"min\":1,\"max\":5,\"icon\":\"star\"}", index)
+		}
+	}
+	if multiple, exists := config["multiple"]; exists {
+		if _, ok := multiple.(bool); !ok {
+			return fmt.Errorf("--fields[%d].config.multiple must be true or false\n  hint: use a JSON boolean without quotes, for example {\"multiple\":false}", index)
+		}
+	}
+	if fieldType == "formula" {
+		formula, _ := config["formula"].(string)
+		if strings.TrimSpace(formula) == "" {
+			return fmt.Errorf("--fields[%d].config.formula is required for formula\n  hint: example: {\"formula\":\"[单价] * [数量]\"}", index)
+		}
+	}
+	if fieldType == "unidirectionalLink" || fieldType == "bidirectionalLink" {
+		linkedTableID, _ := config["linkedTableId"].(string)
+		if strings.TrimSpace(linkedTableID) == "" {
+			return fmt.Errorf("--fields[%d].config.linkedTableId is required for %s\n  hint: get the target table ID first, then use {\"linkedTableId\":\"<TABLE_ID>\",\"multiple\":true}", index, fieldType)
+		}
+	}
+	return nil
 }
 
 // resolveFormUpdateTitle 折叠 form update 的 --title / --name 别名为单个 title 值。
@@ -1369,6 +1540,10 @@ config 结构参考：
 				fields = []any{field}
 			} else {
 				return fmt.Errorf("must specify either --fields OR both --name and --type")
+			}
+			fields, err := validateAitableCreateFields(fields)
+			if err != nil {
+				return err
 			}
 
 			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")

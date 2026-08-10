@@ -180,7 +180,9 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
 		want bool
-	}{{nil, false}, {errors.New("timeout"), true}, {errors.New("SYSTEM_ERROR"), true}, {errors.New("retryable: true"), true}, {errors.New("bad request"), false}} {
+	}{{nil, false}, {errors.New("timeout"), true}, {errors.New("SYSTEM_ERROR"), true}, {errors.New("retryable: true"), true}, {errors.New("bad request"), false},
+		{errors.New(`category: internal_error, type: INPUT_ERROR, retryable: true, message: no record`), false},
+		{errors.New(`category: internal_error, retryable: true, message: resource not found`), false}} {
 		if got := isAitableRetryableError(tc.err); got != tc.want {
 			t.Errorf("isAitableRetryableError(%v) = %v", tc.err, got)
 		}
@@ -248,13 +250,24 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 		t.Fatalf("typed-only update = %#v, %v", merged, err)
 	}
 
-	for _, raw := range []string{`[1]`, `{"fields":[1]}`, `{}`, `{`} {
+	for _, raw := range []string{`[{"fieldName":"N","type":"text"}]`, `{"fields":[{"fieldName":"N","type":"text"}]}`, `{}`, `{`} {
 		fields, err := parseFieldsJSON(raw)
-		if (raw == `[1]` || strings.Contains(raw, "fields")) && (err != nil || len(fields) != 1) {
+		if (strings.HasPrefix(raw, `[{`) || strings.Contains(raw, "fields")) && (err != nil || len(fields) != 1) {
 			t.Errorf("parseFieldsJSON(%q) = %#v, %v", raw, fields, err)
 		}
 		if (raw == `{}` || raw == `{`) && err == nil {
 			t.Errorf("parseFieldsJSON(%q) should fail", raw)
+		}
+	}
+	for _, tc := range []struct {
+		raw  string
+		hint string
+	}{
+		{`[{"fieldName":"状态","type":"select"}]`, "singleSelect"},
+		{`[{"fieldName":"状态","fieldType":"singleSelect"}]`, "fieldName + type"},
+	} {
+		if _, err := parseFieldsJSON(tc.raw); err == nil || !strings.Contains(err.Error(), tc.hint) {
+			t.Errorf("parseFieldsJSON(%q) error = %v, want hint %q", tc.raw, err, tc.hint)
 		}
 	}
 }
@@ -311,5 +324,13 @@ func TestCrossPlatformCoverageAitableToolResponseAndPaginationHelpers(t *testing
 	installAitableDeps(t, caller)
 	if err := recordQueryFetchAll(map[string]any{}, 1); err == nil {
 		t.Fatal("first-page pagination error should fail")
+	}
+	caller = &aitableTestCaller{responses: []string{
+		`{"data":{"records":[{"id":1}],"nextCursor":"same"}}`,
+		`{"data":{"records":[{"id":2}],"nextCursor":"same"}}`,
+	}}
+	out = installAitableDeps(t, caller)
+	if err := recordQueryFetchAll(map[string]any{}, 0); err != nil || !strings.Contains(out.String(), `"stopReason"`) || !strings.Contains(out.String(), `"cursor_not_advanced"`) {
+		t.Fatalf("repeated cursor guard = %q, %v", out.String(), err)
 	}
 }
