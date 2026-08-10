@@ -137,6 +137,9 @@ var Create = shortcut.Shortcut{
 		if err != nil {
 			return docVerificationError("doc.create", "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
+		if content != "" && !verifyUpdatedDocumentContent(verification, content, "overwrite", format) {
+			return docVerificationError("doc.create", "verify", nodeID, fmt.Errorf("回读结果与完整初始内容不一致"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
+		}
 		steps = append(steps, map[string]any{"name": "verify", "status": "success"})
 		return rt.Output(docEnvelope("doc.create", map[string]any{"nodeId": nodeID, "result": created, "verified": true, "verification": verification}, steps...))
 	},
@@ -267,44 +270,20 @@ var Inspect = shortcut.Shortcut{
 			{"include-media", "media", productDoc, "list_document_blocks", map[string]any{"nodeId": node, "format": "jsonml"}},
 			{"include-comments", "comments", productComment, "list_comments", map[string]any{"nodeId": node}},
 		}
-		type inspectResult struct {
-			index     int
-			key, tool string
-			value     map[string]any
-			err       error
-		}
-		selected := 0
-		results := make(chan inspectResult, len(reads))
-		sem := make(chan struct{}, 3)
+		steps := []map[string]any{{"name": "get_document_info", "status": "success"}}
+		failures := []map[string]any{}
 		for _, read := range reads {
 			if !rt.Bool(read.flag) {
 				continue
 			}
-			index := selected
-			selected++
-			read := read
-			go func() {
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				value, callErr := rt.CallMCPReadData(read.product, read.tool, read.params)
-				results <- inspectResult{index: index, key: read.key, tool: read.tool, value: value, err: callErr}
-			}()
-		}
-		steps := []map[string]any{{"name": "get_document_info", "status": "success"}}
-		failures := []map[string]any{}
-		ordered := make([]inspectResult, selected)
-		for i := 0; i < selected; i++ {
-			readResult := <-results
-			ordered[readResult.index] = readResult
-		}
-		for _, readResult := range ordered {
-			if readResult.err != nil {
-				failures = append(failures, map[string]any{"tool": readResult.tool, "error": readResult.err.Error()})
-				steps = append(steps, map[string]any{"name": readResult.tool, "status": "failed"})
+			value, callErr := rt.CallMCPReadData(read.product, read.tool, read.params)
+			if callErr != nil {
+				failures = append(failures, map[string]any{"tool": read.tool, "error": callErr.Error()})
+				steps = append(steps, map[string]any{"name": read.tool, "status": "failed"})
 				continue
 			}
-			result[readResult.key] = readResult.value
-			steps = append(steps, map[string]any{"name": readResult.tool, "status": "success"})
+			result[read.key] = value
+			steps = append(steps, map[string]any{"name": read.tool, "status": "success"})
 		}
 		if len(failures) > 0 {
 			return apperrors.NewAPI(
@@ -548,6 +527,7 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		}
 		return executeVerifiedDocContentMutation(rt, params, node, content, command, rt.Str("doc-format"))
 	case "block_insert_after":
+		verificationFormat := blockVerificationFormat(rt.Str("doc-format"))
 		params := map[string]any{"nodeId": node, "referenceBlockId": rt.Str("after-block-id"), "where": "after"}
 		if rt.Str("doc-format") == "jsonml" {
 			params["format"], params["jsonml"] = "jsonml", content
@@ -556,12 +536,13 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		}
 		referenceBlockID := rt.Str("after-block-id")
 		return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block", params, node,
-			"list_document_blocks", map[string]any{"nodeId": node, "format": "element"},
+			"list_document_blocks", map[string]any{"nodeId": node, "format": verificationFormat},
 			func(result, data map[string]any) bool {
 				return verifyInsertedBlock(result, data, referenceBlockID, content, rt.Str("doc-format"))
 			})
 	case "block_replace":
 		blockID := rt.Str("block-id")
+		verificationFormat := blockVerificationFormat(rt.Str("doc-format"))
 		params := map[string]any{"nodeId": node, "blockId": rt.Str("block-id")}
 		if rt.Str("doc-format") == "jsonml" {
 			params["format"], params["jsonml"] = "jsonml", content
@@ -569,7 +550,7 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 			params["element"] = map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": content}}
 		}
 		return executeVerifiedDocMutation(rt, "doc.update", "update_document_block", params, node,
-			"list_document_blocks", map[string]any{"nodeId": node, "blockId": blockID, "format": "element"},
+			"list_document_blocks", map[string]any{"nodeId": node, "blockId": blockID, "format": verificationFormat},
 			func(_, data map[string]any) bool {
 				return blockContentEquals(data, blockID, content, rt.Str("doc-format"))
 			})
@@ -832,15 +813,22 @@ func verifyInsertedBlock(result, data map[string]any, referenceBlockID, expected
 	return verifyInsertedCanonicalBlock(result, data, referenceBlockID, normalizeDocumentContentForVerification(expected, format), format)
 }
 
+func blockVerificationFormat(format string) string {
+	if format == "jsonml" {
+		return "jsonml"
+	}
+	return "element"
+}
+
 func verifyInsertedCanonicalBlock(result, data map[string]any, referenceBlockID, expected, format string) bool {
 	if insertedID := nestedString(result, "blockId", "elementId", "id"); insertedID != "" {
 		if blockContentEquals(data, insertedID, expected, format) {
 			return true
 		}
 	}
-	blocks := orderedDocumentBlocks(data)
+	blocks := orderedCanonicalBlocks(data, format)
 	for index, block := range blocks {
-		if blockIdentity(block, "") != referenceBlockID || index+1 >= len(blocks) {
+		if canonicalBlockIdentity(block, format) != referenceBlockID || index+1 >= len(blocks) {
 			continue
 		}
 		return canonicalBlockContent(blocks[index+1], format) == expected
@@ -849,7 +837,7 @@ func verifyInsertedCanonicalBlock(result, data map[string]any, referenceBlockID,
 }
 
 func blockContentEquals(data map[string]any, blockID, expected, format string) bool {
-	block := findBlock(data, blockID)
+	block := findCanonicalBlock(data, blockID, format)
 	if block == nil {
 		return false
 	}
@@ -901,6 +889,111 @@ func canonicalBlockContent(value any, format string) string {
 	}
 	walk(value)
 	return normalizeMarkdownForVerification(strings.Join(texts, "\n"))
+}
+
+func orderedCanonicalBlocks(value any, format string) []any {
+	if format == "jsonml" {
+		blocks := orderedJSONMLBlocks(value)
+		result := make([]any, len(blocks))
+		for index := range blocks {
+			result[index] = blocks[index]
+		}
+		return result
+	}
+	blocks := orderedDocumentBlocks(value)
+	result := make([]any, len(blocks))
+	for index := range blocks {
+		result[index] = blocks[index]
+	}
+	return result
+}
+
+func canonicalBlockIdentity(value any, format string) string {
+	if format == "jsonml" {
+		if element, ok := value.([]any); ok {
+			return jsonMLBlockIdentity(element)
+		}
+		return ""
+	}
+	if block, ok := value.(map[string]any); ok {
+		return blockIdentity(block, "")
+	}
+	return ""
+}
+
+func findCanonicalBlock(value any, target, format string) any {
+	if format == "jsonml" {
+		block := findJSONMLBlock(value, target)
+		if block == nil {
+			return nil
+		}
+		return block
+	}
+	block := findBlock(value, target)
+	if block == nil {
+		return nil
+	}
+	return block
+}
+
+func orderedJSONMLBlocks(value any) [][]any {
+	blocks := [][]any{}
+	var walk func(any)
+	walk = func(current any) {
+		switch typed := current.(type) {
+		case map[string]any:
+			for key, child := range typed {
+				if encoded, ok := child.(string); ok && isJSONMLPayloadKey(key) {
+					var decoded any
+					if json.Unmarshal([]byte(encoded), &decoded) == nil {
+						walk(decoded)
+					}
+					continue
+				}
+				walk(child)
+			}
+		case []any:
+			if jsonMLBlockIdentity(typed) != "" {
+				blocks = append(blocks, typed)
+			}
+			start := 0
+			if len(typed) > 0 {
+				if _, ok := typed[0].(string); ok {
+					start = 1
+				}
+			}
+			for _, child := range typed[start:] {
+				walk(child)
+			}
+		}
+	}
+	walk(value)
+	return blocks
+}
+
+func findJSONMLBlock(value any, target string) []any {
+	for _, block := range orderedJSONMLBlocks(value) {
+		if jsonMLBlockIdentity(block) == target {
+			return block
+		}
+	}
+	return nil
+}
+
+func jsonMLBlockIdentity(element []any) string {
+	if len(element) < 2 {
+		return ""
+	}
+	attributes, ok := element[1].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return nestedString(attributes, "uuid", "blockId", "elementId", "id")
+}
+
+func isJSONMLPayloadKey(key string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
+	return normalized == "jsonml" || normalized == "content"
 }
 
 func orderedDocumentBlocks(value any) []map[string]any {

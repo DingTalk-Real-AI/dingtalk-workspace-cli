@@ -534,6 +534,8 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	if deps.Caller.DryRun() {
 		return deps.Out.PrintJSON(map[string]any{
 			"contractVersion": "doc.operation.v1",
+			"dry_run":         true,
+			"preview_kind":    "plan",
 			"ok":              true,
 			"status":          "success",
 			"complete":        true,

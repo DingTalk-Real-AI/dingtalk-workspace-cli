@@ -296,7 +296,14 @@ func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
 			t.Fatalf("write dry-run fixture %s: %v", path, err)
 		}
 	}
-	return agentExampleFiles{root: root, markdown: markdown, json: jsonFile, batch: batch, binary: binary, image: image}
+	return agentExampleFiles{
+		root:     root,
+		markdown: "./" + filepath.Base(markdown),
+		json:     "./" + filepath.Base(jsonFile),
+		batch:    "./" + filepath.Base(batch),
+		binary:   "./" + filepath.Base(binary),
+		image:    "./" + filepath.Base(image),
+	}
 }
 
 func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []string {

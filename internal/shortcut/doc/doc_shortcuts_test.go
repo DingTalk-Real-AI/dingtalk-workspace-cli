@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ type docCoverageCaller struct {
 	mu        sync.Mutex
 	failAt    int
 	calls     int
+	dryRun    bool
 	responses map[string][]map[string]any
 	ctx       context.Context
 	history   []docCoverageCall
@@ -54,6 +56,9 @@ func (f *docCoverageCaller) CallTool(_ context.Context, _, tool string, params m
 		return nil, errors.New("injected doc coverage failure")
 	}
 	value := docCoveragePayload(tool)
+	if tool == "revert_doc_version" {
+		value = map[string]any{"version": params["version"]}
+	}
 	if queue := f.responses[tool]; len(queue) > 0 {
 		value = queue[0]
 		f.responses[tool] = queue[1:]
@@ -66,7 +71,7 @@ func (f *docCoverageCaller) CallTool(_ context.Context, _, tool string, params m
 }
 
 func (f *docCoverageCaller) Format() string { return "json" }
-func (f *docCoverageCaller) DryRun() bool   { return false }
+func (f *docCoverageCaller) DryRun() bool   { return f.dryRun }
 func (f *docCoverageCaller) Fields() string { return "" }
 func (f *docCoverageCaller) JQ() string     { return "" }
 
@@ -506,6 +511,139 @@ func TestCrossPlatformCoverageDocWritesStopOnUnknownCommitAndRequireVerification
 	}
 }
 
+func TestCrossPlatformCoverageDocCreateRejectsSuccessfulMismatchedReadback(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": "truncated"}},
+	}}
+	err := runDocCoverage(t, Create, caller, "--name", "n", "--content", "complete body")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "doc_write_verification_failed" || typed.FailureStage != "verify" {
+		t.Fatalf("create mismatch error = %#v, want verification failure", err)
+	}
+	if len(caller.history) != 2 || caller.history[0].tool != "create_document" || caller.history[1].tool != "get_document_content" {
+		t.Fatalf("create mismatch calls = %#v, want one write followed by one read", caller.history)
+	}
+}
+
+func TestCrossPlatformCoverageDocJSONMLBlockVerificationUsesJSONMLReadback(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		command  string
+		blockArg string
+		response string
+	}{
+		{name: "insert", command: "block_insert_after", blockArg: "--after-block-id", response: `["root",{},["p",{"uuid":"ref"},"before"],["p",{"uuid":"id-1"},"after"]]`},
+		{name: "replace", command: "block_replace", blockArg: "--block-id", response: `["root",{},["p",{"uuid":"target"},"after"]]`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			blockID := "ref"
+			if test.command == "block_replace" {
+				blockID = "target"
+			}
+			caller := &docCoverageCaller{responses: map[string][]map[string]any{
+				"list_document_blocks": {{"jsonml": test.response}},
+			}}
+			err := runDocCoverage(t, Update, caller,
+				"--node", "n", "--command", test.command, test.blockArg, blockID,
+				"--content", `["p",{},"after"]`, "--doc-format", "jsonml", "--yes")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := caller.history[len(caller.history)-1].params["format"]; got != "jsonml" {
+				t.Fatalf("verification format = %#v, want jsonml", got)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocVersionRevertPaginationAndVerification(t *testing.T) {
+	t.Run("target on second page", func(t *testing.T) {
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{
+			"list_doc_versions": {
+				{"versions": []any{map[string]any{"version": 1.0}}, "hasMore": true, "nextCursor": "page-2"},
+				{"versions": []any{map[string]any{"version": 3.0}}, "hasMore": false},
+			},
+		}}
+		if err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes"); err != nil {
+			t.Fatal(err)
+		}
+		if len(caller.history) != 4 || caller.history[1].params["nextCursor"] != "page-2" {
+			t.Fatalf("version pagination calls = %#v", caller.history)
+		}
+	})
+
+	t.Run("write result lacks proof but current state proves source", func(t *testing.T) {
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{
+			"revert_doc_version": {{"ok": true}},
+			"get_document_info":  {{"restoredFromVersion": 3.0}},
+		}}
+		if err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("readback lacks proof", func(t *testing.T) {
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{
+			"revert_doc_version": {{"ok": true}},
+			"get_document_info":  {{"revision": 99.0}},
+		}}
+		err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "doc_history_revert_verification_failed" || typed.Retryable {
+			t.Fatalf("unproven revert error = %#v", err)
+		}
+	})
+
+	for _, test := range []struct {
+		name      string
+		responses []map[string]any
+		want      string
+	}{
+		{name: "not found", responses: []map[string]any{{"versions": []any{}, "hasMore": false}}, want: "目标版本 3 不存在"},
+		{name: "missing cursor", responses: []map[string]any{{"versions": []any{}, "hasMore": true}}, want: "无法证明分页已经完整"},
+		{name: "stalled cursor", responses: []map[string]any{
+			{"versions": []any{}, "hasMore": true, "nextCursor": "same"},
+			{"versions": []any{}, "hasMore": true, "nextCursor": "same"},
+		}, want: "无法证明分页已经完整"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &docCoverageCaller{responses: map[string][]map[string]any{"list_doc_versions": test.responses}}
+			err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes")
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("version preflight error = %v, want %q", err, test.want)
+			}
+			for _, call := range caller.history {
+				if call.tool == "revert_doc_version" {
+					t.Fatalf("preflight failure executed revert: %#v", caller.history)
+				}
+			}
+		})
+	}
+
+	pages := make([]map[string]any, 20)
+	for index := range pages {
+		pages[index] = map[string]any{"versions": []any{}, "hasMore": true, "nextCursor": fmt.Sprintf("page-%d", index+1)}
+	}
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{"list_doc_versions": pages}}
+	if err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes"); err == nil || !strings.Contains(err.Error(), "无法证明分页已经完整") {
+		t.Fatalf("max-pages preflight error = %v", err)
+	}
+
+	for _, value := range []any{json.Number("3"), 3, "3"} {
+		if !versionNumberMatches(value, 3) {
+			t.Errorf("version value %#v did not match", value)
+		}
+	}
+	for _, value := range []any{json.Number("bad"), 4, "bad", true} {
+		if versionNumberMatches(value, 3) {
+			t.Errorf("version value %#v unexpectedly matched", value)
+		}
+	}
+	if !versionEvidenceMatches([]any{map[string]any{"target-version": "3"}}, 3, map[string]bool{"targetversion": true}) {
+		t.Fatal("nested version evidence did not match")
+	}
+}
+
 func TestCrossPlatformCoverageDocWriteErrorStateMachine(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -755,6 +893,14 @@ func TestCrossPlatformCoverageDocContentCommandsAndFailureBoundaries(t *testing.
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
+			switch tc.name {
+			case "create markdown":
+				caller.responses["get_document_content"] = []map[string]any{{"markdown": "body"}}
+			case "create jsonml file":
+				caller.responses["get_document_content"] = []map[string]any{{"jsonml": `["root",{},"body"]`}}
+			case "create stdin":
+				caller.responses["get_document_content"] = []map[string]any{{"markdown": "stdin body"}}
+			}
 			if tc.name == "update overwrite jsonml" || tc.name == "update revision" {
 				caller.responses["get_document_content"] = []map[string]any{{"jsonml": `["root",{}]`}}
 			}
@@ -764,11 +910,11 @@ func TestCrossPlatformCoverageDocContentCommandsAndFailureBoundaries(t *testing.
 			case "update insert text":
 				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "text": "reference"}, map[string]any{"id": "id-1", "text": "x"}}}}
 			case "update insert jsonml":
-				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "text": "reference"}, map[string]any{"id": "id-1", "jsonml": `["p",{},"x"]`}}}}
+				caller.responses["list_document_blocks"] = []map[string]any{{"jsonml": `["root",{},["p",{"uuid":"b"},"reference"],["p",{"uuid":"id-1"},"x"]]`}}
 			case "update replace text":
 				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "text": "x"}}}}
 			case "update replace jsonml":
-				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "b", "jsonml": `["p",{},"x"]`}}}}
+				caller.responses["list_document_blocks"] = []map[string]any{{"jsonml": `["root",{},["p",{"uuid":"b"},"x"]]`}}
 			case "update delete":
 				caller.responses["list_document_blocks"] = []map[string]any{{"items": []any{map[string]any{"id": "other", "text": "x"}}}}
 			case "update replace":

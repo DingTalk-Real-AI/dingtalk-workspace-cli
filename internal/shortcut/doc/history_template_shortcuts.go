@@ -4,6 +4,7 @@
 package doc
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -37,8 +38,8 @@ func canonicalizeHistoryShortcuts() {
 	VersionList.Contract = versionListContract()
 	VersionList.Flags = []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "返回版本数量上限", Aliases: []string{"page-size"}},
-		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标", Aliases: []string{"page-token"}},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "返回版本数量上限", Aliases: []string{"page-size"}, AliasesVisible: true},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标", Aliases: []string{"page-token"}, AliasesVisible: true},
 	}
 	VersionList.Tips = []string{`dws doc +version-list --node <DOC_ID>`, `dws doc +version-list --node <DOC_ID> --limit 20`}
 	VersionList.Execute = func(rt *shortcut.RuntimeContext) error {
@@ -149,17 +150,18 @@ func createFromTemplateContract() corecmd.ContractDecl {
 func executeHistoryRevert(rt *shortcut.RuntimeContext) error {
 	nodeID := rt.Str("node")
 	target := rt.Int("version")
-	versions, err := rt.CallMCPData(productDoc, "list_doc_versions", map[string]any{"nodeId": nodeID})
+	found, err := findHistoryVersion(rt, nodeID, target)
 	if err != nil {
 		return err
 	}
-	if !containsVersion(versions, target) {
+	if !found {
 		return apperrors.NewValidation(fmt.Sprintf("目标版本 %d 不存在，已停止回滚", target))
 	}
 	if rt.DryRun() {
 		return rt.Output(docEnvelope("doc.history_revert", map[string]any{"executed": false, "nodeId": nodeID, "version": target, "preflight": "version_exists"}))
 	}
-	if _, err := rt.CallMCPWriteData(productDoc, "revert_doc_version", map[string]any{"nodeId": nodeID, "version": target}); err != nil {
+	reverted, err := rt.CallMCPWriteData(productDoc, "revert_doc_version", map[string]any{"nodeId": nodeID, "version": target})
+	if err != nil {
 		return err
 	}
 	current, err := rt.CallMCPData(productDoc, "get_document_info", map[string]any{"nodeId": nodeID})
@@ -175,10 +177,126 @@ func executeHistoryRevert(rt *shortcut.RuntimeContext) error {
 			map[string]any{"available": false, "reason": "the requested revert completed; verify the current document before any further write"},
 		)
 	}
-	return rt.Output(docEnvelope("doc.history_revert", map[string]any{"version": target, "current": current},
+	if !revertResultMatchesVersion(reverted, target) && !currentDocumentMatchesRestoredVersion(current, target) {
+		return docPartialWriteError(
+			"doc.history_revert", "doc_history_revert_verification_failed", "verify",
+			fmt.Sprintf("版本 %d 的回滚请求已执行，但服务端回读未证明目标版本已经生效（nodeId=%s）；不要直接重试回滚", target, nodeID),
+			fmt.Errorf("回滚结果和当前文档状态均缺少目标版本 %d 的有效证明", target),
+			map[string]any{"nodeId": nodeID, "version": target, "reverted": true, "verified": false, "revertResult": reverted, "current": current},
+			[]map[string]any{
+				{"name": "preflight", "status": "success"},
+				{"name": "revert", "status": "success"},
+				{"name": "verify", "status": "failed"},
+			},
+			map[string]any{"available": false, "reason": "the revert request completed but the current state did not prove the requested source version"},
+		)
+	}
+	return rt.Output(docEnvelope("doc.history_revert", map[string]any{"version": target, "revertResult": reverted, "current": current, "verified": true},
 		map[string]any{"name": "preflight", "status": "success"},
 		map[string]any{"name": "revert", "status": "success"},
 		map[string]any{"name": "verify", "status": "success"}))
+}
+
+func findHistoryVersion(rt *shortcut.RuntimeContext, nodeID string, target int) (bool, error) {
+	const maxPages = 20
+	cursor := ""
+	seenCursors := map[string]bool{}
+	for page := 1; page <= maxPages; page++ {
+		params := map[string]any{"nodeId": nodeID}
+		if cursor != "" {
+			params["nextCursor"] = cursor
+		}
+		versions, err := rt.CallMCPData(productDoc, "list_doc_versions", params)
+		if err != nil {
+			return false, err
+		}
+		if containsVersion(versions, target) {
+			return true, nil
+		}
+		hasMore, hasMoreKnown, nextCursor := docPageState(versions)
+		nextCursor = strings.TrimSpace(nextCursor)
+		if hasMoreKnown && !hasMore {
+			return false, nil
+		}
+		if nextCursor == "" {
+			if hasMoreKnown && hasMore {
+				return false, historyVersionPaginationError("missing_next_cursor", page, cursor)
+			}
+			return false, nil
+		}
+		if seenCursors[nextCursor] {
+			return false, historyVersionPaginationError("stalled_cursor", page, nextCursor)
+		}
+		seenCursors[nextCursor] = true
+		cursor = nextCursor
+	}
+	return false, historyVersionPaginationError("max_pages", maxPages, cursor)
+}
+
+func historyVersionPaginationError(reason string, page int, cursor string) error {
+	return apperrors.NewAPI(
+		"文档版本预检无法证明分页已经完整，已停止回滚",
+		apperrors.WithOperation("doc.history_revert"),
+		apperrors.WithReason("doc_history_version_"+reason),
+		apperrors.WithFailureStage("preflight"),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithRetryable(true),
+		apperrors.WithDetails(map[string]any{"page": page, "cursor": cursor, "targetVerified": false}),
+	)
+}
+
+func revertResultMatchesVersion(value map[string]any, target int) bool {
+	return versionEvidenceMatches(value, target, map[string]bool{
+		"version": true, "targetversion": true, "appliedversion": true,
+		"restoredversion": true, "revertedversion": true, "sourceversion": true,
+	})
+}
+
+func currentDocumentMatchesRestoredVersion(value map[string]any, target int) bool {
+	return versionEvidenceMatches(value, target, map[string]bool{
+		"restoredfromversion": true, "revertedfromversion": true,
+		"sourceversion": true, "appliedversion": true, "targetversion": true,
+	})
+}
+
+func versionEvidenceMatches(value any, target int, acceptedKeys map[string]bool) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
+			if acceptedKeys[normalized] {
+				if versionNumberMatches(child, target) {
+					return true
+				}
+			}
+			if versionEvidenceMatches(child, target, acceptedKeys) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if versionEvidenceMatches(child, target, acceptedKeys) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func versionNumberMatches(value any, target int) bool {
+	switch number := value.(type) {
+	case float64:
+		return number == float64(target)
+	case json.Number:
+		parsed, err := number.Int64()
+		return err == nil && parsed == int64(target)
+	case int:
+		return number == target
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(number))
+		return err == nil && parsed == target
+	}
+	return false
 }
 
 func containsVersion(value any, target int) bool {
@@ -187,16 +305,8 @@ func containsVersion(value any, target int) bool {
 		for key, child := range typed {
 			normalized := strings.ToLower(strings.ReplaceAll(key, "_", ""))
 			if normalized == "version" || normalized == "versionnumber" || normalized == "revision" {
-				switch number := child.(type) {
-				case float64:
-					if int(number) == target && number == float64(target) {
-						return true
-					}
-				case string:
-					parsed, err := strconv.Atoi(strings.TrimSpace(number))
-					if err == nil && parsed == target {
-						return true
-					}
+				if versionNumberMatches(child, target) {
+					return true
 				}
 			}
 			if containsVersion(child, target) {

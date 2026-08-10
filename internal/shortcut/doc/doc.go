@@ -687,7 +687,7 @@ var ExportGet = shortcut.Shortcut{
 	},
 	Flags: []shortcut.Flag{
 		{Name: "job-id", Type: shortcut.FlagString, Desc: "导出任务 ID", Required: true},
-		{Name: "output", Type: shortcut.FlagString, Desc: "可选：任务完成后安全下载到工作目录内相对路径"},
+		{Name: "output", Shorthand: "o", Type: shortcut.FlagString, Desc: "可选：任务完成后安全下载到工作目录内相对路径"},
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		if rt.Str("output") == "" {

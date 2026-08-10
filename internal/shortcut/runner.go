@@ -154,9 +154,9 @@ func (rt *RuntimeContext) CallMCPData(product, tool string, params map[string]an
 }
 
 // CallMCPReadData dispatches a tool whose name is explicitly classified as
-// read-only without consulting Cobra state. It is safe for bounded concurrent
-// read orchestration after the Execute hook has already completed local flag
-// parsing. Write-shaped tool names fail closed.
+// read-only without consulting Cobra state. Callers must invoke it serially
+// unless the injected ToolCaller separately documents and enforces concurrent
+// safety. Write-shaped tool names fail closed.
 func (rt *RuntimeContext) CallMCPReadData(product, tool string, params map[string]any) (map[string]any, error) {
 	if !looksReadTool(tool) {
 		return nil, apperrors.NewValidation(fmt.Sprintf(

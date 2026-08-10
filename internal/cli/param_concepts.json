@@ -44,6 +44,7 @@
   },
 
   "command_overrides": {
+	"doc +version-list": {"ambiguous": ["size", "max-results", "max-result", "take", "top", "per-page", "next-cursor", "next-token", "next-page-token"], "note": "--limit/--cursor and the shipped visible compatibility flags --page-size/--page-token remain native. Other pagination spellings cannot choose between two visible real flags and must stop before execution."},
     "chat group rename": {"bind": {"id": "open_conversation_id"}, "note": "This command's real --id carries one openConversationId; aliases reduce to --id without changing the value."},
     "chat group members": {"bind": {"id": "open_conversation_id"}},
     "chat group members add": {"bind": {"id": "open_conversation_id"}, "block": ["user-id", "open-dingtalk-id"], "note": "The real --users is a list and may contain mixed userId/openDingTalkId values; singular inputs are not promoted automatically."},

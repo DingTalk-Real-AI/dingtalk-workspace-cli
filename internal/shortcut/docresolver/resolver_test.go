@@ -35,7 +35,7 @@ func row(id, name, typ string) any {
 	return map[string]any{"nodeId": id, "name": name, "docType": typ, "url": "https://alidocs.dingtalk.com/i/nodes/" + id}
 }
 
-func TestResolveStableTargetDoesNotSearch(t *testing.T) {
+func TestCrossPlatformCoverageResolveStableTargetDoesNotSearch(t *testing.T) {
 	reader := &scriptedReader{}
 	resolution, err := Resolve(reader, "node-1", "")
 	if err != nil || reader.calls != 0 || resolution.Selected.CanonicalID != "node-1" || !resolution.Complete {
@@ -43,7 +43,7 @@ func TestResolveStableTargetDoesNotSearch(t *testing.T) {
 	}
 }
 
-func TestResolveNaturalTitleExhaustsPagesBeforeSelecting(t *testing.T) {
+func TestCrossPlatformCoverageResolveNaturalTitleExhaustsPagesBeforeSelecting(t *testing.T) {
 	first := make([]any, 0, searchPageSize)
 	for i := 0; i < searchPageSize; i++ {
 		first = append(first, row(fmt.Sprintf("other-%d", i), "其他", "adoc"))
@@ -58,7 +58,7 @@ func TestResolveNaturalTitleExhaustsPagesBeforeSelecting(t *testing.T) {
 	}
 }
 
-func TestResolveFailsClosedForAmbiguousIncompleteAndWrongType(t *testing.T) {
+func TestCrossPlatformCoverageResolveFailsClosedForAmbiguousIncompleteAndWrongType(t *testing.T) {
 	tests := []struct {
 		name   string
 		pages  []map[string]any
@@ -82,5 +82,73 @@ func TestResolveFailsClosedForAmbiguousIncompleteAndWrongType(t *testing.T) {
 	reader := &scriptedReader{err: errors.New("backend")}
 	if _, err := Resolve(reader, "", "x"); !errors.Is(err, reader.err) {
 		t.Fatalf("transport error=%v", err)
+	}
+}
+
+func TestCrossPlatformCoverageResolverFinalBranchMatrix(t *testing.T) {
+	for _, target := range [][2]string{{"", ""}, {"node", "query"}} {
+		if _, err := Resolve(&scriptedReader{}, target[0], target[1]); err == nil {
+			t.Fatalf("invalid target %#v succeeded", target)
+		}
+	}
+
+	full := make([]any, searchPageSize)
+	for i := range full {
+		full[i] = row(fmt.Sprintf("full-%d", i), "other", "adoc")
+	}
+	for _, tc := range []struct {
+		name  string
+		pages []map[string]any
+	}{
+		{"unproven full page", []map[string]any{{"documents": full}}},
+		{"missing cursor", []map[string]any{{"documents": []any{}, "hasMore": true}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Resolve(&scriptedReader{pages: tc.pages}, "", "wanted"); err == nil {
+				t.Fatal("incomplete pagination succeeded")
+			}
+		})
+	}
+	if _, err := Resolve(&scriptedReader{pages: []map[string]any{{"documents": []any{}}}}, "", "wanted"); err == nil {
+		t.Fatal("underfilled implicit final page should resolve to not-found")
+	}
+	pages := make([]map[string]any, searchPageLimit)
+	for i := range pages {
+		pages[i] = map[string]any{"documents": []any{}, "hasMore": true, "nextPageToken": fmt.Sprintf("p-%d", i+1)}
+	}
+	if _, err := Resolve(&scriptedReader{pages: pages}, "", "wanted"); err == nil {
+		t.Fatal("max-page pagination succeeded")
+	}
+
+	nested := map[string]any{
+		"result": map[string]any{
+			"data": map[string]any{
+				"records": []any{
+					"invalid",
+					map[string]any{"id": "", "title": "empty"},
+					map[string]any{"doc_id": "d", "fileName": "Doc", "fileType": ".ADOC", "webUrl": " u ", "parentId": "p"},
+				},
+				"pagination": map[string]any{"has_more": false, "next_page_token": " next "},
+			},
+		},
+	}
+	rows := extractRows(nested)
+	candidates := extractCandidates(rows)
+	if len(candidates) != 1 || candidates[0].CanonicalID != "d" || normalizeType(candidates[0].ResourceType) != "adoc" {
+		t.Fatalf("nested candidates = %#v", candidates)
+	}
+	if hasMore, known, next := extractPage(nested); !known || hasMore || next != "next" {
+		t.Fatalf("nested page = %v/%v/%q", hasMore, known, next)
+	}
+	if rows := extractRows(map[string]any{"items": "not-a-list"}); len(rows) != 0 {
+		t.Fatalf("non-list rows = %#v", rows)
+	}
+	deduped := dedupe([]Candidate{{}, {CanonicalID: "d"}, {CanonicalID: "d"}})
+	if len(deduped) != 1 {
+		t.Fatalf("deduped = %#v", deduped)
+	}
+	selected, matchedBy := selectCandidates([]Candidate{{CanonicalID: "d", Name: "Different"}}, "query")
+	if len(selected) != 1 || matchedBy != "search_candidate" {
+		t.Fatalf("fallback selection = %#v/%q", selected, matchedBy)
 	}
 }

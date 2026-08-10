@@ -56,11 +56,6 @@ func collectDocPages(
 
 	for page := 1; page <= pageLimit; page++ {
 		remaining := options.MaxItems - len(items)
-		if remaining <= 0 {
-			truncated = true
-			stopReason = "max_items"
-			break
-		}
 		requestPageSize := options.PageSize
 		if requestPageSize > remaining {
 			requestPageSize = remaining
