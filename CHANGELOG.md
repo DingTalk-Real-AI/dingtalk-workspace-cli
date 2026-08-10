@@ -13,6 +13,13 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
   targets to the initial card-creation request and prepending its returned
   `atTag` to the automatic streaming update.
 
+### Fixed
+
+- **Fail-closed `devapp +list` pagination** (#917) — preserves `hasMore` and
+  `nextCursor` in every single-page result, normalizes supported terminal
+  cursor forms, and rejects malformed or ambiguous pagination responses rather
+  than emitting terminal-looking partial data.
+
 ## [1.0.58-beta.2] - 2026-08-10
 
 ### Added
