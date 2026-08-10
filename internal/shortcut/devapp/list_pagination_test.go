@@ -89,6 +89,36 @@ func executeListPagination(
 	return output.String(), err, caller
 }
 
+func executeDevAppListShortcut(
+	t *testing.T,
+	command string,
+	definition shortcut.Shortcut,
+	response string,
+	args ...string,
+) (string, error, *listPaginationCaller) {
+	t.Helper()
+
+	caller := &listPaginationCaller{response: response}
+	helpers.InitDepsForTest(t, caller)
+
+	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentFlags().Bool("dry-run", false, "")
+	root.PersistentFlags().StringP("format", "f", "json", "")
+	root.PersistentFlags().String("fields", "", "")
+	root.PersistentFlags().String("jq", "", "")
+	service := &cobra.Command{Use: "devapp"}
+	service.AddCommand(corecmd.New(shortcut.FromShortcut(definition)))
+	root.AddCommand(service)
+
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	root.SetArgs(append([]string{"devapp", command}, args...))
+	err := root.Execute()
+	return output.String(), err, caller
+}
+
 func decodeListPaginationEnvelope(t *testing.T, output string) map[string]any {
 	t.Helper()
 	var payload map[string]any
@@ -118,6 +148,76 @@ func decodePrettyListPagination(t *testing.T, output string) map[string]string {
 func TestCrossPlatformCoverageListPaginationNilRuntimeCursor(t *testing.T) {
 	if got := listAppRequestCursor(nil); got != "" {
 		t.Fatalf("nil runtime cursor = %q, want empty", got)
+	}
+}
+
+func TestCrossPlatformCoverageAllDevAppPaginatedListsPreservePagination(t *testing.T) {
+	const requestCursor = "opaque-current"
+	const nextCursor = "opaque-next"
+	tests := []struct {
+		name       string
+		command    string
+		definition shortcut.Shortcut
+		tool       string
+		listKey    string
+		response   string
+		args       []string
+	}{
+		{
+			name:       "permissions",
+			command:    "+permission-list",
+			definition: PermissionList,
+			tool:       "list_dev_app_permissions",
+			listKey:    "permissions",
+			response:   `{"result":{"items":[{"scopeValue":"Contact.User.Read"}],"hasMore":true,"nextCursor":"opaque-next"}}`,
+			args:       []string{"--unified-app-id", "app-1"},
+		},
+		{
+			name:       "events",
+			command:    "+event-list",
+			definition: EventList,
+			tool:       "list_dev_app_events",
+			listKey:    "events",
+			response:   `{"result":{"events":[{"eventCode":"chat_update"}],"hasMore":true,"nextCursor":"opaque-next"}}`,
+			args:       []string{"--unified-app-id", "app-1"},
+		},
+		{
+			name:       "versions",
+			command:    "+version-list",
+			definition: VersionList,
+			tool:       "list_dev_app_versions",
+			listKey:    "versions",
+			response:   `{"result":{"items":[{"versionId":"version-1"}],"hasMore":true,"nextCursor":"opaque-next"}}`,
+			args:       []string{"--unified-app-id", "app-1"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := append([]string{}, test.args...)
+			args = append(args, "--cursor", requestCursor, "--page-size", "1", "--format", "json")
+			output, err, caller := executeDevAppListShortcut(
+				t, test.command, test.definition, test.response, args...,
+			)
+			if err != nil {
+				t.Fatalf("execute %s: %v", test.command, err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			call := caller.calls[0]
+			if call.product != productDevApp || call.tool != test.tool ||
+				call.params["cursor"] != requestCursor || call.params["pageSize"] != 1 {
+				t.Fatalf("call = %#v", call)
+			}
+
+			payload := decodeListPaginationEnvelope(t, output)
+			items, ok := payload[test.listKey].([]any)
+			if len(payload) != 4 || !ok || len(items) != 1 || payload["count"] != float64(1) ||
+				payload["hasMore"] != true || payload["nextCursor"] != nextCursor {
+				t.Fatalf("pagination payload = %#v", payload)
+			}
+		})
 	}
 }
 
@@ -378,6 +478,34 @@ func TestCrossPlatformCoverageListPaginationOneLevelAndOpaqueCursor(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoverageListPaginationNormalizesDeployedTerminalEnvelope(t *testing.T) {
+	response := `{
+		"arguments":[],
+		"errorCode":null,
+		"errorMsg":null,
+		"result":{
+			"items":[{"unifiedAppId":"app-live","name":"Live App"}],
+			"hasMore":false,
+			"nextCursor":"4010069592"
+		},
+		"success":true
+	}`
+
+	output, err, caller := executeListPagination(t, response, "--format", "json")
+	if err != nil {
+		t.Fatalf("deployed terminal envelope rejected: %v", err)
+	}
+	if len(caller.calls) != 1 || !reflect.DeepEqual(caller.calls[0].params, map[string]any{"pageSize": 20}) {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	payload := decodeListPaginationEnvelope(t, output)
+	apps, ok := payload["apps"].([]any)
+	if len(payload) != 4 || !ok || len(apps) != 1 || payload["count"] != float64(1) ||
+		payload["hasMore"] != false || payload["nextCursor"] != "" {
+		t.Fatalf("normalized deployed terminal payload = %#v", payload)
+	}
+}
+
 func TestCrossPlatformCoverageListPaginationValidEmptyPages(t *testing.T) {
 	for _, test := range []struct {
 		name        string
@@ -390,6 +518,27 @@ func TestCrossPlatformCoverageListPaginationValidEmptyPages(t *testing.T) {
 		{
 			name:        "terminal",
 			response:    `{"apps":[],"hasMore":false,"nextCursor":""}`,
+			wantHasMore: false,
+			wantNext:    "",
+			wantRequest: map[string]any{"pageSize": 20},
+		},
+		{
+			name:        "terminal omitted provider cursor",
+			response:    `{"apps":[],"hasMore":false}`,
+			wantHasMore: false,
+			wantNext:    "",
+			wantRequest: map[string]any{"pageSize": 20},
+		},
+		{
+			name:        "terminal null provider cursor",
+			response:    `{"apps":[],"hasMore":false,"nextCursor":null}`,
+			wantHasMore: false,
+			wantNext:    "",
+			wantRequest: map[string]any{"pageSize": 20},
+		},
+		{
+			name:        "terminal last provider cursor",
+			response:    `{"apps":[],"hasMore":false,"nextCursor":"4010069592"}`,
 			wantHasMore: false,
 			wantNext:    "",
 			wantRequest: map[string]any{"pageSize": 20},
@@ -439,11 +588,9 @@ func TestCrossPlatformCoverageListPaginationRejectsInvalidContracts(t *testing.T
 		{name: "missing hasMore", response: `{"apps":[],"nextCursor":""}`},
 		{name: "wrong hasMore type", response: `{"apps":[],"hasMore":"false","nextCursor":""}`},
 		{name: "non-terminal missing continuation", response: `{"apps":[],"hasMore":true}`},
-		{name: "terminal missing continuation", response: `{"apps":[],"hasMore":false}`},
-		{name: "terminal null continuation", response: `{"apps":[],"hasMore":false,"nextCursor":null}`},
 		{name: "empty continuation", response: `{"apps":[],"hasMore":true,"nextCursor":""}`},
 		{name: "wrong continuation type", response: `{"apps":[],"hasMore":true,"nextCursor":7}`},
-		{name: "terminal continuation conflict", response: `{"apps":[],"hasMore":false,"nextCursor":"unexpected"}`},
+		{name: "terminal continuation wrong type", response: `{"apps":[],"hasMore":false,"nextCursor":7}`},
 		{name: "stalled cursor", response: `{"apps":[],"hasMore":true,"nextCursor":"same"}`, args: []string{"--cursor", "same"}},
 		{name: "null page", response: `null`},
 		{name: "apps missing", response: `{"hasMore":false,"nextCursor":""}`},
