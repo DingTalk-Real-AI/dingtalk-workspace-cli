@@ -1190,6 +1190,10 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 - Prompt: 有和我相关的审批实例发起时实时通知我
 - Expected: `dws event consume user_oa_approval_instance_started --flatten -f ndjson`
 
+**event_event_consume_oa_instance_cc_001**
+- Prompt: 有审批实例抄送给我时实时通知我
+- Expected: `dws event consume user_oa_approval_instance_cc --flatten -f ndjson`
+
 **event_event_consume_oa_instance_terminated_001**
 - Prompt: 和我相关的审批实例终止时实时通知我
 - Expected: `dws event consume user_oa_approval_instance_terminated --flatten -f ndjson`

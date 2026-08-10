@@ -63,6 +63,13 @@ func TestPersonalOAEventListAndSchemaCommands(t *testing.T) {
 			},
 		},
 		{
+			eventKey: personal.EventOAApprovalInstanceCC,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "title", "status", "create_time", "event_time",
+			},
+		},
+		{
 			eventKey: personal.EventOAApprovalInstanceTerminated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
@@ -226,6 +233,7 @@ func TestPersonalOAEventConsumeDryRunAndValidation(t *testing.T) {
 		personal.EventOAApprovalTaskFinished,
 		personal.EventOAApprovalTaskRedirected,
 		personal.EventOAApprovalInstanceStarted,
+		personal.EventOAApprovalInstanceCC,
 		personal.EventOAApprovalInstanceTerminated,
 		personal.EventOAApprovalInstanceFinished,
 	}
@@ -479,6 +487,7 @@ func TestPersonalOAMultiConsumeCreatesIndependentAllSubscriptionsOnSharedBus(t *
 		personal.EventOAApprovalTaskFinished,
 		personal.EventOAApprovalTaskRedirected,
 		personal.EventOAApprovalInstanceStarted,
+		personal.EventOAApprovalInstanceCC,
 		personal.EventOAApprovalInstanceTerminated,
 		personal.EventOAApprovalInstanceFinished,
 	}
