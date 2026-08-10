@@ -312,10 +312,13 @@ func checkCompatibility(root *cobra.Command, baseline interfaceContract) []strin
 				continue
 			}
 			if actual.Value.Type() != expectedFlag.Type {
-				failures = append(failures, fmt.Sprintf(
-					"%q flag --%s changed type from %s to %s",
-					displayPath(path), expectedFlag.Name, expectedFlag.Type, actual.Value.Type(),
-				))
+				if !reviewedFlagTypeChange(displayPath(path), expectedFlag.Name, expectedFlag.Type, actual.Value.Type()) ||
+					flagContractOtherwiseChanged(expectedFlag, actual, actualScope) {
+					failures = append(failures, fmt.Sprintf(
+						"%q flag --%s changed type from %s to %s",
+						displayPath(path), expectedFlag.Name, expectedFlag.Type, actual.Value.Type(),
+					))
+				}
 			}
 			if expectedFlag.Shorthand != "" && actual.Shorthand != expectedFlag.Shorthand {
 				failures = append(failures, fmt.Sprintf(
@@ -443,11 +446,20 @@ func mergeContracts(historical, current interfaceContract) (interfaceContract, [
 				continue
 			}
 			if oldFlag.Type != newFlag.Type {
-				failures = append(failures, fmt.Sprintf(
-					"%q flag --%s changed type from %s to %s",
-					displayPath(path), name, oldFlag.Type, newFlag.Type,
-				))
-				continue
+				if !reviewedFlagTypeChange(displayPath(path), name, oldFlag.Type, newFlag.Type) ||
+					mergedFlagContractOtherwiseChanged(oldFlag, newFlag) {
+					failures = append(failures, fmt.Sprintf(
+						"%q flag --%s changed type from %s to %s",
+						displayPath(path), name, oldFlag.Type, newFlag.Type,
+					))
+					continue
+				}
+				// A reviewed migration keeps merging, and the merged entry keeps
+				// the historical type below, exactly as this function keeps the
+				// historical shorthand, required and hidden values. The baseline
+				// records what was promised, so a later --check still resolves
+				// this flag through the reviewed table rather than silently
+				// adopting the new type as history.
 			}
 			if oldFlag.Shorthand != "" && oldFlag.Shorthand != newFlag.Shorthand {
 				failures = append(failures, fmt.Sprintf(

@@ -352,6 +352,6 @@ dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> \
 - `add-dimension` 的 `--length` 必须为正整数（>= 1），行列均不超过 5000
 - `group-dimension` / `ungroup-dimension` 的 `--range` 只接受整行或整列范围，不接受普通单元格矩形
 - `group-dimension` 输出和 `sheet info --include groups` 回读均使用 `level`，且为 1-based；不要使用旧的 `depth` 字段
-- `sheet info --include groups` 是分组回读入口；`range read` / `csv-get` 不返回行列分组
+- `sheet info --include groups` 是分组回读入口；裸 `sheet info` 不承诺返回行列分组，`range read` / `csv-get` 不返回行列分组
 - 当前不能直接调整已有分组的 `collapsed` 状态；`--group-state fold` 只在创建分组时生效
 - `batch-update` 支持 `group-dimension` / `ungroup-dimension`，但不适合创建后立即折叠；需要 `fold` 时使用独立 `group-dimension`

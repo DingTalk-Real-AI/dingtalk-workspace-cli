@@ -101,5 +101,5 @@ skills/mono/
 ## 7. 变更流程
 
 1. 改 / 增内容 → 更新 `skills/content-qa/mono-multi-coverage.yaml`（coverage 或 omit）  
-2. 跑 `make skill-mono-multi-content`（或 `make policy`）  
+2. 跑 `make skill-mono-multi-content`（该独立门禁不包含在默认 `make policy` 中）
 3. 失败则修内容或更新 reviewed omit（disposition + 原因），**禁止**用安装默认值绕过  

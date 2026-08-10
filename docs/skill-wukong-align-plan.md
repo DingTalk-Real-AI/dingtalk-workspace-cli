@@ -4,7 +4,7 @@
 > 合同短文：[skill-content-framework.md](skill-content-framework.md)  
 > 质检规格：[skill-mono-multi-qa.md](skill-mono-multi-qa.md)  
 > 机读合同：`skills/content-qa/mono-multi-coverage.yaml`  
-> 门禁：`make skill-mono-multi-content`（已入 `make policy`）
+> 门禁：`make skill-mono-multi-content`（独立门禁；默认 `make policy` 按设计不包含该检查）
 >
 > 撰写 / 收窄 / 质检增补 / 执行：2026-08-05  
 > 工作树：`/Users/john/GolandProjects/open-source/dws-multi-skill-align`  

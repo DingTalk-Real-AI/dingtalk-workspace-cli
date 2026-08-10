@@ -2,7 +2,7 @@
 
 > 对照基准：`skills/mono`（单 skill）。被测主体：`skills/multi`。  
 > 机读合同：`skills/content-qa/mono-multi-coverage.yaml`。  
-> 执行：`make skill-mono-multi-content`（已挂入 `make policy`）。
+> 执行：`make skill-mono-multi-content`（独立门禁；默认 `make policy` 按设计不包含该检查）。
 
 ## 1. 质检矩阵
 
@@ -11,7 +11,8 @@
 | **G1 形状** | 结构 | `skills/multi/*` | 仅 `dingtalk-*`（含必选 `dingtalk-shared`）；每目录有 `SKILL.md` |
 | **G2 结构** | 结构 | 各 `SKILL.md` frontmatter | `name`==目录名；非空 `description`；`category`∈{product,shared}；`requires.bins` 含 `dws` |
 | **G3 覆盖** | 覆盖 | mono `references/products/*` 顶层 stem | 每 stem ∈ `coverage` 或 `omit_coverage`；coverage 目标 skill/refs 存在 |
-| **G4 漂移** | 漂移 | scripts、成对文件、全局协议 | orphan 脚本 ∈ allowlist；paired 一致；全局协议存在或 ∈ `omit_global` |
+| **G4 漂移** | 漂移 | scripts、成对文件、全局协议 | orphan 脚本 ∈ allowlist；paired 内容一致（允许合同声明的布局链接替换）；全局协议存在或 ∈ `omit_global` |
+| **G5 链接** | 可达性 | 合同覆盖的 paired Markdown | 内联相对链接目标文件或目录存在且不逃出仓库；外链、纯锚点和锚点内容不在检查范围 |
 
 已有门禁（继续复用，不替代本矩阵）：`check-skill-commands`、`check-skill-context-budget`、`check-multi-im-skill-chain`、`skill_docs_policy`、whiteboard 成对测试。
 
@@ -37,6 +38,16 @@ orphan_scripts_allowlist:
   - path: dingtalk-misc/scripts/report_received_today.py
     disposition: defer
     reason: "pending report.md reference"
+
+paired_files:
+  - mono: references/products/sheet.md
+    multi: dingtalk-misc/references/sheet.md
+    mode: link-normalized
+    link_substitutions:
+      - mono: "../url-patterns.md"
+        multi: "../../dingtalk-shared/references/url-patterns.md"
+      - mono: "../intent-guide.md"
+        multi: "sheet-intent-guide.md"
 ```
 
 **处置原则**：质检失败 → 修**内容**或更新 reviewed omit；**不**改安装/升级默认。

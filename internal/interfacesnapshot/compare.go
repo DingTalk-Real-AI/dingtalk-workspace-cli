@@ -73,6 +73,10 @@ func CompareAll(current Snapshot, references map[string]Snapshot) Report {
 //     become required; an existing path may not gain a new required flag,
 //   - new commands and flags are allowed.
 //
+// The single exception to the type rule is an individually reviewed migration
+// listed in reviewedFlagTypeChanges, and only when nothing else about the flag
+// changed. See reviewed.go.
+//
 // Comparing the effective local + inherited set is intentional. It catches a
 // persistent flag whose scope is accidentally narrowed to its declaring
 // command, while allowing a local flag to move to an ancestor without breaking
@@ -183,13 +187,20 @@ func compareEffectiveFlags(result *Comparison, acceptedPath string, oldCommand, 
 			continue
 		}
 		if oldFlag.Type != newFlag.Type {
-			result.Blocking = append(result.Blocking, Change{
-				Kind:   "flag_type_changed",
-				Path:   acceptedPath,
-				Flag:   name,
-				Before: oldFlag.Type,
-				After:  newFlag.Type,
-			})
+			// Resolve the exemption against the canonical path, not acceptedPath.
+			// An aliased command reaches this function once per accepted spelling,
+			// so keying on acceptedPath would let every alias spelling re-report a
+			// reviewed migration.
+			if !reviewedFlagTypeChange(newCommand.Path, name, oldFlag.Type, newFlag.Type) ||
+				flagContractOtherwiseChanged(oldFlag, newFlag) {
+				result.Blocking = append(result.Blocking, Change{
+					Kind:   "flag_type_changed",
+					Path:   acceptedPath,
+					Flag:   name,
+					Before: oldFlag.Type,
+					After:  newFlag.Type,
+				})
+			}
 		}
 		if !oldFlag.Required && newFlag.Required {
 			result.Blocking = append(result.Blocking, Change{
