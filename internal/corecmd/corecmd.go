@@ -58,6 +58,7 @@ import (
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
@@ -459,6 +460,9 @@ func runDeclaredPreflight(cmd *cobra.Command, args []string, spec Spec) error {
 			return err
 		}
 	}
+	if err := SyncFlagAliases(cmd); err != nil {
+		return err
+	}
 	if err := ValidateRequired(cmd, spec.Flags); err != nil {
 		return err
 	}
@@ -472,6 +476,87 @@ func runDeclaredPreflight(cmd *cobra.Command, args []string, spec Spec) error {
 		return spec.Validate(cmd, args)
 	}
 	return nil
+}
+
+// SyncFlagAliases copies explicitly provided hidden alias values onto their
+// canonical flags and rejects conflicting dual input before command transport.
+// The relation source is the same framework annotation emitted from
+// FlagSpec.Aliases, so hand-written Cobra leaves can share runtime behavior
+// without writing alias evidence outside corecmd.
+func SyncFlagAliases(cmd *cobra.Command) error {
+	if cmd == nil {
+		return nil
+	}
+	return visitFlagSets(cmd, syncFlagAliasesInSet)
+}
+
+func visitFlagSets(cmd *cobra.Command, visit func(*pflag.FlagSet) error) error {
+	for _, set := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags()} {
+		if set == nil {
+			continue
+		}
+		if err := visit(set); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func syncFlagAliasesInSet(flags *pflag.FlagSet) error {
+	var firstErr error
+	flags.VisitAll(func(aliasFlag *pflag.Flag) {
+		if firstErr != nil || aliasFlag == nil {
+			return
+		}
+		canonical := aliasTarget(aliasFlag)
+		if canonical == "" {
+			return
+		}
+		canonicalFlag := flags.Lookup(canonical)
+		if canonicalFlag == nil {
+			return
+		}
+		if canonicalFlag.Changed && aliasFlag.Changed {
+			if canonicalFlag.Value.String() != aliasFlag.Value.String() {
+				firstErr = apperrors.NewValidation(fmt.Sprintf(
+					"--%s conflicts with --%s; pass only one spelling or use the same value",
+					canonicalFlag.Name, aliasFlag.Name))
+			}
+			return
+		}
+		if aliasFlag.Changed && !canonicalFlag.Changed {
+			firstErr = flags.Set(canonicalFlag.Name, aliasFlag.Value.String())
+			return
+		}
+		if canonicalFlag.Changed && !aliasFlag.Changed {
+			firstErr = flags.Set(aliasFlag.Name, canonicalFlag.Value.String())
+		}
+	})
+	return firstErr
+}
+
+func aliasTarget(flag *pflag.Flag) string {
+	if flag == nil {
+		return ""
+	}
+	aliasOf := exactRuntimeAnnotation(flag, runtimeannotate.AnnotationFlagAliasOf)
+	origin := exactRuntimeAnnotation(flag, runtimeannotate.AnnotationFlagAliasOrigin)
+	if aliasOf == "" || origin != runtimeannotate.FlagAliasOriginCorecmdV1 {
+		return ""
+	}
+	return aliasOf
+}
+
+func exactRuntimeAnnotation(flag *pflag.Flag, key string) string {
+	values := flag.Annotations[key]
+	if len(values) != 1 {
+		return ""
+	}
+	value := strings.TrimSpace(values[0])
+	if value == "" || value != values[0] {
+		return ""
+	}
+	return value
 }
 
 // validateDispatchDecl enforces "exactly one dispatcher" at build time. Like
@@ -553,30 +638,90 @@ func RegisterFlags(cmd *cobra.Command, flags []FlagSpec) {
 				flag.Name))
 		}
 		registerFlagP(cmd, flag.Kind, flag.Name, flag.Shorthand, flag.Default, flag.Usage)
-		// Aliases are registered with the main flag's Kind, otherwise an integer
-		// alias's value would never be readable (silently dropped).
-		for _, alias := range flag.Aliases {
-			RegisterFlag(cmd, flag.Kind, alias, "", flag.Usage+" (alias)")
-			_ = cmd.Flags().MarkHidden(alias)
-			if registered := cmd.Flags().Lookup(alias); registered != nil {
-				runtimeannotate.SetFlagAnnotation(
-					registered,
-					runtimeannotate.AnnotationFlagAliasOf,
-					flag.Name,
-				)
-				runtimeannotate.SetFlagAnnotation(
-					registered,
-					runtimeannotate.AnnotationFlagAliasOrigin,
-					runtimeannotate.FlagAliasOriginCorecmdV1,
-				)
-			}
-		}
+		RegisterFlagAliases(cmd, flag)
 		if flag.MarkRequired {
 			_ = cmd.MarkFlagRequired(flag.Name)
 		}
 		if flag.Hidden {
 			_ = cmd.Flags().MarkHidden(flag.Name)
 		}
+	}
+}
+
+// RegisterFlagAliases registers hidden compatibility spellings declared through
+// FlagSpec.Aliases. It is exported for migration-state Cobra leaves that cannot
+// yet be fully built by corecmd.New but still need the same reviewed alias
+// evidence in Interface Snapshot.
+func RegisterFlagAliases(cmd *cobra.Command, flag FlagSpec) {
+	if cmd == nil || len(flag.Aliases) == 0 {
+		return
+	}
+	flags := cmd.Flags()
+	kind := flag.Kind
+	usage := flag.Usage
+	if existing := flags.Lookup(flag.Name); existing != nil {
+		kind = flagKindFromPFlag(existing)
+		if strings.TrimSpace(usage) == "" {
+			usage = existing.Usage
+		}
+	}
+	if strings.TrimSpace(usage) == "" {
+		usage = flag.Name
+	}
+	for _, alias := range flag.Aliases {
+		alias = strings.TrimSpace(alias)
+		if alias == "" || alias == flag.Name {
+			continue
+		}
+		if existing := flags.Lookup(alias); existing == nil {
+			RegisterFlag(cmd, kind, alias, "", usage+" (alias)")
+		} else if existing.Value.Type() != flagValueType(kind) {
+			panic(fmt.Sprintf(
+				"flag %q alias %q type = %s, want %s",
+				flag.Name, alias, existing.Value.Type(), flagValueType(kind)))
+		}
+		_ = flags.MarkHidden(alias)
+		if registered := flags.Lookup(alias); registered != nil {
+			runtimeannotate.SetFlagAnnotation(
+				registered,
+				runtimeannotate.AnnotationFlagAliasOf,
+				flag.Name,
+			)
+			runtimeannotate.SetFlagAnnotation(
+				registered,
+				runtimeannotate.AnnotationFlagAliasOrigin,
+				runtimeannotate.FlagAliasOriginCorecmdV1,
+			)
+		}
+	}
+}
+
+func flagKindFromPFlag(flag *pflag.Flag) FlagKind {
+	if flag == nil {
+		return KindString
+	}
+	switch flag.Value.Type() {
+	case "int":
+		return KindInt
+	case "bool":
+		return KindBool
+	case "stringSlice":
+		return KindStringSlice
+	default:
+		return KindString
+	}
+}
+
+func flagValueType(kind FlagKind) string {
+	switch kind {
+	case KindInt:
+		return "int"
+	case KindBool:
+		return "bool"
+	case KindStringSlice:
+		return "stringSlice"
+	default:
+		return "string"
 	}
 }
 

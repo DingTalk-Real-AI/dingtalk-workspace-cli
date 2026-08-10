@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
@@ -126,9 +127,9 @@ func newDingCommand() *cobra.Command {
 	dingMessageRecallCmd := &cobra.Command{
 		Use:     "recall",
 		Short:   "撤回 DING 消息",
-		Example: `  dws ding message recall --robot-code <robot-code> --id <open-ding-id>`,
+		Example: `  dws ding message recall --robot-code <robot-code> --ding-id <open-ding-id>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "id"); err != nil {
+			if err := validateRequiredFlags(cmd, "ding-id"); err != nil {
 				return err
 			}
 			robotCode := mustGetFlag(cmd, "robot-code")
@@ -140,7 +141,7 @@ func newDingCommand() *cobra.Command {
 			}
 			return callMCPTool("recall_ding_message", map[string]any{
 				"robotCode":  robotCode,
-				"openDingId": mustGetFlag(cmd, "id"),
+				"openDingId": mustGetFlag(cmd, "ding-id"),
 			})
 		},
 	}
@@ -167,10 +168,10 @@ func newDingCommand() *cobra.Command {
 				AgentSummary: "撤回已发送的机器人 DING",
 				UseWhen:      []string{"已知 openDingId 与同一 robot-code，需要撤回机器人 DING"},
 				AvoidWhen:    []string{"需要以用户身份撤回 DING 时不要使用本命令"},
-				Examples:     []string{"dws ding message recall --robot-code <ROBOT_CODE> --id <OPEN_DING_ID> --format json"},
+				Examples:     []string{"dws ding message recall --robot-code <ROBOT_CODE> --ding-id <OPEN_DING_ID> --format json"},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "id", Property: "openDingId"},
+				{Name: "ding-id", Property: "openDingId", Required: boolPtr(true)},
 			},
 		},
 	})
@@ -282,14 +283,14 @@ func newDingCommand() *cobra.Command {
 		Use:   "recall-personal",
 		Short: "以用户身份撤回 DING",
 		Long:  `以当前用户身份撤回已发送的 DING 消息。需要提供发送时返回的 openDingId。`,
-		Example: `  dws ding message recall-personal --id <openDingId>
+		Example: `  dws ding message recall-personal --ding-id <openDingId>
   # 查询 openDingId: dws ding message list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "id"); err != nil {
+			if err := validateRequiredFlags(cmd, "ding-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "recall_personal_ding", map[string]any{
-				"openDingId": mustGetFlag(cmd, "id"),
+				"openDingId": mustGetFlag(cmd, "ding-id"),
 			})
 		},
 	}
@@ -299,10 +300,12 @@ func newDingCommand() *cobra.Command {
 	dingMessageSendCmd.Flags().String("users", "", "接收人 userId 列表 (必填)")
 	dingMessageSendCmd.Flags().String("content", "", "消息内容 (必填)")
 	dingMessageRecallCmd.Flags().String("robot-code", "", "机器人 ID (必填，或设 DINGTALK_DING_ROBOT_CODE)")
-	dingMessageRecallCmd.Flags().String("id", "", "DING 消息 ID (必填)")
+	dingMessageRecallCmd.Flags().String("ding-id", "", "DING 消息 openDingId (必填)")
+	installDingIDAlias(dingMessageRecallCmd)
 	dingMessageListCmd.Flags().Int64("cursor", 0, "分页游标（首次传 0，翻页传返回的 nextCursor）")
 	dingMessageListCmd.Flags().String("type", "ALL", "消息类型: ALL / UNREAD / SEND / NEW_COMMENT / DELETED（必填，服务端不接受空值；默认 ALL 全部）")
 	dingMessageReceiverStatusCmd.Flags().String("ding-id", "", "DING 消息 openDingId (必填)")
+	installDingIDAlias(dingMessageReceiverStatusCmd)
 	_ = dingMessageReceiverStatusCmd.MarkFlagRequired("ding-id")
 	dingMessageSendPersonalCmd.Flags().String("users", "", "接收者 openDingTalkId 列表，逗号分隔 (必填)")
 	_ = dingMessageSendPersonalCmd.MarkFlagRequired("users")
@@ -310,8 +313,9 @@ func newDingCommand() *cobra.Command {
 	_ = dingMessageSendPersonalCmd.MarkFlagRequired("content")
 	dingMessageSendPersonalCmd.Flags().String("type", "app", "提醒类型: app/sms/call (默认 app)")
 	dingMessageSendPersonalCmd.Flags().String("uuid", "", "幂等唯一标识（可选，不传由服务端生成）")
-	dingMessageRecallPersonalCmd.Flags().String("id", "", "DING 消息 openDingId (必填)")
-	_ = dingMessageRecallPersonalCmd.MarkFlagRequired("id")
+	dingMessageRecallPersonalCmd.Flags().String("ding-id", "", "DING 消息 openDingId (必填)")
+	installDingIDAlias(dingMessageRecallPersonalCmd)
+	_ = dingMessageRecallPersonalCmd.MarkFlagRequired("ding-id")
 	dingMessageSendByMessageCmd.Flags().String("group", "", "原消息所在会话 openConversationId (必填)")
 	_ = dingMessageSendByMessageCmd.MarkFlagRequired("group")
 	dingMessageSendByMessageCmd.Flags().String("message-id", "", "原消息 openMessageId (必填)")
@@ -323,4 +327,23 @@ func newDingCommand() *cobra.Command {
 	dingMessageCmd.AddCommand(dingMessageSendCmd, dingMessageRecallCmd, dingMessageListCmd, dingMessageReceiverStatusCmd, dingMessageSendPersonalCmd, dingMessageRecallPersonalCmd, dingMessageSendByMessageCmd)
 	root.AddCommand(dingMessageCmd)
 	return root
+}
+
+func installDingIDAlias(cmd *cobra.Command) {
+	corecmd.RegisterFlagAliases(cmd, corecmd.FlagSpec{
+		Name:    "ding-id",
+		Kind:    corecmd.KindString,
+		Usage:   "DING 消息 openDingId (必填)",
+		Aliases: []string{"id"},
+	})
+	oldPreRunE := cmd.PreRunE
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := corecmd.SyncFlagAliases(cmd); err != nil {
+			return err
+		}
+		if oldPreRunE != nil {
+			return oldPreRunE(cmd, args)
+		}
+		return nil
+	}
 }

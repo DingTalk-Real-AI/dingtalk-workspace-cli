@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
@@ -227,6 +228,7 @@ func TestCrossPlatformCoverageChatAliasPreRunBranches(t *testing.T) {
 	cmd := &cobra.Command{Use: "edit"}
 	cmd.Flags().String("conversation-id", "", "")
 	cmd.Flags().String("group", "", "")
+	corecmd.RegisterFlagAliases(cmd, corecmd.FlagSpec{Name: "conversation-id", Aliases: []string{"group"}})
 	_ = cmd.Flags().Set("conversation-id", "cid-1")
 	preRunCalled := false
 	cmd.PreRun = func(*cobra.Command, []string) { preRunCalled = true }
@@ -243,6 +245,7 @@ func TestCrossPlatformCoverageChatAliasPreRunBranches(t *testing.T) {
 	cmdWithE := &cobra.Command{Use: "edit"}
 	cmdWithE.Flags().String("conversation-id", "", "")
 	cmdWithE.Flags().String("group", "", "")
+	corecmd.RegisterFlagAliases(cmdWithE, corecmd.FlagSpec{Name: "conversation-id", Aliases: []string{"group"}})
 	_ = cmdWithE.Flags().Set("group", "cid-2")
 	cmdWithE.PreRunE = func(*cobra.Command, []string) error { preRunECalled = true; return nil }
 	installChatAliasSync(cmdWithE)

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -151,6 +152,43 @@ func TestCrossPlatformCoverageChatGroupUpdateIconRejectsBlankMediaID(t *testing.
 	}
 	if caller.calls != 0 {
 		t.Fatalf("tool calls = %d, want 0", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageChatIDAliasConflictFailsBeforeTransport(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	caller := &productExampleCaller{}
+	err := runChatCoverageCommand(t, caller,
+		"message", "recall",
+		"--conversation-id=cid-new",
+		"--group=cid-old",
+		"--msg-id=mid",
+		"--yes")
+	if err == nil || !strings.Contains(err.Error(), "--conversation-id conflicts with --group") {
+		t.Fatalf("conflict err = %v", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("tool calls = %d, want 0", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageChatIDAliasCarriesFrameworkEvidence(t *testing.T) {
+	command, _, err := newChatCommand().Find([]string{"message", "recall"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	flag := command.Flags().Lookup("group")
+	if flag == nil || !flag.Hidden {
+		t.Fatalf("--group = %#v, want hidden alias", flag)
+	}
+	if got := flag.Annotations[runtimeannotate.AnnotationFlagAliasOf]; len(got) != 1 || got[0] != "conversation-id" {
+		t.Fatalf("--group alias_of = %#v", got)
+	}
+	if got := flag.Annotations[runtimeannotate.AnnotationFlagAliasOrigin]; len(got) != 1 || got[0] != runtimeannotate.FlagAliasOriginCorecmdV1 {
+		t.Fatalf("--group alias origin = %#v", got)
 	}
 }
 

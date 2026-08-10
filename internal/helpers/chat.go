@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
@@ -377,7 +378,7 @@ func chatCanonicalFlagNameForCommand(cmd *cobra.Command, name string) string {
 func normalizeChatAliasFlag(cmd *cobra.Command, legacy, canonical, canonicalUsage string) {
 	flags := cmd.Flags()
 	legacyFlag := flags.Lookup(legacy)
-	if legacyFlag == nil || legacyFlag.Hidden {
+	if legacyFlag == nil {
 		return
 	}
 	if flags.Lookup(canonical) == nil {
@@ -393,6 +394,12 @@ func normalizeChatAliasFlag(cmd *cobra.Command, legacy, canonical, canonicalUsag
 			_ = cmd.MarkFlagRequired(canonical)
 			clearChatRequiredFlag(legacyFlag)
 		}
+		corecmd.RegisterFlagAliases(cmd, corecmd.FlagSpec{
+			Name:    canonical,
+			Kind:    corecmd.KindString,
+			Usage:   canonicalFlag.Usage,
+			Aliases: []string{legacy},
+		})
 		installChatAliasSync(cmd)
 	}
 	legacyFlag.Hidden = true
@@ -410,14 +417,16 @@ func installChatAliasSync(cmd *cobra.Command) {
 	cmd.Annotations[chatAliasSyncAnnotation] = "true"
 	oldPreRun := cmd.PreRun
 	cmd.PreRun = func(cmd *cobra.Command, args []string) {
-		syncChatCanonicalAliasValues(cmd)
+		_ = corecmd.SyncFlagAliases(cmd)
 		if oldPreRun != nil {
 			oldPreRun(cmd, args)
 		}
 	}
 	oldPreRunE := cmd.PreRunE
 	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		syncChatCanonicalAliasValues(cmd)
+		if err := corecmd.SyncFlagAliases(cmd); err != nil {
+			return err
+		}
 		if oldPreRunE != nil {
 			return oldPreRunE(cmd, args)
 		}
@@ -425,38 +434,6 @@ func installChatAliasSync(cmd *cobra.Command) {
 			oldPreRun(cmd, args)
 		}
 		return nil
-	}
-}
-
-func syncChatCanonicalAliasValues(cmd *cobra.Command) {
-	pairs := [][2]string{
-		{"conversation-id", "group"},
-		{"conversation-id", "id"},
-		{"conversation-id", "chat"},
-		{"conversation-id", "open-conversation-id"},
-		{"user-id", "user"},
-		{"user-id", "userId"},
-		{"message-id", "msg-id"},
-		{"message-id", "open-message-id"},
-	}
-	for _, pair := range pairs {
-		syncChatAliasValue(cmd, pair[0], pair[1])
-	}
-}
-
-func syncChatAliasValue(cmd *cobra.Command, canonical, legacy string) {
-	flags := cmd.Flags()
-	canonicalFlag := flags.Lookup(canonical)
-	legacyFlag := flags.Lookup(legacy)
-	if canonicalFlag == nil || legacyFlag == nil {
-		return
-	}
-	if canonicalFlag.Changed && !legacyFlag.Changed {
-		_ = flags.Set(legacy, canonicalFlag.Value.String())
-		return
-	}
-	if legacyFlag.Changed && !canonicalFlag.Changed {
-		_ = flags.Set(canonical, legacyFlag.Value.String())
 	}
 }
 
