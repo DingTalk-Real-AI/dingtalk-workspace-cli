@@ -1,7 +1,7 @@
 // Copyright 2026 Alibaba Group
 // Licensed under the Apache License, Version 2.0 (the "License");
 //
-// Mono↔multi skill content QA (G1–G4). Spec: docs/skill-mono-multi-qa.md
+// Mono↔multi skill content QA (G1–G5). Spec: docs/skill-mono-multi-qa.md
 // Contract: skills/content-qa/mono-multi-coverage.yaml
 
 package unit_test
@@ -9,8 +9,11 @@ package unit_test
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -41,10 +44,16 @@ type monoMultiQAContract struct {
 		ExpectedMulti string `yaml:"expected_multi"`
 	} `yaml:"omit_global"`
 	PairedFiles []struct {
+		Mono              string                      `yaml:"mono"`
+		Multi             string                      `yaml:"multi"`
+		Mode              string                      `yaml:"mode"`
+		LinkSubstitutions []monoMultiLinkSubstitution `yaml:"link_substitutions"`
+	} `yaml:"paired_files"`
+	PairedTrees []struct {
 		Mono  string `yaml:"mono"`
 		Multi string `yaml:"multi"`
 		Mode  string `yaml:"mode"`
-	} `yaml:"paired_files"`
+	} `yaml:"paired_trees"`
 	OrphanScriptsAllowlist []struct {
 		Path        string `yaml:"path"`
 		Disposition string `yaml:"disposition"`
@@ -52,6 +61,24 @@ type monoMultiQAContract struct {
 	} `yaml:"orphan_scripts_allowlist"`
 	SkillsWithoutReferencesAllowlist []string `yaml:"skills_without_references_allowlist"`
 }
+
+type monoMultiLinkSubstitution struct {
+	Mono  string `yaml:"mono"`
+	Multi string `yaml:"multi"`
+}
+
+type markdownLink struct {
+	Line   int
+	Target string
+}
+
+type markdownLinkIssue struct {
+	Link     markdownLink
+	Resolved string
+	Err      error
+}
+
+var inlineMarkdownLinkPattern = regexp.MustCompile(`!?\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^)\s\n]+)(?:\s+[^)\n]+)?\)`)
 
 func loadMonoMultiQAContract(t *testing.T) (string, monoMultiQAContract) {
 	t.Helper()
@@ -255,13 +282,50 @@ func TestMonoMultiSkillContentG4Drift(t *testing.T) {
 		if mode == "" {
 			mode = "identical"
 		}
-		switch mode {
-		case "identical":
-			if !bytes.Equal(monoData, multiData) {
-				t.Errorf("G4: paired files differ: mono %s vs multi %s", pair.Mono, pair.Multi)
+		if err := comparePairedFileContent(monoData, multiData, mode, pair.LinkSubstitutions); err != nil {
+			t.Errorf("G4: paired file mono %s vs multi %s: %v", pair.Mono, pair.Multi, err)
+		}
+	}
+
+	for _, pair := range c.PairedTrees {
+		if pair.Mono == "" || pair.Multi == "" {
+			t.Fatalf("G4: paired tree requires mono and multi paths: %+v", pair)
+		}
+		mode := pair.Mode
+		if mode == "" {
+			mode = "identical"
+		}
+		if mode != "identical" {
+			t.Errorf("G4: unknown paired tree mode %q", mode)
+			continue
+		}
+
+		monoDir := filepath.Join(root, "skills", "mono", filepath.FromSlash(pair.Mono))
+		multiDir := filepath.Join(multiRoot, filepath.FromSlash(pair.Multi))
+		monoFiles, err := readRelativeFileTree(monoDir)
+		if err != nil {
+			t.Errorf("G4: paired mono tree %s: %v", pair.Mono, err)
+			continue
+		}
+		multiFiles, err := readRelativeFileTree(multiDir)
+		if err != nil {
+			t.Errorf("G4: paired multi tree %s: %v", pair.Multi, err)
+			continue
+		}
+		for rel, monoData := range monoFiles {
+			multiData, ok := multiFiles[rel]
+			if !ok {
+				t.Errorf("G4: paired multi tree %s missing %s from mono %s", pair.Multi, rel, pair.Mono)
+				continue
 			}
-		default:
-			t.Errorf("G4: unknown paired mode %q", mode)
+			if !bytes.Equal(monoData, multiData) {
+				t.Errorf("G4: paired tree file differs: mono %s/%s vs multi %s/%s", pair.Mono, rel, pair.Multi, rel)
+			}
+		}
+		for rel := range multiFiles {
+			if _, ok := monoFiles[rel]; !ok {
+				t.Errorf("G4: paired mono tree %s missing %s from multi %s", pair.Mono, rel, pair.Multi)
+			}
 		}
 	}
 
@@ -316,6 +380,396 @@ func TestMonoMultiSkillContentG4Drift(t *testing.T) {
 			t.Errorf("G4: orphan allowlist path missing on disk: %s", path)
 		}
 	}
+}
+
+func TestMonoMultiSkillContentG5RelativeLinks(t *testing.T) {
+	root, c := loadMonoMultiQAContract(t)
+	multiRoot := filepath.Join(root, "skills", "multi")
+	sources := map[string]bool{}
+
+	for _, pair := range c.PairedFiles {
+		if pair.Mono == "" || pair.Multi == "" {
+			t.Fatalf("G5: paired file requires mono and multi paths: %+v", pair)
+		}
+		sources[filepath.Join(root, "skills", "mono", filepath.FromSlash(pair.Mono))] = true
+		sources[filepath.Join(multiRoot, filepath.FromSlash(pair.Multi))] = true
+	}
+	for _, pair := range c.PairedTrees {
+		if pair.Mono == "" || pair.Multi == "" {
+			t.Fatalf("G5: paired tree requires mono and multi paths: %+v", pair)
+		}
+		trees := []string{
+			filepath.Join(root, "skills", "mono", filepath.FromSlash(pair.Mono)),
+			filepath.Join(multiRoot, filepath.FromSlash(pair.Multi)),
+		}
+		for _, tree := range trees {
+			files, err := readRelativeFileTree(tree)
+			if err != nil {
+				t.Errorf("G5: read paired Markdown tree %s: %v", tree, err)
+				continue
+			}
+			for rel := range files {
+				sources[filepath.Join(tree, filepath.FromSlash(rel))] = true
+			}
+		}
+	}
+
+	paths := make([]string, 0, len(sources))
+	for path := range sources {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, source := range paths {
+		if !strings.EqualFold(filepath.Ext(source), ".md") {
+			continue
+		}
+		data, err := os.ReadFile(source)
+		if err != nil {
+			t.Errorf("G5: read %s: %v", source, err)
+			continue
+		}
+		rel, relErr := filepath.Rel(root, source)
+		if relErr != nil {
+			rel = source
+		}
+		for _, issue := range unresolvedRelativeMarkdownLinks(root, source, data) {
+			resolved := issue.Resolved
+			if resolved != "" {
+				if resolvedRel, err := filepath.Rel(root, resolved); err == nil {
+					resolved = filepath.ToSlash(resolvedRel)
+				}
+			}
+			t.Errorf("G5: %s:%d relative link %q resolves to %q: %v", filepath.ToSlash(rel), issue.Link.Line, issue.Link.Target, resolved, issue.Err)
+		}
+	}
+}
+
+func TestMonoMultiSkillContentLinkNormalization(t *testing.T) {
+	rules := []monoMultiLinkSubstitution{
+		{Mono: "../url-patterns.md", Multi: "../../dingtalk-shared/references/url-patterns.md"},
+		{Mono: "../intent-guide.md", Multi: "sheet-intent-guide.md"},
+	}
+	mono := []byte("url=../url-patterns.md\nintent=../intent-guide.md\n")
+	multi := []byte("url=../../dingtalk-shared/references/url-patterns.md\nintent=sheet-intent-guide.md\n")
+	if err := comparePairedFileContent(mono, multi, "link-normalized", rules); err != nil {
+		t.Fatalf("valid substitutions rejected: %v", err)
+	}
+	if err := comparePairedFileContent(mono, append(multi, []byte("drift\n")...), "link-normalized", rules); err == nil {
+		t.Fatal("unknown content drift must not be normalized away")
+	}
+	if err := comparePairedFileContent(mono, multi, "identical", rules); err == nil {
+		t.Fatal("identical mode must reject link substitutions")
+	}
+	if err := comparePairedFileContent(mono, multi, "unknown", nil); err == nil {
+		t.Fatal("unknown paired-file mode must fail closed")
+	}
+}
+
+func TestMonoMultiSkillContentLinkNormalizationRejectsInvalidRules(t *testing.T) {
+	tests := []struct {
+		name  string
+		mono  string
+		multi string
+		rules []monoMultiLinkSubstitution
+	}{
+		{name: "no rules", mono: "m1", multi: "x1"},
+		{name: "empty mono", mono: "m1", multi: "x1", rules: []monoMultiLinkSubstitution{{Multi: "x1"}}},
+		{name: "empty multi", mono: "m1", multi: "x1", rules: []monoMultiLinkSubstitution{{Mono: "m1"}}},
+		{name: "same sides", mono: "m1", multi: "m1", rules: []monoMultiLinkSubstitution{{Mono: "m1", Multi: "m1"}}},
+		{name: "duplicate mono", mono: "m1", multi: "x1 x2", rules: []monoMultiLinkSubstitution{{Mono: "m1", Multi: "x1"}, {Mono: "m1", Multi: "x2"}}},
+		{name: "duplicate multi", mono: "m1 m2", multi: "x1", rules: []monoMultiLinkSubstitution{{Mono: "m1", Multi: "x1"}, {Mono: "m2", Multi: "x1"}}},
+		{name: "overlapping mono", mono: "m1 m", multi: "x1 x2", rules: []monoMultiLinkSubstitution{{Mono: "m", Multi: "x1"}, {Mono: "m1", Multi: "x2"}}},
+		{name: "missing occurrence", mono: "m1", multi: "x1", rules: []monoMultiLinkSubstitution{{Mono: "m2", Multi: "x1"}}},
+		{name: "multiple occurrences", mono: "m1 m1", multi: "x1", rules: []monoMultiLinkSubstitution{{Mono: "m1", Multi: "x1"}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, _, err := normalizePairedFileLinks([]byte(tt.mono), []byte(tt.multi), tt.rules); err == nil {
+				t.Fatal("invalid substitution rules must fail closed")
+			}
+		})
+	}
+}
+
+func TestMonoMultiSkillContentRelativeLinkScanner(t *testing.T) {
+	root := t.TempDir()
+	docs := filepath.Join(root, "docs")
+	if err := os.MkdirAll(filepath.Join(docs, "sheet"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(docs, "topic.md"), []byte("# Topic\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("[topic](./topic.md#section)\n[directory](./sheet/)\n[external](https://example.com/a)\n[email](mailto:test@example.com)\n[anchor](#section)\n`[inline](missing-inline.md)`\n```text\n[fenced](missing-fenced.md)\n```\n[missing](missing.md)\n[escape](../../escape.md)\n")
+	issues := unresolvedRelativeMarkdownLinks(root, filepath.Join(docs, "source.md"), body)
+	if len(issues) != 2 {
+		t.Fatalf("got %d unresolved links, want 2: %+v", len(issues), issues)
+	}
+	if issues[0].Link.Target != "missing.md" || issues[0].Link.Line != 10 {
+		t.Fatalf("unexpected unresolved link: %+v", issues[0])
+	}
+	if issues[1].Link.Target != "../../escape.md" || issues[1].Link.Line != 11 || !strings.Contains(issues[1].Err.Error(), "escapes repository") {
+		t.Fatalf("unexpected escaping link: %+v", issues[1])
+	}
+}
+
+func TestMonoMultiSkillContentReadRelativeFileTreeFiltersNonMarkdown(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"nested", ".hidden"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := map[string]string{
+		"guide.md":          "visible",
+		"nested/topic.md":   "nested",
+		"notes.txt":         "ignored",
+		".DS_Store":         "ignored",
+		".draft.md":         "ignored",
+		".hidden/topic.md":  "ignored",
+		"nested/README.MD":  "accepted",
+		"nested/.hidden.md": "ignored",
+	}
+	for rel, body := range files {
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(rel)), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := readRelativeFileTree(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"guide.md", "nested/README.MD", "nested/topic.md"}
+	gotNames := make([]string, 0, len(got))
+	for rel := range got {
+		gotNames = append(gotNames, rel)
+	}
+	sort.Strings(gotNames)
+	if strings.Join(gotNames, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("visible Markdown tree = %v, want %v", gotNames, want)
+	}
+}
+
+func comparePairedFileContent(monoData, multiData []byte, mode string, substitutions []monoMultiLinkSubstitution) error {
+	switch mode {
+	case "identical":
+		if len(substitutions) != 0 {
+			return fmt.Errorf("identical mode does not allow link_substitutions")
+		}
+		if !bytes.Equal(monoData, multiData) {
+			return fmt.Errorf("contents differ")
+		}
+		return nil
+	case "link-normalized":
+		monoNormalized, multiNormalized, err := normalizePairedFileLinks(monoData, multiData, substitutions)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(monoNormalized, multiNormalized) {
+			return fmt.Errorf("contents differ after declared link substitutions")
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown paired mode %q", mode)
+	}
+}
+
+func normalizePairedFileLinks(monoData, multiData []byte, substitutions []monoMultiLinkSubstitution) ([]byte, []byte, error) {
+	if len(substitutions) == 0 {
+		return nil, nil, fmt.Errorf("link-normalized mode requires link_substitutions")
+	}
+	for i, substitution := range substitutions {
+		if substitution.Mono == "" || substitution.Multi == "" {
+			return nil, nil, fmt.Errorf("link_substitutions[%d] requires non-empty mono and multi values", i)
+		}
+		if substitution.Mono == substitution.Multi {
+			return nil, nil, fmt.Errorf("link_substitutions[%d] must describe a layout difference", i)
+		}
+		for j := 0; j < i; j++ {
+			previous := substitutions[j]
+			if strings.Contains(substitution.Mono, previous.Mono) || strings.Contains(previous.Mono, substitution.Mono) {
+				return nil, nil, fmt.Errorf("link_substitutions[%d].mono overlaps link_substitutions[%d].mono", i, j)
+			}
+			if strings.Contains(substitution.Multi, previous.Multi) || strings.Contains(previous.Multi, substitution.Multi) {
+				return nil, nil, fmt.Errorf("link_substitutions[%d].multi overlaps link_substitutions[%d].multi", i, j)
+			}
+		}
+		if count := bytes.Count(monoData, []byte(substitution.Mono)); count != 1 {
+			return nil, nil, fmt.Errorf("link_substitutions[%d].mono occurs %d times, want exactly 1", i, count)
+		}
+		if count := bytes.Count(multiData, []byte(substitution.Multi)); count != 1 {
+			return nil, nil, fmt.Errorf("link_substitutions[%d].multi occurs %d times, want exactly 1", i, count)
+		}
+	}
+
+	monoNormalized := bytes.Clone(monoData)
+	multiNormalized := bytes.Clone(multiData)
+	for i, substitution := range substitutions {
+		marker := []byte(fmt.Sprintf("\x00DWS_LINK_SUBSTITUTION_%d\x00", i))
+		if bytes.Contains(monoNormalized, marker) || bytes.Contains(multiNormalized, marker) {
+			return nil, nil, fmt.Errorf("link_substitutions[%d] normalization marker already exists in content", i)
+		}
+		monoNormalized = bytes.Replace(monoNormalized, []byte(substitution.Mono), marker, 1)
+		multiNormalized = bytes.Replace(multiNormalized, []byte(substitution.Multi), marker, 1)
+	}
+	return monoNormalized, multiNormalized, nil
+}
+
+func unresolvedRelativeMarkdownLinks(repoRoot, source string, body []byte) []markdownLinkIssue {
+	var issues []markdownLinkIssue
+	for _, link := range extractMarkdownLinks(body) {
+		targetPath, check, err := relativeMarkdownTargetPath(link.Target)
+		if err != nil {
+			issues = append(issues, markdownLinkIssue{Link: link, Err: err})
+			continue
+		}
+		if !check {
+			continue
+		}
+		resolved := filepath.Clean(filepath.Join(filepath.Dir(source), filepath.FromSlash(targetPath)))
+		rel, err := filepath.Rel(repoRoot, resolved)
+		if err != nil {
+			issues = append(issues, markdownLinkIssue{Link: link, Resolved: resolved, Err: err})
+			continue
+		}
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			issues = append(issues, markdownLinkIssue{Link: link, Resolved: resolved, Err: fmt.Errorf("target escapes repository")})
+			continue
+		}
+		if _, err := os.Stat(resolved); err != nil {
+			issues = append(issues, markdownLinkIssue{Link: link, Resolved: resolved, Err: err})
+			continue
+		}
+		realRoot, err := filepath.EvalSymlinks(repoRoot)
+		if err != nil {
+			issues = append(issues, markdownLinkIssue{Link: link, Resolved: resolved, Err: fmt.Errorf("resolve repository path: %w", err)})
+			continue
+		}
+		realTarget, err := filepath.EvalSymlinks(resolved)
+		if err != nil {
+			issues = append(issues, markdownLinkIssue{Link: link, Resolved: resolved, Err: fmt.Errorf("resolve target path: %w", err)})
+			continue
+		}
+		realRel, err := filepath.Rel(realRoot, realTarget)
+		if err != nil || realRel == ".." || strings.HasPrefix(realRel, ".."+string(os.PathSeparator)) {
+			if err == nil {
+				err = fmt.Errorf("target escapes repository through a symbolic link")
+			}
+			issues = append(issues, markdownLinkIssue{Link: link, Resolved: resolved, Err: err})
+		}
+	}
+	return issues
+}
+
+func extractMarkdownLinks(body []byte) []markdownLink {
+	var links []markdownLink
+	var fence byte
+	for i, line := range strings.Split(string(body), "\n") {
+		if marker := markdownFenceMarker(line); marker != 0 {
+			if fence == 0 {
+				fence = marker
+			} else if fence == marker {
+				fence = 0
+			}
+			continue
+		}
+		if fence != 0 {
+			continue
+		}
+		masked := maskInlineMarkdownCode(line)
+		for _, match := range inlineMarkdownLinkPattern.FindAllStringSubmatch(masked, -1) {
+			target := match[1]
+			if strings.HasPrefix(target, "<") && strings.HasSuffix(target, ">") {
+				target = strings.TrimSuffix(strings.TrimPrefix(target, "<"), ">")
+			}
+			links = append(links, markdownLink{Line: i + 1, Target: target})
+		}
+	}
+	return links
+}
+
+func markdownFenceMarker(line string) byte {
+	trimmed := strings.TrimLeft(line, " \t")
+	if strings.HasPrefix(trimmed, "```") {
+		return '`'
+	}
+	if strings.HasPrefix(trimmed, "~~~") {
+		return '~'
+	}
+	return 0
+}
+
+func maskInlineMarkdownCode(line string) string {
+	masked := []byte(line)
+	for i := 0; i < len(masked); {
+		if masked[i] != '`' {
+			i++
+			continue
+		}
+		endOfOpener := i
+		for endOfOpener < len(masked) && masked[endOfOpener] == '`' {
+			endOfOpener++
+		}
+		marker := masked[i:endOfOpener]
+		closingOffset := bytes.Index(masked[endOfOpener:], marker)
+		if closingOffset < 0 {
+			i = endOfOpener
+			continue
+		}
+		end := endOfOpener + closingOffset + len(marker)
+		for j := i; j < end; j++ {
+			masked[j] = ' '
+		}
+		i = end
+	}
+	return string(masked)
+}
+
+func relativeMarkdownTargetPath(target string) (string, bool, error) {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return "", false, fmt.Errorf("parse target: %w", err)
+	}
+	if parsed.Scheme != "" || parsed.Host != "" || strings.HasPrefix(target, "//") || strings.HasPrefix(parsed.Path, "/") {
+		return "", false, nil
+	}
+	if parsed.Path == "" {
+		return "", false, nil
+	}
+	path, err := url.PathUnescape(parsed.Path)
+	if err != nil {
+		return "", false, fmt.Errorf("decode target path: %w", err)
+	}
+	return path, true, nil
+}
+
+func readRelativeFileTree(root string) (map[string][]byte, error) {
+	files := map[string][]byte{}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if path != root && strings.HasPrefix(entry.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(entry.Name(), ".") || !strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(rel)] = data
+		return nil
+	})
+	return files, err
 }
 
 type skillFrontmatter struct {

@@ -34,6 +34,7 @@
 | "百分比面积" | 百分比堆积面积图（areaPercentStacked） | 占比式面积 |
 | "散点图"、"相关性" | 散点图（scatter） | 两变量相关性 |
 | "雷达图"、"多维度" | 雷达图（radar） | 多维度对比 |
+| "柱+线"、"组合图"、"双轴" | 组合图（combo） | 多种图表叠加，支持副轴 |
 
 **多图表需求**：当用户同时提到多种分析（如"统计占比 + 对比数量"），必须创建多个图表，每个对应一种类型，不要只做一个。
 
@@ -54,8 +55,6 @@ Flags:
       --sheet-id string   工作表 ID 或名称 (必填)
       --chart-id string   浮动图表 ID (可选，不传则返回全部)
 ```
-
-- **判空看 `totalCount` / `message`，不要看数组长度**：无图表时 `floatCharts` 数组里仍会带 1 个全 null 的幽灵元素（`chart.category`/`chart.series` 全 null，无 id），但 `totalCount` 为 0、`message` 为「Successfully retrieved 0 float chart(s).」。判断有没有图表以 `totalCount` 为准，或过滤掉没有 `id` 的元素。
 
 ### 创建浮动图表
 ```
@@ -130,7 +129,7 @@ Flags:
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `row` | number | 是 | 锚点行索引（0-based），如 0 表示第一行 |
-| `col` | string | 是 | 锚点列。使用字母表示法（`"A"`=第1列, `"B"`=第2列, `"Z"`=第26列, `"AA"`=第27列），不支持数字形式 |
+| `col` | string/number | 是 | 锚点列。支持字母表示法（`"A"`=第1列, `"B"`=第2列, `"Z"`=第26列, `"AA"`=第27列）或 0-based 数字（`0`=第1列） |
 
 **offset 字段**（可选，不传时默认 0）：
 
@@ -150,9 +149,10 @@ Flags:
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `type` | string | 是 | 图表类型，枚举值：`column` / `bar` / `columnStacked` / `barStacked` / `line` / `lineStacked` / `area` / `areaStacked` / `areaPercentStacked` / `pie` / `doughnut` / `scatter` / `radar` |
-| `series` | object[] | 是 | 数据系列数组，至少一项，详见下方 series 字段表 |
-| `category` | string[] | 否 | 分类轴（X轴）数据区域，A1 表示法字符串数组（如 `["A2:A10"]`） |
+| `type` | string | 是 | 图表类型，枚举值：`column` / `bar` / `columnStacked` / `barStacked` / `line` / `lineStacked` / `area` / `areaStacked` / `areaPercentStacked` / `pie` / `doughnut` / `scatter` / `radar` / `combo` |
+| `series` | object[] | 非 combo 必填 | 数据系列数组，至少一项，详见下方 series 字段表。combo 类型不使用此字段 |
+| `subCharts` | object[] | combo 必填 | 组合图子图数组，至少一项，详见下方 subCharts 字段表。仅 combo 类型使用 |
+| `category` | string[] | 否 | 分类轴（X轴）数据区域，A1 表示法字符串数组（如 `["A2:A10"]`）。combo 类型在 subCharts 内声明 |
 | `title` | object | 否 | 图表标题配置，详见下方 title 字段表 |
 | `legend` | object | 否 | 图例配置，详见下方 legend 字段表 |
 | `catAx` | object | 否 | 分类轴（X轴）样式配置，详见下方轴配置表 |
@@ -164,6 +164,15 @@ Flags:
 |------|------|------|------|
 | `name` | string | 否 | 系列名称的单元格引用，A1 表示法（如 `"B1"`）。不传时图例显示为"系列1"等默认名 |
 | `value` | string[] | 是 | 系列数据区域，A1 表示法字符串数组（如 `["B2:B10"]`）。每个元素为一段连续区域 |
+
+**subCharts 数组项**（仅 combo 类型）：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `type` | string | 是 | 子图类型，仅允许笛卡尔坐标系类型：`column` / `bar` / `columnStacked` / `barStacked` / `line` / `lineStacked` / `area` / `areaStacked` / `areaPercentStacked`。不允许 pie/doughnut/scatter/radar/combo |
+| `series` | object[] | 是 | 子图数据系列，格式同上方 series 数组项 |
+| `category` | string[] | 是 | 子图分类轴数据区域（笛卡尔坐标系必须提供） |
+| `useSecondaryAxis` | boolean | 否 | 是否使用副轴（右侧 Y 轴），默认 false |
 
 **title 字段**：
 
@@ -199,7 +208,7 @@ Flags:
 - 格式：`"A2:B10"`（默认使用 `--sheet-id` 对应的工作表）
 - 跨 sheet 引用：`"SHEET_ID!A2:B10"`（前缀为工作表 ID）
 - 单元格引用：`"B1"`（等同于 `"B1:B1"`）
-- MCP 内部自动将 A1 引用转换为 ISheetRange 结构，CLI 直接透传即可
+- 直接传 A1 表示法字符串即可，命令会处理成图表所需的区域引用
 
 ## 图表位置选择（创建前必做）
 
@@ -277,32 +286,19 @@ dws sheet chart create --node <NODE_ID> --sheet-id <SHEET_ID> --properties '{
   }
 }'
 
-# ── 工作流 4: 多图表组合分析 ──
-# 当用户需要"柱+线"等多种图表组合分析时，分别创建对应类型的图表：
+# ── 工作流 4: 创建组合图（combo）──
+# 当用户需要"柱+线"叠加、双轴对比时，使用 combo 类型：
 
-# 创建柱形图
 dws sheet chart create --node <NODE_ID> --sheet-id <SHEET_ID> --properties '{
   "position": {"row": 40, "col": "A"},
-  "dimensions": {"width": 700, "height": 450},
+  "dimensions": {"width": 800, "height": 500},
   "chart": {
-    "type": "column",
-    "series": [{"name": "B1", "value": ["B2:B10"]}],
-    "category": ["A2:A10"],
-    "title": {"show": true, "text": "销售额"},
-    "legend": {"show": true, "pos": "t"}
-  }
-}'
-
-# 创建折线图
-dws sheet chart create --node <NODE_ID> --sheet-id <SHEET_ID> --properties '{
-  "position": {"row": 40, "col": "J"},
-  "dimensions": {"width": 700, "height": 450},
-  "chart": {
-    "type": "line",
-    "series": [{"name": "C1", "value": ["C2:C10"]}],
-    "category": ["A2:A10"],
-    "title": {"show": true, "text": "增长率"},
-    "legend": {"show": true, "pos": "t"}
+    "type": "combo",
+    "subCharts": [
+      {"type": "column", "series": [{"name": "B1", "value": ["B2:B10"]}], "category": ["A2:A10"]},
+      {"type": "line", "series": [{"name": "C1", "value": ["C2:C10"]}], "category": ["A2:A10"], "useSecondaryAxis": true}
+    ],
+    "title": {"show": true, "text": "销售额与增长率"}
   }
 }'
 ```
@@ -344,10 +340,10 @@ dws sheet chart update --node <NODE_ID> --sheet-id <SHEET_ID> --chart-id <CHART_
 
 - [强制] **`--sheet-id` 获取规范**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
 - [强制] **创建后必须验证**：图表创建后必须调用 `chart list` 验证配置是否正确
-- ⚠️ **`chart list` 判空看 `totalCount` 不看数组长度**：无图表时 `floatCharts` 仍含 1 个全 null 幽灵元素（无 id），`totalCount` 为 0、`message` 说明为空。判断有没有图表以 `totalCount` 为准或过滤无 `id` 的元素
 - [强制] **chart-id 禁止臆测**：必须通过 `chart list` 获取真实的图表 ID，不可编造
-- **图表类型映射**：用户说"柱形图"用 `column`，"条形图"（横向）用 `bar`，"散点图"用 `scatter`，"雷达图"用 `radar`，"环形图"用 `doughnut`
+- **图表类型映射**：用户说"柱形图"用 `column`，"条形图"（横向）用 `bar`，"散点图"用 `scatter`，"雷达图"用 `radar`，"环形图"用 `doughnut`，"柱+线/组合/双轴"用 `combo`
 - **堆积类型后缀**：堆叠版本的图表在基本类型后加 `Stacked`（如 `columnStacked`、`lineStacked`、`areaStacked`）
+- **combo 组合图**：不用顶层 `series`/`category`，改用 `chart.subCharts` 数组，每个子图独立声明 `type`/`series`/`category`，可选 `useSecondaryAxis: true` 指定副轴。子图 type 仅允许笛卡尔坐标系类型（column/bar/line/area 及其 Stacked 变体），不允许 pie/doughnut/scatter/radar/combo
 - **位置不得压在数据区上**：图表浮层会遮挡原始数据，必须放在空白区域
 - **多图表需求**：多次调用 `chart create`，不要试图用一个图表包含所有分析
 - **跨 sheet 引用数据**：在 A1 区域前加 `SHEET_ID!` 前缀，如 `"sheetXXX!A2:B10"`
