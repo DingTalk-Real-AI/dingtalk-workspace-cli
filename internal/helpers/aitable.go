@@ -16,6 +16,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/paging"
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
@@ -123,6 +124,70 @@ func resolveWorkflowDSL(cmd *cobra.Command) (map[string]any, error) {
 		return nil, fmt.Errorf("--dsl must be a JSON object, got null")
 	}
 	return dsl, nil
+}
+
+func validateWorkflowRunFlags(cmd *cobra.Command, _ []string) error {
+	tableID, _ := cmd.Flags().GetString("table-id")
+	tableID = strings.TrimSpace(tableID)
+	recordIDs, _ := cmd.Flags().GetStringSlice("record-ids")
+	cleaned := make([]string, 0, len(recordIDs))
+	seen := make(map[string]struct{}, len(recordIDs))
+	for _, recordID := range recordIDs {
+		recordID = strings.TrimSpace(recordID)
+		if recordID == "" {
+			continue
+		}
+		if _, ok := seen[recordID]; ok {
+			return apperrors.NewValidation(fmt.Sprintf("--record-ids 不能包含重复值 %q", recordID))
+		}
+		seen[recordID] = struct{}{}
+		cleaned = append(cleaned, recordID)
+	}
+	if cmd.Flags().Changed("table-id") && tableID == "" {
+		return apperrors.NewValidation("--table-id 不能为空")
+	}
+	if cmd.Flags().Changed("record-ids") && len(cleaned) == 0 {
+		return apperrors.NewValidation("--record-ids 必须包含 1 到 5 个非空记录 ID")
+	}
+	if len(cleaned) > 5 {
+		return apperrors.NewValidation(fmt.Sprintf("--record-ids 最多支持 5 个记录 ID，got %d", len(cleaned)))
+	}
+	if (tableID != "") != (len(cleaned) > 0) {
+		return apperrors.NewValidation("--table-id 与 --record-ids 必须同时提供；定时触发工作流则两者都不传")
+	}
+	return nil
+}
+
+func validateWorkflowHistoryFlags(cmd *cobra.Command, _ []string) error {
+	if cmd.Flags().Changed("page") {
+		page, _ := cmd.Flags().GetInt("page")
+		if page < 0 {
+			return apperrors.NewValidation(fmt.Sprintf("--page 必须 >= 0，got %d", page))
+		}
+	}
+	if cmd.Flags().Changed("size") {
+		size, _ := cmd.Flags().GetInt("size")
+		if size < 1 || size > 100 {
+			return apperrors.NewValidation(fmt.Sprintf("--size 必须在 [1, 100] 范围内，got %d", size))
+		}
+	}
+	for _, name := range []string{"after-time", "before-time"} {
+		if !cmd.Flags().Changed(name) {
+			continue
+		}
+		value, _ := cmd.Flags().GetInt(name)
+		if value < 0 {
+			return apperrors.NewValidation(fmt.Sprintf("--%s 必须是 >= 0 的 Unix 毫秒时间戳，got %d", name, value))
+		}
+	}
+	if cmd.Flags().Changed("after-time") && cmd.Flags().Changed("before-time") {
+		afterTime, _ := cmd.Flags().GetInt("after-time")
+		beforeTime, _ := cmd.Flags().GetInt("before-time")
+		if afterTime >= beforeTime {
+			return apperrors.NewValidation(fmt.Sprintf("--after-time 必须小于 --before-time，got %d >= %d", afterTime, beforeTime))
+		}
+	}
+	return nil
 }
 
 // recordQueryFetchAll implements --all auto-pagination for record query.
@@ -1038,7 +1103,7 @@ func newAitableCommand() *cobra.Command {
   dws aitable form       [list|delete|update]                                           表单管理
   dws aitable form field [list|update|hide]                                             表单字段管理
   dws aitable form share [get|update|notify]                                            表单分享管理
-  dws aitable workflow   [edit-example|create|update|enable|disable|get|list]           自动化工作流管理
+  dws aitable workflow   [edit-example|create|update|enable|disable|run|history|get|list] 自动化工作流管理
   dws aitable dashboard  [get|create|update|delete|config-example]                      仪表盘管理
   dws aitable chart      [get|create|update|delete|widgets-example]                     图表管理
   dws aitable export     data                                                           数据导出
@@ -4878,7 +4943,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 
 	workflowCmd := &cobra.Command{
 		Use:   "workflow",
-		Short: "自动化工作流管理（创建 / 更新 / 启停 / 查看 / 列表）",
+		Short: "自动化工作流管理（创建 / 更新 / 启停 / 执行 / 历史 / 查询）",
 		RunE:  groupRunE,
 	}
 
@@ -5219,6 +5284,116 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 				UseWhen:      []string{"查看有哪些工作流及 status/flowId 时"},
 				AvoidWhen:    []string{"CLI 不能新建/修改/删除工作流；启用/禁用用 enable/disable"},
 				Examples:     []string{"dws aitable workflow list --base-id <BASE_ID>"},
+			},
+		},
+	})
+
+	workflowRunCmd := NewLeafCommand(LeafSpec{
+		Use:   "run",
+		Short: "执行指定自动化工作流",
+		Long: `立即执行指定 Base 中的自动化工作流。此命令会启动真实的异步执行，并可能产生该工作流配置的消息发送、记录写入等副作用，因此执行前需要确认；CLI 不自动重试。
+
+记录类触发器必须同时提供 --table-id 与 --record-ids；--table-id 必须与触发器绑定的数据表一致，--record-ids 接受 1 到 5 个不重复记录 ID。定时触发器不传这两个参数。
+返回每条记录的提交状态；提交成功项包含 executionId，可用 workflow history 返回项的 instanceId 匹配执行记录。`,
+		Example: `  dws aitable workflow run --base-id BASE_ID --workflow-id WORKFLOW_ID --table-id TABLE_ID --record-ids RECORD_ID_1,RECORD_ID_2
+  dws aitable workflow run --base-id BASE_ID --workflow-id WORKFLOW_ID`,
+		Tool: "run_workflow",
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Validate: validateWorkflowRunFlags,
+		Flags: []LeafFlag{
+			{Name: "base-id", Usage: "目标 Base ID (必填)", Bind: "baseId", Trim: true, Required: true, Aliases: []string{"base"}},
+			{Name: "workflow-id", Usage: "目标工作流 ID (必填)", Bind: "workflowId", Trim: true, Required: true},
+			{Name: "table-id", Usage: "记录类触发器绑定的 Table ID；定时触发器不传", Bind: "tableId", Trim: true, OmitEmpty: true, RequiredWhen: "record-ids is provided or the workflow uses a record-based trigger"},
+			{Name: "record-ids", Usage: "触发工作流的记录 ID，逗号分隔；记录类触发器必填，1 到 5 个且不可重复", Kind: LeafStringSlice, Bind: "recordIds", RequiredWhen: "table-id is provided or the workflow uses a record-based trigger"},
+		},
+		Constraints: []LeafConstraint{{
+			Kind:        corecmd.Custom,
+			Flags:       []string{"table-id", "record-ids"},
+			Description: "记录类触发器必须同时提供 --table-id 与 --record-ids；定时触发器两者都不传",
+		}},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "workflow_run",
+				CanonicalPath:  "aitable.workflow_run",
+				CLIPath:        "aitable workflow run",
+				PrimaryCLIPath: "aitable workflow run",
+			},
+			Description: "立即执行 AI 表格自动化工作流，并返回异步执行提交结果。",
+			Interface:   aitableMCPInterface("run_workflow"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "立即执行已知 AI 表格自动化工作流，并获取 executionId。",
+				UseWhen:      []string{"用户明确要求立即执行已知工作流，已确认真实 base-id、workflow-id、触发类型及可能产生的业务副作用；记录类触发器还需确认绑定的 table-id 和 1 到 5 个真实 record-id"},
+				AvoidWhen:    []string{"仅开启后续自动触发用 workflow enable；查询工作流定义用 workflow get；查询既有执行结果用 workflow history；返回 executionId 后应以 history 的 instanceId 核对，不要在结果不确定时直接重复执行"},
+				Examples: []string{
+					"dws aitable workflow run --base-id <BASE_ID> --workflow-id <WORKFLOW_ID> --table-id <TABLE_ID> --record-ids <RECORD_ID>",
+					"dws aitable workflow run --base-id <BASE_ID> --workflow-id <WORKFLOW_ID>",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true), InterfaceType: "string"},
+				{Name: "workflow-id", Property: "workflowId", Required: boolPtr(true), InterfaceType: "string"},
+				{Name: "table-id", Property: "tableId", InterfaceType: "string", RequiredWhen: "record-ids is provided or the workflow uses a record-based trigger"},
+				{Name: "record-ids", Property: "recordIds", InterfaceType: "array", RequiredWhen: "table-id is provided or the workflow uses a record-based trigger"},
+			},
+		},
+	})
+
+	workflowHistoryCmd := NewLeafCommand(LeafSpec{
+		Use:   "history",
+		Short: "查询工作流执行历史",
+		Long: `分页查询指定 AI 表格工作流的执行历史。
+可按状态和 Unix 毫秒时间范围筛选；同时提供 --after-time 与 --before-time 时，前者必须小于后者。--page 从 0 开始，--size 默认 20、最大 100。
+返回 totalCount 与 list；run 返回的 executionId 可与历史项 instanceId 匹配。`,
+		Example: `  dws aitable workflow history --base-id BASE_ID --workflow-id WORKFLOW_ID
+  dws aitable workflow history --base-id BASE_ID --workflow-id WORKFLOW_ID --status failed --after-time 1786000000000 --before-time 1787000000000 --page 0 --size 50`,
+		Tool:     "get_flow_record_list",
+		Safety:   aitableSafetyRead(),
+		Validate: validateWorkflowHistoryFlags,
+		Flags: []LeafFlag{
+			{Name: "base-id", Usage: "目标 Base ID (必填)", Bind: "baseId", Trim: true, Required: true, Aliases: []string{"base"}},
+			{Name: "workflow-id", Usage: "目标工作流 ID (必填)", Bind: "flowId", Trim: true, Required: true},
+			{Name: "status", Usage: "执行状态筛选；不传表示全部", Bind: "status", Trim: true, OmitEmpty: true, Enum: []string{"success", "failed", "running", "break", "untrigger"}},
+			{Name: "after-time", Usage: "开始时间（Unix 毫秒）", Kind: LeafInt, Bind: "afterTime"},
+			{Name: "before-time", Usage: "结束时间（Unix 毫秒）", Kind: LeafInt, Bind: "beforeTime"},
+			{Name: "page", Usage: "页码，从 0 开始", Kind: LeafInt, Default: "0", Bind: "page"},
+			{Name: "size", Usage: "每页条数 [1, 100]", Kind: LeafInt, Default: "20", Bind: "size"},
+		},
+		Constraints: []LeafConstraint{{
+			Kind:        corecmd.Custom,
+			Flags:       []string{"after-time", "before-time"},
+			Description: "同时提供 --after-time 与 --before-time 时，--after-time 必须小于 --before-time",
+		}},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "workflow_history",
+				CanonicalPath:  "aitable.workflow_history",
+				CLIPath:        "aitable workflow history",
+				PrimaryCLIPath: "aitable workflow history",
+			},
+			Description: "分页查询 AI 表格自动化工作流执行历史。",
+			Interface:   aitableMCPInterface("get_flow_record_list"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按状态、时间和分页条件查询工作流执行历史。",
+				UseWhen:      []string{"需要核对工作流是否执行、执行结果或定位 run 返回的 executionId 时；executionId 与历史项 instanceId 相同，running 为非终态"},
+				AvoidWhen:    []string{"查询工作流定义用 workflow get；列出工作流用 workflow list；立即发起执行用 workflow run"},
+				Examples: []string{
+					"dws aitable workflow history --base-id <BASE_ID> --workflow-id <WORKFLOW_ID>",
+					"dws aitable workflow history --base-id <BASE_ID> --workflow-id <WORKFLOW_ID> --status failed --page 0 --size 50",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true), InterfaceType: "string"},
+				{Name: "workflow-id", Property: "flowId", Required: boolPtr(true), InterfaceType: "string"},
+				{Name: "status", Property: "status", InterfaceType: "string", Enum: []string{"success", "failed", "running", "break", "untrigger"}},
+				{Name: "after-time", Property: "afterTime", InterfaceType: "number"},
+				{Name: "before-time", Property: "beforeTime", InterfaceType: "number"},
+				{Name: "page", Property: "page", InterfaceType: "number"},
+				{Name: "size", Property: "size", InterfaceType: "number"},
 			},
 		},
 	})
@@ -7424,6 +7599,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	workflowCmd.AddCommand(
 		workflowEditExampleCmd, workflowCreateCmd, workflowUpdateCmd,
 		workflowEnableCmd, workflowDisableCmd,
+		workflowRunCmd, workflowHistoryCmd,
 		workflowGetCmd, workflowListCmd,
 	)
 

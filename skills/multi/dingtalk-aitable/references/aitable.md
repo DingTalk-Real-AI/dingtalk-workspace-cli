@@ -141,6 +141,8 @@ Flags:
 | `workflow get` | 获取单个工作流详情（含 flowSchema） | `--base-id` `--workflow-id` | `--workflow-id` 接受 list 里的 `flowId`（同值） |
 | `workflow enable` | 启用工作流 | `--base-id` `--workflow-id` | 返回 `{enabled: true}` 是动作确认；要确认真启用看 list 的 `status` |
 | `workflow disable` | 禁用工作流（高危） | `--base-id` `--workflow-id` `--yes` | 影响业务自动化，建议二次确认；status 变 STOP |
+| `workflow run` | 立即执行工作流（需确认） | `--base-id` `--workflow-id`；记录触发另需 `--table-id` `--record-ids` | 返回 `executionId`；不确定时先用 history 核对，避免重复执行 |
+| `workflow history` | 查询工作流执行历史 | `--base-id` `--workflow-id` | 支持 status、Unix 毫秒时间范围和 page/size；`instanceId` 对应 run 的 `executionId` |
 
 > 创建/更新的 `--dsl` 使用钉钉 AI 表格 `workflow-dsl/v1`；完整格式和最小 Demo 见 [aitable-workflow.md](./aitable/aitable-workflow.md)。删除工作流暂未开放。
 

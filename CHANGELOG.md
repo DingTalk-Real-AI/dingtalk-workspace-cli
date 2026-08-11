@@ -8,6 +8,7 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Added
 
+- **Aitable workflow execution and history** — adds `dws aitable workflow run` for confirmed asynchronous execution of scheduled or record-triggered workflows, plus `dws aitable workflow history` for status-, time-, and page-filtered execution records. The commands map directly to `aitable/run_workflow` and `aitable/get_flow_record_list`, validate trigger-specific arguments locally, and document the `executionId` / `instanceId` correlation.
 - **Streaming-card mentions** — `chat +messages-send-card` now accepts
   `--at-open-dingtalk-ids` and `--at-all` for group cards, passing mention
   targets to the initial card-creation request and prepending its returned

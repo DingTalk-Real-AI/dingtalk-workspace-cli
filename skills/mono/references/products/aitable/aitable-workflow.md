@@ -1,7 +1,7 @@
 # workflow — 自动化工作流管理
 
-创建 / 更新 / 启停 / 查看 / 列出 Base 下的自动化工作流（"当 X 时自动 Y" 流程）。
-适用场景：用户要求创建自动化、修改流程、停掉流程、查询已有流程或恢复运行。
+创建 / 更新 / 启停 / 手动执行 / 查询执行历史 / 查看 / 列出 Base 下的自动化工作流（"当 X 时自动 Y" 流程）。
+适用场景：用户要求创建自动化、修改流程、停掉或恢复流程、立即执行流程、核对执行结果或查询已有流程。
 
 ## 命令一览
 
@@ -14,6 +14,8 @@
 | `workflow get` | 获取单个工作流详情（含 flowSchema 完整节点定义） |
 | `workflow enable` | 启用指定工作流（按配置的触发条件自动执行） |
 | `workflow disable` | 禁用指定工作流（高危，建议 `--yes` 二次确认） |
+| `workflow run` | 立即执行指定工作流（会产生真实副作用，需确认） |
+| `workflow history` | 按状态、时间和分页条件查询工作流执行历史 |
 
 > `workflow edit-example` 无参数；其他子命令的 `--base-id` 必填（可用隐藏别名 `--base`）。
 
@@ -103,6 +105,29 @@ dws aitable workflow update \
 | `--locale` | 否 | 请求语言，如 `zh-CN` / `zh_CN` |
 
 update 返回结构与 create 相同，并会对瞬态错误重试。成功时 `data.flowId` 应与传入的工作流 ID 一致；随后用 `workflow get/list` 验证发布结果和运行状态。
+
+### workflow run — 立即执行工作流
+
+```bash
+# 记录类触发器
+dws aitable workflow run --base-id BASE_ID --workflow-id WORKFLOW_ID \
+  --table-id TABLE_ID --record-ids RECORD_ID_1,RECORD_ID_2
+
+# 定时触发器不传 table-id / record-ids
+dws aitable workflow run --base-id BASE_ID --workflow-id WORKFLOW_ID
+```
+
+记录类触发器必须同时传 `--table-id` 和 `--record-ids`；记录 ID 限 1–5 个且不可重复。`run` 会启动真实异步执行并产生工作流配置的副作用，必须先取得用户确认。返回的 `executionId` 可与 `workflow history` 项目的 `instanceId` 匹配；网络结果不确定时先查历史，不要直接重复执行。
+
+### workflow history — 查询执行历史
+
+```bash
+dws aitable workflow history --base-id BASE_ID --workflow-id WORKFLOW_ID \
+  --status failed --after-time 1786000000000 --before-time 1787000000000 \
+  --page 0 --size 50
+```
+
+`--status` 接受 `success` / `failed` / `running` / `break` / `untrigger`；时间参数是 Unix 毫秒且 after 必须小于 before；`--page` 从 0 开始，`--size` 默认 20、最大 100。返回 `totalCount` 与 `list`，其中 `running` 为非终态。
 
 ### workflow list — 列出工作流
 
@@ -211,9 +236,9 @@ dws aitable workflow disable --base-id BASE_ID --workflow-id WORKFLOW_ID --yes -
 | 列出工作流 | ✅ |
 | 看工作流详情（含 flowSchema） | ✅ |
 | 启用/禁用 | ✅ |
+| 查看运行历史/执行日志 | ✅ `workflow history` |
+| 手动触发/单次运行 | ✅ `workflow run`（需确认） |
 | 删除工作流 | ❌ 暂未开放 |
-| 查看运行历史/执行日志 | ❌ 暂未开放 |
-| 手动触发/单次运行 | ❌ 暂未开放 |
 
 ## 错误码速查
 
@@ -282,4 +307,5 @@ done
 - create 不自动重试；update 仅对网络、5xx、`retryable:true` 等瞬态错误自动重试。
 - enable / disable 出参里的 `enabled` / `disabled` 是 **动作确认 flag**，不是当前状态字段。要确认真生效请走 `workflow list` 查 `status`。
 - `workflow get` 的 `flowSchema` 结构随触发器/动作类型变化，不要假设固定字段。
-- 删除、运行历史和手动触发当前仍未开放。
+- `workflow run` 不自动重试；结果不确定时用 `workflow history` 按 executionId / instanceId 核对。
+- 删除工作流当前仍未开放。
