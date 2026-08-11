@@ -90,3 +90,55 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsPostSendIDChain(t *testing
 		})
 	}
 }
+
+func TestCrossPlatformCoverageChatIMCanonicalFlagsHideLegacyGroupAlias(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		contains []string
+		hidden   []string
+	}{
+		{
+			name:     "message search exposes conversation-id",
+			args:     []string{"message", "search", "--help"},
+			contains: []string{"--conversation-id"},
+			hidden:   []string{"--group "},
+		},
+		{
+			name:     "group bots exposes split id and name",
+			args:     []string{"group", "bots", "--help"},
+			contains: []string{"--conversation-id", "--group-name"},
+			hidden:   []string{"--group "},
+		},
+		{
+			name:     "group search exposes group-name",
+			args:     []string{"search", "--help"},
+			contains: []string{"--group-name"},
+			hidden:   []string{"--group "},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := newChatCommand()
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+			cmd.SetArgs(test.args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("chat %s: %v\n%s", strings.Join(test.args, " "), err, output.String())
+			}
+			help := output.String()
+			for _, want := range test.contains {
+				if !strings.Contains(help, want) {
+					t.Errorf("help missing %q:\n%s", want, help)
+				}
+			}
+			for _, hidden := range test.hidden {
+				if strings.Contains(help, hidden) {
+					t.Errorf("help still exposes hidden alias %q:\n%s", hidden, help)
+				}
+			}
+		})
+	}
+}

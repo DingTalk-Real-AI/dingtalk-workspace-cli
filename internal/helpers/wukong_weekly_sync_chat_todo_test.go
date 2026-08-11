@@ -116,7 +116,7 @@ func requireWukongWeeklySyncConfirmation(t *testing.T, err error) {
 func TestCrossPlatformCoverageWukongWeeklyChatCategoryQueries(t *testing.T) {
 	caller := &wukongWeeklySyncCaller{}
 	_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand, "category", "list-by-conv")
-	if err == nil || !strings.Contains(err.Error(), "flag --group is required") {
+	if err == nil || !strings.Contains(err.Error(), "flag --conversation-id is required") {
 		t.Fatalf("missing group error = %v", err)
 	}
 	requireWukongWeeklySyncNoCalls(t, caller)

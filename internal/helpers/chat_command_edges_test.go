@@ -92,7 +92,7 @@ func TestCrossPlatformCoverageChatStableCompatibilityHintsRemainAvailable(t *tes
 		hint string
 	}{
 		{path: "send", args: []string{"send", "--group", "cid-stable", "--text", "hello"}, hint: "dws chat message send"},
-		{path: "history", args: []string{"history", "--group", "cid-stable", "--limit", "20"}, hint: "dws chat message list --group <GROUP_OPEN_CONVERSATION_ID>"},
+		{path: "history", args: []string{"history", "--group", "cid-stable", "--limit", "20"}, hint: "dws chat message list --conversation-id <GROUP_OPEN_CONVERSATION_ID>"},
 	} {
 		command, remaining, err := root.Find([]string{tc.path})
 		if err != nil {

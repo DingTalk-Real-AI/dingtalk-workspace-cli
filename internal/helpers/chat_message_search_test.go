@@ -74,7 +74,21 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 		wantToolArg map[string]any
 	}{
 		{
-			name:      "keyword search",
+			name:      "keyword search canonical conversation-id",
+			args:      []string{"message", "search", "--query", "categoryName", "--conversation-id", "cid-1", "--start", start, "--end", end, "--limit", "100", "--cursor", "0"},
+			productID: "chat",
+			toolName:  "search_messages_by_keyword",
+			wantToolArg: map[string]any{
+				"keyword":            "categoryName",
+				"openConversationId": "cid-1",
+				"startTime":          startTime.UnixMilli(),
+				"endTime":            endTime.UnixMilli(),
+				"limit":              100,
+				"cursor":             "0",
+			},
+		},
+		{
+			name:      "keyword search legacy group alias",
 			args:      []string{"message", "search", "--query", "categoryName", "--group", "cid-1", "--start", start, "--end", end, "--limit", "100", "--cursor", "0"},
 			productID: "chat",
 			toolName:  "search_messages_by_keyword",
@@ -108,7 +122,7 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			caller := &chatMessageSearchCaller{}
+			caller := &chatChangedContractCaller{}
 			InitDeps(caller)
 			deps.Out.w = io.Discard
 			os.Args = []string{"dws", "chat"}
@@ -131,6 +145,85 @@ func TestCrossPlatformCoverageChatMessageSearchUsesMCPContracts(t *testing.T) {
 				t.Fatalf("tool args = %#v, want %#v", call.args, tt.wantToolArg)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageChatIMCanonicalFlagConflictsRejectLegacyGroup(t *testing.T) {
+	start := "2026-07-09T00:00:00+08:00"
+	end := "2026-07-11T00:00:00+08:00"
+	caller := &chatChangedContractCaller{}
+	err := executeChatChangedContract(t, caller,
+		"message", "search",
+		"--query", "categoryName",
+		"--conversation-id", "cid-conversation",
+		"--group", "cid-legacy",
+		"--start", start,
+		"--end", end)
+	if err == nil || !strings.Contains(err.Error(), "--group conflicts with --conversation-id") {
+		t.Fatalf("err = %v, want conflict between canonical and legacy group", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupSearchGroupNameMigration(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "canonical group-name", args: []string{"search", "--group-name", "项目冲刺", "--limit", "20", "--cursor", "0"}},
+		{name: "legacy group alias", args: []string{"search", "--group", "项目冲刺", "--limit", "20", "--cursor", "0"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &chatChangedContractCaller{}
+			err := executeChatChangedContract(t, caller, test.args...)
+			if err != nil {
+				t.Fatalf("chat %s returned error: %v", strings.Join(test.args, " "), err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("tool calls = %#v, want one", caller.calls)
+			}
+			want := map[string]any{"keyword": "项目冲刺", "limit": 20, "cursor": "0"}
+			if caller.calls[0].productID != "im" || caller.calls[0].toolName != "search_groups" || !reflect.DeepEqual(caller.calls[0].args, want) {
+				t.Fatalf("call = %#v, want im/search_groups %#v", caller.calls[0], want)
+			}
+		})
+	}
+
+	caller := &chatChangedContractCaller{}
+	err := executeChatChangedContract(t, caller, "search", "--group-name", "A", "--group", "B")
+	if err == nil || !strings.Contains(err.Error(), "--group conflicts with --group-name") {
+		t.Fatalf("err = %v, want group-name/group conflict", err)
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupBotsSplitsConversationIDAndGroupName(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "canonical conversation-id", args: []string{"group", "bots", "--conversation-id", "cid123456789"}},
+		{name: "legacy group alias", args: []string{"group", "bots", "--group", "cid123456789"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &chatChangedContractCaller{}
+			err := executeChatChangedContract(t, caller, test.args...)
+			if err != nil {
+				t.Fatalf("chat %s returned error: %v", strings.Join(test.args, " "), err)
+			}
+			want := map[string]any{"openConversationId": "cid123456789"}
+			if len(caller.calls) != 1 || caller.calls[0].productID != "bot" || caller.calls[0].toolName != "list_group_bots" || !reflect.DeepEqual(caller.calls[0].args, want) {
+				t.Fatalf("calls = %#v, want bot/list_group_bots %#v", caller.calls, want)
+			}
+		})
+	}
+	caller := &chatChangedContractCaller{}
+	err := executeChatChangedContract(t, caller, "group", "bots", "--conversation-id", "cid123456789", "--group", "cid987654321")
+	if err == nil || !strings.Contains(err.Error(), "--group conflicts with --conversation-id") {
+		t.Fatalf("err = %v, want group/conversation-id conflict", err)
 	}
 }
 
