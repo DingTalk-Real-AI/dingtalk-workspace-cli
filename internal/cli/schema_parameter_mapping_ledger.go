@@ -254,7 +254,7 @@ var reviewedSchemaParameterMappingExclusions = map[string]string{
 	"chat.create_text_emotion --background-id":                           "Runtime extension: the executable helper forwards backgroundId to im/create_text_emotion, but the pinned source-revision metadata does not declare that optional property; preserve the compatibility flag without advertising it as a pinned RPC field.",
 	"chat.get_group_mute_config --conversation-id":                       "Reviewed unpinned adapter: chat.get_group_mute_config has no singular pinned interface_ref; --conversation-id is a CLI wrapper input and does not publish a direct interface property.",
 	"chat.list_conversation_message_v2 --open-dingtalk-id":               "selects the alternate list_individual_chat_message branch",
-	"chat.list_conversation_message_v2 --user":                           "selects the alternate list_individual_chat_message branch",
+	"chat.list_conversation_message_v2 --user-id":                        "selects the alternate list_individual_chat_message branch",
 	"chat.list_message_favorites --cursor":                               "Reviewed unpinned adapter: chat.list_message_favorites has no singular pinned interface_ref; --cursor is a CLI wrapper input and does not publish a direct interface property.",
 	"chat.list_message_favorites --max-items":                            "Reviewed helper-only pagination control: --max-items caps aggregated CLI output for chat.list_message_favorites and is not sent to the remote adapter.",
 	"chat.list_message_favorites --page-all":                             "Reviewed helper-only pagination control: --page-all enables CLI-side looping for chat.list_message_favorites and is not sent to the remote adapter.",

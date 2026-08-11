@@ -2218,9 +2218,9 @@ func newChatCommand() *cobra.Command {
 	chatMessageListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "拉取会话消息内容",
-		Long:  `拉取指定群聊或单聊的会话消息内容。--conversation-id 指定群聊，--user 指定单聊用户（userId），--open-dingtalk-id 指定单聊用户（openDingTalkId），三者互斥。推荐使用 --direction newer/older 控制时间方向：newer 表示从给定时间往现在拉，older 表示从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。引用回复消息会返回 quotedMessage 引用上下文；被引用的原消息是合并转发或图片时，对应的类型与内容也会随引用上下文返回。如果返回的会话消息中包含 openConvThreadId 字段，说明是话题消息，可以调用 dws chat message list-topic-replies 拉取话题回复消息列表，openConvThreadId 作为 topic-id 参数。`,
+		Long:  `拉取指定群聊或单聊的会话消息内容。--conversation-id 指定群聊，--user-id 指定单聊用户（userId），--open-dingtalk-id 指定单聊用户（openDingTalkId），三者互斥。推荐使用 --direction newer/older 控制时间方向：newer 表示从给定时间往现在拉，older 表示从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。引用回复消息会返回 quotedMessage 引用上下文；被引用的原消息是合并转发或图片时，对应的类型与内容也会随引用上下文返回。如果返回的会话消息中包含 openConvThreadId 字段，说明是话题消息，可以调用 dws chat message list-topic-replies 拉取话题回复消息列表，openConvThreadId 作为 topic-id 参数。`,
 		Example: `  dws chat message list --conversation-id <openconversation_id> --time "2025-03-01 00:00:00"
-  dws chat message list --user <userId> --time "2025-03-01 00:00:00" --limit 50
+  dws chat message list --user-id <userId> --time "2025-03-01 00:00:00" --limit 50
   dws chat message list --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --limit 50
   dws chat message list --conversation-id <openconversation_id> --time "2025-03-01 00:00:00" --direction older
   # 查询群 ID: dws chat search --query "群名"
@@ -2230,7 +2230,10 @@ func newChatCommand() *cobra.Command {
 				return err
 			}
 			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
-			userID, _ := cmd.Flags().GetString("user")
+			userID, err := syncStringFlagAliases(cmd, "user-id", "user")
+			if err != nil {
+				return err
+			}
 			openDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
 			specified := 0
 			if groupID != "" {
@@ -2243,10 +2246,10 @@ func newChatCommand() *cobra.Command {
 				specified++
 			}
 			if specified > 1 {
-				return fmt.Errorf("--conversation-id, --user and --open-dingtalk-id are mutually exclusive, specify exactly one")
+				return fmt.Errorf("--conversation-id, --user-id and --open-dingtalk-id are mutually exclusive, specify exactly one")
 			}
 			if specified == 0 {
-				return fmt.Errorf("--conversation-id, --user or --open-dingtalk-id is required")
+				return fmt.Errorf("--conversation-id, --user-id or --open-dingtalk-id is required")
 			}
 			if userID != "" && isOpenDingTalkID(userID) {
 				openDingTalkID = userID
@@ -2320,17 +2323,20 @@ func newChatCommand() *cobra.Command {
 		Short:  "拉取单聊会话消息",
 		Hidden: true,
 		Long:   `按对方 userId 或 openDingTalkId 拉取单聊会话消息。`,
-		Example: `  dws chat message list-direct --user <对方userId> --time "2026-04-01 00:00:00" --forward true --limit 50
+		Example: `  dws chat message list-direct --user-id <对方userId> --time "2026-04-01 00:00:00" --forward true --limit 50
   dws chat message list-direct --open-dingtalk-id <openDingTalkId> --time "2026-04-01 00:00:00" --forward false --limit 20
   # 查询 userId / openDingTalkId: dws contact user search --query "姓名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			userID, _ := cmd.Flags().GetString("user")
+			userID, err := syncStringFlagAliases(cmd, "user-id", "user")
+			if err != nil {
+				return err
+			}
 			openDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
 			if userID != "" && openDingTalkID != "" {
-				return fmt.Errorf("--user and --open-dingtalk-id are mutually exclusive")
+				return fmt.Errorf("--user-id and --open-dingtalk-id are mutually exclusive")
 			}
 			if userID == "" && openDingTalkID == "" {
-				return fmt.Errorf("--user or --open-dingtalk-id is required")
+				return fmt.Errorf("--user-id or --open-dingtalk-id is required")
 			}
 			if userID != "" && isOpenDingTalkID(userID) {
 				openDingTalkID = userID
@@ -2384,12 +2390,12 @@ func newChatCommand() *cobra.Command {
 				AgentSummary: "读取与指定用户的单聊消息记录",
 				UseWhen:      []string{"用户明确要求查看和某人的一对一聊天时"},
 				AvoidWhen:    []string{"跨群聊按发送者查询时使用 chat message list-by-sender"},
-				Examples:     []string{"dws chat message list-direct --user <userId> --time \"2026-07-01 00:00:00\" --direction newer --limit 50"},
+				Examples:     []string{"dws chat message list-direct --user-id <userId> --time \"2026-07-01 00:00:00\" --direction newer --limit 50"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "direction", Property: "forward"},
 				{Name: "open-dingtalk-id", Property: "openDingTalkId"},
-				{Name: "user", Property: "userId"},
+				{Name: "user-id", Property: "userId"},
 			},
 		},
 	})
@@ -3933,8 +3939,10 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 
 	// message 子命令 flags
 	chatMessageListCmd.Flags().String("group", "", "群聊 openconversation_id（群聊时必填）")
-	chatMessageListCmd.Flags().String("user", "", "单聊用户 userId（单聊时与 --open-dingtalk-id 二选一）")
-	chatMessageListCmd.Flags().String("open-dingtalk-id", "", "单聊用户 openDingTalkId（单聊时与 --user 二选一，适用于无法获取 userId 的场景）")
+	chatMessageListCmd.Flags().String("user-id", "", "单聊用户 userId（单聊时与 --open-dingtalk-id 二选一）")
+	chatMessageListCmd.Flags().String("user", "", "--user-id 的旧版别名")
+	_ = chatMessageListCmd.Flags().MarkHidden("user")
+	chatMessageListCmd.Flags().String("open-dingtalk-id", "", "单聊用户 openDingTalkId（单聊时与 --user-id 二选一，适用于无法获取 userId 的场景）")
 	chatMessageListCmd.Flags().String("time", "", "开始时间，格式: yyyy-MM-dd HH:mm:ss (必填)")
 	chatMessageListCmd.Flags().String("direction", "", "时间方向: newer=从给定时间往现在拉，older=从给定时间往以前拉（推荐）")
 	chatMessageListCmd.Flags().String("forward", "true", "true 等价 --direction newer，false 等价 --direction older")
@@ -3942,8 +3950,10 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageListCmd.Flags().Int("limit", 0, "返回数量，不传则不限制")
 	chatMessageListCmd.Flags().Int("size", 0, "--limit 的旧版别名")
 	_ = chatMessageListCmd.Flags().MarkHidden("size")
-	chatMessageListDirectCmd.Flags().String("user", "", "对方 userId（同组织内同事，与 --open-dingtalk-id 二选一）")
-	chatMessageListDirectCmd.Flags().String("open-dingtalk-id", "", "对方 openDingTalkId（非同组织普通好友场景，与 --user 二选一）")
+	chatMessageListDirectCmd.Flags().String("user-id", "", "对方 userId（同组织内同事，与 --open-dingtalk-id 二选一）")
+	chatMessageListDirectCmd.Flags().String("user", "", "--user-id 的旧版别名")
+	_ = chatMessageListDirectCmd.Flags().MarkHidden("user")
+	chatMessageListDirectCmd.Flags().String("open-dingtalk-id", "", "对方 openDingTalkId（非同组织普通好友场景，与 --user-id 二选一）")
 	chatMessageListDirectCmd.Flags().String("time", "", "开始时间，格式 yyyy-MM-dd HH:mm:ss (必填)")
 	chatMessageListDirectCmd.Flags().String("direction", "", "时间方向: newer=从给定时间往现在拉，older=从给定时间往以前拉")
 	chatMessageListDirectCmd.Flags().String("forward", "true", "true 等价 --direction newer，false 等价 --direction older")

@@ -275,6 +275,49 @@ func TestCrossPlatformCoverageChatMessageListUsesMCPMetadataGroupKey(t *testing.
 	}
 }
 
+func TestCrossPlatformCoverageChatMessageListAcceptsUserIDCanonicalAndLegacyAlias(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "canonical user-id",
+			args: []string{"message", "list", "--user-id", "u-1", "--time", "2026-07-15 09:00:00", "--limit", "50"},
+		},
+		{
+			name: "legacy user",
+			args: []string{"message", "list", "--user", "u-1", "--time", "2026-07-15 09:00:00", "--limit", "50"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &chatChangedContractCaller{}
+			err := executeChatChangedContract(t, caller, tc.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 || caller.calls[0].toolName != "list_individual_chat_message" {
+				t.Fatalf("calls = %#v", caller.calls)
+			}
+			want := map[string]any{"userId": "u-1", "time": "2026-07-15 09:00:00", "forward": true, "limit": 50}
+			if !reflect.DeepEqual(caller.calls[0].args, want) {
+				t.Fatalf("tool args = %#v, want %#v", caller.calls[0].args, want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListRejectsUserIDAliasConflict(t *testing.T) {
+	caller := &chatChangedContractCaller{}
+	err := executeChatChangedContract(t, caller,
+		"message", "list", "--user-id", "u-1", "--user", "u-2", "--time", "2026-07-15 09:00:00")
+	if err == nil || !strings.Contains(err.Error(), "--user conflicts with --user-id") {
+		t.Fatalf("error = %v, want user-id conflict", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageChatAuditUsesUserIDs(t *testing.T) {
 	caller := &chatChangedContractCaller{}
 	err := executeChatChangedContract(t, caller,

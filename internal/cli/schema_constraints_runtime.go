@@ -42,8 +42,8 @@ func init() {
 	registerRequireOneOf("chat.add_text_emotion", "conversation-id", "id", "chat")
 	registerRequireOneOf("chat.update_text_emotion", "conversation-id", "id", "chat")
 	registerExclusiveOneOf("chat.get_conversation_info", "conversation-id", "user", "open-dingtalk-id")
-	registerExclusiveOneOf("chat.list_conversation_message_v2", "conversation-id", "user", "open-dingtalk-id")
-	registerExclusiveOneOf("chat.list_individual_chat_message", "user", "open-dingtalk-id")
+	registerExclusiveOneOf("chat.list_conversation_message_v2", "conversation-id", "user-id", "open-dingtalk-id")
+	registerExclusiveOneOf("chat.list_individual_chat_message", "user-id", "open-dingtalk-id")
 	registerRequireOneOf("chat.remove_emoji_reaction", "conversation-id", "id", "chat")
 	registerRequireOneOf("chat.remove_text_emotion", "conversation-id", "id", "chat")
 	RegisterRuntimeSchemaConstraints("chat.send_personal_message", RuntimeSchemaConstraints{
