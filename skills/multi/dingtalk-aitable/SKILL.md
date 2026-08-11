@@ -23,6 +23,7 @@ metadata:
 4. 复杂字段、筛选、导入导出、视图、权限或工作流任务，按“低频能力与 Reference”只加载相关文件，不预读整个 `references/aitable/`。
 5. 现有骨架和 reference 都无法定位能力时，才用 Runtime Shortcut Catalog 做最后发现；不得猜 `cli_path` 或 flag。
 6. Schema、Help、reference 与实际返回冲突时采用更安全的解释并报告契约漂移；`confirmation=user_required` 时先确认，再添加 `--yes`。
+7. 用户已给足名称、字段、数据和目标时，直接按依赖链完成全部步骤；不要调用 todo 工具、分步汇报或追问已明确的信息。中间返回只用于提取下一步 ID 和判断失败，完成所有请求后再统一回读并答复。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
@@ -51,6 +52,7 @@ metadata:
 |---|---|---|
 | 按名称找 Base | `dws aitable +resolve-base --name "<名称>" --format json` | 唯一命中才继续；多候选停止并消歧 |
 | 浏览最近访问 | `dws aitable +base-list --format json` | 只代表最近访问，不得宣称全量 |
+| 搜索模板 | `dws aitable +template-search --query "<关键词>" --format json` | 关键词参数是 `--query`，只返回真实候选，不擅自创建 Base |
 | 按名称找 Table | `dws aitable +resolve-table --base <baseId> --name "<表名>" --format json` | `baseId` 必须来自上一步真实返回 |
 | 取表、字段与视图目录 | `dws aitable +table-get --base-id <baseId> [--table-ids <tableId>] --format json` | `tables[].fields[]` 是字段目录；完整类型/config 再用 `+field-get` |
 | 取字段完整配置 | `dws aitable +field-get --base-id <baseId> --table-id <tableId> [--field-ids <ids>] --format json` | 写入前核对类型、只读性和 select options；按需展开以控制返回体 |
@@ -59,6 +61,7 @@ metadata:
 | 更新记录 | `dws aitable record update --base-id <baseId> --table-id <tableId> --records '[{"recordId":"<id>","cells":{"<fieldId>":<值>}}]' --format json` | 先 query 拿 recordId；只传需改字段；取 `data.recordIds[]` 后回读 |
 | 删除记录 | 先 `dws aitable +record-query ...` 定位，再 `dws aitable record delete --base-id <baseId> --table-id <tableId> --record-ids <ids>` | 展示目标与影响，得到明确确认后才加 `--yes` |
 | 创建 Base / Table | `dws aitable base create --name "<名>"` / `dws aitable table create --base-id <id> --name "<名>" --fields '[...]'` | 使用创建返回的真实 ID；系统改名/加后缀时不得继续猜原名 |
+| 复制视图 | `dws aitable view duplicate --base-id <baseId> --table-id <tableId> --view-id <源viewId> --new-name "<新名称>" --format json` | 源 viewId 来自当前表的真实返回；不要复制数据表或创建仪表盘替代 |
 | 批量追加 CSV / JSON 到已有表 | `python3 scripts/import_records.py <baseId> <tableId> <file> [batch_size]` | CSV 表头必须是 fieldId；脚本返回不完整 ledger 时不得宣称全成功 |
 | 文件导入为新数据表 | `python3 scripts/aitable_import_via_task.py <baseId> <file>` | 与“追加已有 table”不同；走 prepare → PUT → import task |
 | 批量创建字段 | `python3 scripts/bulk_add_fields.py <baseId> <tableId> fields.json` | 单次最多 15；逐项检查成功/失败结果 |
