@@ -1354,9 +1354,9 @@ func TestDeliveryCatalogChatParamDeclsFrom87910880Reviewed(t *testing.T) {
 		interfaceType string
 	}{
 		{"chat message edit", "conversation-id", "openConversationId", true, ""},
-		{"chat message edit", "msg-id", "openMessageId", true, ""},
+		{"chat message edit", "message-id", "openMessageId", true, ""},
 		{"chat message edit", "at-open-dingtalk-ids", "atOpenDingTalkIds", false, "array"},
-		{"chat message update-text-emotion", "msg-id", "openMsgId", true, ""},
+		{"chat message update-text-emotion", "message-id", "openMsgId", true, ""},
 		{"chat message update-text-emotion", "old-emotion-id", "oldEmotionId", true, ""},
 		{"chat category batch-info", "category-ids", "categoryIds", true, "array"},
 		{"chat category list-by-conv", "conversation-id", "openConversationId", true, ""},
@@ -1394,13 +1394,13 @@ func TestDeliveryCatalogChatParamDeclsFrom87910880Reviewed(t *testing.T) {
 		}
 	}
 
-	// Hidden conversation aliases must stay unpublished (merge-base parity).
+	// Hidden conversation and message aliases must stay unpublished.
 	editLeaf, err := queryDeliverySchemaPayload([]string{"chat message edit"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	editParams := schemaMap(editLeaf["parameters"])
-	for _, hidden := range []string{"group", "id", "chat"} {
+	for _, hidden := range []string{"group", "id", "chat", "msg-id", "open-message-id"} {
 		if _, ok := editParams[hidden]; ok {
 			t.Fatalf("chat message edit unexpectedly publishes hidden alias --%s", hidden)
 		}

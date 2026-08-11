@@ -282,7 +282,7 @@ var reviewedSchemaParameterMappingExclusions = map[string]string{
 	"chat.send_personal_message --media-id":                              "serialized into the aggregate content payload",
 	"chat.send_personal_message --text":                                  "serialized into the aggregate content payload",
 	"chat.send_personal_message --title":                                 "serialized into the aggregate content payload",
-	"chat.send_personal_message --user":                                  "resolves a userId to receiverOpenDingTalkId when possible and otherwise uses the unpinned receiverUserId compatibility property",
+	"chat.send_personal_message --user-id":                               "resolves a userId to receiverOpenDingTalkId when possible and otherwise uses the unpinned receiverUserId compatibility property",
 	"chat.set_group_member_mute_list --user":                             "conditional wrapper/alias of --users: userIds are remotely resolved to openDingTalkIds outside dry-run and otherwise may be sent as uids; openDingTalkId inputs are sent as openDingTalkIds, so one exact property would misdescribe execution",
 	"chat.transfer_group_owner --user":                                   "conditional compatibility input: a userId is sent as newOwnerUid, while an openDingTalkId is sent as newOwnerOpenDingTalkId; the runtime ID-shape branch has no single RPC property",
 	"chat.update_conv_member_roles --user":                               "conditional wrapper/alias of --users: splitChatIDValues sends userIds as uids and openDingTalkIds as openDingTalkIds; there is no single RPC property for this flag",

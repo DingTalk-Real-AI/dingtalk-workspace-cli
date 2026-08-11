@@ -2396,14 +2396,14 @@ func newChatCommand() *cobra.Command {
 
 	chatMessageSendCmd := &cobra.Command{
 		Use:   "send",
-		Short: "以当前用户身份发送消息（--conversation-id 群聊 / --user 或 --open-dingtalk-id 单聊）",
+		Short: "以当前用户身份发送消息（--conversation-id 群聊 / --user-id 或 --open-dingtalk-id 单聊）",
 		Long: `以当前用户身份发送消息。
 
 ⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。
 
 目标选择（三选一，必填）：
   --conversation-id    群聊 openconversation_id
-  --user               单聊接收人 userId
+  --user-id            单聊接收人 userId
   --open-dingtalk-id   单聊接收人 openDingTalkId
 
 纯文本 / Markdown 消息（默认）：
@@ -2422,7 +2422,7 @@ func newChatCommand() *cobra.Command {
   仅当上游已经提供有效 mediaId 时，使用 --msg-type image --media-id。
   当前 CLI 不提供本地文件到 mediaId 的上传能力。`,
 		Example: `  dws chat message send --conversation-id <openconversation_id> "hello"
-  dws chat message send --user <userId> "请查收"
+  dws chat message send --user-id <userId> "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> "请查收"
   dws chat message send --conversation-id <openconversation_id> --title "周报提醒" "请大家本周五前提交周报"
   # 发送本地图片或文件（图片会作为可下载的 file 附件发送）
@@ -2438,7 +2438,10 @@ func newChatCommand() *cobra.Command {
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupID := flagOrFallback(cmd, "group", "conversation-id", "id", "chat")
-			userID, _ := cmd.Flags().GetString("user")
+			userID, err := syncStringFlagAliases(cmd, "user-id", "user", "userId")
+			if err != nil {
+				return err
+			}
 			openDingTalkID, _ := cmd.Flags().GetString("open-dingtalk-id")
 			msgUuid, _ := cmd.Flags().GetString("uuid")
 			specified := 0
@@ -2452,10 +2455,10 @@ func newChatCommand() *cobra.Command {
 				specified++
 			}
 			if specified > 1 {
-				return fmt.Errorf("--conversation-id, --user and --open-dingtalk-id are mutually exclusive, specify exactly one")
+				return fmt.Errorf("--conversation-id, --user-id and --open-dingtalk-id are mutually exclusive, specify exactly one")
 			}
 			if specified == 0 {
-				return fmt.Errorf("--conversation-id, --user or --open-dingtalk-id is required")
+				return fmt.Errorf("--conversation-id, --user-id or --open-dingtalk-id is required")
 			}
 			if userID != "" && isOpenDingTalkID(userID) {
 				openDingTalkID = userID
@@ -2467,7 +2470,7 @@ func newChatCommand() *cobra.Command {
 			if userID != "" {
 				resolved, err := resolveOpenDingTalkID(cmd.Context(), userID)
 				if err != nil {
-					return fmt.Errorf("cannot resolve --user %q to openDingTalkId: %w; pass --open-dingtalk-id instead", userID, err)
+					return fmt.Errorf("cannot resolve --user-id %q to openDingTalkId: %w; pass --open-dingtalk-id instead", userID, err)
 				} else {
 					if commandBoolFlag(cmd, "debug") || commandBoolFlag(cmd, "verbose") {
 						fmt.Fprintf(os.Stderr, "[debug] resolved userID=%q to openDingTalkId=%q\n", userID, resolved)
@@ -2656,6 +2659,7 @@ func newChatCommand() *cobra.Command {
 				{Name: "at-open-dingtalk-ids", Property: "atOpenDingTalkIds"},
 				{Name: "conversation-id", Property: "openConversationId"},
 				{Name: "open-dingtalk-id", Property: "receiverOpenDingTalkId"},
+				{Name: "user-id", Property: "receiverOpenDingTalkId"},
 			},
 		},
 	})
@@ -3550,22 +3554,26 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 		Use:   "recall",
 		Short: "撤回用户发送的消息",
 		Long:  `撤回当前用户发送的消息。需要指定会话 ID 和消息 ID。`,
-		Example: `  dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>
+		Example: `  dws chat message recall --conversation-id <openConversationId> --message-id <openMessageId>
 
   # 发送后撤回：send -> query-send-status -> recall
   dws chat message send --conversation-id <openConversationId> --text "待撤回的内容"
   dws chat message query-send-status --open-task-id <上一步返回的openTaskId>
-  dws chat message recall --conversation-id <上一步返回的openConversationId> --msg-id <上一步返回的openMessageId>`,
+  dws chat message recall --conversation-id <上一步返回的openConversationId> --message-id <上一步返回的openMessageId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "msg-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
 				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
 			}
 			return callMCPToolOnServer("im", "recall_message", map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openMessageId":      messageID,
 			})
 		},
 	}
@@ -3595,11 +3603,11 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 					"撤回机器人消息时使用 chat message recall-by-bot",
 					"消息 ID 未确认时先用消息查询/搜索拿到 openMessageId",
 				},
-				Examples: []string{"dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>"},
+				Examples: []string{"dws chat message recall --conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "conversation-id", Property: "openConversationId"},
-				{Name: "msg-id", Property: "openMessageId"},
+				{Name: "message-id", Property: "openMessageId"},
 			},
 		},
 	})
@@ -3611,23 +3619,27 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 
 推荐使用 --text 和可选 --title，CLI 会按 Markdown 消息规则生成 content：{"title":"标题","text":"正文"}。
 也可以直接使用 --content 传入完整 Markdown content JSON。--text 和 --content 二选一。`,
-		Example: `  dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "更新后的内容"
+		Example: `  dws chat message edit --conversation-id <openConversationId> --message-id <openMessageId> --text "更新后的内容"
 
   # 发送后编辑：send -> query-send-status -> edit
   dws chat message send --conversation-id <openConversationId> --text "原始内容"
   dws chat message query-send-status --open-task-id <上一步返回的openTaskId>
-  dws chat message edit --conversation-id <上一步返回的openConversationId> --msg-id <上一步返回的openMessageId> --text "更新后的内容"
+  dws chat message edit --conversation-id <上一步返回的openConversationId> --message-id <上一步返回的openMessageId> --text "更新后的内容"
 
-  dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --title "标题" --text "更新后的内容"
-  dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "<@all> 请查看" --at-all
-  dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text "<@openDingTalkId1> 请查看" --at-open-dingtalk-ids <openDingTalkId1>
-  dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --content '{"title":"标题","text":"更新后的内容"}'`,
+  dws chat message edit --conversation-id <openConversationId> --message-id <openMessageId> --title "标题" --text "更新后的内容"
+  dws chat message edit --conversation-id <openConversationId> --message-id <openMessageId> --text "<@all> 请查看" --at-all
+  dws chat message edit --conversation-id <openConversationId> --message-id <openMessageId> --text "<@openDingTalkId1> 请查看" --at-open-dingtalk-ids <openDingTalkId1>
+  dws chat message edit --conversation-id <openConversationId> --message-id <openMessageId> --content '{"title":"标题","text":"更新后的内容"}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "msg-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
 				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
 			}
 			content, _ := cmd.Flags().GetString("content")
 			text, _ := cmd.Flags().GetString("text")
@@ -3655,7 +3667,7 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 
 			toolArgs := map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openMessageId":      messageID,
 				"content":            content,
 			}
 			if atAll {
@@ -3690,7 +3702,7 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 				AgentSummary: "编辑当前用户已发送消息的 Markdown 内容",
 				UseWhen:      []string{"已有会话 openConversationId 和消息 openMessageId，需要更正已发送消息的标题、正文或 @ 信息"},
 				AvoidWhen:    []string{"发送新消息应使用 chat message send；撤回消息应使用 chat message recall"},
-				Examples:     []string{"dws chat message edit --conversation-id <openConversationId> --msg-id <openMessageId> --text \"更新后的内容\""},
+				Examples:     []string{"dws chat message edit --conversation-id <openConversationId> --message-id <openMessageId> --text \"更新后的内容\""},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "at-all", Property: "atAll", Required: boolPtr(false), InterfaceType: "boolean"},
@@ -3699,7 +3711,7 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 				{Name: "content", Property: "content", Required: boolPtr(false)},
 				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(true)},
 				{Name: "id", Property: "openConversationId", Required: boolPtr(false)},
-				{Name: "msg-id", Property: "openMessageId", Required: boolPtr(true)},
+				{Name: "message-id", Property: "openMessageId", Required: boolPtr(true)},
 				{Name: "text", Property: "text", Required: boolPtr(false)},
 				{Name: "title", Property: "title", Required: boolPtr(false)},
 			},
@@ -3941,8 +3953,12 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	_ = chatMessageListDirectCmd.Flags().MarkHidden("size")
 
 	chatMessageSendCmd.Flags().String("group", "", "群聊 openconversation_id（群聊时必填）")
-	chatMessageSendCmd.Flags().String("user", "", "单聊接收人 userId（单聊时与 --open-dingtalk-id 二选一）")
-	chatMessageSendCmd.Flags().String("open-dingtalk-id", "", "单聊接收人 openDingTalkId（单聊时与 --user 二选一）")
+	chatMessageSendCmd.Flags().String("user-id", "", "单聊接收人 userId（单聊时与 --open-dingtalk-id 二选一）")
+	chatMessageSendCmd.Flags().String("user", "", "--user-id 的别名")
+	_ = chatMessageSendCmd.Flags().MarkHidden("user")
+	chatMessageSendCmd.Flags().String("userId", "", "--user-id 的别名")
+	_ = chatMessageSendCmd.Flags().MarkHidden("userId")
+	chatMessageSendCmd.Flags().String("open-dingtalk-id", "", "单聊接收人 openDingTalkId（单聊时与 --user-id 二选一）")
 	chatMessageSendCmd.Flags().String("title", "", "消息标题，显示在消息列表（可选，未指定时使用消息内容）")
 	// 别名注册: --text/--content/--body/--message/--markdown → 位置参数
 	chatMessageSendCmd.Flags().String("text", "", "消息内容（推荐方式，也可用位置参数传递。内容含换行/特殊字符时必须使用此 flag）")
@@ -3979,8 +3995,8 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageSendCmd.Flags().String("uuid", "", "幂等 UUID，相同 uuid 在 24h 内不会重复发送（可选）")
 	cli.AttachRuntimeSchema(chatMessageSendCmd, "chat", "send_personal_message", "hardcoded:chat")
 	cli.AnnotateRuntimeConstraints(chatMessageSendCmd, cli.RuntimeSchemaConstraints{
-		MutuallyExclusive: [][]string{{"conversation-id", "user", "open-dingtalk-id"}},
-		RequireOneOf:      [][]string{{"conversation-id", "user", "open-dingtalk-id"}},
+		MutuallyExclusive: [][]string{{"conversation-id", "user-id", "open-dingtalk-id"}},
+		RequireOneOf:      [][]string{{"conversation-id", "user-id", "open-dingtalk-id"}},
 	})
 	cli.AnnotateRuntimePositionals(chatMessageSendCmd, contract.RuntimeSchemaPositional{
 		Name:        "content",
@@ -4189,8 +4205,12 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	_ = chatMessageRecallCmd.Flags().MarkHidden("id")
 	chatMessageRecallCmd.Flags().String("chat", "", "--conversation-id 的别名")
 	_ = chatMessageRecallCmd.Flags().MarkHidden("chat")
-	chatMessageRecallCmd.Flags().String("msg-id", "", "消息 openMessageId (必填)")
-	_ = chatMessageRecallCmd.MarkFlagRequired("msg-id")
+	chatMessageRecallCmd.Flags().String("message-id", "", "消息 openMessageId (必填)")
+	chatMessageRecallCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageRecallCmd.Flags().MarkHidden("msg-id")
+	chatMessageRecallCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageRecallCmd.Flags().MarkHidden("open-message-id")
+	chatMessageRecallCmd.MarkFlagsOneRequired("message-id", "msg-id", "open-message-id")
 
 	// edit flags
 	chatMessageEditCmd.Flags().String("conversation-id", "", "会话 openConversationId (必填)")
@@ -4200,8 +4220,12 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	_ = chatMessageEditCmd.Flags().MarkHidden("id")
 	chatMessageEditCmd.Flags().String("chat", "", "--conversation-id 的别名")
 	_ = chatMessageEditCmd.Flags().MarkHidden("chat")
-	chatMessageEditCmd.Flags().String("msg-id", "", "消息 openMessageId (必填)")
-	_ = chatMessageEditCmd.MarkFlagRequired("msg-id")
+	chatMessageEditCmd.Flags().String("message-id", "", "消息 openMessageId (必填)")
+	chatMessageEditCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageEditCmd.Flags().MarkHidden("msg-id")
+	chatMessageEditCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageEditCmd.Flags().MarkHidden("open-message-id")
+	chatMessageEditCmd.MarkFlagsOneRequired("message-id", "msg-id", "open-message-id")
 	chatMessageEditCmd.Flags().String("text", "", "编辑后的 Markdown 正文；与 --content 二选一")
 	chatMessageEditCmd.Flags().String("title", "", "消息标题；配合 --text 使用，未传时从正文自动生成")
 	chatMessageEditCmd.Flags().String("content", "", "完整 Markdown content JSON；与 --text 二选一")
@@ -5175,14 +5199,21 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageUpdateTextEmotionCmd := &cobra.Command{
 		Use:     "update-text-emotion",
 		Short:   "更新消息的文字表情回应",
-		Example: `  dws chat message update-text-emotion --conversation-id <openConversationId> --msg-id <openMsgId> --old-emotion-id <oldEmotionId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id im_bg_5`,
+		Example: `  dws chat message update-text-emotion --conversation-id <openConversationId> --message-id <openMsgId> --old-emotion-id <oldEmotionId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id im_bg_5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
 			return callMCPToolOnServer("im", "update_text_emotion", map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
+				"openMsgId":          messageID,
 				"oldEmotionId":       mustGetFlag(cmd, "old-emotion-id"),
 				"emotionId":          mustGetFlag(cmd, "emotion-id"),
 				"emotionName":        mustGetFlag(cmd, "emotion-name"),
@@ -5217,7 +5248,7 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 					"消息上还没有文字表情时使用 chat message add-text-emotion",
 					"只需清除文字表情时使用 chat message remove-text-emotion",
 				},
-				Examples: []string{"dws chat message update-text-emotion --conversation-id <openConversationId> --msg-id <openMessageId> --old-emotion-id <oldEmotionId> --emotion-id <emotionId> --emotion-name \"处理中\" --text \"处理中 2 分钟\" --background-id im_bg_5"},
+				Examples: []string{"dws chat message update-text-emotion --conversation-id <openConversationId> --message-id <openMessageId> --old-emotion-id <oldEmotionId> --emotion-id <emotionId> --emotion-name \"处理中\" --text \"处理中 2 分钟\" --background-id im_bg_5"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "background-id", Property: "backgroundId", Required: boolPtr(true), Description: "新文字表情的背景 ID"},
@@ -5226,7 +5257,7 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 				{Name: "emotion-id", Property: "emotionId", Required: boolPtr(true), Description: "新的文字表情 ID，可通过 create-text-emotion 获取"},
 				{Name: "emotion-name", Property: "emotionName", Required: boolPtr(true), Description: "新的文字表情名称"},
 				{Name: "id", Property: "openConversationId", Required: boolPtr(false)},
-				{Name: "msg-id", Property: "openMsgId", Required: boolPtr(true), Description: "需要原地更新文字表情的消息 openMsgId"},
+				{Name: "message-id", Property: "openMsgId", Required: boolPtr(true), Description: "需要原地更新文字表情的消息 openMsgId"},
 				{Name: "old-emotion-id", Property: "oldEmotionId", Required: boolPtr(true), Description: "消息上当前文字表情的 emotionId"},
 				{Name: "text", Property: "text", Required: boolPtr(true), Description: "新的文字表情内容"},
 			},
@@ -5236,14 +5267,19 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageUpdateTextEmotionCmd.Flags().String("group", "", "--conversation-id 的别名")
 	chatMessageUpdateTextEmotionCmd.Flags().String("id", "", "--conversation-id 的别名")
 	chatMessageUpdateTextEmotionCmd.Flags().String("chat", "", "--conversation-id 的别名")
-	chatMessageUpdateTextEmotionCmd.Flags().String("msg-id", "", "消息 openMsgId (必填)")
+	chatMessageUpdateTextEmotionCmd.Flags().String("message-id", "", "消息 openMsgId (必填)")
+	chatMessageUpdateTextEmotionCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageUpdateTextEmotionCmd.Flags().MarkHidden("msg-id")
+	chatMessageUpdateTextEmotionCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageUpdateTextEmotionCmd.Flags().MarkHidden("open-message-id")
 	chatMessageUpdateTextEmotionCmd.Flags().String("old-emotion-id", "", "待更新的原表情 ID (必填)")
 	chatMessageUpdateTextEmotionCmd.Flags().String("emotion-id", "", "新表情 ID (必填)")
 	chatMessageUpdateTextEmotionCmd.Flags().String("emotion-name", "", "新表情名称 (必填)")
 	chatMessageUpdateTextEmotionCmd.Flags().String("text", "", "新文字内容 (必填)")
 	chatMessageUpdateTextEmotionCmd.Flags().String("background-id", "", "新背景 ID (必填)")
 	chatMessageUpdateTextEmotionCmd.MarkFlagsOneRequired("conversation-id", "group", "id", "chat")
-	for _, name := range []string{"msg-id", "old-emotion-id", "emotion-id", "emotion-name", "text", "background-id"} {
+	chatMessageUpdateTextEmotionCmd.MarkFlagsOneRequired("message-id", "msg-id", "open-message-id")
+	for _, name := range []string{"old-emotion-id", "emotion-id", "emotion-name", "text", "background-id"} {
 		_ = chatMessageUpdateTextEmotionCmd.MarkFlagRequired(name)
 	}
 

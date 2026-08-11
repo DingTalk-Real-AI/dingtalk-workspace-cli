@@ -25,7 +25,7 @@ func TestCrossPlatformCoverageChatMessageUpdateTextEmotionMapsReplacementTemplat
 			_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
 				"message", "update-text-emotion",
 				"--"+locator, "cid",
-				"--msg-id", "mid",
+				"--message-id", "mid",
 				"--old-emotion-id", "old-emotion",
 				"--emotion-id", "new-emotion",
 				"--emotion-name", "赞",
@@ -58,7 +58,7 @@ func TestCrossPlatformCoverageChatMessageUpdateTextEmotionRequiresEveryBusinessP
 		args []string
 	}{
 		{name: "conversation-id", args: []string{"--group", "cid"}},
-		{name: "msg-id", args: []string{"--msg-id", "mid"}},
+		{name: "message-id", args: []string{"--message-id", "mid"}},
 		{name: "old-emotion-id", args: []string{"--old-emotion-id", "old-emotion"}},
 		{name: "emotion-id", args: []string{"--emotion-id", "new-emotion"}},
 		{name: "emotion-name", args: []string{"--emotion-name", "赞"}},
@@ -83,4 +83,57 @@ func TestCrossPlatformCoverageChatMessageUpdateTextEmotionRequiresEveryBusinessP
 			requireWukongWeeklySyncNoCalls(t, caller)
 		})
 	}
+}
+
+func TestCrossPlatformCoverageChatMessageUpdateTextEmotionAcceptsLegacyMessageIDAlias(t *testing.T) {
+	for _, flag := range []string{"msg-id", "open-message-id"} {
+		t.Run(flag, func(t *testing.T) {
+			caller := &wukongWeeklySyncCaller{}
+			_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
+				"message", "update-text-emotion",
+				"--conversation-id", "cid",
+				"--"+flag, "mid",
+				"--old-emotion-id", "old-emotion",
+				"--emotion-id", "new-emotion",
+				"--emotion-name", "赞",
+				"--text", "nice",
+				"--background-id", "im_bg_5",
+			)
+			if err != nil {
+				t.Fatalf("update-text-emotion returned error: %v", err)
+			}
+			requireWukongWeeklySyncCall(t, caller, wukongWeeklySyncCall{
+				server: "im",
+				tool:   "update_text_emotion",
+				args: map[string]any{
+					"openConversationId": "cid",
+					"openMsgId":          "mid",
+					"oldEmotionId":       "old-emotion",
+					"emotionId":          "new-emotion",
+					"emotionName":        "赞",
+					"text":               "nice",
+					"backgroundId":       "im_bg_5",
+				},
+			})
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageUpdateTextEmotionRejectsMessageIDConflict(t *testing.T) {
+	caller := &wukongWeeklySyncCaller{}
+	_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
+		"message", "update-text-emotion",
+		"--conversation-id", "cid",
+		"--message-id", "canonical",
+		"--msg-id", "legacy",
+		"--old-emotion-id", "old-emotion",
+		"--emotion-id", "new-emotion",
+		"--emotion-name", "赞",
+		"--text", "nice",
+		"--background-id", "im_bg_5",
+	)
+	if err == nil || !strings.Contains(err.Error(), "--msg-id conflicts with --message-id") {
+		t.Fatalf("error = %v, want message-id conflict", err)
+	}
+	requireWukongWeeklySyncNoCalls(t, caller)
 }

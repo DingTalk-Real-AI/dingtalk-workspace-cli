@@ -297,7 +297,7 @@ func TestCrossPlatformCoverageChatAuditUsesUserIDs(t *testing.T) {
 
 func TestCrossPlatformCoverageChatSendResolvesUserBeforeDispatch(t *testing.T) {
 	caller := &chatChangedContractCaller{resolveUsers: true}
-	err := executeChatChangedContract(t, caller, "message", "send", "--user", "123", "--text", "hello")
+	err := executeChatChangedContract(t, caller, "message", "send", "--user-id", "123", "--text", "hello")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +525,7 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 
 func TestCrossPlatformCoverageChatSendFailsClosedWhenUserCannotResolve(t *testing.T) {
 	caller := &chatChangedContractCaller{}
-	err := executeChatChangedContract(t, caller, "message", "send", "--user", "123", "--text", "hello")
+	err := executeChatChangedContract(t, caller, "message", "send", "--user-id", "123", "--text", "hello")
 	if err == nil || !strings.Contains(err.Error(), "pass --open-dingtalk-id instead") {
 		t.Fatalf("error = %v, want explicit resolution failure", err)
 	}
@@ -533,5 +533,30 @@ func TestCrossPlatformCoverageChatSendFailsClosedWhenUserCannotResolve(t *testin
 		if call.toolName == "send_personal_message" {
 			t.Fatalf("unresolved user must not be dispatched: %#v", caller.calls)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageChatSendAcceptsLegacyUserAlias(t *testing.T) {
+	caller := &chatChangedContractCaller{resolveUsers: true}
+	err := executeChatChangedContract(t, caller, "message", "send", "--user", "123", "--text", "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.calls) != 2 || caller.calls[1].toolName != "send_personal_message" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	if got := caller.calls[1].args["receiverOpenDingTalkId"]; got != "open-123" {
+		t.Fatalf("receiverOpenDingTalkId = %#v, args = %#v", got, caller.calls[1].args)
+	}
+}
+
+func TestCrossPlatformCoverageChatSendRejectsUserIDAliasConflict(t *testing.T) {
+	caller := &chatChangedContractCaller{resolveUsers: true}
+	err := executeChatChangedContract(t, caller, "message", "send", "--user-id", "123", "--user", "456", "--text", "hello")
+	if err == nil || !strings.Contains(err.Error(), "--user conflicts with --user-id") {
+		t.Fatalf("error = %v, want user-id conflict", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none", caller.calls)
 	}
 }
