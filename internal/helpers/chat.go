@@ -4900,15 +4900,19 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageListByIdsCmd := &cobra.Command{
 		Use:   "list-by-ids",
 		Short: "根据消息 ID 批量查询消息",
-		Example: `  dws chat message list-by-ids --msg-ids msgId1,msgId2,msgId3
+		Example: `  dws chat message list-by-ids --message-ids msgId1,msgId2,msgId3
   # 最多传 50 条消息 ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "msg-ids"); err != nil {
+			messageIDs, err := syncStringFlagAliases(cmd, "message-ids", "msg-ids", "open-message-ids")
+			if err != nil {
 				return err
 			}
-			msgIds := parseCSVValues(mustGetFlag(cmd, "msg-ids"))
+			if messageIDs == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-ids", "msg-ids", "open-message-ids")
+			}
+			msgIds := parseCSVValues(messageIDs)
 			if len(msgIds) > 50 {
-				return fmt.Errorf("--msg-ids 最多支持 50 条，当前 %d 条", len(msgIds))
+				return fmt.Errorf("--message-ids 最多支持 50 条，当前 %d 条", len(msgIds))
 			}
 			return callMCPToolOnServer("im", "list_messages_by_ids", map[string]any{
 				"openMsgIds": msgIds,
@@ -4938,31 +4942,42 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 				AgentSummary: "按消息 ID 批量获取消息详情",
 				UseWhen:      []string{"已经持有一组 msgId 并需要精确取回消息时"},
 				AvoidWhen:    []string{"只有关键词或时间范围时使用 search 或 list 命令"},
-				Examples:     []string{"dws chat message list-by-ids --msg-ids msgId1,msgId2"},
+				Examples:     []string{"dws chat message list-by-ids --message-ids msgId1,msgId2"},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "msg-ids", Property: "openMsgIds"},
+				{Name: "message-ids", Property: "openMsgIds"},
 			},
 		},
 	})
-	chatMessageListByIdsCmd.Flags().String("msg-ids", "", "消息 ID 列表，逗号分隔，最多 50 条 (必填)")
-	_ = chatMessageListByIdsCmd.MarkFlagRequired("msg-ids")
+	chatMessageListByIdsCmd.Flags().String("message-ids", "", "消息 ID 列表，逗号分隔，最多 50 条 (必填)")
+	chatMessageListByIdsCmd.Flags().String("msg-ids", "", "--message-ids 的别名")
+	_ = chatMessageListByIdsCmd.Flags().MarkHidden("msg-ids")
+	chatMessageListByIdsCmd.Flags().String("open-message-ids", "", "--message-ids 的别名")
+	_ = chatMessageListByIdsCmd.Flags().MarkHidden("open-message-ids")
+	chatMessageListByIdsCmd.MarkFlagsOneRequired("message-ids", "msg-ids", "open-message-ids")
 
 	chatMessageAddEmojiCmd := &cobra.Command{
 		Use:   "add-emoji",
 		Short: "对消息添加 emoji 表情回应",
-		Example: `  dws chat message add-emoji --conversation-id <openConversationId> --msg-id <openMsgId> --emoji "赞"
+		Example: `  dws chat message add-emoji --conversation-id <openConversationId> --message-id <openMsgId> --emoji "赞"
   # 查询会话 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "msg-id", "emoji"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "emoji"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "add_emoji_reaction", map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
+				"openMsgId":          messageID,
 				"emojiName":          mustGetFlag(cmd, "emoji"),
 			})
 		},
@@ -4990,14 +5005,14 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 				AgentSummary: "给指定消息添加表情回应",
 				UseWhen:      []string{"需要对已有消息添加一个 emoji reaction 时"},
 				AvoidWhen:    []string{"发送文本消息或文字表情时不要使用"},
-				Examples:     []string{"dws chat message add-emoji --conversation-id <openConversationId> --msg-id <openMessageId> --emoji \"赞\""},
+				Examples:     []string{"dws chat message add-emoji --conversation-id <openConversationId> --message-id <openMessageId> --emoji \"赞\""},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "chat", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "id", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "emoji", Property: "emojiName"},
-				{Name: "msg-id", Property: "openMsgId"},
+				{Name: "message-id", Property: "openMsgId"},
 			},
 		},
 	})
@@ -5005,24 +5020,35 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageAddEmojiCmd.Flags().String("group", "", "--conversation-id 的别名")
 	chatMessageAddEmojiCmd.Flags().String("id", "", "--conversation-id 的别名")
 	chatMessageAddEmojiCmd.Flags().String("chat", "", "--conversation-id 的别名")
-	chatMessageAddEmojiCmd.Flags().String("msg-id", "", "消息 openMsgId (必填)")
+	chatMessageAddEmojiCmd.Flags().String("message-id", "", "消息 openMsgId (必填)")
+	chatMessageAddEmojiCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageAddEmojiCmd.Flags().MarkHidden("msg-id")
+	chatMessageAddEmojiCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageAddEmojiCmd.Flags().MarkHidden("open-message-id")
 	chatMessageAddEmojiCmd.Flags().String("emoji", "", "emoji 表情名称 (必填)")
 
 	chatMessageRemoveEmojiCmd := &cobra.Command{
 		Use:   "remove-emoji",
 		Short: "移除消息的 emoji 表情回应",
-		Example: `  dws chat message remove-emoji --conversation-id <openConversationId> --msg-id <openMsgId> --emoji "赞"
+		Example: `  dws chat message remove-emoji --conversation-id <openConversationId> --message-id <openMsgId> --emoji "赞"
   # 查询会话 ID: dws chat search --query "群名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "msg-id", "emoji"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "emoji"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "remove_emoji_reaction", map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
+				"openMsgId":          messageID,
 				"emojiName":          mustGetFlag(cmd, "emoji"),
 			})
 		},
@@ -5050,14 +5076,14 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 				AgentSummary: "移除指定消息上的表情回应",
 				UseWhen:      []string{"需要取消此前添加的 emoji reaction 时"},
 				AvoidWhen:    []string{"移除文字表情时使用 chat message remove-text-emotion"},
-				Examples:     []string{"dws chat message remove-emoji --conversation-id <openConversationId> --msg-id <openMessageId> --emoji \"赞\""},
+				Examples:     []string{"dws chat message remove-emoji --conversation-id <openConversationId> --message-id <openMessageId> --emoji \"赞\""},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "chat", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "id", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "emoji", Property: "emojiName"},
-				{Name: "msg-id", Property: "openMsgId"},
+				{Name: "message-id", Property: "openMsgId"},
 			},
 		},
 	})
@@ -5065,23 +5091,34 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageRemoveEmojiCmd.Flags().String("group", "", "--conversation-id 的别名")
 	chatMessageRemoveEmojiCmd.Flags().String("id", "", "--conversation-id 的别名")
 	chatMessageRemoveEmojiCmd.Flags().String("chat", "", "--conversation-id 的别名")
-	chatMessageRemoveEmojiCmd.Flags().String("msg-id", "", "消息 openMsgId (必填)")
+	chatMessageRemoveEmojiCmd.Flags().String("message-id", "", "消息 openMsgId (必填)")
+	chatMessageRemoveEmojiCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageRemoveEmojiCmd.Flags().MarkHidden("msg-id")
+	chatMessageRemoveEmojiCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageRemoveEmojiCmd.Flags().MarkHidden("open-message-id")
 	chatMessageRemoveEmojiCmd.Flags().String("emoji", "", "emoji 表情名称 (必填)")
 
 	chatMessageAddTextEmotionCmd := &cobra.Command{
 		Use:     "add-text-emotion",
 		Short:   "对消息添加文字表情回应",
-		Example: `  dws chat message add-text-emotion --conversation-id <openConversationId> --msg-id <openMsgId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id im_bg_5`,
+		Example: `  dws chat message add-text-emotion --conversation-id <openConversationId> --message-id <openMsgId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id im_bg_5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "msg-id", "emotion-id", "emotion-name", "text", "background-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "emotion-id", "emotion-name", "text", "background-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "add_text_emotion", map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
+				"openMsgId":          messageID,
 				"emotionId":          mustGetFlag(cmd, "emotion-id"),
 				"emotionName":        mustGetFlag(cmd, "emotion-name"),
 				"text":               mustGetFlag(cmd, "text"),
@@ -5112,13 +5149,13 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 				AgentSummary: "给指定消息添加已定义的文字表情",
 				UseWhen:      []string{"已有文字表情定义并要附加到消息时"},
 				AvoidWhen:    []string{"需要先创建文字表情资源时使用 chat message create-text-emotion"},
-				Examples:     []string{"dws chat message add-text-emotion --conversation-id <openConversationId> --msg-id <openMessageId> --emotion-id <emotionId> --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"},
+				Examples:     []string{"dws chat message add-text-emotion --conversation-id <openConversationId> --message-id <openMessageId> --emotion-id <emotionId> --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "chat", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "id", Property: "openConversationId", Required: boolPtr(false)},
-				{Name: "msg-id", Property: "openMsgId"},
+				{Name: "message-id", Property: "openMsgId"},
 			},
 		},
 	})
@@ -5126,7 +5163,11 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageAddTextEmotionCmd.Flags().String("group", "", "--conversation-id 的别名")
 	chatMessageAddTextEmotionCmd.Flags().String("id", "", "--conversation-id 的别名")
 	chatMessageAddTextEmotionCmd.Flags().String("chat", "", "--conversation-id 的别名")
-	chatMessageAddTextEmotionCmd.Flags().String("msg-id", "", "消息 openMsgId (必填)")
+	chatMessageAddTextEmotionCmd.Flags().String("message-id", "", "消息 openMsgId (必填)")
+	chatMessageAddTextEmotionCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageAddTextEmotionCmd.Flags().MarkHidden("msg-id")
+	chatMessageAddTextEmotionCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageAddTextEmotionCmd.Flags().MarkHidden("open-message-id")
 	chatMessageAddTextEmotionCmd.Flags().String("emotion-id", "", "表情 ID (必填，通过 create-text-emotion 获取)")
 	chatMessageAddTextEmotionCmd.Flags().String("emotion-name", "", "表情名称 (必填)")
 	chatMessageAddTextEmotionCmd.Flags().String("text", "", "文字内容 (必填)")
@@ -5135,17 +5176,24 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageRemoveTextEmotionCmd := &cobra.Command{
 		Use:     "remove-text-emotion",
 		Short:   "移除消息的文字表情回应",
-		Example: `  dws chat message remove-text-emotion --conversation-id <openConversationId> --msg-id <openMsgId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id <backgroundId>`,
+		Example: `  dws chat message remove-text-emotion --conversation-id <openConversationId> --message-id <openMsgId> --emotion-id <emotionId> --emotion-name "赞" --text "nice" --background-id <backgroundId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlagWithAliases(cmd, "conversation-id", "group", "id", "chat"); err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "msg-id", "emotion-id", "emotion-name", "text", "background-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "emotion-id", "emotion-name", "text", "background-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "remove_text_emotion", map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
-				"openMsgId":          mustGetFlag(cmd, "msg-id"),
+				"openMsgId":          messageID,
 				"emotionId":          mustGetFlag(cmd, "emotion-id"),
 				"emotionName":        mustGetFlag(cmd, "emotion-name"),
 				"text":               mustGetFlag(cmd, "text"),
@@ -5176,13 +5224,13 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 				AgentSummary: "移除指定消息上的文字表情回应",
 				UseWhen:      []string{"需要取消已添加的文字表情时"},
 				AvoidWhen:    []string{"移除普通 emoji reaction 时使用 chat message remove-emoji"},
-				Examples:     []string{"dws chat message remove-text-emotion --conversation-id <openConversationId> --msg-id <openMessageId> --emotion-id <emotionId> --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"},
+				Examples:     []string{"dws chat message remove-text-emotion --conversation-id <openConversationId> --message-id <openMessageId> --emotion-id <emotionId> --emotion-name \"赞\" --text \"nice\" --background-id im_bg_5"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "chat", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(false)},
 				{Name: "id", Property: "openConversationId", Required: boolPtr(false)},
-				{Name: "msg-id", Property: "openMsgId"},
+				{Name: "message-id", Property: "openMsgId"},
 			},
 		},
 	})
@@ -5190,7 +5238,11 @@ chat message edit 或 chat message recall 的 --msg-id 和 --conversation-id。`
 	chatMessageRemoveTextEmotionCmd.Flags().String("group", "", "--conversation-id 的别名")
 	chatMessageRemoveTextEmotionCmd.Flags().String("id", "", "--conversation-id 的别名")
 	chatMessageRemoveTextEmotionCmd.Flags().String("chat", "", "--conversation-id 的别名")
-	chatMessageRemoveTextEmotionCmd.Flags().String("msg-id", "", "消息 openMsgId (必填)")
+	chatMessageRemoveTextEmotionCmd.Flags().String("message-id", "", "消息 openMsgId (必填)")
+	chatMessageRemoveTextEmotionCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageRemoveTextEmotionCmd.Flags().MarkHidden("msg-id")
+	chatMessageRemoveTextEmotionCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageRemoveTextEmotionCmd.Flags().MarkHidden("open-message-id")
 	chatMessageRemoveTextEmotionCmd.Flags().String("emotion-id", "", "表情 ID (必填)")
 	chatMessageRemoveTextEmotionCmd.Flags().String("emotion-name", "", "表情名称 (必填)")
 	chatMessageRemoveTextEmotionCmd.Flags().String("text", "", "文字内容 (必填)")
@@ -6137,14 +6189,21 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>
           （openDingTalkId 可通过 dws contact user search --query "姓名" 获取）`,
-		Example: `  dws chat message forward --src-conversation-id <srcOpenConversationId> --msg-id <srcOpenMessageId> --dest-conversation-id <destOpenConversationId>`,
+		Example: `  dws chat message forward --src-conversation-id <srcOpenConversationId> --message-id <srcOpenMessageId> --dest-conversation-id <destOpenConversationId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "src-conversation-id", "msg-id", "dest-conversation-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "src-conversation-id", "dest-conversation-id"); err != nil {
 				return err
 			}
 			toolArgs := map[string]any{
 				"srcOpenCid":       mustGetFlag(cmd, "src-conversation-id"),
-				"srcOpenMessageId": mustGetFlag(cmd, "msg-id"),
+				"srcOpenMessageId": messageID,
 				"destOpenCid":      mustGetFlag(cmd, "dest-conversation-id"),
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
@@ -6176,19 +6235,23 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				AgentSummary: "把一条已有消息转发到另一个会话",
 				UseWhen:      []string{"已知源消息与源、目标会话 ID 时"},
 				AvoidWhen:    []string{"合并转发多条消息时使用 chat message combine-forward"},
-				Examples:     []string{"dws chat message forward --src-conversation-id <srcConversationId> --msg-id <openMessageId> --dest-conversation-id <destConversationId>"},
+				Examples:     []string{"dws chat message forward --src-conversation-id <srcConversationId> --message-id <openMessageId> --dest-conversation-id <destConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "dest-conversation-id", Property: "destOpenCid"},
-				{Name: "msg-id", Property: "srcOpenMessageId"},
+				{Name: "message-id", Property: "srcOpenMessageId"},
 				{Name: "src-conversation-id", Property: "srcOpenCid"},
 			},
 		},
 	})
 	chatMessageForwardCmd.Flags().String("src-conversation-id", "", "源会话 openConversationId (必填，支持单聊/群聊)")
 	_ = chatMessageForwardCmd.MarkFlagRequired("src-conversation-id")
-	chatMessageForwardCmd.Flags().String("msg-id", "", "源消息 openMessageId (必填)")
-	_ = chatMessageForwardCmd.MarkFlagRequired("msg-id")
+	chatMessageForwardCmd.Flags().String("message-id", "", "源消息 openMessageId (必填)")
+	chatMessageForwardCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageForwardCmd.Flags().MarkHidden("msg-id")
+	chatMessageForwardCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageForwardCmd.Flags().MarkHidden("open-message-id")
+	chatMessageForwardCmd.MarkFlagsOneRequired("message-id", "msg-id", "open-message-id")
 	chatMessageForwardCmd.Flags().String("dest-conversation-id", "", "目标会话 openConversationId (必填，支持单聊/群聊)")
 	_ = chatMessageForwardCmd.MarkFlagRequired("dest-conversation-id")
 	chatMessageForwardCmd.Flags().String("uuid", "", "幂等键（可选）")
@@ -7322,15 +7385,22 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>
           （openDingTalkId 可通过 dws contact user search --query "姓名" 获取）`,
-		Example: `  dws chat message combine-forward --src-conversation-id <srcOpenCid> --msg-ids <id1>,<id2>,<id3> --dest-conversation-id <destOpenCid>
-  dws chat message combine-forward --src-conversation-id <srcOpenCid> --msg-ids <id1>,<id2> --dest-conversation-id <destOpenCid> --uuid <idempotencyKey>`,
+		Example: `  dws chat message combine-forward --src-conversation-id <srcOpenCid> --message-ids <id1>,<id2>,<id3> --dest-conversation-id <destOpenCid>
+  dws chat message combine-forward --src-conversation-id <srcOpenCid> --message-ids <id1>,<id2> --dest-conversation-id <destOpenCid> --uuid <idempotencyKey>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "src-conversation-id", "msg-ids", "dest-conversation-id"); err != nil {
+			messageIDs, err := syncStringFlagAliases(cmd, "message-ids", "msg-ids", "open-message-ids")
+			if err != nil {
+				return err
+			}
+			if messageIDs == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-ids", "msg-ids", "open-message-ids")
+			}
+			if err := validateRequiredFlags(cmd, "src-conversation-id", "dest-conversation-id"); err != nil {
 				return err
 			}
 			toolArgs := map[string]any{
 				"srcOpenCid":        mustGetFlag(cmd, "src-conversation-id"),
-				"srcOpenMessageIds": parseCSVValues(mustGetFlag(cmd, "msg-ids")),
+				"srcOpenMessageIds": parseCSVValues(messageIDs),
 				"destOpenCid":       mustGetFlag(cmd, "dest-conversation-id"),
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
@@ -7362,19 +7432,23 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				AgentSummary: "把多条消息合并转发到目标会话",
 				UseWhen:      []string{"需要保留多条源消息并作为合集转发时"},
 				AvoidWhen:    []string{"只转发单条消息时使用 chat message forward"},
-				Examples:     []string{"dws chat message combine-forward --src-conversation-id <srcConversationId> --msg-ids <id1>,<id2> --dest-conversation-id <destConversationId>"},
+				Examples:     []string{"dws chat message combine-forward --src-conversation-id <srcConversationId> --message-ids <id1>,<id2> --dest-conversation-id <destConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "dest-conversation-id", Property: "destOpenCid"},
-				{Name: "msg-ids", Property: "srcOpenMessageIds"},
+				{Name: "message-ids", Property: "srcOpenMessageIds"},
 				{Name: "src-conversation-id", Property: "srcOpenCid"},
 			},
 		},
 	})
 	chatMessageCombineForwardCmd.Flags().String("src-conversation-id", "", "源会话 openConversationId (必填，支持单聊/群聊)")
 	_ = chatMessageCombineForwardCmd.MarkFlagRequired("src-conversation-id")
-	chatMessageCombineForwardCmd.Flags().String("msg-ids", "", "源消息 openMessageId 列表，逗号分隔 (必填)")
-	_ = chatMessageCombineForwardCmd.MarkFlagRequired("msg-ids")
+	chatMessageCombineForwardCmd.Flags().String("message-ids", "", "源消息 openMessageId 列表，逗号分隔 (必填)")
+	chatMessageCombineForwardCmd.Flags().String("msg-ids", "", "--message-ids 的别名")
+	_ = chatMessageCombineForwardCmd.Flags().MarkHidden("msg-ids")
+	chatMessageCombineForwardCmd.Flags().String("open-message-ids", "", "--message-ids 的别名")
+	_ = chatMessageCombineForwardCmd.Flags().MarkHidden("open-message-ids")
+	chatMessageCombineForwardCmd.MarkFlagsOneRequired("message-ids", "msg-ids", "open-message-ids")
 	chatMessageCombineForwardCmd.Flags().String("dest-conversation-id", "", "目标会话 openConversationId (必填，支持单聊/群聊)")
 	_ = chatMessageCombineForwardCmd.MarkFlagRequired("dest-conversation-id")
 	chatMessageCombineForwardCmd.Flags().String("uuid", "", "幂等键（可选）")
@@ -7393,13 +7467,20 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 
 话题 ID（srcOpenConvThreadId）格式为 "convThread" + 加密后的 convThreadId，
 可通过 dws chat message list 返回的话题信息获取。`,
-		Example: `  dws chat message forward-topic --src-msg-id <srcOpenMessageId> --src-conversation-id <srcOpenConversationId> --src-thread-id <srcOpenConvThreadId> --dest-conversation-id <destOpenConversationId>`,
+		Example: `  dws chat message forward-topic --source-message-id <srcOpenMessageId> --src-conversation-id <srcOpenConversationId> --src-thread-id <srcOpenConvThreadId> --dest-conversation-id <destOpenConversationId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "src-msg-id", "src-conversation-id", "src-thread-id", "dest-conversation-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "source-message-id", "src-msg-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "source-message-id", "src-msg-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "src-conversation-id", "src-thread-id", "dest-conversation-id"); err != nil {
 				return err
 			}
 			toolArgs := map[string]any{
-				"srcOpenMessageId":       mustGetFlag(cmd, "src-msg-id"),
+				"srcOpenMessageId":       messageID,
 				"srcOpenConversationId":  mustGetFlag(cmd, "src-conversation-id"),
 				"srcOpenConvThreadId":    mustGetFlag(cmd, "src-thread-id"),
 				"destOpenConversationId": mustGetFlag(cmd, "dest-conversation-id"),
@@ -7430,18 +7511,24 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				AgentSummary: "把一个话题消息转发到目标会话",
 				UseWhen:      []string{"需要转发话题圈中的主题及上下文时"},
 				AvoidWhen:    []string{"普通单条消息转发使用 chat message forward"},
-				Examples:     []string{"dws chat message forward-topic --src-msg-id <openMessageId> --src-conversation-id <srcConversationId> --src-thread-id <threadId> --dest-conversation-id <destConversationId>"},
+				Examples:     []string{"dws chat message forward-topic --source-message-id <openMessageId> --src-conversation-id <srcConversationId> --src-thread-id <threadId> --dest-conversation-id <destConversationId>"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "dest-conversation-id", Property: "destOpenConversationId"},
+				{Name: "source-message-id", Property: "srcOpenMessageId"},
 				{Name: "src-conversation-id", Property: "srcOpenConversationId"},
-				{Name: "src-msg-id", Property: "srcOpenMessageId"},
 				{Name: "src-thread-id", Property: "srcOpenConvThreadId"},
 			},
 		},
 	})
-	chatMessageForwardTopicCmd.Flags().String("src-msg-id", "", "源消息 openMessageId (必填，要转发的消息)")
-	_ = chatMessageForwardTopicCmd.MarkFlagRequired("src-msg-id")
+	chatMessageForwardTopicCmd.Flags().String("source-message-id", "", "源消息 openMessageId (必填，要转发的消息)")
+	chatMessageForwardTopicCmd.Flags().String("src-msg-id", "", "--source-message-id 的别名")
+	_ = chatMessageForwardTopicCmd.Flags().MarkHidden("src-msg-id")
+	chatMessageForwardTopicCmd.Flags().String("msg-id", "", "--source-message-id 的别名")
+	_ = chatMessageForwardTopicCmd.Flags().MarkHidden("msg-id")
+	chatMessageForwardTopicCmd.Flags().String("open-message-id", "", "--source-message-id 的别名")
+	_ = chatMessageForwardTopicCmd.Flags().MarkHidden("open-message-id")
+	chatMessageForwardTopicCmd.MarkFlagsOneRequired("source-message-id", "src-msg-id", "msg-id", "open-message-id")
 	chatMessageForwardTopicCmd.Flags().String("src-conversation-id", "", "源会话 openConversationId (必填，消息所在的会话)")
 	_ = chatMessageForwardTopicCmd.MarkFlagRequired("src-conversation-id")
 	chatMessageForwardTopicCmd.Flags().String("src-thread-id", "", "话题 ID (必填，格式: convThread + 加密后的convThreadId)")
@@ -7459,14 +7546,21 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>`,
-		Example: `  dws chat message set-pin-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>`,
+		Example: `  dws chat message set-pin-msg --open-conversation-id <openConversationId> --message-id <openMessageId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "open-conversation-id", "msg-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "open-conversation-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "set_pin_message", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openMessageId":      messageID,
 			})
 		},
 	}
@@ -7493,17 +7587,21 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				AgentSummary: "把指定消息设为会话置顶消息",
 				UseWhen:      []string{"需要在会话中置顶一条已知消息时"},
 				AvoidWhen:    []string{"取消置顶使用 chat message unset-pin-msg"},
-				Examples:     []string{"dws chat message set-pin-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>"},
+				Examples:     []string{"dws chat message set-pin-msg --open-conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "msg-id", Property: "openMessageId"},
+				{Name: "message-id", Property: "openMessageId"},
 			},
 		},
 	})
 	chatMessageSetPinCmd.Flags().String("open-conversation-id", "", "会话 openConversationId (必填，支持群聊/单聊)")
 	_ = chatMessageSetPinCmd.MarkFlagRequired("open-conversation-id")
-	chatMessageSetPinCmd.Flags().String("msg-id", "", "消息 openMessageId (必填)")
-	_ = chatMessageSetPinCmd.MarkFlagRequired("msg-id")
+	chatMessageSetPinCmd.Flags().String("message-id", "", "消息 openMessageId (必填)")
+	chatMessageSetPinCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageSetPinCmd.Flags().MarkHidden("msg-id")
+	chatMessageSetPinCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageSetPinCmd.Flags().MarkHidden("open-message-id")
+	chatMessageSetPinCmd.MarkFlagsOneRequired("message-id", "msg-id", "open-message-id")
 
 	chatMessageUnsetPinCmd := &cobra.Command{
 		Use:   "unset-pin-msg",
@@ -7513,14 +7611,21 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>`,
-		Example: `  dws chat message unset-pin-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>`,
+		Example: `  dws chat message unset-pin-msg --open-conversation-id <openConversationId> --message-id <openMessageId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "open-conversation-id", "msg-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "open-conversation-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "unset_pin_message", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openMessageId":      messageID,
 			})
 		},
 	}
@@ -7547,17 +7652,21 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				AgentSummary: "取消指定消息的会话置顶",
 				UseWhen:      []string{"需要移除一条已知置顶消息时"},
 				AvoidWhen:    []string{"新增置顶使用 chat message set-pin-msg"},
-				Examples:     []string{"dws chat message unset-pin-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>"},
+				Examples:     []string{"dws chat message unset-pin-msg --open-conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "msg-id", Property: "openMessageId"},
+				{Name: "message-id", Property: "openMessageId"},
 			},
 		},
 	})
 	chatMessageUnsetPinCmd.Flags().String("open-conversation-id", "", "会话 openConversationId (必填，支持群聊/单聊)")
 	_ = chatMessageUnsetPinCmd.MarkFlagRequired("open-conversation-id")
-	chatMessageUnsetPinCmd.Flags().String("msg-id", "", "消息 openMessageId (必填)")
-	_ = chatMessageUnsetPinCmd.MarkFlagRequired("msg-id")
+	chatMessageUnsetPinCmd.Flags().String("message-id", "", "消息 openMessageId (必填)")
+	chatMessageUnsetPinCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageUnsetPinCmd.Flags().MarkHidden("msg-id")
+	chatMessageUnsetPinCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageUnsetPinCmd.Flags().MarkHidden("open-message-id")
+	chatMessageUnsetPinCmd.MarkFlagsOneRequired("message-id", "msg-id", "open-message-id")
 
 	chatMessageListPinCmd := &cobra.Command{
 		Use:   "list-pin-msg",
@@ -8404,21 +8513,32 @@ status 可选值:
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>`,
-		Example: `  dws chat message set-top-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>`,
+		Example: `  dws chat message set-top-msg --open-conversation-id <openConversationId> --message-id <openMessageId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "open-conversation-id", "msg-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "open-conversation-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "set_top_message", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openMessageId":      messageID,
 			})
 		},
 	}
 	chatMessageSetTopMsgCmd.Flags().String("open-conversation-id", "", "会话 openConversationId (必填，支持群聊/单聊)")
 	_ = chatMessageSetTopMsgCmd.MarkFlagRequired("open-conversation-id")
-	chatMessageSetTopMsgCmd.Flags().String("msg-id", "", "消息 openMessageId (必填)")
-	_ = chatMessageSetTopMsgCmd.MarkFlagRequired("msg-id")
+	chatMessageSetTopMsgCmd.Flags().String("message-id", "", "消息 openMessageId (必填)")
+	chatMessageSetTopMsgCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageSetTopMsgCmd.Flags().MarkHidden("msg-id")
+	chatMessageSetTopMsgCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageSetTopMsgCmd.Flags().MarkHidden("open-message-id")
+	chatMessageSetTopMsgCmd.MarkFlagsOneRequired("message-id", "msg-id", "open-message-id")
 	DeclareLeafMetadata(chatMessageSetTopMsgCmd, LeafSpec{
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
@@ -8442,10 +8562,10 @@ status 可选值:
 				AgentSummary: "将指定会话消息设置为置顶",
 				UseWhen:      []string{"需要把群聊或单聊中的某条消息置顶展示时"},
 				AvoidWhen:    []string{"取消消息置顶时使用 chat message unset-top-msg"},
-				Examples:     []string{"dws chat message set-top-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>"},
+				Examples:     []string{"dws chat message set-top-msg --open-conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "msg-id", Property: "openMessageId", Required: boolPtr(true)},
+				{Name: "message-id", Property: "openMessageId", Required: boolPtr(true)},
 				{Name: "open-conversation-id", Property: "openConversationId", Required: boolPtr(true)},
 			},
 		},
@@ -8461,21 +8581,32 @@ status 可选值:
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>`,
-		Example: `  dws chat message unset-top-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>`,
+		Example: `  dws chat message unset-top-msg --open-conversation-id <openConversationId> --message-id <openMessageId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "open-conversation-id", "msg-id"); err != nil {
+			messageID, err := syncStringFlagAliases(cmd, "message-id", "msg-id", "open-message-id")
+			if err != nil {
+				return err
+			}
+			if messageID == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-id", "msg-id", "open-message-id")
+			}
+			if err := validateRequiredFlags(cmd, "open-conversation-id"); err != nil {
 				return err
 			}
 			return callMCPToolOnServer("im", "unset_top_message", map[string]any{
 				"openConversationId": mustGetFlag(cmd, "open-conversation-id"),
-				"openMessageId":      mustGetFlag(cmd, "msg-id"),
+				"openMessageId":      messageID,
 			})
 		},
 	}
 	chatMessageUnsetTopMsgCmd.Flags().String("open-conversation-id", "", "会话 openConversationId (必填，支持群聊/单聊)")
 	_ = chatMessageUnsetTopMsgCmd.MarkFlagRequired("open-conversation-id")
-	chatMessageUnsetTopMsgCmd.Flags().String("msg-id", "", "消息 openMessageId (必填)")
-	_ = chatMessageUnsetTopMsgCmd.MarkFlagRequired("msg-id")
+	chatMessageUnsetTopMsgCmd.Flags().String("message-id", "", "消息 openMessageId (必填)")
+	chatMessageUnsetTopMsgCmd.Flags().String("msg-id", "", "--message-id 的别名")
+	_ = chatMessageUnsetTopMsgCmd.Flags().MarkHidden("msg-id")
+	chatMessageUnsetTopMsgCmd.Flags().String("open-message-id", "", "--message-id 的别名")
+	_ = chatMessageUnsetTopMsgCmd.Flags().MarkHidden("open-message-id")
+	chatMessageUnsetTopMsgCmd.MarkFlagsOneRequired("message-id", "msg-id", "open-message-id")
 	DeclareLeafMetadata(chatMessageUnsetTopMsgCmd, LeafSpec{
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
@@ -8499,10 +8630,10 @@ status 可选值:
 				AgentSummary: "取消指定会话消息的置顶",
 				UseWhen:      []string{"需要取消某条消息的置顶状态时"},
 				AvoidWhen:    []string{"设置消息置顶时使用 chat message set-top-msg"},
-				Examples:     []string{"dws chat message unset-top-msg --open-conversation-id <openConversationId> --msg-id <openMessageId>"},
+				Examples:     []string{"dws chat message unset-top-msg --open-conversation-id <openConversationId> --message-id <openMessageId>"},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "msg-id", Property: "openMessageId", Required: boolPtr(true)},
+				{Name: "message-id", Property: "openMessageId", Required: boolPtr(true)},
 				{Name: "open-conversation-id", Property: "openConversationId", Required: boolPtr(true)},
 			},
 		},
@@ -9348,20 +9479,28 @@ status 可选值:
 	chatMessageListEmotionRepliesCmd := &cobra.Command{
 		Use:   "list-emotion-replies",
 		Short: "批量拉取消息的表情回复和文字回复",
-		Example: `  dws chat message list-emotion-replies --msg-ids msgId1,msgId2,msgId3
+		Example: `  dws chat message list-emotion-replies --message-ids msgId1,msgId2,msgId3
   # 消息 ID 可通过 dws chat message list 获取`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "msg-ids"); err != nil {
+			messageIDs, err := syncStringFlagAliases(cmd, "message-ids", "msg-ids", "open-message-ids")
+			if err != nil {
 				return err
 			}
-			msgIds := parseCSVValues(mustGetFlag(cmd, "msg-ids"))
+			if messageIDs == "" {
+				return validateRequiredFlagWithAliases(cmd, "message-ids", "msg-ids", "open-message-ids")
+			}
+			msgIds := parseCSVValues(messageIDs)
 			return callMCPToolOnServer("im", "list_message_emotion_replies", map[string]any{
 				"openMessageIds": msgIds,
 			})
 		},
 	}
-	chatMessageListEmotionRepliesCmd.Flags().String("msg-ids", "", "消息 ID 列表，逗号分隔 (必填)")
-	_ = chatMessageListEmotionRepliesCmd.MarkFlagRequired("msg-ids")
+	chatMessageListEmotionRepliesCmd.Flags().String("message-ids", "", "消息 ID 列表，逗号分隔 (必填)")
+	chatMessageListEmotionRepliesCmd.Flags().String("msg-ids", "", "--message-ids 的别名")
+	_ = chatMessageListEmotionRepliesCmd.Flags().MarkHidden("msg-ids")
+	chatMessageListEmotionRepliesCmd.Flags().String("open-message-ids", "", "--message-ids 的别名")
+	_ = chatMessageListEmotionRepliesCmd.Flags().MarkHidden("open-message-ids")
+	chatMessageListEmotionRepliesCmd.MarkFlagsOneRequired("message-ids", "msg-ids", "open-message-ids")
 	DeclareLeafMetadata(chatMessageListEmotionRepliesCmd, LeafSpec{
 		Safety: contract.SafetySpec{
 			Effect: "read", Risk: "low",
@@ -9385,10 +9524,10 @@ status 可选值:
 				AgentSummary: "批量拉取消息的表情回复和文字回复",
 				UseWhen:      []string{"已有一批消息 ID，需要查看对应 emoji reaction 或文字表情回复时"},
 				AvoidWhen:    []string{"需要读取消息正文时使用 chat message list-by-ids 或 message list"},
-				Examples:     []string{"dws chat message list-emotion-replies --msg-ids msgId1,msgId2"},
+				Examples:     []string{"dws chat message list-emotion-replies --message-ids msgId1,msgId2"},
 			},
 			Parameters: []contract.ParamDecl{
-				{Name: "msg-ids", Property: "openMessageIds", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "message-ids", Property: "openMessageIds", Required: boolPtr(true), InterfaceType: "array"},
 			},
 		},
 	})
