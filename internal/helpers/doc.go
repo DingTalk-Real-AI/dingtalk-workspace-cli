@@ -3668,6 +3668,17 @@ CLI 内部自动完成全部流程：
 			}
 
 			if deps.Caller.DryRun() {
+				if strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+					return deps.Out.PrintJSON(map[string]any{
+						"dry_run":      true,
+						"executed":     false,
+						"preview_kind": "plan",
+						"operation":    "doc_export",
+						"nodeId":       node,
+						"exportFormat": format,
+						"savedPath":    outputPath,
+					})
+				}
 				deps.Out.PrintKeyValue("操作", "导出文档（提交+轮询+下载）")
 				deps.Out.PrintKeyValue("文档", node)
 				deps.Out.PrintKeyValue("输出", outputPath)
@@ -3678,7 +3689,7 @@ CLI 内部自动完成全部流程：
 			ctx := context.Background()
 
 			// ── Step 1: 提交导出任务 ──
-			deps.Out.PrintInfo("[1/3] 提交导出任务...")
+			printJSONSafeInfo("[1/3] 提交导出任务...")
 			submitText, err := callMCPToolReturnText(ctx, "submit_export_job", submitArgs)
 			if err != nil {
 				return fmt.Errorf("提交导出任务失败: %w", err)
@@ -3693,10 +3704,10 @@ CLI 内部自动完成全部流程：
 				deps.Out.PrintRaw(submitText)
 				return fmt.Errorf("提交导出任务成功但未返回 jobId")
 			}
-			deps.Out.PrintInfo(fmt.Sprintf("    任务已提交，jobId: %s", jobID))
+			printJSONSafeInfo(fmt.Sprintf("    任务已提交，jobId: %s", jobID))
 
 			// ── Step 2: 渐进式退避轮询 ──
-			deps.Out.PrintInfo("[2/3] 等待导出完成...")
+			printJSONSafeInfo("[2/3] 等待导出完成...")
 			downloadURL, err := pollDocExportJob(ctx, jobID)
 			if err != nil {
 				return err
@@ -3715,9 +3726,26 @@ CLI 内部自动完成全部流程：
 				outputPath = filepath.Join(outputPath, filename)
 			}
 
-			deps.Out.PrintInfo(fmt.Sprintf("[3/3] 下载文件到 %s ...", outputPath))
+			printJSONSafeInfo(fmt.Sprintf("[3/3] 下载文件到 %s ...", outputPath))
 			if err := httpGetFile(ctx, downloadURL, nil, outputPath); err != nil {
 				return fmt.Errorf("文件下载失败 (jobId=%s): %w", jobID, err)
+			}
+
+			if strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+				info, err := os.Stat(outputPath)
+				if err != nil {
+					return fmt.Errorf("读取导出产物信息失败 (jobId=%s): %w", jobID, err)
+				}
+				return deps.Out.PrintJSON(map[string]any{
+					"success":      true,
+					"nodeId":       node,
+					"exportFormat": format,
+					"jobId":        jobID,
+					"taskId":       jobID,
+					"status":       "SUCCESS",
+					"savedPath":    outputPath,
+					"sizeBytes":    info.Size(),
+				})
 			}
 
 			deps.Out.PrintInfo(fmt.Sprintf("导出完成: %s", outputPath))
@@ -4657,7 +4685,7 @@ func pollDocExportJob(ctx context.Context, jobID string) (downloadURL string, er
 
 	for attempt := 1; attempt <= maxPolls; attempt++ {
 		interval := pollInterval(attempt)
-		deps.Out.PrintInfo(fmt.Sprintf("    第 %d/%d 次查询，等待 %v ...", attempt, maxPolls, interval))
+		printJSONSafeInfo(fmt.Sprintf("    第 %d/%d 次查询，等待 %v ...", attempt, maxPolls, interval))
 
 		select {
 		case <-ctx.Done():

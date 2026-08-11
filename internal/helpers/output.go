@@ -151,6 +151,17 @@ func (f *Formatter) PrintInfo(msg string)     { fmt.Fprintf(f.w, "[INFO] %s\n", 
 func (f *Formatter) PrintProgress(msg string) { fmt.Fprintf(f.errW, "%s\n", msg) }
 func (f *Formatter) PrintDim(msg string)      { fmt.Fprintf(f.w, "  %s\n", msg) }
 
+// printJSONSafeInfo keeps command progress out of stdout when the caller
+// requested JSON. A successful JSON command must leave stdout parseable; its
+// human-readable progress belongs on stderr instead.
+func printJSONSafeInfo(msg string) {
+	if deps != nil && deps.Caller != nil && strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+		deps.Out.PrintProgress("[INFO] " + msg)
+		return
+	}
+	deps.Out.PrintInfo(msg)
+}
+
 func (f *Formatter) PrintKeyValue(key, value string) {
 	fmt.Fprintf(f.w, "%-16s%s\n", key+":", value)
 }

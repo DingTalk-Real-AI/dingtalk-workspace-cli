@@ -13,6 +13,14 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
   targets to the initial card-creation request and prepending its returned
   `atTag` to the automatic streaming update.
 
+### Fixed
+
+- **Machine-readable export and download receipts** — `dws doc export`,
+  `dws drive download`, and `dws drive download --version` now keep progress
+  logs on stderr under `--format json` and emit one JSON result on stdout after
+  a successful local write. The result includes the saved path and byte size;
+  document exports additionally report the node, requested format, job/task
+  ID, and final status.
 ### Changed
 
 - **Minutes `permission apply --policy` type** — `--policy` is now declared as
