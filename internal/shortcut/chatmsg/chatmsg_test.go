@@ -697,7 +697,7 @@ func TestInteractiveCardTextExtraction(t *testing.T) {
 
 	t.Run("cardContent at message top level", func(t *testing.T) {
 		msg := map[string]any{
-			"messageId": "msg-1",
+			"messageId":   "msg-1",
 			"cardContent": cardContent,
 		}
 		got := Text(msg)
