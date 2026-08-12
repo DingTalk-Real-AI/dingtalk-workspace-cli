@@ -662,9 +662,10 @@ func TestCrossPlatformCoverageSearchMessageItemsFlattensConversationGroups(t *te
 	}
 }
 
-func TestInteractiveCardTextExtraction(t *testing.T) {
+func TestCrossPlatformCoverageInteractiveCardTextExtraction(t *testing.T) {
 	// Verified live shape from bot callbacks.
 	cardContent := []any{
+		"invalid-node",
 		map[string]any{
 			"children": []any{
 				map[string]any{"elementType": "TEXT", "value": "@监控机器人 "},
@@ -721,6 +722,20 @@ func TestInteractiveCardTextExtraction(t *testing.T) {
 		}
 	})
 
+	t.Run("empty cardContent returns empty", func(t *testing.T) {
+		got := extractInteractiveCardTextFromMap(map[string]any{"cardContent": []any{}})
+		if got != "" {
+			t.Fatalf("got %q, want empty", got)
+		}
+	})
+
+	t.Run("non-array cardContent returns empty", func(t *testing.T) {
+		got := extractInteractiveCardTextFromMap(map[string]any{"cardContent": "invalid"})
+		if got != "" {
+			t.Fatalf("got %q, want empty", got)
+		}
+	})
+
 	t.Run("CleanText with JSON cardContent", func(t *testing.T) {
 		input := `{"cardContent":[{"children":[{"elementType":"TEXT","value":"Alert: "},{"elementType":"TEXT","value":"CPU high"}]}]}`
 		got := CleanText(input)
@@ -731,6 +746,14 @@ func TestInteractiveCardTextExtraction(t *testing.T) {
 
 	t.Run("CleanText plain text unchanged", func(t *testing.T) {
 		input := "pod_status_no_running_wbprod"
+		got := CleanText(input)
+		if got != input {
+			t.Fatalf("CleanText() = %q, want unchanged", got)
+		}
+	})
+
+	t.Run("CleanText malformed card JSON unchanged", func(t *testing.T) {
+		input := `{"cardContent":`
 		got := CleanText(input)
 		if got != input {
 			t.Fatalf("CleanText() = %q, want unchanged", got)

@@ -259,11 +259,6 @@ func Text(m map[string]any) any {
 			}
 		}
 	}
-	// Last-resort: cardContent directly at the top level of the message map,
-	// without a wrapping content/text key.
-	if extracted := extractInteractiveCardTextFromMap(m); extracted != "" {
-		return extracted
-	}
 	return nil
 }
 
