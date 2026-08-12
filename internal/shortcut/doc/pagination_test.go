@@ -157,3 +157,49 @@ func TestCrossPlatformCoverageDocPaginationFinalBranchMatrix(t *testing.T) {
 		t.Fatalf("nested page state = %v/%v/%q", more, known, next)
 	}
 }
+
+func TestTemplatePaginationRemainingBranchCoverage(t *testing.T) {
+	run := func(t *testing.T, caller *docCoverageCaller, options docPageOptions) error {
+		t.Helper()
+		declaration := Search
+		declaration.Execute = func(rt *shortcut.RuntimeContext) error {
+			items, complete, truncated, cursor, pages, err := collectTemplatePages(rt, "search_doc_templates", map[string]any{"templateSource": "PUBLIC"}, options)
+			if err != nil {
+				return err
+			}
+			return rt.Output(map[string]any{"items": items, "complete": complete, "truncated": truncated, "cursor": cursor, "pages": pages})
+		}
+		return runDocCoverage(t, declaration, caller)
+	}
+	if err := run(t, &docCoverageCaller{responses: map[string][]map[string]any{
+		"search_doc_templates": {{"templates": []any{map[string]any{"templateId": "a"}}}},
+	}}, docPageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(t, &docCoverageCaller{responses: map[string][]map[string]any{
+		"search_doc_templates": {
+			{"templates": []any{map[string]any{"templateId": "a"}}, "hasMore": true, "nextCursor": "p2"},
+			{"templates": []any{map[string]any{"templateId": "a"}}, "hasMore": false},
+		},
+	}}, docPageOptions{PageAll: true, PageSize: 2, MaxPages: 2, MaxItems: 10}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name      string
+		responses []map[string]any
+		options   docPageOptions
+		wantErr   bool
+	}{
+		{"unproven", []map[string]any{{"templates": []any{map[string]any{"templateId": "a"}}}}, docPageOptions{PageAll: true, PageSize: 1, MaxPages: 2, MaxItems: 10}, true},
+		{"max items", []map[string]any{{"templates": []any{map[string]any{"templateId": "a"}}, "hasMore": true, "nextCursor": "p2"}}, docPageOptions{PageAll: true, PageSize: 1, MaxPages: 2, MaxItems: 1}, false},
+		{"stalled", []map[string]any{{"templates": []any{}, "hasMore": true}}, docPageOptions{PageAll: true, PageSize: 1, MaxPages: 2, MaxItems: 10}, true},
+		{"max pages", []map[string]any{{"templates": []any{}, "hasMore": true, "nextCursor": "p2"}}, docPageOptions{PageAll: true, PageSize: 1, MaxPages: 1, MaxItems: 10}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := run(t, &docCoverageCaller{responses: map[string][]map[string]any{"search_doc_templates": tc.responses}}, tc.options)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err=%v wantErr=%v", err, tc.wantErr)
+			}
+		})
+	}
+}

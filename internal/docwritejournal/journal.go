@@ -47,6 +47,19 @@ type fileData struct {
 
 var now = time.Now
 
+var (
+	journalResolveProfile = auth.ResolveProfile
+	journalAcquireLock    = auth.AcquireDualLock
+	journalMkdirAll       = os.MkdirAll
+	journalReadFile       = os.ReadFile
+	journalMarshal        = json.MarshalIndent
+	journalCreateTemp     = os.CreateTemp
+	journalChmod          = func(file *os.File, mode os.FileMode) error { return file.Chmod(mode) }
+	journalWrite          = func(file *os.File, data []byte) (int, error) { return file.Write(data) }
+	journalClose          = func(file *os.File) error { return file.Close() }
+	journalRename         = os.Rename
+)
+
 func Record(ctx context.Context, entry Entry) error {
 	entry.NodeID = strings.TrimSpace(entry.NodeID)
 	entry.Name = strings.TrimSpace(entry.Name)
@@ -108,7 +121,7 @@ func LookupFingerprint(ctx context.Context, fingerprint string) (Entry, bool, er
 
 func currentProfileKey() (string, string) {
 	selector := strings.TrimSpace(profilectx.Get())
-	profile, err := auth.ResolveProfile(config.DefaultConfigDir(), selector)
+	profile, err := journalResolveProfile(config.DefaultConfigDir(), selector)
 	if err == nil && profile != nil {
 		return strings.TrimSpace(profile.CorpID) + "/" + strings.TrimSpace(profile.UserID), strings.TrimSpace(profile.UserID)
 	}
@@ -131,17 +144,17 @@ func prune(entries []Entry) []Entry {
 
 func withLockedData(ctx context.Context, mutate func(*fileData) bool) error {
 	configDir := config.DefaultConfigDir()
-	lock, err := auth.AcquireDualLock(ctx, configDir)
+	lock, err := journalAcquireLock(ctx, configDir)
 	if err != nil {
 		return err
 	}
 	defer lock.Release()
-	if err := os.MkdirAll(configDir, config.DirPerm); err != nil {
+	if err := journalMkdirAll(configDir, config.DirPerm); err != nil {
 		return err
 	}
 	path := filepath.Join(configDir, journalFile)
 	data := fileData{Version: 1}
-	raw, readErr := os.ReadFile(path)
+	raw, readErr := journalReadFile(path)
 	if readErr == nil {
 		if err := json.Unmarshal(raw, &data); err != nil {
 			return fmt.Errorf("decode doc write journal: %w", err)
@@ -152,26 +165,26 @@ func withLockedData(ctx context.Context, mutate func(*fileData) bool) error {
 	if !mutate(&data) {
 		return nil
 	}
-	encoded, err := json.MarshalIndent(data, "", "  ")
+	encoded, err := journalMarshal(data, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(configDir, ".doc-write-journal-*")
+	tmp, err := journalCreateTemp(configDir, ".doc-write-journal-*")
 	if err != nil {
 		return err
 	}
 	tmpName := tmp.Name()
 	defer os.Remove(tmpName)
-	if err := tmp.Chmod(config.FilePerm); err != nil {
+	if err := journalChmod(tmp, config.FilePerm); err != nil {
 		_ = tmp.Close()
 		return err
 	}
-	if _, err := tmp.Write(encoded); err != nil {
+	if _, err := journalWrite(tmp, encoded); err != nil {
 		_ = tmp.Close()
 		return err
 	}
-	if err := tmp.Close(); err != nil {
+	if err := journalClose(tmp); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, path)
+	return journalRename(tmpName, path)
 }

@@ -364,9 +364,6 @@ func collectMediaItems(value any) []map[string]any {
 			}
 			if (resourceID != "" && resourceID != "<nil>") || resourceURL != "" {
 				row := map[string]any{"blockId": blockID}
-				if ownID := blockIdentity(typed, ""); ownID != "" && ownID != blockID {
-					row["mediaElementId"] = ownID
-				}
 				if resourceID != "" && resourceID != "<nil>" {
 					row["resourceId"] = resourceID
 				}

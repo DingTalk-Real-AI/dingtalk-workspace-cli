@@ -15,10 +15,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
@@ -36,6 +38,279 @@ type docCoverageCaller struct {
 	responses map[string][]map[string]any
 	ctx       context.Context
 	history   []docCoverageCall
+}
+
+func TestDocCreateJournalReplayAndReconciliationCoverage(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	testseam.Swap(t, &docVerifySleep, func(time.Duration) {})
+	run := func(declaration shortcut.Shortcut, caller *docCoverageCaller, args ...string) error {
+		return runDocCoveragePath(t, declaration, caller, strings.NewReader(""), declaration.Command, args...)
+	}
+
+	first := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": "body", "revision": 3.0}},
+	}}
+	if err := run(Create, first, "--name", "journal-doc", "--content", "body"); err != nil {
+		t.Fatal(err)
+	}
+	replay := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": "body", "revision": 3.0}},
+	}}
+	if err := run(Create, replay, "--name", "journal-doc", "--content", "body"); err != nil {
+		t.Fatal(err)
+	}
+	if len(replay.history) != 1 || replay.history[0].tool != "get_document_content" {
+		t.Fatalf("idempotent replay history = %#v", replay.history)
+	}
+
+	unique := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{
+		"search_documents": {{"documents": []any{map[string]any{"nodeId": "reconciled", "name": "reconcile"}}}},
+	}}
+	if err := run(Create, unique, "--name", "reconcile"); err != nil {
+		t.Fatalf("unique reconcile: %v", err)
+	}
+	multiple := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{
+		"search_documents": {{"documents": []any{
+			map[string]any{"nodeId": "a", "name": "duplicate"}, map[string]any{"nodeId": "b", "name": "duplicate"},
+		}}},
+	}}
+	if err := run(Create, multiple, "--name", "duplicate"); err == nil {
+		t.Fatal("ambiguous reconcile succeeded")
+	}
+	none := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{
+		"search_documents": {{"documents": []any{map[string]any{"nodeId": "x", "name": "other"}}}},
+	}}
+	if err := run(Create, none, "--name", "missing"); err == nil {
+		t.Fatal("missing reconcile succeeded")
+	}
+
+	withRevision := &docCoverageCaller{responses: map[string][]map[string]any{
+		"create_document":      {{"nodeId": "revision-node", "revision": 4.0}},
+		"get_document_content": {{"markdown": "revision body"}},
+	}}
+	if err := run(Create, withRevision, "--name", "revision-create", "--content", "revision body"); err != nil {
+		t.Fatalf("create revision receipt: %v", err)
+	}
+}
+
+func TestDocUpdateDryRunBranchCoverage(t *testing.T) {
+	block := func(id, text string) map[string]any {
+		return map[string]any{"id": id, "paragraph": map[string]any{"text": text}}
+	}
+	tests := []struct {
+		name      string
+		args      []string
+		responses map[string][]map[string]any
+		failAt    int
+		wantErr   bool
+	}{
+		{"append", []string{"--node", "n", "--command", "append", "--content", "new", "--dry-run"}, map[string][]map[string]any{"get_document_content": {{"markdown": "old"}}}, 0, false},
+		{"append read error", []string{"--node", "n", "--command", "append", "--content", "new", "--dry-run"}, nil, 1, true},
+		{"insert", []string{"--node", "n", "--command", "block_insert", "--ref-block", "ref", "--where", "before", "--content", "new", "--dry-run"}, map[string][]map[string]any{"list_document_blocks": {{"blocks": []any{block("ref", "old")}}}}, 0, false},
+		{"insert missing", []string{"--node", "n", "--command", "block_insert_after", "--after-block-id", "ref", "--content", "new", "--dry-run"}, map[string][]map[string]any{"list_document_blocks": {{"blocks": []any{}}}}, 0, true},
+		{"insert read error", []string{"--node", "n", "--command", "block_insert_after", "--after-block-id", "ref", "--content", "new", "--dry-run"}, nil, 1, true},
+		{"replace", []string{"--node", "n", "--command", "block_replace", "--block-id", "b", "--content", "new", "--dry-run"}, map[string][]map[string]any{"list_document_blocks": {{"blocks": []any{block("b", "old")}}}}, 0, false},
+		{"delete", []string{"--node", "n", "--command", "block_delete", "--block-id", "b", "--dry-run"}, map[string][]map[string]any{"list_document_blocks": {{"blocks": []any{block("b", "old")}}}}, 0, false},
+		{"replace missing", []string{"--node", "n", "--command", "block_replace", "--block-id", "b", "--content", "new", "--dry-run"}, map[string][]map[string]any{"list_document_blocks": {{"blocks": []any{}}}}, 0, true},
+		{"replace read error", []string{"--node", "n", "--command", "block_replace", "--block-id", "b", "--content", "new", "--dry-run"}, nil, 1, true},
+		{"str replace", []string{"--node", "n", "--command", "str_replace", "--old", "old", "--new", "new", "--dry-run"}, map[string][]map[string]any{"list_document_blocks": {{"blocks": []any{block("b", "old text")}}}}, 0, false},
+		{"str read error", []string{"--node", "n", "--command", "str_replace", "--old", "old", "--new", "new", "--dry-run"}, nil, 1, true},
+		{"copy", []string{"--node", "n", "--command", "block_copy_insert", "--block-id", "source", "--ref-block", "ref", "--where", "after", "--dry-run"}, map[string][]map[string]any{"list_document_blocks": {{"blocks": []any{block("source", "copy"), block("ref", "ref")}}}}, 0, false},
+		{"copy missing", []string{"--node", "n", "--command", "block_copy_insert_after", "--block-id", "source", "--after-block-id", "ref", "--dry-run"}, map[string][]map[string]any{"list_document_blocks": {{"blocks": []any{block("source", "copy")}}}}, 0, true},
+		{"copy read error", []string{"--node", "n", "--command", "block_copy_insert_after", "--block-id", "source", "--after-block-id", "ref", "--dry-run"}, nil, 1, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := runDocCoverage(t, Update, &docCoverageCaller{responses: tc.responses, failAt: tc.failAt}, tc.args...)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err=%v wantErr=%v", err, tc.wantErr)
+			}
+		})
+	}
+	unknown := Update
+	unknown.Flags = append([]shortcut.Flag(nil), Update.Flags...)
+	unknown.Flags[1].Enum = append(append([]string(nil), unknown.Flags[1].Enum...), "bogus")
+	if err := runDocCoverage(t, unknown, &docCoverageCaller{}, "--node", "n", "--command", "bogus", "--dry-run"); err == nil {
+		t.Fatal("unknown preview succeeded")
+	}
+}
+
+func TestDocUpdatePureMutationBranchCoverage(t *testing.T) {
+	if _, err := buildTypePreservingTextElement(nil, "x"); err == nil {
+		t.Fatal("nil block accepted")
+	}
+	if _, err := buildTypePreservingTextElement(map[string]any{"table": map[string]any{}}, "x"); err == nil {
+		t.Fatal("rich block accepted")
+	}
+	if _, err := cloneBlockElement(map[string]any{"bad": make(chan int)}); err == nil {
+		t.Fatal("unmarshalable block accepted")
+	}
+	t.Run("clone decode error", func(t *testing.T) {
+		testseam.Swap(t, &cloneBlockUnmarshal, func([]byte, any) error { return errors.New("decode") })
+		if _, err := cloneBlockElement(map[string]any{"id": "b"}); err == nil {
+			t.Fatal("decode failure ignored")
+		}
+		if _, err := buildTypePreservingTextElement(map[string]any{"paragraph": map[string]any{"text": "old"}}, "new"); err == nil {
+			t.Fatal("type-preserving clone failure ignored")
+		}
+	})
+	cloned, err := cloneBlockElement(map[string]any{"element": map[string]any{"id": "b", "paragraph": map[string]any{"text": "x"}}})
+	if err != nil || cloned["id"] != "b" {
+		t.Fatalf("nested clone = %#v, %v", cloned, err)
+	}
+	if got := replaceTextFields([]any{map[string]any{"text": "old"}}, "old", "new"); got != 1 {
+		t.Fatalf("array replacements = %d", got)
+	}
+	if verifyUpdatedDocumentContent(map[string]any{"markdown": "prefix\nsemantic text"}, "**semantic** text", "append", "markdown") != true {
+		t.Fatal("semantic append did not verify")
+	}
+	if !verifyInsertedCanonicalBlock(map[string]any{}, map[string]any{"blocks": []any{
+		map[string]any{"id": "new", "text": "copy"}, map[string]any{"id": "ref", "text": "ref"},
+	}}, "ref", "before", "copy", "element") {
+		t.Fatal("before insert did not verify")
+	}
+	items := collectMediaItems(map[string]any{"id": "container", "children": []any{
+		map[string]any{"id": "media", "resourceId": "rid"},
+	}})
+	if len(items) != 1 || items[0]["blockId"] != "media" {
+		t.Fatalf("nested map media = %#v", items)
+	}
+	items = collectMediaItems([]any{"img", map[string]any{"uuid": "image", "src": "url"}})
+	if len(items) != 1 || items[0]["blockId"] != "image" {
+		t.Fatalf("root media = %#v", items)
+	}
+}
+
+func TestDocSearchJournalFilterAndTemplateListCoverage(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	created := time.Now().UnixMilli()
+	for _, entry := range []docwritejournal.Entry{
+		{NodeID: "remote", Name: "remote duplicate", DocType: "ALIDOC", CreatedAt: created, WorkspaceID: "w", CreatorID: "u"},
+		{NodeID: "local", Name: "Quarterly Report", DocType: "ALIDOC", CreatedAt: created, WorkspaceID: "w", CreatorID: "u"},
+	} {
+		if err := docwritejournal.Record(context.Background(), entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func(caller *docCoverageCaller, args ...string) error {
+		return runDocCoveragePath(t, Search, caller, strings.NewReader(""), Search.Command, args...)
+	}
+	base := map[string][]map[string]any{"search_documents": {{"documents": []any{map[string]any{"nodeId": "remote", "name": "remote duplicate"}}, "hasMore": false}}}
+	if err := run(&docCoverageCaller{responses: base}, "--query", "report"); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"--query", "missing"}, {"--visited-from", "1"}, {"--visited-to", "1"}, {"--editor-uids", "e"}, {"--mentioned-uids", "m"},
+		{"--created-from", fmt.Sprint(created + 100)}, {"--created-to", fmt.Sprint(created - 100)}, {"--workspace-ids", "other"}, {"--creator-uids", "other"}, {"--extensions", "pdf"},
+		{"--workspace-ids", " W "}, {"--creator-uids", " U "}, {"--extensions", ".adoc"}, {"--extensions", "ALIDOC"},
+	} {
+		if err := run(&docCoverageCaller{responses: base}, args...); err != nil {
+			t.Fatalf("search %v: %v", args, err)
+		}
+	}
+
+	if err := runDocCoverage(t, TemplateList, &docCoverageCaller{responses: map[string][]map[string]any{
+		"list_doc_templates": {{"templates": []any{map[string]any{"templateId": "t"}}, "hasMore": false}},
+	}}, "--source", "PUBLIC"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runDocCoverage(t, TemplateList, &docCoverageCaller{failAt: 1}, "--source", "MY"); err == nil {
+		t.Fatal("template list read error succeeded")
+	}
+}
+
+func TestDocUpdateRemainingExecutionBranchCoverage(t *testing.T) {
+	block := func(id, text string) map[string]any {
+		return map[string]any{"id": id, "paragraph": map[string]any{"text": text}}
+	}
+	for _, tc := range []struct {
+		name   string
+		args   []string
+		caller *docCoverageCaller
+	}{
+		{"replace read error", []string{"--node", "n", "--command", "block_replace", "--block-id", "b", "--content", "new", "--yes"}, &docCoverageCaller{failAt: 1}},
+		{"replace missing", []string{"--node", "n", "--command", "block_replace", "--block-id", "b", "--content", "new", "--yes"}, &docCoverageCaller{responses: map[string][]map[string]any{
+			"list_document_blocks": {{"blocks": []any{}}},
+		}}},
+		{"replace rich", []string{"--node", "n", "--command", "block_replace", "--block-id", "b", "--content", "new", "--yes"}, &docCoverageCaller{responses: map[string][]map[string]any{
+			"list_document_blocks": {{"blocks": []any{map[string]any{"id": "b", "table": map[string]any{}}}}},
+		}}},
+		{"delete read error", []string{"--node", "n", "--command", "block_delete", "--block-id", "b", "--yes"}, &docCoverageCaller{failAt: 1}},
+		{"delete missing", []string{"--node", "n", "--command", "block_delete", "--block-id", "b", "--yes"}, &docCoverageCaller{responses: map[string][]map[string]any{
+			"get_document_content": {{"jsonml": `["root",{}]`}},
+		}}},
+		{"replace duplicate id", []string{"--node", "n", "--command", "str_replace", "--old", "old", "--new", "new", "--yes"}, &docCoverageCaller{responses: map[string][]map[string]any{
+			"list_document_blocks": {{"blocks": []any{block("same", "other"), block("same", "old")}}},
+		}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := runDocCoverage(t, Update, tc.caller, tc.args...); err == nil {
+				t.Fatal("expected failure")
+			}
+		})
+	}
+
+	t.Run("replace clone decode error", func(t *testing.T) {
+		testseam.Swap(t, &cloneBlockUnmarshal, func([]byte, any) error { return errors.New("decode") })
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{
+			"list_document_blocks": {{"blocks": []any{block("b", "old")}}},
+		}}
+		if err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "str_replace", "--old", "old", "--new", "new", "--yes"); err == nil {
+			t.Fatal("decode failure ignored")
+		}
+	})
+
+	reconciled := &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{
+		"list_document_blocks": {
+			{"blocks": []any{block("b", "old")}}, {"blocks": []any{block("b", "new")}},
+		},
+	}}
+	if err := runDocCoverage(t, Update, reconciled, "--node", "n", "--command", "block_replace", "--block-id", "b", "--content", "new", "--yes"); err != nil {
+		t.Fatalf("reconciled replace: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name      string
+		responses map[string][]map[string]any
+	}{
+		{"write revision", map[string][]map[string]any{"update_document": {{"revision": 7.0}}, "get_document_content": {{"markdown": "body"}}}},
+		{"readback revision", map[string][]map[string]any{"update_document": {{}}, "get_document_content": {{"markdown": "body", "revision": 8.0}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := runDocCoverage(t, Update, &docCoverageCaller{responses: tc.responses}, "--node", "n", "--command", "append", "--content", "body", "--yes"); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name      string
+		responses map[string][]map[string]any
+	}{
+		{"block result revision", map[string][]map[string]any{
+			"list_document_blocks":  {{"blocks": []any{block("b", "old")}}, {"blocks": []any{block("b", "new")}}},
+			"update_document_block": {{"revision": 9.0}},
+		}},
+		{"block readback revision", map[string][]map[string]any{
+			"list_document_blocks":  {{"blocks": []any{block("b", "old")}}, {"blocks": []any{block("b", "new")}, "revision": 10.0}},
+			"update_document_block": {{}},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := runDocCoverage(t, Update, &docCoverageCaller{responses: tc.responses}, "--node", "n", "--command", "block_replace", "--block-id", "b", "--content", "new", "--yes"); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+
+	if err := runDocCoverage(t, Update, &docCoverageCaller{responses: map[string][]map[string]any{"get_document_content": {{"markdown": ""}}}}, "--node", "n", "--command", "append", "--content", "body", "--dry-run"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runDocCoverage(t, Update, &docCoverageCaller{responses: map[string][]map[string]any{
+		"list_document_blocks": {{"blocks": []any{}}},
+	}}, "--node", "n", "--command", "str_replace", "--old", "missing", "--new", "new", "--dry-run"); err == nil {
+		t.Fatal("missing preview match succeeded")
+	}
 }
 
 type docCoverageCall struct {
@@ -1353,8 +1628,8 @@ func TestCrossPlatformCoverageUpdateContractAndPreflight(t *testing.T) {
 		flag := cmd.Flags().Lookup(alias)
 		if flag == nil {
 			t.Errorf("compatibility alias --%s is not mounted", alias)
-		} else if !flag.Hidden {
-			t.Errorf("compatibility alias --%s must stay hidden from Help and Schema", alias)
+		} else if flag.Hidden {
+			t.Errorf("compatibility alias --%s must remain visible in Help and Schema", alias)
 		}
 	}
 

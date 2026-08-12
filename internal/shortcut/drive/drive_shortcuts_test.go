@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -215,6 +216,46 @@ func TestCrossPlatformCoverageDriveCopyPreservesSchemaProperties(t *testing.T) {
 		if got[name] != property {
 			t.Errorf("copy parameter %q property = %q, want %q", name, got[name], property)
 		}
+	}
+}
+
+func TestDriveRecentPaginationAndJournalCoverage(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	run := func(responses []string, args ...string) error {
+		return runDriveCoverage(t, Recent, &driveCoverageCaller{responses: map[string][]string{"get_recent_list": responses}}, args...)
+	}
+	if err := run([]string{`{"recentItems":[],"hasMore":false}`}, "--max-pages", "0", "--max-items", "0", "--operate-type", "1", "--creator-type", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"__ERROR__"}, "--page-all"); err == nil {
+		t.Fatal("recent read failure succeeded")
+	}
+	if err := run([]string{`{"recentItems":[{"nodeId":"a"}],"hasMore":true,"nextCursor":"p2"}`}, "--page-all", "--max-items", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{`{"recentItems":[],"hasMore":true}`}, "--page-all"); err == nil {
+		t.Fatal("missing cursor succeeded")
+	}
+	if err := run([]string{
+		`{"recentItems":[],"hasMore":true,"nextCursor":"same"}`,
+		`{"recentItems":[],"hasMore":true,"nextCursor":"same"}`,
+	}, "--page-all"); err == nil {
+		t.Fatal("stalled cursor succeeded")
+	}
+	if err := run([]string{`{"recentItems":[],"hasMore":true,"nextCursor":"p2"}`}, "--page-all", "--max-pages", "1"); err != nil {
+		t.Fatal(err)
+	}
+
+	result := map[string]any{"items": []map[string]any{{"nodeId": "remote", "name": "remote"}}}
+	entries := []docwritejournal.Entry{
+		{NodeID: "remote", Name: "duplicate", CreatedAt: 1},
+		{NodeID: "older", Name: "older", CreatedAt: 2},
+		{NodeID: "newer", Name: "newer", CreatedAt: 3},
+	}
+	mergeJournalRecent(result, entries)
+	items, _ := result["items"].([]map[string]any)
+	if len(items) != 3 || items[0]["nodeId"] != "newer" || items[1]["nodeId"] != "older" {
+		t.Fatalf("journal recent = %#v", result)
 	}
 }
 

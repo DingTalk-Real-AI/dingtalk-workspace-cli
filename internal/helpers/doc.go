@@ -514,27 +514,41 @@ func ValidateDocMediaInsertCommand(cmd *cobra.Command) error {
 	if cmd == nil {
 		return apperrors.NewInternal("doc media insert: command is nil")
 	}
-	if _, _, err := resolveDocMediaInputPath(mustGetFlag(cmd, "file")); err != nil {
-		return err
-	}
-	_, err := readDocMediaInsertPosition(cmd)
+	_, _, _, err := resolveDocMediaInsertInput(cmd)
 	return err
 }
+
+func resolveDocMediaInsertInput(cmd *cobra.Command) (string, os.FileInfo, docMediaInsertPosition, error) {
+	filePath, fileInfo, err := resolveDocMediaInputPath(mustGetFlag(cmd, "file"))
+	if err != nil {
+		return "", nil, docMediaInsertPosition{}, err
+	}
+	position, err := readDocMediaInsertPosition(cmd)
+	return filePath, fileInfo, position, err
+}
+
+var docMediaResolveInsertInput = resolveDocMediaInsertInput
+
+var (
+	docMediaGetwd        = os.Getwd
+	docMediaEvalSymlinks = filepath.EvalSymlinks
+	docMediaStat         = os.Stat
+)
 
 func resolveDocMediaInputPath(raw string) (string, os.FileInfo, error) {
 	path := strings.TrimSpace(raw)
 	if path == "" || filepath.IsAbs(path) {
 		return "", nil, apperrors.NewValidation("--file 只接受工作目录内已暂存文件的相对路径")
 	}
-	cwd, err := os.Getwd()
+	cwd, err := docMediaGetwd()
 	if err != nil {
 		return "", nil, apperrors.NewInternal(fmt.Sprintf("读取工作目录失败: %v", err))
 	}
-	realBase, err := filepath.EvalSymlinks(cwd)
+	realBase, err := docMediaEvalSymlinks(cwd)
 	if err != nil {
 		return "", nil, apperrors.NewInternal(fmt.Sprintf("解析工作目录失败: %v", err))
 	}
-	realPath, err := filepath.EvalSymlinks(filepath.Join(realBase, filepath.Clean(path)))
+	realPath, err := docMediaEvalSymlinks(filepath.Join(realBase, filepath.Clean(path)))
 	if err != nil {
 		return "", nil, apperrors.NewValidation(fmt.Sprintf("--file: 读取文件 %q 失败: %v", path, err))
 	}
@@ -542,7 +556,7 @@ func resolveDocMediaInputPath(raw string) (string, os.FileInfo, error) {
 	if err != nil || rel == ".." || strings.HasPrefix(filepath.ToSlash(rel), "../") {
 		return "", nil, apperrors.NewValidation("--file 不能逃逸工作目录；请先把文件暂存到工作目录")
 	}
-	info, err := os.Stat(realPath)
+	info, err := docMediaStat(realPath)
 	if err != nil {
 		return "", nil, apperrors.NewValidation(fmt.Sprintf("--file: 读取文件 %q 失败: %v", path, err))
 	}
@@ -588,20 +602,13 @@ func readDocMediaInsertPosition(cmd *cobra.Command) (docMediaInsertPosition, err
 //  3. insert_document_block with attachment element
 //  4. get_document_content(JSONML) read-back verification, returning the stable block ID
 func runMediaInsert(cmd *cobra.Command, _ []string) error {
-	if err := ValidateDocMediaInsertCommand(cmd); err != nil {
-		return err
-	}
 	nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 	if err != nil {
 		return err
 	}
 
 	fileArg := strings.TrimSpace(mustGetFlag(cmd, "file"))
-	filePath, fileInfo, err := resolveDocMediaInputPath(fileArg)
-	if err != nil {
-		return err
-	}
-	position, err := readDocMediaInsertPosition(cmd)
+	filePath, fileInfo, position, err := docMediaResolveInsertInput(cmd)
 	if err != nil {
 		return err
 	}
@@ -988,11 +995,6 @@ func docTopLevelBlocks(value any) []any {
 	case map[string]any:
 		for _, key := range []string{"blocks", "items", "elements", "blockList"} {
 			if blocks, ok := typed[key].([]any); ok {
-				return blocks
-			}
-		}
-		for _, key := range []string{"result", "data", "content"} {
-			if blocks := docTopLevelBlocks(typed[key]); blocks != nil {
 				return blocks
 			}
 		}
@@ -3185,7 +3187,6 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 	mediaUploadCmd.Flags().String("name", "", "资源文件名 (默认使用本地文件名)")
 	mediaUploadCmd.Flags().String("mime-type", "", "文件 MIME 类型 (默认根据扩展名推断)")
 	mediaUploadCmd.Flags().Bool("yes", false, "兼容参数：普通可恢复上传无需确认")
-	_ = mediaUploadCmd.Flags().MarkHidden("yes")
 
 	mediaInsertCmd := NewLeafCommand(LeafSpec{
 		Use:   "insert",

@@ -266,7 +266,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		t.Fatalf("confirmation = %q, want %q", got, want)
 	}
 	parameters := schemaContractMap(leaf["parameters"])
-	if got, want := len(parameters), 12; got != want {
+	if got, want := len(parameters), 14; got != want {
 		t.Fatalf("parameter count = %d, want %d: %#v", got, want, parameters)
 	}
 	if required, _ := parameters["node"]["required"].(bool); !required {
@@ -276,7 +276,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		t.Errorf("--command required = %#v, want true", parameters["command"]["required"])
 	}
 	wantProperties := map[string]string{
-		"node": "node", "command": "command", "content": "content", "doc-format": "docFormat",
+		"node": "node", "doc": "doc", "command": "command", "content": "content", "text": "text", "doc-format": "docFormat",
 		"block-id": "blockId", "after-block-id": "afterBlockId", "ref-block": "referenceBlockId", "where": "where", "old": "old", "new": "new",
 		"allow-resource-delete": "allowResourceDelete", "expected-revision": "expectedRevision",
 	}
@@ -304,8 +304,8 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		}
 	}
 	for _, alias := range []string{"doc", "text"} {
-		if _, exists := parameters[alias]; exists {
-			t.Errorf("hidden compatibility alias --%s leaked into Schema", alias)
+		if _, exists := parameters[alias]; !exists {
+			t.Errorf("visible compatibility alias --%s missing from Schema", alias)
 		}
 	}
 	if constraints, exists := leaf["constraints"]; exists && constraints != nil {

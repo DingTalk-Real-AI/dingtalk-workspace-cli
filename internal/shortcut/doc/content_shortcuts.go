@@ -426,9 +426,9 @@ var Update = shortcut.Shortcut{
 		contract.ParamDecl{Name: "expected-revision", Property: "expectedRevision"}), contract.DryRunPreviewDiff,
 		"dry-run 必须读取目标文档或 block 的实时内容才能生成真实差异；隔离 Agent 示例没有远端文档 fixture", 0, 1),
 	Flags: []shortcut.Flag{
-		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true, Aliases: []string{"doc"}},
+		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true, Aliases: []string{"doc"}, AliasesVisible: true},
 		{Name: "command", Type: shortcut.FlagString, Desc: "更新动作；" + docUpdateValidationConstraint, Required: true, Enum: []string{"append", "overwrite", "block_insert", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert", "block_copy_insert_after"}},
-		{Name: "content", Type: shortcut.FlagString, Desc: docRequiredContentInputDescription, RequiredWhen: "--command is append, overwrite, block_insert, block_insert_after, or block_replace", Aliases: []string{"text"}},
+		{Name: "content", Type: shortcut.FlagString, Desc: docRequiredContentInputDescription, RequiredWhen: "--command is append, overwrite, block_insert, block_insert_after, or block_replace", Aliases: []string{"text"}, AliasesVisible: true},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
 		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空", RequiredWhen: "--command is block_replace, block_delete, block_copy_insert, or block_copy_insert_after"},
 		{Name: "after-block-id", Type: shortcut.FlagString, Desc: "兼容参数：旧版 after 插入的参考 block ID", RequiredWhen: "--command is block_insert_after or block_copy_insert_after"},
@@ -815,13 +815,18 @@ func buildTypePreservingTextElement(block map[string]any, content string) (map[s
 	return nil, apperrors.NewValidation("UNSAFE_BLOCK_REPLACE: Markdown 文本替换仅支持段落或标题 block；其他富结构请使用 --doc-format jsonml")
 }
 
+var (
+	cloneBlockMarshal   = json.Marshal
+	cloneBlockUnmarshal = json.Unmarshal
+)
+
 func cloneBlockElement(block map[string]any) (map[string]any, error) {
-	encoded, err := json.Marshal(block)
+	encoded, err := cloneBlockMarshal(block)
 	if err != nil {
 		return nil, apperrors.NewInternal(fmt.Sprintf("复制 block 失败: %v", err))
 	}
 	var cloned map[string]any
-	if err := json.Unmarshal(encoded, &cloned); err != nil {
+	if err := cloneBlockUnmarshal(encoded, &cloned); err != nil {
 		return nil, apperrors.NewInternal(fmt.Sprintf("复制 block 失败: %v", err))
 	}
 	if nested, ok := cloned["element"].(map[string]any); ok {
