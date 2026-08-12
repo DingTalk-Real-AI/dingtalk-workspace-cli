@@ -452,7 +452,7 @@ func TestSupportedTargets(t *testing.T) {
 	// Should contain all predefined targets — including the agents/* sentinel
 	// and the IDE/agent registries we share with skillSetupAgentHomes.
 	expectedTargets := []string{
-		"agents", "claude", "cursor", "codex", "opencode", "qoder",
+		"agents", "claude", "cursor", "codex", "zcode", "opencode", "qoder",
 		"gemini", "github", "windsurf", "augment", "cline",
 		"amp", "kiro", "trae", "openclaw", "hermes",
 		".",

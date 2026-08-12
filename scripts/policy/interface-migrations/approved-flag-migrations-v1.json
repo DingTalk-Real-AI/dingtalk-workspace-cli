@@ -1,1 +1,1130 @@
-{"version":1,"migrations":[]}
+{
+  "version": 1,
+  "migrations": [
+    {
+      "command": "dws chat group audit-join-validation",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group bots",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group dismiss",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group invite-url",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group notice create",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group notice edit",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group notice get",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group notice list",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group quit",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group set-admin",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group set-history",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group transfer-owner",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group update-alias",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group update-icon",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group update-nick",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group update-settings",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group upgrade-to-external",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group-role add",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group-role list",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group-role query-user",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group-role remove-user",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group-role remove",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group-role set-user",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat group-role update",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat message edit",
+      "legacy": {
+        "name": "msg-id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "message-id"
+        }
+      },
+      "canonical": {
+        "name": "message-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat message forward",
+      "legacy": {
+        "name": "msg-id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "message-id"
+        }
+      },
+      "canonical": {
+        "name": "message-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat message list-topic-replies",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat message recall",
+      "legacy": {
+        "name": "msg-id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "message-id"
+        }
+      },
+      "canonical": {
+        "name": "message-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat message set-pin-msg",
+      "legacy": {
+        "name": "msg-id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "message-id"
+        }
+      },
+      "canonical": {
+        "name": "message-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat message set-top-msg",
+      "legacy": {
+        "name": "msg-id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "message-id"
+        }
+      },
+      "canonical": {
+        "name": "message-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat message unset-pin-msg",
+      "legacy": {
+        "name": "msg-id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "message-id"
+        }
+      },
+      "canonical": {
+        "name": "message-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat message unset-top-msg",
+      "legacy": {
+        "name": "msg-id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "message-id"
+        }
+      },
+      "canonical": {
+        "name": "message-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat message update-text-emotion",
+      "legacy": {
+        "name": "msg-id",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "message-id"
+        }
+      },
+      "canonical": {
+        "name": "message-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws ding message send-by-message",
+      "legacy": {
+        "name": "group",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "conversation-id"
+        }
+      },
+      "canonical": {
+        "name": "conversation-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    }
+  ]
+}

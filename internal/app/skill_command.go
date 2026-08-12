@@ -126,6 +126,7 @@ var agentSkillPaths = map[string]string{
 	"claude":    ".claude/skills",
 	"cursor":    ".cursor/skills",
 	"codex":     ".codex/skills",
+	"zcode":     ".zcode/skills",
 	"opencode":  filepath.Join(".config", "opencode", "skills"),
 	// IDE / agent registries also probed by `dws skill setup --target all`.
 	"gemini":   ".gemini/skills",

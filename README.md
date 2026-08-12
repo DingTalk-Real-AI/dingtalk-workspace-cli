@@ -433,7 +433,7 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 | Flag | Values | Description |
 |------|--------|-------------|
 | `--mode` | `mono` \| `multi` | Skill layout; defaults to interactive prompt |
-| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `opencode` \| `qoder` | Where to install; `all` covers every detected agent home |
+| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `zcode` \| `opencode` \| `qoder` | Where to install; `all` covers every detected agent home, including ZCode at `~/.zcode/skills` |
 | `--source` | path | Local source directory (overrides bundled skills) |
 | `--yes` | — | Scripting-only: skip the confirmation prompt. Removals are still backed up to `~/.dws/skill-backups/` first |
 

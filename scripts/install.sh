@@ -679,7 +679,7 @@ install_skills_to_homes() {
   specific_agents=0
   for specific_dir in \
     ".claude/skills" ".cursor/skills" ".qoder/skills" ".qoderwork/skills" \
-    ".gemini/skills" ".codex/skills" ".github/skills" ".windsurf/skills" \
+    ".gemini/skills" ".codex/skills" ".zcode/skills" ".github/skills" ".windsurf/skills" \
     ".augment/skills" ".cline/skills" ".amp/skills" ".kiro/skills" \
     ".trae/skills" ".openclaw/skills" ".hermes/skills"
   do
@@ -693,6 +693,7 @@ install_skills_to_homes() {
     ".qoderwork/skills" \
     ".gemini/skills" \
     ".codex/skills" \
+    ".zcode/skills" \
     ".github/skills" \
     ".windsurf/skills" \
     ".augment/skills" \
@@ -788,7 +789,7 @@ install_multi_skills_to_homes() {
   specific_agents=0
   for specific_dir in \
     ".claude/skills" ".cursor/skills" ".qoder/skills" ".qoderwork/skills" \
-    ".gemini/skills" ".codex/skills" ".github/skills" ".windsurf/skills" \
+    ".gemini/skills" ".codex/skills" ".zcode/skills" ".github/skills" ".windsurf/skills" \
     ".augment/skills" ".cline/skills" ".amp/skills" ".kiro/skills" \
     ".trae/skills" ".openclaw/skills" ".hermes/skills"
   do
@@ -802,6 +803,7 @@ install_multi_skills_to_homes() {
     ".qoderwork/skills" \
     ".gemini/skills" \
     ".codex/skills" \
+    ".zcode/skills" \
     ".github/skills" \
     ".windsurf/skills" \
     ".augment/skills" \

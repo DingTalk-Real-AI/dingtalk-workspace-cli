@@ -61,6 +61,7 @@ HOME_AGENT_PARENTS="
 .qoderwork
 .gemini
 .codex
+.zcode
 .github
 .windsurf
 .augment
@@ -79,6 +80,7 @@ HOME_SKILL_BASES="
 .qoderwork/skills
 .gemini/skills
 .codex/skills
+.zcode/skills
 .github/skills
 .windsurf/skills
 .augment/skills

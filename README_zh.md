@@ -427,7 +427,7 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 | 参数 | 取值 | 说明 |
 |------|------|------|
 | `--mode` | `mono` \| `multi` | skill 布局，不指定则交互式询问 |
-| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `opencode` \| `qoder` | 安装目标；`all` 表示铺到检测到的具体 Agent home，仅在未检测到具体 Agent 时回退到 `~/.agents/skills` |
+| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `zcode` \| `opencode` \| `qoder` | 安装目标；`all` 表示铺到检测到的具体 Agent home（ZCode 为 `~/.zcode/skills`），仅在未检测到具体 Agent 时回退到 `~/.agents/skills` |
 | `--source` | 路径 | 本地源目录（覆盖内置 skills） |
 | `--yes` | — | 仅供脚本使用：跳过确认提示。删除操作仍会先备份到 `~/.dws/skill-backups/` |
 
