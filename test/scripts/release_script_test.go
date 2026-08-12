@@ -73,6 +73,7 @@ type releaseTestRepo struct {
 	remote     string
 	contract   string
 	prepare    string
+	render     string
 	releaseCmd string
 	lib        string
 	verify     string
@@ -107,6 +108,7 @@ func newReleaseTestRepo(t *testing.T) *releaseTestRepo {
 		remote:     remote,
 		contract:   filepath.Join(sourceRoot, "scripts", "release", "release-contract.sh"),
 		prepare:    filepath.Join(sourceRoot, "scripts", "release", "prepare-changelog.sh"),
+		render:     filepath.Join(sourceRoot, "scripts", "release", "render-release-fragments.sh"),
 		releaseCmd: filepath.Join(sourceRoot, "scripts", "release", "release.sh"),
 		lib:        filepath.Join(sourceRoot, "scripts", "release", "release-lib.sh"),
 		verify:     filepath.Join(sourceRoot, "scripts", "release", "verify-release-artifacts.sh"),
@@ -1658,10 +1660,13 @@ func TestReleaseContractCIAllowsMainToAdvanceAfterTagSeal(t *testing.T) {
 	}
 }
 
-func TestReleasePrepareChangelogCreatesGuardedTemplate(t *testing.T) {
+func TestReleasePrepareChangelogRendersAndArchivesPrereleaseFragments(t *testing.T) {
 	r := newReleaseTestRepo(t)
 	releaseCopyFile(t, r.lib, filepath.Join(r.root, "scripts", "release", "release-lib.sh"), 0o644)
 	releaseCopyFile(t, r.prepare, filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), 0o755)
+	releaseCopyFile(t, r.render, filepath.Join(r.root, "scripts", "release", "render-release-fragments.sh"), 0o755)
+	mustWriteFile(t, filepath.Join(r.root, ".changes", "1234-chat-reply.md"), []byte("---\ncategory: Added\n---\n\n- **Chat reply mentions** (#1234) — supports selected member mentions.\n"), 0o644)
+	mustWriteFile(t, filepath.Join(r.root, ".changes", "1235-chat-fix.md"), []byte("---\ncategory: Fixed\n---\n\n- **Chat reply fallback** (#1235) — keeps replies compatible with older clients.\n"), 0o644)
 	r.commitAndPush(t, "install changelog preparation")
 
 	cmd := exec.Command("sh", filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), "prerelease", "v1.0.1-beta.1")
@@ -1675,55 +1680,115 @@ func TestReleasePrepareChangelogCreatesGuardedTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(CHANGELOG.md) error = %v", err)
 	}
-	if !strings.Contains(string(changelog), "## [1.0.1-beta.1] - 2026-07-11") || !strings.Contains(string(changelog), "TODO") {
-		t.Fatalf("prepared changelog missing guarded template:\n%s", changelog)
+	content := string(changelog)
+	if !strings.Contains(content, "## [1.0.1-beta.1] - 2026-07-11") ||
+		!strings.Contains(content, "### Added") ||
+		!strings.Contains(content, "Chat reply mentions") ||
+		!strings.Contains(content, "### Fixed") ||
+		!strings.Contains(content, "Chat reply fallback") ||
+		strings.Contains(content, "TODO") {
+		t.Fatalf("prepared changelog did not render release fragments:\n%s", changelog)
 	}
-
-	r.commitAndPush(t, "commit unfinished release notes")
-	contractOutput, contractErr := runReleaseScript(t, r.root, r.contract,
-		"--repo-root", r.root,
-		"--channel", "prerelease",
-		"--version", "v1.0.1-beta.1",
-		"--remote", "origin",
-	)
-	if contractErr == nil || !strings.Contains(contractOutput, "TODO/TBD") {
-		t.Fatalf("unfinished template was not blocked: err=%v\noutput:\n%s", contractErr, contractOutput)
+	for _, name := range []string{"1234-chat-reply.md", "1235-chat-fix.md"} {
+		if _, err := os.Stat(filepath.Join(r.root, ".changes", name)); !os.IsNotExist(err) {
+			t.Fatalf("unconsumed release fragment %s still present: %v", name, err)
+		}
+		if _, err := os.Stat(filepath.Join(r.root, ".changes", "released", "1.0.1-beta.1", name)); err != nil {
+			t.Fatalf("archived release fragment %s missing: %v", name, err)
+		}
 	}
 }
 
-func TestReleasePrepareChangelogKeepsUnreleasedContentAboveNewVersion(t *testing.T) {
+func TestReleasePrepareChangelogRejectsInvalidReleaseFragment(t *testing.T) {
 	r := newReleaseTestRepo(t)
 	releaseCopyFile(t, r.lib, filepath.Join(r.root, "scripts", "release", "release-lib.sh"), 0o644)
 	releaseCopyFile(t, r.prepare, filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), 0o755)
-	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte("# Changelog\n\n## [Unreleased]\n\n### Changed\n\n- Keep this unreleased note.\n\n## [1.0.0] - 2026-07-01\n\n### Changed\n\n- Initial release.\n"), 0o644)
-	r.commitAndPush(t, "add unreleased changelog note")
+	releaseCopyFile(t, r.render, filepath.Join(r.root, "scripts", "release", "render-release-fragments.sh"), 0o755)
+	mustWriteFile(t, filepath.Join(r.root, ".changes", "invalid.md"), []byte("---\ncategory: Added\n---\n\n- TODO: write this later.\n"), 0o644)
+	r.commitAndPush(t, "add invalid release fragment")
 
 	cmd := exec.Command("sh", filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), "prerelease", "v1.0.1-beta.1")
 	cmd.Dir = r.root
 	cmd.Env = append(os.Environ(), "DWS_RELEASE_DATE=2026-07-11")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("prepare changelog error = %v\noutput:\n%s", err, output)
+	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "must not contain TODO/TBD") {
+		t.Fatalf("invalid release fragment was accepted: err=%v\noutput:\n%s", err, output)
 	}
-	data, err := os.ReadFile(filepath.Join(r.root, "CHANGELOG.md"))
-	if err != nil {
-		t.Fatalf("ReadFile(CHANGELOG.md) error = %v", err)
+}
+
+const releaseValidFragment = "---\ncategory: Added\n---\n\n- **Chat reply mentions** (#1234) — supports selected member mentions.\n"
+
+// The renderer used to skip anything `find -type f -name '*.md'` did not match,
+// so a symlinked or illegally named fragment was dropped from the notes without
+// a word. Every unexpected top-level entry must fail the release instead.
+func TestReleasePrepareChangelogRejectsUnsafeReleaseFragmentEntries(t *testing.T) {
+	tests := []struct {
+		name    string
+		seed    func(t *testing.T, changesDir string)
+		wantMsg string
+	}{
+		{
+			name: "symlinked fragment",
+			seed: func(t *testing.T, changesDir string) {
+				mustWriteFile(t, filepath.Join(changesDir, "1234-chat.md"), []byte(releaseValidFragment), 0o644)
+				if err := os.Symlink("1234-chat.md", filepath.Join(changesDir, "5678-alias.md")); err != nil {
+					t.Fatalf("Symlink release fragment: %v", err)
+				}
+			},
+			wantMsg: "not a symbolic link",
+		},
+		{
+			name: "fragment name with a space",
+			seed: func(t *testing.T, changesDir string) {
+				mustWriteFile(t, filepath.Join(changesDir, "chat reply.md"), []byte(releaseValidFragment), 0o644)
+			},
+			wantMsg: "invalid release fragment filename",
+		},
+		{
+			name: "uppercase fragment name",
+			seed: func(t *testing.T, changesDir string) {
+				mustWriteFile(t, filepath.Join(changesDir, "Chat.md"), []byte(releaseValidFragment), 0o644)
+			},
+			wantMsg: "invalid release fragment filename",
+		},
+		{
+			name: "non-markdown entry",
+			seed: func(t *testing.T, changesDir string) {
+				mustWriteFile(t, filepath.Join(changesDir, "notes.txt"), []byte(releaseValidFragment), 0o644)
+			},
+			wantMsg: "invalid release fragment filename",
+		},
+		{
+			// The PR gate is what keeps a nested directory out of `.changes/`;
+			// this covers the release-side backstop that reports it instead of
+			// rendering notes from an unexpected tree shape.
+			name: "nested fragment directory",
+			seed: func(t *testing.T, changesDir string) {
+				mustWriteFile(t, filepath.Join(changesDir, "foo", "bar.md"), []byte(releaseValidFragment), 0o644)
+			},
+			wantMsg: "unexpected directory in release fragments directory",
+		},
 	}
-	content := string(data)
-	positions := []int{
-		strings.Index(content, "## [Unreleased]"),
-		strings.Index(content, "- Keep this unreleased note."),
-		strings.Index(content, "## [1.0.1-beta.1] - 2026-07-11"),
-		strings.Index(content, "## [1.0.0] - 2026-07-01"),
-	}
-	for index, position := range positions {
-		if position < 0 {
-			t.Fatalf("prepared changelog is missing expected marker %d:\n%s", index, content)
-		}
-	}
-	for index := 1; index < len(positions); index++ {
-		if positions[index-1] >= positions[index] {
-			t.Fatalf("prepared changelog order is invalid: %v\n%s", positions, content)
-		}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r := newReleaseTestRepo(t)
+			releaseCopyFile(t, r.lib, filepath.Join(r.root, "scripts", "release", "release-lib.sh"), 0o644)
+			releaseCopyFile(t, r.prepare, filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), 0o755)
+			releaseCopyFile(t, r.render, filepath.Join(r.root, "scripts", "release", "render-release-fragments.sh"), 0o755)
+			test.seed(t, filepath.Join(r.root, ".changes"))
+			r.commitAndPush(t, "add unsafe release fragment entry")
+
+			cmd := exec.Command("sh", filepath.Join(r.root, "scripts", "release", "prepare-changelog.sh"), "prerelease", "v1.0.1-beta.1")
+			cmd.Dir = r.root
+			cmd.Env = append(os.Environ(), "DWS_RELEASE_DATE=2026-07-11")
+			output, err := cmd.CombinedOutput()
+			if err == nil {
+				t.Fatalf("unsafe release fragment entry was accepted:\n%s", output)
+			}
+			if !strings.Contains(string(output), test.wantMsg) {
+				t.Fatalf("renderer output missing %q:\n%s", test.wantMsg, output)
+			}
+		})
 	}
 }
 

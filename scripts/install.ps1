@@ -457,6 +457,38 @@ function Restore-MultiSkillSet {
     return $ok
 }
 
+function Move-GenericSkillRootToBackup {
+    param([string]$Root)
+
+    $baseDir = Join-Path $Root ".agents\skills"
+    $victims = [System.Collections.Generic.List[string]]::new()
+    $victims.Add((Join-Path $baseDir $SkillName))
+    foreach ($existing in Get-ChildItem -Path $baseDir -Directory -ErrorAction SilentlyContinue) {
+        if (Test-ManagedMultiSkillDir -Dir $existing.FullName) {
+            $victims.Add($existing.FullName)
+        }
+    }
+    $backups = @()
+    try {
+        $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($victim in $victims) {
+            if (!$seen.Add($victim)) { continue }
+            $backupPath = ""
+            if (!(Backup-SkillDir -Dir $victim -BackupPath ([ref]$backupPath))) {
+                throw "通用 Skill 副本备份失败: $victim"
+            }
+            if ($backupPath) {
+                $backups += [pscustomobject]@{ Original = $victim; Backup = $backupPath }
+            }
+        }
+        return $true
+    } catch {
+        Restore-MultiSkillSet -Published @() -Backups $backups | Out-Null
+        Write-Say "⚠️  通用 Skill 副本迁移失败，已回滚: $_"
+        return $false
+    }
+}
+
 function Copy-SkillToDir {
     param([string]$SkillSrc, [string]$Dest, [string]$Label)
 
@@ -780,7 +812,11 @@ function Install-SkillsToHomes {
     $installed = 0
     $attempted = 0
     $failed = 0
+	$specificAgents = @($AgentDirs | Select-Object -Skip 1 | Where-Object {
+		Test-Path (Split-Path (Join-Path $Root $_) -Parent)
+	})
     for ($i = 0; $i -lt $AgentDirs.Count; $i++) {
+		if ($i -eq 0 -and $specificAgents.Count -gt 0) { continue }
         $agentDir = $AgentDirs[$i]
         $baseDir = Join-Path $Root $agentDir
         $parentGate = Split-Path $baseDir -Parent
@@ -800,6 +836,9 @@ function Install-SkillsToHomes {
             $failed++
         }
     }
+	if ($specificAgents.Count -gt 0 -and $installed -gt 0) {
+		if (!(Move-GenericSkillRootToBackup -Root $Root)) { $failed++ }
+	}
     if ($attempted -eq 0) {
         $fallback = Join-Path (Join-Path $Root ".agents\skills") $SkillName
         if ($Root -eq $HOME) {
@@ -851,7 +890,11 @@ function Install-MultiSkillsToHomes {
     $installed = 0
     $attempted = 0
     $failed = 0
+	$specificAgents = @($AgentDirs | Select-Object -Skip 1 | Where-Object {
+		Test-Path (Split-Path (Join-Path $Root $_) -Parent)
+	})
     for ($i = 0; $i -lt $AgentDirs.Count; $i++) {
+		if ($i -eq 0 -and $specificAgents.Count -gt 0) { continue }
         $agentDir = $AgentDirs[$i]
         $baseDir = Join-Path $Root $agentDir
         $parentGate = Split-Path $baseDir -Parent
@@ -866,6 +909,9 @@ function Install-MultiSkillsToHomes {
             $failed++
         }
     }
+	if ($specificAgents.Count -gt 0 -and $installed -gt 0) {
+		if (!(Move-GenericSkillRootToBackup -Root $Root)) { $failed++ }
+	}
     if ($attempted -eq 0) {
         if (Install-MultiToBase -MultiSrc $MultiSrc -BaseDir (Join-Path $Root ".agents\skills") -Root $Root -AgentDir ".agents\skills") {
             $installed++

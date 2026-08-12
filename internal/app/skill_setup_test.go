@@ -330,6 +330,24 @@ func TestResolveSkillSetupTargetsMultiOmitsDwsTail(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageResolveSkillSetupTargetsPrefersSpecificAgentRoot(t *testing.T) {
+	home := t.TempDir()
+	testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
+	testseam.Swap(t, &skillSetupAgentHomes, []string{".agents/skills", ".codex/skills"})
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveSkillSetupTargets("all", skillSetupModeMulti)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".codex", "skills")
+	if len(got) != 1 || filepath.Clean(got[0]) != filepath.Clean(want) {
+		t.Fatalf("targets = %v, want [%s]", got, want)
+	}
+}
+
 func TestCrossPlatformCoverageInstallSkillToHomesEndToEnd(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("# test"), 0o644); err != nil {

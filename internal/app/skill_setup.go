@@ -92,6 +92,7 @@ type skillSetupBackup struct {
 type skillSetupTargetPlan struct {
 	Destination string
 	Backups     []skillSetupBackup
+	CleanupOnly bool
 }
 
 type skillSetupPlan struct {
@@ -147,7 +148,8 @@ multi 模式支持按产品挑选：
     备份失败时保留原目录并跳过该目标，绝不静默删除。
   · 所有将被移除的目录都会在确认前逐条列出。
 
-不带 --mode 时进入交互式询问；不带 --target 时铺到所有检测到的 Agent 目录。
+不带 --mode 时进入交互式询问；不带 --target 时铺到检测到的具体 Agent 目录；
+未检测到具体 Agent 时才回退到 ~/.agents/skills，避免同一 Agent 扫描两份 Skill。
 skill 源默认取二进制内嵌的版本（升级二进制即升级 skill）；--source / DWS_SKILL_SOURCE 可显式覆盖。`,
 		Example: `  dws skill setup --mode multi --target claude --dry-run
   dws skill setup --mode multi --target claude`,
@@ -940,18 +942,79 @@ func agentHomeForMode(base, mode string) string {
 }
 
 func detectExistingAgentHomes(home, mode string) []string {
-	var out []string
+	var specific []string
 	for i, rel := range skillSetupAgentHomes {
+		if i == 0 {
+			continue
+		}
 		base := filepath.Join(home, rel)
 		parent := filepath.Dir(base)
-		if i > 0 {
-			if _, err := skillSetupStat(parent); errors.Is(err, os.ErrNotExist) {
+		if info, err := skillSetupStat(parent); err != nil || !info.IsDir() {
+			continue
+		}
+		specific = append(specific, agentHomeForMode(base, mode))
+	}
+	if len(specific) > 0 {
+		return specific
+	}
+	return []string{agentHomeForMode(filepath.Join(home, skillSetupAgentHomes[0]), mode)}
+}
+
+func genericSkillCleanupTarget(dests []string, managed map[string]bool) (*skillSetupTargetPlan, error) {
+	// Derive HOME from a concrete Agent destination instead of resolving it a
+	// second time. The destinations were already resolved from HOME by the
+	// caller, and a later/transient UserHomeDir failure must not turn an
+	// otherwise valid setup plan into an error. Direct/custom destinations that
+	// do not match a known concrete Agent root have no generic-root migration.
+	home := ""
+	for _, dest := range dests {
+		base := dest
+		if filepath.Base(dest) == "dws" {
+			base = filepath.Dir(dest)
+		}
+		base = filepath.Clean(base)
+		for i, rel := range skillSetupAgentHomes {
+			if i == 0 {
 				continue
 			}
+			suffix := filepath.Clean(filepath.FromSlash(rel))
+			needle := string(filepath.Separator) + suffix
+			if strings.HasSuffix(base, needle) {
+				home = strings.TrimSuffix(base, needle)
+				break
+			}
 		}
-		out = append(out, agentHomeForMode(base, mode))
+		if home != "" {
+			break
+		}
 	}
-	return out
+	if home == "" {
+		return nil, nil
+	}
+	genericBase := filepath.Join(home, ".agents", "skills")
+
+	target := &skillSetupTargetPlan{Destination: genericBase, CleanupOnly: true}
+	add := func(path, reason string) {
+		if info, statErr := skillSetupStat(path); statErr == nil && info.IsDir() {
+			target.Backups = append(target.Backups, skillSetupBackup{Path: path, Reason: reason})
+		}
+	}
+	add(filepath.Join(genericBase, "dws"), skillSetupBackupMutual)
+	entries, readErr := skillSetupReadDir(genericBase)
+	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+		return nil, fmt.Errorf("扫描通用 Skill 根目录失败 %s: %w", genericBase, readErr)
+	}
+	for _, entry := range entries {
+		path := filepath.Join(genericBase, entry.Name())
+		if entry.IsDir() && isManagedDWSMultiSkillDir(path, managed) {
+			target.Backups = append(target.Backups, skillSetupBackup{Path: path, Reason: skillSetupBackupStale})
+		}
+	}
+	if len(target.Backups) == 0 {
+		return nil, nil
+	}
+	sort.Slice(target.Backups, func(i, j int) bool { return target.Backups[i].Path < target.Backups[j].Path })
+	return target, nil
 }
 
 func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filtered bool) (*skillSetupPlan, error) {
@@ -1027,6 +1090,13 @@ func buildSkillSetupPlan(mode, src string, dests, multiSkillNames []string, filt
 		sort.Slice(target.Backups, func(i, j int) bool { return target.Backups[i].Path < target.Backups[j].Path })
 		plan.Targets = append(plan.Targets, target)
 	}
+	cleanupTarget, cleanupErr := genericSkillCleanupTarget(sortedDests, managedNames)
+	if cleanupErr != nil {
+		return nil, cleanupErr
+	}
+	if cleanupTarget != nil {
+		plan.Targets = append(plan.Targets, *cleanupTarget)
+	}
 	return plan, nil
 }
 
@@ -1079,7 +1149,11 @@ func renderSkillSetupPlan(out io.Writer, plan *skillSetupPlan) {
 	}
 	fmt.Fprintln(out, "  destinations:")
 	for _, target := range plan.Targets {
-		fmt.Fprintf(out, "    - %s\n", target.Destination)
+		if target.CleanupOnly {
+			fmt.Fprintf(out, "    - %s (仅迁移旧的通用 DWS 副本)\n", target.Destination)
+		} else {
+			fmt.Fprintf(out, "    - %s\n", target.Destination)
+		}
 	}
 	fmt.Fprintln(out, "  将备份并移除（先保存到 ~/.dws/skill-backups/）：")
 	count := 0
@@ -1676,6 +1750,21 @@ func executeSkillSetupPlan(plan *skillSetupPlan, out, errOut io.Writer) (install
 		perTarget = len(plan.MultiSkillNames)
 	}
 	for _, target := range plan.Targets {
+		if target.CleanupOnly {
+			if skipped > 0 {
+				continue
+			}
+			if homeErr != nil {
+				fmt.Fprintf(errOut, "  ✗ 无法解析 HOME，保留通用 Skill 副本 %s: %v\n", target.Destination, homeErr)
+				skipped++
+				continue
+			}
+			if _, cleanupErr := backupSkillSetupTarget(home, target.Backups, out); cleanupErr != nil {
+				fmt.Fprintf(errOut, "  ✗ 通用 Skill 副本迁移失败，已回滚 %s: %v\n", target.Destination, cleanupErr)
+				skipped++
+			}
+			continue
+		}
 		if len(target.Backups) > 0 && homeErr != nil {
 			if plan.Mode == skillSetupModeMono {
 				fmt.Fprintf(errOut, "  ✗ 无法解析 HOME，跳过刷新（保留原目录） %s: %v\n", target.Destination, homeErr)

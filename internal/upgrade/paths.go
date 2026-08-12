@@ -35,8 +35,10 @@ const (
 //   - test/scripts/package_script_test.go                   expectedPackagedSkillTargets
 //   - scripts/release/verify-package-managers.sh            HOME_AGENT_PARENTS / HOME_SKILL_TARGETS
 //
-// The first entry (.agents/skills) is always updated; subsequent entries are
-// only updated when their parent directory already exists.
+// The first entry (.agents/skills) is a generic fallback. It is used only
+// when no concrete Agent home is detected; otherwise publishing there would
+// duplicate every Skill for Agents (including Codex) that scan both roots.
+// Subsequent entries are updated when their parent directory already exists.
 var knownSkillDirs = []string{
 	".agents/skills",
 	".claude/skills",
@@ -201,9 +203,9 @@ func (r *SkillUpgradeResult) Failed() []SkillDirResult {
 // `dws skill setup --mode mono` flow.
 //
 // Strategy (matches npm install.js installSkillsToHomes):
-//   - ~/.agents/skills/ is ALWAYS updated (primary install location)
-//   - Other agent dirs (claude, cursor, ...) are updated only when the parent
-//     directory exists (e.g. ~/.claude/ exists => user has Claude)
+//   - Concrete agent dirs (claude, cursor, codex, ...) are updated when their
+//     parent directory exists (e.g. ~/.codex/ exists => user has Codex)
+//   - ~/.agents/skills/ is used only when no concrete Agent is detected
 //   - ~/.real/ and other blacklisted paths are NEVER touched
 //   - If no location was updated at all, fall back to ~/.agents/skills/
 //
@@ -514,23 +516,57 @@ func publishMultiUpgradeTarget(homeDir, destBase, multiRoot string, skills []str
 	return publishStagedSkillSet(homeDir, staged, victims)
 }
 
+func hasDetectedSpecificSkillRoot(homeDir string) bool {
+	for _, agentDir := range knownSkillDirs {
+		if isGenericSkillRoot(agentDir) || isBlacklisted(agentDir) {
+			continue
+		}
+		parentGate := filepath.Dir(filepath.Join(homeDir, agentDir))
+		if info, err := upgradeStat(parentGate); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func isGenericSkillRoot(agentDir string) bool {
+	return filepath.Clean(agentDir) == filepath.Clean(".agents/skills")
+}
+
+func retireGenericSkillRoot(homeDir string, managed map[string]bool) error {
+	base := filepath.Join(homeDir, ".agents", "skills")
+	victims, err := managedMultiSkillVictims(base, managed)
+	if err != nil {
+		return err
+	}
+	victims = append(victims, filepath.Join(base, "dws"))
+	if _, err := backupSkillSet(homeDir, victims); err != nil {
+		return fmt.Errorf("迁移通用 Skill 根目录失败: %w", err)
+	}
+	return nil
+}
+
 // upgradeMonoSkillLocations is the legacy mono behavior: one dws/ directory
 // per agent home.
 func upgradeMonoSkillLocations(homeDir, skillSrc string) (*SkillUpgradeResult, error) {
 	result := &SkillUpgradeResult{}
 	managedNames := readManagedSkillNames(homeDir)
+	hasSpecificRoot := hasDetectedSpecificSkillRoot(homeDir)
 
-	for i, agentDir := range knownSkillDirs {
+	for _, agentDir := range knownSkillDirs {
 		destDir := filepath.Join(homeDir, agentDir, "dws")
 
 		if isBlacklisted(agentDir) {
 			result.Results = append(result.Results, SkillDirResult{Dir: destDir, Status: SkillDirBlacklisted})
 			continue
 		}
+		if isGenericSkillRoot(agentDir) && hasSpecificRoot {
+			continue
+		}
 
-		if i > 0 {
+		if !isGenericSkillRoot(agentDir) {
 			parentGate := filepath.Dir(filepath.Join(homeDir, agentDir))
-			if _, err := os.Stat(parentGate); os.IsNotExist(err) {
+			if _, err := upgradeStat(parentGate); os.IsNotExist(err) {
 				result.Results = append(result.Results, SkillDirResult{Dir: destDir, Status: SkillDirSkipped})
 				continue
 			}
@@ -542,12 +578,20 @@ func upgradeMonoSkillLocations(homeDir, skillSrc string) (*SkillUpgradeResult, e
 		}
 		result.Results = append(result.Results, SkillDirResult{Dir: destDir, Status: SkillDirOK})
 	}
+	if hasSpecificRoot && len(result.Succeeded()) > 0 {
+		genericBase := filepath.Join(homeDir, ".agents", "skills")
+		if err := retireGenericSkillRoot(homeDir, managedNames); err != nil {
+			result.Results = append(result.Results, SkillDirResult{Dir: genericBase, Status: SkillDirFailed, Err: err})
+		} else {
+			result.Results = append(result.Results, SkillDirResult{Dir: genericBase, Status: SkillDirSkipped})
+		}
+	}
 
 	// Fallback: if nothing succeeded, force the primary location. The multi
 	// leftovers under the primary base are the usual reason the primary
 	// install failed, so clean them first — failing loud like the multi
 	// fallback — instead of letting mono and multi co-exist marked OK.
-	if len(result.Succeeded()) == 0 {
+	if len(result.Succeeded()) == 0 && !hasSpecificRoot {
 		destBase := filepath.Join(homeDir, ".agents", "skills")
 		dest := filepath.Join(destBase, "dws")
 		if err := publishMonoUpgradeTarget(homeDir, destBase, skillSrc, managedNames); err != nil {
@@ -588,18 +632,22 @@ func upgradeMultiSkillLocations(homeDir, multiRoot string, skills []string) (*Sk
 
 	result := &SkillUpgradeResult{}
 	managedNames := readManagedSkillNames(homeDir)
+	hasSpecificRoot := hasDetectedSpecificSkillRoot(homeDir)
 
-	for i, agentDir := range knownSkillDirs {
+	for _, agentDir := range knownSkillDirs {
 		destBase := filepath.Join(homeDir, agentDir)
 
 		if isBlacklisted(agentDir) {
 			result.Results = append(result.Results, SkillDirResult{Dir: destBase, Status: SkillDirBlacklisted})
 			continue
 		}
+		if isGenericSkillRoot(agentDir) && hasSpecificRoot {
+			continue
+		}
 
-		if i > 0 {
+		if !isGenericSkillRoot(agentDir) {
 			parentGate := filepath.Dir(destBase)
-			if _, err := os.Stat(parentGate); os.IsNotExist(err) {
+			if _, err := upgradeStat(parentGate); os.IsNotExist(err) {
 				result.Results = append(result.Results, SkillDirResult{Dir: destBase, Status: SkillDirSkipped})
 				continue
 			}
@@ -611,9 +659,17 @@ func upgradeMultiSkillLocations(homeDir, multiRoot string, skills []string) (*Sk
 		}
 		result.Results = append(result.Results, SkillDirResult{Dir: destBase, Status: SkillDirOK})
 	}
+	if hasSpecificRoot && len(result.Succeeded()) > 0 {
+		genericBase := filepath.Join(homeDir, ".agents", "skills")
+		if err := retireGenericSkillRoot(homeDir, managedNames); err != nil {
+			result.Results = append(result.Results, SkillDirResult{Dir: genericBase, Status: SkillDirFailed, Err: err})
+		} else {
+			result.Results = append(result.Results, SkillDirResult{Dir: genericBase, Status: SkillDirSkipped})
+		}
+	}
 
 	// Fallback: if nothing succeeded, force the primary location
-	if len(result.Succeeded()) == 0 {
+	if len(result.Succeeded()) == 0 && !hasSpecificRoot {
 		destBase := filepath.Join(homeDir, ".agents", "skills")
 		if err := publishMultiUpgradeTarget(homeDir, destBase, multiRoot, skills, skillSet, managedNames); err != nil {
 			return result, fmt.Errorf("所有技能目录安装失败，回退到主目录也失败: %w", err)

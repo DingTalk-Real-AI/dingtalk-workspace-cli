@@ -207,7 +207,7 @@ bash verify-all-channels.sh
 升级过程采用两阶段原子流程，确保一致性：
 
 1. **准备阶段** — 将平台对应的二进制文件和技能包下载到临时目录，校验 SHA256 校验和，解压并验证所有文件。任何步骤失败则立即中止，不会修改现有安装。
-2. **执行阶段** — 仅在所有准备工作成功后，替换二进制文件并将技能包安装到所有已检测到的 Agent 目录（`~/.agents/skills/dws`、`~/.claude/skills/dws`、`~/.cursor/skills/dws` 等）。
+2. **执行阶段** — 仅在所有准备工作成功后，替换二进制文件并将技能包平铺到已检测到的具体 Agent 目录（例如 `~/.codex/skills/dingtalk-chat`、`~/.claude/skills/dingtalk-chat`）。只有未检测到具体 Agent 时才使用 `~/.agents/skills`；检测到具体 Agent 后会备份迁走旧的 DWS 通用副本，避免同一 Skill 被重复发现。
 
 每次升级前自动备份当前版本，可通过 `dws upgrade --rollback` 随时回滚。
 
@@ -399,7 +399,7 @@ Schema 生成的叶子 safety/参数/选型文案由 Go 中的 ProductDecl / Con
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
 ```
 
-> `install.sh` 安装到 `$HOME/.agents/skills/`（全局，multi 为按产品平铺，mono 为 `dws/` 子目录）；`install-skills.sh` 安装到 `./.agents/skills/`（当前项目）。
+> 安装器优先使用检测到的具体 Agent 根目录（如 `$HOME/.codex/skills/`）；仅在未检测到具体 Agent 时回退到 `.agents/skills/`。multi 为按产品平铺，mono 为 `dws/` 子目录。
 >
 > 国内用户加 `DWS_GITEE_REPO` 走 Gitee 镜像，见 [国内加速安装](#国内加速安装)。
 
@@ -427,7 +427,7 @@ DWS_SKILL_SOURCE=/path/to/skills dws skill setup --mode multi
 | 参数 | 取值 | 说明 |
 |------|------|------|
 | `--mode` | `mono` \| `multi` | skill 布局，不指定则交互式询问 |
-| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `opencode` \| `qoder` | 安装目标，`all` 表示铺到所有检测到的 Agent home |
+| `--target` | `all` \| `claude` \| `cursor` \| `codex` \| `opencode` \| `qoder` | 安装目标；`all` 表示铺到检测到的具体 Agent home，仅在未检测到具体 Agent 时回退到 `~/.agents/skills` |
 | `--source` | 路径 | 本地源目录（覆盖内置 skills） |
 | `--yes` | — | 仅供脚本使用：跳过确认提示。删除操作仍会先备份到 `~/.dws/skill-backups/` |
 

@@ -124,7 +124,8 @@ func TestCrossPlatformCoverageBundleSkillNamesLayouts(t *testing.T) {
 func TestCrossPlatformCoverageUpgradeSkillLocationsMulti(t *testing.T) {
 	home := withFakeHome(t)
 
-	// .agents always installs; .claude installs (parent exists); .cursor skipped.
+	// A concrete Agent root wins over the generic .agents fallback; .claude
+	// installs and .cursor is skipped.
 	agentsBase := filepath.Join(home, ".agents", "skills")
 	claudeBase := filepath.Join(home, ".claude", "skills")
 	for _, base := range []string{agentsBase, claudeBase} {
@@ -164,7 +165,7 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMulti(t *testing.T) {
 		t.Fatalf("expected 0 failures, got %v", failed)
 	}
 
-	for _, base := range []string{agentsBase, claudeBase} {
+	for _, base := range []string{claudeBase} {
 		if _, err := os.Stat(filepath.Join(base, "dws")); !os.IsNotExist(err) {
 			t.Errorf("mono leftover still present: %s", filepath.Join(base, "dws"))
 		}
@@ -192,14 +193,17 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMulti(t *testing.T) {
 
 	// Succeeded entries report the agent home base in multi mode.
 	succeeded := result.Succeeded()
-	if len(succeeded) != 2 {
-		t.Fatalf("Succeeded() len = %d, want 2 (%v)", len(succeeded), result.Results)
+	if len(succeeded) != 1 {
+		t.Fatalf("Succeeded() len = %d, want 1 (%v)", len(succeeded), result.Results)
 	}
-	wantDirs := map[string]bool{agentsBase: true, claudeBase: true}
+	wantDirs := map[string]bool{claudeBase: true}
 	for _, d := range succeeded {
 		if !wantDirs[d.Dir] {
 			t.Errorf("unexpected succeeded dir %q", d.Dir)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(agentsBase, "dws")); !os.IsNotExist(err) {
+		t.Fatalf("generic mono duplicate still visible: %v", err)
 	}
 
 	// Multi cache refreshed under the fake home.
@@ -209,6 +213,45 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMulti(t *testing.T) {
 	// Mono sibling tree refreshed the mono cache too.
 	if _, err := os.Stat(filepath.Join(home, ".dws", "skills", "mono", "SKILL.md")); err != nil {
 		t.Errorf("mono cache not refreshed from sibling mono tree: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageUpgradeUsesAgentSpecificRootWithoutGenericDuplicate(t *testing.T) {
+	home := withFakeHome(t)
+	testseam.Swap(t, &knownSkillDirs, []string{".agents/skills", ".codex/skills"})
+
+	genericBase := filepath.Join(home, ".agents", "skills")
+	codexBase := filepath.Join(home, ".codex", "skills")
+	for _, base := range []string{genericBase, codexBase} {
+		if err := os.MkdirAll(base, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	legacyNested := filepath.Join(genericBase, "dws", "multi", "dingtalk-chat")
+	if err := os.MkdirAll(legacyNested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyNested, "SKILL.md"), []byte("old nested"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	multiRoot := writeMultiBundle(t, t.TempDir(), "dingtalk-chat", "dingtalk-shared")
+	result, err := UpgradeSkillLocationsWithOptions(multiRoot, SkillUpgradeOptions{Version: "1.2.3"})
+	if err != nil || len(result.Failed()) != 0 {
+		t.Fatalf("UpgradeSkillLocationsWithOptions() = %#v, %v", result, err)
+	}
+
+	want := filepath.Join(codexBase, "dingtalk-chat", "SKILL.md")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("canonical Codex Skill missing at %s: %v", want, err)
+	}
+	for _, duplicate := range []string{
+		filepath.Join(genericBase, "dingtalk-chat", "SKILL.md"),
+		filepath.Join(genericBase, "dws", "multi", "dingtalk-chat", "SKILL.md"),
+	} {
+		if _, err := os.Stat(duplicate); !os.IsNotExist(err) {
+			t.Fatalf("generic duplicate still visible at %s: %v", duplicate, err)
+		}
 	}
 }
 
@@ -508,7 +551,7 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMonoReadDirErrorFailsHome(t *
 	if len(failed) != 1 {
 		t.Fatalf("Failed() len = %d, want 1 (%v)", len(failed), result.Results)
 	}
-	wantDir := filepath.Join(agentsBase, "dws")
+	wantDir := agentsBase
 	if failed[0].Dir != wantDir || failed[0].Err == nil {
 		t.Fatalf("failed entry = %#v, want dir %q with non-nil err", failed[0], wantDir)
 	}
@@ -931,8 +974,8 @@ func TestCrossPlatformCoverageMultiUpgradeBackupAndFallbackEdges(t *testing.T) {
 		t.Fatalf("blacklisted home must never be touched, stat err=%v", err)
 	}
 
-	// Per-skill backup failure fails the home; a second home still succeeds so
-	// the fallback never runs.
+	// A detected concrete Agent root wins over .agents. A failure while retiring
+	// the old generic copy is surfaced after the concrete root succeeds.
 	home2 := t.TempDir()
 	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home2, nil })
 	knownSkillDirs = []string{".agents/skills", ".claude/skills"}
@@ -956,12 +999,13 @@ func TestCrossPlatformCoverageMultiUpgradeBackupAndFallbackEdges(t *testing.T) {
 	}
 	testseam.Swap(t, &upgradeRename, os.Rename)
 
-	// Per-skill copy failure fails the home the same way.
+	// Per-skill copy failure on the concrete home fails that home; with no
+	// successful concrete target, the generic copy is left untouched.
 	home3 := t.TempDir()
 	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home3, nil })
 	os.MkdirAll(filepath.Join(home3, ".claude"), 0o755)
 	testseam.Swap(t, &upgradeCopyDir, func(src, dst string) error {
-		if strings.Contains(dst, ".agents") {
+		if strings.Contains(dst, ".claude") {
 			return errors.New("copy denied")
 		}
 		return copyDir(src, dst)

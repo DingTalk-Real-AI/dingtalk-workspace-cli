@@ -48,8 +48,12 @@ It then runs:
   --fast-path "$PR_BASE_SHA" HEAD
 ```
 
-Because the verified PR diff contains only `CHANGELOG.md`, the validator and
-its policy dependencies in that merge tree are byte-for-byte the current base
+The exact fast path remains limited to historic one-file maintenance. A
+release-seal PR uses `--content-only`, which permits the generated
+`CHANGELOG.md` change together with archival moves from `.changes/` to
+`.changes/released/`; it receives the normal scoped admission instead of this
+fast path. Ordinary PRs must not modify `CHANGELOG.md`; they add a standalone
+release fragment instead. The validator and its policy dependencies in that merge tree are byte-for-byte the current base
 versions. Validation targets the synthetic merge tree, not the feature-branch
 tree, so a stale branch cannot supply an older validator or combine with newer
 base notes into an invalid final CHANGELOG.
@@ -79,10 +83,12 @@ to the complete main admission suite. A source change can therefore never
 inherit the CHANGELOG-only result.
 
 Any PR that touches `CHANGELOG.md` but also changes another file runs the same
-content contract in `Policy` with `--content-only`. That mode permits the
-second file but still rejects invalid dates or versions, missing bullets,
-placeholder `TODO`/`TBD`, unmanaged-section changes, and unsafe tree modes.
-Adding a second file therefore cannot bypass CHANGELOG validation.
+content contract in `Policy` with `--content-only`. That mode accepts only
+fragment archival moves (`.changes/<name>.md` to
+`.changes/released/<version>/<name>.md`) alongside the changelog; source and
+documentation changes are rejected. It still rejects invalid dates or
+versions, missing bullets, placeholder `TODO`/`TBD`, unmanaged-section
+changes, and unsafe tree modes.
 
 ## Risk tiers and downstream boundaries
 
@@ -184,11 +190,11 @@ Schema，并让 candidate 对两份历史 contract 独立执行检查；它只�
 lifecycle 的 exact rename 规范化到当前历史副本，不会维护第二份 allowlist，也不会
 放宽其他 Schema 历史字段。
 
-For an exact CHANGELOG-only branch:
+For a release-seal branch that archives rendered fragments:
 
 ```sh
 base_ref=$(git merge-base HEAD origin/main)
-./scripts/policy/check-changelog-pr.sh --fast-path "$base_ref" HEAD
+./scripts/policy/check-changelog-pr.sh --content-only "$base_ref" HEAD
 ```
 
 `make coverage-gate` is an enforcement step, not a profile generator. For a
