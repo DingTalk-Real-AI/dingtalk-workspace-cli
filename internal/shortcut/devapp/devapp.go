@@ -25,9 +25,11 @@
 package devapp
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -51,8 +53,49 @@ func applyCursor(rt *shortcut.RuntimeContext, params map[string]any) {
 }
 
 var cursorFlags = []shortcut.Flag{
-	{Name: "cursor", Type: shortcut.FlagString, Desc: "游标令牌：首次查询留空，续翻传上次出参的 nextCursor"},
+	{Name: "cursor", Type: shortcut.FlagString, Desc: "游标令牌：首次查询留空，续翻传上次 meta.pagination.next_token"},
 	{Name: "page-size", Type: shortcut.FlagInt, Default: "20", Desc: "单页条数，默认 20"},
+}
+
+func devAppObjectResult(outcomes ...contract.ResultOutcome) *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   append([]contract.ResultOutcome(nil), outcomes...),
+		DataSchema: json.RawMessage(`{"type":"object","description":"开放平台命令返回的业务对象；具体字段由对应操作定义","additionalProperties":true}`),
+	}
+}
+
+func devAppPaginatedProjectionResult(collection, description string) *contract.ResultSpec {
+	schema, _ := json.Marshal(map[string]any{
+		"type":                 "object",
+		"description":          description,
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"count": map[string]any{
+				"type":        "integer",
+				"description": "当前页业务记录数量",
+			},
+			collection: map[string]any{
+				"type":        "array",
+				"description": "当前页业务记录；分页控制信息只读取 meta.pagination",
+				"items": map[string]any{
+					"type":                 "object",
+					"additionalProperties": true,
+				},
+			},
+		},
+		"required": []string{"count", collection},
+	})
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: schema,
+	}
+}
+
+func devAppCursorPagination() *contract.PaginationSpec {
+	return &contract.PaginationSpec{
+		Kind:            contract.PaginationKindCursor,
+		CursorParameter: "cursor",
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +134,8 @@ var ListApp = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +list"},
 		},
+		Result:     devAppPaginatedProjectionResult("apps", "当前页开放平台应用查询结果"),
+		Pagination: devAppCursorPagination(),
 	},
 	Flags: append([]shortcut.Flag{
 		{Name: "name", Type: shortcut.FlagString, Desc: "应用名称关键词"},
@@ -138,7 +183,7 @@ var ListApp = shortcut.Shortcut{
 			return err
 		}
 		apps := listAppProject(data)
-		return rt.Output(map[string]any{"count": len(apps), "apps": apps})
+		return rt.Output(devAppListProjection(data, "apps", apps))
 	},
 }
 
@@ -248,6 +293,10 @@ var GetApp = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +get --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result: devAppObjectResult(
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomeFailure,
+		),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
@@ -536,6 +585,10 @@ var WebappGet = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +webapp-get --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result: devAppObjectResult(
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomeFailure,
+		),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
@@ -639,6 +692,8 @@ var PermissionList = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +permission-list --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result:     devAppPaginatedProjectionResult("permissions", "当前页开放平台应用权限查询结果"),
+		Pagination: devAppCursorPagination(),
 	},
 	Flags: append([]shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
@@ -671,7 +726,7 @@ var PermissionList = shortcut.Shortcut{
 			return err
 		}
 		permissions := permissionListProject(data)
-		return rt.Output(map[string]any{"count": len(permissions), "permissions": permissions})
+		return rt.Output(devAppListProjection(data, "permissions", permissions))
 	},
 }
 
@@ -998,6 +1053,10 @@ var RobotGet = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +robot-get --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result: devAppObjectResult(
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomeFailure,
+		),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
@@ -1133,6 +1192,8 @@ var EventList = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +event-list --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result:     devAppPaginatedProjectionResult("events", "当前页应用订阅事件查询结果"),
+		Pagination: devAppCursorPagination(),
 	},
 	Flags: append([]shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
@@ -1149,7 +1210,7 @@ var EventList = shortcut.Shortcut{
 			return err
 		}
 		events := eventListProject(data)
-		return rt.Output(map[string]any{"count": len(events), "events": events})
+		return rt.Output(devAppListProjection(data, "events", events))
 	},
 }
 
@@ -1324,6 +1385,8 @@ var VersionList = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +version-list --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result:     devAppPaginatedProjectionResult("versions", "当前页开放平台应用版本查询结果"),
+		Pagination: devAppCursorPagination(),
 	},
 	Flags: append([]shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
@@ -1336,8 +1399,45 @@ var VersionList = shortcut.Shortcut{
 			return err
 		}
 		versions := versionListProject(data)
-		return rt.Output(map[string]any{"count": len(versions), "versions": versions})
+		return rt.Output(devAppListProjection(data, "versions", versions))
 	},
+}
+
+func devAppListProjection(data map[string]any, key string, items []map[string]any) map[string]any {
+	out := map[string]any{"count": len(items), key: items}
+	for _, candidate := range devAppPaginationCandidates(data) {
+		_, hasMore := candidate["hasMore"]
+		_, hasCursor := candidate["nextCursor"]
+		if !hasMore && !hasCursor {
+			continue
+		}
+		if hasMore {
+			out["hasMore"] = candidate["hasMore"]
+		}
+		if hasCursor {
+			out["nextCursor"] = candidate["nextCursor"]
+		}
+		break
+	}
+	return out
+}
+
+func devAppPaginationCandidates(data map[string]any) []map[string]any {
+	if data == nil {
+		return nil
+	}
+	candidates := []map[string]any{data}
+	for _, key := range []string{"content", "result", "data"} {
+		if nested, ok := data[key].(map[string]any); ok {
+			candidates = append(candidates, nested)
+			for _, innerKey := range []string{"result", "data"} {
+				if inner, ok := nested[innerKey].(map[string]any); ok {
+					candidates = append(candidates, inner)
+				}
+			}
+		}
+	}
+	return candidates
 }
 
 // versionListProject reshapes list_dev_app_versions into a clean version list
@@ -1443,6 +1543,10 @@ var VersionGet = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +version-get --unified-app-id <UNIFIED_APP_ID> --version-id <VERSION_ID>"},
 		},
+		Result: devAppObjectResult(
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomeFailure,
+		),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
@@ -1490,6 +1594,11 @@ var VersionCheckApproval = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +version-check-approval --unified-app-id <UNIFIED_APP_ID> --version-id <VERSION_ID>"},
 		},
+		Result: devAppObjectResult(
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomePending,
+			contract.ResultOutcomeFailure,
+		),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
@@ -1568,6 +1677,11 @@ var VersionStatus = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +version-status --unified-app-id <UNIFIED_APP_ID> --version-id <VERSION_ID>"},
 		},
+		Result: devAppObjectResult(
+			contract.ResultOutcomeSuccess,
+			contract.ResultOutcomePending,
+			contract.ResultOutcomeFailure,
+		),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
@@ -1584,35 +1698,48 @@ var VersionStatus = shortcut.Shortcut{
 
 func init() {
 	shortcut.Register(
-		ListApp,
-		GetApp,
-		CreateApp,
-		UpdateApp,
-		DeleteApp,
-		EnableApp,
-		DisableApp,
-		GetCredentials,
-		WebappGet,
-		WebappConfig,
-		PermissionList,
-		PermissionAdd,
-		PermissionRemove,
-		MemberList,
-		MemberAdd,
-		MemberRemove,
-		SecurityConfig,
-		RobotGet,
-		RobotConfig,
-		RobotEnable,
-		RobotDisable,
-		EventList,
-		EventSubscribe,
-		EventUnsubscribe,
-		VersionCreate,
-		VersionList,
-		VersionGet,
-		VersionCheckApproval,
-		VersionPublish,
-		VersionStatus,
+		frameworkUnified(ListApp),
+		frameworkUnified(GetApp),
+		frameworkDualValidate(CreateApp),
+		frameworkDualValidate(UpdateApp),
+		frameworkDualValidate(DeleteApp),
+		frameworkDualValidate(EnableApp),
+		frameworkDualValidate(DisableApp),
+		// Credentials contain secrets and still lack a reviewed public result
+		// projection. Keep legacy bytes while shadow-validating until Safety,
+		// Schema identity, and sensitive-path redaction are declared together.
+		frameworkDualValidate(GetCredentials),
+		frameworkUnified(WebappGet),
+		frameworkDualValidate(WebappConfig),
+		frameworkUnified(PermissionList),
+		frameworkDualValidate(PermissionAdd),
+		frameworkDualValidate(PermissionRemove),
+		frameworkDualValidate(MemberList),
+		frameworkDualValidate(MemberAdd),
+		frameworkDualValidate(MemberRemove),
+		frameworkDualValidate(SecurityConfig),
+		frameworkUnified(RobotGet),
+		frameworkDualValidate(RobotConfig),
+		frameworkDualValidate(RobotEnable),
+		frameworkDualValidate(RobotDisable),
+		frameworkUnified(EventList),
+		frameworkDualValidate(EventSubscribe),
+		frameworkDualValidate(EventUnsubscribe),
+		frameworkDualValidate(VersionCreate),
+		frameworkUnified(VersionList),
+		frameworkUnified(VersionGet),
+		frameworkUnified(VersionCheckApproval),
+		frameworkDualValidate(VersionPublish),
+		frameworkUnified(VersionStatus),
 	)
+}
+
+func frameworkUnified(item shortcut.Shortcut) shortcut.Shortcut {
+	item.OutputRollout = output.RolloutUnifiedActive
+	return item
+}
+
+func frameworkDualValidate(item shortcut.Shortcut) shortcut.Shortcut {
+	item.OutputRollout = output.RolloutDualValidate
+	return item
 }

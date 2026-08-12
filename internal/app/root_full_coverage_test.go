@@ -157,11 +157,11 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 	})
 
 	oldMkdir := rootMkdirAll
-	oldCreate := rootCreateFile
+	oldCreate := rootCreateTemp
 	oldClose := rootCloseFile
 	t.Cleanup(func() {
 		rootMkdirAll = oldMkdir
-		rootCreateFile = oldCreate
+		rootCreateTemp = oldCreate
 		rootCloseFile = oldClose
 	})
 	wantErr := errors.New("filesystem")
@@ -193,17 +193,19 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 		t.Fatal("mkdir failure succeeded")
 	}
 	rootMkdirAll = func(string, os.FileMode) error { return nil }
-	rootCreateFile = func(string) (*os.File, error) { return nil, wantErr }
+	rootCreateTemp = func(string, string) (*os.File, error) { return nil, wantErr }
 	if err := configureOutputSink(newOutputCommand(filepath.Join("create-failure", "out"))); err == nil {
 		t.Fatal("create failure succeeded")
 	}
-	rootCreateFile = oldCreate
+	rootCreateTemp = oldCreate
 	file, err := os.CreateTemp(t.TempDir(), "close")
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := &cobra.Command{Use: "close"}
-	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, file))
+	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, &outputSinkState{
+		file: file, tempPath: file.Name(), target: filepath.Join(filepath.Dir(file.Name()), "close-target"),
+	}))
 	rootCloseFile = func(*os.File) error { return wantErr }
 	if err := closeOutputSink(cmd); err == nil {
 		t.Fatal("close failure succeeded")
@@ -216,7 +218,9 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, file))
+	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, &outputSinkState{
+		file: file, tempPath: file.Name(), target: filepath.Join(filepath.Dir(file.Name()), "close-success-target"),
+	}))
 	if err := closeOutputSink(cmd); err != nil {
 		t.Fatalf("close success = %v", err)
 	}

@@ -38,6 +38,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/registry"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/source"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
@@ -74,18 +75,18 @@ var (
 
 // newEventCommand returns the `event` parent command and all its subcommands.
 // Wired into root.go's utilityCommands list.
-func newEventCommand() *cobra.Command {
+func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	// Product-level Agent routing Decl (migrated from selection/event.json
 	// products.event). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "event",
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "订阅/消费个人消息、动作与群生命周期事件，并管理订阅生命周期",
+			AgentSummary: "实时监听当前用户相关的个人 IM 与 OA 审批事件，并管理订阅生命周期",
 			UseWhen: []string{
-				"需要实时监听个人消息接收、全量消息、已读、撤回、表情回应或群生命周期事件，或管理个人事件订阅生命周期",
+				"需要实时监听未来发生的个人消息、消息动作、群生命周期或 OA 审批任务/实例事件，或管理个人事件订阅生命周期",
 			},
 			AvoidWhen: []string{
-				"查历史聊天或主动发消息分别用 chat 查询/发送命令",
+				"查历史聊天或主动发消息用 chat；查询或处理审批实例/任务用 oa；配置开放平台应用事件回调用 dev app event",
 			},
 		},
 	})
@@ -99,12 +100,12 @@ func newEventCommand() *cobra.Command {
 		RunE:              func(c *cobra.Command, _ []string) error { return c.Help() },
 	}
 	cmd.AddCommand(
-		newEventListenIMCommand(),
-		newEventConsumeCommand(),
+		newEventListenIMCommand(globalFlags...),
+		newEventConsumeCommand(globalFlags...),
 		newEventListCommand(),
 		newEventSchemaCommand(),
-		newEventStatusCommand(),
-		newEventStopCommand(),
+		newEventStatusCommandWithFlags(globalFlags...),
+		newEventStopCommandWithFlags(globalFlags...),
 		newEventBusCommand(),
 	)
 	return cmd
@@ -114,7 +115,7 @@ func newEventCommand() *cobra.Command {
 //  event consume
 // ─────────────────────────────────────────────────────────────────────
 
-func newEventConsumeCommand() *cobra.Command {
+func newEventConsumeCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	var (
 		eventTypes   []string
 		filter       string
@@ -170,6 +171,8 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 				return err
 			}
 			if as == "user" {
+				personalOpts.ExplicitToken = eventExplicitToken(globalFlags)
+				personalOpts.ClientIDOverride = eventExplicitClientID(globalFlags)
 				personalOpts.EventKeys = dedupePersonalEventKeys(args)
 				personalOpts.EventKey = firstArg(personalOpts.EventKeys)
 				personalOpts.Flatten = flatten
@@ -333,7 +336,7 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 	f.BoolVar(&force, "force", false,
 		"仅 --foreground 模式生效：跳过单实例锁 (慎用：会让云事件被随机切分)")
 	f.BoolVar(&dryRun, "dry-run", false,
-		"仅打印解析后的配置，不连接 bus / 云端")
+		"仅打印解析后的配置；不创建订阅、不连接 bus；复用 --subscribe-id 时会只读查询控制面")
 	f.BoolVar(&foreground, "foreground", false,
 		"当前进程直接跑 bus 服务、不 fork、不打印事件（给 systemd/k8s 托管用）；读事件不要用它")
 	f.StringVar(&personalOpts.SubscribeID, "subscribe-id", "",
@@ -398,22 +401,21 @@ SIGTERM、关 stdin，或先用 dws event stop <subscribe_id> --dry-run 预览�
 				Reason:       "Reviewed composite workflow: the command creates or reuses a remote personal-event subscription and coordinates the local event bus and Stream consumer; no single pinned RPC represents the workflow.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "订阅并持续消费一个或多个兼容的个人事件；Agent 使用 --flatten 输出顶层业务 NDJSON",
+				AgentSummary: "消费 OA、群生命周期或需要底层控制的个人事件流；Agent 通常使用 --flatten 输出 NDJSON",
 				UseWhen: []string{
-					"需要实时监听 @我、指定单聊、指定群或指定发送人的后续消息事件",
-					"用户明确要求监听当前身份的所有单聊或所有群消息",
-					"需要监听指定单聊或群聊中的消息已读、撤回或表情回应事件",
+					"需要监听六个公开 OA 审批任务/实例 EventKey 中的一个或多个事件",
 					"需要监听指定群的标题变更、成员进退群或群解散事件",
-					"监听机器人、外部联系人等以 openDingtalkId 标识的单聊目标",
-					"同一目标、同一过滤条件需要同时监听多个兼容事件",
+					"用户显式给出原始 EventKey、Filter DSL、subscribe_id，要求原始 transport envelope，或需要普通 IM facade 不提供的高级多事件控制",
 				},
 				AvoidWhen: []string{
+					"普通 @我、指定发送人/群、全部单聊/群聊及 message/reaction/read/recall 监听优先使用 event +listen-im",
 					"只查历史聊天记录时用 chat 查询命令",
+					"查询、同意、拒绝、转交、撤销或发起审批时用 oa；配置应用事件回调时用 dev app event",
 					"只看事件目录/字段时用 event list / event schema",
 				},
 				Examples: []string{
-					"dws event consume user_im_message_receive_user --open-dingtalk-id open-example --flatten --max-events 1 --format ndjson",
-					"dws event consume user_im_message_receive_o2o user_im_message_read_o2o --user test-user-001 --flatten --max-events 2 --format ndjson",
+					"dws event consume user_oa_approval_task_created user_oa_approval_instance_finished --flatten --duration 10m --format ndjson",
+					"dws event consume user_im_group_member_added --group cid-example --flatten --max-events 1 --format ndjson",
 				},
 			},
 		},
@@ -564,6 +566,8 @@ func newEventBusCommand() *cobra.Command {
 		clientIDOverride string
 		idleTimeout      time.Duration
 		sourceKindRaw    string
+		runtimeTokenMode bool
+		identityHashFlag string
 		streamOpts       eventStreamTicketOptions
 	)
 	cmd := &cobra.Command{
@@ -600,23 +604,45 @@ func newEventBusCommand() *cobra.Command {
 				sourceKind = dwsevent.SourceKindAppStream
 			}
 			if sourceKind == dwsevent.SourceKindPersonalStream {
-				identity, err := eventResolvePersonal(ctx, configDir, streamOpts.SourceID)
-				if err != nil {
-					return failEarly(fmt.Errorf("event _bus: %w", err))
+				var (
+					identity     personal.Identity
+					identityHash string
+				)
+				if runtimeTokenMode {
+					identityHash = strings.TrimSpace(identityHashFlag)
+					if !validPersonalIdentityHash(identityHash) {
+						return failEarly(errors.New("event _bus: --identity-hash must be a 16-character hexadecimal identity hash in runtime token mode"))
+					}
+					if strings.TrimSpace(clientIDOverride) == "" {
+						return failEarly(errors.New("event _bus: --client-id is required in runtime token mode"))
+					}
+					identity = personal.Identity{
+						ClientID: strings.TrimSpace(clientIDOverride),
+						SourceID: personalEventStreamSourceID(streamOpts.SourceID),
+					}
+				} else {
+					var err error
+					identity, err = eventResolvePersonal(ctx, configDir, streamOpts.SourceID)
+					if err != nil {
+						return failEarly(fmt.Errorf("event _bus: %w", err))
+					}
+					if clientIDOverride != "" {
+						identity.ClientID = clientIDOverride
+					}
+					identityHash = dwsevent.IdentityHash(identity.Key())
 				}
-				if clientIDOverride != "" {
-					identity.ClientID = clientIDOverride
-				}
-				identityHash := dwsevent.IdentityHash(identity.Key())
 				editionName := editionNameOrDefault()
 				workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
 				endpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
+				credentialBroker := newPersonalCredentialBroker(configDir, runtimeTokenMode, runtimeTokenMode)
 				src, err := eventNewPersonalSource(ctx, personalStreamSourceOptions{
 					ConfigDir:        configDir,
 					Identity:         identity,
 					TicketMode:       streamOpts.Mode,
 					TicketURL:        streamOpts.TicketURL,
 					ClientIDOverride: clientIDOverride,
+					CredentialBroker: credentialBroker,
+					RuntimeTokenMode: runtimeTokenMode,
 				})
 				if err != nil {
 					return failEarly(err)
@@ -629,17 +655,18 @@ func newEventBusCommand() *cobra.Command {
 					}
 				}
 				busCfg := bus.Config{
-					WorkDir:      workDir,
-					IPCEndpoint:  endpoint,
-					ClientID:     identity.ClientID,
-					Edition:      editionName,
-					SourceKind:   dwsevent.SourceKindPersonalStream,
-					IdentityHash: identityHash,
-					SourceID:     identity.SourceID,
-					Source:       src,
-					IdleTimeout:  idleTimeout,
-					ReadyPipe:    readyPipe,
-					Logger:       slog.Default(),
+					WorkDir:          workDir,
+					IPCEndpoint:      endpoint,
+					ClientID:         identity.ClientID,
+					Edition:          editionName,
+					SourceKind:       dwsevent.SourceKindPersonalStream,
+					IdentityHash:     identityHash,
+					SourceID:         identity.SourceID,
+					Source:           src,
+					IdleTimeout:      idleTimeout,
+					ReadyPipe:        readyPipe,
+					Logger:           slog.Default(),
+					CredentialBroker: credentialBroker,
 				}
 				bus.ApplyEnvTuning(&busCfg)
 				return eventBusRun(ctx, busCfg)
@@ -699,12 +726,18 @@ func newEventBusCommand() *cobra.Command {
 		"exit after this long with zero consumers (0 = disabled)")
 	cmd.Flags().StringVar(&sourceKindRaw, "source-kind", string(dwsevent.SourceKindAppStream),
 		"event source kind: app_stream|personal_stream")
+	cmd.Flags().BoolVar(&runtimeTokenMode, "runtime-token-mode", false,
+		"use an owner-injected in-memory runtime credential")
+	cmd.Flags().StringVar(&identityHashFlag, "identity-hash", "",
+		"pre-resolved non-sensitive personal identity hash")
 	cmd.Flags().StringVar(&streamOpts.Mode, "stream-ticket-mode", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_MODE")),
 		"用户 Stream 建联模式：空=SDK app credential；normal/custom=portal 取票")
 	cmd.Flags().StringVar(&streamOpts.SourceID, "stream-source-id", strings.TrimSpace(os.Getenv("DWS_STREAM_SOURCE_ID")),
 		"用户 Stream sourceId；personal_stream 开源版默认 open")
 	cmd.Flags().StringVar(&streamOpts.TicketURL, "stream-ticket-url", strings.TrimSpace(os.Getenv("DWS_STREAM_TICKET_URL")),
 		"用户 Stream 取票 URL；personal_stream 默认由 MCP base URL 派生")
+	_ = cmd.Flags().MarkHidden("runtime-token-mode")
+	_ = cmd.Flags().MarkHidden("identity-hash")
 	return cmd
 }
 
@@ -823,6 +856,10 @@ func newEventListCommand() *cobra.Command {
 // ─────────────────────────────────────────────────────────────────────
 
 func newEventStatusCommand() *cobra.Command {
+	return newEventStatusCommandWithFlags()
+}
+
+func newEventStatusCommandWithFlags(globalFlags ...*GlobalFlags) *cobra.Command {
 	var (
 		all          bool
 		allEditions  bool
@@ -848,6 +885,8 @@ func newEventStatusCommand() *cobra.Command {
 					return fmt.Errorf("event status: %w", err)
 				}
 				personalOpts.Format = formatRaw
+				personalOpts.ExplicitToken = eventExplicitToken(globalFlags)
+				personalOpts.ClientIDOverride = eventExplicitClientID(globalFlags)
 				return eventRunPersonalStatus(c, personalOpts)
 			}
 			if err := rejectChangedFlags(c, "user", "event", "status", "subscribe-id", "personal-event-base-url", "stream-source-id"); err != nil {
@@ -1139,6 +1178,10 @@ func renderStatusBlock(w io.Writer, qs busctl.EntryStatus) {
 }
 
 func newEventStopCommand() *cobra.Command {
+	return newEventStopCommandWithFlags()
+}
+
+func newEventStopCommandWithFlags(globalFlags ...*GlobalFlags) *cobra.Command {
 	var asIdentity string
 	var opts personalStopOptions
 	cmd := &cobra.Command{
@@ -1159,6 +1202,8 @@ func newEventStopCommand() *cobra.Command {
 			}
 			if as == "user" {
 				opts.SubscribeID = firstArg(args)
+				opts.ExplicitToken = eventExplicitToken(globalFlags)
+				opts.ClientIDOverride = eventExplicitClientID(globalFlags)
 				if eventStopDryRun(c) {
 					return writeEventStopDryRun(c, as, opts)
 				}
@@ -1260,6 +1305,20 @@ func newEventStopCommand() *cobra.Command {
 func eventStopDryRun(cmd *cobra.Command) bool {
 	value, _ := cmd.Flags().GetBool("dry-run")
 	return value
+}
+
+func eventExplicitToken(globalFlags []*GlobalFlags) string {
+	if len(globalFlags) == 0 || globalFlags[0] == nil {
+		return ""
+	}
+	return strings.TrimSpace(globalFlags[0].Token)
+}
+
+func eventExplicitClientID(globalFlags []*GlobalFlags) string {
+	if len(globalFlags) == 0 || globalFlags[0] == nil {
+		return ""
+	}
+	return strings.TrimSpace(globalFlags[0].ClientID)
 }
 
 func writeEventStopDryRun(cmd *cobra.Command, identity string, opts personalStopOptions) error {

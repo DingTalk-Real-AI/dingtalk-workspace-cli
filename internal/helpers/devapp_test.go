@@ -12,14 +12,26 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
 func newDevAppTestRoot(runner executor.Runner) *cobra.Command {
+	ctx, _ := output.WithResultStore(context.Background())
 	root := &cobra.Command{
 		Use:               "dws",
 		DisableAutoGenTag: true,
+		SilenceErrors:     true,
+		SilenceUsage:      true,
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			return output.ValidateUnifiedFormat(cmd)
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
+			_, _, err := output.EmitStoredResult(cmd)
+			return err
+		},
 	}
+	root.SetContext(ctx)
 	root.PersistentFlags().Bool("dry-run", false, "dry run")
 	root.PersistentFlags().Bool("yes", false, "yes")
 	root.PersistentFlags().String("format", "json", "format")
@@ -27,15 +39,64 @@ func newDevAppTestRoot(runner executor.Runner) *cobra.Command {
 	return root
 }
 
+func prepareUnifiedTestCommand(cmd *cobra.Command) *cobra.Command {
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	if cmd.Flags().Lookup("format") == nil {
+		cmd.Flags().String("format", "json", "format")
+	}
+	if cmd.Flags().Lookup("dry-run") == nil {
+		cmd.Flags().Bool("dry-run", false, "dry run")
+	}
+	if cmd.Flags().Lookup("yes") == nil {
+		cmd.Flags().Bool("yes", false, "yes")
+	}
+	cmd.PersistentPostRunE = func(executed *cobra.Command, _ []string) error {
+		_, _, err := output.EmitStoredResult(executed)
+		return err
+	}
+	return cmd
+}
+
 type devAppResponseRunner struct {
-	last     executor.Invocation
-	response map[string]any
+	last                      executor.Invocation
+	response                  map[string]any
+	preserveMissingPagination bool
 }
 
 func (r *devAppResponseRunner) Run(_ context.Context, invocation executor.Invocation) (executor.Result, error) {
 	r.last = invocation
 	invocation.Implemented = true
-	return executor.Result{Invocation: invocation, Response: r.response}, nil
+	response := r.response
+	if !r.preserveMissingPagination && devAppToolRequiresPagination(invocation.Tool) {
+		if service, ok := response["content"].(map[string]any); ok {
+			if result, ok := service["result"].(map[string]any); ok {
+				_, hasFlag := result["hasMore"]
+				_, hasCursor := result["nextCursor"]
+				if !hasFlag && !hasCursor {
+					resultCopy := make(map[string]any, len(result)+1)
+					for key, value := range result {
+						resultCopy[key] = value
+					}
+					resultCopy["hasMore"] = false
+					serviceCopy := make(map[string]any, len(service))
+					for key, value := range service {
+						serviceCopy[key] = value
+					}
+					serviceCopy["result"] = resultCopy
+					responseCopy := make(map[string]any, len(response))
+					for key, value := range response {
+						responseCopy[key] = value
+					}
+					responseCopy["content"] = serviceCopy
+					response = responseCopy
+				}
+			}
+		}
+	}
+	return executor.Result{Invocation: invocation, Response: response}, nil
 }
 
 func TestDevAppMemberCommandsBuildToolParams(t *testing.T) {
@@ -355,7 +416,7 @@ func TestDevAppRobotAndVersionWritesRequireGuard(t *testing.T) {
 
 func TestDevAppListBuildsListByConditionParams(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := prepareUnifiedTestCommand(newDevAppCommand(runner))
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
@@ -381,7 +442,7 @@ func TestDevAppListBuildsListByConditionParams(t *testing.T) {
 
 func TestCrossPlatformCoverageDevAppGetBuildsDetailParams(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := prepareUnifiedTestCommand(newDevAppCommand(runner))
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
@@ -401,7 +462,7 @@ func TestCrossPlatformCoverageDevAppGetBuildsDetailParams(t *testing.T) {
 
 func TestCrossPlatformCoverageDevAppGetBuildsDetailParamsByAppKey(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := prepareUnifiedTestCommand(newDevAppCommand(runner))
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
@@ -421,7 +482,7 @@ func TestCrossPlatformCoverageDevAppGetBuildsDetailParamsByAppKey(t *testing.T) 
 
 func TestCrossPlatformCoverageDevAppGetPrefersUnifiedAppIDWhenBothPresent(t *testing.T) {
 	runner := &captureRunner{}
-	root := newDevAppCommand(runner)
+	root := prepareUnifiedTestCommand(newDevAppCommand(runner))
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
@@ -1128,10 +1189,7 @@ func TestDevAppUnwrapsSuccessfulServiceResult(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	var rendered map[string]any
-	if err := json.Unmarshal(out.Bytes(), &rendered); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
-	}
+	rendered := unwrapDevAppEnvelopeData(t, out.Bytes())
 	if _, ok := rendered["success"]; ok {
 		t.Fatalf("output kept ServiceResult wrapper: %#v", rendered)
 	}
@@ -1180,10 +1238,7 @@ func TestDevAppVersionCheckApprovalPreservesApprovalCandidateNames(t *testing.T)
 	if precheckOnly, _ := runner.last.Params["precheckOnly"].(bool); !precheckOnly {
 		t.Fatalf("precheckOnly = %#v, want true", runner.last.Params["precheckOnly"])
 	}
-	var rendered map[string]any
-	if err := json.Unmarshal(out.Bytes(), &rendered); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
-	}
+	rendered := unwrapDevAppEnvelopeData(t, out.Bytes())
 	candidates, ok := rendered["approvalCandidates"].([]any)
 	if !ok || len(candidates) != 2 {
 		t.Fatalf("approvalCandidates = %#v, want two candidates", rendered["approvalCandidates"])
@@ -1465,31 +1520,44 @@ func TestDevAppRobotResultSuccessWithoutUnifiedAppIDBlocksForUserInput(t *testin
 	assertDevAppStepCommandsDoNotContain(t, steps, "secret-client")
 }
 
-func TestDevAppRobotResultFailAndExpiredAddRetrySteps(t *testing.T) {
+func TestDevAppRobotResultFailAndExpiredAreTerminalFailures(t *testing.T) {
 	cases := []struct {
-		name           string
-		status         string
-		wantTaskIDFlag bool
+		name   string
+		status string
 	}{
-		{name: "fail reuses task id", status: "FAIL", wantTaskIDFlag: true},
-		{name: "expired resubmits without task id", status: "EXPIRED", wantTaskIDFlag: false},
+		{name: "fail", status: "FAIL"},
+		{name: "expired", status: "EXPIRED"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rendered := runDevAppRobotResultOutput(t, map[string]any{
-				"status": tc.status,
-				"taskId": "t-retry",
-			})
-			steps := devAppRenderedSteps(t, rendered)
-			retry := devAppStepByID(t, steps, "retry_robot_submit")
-			command, _ := retry["command"].(string)
-			hasTaskID := strings.Contains(command, "--task-id t-retry")
-			if hasTaskID != tc.wantTaskIDFlag {
-				t.Fatalf("retry command = %q, has task id %v, want %v", command, hasTaskID, tc.wantTaskIDFlag)
+			runner := &devAppResponseRunner{response: map[string]any{
+				"content": map[string]any{
+					"success": true,
+					"result":  map[string]any{"status": tc.status, "taskId": "t-retry"},
+				},
+			}}
+			root := newDevAppTestRoot(runner)
+			var out bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&out)
+			root.SetArgs([]string{"dev", "app", "robot", "result", "--task-id", "t-1", "--format", "json"})
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 			}
-			if dryRun, _ := retry["dryRunCommand"].(string); !strings.Contains(dryRun, "--dry-run") {
-				t.Fatalf("retry dryRunCommand = %q, want --dry-run", dryRun)
+			var env struct {
+				OK      bool   `json:"ok"`
+				Outcome string `json:"outcome"`
+				Error   *struct {
+					Type    string `json:"type"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
+			}
+			if env.OK || env.Outcome != "failure" || env.Error == nil || env.Error.Type != "api" {
+				t.Fatalf("terminal %s envelope = %+v, want API failure", tc.status, env)
 			}
 		})
 	}
@@ -1516,11 +1584,50 @@ func runDevAppRobotResultOutput(t *testing.T, result map[string]any) map[string]
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v\noutput:\n%s", err, out.String())
 	}
-	var rendered map[string]any
-	if err := json.Unmarshal(out.Bytes(), &rendered); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.String())
+	var env struct {
+		OK      bool           `json:"ok"`
+		Outcome string         `json:"outcome"`
+		Data    map[string]any `json:"data"`
+		Meta    *struct {
+			Operation *struct {
+				ID          string `json:"id"`
+				State       string `json:"state"`
+				NextCommand string `json:"next_command"`
+			} `json:"operation"`
+		} `json:"meta"`
 	}
-	return rendered
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, out.Bytes())
+	}
+	if !env.OK || env.Outcome != "pending" || env.Data == nil || env.Meta == nil || env.Meta.Operation == nil {
+		t.Fatalf("async envelope = %+v, want pending with data and operation", env)
+	}
+	if env.Meta.Operation.ID == "" || env.Meta.Operation.State == "" || env.Meta.Operation.NextCommand == "" {
+		t.Fatalf("pending operation = %+v, want id/state/next_command", env.Meta.Operation)
+	}
+	return env.Data
+}
+
+// unwrapDevAppEnvelopeData 解析 dev app 树统一信封输出并返回 data 层
+// （统一输出 dev 域试点，队列 Phase F）：既有断言直接消费裸载荷，
+// 信封化后先校验 ok/outcome，再返回 data（业务载荷形状不变）。
+func unwrapDevAppEnvelopeData(t *testing.T, raw []byte) map[string]any {
+	t.Helper()
+	var env struct {
+		OK      bool           `json:"ok"`
+		Outcome string         `json:"outcome"`
+		Data    map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\noutput:\n%s", err, raw)
+	}
+	if !env.OK || env.Outcome != "success" {
+		t.Fatalf("envelope ok/outcome = %v/%q, want true/success: %s", env.OK, env.Outcome, raw)
+	}
+	if env.Data == nil {
+		t.Fatalf("envelope data is nil: %s", raw)
+	}
+	return env.Data
 }
 
 func devAppRenderedSteps(t *testing.T, rendered map[string]any) []any {

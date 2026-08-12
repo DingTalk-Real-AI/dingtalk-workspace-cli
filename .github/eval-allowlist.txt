@@ -1,0 +1,61 @@
+# /eval 自助触发允许名单
+#
+# 名单内的 GitHub 登录名可对【自己创建的 PR】触发 /eval 评测；
+# 对任意 PR 触发仍需仓库 write/maintain/admin 权限（维护者背书）。
+# 授权读取的始终是默认分支上的本文件，PR 无法修改自身授权。
+#
+# 变更本文件必须走 PR 评审。每行一个 GitHub login，# 开头为注释。
+
+aftersss
+notable-open
+EdgarWang0925
+ayunya
+yutongshe
+qingyang1014
+caiTriumph
+xlb1130
+Anonymity-0
+FuShu-Yang
+guimingyue
+AlwaysLee
+TaoJikun
+zengyoulingzyl-stack
+liyuan333
+huangyoo
+lifeihong
+nitonitori
+cywan1998
+gangwn
+junlonghuo2
+aqruan
+Freda0909
+ShawnWhite777
+PeterGuy326
+abucraft
+pengzhihan47-star
+rainyak8
+gongrongyun
+huangyuanzhuo-coder
+ybcstudy
+bigqy
+liwang-ai
+meng93
+wxianfeng
+Patrick-Star-CN
+rossluo28-hz
+dxy704330469
+gtezg30062
+Neige-Premaire
+zhuoyu20
+avicii-chen
+typefield
+Haofeng0705
+Huwenjiao
+liuzeyang
+maoqxxmm
+FloralTide
+lingyun9833
+dxb121
+C0922
+xiaoji121
+H3java

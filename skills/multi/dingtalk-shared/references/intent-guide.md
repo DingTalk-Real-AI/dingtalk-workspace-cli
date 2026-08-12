@@ -23,7 +23,7 @@
 | "用本地文件覆盖钉盘/知识库里的文件" | 按目标节点类型覆盖已有文件 | 先 `dws drive info --node <目标> --format json` 并记录原 `name`；`extension=md` 时先用 `dws markdown overwrite --node <目标> --file <本地.md> --dry-run --format json` 预览，确认后改用 `--yes` 执行；其他普通文件用 `dws drive upload --node <目标> --file <本地文件> --file-name "<原name>" --format json`；`adoc` / `axls` / `able` 切对应内容 skill/reference 再决定写入方式 | 未探测类型就固定走 `drive upload --node`，或普通文件覆盖时省略 `--file-name` | 原生 `.md` 覆盖必须保留 Markdown 专用 diff 预览与确认流程；普通文件省略 `--file-name` 会被隐式重命名；在线文档、在线表格和 AI 表格也不能按普通文件覆盖 |
 | "导入文件到文档空间" / "导入文件到我的文档" / "导入到个人文档" | 文件导入为在线文档 | `dws doc +import --file <文件>` | 先调用 `dws wiki` 解析默认位置 | 目标参数可省略，由服务端落到默认个人文档根目录；只有明确知识库目标时才传 `--workspace` |
 | "把文件导入成在线文档" / "导入 Word/Excel" | 文件格式转换+创建在线文档 | `dws doc +import --file <文件> [--folder <ID> \| --workspace <WS_ID>]` | `dws drive upload` | doc import 是格式转换（docx→在线文档），目标可省略；drive upload 仅上传到钉盘不做转换 |
-| "在文档空间建文件夹，再建文档、移入文件夹并查元信息" | 普通文档与存储层复合操作 | `dws drive mkdir` → `dws doc +create` → `dws drive move` → `dws drive info` | `dws wiki space search/node create` | “文档空间”不是知识库信号；每一步只消费前一步真实 `folderId/nodeId`，最终用元信息确认位置 |
+| "在文档空间建文件夹，再建文档、移入文件夹并查元信息" | 普通文档与存储层复合操作 | `dws drive +create-folder` → `dws doc +create` → `dws drive +move` → `dws drive +inspect` | `dws wiki space search/node create` | “文档空间”不是知识库信号；每一步只消费前一步真实 `folderId/nodeId`，最终用元信息确认位置 |
 | "帮我看看知识库里的文件" | 知识库节点列表 | `wiki node list --workspace` | `drive list` | 明确"知识库"上下文 → wiki node list |
 | "列出钉盘团队空间" | 列出钉盘空间 | `wiki space list --type orgSpace` | `drive list-spaces` | 空间管理归 wiki，drive list-spaces 已 deprecated |
 | "在知识库里搜方案" | 空间内搜索 | `wiki node search --workspace` | `drive search` | 指定了空间上下文 → wiki node search |

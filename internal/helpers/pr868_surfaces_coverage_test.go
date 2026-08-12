@@ -31,6 +31,17 @@ func executePR868Command(t *testing.T, root *cobra.Command, args ...string) erro
 }
 
 func TestCrossPlatformCoverageMinutesNewSurfaces(t *testing.T) {
+	t.Run("permission add requires explicit policy", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		installScriptedCaller(t, caller)
+		err := executePR868Command(t, newMinutesCommand(), "permission", "add", "--ids", "task-1", "--member-uids", "user-1")
+		if err == nil || !strings.Contains(err.Error(), "--policy") {
+			t.Fatalf("permission add without --policy error = %v", err)
+		}
+		if caller.calls != 0 {
+			t.Fatalf("permission add called MCP %d times before required policy validation", caller.calls)
+		}
+	})
 	t.Run("hot-word delete dry-run", func(t *testing.T) {
 		installScriptedCaller(t, &scriptedToolCaller{dry: true, format: "json"})
 		if err := executePR868Command(t, newMinutesCommand(), "hot-word", "delete", "--words", "钉钉,OKR"); err != nil {
@@ -89,6 +100,21 @@ func TestCrossPlatformCoverageMinutesNewSurfaces(t *testing.T) {
 		}
 		if err := executePR868Command(t, newMinutesCommand(), "permission", "apply", "--id", "task"); err == nil {
 			t.Fatal("expected missing policy")
+		}
+	})
+	t.Run("permission apply policy flag is int", func(t *testing.T) {
+		// 数值参数声明为 int 类型 flag；必填校验走 cmd.Flags().Changed，
+		// 不能用 validateRequiredFlags（它把 int 零值当成未传）。
+		cmd, _, err := newMinutesCommand().Find([]string{"permission", "apply"})
+		if err != nil {
+			t.Fatalf("find permission apply: %v", err)
+		}
+		flag := cmd.Flags().Lookup("policy")
+		if flag == nil {
+			t.Fatal("flag --policy not found")
+		}
+		if flag.Value.Type() != "int" {
+			t.Fatalf("flag --policy type = %q, want %q", flag.Value.Type(), "int")
 		}
 	})
 

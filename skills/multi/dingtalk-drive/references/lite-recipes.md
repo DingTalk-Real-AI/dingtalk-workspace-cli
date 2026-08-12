@@ -6,13 +6,13 @@
 
 ### query-doc
 
-1. 全局搜索：`drive search --query "<关键词>"` → `nodeId`（聚合钉盘+文档空间）
+1. 钉盘全局搜索：`drive +search --query "<关键词>"` → `nodeId`；在线文档统一使用 `doc +search`
 2. 空间内搜索：`wiki node search --workspace <WS_ID> --query "<关键词>"` → `nodeId`
 3. `doc read --node <nodeId>`（按需；大文档只抽章节）
 
 ### list-folder-docs
 
-`drive list --workspace <WS_ID>` 或 `wiki node list --workspace <WS_ID>`
+`wiki node list --workspace <WS_ID>`；普通钉盘目录使用 `drive +list --folder <ID>`
 
 ### import-file
 
@@ -42,4 +42,3 @@ dws doc import --file ./report.docx --format json
 
 > **禁止先 Read 文件再 `doc create` + `doc update`**。`doc import` 是服务端格式转换，客户端无需解析文件内容。
 > 详见 [./doc/doc-import.md](../../dingtalk-doc/references/doc/doc-import.md)。
-

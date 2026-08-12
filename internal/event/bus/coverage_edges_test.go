@@ -17,6 +17,7 @@ import (
 
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	eventlock "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/lock"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
@@ -323,6 +324,21 @@ func TestCrossPlatformCoverageRunStartupAndSourceEdges(t *testing.T) {
 	}}
 	if err := Run(context.Background(), base); !errors.Is(err, errBusInjected) {
 		t.Fatalf("source error = %v", err)
+	}
+
+	runtimeWorkDir := shortTempDir(t)
+	base.WorkDir = runtimeWorkDir
+	base.IPCEndpoint = dwsevent.IPCEndpoint(
+		runtimeWorkDir,
+		"open",
+		dwsevent.SourceKindPersonalStream,
+		dwsevent.IdentityHash(runtimeWorkDir),
+	)
+	base.Source = edgeSource{start: func(context.Context, dwsevent.EmitFn) error {
+		return runtimecred.ErrRuntimeTokenRejected
+	}}
+	if err := Run(context.Background(), base); !errors.Is(err, runtimecred.ErrRuntimeTokenRejected) {
+		t.Fatalf("runtime source error = %v", err)
 	}
 }
 

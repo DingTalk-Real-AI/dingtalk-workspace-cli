@@ -71,7 +71,7 @@ func NewSchemaCommand() *cobra.Command {
 		Short: "渐进查看命令 Schema (产品 / 分组 / 工具参数)",
 		Long: `查看当前可运行命令的 Schema 元数据。
 
-不带参数时列出产品和工具数量；传产品或分组路径逐层展开；传具体工具路径输出扁平参数 Schema（对齐 GWS：parameters 内联 required，键为 CLI flag）。普通 Agent 查询应使用 --compact：它按稳定字段白名单输出选参、约束和安全语义。省略 --compact 的 full leaf 保留参数映射、接口绑定和 provenance，仅用于定向审计；--all 输出全部工具的完整 leaf Schema，用于审计/CI。helper、MCP 与本地 Cobra 命令均须通过 ContractFinal.Identity 声明进入收集的身份集，并从同一声明装配的 ToolSpec 投影；查询不执行服务发现或临时合成第二份 Schema。`,
+不带参数时列出产品和工具数量；传产品或分组路径逐层展开；传具体工具路径输出扁平参数 Schema（对齐 GWS：parameters 内联 required，键为 CLI flag）。普通 Agent 查询应使用 --compact：它按稳定字段白名单输出选参、约束、安全语义和已评审的返回契约。省略 --compact 的 full leaf 保留参数映射、接口绑定和 provenance，仅用于定向审计；--all 输出全部工具的完整 leaf Schema，用于审计/CI。helper、MCP 与本地 Cobra 命令均须通过 ContractFinal.Identity 声明进入收集的身份集，并从同一声明装配的 ToolSpec 投影；查询不执行服务发现或临时合成第二份 Schema。`,
 		Args:              cobra.MaximumNArgs(1),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -113,7 +113,7 @@ func NewSchemaCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("all", false, "输出全部工具的完整 leaf Schema（包括参数和约束，用于审计/CI）")
-	cmd.Flags().Bool("compact", false, "按稳定字段白名单输出 Agent 选参、约束和安全语义")
+	cmd.Flags().Bool("compact", false, "按稳定字段白名单输出 Agent 选参、约束、安全语义和返回契约")
 	cmd.Flags().String("cli-path", "", "按 CLI 命令路径查询")
 	return cmd
 }

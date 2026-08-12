@@ -28,8 +28,12 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
+
+var driveDownload = localio.Download
 
 // ── 钉盘文件（drive MCP server）────────────────────────────────
 
@@ -38,9 +42,20 @@ var List = shortcut.Shortcut{
 	Service:     "drive",
 	Command:     "+list",
 	Product:     "drive",
-	Description: "列出钉盘文件/文件夹",
-	Intent:      "当你想浏览钉盘某个空间或文件夹下有哪些文件和子文件夹、需要拿到文件的 dentryUuid 以便后续下载/移动/删除时使用；可指定 space-id、folder 逐层进入，支持分页和按创建/修改时间、名称排序，返回文件列表（含 ID、名称、类型等）。",
+	Description: "严格分页列出钉盘文件和文件夹",
+	Intent:      "浏览钉盘根目录或已知文件夹时使用；服务端明确空数组才表示空目录，缺字段、坏元素或空响应都会失败。",
 	Risk:        shortcut.RiskRead,
+	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+	Contract: driveContract(
+		"+list", "严格分页列出钉盘文件和文件夹",
+		"浏览钉盘根目录或已知文件夹时使用；服务端明确空数组才表示空目录，缺字段、坏元素或空响应都会失败。",
+		[]string{"按关键词定位文件改用 drive +search；查看单个节点详情改用 drive +inspect"},
+		[]string{`dws drive +list --limit 20`, `dws drive +list --folder <dentryUuid> --limit 20`},
+		driveCollectionResult("files", "严格校验并投影的钉盘目录页"), driveCursorPagination(),
+		contract.ParamDecl{Name: "space-id", Property: "spaceId"},
+		contract.ParamDecl{Name: "folder", Property: "parentId"},
+		contract.ParamDecl{Name: "cursor", Property: "nextToken"},
+	),
 	Flags: []shortcut.Flag{
 		{Name: "space-id", Type: shortcut.FlagString, Desc: "钉盘空间 ID (纯数字)，不传则使用「我的文件」"},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "父节点 ID (dentryUuid)，不传则列出空间根目录"},
@@ -78,66 +93,21 @@ var List = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		files := listFilesProject(data)
-		return rt.Output(map[string]any{"count": len(files), "files": files})
+		items, page, err := requireDriveCollection(data, "drive/list_files", "items", "files", "dentries", "entries", "nodes", "list")
+		if err != nil {
+			return err
+		}
+		files := projectDriveRows(items, map[string][]string{
+			"name":     {"name", "fileName", "dentryName", "title"},
+			"type":     {"type", "dentryType", "fileType", "spaceType"},
+			"nodeId":   {"fileId", "dentryUuid", "nodeId", "id"},
+			"dentryId": {"dentryId"},
+			"fileSize": {"fileSize", "size", "byteSize", "length"},
+		})
+		out := map[string]any{"count": len(files), "files": files}
+		addDrivePagination(out, page)
+		return rt.Output(out)
 	},
-}
-
-// listFilesProject reshapes the raw list_files response into a clean,
-// stable 钉盘 file/folder list ({name,type,dentryId,fileSize}) — the
-// output-projection fidelity applied to every list shortcut. Both the list
-// container and each field are probed defensively across candidate keys, so a
-// missing container or unknown alias simply yields an empty list rather than a
-// fabricated value.
-func listFilesProject(data map[string]any) []map[string]any {
-	raw := listFilesContainer(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		listFilesPick(row, m, "name", "name", "fileName", "dentryName", "title")
-		listFilesPick(row, m, "type", "type", "dentryType", "fileType", "spaceType")
-		listFilesPick(row, m, "dentryId", "dentryId", "dentryUuid", "id", "fileId", "nodeId")
-		listFilesPick(row, m, "fileSize", "fileSize", "size", "byteSize", "length")
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// listFilesContainer locates the file list array inside the response by trying
-// the common container keys emitted across drive backends; the payload itself
-// may also already be the array.
-func listFilesContainer(data map[string]any) []any {
-	for _, k := range []string{"result", "data", "list", "items", "files", "dentries", "entries", "nodes"} {
-		if v, ok := data[k].([]any); ok {
-			return v
-		}
-		// The container may be nested one level (e.g. {"data":{"list":[...]}}).
-		if inner, ok := data[k].(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "files", "dentries", "entries", "nodes", "result"} {
-				if v, ok := inner[ik].([]any); ok {
-					return v
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// listFilesPick copies the first matching alias from src into dst under the
-// canonical key, leaving dst untouched when no alias is present.
-func listFilesPick(dst, src map[string]any, canonical string, aliases ...string) {
-	for _, a := range aliases {
-		if v, ok := src[a]; ok {
-			dst[canonical] = v
-			return
-		}
-	}
 }
 
 // Info → get_file_info
@@ -183,7 +153,15 @@ var Info = shortcut.Shortcut{
 		if rt.Changed("space-id") {
 			params["spaceId"] = rt.Str("space-id")
 		}
-		return rt.CallMCP("get_file_info", params)
+		data, err := rt.CallMCPData("drive", "get_file_info", params)
+		if err != nil {
+			return err
+		}
+		result, err := requireDriveObject(data, "drive/get_file_info")
+		if err != nil {
+			return err
+		}
+		return rt.Output(result)
 	},
 }
 
@@ -192,20 +170,55 @@ var Download = shortcut.Shortcut{
 	Service:     "drive",
 	Command:     "+download",
 	Product:     "drive",
-	Description: "获取钉盘文件下载链接",
-	Intent:      "当你需要把钉盘里某个文件下载到本地或转给他人时使用；输入文件的 dentryUuid，返回带签名的临时下载 URL 和请求头，用它去真正拉取文件内容（本命令本身只取链接、不落盘）。",
+	Description: "安全下载钉盘文件到工作目录",
+	Intent:      "下载普通钉盘文件并要求验证本地字节产物时使用；不是只返回临时 URL。",
 	Risk:        shortcut.RiskRead,
+	Safety:      contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+	Contract: driveContract(
+		"+download", "安全下载钉盘文件到工作目录",
+		"下载普通钉盘文件并要求验证本地字节产物时使用；不是只返回临时 URL。",
+		[]string{"在线文档导出为 docx/pdf 使用 doc +export；只查元数据使用 drive +inspect"},
+		[]string{`dws drive +download --node <dentryUuid> --output downloads/report.pdf`},
+		driveObjectResult("已验证的本地下载产物"), nil,
+		contract.ParamDecl{Name: "node", Property: "fileId"},
+	),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文件 ID (dentryUuid)", Required: true},
 		{Name: "space-id", Type: shortcut.FlagString, Desc: "文件所属空间 ID"},
+		{Name: "output", Shorthand: "o", Type: shortcut.FlagString, Desc: "工作目录内的相对输出路径", Required: true},
 	},
-	Tips: []string{`dws drive +download --node <dentryUuid>`},
+	Tips: []string{`dws drive +download --node <dentryUuid> --output downloads/report.pdf`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{"fileId": rt.Str("node")}
 		if rt.Changed("space-id") {
 			params["spaceId"] = rt.Str("space-id")
 		}
-		return rt.CallMCP("download_file", params)
+		data, err := rt.CallMCPData("drive", "download_file", params)
+		if err != nil {
+			return err
+		}
+		payload, err := requireDriveObject(data, "drive/download_file")
+		if err != nil {
+			return err
+		}
+		url, preferredName, headers, err := driveDownloadPayload(payload, "drive/download_file")
+		if err != nil {
+			return err
+		}
+		cwd, err := driveGetwd()
+		if err != nil {
+			return err
+		}
+		artifact, err := driveDownload(rt.Command().Context(), url, localio.DownloadOptions{
+			BaseDir: cwd, Output: rt.Str("output"), PreferredName: preferredName, Headers: headers,
+		})
+		if err != nil {
+			return err
+		}
+		if artifact.SizeBytes <= 0 {
+			return driveResponseError("drive/download_file", "empty_download_artifact", "下载完成但本地产物为 0 字节")
+		}
+		return rt.Output(map[string]any{"success": true, "nodeId": rt.Str("node"), "savedPath": artifact.RelativePath, "sizeBytes": artifact.SizeBytes})
 	},
 }
 
@@ -302,66 +315,22 @@ var Search = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		files := searchFilesProject(data)
-		return rt.Output(map[string]any{"count": len(files), "files": files})
+		items, page, err := requireDriveCollection(data, "drive/search_files", "items", "files", "dentries", "entries", "nodes", "list")
+		if err != nil {
+			return err
+		}
+		files := projectDriveRows(items, map[string][]string{
+			"name":      {"name", "fileName", "dentryName", "title"},
+			"type":      {"type", "dentryType", "fileType", "spaceType"},
+			"nodeId":    {"fileId", "dentryUuid", "nodeId", "id"},
+			"dentryId":  {"dentryId"},
+			"fileSize":  {"fileSize", "size", "byteSize", "length"},
+			"creatorId": {"creatorId", "creatorUserId", "creator", "creatorUid"},
+		})
+		out := map[string]any{"count": len(files), "files": files}
+		addDrivePagination(out, page)
+		return rt.Output(out)
 	},
-}
-
-// searchFilesProject reshapes the raw search_files response into a clean,
-// stable 钉盘 file list ({name,type,dentryId,fileSize,creatorId}) — the
-// output-projection fidelity applied to every list/search shortcut. Both the
-// list container and each field are probed defensively across candidate keys,
-// so a missing container or unknown alias yields an empty list rather than a
-// fabricated value.
-func searchFilesProject(data map[string]any) []map[string]any {
-	raw := searchFilesContainer(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		searchFilesPick(row, m, "name", "name", "fileName", "dentryName", "title")
-		searchFilesPick(row, m, "type", "type", "dentryType", "fileType", "spaceType")
-		searchFilesPick(row, m, "dentryId", "dentryId", "dentryUuid", "id", "fileId", "nodeId")
-		searchFilesPick(row, m, "fileSize", "fileSize", "size", "byteSize", "length")
-		searchFilesPick(row, m, "creatorId", "creatorId", "creatorUserId", "creator", "creatorUid")
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// searchFilesContainer locates the file list array inside the response by
-// trying the common container keys emitted across drive backends; the payload
-// itself may also already wrap the array one level deeper.
-func searchFilesContainer(data map[string]any) []any {
-	for _, k := range []string{"result", "data", "list", "items", "files", "dentries", "entries", "nodes"} {
-		if v, ok := data[k].([]any); ok {
-			return v
-		}
-		if inner, ok := data[k].(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "files", "dentries", "entries", "nodes", "result"} {
-				if v, ok := inner[ik].([]any); ok {
-					return v
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// searchFilesPick copies the first matching alias from src into dst under the
-// canonical key, leaving dst untouched when no alias is present.
-func searchFilesPick(dst, src map[string]any, canonical string, aliases ...string) {
-	for _, a := range aliases {
-		if v, ok := src[a]; ok {
-			dst[canonical] = v
-			return
-		}
-	}
 }
 
 // RecycleList → list_recycle_items
@@ -419,64 +388,20 @@ var SearchDocs = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		docs := searchDocsProject(data)
-		return rt.Output(map[string]any{"count": len(docs), "docs": docs})
+		items, page, err := requireDriveCollection(data, "doc/search_documents", "documents", "docs", "nodes", "items", "list")
+		if err != nil {
+			return err
+		}
+		docs := projectDriveRows(items, map[string][]string{
+			"name":   {"name", "title", "docName", "nodeName", "fileName"},
+			"nodeId": {"nodeId", "id", "docId", "dentryUuid", "fileId"},
+			"type":   {"type", "docType", "nodeType", "fileType"},
+			"url":    {"url", "docUrl", "link", "webUrl"},
+		})
+		out := map[string]any{"count": len(docs), "docs": docs}
+		addDrivePagination(out, page)
+		return rt.Output(out)
 	},
-}
-
-// searchDocsProject reshapes the raw search_documents response into a clean,
-// stable document list ({name,nodeId,type,url}) — the output-projection
-// fidelity applied to every list/search shortcut. Both the list container and
-// each field are probed defensively across candidate keys, so a missing
-// container or unknown alias yields an empty list rather than fabricated data.
-func searchDocsProject(data map[string]any) []map[string]any {
-	raw := searchDocsContainer(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		searchDocsPick(row, m, "name", "name", "title", "docName", "nodeName", "fileName")
-		searchDocsPick(row, m, "nodeId", "nodeId", "id", "docId", "dentryUuid", "fileId")
-		searchDocsPick(row, m, "type", "type", "docType", "nodeType", "fileType")
-		searchDocsPick(row, m, "url", "url", "docUrl", "link", "webUrl")
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// searchDocsContainer locates the document list array inside the response by
-// trying the common container keys; the payload may also wrap the array one
-// level deeper under a common envelope.
-func searchDocsContainer(data map[string]any) []any {
-	for _, k := range []string{"result", "data", "list", "items", "documents", "docs", "nodes"} {
-		if v, ok := data[k].([]any); ok {
-			return v
-		}
-		if inner, ok := data[k].(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "documents", "docs", "nodes", "result"} {
-				if v, ok := inner[ik].([]any); ok {
-					return v
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// searchDocsPick copies the first matching alias from src into dst under the
-// canonical key, leaving dst untouched when no alias is present.
-func searchDocsPick(dst, src map[string]any, canonical string, aliases ...string) {
-	for _, a := range aliases {
-		if v, ok := src[a]; ok {
-			dst[canonical] = v
-			return
-		}
-	}
 }
 
 // Delete → delete_document (doc)
@@ -520,6 +445,17 @@ var Copy = shortcut.Shortcut{
 	},
 	Tips: []string{`dws drive +copy --node <nodeId> --folder <targetFolderId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		preflight, err := rt.CallMCPData("doc", "get_document_info", map[string]any{"nodeId": rt.Str("node")})
+		if err != nil {
+			return err
+		}
+		preflight, err = requireDriveObject(preflight, "doc/get_document_info")
+		if err != nil {
+			return err
+		}
+		if !isOnlineDriveObject(preflight) {
+			return driveResponseError("doc/copy_document", "ordinary_file_copy_unsupported", "普通钉盘文件当前没有独立副本接口；doc/copy_document 会生成 .dlink 快捷方式。需要快捷入口请用 +create-shortcut；需要独立副本请先 +download 再 +upload")
+		}
 		params := map[string]any{"nodeId": rt.Str("node")}
 		if rt.Changed("folder") {
 			params["targetFolderId"] = rt.Str("folder")
@@ -527,7 +463,27 @@ var Copy = shortcut.Shortcut{
 		if rt.Changed("workspace") {
 			params["workspaceId"] = rt.Str("workspace")
 		}
-		return rt.CallMCP("copy_document", params)
+		written, err := rt.CallMCPWriteDataStrict("doc", "copy_document", params)
+		if err != nil {
+			return err
+		}
+		written, err = requireDriveWrite(written, "doc/copy_document")
+		if err != nil {
+			return err
+		}
+		createdID := nestedString(written, "nodeId", "fileId", "dentryUuid", "id")
+		if createdID == "" {
+			return driveResponseError("doc/copy_document", "missing_created_id", "复制响应没有新节点 ID；远端效果未知")
+		}
+		verified, err := rt.CallMCPData("doc", "get_document_info", map[string]any{"nodeId": createdID})
+		if err != nil {
+			return err
+		}
+		verified, err = requireDriveObject(verified, "doc/get_document_info")
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"success": true, "sourceNodeId": rt.Str("node"), "nodeId": createdID, "copy": verified})
 	},
 }
 
@@ -578,7 +534,23 @@ var Move = shortcut.Shortcut{
 		if rt.Changed("workspace") {
 			params["workspaceId"] = rt.Str("workspace")
 		}
-		return rt.CallMCP("move_document", params)
+		written, err := rt.CallMCPWriteDataStrict("doc", "move_document", params)
+		if err != nil {
+			return err
+		}
+		written, err = requireDriveWrite(written, "doc/move_document")
+		if err != nil {
+			return err
+		}
+		verified, err := rt.CallMCPData("doc", "get_document_info", map[string]any{"nodeId": rt.Str("node")})
+		if err != nil {
+			return err
+		}
+		verified, err = requireDriveObject(verified, "doc/get_document_info")
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"success": true, "nodeId": rt.Str("node"), "file": verified})
 	},
 }
 
@@ -688,11 +660,21 @@ func collectRecentPages(rt *shortcut.RuntimeContext, base map[string]any, pageSi
 		if err != nil {
 			return nil, apperrors.NewAPI(fmt.Sprintf("get_recent_list 分页在第 %d 页失败", page), apperrors.WithCause(err), apperrors.WithReason("recent_pagination_failed"))
 		}
-		projected := recentListProject(data)
-		pageItems, _ := projected["items"].([]map[string]any)
+		rawItems, pageContainer, err := requireDriveCollection(data, "doc/get_recent_list", "recentItems")
+		if err != nil {
+			return nil, err
+		}
+		pageItems := projectDriveRows(rawItems, map[string][]string{
+			"name":        {"name"},
+			"nodeType":    {"nodeType"},
+			"contentType": {"contentType"},
+			"accessTime":  {"accessTime"},
+			"docUrl":      {"docUrl"},
+			"nodeId":      {"nodeId"},
+		})
 		items = append(items, pageItems...)
-		hasMore, _ = projected["hasMore"].(bool)
-		next, _ := projected["nextCursor"].(string)
+		hasMore, _ = pageContainer["hasMore"].(bool)
+		next := firstString(pageContainer, "nextCursor", "nextToken", "nextPageToken")
 		complete = !hasMore
 		cursor = strings.TrimSpace(next)
 		if len(items) >= maxItems && hasMore {
@@ -740,61 +722,39 @@ func mergeJournalRecent(result map[string]any, entries []docwritejournal.Entry) 
 	result["count"] = len(local) + len(items)
 }
 
-// recentListProject reshapes a get_recent_list response into a clean paginated
-// document list, dropping transport noise (logId) while keeping the pagination
-// cursor.
-func recentListProject(data map[string]any) map[string]any {
-	// get_recent_list nests its payload under result.recentItems; earlier this
-	// read data["recentItems"] at the top level only, so the whole list silently
-	// projected to empty. Resolve the payload container (top-level or one level
-	// under result/data) before reading recentItems / pagination fields.
-	payload := data
-	if inner, ok := recentListPayload(data); ok {
-		payload = inner
-	}
-	items := []map[string]any{}
-	raw, _ := payload["recentItems"].([]any)
-	for _, it := range raw {
-		m, ok := it.(map[string]any)
-		if !ok {
-			continue
-		}
-		items = append(items, map[string]any{
-			"name":        m["name"],
-			"nodeType":    m["nodeType"],
-			"contentType": m["contentType"],
-			"accessTime":  m["accessTime"],
-			"docUrl":      m["docUrl"],
-			"nodeId":      m["nodeId"],
-		})
-	}
-	out := map[string]any{"count": len(items), "items": items}
-	if nc, ok := payload["nextCursor"]; ok && nc != nil {
-		out["nextCursor"] = nc
-	}
-	if hm, ok := payload["hasMore"]; ok {
-		out["hasMore"] = hm
-	}
-	return out
-}
-
-// recentListPayload returns the map that actually holds recentItems, tolerating
-// a {result|data:{recentItems:[...]}} envelope as well as a bare top-level shape.
-func recentListPayload(data map[string]any) (map[string]any, bool) {
-	if _, ok := data["recentItems"]; ok {
-		return data, true
-	}
-	for _, k := range []string{"result", "data"} {
-		if inner, ok := data[k].(map[string]any); ok {
-			if _, ok := inner["recentItems"]; ok {
-				return inner, true
-			}
-		}
-	}
-	return nil, false
-}
-
 func init() {
+	Copy.Description = "复制在线文档到指定位置并读回验证"
+	Copy.Intent = "复制钉钉在线文档到新位置并保留原件时使用；先验证对象类型，普通文件不伪装成复制成功。"
+	Copy.Contract = driveContract(
+		"+copy", Copy.Description,
+		"复制钉钉在线文档到新位置并保留原件时使用；先验证对象类型，普通文件不伪装成复制成功。",
+		[]string{"普通钉盘文件独立复制当前无等价接口：需要快捷入口用 +create-shortcut，需要独立字节副本用 +download 后 +upload；移动原件用 +move"},
+		[]string{`dws drive +copy --node <ONLINE_DOC_ID> --folder <TARGET_FOLDER_ID>`},
+		driveObjectResult("在线文档复制并读回后的新节点"), nil,
+		// Preserve the historical public Schema properties. Execute translates
+		// these CLI concepts to nodeId/targetFolderId/workspaceId for the RPC.
+		contract.ParamDecl{Name: "node", Property: "node"},
+		contract.ParamDecl{Name: "folder", Property: "folder"},
+		contract.ParamDecl{Name: "workspace", Property: "workspace"},
+	)
+	Copy.Tips = []string{`dws drive +copy --node <ONLINE_DOC_ID> --folder <TARGET_FOLDER_ID>`}
+	Info.Contract.Result = driveObjectResult("钉盘节点元数据")
+	Search.Contract.Result = driveCollectionResult("files", "严格校验并投影的钉盘搜索结果页")
+	Search.Contract.Pagination = driveCursorPagination()
+	SearchDocs.Contract.Result = driveCollectionResult("docs", "兼容入口的在线文档搜索结果页")
+	Copy.Contract.Result = driveObjectResult("复制操作的终态证据")
+	Move.Contract.Result = driveObjectResult("移动操作的终态证据")
+	Recent.Contract.Result = driveCollectionResult("items", "严格校验的最近访问或编辑结果页")
+	Recent.Contract.Pagination = driveCursorPagination()
+	for _, declaration := range []*shortcut.Shortcut{
+		&List, &Info, &Download, &Search, &SearchDocs, &Copy, &Move, &Recent,
+		&Inspect, &Upload, &CreateFolder, &CreateShortcut, &Rename, &Delete, &Stats,
+		&RecycleList, &RecycleRestore, &StarList, &StarAdd, &StarRemove,
+		&PublishGet, &PublishSet, &PublishUnset, &Cover,
+		&VersionHistory, &VersionGet, &VersionDownload, &VersionRevert,
+	} {
+		declaration.OutputRollout = output.RolloutUnifiedActive
+	}
 	shortcut.Register(
 		List,
 		Info,
@@ -804,5 +764,35 @@ func init() {
 		Copy,
 		Move,
 		Recent,
+		Inspect,
+		Upload,
+		CreateFolder,
+		CreateShortcut,
+		Rename,
+		Delete,
+		Stats,
+		RecycleList,
+		RecycleRestore,
+		StarList,
+		StarAdd,
+		StarRemove,
+		PublishGet,
+		PublishSet,
+		PublishUnset,
+		Cover,
+		VersionHistory,
+		VersionGet,
+		VersionDownload,
+		VersionRevert,
 	)
+}
+
+func isOnlineDriveObject(info map[string]any) bool {
+	extension := strings.ToLower(firstString(info, "extension", "fileExtension", "ext"))
+	switch extension {
+	case "adoc", "axls", "able", "amind", "adraw":
+		return true
+	}
+	contentType := strings.ToUpper(firstString(info, "contentType", "docType"))
+	return contentType == "DOC" || contentType == "SHEET" || contentType == "TABLE" || contentType == "MIND" || contentType == "DRAW"
 }

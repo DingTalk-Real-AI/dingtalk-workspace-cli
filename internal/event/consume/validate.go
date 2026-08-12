@@ -113,8 +113,9 @@ func IsValidationError(err error) bool {
 // human-readable block. Called by Run when cfg.DryRun is true. Format
 // avoids JSON so users can `dws event consume --dry-run | head` cleanly.
 //
-// Secret-bearing fields are never present in Config (credentials never
-// reach this layer), so no redaction is required here.
+// RuntimeToken is the only secret-bearing Config field and is deliberately
+// not read or rendered here. Keep this function allowlist-based: never switch
+// it to generic struct serialization.
 func PrintDryRun(w io.Writer, cfg Config) {
 	if w == nil {
 		return

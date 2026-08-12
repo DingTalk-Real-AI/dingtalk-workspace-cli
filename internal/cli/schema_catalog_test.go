@@ -1356,6 +1356,8 @@ func TestDeliveryCatalogChatParamDeclsFrom87910880Reviewed(t *testing.T) {
 		{"chat message edit", "conversation-id", "openConversationId", true, ""},
 		{"chat message edit", "msg-id", "openMessageId", true, ""},
 		{"chat message edit", "at-open-dingtalk-ids", "atOpenDingTalkIds", false, "array"},
+		{"chat message send-card", "at-all", "atAll", false, ""},
+		{"chat message send-card", "at-open-dingtalk-ids", "atOpenDingTalkIds", false, "array"},
 		{"chat message update-text-emotion", "msg-id", "openMsgId", true, ""},
 		{"chat message update-text-emotion", "old-emotion-id", "oldEmotionId", true, ""},
 		{"chat category batch-info", "category-ids", "categoryIds", true, "array"},

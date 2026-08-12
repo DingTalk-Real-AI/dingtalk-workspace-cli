@@ -18,6 +18,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestCrossPlatformCoverageUpgradeHelpDoesNotMakeFullSkillRefreshForceOnly(t *testing.T) {
+	cmd := newUpgradeCommand()
+	force := cmd.Flags().Lookup("force")
+	if force == nil {
+		t.Fatal("upgrade --force flag is missing")
+	}
+	for _, text := range []string{cmd.Example, force.Usage} {
+		if strings.Contains(text, "恢复全部官方 Skill") {
+			t.Fatalf("upgrade help still implies that only --force performs the full Skill refresh: %q", text)
+		}
+	}
+	if !strings.Contains(force.Usage, "已是最新版本") {
+		t.Fatalf("upgrade --force help must explain its remaining purpose, got %q", force.Usage)
+	}
+	for _, want := range []string{"每次升级", "全量覆盖预制 Skill", "--force 仅额外允许重装当前版本"} {
+		if !strings.Contains(cmd.Long, want) {
+			t.Fatalf("upgrade help missing full-refresh contract %q: %s", want, cmd.Long)
+		}
+	}
+}
+
 // --- ensureV ---
 
 func TestEnsureV(t *testing.T) {

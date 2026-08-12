@@ -360,7 +360,9 @@ func TestCrossPlatformCoverageRecallCardAndLedgerBoundaries(t *testing.T) {
 		})
 	}
 
-	helpers.InitDeps(&larkAlignmentCaller{})
+	helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{
+		"im/update_streaming_card": `{"result":{"updated":true}}`,
+	}})
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{"chat", "+messages-update-card", "--biz-id", "b", "--content", "x", "--flow-status", "3", "--yes"})
 	if err := root.Execute(); err != nil {

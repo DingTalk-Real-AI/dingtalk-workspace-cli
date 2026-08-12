@@ -26,6 +26,14 @@ func TestReviewedMutationSafetyReachesFinalSchema(t *testing.T) {
 	wants := []finalSchemaSafetyWant{
 		{canonical: "aitable.form_field_hide", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "idempotent", provenance: declared},
 		{canonical: "chat.dismiss_group", effect: "destructive", risk: "high", confirmation: "user_required", idempotency: "unknown", provenance: declared},
+		// Card update intentionally layers confirmation: the atomic typed command
+		// preserves its original contract, while the Agent-facing shortcut owns
+		// the outer confirmation boundary.
+		{canonical: "chat.update_streaming_card", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown", provenance: declared},
+		{canonical: "chat.shortcut_messages_send", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown", provenance: declared},
+		{canonical: "chat.shortcut_messages_send_by_webhook", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown", provenance: declared},
+		{canonical: "chat.shortcut_messages_send_card", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown", provenance: declared},
+		{canonical: "chat.shortcut_messages_update_card", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown", provenance: declared},
 		{canonical: "drive.recycle_restore", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown", provenance: declared},
 		{canonical: "minutes.create_speaker_summary", effect: "write", risk: "medium", confirmation: "not_required", idempotency: "unknown", provenance: declared},
 		{canonical: "sheet.clear_range", effect: "write", risk: "medium", confirmation: "user_required", idempotency: "unknown", provenance: declared},

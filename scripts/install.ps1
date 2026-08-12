@@ -17,7 +17,7 @@
 #   DWS_ARCH          — architecture override          (amd64 or arm64)
 #   DWS_NO_SKILLS     — set to 1 to skip skills install
 #   DWS_SKILLS_ONLY   — set to 1 to install only skills
-#   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else mono)
+#   DWS_SKILL_MODE    — mono | multi (default: prompt if TTY, else multi)
 #   DWS_GITEE_REPO    — "owner/repo" on Gitee; resolve version + assets via the
 #                       Gitee API instead of GitHub (China mirror)
 #
@@ -39,6 +39,18 @@ $NoSkills = $env:DWS_NO_SKILLS -eq "1"
 $SkillsOnly = $env:DWS_SKILLS_ONLY -eq "1"
 $SkillName = "dws"
 $SkillMode = ""
+$SkillStateRoot = if ($env:DWS_CONFIG_DIR) { $env:DWS_CONFIG_DIR } else { Join-Path $HOME ".dws" }
+$ManagedSkillDigestScope = "skill-directory-v1"
+$LegacyOfficialMultiSkills = @(
+    "dingtalk-agoal", "dingtalk-aiapp", "dingtalk-aisearch", "dingtalk-aitable",
+    "dingtalk-attendance", "dingtalk-calendar", "dingtalk-chat", "dingtalk-contact",
+    "dingtalk-dev", "dingtalk-devapp", "dingtalk-devdoc", "dingtalk-ding",
+    "dingtalk-doc", "dingtalk-drive", "dingtalk-event", "dingtalk-hrbrain",
+    "dingtalk-live", "dingtalk-mail", "dingtalk-markdown", "dingtalk-minutes",
+    "dingtalk-misc", "dingtalk-oa", "dingtalk-pat", "dingtalk-profile",
+    "dingtalk-report", "dingtalk-shared", "dingtalk-sheet", "dingtalk-skill",
+    "dingtalk-todo", "dingtalk-wiki", "dws-shared"
+)
 
 # Agent skill base directories (same order as build/npm/install.js AGENT_DIRS).
 $AgentDirs = @(
@@ -71,6 +83,105 @@ function Write-Err {
     param([string]$Message)
     Write-Host "  ❌ $Message" -ForegroundColor Red
     exit 1
+}
+
+# A dingtalk-* prefix alone is not ownership evidence: market/user skills may
+# use it too. Ownership comes from the centralized skills-state.json.
+function Test-ManagedMultiSkillDir {
+    param([string]$Dir)
+    $name = Split-Path $Dir -Leaf
+    if ($LegacyOfficialMultiSkills -contains $name) { return $true }
+    $statePath = Join-Path $SkillStateRoot "skills-state.json"
+    if (!(Test-Path $statePath -PathType Leaf)) { return $false }
+    try {
+        $state = Get-Content -Path $statePath -Raw | ConvertFrom-Json -ErrorAction Stop
+        return @($state.managed_skills | Where-Object { $_.name -eq $name }).Count -gt 0
+    } catch {
+        return $false
+    }
+}
+
+function Get-SkillDirectoryDigest {
+    param([string]$Dir)
+    $root = [System.IO.Path]::GetFullPath($Dir).TrimEnd([char[]]@('\', '/'))
+    $files = @(
+        Get-ChildItem -Path $root -Recurse -File -Force |
+            ForEach-Object {
+                [pscustomobject]@{
+                    Relative = $_.FullName.Substring($root.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
+                    FullName = $_.FullName
+                }
+            } |
+            Sort-Object -Property Relative
+    )
+    $stream = [System.IO.MemoryStream]::new()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        foreach ($file in $files) {
+            $pathBytes = [System.Text.Encoding]::UTF8.GetBytes($file.Relative)
+            $stream.Write($pathBytes, 0, $pathBytes.Length)
+            $stream.WriteByte(0)
+            $content = [System.IO.File]::ReadAllBytes($file.FullName)
+            $stream.Write($content, 0, $content.Length)
+            $stream.WriteByte(0)
+        }
+        $hash = $sha.ComputeHash($stream.ToArray())
+        return "sha256:" + ([System.BitConverter]::ToString($hash).Replace("-", "").ToLowerInvariant())
+    } finally {
+        $sha.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Write-SkillsState {
+    param([string]$MultiSrc)
+    $stateDir = $SkillStateRoot
+    New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+    $versionValue = if ([string]::IsNullOrWhiteSpace($Version)) { "unknown" } else { $Version }
+    $skills = @(Get-ChildItem -Path $MultiSrc -Directory | Where-Object {
+        Test-Path (Join-Path $_.FullName "SKILL.md")
+    } | Sort-Object -Property Name)
+    $names = @($skills | ForEach-Object { $_.Name })
+    $managed = @($skills | ForEach-Object {
+        [ordered]@{
+            name = $_.Name
+            version = $versionValue
+            source = "install.ps1"
+            digest = Get-SkillDirectoryDigest -Dir $_.FullName
+            digest_scope = $ManagedSkillDigestScope
+        }
+    })
+    $state = [ordered]@{
+        version = $versionValue
+        official_skills = $names
+        updated_skills = $names
+        managed_skills = $managed
+        updated_at = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+    }
+    $statePath = Join-Path $stateDir "skills-state.json"
+    $tempPath = Join-Path $stateDir (".skills-state-" + [guid]::NewGuid().ToString("N") + ".tmp")
+    $backupPath = Join-Path $stateDir (".skills-state-" + [guid]::NewGuid().ToString("N") + ".previous")
+    try {
+        [System.IO.File]::WriteAllText($tempPath, (($state | ConvertTo-Json -Depth 5) + "`n"), [System.Text.UTF8Encoding]::new($false))
+        if (Test-Path $statePath -PathType Leaf) {
+            [System.IO.File]::Replace($tempPath, $statePath, $backupPath, $true)
+            Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+        } else {
+            Move-Item -LiteralPath $tempPath -Destination $statePath
+        }
+    } finally {
+        if (Test-Path $tempPath) { Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+# Central move seam for transactional Skill publication. Tests replace this
+# function to inject backup/publish failures without relying on ACL behavior.
+function Move-SkillPath {
+    param(
+        [string]$Source,
+        [string]$Destination
+    )
+    Move-Item -LiteralPath $Source -Destination $Destination -ErrorAction Stop
 }
 
 function Get-Arch {
@@ -230,12 +341,162 @@ function Copy-DirRecursive {
     return $count
 }
 
+function Publish-SkillCache {
+    param([string]$Source, [string]$CacheDir)
+
+    $cacheParent = Split-Path $CacheDir -Parent
+    $cacheName = Split-Path $CacheDir -Leaf
+    New-Item -ItemType Directory -Path $cacheParent -Force -ErrorAction Stop | Out-Null
+    $stagedDir = Join-Path $cacheParent ".$cacheName.tmp-$([Guid]::NewGuid().ToString('N'))"
+    $rollbackDir = ""
+    $published = $false
+    New-Item -ItemType Directory -Path $stagedDir -Force -ErrorAction Stop | Out-Null
+
+    try {
+        $count = Copy-DirRecursive -Source $Source -Destination $stagedDir
+        if (Test-Path $CacheDir) {
+            $rollbackDir = Join-Path $cacheParent ".$cacheName.old-$([Guid]::NewGuid().ToString('N'))"
+            Move-Item -Path $CacheDir -Destination $rollbackDir -ErrorAction Stop
+        }
+        try {
+            Move-Item -Path $stagedDir -Destination $CacheDir -ErrorAction Stop
+            $published = $true
+        } catch {
+            $publishError = $_
+            if ($rollbackDir) {
+                try {
+                    Move-Item -Path $rollbackDir -Destination $CacheDir -ErrorAction Stop
+                    $rollbackDir = ""
+                } catch {
+                    throw "Skill 缓存发布失败: $publishError；原缓存恢复也失败，恢复目录: $rollbackDir；错误: $_"
+                }
+            }
+            throw $publishError
+        }
+        if ($rollbackDir -and (Test-Path $rollbackDir)) {
+            Remove-Item -Path $rollbackDir -Recurse -Force -ErrorAction SilentlyContinue
+            if (Test-Path $rollbackDir) {
+                Write-Say "⚠️ 新缓存已生效，但旧缓存清理失败: $rollbackDir"
+            }
+            $rollbackDir = ""
+        }
+        return $count
+    } finally {
+        if (!$published -and (Test-Path $stagedDir)) {
+            Remove-Item -Path $stagedDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# Backup-SkillDir moves $Dir into $HOME\.dws\skill-backups\<stamp>\<name>
+# instead of destroying it (non-interactive installs cannot confirm, so
+# removals must stay reversible). Missing paths are a no-op success. On any
+# backup failure the directory is left in place and $false is returned so
+# callers skip that target rather than silently deleting data.
+function Backup-SkillDir {
+    param(
+        [string]$Dir,
+        [ref]$BackupPath
+    )
+    if ($null -ne $BackupPath) { $BackupPath.Value = "" }
+    if (!(Test-Path $Dir -PathType Container)) { return $true }
+    $backupRoot = Join-Path $HOME ".dws\skill-backups"
+    $stamp = [DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss")
+    $name = Split-Path $Dir -Leaf
+    $target = Join-Path (Join-Path $backupRoot $stamp) $name
+    $i = 1
+    while (Test-Path $target) {
+        $target = Join-Path (Join-Path $backupRoot "$stamp-$i") $name
+        $i++
+        if ($i -gt 1000) {
+            Write-Say "⚠️  备份目录冲突，保留原目录 $Dir"
+            return $false
+        }
+    }
+    try {
+        New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force -ErrorAction Stop | Out-Null
+        Move-SkillPath -Source $Dir -Destination $target
+    } catch {
+        Write-Say "⚠️  备份失败，保留原目录 $Dir"
+        return $false
+    }
+    if ($null -ne $BackupPath) { $BackupPath.Value = $target }
+    Write-Say "  × 已备份并移除 $Dir → $target"
+    return $true
+}
+
+function Restore-MultiSkillSet {
+    param(
+        [array]$Published,
+        [array]$Backups
+    )
+    $ok = $true
+    for ($i = $Published.Count - 1; $i -ge 0; $i--) {
+        try {
+            if (Test-Path $Published[$i]) {
+                Remove-Item -LiteralPath $Published[$i] -Recurse -Force -ErrorAction Stop
+            }
+        } catch {
+            Write-Say "⚠️  无法移除失败发布目录 $($Published[$i]): $_"
+            $ok = $false
+        }
+    }
+    for ($i = $Backups.Count - 1; $i -ge 0; $i--) {
+        $item = $Backups[$i]
+        try {
+            if (Test-Path $item.Original) {
+                throw "恢复目标仍存在"
+            }
+            New-Item -ItemType Directory -Path (Split-Path $item.Original -Parent) -Force -ErrorAction Stop | Out-Null
+            Move-SkillPath -Source $item.Backup -Destination $item.Original
+        } catch {
+            Write-Say "⚠️  无法恢复原 Skill $($item.Original)；备份保留于 $($item.Backup): $_"
+            $ok = $false
+        }
+    }
+    return $ok
+}
+
+function Move-GenericSkillRootToBackup {
+    param([string]$Root)
+
+    $baseDir = Join-Path $Root ".agents\skills"
+    $victims = [System.Collections.Generic.List[string]]::new()
+    $victims.Add((Join-Path $baseDir $SkillName))
+    foreach ($existing in Get-ChildItem -Path $baseDir -Directory -ErrorAction SilentlyContinue) {
+        if (Test-ManagedMultiSkillDir -Dir $existing.FullName) {
+            $victims.Add($existing.FullName)
+        }
+    }
+    $backups = @()
+    try {
+        $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($victim in $victims) {
+            if (!$seen.Add($victim)) { continue }
+            $backupPath = ""
+            if (!(Backup-SkillDir -Dir $victim -BackupPath ([ref]$backupPath))) {
+                throw "通用 Skill 副本备份失败: $victim"
+            }
+            if ($backupPath) {
+                $backups += [pscustomobject]@{ Original = $victim; Backup = $backupPath }
+            }
+        }
+        return $true
+    } catch {
+        Restore-MultiSkillSet -Published @() -Backups $backups | Out-Null
+        Write-Say "⚠️  通用 Skill 副本迁移失败，已回滚: $_"
+        return $false
+    }
+}
+
 function Copy-SkillToDir {
     param([string]$SkillSrc, [string]$Dest, [string]$Label)
 
-    # Remove existing installation
-    if (Test-Path $Dest) {
-        Remove-Item -Path $Dest -Recurse -Force
+    # Refreshing an existing skill: back it up first; on backup failure keep
+    # the user's copy and skip this target.
+    if (!(Backup-SkillDir -Dir $Dest)) {
+        Write-Say "⚠️  跳过 $Dest（保留原目录）"
+        return $false
     }
 
     $fileCount = Copy-DirRecursive -Source $SkillSrc -Destination $Dest
@@ -250,17 +511,20 @@ function Copy-SkillToDir {
             Write-Say "   📄 $($_.Name)"
         }
     }
+    return $true
 }
 
 function Copy-SkillToDirSummary {
     param([string]$SkillSrc, [string]$Dest, [string]$Label)
 
-    if (Test-Path $Dest) {
-        Remove-Item -Path $Dest -Recurse -Force
+    if (!(Backup-SkillDir -Dir $Dest)) {
+        Write-Say "⚠️  跳过 $Dest（保留原目录）"
+        return $false
     }
 
     $fileCount = Copy-DirRecursive -Source $SkillSrc -Destination $Dest
     Write-Say "✅ Skills → $Label ($fileCount files)"
+    return $true
 }
 
 function Resolve-SourceRoot {
@@ -288,8 +552,8 @@ function Write-Banner {
 #
 # Priority (highest first):
 #   1. DWS_SKILL_MODE env var (mono | multi, case-insensitive)
-#   2. Interactive prompt when both stdin and stdout are TTYs (default: mono)
-#   3. Fallback: mono (non-TTY without env var, e.g. irm | iex)
+#   2. Interactive prompt when both stdin and stdout are TTYs (default: multi)
+#   3. Fallback: multi (non-TTY without env var, e.g. irm | iex)
 function Resolve-SkillMode {
     if ($env:DWS_SKILL_MODE) {
         $normalized = $env:DWS_SKILL_MODE.ToLower()
@@ -311,33 +575,25 @@ function Resolve-SkillMode {
     if ($isInteractive) {
         Write-Host ""
         Write-Say "Select skill installation mode:"
-        Write-Say "  1) mono  — install one bundled dws skill (stable / recommended)"
-        Write-Say "  2) multi — split each product into its own skill (run 'dws skill setup --mode multi' afterwards)"
+        Write-Say "  1) multi (default) — split each product into its own skill (dingtalk-*)"
+        Write-Say "  2) mono            — install one bundled dws skill (legacy)"
         $choice = Read-Host "  Choice [1]"
         switch ($choice) {
-            ""      { $script:SkillMode = "mono" }
-            "1"     { $script:SkillMode = "mono" }
-            "mono"  { $script:SkillMode = "mono" }
-            "2"     { $script:SkillMode = "multi" }
+            ""      { $script:SkillMode = "multi" }
+            "1"     { $script:SkillMode = "multi" }
             "multi" { $script:SkillMode = "multi" }
+            "2"     { $script:SkillMode = "mono" }
+            "mono"  { $script:SkillMode = "mono" }
             default {
-                Write-Say "Unrecognized choice '$choice', defaulting to mono."
-                $script:SkillMode = "mono"
+                Write-Say "Unrecognized choice '$choice', defaulting to multi."
+                $script:SkillMode = "multi"
             }
         }
         Write-Say "Skill mode: $SkillMode"
         return
     }
 
-    $script:SkillMode = "mono"
-}
-
-function Write-MultiModeNotice {
-    Write-Say ""
-    Write-Say "Skill mode: multi — automatic skill install skipped."
-    Write-Say "   To install split skills, run:"
-    Write-Say "     $BinName skill setup --mode multi"
-    Write-Say "   (One skill per product family; requires the dws binary installed above.)"
+    $script:SkillMode = "multi"
 }
 
 # ── Install Binary ───────────────────────────────────────────────────────────
@@ -422,16 +678,29 @@ function Install-SkillsLocal {
     $skillSrc = Join-Path (Join-Path $Root "skills") "mono"
     $multiSrc = Join-Path (Join-Path $Root "skills") "multi"
 
-    if (!(Test-Path $skillSrc)) {
-        Write-Say "⚠️  Local skills directory not found: $skillSrc"
-        Write-Say "   Skipping skills installation."
-        return
+    if ($SkillMode -eq "multi" -and (Test-MultiTreeHasSkills $multiSrc)) {
+        Write-Say ""
+        Write-Say "📦 Installing agent skills (multi) from local source: $multiSrc"
+        if (!(Install-MultiSkillsToHomes -MultiSrc $multiSrc -Root $HOME)) {
+            throw "multi Skill installation failed"
+        }
+    } else {
+        if ($SkillMode -eq "multi") {
+            Write-Say "⚠️  multi skill tree not found or empty at $multiSrc; falling back to mono."
+        }
+        if (!(Test-Path $skillSrc)) {
+            Write-Say "⚠️  Local skills directory not found: $skillSrc"
+            Write-Say "   Skipping skills installation."
+            return
+        }
+
+        Write-Say ""
+        Write-Say "📦 Installing agent skills from local source: $skillSrc"
+
+        if (!(Install-SkillsToHomes -SkillSrc $skillSrc -Root $HOME)) {
+            throw "mono Skill installation failed"
+        }
     }
-
-    Write-Say ""
-    Write-Say "📦 Installing agent skills from local source: $skillSrc"
-
-    Install-SkillsToHomes -SkillSrc $skillSrc -Root $HOME
 
     if (Test-Path $multiSrc) {
         Cache-MultiSkills -Source $multiSrc
@@ -445,28 +714,93 @@ function Install-SkillsLocal {
 function Cache-MultiSkills {
     param([string]$Source)
 
-    if (!(Test-Path $Source)) { return }
+    # Never let an empty/corrupt multi\ tree wipe a previously good cache.
+    if (!(Test-MultiTreeHasSkills $Source)) { return }
 
     $cacheDir = Join-Path $HOME ".dws\skills\multi"
-    if (Test-Path $cacheDir) {
-        Remove-Item -Path $cacheDir -Recurse -Force
+    try {
+        $count = Publish-SkillCache -Source $Source -CacheDir $cacheDir
+        Write-Say "✅ Cached multi skills → $cacheDir ($count files)"
+    } catch {
+        Write-Say "⚠️ Multi Skill 缓存刷新失败，未覆盖原缓存: $cacheDir ($_)"
     }
-    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
-    $count = Copy-DirRecursive -Source $Source -Destination $cacheDir
-    Write-Say "✅ Cached multi skills → $cacheDir ($count files)"
 }
 
 function Cache-MonoSkills {
     param([string]$Source)
 
-    if (!(Test-Path $Source)) { return }
+    # Only refresh when the new bundle actually carries a mono tree — a
+    # multi-only bundle must never wipe a previously good mono cache.
+    if (!(Test-Path (Join-Path $Source "SKILL.md"))) { return }
 
     $cacheDir = Join-Path $HOME ".dws\skills\mono"
-    if (Test-Path $cacheDir) {
-        Remove-Item -Path $cacheDir -Recurse -Force
+    try {
+        Publish-SkillCache -Source $Source -CacheDir $cacheDir | Out-Null
+    } catch {
+        Write-Say "⚠️ Mono Skill 缓存刷新失败，未覆盖原缓存: $cacheDir ($_)"
     }
-    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
-    Copy-DirRecursive -Source $Source -Destination $cacheDir | Out-Null
+}
+
+function Install-MonoToBase {
+    param(
+        [string]$SkillSrc,
+        [string]$BaseDir,
+        [string]$Label
+    )
+
+    if (!(Test-Path $BaseDir)) {
+        New-Item -ItemType Directory -Path $BaseDir -Force | Out-Null
+    }
+    $stageRoot = Join-Path $BaseDir (".dws-mono-set-" + [guid]::NewGuid().ToString("N"))
+    $stagedSkill = Join-Path $stageRoot $SkillName
+    $dest = Join-Path $BaseDir $SkillName
+    $backups = @()
+    $published = @()
+    try {
+        # Stage the complete mono tree before moving any Agent-visible
+        # directory, including every mutually-exclusive managed multi Skill.
+        New-Item -ItemType Directory -Path $stageRoot -Force -ErrorAction Stop | Out-Null
+        Copy-DirRecursive -Source $SkillSrc -Destination $stagedSkill | Out-Null
+
+        $victims = [System.Collections.Generic.List[string]]::new()
+        $victims.Add($dest)
+        foreach ($existing in Get-ChildItem -Path $BaseDir -Directory -ErrorAction SilentlyContinue) {
+            if ($existing.FullName -eq $stageRoot) { continue }
+            if (Test-ManagedMultiSkillDir -Dir $existing.FullName) {
+                $victims.Add($existing.FullName)
+            }
+        }
+
+        $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($victim in $victims) {
+            if (!$seen.Add($victim)) { continue }
+            $backupPath = ""
+            if (!(Backup-SkillDir -Dir $victim -BackupPath ([ref]$backupPath))) {
+                throw "Skill 备份失败: $victim"
+            }
+            if ($backupPath) {
+                $backups += [pscustomobject]@{ Original = $victim; Backup = $backupPath }
+            }
+        }
+
+        $published += $dest
+        Move-SkillPath -Source $stagedSkill -Destination $dest
+    } catch {
+        $transactionError = $_
+        if (!(Restore-MultiSkillSet -Published $published -Backups $backups)) {
+            Write-Say "⚠️  原 Skill 集合自动恢复不完整，请检查上方备份路径"
+        }
+        Write-Say "⚠️  mono Skill 集合发布失败，目标已回滚: $BaseDir ($transactionError)"
+        return $false
+    } finally {
+        if (Test-Path $stageRoot) {
+            Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $fileCount = (Get-ChildItem -Path $dest -Recurse -File).Count
+    Write-Say "✅ Skills → $Label ($fileCount files)"
+    return $true
 }
 
 function Install-SkillsToHomes {
@@ -476,35 +810,210 @@ function Install-SkillsToHomes {
     )
 
     $installed = 0
+    $attempted = 0
+    $failed = 0
+	$specificAgents = @($AgentDirs | Select-Object -Skip 1 | Where-Object {
+		Test-Path (Split-Path (Join-Path $Root $_) -Parent)
+	})
     for ($i = 0; $i -lt $AgentDirs.Count; $i++) {
+		if ($i -eq 0 -and $specificAgents.Count -gt 0) { continue }
         $agentDir = $AgentDirs[$i]
         $baseDir = Join-Path $Root $agentDir
         $parentGate = Split-Path $baseDir -Parent
         if ($i -gt 0 -and !(Test-Path $parentGate)) {
             continue
         }
-        $dest = Join-Path $baseDir $SkillName
+        $attempted++
         if ($Root -eq $HOME) {
             $label = "~\$agentDir\$SkillName"
         } else {
             $label = Join-Path $Root (Join-Path $agentDir $SkillName)
         }
-        if ($installed -eq 0) {
-            Copy-SkillToDir -SkillSrc $SkillSrc -Dest $dest -Label $label
+        $copied = Install-MonoToBase -SkillSrc $SkillSrc -BaseDir $baseDir -Label $label
+        if ($copied) {
+            $installed++
         } else {
-            Copy-SkillToDirSummary -SkillSrc $SkillSrc -Dest $dest -Label $label
+            $failed++
         }
-        $installed++
     }
-    if ($installed -eq 0) {
+	if ($specificAgents.Count -gt 0 -and $installed -gt 0) {
+		if (!(Move-GenericSkillRootToBackup -Root $Root)) { $failed++ }
+	}
+    if ($attempted -eq 0) {
         $fallback = Join-Path (Join-Path $Root ".agents\skills") $SkillName
         if ($Root -eq $HOME) {
             $flabel = "~\.agents\skills\$SkillName"
         } else {
             $flabel = Join-Path $Root (Join-Path ".agents\skills" $SkillName)
         }
-        Copy-SkillToDir -SkillSrc $SkillSrc -Dest $fallback -Label $flabel
+        if (Install-MonoToBase -SkillSrc $SkillSrc -BaseDir (Split-Path $fallback -Parent) -Label $flabel) {
+            $installed++
+        } else {
+            $failed++
+        }
     }
+    if ($installed -eq 0) {
+        Write-Say "⚠️  未安装任何 mono Skill：所有检测到的 Agent 目标均失败"
+        return $false
+    }
+    if ($failed -gt 0) {
+        Write-Say "⚠️  有 $failed 个 Agent 目标安装 mono Skill 失败"
+        return $false
+    }
+    Remove-Item -LiteralPath (Join-Path $SkillStateRoot "skills-state.json") -Force -ErrorAction SilentlyContinue
+    return $true
+}
+
+# Test-MultiTreeHasSkills returns $true only when the multi bundle directory
+# contains at least one product skill (a subdirectory with a SKILL.md). An
+# empty or corrupt multi\ tree must never select the multi branch: installing
+# it would delete existing dws\ + dingtalk-* skills and lay down nothing.
+function Test-MultiTreeHasSkills {
+    param([string]$MultiSrc)
+    if (!(Test-Path $MultiSrc)) { return $false }
+    foreach ($dir in Get-ChildItem -Path $MultiSrc -Directory -ErrorAction SilentlyContinue) {
+        if (Test-Path (Join-Path $dir.FullName "SKILL.md")) { return $true }
+    }
+    return $false
+}
+
+# Install the multi skill bundle (one subdirectory per product skill) into all
+# agent homes as sibling directories, mirroring `dws skill setup --mode multi`.
+# Mutual exclusion: the mono leftover (<home>\dws) and stale DWS-managed Skills
+# not present in the new bundle are removed first.
+function Install-MultiSkillsToHomes {
+    param(
+        [string]$MultiSrc,
+        [string]$Root = $HOME
+    )
+
+    $installed = 0
+    $attempted = 0
+    $failed = 0
+	$specificAgents = @($AgentDirs | Select-Object -Skip 1 | Where-Object {
+		Test-Path (Split-Path (Join-Path $Root $_) -Parent)
+	})
+    for ($i = 0; $i -lt $AgentDirs.Count; $i++) {
+		if ($i -eq 0 -and $specificAgents.Count -gt 0) { continue }
+        $agentDir = $AgentDirs[$i]
+        $baseDir = Join-Path $Root $agentDir
+        $parentGate = Split-Path $baseDir -Parent
+        if ($i -gt 0 -and !(Test-Path $parentGate)) {
+            continue
+        }
+        $attempted++
+        if (Install-MultiToBase -MultiSrc $MultiSrc -BaseDir $baseDir -Root $Root -AgentDir $agentDir) {
+            $installed++
+        } else {
+            Write-Say "⚠️  跳过 $baseDir（备份失败，未安装 multi）"
+            $failed++
+        }
+    }
+	if ($specificAgents.Count -gt 0 -and $installed -gt 0) {
+		if (!(Move-GenericSkillRootToBackup -Root $Root)) { $failed++ }
+	}
+    if ($attempted -eq 0) {
+        if (Install-MultiToBase -MultiSrc $MultiSrc -BaseDir (Join-Path $Root ".agents\skills") -Root $Root -AgentDir ".agents\skills") {
+            $installed++
+        } else {
+            $failed++
+        }
+    }
+    if ($installed -eq 0) {
+        Write-Say "⚠️  未安装任何 multi Skill：所有检测到的 Agent 目标均失败"
+        return $false
+    }
+    if ($failed -gt 0) {
+        Write-Say "⚠️  有 $failed 个 Agent 目标安装 multi Skill 失败"
+        return $false
+    }
+    Write-SkillsState -MultiSrc $MultiSrc
+    return $true
+}
+
+function Install-MultiToBase {
+    param(
+        [string]$MultiSrc,
+        [string]$BaseDir,
+        [string]$Root,
+        [string]$AgentDir
+    )
+
+    if (!(Test-Path $BaseDir)) {
+        New-Item -ItemType Directory -Path $BaseDir -Force | Out-Null
+    }
+
+    $skillDirs = @(Get-ChildItem -Path $MultiSrc -Directory | Where-Object {
+        Test-Path (Join-Path $_.FullName "SKILL.md")
+    })
+    $stageRoot = Join-Path $BaseDir (".dws-multi-set-" + [guid]::NewGuid().ToString("N"))
+    $backups = @()
+    $published = @()
+    try {
+        # Stage the complete replacement before moving any Agent-visible
+        # directory. Copy failures therefore leave the old set untouched.
+        New-Item -ItemType Directory -Path $stageRoot -Force -ErrorAction Stop | Out-Null
+        foreach ($skillDir in $skillDirs) {
+            Copy-DirRecursive -Source $skillDir.FullName -Destination (Join-Path $stageRoot $skillDir.Name) | Out-Null
+        }
+
+        $victims = [System.Collections.Generic.List[string]]::new()
+        $victims.Add((Join-Path $BaseDir $SkillName))
+
+        # Include stale, proven DWS-managed skills in the same transaction.
+        foreach ($existing in Get-ChildItem -Path $BaseDir -Directory -ErrorAction SilentlyContinue) {
+            if ($existing.FullName -eq $stageRoot) { continue }
+            if ((Test-ManagedMultiSkillDir -Dir $existing.FullName) -and
+                !(Test-Path (Join-Path (Join-Path $MultiSrc $existing.Name) "SKILL.md"))) {
+                $victims.Add($existing.FullName)
+            }
+        }
+        if (!(Test-Path (Join-Path (Join-Path $MultiSrc "dws-shared") "SKILL.md"))) {
+            $victims.Add((Join-Path $BaseDir "dws-shared"))
+        }
+        foreach ($skillDir in $skillDirs) {
+            $victims.Add((Join-Path $BaseDir $skillDir.Name))
+        }
+
+        $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($victim in $victims) {
+            if (!$seen.Add($victim)) { continue }
+            $backupPath = ""
+            if (!(Backup-SkillDir -Dir $victim -BackupPath ([ref]$backupPath))) {
+                throw "Skill 备份失败: $victim"
+            }
+            if ($backupPath) {
+                $backups += [pscustomobject]@{ Original = $victim; Backup = $backupPath }
+            }
+        }
+
+        foreach ($skillDir in $skillDirs) {
+            $dest = Join-Path $BaseDir $skillDir.Name
+            $published += $dest
+            Move-SkillPath -Source (Join-Path $stageRoot $skillDir.Name) -Destination $dest
+        }
+    } catch {
+        $transactionError = $_
+        if (!(Restore-MultiSkillSet -Published $published -Backups $backups)) {
+            Write-Say "⚠️  原 Skill 集合自动恢复不完整，请检查上方备份路径"
+        }
+        Write-Say "⚠️  multi Skill 集合发布失败，目标已回滚: $BaseDir ($transactionError)"
+        return $false
+    } finally {
+        if (Test-Path $stageRoot) {
+            Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $count = $skillDirs.Count
+
+    if ($Root -eq $HOME) {
+        $label = "~\$AgentDir\"
+    } else {
+        $label = Join-Path $Root $AgentDir
+    }
+    Write-Say "✅ Skills → $label ($count product skills)"
+    return $true
 }
 
 # ── Install Binary from Source ───────────────────────────────────────────────
@@ -575,22 +1084,37 @@ function Install-Skills {
             $skillSrc = Join-Path $extractRoot $SkillName
         }
 
-        if (!(Test-Path (Join-Path $skillSrc "SKILL.md"))) {
-            Write-Say "⚠️  Skills not found in release asset. Trying local source..."
-            $localRoot = Resolve-SourceRoot
-            if ($localRoot) {
-                Install-SkillsLocal -Root $localRoot
+        # Multi first: a release may ship only the multi\ tree without the
+        # root mono copy, so the mono SKILL.md gate must never block a multi
+        # install. An empty/corrupt multi\ tree (no *\SKILL.md) falls back to
+        # mono with a warning — installing it would wipe existing skills and
+        # lay down nothing.
+        $multiRoot = Join-Path $extractRoot "multi"
+        if ($SkillMode -eq "multi" -and (Test-MultiTreeHasSkills $multiRoot)) {
+            if (!(Install-MultiSkillsToHomes -MultiSrc $multiRoot -Root $HOME)) {
+                throw "multi Skill installation failed"
+            }
+        } else {
+            if ($SkillMode -eq "multi") {
+                Write-Say "⚠️  multi skill tree not found or empty in release asset; falling back to mono."
+            }
+            if (!(Test-Path (Join-Path $skillSrc "SKILL.md"))) {
+                Write-Say "⚠️  Skills not found in release asset. Trying local source..."
+                $localRoot = Resolve-SourceRoot
+                if ($localRoot) {
+                    Install-SkillsLocal -Root $localRoot
+                    return
+                }
+                Write-Say "⚠️  No local source found either. Skipping skills installation."
                 return
             }
-            Write-Say "⚠️  No local source found either. Skipping skills installation."
-            return
+            if (!(Install-SkillsToHomes -SkillSrc $skillSrc -Root $HOME)) {
+                throw "mono Skill installation failed"
+            }
         }
-
-        Install-SkillsToHomes -SkillSrc $skillSrc -Root $HOME
 
         # Cache the multi/ tree (and a mono copy) under ~/.dws/skills so that
         # subsequent `dws skill setup --mode multi|mono` can find a source.
-        $multiRoot = Join-Path $extractRoot "multi"
         if (Test-Path $multiRoot) {
             Cache-MultiSkills -Source $multiRoot
         }
@@ -617,27 +1141,15 @@ if (!$NoSkills) {
 if ($SourceRoot -and !$SkillsOnly -and ($Version -eq "latest")) {
     Install-BinaryFromSource -Root $SourceRoot
     if (!$NoSkills) {
-        if ($SkillMode -eq "multi") {
-            Write-MultiModeNotice
-        } else {
-            Install-SkillsLocal -Root $SourceRoot
-        }
+        Install-SkillsLocal -Root $SourceRoot
     }
 } elseif ($SkillsOnly) {
-    if ($SkillMode -eq "multi") {
-        Write-MultiModeNotice
-    } else {
-        Install-Skills
-    }
+    Install-Skills
 } elseif ($NoSkills) {
     Install-Binary
 } else {
     Install-Binary
-    if ($SkillMode -eq "multi") {
-        Write-MultiModeNotice
-    } else {
-        Install-Skills
-    }
+    Install-Skills
 }
 
 Write-Host ""

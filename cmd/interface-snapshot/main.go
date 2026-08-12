@@ -17,17 +17,22 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/interfacesnapshot"
+	"github.com/spf13/cobra"
 )
+
+var newRootCommand = func() *cobra.Command { return app.NewRootCommand() }
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -112,7 +117,11 @@ func runGenerate(args []string, stdout, stderr io.Writer) error {
 	defer i18n.SetLang(previousLang)
 	i18n.SetLang("en")
 
-	snapshot := interfacesnapshot.Capture(app.NewRootCommand())
+	root := newRootCommand()
+	snapshot := interfacesnapshot.Capture(root)
+	if err := validateHelpRendering(root, snapshot); err != nil {
+		return err
+	}
 	if *output == "-" {
 		return interfacesnapshot.Write(stdout, snapshot)
 	}
@@ -138,6 +147,16 @@ func runCompare(args []string, stdout, stderr io.Writer) (bool, error) {
 	currentPath := flags.String("current", "", "candidate snapshot path")
 	basePath := flags.String("base", "", "target main/development baseline snapshot path")
 	stablePath := flags.String("stable", "", "latest stable GA snapshot path")
+	approvedMigrationsPath := flags.String(
+		"approved-flag-migrations",
+		"",
+		"merge-base-owned approved flag migration manifest",
+	)
+	candidateMigrationsPath := flags.String(
+		"candidate-flag-migrations",
+		"",
+		"candidate flag migration manifest",
+	)
 	if err := flags.Parse(args); err != nil {
 		return false, err
 	}
@@ -149,6 +168,14 @@ func runCompare(args []string, stdout, stderr io.Writer) (bool, error) {
 	}
 	if *basePath == "" && *stablePath == "" {
 		return false, fmt.Errorf("compare requires --base, --stable, or both")
+	}
+	if (*approvedMigrationsPath == "") != (*candidateMigrationsPath == "") {
+		return false, fmt.Errorf(
+			"--approved-flag-migrations and --candidate-flag-migrations must be provided together",
+		)
+	}
+	if *approvedMigrationsPath != "" && (*basePath == "" || *stablePath == "") {
+		return false, fmt.Errorf("flag migration compare requires both --base and --stable")
 	}
 
 	current, err := readSnapshot(*currentPath)
@@ -170,6 +197,25 @@ func runCompare(args []string, stdout, stderr io.Writer) (bool, error) {
 	}
 
 	report := interfacesnapshot.CompareAll(current, references)
+	if *approvedMigrationsPath != "" {
+		approved, readErr := readFlagMigrationManifest(*approvedMigrationsPath)
+		if readErr != nil {
+			return false, fmt.Errorf("read approved flag migrations: %w", readErr)
+		}
+		candidate, readErr := readFlagMigrationManifest(*candidateMigrationsPath)
+		if readErr != nil {
+			return false, fmt.Errorf("read candidate flag migrations: %w", readErr)
+		}
+		report, err = interfacesnapshot.CompareAllWithFlagMigrations(
+			current,
+			references,
+			approved,
+			candidate,
+		)
+		if err != nil {
+			return false, fmt.Errorf("validate flag migration lifecycle: %w", err)
+		}
+	}
 	encoder := json.NewEncoder(stdout)
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
@@ -177,6 +223,49 @@ func runCompare(args []string, stdout, stderr io.Writer) (bool, error) {
 		return false, fmt.Errorf("write comparison report: %w", err)
 	}
 	return report.Compatible, nil
+}
+
+func readFlagMigrationManifest(path string) (interfacesnapshot.FlagMigrationManifest, error) {
+	file, err := os.Open(filepath.Clean(path))
+	if err != nil {
+		return interfacesnapshot.FlagMigrationManifest{}, err
+	}
+	defer file.Close()
+	return interfacesnapshot.ReadFlagMigrationManifest(file)
+}
+
+func validateHelpRendering(root *cobra.Command, snapshot interfacesnapshot.Snapshot) error {
+	for _, command := range snapshot.Commands {
+		path := strings.TrimPrefix(command.Path, "dws")
+		resolved, remaining, err := root.Find(strings.Fields(path))
+		if err != nil || len(remaining) != 0 || resolved == nil {
+			return fmt.Errorf("resolve %q before help rendering: remaining=%v error=%v", command.Path, remaining, err)
+		}
+		if err := renderCommandHelp(resolved); err != nil {
+			return fmt.Errorf("render %q help: %w", command.Path, err)
+		}
+	}
+	return nil
+}
+
+func renderCommandHelp(command *cobra.Command) (err error) {
+	var stdout, stderr bytes.Buffer
+	command.InitDefaultHelpFlag()
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("help renderer panicked: %v", recovered)
+		}
+	}()
+	command.HelpFunc()(command, []string{})
+	if stderr.Len() > 0 {
+		return fmt.Errorf("help renderer wrote an error: %s", strings.TrimSpace(stderr.String()))
+	}
+	if stdout.Len() == 0 {
+		return fmt.Errorf("help renderer produced empty output")
+	}
+	return nil
 }
 
 func readSnapshot(path string) (interfacesnapshot.Snapshot, error) {
@@ -191,5 +280,5 @@ func readSnapshot(path string) (interfacesnapshot.Snapshot, error) {
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage:")
 	fmt.Fprintln(w, "  interface-snapshot generate [--output FILE]")
-	fmt.Fprintln(w, "  interface-snapshot compare --current FILE [--base FILE] [--stable FILE]")
+	fmt.Fprintln(w, "  interface-snapshot compare --current FILE [--base FILE] [--stable FILE] [--approved-flag-migrations FILE --candidate-flag-migrations FILE]")
 }

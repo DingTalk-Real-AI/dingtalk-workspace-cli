@@ -47,7 +47,7 @@ metadata:
 | 创建正文 | `dws doc +create` | 文件用 `dws doc +create --name <标题> --content @./content.md`；stdin 用 `dws doc +create --name <标题> --content -`；禁止 `@绝对路径`、`@../路径`、`@-` |
 | 追加或覆盖正文 | `dws doc +update` | 追加：`--node <ID> --command append --content @./content.md`；覆盖把动作改为 `overwrite`；JSONML 才加 `--doc-format jsonml` |
 | 插入或替换 block | `dws doc +update` | 插入：`--node <ID> --command block_insert --ref-block <BLOCK_ID> --where before\|after --content @./content.md`；替换：`--node <ID> --command block_replace --block-id <BLOCK_ID> --content @./content.md`；`--command` 只传动作名 |
-| 文档空间或在线文档节点存储操作 | `dws drive` | 文件夹/元信息用 `dws drive mkdir/move/info`；在线文档节点复制/移动/重命名/删除用 `dws drive +copy` / `dws drive +move` / `dws drive rename` / `dws drive delete`；正文编辑再切回 doc |
+| 文档空间或在线文档节点存储操作 | `dws drive` | 文件夹/元信息用 `dws drive +create-folder` / `dws drive +inspect`；在线文档节点复制/移动/重命名/删除用 `dws drive +copy` / `dws drive +move` / `dws drive +rename` / `dws drive +delete`；正文编辑再切回 doc |
 | 新增权限 | `dws doc +access-grant --node <ID> --to <姓名[,姓名]> --role <READER\|DOWNLOADER\|EDITOR\|MANAGER>` | 接收人参数不是 `--user`；姓名歧义时停止 |
 | 变更已有权限 | `dws doc +access-change --node <ID> --to <姓名[,姓名]> --role <角色>` | 目标不是已有协作者时停止，改用 grant |
 | 撤销权限 | `dws doc +access-revoke --node <ID> --to <姓名[,姓名]>` | 属于 `user_required` |

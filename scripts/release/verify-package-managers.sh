@@ -71,23 +71,23 @@ HOME_AGENT_PARENTS="
 .openclaw
 .hermes
 "
-HOME_SKILL_TARGETS="
-.agents/skills/dws
-.claude/skills/dws
-.cursor/skills/dws
-.qoder/skills/dws
-.qoderwork/skills/dws
-.gemini/skills/dws
-.codex/skills/dws
-.github/skills/dws
-.windsurf/skills/dws
-.augment/skills/dws
-.cline/skills/dws
-.amp/skills/dws
-.kiro/skills/dws
-.trae/skills/dws
-.openclaw/skills/dws
-.hermes/skills/dws
+HOME_SKILL_BASES="
+.agents/skills
+.claude/skills
+.cursor/skills
+.qoder/skills
+.qoderwork/skills
+.gemini/skills
+.codex/skills
+.github/skills
+.windsurf/skills
+.augment/skills
+.cline/skills
+.amp/skills
+.kiro/skills
+.trae/skills
+.openclaw/skills
+.hermes/skills
 "
 cleanup() {
   if [ "$RUN_BREW" -eq 1 ] && command -v brew >/dev/null 2>&1 && [ -n "${BREW_TAP_NAME:-}" ]; then
@@ -109,8 +109,10 @@ seed_agent_homes() {
 
 verify_skill_targets() {
   home_root="$1"
-  for target in $HOME_SKILL_TARGETS; do
-    need_file "$home_root/$target/SKILL.md"
+  for base in $HOME_SKILL_BASES; do
+    need_file "$home_root/$base/dingtalk-shared/SKILL.md"
+    need_file "$home_root/$base/dingtalk-misc/SKILL.md"
+    [ ! -e "$home_root/$base/dws" ] || err "unexpected mono Skill layout found in $home_root/$base/dws"
   done
 }
 

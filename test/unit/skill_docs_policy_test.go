@@ -83,8 +83,8 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
 	paths := []string{
-		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "event.md"),
-		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "event-im.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-im.md"),
 		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
 	}
 	for _, path := range paths {
@@ -137,8 +137,8 @@ func TestCrossPlatformCoverageEventSkillPinsSubscriptionRetryOrchestrationContra
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
 	paths := []string{
-		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "event.md"),
-		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "event-im.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-im.md"),
 		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
 		filepath.Join(root, "docs", "event-subprocess-contract.md"),
 	}
@@ -203,8 +203,8 @@ func TestCrossPlatformCoverageEventSkillDocumentsSubscriptionGuardOperations(t *
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
 	paths := []string{
-		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "event.md"),
-		filepath.Join(root, "skills", "multi", "dingtalk-misc", "references", "event-im.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-im.md"),
 		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
 		filepath.Join(root, "docs", "event-subprocess-contract.md"),
 	}
@@ -263,7 +263,7 @@ func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
 	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
 	paths := []string{
 		filepath.Join(root, "skills", "mono", "SKILL.md"),
-		filepath.Join(root, "skills", "multi", "dingtalk-misc", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
 	}
 	for _, path := range paths {
 		content, err := os.ReadFile(path)
@@ -275,11 +275,157 @@ func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
 			t.Fatalf("%s missing YAML frontmatter", path)
 		}
 		frontmatter := parts[1]
-		for _, required := range []string{"个人 IM 事件", "群成员加入", "群成员退出"} {
+		for _, required := range []string{
+			"个人 IM",
+			"群成员加入",
+			"群成员退出",
+			"审批任务创建/完成/转交",
+			"审批实例发起/终止/完成",
+		} {
 			if !strings.Contains(frontmatter, required) {
 				t.Errorf("%s frontmatter missing event discovery trigger %q", path, required)
 			}
 		}
+	}
+}
+
+func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	eventRoot := filepath.Join(root, "skills", "multi", "dingtalk-event")
+	skillPath := filepath.Join(eventRoot, "SKILL.md")
+	skillContent, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", skillPath, err)
+	}
+	for _, required := range []string{
+		"../dingtalk-shared/SKILL.md",
+		"<!-- dws-intent: event.listen.im -->",
+		"<!-- dws-intent: event.listen.oa -->",
+		"16 个 EventKey",
+		"22 个公开个人 EventKey",
+	} {
+		if !strings.Contains(string(skillContent), required) {
+			t.Errorf("%s missing standalone event contract %q", skillPath, required)
+		}
+	}
+
+	wantReferences := []string{
+		"event-im-keys.md",
+		"event-im-lifecycle.md",
+		"event-im-operations.md",
+		"event-im-output.md",
+		"event-im.md",
+		"event-oa.md",
+	}
+	var combined strings.Builder
+	combined.Write(skillContent)
+	for _, name := range wantReferences {
+		path := filepath.Join(eventRoot, "references", name)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		combined.Write(content)
+	}
+	refs, err := filepath.Glob(filepath.Join(eventRoot, "references", "event-*.md"))
+	if err != nil {
+		t.Fatalf("glob event references: %v", err)
+	}
+	if len(refs) != len(wantReferences) {
+		t.Errorf("event reference count = %d, want %d: %v", len(refs), len(wantReferences), refs)
+	}
+
+	allEventKeys := []string{
+		"user_im_message_receive_at",
+		"user_im_message_receive_o2o",
+		"user_im_message_receive_group",
+		"user_im_message_receive_user",
+		"user_im_message_receive_o2o_all",
+		"user_im_message_receive_group_all",
+		"user_im_message_read_o2o",
+		"user_im_message_read_group",
+		"user_im_message_recall_o2o",
+		"user_im_message_recall_group",
+		"user_im_message_reaction_o2o",
+		"user_im_message_reaction_group",
+		"user_im_group_updated",
+		"user_im_group_member_added",
+		"user_im_group_member_exited",
+		"user_im_group_disbanded",
+		"user_oa_approval_task_created",
+		"user_oa_approval_task_finished",
+		"user_oa_approval_task_redirected",
+		"user_oa_approval_instance_started",
+		"user_oa_approval_instance_terminated",
+		"user_oa_approval_instance_finished",
+	}
+	for _, eventKey := range allEventKeys {
+		if !strings.Contains(combined.String(), eventKey) {
+			t.Errorf("standalone event skill missing EventKey %q", eventKey)
+		}
+	}
+}
+
+func TestMiscSkillDoesNotOwnPersonalEvent(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	miscRoot := filepath.Join(root, "skills", "multi", "dingtalk-misc")
+	miscPath := filepath.Join(miscRoot, "SKILL.md")
+	content, err := os.ReadFile(miscPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", miscPath, err)
+	}
+	parts := strings.SplitN(string(content), "---", 3)
+	if len(parts) != 3 {
+		t.Fatalf("%s missing YAML frontmatter", miscPath)
+	}
+	for _, forbidden := range []string{
+		"个人 IM 事件",
+		"实时监听消息",
+		"被@消息",
+		"群成员加入",
+		"事件驱动 Agent",
+		"dws event",
+	} {
+		if strings.Contains(parts[1], forbidden) {
+			t.Errorf("%s frontmatter still claims personal Event trigger %q", miscPath, forbidden)
+		}
+	}
+	for _, required := range []string{
+		"dingtalk-event",
+		"oa.md",
+		"dev/event.md",
+	} {
+		if !strings.Contains(string(content), required) {
+			t.Errorf("%s missing Event ownership handoff %q", miscPath, required)
+		}
+	}
+
+	retiredNames := []string{
+		"event.md",
+		"event-im.md",
+		"event-im-keys.md",
+		"event-im-lifecycle.md",
+		"event-im-operations.md",
+		"event-im-output.md",
+		"event-oa.md",
+	}
+	for _, name := range retiredNames {
+		path := filepath.Join(miscRoot, "references", name)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("misc retains retired personal Event reference %s", path)
+		}
+	}
+	devEventPath := filepath.Join(miscRoot, "references", "dev", "event.md")
+	if _, err := os.Stat(devEventPath); err != nil {
+		t.Errorf("DevApp event reference must remain at %s: %v", devEventPath, err)
 	}
 }
 
@@ -394,6 +540,36 @@ func TestCrossPlatformCoverageDocSkillReferenceLoadingBudget(t *testing.T) {
 	}
 }
 
+func TestMinutesPermissionAddRequiresExplicitPolicy(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "mono", "references", "products", "minutes.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-minutes", "references", "minutes.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"`permission add` 的 `--policy` 是必填参数，没有默认值",
+			"命令中仍必须显式传入 `--policy 4`",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing permission add policy contract %q", path, required)
+			}
+		}
+		if strings.Contains(text, "`permission add` 默认使用 `--policy 4`") {
+			t.Errorf("%s still documents a nonexistent permission add policy default", path)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageDocumentRoutingContractsStayAligned(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -421,7 +597,7 @@ func TestCrossPlatformCoverageDocumentRoutingContractsStayAligned(t *testing.T) 
 	routing := read("skills", "multi", "dingtalk-shared", "references", "routing.md")
 	intentGuide := read("skills", "multi", "dingtalk-shared", "references", "intent-guide.md")
 
-	for _, route := range []string{"dws drive +copy", "dws drive +move", "dws drive rename", "dws drive delete"} {
+	for _, route := range []string{"dws drive +copy", "dws drive +move", "dws drive +rename", "dws drive +delete"} {
 		if !strings.Contains(docSkill, route) {
 			t.Errorf("Doc Skill does not publish storage ownership route %q", route)
 		}
@@ -474,12 +650,12 @@ func TestCrossPlatformCoverageDocumentRoutingContractsStayAligned(t *testing.T) 
 	if !strings.Contains(wikiReference, "不进入 wiki") || !strings.Contains(wikiReference, "明确说“个人知识库”") {
 		t.Error("Wiki reference does not guard myWikiSpace behind explicit knowledge-base intent")
 	}
-	for _, required := range []string{"dws drive mkdir", "dws doc +create", "dws drive move", "dws drive info"} {
+	for _, required := range []string{"dws drive +create-folder", "dws doc +create", "dws drive +move", "dws drive +inspect"} {
 		if !strings.Contains(intentGuide, required) {
 			t.Errorf("composite document-space route missing %q", required)
 		}
 	}
-	if !strings.Contains(driveSkill, "dws drive mkdir") || !strings.Contains(driveSkill, "dws drive move --folder") || !strings.Contains(driveSkill, "dws drive info --node") {
+	if !strings.Contains(driveSkill, "dws drive +create-folder") || !strings.Contains(driveSkill, "drive +move --node") || !strings.Contains(driveSkill, "dws drive +inspect --node") {
 		t.Error("Drive Skill does not publish the folder -> move -> info storage flow")
 	}
 	for _, required := range []string{"生成文档", "本地", ".md", "在线"} {
@@ -585,7 +761,6 @@ func TestCrossPlatformCoverageDocGoldenRoutePinsP0CommandsAndDeduplicatesLifecyc
 		t.Errorf("Doc Skill should publish one Block ID lifecycle rule, got %d", got)
 	}
 }
-
 func hasAny(s string, needles []string) bool {
 	for _, needle := range needles {
 		if strings.Contains(s, needle) {

@@ -9,9 +9,10 @@ import (
 )
 
 type changelogGateRepo struct {
-	root string
-	gate string
-	base string
+	root           string
+	gate           string
+	fragmentPolicy string
+	base           string
 }
 
 const changelogGateBase = `# Changelog
@@ -34,6 +35,26 @@ const changelogGateValidRelease = `# Changelog
 ### Changed
 
 - Valid release note.
+
+## [1.0.0] - 2026-07-01
+
+### Added
+
+- Initial release.
+`
+
+// A release-seal section whose 1.0.1-beta.1 notes are exactly the rendered form
+// of changelogGateValidFragment. A seal PR built from this therefore satisfies
+// the rendered-notes comparison, which isolates the archive-path assertions.
+const changelogGateSealedRelease = `# Changelog
+
+## [Unreleased]
+
+## [1.0.1-beta.1] - 2026-07-17
+
+### Added
+
+- Chat reply mentions.
 
 ## [1.0.0] - 2026-07-01
 
@@ -69,8 +90,10 @@ func newChangelogGateRepo(t *testing.T) *changelogGateRepo {
 	}
 	for _, path := range []string{
 		"scripts/policy/check-changelog-pr.sh",
+		"scripts/policy/check-release-fragments.sh",
 		"scripts/policy/open-source-audit.sh",
 		"scripts/release/release-lib.sh",
+		"scripts/release/render-release-fragments.sh",
 	} {
 		data, err := os.ReadFile(filepath.Join(sourceRoot, path))
 		if err != nil {
@@ -91,10 +114,19 @@ func newChangelogGateRepo(t *testing.T) *changelogGateRepo {
 	changelogGateGit(t, root, "commit", "-m", "seed repository")
 
 	return &changelogGateRepo{
-		root: root,
-		gate: filepath.Join(root, "scripts", "policy", "check-changelog-pr.sh"),
-		base: strings.TrimSpace(changelogGateGit(t, root, "rev-parse", "HEAD")),
+		root:           root,
+		gate:           filepath.Join(root, "scripts", "policy", "check-changelog-pr.sh"),
+		fragmentPolicy: filepath.Join(root, "scripts", "policy", "check-release-fragments.sh"),
+		base:           strings.TrimSpace(changelogGateGit(t, root, "rev-parse", "HEAD")),
 	}
+}
+
+func (r *changelogGateRepo) runFragmentPolicy(t *testing.T, base, head string) (string, error) {
+	t.Helper()
+	cmd := exec.Command("sh", r.fragmentPolicy, base, head)
+	cmd.Dir = r.root
+	output, err := cmd.CombinedOutput()
+	return string(output), err
 }
 
 func changelogGateWrite(t *testing.T, root, path, content string, mode os.FileMode) {
@@ -203,22 +235,386 @@ func TestChangelogPRGateAcceptsTargetedChanges(t *testing.T) {
 	}
 }
 
-func TestChangelogPRContentOnlyAllowsOtherFiles(t *testing.T) {
+func TestChangelogPRContentOnlyRejectsOrdinaryChangesAlongsideChangelog(t *testing.T) {
 	repo := newChangelogGateRepo(t)
 	changelogGateWrite(t, repo.root, "CHANGELOG.md", changelogGateValidRelease, 0o644)
 	changelogGateWrite(t, repo.root, "internal/change.go", "package internal\n", 0o644)
 	repo.commit(t, "change code with release notes")
 
 	output, err := repo.runMode(t, "--content-only")
-	if err != nil {
-		t.Fatalf("content-only gate error = %v\noutput:\n%s", err, output)
-	}
-	if !strings.Contains(output, "CHANGELOG PR check: ok (mode=content-only") {
-		t.Fatalf("content-only gate output missing success marker:\n%s", output)
+	if err == nil || !strings.Contains(output, "may accompany only release-fragment archival") {
+		t.Fatalf("content-only gate accepted ordinary source change: err=%v\noutput:\n%s", err, output)
 	}
 }
 
-func TestChangelogPRContentOnlyStillValidatesContentWithOtherFiles(t *testing.T) {
+func TestChangelogPRContentOnlyAcceptsReleaseFragmentArchival(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	changelogGateWrite(t, repo.root, ".changes/1234-chat.md", "---\ncategory: Added\n---\n\n- Chat reply mentions.\n", 0o644)
+	repo.commit(t, "add release fragment")
+	sealBase := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+	changelogGateWrite(t, repo.root, "CHANGELOG.md", `# Changelog
+
+## [Unreleased]
+
+## [1.0.1-beta.1] - 2026-07-17
+
+### Added
+
+- Chat reply mentions.
+
+## [1.0.0] - 2026-07-01
+
+### Added
+
+- Initial release.
+`, 0o644)
+	if err := os.MkdirAll(filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1"), 0o755); err != nil {
+		t.Fatalf("MkdirAll archive: %v", err)
+	}
+	if err := os.Rename(filepath.Join(repo.root, ".changes", "1234-chat.md"), filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1", "1234-chat.md")); err != nil {
+		t.Fatalf("Rename release fragment: %v", err)
+	}
+	repo.commit(t, "seal release notes")
+
+	output, err := repo.runMode(t, "--content-only")
+	if err != nil {
+		t.Fatalf("content-only release seal error = %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "CHANGELOG PR check: ok (mode=content-only") {
+		t.Fatalf("content-only release seal output missing success marker:\n%s", output)
+	}
+	if output, err := repo.runFragmentPolicy(t, sealBase, "HEAD"); err != nil {
+		t.Fatalf("release fragment policy rejected matching seal: %v\noutput:\n%s", err, output)
+	}
+}
+
+func TestReleaseFragmentPolicyRejectsInvalidActiveFragmentAndWrongArchiveVersion(t *testing.T) {
+	t.Run("invalid active fragment", func(t *testing.T) {
+		repo := newChangelogGateRepo(t)
+		changelogGateWrite(t, repo.root, ".changes/1234-invalid.md", "---\ncategory: Added\n---\n\n- TODO: fill this in.\n", 0o644)
+		repo.commit(t, "add invalid fragment")
+		output, err := repo.runFragmentPolicy(t, repo.base, "HEAD")
+		if err == nil || !strings.Contains(output, "must not contain TODO/TBD") {
+			t.Fatalf("invalid active fragment passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("archive version differs from changelog", func(t *testing.T) {
+		repo := newChangelogGateRepo(t)
+		changelogGateWrite(t, repo.root, ".changes/1234-chat.md", "---\ncategory: Added\n---\n\n- Chat reply mentions.\n", 0o644)
+		repo.commit(t, "add release fragment")
+		sealBase := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+		changelogGateWrite(t, repo.root, "CHANGELOG.md", changelogGateValidRelease, 0o644)
+		if err := os.MkdirAll(filepath.Join(repo.root, ".changes", "released", "1.0.2-beta.1"), 0o755); err != nil {
+			t.Fatalf("MkdirAll archive: %v", err)
+		}
+		if err := os.Rename(filepath.Join(repo.root, ".changes", "1234-chat.md"), filepath.Join(repo.root, ".changes", "released", "1.0.2-beta.1", "1234-chat.md")); err != nil {
+			t.Fatalf("Rename release fragment: %v", err)
+		}
+		repo.commit(t, "archive under wrong release")
+		output, err := repo.runFragmentPolicy(t, sealBase, "HEAD")
+		if err == nil || !strings.Contains(output, "unchanged R100 moves") {
+			t.Fatalf("wrong archive version passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("archive notes differ from rendered fragment", func(t *testing.T) {
+		repo := newChangelogGateRepo(t)
+		changelogGateWrite(t, repo.root, ".changes/1234-chat.md", "---\ncategory: Added\n---\n\n- Chat reply mentions.\n", 0o644)
+		repo.commit(t, "add release fragment")
+		sealBase := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+		changelogGateWrite(t, repo.root, "CHANGELOG.md", changelogGateValidRelease, 0o644)
+		if err := os.MkdirAll(filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1"), 0o755); err != nil {
+			t.Fatalf("MkdirAll archive: %v", err)
+		}
+		if err := os.Rename(filepath.Join(repo.root, ".changes", "1234-chat.md"), filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1", "1234-chat.md")); err != nil {
+			t.Fatalf("Rename release fragment: %v", err)
+		}
+		repo.commit(t, "seal mismatched release notes")
+		output, err := repo.runFragmentPolicy(t, sealBase, "HEAD")
+		if err == nil || !strings.Contains(output, "does not exactly match") {
+			t.Fatalf("mismatched release notes passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+}
+
+const changelogGateValidFragment = "---\ncategory: Added\n---\n\n- Chat reply mentions.\n"
+
+// sealFragmentInto stages a release-seal PR that archives the single active
+// fragment into .changes/released/<archiveDir>/, with a CHANGELOG section whose
+// rendered notes already match. Only archiveDir varies, so a rejection can only
+// come from the archive-path contract.
+func (r *changelogGateRepo) sealFragmentInto(t *testing.T, archiveDir string) string {
+	t.Helper()
+	changelogGateWrite(t, r.root, ".changes/1234-chat.md", changelogGateValidFragment, 0o644)
+	r.commit(t, "add release fragment")
+	sealBase := strings.TrimSpace(changelogGateGit(t, r.root, "rev-parse", "HEAD"))
+
+	changelogGateWrite(t, r.root, "CHANGELOG.md", changelogGateSealedRelease, 0o644)
+	target := filepath.Join(r.root, ".changes", "released", archiveDir)
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", target, err)
+	}
+	if err := os.Rename(filepath.Join(r.root, ".changes", "1234-chat.md"), filepath.Join(target, "1234-chat.md")); err != nil {
+		t.Fatalf("Rename release fragment error = %v", err)
+	}
+	r.commit(t, "seal release into "+archiveDir)
+	return sealBase
+}
+
+// The archive directory used to be matched by interpolating the version into an
+// awk regex, where `.` matches any character. Version `1.0.1-beta.1` therefore
+// also admitted `1x0x1-betaX1`, letting the archive drift from the CHANGELOG
+// version while every other seal assertion still passed.
+func TestReleaseFragmentPolicyRejectsArchiveDirectoryMatchedAsRegex(t *testing.T) {
+	for _, archiveDir := range []string{"1x0x1-betaX1", "1.0.1-betaX1", "1x0.1-beta.1"} {
+		t.Run(archiveDir, func(t *testing.T) {
+			repo := newChangelogGateRepo(t)
+			sealBase := repo.sealFragmentInto(t, archiveDir)
+
+			output, err := repo.runFragmentPolicy(t, sealBase, "HEAD")
+			if err == nil {
+				t.Fatalf("archive directory %q passed:\n%s", archiveDir, output)
+			}
+			if !strings.Contains(output, "unchanged R100 moves") {
+				t.Fatalf("gate output missing the archive-move contract:\n%s", output)
+			}
+		})
+	}
+}
+
+// Guards the fix against over-blocking: the archive directory that exactly
+// equals the CHANGELOG version must still seal cleanly.
+func TestReleaseFragmentPolicyAcceptsArchiveDirectoryMatchingChangelogVersion(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	sealBase := repo.sealFragmentInto(t, "1.0.1-beta.1")
+
+	if output, err := repo.runFragmentPolicy(t, sealBase, "HEAD"); err != nil {
+		t.Fatalf("matching archive directory rejected: %v\noutput:\n%s", err, output)
+	}
+}
+
+// A top-level `.changes/` entry that violates the naming rule or is not a
+// regular 100644 blob must fail the gate. Selecting the trigger by the legal
+// name pattern used to let these entries through untouched, which both bypassed
+// validation here and broke the next PR that added a legal fragment.
+func TestReleaseFragmentPolicyRejectsIllegalFragmentNamesAndModes(t *testing.T) {
+	tests := []struct {
+		name     string
+		seed     func(t *testing.T, root string)
+		wantPath string
+	}{
+		{
+			name: "uppercase fragment name",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/Chat.md", changelogGateValidFragment, 0o644)
+			},
+			wantPath: ".changes/Chat.md",
+		},
+		{
+			name: "fragment name with a space",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/chat reply.md", changelogGateValidFragment, 0o644)
+			},
+			wantPath: ".changes/chat reply.md",
+		},
+		{
+			name: "fragment name starting with a dash",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/-chat.md", changelogGateValidFragment, 0o644)
+			},
+			wantPath: ".changes/-chat.md",
+		},
+		{
+			name: "non-markdown entry",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/notes.txt", changelogGateValidFragment, 0o644)
+			},
+			wantPath: ".changes/notes.txt",
+		},
+		{
+			name: "symlinked fragment",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/1234-chat.md", changelogGateValidFragment, 0o644)
+				if err := os.Symlink("1234-chat.md", filepath.Join(root, ".changes", "5678-alias.md")); err != nil {
+					t.Fatalf("Symlink release fragment: %v", err)
+				}
+			},
+			wantPath: ".changes/5678-alias.md",
+		},
+		{
+			name: "executable fragment",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/1234-chat.md", changelogGateValidFragment, 0o755)
+			},
+			wantPath: ".changes/1234-chat.md",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newChangelogGateRepo(t)
+			test.seed(t, repo.root)
+			repo.commit(t, test.name)
+
+			output, err := repo.runFragmentPolicy(t, repo.base, "HEAD")
+			if err == nil {
+				t.Fatalf("illegal release fragment entry passed:\n%s", output)
+			}
+			if !strings.Contains(output, ".changes/ accepts only") {
+				t.Fatalf("gate output missing the entry contract:\n%s", output)
+			}
+			if !strings.Contains(output, test.wantPath) {
+				t.Fatalf("gate output missing offending entry %q:\n%s", test.wantPath, output)
+			}
+		})
+	}
+}
+
+func TestReleaseFragmentPolicyAcceptsLegalFragmentAlongsideReadmeAndArchive(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	changelogGateWrite(t, repo.root, ".changes/README.md", "# Release fragments\n", 0o644)
+	changelogGateWrite(t, repo.root, ".changes/released/1.0.0/0001-seed.md", changelogGateValidFragment, 0o644)
+	repo.commit(t, "seed fragment directory")
+	base := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+
+	changelogGateWrite(t, repo.root, ".changes/1234-chat.md", changelogGateValidFragment, 0o644)
+	repo.commit(t, "add release fragment")
+
+	if output, err := repo.runFragmentPolicy(t, base, "HEAD"); err != nil {
+		t.Fatalf("legal release fragment rejected: %v\noutput:\n%s", err, output)
+	}
+}
+
+// Git records no diff entry for a directory itself, so adding
+// `.changes/foo/bar.md` only ever surfaces the nested path. Triggering the
+// top-level validation on single-level paths let such a directory reach main
+// untouched and then broke every later fragment render with
+// `unexpected directory`.
+func TestReleaseFragmentPolicyRejectsNestedChangesEntries(t *testing.T) {
+	tests := []struct {
+		name     string
+		seed     func(t *testing.T, root string)
+		wantPath string
+	}{
+		{
+			name: "nested directory only",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/foo/bar.md", changelogGateValidFragment, 0o644)
+			},
+			wantPath: ".changes/foo",
+		},
+		{
+			name: "nested directory alongside a legal fragment",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/1234-chat.md", changelogGateValidFragment, 0o644)
+				changelogGateWrite(t, root, ".changes/foo/bar.md", changelogGateValidFragment, 0o644)
+			},
+			wantPath: ".changes/foo",
+		},
+		{
+			name: "nested directory shadowing the archive name",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/released.d/bar.md", changelogGateValidFragment, 0o644)
+			},
+			wantPath: ".changes/released.d",
+		},
+		{
+			name: "deeply nested directory",
+			seed: func(t *testing.T, root string) {
+				changelogGateWrite(t, root, ".changes/a/b/c/note.md", changelogGateValidFragment, 0o644)
+			},
+			wantPath: ".changes/a",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newChangelogGateRepo(t)
+			test.seed(t, repo.root)
+			repo.commit(t, test.name)
+
+			output, err := repo.runFragmentPolicy(t, repo.base, "HEAD")
+			if err == nil {
+				t.Fatalf("nested .changes entry passed:\n%s", output)
+			}
+			if !strings.Contains(output, ".changes/ accepts only") {
+				t.Fatalf("gate output missing the entry contract:\n%s", output)
+			}
+			if !strings.Contains(output, test.wantPath) {
+				t.Fatalf("gate output missing offending entry %q:\n%s", test.wantPath, output)
+			}
+		})
+	}
+}
+
+// Replacing `.changes` itself empties the child listing, so scanning entries
+// alone would report nothing invalid while the whole fragment directory
+// disappears. Seeded without an active fragment so the archival-move guard
+// cannot mask the directory contract being asserted here.
+func TestReleaseFragmentPolicyRejectsReplacedChangesDirectory(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	changelogGateWrite(t, repo.root, ".changes/README.md", "# Release fragments\n", 0o644)
+	repo.commit(t, "seed fragment directory")
+	base := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+
+	if err := os.RemoveAll(filepath.Join(repo.root, ".changes")); err != nil {
+		t.Fatalf("RemoveAll(.changes) error = %v", err)
+	}
+	if err := os.Symlink("docs", filepath.Join(repo.root, ".changes")); err != nil {
+		t.Fatalf("Symlink(.changes) error = %v", err)
+	}
+	repo.commit(t, "replace .changes with a symlink")
+
+	output, err := repo.runFragmentPolicy(t, base, "HEAD")
+	if err == nil {
+		t.Fatalf("replaced .changes directory passed:\n%s", output)
+	}
+	if !strings.Contains(output, ".changes must remain a directory") {
+		t.Fatalf("gate output missing the directory contract:\n%s", output)
+	}
+}
+
+// `.changes/README.md` is the contributor contract, not release content, so a
+// documentation-only edit must pass even though no fragment is pending — the
+// renderer rejects an empty fragment set.
+func TestReleaseFragmentPolicyAcceptsReadmeOnlyChangeWithoutPendingFragments(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	changelogGateWrite(t, repo.root, ".changes/README.md", "# Release fragments\n", 0o644)
+	repo.commit(t, "seed fragment directory")
+	base := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+
+	changelogGateWrite(t, repo.root, ".changes/README.md", "# Release fragments\n\nName each fragment `<name>.md`.\n", 0o644)
+	repo.commit(t, "document the fragment naming rule")
+
+	if output, err := repo.runFragmentPolicy(t, base, "HEAD"); err != nil {
+		t.Fatalf("README-only change rejected: %v\noutput:\n%s", err, output)
+	}
+}
+
+// A README-only edit still revalidates the tree, so pollution that somehow
+// reached the branch is reported by the PR that touches `.changes/` rather than
+// deferred to whichever unrelated PR next adds a fragment.
+func TestReleaseFragmentPolicyReadmeOnlyChangeStillValidatesTree(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	changelogGateWrite(t, repo.root, ".changes/README.md", "# Release fragments\n", 0o644)
+	changelogGateWrite(t, repo.root, ".changes/Foo.md", changelogGateValidFragment, 0o644)
+	repo.commit(t, "seed polluted fragment directory")
+	base := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+
+	changelogGateWrite(t, repo.root, ".changes/README.md", "# Release fragments\n\nUpdated contract.\n", 0o644)
+	repo.commit(t, "edit only the fragment readme")
+
+	output, err := repo.runFragmentPolicy(t, base, "HEAD")
+	if err == nil {
+		t.Fatalf("README-only change skipped tree validation:\n%s", output)
+	}
+	if !strings.Contains(output, ".changes/Foo.md") {
+		t.Fatalf("gate output missing the pre-existing illegal entry:\n%s", output)
+	}
+}
+
+func TestChangelogPRContentOnlyStillValidatesReleaseNotes(t *testing.T) {
 	tests := []struct {
 		name       string
 		changelog  string
@@ -250,7 +646,6 @@ func TestChangelogPRContentOnlyStillValidatesContentWithOtherFiles(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			repo := newChangelogGateRepo(t)
 			changelogGateWrite(t, repo.root, "CHANGELOG.md", test.changelog, 0o644)
-			changelogGateWrite(t, repo.root, "internal/change.go", "package internal\n", 0o644)
 			repo.commit(t, test.name)
 
 			output, err := repo.runMode(t, "--content-only")
@@ -401,13 +796,152 @@ func TestInterfaceIntegrityWorkflowContract(t *testing.T) {
 	}
 	interfaceJob := workflow[interfaceStart:interfaceEnd]
 	for _, want := range []string{
-		"name: Check complete CLI command compatibility",
-		"./scripts/policy/check-command-compatibility.sh",
-		`--base-ref "$COMPATIBILITY_BASE_REF"`,
-		`--stable-ref "$COMPATIBILITY_STABLE_REF"`,
+		"name: Check historical commands, help, and complete CLI compatibility",
+		"make authoritative-interface-integrity",
+		`BASE_REF="$COMPATIBILITY_BASE_REF"`,
+		`STABLE_REF="$COMPATIBILITY_STABLE_REF"`,
+		`CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"`,
 	} {
 		if !strings.Contains(interfaceJob, want) {
 			t.Errorf("Interface Integrity job missing release-equivalent compatibility contract %q", want)
+		}
+	}
+	for _, want := range []string{
+		`candidate_ref="$(git rev-parse 'HEAD^{commit}')"`,
+		`[ "$candidate_ref" != "$PR_HEAD_SHA" ]`,
+		`"COMPATIBILITY_BASE_REF=$base_ref"`,
+		`"COMPATIBILITY_STABLE_REF=$stable_ref"`,
+		`"COMPATIBILITY_CANDIDATE_REF=$candidate_ref" >> "$GITHUB_ENV"`,
+	} {
+		if got := strings.Count(interfaceJob, want); got != 1 {
+			t.Errorf("Interface Integrity job contract %q count = %d, want exactly one definition", want, got)
+		}
+	}
+	if got := strings.Count(interfaceJob, `>> "$GITHUB_ENV"`); got != 1 {
+		t.Errorf("Interface Integrity job must append its compatibility refs to GITHUB_ENV once, got %d writes", got)
+	}
+	if strings.Count(interfaceJob, "make authoritative-interface-integrity") != 1 {
+		t.Errorf("Interface Integrity job must have exactly one compatibility decision seam")
+	}
+	if strings.Contains(interfaceJob, "./scripts/policy/check-command-compatibility.sh") {
+		t.Error("Interface Integrity job must not bypass the authoritative Make seam")
+	}
+	if strings.Contains(interfaceJob, "check-interface-baseline.sh") {
+		t.Error("Interface Integrity job must not reintroduce the legacy fixture checker")
+	}
+
+	schemaStart := strings.Index(interfaceJob, "\n      - name: Check complete Schema compatibility\n")
+	if schemaStart < 0 {
+		t.Fatal("Interface Integrity job missing complete Schema compatibility step")
+	}
+	schemaRemainder := interfaceJob[schemaStart+1:]
+	schemaEnd := strings.Index(schemaRemainder, "\n      - name:")
+	if schemaEnd < 0 {
+		t.Fatal("complete Schema compatibility step has no workflow boundary")
+	}
+	schemaStep := schemaRemainder[:schemaEnd]
+	for _, want := range []string{
+		"make schema-compatibility",
+		`BASE_REF="$COMPATIBILITY_BASE_REF"`,
+		`STABLE_REF="$COMPATIBILITY_STABLE_REF"`,
+		`CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"`,
+	} {
+		if !strings.Contains(schemaStep, want) {
+			t.Errorf("Schema compatibility step missing authoritative contract %q", want)
+		}
+	}
+}
+
+func TestLocalInterfaceIntegrityUsesAuthoritativeSeam(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatalf("ReadFile(Makefile) error = %v", err)
+	}
+	makefile := string(data)
+	interfaceStart := strings.Index(makefile, "\ninterface-integrity:\n")
+	authoritativeStart := strings.Index(makefile, "\nauthoritative-interface-integrity:\n")
+	coverageStart := strings.Index(makefile, "\ncoverage-gate:\n")
+	if interfaceStart < 0 || authoritativeStart <= interfaceStart || coverageStart <= authoritativeStart {
+		t.Fatal("Makefile missing interface-integrity target boundaries")
+	}
+	interfaceTarget := makefile[interfaceStart:authoritativeStart]
+	for _, want := range []string{
+		"./scripts/policy/check-authoritative-interface-baselines.sh",
+		`base_ref="origin/main"`,
+		`candidate_ref="HEAD"`,
+		`--base-ref "$$base_ref"`,
+		`--stable-ref "$(STABLE_REF)"`,
+		`--candidate-ref "$$candidate_ref"`,
+	} {
+		if !strings.Contains(interfaceTarget, want) {
+			t.Errorf("interface-integrity target missing authoritative contract %q", want)
+		}
+	}
+	if strings.Contains(interfaceTarget, "check-interface-baseline.sh") {
+		t.Error("interface-integrity target still invokes the legacy fixture checker")
+	}
+	authoritativeTarget := makefile[authoritativeStart:coverageStart]
+	for _, want := range []string{
+		"./scripts/policy/check-authoritative-interface-baselines.sh",
+		`candidate_ref="HEAD"`,
+		`--base-ref "$(BASE_REF)"`,
+		`--stable-ref "$(STABLE_REF)"`,
+		`--candidate-ref "$$candidate_ref"`,
+	} {
+		if !strings.Contains(authoritativeTarget, want) {
+			t.Errorf("authoritative-interface-integrity target missing contract %q", want)
+		}
+	}
+
+	if got := strings.Count(makefile, "./scripts/policy/check-interface-baseline.sh"); got != 2 {
+		t.Fatalf("legacy fixture helper invocation count = %d, want update/reset only", got)
+	}
+	for _, target := range []string{"update-interface-baseline", "reset-interface-baseline"} {
+		marker := "\n" + target + ":\n"
+		start := strings.Index(makefile, marker)
+		if start < 0 {
+			t.Fatalf("Makefile missing %s target", target)
+		}
+		end := strings.Index(makefile[start+len(marker):], "\n\n")
+		if end < 0 {
+			t.Fatalf("Makefile %s target has no boundary", target)
+		}
+		block := makefile[start : start+len(marker)+end]
+		if !strings.Contains(block, "./scripts/policy/check-interface-baseline.sh") {
+			t.Errorf("%s target must retain the legacy fixture helper", target)
+		}
+	}
+}
+
+func TestLocalSchemaCompatibilityUsesAuthoritativeCandidateSeam(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatalf("ReadFile(Makefile) error = %v", err)
+	}
+	makefile := string(data)
+	schemaStart := strings.Index(makefile, "\nschema-compatibility:\n")
+	skillStart := strings.Index(makefile, "\nskill-command-integrity:\n")
+	if schemaStart < 0 || skillStart <= schemaStart {
+		t.Fatal("Makefile missing schema-compatibility target boundaries")
+	}
+	schemaTarget := makefile[schemaStart:skillStart]
+	for _, want := range []string{
+		"./scripts/policy/check-authoritative-schema-compatibility.sh",
+		`candidate_ref="HEAD"`,
+		`--base-ref "$(BASE_REF)"`,
+		`--stable-ref "$(STABLE_REF)"`,
+		`--candidate-ref "$$candidate_ref"`,
+	} {
+		if !strings.Contains(schemaTarget, want) {
+			t.Errorf("schema-compatibility target missing authoritative contract %q", want)
 		}
 	}
 }
@@ -436,6 +970,36 @@ if (!isInterfaceSensitive("internal/corecmd/corecmd.go")) {
 	cmd := exec.Command("node", "-e", probe)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("interface-sensitive classifier rejected corecmd change: %v\n%s", err, output)
+	}
+}
+
+func TestHighRiskClassificationShardsHelperChanges(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatalf("ReadFile(ci.yml) error = %v", err)
+	}
+	workflow := string(data)
+	start := strings.Index(workflow, "            const isDocsOnly =")
+	end := strings.Index(workflow, "            const classifyFiles =")
+	if start < 0 || end <= start {
+		t.Fatal("Code Admission workflow missing high-risk classifier boundaries")
+	}
+	classifier := strings.TrimSpace(workflow[start:end])
+	probe := classifier + `
+if (!isHighRisk("internal/helpers/minutes.go")) {
+  throw new Error("helper changes must use the sharded full suite");
+}
+if (isHighRisk("internal/helpersx/minutes.go")) {
+  throw new Error("helper high-risk classification must respect the path boundary");
+}
+`
+	cmd := exec.Command("node", "-e", probe)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("high-risk classifier rejected helper sharding contract: %v\n%s", err, output)
 	}
 }
 
@@ -505,6 +1069,7 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"filename === '.github/actionlint.yaml'",
 		"filename.startsWith('scripts/')",
 		"filename.startsWith('verify/')",
+		"filename.startsWith('internal/helpers/')",
 		"filename === 'test/fixtures/cli-interface-baseline.txt'",
 		"filename.startsWith('internal/interfacesnapshot/')",
 		"filename.startsWith('internal/cobracmd/')",

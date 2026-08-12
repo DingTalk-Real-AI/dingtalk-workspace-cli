@@ -117,5 +117,8 @@ func flagContractOtherwiseChanged(oldFlag, newFlag Flag) bool {
 	if !oldFlag.Hidden && newFlag.Hidden {
 		return true
 	}
+	if oldFlag.AliasOf != "" && newFlag.AliasOf != oldFlag.AliasOf {
+		return true
+	}
 	return false
 }

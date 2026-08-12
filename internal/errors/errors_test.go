@@ -336,8 +336,49 @@ func TestCrossPlatformCoveragePrintHumanIncludesServerGuidance(t *testing.T) {
 	if !strings.Contains(got, "Hint: 请联系管理员开通消息搜索权益") {
 		t.Fatalf("expected server guidance in output, got %q", got)
 	}
-	if !strings.Contains(got, "Action: 开启地址: https://example.test/enable-search") {
+	if !strings.Contains(got, "Action: 处理入口: https://example.test/enable-search") {
 		t.Fatalf("expected server action URL in output, got %q", got)
+	}
+}
+
+func TestCrossPlatformCoverageServerGuidanceAdapter(t *testing.T) {
+	t.Parallel()
+
+	hint, action := ServerGuidance(ServerDiagnostics{
+		FriendlyHint: "follow the recovery action",
+		ActionURL:    "https://example.test/recover",
+	})
+	if hint != "follow the recovery action" || action != "https://example.test/recover" {
+		t.Fatalf("ServerGuidance() = (%q, %q)", hint, action)
+	}
+}
+
+func TestCrossPlatformCoverageServerGuidanceSuppressesUnsafeActionURL(t *testing.T) {
+	t.Parallel()
+	for _, actionURL := range []string{
+		"http://example.test/help",
+		"javascript:alert(1)",
+		"https://user:secret@example.test/help",
+		"not a url",
+	} {
+		var human strings.Builder
+		err := NewAPI("server error", WithServerDiag(ServerDiagnostics{
+			FriendlyHint: "保留 Trace ID 后排查",
+			ActionURL:    actionURL,
+		}))
+		if printErr := PrintHuman(&human, err); printErr != nil {
+			t.Fatal(printErr)
+		}
+		if strings.Contains(human.String(), actionURL) || strings.Contains(human.String(), "处理入口") {
+			t.Fatalf("unsafe action URL %q leaked to human output: %q", actionURL, human.String())
+		}
+		var jsonOutput strings.Builder
+		if printErr := PrintJSON(&jsonOutput, err); printErr != nil {
+			t.Fatal(printErr)
+		}
+		if strings.Contains(jsonOutput.String(), `"action_url"`) {
+			t.Fatalf("unsafe action URL %q leaked to JSON output: %q", actionURL, jsonOutput.String())
+		}
 	}
 }
 

@@ -47,10 +47,11 @@ func FromShortcut(s Shortcut) corecmd.Spec {
 		}
 	}
 	return corecmd.Spec{
-		Use:     s.Command,
-		Short:   s.Description,
-		Example: shortcutExamples(s.Tips),
-		Hidden:  s.Hidden,
+		Use:           s.Command,
+		Short:         s.Description,
+		Example:       shortcutExamples(s.Tips),
+		Hidden:        s.Hidden,
+		OutputRollout: s.OutputRollout,
 		// Only the prose part: corecmd.New appends its own 参数约束
 		// section, so the adapter must not pre-render it.
 		Long:        shortcutIntentProse(s),

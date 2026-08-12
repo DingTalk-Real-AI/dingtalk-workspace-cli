@@ -59,7 +59,7 @@ RUNTIME_CONTRACT_END = "<!-- DWS_RUNTIME_CONTRACT_END -->"
 # here only after verifying that the product skill has its own reviewed routing
 # section and intent table; compacting a sparse skill without an alternative
 # route would make its shortcuts harder to discover.
-COMPACT_PRODUCT_SERVICES = {"chat", "doc"}
+COMPACT_PRODUCT_SERVICES = {"chat", "doc", "drive"}
 
 
 def md_escape(value: Any) -> str:
@@ -177,7 +177,10 @@ def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
 仅当下方路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service doc --format json`；已知意图不加载完整 Catalog。
 {PRODUCT_END}"""
 
-    discovery = """已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。"""
+    if service == "drive":
+        discovery = """已知意图按下方路由。"""
+    else:
+        discovery = """已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。"""
     return f"""{PRODUCT_START}
 ## Shortcut 发现（按需）
 

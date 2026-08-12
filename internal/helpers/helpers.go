@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -268,6 +269,27 @@ func CallMCPToolTextOnServer(serverID, toolName string, args map[string]any) (st
 	return callMCPToolReturnTextOnServer(context.Background(), serverID, toolName, args)
 }
 
+// CallMCPToolDataOnServer invokes one tool without printing and decodes its
+// JSON text payload. Framework renderers use this seam so the business request
+// is executed exactly once and presentation remains a separate step.
+func CallMCPToolDataOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	text, err := callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(text) == "" {
+		return map[string]any{}, nil
+	}
+	var data any
+	if err := json.Unmarshal([]byte(text), &data); err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", toolName, err))
+	}
+	return data, nil
+}
+
 // callMCPTool 是通用的 MCP 工具调用入口：自动路由 → 调用 → 格式化输出。
 // 通过 resolveProductID() 自动确定目标 MCP Server，JSON 输出使用默认的 HTML 转义。
 func callMCPTool(toolName string, args map[string]any) error {
@@ -366,7 +388,6 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 		printJSON = deps.Out.PrintJSONUnescaped
 	}
 
-	flagFormat := deps.Caller.Format()
 	for _, c := range result.Content {
 		if c.Type == "text" {
 			dumpRawToolResponse(serverID, toolName, c.Text)
@@ -391,35 +412,45 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 				}
 			}
 
-			// JSON 格式输出：解析后使用选定的 printJSON 函数输出
-			if flagFormat == "json" {
-				var parsed any
-				if err := json.Unmarshal([]byte(c.Text), &parsed); err == nil {
-					return printJSON(parsed)
-				}
-			}
-			// 特殊处理：开放平台文档搜索结果的表格格式输出
-			if toolName == "search_open_platform_docs" && flagFormat == "table" {
-				if formatted := formatDevdocSearchTable(c.Text); formatted {
-					return nil
-				}
-			}
-			// 默认：原样输出文本内容。
-			// 当 unescapeHTML=true 时，c.Text 是一段 JSON 字符串，其中 & 已被服务端
-			// 的 JSON 编码器转义为 \u0026。此处先 Unmarshal 还原为 Go 对象，再用
-			// PrintJSONUnescaped 输出，保证 & 不被二次转义。
-			if unescapeHTML {
-				var parsed any
-				if err := json.Unmarshal([]byte(c.Text), &parsed); err == nil {
-					return printJSON(parsed)
-				}
-			}
-			deps.Out.PrintRaw(c.Text)
-			return nil
+			return renderLegacyMCPText(toolName, c.Text, unescapeHTML)
 		}
 	}
 	// 无 text 类型内容时，将整个 result 对象序列化为 JSON 输出
 	return printJSON(result)
+}
+
+// RenderLegacyMCPText renders an already-fetched MCP text response through the
+// exact legacy formatter. It lets dual validation execute the business request
+// once, validate a shadow unified result, and still preserve legacy bytes.
+func RenderLegacyMCPText(toolName, text string) error {
+	return renderLegacyMCPText(toolName, text, false)
+}
+
+func renderLegacyMCPText(toolName, text string, unescapeHTML bool) error {
+	printJSON := deps.Out.PrintJSON
+	if unescapeHTML {
+		printJSON = deps.Out.PrintJSONUnescaped
+	}
+	flagFormat := deps.Caller.Format()
+	if flagFormat == "json" {
+		var parsed any
+		if err := json.Unmarshal([]byte(text), &parsed); err == nil {
+			return printJSON(parsed)
+		}
+	}
+	if toolName == "search_open_platform_docs" && flagFormat == "table" {
+		if formatted := formatDevdocSearchTable(text); formatted {
+			return nil
+		}
+	}
+	if unescapeHTML {
+		var parsed any
+		if err := json.Unmarshal([]byte(text), &parsed); err == nil {
+			return printJSON(parsed)
+		}
+	}
+	deps.Out.PrintRaw(text)
+	return nil
 }
 
 // dumpRawToolResponse emits one opt-in lower-layer record for live projection

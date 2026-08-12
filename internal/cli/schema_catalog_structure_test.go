@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // TestDeliverySchemaCatalogStructure gates the delivered catalog: every tool
@@ -97,6 +99,90 @@ func catalogPayload(t *testing.T, entry map[string]any) []byte {
 func TestValidateCatalogStructureAcceptsValidEntry(t *testing.T) {
 	if err := ValidateCatalogStructure(catalogPayload(t, validCatalogToolEntry())); err != nil {
 		t.Fatalf("ValidateCatalogStructure() error = %v", err)
+	}
+}
+
+func TestValidateCatalogStructureAcceptsOptionalResultObject(t *testing.T) {
+	entry := validCatalogToolEntry()
+	entry["result"] = map[string]any{
+		"outcomes":    []any{"success", "failure"},
+		"data_schema": map[string]any{"type": "object"},
+	}
+	if err := ValidateCatalogStructure(catalogPayload(t, entry)); err != nil {
+		t.Fatalf("ValidateCatalogStructure() error = %v", err)
+	}
+	entry["result"] = "invalid"
+	if err := ValidateCatalogStructure(catalogPayload(t, entry)); err == nil || !strings.Contains(err.Error(), `field "result" must be an object`) {
+		t.Fatalf("invalid result error = %v", err)
+	}
+}
+
+func TestValidateCatalogStructureAcceptsStandalonePagination(t *testing.T) {
+	entry := validCatalogToolEntry()
+	parameters := entry["parameters"].(map[string]any)
+	parameters["cursor"] = map[string]any{
+		"description":      "续页游标",
+		"field_provenance": map[string]any{},
+		"required":         false,
+		"type":             "string",
+	}
+	entry["parameter_count"] = float64(len(parameters))
+	entry["has_parameters"] = true
+	entry["pagination"] = map[string]any{
+		"kind":                    contract.PaginationKindCursor,
+		"cursor_parameter":        "cursor",
+		"meta_path":               contract.PaginationMetaPath,
+		"endpoint_exhausted_path": contract.PaginationExhaustedPath,
+		"next_token_path":         contract.PaginationNextTokenPath,
+	}
+	if err := ValidateCatalogStructure(catalogPayload(t, entry)); err != nil {
+		t.Fatalf("ValidateCatalogStructure() error = %v", err)
+	}
+
+	entry["pagination"].(map[string]any)["next_token_path"] = "data.nextCursor"
+	if err := ValidateCatalogStructure(catalogPayload(t, entry)); err == nil || !strings.Contains(err.Error(), "next_token_path") {
+		t.Fatalf("invalid pagination error = %v", err)
+	}
+}
+
+func TestValidateCatalogStructureRejectsMalformedStandalonePagination(t *testing.T) {
+	validPaginationEntry := func() map[string]any {
+		entry := validCatalogToolEntry()
+		parameters := entry["parameters"].(map[string]any)
+		parameters["cursor"] = map[string]any{
+			"description":      "续页游标",
+			"field_provenance": map[string]any{},
+			"required":         false,
+			"type":             "string",
+		}
+		entry["parameter_count"] = float64(len(parameters))
+		entry["pagination"] = map[string]any{
+			"kind":                    contract.PaginationKindCursor,
+			"cursor_parameter":        "cursor",
+			"meta_path":               contract.PaginationMetaPath,
+			"endpoint_exhausted_path": contract.PaginationExhaustedPath,
+			"next_token_path":         contract.PaginationNextTokenPath,
+		}
+		return entry
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(map[string]any)
+		want   string
+	}{
+		{"not an object", func(entry map[string]any) { entry["pagination"] = "cursor" }, `field "pagination" must be an object`},
+		{"empty cursor", func(entry map[string]any) { entry["pagination"].(map[string]any)["cursor_parameter"] = " " }, "cursor_parameter must be a non-empty string"},
+		{"unknown cursor", func(entry map[string]any) { entry["pagination"].(map[string]any)["cursor_parameter"] = "page-token" }, "references missing parameter"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := validPaginationEntry()
+			tc.mutate(entry)
+			err := ValidateCatalogStructure(catalogPayload(t, entry))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("ValidateCatalogStructure() error = %v, want %q", err, tc.want)
+			}
+		})
 	}
 }
 

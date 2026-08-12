@@ -19,6 +19,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -38,6 +39,41 @@ const (
 	CategoryValidation Category = "validation"
 	CategoryDiscovery  Category = "discovery"
 	CategoryInternal   Category = "internal"
+
+	// CategoryPartial is retained for source compatibility, but an error cannot
+	// reconstruct the per-item data required by a partial result. It therefore
+	// fails closed as internal; callers must use output.Partial for exit code 7.
+	CategoryPartial Category = "partial_failure"
+)
+
+// 退出码表（规划 v1.2 OQ-1 定案；契约规范 §4；轮10裁决⑬——保留现行码表，
+// 仅新增 partial_failure 专用码，不做 wire 破坏性重排）：
+//
+//	0  success / pending（异步受理不是失败）
+//	1  api            （CategoryAPI）
+//	2  auth           （CategoryAuth）
+//	3  validation     （CategoryValidation；confirmation_required 子类共享此码，
+//	                   以 reason/subtype 区分，AC-13）
+//	4  PAT            （PATError 专属，见 pat.go ExitCodePermission；Category 不占用）
+//	5  internal       （CategoryInternal 与兜底：非结构化错误、panic 收敛均归 5）
+//	6  discovery      （CategoryDiscovery）
+//	7  partial_failure（部分成功专用码，见 ExitCodePartial）
+//
+// ExitCodePartial is the partial-result exit code shared with internal/output.
+// It is not returned for CategoryPartial errors because they lack the typed
+// succeeded/failed/unknown payload required for an honest partial result.
+const ExitCodePartial = 7
+
+// 类别专属退出码常量（B171/B172，权威 = 规划 v1.2 OQ-1 定案，契约规范 §4）。
+// ExitCode() 的 switch 用内联字面量，本组常量由 exitcodes.go 的
+// exitCodeByCategory 映射表引用，值与内联字面量一一对应（同源不双轨）。
+// 修改任一值必须先同步 ExitCode() 的 switch 分支与 internal/output 侧码表。
+const (
+	ExitCodeAPI        = 1
+	ExitCodeAuth       = 2
+	ExitCodeValidation = 3
+	ExitCodeDiscovery  = 6
+	ExitCodeInternal   = 5
 )
 
 // Error is the structured repository-local error model for the Go rewrite.
@@ -82,6 +118,13 @@ type Option func(*Error)
 // ExitCodePermission and the exit-code table in docs/reference.md);
 // Discovery therefore uses 6 so hosts can tell "catalog lookup broke"
 // apart from "PAT permission insufficient".
+//
+// confirmation_required 是 validation 的子类而非独立类别（B171，AC-13，
+// 规划 v1.2 OQ-1 定案）：门禁拦截错误挂 CategoryValidation 并以
+// reason=confirmation_required 区分，与 validation 共享 rc=3。信封侧
+// internal/output exitCodeForErrorInfo 的「subtype 优先于 type、
+// confirmation_required 恒 3」规则与本表同源（轮10裁决⑬；远期独立码
+// 保留于规划 OQ-9，落地前不得双轨）。
 func (e *Error) ExitCode() int {
 	switch e.Category {
 	case CategoryAPI:
@@ -92,6 +135,10 @@ func (e *Error) ExitCode() int {
 		return 3
 	case CategoryDiscovery:
 		return 6
+	case CategoryPartial:
+		// An error has no per-item succeeded/failed/unknown data and therefore
+		// cannot truthfully represent partial_failure. Fail closed as internal.
+		return ExitCodeInternal
 	default:
 		return 5
 	}
@@ -148,6 +195,11 @@ func WithRetryable(retryable bool) Option {
 // WithRetryAfterSeconds records the server-recommended delay before a retry.
 // A zero delay is meaningful and is therefore preserved; negative values are
 // ignored as invalid server guidance.
+//
+// 本通道只存原值、不钳制（B195/B199，AC-24）：服务端给多少存多少，wire 上
+// retry_after_seconds 原样透传。transport 侧的 RetryMaxDelay 钳制只作用于
+// 重试延迟选择（retryDelayForAttempt），不得回写或截断本字段（B196 草案：
+// 钳制上限可配置化后仍须保持「钳制延迟、不钳制透传」双通道分离）。
 func WithRetryAfterSeconds(seconds int64) Option {
 	return func(err *Error) {
 		if seconds < 0 {
@@ -321,14 +373,17 @@ func ExitCode(err error) int {
 	return 5
 }
 
-// PrintJSON writes a machine-readable JSON error object.
+// PrintJSON writes the legacy machine-readable JSON error object.
+//
+// This wire predates the unified result framework and is intentionally kept
+// byte-compatible for commands whose rollout is legacy_only or dual_validate.
+// Unified commands publish outcome/type/subtype through internal/output only.
 func PrintJSON(w io.Writer, err error) error {
 	errorPayload := map[string]any{
 		"code":     ExitCode(err),
 		"category": category(err),
 		"message":  err.Error(),
 	}
-
 	var typed *Error
 	if stderrors.As(err, &typed) {
 		if typed.Reason != "" {
@@ -408,7 +463,7 @@ func PrintJSON(w io.Writer, err error) error {
 
 	data, marshalErr := marshalErrorJSON(payload, "", "  ")
 	if marshalErr != nil {
-		_, writeErr := fmt.Fprintf(w, "{\"error\":{\"code\":5,\"category\":\"internal\",\"message\":\"failed to encode error output\"}}\n")
+		_, writeErr := fmt.Fprintln(w, `{"error":{"code":5,"category":"internal","message":"failed to encode error output"}}`)
 		return writeErr
 	}
 
@@ -460,7 +515,7 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 			lines = append(lines, tui.Cyan("Hint: "+friendlyHint))
 		}
 		if actionURL != "" {
-			lines = append(lines, tui.White("Action: 开启地址: "+actionURL))
+			lines = append(lines, tui.White("Action: 处理入口: "+actionURL))
 		}
 	}
 
@@ -540,7 +595,7 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 
 func serverGuidance(diag ServerDiagnostics) (string, string) {
 	friendlyHint := strings.TrimSpace(diag.FriendlyHint)
-	actionURL := strings.TrimSpace(diag.ActionURL)
+	actionURL := safeServerActionURL(diag.ActionURL)
 	if friendlyHint == "" || actionURL == "" {
 		switch diag.ServerErrorCode {
 		case "TOKEN_VERIFIED_FAILED", "CLI_ORG_NOT_AUTHORIZED":
@@ -555,9 +610,31 @@ func serverGuidance(diag ServerDiagnostics) (string, string) {
 	return friendlyHint, actionURL
 }
 
+// ServerGuidance exposes the same recovery projection to repository-local
+// adapters so legacy JSON and unified-result errors stay semantically aligned.
+func ServerGuidance(diag ServerDiagnostics) (string, string) {
+	return serverGuidance(diag)
+}
+
+func safeServerActionURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || !strings.EqualFold(parsed.Scheme, "https") ||
+		parsed.Hostname() == "" || parsed.User != nil {
+		return ""
+	}
+	return parsed.String()
+}
+
 func category(err error) string {
 	var typed *Error
 	if stderrors.As(err, &typed) {
+		if typed.Category == CategoryPartial {
+			return string(CategoryInternal)
+		}
 		return string(typed.Category)
 	}
 	return string(CategoryInternal)

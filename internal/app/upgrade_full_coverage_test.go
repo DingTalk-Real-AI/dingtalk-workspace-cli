@@ -285,7 +285,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			}
 			return nil
 		}
-		installUpgradeSkills = func(string) (*upgradepkg.SkillUpgradeResult, error) {
+		installUpgradeSkills = func(string, upgradepkg.SkillUpgradeOptions) (*upgradepkg.SkillUpgradeResult, error) {
 			if stage == "install" {
 				return nil, fail
 			}

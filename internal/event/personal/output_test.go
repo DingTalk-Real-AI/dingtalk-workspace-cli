@@ -150,6 +150,59 @@ func personalGroupMemberData(eventKey string) string {
 	}`, eventKey)
 }
 
+func personalOAData(eventKey string) string {
+	body := map[string]any{
+		"processInstanceId": "process-instance-1",
+		"createTime":        int64(1785229100000),
+		"processCode":       "PROC-TEST-1",
+		"title":             "测试审批",
+	}
+	switch eventKey {
+	case EventOAApprovalTaskCreated:
+		body["taskId"] = "approval-task-1"
+		body["status"] = "RUNNING"
+	case EventOAApprovalTaskFinished:
+		body["taskId"] = "approval-task-1"
+		body["status"] = "FINISHED"
+		body["result"] = "agree"
+		body["finishTime"] = int64(1785229199000)
+	case EventOAApprovalTaskRedirected:
+		body["taskId"] = "approval-task-1"
+		body["status"] = "FINISHED"
+		body["result"] = "redirect"
+		body["finishTime"] = int64(1785229199000)
+	case EventOAApprovalInstanceStarted:
+		body["status"] = "RUNNING"
+	case EventOAApprovalInstanceTerminated:
+		body["status"] = "TERMINATED"
+		body["finishTime"] = int64(1785229199000)
+	case EventOAApprovalInstanceFinished:
+		body["status"] = "FINISHED"
+		body["result"] = "agree"
+		body["finishTime"] = int64(1785229199000)
+	}
+	data := map[string]any{
+		"eventId":      "oa-event",
+		"eventKey":     eventKey,
+		"occurredAtMs": int64(1785229200123),
+		"subId":        "oa-data-sub",
+		"payload": map[string]any{
+			"uid":         100001,
+			"CORPID":      "internal-corp",
+			"clientId":    "internal-client",
+			"filterSubId": "internal-filter",
+			"bizid":       "internal-biz",
+			"orgId":       100002,
+			"sourceId":    "open",
+			"body":        body,
+			"event_time":  int64(1785229199000),
+			"futureField": map[string]any{"nested": true},
+		},
+	}
+	encoded, _ := json.Marshal(data)
+	return string(encoded)
+}
+
 func TestCrossPlatformCoverageProjectOutputMessageEvents(t *testing.T) {
 	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser, EventAllSingleChat, EventAllGroupChat} {
 		t.Run(eventKey, func(t *testing.T) {
@@ -396,6 +449,170 @@ func TestCrossPlatformCoverageProjectOutputGroupLifecycleEvents(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageProjectOutputOAEvents(t *testing.T) {
+	tests := []struct {
+		eventKey string
+		want     any
+	}{
+		{
+			eventKey: EventOAApprovalTaskCreated,
+			want: OAApprovalTaskCreatedOutput{
+				Type:              EventOAApprovalTaskCreated,
+				EventID:           "oa-event",
+				Timestamp:         1785229200123,
+				SubscribeID:       "outer-sub",
+				ProcessInstanceID: "process-instance-1",
+				ProcessCode:       "PROC-TEST-1",
+				TaskID:            "approval-task-1",
+				Title:             "测试审批",
+				Status:            "RUNNING",
+				CreateTime:        1785229100000,
+				EventTime:         1785229199000,
+			},
+		},
+		{
+			eventKey: EventOAApprovalTaskFinished,
+			want: OAApprovalTaskFinishedOutput{
+				Type:              EventOAApprovalTaskFinished,
+				EventID:           "oa-event",
+				Timestamp:         1785229200123,
+				SubscribeID:       "outer-sub",
+				ProcessInstanceID: "process-instance-1",
+				ProcessCode:       "PROC-TEST-1",
+				TaskID:            "approval-task-1",
+				Title:             "测试审批",
+				Status:            "FINISHED",
+				Result:            "agree",
+				CreateTime:        1785229100000,
+				FinishTime:        1785229199000,
+				EventTime:         1785229199000,
+			},
+		},
+		{
+			eventKey: EventOAApprovalTaskRedirected,
+			want: OAApprovalTaskRedirectedOutput{
+				Type:              EventOAApprovalTaskRedirected,
+				EventID:           "oa-event",
+				Timestamp:         1785229200123,
+				SubscribeID:       "outer-sub",
+				ProcessInstanceID: "process-instance-1",
+				ProcessCode:       "PROC-TEST-1",
+				TaskID:            "approval-task-1",
+				Title:             "测试审批",
+				Status:            "FINISHED",
+				Result:            "redirect",
+				CreateTime:        1785229100000,
+				FinishTime:        1785229199000,
+				EventTime:         1785229199000,
+			},
+		},
+		{
+			eventKey: EventOAApprovalInstanceStarted,
+			want: OAApprovalInstanceStartedOutput{
+				Type:              EventOAApprovalInstanceStarted,
+				EventID:           "oa-event",
+				Timestamp:         1785229200123,
+				SubscribeID:       "outer-sub",
+				ProcessInstanceID: "process-instance-1",
+				ProcessCode:       "PROC-TEST-1",
+				Title:             "测试审批",
+				Status:            "RUNNING",
+				CreateTime:        1785229100000,
+				EventTime:         1785229199000,
+			},
+		},
+		{
+			eventKey: EventOAApprovalInstanceTerminated,
+			want: OAApprovalInstanceTerminatedOutput{
+				Type:              EventOAApprovalInstanceTerminated,
+				EventID:           "oa-event",
+				Timestamp:         1785229200123,
+				SubscribeID:       "outer-sub",
+				ProcessInstanceID: "process-instance-1",
+				ProcessCode:       "PROC-TEST-1",
+				Title:             "测试审批",
+				Status:            "TERMINATED",
+				CreateTime:        1785229100000,
+				FinishTime:        1785229199000,
+				EventTime:         1785229199000,
+			},
+		},
+		{
+			eventKey: EventOAApprovalInstanceFinished,
+			want: OAApprovalInstanceFinishedOutput{
+				Type:              EventOAApprovalInstanceFinished,
+				EventID:           "oa-event",
+				Timestamp:         1785229200123,
+				SubscribeID:       "outer-sub",
+				ProcessInstanceID: "process-instance-1",
+				ProcessCode:       "PROC-TEST-1",
+				Title:             "测试审批",
+				Status:            "FINISHED",
+				Result:            "agree",
+				CreateTime:        1785229100000,
+				FinishTime:        1785229199000,
+				EventTime:         1785229199000,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.eventKey, func(t *testing.T) {
+			projected, err := ProjectOutput(transport.Event{
+				EventID:       "outer-event",
+				EventBornTime: 11,
+				EventType:     tt.eventKey,
+				SubscribeID:   "outer-sub",
+				Data:          personalOAData(tt.eventKey),
+			})
+			if err != nil {
+				t.Fatalf("ProjectOutput() error = %v", err)
+			}
+			if !reflect.DeepEqual(projected, tt.want) {
+				t.Fatalf("ProjectOutput() = %#v, want %#v", projected, tt.want)
+			}
+			assertNoInternalActionFields(t, projected)
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputRejectsUnsupportedOAType(t *testing.T) {
+	ev := transport.Event{EventID: "outer-event", EventType: "user_oa_approval_unknown"}
+	projected, err := projectOAApprovalEvent(
+		ev,
+		baseEventOutput{Type: ev.EventType, EventID: ev.EventID},
+		json.RawMessage(`{"body":{"processInstanceId":"process-instance-1"},"event_time":1}`),
+	)
+	if err == nil || !strings.Contains(err.Error(), `unsupported personal OA event type "user_oa_approval_unknown"`) {
+		t.Fatalf("projectOAApprovalEvent() error = %v", err)
+	}
+	if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+		t.Fatalf("projectOAApprovalEvent() fallback = %#v, want %#v", projected, ev)
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputOADecodesDoublyWrappedJSONString(t *testing.T) {
+	once, err := json.Marshal(personalOAData(EventOAApprovalTaskCreated))
+	if err != nil {
+		t.Fatal(err)
+	}
+	twice, err := json.Marshal(string(once))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	projected, err := ProjectOutput(transport.Event{Data: string(twice)})
+	if err != nil {
+		t.Fatalf("ProjectOutput() error = %v", err)
+	}
+	got, ok := projected.(OAApprovalTaskCreatedOutput)
+	if !ok {
+		t.Fatalf("ProjectOutput() type = %T, want OAApprovalTaskCreatedOutput", projected)
+	}
+	if got.Type != EventOAApprovalTaskCreated || got.EventID != "oa-event" || got.SubscribeID != "oa-data-sub" {
+		t.Fatalf("ProjectOutput() = %#v", got)
+	}
+}
+
 func TestCrossPlatformCoverageProjectOutputGroupMemberEvents(t *testing.T) {
 	for _, eventKey := range []string{EventGroupMemberAdded, EventGroupMemberExited} {
 		t.Run(eventKey, func(t *testing.T) {
@@ -541,6 +758,93 @@ func TestCrossPlatformCoverageProjectOutputRejectsInvalidGroupLifecyclePayloads(
 			projected, err := ProjectOutput(ev)
 			if err == nil {
 				t.Fatal("ProjectOutput() error = nil, want payload validation error")
+			}
+			if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
+				t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputRejectsInvalidOAPayloads(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{name: "missing"},
+		{name: "null", payload: `,"payload":null`},
+		{name: "empty object", payload: `,"payload":{}`},
+		{name: "array", payload: `,"payload":[]`},
+		{name: "string", payload: `,"payload":"invalid"`},
+		{name: "missing body", payload: `,"payload":{"event_time":1}`},
+		{name: "null body", payload: `,"payload":{"body":null,"event_time":1}`},
+		{name: "empty body", payload: `,"payload":{"body":{},"event_time":1}`},
+	}
+	for _, eventKey := range []string{
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
+	} {
+		for _, tt := range tests {
+			t.Run(eventKey+"/"+tt.name, func(t *testing.T) {
+				ev := transport.Event{
+					EventID:   "outer-event",
+					EventType: eventKey,
+					Data:      fmt.Sprintf(`{"eventKey":%q%s}`, eventKey, tt.payload),
+				}
+				projected, err := ProjectOutput(ev)
+				if err == nil {
+					t.Fatal("ProjectOutput() error = nil, want OA payload validation error")
+				}
+				if !strings.Contains(err.Error(), "decode personal OA payload") {
+					t.Fatalf("ProjectOutput() error = %v, want OA payload context", err)
+				}
+				got, ok := projected.(transport.Event)
+				if !ok || !reflect.DeepEqual(got, ev) {
+					t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)
+				}
+			})
+		}
+	}
+}
+
+func TestCrossPlatformCoverageProjectOutputRejectsOAWithoutStableIDs(t *testing.T) {
+	tests := []struct {
+		name     string
+		eventKey string
+		body     string
+		want     string
+	}{
+		{
+			name:     "missing process instance",
+			eventKey: EventOAApprovalInstanceStarted,
+			body:     `{"status":"RUNNING"}`,
+			want:     "processInstanceId is required",
+		},
+		{
+			name:     "missing task",
+			eventKey: EventOAApprovalTaskCreated,
+			body:     `{"processInstanceId":"process-instance-1","status":"RUNNING"}`,
+			want:     "taskId is required",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ev := transport.Event{
+				EventID:   "outer-event",
+				EventType: tt.eventKey,
+				Data: fmt.Sprintf(
+					`{"eventKey":%q,"payload":{"body":%s,"event_time":1}}`,
+					tt.eventKey,
+					tt.body,
+				),
+			}
+			projected, err := ProjectOutput(ev)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ProjectOutput() error = %v, want %q", err, tt.want)
 			}
 			if got, ok := projected.(transport.Event); !ok || !reflect.DeepEqual(got, ev) {
 				t.Fatalf("ProjectOutput() fallback = %#v, want %#v", projected, ev)

@@ -8,7 +8,7 @@ python3 scripts/gen_skill_shortcut_sections.py --check
 
 chat_skill="skills/multi/dingtalk-chat/SKILL.md"
 doc_skill="skills/multi/dingtalk-doc/SKILL.md"
-event_skill="skills/multi/dingtalk-misc/references/event.md"
+event_skill="skills/multi/dingtalk-event/SKILL.md"
 mono_skill="skills/mono/SKILL.md"
 runtime_contract="skills/multi/dingtalk-shared/references/runtime-contract.md"
 chat_target_bytes=10000

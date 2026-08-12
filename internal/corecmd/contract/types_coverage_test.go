@@ -4,9 +4,74 @@
 package contract
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
+
+func TestFrameworkResultSpecValidationEdges(t *testing.T) {
+	if got, err := NormalizeResultSpec(nil, ""); err != nil || got != nil {
+		t.Fatalf("NormalizeResultSpec(nil)=(%v,%v)", got, err)
+	}
+	base := func() *ResultSpec {
+		return &ResultSpec{Outcomes: []ResultOutcome{ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object"}`)}
+	}
+	if got, err := NormalizeResultSpec(base(), ""); err != nil || got == nil || got.SensitivePaths != nil {
+		t.Fatalf("valid default spec=(%#v,%v)", got, err)
+	}
+	cases := []struct {
+		name string
+		edit func(*ResultSpec)
+	}{
+		{"sensitive invalid", func(s *ResultSpec) { s.SensitivePaths = []string{"bad..path"} }},
+		{"empty schema", func(s *ResultSpec) { s.DataSchema = nil }},
+		{"multiple schema", func(s *ResultSpec) { s.DataSchema = json.RawMessage(`{} {}`) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := base()
+			tc.edit(spec)
+			if _, err := NormalizeResultSpec(spec, "sample"); err == nil {
+				t.Fatalf("invalid spec accepted: %#v", spec)
+			}
+		})
+	}
+	if err := validateResultPath("a.$"); err == nil {
+		t.Fatal("unsafe segment accepted")
+	}
+}
+
+func TestFrameworkResultSchemaDescriptionValidationEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"invalid json", `{`, "must be one JSON Schema object"},
+		{"properties is not object", `{"properties":[]}`, "properties must be an object"},
+		{"property is not schema", `{"properties":{"id":"string"}}`, "properties.id must be a JSON Schema object"},
+		{"property description missing", `{"properties":{"id":{"type":"string"}}}`, "properties.id requires description"},
+		{"nested property invalid", `{"properties":{"item":{"description":"item","properties":[]}}}`, "properties.item.properties must be an object"},
+		{"items is not schema", `{"items":[]}`, "items must be a JSON Schema object"},
+		{"nested items invalid", `{"items":{"properties":[]}}`, "items.properties must be an object"},
+		{"composition is not array", `{"oneOf":{}}`, "oneOf must be an array"},
+		{"composition branch is not schema", `{"anyOf":["string"]}`, "anyOf[0] must be a JSON Schema object"},
+		{"nested composition invalid", `{"allOf":[{"properties":[]}]}`, "allOf[0].properties must be an object"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateResultSchemaDescriptions(json.RawMessage(tc.raw), "data_schema")
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("validation error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizePaginationSpecNilIsAbsent(t *testing.T) {
+	if got, err := NormalizePaginationSpec(nil, ""); err != nil || got != nil {
+		t.Fatalf("NormalizePaginationSpec(nil) = (%#v, %v)", got, err)
+	}
+}
 
 func TestCrossPlatformCoverageDryRunSpecValidate(t *testing.T) {
 	for _, kind := range []string{DryRunPreviewInvocation, DryRunPreviewRequest, DryRunPreviewPlan, DryRunPreviewDiff} {

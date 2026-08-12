@@ -96,13 +96,13 @@ func TestCrossPlatformCoverageValidateManifestAcceptsExactReviewedRoute(t *testi
 	root := t.TempDir()
 	writeTestFile(t, root, "skills/multi/dingtalk-chat/SKILL.md", "| 发消息 | `dws chat +send` | <!-- dws-intent: chat.send -->\n")
 	writeTypedContractReference(t, root, "skills/multi/dingtalk-chat/references/contracts.md")
-	writeEventHandoffReference(t, root, "skills/multi/dingtalk-misc/references/event-im-output.md")
+	writeEventHandoffReference(t, root, "skills/multi/dingtalk-event/references/event-im-output.md")
 	manifest := routeManifest{
 		Version:           3,
 		MarkerRoots:       []string{"skills/multi/dingtalk-chat"},
 		RetiredScripts:    []string{"skills/multi/dingtalk-chat/scripts/retired.py"},
 		ContractReference: "skills/multi/dingtalk-chat/references/contracts.md",
-		HandoffReference:  "skills/multi/dingtalk-misc/references/event-im-output.md",
+		HandoffReference:  "skills/multi/dingtalk-event/references/event-im-output.md",
 		Intents: []intentRoute{{
 			ID:                    "chat.send",
 			PreferredTool:         "chat.shortcut_send",
@@ -123,13 +123,13 @@ func TestCrossPlatformCoverageValidateManifestRejectsWrongMarkerAndSafetyDowngra
 	root := t.TempDir()
 	writeTestFile(t, root, "skills/multi/dingtalk-chat/SKILL.md", "| 发消息 | `dws chat message send` | <!-- dws-intent: chat.send -->\n")
 	writeTypedContractReference(t, root, "skills/multi/dingtalk-chat/references/contracts.md")
-	writeEventHandoffReference(t, root, "skills/multi/dingtalk-misc/references/event-im-output.md")
+	writeEventHandoffReference(t, root, "skills/multi/dingtalk-event/references/event-im-output.md")
 	manifest := routeManifest{
 		Version:           3,
 		MarkerRoots:       []string{"skills/multi/dingtalk-chat"},
 		RetiredScripts:    []string{"skills/multi/dingtalk-chat/scripts/retired.py"},
 		ContractReference: "skills/multi/dingtalk-chat/references/contracts.md",
-		HandoffReference:  "skills/multi/dingtalk-misc/references/event-im-output.md",
+		HandoffReference:  "skills/multi/dingtalk-event/references/event-im-output.md",
 		Intents: []intentRoute{{
 			ID:                    "chat.send",
 			PreferredTool:         "chat.shortcut_send",

@@ -281,6 +281,85 @@ func parseDriveUploadInfo(text string) (resourceURL, uploadID string, headers ma
 	return
 }
 
+// DriveUploadRequest describes the reusable Drive upload transaction used by
+// the native leaf and the curated +upload shortcut. FilePath must already be
+// resolved and validated by the caller.
+type DriveUploadRequest struct {
+	FilePath      string
+	FileName      string
+	FileSize      int64
+	SpaceID       string
+	ParentID      string
+	OverwriteFile string
+	MIMEType      string
+}
+
+// UploadDriveFileData runs credentials -> OSS PUT -> commit exactly once and
+// returns the parsed commit response without rendering it. Unlike the legacy
+// leaf helper, this path fails when the commit has no non-empty JSON response;
+// the Shortcut can then require terminal success evidence and read back the
+// created node before reporting success.
+func UploadDriveFileData(ctx context.Context, request DriveUploadRequest) (map[string]any, error) {
+	if strings.TrimSpace(request.FilePath) == "" || strings.TrimSpace(request.FileName) == "" || request.FileSize <= 0 {
+		return nil, fmt.Errorf("invalid drive upload request")
+	}
+	step1Args := map[string]any{
+		"fileName": request.FileName,
+		"fileSize": float64(request.FileSize),
+	}
+	if request.SpaceID != "" {
+		step1Args["spaceId"] = request.SpaceID
+	}
+	if request.MIMEType != "" {
+		step1Args["mimeType"] = request.MIMEType
+	}
+	if request.OverwriteFile != "" {
+		step1Args["overwriteFileId"] = request.OverwriteFile
+	} else if request.ParentID != "" {
+		step1Args["parentId"] = request.ParentID
+	}
+
+	credentialText, err := callMCPToolReturnTextOnServer(ctx, "drive", "get_upload_info", step1Args)
+	if err != nil {
+		return nil, err
+	}
+	uploadID, err := driveUploadPut(ctx, credentialText, func(refreshCtx context.Context) (string, error) {
+		return callMCPToolReturnTextOnServer(refreshCtx, "drive", "get_upload_info", step1Args)
+	}, request.FilePath, request.FileSize)
+	if err != nil {
+		return nil, err
+	}
+
+	commitArgs := map[string]any{
+		"fileName": request.FileName,
+		"fileSize": float64(request.FileSize),
+		"uploadId": uploadID,
+	}
+	if request.SpaceID != "" {
+		commitArgs["spaceId"] = request.SpaceID
+	}
+	if request.OverwriteFile != "" {
+		commitArgs["overwriteFileId"] = request.OverwriteFile
+	} else if request.ParentID != "" {
+		commitArgs["parentId"] = request.ParentID
+	}
+	commitText, err := callMCPToolReturnTextOnServer(ctx, "drive", "commit_upload", commitArgs)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(commitText) == "" {
+		return nil, fmt.Errorf("commit_upload returned no business result; remote effect is unknown")
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(commitText), &result); err != nil {
+		return nil, fmt.Errorf("parse commit_upload response: %w", err)
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("commit_upload returned an empty JSON object; remote effect is unknown")
+	}
+	return result, nil
+}
+
 func newDriveCommand() *cobra.Command {
 	// Product-level Agent routing Decl (migrated from selection/drive.json
 	// products.drive). Catalog assembly stamps provenance contract_final.
@@ -619,10 +698,20 @@ func newDriveCommand() *cobra.Command {
 				return err
 			}
 			dlOpts.logf = func(format string, a ...any) {
-				deps.Out.PrintInfo(fmt.Sprintf(format, a...))
+				printJSONSafeInfo(fmt.Sprintf(format, a...))
 			}
 
 			if deps.Caller.DryRun() {
+				if strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+					return deps.Out.PrintJSON(map[string]any{
+						"dry_run":      true,
+						"executed":     false,
+						"preview_kind": "plan",
+						"operation":    "drive_download",
+						"nodeId":       fileID,
+						"savedPath":    outputPath,
+					})
+				}
 				deps.Out.PrintKeyValue("操作", "下载钉盘文件")
 				deps.Out.PrintKeyValue("文件ID", fileID)
 				deps.Out.PrintKeyValue("输出", outputPath)
@@ -632,7 +721,7 @@ func newDriveCommand() *cobra.Command {
 			ctx := cmd.Context()
 
 			// Step 1: 获取下载 URL 和签名请求头
-			deps.Out.PrintInfo("[1/2] 获取下载链接...")
+			printJSONSafeInfo("[1/2] 获取下载链接...")
 			text, err := callMCPToolReturnText(ctx, "download_file", argsMap)
 			if err != nil {
 				return err
@@ -654,7 +743,7 @@ func newDriveCommand() *cobra.Command {
 			}
 
 			// Step 2: 分片下载（自动分派 + 401/403 凭证刷新重试）
-			deps.Out.PrintInfo(fmt.Sprintf("[2/2] 下载文件到 %s ...", outputPath))
+			printJSONSafeInfo(fmt.Sprintf("[2/2] 下载文件到 %s ...", outputPath))
 			dlOpts.knownSize = parseDownloadFileSize(text)
 			dlOpts.nodeID = fileID
 			dlOpts.version = parseDownloadFileVersion(text)
@@ -684,6 +773,19 @@ func newDriveCommand() *cobra.Command {
 				return err
 			}
 
+			if strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+				info, err := os.Stat(outputPath)
+				if err != nil {
+					return fmt.Errorf("读取下载产物信息失败: %w", err)
+				}
+				return deps.Out.PrintJSON(map[string]any{
+					"success":   true,
+					"nodeId":    fileID,
+					"version":   dlOpts.version,
+					"savedPath": outputPath,
+					"sizeBytes": info.Size(),
+				})
+			}
 			deps.Out.PrintInfo(fmt.Sprintf("下载完成: %s", outputPath))
 			return nil
 		},
@@ -772,10 +874,21 @@ func newDriveCommand() *cobra.Command {
 				return err
 			}
 			dlOpts.logf = func(format string, a ...any) {
-				deps.Out.PrintInfo(fmt.Sprintf(format, a...))
+				printJSONSafeInfo(fmt.Sprintf(format, a...))
 			}
 
 			if deps.Caller.DryRun() {
+				if strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+					return deps.Out.PrintJSON(map[string]any{
+						"dry_run":      true,
+						"executed":     false,
+						"preview_kind": "plan",
+						"operation":    "drive_download_version",
+						"nodeId":       fileID,
+						"version":      versionNum,
+						"savedPath":    outputPath,
+					})
+				}
 				deps.Out.PrintKeyValue("操作", "下载文件历史版本")
 				deps.Out.PrintKeyValue("节点ID", fileID)
 				deps.Out.PrintKeyValue("版本号", fmt.Sprintf("%d", versionNum))
@@ -784,7 +897,7 @@ func newDriveCommand() *cobra.Command {
 			}
 
 			ctx := cmd.Context()
-			deps.Out.PrintInfo("[1/2] 获取历史版本下载链接...")
+			printJSONSafeInfo("[1/2] 获取历史版本下载链接...")
 			dlArgsMap := map[string]any{
 				"nodeId":  fileID,
 				"version": versionNum,
@@ -804,7 +917,7 @@ func newDriveCommand() *cobra.Command {
 				}
 				outputPath = filepath.Join(outputPath, filename)
 			}
-			deps.Out.PrintInfo(fmt.Sprintf("[2/2] 下载文件到 %s ...", outputPath))
+			printJSONSafeInfo(fmt.Sprintf("[2/2] 下载文件到 %s ...", outputPath))
 			dlOpts.knownSize = parseDownloadFileSize(text)
 			dlOpts.nodeID = fileID
 			dlOpts.version = versionNum
@@ -832,6 +945,19 @@ func newDriveCommand() *cobra.Command {
 					return err
 				}
 				return err
+			}
+			if strings.EqualFold(strings.TrimSpace(deps.Caller.Format()), "json") {
+				info, err := os.Stat(outputPath)
+				if err != nil {
+					return fmt.Errorf("读取下载产物信息失败: %w", err)
+				}
+				return deps.Out.PrintJSON(map[string]any{
+					"success":   true,
+					"nodeId":    fileID,
+					"version":   versionNum,
+					"savedPath": outputPath,
+					"sizeBytes": info.Size(),
+				})
 			}
 			deps.Out.PrintInfo(fmt.Sprintf("下载完成: %s", outputPath))
 			return nil
@@ -3158,6 +3284,7 @@ func newDriveCommand() *cobra.Command {
 		driveListCmd,
 		driveListSpacesCmd,
 		driveInfoCmd,
+		newDriveFileCommentCmd(),
 		driveDownloadCmd,
 		driveDownloadVersionCmd,
 		driveMkdirCmd,

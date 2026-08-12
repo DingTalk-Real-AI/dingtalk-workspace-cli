@@ -154,6 +154,88 @@ func TestCrossPlatformCoverageDriveUploadTransportCoverage(t *testing.T) {
 	})
 }
 
+func TestCrossPlatformCoverageUploadDriveFileDataStrictTransaction(t *testing.T) {
+	credential := `{"result":{"uploadType":"httpToCenterWithToken","resourceUrl":"https://c.example.com/u?upload_key=u1","uploadId":"u1","headers":{"dentry-token":"token"}}}`
+	request := DriveUploadRequest{FilePath: "fixture.bin", FileName: "fixture.bin", FileSize: 7, SpaceID: "space", ParentID: "folder", MIMEType: "application/octet-stream"}
+
+	t.Run("success with parent", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: credential}, {text: `{"success":true,"result":{"fileId":"n1"}}`}}}
+		installScriptedCaller(t, caller)
+		SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error { return nil })
+		t.Cleanup(func() { SetHTTPPutFile(nil) })
+		result, err := UploadDriveFileData(context.Background(), request)
+		if err != nil || result["success"] != true || caller.calls != 2 {
+			t.Fatalf("result=%v calls=%d error=%v", result, caller.calls, err)
+		}
+		if caller.args["spaceId"] != "space" || caller.args["parentId"] != "folder" {
+			t.Fatalf("commit args=%v", caller.args)
+		}
+	})
+
+	t.Run("success with overwrite", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: credential}, {text: `{"success":true}`}}}
+		installScriptedCaller(t, caller)
+		SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error { return nil })
+		t.Cleanup(func() { SetHTTPPutFile(nil) })
+		overwrite := request
+		overwrite.ParentID = "ignored"
+		overwrite.OverwriteFile = "existing"
+		if _, err := UploadDriveFileData(context.Background(), overwrite); err != nil {
+			t.Fatal(err)
+		}
+		if caller.args["overwriteFileId"] != "existing" {
+			t.Fatalf("commit args=%v", caller.args)
+		}
+	})
+
+	t.Run("credential refresh callback", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: credential}, {text: credential}, {text: `{"success":true}`}}}
+		installScriptedCaller(t, caller)
+		putCalls := 0
+		SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error {
+			putCalls++
+			if putCalls == 1 {
+				return &httpStatusError{StatusCode: 401, Body: "expired"}
+			}
+			return nil
+		})
+		t.Cleanup(func() { SetHTTPPutFile(nil) })
+		if _, err := UploadDriveFileData(context.Background(), request); err != nil {
+			t.Fatal(err)
+		}
+		if caller.calls != 3 || putCalls != 2 {
+			t.Fatalf("caller calls=%d put calls=%d", caller.calls, putCalls)
+		}
+	})
+
+	for _, tc := range []struct {
+		name    string
+		request DriveUploadRequest
+		steps   []scriptedToolStep
+		putErr  error
+		want    string
+	}{
+		{name: "invalid request", request: DriveUploadRequest{}, want: "invalid drive upload request"},
+		{name: "credential failure", request: request, steps: []scriptedToolStep{{err: errors.New("credentials")}}, want: "credentials"},
+		{name: "put failure", request: request, steps: []scriptedToolStep{{text: credential}}, putErr: errors.New("put failed"), want: "put failed"},
+		{name: "commit failure", request: request, steps: []scriptedToolStep{{text: credential}, {err: errors.New("commit failed")}}, want: "commit failed"},
+		{name: "empty commit", request: request, steps: []scriptedToolStep{{text: credential}, {text: "  "}}, want: "no business result"},
+		{name: "malformed commit", request: request, steps: []scriptedToolStep{{text: credential}, {text: "{"}}, want: "parse commit_upload response"},
+		{name: "empty object commit", request: request, steps: []scriptedToolStep{{text: credential}, {text: `{}`}}, want: "empty JSON object"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{steps: tc.steps}
+			installScriptedCaller(t, caller)
+			SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error { return tc.putErr })
+			t.Cleanup(func() { SetHTTPPutFile(nil) })
+			_, err := UploadDriveFileData(context.Background(), tc.request)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error=%v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageDriveCommandRemainingEdges(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "fixture.txt")
 	_ = os.WriteFile(file, []byte("fixture"), 0o600)

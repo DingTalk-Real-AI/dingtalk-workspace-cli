@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
@@ -53,6 +54,7 @@ func RunMany(ctx context.Context, cfg Config, specs []ConsumerSpec) error {
 	if cfg.WorkDir == "" || cfg.IPCEndpoint == "" || cfg.ClientID == "" {
 		return errors.New("consume: WorkDir, IPCEndpoint, and ClientID are required")
 	}
+	cfg.RuntimeToken = strings.TrimSpace(cfg.RuntimeToken)
 	if len(specs) < 2 {
 		return errors.New("consume: RunMany requires at least two consumers")
 	}
@@ -127,14 +129,18 @@ func RunMany(ctx context.Context, cfg Config, specs []ConsumerSpec) error {
 		}
 		sessions = append(sessions, session)
 		closeOnContext(ctx, session.conn)
-		if err := session.w.WriteJSON(transport.Hello{
+		hello := transport.Hello{
 			Type:        transport.FrameTypeHello,
 			ConsumerPID: os.Getpid(),
 			EventTypes:  spec.EventTypes,
 			Filter:      spec.Filter,
 			SubscribeID: spec.SubscribeID,
 			Compact:     cfg.Compact,
-		}); err != nil {
+		}
+		if cfg.RuntimeToken != "" {
+			hello.CredentialMode = transport.CredentialModeRuntimeToken
+		}
+		if err := session.w.WriteJSON(hello); err != nil {
 			return fmt.Errorf("consume: write hello for %s: %w", spec.EventKey, err)
 		}
 		if err := session.r.ReadJSON(&session.ack); err != nil {
@@ -143,8 +149,15 @@ func RunMany(ctx context.Context, cfg Config, specs []ConsumerSpec) error {
 		if session.ack.Type != transport.FrameTypeHelloAck {
 			return fmt.Errorf("consume: unexpected first frame type %q for %s", session.ack.Type, spec.EventKey)
 		}
+		// Verify that every connection reached the same bus before handing a
+		// runtime credential to it. Discovery is expected to converge on one
+		// daemon, but a stale endpoint/race must not propagate the host token to
+		// an unrelated process merely so we can report the PID mismatch later.
 		if len(sessions) > 1 && session.ack.BusPID != sessions[0].ack.BusPID {
 			return fmt.Errorf("consume: consumers connected to different bus processes (%d and %d)", sessions[0].ack.BusPID, session.ack.BusPID)
+		}
+		if err := negotiateRuntimeToken(session.w, session.r, session.ack, cfg.RuntimeToken); err != nil {
+			return fmt.Errorf("consume: runtime credential handshake for %s: %w", spec.EventKey, err)
 		}
 	}
 
@@ -225,6 +238,9 @@ func RunMany(ctx context.Context, cfg Config, specs []ConsumerSpec) error {
 			case transport.FrameTypeBye:
 				var bye transport.Bye
 				_ = json.Unmarshal(frame.raw, &bye)
+				if bye.Reason == transport.ByeReasonRuntimeTokenRejected {
+					return fmt.Errorf("consume: %w", runtimecred.ErrRuntimeTokenRejected)
+				}
 				if bye.Reason == transport.ByeReasonSubscriptionStopped {
 					delete(active, frame.index)
 					_ = sessions[frame.index].conn.Close()

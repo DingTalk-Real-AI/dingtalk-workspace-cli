@@ -84,7 +84,7 @@ func (devHandler) Command(runner executor.Runner) *cobra.Command {
 		},
 	}
 	cmdutil.MarkGroup(doc)
-	doc.AddCommand(newDevDocSearchCommand())
+	doc.AddCommand(newDevDocSearchCommand(runner))
 
 	root.AddCommand(
 		newDevAppCommand(runner),

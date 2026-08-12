@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -157,7 +158,15 @@ func TestCrossPlatformCoverageProductCommandExamplesAreExecutableContracts(t *te
 	deps.Out.errW = io.Discard
 	// Product examples execute real RunE paths; whiteboard insert retries must
 	// not burn the suite timeout on real sleep (race CI uses a 12m package cap).
+	// Sheet export uses helperAfter for progressive polling, so keep that clock
+	// deterministic too; context deadlines alone still accumulate heavily under
+	// Windows coverage instrumentation.
 	whiteboardSleep = func(time.Duration) {}
+	testseam.Swap(t, &helperAfter, func(time.Duration) <-chan time.Time {
+		ch := make(chan time.Time, 1)
+		ch <- time.Now()
+		return ch
+	})
 	httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
 	httpGetFile = func(_ context.Context, _ string, _ map[string]string, destPath string) error {
 		if destPath == "" {

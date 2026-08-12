@@ -23,6 +23,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	chatshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
@@ -34,15 +35,18 @@ import (
 // search hits through list_messages_by_ids in chunks of 50. A later-page or
 // enrichment failure never turns a partial result into a false success: the
 // output carries an explicit failure ledger and complete=false.
+const searchMsgIntent = "当你要按关键词、发送者、@对象、消息类型、机器人来源或会话范围组合搜索 IM 消息时使用；可搜索单个、多个或全部会话，会话与发送者过滤使用稳定 ID。默认查询近 7 天，也可指定精确起止时间和输出顺序。" +
+	"显式指定会话时会先验证 CID，再执行有界全局扫描并在本地精确过滤，避免下层忽略非法 CID 或群聊 CID。" +
+	"--page-all 会连续拉取游标页，默认再按消息 ID 分批富化详情；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger，绝不把截断结果标成完整。" +
+	"--download-resources 使用安全本地路径、默认不覆盖和原子落盘。"
+
 var SearchMsg = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+search-msg",
 	Product:     "im",
-	Description: "按发送者、关键词、@对象、会话或消息类型等条件搜索消息，可限定单个、多个或全部会话",
-	Intent: "当你要按发送者、关键词、@对象、消息类型、机器人来源或会话范围等条件搜索 IM 消息时使用；搜索范围可为单个、多个或全部会话，会话与发送者的公开过滤参数使用稳定 ID。默认查询近 7 天，也可指定精确起止时间及输出顺序。" +
-		"--page-all 会连续拉取游标页，默认再按消息 ID 分批富化详情；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger，绝不把截断结果标成完整。" +
-		"--download-resources 使用安全本地路径、默认不覆盖和原子落盘。",
-	Risk: shortcut.RiskRead,
+	Description: "按稳定 ID、内容、时间等条件搜索消息，可校验会话范围、全量翻页并批量富化",
+	Intent:      searchMsgIntent,
+	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -55,19 +59,19 @@ var SearchMsg = shortcut.Shortcut{
 			CLIPath:        "chat +search-msg",
 			PrimaryCLIPath: "chat +search-msg",
 		},
-		Description: "按发送者、关键词、@对象、会话或消息类型等条件搜索消息，可限定单个、多个或全部会话",
+		Description: "按稳定 ID、内容、时间等条件搜索消息，可校验会话范围、全量翻页并批量富化",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed search adapter: it combines filters, cursor pagination, batched mget enrichment, stable projection, completeness accounting, and optional safe resource downloads.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "按发送者、关键词、@对象、会话或消息类型等条件搜索消息，可限定单个、多个或全部会话",
-			UseWhen:      []string{"当你要按发送者、关键词、@对象、消息类型、机器人来源或会话范围等条件搜索 IM 消息时使用；搜索范围可为单个、多个或全部会话，会话与发送者的公开过滤参数使用稳定 ID。默认查询近 7 天，也可指定精确起止时间及输出顺序。--page-all 会连续拉取游标页，默认再按消息 ID 分批富化详情；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger，绝不把截断结果标成完整。--download-resources 使用安全本地路径、默认不覆盖和原子落盘。"},
+			AgentSummary: "按稳定 ID、内容、时间等条件搜索消息，可校验会话范围、全量翻页并批量富化",
+			UseWhen:      []string{searchMsgIntent},
 			AvoidWhen:    []string{"只想查看或导出一个指定会话的消息记录、且没有发送者、关键词、@对象或消息类型等主要筛选条件时使用 +chat-messages；已有精确消息 ID 时使用 +messages-mget"},
 			Examples: []string{
 				"dws chat +search-msg --query \"周报\" --senders <openDingTalkId> --days 3 --page-all",
-				"dws chat +search-msg --group <openConversationId> --message-type file --download-resources --output-dir ./downloads",
+				"dws chat +search-msg --query \"周报\" --senders <openDingTalkId> --days 3 --page-all --jq '.messages[] | {messageId, text}'",
 			},
 		},
 	},
@@ -104,7 +108,7 @@ var SearchMsg = shortcut.Shortcut{
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传上次的 nextCursor", Default: "0"},
 		{Name: "page-token", Type: shortcut.FlagString, Desc: "--cursor 的 lark-cli 对齐别名"},
 		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动连续拉取所有游标页"},
-		{Name: "page-limit", Type: shortcut.FlagInt, Desc: "--page-all 的最大页数（1-40）", Default: "20"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Desc: "--page-all 或显式会话范围本地扫描的最大页数（1-40）", Default: "20"},
 		{Name: "no-enrich", Type: shortcut.FlagBool, Desc: "不再按消息 ID 批量查询完整详情"},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出命中消息的 reaction（默认输出）"},
 	}, chatshortcut.MessageResourceDownloadFlags()...),
@@ -138,6 +142,7 @@ var SearchMsg = shortcut.Shortcut{
 	Tips: []string{
 		`dws chat +search-msg --group <openConversationId> --query "changefree"`,
 		`dws chat +search-msg --senders <openDingTalkId> --at-me --days 3 --page-all`,
+		`dws chat +search-msg --group <openConversationId> --query "changefree" --jq '.messages[] | {messageId, text}'`,
 	},
 	Validate: validateSearchMsgWithResources,
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -145,9 +150,21 @@ var SearchMsg = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
+		requestedConversationIDs, _ := params["openConversationIds"].([]string)
+		scopedSearch := len(requestedConversationIDs) > 0
+		if scopedSearch {
+			if err := validateSearchConversationScope(rt, requestedConversationIDs); err != nil {
+				return err
+			}
+			// The downstream search currently drops invalid CID filters and does
+			// not return group-scoped hits reliably. Scan the same filtered global
+			// stream and apply the already-validated CID set locally instead.
+			delete(params, "openConversationIds")
+		}
 
 		pageLimit := 1
-		if rt.Bool("page-all") {
+		scanAllPages := rt.Bool("page-all") || scopedSearch
+		if scanAllPages {
 			pageLimit = rt.Int("page-limit")
 		}
 		cursor := rt.StrFirst("page-token", "cursor")
@@ -176,7 +193,15 @@ var SearchMsg = shortcut.Shortcut{
 				break
 			}
 			pagesFetched++
-			for _, message := range searchMsgItems(data) {
+			pageMessages := searchMsgItems(data)
+			if scopedSearch {
+				var unverifiableMessageIDs []string
+				pageMessages, unverifiableMessageIDs = chatmsg.FilterConversationScope(pageMessages, requestedConversationIDs)
+				if len(unverifiableMessageIDs) > 0 {
+					return searchScopeUnverifiedError(requestedConversationIDs, unverifiableMessageIDs)
+				}
+			}
+			for _, message := range pageMessages {
 				messageID := strings.TrimSpace(fmt.Sprint(searchMsgMessageID(message)))
 				if messageID != "" && messageID != "<nil>" {
 					if seen[messageID] {
@@ -204,7 +229,7 @@ var SearchMsg = shortcut.Shortcut{
 				}
 			}
 			hasMore = hasMoreValue
-			if !rt.Bool("page-all") || !hasMore {
+			if !scanAllPages || !hasMore {
 				complete = !hasMore
 				break
 			}
@@ -218,7 +243,7 @@ var SearchMsg = shortcut.Shortcut{
 			}
 			cursor = nextCursor
 		}
-		if rt.Bool("page-all") && hasMore && pagesFetched == pageLimit {
+		if scanAllPages && hasMore && pagesFetched == pageLimit {
 			failures = append(failures, map[string]any{
 				"stage": "search-page-limit",
 				"error": fmt.Sprintf("达到 --page-limit=%d，仍有更多结果", pageLimit),
@@ -234,6 +259,16 @@ var SearchMsg = shortcut.Shortcut{
 			if len(enrichFailures) > 0 {
 				complete = false
 			}
+		}
+		if scopedSearch {
+			validatedMessages, unverifiableMessageIDs := chatmsg.FilterConversationScope(messages, requestedConversationIDs)
+			if len(unverifiableMessageIDs) > 0 {
+				return searchScopeUnverifiedError(requestedConversationIDs, unverifiableMessageIDs)
+			}
+			if len(validatedMessages) != len(messages) {
+				return searchScopeViolationError(requestedConversationIDs, messages)
+			}
+			messages = validatedMessages
 		}
 
 		order := strings.ToLower(strings.TrimSpace(rt.StrFirst("order", "sort")))
@@ -261,6 +296,9 @@ var SearchMsg = shortcut.Shortcut{
 		}
 		if len(resolvedFilters.Senders) > 0 {
 			payload["resolvedFilters"] = resolvedFilters
+		}
+		if scopedSearch {
+			payload["scope"] = searchScopePayload(requestedConversationIDs, paginationKnown && !hasMore)
 		}
 		if hasMore && nextCursor != "" && nextCursor != "<nil>" {
 			payload["nextCursor"] = nextCursor
@@ -432,6 +470,63 @@ func uniqueSearchStrings(values []string) []string {
 	return out
 }
 
+func validateSearchConversationScope(rt *shortcut.RuntimeContext, conversationIDs []string) error {
+	for _, conversationID := range conversationIDs {
+		_, err := rt.CallMCPData("chat", "get_conversation_info", map[string]any{
+			"openConversationId": conversationID,
+		})
+		if err == nil {
+			continue
+		}
+		return helpers.NormalizeSearchConversationScopeError(conversationID, err)
+	}
+	return nil
+}
+
+func searchScopeUnverifiedError(conversationIDs, messageIDs []string) error {
+	return apperrors.NewAPI(
+		"搜索结果缺少 conversationId，无法证明会话过滤范围；已停止输出",
+		apperrors.WithReason("search_conversation_scope_unverified"),
+		apperrors.WithDetails(map[string]any{
+			"requestedConversationIds": conversationIDs,
+			"unverifiableMessageIds":   messageIDs,
+		}),
+		apperrors.WithRetryable(false),
+		apperrors.WithHint("请保留 trace_id 并检查 IM 搜索服务是否返回 openConversationId"),
+	)
+}
+
+func searchScopeViolationError(conversationIDs []string, messages []map[string]any) error {
+	observed := make([]string, 0, len(messages))
+	for _, message := range messages {
+		conversationID := strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(message)))
+		if conversationID == "" || conversationID == "<nil>" {
+			continue
+		}
+		observed = append(observed, conversationID)
+	}
+	return apperrors.NewAPI(
+		"消息富化结果超出请求的会话范围；已停止输出",
+		apperrors.WithReason("search_conversation_scope_violation"),
+		apperrors.WithDetails(map[string]any{
+			"requestedConversationIds": conversationIDs,
+			"observedConversationIds":  uniqueSearchStrings(observed),
+		}),
+		apperrors.WithRetryable(false),
+	)
+}
+
+func searchScopePayload(conversationIDs []string, sourceComplete bool) map[string]any {
+	return map[string]any{
+		"requestedConversationIds": append([]string(nil), conversationIDs...),
+		"targetsValidated":         true,
+		"filterApplied":            true,
+		"filterMode":               "client",
+		"resultsWithinScope":       true,
+		"sourceComplete":           sourceComplete,
+	}
+}
+
 func enrichSearchMessages(rt *shortcut.RuntimeContext, messages []map[string]any) ([]map[string]any, int, []map[string]any) {
 	detailsByID := map[string]map[string]any{}
 	failures := make([]map[string]any, 0)
@@ -505,120 +600,27 @@ func enrichSearchMessages(rt *shortcut.RuntimeContext, messages []map[string]any
 // response, probing common container keys at the top level and nested under
 // "result". Returns nil when no list is found.
 func searchMsgItems(data map[string]any) []map[string]any {
-	if data == nil {
-		return nil
-	}
-	for _, root := range []map[string]any{data, searchMsgChildMap(data, "result")} {
-		if root == nil {
-			continue
-		}
-		if groups, ok := root["conversationMessagesList"].([]any); ok {
-			return searchMsgFlattenGroups(groups)
-		}
-	}
-	keys := []string{"list", "messages", "messageList", "items", "data", "records", "result"}
-	for _, key := range keys {
-		if arr, ok := data[key].([]any); ok {
-			return searchMsgToMaps(arr)
-		}
-		if inner, ok := data[key].(map[string]any); ok {
-			for _, k2 := range []string{"list", "messages", "messageList", "items", "data", "records"} {
-				if arr, ok := inner[k2].([]any); ok {
-					return searchMsgToMaps(arr)
-				}
-			}
-		}
-	}
-	return nil
+	return chatmsg.SearchItems(data)
 }
 
-func searchMsgChildMap(data map[string]any, key string) map[string]any {
-	if value, ok := data[key].(map[string]any); ok {
-		return value
-	}
-	return nil
-}
-
-func searchMsgFlattenGroups(groups []any) []map[string]any {
-	out := make([]map[string]any, 0)
-	for _, rawGroup := range groups {
-		group, ok := rawGroup.(map[string]any)
-		if !ok {
-			continue
-		}
-		messages, ok := group["messages"].([]any)
-		if !ok {
-			continue
-		}
-		conversationID := strings.TrimSpace(fmt.Sprint(group["openConversationId"]))
-		conversationTitle := strings.TrimSpace(fmt.Sprint(group["title"]))
-		singleChat, hasSingleChat := group["singleChat"]
-		for _, rawMessage := range messages {
-			message, ok := rawMessage.(map[string]any)
-			if !ok {
-				continue
-			}
-			item := make(map[string]any, len(message)+3)
-			for key, value := range message {
-				item[key] = value
-			}
-			if _, exists := item["openConversationId"]; !exists &&
-				conversationID != "" && conversationID != "<nil>" {
-				item["openConversationId"] = conversationID
-			}
-			if _, exists := item["conversationTitle"]; !exists &&
-				conversationTitle != "" && conversationTitle != "<nil>" {
-				item["conversationTitle"] = conversationTitle
-			}
-			if _, exists := item["singleChat"]; !exists && hasSingleChat {
-				item["singleChat"] = singleChat
-			}
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
-func searchMsgToMaps(arr []any) []map[string]any {
-	out := make([]map[string]any, 0, len(arr))
-	for _, it := range arr {
-		if m, ok := it.(map[string]any); ok {
-			out = append(out, m)
-		}
-	}
-	return out
-}
-
-// searchMsgProject reshapes one matched message into {sender, time, text,
-// messageId}, running text through the shared chatmsg cleaning (card/auto-reply
-// JSON → readable, ciphertext → marker) and recursively expanding any forwarded
-// chat record under "forwarded".
+// searchMsgProject adds search-only sender/time aliases and forwarded-message
+// expansion to the shared message projection.
 func searchMsgProject(m map[string]any) map[string]any {
 	return searchMsgProjectWithReactions(m, true)
 }
 
 func searchMsgProjectWithReactions(m map[string]any, includeReactions bool) map[string]any {
 	row := chatmsg.ProjectMessageV1(m, includeReactions)
-	// Preserve the established search aliases while also publishing the V1
-	// canonical fields used by other message readers.
+	// Keep search-only aliases while messageId/text stay owned by the shared
+	// projection used by typed message search.
 	row["sender"] = searchMsgSender(m)
 	row["time"] = searchMsgTime(m)
-	row["text"] = searchMsgCleanText(m)
-	row["messageId"] = searchMsgMessageID(m)
 	if forwarded := chatmsg.Forwarded(m, func(item map[string]any) map[string]any {
 		return searchMsgProjectWithReactions(item, includeReactions)
 	}); len(forwarded) > 0 {
 		row["forwarded"] = forwarded
 	}
 	return row
-}
-
-// searchMsgCleanText runs searchMsgText's extraction through chatmsg.CleanText.
-func searchMsgCleanText(m map[string]any) any {
-	if s, ok := searchMsgText(m).(string); ok {
-		return chatmsg.CleanText(s)
-	}
-	return searchMsgText(m)
 }
 
 // searchMsgSender reads a message's sender display name/id, tolerating the
@@ -639,8 +641,8 @@ func searchMsgSender(m map[string]any) any {
 	}
 	for _, key := range []string{"sender", "from", "senderUser"} {
 		if nested, ok := m[key].(map[string]any); ok {
-			for _, k2 := range []string{"name", "nick", "userName", "staffName", "displayName"} {
-				if v := norm(nested[k2]); v != "" {
+			for _, nestedKey := range []string{"name", "nick", "userName", "staffName", "displayName"} {
+				if v := norm(nested[nestedKey]); v != "" {
 					return v
 				}
 			}
@@ -668,39 +670,12 @@ func searchMsgTime(m map[string]any) any {
 	return nil
 }
 
-// searchMsgText reads a message's textual content, tolerating flat text keys and
-// a nested content/text object.
-func searchMsgText(m map[string]any) any {
-	for _, key := range []string{"text", "content", "msgContent", "message", "body"} {
-		if v := searchMsgString(m[key]); v != "" {
-			return v
-		}
-	}
-	for _, key := range []string{"content", "text", "msg"} {
-		if nested, ok := m[key].(map[string]any); ok {
-			for _, k2 := range []string{"text", "content", "richText", "title"} {
-				if v := searchMsgString(nested[k2]); v != "" {
-					return v
-				}
-			}
-		}
-	}
-	return nil
-}
-
 // searchMsgMessageID reads a message's identifier, tolerating the common id keys
 // the gateway may use.
 func searchMsgMessageID(m map[string]any) any {
-	for _, key := range []string{"messageId", "message_id", "msgId", "msg_id", "openMessageId", "id"} {
-		if v := searchMsgString(m[key]); v != "" {
-			return v
-		}
-	}
-	return nil
+	return chatmsg.MessageID(m)
 }
 
-// searchMsgString coerces a scalar JSON value to a trimmed string, returning ""
-// for nil / non-scalar / empty values.
 func searchMsgString(v any) string {
 	switch typed := v.(type) {
 	case string:

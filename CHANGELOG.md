@@ -6,12 +6,102 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.58-beta.4] - 2026-08-12
+
 ### Added
 
+- **Multi-skill installation and upgrade** — fresh installs, `dws skill setup`,
+  and `dws upgrade` now use the multi-skill layout by default. Existing mono
+  installations migrate during upgrade; mono remains an explicit legacy option.
+- **Native streaming-card mentions** — `dws chat message send-card` now accepts
+  `--at-open-dingtalk-ids` and `--at-all` for group cards and forwards them to
+  `create_and_send_card`, matching the existing shortcut behavior without
+  changing single-chat card creation.
+- **Expanded Minutes workflows** — 27 public Minutes shortcuts now cover
+  upload, download, export, recording, analysis, sharing, and recovery flows;
+  every write command keeps an explicit confirmation requirement.
+- **Chat command discovery** — 30 existing typed Chat commands are now
+  available in the runtime Schema and Agent catalog, with sensitive writes
+  carrying their required confirmation metadata.
+
+### Changed
+
+- **Chat read results** — typed commands and shortcuts now expose a consistent
+  top-level `messages` list with stable `messageId` and `text` fields while
+  retaining existing response envelopes and fields.
+- **Wiki feed results** — Wiki feed list output now formats time fields and
+  trims excess fields. Its `--limit` default is 10 and maximum is 20.
+- **Developer command results** — the `dev` and selected `devapp` commands now
+  use the unified result envelope for consistent success, pending, partial,
+  and failure reporting.
+- **Evaluation dispatch hardening** — `/eval` now uses a verifiable polling
+  relay instead of direct access from the hosted runner, binding the workflow,
+  comment, PR head, parameters, and result provenance.
+
+### Fixed
+
+- **Streaming-card update acknowledgement** — accepts the pre-production
+  `success: true` response from `update_streaming_card` as affirmative write
+  evidence while preserving explicit negative, conflicting, and bizId-drift
+  failures, so Agents do not repeat an update that the service already applied.
+- **Text input bounds** — literal input, stdin, and `@file` inputs now all
+  enforce the same byte limit; file reads validate the opened descriptor and
+  cannot exceed the limit after a path replacement or file growth.
+- **Evaluation PR comments** — restores `/eval` PR conversation comments with
+  the least required pull-request write permission and actionable GitHub 403
+  diagnostics.
+
+## [1.0.58-beta.3] - 2026-08-11
+
+### Added
+
+- **Aitable workflow execution and history** — adds `dws aitable workflow run` for confirmed asynchronous execution of scheduled or record-triggered workflows, plus `dws aitable workflow history` for status-, time-, and page-filtered execution records. The commands map directly to `aitable/run_workflow` and `aitable/get_flow_record_list`, validate trigger-specific arguments locally, and document the `executionId` / `instanceId` correlation.
 - **Streaming-card mentions** — `chat +messages-send-card` now accepts
   `--at-open-dingtalk-ids` and `--at-all` for group cards, passing mention
   targets to the initial card-creation request and prepending its returned
   `atTag` to the automatic streaming update.
+- **Personal OA approval events** — personal event consumers now support task
+  creation, completion, redirection, instance start, termination, and
+  completion events, with typed output and matching usage documentation.
+
+### Fixed
+
+- **Machine-readable export and download receipts** — `dws doc export`,
+  `dws drive download`, and `dws drive download --version` now keep progress
+  logs on stderr under `--format json` and emit one JSON result on stdout after
+  a successful local write. The result includes the saved path and byte size;
+  document exports additionally report the node, requested format, job/task
+  ID, and final status.
+- **IM search and card-write safety** — conversation-scoped search now fails
+  closed when the target cannot be verified, and streaming-card updates require
+  business evidence rather than a transport-only success response.
+- **Document shortcut reliability** — document write, readback verification,
+  pagination, template/version discovery, export, media, and local-file
+  workflows now preserve compatibility while rejecting ambiguous write results.
+- **Event runtime-token handoff** — personal `event consume`, `status`,
+  `stop`, and `+listen-im` honor the root `--token` without falling back to a
+  stale OAuth profile. Detached buses negotiate an owner-only, memory-only IPC
+  credential channel; tokens are never placed in child argv, environment,
+  profiles, logs, or run-state files.
+
+### Changed
+
+- **Minutes `permission apply --policy` type** — `--policy` is now declared as
+  an `int` flag and its required check uses `Flags().Changed`, matching the
+  numeric-parameter convention. `--help` reports `int` instead of `string`;
+  accepted values (2/3/4) and gateway behavior are unchanged.
+- **Minutes skill references** — document `permission apply` in both Minutes
+  skill references: list it in the command trees, describe its policy values and
+  how it differs from `permission add`, and add its intent routing.
+- **Chat paging guidance** — typed chat message commands now document
+  `--page-all`, aggregate result shapes, and cursor behavior in CLI Help and
+  Agent selection examples.
+- **Calendar skill parity** — mono and multi Calendar references are aligned to
+  prevent documentation drift without changing CLI behavior.
+- **Release engineering** — CI now shards helper-package changes through the
+  full race suite, widens a flaky stdio idempotency test budget, governs exact
+  reviewed CLI/Schema type migrations, and lets authorized maintainers trigger
+  internal MCP evaluation with a reviewed `/eval` PR comment.
 
 ## [1.0.58-beta.2] - 2026-08-10
 
@@ -39,6 +129,11 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 - **`sheet range batch-clear` / `batch-set-style` 的 `--ranges` 拒绝空白工作表前缀**（用户可见行为变更）— 此前只按原始串里 `!` 的位置判断，`" !A1:B2"` 修剪后工作表名成了空串，操作却照样带着 `sheetId: ""` 提交：服务端要么让整批 `batch_update` 失败，要么更糟——落到默认工作表而不是用户指定的那张表，且命令报成功。现在工作表名与范围都必须在修剪之后仍非空，否则在发起任何请求之前报错。`batch-set-style --batch` 的纯空白 `sheetId` / `range` 同样拒绝（此前只挡空字符串）；`--batch` 下发仍用原值不替用户修剪，因为 `sheetId` 可以是允许带首尾空格的工作表**名**。两条 `--ranges` 路径现在共用同一个拆分器。
 - **`sheet insert-dimension` / `delete-dimension` / `update-dimension` 的 `--length` 严格校验**（用户可见行为变更）— 解析由 `fmt.Sscanf("%d")` 改为 `strconv.Atoi`。此前只消费前缀数字，`--length 2x` / `3foo` 会被静默当成 `2` / `3` 并对错误的行列数执行操作（删除方向不可回滚）；现在整个值必须是合法正整数，否则报错「`--length` 必须为正整数（>= 1）」且不发起任何请求。**升级影响**：原先依赖这种宽松解析、在传畸形 `--length` 的脚本会开始报错，请把参数修正为纯数字。合法数字值行为不变，上限仍为 5000。`add-dimension` 的 `--length` 是 `Int` 类型 flag，一直由 cobra 严格校验，不受影响。
 - **CLI 接口兼容门禁支持 reviewed flag 类型豁免**（无用户可见变更）— `authoritative-interface-integrity` 与 `check-command-compatibility.sh` 此前一律拒绝历史命令的 flag 类型变更，即使新类型只是把同一套校验从 RunE 前移到解析期，也没有任何评审通道。现在两道门禁各带一张精确豁免表：命令路径 + flag 名 + 旧类型 → 新类型四元组全等才命中、方向敏感（`string`→`int` 与 `int`→`string` 是两个不同的键，只有被评审的方向可用），且仅当该 flag 的其他契约（shorthand / required / hidden / no-opt / scope）纹丝不动时才放行，因此豁免夹带不了别的破坏。首条也是目前唯一一条登记的是 `dws minutes permission apply --policy` 的 `string` → `int`（配合 #912）：旧实现在 RunE 里做 `strconv.ParseInt(v, 10, 64)` 再校验 `[2,4]`，新实现由 pflag 以 `strconv.ParseInt(s, 0, 64)` 解析后仍校验 `[2,4]`，**历史上能成功的调用集是新调用集的子集**（base 0 额外接受 `0x3` 这类写法，只放宽不收紧），非法值依然失败、只是报错文案与时机前移；flag 默认值由 `""` 变 `"0"` 是类型的必然结果，两道门禁都不比较默认值，且该 flag 必须显式给出、默认值不可达。两张表必须逐字一致并有守卫测试锚定漂移——重复是被迫的而非选择：`check-authoritative-interface-baselines.sh` 会把整个 `scripts/policy/interface-baseline` 目录复制进检出历史版本的 worktree 再编译，那份拷贝不能 import 本分支新增的包。
+- **Schema 兼容门禁支持 reviewed 参数类型豁免**（无用户可见变更）— 接上一条。`schema-compatibility` 是同一个 `Interface Integrity` job 里排在两道 CLI 接口门禁之后的第三道检查，此前也一律拒绝已发布参数的 `type` 变更。由于前两道先失败、`set -e` 让它从未在 CI 上暴露，上一条豁免只解决了三分之二。现在 `checkParameterCompatibility` 也带一张精确豁免表：`<product>/<tool id>` + 参数名 + 旧类型 + 新类型四元组全等才命中、方向敏感，且仅当该参数**除 `type` 外的全部已发布字段逐字段相等**时才放行。这里刻意用相等性比较而非「没有产生其他兼容性错误」：放宽 `required` / `cli_required`、清空 `required_when`、扩宽 `enum`、清空 `interface_type`、经 reviewed mapping exclusion 清空 `property`——这些变化单独看都是兼容的、根本不产生错误，若以错误列表代替相等性检查，它们就能搭着一次已评审的类型迁移一起蒙混过关。结构体整体比较还意味着将来给 `parameterSchema` 新增字段时会自动纳入守卫，而不是悄悄放宽每一条既有条目。唯一条目是 `minutes/minutes.apply_minutes_permission` 的 `policy` 由 `"string"` 迁移到 `"integer"`（配合 #912）：该 `type` 由 Cobra flag 类型投影而来（provenance `cobra_flag_type`），描述的是 CLI 如何接受取值；消费方据此拼装的是命令行，而 `--policy 4` 在两种声明下是同一个 argv，加引号的 `--policy "4"` 到 pflag 仍是 4，RunE 也仍校验 `[2,4]`——而且该参数映射的 property `policyId` 一直以数字上报，新声明比旧声明更贴近真实请求。表里的类型值必须是 `schemaType` 实际产出的带引号形态（`"string"` 而非裸 `string`），守卫测试用 `schemaType` 复算并校验类型名属于 JSON Schema 的封闭取值集合——`reviewedInterfaceRefRedirect` 曾因键的书写形态错误两次静默失效，这里不重犯。
+
+### Fixed
+
+- **Event runtime-token handoff** — personal `event consume`, `status`, `stop`, and `+listen-im` now honor the existing root `--token` instead of falling back to a stale local OAuth profile. Detached personal-event buses negotiate the credential only after an additive capability handshake, receive and rotate it through owner-only local IPC, and keep it in memory; the token is never forwarded through child argv, environment variables, profiles, logs, or run-state files. Existing OAuth and multi-profile behavior is unchanged when `--token` is absent. A new client refuses to send a runtime token to an older bus and leaves its existing consumers and subscriptions untouched; the recovery message asks users to inspect `event status --as user`, preview `event stop --as user --all --dry-run`, and explicitly confirm `event stop --as user --all --yes` before retrying.
 
 ## [1.0.58-beta.1] - 2026-08-07
 

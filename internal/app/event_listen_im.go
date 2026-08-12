@@ -65,13 +65,13 @@ func (eventTargetReader) CallMCPData(product, tool string, params map[string]any
 
 var eventListenIMReader = func() targetresolver.Reader { return eventTargetReader{} }
 
-func newEventListenIMCommand() *cobra.Command {
+func newEventListenIMCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	var opts listenIMOptions
 	cmd := &cobra.Command{
 		Use:   "+listen-im",
 		Short: "按 IM 意图解析目标并监听一个或多个个人消息事件",
 		Long: "把 @我、指定发送人、指定群、全部单聊或全部群聊等用户意图确定性编译为个人 EventKey，" +
-			"自然姓名/群名会先唯一解析，再复用 event consume 的订阅、ready marker、NDJSON、取消、回滚和清理生命周期。",
+			"自然姓名/群名会先唯一解析，再复用 event consume 的订阅、ready marker、NDJSON、取消、回滚和清理生命周期；本命令只处理 IM，不接收 OA 审批事件。",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -91,6 +91,8 @@ func newEventListenIMCommand() *cobra.Command {
 				StreamTicketMode: opts.StreamTicketMode,
 				StreamTicketURL:  opts.StreamTicketURL,
 				StreamSourceID:   opts.StreamSourceID,
+				ExplicitToken:    eventExplicitToken(globalFlags),
+				ClientIDOverride: eventExplicitClientID(globalFlags),
 				Common: commonConsumeOptions{
 					FormatRaw: "ndjson",
 					MaxEvents: opts.MaxEvents,
@@ -143,12 +145,12 @@ func newEventListenIMCommand() *cobra.Command {
 				Reason:       "Reviewed IM event facade: it deterministically maps kind/events to public personal EventKeys, resolves one natural user/chat target with the shared typed resolver, then delegates one single- or multi-event invocation to the existing subscription, bus, ready-marker, NDJSON, rollback, cancellation, and cleanup lifecycle.",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "按 @我、姓名、群名或全量范围监听一个或多个 IM 消息事件",
+				AgentSummary: "按 @我、发送人、群或全量范围监听普通 IM message/reaction/read/recall 事件",
 				UseWhen: []string{
 					"已知要监听 @我、指定发送人、指定群、全部单聊或全部群聊的 message/reaction/read/recall 事件时使用；姓名用 --user-query、群名用 --chat-query，CLI 会唯一解析目标并把多个兼容事件合并到一个消费生命周期。",
 				},
 				AvoidWhen: []string{
-					"需要群标题/成员/解散等生命周期事件、显式 EventKey、复用 subscribe_id、Filter DSL、原始 transport envelope 或其它底层 consume 控制时使用 event consume；只查历史消息时使用 chat 查询入口",
+					"OA 审批事件、群标题/成员/解散等生命周期事件、显式 EventKey、复用 subscribe_id、Filter DSL、原始 transport envelope 或其它底层控制使用 event consume；只查历史消息使用 chat 查询入口",
 				},
 				Examples: []string{
 					"dws event +listen-im --kind at-me --max-events 1",

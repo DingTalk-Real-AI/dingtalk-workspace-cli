@@ -9,8 +9,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/interfacesnapshot"
 )
 
 const completeSchemaJSON = `{
@@ -427,6 +431,239 @@ func TestMergeContracts(t *testing.T) {
 	})
 	if _, failures := mergeContracts(historical, current); len(failures) == 0 {
 		t.Fatal("incompatible merge unexpectedly passed")
+	}
+}
+
+// registerReviewedParameterTypeFixture puts a fixture entry in the reviewed
+// table for the duration of one test, so the behaviour tests exercise the real
+// lookup instead of depending on whichever production entries happen to exist.
+func registerReviewedParameterTypeFixture(t *testing.T, change parameterTypeChange) {
+	t.Helper()
+	if _, exists := reviewedParameterTypeChanges[change]; exists {
+		t.Fatalf("fixture %+v collides with a production entry", change)
+	}
+	reviewedParameterTypeChanges[change] = struct{}{}
+	t.Cleanup(func() { delete(reviewedParameterTypeChanges, change) })
+}
+
+func reviewedFormatTypeFixture() parameterTypeChange {
+	return parameterTypeChange{
+		ToolPath:  "doc/doc.create",
+		Parameter: "format",
+		From:      `"string"`,
+		To:        `"integer"`,
+	}
+}
+
+const docCreateFormatTypeFailure = `schema tool "doc/doc.create" parameter "format" changed type`
+
+func assertSchemaFailureContains(t *testing.T, failures []string, want string) {
+	t.Helper()
+	for _, failure := range failures {
+		if strings.Contains(failure, want) {
+			return
+		}
+	}
+	t.Fatalf("failures %v do not contain %q", failures, want)
+}
+
+func TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChange(t *testing.T) {
+	baseline := cloneContract(baselineContract())
+	current := cloneContract(baseline)
+	mutateParameter(&current, func(parameter *parameterSchema) { parameter.Type = `"integer"` })
+
+	// Without an entry the migration is still a blocking change.
+	assertSchemaFailureContains(t, checkCompatibility(baseline, current), docCreateFormatTypeFailure)
+
+	registerReviewedParameterTypeFixture(t, reviewedFormatTypeFixture())
+	if failures := checkCompatibility(baseline, current); len(failures) != 0 {
+		t.Fatalf("a reviewed parameter type migration should pass: %v", failures)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeIsDirectionSensitive(t *testing.T) {
+	registerReviewedParameterTypeFixture(t, reviewedFormatTypeFixture())
+
+	// The reverse migration shares tool and parameter but not direction, so the
+	// string->integer entry must not admit it.
+	baseline := cloneContract(baselineContract())
+	mutateParameter(&baseline, func(parameter *parameterSchema) { parameter.Type = `"integer"` })
+	current := cloneContract(baselineContract())
+	assertSchemaFailureContains(t, checkCompatibility(baseline, current), docCreateFormatTypeFailure)
+}
+
+func TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsOtherToolsAndParameters(t *testing.T) {
+	baseline := cloneContract(baselineContract())
+	current := cloneContract(baseline)
+	mutateParameter(&current, func(parameter *parameterSchema) { parameter.Type = `"integer"` })
+
+	// Same parameter and direction, different tool.
+	other := reviewedFormatTypeFixture()
+	other.ToolPath = "doc/doc.elsewhere"
+	registerReviewedParameterTypeFixture(t, other)
+	assertSchemaFailureContains(t, checkCompatibility(baseline, current), docCreateFormatTypeFailure)
+
+	// Same tool and direction, different parameter.
+	elsewhere := reviewedFormatTypeFixture()
+	elsewhere.Parameter = "title"
+	registerReviewedParameterTypeFixture(t, elsewhere)
+	assertSchemaFailureContains(t, checkCompatibility(baseline, current), docCreateFormatTypeFailure)
+}
+
+// A reviewed migration is only accepted when the rest of the parameter's
+// contract held still. Each case bundles one unrelated regression with the
+// reviewed type change and requires the type failure to reappear, so the
+// exemption cannot carry a second change in behind it.
+func TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsBundledRegression(t *testing.T) {
+	registerReviewedParameterTypeFixture(t, reviewedFormatTypeFixture())
+
+	tests := []struct {
+		name   string
+		mutate func(*parameterSchema)
+	}{
+		{name: "changed default", mutate: func(p *parameterSchema) { p.Default = `"text"` }},
+		{name: "changed interface_default", mutate: func(p *parameterSchema) { p.InterfaceDefault = `"text"` }},
+		{name: "changed format", mutate: func(p *parameterSchema) { p.Format = "uri" }},
+		{name: "redirected property", mutate: func(p *parameterSchema) { p.Property = "renamed" }},
+		{name: "redirected interface_type", mutate: func(p *parameterSchema) { p.InterfaceType = "integer" }},
+		{name: "newly required", mutate: func(p *parameterSchema) { p.Required = true }},
+		{name: "newly cli_required", mutate: func(p *parameterSchema) { p.CLIRequired = true }},
+		{name: "changed required_when", mutate: func(p *parameterSchema) { p.RequiredWhen = "always" }},
+		{name: "narrowed enum", mutate: func(p *parameterSchema) { p.Enum = []string{"markdown"} }},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			baseline := cloneContract(baselineContract())
+			current := cloneContract(baseline)
+			mutateParameter(&current, func(parameter *parameterSchema) {
+				parameter.Type = `"integer"`
+				test.mutate(parameter)
+			})
+			assertSchemaFailureContains(t, checkCompatibility(baseline, current), docCreateFormatTypeFailure)
+		})
+	}
+}
+
+// Every drift below is individually *compatible* — on its own it produces no
+// failure at all — which is precisely why the carve-out cannot be keyed on "the
+// gate recorded no other failure for this parameter". Bundled with a reviewed
+// type migration they must still be rejected: none of them were reviewed under
+// that entry, and admitting them would make the exemption wider than what the
+// table documents.
+//
+// Each case first asserts that the drift alone really is compatible, so a future
+// rule change that starts reporting it turns into an explicit failure here
+// rather than quietly turning this test into a duplicate of the bundled-
+// regression cases above.
+func TestCrossPlatformCoverageSchemaCompatReviewedParameterTypeChangeRejectsIndividuallyCompatibleDrift(t *testing.T) {
+	registerReviewedParameterTypeFixture(t, reviewedFormatTypeFixture())
+
+	tests := []struct {
+		name     string
+		baseline func(*parameterSchema)
+		current  func(*parameterSchema)
+	}{
+		{
+			name:     "relaxed required",
+			baseline: func(p *parameterSchema) { p.Required = true },
+			current:  func(p *parameterSchema) { p.Required = false },
+		},
+		{
+			name:     "relaxed cli_required",
+			baseline: func(p *parameterSchema) { p.CLIRequired = true },
+			current:  func(p *parameterSchema) { p.CLIRequired = false },
+		},
+		{
+			name:     "cleared required_when",
+			baseline: func(p *parameterSchema) { p.RequiredWhen = "always" },
+			current:  func(p *parameterSchema) { p.RequiredWhen = "" },
+		},
+		{
+			name:    "widened enum",
+			current: func(p *parameterSchema) { p.Enum = []string{"html", "markdown", "text"} },
+		},
+		{
+			name:     "cleared interface_type",
+			baseline: func(p *parameterSchema) { p.InterfaceType = "string" },
+			current:  func(p *parameterSchema) { p.InterfaceType = "" },
+		},
+		{
+			name: "cleared property through reviewed mapping exclusion",
+			current: func(p *parameterSchema) {
+				p.Property = ""
+				p.PropertySource = propertySourceReviewedMappingExclusion
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			baseline := cloneContract(baselineContract())
+			if test.baseline != nil {
+				mutateParameter(&baseline, test.baseline)
+			}
+
+			driftOnly := cloneContract(baseline)
+			mutateParameter(&driftOnly, test.current)
+			if failures := checkCompatibility(baseline, driftOnly); len(failures) != 0 {
+				t.Fatalf("前提不成立：该变化本身已不兼容，用例测不到相等性守卫: %v", failures)
+			}
+
+			bundled := cloneContract(baseline)
+			mutateParameter(&bundled, func(parameter *parameterSchema) {
+				parameter.Type = `"integer"`
+				test.current(parameter)
+			})
+			assertSchemaFailureContains(t, checkCompatibility(baseline, bundled), docCreateFormatTypeFailure)
+		})
+	}
+}
+
+// The behaviour tests above register their own fixtures, so they cannot catch a
+// production entry whose type values are spelled in the wrong form. That mistake
+// disables the exemption silently and only a real gate run reports it — exactly
+// how reviewedInterfaceRefRedirect was broken twice. Recompute both values
+// through schemaType instead of trusting the spelling in the table.
+func TestCrossPlatformCoverageReviewedParameterTypeChangeKeysAreCanonical(t *testing.T) {
+	if len(reviewedParameterTypeChanges) == 0 {
+		t.Fatal("豁免表为空：若确已清空，请连这条守卫一起删除")
+	}
+	for change := range reviewedParameterTypeChanges {
+		if strings.Count(change.ToolPath, "/") != 1 ||
+			strings.HasPrefix(change.ToolPath, "/") || strings.HasSuffix(change.ToolPath, "/") {
+			t.Errorf("tool path %q 不是 \"<product id>/<tool id>\" 形态", change.ToolPath)
+		}
+		if strings.TrimSpace(change.Parameter) != change.Parameter || change.Parameter == "" ||
+			strings.HasPrefix(change.Parameter, "-") {
+			t.Errorf("%s: 参数名应是 Schema 里的裸名，登记为 %q", change.ToolPath, change.Parameter)
+		}
+		if change.From == change.To {
+			t.Errorf("%s %s: From 与 To 相同，不构成迁移", change.ToolPath, change.Parameter)
+		}
+		for _, side := range []struct {
+			label string
+			value string
+		}{{"From", change.From}, {"To", change.To}} {
+			var name string
+			if err := json.Unmarshal([]byte(side.value), &name); err != nil {
+				t.Errorf("%s %s 的 %s=%q 不是合法的 JSON type 值（schemaType 产出带引号的形态，如 `\"string\"`）: %v",
+					change.ToolPath, change.Parameter, side.label, side.value, err)
+				continue
+			}
+			if got := schemaType(map[string]any{"type": name}); got != side.value {
+				t.Errorf("%s %s 的 %s 不是规范形态\n  登记: %s\n  规范: %s",
+					change.ToolPath, change.Parameter, side.label, side.value, got)
+			}
+			// 复算只能证明引号形态对，证明不了类型名本身没拼错——"integar" 同样
+			// 能通过复算。JSON Schema 的 type 取值是封闭集合，直接校验。
+			switch name {
+			case "string", "integer", "number", "boolean", "array", "object", "null":
+			default:
+				t.Errorf("%s %s 的 %s=%q 不是 JSON Schema 的合法 type 名",
+					change.ToolPath, change.Parameter, side.label, name)
+			}
+		}
 	}
 }
 
@@ -961,4 +1198,805 @@ func TestCrossPlatformCoverageSchemaCompatInterfaceRefRedirect(t *testing.T) {
 			t.Fatalf("an unlisted tool must not get the redirect carve-out, got %v", failures)
 		}
 	})
+}
+
+func TestCrossPlatformCoverageSchemaFlagMigrationNormalizesExactRename(t *testing.T) {
+	baseline := schemaFlagMigrationContract(false)
+	current := schemaFlagMigrationContract(true)
+
+	normalized, err := normalizeSchemaFlagMigrations(baseline, current, schemaFlagMigrationAuthorizations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := checkCompatibility(normalized, current); len(failures) != 0 {
+		t.Fatalf("exact flag migration should pass after normalization: %v", failures)
+	}
+
+	tool := normalized.Products["chat"].Tools["chat.edit_message"]
+	for _, legacy := range []string{"group", "id", "msg-id"} {
+		if _, exists := tool.Parameters[legacy]; exists {
+			t.Fatalf("normalized baseline retained legacy parameter %q", legacy)
+		}
+	}
+	if canonical := tool.Parameters["conversation-id"]; !canonical.Required || !canonical.CLIRequired {
+		t.Fatalf("canonical required transition was not normalized: %#v", canonical)
+	}
+	if tool.Constraints != current.Products["chat"].Tools["chat.edit_message"].Constraints {
+		t.Fatalf("constraints were not normalized: %s", tool.Constraints)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift(t *testing.T) {
+	tests := []struct {
+		name   string
+		want   string
+		mutate func(*parameterSchema)
+	}{
+		{name: "required decline", want: "must be required and cli_required", mutate: func(parameter *parameterSchema) {
+			parameter.Required = false
+		}},
+		{name: "cli required decline", want: "must be required and cli_required", mutate: func(parameter *parameterSchema) {
+			parameter.CLIRequired = false
+		}},
+		{name: "type", want: "non-migration field", mutate: func(parameter *parameterSchema) { parameter.Type = `"integer"` }},
+		{name: "property", want: "non-migration field", mutate: func(parameter *parameterSchema) { parameter.Property = "other" }},
+		{name: "interface type", want: "non-migration field", mutate: func(parameter *parameterSchema) { parameter.InterfaceType = "integer" }},
+		{name: "required when", want: "non-migration field", mutate: func(parameter *parameterSchema) { parameter.RequiredWhen = "mode=other" }},
+		{name: "default", want: "non-migration field", mutate: func(parameter *parameterSchema) { parameter.Default = `"other"` }},
+		{name: "interface default", want: "non-migration field", mutate: func(parameter *parameterSchema) { parameter.InterfaceDefault = `"other"` }},
+		{name: "format", want: "non-migration field", mutate: func(parameter *parameterSchema) { parameter.Format = "uri" }},
+		{name: "enum", want: "non-migration field", mutate: func(parameter *parameterSchema) { parameter.Enum = []string{"a"} }},
+		{name: "enum same length", want: "non-migration field", mutate: func(parameter *parameterSchema) { parameter.Enum = []string{"a", "c"} }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			current := schemaFlagMigrationContract(true)
+			product := current.Products["chat"]
+			tool := product.Tools["chat.edit_message"]
+			canonical := tool.Parameters["message-id"]
+			test.mutate(&canonical)
+			tool.Parameters["message-id"] = canonical
+			product.Tools["chat.edit_message"] = tool
+			current.Products["chat"] = product
+
+			_, err := normalizeSchemaFlagMigrations(
+				schemaFlagMigrationContract(false),
+				current,
+				schemaFlagMigrationAuthorizations(),
+			)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("normalizeSchemaFlagMigrations() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaFlagMigrationAdapterBranches(t *testing.T) {
+	baseline := schemaFlagMigrationContract(false)
+	current := schemaFlagMigrationContract(true)
+	noConstraintsBaseline := cloneContract(baseline)
+	product := noConstraintsBaseline.Products["chat"]
+	tool := product.Tools["chat.edit_message"]
+	tool.Constraints = ""
+	product.Tools["chat.edit_message"] = tool
+	noConstraintsBaseline.Products["chat"] = product
+	noConstraintsCurrent := cloneContract(current)
+	product = noConstraintsCurrent.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	tool.Constraints = ""
+	product.Tools["chat.edit_message"] = tool
+	noConstraintsCurrent.Products["chat"] = product
+	if _, err := normalizeSchemaFlagMigrations(noConstraintsBaseline, noConstraintsCurrent, schemaFlagMigrationAuthorizations()); err != nil {
+		t.Fatalf("unchanged empty constraints: %v", err)
+	}
+
+	cliOnly := schemaFlagMigrationAuthorizations()[:1]
+	cliOnly[0].Command = "dws chat cli-only"
+	normalized, err := normalizeSchemaFlagMigrations(baseline, current, cliOnly)
+	if err != nil || !reflect.DeepEqual(normalized, baseline) {
+		t.Fatalf("CLI-only migration = %#v, %v", normalized, err)
+	}
+
+	duplicate := cloneContract(baseline)
+	product = duplicate.Products["chat"]
+	product.Tools["chat.another"] = product.Tools["chat.edit_message"]
+	duplicate.Products["chat"] = product
+	duplicate.Products["chat2"] = productSchema{Tools: map[string]toolSchema{
+		"chat.third": product.Tools["chat.edit_message"],
+	}}
+	if matches := schemaToolsByPrimaryPath(duplicate, "chat message edit"); len(matches) != 3 || matches[0].productID != "chat" || matches[0].toolID != "chat.another" {
+		t.Fatalf("sorted duplicate Schema matches = %#v", matches)
+	}
+	if _, err := normalizeSchemaFlagMigrations(duplicate, current, schemaFlagMigrationAuthorizations()[:1]); err == nil || !strings.Contains(err.Error(), "matches 3") {
+		t.Fatalf("duplicate Schema path error = %v", err)
+	}
+
+	missingCurrent := cloneContract(current)
+	delete(missingCurrent.Products, "chat")
+	normalized, err = normalizeSchemaFlagMigrations(baseline, missingCurrent, schemaFlagMigrationAuthorizations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := checkCompatibility(normalized, missingCurrent); len(failures) == 0 {
+		t.Fatal("missing candidate product was normalized away")
+	}
+
+	canonicalOnly := schemaFlagMigrationAuthorizations()[0]
+	canonicalOnly.Legacy.Name = "legacy-not-published-in-schema"
+	driftedCanonical := cloneContract(current)
+	product = driftedCanonical.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	canonical := tool.Parameters["conversation-id"]
+	canonical.Property = "different"
+	tool.Parameters["conversation-id"] = canonical
+	product.Tools["chat.edit_message"] = tool
+	driftedCanonical.Products["chat"] = product
+	normalized, err = normalizeSchemaFlagMigrations(baseline, driftedCanonical, []interfacesnapshot.FlagMigration{canonicalOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, driftedCanonical), "\n"); !strings.Contains(failures, "changed property") {
+		t.Fatalf("canonical-only Schema drift was hidden: %s", failures)
+	}
+
+	canonicalOptional := schemaFlagMigrationContract(true)
+	product = canonicalOptional.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	canonical = tool.Parameters["conversation-id"]
+	canonical.Required = false
+	canonical.CLIRequired = false
+	tool.Parameters["conversation-id"] = canonical
+	product.Tools["chat.edit_message"] = tool
+	canonicalOptional.Products["chat"] = product
+	normalized, err = normalizeSchemaFlagMigrations(
+		canonicalOptional,
+		schemaFlagMigrationContract(true),
+		[]interfacesnapshot.FlagMigration{canonicalOnly},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, schemaFlagMigrationContract(true)), "\n"); !strings.Contains(failures, "newly required") || !strings.Contains(failures, "newly cli_required") {
+		t.Fatalf("canonical-only required promotion was hidden: %s", failures)
+	}
+
+	canonicalConflictBaseline := schemaFlagMigrationContract(false)
+	product = canonicalConflictBaseline.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	canonical = tool.Parameters["conversation-id"]
+	canonical.Property = "historicalCanonicalProperty"
+	tool.Parameters["conversation-id"] = canonical
+	product.Tools["chat.edit_message"] = tool
+	canonicalConflictBaseline.Products["chat"] = product
+	if _, err := normalizeSchemaFlagMigrations(
+		canonicalConflictBaseline,
+		schemaFlagMigrationContract(true),
+		schemaFlagMigrationAuthorizations()[:1],
+	); err == nil || !strings.Contains(err.Error(), "non-migration field") {
+		t.Fatalf("historical canonical drift error = %v", err)
+	}
+
+	conflicting := schemaFlagMigrationAuthorizations()[0]
+	conflicting.Canonical.Name = "other-conversation-id"
+	conflicting.Legacy.After.AliasOf = conflicting.Canonical.Name
+	product = current.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	tool.Parameters[conflicting.Canonical.Name] = tool.Parameters["conversation-id"]
+	product.Tools["chat.edit_message"] = tool
+	current.Products["chat"] = product
+	if _, err := normalizeSchemaFlagMigrations(baseline, current, []interfacesnapshot.FlagMigration{
+		schemaFlagMigrationAuthorizations()[0],
+		conflicting,
+	}); err == nil || !strings.Contains(err.Error(), "maps Schema parameter") {
+		t.Fatalf("conflicting Schema mapping error = %v", err)
+	}
+
+	old := parameterSchema{Required: true, CLIRequired: true}
+	if err := validateRenamedSchemaParameter(schemaFlagMigrationAuthorizations()[0], old, parameterSchema{CLIRequired: true}); err == nil || !strings.Contains(err.Error(), "became optional") {
+		t.Fatalf("direct required decline error = %v", err)
+	}
+	if err := validateRenamedSchemaParameter(schemaFlagMigrationAuthorizations()[0], old, parameterSchema{Required: true}); err == nil || !strings.Contains(err.Error(), "stopped being cli_required") {
+		t.Fatalf("direct cli_required decline error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaFlagMigrationRejectsPartialAndUnrelatedChanges(t *testing.T) {
+	baseline := schemaFlagMigrationContract(false)
+	migrations := schemaFlagMigrationAuthorizations()
+
+	current := schemaFlagMigrationContract(true)
+	product := current.Products["chat"]
+	tool := product.Tools["chat.edit_message"]
+	delete(tool.Parameters, "message-id")
+	product.Tools["chat.edit_message"] = tool
+	current.Products["chat"] = product
+	if _, err := normalizeSchemaFlagMigrations(baseline, current, migrations); err == nil || !strings.Contains(err.Error(), "does not publish canonical") {
+		t.Fatalf("missing canonical error = %v", err)
+	}
+
+	current = schemaFlagMigrationContract(true)
+	product = current.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	tool.Parameters["msg-id"] = schemaFlagMigrationContract(false).Products["chat"].Tools["chat.edit_message"].Parameters["msg-id"]
+	product.Tools["chat.edit_message"] = tool
+	current.Products["chat"] = product
+	if _, err := normalizeSchemaFlagMigrations(baseline, current, migrations); err == nil || !strings.Contains(err.Error(), "still publishes legacy") {
+		t.Fatalf("published legacy error = %v", err)
+	}
+
+	current = schemaFlagMigrationContract(true)
+	product = current.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	delete(tool.Parameters, "unrelated")
+	product.Tools["chat.edit_message"] = tool
+	current.Products["chat"] = product
+	normalized, err := normalizeSchemaFlagMigrations(baseline, current, migrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, current), "\n"); !strings.Contains(failures, `lost parameter "unrelated"`) {
+		t.Fatalf("unrelated parameter removal was hidden: %s", failures)
+	}
+
+	current = schemaFlagMigrationContract(true)
+	product = current.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	tool.Constraints = `{"require_one_of":[["conversation-id"]],"require_together":[["conversation-id","unrelated"]]}`
+	product.Tools["chat.edit_message"] = tool
+	current.Products["chat"] = product
+	normalized, err = normalizeSchemaFlagMigrations(baseline, current, migrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, current), "\n"); !strings.Contains(failures, "changed constraints") {
+		t.Fatalf("unrelated constraint change was hidden: %s", failures)
+	}
+
+	// A CLI ledger entry alone cannot authorize a Schema constraint rewrite
+	// when the historical Schema published neither the legacy nor canonical
+	// parameter involved in that entry.
+	noSchemaEvidence := schemaFlagMigrationContract(false)
+	product = noSchemaEvidence.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	for _, name := range []string{"conversation-id", "group", "id", "msg-id"} {
+		delete(tool.Parameters, name)
+	}
+	product.Tools["chat.edit_message"] = tool
+	noSchemaEvidence.Products["chat"] = product
+	normalized, err = normalizeSchemaFlagMigrations(noSchemaEvidence, schemaFlagMigrationContract(true), migrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, schemaFlagMigrationContract(true)), "\n"); !strings.Contains(failures, "changed constraints") {
+		t.Fatalf("constraint rewrite without Schema parameter evidence was hidden: %s", failures)
+	}
+
+	// A baseline that already contains only the canonical parameter may receive
+	// a required promotion, but that is not evidence that a stray legacy name in
+	// constraints belongs to the migration.
+	canonicalOnly := schemaFlagMigrationContract(true)
+	product = canonicalOnly.Products["chat"]
+	tool = product.Tools["chat.edit_message"]
+	tool.Constraints = `{"require_one_of":[["group"]]}`
+	product.Tools["chat.edit_message"] = tool
+	canonicalOnly.Products["chat"] = product
+	normalized, err = normalizeSchemaFlagMigrations(canonicalOnly, schemaFlagMigrationContract(true), migrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, schemaFlagMigrationContract(true)), "\n"); !strings.Contains(failures, "changed constraints") {
+		t.Fatalf("canonical-only baseline authorized a legacy constraint rewrite: %s", failures)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaFlagMigrationConstraintsFailClosed(t *testing.T) {
+	for _, constraints := range []string{
+		`{`,
+		`{"`,
+		`{"require_one_of":`,
+		`{"unknown_kind":[["conversation-id"]]}`,
+		`{"require_one_of":"conversation-id"}`,
+		`{"require_one_of":["conversation-id"]}`,
+		`{"require_one_of":null}`,
+		`{"require_one_of":[[]]}`,
+		`{"require_one_of":[[" conversation-id"]]}`,
+		`{"require_one_of":[["conversation-id"]],"require_one_of":[["conversation-id"]]}`,
+		`{"require_one_of":[]`,
+		`{} {}`,
+		`[]`,
+	} {
+		current := schemaFlagMigrationContract(true)
+		product := current.Products["chat"]
+		tool := product.Tools["chat.edit_message"]
+		tool.Constraints = constraints
+		product.Tools["chat.edit_message"] = tool
+		current.Products["chat"] = product
+
+		normalized, err := normalizeSchemaFlagMigrations(
+			schemaFlagMigrationContract(false),
+			current,
+			schemaFlagMigrationAuthorizations(),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := strings.Join(checkCompatibility(normalized, current), "\n"); !strings.Contains(failures, "changed constraints") {
+			t.Fatalf("malformed constraints %s were authorized: %s", constraints, failures)
+		}
+	}
+
+	if encoded, ok := canonicalizeMigratedConstraints("", nil); !ok || encoded != "" {
+		t.Fatalf("empty migrated constraints = %q, %v", encoded, ok)
+	}
+	encoded, ok := canonicalizeMigratedConstraints(
+		`{"require_one_of":[["b"],["a"],["a"],["c","c"]]}`,
+		nil,
+	)
+	if !ok || encoded != `{"require_one_of":[["a"],["b"],["c"]]}` {
+		t.Fatalf("canonical migrated constraint groups = %q, %v", encoded, ok)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaMigrationCLIRequiresCompleteCheckInputs(t *testing.T) {
+	allInputs := []string{
+		"--approved-flag-migrations", "approved.json",
+		"--candidate-flag-migrations", "candidate.json",
+		"--migration-current-snapshot", "current.json",
+		"--migration-base-snapshot", "base.json",
+		"--migration-stable-snapshot", "stable.json",
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--check", "baseline.json", "--current", "schema.json", "--approved-flag-migrations", "approved.json"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "all five") {
+		t.Fatalf("partial migration inputs code=%d stderr=%q", code, stderr.String())
+	}
+
+	for _, mode := range []string{"--normalize", "--merge"} {
+		stderr.Reset()
+		args := append([]string{mode, "schema.json"}, allInputs...)
+		if code := run(args, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "only valid with --check") {
+			t.Fatalf("%s migration inputs code=%d stderr=%q", mode, code, stderr.String())
+		}
+	}
+}
+
+func TestCrossPlatformCoverageSchemaMigrationLifecycleAndRun(t *testing.T) {
+	directory := t.TempDir()
+	baselinePath := filepath.Join(directory, "schema-baseline.json")
+	currentSchemaPath := filepath.Join(directory, "schema-current.json")
+	writeSchemaContractFile(t, baselinePath, schemaFlagMigrationContract(false))
+	writeRawSchemaContractFile(t, currentSchemaPath, schemaFlagMigrationContract(true))
+
+	approvedPath := filepath.Join(directory, "approved.json")
+	candidatePath := filepath.Join(directory, "candidate.json")
+	currentSnapshotPath := filepath.Join(directory, "interface-current.json")
+	baseSnapshotPath := filepath.Join(directory, "interface-base.json")
+	stableSnapshotPath := filepath.Join(directory, "interface-stable.json")
+	writeFlagMigrationManifestFile(t, approvedPath, schemaFlagMigrationManifest(interfacesnapshot.FlagMigrationPending))
+	writeFlagMigrationManifestFile(t, candidatePath, schemaFlagMigrationManifest(interfacesnapshot.FlagMigrationConsumed))
+	writeInterfaceSnapshotFile(t, currentSnapshotPath, schemaFlagMigrationSnapshot(true))
+	writeInterfaceSnapshotFile(t, baseSnapshotPath, schemaFlagMigrationSnapshot(false))
+	writeInterfaceSnapshotFile(t, stableSnapshotPath, schemaFlagMigrationSnapshot(false))
+
+	args := []string{
+		"--check", baselinePath,
+		"--current", currentSchemaPath,
+		"--approved-flag-migrations", approvedPath,
+		"--candidate-flag-migrations", candidatePath,
+		"--migration-current-snapshot", currentSnapshotPath,
+		"--migration-base-snapshot", baseSnapshotPath,
+		"--migration-stable-snapshot", stableSnapshotPath,
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("governed Schema check code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "compatibility check: ok") {
+		t.Fatalf("governed Schema check output = %q", stdout.String())
+	}
+
+	badArgs := append([]string(nil), args...)
+	badArgs[5] = filepath.Join(directory, "missing-approved.json")
+	stderr.Reset()
+	if code := run(badArgs, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "authorize Schema flag migrations") {
+		t.Fatalf("authorization error code=%d stderr=%q", code, stderr.String())
+	}
+
+	legacyCurrent := schemaFlagMigrationContract(true)
+	product := legacyCurrent.Products["chat"]
+	tool := product.Tools["chat.edit_message"]
+	tool.Parameters["msg-id"] = schemaFlagMigrationContract(false).Products["chat"].Tools["chat.edit_message"].Parameters["msg-id"]
+	product.Tools["chat.edit_message"] = tool
+	legacyCurrent.Products["chat"] = product
+	writeRawSchemaContractFile(t, currentSchemaPath, legacyCurrent)
+	stderr.Reset()
+	if code := run(args, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "normalize approved Schema flag migrations") {
+		t.Fatalf("normalization error code=%d stderr=%q", code, stderr.String())
+	}
+
+	// Candidate-owned pending records cannot approve their own after-state.
+	writeFlagMigrationManifestFile(t, approvedPath, interfacesnapshot.FlagMigrationManifest{
+		Version:    interfacesnapshot.FlagMigrationManifestVersion,
+		Migrations: []interfacesnapshot.FlagMigration{},
+	})
+	writeFlagMigrationManifestFile(t, candidatePath, schemaFlagMigrationManifest(interfacesnapshot.FlagMigrationPending))
+	if _, err := authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath); err == nil || !strings.Contains(err.Error(), "cannot authorize its own interface change") {
+		t.Fatalf("self-approval error = %v", err)
+	}
+
+	// An incomplete after-state fails lifecycle authorization before Schema is normalized.
+	writeFlagMigrationManifestFile(t, approvedPath, schemaFlagMigrationManifest(interfacesnapshot.FlagMigrationPending))
+	writeFlagMigrationManifestFile(t, candidatePath, schemaFlagMigrationManifest(interfacesnapshot.FlagMigrationConsumed))
+	partial := schemaFlagMigrationSnapshot(true)
+	partial.Commands[0].LocalFlags = partial.Commands[0].LocalFlags[:len(partial.Commands[0].LocalFlags)-1]
+	writeInterfaceSnapshotFile(t, currentSnapshotPath, partial)
+	if _, err := authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath); err == nil || !strings.Contains(err.Error(), "partially applied") {
+		t.Fatalf("partial migration error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaMigrationFileErrors(t *testing.T) {
+	directory := t.TempDir()
+	approvedPath := filepath.Join(directory, "approved.json")
+	candidatePath := filepath.Join(directory, "candidate.json")
+	currentPath := filepath.Join(directory, "current.json")
+	basePath := filepath.Join(directory, "base.json")
+	stablePath := filepath.Join(directory, "stable.json")
+	writeFlagMigrationManifestFile(t, approvedPath, schemaFlagMigrationManifest(interfacesnapshot.FlagMigrationPending))
+	writeFlagMigrationManifestFile(t, candidatePath, schemaFlagMigrationManifest(interfacesnapshot.FlagMigrationConsumed))
+	writeInterfaceSnapshotFile(t, currentPath, schemaFlagMigrationSnapshot(true))
+	writeInterfaceSnapshotFile(t, basePath, schemaFlagMigrationSnapshot(false))
+	writeInterfaceSnapshotFile(t, stablePath, schemaFlagMigrationSnapshot(false))
+
+	paths := []string{approvedPath, candidatePath, currentPath, basePath, stablePath}
+	wants := []string{
+		"read approved flag migrations",
+		"read candidate flag migrations",
+		"read migration current snapshot",
+		"read migration base snapshot",
+		"read migration stable snapshot",
+	}
+	for index, want := range wants {
+		t.Run(want, func(t *testing.T) {
+			invalid := append([]string(nil), paths...)
+			invalid[index] = filepath.Join(directory, "missing.json")
+			_, err := authorizeSchemaFlagMigrations(invalid[0], invalid[1], invalid[2], invalid[3], invalid[4])
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("authorizeSchemaFlagMigrations() error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaConsumedReceiptIsNoOpForAfterBaseline(t *testing.T) {
+	directory := t.TempDir()
+	approvedPath := filepath.Join(directory, "approved.json")
+	candidatePath := filepath.Join(directory, "candidate.json")
+	currentSnapshotPath := filepath.Join(directory, "current.json")
+	baseSnapshotPath := filepath.Join(directory, "base.json")
+	stableSnapshotPath := filepath.Join(directory, "stable.json")
+	writeFlagMigrationManifestFile(t, approvedPath, schemaFlagMigrationManifest(interfacesnapshot.FlagMigrationConsumed))
+	writeFlagMigrationManifestFile(t, candidatePath, schemaFlagMigrationManifest(interfacesnapshot.FlagMigrationConsumed))
+	writeInterfaceSnapshotFile(t, currentSnapshotPath, schemaFlagMigrationSnapshot(true))
+	writeInterfaceSnapshotFile(t, baseSnapshotPath, schemaFlagMigrationSnapshot(true))
+	writeInterfaceSnapshotFile(t, stableSnapshotPath, schemaFlagMigrationSnapshot(false))
+
+	migrations, err := authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := schemaFlagMigrationContract(true)
+	normalized, err := normalizeSchemaFlagMigrations(baseline, schemaFlagMigrationContract(true), migrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(normalized, baseline) {
+		t.Fatalf("consumed receipt changed an already-after Schema baseline: %#v", normalized)
+	}
+	if failures := checkCompatibility(normalized, schemaFlagMigrationContract(true)); len(failures) != 0 {
+		t.Fatalf("consumed receipt did not preserve compatibility: %v", failures)
+	}
+
+	// Once stable also reaches after, retaining the consumed receipt is stale;
+	// deleting it yields no authorization and the already-after Schema passes.
+	writeInterfaceSnapshotFile(t, stableSnapshotPath, schemaFlagMigrationSnapshot(true))
+	if _, err := authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath); err == nil || !strings.Contains(err.Error(), "stale after all references reached the after state") {
+		t.Fatalf("stale consumed receipt error = %v", err)
+	}
+	emptyManifest := interfacesnapshot.FlagMigrationManifest{
+		Version:    interfacesnapshot.FlagMigrationManifestVersion,
+		Migrations: []interfacesnapshot.FlagMigration{},
+	}
+	writeFlagMigrationManifestFile(t, candidatePath, emptyManifest)
+	migrations, err = authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath)
+	if err != nil || len(migrations) != 0 {
+		t.Fatalf("cleaned consumed receipt authorizations = %#v, %v", migrations, err)
+	}
+
+	baselinePath := filepath.Join(directory, "schema-baseline.json")
+	currentSchemaPath := filepath.Join(directory, "schema-current.json")
+	writeSchemaContractFile(t, baselinePath, baseline)
+	writeRawSchemaContractFile(t, currentSchemaPath, schemaFlagMigrationContract(true))
+	args := []string{
+		"--check", baselinePath,
+		"--current", currentSchemaPath,
+		"--approved-flag-migrations", approvedPath,
+		"--candidate-flag-migrations", candidatePath,
+		"--migration-current-snapshot", currentSnapshotPath,
+		"--migration-base-snapshot", baseSnapshotPath,
+		"--migration-stable-snapshot", stableSnapshotPath,
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("cleaned consumed receipt check code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func schemaFlagMigrationContract(after bool) schemaContract {
+	legacyMessage := parameterSchema{
+		Type:             `"string"`,
+		Property:         "openMessageId",
+		InterfaceType:    "string",
+		Required:         true,
+		CLIRequired:      true,
+		Default:          `"default-message"`,
+		InterfaceDefault: `"default-message"`,
+		Format:           "id",
+		Enum:             []string{"a", "b"},
+	}
+	conversation := parameterSchema{
+		Type:          `"string"`,
+		Property:      "openConversationId",
+		InterfaceType: "string",
+	}
+	parameters := map[string]parameterSchema{
+		"conversation-id": conversation,
+		"unrelated":       {Type: `"string"`, Property: "unrelated"},
+	}
+	constraints := `{"require_one_of":[["conversation-id","group","id"]]}`
+	if after {
+		conversation.Required = true
+		conversation.CLIRequired = true
+		parameters["conversation-id"] = conversation
+		parameters["message-id"] = legacyMessage
+		constraints = `{"require_one_of":[["conversation-id"]]}`
+	} else {
+		parameters["group"] = conversation
+		parameters["id"] = conversation
+		parameters["msg-id"] = legacyMessage
+	}
+	return schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{
+		"chat": {Tools: map[string]toolSchema{
+			"chat.edit_message": {
+				PrimaryCLIPath: "chat message edit",
+				InterfaceMode:  "mcp",
+				Availability:   "available",
+				Parameters:     parameters,
+				Constraints:    constraints,
+				Effect:         "write",
+				Risk:           "medium",
+				Confirmation:   "not_required",
+				Idempotency:    "unknown",
+			},
+		}},
+	}}
+}
+
+func schemaFlagMigrationAuthorizations() []interfacesnapshot.FlagMigration {
+	conversationBefore := interfacesnapshot.FlagMigrationState{
+		Present: true,
+		Type:    "string",
+		Scope:   "local",
+	}
+	conversationAfter := conversationBefore
+	conversationAfter.Required = true
+	messageBefore := interfacesnapshot.FlagMigrationState{
+		Present:  true,
+		Type:     "string",
+		Required: true,
+		Scope:    "local",
+	}
+	messageAfter := messageBefore
+	return []interfacesnapshot.FlagMigration{
+		{
+			Command: "dws chat message edit",
+			Legacy: interfacesnapshot.FlagMigrationSide{
+				Name:   "group",
+				Before: conversationBefore,
+				After: interfacesnapshot.FlagMigrationState{
+					Present: true, Type: "string", Hidden: true, Scope: "local", AliasOf: "conversation-id",
+				},
+			},
+			Canonical: interfacesnapshot.FlagMigrationSide{
+				Name:   "conversation-id",
+				Before: conversationBefore,
+				After:  conversationAfter,
+			},
+		},
+		{
+			Command: "dws chat message edit",
+			Legacy: interfacesnapshot.FlagMigrationSide{
+				Name:   "id",
+				Before: conversationBefore,
+				After: interfacesnapshot.FlagMigrationState{
+					Present: true, Type: "string", Hidden: true, Scope: "local", AliasOf: "conversation-id",
+				},
+			},
+			Canonical: interfacesnapshot.FlagMigrationSide{
+				Name:   "conversation-id",
+				Before: conversationBefore,
+				After:  conversationAfter,
+			},
+		},
+		{
+			Command: "dws chat message edit",
+			Legacy: interfacesnapshot.FlagMigrationSide{
+				Name:   "msg-id",
+				Before: messageBefore,
+				After: interfacesnapshot.FlagMigrationState{
+					Present: true, Type: "string", Hidden: true, Scope: "local", AliasOf: "message-id",
+				},
+			},
+			Canonical: interfacesnapshot.FlagMigrationSide{
+				Name:   "message-id",
+				Before: interfacesnapshot.FlagMigrationState{},
+				After:  messageAfter,
+			},
+		},
+	}
+}
+
+func schemaFlagMigrationManifest(state string) interfacesnapshot.FlagMigrationManifest {
+	migrations := schemaFlagMigrationAuthorizations()
+	for index := range migrations {
+		migrations[index].State = state
+		migrations[index].Reason = "canonicalize historical public flag names"
+	}
+	return interfacesnapshot.FlagMigrationManifest{
+		Version:    interfacesnapshot.FlagMigrationManifestVersion,
+		Migrations: migrations,
+	}
+}
+
+func schemaFlagMigrationSnapshot(after bool) interfacesnapshot.Snapshot {
+	states := map[string]interfacesnapshot.FlagMigrationState{}
+	for _, migration := range schemaFlagMigrationAuthorizations() {
+		if after {
+			states[migration.Legacy.Name] = migration.Legacy.After
+			states[migration.Canonical.Name] = migration.Canonical.After
+		} else {
+			states[migration.Legacy.Name] = migration.Legacy.Before
+			states[migration.Canonical.Name] = migration.Canonical.Before
+		}
+	}
+	names := make([]string, 0, len(states))
+	for name, state := range states {
+		if state.Present {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	flags := make([]interfacesnapshot.Flag, 0, len(names))
+	for _, name := range names {
+		state := states[name]
+		flags = append(flags, interfacesnapshot.Flag{
+			Name:      name,
+			Type:      state.Type,
+			Required:  state.Required,
+			Hidden:    state.Hidden,
+			Shorthand: state.Shorthand,
+			NoOpt:     state.NoOpt,
+			AliasOf:   state.AliasOf,
+		})
+	}
+	return interfacesnapshot.Snapshot{
+		SchemaVersion: interfacesnapshot.SchemaVersion,
+		Rules: interfacesnapshot.Rules{
+			ExcludedCommandSubtrees: []string{},
+			ExcludedFlags:           []string{},
+		},
+		Commands: []interfacesnapshot.Command{{
+			Path:       "dws chat message edit",
+			Runnable:   true,
+			Aliases:    []string{},
+			LocalFlags: flags,
+		}},
+	}
+}
+
+func writeFlagMigrationManifestFile(t *testing.T, path string, manifest interfacesnapshot.FlagMigrationManifest) {
+	t.Helper()
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeInterfaceSnapshotFile(t *testing.T, path string, snapshot interfacesnapshot.Snapshot) {
+	t.Helper()
+	var encoded bytes.Buffer
+	if err := interfacesnapshot.Write(&encoded, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeSchemaContractFile(t *testing.T, path string, contract schemaContract) {
+	t.Helper()
+	var encoded bytes.Buffer
+	if err := writeContract(&encoded, contract); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, encoded.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeRawSchemaContractFile(t *testing.T, path string, contract schemaContract) {
+	t.Helper()
+	products := make([]map[string]any, 0, len(contract.Products))
+	for productID, product := range contract.Products {
+		tools := make([]map[string]any, 0, len(product.Tools))
+		for toolID, tool := range product.Tools {
+			parameters := map[string]any{}
+			for name, parameter := range tool.Parameters {
+				raw := map[string]any{
+					"type":             json.RawMessage(parameter.Type),
+					"required":         parameter.Required,
+					"cli_required":     parameter.CLIRequired,
+					"property":         parameter.Property,
+					"interface_type":   parameter.InterfaceType,
+					"required_when":    parameter.RequiredWhen,
+					"format":           parameter.Format,
+					"enum":             parameter.Enum,
+					"field_provenance": map[string]any{},
+				}
+				if parameter.Default != "" {
+					raw["default"] = json.RawMessage(parameter.Default)
+				}
+				if parameter.InterfaceDefault != "" {
+					raw["interface_default"] = json.RawMessage(parameter.InterfaceDefault)
+				}
+				parameters[name] = raw
+			}
+			rawTool := map[string]any{
+				"canonical_path":   toolID,
+				"primary_cli_path": tool.PrimaryCLIPath,
+				"interface_mode":   tool.InterfaceMode,
+				"availability":     tool.Availability,
+				"parameters":       parameters,
+				"effect":           tool.Effect,
+				"risk":             tool.Risk,
+				"confirmation":     tool.Confirmation,
+				"idempotency":      tool.Idempotency,
+				"field_provenance": map[string]any{},
+			}
+			if tool.InterfaceRef != "" {
+				rawTool["interface_ref"] = json.RawMessage(tool.InterfaceRef)
+			}
+			if tool.Constraints != "" {
+				rawTool["constraints"] = json.RawMessage(tool.Constraints)
+			}
+			if len(tool.Positionals) > 0 {
+				rawTool["positionals"] = tool.Positionals
+			}
+			if tool.DryRun != "" {
+				rawTool["dry_run"] = json.RawMessage(tool.DryRun)
+			}
+			tools = append(tools, rawTool)
+		}
+		products = append(products, map[string]any{"id": productID, "tools": tools})
+	}
+	payload := map[string]any{"kind": "schema", "products": products}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }

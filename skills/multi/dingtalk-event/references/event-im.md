@@ -1,7 +1,7 @@
 # IM 事件任务路由
 
 本页是任务索引，不再混放 16 个 EventKey、输出字段和运维细节。先用上层
-[event.md](./event.md) 的 Golden Route；只加载当前任务对应的一份子 reference。
+[SKILL.md](../SKILL.md) 的 Golden Route；只加载当前任务对应的一份子 reference。
 
 <!-- dws-intent: event.listen.im -->消息、reaction、已读和撤回默认使用 `dws event +listen-im` 长连接；
 群生命周期、显式 EventKey、Filter DSL、原始 envelope 或底层订阅控制才使用

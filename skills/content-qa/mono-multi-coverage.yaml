@@ -40,9 +40,10 @@ coverage:
   - mono: drive
     multi_skill: dingtalk-drive
   - mono: event
-    multi_skill: dingtalk-misc
+    multi_skill: dingtalk-event
     multi_refs:
-      - references/event.md
+      - references/event-im.md
+      - references/event-oa.md
   - mono: hrbrain
     multi_skill: dingtalk-misc
     multi_refs:

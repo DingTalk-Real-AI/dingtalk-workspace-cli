@@ -90,10 +90,16 @@ func TestCrossPlatformCoverageRegisterFlagsAllKinds(t *testing.T) {
 		}
 	}
 	// Aliases are registered with the main kind and hidden.
-	for _, alias := range []string{"i-alias", "sl-alias"} {
+	for alias, canonical := range map[string]string{"i-alias": "i", "sl-alias": "sl"} {
 		f := cmd.Flags().Lookup(alias)
 		if f == nil || !f.Hidden {
 			t.Fatalf("alias %q = %#v, want registered+hidden", alias, f)
+		}
+		if got := f.Annotations[runtimeannotate.AnnotationFlagAliasOf]; len(got) != 1 || got[0] != canonical {
+			t.Fatalf("alias %q annotation = %#v, want alias_of %q", alias, got, canonical)
+		}
+		if got := f.Annotations[runtimeannotate.AnnotationFlagAliasOrigin]; len(got) != 1 || got[0] != runtimeannotate.FlagAliasOriginCorecmdV1 {
+			t.Fatalf("alias %q origin = %#v, want corecmd FlagSpec marker", alias, got)
 		}
 	}
 	if cmd.Flags().Lookup("i-alias").Value.Type() != "int" {

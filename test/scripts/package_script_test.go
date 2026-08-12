@@ -17,22 +17,22 @@ import (
 )
 
 var expectedPackagedSkillTargets = []string{
-	".agents/skills/dws",
-	".claude/skills/dws",
-	".cursor/skills/dws",
-	".qoder/skills/dws",
-	".qoderwork/skills/dws",
-	".gemini/skills/dws",
-	".codex/skills/dws",
-	".github/skills/dws",
-	".windsurf/skills/dws",
-	".augment/skills/dws",
-	".cline/skills/dws",
-	".amp/skills/dws",
-	".kiro/skills/dws",
-	".trae/skills/dws",
-	".openclaw/skills/dws",
-	".hermes/skills/dws",
+	".agents/skills/dingtalk-shared",
+	".claude/skills/dingtalk-shared",
+	".cursor/skills/dingtalk-shared",
+	".qoder/skills/dingtalk-shared",
+	".qoderwork/skills/dingtalk-shared",
+	".gemini/skills/dingtalk-shared",
+	".codex/skills/dingtalk-shared",
+	".github/skills/dingtalk-shared",
+	".windsurf/skills/dingtalk-shared",
+	".augment/skills/dingtalk-shared",
+	".cline/skills/dingtalk-shared",
+	".amp/skills/dingtalk-shared",
+	".kiro/skills/dingtalk-shared",
+	".trae/skills/dingtalk-shared",
+	".openclaw/skills/dingtalk-shared",
+	".hermes/skills/dingtalk-shared",
 }
 
 var expectedReleaseAdmissionContexts = []string{
@@ -67,6 +67,19 @@ func TestPackageManagerVersionVerificationReadsRawBinary(t *testing.T) {
 	}
 	if strings.Contains(script, `strings "$vendor_bin"`) || strings.Contains(script, `strings "$prefix/bin/dws"`) {
 		t.Fatal("package-manager verifier still requires the version marker to occupy a strings(1) line")
+	}
+	for _, want := range []string{
+		"HOME_SKILL_BASES=",
+		`$base/dingtalk-shared/SKILL.md`,
+		`$base/dingtalk-misc/SKILL.md`,
+		"unexpected mono Skill layout",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("package-manager verifier is missing multi-layout contract %q", want)
+		}
+	}
+	if strings.Contains(script, "HOME_SKILL_TARGETS=") {
+		t.Fatal("package-manager verifier still declares the legacy mono target contract")
 	}
 }
 
@@ -277,7 +290,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	}
 	npmInstallText := string(npmInstallData)
 	for _, target := range expectedPackagedSkillTargets {
-		agentDir := strings.TrimSuffix(target, "/dws")
+		agentDir := strings.TrimSuffix(target, "/dingtalk-shared")
 		if !strings.Contains(npmInstallText, agentDir) {
 			t.Fatalf("npm install.js missing %q:\n%s", agentDir, npmInstallText)
 		}
@@ -632,6 +645,33 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	}
 	if !foundDingtalk {
 		t.Fatalf("multi/ does not contain any dingtalk-* skill: %v", multiEntries)
+	}
+
+	// Personal IM/OA events are owned by the standalone dingtalk-event Skill.
+	// Keep the release archive layout explicit so a future refactor cannot
+	// silently fold the Event entry point back into dingtalk-misc.
+	for _, rel := range []string{
+		filepath.Join("multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join("multi", "dingtalk-event", "references", "event-oa.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(extractDir, rel)); err != nil {
+			t.Fatalf("zip missing %s: %v", rel, err)
+		}
+	}
+	for _, rel := range []string{
+		filepath.Join("multi", "dingtalk-misc", "references", "event.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-keys.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-lifecycle.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-operations.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-output.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-oa.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(extractDir, rel)); err == nil {
+			t.Fatalf("zip unexpectedly contains retired misc Event reference %s", rel)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("Stat(%s) error = %v", rel, err)
+		}
 	}
 }
 

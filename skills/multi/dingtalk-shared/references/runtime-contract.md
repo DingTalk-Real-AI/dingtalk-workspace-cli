@@ -1,7 +1,9 @@
 ## 最小 DWS 执行契约
 
 - 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
-- 已知命令直接执行。只有 leaf 参数或安全语义不确定时读取精确 Schema，只有 Cobra flag 不确定时读取精确 leaf Help；不要加载产品级 Catalog 代替选路。
+- 已知命令直接执行；Help 不参与选路。准备 Help 时，本轮仅查一次精确 leaf：真实 `unknown flag` 后查 leaf Help，`unknown command` 后只查一次 shortcut 清单；禁止试探后缀。
+- 参数或安全语义不确定时只查一次精确 leaf Schema：`--fields use_when,avoid_when,parameters,constraints,confirmation`；禁用产品级/`--all`，禁止靠失败探测门禁。
+- 本地内容作为命令输入时，已有或临时文件先暂存到 cwd，再用显式文件参数传递；stdin 仅承载内容，不承载交互确认。
 - 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
 - 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
 - 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。

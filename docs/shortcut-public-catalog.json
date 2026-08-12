@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-12T14:39:44.839171",
-  "count": 357,
+  "generated_at": "2026-08-12T00:10:44.511794",
+  "count": 399,
   "results": [
     {
       "suite": "semantic",
@@ -2885,53 +2885,284 @@
       "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "drive",
       "command": "+copy",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "复制前预检在线对象类型；普通钉盘文件因下层只会生成 .dlink 而显式拒绝，避免把快捷方式伪装成独立副本。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+cover",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取节点封面或缩略图地址；明确不声称服务端多格式预览转换。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+create-folder",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "创建普通钉盘文件夹后要求 fileId，并读回名称验证。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+create-shortcut",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "明确 shortcut 与 copy 语义差异，创建后读取新节点验证。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将已确认节点移入回收站，要求高风险确认和 success=true 终态证据。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+download",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "不再只返回临时链接；使用受控相对路径、no-clobber、原子发布并验证非零本地字节。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "drive",
       "command": "+find-file",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史文件定位入口；新的 Agent 文件搜索统一使用 +search。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "drive",
       "command": "+info",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史元数据入口；新的 Agent 场景统一使用可扩展的 +inspect。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+inspect",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "以文件元数据为必达结果，按需聚合统计、公开状态和封面；可选读取失败显式报告 partial_success。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格区分显式空目录与缺失/畸形响应，稳定投影节点并完整保留分页游标。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "drive",
       "command": "+move",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "移动后原位置不保留，统一 folder/workspace 目标语义并发布静态确认。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+publish-get",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "只读查询互联网公开状态和权限，不沿用原子命令错误的写风险标签。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+publish-unset",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "高风险确认后关闭互联网公开，并读回状态验证外链已失效。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "drive",
       "command": "+recent",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格读取最近访问/编辑列表并保留 nextCursor/hasMore，防止嵌套响应被投影为空。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+recycle-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格分页列出回收项并稳定投影 recycleItemId，显式空数组才是空回收站。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+recycle-restore",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "只要求列表可获得的 recycleItemId；恢复响应必须给出节点 ID，随后读回验证。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+rename",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "重命名后读取真实节点元数据验证最终名称。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "drive",
       "command": "+search",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一关键词、文件类型、扩展名、创建者、时间和分页过滤，并拒绝缺失结果数组。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "drive",
       "command": "+search-docs",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留历史跨域文档搜索入口；新的在线文档搜索统一使用 doc +search。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+star-add",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "以幂等用户偏好语义收藏指定节点。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+star-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格分页列出当前用户收藏并保留游标。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+star-remove",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "以幂等用户偏好语义取消收藏指定节点。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+stats",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取节点访问、编辑、评论、点赞、预览和下载统计的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+upload",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "组合工作目录边界校验、上传凭证、OSS PUT、严格提交响应和远端元数据读回。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+version-download",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "预检版本存在后安全下载历史字节，受控相对路径原子发布且要求非零产物。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+version-get",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按正整数版本号精确匹配元数据；零命中显式失败。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+version-history",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格分页列出普通文件版本，区分合法空历史与响应契约错误。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "drive",
+      "command": "+version-revert",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "先验证目标版本存在，再经高风险确认回滚并读取当前节点状态。",
+      "availability": "available"
     },
     {
       "suite": "read",
@@ -3004,46 +3235,274 @@
       "status": "real-ok"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+action-items",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Resolves the latest task through strict itemList parsing and retrieves extracted Minutes actions without pretending to write Todo objects.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+apply-permission",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "Maps view/download/edit intent to policy 4/3/2 and validates the permission-request response.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "minutes",
       "command": "+detail",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Fans out selected artifacts, fully paginates transcript data, validates artifact-specific shapes and returns non-zero on partial reads.",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+download",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Resolves real audio/video URLs, validates response shape and performs batch safe atomic local downloads with an explicit failure ledger.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+export-pack",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Validates selected artifacts, safely publishes a no-clobber local directory and emits a manifest without signed URLs or credentials.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+latest",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Validates the real itemList response and chooses latest only from an explicit comparable timestamp before reading details; +latest-minutes remains a compatibility alias.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "minutes",
       "command": "+list-all",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "Stable projection of all accessible Minutes with strict itemList response validation.",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "minutes",
       "command": "+list-mine",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "Stable projection of current-user Minutes with strict itemList response validation.",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "minutes",
       "command": "+list-shared",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "Stable projection of shared Minutes with strict itemList response validation.",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+mindmap",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Creates the asynchronous mind-graph task exactly once and polls the explicit 0/1/2 taskStatus to success, failure or timeout.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+prepare-asr",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Reads the real personal hot-word set, computes deterministic add/delete differences, defaults to additive changes and verifies final state.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+record-pause",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "Friendly recording-pause facade with explicit task UUID validation and confirmation.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+record-resume",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "Friendly recording-resume facade with explicit task UUID validation and confirmation.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "minutes",
       "command": "+record-start",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "Friendly recording-create facade with explicit confirmation and stable session parameter.",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+record-stop",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "Friendly recording-stop facade with explicit task UUID validation and confirmation.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+record-wrap-up",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Stops recording once, then boundedly waits for selected validated artifacts and preserves taskUuid recovery on partial completion.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "minutes",
       "command": "+replace-batch",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Validates multi-rule input, supports JSON/file/stdin and reports partial writes with stop/continue policy and non-zero failure.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+search",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Validated itemList parsing, deterministic title filtering, bounded cursor pagination, de-duplication and completeness ledger; replaces the deprecated +minutes-search discovery route.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+share",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Grants semantic view/download/edit permissions per stable member UID with stop/continue partial-write ledgers and explicit acknowledgements.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+speaker-insights",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Requires a real async taskId, boundedly polls speaker summaries and returns task recovery handles when content is not ready.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+speaker-replace",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Fully paginates the transcript to preflight source speaker presence and verifies the nickname replacement after writing.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+summary",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Reads current summary, supports literal/file/stdin, preserves Markdown images, previews the change and verifies full read-back.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+transcript",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Resolves an explicit or latest task, follows every transcript cursor, de-duplicates paragraphs and publishes completeness.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+unshare",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Removes permission per stable member UID with stop/continue partial-write ledgers and explicit acknowledgements.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "Reads the current title, previews the diff, avoids no-op writes and verifies the final title by read-back.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+upload",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Owns local file validation, create-PUT-complete polling, pre-complete transfer cancellation compensation, unknown-completion recovery and final task read-back verification.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+upload-and-analyze",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Completes local upload with compensation, waits for validated artifacts, and optionally orchestrates mind map and speaker insights without re-upload recovery hazards.",
+      "availability": "available"
     },
     {
       "suite": "read",

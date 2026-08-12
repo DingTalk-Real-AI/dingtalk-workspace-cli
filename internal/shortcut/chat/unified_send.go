@@ -19,6 +19,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
@@ -372,12 +373,16 @@ func executeUnifiedMessageWrite(rt *shortcut.RuntimeContext, product, tool strin
 	if err != nil {
 		return err
 	}
-	return rt.Output(map[string]any{
+	payload := map[string]any{
 		"ok":       true,
 		"identity": messagesSendIdentity(rt),
 		"tool":     tool,
 		"result":   data,
-	})
+	}
+	if messagesSendIdentity(rt) == "user" && tool == "send_personal_message" {
+		payload["sendReceipt"] = chatmsg.ProjectMessageSendReceipt(data)
+	}
+	return rt.Output(payload)
 }
 
 func messagesSendIdentity(rt *shortcut.RuntimeContext) string {
@@ -612,7 +617,7 @@ func executeMessagesSendUserFile(
 	if err != nil {
 		return err
 	}
-	return rt.Output(map[string]any{
+	payload := map[string]any{
 		"ok":                   true,
 		"identity":             "user",
 		"tool":                 "send_personal_message",
@@ -624,7 +629,9 @@ func executeMessagesSendUserFile(
 			"sizeBytes": meta.FileSize,
 		},
 		"result": data,
-	})
+	}
+	payload["sendReceipt"] = chatmsg.ProjectMessageSendReceipt(data)
+	return rt.Output(payload)
 }
 
 func addMessagesSendUserTarget(params map[string]any, group, openID string) {

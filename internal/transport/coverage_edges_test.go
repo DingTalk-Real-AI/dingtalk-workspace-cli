@@ -397,13 +397,13 @@ func TestCrossPlatformCoverageHTTPStatusAndDiagnosticsEdges(t *testing.T) {
 			t.Fatalf("HTTP %d returned nil", tc.code)
 		}
 	}
-	if got := networkActions("snap"); len(got) != 2 {
+	if got := networkActions("snap"); len(got) != 3 {
 		t.Fatalf("network actions = %#v", got)
 	}
 	if got := authActions("snap"); len(got) != 2 {
 		t.Fatalf("auth actions = %#v", got)
 	}
-	if got := runtimeActions("snap"); len(got) != 1 {
+	if got := runtimeActions("snap"); len(got) != 2 {
 		t.Fatalf("runtime actions = %#v", got)
 	}
 	if got := actionsForMethod("tools/call", "snap"); len(got) == 0 {

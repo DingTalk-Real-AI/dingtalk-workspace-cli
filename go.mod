@@ -14,7 +14,7 @@ require (
 	github.com/itchyny/gojq v0.12.18
 	github.com/mattn/go-isatty v0.0.20
 	github.com/muesli/termenv v0.16.0
-	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-0.20260705041131-325e7c1049ad
+	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-beta.1
 	github.com/spf13/cobra v1.10.2
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.49.0

@@ -148,13 +148,15 @@ dws chat +chat-messages --group "项目群" --page-all --format json \
 | 命令 | 用途 | 示例与要点 |
 |------|------|------------|
 | `message list` | 拉取指定群聊或单聊消息 | `dws chat message list --group <cid> --time "2025-03-01 00:00:00" --direction older`；目标三选一，`--direction newer/older` 优先于旧 `--forward` |
-| `message list-all` | 时间范围内全部会话消息 | `dws chat message list-all --start <ISO> --end <ISO> --limit 100 --cursor 0`；四个参数每次请求都传，翻页用 `nextCursor` |
-| `message list-by-sender` | 查指定发送者消息 | `--sender-user-id` 与 `--sender-open-dingtalk-id` 二选一，跨单聊+群聊 |
-| `message list-mentions` | 查 @ 我的消息 | 可传 `--group` 限定群，不传查全部 |
-| `message list-focused` | 查特别关注人消息 | 零参数可用，可加 `--limit` / `--cursor` |
+| `message list-all` | 时间范围内全部会话消息 | `dws chat message list-all --start <ISO> --end <ISO> --limit 100 --cursor 0`；默认一页，完整遍历加 `--page-all`，保留并合并 `result.conversationMessagesList` |
+| `message list-by-sender` | 查指定发送者消息 | `--sender-user-id` 与 `--sender-open-dingtalk-id` 二选一，跨单聊+群聊；完整遍历加 `--page-all`，同一会话跨页合并 messages |
+| `message list-mentions` | 查 @ 我的消息 | 可传 `--group` 限定群，不传查全部；完整遍历加 `--page-all`，同一会话跨页合并 messages |
+| `message list-focused` | 查特别关注人消息 | 零参数可用，可加 `--limit` / `--cursor`；完整遍历加 `--page-all`，cursor 为 int64 |
 | `message list-unread-conversations` | 未读会话列表 | 可选 `--count` |
 | `message list-topic-replies` | 拉取话题回复 | `--group <openConversationId> --topic-id <openConvThreadId>` |
 | `message list-by-ids` | 按消息 ID 批量查询 | `--msg-ids msgId1,msgId2`，最多 50 条 |
+
+Typed `chat message` 自动翻页只由 `--page-all` 触发；只传 `--page-limit`、`--max-items` 或 `--page-delay` 仍保持默认单页 fallback。`conversationMessagesList` 结构会保留并按 `openConversationId` 合并 messages。分页元数据输出到顶层 `paging`，包含 `truncated`、`hasMore`、`lastCursor`、`pages`、`total`；非第一页失败时会输出 partial 结果和 `failedPage` / `failedCursor` / `pagesFetched` / `itemsFetched`。
 
 `message list` 注意事项：
 
@@ -194,6 +196,7 @@ dws chat message search-advanced --query "周报" --start "2026-04-01T00:00:00+0
 dws chat message search-advanced --user <userId> --start <ISO> --end <ISO>
 dws chat message search-advanced --at-me --start <ISO> --end <ISO>
 dws chat message search-advanced --conversation-ids <cid1>,<cid2> --query "合同" --limit 50 --cursor 0
+dws chat message search-advanced --query "周报" --start <ISO> --end <ISO> --page-all --max-items 200
 dws chat message search-advanced --message-type file --search-conv-type group_chat --query "附件"
 dws chat message search-advanced --only-robot-messages --query "通知"
 ```
@@ -210,12 +213,14 @@ dws chat message search-advanced --only-robot-messages --query "通知"
 | `--only-robot-messages` | 只搜索机器人消息 |
 | `--start` / `--end` | ISO-8601 时间范围 |
 | `--cursor` / `--limit` | 分页，翻页用 `nextCursor` |
+| `--page-all` / `--page-limit` / `--max-items` / `--page-delay` | 自动翻页；`--page-all` 是唯一触发开关 |
 
 仅简单关键词搜索时可用：
 
 ```bash
 dws chat message search --query "changefree" --start <ISO> --end <ISO> --limit 50 --cursor 0
 dws chat message search --query "codereview" --group <openConversationId> --start <ISO> --end <ISO>
+dws chat message search --query "发布计划" --start <ISO> --end <ISO> --page-all --page-delay 0
 ```
 
 ### 消息状态与撤回
@@ -307,9 +312,10 @@ Runtime 会把创建响应的 `atTag` 自动放在正文前；不要自行写 ID
 | `message add-favorite` | 收藏消息 | `--open-message-id` `--open-conversation-id` |
 | `message remove-favorite` | 取消收藏消息 | `--open-message-id` `--open-conversation-id` |
 | `+flag-list` | 查询收藏消息列表的默认 Shortcut | 默认一页；要求全部时加 `--page-all`；`--page-size/--size` 范围为 1-30，可用 `--page-token` 或兼容的 `--cursor` 续页，检查 `complete` / `failures` |
-| `message list-favorites` | 原始单页收藏结果 fallback | 可选 `--cursor` `--size` |
+| `message list-favorites` | typed 收藏消息列表 | 默认一页；完整遍历加 `--page-all`，数字 cursor，聚合 `result.items`；可选 `--cursor` `--size` |
 
 `+flag-list` 查询钉钉 message favorite，底层使用数字 cursor；它与消息 Pin、消息 Top 和会话置顶属于不同对象层级。
+`message list-favorites --page-all` 仍遵守 `--size` 1-30；`--page-limit` 只控制最多请求页数，`--max-items` 可精确截断输出。
 消息置顶 `set-top-msg` 与会话置顶 `chat set-top` 不同：前者置顶会话内消息，后者置顶整个会话。
 
 ### 表情回应

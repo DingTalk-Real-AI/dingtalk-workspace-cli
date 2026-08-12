@@ -464,6 +464,134 @@ Keep CLI confirmation behavior and Schema metadata consistent, and add a
 semantic regression test through the final embedded loader/query delivery
 path; a generator unit test or JSON count alone is insufficient.
 
+## Unified result Schema and performance
+
+The unified runtime envelope and the per-command Schema result declaration are
+related but distinct contracts:
+
+- Runtime owns the outer machine envelope (`ok`, `outcome`, `data`, `error`,
+  `meta`) and derives it through `internal/output`. Business commands return a
+  `CommandResult`; they must not hand-author the outer JSON shape.
+- A leaf `Contract.Result` / `contract.ResultSpec` describes the reviewed
+  business value inside `data`. It may declare `outcomes`, `data_schema`, and
+  `sensitive_paths`. `Contract.Pagination` is a separate command capability
+  because pagination is emitted under envelope `meta`, not inside `data`.
+- `outcomes` is the set of results a command may produce; it is not the outcome
+  of the current invocation. `data_schema` is a JSON Schema object for business
+  data and must not duplicate the framework envelope.
+- Result declarations are delivered in the full leaf and in the reviewed
+  `--compact` Agent projection. Compact retains the normalized `result` object
+  verbatim but still omits provenance, interface bindings, and other audit-only
+  fields. Product/group summaries remain navigation views and need not repeat
+  every leaf Result. When an Agent needs return-shape facts, query the compact
+  leaf directly; do not load the whole full Catalog.
+- A missing `result` means “no reviewed return-value declaration is published
+  for this leaf.” It does **not** prove that the runtime is legacy, and it must
+  not be filled by inference from examples, MCP samples, or previous command
+  output. Runtime rollout remains an internal per-command fact.
+- The public contract has no `contract_version`, no `--output-contract`, and no
+  Agent-selectable protocol alias. Agents continue to request machine output
+  with `--format json`; migrated commands use the unified result directly and
+  unmigrated commands retain their current legacy output.
+- Existing `dev` / `devapp` pilot coverage is gradual. Active reviewed
+  `devapp` shortcuts are gated on a non-empty Result declaration, while `dev`
+  currently has representative Result coverage. Do not describe that as
+  repository-wide coverage. Any newly activated Agent-visible command should
+  add and test its Result declaration; the remaining pilot gaps should shrink,
+  not expand.
+
+The compact/full leaf `result` object has one stable shape:
+
+```json
+{
+  "result": {
+    "outcomes": ["success", "pending", "partial_failure", "failure"],
+    "data_schema": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string", "description": "Stable resource ID"},
+              "name": {"type": "string", "description": "Display name"}
+            }
+          }
+        }
+      }
+    },
+    "sensitive_paths": ["credential.secret"]
+  },
+  "pagination": {
+    "kind": "cursor",
+    "cursor_parameter": "cursor",
+    "meta_path": "meta.pagination",
+    "endpoint_exhausted_path": "meta.pagination.endpoint_exhausted",
+    "next_token_path": "meta.pagination.next_token"
+  }
+}
+```
+
+Field rules:
+
+| Field | Required | Contract |
+|---|---|---|
+| `outcomes` | yes | Non-empty unique subset of `success`, `pending`, `partial_failure`, `failure`; normalization publishes canonical order. |
+| `data_schema` | yes | One recursive JSON Schema **object** describing only the runtime envelope's `data` value. Every named `properties` child must have a non-empty `description`. It must not duplicate `ok`, `outcome`, `error`, or `meta`. |
+| `sensitive_paths` | no | Unique safe dot paths relative to `data`; renderers/redaction consumers must not treat them as shell/JQ expressions. |
+
+Optional members are omitted, never emitted as `null`. A leaf without a
+reviewed Result omits the entire `result` key. Compact must preserve the same
+normalized Result value as the full leaf; it must not summarize, infer, rename,
+or independently rebuild any Result field. Product/group summaries do not
+aggregate child Result objects.
+
+`pagination` is a sibling of `result`, not a child. It declares the canonical
+CLI cursor parameter and the fixed framework paths under `meta.pagination`.
+Product response fields used to derive that metadata remain mapper internals;
+they are not part of `result.data_schema`. Do not execute a second request to
+derive pagination metadata.
+
+Invalid result declarations fail closed during normalization: unknown or
+duplicate outcomes, a non-object/multiple `data_schema`, unsafe or duplicate
+sensitive paths, unsupported pagination kinds, attempts to override framework
+meta paths, and an invalid cursor parameter must be rejected rather than
+silently removed.
+Full-leaf wire round trips must
+preserve the normalized Result exactly. Do not commit generated Schema JSON as
+evidence; tests construct contracts in Go and runtime/CI assemble the Catalog
+from declarations.
+
+### Performance model and rules
+
+- Catalog construction is declaration-driven and cached through the existing
+  lazy `sync.Once` delivery path. Do not reassemble or reopen annotations per
+  command invocation, per leaf lookup, or per renderer.
+- Normalizing one Result declaration is linear in the size of that declaration.
+  Full `schema --all` is linear in tools + parameters + Result schema bytes and
+  is an audit/compatibility export, not the normal Agent discovery path.
+  Overview → compact product/group → compact leaf remains the normal route;
+  only the final leaf carries its Result declaration.
+- Constructing a `CommandResult` defensively clones result data and validates
+  invariants; rendering is buffer-first and then writes once. Both CPU cost and
+  transient memory are O(payload size), with roughly one additional in-memory
+  rendered copy. This buys immutability and prevents partial JSON leakage, but
+  it is not free.
+- Large list/search commands must use bounded pages and publish continuation
+  facts. The current emitter buffers one command result/page before publishing;
+  pagination is the memory bound. Continuous event streams are a separate,
+  command-specific protocol and are not described by `ResultSpec`.
+- A `dual_validate` command must execute the business request exactly once,
+  validate a shadow unified result, and preserve legacy bytes. Never obtain
+  validation by issuing a second network or write request.
+- Filters and alternate formats are render-time work over the same in-memory
+  result. They must not rerun the business operation or rebuild Schema.
+- Performance changes must preserve the one-result, buffer-first, fail-closed,
+  and atomic `--output` guarantees. Do not trade correctness for a microbenchmark
+  improvement. For a material hot-path change, benchmark representative small
+  and page-sized payloads and report allocations/bytes as well as latency.
+
 ## Current Schema boundaries
 
 - `schema list` remains a progressive overview. `schema --all` is the stable
@@ -479,8 +607,9 @@ path; a generator unit test or JSON count alone is insufficient.
   a complete compatibility baseline.
 - `dws <path> --help` defines whether Cobra exposes a path and which flags the
   executable accepts. A compact leaf defines Agent selection, CLI parameters,
-  constraints, and safety/confirmation semantics. Full leaf fields such as
-  `property`, `interface_ref`, and provenance are audit facts. A conflict is
-  contract drift, not permission to guess.
+  constraints, safety/confirmation semantics, and any reviewed `result`
+  contract. Full leaf fields such as `property`, `interface_ref`, and
+  provenance are audit facts. A conflict is contract drift, not permission to
+  guess.
 - Schema and Help describe commands; neither returns DingTalk business data.
   After discovery, execute the real read/search/list command to obtain data.

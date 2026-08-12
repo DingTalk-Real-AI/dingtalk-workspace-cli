@@ -19,6 +19,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutesdata"
 )
 
 // listeningNoteCmdTool is the gateway-registered name of the 听记指令 tool.
@@ -173,7 +174,10 @@ func callList(rt *shortcut.RuntimeContext, belonging string) error {
 	if err != nil {
 		return err
 	}
-	minutes := callListProject(data)
+	minutes, err := callListProject(data)
+	if err != nil {
+		return err
+	}
 	return rt.Output(map[string]any{"count": len(minutes), "minutes": minutes})
 }
 
@@ -183,83 +187,12 @@ func callList(rt *shortcut.RuntimeContext, belonging string) error {
 // The list container and field names are probed defensively across candidate
 // keys so the projection tolerates response-shape drift; unknown keys are never
 // invented.
-func callListProject(data map[string]any) []map[string]any {
-	raw := callListResolveList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		// Only real taskUuid spellings map to taskUuid: the downstream
-		// +record-pause/resume/stop commands feed this value straight into the
-		// recording-control tool as the task uuid, so a minutesId (the minutes
-		// document id, a different identifier) must not be substituted here or
-		// record control would fail with a wrong id. The backend list already
-		// returns taskUuid.
-		if v, ok := callListFirst(m, "taskUuid", "task_uuid", "uuid"); ok {
-			row["taskUuid"] = v
-		}
-		if v, ok := callListFirst(m, "title", "name"); ok {
-			row["title"] = v
-		}
-		if v, ok := callListFirst(m, "creator", "creatorName", "createUserName", "creatorNick"); ok {
-			row["creator"] = v
-		}
-		if v, ok := callListFirst(m, "startTime", "gmtStart", "beginTime"); ok {
-			row["startTime"] = v
-		}
-		if v, ok := callListFirst(m, "endTime", "gmtEnd", "deadline"); ok {
-			row["endTime"] = v
-		}
-		if v, ok := callListFirst(m, "url", "shareUrl", "link"); ok {
-			row["url"] = v
-		}
-		if v, ok := callListFirst(m, "status", "taskStatus", "state"); ok {
-			row["status"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
+func callListProject(data map[string]any) ([]map[string]any, error) {
+	page, err := minutesdata.ParseListPage(data)
+	if err != nil {
+		return nil, err
 	}
-	return out
-}
-
-// callListResolveList locates the list payload inside the response, tolerating a
-// bare top-level array or nesting under result/data/list/items/records containers.
-func callListResolveList(data map[string]any) []any {
-	// list_by_keyword_and_time_range nests the minutes under result.itemList;
-	// "itemList" MUST be probed or +list-all/+list-mine/+list-shared silently
-	// return empty despite the backend returning minutes.
-	for _, key := range []string{"result", "data", "list", "items", "itemList", "records", "dataList"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		// container may itself wrap the list one level deeper
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "itemList", "records", "dataList", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
-}
-
-// callListFirst returns the first present candidate key's value.
-func callListFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
-		}
-	}
-	return nil, false
+	return minutesdata.ProjectList(page)
 }
 
 // ── get ─────────────────────────────────────────────────────────────────────
@@ -273,7 +206,7 @@ var RecordStart = shortcut.Shortcut{
 	Command:     "+record-start",
 	Product:     "minutes",
 	Description: "发起听记（开始录音）",
-	Intent:      "当你要开始一场实时会议/通话的 AI 听记、立刻启动录音并生成一条新听记任务时使用；可选传入 AI 助理会话 ID，会真实发起录音，返回新建听记的 taskUuid 供后续暂停/恢复/结束。",
+	Intent:      "当你要开始一场实时会议/通话的 AI 听记、立刻启动录音时使用；可选传入 AI 助理会话 ID。当前网关 create 回执不返回 taskUuid，只能证明录音指令已被接受；随后需用 +latest/+search 定位新听记。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -295,7 +228,7 @@ var RecordStart = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "发起听记（开始录音）",
-			UseWhen:      []string{"当你要开始一场实时会议/通话的 AI 听记、立刻启动录音并生成一条新听记任务时使用；可选传入 AI 助理会话 ID，会真实发起录音，返回新建听记的 taskUuid 供后续暂停/恢复/结束。"},
+			UseWhen:      []string{"当你要开始一场实时会议/通话的 AI 听记、立刻启动录音时使用；网关 create 只返回已接受回执，不返回 taskUuid，随后需用 +latest/+search 定位新听记。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws minutes +record-start --session-id <sessionId>"},
 		},
@@ -309,7 +242,7 @@ var RecordStart = shortcut.Shortcut{
 		if rt.Changed("session-id") {
 			params["sessionId"] = rt.Str("session-id")
 		}
-		return rt.CallMCP(listeningNoteCmdTool, params)
+		return executeRecordCommand(rt, "create", "", params)
 	},
 }
 
@@ -320,6 +253,16 @@ var RecordPause = shortcut.Shortcut{
 	Description: "暂停听记录音",
 	Intent:      "录音进行中想临时中断（如中场休息、切换话题）又不想结束整条听记时使用；传入正在录音的听记 taskUuid，会真实暂停该次录音，之后可用 +record-resume 继续。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: minutesContract(
+		"+record-pause",
+		"暂停听记录音",
+		"实时听记仍在录制，但要临时中断且保留后续恢复能力时使用；必须传当前录制任务的 taskUuid。",
+		[]string{"会议已经结束时使用 +record-stop；只是查看听记状态或内容时使用只读命令"},
+		[]string{"dws minutes +record-pause --id <taskUuid>"},
+	),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid", Required: true},
 		{Name: "session-id", Type: shortcut.FlagString, Desc: "AI 助理会话 ID (可选)"},
@@ -330,7 +273,7 @@ var RecordPause = shortcut.Shortcut{
 		if rt.Changed("session-id") {
 			params["sessionId"] = rt.Str("session-id")
 		}
-		return rt.CallMCP(listeningNoteCmdTool, params)
+		return executeRecordCommand(rt, "pause", rt.Str("id"), params)
 	},
 }
 
@@ -341,6 +284,16 @@ var RecordResume = shortcut.Shortcut{
 	Description: "恢复听记录音",
 	Intent:      "之前用 +record-pause 暂停过的听记，现在想接着录时使用；传入该听记 taskUuid，会真实恢复录音，继续追加到同一条听记中。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: minutesContract(
+		"+record-resume",
+		"恢复听记录音",
+		"实时听记此前已暂停、现在要继续向同一 taskUuid 追加录音时使用。",
+		[]string{"已经结束的听记不能恢复；要新建录制时使用 +record-start"},
+		[]string{"dws minutes +record-resume --id <taskUuid>"},
+	),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid", Required: true},
 		{Name: "session-id", Type: shortcut.FlagString, Desc: "AI 助理会话 ID (可选)"},
@@ -351,7 +304,7 @@ var RecordResume = shortcut.Shortcut{
 		if rt.Changed("session-id") {
 			params["sessionId"] = rt.Str("session-id")
 		}
-		return rt.CallMCP(listeningNoteCmdTool, params)
+		return executeRecordCommand(rt, "resume", rt.Str("id"), params)
 	},
 }
 
@@ -362,6 +315,16 @@ var RecordStop = shortcut.Shortcut{
 	Description: "结束听记录音",
 	Intent:      "会议开完、想彻底停止录音并让系统开始生成转写与 AI 纪要时使用；传入正在录音的听记 taskUuid，会真实结束该次录音，结束后无法再恢复到这条听记继续录。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: minutesContract(
+		"+record-stop",
+		"结束听记录音",
+		"会议结束且要永久停止指定 taskUuid 的实时录制，让服务进入转写和纪要处理阶段时使用。",
+		[]string{"仍计划继续录音时使用 +record-pause；结束后不能通过 +record-resume 继续同一条录制"},
+		[]string{"dws minutes +record-stop --id <taskUuid>"},
+	),
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid", Required: true},
 		{Name: "session-id", Type: shortcut.FlagString, Desc: "AI 助理会话 ID (可选)"},
@@ -372,8 +335,25 @@ var RecordStop = shortcut.Shortcut{
 		if rt.Changed("session-id") {
 			params["sessionId"] = rt.Str("session-id")
 		}
-		return rt.CallMCP(listeningNoteCmdTool, params)
+		return executeRecordCommand(rt, "end", rt.Str("id"), params)
 	},
+}
+
+func executeRecordCommand(rt *shortcut.RuntimeContext, expectedCmd, taskUUID string, params map[string]any) error {
+	data, err := rt.CallMCPWriteDataStrict("minutes", listeningNoteCmdTool, params)
+	if err != nil {
+		return err
+	}
+	result, err := minutesdata.RecordResult(expectedCmd, taskUUID, data)
+	if err != nil {
+		return err
+	}
+	return rt.Output(map[string]any{
+		"accepted": true,
+		"command":  expectedCmd,
+		"taskUuid": taskUUID,
+		"result":   result,
+	})
 }
 
 // ── mind-graph ──────────────────────────────────────────────────────────────
@@ -391,7 +371,7 @@ var RecordStop = shortcut.Shortcut{
 // ── tag ─────────────────────────────────────────────────────────────────────
 
 func init() {
-	shortcut.Register(
+	shortcut.Register(finalizeMinutesShortcuts(
 		ListMine,
 		ListShared,
 		ListAll,
@@ -399,5 +379,5 @@ func init() {
 		RecordPause,
 		RecordResume,
 		RecordStop,
-	)
+	)...)
 }

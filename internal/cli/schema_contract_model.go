@@ -60,6 +60,8 @@ type ToolSpec struct {
 	Constraints     RuntimeSchemaConstraints
 	Positionals     []contract.RuntimeSchemaPositional
 	DryRun          *contract.DryRunSpec
+	Result          *contract.ResultSpec
+	Pagination      *contract.PaginationSpec
 	Safety          contract.SafetySpec
 	Interface       contract.InterfaceSpec
 	Selection       contract.SelectionSpec
@@ -133,6 +135,8 @@ type RuntimeToolSpecInput struct {
 	Constraints     RuntimeSchemaConstraints
 	Positionals     []contract.RuntimeSchemaPositional
 	DryRun          *contract.DryRunSpec
+	Result          *contract.ResultSpec
+	Pagination      *contract.PaginationSpec
 	Safety          contract.SafetySpec
 	Interface       contract.InterfaceSpec
 	Selection       contract.SelectionSpec
@@ -538,6 +542,20 @@ func (t ToolSpec) Validate() error {
 			return err
 		}
 	}
+	if t.Result != nil {
+		if _, err := contract.NormalizeResultSpec(t.Result, id.CanonicalPath); err != nil {
+			return err
+		}
+	}
+	if t.Pagination != nil {
+		pagination, err := contract.NormalizePaginationSpec(t.Pagination, id.CanonicalPath)
+		if err != nil {
+			return err
+		}
+		if !seen[pagination.CursorParameter] {
+			return fmt.Errorf("tool %s pagination cursor_parameter %q is not a declared parameter", id.CanonicalPath, pagination.CursorParameter)
+		}
+	}
 	if t.Interface.Mode != "" || t.Interface.Availability != "" || t.Interface.Reason != "" || t.Interface.Ref != nil {
 		if err := t.Interface.Validate(id.CanonicalPath); err != nil {
 			return err
@@ -725,6 +743,18 @@ func (t ToolSpec) normalized() ToolSpec {
 		dryRun := *t.DryRun
 		dryRun.PreviewKind = strings.TrimSpace(dryRun.PreviewKind)
 		out.DryRun = &dryRun
+	}
+	if t.Result != nil {
+		result, err := contract.NormalizeResultSpec(t.Result, id.CanonicalPath)
+		if err == nil {
+			out.Result = result
+		}
+	}
+	if t.Pagination != nil {
+		pagination, err := contract.NormalizePaginationSpec(t.Pagination, id.CanonicalPath)
+		if err == nil {
+			out.Pagination = pagination
+		}
 	}
 	out.Positionals = append([]contract.RuntimeSchemaPositional(nil), t.Positionals...)
 	sort.Slice(out.Positionals, func(i, j int) bool {
@@ -952,6 +982,14 @@ func (t ToolSpec) ToPayload() (map[string]any, error) {
 		value, _ := typedJSONValue(t.DryRun)
 		payload["dry_run"] = value
 	}
+	if t.Result != nil {
+		value, _ := typedJSONValue(t.Result)
+		payload["result"] = value
+	}
+	if t.Pagination != nil {
+		value, _ := typedJSONValue(t.Pagination)
+		payload["pagination"] = value
+	}
 	applySafetyPayload(payload, t.Safety)
 	applyInterfacePayload(payload, t.Interface)
 	applySelectionPayload(payload, t.Selection, true)
@@ -975,7 +1013,7 @@ func (t ToolSpec) ToSummaryPayload() (map[string]any, error) {
 	}
 	for _, key := range []string{
 		"parameters", "has_parameters", "parameter_count", "constraints",
-		"positionals", "examples", "effect_source", "agent_source_refs",
+		"positionals", "result", "examples", "effect_source", "agent_source_refs",
 		"field_provenance", "path", "source", "product_id", "display", "is_alias",
 	} {
 		delete(payload, key)

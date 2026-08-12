@@ -18,6 +18,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/source"
 	eventtransport "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -36,17 +37,19 @@ func TestCrossPlatformCoveragePersonalEventRemainingSchemaAndSubscriptionCoverag
 		}
 	}
 
-	oldGet := personalGetSubscription
-	oldCreate := personalCreateSubscription
-	t.Cleanup(func() {
-		personalGetSubscription = oldGet
-		personalCreateSubscription = oldCreate
-	})
+	testseam.Protect(t, &personalGetSubscription)
+	testseam.Protect(t, &personalCreateSubscription)
 	client := personal.NewClient("https://example.test", personal.Identity{})
 	wantErr := errors.New("subscription")
 	personalGetSubscription = func(*personal.Client, context.Context, string) (*personal.Subscription, error) { return nil, wantErr }
 	if _, _, _, err := ensurePersonalSubscription(context.Background(), client, personal.Identity{}, personalConsumeOptions{SubscribeID: "sub"}); !errors.Is(err, wantErr) {
 		t.Fatalf("get subscription error = %v", err)
+	}
+	personalGetSubscription = func(*personal.Client, context.Context, string) (*personal.Subscription, error) {
+		return nil, nil
+	}
+	if _, _, _, err := ensurePersonalSubscription(context.Background(), client, personal.Identity{}, personalConsumeOptions{SubscribeID: "sub"}); err == nil || !strings.Contains(err.Error(), "empty subscription") {
+		t.Fatalf("nil subscription = %v", err)
 	}
 	personalGetSubscription = func(*personal.Client, context.Context, string) (*personal.Subscription, error) {
 		return &personal.Subscription{}, nil

@@ -346,6 +346,27 @@ func TestHub_StopConsumersCoalescesQueuedStop(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageHubStopAllBypassesFullEventBuffer(t *testing.T) {
+	hub := NewHub(1)
+	consumer, err := hub.Register(transport.Hello{Type: transport.FrameTypeHello})
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumer.SendCh <- transport.Event{Type: transport.FrameTypeEvent}
+
+	if stopped := hub.StopAll(transport.ByeReasonRuntimeTokenRejected); stopped != 1 {
+		t.Fatalf("StopAll() = %d, want 1", stopped)
+	}
+	select {
+	case reason := <-consumer.StopCh:
+		if reason != transport.ByeReasonRuntimeTokenRejected {
+			t.Fatalf("StopCh reason = %q", reason)
+		}
+	default:
+		t.Fatal("terminal stop was blocked behind the full event buffer")
+	}
+}
+
 func TestHub_ConcurrentStopConsumersRegisterUnregister(t *testing.T) {
 	h := NewHub(4)
 	const workers = 32

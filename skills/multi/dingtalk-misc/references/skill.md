@@ -9,7 +9,7 @@
 | "搜索技能 / 找技能" | `dws skill search --query "<关键词>" [--source DingtalkMarket\|OrgInternal]` |
 | "下载技能包" | `dws skill get --skill-id <skillId>` |
 | "安装市场技能" | `dws skill install <skillId> <target>` |
-| "安装 DWS mono/multi skills" | `dws skill setup --mode <mono\|multi> --target <target> --yes` |
+| "安装 DWS mono/multi skills" | `dws skill setup --mode <mono\|multi> --target <target>` |
 
 ## 约束
 
@@ -73,20 +73,20 @@ Example:
 Usage:
   dws skill setup [flags]
 Example:
-  dws skill setup --mode mono --yes
-  dws skill setup --mode multi --target qoder --yes
-  dws skill setup --mode multi -s aitable -s calendar --target qoder --yes
-  dws skill setup --mode multi -x live -x devdoc --target qoder --yes
+  dws skill setup --mode mono
+  dws skill setup --mode multi --target qoder
+  dws skill setup --mode multi -s aitable -s calendar --target qoder
+  dws skill setup --mode multi -x live -x devdoc --target qoder
 Flags:
       --mode string       mono | multi
       --target string     目标 Agent，默认 all
       --source string     显式 skill 源目录
   -s, --skill strings     multi 模式只安装指定子 skill
   -x, --exclude strings   multi 模式排除指定子 skill
-      --yes               跳过确认
+      --yes               仅脚本使用：跳过确认（删除仍先备份）
 ```
 
-`--skill` 与 `--exclude` 互斥。未指定 `--source` 时使用当前二进制内置的 skill 版本。
+`--skill` 与 `--exclude` 互斥。未指定 `--source` 时使用当前二进制内置的 skill 版本。setup 会清理对面模式残留与不在 bundle 内的过期 skill；这些目录在确认前逐条列出，删除前先备份到 `~/.dws/skill-backups/`，备份失败的目录保留原样。代用户执行时不要附加 `--yes` 绕过确认。
 
 ## 上下文传递
 

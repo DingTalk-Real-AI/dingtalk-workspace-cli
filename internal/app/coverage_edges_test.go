@@ -33,6 +33,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillstate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	upgradepkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -2033,6 +2034,10 @@ func TestCrossPlatformCoverageSkillSetupRuntimeCoverage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "dingtalk-shared", "SKILL.md")); err != nil {
 		t.Fatal(err)
 	}
+	state, readable, err := skillstate.Read(home)
+	if err != nil || !readable || len(state.OfficialSkills) != 3 || len(state.UpdatedSkills) != 2 {
+		t.Fatalf("setup state = %#v, readable=%v, err=%v", state, readable, err)
+	}
 	if output, _, err := run("--mode", "multi", "--source", multi, "--target", "agents", "--yes", "--dry-run", "--exclude", "b"); err != nil || !strings.Contains(output, "DRY-RUN") {
 		t.Fatalf("multi dry run = %q, %v", output, err)
 	}
@@ -2048,8 +2053,11 @@ func TestCrossPlatformCoverageSkillSetupRuntimeCoverage(t *testing.T) {
 			t.Fatalf("invalid setup %#v succeeded", args)
 		}
 	}
-	if _, _, err := run("--source", mono, "--target", "agents", "--yes", "--dry-run"); err != nil {
-		t.Fatalf("default mono setup: %v", err)
+	if _, _, err := run("--mode", "mono", "--source", mono, "--target", "agents", "--yes", "--dry-run"); err != nil {
+		t.Fatalf("mono setup: %v", err)
+	}
+	if output, _, err := run("--source", multi, "--target", "agents", "--yes", "--dry-run"); err != nil || !strings.Contains(output, "mode=multi") {
+		t.Fatalf("default mode should be multi: %q, %v", output, err)
 	}
 }
 
@@ -2082,7 +2090,7 @@ func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
 	if _, err := listMultiSkillNames(filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Fatal("missing multi source succeeded")
 	}
-	if mode, err := resolveSkillSetupMode("", true, io.Discard); err != nil || mode != skillSetupModeMono {
+	if mode, err := resolveSkillSetupMode("", true, io.Discard); err != nil || mode != skillSetupModeMulti {
 		t.Fatalf("default setup mode = %q, %v", mode, err)
 	}
 	if _, err := resolveSkillSetupMode("bad", true, io.Discard); err == nil {
@@ -2117,7 +2125,7 @@ func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
 	for _, tc := range []struct{ path, mode string }{{"", skillSetupModeMono}, {mono, skillSetupModeMono}, {filepath.Dir(multi), skillSetupModeMulti}, {root, "bad"}} {
 		_ = isSkillSourceRoot(tc.path, tc.mode)
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	for _, tc := range []struct{ target, mode string }{{"agents", skillSetupModeMono}, {"agents", skillSetupModeMulti}, {"all", skillSetupModeMono}, {"missing", skillSetupModeMono}} {
 		_, _ = resolveSkillSetupTargets(tc.target, tc.mode)
 	}
@@ -2125,8 +2133,8 @@ func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
 	_ = agentHomeForMode("base", skillSetupModeMulti)
 	_ = detectExistingAgentHomes(t.TempDir(), skillSetupModeMono)
 	for _, mode := range []string{skillSetupModeMono, skillSetupModeMulti, "bad"} {
-		_, _ = confirmSkillSetup(io.Discard, mode, root, []string{root}, all)
-		_ = mutualExclusionVictims(root, mode)
+		_, _ = confirmSkillSetup(io.Discard, mode, root, []string{root}, all, false)
+		_, _ = mutualExclusionVictims(root, mode)
 	}
 	if isCharDevice(nil) || isInteractiveTerminal() {
 		t.Fatal("test process unexpectedly interactive")
@@ -2134,17 +2142,17 @@ func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
 
 	monoDest := filepath.Join(t.TempDir(), "agent", "dws")
 	_ = os.MkdirAll(filepath.Join(filepath.Dir(monoDest), "dingtalk-old"), 0o755)
-	_ = mutualExclusionVictims(monoDest, skillSetupModeMono)
+	_, _ = mutualExclusionVictims(monoDest, skillSetupModeMono)
 	multiDest := filepath.Join(t.TempDir(), "agent")
 	_ = os.MkdirAll(filepath.Join(multiDest, "dws"), 0o755)
-	_ = mutualExclusionVictims(multiDest, skillSetupModeMulti)
+	_, _ = mutualExclusionVictims(multiDest, skillSetupModeMulti)
 	cleanupMutualExclusion(monoDest, skillSetupModeMono, io.Discard, io.Discard)
 	cleanupMutualExclusion(multiDest, skillSetupModeMulti, io.Discard, io.Discard)
 
 	badParent := filepath.Join(t.TempDir(), "file")
 	_ = os.WriteFile(badParent, []byte("x"), 0o600)
 	_, _, _ = installSkillToHomes(root, []string{filepath.Join(badParent, "dest")}, io.Discard, io.Discard)
-	_, _, _ = installMultiSkillToHomes(root, []string{"missing"}, []string{filepath.Join(badParent, "dest")}, io.Discard, io.Discard)
+	_, _, _ = installMultiSkillToHomes(root, []string{"missing"}, []string{filepath.Join(badParent, "dest")}, io.Discard, io.Discard, true)
 	if err := copyDir(filepath.Join(root, "missing"), t.TempDir()); err == nil {
 		t.Fatal("copy missing directory succeeded")
 	}

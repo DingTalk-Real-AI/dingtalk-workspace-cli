@@ -28,16 +28,18 @@ func TestCrossPlatformCoverageQuotedResourcesAndScalarVariants(t *testing.T) {
 	}
 	resources := Resources(map[string]any{
 		"attachments": []map[string]any{
-			{"resourceType": "mediaId", "resourceId": "@file-a"},
-			{"resourceType": "fileId", "resourceId": "drive-file"},
+			{"resourceType": "mediaId", "resourceId": "@file-a", "name": "photo.png"},
+			{"resourceType": "fileId", "resourceId": "drive-file", "fileName": "canonical-report.txt"},
 			{"mediaId": 42, "fileId": 42},
 		},
 		"content": `[文件] report.txt fileId: drive-file`,
 	})
 	if len(resources) != 2 ||
 		resources[0]["resourceId"] != "@file-a" ||
+		resources[0]["name"] != "photo.png" ||
 		resources[1]["resourceId"] != "drive-file" ||
-		resources[1]["type"] != "fileId" {
+		resources[1]["type"] != "fileId" ||
+		resources[1]["name"] != "canonical-report.txt" {
 		t.Fatalf("resources = %#v", resources)
 	}
 	fileDownload := resources[1]["download"].(map[string]any)
@@ -50,6 +52,65 @@ func TestCrossPlatformCoverageQuotedResourcesAndScalarVariants(t *testing.T) {
 	}
 	if got := resourceIDScalar(42); got != "" {
 		t.Fatalf("non-string resource ID = %q", got)
+	}
+}
+
+func TestCrossPlatformCoverageResourcesExtractsLegacyFileNameWithoutGuessing(t *testing.T) {
+	resources := Resources(map[string]any{
+		"name":                "sender-name-must-not-leak",
+		"openMessageId":       "msg-1",
+		"openConversationId":  "cid-1",
+		"content":             `[文件] 项目最终报告 2026.pdf fileId: drive-file 注意：如需下载使用旧命令`,
+		"unrelatedAttachment": map[string]any{"mediaId": "@image-without-name"},
+	})
+	if len(resources) != 2 {
+		t.Fatalf("resources = %#v", resources)
+	}
+	if resources[0]["resourceId"] != "@image-without-name" {
+		t.Fatalf("first resource = %#v", resources[0])
+	}
+	if _, leaked := resources[0]["name"]; leaked {
+		t.Fatalf("message sender name leaked into media resource: %#v", resources[0])
+	}
+	if resources[1]["resourceId"] != "drive-file" ||
+		resources[1]["name"] != "项目最终报告 2026.pdf" {
+		t.Fatalf("file resource = %#v", resources[1])
+	}
+}
+
+func TestCrossPlatformCoverageResourceNameRejectsIncompletePairs(t *testing.T) {
+	names := map[string]resourceNameCandidate{}
+	recordResourceName(names, "", "report.pdf", resourceNamePriorityStructured)
+	recordResourceName(names, "file-1", "", resourceNamePriorityStructured)
+	if len(names) != 0 {
+		t.Fatalf("incomplete resource-name pairs were retained: %#v", names)
+	}
+}
+
+func TestCrossPlatformCoverageProjectionRemovesOnlyLegacyResourceDownloadHint(t *testing.T) {
+	legacy := `[文件] 项目最终报告 2026.pdf fileId: drive-file 注意：如需下载使用dws drive download命令下载`
+	row := ProjectMessageV1(map[string]any{"content": legacy}, false)
+	if row["text"] != `[文件] 项目最终报告 2026.pdf fileId: drive-file` {
+		t.Fatalf("projected text = %#v", row["text"])
+	}
+	resources := row["resourceRefs"].([]map[string]any)
+	if len(resources) != 1 ||
+		resources[0]["name"] != "项目最终报告 2026.pdf" ||
+		resources[0]["download"].(map[string]any)["shortcut"] != "+messages-resource-download" {
+		t.Fatalf("projected resources = %#v", resources)
+	}
+	mediaRow := ProjectMessageV1(map[string]any{
+		"openMessageId":      "msg-media",
+		"openConversationId": "cid-media",
+		"content":            `[图片消息](mediaId=@media) 注意：如需下载使用dws chat message download-media命令下载`,
+	}, false)
+	if mediaRow["text"] != `[图片消息](mediaId=@media)` {
+		t.Fatalf("projected media text = %#v", mediaRow["text"])
+	}
+
+	ordinary := `团队规范：注意：如需下载使用dws drive download命令下载`
+	if got := ProjectMessageV1(map[string]any{"content": ordinary}, false)["text"]; got != ordinary {
+		t.Fatalf("ordinary text was rewritten: got %#v, want %q", got, ordinary)
 	}
 }
 
@@ -114,6 +175,9 @@ func TestCrossPlatformCoveragePaginationVariants(t *testing.T) {
 		want  bool
 	}{
 		{nil, false},
+		{json.Number("0"), false},
+		{json.Number("0.0"), false},
+		{json.Number("9007199254740993"), true},
 		{" ", false},
 		{"0", false},
 		{"cursor", true},

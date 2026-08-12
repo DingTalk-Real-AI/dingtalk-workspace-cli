@@ -22,6 +22,8 @@ SEMANTIC_PATHS = [
     ROOT / "internal" / "shortcut" / "semantic_catalog.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_doc.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_aitable.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_minutes.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_drive.json",
 ]
 
 

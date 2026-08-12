@@ -1,8 +1,9 @@
 // Copyright 2026 Alibaba Group
 // Licensed under the Apache License, Version 2.0 (the "License");
 
-// Command multi-im-skill-chain verifies that reviewed high-frequency IM
-// intents keep one default route across Skill references and Agent selection.
+// Command multi-im-skill-chain verifies that reviewed high-frequency IM and
+// personal-event intents keep one default route across Skill references and
+// Agent selection.
 package main
 
 import (

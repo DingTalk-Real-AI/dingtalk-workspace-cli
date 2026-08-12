@@ -24,12 +24,33 @@ metadata:
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws minutes +detail` | read | 一条命令聚合取一条妙记（听记）的多项产物（基础信息/摘要/关键词/逐字稿/待办） |
+| `dws minutes +action-items` | read | 读取指定或我最新一条听记中已抽取的行动项 |
+| `dws minutes +apply-permission` | write | 为当前用户申请语义化的听记访问权限 |
+| `dws minutes +detail` | read | 批量聚合听记基础信息、摘要、关键词、完整逐字稿和行动项，支持安全文件输出 |
+| `dws minutes +download` | read | 批量取得听记音视频地址并安全下载到本地 |
+| `dws minutes +export-pack` | read | 把完整听记产物写入受控目录并生成不含签名 URL 的 manifest |
+| `dws minutes +latest` | read | 取我最新的一条妙记（听记）详情 |
 | `dws minutes +list-all` | read | 查询我有权限访问的所有听记列表 |
 | `dws minutes +list-mine` | read | 查询我创建的听记列表 |
 | `dws minutes +list-shared` | read | 查询他人共享给我的听记列表 |
+| `dws minutes +mindmap` | write | 创建听记思维导图并轮询到明确成功、失败或超时 |
+| `dws minutes +prepare-asr` | write | 读取个人热词、计算差异、按需新增并可显式同步删除后读回验证 |
+| `dws minutes +record-pause` | write | 暂停听记录音 |
+| `dws minutes +record-resume` | write | 恢复听记录音 |
 | `dws minutes +record-start` | write | 发起听记（开始录音） |
-| `dws minutes +replace-batch` | write | 对一条妙记（听记）批量执行多组文字替换（原文=>替换） |
+| `dws minutes +record-stop` | write | 结束听记录音 |
+| `dws minutes +record-wrap-up` | write | 停止实时录音并有界等待听记产物，失败时保留恢复句柄 |
+| `dws minutes +replace-batch` | write | 预检并批量执行多组听记文字替换，逐项验证且失败必定非零 |
+| `dws minutes +search` | read | 按范围、标题关键词和时间搜索听记，支持安全全量翻页 |
+| `dws minutes +share` | write | 按成员逐项授予一个或多个听记权限，输出可审计的部分写入 ledger |
+| `dws minutes +speaker-insights` | write | 创建发言人段落总结并轮询结果，保留异步任务恢复句柄 |
+| `dws minutes +speaker-replace` | write | 预检逐字稿中的发言人昵称，替换后重新读回验证 |
+| `dws minutes +summary` | write | 读取当前纪要、校验图片引用、全量覆盖并读回验证 |
+| `dws minutes +transcript` | read | 读取指定或我最新一条听记的完整逐字稿，并交付分页完整性证据 |
+| `dws minutes +unshare` | write | 按成员逐项移除一个或多个听记权限，输出可审计的部分写入 ledger |
+| `dws minutes +update` | write | 读取现状、预览差异、更新听记标题并读回验证 |
+| `dws minutes +upload` | write | 把本地音视频完整上传并创建听记，失败时取消会话 |
+| `dws minutes +upload-and-analyze` | write | 本地音视频直传听记并等待分析产物，可选思维导图和发言人洞察 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## 意图表

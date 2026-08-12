@@ -540,6 +540,28 @@ func TestCrossPlatformCoverageResourcesBuildsActionableDownloadReferences(t *tes
 	}
 }
 
+func TestCrossPlatformCoverageResourcesKeepsNestedResourceNamesWithTheirOwner(t *testing.T) {
+	message := map[string]any{
+		"openMessageId":      "parent-message",
+		"openConversationId": "cid-1",
+		"content":            `{"fileId":"parent-file","fileName":"parent.pdf"}`,
+		"quotedMessage": map[string]any{
+			"openMessageId": "quoted-message",
+			"content":       `{"fileId":"quoted-file","file_name":"quoted.pdf"}`,
+		},
+	}
+	resources := ResourcesDeep(message)
+	if len(resources) != 2 {
+		t.Fatalf("resources = %#v", resources)
+	}
+	if resources[0]["resourceId"] != "parent-file" || resources[0]["name"] != "parent.pdf" {
+		t.Fatalf("parent resource = %#v", resources[0])
+	}
+	if resources[1]["resourceId"] != "quoted-file" || resources[1]["name"] != "quoted.pdf" {
+		t.Fatalf("quoted resource = %#v", resources[1])
+	}
+}
+
 func TestCrossPlatformCoverageResourcesReportsMissingDownloadContext(t *testing.T) {
 	resources := Resources(map[string]any{"content": `{"mediaId":"@image-a"}`})
 	if len(resources) != 1 {
@@ -593,5 +615,49 @@ func TestCrossPlatformCoverageForwarded(t *testing.T) {
 	nested, ok := fwd[1]["forwarded"].([]map[string]any)
 	if !ok || len(nested) != 1 || nested[0]["text"] != "nested" {
 		t.Errorf("nested forwarded = %#v", fwd[1]["forwarded"])
+	}
+}
+
+func TestCrossPlatformCoverageListMessageItemsUnwrapsCommonEnvelope(t *testing.T) {
+	if ListMessageItems(nil) != nil {
+		t.Fatal("nil list envelope returned messages")
+	}
+	items := ListMessageItems(map[string]any{
+		"result": map[string]any{
+			"messages": []any{
+				map[string]any{"openMessageId": "msg-1"},
+				"invalid",
+			},
+		},
+	})
+	if len(items) != 1 || items[0]["openMessageId"] != "msg-1" {
+		t.Fatalf("items = %#v", items)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMessageItemsFlattensConversationGroups(t *testing.T) {
+	if SearchMessageItems(nil) != nil {
+		t.Fatal("nil search envelope returned messages")
+	}
+	items := SearchMessageItems(map[string]any{
+		"result": map[string]any{
+			"conversationMessagesList": []any{
+				map[string]any{
+					"openConversationId": "cid-1",
+					"title":              "项目群",
+					"singleChat":         false,
+					"messages": []any{
+						map[string]any{"openMessageId": "msg-1"},
+					},
+				},
+			},
+		},
+	})
+	if len(items) != 1 || items[0]["openConversationId"] != "cid-1" ||
+		items[0]["conversationTitle"] != "项目群" || items[0]["singleChat"] != false {
+		t.Fatalf("items = %#v", items)
+	}
+	if SearchMessageItems(map[string]any{"result": "invalid"}) != nil {
+		t.Fatal("non-map result was accepted")
 	}
 }

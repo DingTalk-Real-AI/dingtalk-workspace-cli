@@ -4,7 +4,8 @@
 #
 # One-command installer for dws personal events.
 # Downloads the official dws binary and installs:
-#   - multi skill: dingtalk-misc (hosts personal IM event docs)
+#   - multi skill: dingtalk-event (personal IM/OA event routing)
+#   - multi prerequisites: dingtalk-shared + clean dingtalk-misc
 #   - mono skill:  dws
 #
 # Usage:
@@ -25,7 +26,9 @@ INSTALL_DIR="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
 NO_SKILLS="${DWS_NO_SKILLS:-0}"
 SKILLS_ONLY="${DWS_SKILLS_ONLY:-0}"
 BIN_NAME="dws"
-EVENT_SKILL_NAME="dingtalk-misc"
+EVENT_SKILL_NAME="dingtalk-event"
+SHARED_SKILL_NAME="dingtalk-shared"
+MISC_SKILL_NAME="dingtalk-misc"
 MONO_SKILL_NAME="dws"
 
 if [ "$EVENT_VERSION" = "latest" ]; then
@@ -123,12 +126,13 @@ install_skill_to_homes() {
   printf '%s\n' "$installed"
 }
 
-find_event_skill_src() {
+find_multi_skill_src() {
   bundle="$1"
+  skill_name="$2"
   for c in \
-    "$bundle/multi/$EVENT_SKILL_NAME" \
-    "$bundle/skills/multi/$EVENT_SKILL_NAME" \
-    "$bundle/$EVENT_SKILL_NAME"
+    "$bundle/multi/$skill_name" \
+    "$bundle/skills/multi/$skill_name" \
+    "$bundle/$skill_name"
   do
     if [ -f "$c/SKILL.md" ]; then
       printf '%s\n' "$c"
@@ -157,23 +161,40 @@ find_mono_skill_src() {
 install_skills_from_bundle() {
   bundle="$1"
 
-  event_src="$(find_event_skill_src "$bundle" || true)"
+  # Resolve the complete, version-matched set before touching any installed or
+  # cached skill. A malformed release therefore cannot leave a half-migrated
+  # event/misc pair behind.
+  event_src="$(find_multi_skill_src "$bundle" "$EVENT_SKILL_NAME" || true)"
   [ -n "$event_src" ] || err "${EVENT_SKILL_NAME} not found in dws-skills.zip"
+  shared_src="$(find_multi_skill_src "$bundle" "$SHARED_SKILL_NAME" || true)"
+  [ -n "$shared_src" ] || err "${SHARED_SKILL_NAME} not found in dws-skills.zip"
+  misc_src="$(find_multi_skill_src "$bundle" "$MISC_SKILL_NAME" || true)"
+  [ -n "$misc_src" ] || err "${MISC_SKILL_NAME} not found in dws-skills.zip"
   mono_src="$(find_mono_skill_src "$bundle" || true)"
   [ -n "$mono_src" ] || err "mono ${MONO_SKILL_NAME} skill not found in dws-skills.zip"
 
   event_cache="$HOME/.dws/skills/multi/$EVENT_SKILL_NAME"
+  shared_cache="$HOME/.dws/skills/multi/$SHARED_SKILL_NAME"
+  misc_cache="$HOME/.dws/skills/multi/$MISC_SKILL_NAME"
   copy_tree "$event_src" "$event_cache"
+  copy_tree "$shared_src" "$shared_cache"
+  copy_tree "$misc_src" "$misc_cache"
 
   mono_cache="$HOME/.dws/skills/mono"
   copy_tree "$mono_src" "$mono_cache"
 
   event_installed="$(install_skill_to_homes "$event_src" "$EVENT_SKILL_NAME")"
+  shared_installed="$(install_skill_to_homes "$shared_src" "$SHARED_SKILL_NAME")"
+  misc_installed="$(install_skill_to_homes "$misc_src" "$MISC_SKILL_NAME")"
   mono_installed="$(install_skill_to_homes "$mono_src" "$MONO_SKILL_NAME")"
 
   say "Skill ${EVENT_SKILL_NAME} -> ${event_installed} agent dir(s)"
+  say "Skill ${SHARED_SKILL_NAME} -> ${shared_installed} agent dir(s)"
+  say "Skill ${MISC_SKILL_NAME} -> ${misc_installed} agent dir(s)"
   say "Skill ${MONO_SKILL_NAME} -> ${mono_installed} agent dir(s)"
   say "Cached ${EVENT_SKILL_NAME} -> ${event_cache}"
+  say "Cached ${SHARED_SKILL_NAME} -> ${shared_cache}"
+  say "Cached ${MISC_SKILL_NAME} -> ${misc_cache}"
   say "Cached mono ${MONO_SKILL_NAME} -> ${mono_cache}"
 }
 

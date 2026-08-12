@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -25,7 +26,7 @@ func runChatCoverageCommand(t *testing.T, caller edition.ToolCaller, args ...str
 	root.SilenceUsage = true
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs(args)
+	root.SetArgs(append(append([]string(nil), args...), "--yes"))
 	return root.ExecuteContext(context.Background())
 }
 
@@ -269,6 +270,52 @@ func TestCrossPlatformCoverageChatCreateAndMessageSendEdges(t *testing.T) {
 	for _, tc := range tests {
 		caller := &scriptedToolCaller{steps: tc.steps, dry: tc.dry}
 		_ = runChatCoverageCommand(t, caller, tc.args...)
+	}
+}
+
+func TestCrossPlatformCoverageChatNativeSendCardMentions(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	t.Run("group forwards mention arguments", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-card",
+			"--group=cid",
+			"--at-open-dingtalk-ids=D1,D2,D1",
+			"--at-all",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := map[string]any{
+			"openConversationId": "cid",
+			"atOpenDingTalkIds":  []string{"D1", "D2"},
+			"atAll":              true,
+		}
+		if caller.calls != 1 || caller.server != "im" || caller.tool != "create_and_send_card" || !reflect.DeepEqual(caller.args, want) {
+			t.Fatalf("call = count:%d server:%q tool:%q args:%#v, want %#v", caller.calls, caller.server, caller.tool, caller.args, want)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "member mention rejects direct message", args: []string{"--receiver=D1", "--at-open-dingtalk-ids=D2"}},
+		{name: "at all rejects direct message", args: []string{"--receiver=D1", "--at-all"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller, append([]string{"message", "send-card"}, tc.args...)...)
+			if err == nil || !strings.Contains(err.Error(), "only supported with --group") {
+				t.Fatalf("error = %v, want group-only mention validation", err)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("invalid direct-message mentions made %d tool calls", caller.calls)
+			}
+		})
 	}
 }
 

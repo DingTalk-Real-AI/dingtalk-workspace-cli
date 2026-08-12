@@ -72,8 +72,9 @@ func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool strin
 			text = f.chatMessagesResult
 		}
 	case "im/search_messages":
-		if f.searchMessagesResult != "" {
-			text = f.searchMessagesResult
+		text = f.searchMessagesResult
+		if text == "" {
+			text = `{"result":{"messages":[],"hasMore":false}}`
 		}
 	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
@@ -405,7 +406,8 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			argv:        []string{"chat", "+search-msg", "--id", "cid-1", "--keyword", "树莓派", "--no-enrich", "--yes"},
 			wantProduct: "im",
 			wantTool:    "search_messages",
-			wantArgs:    map[string]any{"openConversationIds": []string{"cid-1"}, "keyword": "树莓派"},
+			wantArgs:    map[string]any{"keyword": "树莓派"},
+			wantAbsent:  []string{"openConversationIds"},
 		},
 	}
 

@@ -323,15 +323,18 @@ func TestCrossPlatformCoverageSearchMsgResolvesNaturalChatAndSenderBeforeSearch(
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 3 {
-		t.Fatalf("calls = %#v, want chat resolve + user resolve + search", fake.calls)
+	if len(fake.calls) != 4 {
+		t.Fatalf("calls = %#v, want chat resolve + user resolve + scope validation + search", fake.calls)
 	}
-	search := fake.calls[2]
+	if preflight := fake.calls[2]; preflight.product != "chat" || preflight.tool != "get_conversation_info" || preflight.args["openConversationId"] != "cid-1" {
+		t.Fatalf("scope preflight = %#v", preflight)
+	}
+	search := fake.calls[3]
 	if search.product != "im" || search.tool != "search_messages" {
 		t.Fatalf("search = %#v", search)
 	}
-	if got, want := search.args["openConversationIds"], []string{"cid-1"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("openConversationIds = %#v, want %#v", got, want)
+	if _, exists := search.args["openConversationIds"]; exists {
+		t.Fatalf("global fallback unexpectedly forwarded openConversationIds: %#v", search.args)
 	}
 	if got, want := search.args["senderOpenDingTakIds"], []string{"D1"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("senderOpenDingTakIds = %#v, want %#v", got, want)
@@ -392,14 +395,17 @@ func TestCrossPlatformCoverageSearchMsgAcceptsStableIDInChatQuery(t *testing.T) 
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 1 || fake.calls[0].tool != "search_messages" {
+	if len(fake.calls) != 2 || fake.calls[0].tool != "get_conversation_info" || fake.calls[1].tool != "search_messages" {
 		t.Fatalf("calls = %#v", fake.calls)
 	}
-	if got, want := fake.calls[0].args["openConversationIds"], []string{"cid-fixture-chat-0002"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("openConversationIds = %#v, want %#v", got, want)
+	if fake.calls[0].args["openConversationId"] != "cid-fixture-chat-0002" {
+		t.Fatalf("scope preflight = %#v", fake.calls[0])
 	}
-	if fake.calls[0].args["keyword"] != "评测" {
-		t.Fatalf("keyword = %#v", fake.calls[0].args["keyword"])
+	if _, exists := fake.calls[1].args["openConversationIds"]; exists {
+		t.Fatalf("global fallback unexpectedly forwarded openConversationIds: %#v", fake.calls[1].args)
+	}
+	if fake.calls[1].args["keyword"] != "评测" {
+		t.Fatalf("keyword = %#v", fake.calls[1].args["keyword"])
 	}
 }
 

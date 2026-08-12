@@ -57,9 +57,9 @@ var (
 	downloadUpgradeProgress = upgrade.DownloadWithProgress
 	extractUpgradeZip       = upgrade.ExtractZip
 	findExtractedBinary     = upgrade.FindBinaryInDir
-	locateUpgradeSkill      = upgrade.LocateSkillMD
+	locateUpgradeSkill      = upgrade.LocateSkillsRoot
 	replaceUpgradeSelf      = upgrade.ReplaceSelf
-	installUpgradeSkills    = upgrade.UpgradeSkillLocations
+	installUpgradeSkills    = upgrade.UpgradeSkillLocationsWithOptions
 	upgradeMkdirTemp        = os.MkdirTemp
 	upgradeRemoveAll        = os.RemoveAll
 	upgradeReadFile         = os.ReadFile
@@ -99,7 +99,8 @@ func newUpgradeCommand() *cobra.Command {
 		Long: `检查并升级 DWS CLI 到最新版本。
 
 自动下载匹配当前平台的二进制文件和技能包，通过 SHA256 校验后原子替换。
-升级前会自动备份当前版本，可通过 --rollback 回滚。`,
+升级前会自动备份当前版本，可通过 --rollback 回滚。
+每次升级都会按新版本官方清单全量覆盖预制 Skill；--force 仅额外允许重装当前版本。`,
 		Example: `  dws upgrade                    # 交互式升级到最新版本
   dws upgrade --check            # 仅检查是否有新版本
   dws upgrade --list             # 列出最近版本
@@ -107,6 +108,7 @@ func newUpgradeCommand() *cobra.Command {
   dws upgrade --beta             # 升级到最新 beta 预发布版本
   dws upgrade --version v1.0.7   # 升级到指定正式版本
   dws upgrade --version v1.0.8-beta.1  # 升级到指定 beta 版本
+  dws upgrade --force           # 即使已是最新版本也重装当前版本
   dws upgrade --rollback         # 回滚到上一版本
   dws upgrade --dry-run          # 仅预览升级步骤，不实际执行
   dws upgrade -y                 # 跳过确认直接升级`,
@@ -158,7 +160,7 @@ func newUpgradeCommand() *cobra.Command {
 	cmd.Flags().StringVar(&flagVersion, "version", "", "升级到指定版本")
 	cmd.Flags().BoolVar(&flagBeta, "beta", false, "使用最新 beta 预发布版本（默认使用正式 release）")
 	cmd.Flags().BoolVar(&flagRollback, "rollback", false, "回滚到上一版本")
-	cmd.Flags().BoolVar(&flagForce, "force", false, "强制重新安装当前版本")
+	cmd.Flags().BoolVar(&flagForce, "force", false, "即使已是最新版本也强制重新安装当前版本")
 	cmd.Flags().BoolVar(&flagSkipSkills, "skip-skills", false, "跳过技能包更新")
 
 	return cmd
@@ -596,7 +598,9 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	}
 
 	if hasSkills {
-		result, installErr := installUpgradeSkills(skillSrc)
+		result, installErr := installUpgradeSkills(skillSrc, upgrade.SkillUpgradeOptions{
+			Version: release.Version,
+		})
 		if installErr != nil {
 			fmt.Printf(" %s\n", ugRed("✗"))
 			return fmt.Errorf("技能包安装失败: %w", installErr)
