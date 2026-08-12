@@ -14,8 +14,10 @@
 package smart
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutesdata"
 )
 
 // ActionItems: fetch the extracted to-do items (待办事项) from MY most recent
@@ -24,8 +26,7 @@ import (
 // Steps:
 //  1. list my minutes via list_by_keyword_and_time_range
 //     (belongingConditionId = "created", maxResults = 20);
-//  2. pick the newest entry (largest create time, falling back to the first
-//     item since lists come back newest-first) and read its taskUuid;
+//  2. pick the newest entry by an explicit comparable timestamp and read its taskUuid;
 //  3. print that minute's extracted to-do items via list_minutes_todos.
 //
 // If the list is empty it reports "暂无妙记" instead of failing obscurely.
@@ -35,41 +36,68 @@ var ActionItems = shortcut.Shortcut{
 	Service:     "minutes",
 	Command:     "+action-items",
 	Product:     "minutes",
-	Description: "取我最新一条妙记里的待办事项",
-	Intent: "当你刚开完会、只想立刻知道自己最近这条听记里系统帮你提取出了哪些待办事项，" +
-		"却不想先翻听记列表、复制 taskUuid、再手动去查待办时使用；" +
-		"内部会先列出你创建的听记，自动挑出最新的一条，再拉取这条听记里提取的待办事项清单（含待办内容、参与人、待办时间等）。" +
-		"这是只读操作，不会新增或修改任何待办；若你名下没有任何听记则提示「暂无妙记」。",
+	Description: "读取指定或我最新一条听记中已抽取的行动项",
+	Intent: "当你要读取已知 taskUuid（--id）的听记行动项，或不传 --id 自动选择自己最新听记时使用；" +
+		"只接受服务端显式 actions/dingtalkTodoList 数组，合法空数组表示没有抽取到行动项，缺字段或错误响应不会被当成空成功。" +
+		"这是只读的 Minutes 产物读取，不会创建或修改钉钉 Todo。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: minutesSmartContract(
+		"+action-items",
+		"读取最新听记中已抽取的行动项",
+		"要读取指定听记（--id）或默认最新听记中由听记服务抽取的 actions/dingtalkTodoList 时使用；该命令只读，不会创建钉钉待办。",
+		[]string{"要创建或修改真正的钉钉待办时使用 Todo 产品命令"},
+		[]string{"dws minutes +action-items --id <taskUuid>", "dws minutes +action-items"},
+		nil,
+	),
+	Flags: []shortcut.Flag{
+		{Name: "id", Type: shortcut.FlagString, Desc: "听记 taskUuid；不传时选择我最新的一条"},
+	},
 	Tips: []string{
+		`dws minutes +action-items --id <taskUuid>`,
 		`dws minutes +action-items`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		// Step 1 — list my minutes (newest first). belongingConditionId /
-		// maxResults mirror helpers.callListByKeywordRange.
-		data, err := rt.CallMCPData("minutes", "list_by_keyword_and_time_range", map[string]any{
-			"belongingConditionId": "created",
-			"maxResults":           float64(20),
+		taskUUID := rt.Str("id")
+		if taskUUID == "" {
+			// Step 1 — list my minutes (newest first). belongingConditionId /
+			// maxResults mirror helpers.callListByKeywordRange.
+			data, err := rt.CallMCPData("minutes", "list_by_keyword_and_time_range", map[string]any{
+				"belongingConditionId": "created",
+				"maxResults":           float64(20),
+			})
+			if err != nil {
+				return err
+			}
+
+			// Step 2 — locate the newest minute's taskUuid. Reuse the defensive
+			// list/UUID/createTime parsing from latest_minutes.go.
+			taskUUID, err = latestMinutesTaskUUID(data)
+			if err != nil {
+				return err
+			}
+			if taskUUID == "" {
+				return apperrors.NewValidation("暂无妙记")
+			}
+		}
+
+		// Step 3 — validate and print its extracted to-do items. Empty arrays are
+		// valid business data; a missing result/actions collection is not.
+		todosData, err := rt.CallMCPData("minutes", "list_minutes_todos", map[string]any{
+			"taskUuid": taskUUID,
 		})
 		if err != nil {
 			return err
 		}
-
-		// Step 2 — locate the newest minute's taskUuid. Reuse the defensive
-		// list/UUID/createTime parsing from latest_minutes.go.
-		taskUUID := latestMinutesTaskUUID(data)
-		if taskUUID == "" {
-			return apperrors.NewValidation("暂无妙记")
+		if err := minutesdata.ValidateArtifact("todos", taskUUID, todosData); err != nil {
+			return err
 		}
-
-		// Step 3 — print its extracted to-do items (taskUuid param mirrors
-		// helpers' list_minutes_todos call).
-		return rt.CallMCP("list_minutes_todos", map[string]any{
-			"taskUuid": taskUUID,
-		})
+		return rt.Output(todosData["result"])
 	},
 }
 
 func init() {
-	shortcut.Register(ActionItems)
+	shortcut.Register(finalizeMinutesSmartShortcut(ActionItems))
 }

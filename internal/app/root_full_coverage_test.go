@@ -12,7 +12,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
@@ -24,8 +23,6 @@ func TestCrossPlatformCoverageRootExecuteAllBranchesCoverage(t *testing.T) {
 	oldExecute := rootExecuteCommand
 	oldNewRoot := rootNewRootCommandWithEngine
 	oldPreParse := rootRunPreParse
-	oldLatest := rootLatestRecoveryCapture
-	oldReset := rootResetRecoveryState
 	oldStop := rootStopAllStdioClients
 	oldArgs := os.Args
 	t.Cleanup(func() {
@@ -33,27 +30,28 @@ func TestCrossPlatformCoverageRootExecuteAllBranchesCoverage(t *testing.T) {
 		rootExecuteCommand = oldExecute
 		rootNewRootCommandWithEngine = oldNewRoot
 		rootRunPreParse = oldPreParse
-		rootLatestRecoveryCapture = oldLatest
-		rootResetRecoveryState = oldReset
 		rootStopAllStdioClients = oldStop
 		os.Args = oldArgs
 	})
 	os.Args = []string{"dws"}
 	rootNormalizeProcessProfileArgs = func() func() { return func() {} }
-	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) {}
-	rootResetRecoveryState = func() {}
+	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return nil }
 	rootStopAllStdioClients = func() {}
 	rootNewRootCommandWithEngine = func(context.Context, *pipeline.Engine) *cobra.Command {
 		return &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	}
-	rootLatestRecoveryCapture = func() *recovery.LastError { return nil }
 	rootExecuteCommand = func(cmd *cobra.Command) (*cobra.Command, error) { return cmd, nil }
 	if code := Execute(); code != 0 {
 		t.Fatalf("successful Execute code = %d", code)
 	}
 
+	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return errors.New("alias/canonical conflict") }
+	if code := Execute(); code == 0 {
+		t.Fatal("pre-parse conflict returned zero")
+	}
+	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return nil }
+
 	wantErr := errors.New("unknown command missing")
-	rootLatestRecoveryCapture = func() *recovery.LastError { return &recovery.LastError{EventID: "evt-test"} }
 	rootExecuteCommand = func(*cobra.Command) (*cobra.Command, error) { return nil, wantErr }
 	if code := Execute(); code == 0 {
 		t.Fatal("failed Execute returned zero")
@@ -159,11 +157,11 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 	})
 
 	oldMkdir := rootMkdirAll
-	oldCreate := rootCreateFile
+	oldCreate := rootCreateTemp
 	oldClose := rootCloseFile
 	t.Cleanup(func() {
 		rootMkdirAll = oldMkdir
-		rootCreateFile = oldCreate
+		rootCreateTemp = oldCreate
 		rootCloseFile = oldClose
 	})
 	wantErr := errors.New("filesystem")
@@ -195,17 +193,19 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 		t.Fatal("mkdir failure succeeded")
 	}
 	rootMkdirAll = func(string, os.FileMode) error { return nil }
-	rootCreateFile = func(string) (*os.File, error) { return nil, wantErr }
+	rootCreateTemp = func(string, string) (*os.File, error) { return nil, wantErr }
 	if err := configureOutputSink(newOutputCommand(filepath.Join("create-failure", "out"))); err == nil {
 		t.Fatal("create failure succeeded")
 	}
-	rootCreateFile = oldCreate
+	rootCreateTemp = oldCreate
 	file, err := os.CreateTemp(t.TempDir(), "close")
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := &cobra.Command{Use: "close"}
-	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, file))
+	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, &outputSinkState{
+		file: file, tempPath: file.Name(), target: filepath.Join(filepath.Dir(file.Name()), "close-target"),
+	}))
 	rootCloseFile = func(*os.File) error { return wantErr }
 	if err := closeOutputSink(cmd); err == nil {
 		t.Fatal("close failure succeeded")
@@ -218,7 +218,9 @@ func TestCrossPlatformCoverageRootFlagsPluginsAndOutputRemainingCoverage(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, file))
+	cmd.SetContext(context.WithValue(context.Background(), outputFileContextKey{}, &outputSinkState{
+		file: file, tempPath: file.Name(), target: filepath.Join(filepath.Dir(file.Name()), "close-success-target"),
+	}))
 	if err := closeOutputSink(cmd); err != nil {
 		t.Fatalf("close success = %v", err)
 	}

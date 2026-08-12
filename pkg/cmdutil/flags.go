@@ -25,6 +25,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const hintOnlyCommandAnnotation = "dws.command.hint_only"
+
 // GroupRunE is a reusable RunE for parent (group) commands that have no
 // business logic of their own. With args it returns an error listing available
 // subcommands; without args it shows help.
@@ -45,13 +47,21 @@ func GroupRunE(cmd *cobra.Command, args []string) error {
 // HintSubCmd creates a hidden subcommand that only prints a disambiguation hint.
 func HintSubCmd(use, hint string) *cobra.Command {
 	return &cobra.Command{
-		Use:    use,
-		Hidden: true,
+		Use:         use,
+		Hidden:      true,
+		Annotations: map[string]string{hintOnlyCommandAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("ambiguous command %q for %q\n  hint: %s",
 				use, cmd.Parent().CommandPath(), hint)
 		},
 	}
+}
+
+// IsHintOnlyCommand reports whether cmd is a hidden compatibility prompt that
+// has no business execution of its own. Reviewed command-path fallbacks may
+// supersede these nodes, but must still reject collisions with real commands.
+func IsHintOnlyCommand(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Annotations[hintOnlyCommandAnnotation] == "true"
 }
 
 // MustGetFlag retrieves a string flag value, checking both local and inherited flags.
@@ -104,14 +114,26 @@ func ValidateRequiredFlags(cmd *cobra.Command, names ...string) error {
 	for _, name := range names {
 		v, _ := cmd.Flags().GetString(name)
 		if v == "" {
-			missing = append(missing, "--"+name)
+			missing = append(missing, name)
 		}
 	}
-	if len(missing) == 0 {
+	return MissingRequiredFlagsError(cmd, missing...)
+}
+
+// MissingRequiredFlagsError formats the unified "missing required flag(s)"
+// error for the given flag names, or returns nil when none are missing. Use
+// this when the caller has already determined which flags are missing (e.g.
+// after alias/env fallback resolution).
+func MissingRequiredFlagsError(cmd *cobra.Command, names ...string) error {
+	if len(names) == 0 {
 		return nil
 	}
+	flags := make([]string, 0, len(names))
+	for _, name := range names {
+		flags = append(flags, "--"+name)
+	}
 	return fmt.Errorf("missing required flag(s): %s\n  usage: %s\n  example:\n%s",
-		strings.Join(missing, ", "), cmd.UseLine(), cmd.Example)
+		strings.Join(flags, ", "), cmd.UseLine(), cmd.Example)
 }
 
 // ValidateRequiredFlagWithAliases checks that at least one of the primary flag

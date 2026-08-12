@@ -8,34 +8,27 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
 
-func validParameterBindingSnapshotForCoverage(t *testing.T) schemaParameterBindingSnapshot {
-	t.Helper()
-	bindings := map[string]map[string]string{
-		"sample.read":  {"id": "itemId", "limit": "pageSize"},
-		"sample.write": {"name": "name"},
-	}
-	hash, err := schemaParameterBindingManifestHash(bindings)
-	if err != nil {
-		t.Fatal(err)
-	}
+func validParameterBindingSnapshotForCoverage() schemaParameterBindingSnapshot {
 	return schemaParameterBindingSnapshot{
-		Version:  schemaParameterBindingsVersion,
-		Baseline: schemaParameterBindingBaseline{Manifest: schemaParameterBindingsBaselineManifest, SHA256: hash, Reason: "reviewed", Reviewed: true},
-		Bindings: bindings,
+		Bindings: map[string]map[string]string{},
+		MappingExclusions: map[string]string{
+			"sample.read --local": "reviewed local selector",
+		},
+		Removals: map[string]schemaParameterBindingRemoval{
+			"sample.old --id": {Reason: "reviewed", Reviewed: true},
+		},
 	}
 }
 
 func TestCrossPlatformCoverageSchemaParameterBindingSnapshotAuditEdges(t *testing.T) {
-	valid := validParameterBindingSnapshotForCoverage(t)
-	encoded, err := json.Marshal(valid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ValidateSchemaParameterBindingsSource(encoded); err != nil {
-		t.Fatalf("ValidateSchemaParameterBindingsSource() = %v", err)
+	valid := validParameterBindingSnapshotForCoverage()
+	if err := validateSchemaParameterBindingSnapshot(valid); err != nil {
+		t.Fatalf("valid audit records rejected: %v", err)
 	}
 
 	cases := []struct {
@@ -43,72 +36,44 @@ func TestCrossPlatformCoverageSchemaParameterBindingSnapshotAuditEdges(t *testin
 		mutate func(*schemaParameterBindingSnapshot)
 		want   string
 	}{
-		{name: "manifest", mutate: func(s *schemaParameterBindingSnapshot) { s.Baseline.Manifest = " wrong " }, want: "must declare manifest"},
-		{name: "empty active", mutate: func(s *schemaParameterBindingSnapshot) { s.Bindings = nil }, want: "active manifest is empty"},
-		{name: "correction key", mutate: func(s *schemaParameterBindingSnapshot) {
-			s.Corrections = map[string]schemaParameterBindingCorrection{"bad": {}}
-		}, want: "correction: invalid exact"},
-		{name: "correction properties", mutate: func(s *schemaParameterBindingSnapshot) {
-			s.Corrections = map[string]schemaParameterBindingCorrection{"sample.read --id": {OldProperty: "same", NewProperty: "same", Reason: "r", Reviewed: true}}
-		}, want: "invalid old/new"},
-		{name: "correction review", mutate: func(s *schemaParameterBindingSnapshot) {
-			s.Corrections = map[string]schemaParameterBindingCorrection{"sample.read --id": {OldProperty: "old", NewProperty: "itemId"}}
-		}, want: "must be reviewed"},
-		{name: "correction active", mutate: func(s *schemaParameterBindingSnapshot) {
-			s.Corrections = map[string]schemaParameterBindingCorrection{"sample.read --id": {OldProperty: "old", NewProperty: "other", Reason: "r", Reviewed: true}}
-		}, want: "active manifest"},
+		{name: "active bindings retired", mutate: func(s *schemaParameterBindingSnapshot) {
+			s.Bindings = map[string]map[string]string{"sample.read": {"id": "itemId"}}
+		}, want: "active bindings must remain empty"},
 		{name: "removal key", mutate: func(s *schemaParameterBindingSnapshot) {
 			s.Removals = map[string]schemaParameterBindingRemoval{"bad": {}}
 		}, want: "removal: invalid exact"},
-		{name: "removal active", mutate: func(s *schemaParameterBindingSnapshot) {
-			s.Removals = map[string]schemaParameterBindingRemoval{"sample.read --id": {Reason: "r", Reviewed: true}}
-		}, want: "still exists"},
 		{name: "removal review", mutate: func(s *schemaParameterBindingSnapshot) {
 			s.Removals = map[string]schemaParameterBindingRemoval{"sample.old --id": {}}
 		}, want: "must be reviewed"},
 		{name: "removal replaced trim", mutate: func(s *schemaParameterBindingSnapshot) {
 			s.Removals = map[string]schemaParameterBindingRemoval{"sample.old --id": {Reason: "r", Reviewed: true, ReplacedBy: " sample.read --id"}}
 		}, want: "non-canonical replaced_by"},
-		{name: "removal replacement key", mutate: func(s *schemaParameterBindingSnapshot) {
-			s.Removals = map[string]schemaParameterBindingRemoval{"sample.old --id": {Reason: "r", Reviewed: true, ReplacedBy: "bad"}}
-		}, want: "replaced_by: invalid exact"},
-		{name: "removal replacement inactive", mutate: func(s *schemaParameterBindingSnapshot) {
-			s.Removals = map[string]schemaParameterBindingRemoval{"sample.old --id": {Reason: "r", Reviewed: true, ReplacedBy: "sample.other --id"}}
+		{name: "removal replacement retired", mutate: func(s *schemaParameterBindingSnapshot) {
+			s.Removals = map[string]schemaParameterBindingRemoval{"sample.old --id": {Reason: "r", Reviewed: true, ReplacedBy: "sample.read --id"}}
 		}, want: "is not active"},
 		{name: "exclusion key", mutate: func(s *schemaParameterBindingSnapshot) {
 			s.MappingExclusions = map[string]string{"bad": "r"}
 		}, want: "exclusion: invalid exact"},
-		{name: "exclusion active", mutate: func(s *schemaParameterBindingSnapshot) {
-			s.MappingExclusions = map[string]string{"sample.read --id": "r"}
-		}, want: "conflicts with the active"},
 		{name: "exclusion removal", mutate: func(s *schemaParameterBindingSnapshot) {
 			s.Removals = map[string]schemaParameterBindingRemoval{"sample.old --id": {Reason: "r", Reviewed: true}}
 			s.MappingExclusions = map[string]string{"sample.old --id": "r"}
 		}, want: "also recorded as a removal"},
 		{name: "exclusion reason", mutate: func(s *schemaParameterBindingSnapshot) {
-			s.MappingExclusions = map[string]string{"sample.old --id": " "}
+			s.MappingExclusions = map[string]string{"sample.old --local": " "}
 		}, want: "exact non-empty reason"},
+		{name: "empty exclusions", mutate: func(s *schemaParameterBindingSnapshot) {
+			s.MappingExclusions = map[string]string{}
+		}, want: "mapping exclusions ledger must remain non-empty"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			snapshot := validParameterBindingSnapshotForCoverage(t)
+			snapshot := validParameterBindingSnapshotForCoverage()
 			tc.mutate(&snapshot)
 			err := validateSchemaParameterBindingSnapshot(snapshot)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want %q", err, tc.want)
 			}
 		})
-	}
-
-	valid.Corrections = map[string]schemaParameterBindingCorrection{
-		"sample.read --id": {OldProperty: "oldId", NewProperty: "itemId", Reason: "reviewed", Reviewed: true},
-	}
-	valid.Removals = map[string]schemaParameterBindingRemoval{
-		"sample.old --id": {Reason: "reviewed", ReplacedBy: "sample.read --id", Reviewed: true},
-	}
-	valid.MappingExclusions = map[string]string{"sample.read --local": "reviewed"}
-	if err := validateSchemaParameterBindingSnapshot(valid); err != nil {
-		t.Fatalf("valid audit records rejected: %v", err)
 	}
 }
 
@@ -117,9 +82,9 @@ func TestCrossPlatformCoverageSchemaParameterBindingDeliveryRemainingEdges(t *te
 	command.Flags().String("id", "", "id")
 	boundSpec := BoundCommandSpec{CommandSpec: CommandSpec{CanonicalPath: "sample.read", Visibility: SchemaVisibilityPublic}, PrimaryCommand: command}
 	bound := BoundCommandRegistry{Commands: []BoundCommandSpec{boundSpec}, ByCanonical: map[string]BoundCommandSpec{"sample.read": boundSpec}}
-	versioned := FieldProvenance{Value: json.RawMessage(`"itemId"`), Source: "versioned_parameter_binding", Resolution: "selected"}
-	parameter := ParameterSpec{Name: "id", Property: "itemId", FieldProvenance: map[string]FieldProvenance{"property": versioned}}
-	registry := SchemaRegistry{Products: []ProductSpec{{ID: "sample", Tools: []ToolSpec{{Identity: ToolIdentitySpec{CanonicalPath: "sample.read"}, Parameters: []ParameterSpec{parameter}}}}}}
+	versioned := contract.FieldProvenance{Value: json.RawMessage(`"itemId"`), Source: "versioned_parameter_binding", Resolution: "selected"}
+	parameter := ParameterSpec{Name: "id", Property: "itemId", FieldProvenance: map[string]contract.FieldProvenance{"property": versioned}}
+	registry := SchemaRegistry{Products: []ProductSpec{{ID: "sample", Tools: []ToolSpec{{Identity: contract.ToolIdentitySpec{CanonicalPath: "sample.read"}, Parameters: []ParameterSpec{parameter}}}}}}
 
 	cases := []struct {
 		name     string
@@ -134,8 +99,8 @@ func TestCrossPlatformCoverageSchemaParameterBindingDeliveryRemainingEdges(t *te
 			snapshot: schemaParameterBindingSnapshot{},
 			bound:    bound,
 			registry: SchemaRegistry{Products: []ProductSpec{{Tools: []ToolSpec{
-				{Identity: ToolIdentitySpec{CanonicalPath: "sample.read"}},
-				{Identity: ToolIdentitySpec{CanonicalPath: "sample.read"}},
+				{Identity: contract.ToolIdentitySpec{CanonicalPath: "sample.read"}},
+				{Identity: contract.ToolIdentitySpec{CanonicalPath: "sample.read"}},
 			}}}},
 			want: "duplicate canonical",
 		},
@@ -147,7 +112,7 @@ func TestCrossPlatformCoverageSchemaParameterBindingDeliveryRemainingEdges(t *te
 			snapshot: schemaParameterBindingSnapshot{Bindings: map[string]map[string]string{"sample.read": {"id": "itemId"}}},
 			bound:    bound,
 			registry: SchemaRegistry{Products: []ProductSpec{{Tools: []ToolSpec{{
-				Identity:   ToolIdentitySpec{CanonicalPath: "sample.read"},
+				Identity:   contract.ToolIdentitySpec{CanonicalPath: "sample.read"},
 				Parameters: []ParameterSpec{{Name: "id", Property: "itemId"}},
 			}}}}},
 			want: "no exact versioned",
@@ -162,8 +127,8 @@ func TestCrossPlatformCoverageSchemaParameterBindingDeliveryRemainingEdges(t *te
 			snapshot: schemaParameterBindingSnapshot{},
 			bound:    bound,
 			registry: SchemaRegistry{Products: []ProductSpec{{Tools: []ToolSpec{{
-				Identity: ToolIdentitySpec{CanonicalPath: "sample.read"},
-				Parameters: []ParameterSpec{{Name: "id", FieldProvenance: map[string]FieldProvenance{
+				Identity: contract.ToolIdentitySpec{CanonicalPath: "sample.read"},
+				Parameters: []ParameterSpec{{Name: "id", FieldProvenance: map[string]contract.FieldProvenance{
 					"property": {Source: "reviewed_mapping_exclusion"},
 				}}},
 			}}}}},
@@ -180,7 +145,7 @@ func TestCrossPlatformCoverageSchemaParameterBindingDeliveryRemainingEdges(t *te
 	}
 
 	noPropertyProvenance := registry
-	noPropertyProvenance.Products[0].Tools[0].Parameters[0].FieldProvenance = map[string]FieldProvenance{}
+	noPropertyProvenance.Products[0].Tools[0].Parameters[0].FieldProvenance = map[string]contract.FieldProvenance{}
 	if err := validateSchemaParameterBindingDelivery(schemaParameterBindingSnapshot{}, bound, noPropertyProvenance); err != nil {
 		t.Fatalf("absent optional property provenance rejected: %v", err)
 	}
@@ -190,30 +155,18 @@ func TestCrossPlatformCoverageSchemaParameterBindingHelpersAndLoaderErrors(t *te
 	if _, ok := finalSchemaParameterByName(ToolSpec{}, "missing"); ok {
 		t.Fatal("missing parameter found")
 	}
-	selected := FieldProvenance{Value: json.RawMessage(`"value"`), Source: "source"}
+	selected := contract.FieldProvenance{Value: json.RawMessage(`"value"`), Source: "source"}
 	if !schemaParameterProvenanceHasStringCandidate(selected, "source", "value") {
 		t.Fatal("selected provenance not found")
 	}
-	if schemaParameterProvenanceHasStringCandidate(FieldProvenance{Value: json.RawMessage(`{`), Source: "source"}, "source", "value") {
+	if schemaParameterProvenanceHasStringCandidate(contract.FieldProvenance{Value: json.RawMessage(`{`), Source: "source"}, "source", "value") {
 		t.Fatal("invalid selected provenance matched")
 	}
-	candidates := FieldProvenance{Candidates: []FieldCandidateProvenance{{Source: "other", Value: json.RawMessage(`"value"`)}, {Source: "source", Value: json.RawMessage(`{`)}, {Source: "source", Value: json.RawMessage(`"value"`)}}}
+	candidates := contract.FieldProvenance{Candidates: []contract.FieldCandidateProvenance{{Source: "other", Value: json.RawMessage(`"value"`)}, {Source: "source", Value: json.RawMessage(`{`)}, {Source: "source", Value: json.RawMessage(`"value"`)}}}
 	if !schemaParameterProvenanceHasStringCandidate(candidates, "source", "value") || schemaParameterProvenanceHasStringCandidate(candidates, "missing", "value") {
 		t.Fatal("candidate provenance lookup failed")
 	}
 
-	manifestCases := []map[string]map[string]string{
-		nil,
-		{" bad": {"id": "value"}},
-		{"sample.read": {}},
-		{"sample.read": {" bad": "value"}},
-		{"sample.read": {"id": " value "}},
-	}
-	for _, bindings := range manifestCases {
-		if _, err := schemaParameterBindingManifestHash(bindings); err == nil {
-			t.Fatalf("invalid bindings accepted: %#v", bindings)
-		}
-	}
 	for _, key := range []string{"", " bad", "bad", "sample.read --id --other", "sample.read --", "sample.read --bad flag"} {
 		if err := validateSchemaParameterBindingAuditKey(key); err == nil {
 			t.Fatalf("invalid audit key %q accepted", key)
@@ -227,18 +180,16 @@ func TestCrossPlatformCoverageSchemaParameterBindingHelpersAndLoaderErrors(t *te
 		t.Fatalf("binding annotation = %#v", got)
 	}
 
-	previous := schemaParameterBindingData
-	schemaParameterBindingData = func() (schemaParameterBindingSnapshot, error) {
+	testseam.Swap(t, &schemaParameterBindingData, func() (schemaParameterBindingSnapshot, error) {
 		return schemaParameterBindingSnapshot{}, errors.New("binding data failed")
-	}
-	t.Cleanup(func() { schemaParameterBindingData = previous })
-	if err := ValidateEmbeddedSchemaParameterBindings(); err == nil || !strings.Contains(err.Error(), "binding data failed") {
-		t.Fatalf("ValidateEmbeddedSchemaParameterBindings() error = %v", err)
+	})
+	if err := ValidateSchemaParameterBindings(); err == nil || !strings.Contains(err.Error(), "binding data failed") {
+		t.Fatalf("ValidateSchemaParameterBindings() error = %v", err)
 	}
 	if err := ValidateSchemaParameterBindingDelivery(BoundCommandRegistry{}, SchemaRegistry{}); err == nil || !strings.Contains(err.Error(), "binding data failed") {
 		t.Fatalf("ValidateSchemaParameterBindingDelivery() error = %v", err)
 	}
-	if _, err := EmbeddedSchemaParameterBindings(); err == nil || !strings.Contains(err.Error(), "binding data failed") {
-		t.Fatalf("EmbeddedSchemaParameterBindings() error = %v", err)
+	if _, err := LoadSchemaParameterBindings(); err == nil || !strings.Contains(err.Error(), "binding data failed") {
+		t.Fatalf("LoadSchemaParameterBindings() error = %v", err)
 	}
 }

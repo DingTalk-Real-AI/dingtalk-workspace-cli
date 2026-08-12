@@ -25,6 +25,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -56,6 +59,51 @@ func parseJSONObject(flag, s string) (map[string]any, error) {
 	return m, nil
 }
 
+// resolveNamedList finds a list in a response envelope without conflating a
+// missing/malformed collection with a legitimate empty array. Some AITable MCP
+// versions use a direct collection key while others wrap it one level below
+// data/result, so all reviewed shapes are accepted but at least one explicit
+// JSON array must be present.
+func resolveNamedList(operation string, data map[string]any, outerKeys, innerKeys []string) ([]any, error) {
+	if data == nil {
+		return nil, fmt.Errorf("%s response is nil and does not establish a list result", operation)
+	}
+	invalid := make([]string, 0)
+	for _, key := range outerKeys {
+		value, exists := data[key]
+		if !exists {
+			continue
+		}
+		if list, ok := value.([]any); ok {
+			return list, nil
+		}
+		envelope, ok := value.(map[string]any)
+		if !ok {
+			invalid = append(invalid, fmt.Sprintf("%s=%T", key, value))
+			continue
+		}
+		foundInner := false
+		for _, innerKey := range innerKeys {
+			innerValue, innerExists := envelope[innerKey]
+			if !innerExists {
+				continue
+			}
+			foundInner = true
+			if list, ok := innerValue.([]any); ok {
+				return list, nil
+			}
+			invalid = append(invalid, fmt.Sprintf("%s.%s=%T", key, innerKey, innerValue))
+		}
+		if !foundInner {
+			invalid = append(invalid, fmt.Sprintf("%s has no recognized collection", key))
+		}
+	}
+	if len(invalid) > 0 {
+		return nil, fmt.Errorf("%s response has no valid list collection (%v)", operation, invalid)
+	}
+	return nil, fmt.Errorf("%s response is missing its list collection", operation)
+}
+
 // ─────────────────────────────────────────────────────────────
 // base: Base 管理（server: aitable）
 // ─────────────────────────────────────────────────────────────
@@ -68,6 +116,34 @@ var BaseList = shortcut.Shortcut{
 	Description: "获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页）",
 	Intent:      "当你不知道具体 baseId、想先浏览自己最近用过或可访问的 AI 表格清单以便定位目标时使用；支持游标分页，返回 Base 列表及其 baseId。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_base_list",
+			CanonicalPath:  "aitable.shortcut_base_list",
+			CLIPath:        "aitable +base-list",
+			PrimaryCLIPath: "aitable +base-list",
+		},
+		Description: "获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取当前用户可访问的 AI 表格 Base 列表（最近访问，支持游标分页）",
+			UseWhen:      []string{"当你不知道具体 baseId、想先浏览自己最近用过或可访问的 AI 表格清单以便定位目标时使用；支持游标分页，返回 Base 列表及其 baseId。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws aitable +base-list",
+				"dws aitable +base-list --limit 5 --cursor NEXT",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量，默认 10，最大 10"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，首次不传"},
@@ -85,7 +161,10 @@ var BaseList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		bases := baseListProject(data)
+		bases, err := baseListProject("list_bases", data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(bases), "bases": bases})
 	},
 }
@@ -93,15 +172,19 @@ var BaseList = shortcut.Shortcut{
 // baseListProject reshapes list_bases / search_bases responses into a clean
 // {baseId, baseName} list — clean output projection. Both the list
 // container and the per-item field names are probed defensively across
-// candidate keys, so an empty/unknown shape yields an empty list rather than a
-// crash or fabricated data.
-func baseListProject(data map[string]any) []map[string]any {
-	raw := baseListResolveList(data)
+// candidate keys. An explicitly returned empty array is a successful empty
+// result; a missing/malformed collection is a protocol error and must not be
+// reported as count=0.
+func baseListProject(operation string, data map[string]any) ([]map[string]any, error) {
+	raw, err := baseListResolveList(operation, data)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
+	for index, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("%s response item %d must be an object, got %T", operation, index, item)
 		}
 		row := map[string]any{}
 		if v, ok := baseListFirst(m, "baseId", "base_id", "id"); ok {
@@ -110,36 +193,20 @@ func baseListProject(data map[string]any) []map[string]any {
 		if v, ok := baseListFirst(m, "baseName", "base_name", "name", "title"); ok {
 			row["baseName"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
+		if _, ok := row["baseId"]; !ok {
+			return nil, fmt.Errorf("%s response item %d is missing baseId", operation, index)
 		}
+		out = append(out, row)
 	}
-	return out
+	return out, nil
 }
 
 // baseListResolveList locates the list payload inside the response, tolerating a
 // bare top-level array container or nesting one level under a common envelope.
-func baseListResolveList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, key := range []string{"bases", "result", "data", "list", "items", "records"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"bases", "list", "items", "result", "data", "records"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+func baseListResolveList(operation string, data map[string]any) ([]any, error) {
+	return resolveNamedList(operation, data,
+		[]string{"bases", "result", "data", "list", "items", "records"},
+		[]string{"bases", "list", "items", "result", "data", "records"})
 }
 
 // baseListFirst returns the first present candidate key's value.
@@ -160,6 +227,31 @@ var BaseSearch = shortcut.Shortcut{
 	Description: "按名称关键词搜索 AI 表格 Base",
 	Intent:      "当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_base_search",
+			CanonicalPath:  "aitable.shortcut_base_search",
+			CLIPath:        "aitable +base-search",
+			PrimaryCLIPath: "aitable +base-search",
+		},
+		Description: "按名称关键词搜索 AI 表格 Base",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按名称关键词搜索 AI 表格 Base",
+			UseWhen:      []string{"当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +base-search --query \"项目管理\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "Base 名称关键词", Required: true},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，首次不传"},
@@ -174,7 +266,10 @@ var BaseSearch = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		bases := baseListProject(data)
+		bases, err := baseListProject("search_bases", data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(bases), "bases": bases})
 	},
 }
@@ -187,6 +282,31 @@ var BaseGet = shortcut.Shortcut{
 	Description: "获取指定 Base 的目录信息（tables / dashboards summary）",
 	Intent:      "当你已有 baseId、需要了解这个表格里有哪些数据表和仪表盘（拿到 tableId/dashboardId）以便进一步操作时使用；返回 Base 的目录结构概要。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_base_get",
+			CanonicalPath:  "aitable.shortcut_base_get",
+			CLIPath:        "aitable +base-get",
+			PrimaryCLIPath: "aitable +base-get",
+		},
+		Description: "获取指定 Base 的目录信息（tables / dashboards summary）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取指定 Base 的目录信息（tables / dashboards summary）",
+			UseWhen:      []string{"当你已有 baseId、需要了解这个表格里有哪些数据表和仪表盘（拿到 tableId/dashboardId）以便进一步操作时使用；返回 Base 的目录结构概要。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +base-get --base-id BASE_ID"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 	},
@@ -258,7 +378,7 @@ var BaseDelete = shortcut.Shortcut{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "待删除 Base ID", Required: true},
 		{Name: "reason", Type: shortcut.FlagString, Desc: "删除原因（可选）"},
 	},
-	Tips: []string{`dws aitable +base-delete --base-id BASE_ID --yes`},
+	Tips: []string{`dws aitable +base-delete --base-id BASE_ID`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{"baseId": rt.Str("base-id")}
 		if rt.Changed("reason") {
@@ -303,6 +423,34 @@ var TableGet = shortcut.Shortcut{
 	Description: "批量获取指定数据表的表级信息、字段目录与视图目录",
 	Intent:      "当你已进入某个 Base、需要了解其中某些数据表有哪些字段（拿 fieldId）、有哪些视图（拿 viewId）以便读写数据时使用；批量返回表信息、字段目录和视图目录。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_table_get",
+			CanonicalPath:  "aitable.shortcut_table_get",
+			CLIPath:        "aitable +table-get",
+			PrimaryCLIPath: "aitable +table-get",
+		},
+		Description: "批量获取指定数据表的表级信息、字段目录与视图目录",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "批量获取指定数据表的表级信息、字段目录与视图目录",
+			UseWhen:      []string{"当你已进入某个 Base、需要了解其中某些数据表有哪些字段（拿 fieldId）、有哪些视图（拿 viewId）以便读写数据时使用；批量返回表信息、字段目录和视图目录。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws aitable +table-get --base-id BASE_ID",
+				"dws aitable +table-get --base-id B --table-ids tbl1,tbl2",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-ids", Type: shortcut.FlagStringSlice, Desc: "Table ID 列表，逗号分隔，单次最多 10 个（可选）"},
@@ -365,7 +513,7 @@ var TableDelete = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "待删除 Table ID", Required: true},
 		{Name: "reason", Type: shortcut.FlagString, Desc: "删除原因（可选）"},
 	},
-	Tips: []string{`dws aitable +table-delete --base-id B --table-id T --yes`},
+	Tips: []string{`dws aitable +table-delete --base-id B --table-id T`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
 			"baseId":  rt.Str("base-id"),
@@ -390,6 +538,31 @@ var FieldGet = shortcut.Shortcut{
 	Description: "批量获取字段详情（含类型相关完整配置）",
 	Intent:      "当你需要查看字段的完整类型配置（如单选选项、关联表设置、AI 配置）以便正确写入数据或改配置时使用；批量返回字段详情。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_field_get",
+			CanonicalPath:  "aitable.shortcut_field_get",
+			CLIPath:        "aitable +field-get",
+			PrimaryCLIPath: "aitable +field-get",
+		},
+		Description: "批量获取字段详情（含类型相关完整配置）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "批量获取字段详情（含类型相关完整配置）",
+			UseWhen:      []string{"当你需要查看字段的完整类型配置（如单选选项、关联表设置、AI 配置）以便正确写入数据或改配置时使用；批量返回字段详情。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +field-get --base-id B --table-id T"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -467,7 +640,7 @@ var FieldDelete = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "field-id", Type: shortcut.FlagString, Desc: "待删除字段 ID", Required: true},
 	},
-	Tips: []string{`dws aitable +field-delete --base-id B --table-id T --field-id F --yes`},
+	Tips: []string{`dws aitable +field-delete --base-id B --table-id T --field-id F`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("delete_field", map[string]any{
 			"baseId":  rt.Str("base-id"),
@@ -489,6 +662,31 @@ var RecordQuery = shortcut.Shortcut{
 	Description: "查询表格记录（按 ID 取 / 条件筛选 / 关键词 / 分页）",
 	Intent:      "当你要读取表格里的行数据——按 recordId 精确取、按结构化条件筛选、按关键词全文搜索或分页遍历时使用；返回匹配记录及其单元格值。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_record_query",
+			CanonicalPath:  "aitable.shortcut_record_query",
+			CLIPath:        "aitable +record-query",
+			PrimaryCLIPath: "aitable +record-query",
+		},
+		Description: "查询表格记录（按 ID 取 / 条件筛选 / 关键词 / 分页）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询表格记录（按 ID 取 / 条件筛选 / 关键词 / 分页）",
+			UseWhen:      []string{"当你要读取表格里的行数据——按 recordId 精确取、按结构化条件筛选、按关键词全文搜索或分页遍历时使用；返回匹配记录及其单元格值。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +record-query --base-id B --table-id T --query \"关键词\" --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -545,26 +743,16 @@ var RecordUpdate = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+record-update",
 	Product:     serverMain,
-	Description: "批量更新记录（每条含 recordId 与 cells），单次最多 100 条",
-	Intent:      "当你要批量修改已有行的字段值（如把一批任务标为已完成，每条须带 recordId）时使用；会实际覆盖对应单元格，单次最多 100 条。",
+	Description: "批量更新记录，自动按 100 条分片并逐批读回验证",
+	Intent:      "当你要批量修改已有行的字段值（每条须带 recordId）时使用；自动按 100 条分片，任一批失败或读回不一致即非零退出并给出 nextOffset。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "records", Type: shortcut.FlagString, Desc: "记录 JSON 数组，如 '[{\"recordId\":\"rec\",\"cells\":{...}}]'", Required: true},
 	},
-	Tips: []string{`dws aitable +record-update --base-id B --table-id T --records '[{"recordId":"rec","cells":{"fldStatusId":"已完成"}}]'`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		recs, err := parseJSONAny("records", rt.Str("records"))
-		if err != nil {
-			return err
-		}
-		return rt.CallMCP("update_records", map[string]any{
-			"baseId":  rt.Str("base-id"),
-			"tableId": rt.Str("table-id"),
-			"records": recs,
-		})
-	},
+	Tips:    []string{`dws aitable +record-update --base-id B --table-id T --records '[{"recordId":"rec","cells":{"fldStatusId":"已完成"}}]'`},
+	Execute: executeRecordUpdateBatches,
 }
 
 // RecordDelete 删除行记录（delete_records）。
@@ -572,22 +760,16 @@ var RecordDelete = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+record-delete",
 	Product:     serverMain,
-	Description: "批量删除记录（不可逆），单次最多 100 条",
-	Intent:      "当你确认要批量删除若干行记录时使用；不可逆，按 recordId 列表删除，单次最多 100 条。",
+	Description: "批量删除记录（不可逆），自动按 100 条分片并逐批确认记录已不存在",
+	Intent:      "当你确认要批量删除若干行记录时使用；自动按 100 条分片，只有每批全部 recordId 读回均不存在才判定成功，否则非零退出并给出 nextOffset。",
 	Risk:        shortcut.RiskHighWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
-		{Name: "record-ids", Type: shortcut.FlagStringSlice, Desc: "待删除记录 ID 列表，逗号分隔", Required: true},
+		{Name: "record-ids", Type: shortcut.FlagStringSlice, Desc: "待删除记录 ID 列表，逗号分隔；最多 10000 个唯一 ID", Required: true},
 	},
-	Tips: []string{`dws aitable +record-delete --base-id B --table-id T --record-ids rec1,rec2 --yes`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("delete_records", map[string]any{
-			"baseId":    rt.Str("base-id"),
-			"tableId":   rt.Str("table-id"),
-			"recordIds": rt.StrSlice("record-ids"),
-		})
-	},
+	Tips:    []string{`dws aitable +record-delete --base-id B --table-id T --record-ids rec1,rec2`},
+	Execute: executeRecordDeleteBatches,
 }
 
 // RecordQueryEmpty 查询空行（query_empty_records，server: aitable-helper）。
@@ -598,6 +780,31 @@ var RecordQueryEmpty = shortcut.Shortcut{
 	Description: "扫描并过滤出完全没填用户字段的空行",
 	Intent:      "当你想清理表格、需要先找出那些所有用户字段都为空的空行时使用；扫描并返回空行列表，支持分页预算。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_record_query_empty",
+			CanonicalPath:  "aitable.shortcut_record_query_empty",
+			CLIPath:        "aitable +record-query-empty",
+			PrimaryCLIPath: "aitable +record-query-empty",
+		},
+		Description: "扫描并过滤出完全没填用户字段的空行",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "扫描并过滤出完全没填用户字段的空行",
+			UseWhen:      []string{"当你想清理表格、需要先找出那些所有用户字段都为空的空行时使用；扫描并返回空行列表，支持分页预算。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +record-query-empty --base-id B --table-id T"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -628,6 +835,31 @@ var RecordHistoryList = shortcut.Shortcut{
 	Description: "按 recordId 查询单条记录的变更历史",
 	Intent:      "当你要追溯某条记录曾被谁在何时改过哪些字段时使用；按 recordId 分页返回该行的变更历史。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_record_history_list",
+			CanonicalPath:  "aitable.shortcut_record_history_list",
+			CLIPath:        "aitable +record-history-list",
+			PrimaryCLIPath: "aitable +record-history-list",
+		},
+		Description: "按 recordId 查询单条记录的变更历史",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按 recordId 查询单条记录的变更历史",
+			UseWhen:      []string{"当你要追溯某条记录曾被谁在何时改过哪些字段时使用；按 recordId 分页返回该行的变更历史。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +record-history-list --base-id B --table-id T --record-id R"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -660,6 +892,31 @@ var RecordShareURL = shortcut.Shortcut{
 	Description: "按 recordId 批量获取记录分享链接，单次最多 20 条",
 	Intent:      "当你要把某几条记录以链接形式分享给他人（可带视图上下文）时使用；按 recordId 批量返回分享链接，单次最多 20 条。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_record_share_url",
+			CanonicalPath:  "aitable.shortcut_record_share_url",
+			CLIPath:        "aitable +record-share-url",
+			PrimaryCLIPath: "aitable +record-share-url",
+		},
+		Description: "按 recordId 批量获取记录分享链接，单次最多 20 条",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按 recordId 批量获取记录分享链接，单次最多 20 条",
+			UseWhen:      []string{"当你要把某几条记录以链接形式分享给他人（可带视图上下文）时使用；按 recordId 批量返回分享链接，单次最多 20 条。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +record-share-url --base-id B --table-id T --record-ids rec1,rec2"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -685,26 +942,16 @@ var RecordUpsert = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+record-upsert",
 	Product:     serverHelper,
-	Description: "按 records 是否带 recordId 自动拆分 create / update",
-	Intent:      "当你有一批数据、其中部分是新增部分是更新、不想自己区分时使用；按记录是否带 recordId 自动拆分为创建或更新并实际写入，单次最多 100 条。",
+	Description: "按 recordId 自动拆分 create/update，按 100 条分片并读回验证",
+	Intent:      "当一批数据中部分新增、部分更新时使用；自动按 recordId 拆分并以 100 条为批次写入，创建必须返回新 recordId，全部批次都需读回验证。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "records", Type: shortcut.FlagString, Desc: "记录 JSON 数组，单次最多 100 条", Required: true},
 	},
-	Tips: []string{`dws aitable +record-upsert --base-id B --table-id T --records '[{"cells":{...}}]'`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		recs, err := parseJSONAny("records", rt.Str("records"))
-		if err != nil {
-			return err
-		}
-		return rt.CallMCP("record_upsert", map[string]any{
-			"baseId":  rt.Str("base-id"),
-			"tableId": rt.Str("table-id"),
-			"records": recs,
-		})
-	},
+	Tips:    []string{`dws aitable +record-upsert --base-id B --table-id T --records '[{"cells":{...}}]'`},
+	Execute: executeRecordUpsertBatches,
 }
 
 // RecordPrimaryDocGet 查询记录主键文档（get_primary_doc，server: aitable-helper）。
@@ -767,6 +1014,31 @@ var TemplateSearch = shortcut.Shortcut{
 	Description: "按名称关键词搜索 AI 表格模板",
 	Intent:      "当你要新建表格并想套用现成模板、需要先按关键词找模板（不传关键词则返回热门）时使用；返回模板列表及其模板 ID。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_template_search",
+			CanonicalPath:  "aitable.shortcut_template_search",
+			CLIPath:        "aitable +template-search",
+			PrimaryCLIPath: "aitable +template-search",
+		},
+		Description: "按名称关键词搜索 AI 表格模板",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按名称关键词搜索 AI 表格模板",
+			UseWhen:      []string{"当你要新建表格并想套用现成模板、需要先按关键词找模板（不传关键词则返回热门）时使用；返回模板列表及其模板 ID。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +template-search --query \"项目管理\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "模板名称关键词（可选，不传返回热门）"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量，默认 10，最大 30（可选）"},
@@ -788,7 +1060,10 @@ var TemplateSearch = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		templates := templateSearchProject(data)
+		templates, err := templateSearchProject(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(templates), "templates": templates})
 	},
 }
@@ -796,15 +1071,17 @@ var TemplateSearch = shortcut.Shortcut{
 // templateSearchProject reshapes the raw search_templates response into a clean
 // {templateId, templateName} list — clean output projection. Both
 // the list container and the per-item field names are probed defensively across
-// candidate keys, so an empty/unknown shape yields an empty list rather than a
-// crash or fabricated data.
-func templateSearchProject(data map[string]any) []map[string]any {
-	raw := templateSearchResolveList(data)
+// candidate keys. Only an explicit array can establish a successful result.
+func templateSearchProject(data map[string]any) ([]map[string]any, error) {
+	raw, err := templateSearchResolveList(data)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
+	for index, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("search_templates response item %d must be an object, got %T", index, item)
 		}
 		row := map[string]any{}
 		if v, ok := templateSearchFirst(m, "templateId", "template_id", "id"); ok {
@@ -813,37 +1090,21 @@ func templateSearchProject(data map[string]any) []map[string]any {
 		if v, ok := templateSearchFirst(m, "templateName", "template_name", "name", "title"); ok {
 			row["templateName"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
+		if _, ok := row["templateId"]; !ok {
+			return nil, fmt.Errorf("search_templates response item %d is missing templateId", index)
 		}
+		out = append(out, row)
 	}
-	return out
+	return out, nil
 }
 
 // templateSearchResolveList locates the list payload inside the response,
 // tolerating a bare top-level array container or nesting one level under a
 // common envelope key.
-func templateSearchResolveList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, key := range []string{"templates", "result", "data", "list", "items"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"templates", "list", "items", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+func templateSearchResolveList(data map[string]any) ([]any, error) {
+	return resolveNamedList("search_templates", data,
+		[]string{"templates", "result", "data", "list", "items"},
+		[]string{"templates", "list", "items", "result", "data"})
 }
 
 // templateSearchFirst returns the first present candidate key's value.
@@ -896,6 +1157,31 @@ var ViewGet = shortcut.Shortcut{
 	Description: "获取视图完整信息（列顺序、筛选、排序、分组等）",
 	Intent:      "当你要了解某个视图当前的列顺序、筛选、排序、分组等完整配置以便复用或修改时使用；批量返回视图详情。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_view_get",
+			CanonicalPath:  "aitable.shortcut_view_get",
+			CLIPath:        "aitable +view-get",
+			PrimaryCLIPath: "aitable +view-get",
+		},
+		Description: "获取视图完整信息（列顺序、筛选、排序、分组等）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取视图完整信息（列顺序、筛选、排序、分组等）",
+			UseWhen:      []string{"当你要了解某个视图当前的列顺序、筛选、排序、分组等完整配置以便复用或修改时使用；批量返回视图详情。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +view-get --base-id B --table-id T"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -914,7 +1200,10 @@ var ViewGet = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		views := viewGetProject(data)
+		views, err := viewGetProject(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(views), "views": views})
 	},
 }
@@ -922,15 +1211,17 @@ var ViewGet = shortcut.Shortcut{
 // viewGetProject reshapes the raw get_views response into a clean
 // {viewId, viewName, viewType} list — clean output projection. Both
 // the list container and the per-item field names are probed defensively across
-// candidate keys, so an empty/unknown shape yields an empty list rather than a
-// crash or fabricated data.
-func viewGetProject(data map[string]any) []map[string]any {
-	raw := viewGetResolveList(data)
+// candidate keys. Only an explicit array can establish a successful result.
+func viewGetProject(data map[string]any) ([]map[string]any, error) {
+	raw, err := viewGetResolveList(data)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
+	for index, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("get_views response item %d must be an object, got %T", index, item)
 		}
 		row := map[string]any{}
 		if v, ok := viewGetFirst(m, "viewId", "view_id", "id"); ok {
@@ -942,37 +1233,21 @@ func viewGetProject(data map[string]any) []map[string]any {
 		if v, ok := viewGetFirst(m, "viewType", "view_type", "type"); ok {
 			row["viewType"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
+		if _, ok := row["viewId"]; !ok {
+			return nil, fmt.Errorf("get_views response item %d is missing viewId", index)
 		}
+		out = append(out, row)
 	}
-	return out
+	return out, nil
 }
 
 // viewGetResolveList locates the list payload inside the response, tolerating a
 // bare top-level array container or nesting one level under a common envelope
 // key.
-func viewGetResolveList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, key := range []string{"views", "result", "data", "list", "items"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"views", "list", "items", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+func viewGetResolveList(data map[string]any) ([]any, error) {
+	return resolveNamedList("get_views", data,
+		[]string{"views", "result", "data", "list", "items"},
+		[]string{"views", "list", "items", "result", "data"})
 }
 
 // viewGetFirst returns the first present candidate key's value.
@@ -1071,7 +1346,7 @@ var ViewDelete = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "view-id", Type: shortcut.FlagString, Desc: "待删除 View ID", Required: true},
 	},
-	Tips: []string{`dws aitable +view-delete --base-id B --table-id T --view-id V --yes`},
+	Tips: []string{`dws aitable +view-delete --base-id B --table-id T --view-id V`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("delete_view", map[string]any{
 			"baseId":  rt.Str("base-id"),
@@ -1089,6 +1364,31 @@ var ViewGetLock = shortcut.Shortcut{
 	Description: "获取视图锁定状态",
 	Intent:      "当你想确认某视图是否已被锁定（以防他人误改其配置）时使用；返回该视图的锁定状态。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_view_get_lock",
+			CanonicalPath:  "aitable.shortcut_view_get_lock",
+			CLIPath:        "aitable +view-get-lock",
+			PrimaryCLIPath: "aitable +view-get-lock",
+		},
+		Description: "获取视图锁定状态",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取视图锁定状态",
+			UseWhen:      []string{"当你想确认某视图是否已被锁定（以防他人误改其配置）时使用；返回该视图的锁定状态。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +view-get-lock --base-id B --table-id T --view-id V"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -1141,6 +1441,31 @@ var ViewGetFrozenCols = shortcut.Shortcut{
 	Description: "获取视图当前冻结的左侧列数",
 	Intent:      "当你想知道某视图当前冻结了左侧几列时使用；返回冻结列数。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_view_get_frozen_cols",
+			CanonicalPath:  "aitable.shortcut_view_get_frozen_cols",
+			CLIPath:        "aitable +view-get-frozen-cols",
+			PrimaryCLIPath: "aitable +view-get-frozen-cols",
+		},
+		Description: "获取视图当前冻结的左侧列数",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取视图当前冻结的左侧列数",
+			UseWhen:      []string{"当你想知道某视图当前冻结了左侧几列时使用；返回冻结列数。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +view-get-frozen-cols --base-id B --table-id T --view-id V"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -1189,6 +1514,31 @@ var ViewGetRowHeight = shortcut.Shortcut{
 	Description: "获取视图单元格行高（像素）",
 	Intent:      "当你想知道某视图当前的行高档位时使用；返回单元格行高的像素值。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_view_get_row_height",
+			CanonicalPath:  "aitable.shortcut_view_get_row_height",
+			CLIPath:        "aitable +view-get-row-height",
+			PrimaryCLIPath: "aitable +view-get-row-height",
+		},
+		Description: "获取视图单元格行高（像素）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取视图单元格行高（像素）",
+			UseWhen:      []string{"当你想知道某视图当前的行高档位时使用；返回单元格行高的像素值。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +view-get-row-height --base-id B --table-id T --view-id V"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -1271,6 +1621,31 @@ var FormList = shortcut.Shortcut{
 	Description: "列出指定数据表下的所有表单视图",
 	Intent:      "当你要查看某数据表下已有哪些收集表单时使用；返回该表的全部表单视图列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_form_list",
+			CanonicalPath:  "aitable.shortcut_form_list",
+			CLIPath:        "aitable +form-list",
+			PrimaryCLIPath: "aitable +form-list",
+		},
+		Description: "列出指定数据表下的所有表单视图",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出指定数据表下的所有表单视图",
+			UseWhen:      []string{"当你要查看某数据表下已有哪些收集表单时使用；返回该表的全部表单视图列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +form-list --base-id B --table-id T"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -1284,23 +1659,28 @@ var FormList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		forms := formListProject(data)
+		forms, err := formListProject(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(forms), "forms": forms})
 	},
 }
 
 // formListProject reshapes the raw list_form_views response into a clean form
 // view list ({viewId, viewName, viewType}) — clean output projection.
-// Both the list container and the per-item field names are probed
-// defensively across candidate keys, so an empty/unknown shape yields an empty
-// list rather than a crash or fabricated data.
-func formListProject(data map[string]any) []map[string]any {
-	raw := formListResolveList(data)
+// Both the list container and the per-item field names are probed defensively
+// across candidate keys. Only an explicit array can establish success.
+func formListProject(data map[string]any) ([]map[string]any, error) {
+	raw, err := formListResolveList(data)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
+	for index, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("list_form_views response item %d must be an object, got %T", index, item)
 		}
 		row := map[string]any{}
 		if v, ok := formListFirst(m, "viewId", "view_id", "id"); ok {
@@ -1312,36 +1692,20 @@ func formListProject(data map[string]any) []map[string]any {
 		if v, ok := formListFirst(m, "viewType", "view_type", "type"); ok {
 			row["viewType"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
+		if _, ok := row["viewId"]; !ok {
+			return nil, fmt.Errorf("list_form_views response item %d is missing viewId", index)
 		}
+		out = append(out, row)
 	}
-	return out
+	return out, nil
 }
 
 // formListResolveList locates the list payload inside the response, tolerating a
 // bare top-level array container or nesting one level under a common envelope.
-func formListResolveList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, key := range []string{"forms", "views", "formViews", "result", "data", "list", "items"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"forms", "views", "formViews", "list", "items", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+func formListResolveList(data map[string]any) ([]any, error) {
+	return resolveNamedList("list_form_views", data,
+		[]string{"forms", "views", "formViews", "result", "data", "list", "items"},
+		[]string{"forms", "views", "formViews", "list", "items", "result", "data"})
 }
 
 // formListFirst returns the first present candidate key's value.
@@ -1367,7 +1731,7 @@ var FormDelete = shortcut.Shortcut{
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
 		{Name: "view-id", Type: shortcut.FlagString, Desc: "表单 View ID", Required: true},
 	},
-	Tips: []string{`dws aitable +form-delete --base-id B --table-id T --view-id V --yes`},
+	Tips: []string{`dws aitable +form-delete --base-id B --table-id T --view-id V`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("delete_form_view", map[string]any{
 			"baseId":  rt.Str("base-id"),
@@ -1417,6 +1781,31 @@ var FormFieldList = shortcut.Shortcut{
 	Description: "列出表单视图当前可见的字段及其配置",
 	Intent:      "当你要查看某表单当前放出了哪些字段供填写及其是否必填等配置时使用；返回表单可见字段列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_form_field_list",
+			CanonicalPath:  "aitable.shortcut_form_field_list",
+			CLIPath:        "aitable +form-field-list",
+			PrimaryCLIPath: "aitable +form-field-list",
+		},
+		Description: "列出表单视图当前可见的字段及其配置",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出表单视图当前可见的字段及其配置",
+			UseWhen:      []string{"当你要查看某表单当前放出了哪些字段供填写及其是否必填等配置时使用；返回表单可见字段列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +form-field-list --base-id B --table-id T --view-id V"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -1501,6 +1890,31 @@ var FormShareGet = shortcut.Shortcut{
 	Description: "读取视图当前的分享表单配置",
 	Intent:      "当你要查看某视图的表单分享是否已开启及其分享配置时使用；返回当前的分享表单配置。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_form_share_get",
+			CanonicalPath:  "aitable.shortcut_form_share_get",
+			CLIPath:        "aitable +form-share-get",
+			PrimaryCLIPath: "aitable +form-share-get",
+		},
+		Description: "读取视图当前的分享表单配置",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "读取视图当前的分享表单配置",
+			UseWhen:      []string{"当你要查看某视图的表单分享是否已开启及其分享配置时使用；返回当前的分享表单配置。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +form-share-get --base-id B --table-id T --view-id V"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "table-id", Type: shortcut.FlagString, Desc: "Table ID", Required: true},
@@ -1579,7 +1993,7 @@ var WorkflowDisable = shortcut.Shortcut{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "workflow-id", Type: shortcut.FlagString, Desc: "Workflow ID", Required: true},
 	},
-	Tips: []string{`dws aitable +workflow-disable --base-id B --workflow-id W --yes`},
+	Tips: []string{`dws aitable +workflow-disable --base-id B --workflow-id W`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("disable_workflow", map[string]any{
 			"baseId":     rt.Str("base-id"),
@@ -1635,23 +2049,27 @@ var WorkflowList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		workflows := workflowListProject(data)
+		workflows, err := workflowListProject(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(workflows), "workflows": workflows})
 	},
 }
 
 // workflowListProject reshapes the raw list_workflows response into a clean
 // workflow list ({workflowId, name, status/enabled}) — output-projection
-// clean output projection. Both the list container and the per-item field names are
-// probed defensively across candidate keys, so an empty/unknown shape yields an
-// empty list rather than a crash or fabricated data.
-func workflowListProject(data map[string]any) []map[string]any {
-	raw := workflowListResolveList(data)
+// clean output projection. Only an explicit array can establish success.
+func workflowListProject(data map[string]any) ([]map[string]any, error) {
+	raw, err := workflowListResolveList(data)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
+	for index, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("list_workflows response item %d must be an object, got %T", index, item)
 		}
 		row := map[string]any{}
 		if v, ok := workflowListFirst(m, "workflowId", "workflow_id", "id"); ok {
@@ -1663,37 +2081,21 @@ func workflowListProject(data map[string]any) []map[string]any {
 		if v, ok := workflowListFirst(m, "status", "enabled", "isEnabled", "state"); ok {
 			row["status"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
+		if _, ok := row["workflowId"]; !ok {
+			return nil, fmt.Errorf("list_workflows response item %d is missing workflowId", index)
 		}
+		out = append(out, row)
 	}
-	return out
+	return out, nil
 }
 
 // workflowListResolveList locates the list payload inside the response,
 // tolerating a bare top-level array container or nesting one level under a
 // common envelope.
-func workflowListResolveList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, key := range []string{"workflows", "result", "data", "list", "items"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"workflows", "list", "items", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+func workflowListResolveList(data map[string]any) ([]any, error) {
+	return resolveNamedList("list_workflows", data,
+		[]string{"workflows", "result", "data", "list", "items"},
+		[]string{"workflows", "list", "items", "result", "data"})
 }
 
 // workflowListFirst returns the first present candidate key's value.
@@ -1718,7 +2120,32 @@ var DashboardConfigExample = shortcut.Shortcut{
 	Description: "获取 dashboard config 的结构示例",
 	Intent:      "当你准备创建或更新仪表盘、需要先了解 dashboard config 的字段结构长什么样时使用；返回一份配置结构示例供参考。",
 	Risk:        shortcut.RiskRead,
-	Tips:        []string{`dws aitable +dashboard-config-example`},
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_dashboard_config_example",
+			CanonicalPath:  "aitable.shortcut_dashboard_config_example",
+			CLIPath:        "aitable +dashboard-config-example",
+			PrimaryCLIPath: "aitable +dashboard-config-example",
+		},
+		Description: "获取 dashboard config 的结构示例",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取 dashboard config 的结构示例",
+			UseWhen:      []string{"当你准备创建或更新仪表盘、需要先了解 dashboard config 的字段结构长什么样时使用；返回一份配置结构示例供参考。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +dashboard-config-example"},
+		},
+	},
+	Tips: []string{`dws aitable +dashboard-config-example`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("get_dashboard_config_example", map[string]any{})
 	},
@@ -1732,6 +2159,31 @@ var DashboardGet = shortcut.Shortcut{
 	Description: "获取指定 dashboard 的详细信息（含 charts summary）",
 	Intent:      "当你要查看某仪表盘的配置详情及它包含哪些图表（拿 chartId）时使用；返回 dashboard 信息与 charts 概要。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_dashboard_get",
+			CanonicalPath:  "aitable.shortcut_dashboard_get",
+			CLIPath:        "aitable +dashboard-get",
+			PrimaryCLIPath: "aitable +dashboard-get",
+		},
+		Description: "获取指定 dashboard 的详细信息（含 charts summary）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取指定 dashboard 的详细信息（含 charts summary）",
+			UseWhen:      []string{"当你要查看某仪表盘的配置详情及它包含哪些图表（拿 chartId）时使用；返回 dashboard 信息与 charts 概要。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +dashboard-get --base-id B --dashboard-id D"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "dashboard-id", Type: shortcut.FlagString, Desc: "Dashboard ID", Required: true},
@@ -1797,7 +2249,7 @@ var DashboardDelete = shortcut.Shortcut{
 		{Name: "dashboard-id", Type: shortcut.FlagString, Desc: "Dashboard ID", Required: true},
 		{Name: "reason", Type: shortcut.FlagString, Desc: "删除原因（可选）"},
 	},
-	Tips: []string{`dws aitable +dashboard-delete --base-id B --dashboard-id D --yes`},
+	Tips: []string{`dws aitable +dashboard-delete --base-id B --dashboard-id D`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
 			"baseId":      rt.Str("base-id"),
@@ -1896,7 +2348,32 @@ var ChartWidgetsExample = shortcut.Shortcut{
 	Description: "获取所有图表类型的 widget config 示例",
 	Intent:      "当你准备创建或修改图表、需要先参考各类图表 widget config 的示例结构时使用；返回所有图表类型的配置示例。",
 	Risk:        shortcut.RiskRead,
-	Tips:        []string{`dws aitable +chart-widgets-example`},
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_chart_widgets_example",
+			CanonicalPath:  "aitable.shortcut_chart_widgets_example",
+			CLIPath:        "aitable +chart-widgets-example",
+			PrimaryCLIPath: "aitable +chart-widgets-example",
+		},
+		Description: "获取所有图表类型的 widget config 示例",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取所有图表类型的 widget config 示例",
+			UseWhen:      []string{"当你准备创建或修改图表、需要先参考各类图表 widget config 的示例结构时使用；返回所有图表类型的配置示例。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +chart-widgets-example"},
+		},
+	},
+	Tips: []string{`dws aitable +chart-widgets-example`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("get_dashboard_widgets_example", map[string]any{})
 	},
@@ -1910,6 +2387,31 @@ var ChartGet = shortcut.Shortcut{
 	Description: "获取指定 chart 的详细信息",
 	Intent:      "当你要查看某个图表的配置详情（统计维度、样式等）时使用；返回指定 chart 的详细信息。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_chart_get",
+			CanonicalPath:  "aitable.shortcut_chart_get",
+			CLIPath:        "aitable +chart-get",
+			PrimaryCLIPath: "aitable +chart-get",
+		},
+		Description: "获取指定 chart 的详细信息",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取指定 chart 的详细信息",
+			UseWhen:      []string{"当你要查看某个图表的配置详情（统计维度、样式等）时使用；返回指定 chart 的详细信息。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +chart-get --base-id B --dashboard-id D --chart-id C"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "dashboard-id", Type: shortcut.FlagString, Desc: "Dashboard ID", Required: true},
@@ -1978,7 +2480,7 @@ var ChartDelete = shortcut.Shortcut{
 		{Name: "chart-id", Type: shortcut.FlagString, Desc: "Chart ID", Required: true},
 		{Name: "reason", Type: shortcut.FlagString, Desc: "删除原因（可选）"},
 	},
-	Tips: []string{`dws aitable +chart-delete --base-id B --dashboard-id D --chart-id C --yes`},
+	Tips: []string{`dws aitable +chart-delete --base-id B --dashboard-id D --chart-id C`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
 			"baseId":      rt.Str("base-id"),
@@ -2210,7 +2712,7 @@ var AdvpermDisable = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 	},
-	Tips: []string{`dws aitable +advperm-disable --base-id B --yes`},
+	Tips: []string{`dws aitable +advperm-disable --base-id B`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("set_advanced_permission", map[string]any{
 			"baseId":  rt.Str("base-id"),
@@ -2227,6 +2729,31 @@ var RoleList = shortcut.Shortcut{
 	Description: "列出指定 Base 下的全部角色",
 	Intent:      "当你要查看某 Base 下配置了哪些角色（拿 roleId）时使用；返回全部角色列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_role_list",
+			CanonicalPath:  "aitable.shortcut_role_list",
+			CLIPath:        "aitable +role-list",
+			PrimaryCLIPath: "aitable +role-list",
+		},
+		Description: "列出指定 Base 下的全部角色",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出指定 Base 下的全部角色",
+			UseWhen:      []string{"当你要查看某 Base 下配置了哪些角色（拿 roleId）时使用；返回全部角色列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +role-list --base-id B"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 	},
@@ -2349,7 +2876,7 @@ var RoleDelete = shortcut.Shortcut{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "role-id", Type: shortcut.FlagString, Desc: "Role ID（数字 long 字符串）", Required: true},
 	},
-	Tips: []string{`dws aitable +role-delete --base-id B --role-id R --yes`},
+	Tips: []string{`dws aitable +role-delete --base-id B --role-id R`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("delete_role", map[string]any{
 			"baseId": rt.Str("base-id"),
@@ -2427,7 +2954,7 @@ var SectionDelete = shortcut.Shortcut{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 		{Name: "section-id", Type: shortcut.FlagString, Desc: "Section ID", Required: true},
 	},
-	Tips: []string{`dws aitable +section-delete --base-id B --section-id S --yes`},
+	Tips: []string{`dws aitable +section-delete --base-id B --section-id S`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("delete_section", map[string]any{
 			"baseId":    rt.Str("base-id"),
@@ -2467,6 +2994,31 @@ var SectionListEmpty = shortcut.Shortcut{
 	Description: "列出指定 Base 下所有没有子节点的空文件夹",
 	Intent:      "当你想清理 Base、需要先找出所有没有任何子节点的空文件夹时使用；返回空文件夹列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_section_list_empty",
+			CanonicalPath:  "aitable.shortcut_section_list_empty",
+			CLIPath:        "aitable +section-list-empty",
+			PrimaryCLIPath: "aitable +section-list-empty",
+		},
+		Description: "列出指定 Base 下所有没有子节点的空文件夹",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出指定 Base 下所有没有子节点的空文件夹",
+			UseWhen:      []string{"当你想清理 Base、需要先找出所有没有任何子节点的空文件夹时使用；返回空文件夹列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +section-list-empty --base-id B"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 	},
@@ -2484,6 +3036,31 @@ var SectionListNodes = shortcut.Shortcut{
 	Description: "列出指定 Base 当前版本下的全部 nsheet 节点",
 	Intent:      "当你要总览某 Base 当前版本下的全部节点（表、仪表盘、文件夹等）目录结构时使用；返回所有 nsheet 节点。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_section_list_nodes",
+			CanonicalPath:  "aitable.shortcut_section_list_nodes",
+			CLIPath:        "aitable +section-list-nodes",
+			PrimaryCLIPath: "aitable +section-list-nodes",
+		},
+		Description: "列出指定 Base 当前版本下的全部 nsheet 节点",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出指定 Base 当前版本下的全部 nsheet 节点",
+			UseWhen:      []string{"当你要总览某 Base 当前版本下的全部节点（表、仪表盘、文件夹等）目录结构时使用；返回所有 nsheet 节点。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws aitable +section-list-nodes --base-id B"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base-id", Type: shortcut.FlagString, Desc: "Base ID", Required: true},
 	},
@@ -2522,7 +3099,7 @@ var SectionMoveNode = shortcut.Shortcut{
 }
 
 func init() {
-	shortcut.Register(
+	shortcut.Register(withReviewedAITableShortcutContracts(
 		BaseList,
 		BaseSearch,
 		BaseGet,
@@ -2530,7 +3107,10 @@ func init() {
 		BaseUpdate,
 		BaseDelete,
 		BaseCopy,
+		BaseSchemaSnapshot,
+		BaseBootstrap,
 		TableGet,
+		TableCopy,
 		TableUpdate,
 		TableDelete,
 		FieldGet,
@@ -2543,12 +3123,17 @@ func init() {
 		RecordHistoryList,
 		RecordShareURL,
 		RecordUpsert,
+		RecordUpsertByKey,
+		RecordBulkPatch,
 		RecordPrimaryDocGet,
 		RecordPrimaryDocCreate,
 		TemplateSearch,
 		AttachmentUpload,
+		AttachmentPut,
+		AttachmentRemove,
 		ViewGet,
 		ViewUpdate,
+		ViewPresetApply,
 		ViewDuplicate,
 		ViewDelete,
 		ViewGetLock,
@@ -2570,6 +3155,7 @@ func init() {
 		WorkflowDisable,
 		WorkflowGet,
 		WorkflowList,
+		WorkflowDeploy,
 		DashboardConfigExample,
 		DashboardGet,
 		DashboardUpdate,
@@ -2600,5 +3186,6 @@ func init() {
 		SectionListEmpty,
 		SectionListNodes,
 		SectionMoveNode,
-	)
+		URLResolve,
+	)...)
 }

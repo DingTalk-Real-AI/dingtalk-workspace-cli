@@ -13,9 +13,14 @@
 
 package edition
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
+)
 
 func TestClawTypeDefaultsToOSSValue(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "")
 	prev := Get()
 	defer Override(prev)
 
@@ -26,12 +31,35 @@ func TestClawTypeDefaultsToOSSValue(t *testing.T) {
 }
 
 func TestClawTypeUsesOverlayValue(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "")
 	prev := Get()
 	defer Override(prev)
 
 	Override(&Hooks{Name: "overlay", ClawTypeValue: "wukong"})
 	if got := ClawType(); got != "wukong" {
 		t.Fatalf("ClawType() = %q, want overlay value %q", got, "wukong")
+	}
+}
+
+func TestClawTypeUsesValidAgentProduct(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, " qwenwork ")
+	prev := Get()
+	defer Override(prev)
+
+	Override(&Hooks{Name: "overlay", ClawTypeValue: "wukong"})
+	if got := ClawType(); got != "qwenwork" {
+		t.Fatalf("ClawType() = %q, want qwenwork", got)
+	}
+}
+
+func TestClawTypeInvalidAgentProductFallsBackToOverlay(t *testing.T) {
+	t.Setenv(agentproduct.EnvName, "qwen work")
+	prev := Get()
+	defer Override(prev)
+
+	Override(&Hooks{Name: "overlay", ClawTypeValue: "wukong"})
+	if got := ClawType(); got != "wukong" {
+		t.Fatalf("ClawType() = %q, want overlay fallback wukong", got)
 	}
 }
 
@@ -77,17 +105,27 @@ func TestOpenVisibleProductsExcludesCompatibilityOnlyCommands(t *testing.T) {
 
 func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	servers := openSupplementServers()
+	foundMCPMeta := false
+	foundWhiteboard := false
 	for _, server := range servers {
+		if server.ID == "whiteboard" {
+			foundWhiteboard = server.Endpoint == "https://mcp-gw.dingtalk.com/server/whiteboard"
+		}
 		if server.ID != "mcp-meta" {
 			continue
 		}
+		foundMCPMeta = true
 		if server.Endpoint == "" {
 			t.Fatal("mcp-meta has empty endpoint")
 		}
 		if len(server.Prefixes) != 0 {
 			t.Fatal("mcp-meta must remain helper-only without command prefixes")
 		}
-		return
 	}
-	t.Fatal("openSupplementServers() missing mcp-meta")
+	if !foundMCPMeta {
+		t.Fatal("openSupplementServers() missing mcp-meta")
+	}
+	if !foundWhiteboard {
+		t.Fatal("openSupplementServers() missing helper-only whiteboard endpoint")
+	}
 }

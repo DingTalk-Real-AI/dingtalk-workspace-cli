@@ -2,23 +2,25 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-BIN="${DWS_BIN:-$ROOT/dws}"
 cd "$ROOT"
-. "$ROOT/scripts/policy/policy-runtime.sh"
-policy_prepare_runtime "$ROOT"
+
+BIN="${DWS_BIN:-$ROOT/dws}"
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+
+# Assemble a fresh runtime Catalog dump (ResolveSchemaBuild via with-catalog.sh)
+# into the single-document shape this check consumes. No committed
+# schema_catalog/ split is consulted.
+catalog_combined="$tmp/catalog-combined.json"
+scripts/policy/with-catalog.sh >"$catalog_combined"
 
 if [ ! -x "$BIN" ]; then
 	printf 'error: dws binary not found at %s (run make build first)\n' "$BIN" >&2
 	exit 2
 fi
 
-tmp="$(mktemp -d)"
-exec_tmp="$(policy_runtime_mktemp_dir dws-schema-binary)"
-smoke_generator="$exec_tmp/schema-registry-smoke"
-trap 'rm -rf "$tmp" "$exec_tmp"' EXIT HUP INT TERM
-
-go build -o "$smoke_generator" ./internal/generator/cmd_schema_registry_smoke
-"$smoke_generator" >"$tmp/smoke-vector.json"
+go run ./internal/generator/cmd_schema_registry_smoke >"$tmp/smoke-vector.json"
 
 "$BIN" schema list --format json >"$tmp/list.json"
 "$BIN" schema --all --format json >"$tmp/all.json"
@@ -43,7 +45,7 @@ fi
 
 if ! jq -e -n \
 	--slurpfile vector "$tmp/smoke-vector.json" \
-	--slurpfile catalog internal/cli/schema_catalog.json \
+	--slurpfile catalog "$catalog_combined" \
 	--slurpfile list "$tmp/list.json" \
 	--slurpfile all "$tmp/all.json" '
   $vector[0] as $vector |
@@ -64,12 +66,12 @@ if ! jq -e -n \
 	      ($command.alias_cli_paths | sort))] | all) and
   all($all.products[].tools[]; . == $catalog.tools[.canonical_path])
 ' >/dev/null; then
-	printf '%s\n' 'built dws Schema navigation/hash/--all content differs from EffectiveCommandRegistry or embedded Catalog' >&2
+	printf '%s\n' 'built dws Schema navigation/hash/--all content differs from EffectiveCommandRegistry or assembled Catalog dump' >&2
 	exit 1
 fi
 
 # schema list is an intentionally compact product overview, but every field
-# still has to be the exact typed projection of the same embedded Catalog.
+# still has to be the exact typed projection of the same assembled Catalog dump.
 # Derive the expected overview without invoking another Schema code path so a
 # release binary cannot hide loader/query drift behind two identical helpers.
 jq -S '
@@ -99,11 +101,10 @@ jq -S '
     ]
   } +
   (if (($catalog.source // "") | type == "string" and length > 0) then {source: $catalog.source} else {} end) +
-  (if $catalog | has("interface_metadata") then {interface_metadata: $catalog.interface_metadata} else {} end) +
   (if $catalog | has("agent_metadata") then {agent_metadata: $catalog.agent_metadata} else {} end) +
   {catalog_hash: $snapshot.source_hash} +
   (if (($snapshot.surface_hash // "") | nonempty) then {surface_hash: $snapshot.surface_hash} else {} end)
-' internal/cli/schema_catalog.json >"$tmp/expected-list.json"
+' "$catalog_combined" >"$tmp/expected-list.json"
 jq -S . "$tmp/list.json" >"$tmp/actual-list.json"
 if ! cmp -s "$tmp/expected-list.json" "$tmp/actual-list.json"; then
 	printf '%s\n' 'built dws schema list differs from the typed Catalog overview projection' >&2

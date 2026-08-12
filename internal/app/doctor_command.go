@@ -61,7 +61,7 @@ func newDoctorCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "doctor",
 		Short:             "环境健康检查",
-		Long:              "一键检查登录态、网络连通性、缓存状态和版本更新，快速定位常见问题。",
+		Long:              "一键检查登录态、网络连通性和版本更新，快速定位常见问题。",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE:              runDoctor,
@@ -91,9 +91,6 @@ func runDoctor(cmd *cobra.Command, _ []string) error {
 
 	networkResult := doctorCheckNetwork(cmd.Context(), w, jsonOut, networkTimeout)
 	checks = append(checks, networkResult)
-
-	cacheResult := doctorCheckCache(w, jsonOut)
-	checks = append(checks, cacheResult)
 
 	versionResult := doctorCheckVersion(w, jsonOut, networkTimeout)
 	checks = append(checks, versionResult)
@@ -290,24 +287,6 @@ func doctorCheckNetwork(ctx context.Context, w io.Writer, jsonOut bool, timeout 
 		Name:    "network",
 		Status:  statusPass,
 		Message: fmt.Sprintf("%s 可达 (延迟 %dms)", baseURL, latency.Milliseconds()),
-	}
-	if !jsonOut {
-		printCheckResult(w, r)
-	}
-	return r
-}
-
-// ── Cache check ─────────────────────────────────────────────────────────
-
-func doctorCheckCache(w io.Writer, jsonOut bool) checkResult {
-	if !jsonOut {
-		fmt.Fprint(w, tui.Dim("检查缓存状态...       "))
-	}
-
-	r := checkResult{
-		Name:    "cache",
-		Status:  statusPass,
-		Message: "静态端点模式, 无需缓存",
 	}
 	if !jsonOut {
 		printCheckResult(w, r)

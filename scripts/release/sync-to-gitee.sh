@@ -165,7 +165,6 @@ rel_json="$(<"$release_lookup_body")"
 case "$release_status" in
   200)
     release_id="$(printf '%s' "$rel_json" | release_id_from_json || true)"
-    [ -n "$release_id" ] || err "Gitee release lookup returned HTTP 200 without a valid release id"
     ;;
   404)
     release_id=""
@@ -175,7 +174,7 @@ case "$release_status" in
     ;;
 esac
 
-if [ "$release_status" = "404" ]; then
+if [ -z "$release_id" ]; then
   deadline_remaining >/dev/null || err "overall Gitee sync deadline exhausted during release lookup"
   echo "   No Gitee release for ${VERSION} yet — creating it."
   create_max_time="$(bounded_max_time "$GITEE_RELEASE_CREATE_MAX_TIME")" \

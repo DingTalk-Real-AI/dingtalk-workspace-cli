@@ -71,7 +71,7 @@ func TestEventStopDryRunPrecedesConfirmationAndReturnsPreview(t *testing.T) {
 	}
 }
 
-func TestEventStopDryRunDoesNotBypassTargetValidation(t *testing.T) {
+func TestCrossPlatformCoverageEventStopDryRunDoesNotBypassTargetValidation(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		args []string

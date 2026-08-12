@@ -23,7 +23,7 @@ import "embed"
 // FS holds the peer mono and multi installable skill trees. Schema-generation
 // inputs live under internal/cli and are intentionally not embedded. The all:
 // prefix keeps underscore-prefixed directories (for example,
-// references/best_practices/_common) that plain embed patterns would skip.
+// mono/references/best_practices/_common) that plain embed patterns would skip.
 //
 //go:embed all:mono all:multi
 var FS embed.FS

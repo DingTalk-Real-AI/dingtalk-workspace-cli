@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/fatih/color"
 )
 
@@ -26,9 +27,7 @@ import (
 // so we flip the flag explicitly.
 func forceNoColor(t *testing.T) {
 	t.Helper()
-	prev := color.NoColor
-	color.NoColor = true
-	t.Cleanup(func() { color.NoColor = prev })
+	testseam.Swap(t, &color.NoColor, true)
 }
 
 func TestPretty_SchemaListRendersProducts(t *testing.T) {

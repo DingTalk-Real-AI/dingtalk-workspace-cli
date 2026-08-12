@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -16,6 +18,20 @@ import (
 var dingRemindTypeMap = map[string]int{"app": 1, "sms": 2, "call": 3}
 
 func newDingCommand() *cobra.Command {
+	// Product-level Agent routing Decl (migrated from selection/ding.json
+	// products.ding). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "ding",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "以企业机器人发送或撤回应用内/短信/电话 DING",
+			UseWhen: []string{
+				"需要机器人身份发送或撤回 DING",
+			},
+			AvoidWhen: []string{
+				"普通聊天消息用 chat；用户身份 DING 不要走机器人命令",
+			},
+		},
+	})
 	root := &cobra.Command{
 		Use:   "ding",
 		Short: "DING 消息 / 发送 / 撤回",
@@ -66,6 +82,46 @@ func newDingCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(dingMessageSendCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "ding",
+				Name:           "send_ding_message",
+				CanonicalPath:  "ding.send_ding_message",
+				CLIPath:        "ding message send",
+				PrimaryCLIPath: "ding message send",
+			},
+			Description: "以企业机器人发送应用内/短信/电话 DING",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "ding", RPCName: "send_ding_message"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "以企业机器人发送应用内/短信/电话 DING",
+				UseWhen:      []string{"需要用企业机器人向指定 userId 发送应用内、短信或电话 DING"},
+				AvoidWhen: []string{
+					"普通聊天消息用 chat message send / send-by-bot",
+					"需要用户身份 DING 时不要用本命令（机器人身份）",
+					"短信/电话有成本，用户未确认前不要发 call/sms",
+				},
+				Examples: []string{
+					"dws ding message send --robot-code <ROBOT_CODE> --users userId1,userId2 --content \"请查看\" --format json",
+					"dws ding message send --robot-code <ROBOT_CODE> --type call --users userId1 --content \"紧急告警\" --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "content", Required: boolPtr(true)},
+				{Name: "robot-code", Required: boolPtr(true)},
+				{Name: "type", Property: "remindType"},
+				{Name: "users", Property: "receiverUserIdList", Required: boolPtr(true), InterfaceType: "array"},
+			},
+		},
+	})
 
 	dingMessageRecallCmd := &cobra.Command{
 		Use:     "recall",
@@ -88,6 +144,36 @@ func newDingCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(dingMessageRecallCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "ding",
+				Name:           "recall_ding_message",
+				CanonicalPath:  "ding.recall_ding_message",
+				CLIPath:        "ding message recall",
+				PrimaryCLIPath: "ding message recall",
+			},
+			Description: "撤回已发送的机器人 DING",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "ding", RPCName: "recall_ding_message"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "撤回已发送的机器人 DING",
+				UseWhen:      []string{"已知 openDingId 与同一 robot-code，需要撤回机器人 DING"},
+				AvoidWhen:    []string{"需要以用户身份撤回 DING 时不要使用本命令"},
+				Examples:     []string{"dws ding message recall --robot-code <ROBOT_CODE> --id <OPEN_DING_ID> --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "openDingId"},
+			},
+		},
+	})
 
 	dingMessageListCmd := &cobra.Command{
 		Use:   "list",

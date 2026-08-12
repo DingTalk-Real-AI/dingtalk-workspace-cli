@@ -14,6 +14,7 @@
 package event
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,10 +34,27 @@ func TestCrossPlatformCoverageEndpointPortableCoverageEdges(t *testing.T) {
 	if got := ipcEndpointForOS("windows", "ignored", "open", "", "hash"); got != `\\.\pipe\dws-event-open-app_stream-hash` {
 		t.Fatalf("Windows endpoint = %q", got)
 	}
-	if got := ipcEndpointForOS("darwin", "short", "open", SourceKindPersonalStream, "hash"); got != filepath.Join("short", "bus.sock") {
+
+	runtimeRoot := filepath.VolumeName(os.TempDir()) + string(filepath.Separator)
+	runtimeDir := filepath.Join(runtimeRoot, "dws-xdg-runtime")
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	workDir := "portable-xdg-workdir"
+	wantXDG := filepath.Join(runtimeDir, eventRuntimeDirPrefix+currentUserID(), "dws-evt-"+IdentityHash(workDir)+".sock")
+	if got := ipcEndpointForOS("linux", workDir, "open", SourceKindPersonalStream, "hash"); got != wantXDG {
+		t.Fatalf("XDG Unix endpoint = %q, want %q", got, wantXDG)
+	}
+
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	if got := ipcEndpointForOS("darwin", "short", "open", SourceKindPersonalStream, "hash"); got != filepath.Join(os.TempDir(), eventRuntimeDirPrefix+currentUserID(), "dws-evt-"+IdentityHash("short")+".sock") {
 		t.Fatalf("short Unix endpoint = %q", got)
 	}
 	if got := ipcEndpointForOS("darwin", strings.Repeat("x", 200), "open", SourceKindAppStream, "hash"); !strings.Contains(got, "dws-evt-") {
 		t.Fatalf("long Unix endpoint = %q", got)
+	}
+
+	longTempDir := filepath.Join(string(filepath.Separator), strings.Repeat("long-temp-root", 20))
+	wantShortFallback := filepath.Join("/tmp", eventRuntimeDirPrefix+currentUserID(), "dws-evt-"+IdentityHash(workDir)+".sock")
+	if got := unixSocketEndpoint("darwin", workDir, "", longTempDir); got != wantShortFallback {
+		t.Fatalf("overlong temp endpoint = %q, want %q", got, wantShortFallback)
 	}
 }

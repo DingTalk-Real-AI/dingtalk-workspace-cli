@@ -17,7 +17,11 @@
 // declared in internal/helpers/mail.go.
 package mail
 
-import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+)
 
 // ── mailbox ────────────────────────────────────────────────
 
@@ -47,6 +51,31 @@ var ThreadList = shortcut.Shortcut{
 	Description: "列出指定邮箱文件夹下的邮件会话（thread）",
 	Intent:      "当你想按会话（同一往来主题的邮件串）而非单封邮件来浏览某个文件夹时使用；传入邮箱和文件夹 ID，可按时间范围和升降序筛选，返回会话列表及其 conversationId，供 +thread 查看详情。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_thread_list",
+			CanonicalPath:  "mail.shortcut_thread_list",
+			CLIPath:        "mail +thread-list",
+			PrimaryCLIPath: "mail +thread-list",
+		},
+		Description: "列出指定邮箱文件夹下的邮件会话（thread）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出指定邮箱文件夹下的邮件会话（thread）",
+			UseWhen:      []string{"当你想按会话（同一往来主题的邮件串）而非单封邮件来浏览某个文件夹时使用；传入邮箱和文件夹 ID，可按时间范围和升降序筛选，返回会话列表及其 conversationId，供 +thread 查看详情。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws mail +thread-list --email user@company.com --folder 104 --limit 20"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "email", Type: shortcut.FlagString, Desc: "会话所属邮箱地址", Required: true},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "邮件文件夹 ID（不是文件夹名称）", Required: true},
@@ -106,7 +135,7 @@ func threadListProject(data map[string]any) []map[string]any {
 		if v, ok := threadListFirst(m, "subject", "title", "topic"); ok {
 			row["subject"] = v
 		}
-		if v, ok := threadListFirst(m, "lastUpdated", "last_updated", "updateTime", "modifiedTime", "sentDateTime"); ok {
+		if v, ok := threadListFirst(m, "lastUpdated", "last_updated", "lastModifiedDateTime", "updateTime", "modifiedTime", "sentDateTime"); ok {
 			row["lastUpdated"] = v
 		}
 		if v, ok := threadListFirst(m, "isRead", "is_read", "read", "unread"); ok {
@@ -166,6 +195,31 @@ var FolderList = shortcut.Shortcut{
 	Description: "列出顶层文件夹或指定父文件夹下的子文件夹",
 	Intent:      "当你需要了解某个邮箱有哪些文件夹、或要取得文件夹 ID 以便移动邮件、按文件夹列信/建规则时使用；传入邮箱（可选父文件夹 ID 查子级），返回文件夹列表及其 ID。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_folder_list",
+			CanonicalPath:  "mail.shortcut_folder_list",
+			CLIPath:        "mail +folder-list",
+			PrimaryCLIPath: "mail +folder-list",
+		},
+		Description: "列出顶层文件夹或指定父文件夹下的子文件夹",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出顶层文件夹或指定父文件夹下的子文件夹",
+			UseWhen:      []string{"当你需要了解某个邮箱有哪些文件夹、或要取得文件夹 ID 以便移动邮件、按文件夹列信/建规则时使用；传入邮箱（可选父文件夹 ID 查子级），返回文件夹列表及其 ID。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws mail +folder-list --email user@company.com"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "email", Type: shortcut.FlagString, Desc: "邮件所属邮箱地址", Required: true},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "父文件夹 ID，不传则返回顶层文件夹"},
@@ -264,6 +318,31 @@ var TagList = shortcut.Shortcut{
 	Description: "列出指定邮箱下的所有邮件标签",
 	Intent:      "当你要查看邮箱里有哪些标签、或需要取得标签 ID 以便给邮件/会话加标签时使用；传入邮箱地址，返回全部邮件标签及其 ID。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_tag_list",
+			CanonicalPath:  "mail.shortcut_tag_list",
+			CLIPath:        "mail +tag-list",
+			PrimaryCLIPath: "mail +tag-list",
+		},
+		Description: "列出指定邮箱下的所有邮件标签",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出指定邮箱下的所有邮件标签",
+			UseWhen:      []string{"当你要查看邮箱里有哪些标签、或需要取得标签 ID 以便给邮件/会话加标签时使用；传入邮箱地址，返回全部邮件标签及其 ID。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws mail +tag-list --email user@company.com"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "email", Type: shortcut.FlagString, Desc: "用户的邮箱地址", Required: true},
 	},
@@ -357,6 +436,34 @@ var UserSearch = shortcut.Shortcut{
 	Description: "按关键词或工号搜索邮箱用户（仅企业邮箱）",
 	Intent:      "当你只知道同事的姓名或工号、需要查出其企业邮箱地址以便发信或添加联系人时使用；提供关键词或工号（至少其一），返回匹配的企业邮箱用户列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_user_search",
+			CanonicalPath:  "mail.shortcut_user_search",
+			CLIPath:        "mail +user-search",
+			PrimaryCLIPath: "mail +user-search",
+		},
+		Description: "按关键词或工号搜索邮箱用户（仅企业邮箱）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按关键词或工号搜索邮箱用户（仅企业邮箱）",
+			UseWhen:      []string{"当你只知道同事的姓名或工号、需要查出其企业邮箱地址以便发信或添加联系人时使用；提供关键词或工号（至少其一），返回匹配的企业邮箱用户列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws mail +user-search --keyword \"张三\"",
+				"dws mail +user-search --email user@company.com --employee-no \"E123456\"",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "搜索关键词（未提供 --employee-no 时为必填）"},
 		{Name: "employee-no", Type: shortcut.FlagString, Desc: "按工号精确搜索"},
@@ -476,6 +583,31 @@ var TemplateList = shortcut.Shortcut{
 	Description: "列出指定邮箱的所有邮件模板",
 	Intent:      "当你想查看某个邮箱下已有哪些邮件模板、或需要取得模板 ID 以便查看详情或更新时使用；传入邮箱和每页数量，返回模板列表，支持分页。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_template_list",
+			CanonicalPath:  "mail.shortcut_template_list",
+			CLIPath:        "mail +template-list",
+			PrimaryCLIPath: "mail +template-list",
+		},
+		Description: "列出指定邮箱的所有邮件模板",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出指定邮箱的所有邮件模板",
+			UseWhen:      []string{"当你想查看某个邮箱下已有哪些邮件模板、或需要取得模板 ID 以便查看详情或更新时使用；传入邮箱和每页数量，返回模板列表，支持分页。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws mail +template-list --email user@company.com --limit 20"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "email", Type: shortcut.FlagString, Desc: "用户邮箱地址", Required: true},
 		{Name: "limit", Type: shortcut.FlagString, Desc: "每页返回数量", Required: true},
@@ -577,6 +709,31 @@ var ContactList = shortcut.Shortcut{
 	Description: "列出指定邮箱的所有邮件联系人",
 	Intent:      "当你想查看某邮箱通讯录里有哪些联系人、或需要取得联系人 ID 以便更新或删除时使用；传入邮箱和每页数量，返回联系人列表，支持分页。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_contact_list",
+			CanonicalPath:  "mail.shortcut_contact_list",
+			CLIPath:        "mail +contact-list",
+			PrimaryCLIPath: "mail +contact-list",
+		},
+		Description: "列出指定邮箱的所有邮件联系人",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出指定邮箱的所有邮件联系人",
+			UseWhen:      []string{"当你想查看某邮箱通讯录里有哪些联系人、或需要取得联系人 ID 以便更新或删除时使用；传入邮箱和每页数量，返回联系人列表，支持分页。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws mail +contact-list --email user@company.com --limit 20"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "email", Type: shortcut.FlagString, Desc: "用户邮箱地址", Required: true},
 		{Name: "limit", Type: shortcut.FlagString, Desc: "每页返回数量", Required: true},

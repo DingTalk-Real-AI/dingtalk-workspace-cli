@@ -1,0 +1,181 @@
+# Mono↔multi content QA contract (machine-readable).
+# Spec: docs/skill-mono-multi-qa.md
+# schema_version bumps only when field semantics change.
+
+schema_version: 1
+
+# Every top-level stem under skills/mono/references/products must appear
+# in coverage or omit_coverage (file stem without .md, or directory name).
+# Duplicate stems (chat.md + chat/ dir) share one row.
+
+coverage:
+  - mono: aisearch
+    multi_skill: dingtalk-aisearch
+  - mono: aitable
+    multi_skill: dingtalk-aitable
+    multi_refs:
+      - references/aitable.md
+  - mono: aitable-record-ops
+    multi_skill: dingtalk-aitable
+  - mono: calendar
+    multi_skill: dingtalk-calendar
+  - mono: chat
+    multi_skill: dingtalk-chat
+    multi_refs:
+      - references/chat.md
+  - mono: chat-emoji-list
+    multi_skill: dingtalk-chat
+    multi_refs:
+      - references/chat-emoji-list.md
+  - mono: contact
+    multi_skill: dingtalk-contact
+  - mono: dev
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/devapp.md
+  - mono: doc
+    multi_skill: dingtalk-doc
+    multi_refs:
+      - references/doc.md
+  - mono: drive
+    multi_skill: dingtalk-drive
+  - mono: event
+    multi_skill: dingtalk-event
+    multi_refs:
+      - references/event-im.md
+      - references/event-oa.md
+  - mono: hrbrain
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/hrbrain.md
+  - mono: mail
+    multi_skill: dingtalk-mail
+  - mono: markdown
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/markdown.md
+  - mono: minutes
+    multi_skill: dingtalk-minutes
+  - mono: pat
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/pat.md
+  - mono: todo
+    multi_skill: dingtalk-todo
+  - mono: wiki
+    multi_skill: dingtalk-wiki
+  - mono: agoal
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/agoal.md
+  - mono: attendance
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/attendance.md
+  - mono: attendance-report
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/attendance-report.md
+  - mono: attendance-schedule
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/attendance-schedule.md
+  - mono: attendance-vacation
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/attendance-vacation.md
+  - mono: ding
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/ding.md
+  - mono: devdoc
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/devdoc.md
+  - mono: oa
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/oa.md
+  - mono: report
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/report.md
+  - mono: sheet
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/sheet.md
+  - mono: whiteboard
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/whiteboard.md
+
+omit_coverage:
+  - mono: simple
+    disposition: covered_by
+    via: dingtalk-misc
+    reason: "mono simple.md 为 oa/devdoc 合集；已拆入 dingtalk-misc references/oa.md 与 devdoc.md"
+
+# Global protocol files: multi path must exist unless omit_global.
+global_protocols:
+  - id: error-codes
+    multi_path: dingtalk-shared/references/error-codes.md
+  - id: url-patterns
+    multi_path: dingtalk-shared/references/url-patterns.md
+  - id: capability-limits
+    multi_path: dingtalk-shared/references/capability-limits.md
+  - id: channel-login
+    multi_path: dingtalk-shared/references/channel-login.md
+  - id: global-reference
+    multi_path: dingtalk-shared/references/global-reference.md
+  - id: intent-guide
+    multi_path: dingtalk-shared/references/intent-guide.md
+  - id: runtime-contract
+    multi_path: dingtalk-shared/references/runtime-contract.md
+  - id: confirmation-protocol
+    multi_path: dingtalk-shared/references/confirmation.md
+  - id: schema-usage
+    multi_path: dingtalk-shared/references/schema-usage.md
+
+omit_global:
+  - id: field-rules-global
+    mono_path: references/field-rules.md
+    expected_multi: dingtalk-aitable/references/field-rules.md
+    disposition: covered_by
+    reason: "AI 表格字段规则已下沉到 dingtalk-aitable；G3/coverage 不强制全局同名"
+
+# Reviewed file pairs. Most are byte-identical; layout-only link differences
+# must be declared as data-driven substitutions.
+paired_files:
+  - mono: references/products/sheet.md
+    multi: dingtalk-misc/references/sheet.md
+    mode: link-normalized
+    link_substitutions:
+      - mono: "../url-patterns.md"
+        multi: "../../dingtalk-shared/references/url-patterns.md"
+      - mono: "../intent-guide.md"
+        multi: "sheet-intent-guide.md"
+  - mono: references/products/whiteboard/recipes.md
+    multi: dingtalk-misc/references/whiteboard/recipes.md
+    mode: identical
+
+# Directory pairs whose relative file sets and contents must stay byte-identical.
+paired_trees:
+  - mono: references/products/sheet
+    multi: dingtalk-misc/references/sheet
+    mode: identical
+
+# Scripts under skills/multi/*/scripts not referenced by any .md in that skill tree.
+# yida/finance/aiapp are referenced via dingtalk-misc/references/unsupported-scripts.md
+orphan_scripts_allowlist:
+  - path: dingtalk-aitable/scripts/aitable_import_via_task.py
+    disposition: defer
+    reason: "helper referenced indirectly / pending doc"
+  - path: dingtalk-minutes/scripts/minutes_list_parse.py
+    disposition: defer
+    reason: "pending doc reference"
+  - path: dingtalk-misc/scripts/report_received_today.py
+    disposition: defer
+    reason: "pending report.md reference"
+
+# Skills allowed to omit references/ directory.
+skills_without_references_allowlist: []

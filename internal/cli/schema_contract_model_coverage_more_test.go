@@ -7,18 +7,20 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 func contractCoverageTool(product, name, cliPath string) ToolSpec {
 	canonical := product + "." + name
-	return ToolSpec{Identity: ToolIdentitySpec{
+	return ToolSpec{Identity: contract.ToolIdentitySpec{
 		ProductID: product, Name: name, CLIName: name, CanonicalPath: canonical,
 		Path: canonical, CLIPath: cliPath, PrimaryCLIPath: cliPath,
 	}}
 }
 
 func TestCrossPlatformCoverageContractModelProvenanceValueAndDryRunEdges(t *testing.T) {
-	if err := (DryRunSpec{}).Validate(""); err == nil || !strings.Contains(err.Error(), "no preview_kind") {
+	if err := (contract.DryRunSpec{}).Validate(""); err == nil || !strings.Contains(err.Error(), "no preview_kind") {
 		t.Fatalf("empty dry-run error = %v", err)
 	}
 	tool := contractCoverageTool("sample", "run", "sample run")
@@ -115,9 +117,7 @@ func TestCrossPlatformCoverageSchemaSnapshotRendererDependencyEdges(t *testing.T
 	snapshotProductSummary = oldProductSummary
 
 	for name, candidate := range map[string]SchemaRegistry{
-		"extensions":         {Extensions: map[string]json.RawMessage{"bad": json.RawMessage(`{`)}},
-		"interface metadata": {InterfaceMetadata: json.RawMessage(`{`)},
-		"agent metadata":     {AgentMetadata: json.RawMessage(`{`)},
+		"agent metadata": {AgentMetadata: json.RawMessage(`{`)},
 	} {
 		if _, err := candidate.ToSnapshotPayload(); err == nil {
 			t.Errorf("%s error was nil", name)
@@ -141,14 +141,14 @@ func TestCrossPlatformCoverageToolSpecValidationRemainingEdges(t *testing.T) {
 			v.Parameters = []ParameterSpec{{Name: "id", InterfaceDefault: json.RawMessage(`{`)}}
 		}, want: "invalid JSON interface_default"},
 		{name: "example json", mutate: func(v *ToolSpec) { v.Parameters = []ParameterSpec{{Name: "id", Example: json.RawMessage(`{`)}} }, want: "invalid JSON example"},
-		{name: "interface ref", mutate: func(v *ToolSpec) { v.Interface.Ref = &InterfaceRefSpec{} }, want: "incomplete interface_ref"},
-		{name: "dry run", mutate: func(v *ToolSpec) { v.DryRun = &DryRunSpec{} }, want: "preview_kind"},
+		{name: "interface ref", mutate: func(v *ToolSpec) { v.Interface.Ref = &contract.InterfaceRefSpec{} }, want: "incomplete interface_ref"},
+		{name: "dry run", mutate: func(v *ToolSpec) { v.DryRun = &contract.DryRunSpec{} }, want: "preview_kind"},
 		{name: "interface", mutate: func(v *ToolSpec) { v.Interface.Mode = "unknown" }, want: "unknown interface mode"},
 		{name: "tool provenance", mutate: func(v *ToolSpec) {
-			v.FieldProvenance = map[string]FieldProvenance{"title": {Value: json.RawMessage(`"wrong"`)}}
+			v.FieldProvenance = map[string]contract.FieldProvenance{"title": {Value: json.RawMessage(`"wrong"`)}}
 		}, want: "winner does not equal"},
 		{name: "parameter provenance", mutate: func(v *ToolSpec) {
-			v.Parameters = []ParameterSpec{{Name: "id", FieldProvenance: map[string]FieldProvenance{"required": {Value: json.RawMessage(`true`)}}}}
+			v.Parameters = []ParameterSpec{{Name: "id", FieldProvenance: map[string]contract.FieldProvenance{"required": {Value: json.RawMessage(`true`)}}}}
 		}, want: "winner does not equal"},
 	}
 	for _, tc := range cases {
@@ -163,24 +163,24 @@ func TestCrossPlatformCoverageToolSpecValidationRemainingEdges(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageFinalFieldProvenanceRemainingEdges(t *testing.T) {
-	if err := validateFinalFieldProvenance("owner", "field", FieldProvenance{}, func() {}); err == nil || !strings.Contains(err.Error(), "cannot encode") {
+	if err := validateFinalFieldProvenance("owner", "field", contract.FieldProvenance{}, func() {}); err == nil || !strings.Contains(err.Error(), "cannot encode") {
 		t.Fatalf("final encode error = %v", err)
 	}
 	selected := true
-	base := FieldProvenance{
+	base := contract.FieldProvenance{
 		Value:      json.RawMessage(`"value"`),
 		Source:     "source",
 		Precedence: "high",
 		Resolution: "selected",
-		Candidates: []FieldCandidateProvenance{{Value: json.RawMessage(`"value"`), Source: "source", Precedence: "high", Selected: &selected}},
+		Candidates: []contract.FieldCandidateProvenance{{Value: json.RawMessage(`"value"`), Source: "source", Precedence: "high", Selected: &selected}},
 	}
 	disagrees := base
-	disagrees.Candidates = []FieldCandidateProvenance{{Value: json.RawMessage(`"value"`), Source: "other", Precedence: "high", Selected: &selected}}
+	disagrees.Candidates = []contract.FieldCandidateProvenance{{Value: json.RawMessage(`"value"`), Source: "other", Precedence: "high", Selected: &selected}}
 	if err := validateFinalFieldProvenance("owner", "field", disagrees, "value"); err == nil || !strings.Contains(err.Error(), "disagrees with winner") {
 		t.Fatalf("candidate disagreement = %v", err)
 	}
 	overridden := base
-	overridden.OverriddenCandidates = []FieldCandidateProvenance{{Value: json.RawMessage(`{`)}}
+	overridden.OverriddenCandidates = []contract.FieldCandidateProvenance{{Value: json.RawMessage(`{`)}}
 	if err := validateFinalFieldProvenance("owner", "field", overridden, "value"); err == nil || !strings.Contains(err.Error(), "overridden provenance candidate with invalid") {
 		t.Fatalf("overridden invalid error = %v", err)
 	}
@@ -193,8 +193,8 @@ func TestCrossPlatformCoverageContractModelNormalizationSortEdges(t *testing.T) 
 	registry := SchemaRegistry{Products: []ProductSpec{{
 		ID: " sample ",
 		Tools: []ToolSpec{
-			{Identity: ToolIdentitySpec{ProductID: "sample", Name: "same", CLIPath: "sample z"}},
-			{Identity: ToolIdentitySpec{ProductID: "sample", Name: "same", CLIPath: "sample a"}},
+			{Identity: contract.ToolIdentitySpec{ProductID: "sample", Name: "same", CLIPath: "sample z"}},
+			{Identity: contract.ToolIdentitySpec{ProductID: "sample", Name: "same", CLIPath: "sample a"}},
 		},
 	}}}
 	sorted := registry.Sorted()
@@ -202,7 +202,7 @@ func TestCrossPlatformCoverageContractModelNormalizationSortEdges(t *testing.T) 
 		t.Fatalf("tool sort = %#v", sorted.Products[0].Tools)
 	}
 	tool := contractCoverageTool("sample", "run", "sample run")
-	tool.Positionals = []RuntimeSchemaPositional{{Index: 0, Name: "z"}, {Index: 0, Name: "a"}, {Index: 1, Name: "x"}}
+	tool.Positionals = []contract.RuntimeSchemaPositional{{Index: 0, Name: "z"}, {Index: 0, Name: "a"}, {Index: 1, Name: "x"}}
 	normalized := tool.normalized()
 	if normalized.Positionals[0].Name != "a" || normalized.Positionals[2].Index != 1 {
 		t.Fatalf("positionals = %#v", normalized.Positionals)
@@ -220,24 +220,20 @@ func TestCrossPlatformCoverageContractModelPayloadErrorEdges(t *testing.T) {
 	if _, err := invalidRegistry.ToOverviewPayload(); err == nil {
 		t.Fatal("invalid registry overview succeeded")
 	}
-	overview, err := (SchemaRegistry{Products: []ProductSpec{{ID: "sample", Selection: SelectionSpec{UseWhen: []string{"use it"}}}}}).ToOverviewPayload()
+	overview, err := (SchemaRegistry{Products: []ProductSpec{{ID: "sample", Selection: contract.SelectionSpec{UseWhen: []string{"use it"}}}}}).ToOverviewPayload()
 	if err != nil || schemaMapSlice(overview["products"])[0]["use_when"] == nil {
 		t.Fatalf("use_when overview = %#v, %v", overview, err)
 	}
 	badRaw := json.RawMessage(`{`)
 	for name, registry := range map[string]SchemaRegistry{
-		"product":            {Products: []ProductSpec{{ID: "sample", Extensions: map[string]json.RawMessage{"bad": badRaw}}}},
-		"registry extension": {Extensions: map[string]json.RawMessage{"bad": badRaw}},
-		"interface metadata": {InterfaceMetadata: badRaw},
-		"agent metadata":     {AgentMetadata: badRaw},
+		"agent metadata": {AgentMetadata: badRaw},
 	} {
 		if _, err := registry.ToPayload(); err == nil {
 			t.Errorf("registry %s ToPayload error was nil", name)
 		}
 	}
 	for name, registry := range map[string]SchemaRegistry{
-		"interface metadata": {InterfaceMetadata: badRaw},
-		"agent metadata":     {AgentMetadata: badRaw},
+		"agent metadata": {AgentMetadata: badRaw},
 	} {
 		if _, err := registry.ToOverviewPayload(); err == nil {
 			t.Errorf("overview %s error was nil", name)
@@ -251,13 +247,7 @@ func TestCrossPlatformCoverageContractModelPayloadErrorEdges(t *testing.T) {
 	if _, err := (ProductSpec{Tools: []ToolSpec{badTool}}).ToSummaryPayload(); err == nil {
 		t.Fatal("product summary with invalid tool rendered")
 	}
-	if _, err := (ProductSpec{Extensions: map[string]json.RawMessage{"bad": badRaw}}).ToPayload(); err == nil {
-		t.Fatal("product invalid extension rendered")
-	}
-	if _, err := (ProductSpec{Extensions: map[string]json.RawMessage{"bad": badRaw}}).ToSummaryPayload(); err == nil {
-		t.Fatal("product summary invalid extension rendered")
-	}
-	badProvenance := map[string]FieldProvenance{"agent_summary": {Value: badRaw}}
+	badProvenance := map[string]contract.FieldProvenance{"agent_summary": {Value: badRaw}}
 	if _, err := (ProductSpec{FieldProvenance: badProvenance}).ToPayload(); err == nil {
 		t.Fatal("product invalid provenance rendered")
 	}
@@ -269,25 +259,20 @@ func TestCrossPlatformCoverageContractModelPayloadErrorEdges(t *testing.T) {
 	if _, err := badTool.ToPayload(); err == nil {
 		t.Fatal("invalid tool rendered")
 	}
-	withExtension := validTool
-	withExtension.Extensions = map[string]json.RawMessage{"bad": badRaw}
-	if _, err := withExtension.ToPayload(); err == nil {
-		t.Fatal("tool invalid extension rendered")
-	}
 	withParameter := validTool
-	withParameter.Parameters = []ParameterSpec{{Name: "id", Extensions: map[string]json.RawMessage{"bad": badRaw}}}
+	withParameter.Parameters = []ParameterSpec{{Name: "id", FieldProvenance: map[string]contract.FieldProvenance{"unknown": {Value: badRaw}}}}
 	if _, err := withParameter.ToPayload(); err == nil || !strings.Contains(err.Error(), "render sample.run parameter id") {
 		t.Fatalf("tool parameter render error = %v", err)
 	}
 	withDetails := validTool
 	withDetails.Constraints = RuntimeSchemaConstraints{RequireOneOf: [][]string{{"id"}}}
-	withDetails.Positionals = []RuntimeSchemaPositional{{Index: 0, Name: "id"}}
-	withDetails.DryRun = &DryRunSpec{PreviewKind: DryRunPreviewPlan}
+	withDetails.Positionals = []contract.RuntimeSchemaPositional{{Index: 0, Name: "id"}}
+	withDetails.DryRun = &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan}
 	if _, err := withDetails.ToPayload(); err != nil {
 		t.Fatalf("typed details render error = %v", err)
 	}
 	withProvenance := validTool
-	withProvenance.FieldProvenance = map[string]FieldProvenance{"unknown": {Value: badRaw}}
+	withProvenance.FieldProvenance = map[string]contract.FieldProvenance{"unknown": {Value: badRaw}}
 	if _, err := withProvenance.ToPayload(); err == nil {
 		t.Fatal("tool invalid provenance rendered")
 	}
@@ -296,11 +281,10 @@ func TestCrossPlatformCoverageContractModelPayloadErrorEdges(t *testing.T) {
 	}
 
 	for name, parameter := range map[string]ParameterSpec{
-		"extension":         {Extensions: map[string]json.RawMessage{"bad": badRaw}},
 		"default":           {Default: badRaw},
 		"interface default": {InterfaceDefault: badRaw},
 		"example":           {Example: badRaw},
-		"provenance":        {FieldProvenance: map[string]FieldProvenance{"required": {Value: badRaw}}},
+		"provenance":        {FieldProvenance: map[string]contract.FieldProvenance{"required": {Value: badRaw}}},
 	} {
 		if _, err := parameter.ToPayload(); err == nil {
 			t.Errorf("parameter %s error was nil", name)

@@ -14,11 +14,24 @@
 package chat
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
+
+const directMessagesHardPageLimit = 500
 
 // MessagesSend sends a text/markdown message as the current user
 // (send_personal_message, chat server). Media/file variants are not covered.
@@ -103,9 +116,34 @@ var MessagesSendByWebhook = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+messages-send-by-webhook",
 	Product:     "bot",
-	Description: "自定义机器人 Webhook 发送群消息",
-	Intent:      "当你只有自定义机器人的 Webhook token、想往其所在群推送消息时使用；会实际通过 Webhook 发群消息，需传 token、标题、正文，可 @手机号/userId 或 @所有人。",
+	Description: "兼容旧入口的自定义机器人 Webhook 群消息发送",
+	Intent:      "只有既有自动化明确依赖 +messages-send-by-webhook 兼容路径、暂时不能迁移统一身份入口时使用",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_send_by_webhook",
+			CanonicalPath:  "chat.shortcut_messages_send_by_webhook",
+			CLIPath:        "chat +messages-send-by-webhook",
+			PrimaryCLIPath: "chat +messages-send-by-webhook",
+		},
+		Description: "兼容旧入口的自定义机器人 Webhook 群消息发送",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "兼容旧入口的自定义机器人 Webhook 群消息发送",
+			UseWhen:      []string{"只有既有自动化明确依赖 +messages-send-by-webhook 兼容路径、暂时不能迁移统一身份入口时使用"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +messages-send-by-webhook --token <token> --title \"告警\" --text \"CPU 超 90%\" --at-all"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "token", Type: shortcut.FlagString, Desc: "Webhook token", Required: true},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题", Required: true},
@@ -140,17 +178,56 @@ var MessagesRecall = shortcut.Shortcut{
 	Command:     "+messages-recall",
 	Product:     "im",
 	Description: "撤回当前用户发送的消息",
-	Intent:      "当你想撤回当前用户刚发出的某条消息时使用；会实际撤回消息，需传会话 openConversationId 和消息 openMessageId。",
+	Intent:      "当你想撤回当前用户刚发出的某条消息时使用；会实际撤回消息。推荐同时传会话 openConversationId 和消息 openMessageId；若只传一个消息 ID，CLI 会先只读查询消息详情并补齐会话 ID。兼容 --message-id/--message-ids 的单值写法。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
-		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
-		{Name: "msg-id", Type: shortcut.FlagString, Desc: "消息 openMessageId", Required: true},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId；省略时从消息详情解析"},
+		{Name: "group", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "id", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "chat", Type: shortcut.FlagString, Desc: "--conversation-id 的兼容别名", Hidden: true},
+		{Name: "msg-id", Type: shortcut.FlagString, Desc: "消息 openMessageId；一次只能撤回一个消息 ID；--message-ids 仅接受单值"},
+		{Name: "message-id", Type: shortcut.FlagString, Desc: "--msg-id 的兼容别名", Hidden: true},
+		{Name: "message-ids", Type: shortcut.FlagStringSlice, Desc: "--msg-id 的兼容单值别名；不支持批量撤回", Hidden: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"msg-id", "message-id", "message-ids"}},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"msg-id"}, Description: "一次只能撤回一个消息 ID；--message-ids 仅接受单值"},
 	},
 	Tips: []string{`dws chat +messages-recall --conversation-id <openConversationId> --msg-id <openMessageId>`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		messageIDs := uniqueShortcutStrings(append(
+			[]string{rt.StrFirst("msg-id", "message-id")},
+			rt.StrSlice("message-ids")...,
+		))
+		if len(messageIDs) != 1 {
+			return apperrors.NewValidation("撤回一次只接受一个消息 ID；请通过 --msg-id 或单值 --message-ids 传入")
+		}
+		return nil
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		messageIDs := uniqueShortcutStrings(append(
+			[]string{rt.StrFirst("msg-id", "message-id")},
+			rt.StrSlice("message-ids")...,
+		))
+		messageID := messageIDs[0]
+		conversationID := strings.TrimSpace(rt.StrFirst("conversation-id", "group", "id", "chat"))
+		if conversationID == "" {
+			data, err := rt.CallMCPData("im", "list_messages_by_ids", map[string]any{"openMsgIds": []string{messageID}})
+			if err != nil {
+				return err
+			}
+			messages := listMessagesResolveMaps(data)
+			if len(messages) == 0 {
+				return apperrors.NewValidation("无法根据消息 ID 查询到会话；请补充 --conversation-id")
+			}
+			conversationID = strings.TrimSpace(fmt.Sprint(chatmsg.ConversationID(messages[0])))
+			if conversationID == "" || conversationID == "<nil>" {
+				return apperrors.NewValidation("消息详情未返回会话 ID；请补充 --conversation-id")
+			}
+		}
 		return rt.CallMCP("recall_message", map[string]any{
-			"openConversationId": rt.Str("conversation-id"),
-			"openMessageId":      rt.Str("msg-id"),
+			"openConversationId": conversationID,
+			"openMessageId":      messageID,
 		})
 	},
 }
@@ -212,8 +289,9 @@ var MessagesList = shortcut.Shortcut{
 		{Name: "id", Type: shortcut.FlagString, Desc: "--group 的别名", Hidden: true},
 		{Name: "time", Type: shortcut.FlagString, Desc: "起始时间，如 \"2025-03-01 00:00:00\"", Required: true},
 		{Name: "forward", Type: shortcut.FlagBool, Default: "true", Desc: "true=从给定时间往现在拉，false=往以前拉"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量"},
-		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量；显式页大小必须大于 0"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名；显式页大小必须大于 0", Hidden: true},
+		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "conversation-id", "id"}},
@@ -233,8 +311,14 @@ var MessagesList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		messages := listMessagesProject(data)
-		return rt.Output(map[string]any{"count": len(messages), "messages": messages})
+		messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+		payload := map[string]any{"count": len(messages), "messages": messages}
+		direction := "older"
+		if rt.Bool("forward") {
+			direction = "newer"
+		}
+		chatmsg.ApplyMessagePagination(payload, data, listMessagesResolveMaps(data), direction)
+		return rt.Output(payload)
 	},
 }
 
@@ -249,6 +333,10 @@ var MessagesList = shortcut.Shortcut{
 // records ("聊天记录") expand their nested messages under "forwarded" instead of
 // collapsing to a "[卡片]" summary.
 func listMessagesProject(data map[string]any) []map[string]any {
+	return listMessagesProjectWithReactions(data, true)
+}
+
+func listMessagesProjectWithReactions(data map[string]any, includeReactions bool) []map[string]any {
 	raw := listMessagesResolveList(data)
 	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
@@ -256,7 +344,7 @@ func listMessagesProject(data map[string]any) []map[string]any {
 		if !ok {
 			continue
 		}
-		if row := listMessageProjectOne(m); len(row) > 0 {
+		if row := listMessageProjectOneWithReactions(m, includeReactions); len(row) > 0 {
 			out = append(out, row)
 		}
 	}
@@ -267,23 +355,26 @@ func listMessagesProject(data map[string]any) []map[string]any {
 // {messageId, senderId, msgType, createTime, text(, forwarded)} shape, reused
 // recursively for forwarded chat records.
 func listMessageProjectOne(m map[string]any) map[string]any {
-	row := map[string]any{}
-	if v, ok := listMessagesFirst(m, "openMessageId", "openMsgId", "messageId", "msgId"); ok {
-		row["messageId"] = v
+	return listMessageProjectOneWithReactions(m, true)
+}
+
+func listMessageProjectOneWithReactions(m map[string]any, includeReactions bool) map[string]any {
+	row := chatmsg.ProjectMessageV1(m, includeReactions)
+	// The established mget/list projection omits absent scalar fields; keep
+	// that wire behavior even though the shared chat/search view retains them.
+	for _, key := range []string{"sender", "text", "createTime"} {
+		if row[key] == nil {
+			delete(row, key)
+		}
 	}
-	if v, ok := listMessagesFirst(m, "senderOpenDingTalkId", "senderUserId", "senderId", "senderStaffId"); ok {
-		row["senderId"] = v
+	// Keep the historical mget/list msgType alias while adding the canonical
+	// messageType field from MessageViewV1.
+	if messageType := chatmsg.MessageType(m); messageType != nil {
+		row["msgType"] = messageType
 	}
-	if v, ok := listMessagesFirst(m, "msgType", "messageType", "type"); ok {
-		row["msgType"] = v
-	}
-	if v, ok := listMessagesFirst(m, "createTime", "sendTime", "gmtCreate", "messageTime"); ok {
-		row["createTime"] = v
-	}
-	if text := chatmsg.Text(m); text != nil {
-		row["text"] = text
-	}
-	if forwarded := chatmsg.Forwarded(m, listMessageProjectOne); len(forwarded) > 0 {
+	if forwarded := chatmsg.Forwarded(m, func(item map[string]any) map[string]any {
+		return listMessageProjectOneWithReactions(item, includeReactions)
+	}); len(forwarded) > 0 {
 		row["forwarded"] = forwarded
 	}
 	return row
@@ -311,14 +402,15 @@ func listMessagesResolveList(data map[string]any) []any {
 	return []any{}
 }
 
-// listMessagesFirst returns the first present candidate key's value.
-func listMessagesFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
+func listMessagesResolveMaps(data map[string]any) []map[string]any {
+	raw := listMessagesResolveList(data)
+	out := make([]map[string]any, 0, len(raw))
+	for _, item := range raw {
+		if message, ok := item.(map[string]any); ok {
+			out = append(out, message)
 		}
 	}
-	return nil, false
+	return out
 }
 
 // MessagesListDirect pulls messages of a single chat (list_individual_chat_message, chat server).
@@ -328,38 +420,276 @@ var MessagesListDirect = shortcut.Shortcut{
 	Description: "拉取单聊会话消息",
 	Intent:      "当你想按时间拉取与某人单聊的历史消息时使用；只读，需传对方 userId 或 openDingTalkId 及起始时间，--forward 控制翻页方向。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_list_direct",
+			CanonicalPath:  "chat.shortcut_messages_list_direct",
+			CLIPath:        "chat +messages-list-direct",
+			PrimaryCLIPath: "chat +messages-list-direct",
+		},
+		Description: "拉取单聊会话消息",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "拉取单聊会话消息",
+			UseWhen:      []string{"当你想按时间拉取与某人单聊的历史消息时使用；只读，需传对方 userId 或 openDingTalkId 及起始时间，--forward 控制翻页方向。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +messages-list-direct --user <userId> --time \"2025-03-01 00:00:00\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "user", Type: shortcut.FlagString, Desc: "对方 userId（与 --open-dingtalk-id 二选一）"},
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "对方 openDingTalkId（与 --user 二选一）"},
 		{Name: "time", Type: shortcut.FlagString, Desc: "起始时间，如 \"2025-03-01 00:00:00\"", Required: true},
 		{Name: "forward", Type: shortcut.FlagBool, Default: "true", Desc: "true=往现在拉，false=往以前拉"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量"},
-		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名", Hidden: true},
+		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量；显式页大小必须大于 0"},
+		{Name: "size", Type: shortcut.FlagInt, Desc: "--limit 的旧版别名；显式页大小必须大于 0", Hidden: true},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿毫秒级 nextCursor 自动读取全部单聊消息；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
 	},
-	Tips: []string{`dws chat +messages-list-direct --user <userId> --time "2025-03-01 00:00:00"`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"time":    rt.Str("time"),
-			"forward": rt.Bool("forward"),
+	Tips: []string{
+		`dws chat +messages-list-direct --user <userId> --time "2025-03-01 00:00:00"`,
+		`dws chat +messages-list-direct --open-dingtalk-id <openDingTalkId> --time "2025-03-01 00:00:00" --forward=false --page-all`,
+	},
+	Execute: executeMessagesListDirect,
+}
+
+func validateMessagesListDirectPagination(rt *shortcut.RuntimeContext) error {
+	// This existing command shipped without formal Schema constraints. Keep its
+	// published constraint set stable and validate the new pagination options at
+	// runtime so adding --page-all remains backwards compatible for consumers.
+	for _, name := range []string{"limit", "size"} {
+		if rt.Changed(name) && rt.Int(name) <= 0 {
+			return apperrors.NewValidation("--" + name + " 必须大于 0")
 		}
-		switch {
-		case rt.Str("open-dingtalk-id") != "":
-			params["openDingTalkId"] = rt.Str("open-dingtalk-id")
-		case rt.Str("user") != "":
-			params["userId"] = rt.Str("user")
-		default:
-			return fmt.Errorf("--user 或 --open-dingtalk-id 必填其一")
+	}
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if rt.Bool("page-all") {
+		if limit := rt.Int("page-limit"); limit < 1 || limit > directMessagesHardPageLimit {
+			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 		}
-		if limit := rt.IntFirst("limit", "size"); limit > 0 {
-			params["limit"] = limit
+	}
+	return nil
+}
+
+func executeMessagesListDirect(rt *shortcut.RuntimeContext) error {
+	if err := validateMessagesListDirectPagination(rt); err != nil {
+		return err
+	}
+	params := map[string]any{
+		"time":    rt.Str("time"),
+		"forward": rt.Bool("forward"),
+	}
+	switch {
+	case rt.Str("open-dingtalk-id") != "":
+		params["openDingTalkId"] = rt.Str("open-dingtalk-id")
+	case rt.Str("user") != "":
+		params["userId"] = rt.Str("user")
+	default:
+		return fmt.Errorf("--user 或 --open-dingtalk-id 必填其一")
+	}
+	if limit := rt.IntFirst("limit", "size"); limit > 0 {
+		params["limit"] = limit
+	}
+	if rt.Bool("page-all") {
+		payload, err := readAllDirectMessages(rt, params)
+		if outputErr := rt.Output(payload); outputErr != nil {
+			return outputErr
 		}
+		return err
+	}
+	data, err := rt.CallMCPData("chat", "list_individual_chat_message", params)
+	if err != nil {
+		return err
+	}
+	messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+	payload := map[string]any{"count": len(messages), "messages": messages}
+	direction := "older"
+	if rt.Bool("forward") {
+		direction = "newer"
+	}
+	chatmsg.ApplyMessagePagination(payload, data, listMessagesResolveMaps(data), direction)
+	if payload["complete"] == true {
+		payload["stopReason"] = "source_complete"
+	} else {
+		payload["stopReason"] = "single_page"
+	}
+	return rt.Output(payload)
+}
+
+func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (map[string]any, error) {
+	pageLimit := rt.Int("page-limit")
+	direction := "older"
+	if rt.Bool("forward") {
+		direction = "newer"
+	}
+	seenCursors := map[string]bool{}
+	seenMessages := map[string]bool{}
+	allItems := make([]map[string]any, 0)
+	failures := make([]map[string]any, 0)
+	pagesFetched := 0
+	complete := false
+	hasMore := false
+	stopReason := "source_complete"
+	truncatedByPageLimit := false
+	var nextPage map[string]any
+
+	for pagesFetched < pageLimit {
 		data, err := rt.CallMCPData("chat", "list_individual_chat_message", params)
 		if err != nil {
-			return err
+			if pagesFetched == 0 {
+				return nil, err
+			}
+			failures = append(failures, map[string]any{
+				"page": pagesFetched + 1, "stage": "read", "error": err.Error(),
+			})
+			stopReason = "read_failure"
+			break
 		}
-		messages := listMessagesProject(data)
-		return rt.Output(map[string]any{"count": len(messages), "messages": messages})
-	},
+		pagesFetched++
+		pageItems := listMessagesResolveMaps(data)
+		for _, item := range pageItems {
+			id := chatmsg.StableMessageID(item)
+			if id != "" && seenMessages[id] {
+				continue
+			}
+			if id != "" {
+				seenMessages[id] = true
+			}
+			allItems = append(allItems, item)
+		}
+
+		page := chatmsg.Pagination(data)
+		pageHasMore, known := page["hasMore"].(bool)
+		if !known {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "单聊消息下层未返回可靠的 hasMore，无法证明结果完整",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		hasMore = pageHasMore
+		if !hasMore {
+			complete = true
+			nextPage = nil
+			stopReason = "source_complete"
+			break
+		}
+		if len(pageItems) == 0 {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "单聊消息下层返回 hasMore=true 但当前页没有消息",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		cursorKey, boundary, cursorErr := directMessageCursorBoundary(page["nextCursor"])
+		if cursorErr != nil {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "单聊消息下层返回 hasMore=true，但 nextCursor 无效: " + cursorErr.Error(),
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		if seenCursors[cursorKey] {
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "单聊消息毫秒 nextCursor 停滞",
+			})
+			stopReason = "pagination_error"
+			break
+		}
+		seenCursors[cursorKey] = true
+		nextPage = map[string]any{
+			"direction": direction, "time": boundary, "nextCursor": page["nextCursor"],
+		}
+		params["time"] = boundary
+	}
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+		truncatedByPageLimit = true
+		stopReason = "page_limit"
+	}
+
+	messages := make([]map[string]any, 0, len(allItems))
+	for _, item := range allItems {
+		messages = append(messages, listMessageProjectOneWithReactions(item, !rt.Bool("no-reactions")))
+	}
+	payload := chatmsg.NewMessageListPayload(messages)
+	payload["pagesFetched"] = pagesFetched
+	payload["paginationKnown"] = true
+	payload["complete"] = complete && len(failures) == 0
+	payload["hasMore"] = hasMore
+	payload["stopReason"] = stopReason
+	payload["truncatedByPageLimit"] = truncatedByPageLimit
+	payload["failedCount"] = len(failures)
+	payload["failures"] = failures
+	payload["partial"] = len(failures) > 0 && len(messages) > 0
+	if hasMore && nextPage != nil {
+		payload["nextPage"] = nextPage
+	}
+	if len(failures) == 0 {
+		return payload, nil
+	}
+	return payload, apperrors.NewAPI(
+		fmt.Sprintf("单聊消息分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+		apperrors.WithOperation("chat/list_individual_chat_message"),
+		apperrors.WithReason("messages_list_direct_incomplete"),
+		apperrors.WithOrigin("mcp_gateway"),
+		apperrors.WithFailureStage("pagination"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(true),
+		apperrors.WithHint("请根据 failures 和 nextPage 重试"),
+	)
+}
+
+func directMessageCursorBoundary(value any) (string, string, error) {
+	var millis int64
+	switch typed := value.(type) {
+	case int:
+		millis = int64(typed)
+	case int32:
+		millis = int64(typed)
+	case int64:
+		millis = typed
+	case float32:
+		asFloat := float64(typed)
+		if math.IsNaN(asFloat) || math.IsInf(asFloat, 0) || asFloat <= 0 || math.Trunc(asFloat) != asFloat || asFloat > math.MaxInt64 {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = int64(asFloat)
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed <= 0 || math.Trunc(typed) != typed || typed > math.MaxInt64 {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = int64(typed)
+	case string:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+		if err != nil {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = parsed
+	default:
+		return "", "", fmt.Errorf("缺少毫秒级分页游标")
+	}
+	if millis <= 0 {
+		return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+	}
+	key := strconv.FormatInt(millis, 10)
+	boundary := time.UnixMilli(millis).UTC().Format(time.RFC3339Nano)
+	return key, boundary, nil
 }
 
 // MessagesListTopicReplies pulls topic replies (list_topic_replies, chat server).
@@ -373,6 +703,31 @@ var MessagesListUnreadConversations = shortcut.Shortcut{
 	Description: "获取有未读消息的会话列表",
 	Intent:      "当你想快速定位哪些会话还有未读消息时使用；只读返回有未读的会话列表，可用 --exclude-muted 排除已免打扰会话。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_list_unread_conversations",
+			CanonicalPath:  "chat.shortcut_messages_list_unread_conversations",
+			CLIPath:        "chat +messages-list-unread-conversations",
+			PrimaryCLIPath: "chat +messages-list-unread-conversations",
+		},
+		Description: "获取有未读消息的会话列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取有未读消息的会话列表",
+			UseWhen:      []string{"当你想快速定位哪些会话还有未读消息时使用；只读返回有未读的会话列表，可用 --exclude-muted 排除已免打扰会话。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +messages-list-unread-conversations --count 20"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "count", Type: shortcut.FlagInt, Desc: "返回的会话条数"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已免打扰会话"},
@@ -466,31 +821,435 @@ var MessagesMget = shortcut.Shortcut{
 	Command:     "+messages-mget",
 	Product:     "im",
 	Description: "根据消息 ID 批量查询消息（最多 50 条）",
-	Intent:      "当你已有一批消息 openMsgId、需要批量取回它们的详细内容时使用；只读，一次最多查询 50 条。",
+	Intent:      "当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。",
 	Risk:        shortcut.RiskRead,
-	Flags: []shortcut.Flag{
-		{Name: "msg-ids", Type: shortcut.FlagStringSlice, Desc: "消息 openMsgId 列表", Required: true},
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
 	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_mget",
+			CanonicalPath:  "chat.shortcut_messages_mget",
+			CLIPath:        "chat +messages-mget",
+			PrimaryCLIPath: "chat +messages-mget",
+		},
+		Description: "根据消息 ID 批量查询消息（最多 50 条）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "根据消息 ID 批量查询消息（最多 50 条）",
+			UseWhen:      []string{"当你已有一批消息 openMsgId、需要批量取回完整详情、reaction 和可执行资源引用时使用；一次最多 50 条。--download-resources 可把所有可识别 mediaId/fileId 安全下载到工作目录内，并逐资源返回成功/失败 ledger；本地下载路径受限于工作目录、默认不覆盖同名文件，按既有安全下载约定无需交互确认。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +messages-mget --msg-ids msgId1,msgId2"},
+		},
+	},
+	Flags: append([]shortcut.Flag{
+		{Name: "msg-ids", Type: shortcut.FlagStringSlice, Desc: "消息 openMsgId 列表；--msg-ids 去重后必须包含 1-50 条消息 ID", Required: true},
+		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
+	}, MessageResourceDownloadFlags()...),
+	Constraints: append([]shortcut.Constraint{
+		{
+			Kind:        shortcut.ConstraintCustom,
+			Flags:       []string{"msg-ids"},
+			Description: "--msg-ids 去重后必须包含 1-50 条消息 ID",
+		},
+	}, MessageResourceDownloadConstraints()...),
 	Tips: []string{`dws chat +messages-mget --msg-ids msgId1,msgId2`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("list_messages_by_ids", map[string]any{"openMsgIds": rt.StrSlice("msg-ids")})
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		ids := uniqueShortcutStrings(rt.StrSlice("msg-ids"))
+		if len(ids) < 1 || len(ids) > 50 {
+			return fmt.Errorf("--msg-ids 去重后必须包含 1-50 条消息 ID，当前 %d 条", len(ids))
+		}
+		return ValidateMessageResourceDownload(rt)
 	},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		ids := uniqueShortcutStrings(rt.StrSlice("msg-ids"))
+		data, err := rt.CallMCPData("im", "list_messages_by_ids", map[string]any{"openMsgIds": ids})
+		if err != nil {
+			return err
+		}
+		rawMessages := listMessagesResolveMaps(data)
+		messages := listMessagesProjectWithReactions(data, !rt.Bool("no-reactions"))
+		found := map[string]bool{}
+		for _, message := range rawMessages {
+			if id := strings.TrimSpace(fmt.Sprint(chatmsg.MessageID(message))); id != "" && id != "<nil>" {
+				found[id] = true
+			}
+		}
+		notFound := make([]string, 0)
+		failures := make([]map[string]any, 0)
+		for _, id := range ids {
+			if !found[id] {
+				notFound = append(notFound, id)
+				failures = append(failures, map[string]any{
+					"stage":     "mget",
+					"messageId": id,
+					"error":     "下层未返回该消息",
+				})
+			}
+		}
+		payload := map[string]any{
+			"contractVersion":    chatmsg.MessageListContractVersion,
+			"requestedCount":     len(ids),
+			"foundCount":         len(ids) - len(notFound),
+			"notFoundCount":      len(notFound),
+			"notFoundMessageIds": notFound,
+			"messages":           messages,
+			"complete":           len(notFound) == 0,
+			"hasMore":            false,
+			"nextCursor":         "",
+			"paginationKnown":    true,
+			"pagesFetched":       1,
+			"enrichedCount":      0,
+			"failedCount":        len(failures),
+			"failures":           failures,
+		}
+		if rt.Bool("download-resources") {
+			AttachMessageResourceDownloads(payload, DownloadMessageResources(rt, rawMessages, ""))
+		}
+		return rt.Output(payload)
+	},
+}
+
+// MessageResourceDownloadFlags returns the common opt-in resource workflow used
+// by message list, search, mget, @me and thread-reading Shortcuts.
+func MessageResourceDownloadFlags() []shortcut.Flag {
+	return []shortcut.Flag{
+		{Name: "download-resources", Type: shortcut.FlagBool, Desc: "自动下载消息中的全部可识别 mediaId/fileId 资源"},
+		{Name: "output-dir", Type: shortcut.FlagString, Default: "./downloads", Desc: "资源输出目录；必须是工作目录内的相对路径，禁止绝对路径和 .. 逃逸"},
+		{Name: "overwrite", Type: shortcut.FlagBool, Desc: "允许覆盖工作目录内已存在的本地输出文件（默认拒绝）"},
+	}
+}
+
+// MessageResourceDownloadConstraints publishes the shared safe-output rule.
+func MessageResourceDownloadConstraints() []shortcut.Constraint {
+	return []shortcut.Constraint{{
+		Kind:        shortcut.ConstraintCustom,
+		Flags:       []string{"output-dir"},
+		Description: "--output-dir 必须是工作目录内的相对路径，不允许绝对路径或 .. 逃逸",
+	}}
+}
+
+// ValidateMessageResourceDownload validates the output path only when the
+// caller opts into local writes.
+func ValidateMessageResourceDownload(rt *shortcut.RuntimeContext) error {
+	if !rt.Bool("download-resources") {
+		return nil
+	}
+	return validateResourceDownloadOutputFlag(rt.Str("output-dir"), "--output-dir")
+}
+
+// DownloadMessageResources downloads every unique message resource reference
+// and returns a per-resource success/failure ledger. A fallback conversation
+// ID lets group/thread list commands supply context when a mediaId item's lower
+// response omits it; fileId resources route through the existing drive leaf.
+func DownloadMessageResources(
+	rt *shortcut.RuntimeContext,
+	messages []map[string]any,
+	fallbackConversationID string,
+) map[string]any {
+	resources := make([]map[string]any, 0)
+	for _, message := range messages {
+		resources = append(resources, chatmsg.ResourcesDeep(message)...)
+	}
+	discoveredCount := len(resources)
+	uniqueResources := make([]map[string]any, 0, len(resources))
+	seen := map[string]bool{}
+	for _, resource := range resources {
+		resourceType := strings.TrimSpace(fmt.Sprint(resource["type"]))
+		if canonicalType, ok := canonicalMessageResourceType(resourceType); ok {
+			resourceType = canonicalType
+		}
+		resourceID := strings.TrimSpace(fmt.Sprint(resource["resourceId"]))
+		download, _ := resource["download"].(map[string]any)
+		arguments, _ := download["arguments"].(map[string]any)
+		messageID := strings.TrimSpace(fmt.Sprint(arguments["message-id"]))
+		if messageID == "<nil>" {
+			messageID = ""
+		}
+		key := strings.ToLower(resourceType) + "\x00" + resourceID
+		if strings.EqualFold(resourceType, "mediaId") {
+			conversationID := strings.TrimSpace(fmt.Sprint(arguments["open-conversation-id"]))
+			key += "\x00" + messageID + "\x00" + conversationID
+		}
+		if resourceID != "" && resourceID != "<nil>" {
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+		}
+		uniqueResources = append(uniqueResources, resource)
+	}
+	resources = uniqueResources
+	if rt.DryRun() {
+		return map[string]any{
+			"dryRun":            true,
+			"discoveredCount":   discoveredCount,
+			"requestedCount":    len(resources),
+			"deduplicatedCount": discoveredCount - len(resources),
+			"resources":         resources,
+		}
+	}
+	if len(resources) == 0 {
+		return map[string]any{
+			"ok":                true,
+			"partial":           false,
+			"discoveredCount":   discoveredCount,
+			"requestedCount":    0,
+			"deduplicatedCount": discoveredCount,
+			"downloadedCount":   0,
+			"failedCount":       0,
+			"downloads":         []map[string]any{},
+			"failures":          []map[string]any{},
+		}
+	}
+
+	cwd, err := resourceGetwd()
+	if err != nil {
+		return map[string]any{
+			"ok":                false,
+			"partial":           false,
+			"discoveredCount":   discoveredCount,
+			"requestedCount":    len(resources),
+			"deduplicatedCount": discoveredCount - len(resources),
+			"downloadedCount":   0,
+			"failedCount":       len(resources),
+			"downloads":         []map[string]any{},
+			"failures": []map[string]any{{
+				"stage":         "output-directory",
+				"affectedCount": len(resources),
+				"error":         fmt.Sprintf("读取工作目录失败: %v", err),
+			}},
+		}
+	}
+	outputDir := strings.TrimRight(rt.Str("output-dir"), `/\`)
+	downloads := make([]map[string]any, 0, len(resources))
+	failures := make([]map[string]any, 0)
+	downloadedNames := map[string]bool{}
+	for _, resource := range resources {
+		resourceType := strings.TrimSpace(fmt.Sprint(resource["type"]))
+		if canonicalType, ok := canonicalMessageResourceType(resourceType); ok {
+			resourceType = canonicalType
+		}
+		resourceID := strings.TrimSpace(fmt.Sprint(resource["resourceId"]))
+		download, _ := resource["download"].(map[string]any)
+		arguments, _ := download["arguments"].(map[string]any)
+		messageID := strings.TrimSpace(fmt.Sprint(arguments["message-id"]))
+		conversationID := strings.TrimSpace(fmt.Sprint(arguments["open-conversation-id"]))
+		if messageID == "<nil>" {
+			messageID = ""
+		}
+		if conversationID == "" || conversationID == "<nil>" {
+			conversationID = strings.TrimSpace(fallbackConversationID)
+		}
+		missingMediaContext := resourceType == "mediaId" &&
+			(messageID == "" || messageID == "<nil>" ||
+				conversationID == "" || conversationID == "<nil>")
+		if resourceID == "" || resourceID == "<nil>" || missingMediaContext {
+			failures = append(failures, map[string]any{
+				"resourceType": resourceType,
+				"resourceId":   resourceID,
+				"messageId":    messageID,
+				"error":        "资源引用缺少 resource-id，或 mediaId 缺少 message-id/open-conversation-id",
+			})
+			continue
+		}
+
+		data, callErr := resolveMessageResourceDownloadData(
+			rt, resourceType, resourceID, messageID, conversationID)
+		if callErr != nil {
+			failures = append(failures, map[string]any{
+				"resourceType": resourceType,
+				"resourceId":   resourceID,
+				"messageId":    messageID,
+				"error":        callErr.Error(),
+			})
+			continue
+		}
+		resourceURL, headers, infoErr := resourceDownloadInfo(data)
+		if infoErr != nil {
+			failures = append(failures, map[string]any{
+				"resourceType": resourceType,
+				"resourceId":   resourceID,
+				"messageId":    messageID,
+				"error":        infoErr.Error(),
+			})
+			continue
+		}
+		preferredName := resourceDownloadPreferredName(data)
+		if preferredName == "" {
+			preferredName, _ = resource["name"].(string)
+			preferredName = strings.TrimSpace(preferredName)
+		}
+		filename := resourceDownloadFilename(resourceURL, preferredName)
+		filename = disambiguateResourceDownloadFilename(filename, downloadedNames)
+		output := filepath.Join(outputDir, filename)
+		destPath, relativePath, pathErr := resolveResourceDownloadPath(
+			cwd,
+			output,
+			resourceURL,
+			rt.Bool("overwrite"),
+			preferredName,
+		)
+		if pathErr != nil {
+			failures = append(failures, map[string]any{
+				"resourceType": resourceType,
+				"resourceId":   resourceID,
+				"messageId":    messageID,
+				"error":        pathErr.Error(),
+			})
+			continue
+		}
+		size, downloadErr := resourceDownload(
+			rt.Command().Context(), nil, resourceURL, headers, destPath, rt.Bool("overwrite"))
+		if downloadErr != nil {
+			failures = append(failures, map[string]any{
+				"resourceType": resourceType,
+				"resourceId":   resourceID,
+				"messageId":    messageID,
+				"error":        downloadErr.Error(),
+			})
+			continue
+		}
+		downloadedNames[strings.ToLower(filepath.Base(relativePath))] = true
+		downloads = append(downloads, map[string]any{
+			"resourceType": resourceType,
+			"resourceId":   resourceID,
+			"messageId":    messageID,
+			"localPath":    filepath.ToSlash(relativePath),
+			"sizeBytes":    size,
+		})
+	}
+	return map[string]any{
+		"ok":                len(failures) == 0,
+		"partial":           len(downloads) > 0 && len(failures) > 0,
+		"discoveredCount":   discoveredCount,
+		"requestedCount":    len(resources),
+		"deduplicatedCount": discoveredCount - len(resources),
+		"downloadedCount":   len(downloads),
+		"failedCount":       len(failures),
+		"downloads":         downloads,
+		"failures":          failures,
+	}
+}
+
+// AttachMessageResourceDownloads publishes the download ledger and folds any
+// resource failure into the task-level completeness contract without dropping
+// successfully read messages or downloaded files.
+func AttachMessageResourceDownloads(payload, ledger map[string]any) {
+	payload["resourceDownloads"] = ledger
+	failed := messageLedgerInt(ledger["failedCount"])
+	if failed == 0 {
+		return
+	}
+	payload["complete"] = false
+	payload["failedCount"] = messageLedgerInt(payload["failedCount"]) + failed
+	taskFailures, _ := payload["failures"].([]map[string]any)
+	resourceFailures, _ := ledger["failures"].([]map[string]any)
+	for _, failure := range resourceFailures {
+		row := make(map[string]any, len(failure)+1)
+		row["stage"] = "resource-download"
+		for key, value := range failure {
+			row[key] = value
+		}
+		taskFailures = append(taskFailures, row)
+	}
+	payload["failures"] = taskFailures
+}
+
+func messageLedgerInt(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float32:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
+func disambiguateResourceDownloadFilename(filename string, used map[string]bool) string {
+	if !used[strings.ToLower(filename)] {
+		return filename
+	}
+	extension := filepath.Ext(filename)
+	stem := strings.TrimSuffix(filename, extension)
+	for sequence := 2; ; sequence++ {
+		candidate := fmt.Sprintf("%s (%d)%s", stem, sequence, extension)
+		if !used[strings.ToLower(candidate)] {
+			return candidate
+		}
+	}
+}
+
+func uniqueShortcutStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = appendUniqueShortcutString(out, value)
+		}
+	}
+	return out
 }
 
 // MessagesQuerySendStatus queries send status of a message (query_message_send_status, im).
 var MessagesQuerySendStatus = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+messages-query-send-status",
+	Aliases:     []string{"+messages-send-status"},
 	Product:     "im",
-	Description: "查询消息发送状态",
-	Intent:      "当你发消息后拿到 openTaskId、想确认这条消息是否发送成功时使用；只读返回发送状态，需传 --open-task-id。",
+	Description: "查询消息投递状态并衔接后续消息操作",
+	Intent:      "当你发消息后拿到 openTaskId、想确认投递结果，或后续 edit/recall/read-status 需要取得 openMessageId 和 openConversationId 时使用；openTaskId 不是消息 ID。结果会保留下层响应，并追加版本化 messageRef 与结构化 nextActions。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_query_send_status",
+			CanonicalPath:  "chat.shortcut_messages_query_send_status",
+			CLIPath:        "chat +messages-query-send-status",
+			PrimaryCLIPath: "chat +messages-query-send-status",
+			Aliases:        []string{"chat +messages-send-status"},
+		},
+		Description: "查询消息投递状态并衔接后续消息操作",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询消息投递状态并衔接后续消息操作",
+			UseWhen:      []string{"当你发消息后拿到 openTaskId、想确认投递结果，或后续 edit/recall/read-status 需要取得 openMessageId 和 openConversationId 时使用；openTaskId 不是消息 ID。结果会保留下层响应，并追加版本化 messageRef 与结构化 nextActions。"},
+			AvoidWhen:    []string{"没有 openTaskId、已经有消息 ID，或只需查历史消息内容时不要使用"},
+			Examples:     []string{"dws chat +messages-query-send-status --open-task-id <openTaskId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "open-task-id", Type: shortcut.FlagString, Desc: "发送消息时返回的 openTaskId", Required: true},
 	},
 	Tips: []string{`dws chat +messages-query-send-status --open-task-id <openTaskId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("query_message_send_status", map[string]any{"openTaskId": rt.Str("open-task-id")})
+		taskID := rt.Str("open-task-id")
+		data, err := rt.CallMCPData("im", "query_message_send_status", map[string]any{"openTaskId": taskID})
+		if err != nil {
+			return err
+		}
+		return rt.Output(chatmsg.ProjectMessageSendStatus(data, taskID))
 	},
 }
 
@@ -502,6 +1261,31 @@ var MessagesReadStatus = shortcut.Shortcut{
 	Description: "查询消息的已读/未读状态",
 	Intent:      "当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_read_status",
+			CanonicalPath:  "chat.shortcut_messages_read_status",
+			CLIPath:        "chat +messages-read-status",
+			PrimaryCLIPath: "chat +messages-read-status",
+		},
+		Description: "查询消息的已读/未读状态",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询消息的已读/未读状态",
+			UseWhen:      []string{"当你想知道自己发出的某条消息有哪些人已读/未读时使用；只读，需传会话 openConversationId 和该消息 openMessageId，可指定目标成员列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +messages-read-status --conversation-id <openConversationId> --message-id <openMessageId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId"},
 		{Name: "group", Type: shortcut.FlagString, Desc: "--conversation-id 的别名", Hidden: true},
@@ -661,39 +1445,257 @@ var MessagesCreateTextEmotion = shortcut.Shortcut{
 	},
 }
 
-// MessagesSendCard creates and pushes a streaming card (create_and_send_card, im).
+// MessagesSendCard creates and optionally completes a streaming card by
+// composing create_and_send_card with update_streaming_card.
 var MessagesSendCard = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+messages-send-card",
 	Product:     "im",
-	Description: "创建并推送流式卡片（需配合 messages-update-card）",
-	Intent:      "当你要发送一张可后续流式更新的卡片消息（如 AI 逐字输出）时使用；会实际推送卡片并返回 bizId，群 openConversationId 或单聊接收者 userId 二选一，配合 messages-update-card 更新。",
+	Description: "创建流式卡片，可在同一次调用中写入内容并结束；群聊创建时可 @成员或 @所有人",
+	Intent:      "当你要发送一张流式文本卡片时使用；群 openConversationId、单聊 userId、单聊 openDingTalkId 严格三选一，分别使用 --group、--receiver、--receiver-open-dingtalk-id。群聊可用 --at-open-dingtalk-ids 或 --at-all 在创建卡片时设置 @对象；同时传 --content 时，Runtime 会把创建响应中的 atTag 自动加在正文前，后续更新不重复传递 @参数。--receiver 始终按 userId 通过通讯录关键词搜索做精确匹配，即使值以 D/d 开头也不会猜成 openDingTalkId；已有 openDingTalkId 时必须用显式参数直传。userId 包括在 --dry-run 时也会先解析。只传目标时创建卡片并返回 bizId，供后续 messages-update-card 流式更新；同时传 --content 时会自动串联创建和更新，默认以 flowStatus=3 完成。当前只支持 streaming text，不支持 Card JSON 组件或 action callback。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_send_card",
+			CanonicalPath:  "chat.shortcut_messages_send_card",
+			CLIPath:        "chat +messages-send-card",
+			PrimaryCLIPath: "chat +messages-send-card",
+		},
+		Description: "创建流式卡片，可在同一次调用中写入内容并结束；群聊创建时可 @成员或 @所有人",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed card lifecycle adapter: it can resolve a userId through contact search with exact matching, call create_and_send_card alone, or compose creation with update_streaming_card after extracting the returned bizId and atTag.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "创建流式卡片，可在同一次调用中写入内容并结束；群聊创建时可 @成员或 @所有人",
+			UseWhen:      []string{"当你要发送一张流式文本卡片时使用；群 openConversationId、单聊 userId、单聊 openDingTalkId 严格三选一，分别使用 --group、--receiver、--receiver-open-dingtalk-id。群聊可用 --at-open-dingtalk-ids 或 --at-all 在创建卡片时设置 @对象；同时传 --content 时，Runtime 会把创建响应中的 atTag 自动加在正文前，后续更新不重复传递 @参数。--receiver 始终按 userId 通过通讯录关键词搜索做精确匹配，即使值以 D/d 开头也不会猜成 openDingTalkId；已有 openDingTalkId 时必须用显式参数直传。userId 包括在 --dry-run 时也会先解析。只传目标时创建卡片并返回 bizId，供后续 messages-update-card 流式更新；同时传 --content 时会自动串联创建和更新，默认以 flowStatus=3 完成。当前只支持 streaming text，不支持 Card JSON 组件或 action callback。"},
+			AvoidWhen:    []string{"已有 bizId、只需要追加或更新现有卡片内容时使用 +messages-update-card"},
+			Examples: []string{
+				"dws chat +messages-send-card --group <openConversationId> --at-open-dingtalk-ids <openDingTalkId> --content \"任务已完成\"",
+				"dws chat +messages-send-card --receiver <userId>",
+			},
+		},
+		Parameters: []contract.ParamDecl{
+			{Name: "receiver-open-dingtalk-id", Property: "receiverOpenDingTalkId"},
+			{Name: "at-open-dingtalk-ids", Property: "atOpenDingTalkIds"},
+			{Name: "at-all", Property: "atAll"},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（与 --receiver 互斥）"},
-		{Name: "receiver", Type: shortcut.FlagString, Desc: "单聊接收者 userId（与 --group 互斥）"},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（与两个单聊接收者参数互斥）；艾特参数仅支持群聊 --group"},
+		{Name: "receiver", Type: shortcut.FlagString, Desc: "单聊接收者 userId（与 --group/--receiver-open-dingtalk-id 互斥）；始终通过通讯录搜索精确匹配 openDingTalkId，包括 --dry-run 和 D/d 开头的 userId"},
+		{Name: "receiver-open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊接收者 openDingTalkId（与 --group/--receiver 互斥）；显式直传且不做通讯录解析"},
+		{Name: "at-open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "群聊创建卡片时 @ 的 openDingTalkId 列表；仅随 create_and_send_card 发送；艾特参数仅支持群聊 --group"},
+		{Name: "at-all", Type: shortcut.FlagBool, Desc: "群聊创建卡片时 @ 所有人；仅随 create_and_send_card 发送；艾特参数仅支持群聊 --group"},
+		{Name: "content", Type: shortcut.FlagString, Desc: "创建后立即写入的卡片正文；群聊 @ 时 Runtime 自动前置 create 返回的 atTag；省略时仅创建并返回 bizId"},
+		{Name: "flow-status", Type: shortcut.FlagInt, Default: "3", Desc: "自动更新状态：1处理中/2输入中/3完成/4执行中/5错误；--flow-status 必须在 1-5 之间，且显式指定时必须同时提供 --content"},
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "receiver"}},
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"group", "receiver", "receiver-open-dingtalk-id"}},
+		{
+			Kind:        shortcut.ConstraintCustom,
+			Flags:       []string{"flow-status"},
+			Description: "--flow-status 必须在 1-5 之间，且显式指定时必须同时提供 --content",
+		},
+		{
+			Kind:        shortcut.ConstraintCustom,
+			Flags:       []string{"group", "at-open-dingtalk-ids", "at-all"},
+			Description: "艾特参数仅支持群聊 --group",
+		},
 	},
-	Tips: []string{`dws chat +messages-send-card --group <openConversationId>`},
+	Tips: []string{
+		`dws chat +messages-send-card --group <openConversationId>`,
+		`dws chat +messages-send-card --group <openConversationId> --at-open-dingtalk-ids <openDingTalkId> --content "任务已完成"`,
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if status := rt.Int("flow-status"); !validCardFlowStatus(status) {
+			return fmt.Errorf("--flow-status 必须在 1-5 之间")
+		}
+		if rt.Changed("flow-status") && rt.Str("content") == "" {
+			return fmt.Errorf("--flow-status 只有与 --content 一起使用才有意义")
+		}
+		if rt.Str("group") == "" && (len(uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids"))) > 0 || rt.Bool("at-all")) {
+			return fmt.Errorf("--at-open-dingtalk-ids 和 --at-all 仅支持群聊 --group")
+		}
+		return nil
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		group := rt.Str("group")
 		receiver := rt.Str("receiver")
-		if group == "" && receiver == "" {
-			return fmt.Errorf("--group 或 --receiver 必填其一")
-		}
-		if group != "" && receiver != "" {
-			return fmt.Errorf("--group 与 --receiver 互斥")
-		}
+		receiverOpenID := rt.Str("receiver-open-dingtalk-id")
 		params := map[string]any{}
-		if group != "" {
+		mentionsRequested := false
+		switch {
+		case group != "":
 			params["openConversationId"] = group
-		} else {
-			params["receiverUid"] = receiver
+			if atOpenIDs := uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")); len(atOpenIDs) > 0 {
+				params["atOpenDingTalkIds"] = atOpenIDs
+				mentionsRequested = true
+			}
+			if rt.Bool("at-all") {
+				params["atAll"] = true
+				mentionsRequested = true
+			}
+		case receiver != "":
+			openID, err := resolveUserOpenDingTalkID(rt, receiver)
+			if err != nil {
+				return err
+			}
+			params["receiverOpenDingTalkId"] = openID
+		default:
+			params["receiverOpenDingTalkId"] = receiverOpenID
 		}
-		return rt.CallMCP("create_and_send_card", params)
+		content := rt.Str("content")
+		if content == "" {
+			if rt.DryRun() {
+				return rt.Output(map[string]any{
+					"contractVersion": chatmsg.StreamingCardContractVersion,
+					"dry_run":         true,
+					"executed":        false,
+					"preview_kind":    "plan",
+					"actionCount":     1,
+					"actions": []map[string]any{{
+						"tool":      "create_and_send_card",
+						"arguments": params,
+					}},
+				})
+			}
+			created, err := rt.CallMCPWriteData("im", "create_and_send_card", params)
+			if err != nil {
+				return err
+			}
+			bizID := findCardBizID(created)
+			if bizID == "" {
+				return cardCreateMissingBizIDError(created)
+			}
+			return rt.Output(chatmsg.ProjectStreamingCardReceipt(created, bizID))
+		}
+		status := rt.Int("flow-status")
+		if rt.DryRun() {
+			plannedContent := content
+			if mentionsRequested {
+				plannedContent = "<atTag from create_and_send_card>" + content
+			}
+			return rt.Output(map[string]any{
+				"contractVersion": currentCardWorkflowContract.Version,
+				"dry_run":         true,
+				"executed":        false,
+				"preview_kind":    "plan",
+				"actionCount":     2,
+				"failedCount":     0,
+				"actions": []map[string]any{
+					{
+						"tool":      "create_and_send_card",
+						"arguments": params,
+					},
+					{
+						"tool": "update_streaming_card",
+						"arguments": map[string]any{
+							"bizId":      "<from create_and_send_card>",
+							"msgContent": plannedContent,
+							"flowStatus": status,
+						},
+					},
+				},
+			})
+		}
+		created, err := rt.CallMCPWriteData("im", "create_and_send_card", params)
+		if err != nil {
+			return err
+		}
+		bizID := findCardBizID(created)
+		if bizID == "" {
+			return fmt.Errorf("卡片已创建但下层未返回 bizId，无法自动更新；请检查 create_and_send_card 响应")
+		}
+		atTag := findCardAtTag(created)
+		if mentionsRequested && atTag == "" {
+			return fmt.Errorf("卡片已创建（bizId=%s），但下层未返回 atTag，无法保证请求的 @ 生效；未执行自动更新", bizID)
+		}
+		updated, err := rt.CallMCPWriteData("im", "update_streaming_card", map[string]any{
+			"bizId":      bizID,
+			"msgContent": atTag + content,
+			"flowStatus": status,
+		})
+		if err != nil {
+			return fmt.Errorf("卡片已创建（bizId=%s），但自动更新失败: %w", bizID, err)
+		}
+		if _, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated); err != nil {
+			return fmt.Errorf("卡片已创建（bizId=%s），但自动更新结果不可信: %w", bizID, cardUpdateVerificationError(bizID, err))
+		}
+		payload := chatmsg.ProjectStreamingCardReceipt(created, bizID)
+		payload["bizId"] = bizID
+		payload["flowStatus"] = status
+		payload["updated"] = updated
+		return rt.Output(payload)
 	},
+}
+
+func findCardBizID(value any) string {
+	return strings.TrimSpace(findCardResponseString(value, []string{"bizId", "bizID", "biz_id"}))
+}
+
+func findCardAtTag(value any) string {
+	return findCardResponseString(value, []string{"atTag"})
+}
+
+func findCardResponseString(value any, directKeys []string) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range directKeys {
+			if candidate, ok := typed[key].(string); ok && strings.TrimSpace(candidate) != "" {
+				return candidate
+			}
+		}
+
+		// Prefer documented response envelopes before scanning extension fields.
+		// Map iteration order is deliberately randomized by Go, so an unordered
+		// recursive walk could select a stale metadata bizId.
+		envelopeKeys := []string{"result", "data", "card", "response"}
+		visited := make(map[string]struct{}, len(directKeys)+len(envelopeKeys))
+		for _, key := range directKeys {
+			visited[key] = struct{}{}
+		}
+		for _, key := range envelopeKeys {
+			visited[key] = struct{}{}
+			if candidate := findCardResponseString(typed[key], directKeys); candidate != "" {
+				return candidate
+			}
+		}
+
+		remainingKeys := make([]string, 0, len(typed))
+		for key := range typed {
+			if _, ok := visited[key]; !ok {
+				remainingKeys = append(remainingKeys, key)
+			}
+		}
+		sort.Strings(remainingKeys)
+		for _, key := range remainingKeys {
+			if candidate := findCardResponseString(typed[key], directKeys); candidate != "" {
+				return candidate
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if candidate := findCardResponseString(child, directKeys); candidate != "" {
+				return candidate
+			}
+		}
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+			var nested any
+			if json.Unmarshal([]byte(trimmed), &nested) == nil {
+				return findCardResponseString(nested, directKeys)
+			}
+		}
+	}
+	return ""
 }
 
 // MessagesUpdateCard streams updated card content (update_streaming_card, im).
@@ -702,21 +1704,126 @@ var MessagesUpdateCard = shortcut.Shortcut{
 	Command:     "+messages-update-card",
 	Product:     "im",
 	Description: "流式更新卡片内容（最后一次 --flow-status 应为 3）",
-	Intent:      "当你要向已发送的流式卡片持续追加/更新内容时使用；会实际更新卡片，需传 send-card 返回的 bizId、新内容及 flowStatus（最后一次应为 3 表示完成）。",
+	Intent:      "当你要向已发送的流式文本卡片持续追加/更新内容时使用；会实际更新卡片，需传 send-card 返回的 bizId、新内容及 flowStatus 1-5（最后一次应为 3 表示完成）。当前不支持 Card JSON 组件或 action callback。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_update_card",
+			CanonicalPath:  "chat.shortcut_messages_update_card",
+			CLIPath:        "chat +messages-update-card",
+			PrimaryCLIPath: "chat +messages-update-card",
+		},
+		Description: "流式更新卡片内容（最后一次 --flow-status 应为 3）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "流式更新卡片内容（最后一次 --flow-status 应为 3）",
+			UseWhen:      []string{"当你要向已发送的流式文本卡片持续追加/更新内容时使用；会实际更新卡片，需传 send-card 返回的 bizId、新内容及 flowStatus 1-5（最后一次应为 3 表示完成）。当前不支持 Card JSON 组件或 action callback。"},
+			AvoidWhen:    []string{"需要底层原始响应、未公开参数，或由调用方自行管理确认与更新节奏时，改用 chat message update-card"},
+			Examples:     []string{"dws chat +messages-update-card --biz-id <bizId> --content \"内容\" --flow-status 3"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "biz-id", Type: shortcut.FlagString, Desc: "send-card 返回的卡片业务 ID", Required: true},
 		{Name: "content", Type: shortcut.FlagString, Desc: "卡片消息内容", Required: true},
-		{Name: "flow-status", Type: shortcut.FlagInt, Desc: "流式状态 1处理中/2输入中/3完成/4执行中/5错误", Required: true},
+		{Name: "flow-status", Type: shortcut.FlagInt, Desc: "流式状态 1处理中/2输入中/3完成/4执行中/5错误；--flow-status 必须在 1-5 之间", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"flow-status"}, Description: "--flow-status 必须在 1-5 之间"},
 	},
 	Tips: []string{`dws chat +messages-update-card --biz-id <bizId> --content "内容" --flow-status 3`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if _, err := chatmsg.NormalizeCardBizID(rt.Str("biz-id")); err != nil {
+			return err
+		}
+		if !validCardFlowStatus(rt.Int("flow-status")) {
+			return fmt.Errorf("--flow-status 必须在 1-5 之间")
+		}
+		return nil
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("update_streaming_card", map[string]any{
-			"bizId":      rt.Str("biz-id"),
+		// Validate has already normalized and rejected empty, placeholder, and
+		// whitespace-containing values before Execute is entered.
+		bizID, _ := chatmsg.NormalizeCardBizID(rt.Str("biz-id"))
+		params := map[string]any{
+			"bizId":      bizID,
 			"msgContent": rt.Str("content"),
 			"flowStatus": rt.Int("flow-status"),
-		})
+		}
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"dry_run":  true,
+				"executed": false,
+				"verified": false,
+				"action": map[string]any{
+					"product":   "im",
+					"tool":      "update_streaming_card",
+					"arguments": params,
+				},
+			})
+		}
+		updated, err := rt.CallMCPWriteData("im", "update_streaming_card", params)
+		if err != nil {
+			return err
+		}
+		proof, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
+		if err != nil {
+			return cardUpdateVerificationError(bizID, err)
+		}
+		return rt.Output(chatmsg.ProjectStreamingCardUpdate(updated, bizID, proof))
 	},
+}
+
+func cardCreateMissingBizIDError(created map[string]any) error {
+	return apperrors.NewAPI(
+		"卡片可能已经创建，但服务端未返回后续更新所需的 bizId；CLI 无法确认卡片工作流可继续",
+		apperrors.WithOperation("create_and_send_card"),
+		apperrors.WithServerKey("im"),
+		apperrors.WithOrigin("client_postcondition"),
+		apperrors.WithFailureStage("verify_card_reference"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason("streaming_card_reference_missing"),
+		apperrors.WithHint("不要盲目重试创建；请保留 trace_id 并推动服务端返回 bizId、openMessageId 和 openConversationId"),
+		apperrors.WithDetails(map[string]any{"created": created}),
+	)
+}
+
+func cardUpdateVerificationError(bizID string, verifyErr error) error {
+	reason := "streaming_card_update_unverified"
+	message := "服务端未返回卡片实际更新的证据；为避免假成功，CLI 已将本次操作判为失败"
+	hint := "请检查服务端是否返回 updated=true、affectedCount>0 或等价的明确更新结果"
+	switch {
+	case errors.Is(verifyErr, chatmsg.ErrCardUpdateNotApplied):
+		reason = "streaming_card_update_not_applied"
+		message = "服务端明确表示流式卡片没有被更新"
+		hint = "请确认 bizId 来自 send-card、当前账号有权限且卡片仍允许该状态转换"
+	case errors.Is(verifyErr, chatmsg.ErrCardUpdateBizIDDrift):
+		reason = "streaming_card_update_biz_id_mismatch"
+		message = "服务端返回的 bizId 与本次请求不一致；无法确认目标卡片已更新"
+		hint = "请保留 trace_id 并检查 update_streaming_card 的响应映射"
+	}
+	return apperrors.NewAPI(
+		message,
+		apperrors.WithOperation("update_streaming_card"),
+		apperrors.WithServerKey("im"),
+		apperrors.WithOrigin("client_postcondition"),
+		apperrors.WithFailureStage("verify_update_result"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason(reason),
+		apperrors.WithHint(hint),
+		apperrors.WithDetails(map[string]any{"bizId": bizID}),
+		apperrors.WithCause(verifyErr),
+	)
 }
 
 // MessagesResourceURL gets a message resource download url (get_resource_download_url, im).
@@ -730,15 +1837,24 @@ var MessagesResourceURL = shortcut.Shortcut{
 	Flags: []shortcut.Flag{
 		{Name: "type", Type: shortcut.FlagString, Default: "mediaId", Desc: "资源类型", Enum: []string{"mediaId"}},
 		{Name: "resource-id", Type: shortcut.FlagString, Desc: "资源 ID（消息中的 mediaId）", Required: true},
-		{Name: "message-id", Type: shortcut.FlagString, Desc: "消息 openMessageId", Required: true},
+		{Name: "message-id", Type: shortcut.FlagString, Desc: "消息 openMessageId"},
+		{Name: "msg-id", Type: shortcut.FlagString, Desc: "--message-id 的别名", Hidden: true},
+		{Name: "open-message-id", Type: shortcut.FlagString, Desc: "--message-id 的别名", Hidden: true},
 		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
+	},
+	// message-id is required, but accept the natural aliases agents reach for
+	// (the message-list output field is openMessageId/msgId). Declared via a
+	// constraint rather than Required because a shortcut's Required check only
+	// looks at the primary flag name, so a hidden alias could not satisfy it.
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"message-id", "msg-id", "open-message-id"}},
 	},
 	Tips: []string{`dws chat +messages-resource-url --type mediaId --resource-id <mediaId> --message-id <openMessageId> --open-conversation-id <openConversationId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("get_resource_download_url", map[string]any{
 			"resourceType":       rt.Str("type"),
 			"resourceId":         rt.Str("resource-id"),
-			"openMessageId":      rt.Str("message-id"),
+			"openMessageId":      rt.StrFirst("message-id", "msg-id", "open-message-id"),
 			"openConversationId": rt.Str("open-conversation-id"),
 		})
 	},
@@ -877,6 +1993,31 @@ var MessagesListPin = shortcut.Shortcut{
 	Description: "拉取会话中钉住的消息列表",
 	Intent:      "当你想查看某会话里当前钉住的消息有哪些时使用；只读分页返回，需传会话 openConversationId。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_list_pin",
+			CanonicalPath:  "chat.shortcut_messages_list_pin",
+			CLIPath:        "chat +messages-list-pin",
+			PrimaryCLIPath: "chat +messages-list-pin",
+		},
+		Description: "拉取会话中钉住的消息列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "拉取会话中钉住的消息列表",
+			UseWhen:      []string{"当你想查看某会话里当前钉住的消息有哪些时使用；只读分页返回，需传会话 openConversationId。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +messages-list-pin --open-conversation-id <openConversationId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传 nextCursor"},
@@ -899,7 +2040,9 @@ var MessagesListPin = shortcut.Shortcut{
 			return err
 		}
 		pins := listPinProject(data)
-		return rt.Output(map[string]any{"count": len(pins), "pins": pins})
+		payload := map[string]any{"count": len(pins), "pins": pins}
+		chatmsg.ApplyPagination(payload, data)
+		return rt.Output(payload)
 	},
 }
 
@@ -928,6 +2071,9 @@ func listPinProject(data map[string]any) []map[string]any {
 		}
 		if v, ok := listPinFirst(m, "openConversationId", "conversationId", "openConvId"); ok {
 			row["conversationId"] = v
+		}
+		if threadID := chatmsg.ThreadID(m); threadID != nil {
+			row["threadId"] = threadID
 		}
 		if len(row) > 0 {
 			out = append(out, row)
@@ -1011,7 +2157,7 @@ var MessagesUnsetTop = shortcut.Shortcut{
 }
 
 func init() {
-	shortcut.Register(
+	shortcut.Register(withReviewedChatShortcutContracts(
 		MessagesSendByBot,
 		MessagesBatchSendByBot,
 		MessagesSendByWebhook,
@@ -1040,5 +2186,5 @@ func init() {
 		MessagesListPin,
 		MessagesSetTop,
 		MessagesUnsetTop,
-	)
+	)...)
 }

@@ -12,9 +12,10 @@
 // limitations under the License.
 
 // Package builtin aggregates all built-in shortcut service packages via blank
-// imports so their init() registrations run, then re-exports the compiled cobra
-// commands. The host application depends only on this package, keeping the
-// service packages free to import the core shortcut package without a cycle.
+// imports so their init() registrations run, applies the reviewed semantic and
+// public-catalog decorations in the core registry, then re-exports the compiled
+// cobra commands. The host application depends only on this package, keeping
+// the service packages free to import the core shortcut package without a cycle.
 //
 // Add a blank import here when a new service package is generated under
 // internal/shortcut/<service>/.

@@ -6,16 +6,25 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import shlex
 import subprocess
 import time
 from pathlib import Path
 
-from shortcut_real_result import classify_failure, summarize_failure_categories, classify_real_status, summarize_results
+from shortcut_real_result import (
+    classify_failure,
+    summarize_failure_categories,
+    classify_real_status,
+    summarize_results,
+    projection_audit,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT_PATH = ROOT / "docs" / "shortcut-real-write-results.json"
+OUT_PATH = Path(
+    os.environ.get("SHORTCUT_REAL_RESULTS_PATH", ROOT / "docs" / "shortcut-real-write-results.json")
+)
 
 
 def load_report() -> dict:
@@ -39,6 +48,12 @@ def main() -> int:
     p.add_argument("--risk", default="write")
     p.add_argument("--method", default="real-backend-manual-write; no --mock; no --dry-run")
     p.add_argument("--timeout", type=int, default=35)
+    p.add_argument(
+        "--backend-raw",
+        help="Path to a JSON file holding the lower-layer MCP tool response for "
+        "this shortcut (captured separately). Used only in memory to compare the "
+        "upper projection against the lower layer; never persisted.",
+    )
     p.add_argument("argv", nargs=argparse.REMAINDER)
     ns = p.parse_args()
     argv = ns.argv
@@ -46,6 +61,12 @@ def main() -> int:
         argv = argv[1:]
     if not argv:
         raise SystemExit("missing command argv")
+
+    # Lower layer stays in memory only — we persist derived counts, never the raw
+    # PII-bearing backend payload.
+    backend_raw = None
+    if ns.backend_raw:
+        backend_raw = json.loads(Path(ns.backend_raw).read_text(encoding="utf-8"))
 
     started = time.time()
     status = "real-error"
@@ -57,7 +78,7 @@ def main() -> int:
         stdout = proc.stdout.strip()
         stderr = proc.stderr.strip()
         exit_code = proc.returncode
-        status = classify_real_status(exit_code, stdout)
+        status = classify_real_status(exit_code, stdout, backend_raw=backend_raw)
     except subprocess.TimeoutExpired as e:
         status = "timeout"
         if isinstance(e.stdout, str):
@@ -83,7 +104,17 @@ def main() -> int:
         "duration_ms": duration_ms,
         "recorded_at": dt.datetime.now().isoformat(),
     }
-    category, fixability, note = classify_failure(result)
+    # Compare upper projection vs lower layer in memory; persist only the derived
+    # verdict (kind + counts), never the raw backend payload.
+    if backend_raw is not None:
+        audit = projection_audit({**result, "backend": backend_raw})
+        if audit is not None:
+            result["projection_audit"] = audit
+
+    # classify_failure inspects the lower layer to flag projection-data-loss, so
+    # hand it a copy carrying the in-memory backend; the persisted `result` keeps
+    # only the verdict.
+    category, fixability, note = classify_failure({**result, "backend": backend_raw})
     if category != "passed":
         result["failure_category"] = category
         result["fixability"] = fixability

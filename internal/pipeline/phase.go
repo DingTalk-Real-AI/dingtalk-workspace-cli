@@ -13,6 +13,12 @@
 
 package pipeline
 
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
 // Phase represents a named stage in the CLI execution pipeline.
 // Handlers are grouped by phase and executed in chain order within
 // each phase. Phases themselves execute in a fixed order defined
@@ -77,8 +83,11 @@ type Context struct {
 	// PreParse handlers may rewrite this in place.
 	Args []string
 
-	// Command is the resolved product.tool canonical path
-	// (available from PostParse onward).
+	// Command identifies the resolved command. RunPreParse fills it with
+	// Cobra's raw CommandPath() (e.g. "dws chat message send-by-bot") so
+	// PreParse handlers can key per-command tables; the PostParse pipeline
+	// fills it with the resolved product.tool canonical path. The two phases
+	// use independent Context instances, so the differing forms never mix.
 	Command string
 
 	// Params holds structured key→value parameters after Cobra
@@ -105,9 +114,80 @@ type Context struct {
 	// handlers use this to match against raw argv tokens.
 	FlagSpecs []FlagInfo
 
+	// ProtectedFlags carries reviewed semantic guard decisions across the
+	// complete PreParse chain. Keys are morphed flag names. Sticky and fuzzy
+	// handlers must not reinterpret a name classified as blocked or ambiguous
+	// by the semantic alias table.
+	ProtectedFlags map[string]FlagProtection
+
 	// Corrections records every correction applied by handlers,
 	// enabling downstream logging and debugging.
 	Corrections []Correction
+}
+
+// FlagProtection identifies why an emitted flag name must not be automatically
+// rewritten.
+type FlagProtection string
+
+const (
+	FlagProtectionBlocked   FlagProtection = "blocked"
+	FlagProtectionAmbiguous FlagProtection = "ambiguous"
+)
+
+// ProtectFlag records a reviewed no-touch decision for the remainder of the
+// current pipeline context.
+func (c *Context) ProtectFlag(morphed string, protection FlagProtection) {
+	if c == nil || morphed == "" {
+		return
+	}
+	if c.ProtectedFlags == nil {
+		c.ProtectedFlags = make(map[string]FlagProtection)
+	}
+	c.ProtectedFlags[morphed] = protection
+}
+
+// IsFlagProtected reports whether a morphed flag name is guarded from further
+// automatic interpretation.
+func (c *Context) IsFlagProtected(morphed string) bool {
+	if c == nil {
+		return false
+	}
+	_, ok := c.ProtectedFlags[morphed]
+	return ok
+}
+
+// FlagConflictError is returned when multiple distinct spellings that reduce
+// to one scalar canonical flag are present in the same argv. Rejecting the
+// command makes the outcome independent of argument order.
+type FlagConflictError struct {
+	Command   string
+	Canonical string
+	Spellings []string
+}
+
+func (e *FlagConflictError) Error() string {
+	spellings := append([]string(nil), e.Spellings...)
+	sort.Strings(spellings)
+	for i := range spellings {
+		spellings[i] = "--" + strings.TrimPrefix(spellings[i], "--")
+	}
+	return fmt.Sprintf("conflicting parameter spellings for --%s on %q: %s; pass exactly one spelling", e.Canonical, e.Command, strings.Join(spellings, ", "))
+}
+
+// BoolValueConflictError is returned when one canonical boolean flag receives
+// both true and false in the same argv. Rejecting contradictory values keeps
+// the outcome independent of argument order while allowing repeated identical
+// spellings to retain Cobra's native behaviour.
+type BoolValueConflictError struct {
+	Command string
+	Flag    string
+	Values  []string
+}
+
+func (e *BoolValueConflictError) Error() string {
+	values := append([]string(nil), e.Values...)
+	sort.Strings(values)
+	return fmt.Sprintf("conflicting boolean values for --%s on %q: %s; pass exactly one value", strings.TrimPrefix(e.Flag, "--"), e.Command, strings.Join(values, ", "))
 }
 
 // FlagInfo describes a single CLI flag derived from a tool's input
@@ -116,6 +196,11 @@ type Context struct {
 type FlagInfo struct {
 	// Name is the canonical kebab-case flag name (e.g. "user-id").
 	Name string
+
+	// Shorthand is the optional single-character pflag shorthand (e.g. "y"
+	// for --yes). PreParse uses exact shorthand tokens when normalising
+	// explicit boolean values; shorthand clusters retain native pflag syntax.
+	Shorthand string
 
 	// PropertyName is the original schema property key (e.g. "userId").
 	PropertyName string

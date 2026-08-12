@@ -12,7 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +29,20 @@ var (
 )
 
 func newAuditCommand() *cobra.Command {
+	// Product-level Agent routing Decl (migrated from selection/audit.json
+	// products.audit). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "audit",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "查看、导出和校验本地操作审计日志",
+			UseWhen: []string{
+				"需要排查本机 CLI 操作审计记录，或验证审计文件完整性",
+			},
+			AvoidWhen: []string{
+				"查钉钉业务数据或发消息请用对应产品命令，不要用 audit",
+			},
+		},
+	})
 	cmd := &cobra.Command{
 		Use:   "audit",
 		Short: "操作审计日志管理",
@@ -64,6 +81,39 @@ func newAuditTailCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVarP(&n, "lines", "n", 20, "显示最近 N 条记录")
+	helpers.DeclareLeafMetadata(cmd, helpers.LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: helpers.LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "audit",
+				Name:           "tail",
+				CanonicalPath:  "audit.tail",
+				CLIPath:        "audit tail",
+				PrimaryCLIPath: "audit tail",
+			},
+			Description: "查看本地操作审计日志最近 N 条记录",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "local",
+				Availability: "available",
+				Reason:       "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查看本地操作审计日志最近 N 条记录",
+				UseWhen:      []string{"需要快速查看最近写入的审计记录（默认最近 20 条）"},
+				AvoidWhen: []string{
+					"需要按日期范围整段导出用 audit export",
+					"需要校验哈希链用 audit verify",
+				},
+				Examples: []string{
+					"dws audit tail",
+					"dws audit tail --lines 50",
+				},
+			},
+		},
+	})
 	return cmd
 }
 
@@ -99,6 +149,39 @@ func newAuditExportCommand() *cobra.Command {
 	cmd.Flags().StringVar(&since, "since", "", "起始日期 (YYYY-MM-DD)")
 	cmd.Flags().StringVar(&until, "until", "", "截止日期 (YYYY-MM-DD)")
 	cmd.Flags().StringVar(&format, "format", "jsonl", "输出格式: jsonl 或 csv")
+	helpers.DeclareLeafMetadata(cmd, helpers.LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: helpers.LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "audit",
+				Name:           "export",
+				CanonicalPath:  "audit.export",
+				CLIPath:        "audit export",
+				PrimaryCLIPath: "audit export",
+			},
+			Description: "按日期范围导出本地操作审计日志（jsonl 或 csv）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "local",
+				Availability: "available",
+				Reason:       "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按日期范围导出本地操作审计日志（jsonl 或 csv）",
+				UseWhen:      []string{"需要把本地审计日志导出为 jsonl/csv，或按 --since/--until 取一段时间"},
+				AvoidWhen: []string{
+					"只看最近几条用 audit tail",
+					"只校验哈希链完整性用 audit verify",
+				},
+				Examples: []string{
+					"dws audit export --format jsonl",
+					"dws audit export --since 2026-07-01 --until 2026-07-14 --format csv",
+				},
+			},
+		},
+	})
 	return cmd
 }
 
@@ -152,6 +235,36 @@ func newAuditVerifyCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&file, "file", "", "指定审计文件路径（默认最新文件）")
+	helpers.DeclareLeafMetadata(cmd, helpers.LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: helpers.LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "audit",
+				Name:           "verify",
+				CanonicalPath:  "audit.verify",
+				CLIPath:        "audit verify",
+				PrimaryCLIPath: "audit verify",
+			},
+			Description: "校验本地审计日志文件的哈希链完整性",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "local",
+				Availability: "available",
+				Reason:       "命令校验本地审计日志哈希链，不绑定 pinned MCP RPC",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "校验本地审计日志文件的哈希链完整性",
+				UseWhen:      []string{"怀疑审计文件被篡改，或需要确认最新/指定文件哈希链是否完整"},
+				AvoidWhen:    []string{"只浏览或导出日志内容时用 audit tail / audit export"},
+				Examples: []string{
+					"dws audit verify",
+					"dws audit verify --file /path/to/audit.jsonl",
+				},
+			},
+		},
+	})
 	return cmd
 }
 

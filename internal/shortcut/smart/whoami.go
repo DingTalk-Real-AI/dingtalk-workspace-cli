@@ -14,6 +14,8 @@
 package smart
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -35,6 +37,31 @@ var Whoami = shortcut.Shortcut{
 		"内部调用零参数的 get_current_user_profile（永远是「我」，无需传姓名），再把冗长的原始资料投影成 {name,userId,mobile,dept,org,email} 几个关键字段。" +
 		"这是纯只读操作，不修改任何资料。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "contact",
+			Name:           "shortcut_me",
+			CanonicalPath:  "contact.shortcut_me",
+			CLIPath:        "contact +me",
+			PrimaryCLIPath: "contact +me",
+		},
+		Description: "查看我自己的通讯录资料（姓名/userId/手机/部门/组织，干净投影）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查看我自己的通讯录资料（姓名/userId/手机/部门/组织，干净投影）",
+			UseWhen:      []string{"当你（或 AI agent）需要知道「我是谁」——我自己的 userId、姓名、所在部门、组织、手机号，用于后续按名解析他人前先确定自己身份、或填充发起人信息时使用；内部调用零参数的 get_current_user_profile（永远是「我」，无需传姓名），再把冗长的原始资料投影成 {name,userId,mobile,dept,org,email} 几个关键字段。这是纯只读操作，不修改任何资料。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws contact +me"},
+		},
+	},
 	Tips: []string{
 		`dws contact +me`,
 	},

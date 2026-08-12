@@ -14,6 +14,8 @@
 package smart
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -48,6 +50,34 @@ var SearchMail = shortcut.Shortcut{
 		"最后在本地把每封邮件投影成 {subject, from, date, messageId} 打印出来，可配合 --format/--jq/--fields。" +
 		"这是纯只读操作，只做搜索与本地投影，不会修改、发送或删除任何邮件；若没有命中则返回空列表。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_search_mail",
+			CanonicalPath:  "mail.shortcut_search_mail",
+			CLIPath:        "mail +search-mail",
+			PrimaryCLIPath: "mail +search-mail",
+		},
+		Description: "按 KQL 关键词搜索邮件并投影列表（主题/发件人/时间/messageId）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按 KQL 关键词搜索邮件并投影列表（主题/发件人/时间/messageId）",
+			UseWhen:      []string{"当你想按关键词（KQL 表达式，如 subject:周报、from:alice、hasAttachments:true、folderId:2 等）快速搜自己的邮件、并只看一份精简清单（主题、发件人、时间、邮件 messageId）而不想翻完整正文时使用；内部先确定要搜的邮箱地址——你可以用 --email 指定，不指定时自动取你绑定的第一个邮箱——再执行邮件搜索，最后在本地把每封邮件投影成 {subject, from, date, messageId} 打印出来，可配合 --format/--jq/--fields。这是纯只读操作，只做搜索与本地投影，不会修改、发送或删除任何邮件；若没有命中则返回空列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws mail +search-mail --query \"subject:周报\"",
+				"dws mail +search-mail --query \"from:alice AND date>2025-06-01T00:00:00Z\"",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "KQL 搜索表达式（如 subject:周报、from:alice、folderId:2）", Required: true},
 		{Name: "email", Type: shortcut.FlagString, Desc: "要搜索的邮箱地址（可选，默认取你绑定的第一个邮箱）", Required: false},
@@ -112,23 +142,49 @@ func searchMailFirstMailbox(rt *shortcut.RuntimeContext) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	boxes := searchMailUnwrapList(data, "mailboxes", "list", "items", "data", "result", "records")
-	for _, m := range boxes {
+	if addr := searchMailPickMailbox(data); addr != "" {
+		return addr, nil
+	}
+	return "", apperrors.NewValidation("未找到可用邮箱，请用 --email 指定要搜索的邮箱地址")
+}
+
+// searchMailPickMailbox resolves the first usable mailbox address from a
+// list_user_mailboxes response. It tolerates every observed shape: objects with
+// an email field (result.emailAccounts[].email) and bare string arrays
+// (result.emailAccounts[]), each at the top level or one level under a
+// result/data wrapper. searchMailToMaps drops plain strings, so the bare-string
+// case is scanned separately — otherwise all three smart mail shortcuts wrongly
+// report that no mailbox exists.
+func searchMailPickMailbox(data map[string]any) string {
+	containers := []string{"emailAccounts", "mailboxes", "list", "items", "data", "result", "records"}
+	for _, m := range searchMailUnwrapList(data, containers...) {
 		if addr := searchMailFirstString(m, "email", "emailAddress", "mailbox", "address", "account"); addr != "" {
-			return addr, nil
+			return addr
 		}
 	}
-	// Some gateways return the addresses as a bare string list.
-	for _, key := range []string{"mailboxes", "list", "items", "data", "result"} {
-		if arr, ok := data[key].([]any); ok {
-			for _, it := range arr {
-				if s, ok := it.(string); ok && s != "" {
-					return s, nil
+	scanStrings := func(m map[string]any) string {
+		for _, key := range containers {
+			if arr, ok := m[key].([]any); ok {
+				for _, it := range arr {
+					if s, ok := it.(string); ok && s != "" {
+						return s
+					}
 				}
 			}
 		}
+		return ""
 	}
-	return "", apperrors.NewValidation("未找到可用邮箱，请用 --email 指定要搜索的邮箱地址")
+	if s := scanStrings(data); s != "" {
+		return s
+	}
+	for _, wrap := range []string{"result", "data"} {
+		if inner, ok := data[wrap].(map[string]any); ok {
+			if s := scanStrings(inner); s != "" {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 // searchMailMessages extracts the message list from a search_emails response.

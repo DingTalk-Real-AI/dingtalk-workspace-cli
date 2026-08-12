@@ -97,7 +97,7 @@ func resolveSpaceItems(data map[string]any) []map[string]any {
 	if data == nil {
 		return nil
 	}
-	for _, key := range []string{"result", "data", "list", "items", "spaces", "records"} {
+	for _, key := range []string{"result", "data", "list", "items", "wikiSpaces", "spaces", "records"} {
 		raw, ok := data[key]
 		if !ok {
 			continue

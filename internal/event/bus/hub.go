@@ -41,7 +41,8 @@ type Consumer struct {
 	Filter       string   // raw regex from Hello (for status display)
 	SubscribeID  string   // optional personal subscription label and local isolation key
 	SubscribedAt time.Time
-	SendCh       chan any // bus → consume frames (Event/SourceState/Heartbeat/Bye)
+	SendCh       chan any    // bus → consume frames (Event/SourceState/Heartbeat/Bye)
+	StopCh       chan string // targeted local stop reason; consumed by daemon writer
 	matcher      consumerMatcher
 	sendMu       sync.Mutex    // serialises Deliver/Broadcast with SendCh close
 	closed       bool          // guarded by sendMu
@@ -192,10 +193,82 @@ func (h *Hub) Register(hello transport.Hello) (*Consumer, error) {
 		SubscribeID:  strings.TrimSpace(hello.SubscribeID),
 		SubscribedAt: time.Now().UTC(),
 		SendCh:       make(chan any, h.bufferSize),
+		StopCh:       make(chan string, 1),
 		matcher:      m,
 	}
 	h.consumers[c.ID] = c
 	return c, nil
+}
+
+// StopConsumers requests a graceful close for every consumer whose exact
+// SubscribeID appears in subscribeIDs. The daemon writer owns the wire, so
+// this method signals StopCh instead of writing or closing SendCh directly.
+func (h *Hub) StopConsumers(subscribeIDs []string, reason string) []string {
+	targets := make(map[string]struct{}, len(subscribeIDs))
+	for _, id := range subscribeIDs {
+		if id = strings.TrimSpace(id); id != "" {
+			targets[id] = struct{}{}
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(reason) == "" {
+		reason = transport.ByeReasonSubscriptionStopped
+	}
+
+	matched := make(map[string]struct{}, len(targets))
+	stopTargets := make([]*Consumer, 0, len(targets))
+	h.mu.RLock()
+	for _, c := range h.consumers {
+		id := strings.TrimSpace(c.SubscribeID)
+		if _, ok := targets[id]; !ok {
+			continue
+		}
+		matched[id] = struct{}{}
+		stopTargets = append(stopTargets, c)
+	}
+	h.mu.RUnlock()
+
+	for _, target := range stopTargets {
+		select {
+		case target.StopCh <- reason:
+		default:
+			// A stop is already queued for this consumer.
+		}
+	}
+
+	out := make([]string, 0, len(matched))
+	for id := range matched {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// StopAll requests a high-priority graceful close for every live consumer.
+// Unlike Broadcast(Bye), this uses the writer's priority StopCh and therefore
+// cannot sit behind a full event buffer during a terminal source failure.
+func (h *Hub) StopAll(reason string) int {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "shutdown"
+	}
+	h.mu.RLock()
+	consumers := make([]*Consumer, 0, len(h.consumers))
+	for _, consumer := range h.consumers {
+		consumers = append(consumers, consumer)
+	}
+	h.mu.RUnlock()
+	stopped := 0
+	for _, consumer := range consumers {
+		select {
+		case consumer.StopCh <- reason:
+			stopped++
+		default:
+		}
+	}
+	return stopped
 }
 
 // Unregister removes a consumer by ID and closes its sendCh. Idempotent —

@@ -273,7 +273,15 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 // subtest hermetic and matches the upstream shared-state fix in PR #129.
 func buildChmod(t *testing.T, fake *fakeToolCaller) *cobra.Command {
 	t.Helper()
-	return newChmodCommand(fake)
+	return chmodWithYes(t, newChmodCommand(fake))
+}
+
+// chmodWithYes attaches root persistent --yes for Catalog user_required
+// ConfirmSafety when tests call RunE directly.
+func chmodWithYes(t *testing.T, cmd *cobra.Command) *cobra.Command {
+	t.Helper()
+	attachRootYesFlag(t, cmd, true)
+	return cmd
 }
 
 func attachRootYesFlag(t *testing.T, cmd *cobra.Command, yes bool) {
@@ -290,14 +298,25 @@ func attachRootYesFlag(t *testing.T, cmd *cobra.Command, yes bool) {
 
 func attachRootPATFlags(t *testing.T, cmd *cobra.Command, yes bool, formatChanged bool) {
 	t.Helper()
+	attachRootPATFlagsOpts(t, cmd, yes, false, formatChanged)
+}
+
+func attachRootPATFlagsOpts(t *testing.T, cmd *cobra.Command, yes, dryRun, formatChanged bool) {
+	t.Helper()
 	root := &cobra.Command{Use: "dws"}
 	root.PersistentFlags().Bool("yes", false, "skip confirmation")
+	root.PersistentFlags().Bool("dry-run", false, "preview without executing")
 	root.PersistentFlags().String("format", "json", "")
 	root.PersistentFlags().Bool("verbose", false, "")
 	root.AddCommand(cmd)
 	if yes {
 		if err := root.PersistentFlags().Set("yes", "true"); err != nil {
 			t.Fatalf("set root --yes: %v", err)
+		}
+	}
+	if dryRun {
+		if err := root.PersistentFlags().Set("dry-run", "true"); err != nil {
+			t.Fatalf("set root --dry-run: %v", err)
 		}
 	}
 	if formatChanged {
@@ -396,7 +415,7 @@ func TestChmod_productsFlagPlansThenGrantsSelectedScopes(t *testing.T) {
 		`{"success":true,"data":{"selectedScopes":["calendar.event:read","aitable.record:read"]}}`,
 		`{"success":true,"data":{"grantedScopes":["calendar.event:read","aitable.record:read"]}}`,
 	}}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("products", "calendar,aitable")
 	setBatchYesForTest(t, cmd)
@@ -443,21 +462,24 @@ func TestChmod_productsFlagWithoutYesBlocksAfterPlan(t *testing.T) {
 		`{"success":true,"data":{"selectedScopes":["calendar.event:read"]}}`,
 	}}
 	cmd := newChmodCommand(fake)
+	attachRootYesFlag(t, cmd, false)
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("products", "calendar")
 
 	err := cmd.RunE(cmd, nil)
 	if err == nil {
-		t.Fatal("chmod RunE error = nil, want batch --yes blocker")
+		t.Fatal("chmod RunE error = nil, want confirmation gate")
 	}
-	if !strings.Contains(err.Error(), "--yes") || !strings.Contains(err.Error(), "batch PAT authorization blocked") {
-		t.Fatalf("error = %q, want explicit batch --yes blocker", err.Error())
+	// Catalog user_required ConfirmSafety runs after Validate and before RunE,
+	// so the plan MCP call is not reached without --yes.
+	if !strings.Contains(err.Error(), "--yes") ||
+		!(strings.Contains(err.Error(), "confirmation_required") ||
+			strings.Contains(err.Error(), "需要用户确认") ||
+			strings.Contains(err.Error(), "batch PAT authorization blocked")) {
+		t.Fatalf("error = %q, want --yes confirmation gate", err.Error())
 	}
-	if len(fake.calls) != 1 {
-		t.Fatalf("CallTool count = %d, want plan only", len(fake.calls))
-	}
-	if fake.calls[0].tool != patBatchPlanToolName {
-		t.Fatalf("tool = %q, want %q", fake.calls[0].tool, patBatchPlanToolName)
+	if len(fake.calls) != 0 {
+		t.Fatalf("CallTool count = %d, want none before confirmation", len(fake.calls))
 	}
 }
 
@@ -465,14 +487,18 @@ func TestChmod_multipleScopesWithoutYesBlocksBeforeMCP(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &sequenceToolCaller{}
 	cmd := newChmodCommand(fake)
+	attachRootYesFlag(t, cmd, false)
 	_ = cmd.Flags().Set("grant-type", "permanent")
 
 	err := cmd.RunE(cmd, []string{"calendar.event:read", "aitable.record:write"})
 	if err == nil {
-		t.Fatal("chmod RunE error = nil, want batch --yes blocker")
+		t.Fatal("chmod RunE error = nil, want confirmation gate")
 	}
-	if !strings.Contains(err.Error(), "--yes") || !strings.Contains(err.Error(), "batch PAT authorization blocked") {
-		t.Fatalf("error = %q, want explicit batch --yes blocker", err.Error())
+	if !strings.Contains(err.Error(), "--yes") ||
+		!(strings.Contains(err.Error(), "confirmation_required") ||
+			strings.Contains(err.Error(), "需要用户确认") ||
+			strings.Contains(err.Error(), "batch PAT authorization blocked")) {
+		t.Fatalf("error = %q, want --yes confirmation gate", err.Error())
 	}
 	if len(fake.calls) != 0 {
 		t.Fatalf("CallTool count = %d, want blocker before MCP", len(fake.calls))
@@ -485,7 +511,7 @@ func TestChmod_productsSessionModePassesIdentityArgsAndCompatEnv(t *testing.T) {
 		`{"success":true,"data":{"selectedScopes":["calendar.event:read"]}}`,
 		`{"success":true,"data":{"grantedScopes":["calendar.event:read"]}}`,
 	}}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "session")
 	_ = cmd.Flags().Set("products", "calendar")
 	_ = cmd.Flags().Set("session-id", "session-123")
@@ -537,7 +563,7 @@ func TestChmod_singleScopeReturnsServerAgentCodeInSummary(t *testing.T) {
 	}}
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
-	attachRootPATFlags(t, cmd, false, false)
+	attachRootPATFlags(t, cmd, true, false)
 
 	output, err := captureStdout(t, func() error {
 		return cmd.RunE(cmd, []string{"contact.user:get-self"})
@@ -567,7 +593,7 @@ func TestChmod_flagAgentCodeWinsAndReturnedAgentCodeMatches(t *testing.T) {
 	cmd := newChmodCommand(fake)
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("agentCode", "qoderwork")
-	attachRootPATFlags(t, cmd, false, false)
+	attachRootPATFlags(t, cmd, true, false)
 
 	output, err := captureStdout(t, func() error {
 		return cmd.RunE(cmd, []string{"chat.bot:search"})
@@ -668,7 +694,7 @@ func TestChmod_batchEntryPointMatrixRequiresYesAndReturnsAgentCode(t *testing.T)
 				}
 			}
 			fake := &sequenceToolCaller{responses: responses}
-			cmd := newChmodCommand(fake)
+			cmd := chmodWithYes(t, newChmodCommand(fake))
 			tc.setFlags(cmd)
 			attachRootPATFlags(t, cmd, true, false)
 
@@ -758,7 +784,7 @@ func TestChmod_batchPlanEntryPointsDryRunOnlyReturnPlanAgentCode(t *testing.T) {
 			cmd := newChmodCommand(fake)
 			_ = cmd.Flags().Set("grant-type", "once")
 			tc.setFlags(cmd)
-			attachRootPATFlags(t, cmd, false, false)
+			attachRootPATFlagsOpts(t, cmd, false, true, false)
 
 			output, err := captureStdout(t, func() error {
 				return cmd.RunE(cmd, nil)
@@ -811,7 +837,7 @@ func TestChmod_grantTypeAndSessionParameterMatrix(t *testing.T) {
 			fake := &sequenceToolCaller{responses: []string{
 				`{"success":true,"code":"OK","data":{"agentCode":"qoderwork","grantedScopes":["aitable.record:read"]}}`,
 			}}
-			cmd := newChmodCommand(fake)
+			cmd := chmodWithYes(t, newChmodCommand(fake))
 			_ = cmd.Flags().Set("grant-type", tc.grantType)
 			if tc.sessionFlag != "" {
 				_ = cmd.Flags().Set("session-id", tc.sessionFlag)
@@ -861,7 +887,7 @@ func TestChmod_productsSessionDryRunUsesSessionIDFromEnv(t *testing.T) {
 			`{"success":true,"data":{"selectedScopes":["calendar.event:read"]}}`,
 		},
 	}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "session")
 	_ = cmd.Flags().Set("products", "calendar")
 
@@ -906,7 +932,7 @@ func TestChmod_batchPlanRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 			`{"success":true,"data":{"agentCode":"qoderwork","allGranted":true,"selectedScopes":[]}}`,
 		},
 	}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("products", "calendar")
 	setBatchYesForTest(t, cmd)
@@ -948,7 +974,7 @@ func TestChmod_batchGrantRetriesWithoutIdentityArgsForCompat(t *testing.T) {
 			`{"success":true,"data":{"agentCode":"qoderwork","grantedScopes":["calendar.event:read"]}}`,
 		},
 	}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "once")
 
 	if err := cmd.RunE(cmd, []string{"calendar.event:read"}); err != nil {
@@ -988,7 +1014,7 @@ func TestChmod_batchGrantIdentityFallbackRejectsMismatchedAgentCode(t *testing.T
 			`{"success":true,"result":{"agentCode":"dingmbw5n9ktkkbbjv3g","grantedScopes":[],"alreadyGrantedScopes":["chat.message:send"]}}`,
 		},
 	}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "permanent")
 
 	err := cmd.RunE(cmd, []string{"chat.message:send"})
@@ -1028,7 +1054,7 @@ func TestChmod_batchGrantIdentityFallbackRejectsMissingAgentCode(t *testing.T) {
 			`{"success":true,"data":{"grantedScopes":["chat.message:send"]}}`,
 		},
 	}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "permanent")
 
 	err := cmd.RunE(cmd, []string{"chat.message:send"})
@@ -1119,7 +1145,7 @@ func TestChmod_recommendFlagPlansThenGrantsWithoutPositionalScopes(t *testing.T)
 		`{"success":true,"data":{"selectedScopes":["recommended.scope:read"]}}`,
 		`{"success":true,"data":{"grantedScopes":["recommended.scope:read"]}}`,
 	}}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("recommend", "true")
 	setBatchYesForTest(t, cmd)
 
@@ -1342,7 +1368,7 @@ func TestChmod_productsAllGrantedStopsAfterPlan(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"data":{"allGranted":true,"selectedScopes":[]}}`,
 	}}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "once")
 	_ = cmd.Flags().Set("products", "calendar")
 	setBatchYesForTest(t, cmd)
@@ -1361,7 +1387,7 @@ func TestChmod_productsAllGrantedStopsAfterPlan(t *testing.T) {
 func TestChmod_explicitScopesDryRunShowsBatchGrantTool(t *testing.T) {
 	t.Setenv(agentCodeEnv, "qoderwork")
 	fake := &fakeToolCaller{dryRun: true}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "once")
 
 	output, err := captureStdout(t, func() error {
@@ -1466,7 +1492,7 @@ func TestChmod_agentCode_envServerMismatchFails(t *testing.T) {
 	fake := &sequenceToolCaller{responses: []string{
 		`{"success":true,"code":"OK","data":{"agentCode":"dingmbw5n9ktkkkbjv3g","grantType":"permanent","grantedScopes":[],"alreadyGrantedScopes":["chat.message:send"]}}`,
 	}}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("grant-type", "permanent")
 
 	err := cmd.RunE(cmd, []string{"chat.message:send"})
@@ -1524,7 +1550,7 @@ func TestCallPATToolWithLegacyFallback_emptyCanonicalResultDoesNotRetryLegacyAli
 
 func TestChmod_emptyCanonicalResultReturnsError(t *testing.T) {
 	fake := &fallbackToolCaller{}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("agentCode", "qoderwork")
 	_ = cmd.Flags().Set("grant-type", "permanent")
 
@@ -1704,7 +1730,7 @@ func TestChmod_batchMetadataScopeErrorFallsBackToPATGrant(t *testing.T) {
 			`{"success":true,"data":{"authRequestId":"req-ok"}}`,
 		},
 	}
-	cmd := newChmodCommand(fake)
+	cmd := chmodWithYes(t, newChmodCommand(fake))
 	_ = cmd.Flags().Set("agentCode", "qoderwork")
 	_ = cmd.Flags().Set("grant-type", "once")
 

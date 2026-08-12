@@ -23,16 +23,28 @@ import (
 )
 
 const (
-	EventMention       = "user_im_message_receive_at"
-	EventSingleChat    = "user_im_message_receive_o2o"
-	EventInChat        = "user_im_message_receive_group"
-	EventFromUser      = "user_im_message_receive_user"
-	EventReadO2O       = "user_im_message_read_o2o"
-	EventReadGroup     = "user_im_message_read_group"
-	EventRecallO2O     = "user_im_message_recall_o2o"
-	EventRecallGroup   = "user_im_message_recall_group"
-	EventReactionO2O   = "user_im_message_reaction_o2o"
-	EventReactionGroup = "user_im_message_reaction_group"
+	EventMention                      = "user_im_message_receive_at"
+	EventSingleChat                   = "user_im_message_receive_o2o"
+	EventInChat                       = "user_im_message_receive_group"
+	EventFromUser                     = "user_im_message_receive_user"
+	EventAllSingleChat                = "user_im_message_receive_o2o_all"
+	EventAllGroupChat                 = "user_im_message_receive_group_all"
+	EventReadO2O                      = "user_im_message_read_o2o"
+	EventReadGroup                    = "user_im_message_read_group"
+	EventRecallO2O                    = "user_im_message_recall_o2o"
+	EventRecallGroup                  = "user_im_message_recall_group"
+	EventReactionO2O                  = "user_im_message_reaction_o2o"
+	EventReactionGroup                = "user_im_message_reaction_group"
+	EventGroupUpdated                 = "user_im_group_updated"
+	EventGroupMemberAdded             = "user_im_group_member_added"
+	EventGroupMemberExited            = "user_im_group_member_exited"
+	EventGroupDisbanded               = "user_im_group_disbanded"
+	EventOAApprovalTaskCreated        = "user_oa_approval_task_created"
+	EventOAApprovalTaskFinished       = "user_oa_approval_task_finished"
+	EventOAApprovalTaskRedirected     = "user_oa_approval_task_redirected"
+	EventOAApprovalInstanceStarted    = "user_oa_approval_instance_started"
+	EventOAApprovalInstanceTerminated = "user_oa_approval_instance_terminated"
+	EventOAApprovalInstanceFinished   = "user_oa_approval_instance_finished"
 )
 
 const (
@@ -133,6 +145,28 @@ var definitions = []Definition{
 		Public:         true,
 	},
 	{
+		EventKey:       EventAllSingleChat,
+		DisplayName:    "全部单聊消息",
+		Description:    "当前用户收到的所有单聊消息",
+		Category:       "im",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventAllGroupChat,
+		DisplayName:    "全部群消息",
+		Description:    "当前用户收到的所有群聊消息",
+		Category:       "im",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
 		EventKey:       EventReadO2O,
 		DisplayName:    "指定单聊消息已读",
 		Description:    "当前用户在指定单聊中发送的消息被对方已读",
@@ -198,6 +232,116 @@ var definitions = []Definition{
 		RuleType:       "group",
 		Status:         StatusEnabled,
 		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventGroupUpdated,
+		DisplayName:    "群标题变更",
+		Description:    "指定群聊的标题发生变更",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventGroupMemberAdded,
+		DisplayName:    "群成员加入",
+		Description:    "指定群聊有成员加入",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventGroupMemberExited,
+		DisplayName:    "群成员退出",
+		Description:    "指定群聊有成员退出",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventGroupDisbanded,
+		DisplayName:    "群解散",
+		Description:    "指定群聊被解散",
+		Category:       "im",
+		RuleType:       "group",
+		Status:         StatusEnabled,
+		RequiredParams: []string{"group"},
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventOAApprovalTaskCreated,
+		DisplayName:    "审批任务创建",
+		Description:    "审批任务创建，发送给审批人",
+		Category:       "oa",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventOAApprovalTaskFinished,
+		DisplayName:    "审批任务完成",
+		Description:    "审批任务已完成",
+		Category:       "oa",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventOAApprovalTaskRedirected,
+		DisplayName:    "审批人任务转交",
+		Description:    "审批任务已转交",
+		Category:       "oa",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventOAApprovalInstanceStarted,
+		DisplayName:    "发起审批单",
+		Description:    "审批实例已发起",
+		Category:       "oa",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventOAApprovalInstanceTerminated,
+		DisplayName:    "审批单终止",
+		Description:    "审批实例已终止",
+		Category:       "oa",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventOAApprovalInstanceFinished,
+		DisplayName:    "审批单完成",
+		Description:    "审批实例完成，发送给审批单发起人",
+		Category:       "oa",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
 		Auth:           map[string]any{"identity": "user"},
 		Public:         true,
 	},
@@ -332,7 +476,7 @@ func BuildRuleParam(eventKey string, opts RuleOptions) (ruleType string, rulePar
 	openDingTalkID := strings.TrimSpace(opts.OpenDingTalkID)
 	groupID := strings.TrimSpace(opts.GroupID)
 	switch def.RuleType {
-	case "at":
+	case "at", "all":
 		if userID != "" {
 			return "", nil, fmt.Errorf("--user is not supported for %s", eventKey)
 		}
@@ -490,11 +634,18 @@ func normalizeFilterAliases(v any) any {
 
 func isMessageReceiveEvent(eventKey string) bool {
 	switch eventKey {
-	case EventMention, EventSingleChat, EventInChat, EventFromUser:
+	case EventMention, EventSingleChat, EventInChat, EventFromUser, EventAllSingleChat, EventAllGroupChat:
 		return true
 	default:
 		return false
 	}
+}
+
+// SupportsMessageFilter reports whether --query/--filter-json describe a
+// stable message payload for this event. Action and group lifecycle events do
+// not expose the same filter fields.
+func SupportsMessageFilter(eventKey string) bool {
+	return isMessageReceiveEvent(eventKey)
 }
 
 func IsSchemaPending(err error) bool {

@@ -22,8 +22,10 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -417,11 +419,9 @@ func connectLocalDebugNotice() string {
 	return "[connect] 提示：本地调试，不代表线上发布完成；dev connect 只建立本地 Stream，不会提交版本发布。若机器人来自 APPROVAL_REQUIRED，仍需继续执行 version create → check-approval → publish → status。\n"
 }
 
-// connectPreviewEnvelope wraps a connect dry-run preview in an envelope that
-// mirrors the app-tree helper_invocation shape (kind + dry_run at a known top
-// level), so an agent can parse "is this a dry-run preview" the same way across
-// all dev commands. The connect-specific fields (channel/cli/connect/...) sit
-// inside, since connect is a linking pre-check, not an MCP tool call.
+// connectPreviewEnvelope preserves the established streaming-command preview
+// shape. `dev connect` remains legacy until a dedicated streaming contract is
+// available; terminal child commands migrate independently.
 func connectPreviewEnvelope(fields map[string]any) map[string]any {
 	fields["kind"] = "connect_preview"
 	fields["dry_run"] = true
@@ -489,6 +489,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			daemonMode, _ := cmd.Flags().GetBool(daemonFlag)
 
 			// Credential resolution: explicit pair wins; otherwise reuse dev app's
 			// credentials get against --unified-app-id.
@@ -558,7 +559,7 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 			// --daemon: detach into a background supervisor that keeps the
 			// connector alive 7x24. We resolve credentials/channel first (above) so
 			// the parent fails fast on bad input before forking, then re-exec.
-			if daemonMode, _ := cmd.Flags().GetBool(daemonFlag); daemonMode {
+			if daemonMode {
 				notifyStaffID := devAppStringFlag(cmd, "notify-staff-id")
 				profile, _ := cmd.Root().PersistentFlags().GetString("profile")
 				alwaysOn, _ := cmd.Flags().GetBool("alwayson")
@@ -614,6 +615,29 @@ func newDevAppRobotConnectCommand(runner executor.Runner) *cobra.Command {
 	cmd.Flags().String("audit-sheet", "", "审计在线表格 ID/URL（axls）：确认闸每个操作追加一行到该表格，可在钉钉随时查看；空=仅本地审计文件；env: DWS_AUDIT_SHEET")
 	cmd.Flags().String("audit-sheet-tab", "Sheet1", "审计表格的工作表 ID/名称（配合 --audit-sheet）；env: DWS_AUDIT_SHEET_TAB")
 	cmd.Flags().String("notify-staff-id", "", "状态通知 staffId：机器人启动/停止/崩溃时自动发钉钉消息通知此人；env: DWS_NOTIFY_STAFF_ID")
+	DeclareLeafMetadata(cmd, LeafSpec{
+		// Foreground connect is a long-lived stream and remains legacy until a
+		// dedicated streaming contract exists. Terminal child commands migrate
+		// independently.
+		OutputRollout: output.RolloutLegacyOnly,
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID: "dev", Name: "connect", CanonicalPath: "dev.connect",
+				CLIPath: "dev connect", PrimaryCLIPath: "dev connect",
+			},
+			Description: "把现有机器人连接到本地 agent；该命令同时承载前台流与 --daemon，整体暂留 legacy，终态子命令独立迁移",
+			Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "命令组合远端凭证获取、Stream 建连与本地守护进程管理，不对应单一 MCP 接口"},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "把现有机器人连接到本地 agent 进行调试",
+				UseWhen:      []string{"需要启动本地机器人 Stream 调试连接"},
+				AvoidWhen:    []string{"创建或发布应用版本时使用 dev app"},
+				Examples:     []string{"dws dev connect --daemon --unified-app-id <unifiedAppId>"},
+			},
+		},
+	})
 	return cmd
 }
 

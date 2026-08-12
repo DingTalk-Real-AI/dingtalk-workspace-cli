@@ -181,6 +181,52 @@ Flags:
 
 > ⚠️ **返回字段限制**：`member list` 每条只返回 `name` / `role` / `type` 三个字段，**不含 userId**（服务端不返回）。因此**无法**从 `member list` 拿到 userId 再去串联 `member update` / `member remove`。要对某人改角色 / 移除，需另行拿到其 userId（例如用 `dws contact user search --query "<姓名>"` 按姓名反查）。
 
+### 查询知识库动态
+```
+Usage:
+  dws wiki feed list [flags]
+Aliases:
+  list, ls
+Example:
+  dws wiki feed list --workspace <workspaceId> --format json
+  dws wiki feed list --workspace <workspaceId> --limit 10 --format json
+  dws wiki feed list --workspace <workspaceId> --exclude-file --format json
+  dws wiki feed list --workspace <workspaceId> --limit 10 --cursor <nextToken> --format json
+Flags:
+      --workspace string   知识库 ID 或 URL (必填)
+      --limit int          每页数量 (默认 10，最大 20)。用户未明确要求条数时禁止加此 flag，让服务端走默认 10
+      --cursor string      分页游标 (首页留空)
+      --exclude-file       排除普通文件、媒体文件、文件夹及 Office 文件动态，仅保留在线文档操作 (默认 false)
+```
+
+查询指定知识库的动态，返回谁在什么时间进行了更新、上传、评论等操作。
+支持传入知识库 ID 或知识库 URL，系统自动识别。
+支持分页，通过 `--cursor` 传入上次返回的 nextToken 获取下一页；出参 `hasMore` 指示是否还有下一页。
+
+> **权限要求**：调用者需具备知识库的成员权限，非成员会被拒绝访问。
+
+**动态类型 `type` 枚举（严格按此映射展示，禁止猜测）**：
+
+| type | 含义 |
+|------|------|
+| 0 | 创建文档 |
+| 1 | 更新文档 |
+| 2 | 评论文档 |
+| 3 | 点赞文档 |
+| 4 | 加入团队空间 |
+| 5 | 表格选区数据变更 |
+| 6 | 更新 office 文件 |
+| 7 | 上传普通文件（非媒体文件） |
+| 8 | 上传媒体文件（图片/视频） |
+| 9 | 上传文件夹 |
+| 10 | 上传文件夹 V2 |
+| 11 | 加入团队 |
+| 12 | 创建知识库 |
+
+> **重要 — 展示规则（必须严格遵守）**：
+> 1. **typeLabel 字段**：CLI 已自动将 `type` 数字映射为 `typeLabel` 中文标签（如 `更新文档`、`创建文档`），**直接使用 `typeLabel` 展示即可**，无需自行查表映射。
+> 2. **timeFormatted 字段**：已是北京时间字符串（格式如 `2026-07-30 08:00`），直接展示即可，无需任何转换。原始毫秒时间戳保存在 `time` 字段中（数字类型）。
+
 ### 列出知识库节点
 ```
 Usage:
@@ -296,7 +342,13 @@ Flags:
 - 用户说"修改某人在知识库的权限/调整成员角色" → `member update`
 - 用户说"移除知识库成员/把某人从知识库移除/删除知识库成员" → `member remove`（需 `--workspace` + `--users`）
 - 用户说"知识库有哪些成员/查看知识库成员" → `member list`
+- 用户说"知识库动态/最近有什么更新/谁改了什么/知识库活动" → `feed list`（需 `--workspace`）
+- 用户说"知识库最近的评论/更新记录/操作日志" → `feed list`（需 `--workspace`）
 - 用户说"删除知识库/移除知识库/把知识库删了" → `space delete`（需 `--workspace`）
+- 用户说"排除文件/只看创建文档/只看更新文档/只看文档操作/不要上传文件的记录/过滤掉文件动态/只看文档变更" → `feed list --exclude-file`（**必须带 flag，禁止客户端自行过滤**）
+
+> **重要 — `--exclude-file` 使用规则**：
+> 当用户意图排除文件类动态（上传文件、更新 office 文件等）或只看文档操作时，**必须在命令中带上 `--exclude-file`**，由后端完成过滤。禁止先拉全量数据再用 Python/jq 等工具在客户端过滤，那样既浪费带宽又可能因分页遗漏数据。
 
 > **跨产品路由说明**：知识库节点的**内容操作**（读取/编辑/块级操作）仍由 `dws doc` 承担：
 >- 用户说"读某个知识库里的某篇文档" → 先 `node list` 拿到 nodeId，再走 **`dws doc read --node <nodeId>`**
@@ -382,6 +434,20 @@ dws wiki node move --workspace <workspaceId> --node <nodeId> --folder <targetFol
 # 删除节点（会要求确认）
 dws wiki node delete --workspace <workspaceId> --node <nodeId>
 
+# ── 工作流: 查询知识库动态 ──
+
+# 1. 获取知识库 ID
+dws wiki space list --format json
+
+# 2. 查询知识库动态
+dws wiki feed list --workspace <workspaceId> --format json
+
+# 3. 排除文件动态，只看文档操作
+dws wiki feed list --workspace <workspaceId> --exclude-file --format json
+
+# 4. 翻页（cursor 取上一页返回的 nextToken）
+dws wiki feed list --workspace <workspaceId> --cursor <nextToken> --format json
+
 # ── 工作流: 给知识库加成员 ──
 
 # 1. 先确认知识库 ID（避免授权到「我的文档」）
@@ -424,6 +490,7 @@ dws wiki space delete --workspace <workspaceId> --format json
 | `node list` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
 | `node search` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
 | `node create` | `nodeId` | node copy/move/delete 的 --node / `dws doc read` 的 --node |
+| `feed list` | `nextToken` | feed list 的 --cursor（翻页，`hasMore` 为 true 时继续）|
 | `member list` | `name` / `role` / `type`（**不含 userId**）| 仅用于查看成员名单；**无法**从这里取 userId 去串联 member update/remove，需另行按姓名反查 userId（如 `dws contact user search --query "<姓名>"`）|
 
 ## 相关产品

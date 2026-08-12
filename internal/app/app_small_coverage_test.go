@@ -17,6 +17,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -334,18 +335,13 @@ func TestCrossPlatformCoverageOverlayRecoveryHostAndHelperRemainingCoverage(t *t
 	edition.Override(&edition.Hooks{ConfigDir: func() string { return "" }})
 	captureRuntimeFailure(executor.Invocation{}, nil, nil)
 	captureRuntimeFailure(executor.Invocation{}, errors.New("raw"), nil)
-	oldArgs := os.Args
-	os.Args = []string{"dws", "doc", "download", "--node", "n"}
-	if got := runtimeCommandPath(executor.Invocation{}); len(got) != 2 {
-		t.Fatalf("runtime command path = %#v", got)
-	}
-	os.Args = oldArgs
 
 	t.Setenv(authpkg.AgentCodeEnv, "")
 	if hostControlProviderFromEnv() != "" {
 		t.Fatal("host control enabled without agent code")
 	}
 	t.Setenv(authpkg.AgentCodeEnv, "agent")
+	t.Setenv(agentproduct.EnvName, "")
 	edition.Override(&edition.Hooks{MergeHeaders: func(headers map[string]string) map[string]string { return headers }})
 	if got := hostControlProviderFromEnv(); got != edition.DefaultOSSClawType {
 		t.Fatalf("default claw type = %q", got)
@@ -358,6 +354,10 @@ func TestCrossPlatformCoverageOverlayRecoveryHostAndHelperRemainingCoverage(t *t
 
 func TestCrossPlatformCoverageConfigAndCacheCommandRemainingCoverage(t *testing.T) {
 	for _, command := range []*cobra.Command{newConfigCommand(), newCacheCommand()} {
+		command.SetOut(io.Discard)
+		rootWrap := &cobra.Command{Use: "dws"}
+		rootWrap.PersistentFlags().String("format", "json", "")
+		rootWrap.AddCommand(command)
 		command.SetOut(io.Discard)
 		if err := command.RunE(command, nil); err != nil {
 			t.Fatal(err)
@@ -387,18 +387,18 @@ func TestCrossPlatformCoverageConfigAndCacheCommandRemainingCoverage(t *testing.
 	for _, format := range []string{"json", "pretty", "table"} {
 		_ = cacheRoot.PersistentFlags().Set("format", format)
 		cacheCmd.SetOut(io.Discard)
-		if err := printCacheCompatNotice(cacheCmd, "status"); err != nil {
+		if err := printCacheCompatNotice(cacheCmd, "dws cache status"); err != nil {
 			t.Fatal(err)
 		}
 	}
 	fail := errors.New("write")
 	cacheCmd.SetOut(appFailWriter{err: fail})
 	_ = cacheRoot.PersistentFlags().Set("format", "pretty")
-	if err := printCacheCompatNotice(cacheCmd, "status"); !errors.Is(err, fail) {
+	if err := printCacheCompatNotice(cacheCmd, "dws cache status"); !errors.Is(err, fail) {
 		t.Fatalf("pretty write error = %v", err)
 	}
 	_ = cacheRoot.PersistentFlags().Set("format", "table")
-	if err := printCacheCompatNotice(cacheCmd, "status"); !errors.Is(err, fail) {
+	if err := printCacheCompatNotice(cacheCmd, "dws cache status"); !errors.Is(err, fail) {
 		t.Fatalf("table write error = %v", err)
 	}
 }

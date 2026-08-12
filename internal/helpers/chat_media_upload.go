@@ -14,38 +14,23 @@
 package helpers
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"mime/multipart"
-	"net/http"
-	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
-
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
-var (
-	chatMediaResolveAppToken = mediaResolveAppToken
-	chatMediaUploadFile      = mediaUploadFile
-	mediaCreateFormFile      = func(w *multipart.Writer, field, name string) (io.Writer, error) { return w.CreateFormFile(field, name) }
-	mediaOpenFile            = os.Open
-	mediaCopyFile            = io.Copy
-)
+const chatMediaUploadReplacement = "dws chat message send --msg-type file --file-path <本地路径>"
 
 func newChatMediaGroup() *cobra.Command {
 	media := &cobra.Command{
 		Use:               "media",
-		Short:             "媒体文件管理",
+		Short:             "已下线：媒体文件上传兼容入口",
+		Deprecated:        "本地图片和文件请改用 " + chatMediaUploadReplacement,
 		Args:              cobra.NoArgs,
 		TraverseChildren:  true,
 		DisableAutoGenTag: true,
-		RunE:              func(cmd *cobra.Command, args []string) error { return cmd.Help() },
+		RunE: func(*cobra.Command, []string) error {
+			return chatMediaUploadDownlineError()
+		},
 	}
 	media.AddCommand(newChatMediaUploadCommand())
 	return media
@@ -53,160 +38,33 @@ func newChatMediaGroup() *cobra.Command {
 
 func newChatMediaUploadCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "upload",
-		Short: "上传图片获取 mediaId（用于 chat message send --msg-type image）",
-		Example: "  dws chat media upload --file ./screenshot.png\n" +
-			"  dws chat media upload --file ./photo.jpg --type image",
+		Use:        "upload",
+		Short:      "已下线：请通过 chat message send 直接发送本地文件",
+		Deprecated: "请改用 " + chatMediaUploadReplacement,
+		Long: `此命令仅为 1.x 命令行兼容保留，不再读取应用凭证或调用旧版媒体上传接口。
+
+发送本地图片或文件时，请使用 chat message send --msg-type file --file-path。
+该路径会把图片作为可下载的 file 消息发送，不会生成 mediaId，也不会渲染成内联 image 消息。
+如果上游已经提供 mediaId，仍可使用 chat message send --msg-type image --media-id。`,
+		Example: "  dws chat message send --group <openConversationId> --msg-type file --file-path ./screenshot.png\n" +
+			"  dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file-path ./report.pdf",
 		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			filePath, _ := cmd.Flags().GetString("file")
-			filePath = strings.TrimSpace(filePath)
-			if filePath == "" {
-				return apperrors.NewValidation("--file is required")
-			}
-			fi, err := os.Stat(filePath)
-			if err != nil {
-				return apperrors.NewValidation("cannot read file: " + err.Error())
-			}
-			if fi.IsDir() {
-				return apperrors.NewValidation(filePath + " is a directory")
-			}
-			mediaType, _ := cmd.Flags().GetString("type")
-			mediaType = strings.TrimSpace(strings.ToLower(mediaType))
-			if mediaType == "" {
-				mediaType = "image"
-			}
-
-			ctx, cancel := context.WithTimeout(cmd.Context(), 2*time.Minute)
-			defer cancel()
-
-			token, err := chatMediaResolveAppToken(ctx)
-			if err != nil {
-				return err
-			}
-
-			mediaID, err := chatMediaUploadFile(ctx, token, filePath, mediaType)
-			if err != nil {
-				return err
-			}
-
-			return writeCommandPayload(cmd, map[string]any{
-				"success": true,
-				"mediaId": mediaID,
-			})
+		RunE: func(*cobra.Command, []string) error {
+			return chatMediaUploadDownlineError()
 		},
 	}
-	cmd.Flags().String("file", "", "本地文件路径 (必填)")
-	cmd.Flags().String("type", "image", "媒体类型: image/voice/video/file")
+	// Keep the historical flags so existing argv remains parseable while the
+	// 1.x compatibility command returns an actionable migration error.
+	cmd.Flags().String("file", "", "旧版兼容参数；本地文件请改用 chat message send --file-path")
+	cmd.Flags().String("type", "image", "旧版兼容参数；不再执行媒体上传")
 	return cmd
 }
 
-func mediaResolveAppToken(ctx context.Context) (string, error) {
-	return mediaResolveAppTokenWithRequest(ctx, http.NewRequestWithContext)
-}
-
-type mediaRequestFactory func(context.Context, string, string, io.Reader) (*http.Request, error)
-
-func mediaResolveAppTokenWithRequest(ctx context.Context, newRequest mediaRequestFactory) (string, error) {
-	appKey := os.Getenv("DWS_CLIENT_ID")
-	appSecret := os.Getenv("DWS_CLIENT_SECRET")
-	if appKey == "" || appSecret == "" {
-		return "", apperrors.NewAuth(
-			"缺少应用凭证。chat media upload 需要 DWS_CLIENT_ID / DWS_CLIENT_SECRET 环境变量。\n" +
-				"请使用 dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET> 登录。")
-	}
-	endpoint := url.URL{Scheme: "https", Host: "oapi.dingtalk.com", Path: "/gettoken"}
-	endpoint.RawQuery = url.Values{
-		"appkey":    []string{appKey},
-		"appsecret": []string{appSecret},
-	}.Encode()
-	req, err := newRequest(ctx, http.MethodGet, endpoint.String(), nil)
-	if err != nil {
-		return "", apperrors.NewAuth("构造访问令牌请求失败: " + err.Error())
-	}
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
-	if err != nil {
-		return "", apperrors.NewAuth("获取访问令牌失败: " + err.Error())
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode >= 400 {
-		return "", apperrors.NewAuth(fmt.Sprintf("获取访问令牌 HTTP %d: %s", resp.StatusCode, string(raw)))
-	}
-	var parsed struct {
-		AccessToken string `json:"access_token"`
-		ErrCode     int    `json:"errcode"`
-		ErrMsg      string `json:"errmsg"`
-	}
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", apperrors.NewAuth("gettoken 响应解析失败: " + string(raw))
-	}
-	if parsed.ErrCode != 0 || parsed.AccessToken == "" {
-		return "", apperrors.NewAuth(fmt.Sprintf("gettoken errcode=%d errmsg=%s", parsed.ErrCode, parsed.ErrMsg))
-	}
-	return parsed.AccessToken, nil
-}
-
-func mediaUploadFile(ctx context.Context, token, filePath, mediaType string) (string, error) {
-	return mediaUploadFileWithRequest(ctx, token, filePath, mediaType, http.NewRequestWithContext)
-}
-
-func mediaUploadFileWithRequest(ctx context.Context, token, filePath, mediaType string, newRequest mediaRequestFactory) (string, error) {
-	pr, pw := io.Pipe()
-	writer := multipart.NewWriter(pw)
-	endpoint := url.URL{Scheme: "https", Host: "oapi.dingtalk.com", Path: "/media/upload"}
-	endpoint.RawQuery = url.Values{
-		"access_token": []string{token},
-		"type":         []string{mediaType},
-	}.Encode()
-	req, err := newRequest(ctx, http.MethodPost, endpoint.String(), pr)
-	if err != nil {
-		_ = pr.CloseWithError(err)
-		_ = pw.CloseWithError(err)
-		return "", apperrors.NewAPI("construct media upload request: " + err.Error())
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	go func() {
-		defer pw.Close()
-		defer writer.Close()
-		part, err := mediaCreateFormFile(writer, "media", filepath.Base(filePath))
-		if err != nil {
-			pw.CloseWithError(err)
-			return
-		}
-		f, err := mediaOpenFile(filePath)
-		if err != nil {
-			pw.CloseWithError(err)
-			return
-		}
-		defer f.Close()
-		if _, err := mediaCopyFile(part, f); err != nil {
-			pw.CloseWithError(err)
-		}
-	}()
-
-	resp, err := (&http.Client{Timeout: 2 * time.Minute}).Do(req)
-	if err != nil {
-		return "", apperrors.NewAPI("media upload failed: " + err.Error())
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode >= 400 {
-		return "", apperrors.NewAPI(fmt.Sprintf("media upload HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
-	}
-
-	var parsed struct {
-		MediaID string `json:"media_id"`
-		ErrCode int    `json:"errcode"`
-		ErrMsg  string `json:"errmsg"`
-	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return "", apperrors.NewAPI("media upload 响应解析失败: " + string(body))
-	}
-	if parsed.ErrCode != 0 || strings.TrimSpace(parsed.MediaID) == "" {
-		return "", apperrors.NewAPI(fmt.Sprintf("media upload errcode=%d errmsg=%s body=%s", parsed.ErrCode, parsed.ErrMsg, string(body)))
-	}
-	return strings.TrimSpace(parsed.MediaID), nil
+func chatMediaUploadDownlineError() error {
+	return apperrors.NewValidation(
+		"chat media upload 已下线，当前 CLI 不提供本地文件到 mediaId 的上传能力。" +
+			" 本地图片或文件请改用: " + chatMediaUploadReplacement +
+			"；已有 mediaId 时可使用 dws chat message send --msg-type image --media-id <mediaId>。",
+	)
 }

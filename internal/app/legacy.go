@@ -27,9 +27,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller, loadUserShortcuts bool) []*cobra.Command {
-	injectStaticServers()
-	helpers.InitDeps(caller)
+// mountLegacyPublicCommands builds the product + shortcut command tree without
+// mutating process-global MCP deps or dynamic server endpoints. Used by the
+// Schema source root (declaration-only) path so assembly cannot clobber a live
+// runtime's InitDeps caller or plugin endpoints.
+func mountLegacyPublicCommands(runner executor.Runner, loadUserShortcuts bool) []*cobra.Command {
 	commands := helpers.NewPublicCommands(runner)
 	// Load user-defined shortcuts (~/.dws/shortcuts/*.yaml) BEFORE compiling the
 	// command tree, so distilled high-frequency operations mount alongside the
@@ -49,6 +51,14 @@ func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller, 
 		commands = append(commands, builtin.BaseCommands()...)
 	}
 	return mergeTopLevelCommands(commands)
+}
+
+// newLegacyPublicCommands is the executable CLI path: inject static MCP
+// endpoints, InitDeps, then mount the public command tree.
+func newLegacyPublicCommands(runner executor.Runner, caller edition.ToolCaller, loadUserShortcuts bool) []*cobra.Command {
+	injectStaticServers()
+	helpers.InitDeps(caller)
+	return mountLegacyPublicCommands(runner, loadUserShortcuts)
 }
 
 func injectStaticServers() {
@@ -80,10 +90,6 @@ func injectStaticServers() {
 		})
 	}
 	SetDynamicServers(descriptors)
-}
-
-func newLegacyHiddenCommands(_ executor.Runner) []*cobra.Command {
-	return nil
 }
 
 func mergeTopLevelCommands(commands []*cobra.Command) []*cobra.Command {

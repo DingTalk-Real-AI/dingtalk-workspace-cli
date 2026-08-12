@@ -266,7 +266,7 @@ func selectProfileSwitchProfile(cmd *cobra.Command, configDir string) (string, e
 	}
 	choice := strings.TrimSpace(cfg.CurrentProfile)
 	if choice == "" {
-		choice = authpkg.ProfileSelector(cfg.Profiles[0])
+		choice = authpkg.ProfileSelectionSelector(cfg.Profiles[0], cfg)
 	}
 	return profileSwitchTUIRunner(cmd, cfg, choice)
 }
@@ -428,11 +428,36 @@ func (m profileSwitchTUIModel) selectedCorpID() string {
 	if m.selected < 0 || m.selected >= len(m.profiles) {
 		return ""
 	}
-	return authpkg.ProfileSelector(m.profiles[m.selected])
+	selected := m.profiles[m.selected]
+	return authpkg.ProfileSelectionSelector(selected, &authpkg.ProfilesConfig{Profiles: m.profiles})
 }
 
 func profileSwitchProfileIndex(profiles []authpkg.Profile, selector string, cfg *authpkg.ProfilesConfig) int {
 	selector = strings.TrimSpace(selector)
+	for i, profile := range profiles {
+		if authpkg.ProfileSelectionSelector(profile, cfg) == selector {
+			return i
+		}
+	}
+	// Accept an old current/previous pointer long enough for the migration path
+	// to canonicalize it. Only an unresolved profile in a multi-account
+	// organization qualifies, so ordinary exact account names cannot capture an
+	// identity selector that contains ':'.
+	legacyBlank := -1
+	for i, profile := range profiles {
+		if strings.TrimSpace(profile.UserID) != "" || strings.TrimSpace(profile.Name) != selector ||
+			profileCountForCorp(cfg, profile.CorpID) <= 1 {
+			continue
+		}
+		if legacyBlank >= 0 {
+			legacyBlank = -1
+			break
+		}
+		legacyBlank = i
+	}
+	if legacyBlank >= 0 {
+		return legacyBlank
+	}
 	if corpID, userID, exact := authpkg.ParseIdentitySelector(selector); exact {
 		for i, p := range profiles {
 			if strings.TrimSpace(p.CorpID) == corpID && strings.TrimSpace(p.UserID) == userID {
@@ -443,6 +468,9 @@ func profileSwitchProfileIndex(profiles []authpkg.Profile, selector string, cfg 
 	}
 	fallback := -1
 	for i, p := range profiles {
+		if strings.TrimSpace(p.UserID) == "" && strings.TrimSpace(p.Name) == selector {
+			return i
+		}
 		if strings.TrimSpace(p.CorpID) == selector {
 			if fallback < 0 {
 				fallback = i
@@ -486,7 +514,7 @@ func profileSwitchProfileCells(p authpkg.Profile, cfg *authpkg.ProfilesConfig) (
 }
 
 func profileSwitchProfileStatus(p authpkg.Profile, cfg *authpkg.ProfilesConfig) string {
-	if cfg != nil && profileSelectorSelectsProfile(cfg.CurrentProfile, p, profileIsOrgCurrent(p, cfg), profileCountForCorp(cfg, p.CorpID) <= 1) {
+	if cfg != nil && profileSelectorSelectsProfile(cfg.CurrentProfile, p, cfg, profileIsOrgCurrent(p, cfg), profileCountForCorp(cfg, p.CorpID) <= 1) {
 		return "当前组织"
 	}
 	return ""
@@ -636,13 +664,14 @@ func writeProfileListTable(w io.Writer, configDir string, cfg *authpkg.ProfilesC
 	}
 	fmt.Fprintf(w, "%-3s %-28s %-34s %-10s %s\n", "CUR", "ORG_NAME", "CORP_ID", "STATUS", "USER")
 	for _, p := range cfg.Profiles {
+		selector := profileCLISelector(p, cfg)
 		view := profileViewFromProfile(
 			p,
 			cfg,
 			cfg.PrimaryProfile,
 			cfg.CurrentProfile,
 			profileCountForCorp(cfg, p.CorpID) == 1,
-			loadProfileTokenState(configDir, p),
+			loadProfileTokenState(configDir, p, selector),
 		)
 		current := ""
 		if view.IsCurrent {
@@ -698,13 +727,14 @@ func profileViews(configDir string, cfg *authpkg.ProfilesConfig) []profileView {
 	}
 	views := make([]profileView, 0, len(cfg.Profiles))
 	for _, p := range cfg.Profiles {
+		selector := profileCLISelector(p, cfg)
 		views = append(views, profileViewFromProfile(
 			p,
 			cfg,
 			cfg.PrimaryProfile,
 			cfg.CurrentProfile,
 			profileCountForCorp(cfg, p.CorpID) == 1,
-			loadProfileTokenState(configDir, p),
+			loadProfileTokenState(configDir, p, selector),
 		))
 	}
 	return views
@@ -719,7 +749,7 @@ func profileViewFromProfile(
 ) profileView {
 	isOrgCurrent := profileIsOrgCurrent(p, cfg)
 	view := profileView{
-		Profile:           authpkg.ProfileSelector(p),
+		Profile:           profileCLISelector(p, cfg),
 		CorpID:            p.CorpID,
 		CorpName:          profileOrgName(p),
 		UserID:            p.UserID,
@@ -731,8 +761,8 @@ func profileViewFromProfile(
 		RefreshExpAt:      p.RefreshExpAt,
 		LastLoginAt:       p.LastLoginAt,
 		LastUsedAt:        p.LastUsedAt,
-		IsPrimary:         profileSelectorSelectsProfile(primaryProfile, p, isOrgCurrent, onlyAccountInOrg),
-		IsCurrent:         profileSelectorSelectsProfile(currentProfile, p, isOrgCurrent, onlyAccountInOrg),
+		IsPrimary:         profileSelectorSelectsProfile(primaryProfile, p, cfg, isOrgCurrent, onlyAccountInOrg),
+		IsCurrent:         profileSelectorSelectsProfile(currentProfile, p, cfg, isOrgCurrent, onlyAccountInOrg),
 		IsOrgCurrent:      isOrgCurrent,
 	}
 	if tokenState != nil {
@@ -743,8 +773,12 @@ func profileViewFromProfile(
 	return view
 }
 
-func loadProfileTokenState(configDir string, profile authpkg.Profile) *profileTokenState {
-	data, err := profileLoadTokenData(configDir, authpkg.ProfileSelector(profile))
+func loadProfileTokenState(configDir string, profile authpkg.Profile, selectors ...string) *profileTokenState {
+	selector := authpkg.ProfileSelector(profile)
+	if len(selectors) > 0 && strings.TrimSpace(selectors[0]) != "" {
+		selector = strings.TrimSpace(selectors[0])
+	}
+	data, err := profileLoadTokenData(configDir, selector)
 	if errors.Is(err, authpkg.ErrTokenDataNotFound) || (err == nil && data == nil) {
 		return &profileTokenState{Status: authpkg.ProfileStatusRevoked}
 	}
@@ -762,6 +796,10 @@ func loadProfileTokenState(configDir string, profile authpkg.Profile) *profileTo
 	}
 }
 
+func profileCLISelector(profile authpkg.Profile, cfg *authpkg.ProfilesConfig) string {
+	return authpkg.ProfileSelectionSelector(profile, cfg)
+}
+
 func profileTokenTime(value time.Time) string {
 	if value.IsZero() {
 		return ""
@@ -769,8 +807,11 @@ func profileTokenTime(value time.Time) string {
 	return value.Format(time.RFC3339)
 }
 
-func profileSelectorSelectsProfile(selector string, profile authpkg.Profile, isOrgCurrent, onlyAccountInOrg bool) bool {
+func profileSelectorSelectsProfile(selector string, profile authpkg.Profile, cfg *authpkg.ProfilesConfig, isOrgCurrent, onlyAccountInOrg bool) bool {
 	selector = strings.TrimSpace(selector)
+	if selector == authpkg.ProfileSelectionSelector(profile, cfg) {
+		return true
+	}
 	if corpID, userID, exact := authpkg.ParseIdentitySelector(selector); exact {
 		return corpID == strings.TrimSpace(profile.CorpID) && userID == strings.TrimSpace(profile.UserID)
 	}

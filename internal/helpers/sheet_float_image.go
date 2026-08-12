@@ -3,6 +3,7 @@ package helpers
 import (
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -75,6 +76,36 @@ func newFloatImageCmds() []*cobra.Command {
 			return callMCPTool("create_float_image", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(createFloatImageCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "create_float_image",
+				CanonicalPath:  "sheet.create_float_image",
+				CLIPath:        "sheet create-float-image",
+				PrimaryCLIPath: "sheet create-float-image",
+			},
+			Description: "创建浮动图片（src 必须来自 media-upload 的 resourceUrl）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "create_float_image"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建浮动图片（src 必须来自 media-upload 的 resourceUrl）。",
+				UseWhen:      []string{"需要在单元格上方悬浮图片、不占用单元格内容时"},
+				AvoidWhen:    []string{"单元格内嵌图片用 write-image；更新/删除浮动图用 update/delete-float-image"},
+				Examples:     []string{"dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --src \"/core/api/resources/img/...\" --range A1 --width 400 --height 300"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	createFloatImageCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	createFloatImageCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	createFloatImageCmd.Flags().String("src", "", "图片资源路径，通过 media-upload 获取的 resourceUrl (必填)")
@@ -100,6 +131,36 @@ floatImageId 可通过 list-float-images 获取。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(getFloatImageCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "get_float_image",
+				CanonicalPath:  "sheet.get_float_image",
+				CLIPath:        "sheet get-float-image",
+				PrimaryCLIPath: "sheet get-float-image",
+			},
+			Description: "获取单张浮动图片详情。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "get_float_image"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取单张浮动图片详情。",
+				UseWhen:      []string{"已知 float-image-id，需要查看锚点/尺寸/src 时"},
+				AvoidWhen:    []string{"列出全部浮动图用 list-float-images"},
+				Examples:     []string{"dws sheet get-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	getFloatImageCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	getFloatImageCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	getFloatImageCmd.Flags().String("float-image-id", "", "浮动图片 ID (必填)")
@@ -118,6 +179,36 @@ floatImageId 可通过 list-float-images 获取。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(listFloatImagesCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "list_float_images",
+				CanonicalPath:  "sheet.list_float_images",
+				CLIPath:        "sheet list-float-images",
+				PrimaryCLIPath: "sheet list-float-images",
+			},
+			Description: "列出工作表全部浮动图片。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "list_float_images"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "列出工作表全部浮动图片。",
+				UseWhen:      []string{"需要枚举浮动图 ID 以便后续 get/update/delete 时"},
+				AvoidWhen:    []string{"查单张详情用 get-float-image"},
+				Examples:     []string{"dws sheet list-float-images --node <NODE_ID> --sheet-id <SHEET_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	listFloatImagesCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	listFloatImagesCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 
@@ -192,6 +283,36 @@ floatImageId 可通过 list-float-images 获取。`,
 			return callMCPTool("update_float_image", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(updateFloatImageCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "update_float_image",
+				CanonicalPath:  "sheet.update_float_image",
+				CLIPath:        "sheet update-float-image",
+				PrimaryCLIPath: "sheet update-float-image",
+			},
+			Description: "更新浮动图片锚点、尺寸、偏移或资源路径。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "update_float_image"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新浮动图片锚点、尺寸、偏移或资源路径。",
+				UseWhen:      []string{"需要移动/缩放/替换已有浮动图片时"},
+				AvoidWhen:    []string{"创建用 create-float-image；删除用 delete-float-image"},
+				Examples:     []string{"dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> --range C5"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	updateFloatImageCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	updateFloatImageCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	updateFloatImageCmd.Flags().String("float-image-id", "", "浮动图片 ID (必填)")
@@ -218,6 +339,36 @@ floatImageId 可通过 list-float-images 获取。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(deleteFloatImageCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "delete_float_image",
+				CanonicalPath:  "sheet.delete_float_image",
+				CLIPath:        "sheet delete-float-image",
+				PrimaryCLIPath: "sheet delete-float-image",
+			},
+			Description: "删除浮动图片（需确认后加 --yes）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "delete_float_image"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除浮动图片（需确认后加 --yes）。",
+				UseWhen:      []string{"用户明确要求删除某张浮动图片时"},
+				AvoidWhen:    []string{"删除单元格内嵌图需改写单元格；列目录用 list-float-images"},
+				Examples:     []string{"dws sheet delete-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	deleteFloatImageCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	deleteFloatImageCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	deleteFloatImageCmd.Flags().String("float-image-id", "", "浮动图片 ID (必填)")

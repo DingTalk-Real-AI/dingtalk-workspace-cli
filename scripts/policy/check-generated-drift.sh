@@ -1,9 +1,15 @@
 #!/bin/sh
 set -eu
 
-# Regenerate deterministic downstream release assets from the reviewed
-# CommandRegistry into a temporary directory and compare them with the
-# committed files.
+# Drift policy after Catalog generator retirement as a committed delivery step:
+#   1. committed parameter-alias and command-path-fallback Go tables match
+#      fresh generations
+#   2. Schema assembly is deterministic (check-schema-assembly.sh)
+#   3. Reviewed inputs are not mutated; retired delivery artifacts stay absent
+#
+# Production delivers Schema exclusively through runtime assembly:
+# RegisterSchemaSourceRoot → ResolveSchemaBuild. Catalog and meta-index dumps
+# are CI/local artifacts and must never be committed under internal/cli.
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
@@ -12,82 +18,103 @@ policy_prepare_runtime "$ROOT"
 
 tmp="$(mktemp -d)"
 exec_tmp="$(policy_runtime_mktemp_dir dws-generated-drift)"
-metadata_generator="$exec_tmp/schema-agent-metadata"
-catalog_generator="$exec_tmp/schema-catalog"
+param_aliases_generator="$exec_tmp/param-aliases"
+command_fallbacks_generator="$exec_tmp/command-path-fallbacks"
 trap 'rm -rf "$tmp" "$exec_tmp"' EXIT HUP INT TERM
 
-go build -o "$metadata_generator" ./internal/generator/cmd_schema_agent_metadata
-go build -a -o "$catalog_generator" ./internal/generator/cmd_schema_catalog
+go build -o "$param_aliases_generator" ./internal/generator/cmd_param_aliases
+go build -o "$command_fallbacks_generator" ./internal/generator/cmd_command_path_fallbacks
 
-# CommandRegistry is a reviewed input, never a generated artifact. Keep an
-# independent byte-for-byte guard around the ordinary downstream generators.
-registry_guard="$tmp/schema_command_registry.json"
-cp internal/cli/schema_command_registry.json "$registry_guard"
-# Also guard human-authored metadata + selection hint trees.
-metadata_guard="$tmp/metadata-hints"
-selection_guard="$tmp/selection-hints"
-cp -R internal/cli/schema_hints/metadata "$metadata_guard"
-cp -R internal/cli/schema_hints/selection "$selection_guard"
+concepts_guard="$tmp/param_concepts.json"
+concepts_schema_guard="$tmp/param_concepts.schema.json"
+cp internal/cli/param_concepts.json "$concepts_guard"
+cp internal/cli/param_concepts.schema.json "$concepts_schema_guard"
+# Command path fallbacks and their editor schema are reviewed inputs too.
+command_fallbacks_guard="$tmp/command_path_fallbacks.json"
+command_fallbacks_schema_guard="$tmp/command_path_fallbacks.schema.json"
+cp internal/cli/command_path_fallbacks.json "$command_fallbacks_guard"
+cp internal/cli/command_path_fallbacks.schema.json "$command_fallbacks_schema_guard"
+param_aliases_tmp="$tmp/param_aliases_generated.go"
+param_aliases_tmp_second="$tmp/param_aliases_generated-second.go"
+command_fallbacks_tmp="$tmp/command_path_fallbacks_generated.go"
+command_fallbacks_tmp_second="$tmp/command_path_fallbacks_generated-second.go"
 
-metadata_tmp="$tmp/metadata"
-audit_tmp="$tmp/audit.json"
-catalog_tmp="$tmp/catalog.json"
-catalog_tmp_second="$tmp/catalog-second.json"
+if [ -e internal/cli/schema_agent_metadata ] || [ -e internal/cli/schema_agent_metadata_audit.json ]; then
+	printf '%s\n' 'generated drift: retired schema_agent_metadata delivery artifact is present' >&2
+	printf '%s\n' 'remove internal/cli/schema_agent_metadata/ and schema_agent_metadata_audit.json' >&2
+	exit 1
+fi
 
-"$metadata_generator" \
-  -root . \
-  -registry internal/cli/schema_command_registry.json \
-  -output-dir "$metadata_tmp" \
-  -audit-output "$audit_tmp"
+"$param_aliases_generator" -root . -output "$param_aliases_tmp"
+"$param_aliases_generator" -root . -output "$param_aliases_tmp_second"
+"$command_fallbacks_generator" -root . -output "$command_fallbacks_tmp"
+"$command_fallbacks_generator" -root . -output "$command_fallbacks_tmp_second"
 
-if ! diff -qr internal/cli/schema_agent_metadata "$metadata_tmp" >/dev/null; then
-	printf '%s\n' 'generated drift: internal/cli/schema_agent_metadata is stale' >&2
+if [ -e internal/cli/schema_command_registry ]; then
+	printf '%s\n' 'generated drift: retired schema_command_registry/ must not be present' >&2
+	exit 1
+fi
+
+if ! cmp -s internal/cli/param_concepts.json "$concepts_guard"; then
+	printf '%s\n' 'generation modified reviewed input internal/cli/param_concepts.json' >&2
+	exit 1
+fi
+
+if ! cmp -s internal/cli/param_concepts.schema.json "$concepts_schema_guard"; then
+	printf '%s\n' 'generation modified reviewed input internal/cli/param_concepts.schema.json' >&2
+	exit 1
+fi
+
+if ! cmp -s internal/cli/command_path_fallbacks.json "$command_fallbacks_guard"; then
+	printf '%s\n' 'generation modified reviewed input internal/cli/command_path_fallbacks.json' >&2
+	exit 1
+fi
+
+if ! cmp -s internal/cli/command_path_fallbacks.schema.json "$command_fallbacks_schema_guard"; then
+	printf '%s\n' 'generation modified reviewed input internal/cli/command_path_fallbacks.schema.json' >&2
+	exit 1
+fi
+
+if [ -e internal/cli/schema_hints ]; then
+	printf '%s\n' 'generated drift: retired schema_hints/ must not be present' >&2
+	exit 1
+fi
+
+if [ -e internal/cli/schema_catalog ] ||
+	[ -e internal/cli/schema_meta_index.gob ] ||
+	[ -e internal/cli/schema_meta_index.json ]; then
+	printf '%s\n' 'generated drift: committed Schema Catalog/meta-index fixtures must not be present' >&2
+	printf '%s\n' 'remove internal/cli/schema_catalog, schema_meta_index.gob, and schema_meta_index.json (ResolveMeta projects from runtime assembly)' >&2
+	exit 1
+fi
+
+if ! cmp -s "$param_aliases_tmp" "$param_aliases_tmp_second"; then
+	printf '%s\n' 'generated drift: consecutive parameter-alias generations are not byte-identical' >&2
+	diff -u "$param_aliases_tmp" "$param_aliases_tmp_second" || true
+	exit 1
+fi
+
+if ! cmp -s internal/cli/param_aliases_generated.go "$param_aliases_tmp"; then
+	printf '%s\n' 'generated drift: internal/cli/param_aliases_generated.go is stale' >&2
 	printf '%s\n' 'run: make generate-schema' >&2
-	diff -ru internal/cli/schema_agent_metadata "$metadata_tmp" || true
+	diff -u internal/cli/param_aliases_generated.go "$param_aliases_tmp" || true
 	exit 1
 fi
 
-if ! cmp -s internal/cli/schema_agent_metadata_audit.json "$audit_tmp"; then
-	printf '%s\n' 'generated drift: internal/cli/schema_agent_metadata_audit.json is stale' >&2
+if ! cmp -s "$command_fallbacks_tmp" "$command_fallbacks_tmp_second"; then
+	printf '%s\n' 'generated drift: consecutive command-path fallback generations are not byte-identical' >&2
+	diff -u "$command_fallbacks_tmp" "$command_fallbacks_tmp_second" || true
+	exit 1
+fi
+
+if ! cmp -s internal/cli/command_path_fallbacks_generated.go "$command_fallbacks_tmp"; then
+	printf '%s\n' 'generated drift: internal/cli/command_path_fallbacks_generated.go is stale' >&2
 	printf '%s\n' 'run: make generate-schema' >&2
-	diff -u internal/cli/schema_agent_metadata_audit.json "$audit_tmp" || true
+	diff -u internal/cli/command_path_fallbacks_generated.go "$command_fallbacks_tmp" || true
 	exit 1
 fi
 
-"$catalog_generator" \
-	-root . \
-	-output "$catalog_tmp"
-
-"$catalog_generator" \
-	-root . \
-	-output "$catalog_tmp_second"
-
-if ! cmp -s internal/cli/schema_command_registry.json "$registry_guard"; then
-	printf '%s\n' 'generation modified reviewed input internal/cli/schema_command_registry.json' >&2
-	exit 1
-fi
-
-if ! diff -qr internal/cli/schema_hints/metadata "$metadata_guard" >/dev/null; then
-	printf '%s\n' 'generation modified reviewed input internal/cli/schema_hints/metadata' >&2
-	exit 1
-fi
-
-if ! diff -qr internal/cli/schema_hints/selection "$selection_guard" >/dev/null; then
-	printf '%s\n' 'generation modified reviewed input internal/cli/schema_hints/selection' >&2
-	exit 1
-fi
-
-if ! cmp -s "$catalog_tmp" "$catalog_tmp_second"; then
-	printf '%s\n' 'generated drift: consecutive Catalog generations are not byte-identical' >&2
-	diff -u "$catalog_tmp" "$catalog_tmp_second" || true
-	exit 1
-fi
-
-if ! cmp -s internal/cli/schema_catalog.json "$catalog_tmp"; then
-	printf '%s\n' 'generated drift: internal/cli/schema_catalog.json is stale' >&2
-	printf '%s\n' 'run: make generate-schema' >&2
-	diff -u internal/cli/schema_catalog.json "$catalog_tmp" || true
-	exit 1
-fi
+# Assembly determinism validates fresh CI/local Catalog dumps.
+"$ROOT/scripts/policy/check-schema-assembly.sh"
 
 printf 'generated drift check: ok\n'

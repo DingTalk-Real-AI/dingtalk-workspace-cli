@@ -472,7 +472,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 			fmt.Sprintf("JSON-RPC %s returned an empty result payload", request.Method),
 			apperrors.WithOperation(request.Method),
 			apperrors.WithReason(reasonForMethod(request.Method, "empty_result")),
-			apperrors.WithHint(i18n.T("服务返回了空结果；请稍后重试，必要时查看 recovery snapshot。")),
+			apperrors.WithHint(i18n.T("服务返回了空结果；请稍后重试。")),
 			apperrors.WithActions(discoveryActions(snapshotPath)...),
 			apperrors.WithSnapshot(snapshotPath),
 		)
@@ -896,7 +896,7 @@ func httpStatusError(method, endpoint string, statusCode int, snapshotPath, head
 		return apperrors.NewAPI(message, opts...)
 	default:
 		opts = append(opts,
-			apperrors.WithHint(i18n.T("上游服务异常；可稍后重试，若持续失败请查看 recovery snapshot。")),
+			apperrors.WithHint(i18n.T("上游服务异常；可稍后重试。")),
 			apperrors.WithActions(actionsForMethod(method, snapshotPath)...),
 		)
 		if method == "tools/call" {
@@ -1038,20 +1038,18 @@ func actionsForMethod(method, snapshotPath string) []string {
 func authActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查登录状态后重试"),
+		i18n.T("运行 dws auth status 确认凭证有效，必要时重新登录"),
 	}
-	if snapshotPath != "" {
-		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
-	}
+	_ = snapshotPath
 	return actions
 }
 
 func runtimeActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查认证、权限和参数后重试原命令"),
+		i18n.T("运行 dws doctor 检查登录态、网络和本地环境；持续失败时保留 Trace ID 和 Server Code"),
 	}
-	if snapshotPath != "" {
-		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
-	}
+	_ = snapshotPath
 	return actions
 }
 
@@ -1059,10 +1057,9 @@ func networkActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查网络、代理和 DNS 配置后重试原命令"),
 		i18n.T("确认 MCP 服务可访问；若持续失败请稍后重试"),
+		i18n.T("运行 dws doctor 获取可共享的环境诊断结果"),
 	}
-	if snapshotPath != "" {
-		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
-	}
+	_ = snapshotPath
 	return actions
 }
 
@@ -1103,8 +1100,6 @@ func discoveryActions(snapshotPath string) []string {
 		i18n.T("运行 sync-oss 重新生成静态端点与路由后重试"),
 		i18n.T("检查服务连通性和协议版本后重试"),
 	}
-	if snapshotPath != "" {
-		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
-	}
+	_ = snapshotPath
 	return actions
 }

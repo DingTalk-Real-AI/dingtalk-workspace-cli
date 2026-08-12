@@ -15,6 +15,7 @@ RUN_GO_TESTS=1
 VERBOSE=0
 KEEP_WORKDIR=0
 E2E_VERSION="${DWS_PACKAGE_VERSION:-v1.0.53-beta.3}"
+GO_TEST_TIMEOUT="${MULTI_PROFILE_GO_TEST_TIMEOUT:-10m}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -582,7 +583,7 @@ cd "$ROOT"
 
 if [[ "$RUN_GO_TESTS" -eq 1 ]]; then
   log "running multi-profile Go regressions"
-  go test -timeout 180s -count=1 ./internal/auth ./internal/app ./test/cli
+  go test -timeout "$GO_TEST_TIMEOUT" -count=1 ./internal/auth ./internal/app ./test/cli
 fi
 
 log "building dws"
@@ -641,9 +642,9 @@ expect_contains "$MONO_HOME/.codex/skills/dws/SKILL.md" "corpId:userId"
 expect_contains "$MONO_HOME/.codex/skills/dws/SKILL.md" "禁止选择第一项、最近登录或最近使用账号"
 expect_contains "$MONO_HOME/.codex/skills/dws/references/global-reference.md" "userId/userName"
 capture "$OUT_DIR/skill-multi-setup.txt" env HOME="$MULTI_HOME" "$BIN" skill setup --mode multi --target codex --source "$ROOT" --yes
-expect_contains "$MULTI_HOME/.codex/skills/dws-shared/SKILL.md" "禁止选择第一项、最近登录或最近使用账号"
-expect_contains "$MULTI_HOME/.codex/skills/dingtalk-profile/SKILL.md" "corpId:userId"
-expect_contains "$MULTI_HOME/.codex/skills/dingtalk-profile/SKILL.md" "isOrgCurrent"
+expect_contains "$MULTI_HOME/.codex/skills/dingtalk-shared/SKILL.md" "禁止选择第一项、最近登录或最近使用账号"
+expect_contains "$MULTI_HOME/.codex/skills/dingtalk-misc/references/profile.md" "corpId:userId"
+expect_contains "$MULTI_HOME/.codex/skills/dingtalk-misc/references/profile.md" "isOrgCurrent"
 
 log "verifying empty profile list"
 capture "$OUT_DIR/list-empty.json" "$BIN" profile list --format json

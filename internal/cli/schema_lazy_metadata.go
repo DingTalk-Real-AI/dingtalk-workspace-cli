@@ -4,12 +4,12 @@
 package cli
 
 // SchemaMetadataLoadCounts exposes read-only diagnostics for startup tests and
-// profiling. Counts are incremented only when a lazy embedded snapshot is
-// parsed for the first time.
+// profiling. Counts are incremented only when a lazy delivery snapshot is
+// assembled / projected for the first time.
 type SchemaMetadataLoadCounts struct {
 	Catalog          uint64
+	MetaIndex        uint64
 	AgentMetadata    uint64
-	MCPMetadata      uint64
 	ParameterBinding uint64
 }
 
@@ -17,9 +17,9 @@ type SchemaMetadataLoadCounts struct {
 // counters without triggering any loader.
 func RuntimeSchemaMetadataLoadCounts() SchemaMetadataLoadCounts {
 	return SchemaMetadataLoadCounts{
-		Catalog:          runtimeEmbeddedSchemaCatalogLazyLoadCount.Load(),
-		AgentMetadata:    runtimeEmbeddedAgentMetadataLazyLoadCount.Load(),
-		MCPMetadata:      runtimeEmbeddedMCPMetadataLazyLoadCount.Load(),
+		Catalog:          runtimeDeliverySchemaCatalogLazyCount.Load(),
+		MetaIndex:        runtimeDeliverySchemaMetaIndexLazyCount.Load(),
+		AgentMetadata:    runtimeAgentMetadataLazyLoadCount.Load(),
 		ParameterBinding: runtimeSchemaParameterBindingsLazyLoadCount.Load(),
 	}
 }

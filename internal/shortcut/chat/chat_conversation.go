@@ -15,8 +15,16 @@ package chat
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+	"unicode/utf8"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
 
 // ConversationInfo gets conversation info (get_conversation_info, chat server).
@@ -27,6 +35,31 @@ var ConversationInfo = shortcut.Shortcut{
 	Description: "获取会话信息（群聊传 --group，单聊传 --open-dingtalk-id）",
 	Intent:      "当你已有群 openConversationId 或单聊对方 openDingTalkId、需要查看该会话的名称/类型/成员数等基础信息时使用；只读，群聊传 --group、单聊传 --open-dingtalk-id 二选一。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_conversation_info",
+			CanonicalPath:  "chat.shortcut_conversation_info",
+			CLIPath:        "chat +conversation-info",
+			PrimaryCLIPath: "chat +conversation-info",
+		},
+		Description: "获取会话信息（群聊传 --group，单聊传 --open-dingtalk-id）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取会话信息（群聊传 --group，单聊传 --open-dingtalk-id）",
+			UseWhen:      []string{"当你已有群 openConversationId 或单聊对方 openDingTalkId、需要查看该会话的名称/类型/成员数等基础信息时使用；只读，群聊传 --group、单聊传 --open-dingtalk-id 二选一。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +conversation-info --group <openConversationId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "group", Type: shortcut.FlagString, Desc: "群聊 openConversationId"},
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊对方 openDingTalkId"},
@@ -52,21 +85,56 @@ var ConversationSetTop = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+conversation-set-top",
 	Product:     "im",
-	Description: "会话置顶 / 取消置顶（支持单聊/群聊）",
-	Intent:      "当你想把某个单聊或群聊置顶到会话列表顶部、或取消其置顶时使用；会实际修改该会话的置顶状态，需传 openConversationId，加 --off 取消置顶。",
+	Description: "批量会话置顶 / 取消置顶（最多 10 个）",
+	Intent:      "当你想把一个或多个单聊/群聊置顶到会话列表顶部、或取消置顶时使用；支持 1-10 个 openConversationId，逐项执行并返回成功/失败 ledger，某一项失败不阻断其余项。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
-		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
+		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "单个会话 openConversationId；会话 ID 去重后必须为 1-10 个"},
+		{Name: "conversation-ids", Type: shortcut.FlagStringSlice, Desc: "多个会话 openConversationId；会话 ID 去重后必须为 1-10 个"},
 		{Name: "off", Type: shortcut.FlagBool, Desc: "取消置顶（不传则设置置顶）"},
 	},
-	Tips: []string{`dws chat +conversation-set-top --conversation-id <openConversationId>`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("set_top_conversation", map[string]any{
-			"openConversationId": rt.Str("conversation-id"),
-			"cid":                rt.Str("conversation-id"),
-			"top":                !rt.Bool("off"),
-		})
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintAtLeastOne, Flags: []string{"conversation-id", "conversation-ids"}},
+		{
+			Kind:        shortcut.ConstraintCustom,
+			Flags:       []string{"conversation-id", "conversation-ids"},
+			Description: "会话 ID 去重后必须为 1-10 个",
+		},
 	},
+	Tips: []string{
+		`dws chat +conversation-set-top --conversation-id <openConversationId>`,
+		`dws chat +conversation-set-top --conversation-ids <cid1>,<cid2> --off`,
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		ids := conversationSetTopIDs(rt)
+		if len(ids) < 1 || len(ids) > 10 {
+			return apperrors.NewValidation(fmt.Sprintf("会话 ID 去重后必须为 1-10 个，当前 %d 个", len(ids)))
+		}
+		return nil
+	},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		ids := conversationSetTopIDs(rt)
+		items := make([]shortcutBatchWrite, 0, len(ids))
+		for _, id := range ids {
+			items = append(items, shortcutBatchWrite{
+				target: id,
+				arguments: map[string]any{
+					"openConversationId": id,
+					"cid":                id,
+					"top":                !rt.Bool("off"),
+				},
+			})
+		}
+		return executeShortcutBatchWrite(rt, "im", "set_top_conversation", items)
+	},
+}
+
+func conversationSetTopIDs(rt *shortcut.RuntimeContext) []string {
+	values := append([]string{}, rt.StrSlice("conversation-ids")...)
+	if value := rt.Str("conversation-id"); value != "" {
+		values = append(values, value)
+	}
+	return uniqueShortcutStrings(values)
 }
 
 // ConversationMute mutes/unmutes a conversation (update_notification_off, im).
@@ -97,7 +165,7 @@ var ConversationMuteAtAll = shortcut.Shortcut{
 	Command:     "+conversation-mute-at-all",
 	Product:     "im",
 	Description: "关闭/开启 @所有人消息提醒",
-	Intent:      "当你在某个群里不想再被'@所有人'打扰、或想恢复该提醒时使用；会实际修改该会话的@所有人提醒开关，需传 openConversationId。",
+	Intent:      "当你已对某个会话开启消息免打扰，并希望额外关闭或恢复'@所有人'提醒时使用；这是免打扰的子开关，若尚未开启总免打扰，先执行 +conversation-mute，否则平台会返回 NotificationOffNotEnabled。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
@@ -107,7 +175,6 @@ var ConversationMuteAtAll = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("update_at_all_notification_off", map[string]any{
 			"openConversationId": rt.Str("conversation-id"),
-			"cid":                rt.Str("conversation-id"),
 			"mute":               !rt.Bool("off"),
 		})
 	},
@@ -119,7 +186,7 @@ var ConversationMuteRedEnvelope = shortcut.Shortcut{
 	Command:     "+conversation-mute-red-envelope",
 	Product:     "im",
 	Description: "关闭/开启红包消息提醒",
-	Intent:      "当你想在某个会话里关闭或恢复红包消息提醒时使用；会实际修改该会话的红包提醒开关，需传 openConversationId。",
+	Intent:      "当你已对某个会话开启消息免打扰，并希望额外关闭或恢复红包提醒时使用；这是免打扰的子开关，若尚未开启总免打扰，或刚恢复过@所有人提醒，先执行 +conversation-mute，否则平台会返回 NotificationOffNotEnabled。",
 	Risk:        shortcut.RiskWrite,
 	Flags: []shortcut.Flag{
 		{Name: "conversation-id", Type: shortcut.FlagString, Desc: "会话 openConversationId", Required: true},
@@ -129,7 +196,6 @@ var ConversationMuteRedEnvelope = shortcut.Shortcut{
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("update_red_env_notification_off", map[string]any{
 			"openConversationId": rt.Str("conversation-id"),
-			"cid":                rt.Str("conversation-id"),
 			"mute":               !rt.Bool("off"),
 		})
 	},
@@ -183,7 +249,32 @@ var ConversationClearAllRedPoint = shortcut.Shortcut{
 	Description: "清除所有会话红点（全部已读）",
 	Intent:      "当你想一键把全部会话标记为已读、清空所有红点时使用；会实际清除当前用户所有会话的红点，无需任何参数。",
 	Risk:        shortcut.RiskWrite,
-	Tips:        []string{`dws chat +conversation-clear-all-red-point`},
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_conversation_clear_all_red_point",
+			CanonicalPath:  "chat.shortcut_conversation_clear_all_red_point",
+			CLIPath:        "chat +conversation-clear-all-red-point",
+			PrimaryCLIPath: "chat +conversation-clear-all-red-point",
+		},
+		Description: "清除所有会话红点（全部已读）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "清除所有会话红点（全部已读）",
+			UseWhen:      []string{"当你想一键把全部会话标记为已读、清空所有红点时使用；会实际清除当前用户所有会话的红点，无需任何参数。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +conversation-clear-all-red-point"},
+		},
+	},
+	Tips: []string{`dws chat +conversation-clear-all-red-point`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("clear_all_red_point", map[string]any{})
 	},
@@ -194,41 +285,156 @@ var ConversationList = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+conversation-list",
 	Product:     "im",
-	Description: "分页获取当前用户的全部会话列表（单聊+群聊）",
-	Intent:      "当你想遍历当前用户的所有会话（单聊+群聊）做统计、清理或批量处理时使用；只读分页返回，可用 --exclude-muted 排除已免打扰会话。",
+	Description: "分页或一键全量获取当前用户的会话列表（单聊+群聊）",
+	Intent:      "当你想遍历当前用户的所有会话（单聊+群聊）做统计、清理或批量处理时使用；默认读取一页，明确要求全部时使用 --page-all，CLI 会按服务端每页上限自动翻页并公开完整性 ledger；可用 --exclude-muted 排除已免打扰会话。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_conversation_list",
+			CanonicalPath:  "chat.shortcut_conversation_list",
+			CLIPath:        "chat +conversation-list",
+			PrimaryCLIPath: "chat +conversation-list",
+		},
+		Description: "分页或一键全量获取当前用户的会话列表（单聊+群聊）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "分页或一键全量获取当前用户的会话列表（单聊+群聊）",
+			UseWhen:      []string{"当你想遍历当前用户的所有会话（单聊+群聊）做统计、清理或批量处理时使用；默认读取一页，明确要求全部时使用 --page-all，CLI 会按服务端每页上限自动翻页并公开完整性 ledger；可用 --exclude-muted 排除已免打扰会话。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +conversation-list --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "limit", Type: shortcut.FlagInt, Default: "100", Desc: "每页数量（1-100）"},
+		{Name: "limit", Type: shortcut.FlagInt, Default: "100", Desc: "每页数量；--limit 必须在 1-100"},
 		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标（首次不传或 0）"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已免打扰会话"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取全部分页；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 	},
-	Tips: []string{`dws chat +conversation-list --limit 50`},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-100"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+	},
+	Tips: []string{
+		`dws chat +conversation-list --limit 50`,
+		`dws chat +conversation-list --page-all --limit 100`,
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if limit := rt.Int("limit"); limit < 1 || limit > 100 {
+			return apperrors.NewValidation("--limit 必须在 1-100 之间；读取全部会话请使用 --page-all")
+		}
+		if !rt.Bool("page-all") && rt.Changed("page-limit") {
+			return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+		}
+		if pageLimit := rt.Int("page-limit"); pageLimit < 1 || pageLimit > 500 {
+			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
+		}
+		return nil
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{}
-		if rt.Int("limit") > 0 {
-			params["limit"] = rt.Int("limit")
+		cursor := int64(rt.Int("cursor"))
+		pageLimit := 1
+		if rt.Bool("page-all") {
+			pageLimit = rt.Int("page-limit")
 		}
-		if rt.Int("cursor") > 0 {
-			params["cursor"] = rt.Int("cursor")
+		convs := make([]map[string]any, 0)
+		seenConversations := map[string]bool{}
+		seenCursors := map[int64]bool{cursor: true}
+		pagesFetched := 0
+		complete := false
+		hasMore := false
+		nextCursor := int64(0)
+		failures := make([]map[string]any, 0)
+		for pagesFetched < pageLimit {
+			params := map[string]any{"limit": rt.Int("limit")}
+			if cursor > 0 {
+				params["cursor"] = cursor
+			}
+			if rt.Bool("exclude-muted") {
+				params["excludeMuted"] = true
+			}
+			data, err := rt.CallMCPData("im", "list_all_conversations", params)
+			if err != nil {
+				if pagesFetched == 0 {
+					return err
+				}
+				failures = append(failures, map[string]any{"stage": "conversation-page", "cursor": cursor, "error": err.Error()})
+				break
+			}
+			pagesFetched++
+			for _, conversation := range conversationListProject(data) {
+				id := strings.TrimSpace(fmt.Sprint(conversation["openConversationId"]))
+				if id != "" && id != "<nil>" {
+					if seenConversations[id] {
+						continue
+					}
+					seenConversations[id] = true
+				}
+				convs = append(convs, conversation)
+			}
+			page := chatmsg.Pagination(data)
+			hasMoreValue, known := page["hasMore"].(bool)
+			hasMore = hasMoreValue
+			if !known {
+				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": "下层未返回 hasMore，无法证明结果完整"})
+				break
+			}
+			if !hasMore {
+				complete = true
+				break
+			}
+			nextCursor, err = conversationPaginationCursor(page["nextCursor"])
+			if err != nil || nextCursor == 0 || seenCursors[nextCursor] {
+				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": "hasMore=true 但 nextCursor 缺失、无效或未前进"})
+				break
+			}
+			if !rt.Bool("page-all") {
+				break
+			}
+			seenCursors[nextCursor] = true
+			cursor = nextCursor
 		}
-		if rt.Bool("exclude-muted") {
-			params["excludeMuted"] = true
+		if rt.Bool("page-all") && hasMore && pagesFetched == pageLimit {
+			failures = append(failures, map[string]any{"stage": "conversation-page-limit", "error": fmt.Sprintf("达到 --page-limit=%d，仍有更多会话", pageLimit)})
 		}
-		data, err := rt.CallMCPData("im", "list_all_conversations", params)
-		if err != nil {
-			return err
-		}
-		convs := conversationListProject(data)
-		payload := map[string]any{"count": len(convs), "conversations": convs}
-		// carry pagination hints when present so翻页仍可继续（字段防御式探测）。
-		if v, ok := conversationListFirst(data, "nextCursor", "cursor"); ok {
-			payload["nextCursor"] = v
-		}
-		if v, ok := conversationListFirst(data, "hasMore", "has_more"); ok {
-			payload["hasMore"] = v
+		payload := map[string]any{
+			"count":           len(convs),
+			"conversations":   convs,
+			"pagesFetched":    pagesFetched,
+			"complete":        complete,
+			"hasMore":         hasMore,
+			"nextCursor":      nextCursor,
+			"paginationKnown": len(failures) == 0 || hasMore,
+			"failedCount":     len(failures),
+			"failures":        failures,
+			"partial":         len(failures) > 0,
 		}
 		return rt.Output(payload)
 	},
+}
+
+func conversationPaginationCursor(value any) (int64, error) {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed), nil
+	case int64:
+		return typed, nil
+	case float64:
+		return int64(typed), nil
+	case string:
+		return strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+	default:
+		return 0, fmt.Errorf("unsupported cursor type %T", value)
+	}
 }
 
 // conversationListProject reshapes the raw list_all_conversations response into a
@@ -270,17 +476,30 @@ func conversationListResolveList(data map[string]any) []any {
 			continue
 		}
 		if arr, ok := v.([]any); ok {
-			return arr
+			return unwrapConversationTuple(arr)
 		}
 		if inner, ok := v.(map[string]any); ok {
 			for _, ik := range []string{"conversationList", "conversations", "list", "items", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
-					return arr
+					return unwrapConversationTuple(arr)
 				}
 			}
 		}
 	}
 	return []any{}
+}
+
+// unwrapConversationTuple handles gateway responses shaped as
+// result:[conversationList,nextCursor,hasMore] while leaving ordinary arrays
+// untouched. This prevents the first list from being mistaken for one row.
+func unwrapConversationTuple(values []any) []any {
+	if len(values) == 0 {
+		return values
+	}
+	if nested, ok := values[0].([]any); ok {
+		return nested
+	}
+	return values
 }
 
 // conversationListFirst returns the first present candidate key's value.
@@ -297,15 +516,47 @@ func conversationListFirst(m map[string]any, keys ...string) (any, bool) {
 var ConversationListTop = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+conversation-list-top",
-	Description: "拉取置顶会话列表",
-	Intent:      "当你只想查看被置顶的那些会话时使用；只读分页返回置顶会话列表，可用 --exclude-muted 排除已免打扰会话。",
+	Description: "拉取置顶会话列表，可只看群聊或单聊",
+	Intent:      "当你只想查看被置顶的那些会话时使用；只读分页返回置顶会话列表，并把下层 singleChat 规范化为 conversationType=group|direct。可用 --type group 只看群聊、--type direct 只看单聊，或用 --exclude-muted 排除已免打扰会话。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_conversation_list_top",
+			CanonicalPath:  "chat.shortcut_conversation_list_top",
+			CLIPath:        "chat +conversation-list-top",
+			PrimaryCLIPath: "chat +conversation-list-top",
+		},
+		Description: "拉取置顶会话列表，可只看群聊或单聊",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "拉取置顶会话列表，可只看群聊或单聊",
+			UseWhen:      []string{"当你只想查看被置顶的那些会话时使用；只读分页返回置顶会话列表，并把下层 singleChat 规范化为 conversationType=group|direct。可用 --type group 只看群聊、--type direct 只看单聊，或用 --exclude-muted 排除已免打扰会话。"},
+			AvoidWhen:    []string{"用户要查看群内被 Pin 的消息而不是侧边栏置顶会话时，改用 +messages-list-pin"},
+			Examples: []string{
+				"dws chat +conversation-list-top --type group --limit 1000",
+				"dws chat +conversation-list-top --type direct --limit 1000",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量"},
 		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标（首次不传或 0）"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已免打扰会话"},
+		{Name: "type", Type: shortcut.FlagString, Default: "all", Desc: "会话类型：all 全部 / group 群聊 / direct 单聊（当前页本地过滤）", Enum: []string{"all", "group", "direct"}},
 	},
-	Tips: []string{`dws chat +conversation-list-top --limit 1000`},
+	Tips: []string{
+		`dws chat +conversation-list-top --limit 1000`,
+		`dws chat +conversation-list-top --type group --limit 1000`,
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{}
 		if rt.Int("limit") > 0 {
@@ -322,13 +573,14 @@ var ConversationListTop = shortcut.Shortcut{
 			return err
 		}
 		convs := conversationListTopProject(data)
-		payload := map[string]any{"count": len(convs), "conversations": convs}
-		if v, ok := conversationListTopFirst(data, "nextCursor", "cursor"); ok {
-			payload["nextCursor"] = v
+		typeFilter := rt.Str("type")
+		convs = conversationListTopFilter(convs, typeFilter)
+		payload := map[string]any{
+			"count":         len(convs),
+			"requestedType": typeFilter,
+			"conversations": convs,
 		}
-		if v, ok := conversationListTopFirst(data, "hasMore", "has_more"); ok {
-			payload["hasMore"] = v
-		}
+		chatmsg.ApplyPagination(payload, data)
 		return rt.Output(payload)
 	},
 }
@@ -353,14 +605,75 @@ func conversationListTopProject(data map[string]any) []map[string]any {
 		if v, ok := conversationListTopFirst(m, "conversationName", "name", "title"); ok {
 			row["conversationName"] = v
 		}
-		if v, ok := conversationListTopFirst(m, "conversationType", "type"); ok {
-			row["conversationType"] = v
+		if conversationType, ok := conversationListTopType(m); ok {
+			row["conversationType"] = conversationType
 		}
 		if len(row) > 0 {
 			out = append(out, row)
 		}
 	}
 	return out
+}
+
+// conversationListTopType converts the lower service's singleChat flag into a
+// stable, Agent-facing type. The fallback accepts known type spellings for
+// compatibility with older/newer response projections.
+func conversationListTopType(m map[string]any) (string, bool) {
+	if value, ok := conversationListTopFirst(m, "singleChat", "single_chat", "isSingleChat"); ok {
+		switch typed := value.(type) {
+		case bool:
+			if typed {
+				return "direct", true
+			}
+			return "group", true
+		case string:
+			switch strings.ToLower(strings.TrimSpace(typed)) {
+			case "true", "1":
+				return "direct", true
+			case "false", "0":
+				return "group", true
+			}
+		case float64:
+			if typed == 1 {
+				return "direct", true
+			}
+			if typed == 0 {
+				return "group", true
+			}
+		case int:
+			if typed == 1 {
+				return "direct", true
+			}
+			if typed == 0 {
+				return "group", true
+			}
+		}
+	}
+
+	if value, ok := conversationListTopFirst(m, "conversationType", "type"); ok {
+		if text, ok := value.(string); ok {
+			switch strings.ToLower(strings.TrimSpace(text)) {
+			case "group", "groupchat", "group_chat":
+				return "group", true
+			case "direct", "single", "singlechat", "single_chat", "p2p":
+				return "direct", true
+			}
+		}
+	}
+	return "", false
+}
+
+func conversationListTopFilter(conversations []map[string]any, typeFilter string) []map[string]any {
+	if typeFilter == "" || typeFilter == "all" {
+		return conversations
+	}
+	filtered := make([]map[string]any, 0, len(conversations))
+	for _, conversation := range conversations {
+		if conversation["conversationType"] == typeFilter {
+			filtered = append(filtered, conversation)
+		}
+	}
+	return filtered
 }
 
 // conversationListTopResolveList locates the conversation array inside the
@@ -373,12 +686,12 @@ func conversationListTopResolveList(data map[string]any) []any {
 			continue
 		}
 		if arr, ok := v.([]any); ok {
-			return arr
+			return unwrapConversationTuple(arr)
 		}
 		if inner, ok := v.(map[string]any); ok {
 			for _, ik := range []string{"conversationList", "conversations", "topConversations", "list", "items", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
-					return arr
+					return unwrapConversationTuple(arr)
 				}
 			}
 		}
@@ -467,7 +780,32 @@ var CategoryList = shortcut.Shortcut{
 	Description: "获取用户自定义会话分组",
 	Intent:      "当你想查看当前用户自建了哪些会话分组（如'工作群''项目群'）时使用；只读返回分组列表及其 categoryId，供后续按分组拉会话或增删。",
 	Risk:        shortcut.RiskRead,
-	Tips:        []string{`dws chat +category-list`},
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_category_list",
+			CanonicalPath:  "chat.shortcut_category_list",
+			CLIPath:        "chat +category-list",
+			PrimaryCLIPath: "chat +category-list",
+		},
+		Description: "获取用户自定义会话分组",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取用户自定义会话分组",
+			UseWhen:      []string{"当你想查看当前用户自建了哪些会话分组（如'工作群''项目群'）时使用；只读返回分组列表及其 categoryId，供后续按分组拉会话或增删。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +category-list"},
+		},
+	},
+	Tips: []string{`dws chat +category-list`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		data, err := rt.CallMCPData("im", "list_user_define_conv_categories", map[string]any{})
 		if err != nil {
@@ -561,12 +899,7 @@ var CategoryListConversations = shortcut.Shortcut{
 		}
 		convs := categoryConversationsProject(data)
 		payload := map[string]any{"count": len(convs), "conversations": convs}
-		if v, ok := categoryConversationsFirst(data, "nextCursor", "cursor"); ok {
-			payload["nextCursor"] = v
-		}
-		if v, ok := categoryConversationsFirst(data, "hasMore", "has_more"); ok {
-			payload["hasMore"] = v
-		}
+		chatmsg.ApplyPagination(payload, data)
 		return rt.Output(payload)
 	},
 }
@@ -634,20 +967,69 @@ func categoryConversationsFirst(m map[string]any, keys ...string) (any, bool) {
 	return nil, false
 }
 
+const maxConversationCategoryTitleRunes = 15
+
+func validateConversationCategoryTitle(rt *shortcut.RuntimeContext) error {
+	title := strings.TrimSpace(rt.Str("title"))
+	if title == "" {
+		return apperrors.NewValidation("--title 不能为空")
+	}
+	if utf8.RuneCountInString(title) > maxConversationCategoryTitleRunes {
+		return apperrors.NewValidation(fmt.Sprintf(
+			"--title 最多 %d 个字符", maxConversationCategoryTitleRunes))
+	}
+	return nil
+}
+
 // CategoryCreate creates a conversation category (create_conv_category, im).
 var CategoryCreate = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+category-create",
 	Product:     "im",
 	Description: "创建用户自定义会话分组",
-	Intent:      "当你想新建一个会话分组来归类会话时使用；会实际创建分组并返回其 ID，需传分组名称 --title。",
+	Intent:      "当你想新建一个会话分组来归类会话时使用；会实际创建分组并返回其 ID，需传最多 15 个字符的分组名称 --title。",
 	Risk:        shortcut.RiskWrite,
-	Flags: []shortcut.Flag{
-		{Name: "title", Type: shortcut.FlagString, Desc: "分组名称", Required: true},
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
 	},
-	Tips: []string{`dws chat +category-create --title "工作群"`},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_category_create",
+			CanonicalPath:  "chat.shortcut_category_create",
+			CLIPath:        "chat +category-create",
+			PrimaryCLIPath: "chat +category-create",
+		},
+		Description: "创建用户自定义会话分组",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "创建用户自定义会话分组",
+			UseWhen:      []string{"当你想新建一个会话分组来归类会话时使用；会实际创建分组并返回其 ID，需传最多 15 个字符的分组名称 --title。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +category-create --title \"工作群\""},
+		},
+	},
+	Flags: []shortcut.Flag{
+		{Name: "title", Type: shortcut.FlagString, Desc: "分组名称；去除首尾空白后必须非空，且最多 15 个字符", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{
+			Kind:        shortcut.ConstraintCustom,
+			Flags:       []string{"title"},
+			Description: "--title 去除首尾空白后必须非空，且最多 15 个字符",
+		},
+	},
+	Tips:     []string{`dws chat +category-create --title "工作群"`},
+	Validate: validateConversationCategoryTitle,
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("create_conv_category", map[string]any{"title": rt.Str("title")})
+		return rt.CallMCP("create_conv_category", map[string]any{
+			"title": strings.TrimSpace(rt.Str("title")),
+		})
 	},
 }
 
@@ -659,6 +1041,31 @@ var CategoryDelete = shortcut.Shortcut{
 	Description: "删除用户自定义会话分组",
 	Intent:      "当你想删除某个自定义会话分组时使用；会实际删除分组（不影响其中会话本身），不可逆，需传 categoryId。",
 	Risk:        shortcut.RiskHighWrite,
+	Safety: contract.SafetySpec{
+		Effect: "destructive", Risk: "high",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_category_delete",
+			CanonicalPath:  "chat.shortcut_category_delete",
+			CLIPath:        "chat +category-delete",
+			PrimaryCLIPath: "chat +category-delete",
+		},
+		Description: "删除用户自定义会话分组",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "删除用户自定义会话分组",
+			UseWhen:      []string{"当你想删除某个自定义会话分组时使用；会实际删除分组（不影响其中会话本身），不可逆，需传 categoryId。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +category-delete --category-id <分组ID>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "category-id", Type: shortcut.FlagInt, Desc: "会话分组 ID", Required: true},
 	},
@@ -674,17 +1081,50 @@ var CategoryRename = shortcut.Shortcut{
 	Command:     "+category-rename",
 	Product:     "im",
 	Description: "更新用户自定义会话分组的名称",
-	Intent:      "当你想重命名已有的自定义会话分组时使用；会实际更新分组名称，需传 categoryId 和新名称 --title。",
+	Intent:      "当你想重命名已有的自定义会话分组时使用；会实际更新分组名称，需传 categoryId 和最多 15 个字符的新名称 --title。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_category_rename",
+			CanonicalPath:  "chat.shortcut_category_rename",
+			CLIPath:        "chat +category-rename",
+			PrimaryCLIPath: "chat +category-rename",
+		},
+		Description: "更新用户自定义会话分组的名称",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "更新用户自定义会话分组的名称",
+			UseWhen:      []string{"当你想重命名已有的自定义会话分组时使用；会实际更新分组名称，需传 categoryId 和最多 15 个字符的新名称 --title。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +category-rename --category-id <分组ID> --title \"新名称\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "category-id", Type: shortcut.FlagInt, Desc: "会话分组 ID", Required: true},
-		{Name: "title", Type: shortcut.FlagString, Desc: "新的分组名称", Required: true},
+		{Name: "title", Type: shortcut.FlagString, Desc: "新的分组名称；去除首尾空白后必须非空，且最多 15 个字符", Required: true},
 	},
-	Tips: []string{`dws chat +category-rename --category-id <分组ID> --title "新名称"`},
+	Constraints: []shortcut.Constraint{
+		{
+			Kind:        shortcut.ConstraintCustom,
+			Flags:       []string{"title"},
+			Description: "--title 去除首尾空白后必须非空，且最多 15 个字符",
+		},
+	},
+	Tips:     []string{`dws chat +category-rename --category-id <分组ID> --title "新名称"`},
+	Validate: validateConversationCategoryTitle,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("rename_conv_category", map[string]any{
 			"categoryId": rt.Int("category-id"),
-			"title":      rt.Str("title"),
+			"title":      strings.TrimSpace(rt.Str("title")),
 		})
 	},
 }
@@ -740,7 +1180,7 @@ var CategoryRemoveConversation = shortcut.Shortcut{
 }
 
 func init() {
-	shortcut.Register(
+	shortcut.Register(withReviewedChatShortcutContracts(
 		ConversationInfo,
 		ConversationSetTop,
 		ConversationMute,
@@ -761,5 +1201,5 @@ func init() {
 		CategoryRename,
 		CategoryAddConversation,
 		CategoryRemoveConversation,
-	)
+	)...)
 }

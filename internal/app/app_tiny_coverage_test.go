@@ -140,7 +140,7 @@ func TestCrossPlatformCoverageDirectRuntimeRemainingCoverage(t *testing.T) {
 	products := map[string]bool{}
 	aliases := map[string]string{}
 	tools := map[string]string{}
-	registerDynamicServer(mcptypes.ServerDescriptor{CLI: mcptypes.CLIOverlay{Skip: true}}, endpoints, products, aliases, tools)
+	registerDynamicServer(mcptypes.ServerDescriptor{CLI: mcptypes.CLIOverlay{Skip: true}}, endpoints, products, aliases, tools, false)
 	registerDynamicServer(mcptypes.ServerDescriptor{
 		Endpoint: "https://server.test",
 		CLI: mcptypes.CLIOverlay{
@@ -148,7 +148,7 @@ func TestCrossPlatformCoverageDirectRuntimeRemainingCoverage(t *testing.T) {
 			Tools:         []mcptypes.CLITool{{Name: "tool"}, {Name: " "}},
 			ToolOverrides: map[string]mcptypes.CLIToolOverride{"override": {}, " ": {}},
 		},
-	}, endpoints, products, aliases, tools)
+	}, endpoints, products, aliases, tools, false)
 	if endpoints["command"] == "" || aliases["alias"] != "id" || tools["override"] == "" {
 		t.Fatalf("registered dynamic server = %#v %#v %#v", endpoints, aliases, tools)
 	}
@@ -200,7 +200,7 @@ func TestCrossPlatformCoverageDirectRuntimeRemainingCoverage(t *testing.T) {
 			},
 		},
 	})
-	if got, ok := directRuntimeToolEndpoint("append-override"); !ok || got != "https://append.test" {
+	if got, ok := directRuntimeEndpoint("", "append-override"); !ok || got != "https://append.test" {
 		t.Fatalf("append override endpoint = %q, %v", got, ok)
 	}
 }
@@ -274,7 +274,7 @@ func TestCrossPlatformCoverageEmbeddedSkillAndTinyCommandsRemainingCoverage(t *t
 	if err := completion.RunE(completion, []string{"other"}); err != nil {
 		t.Fatal(err)
 	}
-	catalog := newCatalogCommand(nil)
+	catalog := newCatalogCommand()
 	catalog.SetOut(io.Discard)
 	if err := catalog.RunE(catalog, nil); err != nil {
 		t.Fatal(err)

@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // InterfaceRefKey is the exact, typed identity of an embedded MCP operation.
@@ -27,26 +29,27 @@ type InterfaceRefKey struct {
 	RPCName   string
 }
 
-// InterfaceRegistryEntry is one operation projection from the fixed embedded
-// MCP metadata. CanonicalPath is a metadata lookup key, not command identity.
+// InterfaceRegistryEntry is one operation projection from an optional
+// diagnostic MCP-shaped map (tests / fetch dumps). CanonicalPath is a lookup
+// key, not command identity. Production assembly does not build this from a
+// committed pin.
 type InterfaceRegistryEntry struct {
 	CanonicalPath string
-	Ref           InterfaceRefSpec
+	Ref           contract.InterfaceRefSpec
 	Metadata      embeddedMCPToolMetadata
 }
 
-// InterfaceRegistry is the typed interface fact model. ByCanonical supports
-// exact metadata navigation; ByInterfaceRef answers whether an explicitly
-// selected (product_id, rpc_name) exists. The latter retains every canonical
-// projection because sharing one RPC is valid and intentional.
+// InterfaceRegistry is the typed interface fact model for optional MCP-shaped
+// fixtures. ByCanonical supports exact navigation; ByInterfaceRef answers
+// whether an explicitly selected (product_id, rpc_name) exists.
 type InterfaceRegistry struct {
 	ByCanonical    map[string]InterfaceRegistryEntry
 	ByInterfaceRef map[InterfaceRefKey][]string
 }
 
-// buildInterfaceRegistry creates deterministic exact indexes over embedded
-// MCP metadata. It rejects malformed or conflicting canonical projections and
-// never manufactures an interface from a command identity.
+// buildInterfaceRegistry creates deterministic exact indexes over an optional
+// MCP-shaped tool map. It rejects malformed or conflicting canonical
+// projections and never manufactures an interface from a command identity.
 func buildInterfaceRegistry(tools map[string]embeddedMCPToolMetadata) (InterfaceRegistry, error) {
 	registry := InterfaceRegistry{
 		ByCanonical:    make(map[string]InterfaceRegistryEntry, len(tools)),
@@ -86,7 +89,7 @@ func buildInterfaceRegistry(tools map[string]embeddedMCPToolMetadata) (Interface
 
 		entry := InterfaceRegistryEntry{
 			CanonicalPath: canonical,
-			Ref:           InterfaceRefSpec(key),
+			Ref:           contract.InterfaceRefSpec(key),
 			Metadata:      metadata,
 		}
 		registry.ByCanonical[canonical] = entry
@@ -99,17 +102,23 @@ func buildInterfaceRegistry(tools map[string]embeddedMCPToolMetadata) (Interface
 	return registry, nil
 }
 
-// validateSchemaRegistryInterfaces proves every ToolSpec's declared mode and
-// explicit RPC reference against the fixed embedded MCP metadata. It does not
-// infer an RPC from canonical identity or use aggregate counts as coverage.
+// validateSchemaRegistryInterfaces proves every ToolSpec's declared Interface
+// self-consistency (mode / ref / reason). ContractFinal Interface is the
+// authority; there is no committed MCP pin to cross-check against.
 func validateSchemaRegistryInterfaces(schema SchemaRegistry) error {
-	return validateSchemaRegistryInterfacesWithMetadata(schema, runtimeMCPMetadata())
+	return validateSchemaRegistryInterfacesWithMetadata(schema, emptyPinnedMCPMetadata())
 }
 
 func validateSchemaRegistryInterfacesWithMetadata(schema SchemaRegistry, metadata embeddedMCPMetadata) error {
-	interfaces, err := buildInterfaceRegistry(metadata.Tools)
-	if err != nil {
-		return fmt.Errorf("build typed Interface registry: %w", err)
+	// When a non-empty diagnostic/fixture map is supplied, MCP-mode refs must
+	// resolve into it. Production metadata is empty, so only Validate() runs.
+	var interfaces InterfaceRegistry
+	if len(metadata.Tools) > 0 {
+		built, err := buildInterfaceRegistry(metadata.Tools)
+		if err != nil {
+			return fmt.Errorf("build typed Interface registry: %w", err)
+		}
+		interfaces = built
 	}
 
 	var problems []string
@@ -127,7 +136,10 @@ func validateSchemaRegistryInterfacesWithMetadata(schema SchemaRegistry, metadat
 				problems = append(problems, err.Error())
 				continue
 			}
-			if mode := strings.TrimSpace(tool.Interface.Mode); mode == InterfaceModeMCP && tool.Interface.AgentExecutable() {
+			if len(interfaces.ByInterfaceRef) == 0 {
+				continue
+			}
+			if mode := strings.TrimSpace(tool.Interface.Mode); mode == contract.InterfaceModeMCP && tool.Interface.AgentExecutable() {
 				if err := validateToolInterfaceRef(canonical, mode, tool.Interface.Ref, interfaces); err != nil {
 					problems = append(problems, err.Error())
 				}
@@ -141,7 +153,7 @@ func validateSchemaRegistryInterfacesWithMetadata(schema SchemaRegistry, metadat
 	return nil
 }
 
-func validateToolInterfaceRef(canonical, mode string, ref *InterfaceRefSpec, interfaces InterfaceRegistry) error {
+func validateToolInterfaceRef(canonical, mode string, ref *contract.InterfaceRefSpec, interfaces InterfaceRegistry) error {
 	if ref == nil {
 		return fmt.Errorf("schema tool %s with interface mode %s has no interface_ref", canonical, mode)
 	}

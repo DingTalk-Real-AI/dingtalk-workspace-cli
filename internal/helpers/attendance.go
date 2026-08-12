@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -512,6 +514,20 @@ func readGlobalSettingSaveFlagValue(cmd *cobra.Command, spec globalSettingSaveFl
 }
 
 func newAttendanceCommand() *cobra.Command {
+	// Product-level Agent routing Decl (migrated from selection/attendance.json
+	// products.attendance). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "attendance",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "查询考勤记录、排班、班次、考勤组、审批、报表、个人规则和假期，并执行经确认的考勤配置变更。",
+			UseWhen: []string{
+				"用户要查询或管理钉钉考勤数据、规则、排班、考勤组、审批表单或假期余额。",
+			},
+			AvoidWhen: []string{
+				"用户只需处理普通日历日程、非考勤类活动签到或通用审批流状态，而不是钉钉考勤业务。",
+			},
+		},
+	})
 	root := &cobra.Command{
 		Use:   "attendance",
 		Short: "考勤打卡 / 排班 / 统计",
@@ -556,6 +572,43 @@ func newAttendanceCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceRecordGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "get_user_attendance_record",
+				CanonicalPath:  "attendance.get_user_attendance_record",
+				CLIPath:        "attendance record get",
+				PrimaryCLIPath: "attendance record get",
+			},
+			Description: "查询个人考勤详情",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "attendance", RPCName: "get_user_attendance_record"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询个人考勤详情",
+				UseWhen:      []string{"需要查询指定用户某一天的考勤详情（打卡、班次、考勤组、工时、加班等，受权限限制）时"},
+				AvoidWhen: []string{
+					"要统计摘要时改用 summary",
+					"要改打卡结果时改用 boss-check",
+				},
+				Examples: []string{
+					"dws attendance record get --user 011769261608 --date 2026-03-08",
+					"dws attendance record get --user USER_ID --date 2026-03-08",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "user", Property: "userId", Required: boolPtr(true)},
+				{Name: "date", Property: "workDate", Required: boolPtr(true)},
+			},
+		},
+	})
 
 	// ── check ────────────────────────────────────────────────
 
@@ -619,6 +672,37 @@ func newAttendanceCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceCheckResultCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "check_result",
+				CanonicalPath:  "attendance.check_result",
+				CLIPath:        "attendance check result",
+				PrimaryCLIPath: "attendance check result",
+			},
+			Description: "查询打卡结果",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询打卡结果",
+				UseWhen:      []string{"查询员工打卡结果或考勤结果"},
+				AvoidWhen: []string{
+					"查询原始打卡流水时使用 attendance check record",
+					"查询统计摘要时使用 attendance summary",
+					"修改打卡结果时使用 attendance boss-check",
+				},
+				Examples: []string{"dws attendance check result --users userId1,userId2 --start 2026-04-01 --end 2026-04-30 --limit 50"},
+			},
+		},
+	})
 
 	// MCP tool: query_check_record
 	attendanceCheckRecordCmd := &cobra.Command{
@@ -665,6 +749,37 @@ func newAttendanceCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceCheckRecordCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "check_record",
+				CanonicalPath:  "attendance.check_record",
+				CLIPath:        "attendance check record",
+				PrimaryCLIPath: "attendance check record",
+			},
+			Description: "查询打卡记录",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询打卡记录",
+				UseWhen:      []string{"查询员工打卡流水或打卡记录"},
+				AvoidWhen: []string{
+					"查询考勤详情时使用 attendance record get",
+					"查询考勤统计摘要时使用 attendance summary",
+					"修改打卡结果时使用 attendance boss-check",
+				},
+				Examples: []string{"dws attendance check record --users userId1 --start 2026-04-01 --end 2026-04-30"},
+			},
+		},
+	})
 
 	// ── approve ────────────────────────────────────────────────
 
@@ -774,6 +889,40 @@ func newAttendanceCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceApproveListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "approve_list",
+				CanonicalPath:  "attendance.approve_list",
+				CLIPath:        "attendance approve list",
+				PrimaryCLIPath: "attendance approve list",
+			},
+			Description: "查询考勤相关审批单记录",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询考勤相关审批单记录",
+				UseWhen:      []string{"查询补卡、加班、请假、出差外出等考勤审批记录"},
+				AvoidWhen: []string{
+					"需要获取可提交审批的模板/跳转链接时使用 attendance approve templates",
+					"查询实际打卡记录时使用 attendance record get 或 attendance check record",
+					"查询假期余额时使用 attendance vacation balance",
+				},
+				Examples: []string{
+					"dws attendance approve list --users userId1 --types overtime,leave --start 2026-04-01 --end 2026-04-30",
+					"dws attendance approve list --users userId1 --types trip --start 2026-04-01 --end 2026-04-30",
+				},
+			},
+		},
+	})
 
 	// MCP tool: query_at_approve_template
 	attendanceApproveTemplatesCmd := &cobra.Command{
@@ -806,6 +955,40 @@ func newAttendanceCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceApproveTemplatesCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "approve_templates",
+				CanonicalPath:  "attendance.approve_templates",
+				CLIPath:        "attendance approve templates",
+				PrimaryCLIPath: "attendance approve templates",
+			},
+			Description: "查询考勤审批模板和提交入口",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询考勤审批模板和提交入口",
+				UseWhen:      []string{"用户要发起补卡、请假、加班、外出或出差审批前查询可用模板"},
+				AvoidWhen: []string{
+					"查看已存在审批单记录时使用 attendance approve list",
+					"查询考勤记录/统计时使用 attendance record get 或 attendance summary",
+					"配置考勤规则时使用 attendance group/globalsetting/class 相关命令",
+				},
+				Examples: []string{
+					"dws attendance approve templates --type leave",
+					"dws attendance approve templates --type REPAIR_CHECK",
+				},
+			},
+		},
+	})
 
 	// ── shift ────────────────────────────────────────────────
 
@@ -846,6 +1029,42 @@ func newAttendanceCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceShiftListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "batch_get_employee_shifts",
+				CanonicalPath:  "attendance.batch_get_employee_shifts",
+				CLIPath:        "attendance shift list",
+				PrimaryCLIPath: "attendance shift list",
+			},
+			Description: "批量查询员工班次信息",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "attendance", RPCName: "batch_get_employee_shifts"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "批量查询员工班次信息",
+				UseWhen:      []string{"需要批量查询多个员工在日期范围内的考勤班次（userId/workDate/checkType/planCheckTime/isRest）时"},
+				AvoidWhen: []string{
+					"要查实际排班记录时改用 schedule get",
+					"要查班次定义时改用 class search/get",
+					"要查考勤组规则时改用 rules",
+				},
+				Examples: []string{"dws attendance shift list --users userId1,userId2 --start 2026-03-03 --end 2026-03-07"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "users", Property: "userIds", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "start", Property: "fromDateTime", Required: boolPtr(true)},
+				{Name: "end", Property: "toDateTime", Required: boolPtr(true)},
+			},
+		},
+	})
 
 	// ── class ────────────────────────────────────────────────
 
@@ -889,6 +1108,40 @@ func newAttendanceCommand() *cobra.Command {
 			return callMCPToolOnServer("attendance-wukong", "get_class_list", params)
 		},
 	}
+	DeclareLeafMetadata(attendanceClassSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "class_search",
+				CanonicalPath:  "attendance.class_search",
+				CLIPath:        "attendance class search",
+				PrimaryCLIPath: "attendance class search",
+			},
+			Description: "查询班次定义列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询班次定义列表",
+				UseWhen:      []string{"搜索或列出可用班次/班次ID"},
+				AvoidWhen: []string{
+					"已知道班次ID并要看详情时使用 attendance class get",
+					"查询员工排班记录时使用 attendance schedule get",
+					"创建或修改班次定义时使用 attendance class create/update",
+				},
+				Examples: []string{
+					"dws attendance class search",
+					"dws attendance class search --query \"早班\" --filter-type MINE_OWN",
+				},
+			},
+		},
+	})
 
 	// MCP tool: get_class_detail
 	attendanceClassGetCmd := &cobra.Command{
@@ -906,6 +1159,40 @@ func newAttendanceCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceClassGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "class_get",
+				CanonicalPath:  "attendance.class_get",
+				CLIPath:        "attendance class get",
+				PrimaryCLIPath: "attendance class get",
+			},
+			Description: "查询单个班次定义详情",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询单个班次定义详情",
+				UseWhen:      []string{"已取得班次ID，需要查看班次配置"},
+				AvoidWhen: []string{
+					"不知道班次ID时先用 attendance class search",
+					"查询员工排班记录时使用 attendance schedule get",
+					"修改班次定义时使用 attendance class update",
+				},
+				Examples: []string{
+					"dws attendance class get --class-id 1170996821",
+					"dws attendance class get --class-id 1170996821 --format json",
+				},
+			},
+		},
+	})
 
 	// MCP tool: create_class_setting
 	attendanceClassCreateCmd := &cobra.Command{
@@ -977,26 +1264,42 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 			// 自动转换 checkTime："HH:mm" → 毫秒时间戳
 			convertClassCheckTime(classVO)
 
-			// 确认提示（除非 --yes）
-			yes, _ := cmd.Flags().GetBool("yes")
-			if !yes {
-				fmt.Printf("About to create class: %v\n", classVO["name"])
-				fmt.Print("Confirm create? (yes/no): ")
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("create cancelled")
-				}
-			}
-
 			return callMCPToolOnServer("attendance-wukong", "create_class_setting", map[string]any{
 				"TopAtClassVO": classVO,
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceClassCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "class_create",
+				CanonicalPath:  "attendance.class_create",
+				CLIPath:        "attendance class create",
+				PrimaryCLIPath: "attendance class create",
+			},
+			Description: "创建班次定义",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建班次定义",
+				UseWhen:      []string{"需要新增班次及上下班时间规则，且名称与 class-vo 已确认时"},
+				AvoidWhen: []string{
+					"查询已有班次时使用 attendance class search/get",
+					"修改已有班次时使用 attendance class update",
+					"导入员工排班时使用 attendance schedule import",
+				},
+				Examples: []string{"dws attendance class create --name \"早班\" --class-vo '{\"sections\":[{\"times\":[{\"checkType\":\"OnDuty\",\"checkTime\":\"08:00\",\"across\":0},{\"checkType\":\"OffDuty\",\"checkTime\":\"17:00\",\"across\":0}]}]}' --timeout 10"},
+			},
+		},
+	})
 
 	// MCP tool: update_class_setting
 	attendanceClassUpdateCmd := &cobra.Command{
@@ -1070,26 +1373,45 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 			// 自动转换 checkTime："HH:mm" → 毫秒时间戳
 			convertClassCheckTime(classVO)
 
-			// 确认提示（除非 --yes）
-			yes, _ := cmd.Flags().GetBool("yes")
-			if !yes {
-				fmt.Printf("About to update class: %v (classId: %d)\n", classVO["name"], classID)
-				fmt.Print("Confirm update? (yes/no): ")
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("update cancelled")
-				}
-			}
-
 			return callMCPToolOnServer("attendance-wukong", "update_class_setting", map[string]any{
 				"TopAtClassVO": classVO,
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceClassUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "class_update",
+				CanonicalPath:  "attendance.class_update",
+				CLIPath:        "attendance class update",
+				PrimaryCLIPath: "attendance class update",
+			},
+			Description: "更新班次定义",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新班次定义",
+				UseWhen:      []string{"需要修改已有班次的名称、上下班时间或规则，且 classId 与变更内容已确认时"},
+				AvoidWhen: []string{
+					"查询班次详情时使用 attendance class get",
+					"创建新班次时使用 attendance class create",
+					"调整员工排班时使用 attendance schedule import",
+				},
+				Examples: []string{
+					"dws attendance class update --class-id 1170996821 --name \"新早班\" --timeout 10",
+					"dws attendance class update --class-id 1170996821 --class-vo '{\"sections\":[{\"times\":[{\"checkType\":\"OnDuty\",\"checkTime\":\"08:30\",\"across\":0},{\"checkType\":\"OffDuty\",\"checkTime\":\"17:30\",\"across\":0}]}]}' --timeout 10",
+				},
+			},
+		},
+	})
 
 	// ── adjustment-rule ────────────────────────────────────
 
@@ -1112,6 +1434,40 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceAdjustmentGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "adjustment_get",
+				CanonicalPath:  "attendance.adjustment_get",
+				CLIPath:        "attendance adjustment get",
+				PrimaryCLIPath: "attendance adjustment get",
+			},
+			Description: "查询单个补卡规则详情",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询单个补卡规则详情",
+				UseWhen:      []string{"已取得补卡规则ID，需要查看规则详情"},
+				AvoidWhen: []string{
+					"不知道补卡规则ID时先用 attendance adjustment search",
+					"查询加班规则详情时使用 attendance overtime get",
+					"查询补卡审批单记录时使用 attendance approve list",
+				},
+				Examples: []string{
+					"dws attendance adjustment get --adjustment-id 12345",
+					"dws attendance adjustment get --adjustment-id 12345 --format json",
+				},
+			},
+		},
+	})
 
 	// MCP tool: get_adjustment_rule
 	attendanceAdjustmentSearchCmd := &cobra.Command{
@@ -1143,6 +1499,44 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceAdjustmentSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "adjustment_search",
+				CanonicalPath:  "attendance.adjustment_search",
+				CLIPath:        "attendance adjustment search",
+				PrimaryCLIPath: "attendance adjustment search",
+			},
+			Description: "查询补卡规则列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询补卡规则列表",
+				UseWhen:      []string{"需要查看有哪些补卡规则或筛选补卡规则"},
+				AvoidWhen: []string{
+					"已知道补卡规则ID并要看详情时使用 attendance adjustment get",
+					"查询加班规则时使用 attendance overtime search",
+					"查询员工打卡/考勤记录时使用 attendance record get 或 attendance check record",
+				},
+				Examples: []string{
+					"dws attendance adjustment search --page 1 --limit 20",
+					"dws attendance adjustment search --query \"标准\" --page 1 --limit 50",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "limit", Required: boolPtr(false)},
+				{Name: "page", Required: boolPtr(false)},
+			},
+		},
+	})
 
 	// ── overtime-rule ──────────────────────────────────────
 
@@ -1165,6 +1559,40 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceOvertimeGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "overtime_get",
+				CanonicalPath:  "attendance.overtime_get",
+				CLIPath:        "attendance overtime get",
+				PrimaryCLIPath: "attendance overtime get",
+			},
+			Description: "查询单个加班规则详情",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询单个加班规则详情",
+				UseWhen:      []string{"已取得加班规则ID，需要查看规则详情"},
+				AvoidWhen: []string{
+					"不知道加班规则ID时先用 attendance overtime search",
+					"查询补卡规则详情时使用 attendance adjustment get",
+					"查询员工班次时使用 attendance shift list",
+				},
+				Examples: []string{
+					"dws attendance overtime get --overtime-id 12345",
+					"dws attendance overtime get --overtime-id 12345 --format json",
+				},
+			},
+		},
+	})
 
 	// MCP tool: get_overtime_rule
 	attendanceOvertimeSearchCmd := &cobra.Command{
@@ -1196,6 +1624,44 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceOvertimeSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "overtime_search",
+				CanonicalPath:  "attendance.overtime_search",
+				CLIPath:        "attendance overtime search",
+				PrimaryCLIPath: "attendance overtime search",
+			},
+			Description: "查询加班规则列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询加班规则列表",
+				UseWhen:      []string{"需要查看可用加班规则或筛选加班规则"},
+				AvoidWhen: []string{
+					"已知道加班规则ID并要看详情时使用 attendance overtime get",
+					"查询补卡规则时使用 attendance adjustment search",
+					"查询加班审批单记录时使用 attendance approve list",
+				},
+				Examples: []string{
+					"dws attendance overtime search --page 1 --limit 20",
+					"dws attendance overtime search --query \"节假日\" --page 1 --limit 50",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "limit", Required: boolPtr(false)},
+				{Name: "page", Required: boolPtr(false)},
+			},
+		},
+	})
 
 	// ── group ──────────────────────────────────────────────
 
@@ -1261,6 +1727,44 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceGroupSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "group_search",
+				CanonicalPath:  "attendance.group_search",
+				CLIPath:        "attendance group search",
+				PrimaryCLIPath: "attendance group search",
+			},
+			Description: "查询考勤组列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询考勤组列表",
+				UseWhen:      []string{"按权限或条件查看考勤组简要信息"},
+				AvoidWhen: []string{
+					"已知道考勤组ID并要看详情时使用 attendance group get",
+					"只需要部分字段时使用 attendance group filtered-get",
+					"创建/修改考勤组时使用 attendance group create/update",
+				},
+				Examples: []string{
+					"dws attendance group search --query \"<考勤组名称>\" --type TURN --format json",
+					"dws attendance group search --query \"研发组\" --type TURN --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "limit", Required: boolPtr(false)},
+				{Name: "page", Required: boolPtr(false)},
+			},
+		},
+	})
 
 	// MCP tool: get_group_detail
 	attendanceGroupGetCmd := &cobra.Command{
@@ -1279,6 +1783,37 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceGroupGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "group_get",
+				CanonicalPath:  "attendance.group_get",
+				CLIPath:        "attendance group get",
+				PrimaryCLIPath: "attendance group get",
+			},
+			Description: "查询考勤组完整详情",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询考勤组完整详情",
+				UseWhen:      []string{"已取得考勤组ID，需要查看完整配置"},
+				AvoidWhen: []string{
+					"不知道考勤组ID时先用 attendance group search",
+					"只需要成员/地址等子集时使用 attendance group filtered-get",
+					"修改考勤组配置时使用 attendance group update",
+				},
+				Examples: []string{"dws attendance group get --group-id <groupId> --format json"},
+			},
+		},
+	})
 
 	// MCP tool: get_group_filtered_detail
 	attendanceGroupFilteredGetCmd := &cobra.Command{
@@ -1313,6 +1848,37 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceGroupFilteredGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "group_filtered_get",
+				CanonicalPath:  "attendance.group_filtered_get",
+				CLIPath:        "attendance group filtered-get",
+				PrimaryCLIPath: "attendance group filtered-get",
+			},
+			Description: "查询考勤组指定字段子集",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询考勤组指定字段子集",
+				UseWhen:      []string{"只需要考勤组成员、打卡地址、蓝牙等部分字段，减少返回体积"},
+				AvoidWhen: []string{
+					"需要完整考勤组配置时使用 attendance group get",
+					"不知道考勤组ID时先用 attendance group search",
+					"需要修改成员时使用 attendance group update-members",
+				},
+				Examples: []string{"dws attendance group filtered-get --group-id <groupId> --member --format json"},
+			},
+		},
+	})
 
 	// MCP tool: update_group_member
 	attendanceGroupUpdateMembersCmd := &cobra.Command{
@@ -1362,27 +1928,46 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 				return fmt.Errorf("至少需要指定一个变更项：--add-users / --remove-users / --add-extra-users / --remove-extra-users / --add-depts / --remove-depts")
 			}
 
-			// 确认提示（除非 --yes）
-			yes, _ := cmd.Flags().GetBool("yes")
-			if !yes {
-				fmt.Printf("About to update members of attendance group: %d\n", groupID)
-				fmt.Print("Confirm update? (yes/no): ")
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("update cancelled")
-				}
-			}
-
 			return callMCPToolOnServer("attendance-wukong", "update_group_member", map[string]any{
 				"groupId":     groupID,
 				"updateParam": updateParam,
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceGroupUpdateMembersCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "group_update_members",
+				CanonicalPath:  "attendance.group_update_members",
+				CLIPath:        "attendance group update-members",
+				PrimaryCLIPath: "attendance group update-members",
+			},
+			Description: "增删考勤组成员",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "增删考勤组成员",
+				UseWhen:      []string{"需要向考勤组添加或移除成员，且 groupId 与成员列表已确认时"},
+				AvoidWhen: []string{
+					"只查询成员信息时使用 attendance group filtered-get 或 group get",
+					"修改考勤组规则配置时使用 attendance group update",
+					"创建新考勤组时使用 attendance group create",
+				},
+				Examples: []string{
+					"dws attendance group update-members --group-id 123456 --add-users userId1,userId2",
+					"dws attendance group update-members --group-id 123456 --remove-users userId1",
+				},
+			},
+		},
+	})
 
 	// MCP tool: create_group_setting
 	attendanceGroupCreateCmd := &cobra.Command{
@@ -1570,21 +2155,6 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 				}
 			}
 
-			// 确认提示（除非 --yes）
-			yes, _ := cmd.Flags().GetBool("yes")
-			if !yes {
-				fmt.Printf("About to create attendance group: %v (type: %v)\n", groupVO["name"], groupVO["type"])
-				fmt.Print("Confirm create? (yes/no): ")
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("create cancelled")
-				}
-			}
-
 			// 调用创建接口并拿到响应文本，DryRun 走原有路径（预览参数不调用）。
 			payload := map[string]any{"groupVO": groupVO}
 			if deps.Caller.DryRun() {
@@ -1616,6 +2186,40 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 			return nil
 		},
 	}
+	DeclareLeafMetadata(attendanceGroupCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "group_create",
+				CanonicalPath:  "attendance.group_create",
+				CLIPath:        "attendance group create",
+				PrimaryCLIPath: "attendance group create",
+			},
+			Description: "创建考勤组",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建考勤组",
+				UseWhen:      []string{"需要新建考勤组并配置规则，且名称、类型与 group-vo 已确认时"},
+				AvoidWhen: []string{
+					"查询已有考勤组时使用 attendance group search/get",
+					"修改已有考勤组时使用 attendance group update",
+					"仅修改成员时使用 attendance group update-members",
+				},
+				Examples: []string{
+					"dws attendance group create --name \"研发考勤组\" --type FIXED --group-vo '{\"defaultClassId\":1170996821,\"workDayClassList\":[0,1170996821,0,0,0,0,0]}' --timeout 10",
+					"dws attendance group create --name \"自由工时分组\" --type NONE --timeout 10",
+				},
+			},
+		},
+	})
 
 	// MCP tool: update_group
 	attendanceGroupUpdateCmd := &cobra.Command{
@@ -1794,27 +2398,46 @@ CLI 会在未传筛选条件时补齐默认查询字段，在未传分页参数�
 			// 服务端要求 groupVO 中必须包含 id 字段
 			groupVO["id"] = groupID
 
-			// 确认提示（除非 --yes）
-			yes, _ := cmd.Flags().GetBool("yes")
-			if !yes {
-				fmt.Printf("About to update attendance group: %d\n", groupID)
-				fmt.Print("Confirm update? (yes/no): ")
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("update cancelled")
-				}
-			}
-
 			return callMCPToolOnServer("attendance-wukong", "update_group_setting", map[string]any{
 				"groupId": groupID,
 				"groupVO": groupVO,
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceGroupUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "group_update",
+				CanonicalPath:  "attendance.group_update",
+				CLIPath:        "attendance group update",
+				PrimaryCLIPath: "attendance group update",
+			},
+			Description: "更新考勤组配置",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新考勤组配置",
+				UseWhen:      []string{"需要修改已有考勤组的规则、班次、位置或范围，且 groupId 与变更内容已确认时"},
+				AvoidWhen: []string{
+					"查询考勤组详情时使用 attendance group get",
+					"只调整成员时使用 attendance group update-members",
+					"创建新考勤组时使用 attendance group create",
+				},
+				Examples: []string{
+					"dws attendance group update --group-id 123456 --name \"研发考勤组\" --timeout 10",
+					"dws attendance group update --group-id 123456 --owner userId1 --timeout 10",
+				},
+			},
+		},
+	})
 
 	// ── summary ──────────────────────────────────────────────
 	attendanceSummaryCmd := &cobra.Command{
@@ -1845,6 +2468,44 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			return callMCPToolOnServer("attendance-wukong", "get_user_attendance_summary", vo)
 		},
 	}
+	DeclareLeafMetadata(attendanceSummaryCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "get_attendance_summary",
+				CanonicalPath:  "attendance.get_attendance_summary",
+				CLIPath:        "attendance summary",
+				PrimaryCLIPath: "attendance summary",
+			},
+			Description: "查询个人考勤统计摘要",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the CLI calls attendance-wukong/get_user_attendance_summary, which is absent from the pinned MCP metadata snapshot; the incompatible attendance/get_attendance_summary contract must not be advertised.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询个人考勤统计摘要",
+				UseWhen:      []string{"需要查看员工出勤/异常/请假等考勤统计摘要时"},
+				AvoidWhen: []string{
+					"要看单日明细时改用 record get",
+					"要看打卡流水时改用 check record",
+				},
+				Examples: []string{
+					"dws attendance summary --user USER_ID --date 2026-03-12 --stats-type week",
+					"dws attendance summary --user USER_ID --date \"2026-03-12 15:00:00\" --stats-type month",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "user", Required: boolPtr(true)},
+				{Name: "date", Required: boolPtr(true)},
+				{Name: "stats-type", Required: boolPtr(true)},
+			},
+		},
+	})
 
 	// ── rules ────────────────────────────────────────────────
 
@@ -1875,6 +2536,42 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceRulesCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "query_attendance_group_or_rules",
+				CanonicalPath:  "attendance.query_attendance_group_or_rules",
+				CLIPath:        "attendance rules",
+				PrimaryCLIPath: "attendance rules",
+			},
+			Description: "查询考勤组与考勤规则",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "attendance", RPCName: "query_attendance_group_or_rules"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询考勤组与考勤规则",
+				UseWhen:      []string{"需要回答「我属于哪个考勤组/打卡范围/弹性工时怎么算」等规则概览问题时"},
+				AvoidWhen: []string{
+					"要完整考勤组配置时改用 group get",
+					"要补卡/加班规则列表时改用 adjustment/overtime search",
+				},
+				Examples: []string{
+					"dws attendance rules --date <今天日期> --format json",
+					"dws attendance rules --date 2026-03-14",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "date", Required: boolPtr(true)},
+			},
+		},
+	})
 
 	// ── selfsetting ─────────────────────────────────────────────
 	attendanceSelfSettingCmd := &cobra.Command{
@@ -1984,6 +2681,40 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceSelfSettingGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "selfsetting_get",
+				CanonicalPath:  "attendance.selfsetting_get",
+				CLIPath:        "attendance selfsetting get",
+				PrimaryCLIPath: "attendance selfsetting get",
+			},
+			Description: "查询个人考勤设置",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询个人考勤设置",
+				UseWhen:      []string{"查看某个员工的个人打卡提醒、极速打卡、结果通知等设置"},
+				AvoidWhen: []string{
+					"修改个人设置时使用 attendance selfsetting save",
+					"查询企业全局设置时使用 attendance globalsetting get",
+					"查询个人考勤记录时使用 attendance record get",
+				},
+				Examples: []string{
+					"dws attendance selfsetting get --setting-scene checkRemind --user <USER_ID> --format json",
+					"dws attendance selfsetting get --setting-scene fastCheck --user <USER_ID> --format json",
+				},
+			},
+		},
+	})
 
 	// MCP tool: save_self_setting
 	attendanceSelfSettingSaveCmd := &cobra.Command{
@@ -2055,26 +2786,45 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				return err
 			}
 
-			// 确认提示（除非 --yes）
-			yes, _ := cmd.Flags().GetBool("yes")
-			if !yes {
-				fmt.Printf("About to save self setting [%s] for user: %s\n", settingScene, userID)
-				fmt.Print("Confirm save? (yes/no): ")
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("save cancelled")
-				}
-			}
-
 			return callMCPToolOnServer("attendance-wukong", "save_self_setting", map[string]any{
 				"RuleMcpSaveSelfSettingRequest": request,
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceSelfSettingSaveCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "selfsetting_save",
+				CanonicalPath:  "attendance.selfsetting_save",
+				CLIPath:        "attendance selfsetting save",
+				PrimaryCLIPath: "attendance selfsetting save",
+			},
+			Description: "更新个人考勤设置",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新个人考勤设置",
+				UseWhen:      []string{"需要修改员工个人打卡提醒、极速打卡或结果通知设置，且 scene 与变更值已确认时"},
+				AvoidWhen: []string{
+					"只查看个人设置时使用 attendance selfsetting get",
+					"修改企业全局设置时使用 attendance globalsetting save",
+					"查询考勤记录时使用 attendance record get",
+				},
+				Examples: []string{
+					"dws attendance selfsetting save --setting-scene checkResultNotify --user <USER_ID> --check-result-msg 1 --format json",
+					"dws attendance selfsetting save --setting-scene fastCheck --user <USER_ID> --onduty-check-type 3 --voice-remind-switch=true --format json",
+				},
+			},
+		},
+	})
 
 	// ── globalsetting ────────────────────────────────────────
 	attendanceGlobalSettingCmd := &cobra.Command{
@@ -2120,6 +2870,40 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceGlobalSettingGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "globalsetting_get",
+				CanonicalPath:  "attendance.globalsetting_get",
+				CLIPath:        "attendance globalsetting get",
+				PrimaryCLIPath: "attendance globalsetting get",
+			},
+			Description: "查询企业全局考勤设置",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询企业全局考勤设置",
+				UseWhen:      []string{"管理员查看企业级打卡提醒、极速打卡等全局设置"},
+				AvoidWhen: []string{
+					"修改全局设置时使用 attendance globalsetting save",
+					"查看个人设置时使用 attendance selfsetting get",
+					"查看考勤组规则时使用 attendance group get/rules",
+				},
+				Examples: []string{
+					"dws attendance globalsetting get --scope 企业 --setting-scene checkRemind --format json",
+					"dws attendance globalsetting get --scope 全公司 --setting-scene bossAttendStatNotify --format json",
+				},
+			},
+		},
+	})
 
 	// MCP tool: save_global_setting
 	attendanceGlobalSettingSaveCmd := &cobra.Command{
@@ -2173,25 +2957,45 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				return err
 			}
 
-			yes, _ := cmd.Flags().GetBool("yes")
-			if !yes {
-				fmt.Printf("About to save global setting [%s]\n", settingScene)
-				fmt.Print("Confirm save? (yes/no): ")
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("save cancelled")
-				}
-			}
-
 			return callMCPToolOnServer("attendance-wukong", "save_global_setting", map[string]any{
 				"RuleMcpSaveGlobalSettingRequest": request,
 			})
 		},
 	}
+	DeclareLeafMetadata(attendanceGlobalSettingSaveCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "globalsetting_save",
+				CanonicalPath:  "attendance.globalsetting_save",
+				CLIPath:        "attendance globalsetting save",
+				PrimaryCLIPath: "attendance globalsetting save",
+			},
+			Description: "更新企业全局考勤设置",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新企业全局考勤设置",
+				UseWhen:      []string{"管理员明确要求修改企业级打卡提醒、极速打卡等全局设置，且 scope/scene 与变更值已确认时"},
+				AvoidWhen: []string{
+					"只查看全局设置时使用 attendance globalsetting get",
+					"修改个人设置时使用 attendance selfsetting save",
+					"修改考勤组配置时使用 attendance group update",
+				},
+				Examples: []string{
+					"dws attendance globalsetting save --scope 企业 --setting-scene checkRemind --check-remind-corp=true",
+					"dws attendance globalsetting save --scope 全公司 --setting-scene fastCheck --fast-check-corp=false",
+				},
+			},
+		},
+	})
 
 	// ── report ──────────────────────────────────────────────
 
@@ -2218,6 +3022,37 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			return callMCPToolOnServer("attendance-wukong", "get_report_columns", map[string]any{})
 		},
 	}
+	DeclareLeafMetadata(reportColumnsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "report_columns",
+				CanonicalPath:  "attendance.report_columns",
+				CLIPath:        "attendance report columns",
+				PrimaryCLIPath: "attendance report columns",
+			},
+			Description: "查询可查看的考勤报表字段",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询可查看的考勤报表字段",
+				UseWhen:      []string{"查看操作者有权限查询的考勤报表字段"},
+				AvoidWhen: []string{
+					"查询报表数据时使用 attendance report query-data",
+					"查询假期数据时使用 attendance report query-leave",
+					"查询个人考勤明细时使用 attendance record get",
+				},
+				Examples: []string{"dws attendance report columns"},
+			},
+		},
+	})
 
 	// MCP tool: get_report_columns_value
 	reportQueryDataCmd := &cobra.Command{
@@ -2267,6 +3102,40 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(reportQueryDataCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "report_query_data",
+				CanonicalPath:  "attendance.report_query_data",
+				CLIPath:        "attendance report query-data",
+				PrimaryCLIPath: "attendance report query-data",
+			},
+			Description: "查询考勤报表数据",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询考勤报表数据",
+				UseWhen:      []string{"按字段查询考勤报表数据并进行权限过滤"},
+				AvoidWhen: []string{
+					"查询可用字段时先用 attendance report columns",
+					"查询假期数据时使用 attendance report query-leave",
+					"查询个人单日明细时使用 attendance record get",
+				},
+				Examples: []string{
+					"dws attendance report query-data --users userId1,userId2 --columns 1001,1002 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\"",
+					"dws attendance report query-data --users userId1,userId2 --columns 1001,1002 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\" --format json",
+				},
+			},
+		},
+	})
 
 	// MCP tool: get_leave_time_by_leave_names
 	reportQueryLeaveCmd := &cobra.Command{
@@ -2312,6 +3181,40 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(reportQueryLeaveCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "report_query_leave",
+				CanonicalPath:  "attendance.report_query_leave",
+				CLIPath:        "attendance report query-leave",
+				PrimaryCLIPath: "attendance report query-leave",
+			},
+			Description: "查询假期报表数据",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询假期报表数据",
+				UseWhen:      []string{"查询用户假期/请假相关报表数据"},
+				AvoidWhen: []string{
+					"查询假期余额时使用 attendance vacation balance",
+					"查询假期余额变更记录时使用 attendance vacation records",
+					"查询通用考勤报表时使用 attendance report query-data",
+				},
+				Examples: []string{
+					"dws attendance report query-leave --users userId1,userId2 --leave-names 年假,病假 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\"",
+					"dws attendance report query-leave --users userId1,userId2 --leave-names 年假,病假 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\" --format json",
+				},
+			},
+		},
+	})
 
 	// ── 假期 vacation ───────────────────────────────────────────────
 
@@ -2344,6 +3247,37 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(vacationTypesCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "vacation_types",
+				CanonicalPath:  "attendance.vacation_types",
+				CLIPath:        "attendance vacation types",
+				PrimaryCLIPath: "attendance vacation types",
+			},
+			Description: "查询可用假期类型",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询可用假期类型",
+				UseWhen:      []string{"查看当前用户可用的假期规则/假期类型列表"},
+				AvoidWhen: []string{
+					"查询员工假期余额时使用 attendance vacation balance",
+					"修改假期规则时使用 attendance vacation update-type",
+					"修改假期余额时使用 attendance vacation save-balance",
+				},
+				Examples: []string{"dws attendance vacation types"},
+			},
+		},
+	})
 
 	// ── 假期余额 balance ───────────────────────────────────────
 
@@ -2376,6 +3310,40 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(vacationBalanceCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "vacation_balance",
+				CanonicalPath:  "attendance.vacation_balance",
+				CLIPath:        "attendance vacation balance",
+				PrimaryCLIPath: "attendance vacation balance",
+			},
+			Description: "查询员工假期余额",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询员工假期余额",
+				UseWhen:      []string{"查询指定员工的年假、调休等假期余额"},
+				AvoidWhen: []string{
+					"查询假期余额变更明细时使用 attendance vacation records",
+					"查询假期类型时使用 attendance vacation types",
+					"修改余额时使用 attendance vacation save-balance",
+				},
+				Examples: []string{
+					"dws attendance vacation balance --users userId1,userId2 --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+					"dws attendance vacation balance --users userId1,userId2 --leave-code <假期类型code> --format json",
+				},
+			},
+		},
+	})
 
 	// ── 假期记录 records ───────────────────────────────────────
 
@@ -2412,6 +3380,40 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(vacationRecordsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "vacation_records",
+				CanonicalPath:  "attendance.vacation_records",
+				CLIPath:        "attendance vacation records",
+				PrimaryCLIPath: "attendance vacation records",
+			},
+			Description: "查询假期余额变更记录",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询假期余额变更记录",
+				UseWhen:      []string{"查询员工假期余额的增减流水或变更历史"},
+				AvoidWhen: []string{
+					"只看当前余额时使用 attendance vacation balance",
+					"查询假期类型时使用 attendance vacation types",
+					"修改余额时使用 attendance vacation save-balance",
+				},
+				Examples: []string{
+					"dws attendance vacation records --user USER_ID --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --start 2026-04-01 --end 2026-04-22",
+					"dws attendance vacation records --user USER_ID --leave-code <假期类型code> --start 2026-04-01 --end 2026-04-22 --format json",
+				},
+			},
+		},
+	})
 
 	// ── 假期规则更新 update-type ─────────────────────────────────────────
 
@@ -2540,40 +3542,6 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				}
 			}
 
-			// 确认提示（除非 --user-say-yes）
-			yes := boolFlagOrFallback(cmd, "user-say-yes", "yes")
-			if !yes {
-				leaveCode := mustGetFlag(cmd, "leave-code")
-				fmt.Printf("即将更新假期规则：\n")
-				fmt.Printf("  编码：%s\n", leaveCode)
-				if cmd.Flags().Changed("name") {
-					fmt.Printf("  名称：%s\n", mustGetFlag(cmd, "name"))
-				}
-				if cmd.Flags().Changed("unit") {
-					fmt.Printf("  单位：%s\n", mustGetFlag(cmd, "unit"))
-				}
-				if cmd.Flags().Changed("paid") {
-					paid, _ := cmd.Flags().GetBool("paid")
-					fmt.Printf("  带薪：%v\n", paid)
-				}
-				if cmd.Flags().Changed("visibility-rules") {
-					fmt.Printf("  适用范围：%s\n", mustGetFlag(cmd, "visibility-rules"))
-					if visibilityRulesSentinel {
-						fmt.Println("    → 命中哨兵，将改为「全公司可见」（清空可见范围）")
-					}
-				}
-				fmt.Print("确认更新？: ")
-
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("update cancelled")
-				}
-			}
-
 			// 构建 MCP 请求参数
 			req := map[string]any{
 				"leaveCode": mustGetFlag(cmd, "leave-code"),
@@ -2614,6 +3582,40 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(vacationUpdateTypeCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "vacation_update_type",
+				CanonicalPath:  "attendance.vacation_update_type",
+				CLIPath:        "attendance vacation update-type",
+				PrimaryCLIPath: "attendance vacation update-type",
+			},
+			Description: "更新假期类型规则",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新假期类型规则",
+				UseWhen:      []string{"管理员明确要求修改已有假期规则或假期类型配置，且 leave-code 与变更字段已确认时"},
+				AvoidWhen: []string{
+					"只查询假期类型时使用 attendance vacation types",
+					"调整员工假期余额时使用 attendance vacation save-balance",
+					"查询假期报表时使用 attendance report query-leave",
+				},
+				Examples: []string{
+					"dws attendance vacation update-type --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --name \"事假（修改版）\"",
+					"dws attendance vacation update-type --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --unit hour --per-hours 8",
+				},
+			},
+		},
+	})
 
 	// ── 假期余额保存 save-balance ─────────────────────────────────────────
 
@@ -2645,38 +3647,6 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "target", "leave-code", "num", "reason"); err != nil {
 				return err
-			}
-
-			// 确认提示（除非 --user-say-yes）
-			yes := boolFlagOrFallback(cmd, "user-say-yes", "yes")
-			if !yes {
-				targetUser := mustGetFlag(cmd, "target")
-				leaveCode := mustGetFlag(cmd, "leave-code")
-				numStr := mustGetFlag(cmd, "num")
-				reason := mustGetFlag(cmd, "reason")
-
-				fmt.Printf("即将设置员工假期余额：\n")
-				fmt.Printf("  目标员工：%s\n", targetUser)
-				fmt.Printf("  假期编码：%s\n", leaveCode)
-				fmt.Printf("  余额数量：%s\n", numStr)
-				fmt.Printf("  变更原因：%s\n", reason)
-
-				startStr := mustGetFlag(cmd, "start")
-				endStr := mustGetFlag(cmd, "end")
-				if startStr != "" && endStr != "" {
-					fmt.Printf("  有效期：%s 至 %s\n", startStr, endStr)
-				}
-
-				fmt.Print("确认设置？: ")
-
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("save cancelled")
-				}
 			}
 
 			// 构建 MCP 请求参数
@@ -2716,6 +3686,40 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(vacationSaveBalanceCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "vacation_save_balance",
+				CanonicalPath:  "attendance.vacation_save_balance",
+				CLIPath:        "attendance vacation save-balance",
+				PrimaryCLIPath: "attendance vacation save-balance",
+			},
+			Description: "调整员工假期余额",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "调整员工假期余额",
+				UseWhen:      []string{"管理员明确要求设置指定员工假期余额（SET 替换而非累加），且 target/leave-code/num/reason 已确认时"},
+				AvoidWhen: []string{
+					"只查询余额时使用 attendance vacation balance",
+					"查询变更流水时使用 attendance vacation records",
+					"修改假期类型/规则时使用 attendance vacation update-type",
+				},
+				Examples: []string{
+					"dws attendance vacation save-balance --target user001 --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --num 8 --reason \"年度发放\"",
+					"dws attendance vacation save-balance --target user001 --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --num 8 --reason \"年度发放\" --start 2024-01-01 --end 2024-12-31",
+				},
+			},
+		},
+	})
 
 	// record
 	attendanceRecordGetCmd.Flags().String("user", "", "钉钉用户 ID (必填)")
@@ -2835,21 +3839,6 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				}
 			}
 
-			// 确认提示（除非 --user-say-yes）
-			yes := boolFlagOrFallback(cmd, "user-say-yes", "yes")
-			if !yes {
-				fmt.Printf("About to import %d schedule(s) to attendance group: %s\n", len(scheduleVOS), groupID)
-				fmt.Print("Confirm import? (yes/no): ")
-				var answer string
-				if _, err := fmt.Scanln(&answer); err != nil {
-					return fmt.Errorf("failed to read confirmation: %w", err)
-				}
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("import cancelled")
-				}
-			}
-
 			// 转换 groupId 为 int64
 			groupIDInt, err := strconv.ParseInt(groupID, 10, 64)
 			if err != nil {
@@ -2867,6 +3856,37 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(scheduleImportCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "schedule_import",
+				CanonicalPath:  "attendance.schedule_import",
+				CLIPath:        "attendance schedule import",
+				PrimaryCLIPath: "attendance schedule import",
+			},
+			Description: "导入排班制考勤组排班记录",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "导入排班制考勤组排班记录",
+				UseWhen:      []string{"需要向排班制考勤组批量导入或覆盖员工排班，且 groupId 与 scheduleVOS 已确认时"},
+				AvoidWhen: []string{
+					"仅查看排班时使用 attendance schedule get 或 attendance shift list",
+					"查询班次定义时使用 attendance class search/get",
+					"不确定 groupId/classId/workDate 时先查询考勤组和班次",
+				},
+				Examples: []string{"dws attendance schedule import --groupId 123456 --scheduleVOS '[{\"userId\":\"user001\",\"workDate\":\"2026-04-22 09:00:00\",\"classId\":123,\"isRest\":\"N\"}]'"},
+			},
+		},
+	})
 
 	scheduleImportCmd.Flags().String("groupId", "", "考勤组ID（必填）")
 	scheduleImportCmd.Flags().String("group-id", "", "考勤组ID（--groupId 的别名）")
@@ -2930,6 +3950,37 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(scheduleGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "schedule_get",
+				CanonicalPath:  "attendance.schedule_get",
+				CLIPath:        "attendance schedule get",
+				PrimaryCLIPath: "attendance schedule get",
+			},
+			Description: "查询员工排班记录",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询员工排班记录",
+				UseWhen:      []string{"查询指定员工在日期范围内的排班记录"},
+				AvoidWhen: []string{
+					"查询班次定义时使用 attendance class get/search",
+					"批量查询员工班次结果时使用 attendance shift list",
+					"导入或修改排班时使用 attendance schedule import",
+				},
+				Examples: []string{"dws attendance schedule get --userIdList 03642229451220076 --workDateBegin 2026-05-13 --workDateEnd 2026-05-13 -f json"},
+			},
+		},
+	})
 
 	scheduleGetCmd.Flags().String("users", "", "用户ID列表，逗号分隔（必填）")
 	scheduleGetCmd.Flags().String("userIdList", "", "用户ID列表（--users 的别名）")
@@ -3230,6 +4281,40 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(checkinRecordsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "checkin_records",
+				CanonicalPath:  "attendance.checkin_records",
+				CLIPath:        "attendance checkin records",
+				PrimaryCLIPath: "attendance checkin records",
+			},
+			Description: "查询打卡流水记录",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询打卡流水记录",
+				UseWhen:      []string{"查询员工打卡流水、定位或打卡时间记录"},
+				AvoidWhen: []string{
+					"查询考勤汇总时使用 attendance summary",
+					"查询班次/排班时使用 attendance shift list 或 schedule get",
+					"修改打卡记录时使用 attendance boss-check",
+				},
+				Examples: []string{
+					"dws attendance checkin records --operator-corp-id corp001 --operator-staff-id op001 --staff-ids user001,user002 --start \"2026-04-01 00:00:00\" --end \"2026-04-07 00:00:00\"",
+					"dws attendance checkin records --operator-corp-id corp001 --operator-staff-id op001 --staff-ids user001,user002 --start \"2026-04-01 00:00:00\" --end \"2026-04-07 00:00:00\" --format json",
+				},
+			},
+		},
+	})
 
 	checkinRecordsCmd.Flags().String("operator-corp-id", "", "操作者企业 ID（必填）")
 	checkinRecordsCmd.Flags().String("operator-staff-id", "", "操作者员工 ID（必填）")
@@ -3293,37 +4378,6 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 				return fmt.Errorf("--plan-id 和 --result-id 至少传一个")
 			}
 
-			// 确认提示（除非 --user-say-yes）
-			yes, _ := cmd.Flags().GetBool("user-say-yes")
-			if !yes {
-				fmt.Printf("即将 BOSS 改签：\n")
-				if resultID != "" {
-					fmt.Printf("  打卡结果ID：%s\n", resultID)
-				} else {
-					fmt.Printf("  排班ID：%s\n", planID)
-				}
-				if cmd.Flags().Changed("time") {
-					fmt.Printf("  新打卡时间：%s\n", mustGetFlag(cmd, "time"))
-				}
-				if cmd.Flags().Changed("result") {
-					fmt.Printf("  新打卡结果：%s\n", mustGetFlag(cmd, "result"))
-				}
-				if cmd.Flags().Changed("absent-min") {
-					absentMin, _ := cmd.Flags().GetInt("absent-min")
-					fmt.Printf("  缺勤时长：%d 分钟\n", absentMin)
-				}
-				if cmd.Flags().Changed("remark") {
-					fmt.Printf("  备注：%s\n", mustGetFlag(cmd, "remark"))
-				}
-				fmt.Print("是否确认执行？: ")
-				var answer string
-				fmt.Scanln(&answer)
-				answer = strings.ToLower(strings.TrimSpace(answer))
-				if answer != "yes" && answer != "y" {
-					return fmt.Errorf("操作取消")
-				}
-			}
-
 			// 构建 MCP 调用参数
 			req := map[string]any{}
 
@@ -3354,6 +4408,43 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(bossCheckCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "attendance",
+				Name:           "boss_check",
+				CanonicalPath:  "attendance.boss_check",
+				CLIPath:        "attendance boss-check",
+				PrimaryCLIPath: "attendance boss-check",
+			},
+			Description: "管理员修正员工打卡结果",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "管理员修正员工打卡结果",
+				UseWhen:      []string{"管理员明确要求修正员工打卡时间或打卡结果，且已确认 planId/resultId 与变更内容时"},
+				AvoidWhen: []string{
+					"只查询打卡记录时使用 attendance check record/check result",
+					"查询考勤统计时使用 attendance summary",
+					"用户尚未确认改签目标与结果时不要执行",
+				},
+				Examples: []string{
+					"dws attendance boss-check --plan-id 123456 --time \"2025-04-21 08:30\"",
+					"dws attendance boss-check --result-id 789012 --result Normal",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "plan-id", Required: boolPtr(true)},
+			},
+		},
+	})
 
 	bossCheckCmd.Flags().String("plan-id", "", "排班ID（与 --result-id 二选一）")
 	bossCheckCmd.Flags().String("result-id", "", "打卡结果ID（与 --plan-id 二选一，优先使用）")

@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -78,9 +79,7 @@ func installRejectedTokenHookStore(t *testing.T, data TokenData) *rejectedTokenH
 func installOAuthRefreshStub(t *testing.T, fn func(*OAuthProvider, context.Context, *TokenData) (*TokenData, error)) {
 	t.Helper()
 	resetRejectedTokenRefreshCoordinator(t)
-	previous := oauthRefreshToken
-	oauthRefreshToken = fn
-	t.Cleanup(func() { oauthRefreshToken = previous })
+	testseam.Swap(t, &oauthRefreshToken, fn)
 }
 
 func resetRejectedTokenRefreshCoordinator(t *testing.T) {
@@ -121,11 +120,10 @@ func installProfilesAcquireProbe(t *testing.T) <-chan struct{} {
 	t.Helper()
 	previous := profilesAcquireDualLock
 	attempted := make(chan struct{}, 1)
-	profilesAcquireDualLock = func(ctx context.Context, configDir string) (*DualLock, error) {
+	testseam.Swap(t, &profilesAcquireDualLock, func(ctx context.Context, configDir string) (*DualLock, error) {
 		attempted <- struct{}{}
 		return previous(ctx, configDir)
-	}
-	t.Cleanup(func() { profilesAcquireDualLock = previous })
+	})
 	return attempted
 }
 

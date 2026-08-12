@@ -15,6 +15,7 @@ package bus
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -288,6 +289,106 @@ func TestHub_UnregisterIdempotent(t *testing.T) {
 	h.Unregister(c.ID)
 	h.Unregister(c.ID) // must not panic
 	h.Unregister(9999) // unknown ID
+}
+
+func TestHub_StopConsumersTargetsExactSubscribeID(t *testing.T) {
+	h := NewHub(10)
+	if stopped := h.StopConsumers([]string{"", "  "}, "ignored"); stopped != nil {
+		t.Fatalf("empty targets stopped = %#v", stopped)
+	}
+	a, err := h.Register(transport.Hello{SubscribeID: "sub-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := h.Register(transport.Hello{SubscribeID: "sub-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stopped := h.StopConsumers([]string{" sub-a ", "sub-a", "missing"}, "")
+	if len(stopped) != 1 || stopped[0] != "sub-a" {
+		t.Fatalf("stopped = %#v, want [sub-a]", stopped)
+	}
+	select {
+	case reason := <-a.StopCh:
+		if reason != transport.ByeReasonSubscriptionStopped {
+			t.Fatalf("reason = %q", reason)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("sub-a stop was not signalled")
+	}
+	select {
+	case reason := <-b.StopCh:
+		t.Fatalf("sub-b was stopped: %q", reason)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestHub_StopConsumersCoalescesQueuedStop(t *testing.T) {
+	h := NewHub(10)
+	c, err := h.Register(transport.Hello{SubscribeID: "sub-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := h.StopConsumers([]string{"sub-a"}, "first"); len(got) != 1 {
+		t.Fatalf("first stop = %#v", got)
+	}
+	if got := h.StopConsumers([]string{"sub-a"}, "second"); len(got) != 1 {
+		t.Fatalf("second stop = %#v", got)
+	}
+	if reason := <-c.StopCh; reason != "first" {
+		t.Fatalf("queued reason = %q, want first", reason)
+	}
+	select {
+	case reason := <-c.StopCh:
+		t.Fatalf("duplicate stop queued: %q", reason)
+	default:
+	}
+}
+
+func TestCrossPlatformCoverageHubStopAllBypassesFullEventBuffer(t *testing.T) {
+	hub := NewHub(1)
+	consumer, err := hub.Register(transport.Hello{Type: transport.FrameTypeHello})
+	if err != nil {
+		t.Fatal(err)
+	}
+	consumer.SendCh <- transport.Event{Type: transport.FrameTypeEvent}
+
+	if stopped := hub.StopAll(transport.ByeReasonRuntimeTokenRejected); stopped != 1 {
+		t.Fatalf("StopAll() = %d, want 1", stopped)
+	}
+	select {
+	case reason := <-consumer.StopCh:
+		if reason != transport.ByeReasonRuntimeTokenRejected {
+			t.Fatalf("StopCh reason = %q", reason)
+		}
+	default:
+		t.Fatal("terminal stop was blocked behind the full event buffer")
+	}
+}
+
+func TestHub_ConcurrentStopConsumersRegisterUnregister(t *testing.T) {
+	h := NewHub(4)
+	const workers = 32
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			subscribeID := fmt.Sprintf("sub-%d", i)
+			c, err := h.Register(transport.Hello{SubscribeID: subscribeID})
+			if err != nil {
+				t.Errorf("register: %v", err)
+				return
+			}
+			h.StopConsumers([]string{subscribeID}, "concurrent-stop")
+			h.Unregister(c.ID)
+		}(i)
+	}
+	wg.Wait()
+	if got := h.Len(); got != 0 {
+		t.Fatalf("remaining consumers = %d", got)
+	}
 }
 
 func TestHub_ConcurrentDeliverBroadcastUnregister(t *testing.T) {

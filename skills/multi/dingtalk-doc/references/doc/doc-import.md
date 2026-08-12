@@ -1,53 +1,27 @@
-# 本地文件导入为在线文档 (doc import)
+# 导入本地文件：`+import` Golden Route
 
-## 使用场景
-
-用户说"导入 Word/Excel/Markdown/xmind 到钉钉文档"、"把本地文件转成在线文档"、"导入到知识库/文件夹"时，使用 `dws doc import`。
-
-不要先读取文件内容再调用 `doc create` 或 `doc update`。`doc import` 会按文件格式走导入任务，保留更完整的原始结构。
-
-## 命令
+## 唯一推荐入口
 
 ```bash
-dws doc import --file ./report.docx --format json
-dws doc import --file ./notes.md --folder <FOLDER_ID> --format json
-dws doc import --file ./data.xlsx --workspace <WORKSPACE_ID> --format json
-dws doc import --file ./draft.md --name "项目周报" --format json
+dws doc +import --file ./report.docx --format json
+dws doc +import --file ./report.docx --folder <FOLDER_ID> --format json
+dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要" --format json
 ```
 
-```bash
-dws doc import get --task-id <TASK_ID> --format json
-```
+`+import` 一次完成创建会话、上传、确认转换和轮询。支持 `doc/docx/xls/xlsx/md/txt/xmind/mark`，文件大小上限 20MB。
 
-## 参数
+## 本地文件边界
 
-| 参数 | 说明 |
-|------|------|
-| `--file` | 本地文件路径，必填 |
-| `--folder` | 目标文件夹 ID 或 URL，可选 |
-| `--workspace` | 目标知识库 ID 或 URL，可选 |
-| `--name` / `-n` | 导入后的文档名称；不传时使用文件名 |
-| `--task-id` | `import get` 查询导入任务时必填 |
+- `--file` 只接受当前工作目录内已存在的相对路径；禁止绝对路径、`..` 或符号链接逃逸。
+- `--folder` 与 `--workspace` 都是可选位置；都不传时导入默认根目录，两者都有时优先 `--folder`。
+- CLI 负责上传和格式转换。不要先用 Python/Office 库解析文件，不要安装本地依赖来伪造在线导入结果，也不要手写 HTTP 上传。
+- 白名单外格式（如 HTML/PDF）自动改走原文件上传，返回 `fallback=upload`、`converted=false`；不得报告成已经转换为可编辑在线文档。
 
-支持格式：docx、doc、xlsx、xls、md、txt、xmind、mark。文件大小上限 20MB。
+## 失败处理
 
-## 工作流
+- 发起前的格式、大小或路径校验失败：修正输入后再执行。
+- 已返回 `taskId` 后超时或中断：保留该 `taskId`，读取精确恢复命令 Schema 后只查询原任务；禁止重新提交导入。
+- 返回状态未知时原样报告，不把本地文件内容改走 `+create`，因为这会改变格式保真和任务语义。
+- 白名单外格式如果目标是钉盘而非文档空间，切换到 `dingtalk-drive` 上传。
 
-1. 确认本地文件存在且格式受支持。
-2. 如果用户指定目标知识库或文件夹，传 `--workspace` 或 `--folder`；未指定时导入到默认位置。
-3. 执行 `dws doc import --file ... --format json`。
-4. 正常情况下 CLI 会自动提交、上传并轮询导入任务。
-5. 如果命令超时或中断，从输出中提取 `taskId`，再执行 `dws doc import get --task-id <TASK_ID> --format json`。
-
-## 上下文传递
-
-| 操作 | 从返回中提取 | 用于 |
-|------|-------------|------|
-| `doc import` | `nodeId` / `documentUrl` / `documentName` / `documentType` | 后续 `doc read` / `doc info` / `sheet` 操作 |
-| `doc import` 中断 | `taskId` | `doc import get --task-id` 查询任务状态 |
-
-## 注意事项
-
-- `--folder` 和 `--workspace` 都是目标位置参数；用户明确指定文件夹时优先使用 `--folder`。
-- 导入 Excel 后通常得到在线表格，后续数据读取和编辑走 `dws sheet ...`。
-- 导入 Markdown 或 Word 后通常得到在线文档，后续内容读取和编辑走 `dws doc ...`。
+正常导入不得手工编排原子 `doc import` 子步骤。只有 shortcut 未公开必要的恢复参数时，才按精确 leaf Schema 使用原子查询命令。

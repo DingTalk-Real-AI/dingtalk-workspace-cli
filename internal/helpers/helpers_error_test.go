@@ -10,6 +10,8 @@ func TestCrossPlatformCoverageIsBusinessErrorRecognizesRealErrorEnvelopes(t *tes
 		{"status": "error", "success": true, "error": map[string]any{"code": "INVALID_BASE_ID"}},
 		{"status": " error ", "success": true},
 		{"success": true, "errorCode": "1001"},
+		{"errcode": 300005, "errmsg": "token is not exist"},
+		{"err_code": "300005", "errmsg": "token is not exist"},
 		{"success": true, "error": []any{"failed"}},
 		{"success": true, "error": true},
 		{"success": false},
@@ -45,13 +47,24 @@ func TestCrossPlatformCoverageIsBusinessErrorAllowsSuccessEnvelope(t *testing.T)
 }
 
 func TestCrossPlatformCoverageIsBusinessErrorAllowsCodeZeroSuccessEnvelope(t *testing.T) {
-	body := map[string]any{
-		"success": true,
-		"code":    "0",
-		"message": "success",
-		"result":  []any{},
-	}
-	if isBusinessError(body) {
-		t.Fatalf("isBusinessError(%v) = true, want false", body)
+	for _, body := range []map[string]any{
+		{
+			"success": true,
+			"code":    "0",
+			"message": "success",
+			"result":  []any{},
+		},
+		{
+			"errcode": 0,
+			"errmsg":  "ok",
+		},
+		{
+			"err_code": "0",
+			"errmsg":   "ok",
+		},
+	} {
+		if isBusinessError(body) {
+			t.Fatalf("isBusinessError(%v) = true, want false", body)
+		}
 	}
 }

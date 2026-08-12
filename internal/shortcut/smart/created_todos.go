@@ -14,6 +14,8 @@
 package smart
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -46,7 +48,32 @@ var CreatedTodos = shortcut.Shortcut{
 		"creator 是待办列表支持的角色枚举之一），再在本地把每条待办投影成标题(subject)、" +
 		"任务 ID(taskId) 和截止时间(dueTime) 打印出来。这是纯只读操作，只做列表与投影，" +
 		"不会创建或修改任何待办；若没有你创建的待办则返回空列表。",
-	Risk:  shortcut.RiskRead,
+	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "todo",
+			Name:           "shortcut_created_todos",
+			CanonicalPath:  "todo.shortcut_created_todos",
+			CLIPath:        "todo +created-todos",
+			PrimaryCLIPath: "todo +created-todos",
+		},
+		Description: "列出我创建的待办（我作为创建人 creator 发起的待办，而非分配给我执行的）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出我创建的待办（我作为创建人 creator 发起的待办，而非分配给我执行的）",
+			UseWhen:      []string{"当你想快速看清『哪些待办是我自己创建/发起的』，而不是别人指派给我执行的待办时使用；内部拉取你当前组织下角色为创建人(creator)的待办列表（roleTypes=[\"creator\"]，creator 是待办列表支持的角色枚举之一），再在本地把每条待办投影成标题(subject)、任务 ID(taskId) 和截止时间(dueTime) 打印出来。这是纯只读操作，只做列表与投影，不会创建或修改任何待办；若没有你创建的待办则返回空列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws todo +created-todos"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		// No required flags: "my created todos" is fully derived from the
 		// current identity plus roleTypes=["creator"].
@@ -55,12 +82,12 @@ var CreatedTodos = shortcut.Shortcut{
 		`dws todo +created-todos`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		// Step 1 — list my todos as creator. pageNum/pageSize are strings and
-		// roleTypes=["creator"] mirrors helpers.buildListTodoTaskArgs, where
-		// "creator" is an accepted role-type enum value.
-		data, err := rt.CallMCPData("todo", "get_user_todos_in_current_org", map[string]any{
-			"pageNum":   "1",
-			"pageSize":  "50",
+		// Step 1 — list my todos as creator via the shared pager. This keeps
+		// pageSize at todoPageSize(=20): the backend silently returns an empty
+		// page for pageSize>20, so the previous hard-coded pageSize=50 made this
+		// command always return empty even when the creator had todos. The pager
+		// also merges every page instead of only the first.
+		cards, err := shortcutListAllTodoCards(rt, map[string]any{
 			"roleTypes": []string{"creator"},
 		})
 		if err != nil {
@@ -69,7 +96,6 @@ var CreatedTodos = shortcut.Shortcut{
 
 		// Step 2 — project each card to {subject, taskId, dueTime}, parsing
 		// fields defensively (helpers reused from todo_done.go / overdue.go).
-		cards := shortcutTodoCards(data)
 		created := make([]map[string]any, 0, len(cards))
 		for _, m := range cards {
 			subject, _ := m["subject"].(string)

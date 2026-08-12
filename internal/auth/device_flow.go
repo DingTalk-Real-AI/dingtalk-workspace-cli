@@ -195,7 +195,7 @@ func (p *DeviceFlowProvider) resetCredentialState() {
 }
 
 func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
-	if err := preflightTokenPersistence(p.configDir); err != nil {
+	if err := prepareLoginPersistence(p.configDir); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
 
@@ -356,6 +356,9 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 	tokenData.ClientID = p.clientID
 	if err := oauthProvider.prepareLoginToken(ctx, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
+	}
+	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
+		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
 	if err := deviceSaveToken(p.configDir, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)

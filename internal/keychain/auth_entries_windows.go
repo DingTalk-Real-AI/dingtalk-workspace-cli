@@ -15,9 +15,53 @@
 
 package keychain
 
-// Windows stores token entries in the DPAPI-protected user registry rather
-// than auth-token*.enc files, so there is no file inventory to validate.
-func platformValidateAuthTokenEntries(string) error {
+import (
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
+
+	"golang.org/x/sys/windows/registry"
+)
+
+var registryReadValueNames = registry.Key.ReadValueNames
+
+// Windows stores token entries in the DPAPI-protected user registry. Enumerate
+// every auth-token account so orphaned slots that are not present in
+// profiles.json are still validated before a login can overwrite credentials.
+func platformValidateAuthTokenEntries(service string) error {
+	keyPath := registryPathForService(service)
+	k, err := registryOpenReadKey(registry.CURRENT_USER, keyPath, registry.QUERY_VALUE)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("registry open for auth token validation failed: %w", err)
+	}
+	defer k.Close()
+
+	names, err := registryReadValueNames(k, -1)
+	if err != nil {
+		return fmt.Errorf("registry list values for auth token validation failed: %w", err)
+	}
+	for _, name := range names {
+		accountBytes, decodeErr := base64.RawURLEncoding.DecodeString(name)
+		if decodeErr != nil {
+			continue
+		}
+		account := string(accountBytes)
+		if account != AccountToken && !strings.HasPrefix(account, AccountToken+":") {
+			continue
+		}
+		if _, found, err := registryGetFromKey(k, service, account); err != nil {
+			return fmt.Errorf("validate registry auth token account %q: %w", account, err)
+		} else if !found {
+			// The value was returned by ReadValueNames but disappeared before it
+			// could be read. Fail closed so a concurrent mutation cannot make the
+			// preflight silently skip an existing credential slot.
+			return fmt.Errorf("validate registry auth token account %q: value disappeared during validation", account)
+		}
+	}
 	return nil
 }
 

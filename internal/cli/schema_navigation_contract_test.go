@@ -4,15 +4,11 @@
 package cli
 
 import (
-	"reflect"
 	"testing"
 )
 
-func TestToolSchemaHintCannotOwnCommandNavigation(t *testing.T) {
-	typeOfHint := reflect.TypeOf(ToolSchemaHint{})
-	for _, field := range []string{"CanonicalPath", "PrimaryCLIPath", "Aliases", "Visibility"} {
-		if _, exists := typeOfHint.FieldByName(field); exists {
-			t.Fatalf("ToolSchemaHint.%s reintroduces a navigation source outside CommandRegistry", field)
-		}
+func TestSchemaVisibilityRemainsRegistryNavigationClass(t *testing.T) {
+	if SchemaVisibilityPublic != "public" || SchemaVisibilityCompat != "compat" || SchemaVisibilityInternal != "internal" {
+		t.Fatalf("SchemaVisibility values changed: %q, %q, %q", SchemaVisibilityPublic, SchemaVisibilityCompat, SchemaVisibilityInternal)
 	}
 }

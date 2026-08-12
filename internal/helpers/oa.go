@@ -1,12 +1,46 @@
 package helpers
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
+
+func decodeOARequest(raw string) (map[string]any, error) {
+	dec := json.NewDecoder(bytes.NewBufferString(raw))
+	dec.UseNumber()
+	var request map[string]any
+	if err := dec.Decode(&request); err != nil || request == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("JSON 请求不能为 null")
+	}
+	if err := dec.Decode(new(any)); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("JSON 请求包含多余内容")
+	}
+	return request, nil
+}
+
+func oaFormValues(raw string) ([]map[string]string, error) {
+	var values map[string]string
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil, err
+	}
+	result := make([]map[string]string, 0, len(values))
+	for name, value := range values {
+		result = append(result, map[string]string{"name": name, "value": value})
+	}
+	return result, nil
+}
 
 // ──────────────────────────────────────────────────────────
 // dws oa — OA 审批
@@ -14,10 +48,25 @@ import (
 // approve_processInstance, reject_processInstance, revoke_processInstance,
 // get_processInstance_records, list_initiated_instances, list_pending_tasks,
 // list_user_visible_process, append_task, search_form, oa_ding_user, revert_task,
-// get_inst_revert_activities
+// get_inst_revert_activities, get_process_schema, forecast_process,
+// start_process_instance
 // ──────────────────────────────────────────────────────────
 
 func newOaCommand() *cobra.Command {
+	// Product-level Agent routing Decl (migrated from selection/oa.json
+	// products.oa). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "oa",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "查询和处理 OA 审批实例、任务、记录、抄送与评论",
+			UseWhen: []string{
+				"查看待审、已办、已发起或抄送审批，并执行同意、拒绝、撤销、转交等审批动作时",
+			},
+			AvoidWhen: []string{
+				"不要用于普通待办任务或工作日志；需要实时监听未来的审批任务/实例事件时使用 event consume",
+			},
+		},
+	})
 	root := &cobra.Command{
 		Use:   "oa",
 		Short: "OA 审批 / 同意 / 拒绝 / 撤销",
@@ -63,6 +112,45 @@ func newOaCommand() *cobra.Command {
 			return callMCPTool("list_pending_approvals", argsMap)
 		},
 	}
+	DeclareLeafMetadata(approvalListPendingCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "list_pending_approvals",
+				CanonicalPath:  "oa.list_pending_approvals",
+				CLIPath:        "oa approval list-pending",
+				PrimaryCLIPath: "oa approval list-pending",
+			},
+			Description: "查询当前用户待处理的审批单列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_pending_approvals"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询当前用户待处理的审批单列表",
+				UseWhen:      []string{"需要查看待我处理的审批单并提取 processInstanceId / 跳转链接时"},
+				AvoidWhen: []string{
+					"已知实例只要 taskId 时改用 dws oa approval tasks",
+					"不要用本命令执行同意/拒绝",
+				},
+				Examples: []string{
+					"dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\"",
+					"dws oa approval list-pending --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --query 关键词",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "end", Property: "endTime"},
+				{Name: "limit", Property: "pageSize"},
+				{Name: "page", Property: "pageNum"},
+				{Name: "start", Property: "starTime"},
+			},
+		},
+	})
 
 	approvalDetailCmd := &cobra.Command{
 		Use:     "detail",
@@ -77,6 +165,42 @@ func newOaCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(approvalDetailCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "get_processInstance_detail",
+				CanonicalPath:  "oa.get_processInstance_detail",
+				CLIPath:        "oa approval detail",
+				PrimaryCLIPath: "oa approval detail",
+			},
+			Description: "获取指定审批实例的详情信息",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_processInstance_detail"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取指定审批实例的详情信息",
+				UseWhen:      []string{"已知 processInstanceId，需要查看表单内容与当前状态详情时"},
+				AvoidWhen: []string{
+					"需要操作历史而非表单详情时改用 dws oa approval records",
+					"该命令不会同意/拒绝/撤销",
+				},
+				Examples: []string{
+					"dws oa approval detail --instance-id <processInstanceId>",
+					"dws oa approval detail --instance-id <processInstanceId> --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "instance-id", Property: "processInstanceId"},
+			},
+		},
+	})
 
 	approvalApproveCmd := &cobra.Command{
 		Use:   "approve",
@@ -98,6 +222,42 @@ func newOaCommand() *cobra.Command {
 			return callMCPTool("approve_processInstance", argsMap)
 		},
 	}
+	DeclareLeafMetadata(approvalApproveCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "approve_processInstance",
+				CanonicalPath:  "oa.approve_processInstance",
+				CLIPath:        "oa approval approve",
+				PrimaryCLIPath: "oa approval approve",
+			},
+			Description: "同意审批",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "approve_processInstance"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "同意审批",
+				UseWhen:      []string{"已知 processInstanceId 与待办 taskId，用户明确要求同意该审批任务时"},
+				AvoidWhen: []string{
+					"实例或 taskId 未确认时不要同意；先用 list-pending / tasks 取 ID",
+					"要拒绝时改用 dws oa approval reject；要撤销自己发起的单时改用 revoke",
+				},
+				Examples: []string{
+					"dws oa approval approve --instance-id <id> --task-id <taskId>",
+					"dws oa approval approve --instance-id <id> --task-id <taskId> --remark \"同意\"",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "instance-id", Property: "processInstanceId"},
+			},
+		},
+	})
 
 	approvalRejectCmd := &cobra.Command{
 		Use:     "reject",
@@ -118,6 +278,42 @@ func newOaCommand() *cobra.Command {
 			return callMCPTool("reject_processInstance", argsMap)
 		},
 	}
+	DeclareLeafMetadata(approvalRejectCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "reject_processInstance",
+				CanonicalPath:  "oa.reject_processInstance",
+				CLIPath:        "oa approval reject",
+				PrimaryCLIPath: "oa approval reject",
+			},
+			Description: "拒绝审批",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "reject_processInstance"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "拒绝审批",
+				UseWhen:      []string{"已知 processInstanceId 与 taskId，用户明确要求拒绝/驳回该审批任务时"},
+				AvoidWhen: []string{
+					"要同意时改用 dws oa approval approve",
+					"实例、taskId 或拒绝原因未确认时不要拒绝",
+				},
+				Examples: []string{
+					"dws oa approval reject --instance-id <id> --task-id <taskId> --remark \"不同意\"",
+					"dws oa approval reject --instance-id <id> --task-id <taskId> --remark \"不符合要求\" --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "instance-id", Property: "processInstanceId"},
+			},
+		},
+	})
 
 	approvalRevokeCmd := &cobra.Command{
 		Use:   "revoke",
@@ -129,9 +325,6 @@ func newOaCommand() *cobra.Command {
 				return err
 			}
 			instanceId := mustGetFlag(cmd, "instance-id")
-			if !confirmDelete("审批实例", instanceId) {
-				return nil
-			}
 			argsMap := map[string]any{
 				"processInstanceId": instanceId,
 			}
@@ -141,6 +334,39 @@ func newOaCommand() *cobra.Command {
 			return callMCPTool("revoke_processInstance", argsMap)
 		},
 	}
+	DeclareLeafMetadata(approvalRevokeCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "revoke_processInstance",
+				CanonicalPath:  "oa.revoke_processInstance",
+				CLIPath:        "oa approval revoke",
+				PrimaryCLIPath: "oa approval revoke",
+			},
+			Description: "撤销当前用户已发起的审批实例",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "revoke_processInstance"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "撤销当前用户已发起的审批实例",
+				UseWhen:      []string{"用户明确要求撤销自己已发起的审批实例，且 processInstanceId 已确认时"},
+				AvoidWhen: []string{
+					"不是自己发起的单或 instanceId 未确认时不要撤销",
+					"要拒绝别人的待办时改用 reject，不要用 revoke",
+				},
+				Examples: []string{"dws oa approval revoke --instance-id <instance-id>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "instance-id", Property: "processInstanceId"},
+			},
+		},
+	})
 
 	approvalRecordsCmd := &cobra.Command{
 		Use:     "records",
@@ -155,6 +381,42 @@ func newOaCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(approvalRecordsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "get_processInstance_records",
+				CanonicalPath:  "oa.get_processInstance_records",
+				CLIPath:        "oa approval records",
+				PrimaryCLIPath: "oa approval records",
+			},
+			Description: "获取审批操作记录",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_processInstance_records"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取审批操作记录",
+				UseWhen:      []string{"已知 processInstanceId，需要查看谁做了什么审批操作及结果时"},
+				AvoidWhen: []string{
+					"需要当前表单详情时改用 dws oa approval detail",
+					"该命令只读历史，不处理审批",
+				},
+				Examples: []string{
+					"dws oa approval records --instance-id <processInstanceId>",
+					"dws oa approval records --instance-id <processInstanceId> --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "instance-id", Property: "processInstanceId"},
+			},
+		},
+	})
 
 	approvalListInitiatedCmd := &cobra.Command{
 		Use:     "list-initiated",
@@ -186,6 +448,45 @@ func newOaCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(approvalListInitiatedCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "list_initiated_instances",
+				CanonicalPath:  "oa.list_initiated_instances",
+				CLIPath:        "oa approval list-initiated",
+				PrimaryCLIPath: "oa approval list-initiated",
+			},
+			Description: "查询当前用户已发起的审批实例列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_initiated_instances"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询当前用户已发起的审批实例列表",
+				UseWhen:      []string{"已知 processCode，需要按起止时间查询自己发起的审批实例基础信息时"},
+				AvoidWhen: []string{
+					"不知道 processCode 时先用 dws oa approval list-forms",
+					"要撤销实例时先确认 instanceId 再改用 revoke",
+				},
+				Examples: []string{
+					"dws oa approval list-initiated --process-code <code> --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20",
+					"dws oa approval list-initiated --process-code <code> --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --limit 20 --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "cursor", Property: "nextToken"},
+				{Name: "end", Property: "endTime"},
+				{Name: "limit", Property: "maxResults"},
+				{Name: "start", Property: "startTime"},
+			},
+		},
+	})
 
 	approvalTasksCmd := &cobra.Command{
 		Use:     "tasks",
@@ -200,6 +501,42 @@ func newOaCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(approvalTasksCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "list_pending_tasks",
+				CanonicalPath:  "oa.list_pending_tasks",
+				CLIPath:        "oa approval tasks",
+				PrimaryCLIPath: "oa approval tasks",
+			},
+			Description: "查询待我审批的任务Id",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_pending_tasks"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询待我审批的任务Id",
+				UseWhen:      []string{"已知 processInstanceId，需要取得当前用户待办 taskId 以便同意或拒绝时"},
+				AvoidWhen: []string{
+					"还不知道实例列表时先用 dws oa approval list-pending",
+					"本命令只取 taskId，不执行审批",
+				},
+				Examples: []string{
+					"dws oa approval tasks --instance-id <processInstanceId>",
+					"dws oa approval tasks --instance-id <processInstanceId> --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "instance-id", Property: "processInstanceId"},
+			},
+		},
+	})
 
 	approvalListFormsCmd := &cobra.Command{
 		Use:     "list-forms",
@@ -214,6 +551,39 @@ func newOaCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(approvalListFormsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "list_user_visible_process",
+				CanonicalPath:  "oa.list_user_visible_process",
+				CLIPath:        "oa approval list-forms",
+				PrimaryCLIPath: "oa approval list-forms",
+			},
+			Description: "获取当前用户可见的审批表单列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "list_user_visible_process"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取当前用户可见的审批表单列表",
+				UseWhen:      []string{"需要列出可见审批模板并取得 processCode 时"},
+				AvoidWhen:    []string{"需要实例、任务或操作记录时不要使用；该命令只列可见模板"},
+				Examples: []string{
+					"dws oa approval list-forms --cursor 0 --limit 100",
+					"dws oa approval list-forms --cursor 0 --limit 100 --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "limit", Property: "pageSize"},
+			},
+		},
+	})
 
 	// 模糊搜索表单（按 processCode 或 name 关键字）
 	approvalSearchFormsCmd := &cobra.Command{
@@ -267,6 +637,43 @@ func newOaCommand() *cobra.Command {
 			return callMCPTool("get_done_tasks", argsMap)
 		},
 	}
+	DeclareLeafMetadata(approvalExecutedListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "get_done_tasks",
+				CanonicalPath:  "oa.get_done_tasks",
+				CLIPath:        "oa approval list-executed",
+				PrimaryCLIPath: "oa approval list-executed",
+			},
+			Description: "获取员工已处理任务列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_done_tasks"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取员工已处理任务列表",
+				UseWhen:      []string{"需要查看当前用户已经处理过的审批单列表时"},
+				AvoidWhen: []string{
+					"要看待处理单时改用 dws oa approval list-pending",
+					"要看自己发起或抄送时改用 list-submitted / list-cc",
+				},
+				Examples: []string{
+					"dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关键词",
+					"dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关键词 --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "limit", Property: "pageSize"},
+				{Name: "page", Property: "pageNumber"},
+			},
+		},
+	})
 	// 已发起
 	approvalSubmittedListCmd := &cobra.Command{
 		Use:     "list-submitted",
@@ -285,6 +692,43 @@ func newOaCommand() *cobra.Command {
 			return callMCPTool("get_submitted_instances", argsMap)
 		},
 	}
+	DeclareLeafMetadata(approvalSubmittedListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "get_submitted_instances",
+				CanonicalPath:  "oa.get_submitted_instances",
+				CLIPath:        "oa approval list-submitted",
+				PrimaryCLIPath: "oa approval list-submitted",
+			},
+			Description: "获取已提交实例列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_submitted_instances"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取已提交实例列表",
+				UseWhen:      []string{"需要查看当前用户已提交/发起相关的审批单列表时"},
+				AvoidWhen: []string{
+					"要按 processCode 与时间窗列已发起实例时也可对照 list-initiated",
+					"要处理待办时改用 list-pending / tasks",
+				},
+				Examples: []string{
+					"dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词",
+					"dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词 --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "limit", Property: "pageSize"},
+				{Name: "page", Property: "pageNumber"},
+			},
+		},
+	})
 	// 抄送
 	approvalCcListCmd := &cobra.Command{
 		Use:     "list-cc",
@@ -303,6 +747,43 @@ func newOaCommand() *cobra.Command {
 			return callMCPTool("get_noticed_instances", argsMap)
 		},
 	}
+	DeclareLeafMetadata(approvalCcListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "get_noticed_instances",
+				CanonicalPath:  "oa.get_noticed_instances",
+				CLIPath:        "oa approval list-cc",
+				PrimaryCLIPath: "oa approval list-cc",
+			},
+			Description: "获取抄送用户的列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_noticed_instances"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取抄送用户的列表",
+				UseWhen:      []string{"需要查看抄送给当前用户的审批单列表时"},
+				AvoidWhen: []string{
+					"要看待处理或自己发起的审批时不要使用",
+					"该命令只列抄送实例，不执行审批动作",
+				},
+				Examples: []string{
+					"dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词",
+					"dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词 --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "limit", Property: "pageSize"},
+				{Name: "page", Property: "pageNumber"},
+			},
+		},
+	})
 
 	// 转交任务
 	approvalTransferCmd := &cobra.Command{
@@ -324,6 +805,39 @@ func newOaCommand() *cobra.Command {
 			return callMCPTool("redirect_task", argsMap)
 		},
 	}
+	DeclareLeafMetadata(approvalTransferCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "redirect_task",
+				CanonicalPath:  "oa.redirect_task",
+				CLIPath:        "oa approval redirect-task",
+				PrimaryCLIPath: "oa approval redirect-task",
+			},
+			Description: "转交审批任务",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "redirect_task"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "转交审批任务",
+				UseWhen:      []string{"已知 taskId 与接收人 toActionerId，用户明确要求转交审批任务时"},
+				AvoidWhen: []string{
+					"任务、接收人或转交意图未确认时不要转交",
+					"要自己处理时改用 approve/reject",
+				},
+				Examples: []string{
+					"dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId>",
+					"dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --remark \"请帮忙处理\"",
+				},
+			},
+		},
+	})
 
 	// 评论审批实例
 	approvalCommentCmd := &cobra.Command{
@@ -344,6 +858,43 @@ func newOaCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(approvalCommentCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "dingflow_comments",
+				CanonicalPath:  "oa.dingflow_comments",
+				CLIPath:        "oa approval oa-comments",
+				PrimaryCLIPath: "oa approval oa-comments",
+			},
+			Description: "用户添加审批评论",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "dingflow_comments"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "用户添加审批评论",
+				UseWhen:      []string{"已知 processInstanceId，需要为审批实例添加评论文本时"},
+				AvoidWhen: []string{
+					"只需同意/拒绝/转交时改用对应写命令",
+					"评论内容或实例未确认时不要添加",
+				},
+				Examples: []string{
+					"dws oa approval oa-comments --instance-id <processInstanceId> --content \"同意，请尽快处理\"",
+					"dws oa approval oa-comments --instance-id <processInstanceId> --content \"同意，请尽快处理\" --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "content", Property: "text"},
+				{Name: "instance-id", Property: "processInstanceId"},
+			},
+		},
+	})
 
 	// 审批抄送
 	approvalCcCmd := &cobra.Command{
@@ -367,6 +918,43 @@ func newOaCommand() *cobra.Command {
 			return callMCPTool("oa_cc_noticer", argsMap)
 		},
 	}
+	DeclareLeafMetadata(approvalCcCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "oa_cc_noticer",
+				CanonicalPath:  "oa.oa_cc_noticer",
+				CLIPath:        "oa approval oa-cc-noticer",
+				PrimaryCLIPath: "oa approval oa-cc-noticer",
+			},
+			Description: "抄送审批人",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "oa_cc_noticer"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "抄送审批人",
+				UseWhen:      []string{"已知 processInstanceId，需要为审批实例追加抄送人时"},
+				AvoidWhen: []string{
+					"只需查看抄送列表时改用 dws oa approval list-cc",
+					"实例与抄送人未确认时不要添加",
+				},
+				Examples: []string{
+					"dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users \"68674200835816\"",
+					"dws oa approval oa-cc-noticer --instance-id <processInstanceId> --users \"userId1,userId2\" --operator-id \"123123\"",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "instance-id", Property: "processInstanceId"},
+				{Name: "users", Property: "userList"},
+			},
+		},
+	})
 
 	// 加签任务
 	approvalAppendTaskCmd := &cobra.Command{
@@ -463,6 +1051,195 @@ func newOaCommand() *cobra.Command {
 		},
 	}
 
+	approvalFormSchemaCmd := &cobra.Command{
+		Use: "form-schema", Short: "查询审批模板的表单 Schema",
+		Example: "dws oa approval form-schema --process-code <processCode>",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "process-code"); err != nil {
+				return err
+			}
+			return callMCPTool("get_process_schema", map[string]any{"processCode": mustGetFlag(cmd, "process-code")})
+		},
+	}
+	DeclareLeafMetadata(approvalFormSchemaCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "get_process_schema",
+				CanonicalPath:  "oa.get_process_schema",
+				CLIPath:        "oa approval form-schema",
+				PrimaryCLIPath: "oa approval form-schema",
+			},
+			Description: "查询审批模板的表单 Schema",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_process_schema"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询审批模板的表单 Schema",
+				UseWhen:      []string{"已从 list-forms 或 search-forms 获得 processCode，需要读取字段、选项和必填规则后再填写审批时"},
+				AvoidWhen:    []string{"只需列出可用模板时使用 list-forms；不要把返回的 Schema 当作可直接提交的实例请求"},
+				Examples:     []string{"dws oa approval form-schema --process-code <processCode>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "process-code", Property: "processCode"},
+			},
+		},
+	})
+	approvalForecastCmd := &cobra.Command{
+		Use: "forecast-process", Short: "根据表单值预测审批流程与自选节点",
+		Example: "dws oa approval forecast-process --process-code <processCode> --dept-id -1 --form-values '{\"金额\":\"100\"}'",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if raw, _ := cmd.Flags().GetString("request"); raw != "" {
+				request, err := decodeOARequest(raw)
+				if err != nil {
+					return fmt.Errorf("--request JSON 解析失败: %w", err)
+				}
+				return callMCPTool("forecast_process", map[string]any{"ProcessForecastPopRequest": request})
+			}
+			if err := validateRequiredFlags(cmd, "process-code", "dept-id", "form-values"); err != nil {
+				return err
+			}
+			deptID, err := strconv.ParseInt(mustGetFlag(cmd, "dept-id"), 10, 64)
+			if err != nil {
+				return fmt.Errorf("--dept-id 必须为整数: %w", err)
+			}
+			values, err := oaFormValues(mustGetFlag(cmd, "form-values"))
+			if err != nil {
+				return fmt.Errorf("--form-values JSON 解析失败: %w", err)
+			}
+			return callMCPTool("forecast_process", map[string]any{"ProcessForecastPopRequest": map[string]any{"processCode": mustGetFlag(cmd, "process-code"), "deptId": deptID, "formComponentValues": [][]map[string]string{values}}})
+		},
+	}
+	DeclareLeafMetadata(approvalForecastCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "forecast_process",
+				CanonicalPath:  "oa.forecast_process",
+				CLIPath:        "oa approval forecast-process",
+				PrimaryCLIPath: "oa approval forecast-process",
+			},
+			Description: "根据表单值预测审批流程与自选节点",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "forecast_process"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "预测审批流程与自选审批节点",
+				UseWhen:      []string{"已知道 processCode 且已根据表单 Schema 组装字段，需要在发起前确认审批路径或自选节点时"},
+				AvoidWhen:    []string{"需要真正创建审批单时改用 create-instance；未获得字段定义时先用 form-schema"},
+				Examples: []string{
+					"dws oa approval forecast-process --process-code <processCode> --dept-id -1 --form-values '{\"金额\":\"100\"}'",
+					"dws oa approval forecast-process --request '{\"processCode\":\"PROC-xxx\",\"deptId\":-1,\"formComponentValues\":[[{\"name\":\"金额\",\"value\":\"100\"}]]}'",
+				},
+			},
+			// Simple-mode flags are mapping exclusions (encoded inside ProcessForecastPopRequest).
+			Parameters: []contract.ParamDecl{
+				{Name: "request", Property: "ProcessForecastPopRequest", InterfaceType: "object"},
+			},
+		},
+	})
+	approvalCreateCmd := &cobra.Command{
+		Use: "create-instance", Short: "发起审批实例（需要 --yes 确认）",
+		Example: "dws oa approval create-instance --process-code <processCode> --form-values '{\"事由\":\"测试\"}' --yes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !commandDryRun(cmd) {
+				yes, _ := cmd.Flags().GetBool("yes")
+				if !yes {
+					return fmt.Errorf("发起审批实例会创建真实业务数据；请先核对参数，然后添加 --yes 确认执行")
+				}
+			}
+			var request map[string]any
+			if raw, _ := cmd.Flags().GetString("request"); raw != "" {
+				var err error
+				request, err = decodeOARequest(raw)
+				if err != nil {
+					return fmt.Errorf("--request JSON 解析失败: %w", err)
+				}
+			} else {
+				if err := validateRequiredFlags(cmd, "process-code", "form-values"); err != nil {
+					return err
+				}
+				values, err := oaFormValues(mustGetFlag(cmd, "form-values"))
+				if err != nil {
+					return fmt.Errorf("--form-values JSON 解析失败: %w", err)
+				}
+				request = map[string]any{"processCode": mustGetFlag(cmd, "process-code"), "formComponentValues": values}
+				if dept, _ := cmd.Flags().GetString("dept-id"); dept != "" {
+					value, err := strconv.ParseInt(dept, 10, 64)
+					if err != nil {
+						return fmt.Errorf("--dept-id 必须为整数: %w", err)
+					}
+					request["deptId"] = value
+				}
+				if userID, _ := cmd.Flags().GetString("originator-user-id"); userID != "" {
+					request["originatorUserId"] = userID
+				}
+				if rawApprovers, _ := cmd.Flags().GetString("approvers"); rawApprovers != "" {
+					action, _ := cmd.Flags().GetString("approvers-action-type")
+					if action != "AND" && action != "OR" && action != "NONE" {
+						return fmt.Errorf("--approvers-action-type 必须为 AND、OR 或 NONE")
+					}
+					request["approvers"] = []map[string]any{{"actionType": action, "userIds": strings.Split(rawApprovers, ",")}}
+				}
+				if rawCC, _ := cmd.Flags().GetString("cc-list"); rawCC != "" {
+					position, _ := cmd.Flags().GetString("cc-position")
+					if position != "START" && position != "FINISH" && position != "START_FINISH" {
+						return fmt.Errorf("--cc-position 必须为 START、FINISH 或 START_FINISH")
+					}
+					request["ccList"] = strings.Split(rawCC, ",")
+					request["ccPosition"] = position
+				}
+			}
+			return callMCPTool("start_process_instance", map[string]any{"ProcessInstanceCreationPopRequest": request})
+		},
+	}
+	DeclareLeafMetadata(approvalCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "start_process_instance",
+				CanonicalPath:  "oa.start_process_instance",
+				CLIPath:        "oa approval create-instance",
+				PrimaryCLIPath: "oa approval create-instance",
+			},
+			Description: "发起审批实例（需要 --yes 确认）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "start_process_instance"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "发起新的审批实例",
+				UseWhen:      []string{"用户确认要发起审批，且已查询表单 Schema、核对字段及审批路径后使用"},
+				AvoidWhen:    []string{"只需预测流程时使用 forecast-process；用户尚未确认或字段未按 Schema 核对时不要发起"},
+				Examples: []string{
+					"dws oa approval create-instance --process-code <processCode> --form-values '{\"事由\":\"测试\"}'",
+					"dws oa approval create-instance --request '{\"processCode\":\"PROC-xxx\",\"deptId\":-1,\"formComponentValues\":[{\"name\":\"事由\",\"value\":\"测试\"}],\"targetSelectActioners\":[{\"actionerKey\":\"manual-node\",\"actionerStaffIds\":[\"user-id\"]}]}'",
+				},
+			},
+			// Simple-mode flags are mapping exclusions (encoded inside ProcessInstanceCreationPopRequest).
+			Parameters: []contract.ParamDecl{
+				{Name: "request", Property: "ProcessInstanceCreationPopRequest", InterfaceType: "object"},
+			},
+		},
+	})
+
 	approvalListPendingCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00) (必填)")
 	approvalListPendingCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00) (必填)")
 	approvalListPendingCmd.Flags().String("page", "", "分页页码 (可选)")
@@ -533,6 +1310,46 @@ func newOaCommand() *cobra.Command {
 	approvalRevertTaskCmd.Flags().String("target-activity-id", "", "退回到的节点 ID（退回发起人固定传 sid-startevent）(必填)")
 	approvalRevertTaskCmd.Flags().String("action", "", "退回方式：REVERT_FOR_APPROVAL（退回到审批人）/ REVERT_FOR_RESUBMIT（退回到发起人）(必填)")
 	approvalRevertTaskCmd.Flags().String("remark", "", "退回说明 (可选)")
+	approvalFormSchemaCmd.Flags().String("process-code", "", "审批模板 processCode (必填)")
+	approvalForecastCmd.Flags().String("process-code", "", "审批模板 processCode（简单模式使用；与 --request 互斥）")
+	approvalForecastCmd.Flags().String("dept-id", "", "发起人部门 ID（简单模式使用；与 --request 互斥）")
+	approvalForecastCmd.Flags().String("form-values", "", "表单值 JSON（简单模式使用；与 --request 互斥）")
+	approvalForecastCmd.Flags().String("request", "", "完整请求 JSON（高级模式；与简单模式参数互斥）")
+	approvalForecastCmd.MarkFlagsOneRequired("request", "process-code")
+	approvalForecastCmd.MarkFlagsRequiredTogether("process-code", "dept-id", "form-values")
+	forecastMutuallyExclusive := make([][]string, 0, 3)
+	for _, name := range []string{"process-code", "dept-id", "form-values"} {
+		approvalForecastCmd.MarkFlagsMutuallyExclusive("request", name)
+		forecastMutuallyExclusive = append(forecastMutuallyExclusive, []string{"request", name})
+	}
+	cli.AnnotateRuntimeConstraints(approvalForecastCmd, cli.RuntimeSchemaConstraints{
+		MutuallyExclusive: forecastMutuallyExclusive,
+		RequireOneOf:      [][]string{{"request", "process-code"}},
+		RequireTogether:   [][]string{{"process-code", "dept-id", "form-values"}},
+	})
+
+	approvalCreateCmd.Flags().String("process-code", "", "审批模板 processCode（简单模式使用；与 --request 互斥）")
+	approvalCreateCmd.Flags().String("dept-id", "-1", "发起人部门 ID")
+	approvalCreateCmd.Flags().String("form-values", "", "表单值 JSON（简单模式使用；与 --request 互斥）")
+	approvalCreateCmd.Flags().String("request", "", "完整请求 JSON（高级模式；与简单模式参数互斥）")
+	approvalCreateCmd.Flags().String("originator-user-id", "", "审批发起人 userId")
+	approvalCreateCmd.Flags().String("approvers", "", "审批人 userId 列表，多个用逗号分隔")
+	approvalCreateCmd.Flags().String("approvers-action-type", "OR", "审批类型：AND、OR 或 NONE")
+	approvalCreateCmd.Flags().String("cc-list", "", "抄送人 userId 列表，多个用逗号分隔")
+	approvalCreateCmd.Flags().String("cc-position", "START", "抄送时点：START、FINISH 或 START_FINISH")
+	approvalCreateCmd.MarkFlagsOneRequired("request", "process-code")
+	approvalCreateCmd.MarkFlagsRequiredTogether("process-code", "form-values")
+	createSimpleFlags := []string{"process-code", "dept-id", "form-values", "originator-user-id", "approvers", "approvers-action-type", "cc-list", "cc-position"}
+	createMutuallyExclusive := make([][]string, 0, len(createSimpleFlags))
+	for _, name := range createSimpleFlags {
+		approvalCreateCmd.MarkFlagsMutuallyExclusive("request", name)
+		createMutuallyExclusive = append(createMutuallyExclusive, []string{"request", name})
+	}
+	cli.AnnotateRuntimeConstraints(approvalCreateCmd, cli.RuntimeSchemaConstraints{
+		MutuallyExclusive: createMutuallyExclusive,
+		RequireOneOf:      [][]string{{"request", "process-code"}},
+		RequireTogether:   [][]string{{"process-code", "form-values"}},
+	})
 
 	approvalCmd.AddCommand(
 		approvalListPendingCmd,
@@ -555,6 +1372,9 @@ func newOaCommand() *cobra.Command {
 		approvalAppendTaskCmd,
 		approvalRevertActivitiesCmd,
 		approvalRevertTaskCmd,
+		approvalFormSchemaCmd,
+		approvalForecastCmd,
+		approvalCreateCmd,
 	)
 	root.AddCommand(approvalCmd)
 

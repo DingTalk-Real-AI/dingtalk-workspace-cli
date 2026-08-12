@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
 
@@ -113,6 +114,18 @@ func TestCrossPlatformCoverageChatDirectionAndScalarCoverage(t *testing.T) {
 	_ = appendChatIDArgs(args, []string{"u1", "D1"}, "users", "open")
 	for _, wrap := range []bool{true, false} {
 		_ = normalizeAtPlaceholders("hello @u1 <@u2>", []string{"", "u1", "u2"}, wrap)
+	}
+	if got := NormalizeMessageMentions("hello @u1", []string{"u1"}, true, true); got != "<@all> hello <@u1>" {
+		t.Fatalf("current-user mention normalization = %q", got)
+	}
+	if got := NormalizeMessageMentions("<@all> <@u1>", []string{"u1"}, true, false); got != "@all @u1" {
+		t.Fatalf("bot mention normalization = %q", got)
+	}
+	if got := NormalizeMessageMentions("@alliance hello", nil, true, false); got != "@all @alliance hello" {
+		t.Fatalf("bot @all token detection = %q", got)
+	}
+	if got := NormalizeMessageMentions("hello @all", nil, true, false); got != "hello @all" {
+		t.Fatalf("trailing bot @all detection = %q", got)
 	}
 }
 
@@ -325,12 +338,11 @@ func TestCrossPlatformCoverageChatFileUtilityCoverage(t *testing.T) {
 	_ = unmarshalJSONUseNumber(`{"n":1}`, &map[string]any{})
 	_ = firstStringField(map[string]any{"one": "", "two": 2}, "one", "two")
 
-	previous := deps
+	testseam.Protect(t, &deps)
 	caller := &helpersCoreCaller{format: "json"}
 	InitDeps(caller)
 	deps.Out.w = io.Discard
 	deps.Out.errW = io.Discard
-	t.Cleanup(func() { deps = previous })
 	caller.format = "raw"
 }
 
@@ -356,6 +368,131 @@ func TestCrossPlatformCoverageUploadConversationLocalFileCoverage(t *testing.T) 
 			_, _ = uploadConversationLocalFile(context.Background(), map[string]any{"target": "id"}, meta, "uuid")
 		})
 	}
+}
+
+func TestCrossPlatformCoverageChatBotRichMediaCoverage(t *testing.T) {
+	testseam.Protect(t, &deps)
+	testseam.Swap(t, &httpPutFile, func(context.Context, string, map[string]string, string, int64) error {
+		return nil
+	})
+
+	filePath := filepath.Join(t.TempDir(), "report.pdf")
+	if err := os.WriteFile(filePath, []byte("report"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, response := range []string{`{`, `{"result":{}}`} {
+		if _, err := parseConversationFileDownloadURL(response); err == nil {
+			t.Fatalf("parseConversationFileDownloadURL(%q) returned nil", response)
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{name: "markdown requires title", args: []string{"--text", "message"}},
+		{name: "markdown requires text", args: []string{"--title", "title"}},
+		{name: "image requires URL", args: []string{"--msg-type", "image"}},
+		{name: "file requires path", args: []string{"--msg-type", "file"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{"message", "send-by-bot", "--robot-code", "robot", "--group", "group"}
+			if err := runChatCoverageCommand(t, &scriptedToolCaller{}, append(args, tc.args...)...); err == nil {
+				t.Fatal("missing rich-media input returned nil")
+			}
+		})
+	}
+
+	t.Run("group and direct targets are mutually exclusive", func(t *testing.T) {
+		err := runChatCoverageCommand(t, &scriptedToolCaller{},
+			"message", "send-by-bot", "--robot-code", "robot",
+			"--group", "group", "--users", "user", "--title", "title", "--text", "message",
+		)
+		if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+			t.Fatalf("mutually exclusive target error = %v", err)
+		}
+	})
+
+	t.Run("direct markdown defaults to DX message type", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		if err := runChatCoverageCommand(t, caller,
+			"message", "send-by-bot", "--robot-code", "robot", "--users", "user",
+			"--title", "title", "--text", "message",
+		); err != nil {
+			t.Fatal(err)
+		}
+		if caller.tool != "batch_send_robot_msg_to_users" || caller.args["msgType"] != "sampleMarkdownDX" {
+			t.Fatalf("direct markdown call = %s %#v", caller.tool, caller.args)
+		}
+	})
+
+	t.Run("direct image", func(t *testing.T) {
+		caller := &scriptedToolCaller{}
+		if err := runChatCoverageCommand(t, caller,
+			"message", "send-by-bot", "--robot-code", "robot", "--users", "user",
+			"--msg-type", "image", "--image-url", "https://example.test/image.png", "--at-all",
+		); err != nil {
+			t.Fatal(err)
+		}
+		if caller.tool != "batch_send_robot_msg_to_users" || caller.args["msgType"] != "sampleImageMsg" || caller.args["isAtAll"] != "true" {
+			t.Fatalf("direct image call = %s %#v", caller.tool, caller.args)
+		}
+	})
+
+	for _, tc := range []struct {
+		name   string
+		target []string
+	}{
+		{name: "user file", target: []string{"--users", "user"}},
+		{name: "open DingTalk ID file", target: []string{"--open-dingtalk-ids", "D-user"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{steps: []scriptedToolStep{
+				{text: `{"resourceUrl":"https://upload.example/file","uploadKey":"key"}`},
+				{text: `{"result":{"downloadUrl":"https://download.example/report.pdf"}}`},
+				{text: `{"success":true}`},
+			}}
+			args := []string{"message", "send-by-bot", "--robot-code", "robot", "--msg-type", "file", "--file-path", filePath}
+			if err := runChatCoverageCommand(t, caller, append(args, tc.target...)...); err != nil {
+				t.Fatal(err)
+			}
+			if caller.calls != 3 || caller.tool != "batch_send_robot_msg_to_users" || caller.args["msgType"] != "sampleDingtalkDriveFile" || caller.args["fileUrl"] != "https://download.example/report.pdf" {
+				t.Fatalf("direct file call = %d %s %#v", caller.calls, caller.tool, caller.args)
+			}
+		})
+	}
+
+	t.Run("file dry run", func(t *testing.T) {
+		caller := &scriptedToolCaller{dry: true}
+		if err := runChatCoverageCommand(t, caller,
+			"message", "send-by-bot", "--robot-code", "robot", "--group", "group",
+			"--msg-type", "file", "--file-path", filePath,
+		); err != nil || caller.calls != 0 {
+			t.Fatalf("dry run error = %v, calls = %d", err, caller.calls)
+		}
+	})
+
+	t.Run("file rejects multiple recipients", func(t *testing.T) {
+		err := runChatCoverageCommand(t, &scriptedToolCaller{},
+			"message", "send-by-bot", "--robot-code", "robot", "--users", "one,two",
+			"--msg-type", "file", "--file-path", filePath,
+		)
+		if err == nil || !strings.Contains(err.Error(), "requires exactly one") {
+			t.Fatalf("multiple-recipient error = %v", err)
+		}
+	})
+
+	t.Run("file upload failure", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{err: errors.New("upload failed")}}}
+		err := runChatCoverageCommand(t, caller,
+			"message", "send-by-bot", "--robot-code", "robot", "--group", "group",
+			"--msg-type", "file", "--file-path", filePath,
+		)
+		if err == nil || !strings.Contains(err.Error(), "upload failed") {
+			t.Fatalf("upload error = %v", err)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageGuardGroupOwnerRemovalCoverage(t *testing.T) {

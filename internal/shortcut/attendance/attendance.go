@@ -30,6 +30,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -168,6 +171,31 @@ var CheckResult = shortcut.Shortcut{
 	Description: "查询用户打卡结果（迟到/早退/缺卡等）",
 	Intent:      "当你需要批量统计一批员工在某段时间的打卡结果（正常/迟到/早退/缺卡等判定结论）时使用，例如做月度考勤汇总或异常人员排查；输入多个 userId（最多 100 人）和不超过 1 个月的日期区间，返回每人每天的打卡结果状态，支持分页。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_check_result",
+			CanonicalPath:  "attendance.shortcut_check_result",
+			CLIPath:        "attendance +check-result",
+			PrimaryCLIPath: "attendance +check-result",
+		},
+		Description: "查询用户打卡结果（迟到/早退/缺卡等）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询用户打卡结果（迟到/早退/缺卡等）",
+			UseWhen:      []string{"当你需要批量统计一批员工在某段时间的打卡结果（正常/迟到/早退/缺卡等判定结论）时使用，例如做月度考勤汇总或异常人员排查；输入多个 userId（最多 100 人）和不超过 1 个月的日期区间，返回每人每天的打卡结果状态，支持分页。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +check-result --users userId1,userId2 --start 2026-04-01 --end 2026-04-30 --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "用户 userId 列表，逗号分隔，最多 100 人", Required: true},
 		{Name: "start", Type: shortcut.FlagString, Desc: "起始日期 YYYY-MM-DD", Required: true},
@@ -205,6 +233,31 @@ var CheckRecord = shortcut.Shortcut{
 	Description: "查询用户打卡流水（打卡时间/地点/定位方式）",
 	Intent:      "当你要查看员工每一次实际打卡的原始记录（具体打卡时刻、打卡地点、定位/Wifi/蓝牙等方式）而不是判定结论时使用，例如核实某人是否在指定地点打卡；输入 userId 列表和不超过 1 个月的日期区间，返回逐条打卡流水。与 +check-result 的区别是这里返回明细流水而非迟到早退结论。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_check_record",
+			CanonicalPath:  "attendance.shortcut_check_record",
+			CLIPath:        "attendance +check-record",
+			PrimaryCLIPath: "attendance +check-record",
+		},
+		Description: "查询用户打卡流水（打卡时间/地点/定位方式）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询用户打卡流水（打卡时间/地点/定位方式）",
+			UseWhen:      []string{"当你要查看员工每一次实际打卡的原始记录（具体打卡时刻、打卡地点、定位/Wifi/蓝牙等方式）而不是判定结论时使用，例如核实某人是否在指定地点打卡；输入 userId 列表和不超过 1 个月的日期区间，返回逐条打卡流水。与 +check-result 的区别是这里返回明细流水而非迟到早退结论。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +check-record --users userId1 --start 2026-04-01 --end 2026-04-30"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "用户 userId 列表，逗号分隔", Required: true},
 		{Name: "start", Type: shortcut.FlagString, Desc: "起始日期 YYYY-MM-DD", Required: true},
@@ -240,6 +293,31 @@ var ListApprove = shortcut.Shortcut{
 	Description: "查询用户考勤审批单（补卡/加班/请假/出差外出）",
 	Intent:      "当你想查看某些员工已提交的考勤类审批单（加班、请假、出差外出、补卡）时使用，例如核对某人这段时间请了几次假或有没有补卡审批；输入 userId 列表、审批类型（overtime/加班、leave/请假、trip/出差外出、patch/补卡）和日期区间，返回匹配的审批单记录。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_list_approve",
+			CanonicalPath:  "attendance.shortcut_list_approve",
+			CLIPath:        "attendance +list-approve",
+			PrimaryCLIPath: "attendance +list-approve",
+		},
+		Description: "查询用户考勤审批单（补卡/加班/请假/出差外出）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询用户考勤审批单（补卡/加班/请假/出差外出）",
+			UseWhen:      []string{"当你想查看某些员工已提交的考勤类审批单（加班、请假、出差外出、补卡）时使用，例如核对某人这段时间请了几次假或有没有补卡审批；输入 userId 列表、审批类型（overtime/加班、leave/请假、trip/出差外出、patch/补卡）和日期区间，返回匹配的审批单记录。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +list-approve --users userId1 --types overtime,leave --start 2026-04-01 --end 2026-04-30"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "用户 userId 列表，逗号分隔", Required: true},
 		{Name: "types", Type: shortcut.FlagStringSlice, Desc: "审批类型，逗号分隔：overtime/加班、trip/travel/出差/外出、leave/请假、patch/补卡", Required: true},
@@ -287,6 +365,31 @@ var GetApproveTemplate = shortcut.Shortcut{
 	Description: "查询补卡/请假/加班/外出/出差审批提交链接",
 	Intent:      "当用户想自己发起一条考勤审批（补卡、请假、加班、外出、出差）、需要拿到对应审批表单的提交入口链接时使用；输入审批类型（如 leave/请假），返回可直接打开填写并提交的审批链接。本命令只返回链接、不代替用户提交审批。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_approve_template",
+			CanonicalPath:  "attendance.shortcut_get_approve_template",
+			CLIPath:        "attendance +get-approve-template",
+			PrimaryCLIPath: "attendance +get-approve-template",
+		},
+		Description: "查询补卡/请假/加班/外出/出差审批提交链接",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询补卡/请假/加班/外出/出差审批提交链接",
+			UseWhen:      []string{"当用户想自己发起一条考勤审批（补卡、请假、加班、外出、出差）、需要拿到对应审批表单的提交入口链接时使用；输入审批类型（如 leave/请假），返回可直接打开填写并提交的审批链接。本命令只返回链接、不代替用户提交审批。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-approve-template --type leave"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "type", Type: shortcut.FlagString, Desc: "审批类型：repair-check/补卡、leave/请假、overtime/加班、travel/外出、out/出差（或 REPAIR_CHECK/LEAVE/OVERTIME/TRAVEL/OUT）", Required: true},
 	},
@@ -321,6 +424,31 @@ var GetSchedule = shortcut.Shortcut{
 	Description: "获取指定用户一段时间内的排班记录",
 	Intent:      "当你要查看排班制考勤组下员工在某段时间的排班记录（含排班 id、班次、是否休息）时使用，尤其是需要拿到排班 id 用于后续 BOSS 改签打卡（+boss-check）的场景；输入 userId 列表和起止时间，返回逐日排班明细。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_schedule",
+			CanonicalPath:  "attendance.shortcut_get_schedule",
+			CLIPath:        "attendance +get-schedule",
+			PrimaryCLIPath: "attendance +get-schedule",
+		},
+		Description: "获取指定用户一段时间内的排班记录",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取指定用户一段时间内的排班记录",
+			UseWhen:      []string{"当你要查看排班制考勤组下员工在某段时间的排班记录（含排班 id、班次、是否休息）时使用，尤其是需要拿到排班 id 用于后续 BOSS 改签打卡（+boss-check）的场景；输入 userId 列表和起止时间，返回逐日排班明细。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-schedule --users user001,user002 --start 2026-04-01 --end 2026-04-30"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "用户 userId 列表，逗号分隔", Required: true},
 		{Name: "start", Type: shortcut.FlagString, Desc: "开始日期 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss", Required: true},
@@ -404,6 +532,31 @@ var SearchClass = shortcut.Shortcut{
 	Description: "查询当前用户可管理的班次详情列表",
 	Intent:      "当你要浏览或按名称查找当前用户能管理的班次、以便拿到班次 ID 用于建组、排班或改班次时使用；可选按班次名关键字模糊搜索、按 ALL/我负责的过滤并分页，返回班次列表及详情。要看某个具体班次的完整配置用 +get-class。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_search_class",
+			CanonicalPath:  "attendance.shortcut_search_class",
+			CLIPath:        "attendance +search-class",
+			PrimaryCLIPath: "attendance +search-class",
+		},
+		Description: "查询当前用户可管理的班次详情列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可管理的班次详情列表",
+			UseWhen:      []string{"当你要浏览或按名称查找当前用户能管理的班次、以便拿到班次 ID 用于建组、排班或改班次时使用；可选按班次名关键字模糊搜索、按 ALL/我负责的过滤并分页，返回班次列表及详情。要看某个具体班次的完整配置用 +get-class。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +search-class --query \"早班\" --filter-type MINE_OWN"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "班次名称关键字，模糊搜索"},
 		{Name: "filter-type", Type: shortcut.FlagString, Enum: []string{"ALL", "MINE_OWN"}, Desc: "班次类型：ALL 全部 / MINE_OWN 我负责的"},
@@ -454,6 +607,12 @@ func searchClassProject(data map[string]any) []map[string]any {
 		m, ok := item.(map[string]any)
 		if !ok {
 			continue
+		}
+		// get_class_list wraps each shift's identity/label under shiftVO
+		// (item = {"shiftVO": {id, name, ...}}); unwrap it first, otherwise every
+		// row projects empty and the whole command silently returns nothing.
+		if vo, ok := m["shiftVO"].(map[string]any); ok {
+			m = vo
 		}
 		row := map[string]any{}
 		if v, ok := attendanceFirst(m, "id", "classId", "class_id"); ok {
@@ -611,6 +770,31 @@ var GetAdjustmentRule = shortcut.Shortcut{
 	Description: "根据补卡规则主键 ID 查询补卡规则详情",
 	Intent:      "当你已知某条补卡规则的主键 ID、想查看它的具体规则内容（每月可补卡次数、时限、适用范围等）时使用；输入 adjustmentId，返回该补卡规则的完整详情。不知道 ID 时先用 +search-adjustment-rule 列出。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_adjustment_rule",
+			CanonicalPath:  "attendance.shortcut_get_adjustment_rule",
+			CLIPath:        "attendance +get-adjustment-rule",
+			PrimaryCLIPath: "attendance +get-adjustment-rule",
+		},
+		Description: "根据补卡规则主键 ID 查询补卡规则详情",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "根据补卡规则主键 ID 查询补卡规则详情",
+			UseWhen:      []string{"当你已知某条补卡规则的主键 ID、想查看它的具体规则内容（每月可补卡次数、时限、适用范围等）时使用；输入 adjustmentId，返回该补卡规则的完整详情。不知道 ID 时先用 +search-adjustment-rule 列出。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-adjustment-rule --adjustment-id 12345"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "adjustment-id", Type: shortcut.FlagInt, Desc: "补卡规则主键 ID", Required: true},
 	},
@@ -630,6 +814,31 @@ var SearchAdjustmentRule = shortcut.Shortcut{
 	Description: "查询当前用户可管理的补卡规则列表",
 	Intent:      "当你要浏览或按名称查找当前用户可管理的补卡规则、以便拿到规则 ID 做进一步查看时使用；可选按规则名关键字模糊搜索并分页，返回补卡规则列表。要看某条规则的完整内容用 +get-adjustment-rule。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_search_adjustment_rule",
+			CanonicalPath:  "attendance.shortcut_search_adjustment_rule",
+			CLIPath:        "attendance +search-adjustment-rule",
+			PrimaryCLIPath: "attendance +search-adjustment-rule",
+		},
+		Description: "查询当前用户可管理的补卡规则列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可管理的补卡规则列表",
+			UseWhen:      []string{"当你要浏览或按名称查找当前用户可管理的补卡规则、以便拿到规则 ID 做进一步查看时使用；可选按规则名关键字模糊搜索并分页，返回补卡规则列表。要看某条规则的完整内容用 +get-adjustment-rule。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +search-adjustment-rule --query \"标准\" --page 1 --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "补卡规则名称关键字，模糊搜索"},
 		{Name: "page", Type: shortcut.FlagInt, Default: "1", Desc: "页码，从 1 开始"},
@@ -668,12 +877,20 @@ var SearchAdjustmentRule = shortcut.Shortcut{
 // across candidate keys, so an unknown/empty shape yields an empty list rather
 // than a crash or fabricated data.
 func searchRuleProject(data map[string]any) []map[string]any {
-	raw := attendanceResolveList(data, "ruleList", "rules", "list", "items")
+	// get_overtime_rule nests the list under result.atRuleList and
+	// get_adjustment_rule under result.adjustmentList; both wrap each rule's
+	// identity/label under entityVO. Probe those container keys AND unwrap
+	// entityVO, otherwise +search-overtime-rule / +search-adjustment-rule
+	// silently return empty despite the backend returning rules.
+	raw := attendanceResolveList(data, "atRuleList", "adjustmentList", "ruleList", "rules", "list", "items")
 	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
 		m, ok := item.(map[string]any)
 		if !ok {
 			continue
+		}
+		if vo, ok := m["entityVO"].(map[string]any); ok {
+			m = vo
 		}
 		row := map[string]any{}
 		if v, ok := attendanceFirst(m, "id", "ruleId", "rule_id", "adjustmentId", "overtimeId"); ok {
@@ -699,6 +916,31 @@ var GetOvertimeRule = shortcut.Shortcut{
 	Description: "根据加班规则主键 ID 查询加班规则详情",
 	Intent:      "当你已知某条加班规则的主键 ID、想查看它的具体内容（工作日/休息日/节假日加班计算方式、适用范围等）时使用；输入 overtimeId，返回该加班规则的完整详情。不知道 ID 时先用 +search-overtime-rule 列出。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_overtime_rule",
+			CanonicalPath:  "attendance.shortcut_get_overtime_rule",
+			CLIPath:        "attendance +get-overtime-rule",
+			PrimaryCLIPath: "attendance +get-overtime-rule",
+		},
+		Description: "根据加班规则主键 ID 查询加班规则详情",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "根据加班规则主键 ID 查询加班规则详情",
+			UseWhen:      []string{"当你已知某条加班规则的主键 ID、想查看它的具体内容（工作日/休息日/节假日加班计算方式、适用范围等）时使用；输入 overtimeId，返回该加班规则的完整详情。不知道 ID 时先用 +search-overtime-rule 列出。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-overtime-rule --overtime-id 12345"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "overtime-id", Type: shortcut.FlagInt, Desc: "加班规则主键 ID", Required: true},
 	},
@@ -718,6 +960,31 @@ var SearchOvertimeRule = shortcut.Shortcut{
 	Description: "查询当前用户可管理的加班规则列表",
 	Intent:      "当你要浏览或按名称查找当前用户可管理的加班规则、以便拿到规则 ID 做进一步查看时使用；可选按规则名关键字模糊搜索并分页，返回加班规则列表。要看某条规则的完整内容用 +get-overtime-rule。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_search_overtime_rule",
+			CanonicalPath:  "attendance.shortcut_search_overtime_rule",
+			CLIPath:        "attendance +search-overtime-rule",
+			PrimaryCLIPath: "attendance +search-overtime-rule",
+		},
+		Description: "查询当前用户可管理的加班规则列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可管理的加班规则列表",
+			UseWhen:      []string{"当你要浏览或按名称查找当前用户可管理的加班规则、以便拿到规则 ID 做进一步查看时使用；可选按规则名关键字模糊搜索并分页，返回加班规则列表。要看某条规则的完整内容用 +get-overtime-rule。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +search-overtime-rule --query \"节假日\" --page 1 --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "加班规则名称关键字，模糊搜索"},
 		{Name: "page", Type: shortcut.FlagInt, Default: "1", Desc: "页码，从 1 开始"},
@@ -760,6 +1027,31 @@ var SearchGroup = shortcut.Shortcut{
 	Description: "查询当前用户可管理的考勤组列表",
 	Intent:      "当你要浏览或按名称查找当前用户可管理的考勤组、以便拿到考勤组 ID 用于查看详情、改成员或改配置时使用；可选按名称关键字、考勤组类型（固定班制/排班制/自由工时）过滤，并可选带出定位/Wifi/蓝牙信息，分页返回考勤组简要列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_search_group",
+			CanonicalPath:  "attendance.shortcut_search_group",
+			CLIPath:        "attendance +search-group",
+			PrimaryCLIPath: "attendance +search-group",
+		},
+		Description: "查询当前用户可管理的考勤组列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可管理的考勤组列表",
+			UseWhen:      []string{"当你要浏览或按名称查找当前用户可管理的考勤组、以便拿到考勤组 ID 用于查看详情、改成员或改配置时使用；可选按名称关键字、考勤组类型（固定班制/排班制/自由工时）过滤，并可选带出定位/Wifi/蓝牙信息，分页返回考勤组简要列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +search-group --query \"研发\" --type FIXED --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "考勤组名称关键字，模糊搜索"},
 		{Name: "type", Type: shortcut.FlagString, Enum: []string{"FIXED", "TURN", "NONE"}, Desc: "考勤组类型：FIXED 固定班制 / TURN 排班制 / NONE 自由工时"},
@@ -1051,6 +1343,31 @@ var GetSummary = shortcut.Shortcut{
 	Description: "查询某个人的考勤统计摘要（周/月）",
 	Intent:      "当你想快速了解某个人一周或一月的考勤汇总（出勤天数、迟到早退次数、加班、请假时长等统计口径）而不是逐天明细时使用；输入 userId、所在周期内的任意日期和统计类型（week/month），返回该周期的考勤统计摘要。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_summary",
+			CanonicalPath:  "attendance.shortcut_get_summary",
+			CLIPath:        "attendance +get-summary",
+			PrimaryCLIPath: "attendance +get-summary",
+		},
+		Description: "查询某个人的考勤统计摘要（周/月）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询某个人的考勤统计摘要（周/月）",
+			UseWhen:      []string{"当你想快速了解某个人一周或一月的考勤汇总（出勤天数、迟到早退次数、加班、请假时长等统计口径）而不是逐天明细时使用；输入 userId、所在周期内的任意日期和统计类型（week/month），返回该周期的考勤统计摘要。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-summary --user USER_ID --date 2026-03-12 --stats-type week"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "user", Type: shortcut.FlagString, Desc: "钉钉用户 userId", Required: true},
 		{Name: "date", Type: shortcut.FlagString, Desc: "查询日期 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss", Required: true},
@@ -1083,6 +1400,31 @@ var GetSelfSetting = shortcut.Shortcut{
 	Description: "查询个人规则设置（打卡提醒/极速打卡/缺卡提醒等）",
 	Intent:      "当你想查看某个用户在指定场景下的个人考勤规则开关配置（如打卡提醒、极速打卡、缺卡提醒、考勤结果通知等是否开启）时使用；输入设置场景 settingScene 和用户 userId，返回该用户对应场景的个人设置。查企业全局设置用 +get-global-setting。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_self_setting",
+			CanonicalPath:  "attendance.shortcut_get_self_setting",
+			CLIPath:        "attendance +get-self-setting",
+			PrimaryCLIPath: "attendance +get-self-setting",
+		},
+		Description: "查询个人规则设置（打卡提醒/极速打卡/缺卡提醒等）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询个人规则设置（打卡提醒/极速打卡/缺卡提醒等）",
+			UseWhen:      []string{"当你想查看某个用户在指定场景下的个人考勤规则开关配置（如打卡提醒、极速打卡、缺卡提醒、考勤结果通知等是否开启）时使用；输入设置场景 settingScene 和用户 userId，返回该用户对应场景的个人设置。查企业全局设置用 +get-global-setting。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-self-setting --setting-scene checkRemind --user USER_ID"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "setting-scene", Type: shortcut.FlagString, Enum: []string{"checkRemind", "fastCheck", "checkResultNotify", "lackRemind", "personalAttendStatNotify", "bossAttendStatNotify"}, Desc: "查询设置项场景", Required: true},
 		{Name: "user", Type: shortcut.FlagString, Desc: "查询用户 userId", Required: true},
@@ -1146,6 +1488,31 @@ var QueryReportData = shortcut.Shortcut{
 	Description: "根据字段查询考勤报表数据（仅管理员）",
 	Intent:      "当你要按指定考勤字段导出/查询一批员工在某时间段的报表数值（如各人的出勤天数、迟到次数、加班时长）时使用，常用于做考勤汇总或核算；输入 userId 列表（最多 20 人）、字段 ID 列表（来自 +list-report-columns）和不超过 32 天的时间区间，返回对应字段的数据。仅管理员可用。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_query_report_data",
+			CanonicalPath:  "attendance.shortcut_query_report_data",
+			CLIPath:        "attendance +query-report-data",
+			PrimaryCLIPath: "attendance +query-report-data",
+		},
+		Description: "根据字段查询考勤报表数据（仅管理员）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "根据字段查询考勤报表数据（仅管理员）",
+			UseWhen:      []string{"当你要按指定考勤字段导出/查询一批员工在某时间段的报表数值（如各人的出勤天数、迟到次数、加班时长）时使用，常用于做考勤汇总或核算；输入 userId 列表（最多 20 人）、字段 ID 列表（来自 +list-report-columns）和不超过 32 天的时间区间，返回对应字段的数据。仅管理员可用。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +query-report-data --users userId1,userId2 --columns 1001,1002 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "目标用户 userId 列表，逗号分隔，最多 20 人", Required: true},
 		{Name: "columns", Type: shortcut.FlagStringSlice, Desc: "字段 ID 列表，逗号分隔（可用 +list-report-columns 获取）", Required: true},
@@ -1230,7 +1597,32 @@ var ListLeaveTypes = shortcut.Shortcut{
 	Description: "查询当前用户可用的假期规则列表",
 	Intent:      "当你想知道企业有哪些假期类型（年假、事假、病假等）及其对应的假期编码 code、单位、是否带薪时使用，通常是查余额或改假期规则前先拿到 leaveCode；无需参数，返回当前用户可用的假期规则列表。",
 	Risk:        shortcut.RiskRead,
-	Tips:        []string{`dws attendance +list-leave-types`},
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_list_leave_types",
+			CanonicalPath:  "attendance.shortcut_list_leave_types",
+			CLIPath:        "attendance +list-leave-types",
+			PrimaryCLIPath: "attendance +list-leave-types",
+		},
+		Description: "查询当前用户可用的假期规则列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可用的假期规则列表",
+			UseWhen:      []string{"当你想知道企业有哪些假期类型（年假、事假、病假等）及其对应的假期编码 code、单位、是否带薪时使用，通常是查余额或改假期规则前先拿到 leaveCode；无需参数，返回当前用户可用的假期规则列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +list-leave-types"},
+		},
+	},
+	Tips: []string{`dws attendance +list-leave-types`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("get_leave_types", map[string]any{
 			"McpLeaveTypeRequest": map[string]any{},
@@ -1272,6 +1664,31 @@ var GetLeaveRecords = shortcut.Shortcut{
 	Description: "查询指定员工的假期余额变更记录",
 	Intent:      "当你想追溯某个员工假期额度的变动流水（何时发放、扣减、因请假消耗多少）以核对余额来龙去脉时使用；输入单个 userId、日期区间，可选假期 code（不传查所有假期），返回该员工在该时间段的余额变更记录。只想看当前余额用 +get-leave-balance。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_leave_records",
+			CanonicalPath:  "attendance.shortcut_get_leave_records",
+			CLIPath:        "attendance +get-leave-records",
+			PrimaryCLIPath: "attendance +get-leave-records",
+		},
+		Description: "查询指定员工的假期余额变更记录",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询指定员工的假期余额变更记录",
+			UseWhen:      []string{"当你想追溯某个员工假期额度的变动流水（何时发放、扣减、因请假消耗多少）以核对余额来龙去脉时使用；输入单个 userId、日期区间，可选假期 code（不传查所有假期），返回该员工在该时间段的余额变更记录。只想看当前余额用 +get-leave-balance。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-leave-records --user USER_ID --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --start 2026-04-01 --end 2026-04-22"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "user", Type: shortcut.FlagString, Desc: "目标员工 userId", Required: true},
 		{Name: "leave-code", Type: shortcut.FlagString, Desc: "假期规则 code（不传则查询所有假期）"},
@@ -1430,6 +1847,31 @@ var GetCheckinRecord = shortcut.Shortcut{
 	Description: "查询指定员工一段时间内的签到记录",
 	Intent:      "当你要查看员工的外勤/移动办公签到记录（signin/checkin，区别于考勤打卡）时使用，例如核实业务员的拜访签到轨迹；需提供操作者企业 ID 与员工 ID、目标员工 ID 列表（最多 100 人）以及不超过 7 天的时间区间，返回这些人的签到明细。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_checkin_record",
+			CanonicalPath:  "attendance.shortcut_get_checkin_record",
+			CLIPath:        "attendance +get-checkin-record",
+			PrimaryCLIPath: "attendance +get-checkin-record",
+		},
+		Description: "查询指定员工一段时间内的签到记录",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询指定员工一段时间内的签到记录",
+			UseWhen:      []string{"当你要查看员工的外勤/移动办公签到记录（signin/checkin，区别于考勤打卡）时使用，例如核实业务员的拜访签到轨迹；需提供操作者企业 ID 与员工 ID、目标员工 ID 列表（最多 100 人）以及不超过 7 天的时间区间，返回这些人的签到明细。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-checkin-record --operator-corp-id dingXXX --operator-staff-id op001 --staff-ids user001,user002 --start \"2026-04-01 00:00:00\" --end \"2026-04-07 00:00:00\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "operator-corp-id", Type: shortcut.FlagString, Desc: "操作者企业 ID", Required: true},
 		{Name: "operator-staff-id", Type: shortcut.FlagString, Desc: "操作者员工 ID", Required: true},

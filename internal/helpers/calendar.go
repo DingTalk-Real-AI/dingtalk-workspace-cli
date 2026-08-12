@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -73,8 +75,16 @@ func installUnknownVerbFallback(group *cobra.Command) {
 				printUnknownSubcmdError(cmd, bad)
 				return
 			}
+			origHelp(cmd, args)
+			return
 		}
+		// For non-group commands, render base help then apply the safety
+		// annotation. Recursion safety hinges on NOT calling
+		// cmd.Root().HelpFunc(): in test trees calendar IS the root, so that
+		// would re-enter this wrapper. origHelp was captured before any
+		// wrapping and is the plain cobra renderer.
 		origHelp(cmd, args)
+		cli.RenderSafetyAnnotation(cmd)
 	})
 
 	prev := group.RunE
@@ -200,13 +210,27 @@ func findUnknownFlag(cmd *cobra.Command) string {
 }
 
 func newCalendarCommand() *cobra.Command {
+	// Product-level Agent routing Decl (migrated from selection/calendar.json
+	// products.calendar). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "calendar",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "管理日历本、日程、参与人、附件、会议室，并查询人员或会议室闲忙状态。",
+			UseWhen: []string{
+				"需要查询或管理钉钉日历、日程、参与人、会议室和闲忙信息时。",
+			},
+			AvoidWhen: []string{
+				"目标是聊天消息、待办或审批，而不是日历与日程资源时。",
+			},
+		},
+	})
 	root := &cobra.Command{
 		Use:   "calendar",
 		Short: "日历日程 / 会议室 / 闲忙",
 		Long: `管理钉钉日历：日程、参会人、会议室、闲忙、附件、日历本、访问权限。调用前必须先使用 --help 查看参数结构。
 
 命令结构:
-  dws calendar event       [list|get|create|update|delete|suggest|respond]  日程管理
+  dws calendar event       [list|get|create|update|delete|suggest|respond|instances]  日程管理
   dws calendar attendee    [list|add|delete]                 参会人管理
   dws calendar room        [search|add|delete|list-groups]   会议室管理
   dws calendar busy        search                           闲忙查询 (可查人、查会议室)
@@ -288,6 +312,43 @@ func newCalendarCommand() *cobra.Command {
 			return callSortedCalendarEvents(cmd, "list_calendar_events", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(eventListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "list_calendar_events",
+				CanonicalPath:  "calendar.list_calendar_events",
+				CLIPath:        "calendar event list",
+				PrimaryCLIPath: "calendar event list",
+			},
+			Description: "查询当前用户日程列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "list_calendar_events"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询当前用户日程列表",
+				UseWhen:      []string{"需要按起止时间检索指定日历本下的日程列表时（未传起止默认查当天）"},
+				AvoidWhen: []string{
+					"已知 eventId 要详情时改用 dws calendar event get",
+					"要创建日程时改用 dws calendar event create",
+				},
+				Examples: []string{
+					"dws calendar event list --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+					"dws calendar event list --calendar-id primary",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "end", Property: "endTime"},
+				{Name: "start", Property: "startTime"},
+			},
+		},
+	})
 
 	eventGetCmd := &cobra.Command{
 		Use:   "get",
@@ -306,6 +367,42 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("get_calendar_detail", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(eventGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "get_calendar_detail",
+				CanonicalPath:  "calendar.get_calendar_detail",
+				CLIPath:        "calendar event get",
+				PrimaryCLIPath: "calendar event get",
+			},
+			Description: "查询日程详情",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "get_calendar_detail"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询日程详情",
+				UseWhen:      []string{"已知 eventId，需要查看日程明细时"},
+				AvoidWhen: []string{
+					"要按时间查列表时改用 dws calendar event list",
+					"要创建/删除时改用 create/delete",
+				},
+				Examples: []string{
+					"dws calendar event get --id <EVENT_ID>",
+					"dws calendar event get --id <EVENT_ID> --calendar-id primary",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "eventId"},
+			},
+		},
+	})
 
 	eventCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -386,6 +483,50 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("create_calendar_event", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(eventCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "create_calendar_event",
+				CanonicalPath:  "calendar.create_calendar_event",
+				CLIPath:        "calendar event create",
+				PrimaryCLIPath: "calendar event create",
+			},
+			Description: "创建日程",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "create_calendar_event"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建日程",
+				UseWhen:      []string{"需要创建新日程（时间、可选参会人/提醒/会议室/循环规则）并提取 eventId 时"},
+				AvoidWhen: []string{
+					"只需查询日程列表或详情时改用 event list/get",
+					"只改已有日程字段时改用 event update；改参会人/会议室用 attendee/room 命令",
+				},
+				Examples: []string{
+					"dws calendar event create --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+					"dws calendar event create --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --attendees userId1,userId2",
+				},
+			},
+			Parameters: append([]contract.ParamDecl{
+				{Name: "title", Property: "summary", Required: boolPtr(true)},
+				{Name: "start", Property: "startDateTime", Required: boolPtr(true)},
+				{Name: "end", Property: "endDateTime", Required: boolPtr(true)},
+				{Name: "desc", Property: "description"},
+				{Name: "open-dingtalk-ids", Property: "openDingTalkIds"},
+				{Name: "remind-minutes", Property: "reminders"},
+				{Name: "rich-text-desc", Property: "richTextDescription"},
+				{Name: "rooms", Property: "roomIds"},
+				{Name: "timezone", Property: "timeZone"},
+			}, calendarRecurrenceParamDecls()...),
+		},
+	})
 
 	eventUpdateCmd := &cobra.Command{
 		Use:   "update",
@@ -441,6 +582,48 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("update_calendar_event", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(eventUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "update_calendar_event",
+				CanonicalPath:  "calendar.update_calendar_event",
+				CLIPath:        "calendar event update",
+				PrimaryCLIPath: "calendar event update",
+			},
+			Description: "修改日程",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "update_calendar_event"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "修改日程",
+				UseWhen:      []string{"已知 eventId 且具备组织者权限，需要修改标题、时间、地点、描述等字段时"},
+				AvoidWhen: []string{
+					"改参会人请用 attendee add/delete；改会议室请用 room add/delete",
+					"目标字段未确认时不要更新",
+				},
+				Examples: []string{
+					"dws calendar event update --id <EVENT_ID> --title \"新标题\"",
+					"dws calendar event update --id <EVENT_ID> --desc \"新描述\" --timezone Asia/Tokyo",
+				},
+			},
+			Parameters: append([]contract.ParamDecl{
+				{Name: "desc", Property: "description"},
+				{Name: "end", Property: "endDateTime"},
+				{Name: "id", Property: "eventId"},
+				{Name: "rich-text-desc", Property: "richTextDescription"},
+				{Name: "start", Property: "startDateTime"},
+				{Name: "timezone", Property: "timeZone"},
+				{Name: "title", Property: "summary"},
+			}, calendarRecurrenceParamDecls()...),
+		},
+	})
 
 	eventDeleteCmd := &cobra.Command{
 		Use:     "delete",
@@ -458,6 +641,39 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("delete_calendar_event", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(eventDeleteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "delete_calendar_event",
+				CanonicalPath:  "calendar.delete_calendar_event",
+				CLIPath:        "calendar event delete",
+				PrimaryCLIPath: "calendar event delete",
+			},
+			Description: "删除指定日程",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "delete_calendar_event"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除指定日程",
+				UseWhen:      []string{"用户明确要求删除/取消指定日程，且 eventId 已确认时（组织者删除会通知所有参与者）"},
+				AvoidWhen: []string{
+					"只需从自己日历移除参与身份且非组织者场景需区分影响范围",
+					"目标 eventId 未确认或仍需保留日程时不要删除",
+				},
+				Examples: []string{"dws calendar event delete --id <id>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "eventId"},
+			},
+		},
+	})
 
 	eventSuggestCmd := &cobra.Command{
 		Use:   "suggest",
@@ -486,6 +702,44 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("list_suggested_event_times", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(eventSuggestCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "list_suggested_event_times",
+				CanonicalPath:  "calendar.list_suggested_event_times",
+				CLIPath:        "calendar event suggest",
+				PrimaryCLIPath: "calendar event suggest",
+			},
+			Description: "建议日程时间",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "list_suggested_event_times"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "建议日程时间",
+				UseWhen:      []string{"时间未定，需要基于参会人闲忙推荐可用时间块时"},
+				AvoidWhen: []string{
+					"时间已确定只需创建日程时改用 event create",
+					"只查闲忙片段时改用 busy search",
+				},
+				Examples: []string{
+					"dws calendar event suggest --users userId1,userId2 --duration 60",
+					"dws calendar event suggest --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --users userId1",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "duration", Property: "durationMinutes"},
+				{Name: "timezone", Property: "timeZone"},
+				{Name: "users", Property: "attendeeUserIds"},
+			},
+		},
+	})
 
 	eventRespondCmd := &cobra.Command{
 		Use:   "respond",
@@ -522,6 +776,43 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("respond", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(eventRespondCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "respond",
+				CanonicalPath:  "calendar.respond",
+				CLIPath:        "calendar event respond",
+				PrimaryCLIPath: "calendar event respond",
+			},
+			Description: "响应日程",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "respond"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "响应日程",
+				UseWhen:      []string{"作为参会人需要设置自己的响应状态（accepted/declined/tentative）时"},
+				AvoidWhen: []string{
+					"是组织者要改日程内容时改用 event update",
+					"订阅日历日程不可响应",
+				},
+				Examples: []string{
+					"dws calendar event respond --id <EVENT_ID> --status accepted",
+					"dws calendar event respond --id <EVENT_ID> --status declined",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "eventId"},
+				{Name: "status", Property: "responseStatus"},
+			},
+		},
+	})
 
 	// ── attendee: 参会人 (曾用名: participant) ─────────────────
 
@@ -552,6 +843,37 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("get_calendar_participants", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(participantListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "get_calendar_participants",
+				CanonicalPath:  "calendar.get_calendar_participants",
+				CLIPath:        "calendar attendee list",
+				PrimaryCLIPath: "calendar attendee list",
+			},
+			Description: "获取日程参与人",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "get_calendar_participants"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取日程参与人",
+				UseWhen:      []string{"已知 eventId，需要查看参会人列表及状态时（订阅日历日程无参会人）"},
+				AvoidWhen:    []string{"要添加/移除参会人时改用 attendee add/delete"},
+				Examples:     []string{"dws calendar attendee list --event <EVENT_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "calendar-id", Property: "calendarId"},
+				{Name: "event", Property: "eventId"},
+			},
+		},
+	})
 
 	participantAddCmd := &cobra.Command{
 		Use:   "add",
@@ -583,6 +905,44 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("add_calendar_participant", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(participantAddCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "add_calendar_participant",
+				CanonicalPath:  "calendar.add_calendar_participant",
+				CLIPath:        "calendar attendee add",
+				PrimaryCLIPath: "calendar attendee add",
+			},
+			Description: "添加日程参与人",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "add_calendar_participant"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "添加日程参与人",
+				UseWhen:      []string{"已知 eventId，需要向已有日程批量添加参会人时（订阅日历日程无参会人）"},
+				AvoidWhen: []string{
+					"要查看参会人时改用 dws calendar attendee list",
+					"要移除参会人时改用 dws calendar attendee delete",
+				},
+				Examples: []string{
+					"dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID_1>,<USER_ID_2>",
+					"dws calendar attendee add --event <EVENT_ID> --attendees <USER_ID> --optional",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "attendees", Property: "attendeesToAdd"},
+				{Name: "calendar-id", Property: "calendarId"},
+				{Name: "event", Property: "eventId"},
+			},
+		},
+	})
 
 	participantDeleteCmd := &cobra.Command{
 		Use:   "delete",
@@ -610,6 +970,41 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("remove_calendar_participant", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(participantDeleteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "remove_calendar_participant",
+				CanonicalPath:  "calendar.remove_calendar_participant",
+				CLIPath:        "calendar attendee delete",
+				PrimaryCLIPath: "calendar attendee delete",
+			},
+			Description: "删除日程参与人",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "remove_calendar_participant"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除日程参与人",
+				UseWhen:      []string{"已知 eventId，需要从日程批量移除参会人时（订阅日历日程无参会人）"},
+				AvoidWhen: []string{
+					"要添加参会人时改用 attendee add",
+					"要查看参会人时改用 attendee list",
+				},
+				Examples: []string{"dws calendar attendee delete --attendees <attendees> --event <event>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "attendees", Property: "attendeesToRemove"},
+				{Name: "calendar-id", Property: "calendarId"},
+				{Name: "event", Property: "eventId"},
+			},
+		},
+	})
 
 	// ── room: 会议室 ────────────────────────────────────────────
 
@@ -737,6 +1132,45 @@ func newCalendarCommand() *cobra.Command {
 			return callMeetingRoomSearchResult(cmd, toolArgs, startProvided, endProvided, startCorrected)
 		},
 	}
+	DeclareLeafMetadata(roomSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "query_available_meeting_room",
+				CanonicalPath:  "calendar.query_available_meeting_room",
+				CLIPath:        "calendar room search",
+				PrimaryCLIPath: "calendar room search",
+			},
+			Description: "查询空闲或按名搜索会议室",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "query_available_meeting_room"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询空闲或按名搜索会议室",
+				UseWhen:      []string{"需要按名称模糊搜会议室，或按时间段查询全程空闲且可预订的会议室时"},
+				AvoidWhen: []string{
+					"要完成预订时在取得 roomId 后改用 room add",
+					"只要会议室分组时改用 room list-groups",
+				},
+				Examples: []string{
+					"dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+					"dws calendar room search --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --group-id <GROUP_ID>",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "end", Property: "endTime"},
+				{Name: "limit", Property: "pageSize"},
+				{Name: "page", Property: "pageIndex"},
+				{Name: "start", Property: "startTime"},
+			},
+		},
+	})
 
 	roomAddCmd := &cobra.Command{
 		Use:   "add",
@@ -764,6 +1198,43 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("add_meeting_room", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(roomAddCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "add_meeting_room",
+				CanonicalPath:  "calendar.add_meeting_room",
+				CLIPath:        "calendar room add",
+				PrimaryCLIPath: "calendar room add",
+			},
+			Description: "为日程预订会议室",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "add_meeting_room"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "为日程预订会议室",
+				UseWhen:      []string{"已知 eventId 与 roomId，需要为已有日程预订线下会议室时"},
+				AvoidWhen: []string{
+					"要搜索空闲会议室时先用 dws calendar room search",
+					"要取消会议室预订时改用 dws calendar room delete",
+				},
+				Examples: []string{
+					"dws calendar room add --event <EVENT_ID> --rooms <ROOM_ID>",
+					"dws calendar room add --event <EVENT_ID> --rooms <ROOM_ID> --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "event", Property: "eventId"},
+				{Name: "rooms", Property: "roomIds"},
+			},
+		},
+	})
 
 	roomDeleteCmd := &cobra.Command{
 		Use:   "delete",
@@ -790,6 +1261,40 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("delete_meeting_room", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(roomDeleteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "delete_meeting_room",
+				CanonicalPath:  "calendar.delete_meeting_room",
+				CLIPath:        "calendar room delete",
+				PrimaryCLIPath: "calendar room delete",
+			},
+			Description: "移除日程中的会议室",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "delete_meeting_room"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "移除日程中的会议室",
+				UseWhen:      []string{"已知 eventId 与 roomId，需要取消日程会议室预订并释放占用时"},
+				AvoidWhen: []string{
+					"要新增预订时改用 dws calendar room add",
+					"eventId/roomId 未确认时不要移除",
+				},
+				Examples: []string{"dws calendar room delete --event <event> --rooms <rooms>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "event", Property: "eventId"},
+				{Name: "rooms", Property: "roomIds"},
+			},
+		},
+	})
 
 	roomListGroupsCmd := &cobra.Command{
 		Use:   "list-groups",
@@ -810,6 +1315,40 @@ func newCalendarCommand() *cobra.Command {
 			return callMeetingRoomMCPTool("list_meeting_room_groups", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(roomListGroupsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "list_meeting_room_groups",
+				CanonicalPath:  "calendar.list_meeting_room_groups",
+				CLIPath:        "calendar room list-groups",
+				PrimaryCLIPath: "calendar room list-groups",
+			},
+			Description: "查询会议室分组列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "list_meeting_room_groups"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询会议室分组列表",
+				UseWhen:      []string{"需要分页查看企业会议室分组（groupId/parentId）时"},
+				AvoidWhen:    []string{"要搜空闲会议室时改用 dws calendar room search"},
+				Examples: []string{
+					"dws calendar room list-groups",
+					"dws calendar room list-groups --limit 20 --page 0",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "limit", Property: "pageSize"},
+				{Name: "page", Property: "pageIndex"},
+			},
+		},
+	})
 
 	// ── busy: 闲忙 ──────────────────────────────────────────────
 
@@ -866,6 +1405,42 @@ func newCalendarCommand() *cobra.Command {
 			return callFilteredBusyStatus(cmd, toolArgs)
 		},
 	}
+	DeclareLeafMetadata(busySearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "query_busy_status",
+				CanonicalPath:  "calendar.query_busy_status",
+				CLIPath:        "calendar busy search",
+				PrimaryCLIPath: "calendar busy search",
+			},
+			Description: "查询用户或会议室闲忙",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "query_busy_status"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询用户或会议室闲忙",
+				UseWhen:      []string{"需要查询指定用户和/或会议室在时间范围内的已占用时段时（users 与 rooms 至少其一）"},
+				AvoidWhen:    []string{"需要创建或改日程时不要使用；本命令只返回闲忙时间片段"},
+				Examples: []string{
+					"dws calendar busy search --users <USER_ID_1>,<USER_ID_2> --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+					"dws calendar busy search --rooms <ROOM_ID_1>,<ROOM_ID_2> --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "end", Property: "endTime"},
+				{Name: "rooms", Property: "roomIds"},
+				{Name: "start", Property: "startTime"},
+				{Name: "users", Property: "userIds"},
+			},
+		},
+	})
 
 	// ── attachment: 附件 ────────────────────────────────────────
 
@@ -914,6 +1489,43 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("add_attachments", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(attachmentAddCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "add_attachments",
+				CanonicalPath:  "calendar.add_attachments",
+				CLIPath:        "calendar attachment add",
+				PrimaryCLIPath: "calendar attachment add",
+			},
+			Description: "为日程添加附件",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "add_attachments"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "为日程添加附件",
+				UseWhen:      []string{"已知 eventId，已有钉盘 fileId，需要为日程添加附件时（订阅日历日程不支持）"},
+				AvoidWhen: []string{
+					"尚未上传钉盘文件取得 fileId 时不要调用",
+					"只需查询日程时改用 dws calendar event get",
+				},
+				Examples: []string{
+					"dws calendar attachment add --event <EVENT_ID> --files <FILE_ID>:report.pdf,<FILE_ID2>:slides.pptx",
+					"dws calendar attachment add --event <EVENT_ID> --files <FILE_ID>:report.pdf --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "event", Property: "eventId"},
+				{Name: "files", Property: "attachments"},
+			},
+		},
+	})
 
 	// ── acl: 日历访问权限 ─────────────────────────────────────────
 
@@ -928,6 +1540,33 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("list_acls", nil)
 		},
 	}
+	DeclareLeafMetadata(aclListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "list_acls",
+				CanonicalPath:  "calendar.list_acls",
+				CLIPath:        "calendar acl list",
+				PrimaryCLIPath: "calendar acl list",
+			},
+			Description: "查询主日历访问控制列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "list_acls"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询主日历访问控制列表",
+				UseWhen:      []string{"需要查看主日历共享给了谁、各自权限时（不是日历本列表）"},
+				AvoidWhen:    []string{"要列日历本时改用 dws calendar book list"},
+				Examples:     []string{"dws calendar acl list"},
+			},
+		},
+	})
 
 	aclAddCmd := &cobra.Command{
 		Use:   "add",
@@ -993,6 +1632,36 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("list_calendars", nil)
 		},
 	}
+	DeclareLeafMetadata(bookListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "list_calendars",
+				CanonicalPath:  "calendar.list_calendars",
+				CLIPath:        "calendar book list",
+				PrimaryCLIPath: "calendar book list",
+			},
+			Description: "查询用户日历列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "list_calendars"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询用户日历列表",
+				UseWhen:      []string{"需要列出自己的、已订阅的、他人共享的日历本（主日历 id=primary）时"},
+				AvoidWhen: []string{
+					"已知日历 id 要详情时改用 dws calendar book get",
+					"要按名称模糊搜索时改用 dws calendar book search",
+				},
+				Examples: []string{"dws calendar book list"},
+			},
+		},
+	})
 
 	bookGetCmd := &cobra.Command{
 		Use:   "get",
@@ -1008,6 +1677,42 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("get_calendar", map[string]any{"calendarId": calendarID})
 		},
 	}
+	DeclareLeafMetadata(bookGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "get_calendar",
+				CanonicalPath:  "calendar.get_calendar",
+				CLIPath:        "calendar book get",
+				PrimaryCLIPath: "calendar book get",
+			},
+			Description: "查询指定日历信息",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "get_calendar"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询指定日历信息",
+				UseWhen:      []string{"已知日历 id（主日历固定 primary），需要查询该日历本信息时"},
+				AvoidWhen: []string{
+					"要列全部日历时改用 dws calendar book list",
+					"要按名称搜索日历本时改用 dws calendar book search",
+				},
+				Examples: []string{
+					"dws calendar book get --id primary",
+					"dws calendar book get --id CALENDAR_ID",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "calendarId"},
+			},
+		},
+	})
 
 	bookSearchCmd := &cobra.Command{
 		Use:   "search",
@@ -1023,6 +1728,42 @@ func newCalendarCommand() *cobra.Command {
 			return callMCPTool("search_calendar", map[string]any{"query": query})
 		},
 	}
+	DeclareLeafMetadata(bookSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "search_calendar",
+				CanonicalPath:  "calendar.search_calendar",
+				CLIPath:        "calendar book search",
+				PrimaryCLIPath: "calendar book search",
+			},
+			Description: "搜索日历本列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "search_calendar"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "搜索日历本列表",
+				UseWhen:      []string{"需要按日历本名模糊搜索当前用户拥有的日历本时"},
+				AvoidWhen: []string{
+					"要获取全部日历时改用 dws calendar book list",
+					"已知 id 要详情时改用 book get",
+				},
+				Examples: []string{
+					"dws calendar book search --query \"项目\"",
+					"dws calendar book search --query \"团队周报\"",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "query", Property: "query"},
+			},
+		},
+	})
 
 	bookUpdateCmd := &cobra.Command{
 		Use:   "update",
@@ -1341,7 +2082,184 @@ func newCalendarCommand() *cobra.Command {
 	eventSuggestCmd.Flags().String("members", "", "")
 	_ = eventSuggestCmd.Flags().MarkHidden("members")
 	eventSuggestCmd.Flags().String("duration", "", "日程持续时间 (分钟，默认30)")
-	eventCmd.AddCommand(eventListCmd, eventGetCmd, eventCreateCmd, eventUpdateCmd, eventDeleteCmd, eventSuggestCmd, eventRespondCmd)
+
+	eventInstancesCmd := &cobra.Command{
+		Use:   "instances",
+		Short: "查询循环日程的实例列表",
+		Long: `查询指定重复性日程（SeriesMaster）在指定时间范围内的所有实例。
+**注意**：此接口只能查询重复性日程的实例；若传入的是普通非循环日程，将查不到任何实例信息。
+必须传入 --id 指定重复性日程的 eventId（即 SeriesMaster 的 eventId，可通过 event list 获取）。
+不传 --start/--end 时，默认查询今天（00:00:00 ~ 23:59:59）的实例。`,
+		Example: `  dws calendar event instances --id EVENT_ID
+  dws calendar event instances --id EVENT_ID --start "2026-03-10T00:00:00+08:00" --end "2026-03-31T23:59:59+08:00"
+  dws calendar event instances --id EVENT_ID --limit 50
+  dws calendar event instances --id EVENT_ID --cursor "<nextCursor>"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			eventID, err := mustFlagOrFallback(cmd, "id", "event", "event-id", "eventId")
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{"eventId": eventID}
+			var startTime, endTime int64
+			var now time.Time
+			if v := flagOrFallback(cmd, "start", "time-min", "min-time", "start-time", "startTime", "start_time", "start-date", "startDate"); v != "" {
+				startTime, err = parseISOTimeToMillis("start", v)
+				if err != nil {
+					return err
+				}
+				toolArgs["startTime"] = startTime
+			} else {
+				now = time.Now()
+				startTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).UnixMilli()
+				toolArgs["startTime"] = startTime
+			}
+			if v := flagOrFallback(cmd, "end", "time-max", "max-time", "end-time", "endTime", "end_time", "end-date", "endDate"); v != "" {
+				endTime, err = parseISOTimeToMillis("end", v)
+				if err != nil {
+					return err
+				}
+				toolArgs["endTime"] = endTime
+			} else {
+				if now.IsZero() {
+					now = time.Now()
+				}
+				endTime = time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location()).UnixMilli()
+				toolArgs["endTime"] = endTime
+			}
+			if err := validateTimeRange(startTime, endTime); err != nil {
+				return err
+			}
+			if v := flagOrFallback(cmd, "calendar-id", "calendarId", "calendar"); v != "" {
+				toolArgs["calendarId"] = v
+			}
+			if v := flagOrFallback(cmd, "cursor", "next-cursor", "nextCursor", "page-token", "pageToken", "next-token"); v != "" {
+				toolArgs["cursor"] = v
+			}
+			if lim, _ := cmd.Flags().GetInt("limit"); lim > 0 {
+				toolArgs["limit"] = lim
+			} else if lim, _ := cmd.Flags().GetInt("max-results"); lim > 0 {
+				toolArgs["limit"] = lim
+			} else if lim, _ := cmd.Flags().GetInt("maxResults"); lim > 0 {
+				toolArgs["limit"] = lim
+			} else if lim, _ := cmd.Flags().GetInt("page-size"); lim > 0 {
+				toolArgs["limit"] = lim
+			} else if lim, _ := cmd.Flags().GetInt("size"); lim > 0 {
+				toolArgs["limit"] = lim
+			} else if lim, _ := cmd.Flags().GetInt("count"); lim > 0 {
+				toolArgs["limit"] = lim
+			}
+			return callSortedCalendarEvents(cmd, "list_event_instances", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(eventInstancesCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "list_event_instances",
+				CanonicalPath:  "calendar.list_event_instances",
+				CLIPath:        "calendar event instances",
+				PrimaryCLIPath: "calendar event instances",
+			},
+			Description: "查询循环日程的实例列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "list_event_instances"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询循环日程在时间范围内展开的实例",
+				UseWhen:      []string{"已知循环日程 eventId（SeriesMaster），需要列出某时间窗内的实例时"},
+				AvoidWhen: []string{
+					"普通非循环日程请用 dws calendar event get / list",
+					"未知 eventId 时先 dws calendar event list",
+				},
+				Examples: []string{
+					"dws calendar event instances --id <EVENT_ID>",
+					"dws calendar event instances --id <EVENT_ID> --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-31T23:59:59+08:00\"",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "eventId", Required: boolPtr(true)},
+				{Name: "start", Property: "startTime"},
+				{Name: "end", Property: "endTime"},
+				{Name: "calendar-id", Property: "calendarId"},
+				{Name: "cursor", Property: "cursor"},
+				{Name: "limit", Property: "limit", InterfaceType: "integer"},
+			},
+		},
+	})
+
+	// InstancesEvent flags (aligned with event list aliases)
+	eventInstancesCmd.Flags().String("id", "", "日程 ID (必填)")
+	eventInstancesCmd.Flags().String("event", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("event")
+	eventInstancesCmd.Flags().String("event-id", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("event-id")
+	eventInstancesCmd.Flags().String("eventId", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("eventId")
+	eventInstancesCmd.Flags().String("start", "", "开始时间 ISO-8601 (例如 2026-03-10T00:00:00+08:00)")
+	eventInstancesCmd.Flags().String("time-min", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("time-min")
+	eventInstancesCmd.Flags().String("min-time", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("min-time")
+	eventInstancesCmd.Flags().String("start-time", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("start-time")
+	eventInstancesCmd.Flags().String("startTime", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("startTime")
+	eventInstancesCmd.Flags().String("start_time", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("start_time")
+	eventInstancesCmd.Flags().String("start-date", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("start-date")
+	eventInstancesCmd.Flags().String("startDate", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("startDate")
+	eventInstancesCmd.Flags().String("end", "", "结束时间 ISO-8601 (例如 2026-03-31T23:59:59+08:00)")
+	eventInstancesCmd.Flags().String("time-max", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("time-max")
+	eventInstancesCmd.Flags().String("max-time", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("max-time")
+	eventInstancesCmd.Flags().String("end-time", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("end-time")
+	eventInstancesCmd.Flags().String("endTime", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("endTime")
+	eventInstancesCmd.Flags().String("end_time", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("end_time")
+	eventInstancesCmd.Flags().String("end-date", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("end-date")
+	eventInstancesCmd.Flags().String("endDate", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("endDate")
+	eventInstancesCmd.Flags().String("calendar-id", "", "日历 ID (可选，默认 primary 主日历；指定其他日历本时填写，可通过 book list 获取)")
+	eventInstancesCmd.Flags().String("calendarId", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("calendarId")
+	eventInstancesCmd.Flags().String("calendar", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("calendar")
+	eventInstancesCmd.Flags().String("cursor", "", "分页游标 (首次查询无需传入，仅翻页时传入上一次返回的 nextCursor)")
+	eventInstancesCmd.Flags().String("next-cursor", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("next-cursor")
+	eventInstancesCmd.Flags().String("nextCursor", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("nextCursor")
+	eventInstancesCmd.Flags().String("page-token", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("page-token")
+	eventInstancesCmd.Flags().String("pageToken", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("pageToken")
+	eventInstancesCmd.Flags().String("next-token", "", "")
+	_ = eventInstancesCmd.Flags().MarkHidden("next-token")
+	eventInstancesCmd.Flags().Int("limit", 0, "每页返回条数 (默认 100，最大 100)")
+	eventInstancesCmd.Flags().Int("max-results", 0, "")
+	_ = eventInstancesCmd.Flags().MarkHidden("max-results")
+	eventInstancesCmd.Flags().Int("maxResults", 0, "")
+	_ = eventInstancesCmd.Flags().MarkHidden("maxResults")
+	eventInstancesCmd.Flags().Int("page-size", 0, "")
+	_ = eventInstancesCmd.Flags().MarkHidden("page-size")
+	eventInstancesCmd.Flags().Int("size", 0, "")
+	_ = eventInstancesCmd.Flags().MarkHidden("size")
+	eventInstancesCmd.Flags().Int("count", 0, "")
+	_ = eventInstancesCmd.Flags().MarkHidden("count")
+
+	eventCmd.AddCommand(eventListCmd, eventGetCmd, eventCreateCmd, eventUpdateCmd, eventDeleteCmd, eventSuggestCmd, eventRespondCmd, eventInstancesCmd)
 
 	// participant
 	participantCmd.PersistentFlags().String("event", "", "日程 ID (必填)")
@@ -2023,6 +2941,22 @@ var recurrenceFlagNames = []string{
 	"recurrence-type", "recurrence-interval", "recurrence-days-of-week",
 	"recurrence-day-of-month", "recurrence-index", "recurrence-first-day-of-week",
 	"recurrence-range-type", "recurrence-end-date", "recurrence-count",
+}
+
+// calendarRecurrenceParamDecls declares recurrence required/required_when pins
+// for create/update event leaves (native_annotation).
+func calendarRecurrenceParamDecls() []contract.ParamDecl {
+	return []contract.ParamDecl{
+		{Name: "recurrence-day-of-month", Property: "recurrence.pattern.dayOfMonth", Required: boolPtr(false), RequiredWhen: "recurrence-type is absoluteMonthly or absoluteYearly"},
+		{Name: "recurrence-days-of-week", Property: "recurrence.pattern.daysOfWeek", Required: boolPtr(false), RequiredWhen: "recurrence-type is weekly or relativeMonthly"},
+		{Name: "recurrence-index", Property: "recurrence.pattern.index", Required: boolPtr(false), RequiredWhen: "recurrence-type is relativeMonthly"},
+		{Name: "recurrence-interval", Property: "recurrence.pattern.interval", Required: boolPtr(false), RequiredWhen: "any recurrence-* flag is provided"},
+		{Name: "recurrence-type", Property: "recurrence.pattern.type", Required: boolPtr(false), RequiredWhen: "any recurrence-* flag is provided"},
+		{Name: "recurrence-end-date", Property: "recurrence.range.endDate", Required: boolPtr(false), RequiredWhen: "recurrence-range-type is endDate"},
+		{Name: "recurrence-count", Property: "recurrence.range.numberOfOccurrences", Required: boolPtr(false), RequiredWhen: "recurrence-range-type is numbered"},
+		{Name: "recurrence-range-type", Property: "recurrence.range.type", Required: boolPtr(false), RequiredWhen: "any recurrence-* flag is provided"},
+		{Name: "recurrence-first-day-of-week", Property: "recurrence.pattern.firstDayOfWeek"},
+	}
 }
 
 // recurrenceIncompleteSuggestion is the canonical reminder appended to any

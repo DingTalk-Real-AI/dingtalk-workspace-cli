@@ -18,28 +18,30 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 func TestInterfaceSpecValidateDispositionMatrix(t *testing.T) {
-	ref := &InterfaceRefSpec{ProductID: "calendar", RPCName: "get_event"}
+	ref := &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "get_event"}
 	for _, test := range []struct {
 		name       string
-		spec       InterfaceSpec
+		spec       contract.InterfaceSpec
 		wantError  string
 		executable bool
 	}{
-		{name: "mcp available", spec: InterfaceSpec{Mode: InterfaceModeMCP, Availability: InterfaceAvailable, Ref: ref}, executable: true},
-		{name: "local available", spec: InterfaceSpec{Mode: InterfaceModeLocal, Availability: InterfaceAvailable}, executable: true},
-		{name: "composite available", spec: InterfaceSpec{Mode: InterfaceModeComposite, Availability: InterfaceAvailable, Reason: "orchestrates operations"}, executable: true},
-		{name: "mcp unavailable", spec: InterfaceSpec{Mode: InterfaceModeMCP, Availability: InterfaceUnavailable, Reason: "RPC temporarily disabled"}},
-		{name: "local unavailable", spec: InterfaceSpec{Mode: InterfaceModeLocal, Availability: InterfaceUnavailable, Reason: "compatibility command frozen"}},
-		{name: "composite unavailable", spec: InterfaceSpec{Mode: InterfaceModeComposite, Availability: InterfaceUnavailable, Reason: "workflow retired"}},
-		{name: "legacy unavailable mode", spec: InterfaceSpec{Mode: InterfaceUnavailable, Availability: InterfaceUnavailable, Reason: "legacy"}, wantError: "legacy interface_mode=unavailable; migrate"},
-		{name: "mcp available missing ref", spec: InterfaceSpec{Mode: InterfaceModeMCP, Availability: InterfaceAvailable}, wantError: "has no interface_ref"},
-		{name: "local available with ref", spec: InterfaceSpec{Mode: InterfaceModeLocal, Availability: InterfaceAvailable, Ref: ref}, wantError: "must not declare interface_ref"},
-		{name: "composite available missing reason", spec: InterfaceSpec{Mode: InterfaceModeComposite, Availability: InterfaceAvailable}, wantError: "must declare interface_reason"},
-		{name: "unavailable with ref", spec: InterfaceSpec{Mode: InterfaceModeMCP, Availability: InterfaceUnavailable, Reason: "retired", Ref: ref}, wantError: "unavailable interface must not declare interface_ref"},
-		{name: "unavailable missing reason", spec: InterfaceSpec{Mode: InterfaceModeLocal, Availability: InterfaceUnavailable}, wantError: "must declare interface_reason"},
+		{name: "mcp available", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeMCP, Availability: contract.InterfaceAvailable, Ref: ref}, executable: true},
+		{name: "local available", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeLocal, Availability: contract.InterfaceAvailable}, executable: true},
+		{name: "composite available", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "orchestrates operations"}, executable: true},
+		{name: "mcp unavailable", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeMCP, Availability: contract.InterfaceUnavailable, Reason: "RPC temporarily disabled"}},
+		{name: "local unavailable", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeLocal, Availability: contract.InterfaceUnavailable, Reason: "compatibility command frozen"}},
+		{name: "composite unavailable", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceUnavailable, Reason: "workflow retired"}},
+		{name: "legacy unavailable mode", spec: contract.InterfaceSpec{Mode: contract.InterfaceUnavailable, Availability: contract.InterfaceUnavailable, Reason: "legacy"}, wantError: "legacy interface_mode=unavailable; migrate"},
+		{name: "mcp available missing ref", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeMCP, Availability: contract.InterfaceAvailable}, wantError: "has no interface_ref"},
+		{name: "local available with ref", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeLocal, Availability: contract.InterfaceAvailable, Ref: ref}, wantError: "must not declare interface_ref"},
+		{name: "composite available missing reason", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable}, wantError: "must declare interface_reason"},
+		{name: "unavailable with ref", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeMCP, Availability: contract.InterfaceUnavailable, Reason: "retired", Ref: ref}, wantError: "unavailable interface must not declare interface_ref"},
+		{name: "unavailable missing reason", spec: contract.InterfaceSpec{Mode: contract.InterfaceModeLocal, Availability: contract.InterfaceUnavailable}, wantError: "must declare interface_reason"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			err := test.spec.Validate("calendar.event_get")
@@ -61,7 +63,7 @@ func TestToolSpecFromRuntimeBuildsOneTypedResolvedContract(t *testing.T) {
 	selected := true
 	reviewed := false
 	spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{
-		Identity: ToolIdentitySpec{
+		Identity: contract.ToolIdentitySpec{
 			ProductID: " calendar ",
 			Name:      " attendee_delete ",
 			CLIName:   "delete",
@@ -80,34 +82,34 @@ func TestToolSpecFromRuntimeBuildsOneTypedResolvedContract(t *testing.T) {
 				Property:    "eventId",
 				Required:    false,
 				CLIRequired: true,
-				FieldProvenance: map[string]FieldProvenance{
+				FieldProvenance: map[string]contract.FieldProvenance{
 					"required": {
 						Value:      json.RawMessage("false"),
 						Source:     "reviewed_manual_hint",
-						Precedence: "reviewed_manual",
+						Precedence: ProvenanceReviewedManual,
 						Resolution: "highest_precedence",
-						Candidates: []FieldCandidateProvenance{{
+						Candidates: []contract.FieldCandidateProvenance{{
 							Value:      json.RawMessage("false"),
 							Source:     "reviewed_manual_hint",
-							Precedence: "reviewed_manual",
+							Precedence: ProvenanceReviewedManual,
 							Selected:   &selected,
 						}},
 					},
 				},
 			},
 		},
-		Safety: SafetySpec{
+		Safety: contract.SafetySpec{
 			Effect:       "write",
 			Risk:         "low",
 			Confirmation: "not_required",
 			Idempotency:  "non_idempotent",
 		},
-		Interface: InterfaceSpec{
-			Ref:          &InterfaceRefSpec{ProductID: "calendar", RPCName: "delete_attendee"},
+		Interface: contract.InterfaceSpec{
+			Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "delete_attendee"},
 			Mode:         "mcp",
 			Availability: "available",
 		},
-		Selection: SelectionSpec{
+		Selection: contract.SelectionSpec{
 			UseWhen:        []string{"remove attendee", "delete attendee", "remove attendee"},
 			AvoidWhen:      []string{"keep attendee"},
 			Reviewed:       &reviewed,
@@ -141,21 +143,21 @@ func TestToolSpecFromRuntimeBuildsOneTypedResolvedContract(t *testing.T) {
 }
 
 func TestToolSpecDryRunCapabilityProjectsAndRoundTripsAtomically(t *testing.T) {
-	dryRun := &DryRunSpec{PreviewKind: DryRunPreviewDiff, RemoteReads: true}
+	dryRun := &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewDiff, RemoteReads: true}
 	spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{
-		Identity: ToolIdentitySpec{
+		Identity: contract.ToolIdentitySpec{
 			ProductID: "doc",
 			Name:      "update",
 			CLIName:   "update",
 			CLIPath:   "doc update",
 		},
 		DryRun: dryRun,
-		FieldProvenance: map[string]FieldProvenance{
+		FieldProvenance: map[string]contract.FieldProvenance{
 			"dry_run": resolvedFieldProvenance(
 				dryRun,
 				"reviewed_manual_hint",
 				"schema_manual_hints.json",
-				"reviewed_manual",
+				ProvenanceReviewedManual,
 				"highest_precedence",
 				"reviewed dry-run capability",
 			),
@@ -173,7 +175,7 @@ func TestToolSpecDryRunCapabilityProjectsAndRoundTripsAtomically(t *testing.T) {
 	if !ok {
 		t.Fatalf("dry_run = %#v", full["dry_run"])
 	}
-	if got := schemaString(delivered["preview_kind"]); got != DryRunPreviewDiff {
+	if got := schemaString(delivered["preview_kind"]); got != contract.DryRunPreviewDiff {
 		t.Fatalf("dry_run.preview_kind = %q", got)
 	}
 	if got, ok := delivered["remote_reads"].(bool); !ok || !got {
@@ -214,7 +216,7 @@ func TestToolSpecDryRunCapabilityProjectsAndRoundTripsAtomically(t *testing.T) {
 }
 
 func TestToolSpecDryRunCapabilityIsPositiveOnlyAndStrict(t *testing.T) {
-	base := RuntimeToolSpecInput{Identity: ToolIdentitySpec{
+	base := RuntimeToolSpecInput{Identity: contract.ToolIdentitySpec{
 		ProductID: "sample",
 		Name:      "run",
 		CLIName:   "run",
@@ -233,12 +235,12 @@ func TestToolSpecDryRunCapabilityIsPositiveOnlyAndStrict(t *testing.T) {
 		t.Fatalf("nil capability unexpectedly emitted dry_run: %#v", payload["dry_run"])
 	}
 
-	base.DryRun = &DryRunSpec{PreviewKind: "unsupported"}
+	base.DryRun = &contract.DryRunSpec{PreviewKind: "unsupported"}
 	if _, err := ToolSpecFromRuntime(base); err == nil || !strings.Contains(err.Error(), "unknown preview_kind") {
 		t.Fatalf("invalid preview_kind error = %v", err)
 	}
 
-	base.DryRun = &DryRunSpec{PreviewKind: DryRunPreviewInvocation}
+	base.DryRun = &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewInvocation}
 	withCapability, err := ToolSpecFromRuntime(base)
 	if err != nil {
 		t.Fatalf("ToolSpecFromRuntime(valid dry_run) error = %v", err)
@@ -259,20 +261,20 @@ func TestToolSpecDryRunCapabilityIsPositiveOnlyAndStrict(t *testing.T) {
 
 func TestToolSpecDryRunProvenanceRejectsAtomicDrift(t *testing.T) {
 	selected := true
-	dryRun := &DryRunSpec{PreviewKind: DryRunPreviewRequest}
+	dryRun := &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest}
 	_, err := ToolSpecFromRuntime(RuntimeToolSpecInput{
-		Identity: ToolIdentitySpec{ProductID: "sample", Name: "run", CLIPath: "sample run"},
+		Identity: contract.ToolIdentitySpec{ProductID: "sample", Name: "run", CLIPath: "sample run"},
 		DryRun:   dryRun,
-		FieldProvenance: map[string]FieldProvenance{
+		FieldProvenance: map[string]contract.FieldProvenance{
 			"dry_run": {
 				Value:      json.RawMessage(`{"preview_kind":"plan"}`),
 				Source:     "reviewed_manual_hint",
-				Precedence: "reviewed_manual",
+				Precedence: ProvenanceReviewedManual,
 				Resolution: "highest_precedence",
-				Candidates: []FieldCandidateProvenance{{
+				Candidates: []contract.FieldCandidateProvenance{{
 					Value:      json.RawMessage(`{"preview_kind":"plan"}`),
 					Source:     "reviewed_manual_hint",
-					Precedence: "reviewed_manual",
+					Precedence: ProvenanceReviewedManual,
 					Selected:   &selected,
 				}},
 			},
@@ -287,7 +289,7 @@ func TestToolSpecToPayloadKeepsCompatibleFlatShape(t *testing.T) {
 	selected := true
 	reviewed := true
 	spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{
-		Identity: ToolIdentitySpec{
+		Identity: contract.ToolIdentitySpec{
 			ProductID:      "chat",
 			Name:           "category_create_smart",
 			CLIName:        "create-smart",
@@ -308,46 +310,46 @@ func TestToolSpecToPayloadKeepsCompatibleFlatShape(t *testing.T) {
 			Example:       json.RawMessage("true"),
 			Enum:          []string{"true", "false"},
 			InterfaceType: "boolean",
-			FieldProvenance: map[string]FieldProvenance{
+			FieldProvenance: map[string]contract.FieldProvenance{
 				"required": {
 					Value:        json.RawMessage("false"),
 					Source:       "reviewed_manual_hint",
-					Precedence:   "reviewed_manual",
+					Precedence:   ProvenanceReviewedManual,
 					Resolution:   "highest_precedence",
 					ReviewReason: "preview remains optional",
-					Candidates: []FieldCandidateProvenance{{
+					Candidates: []contract.FieldCandidateProvenance{{
 						Value:      json.RawMessage("false"),
 						Source:     "reviewed_manual_hint",
-						Precedence: "reviewed_manual",
+						Precedence: ProvenanceReviewedManual,
 						Selected:   &selected,
 					}},
 				},
 			},
 		}},
-		Safety: SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required"},
-		Interface: InterfaceSpec{
-			Ref:          &InterfaceRefSpec{ProductID: "chat", RPCName: "create_smart_category"},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required"},
+		Interface: contract.InterfaceSpec{
+			Ref:          &contract.InterfaceRefSpec{ProductID: "chat", RPCName: "create_smart_category"},
 			Mode:         "mcp",
 			Availability: "available",
 			Reason:       "reviewed interface",
 		},
-		Selection: SelectionSpec{
+		Selection: contract.SelectionSpec{
 			AgentSummary:   "Create a category from rules.",
 			UseWhen:        []string{"create smart category"},
 			Examples:       []string{"dws chat category create-smart --dry-run"},
 			Reviewed:       &reviewed,
 			MetadataSource: "resolved-agent-metadata",
 		},
-		FieldProvenance: map[string]FieldProvenance{
+		FieldProvenance: map[string]contract.FieldProvenance{
 			"canonical_path": {
 				Value:      json.RawMessage(`"chat.category_create_smart"`),
 				Source:     "reviewed_manual_hint",
-				Precedence: "reviewed_manual",
+				Precedence: ProvenanceReviewedManual,
 				Resolution: "highest_precedence",
-				Candidates: []FieldCandidateProvenance{{
+				Candidates: []contract.FieldCandidateProvenance{{
 					Value:      json.RawMessage(`"chat.category_create_smart"`),
 					Source:     "reviewed_manual_hint",
-					Precedence: "reviewed_manual",
+					Precedence: ProvenanceReviewedManual,
 					Selected:   &selected,
 				}},
 			},
@@ -403,7 +405,7 @@ func TestToolSpecToPayloadKeepsCompatibleFlatShape(t *testing.T) {
 
 func TestSchemaRegistryToPayloadIsDeterministic(t *testing.T) {
 	tool := func(product, name, cliPath string) ToolSpec {
-		spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{Identity: ToolIdentitySpec{
+		spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{Identity: contract.ToolIdentitySpec{
 			ProductID: product,
 			Name:      name,
 			CLIName:   name,
@@ -447,13 +449,13 @@ func TestSchemaRegistryToPayloadIsDeterministic(t *testing.T) {
 }
 
 func TestProductFieldProvenanceSurvivesTypedPayloadAndFailsOnDrift(t *testing.T) {
-	provenance := resolvedFieldProvenance("Calendar operations", "manual", "schema_manual_hints.json", "reviewed_manual", "highest_precedence", "reviewed")
+	provenance := resolvedFieldProvenance("Calendar operations", "manual", "schema_manual_hints.json", ProvenanceReviewedManual, "highest_precedence", "reviewed")
 	product := ProductSpec{
 		ID: "calendar",
-		Selection: SelectionSpec{
+		Selection: contract.SelectionSpec{
 			AgentSummary: "Calendar operations",
 		},
-		FieldProvenance: map[string]FieldProvenance{"agent_summary": provenance},
+		FieldProvenance: map[string]contract.FieldProvenance{"agent_summary": provenance},
 	}
 	registry, err := SchemaRegistryFromRuntime("runtime-command", []ProductSpec{product})
 	if err != nil {
@@ -480,7 +482,7 @@ func TestProductFieldProvenanceSurvivesTypedPayloadAndFailsOnDrift(t *testing.T)
 }
 
 func TestSchemaRegistryIndexResolvesCanonicalCLIAndAlias(t *testing.T) {
-	spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{Identity: ToolIdentitySpec{
+	spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{Identity: contract.ToolIdentitySpec{
 		ProductID:      "calendar",
 		Name:           "attendee_delete",
 		CLIName:        "delete",
@@ -537,7 +539,7 @@ func TestSchemaRegistryIndexResolvesCanonicalCLIAndAlias(t *testing.T) {
 
 func TestSchemaRegistryIndexRejectsAmbiguousCLIIdentity(t *testing.T) {
 	build := func(name, cliPath string, aliases ...string) ToolSpec {
-		spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{Identity: ToolIdentitySpec{
+		spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{Identity: contract.ToolIdentitySpec{
 			ProductID: "chat",
 			Name:      name,
 			CLIName:   name,
@@ -563,7 +565,7 @@ func TestSchemaRegistryIndexRejectsAmbiguousCLIIdentity(t *testing.T) {
 
 func TestSchemaRegistrySnapshotUsesSameToolForSummaryAndFullExport(t *testing.T) {
 	spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{
-		Identity: ToolIdentitySpec{
+		Identity: contract.ToolIdentitySpec{
 			ProductID: "agoal",
 			Name:      "strategy_list",
 			CLIName:   "list",
@@ -582,7 +584,7 @@ func TestSchemaRegistrySnapshotUsesSameToolForSummaryAndFullExport(t *testing.T)
 	if err != nil {
 		t.Fatalf("ToolSpecFromRuntime() error = %v", err)
 	}
-	registry, err := SchemaRegistryFromRuntime("embedded-command-catalog", []ProductSpec{{
+	registry, err := SchemaRegistryFromRuntime(SchemaSourceRuntimeAssembled, []ProductSpec{{
 		ID:    "agoal",
 		Name:  "AGoal",
 		Tools: []ToolSpec{spec},
@@ -616,7 +618,7 @@ func TestSchemaRegistrySnapshotUsesSameToolForSummaryAndFullExport(t *testing.T)
 }
 
 func TestToolSpecStructuralValidationDoesNotEncodePrecedencePolicy(t *testing.T) {
-	_, err := ToolSpecFromRuntime(RuntimeToolSpecInput{Identity: ToolIdentitySpec{
+	_, err := ToolSpecFromRuntime(RuntimeToolSpecInput{Identity: contract.ToolIdentitySpec{
 		ProductID:     "chat",
 		Name:          "read",
 		CanonicalPath: "chat.wrong",
@@ -627,7 +629,7 @@ func TestToolSpecStructuralValidationDoesNotEncodePrecedencePolicy(t *testing.T)
 	}
 
 	_, err = ToolSpecFromRuntime(RuntimeToolSpecInput{
-		Identity: ToolIdentitySpec{ProductID: "chat", Name: "read", CLIPath: "chat read"},
+		Identity: contract.ToolIdentitySpec{ProductID: "chat", Name: "read", CLIPath: "chat read"},
 		Parameters: []ParameterSpec{{
 			Name:    "query",
 			Default: json.RawMessage("not-json"),
@@ -652,12 +654,12 @@ func TestFinalFieldProvenancePreservesFalseAndEmptyJSONValues(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			provenance := FieldProvenance{
+			provenance := contract.FieldProvenance{
 				Value:      append(json.RawMessage(nil), test.raw...),
 				Source:     "reviewed",
 				Precedence: "reviewed_explicit",
 				Resolution: "highest_precedence",
-				Candidates: []FieldCandidateProvenance{{
+				Candidates: []contract.FieldCandidateProvenance{{
 					Value:      append(json.RawMessage(nil), test.raw...),
 					Source:     "reviewed",
 					Precedence: "reviewed_explicit",
@@ -674,19 +676,19 @@ func TestFinalFieldProvenancePreservesFalseAndEmptyJSONValues(t *testing.T) {
 func TestFinalFieldProvenanceIgnoresFormattingWhitespaceOnly(t *testing.T) {
 	selected := true
 	formatted := json.RawMessage("[\n  \"first\",\n  \"second\"\n]")
-	provenance := FieldProvenance{
+	provenance := contract.FieldProvenance{
 		Value:      formatted,
 		Source:     "manual",
-		Precedence: "reviewed_manual",
+		Precedence: ProvenanceReviewedManual,
 		Resolution: "highest_precedence",
-		Candidates: []FieldCandidateProvenance{{
-			Value: formatted, Source: "manual", Precedence: "reviewed_manual", Selected: &selected,
+		Candidates: []contract.FieldCandidateProvenance{{
+			Value: formatted, Source: "manual", Precedence: ProvenanceReviewedManual, Selected: &selected,
 		}},
 	}
 	if err := validateFinalFieldProvenance("sample.run", "use_when", provenance, []string{"first", "second"}); err != nil {
 		t.Fatalf("formatted provenance should validate: %v", err)
 	}
-	escaped := resolvedFieldProvenance("<none>", "manual", "manual.json", "reviewed_manual", "highest_precedence", "reviewed")
+	escaped := resolvedFieldProvenance("<none>", "manual", "manual.json", ProvenanceReviewedManual, "highest_precedence", "reviewed")
 	escaped.Value = json.RawMessage(`"\u003cnone\u003e"`)
 	escaped.Candidates[0].Value = escaped.Value
 	if err := validateFinalFieldProvenance("sample.run", "interface_ref", escaped, "<none>"); err != nil {
@@ -725,21 +727,21 @@ func TestToolSpecFromRuntimeDoesNotRepairResolvedProvenance(t *testing.T) {
 	selected := true
 	base := func() RuntimeToolSpecInput {
 		return RuntimeToolSpecInput{
-			Identity: ToolIdentitySpec{
+			Identity: contract.ToolIdentitySpec{
 				ProductID:     "sample",
 				Name:          "run",
 				CanonicalPath: "sample.run",
 				CLIPath:       "sample run",
 			},
-			FieldProvenance: map[string]FieldProvenance{
+			FieldProvenance: map[string]contract.FieldProvenance{
 				"canonical_path": {
 					Value:      json.RawMessage(`"sample.run"`),
-					Source:     "reviewed_command_registry",
+					Source:     "contract_identity",
 					Precedence: "command_registry",
 					Resolution: "registry_identity",
-					Candidates: []FieldCandidateProvenance{{
+					Candidates: []contract.FieldCandidateProvenance{{
 						Value:      json.RawMessage(`"sample.run"`),
-						Source:     "reviewed_command_registry",
+						Source:     "contract_identity",
 						Precedence: "command_registry",
 						Selected:   &selected,
 					}},
@@ -750,26 +752,26 @@ func TestToolSpecFromRuntimeDoesNotRepairResolvedProvenance(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		mutate  func(*FieldProvenance)
+		mutate  func(*contract.FieldProvenance)
 		wantErr string
 	}{
 		{
 			name: "winner value is not synthesized",
-			mutate: func(provenance *FieldProvenance) {
+			mutate: func(provenance *contract.FieldProvenance) {
 				provenance.Value = nil
 			},
 			wantErr: "winner does not equal final value",
 		},
 		{
 			name: "selected value is not rewritten",
-			mutate: func(provenance *FieldProvenance) {
+			mutate: func(provenance *contract.FieldProvenance) {
 				provenance.Candidates[0].Value = json.RawMessage(`"sample.other"`)
 			},
 			wantErr: "selected provenance candidate does not equal final value",
 		},
 		{
 			name: "precedence is not inferred",
-			mutate: func(provenance *FieldProvenance) {
+			mutate: func(provenance *contract.FieldProvenance) {
 				provenance.Precedence = ""
 			},
 			wantErr: "winner is incomplete",
@@ -792,13 +794,13 @@ func TestToolSpecFromRuntimeDoesNotRepairResolvedProvenance(t *testing.T) {
 func TestFinalFieldProvenanceRequiresExactlyOneTypedWinner(t *testing.T) {
 	selected := true
 	unselected := false
-	valid := func() FieldProvenance {
-		return FieldProvenance{
+	valid := func() contract.FieldProvenance {
+		return contract.FieldProvenance{
 			Value:      json.RawMessage("false"),
 			Source:     "reviewed",
 			Precedence: "reviewed_explicit",
 			Resolution: "highest_precedence",
-			Candidates: []FieldCandidateProvenance{{
+			Candidates: []contract.FieldCandidateProvenance{{
 				Value:      json.RawMessage("false"),
 				Source:     "reviewed",
 				Precedence: "reviewed_explicit",
@@ -808,41 +810,41 @@ func TestFinalFieldProvenanceRequiresExactlyOneTypedWinner(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		mutate  func(*FieldProvenance)
+		mutate  func(*contract.FieldProvenance)
 		wantErr string
 	}{
 		{
 			name: "JSON type mismatch",
-			mutate: func(provenance *FieldProvenance) {
+			mutate: func(provenance *contract.FieldProvenance) {
 				provenance.Value = json.RawMessage(`"false"`)
 			},
 			wantErr: "winner does not equal final value",
 		},
 		{
 			name: "no candidates",
-			mutate: func(provenance *FieldProvenance) {
+			mutate: func(provenance *contract.FieldProvenance) {
 				provenance.Candidates = nil
 			},
 			wantErr: "has no candidates",
 		},
 		{
 			name: "no selected candidate",
-			mutate: func(provenance *FieldProvenance) {
+			mutate: func(provenance *contract.FieldProvenance) {
 				provenance.Candidates[0].Selected = &unselected
 			},
 			wantErr: "0 selected candidates",
 		},
 		{
 			name: "two selected candidates",
-			mutate: func(provenance *FieldProvenance) {
+			mutate: func(provenance *contract.FieldProvenance) {
 				provenance.Candidates = append(provenance.Candidates, provenance.Candidates[0])
 			},
 			wantErr: "2 selected candidates",
 		},
 		{
 			name: "selected overridden candidate",
-			mutate: func(provenance *FieldProvenance) {
-				provenance.OverriddenCandidates = []FieldCandidateProvenance{{
+			mutate: func(provenance *contract.FieldProvenance) {
+				provenance.OverriddenCandidates = []contract.FieldCandidateProvenance{{
 					Value: json.RawMessage("true"), Source: "imported", Precedence: "imported", Selected: &selected,
 				}}
 			},
@@ -850,8 +852,8 @@ func TestFinalFieldProvenanceRequiresExactlyOneTypedWinner(t *testing.T) {
 		},
 		{
 			name: "invalid unselected candidate value",
-			mutate: func(provenance *FieldProvenance) {
-				provenance.Candidates = append(provenance.Candidates, FieldCandidateProvenance{
+			mutate: func(provenance *contract.FieldProvenance) {
+				provenance.Candidates = append(provenance.Candidates, contract.FieldCandidateProvenance{
 					Value: json.RawMessage("not-json"), Source: "bad", Precedence: "imported", Selected: &unselected,
 				})
 			},
@@ -899,20 +901,20 @@ func TestProductionSnapshotLoaderDoesNotSynthesizeRequiredProvenance(t *testing.
 
 	selectionCases := []struct {
 		field     string
-		selection SelectionSpec
+		selection contract.SelectionSpec
 	}{
-		{field: "use_when", selection: SelectionSpec{UseWhen: []string{}}},
-		{field: "avoid_when", selection: SelectionSpec{AvoidWhen: []string{"avoid"}}},
-		{field: "prerequisites", selection: SelectionSpec{Prerequisites: []string{"token"}}},
-		{field: "tips", selection: SelectionSpec{Tips: []string{"tip"}}},
-		{field: "workflow_refs", selection: SelectionSpec{WorkflowRefs: []string{"sample.other"}}},
-		{field: "examples", selection: SelectionSpec{Examples: []string{"dws sample run"}}},
+		{field: "use_when", selection: contract.SelectionSpec{UseWhen: []string{}}},
+		{field: "avoid_when", selection: contract.SelectionSpec{AvoidWhen: []string{"avoid"}}},
+		{field: "prerequisites", selection: contract.SelectionSpec{Prerequisites: []string{"token"}}},
+		{field: "tips", selection: contract.SelectionSpec{Tips: []string{"tip"}}},
+		{field: "workflow_refs", selection: contract.SelectionSpec{WorkflowRefs: []string{"sample.other"}}},
+		{field: "examples", selection: contract.SelectionSpec{Examples: []string{"dws sample run"}}},
 	}
 	reviewed := false
 	selectionCases = append(selectionCases, struct {
 		field     string
-		selection SelectionSpec
-	}{field: "reviewed", selection: SelectionSpec{Reviewed: &reviewed}})
+		selection contract.SelectionSpec
+	}{field: "reviewed", selection: contract.SelectionSpec{Reviewed: &reviewed}})
 	for _, test := range selectionCases {
 		t.Run("selection "+test.field, func(t *testing.T) {
 			snapshot := schemaDeliveryTestSnapshot(schemaDeliveryTestTool{

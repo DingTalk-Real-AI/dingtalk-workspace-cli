@@ -845,7 +845,7 @@ print(json.dumps({
 }))
 PY
     ;;
-  */actions/runs/42/attempts/1/jobs*)
+  */actions/runs/42/attempts/*/jobs*)
     python3 - <<'PY'
 import json
 import os
@@ -891,13 +891,13 @@ for name in required:
 print(json.dumps({"jobs": jobs}))
 PY
     ;;
-  */actions/runs/42/attempts/1)
+  */actions/runs/42|*/actions/runs/42/attempts/1)
     python3 - <<'PY'
 import json
 import os
 print(json.dumps({
     "id": 42,
-    "run_attempt": 1,
+    "run_attempt": int(os.environ.get("RUN_ATTEMPT", "1")),
     "repository": {"full_name": "owner/repo"},
     "path": ".github/workflows/release.yml",
     "event": "workflow_dispatch",
@@ -942,6 +942,10 @@ esac
 
 	if output, err := run(); err != nil || !strings.Contains(output, "cloud release run 42") {
 		t.Fatalf("tag-bound cloud delivery was rejected: err=%v\noutput:\n%s", err, output)
+	}
+	if output, err := run("RUN_ATTEMPT=2"); err != nil ||
+		!strings.Contains(output, "cloud release run 42") {
+		t.Fatalf("successful rerun of tag-bound cloud delivery was rejected: err=%v\noutput:\n%s", err, output)
 	}
 	if output, err := runWithArgs(
 		[]string{"--channel-repair", "oss", tag, commit},

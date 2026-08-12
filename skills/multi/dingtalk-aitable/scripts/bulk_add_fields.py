@@ -29,14 +29,14 @@ JsonData = Union[List[Any], Dict[str, Any]]
 
 MAX_FILE_SIZE = 10 * 1024 * 1024
 ALLOWED_FILE_EXTENSIONS = ['.json']
-RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{6,128}$')
+RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
 ALLOWED_FIELD_TYPES = {
     'text', 'number', 'singleSelect', 'multipleSelect', 'date', 'currency',
     'user', 'department', 'group', 'progress', 'rating', 'checkbox',
     'attachment', 'url', 'richText', 'telephone', 'email', 'idCard',
-    'barcode', 'geolocation', 'primaryDoc', 'formula', 'unidirectionalLink',
-    'bidirectionalLink', 'creator', 'lastModifier', 'createdTime',
-    'lastModifiedTime',
+    'barcode', 'geolocation', 'address', 'primaryDoc', 'formula',
+    'unidirectionalLink', 'bidirectionalLink', 'lookup', 'filterUp',
+    'creator', 'lastModifier', 'createdTime', 'lastModifiedTime',
 }
 FIELD_TYPE_ALIASES = {
     'phone': 'telephone',
@@ -121,9 +121,32 @@ def validate_field_config(field: Dict[str, Any]) -> Tuple[bool, str]:
             )
 
     if field_type in {'unidirectionalLink', 'bidirectionalLink'}:
-        linked_sheet_id = (config or {}).get('linkedSheetId')
-        if not linked_sheet_id or not validate_resource_id(linked_sheet_id):
-            return False, '关联字段必须提供合法的 config.linkedSheetId'
+        linked_table_id = (config or {}).get('linkedTableId')
+        if not linked_table_id or not validate_resource_id(linked_table_id):
+            return False, (
+                '关联字段必须提供合法的 config.linkedTableId（目标 Table ID）'
+            )
+
+    if field_type == 'lookup':
+        cfg = config or {}
+        if not cfg.get('associateField'):
+            return False, 'lookup 必须提供 config.associateField（本表关联字段的 fieldId）'
+        if not cfg.get('valuesField'):
+            return False, 'lookup 必须提供 config.valuesField（关联目标表中要取值的字段 fieldId）'
+        if not cfg.get('aggregator'):
+            return False, 'lookup 必须提供 config.aggregator（SUM/AVERAGE/COUNT/MAX/MIN/CONCATENATE）'
+
+    if field_type == 'filterUp':
+        cfg = config or {}
+        if not cfg.get('targetSheet'):
+            return False, 'filterUp 必须提供 config.targetSheet（目标 Table ID）'
+        filters = cfg.get('filters')
+        if not filters or not isinstance(filters, list):
+            return False, 'filterUp 必须提供 config.filters（至少一条筛选规则）'
+        if not cfg.get('valuesField'):
+            return False, 'filterUp 必须提供 config.valuesField（目标表中要取值的字段 fieldId）'
+        if not cfg.get('aggregator'):
+            return False, 'filterUp 必须提供 config.aggregator（SUM/AVERAGE/COUNT/MAX/MIN/CONCATENATE）'
 
     return True, ''
 

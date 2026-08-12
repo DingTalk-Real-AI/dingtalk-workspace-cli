@@ -57,9 +57,10 @@ dws minutes
 │   ├── create --file-name "..." --file-size <n>   # 创建上传会话，获取上传地址
 │   ├── complete --session-id <sid>                # 确认上传完成
 │   └── cancel --session-id <sid>                  # 取消上传会话
-└── permission <subcommand>          # 权限管理（添加/移除听记成员权限）
+└── permission <subcommand>          # 权限管理（添加/移除听记成员权限、为自己申请权限）
     ├── add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy <0-4> [--cover] [--sub-resources "..."]   # 添加成员权限
-    └── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>   # 移除成员权限
+    ├── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>   # 移除成员权限
+    └── apply --id <uuid> --policy <2-4>   # 为当前用户申请听记权限
 ```
 
 **高频错误命令 vs 正确命令对照（真实 badcase 提炼）：**
@@ -308,7 +309,8 @@ dws minutes
 │   └── cancel --session-id <sid>
 ├── permission <subcommand>
 │   ├── add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy <0-4> [--cover] [--sub-resources "..."]
-│   └── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>
+│   ├── remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>
+│   └── apply --id <uuid> --policy <2-4>
 └── tag <subcommand>                 # 听记标签/分组管理（标签在听记页面手动创建）
     ├── list                         # 查询我的听记标签/分组列表（返回 tagId 和标签名称）
     └── query --tag-id <tagId> [--limit] [--cursor]   # 根据标签ID查询该标签下的听记列表
@@ -1211,6 +1213,38 @@ Flags:
 - 如果成员是听记的创建者（所有者），无法通过此命令移除其权限
 - 建议在移除前先确认成员的当前权限，避免误操作
 
+### 为当前用户申请听记权限
+```
+Usage:
+  dws minutes permission apply [flags]
+Example:
+  dws minutes permission apply --id <taskUuid> --policy 4
+  dws minutes permission apply --id <taskUuid> --policy 2
+Flags:
+      --id string    听记 taskUuid (必填)
+      --policy int   权限类型: 2=可编辑, 3=可查看/下载, 4=仅查看 (必填)
+```
+
+为当前登录用户申请指定听记的权限，无需传入用户 ID，系统自动识别当前用户身份。
+适用于用户无权限访问某听记（如打开分享链接提示无权限）时，主动向听记所有者发起权限申请。
+
+**权限类型说明：**
+
+| --policy 值 | 含义 | 说明 |
+|------------|------|------|
+| 2 | 可编辑 | 可编辑听记的纪要、待办等内容 |
+| 3 | 可查看/下载 | 可查看和下载听记内容，不可编辑 |
+| 4 | 仅查看 | 仅可查看听记内容，不可下载 |
+
+**与 permission add 的区别：**
+- `permission add` 是听记所有者/管理员**给别人授权**，需传 `--member-uids`
+- `permission apply` 是当前用户**为自己申请权限**，不需要任何用户 ID，不支持申请管理员/所有者权限（0/1）
+
+**典型使用场景：**
+- 打开同事分享的听记链接提示无权限，申请查看权限
+- 需要编辑某篇只读听记的纪要，申请可编辑权限
+- 需要下载听记音频但当前仅有查看权限，申请可查看/下载权限
+
 ### 查询我的听记标签/分组列表
 ```
 Usage:
@@ -1595,6 +1629,7 @@ tagId 可通过 `dws minutes tag list` 获取。
 用户说"把某人加到这个听记中/共享听记给某人/给某人添加听记权限/把听记分享给同事/让某人也能看这个听记" → `permission add`
 用户说"添加参会者/批量添加参会者/添加成员/批量添加成员/加参会人/加入成员" → `permission add`（**注意：听记模块没有独立的"添加参会者/成员"命令，统一走权限接口**）
 用户说"移除某人的权限/取消共享/不让某人看这个听记了" → `permission remove`
+用户说"我没权限看这个听记/帮我申请这个听记的权限/申请查看权限/申请编辑权限" → `permission apply`（**注意：为当前用户自己申请，不是给别人授权**）
 
 **自然语言示例：**
 - "把张三加到这个听记中"
@@ -1611,6 +1646,9 @@ tagId 可通过 `dws minutes tag list` 获取。
 - "批量添加成员到这个听记"
 - "把张三加为参会人"
 - "移除张三对这个听记的权限"
+- "我打不开这个听记，帮我申请一下权限"
+- "帮我申请这个听记的查看权限"
+- "申请这篇听记的编辑权限"
 - "取消小王对这个听记的访问"
 - "不让某人看这个听记了"
 
@@ -1618,8 +1656,9 @@ tagId 可通过 `dws minutes tag list` 获取。
 - 用户提到"加/添加/共享/分享/让...看/让...访问"等增加权限语义 → `permission add`
 - 用户提到"添加参会者/加参会者/批量添加参会者/添加成员/加成员/批量添加成员/加参会人/添加参会人"等成员语义 → `permission add`（听记没有独立的"添加成员"接口，**统一走权限接口**）
 - 用户提到"移除/取消/删除/不让...看"等移除权限语义 → `permission remove`
-- 如果用户未指定权限类型，默认使用 `--policy 4`（可查看/下载/编辑）
-- 如果用户未提供 member-uids，需要先引导用户提供目标成员的钉钉 UID（可通过 `dws contact user search --query "姓名"` 查询）
+- 用户提到"我没权限/打不开/帮我申请/申请查看权限/申请编辑权限"等**为自己申请**语义 → `permission apply`（只需 `--id` + `--policy`；**不需要也不接受 `--member-uids`**，当前用户身份由系统自动识别；未说明权限等级时先与用户确认要 2（可编辑）/ 3（可查看下载）/ 4（仅查看））
+- `permission add` 的 `--policy` 是必填参数，没有默认值。用户未指定权限类型时，先确认要 0（管理员）/ 1（所有者）/ 2（可编辑）/ 3（可查看下载）/ 4（仅查看）；即使确认选择 4，命令中仍必须显式传入 `--policy 4`
+- `permission add` / `permission remove` 需要目标成员的钉钉 UID：如果用户未提供 member-uids，需要先引导用户提供（可通过 `dws contact user search --query "姓名"` 查询）；`permission apply` 不适用这一条
 
 **典型执行链路：**
 1. 用户说"把张三加到这个听记中" → AI 需获取张三的 UID

@@ -17,6 +17,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -43,6 +46,34 @@ var Book = shortcut.Shortcut{
 		"如果加参会人失败，会自动删除刚建好的日程回滚，避免留下一个没人的空日程。" +
 		"会真实创建日程并发出参会邀请。",
 	Risk: shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_book",
+			CanonicalPath:  "calendar.shortcut_book",
+			CLIPath:        "calendar +book",
+			PrimaryCLIPath: "calendar +book",
+		},
+		Description: "创建日程，并可按姓名邀请参会人（自动解析 userId，失败自动回滚删除日程）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "创建日程，并可按姓名邀请参会人（自动解析 userId，失败自动回滚删除日程）",
+			UseWhen:      []string{"当你想快速排一个会/日程、并顺手把几位同事按姓名拉进来时使用；内部先建日程拿到 eventId，再把每个姓名解析成唯一 userId 批量加为参会人。如果加参会人失败，会自动删除刚建好的日程回滚，避免留下一个没人的空日程。会真实创建日程并发出参会邀请。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws calendar +book --title \"周会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\"",
+				"dws calendar +book --title \"Q1 复盘会\" --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T15:00:00+08:00\" --with 张三,李四",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "title", Type: shortcut.FlagString, Desc: "日程标题", Required: true},
 		{Name: "start", Type: shortcut.FlagString, Desc: "开始时间（ISO8601，如 2026-03-10T14:00:00+08:00）", Required: true},

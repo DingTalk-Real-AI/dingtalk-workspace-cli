@@ -113,8 +113,9 @@ func IsValidationError(err error) bool {
 // human-readable block. Called by Run when cfg.DryRun is true. Format
 // avoids JSON so users can `dws event consume --dry-run | head` cleanly.
 //
-// Secret-bearing fields are never present in Config (credentials never
-// reach this layer), so no redaction is required here.
+// RuntimeToken is the only secret-bearing Config field and is deliberately
+// not read or rendered here. Keep this function allowlist-based: never switch
+// it to generic struct serialization.
 func PrintDryRun(w io.Writer, cfg Config) {
 	if w == nil {
 		return
@@ -149,4 +150,26 @@ func PrintDryRun(w io.Writer, cfg Config) {
 	fmt.Fprintf(w, "  quiet            : %v\n", cfg.Quiet)
 	fmt.Fprintf(w, "  foreground       : %v\n", cfg.Foreground)
 	fmt.Fprintf(w, "  force            : %v\n", cfg.Force)
+}
+
+// PrintDryRunMany renders the shared consume configuration plus every local
+// logical consumer without opening the bus.
+func PrintDryRunMany(w io.Writer, cfg Config, specs []ConsumerSpec) {
+	preview := cfg
+	preview.EventTypes = nil
+	for _, spec := range specs {
+		preview.EventTypes = append(preview.EventTypes, spec.EventTypes...)
+	}
+	PrintDryRun(w, preview)
+	for i, spec := range specs {
+		fmt.Fprintf(w, "  consumer[%d]      : event_key=%s subscribe_id=%s event_types=%s\n",
+			i, spec.EventKey, displayDryRunValue(spec.SubscribeID), strings.Join(spec.EventTypes, ","))
+	}
+}
+
+func displayDryRunValue(value string) string {
+	if value = strings.TrimSpace(value); value != "" {
+		return value
+	}
+	return "(pending)"
 }

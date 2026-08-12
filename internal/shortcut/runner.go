@@ -14,12 +14,11 @@
 package shortcut
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -27,6 +26,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+var validateShadowResult = output.ValidateResult
 
 // RuntimeContext is handed to a Shortcut's Validate and Execute hooks. It wraps
 // the cobra command and exposes typed flag accessors plus a single CallMCP entry
@@ -130,7 +131,59 @@ func (rt *RuntimeContext) CallMCP(tool string, params map[string]any) error {
 	if params == nil {
 		params = map[string]any{}
 	}
+	if output.UsesUnifiedResult(rt.cmd) {
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"dry_run":   true,
+				"executed":  false,
+				"tool":      tool,
+				"arguments": params,
+			})
+		}
+		data, err := helpers.CallMCPToolDataOnServer(rt.cmd.Context(), rt.shortcut.product(), tool, params)
+		if err != nil {
+			return err
+		}
+		return rt.storePayload(tool, data)
+	}
+	if output.CommandRollout(rt.cmd) == output.RolloutDualValidate {
+		preview := any(map[string]any{
+			"dry_run":   true,
+			"executed":  false,
+			"tool":      tool,
+			"arguments": params,
+		})
+		if rt.DryRun() {
+			if err := validateShadowResult(rt.resultForPayload(tool, preview)); err != nil {
+				return err
+			}
+			// The legacy caller owns dry-run presentation (including its human
+			// preview for non-JSON formats) and does not cross the business-call
+			// boundary. Keep using it so dual validation changes no bytes.
+			return helpers.CallMCPToolOnServer(rt.shortcut.product(), tool, params)
+		}
+		text, err := helpers.CallMCPToolTextOnServer(rt.shortcut.product(), tool, params)
+		if err != nil {
+			return err
+		}
+		data := legacyMCPPayload(text)
+		if err := validateShadowResult(rt.resultForPayload(tool, data)); err != nil {
+			return err
+		}
+		// dual_validate changes no external bytes: it renders the once-fetched
+		// payload through the established legacy projection after validating the
+		// shadow unified result.
+		return helpers.RenderLegacyMCPText(tool, text)
+	}
 	return helpers.CallMCPToolOnServer(rt.shortcut.product(), tool, params)
+}
+
+func legacyMCPPayload(text string) any {
+	var data any
+	if err := json.Unmarshal([]byte(text), &data); err == nil {
+		return data
+	}
+	return text
 }
 
 // CallMCPData dispatches a read-only tool call to an explicit MCP product and
@@ -141,18 +194,37 @@ func (rt *RuntimeContext) CallMCP(tool string, params map[string]any) error {
 // The product is explicit (not the shortcut's own) because smart shortcuts
 // routinely cross services — e.g. resolve a name via `contact` then act via
 // `chat`. Reads run even under --dry-run so a preview can still resolve inputs.
-// Write tools that need parsed responses must use CallMCPWriteData instead; as
-// a backstop, obvious write-like tool names are rejected here under --dry-run.
+// Write tools that need parsed responses must use CallMCPWriteData instead.
+// Under --dry-run this path fails closed unless the tool name belongs to the
+// narrow read-only naming contract used by the current MCP registry.
 func (rt *RuntimeContext) CallMCPData(product, tool string, params map[string]any) (map[string]any, error) {
-	if rt.DryRun() && looksWriteTool(tool) {
-		return nil, dryRunWriteError(product, tool)
+	if rt.DryRun() {
+		if !looksReadTool(tool) {
+			return nil, dryRunWriteError(product, tool)
+		}
+		return rt.callMCPReadData(product, tool, params)
 	}
 	return rt.callMCPData(product, tool, params)
 }
 
+// CallMCPReadData dispatches a tool whose name is explicitly classified as
+// read-only without consulting Cobra state. Callers must invoke it serially
+// unless the injected ToolCaller separately documents and enforces concurrent
+// safety. Write-shaped tool names fail closed.
+func (rt *RuntimeContext) CallMCPReadData(product, tool string, params map[string]any) (map[string]any, error) {
+	if !looksReadTool(tool) {
+		return nil, apperrors.NewValidation(fmt.Sprintf(
+			"并发只读入口拒绝写工具 %s/%s；写操作必须使用 CallMCPWriteData",
+			product, tool,
+		))
+	}
+	return rt.callMCPReadData(product, tool, params)
+}
+
 // CallMCPWriteData dispatches a write tool call and returns its parsed response.
 // Unlike CallMCPData, it refuses to run under --dry-run so smart shortcuts cannot
-// accidentally perform writes while rendering a preview.
+// accidentally perform writes while rendering a preview. For compatibility with
+// existing write shortcuts, an empty text acknowledgement remains an empty map.
 func (rt *RuntimeContext) CallMCPWriteData(product, tool string, params map[string]any) (map[string]any, error) {
 	if rt.DryRun() {
 		return nil, dryRunWriteError(product, tool)
@@ -160,25 +232,24 @@ func (rt *RuntimeContext) CallMCPWriteData(product, tool string, params map[stri
 	return rt.callMCPData(product, tool, params)
 }
 
-func dryRunWriteError(product, tool string) error {
-	return apperrors.NewValidation(fmt.Sprintf(
-		"--dry-run 下禁止执行写操作 %s/%s；请在 shortcut 中输出 preview 后返回", product, tool))
+// CallMCPWriteDataStrict dispatches a write tool call whose contract requires a
+// non-empty JSON business result. An empty acknowledgement is reported as an
+// unknown remote effect so callers can verify it independently before success.
+func (rt *RuntimeContext) CallMCPWriteDataStrict(product, tool string, params map[string]any) (map[string]any, error) {
+	if rt.DryRun() {
+		return nil, dryRunWriteError(product, tool)
+	}
+	return rt.callMCPWriteData(product, tool, params)
 }
 
-func looksWriteTool(tool string) bool {
-	tool = strings.TrimSpace(strings.ToLower(tool))
-	for _, prefix := range []string{
-		"add_", "append_", "approve_", "archive_", "cancel_", "create_",
-		"delete_", "disable_", "enable_", "grant_", "import_", "insert_",
-		"invite_", "move_", "publish_", "reject_", "remove_", "replace_",
-		"respond", "revoke_", "send_", "set_", "submit_", "update_",
-		"upload_", "write_",
-	} {
-		if strings.HasPrefix(tool, prefix) {
-			return true
-		}
-	}
-	return false
+func dryRunWriteError(product, tool string) error {
+	return apperrors.NewValidation(fmt.Sprintf(
+		"--dry-run 下禁止执行未明确分类为只读的工具 %s/%s；请在 shortcut 中输出 preview 后返回",
+		product, tool))
+}
+
+func looksReadTool(tool string) bool {
+	return helpers.IsReadToolName(tool)
 }
 
 func (rt *RuntimeContext) callMCPData(product, tool string, params map[string]any) (map[string]any, error) {
@@ -199,69 +270,158 @@ func (rt *RuntimeContext) callMCPData(product, tool string, params map[string]an
 	return out, nil
 }
 
+func (rt *RuntimeContext) callMCPReadData(product, tool string, params map[string]any) (map[string]any, error) {
+	if params == nil {
+		params = map[string]any{}
+	}
+	text, err := helpers.CallMCPReadToolTextOnServer(product, tool, params)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(text) == "" {
+		return map[string]any{}, nil
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", tool, err))
+	}
+	return out, nil
+}
+
+func (rt *RuntimeContext) callMCPWriteData(product, tool string, params map[string]any) (map[string]any, error) {
+	if params == nil {
+		params = map[string]any{}
+	}
+	text, err := helpers.CallMCPToolTextOnServer(product, tool, params)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, apperrors.NewAPI("MCP write tool returned no business result; the remote effect is unknown",
+			apperrors.WithOperation(product+"/"+tool),
+			apperrors.WithOrigin("mcp"),
+			apperrors.WithFailureStage("response_validation"),
+			apperrors.WithRetryable(false),
+			apperrors.WithReason("empty_tool_response"),
+		)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", tool, err))
+	}
+	return out, nil
+}
+
 // Output prints a (typically reshaped/projected) payload honouring the root
 // --format/--jq/--fields flags. Multi-step shortcuts use it to emit a clean,
 // composed result instead of the raw MCP response — the output-projection
 // output-formatting capability.
 func (rt *RuntimeContext) Output(payload any) error {
+	if output.UsesUnifiedResult(rt.cmd) {
+		return output.StoreResult(rt.cmd.Context(), rt.resultForPayload("", payload))
+	}
+	if output.CommandRollout(rt.cmd) == output.RolloutDualValidate {
+		if err := validateShadowResult(rt.resultForPayload("", payload)); err != nil {
+			return err
+		}
+	}
 	return output.WriteCommandPayload(rt.cmd, payload, output.FormatJSON)
 }
 
-// mount compiles a Shortcut into a cobra command.
-func mount(s Shortcut) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:    s.Command,
-		Short:  s.Description,
-		Long:   shortcutLongHelp(s),
-		Hidden: s.Hidden,
-	}
-	if len(s.Tips) > 0 {
-		cmd.Example = "  " + strings.Join(s.Tips, "\n  ")
-	}
-	registerFlags(cmd, s.Flags)
-
-	cmd.RunE = func(c *cobra.Command, _ []string) error {
-		rt := &RuntimeContext{cmd: c, shortcut: s}
-		if err := validateFlags(rt, s); err != nil {
-			return err
-		}
-		if err := validateConstraints(rt, s); err != nil {
-			return err
-		}
-		if s.Validate != nil {
-			if err := s.Validate(rt); err != nil {
-				return err
-			}
-		}
-		if !confirmRisk(rt, s) {
-			return nil
-		}
-		if s.Execute == nil {
-			return apperrors.NewInternal(fmt.Sprintf("shortcut %s %s 未实现 Execute", s.Service, s.Command))
-		}
-		return s.Execute(rt)
-	}
-	return cmd
+func (rt *RuntimeContext) storePayload(tool string, payload any) error {
+	return output.StoreResult(rt.cmd.Context(), rt.resultForPayload(tool, payload))
 }
 
-// registerFlags declares each Flag on the command with its type/default/desc.
-func registerFlags(cmd *cobra.Command, flags []Flag) {
-	for _, f := range flags {
-		desc := flagHelp(f)
-		switch f.Type {
-		case FlagBool:
-			cmd.Flags().Bool(f.Name, f.Default == "true", desc)
-		case FlagInt:
-			cmd.Flags().Int(f.Name, atoiDefault(f.Default), desc)
-		case FlagStringSlice:
-			cmd.Flags().StringSlice(f.Name, nil, desc)
-		default: // FlagString and empty
-			cmd.Flags().String(f.Name, f.Default, desc)
+func (rt *RuntimeContext) resultForPayload(tool string, payload any) output.CommandResult {
+	if rt.shortcut.product() == "devapp" {
+		return helpers.DevAppCommandResultFromPayload(tool, payload, rt.DryRun())
+	}
+	options := []output.ResultOption{}
+	if rt.DryRun() {
+		options = append(options, output.WithDryRun())
+	}
+	result := shortcutCommandResult(payload, options...)
+	if tool != "" && !rt.DryRun() && rt.isWriteShortcut() &&
+		result.Outcome() == output.OutcomeSuccess && !hasExplicitShortcutSuccess(payload) {
+		started := true
+		return output.Failure(&output.ErrorInfo{
+			Type:             "api",
+			Subtype:          "projection_unknown",
+			Message:          "write shortcut response has no reviewed terminal success evidence",
+			Hint:             "核查目标资源状态后再决定是否重试；为该命令使用专属结果投影表达成功证据。",
+			Operation:        rt.shortcut.product() + "/" + tool,
+			Origin:           "mcp_gateway",
+			Stage:            "response_projection",
+			ExecutionStarted: &started,
+		})
+	}
+	return result
+}
+
+func (rt *RuntimeContext) isWriteShortcut() bool {
+	effect := strings.TrimSpace(rt.shortcut.Safety.Effect)
+	if effect == "write" || effect == "destructive" {
+		return true
+	}
+	return rt.shortcut.Risk == RiskWrite || rt.shortcut.Risk == RiskHighWrite
+}
+
+func hasExplicitShortcutSuccess(payload any) bool {
+	object, ok := payload.(map[string]any)
+	if !ok {
+		return false
+	}
+	status := object
+	if content, ok := object["content"].(map[string]any); ok {
+		status = content
+	}
+	success, present := status["success"].(bool)
+	return present && success
+}
+
+func shortcutCommandResult(payload any, options ...output.ResultOption) output.CommandResult {
+	if object, ok := payload.(map[string]any); ok {
+		status := object
+		if content, ok := object["content"].(map[string]any); ok {
+			status = content
 		}
-		if f.Hidden {
-			_ = cmd.Flags().MarkHidden(f.Name)
+		if rawSuccess, present := status["success"]; present {
+			success, isBool := rawSuccess.(bool)
+			if !isBool {
+				return output.Failure(&output.ErrorInfo{
+					Type:      "api",
+					Subtype:   "invalid_success_type",
+					Message:   "shortcut response success field must be a JSON boolean",
+					Hint:      "写操作先核查目标状态；读取操作保留脱敏响应证据后排查上游。",
+					Operation: "shortcut.response_projection",
+				}, options...)
+			}
+			if success {
+				return output.Success(payload, options...)
+			}
+			message := "shortcut operation failed"
+			for _, key := range []string{"errorMsg", "errorMessage", "message"} {
+				if value, ok := status[key].(string); ok && strings.TrimSpace(value) != "" {
+					message = strings.TrimSpace(value)
+					break
+				}
+			}
+			return output.Failure(&output.ErrorInfo{Type: "api", Message: message}, options...)
 		}
 	}
+	return output.Success(payload, options...)
+}
+
+// mount compiles a Shortcut into a cobra command through the unified command
+// path. FromShortcut expands the legacy Risk only when Safety is absent; when
+// Safety is explicit the same value drives both ConfirmSafety and ContractFinal.
+func mount(s Shortcut) *cobra.Command {
+	cmd := corecmd.New(FromShortcut(s))
+	// Preserve the historical Shortcut help surface: Tips, rather than Agent
+	// selection examples, own cobra's Example block. The Schema declaration still
+	// carries its reviewed examples in ContractFinal.
+	cmd.Example = shortcutExamples(s.Tips)
+	return cmd
 }
 
 func flagHelp(f Flag) string {
@@ -281,72 +441,6 @@ func flagHelp(f Flag) string {
 	return f.Desc + "（" + strings.Join(parts, "；") + "）"
 }
 
-func shortcutLongHelp(s Shortcut) string {
-	long := strings.TrimSpace(s.Intent)
-	if long == "" {
-		long = strings.TrimSpace(s.Description)
-	}
-	if len(s.Constraints) == 0 {
-		return long
-	}
-	lines := make([]string, 0, len(s.Constraints))
-	for _, constraint := range s.Constraints {
-		lines = append(lines, "  - "+constraintHelp(constraint))
-	}
-	return long + "\n\n参数约束：\n" + strings.Join(lines, "\n")
-}
-
-func constraintHelp(constraint Constraint) string {
-	if strings.TrimSpace(constraint.Description) != "" {
-		return constraint.Description
-	}
-	switch constraint.Kind {
-	case ConstraintAtLeastOne:
-		return fmt.Sprintf("%s 至少指定一个", dashed(constraint.Flags))
-	case ConstraintExactlyOne:
-		return fmt.Sprintf("%s 必须且只能指定一个", dashed(constraint.Flags))
-	case ConstraintMutuallyExclusive:
-		return fmt.Sprintf("%s 互斥，最多指定一个", dashed(constraint.Flags))
-	default:
-		return fmt.Sprintf("%s 使用未识别的约束类型 %q", dashed(constraint.Flags), constraint.Kind)
-	}
-}
-
-// validateFlags enforces the declarative Required and Enum constraints.
-func validateFlags(rt *RuntimeContext, s Shortcut) error {
-	for _, f := range s.Flags {
-		if f.Required && !rt.Changed(f.Name) {
-			return apperrors.NewValidation(fmt.Sprintf("缺少必填参数 --%s：%s", f.Name, f.Desc))
-		}
-		if f.Required && rt.Changed(f.Name) {
-			switch f.Type {
-			case FlagStringSlice:
-				if !hasNonEmptyString(rt.StrSlice(f.Name)) {
-					return apperrors.NewValidation(fmt.Sprintf("必填参数 --%s 不能为空", f.Name))
-				}
-			case FlagString, "":
-				if rt.Str(f.Name) == "" {
-					return apperrors.NewValidation(fmt.Sprintf("必填参数 --%s 不能为空", f.Name))
-				}
-			}
-		}
-		if len(f.Enum) > 0 && rt.Changed(f.Name) {
-			values := []string{rt.Str(f.Name)}
-			if f.Type == FlagStringSlice {
-				values = rt.StrSlice(f.Name)
-			}
-			for _, val := range values {
-				val = strings.TrimSpace(val)
-				if !contains(f.Enum, val) {
-					return apperrors.NewValidation(fmt.Sprintf(
-						"参数 --%s 取值 %q 不合法，允许值：%s", f.Name, val, strings.Join(f.Enum, ", ")))
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func hasNonEmptyString(values []string) bool {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -354,52 +448,6 @@ func hasNonEmptyString(values []string) bool {
 		}
 	}
 	return false
-}
-
-func validateConstraints(rt *RuntimeContext, s Shortcut) error {
-	for _, constraint := range s.Constraints {
-		if len(constraint.Flags) == 0 {
-			return apperrors.NewInternal(fmt.Sprintf(
-				"shortcut %s %s 的约束 %q 未声明参数", s.Service, s.Command, constraint.Kind))
-		}
-		switch constraint.Kind {
-		case ConstraintAtLeastOne:
-			if err := rt.AtLeastOne(constraint.Flags...); err != nil {
-				return err
-			}
-		case ConstraintExactlyOne:
-			if err := rt.ExactlyOne(constraint.Flags...); err != nil {
-				return err
-			}
-		case ConstraintMutuallyExclusive:
-			if err := rt.MutuallyExclusive(constraint.Flags...); err != nil {
-				return err
-			}
-		case ConstraintCustom:
-			if strings.TrimSpace(constraint.Description) == "" {
-				return apperrors.NewInternal(fmt.Sprintf(
-					"shortcut %s %s 的 custom 约束缺少描述", s.Service, s.Command))
-			}
-		default:
-			return apperrors.NewInternal(fmt.Sprintf(
-				"shortcut %s %s 使用未知约束类型 %q", s.Service, s.Command, constraint.Kind))
-		}
-	}
-	return nil
-}
-
-// confirmRisk prompts before a write/high-risk-write shortcut unless --yes or
-// --dry-run is set. Read-only shortcuts never prompt. Returns false when the
-// user declines.
-func confirmRisk(rt *RuntimeContext, s Shortcut) bool {
-	if s.risk() == RiskRead || rt.DryRun() || rt.Yes() {
-		return true
-	}
-	fmt.Fprintf(rt.cmd.ErrOrStderr(), "即将执行 %s %s（%s），确认继续？(yes/no): ", s.Service, s.Command, s.risk())
-	reader := bufio.NewReader(os.Stdin)
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(strings.ToLower(answer))
-	return answer == "yes" || answer == "y"
 }
 
 // globalBool reads a bool flag that may live on the command, inherited flags, or

@@ -22,6 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -46,6 +49,34 @@ var EventList = shortcut.Shortcut{
 	Description: "查询日程列表（不传时间默认查询今天）",
 	Intent:      "当你想了解某人（默认自己）在某段时间内的日程安排、看看今天/本周有哪些会时使用；可传 --start/--end 圈定时间范围、--calendar-id 指定日历，返回该区间内的日程列表（含日程 ID，可配合 +get 看详情）。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_agenda",
+			CanonicalPath:  "calendar.shortcut_agenda",
+			CLIPath:        "calendar +agenda",
+			PrimaryCLIPath: "calendar +agenda",
+		},
+		Description: "查询日程列表（不传时间默认查询今天）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询日程列表（不传时间默认查询今天）",
+			UseWhen:      []string{"当你想了解某人（默认自己）在某段时间内的日程安排、看看今天/本周有哪些会时使用；可传 --start/--end 圈定时间范围、--calendar-id 指定日历，返回该区间内的日程列表（含日程 ID，可配合 +get 看详情）。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws calendar +agenda",
+				"dws calendar +agenda --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-31T23:59:59+08:00\" --limit 50",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "start", Type: shortcut.FlagString, Desc: "开始时间 ISO-8601 (例如 2026-03-10T00:00:00+08:00)，默认今天 00:00"},
 		{Name: "end", Type: shortcut.FlagString, Desc: "结束时间 ISO-8601，默认今天 23:59"},
@@ -187,6 +218,31 @@ var AttendeeList = shortcut.Shortcut{
 	Description: "查看日程参会人",
 	Intent:      "当你想知道某个日程都有谁参加、各人的出席响应状态时使用；输入 --event 日程 ID，返回参会人列表（userId 及其接受/拒绝等状态）。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_attendee_list",
+			CanonicalPath:  "calendar.shortcut_attendee_list",
+			CLIPath:        "calendar +attendee-list",
+			PrimaryCLIPath: "calendar +attendee-list",
+		},
+		Description: "查看日程参会人",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查看日程参会人",
+			UseWhen:      []string{"当你想知道某个日程都有谁参加、各人的出席响应状态时使用；输入 --event 日程 ID，返回参会人列表（userId 及其接受/拒绝等状态）。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +attendee-list --event EVENT_ID"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "event", Type: shortcut.FlagString, Desc: "日程 ID", Required: true},
 		{Name: "calendar-id", Type: shortcut.FlagString, Desc: "日历 ID (默认 primary 主日历)"},
@@ -284,6 +340,31 @@ var RoomSearch = shortcut.Shortcut{
 	Description: "按名称模糊搜索会议室（不检查可用性）",
 	Intent:      "当你只知道会议室名字、想拿到它的 roomId 以便后续预定时使用；输入 --room-name 名称关键词（建议只填核心专名，去掉“会议室”等后缀），返回名称匹配的会议室列表。它只按名字找、不判断该时段是否空闲，查可用性请用 +room-find。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_room_search",
+			CanonicalPath:  "calendar.shortcut_room_search",
+			CLIPath:        "calendar +room-search",
+			PrimaryCLIPath: "calendar +room-search",
+		},
+		Description: "按名称模糊搜索会议室（不检查可用性）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按名称模糊搜索会议室（不检查可用性）",
+			UseWhen:      []string{"当你只知道会议室名字、想拿到它的 roomId 以便后续预定时使用；输入 --room-name 名称关键词（建议只填核心专名，去掉“会议室”等后缀），返回名称匹配的会议室列表。它只按名字找、不判断该时段是否空闲，查可用性请用 +room-find。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +room-search --room-name 永澄亭"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "room-name", Type: shortcut.FlagString, Desc: "会议室名称（精简核心专名，剔除“会议室”等后缀）", Required: true},
 	},
@@ -439,6 +520,31 @@ var RoomGroups = shortcut.Shortcut{
 	Description: "会议室分组列表",
 	Intent:      "当你想按楼层/园区等分组浏览会议室、或需要拿到 groupId 以便在 +room-find 里按分组过滤时使用；返回会议室分组列表，支持 --limit/--page 分页。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_room_groups",
+			CanonicalPath:  "calendar.shortcut_room_groups",
+			CLIPath:        "calendar +room-groups",
+			PrimaryCLIPath: "calendar +room-groups",
+		},
+		Description: "会议室分组列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "会议室分组列表",
+			UseWhen:      []string{"当你想按楼层/园区等分组浏览会议室、或需要拿到 groupId 以便在 +room-find 里按分组过滤时使用；返回会议室分组列表，支持 --limit/--page 分页。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +room-groups"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "limit", Type: shortcut.FlagString, Desc: "每页条数 (pageSize)"},
 		{Name: "page", Type: shortcut.FlagString, Desc: "页码 (pageIndex，从 0 开始)"},
@@ -494,7 +600,10 @@ func roomGroupsProject(data map[string]any) []map[string]any {
 // roomGroupsContainer locates the group slice across candidate wrapper keys,
 // unwrapping one nested object layer (e.g. result.list) when needed.
 func roomGroupsContainer(data map[string]any) []any {
-	keys := []string{"result", "data", "list", "items", "groups"}
+	// list_meeting_room_groups nests the groups under result.groupList;
+	// "groupList" MUST be probed or +room-groups silently returns empty despite
+	// the backend returning meeting-room groups.
+	keys := []string{"result", "data", "list", "items", "groupList", "groups"}
 	for _, k := range keys {
 		v, ok := data[k]
 		if !ok {
@@ -534,6 +643,31 @@ var BusySearch = shortcut.Shortcut{
 	Description: "查询用户 / 会议室闲忙状态（--users 与 --rooms 至少其一）",
 	Intent:      "当你要在约会前确认某些人或会议室在指定时间段是否有空、避免冲突时使用；传入 --start/--end 时间段并至少给出 --users 或 --rooms 其一，返回各对象在该区间的忙/闲时段。只看忙闲结果、不看具体日程内容，需要系统给出建议时段可用 +suggestion。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_freebusy",
+			CanonicalPath:  "calendar.shortcut_freebusy",
+			CLIPath:        "calendar +freebusy",
+			PrimaryCLIPath: "calendar +freebusy",
+		},
+		Description: "查询用户 / 会议室闲忙状态（--users 与 --rooms 至少其一）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询用户 / 会议室闲忙状态（--users 与 --rooms 至少其一）",
+			UseWhen:      []string{"当你要在约会前确认某些人或会议室在指定时间段是否有空、避免冲突时使用；传入 --start/--end 时间段并至少给出 --users 或 --rooms 其一，返回各对象在该区间的忙/闲时段。只看忙闲结果、不看具体日程内容，需要系统给出建议时段可用 +suggestion。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +freebusy --users userId1,userId2 --start \"2026-03-10T14:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "用户 userId 列表 (逗号分隔)"},
 		{Name: "rooms", Type: shortcut.FlagStringSlice, Desc: "会议室 roomId 列表 (逗号分隔)"},
@@ -587,7 +721,32 @@ var BookList = shortcut.Shortcut{
 	Description: "查询用户的日历本列表",
 	Intent:      "当你想知道自己有哪些日历本（主日历、项目日历、订阅日历等）、或需要拿到某个日历的 calendarId 以便在 +agenda/+create 中指定时使用；无需参数，返回全部日历本列表。",
 	Risk:        shortcut.RiskRead,
-	Tips:        []string{`dws calendar +book-list`},
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_book_list",
+			CanonicalPath:  "calendar.shortcut_book_list",
+			CLIPath:        "calendar +book-list",
+			PrimaryCLIPath: "calendar +book-list",
+		},
+		Description: "查询用户的日历本列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询用户的日历本列表",
+			UseWhen:      []string{"当你想知道自己有哪些日历本（主日历、项目日历、订阅日历等）、或需要拿到某个日历的 calendarId 以便在 +agenda/+create 中指定时使用；无需参数，返回全部日历本列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +book-list"},
+		},
+	},
+	Tips: []string{`dws calendar +book-list`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		data, err := rt.CallMCPData("calendar", "list_calendars", nil)
 		if err != nil {
@@ -633,6 +792,31 @@ var BookSearch = shortcut.Shortcut{
 	Description: "按名称模糊搜索日历本",
 	Intent:      "当你只记得日历本名字的一部分、想据此找到对应的 calendarId 时使用；输入 --query 名称关键词，返回名称匹配的日历本列表，便于后续在其它命令里指定 --calendar-id。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_book_search",
+			CanonicalPath:  "calendar.shortcut_book_search",
+			CLIPath:        "calendar +book-search",
+			PrimaryCLIPath: "calendar +book-search",
+		},
+		Description: "按名称模糊搜索日历本",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按名称模糊搜索日历本",
+			UseWhen:      []string{"当你只记得日历本名字的一部分、想据此找到对应的 calendarId 时使用；输入 --query 名称关键词，返回名称匹配的日历本列表，便于后续在其它命令里指定 --calendar-id。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +book-search --query \"项目\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "日历本名称关键词", Required: true},
 	},

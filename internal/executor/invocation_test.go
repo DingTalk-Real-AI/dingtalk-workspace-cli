@@ -23,12 +23,6 @@ func TestCrossPlatformCoverageInvocationBuildersAndEchoRunner(t *testing.T) {
 		t.Fatal("nil helper params were not normalized")
 	}
 
-	workflow := NewWorkflowInvocation("old", "publish", []Invocation{compat, help})
-	steps, ok := workflow.Params["steps"].([]any)
-	if !ok || len(steps) != 2 || workflow.CanonicalPath != "workflow.publish" {
-		t.Fatalf("unexpected workflow invocation: %#v", workflow)
-	}
-
 	runner := EchoRunner{}
 	result, err := runner.Run(context.Background(), compat)
 	if err != nil || result.Invocation.Tool != "read" || result.Response != nil {

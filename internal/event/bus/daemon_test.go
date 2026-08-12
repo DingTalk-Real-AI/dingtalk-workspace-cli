@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -216,6 +217,121 @@ func TestDaemon_ConsumerReceivesEvents(t *testing.T) {
 
 	cancel()
 	<-runDone
+}
+
+func TestDaemon_ConsumerStopClosesOnlyMatchingSubscription(t *testing.T) {
+	skipOnWindows(t, "uses Unix socket dial")
+	workDir := shortTempDir(t)
+	sockPath := filepath.Join(workDir, "bus.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- Run(ctx, Config{
+			WorkDir:     workDir,
+			IPCEndpoint: sockPath,
+			ClientID:    "ding_test",
+			Edition:     "open",
+			Source:      &fakeSource{},
+		})
+	}()
+	defer func() { cancel(); <-runDone }()
+	waitForFile(t, sockPath, 2*time.Second)
+
+	connect := func(subscribeID string) (net.Conn, *transport.Reader) {
+		t.Helper()
+		conn, err := transport.Dial(sockPath)
+		if err != nil {
+			t.Fatalf("dial consumer: %v", err)
+		}
+		w := transport.NewWriter(conn)
+		r := transport.NewReader(conn)
+		if err := w.WriteJSON(transport.Hello{
+			Type:        transport.FrameTypeHello,
+			ConsumerPID: os.Getpid(),
+			SubscribeID: subscribeID,
+		}); err != nil {
+			t.Fatalf("write hello: %v", err)
+		}
+		var ack transport.HelloAck
+		if err := r.ReadJSON(&ack); err != nil || ack.Type != transport.FrameTypeHelloAck {
+			t.Fatalf("read hello ack: %#v, %v", ack, err)
+		}
+		return conn, r
+	}
+	aConn, aReader := connect("sub-a")
+	defer aConn.Close()
+	bConn, _ := connect("sub-b")
+	defer bConn.Close()
+
+	ctl, err := transport.Dial(sockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctlW := transport.NewWriter(ctl)
+	ctlR := transport.NewReader(ctl)
+	if err := ctlW.WriteJSON(transport.Hello{
+		Type: transport.FrameTypeHello,
+		Role: transport.HelloRoleConsumerStop,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctlW.WriteJSON(transport.ConsumerStopReq{
+		Type:         transport.FrameTypeConsumerStopReq,
+		SubscribeIDs: []string{"sub-a", "missing"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var resp transport.ConsumerStopResp
+	if err := ctlR.ReadJSON(&resp); err != nil {
+		t.Fatal(err)
+	}
+	_ = ctl.Close()
+	if len(resp.Stopped) != 1 || resp.Stopped[0] != "sub-a" || len(resp.NotFound) != 1 || resp.NotFound[0] != "missing" {
+		t.Fatalf("consumer stop response = %#v", resp)
+	}
+
+	var bye transport.Bye
+	if err := aReader.ReadJSON(&bye); err != nil {
+		t.Fatalf("read targeted bye: %v", err)
+	}
+	if bye.Type != transport.FrameTypeBye || bye.Reason != transport.ByeReasonSubscriptionStopped {
+		t.Fatalf("targeted bye = %#v", bye)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		status := queryDaemonStatus(t, sockPath)
+		if len(status.Consumers) == 1 && status.Consumers[0].SubscribeID == "sub-b" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("consumers after targeted stop = %#v", status.Consumers)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func queryDaemonStatus(t *testing.T, endpoint string) transport.StatusResp {
+	t.Helper()
+	conn, err := transport.Dial(endpoint)
+	if err != nil {
+		t.Fatalf("dial status: %v", err)
+	}
+	defer conn.Close()
+	w := transport.NewWriter(conn)
+	r := transport.NewReader(conn)
+	if err := w.WriteJSON(transport.Hello{Type: transport.FrameTypeHello, Role: transport.HelloRoleStatus}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteJSON(transport.StatusReq{Type: transport.FrameTypeStatusReq}); err != nil {
+		t.Fatal(err)
+	}
+	var status transport.StatusResp
+	if err := r.ReadJSON(&status); err != nil {
+		t.Fatal(err)
+	}
+	return status
 }
 
 func TestDaemon_LockBusyOnSecondRun(t *testing.T) {

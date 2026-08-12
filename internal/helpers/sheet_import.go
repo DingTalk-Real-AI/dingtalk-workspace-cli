@@ -13,7 +13,11 @@
 
 package helpers
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+)
 
 const sheetImportLong = `将本地表格文件导入为一个新的钉钉在线电子表格，与 dws sheet export（导出）对称。
 
@@ -69,6 +73,39 @@ func newSheetImportCmdWithConfig(cfg importFlowConfig) *cobra.Command {
 			return runImportCommand(cmd, args, cfg)
 		},
 	}
+	DeclareLeafMetadata(importCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "import",
+				CanonicalPath:  "sheet.import",
+				CLIPath:        "sheet import create",
+				PrimaryCLIPath: "sheet import create",
+			},
+			Description: "将本地 xlsx/xls 文件导入为新的钉钉在线电子表格。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "该 CLI 导入流程包含本地文件校验、创建导入会话、OSS 上传、确认转换和任务轮询，不能绑定为单一 interface_ref。",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "将本地 xlsx/xls 文件导入为新的钉钉在线电子表格。",
+				UseWhen:      []string{"用户要把本地 Excel 文件转换为可在线编辑的钉钉表格时"},
+				AvoidWhen: []string{
+					"读取或修改已有在线表格时应使用 sheet list/info/range 等命令",
+					"查询已提交导入任务的状态时使用 sheet import get，不要重复创建导入任务",
+				},
+				Examples: []string{
+					"dws sheet import create --file ./report.xlsx --folder-token <FOLDER_TOKEN> --format json",
+					"dws sheet import create --file ./data.xls --workspace <WORKSPACE_ID> --name \"月度报表\" --format json",
+				},
+			},
+		},
+	})
 	addSheetImportFlags(importCreateCmd)
 
 	importGetCmd := &cobra.Command{
@@ -87,6 +124,36 @@ func newSheetImportCmdWithConfig(cfg importFlowConfig) *cobra.Command {
 			return runImportGetCommand(cmd, cfg)
 		},
 	}
+	DeclareLeafMetadata(importGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "import_get",
+				CanonicalPath:  "sheet.import_get",
+				CLIPath:        "sheet import get",
+				PrimaryCLIPath: "sheet import get",
+			},
+			Description: "根据 taskId 查询表格导入任务结果。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "该 CLI 续查命令显式复用 doc server 的 query_import_task；当前 Sheet 静态接口快照没有可直接绑定的单一 interface_ref。",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "根据 taskId 查询表格导入任务结果。",
+				UseWhen:      []string{"已有 sheet import 返回的 taskId，需要在导入超时或中断后续查转换状态时"},
+				AvoidWhen: []string{
+					"发起新的 xlsx/xls 导入应使用 sheet import；不要用本命令代替导入",
+					"状态仍为 processing 时不要重新提交 import，稍后继续查询同一 taskId",
+				},
+				Examples: []string{"dws sheet import get --task-id <TASK_ID> --format json"},
+			},
+		},
+	})
 	importGetCmd.Flags().String("task-id", "", "导入任务 ID (必填)")
 	importCmd.AddCommand(importCreateCmd, importGetCmd)
 	return importCmd

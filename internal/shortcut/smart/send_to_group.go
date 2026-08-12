@@ -14,18 +14,18 @@
 package smart
 
 import (
-	"encoding/json"
-	"fmt"
-	"strings"
-
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	chatshortcut "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chat"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
-// SendToGroup: message a group by its NAME, no openConversationId juggling.
+// SendToGroup: message a group by its name or stable openConversationId.
 //
-// Steps: search groups by name → resolve to a single openConversationId
-// (disambiguate on multiple matches, never guess) → send a markdown message.
+// Steps: normalize a stable ID, or search a name and resolve it to a single
+// openConversationId (disambiguate on multiple matches, never guess), then
+// send a markdown message.
 // Replaces `chat search --query <群名>` (copy openConversationId) →
 // `chat +messages-send --group <openConversationId>`.
 //
@@ -38,12 +38,36 @@ var SendToGroup = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+send-to-group",
 	Product:     "chat",
-	Description: "按群名直接给群发消息（自动搜群解析 openConversationId）",
-	Intent: "当你只知道群的名字、想直接往这个群里发一条消息而不想先手动查群 ID 时使用；" +
-		"内部先按群名搜索群聊解析出唯一 openConversationId 再发送，群名匹配到多个群时会列出候选让你区分、绝不自行假定。会真实发出群消息。",
-	Risk: shortcut.RiskWrite,
+	Description: "按群名或 openConversationId 直接给群发消息",
+	Intent:      "当你有群名或 openConversationId、想直接往该群发送简单文本或 Markdown 时使用；稳定 ID 不进入搜索，群名则必须唯一解析，零命中或多候选都会在发送前停止。会真实发出群消息。",
+	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_send_to_group",
+			CanonicalPath:  "chat.shortcut_send_to_group",
+			CLIPath:        "chat +send-to-group",
+			PrimaryCLIPath: "chat +send-to-group",
+		},
+		Description: "按群名或 openConversationId 直接给群发消息",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按群名或 openConversationId 直接给群发消息",
+			UseWhen:      []string{"当你有群名或 openConversationId、想直接往该群发送简单文本或 Markdown 时使用；稳定 ID 不进入搜索，群名则必须唯一解析，零命中或多候选都会在发送前停止。会真实发出群消息。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws chat +send-to-group --group 项目冲刺 --text \"今天 5 点前提交进度\""},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "group", Type: shortcut.FlagString, Desc: "群名称（搜群关键词，用群名里连续的核心词）", Required: true},
+		{Name: "group", Type: shortcut.FlagString, Desc: "群名称或 openConversationId", Required: true},
 		{Name: "text", Type: shortcut.FlagString, Desc: "消息内容（支持 Markdown）", Required: true},
 		shortcut.AIMessageTagFlag(),
 	},
@@ -52,33 +76,17 @@ var SendToGroup = shortcut.Shortcut{
 		groupName := rt.Str("group")
 		text := rt.Str("text")
 
-		// Step 1 — search groups by name (keyword) on the im server.
-		data, err := rt.CallMCPData("im", "search_groups", map[string]any{
-			"keyword": groupName,
-			"limit":   10,
-			"cursor":  "0",
-		})
+		resolved, err := targetresolver.ResolveChatTarget(rt, groupName, "")
 		if err != nil {
 			return err
 		}
-		groups := extractGroupsForSend(data)
-		switch {
-		case len(groups) == 0:
-			return apperrors.NewValidation(fmt.Sprintf(
-				"没找到名字匹配 %q 的群；换用群名里连续的核心词再试。", groupName))
-		case len(groups) > 1:
-			return apperrors.NewValidation(fmt.Sprintf(
-				"%q 匹配到 %d 个群：%s。请用更精确的群名，或直接用 dws chat +messages-send --group <openConversationId> 指定群。",
-				groupName, len(groups), strings.Join(sendGroupLabels(groups), "、")))
-		}
-
-		// Step 2 — send the markdown message to the unique group.
-		content, _ := json.Marshal(map[string]string{"title": text, "text": text})
-		return rt.CallMCP("send_personal_message", rt.AddAIMessageTag(map[string]any{
-			"openConversationId": groups[0].id,
-			"msgType":            "markdown",
-			"content":            string(content),
-		}))
+		return chatshortcut.ExecuteResolvedUserMarkdown(
+			rt,
+			chatshortcut.ResolvedUserMessageTarget{
+				GroupID: resolved.Selected.OpenConversationID,
+			},
+			text,
+		)
 	},
 }
 
@@ -93,55 +101,38 @@ type sendGroupMatch struct {
 // result/result.items/result.groups (field names per chat search's real
 // response shape), and the name field may be "title" or "name".
 func extractGroupsForSend(data map[string]any) []sendGroupMatch {
-	var list []any
-	switch inner := data["result"].(type) {
-	case []any:
-		list = inner
-	case map[string]any:
-		if v, ok := inner["items"].([]any); ok {
-			list = v
-		} else if v, ok := inner["groups"].([]any); ok {
-			list = v
-		}
+	chats := targetresolver.ExtractChats(data)
+	out := make([]sendGroupMatch, 0, len(chats))
+	for _, chat := range chats {
+		out = append(out, sendGroupMatch{id: chat.OpenConversationID, name: chat.Name})
 	}
-	if list == nil {
-		if v, ok := data["items"].([]any); ok {
-			list = v
-		}
-	}
+	return out
+}
 
-	var out []sendGroupMatch
-	for _, item := range list {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		id, _ := m["openConversationId"].(string)
-		if id == "" {
-			id, _ = m["id"].(string)
-		}
-		if id == "" {
-			continue
-		}
-		name, _ := m["title"].(string)
-		if name == "" {
-			name, _ = m["name"].(string)
-		}
-		out = append(out, sendGroupMatch{id: id, name: name})
+// preferExactGroupMatches keeps name-based routing ambiguity-safe while
+// avoiding a common false ambiguity from substring search. If the server
+// returns exactly one group whose title equals the requested name, that exact
+// group wins over prefix/suffix matches. Duplicate rows for the same
+// openConversationId are collapsed before selection.
+func preferExactGroupMatches(groups []sendGroupMatch, query string) []sendGroupMatch {
+	chats := make([]targetresolver.Chat, 0, len(groups))
+	for _, group := range groups {
+		chats = append(chats, targetresolver.Chat{OpenConversationID: group.id, Name: group.name})
+	}
+	selected := targetresolver.PreferExactChats(chats, query)
+	out := make([]sendGroupMatch, 0, len(selected))
+	for _, chat := range selected {
+		out = append(out, sendGroupMatch{id: chat.OpenConversationID, name: chat.Name})
 	}
 	return out
 }
 
 func sendGroupLabels(groups []sendGroupMatch) []string {
-	out := make([]string, 0, len(groups))
-	for _, g := range groups {
-		name := g.name
-		if name == "" {
-			name = "(未命名群)"
-		}
-		out = append(out, fmt.Sprintf("%s(%s)", name, g.id))
+	chats := make([]targetresolver.Chat, 0, len(groups))
+	for _, group := range groups {
+		chats = append(chats, targetresolver.Chat{OpenConversationID: group.id, Name: group.name})
 	}
-	return out
+	return targetresolver.ChatLabels(chats)
 }
 
 func init() {

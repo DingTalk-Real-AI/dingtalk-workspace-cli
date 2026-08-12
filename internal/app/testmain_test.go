@@ -44,6 +44,10 @@ import (
 // test binary never launches a page on the developer's machine; tests that
 // need to assert the URL can still replace openBrowserFunc locally.
 func TestMain(m *testing.M) {
+	if code, ok := runRuntimeTokenDetachedE2EChild(); ok {
+		os.Exit(code)
+	}
+
 	tmpDir, err := os.MkdirTemp("", "dws-app-test-keychain-")
 	if err != nil {
 		panic("create test keychain tempdir: " + err.Error())

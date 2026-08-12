@@ -14,6 +14,11 @@ on:
   schedule:
     - cron: '0 18 * * *'
   workflow_dispatch:
+    inputs:
+      sync_release_version:
+        description: "Sync a specific release version's assets to Gitee (e.g. v1.0.55-beta.3)"
+        required: false
+        type: string
 
 concurrency:
   group: gitee-code-mirror
@@ -23,7 +28,6 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
     if: ${{ github.ref_name == github.event.repository.default_branch && github.repository_owner == 'DingTalk-Real-AI' }}
-    # GitHub Actions 不允许在 job-level if 直接引用 secrets，故先用 env 暴露再在 step 守卫。
     env:
       GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
       GITEE_USER: ${{ secrets.GITEE_USER }}
@@ -76,3 +80,42 @@ jobs:
           # main 镜像对齐；release tag 由 release.yml 单独校验后创建，禁止在这里 force。
           git push --force "$REMOTE" 'gitee-main:refs/heads/main'
           echo "✅ 已镜像 main（含 Gitee README 本地化）到 Gitee ${GITEE_REPO}"
+
+      - name: Download GitHub Release assets
+        if: ${{ inputs.sync_release_version != '' }}
+        env:
+          VERSION: ${{ inputs.sync_release_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          echo "📥 Downloading release assets for ${VERSION}"
+          mkdir -p dist
+          gh release download "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir dist \
+            --pattern 'dws-*' \
+            --pattern 'checksums.txt' \
+            --clobber
+          ls -la dist/
+
+      - name: Verify release artifacts
+        if: ${{ inputs.sync_release_version != '' }}
+        env:
+          VERSION: ${{ inputs.sync_release_version }}
+        run: |
+          set -eu
+          DWS_PACKAGE_DIST_DIR="$GITHUB_WORKSPACE/dist" \
+            ./scripts/release/verify-release-artifacts.sh "$VERSION"
+
+      - name: Sync release assets to Gitee
+        if: ${{ inputs.sync_release_version != '' }}
+        env:
+          VERSION: ${{ inputs.sync_release_version }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_USER: ${{ secrets.GITEE_USER }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          DIST_DIR: ${{ github.workspace }}/dist
+        run: |
+          set -eu
+          echo "📦 Syncing release assets for ${VERSION} to Gitee ${GITEE_REPO}"
+          ./scripts/release/sync-to-gitee.sh

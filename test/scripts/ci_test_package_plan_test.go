@@ -19,6 +19,7 @@ func TestCITestPackagePlanCoversDefaultPackagesExactlyOnce(t *testing.T) {
 func TestCITestPackagePlanRoutesPublicTestSuites(t *testing.T) {
 	root := testPackagePlanRoot(t)
 	remaining := strings.Fields(runTestPackagePlan(t, root, "list", "remaining"))
+	smoke := strings.Fields(runTestPackagePlan(t, root, "list", "smoke"))
 	releaseScripts := strings.Fields(runTestPackagePlan(t, root, "list", "release-scripts"))
 
 	for _, suffix := range []string{
@@ -26,15 +27,20 @@ func TestCITestPackagePlanRoutesPublicTestSuites(t *testing.T) {
 		"/test/contract",
 		"/test/integration/extensions",
 		"/test/mock_mcp",
-		"/test/smoke",
 		"/test/unit",
 	} {
 		if !containsPackageSuffix(remaining, suffix) {
 			t.Errorf("remaining shard does not contain package ending in %q", suffix)
 		}
 	}
+	if containsPackageSuffix(remaining, "/test/smoke") {
+		t.Error("remaining shard unexpectedly contains /test/smoke")
+	}
 	if containsPackageSuffix(remaining, "/test/scripts") {
 		t.Error("remaining shard unexpectedly contains /test/scripts")
+	}
+	if !containsPackageSuffix(smoke, "/test/smoke") {
+		t.Error("smoke shard does not contain /test/smoke")
 	}
 	if !containsPackageSuffix(releaseScripts, "/test/scripts") {
 		t.Error("release-scripts shard does not contain /test/scripts")

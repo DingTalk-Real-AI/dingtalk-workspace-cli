@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -22,9 +23,17 @@ type scriptedToolCaller struct {
 	index  int
 	format string
 	dry    bool
+	calls  int
+	server string
+	tool   string
+	args   map[string]any
 }
 
-func (c *scriptedToolCaller) CallTool(context.Context, string, string, map[string]any) (*edition.ToolResult, error) {
+func (c *scriptedToolCaller) CallTool(_ context.Context, serverID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	c.calls++
+	c.server = serverID
+	c.tool = toolName
+	c.args = args
 	if len(c.steps) == 0 {
 		return &edition.ToolResult{}, nil
 	}
@@ -47,11 +56,10 @@ func (*scriptedToolCaller) JQ() string       { return "" }
 
 func installScriptedCaller(t *testing.T, caller *scriptedToolCaller) {
 	t.Helper()
-	previous := deps
+	testseam.Protect(t, &deps)
 	InitDeps(caller)
 	deps.Out.w = io.Discard
 	deps.Out.errW = io.Discard
-	t.Cleanup(func() { deps = previous })
 }
 
 func installImmediateTiming(t *testing.T) {

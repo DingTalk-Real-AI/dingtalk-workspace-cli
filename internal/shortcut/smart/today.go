@@ -14,6 +14,8 @@
 package smart
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -38,7 +40,32 @@ var Today = shortcut.Shortcut{
 	Intent: "当你想快速看看『我今天有哪些日程/会议安排』时使用；" +
 		"内部用本地时区自动把时间范围算成今天 00:00 到次日 00:00，转成毫秒时间戳，" +
 		"查询主日历（primary）下今天的全部日程。只读，不会创建或修改任何日程。",
-	Risk:  shortcut.RiskRead,
+	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_today",
+			CanonicalPath:  "calendar.shortcut_today",
+			CLIPath:        "calendar +today",
+			PrimaryCLIPath: "calendar +today",
+		},
+		Description: "列出我今天的日程（自动计算今天的起止时间，无需手动填时间范围）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出我今天的日程（自动计算今天的起止时间，无需手动填时间范围）",
+			UseWhen:      []string{"当你想快速看看『我今天有哪些日程/会议安排』时使用；内部用本地时区自动把时间范围算成今天 00:00 到次日 00:00，转成毫秒时间戳，查询主日历（primary）下今天的全部日程。只读，不会创建或修改任何日程。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +today"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		// No required flags: "today" is fully derived from the local clock.
 	},

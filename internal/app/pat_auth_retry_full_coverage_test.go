@@ -79,13 +79,15 @@ func TestCrossPlatformCoveragePATRetryRemainingPureAndWaitCoverage(t *testing.T)
 	if ok, err := WaitForPatAuthorization(context.Background(), "", &out); err != nil || ok {
 		t.Fatalf("timed out authorization = %v, %v", ok, err)
 	}
-	patAuthorizationTimeout = 5 * time.Millisecond
+	patAuthorizationTimeout = time.Second
 	patAuthorizationPollInterval = time.Millisecond
+	pollCtx, pollCancel := context.WithCancel(context.Background())
 	patResolveAccessToken = func(context.Context, string, string) (string, error) {
+		pollCancel()
 		return "", authpkg.ErrTokenDataNotFound
 	}
 	out.Reset()
-	if ok, err := WaitForPatAuthorization(context.Background(), "", &out); err != nil || ok || !strings.Contains(out.String(), "等待授权中") {
+	if ok, err := WaitForPatAuthorization(pollCtx, "", &out); ok || !errors.Is(err, context.Canceled) || !strings.Contains(out.String(), "等待授权中") {
 		t.Fatalf("invalid-token polling = %v, %v, output %q", ok, err, out.String())
 	}
 }

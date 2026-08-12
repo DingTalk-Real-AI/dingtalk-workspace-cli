@@ -26,12 +26,12 @@ func TestTodoListAttachmentDeliveredSchemaMatchesExecutableHelp(t *testing.T) {
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"schema", cliPath, "--format", "json"})
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute embedded schema leaf: %v; stderr=%s", err, stderr.String())
+		t.Fatalf("execute delivery schema leaf: %v; stderr=%s", err, stderr.String())
 	}
 
 	var tool map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &tool); err != nil {
-		t.Fatalf("decode embedded schema leaf: %v", err)
+		t.Fatalf("decode delivery schema leaf: %v", err)
 	}
 	if got := schemaContractString(tool["canonical_path"]); got != canonicalPath {
 		t.Fatalf("canonical_path = %q, want %q", got, canonicalPath)

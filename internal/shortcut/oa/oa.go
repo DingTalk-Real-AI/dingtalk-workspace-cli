@@ -16,6 +16,8 @@
 package oa
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -27,6 +29,31 @@ var ListPending = shortcut.Shortcut{
 	Description: "查询待我处理的审批（时间范围为 epoch 毫秒）",
 	Intent:      "当你想知道自己当前有哪些审批还没处理、需要清理审批待办或按时间段/关键字盘点待审批单时使用；传入起止时间（epoch 毫秒，可选关键字与分页），返回待我审批的实例列表，是后续 +get 查详情、+approve/+reject 处理的入口。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "oa",
+			Name:           "shortcut_list_pending",
+			CanonicalPath:  "oa.shortcut_list_pending",
+			CLIPath:        "oa +list-pending",
+			PrimaryCLIPath: "oa +list-pending",
+		},
+		Description: "查询待我处理的审批（时间范围为 epoch 毫秒）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询待我处理的审批（时间范围为 epoch 毫秒）",
+			UseWhen:      []string{"当你想知道自己当前有哪些审批还没处理、需要清理审批待办或按时间段/关键字盘点待审批单时使用；传入起止时间（epoch 毫秒，可选关键字与分页），返回待我审批的实例列表，是后续 +get 查详情、+approve/+reject 处理的入口。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws oa +list-pending --start 1741536000000 --end 1741622399000 --query 报销"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "start", Type: shortcut.FlagInt, Desc: "开始时间（epoch 毫秒）", Required: true},
 		{Name: "end", Type: shortcut.FlagInt, Desc: "结束时间（epoch 毫秒）", Required: true},
@@ -93,6 +120,31 @@ var ListForms = shortcut.Shortcut{
 	Description: "获取当前用户可见的审批表单列表",
 	Intent:      "当你想浏览自己有权限发起哪些审批模板、或需要为 +list-initiated 等操作枚举 processCode 时使用；无需关键字，按游标分页返回当前用户可见的全部审批表单，适合不确定表单名称时先整体看一遍。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "oa",
+			Name:           "shortcut_list_forms",
+			CanonicalPath:  "oa.shortcut_list_forms",
+			CLIPath:        "oa +list-forms",
+			PrimaryCLIPath: "oa +list-forms",
+		},
+		Description: "获取当前用户可见的审批表单列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取当前用户可见的审批表单列表",
+			UseWhen:      []string{"当你想浏览自己有权限发起哪些审批模板、或需要为 +list-initiated 等操作枚举 processCode 时使用；无需关键字，按游标分页返回当前用户可见的全部审批表单，适合不确定表单名称时先整体看一遍。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws oa +list-forms --cursor 0 --limit 100"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "cursor", Type: shortcut.FlagInt, Default: "0", Desc: "分页游标，首次传 0"},
 		{Name: "limit", Type: shortcut.FlagInt, Default: "100", Desc: "每页大小，最大 100"},
@@ -137,7 +189,11 @@ func oaFormResolveList(data map[string]any) []any {
 	if data == nil {
 		return []any{}
 	}
-	for _, key := range []string{"result", "data", "list", "items", "processList", "forms"} {
+	// list_user_visible_process nests the forms under result.processCodeList;
+	// probing must include that exact key (both at the top level in case the
+	// envelope is already unwrapped, and one level deeper under result/data) or
+	// the whole list silently projects to empty.
+	for _, key := range []string{"result", "data", "list", "items", "processList", "processCodeList", "forms"} {
 		v, ok := data[key]
 		if !ok {
 			continue
@@ -146,7 +202,7 @@ func oaFormResolveList(data map[string]any) []any {
 			return arr
 		}
 		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "processList", "forms", "result", "data"} {
+			for _, ik := range []string{"list", "items", "processList", "processCodeList", "forms", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
 					return arr
 				}
@@ -190,6 +246,31 @@ var SearchForms = shortcut.Shortcut{
 	Description: "按关键字模糊搜索当前用户可见的审批表单",
 	Intent:      "当你已知想找的审批大致名称（如「报销」「请假」）、想快速定位对应表单及其 processCode 时使用，比 +list-forms 全量列举更高效；传入关键字，返回名称或 processCode 匹配的表单，供后续 +list-initiated 按模板查询。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "oa",
+			Name:           "shortcut_search_forms",
+			CanonicalPath:  "oa.shortcut_search_forms",
+			CLIPath:        "oa +search-forms",
+			PrimaryCLIPath: "oa +search-forms",
+		},
+		Description: "按关键字模糊搜索当前用户可见的审批表单",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按关键字模糊搜索当前用户可见的审批表单",
+			UseWhen:      []string{"当你已知想找的审批大致名称（如「报销」「请假」）、想快速定位对应表单及其 processCode 时使用，比 +list-forms 全量列举更高效；传入关键字，返回名称或 processCode 匹配的表单，供后续 +list-initiated 按模板查询。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws oa +search-forms --query 报销"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "关键字（匹配 processCode 或表单名称）", Required: true},
 	},
@@ -234,6 +315,31 @@ var ListExecuted = shortcut.Shortcut{
 	Description: "获取当前用户已经处理过的审批单列表",
 	Intent:      "当你想回顾自己历史上审批过（已同意/拒绝等）的单子、做复盘或查找某条已办审批时使用，区别于 +list-pending 的待办；按页码/关键字分页返回我已处理的审批单。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "oa",
+			Name:           "shortcut_list_executed",
+			CanonicalPath:  "oa.shortcut_list_executed",
+			CLIPath:        "oa +list-executed",
+			PrimaryCLIPath: "oa +list-executed",
+		},
+		Description: "获取当前用户已经处理过的审批单列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取当前用户已经处理过的审批单列表",
+			UseWhen:      []string{"当你想回顾自己历史上审批过（已同意/拒绝等）的单子、做复盘或查找某条已办审批时使用，区别于 +list-pending 的待办；按页码/关键字分页返回我已处理的审批单。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws oa +list-executed --limit 20 --page 1 --query 报销"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "page", Type: shortcut.FlagString, Default: "1", Desc: "分页页码"},
 		{Name: "limit", Type: shortcut.FlagString, Default: "20", Desc: "每页大小"},
@@ -285,7 +391,12 @@ func oaInstanceResolveList(data map[string]any) []any {
 	if data == nil {
 		return []any{}
 	}
-	for _, key := range []string{"result", "data", "list", "items", "instances", "tasks"} {
+	// The approval instance tools (list_pending_approvals, get_done_tasks,
+	// get_submitted_instances, get_noticed_instances) all nest the instance list
+	// under result.values; "values" MUST be in the probe set or every one of
+	// +list-pending / +list-executed / +list-submitted / +list-cc silently
+	// projects to empty despite the backend returning records.
+	for _, key := range []string{"result", "data", "list", "items", "values", "instances", "tasks"} {
 		v, ok := data[key]
 		if !ok {
 			continue
@@ -294,7 +405,7 @@ func oaInstanceResolveList(data map[string]any) []any {
 			return arr
 		}
 		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "instances", "tasks", "result", "data"} {
+			for _, ik := range []string{"list", "items", "values", "instances", "tasks", "result", "data"} {
 				if arr, ok := inner[ik].([]any); ok {
 					return arr
 				}
@@ -332,6 +443,31 @@ var ListSubmitted = shortcut.Shortcut{
 	Description: "获取当前用户已发起的审批单列表",
 	Intent:      "当你想查看自己提交发起的审批单及其审批进度（如某笔报销/请假审到哪一步）时使用；按页码/关键字分页返回我发起的审批单，可据此决定是否 +revoke 撤销或催办。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "oa",
+			Name:           "shortcut_list_submitted",
+			CanonicalPath:  "oa.shortcut_list_submitted",
+			CLIPath:        "oa +list-submitted",
+			PrimaryCLIPath: "oa +list-submitted",
+		},
+		Description: "获取当前用户已发起的审批单列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取当前用户已发起的审批单列表",
+			UseWhen:      []string{"当你想查看自己提交发起的审批单及其审批进度（如某笔报销/请假审到哪一步）时使用；按页码/关键字分页返回我发起的审批单，可据此决定是否 +revoke 撤销或催办。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws oa +list-submitted --limit 20 --page 1 --query 报销"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "page", Type: shortcut.FlagString, Default: "1", Desc: "分页页码"},
 		{Name: "limit", Type: shortcut.FlagString, Default: "20", Desc: "每页大小"},
@@ -383,6 +519,31 @@ var ListCc = shortcut.Shortcut{
 	Description: "获取抄送当前用户的审批单列表",
 	Intent:      "当你想查看抄送给自己、需要知悉但无需审批的单子时使用；按页码/关键字分页返回抄送我的审批单列表，适合了解与自己相关但不用自己动手处理的审批动态。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "oa",
+			Name:           "shortcut_list_cc",
+			CanonicalPath:  "oa.shortcut_list_cc",
+			CLIPath:        "oa +list-cc",
+			PrimaryCLIPath: "oa +list-cc",
+		},
+		Description: "获取抄送当前用户的审批单列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取抄送当前用户的审批单列表",
+			UseWhen:      []string{"当你想查看抄送给自己、需要知悉但无需审批的单子时使用；按页码/关键字分页返回抄送我的审批单列表，适合了解与自己相关但不用自己动手处理的审批动态。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws oa +list-cc --limit 20 --page 1 --query 报销"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "page", Type: shortcut.FlagString, Default: "1", Desc: "分页页码"},
 		{Name: "limit", Type: shortcut.FlagString, Default: "20", Desc: "每页大小"},

@@ -64,15 +64,111 @@ var (
 )
 
 func ResolveFormat(cmd *cobra.Command, fallback Format) Format {
+	format, _ := resolveFormatWithWarning(cmd, fallback)
+	return format
+}
+
+// resolveFormatWithWarning 解析命令的 --format flag（B36，AC-09）：已知值
+// 归一化为对应 Format 常量；未知非空值**降级 fallback 并产出一条 warning
+// 文本**（不崩不静默，契约规范 §5.2「未知值 → 降级 + stderr warning」）。
+// warning 的写出由调用方负责（信封出口 WriteEnvelope 写 cmd.ErrOrStderr()），
+// 本函数不做 I/O——ResolveFormat 的既有调用方（只读 format 值、不持有出口
+// 语义）行为保持不变。flag 缺席或值为空返回 fallback 且不产生 warning
+// （空值是「未指定」而非「未知」）。查找顺序与 ResolveFormat 一致：
+// cmd.Flags() 优先于 InheritedFlags()，命中 format flag 即返回。
+func resolveFormatWithWarning(cmd *cobra.Command, fallback Format) (Format, string) {
+	if cmd == nil {
+		return fallback, ""
+	}
+	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags()} {
+		value, ok := formatValueFromFlagSet(flags)
+		if !ok {
+			continue
+		}
+		format := normalizeFormat(value, fallback)
+		return format, unknownFormatWarning(value, format)
+	}
+	return fallback, ""
+}
+
+// formatValueFromFlagSet 返回 flagSet 上 --format flag 的原始字符串值
+// （B35/B36/B43 共用的查找辅助）。flag 缺席或类型非 string 时返回 ok=false——
+// 与 formatFromFlagSet 的容错口径一致（不报错、交由 fallback 兜底）。
+func formatValueFromFlagSet(flags *pflag.FlagSet) (string, bool) {
+	if flags == nil || flags.Lookup("format") == nil {
+		return "", false
+	}
+	value, err := flags.GetString("format")
+	if err != nil {
+		return "", false
+	}
+	return value, true
+}
+
+// unknownFormatWarning 在 raw 为非空未知值（归一化后不等于 resolved，即不是
+// 任何已知 format 的大小写/空白变体）时返回 warning 文本，否则返回空串
+// （B36，AC-09 不崩不静默）。文本只陈述事实（未知值 + 降级目标），
+// 不做过度承诺。
+func unknownFormatWarning(raw string, resolved Format) string {
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	if trimmed == "" || trimmed == string(resolved) {
+		return ""
+	}
+	return fmt.Sprintf("unknown --format %q, falling back to %q", raw, string(resolved))
+}
+
+// ResolveFormatWithJSONShorthand 解析命令的输出 format，实现 --json 简写语义
+// （B43，契约规范 §5.2：「--json 自动注册为 --format json 简写（显式
+// --format 优先）」）。优先级链：
+//
+//  1. 显式 --format（非空值）恒优先——含未知值（按 normalizeFormat 降级
+//     fallback，--json 不 rescues 未知值）；
+//  2. --format 缺席或为空时，--json 布尔 flag（Changed 且为 true）等价
+//     --format json；
+//  3. 两者皆无 → fallback。
+//
+// --json 判定只接受 bool 型 flag（GetBool 成功）：业务层存在同名 string
+// flag（如 table create --json 载荷参数）的命令不会被误判为简写。本函数
+// 纯判定不做 I/O，供不直接走 WriteEnvelope 的调用方（如主漏斗桥接，B44）
+// 复用；与 resolveFormatWithWarning 共用 formatValueFromFlagSet /
+// normalizeFormat，归一化规则单一事实源。
+func ResolveFormatWithJSONShorthand(cmd *cobra.Command, fallback Format) Format {
 	if cmd == nil {
 		return fallback
 	}
 	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags()} {
-		if format, ok := formatFromFlagSet(flags, fallback); ok {
-			return format
+		value, ok := formatValueFromFlagSet(flags)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(value) != "" {
+			return normalizeFormat(value, fallback)
 		}
 	}
+	if jsonShorthandActive(cmd) {
+		return FormatJSON
+	}
 	return fallback
+}
+
+// jsonShorthandActive 报告 cmd 上是否有生效的 --json 简写（bool flag 被显式
+// 设置为 true）。查找 Flags / InheritedFlags / PersistentFlags 三组，与
+// internal/app 侧 commandRequestsJSONErrors 的判定面一致；GetBool 失败
+// （非 bool 同名 flag）跳过该组继续。
+func jsonShorthandActive(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	for _, flags := range []*pflag.FlagSet{cmd.Flags(), cmd.InheritedFlags(), cmd.PersistentFlags()} {
+		flag := flags.Lookup("json")
+		if flag == nil || !flag.Changed {
+			continue
+		}
+		if value, err := flags.GetBool("json"); err == nil {
+			return value
+		}
+	}
+	return false
 }
 
 func WriteCommandPayload(cmd *cobra.Command, payload any, fallback Format) error {
@@ -127,15 +223,8 @@ func unwrapCompatRuntimePayload(payload any) any {
 }
 
 func formatFromFlagSet(flags *pflag.FlagSet, fallback Format) (Format, bool) {
-	if flags == nil {
-		return fallback, false
-	}
-	flag := flags.Lookup("format")
-	if flag == nil {
-		return fallback, false
-	}
-	value, err := flags.GetString("format")
-	if err != nil {
+	value, ok := formatValueFromFlagSet(flags)
+	if !ok {
 		return fallback, false
 	}
 	return normalizeFormat(value, fallback), true

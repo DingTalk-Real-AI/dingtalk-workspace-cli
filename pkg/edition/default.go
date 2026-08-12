@@ -15,20 +15,18 @@ package edition
 
 import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata"
 
-// DefaultOSSClawType is the wire value for request header claw-type in
-// the open-source build. It is intentionally hard-wired — the open-source
-// CLI does NOT derive claw-type from DINGTALK_AGENT or any other caller
-// input, so third-party hosts get a predictable header regardless of
-// their environment.
+// DefaultOSSClawType is the fixed wire value for request header claw-type in
+// the open-source build. It is intentionally independent of caller-provided
+// environment variables so PAT and routing behaviour stays predictable.
 const DefaultOSSClawType = "openClaw"
 
 // defaultHooks returns the open-source edition defaults.
 //
-// MergeHeaders is the only hook that ships with behaviour: it pins the
-// `claw-type` request header to DefaultOSSClawType so every open-source
-// MCP request carries the same stable routing tag. All other fields are
-// nil — the internal code interprets nil as "use standard open-source
-// behaviour".
+// MergeHeaders is the only hook that ships with behaviour: it supplies
+// DefaultOSSClawType so every open-source MCP request has a stable default.
+// DWS_AGENT_PRODUCT is sent through a separate observability Header and never
+// changes claw-type. All other fields are nil — the internal code interprets
+// nil as "use standard open-source behaviour".
 func defaultHooks() *Hooks {
 	return &Hooks{
 		Name: "open",
@@ -56,6 +54,11 @@ func openSupplementServers() []ServerInfo {
 			ID:       "mcp-meta",
 			Name:     "MCP 元服务",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/89833ea5debf30c260a07ffcb5127ffa3bf0c830cd76babadb293d9861485d44",
+		},
+		{
+			ID:       "whiteboard",
+			Name:     "钉钉白板",
+			Endpoint: "https://mcp-gw.dingtalk.com/server/whiteboard",
 		},
 	}
 }

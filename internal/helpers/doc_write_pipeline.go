@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"unicode/utf8"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -16,9 +17,6 @@ const (
 	// initialChunkSize is the first attempted chunk size (rune count).
 	// Server-side OSS delta resolution is now fixed, so large chunks are safe.
 	initialChunkSize = 10000
-
-	// minChunkSize is the floor; below this we report an error instead of retrying.
-	minChunkSize = 5000
 
 	// longContentWarningThreshold triggers a hint to use --content-file.
 	longContentWarningThreshold = 2048
@@ -95,10 +93,11 @@ func docWritePipeline(cmd *cobra.Command, toolName string, toolArgs map[string]a
 		// Single write path
 		nodeID, lastResponse, writeErr = singleWrite(ctx, toolName, toolArgs)
 		chunksWritten = 1
-		if writeErr != nil && isTimeoutError(writeErr.Error()) && runeCount > minChunkSize {
-			// Timeout on single write — fallback to chunked with halved size
-			deps.Out.PrintInfo("[INFO] 单次写入超时，自动切换为分片写入...")
-			nodeID, chunksWritten, lastResponse, writeErr = chunkedWrite(ctx, toolName, toolArgs, markdown, operation, initialChunkSize/2)
+		if writeErr != nil && isTimeoutError(writeErr.Error()) {
+			// The server may have committed the write before the client observed the
+			// timeout. Replaying create/append here can duplicate a document or
+			// content, so fail closed and require inspection before any retry.
+			writeErr = docWriteUnknownStateError(operation, nodeID, "single_write", 0, 1, writeErr)
 		}
 	} else {
 		// Chunked write path
@@ -156,6 +155,9 @@ func chunkedWrite(ctx context.Context, toolName string, toolArgs map[string]any,
 			len(chunks), utf8.RuneCountInString(chunks[0])))
 		resultText, err := callMCPToolReturnText(ctx, "create_document", createArgs)
 		if err != nil {
+			if isTimeoutError(err.Error()) {
+				return "", 0, resultText, docWriteUnknownStateError(operation, "", "chunk_1", 0, len(chunks), err)
+			}
 			return "", 0, resultText, fmt.Errorf("创建文档失败: %w", err)
 		}
 		nodeID = extractNodeIDFromResult(resultText)
@@ -181,6 +183,9 @@ func chunkedWrite(ctx context.Context, toolName string, toolArgs map[string]any,
 			len(chunks), utf8.RuneCountInString(chunks[0]), firstMode))
 		resultText, err := callMCPToolReturnText(ctx, "update_document", updateArgs)
 		if err != nil {
+			if isTimeoutError(err.Error()) {
+				return nodeID, 0, resultText, docWriteUnknownStateError(operation, nodeID, "chunk_1", 0, len(chunks), err)
+			}
 			return nodeID, 0, resultText, fmt.Errorf("第 1 片写入失败: %w", err)
 		}
 		lastResponse = resultText
@@ -209,29 +214,9 @@ func chunkedWrite(ctx context.Context, toolName string, toolArgs map[string]any,
 		resultText, err := callMCPToolReturnText(ctx, "update_document", updateArgs)
 		if err != nil {
 			if isTimeoutError(err.Error()) {
-				newSize := chunkSize / 2
-				if newSize < minChunkSize {
-					return nodeID, writtenCount, resultText, &CLIError{
-						Code: CodeContentTruncated,
-						Message: fmt.Sprintf("分片写入持续超时，已写入 %d 片。当前分片大小 %d 字符已低于最小阈值 %d",
-							writtenCount, chunkSize, minChunkSize),
-						Suggestion: fmt.Sprintf("后端写入超时无法恢复。已成功写入部分内容到 nodeId=%s，请使用 dws doc read --node %s 查看已写入部分",
-							nodeID, nodeID),
-						Operation: operation,
-					}
-				}
-				deps.Out.PrintInfo(fmt.Sprintf("[INFO] 写入超时，分片大小减半为 %d 字符后重试...", newSize))
-				chunkSize = newSize
-
-				var remaining strings.Builder
-				remaining.WriteString(chunk)
-				for j := i + 1; j < len(chunks); j++ {
-					remaining.WriteString(chunks[j])
-				}
-				newChunks := splitMarkdownSafe(remaining.String(), chunkSize)
-				chunks = append(chunks[:i], newChunks...)
-				i-- // retry current index
-				continue
+				return nodeID, writtenCount, resultText, docWriteUnknownStateError(
+					operation, nodeID, fmt.Sprintf("chunk_%d", i+1), writtenCount, len(chunks), err,
+				)
 			}
 			return nodeID, writtenCount, resultText, fmt.Errorf("分片 %d 写入失败: %w", writtenCount+1, err)
 		}
@@ -241,6 +226,27 @@ func chunkedWrite(ctx context.Context, toolName string, toolArgs map[string]any,
 
 	deps.Out.PrintInfo(fmt.Sprintf("[INFO] 全部 %d 个分片写入完成", writtenCount))
 	return nodeID, writtenCount, lastResponse, nil
+}
+
+func docWriteUnknownStateError(operation, nodeID, stage string, written, total int, cause error) error {
+	details := map[string]any{
+		"status":        "unknown",
+		"nodeId":        nodeID,
+		"chunksWritten": written,
+		"chunksTotal":   total,
+		"failedStage":   stage,
+	}
+	return apperrors.NewAPI(
+		"文档写入响应超时，服务端提交状态未知；为避免重复创建或重复追加，已停止自动重试",
+		apperrors.WithOperation(operation),
+		apperrors.WithReason("doc_write_commit_unknown"),
+		apperrors.WithFailureStage(stage),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithActions("先读取目标文档确认实际写入状态", "仅在确认服务端未提交后重新执行"),
+		apperrors.WithDetails(details),
+		apperrors.WithCause(cause),
+	)
 }
 
 // isTimeoutError checks if an error message indicates a server-side timeout.

@@ -6,7 +6,7 @@ MODULE="$(cd "$ROOT" && go list -m)"
 
 usage() {
   printf '%s\n' \
-    "usage: $0 list <app|generators|helpers|remaining|release-scripts>" \
+    "usage: $0 list <app|generators|helpers|cli|smoke|remaining|release-scripts>" \
     "       $0 verify" >&2
   exit 2
 }
@@ -25,6 +25,14 @@ list_shard() {
     helpers)
       go list ./internal/helpers/...
       ;;
+    cli)
+      # Owns package-cli Schema TestMain assembly (cmd_schema_catalog dump).
+      go list ./internal/cli/...
+      ;;
+    smoke)
+      # Owns app.NewRootCommand public-tree smoke under -race (heavy assembly).
+      go list ./test/smoke/...
+      ;;
     release-scripts)
       go list ./test/scripts/...
       ;;
@@ -35,6 +43,8 @@ list_shard() {
           "$MODULE/internal/app"|"$MODULE/internal/app/"*) ;;
           "$MODULE/internal/generator"|"$MODULE/internal/generator/"*) ;;
           "$MODULE/internal/helpers"|"$MODULE/internal/helpers/"*) ;;
+          "$MODULE/internal/cli"|"$MODULE/internal/cli/"*) ;;
+          "$MODULE/test/smoke"|"$MODULE/test/smoke/"*) ;;
           "$MODULE/test/scripts"|"$MODULE/test/scripts/"*) ;;
           *) printf '%s\n' "$package" ;;
         esac
@@ -64,7 +74,7 @@ verify_plan() {
   LC_ALL=C sort -u "$all_packages" > "$expected"
   : > "$assigned"
 
-  for shard in app generators helpers remaining release-scripts; do
+  for shard in app generators helpers cli smoke remaining release-scripts; do
     shard_packages="$workdir/$shard"
     unsorted_shard_packages="$workdir/$shard.unsorted"
     list_shard "$shard" > "$unsorted_shard_packages"

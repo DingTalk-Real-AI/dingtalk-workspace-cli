@@ -460,7 +460,9 @@ block tag 也可出现在 inline 上下文（如 `img` 既是 block 又是 inlin
 ["img", {"uuid": "img1", "src": "https://example.com/photo.png", "width": 400, "height": 300}]
 ```
 
-- **注意**: 不存在 `layout` 属性，布局由 UI 层控制
+- **注意**: 
+  - 不存在 `layout` 属性，布局由 UI 层控制
+  - `img` 是 inline 元素，必须包裹在 `p` 段落中
 
 ### mention（@提及）
 

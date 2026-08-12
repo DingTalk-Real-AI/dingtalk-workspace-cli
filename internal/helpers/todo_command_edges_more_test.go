@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -23,10 +24,17 @@ func executeTodoEdge(t *testing.T, caller *scriptedToolCaller, args ...string) e
 	}()
 
 	cmd := newTodoCommand()
+	if cmd.PersistentFlags().Lookup("yes") == nil {
+		cmd.PersistentFlags().Bool("yes", false, "confirm execution")
+	}
+	if cmd.PersistentFlags().Lookup("dry-run") == nil {
+		cmd.PersistentFlags().Bool("dry-run", false, "preview without executing")
+	}
 	cmd.SilenceErrors = true
 	cmd.SilenceUsage = true
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
+	cmd.SetIn(os.Stdin)
 	cmd.SetArgs(args)
 	return cmd.Execute()
 }
@@ -137,6 +145,8 @@ func TestCrossPlatformCoverageTodoUpdateReminderAndDetailEdges(t *testing.T) {
 		{"task", "update", "--task-id", "1", "--due", "bad"},
 		{"task", "add-reminder", "--task-id", "1", "--base-time", "customTime", "--reminder-time-stamp", "bad"},
 		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `[{"baseTime":"customTime","reminderTimeStamp":"bad"}]`},
+		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `not-json`},
+		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `[1,{"baseTime":"dueTime"},{"baseTime":"customTime","reminderTimeStamp":"` + validDate + `"}]`},
 	}
 	for _, args := range errorCases {
 		if err := executeTodoEdge(t, &scriptedToolCaller{}, args...); err == nil {
@@ -148,8 +158,6 @@ func TestCrossPlatformCoverageTodoUpdateReminderAndDetailEdges(t *testing.T) {
 		{"task", "update", "--task-id", "1", "--priority", "bad"},
 		{"task", "add-reminder", "--task-id", "1", "--base-time", "dueTime", "--due-date-offset", "-10"},
 		{"task", "add-reminder", "--task-id", "1", "--base-time", "customTime", "--reminder-time-stamp", validDate},
-		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `not-json`},
-		{"task", "reset-reminder", "--task-id", "1", "--reminder-rules", `[1,{"baseTime":"dueTime"},{"baseTime":"customTime","reminderTimeStamp":"` + validDate + `"}]`},
 	}
 	for _, args := range validCases {
 		if err := executeTodoEdge(t, &scriptedToolCaller{}, args...); err != nil {
@@ -215,32 +223,42 @@ func TestCrossPlatformCoverageTodoDeleteCancellationAndConfirmationEdges(t *test
 		os.Stdin = originalStdin
 	}()
 
-	readEnd, writeEnd, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := writeEnd.WriteString("no\nno\nno\n"); err != nil {
-		t.Fatal(err)
-	}
-	_ = writeEnd.Close()
-	os.Stdin = readEnd
 	os.Args = []string{"dws"}
 	for _, args := range [][]string{
 		{"task", "delete", "--task-id", "1"},
+		// remove-attachment is schema-excluded and still uses confirmDelete (nil cancel).
 		{"task", "remove-attachment", "--task-id", "1", "--attachment-id", "2"},
 		{"comment", "delete", "--task-id", "1", "--comment-id", "2"},
 	} {
-		if err := executeTodoEdge(t, &scriptedToolCaller{}, args...); err != nil {
-			t.Fatalf("cancel %v: %v", args, err)
+		readEnd, writeEnd, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := writeEnd.WriteString("no\n"); err != nil {
+			t.Fatal(err)
+		}
+		_ = writeEnd.Close()
+		os.Stdin = readEnd
+		err = executeTodoEdge(t, &scriptedToolCaller{}, args...)
+		_ = readEnd.Close()
+		switch args[1] {
+		case "remove-attachment":
+			if err != nil {
+				t.Fatalf("cancel %v: %v", args, err)
+			}
+		default:
+			// Contract ConfirmSafety returns a typed cancel error (not silent nil).
+			if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+				t.Fatalf("cancel %v: error = %v, want 用户取消了操作", args, err)
+			}
 		}
 	}
-	_ = readEnd.Close()
 
 	os.Args = []string{"dws", "--yes"}
 	for _, args := range [][]string{
-		{"task", "delete", "--task-id", "1"},
-		{"task", "remove-attachment", "--task-id", "1", "--attachment-id", "2"},
-		{"comment", "delete", "--task-id", "1", "--comment-id", "2"},
+		{"task", "delete", "--task-id", "1", "--yes"},
+		{"task", "remove-attachment", "--task-id", "1", "--attachment-id", "2", "--yes"},
+		{"comment", "delete", "--task-id", "1", "--comment-id", "2", "--yes"},
 	} {
 		if err := executeTodoEdge(t, &scriptedToolCaller{}, args...); err != nil {
 			t.Fatalf("confirm %v: %v", args, err)

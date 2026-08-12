@@ -285,7 +285,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			}
 			return nil
 		}
-		installUpgradeSkills = func(string) (*upgradepkg.SkillUpgradeResult, error) {
+		installUpgradeSkills = func(string, upgradepkg.SkillUpgradeOptions) (*upgradepkg.SkillUpgradeResult, error) {
 			if stage == "install" {
 				return nil, fail
 			}
@@ -429,7 +429,7 @@ func TestCrossPlatformCoverageUpgradeBinaryHelpersFailureCoverage(t *testing.T) 
 	}
 	upgradeMkdirAll = func(string, os.FileMode) error { return nil }
 	upgradeCommandOutput = func(string, ...string) ([]byte, error) { return []byte("tar failed"), fail }
-	if err := extractTarGz("archive", "dest"); err == nil || !strings.Contains(err.Error(), "tar failed") {
+	if err := extractTarGz("archive", filepath.Join(t.TempDir(), "dest")); err == nil || !strings.Contains(err.Error(), "tar failed") {
 		t.Fatalf("tar error = %v", err)
 	}
 	upgradeUserHomeDir = func() (string, error) { return "", fail }

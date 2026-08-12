@@ -10,8 +10,41 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
+
+func TestDeliveryRuntimeSchemaExclusionsAreReviewedExact(t *testing.T) {
+	exclusions, err := ReviewedRuntimeSchemaExclusions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exclusions) == 0 {
+		t.Fatal("reviewed runtime schema exclusions must not be empty")
+	}
+	seen := map[string]bool{}
+	for _, exclusion := range exclusions {
+		if !exclusion.Reviewed || strings.TrimSpace(exclusion.Reason) == "" {
+			t.Fatalf("unreviewed exclusion: %#v", exclusion)
+		}
+		path := normalizeSchemaCLIPath(exclusion.CLIPath)
+		if path == "" || path != exclusion.CLIPath {
+			t.Fatalf("exclusion path must be normalized and non-empty: %#v", exclusion)
+		}
+		if seen[path] {
+			t.Fatalf("duplicate exclusion %q", path)
+		}
+		seen[path] = true
+	}
+	for _, group := range reviewedRuntimeSchemaExclusionGroups {
+		if strings.TrimSpace(group.ID) == "" || !group.Reviewed || strings.TrimSpace(group.Reason) == "" {
+			t.Fatalf("invalid exclusion group: %#v", group)
+		}
+		if len(group.Commands) == 0 {
+			t.Fatalf("exclusion group %q has no commands", group.ID)
+		}
+	}
+}
 
 func TestRuntimeSchemaCompletenessRequiresCoverageOrReviewedExclusion(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
@@ -61,20 +94,16 @@ func TestRuntimeSchemaCompletenessRejectsInvalidAndStaleExclusions(t *testing.T)
 	}
 }
 
-func TestReviewedCommandRegistryOwnsIdentityWithoutNativeAnnotation(t *testing.T) {
+func TestEffectiveCommandRegistryOwnsIdentityWithoutNativeAnnotation(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
 	product := &cobra.Command{Use: "aisearch"}
 	leaf := &cobra.Command{Use: "person", Run: func(*cobra.Command, []string) {}}
 	product.AddCommand(leaf)
 	root.AddCommand(product)
 
-	reviewed, err := loadEmbeddedCommandRegistry()
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec, ok := reviewed.ByCLIPath["aisearch person"]
-	if !ok || spec.CanonicalPath != "aisearch.enterprise_person_search" {
-		t.Fatalf("reviewed registry fixture = %#v, %v", spec, ok)
+	spec := CommandSpec{
+		CanonicalPath:  "aisearch.enterprise_person_search",
+		PrimaryCLIPath: "aisearch person",
 	}
 	effective, err := newEffectiveCommandRegistry([]CommandSpec{spec})
 	if err != nil {
@@ -161,28 +190,6 @@ func TestSchemaCatalogDeliveryCompletenessAcceptsDeliveredAlias(t *testing.T) {
 	report := schemaCatalogDeliveryCompletenessForTest(root, snapshot, nil)
 	if !reflect.DeepEqual(report.Covered, []string{"sample legacy"}) || len(report.Missing) != 0 {
 		t.Fatalf("delivery report = %#v", report)
-	}
-}
-
-func TestSchemaRegistryRejectsIdentityConflictOnAliasLeaf(t *testing.T) {
-	root := &cobra.Command{Use: "dws"}
-	product := &cobra.Command{Use: "sample"}
-	current := &cobra.Command{Use: "current", Run: func(*cobra.Command, []string) {}}
-	legacy := &cobra.Command{Use: "legacy", Run: func(*cobra.Command, []string) {}}
-	AttachRuntimeSchema(current, "sample", "current", "test")
-	AttachRuntimeSchema(legacy, "sample", "current", "test")
-	annotateManualSchemaIdentity(legacy, "sample.wrong", "reviewed conflict fixture")
-	product.AddCommand(current, legacy)
-	root.AddCommand(product)
-
-	if _, err := schemaRegistryForTest(root); err == nil || !strings.Contains(err.Error(), "sample legacy") || !strings.Contains(err.Error(), "conflicts") {
-		t.Fatalf("schemaRegistryForTest() error = %v, want alias identity conflict", err)
-	}
-	report := schemaCatalogDeliveryCompletenessForTest(root, schemaDeliveryTestSnapshot(schemaDeliveryTestTool{
-		Canonical: "sample.current", CLIPath: "sample current", Aliases: []string{"sample legacy"},
-	}), nil)
-	if len(report.DeliveryErrors) == 0 || !strings.Contains(strings.Join(report.DeliveryErrors, " "), "sample legacy") {
-		t.Fatalf("delivery errors = %v, want alias identity conflict", report.DeliveryErrors)
 	}
 }
 
@@ -289,7 +296,7 @@ type schemaDeliveryTestTool struct {
 	CLIPath    string
 	Aliases    []string
 	Parameters []ParameterSpec
-	Selection  SelectionSpec
+	Selection  contract.SelectionSpec
 }
 
 func schemaDeliveryTestRoot(tools ...schemaDeliveryTestTool) *cobra.Command {
@@ -359,7 +366,7 @@ func schemaDeliveryTestRegistry(tools ...schemaDeliveryTestTool) SchemaRegistry 
 			provenanceValues["reviewed"] = *tool.Selection.Reviewed
 		}
 		spec, err := ToolSpecFromRuntime(RuntimeToolSpecInput{
-			Identity: ToolIdentitySpec{
+			Identity: contract.ToolIdentitySpec{
 				ProductID:      parts[0],
 				Name:           parts[1],
 				CLIName:        strings.Fields(tool.CLIPath)[len(strings.Fields(tool.CLIPath))-1],
@@ -370,7 +377,7 @@ func schemaDeliveryTestRegistry(tools ...schemaDeliveryTestTool) SchemaRegistry 
 				Source:         "test",
 			},
 			Parameters:      append([]ParameterSpec(nil), tool.Parameters...),
-			Interface:       InterfaceSpec{Mode: "local", Availability: "available", Reason: interfaceReason},
+			Interface:       contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: interfaceReason},
 			Selection:       tool.Selection,
 			FieldProvenance: schemaDeliveryTestProvenance(provenanceValues),
 		})
@@ -395,20 +402,20 @@ func schemaDeliveryTestRegistry(tools ...schemaDeliveryTestTool) SchemaRegistry 
 	return registry
 }
 
-func schemaDeliveryTestProvenance(fields map[string]any) map[string]FieldProvenance {
-	provenance := make(map[string]FieldProvenance, len(fields))
+func schemaDeliveryTestProvenance(fields map[string]any) map[string]contract.FieldProvenance {
+	provenance := make(map[string]contract.FieldProvenance, len(fields))
 	for field, value := range fields {
 		encoded, err := json.Marshal(value)
 		if err != nil {
 			panic(err)
 		}
 		selected := true
-		provenance[field] = FieldProvenance{
+		provenance[field] = contract.FieldProvenance{
 			Value:      encoded,
 			Source:     "test",
 			Precedence: "test",
 			Resolution: "test",
-			Candidates: []FieldCandidateProvenance{{Value: append(json.RawMessage(nil), encoded...), Source: "test", Precedence: "test", Selected: &selected}},
+			Candidates: []contract.FieldCandidateProvenance{{Value: append(json.RawMessage(nil), encoded...), Source: "test", Precedence: "test", Selected: &selected}},
 		}
 	}
 	return provenance

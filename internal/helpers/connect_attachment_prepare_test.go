@@ -19,11 +19,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestPrepareOpenCodeAttachmentsUsesStoryboardAndTranscript(t *testing.T) {
-	previous := generateConnectVideoStoryboard
-	t.Cleanup(func() { generateConnectVideoStoryboard = previous })
+	testseam.Protect(t, &generateConnectVideoStoryboard)
 	storyboard := filepath.Join(t.TempDir(), "storyboard.jpg")
 	if err := os.WriteFile(storyboard, []byte("jpeg"), 0o600); err != nil {
 		t.Fatal(err)
@@ -61,11 +62,9 @@ func TestPrepareOpenCodeAttachmentsUsesStoryboardAndTranscript(t *testing.T) {
 }
 
 func TestPrepareOpenCodeAttachmentsDoesNotSubmitVideoWhenStoryboardFails(t *testing.T) {
-	previous := generateConnectVideoStoryboard
-	t.Cleanup(func() { generateConnectVideoStoryboard = previous })
-	generateConnectVideoStoryboard = func(context.Context, string) (string, error) {
+	testseam.Swap(t, &generateConnectVideoStoryboard, func(context.Context, string) (string, error) {
 		return "", os.ErrNotExist
-	}
+	})
 	prompt, attachments := prepareOpenCodeAttachments(context.Background(), "请看视频", []connectMediaAttachment{
 		{LocalPath: "/tmp/original.mov", FileName: "demo.mov", MediaType: "video"},
 	})

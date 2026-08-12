@@ -14,6 +14,8 @@
 package smart
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -56,6 +58,34 @@ var RecentMail = shortcut.Shortcut{
 		"最后在本地把每条会话投影成 {subject, from, date, threadId} 打印出来，可配合 --format/--jq/--fields。" +
 		"这是纯只读操作，只做列举与本地投影，不会修改、发送或删除任何邮件；若最近没有邮件则提示「最近没有邮件」。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_recent_mail",
+			CanonicalPath:  "mail.shortcut_recent_mail",
+			CLIPath:        "mail +recent-mail",
+			PrimaryCLIPath: "mail +recent-mail",
+		},
+		Description: "列出收件箱近期邮件会话并投影列表（主题/发件人/时间/threadId）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出收件箱近期邮件会话并投影列表（主题/发件人/时间/threadId）",
+			UseWhen:      []string{"当你想快速看一眼自己邮箱里近期的邮件会话（收件箱线程/conversation），只需要一份精简清单（主题、发件人、最后修改时间、会话 threadId）、而不想翻完整正文或原始字段时使用；内部先确定要看的邮箱地址——你可以用 --email 指定，不指定时自动取你绑定的第一个邮箱——再解析要看的文件夹——你可以用 --folder 指定文件夹 ID，不指定时自动定位收件箱——然后列出该文件夹下的近期会话，最后在本地把每条会话投影成 {subject, from, date, threadId} 打印出来，可配合 --format/--jq/--fields。这是纯只读操作，只做列举与本地投影，不会修改、发送或删除任何邮件；若最近没有邮件则提示「最近没有邮件」。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws mail +recent-mail",
+				"dws mail +recent-mail --limit 30",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "返回会话条数上限（可选，默认 20，最大 100）", Required: false},
 		{Name: "email", Type: shortcut.FlagString, Desc: "要查看的邮箱地址（可选，默认取你绑定的第一个邮箱）", Required: false},

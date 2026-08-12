@@ -219,8 +219,8 @@ func TestCrossPlatformCoveragePersonalClientHelpersAndOperations(t *testing.T) {
 	}
 	base.HTTPClient = personalHTTPClient(400, `{"error":{"code":"DUP","details":{"subscribe_id":"existing"}}}`)
 	created, err := base.CreateSubscription(t.Context(), CreateSubscriptionRequest{EventKey: "e", RuleType: "r"})
-	if err != nil || created.SubscribeID != "existing" {
-		t.Fatalf("duplicate create = %#v, %v", created, err)
+	if err == nil || created != nil {
+		t.Fatalf("duplicate error create = %#v, %v", created, err)
 	}
 	request := base.buildCreateRequest(CreateSubscriptionRequest{
 		EventKey: "e", RuleType: "r", Name: "n", RuleParam: map[string]any{"bad": make(chan int)},

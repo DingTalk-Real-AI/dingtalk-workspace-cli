@@ -1,0 +1,311 @@
+{
+  "$schema": "./command_path_fallbacks.schema.json",
+  "version": 1,
+  "entries": [
+    {
+      "from": "chat +group-search",
+      "mode": "rewrite",
+      "to": "chat +chat-search",
+      "reviewed": true,
+      "review_reason": "0803 evaluation badcase: the model emitted +group-search with --query; +chat-search provides the same group-name search operation."
+    },
+    {
+      "from": "chat +members",
+      "mode": "rewrite",
+      "to": "chat +group-members",
+      "reviewed": true,
+      "review_reason": "20260728 evaluation badcases emitted +members three times for listing members of a group selected by name; +group-members is the unique reviewed read-only shortcut for that intent."
+    },
+    {
+      "from": "chat +group-member-list",
+      "mode": "rewrite",
+      "to": "chat +group-members",
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +group-member-list for a group-name member lookup; +group-members is the unique reviewed read-only shortcut and canonical parameter validation remains authoritative."
+    },
+    {
+      "from": "chat +list-group-bots",
+      "mode": "rewrite",
+      "to": "chat +chat-bots",
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +list-group-bots for listing robots in one group; +chat-bots is the unique reviewed read-only shortcut. The fallback preserves flags and does not reinterpret generic IDs."
+    },
+    {
+      "from": "chat +list-robot",
+      "mode": "rewrite",
+      "to": "chat +chat-bots",
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted singular +list-robot for listing robots in one group; +chat-bots is the unique reviewed read-only shortcut. The fallback preserves flags and does not reinterpret generic IDs."
+    },
+    {
+      "from": "chat +list-robots",
+      "mode": "rewrite",
+      "to": "chat +chat-bots",
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +list-robots for listing robots in one group; +chat-bots is the unique reviewed read-only shortcut. The fallback preserves flags and does not reinterpret generic IDs."
+    },
+    {
+      "from": "chat +message-list",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +chat-messages",
+        "chat +messages-list-direct",
+        "chat +search-msg",
+        "chat +unread-chats"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +message-list without identifying group versus direct history, conversation history versus cross-chat search, or ordinary versus unread conversations; no candidate may be selected automatically."
+    },
+    {
+      "from": "chat +read-single",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +messages-list-direct",
+        "chat +chat-messages"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +read-single six times for direct-message history, but the invented name does not choose between the focused direct-history shortcut and the broader group/direct history workflow; command recovery must stop before parameter validation or dispatch."
+    },
+    {
+      "from": "chat +rename-group",
+      "mode": "rewrite",
+      "to": "chat +chat-update",
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +rename-group for the unique group-name update intent; +chat-update is the reviewed shortcut with that exact command-level operation. Parameter compatibility remains the canonical target's responsibility."
+    },
+    {
+      "from": "chat +send",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +messages-send",
+        "chat +dm",
+        "chat +send-to-group"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +send without a stable recipient type or sending identity; the write operation must stop until the caller chooses the unified, resolved-direct, or resolved-group workflow."
+    },
+    {
+      "from": "chat +send-message",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +messages-send",
+        "chat +dm",
+        "chat +send-to-group"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +send-message without a stable recipient type or sending identity; the write operation must stop until the caller chooses the unified, resolved-direct, or resolved-group workflow."
+    },
+    {
+      "from": "chat +send-text",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +messages-send",
+        "chat +dm",
+        "chat +send-to-group"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation identified text content but not a stable recipient type or sending identity; the write operation must stop until the caller chooses the unified, resolved-direct, or resolved-group workflow."
+    },
+    {
+      "from": "chat +send-to",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +messages-send",
+        "chat +dm",
+        "chat +send-to-group"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +send-to without proving whether the recipient denotes a user, group, or low-level identifier; the write operation must not choose a target workflow automatically."
+    },
+    {
+      "from": "chat +send-dm",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +dm",
+        "chat +messages-send"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +send-dm twice, but the invented name does not choose between the resolved-name text shortcut and the unified identifier-aware sending workflow; the write operation must not dispatch automatically."
+    },
+    {
+      "from": "chat +send-single",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +dm",
+        "chat +messages-send"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +send-single for a direct message, but the invented name does not choose between the resolved-name text shortcut and the unified identifier-aware sending workflow; the write operation must not dispatch automatically."
+    },
+    {
+      "from": "chat +send-by-bot",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +messages-send",
+        "chat message send-by-bot"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +send-by-bot three times without a complete sending-identity contract; stop and present the unified identity-aware shortcut and the exact native bot sender instead of selecting a write path."
+    },
+    {
+      "from": "chat +group-send-text",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +send-to-group",
+        "chat +messages-send"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +group-send-text for a group text operation, but the invented name does not choose between name-resolved group text and the unified identifier-aware workflow; the write operation must not dispatch automatically."
+    },
+    {
+      "from": "chat +send-file",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +messages-send",
+        "chat message send"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +send-file fifteen times with incompatible target and file parameter spellings; stop before dispatch and let the caller choose the unified shortcut or native current-user file workflow."
+    },
+    {
+      "from": "chat +send-image",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +messages-send",
+        "chat message send"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +send-image without proving whether the input is an existing mediaId or a local file; stop before dispatch and let the caller choose the reviewed unified or native workflow."
+    },
+    {
+      "from": "chat +send-media",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +messages-send",
+        "chat message send"
+      ],
+      "reviewed": true,
+      "review_reason": "20260728 evaluation emitted +send-media without a concrete media type, sending identity, or compatible parameter contract; stop before dispatch and let the caller choose the reviewed unified or native workflow."
+    },
+    {
+      "from": "oa +list-processes",
+      "mode": "ambiguous",
+      "candidates": [
+        "oa +list-forms",
+        "oa +my-initiated",
+        "oa approval list-initiated"
+      ],
+      "reviewed": true,
+      "review_reason": "20260720 merged evaluation emitted +list-processes, but process can mean approval forms/templates or approval instances initiated by the current user; stop and present both shortcut workflows plus the exact native instance leaf."
+    },
+    {
+      "from": "chat +conversation-detail",
+      "mode": "rewrite",
+      "to": "chat +conversation-info",
+      "reviewed": true,
+      "review_reason": "20260804 multi-im badcase requested one conversation's details. +conversation-info is the unique current read-only shortcut for that operation. The rewrite changes only the command path and preserves every flag/value for target validation."
+    },
+    {
+      "from": "chat +bot-list",
+      "mode": "rewrite",
+      "to": "chat +chat-bots",
+      "reviewed": true,
+      "review_reason": "20260804 multi-im badcase requested the robot list for one group. +chat-bots is the unique current read-only shortcut. The fallback must not reinterpret the accompanying group flag."
+    },
+    {
+      "from": "chat +conversation-category-list",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +category-list",
+        "chat +category-list-conversations"
+      ],
+      "reviewed": true,
+      "review_reason": "The invented name can mean listing the user's categories or listing conversations inside one category. No candidate may execute before the caller chooses the intended object level."
+    },
+    {
+      "from": "chat +conversation-group-list",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +category-list-conversations",
+        "chat +conversation-list"
+      ],
+      "reviewed": true,
+      "review_reason": "The invented name can mean conversations in a custom category or the general conversation list. The command name alone does not identify the requested collection."
+    },
+    {
+      "from": "chat +list-my-groups",
+      "mode": "ambiguous",
+      "candidates": [
+        "chat +my-groups",
+        "chat +chat-list-mine",
+        "chat +chat-list"
+      ],
+      "reviewed": true,
+      "review_reason": "The invented name does not choose between the established resolver shortcut, the legacy personal-group list and the current Schema-complete chat list. Recovery must stop instead of silently changing pagination or output semantics."
+    },
+    {
+      "from": "doc +list-templates",
+      "mode": "rewrite",
+      "to": "doc +template-list",
+      "reviewed": true,
+      "review_reason": "202608 Doc experiments emitted +list-templates while discovering available templates. +template-list is the unique current public read-only shortcut for that operation; the rewrite changes only the command path and preserves flags for target validation."
+    },
+    {
+      "from": "doc +search-template",
+      "mode": "rewrite",
+      "to": "doc +template-search",
+      "reviewed": true,
+      "review_reason": "202608 Doc experiments emitted the verb/object inversion +search-template. +template-search is the unique current public read-only template-name search shortcut; the rewrite preserves every flag and value."
+    },
+    {
+      "from": "doc +template",
+      "mode": "ambiguous",
+      "candidates": [
+        "doc +template-list",
+        "doc +template-search",
+        "doc +create-from-template"
+      ],
+      "reviewed": true,
+      "review_reason": "202608 Doc experiments emitted the family-like +template without selecting browse, search, or create-from-template. Command recovery must stop before parameters or execution and present the three public workflows."
+    },
+    {
+      "from": "doc +version",
+      "mode": "ambiguous",
+      "candidates": [
+        "doc +history-list",
+        "doc +history-save",
+        "doc +history-revert"
+      ],
+      "reviewed": true,
+      "review_reason": "202608 Doc experiments emitted the family-like +version without choosing list, save, or revert. The write and high-risk revert operations cannot be selected from an umbrella name; present the canonical history shortcuts and stop."
+    },
+    {
+      "from": "doc +create-version",
+      "mode": "rewrite",
+      "to": "doc +history-save",
+      "reviewed": true,
+      "review_reason": "202608 supplemental Doc badcase emitted +create-version while explicitly trying to save the current document as a recoverable history snapshot. +history-save is the unique current canonical shortcut for that operation and accepts the same --node value without parameter transformation."
+    },
+    {
+      "from": "doc +save-version",
+      "mode": "rewrite",
+      "to": "doc +history-save",
+      "reviewed": true,
+      "review_reason": "202608 supplemental Doc badcase emitted the verb/object inversion +save-version for a current-version snapshot. +history-save is the unique current canonical shortcut with the same document-node contract; the legacy +version-save path is not selected as the fallback target."
+    },
+    {
+      "from": "doc +snapshot",
+      "mode": "rewrite",
+      "to": "doc +history-save",
+      "reviewed": true,
+      "review_reason": "202608 supplemental Doc badcase emitted +snapshot during an explicit save-current-version workflow. The current +history-save selection contract names this exact recoverable history-snapshot operation, so the reviewed rewrite preserves the --node value and does not infer an update or export workflow."
+    },
+    {
+      "from": "doc +version-create",
+      "mode": "rewrite",
+      "to": "doc +history-save",
+      "reviewed": true,
+      "review_reason": "202608 supplemental Doc badcase emitted +version-create while saving the current document version. +history-save is the unique current canonical snapshot shortcut and the path-only rewrite leaves its real execution and safety contract authoritative."
+    }
+  ]
+}

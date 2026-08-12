@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0
 #
 # One-command installer for dws dev on native Windows (PowerShell).
-# Downloads the dev binary (dws.exe) + dingtalk-dev skill from the DingTalk-Real-AI GitHub Releases.
+# Downloads the dev binary (dws.exe) + dingtalk-misc skill (hosts open-platform app docs) from the DingTalk-Real-AI GitHub Releases.
 #
 # Usage:
 #   irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-devapp.ps1 | iex
@@ -20,7 +20,7 @@ $Repo       = if ($env:DEVAPP_REPO) { $env:DEVAPP_REPO } else { "DingTalk-Real-A
 $Version    = $env:DEVAPP_VERSION
 $InstallDir = if ($env:DWS_INSTALL_DIR) { $env:DWS_INSTALL_DIR } else { Join-Path $HOME ".local\bin" }
 $NoSkills   = $env:DWS_NO_SKILLS -eq "1"
-$SkillName  = "dingtalk-dev"
+$SkillName  = "dingtalk-misc"
 
 function Say($m) { Write-Host "  $m" }
 function Die($m) { Write-Host "  X $m" -ForegroundColor Red; exit 1 }
@@ -116,9 +116,9 @@ if (-not $NoSkills) {
                 Copy-Item -Path "$src\*" -Destination $dest -Recurse -Force
                 $installed++; $idx++
             }
-            Say "Skill dingtalk-dev -> $installed agent dir(s)"
+            Say "Skill dingtalk-misc -> $installed agent dir(s)"
         } else {
-            Say "(dingtalk-dev not found in skills bundle; skipped)"
+            Say "(dingtalk-misc not found in skills bundle; skipped)"
         }
     } catch {
         Say "(skill install skipped: $($_.Exception.Message))"

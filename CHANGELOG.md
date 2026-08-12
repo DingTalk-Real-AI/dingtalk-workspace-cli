@@ -8,10 +8,536 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Added
 
-- **MCP URL resolution** — adds `dws mcp url get <mcpId>` for resolving a DingTalk MCP Market ID to the current user and organization scoped Streamable HTTP URL, while keeping the helper-only `mcp-meta` endpoint out of the public product command surface.
+- **Native streaming-card mentions** — `dws chat message send-card` now accepts
+  `--at-open-dingtalk-ids` and `--at-all` for group cards and forwards them to
+  `create_and_send_card`, matching the existing `chat +messages-send-card`
+  mention behavior without changing single-chat card creation.
+
+## [1.0.58-beta.3] - 2026-08-11
+
+### Added
+
+- **Aitable workflow execution and history** — adds `dws aitable workflow run` for confirmed asynchronous execution of scheduled or record-triggered workflows, plus `dws aitable workflow history` for status-, time-, and page-filtered execution records. The commands map directly to `aitable/run_workflow` and `aitable/get_flow_record_list`, validate trigger-specific arguments locally, and document the `executionId` / `instanceId` correlation.
+- **Streaming-card mentions** — `chat +messages-send-card` now accepts
+  `--at-open-dingtalk-ids` and `--at-all` for group cards, passing mention
+  targets to the initial card-creation request and prepending its returned
+  `atTag` to the automatic streaming update.
+- **Personal OA approval events** — personal event consumers now support task
+  creation, completion, redirection, instance start, termination, and
+  completion events, with typed output and matching usage documentation.
 
 ### Fixed
 
+- **Streaming-card update acknowledgement** — accepts the pre-production
+  `success: true` response from `update_streaming_card` as affirmative write
+  evidence while preserving explicit negative, conflicting, and bizId-drift
+  failures, so Agents do not repeat an update that the service already applied.
+- **Machine-readable export and download receipts** — `dws doc export`,
+  `dws drive download`, and `dws drive download --version` now keep progress
+  logs on stderr under `--format json` and emit one JSON result on stdout after
+  a successful local write. The result includes the saved path and byte size;
+  document exports additionally report the node, requested format, job/task
+  ID, and final status.
+- **IM search and card-write safety** — conversation-scoped search now fails
+  closed when the target cannot be verified, and streaming-card updates require
+  business evidence rather than a transport-only success response.
+- **Document shortcut reliability** — document write, readback verification,
+  pagination, template/version discovery, export, media, and local-file
+  workflows now preserve compatibility while rejecting ambiguous write results.
+- **Event runtime-token handoff** — personal `event consume`, `status`,
+  `stop`, and `+listen-im` honor the root `--token` without falling back to a
+  stale OAuth profile. Detached buses negotiate an owner-only, memory-only IPC
+  credential channel; tokens are never placed in child argv, environment,
+  profiles, logs, or run-state files.
+
+### Changed
+
+- **Minutes `permission apply --policy` type** — `--policy` is now declared as
+  an `int` flag and its required check uses `Flags().Changed`, matching the
+  numeric-parameter convention. `--help` reports `int` instead of `string`;
+  accepted values (2/3/4) and gateway behavior are unchanged.
+- **Minutes skill references** — document `permission apply` in both Minutes
+  skill references: list it in the command trees, describe its policy values and
+  how it differs from `permission add`, and add its intent routing.
+- **Chat paging guidance** — typed chat message commands now document
+  `--page-all`, aggregate result shapes, and cursor behavior in CLI Help and
+  Agent selection examples.
+- **Calendar skill parity** — mono and multi Calendar references are aligned to
+  prevent documentation drift without changing CLI behavior.
+- **Release engineering** — CI now shards helper-package changes through the
+  full race suite, widens a flaky stdio idempotency test budget, governs exact
+  reviewed CLI/Schema type migrations, and lets authorized maintainers trigger
+  internal MCP evaluation with a reviewed `/eval` PR comment.
+
+## [1.0.58-beta.2] - 2026-08-10
+
+### Added
+
+- **`dws sheet create-with-data`（新命令）** — 建表并写入初始数据与样式：`--values`（二维数组写默认表）/ `--sheets`（typed table 多工作表，二者必须给一个）/ `--styles`（`cell_styles` / `row_sizes` / `col_sizes` / `cell_merges`，顶层键对齐飞书 snake_case、列表项内字段兼容 camelCase）。所有结构、字段类型与枚举在创建文档之前校验，非法配置不会留下白建的空文档：`--sheets` 按 `table_put` 的输入契约逐字段校验（`columns` 必填且列名非空不重复、`data` 为二维且行宽与 `columns` 一致、单元格仅限字符串/数字/布尔/null、`dtypes`/`formats` 的键须是列名、`mode`/`header`/`allowOverwrite`/`startCell` 类型与取值、单表 30000 单元格上限），并拒绝未知键、snake_case 变体、`{"sheets":"bad"}` 这类畸形包装与 `sheetId`（服务端会静默丢弃写错的键，导致"只写了表头却报成功"的静默丢数据）；`--values` 校验单元格为标量并受 30000 单元格 / 2000000 字符上限约束；`--styles` 的顶层键与列表项内字段同样拒绝未知键，避免样式只应用一半。写入后回读校验按 `startCell` / `header` / `mode` 推算的首个预期非空单元格，而非固定 A1。该命令是多步编排（建文档 → 探活 → 定位默认工作表 → 写数据 → 回读 → 可选样式），因此如实声明为独立叶子 `sheet.create_with_data` + `interface_mode: composite`（附评审 reason，按契约不带 `interface_ref`）；**`dws sheet create` 保持原样不变**——仍是一次 `create_workspace_sheet` 直连（`interface_mode: mcp`），不新增 flag，避免让 Schema 消费者把编排步骤的参数误当成该 RPC 的入参。
+- **`dws sheet export-csv`（新命令）** — 同步导出单个工作表为 RFC4180 CSV，支持 `--sheet-id` 选表、`--range` 限定范围、`--value-render-option` 选取值模式；`--output` 落盘（为目录时按 `sheet-export.csv` 命名，落盘走 `AtomicWrite` 原子替换，写入失败时已有文件保持原样；父目录不存在按错误处理，不会自动创建），不传则把纯 CSV 打到 stdout（警告只走 stderr）。数据超出单次读取上限时默认报错、既不输出也不写文件，需 `--allow-truncated` 显式接受不完整结果。响应缺 `csv` 字段或类型不对一律报错，不会用 0 字节覆盖已有文件。该分支读的是 `get_range_as_csv`、与 xlsx 的异步导出任务毫无关系，因此独立成叶子 `sheet.export_csv` 并如实声明 `interface_mode: mcp` + `interface_ref: get_range_as_csv`；**`dws sheet export` 保持原样不变**——仍只导 xlsx（`interface_ref: submit_export_job`），flag 面仍是 `--node` / `--output`，csv 专属 flag 不会出现在它上面（此前挂在同一条命令上时，漏写 `--export-format csv` 会让 `--range` 被静默丢弃而导出整篇工作簿）。
+- **`sheet update-dimension --size-type`** — `pixel` / `standard`（恢复默认行高列宽）/ `auto`（按内容自适应行高，仅 ROWS）。
+- **`sheet replace --match-formula`** — 在公式文本中查找替换。
+- **`sheet range set-style` 扩展样式维度** — 新增 `--font-style`（斜体）/ `--font-line`（下划线、删除线）/ `--font-family` / `--border-styles-json`（四边边框；每条边只接受 `style` / `color`，未知键与非字符串 `color` 直接报错，不再静默忽略而画出无颜色的边框，`set-style` / `batch-set-style` / `create-with-data --styles` 三条路径同源校验）。
+- **`sheet range batch-set-style --ranges`** — 一组样式刷多个带工作表前缀的区域，组装为一次原子 `batch_update`。
+
+### Changed
+
+- **Chat message post-send ID handoff** (#897) — CLI Help and bundled Skills
+  now document the `send` → `query-send-status` → `edit`/`recall` workflow,
+  so callers can reuse returned task, message, and conversation IDs instead
+  of searching message history by content.
+- **Sheet mono/multi Skill alignment** — replaces the oversized mono Sheet
+  reference with the progressive routing layout, aligns all 20 Sheet topic
+  references across the mono and multi bundles, and adds a content-policy guard
+  that prevents the paired topic trees from drifting again.
+- **`sheet range set-style` 后端切换为 `set_cell_range`** — 样式统一走 cellStyles 路径（仅设样式、保留原值），这是斜体/下划线删除线/字体族/边框唯一可用的通道。`interface_ref` 由 `update_range` 变为 `set_cell_range`，12 个样式 flag 改为 reviewed mapping exclusion。CLI 用法向后兼容、无 flag 删除；schema-compatibility 经 reviewed 豁免判定为兼容（0 changed fields）。
+- **`sheet range batch-set-style` 改为单次原子提交** — 由本地循环多次 `update_range` 改为一次 `batch_update`，任一项失败默认整批回滚；`--continue-on-error` 由本地控制改为透传服务端。新增批量上限：最多 100 个区域且累计不超过 200000 个单元格。
+- **`sheet range batch-clear` / `batch-set-style` 的 `--ranges` 拒绝空白工作表前缀**（用户可见行为变更）— 此前只按原始串里 `!` 的位置判断，`" !A1:B2"` 修剪后工作表名成了空串，操作却照样带着 `sheetId: ""` 提交：服务端要么让整批 `batch_update` 失败，要么更糟——落到默认工作表而不是用户指定的那张表，且命令报成功。现在工作表名与范围都必须在修剪之后仍非空，否则在发起任何请求之前报错。`batch-set-style --batch` 的纯空白 `sheetId` / `range` 同样拒绝（此前只挡空字符串）；`--batch` 下发仍用原值不替用户修剪，因为 `sheetId` 可以是允许带首尾空格的工作表**名**。两条 `--ranges` 路径现在共用同一个拆分器。
+- **`sheet insert-dimension` / `delete-dimension` / `update-dimension` 的 `--length` 严格校验**（用户可见行为变更）— 解析由 `fmt.Sscanf("%d")` 改为 `strconv.Atoi`。此前只消费前缀数字，`--length 2x` / `3foo` 会被静默当成 `2` / `3` 并对错误的行列数执行操作（删除方向不可回滚）；现在整个值必须是合法正整数，否则报错「`--length` 必须为正整数（>= 1）」且不发起任何请求。**升级影响**：原先依赖这种宽松解析、在传畸形 `--length` 的脚本会开始报错，请把参数修正为纯数字。合法数字值行为不变，上限仍为 5000。`add-dimension` 的 `--length` 是 `Int` 类型 flag，一直由 cobra 严格校验，不受影响。
+- **CLI 接口兼容门禁支持 reviewed flag 类型豁免**（无用户可见变更）— `authoritative-interface-integrity` 与 `check-command-compatibility.sh` 此前一律拒绝历史命令的 flag 类型变更，即使新类型只是把同一套校验从 RunE 前移到解析期，也没有任何评审通道。现在两道门禁各带一张精确豁免表：命令路径 + flag 名 + 旧类型 → 新类型四元组全等才命中、方向敏感（`string`→`int` 与 `int`→`string` 是两个不同的键，只有被评审的方向可用），且仅当该 flag 的其他契约（shorthand / required / hidden / no-opt / scope）纹丝不动时才放行，因此豁免夹带不了别的破坏。首条也是目前唯一一条登记的是 `dws minutes permission apply --policy` 的 `string` → `int`（配合 #912）：旧实现在 RunE 里做 `strconv.ParseInt(v, 10, 64)` 再校验 `[2,4]`，新实现由 pflag 以 `strconv.ParseInt(s, 0, 64)` 解析后仍校验 `[2,4]`，**历史上能成功的调用集是新调用集的子集**（base 0 额外接受 `0x3` 这类写法，只放宽不收紧），非法值依然失败、只是报错文案与时机前移；flag 默认值由 `""` 变 `"0"` 是类型的必然结果，两道门禁都不比较默认值，且该 flag 必须显式给出、默认值不可达。两张表必须逐字一致并有守卫测试锚定漂移——重复是被迫的而非选择：`check-authoritative-interface-baselines.sh` 会把整个 `scripts/policy/interface-baseline` 目录复制进检出历史版本的 worktree 再编译，那份拷贝不能 import 本分支新增的包。
+- **Schema 兼容门禁支持 reviewed 参数类型豁免**（无用户可见变更）— 接上一条。`schema-compatibility` 是同一个 `Interface Integrity` job 里排在两道 CLI 接口门禁之后的第三道检查，此前也一律拒绝已发布参数的 `type` 变更。由于前两道先失败、`set -e` 让它从未在 CI 上暴露，上一条豁免只解决了三分之二。现在 `checkParameterCompatibility` 也带一张精确豁免表：`<product>/<tool id>` + 参数名 + 旧类型 + 新类型四元组全等才命中、方向敏感，且仅当该参数**除 `type` 外的全部已发布字段逐字段相等**时才放行。这里刻意用相等性比较而非「没有产生其他兼容性错误」：放宽 `required` / `cli_required`、清空 `required_when`、扩宽 `enum`、清空 `interface_type`、经 reviewed mapping exclusion 清空 `property`——这些变化单独看都是兼容的、根本不产生错误，若以错误列表代替相等性检查，它们就能搭着一次已评审的类型迁移一起蒙混过关。结构体整体比较还意味着将来给 `parameterSchema` 新增字段时会自动纳入守卫，而不是悄悄放宽每一条既有条目。唯一条目是 `minutes/minutes.apply_minutes_permission` 的 `policy` 由 `"string"` 迁移到 `"integer"`（配合 #912）：该 `type` 由 Cobra flag 类型投影而来（provenance `cobra_flag_type`），描述的是 CLI 如何接受取值；消费方据此拼装的是命令行，而 `--policy 4` 在两种声明下是同一个 argv，加引号的 `--policy "4"` 到 pflag 仍是 4，RunE 也仍校验 `[2,4]`——而且该参数映射的 property `policyId` 一直以数字上报，新声明比旧声明更贴近真实请求。表里的类型值必须是 `schemaType` 实际产出的带引号形态（`"string"` 而非裸 `string`），守卫测试用 `schemaType` 复算并校验类型名属于 JSON Schema 的封闭取值集合——`reviewedInterfaceRefRedirect` 曾因键的书写形态错误两次静默失效，这里不重犯。
+
+### Fixed
+
+- **Event runtime-token handoff** — personal `event consume`, `status`, `stop`, and `+listen-im` now honor the existing root `--token` instead of falling back to a stale local OAuth profile. Detached personal-event buses negotiate the credential only after an additive capability handshake, receive and rotate it through owner-only local IPC, and keep it in memory; the token is never forwarded through child argv, environment variables, profiles, logs, or run-state files. Existing OAuth and multi-profile behavior is unchanged when `--token` is absent. A new client refuses to send a runtime token to an older bus and leaves its existing consumers and subscriptions untouched; the recovery message asks users to inspect `event status --as user`, preview `event stop --as user --all --dry-run`, and explicitly confirm `event stop --as user --all --yes` before retrying.
+
+## [1.0.58-beta.1] - 2026-08-07
+
+### Added
+
+- **Robot image and file messages** (#867) — `dws chat message send-by-bot`
+  now supports image URLs and local-file uploads through explicit message
+  types, while retaining Markdown as the default and preserving its existing
+  title and text requirements.
+- **Conversation shortcut-bar management** (#877) — adds `dws chat toolbar`
+  commands to list, add, hide, sort, and manage custom conversation shortcuts,
+  with validation and confirmation for destructive removal.
+- **Complete AI Table Shortcut surface** (#901) — makes all 92 supported
+  AI Table Shortcuts discoverable through Runtime Schema and adds reliable
+  Base, table, record, attachment, view, dashboard, and workflow operations
+  with explicit confirmation and result-verification semantics for writes.
+
+### Changed
+
+- **Doc import upload fallback** — `dws doc import` no longer fails on file
+  formats outside the conversion whitelist (html, pdf, zip, extensionless,
+  and any future format): it now hands the file to the document-space upload
+  chain (the same primitive as `dws drive upload --workspace`), stores the
+  original file at the requested `--folder`/`--workspace` target, and prints
+  an explicit stderr notice with the supported-format list and the
+  convert-to-md alternative. The fallback shares the import file checks
+  (20MB cap, empty-file guard), keeps `--format json` / `--dry-run` output as
+  a single JSON document, and marks the machine-readable result with
+  `fallback: "upload"` and `converted: false` so agents never mistake the
+  stored file for a converted online document. The fallback fails closed
+  unless the commit response parses as JSON and carries a file identity
+  (exposed as `dentry_id`); empty or unverifiable responses surface as
+  errors instead of fabricated success. Importable formats and
+  `dws sheet import` validation are unchanged.
+- **IM natural-target and history alignment** — Chat shortcuts can resolve natural user/group targets before execution, and message-history workflows expose bounded time ranges, ordering, explicit all-page controls, continuation ledgers, safe local export, and thread-reply pagination without treating empty or incomplete reads as successful results. Bundled mono/multi Skills and intent routing now describe the same executable surface.
+- **Sheet CSV formula writes** — `dws sheet csv-put` and batch `csv-put` now expose the service contract that CSV fields beginning with `=` are written as formulas. Prefix the field with an apostrophe to write literal text beginning with `=`; CSV content continues to pass through unchanged.
+- **Release-equivalent PR compatibility gate** (#889) — pull-request
+  admission now runs command-surface compatibility checks against the current
+  release baseline before code reaches `main`.
+- **Reviewer routing governance** (#903) — updates the Reviewer Router pool
+  used for new ready PRs while retaining the existing current-head review and
+  required-check gates.
+
+### Fixed
+
+- **Fail-closed IM pagination and audit evidence** — `+chat-messages`, `+search-msg`, `+thread-replies`, `+at-me`, `+my-groups`, conversation lists, and favorites preserve partial-read failures, reject missing or stalled continuation state, deduplicate page boundaries, and publish completion evidence. The live-audit regression suite now rejects empty projections and incomplete reads instead of promoting them to passing results.
+- **Sheet formula verification** (#873) — `dws sheet formula-verify` now calls
+  the registered remote tool name `verify_formula`; the previous
+  `formula_verify` name failed at gateway dispatch.
+- **CLI and parameter recovery boundaries** (#864) — command and parameter
+  recovery now fail closed when an Agent-provided path or flag cannot be
+  reconciled with the executable CLI surface, reducing unsafe hallucinated
+  retries.
+
+## [1.0.57-beta.4] - 2026-08-06
+
+### Added
+
+- **Expanded open CLI workflows** (#887) — adds calendar event-instance
+  queries, Drive latest-file selection, Markdown diff, Mail calendar/export/
+  share-to-chat workflows, and Minutes hot-word, permission, and audio-memo
+  operations, with matching Schema and cross-platform coverage.
+
+### Changed
+
+- **Multi-skill framework alignment** (#887) — folds long-tail skills into
+  `dingtalk-misc`, renames the shared package to `dingtalk-shared`, removes
+  stale Preview guidance, and reorganizes shared recipes and routing for more
+  predictable Agent selection.
+- **Bounded Agent Schema delivery** (#887) — keeps compact and wire projections
+  focused on executable contract facts, retires stale MCP metadata candidates,
+  and teaches Agents to prefer `dws schema --compact` for bounded context.
+
+### Deprecated
+
+- **Recovery and discovery-cache compatibility surfaces** (#887) — keeps
+  visible Deprecated `dws recovery` and `dws cache` compatibility stubs while
+  retiring their former recovery engine and dynamic discovery-cache behavior.
+  Recovery plan/execute/finalize now return an explicit “不再支持” notice, and
+  Skills no longer teach either retired workflow.
+
+### Fixed
+
+- **Mail share-to-chat confirmation** (#887) — requires explicit confirmation
+  before the first remote write, while preserving the confirmed sign-retry
+  flow and covering both direct-success and retry responses.
+
+## [1.0.57] - 2026-08-06
+
+This stable release promotes the fully delivered `v1.0.57-beta.4` baseline.
+It includes the v1.0.57 beta-line command-contract, document, chat, OA, Wiki,
+and compatibility improvements, plus the multi-skill framework alignment and
+expanded calendar, Drive, Markdown, Mail, and Minutes workflows validated in
+the final prerelease.
+
+- **Promote v1.0.57-beta.4** — publishes the final validated prerelease
+  baseline as stable `v1.0.57` without adding post-beta product changes.
+
+## [1.0.57-beta.3] - 2026-08-06
+
+### Added
+
+- **Reviewed document shortcuts** (#880) — adds public document shortcuts for
+  safe local downloads, content and history, review, media and style, and
+  document access/sharing workflows, while retaining reviewed compatibility
+  identities and confirmation safeguards for writes.
+- **Mentions in chat replies** (#881) — `chat message reply` now supports
+  `--at-open-dingtalk-ids` and `--at-all`, forwarding reply mention fields and
+  adding any required mention placeholders without changing existing send
+  behavior.
+
+## [1.0.57-beta.2] - 2026-08-05
+
+### Fixed
+
+- **Stable Chat command compatibility** (#876) — restores the hidden migration
+  entries for `chat send`, `chat history`, and their `im` aliases, preserving
+  the v1.0.56 command surface while directing callers to the supported
+  `chat message send/list` commands. Legacy flags now reach the same migration
+  hints instead of failing during flag parsing.
+- **Drive download cancellation-test stability** (#876) — replaces a
+  timing-sensitive worker-cancellation coverage test with a deterministic seam,
+  reducing flaky CI without changing download behavior.
+
+## [1.0.57-beta.1] - 2026-08-05
+
+This beta starts the v1.0.57 line on top of v1.0.56. It packages the unified
+command-contract and runtime Schema architecture, complete Multi IM Chat
+coverage, document whiteboard and OA approval workflows, Wiki activity feeds,
+and compatibility and CI reliability fixes.
+
+### Added
+
+- **Contact personal-status updates** (#872) — adds `contact user update-ownness`
+  (alias `set-ownness`) for updating a user's personal status text. The write
+  operation maps reviewed `userId` and `ownnessText` parameters to the service
+  contract and requires confirmation unless `--yes` is explicitly supplied.
+- **Document whiteboard workflows** (#861) — adds `doc whiteboard insert`,
+  `whiteboard query/update`, and `doc media upload`. These commands support
+  confirmed document-embedded whiteboard creation and updates, structured
+  OpenNodes reads, and preparation of node-bound Vector/SVG resources.
+- **Complete Multi IM Chat coverage** (#860) — hardens deterministic group and
+  stable-ID resolution, sending, querying, downloading, pagination, and JSON
+  export. The remaining reviewed Chat Shortcuts enter Schema coverage, with
+  destructive delete and clear operations aligned to confirmation gates.
+- **OA approval form workflows** (#853) — adds OA form-schema lookup,
+  process forecast, and confirmed approval-instance creation, supporting both
+  simple flags and complete `--request` payloads.
+- **Wiki activity-feed queries** (#862) — adds `wiki feed list` to retrieve
+  workspace document activity, with cursor paging and optional file exclusion.
+
+### Changed
+
+- **Unified command and Schema contract framework** (#830) — Leaf commands and
+  Shortcuts now use the shared typed `corecmd` base for flags, constraints,
+  confirmation, Help, and runtime Schema projection. Schema delivery assembles
+  from leaf Contract declarations at runtime; the retired hint overlays,
+  pinned MCP metadata, and committed Catalog artifacts are no longer delivery
+  authorities.
+- **Faster macOS CI without reducing native coverage** (#857) — narrows the
+  macOS race suite to Keychain, codesign, and Darwin-only tests while adding a
+  reachability contract that prevents native-only tests from being silently
+  excluded.
+
+### Fixed
+
+- **Chat media-download JSON compatibility** (#854) — restores parseable
+  `success`, `downloadUrl`, and `output` fields for
+  `chat message download-media --format json` after a successful download,
+  without progress output corrupting JSON stdout.
+
+### Added
+
+- **Document-embedded whiteboard workflows** — adds `doc whiteboard insert` for confirmed creation and part-ID verification, `whiteboard query/update` for structured OpenNodes reads and confirmed writes, and `doc media upload` for preparing node-bound Vector/SVG resources. The public adapter uses an explicit helper-only whiteboard endpoint, validates update envelopes locally, decodes `resultJson`, and publishes the full command, Schema, Skill, and safety contract migrated from `dws-wukong@e2da8ab947c6`.
+- **Robot image and file messages** — extends `chat message send-by-bot` with public image URL delivery through `--msg-type image --image-url` and local-file upload/send through `--msg-type file --file-path`, while preserving Markdown as the default message type.
+
+### Changed
+
+- **Chat reply mentions** — `dws chat message reply` can @ specified group members with `--at-open-dingtalk-ids` or @ everyone with `--at-all`, forwarding the existing `send_personal_message` mention fields and automatically adding missing current-user `<@id>` / `<@all>` placeholders.
+- **Pinned MCP metadata retired** — deletes `internal/cli/schema_mcp_metadata.json` and removes its embed/loader/fallback role from Schema assembly. Catalog now assembles from Contract/ParamDecl/Interface + Cobra only; `make fetch-mcp-metadata` remains an optional diagnostic dump under `artifacts/` and refuses the retired pin path. Policy bans the pin from reappearing.
+- **MCP service review retired** — deletes `schema_mcp_service_review.json` and removes its policy jq / outputguard / test disposition gate (`notify` → `out_of_surface`, snapshot hash pin). No replacement ledger.
+- **Hints retired; ContractDecl is the leaf Schema source** (#830) — `schema_hints/`, Manual/Schema hint overlays, and `schema_agent_metadata/` delivery are removed. Selection, safety, parameters, and interface facts declare on ProductDecl / leaf `Contract` (`corecmd.ContractDecl` + `contract.ParamDecl` / `Safety`). Authoring renamed `SchemaDecl` → `ContractDecl`; nested fields reuse `contract.*` directly.
+- **Contract package seam** (#830) — types / ProductDecl live under `internal/corecmd/contract` (DTO only). Annotate writers live in `internal/corecmd/runtimeannotate`; Cobra-keyed ContractFinal store + Register live in `internal/corecmd/contractfinal`; homology gates in `internal/cli/homology`. All packages import `corecmd/*` directly; the former `cli/runtimeannotate` / `cli/contractfinal` shim packages are removed, and the `cli` root keeps only package-local aliases (`runtime_schema_seam.go`). Catalog/`ResolveMeta` stay on the `cli` delivery root. `internal/corecmd` must not import any `internal/cli` package.
+- **CommandMeta cache for ResolveMeta** — production `ResolveMeta` / leaf `--help` Safety project from the runtime-assembled `SchemaRegistry` into a `map[cli_path]CommandMeta` installed during `deliverySchemaCatalog` sync.Once. Steady-state lookups are O(1); full Catalog wire maps stay deferred. Registry `Source` stamps `runtime-assembled`.
+
+### Fixed
+
+- **Fail-closed IM pagination and audit evidence** — `+chat-messages`, `+search-msg`, `+thread-replies`, `+at-me`, `+my-groups`, conversation lists, and favorites preserve partial-read failures, reject missing or stalled continuation state, deduplicate page boundaries, and publish completion evidence. The live-audit regression suite now rejects empty projections and incomplete reads instead of promoting them to passing results.
+- **Unified command safety and Shortcut runtime (H0)** — Shortcut leaves now execute through `corecmd.New`, sharing the same typed Safety confirmation gate as Leaf commands. EOF / closed stdin returns `confirmation_required`, and interactive `no` returns the existing non-zero cancellation validation error instead of reporting success for an operation that did not run. Pass `--yes` or `--dry-run` to skip the prompt.
+- **Constraint "provided" for `at_least_one` / `exactly_one` (H0)** — a flag set to an empty string (`--flag ""`) no longer counts as provided; previously bare Cobra `Changed` satisfied the constraint. Pass a non-blank value for a member of the group.
+- **Chat media download JSON compatibility** — `dws chat message download-media --format json` once again returns a clean `{success, downloadUrl, output}` result after the file is saved, preserving the temporary URL and resolved local path without progress text corrupting JSON stdout.
+
+## [1.0.56] - 2026-08-04
+
+This stable release promotes the fully delivered `v1.0.56-beta.4` baseline.
+It includes PR #852's resilient multipart Drive download implementation,
+together with the v1.0.56 beta-line command, Schema, Skill, and runtime
+improvements already validated through the prerelease channel.
+
+### Added
+
+- **Resilient multipart Drive downloads** (#852) — `drive download` and
+  `drive download-version` support parallel chunk transfer, Range probing,
+  fingerprint-validated checkpoint resume, automatic 401/403 credential
+  refresh, and graceful interruption with checkpoint preservation.
+
+## [1.0.56-beta.4] - 2026-08-04
+
+This beta adds PR #852 on top of v1.0.56-beta.3. It makes Drive downloads
+resilient for large files through parallel transfer, validated resumable
+checkpoints, and automatic credential refresh.
+
+### Added
+
+- **Multipart Drive downloads** (#852) — adds `--part-size`, `--parallel`, and
+  `--no-resume` to `drive download` and `drive download-version`. Files above
+  the part-size threshold use a Range probe and parallel chunks, resume from a
+  fingerprint-validated checkpoint, refresh credentials on 401/403, and keep
+  the checkpoint when Ctrl+C interrupts a transfer.
+
+## [1.0.56-beta.3] - 2026-08-03
+
+This beta adds PRs #846 and #851 on top of v1.0.56-beta.2. It adds a
+service-provided Aitable workflow-editing reference command and makes local
+event-bus IPC reliable on shared filesystems by placing Unix sockets in a
+validated private runtime directory.
+
+### Added
+
+- **Aitable workflow editing reference** (#851) — adds `dws aitable workflow edit-example`, a parameter-free read command that returns the service-provided workflow editing documentation and `workflow-dsl/v1` examples through `aitable/edit_workflow_example`.
+
+### Fixed
+
+- **Event bus sockets on shared filesystems** (#846) — Unix event buses now place their local IPC socket in a private per-user runtime directory (`XDG_RUNTIME_DIR` when available, otherwise a `0700` per-UID directory under the system temporary directory) while retaining locks, metadata, logs, and subscription state in the configured Workdir. Listener and dial paths validate directory ownership and permissions before use. This prevents `dws event consume` from failing with `bind: errno 524` when `~/.dws` is hosted on NFS, CSI, FUSE, or another filesystem that does not support Unix Domain Sockets without exposing the socket directly in a shared `/tmp` root. When `XDG_RUNTIME_DIR` is unavailable, the per-UID directory name is deterministic: ownership validation prevents endpoint hijacking, but another local user can pre-create the directory to deny service; multi-user deployments should provide a private `XDG_RUNTIME_DIR`.
+
+## [1.0.56-beta.2] - 2026-07-30
+
+This beta adds PRs #831 and #835 on top of v1.0.56-beta.1. It separates
+Agent Product observability and IM display identity from the stable
+edition-owned PAT and routing identity, and reduces common-path Skill context
+loading without changing the public command or Runtime Schema surface.
+
+### Changed
+
+- **Agent Product identity separation** (#831) — sends `DWS_AGENT_PRODUCT` through the new `x-dws-agent-product` observability Header and uses a valid non-empty value for the IM `clawType` display label whenever `--ai-tag` is enabled. Because `--ai-tag` defaults to `true`, callers that set `DWS_AGENT_PRODUCT` change the displayed label by default. With `--ai-tag=false`, native `chat message send` / `reply` calls preserve their existing wire shape by sending an empty IM `clawType`, while shortcut calls omit the argument. Unset or empty Product values omit the Header and preserve the active edition's IM display default.
+- **Agent Host dimension convention** (#831) — new integrations should send the runtime form (`cloud` or `desktop`) through `DWS_AGENT_HOST` and report the product separately through `DWS_AGENT_PRODUCT`. Legacy combined labels such as `qwenwork_cloud` remain syntactically valid for compatibility.
+- **Reduced common-path Skill context** (#835) — keeps the complete 97-command Chat Shortcut inventory in Runtime Catalog and leaf Schema while routing common intents through compact Skill tables and references. When an exact command path is already known, the mono Skill no longer requires eager loading of a complete product reference. The generated Skill policy now detects drift, forced full-reference loading, and context-budget regressions; the common Chat plus shared activation estimate drops from 7,301 to 4,771 `o200k_base` tokens without changing the 845-tool Schema surface.
+
+### Fixed
+
+- **Stable PAT/routing identity** (#831) — restores the CLI-emitted open-source HTTP `claw-type` and PAT `hostControl.clawType` to the edition-fixed `openClaw` value. `DWS_AGENT_PRODUCT` no longer changes those wire values, and the client continues to derive PAT, authentication, routing, and Discovery behaviour from the existing independent signals.
+- **Portable generated Skill validation** (#835) — resolves the mono Skill name by scanning upward from the generated target, keeping `--check` independent of the repository checkout path and preventing false drift failures when an ancestor directory resembles a Skill name.
+
+## [1.0.56-beta.1] - 2026-07-30
+
+This beta starts the v1.0.56 line on top of v1.0.55 and packages PRs #817,
+#806, and #834, together with release-validation fixes #838 and #839. It closes
+the remaining Agent-visible IM shortcut gaps, introduces reviewed
+command-scoped parameter normalization without guessing business identifiers
+or values, and prevents deterministic personal-event subscription failures
+from becoming unbounded retry storms.
+
+### Added
+
+- **Complete IM shortcut workflows** (#817) — publishes the previously excluded `+chat-messages`, `+messages-send`, `+messages-send-card`, `+search-msg`, and `+thread-replies` shortcuts in Runtime Schema. Unified send, streaming-card delivery, advanced search, thread replies, and opt-in resource downloads now share reviewed parameters, selection guidance, and runtime-aligned safety semantics.
+- **Reviewed parameter concept normalization** (#806) — adds a closed parameter-concept dictionary and generated command-level alias table, covering reviewed IM synonyms while preserving the boundaries between group, conversation, user, open-user, cursor, and paging identifiers.
+
+### Fixed
+
+- **Message delivery and resource handling** (#817) — resolves direct recipients through exact contact search, preserves rich and nested message resources, avoids same-name download overwrites, and prevents read shortcuts from silently returning empty results on non-interactive input.
+- **Parameter parsing safety** (#806) — rejects ambiguous, blocked, or conflicting aliases before dispatch, normalizes explicit boolean values such as `--dry-run false`, and keeps internal pre-parse handler details out of user-visible errors.
+- **Personal-event subscription retry safety** (#834) — adds cross-process attempt claims, deterministic backoff and jitter, `Retry-After` handling, terminal holds, compare-and-swap completion, and fail-closed state handling across all public personal-event subscriptions, preventing deterministic failures from causing unbounded callback retries.
+- **Scoped CI and release validation reliability** (#838, #839) — keeps scoped coverage aligned with intentionally skipped supporting profiles, gives focused race and Multi-profile E2E suites enough time for the current `internal/app` workload, and preserves hidden E2E diagnostics on failure.
+
+## [1.0.55-beta.8] - 2026-07-30
+
+This beta revalidates the `v1.0.55-beta.7` product baseline through a complete
+guarded release delivery. It carries no new product-facing command behavior;
+the new version is required because the published beta.7 artifacts succeeded
+on GitHub, npm, and Homebrew, but its enabled optional Gitee mirror failed and
+left that Release run ineligible for stable promotion.
+
+### Changed
+
+- **Complete promotion evidence** — republishes the validated v1.0.55 command, Runtime Schema, Skill, authentication, and projection changes with the optional Gitee upload fallback disabled, so the release can produce one successful auditable delivery proof before stable promotion.
+
+## [1.0.55] - 2026-07-30
+
+This release promotes the validated `v1.0.55-beta.8` baseline to stable. It
+expands the public Workspace command surface and personal event consumption,
+makes the full built-in shortcut catalog available to Agents, and hardens
+multi-account routing, authentication compatibility, command safety, and
+response projection across the CLI.
+
+### Added
+
+- **Broader Workspace command surface** (#621, #676) — adds roughly 30 reviewed Drive, Doc, Sheet, and Chat leaf commands synchronized from Wukong, including Drive version and permission operations, document styling, Sheet comment/version/formula verification, and in-place text-emotion updates. A reusable declarative `LeafSpec` framework now delivers command identity, safety, selection, and guarded Help metadata consistently.
+- **Complete Agent-visible shortcut delivery** (#802, #815) — publishes all 210 built-in shortcuts as reviewed Runtime Schema leaves across 16 products, including 88 validated Chat shortcuts, with executable paths, parameters, constraints, selection guidance, dry-run capabilities, and runtime-aligned confirmation semantics.
+- **Expanded enterprise and event capabilities** (#790) — adds the HR Brain talent-pool, employee-profile, and structured-search command families; `dws mcp url get` resolves MCP Market endpoints; personal event consumption supports eight additional IM event keys, multi-key consumers, and targeted shutdown.
+- **Agent integration identity** (#804, #816) — adds validated `DWS_AGENT_HOST` and `DWS_AGENT_PRODUCT` labels for observability and product attribution while keeping them separate from authentication and authorization.
+
+### Changed
+
+- **Progressive multi-Skill guidance and account safety** (#621, #821) — reorganizes bundled product guidance for progressive discovery and restores the mandatory rule that Agents must not guess an account when a multi-account organization has no unique current default.
+- **Supported Chat file delivery** — retires the legacy AppKey/AppSecret-backed `chat media upload` command from discovery and routes local files through `chat message send --msg-type file --file-path`, while callers with an existing media ID can continue sending images directly.
+- **Guarded release delivery** (#791) — strengthens immutable GitHub, npm, Homebrew, optional mirror, recovery, and version-allocation checks while keeping beta and stable publication role-gated and auditable.
+
+### Fixed
+
+- **Shortcut and message projection correctness** (#706, #783, #795) — prevents successful read shortcuts from silently projecting non-empty backend responses to empty results, renders rich, forwarded, and encrypted message forms safely, and fixes group-bot, bot-search, mail-thread, media-ID alias, and Todo paging response handling.
+- **Command contract edge cases** (#803) — makes approval revocation and document rollback honor dry-run before confirmation or preflight, fixes Drive and Doc rename semantics, restores Drive-specific metadata, and validates Todo reminder rules.
+- **Authentication and external-contact compatibility** (#756, #757) — migrates legacy global and organization-scoped credentials without cross-account token borrowing, preserves contacts that expose only `openDingTalkId`, and aligns message-resource flags with message-list output fields.
+
+## [1.0.55-beta.7] - 2026-07-29
+
+This beta supersedes the unpublished `v1.0.55-beta.6` candidate and packages
+PRs #621, #676, #757, #815, #816, and #821. It restores the mandatory
+multi-account safety rule caught by the sealed-release E2E gate while retaining
+the reviewed Wukong capability and multi-Skill synchronization, declarative
+command and Schema delivery, hardened Chat shortcuts, external contact
+resolution, and Agent product identity on top of the `v1.0.55-beta.5` baseline.
+
+### Added
+
+- **Wukong capability and multi-Skill synchronization** (#621) — ports roughly 30 reviewed leaf commands into the open-source CLI across Drive, Doc, Sheet, and Chat, including in-place text-emotion updates, Drive version and permission operations, document styling, and Sheet comment/version/formula verification. The bundled multi-Skill framework is reorganized into progressive product references and routing guidance while retaining current open-source command, response, safety, and Runtime Schema contracts.
+- **Declarative leaf commands and unified metadata delivery** (#676) — adds the reusable `LeafSpec` command framework and migrates 27 DevApp commands without changing their paths or flags. Runtime consumers now resolve identity, safety, and selection through one embedded Catalog-backed API, and guarded Help output publishes the command's safety/confirmation annotation.
+- **Agent product identity** (#816) — adds the optional `DWS_AGENT_PRODUCT` override for the existing HTTP `claw-type` header while preserving each edition's default when unset. Product and runtime labels are caller-declared signals, not authentication credentials; services must validate supported values and must not grant access solely from them. The override does not change the separate IM message-display `clawType` parameter controlled by the edition and `--ai-tag`.
+
+### Changed
+
+- **Reviewed Chat shortcut delivery** (#815) — publishes 88 currently available Chat shortcuts after real-business validation, keeps three confirmed lower-service failures unavailable, strengthens semantic availability and dry-run contracts, and adds safe message-resource download plus group-member listing. Conversation filtering, IM routing/reporting, and member mute resolution are aligned with the validated backend identities.
+- **Agent identity label hardening** (#816) — limits `DWS_AGENT_PRODUCT` and `DWS_AGENT_HOST` to 64 ASCII bytes, trims only surrounding ASCII spaces and tabs, and rejects other control or Unicode whitespace. QwenWork integrations should report the two dimensions separately as `DWS_AGENT_PRODUCT=qwenwork` plus `DWS_AGENT_HOST=cloud` or `desktop`; previously used combined Host labels such as `qwenwork_cloud` remain syntactically valid for compatibility.
+
+### Fixed
+
+- **External-contact and message-resource chaining** (#757) — the shared name-to-ID resolver keeps external or cross-organization contacts that expose only `openDingTalkId`, applies reviewed display-name fallbacks, and preserves organization-only filtering for commands that require `userId`. `chat +messages-resource-url` now accepts `--msg-id` and `--open-message-id` as aliases for `--message-id`, matching message-list response fields.
+- **Multi-account Skill safety contract** (#821) — restores the mandatory rule that an Agent must never choose the first, most recently logged-in, or most recently used account when an organization has multiple accounts without one unique `isOrgCurrent=true` default. A PR-level embedded-Skill regression test now catches removal before the full sealed-release E2E gate.
+
+## [1.0.55-beta.6] - 2026-07-29
+
+This beta packages PRs #621, #676, #757, #815, and #816, validating the Wukong
+capability and multi-Skill synchronization, declarative command and Schema
+delivery, hardened Chat shortcuts, external contact resolution, and Agent
+product identity on top of the `v1.0.55-beta.5` baseline.
+
+### Added
+
+- **Wukong capability and multi-Skill synchronization** (#621) — ports roughly 30 reviewed leaf commands into the open-source CLI across Drive, Doc, Sheet, and Chat, including in-place text-emotion updates, Drive version and permission operations, document styling, and Sheet comment/version/formula verification. The bundled multi-Skill framework is reorganized into progressive product references and routing guidance while retaining current open-source command, response, safety, and Runtime Schema contracts.
+- **Declarative leaf commands and unified metadata delivery** (#676) — adds the reusable `LeafSpec` command framework and migrates 27 DevApp commands without changing their paths or flags. Runtime consumers now resolve identity, safety, and selection through one embedded Catalog-backed API, and guarded Help output publishes the command's safety/confirmation annotation.
+- **Agent product identity** (#816) — adds the optional `DWS_AGENT_PRODUCT` override for the existing HTTP `claw-type` header while preserving each edition's default when unset. Product and runtime labels are caller-declared signals, not authentication credentials; services must validate supported values and must not grant access solely from them. The override does not change the separate IM message-display `clawType` parameter controlled by the edition and `--ai-tag`.
+
+### Changed
+
+- **Reviewed Chat shortcut delivery** (#815) — publishes 88 currently available Chat shortcuts after real-business validation, keeps three confirmed lower-service failures unavailable, strengthens semantic availability and dry-run contracts, and adds safe message-resource download plus group-member listing. Conversation filtering, IM routing/reporting, and member mute resolution are aligned with the validated backend identities.
+- **Agent identity label hardening** (#816) — limits `DWS_AGENT_PRODUCT` and `DWS_AGENT_HOST` to 64 ASCII bytes, trims only surrounding ASCII spaces and tabs, and rejects other control or Unicode whitespace. QwenWork integrations should report the two dimensions separately as `DWS_AGENT_PRODUCT=qwenwork` plus `DWS_AGENT_HOST=cloud` or `desktop`; previously used combined Host labels such as `qwenwork_cloud` remain syntactically valid for compatibility.
+
+### Fixed
+
+- **External-contact and message-resource chaining** (#757) — the shared name-to-ID resolver keeps external or cross-organization contacts that expose only `openDingTalkId`, applies reviewed display-name fallbacks, and preserves organization-only filtering for commands that require `userId`. `chat +messages-resource-url` now accepts `--msg-id` and `--open-message-id` as aliases for `--message-id`, matching message-list response fields.
+
+## [1.0.55-beta.5] - 2026-07-28
+
+This beta validates expanded personal event consumption, complete Agent-visible
+Runtime Schema coverage for all 210 built-in shortcuts, Agent host
+observability, and hardened document, Drive, approval, and Todo command
+contracts on top of the `v1.0.55-beta.4` baseline.
+
+### Added
+
+- **Expanded personal event consumption** (#790) — adds eight IM personal event keys, supports subscribing to and consuming multiple event keys in one `dws event consume` invocation, and adds targeted local-consumer shutdown when a subscription is stopped so other consumers can continue on the shared event bus.
+- **Shortcut Runtime Schema delivery** (#802) — publishes all 210 public built-in shortcuts as reviewed Agent-visible leaf tools across 16 product groups, with stable canonical identities, executable `+shortcut` CLI paths, parameter and cross-parameter constraints, selection guidance, interface metadata, and runtime-aligned safety/confirmation semantics. `dws shortcut list` remains the lightweight batch-discovery view, while leaf Schema now carries the complete Agent contract; declared string-slice defaults are also preserved consistently in Cobra and Schema.
+- **Agent host observability** (#804) — accepts an optional, validated `DWS_AGENT_HOST` label and sends it as `x-dws-agent-host` for logs and BI only; invalid values fail before CLI network activity, and the label never participates in authentication or routing.
+
+### Fixed
+
+- **Command contract edge cases** (#803) — approval revocation and document-version rollback now honor `--dry-run` before confirmation or remote preflight; `drive rename` removes only a suffix matching the node's current extension to avoid duplicate extensions while `doc rename` preserves the caller's exact display name; `doc info` keeps its stable MCP contract while `drive info` restores Drive-only metadata such as a non-null `fileSize`; and Todo reminder writes now reject invalid rule JSON while Help, Schema, and Skills distinguish a due time from an independently unreadable reminder rule.
+
+## [1.0.55-beta.4] - 2026-07-27
+
+This beta validates the shortcut projection fixes for group bots, bot search,
+and mail threads, together with hardened release delivery to Gitee and npm on
+top of the `v1.0.55-beta.3` baseline.
+
+### Fixed
+
+- **Shortcut projection fixes** (#795) — `chat +chat-bots` no longer projects a non-empty `list_group_bots` response to an empty list, `+bot-find` recognizes the `search_bots` response shape (`result.bots` entries with `botOpenDingTalkId`), and mail thread listings keep `lastUpdated` when the backend returns `lastModifiedDateTime`.
+
+### Changed
+
+- **Hardened release delivery** — the Gitee mirror workflow can synchronize a specific release's assets on demand, release lookup tolerates Gitee's HTTP 200 null-body response for missing releases, npm dist-tag verification waits through slow registry CDN propagation with incremental backoff, and beta/stable release operations are role-enforced (#791).
+
+## [1.0.55-beta.3] - 2026-07-24
+
+This beta validates the HR Brain command surface, smoother guarded release
+automation, and deterministic Markdown test coverage on top of the
+`v1.0.55-beta.2` baseline.
+
+### Added
+
+- **HR Brain (`dws hrbrain`) command surface** — adds 11 commands across three groups: `talent-pool list/detail/employees` for talent pool browsing, `profile metadata/query/labels/career/performance` for employee profile data, and `search employees/employees-structured/fields` for basic and advanced (rule-based) people search. Ships with bundled mono/multi Skill guidance (`dingtalk-hrbrain`, `cli_version: ">=1.0.54"`); `search employees-structured` validates `--origin-json` as a JSON object and `--fields` as a JSON array before dispatch.
+
+### Changed
+
+- **Smoother guarded releases** — publishes verified stable and beta Homebrew Formula updates directly from the release workflow, retries transient tag-ref visibility failures, lets an exact same-run retry reuse its sealed tag, and allows machine-verified rebuild recovery without a separate approval wait.
+
+### Fixed
+
+- **Deterministic Markdown coverage** — replaces timing-dependent temporary-file deletion tests with synchronized file-stat failures so release admission no longer flakes on scheduler timing.
+
+### Changed
+
+- **Faster guarded releases** — trusts an independently revalidated, exact `CHANGELOG.md`-only successor of an already admitted `main` commit, runs cloud planning alongside governance, and executes sealed-release automation, compatibility, and multi-profile validation in parallel with artifact compilation. Normal cloud publication no longer requires an unshareable local packaging preflight.
+- **Scoped document reads and group mentions** — `doc read --content-format jsonml` can return `outline`, `range`, `section`, or custom-tag fragments with depth and block-boundary controls; document comment create, reply, and update can mention groups through `--mentioned-open-conversation-id`.
+- **Drive overwrite uploads** — `drive upload --node <fileId>` can replace an existing Drive or document-space file, is mutually exclusive with `--folder`, supports dry-run, and requires confirmation before writing.
+- **Chat nickname clearing and cross-organization todos** — omitting `--nick` from `chat group update-nick` now clears the current user's group nickname, while `todo task list --query-all` queries todos across organizations.
+
+### Fixed
+
+- **Legacy authentication compatibility** (#756) — migrates pre-v1.0.53 global and organization-scoped login state into the identity-aware token store, including all legacy organizations, while keeping unresolved accounts isolated from exact `corpId:userId` credentials so external or no-directory identities can complete login without borrowing another user's token.
+
+## [1.0.55-beta.1] - 2026-07-23
+
+This beta validates MCP Market URL resolution, the supported Wukong local-file
+send path after retiring the legacy credential-based media upload command from
+discovery, and reliable message-read rendering for rich content, forwarded
+records, encrypted messages, and media-download ID aliases.
+
+### Added
+
+- **MCP URL resolution** — adds `dws mcp url get <mcpId>` for resolving a DingTalk MCP Market ID to the current user and organization scoped Streamable HTTP URL, while keeping the helper-only `mcp-meta` endpoint out of the public product command surface.
+
+### Changed
+
+- **Chat local-file sending** — hides the open-source-only `chat media upload` compatibility command from Help, Schema, and bundled Skills, and removes its legacy AppKey/AppSecret OAPI path. Historical argv still receives an actionable migration error. Send local images and files through `chat message send --msg-type file --file-path`; callers that already hold a mediaId may continue to use `--msg-type image --media-id`.
+
+### Fixed
+
+- **Shortcut projection silent-empty returns** (#783) — a batch of read shortcuts returned an empty list with exit 0 and no error envelope even when the underlying MCP tool returned data, so agents misread "no data". The projection resolvers now probe the real container keys (`processCodeList`, `values`, `wikiSpaces`, `itemList`, `groupList`, `recentItems`, `emailAccounts`, `deptUserList`, `labelUserList`, `roles`, `report_list`, and the grouped `get_org_labels` `labels[]`), unwrap items nested under a VO wrapper (`shiftVO` / `entityVO` / `userInfo`), and `todo +created-todos` uses the shared pager (`pageSize=20`) because the backend silently returns an empty page for `pageSize>20`. Affects contact/oa/wiki/drive/minutes/calendar/attendance/chat/report/smart shortcuts, each with a guard test asserting the real response shape projects non-empty. `scripts/shortcut_real_result.py` also gains an upper-vs-lower layer comparison so an exit-0 empty projection over a non-empty backend is scored as `projection-data-loss` in the real read-audit path rather than `real-ok`.
 - **Message-read shortcut projection** (#706) — the message-list shortcuts (`chat +chat-messages` / `+messages-list` / `+messages-list-direct` / `+at-me` / `+search-msg` / `+thread-replies`) now render card and out-of-office rich-content JSON as readable text (without ever rewriting ordinary text that merely embeds a JSON fragment), expand a forwarded chat record's nested `forwardMessages` instead of collapsing to a "[卡片]" summary, and mark undecryptable encrypted card messages as `[加密消息]`; the speaker is read from the bare `sender` key, nested `{name:…}` sender objects yield their display name, and the literal string `"null"` is treated as absent. Shared projection helpers now live in `internal/shortcut/chatmsg`. `chat message download-media` also gains `--msg-id` / `--open-message-id` aliases for its `--message-id` flag so agents copying the `openMessageId`/`msgId` output field no longer hit "unknown flag".
 
 ## [1.0.54] - 2026-07-21

@@ -18,6 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -41,6 +44,34 @@ var Conflicts = shortcut.Shortcut{
 		"再在本地两两比对开始/结束时间，找出所有时间段重叠的日程对并报告。" +
 		"只读操作，不修改任何日程；没有冲突时明确告诉你「无冲突」。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_conflicts",
+			CanonicalPath:  "calendar.shortcut_conflicts",
+			CLIPath:        "calendar +conflicts",
+			PrimaryCLIPath: "calendar +conflicts",
+		},
+		Description: "检测我某天日程的时间冲突（重叠/双重预订，默认今天）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "检测我某天日程的时间冲突（重叠/双重预订，默认今天）",
+			UseWhen:      []string{"当你想快速知道『我今天（或某天）的日程有没有时间冲突、撞车的会议』时使用；内部自动算出目标日期的时间范围（默认今天，可用 --in-days 指定几天后），列出当天全部日程，再在本地两两比对开始/结束时间，找出所有时间段重叠的日程对并报告。只读操作，不修改任何日程；没有冲突时明确告诉你「无冲突」。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws calendar +conflicts",
+				"dws calendar +conflicts --in-days 1",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "in-days", Type: shortcut.FlagInt, Desc: "几天后（可选，0=今天默认，1=明天…）", Required: false},
 	},

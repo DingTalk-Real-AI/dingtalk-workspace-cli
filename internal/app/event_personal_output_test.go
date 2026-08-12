@@ -47,12 +47,18 @@ func TestPersonalEventListHidesSchemaIDs(t *testing.T) {
 			assertPersonalOutputHidesSchemaIDs(t, got)
 			for _, eventKey := range []string{
 				personal.EventFromUser,
+				personal.EventAllSingleChat,
+				personal.EventAllGroupChat,
 				personal.EventReadO2O,
 				personal.EventReadGroup,
 				personal.EventRecallO2O,
 				personal.EventRecallGroup,
 				personal.EventReactionO2O,
 				personal.EventReactionGroup,
+				personal.EventGroupUpdated,
+				personal.EventGroupMemberAdded,
+				personal.EventGroupMemberExited,
+				personal.EventGroupDisbanded,
 			} {
 				if !strings.Contains(got, eventKey) {
 					t.Fatalf("list output missing %s: %s", eventKey, got)
@@ -230,6 +236,8 @@ func TestPersonalEventFlattenedSchemaUsesSingleJSONSchema(t *testing.T) {
 		personal.EventMention,
 		personal.EventSingleChat,
 		personal.EventInChat,
+		personal.EventAllSingleChat,
+		personal.EventAllGroupChat,
 	} {
 		t.Run(eventKey, func(t *testing.T) {
 			cmd := newEventSchemaCommand()
@@ -265,6 +273,8 @@ func TestPersonalEventFlattenedSchemaUsesSingleJSONSchema(t *testing.T) {
 				"message_id",
 				"create_time",
 				"event_time",
+				"quoted_message",
+				"forward_messages",
 			} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("schema output for %s missing %q: %s", eventKey, want, got)
@@ -308,6 +318,103 @@ func TestPersonalEventFlattenedSchemaUsesSingleJSONSchema(t *testing.T) {
 			}
 			if _, ok := props["content"].(map[string]any); !ok {
 				t.Fatalf("schema.properties.content = %#v, want object", props["content"])
+			}
+			quoted, ok := props["quoted_message"].(map[string]any)
+			if !ok || quoted["type"] != "object" {
+				t.Fatalf("schema.properties.quoted_message = %#v, want object", props["quoted_message"])
+			}
+			forward, ok := props["forward_messages"].(map[string]any)
+			if !ok || forward["type"] != "array" {
+				t.Fatalf("schema.properties.forward_messages = %#v, want array", props["forward_messages"])
+			}
+		})
+	}
+}
+
+func TestPersonalGroupLifecycleEventSchemaUsesConservativePayload(t *testing.T) {
+	for _, eventKey := range []string{personal.EventGroupUpdated, personal.EventGroupDisbanded} {
+		t.Run(eventKey, func(t *testing.T) {
+			cmd := newEventSchemaCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetArgs([]string{eventKey, "--flatten"})
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			var doc map[string]any
+			if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+				t.Fatalf("schema output is not JSON: %v\n%s", err, out.String())
+			}
+			if doc["event_key"] != eventKey || doc["rule_type"] != "group" || doc["jq_root_path"] != "." {
+				t.Fatalf("schema metadata = %#v", doc)
+			}
+			required, ok := doc["required_params"].([]any)
+			if !ok || len(required) != 1 || required[0] != "group" {
+				t.Fatalf("required_params = %#v, want [group]", doc["required_params"])
+			}
+			schema := doc["schema"].(map[string]any)
+			properties := schema["properties"].(map[string]any)
+			if len(properties) != 5 {
+				t.Fatalf("schema.properties = %#v, want five conservative fields", properties)
+			}
+			payload, ok := properties["payload"].(map[string]any)
+			if !ok || payload["type"] != "object" || payload["additionalProperties"] != true {
+				t.Fatalf("schema.properties.payload = %#v", properties["payload"])
+			}
+		})
+	}
+}
+
+func TestPersonalGroupMemberEventSchemaMatchesFlatOutput(t *testing.T) {
+	wantProperties := []string{
+		"type", "event_id", "timestamp", "subscribe_id", "conversation_id",
+		"operator", "operator_open_dingtalk_id", "members", "event_time",
+	}
+	for _, eventKey := range []string{personal.EventGroupMemberAdded, personal.EventGroupMemberExited} {
+		t.Run(eventKey, func(t *testing.T) {
+			cmd := newEventSchemaCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetArgs([]string{eventKey, "--flatten"})
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			var doc map[string]any
+			if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+				t.Fatalf("schema output is not JSON: %v\n%s", err, out.String())
+			}
+			if doc["event_key"] != eventKey || doc["rule_type"] != "group" || doc["jq_root_path"] != "." {
+				t.Fatalf("schema metadata = %#v", doc)
+			}
+			properties := doc["schema"].(map[string]any)["properties"].(map[string]any)
+			if len(properties) != len(wantProperties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d flat fields", properties, len(wantProperties))
+			}
+			for _, field := range wantProperties {
+				if _, ok := properties[field].(map[string]any); !ok {
+					t.Fatalf("schema missing %q: %#v", field, properties)
+				}
+			}
+			members := properties["members"].(map[string]any)
+			items, ok := members["items"].(map[string]any)
+			if !ok || members["type"] != "array" || items["type"] != "object" {
+				t.Fatalf("members schema = %#v", members)
+			}
+			memberProperties, ok := items["properties"].(map[string]any)
+			if !ok {
+				t.Fatalf("members.items.properties = %#v", items["properties"])
+			}
+			for _, field := range []string{"nick", "open_dingtalk_id"} {
+				if _, ok := memberProperties[field].(map[string]any); !ok {
+					t.Fatalf("member schema missing %q: %#v", field, memberProperties)
+				}
+			}
+			if _, ok := properties["payload"]; ok {
+				t.Fatalf("group member schema exposed generic payload: %#v", properties)
 			}
 		})
 	}
@@ -485,6 +592,64 @@ func TestPersonalEventFromUserIsPubliclyAvailable(t *testing.T) {
 	}
 }
 
+func TestPersonalNewIMEventsDryRunAndValidation(t *testing.T) {
+	configDir := setupPersonalIdentityToken(t, &authpkg.TokenData{
+		AccessToken:  "access-1",
+		RefreshToken: "refresh-1",
+		ExpiresAt:    time.Now().Add(time.Hour),
+		RefreshExpAt: time.Now().Add(24 * time.Hour),
+		CorpID:       "corp-1",
+		UserID:       "user-1",
+		ClientID:     "client-1",
+	})
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+
+	for _, test := range []struct {
+		eventKey string
+		args     []string
+	}{
+		{eventKey: personal.EventAllSingleChat},
+		{eventKey: personal.EventAllGroupChat},
+		{eventKey: personal.EventGroupUpdated, args: []string{"--group", "cid-test-group"}},
+		{eventKey: personal.EventGroupMemberAdded, args: []string{"--group", "cid-test-group"}},
+		{eventKey: personal.EventGroupMemberExited, args: []string{"--group", "cid-test-group"}},
+		{eventKey: personal.EventGroupDisbanded, args: []string{"--group", "cid-test-group"}},
+	} {
+		t.Run(test.eventKey, func(t *testing.T) {
+			if err := ensurePublicPersonalEvent(test.eventKey); err != nil {
+				t.Fatalf("ensurePublicPersonalEvent() error = %v", err)
+			}
+			cmd := newEventConsumeCommand()
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			cmd.SetArgs(append([]string{test.eventKey}, append(test.args, "--dry-run")...))
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("dry-run Execute() error = %v", err)
+			}
+		})
+	}
+
+	for _, eventKey := range []string{personal.EventAllSingleChat, personal.EventAllGroupChat} {
+		cmd := newEventConsumeCommand()
+		cmd.SilenceUsage = true
+		cmd.SilenceErrors = true
+		cmd.SetArgs([]string{eventKey, "--user", "test-user-001", "--dry-run"})
+		if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "--user is not supported for "+eventKey) {
+			t.Fatalf("%s scoped user error = %v", eventKey, err)
+		}
+	}
+
+	for _, eventKey := range []string{personal.EventGroupUpdated, personal.EventGroupMemberAdded, personal.EventGroupMemberExited, personal.EventGroupDisbanded} {
+		cmd := newEventConsumeCommand()
+		cmd.SilenceUsage = true
+		cmd.SilenceErrors = true
+		cmd.SetArgs([]string{eventKey, "--dry-run"})
+		if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "--group is required for "+eventKey) {
+			t.Fatalf("%s missing group error = %v", eventKey, err)
+		}
+	}
+}
+
 func TestEventConsumeCobraSchemaIncludesOpenDingTalkID(t *testing.T) {
 	root := NewRootCommand()
 	root.SilenceUsage = true
@@ -550,6 +715,14 @@ func TestEventConsumeCobraSchemaIncludesOpenDingTalkID(t *testing.T) {
 		t.Fatalf("schema constraint %s = %#v, missing %#v", field, groups, want)
 	}
 	assertJSONConstraintGroup("require_one_of", []string{"event_key", "subscribe-id"})
+	positionals, ok := doc["positionals"].([]any)
+	if !ok || len(positionals) != 1 {
+		t.Fatalf("schema positionals = %#v", doc["positionals"])
+	}
+	eventKey, ok := positionals[0].(map[string]any)
+	if !ok || eventKey["name"] != "event_key" || eventKey["variadic"] != true {
+		t.Fatalf("event_key positional = %#v, want variadic", positionals[0])
+	}
 }
 
 func TestPersonalEventSchemaRejectsTableFormat(t *testing.T) {

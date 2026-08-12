@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -67,6 +68,8 @@ type Client struct {
 	HTTPClient          *http.Client
 	Identity            Identity
 	AccessTokenProvider func(context.Context) (string, error)
+	ClientVersion       string
+	UserAgent           string
 }
 
 type CreateSubscriptionRequest struct {
@@ -141,10 +144,14 @@ func (s dwsSubscription) toSubscription() Subscription {
 }
 
 type APIError struct {
-	Code      string         `json:"code"`
-	Message   string         `json:"message"`
-	Retryable bool           `json:"retryable,omitempty"`
-	Details   map[string]any `json:"details,omitempty"`
+	Code              string         `json:"code"`
+	Message           string         `json:"message"`
+	Retryable         *bool          `json:"retryable,omitempty"`
+	RetryAfterSeconds *int64         `json:"retry_after_seconds,omitempty"`
+	NextRetryAt       *time.Time     `json:"next_retry_at,omitempty"`
+	TraceID           string         `json:"trace_id,omitempty"`
+	HTTPStatus        int            `json:"http_status,omitempty"`
+	Details           map[string]any `json:"details,omitempty"`
 }
 
 func (e *APIError) Error() string {
@@ -178,18 +185,6 @@ func (c *Client) CreateSubscription(ctx context.Context, req CreateSubscriptionR
 	}
 	var sub Subscription
 	if err := c.do(ctx, http.MethodPost, "/subscription/user", nil, c.buildCreateRequest(req), &sub); err != nil {
-		var apiErr *APIError
-		if errors.As(err, &apiErr) {
-			if subID, ok := apiErr.Details["subscribe_id"].(string); ok && subID != "" {
-				return &Subscription{
-					SubscribeID: subID,
-					EventKey:    req.EventKey,
-					RuleType:    req.RuleType,
-					Status:      "active",
-					SourceID:    c.Identity.SourceID,
-				}, nil
-			}
-		}
 		return nil, err
 	}
 	if sub.EventKey == "" {
@@ -378,14 +373,20 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 		return fmt.Errorf("personal event: read response: %w", err)
 	}
 	responseLog := sanitizeLogPayload(data)
+	responseID := firstNonEmpty(responseRequestID(data), responseHeaderRequestID(resp.Header))
+	responseTrace := firstNonEmpty(responseBodyTraceID(data), responseTraceID(resp.Header))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if apiErr := decodeAPIError(data); apiErr != nil {
-			apiErr = withRequestDetails(apiErr, method, path, resp.StatusCode, responseRequestID(data))
-			logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, responseRequestID(data), apiErr)
+			apiErr = withHTTPResponseDetails(apiErr, method, path, resp, responseID, responseTrace)
+			logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, responseID, apiErr)
 			return apiErr
 		}
-		logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, responseRequestID(data), nil)
-		return fmt.Errorf("personal event: HTTP %d", resp.StatusCode)
+		apiErr := withHTTPResponseDetails(&APIError{
+			Code:    fmt.Sprintf("HTTP_%d", resp.StatusCode),
+			Message: firstNonEmpty(http.StatusText(resp.StatusCode), "HTTP request failed"),
+		}, method, path, resp, responseID, responseTrace)
+		logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, responseID, apiErr)
+		return apiErr
 	}
 	if len(bytes.TrimSpace(data)) == 0 {
 		logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, "", nil)
@@ -393,23 +394,25 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 	}
 	var env responseEnvelope
 	if err := json.Unmarshal(data, &env); err == nil && (env.Success != nil || env.Error != nil || env.Result != nil || env.ErrorCode != "" || env.ErrorMsg != "") {
+		envID := firstNonEmpty(env.requestID(), responseID)
+		envTrace := firstNonEmpty(env.traceID(), responseTrace)
 		if env.Success == nil {
 			if apiErr := env.apiError(); apiErr != nil {
-				apiErr = withRequestDetails(apiErr, method, path, resp.StatusCode, env.requestID())
-				logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, env.requestID(), apiErr)
+				apiErr = withHTTPResponseDetails(apiErr, method, path, resp, envID, envTrace)
+				logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, envID, apiErr)
 				return apiErr
 			}
 		}
 		if env.Success != nil && !*env.Success {
 			if apiErr := env.apiError(); apiErr != nil {
-				apiErr = withRequestDetails(apiErr, method, path, resp.StatusCode, env.requestID())
-				logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, env.requestID(), apiErr)
+				apiErr = withHTTPResponseDetails(apiErr, method, path, resp, envID, envTrace)
+				logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, envID, apiErr)
 				return apiErr
 			}
-			logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, env.requestID(), nil)
+			logControlRequest("personal event control request failed", method, path, q, resp.StatusCode, requestLog, responseLog, envID, nil)
 			return errors.New("personal event: request failed")
 		}
-		logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, env.requestID(), nil)
+		logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, envID, nil)
 		if env.Result == nil {
 			return nil
 		}
@@ -419,10 +422,10 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 		return decodeResult(env.Result, out)
 	}
 	if out == nil {
-		logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, responseRequestID(data), nil)
+		logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, responseID, nil)
 		return nil
 	}
-	logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, responseRequestID(data), nil)
+	logControlRequest("personal event control request", method, path, q, resp.StatusCode, requestLog, responseLog, responseID, nil)
 	return json.Unmarshal(data, out)
 }
 
@@ -451,31 +454,68 @@ func (c *Client) decorate(req *http.Request, accessToken string) {
 	if c.Identity.CorpID != "" {
 		req.Header.Set("X-DWS-Corp-Id", c.Identity.CorpID)
 	}
+	if version := strings.TrimSpace(c.ClientVersion); version != "" {
+		req.Header.Set("X-Cli-Version", version)
+	}
+	if userAgent := strings.TrimSpace(c.UserAgent); userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
 	req.Header.Set("Accept", "application/json")
 }
 
 type responseEnvelope struct {
-	Success    *bool           `json:"success"`
-	RequestID  string          `json:"request_id,omitempty"`
-	RequestID2 string          `json:"requestId,omitempty"`
-	Result     json.RawMessage `json:"result"`
-	Error      *APIError       `json:"error"`
-	ErrorCode  string          `json:"errorCode,omitempty"`
-	ErrorMsg   string          `json:"errorMsg,omitempty"`
+	Success                *bool             `json:"success"`
+	RequestID              string            `json:"request_id,omitempty"`
+	RequestID2             string            `json:"requestId,omitempty"`
+	TraceID                string            `json:"trace_id,omitempty"`
+	TraceID2               string            `json:"traceId,omitempty"`
+	Arguments              []json.RawMessage `json:"arguments,omitempty"`
+	Result                 json.RawMessage   `json:"result"`
+	Error                  *APIError         `json:"error"`
+	ErrorCode              string            `json:"errorCode,omitempty"`
+	ErrorMsg               string            `json:"errorMsg,omitempty"`
+	Retryable              *bool             `json:"retryable,omitempty"`
+	RetryAfterSeconds      *int64            `json:"retry_after_seconds,omitempty"`
+	RetryAfterSecondsCamel *int64            `json:"retryAfterSeconds,omitempty"`
+	NextRetryAt            *time.Time        `json:"next_retry_at,omitempty"`
+	NextRetryAtCamel       *time.Time        `json:"nextRetryAt,omitempty"`
 }
 
 func (e responseEnvelope) apiError() *APIError {
 	if e.Error != nil {
+		if e.Error.Retryable == nil {
+			e.Error.Retryable = e.Retryable
+		}
+		if e.Error.RetryAfterSeconds == nil {
+			e.Error.RetryAfterSeconds = firstInt64Pointer(e.RetryAfterSeconds, e.RetryAfterSecondsCamel)
+		}
+		if e.Error.NextRetryAt == nil {
+			e.Error.NextRetryAt = firstTimePointer(e.NextRetryAt, e.NextRetryAtCamel)
+		}
+		if e.Error.TraceID == "" {
+			e.Error.TraceID = e.traceID()
+		}
 		return e.Error
 	}
 	if e.ErrorCode != "" || e.ErrorMsg != "" {
-		return &APIError{Code: e.ErrorCode, Message: e.ErrorMsg}
+		return &APIError{
+			Code:              e.ErrorCode,
+			Message:           e.ErrorMsg,
+			Retryable:         e.Retryable,
+			RetryAfterSeconds: firstInt64Pointer(e.RetryAfterSeconds, e.RetryAfterSecondsCamel),
+			NextRetryAt:       firstTimePointer(e.NextRetryAt, e.NextRetryAtCamel),
+			TraceID:           e.traceID(),
+		}
 	}
 	return nil
 }
 
 func (e responseEnvelope) requestID() string {
 	return firstNonEmpty(e.RequestID, e.RequestID2)
+}
+
+func (e responseEnvelope) traceID() string {
+	return firstNonEmpty(e.TraceID, e.TraceID2, firstArgumentString(e.Arguments))
 }
 
 func decodeResult(raw json.RawMessage, out any) error {
@@ -511,11 +551,8 @@ func decodeSubscriptionResult(raw json.RawMessage) (Subscription, bool) {
 func decodeAPIError(data []byte) *APIError {
 	var env responseEnvelope
 	if err := json.Unmarshal(data, &env); err == nil {
-		if env.Error != nil {
-			return env.Error
-		}
-		if env.ErrorCode != "" || env.ErrorMsg != "" {
-			return &APIError{Code: env.ErrorCode, Message: env.ErrorMsg}
+		if apiErr := env.apiError(); apiErr != nil {
+			return apiErr
 		}
 	}
 	var apiErr APIError
@@ -533,12 +570,24 @@ func responseRequestID(data []byte) string {
 	return ""
 }
 
+func responseBodyTraceID(data []byte) string {
+	var env responseEnvelope
+	if err := json.Unmarshal(data, &env); err == nil {
+		if env.Error != nil && strings.TrimSpace(env.Error.TraceID) != "" {
+			return strings.TrimSpace(env.Error.TraceID)
+		}
+		return env.traceID()
+	}
+	return ""
+}
+
 func withRequestDetails(apiErr *APIError, method, path string, status int, requestID string) *APIError {
 	if apiErr == nil {
 		return nil
 	}
+	apiErr.HTTPStatus = status
 	if apiErr.Details == nil {
-		apiErr.Details = make(map[string]any, 4)
+		apiErr.Details = make(map[string]any, 8)
 	}
 	apiErr.Details["method"] = method
 	apiErr.Details["path"] = path
@@ -547,6 +596,91 @@ func withRequestDetails(apiErr *APIError, method, path string, status int, reque
 		apiErr.Details["request_id"] = requestID
 	}
 	return apiErr
+}
+
+func withHTTPResponseDetails(apiErr *APIError, method, path string, resp *http.Response, requestID, traceID string) *APIError {
+	if apiErr == nil {
+		return nil
+	}
+	status := 0
+	if resp != nil {
+		status = resp.StatusCode
+		traceID = firstNonEmpty(apiErr.TraceID, traceID, responseTraceID(resp.Header))
+	}
+	apiErr = withRequestDetails(apiErr, method, path, status, requestID)
+	if apiErr.TraceID == "" {
+		apiErr.TraceID = strings.TrimSpace(traceID)
+	}
+	if resp == nil {
+		return apiErr
+	}
+
+	retryAfter := strings.TrimSpace(resp.Header.Get("Retry-After"))
+	if retryAfter == "" {
+		return apiErr
+	}
+	apiErr.Details["retry_after"] = retryAfter
+	if apiErr.RetryAfterSeconds == nil && apiErr.NextRetryAt == nil {
+		if seconds, err := strconv.ParseInt(retryAfter, 10, 64); err == nil && seconds >= 0 {
+			apiErr.RetryAfterSeconds = &seconds
+		} else if next, err := http.ParseTime(retryAfter); err == nil {
+			next = next.UTC()
+			apiErr.NextRetryAt = &next
+		}
+	}
+	if apiErr.RetryAfterSeconds != nil {
+		apiErr.Details["retry_after_seconds"] = *apiErr.RetryAfterSeconds
+	}
+	if apiErr.NextRetryAt != nil {
+		apiErr.Details["next_retry_at"] = apiErr.NextRetryAt.UTC().Format(time.RFC3339)
+	}
+	return apiErr
+}
+
+func responseTraceID(headers http.Header) string {
+	for _, key := range []string{"X-Trace-Id", "X-Dingtalk-Trace-Id"} {
+		if value := strings.TrimSpace(headers.Get(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func responseHeaderRequestID(headers http.Header) string {
+	return strings.TrimSpace(headers.Get("X-Request-Id"))
+}
+
+func firstArgumentString(arguments []json.RawMessage) string {
+	if len(arguments) == 0 {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(arguments[0], &value); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func firstInt64Pointer(values ...*int64) *int64 {
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		copy := *value
+		return &copy
+	}
+	return nil
+}
+
+func firstTimePointer(values ...*time.Time) *time.Time {
+	for _, value := range values {
+		if value == nil || value.IsZero() {
+			continue
+		}
+		copy := value.UTC()
+		return &copy
+	}
+	return nil
 }
 
 func logControlRequest(message, method, path string, q url.Values, status int, requestPayload, responsePayload, requestID string, apiErr *APIError) {
@@ -568,6 +702,9 @@ func logControlRequest(message, method, path string, q url.Values, status int, r
 		attrs = append(attrs, "request_id", requestID)
 	}
 	if apiErr != nil {
+		if apiErr.TraceID != "" {
+			attrs = append(attrs, "trace_id", apiErr.TraceID)
+		}
 		if apiErr.Code != "" {
 			attrs = append(attrs, "error_code", apiErr.Code)
 		}

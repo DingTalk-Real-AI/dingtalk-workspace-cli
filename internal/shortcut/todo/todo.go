@@ -19,6 +19,9 @@ package todo
 import (
 	"strconv"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -32,6 +35,31 @@ var GetMyTasks = shortcut.Shortcut{
 	Description: "查询当前组织下我的待办列表",
 	Intent:      "当你想查看自己在当前组织下的待办清单、盘点未完成事项或按条件筛选任务时使用；可按完成状态、优先级、角色（创建者/执行者/参与者）和截止时间范围过滤并分页，返回匹配的待办列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "todo",
+			Name:           "shortcut_get_my_tasks",
+			CanonicalPath:  "todo.shortcut_get_my_tasks",
+			CLIPath:        "todo +get-my-tasks",
+			PrimaryCLIPath: "todo +get-my-tasks",
+		},
+		Description: "查询当前组织下我的待办列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前组织下我的待办列表",
+			UseWhen:      []string{"当你想查看自己在当前组织下的待办清单、盘点未完成事项或按条件筛选任务时使用；可按完成状态、优先级、角色（创建者/执行者/参与者）和截止时间范围过滤并分页，返回匹配的待办列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws todo +get-my-tasks --status false --priority 40,30"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "page", Type: shortcut.FlagString, Default: "1", Desc: "页码"},
 		{Name: "size", Type: shortcut.FlagString, Default: "20", Desc: "每页数量"},
@@ -120,6 +148,31 @@ var ListSub = shortcut.Shortcut{
 	Description: "查询子待办列表",
 	Intent:      "当你已知某个待办任务 ID、想了解它被拆解出的所有子任务时使用；输入父任务 ID，返回其下的子待办列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "todo",
+			Name:           "shortcut_list_sub",
+			CanonicalPath:  "todo.shortcut_list_sub",
+			CLIPath:        "todo +list-sub",
+			PrimaryCLIPath: "todo +list-sub",
+		},
+		Description: "查询子待办列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询子待办列表",
+			UseWhen:      []string{"当你已知某个待办任务 ID、想了解它被拆解出的所有子任务时使用；输入父任务 ID，返回其下的子待办列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws todo +list-sub --task-id <taskId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "task-id", Type: shortcut.FlagString, Desc: "待办任务 ID", Required: true},
 	},
@@ -212,6 +265,31 @@ var Get = shortcut.Shortcut{
 	Description: "查询待办详情",
 	Intent:      "当你已知某条待办的任务 ID、想查看它的完整信息（标题、执行者、截止时间、优先级、状态等）时使用；输入任务 ID，返回该待办的详细内容。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "todo",
+			Name:           "shortcut_get",
+			CanonicalPath:  "todo.shortcut_get",
+			CLIPath:        "todo +get",
+			PrimaryCLIPath: "todo +get",
+		},
+		Description: "查询待办详情",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询待办详情",
+			UseWhen:      []string{"当你已知某条待办的任务 ID、想查看它的完整信息（标题、执行者、截止时间、优先级、状态等）时使用；输入任务 ID，返回该待办的详细内容。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws todo +get --task-id <taskId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "task-id", Type: shortcut.FlagString, Desc: "待办任务 ID", Required: true},
 	},
@@ -237,6 +315,31 @@ var ListAttachment = shortcut.Shortcut{
 	Description: "查询待办任务的附件列表",
 	Intent:      "当你想查看某条待办上挂了哪些附件、或需要拿到附件 ID 以便后续删除时使用；输入任务 ID，返回该待办的附件列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "todo",
+			Name:           "shortcut_list_attachment",
+			CanonicalPath:  "todo.shortcut_list_attachment",
+			CLIPath:        "todo +list-attachment",
+			PrimaryCLIPath: "todo +list-attachment",
+		},
+		Description: "查询待办任务的附件列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询待办任务的附件列表",
+			UseWhen:      []string{"当你想查看某条待办上挂了哪些附件、或需要拿到附件 ID 以便后续删除时使用；输入任务 ID，返回该待办的附件列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws todo +list-attachment --task-id <taskId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "task-id", Type: shortcut.FlagString, Desc: "待办任务 ID", Required: true},
 	},
@@ -331,6 +434,31 @@ var ListComment = shortcut.Shortcut{
 	Description: "查询待办评论列表",
 	Intent:      "当你想查看某条待办下的讨论记录、了解协作沟通历史或获取评论 ID 以便删除时使用；输入任务 ID 并可分页，返回该待办的评论列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "todo",
+			Name:           "shortcut_list_comment",
+			CanonicalPath:  "todo.shortcut_list_comment",
+			CLIPath:        "todo +list-comment",
+			PrimaryCLIPath: "todo +list-comment",
+		},
+		Description: "查询待办评论列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询待办评论列表",
+			UseWhen:      []string{"当你想查看某条待办下的讨论记录、了解协作沟通历史或获取评论 ID 以便删除时使用；输入任务 ID 并可分页，返回该待办的评论列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws todo +list-comment --task-id <taskId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "task-id", Type: shortcut.FlagString, Desc: "待办任务 ID", Required: true},
 		{Name: "page", Type: shortcut.FlagString, Default: "1", Desc: "页码"},

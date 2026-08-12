@@ -4,9 +4,9 @@ The pull-request admission layer has exactly nine required external contexts:
 
 | Required context | Contract |
 |---|---|
-| `Lint` | Stable PR revision classification, formatting, `go vet`, and Actionlint |
-| `Test` | Race/unit/release-script tests plus fast cross-platform compilation |
-| `Coverage` | Overall non-regression and 100% changed-code coverage |
+| `Lint` | Stable PR revision/risk classification plus applicable formatting, `go vet`, and Actionlint |
+| `Test` | Tier-selected race/unit/release-script tests plus representative cross-platform compilation |
+| `Coverage` | Scope-matched overall non-regression and 100% changed-code coverage |
 | `Policy` | Repository policy and the fail-closed CHANGELOG contract |
 | `Edition` | Edition contract tests |
 | `Interface Integrity` | CLI, Schema, Skill, and stable-release compatibility |
@@ -56,8 +56,27 @@ base notes into an invalid final CHANGELOG.
 
 All nine admission contexts are still emitted and must succeed. Expensive
 implementation helpers are skipped; the named contexts record that their code
-surface is unaffected. After merge, the protected `main` push executes the
-full admission suite.
+surface is unaffected.
+
+The protected `main` push keeps that fast path only when all of these
+fail-closed conditions hold:
+
+- the event is a non-forced update of the existing `refs/heads/main`;
+- the event `after` SHA is the exact workflow SHA, and both event SHAs are
+  complete, non-zero commit IDs;
+- GitHub's comparison reports the previous main tip as the unique linear merge
+  base, with no commits behind it;
+- the complete resulting tree diff is exactly one in-place modification of
+  `CHANGELOG.md`;
+- the previous main tip already has successful GitHub Actions checks for all
+  nine Code Admission contexts.
+
+`Policy` then independently checks out the pushed revision and runs the same
+`check-changelog-pr.sh --fast-path` contract from the event's `before` SHA to
+its `after` SHA. If identity, ancestry, file scope, tree mode, CHANGELOG
+content, or predecessor admission cannot be proved, classification falls back
+to the complete main admission suite. A source change can therefore never
+inherit the CHANGELOG-only result.
 
 Any PR that touches `CHANGELOG.md` but also changes another file runs the same
 content contract in `Policy` with `--content-only`. That mode permits the
@@ -65,13 +84,28 @@ second file but still rejects invalid dates or versions, missing bullets,
 placeholder `TODO`/`TBD`, unmanaged-section changes, and unsafe tree modes.
 Adding a second file therefore cannot bypass CHANGELOG validation.
 
-## Platform and downstream boundaries
+## Risk tiers and downstream boundaries
 
-Ordinary PRs run the primary Linux assurance plus fast Darwin/Windows compile
-checks. Full native macOS/Windows tests and platform coverage run on a PR only
-when its diff touches auth, keychain, OS-specific Go files, installers,
-packaging, Formulae, or release automation. Protected `main` pushes run the
-complete native matrix.
+`Lint` resolves the complete base/head diff before any helper is skipped.
+Unknown or truncated input fails closed into the high-risk tier.
+
+| Tier | Selection | Admission work |
+|---|---|---|
+| Documentation-only | Only prose/documentation assets; no executable, generated, workflow, packaging, or interface surface | Documentation and repository-asset validation; expensive code helpers skip while every required context still succeeds |
+| Standard | Ordinary code change with a stable package graph | Race tests for changed Go packages and their reverse dependencies; candidate and merge-base coverage over the same impacted scope and `coverpkg`; representative Darwin/Windows compilation |
+| High-risk / protected `main` | Workflow/policy, package add/remove/rename, generated Schema/registry, platform, auth/keychain, installer, packaging, release, transport, recovery, or an unprovable infrastructure classification | Complete race suite and full native macOS/Windows tests, plus every affected domain gate |
+
+Domain helpers (`Edition`, `Interface Integrity`, `CLI Smoke`, and `Mock MCP`,
+for example) execute their substantive suites when the diff can affect that
+contract or when the high-risk tier is selected. Otherwise their stable named
+contexts still report a successful, explicit unaffected result. Release-script
+tests follow the same impact rule. This preserves the ruleset contract without
+charging every developer for unrelated work.
+
+Platform-sensitive changes additionally run native changed-code coverage.
+Protected `main` always runs native tests; generic portable changes are held to
+the Linux changed-code gate rather than being forced to manufacture
+platform-only coverage.
 
 Complete `Multi-profile E2E` is not a PR admission context. It belongs to the
 `Main Integration — 主干集成` workflow and runs only after a push to `main` (or
@@ -97,21 +131,58 @@ flowchart TB
   MAIN --> RELEASE["Release delivery"]
 ```
 
+## Review ownership and auto-merge
+
+A base-owned `pull_request_target` workflow routes newly opened, updated,
+reopened, or newly ready PRs targeting `main` to one eligible peer reviewer. It
+does not check out or execute PR code, excludes both the author and the known
+latest pusher, and balances the open requested-review load across the reviewed
+maintainer pool. A current-head approval or change request is preserved; after
+a new push, stale activity does not suppress a fresh request, and an
+outstanding change requester is preferred for continuity.
+
+The branch ruleset keeps one human approval and all nine strict required
+contexts, and requires someone other than the latest pusher to approve after
+the most recent head update. Repository auto-merge is enabled for ready PRs,
+so a PR merges after that approval and the current revision's nine checks are
+green. If `main` advances, strict checks rerun before merge. The reviewer
+router is orchestration, not a quality context, and must not be added to the
+ruleset.
+
 ## Running focused gates locally
 
-Run the contracts relevant to the change:
+Run the contracts relevant to the change. Ordinary contributors are not
+expected to repeat every CI job locally:
 
 ```sh
 make build
 make policy
-make interface-integrity
-make authoritative-interface-integrity BASE_REF=<merge-base>
-make schema-compatibility BASE_REF=<merge-base>
+make interface-integrity BASE_REF=<merge-base> STABLE_REF=<stable-tag> CANDIDATE_REF=<candidate-sha>
+make schema-compatibility BASE_REF=<merge-base> STABLE_REF=<stable-tag> CANDIDATE_REF=<candidate-sha>
 make skill-command-integrity
 make cli-smoke
 make mock-mcp-smoke
 go test -v -count=1 ./pkg/editiontest/...
 ```
+
+CI 先解析并核对精确的 merge-base、最近可达且未撤回的 stable GA tag 和已提交的 candidate
+SHA，再调用 `make authoritative-interface-integrity`。本地 `make interface-integrity`
+与该 CI target 都只委托给同一个 modern authoritative wrapper，不存在第二个比较
+入口。省略 `BASE_REF` 时本地 target 默认比较 `origin/main`，省略 `STABLE_REF` 时自动
+选择该 base 可达且未撤回的最近 stable GA tag，省略 `CANDIDATE_REF` 时比较已提交的 `HEAD`。
+需要逐字复现某次 CI 时，应显式传入该次运行记录的 merge-base、stable tag 和
+candidate SHA。
+
+`make update-interface-baseline` / `make reset-interface-baseline` 只维护
+`test/fixtures/cli-interface-baseline.txt` 这一份非权威 CLI Smoke fixture。底层旧
+`check-interface-baseline.sh` 不再作为本地或 CI 的兼容性审批入口，也不能用于批准
+flag 迁移。
+
+Schema compatibility 使用同一组 base、stable、candidate refs 和同一份 base-owned flag
+migration ledger。merge-base-owned checker 分别规范化 merge-base 与 stable 的完整
+Schema，并让 candidate 对两份历史 contract 独立执行检查；它只把已通过 Interface
+lifecycle 的 exact rename 规范化到当前历史副本，不会维护第二份 allowlist，也不会
+放宽其他 Schema 历史字段。
 
 For an exact CHANGELOG-only branch:
 
@@ -120,21 +191,37 @@ base_ref=$(git merge-base HEAD origin/main)
 ./scripts/policy/check-changelog-pr.sh --fast-path "$base_ref" HEAD
 ```
 
-`make coverage-gate` is an enforcement step, not a profile generator. CI
-generates the candidate, supporting, merge-base, and (when risk-selected)
-native profiles before the aggregate `Coverage` context evaluates them. The
+`make coverage-gate` is an enforcement step, not a profile generator. For a
+standard PR, CI derives changed packages and their reverse-dependency test
+closure, then generates candidate and merge-base profiles with the same test
+scope and `coverpkg`. High-risk and protected-main runs use the complete
+profiles. Supporting and (when platform-selected) native profiles are
+generated before the aggregate `Coverage` context evaluates them. The
 aggregate and native gates require 100% coverage for changed executable Go
-statements. Overall coverage remains an unrounded, zero-tolerance merge-base
-non-regression check. Candidate and baseline profiles are evaluated by the
-same block-deduplicating checker; supporting policy and shortcut profiles
-contribute to changed-code coverage only. The checked-in badge is presentation
-only and is never read as a gate input.
+statements. Overall coverage remains an unrounded, zero-tolerance,
+scope-matched merge-base non-regression check. Candidate and baseline profiles
+are evaluated by the same block-deduplicating checker; supporting policy and
+shortcut profiles contribute to changed-code coverage only. The checked-in
+badge is presentation only and is never read as a gate input.
 
-Compatibility checks derive authoritative Interface snapshots from the PR
-merge-base and the latest reachable stable release. The candidate cannot bless
-a breaking change by editing a fixture. Schema additions are allowed;
-historical products, tools, parameters, mappings, positional execution fields,
-constraints, and safety semantics remain protected.
+CLI 兼容检查只使用 modern Interface Snapshot 这一处权威比较 seam，并从 PR
+merge-base 和最近的可达 stable release 生成权威快照。本治理机制合入后，
+merge-base 拥有生成器、比较器和已审批迁移清单，因此 candidate 不能通过修改
+helper、fixture 或在同一 PR 新增 self-approval 记录来放行 breaking change。首次
+bootstrap 仍由 merge-base 已有的 modern helper 做无豁免比较，并只接受 candidate
+提交中的规范空清单；完整边界见下方治理文档。
+
+精确的两阶段 flag 迁移生命周期见
+[CLI flag 兼容迁移治理](cli-interface-flag-migrations.md)。治理 PR 只能在
+surface 未变化时新增 `pending`；后续产品 PR 达到审批的精确 surface 后，才能
+消费 base-owned 记录并改为 `consumed`。在 main 与 stable 都达到 after 状态前
+必须保留该回执，之后再由单独 PR 清理。机制只放行记录中的 legacy
+visible-to-hidden，以及 canonical required 新增或提升；删除、type、scope、
+shorthand、no-opt 和任何无关漂移仍然阻塞。Schema 可以新增；历史 product、
+tool、parameter、mapping、positional execution、constraint 与 safety 语义继续
+受保护。`alias_of` 只是一项由 `FlagSpec.Aliases` 产生的框架关系证据，不是 payload
+等价证明；产品 PR 仍须证明 canonical 与 legacy 的最终运行 payload 等价并在 transport
+前拒绝冲突输入。当前迁移清单为空，不授权 PR #904。
 
 ## Required GitHub repository settings
 
@@ -156,3 +243,7 @@ Do not require helper jobs, `Multi-profile E2E`, or an aggregate admission
 alias. Update ruleset contexts only after the new names have appeared on the
 protected branch, so a rename cannot silently remove enforcement or leave an
 unproducible required context.
+
+The branch ruleset also requires one approval after the latest push. Enable
+repository auto-merge and automatic head-branch deletion; keep the base-owned
+reviewer router outside the required-context list.

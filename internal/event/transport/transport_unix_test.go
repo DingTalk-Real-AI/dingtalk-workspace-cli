@@ -21,12 +21,32 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
+
+	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 )
 
+func shortSecureTempDir(t *testing.T) string {
+	t.Helper()
+	tempRoot, err := filepath.EvalSymlinks("/tmp")
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	dir, err := os.MkdirTemp(tempRoot, "dws-et-")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatalf("chmod temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func TestListen_DialRoundtrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "bus.sock")
+	path := filepath.Join(shortSecureTempDir(t), "bus.sock")
 	l, err := Listen(path)
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
@@ -87,7 +107,7 @@ func TestListen_DialRoundtrip(t *testing.T) {
 }
 
 func TestListen_StaleSocketCleanup(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "bus.sock")
+	path := filepath.Join(shortSecureTempDir(t), "bus.sock")
 	// Pre-create a stale file at path (not a valid socket).
 	if err := os.WriteFile(path, []byte("stale"), 0o600); err != nil {
 		t.Fatalf("pre-create: %v", err)
@@ -99,8 +119,121 @@ func TestListen_StaleSocketCleanup(t *testing.T) {
 	defer l.Close()
 }
 
+func TestCrossPlatformCoverageListenCreatesPrivateSocketDirectory(t *testing.T) {
+	dir := filepath.Join(shortSecureTempDir(t), "dws-event-test")
+	path := filepath.Join(dir, "bus.sock")
+	l, err := Listen(path)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer l.Close()
+
+	st, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat socket directory: %v", err)
+	}
+	if mode := st.Mode().Perm(); mode != 0o700 {
+		t.Fatalf("socket directory mode = %04o, want 0700", mode)
+	}
+}
+
+func TestCrossPlatformCoverageListenRejectsWorldAccessibleSocketDirectory(t *testing.T) {
+	dir := filepath.Join(shortSecureTempDir(t), "dws-event-test")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	if _, err := Listen(filepath.Join(dir, "bus.sock")); err == nil || !strings.Contains(err.Error(), "want 0700") {
+		t.Fatalf("Listen error = %v, want 0700 directory rejection", err)
+	}
+}
+
+func TestCrossPlatformCoverageDialRejectsWorldAccessibleSocketDirectory(t *testing.T) {
+	dir := filepath.Join(shortSecureTempDir(t), "dws-event-test")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	if _, err := Dial(filepath.Join(dir, "bus.sock")); err == nil || !strings.Contains(err.Error(), "want 0700") {
+		t.Fatalf("Dial error = %v, want 0700 directory rejection", err)
+	}
+}
+
+func TestCrossPlatformCoverageListenRejectsSymlinkSocketDirectory(t *testing.T) {
+	root := shortSecureTempDir(t)
+	target := filepath.Join(root, "target")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	link := filepath.Join(root, "dws-event-test")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	if _, err := Listen(filepath.Join(link, "bus.sock")); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("Listen error = %v, want symlink directory rejection", err)
+	}
+}
+
+func TestCrossPlatformCoverageValidatePrivateSocketDirRejectsDifferentOwner(t *testing.T) {
+	dir := shortSecureTempDir(t)
+	st, err := os.Lstat(dir)
+	if err != nil {
+		t.Fatalf("lstat: %v", err)
+	}
+	otherUID := uint32(os.Geteuid() + 1)
+	if err := validatePrivateSocketDir(dir, st, otherUID); err == nil || !strings.Contains(err.Error(), "is owned by uid") {
+		t.Fatalf("validatePrivateSocketDir error = %v, want owner mismatch", err)
+	}
+}
+
+func TestCrossPlatformCoverageListenRejectsUntrustedRuntimeRoot(t *testing.T) {
+	root := filepath.Join(shortSecureTempDir(t), "untrusted")
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatalf("mkdir root: %v", err)
+	}
+	if err := os.Chmod(root, 0o777); err != nil {
+		t.Fatalf("chmod root: %v", err)
+	}
+	dir := filepath.Join(root, "dws-event-test")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatalf("mkdir socket dir: %v", err)
+	}
+	if _, err := Listen(filepath.Join(dir, "bus.sock")); err == nil || !strings.Contains(err.Error(), "neither private nor sticky") {
+		t.Fatalf("Listen error = %v, want untrusted runtime root rejection", err)
+	}
+}
+
+func TestCrossPlatformCoverageListenSharedWorkDirUsesLocalSecureRuntimeEndpoint(t *testing.T) {
+	root := shortSecureTempDir(t)
+	runtimeDir := filepath.Join(root, "runtime")
+	if err := os.Mkdir(runtimeDir, 0o700); err != nil {
+		t.Fatalf("mkdir runtime: %v", err)
+	}
+	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
+	sharedWorkDir := filepath.Join(root, "simulated-nfs", "events", "open", "personal_stream", "identity")
+	endpoint := dwsevent.IPCEndpoint(sharedWorkDir, "open", dwsevent.SourceKindPersonalStream, "identity")
+	if strings.HasPrefix(endpoint, sharedWorkDir) {
+		t.Fatalf("endpoint = %q, want socket outside shared WorkDir %q", endpoint, sharedWorkDir)
+	}
+
+	l, err := Listen(endpoint)
+	if err != nil {
+		t.Fatalf("Listen on local runtime endpoint: %v", err)
+	}
+	defer l.Close()
+	if mode, err := os.Stat(filepath.Dir(endpoint)); err != nil {
+		t.Fatalf("stat runtime socket directory: %v", err)
+	} else if mode.Mode().Perm() != 0o700 {
+		t.Fatalf("runtime socket directory mode = %04o, want 0700", mode.Mode().Perm())
+	}
+}
+
 func TestListen_CloseUnlinksSocket(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "bus.sock")
+	path := filepath.Join(shortSecureTempDir(t), "bus.sock")
 	l, err := Listen(path)
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
@@ -114,7 +247,7 @@ func TestListen_CloseUnlinksSocket(t *testing.T) {
 }
 
 func TestDial_NoServerReturnsError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nonexistent.sock")
+	path := filepath.Join(shortSecureTempDir(t), "nonexistent.sock")
 	if _, err := Dial(path); err == nil {
 		t.Fatal("Dial to nonexistent socket should error")
 	}
@@ -124,7 +257,7 @@ func TestDial_NoServerReturnsError(t *testing.T) {
 // surfaces as io.EOF to the server's Reader — the EOF signal is what bus
 // uses to unregister dead consumers (plan invariant #5).
 func TestReader_HandlesPeerCloseEOF(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "bus.sock")
+	path := filepath.Join(shortSecureTempDir(t), "bus.sock")
 	l, err := Listen(path)
 	if err != nil {
 		t.Fatalf("Listen: %v", err)

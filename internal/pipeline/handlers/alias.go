@@ -14,10 +14,8 @@
 package handlers
 
 import (
-	"strings"
-	"unicode"
-
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 )
 
 // AliasHandler normalises flag names in raw argv so that common
@@ -46,6 +44,10 @@ func (AliasHandler) Handle(ctx *pipeline.Context) error {
 	result := make([]string, 0, len(ctx.Args))
 
 	for i, arg := range ctx.Args {
+		if arg == "--" {
+			result = append(result, ctx.Args[i:]...)
+			break
+		}
 		rewritten, ok := tryNormaliseFlag(arg, known)
 		if ok {
 			ctx.AddCorrection("alias", pipeline.PreParse, rewritten, arg, rewritten, "alias")
@@ -63,40 +65,14 @@ func (AliasHandler) Handle(ctx *pipeline.Context) error {
 // normalised to a known flag name. It handles both bare flags and
 // "--flag=value" syntax.
 func tryNormaliseFlag(arg string, known map[string]bool) (string, bool) {
-	if !strings.HasPrefix(arg, "--") {
-		return "", false
-	}
-
-	bare := arg[2:]
-	if bare == "" {
-		return "", false
-	}
-
-	// Handle --flag=value syntax: split, normalise the key, reassemble.
-	var suffix string
-	if idx := strings.IndexByte(bare, '='); idx >= 0 {
-		suffix = bare[idx:] // includes "="
-		bare = bare[:idx]
-	}
-
-	// Already a known flag in its current form — no change needed.
-	if known[bare] {
-		return "", false
-	}
-
-	normalised := toKebabCase(bare)
-	if normalised == bare {
-		return "", false
-	}
-	if !known[normalised] {
-		return "", false
-	}
-
-	return "--" + normalised + suffix, true
+	return pipeline.NormalizeFlagToken(arg, known)
 }
 
-// toKebabCase converts a string from camelCase, PascalCase, or
-// snake_case to kebab-case. Examples:
+// toKebabCase converts a string from camelCase, PascalCase, or snake_case to
+// kebab-case. It is a thin compatibility shim over the single shared
+// normaliser cmdutil.Morph so the pipeline handlers and the build-time
+// parameter-alias generator can never diverge on how a flag spelling is
+// folded. Examples:
 //
 //	"userId"    → "user-id"
 //	"UserName"  → "user-name"
@@ -104,43 +80,5 @@ func tryNormaliseFlag(arg string, known map[string]bool) (string, bool) {
 //	"USER_ID"   → "user-id"
 //	"pageSize"  → "page-size"
 func toKebabCase(s string) string {
-	if s == "" {
-		return ""
-	}
-
-	var b strings.Builder
-	b.Grow(len(s) + 4) // small extra for hyphens
-
-	runes := []rune(s)
-	for i, r := range runes {
-		if r == '_' || r == ' ' {
-			if b.Len() > 0 {
-				b.WriteByte('-')
-			}
-			continue
-		}
-
-		if unicode.IsUpper(r) {
-			// Insert hyphen before an uppercase letter when:
-			// 1. Not at start, AND
-			// 2. Previous char was lowercase, OR
-			// 3. Next char is lowercase (handles "userID" → "user-id"
-			//    at the boundary between "I" and "D" in "ID" we don't
-			//    split, but "IDs" → we split before "s" which is
-			//    handled by the lowercase check at the next iteration).
-			if i > 0 {
-				prev := runes[i-1]
-				if unicode.IsLower(prev) {
-					b.WriteByte('-')
-				} else if unicode.IsUpper(prev) && i+1 < len(runes) && unicode.IsLower(runes[i+1]) {
-					b.WriteByte('-')
-				}
-			}
-			b.WriteRune(unicode.ToLower(r))
-		} else {
-			b.WriteRune(unicode.ToLower(r))
-		}
-	}
-
-	return strings.Trim(b.String(), "-")
+	return cmdutil.Morph(s)
 }

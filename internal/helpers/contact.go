@@ -7,7 +7,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -76,6 +79,39 @@ func contactAnyFlagChanged(cmd *cobra.Command, names ...string) bool {
 	return false
 }
 
+func contactGetBoolWithAliases(cmd *cobra.Command, names ...string) (bool, bool) {
+	for _, name := range names {
+		if flag := cmd.Flag(name); flag != nil && flag.Changed {
+			value, err := cmd.Flags().GetBool(name)
+			return value, err == nil
+		}
+	}
+	return false, false
+}
+
+func contactOptionalString(cmd *cobra.Command, primary string, aliases ...string) (string, bool) {
+	names := append([]string{primary}, aliases...)
+	if !contactAnyFlagChanged(cmd, names...) {
+		return "", false
+	}
+	return strings.TrimSpace(flagOrFallback(cmd, primary, aliases...)), true
+}
+
+func contactOptionalDepartments(cmd *cobra.Command) ([]map[string]any, bool, error) {
+	if !cmd.Flags().Changed("depts") {
+		return nil, false, nil
+	}
+	raw := strings.TrimSpace(mustGetFlag(cmd, "depts"))
+	if raw == "" {
+		return nil, false, nil
+	}
+	var departments []map[string]any
+	if err := json.Unmarshal([]byte(raw), &departments); err != nil {
+		return nil, false, fmt.Errorf("--depts JSON 解析失败: %w\n  hint: 正确格式: [{\"deptId\":1}]", err)
+	}
+	return departments, true, nil
+}
+
 // contactParseInt64WithAliases 先在主 flag 与全部别名中找出用户实际传入的值（空则报 missing），
 // 再走根部门占位符警告 + int64 解析，避免用户传别名时 RunE 读不到。
 // 报错文案中使用用户实际输入的 flag 名（比如用户传 --ids me，错误里显示 --ids 而不是主 flag --id），
@@ -97,21 +133,309 @@ func contactParseInt64WithAliases(cmd *cobra.Command, primary string, aliases ..
 	return v, nil
 }
 
+func newContactDeptCreateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "创建部门",
+		Long: `在当前企业下创建部门。--create-dept-group 必须显式传 true 或 false。
+不传 --parent 时使用企业根部门。该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact dept create --name "新产品部" --create-dept-group=true
+  dws contact dept create --name "研发一组" --parent 12345 --create-dept-group=false`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "name", "dept-name", "deptName"); err != nil {
+				return err
+			}
+			name := strings.TrimSpace(flagOrFallback(cmd, "name", "dept-name", "deptName"))
+			if name == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "name", "dept-name", "deptName"))
+			}
+			createGroup, supplied := contactGetBoolWithAliases(cmd, "create-dept-group", "createDeptGroup")
+			if !supplied {
+				return fmt.Errorf("--create-dept-group 是必填参数，请显式指定 true 或 false")
+			}
+			toolArgs := map[string]any{
+				"deptName":        name,
+				"createDeptGroup": createGroup,
+			}
+			if contactAnyFlagChanged(cmd, "parent", "super-dept-id", "super-dept", "superDeptId") {
+				parentID, err := contactParseInt64WithAliases(cmd, "parent", "super-dept-id", "super-dept", "superDeptId")
+				if err != nil {
+					return err
+				}
+				toolArgs["superDeptId"] = parentID
+			}
+			return callMCPTool("department_create", toolArgs)
+		},
+	}
+	cmd.Flags().String("name", "", "部门名称 (必填)")
+	cmd.Flags().String("dept-name", "", "--name 的别名")
+	_ = cmd.Flags().MarkHidden("dept-name")
+	cmd.Flags().String("parent", "", "父部门 ID（可选，不传默认根部门）")
+	cmd.Flags().String("super-dept-id", "", "--parent 的别名")
+	cmd.Flags().String("super-dept", "", "--parent 的别名")
+	_ = cmd.Flags().MarkHidden("super-dept-id")
+	_ = cmd.Flags().MarkHidden("super-dept")
+	cmd.Flags().Bool("create-dept-group", false, "是否创建部门群 (必填，需显式传 true 或 false)")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "name", "create-dept-group")
+	return cmd
+}
+
+func newContactDeptUpdateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update",
+		Aliases: []string{"modify", "edit"},
+		Short:   "更新部门信息",
+		Long:    "更新部门名称，并可选择调整父部门。该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。",
+		Example: `  dws contact dept update --dept 12345 --name "新部门名"
+  dws contact dept update --dept 12345 --name "新名称" --parent 67890`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			deptID, err := contactParseInt64WithAliases(cmd, "dept", "id", "ids", "dept-id", "dept-ids", "deptId", "deptIds")
+			if err != nil {
+				return err
+			}
+			if err := validateRequiredFlagWithAliases(cmd, "name", "dept-name", "deptName"); err != nil {
+				return err
+			}
+			name := strings.TrimSpace(flagOrFallback(cmd, "name", "dept-name", "deptName"))
+			if name == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "name", "dept-name", "deptName"))
+			}
+			toolArgs := map[string]any{"deptId": deptID, "deptName": name}
+			if contactAnyFlagChanged(cmd, "parent", "super-dept-id", "super-dept", "superDeptId") {
+				parentID, err := contactParseInt64WithAliases(cmd, "parent", "super-dept-id", "super-dept", "superDeptId")
+				if err != nil {
+					return err
+				}
+				toolArgs["superDeptId"] = parentID
+			}
+			return callMCPTool("department_update", toolArgs)
+		},
+	}
+	cmd.Flags().String("dept", "", "部门 ID (必填)")
+	cmd.Flags().String("name", "", "新部门名称 (必填)")
+	cmd.Flags().String("dept-name", "", "--name 的别名")
+	_ = cmd.Flags().MarkHidden("dept-name")
+	cmd.Flags().String("parent", "", "新父部门 ID（可选）")
+	cmd.Flags().String("super-dept-id", "", "--parent 的别名")
+	cmd.Flags().String("super-dept", "", "--parent 的别名")
+	_ = cmd.Flags().MarkHidden("super-dept-id")
+	_ = cmd.Flags().MarkHidden("super-dept")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "dept", "name")
+	return cmd
+}
+
+func newContactUserUpdateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update",
+		Aliases: []string{"modify", "edit"},
+		Short:   "修改员工信息",
+		Long:    "修改员工的企业内姓名、所属部门或直属主管。至少提供一个修改项，执行前需要确认。",
+		Example: `  dws contact user update --user-id user001 --org-user-name "张三三"
+  dws contact user update --user-id user001 --depts '[{"deptId":1}]'`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "user-id", "id", "userid", "userId"); err != nil {
+				return err
+			}
+			userID := strings.TrimSpace(flagOrFallback(cmd, "user-id", "id", "userid", "userId"))
+			if userID == "" {
+				return fmt.Errorf("--user-id 不能为空")
+			}
+			toolArgs := map[string]any{"userId": userID}
+			changed := false
+			if value, supplied := contactOptionalString(cmd, "org-user-name", "orgUserName"); supplied && value != "" {
+				toolArgs["orgUserName"] = value
+				changed = true
+			}
+			departments, supplied, err := contactOptionalDepartments(cmd)
+			if err != nil {
+				return err
+			}
+			if supplied {
+				toolArgs["depts"] = departments
+				changed = true
+			}
+			if value, supplied := contactOptionalString(cmd, "master-user-id", "masterUserId"); supplied && value != "" {
+				toolArgs["masterUserId"] = value
+				changed = true
+			}
+			if !changed {
+				return fmt.Errorf("至少需要一个修改项：--org-user-name、--depts 或 --master-user-id")
+			}
+			return callMCPTool("employee_update", toolArgs)
+		},
+	}
+	cmd.Flags().String("user-id", "", "要修改的员工 userId (必填)")
+	cmd.Flags().String("id", "", "--user-id 的别名")
+	cmd.Flags().String("userid", "", "--user-id 的别名")
+	_ = cmd.Flags().MarkHidden("id")
+	_ = cmd.Flags().MarkHidden("userid")
+	cmd.Flags().String("org-user-name", "", "员工在企业内的名称（可选）")
+	cmd.Flags().String("depts", "", "员工所属部门列表 JSON 数组（可选），格式: [{\"deptId\":1}]")
+	cmd.Flags().String("master-user-id", "", "直属主管 userId（可选）")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "user-id")
+	cli.AnnotateRuntimeConstraints(cmd, cli.RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"org-user-name", "depts", "master-user-id"}},
+	})
+	return cmd
+}
+
+func newContactUserUpdateSelfCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update-self",
+		Aliases: []string{"update-me", "update-self-profile", "edit-self", "modify-self"},
+		Short:   "更新当前用户自己的 profile 信息",
+		Long:    "更新当前用户的昵称或头像。头像需先上传到钉盘取得 fileId；执行前需要确认。",
+		Example: `  dws contact user update-self --nick "新昵称"
+  dws contact user update-self --avatar-file-id "file-id"`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			toolArgs := map[string]any{}
+			if value, supplied := contactOptionalString(cmd, "nick"); supplied && value != "" {
+				toolArgs["nick"] = value
+			}
+			if value, supplied := contactOptionalString(cmd, "avatar-file-id", "avatarFileId"); supplied && value != "" {
+				toolArgs["avatarFileId"] = value
+			}
+			if len(toolArgs) == 0 {
+				return fmt.Errorf("至少需要一个修改项：--nick 或 --avatar-file-id")
+			}
+			return callMCPTool("self_user_profile_update", toolArgs)
+		},
+	}
+	cmd.Flags().String("nick", "", "新昵称（可选）")
+	cmd.Flags().String("avatar-file-id", "", "新头像在钉盘的 fileId（可选）")
+	cli.AnnotateRuntimeConstraints(cmd, cli.RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"nick", "avatar-file-id"}},
+	})
+	return cmd
+}
+
+func newContactUserUpdateOwnnessCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update-ownness",
+		Aliases: []string{"set-ownness"},
+		Short:   "更新用户个人状态",
+		Long:    "更新指定用户的个人状态文本（展示在个人资料与聊天会话中，如「居家办公中」）。执行前需要确认，自动化场景在用户明确授权后传 --yes。",
+		Example: `  dws contact user update-ownness --user-id user001 --ownness-text "居家办公中"`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "user-id", "id", "userid", "userId"); err != nil {
+				return err
+			}
+			userID := strings.TrimSpace(flagOrFallback(cmd, "user-id", "id", "userid", "userId"))
+			if userID == "" {
+				return fmt.Errorf("--user-id 不能为空")
+			}
+			if err := validateRequiredFlagWithAliases(cmd, "ownness-text", "ownnessText"); err != nil {
+				return err
+			}
+			ownnessText := strings.TrimSpace(flagOrFallback(cmd, "ownness-text", "ownnessText"))
+			if ownnessText == "" {
+				return fmt.Errorf("--ownness-text 不能为空")
+			}
+			return callMCPTool("user_ownness_update", map[string]any{
+				"userId":      userID,
+				"ownnessText": ownnessText,
+			})
+		},
+	}
+	cmd.Flags().String("user-id", "", "要更新个人状态的用户 userId (必填)")
+	cmd.Flags().String("id", "", "--user-id 的别名")
+	cmd.Flags().String("userid", "", "--user-id 的别名")
+	_ = cmd.Flags().MarkHidden("id")
+	_ = cmd.Flags().MarkHidden("userid")
+	cmd.Flags().String("ownness-text", "", "个人状态文本 (必填)，如 \"居家办公中\"")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "user-id", "ownness-text")
+	return cmd
+}
+
+func newContactAccountUpdateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "update",
+		Aliases: []string{"modify", "edit"},
+		Short:   "更新企业账号用户信息",
+		Long:    "更新企业账号的员工姓名、部门、直属主管、昵称或头像。至少提供一个修改项，执行前需要确认。",
+		Example: `  dws contact account update --user-id user001 --org-user-name "张三"
+  dws contact account update --user-id user001 --nick "新昵称" --avatar-file-id "file-id"`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "user-id", "id", "userid", "userId"); err != nil {
+				return err
+			}
+			userID := strings.TrimSpace(flagOrFallback(cmd, "user-id", "id", "userid", "userId"))
+			if userID == "" {
+				return fmt.Errorf("--user-id 不能为空")
+			}
+			toolArgs := map[string]any{"userId": userID}
+			if value, supplied := contactOptionalString(cmd, "org-user-name", "orgUserName"); supplied && value != "" {
+				toolArgs["orgUserName"] = value
+			}
+			departments, supplied, err := contactOptionalDepartments(cmd)
+			if err != nil {
+				return err
+			}
+			if supplied {
+				toolArgs["depts"] = departments
+			}
+			if value, supplied := contactOptionalString(cmd, "master-user-id", "masterUserId"); supplied && value != "" {
+				toolArgs["masterUserId"] = value
+			}
+			if value, supplied := contactOptionalString(cmd, "nick"); supplied && value != "" {
+				toolArgs["nick"] = value
+			}
+			if value, supplied := contactOptionalString(cmd, "avatar-file-id", "avatarFileId"); supplied && value != "" {
+				toolArgs["avatarFileId"] = value
+			}
+			if len(toolArgs) == 1 {
+				return fmt.Errorf("至少需要一个修改项：--org-user-name、--depts、--master-user-id、--nick 或 --avatar-file-id")
+			}
+			return callMCPTool("exclusive_account_user_update", toolArgs)
+		},
+	}
+	cmd.Flags().String("user-id", "", "被修改企业账号的 userId (必填)")
+	cmd.Flags().String("id", "", "--user-id 的别名")
+	cmd.Flags().String("userid", "", "--user-id 的别名")
+	_ = cmd.Flags().MarkHidden("id")
+	_ = cmd.Flags().MarkHidden("userid")
+	cmd.Flags().String("org-user-name", "", "企业账号在企业内的员工姓名（可选）")
+	cmd.Flags().String("depts", "", "部门列表 JSON 数组（可选），格式: [{\"deptId\":1}]")
+	cmd.Flags().String("master-user-id", "", "直属主管 userId（可选）")
+	cmd.Flags().String("nick", "", "企业账号自身昵称（可选）")
+	cmd.Flags().String("avatar-file-id", "", "企业账号头像在钉盘的 fileId（可选）")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "user-id")
+	cli.AnnotateRuntimeConstraints(cmd, cli.RuntimeSchemaConstraints{
+		RequireOneOf: [][]string{{"org-user-name", "depts", "master-user-id", "nick", "avatar-file-id"}},
+	})
+	return cmd
+}
+
 func newContactCommand() *cobra.Command {
+	// Product-level Agent routing Decl (migrated from selection/contact.json
+	// products.contact). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "contact",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "查询通讯录与花名册，并管理企业、部门、员工及企业账号",
+			UseWhen: []string{
+				"按姓名/手机号/userId/部门条件做通讯录精确查询，或明确执行企业与员工入企管理",
+			},
+			AvoidWhen: []string{
+				"职责/上级等语义找人优先 aisearch person；不要用 contact 发消息；写操作前确认当前企业和目标信息",
+			},
+		},
+	})
 	root := &cobra.Command{
 		Use:   "contact",
-		Short: "通讯录 / 用户 / 部门 / 人员关系",
+		Short: "通讯录 / 用户 / 部门 / 角色 / 人员关系",
 		Long: `查询钉钉通讯录：用户搜索、手机号查找、部门搜索、子部门 / 成员列表、人员关系；用户花名册档案信息（学历、家庭、银行卡、合同等）与离职员工信息。
 
 通讯录功能：
   - contact user get-self/search/search-mobile/get: 通讯录用户查询
-  - contact user invite: 邀请员工加入企业
-  - contact dept search/get-info/list-children/list-members: 部门查询
+  - contact user invite/update/update-self/update-ownness: 邀请与更新员工
+  - contact dept search/get-info/list-children/list-members/create/update: 部门查询与管理
   - contact relation list-my-followings: 特别关注人查询
 
 企业管理功能：
   - contact org create: 创建企业
-  - contact account create: 创建企业专属账号
+  - contact account create/update: 创建与更新企业专属账号
 
 基础人事功能（HR 花名册）：
   - contact user profile fields/get: 员工花名册档案查询（学历、家庭、银行卡等）
@@ -122,13 +446,16 @@ func newContactCommand() *cobra.Command {
 	userCmd := &cobra.Command{
 		Use:   "user",
 		Short: "人员管理",
-		Long: `人员管理：通讯录用户查询、邀请员工加入企业、用户档案（花名册）查询、离职员工查询。
+		Long: `人员管理：通讯录用户查询、修改员工信息、邀请员工加入企业、用户档案（花名册）查询、离职员工查询。
 
 【何时用哪个命令】
-  - 查询用户的部门、主管、管理员权限       → contact user get
-  - 邀请员工加入企业                     → contact user invite
+  - 查询用户的部门、主管、管理员权限         → contact user get
+  - 修改员工信息（姓名 / 部门 / 直属主管）   → contact user update
+  - 更新当前用户自己的 profile（昵称 / 头像） → contact user update-self
+  - 更新用户个人状态（如「居家办公中」）     → contact user update-ownness
+  - 邀请员工加入企业                         → contact user invite
   - 查询用户的学历、家庭、银行卡、合同等档案 → contact user profile get
-  - 查询离职员工列表                       → contact user dismission search`,
+  - 查询离职员工列表                         → contact user dismission search`,
 		RunE: groupRunE,
 	}
 
@@ -144,6 +471,33 @@ func newContactCommand() *cobra.Command {
 			return callMCPTool("get_current_user_profile", nil)
 		},
 	}
+	DeclareLeafMetadata(contactUserGetSelfCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_current_user_profile",
+				CanonicalPath:  "contact.get_current_user_profile",
+				CLIPath:        "contact user get-self",
+				PrimaryCLIPath: "contact user get-self",
+			},
+			Description: "获取当前登录用户资料与 userId",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_current_user_profile"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取当前登录用户资料与 userId",
+				UseWhen:      []string{"用户问我是谁/我的 userId/当前账号信息"},
+				AvoidWhen:    []string{"查他人详情用 contact user get 或先搜索"},
+				Examples:     []string{"dws contact user get-self --format json"},
+			},
+		},
+	})
 
 	relationCmd := &cobra.Command{Use: "relation",
 		Short: "人员关系查询",
@@ -159,6 +513,33 @@ func newContactCommand() *cobra.Command {
 			return callMCPTool("list_my_followings", nil)
 		},
 	}
+	DeclareLeafMetadata(contactRelationListMyFollowingsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "list_my_followings",
+				CanonicalPath:  "contact.list_my_followings",
+				CLIPath:        "contact relation list-my-followings",
+				PrimaryCLIPath: "contact relation list-my-followings",
+			},
+			Description: "获取当前用户的特别关注列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "list_my_followings"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取当前用户的特别关注列表",
+				UseWhen:      []string{"需要查看当前用户特别关注或星标联系人时"},
+				AvoidWhen:    []string{"需要搜索企业通讯录或查询任意员工详情时不要使用；这里只返回当前用户的特别关注列表。"},
+				Examples:     []string{"dws contact relation list-my-followings --format json"},
+			},
+		},
+	})
 
 	contactUserSearchCmd := &cobra.Command{
 		Use:     "search",
@@ -175,6 +556,40 @@ func newContactCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(contactUserSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "search_contact_by_key_word",
+				CanonicalPath:  "contact.search_contact_by_key_word",
+				CLIPath:        "contact user search",
+				PrimaryCLIPath: "contact user search",
+			},
+			Description: "按关键词搜索好友和同事，提取 userId/openDingTalkId",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "search_contact_by_key_word"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按关键词搜索好友和同事，提取 userId/openDingTalkId",
+				UseWhen:      []string{"按姓名等关键词在通讯录里精确搜人，并需要 userId 或 openDingTalkId"},
+				AvoidWhen: []string{
+					"职责/上级/技能等语义找人优先 aisearch person",
+					"已有 userId 查详情用 contact user get",
+					"查自己用 contact user get-self",
+				},
+				Examples: []string{"dws contact user search --query \"张三\" --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "query", Property: "keyword"},
+			},
+		},
+	})
 
 	contactUserSearchMobileCmd := &cobra.Command{
 		Use:     "search-mobile",
@@ -189,6 +604,33 @@ func newContactCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(contactUserSearchMobileCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "search_user_by_mobile",
+				CanonicalPath:  "contact.search_user_by_mobile",
+				CLIPath:        "contact user search-mobile",
+				PrimaryCLIPath: "contact user search-mobile",
+			},
+			Description: "按手机号搜索用户",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "search_user_by_mobile"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按手机号搜索用户",
+				UseWhen:      []string{"已知手机号，需要精确搜索用户时"},
+				AvoidWhen:    []string{"已有用户 ID 或需要批量用户详情时改用批量详情命令；该命令仅按手机号定位用户。"},
+				Examples:     []string{"dws contact user search-mobile --mobile 13800138000 --format json"},
+			},
+		},
+	})
 
 	contactUserGetCmd := &cobra.Command{
 		Use:   "get",
@@ -226,6 +668,39 @@ func newContactCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(contactUserGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_user_info_by_user_ids",
+				CanonicalPath:  "contact.get_user_info_by_user_ids",
+				CLIPath:        "contact user get",
+				PrimaryCLIPath: "contact user get",
+			},
+			Description: "按 userId 批量获取员工详情（部门/主管等，受可见性限制）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_user_info_by_user_ids"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按 userId 批量获取员工详情（部门/主管等，受可见性限制）",
+				UseWhen:      []string{"已有一个或多个 userId，需要部门、主管等详情"},
+				AvoidWhen: []string{
+					"还没有 userId 时先 search / aisearch person",
+					"查自己不要传 me/self，用 contact user get-self",
+				},
+				Examples: []string{"dws contact user get --ids userId1,userId2"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "ids", Property: "user_id_list"},
+			},
+		},
+	})
 
 	// ── label 角色 ──────────────────────────────────────────────────
 
@@ -336,6 +811,33 @@ func newContactCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(contactDeptSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "search_dept_by_keyword",
+				CanonicalPath:  "contact.search_dept_by_keyword",
+				CLIPath:        "contact dept search",
+				PrimaryCLIPath: "contact dept search",
+			},
+			Description: "按关键词搜索部门",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "search_dept_by_keyword"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按关键词搜索部门",
+				UseWhen:      []string{"只知道部门名称或关键词，需要定位 deptId 时"},
+				AvoidWhen:    []string{"已经有准确部门 ID 并需要详情时改用部门详情命令；该命令用于关键词定位部门。"},
+				Examples:     []string{"dws contact dept search --query \"技术部\" --format json"},
+			},
+		},
+	})
 
 	contactDeptListChildrenCmd := &cobra.Command{
 		Use:     "list-children",
@@ -352,6 +854,36 @@ func newContactCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(contactDeptListChildrenCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_sub_depts_by_dept_id",
+				CanonicalPath:  "contact.get_sub_depts_by_dept_id",
+				CLIPath:        "contact dept list-children",
+				PrimaryCLIPath: "contact dept list-children",
+			},
+			Description: "列出指定部门的直属子部门",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_sub_depts_by_dept_id"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "列出指定部门的直属子部门",
+				UseWhen:      []string{"已知父部门 deptId，需要列出直属子部门时"},
+				AvoidWhen:    []string{"需要父部门自身详情或递归组织树时不要使用；该命令只列直属子部门。"},
+				Examples:     []string{"dws contact dept list-children --dept 12345 --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "dept", Property: "deptId"},
+			},
+		},
+	})
 
 	contactDeptGetInfoCmd := &cobra.Command{
 		Use:     "get-info",
@@ -368,6 +900,36 @@ func newContactCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(contactDeptGetInfoCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_dept_info_by_dept_id",
+				CanonicalPath:  "contact.get_dept_info_by_dept_id",
+				CLIPath:        "contact dept get-info",
+				PrimaryCLIPath: "contact dept get-info",
+			},
+			Description: "获取指定部门详情",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_dept_info_by_dept_id"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取指定部门详情",
+				UseWhen:      []string{"已知 deptId，需要部门名称、人数等详情时"},
+				AvoidWhen:    []string{"只知道部门名称时应先搜索部门；需要列出直属子部门时改用子部门查询。"},
+				Examples:     []string{"dws contact dept get-info --dept 12345 --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "dept", Property: "deptId"},
+			},
+		},
+	})
 
 	contactDeptListMembersCmd := &cobra.Command{
 		Use:     "list-members",
@@ -394,6 +956,36 @@ func newContactCommand() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(contactDeptListMembersCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_dept_members_by_deptId",
+				CanonicalPath:  "contact.get_dept_members_by_deptId",
+				CLIPath:        "contact dept list-members",
+				PrimaryCLIPath: "contact dept list-members",
+			},
+			Description: "查看部门成员（逗号分隔 deptId）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "contact", RPCName: "get_dept_members_by_deptId"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查看部门成员（逗号分隔 deptId）",
+				UseWhen:      []string{"需要按一个或多个 deptId 查看部门成员名单时"},
+				AvoidWhen:    []string{"只需部门详情或人数时使用 contact dept get-info；需要直属子部门时使用 contact dept list-children"},
+				Examples:     []string{"dws contact dept list-members --depts 12345,67890 --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "depts", Property: "deptIds"},
+			},
+		},
+	})
 
 	// ── user profile 用户档案（花名册） ────────────────────────────────────
 	contactUserProfileCmd := &cobra.Command{
@@ -427,6 +1019,33 @@ func newContactCommand() *cobra.Command {
 			return callMCPToolOnServer("hrmregister", "list_authorized_roster_fields", map[string]any{})
 		},
 	}
+	DeclareLeafMetadata(contactUserProfileFieldsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "list_authorized_roster_fields",
+				CanonicalPath:  "contact.list_authorized_roster_fields",
+				CLIPath:        "contact user profile fields",
+				PrimaryCLIPath: "contact user profile fields",
+			},
+			Description: "查询当前用户有权查看的花名册字段",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "hrmregister", RPCName: "list_authorized_roster_fields"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询当前用户有权查看的花名册字段",
+				UseWhen:      []string{"查询花名册前，需要先确认当前用户可见的字段 code 时"},
+				AvoidWhen:    []string{"需要读取某位员工的具体花名册字段值时不要停在字段目录，应再调用员工花名册查询。"},
+				Examples:     []string{"dws contact user profile fields --format json"},
+			},
+		},
+	})
 
 	contactUserProfileGetCmd := &cobra.Command{
 		Use:   "get",
@@ -465,6 +1084,40 @@ contact user profile fields 获取可用字段列表。
 			return callMCPToolOnServer("hrmregister", "get_authorized_emp_rosterInfo", params)
 		},
 	}
+	DeclareLeafMetadata(contactUserProfileGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "get_authorized_emp_rosterInfo",
+				CanonicalPath:  "contact.get_authorized_emp_rosterInfo",
+				CLIPath:        "contact user profile get",
+				PrimaryCLIPath: "contact user profile get",
+			},
+			Description: "按字段 code 查询指定员工花名册字段值",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "hrmregister", RPCName: "get_authorized_emp_rosterInfo"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按字段 code 查询指定员工花名册字段值",
+				UseWhen:      []string{"已确认 staffId 与可见字段 code，需要读花名册字段"},
+				AvoidWhen: []string{
+					"尚不知道可见字段时先用 contact user profile fields",
+					"普通通讯录姓名搜索不要走花名册",
+				},
+				Examples: []string{"dws contact user profile get --staff-id STAFF_ID --fields fieldCode1,fieldCode2"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "fields", Property: "fieldCodeList", Required: boolPtr(false)},
+				{Name: "staff-id", Required: boolPtr(false)},
+			},
+		},
+	})
 	contactUserProfileGetCmd.Flags().String("staff-id", "", "查询员工 ID（可选）")
 	contactUserProfileGetCmd.Flags().String("fields", "", "指定字段集合, 逗号分隔, 可通过 profile fields 获取（可选）")
 
@@ -552,6 +1205,46 @@ contact user profile fields 获取可用字段列表。
 			return callMCPToolOnServer("hrmregister", "query_dismission_employee_list", params)
 		},
 	}
+	DeclareLeafMetadata(contactUserDismissionSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "query_dismission_employee_list",
+				CanonicalPath:  "contact.query_dismission_employee_list",
+				CLIPath:        "contact user dismission search",
+				PrimaryCLIPath: "contact user dismission search",
+			},
+			Description: "查询离职员工列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "hrmregister", RPCName: "query_dismission_employee_list"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询离职员工列表",
+				UseWhen:      []string{"需要按姓名、离职时间或部门查询离职员工时"},
+				AvoidWhen:    []string{"需要查询在职员工或修改离职信息时不要使用；该命令只检索离职员工记录。"},
+				Examples: []string{
+					"dws contact user dismission search --format json",
+					"dws contact user dismission search --name \"张三\" --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "depts", Property: "searchVO.depts"},
+				{Name: "end", Property: "searchVO.endDate"},
+				{Name: "hide-partner", Property: "searchVO.hidePartner"},
+				{Name: "hide-retirement", Property: "searchVO.hideRetirement"},
+				{Name: "limit", Property: "pageSize"},
+				{Name: "name", Property: "searchVO.empName"},
+				{Name: "page", Property: "pageNum"},
+				{Name: "start", Property: "searchVO.startDate"},
+			},
+		},
+	})
 	contactUserDismissionSearchCmd.Flags().String("name", "", "员工姓名，模糊搜索（可选）")
 	contactUserDismissionSearchCmd.Flags().String("start", "", "离职日期查询范围开始，格式 YYYY-MM-DD（可选），与end要么都不填要么都填")
 	contactUserDismissionSearchCmd.Flags().String("end", "", "离职日期查询范围结束，格式 YYYY-MM-DD（可选），与start要么都不填要么都填")
@@ -598,9 +1291,143 @@ contact user profile fields 获取可用字段列表。
 			})
 		},
 	}
+	DeclareLeafMetadata(contactUserInviteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "add_employee",
+				CanonicalPath:  "contact.add_employee",
+				CLIPath:        "contact user invite",
+				PrimaryCLIPath: "contact user invite",
+			},
+			Description: "按手机号邀请一名员工加入当前企业",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps employee identity and decoded department JSON to contact/add_employee, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按手机号邀请一名员工加入当前企业",
+				UseWhen:      []string{"用户明确要求邀请或添加员工到当前企业，且已提供企业内姓名和手机号"},
+				AvoidWhen:    []string{"需要创建企业专属登录账号时使用 contact account create；需要创建企业组织本身时使用 contact org create"},
+				Examples:     []string{"dws contact user invite --org-user-name \"张三\" --org-user-mobile \"13800138000\" --depts '[{\"deptId\":1}]'"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "depts", Property: "depts", Required: boolPtr(false), InterfaceType: "array"},
+				{Name: "org-user-mobile", Property: "orgUserMobile", Required: boolPtr(true)},
+				{Name: "org-user-name", Property: "orgUserName", Required: boolPtr(true)},
+			},
+		},
+	})
 	contactUserInviteCmd.Flags().String("org-user-name", "", "员工在企业内的名称 (必填)")
 	contactUserInviteCmd.Flags().String("org-user-mobile", "", "员工手机号 (必填)")
 	contactUserInviteCmd.Flags().String("depts", "", "员工所属部门列表 JSON 数组（可选），格式: [{\"deptId\":1}]")
+	contactUserUpdateCmd := newContactUserUpdateCommand()
+	DeclareLeafMetadata(contactUserUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "employee_update",
+				CanonicalPath:  "contact.employee_update",
+				CLIPath:        "contact user update",
+				PrimaryCLIPath: "contact user update",
+			},
+			Description: "修改指定员工的企业内姓名、所属部门或直属主管",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps employee update flags to contact/employee_update, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "修改指定员工的企业内姓名、所属部门或直属主管",
+				UseWhen:      []string{"用户明确要求更新已有员工的组织信息，且已确认目标 userId 和至少一个修改项"},
+				AvoidWhen:    []string{"修改当前用户自己的昵称或头像应使用 contact user update-self；创建企业专属账号应使用 contact account create"},
+				Examples:     []string{"dws contact user update --user-id user001 --org-user-name \"张三三\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "depts", Property: "depts", Required: boolPtr(false), InterfaceType: "array"},
+				{Name: "id", Property: "userId", Required: boolPtr(false)},
+				{Name: "master-user-id", Property: "masterUserId", Required: boolPtr(false)},
+				{Name: "org-user-name", Property: "orgUserName", Required: boolPtr(false)},
+				{Name: "user-id", Property: "userId", Required: boolPtr(true)},
+				{Name: "userid", Property: "userId", Required: boolPtr(false)},
+			},
+		},
+	})
+	contactUserUpdateSelfCmd := newContactUserUpdateSelfCommand()
+	DeclareLeafMetadata(contactUserUpdateSelfCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "self_user_profile_update",
+				CanonicalPath:  "contact.self_user_profile_update",
+				CLIPath:        "contact user update-self",
+				PrimaryCLIPath: "contact user update-self",
+			},
+			Description: "更新当前登录用户自己的昵称或头像",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps self-profile update flags to contact/self_user_profile_update, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新当前登录用户自己的昵称或头像",
+				UseWhen:      []string{"用户明确要求修改自己的 profile 昵称或头像 fileId"},
+				AvoidWhen:    []string{"修改其他员工的组织信息应使用 contact user update；修改企业专属账号应使用 contact account update"},
+				Examples:     []string{"dws contact user update-self --nick \"新昵称\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "avatar-file-id", Property: "avatarFileId", Required: boolPtr(false)},
+				{Name: "nick", Property: "nick", Required: boolPtr(false)},
+			},
+		},
+	})
+	contactUserUpdateOwnnessCmd := newContactUserUpdateOwnnessCommand()
+	DeclareLeafMetadata(contactUserUpdateOwnnessCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "user_ownness_update",
+				CanonicalPath:  "contact.user_ownness_update",
+				CLIPath:        "contact user update-ownness",
+				PrimaryCLIPath: "contact user update-ownness",
+			},
+			Description: "更新指定用户的个人状态文本（展示在个人资料与聊天会话中，如「居家办公中」）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps personal-status update flags to contact/user_ownness_update, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新指定用户的个人状态文本（如「居家办公中」）",
+				UseWhen:      []string{"用户明确要求设置或修改自己/指定用户的个人状态文本，且已确认目标 userId 和状态内容"},
+				AvoidWhen:    []string{"修改员工组织信息（姓名 / 部门 / 主管）应使用 contact user update；修改当前用户昵称或头像应使用 contact user update-self"},
+				Examples:     []string{"dws contact user update-ownness --user-id user001 --ownness-text \"居家办公中\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "userId", Required: boolPtr(false)},
+				{Name: "ownness-text", Property: "ownnessText", Required: boolPtr(true)},
+				{Name: "user-id", Property: "userId", Required: boolPtr(true)},
+				{Name: "userid", Property: "userId", Required: boolPtr(false)},
+			},
+		},
+	})
 
 	// ── flags 注册 ───────────────────────────────────────────────
 	contactUserSearchCmd.Flags().String("query", "", "搜索关键词 (必填)")
@@ -618,9 +1445,12 @@ contact user profile fields 获取可用字段列表。
 	_ = contactUserGetCmd.Flags().MarkHidden("userid")
 	userCmd.AddCommand(
 		contactUserGetSelfCmd, contactUserSearchCmd, contactUserSearchMobileCmd, contactUserGetCmd,
-		contactUserInviteCmd,     // 邀请员工加入企业
-		contactUserProfileCmd,    // 花名册档案
-		contactUserDismissionCmd, // 离职员工
+		contactUserInviteCmd,        // 邀请员工加入企业
+		contactUserUpdateCmd,        // 修改员工信息
+		contactUserUpdateSelfCmd,    // 更新当前用户自己的 profile 信息
+		contactUserUpdateOwnnessCmd, // 更新用户个人状态
+		contactUserProfileCmd,       // 花名册档案
+		contactUserDismissionCmd,    // 离职员工
 	)
 
 	contactDeptSearchCmd.Flags().String("query", "", "搜索关键词 (必填)")
@@ -640,17 +1470,101 @@ contact user profile fields 获取可用字段列表。
 		cmd     *cobra.Command
 		aliases []string
 	}
+	contactDeptCreateCmd := newContactDeptCreateCommand()
+	DeclareLeafMetadata(contactDeptCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "department_create",
+				CanonicalPath:  "contact.department_create",
+				CLIPath:        "contact dept create",
+				PrimaryCLIPath: "contact dept create",
+			},
+			Description: "在当前企业的根部门或指定父部门下创建部门",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps department creation flags to contact/department_create, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "在当前企业的根部门或指定父部门下创建部门",
+				UseWhen:      []string{"用户明确要求新建部门，且已确认部门名称、父部门及是否同步创建部门群"},
+				AvoidWhen:    []string{"修改已有部门名称或父级应使用 contact dept update；仅查找部门应使用 contact dept search"},
+				Examples:     []string{"dws contact dept create --name \"新产品部\" --create-dept-group=true"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "create-dept-group", Property: "createDeptGroup", Required: boolPtr(true), InterfaceType: "boolean"},
+				{Name: "dept-name", Property: "deptName", Required: boolPtr(false)},
+				{Name: "name", Property: "deptName", Required: boolPtr(true)},
+				{Name: "parent", Property: "superDeptId", Required: boolPtr(false), InterfaceType: "integer"},
+				{Name: "super-dept", Property: "superDeptId", Required: boolPtr(false), InterfaceType: "integer"},
+				{Name: "super-dept-id", Property: "superDeptId", Required: boolPtr(false), InterfaceType: "integer"},
+			},
+		},
+	})
+	contactDeptUpdateCmd := newContactDeptUpdateCommand()
+	DeclareLeafMetadata(contactDeptUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "department_update",
+				CanonicalPath:  "contact.department_update",
+				CLIPath:        "contact dept update",
+				PrimaryCLIPath: "contact dept update",
+			},
+			Description: "更新指定部门的名称，并可调整父部门",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps department update flags to contact/department_update, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新指定部门的名称，并可调整父部门",
+				UseWhen:      []string{"用户明确要求修改已有部门名称或迁移父部门，且已确认目标 deptId"},
+				AvoidWhen:    []string{"创建新部门应使用 contact dept create；仅查看部门信息应使用 contact dept get-info"},
+				Examples:     []string{"dws contact dept update --dept 12345 --name \"研发中心\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "dept", Property: "deptId", Required: boolPtr(true), InterfaceType: "integer"},
+				{Name: "dept-id", Property: "deptId", Required: boolPtr(false), InterfaceType: "integer"},
+				{Name: "dept-ids", Property: "deptId", Required: boolPtr(false), InterfaceType: "integer"},
+				{Name: "dept-name", Property: "deptName", Required: boolPtr(false)},
+				{Name: "id", Property: "deptId", Required: boolPtr(false), InterfaceType: "integer"},
+				{Name: "ids", Property: "deptId", Required: boolPtr(false), InterfaceType: "integer"},
+				{Name: "name", Property: "deptName", Required: boolPtr(true)},
+				{Name: "parent", Property: "superDeptId", Required: boolPtr(false), InterfaceType: "integer"},
+				{Name: "super-dept", Property: "superDeptId", Required: boolPtr(false), InterfaceType: "integer"},
+				{Name: "super-dept-id", Property: "superDeptId", Required: boolPtr(false), InterfaceType: "integer"},
+			},
+		},
+	})
 	for _, s := range []deptIDAliasSpec{
 		{contactDeptGetInfoCmd, []string{"id", "dept-id", "ids", "dept-ids"}},
 		{contactDeptListChildrenCmd, []string{"id", "ids", "dept-id", "dept-ids"}},
 		{contactDeptListMembersCmd, []string{"ids", "id", "dept-id", "dept-ids"}},
+		{contactDeptUpdateCmd, []string{"id", "ids", "dept-id", "dept-ids"}},
 	} {
 		for _, name := range s.aliases {
 			s.cmd.Flags().String(name, "", "部门 ID 别名（等价于当前命令的主 flag）")
 			_ = s.cmd.Flags().MarkHidden(name)
 		}
 	}
-	contactDeptCmd.AddCommand(contactDeptSearchCmd, contactDeptGetInfoCmd, contactDeptListChildrenCmd, contactDeptListMembersCmd)
+	contactDeptCmd.AddCommand(
+		contactDeptSearchCmd,
+		contactDeptGetInfoCmd,
+		contactDeptListChildrenCmd,
+		contactDeptListMembersCmd,
+		contactDeptCreateCmd,
+		contactDeptUpdateCmd,
+	)
 
 	// ── org 企业管理 ──────────────────────────────────────────────────
 
@@ -688,6 +1602,37 @@ contact user profile fields 获取可用字段列表。
 			})
 		},
 	}
+	DeclareLeafMetadata(contactOrgCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "org_create",
+				CanonicalPath:  "contact.org_create",
+				CLIPath:        "contact org create",
+				PrimaryCLIPath: "contact org create",
+			},
+			Description: "创建一个新的钉钉企业组织",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps organization and creator names to contact/org_create, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建一个新的钉钉企业组织",
+				UseWhen:      []string{"用户明确要求创建、新建、开通或初始化企业组织，并已提供企业名称和创建者企业内名称"},
+				AvoidWhen:    []string{"请求中包含企业账号、专属账号或登录账号时改用 contact account create；邀请员工时改用 contact user invite"},
+				Examples:     []string{"dws contact org create --org-name \"我的企业\" --creator-username \"张三\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "creator-username", Property: "creatorUsername", Required: boolPtr(true)},
+				{Name: "org-name", Property: "orgName", Required: boolPtr(true)},
+			},
+		},
+	})
 	contactOrgCreateCmd.Flags().String("org-name", "", "企业名称 (必填)")
 	contactOrgCreateCmd.Flags().String("creator-username", "", "创建者在企业内的名称，对应 creatorUsername (必填)")
 	contactOrgCmd.AddCommand(contactOrgCreateCmd)
@@ -697,7 +1642,7 @@ contact user profile fields 获取可用字段列表。
 	contactAccountCmd := &cobra.Command{
 		Use:   "account",
 		Short: "企业账号管理",
-		Long:  "企业账号管理：创建企业专属账号。",
+		Long:  "企业账号管理：创建或更新企业专属账号。",
 		RunE:  groupRunE,
 	}
 
@@ -748,13 +1693,86 @@ contact user profile fields 获取可用字段列表。
 			return callMCPTool("exclusive_account_create", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(contactAccountCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "exclusive_account_create",
+				CanonicalPath:  "contact.exclusive_account_create",
+				CLIPath:        "contact account create",
+				PrimaryCLIPath: "contact account create",
+			},
+			Description: "为当前企业创建专属登录账号",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account flags to contact/exclusive_account_create, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "为当前企业创建专属登录账号",
+				UseWhen:      []string{"用户明确要求创建企业账号、专属账号或企业登录账号，并已提供员工名称和登录号"},
+				AvoidWhen:    []string{"创建企业组织本身应使用 contact org create；仅邀请已有手机号员工入企应使用 contact user invite"},
+				Examples:     []string{"dws contact account create --org-user-name \"张三\" --login-id \"zhangsan001\" --org-user-mobile \"13800138000\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "dept-ids", Property: "deptIds", Required: boolPtr(false), InterfaceType: "array"},
+				{Name: "email", Property: "email", Required: boolPtr(false)},
+				{Name: "login-id", Property: "loginId", Required: boolPtr(true)},
+				{Name: "org-user-mobile", Property: "orgUserMobile", Required: boolPtr(false)},
+				{Name: "org-user-name", Property: "orgUserName", Required: boolPtr(true)},
+				{Name: "send-pwd-via-sms", Property: "sendPwdViaSms", Required: boolPtr(false), InterfaceType: "boolean"},
+			},
+		},
+	})
 	contactAccountCreateCmd.Flags().String("org-user-name", "", "员工在企业内的名称 (必填)")
 	contactAccountCreateCmd.Flags().String("login-id", "", "登录号 (必填)，请勿包含手机号")
 	contactAccountCreateCmd.Flags().String("org-user-mobile", "", "员工手机号（可选）")
 	contactAccountCreateCmd.Flags().String("email", "", "邮箱（可选）")
 	contactAccountCreateCmd.Flags().String("dept-ids", "", "要加入的部门 ID 列表，逗号分隔（可选）")
 	contactAccountCreateCmd.Flags().Bool("send-pwd-via-sms", false, "是否通过手机短信/邮件发送登录邀请（可选）")
-	contactAccountCmd.AddCommand(contactAccountCreateCmd)
+	contactAccountUpdateCmd := newContactAccountUpdateCommand()
+	DeclareLeafMetadata(contactAccountUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "exclusive_account_user_update",
+				CanonicalPath:  "contact.exclusive_account_user_update",
+				CLIPath:        "contact account update",
+				PrimaryCLIPath: "contact account update",
+			},
+			Description: "更新企业专属账号的组织信息或个人资料",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps enterprise-account update flags to contact/exclusive_account_user_update, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新企业专属账号的组织信息或个人资料",
+				UseWhen:      []string{"用户明确要求修改已有企业专属账号的姓名、部门、主管、昵称或头像"},
+				AvoidWhen:    []string{"创建新企业专属账号应使用 contact account create；修改普通员工组织信息应使用 contact user update"},
+				Examples:     []string{"dws contact account update --user-id user001 --nick \"新昵称\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "avatar-file-id", Property: "avatarFileId", Required: boolPtr(false)},
+				{Name: "depts", Property: "depts", Required: boolPtr(false), InterfaceType: "array"},
+				{Name: "id", Property: "userId", Required: boolPtr(false)},
+				{Name: "master-user-id", Property: "masterUserId", Required: boolPtr(false)},
+				{Name: "nick", Property: "nick", Required: boolPtr(false)},
+				{Name: "org-user-name", Property: "orgUserName", Required: boolPtr(false)},
+				{Name: "user-id", Property: "userId", Required: boolPtr(true)},
+				{Name: "userid", Property: "userId", Required: boolPtr(false)},
+			},
+		},
+	})
+	contactAccountCmd.AddCommand(contactAccountCreateCmd, contactAccountUpdateCmd)
 
 	relationCmd.AddCommand(contactRelationListMyFollowingsCmd)
 	root.AddCommand(userCmd, contactDeptCmd, contactLabelCmd, relationCmd, contactOrgCmd, contactAccountCmd)

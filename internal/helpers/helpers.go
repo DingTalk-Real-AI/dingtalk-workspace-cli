@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -99,6 +101,7 @@ var cmdToProduct = map[string]string{
 	"sheet":      "sheet",
 	"wiki":       "wiki",
 	"aisearch":   "aisearch",
+	"hrbrain":    "hrbrain",
 	"yida":       "yida",
 	// vendor extension command routing (kept here for resolveProductID)
 	"unified-toolkit": "unified-toolkit",
@@ -143,14 +146,82 @@ func callMCPToolReturnText(ctx context.Context, toolName string, args map[string
 
 func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
 	result, err := deps.Caller.CallTool(ctx, serverID, toolName, args)
+	return parseMCPToolTextResult(serverID, toolName, result, err)
+}
+
+// CallMCPReadToolTextOnServer performs a read-only lookup needed to construct a
+// semantic Shortcut dry-run plan. Under ordinary execution it is identical to
+// CallMCPToolTextOnServer. Under --dry-run it requires the host's optional
+// ReadToolCaller capability; if unavailable, it fails closed instead of
+// returning a synthetic dry-run envelope that looks like business data.
+func CallMCPReadToolTextOnServer(serverID, toolName string, args map[string]any) (string, error) {
+	return callMCPReadToolReturnTextOnServer(context.Background(), serverID, toolName, args)
+}
+
+func callMCPReadToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	if !IsReadToolName(toolName) {
+		return "", &CLIError{
+			Code:    CodeMCPToolError,
+			Message: fmt.Sprintf("tool %q is not allowed on the dry-run read channel", toolName),
+		}
+	}
+	if deps == nil || deps.Caller == nil {
+		return "", &CLIError{
+			Code:    CodeMCPToolError,
+			Message: "MCP caller is not initialized",
+		}
+	}
+	if !deps.Caller.DryRun() {
+		return callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
+	}
+	readCaller, ok := deps.Caller.(edition.ReadToolCaller)
+	if !ok {
+		return "", &CLIError{
+			Code:    CodeMCPToolError,
+			Message: "当前运行时不支持在 --dry-run 下执行只读解析",
+		}
+	}
+	result, err := readCaller.CallReadTool(ctx, serverID, toolName, args)
+	return parseMCPToolTextResult(serverID, toolName, result, err)
+}
+
+// IsReadToolName is the fail-closed naming contract for the dry-run read
+// channel. Both the Shortcut runtime and the helper boundary enforce it so a
+// future direct helper caller cannot accidentally route a write tool through
+// ReadToolCaller.
+func IsReadToolName(toolName string) bool {
+	toolName = strings.TrimSpace(strings.ToLower(toolName))
+	if toolName == "enterprise_person_search" {
+		return true
+	}
+	for _, prefix := range []string{
+		"get_", "list_", "query_", "search_", "unread_",
+	} {
+		if strings.HasPrefix(toolName, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResult, err error) (string, error) {
 	if err != nil {
 		if patErr := reclassifyPATFromError(err); patErr != nil {
 			return "", patErr
 		}
 		return "", WrapError(err)
 	}
+	if result == nil {
+		return "", &CLIError{
+			Code:       CodeMCPToolError,
+			Message:    "MCP 工具返回 nil result，无法判断操作结果",
+			Suggestion: "不要把空回复当作成功；请重试并携带 operation/trace 信息排查服务端",
+			Operation:  serverID + "/" + toolName,
+		}
+	}
 	for _, c := range result.Content {
-		if c.Type == "text" && c.Text != "" {
+		if c.Type == "text" && strings.TrimSpace(c.Text) != "" {
+			dumpRawToolResponse(serverID, toolName, c.Text)
 			var errBody map[string]any
 			if json.Unmarshal([]byte(c.Text), &errBody) == nil {
 				if _, ok := getDWSGatewayErrorCode(errBody); ok {
@@ -181,6 +252,12 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 			return c.Text, nil
 		}
 	}
+	// Some legacy tools intentionally use an empty text response as an
+	// acknowledgement. This low-level parser cannot know the business contract,
+	// so preserve that representation. Data-returning callers must validate the
+	// operation-specific shape (for example records/tables/valid) before they
+	// report success. Orchestrators whose contract requires a business result use
+	// CallMCPWriteDataStrict and may prove an unknown effect by independent read-back.
 	return "", nil
 }
 
@@ -190,6 +267,27 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 // which chain several tool calls and need each intermediate result as data.
 func CallMCPToolTextOnServer(serverID, toolName string, args map[string]any) (string, error) {
 	return callMCPToolReturnTextOnServer(context.Background(), serverID, toolName, args)
+}
+
+// CallMCPToolDataOnServer invokes one tool without printing and decodes its
+// JSON text payload. Framework renderers use this seam so the business request
+// is executed exactly once and presentation remains a separate step.
+func CallMCPToolDataOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	text, err := callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(text) == "" {
+		return map[string]any{}, nil
+	}
+	var data any
+	if err := json.Unmarshal([]byte(text), &data); err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", toolName, err))
+	}
+	return data, nil
 }
 
 // callMCPTool 是通用的 MCP 工具调用入口：自动路由 → 调用 → 格式化输出。
@@ -290,9 +388,9 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 		printJSON = deps.Out.PrintJSONUnescaped
 	}
 
-	flagFormat := deps.Caller.Format()
 	for _, c := range result.Content {
 		if c.Type == "text" {
+			dumpRawToolResponse(serverID, toolName, c.Text)
 			// 尝试将返回文本解析为 JSON，进行错误分类
 			var errBody map[string]any
 			if json.Unmarshal([]byte(c.Text), &errBody) == nil {
@@ -314,35 +412,68 @@ func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]
 				}
 			}
 
-			// JSON 格式输出：解析后使用选定的 printJSON 函数输出
-			if flagFormat == "json" {
-				var parsed any
-				if err := json.Unmarshal([]byte(c.Text), &parsed); err == nil {
-					return printJSON(parsed)
-				}
-			}
-			// 特殊处理：开放平台文档搜索结果的表格格式输出
-			if toolName == "search_open_platform_docs" && flagFormat == "table" {
-				if formatted := formatDevdocSearchTable(c.Text); formatted {
-					return nil
-				}
-			}
-			// 默认：原样输出文本内容。
-			// 当 unescapeHTML=true 时，c.Text 是一段 JSON 字符串，其中 & 已被服务端
-			// 的 JSON 编码器转义为 \u0026。此处先 Unmarshal 还原为 Go 对象，再用
-			// PrintJSONUnescaped 输出，保证 & 不被二次转义。
-			if unescapeHTML {
-				var parsed any
-				if err := json.Unmarshal([]byte(c.Text), &parsed); err == nil {
-					return printJSON(parsed)
-				}
-			}
-			deps.Out.PrintRaw(c.Text)
-			return nil
+			return renderLegacyMCPText(toolName, c.Text, unescapeHTML)
 		}
 	}
 	// 无 text 类型内容时，将整个 result 对象序列化为 JSON 输出
 	return printJSON(result)
+}
+
+// RenderLegacyMCPText renders an already-fetched MCP text response through the
+// exact legacy formatter. It lets dual validation execute the business request
+// once, validate a shadow unified result, and still preserve legacy bytes.
+func RenderLegacyMCPText(toolName, text string) error {
+	return renderLegacyMCPText(toolName, text, false)
+}
+
+func renderLegacyMCPText(toolName, text string, unescapeHTML bool) error {
+	printJSON := deps.Out.PrintJSON
+	if unescapeHTML {
+		printJSON = deps.Out.PrintJSONUnescaped
+	}
+	flagFormat := deps.Caller.Format()
+	if flagFormat == "json" {
+		var parsed any
+		if err := json.Unmarshal([]byte(text), &parsed); err == nil {
+			return printJSON(parsed)
+		}
+	}
+	if toolName == "search_open_platform_docs" && flagFormat == "table" {
+		if formatted := formatDevdocSearchTable(text); formatted {
+			return nil
+		}
+	}
+	if unescapeHTML {
+		var parsed any
+		if err := json.Unmarshal([]byte(text), &parsed); err == nil {
+			return printJSON(parsed)
+		}
+	}
+	deps.Out.PrintRaw(text)
+	return nil
+}
+
+// dumpRawToolResponse emits one opt-in lower-layer record for live projection
+// audits. Responses may contain business data, so normal CLI runs never emit
+// this line; an auditor must explicitly set DWS_DUMP_RAW.
+func dumpRawToolResponse(serverID, toolName, text string) {
+	if strings.TrimSpace(os.Getenv("DWS_DUMP_RAW")) == "" {
+		return
+	}
+	fmt.Fprintln(os.Stderr, formatRawDumpLine(serverID, toolName, text))
+}
+
+func formatRawDumpLine(serverID, toolName, text string) string {
+	raw := json.RawMessage(strings.TrimSpace(text))
+	if json.Valid(raw) {
+		var compact bytes.Buffer
+		_ = json.Compact(&compact, raw)
+		raw = compact.Bytes()
+	} else {
+		encoded, _ := json.Marshal(text)
+		raw = encoded
+	}
+	return "DWSRAW\t" + serverID + "\t" + toolName + "\t" + string(raw)
 }
 
 // formatDevdocSearchTable formats devdoc search JSON results as a table.
@@ -488,7 +619,7 @@ func isBusinessError(body map[string]any) bool {
 	if v, ok := body["status"].(string); ok && strings.EqualFold(strings.TrimSpace(v), "error") {
 		return true
 	}
-	for _, key := range []string{"errorCode", "error_code", "code"} {
+	for _, key := range []string{"errorCode", "error_code", "errcode", "err_code", "code"} {
 		if isErrorCodeValue(body[key]) {
 			return true
 		}

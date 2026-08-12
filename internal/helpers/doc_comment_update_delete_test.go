@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -182,8 +183,8 @@ func TestDocCommentDeleteCancellationSkipsRemoteCall(t *testing.T) {
 	caller := &docCommentMutationCaller{}
 	err = executeDocCommentMutationCommand(t, caller, []string{"dws", "doc"},
 		"comment", "delete", "--node", "doc-1", "--comment-key", "comment-1")
-	if err != nil {
-		t.Fatalf("cancelled doc comment delete returned error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+		t.Fatalf("cancelled doc comment delete error = %v, want 用户取消了操作", err)
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("remote calls = %d, want 0 after cancellation", len(caller.calls))

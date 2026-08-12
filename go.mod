@@ -12,6 +12,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/itchyny/gojq v0.12.18
+	github.com/mattn/go-isatty v0.0.20
 	github.com/muesli/termenv v0.16.0
 	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-0.20260705041131-325e7c1049ad
 	github.com/spf13/cobra v1.10.2
@@ -40,7 +41,6 @@ require (
 	github.com/itchyny/timefmt-go v0.1.7 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect

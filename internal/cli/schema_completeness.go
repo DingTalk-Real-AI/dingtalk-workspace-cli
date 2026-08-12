@@ -4,7 +4,6 @@
 package cli
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -16,35 +15,26 @@ import (
 // RuntimeSchemaExclusion records a reviewed reason why a public executable
 // command is intentionally not advertised as an Agent tool.
 type RuntimeSchemaExclusion struct {
-	CLIPath  string `json:"cli_path"`
-	Reason   string `json:"reason"`
-	Reviewed bool   `json:"reviewed"`
-}
-
-type runtimeSchemaExclusionSnapshot struct {
-	Version int                           `json:"version"`
-	Groups  []runtimeSchemaExclusionGroup `json:"groups"`
+	CLIPath  string
+	Reason   string
+	Reviewed bool
 }
 
 type runtimeSchemaExclusionGroup struct {
-	ID       string   `json:"id"`
-	Reason   string   `json:"reason"`
-	Reviewed bool     `json:"reviewed"`
-	Commands []string `json:"commands"`
+	ID       string
+	Reason   string
+	Reviewed bool
+	Commands []string
 }
 
 var (
-	completenessLoadExclusions = EmbeddedRuntimeSchemaExclusions
-	completenessApplyManual    = ApplyEmbeddedManualSchemaHints
+	completenessLoadExclusions = ReviewedRuntimeSchemaExclusions
 	completenessBuildEffective = BuildEffectiveCommandRegistry
 	completenessBindEffective  = BindEffectiveCommandRegistry
 	completenessRuntimeReport  = runtimeSchemaCompletenessFromBound
 	completenessDeliveryReport = schemaCatalogDeliveryCompletenessAgainstLoadedAndBound
 	completenessCollectEntries = collectRuntimeSchemaEntries
 )
-
-//go:embed schema_command_exclusions.json
-var embeddedRuntimeSchemaExclusionsJSON []byte
 
 // RuntimeSchemaCompletenessReport compares the public executable Cobra leaves
 // with a reviewed Schema command set, such as runtime annotations or the final
@@ -58,19 +48,14 @@ type RuntimeSchemaCompletenessReport struct {
 	DeliveryErrors    []string
 }
 
-// EmbeddedRuntimeSchemaExclusions returns the exact, reviewed list of public
+// ReviewedRuntimeSchemaExclusions returns the exact, reviewed list of public
 // CLI leaves intentionally kept outside the stable Agent command contract.
-func EmbeddedRuntimeSchemaExclusions() ([]RuntimeSchemaExclusion, error) {
-	var snapshot runtimeSchemaExclusionSnapshot
-	if err := json.Unmarshal(embeddedRuntimeSchemaExclusionsJSON, &snapshot); err != nil {
-		return nil, fmt.Errorf("decode runtime schema exclusions: %w", err)
-	}
-	if snapshot.Version != 1 {
-		return nil, fmt.Errorf("unsupported runtime schema exclusion version %d", snapshot.Version)
-	}
+// Authority is the reviewed Go registry in schema_command_exclusions.go
+// (central groups + non-empty reason); there is no JSON completeness input.
+func ReviewedRuntimeSchemaExclusions() ([]RuntimeSchemaExclusion, error) {
 	var exclusions []RuntimeSchemaExclusion
 	seen := map[string]bool{}
-	for _, group := range snapshot.Groups {
+	for _, group := range reviewedRuntimeSchemaExclusionGroups {
 		if strings.TrimSpace(group.ID) == "" || strings.TrimSpace(group.Reason) == "" || !group.Reviewed {
 			return nil, fmt.Errorf("runtime schema exclusion group %q is not reviewed or has no reason", group.ID)
 		}
@@ -89,12 +74,9 @@ func EmbeddedRuntimeSchemaExclusions() ([]RuntimeSchemaExclusion, error) {
 	return exclusions, nil
 }
 
-// ValidateEmbeddedRuntimeSchemaCompleteness enforces the reviewed reverse
+// ValidateRuntimeSchemaCompleteness enforces the reviewed reverse
 // command-tree contract used by generation and CI.
-func ValidateEmbeddedRuntimeSchemaCompleteness(root *cobra.Command) error {
-	if _, err := completenessApplyManual(root); err != nil {
-		return err
-	}
+func ValidateRuntimeSchemaCompleteness(root *cobra.Command) error {
 	effective, err := completenessBuildEffective(root)
 	if err != nil {
 		return err
@@ -330,7 +312,7 @@ func schemaRegistryProjectionErrors(loaded loadedSchemaCatalog) []string {
 
 	groupPaths := map[string]bool{}
 	for _, product := range loaded.Registry.Products {
-		expectedProduct, renderErr := renderRegistryProductSummary(product)
+		expectedProduct, renderErr := product.ToSummaryPayload()
 		if renderErr != nil {
 			problems = append(problems, fmt.Sprintf("render product %s summary: %v", product.ID, renderErr))
 		} else if actual, queryErr := deliverySchemaPayload(loaded, []string{product.ID}); queryErr != nil {

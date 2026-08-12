@@ -16,6 +16,9 @@ package smart
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -38,6 +41,34 @@ var SuggestTime = shortcut.Shortcut{
 		"内部会把 --with 里的姓名逐个搜通讯录解析成唯一 userId（任何一个没匹配到或匹配到多人都会明确报出来，绝不瞎猜），" +
 		"再基于所有参与者的忙闲，在给定时间范围内推荐若干可用时段。只读，不创建任何日程。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_suggest_time",
+			CanonicalPath:  "calendar.shortcut_suggest_time",
+			CLIPath:        "calendar +suggest-time",
+			PrimaryCLIPath: "calendar +suggest-time",
+		},
+		Description: "按姓名解析多位参与者，推荐大家都有空的可开会时间段（自动解析 userId）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按姓名解析多位参与者，推荐大家都有空的可开会时间段（自动解析 userId）",
+			UseWhen:      []string{"当你想为几个人凑一个大家都空闲的开会时间、但只知道他们的姓名而不想逐个手动查 userId 时使用；内部会把 --with 里的姓名逐个搜通讯录解析成唯一 userId（任何一个没匹配到或匹配到多人都会明确报出来，绝不瞎猜），再基于所有参与者的忙闲，在给定时间范围内推荐若干可用时段。只读，不创建任何日程。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws calendar +suggest-time --with 张三,李四 --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\"",
+				"dws calendar +suggest-time --with 张三,李四,王五 --start \"2026-03-10T09:00:00+08:00\" --end \"2026-03-10T18:00:00+08:00\" --duration 30",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "with", Type: shortcut.FlagStringSlice, Desc: "参与者姓名（逗号分隔的 CSV，如 张三,李四）", Required: true},
 		{Name: "start", Type: shortcut.FlagString, Desc: "时间范围开始（ISO8601，如 2026-03-10T09:00:00+08:00）", Required: true},

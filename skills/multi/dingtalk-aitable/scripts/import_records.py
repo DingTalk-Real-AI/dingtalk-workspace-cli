@@ -11,6 +11,13 @@
 - JSON 支持两种格式：
   1. [{"cells": {"fldxxx": "value"}}, ...]
   2. [{"fldxxx": "value"}, ...]  # 会自动包装成 cells
+
+⚠️ CSV 自动类型转换风险：
+  CSV 读入的所有 cell 都是 string，本脚本会尝试自动识别 'true'/'false'/数字
+  并转成对应类型（避免 text 字段塞入纯文本数字）。但当 fieldId 对应的字段是
+  text / telephone / idCard / barcode 这类"字符串形数字"字段时，自动转 int / float
+  会让 server 拒绝（字段类型不匹配）。这种情况建议改用 JSON 格式（自己显式控制类型），
+  或在 CSV 写入前给字段值前缀加引号 / 改为非纯数字。
 """
 
 import sys
@@ -28,7 +35,7 @@ RecordDict = Dict[str, str]
 MAX_FILE_SIZE = 50 * 1024 * 1024
 ALLOWED_CSV_EXTENSIONS = ['.csv']
 ALLOWED_JSON_EXTENSIONS = ['.json']
-RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{6,128}$')
+RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
 MAX_RECORDS_PER_BATCH = 100
 DEFAULT_BATCH_SIZE = 50
 
@@ -131,9 +138,7 @@ def normalize_record(record: Dict[str, Any]) -> Dict[str, Any]:
     return {'cells': normalized}
 
 
-def validate_record(
-    record: Dict[str, Any], headers: List[str]
-) -> Tuple[bool, str]:
+def validate_record(record: Dict[str, Any]) -> Tuple[bool, str]:
     if not isinstance(record, dict):
         return False, '记录必须是对象'
     normalized = normalize_record(record)
@@ -238,7 +243,7 @@ def import_from_json(
         return False
 
     for i, record in enumerate(records):
-        valid, error = validate_record(record, [])
+        valid, error = validate_record(record)
         if not valid:
             print(f"错误：记录 #{i+1} 格式无效：{error}")
             return False

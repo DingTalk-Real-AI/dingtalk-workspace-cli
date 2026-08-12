@@ -59,6 +59,10 @@ func TestLocateSkillMD(t *testing.T) {
 }
 
 func TestUpgradeSkillLocations(t *testing.T) {
+	// Fake HOME: the mono path refreshes ~/.dws/skills/mono best-effort, and
+	// the test must never touch the real user cache.
+	homeDir := withFakeHome(t)
+
 	skillSrc := t.TempDir()
 	os.WriteFile(filepath.Join(skillSrc, "SKILL.md"), []byte("# test skill"), 0644)
 	os.MkdirAll(filepath.Join(skillSrc, "references"), 0755)
@@ -74,7 +78,6 @@ func TestUpgradeSkillLocations(t *testing.T) {
 		t.Fatal("UpgradeSkillLocations() returned 0 succeeded locations")
 	}
 
-	homeDir, _ := os.UserHomeDir()
 	primaryDest := filepath.Join(homeDir, ".agents", "skills", "dws")
 
 	found := false

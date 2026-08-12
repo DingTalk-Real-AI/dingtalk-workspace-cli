@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-func TestEmbeddedCatalogKeepsSpecializedAitableViewTextCommandSpecific(t *testing.T) {
-	loaded := embeddedSchemaCatalog()
+func TestDeliveryCatalogKeepsSpecializedAitableViewTextCommandSpecific(t *testing.T) {
+	loaded := mustDeliverySchemaCatalogMaps(t)
 	checked := 0
 	for canonical, tool := range loaded.Snapshot.Tools {
 		if !strings.HasPrefix(canonical, "aitable.view_get_") &&

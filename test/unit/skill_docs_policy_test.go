@@ -104,6 +104,15 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 			"operation_type",
 			"dws chat message download-media",
 			"--open-dingtalk-id",
+			"user_im_message_receive_o2o_all",
+			"user_im_message_receive_group_all",
+			"user_im_group_updated",
+			"user_im_group_member_added",
+			"user_im_group_member_exited",
+			"user_im_group_disbanded",
+			"operator_open_dingtalk_id",
+			"members",
+			"open_dingtalk_id",
 		} {
 			if !strings.Contains(text, required) {
 				t.Errorf("%s missing event contract %q", path, required)
@@ -117,6 +126,446 @@ func TestEventSkillUsesFlatOutputContract(t *testing.T) {
 			if strings.Contains(text, retired) {
 				t.Errorf("%s still documents retired event path %q", path, retired)
 			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageEventSkillPinsSubscriptionRetryOrchestrationContract(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-im.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
+		filepath.Join(root, "docs", "event-subprocess-contract.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		normalizedText := strings.Join(strings.Fields(text), " ")
+		for _, required := range []string{
+			"16",
+			"--profile",
+			"Agent/host",
+			"0/2/1",
+			"retryable=false",
+			"max_additional_attempts=0",
+			"retryable=true",
+			"max_additional_attempts=2",
+			"retryable=unknown",
+			"max_additional_attempts=1",
+			"retry_after_seconds",
+			"next_retry_at",
+			"in_flight",
+			"cooldown",
+			"terminal_hold",
+			"subscribe_id",
+			"trace_id",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing subscription retry orchestration contract %q", path, required)
+			}
+		}
+		if path == filepath.Join(root, "docs", "event-subprocess-contract.md") {
+			for _, required := range []string{
+				"not a CLI-enforced persisted total-attempt cap",
+				"performs no in-process automatic retry",
+				"does not persist or enforce the Agent/host attempt count",
+			} {
+				if !strings.Contains(normalizedText, required) {
+					t.Errorf("%s overstates CLI retry enforcement; missing %q", path, required)
+				}
+			}
+			continue
+		}
+		for _, required := range []string{
+			"不是 CLI 持久化硬总次数上限",
+			"进程内不会自动重试",
+			"不持久化或计算跨调用的 Agent/host 尝试次数",
+		} {
+			if !strings.Contains(normalizedText, required) {
+				t.Errorf("%s overstates CLI retry enforcement; missing %q", path, required)
+			}
+		}
+	}
+}
+
+func TestCrossPlatformCoverageEventSkillDocumentsSubscriptionGuardOperations(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "references", "event-im.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "event.md"),
+		filepath.Join(root, "docs", "event-subprocess-contract.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		normalizedText := strings.Join(strings.Fields(text), " ")
+		for _, required := range []string{
+			"~/.dws/events/open/personal_stream/<identity_hash>/personal_subscription_attempts.json",
+			"DWS_CONFIG_DIR",
+			"personal_subscription_attempts.json",
+			"personal_subscription_attempts.lock",
+			"0700",
+			"0600",
+			"24h",
+			"1h",
+			"terminal_hold",
+			"next_retry_at",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing subscription guard operations %q", path, required)
+			}
+		}
+		if path == filepath.Join(root, "docs", "event-subprocess-contract.md") {
+			for _, required := range []string{
+				"Delete only",
+				"never the lock file",
+				"every protection record for that identity",
+			} {
+				if !strings.Contains(normalizedText, required) {
+					t.Errorf("%s missing emergency guard-clear warning %q", path, required)
+				}
+			}
+			continue
+		}
+		for _, required := range []string{
+			"只删除 `personal_subscription_attempts.json`",
+			"不要删除 lock 文件",
+			"该 identity 的全部保护记录",
+		} {
+			if !strings.Contains(normalizedText, required) {
+				t.Errorf("%s missing emergency guard-clear warning %q", path, required)
+			}
+		}
+	}
+}
+
+func TestEventSkillFrontmatterAdvertisesGroupMemberLifecycle(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "mono", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-event", "SKILL.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		parts := strings.SplitN(string(content), "---", 3)
+		if len(parts) != 3 {
+			t.Fatalf("%s missing YAML frontmatter", path)
+		}
+		frontmatter := parts[1]
+		for _, required := range []string{
+			"个人 IM",
+			"群成员加入",
+			"群成员退出",
+			"审批任务创建/完成/转交",
+			"审批实例发起/终止/完成",
+		} {
+			if !strings.Contains(frontmatter, required) {
+				t.Errorf("%s frontmatter missing event discovery trigger %q", path, required)
+			}
+		}
+	}
+}
+
+func TestStandaloneEventSkillOwnsAllPersonalEventContracts(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	eventRoot := filepath.Join(root, "skills", "multi", "dingtalk-event")
+	skillPath := filepath.Join(eventRoot, "SKILL.md")
+	skillContent, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", skillPath, err)
+	}
+	for _, required := range []string{
+		"../dingtalk-shared/SKILL.md",
+		"<!-- dws-intent: event.listen.im -->",
+		"<!-- dws-intent: event.listen.oa -->",
+		"16 个 EventKey",
+		"22 个公开个人 EventKey",
+	} {
+		if !strings.Contains(string(skillContent), required) {
+			t.Errorf("%s missing standalone event contract %q", skillPath, required)
+		}
+	}
+
+	wantReferences := []string{
+		"event-im-keys.md",
+		"event-im-lifecycle.md",
+		"event-im-operations.md",
+		"event-im-output.md",
+		"event-im.md",
+		"event-oa.md",
+	}
+	var combined strings.Builder
+	combined.Write(skillContent)
+	for _, name := range wantReferences {
+		path := filepath.Join(eventRoot, "references", name)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		combined.Write(content)
+	}
+	refs, err := filepath.Glob(filepath.Join(eventRoot, "references", "event-*.md"))
+	if err != nil {
+		t.Fatalf("glob event references: %v", err)
+	}
+	if len(refs) != len(wantReferences) {
+		t.Errorf("event reference count = %d, want %d: %v", len(refs), len(wantReferences), refs)
+	}
+
+	allEventKeys := []string{
+		"user_im_message_receive_at",
+		"user_im_message_receive_o2o",
+		"user_im_message_receive_group",
+		"user_im_message_receive_user",
+		"user_im_message_receive_o2o_all",
+		"user_im_message_receive_group_all",
+		"user_im_message_read_o2o",
+		"user_im_message_read_group",
+		"user_im_message_recall_o2o",
+		"user_im_message_recall_group",
+		"user_im_message_reaction_o2o",
+		"user_im_message_reaction_group",
+		"user_im_group_updated",
+		"user_im_group_member_added",
+		"user_im_group_member_exited",
+		"user_im_group_disbanded",
+		"user_oa_approval_task_created",
+		"user_oa_approval_task_finished",
+		"user_oa_approval_task_redirected",
+		"user_oa_approval_instance_started",
+		"user_oa_approval_instance_terminated",
+		"user_oa_approval_instance_finished",
+	}
+	for _, eventKey := range allEventKeys {
+		if !strings.Contains(combined.String(), eventKey) {
+			t.Errorf("standalone event skill missing EventKey %q", eventKey)
+		}
+	}
+}
+
+func TestMiscSkillDoesNotOwnPersonalEvent(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	miscRoot := filepath.Join(root, "skills", "multi", "dingtalk-misc")
+	miscPath := filepath.Join(miscRoot, "SKILL.md")
+	content, err := os.ReadFile(miscPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", miscPath, err)
+	}
+	parts := strings.SplitN(string(content), "---", 3)
+	if len(parts) != 3 {
+		t.Fatalf("%s missing YAML frontmatter", miscPath)
+	}
+	for _, forbidden := range []string{
+		"个人 IM 事件",
+		"实时监听消息",
+		"被@消息",
+		"群成员加入",
+		"事件驱动 Agent",
+		"dws event",
+	} {
+		if strings.Contains(parts[1], forbidden) {
+			t.Errorf("%s frontmatter still claims personal Event trigger %q", miscPath, forbidden)
+		}
+	}
+	for _, required := range []string{
+		"dingtalk-event",
+		"oa.md",
+		"dev/event.md",
+	} {
+		if !strings.Contains(string(content), required) {
+			t.Errorf("%s missing Event ownership handoff %q", miscPath, required)
+		}
+	}
+
+	retiredNames := []string{
+		"event.md",
+		"event-im.md",
+		"event-im-keys.md",
+		"event-im-lifecycle.md",
+		"event-im-operations.md",
+		"event-im-output.md",
+		"event-oa.md",
+	}
+	for _, name := range retiredNames {
+		path := filepath.Join(miscRoot, "references", name)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("misc retains retired personal Event reference %s", path)
+		}
+	}
+	devEventPath := filepath.Join(miscRoot, "references", "dev", "event.md")
+	if _, err := os.Stat(devEventPath); err != nil {
+		t.Errorf("DevApp event reference must remain at %s: %v", devEventPath, err)
+	}
+}
+
+func TestCrossPlatformCoverageDocSkillPinsExactVersionRoutesAndHelpBudget(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-doc", "SKILL.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-doc", "references", "doc.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "doc.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"dws doc +version-save --node",
+			"dws doc +version-list --node",
+			"dws doc +version-revert --node",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing exact version route %q", path, required)
+			}
+		}
+		if strings.Contains(text, "dws doc +history-") {
+			t.Errorf("%s recommends a history compatibility route", path)
+		}
+	}
+
+	rootSkill, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"Help 不参与选路", "unknown flag", "只查一次 shortcut 清单", "禁止试探后缀"} {
+		if !strings.Contains(string(rootSkill), required) {
+			t.Errorf("Doc root Skill missing Help budget rule %q", required)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDocSkillPinsTemplateSearchRequiredQuery(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	path := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", "skills", "multi", "dingtalk-doc", "SKILL.md"))
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	for _, route := range []string{
+		"dws doc +template-list [--source MY\\|PUBLIC]",
+		"dws doc +template-search --query <名称或关键词>",
+		"dws doc +create-from-template --template-id <唯一ID>",
+	} {
+		if !strings.Contains(text, route) {
+			t.Errorf("Doc Golden Route does not publish mutually exclusive template route %q", route)
+		}
+	}
+	if strings.Contains(text, "`dws doc +template-search` →") {
+		t.Fatal("Doc Golden Route still recommends template-search without --query")
+	}
+	for _, required := range []string{
+		"准备 Help 时，本轮仅查一次",
+		"--fields use_when,avoid_when,parameters,constraints,confirmation",
+		"禁用产品级/`--all`",
+		"Help 不参与选路",
+		"禁止靠失败探测门禁",
+		"已有或临时文件先暂存到 cwd",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("Doc root Skill missing bounded Schema/input protocol %q", required)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDocSkillReferenceLoadingBudget(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "multi", "dingtalk-doc", "SKILL.md"),
+		filepath.Join(root, "skills", "mono", "references", "products", "doc.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"禁止读取 reference",
+			"最多读取一个",
+			"复杂 JSONML",
+			"append/overwrite",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing bounded Reference rule %q", path, required)
+			}
+		}
+		if strings.Contains(text, "只在任务命中时读取一个精确 reference") {
+			t.Errorf("%s restores task-match-driven Reference loading", path)
+		}
+	}
+}
+
+func TestMinutesPermissionAddRequiresExplicitPolicy(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	paths := []string{
+		filepath.Join(root, "skills", "mono", "references", "products", "minutes.md"),
+		filepath.Join(root, "skills", "multi", "dingtalk-minutes", "references", "minutes.md"),
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(content)
+		for _, required := range []string{
+			"`permission add` 的 `--policy` 是必填参数，没有默认值",
+			"命令中仍必须显式传入 `--policy 4`",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing permission add policy contract %q", path, required)
+			}
+		}
+		if strings.Contains(text, "`permission add` 默认使用 `--policy 4`") {
+			t.Errorf("%s still documents a nonexistent permission add policy default", path)
 		}
 	}
 }

@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 . "$SCRIPT_DIR/release-lib.sh"
 ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
+CLOUD_RELEASE_URL="https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/actions/workflows/release.yml"
 
 VERSION=""
 FROM_BETA=""
@@ -20,21 +21,20 @@ usage: dws-release [version] [options]
 
 With no arguments, starts an interactive release guide. For a version that has
 no CHANGELOG section yet, prepares the template and stops. Otherwise, runs the
-full guarded preflight; add --publish to publish after the preflight succeeds.
+full guarded preflight. Official publication runs from GitHub Actions so beta
+and stable use the repository's release authorization policy.
 
 Options:
   --from-beta <tag>   Required stable promotion baseline
   --remote <name>     Override the configured release remote
   --check             Validate only (default)
-  --publish           Run the preflight, then create and push the tag
+  --publish           Retired for official releases; use Actions -> Release
   -h, --help           Show this help
 
 Examples:
   dws-release config --remote origin
   dws-release v1.2.3-beta.1
-  dws-release v1.2.3-beta.1 --publish
   dws-release v1.2.3 --from-beta v1.2.3-beta.1
-  dws-release v1.2.3 --from-beta v1.2.3-beta.1 --publish
   dws-release recover v1.2.3-beta.1
 EOF
 }
@@ -125,6 +125,18 @@ require_remote() {
     printf '%s\n' 'Review the remote and run dws-release config again only if this change is intentional.' >&2
     exit 1
   }
+}
+
+reject_official_publish() {
+  normalized_repository="$(
+    printf '%s\n' "$actual_repository" | tr '[:upper:]' '[:lower:]'
+  )"
+  if [ "$MODE" = "publish" ] &&
+     [ "$normalized_repository" = "github.com/dingtalk-real-ai/dingtalk-workspace-cli" ]; then
+    printf '%s\n' 'Direct local publication is disabled for official releases.' >&2
+    printf 'Use Actions -> Release -> Run workflow: %s\n' "$CLOUD_RELEASE_URL" >&2
+    exit 1
+  fi
 }
 
 sync_main_if_safe() {
@@ -322,6 +334,7 @@ MAIN_SYNCED=0
 current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
 if [ "$current_branch" = "main" ]; then
   require_remote
+  reject_official_publish
   sync_main_if_safe
   MAIN_SYNCED=1
 fi
@@ -351,6 +364,7 @@ release_extract_changelog "$CHANGELOG" "$semver" "$notes_tmp"
 
 if [ "$MAIN_SYNCED" -ne 1 ]; then
   require_remote
+  reject_official_publish
   sync_main_if_safe
 fi
 

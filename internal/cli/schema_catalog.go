@@ -15,22 +15,20 @@ package cli
 
 import (
 	"crypto/sha256"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
-	"sync/atomic"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
-	"github.com/spf13/cobra"
 )
 
 const SchemaCatalogSnapshotVersion = 1
 
-//go:embed schema_catalog.json
-var embeddedSchemaCatalogJSON []byte
+// Schema Catalog delivery is single-track: RegisterSchemaSourceRoot →
+// ResolveSchemaBuild (see schema_source_root.go). There is no committed
+// schema_catalog/ embed and no shard/envelope loading path left in the CLI;
+// cmd_schema_catalog owns shard writing and re-merges its own dumps.
 
 // SchemaCatalogSnapshot is the release-stable Agent contract. Catalog holds
 // the progressive product/tool index; Tools holds full leaf parameter schemas.
@@ -57,31 +55,20 @@ type loadedSchemaCatalog struct {
 	Index    SchemaIndex
 }
 
-var (
-	runtimeEmbeddedSchemaCatalogOnce sync.Once
-	runtimeEmbeddedSchemaCatalog     loadedSchemaCatalog
-	runtimeEmbeddedSchemaCatalogErr  error
-)
-
-var runtimeEmbeddedSchemaCatalogLazyLoadCount atomic.Uint64
-
-func embeddedSchemaCatalog() loadedSchemaCatalog {
-	runtimeEmbeddedSchemaCatalogOnce.Do(func() {
-		runtimeEmbeddedSchemaCatalogLazyLoadCount.Add(1)
-		runtimeEmbeddedSchemaCatalog, runtimeEmbeddedSchemaCatalogErr = decodeSchemaCatalogSnapshot(embeddedSchemaCatalogJSON)
-	})
-	return runtimeEmbeddedSchemaCatalog
+func registryToSnapshotPayload(registry SchemaRegistry) (SchemaCatalogSnapshot, error) {
+	payload, err := registry.ToSnapshotPayload()
+	if err != nil {
+		return SchemaCatalogSnapshot{}, err
+	}
+	return SchemaCatalogSnapshot{Catalog: payload.Catalog, Tools: payload.Tools}, nil
 }
 
-func embeddedSchemaCatalogError() error {
-	_ = embeddedSchemaCatalog()
-	return runtimeEmbeddedSchemaCatalogErr
-}
+var registryToSnapshotPayloadFn = registryToSnapshotPayload
 
 var (
 	buildCatalogValidateParameterBindings = ValidateSchemaParameterBindingDelivery
 	buildCatalogValidateDryRun            = ValidateReviewedDryRunCapabilityDelivery
-	buildCatalogValidateExamples          = ValidateEmbeddedManualAgentExampleDelivery
+	buildCatalogValidateExamples          = ValidateAgentExampleDelivery
 	buildCatalogValidateCompleteness      = validateResolvedRuntimeSchemaCompleteness
 	buildCatalogValidateRegistry          = validateSchemaRegistryAgainstCommandRegistry
 	buildCatalogValidateInterfaces        = validateSchemaRegistryInterfaces
@@ -90,19 +77,18 @@ var (
 	buildCatalogValidateDelivery          = ValidateSchemaDeliveryInvariants
 	buildCatalogValidateFinalCompleteness = validateResolvedSchemaCatalogDeliveryCompleteness
 
-	loadCatalogValidateInterfaces    = validateSchemaRegistryInterfaces
-	loadCatalogValidateProvenance    = validateFinalSchemaProvenanceCoverage
-	loadCatalogValidateAgentMetadata = validateSchemaRegistryAgentMetadata
+	loadCatalogValidateInterfaces = validateSchemaRegistryInterfaces
+	loadCatalogValidateProvenance = validateFinalSchemaProvenanceCoverage
 
-	renderEmbeddedSchemaAll      = func(registry SchemaRegistry) (map[string]any, error) { return registry.ToPayload() }
-	renderEmbeddedSchemaOverview = func(registry SchemaRegistry) (map[string]any, error) { return registry.ToOverviewPayload() }
+	renderDeliverySchemaAll      = func(registry SchemaRegistry) (map[string]any, error) { return registry.ToPayload() }
+	renderDeliverySchemaOverview = func(registry SchemaRegistry) (map[string]any, error) { return registry.ToOverviewPayload() }
 	renderSchemaProductSummary   = func(product ProductSpec) (map[string]any, error) { return product.ToSummaryPayload() }
 	renderSchemaToolSummary      = func(tool ToolSpec) (map[string]any, error) { return tool.ToSummaryPayload() }
 )
 
 // BuildSchemaCatalogSnapshot renders a deterministic Catalog from one
 // resolved source-to-delivery hand-off. It deliberately accepts no Cobra root:
-// reapplying manual hints or rebuilding SchemaRegistry at this boundary would
+// rebuilding SchemaRegistry or re-deriving identity at this boundary would
 // allow generation gates to validate one candidate while publishing another.
 func BuildSchemaCatalogSnapshot(resolved ResolvedSchemaBuild, options SchemaCatalogBuildOptions) (SchemaCatalogSnapshot, error) {
 	if resolved.root == nil {
@@ -144,7 +130,7 @@ func BuildSchemaCatalogSnapshot(resolved ResolvedSchemaBuild, options SchemaCata
 	// collectRuntimeSchemaEntriesFromBound. Do not apply a post-assembly
 	// allowlist: doing so could silently erase an otherwise valid reviewed
 	// manual-only command after the exact-set validation above has passed.
-	registry.Source = "embedded-command-catalog"
+	registry.Source = SchemaSourceRuntimeAssembled
 	payload, err := registry.ToSnapshotPayload()
 	if err != nil {
 		return SchemaCatalogSnapshot{}, fmt.Errorf("serialize typed Schema registry: %w", err)
@@ -166,9 +152,10 @@ func BuildSchemaCatalogSnapshot(resolved ResolvedSchemaBuild, options SchemaCata
 	return snapshot, nil
 }
 
-// decodeSchemaCatalogSnapshot is the single release and generation-time
-// loading path. Delivery validation round-trips generated JSON through this
-// function so it cannot pass with data that the shipped binary would reject.
+// decodeSchemaCatalogSnapshot decodes a single-document snapshot and loads it
+// through loadSchemaCatalogSnapshot. Delivery validation round-trips generated
+// JSON through this function so it cannot pass with data that the shared
+// loader would reject.
 func decodeSchemaCatalogSnapshot(data []byte) (loadedSchemaCatalog, error) {
 	var snapshot SchemaCatalogSnapshot
 	if err := decodeStrictSchemaJSON(data, &snapshot); err != nil {
@@ -187,9 +174,17 @@ func loadSchemaCatalogSnapshot(snapshot SchemaCatalogSnapshot) (loadedSchemaCata
 	if len(snapshot.Catalog) == 0 || len(snapshot.Tools) == 0 {
 		return loadedSchemaCatalog{}, fmt.Errorf("schema Catalog snapshot is empty")
 	}
-	if snapshot.SourceHash == "" || snapshot.SourceHash != schemaCatalogSnapshotHash(snapshot) {
+	if snapshot.SourceHash == "" {
+		return loadedSchemaCatalog{}, fmt.Errorf("schema Catalog snapshot is missing source_hash")
+	}
+	if snapshot.SourceHash != schemaCatalogSnapshotHash(snapshot) {
 		return loadedSchemaCatalog{}, fmt.Errorf("schema Catalog snapshot source_hash does not match its content")
 	}
+	// Production delivery assembles in memory via assembleSchemaCatalogFromRoot and
+	// never round-trips through this decode loader. This hash check applies to
+	// serialized snapshots only (CI round-trips, cmd_schema_catalog dumps, and
+	// delivery-invariant gates) so tampered catalog_hash cannot be stamped from
+	// a forged source_hash.
 	registry, index, err := schemaRegistryFromSnapshot(snapshot)
 	if err != nil {
 		return loadedSchemaCatalog{}, fmt.Errorf("load typed Schema registry: %w", err)
@@ -198,79 +193,70 @@ func loadSchemaCatalogSnapshot(snapshot SchemaCatalogSnapshot) (loadedSchemaCata
 		return loadedSchemaCatalog{}, fmt.Errorf("validate final Schema interface disposition: %w", err)
 	}
 	// The production loader validates delivered provenance exactly as encoded.
-	// toolSpecFromSnapshot deliberately does not synthesize candidates or
+	// ToolSpecFromRuntime deliberately does not synthesize candidates or
 	// rewrite winners, and this coverage gate applies to every snapshot source.
 	if err := loadCatalogValidateProvenance(registry); err != nil {
 		return loadedSchemaCatalog{}, fmt.Errorf("validate final Schema provenance: %w", err)
 	}
-	if registry.Source == "embedded-command-catalog" {
-		if err := loadCatalogValidateAgentMetadata(registry); err != nil {
-			return loadedSchemaCatalog{}, fmt.Errorf("validate final Schema Agent metadata set: %w", err)
-		}
-	}
+	// Agent metadata is no longer a shipped embed. CI/local cmd_schema_catalog
+	// dumps may still inject Agent metadata for validation; production delivery
+	// reassembles via ResolveSchemaBuild and must not reopen retired
+	// schema_agent_metadata/ artifacts.
 	return loadedSchemaCatalog{Snapshot: snapshot, Registry: registry, Index: index}, nil
 }
 
-func embeddedSchemaCatalogAvailable() bool {
-	return len(embeddedSchemaCatalog().Index.CanonicalPaths()) > 0
-}
-
-func embeddedSchemaAllPayload() (map[string]any, error) {
-	loaded := embeddedSchemaCatalog()
-	payload, err := renderEmbeddedSchemaAll(loaded.Registry)
-	if err != nil {
+func deliverySchemaAllPayload() (map[string]any, error) {
+	if err := deliverySchemaCatalogError(); err != nil {
 		return nil, err
 	}
+	return schemaAllPayloadFromLoaded(deliverySchemaCatalog())
+}
+
+func deliverySchemaOverviewPayload() (map[string]any, error) {
+	if err := deliverySchemaCatalogError(); err != nil {
+		return nil, err
+	}
+	return schemaOverviewPayloadFromLoaded(deliverySchemaCatalog())
+}
+
+// stampSnapshotHashes writes the protected catalog_hash / surface_hash pair
+// onto a delivery payload. Every envelope that exposes snapshot hashes must
+// go through this helper so the two keys never drift apart.
+func stampSnapshotHashes(payload map[string]any, loaded loadedSchemaCatalog) {
 	payload["catalog_hash"] = loaded.Snapshot.SourceHash
 	if loaded.Snapshot.SurfaceHash != "" {
 		payload["surface_hash"] = loaded.Snapshot.SurfaceHash
 	}
-	return payload, nil
 }
 
-func embeddedSchemaOverviewPayload() (map[string]any, error) {
-	loaded := embeddedSchemaCatalog()
-	payload, err := renderEmbeddedSchemaOverview(loaded.Registry)
+func schemaAllPayloadFromLoaded(loaded loadedSchemaCatalog) (map[string]any, error) {
+	payload, err := renderDeliverySchemaAll(loaded.Registry)
 	if err != nil {
 		return nil, err
 	}
-	payload["catalog_hash"] = loaded.Snapshot.SourceHash
-	if loaded.Snapshot.SurfaceHash != "" {
-		payload["surface_hash"] = loaded.Snapshot.SurfaceHash
-	}
+	stampSnapshotHashes(payload, loaded)
 	return payload, nil
 }
 
-func exactSchemaCommand(root *cobra.Command, rawPath string) *cobra.Command {
-	if root == nil {
-		return nil
+func schemaOverviewPayloadFromLoaded(loaded loadedSchemaCatalog) (map[string]any, error) {
+	payload, err := renderDeliverySchemaOverview(loaded.Registry)
+	if err != nil {
+		return nil, err
 	}
-	parts := strings.Fields(strings.TrimSpace(rawPath))
-	if len(parts) > 0 && parts[0] == root.Name() {
-		parts = parts[1:]
-	}
-	current := root
-	for _, part := range parts {
-		var next *cobra.Command
-		for _, child := range current.Commands() {
-			if child.Name() == part {
-				next = child
-				break
-			}
-		}
-		if next == nil {
-			return nil
-		}
-		current = next
-	}
-	if current == root {
-		return nil
-	}
-	return current
+	stampSnapshotHashes(payload, loaded)
+	return payload, nil
 }
 
-func embeddedSchemaPayload(args []string) (map[string]any, error) {
-	return schemaPayloadFromLoadedCatalog(embeddedSchemaCatalog(), args)
+// queryDeliverySchemaPayload serves dws schema queries through the production
+// delivery loader. Completeness / invariant gates must call
+// schemaPayloadFromLoadedCatalog (or the deliverySchemaPayload var alias) with
+// an explicit loaded catalog — never this helper — to avoid an init cycle
+// through assembleSchemaCatalogFromRoot → BuildSchemaCatalogSnapshot.
+func queryDeliverySchemaPayload(args []string) (map[string]any, error) {
+	if err := deliverySchemaCatalogError(); err != nil {
+		return nil, err
+	}
+	return schemaPayloadFromLoadedCatalog(deliverySchemaCatalog(), args)
 }
 
 // schemaPayloadFromLoadedCatalog is shared by the shipped schema command and
@@ -283,10 +269,7 @@ func schemaPayloadFromLoadedCatalog(loaded loadedSchemaCatalog, args []string) (
 			return nil, err
 		}
 		payload := snapshot.Catalog
-		payload["catalog_hash"] = loaded.Snapshot.SourceHash
-		if loaded.Snapshot.SurfaceHash != "" {
-			payload["surface_hash"] = loaded.Snapshot.SurfaceHash
-		}
+		stampSnapshotHashes(payload, loaded)
 		return payload, nil
 	}
 	raw := strings.TrimSpace(args[0])
@@ -300,12 +283,16 @@ func schemaPayloadFromLoadedCatalog(loaded loadedSchemaCatalog, args []string) (
 			if err != nil {
 				return nil, err
 			}
+			source := strings.TrimSpace(loaded.Registry.Source)
+			if source == "" {
+				source = SchemaSourceRuntimeAssembled
+			}
 			return map[string]any{
 				"kind":    "schema",
 				"level":   "product",
 				"count":   len(product.Tools),
 				"product": payload,
-				"source":  "embedded-command-catalog",
+				"source":  source,
 			}, nil
 		}
 	}
@@ -323,13 +310,17 @@ func schemaPayloadFromLoadedCatalog(loaded loadedSchemaCatalog, args []string) (
 				}
 			}
 			if len(matched) > 0 {
+				source := strings.TrimSpace(loaded.Registry.Source)
+				if source == "" {
+					source = SchemaSourceRuntimeAssembled
+				}
 				return map[string]any{
 					"kind":   "schema",
 					"level":  "group",
 					"path":   path,
 					"count":  len(matched),
 					"tools":  matched,
-					"source": "embedded-command-catalog",
+					"source": source,
 				}, nil
 			}
 		}
@@ -364,20 +355,6 @@ func schemaMapSlice(value any) []map[string]any {
 	default:
 		return nil
 	}
-}
-
-func schemaMap(value any) map[string]map[string]any {
-	input, ok := value.(map[string]any)
-	if !ok {
-		return nil
-	}
-	out := make(map[string]map[string]any, len(input))
-	for key, value := range input {
-		if item, ok := value.(map[string]any); ok {
-			out[key] = item
-		}
-	}
-	return out
 }
 
 func schemaString(value any) string {

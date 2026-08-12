@@ -26,14 +26,28 @@ import (
 type FrameType string
 
 const (
-	FrameTypeHello       FrameType = "hello"        // consume → bus
-	FrameTypeHelloAck    FrameType = "hello_ack"    // bus → consume
-	FrameTypeEvent       FrameType = "event"        // bus → consume
-	FrameTypeHeartbeat   FrameType = "heartbeat"    // bidirectional
-	FrameTypeSourceState FrameType = "source_state" // bus → consume
-	FrameTypeBye         FrameType = "bye"          // bidirectional
-	FrameTypeStatusReq   FrameType = "status_req"   // consume/ad-hoc → bus
-	FrameTypeStatusResp  FrameType = "status_resp"  // bus → consume/ad-hoc
+	FrameTypeHello               FrameType = "hello"                 // consume → bus
+	FrameTypeHelloAck            FrameType = "hello_ack"             // bus → consume
+	FrameTypeEvent               FrameType = "event"                 // bus → consume
+	FrameTypeHeartbeat           FrameType = "heartbeat"             // bidirectional
+	FrameTypeSourceState         FrameType = "source_state"          // bus → consume
+	FrameTypeBye                 FrameType = "bye"                   // bidirectional
+	FrameTypeStatusReq           FrameType = "status_req"            // consume/ad-hoc → bus
+	FrameTypeStatusResp          FrameType = "status_resp"           // bus → consume/ad-hoc
+	FrameTypeConsumerStopReq     FrameType = "consumer_stop_req"     // ad-hoc → bus
+	FrameTypeConsumerStopResp    FrameType = "consumer_stop_resp"    // bus → ad-hoc
+	FrameTypeCredentialUpdate    FrameType = "credential_update"     // consume → bus
+	FrameTypeCredentialUpdateAck FrameType = "credential_update_ack" // bus → consume
+)
+
+// CredentialMode declares that a consumer needs an additive credential
+// negotiation before it can register for events. The zero value preserves the
+// original protocol.
+type CredentialMode string
+
+const (
+	CredentialModeRuntimeToken CredentialMode = "runtime_token"
+	CapabilityRuntimeTokenV1                  = "runtime_token_v1"
 )
 
 // Hello is the first frame a consumer sends after dialing the bus. The bus
@@ -49,16 +63,18 @@ type Hello struct {
 	// Role distinguishes a real consumer (registered for events) from an
 	// ad-hoc tooling connection (status/list/stop). Ad-hoc connections do
 	// NOT register with the Hub.
-	Role HelloRole `json:"role,omitempty"`
+	Role           HelloRole      `json:"role,omitempty"`
+	CredentialMode CredentialMode `json:"credential_mode,omitempty"`
 }
 
 // HelloRole tags the purpose of a Hello connection.
 type HelloRole string
 
 const (
-	HelloRoleConsumer HelloRole = ""       // default
-	HelloRoleStatus   HelloRole = "status" // event list / event status
-	HelloRoleStop     HelloRole = "stop"   // event stop (graceful trigger)
+	HelloRoleConsumer     HelloRole = ""              // default
+	HelloRoleStatus       HelloRole = "status"        // event list / event status
+	HelloRoleStop         HelloRole = "stop"          // event stop (graceful trigger)
+	HelloRoleConsumerStop HelloRole = "consumer_stop" // stop selected consumers only
 )
 
 // HelloAck is the bus's reply on accepted Hello. SourceState/StateSource
@@ -73,6 +89,38 @@ type HelloAck struct {
 	ClientIDSource     string    `json:"client_id_source"`            // auth.CredentialSource string
 	ClientSecretSource string    `json:"client_secret_source"`        // auth.CredentialSource string
 	IdleTimeoutSecs    int       `json:"idle_timeout_secs,omitempty"` // bus's IdleTimeout for diagnostics
+	Capabilities       []string  `json:"capabilities,omitempty"`
+	// CredentialGeneration is process-local and contains no secret data.
+	CredentialGeneration uint64 `json:"credential_generation"`
+	// TerminalReason is a fixed, non-sensitive bus terminal state. A runtime
+	// client checks it before sending credential material.
+	TerminalReason string `json:"terminal_reason,omitempty"`
+}
+
+// CredentialUpdate installs a host-supplied runtime token into a compatible
+// bus after the bus has advertised CapabilityRuntimeTokenV1. Token is carried
+// only over the owner-only local IPC connection and must never be logged.
+type CredentialUpdate struct {
+	Type               FrameType `json:"type"`
+	ExpectedGeneration uint64    `json:"expected_generation"`
+	Token              string    `json:"token"`
+}
+
+const (
+	CredentialErrorGenerationConflict = "generation_conflict"
+	CredentialErrorInvalid            = "invalid_credential"
+	CredentialErrorRegistration       = "registration_failed"
+	CredentialErrorRuntimeRejected    = "runtime_token_rejected"
+	CredentialErrorInternal           = "internal_error"
+)
+
+// CredentialUpdateAck reports the CAS result without echoing any credential.
+type CredentialUpdateAck struct {
+	Type                 FrameType `json:"type"`
+	Accepted             bool      `json:"accepted"`
+	CredentialGeneration uint64    `json:"credential_generation"`
+	ErrorCode            string    `json:"error_code,omitempty"`
+	Error                string    `json:"error,omitempty"`
 }
 
 // Event wraps one delivered RawEvent for the wire. We keep the payload as
@@ -117,9 +165,33 @@ type SourceState struct {
 //	"shutdown"      — bus SIGTERM/SIGINT
 //	"idle_timeout"  — bus IdleTimeout fired with no consumers
 //	"stop_request"  — bus received explicit Stop RPC
+//	"subscription_stopped" — one consumer was removed by subscribe_id
 type Bye struct {
 	Type   FrameType `json:"type"`
 	Reason string    `json:"reason"`
+}
+
+const (
+	ByeReasonSubscriptionStopped  = "subscription_stopped"
+	ByeReasonRuntimeTokenRejected = "runtime_token_rejected"
+)
+
+// ConsumerStopReq asks the bus to close consumers whose exact personal
+// subscription IDs match. It is an additive local IPC control operation;
+// the remote Stream connection remains alive while other consumers exist.
+type ConsumerStopReq struct {
+	Type         FrameType `json:"type"`
+	SubscribeIDs []string  `json:"subscribe_ids"`
+}
+
+// ConsumerStopResp reports which requested subscriptions had a live local
+// consumer. Missing IDs are not errors because a server subscription can be
+// cancelled after its foreground consumer has already exited.
+type ConsumerStopResp struct {
+	Type     FrameType `json:"type"`
+	Stopped  []string  `json:"stopped,omitempty"`
+	NotFound []string  `json:"not_found,omitempty"`
+	Error    string    `json:"error,omitempty"`
 }
 
 // StatusReq is an empty JSON frame ad-hoc tooling sends after Hello to

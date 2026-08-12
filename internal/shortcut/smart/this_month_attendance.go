@@ -16,6 +16,9 @@ package smart
 import (
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -45,7 +48,32 @@ var ThisMonthAttendance = shortcut.Shortcut{
 	Intent: "当你想快速看自己本月的打卡流水（几点上下班打卡、打卡地址/定位方式）、又不想先查自己的 userId " +
 		"再手动填写本月的起止时间时使用；内部先取当前登录用户的 userId，再按本地时区算出本月 1 号 00:00 到下月 1 号 00:00 的时间窗，" +
 		"最后查询你本月的打卡流水记录。只读操作，不会修改任何考勤数据；本月若还没有任何打卡则返回空结果。",
-	Risk:  shortcut.RiskRead,
+	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_this_month",
+			CanonicalPath:  "attendance.shortcut_this_month",
+			CLIPath:        "attendance +this-month",
+			PrimaryCLIPath: "attendance +this-month",
+		},
+		Description: "查我本月的考勤打卡记录（打卡流水，自动解析当前用户）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查我本月的考勤打卡记录（打卡流水，自动解析当前用户）",
+			UseWhen:      []string{"当你想快速看自己本月的打卡流水（几点上下班打卡、打卡地址/定位方式）、又不想先查自己的 userId 再手动填写本月的起止时间时使用；内部先取当前登录用户的 userId，再按本地时区算出本月 1 号 00:00 到下月 1 号 00:00 的时间窗，最后查询你本月的打卡流水记录。只读操作，不会修改任何考勤数据；本月若还没有任何打卡则返回空结果。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +this-month"},
+		},
+	},
 	Flags: []shortcut.Flag{},
 	Tips: []string{
 		`dws attendance +this-month`,

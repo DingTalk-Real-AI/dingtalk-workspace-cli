@@ -16,6 +16,9 @@ package smart
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -36,6 +39,34 @@ var Invite = shortcut.Shortcut{
 		"内部先把 --with 里每个姓名解析成唯一 userId，再一次性把他们全部加到 --event 指定的日程里。" +
 		"会真实修改日程并发出参会邀请。",
 	Risk: shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_invite",
+			CanonicalPath:  "calendar.shortcut_invite",
+			CLIPath:        "calendar +invite",
+			PrimaryCLIPath: "calendar +invite",
+		},
+		Description: "按姓名把参会人加入已有日程（自动解析 userId 后批量添加）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按姓名把参会人加入已有日程（自动解析 userId 后批量添加）",
+			UseWhen:      []string{"当你已经有一个日程（知道 eventId），想按姓名把几位同事拉进来当参会人时使用；内部先把 --with 里每个姓名解析成唯一 userId，再一次性把他们全部加到 --event 指定的日程里。会真实修改日程并发出参会邀请。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws calendar +invite --event EVENT_ID --with 张三",
+				"dws calendar +invite --event EVENT_ID --with 张三,李四",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "event", Type: shortcut.FlagString, Desc: "已有日程的 eventId", Required: true},
 		{Name: "with", Type: shortcut.FlagString, Desc: "参会人姓名，逗号分隔", Required: true},

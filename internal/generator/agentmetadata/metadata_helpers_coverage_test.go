@@ -5,10 +5,17 @@ package agentmetadata
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageMetadataMarshalAndProjectionEdges(t *testing.T) {
@@ -37,7 +44,7 @@ func TestCrossPlatformCoverageMetadataMarshalAndProjectionEdges(t *testing.T) {
 		t.Fatal("unexpected tool projection succeeded")
 	}
 	if _, _, err := Generate(Options{
-		HintsDir:           "hints",
+		HintsDir:           "",
 		CanonicalToolPaths: map[string]string{"sample": "sample get"},
 		ToolPaths:          map[string]string{"sample": "sample get"},
 		ProductIDs:         map[string]bool{"sample": true},
@@ -274,22 +281,111 @@ func TestCrossPlatformCoverageMetadataSourceAndPathEdges(t *testing.T) {
 	if err := os.MkdirAll(products, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadSources(Options{Root: root, ProductsDir: "products", HintsDir: "missing"}); err == nil || !strings.Contains(err.Error(), "walk Agent hint") {
-		t.Fatalf("missing hints directory error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(products, "skip.txt"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	same := filepath.Join(root, "same.md")
 	if err := os.WriteFile(same, []byte("same"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadSources(Options{Root: root, ProductsDir: "products", SkillPath: "same.md", IntentGuidePath: "same.md", HintsDir: "missing"}); err == nil || !strings.Contains(err.Error(), "schema_hints/ is retired") {
+		t.Fatalf("non-empty HintsDir should fail closed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(products, "skip.txt"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	files, err := loadSources(Options{Root: root, ProductsDir: "products", SkillPath: "same.md", IntentGuidePath: "same.md"})
 	if err != nil || len(files) != 1 {
 		t.Fatalf("deduplicated sources = %#v, %v", files, err)
 	}
-	if _, err := loadSources(Options{Root: root, ProductsDir: "products", ManualHintsPath: "missing.json"}); err == nil || !strings.Contains(err.Error(), "read") {
-		t.Fatalf("missing source error = %v", err)
+	if _, err := loadSources(Options{Root: root, ProductsDir: "products", ManualHintsPath: "missing.json"}); err == nil || !strings.Contains(err.Error(), "manual hints are retired") {
+		t.Fatalf("non-empty ManualHintsPath should fail closed: %v", err)
+	}
+	if got := SelectionCoverageProducts(RegistryProjection{ProductIDs: map[string]bool{"": true, "skip": false}}); len(got) != 0 {
+		t.Fatalf("SelectionCoverageProducts empty/skip = %#v", got)
+	}
+	if err := ValidateSelectionCoverage(RegistryProjection{}); err != nil {
+		t.Fatalf("ValidateSelectionCoverage empty projection: %v", err)
+	}
+	if selectionCoverageRequired(map[string]bool{"p": true}, nil) != true {
+		t.Fatal("product include must require coverage")
+	}
+	if selectionCoverageRequired(nil, map[string]bool{"t": true}) != true {
+		t.Fatal("tool include must require coverage")
+	}
+	if selectionCoverageRequired(map[string]bool{"p": false}, map[string]bool{"t": false}) {
+		t.Fatal("all-false maps must not require coverage")
+	}
+	if got := SelectionCoverageProducts(RegistryProjection{}); got != nil {
+		t.Fatalf("nil ProductIDs must return nil, got %#v", got)
+	}
+	missingProduct := SelectionCoverageProducts(RegistryProjection{
+		ProductIDs: map[string]bool{"coverage-missing-product-xyz": true},
+	})
+	if !missingProduct["coverage-missing-product-xyz"] {
+		t.Fatalf("missing ProductDecl must remain expected, got %#v", missingProduct)
+	}
+	proj := ProjectEffectiveRegistry(cli.EffectiveCommandRegistry{Commands: []cli.CommandSpec{
+		{CanonicalPath: "hidden.tool", PrimaryCLIPath: "hidden tool", Visibility: cli.SchemaVisibilityInternal},
+		{CanonicalPath: "sample.run", PrimaryCLIPath: "sample run", Aliases: []string{" sample alias ", ""}, Visibility: cli.SchemaVisibilityPublic},
+	}})
+	if proj.ToolCount != 1 || proj.ToolPaths["sample alias"] != "sample run" {
+		t.Fatalf("ProjectEffectiveRegistry = %#v", proj)
+	}
+	if err := ValidateSelectionCoverage(RegistryProjection{
+		ProductIDs:         map[string]bool{"coverage-missing-product-xyz": true},
+		CanonicalToolPaths: map[string]string{"coverage.missing": "coverage missing"},
+	}); err == nil || !strings.Contains(err.Error(), "selection coverage incomplete") {
+		t.Fatalf("ValidateSelectionCoverage missing error = %v", err)
+	}
+	if _, _, _, err := GenerateFromCommandRoot(".", nil, Options{}); err == nil || !strings.Contains(err.Error(), "schema source root is nil") {
+		t.Fatalf("GenerateFromCommandRoot nil root = %v", err)
+	}
+	testseam.Swap(t, &pipelineBuildEffectiveRegistry, func(*cobra.Command) (cli.EffectiveCommandRegistry, error) {
+		return cli.EffectiveCommandRegistry{}, nil
+	})
+	testseam.Swap(t, &pipelineBindEffectiveRegistry, func(*cobra.Command, cli.EffectiveCommandRegistry) (cli.BoundCommandRegistry, error) {
+		return cli.BoundCommandRegistry{}, nil
+	})
+	testseam.Swap(t, &pipelineGenerateMetadata, func(Options) (File, Stats, error) {
+		return File{}, Stats{}, nil
+	})
+	if _, _, _, err := GenerateFromCommandRoot("  ", &cobra.Command{Use: "dws"}, Options{}); err != nil {
+		t.Fatalf("GenerateFromCommandRoot empty rootPath defaults: %v", err)
+	}
+	testseam.Swap(t, &pipelineBuildEffectiveRegistry, func(*cobra.Command) (cli.EffectiveCommandRegistry, error) {
+		return cli.EffectiveCommandRegistry{}, errors.New("build boom")
+	})
+	if _, _, _, err := GenerateFromCommandRoot(".", &cobra.Command{Use: "dws"}, Options{}); err == nil || !strings.Contains(err.Error(), "build effective") {
+		t.Fatalf("build error = %v", err)
+	}
+	testseam.Swap(t, &pipelineBuildEffectiveRegistry, func(*cobra.Command) (cli.EffectiveCommandRegistry, error) {
+		return cli.EffectiveCommandRegistry{}, nil
+	})
+	testseam.Swap(t, &pipelineBindEffectiveRegistry, func(*cobra.Command, cli.EffectiveCommandRegistry) (cli.BoundCommandRegistry, error) {
+		return cli.BoundCommandRegistry{}, errors.New("bind boom")
+	})
+	if _, _, _, err := GenerateFromCommandRoot(".", &cobra.Command{Use: "dws"}, Options{}); err == nil || !strings.Contains(err.Error(), "bind effective") {
+		t.Fatalf("bind error = %v", err)
+	}
+	testseam.Swap(t, &pipelineBindEffectiveRegistry, func(*cobra.Command, cli.EffectiveCommandRegistry) (cli.BoundCommandRegistry, error) {
+		return cli.BoundCommandRegistry{}, nil
+	})
+	testseam.Swap(t, &pipelineGenerateMetadata, func(Options) (File, Stats, error) {
+		return File{}, Stats{}, errors.New("generate boom")
+	})
+	if _, _, _, err := GenerateFromCommandRoot(".", &cobra.Command{Use: "dws"}, Options{}); err == nil || !strings.Contains(err.Error(), "generate in-memory") {
+		t.Fatalf("generate error = %v", err)
+	}
+	testseam.Swap(t, &pipelineBuildEffectiveRegistry, func(*cobra.Command) (cli.EffectiveCommandRegistry, error) {
+		return cli.EffectiveCommandRegistry{Commands: []cli.CommandSpec{{
+			CanonicalPath:  "coverage.missing",
+			PrimaryCLIPath: "coverage missing",
+			Visibility:     cli.SchemaVisibilityPublic,
+		}}}, nil
+	})
+	testseam.Swap(t, &pipelineBindEffectiveRegistry, func(*cobra.Command, cli.EffectiveCommandRegistry) (cli.BoundCommandRegistry, error) {
+		return cli.BoundCommandRegistry{}, nil
+	})
+	if _, _, _, err := GenerateFromCommandRoot(".", &cobra.Command{Use: "dws"}, Options{}); err == nil || !strings.Contains(err.Error(), "selection coverage incomplete") {
+		t.Fatalf("selection coverage error = %v", err)
 	}
 
 	if got := sourceProductIDs(sourceFile{path: filepath.Join(root, "products", "sample", "guide.md")}, products, nil, nil); len(got) != 1 || got[0] != "sample" {
@@ -479,90 +575,51 @@ func TestCrossPlatformCoverageMetadataParserConflictEdges(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageGenerateFromSourcesFailureEdges(t *testing.T) {
-	base := func(t *testing.T) (string, Options) {
-		t.Helper()
-		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, "products"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		writeManualFixtureFile(t, root, "empty.md", "# empty")
-		return root, Options{Root: root, ProductsDir: "products", SkillPath: "empty.md", IntentGuidePath: "empty.md"}
+func TestCrossPlatformCoverageContractFinalDeclarationFailureEdges(t *testing.T) {
+	declared := &cobra.Command{Use: "run"}
+	contractfinal.RegisterRuntimeContractFinal(declared, contract.ContractFinalPayload{
+		Selection: &contract.SelectionSpec{AgentSummary: "declared summary"},
+	})
+	t.Cleanup(func() { contractfinal.ClearRuntimeContractFinalForTest(declared) })
+	bound := cli.BoundCommandRegistry{ByCanonical: map[string]cli.BoundCommandSpec{
+		"sample.run": {PrimaryCommand: declared},
+	}}
+
+	// A declared overlay without a canonical CLI projection must fail loudly
+	// instead of silently dropping the declaration from the artifact.
+	missing := &File{Tools: map[string]ToolMetadata{}}
+	err := applyContractFinalDeclarations(missing, Options{BoundCommands: bound})
+	if err == nil || !strings.Contains(err.Error(), "no canonical CLI projection") {
+		t.Fatalf("missing projection error = %v", err)
 	}
 
-	t.Run("danger rules", func(t *testing.T) {
-		root, opts := base(t)
-		opts.SkillPath = "skill.md"
-		writeManualFixtureFile(t, root, "skill.md", "## 危险操作确认\n| 产品 | 命令 | 风险 |\n|---|---|---|\n| `sample` | `get` | 删除 |\n| `sample` | `get` | 高风险写入 |")
-		if _, _, err := generateFromSources(opts); err == nil {
-			t.Fatal("conflicting danger source succeeded")
-		}
+	// A same-precedence conflicting value must surface the merge conflict.
+	conflicted := &File{Tools: map[string]ToolMetadata{
+		"sample run": {
+			AgentSummary: "other summary", agentSummaryPresent: true,
+			agentSummaryRank: selectionRankContractFinal, agentSummaryOrigin: "other-origin",
+		},
+	}}
+	err = applyContractFinalDeclarations(conflicted, Options{
+		BoundCommands:      bound,
+		CanonicalToolPaths: map[string]string{"sample.run": "sample run"},
 	})
+	if err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("contract final merge conflict error = %v", err)
+	}
 
-	t.Run("examples", func(t *testing.T) {
-		root, opts := base(t)
-		opts.SkillPath = "skill.md"
-		writeManualFixtureFile(t, root, "skill.md", "## 危险操作确认\n| 产品 | 命令 | 风险 |\n|---|---|---|\n| `sample` | `delete` | 删除且不可逆 |")
-		body := "## 使用场景\n- 用户提到“delete” → `sample delete`\n\n```bash\n# 高风险需要确认\ndws sample delete\n```"
-		writeManualFixtureFile(t, root, "products/sample/guide.md", body)
-		if _, _, err := generateFromSources(opts); err == nil {
-			t.Fatal("conflicting example source succeeded")
-		}
-	})
-
-	t.Run("interface metadata", func(t *testing.T) {
-		root, opts := base(t)
-		opts.InterfaceMetadataPath = "interface.json"
-		writeManualFixtureFile(t, root, "interface.json", "{")
-		if _, _, err := generateFromSources(opts); err == nil {
-			t.Fatal("invalid interface metadata succeeded")
-		}
-	})
-
-	t.Run("projected count", func(t *testing.T) {
-		_, opts := base(t)
-		opts.ToolPaths = map[string]string{"sample.tool": "sample get"}
-		opts.SurfaceToolCount = 2
-		if _, _, err := generateFromSources(opts); err == nil {
-			t.Fatal("invalid projected count succeeded")
-		}
-	})
-
-	t.Run("reviewed delivery", func(t *testing.T) {
-		root := t.TempDir()
-		writeSelectionFixture(t, root, true, `["dws sample item search --query value"]`)
-		writeManualFixtureFile(t, root, "skills/mono/SKILL.md", "# empty")
-		writeManualFixtureFile(t, root, "skills/mono/references/intent-guide.md", "# empty")
-		if err := os.MkdirAll(filepath.Join(root, "skills/mono/references/products"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		opts := selectionFixtureOptions(root)
-		opts.ToolPaths = map[string]string{"other.tool": "other get"}
-		opts.SurfaceToolCount = 1
-		if _, _, err := generateFromSources(opts); err == nil || !strings.Contains(err.Error(), "selection Agent delivery") {
-			t.Fatalf("reviewed delivery error = %v", err)
-		}
-	})
-
-	t.Run("interface disposition", func(t *testing.T) {
-		root := t.TempDir()
-		writeSelectionFixture(t, root, true, `["dws sample item search --query value"]`)
-		writeManualFixtureFile(t, root, "skills/mono/SKILL.md", "# empty")
-		writeManualFixtureFile(t, root, "skills/mono/references/intent-guide.md", "# empty")
-		if err := os.MkdirAll(filepath.Join(root, "skills/mono/references/products"), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		path := filepath.Join(root, "internal/cli/schema_hints/metadata/sample.json")
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body = []byte(strings.Replace(string(body), `"runtime_gate":"none",`, `"runtime_gate":"none","interface_mode":"mcp","availability":"available",`, 1))
-		if err := os.WriteFile(path, body, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, err := generateFromSources(selectionFixtureOptions(root)); err == nil || !strings.Contains(err.Error(), "invalid final Agent interface disposition") {
-			t.Fatalf("interface disposition error = %v", err)
-		}
-	})
+	// generateFromSources propagates the declaration failure to its caller.
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "products"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "skill.md"), []byte("# skill\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := generateFromSources(Options{
+		Root: root, SkillPath: "skill.md", IntentGuidePath: "skill.md", ProductsDir: "products",
+		BoundCommands: bound,
+	}); err == nil || !strings.Contains(err.Error(), "no canonical CLI projection") {
+		t.Fatalf("generateFromSources contract final error = %v", err)
+	}
 }

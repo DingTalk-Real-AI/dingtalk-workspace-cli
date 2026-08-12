@@ -1,10 +1,9 @@
 ---
 name: dingtalk-todo
-description: 钉钉待办 / TODO。Use when 用户说 创建待办/TODO/任务提醒/指派任务/标记完成/查待办/紧急待办/循环待办/批量建待办/逾期待办。Distinct from dingtalk-report(日报周报)、dingtalk-oa(审批)、dingtalk-calendar(日程)。命令前缀：dws todo。
-cli_version: ">=0.2.14"
+description: 钉钉待办 / TODO。Use when 用户说 创建待办/TODO/任务提醒/指派任务/标记完成/查待办/紧急待办/循环待办/批量建待办/逾期待办。不做日报周报（走 dingtalk-misc）、审批（走 dingtalk-misc）、日程（走 dingtalk-calendar）。命令前缀：dws todo。
 metadata:
+  cli_version: ">=0.2.14"
   category: product
-  stability: experimental
   requires:
     bins:
       - dws
@@ -12,21 +11,16 @@ metadata:
 
 # 钉钉待办 Skill
 
-> 🧪 **EXPERIMENTAL · 试验版 / Preview** — multi 模式当前未达 stable 标准。全部 dingtalk-* skill 已通过 dispatch verifier，但接口、命名、跨 skill 引用后续可能调整；生产 / 共享环境请优先使用 mono 模式（`dws skill setup --mode mono`）。问题请提 issue 反馈。
+## 前置条件 — 执行操作前必读
 
-> **PREREQUISITE:** Read the `dws-shared` skill first for auth, global flags, product routing, URL preflight, error codes, and safety rules. The `dws` binary must be on PATH.
-
-<!-- SAFETY_PREAMBLE_INJECT -->
-
-> ⚠️ **命令可用性以当前 dws 二进制为准**。服务发现已下线，本文档随内置 skill 发布；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。若命令存在但调用失败，请按错误中的 endpoint 或 tool 提示确认静态端点目录和后端工具注册。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
-
+> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
 
 > 命令参考：[todo.md](references/todo.md)；剧本：[02-task.md](references/02-task.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 来自独立于 Runtime Schema 的公开 catalog。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。用 `dws shortcut list --service todo --format json` 读取参数、约束、风险和示例，并以 `dws todo <shortcut> --help` 核对当前 Cobra flags；不要对 `+` 路径调用 `dws schema`。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "todo +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws todo <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service todo --format json` 批量发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
@@ -39,7 +33,7 @@ metadata:
 | `dws todo +list-comment` | read | 查询待办评论列表 |
 | `dws todo +list-sub` | read | 查询子待办列表 |
 | `dws todo +overdue` | read | 列出我已过期未完成的待办 |
-| `dws todo +remind` | write | 给自己创建一条带截止/提醒时间的待办 |
+| `dws todo +remind` | write | 给自己创建一条带可选截止时间的待办 |
 | `dws todo +todo-done` | write | 按标题关键词把我的某条待办标记完成（自动定位 taskId） |
 <!-- VISIBLE_SHORTCUTS_END -->
 
@@ -51,12 +45,55 @@ metadata:
 | "较高 / 高优先级待办" | `dws todo task create ... --priority 30`（10低/20普通/30较高/40紧急） |
 | "紧急 / 最高优先级 / 立即处理" | `dws todo task create ... --priority 40` |
 | "循环待办（每天）" | `dws todo task create ... --due "<首次截止ISO>" --recurrence "DTSTART:<UTC>\nRRULE:FREQ=DAILY;INTERVAL=1"` |
-| "批量建待办（JSON 文件）" | `python scripts/todo_batch_create.py todos.json` |
+| "批量建待办" | 按 SOP-4 逐条创建、收集 `taskId` 并批量回读 |
 | "今天 / 本周未完成待办" | `python scripts/todo_daily_summary.py [today\|tomorrow\|week]` |
 | "逾期待办" | `python scripts/todo_overdue_check.py` |
 | "标记完成 / 重开" | `dws todo task done --task-id <taskId> --status true\|false` |
 | "修改标题/截止时间/优先级" | `dws todo task update --task-id <taskId> ...` |
 | "删除待办" | `dws todo task delete --task-id <taskId>`（需用户确认） |
+
+## 标准 SOP（必遵流程）
+
+> 命中以下意图**必须**按对应 SOP 顺序执行；**禁止**跳步、替换命令、编造 taskId。每条命令必须带 `--format json`。创建/完成/删除后**必须**回读验证，不要凭创建返回或口头计划就结束。
+
+### SOP-1 建待办（create-todo）
+
+**触发**：建待办/任务提醒/指派任务/TODO。
+
+1. **解析执行者（必须）**：指定姓名 → `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId`；未指定 → `dws contact user get-self --format json` 取当前用户 `userId`；多人逐个搜索后英文逗号拼接。
+2. **执行（必须）**：`dws todo task create --title "<标题>" --executors <userId>[,<userId2>...] --priority <10/20/30/40> --format json`；有截止时间加 `--due "<ISO>"`；循环待办加 `--due "<首次截止ISO>" --recurrence "DTSTART:<UTC>\nRRULE:FREQ=DAILY;INTERVAL=1"`。
+3. **验证（必须）**：从返回取 `taskId`/`todoTaskId`，立即 `dws todo task get --task-id <taskId> --format json` 回读。
+
+**禁止**：跳过执行者解析直接传姓名、用 `task detail` 取详情（正确是 `task get`）、创建后不回读。
+
+### SOP-2 查询待办（query-todo）
+
+**触发**：查待办/今天本周待办/未完成/已完成。
+
+1. **执行（必须）**：`dws todo task list --status false|true --format json`（`false`=未完成、`true`=已完成、不传=全部）；`hasMore=true` 必须翻页。
+2. **摘要脚本（必须）**：今天/本周未完成 → `python scripts/todo_daily_summary.py today|tomorrow|week`；逾期 → `python scripts/todo_overdue_check.py`。
+3. **详情（必须）**：`dws todo task get --task-id <taskId> --format json`；按主题筛选先 `task list` 再按标题过滤，**禁止**编造主题查询 flag。
+
+**禁止**：写 `--done true`（用 `--status true`）、编造主题筛选参数。
+
+### SOP-3 完成 / 重开 / 改 / 删（mutate-todo）
+
+**触发**：标记完成/重开/改标题截止优先级/删待办。
+
+1. **执行（必须）**：完成/重开 `dws todo task done --task-id <taskId> --status true|false --format json`；修改 `dws todo task update --task-id <taskId> ...`；删除 `dws todo task delete --task-id <taskId>`（**必须**先与用户确认）。
+2. **验证（必须）**：`task done`/`update` 后用 `task get` 或对应 `task list --status ...` 回读确认；`delete` 后用 `task get` 确认已不存在或列表已移除。
+
+**禁止**：未确认就删除、用 `update --done`（首选 `task done --status`）、改动后不回读。
+
+### SOP-4 批量建待办（batch-create）
+
+**触发**：批量建待办/一次建多条。
+
+1. **解析（必须）**：执行者姓名先批量解析成真实 `userId`；单批最多 30 条。
+2. **执行（必须）**：对每条待办执行 `dws todo task create --title "<标题>" --executors <userId> --priority <10/20/30/40> [--due "<ISO>"] --format json`，逐条收集返回的 `taskId`/`todoTaskId`。可并行执行，但不得丢失“输入条目 → taskId”对应关系。
+3. **验证（必须）**：对全部新建 `taskId` 执行 `dws todo task get --task-id <taskId> --format json` 回读；多 ID 按共享并行规则处理，全部成功后才能报告批量创建完成。
+
+**禁止**：只统计创建命令退出码、不保留 taskId、创建后不回读、在执行者位置传姓名。
 
 ## 参数硬约束
 
@@ -66,7 +103,6 @@ metadata:
 - `--id` / `--ids` 是隐藏兼容别名，文档和生成命令统一写 `--task-id`，减少模型漂移。
 - 优先级映射：低=10，普通=20，较高/高/重要=30，紧急/最高/P0/马上处理=40；不要把"较高"写成 40。
 - 截止时间必须是 ISO-8601。相对日期按当前日期计算；例如周五说"下周二"就是紧接下一个自然周的周二，不要再加一周。
-- 附件命令 `task add-attachment` / `list-attachment` / `remove-attachment` 均可用：`add-attachment --task-id <taskId> --file-path <本地文件>`（真实上传，先确认待办存在，返回 `result.attachmentIds`）；`list-attachment --task-id <taskId>`（返回顶层 `attachments[].attachmentId`）；`remove-attachment --task-id <taskId> --attachment-id <id> --yes`（不可逆，先确认）。
 - 创建、标记完成、重开、删除后必须 `task get` 或对应 `task list --status ...` 验证，不要只凭创建返回或口头计划结束。
 - 所有 dws 命令带 `--format json`。
 
@@ -75,3 +111,6 @@ metadata:
 - 执行人是人名 → 先用 `dingtalk-aisearch` 拿 `userId`
 - 会后从听记自动建待办 → 切到 `dingtalk-minutes`
 - 项目进度汇总写文档 → 切到 `dingtalk-doc`
+## 局部意图与短流程
+
+- [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。

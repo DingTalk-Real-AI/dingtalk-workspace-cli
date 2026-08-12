@@ -46,44 +46,52 @@ func newListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "列出内建 shortcut 及其完整参数契约",
-		Long: "列出独立于 Runtime Schema 的 shortcut catalog。每条记录包含公开参数、" +
-			"必填/枚举约束、跨参数约束与可执行示例；也可用 dws <service> +<command> --help 查看单条契约。",
+		Long: "列出内建 shortcut catalog。公开 shortcut 同时进入 Runtime Schema；本列表保留轻量批量发现，" +
+			"leaf Schema 提供 Agent 选择、参数、约束、安全与接口契约，Cobra help 提供当前可执行 flags。",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			svc, _ := cmd.Flags().GetString("service")
+			includeHidden, _ := cmd.Flags().GetBool("all")
 			rows := make([]shortcutListRow, 0)
 			for _, s := range shortcut.All() {
 				if svc != "" && s.Service != svc {
 					continue
 				}
-				if s.Hidden {
+				if s.Hidden && !includeHidden {
 					continue
 				}
 				rows = append(rows, newShortcutListRow(s))
 			}
 			return output.WriteCommandPayload(cmd, map[string]any{
 				"catalog":        "shortcut",
-				"runtime_schema": false,
+				"runtime_schema": true,
 				"count":          len(rows),
 				"shortcuts":      rows,
 			}, output.FormatJSON)
 		},
 	}
 	cmd.Flags().String("service", "", "只列出指定服务的 shortcut")
+	cmd.Flags().Bool("all", false, "包含当前未进入公开 Catalog、但仍可直接调用的 shortcut")
 	return cmd
 }
 
 type shortcutListRow struct {
-	Service      string                `json:"service"`
-	Command      string                `json:"command"`
-	CLIPath      string                `json:"cli_path"`
-	Product      string                `json:"product"`
-	Risk         string                `json:"risk"`
-	Confirmation string                `json:"confirmation"`
-	Description  string                `json:"description"`
-	Intent       string                `json:"intent,omitempty"`
-	Flags        []shortcut.Flag       `json:"flags"`
-	Constraints  []shortcut.Constraint `json:"constraints"`
-	Examples     []string              `json:"examples"`
+	Service       string                `json:"service"`
+	Command       string                `json:"command"`
+	CLIPath       string                `json:"cli_path"`
+	Product       string                `json:"product"`
+	Risk          string                `json:"risk"`
+	Confirmation  string                `json:"confirmation"`
+	Description   string                `json:"description"`
+	Intent        string                `json:"intent,omitempty"`
+	Flags         []shortcut.Flag       `json:"flags"`
+	Constraints   []shortcut.Constraint `json:"constraints"`
+	Examples      []string              `json:"examples"`
+	Public        bool                  `json:"public"`
+	Disposition   string                `json:"disposition,omitempty"`
+	SemanticDelta string                `json:"semantic_delta,omitempty"`
+	Availability  string                `json:"availability,omitempty"`
+	Primary       string                `json:"primary,omitempty"`
+	Reviewed      bool                  `json:"reviewed"`
 }
 
 func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {
@@ -95,10 +103,7 @@ func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {
 	if risk == "" {
 		risk = string(shortcut.RiskRead)
 	}
-	confirmation := "not_required"
-	if risk != string(shortcut.RiskRead) {
-		confirmation = "user_required"
-	}
+	confirmation := shortcut.EffectiveSafety(s).Confirmation
 	flags := make([]shortcut.Flag, 0, len(s.Flags))
 	for _, flag := range s.Flags {
 		if flag.Hidden {
@@ -115,17 +120,23 @@ func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {
 	constraints := append([]shortcut.Constraint{}, s.Constraints...)
 	examples := append([]string{}, s.Tips...)
 	return shortcutListRow{
-		Service:      s.Service,
-		Command:      s.Command,
-		CLIPath:      s.Service + " " + s.Command,
-		Product:      product,
-		Risk:         risk,
-		Confirmation: confirmation,
-		Description:  s.Description,
-		Intent:       s.Intent,
-		Flags:        flags,
-		Constraints:  constraints,
-		Examples:     examples,
+		Service:       s.Service,
+		Command:       s.Command,
+		CLIPath:       s.Service + " " + s.Command,
+		Product:       product,
+		Risk:          risk,
+		Confirmation:  confirmation,
+		Description:   s.Description,
+		Intent:        s.Intent,
+		Flags:         flags,
+		Constraints:   constraints,
+		Examples:      examples,
+		Public:        !s.Hidden,
+		Disposition:   string(s.Disposition),
+		SemanticDelta: s.SemanticDelta,
+		Availability:  string(s.Availability),
+		Primary:       s.PrimaryCommand,
+		Reviewed:      s.SemanticReviewed,
 	}
 }
 

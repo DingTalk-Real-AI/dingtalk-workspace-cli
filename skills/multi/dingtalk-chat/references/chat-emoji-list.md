@@ -2,6 +2,13 @@
 
 > 本文件列出钉钉支持的所有用户可见默认表情（showType=1），共 199 个。
 >
+> **来源与维护合同（reviewed snapshot）**：表格来自钉钉默认表情 catalog 的 showType=1
+> 人工复核快照；当前 lower interface 没有可靠的“列出默认 emoji”命令，因此本文件不是从
+> Runtime 或旧 Catalog 反向生成。更新时必须取得新的官方/真实客户端 catalog，核对
+> emotionId、中文 name、en_US、showType 和总数，说明来源与复核日期，再整体替换表格；禁止
+> 根据用户输入或单次 reaction 响应增补。生成策略为 **non-generated reviewed reference**，
+> Schema/Skill 生成器不得机械重写它。最后复核：2026-08-03。
+>
 > 使用规则：
 > - 用户描述的表情命中下表中的 `name` → 使用 `chat message add-emoji --emoji <name>` 贴 emoji 回应
 > - 用户描述的表情未命中下表 → 先 `chat message create-text-emotion` 创建文字表情获取 emotionId，再 `chat message add-text-emotion` 贴文字表情回应

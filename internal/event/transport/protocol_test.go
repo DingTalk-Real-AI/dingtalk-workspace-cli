@@ -23,19 +23,23 @@ import (
 // to guard against accidental wire-format changes (the JSON field tags
 // double as part of the cross-version protocol contract).
 
-func TestFrameType_StableWireValues(t *testing.T) {
+func TestCrossPlatformCoverageFrameTypeStableWireValues(t *testing.T) {
 	// If any of these strings change we've made a protocol-breaking
 	// change. The test value list is duplicated here on purpose so a
 	// reviewer renaming a constant is forced to also update the test.
 	wants := map[FrameType]string{
-		FrameTypeHello:       "hello",
-		FrameTypeHelloAck:    "hello_ack",
-		FrameTypeEvent:       "event",
-		FrameTypeHeartbeat:   "heartbeat",
-		FrameTypeSourceState: "source_state",
-		FrameTypeBye:         "bye",
-		FrameTypeStatusReq:   "status_req",
-		FrameTypeStatusResp:  "status_resp",
+		FrameTypeHello:               "hello",
+		FrameTypeHelloAck:            "hello_ack",
+		FrameTypeEvent:               "event",
+		FrameTypeHeartbeat:           "heartbeat",
+		FrameTypeSourceState:         "source_state",
+		FrameTypeBye:                 "bye",
+		FrameTypeStatusReq:           "status_req",
+		FrameTypeStatusResp:          "status_resp",
+		FrameTypeConsumerStopReq:     "consumer_stop_req",
+		FrameTypeConsumerStopResp:    "consumer_stop_resp",
+		FrameTypeCredentialUpdate:    "credential_update",
+		FrameTypeCredentialUpdateAck: "credential_update_ack",
 	}
 	for ft, want := range wants {
 		if string(ft) != want {
@@ -46,14 +50,48 @@ func TestFrameType_StableWireValues(t *testing.T) {
 
 func TestHelloRole_StableWireValues(t *testing.T) {
 	wants := map[HelloRole]string{
-		HelloRoleConsumer: "",
-		HelloRoleStatus:   "status",
-		HelloRoleStop:     "stop",
+		HelloRoleConsumer:     "",
+		HelloRoleStatus:       "status",
+		HelloRoleStop:         "stop",
+		HelloRoleConsumerStop: "consumer_stop",
 	}
 	for r, want := range wants {
 		if string(r) != want {
 			t.Errorf("HelloRole wire value drift: %v != %q", r, want)
 		}
+	}
+}
+
+func TestConsumerStopFrames_Roundtrip(t *testing.T) {
+	inReq := ConsumerStopReq{
+		Type:         FrameTypeConsumerStopReq,
+		SubscribeIDs: []string{"sub-a", "sub-b"},
+	}
+	var outReq ConsumerStopReq
+	roundTrip(t, inReq, &outReq)
+	if outReq.Type != FrameTypeConsumerStopReq || strings.Join(outReq.SubscribeIDs, ",") != "sub-a,sub-b" {
+		t.Fatalf("request roundtrip = %#v", outReq)
+	}
+
+	inResp := ConsumerStopResp{
+		Type:     FrameTypeConsumerStopResp,
+		Stopped:  []string{"sub-a"},
+		NotFound: []string{"sub-b"},
+	}
+	var outResp ConsumerStopResp
+	roundTrip(t, inResp, &outResp)
+	if outResp.Type != FrameTypeConsumerStopResp || strings.Join(outResp.Stopped, ",") != "sub-a" || strings.Join(outResp.NotFound, ",") != "sub-b" {
+		t.Fatalf("response roundtrip = %#v", outResp)
+	}
+
+	inError := ConsumerStopResp{
+		Type:  FrameTypeConsumerStopResp,
+		Error: "malformed consumer stop request",
+	}
+	var outError ConsumerStopResp
+	roundTrip(t, inError, &outError)
+	if outError.Type != FrameTypeConsumerStopResp || outError.Error != inError.Error {
+		t.Fatalf("error response roundtrip = %#v", outError)
 	}
 }
 
@@ -68,51 +106,88 @@ func roundTrip(t *testing.T, in any, dst any) {
 	}
 }
 
-func TestHello_Roundtrip(t *testing.T) {
+func TestCrossPlatformCoverageHelloRoundtrip(t *testing.T) {
 	in := Hello{
-		Type:        FrameTypeHello,
-		ConsumerPID: 42,
-		EventTypes:  []string{"im.*", "approval.task"},
-		Filter:      `^im\.`,
-		Compact:     true,
-		Role:        HelloRoleStatus,
+		Type:           FrameTypeHello,
+		ConsumerPID:    42,
+		EventTypes:     []string{"im.*", "approval.task"},
+		Filter:         `^im\.`,
+		Compact:        true,
+		Role:           HelloRoleStatus,
+		CredentialMode: CredentialModeRuntimeToken,
 	}
 	var out Hello
 	roundTrip(t, in, &out)
 	if out.Type != in.Type || out.ConsumerPID != in.ConsumerPID || out.Filter != in.Filter ||
-		out.Compact != in.Compact || out.Role != in.Role || len(out.EventTypes) != len(in.EventTypes) {
+		out.Compact != in.Compact || out.Role != in.Role || out.CredentialMode != in.CredentialMode || len(out.EventTypes) != len(in.EventTypes) {
 		t.Fatalf("roundtrip mismatch: %+v != %+v", out, in)
 	}
 }
 
-func TestHello_OmitemptyForDefaults(t *testing.T) {
+func TestCrossPlatformCoverageHelloOmitemptyForDefaults(t *testing.T) {
 	// Default values should NOT appear in the wire form so old/new readers
 	// stay tolerant of each other (each new field comes in with its
 	// zero value by default).
 	in := Hello{Type: FrameTypeHello, ConsumerPID: 1}
 	b, _ := json.Marshal(in)
 	s := string(b)
-	for _, k := range []string{`"event_types"`, `"filter"`, `"compact"`, `"role"`} {
+	for _, k := range []string{`"event_types"`, `"filter"`, `"compact"`, `"role"`, `"credential_mode"`} {
 		if strings.Contains(s, k) {
 			t.Errorf("zero-value field %s leaked into wire form: %s", k, s)
 		}
 	}
 }
 
-func TestHelloAck_Roundtrip(t *testing.T) {
+func TestCrossPlatformCoverageHelloAckRoundtrip(t *testing.T) {
 	in := HelloAck{
-		Type:               FrameTypeHelloAck,
-		BusPID:             12345,
-		SourceState:        "connected",
-		StateSource:        "inferred",
-		ClientIDSource:     "env",
-		ClientSecretSource: "env",
-		IdleTimeoutSecs:    300,
+		Type:                 FrameTypeHelloAck,
+		BusPID:               12345,
+		SourceState:          "connected",
+		StateSource:          "inferred",
+		ClientIDSource:       "env",
+		ClientSecretSource:   "env",
+		IdleTimeoutSecs:      300,
+		Capabilities:         []string{CapabilityRuntimeTokenV1},
+		CredentialGeneration: 7,
 	}
 	var out HelloAck
 	roundTrip(t, in, &out)
-	if out != in {
+	if out.Type != in.Type || out.BusPID != in.BusPID || out.SourceState != in.SourceState ||
+		out.StateSource != in.StateSource || out.ClientIDSource != in.ClientIDSource ||
+		out.ClientSecretSource != in.ClientSecretSource || out.IdleTimeoutSecs != in.IdleTimeoutSecs ||
+		out.CredentialGeneration != in.CredentialGeneration || strings.Join(out.Capabilities, ",") != CapabilityRuntimeTokenV1 {
 		t.Fatalf("HelloAck roundtrip: %+v != %+v", out, in)
+	}
+}
+
+func TestCrossPlatformCoverageCredentialFramesRoundtripWithoutTokenInAck(t *testing.T) {
+	update := CredentialUpdate{
+		Type:               FrameTypeCredentialUpdate,
+		ExpectedGeneration: 4,
+		Token:              "canary-secret",
+	}
+	var decodedUpdate CredentialUpdate
+	roundTrip(t, update, &decodedUpdate)
+	if decodedUpdate != update {
+		t.Fatal("CredentialUpdate roundtrip mismatch")
+	}
+
+	ack := CredentialUpdateAck{
+		Type:                 FrameTypeCredentialUpdateAck,
+		Accepted:             true,
+		CredentialGeneration: 5,
+	}
+	var decodedAck CredentialUpdateAck
+	roundTrip(t, ack, &decodedAck)
+	if decodedAck != ack {
+		t.Fatalf("CredentialUpdateAck roundtrip = %#v", decodedAck)
+	}
+	b, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), update.Token) {
+		t.Fatal("credential acknowledgement contained token")
 	}
 }
 
@@ -209,7 +284,7 @@ func TestStatusResp_Roundtrip(t *testing.T) {
 // PeekType is used by the daemon to dispatch incoming frames before
 // fully decoding into the typed struct. Behaviour at boundaries matters.
 
-func TestPeekType_EachFrameVariant(t *testing.T) {
+func TestCrossPlatformCoveragePeekTypeEachFrameVariant(t *testing.T) {
 	cases := []struct {
 		v   any
 		typ FrameType
@@ -222,6 +297,8 @@ func TestPeekType_EachFrameVariant(t *testing.T) {
 		{Bye{Type: FrameTypeBye, Reason: "x"}, FrameTypeBye},
 		{StatusReq{Type: FrameTypeStatusReq}, FrameTypeStatusReq},
 		{StatusResp{Type: FrameTypeStatusResp}, FrameTypeStatusResp},
+		{CredentialUpdate{Type: FrameTypeCredentialUpdate}, FrameTypeCredentialUpdate},
+		{CredentialUpdateAck{Type: FrameTypeCredentialUpdateAck}, FrameTypeCredentialUpdateAck},
 	}
 	for _, c := range cases {
 		b, _ := json.Marshal(c.v)

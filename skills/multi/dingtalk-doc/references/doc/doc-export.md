@@ -1,80 +1,30 @@
-# doc export（在线文档导出为 docx）
+# 导出在线文档
 
-> **前置条件（MUST READ）：** 执行本命令前，必须先用 Read 工具读取以下文件：
-> 1. [`../doc.md`](../doc.md) — 命令路由 + 场景索引 + 意图判断 + 工作流
-
-> **路由前置判断**：用户说「下载/导出」时**必须**先用 [`./doc-info.md`](./doc-info.md) `info --node <ID> --format json` 查 `contentType`：
-> - `contentType` 为 `ALIDOC`（在线文档）→ **必须用 `export`**，禁止用 `download`
-> - `contentType` 为 `DOCUMENT`/`IMAGE`/`VIDEO` 等（已有文件）→ 用 `dws drive download`（详见 [`../drive.md`](../drive.md)）
->
-> `drive download` 只能下载**已有文件**（原样下载），`export` 是将**在线文档格式转换**后导出为 docx，两者完全不同。
-
----
-
-## doc export（一体化命令）
-
-```
-Usage:
-  dws doc export [flags]
-Example:
-  dws doc export --node "https://alidocs.dingtalk.com/i/nodes/xxx" --output ./exported.docx
-  dws doc export --node <DOC_ID> --output ~/downloads/
-Flags:
-      --node string           要导出的文档标识，支持文档 URL 或 dentryUuid (必填)
-      --output string         本地保存路径，文件路径或目录 (必填)
-      --export-format string  导出格式，当前仅支持 docx (默认)
-```
-
-CLI 内部自动完成：提交导出任务 → 渐进式退避轮询（最多约 5 分钟）→ 成功后自动下载文件。
-**只需一条命令，无需手动轮询。**
-
----
-
-## doc export get（手动兜底查询任务）
-
-```
-Usage:
-  dws doc export get [flags]
-Example:
-  dws doc export get --job-id <JOB_ID>
-Flags:
-      --job-id string   导出任务 ID (必填)
-```
-
-仅在 `dws doc export` 超时或中断后，用于手动查询任务状态。通常不需要调用。
-
-## 关键说明
-
-- `export` 是一体化命令，一条命令自动完成提交→轮询→下载，**无需手动编排轮询**。CLI 内部使用渐进式退避轮询（最多约 5 分钟）。
-- `export` 超时或中断后，CLI 会输出 `jobId`，可用 `dws doc export get --job-id <jobId>` 手动查询任务状态。
-- `export` 当前仅支持钉钉在线文档（alidocs，`contentType=ALIDOC`）导出为 `docx`，**在线表格导出请使用其他命令**。
-- `--output` 既可以是文件完整路径，也可以是目录（CLI 自动按文档名生成 `.docx`）。
-
-## 上下文传递
-
-| 从返回中提取 | 用于 |
-|-------------|------|
-| `localPath` | 用户可访问的本地文件路径 |
-| 中断时返回的 `jobId` | `export get` 的 `--job-id` |
-
-## 常用模板
+## 唯一推荐入口
 
 ```bash
-# 一体化导出（最常用）
-dws doc export --node <DOC_ID> --output ./exported.docx
-
-# 输出到目录（自动按文档名命名）
-dws doc export --node <DOC_ID> --output ~/downloads/
-
-# alidocs URL 直传
-dws doc export --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --output ./exported.docx
-
-# 兜底：超时或中断后手动查任务
-dws doc export get --job-id <JOB_ID> --format json
+dws doc +export --node <DOC_ID_OR_URL> --export-format docx --output ./exports/ --format json
+dws doc +export --node <DOC_ID_OR_URL> --export-format markdown --output ./document.md --format json
+dws doc +export --node <DOC_ID_OR_URL> --export-format pdf --output ./document.pdf --format json
 ```
 
-## 参考
+`+export` 一次完成提交、轮询和原子下载。输出路径必须位于工作目录内，默认 no-clobber；只有用户明确允许覆盖时使用 `--overwrite`。
 
-- [`../doc.md` §意图判断](../doc.md#意图判断)（如何路由到本命令）
-- [`./doc-info.md`](./doc-info.md)（前置：判断 contentType=ALIDOC 才走 export）
-- [`../drive.md`](../drive.md)（非 ALIDOC 文件用 `dws drive download`）
+`--export-format` 必填；全局 `--format json` 只控制 CLI 输出，不能代替业务导出格式。禁止依赖默认 docx，也不要猜测 `--type`。
+
+异步状态 `INIT` 与 `PROCESSING` 都表示任务仍可继续轮询；只有终态失败才停止，不能把 `INIT` 当导出失败。
+
+## 类型边界
+
+- 在线文字文档（`adoc`）转为 docx/markdown/pdf：`+export`。
+- 已存在的普通文件原样下载：切换到 `dingtalk-drive`，使用 drive download。
+- 不要为了导出先把正文读到本地再重新生成文件。
+
+## 失败处理
+
+- 提交前权限/认证失败：原样报告并停止；不要尝试同义底层命令。
+- 已返回 `jobId` 后轮询失败或超时：保留 `jobId`，只用 `+export-get --job-id <JOB_ID>` 恢复查询，禁止重新提交导出。
+- 下载阶段失败：保留 `jobId` 和目标相对路径，用 `+export-get --job-id <JOB_ID> --output ./目标文件` 通过同一安全下载器恢复；不要直接 `curl` 临时 URL。
+- 禁止安装 `pandoc`、`python-docx` 或其他依赖来隐式伪造导出结果。只有用户明确改成“本地生成文件”任务时，才可作为一个新的独立工作流处理。
+
+只有需要显式接管异步 job 的恢复场景才使用 `+export-submit/+export-get`；正常导出不得手工编排它们。

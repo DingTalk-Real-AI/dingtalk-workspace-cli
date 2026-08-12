@@ -6,8 +6,6 @@ package cli
 
 import (
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -43,38 +41,6 @@ func RegisterRuntimeSchemaParameterMetadata(canonicalPath string, metadata Runti
 		panic("duplicate runtime schema parameter metadata: " + canonicalPath)
 	}
 	runtimeSchemaParameterMetadataByCanonical[canonicalPath] = metadata
-}
-
-func applyRuntimeSchemaParameterMetadata(cmd *cobra.Command, canonicalPath string) {
-	metadata, ok := runtimeSchemaParameterMetadataByCanonical[strings.TrimSpace(canonicalPath)]
-	if !ok {
-		return
-	}
-	for _, flagName := range metadata.Required {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotation(flag, runtimeSchemaFlagMetadataRequiredAnnotation, "true")
-		}
-	}
-	for flagName, expression := range metadata.RequiredWhen {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotation(flag, runtimeSchemaFlagMetadataRequiredWhenAnnotation, strings.TrimSpace(expression))
-		}
-	}
-	for flagName, format := range metadata.Formats {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotation(flag, runtimeSchemaFlagMetadataFormatAnnotation, strings.TrimSpace(format))
-		}
-	}
-	for flagName, values := range metadata.Enums {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotationValues(flag, runtimeSchemaFlagMetadataEnumAnnotation, values...)
-		}
-	}
-	for flagName, example := range metadata.Examples {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotation(flag, runtimeSchemaFlagMetadataExampleAnnotation, strings.TrimSpace(example))
-		}
-	}
 }
 
 // RuntimeSchemaParameterMetadataDefinitions returns a defensive copy for

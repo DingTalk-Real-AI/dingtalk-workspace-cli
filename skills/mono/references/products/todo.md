@@ -39,10 +39,12 @@ Usage:
   dws todo task list [flags]
 Example:
   dws todo task list --page 1 --size 20 --status false
+  dws todo task list --page 1 --size 20 --query-all
 Flags:
-      --page string     页码 (默认 1)
-      --size string     每页数量 (默认 20)
-      --status string   true=已完成, false=未完成
+      --page string      页码 (默认 1)
+      --size string      每页数量 (默认 20)
+      --status string    true=已完成, false=未完成
+      --query-all        查询全部组织的待办；不传时仅查询当前组织
 ```
 
 ### 修改待办任务
@@ -266,7 +268,7 @@ Example:
   dws todo task reset-reminder --task-id <taskId>
   dws todo task reset-reminder --task-id <taskId> --reminder-rules '[{"dueDateOffset":-30,"baseTime":"dueTime"},{"reminderTimeStamp":"2026-03-10T18:00:00+08:00","baseTime":"customTime"}]'
 Flags:
-      --reminder-rules string   提醒规则 JSON 数组 (可选，为空则清除提醒)
+      --reminder-rules string   提醒规则 JSON 数组 (不传则清除；显式传值必须合法)
       --task-id string          待办任务 ID (必填)
 ```
 
@@ -289,12 +291,68 @@ JSON 数组，每个元素为一条提醒规则，支持两种 `baseTime` 模式
 ```
 以上表示两条提醒规则：第一条在截止时间前 30 分钟提醒，第二条在指定时间（ISO-8601）提醒。
 
+不传 `--reminder-rules` 或显式传 `[]` 表示清除提醒。其他显式值必须是合法对象数组：每条规则必须提供 `baseTime`；`dueTime` 必须带整数 `dueDateOffset`，`customTime` 必须带 ISO-8601 `reminderTimeStamp`。非法 JSON、`null`、标量元素或缺失模式字段都会在调用远端前报错，不会静默按 `null` 清空提醒。
+
+### 给待办打标签
+```
+Usage:
+  dws todo tag add [flags]
+Example:
+  dws todo tag add --task-id <taskId> --tag-codes code1,code2
+Flags:
+      --task-id string    待办任务 ID (必填)
+      --tag-codes string  标签编码列表，逗号分隔，最多 2 个 (必填)
+```
+
+### 删除待办标签
+
+> **CAUTION:** 删除的是标签定义且不可恢复，执行前必须获得用户确认。
+
+```
+Usage:
+  dws todo tag delete [flags]
+Example:
+  dws todo tag delete --tag-codes code1,code2 --yes
+Flags:
+      --tag-codes string  要删除的标签编码列表，逗号分隔 (必填)
+      --yes               跳过交互确认（仅在用户已确认后使用）
+```
+
+### 更新待办标签
+```
+Usage:
+  dws todo tag update [flags]
+Example:
+  dws todo tag update --user-tags '[{"code":"code1","name":"新名称"}]'
+Flags:
+      --user-tags string  标签列表 JSON 数组 (必填)
+```
+
+### 查询待办标签列表
+```
+Usage:
+  dws todo tag list
+Example:
+  dws todo tag list
+```
+
+### 创建待办标签
+```
+Usage:
+  dws todo tag create [flags]
+Example:
+  dws todo tag create --name "标签名"
+Flags:
+      --name string  标签名称 (必填)
+```
+
 ## 意图判断
 
 用户说"加个待办/记一下/TODO" → `task create`
 用户说"每天重复/循环待办/按天重复" → `task create`（需 `--due` + `--recurrence`）
 用户说"加个子任务/创建子待办" → `task create-sub`
 用户说"看看待办/我有啥要做" → `task list`
+用户说"查询全部组织/跨组织待办" → `task list --query-all`
 用户说"改个待办/修改待办标题/改优先级" → `task update`
 用户说"做完了/完成待办/标记完成" → `task done`
 用户说"看看待办详情" → `task get`
@@ -308,6 +366,11 @@ JSON 数组，每个元素为一条提醒规则，支持两种 `baseTime` 模式
 用户说"移除参与人/删除参与者" → `task remove-participant`
 用户说"给待办加个提醒/设置提醒" → `task add-reminder`
 用户说"重置提醒/清除提醒/修改提醒规则" → `task reset-reminder`
+用户说"给待办打标签/关联标签" → `tag add`
+用户说"删除标签定义" → `tag delete`（不可逆，需确认）
+用户说"修改标签名称或信息" → `tag update`
+用户说"查看已有标签" → `tag list`
+用户说"创建/新建标签" → `tag create`
 
 关键区分: todo(个人待办)
 
@@ -390,15 +453,18 @@ dws todo task list-sub --task-id <taskId> --format json
 | `add-attachment` | `result.attachmentIds[]` | 新上传附件的 attachmentId |
 | `list-attachment` | `attachments[].attachmentId`（顶层数组） | `remove-attachment` 的 --attachment-id |
 | `comment list` | `result.comments[].id` | `comment delete` 的 --comment-id             |
+| `tag list` | `tagCode` | `tag add` / `tag update` / `tag delete` 的标签编码 |
 
 ## 注意事项
 
 - 优先级值: 10=低, 20=普通, 30=较高, 40=紧急
 - `--due` 是截止时间 dueTime，不是提醒时间；使用 ISO-8601 格式（如 2026-03-10T18:00:00+08:00）
-- 当前不支持单独的 `reminder` / `remind-at` 精确提醒能力；不要把 `--due` 解释成“几点提醒”
+- `todo +remind --at` 同样只写截止时间 dueTime，不会创建独立提醒规则；不要把它解释成“几点提醒”
 - `--recurrence`：仅在与 `--due` 同时设置时有效；当前仅支持按天循环。字符串内需含换行，示例：`DTSTART:20260320T020000Z\nRRULE:FREQ=DAILY;INTERVAL=1`（DTSTART 表示首次截止时间，需与业务约定一致）
-- 若用户的真实诉求是“到点提醒我”，需要先说明能力边界；当前 CLI 只能表达 deadline / recurrence，不能表达独立 reminder schedule
+- 独立提醒可在待办创建后通过 `task add-reminder` 写入，或用 `task reset-reminder` 整体替换/清除
+- 当前上游没有提醒规则查询接口，`task get/list` 均不返回 `reminderRules`；写命令成功响应只能作为写入回执，不能声称已读回核验
 - `task list` 的 `--status` 对应 MCP `get_user_todos_in_current_org` 的 `todoStatus` 参数
+- `task list --query-all` 查询当前用户跨组织的全部待办；不传时保持当前组织范围
 - todo 是个人待办管理产品
 - `task update` 可同时修改标题/优先级/截止时间/完成状态
 - `task done` 专用于修改执行者的完成状态，与 `task update --done` 作用不同
@@ -408,10 +474,13 @@ dws todo task list-sub --task-id <taskId> --format json
 - `task add-participant` / `task remove-participant` 用于管理待办的参与人，`--participants` 支持逗号分隔的多个 userId
 - 执行人 (executor) 与参与人 (participant) 的区别：执行人负责完成待办，参与人仅关注待办进度
 - `task add-reminder` 用于为待办添加提醒，`--base-time` 支持 `dueTime`（基于截止时间偏移，待办必须有截止时间）和 `customTime`（自定义时间戳）两种模式
-- `task reset-reminder` 用于重置待办提醒规则，不传 `--reminder-rules` 则清除所有提醒
+- `customTime` 直接使用 `--reminder-time-stamp`，不要求先设置 `--due`；只有 `dueTime` 模式依赖待办截止时间
+- `task reset-reminder` 用于重置待办提醒规则，不传 `--reminder-rules` 或传 `[]` 则清除所有提醒；其他值会严格校验，非法输入不会发出远端调用
 - `task add-attachment` / `list-attachment` / `remove-attachment` 三条附件命令均可用；`add-attachment` 会真实上传文件，勿用于试探性调用，先确认待办存在
 - 附件 ID 的取法：`add-attachment` 从 `result.attachmentIds[]` 取，`list-attachment` 从顶层 `attachments[].attachmentId` 取；`remove-attachment` 用 `--attachment-id` + `--yes`
 - 子待办 ID 只能从 `task list-sub` 的顶层 `subTasks[].taskId` 取；`task get` 的 `result.todoDetailModel.subTodos[]` 没有 taskId 字段
+- `tag add` 只把标签关联到指定待办；`tag delete` 删除标签定义，两者语义不同
+- `tag delete` 不可逆，必须先确认，再传 `--yes`
 
 
 ## 自动化脚本

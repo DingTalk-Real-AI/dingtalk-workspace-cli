@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -285,6 +286,34 @@ func newMediaCmds() []*cobra.Command {
   dws sheet media-upload --node SHEET_DOC_ID --file ./data.bin --name "数据文件.dat" --mime-type application/octet-stream`,
 		RunE: runSheetMediaUpload,
 	}
+	DeclareLeafMetadata(mediaUploadCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "media_upload",
+				CanonicalPath:  "sheet.media_upload",
+				CLIPath:        "sheet media-upload",
+				PrimaryCLIPath: "sheet media-upload",
+			},
+			Description: "上传附件到表格并返回 resourceUrl（浮动图片前置步骤）。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "上传附件到表格并返回 resourceUrl（浮动图片前置步骤）。",
+				UseWhen:      []string{"需要把本地文件上传为表格资源，或为 create-float-image 准备 src 时"},
+				AvoidWhen:    []string{"要把图片写入单元格内容用 write-image；AI 表格附件用 aitable attachment upload"},
+				Examples:     []string{"dws sheet media-upload --node <NODE_ID> --file ./report.pdf"},
+			},
+		},
+	})
 	mediaUploadCmd.Flags().String("node", "", "目标表格文档的标识，支持传入 URL 或 ID (必填)")
 	mediaUploadCmd.Flags().String("file", "", "本地文件路径 (必填)")
 	mediaUploadCmd.Flags().String("name", "", "附件显示名称 (默认使用文件名)")
@@ -317,6 +346,38 @@ func newMediaCmds() []*cobra.Command {
   dws sheet write-image --node SHEET_DOC_ID --sheet-id SHEET_ID --range B2:B2 --file ./logo.png --width 200 --height 100`,
 		RunE: runSheetWriteImage,
 	}
+	DeclareLeafMetadata(writeImageCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "write_image",
+				CanonicalPath:  "sheet.write_image",
+				CLIPath:        "sheet write-image",
+				PrimaryCLIPath: "sheet write-image",
+			},
+			Description: "上传图片并写入指定单元格（占单元格内容）。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "write_image"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "上传图片并写入指定单元格（占单元格内容）。",
+				UseWhen:      []string{"需要把图片嵌进某个单元格时"},
+				AvoidWhen:    []string{"悬浮在单元格上的浮动图用 create-float-image；禁止用 range update 写图片"},
+				Examples:     []string{"dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range A1:A1 --file ./chart.png"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+				{Name: "range", Property: "rangeAddress"},
+			},
+		},
+	})
 	writeImageCmd.Flags().String("node", "", "目标表格文档的标识，支持传入 URL 或 ID (必填)")
 	writeImageCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	writeImageCmd.Flags().String("range", "", "目标单元格区域地址，如 A1:B3 (必填)")

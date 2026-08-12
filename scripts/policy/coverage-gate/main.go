@@ -12,6 +12,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"os/exec"
@@ -129,7 +132,10 @@ func run(
 				fmt.Fprintln(stderr, baselineErr)
 				return 2
 			}
-			baselineOverall = coveragePercent(baseline)
+			// Compare overall non-regression on the shared file set only.
+			// Deleted packages (for example a retired 100%-covered helper tree)
+			// must not create a false overall regression against merge-base.
+			baselineOverall = coveragePercent(filterBlocksByFiles(baseline, profileFiles(overall)))
 		}
 	}
 	diff, err := readProfiles(diffPaths, modulePath)
@@ -149,6 +155,11 @@ func run(
 			return 2
 		}
 		changed = filterChangedFiles(changed, buildable)
+	}
+	var exempted []string
+	changed, exempted = exemptNonExecutableFiles(changed, fileHasExecutableStatements)
+	for _, path := range exempted {
+		fmt.Fprintf(stderr, "coverage-gate: exempting %s (no executable statements)\n", path)
 	}
 	result := evaluate(gateInput{
 		Overall:          overall,
@@ -237,6 +248,58 @@ func filterChangedFiles(changed map[string][]lineRange, allowed map[string]bool)
 	return filtered
 }
 
+// exemptNonExecutableFiles drops changed files that contain no executable
+// statements (pragma carriers such as gen.go, doc-only files). The Go coverage
+// tool never emits profile blocks for them, so requiring their presence in a
+// profile would fail every PR that touches such a file. Exempted paths are
+// returned sorted so the caller can log them instead of dropping silently.
+func exemptNonExecutableFiles(changed map[string][]lineRange, hasExecutable func(string) bool) (map[string][]lineRange, []string) {
+	filtered := map[string][]lineRange{}
+	var exempted []string
+	for path, ranges := range changed {
+		if hasExecutable(path) {
+			filtered[path] = ranges
+		} else {
+			exempted = append(exempted, path)
+		}
+	}
+	sort.Strings(exempted)
+	return filtered, exempted
+}
+
+// fileHasExecutableStatements reports whether the Go file declares at least
+// one function (or function literal) with a non-empty body. Unreadable or
+// unparsable files count as executable so real coverage gaps cannot hide
+// behind a parse failure.
+func fileHasExecutableStatements(path string) bool {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return true
+	}
+	parsed, err := parser.ParseFile(token.NewFileSet(), path, source, parser.SkipObjectResolution)
+	if err != nil {
+		return true
+	}
+	executable := false
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		if executable {
+			return false
+		}
+		switch fn := node.(type) {
+		case *ast.FuncDecl:
+			if fn.Body != nil && len(fn.Body.List) > 0 {
+				executable = true
+			}
+		case *ast.FuncLit:
+			if fn.Body != nil && len(fn.Body.List) > 0 {
+				executable = true
+			}
+		}
+		return !executable
+	})
+	return executable
+}
+
 func readProfiles(paths []string, modulePath string) ([]coverageBlock, error) {
 	var blocks []coverageBlock
 	for _, path := range paths {
@@ -298,13 +361,25 @@ func gitChangedLines(baseRef string) (map[string][]lineRange, error) {
 	return parseChangedLines(output)
 }
 
+// physicalPath resolves symlinks so git-reported and go-reported paths agree.
+// git rev-parse --show-toplevel prints the physical path while go list reports
+// Dirs derived from the logical CWD; on macOS /tmp is a symlink to /private/tmp
+// and the mismatch makes every buildable file relativize outside the root,
+// silently emptying the changed-code gate.
+func physicalPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
+}
+
 func goListBuildableFiles() (map[string]bool, error) {
 	rootCommand := exec.Command("git", "rev-parse", "--show-toplevel")
 	rootOutput, err := rootCommand.Output()
 	if err != nil {
 		return nil, fmt.Errorf("resolve repository root: %w", err)
 	}
-	root := strings.TrimSpace(string(rootOutput))
+	root := physicalPath(strings.TrimSpace(string(rootOutput)))
 
 	command := exec.Command("go", "list", "-json", "./...")
 	output, err := command.Output()
@@ -331,7 +406,7 @@ func goListBuildableFiles() (map[string]bool, error) {
 			return nil, fmt.Errorf("decode go list output: %w", err)
 		}
 		for _, name := range append(packageInfo.GoFiles, packageInfo.CgoFiles...) {
-			relative, err := filepath.Rel(root, filepath.Join(packageInfo.Dir, name))
+			relative, err := filepath.Rel(root, filepath.Join(physicalPath(packageInfo.Dir), name))
 			if err != nil {
 				return nil, fmt.Errorf("normalize buildable file %s: %w", name, err)
 			}
@@ -409,6 +484,29 @@ func coveragePercent(blocks []coverageBlock) float64 {
 		return 0
 	}
 	return float64(covered) * 100 / float64(total)
+}
+
+func profileFiles(blocks []coverageBlock) map[string]bool {
+	files := map[string]bool{}
+	for _, block := range blocks {
+		if block.File != "" {
+			files[block.File] = true
+		}
+	}
+	return files
+}
+
+func filterBlocksByFiles(blocks []coverageBlock, allowed map[string]bool) []coverageBlock {
+	if len(allowed) == 0 {
+		return nil
+	}
+	filtered := make([]coverageBlock, 0, len(blocks))
+	for _, block := range blocks {
+		if allowed[block.File] {
+			filtered = append(filtered, block)
+		}
+	}
+	return filtered
 }
 
 // mergeCoverageBlocks unions duplicate blocks emitted by cross-package

@@ -21,6 +21,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const cacheUnsupportedMessage = "dws cache 不再支持：服务发现已下线，当前版本使用编译期静态端点目录；dws cache 仅保留为兼容入口，不会刷新端点。"
+
+const cacheReplacementHint = "如遇 endpoint_not_resolved，请先执行 dws upgrade 获取包含最新 internal/syncdata 端点的版本；仍失败时检查 internal/syncdata.StaticServers() 是否覆盖目标 product/server。"
+
 type cacheCompatNotice struct {
 	Status      string `json:"status"`
 	Command     string `json:"command"`
@@ -28,24 +32,32 @@ type cacheCompatNotice struct {
 	Replacement string `json:"replacement,omitempty"`
 }
 
+// newCacheCommand keeps a visible Deprecated compatibility surface for
+// historical argv (refresh/status/clean). Behavior is a successful no-op notice.
+// Skills must not teach this path. Deprecated leaves are excluded from Schema
+// via cobra.IsAvailableCommand() — do not add schema_command_exclusions entries.
 func newCacheCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "cache",
-		Short:             "服务发现缓存兼容入口（静态端点模式已弃用）",
-		Hidden:            true,
+		Short:             "不再支持：服务发现缓存兼容入口",
+		Long:              "此命令组仅为历史 argv 兼容保留。静态端点模式下无需服务发现缓存；Skill / Agent 请勿引导此路径。",
+		Deprecated:        "不再支持；" + cacheUnsupportedMessage,
+		Args:              cobra.NoArgs,
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
+			return printCacheCompatNotice(cmd, "dws cache")
 		},
 	}
 	for _, name := range []string{"refresh", "status", "clean"} {
+		subName := name
 		sub := &cobra.Command{
-			Use:               name,
-			Short:             "已弃用：静态端点模式无需服务发现缓存",
+			Use:               subName,
+			Short:             "不再支持：静态端点模式无需服务发现缓存",
+			Deprecated:        "不再支持；" + cacheUnsupportedMessage,
 			Args:              cobra.NoArgs,
 			DisableAutoGenTag: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
-				return printCacheCompatNotice(cmd, name)
+				return printCacheCompatNotice(cmd, "dws cache "+subName)
 			},
 		}
 		cmd.AddCommand(sub)
@@ -56,9 +68,9 @@ func newCacheCommand() *cobra.Command {
 func printCacheCompatNotice(cmd *cobra.Command, command string) error {
 	notice := cacheCompatNotice{
 		Status:      "deprecated",
-		Command:     "dws cache " + command,
-		Message:     "服务发现已下线，当前版本使用编译期静态端点目录；dws cache 仅保留为兼容入口，不会刷新端点。",
-		Replacement: "如遇 endpoint_not_resolved，请先执行 dws upgrade 获取包含最新 internal/syncdata 端点的版本；仍失败时检查 internal/syncdata.StaticServers() 是否覆盖目标 product/server。",
+		Command:     command,
+		Message:     cacheUnsupportedMessage,
+		Replacement: cacheReplacementHint,
 	}
 	format, _ := cmd.Root().PersistentFlags().GetString("format")
 	switch strings.ToLower(strings.TrimSpace(format)) {
@@ -66,8 +78,7 @@ func printCacheCompatNotice(cmd *cobra.Command, command string) error {
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(notice)
 	case "pretty":
 		data, _ := json.MarshalIndent(notice, "", "  ")
-		var err error
-		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), string(data))
 		return err
 	default:
 		_, err := fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n%s\n", notice.Command, notice.Message, notice.Replacement)

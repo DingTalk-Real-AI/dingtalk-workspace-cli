@@ -40,7 +40,7 @@ Every command inherits these flags (documented here once, not repeated per comma
 - [`dws doc` — DingTalk Doc](#dws-doc) · 21 commands
 - [`dws drive` — DingTalk Drive](#dws-drive) · 6 commands
 - [`dws minutes` — AI Minutes](#dws-minutes) · 19 commands
-- [`dws oa` — OA Approval](#dws-oa) · 9 commands
+- [`dws oa` — OA Approval](#dws-oa) · 12 commands
 - [`dws report` — Reports](#dws-report) · 7 commands
 - [`dws todo` — Todo Tasks](#dws-todo) · 6 commands
 
@@ -277,14 +277,17 @@ _AI meeting notes: listing, summary, todos, transcription, recording control, mi
 
 ## `dws oa` — OA Approval
 
-_OA approval workflows: list, approve, reject, revoke, records._
+_OA approval workflows: inspect forms, forecast routes, create instances, approve, reject, revoke, and audit records._
 
-**9 commands**
+**12 commands**
 
 | Command | Description | When to use |
 |---|---|---|
 | `dws oa approval approve` | Approve a pending approval process instance (task) as the current user. | When the agent acts on a pending approval the user has delegated it to handle. |
+| `dws oa approval create-instance` | Create a real approval process instance from validated form values or a complete request payload. | After the agent has inspected the form Schema, forecast the route, resolved any selectable approvers, and obtained explicit user confirmation. |
 | `dws oa approval detail` | Retrieve full details of an approval process instance, including form fields, attachments, and state. | When the agent needs to read the content of an approval ticket before deciding on it or summarizing it. |
+| `dws oa approval form-schema` | Retrieve the form Schema for an approval template by processCode. | Before collecting or validating values for a new approval instance. |
+| `dws oa approval forecast-process` | Forecast the approval route for a template and its proposed form values. | Before creating an instance, especially when the route contains user-selectable approver or notifier nodes. |
 | `dws oa approval list-forms` | List approval process templates (forms) the current user is allowed to initiate. | When the agent needs to pick the right approval form before submitting a new request. |
 | `dws oa approval list-initiated` | List approval process instances the current user has initiated. | When the agent reviews the status of approvals the user submitted. |
 | `dws oa approval list-pending` | List approval process instances currently awaiting action from the current user. | When the agent surfaces "needs your approval" items in the user's inbox. |

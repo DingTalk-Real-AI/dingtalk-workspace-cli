@@ -17,9 +17,7 @@ dws aitable record primary-doc-get --base-id BASE_ID --table-id TABLE_ID --recor
 - `--table-id`（必填）：Table ID
 - `--record-id`（必填）：Record ID
 
-**返回：** `data.nodeId` — 主键文档的 nodeId，可直接传给 `dws doc read/update` 的 `--node` 参数。
-
-> **该记录尚未创建主键文档时**：不会返回 `nodeId: null`，而是 `status=error`、`data={}`，`error={code:"-1", message:"no record", type:"SYSTEM_ERROR", retryable:true}`。要判断"有没有主键文档"，看是否命中这个 `no record` 错误，而不是判断 `nodeId` 是否为 null。需要文档时改用 `primary-doc-create`（幂等，已存在则直接返回）。
+**返回：** `data.nodeId` — 主键文档的 nodeId，可直接传给 `dws doc read/update` 的 `--node` 参数。若该记录尚未创建主键文档，`nodeId` 为 null。
 
 ### 创建主键文档
 
@@ -30,7 +28,7 @@ dws aitable record primary-doc-create --base-id BASE_ID --table-id TABLE_ID --fi
 **参数：**
 - `--base-id`（必填）：Base ID
 - `--table-id`（必填）：Table ID
-- `--field-id`（必填）：主键字段 ID，必须是 primaryDoc 类型（通过 `dws aitable table get` 查看字段类型）
+- `--field-id`（必填）：主键字段 ID，必须是 primaryDoc 类型（通过 `dws aitable field get` 查看字段类型）
 - `--record-id`（必填）：Record ID
 
 **返回：** `data.nodeId` — 创建或已存在的主键文档 nodeId。
@@ -46,8 +44,8 @@ dws aitable record primary-doc-create --base-id BASE_ID --table-id TABLE_ID --fi
 ## 典型工作流
 
 ```bash
-# 1. 查询表结构，拿到 primaryDoc 字段的 fieldId
-dws aitable table get --base-id BASE_ID --table-ids TABLE_ID
+# 1. 查询字段目录，拿到 primaryDoc 字段的 fieldId
+dws aitable field get --base-id BASE_ID --table-id TABLE_ID
 
 # 2. 为某条记录创建主键文档
 dws aitable record primary-doc-create --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --record-id RECORD_ID

@@ -25,6 +25,12 @@
 // dynamically-discovered MCP leaf commands and from hand-written helper commands.
 package shortcut
 
+import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+)
+
 // Risk classifies the side effect of running a shortcut. It drives whether a
 // confirmation prompt is required before execution (see internal/safety).
 type Risk string
@@ -37,6 +43,27 @@ const (
 	// RiskHighWrite is a destructive/irreversible operation; requires explicit
 	// confirmation (or --yes) before execution.
 	RiskHighWrite Risk = "high-risk-write"
+)
+
+// SemanticDisposition records the reviewed relationship between a Shortcut and
+// the underlying Runtime Schema surface.
+type SemanticDisposition string
+
+const (
+	DispositionPrimarySmart    SemanticDisposition = "primary_smart"
+	DispositionSemanticAdapter SemanticDisposition = "semantic_adapter"
+	DispositionSchemaLeaf      SemanticDisposition = "schema_leaf"
+	DispositionAliasInternal   SemanticDisposition = "alias_internal"
+)
+
+// Availability is independent from live-account evidence. A missing fixture or
+// permission does not make an implemented command unavailable.
+type Availability string
+
+const (
+	AvailabilityAvailable   Availability = "available"
+	AvailabilityUnavailable Availability = "unavailable"
+	AvailabilityDeprecated  Availability = "deprecated"
 )
 
 // FlagType is the pflag value type a Flag registers as.
@@ -55,6 +82,8 @@ const (
 type Flag struct {
 	// Name is the long flag name (kebab-case), e.g. "user-ids".
 	Name string `json:"name"`
+	// Shorthand is the optional one-character CLI spelling, e.g. "o" for --output.
+	Shorthand string `json:"shorthand,omitempty"`
 	// Type is the value type; defaults to FlagString when empty.
 	Type FlagType `json:"type"`
 	// Default is the default value rendered as a string.
@@ -63,10 +92,21 @@ type Flag struct {
 	Desc string `json:"description"`
 	// Required, when true, makes the framework error if the flag is not set.
 	Required bool `json:"required"`
+	// RequiredWhen publishes a conditional-required rule that Required cannot
+	// express, e.g. "identity=bot" for a credential only mandatory under one
+	// identity. It is published Schema metadata so an Agent can predict the
+	// failure; enforcement stays in Validate, which remains authoritative.
+	RequiredWhen string `json:"required_when,omitempty"`
 	// Enum, when non-empty, restricts the accepted values (string flags only).
 	Enum []string `json:"enum"`
 	// Hidden hides the flag from --help while keeping it usable.
 	Hidden bool `json:"-"`
+	// Aliases are hidden executable flag spellings for compatibility. They do
+	// not create additional Schema parameters; validation and value fallback
+	// remain attached to the canonical Name. AliasesVisible is a narrow
+	// compatibility escape hatch for aliases that were historically public.
+	Aliases        []string `json:"-"`
+	AliasesVisible bool     `json:"-"`
 }
 
 // ConstraintKind is a machine-readable cross-parameter or custom validation
@@ -99,11 +139,25 @@ type Constraint struct {
 // The framework injects the global --format/--dry-run/--jq/--yes flags from the
 // root command, so shortcuts must not redeclare them.
 type Shortcut struct {
+	// OutputRollout selects the single active output contract for this exact
+	// command in the current release. It is internal release metadata, never a
+	// user/Agent flag.
+	OutputRollout output.RolloutState
 	// Service is the top-level command group, e.g. "contact". Multiple
 	// shortcuts sharing a Service are mounted under the same parent command.
 	Service string
 	// Command is the leaf name including its "+" prefix, e.g. "+search-user".
 	Command string
+	// Aliases are hidden, compatibility-only Cobra spellings for the same
+	// command identity. Agent-facing Skill and Schema examples must continue to
+	// use Command; reviewed Schema aliases are declared separately in the
+	// CommandRegistry.
+	Aliases []string
+	// SinglePositionalAliasFor optionally treats one positional argument as the
+	// value of the named string flag. It is intended only for unambiguous search
+	// compatibility such as `+chat-search "群名"`; it never changes the
+	// canonical flag-based contract published to Agents.
+	SinglePositionalAliasFor string
 	// Product is the canonical MCP product id used to build the invocation.
 	// Defaults to Service when empty.
 	Product string
@@ -116,7 +170,15 @@ type Shortcut struct {
 	// long description) and in `dws shortcut list`.
 	Intent string
 	// Risk classifies the side effect; defaults to RiskRead when empty.
+	// Kept as the runtime confirmation source when Safety is empty.
 	Risk Risk
+	// Safety is an optional explicit Schema/runtime safety declaration. When
+	// non-empty it overrides Risk expansion in FromShortcut; otherwise Risk
+	// still drives ConfirmSafety so existing Execute bodies stay unchanged.
+	Safety contract.SafetySpec
+	// Contract is the final Agent Contract overlay (selection/interface/dry-run).
+	// Empty fails Catalog assembly; every Shortcut must declare Contract.
+	Contract corecmd.ContractDecl
 	// Flags are the command-specific flags. Global flags are injected separately.
 	Flags []Flag
 	// Constraints publish and enforce relationships that individual flags cannot
@@ -127,6 +189,21 @@ type Shortcut struct {
 	Tips []string
 	// Hidden hides the command from listings while keeping it invocable.
 	Hidden bool
+	// Disposition is the reviewed semantic relation to the Runtime Schema leaf
+	// surface. It determines default Agent discovery independently from live
+	// fixture evidence.
+	Disposition SemanticDisposition
+	// SemanticDelta explains the concrete value added beyond renaming a leaf.
+	SemanticDelta string
+	// Availability describes whether the implementation is shipped and
+	// callable; it does not encode the current account's permissions.
+	Availability Availability
+	// PrimaryCommand links aliases/internal compatibility entries to their
+	// preferred semantic entry.
+	PrimaryCommand string
+	// SemanticReviewed is true only when the disposition and visibility came
+	// from the reviewed semantic catalog.
+	SemanticReviewed bool
 	// UserDefined identifies shortcuts loaded from the user's config
 	// directory. Distribution-owned Schema and interface snapshots exclude
 	// these runtime extensions even if another root loaded them earlier.

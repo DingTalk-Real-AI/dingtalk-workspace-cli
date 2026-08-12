@@ -19,7 +19,11 @@
 // "doc" MCP server (per callMCPToolOnServer("doc", ...)) set Product: "doc".
 package drive
 
-import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+)
 
 // ── 钉盘文件（drive MCP server）────────────────────────────────
 
@@ -138,6 +142,31 @@ var Info = shortcut.Shortcut{
 	Description: "获取钉盘文件/文件夹元数据",
 	Intent:      "当你已经知道某个节点的 dentryUuid、想查看它的详细信息（名称、大小、类型、创建/修改时间、所属空间等）而不是仅列表概览时使用；输入 node（节点 ID），返回该单个文件或文件夹的完整元数据。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "drive",
+			Name:           "shortcut_info",
+			CanonicalPath:  "drive.shortcut_info",
+			CLIPath:        "drive +info",
+			PrimaryCLIPath: "drive +info",
+		},
+		Description: "获取钉盘文件/文件夹元数据",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取钉盘文件/文件夹元数据",
+			UseWhen:      []string{"当你已经知道某个节点的 dentryUuid、想查看它的详细信息（名称、大小、类型、创建/修改时间、所属空间等）而不是仅列表概览时使用；输入 node（节点 ID），返回该单个文件或文件夹的完整元数据。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws drive +info --node <dentryUuid>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "节点 ID (dentryUuid)", Required: true},
 		{Name: "space-id", Type: shortcut.FlagString, Desc: "节点所属空间 ID"},
@@ -186,6 +215,34 @@ var Search = shortcut.Shortcut{
 	Description: "搜索钉盘文件",
 	Intent:      "当你只记得文件名或内容关键词、不知道它在哪个目录时用它全局检索钉盘文件；输入 query，可按文件类型、扩展名、创建者、创建/修改时间范围过滤，返回匹配文件及其 ID，便于再做下载或整理。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "drive",
+			Name:           "shortcut_search",
+			CanonicalPath:  "drive.shortcut_search",
+			CLIPath:        "drive +search",
+			PrimaryCLIPath: "drive +search",
+		},
+		Description: "搜索钉盘文件",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "搜索钉盘文件",
+			UseWhen:      []string{"当你只记得文件名或内容关键词、不知道它在哪个目录时用它全局检索钉盘文件；输入 query，可按文件类型、扩展名、创建者、创建/修改时间范围过滤，返回匹配文件及其 ID，便于再做下载或整理。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws drive +search --query \"季度汇报\"",
+				"dws drive +search --query \"合同\" --target file --extensions pdf,docx",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词", Required: true},
 		{Name: "target", Type: shortcut.FlagString, Desc: "搜索范围: file(钉盘文件) / space(钉盘团队空间)", Enum: []string{"file", "space"}},
@@ -317,6 +374,31 @@ var SearchDocs = shortcut.Shortcut{
 	Description: "搜索文档空间文档",
 	Intent:      "当你只记得文档标题或关键词、想在文档空间/知识库中检索在线文档（区别于 +search 检索钉盘文件）时使用；输入 query 关键词，返回匹配的文档及其节点信息。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "drive",
+			Name:           "shortcut_search_docs",
+			CanonicalPath:  "drive.shortcut_search_docs",
+			CLIPath:        "drive +search-docs",
+			PrimaryCLIPath: "drive +search-docs",
+		},
+		Description: "搜索文档空间文档",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "搜索文档空间文档",
+			UseWhen:      []string{"当你只记得文档标题或关键词、想在文档空间/知识库中检索在线文档（区别于 +search 检索钉盘文件）时使用；输入 query 关键词，返回匹配的文档及其节点信息。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws drive +search-docs --query \"季度汇报\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词", Required: true},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量"},
@@ -400,6 +482,31 @@ var Copy = shortcut.Shortcut{
 	Description: "复制文件/文档到指定位置",
 	Intent:      "当你想保留原件、把某个文件/文档拷贝一份到指定文件夹或知识库时使用；输入源节点 node 及目标 folder/workspace，会实际生成一个副本，原文件位置不变。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "drive",
+			Name:           "shortcut_copy",
+			CanonicalPath:  "drive.shortcut_copy",
+			CLIPath:        "drive +copy",
+			PrimaryCLIPath: "drive +copy",
+		},
+		Description: "复制文件/文档到指定位置",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "复制文件/文档到指定位置",
+			UseWhen:      []string{"当你想保留原件、把某个文件/文档拷贝一份到指定文件夹或知识库时使用；输入源节点 node 及目标 folder/workspace，会实际生成一个副本，原文件位置不变。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws drive +copy --node <nodeId> --folder <targetFolderId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档/文件 ID", Required: true},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 nodeId"},
@@ -426,6 +533,31 @@ var Move = shortcut.Shortcut{
 	Description: "移动文件/文档到指定位置",
 	Intent:      "当你要把某个文件/文档从当前位置转移到另一个文件夹或知识库（整理归档、调整目录结构）时使用；输入源节点 node 及目标 folder/workspace，会实际改变文件所在位置，原位置不再保留该文件。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "drive",
+			Name:           "shortcut_move",
+			CanonicalPath:  "drive.shortcut_move",
+			CLIPath:        "drive +move",
+			PrimaryCLIPath: "drive +move",
+		},
+		Description: "移动文件/文档到指定位置",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "移动文件/文档到指定位置",
+			UseWhen:      []string{"当你要把某个文件/文档从当前位置转移到另一个文件夹或知识库（整理归档、调整目录结构）时使用；输入源节点 node 及目标 folder/workspace，会实际改变文件所在位置，原位置不再保留该文件。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws drive +move --node <nodeId> --folder <targetFolderId>"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档/文件 ID", Required: true},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 nodeId"},
@@ -457,6 +589,34 @@ var Recent = shortcut.Shortcut{
 	Description: "获取最近访问/编辑的文档列表",
 	Intent:      "当你想快速找回「我最近看过/改过的那个文档」而不记得它放在哪时使用；可按操作类型（最近访问/最近编辑）和创建人（全部/我创建/他人创建）过滤，返回近期文档列表及其节点信息。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "drive",
+			Name:           "shortcut_recent",
+			CanonicalPath:  "drive.shortcut_recent",
+			CLIPath:        "drive +recent",
+			PrimaryCLIPath: "drive +recent",
+		},
+		Description: "获取最近访问/编辑的文档列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取最近访问/编辑的文档列表",
+			UseWhen:      []string{"当你想快速找回「我最近看过/改过的那个文档」而不记得它放在哪时使用；可按操作类型（最近访问/最近编辑）和创建人（全部/我创建/他人创建）过滤，返回近期文档列表及其节点信息。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws drive +recent",
+				"dws drive +recent --operate-type 1 --creator-type 1",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "operate-type", Type: shortcut.FlagInt, Desc: "操作类型: 0=最近访问(默认), 1=最近编辑"},
 		{Name: "creator-type", Type: shortcut.FlagInt, Desc: "创建人过滤: 0=全部, 1=我创建, 2=他人创建"},
@@ -495,8 +655,16 @@ var Recent = shortcut.Shortcut{
 // document list, dropping transport noise (logId) while keeping the pagination
 // cursor.
 func recentListProject(data map[string]any) map[string]any {
+	// get_recent_list nests its payload under result.recentItems; earlier this
+	// read data["recentItems"] at the top level only, so the whole list silently
+	// projected to empty. Resolve the payload container (top-level or one level
+	// under result/data) before reading recentItems / pagination fields.
+	payload := data
+	if inner, ok := recentListPayload(data); ok {
+		payload = inner
+	}
 	items := []map[string]any{}
-	raw, _ := data["recentItems"].([]any)
+	raw, _ := payload["recentItems"].([]any)
 	for _, it := range raw {
 		m, ok := it.(map[string]any)
 		if !ok {
@@ -512,13 +680,29 @@ func recentListProject(data map[string]any) map[string]any {
 		})
 	}
 	out := map[string]any{"count": len(items), "items": items}
-	if nc, ok := data["nextCursor"]; ok && nc != nil {
+	if nc, ok := payload["nextCursor"]; ok && nc != nil {
 		out["nextCursor"] = nc
 	}
-	if hm, ok := data["hasMore"]; ok {
+	if hm, ok := payload["hasMore"]; ok {
 		out["hasMore"] = hm
 	}
 	return out
+}
+
+// recentListPayload returns the map that actually holds recentItems, tolerating
+// a {result|data:{recentItems:[...]}} envelope as well as a bare top-level shape.
+func recentListPayload(data map[string]any) (map[string]any, bool) {
+	if _, ok := data["recentItems"]; ok {
+		return data, true
+	}
+	for _, k := range []string{"result", "data"} {
+		if inner, ok := data[k].(map[string]any); ok {
+			if _, ok := inner["recentItems"]; ok {
+				return inner, true
+			}
+		}
+	}
+	return nil, false
 }
 
 func init() {

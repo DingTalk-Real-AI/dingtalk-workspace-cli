@@ -14,68 +14,49 @@
 package cli
 
 import (
-	"bytes"
-	"crypto/sha256"
-	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 
-	"github.com/spf13/cobra"
-)
-
-const (
-	schemaParameterBindingsVersion          = 3
-	schemaParameterBindingsBaselineManifest = "schema-parameter-bindings-v3"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 const runtimeSchemaFlagBindingPropertyAnnotation = "dws.schema.binding.property"
 
-//go:embed schema_parameter_bindings.json
-var embeddedSchemaParameterBindingsJSON []byte
+// Property delivery has migrated from active bindings to ParamDecl.Property:
+//
+//   - Property delivery is owned by leaf Contract.Parameters (ParamDecl.Property
+//     → dws.schema.property / native_annotation). There is no committed
+//     schema_parameter_bindings.json and no empty bindings{} audit table.
+//   - Mapping exclusions and semantic removals live in
+//     schema_parameter_mapping_ledger.go (reviewed Go constants).
+//   - ValidateSchemaParameterBindingDelivery still joins exclusions/removals to
+//     the final bound SchemaRegistry.
+//   - Do not record ParamDecl migrations under Removals: that ledger means
+//     "must not deliver a property anymore". Migration keeps delivery via
+//     ParamDecl.
+//   - BuildEffectiveCommandRegistry does not load this ledger; exclusion
+//     validation runs at BindEffectiveCommandRegistry and catalog assembly.
 
 type schemaParameterBindingSnapshot struct {
-	Version           int                                         `json:"version"`
-	Baseline          schemaParameterBindingBaseline              `json:"baseline"`
-	Bindings          map[string]map[string]string                `json:"bindings"`
-	Corrections       map[string]schemaParameterBindingCorrection `json:"corrections,omitempty"`
-	Removals          map[string]schemaParameterBindingRemoval    `json:"removals,omitempty"`
-	MappingExclusions map[string]string                           `json:"mapping_exclusions,omitempty"`
-}
-
-// schemaParameterBindingBaseline reviews the complete active binding set as
-// one deterministic manifest. The hash is content-addressed: adding, removing,
-// renaming, or remapping any active canonical/flag/property tuple requires an
-// explicit baseline review instead of hundreds of low-value per-row records.
-type schemaParameterBindingBaseline struct {
-	Manifest string `json:"manifest"`
-	SHA256   string `json:"sha256"`
-	Reason   string `json:"reason"`
-	Reviewed bool   `json:"reviewed"`
-}
-
-// schemaParameterBindingCorrection is a reviewed audit record for a binding
-// whose historical property was wrong. It does not participate in resolution;
-// Bindings remains the only source of non-empty versioned property mappings.
-type schemaParameterBindingCorrection struct {
-	OldProperty string `json:"old_property"`
-	NewProperty string `json:"new_property"`
-	Reason      string `json:"reason"`
-	Reviewed    bool   `json:"reviewed"`
+	// Bindings is retained only so dual-read / delivery audit can still prove
+	// there are no versioned_parameter_binding winners. It is always empty in
+	// production; property delivery is ParamDecl.Property.
+	Bindings          map[string]map[string]string
+	Removals          map[string]schemaParameterBindingRemoval
+	MappingExclusions map[string]string
 }
 
 // schemaParameterBindingRemoval records a semantically meaningful deletion
 // from a previous reviewed baseline. ReplacedBy, when present, must name an
-// exact active binding key in the v3 manifest.
+// exact active binding key (no active bindings remain).
 type schemaParameterBindingRemoval struct {
-	Reason     string `json:"reason"`
-	ReplacedBy string `json:"replaced_by,omitempty"`
-	Reviewed   bool   `json:"reviewed"`
+	Reason     string
+	ReplacedBy string
+	Reviewed   bool
 }
 
 var runtimeSchemaParameterBindingsLazy struct {
@@ -88,18 +69,11 @@ var runtimeSchemaParameterBindingsLazyLoadCount atomic.Uint64
 
 var schemaParameterBindingData = runtimeSchemaParameterBindingData
 
-func decodeSchemaParameterBindings(data []byte) (schemaParameterBindingSnapshot, error) {
-	var snapshot schemaParameterBindingSnapshot
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&snapshot); err != nil {
-		return schemaParameterBindingSnapshot{}, fmt.Errorf("decode reviewed Schema parameter bindings: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			err = fmt.Errorf("multiple JSON values")
-		}
-		return schemaParameterBindingSnapshot{}, fmt.Errorf("decode reviewed Schema parameter bindings: %w", err)
+func loadSchemaParameterBindingSnapshot() (schemaParameterBindingSnapshot, error) {
+	snapshot := schemaParameterBindingSnapshot{
+		Bindings:          map[string]map[string]string{},
+		Removals:          reviewedSchemaParameterBindingRemovals,
+		MappingExclusions: reviewedSchemaParameterMappingExclusions,
 	}
 	if err := validateSchemaParameterBindingSnapshot(snapshot); err != nil {
 		return schemaParameterBindingSnapshot{}, err
@@ -107,82 +81,29 @@ func decodeSchemaParameterBindings(data []byte) (schemaParameterBindingSnapshot,
 	return snapshot, nil
 }
 
-func loadSchemaParameterBindings() (schemaParameterBindingSnapshot, error) {
-	return decodeSchemaParameterBindings(embeddedSchemaParameterBindingsJSON)
-}
-
 func runtimeSchemaParameterBindingData() (schemaParameterBindingSnapshot, error) {
 	runtimeSchemaParameterBindingsLazy.once.Do(func() {
 		runtimeSchemaParameterBindingsLazyLoadCount.Add(1)
-		runtimeSchemaParameterBindingsLazy.snapshot, runtimeSchemaParameterBindingsLazy.err = loadSchemaParameterBindings()
+		runtimeSchemaParameterBindingsLazy.snapshot, runtimeSchemaParameterBindingsLazy.err = loadSchemaParameterBindingSnapshot()
 	})
 	return runtimeSchemaParameterBindingsLazy.snapshot, runtimeSchemaParameterBindingsLazy.err
 }
 
-// ValidateEmbeddedSchemaParameterBindings is the production validation gate
-// for the reviewed binding source. Build and generator entrypoints call this
-// before any candidate resolution so malformed input can never degrade to an
-// empty binding set and flag-name inference.
-func ValidateEmbeddedSchemaParameterBindings() error {
+// ValidateSchemaParameterBindings is the production validation gate for the
+// reviewed mapping ledger (exclusions + removals). Build and generator
+// entrypoints call this before any candidate resolution.
+func ValidateSchemaParameterBindings() error {
 	_, err := schemaParameterBindingData()
 	return err
 }
 
-// ValidateSchemaParameterBindingsSource validates an alternate source with
-// the same strict decoder used in production. It is intended for source audit
-// tools and tests; runtime resolution always consumes the embedded source.
-func ValidateSchemaParameterBindingsSource(data []byte) error {
-	_, err := decodeSchemaParameterBindings(data)
-	return err
-}
-
 func validateSchemaParameterBindingSnapshot(snapshot schemaParameterBindingSnapshot) error {
-	if snapshot.Version != schemaParameterBindingsVersion {
-		return fmt.Errorf("unsupported schema parameter bindings version %d", snapshot.Version)
-	}
-	baseline := snapshot.Baseline
-	if strings.TrimSpace(baseline.Manifest) != schemaParameterBindingsBaselineManifest || baseline.Manifest != strings.TrimSpace(baseline.Manifest) {
-		return fmt.Errorf("schema parameter bindings baseline must declare manifest %q", schemaParameterBindingsBaselineManifest)
-	}
-	if !baseline.Reviewed || strings.TrimSpace(baseline.Reason) == "" || baseline.Reason != strings.TrimSpace(baseline.Reason) {
-		return fmt.Errorf("schema parameter bindings baseline must be reviewed with an exact non-empty reason")
-	}
-	manifestHash, err := schemaParameterBindingManifestHash(snapshot.Bindings)
-	if err != nil {
-		return err
-	}
-	if baseline.SHA256 != manifestHash {
-		return fmt.Errorf("schema parameter bindings baseline hash = %q, want exact active manifest %q", baseline.SHA256, manifestHash)
-	}
-
-	active := make(map[string]string)
-	for canonical, bindings := range snapshot.Bindings {
-		for flagName, property := range bindings {
-			active[runtimeSchemaParameterMappingKey(canonical, flagName)] = property
-		}
-	}
-	for key, correction := range snapshot.Corrections {
-		if err := validateSchemaParameterBindingAuditKey(key); err != nil {
-			return fmt.Errorf("schema parameter binding correction: %w", err)
-		}
-		oldProperty := strings.TrimSpace(correction.OldProperty)
-		newProperty := strings.TrimSpace(correction.NewProperty)
-		if oldProperty == "" || newProperty == "" || oldProperty == newProperty || oldProperty != correction.OldProperty || newProperty != correction.NewProperty {
-			return fmt.Errorf("schema parameter binding correction %q has invalid old/new properties", key)
-		}
-		if !correction.Reviewed || strings.TrimSpace(correction.Reason) == "" || correction.Reason != strings.TrimSpace(correction.Reason) {
-			return fmt.Errorf("schema parameter binding correction %q must be reviewed with an exact non-empty reason", key)
-		}
-		if got := active[key]; got != newProperty {
-			return fmt.Errorf("schema parameter binding correction %q new_property = %q, active manifest = %q", key, newProperty, got)
-		}
+	if len(snapshot.Bindings) != 0 {
+		return fmt.Errorf("schema parameter active bindings must remain empty; use ParamDecl.Property for property delivery")
 	}
 	for key, removal := range snapshot.Removals {
 		if err := validateSchemaParameterBindingAuditKey(key); err != nil {
 			return fmt.Errorf("schema parameter binding removal: %w", err)
-		}
-		if _, exists := active[key]; exists {
-			return fmt.Errorf("schema parameter binding removal %q still exists in the active manifest", key)
 		}
 		if !removal.Reviewed || strings.TrimSpace(removal.Reason) == "" || removal.Reason != strings.TrimSpace(removal.Reason) {
 			return fmt.Errorf("schema parameter binding removal %q must be reviewed with an exact non-empty reason", key)
@@ -191,20 +112,12 @@ func validateSchemaParameterBindingSnapshot(snapshot schemaParameterBindingSnaps
 			return fmt.Errorf("schema parameter binding removal %q has non-canonical replaced_by %q", key, removal.ReplacedBy)
 		}
 		if removal.ReplacedBy != "" {
-			if err := validateSchemaParameterBindingAuditKey(removal.ReplacedBy); err != nil {
-				return fmt.Errorf("schema parameter binding removal %q replaced_by: %w", key, err)
-			}
-			if _, exists := active[removal.ReplacedBy]; !exists {
-				return fmt.Errorf("schema parameter binding removal %q replacement %q is not active", key, removal.ReplacedBy)
-			}
+			return fmt.Errorf("schema parameter binding removal %q replacement %q is not active (active bindings are retired)", key, removal.ReplacedBy)
 		}
 	}
 	for key, reason := range snapshot.MappingExclusions {
 		if err := validateSchemaParameterBindingAuditKey(key); err != nil {
 			return fmt.Errorf("schema parameter mapping exclusion: %w", err)
-		}
-		if _, exists := active[key]; exists {
-			return fmt.Errorf("schema parameter mapping exclusion %q conflicts with the active manifest", key)
 		}
 		if _, removed := snapshot.Removals[key]; removed {
 			return fmt.Errorf("schema parameter mapping exclusion %q is also recorded as a removal", key)
@@ -213,14 +126,14 @@ func validateSchemaParameterBindingSnapshot(snapshot schemaParameterBindingSnaps
 			return fmt.Errorf("schema parameter mapping exclusion %q must have an exact non-empty reason", key)
 		}
 	}
+	if len(snapshot.MappingExclusions) == 0 {
+		return fmt.Errorf("schema parameter mapping exclusions ledger must remain non-empty")
+	}
 	return nil
 }
 
-// ValidateSchemaParameterBindingDelivery proves that every reviewed binding
-// input reaches the final public typed registry it was written for. Source
-// validation alone cannot catch a typo that is internally hash-consistent;
-// this production invariant joins the v3 manifest to the bound Cobra command
-// and its delivered ParameterSpec before any Catalog is serialized.
+// ValidateSchemaParameterBindingDelivery proves that every reviewed mapping
+// ledger entry reaches the final public typed registry it was written for.
 func ValidateSchemaParameterBindingDelivery(bound BoundCommandRegistry, registry SchemaRegistry) error {
 	snapshot, err := schemaParameterBindingData()
 	if err != nil {
@@ -366,7 +279,7 @@ func finalSchemaParameterByName(tool ToolSpec, flagName string) (ParameterSpec, 
 	return ParameterSpec{}, false
 }
 
-func schemaParameterProvenanceHasStringCandidate(provenance FieldProvenance, source, value string) bool {
+func schemaParameterProvenanceHasStringCandidate(provenance contract.FieldProvenance, source, value string) bool {
 	if provenance.Source == source {
 		var selected string
 		return json.Unmarshal(provenance.Value, &selected) == nil && selected == value
@@ -392,43 +305,6 @@ func sortedSchemaParameterBindingKeys(bindings map[string]string) []string {
 	return keys
 }
 
-func schemaParameterBindingManifestHash(bindings map[string]map[string]string) (string, error) {
-	if len(bindings) == 0 {
-		return "", fmt.Errorf("schema parameter bindings active manifest is empty")
-	}
-	type bindingRow struct {
-		CanonicalPath string `json:"canonical_path"`
-		FlagName      string `json:"flag_name"`
-		Property      string `json:"property"`
-	}
-	rows := make([]bindingRow, 0)
-	for canonical, parameters := range bindings {
-		if canonical == "" || canonical != strings.TrimSpace(canonical) || !commandRegistryCanonicalPattern.MatchString(canonical) {
-			return "", fmt.Errorf("schema parameter bindings contains invalid canonical path %q", canonical)
-		}
-		if len(parameters) == 0 {
-			return "", fmt.Errorf("schema parameter bindings canonical %q contains no bindings", canonical)
-		}
-		for flagName, property := range parameters {
-			if flagName == "" || flagName != strings.TrimSpace(flagName) || strings.ContainsAny(flagName, " \t\r\n") {
-				return "", fmt.Errorf("schema parameter bindings %s contains invalid flag name %q", canonical, flagName)
-			}
-			if property == "" || property != strings.TrimSpace(property) {
-				return "", fmt.Errorf("schema parameter binding %s --%s has invalid property %q", canonical, flagName, property)
-			}
-			rows = append(rows, bindingRow{CanonicalPath: canonical, FlagName: flagName, Property: property})
-		}
-	}
-	sort.Slice(rows, func(i, j int) bool {
-		left := rows[i].CanonicalPath + "\x00" + rows[i].FlagName
-		right := rows[j].CanonicalPath + "\x00" + rows[j].FlagName
-		return left < right
-	})
-	encoded, _ := json.Marshal(rows)
-	sum := sha256.Sum256(encoded)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
-}
-
 func validateSchemaParameterBindingAuditKey(key string) error {
 	if key == "" || key != strings.TrimSpace(key) {
 		return fmt.Errorf("invalid exact binding key %q", key)
@@ -440,17 +316,11 @@ func validateSchemaParameterBindingAuditKey(key string) error {
 	return nil
 }
 
-func applyRuntimeSchemaParameterBindingsFrom(cmd *cobra.Command, canonical string, bindings map[string]map[string]string) {
-	for flagName, propertyName := range bindings[strings.TrimSpace(canonical)] {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotation(flag, runtimeSchemaFlagBindingPropertyAnnotation, strings.TrimSpace(propertyName))
-		}
-	}
-}
-
-// EmbeddedSchemaParameterBindings returns a defensive copy of the reviewed,
-// active public flag-to-interface bindings used by Catalog generation.
-func EmbeddedSchemaParameterBindings() (map[string]map[string]string, error) {
+// LoadSchemaParameterBindings returns a defensive copy of the reviewed
+// active public flag-to-interface bindings. Active bindings are empty;
+// property delivery comes from ParamDecl.Property. Mapping
+// exclusions and removals remain on the Go mapping ledger (not returned here).
+func LoadSchemaParameterBindings() (map[string]map[string]string, error) {
 	snapshot, err := schemaParameterBindingData()
 	if err != nil {
 		return nil, err

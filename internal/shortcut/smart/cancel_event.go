@@ -16,6 +16,9 @@ package smart
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -45,6 +48,31 @@ var CancelEvent = shortcut.Shortcut{
 		"如果 eventId 查不到会直接报错，不会盲目删除。" +
 		"这是高危写操作，会真实删除该日程，框架会二次确认。",
 	Risk: shortcut.RiskHighWrite,
+	Safety: contract.SafetySpec{
+		Effect: "destructive", Risk: "high",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_cancel_event",
+			CanonicalPath:  "calendar.shortcut_cancel_event",
+			CLIPath:        "calendar +cancel-event",
+			PrimaryCLIPath: "calendar +cancel-event",
+		},
+		Description: "取消（删除）一个已有日程（删除前先确认它真实存在）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "取消（删除）一个已有日程（删除前先确认它真实存在）",
+			UseWhen:      []string{"当你想取消/删除一个已经存在的日程时使用；内部先用 eventId 拉一次日程详情确认它真实存在并回显标题，再执行删除，避免因 eventId 写错而误删别的日程。如果 eventId 查不到会直接报错，不会盲目删除。这是高危写操作，会真实删除该日程，框架会二次确认。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +cancel-event --event EVENT_ID"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "event", Type: shortcut.FlagString, Desc: "要取消的日程 eventId（可用 dws calendar event list 查询）", Required: true},
 	},

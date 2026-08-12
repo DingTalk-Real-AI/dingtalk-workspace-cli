@@ -1,27 +1,20 @@
 # 文档 (doc) 命令参考
 
-## 查询命令帮助
+## 路由与帮助预算
 
-当你不确定某个命令的具体参数、格式或可选项时，**优先执行 `--help` 查询**，不要猜测参数名或凭记忆编造。
+已知精确命令和参数时直接执行，禁止预调用 Help。参数语义不确定时先查精确 leaf Schema；真实返回 `unknown flag` 后最多读取一次该 leaf Help。`unknown command` 只执行一次 `dws shortcut list --service doc --format json`，禁止试探候选后缀或执行产品级 `dws doc --help | grep/head`。
+
+本页已给出精确命令且参数足够时，禁止读取 reference 子页。只有复杂 JSONML、block/划词评论高级参数、分页或部分成功恢复仍无法由本页和精确 leaf Schema处理时，才最多读取一个对应子 reference；普通创建、全文读取、append/overwrite、导出和导入直接执行。
+
+版本快照、列表和恢复的 Agent 主入口固定为：
 
 ```bash
-# 查看 doc 下所有子命令
-dws doc --help
-
-# 查看具体命令的完整参数说明
-dws doc read --help
-dws doc create --help
-dws doc block insert --help
-
-# 查看子命令组下的所有命令
-dws doc block --help
-dws doc permission --help
+dws doc +version-save --node <DOC_ID>
+dws doc +version-list --node <DOC_ID> --limit 20
+dws doc +version-revert --node <DOC_ID> --version <N>
 ```
 
-规则：
-- 参数名不确定时 → 先 `--help`，再调用
-- 报错 "unknown flag" 时 → `--help` 确认正确的 flag 名称
-- 不确定某个功能是否存在时 → `dws doc --help` 查看命令列表
+`+history-*` 仅兼容已有调用，不用于新的 Agent 选路。
 
 ## 命令总览
 
@@ -61,9 +54,18 @@ Example:
   dws doc read --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"
   dws doc read --node "https://alidocs.dingtalk.com/document/edit?dentryKey=<DENTRY_KEY>"
   dws doc read --node "https://alidocs.dingtalk.com/document/preview?dentryKey=<DENTRY_KEY>"
+  dws doc read --node <DOC_ID> --content-format jsonml --scope outline
 Flags:
-      --node string   文档 ID 或 URL (必填)
+      --node string             文档 ID 或 URL (必填)
+      --content-format string   输出格式: markdown / jsonml
+      --scope string            JSONML 节点范围: outline / range / section / tags
+      --tags string             scope=tags 时的节点 tag 列表
+      --max-depth int           筛选遍历最大深度，0 表示不限
+      --start-block-id string   range / section 起始块 UUID
+      --end-block-id string     range 结束块 UUID
 ```
+
+`--scope` 只适用于 `--content-format jsonml`，用于按大纲、块区间、单块子树或自定义 tag 局部读取。筛选结果是虚拟 JSONML fragment，只能剥壳后消费 children，不得把 fragment 容器整体写回。完整规则见 [`doc-read.md`](./doc/doc-read.md)。
 
 ### 创建文档
 ```
@@ -133,7 +135,7 @@ Flags:
 
 ### 导入本地文件为在线文档
 
-详见 [doc/doc-import.md](./doc/doc-import.md)。
+详见 [doc/doc-import.md](./doc/doc-import.md)。白名单外格式（html/pdf/zip/无扩展名等）不报错，自动改走文件上传原样入库，JSON 结果带 `fallback=upload`、`converted=false` 标记。
 
 ```
 Usage:
@@ -298,10 +300,12 @@ Usage:
 Example:
   dws doc comment create --node <DOC_ID> --content "这里需要修改"
   dws doc comment create --node <DOC_ID> --content "请review" --mention uid1,uid2
+  dws doc comment create --node <DOC_ID> --content "请群内关注" --mentioned-open-conversation-id <OPEN_CID>
 Flags:
       --node string      目标文档的标识，支持传入 URL 或 ID (必填)
       --content string   评论的文字内容，纯文本 (必填)
       --mention string   被 @ 的用户 uid 列表，逗号分隔
+      --mentioned-open-conversation-id strings  被 @ 的群 openConversationId，可重复或逗号分隔
 ```
 
 ### 创建划词评论 (内联评论)
@@ -330,21 +334,23 @@ Example:
   dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "同意"
   dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "比心" --emoji
   dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "请确认" --mention uid1,uid2
+  dws doc comment reply --node <DOC_ID> --comment-key <COMMENT_KEY> --content "请群内确认" --mentioned-open-conversation-id <OPEN_CID>
 Flags:
       --node string         目标文档的标识，支持传入 URL 或 ID (必填)
       --content string      回复的文字内容，表情回复时填写表情名称 (必填)
       --comment-key string  被回复评论的 commentKey，格式: {13位毫秒时间戳}{32位UUID}，可从 list/create 结果获取 (必填)
       --emoji               设为 true 时作为表情贴图回复 (默认 false)
       --mention string      被 @ 的用户 uid 列表，逗号分隔
+      --mentioned-open-conversation-id strings  被 @ 的群 openConversationId；不得与 --emoji 同时使用
 ```
 
 ### 更新文档评论
 ```text
 Usage:
-  dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content <CONTENT> [--mention uid1,uid2]
+  dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content <CONTENT> [--mention uid1,uid2] [--mentioned-open-conversation-id <OPEN_CID>]
 ```
 
-`commentKey` 从 `comment list/create/create-inline` 返回中获取。只有显式传入 `--mention` 时才更新被 @ 用户列表。
+`commentKey` 从 `comment list/create/create-inline` 返回中获取。全文评论的 `create` / `reply` / `update` 支持通过 `--mentioned-open-conversation-id` 真实 @群；`create-inline` 不支持 @群。群名需先用 `dws chat search` 唯一解析为 openConversationId。
 
 ### 删除文档评论
 ```text
@@ -658,6 +664,7 @@ Flags:
 用户说"导入文件/导入为在线文档/导入 Word/导入 Excel/导入 xmind/导入 Markdown/把本地文件转在线文档":
 - 导入并转换为在线文档 → `doc import --file <本地路径>`
 - 支持 docx/doc/xlsx/xls/md/txt/xmind/mark，文件大小不超过 20MB
+- 白名单外格式（html/pdf/zip/无扩展名等）不报错：自动改走文件上传链路原样入库（stderr 有改道提示），JSON 结果带 `fallback=upload`、`converted=false` 标记，产出的是文件对象而非在线文档，不得报告为"已转换"；要"可编辑在线文档"时先把内容转为 md 再导入
 - 如果用户指定知识库或文件夹，补充 `--workspace` 或 `--folder`
 - 不要把本地文件内容先读出来再 `doc create/update`；应直接使用 `doc import`
 
@@ -909,6 +916,10 @@ dws doc comment create --node <DOC_ID> --content "这里需要补充数据来源
 #    再将 userId 传入 --mention
 dws doc comment create --node <DOC_ID> --content "请确认这部分内容" --mention <userId1>,<userId2> --format json
 
+# 3b. 创建评论并 @群（先唯一解析群 openConversationId）
+dws chat search --query "项目群" --format json
+dws doc comment create --node <DOC_ID> --content "请群内确认" --mentioned-open-conversation-id <OPEN_CID> --format json
+
 # 4. 更新某条评论（可选 --mention）
 dws doc comment update --node <DOC_ID> --comment-key <COMMENT_KEY> --content "已按最新数据修正" --format json
 
@@ -952,6 +963,7 @@ dws doc export --node <DOC_ID_OR_URL> --output ./exported.docx
 | `comment create` / `comment create-inline` | `commentKey` | comment reply/update/delete 的 --comment-key |
 | `block list` | `blockId` + 文本内容 | comment create-inline 的 --block-id 及 --start/--end 计算 |
 | `contact user search` | `userId` | comment create / create-inline / reply / update 的 --mention |
+| `chat search` | `openConversationId` | comment create / reply / update 的 --mentioned-open-conversation-id |
 | `wiki node create`（原 `doc file create`，已弃用） | `nodeId` | 后续 read / update / block 操作的 --node（仅 adoc 支持 read/update，axls/amind 等类型用各自产品的命令） |
 | `copy` / `move` | 新 `nodeId`（copy）或原 nodeId（move） | 后续 read / info 等的 --node |
 
@@ -986,25 +998,24 @@ dws doc read --node "https://alidocs.dingtalk.com/document/preview?cid=749936706
 | `--content -` | 从 stdin 读取（可配合 heredoc/pipe） |
 | `--content-file path` | 从文件读取（UTF-8），推荐 |
 
-### 短/中等长度（< 200KB）— 单步创建
+### 创建并写入 — Runtime 自动分片
 
 ```bash
 # 1. 把内容写入 UTF-8 文本文件：
 #    Linux/Mac: /tmp/<name>.md；Windows: %TEMP%\<name>.md
-# 2. 一步创建+写入：
-dws doc create --name "<文档名>" --content-file <tmp> [--folder <ID>] [--workspace <ID>]
+# 2. 一步创建、必要时自动分片并回读验证：
+dws doc +create --name "<文档名>" --content @<工作目录相对文件> [--folder <ID>] [--workspace <ID>]
 ```
 
-### 超长（> 200KB 兜底）— 创建空文档 + 分片追加
+`+create` 会按安全边界拆分长 Markdown，首片创建、后续片追加，每个写调用最多执行一次。若返回 `partial_success` 或 `unknown`，先按返回的 `nodeId/steps` 回读文档，不得重跑整个创建。
+
+### 更新并验证
 
 ```bash
-# 1. 创建空文档拿 nodeId
-dws doc create --name "<文档名>" [--folder/--workspace]  # → nodeId
-
-# 2. 按 markdown 标题或段落边界切成 ≤200KB 的片段（不要切断表格）
-# 3. 逐个追加：
-dws doc update --node <nodeId> --content-file <part> --mode append
+dws doc +update --node <nodeId> --command append --content @<工作目录相对文件>
 ```
+
+Runtime 自动分片并在最后回读验证。重要覆盖使用 `+checkpoint-update`；不要自行编写重试循环，创建和追加在超时后可能已经提交。
 
 ### stdin 变体
 
@@ -1051,15 +1062,24 @@ EOF
 - `rename` 需要对文档有"编辑"权限
 - `copy` / `move` 不传 `--folder` 时，`--workspace` 表示放到知识库根目录；两者都不传则回落到"我的文档"
 - `comment create` 是全文评论；`comment create-inline` 是划词评论，必须先 `block list` 拿到 `blockId` 并确定 `--start` / `--end` 偏移（按块内纯文本字符算，从 0 开始）
+- 全文评论 `create` / `reply` / `update` 支持通过 `--mentioned-open-conversation-id` @群；划词评论 `create-inline` 不支持 @群
 
-## 自动化脚本
+## 白板卡片与白板媒体资源
 
-| 脚本 | 场景 | 用法 |
-|------|------|------|
-| [doc_create_and_write.py](../../scripts/doc_create_and_write.py) | 创建文档并写入 Markdown 内容 | `python doc_create_and_write.py --name "周报" --content "# 本周总结"` |
+```bash
+dws doc whiteboard insert --node <DOC_ID> --yes --format json
+dws doc media upload --node <DOC_ID> --file ./icon.svg \
+  --mime-type image/svg+xml --yes --format json
+```
+
+两个命令都是远端写入，必须先获得用户确认。insert 返回的 `whiteboardId` 是
+`dws whiteboard query/update` 使用的 partId；`blockId` 只用于文档块定位/删除。
+media upload 返回的 `resourceId` / `resourceUrl` 只能用于同一 nodeId 下的白板
+Vector/SVG。完整协议见 [whiteboard.md](./whiteboard.md)。
 
 ## 相关产品
 
 - [aitable](./aitable.md) — 结构化数据表格（行列/字段/记录），不是富文本文档
 - [drive](./drive.md) — 钉盘文件存储/上传/下载，不是文档内容编辑
+- [markdown](./markdown.md) — 原生 `.md` 文件的纯文本读取、创建、覆盖与局部替换
 - [report](./report.md) — 钉钉日志系统（日报/周报模版），不是在线文档

@@ -15,11 +15,15 @@ package app
 
 import (
 	"bytes"
+	stderrors "errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -68,6 +72,39 @@ func TestCalendarEventCreateHelpKeepsRoomsStringMetavar(t *testing.T) {
 
 func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 	root := NewRootCommand()
+	for _, path := range []string{
+		"chat send",
+		"chat history",
+		"im send",
+		"im history",
+	} {
+		command, remaining, err := root.Find(strings.Fields(path))
+		if err != nil {
+			t.Fatalf("find %s: %v", path, err)
+		}
+		if len(remaining) != 0 || !command.Hidden || !command.Runnable() {
+			t.Fatalf("%s compatibility contract: remaining=%v hidden=%v runnable=%v", path, remaining, command.Hidden, command.Runnable())
+		}
+	}
+	for _, tc := range []struct {
+		args []string
+		hint string
+	}{
+		{args: []string{"chat", "send", "--group", "cid-stable", "--text", "hello"}, hint: "dws chat message send"},
+		{args: []string{"im", "send", "--group", "cid-stable", "--text", "hello"}, hint: "dws chat message send"},
+		{args: []string{"chat", "history", "--group", "cid-stable", "--limit", "20"}, hint: "dws chat message list --group <GROUP_OPEN_CONVERSATION_ID>"},
+		{args: []string{"im", "history", "--group", "cid-stable", "--limit", "20"}, hint: "dws chat message list --group <GROUP_OPEN_CONVERSATION_ID>"},
+	} {
+		command := NewRootCommand()
+		command.SilenceErrors = true
+		command.SilenceUsage = true
+		command.SetArgs(tc.args)
+		err := command.Execute()
+		if err == nil || !strings.Contains(err.Error(), "ambiguous command") || !strings.Contains(err.Error(), tc.hint) {
+			t.Fatalf("dws %s error = %v, want migration hint %q", strings.Join(tc.args, " "), err, tc.hint)
+		}
+	}
+
 	listDirect := mustFindCommand(t, root, "chat", "message", "list-direct")
 	for _, flag := range []string{"user", "open-dingtalk-id", "time", "forward", "limit"} {
 		if listDirect.Flags().Lookup(flag) == nil {
@@ -75,7 +112,14 @@ func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 		}
 	}
 
-	mediaUpload := mustFindCommand(t, root, "chat", "media", "upload")
+	mediaGroup := mustFindCommand(t, root, "chat", "media")
+	if mediaGroup.Deprecated == "" || mediaGroup.Hidden || !mediaGroup.Runnable() {
+		t.Fatalf("chat media compatibility contract: deprecated=%q hidden=%v runnable=%v", mediaGroup.Deprecated, mediaGroup.Hidden, mediaGroup.Runnable())
+	}
+	mediaUpload := mustFindCommand(t, mediaGroup, "upload")
+	if mediaUpload.Deprecated == "" || mediaUpload.Hidden || !mediaUpload.Runnable() {
+		t.Fatalf("chat media upload compatibility contract: deprecated=%q hidden=%v runnable=%v", mediaUpload.Deprecated, mediaUpload.Hidden, mediaUpload.Runnable())
+	}
 	for _, flag := range []string{"file", "type"} {
 		if mediaUpload.Flags().Lookup(flag) == nil {
 			t.Fatalf("chat media upload missing --%s", flag)
@@ -86,6 +130,111 @@ func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 	mustFindCommand(t, root, "contact", "search")
 	mustFindCommand(t, root, "contact", "user", "list")
 	mustFindCommand(t, root, "conference", "meeting", "reserve")
+}
+
+func TestChatHelpAndSchemaHideRetiredMediaUpload(t *testing.T) {
+	for _, args := range [][]string{
+		{"chat", "--help"},
+		{"chat", "media", "--help"},
+	} {
+		root := NewRootCommand()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetErr(&output)
+		root.SetArgs(args)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("dws %s: %v\n%s", strings.Join(args, " "), err, output.String())
+		}
+		for _, line := range strings.Split(output.String(), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) > 0 && (fields[0] == "media" || fields[0] == "upload") {
+				t.Fatalf("dws %s exposes retired command in Help line %q:\n%s", strings.Join(args, " "), line, output.String())
+			}
+		}
+	}
+
+	root := NewRootCommand()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	root.SetArgs([]string{"schema", "--cli-path", "chat media upload", "--format", "json"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatalf("retired chat media upload remains queryable from Schema:\n%s", output.String())
+	}
+	if !strings.Contains(err.Error(), "unknown runtime schema path") {
+		t.Fatalf("retired chat media upload Schema error = %v, want unknown path", err)
+	}
+}
+
+func TestRootChatMediaUploadWithoutAppCredentialsReturnsMigrationValidation(t *testing.T) {
+	for _, key := range []string{"DWS_CLIENT_ID", "DWS_CLIENT_SECRET"} {
+		value, existed := os.LookupEnv(key)
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatalf("unset %s: %v", key, err)
+		}
+		t.Cleanup(func() {
+			if existed {
+				_ = os.Setenv(key, value)
+				return
+			}
+			_ = os.Unsetenv(key)
+		})
+		if _, exists := os.LookupEnv(key); exists {
+			t.Fatalf("%s is still set", key)
+		}
+	}
+	t.Setenv("DWS_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+
+	filePath := filepath.Join(t.TempDir(), "image.png")
+	if err := os.WriteFile(filePath, []byte("image"), 0o600); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+	commandArgs := []string{
+		"chat", "media", "upload",
+		"--file", filePath,
+		"--type", "image",
+	}
+	testseam.Swap(t, &os.Args, append([]string{"dws"}, commandArgs...))
+
+	root := NewRootCommand()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	root.SetArgs(commandArgs)
+	err := root.Execute()
+	if err == nil {
+		t.Fatalf("chat media upload succeeded without app credentials:\n%s", output.String())
+	}
+
+	var typed *apperrors.Error
+	if !stderrors.As(err, &typed) {
+		t.Fatalf("chat media upload error type = %T, want *errors.Error: %v", err, err)
+	}
+	if typed.Category != apperrors.CategoryValidation {
+		t.Fatalf("chat media upload category = %q, want %q", typed.Category, apperrors.CategoryValidation)
+	}
+	if exitCode := apperrors.ExitCode(err); exitCode != 3 {
+		t.Fatalf("chat media upload exit code = %d, want 3", exitCode)
+	}
+
+	got := output.String() + "\n" + err.Error()
+	for _, want := range []string{"已下线", "chat message send --msg-type file --file-path"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("chat media upload migration output missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{
+		"DWS_CLIENT_ID",
+		"DWS_CLIENT_SECRET",
+		"缺少应用凭证",
+		"AppSecret",
+		"clientSecret",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("chat media upload returned credential error %q:\n%s", forbidden, got)
+		}
+	}
 }
 
 func TestRootKeepsContactWukongCompatibilityCommands(t *testing.T) {
@@ -263,27 +412,21 @@ func TestRootKeepsSVIPChatCompatibilityFlags(t *testing.T) {
 	}
 
 	searchAdvanced := mustFindCommand(t, root, "chat", "message", "search-advanced")
-	for _, flag := range []string{"sender", "senders", "sender-ids"} {
+	for _, flag := range []string{"sender", "senders", "sender-ids", "message-type", "only-robot", "conversation-type"} {
 		if searchAdvanced.Flags().Lookup(flag) == nil {
 			t.Fatalf("chat message search-advanced missing --%s", flag)
 		}
 	}
 }
 
-func TestCacheRefreshCompatibilityStub(t *testing.T) {
-	cmd := NewRootCommand()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"cache", "refresh", "--format", "json"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("cache refresh compatibility stub: %v\n%s", err, out.String())
+func TestCacheCommandDeprecatedCompatStub(t *testing.T) {
+	root := NewRootCommand()
+	cmd, _, err := root.Find([]string{"cache", "refresh"})
+	if err != nil || cmd == nil || cmd == root {
+		t.Fatalf("dws cache refresh compatibility stub missing: %v", err)
 	}
-	got := out.String()
-	for _, want := range []string{`"status":"deprecated"`, `"command":"dws cache refresh"`, "服务发现已下线"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("cache refresh output missing %q:\n%s", want, got)
-		}
+	if cmd.Hidden || cmd.Deprecated == "" {
+		t.Fatalf("cache refresh must be visible Deprecated: hidden=%v deprecated=%q", cmd.Hidden, cmd.Deprecated)
 	}
 }
 

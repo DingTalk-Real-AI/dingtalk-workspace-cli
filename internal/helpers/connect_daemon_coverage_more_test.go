@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -164,13 +165,18 @@ func TestCrossPlatformCoverageStartDaemonLifecycleEdges(t *testing.T) {
 		fixture := writeShellExecutable(t, t.TempDir(), "daemon-success", "exit 0\n")
 		daemonCommand = func(string, ...string) *exec.Cmd { return exec.Command(fixture) }
 		cmd := daemonTestCommand()
-		var out bytes.Buffer
+		var out, errOut bytes.Buffer
 		cmd.SetOut(&out)
+		cmd.SetErr(&errOut)
 		if err := startDaemon(cmd, "key", "client", "app", "custom", "staff", "profile", true); err != nil {
 			t.Fatalf("startDaemon() error = %v", err)
 		}
-		if !strings.Contains(out.String(), "daemon started") {
-			t.Fatalf("start output = %q", out.String())
+		// The streaming root remains legacy until a dedicated stream contract.
+		if !strings.Contains(out.String(), "daemon started") || !strings.Contains(out.String(), "pid") {
+			t.Fatalf("legacy daemon start output = %q", out.String())
+		}
+		if errOut.Len() != 0 {
+			t.Fatalf("legacy daemon start stderr = %q", errOut.String())
 		}
 
 		// startDaemon intentionally releases its detached child. On Windows the
@@ -564,7 +570,7 @@ func TestCrossPlatformCoverageDaemonStatusAndStopEdges(t *testing.T) {
 			t.Fatal(err)
 		}
 		connectDaemonDirOverride = blocked
-		if err := daemonStop(&bytes.Buffer{}, "key"); err == nil {
+		if _, err := daemonStopResult(&bytes.Buffer{}, "key"); err == nil {
 			t.Fatal("stop with blocked directory succeeded")
 		}
 		connectDaemonDirOverride = t.TempDir()
@@ -572,7 +578,7 @@ func TestCrossPlatformCoverageDaemonStatusAndStopEdges(t *testing.T) {
 		if err := os.WriteFile(daemonStatePath(dir), []byte("{"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := daemonStop(&bytes.Buffer{}, "corrupt"); err == nil {
+		if _, err := daemonStopResult(&bytes.Buffer{}, "corrupt"); err == nil {
 			t.Fatal("stop with corrupt state succeeded")
 		}
 	})
@@ -586,7 +592,7 @@ func TestCrossPlatformCoverageDaemonStatusAndStopEdges(t *testing.T) {
 		}
 		daemonProcessAlive = func(int) bool { return true }
 		daemonFindProcess = func(int) (*os.Process, error) { return nil, errors.New("find") }
-		if err := daemonStop(&bytes.Buffer{}, "find-error"); err == nil {
+		if _, err := daemonStopResult(&bytes.Buffer{}, "find-error"); err == nil {
 			t.Fatal("find process error was ignored")
 		}
 	})
@@ -634,7 +640,7 @@ func TestCrossPlatformCoverageDaemonStopHookedLifecycleEdges(t *testing.T) {
 		}
 		sleeps := 0
 		helperSleep = func(time.Duration) { sleeps++ }
-		if err := daemonStop(&bytes.Buffer{}, "orphan-graceful"); err != nil {
+		if _, err := daemonStopResult(&bytes.Buffer{}, "orphan-graceful"); err != nil {
 			t.Fatal(err)
 		}
 		if len(signals) != 1 || signals[0] != syscall.SIGTERM || sleeps != 1 {
@@ -660,7 +666,7 @@ func TestCrossPlatformCoverageDaemonStopHookedLifecycleEdges(t *testing.T) {
 			return nil
 		}
 		helperSleep = func(time.Duration) {}
-		if err := daemonStop(&bytes.Buffer{}, "orphan-force-hooked"); err != nil {
+		if _, err := daemonStopResult(&bytes.Buffer{}, "orphan-force-hooked"); err != nil {
 			t.Fatal(err)
 		}
 		if len(signals) != 2 || signals[0] != syscall.SIGTERM || signals[1] != syscall.SIGKILL {
@@ -678,7 +684,7 @@ func TestCrossPlatformCoverageDaemonStopHookedLifecycleEdges(t *testing.T) {
 		base := time.Now()
 		daemonNow = func() time.Time { return base }
 		daemonSignalProcess = func(*os.Process, os.Signal) error { return nil }
-		if err := daemonStop(&bytes.Buffer{}, "live-graceful-hooked"); err != nil {
+		if _, err := daemonStopResult(&bytes.Buffer{}, "live-graceful-hooked"); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -687,7 +693,7 @@ func TestCrossPlatformCoverageDaemonStopHookedLifecycleEdges(t *testing.T) {
 		prepare(t, "live-signal-error-hooked", false)
 		daemonProcessAlive = func(int) bool { return true }
 		daemonSignalProcess = func(*os.Process, os.Signal) error { return errors.New("signal") }
-		if err := daemonStop(&bytes.Buffer{}, "live-signal-error-hooked"); err == nil {
+		if _, err := daemonStopResult(&bytes.Buffer{}, "live-signal-error-hooked"); err == nil {
 			t.Fatal("signal error was ignored")
 		}
 	})
@@ -710,7 +716,7 @@ func TestCrossPlatformCoverageDaemonStopHookedLifecycleEdges(t *testing.T) {
 			return nil
 		}
 		helperSleep = func(time.Duration) {}
-		if err := daemonStop(&bytes.Buffer{}, "live-force-hooked"); err != nil {
+		if _, err := daemonStopResult(&bytes.Buffer{}, "live-force-hooked"); err != nil {
 			t.Fatal(err)
 		}
 		if len(signals) != 2 || signals[0] != syscall.SIGTERM || signals[1] != syscall.SIGKILL {
@@ -763,25 +769,25 @@ func TestCrossPlatformCoverageDaemonListAndNamePaginationEdges(t *testing.T) {
 	}
 	resolveAppNames(cmd, connectResponseRunner{err: errors.New("offline")}, []connectHealthReport{{UnifiedAppID: "u-1"}})
 
-	list := newDevAppRobotConnectListCommand(runner)
+	list := prepareUnifiedTestCommand(newDevAppRobotConnectListCommand(runner))
 	var out bytes.Buffer
 	list.SetOut(&out)
-	if err := list.Execute(); err != nil || !strings.Contains(out.String(), "no connectors") {
-		t.Fatalf("empty list = %q, %v", out.String(), err)
+	if err := list.Execute(); err != nil || strings.TrimSpace(out.String()) != "no connectors found" {
+		t.Fatalf("empty list output = %q, %v", out.String(), err)
 	}
-	list = newDevAppRobotConnectListCommand(runner)
+	list = prepareUnifiedTestCommand(newDevAppRobotConnectListCommand(runner))
 	out.Reset()
 	list.SetOut(&out)
 	list.SetArgs([]string{"--json"})
-	if err := list.Execute(); err != nil || !strings.Contains(out.String(), "null") {
-		t.Fatalf("json list = %q, %v", out.String(), err)
+	if err := list.Execute(); err != nil || strings.TrimSpace(out.String()) != "[]" {
+		t.Fatalf("json list array = %q, %v", out.String(), err)
 	}
 
 	seedHeartbeat(t, "listed", connectHeartbeat{
 		Pid: os.Getpid(), ClientID: strings.Repeat("c", 80), Channel: strings.Repeat("x", 80),
 		StartUnix: time.Now().Add(-time.Minute).Unix(), ConnectedUnix: time.Now().Add(-time.Minute).Unix(),
 	})
-	list = newDevAppRobotConnectListCommand(runner)
+	list = prepareUnifiedTestCommand(newDevAppRobotConnectListCommand(runner))
 	out.Reset()
 	list.SetOut(&out)
 	if err := list.Execute(); err != nil || !strings.Contains(out.String(), "STATE") {
@@ -791,7 +797,7 @@ func TestCrossPlatformCoverageDaemonListAndNamePaginationEdges(t *testing.T) {
 	connectHealthReadDir = func(string) ([]os.DirEntry, error) {
 		return nil, errors.New("read directory")
 	}
-	list = newDevAppRobotConnectListCommand(runner)
+	list = prepareUnifiedTestCommand(newDevAppRobotConnectListCommand(runner))
 	list.SetOut(&bytes.Buffer{})
 	if err := list.Execute(); err == nil {
 		t.Fatal("list with blocked directory succeeded")
@@ -806,6 +812,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	defaultFindProcess := daemonFindProcess
 
 	for _, command := range []*cobra.Command{newDevAppRobotConnectStatusCommand(), newDevAppRobotConnectStopCommand(), newDevAppRobotConnectRestartCommand()} {
+		command = prepareUnifiedTestCommand(command)
 		command.SetArgs(nil)
 		command.SetOut(&bytes.Buffer{})
 		command.SetErr(&bytes.Buffer{})
@@ -814,20 +821,20 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 		}
 	}
 
-	status := newDevAppRobotConnectStatusCommand()
+	status := prepareUnifiedTestCommand(newDevAppRobotConnectStatusCommand())
 	status.SetArgs([]string{"--robot-client-id", "missing", "--json"})
 	status.SetOut(&bytes.Buffer{})
 	if err := status.Execute(); err != nil {
 		t.Fatalf("status command = %v", err)
 	}
-	stop := newDevAppRobotConnectStopCommand()
-	stop.SetArgs([]string{"--unified-app-id", "missing"})
+	stop := prepareUnifiedTestCommand(newDevAppRobotConnectStopCommand())
+	stop.SetArgs([]string{"--unified-app-id", "missing", "--yes"})
 	stop.SetOut(&bytes.Buffer{})
 	if err := stop.Execute(); err != nil {
 		t.Fatalf("stop command = %v", err)
 	}
 
-	restart := newDevAppRobotConnectRestartCommand()
+	restart := prepareUnifiedTestCommand(newDevAppRobotConnectRestartCommand())
 	restart.SetArgs([]string{"--robot-client-id", "missing"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
@@ -840,7 +847,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	connectDaemonDirOverride = blocked
-	restart = newDevAppRobotConnectRestartCommand()
+	restart = prepareUnifiedTestCommand(newDevAppRobotConnectRestartCommand())
 	restart.SetArgs([]string{"--robot-client-id", "blocked"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
@@ -852,7 +859,7 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	if err := os.WriteFile(daemonStatePath(corruptDir), []byte("{"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	restart = newDevAppRobotConnectRestartCommand()
+	restart = prepareUnifiedTestCommand(newDevAppRobotConnectRestartCommand())
 	restart.SetArgs([]string{"--robot-client-id", "corrupt-restart"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
@@ -879,8 +886,8 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	}
 	daemonExecutable = func() (string, error) { return "/bin/sh", nil }
 	daemonCommand = func(string, ...string) *exec.Cmd { return exec.Command("sh", "-c", "exit 0") }
-	restart = newDevAppRobotConnectRestartCommand()
-	restart.SetArgs([]string{"--robot-client-id", "restart"})
+	restart = prepareUnifiedTestCommand(newDevAppRobotConnectRestartCommand())
+	restart.SetArgs([]string{"--robot-client-id", "restart", "--yes"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
 	if err := restart.Execute(); err != nil {
@@ -892,8 +899,8 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	}
 	daemonProcessAlive = func(int) bool { return true }
 	daemonFindProcess = func(int) (*os.Process, error) { return nil, errors.New("find") }
-	restart = newDevAppRobotConnectRestartCommand()
-	restart.SetArgs([]string{"--robot-client-id", "restart"})
+	restart = prepareUnifiedTestCommand(newDevAppRobotConnectRestartCommand())
+	restart.SetArgs([]string{"--robot-client-id", "restart", "--yes"})
 	restart.SetOut(&bytes.Buffer{})
 	restart.SetErr(&bytes.Buffer{})
 	if err := restart.Execute(); err != nil {
@@ -906,10 +913,19 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := &cobra.Command{Use: "dws"}
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.PersistentFlags().String("profile", "", "")
+	root.PersistentFlags().String("format", "json", "")
+	root.PersistentFlags().Bool("dry-run", false, "")
+	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentPostRunE = func(cmd *cobra.Command, _ []string) error {
+		_, _, err := output.EmitStoredResult(cmd)
+		return err
+	}
 	restart = newDevAppRobotConnectRestartCommand()
 	root.AddCommand(restart)
-	root.SetArgs([]string{"restart", "--robot-client-id", "restart", "--profile", "override"})
+	root.SetArgs([]string{"restart", "--robot-client-id", "restart", "--profile", "override", "--yes"})
 	root.SetOut(&bytes.Buffer{})
 	root.SetErr(&bytes.Buffer{})
 	if err := root.Execute(); err != nil {
@@ -939,5 +955,52 @@ func TestCrossPlatformCoverageDaemonControlCommandEdges(t *testing.T) {
 	restart.SetErr(&bytes.Buffer{})
 	if err := restart.Execute(); err == nil {
 		t.Fatal("failing restart subprocess succeeded")
+	}
+}
+
+func TestFrameworkConnectControlDryRunPlansAndLegacyListRollback(t *testing.T) {
+	preserveDaemonHooks(t)
+	connectDaemonDirOverride = t.TempDir()
+
+	stop := prepareUnifiedTestCommand(newDevAppRobotConnectStopCommand())
+	stop.SetArgs([]string{"--unified-app-id", "app", "--dry-run"})
+	var stopOut bytes.Buffer
+	stop.SetOut(&stopOut)
+	if err := stop.Execute(); err != nil || !strings.Contains(stopOut.String(), `"preview_kind": "plan"`) {
+		t.Fatalf("stop preview=%q err=%v", stopOut.String(), err)
+	}
+
+	restart := prepareUnifiedTestCommand(newDevAppRobotConnectRestartCommand())
+	restart.SetArgs([]string{"--unified-app-id", "app", "--dry-run"})
+	var restartOut bytes.Buffer
+	restart.SetOut(&restartOut)
+	if err := restart.Execute(); err != nil || !strings.Contains(restartOut.String(), `"preview_kind": "plan"`) {
+		t.Fatalf("restart preview=%q err=%v", restartOut.String(), err)
+	}
+
+	dir, err := connectDaemonDir("saved")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeDaemonState(dir, daemonState{DirKey: "saved", UnifiedAppID: "saved-app", Channel: "custom"}); err != nil {
+		t.Fatal(err)
+	}
+	restart = prepareUnifiedTestCommand(newDevAppRobotConnectRestartCommand())
+	restart.SetArgs([]string{"--robot-client-id", "saved", "--dry-run"})
+	restartOut.Reset()
+	restart.SetOut(&restartOut)
+	if err := restart.Execute(); err != nil || !strings.Contains(restartOut.String(), "saved-app") {
+		t.Fatalf("saved restart preview=%q err=%v", restartOut.String(), err)
+	}
+
+	list := prepareUnifiedTestCommand(newDevAppRobotConnectListCommand(connectResponseRunner{response: map[string]any{"items": []any{}, "hasMore": false}}))
+	output.SetCommandRollout(list, output.RolloutLegacyOnly)
+	for _, format := range []string{"json", "table", "pretty"} {
+		var out bytes.Buffer
+		list.SetOut(&out)
+		list.SetArgs([]string{"--format", format})
+		if err := list.Execute(); err != nil {
+			t.Fatalf("legacy list %s: %v", format, err)
+		}
 	}
 }

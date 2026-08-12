@@ -3,7 +3,7 @@
 # Licensed under the Apache License, Version 2.0
 #
 # One-command installer for dws dev — pre-built binary, no build tools.
-# Downloads the dev binary + dingtalk-dev skill from the DingTalk-Real-AI GitHub Releases.
+# Downloads the dev binary + dingtalk-misc skill (hosts open-platform app docs) from the DingTalk-Real-AI GitHub Releases.
 # Requires only curl + tar (no go / make / git).
 #
 # Usage:
@@ -20,7 +20,7 @@ DEVAPP_REPO="${DEVAPP_REPO:-DingTalk-Real-AI/dingtalk-workspace-cli}"
 DEVAPP_VERSION="${DEVAPP_VERSION:-}"
 INSTALL_DIR="${DWS_INSTALL_DIR:-$HOME/.local/bin}"
 NO_SKILLS="${DWS_NO_SKILLS:-0}"
-SKILL_NAME="dingtalk-dev"
+SKILL_NAME="dingtalk-misc"
 
 say() { printf '  %s\n' "$@"; }
 err() { printf '  ❌ %s\n' "$@" >&2; exit 1; }
@@ -77,7 +77,7 @@ install_skill() {
   for c in "$bundle/multi/$SKILL_NAME" "$bundle/skills/multi/$SKILL_NAME" "$bundle/$SKILL_NAME"; do
     [ -f "$c/SKILL.md" ] && src="$c" && break
   done
-  [ -n "$src" ] || { say "  (dingtalk-dev not found in skills bundle; skipped)"; return 0; }
+  [ -n "$src" ] || { say "  (dingtalk-misc not found in skills bundle; skipped)"; return 0; }
 
   # cache so `dws skill setup --mode multi` can find a source later
   cache="$HOME/.dws/skills/multi/$SKILL_NAME"
@@ -95,7 +95,7 @@ install_skill() {
     dest="$base/$SKILL_NAME"; rm -rf "$dest"; mkdir -p "$dest"; cp -R "$src/." "$dest/"
     installed=$((installed + 1)); idx=$((idx + 1))
   done
-  say "✅ Skill dingtalk-dev → ${installed} agent dir(s)"
+  say "✅ Skill dingtalk-misc → ${installed} agent dir(s)"
 }
 
 main() {

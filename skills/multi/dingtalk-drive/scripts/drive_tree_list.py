@@ -3,16 +3,10 @@
 递归列出钉盘目录树结构（可指定深度）
 
 用法:
-    python drive_tree_list.py                # 列出根目录
-    python drive_tree_list.py --depth 2      # 递归 2 层
-    python drive_tree_list.py --folder <id>  # 指定目录 (传 drive list 返回的 fileId)
+    python drive_tree_list.py                   # 列出根目录
+    python drive_tree_list.py --depth 2         # 递归 2 层
+    python drive_tree_list.py --parent-id <id>  # 指定目录
     python drive_tree_list.py --dry-run
-
-说明:
-    `dws drive list` 返回的每个 item 有两个 ID：
-      - dentryId：纯数字串，`--folder` 不接受，别用它递归；
-      - fileId：字母数字串，即 CLI 所称 dentryUuid，`--folder` 只认它。
-    递归子目录必须用 fileId 作为 `--folder` 的值。
 """
 
 import sys
@@ -44,13 +38,13 @@ def run_dws(
 
 
 def list_dir(
-    folder: str = '', dry_run: bool = False,
+    parent_id: str = '', dry_run: bool = False,
 ) -> list:
     cmd_args = [
-        'drive', 'list', '--limit', '50', '--format', 'json',
+        'drive', 'list', '--max', '50', '--format', 'json',
     ]
-    if folder:
-        cmd_args.extend(['--folder', folder])
+    if parent_id:
+        cmd_args.extend(['--parent-id', parent_id])
     data = run_dws(cmd_args, dry_run=dry_run)
     if not data:
         return []
@@ -75,7 +69,7 @@ def print_tree(
         name = item.get('name') or item.get('fileName', '?')
         item_type = item.get('type') or item.get('dentryType', '')
         is_dir = str(item_type).lower() in (
-            'folder', 'directory', '1',
+            'folder', 'directory', '1', 'FOLDER'
         )
         icon = '📁' if is_dir else '📄'
         size_str = ''
@@ -93,10 +87,10 @@ def print_tree(
 
         if is_dir and depth < max_depth:
             child_prefix = prefix + ('    ' if is_last else '│   ')
-            # `--folder` 只认 fileId (dentryUuid)，不认纯数字 dentryId
-            folder_id = item.get('fileId', '')
-            if folder_id:
-                children = list_dir(folder_id, dry_run=dry_run)
+            dentry_id = (item.get('dentryUuid')
+                         or item.get('id', ''))
+            if dentry_id:
+                children = list_dir(dentry_id, dry_run=dry_run)
                 print_tree(
                     children, depth + 1, max_depth,
                     child_prefix, dry_run,
@@ -108,8 +102,7 @@ def main():
         description='递归列出钉盘目录树'
     )
     parser.add_argument(
-        '--folder', default='',
-        help='起始目录 ID (传 drive list 返回的 fileId)',
+        '--parent-id', default='', help='起始目录 ID'
     )
     parser.add_argument(
         '--depth', type=int, default=1,
@@ -119,10 +112,10 @@ def main():
     args = parser.parse_args()
     args.depth = min(args.depth, 5)
 
-    root_name = args.folder or '我的文件'
+    root_name = args.parent_id or '我的文件'
     print(f"📁 {root_name}")
 
-    items = list_dir(args.folder, dry_run=args.dry_run)
+    items = list_dir(args.parent_id, dry_run=args.dry_run)
     if args.dry_run:
         return
     if not items:

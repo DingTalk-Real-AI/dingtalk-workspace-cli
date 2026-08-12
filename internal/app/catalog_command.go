@@ -1,11 +1,10 @@
 package app
 
 import (
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
 )
 
-func newCatalogCommand(_ cli.CatalogLoader) *cobra.Command {
+func newCatalogCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "catalog",
 		Short:             "查看服务目录 (静态端点模式)",

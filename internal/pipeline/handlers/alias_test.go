@@ -184,3 +184,9 @@ func TestAliasHandlerNameAndPhase(t *testing.T) {
 		t.Errorf("Phase() = %v, want PreParse", h.Phase())
 	}
 }
+
+func TestTryNormaliseFlagRejectsBareDoubleDash(t *testing.T) {
+	if got, ok := tryNormaliseFlag("--", map[string]bool{"limit": true}); ok || got != "" {
+		t.Fatalf("tryNormaliseFlag(--) = %q, %v", got, ok)
+	}
+}

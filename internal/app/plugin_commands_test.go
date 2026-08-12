@@ -30,6 +30,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	"github.com/spf13/cobra"
@@ -417,10 +418,8 @@ func TestConflictingPluginDescriptorCannotReplaceDistributionEndpoint(t *testing
 
 func TestSchemaSourceRootDoesNotLoadRuntimePlugins(t *testing.T) {
 	isolatePluginRuntime(t)
-	previous := rootLoadPlugins
-	t.Cleanup(func() { rootLoadPlugins = previous })
 	var calls atomic.Int32
-	rootLoadPlugins = func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
+	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
 		calls.Add(1)
 		AppendDynamicServer(conferencePluginDescriptor())
 		return buildPluginCommands(
@@ -428,7 +427,7 @@ func TestSchemaSourceRootDoesNotLoadRuntimePlugins(t *testing.T) {
 			executor.EchoRunner{},
 			nil,
 		)
-	}
+	})
 
 	base := NewSchemaSourceRootCommand()
 	if calls.Load() != 0 {

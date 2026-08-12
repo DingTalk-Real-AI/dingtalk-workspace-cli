@@ -193,10 +193,13 @@ func TestCrossPlatformCoverageDriveDownloadDirectoryCoverage(t *testing.T) {
 func TestCrossPlatformCoverageDriveConfirmationCancellationCoverage(t *testing.T) {
 	oldStdin := os.Stdin
 	t.Cleanup(func() { os.Stdin = oldStdin })
-	for _, args := range [][]string{
-		{"delete", "--node", "node"},
-		{"publish", "set", "--node", "node"},
-		{"publish", "unset", "--node", "node"},
+	for _, test := range []struct {
+		args                 []string
+		wantObservableCancel bool
+	}{
+		{args: []string{"delete", "--node", "node"}, wantObservableCancel: true},
+		{args: []string{"publish", "set", "--node", "node"}},
+		{args: []string{"publish", "unset", "--node", "node"}},
 	} {
 		file, err := os.CreateTemp(t.TempDir(), "stdin")
 		if err != nil {
@@ -207,8 +210,9 @@ func TestCrossPlatformCoverageDriveConfirmationCancellationCoverage(t *testing.T
 		}
 		_, _ = file.Seek(0, 0)
 		os.Stdin = file
-		if err := executeDriveEdge(t, &scriptedToolCaller{}, args...); err != nil {
-			t.Fatalf("cancel %v: %v", args, err)
+		err = executeDriveEdge(t, &scriptedToolCaller{}, test.args...)
+		if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+			t.Fatalf("cancel %v = %v, want 用户取消了操作", test.args, err)
 		}
 		_ = file.Close()
 	}

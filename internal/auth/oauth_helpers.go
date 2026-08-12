@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/i18n"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
@@ -39,10 +38,6 @@ var (
 )
 
 func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenData, error) {
-	if err := preflightTokenPersistence(p.configDir); err != nil {
-		return nil, fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
-	}
-
 	// Use MCP mode if clientID is from MCP server
 	if IsClientIDFromMCP() {
 		return p.exchangeCodeViaMCP(ctx, code)
@@ -79,13 +74,21 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 // the currently configured client credentials.  This is a convenience wrapper
 // around OAuthProvider.exchangeCode for callers outside the auth package.
 func ExchangeCodeForToken(ctx context.Context, configDir, code string) (*TokenData, error) {
+	if err := prepareLoginPersistence(configDir); err != nil {
+		return nil, fmt.Errorf("local login state cannot be safely updated before token exchange: %w", err)
+	}
 	p := &OAuthProvider{
 		configDir:  configDir,
 		clientID:   ClientID(),
 		Output:     io.Discard,
 		httpClient: oauthHTTPClient,
 	}
-	return p.exchangeCode(ctx, code)
+	data, err := p.exchangeCode(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	data.FreshAuthorization = true
+	return data, nil
 }
 
 // exchangeCodeViaMCP exchanges auth code for token via MCP proxy.
@@ -290,6 +293,24 @@ func (p *OAuthProvider) parseTokenResponse(body []byte) (*TokenData, error) {
 	return data, nil
 }
 
+const legacyMCPRefreshRejectedCode = "invalidParameter.authCode.notFound"
+
+// MCPTokenExchangeError preserves the backend business code so refresh callers
+// can distinguish a legacy credential that requires a new authorization from
+// transient transport failures.
+type MCPTokenExchangeError struct {
+	Code    string
+	Message string
+}
+
+func (e *MCPTokenExchangeError) Error() string {
+	return fmt.Sprintf("MCP token exchange failed: %s - %s", e.Code, e.Message)
+}
+
+func (e *MCPTokenExchangeError) requiresReauthorization() bool {
+	return strings.TrimSpace(e.Code) == legacyMCPRefreshRejectedCode
+}
+
 // parseMCPTokenResponse parses token response from MCP proxy.
 // MCP OAuth response format: {"accessToken": "...", "refreshToken": "...", "expiresIn": 7200, "corpId": "...", "corpName": "..."}
 func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
@@ -313,7 +334,7 @@ func (p *OAuthProvider) parseMCPTokenResponse(body []byte) (*TokenData, error) {
 	}
 	// Check for error response
 	if resp.ErrorCode != "" || resp.ErrorMsg != "" {
-		return nil, fmt.Errorf("MCP token exchange failed: %s - %s", resp.ErrorCode, resp.ErrorMsg)
+		return nil, &MCPTokenExchangeError{Code: resp.ErrorCode, Message: resp.ErrorMsg}
 	}
 	if resp.AccessToken == "" {
 		return nil, fmt.Errorf("MCP token response missing accessToken (body: %s)", string(body))

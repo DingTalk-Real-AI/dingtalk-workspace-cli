@@ -5,8 +5,12 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestValidateSchemaDeliveryInvariantsAcceptsOneTypedSource(t *testing.T) {
@@ -56,7 +60,7 @@ func TestValidateSchemaDeliveryInvariantsRejectsSelectionProvenanceOmission(t *t
 	fixture := schemaDeliveryTestTool{
 		Canonical: "sample.run",
 		CLIPath:   "sample run",
-		Selection: SelectionSpec{Examples: []string{"dws sample run"}},
+		Selection: contract.SelectionSpec{Examples: []string{"dws sample run"}},
 	}
 	source := schemaDeliveryTestRegistry(fixture)
 	snapshot := schemaDeliveryTestSnapshot(fixture)
@@ -111,7 +115,7 @@ func TestSelectionExplicitEmptyListSurvivesFinalDelivery(t *testing.T) {
 		Canonical: "sample.run",
 		CLIPath:   "sample category run",
 		Aliases:   []string{"sample legacy execute"},
-		Selection: SelectionSpec{UseWhen: []string{}},
+		Selection: contract.SelectionSpec{UseWhen: []string{}},
 	})
 
 	full, ok := snapshot.Tools["sample.run"]["use_when"].([]string)
@@ -196,7 +200,7 @@ func TestValidateSchemaDeliveryInvariantsAllowsOnlyEnvelopeHashes(t *testing.T) 
 func TestSchemaOverviewPayloadFromCatalogPreservesListSelectionPriority(t *testing.T) {
 	catalog := map[string]any{
 		"kind":   "schema",
-		"source": "embedded-command-catalog",
+		"source": "runtime-assembled",
 		"products": []map[string]any{
 			{
 				"id":            "agent-summary",
@@ -217,8 +221,7 @@ func TestSchemaOverviewPayloadFromCatalogPreservesListSelectionPriority(t *testi
 				"tools":       []map[string]any{{}, {}},
 			},
 		},
-		"interface_metadata": map[string]any{"coverage": "complete"},
-		"agent_metadata":     map[string]any{"coverage": "reviewed"},
+		"agent_metadata": map[string]any{"coverage": "reviewed"},
 	}
 
 	got := schemaOverviewPayloadFromCatalog(catalog)
@@ -230,10 +233,10 @@ func TestSchemaOverviewPayloadFromCatalogPreservesListSelectionPriority(t *testi
 	if !schemaJSONEqual(got["products"], wantProducts) {
 		t.Fatalf("overview products = %#v, want %#v", got["products"], wantProducts)
 	}
-	if got["count"] != 3 || got["tool_count"] != 3 || got["source"] != "embedded-command-catalog" {
+	if got["count"] != 3 || got["tool_count"] != 3 || got["source"] != "runtime-assembled" {
 		t.Fatalf("overview envelope = %#v", got)
 	}
-	if !schemaJSONEqual(got["interface_metadata"], catalog["interface_metadata"]) || !schemaJSONEqual(got["agent_metadata"], catalog["agent_metadata"]) {
+	if !schemaJSONEqual(got["agent_metadata"], catalog["agent_metadata"]) {
 		t.Fatalf("overview metadata = %#v", got)
 	}
 }
@@ -391,5 +394,163 @@ func TestSchemaDeliveryToolsByCanonicalRejectsDuplicateWithoutRelyingOnCount(t *
 	tools, problems := schemaDeliveryToolsByCanonical(payload, "test view")
 	if len(tools) != 1 || len(problems) != 1 || !strings.Contains(problems[0], "duplicate tool sample.same") {
 		t.Fatalf("tools=%v problems=%v", tools, problems)
+	}
+}
+
+func TestOverallCoverageGapDeliveryInvariantResidualBranches(t *testing.T) {
+	if err := ValidateSchemaDeliveryInvariants(SchemaRegistry{}, SchemaCatalogSnapshot{
+		Version: SchemaCatalogSnapshotVersion,
+		Catalog: map[string]any{"bad": func() {}},
+	}); err == nil || !strings.Contains(err.Error(), "encode final Schema Catalog") {
+		t.Fatalf("unmarshalable snapshot error = %v", err)
+	}
+
+	fixture := schemaDeliveryTestTool{Canonical: "sample.run", CLIPath: "sample run"}
+	source := schemaDeliveryTestRegistry(fixture)
+	snapshot := schemaDeliveryTestSnapshot(fixture)
+	t.Run("source snapshot render failure", func(t *testing.T) {
+		testseam.Swap(t, &snapshotToolSummary, func(ToolSpec) (map[string]any, error) {
+			return nil, fmt.Errorf("summary failed")
+		})
+		if problems := schemaSourceSnapshotInvariantErrors(source, snapshot); len(problems) == 0 || !strings.Contains(problems[0], "summary failed") {
+			t.Fatalf("ToSnapshotPayload error problems = %v", problems)
+		}
+	})
+
+	badSnapshot := SchemaCatalogSnapshot{
+		Version: SchemaCatalogSnapshotVersion,
+		Catalog: map[string]any{"bad": func() {}},
+	}
+	if err := validateSchemaSnapshotDeliveryInvariants(badSnapshot); err == nil || !strings.Contains(err.Error(), "encode final Schema Catalog") {
+		t.Fatalf("validate snapshot marshal error = %v", err)
+	}
+
+	if problems := schemaSourceDeliveryInvariantErrors(
+		SchemaRegistry{Products: []ProductSpec{{ID: ""}}},
+		schemaDeliveryTestRegistry(fixture),
+	); len(problems) == 0 || !strings.Contains(problems[0], "empty") {
+		t.Fatalf("source Index error problems = %v", problems)
+	}
+	if problems := schemaSourceDeliveryInvariantErrors(
+		source,
+		SchemaRegistry{Products: []ProductSpec{{ID: ""}}},
+	); len(problems) == 0 || !strings.Contains(problems[0], "empty") {
+		t.Fatalf("delivered Index error problems = %v", problems)
+	}
+
+	if path, _, _ := firstSchemaJSONDifference(map[string]any{"bad": func() {}}, map[string]any{"bad": "ok"}); path == "" {
+		t.Fatal("firstSchemaJSONDifference must report encode-error path")
+	}
+	if got := compactSchemaDiagnosticValue(func() {}); got == "" {
+		t.Fatal("compactSchemaDiagnosticValue must stringify unmarshalable values")
+	}
+
+	registry := schemaDeliveryTestRegistry(fixture)
+	index, err := registry.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := registry.ToSnapshotPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadedSnapshot := SchemaCatalogSnapshot{
+		Version: SchemaCatalogSnapshotVersion,
+		Catalog: payload.Catalog,
+		Tools:   payload.Tools,
+	}
+	loadedSnapshot.SourceHash = schemaCatalogSnapshotHash(loadedSnapshot)
+	copyLoaded := func() loadedSchemaCatalog {
+		toolsCopy := make(map[string]map[string]any, len(loadedSnapshot.Tools))
+		for key, value := range loadedSnapshot.Tools {
+			toolCopy := make(map[string]any, len(value))
+			for field, fieldValue := range value {
+				toolCopy[field] = fieldValue
+			}
+			toolsCopy[key] = toolCopy
+		}
+		catalogCopy := make(map[string]any, len(loadedSnapshot.Catalog))
+		for key, value := range loadedSnapshot.Catalog {
+			catalogCopy[key] = value
+		}
+		snapshotCopy := loadedSnapshot
+		snapshotCopy.Tools = toolsCopy
+		snapshotCopy.Catalog = catalogCopy
+		return loadedSchemaCatalog{Registry: registry, Index: index, Snapshot: snapshotCopy}
+	}
+
+	missingFullLoaded := copyLoaded()
+	delete(missingFullLoaded.Snapshot.Tools, fixture.Canonical)
+	if problems := schemaDeliveryInvariantErrors(missingFullLoaded); len(problems) == 0 || !strings.Contains(strings.Join(problems, "; "), "missing") {
+		t.Fatalf("missing stored full problems = %v", problems)
+	}
+
+	t.Run("missing --all tool", func(t *testing.T) {
+		missingAllLoaded := copyLoaded()
+		testseam.Swap(t, &deliveryRegistryPayload, func(SchemaRegistry) (map[string]any, error) {
+			return map[string]any{"products": []any{map[string]any{"tools": []any{}}}}, nil
+		})
+		problems := schemaDeliveryInvariantErrors(missingAllLoaded)
+		joined := strings.Join(problems, "; ")
+		if len(problems) == 0 || !strings.Contains(joined, "Schema --all is missing") {
+			t.Fatalf("missing --all tool problems = %v", problems)
+		}
+	})
+
+	t.Run("drifted --all tool", func(t *testing.T) {
+		driftAllLoaded := copyLoaded()
+		testseam.Swap(t, &deliveryRegistryPayload, func(reg SchemaRegistry) (map[string]any, error) {
+			all, allErr := reg.ToPayload()
+			if allErr != nil {
+				return nil, allErr
+			}
+			products := all["products"].([]map[string]any)
+			tools := products[0]["tools"].([]map[string]any)
+			tools[0] = map[string]any{"canonical_path": fixture.Canonical, "title": "drift"}
+			return all, nil
+		})
+		problems := schemaDeliveryInvariantErrors(driftAllLoaded)
+		if len(problems) == 0 || !strings.Contains(strings.Join(problems, "; "), "Schema --all tool") {
+			t.Fatalf("--all drift problems = %v", problems)
+		}
+	})
+
+	missingSummaryLoaded := copyLoaded()
+	missingSummaryLoaded.Snapshot.Catalog = map[string]any{"products": []any{map[string]any{"id": "sample", "tools": []any{}}}}
+	if problems := schemaDeliveryInvariantErrors(missingSummaryLoaded); len(problems) == 0 || !strings.Contains(strings.Join(problems, "; "), "Catalog summary is missing") {
+		t.Fatalf("missing catalog summary problems = %v", problems)
+	}
+
+	driftSummaryLoaded := copyLoaded()
+	driftProducts := driftSummaryLoaded.Snapshot.Catalog["products"].([]map[string]any)
+	driftSummaries := driftProducts[0]["tools"].([]map[string]any)
+	driftSummaries[0] = map[string]any{"canonical_path": fixture.Canonical, "title": "summary drift"}
+	if problems := schemaDeliveryInvariantErrors(driftSummaryLoaded); len(problems) == 0 || !strings.Contains(strings.Join(problems, "; "), "summary") {
+		t.Fatalf("catalog summary drift problems = %v", problems)
+	}
+
+	blankAliasFixture := schemaDeliveryTestTool{
+		Canonical: fixture.Canonical,
+		CLIPath:   fixture.CLIPath,
+		Aliases:   []string{"   "},
+	}
+	blankRegistry := schemaDeliveryTestRegistry(blankAliasFixture)
+	blankIndex, err := blankRegistry.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	blankPayload, err := blankRegistry.ToSnapshotPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	blankSnapshot := SchemaCatalogSnapshot{
+		Version: SchemaCatalogSnapshotVersion,
+		Catalog: blankPayload.Catalog,
+		Tools:   blankPayload.Tools,
+	}
+	blankSnapshot.SourceHash = schemaCatalogSnapshotHash(blankSnapshot)
+	blankLoaded := loadedSchemaCatalog{Registry: blankRegistry, Index: blankIndex, Snapshot: blankSnapshot}
+	if problems := schemaDeliveryInvariantErrors(blankLoaded); len(problems) != 0 {
+		t.Fatalf("blank alias must be skipped cleanly, problems = %v", problems)
 	}
 }

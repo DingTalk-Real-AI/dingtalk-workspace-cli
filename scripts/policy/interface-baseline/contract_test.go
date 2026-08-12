@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 	"github.com/spf13/cobra"
 )
 
@@ -237,6 +238,286 @@ func assertFailureContains(t *testing.T, failures []string, want string) {
 		}
 	}
 	t.Fatalf("failures %v do not contain %q", failures, want)
+}
+
+// policyRoot builds "dws old" with a single --policy flag declared by declare,
+// so a baseline and a candidate can differ only in how that flag is typed.
+func policyRoot(declare func(*cobra.Command)) *cobra.Command {
+	root := &cobra.Command{Use: "dws"}
+	old := &cobra.Command{Use: "old", Run: func(*cobra.Command, []string) {}}
+	declare(old)
+	root.AddCommand(old)
+	root.InitDefaultHelpCmd()
+	return root
+}
+
+// registerReviewedFixture puts a fixture command in the reviewed table for the
+// duration of one test, so the behaviour tests exercise the real lookup instead
+// of depending on whichever production entries happen to exist.
+func registerReviewedFixture(t *testing.T, change flagTypeChange) {
+	t.Helper()
+	if _, exists := reviewedFlagTypeChanges[change]; exists {
+		t.Fatalf("fixture %+v collides with a production entry", change)
+	}
+	reviewedFlagTypeChanges[change] = struct{}{}
+	t.Cleanup(func() { delete(reviewedFlagTypeChanges, change) })
+}
+
+const typeChangedFailure = "changed type from string to int"
+
+func TestReviewedFlagTypeChangeAcceptsRegisteredMigration(t *testing.T) {
+	baseline := snapshot(policyRoot(func(command *cobra.Command) {
+		command.Flags().String("policy", "", "policy")
+	}))
+	current := policyRoot(func(command *cobra.Command) {
+		command.Flags().Int("policy", 0, "policy")
+	})
+
+	// Without an entry the migration is still a blocking change.
+	assertFailureContains(t, checkCompatibility(current, baseline), typeChangedFailure)
+
+	registerReviewedFixture(t, flagTypeChange{CommandPath: "dws old", Flag: "policy", From: "string", To: "int"})
+	if failures := checkCompatibility(current, baseline); len(failures) != 0 {
+		t.Fatalf("a reviewed string->int migration should pass: %v", failures)
+	}
+}
+
+func TestReviewedFlagTypeChangeIsDirectionSensitive(t *testing.T) {
+	registerReviewedFixture(t, flagTypeChange{CommandPath: "dws old", Flag: "policy", From: "string", To: "int"})
+
+	// The reverse migration shares command and flag but not direction, so the
+	// string->int entry must not admit it.
+	baseline := snapshot(policyRoot(func(command *cobra.Command) {
+		command.Flags().Int("policy", 0, "policy")
+	}))
+	current := policyRoot(func(command *cobra.Command) {
+		command.Flags().String("policy", "", "policy")
+	})
+	assertFailureContains(t, checkCompatibility(current, baseline), "changed type from int to string")
+}
+
+func TestReviewedFlagTypeChangeRejectsOtherCommandsAndFlags(t *testing.T) {
+	registerReviewedFixture(t, flagTypeChange{CommandPath: "dws other", Flag: "policy", From: "string", To: "int"})
+	baseline := snapshot(policyRoot(func(command *cobra.Command) {
+		command.Flags().String("policy", "", "policy")
+	}))
+	current := policyRoot(func(command *cobra.Command) {
+		command.Flags().Int("policy", 0, "policy")
+	})
+	// Same flag and direction, different command.
+	assertFailureContains(t, checkCompatibility(current, baseline), typeChangedFailure)
+
+	registerReviewedFixture(t, flagTypeChange{CommandPath: "dws old", Flag: "elsewhere", From: "string", To: "int"})
+	// Same command and direction, different flag.
+	assertFailureContains(t, checkCompatibility(current, baseline), typeChangedFailure)
+}
+
+// A reviewed migration is only accepted when the rest of the flag's contract
+// held still. Each case bundles one unrelated regression with the reviewed type
+// change and requires the type failure to reappear, which also anchors
+// flagContractOtherwiseChanged against the checks it mirrors: a condition that
+// drifts out of sync fails here instead of silently widening the exemption.
+func TestReviewedFlagTypeChangeRejectsBundledRegression(t *testing.T) {
+	registerReviewedFixture(t, flagTypeChange{CommandPath: "dws old", Flag: "policy", From: "string", To: "int"})
+
+	tests := []struct {
+		name     string
+		baseline func(*cobra.Command)
+		current  func(*cobra.Command)
+		want     string
+	}{
+		{
+			name:     "became required",
+			baseline: func(command *cobra.Command) { command.Flags().String("policy", "", "policy") },
+			current: func(command *cobra.Command) {
+				command.Flags().Int("policy", 0, "policy")
+				_ = command.MarkFlagRequired("policy")
+			},
+			want: "became required",
+		},
+		{
+			name:     "became hidden",
+			baseline: func(command *cobra.Command) { command.Flags().String("policy", "", "policy") },
+			current: func(command *cobra.Command) {
+				command.Flags().Int("policy", 0, "policy")
+				_ = command.Flags().MarkHidden("policy")
+			},
+			want: "became hidden",
+		},
+		{
+			name:     "lost shorthand",
+			baseline: func(command *cobra.Command) { command.Flags().StringP("policy", "p", "", "policy") },
+			current:  func(command *cobra.Command) { command.Flags().Int("policy", 0, "policy") },
+			want:     "lost shorthand",
+		},
+		{
+			name:     "changed no-opt value",
+			baseline: func(command *cobra.Command) { command.Flags().String("policy", "", "policy") },
+			current: func(command *cobra.Command) {
+				command.Flags().Int("policy", 0, "policy")
+				command.Flags().Lookup("policy").NoOptDefVal = "4"
+			},
+			want: "changed no-opt value",
+		},
+		{
+			name:     "narrowed persistent scope",
+			baseline: func(command *cobra.Command) { command.PersistentFlags().String("policy", "", "policy") },
+			current:  func(command *cobra.Command) { command.Flags().Int("policy", 0, "policy") },
+			want:     "narrowed persistent scope",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			failures := checkCompatibility(policyRoot(test.current), snapshot(policyRoot(test.baseline)))
+			assertFailureContains(t, failures, test.want)
+			assertFailureContains(t, failures, typeChangedFailure)
+		})
+	}
+}
+
+// mergeContracts runs the same admission decision on --merge. A reviewed
+// migration keeps merging and the merged entry keeps the historical type, so a
+// later --check still resolves the flag through the reviewed table.
+func TestMergeAcceptsReviewedFlagTypeChangeAndKeepsHistoricalType(t *testing.T) {
+	historical := snapshot(policyRoot(func(command *cobra.Command) {
+		command.Flags().String("policy", "", "policy")
+	}))
+	current := snapshot(policyRoot(func(command *cobra.Command) {
+		command.Flags().Int("policy", 0, "policy")
+	}))
+
+	if _, failures := mergeContracts(historical, current); len(failures) == 0 {
+		t.Fatal("an unreviewed merge should report the type change")
+	}
+
+	registerReviewedFixture(t, flagTypeChange{CommandPath: "dws old", Flag: "policy", From: "string", To: "int"})
+	merged, failures := mergeContracts(historical, current)
+	if len(failures) != 0 {
+		t.Fatalf("a reviewed merge should pass: %v", failures)
+	}
+	if got := merged.Commands["old"].Flags["policy"].Type; got != "string" {
+		t.Fatalf("merged type = %q, want the historical %q", got, "string")
+	}
+}
+
+// mergeContracts applies the same "nothing else moved" condition as
+// checkCompatibility, but against two recorded contracts rather than a live
+// pflag definition. Each case bundles one unrelated regression with the reviewed
+// type change and requires the type failure to reappear, anchoring
+// mergedFlagContractOtherwiseChanged against the checks it mirrors.
+func TestMergeRejectsReviewedFlagTypeChangeWithBundledRegression(t *testing.T) {
+	registerReviewedFixture(t, flagTypeChange{CommandPath: "dws old", Flag: "policy", From: "string", To: "int"})
+
+	tests := []struct {
+		name       string
+		historical func(*cobra.Command)
+		current    func(*cobra.Command)
+	}{
+		{
+			name:       "lost shorthand",
+			historical: func(command *cobra.Command) { command.Flags().StringP("policy", "p", "", "policy") },
+			current:    func(command *cobra.Command) { command.Flags().Int("policy", 0, "policy") },
+		},
+		{
+			name:       "became required",
+			historical: func(command *cobra.Command) { command.Flags().String("policy", "", "policy") },
+			current: func(command *cobra.Command) {
+				command.Flags().Int("policy", 0, "policy")
+				_ = command.MarkFlagRequired("policy")
+			},
+		},
+		{
+			name:       "became hidden",
+			historical: func(command *cobra.Command) { command.Flags().String("policy", "", "policy") },
+			current: func(command *cobra.Command) {
+				command.Flags().Int("policy", 0, "policy")
+				_ = command.Flags().MarkHidden("policy")
+			},
+		},
+		{
+			name:       "changed no-opt value",
+			historical: func(command *cobra.Command) { command.Flags().String("policy", "", "policy") },
+			current: func(command *cobra.Command) {
+				command.Flags().Int("policy", 0, "policy")
+				command.Flags().Lookup("policy").NoOptDefVal = "4"
+			},
+		},
+		{
+			name:       "narrowed persistent scope",
+			historical: func(command *cobra.Command) { command.PersistentFlags().String("policy", "", "policy") },
+			current:    func(command *cobra.Command) { command.Flags().Int("policy", 0, "policy") },
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, failures := mergeContracts(
+				snapshot(policyRoot(test.historical)),
+				snapshot(policyRoot(test.current)),
+			)
+			assertFailureContains(t, failures, typeChangedFailure)
+		})
+	}
+}
+
+// The behaviour tests above register their own fixtures, so they cannot catch a
+// production entry whose key is spelled in the wrong form — that mistake
+// disables the exemption silently and only a real gate run reports it. Recompute
+// every key through displayPath instead of trusting the spelling in the table.
+func TestReviewedFlagTypeChangeKeysUseDisplayPaths(t *testing.T) {
+	if len(reviewedFlagTypeChanges) == 0 {
+		t.Fatal("豁免表为空：若确已清空，请连这条守卫一起删除")
+	}
+	for change := range reviewedFlagTypeChanges {
+		if got := displayPath(internalCommandPath(change.CommandPath)); got != change.CommandPath {
+			t.Errorf("命令路径不是 displayPath 的规范形态\n  登记: %s\n  规范: %s", change.CommandPath, got)
+		}
+		if change.Flag == "" || strings.HasPrefix(change.Flag, "-") {
+			t.Errorf("%s: flag 名应是裸名（lookupFlag 用裸名查找），登记为 %q", change.CommandPath, change.Flag)
+		}
+		if change.From == "" || change.To == "" || change.From == change.To {
+			t.Errorf("%s --%s: %q -> %q 不构成类型迁移", change.CommandPath, change.Flag, change.From, change.To)
+		}
+	}
+}
+
+// Anchor every production entry to the real command tree. A misspelled command
+// or flag name would leave the exemption permanently inert, and the behaviour
+// tests cannot see that because they register their own paths.
+func TestReviewedFlagTypeChangeEntriesResolveInTheRealCommandTree(t *testing.T) {
+	if len(reviewedFlagTypeChanges) == 0 {
+		t.Fatal("豁免表为空：若确已清空，请连这条守卫一起删除")
+	}
+	root := app.NewRootCommand()
+	for change := range reviewedFlagTypeChanges {
+		command, resolved := resolveCommand(root, internalCommandPath(change.CommandPath))
+		if !resolved {
+			t.Errorf("%q 在真实命令树中不存在", change.CommandPath)
+			continue
+		}
+		flag, _ := lookupFlag(command, change.Flag)
+		if flag == nil {
+			t.Errorf("%q 上不存在 --%s", change.CommandPath, change.Flag)
+			continue
+		}
+		// Exactly one side holds depending on whether the migration has landed:
+		// From before it does, To afterwards. Asserting membership catches a
+		// misspelled type name without failing while the migration is pending.
+		if actual := flag.Value.Type(); actual != change.From && actual != change.To {
+			t.Errorf("%q --%s 当前类型 %q 既不是 %q 也不是 %q",
+				change.CommandPath, change.Flag, actual, change.From, change.To)
+		}
+	}
+}
+
+// internalCommandPath inverts displayPath so a table key can be fed back into
+// resolveCommand and displayPath.
+func internalCommandPath(displayed string) string {
+	if displayed == "dws" {
+		return "root"
+	}
+	return strings.ReplaceAll(strings.TrimPrefix(displayed, "dws "), " ", ".")
 }
 
 func testRoot() *cobra.Command {

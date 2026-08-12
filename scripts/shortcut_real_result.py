@@ -80,13 +80,120 @@ def payload_indicates_error(stdout: str) -> bool:
     return False
 
 
-def classify_real_status(exit_code: int | None, stdout: str, current_status: str | None = None) -> str:
+# ---------------------------------------------------------------------------
+# 上层 / 下层数据一致性（投影保真）
+#
+# 警示案例：contact +list-roles、oa +list-forms 在 exit 0、无 error 信封的情况下
+# 依然静默返空——底层 MCP 明明有 57 个角色 / 93 张表单，投影层因为容器 key 对不上
+# （result[].labels[] 未下钻 / 缺 processCodeList）把数据全吃掉了。只看上层（便捷层
+# 投影输出）永远发现不了这类问题；**shortcut 务必对比上层投影与下层原始后端数据**。
+#
+# 判定规则因此新增一条铁律：一个只读/列表类 shortcut，若上层投影为空，必须能拿下层
+# 原始响应来佐证「本就没有数据」。拿不到下层、或下层明明有数据，都不能算 real-ok。
+# ---------------------------------------------------------------------------
+
+# 便捷层投影输出里承载业务列表的常见容器字段名。
+_PROJECTION_LIST_KEYS = (
+    "roles", "forms", "users", "user", "items", "list", "records", "files",
+    "docs", "nodes", "messages", "conversations", "groups", "events",
+    "attendees", "rooms", "threads", "folders", "tags", "templates", "contacts",
+    "spaces", "tasks", "todos", "created", "members", "depts", "departments",
+    "sheets", "bases", "tables", "views", "apps", "minutes", "reports",
+    "comments", "attachments", "instances", "robots", "bots", "results",
+    "workflows", "permissions", "versions", "calendars", "cards",
+)
+
+
+def count_projection_items(stdout: str) -> int | None:
+    """从便捷层投影输出里数出条目数（上层）。
+
+    返回 None 表示这段输出不像一个「列表型」投影（例如详情命令、纯文本、写操作
+    回执），此时不参与空投影判定。识别到列表型投影时返回其条目数（可能为 0）。
+    """
+    best: int | None = None
+    for value in _json_values(stdout):
+        if isinstance(value, list):
+            best = max(best or 0, len(value))
+            continue
+        if not isinstance(value, dict):
+            continue
+        count_field = value.get("count")
+        if isinstance(count_field, bool):
+            count_field = None
+        if isinstance(count_field, int):
+            best = max(best or 0, count_field)
+        for key in _PROJECTION_LIST_KEYS:
+            member = value.get(key)
+            if isinstance(member, list):
+                best = max(best or 0, len(member))
+    return best
+
+
+def backend_record_count(raw: Any, depth: int = 0) -> int:
+    """递归估算下层原始后端响应里的业务条目数（下层真值）。
+
+    取任意深度下「最大的一个对象数组」的长度作为「后端是否有数据」的代理指标——
+    足以判定投影是否把非空的底层数据吃成了空。
+    """
+    if depth > 6 or raw is None:
+        return 0
+    best = 0
+    if isinstance(raw, list):
+        obj_items = sum(1 for item in raw if isinstance(item, dict))
+        best = max(best, obj_items)
+        for item in raw:
+            best = max(best, backend_record_count(item, depth + 1))
+    elif isinstance(raw, dict):
+        for value in raw.values():
+            best = max(best, backend_record_count(value, depth + 1))
+    return best
+
+
+def _backend_payload(result: dict[str, Any]) -> Any:
+    """取出随 result 一起记录的下层原始后端响应（若采集了的话）。
+
+    约定字段：backend_raw / raw_backend / backend / lower_layer / backend_stdout。
+    backend_stdout 是字符串时按 JSON 解析。"""
+    for key in ("backend_raw", "raw_backend", "backend", "lower_layer"):
+        if key in result and result[key] not in (None, "", {}, []):
+            return result[key]
+    text = result.get("backend_stdout")
+    if isinstance(text, str) and text.strip():
+        values = _json_values(text)
+        if values:
+            return values[0] if len(values) == 1 else values
+    return None
+
+
+def compare_layers(shortcut_stdout: str, backend_raw: Any) -> tuple[bool, int | None, int]:
+    """对比上层投影与下层原始后端数据。
+
+    返回 (是否投影吃了数据, 上层条目数, 下层条目数)。当上层是列表型投影且为空、
+    而下层明显有对象数组时，判定为投影数据丢失（True）。"""
+    upper = count_projection_items(shortcut_stdout)
+    lower = backend_record_count(backend_raw)
+    lost = upper == 0 and lower > 0
+    return lost, upper, lower
+
+
+def classify_real_status(
+    exit_code: int | None,
+    stdout: str,
+    current_status: str | None = None,
+    *,
+    backend_raw: Any = None,
+) -> str:
     if current_status in {"timeout", "held"}:
         return current_status
     if exit_code != 0:
         return "real-error"
     if payload_indicates_error(stdout):
         return "real-error"
+    # 上下层比对：下层有数据但上层投影为空 = 投影吃数据，绝不能算通过。
+    if backend_raw is not None:
+        lost, _upper, _lower = compare_layers(stdout, backend_raw)
+        if lost:
+            return "real-error"
     return "real-ok"
 
 
@@ -97,6 +204,22 @@ def _haystack(result: dict[str, Any]) -> str:
 def classify_failure(result: dict[str, Any]) -> tuple[str, str, str]:
     """Return (category, fixability, note) for a real-test result."""
     status = result.get("status")
+
+    # 上下层比对优先：即便进程 exit 0、无 error 信封、status 被记成 real-ok，只要
+    # 采集到的下层原始后端有数据而上层投影为空，就是投影把数据吃了——判定为
+    # projection-data-loss，属于 shortcut 自身可修的 bug（改投影层的容器 key/下钻）。
+    backend_raw = _backend_payload(result)
+    if backend_raw is not None and result.get("exit_code") in (0, None):
+        lost, upper, lower = compare_layers(result.get("stdout") or "", backend_raw)
+        if lost:
+            return (
+                "projection-data-loss",
+                "cli-projection-fix-needed",
+                f"上层便捷层投影为空（{upper} 条），但下层原始后端有数据（约 {lower} 条）；"
+                "投影层的容器 key/嵌套下钻与真实响应结构不匹配，把非空数据吃成了空。"
+                "需修投影层解析，并补「喂真实响应结构、断言非空」的单测。",
+            )
+
     if status == "real-ok":
         return ("passed", "fixed", "真实后端执行成功。")
     if status == "timeout":
@@ -261,6 +384,38 @@ def summarize_failure_categories(results: list[dict[str, Any]]) -> dict[str, int
             continue
         out[category] = out.get(category, 0) + 1
     return dict(sorted(out.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def projection_audit(result: dict[str, Any]) -> dict[str, Any] | None:
+    """投影保真审计：对只读/列表类 shortcut 强制「上下层比对」这条铁律。
+
+    返回 None 表示无需关注；否则返回一个 warning dict 供报告展示：
+      - projection-data-loss：下层有数据、上层空 —— 确定的投影吃数据 bug；
+      - empty-projection-unverified：上层投影为空但缺下层采集 —— 无法证明「本就为空」，
+        必须补采下层原始响应（原始 MCP 响应 / 对应 leaf 命令）再比对，禁止直接判 real-ok。
+    """
+    stdout = result.get("stdout") or ""
+    upper = count_projection_items(stdout)
+    if upper is None or upper > 0:
+        return None  # 非列表型投影，或上层本就有数据 —— 最常见的正常情形。
+    backend_raw = _backend_payload(result)
+    if backend_raw is None:
+        return {
+            "kind": "empty-projection-unverified",
+            "upper_count": upper,
+            "backend_count": None,
+            "note": "便捷层投影为空，但未采集下层原始后端响应，无法证明底层确实无数据；"
+            "按铁律必须补采下层后再比对，不能直接判 real-ok。",
+        }
+    lost, _upper, lower = compare_layers(stdout, backend_raw)
+    if lost:
+        return {
+            "kind": "projection-data-loss",
+            "upper_count": upper,
+            "backend_count": lower,
+            "note": "下层原始后端有数据但上层投影为空：投影层解析与真实响应结构不匹配。",
+        }
+    return None
 
 
 _OSS_URL_RE = re.compile(r"https?://[^\s\"'<>]*oss[^\s\"'<>]*", re.IGNORECASE)

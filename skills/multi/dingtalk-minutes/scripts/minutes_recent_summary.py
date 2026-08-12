@@ -93,16 +93,9 @@ def main():
             if isinstance(summary_data, str):
                 summary_text = summary_data
             elif isinstance(summary_data, dict):
-                # 兼容 {result: {fullSummary}} 包裹结构
-                inner = summary_data.get('result')
-                container = (inner if isinstance(inner, dict)
-                             else summary_data)
-                summary_text = (container.get('fullSummary')
-                                or container.get('summary')
-                                or container.get('content')
-                                or (inner if isinstance(inner, str)
-                                    else '')
-                                or json.dumps(container,
+                summary_text = (summary_data.get('summary')
+                                or summary_data.get('content')
+                                or json.dumps(summary_data,
                                               ensure_ascii=False))
 
         output_lines.append(f"## {i}. {title}\n")

@@ -245,6 +245,10 @@ const (
 	selectionRankExplicit           = 300
 	selectionRankReviewedExplicit   = 400
 	selectionRankReviewedManual     = 500
+	// Contract final declarations (corecmd.ContractDecl, registered in-process)
+	// outrank every file/manual source: the declaration in reviewed code is
+	// the final data source for declared tools.
+	selectionRankContractFinal = 600
 
 	selectionPrecedenceDefault            = "inference_or_default"
 	selectionPrecedenceMCPFallback        = "mcp_fallback"
@@ -253,15 +257,26 @@ const (
 	selectionPrecedenceImported           = "imported"
 	selectionPrecedenceExplicit           = "explicit"
 	selectionPrecedenceReviewedExplicit   = "reviewed_explicit"
-	selectionPrecedenceReviewedManual     = "reviewed_manual"
+	selectionPrecedenceReviewedManual     = cli.ProvenanceReviewedManual
+	selectionPrecedenceContractFinal      = "contract_final"
 )
 
+// contractFinalOrigin labels every candidate sourced from an in-process
+// Contract final declaration. It is not a file path; the declaration lives in
+// reviewed command source code (corecmd.ContractDecl).
+const contractFinalOrigin = "corecmd.contract"
+
 type Options struct {
-	Root                     string
-	SkillPath                string
-	ProductsDir              string
-	IntentGuidePath          string
-	HintsDir                 string
+	Root            string
+	SkillPath       string
+	ProductsDir     string
+	IntentGuidePath string
+	// HintsDir is a fail-closed anti-regression valve. The field name and the
+	// "schema_hints/" error text are intentional: policy and callers still probe
+	// this retired path. Non-empty values must keep failing; do not rename away.
+	HintsDir string
+	// ManualHintsPath is a fail-closed anti-regression valve for the retired
+	// manual-hints file path. Keep the field name; non-empty values must fail.
 	ManualHintsPath          string
 	InterfaceMetadataPath    string
 	MaxExamples              int
@@ -281,9 +296,6 @@ type Stats struct {
 	ToolIntents                   int
 	Examples                      int
 	RiskRules                     int
-	HintFiles                     int
-	HintProducts                  int
-	HintTools                     int
 	InterfaceMetadata             *InterfaceMetadataAudit
 	UnmatchedTools                int
 	SourceProducts                []string
@@ -305,9 +317,10 @@ type UnmatchedReference struct {
 	Review     *ReferenceReview `json:"review,omitempty"`
 }
 
-// ReferenceReview is the fixed disposition of a Skill command reference that
-// is not a current public leaf. It prevents fuzzy matching from silently
-// binding stale prose or command groups to an unrelated tool.
+// ReferenceReview is an optional disposition of a Skill command reference that
+// is not a current public leaf. Production no longer loads reviewed HintFile
+// reference_review maps; unmatched Skill paths are recorded in the build-time
+// audit without requiring a reviewed disposition.
 type ReferenceReview struct {
 	Status string `json:"status"`
 	Target string `json:"target,omitempty"`
@@ -321,9 +334,6 @@ type Audit struct {
 	SourceHash                    string                  `json:"source_hash"`
 	SurfaceHash                   string                  `json:"surface_hash,omitempty"`
 	SourceFiles                   int                     `json:"source_files"`
-	HintFiles                     int                     `json:"hint_files,omitempty"`
-	HintProducts                  int                     `json:"hint_products,omitempty"`
-	HintTools                     int                     `json:"hint_tools,omitempty"`
 	InterfaceMetadata             *InterfaceMetadataAudit `json:"interface_metadata,omitempty"`
 	Coverage                      Coverage                `json:"coverage"`
 	SourceProducts                []string                `json:"source_products,omitempty"`
@@ -358,9 +368,6 @@ var (
 )
 
 func Generate(opts Options) (File, Stats, error) {
-	if strings.TrimSpace(opts.HintsDir) == "" {
-		return File{}, Stats{}, fmt.Errorf("agent hint directory is required")
-	}
 	if len(opts.CanonicalToolPaths) == 0 || len(opts.ToolPaths) == 0 || len(opts.ProductIDs) == 0 {
 		return File{}, Stats{}, fmt.Errorf("complete Effective CommandRegistry projection is required")
 	}
@@ -371,8 +378,10 @@ func Generate(opts Options) (File, Stats, error) {
 }
 
 // generateFromSources retains the lower-precedence evidence parsers as a
-// package-internal seam for focused tests. Production callers must use Generate,
-// which requires the reviewed selection + metadata hint sources under HintsDir.
+// package-internal seam for focused tests. Production callers must use Generate.
+// HintsDir and ManualHintsPath are retired: ProductDecl / ContractFinal own
+// routing and leaf facts. Non-empty values fail closed in loadSources;
+// Skill Markdown remains evidence-only.
 func generateFromSources(opts Options) (File, Stats, error) {
 	if opts.Root == "" {
 		opts.Root = "."
@@ -435,15 +444,6 @@ func generateFromSources(opts Options) (File, Stats, error) {
 			return File{}, Stats{}, err
 		}
 	}
-	usedSelection, err := parseHintSources(&out, files, opts, &stats, origins)
-	if err != nil {
-		return File{}, Stats{}, err
-	}
-	if usedSelection {
-		if err := validateSelectionAuthoringContracts(opts); err != nil {
-			return File{}, Stats{}, err
-		}
-	}
 	if err := applyInterfaceMetadataFallback(&out, byDisplay, opts, &stats, origins); err != nil {
 		return File{}, Stats{}, err
 	}
@@ -468,21 +468,16 @@ func generateFromSources(opts Options) (File, Stats, error) {
 	if err := reconcileSurface(&out, opts, &stats, origins); err != nil {
 		return File{}, Stats{}, err
 	}
+	if err := applyContractFinalDeclarations(&out, opts); err != nil {
+		return File{}, Stats{}, err
+	}
 	seedEffectiveToolProjection(&out, opts.ToolPaths)
 	if err := validateEffectiveToolProjection(out, opts); err != nil {
 		return File{}, Stats{}, err
 	}
-	if usedSelection {
-		retainReviewedSelectionCandidates(&out)
-	}
 	normalizeFile(&out, opts.MaxExamples)
 	if err := validateToolFieldCandidateConflicts(out); err != nil {
 		return File{}, Stats{}, err
-	}
-	if usedSelection {
-		if err := validateReviewedSelectionDelivery(out, opts); err != nil {
-			return File{}, Stats{}, err
-		}
 	}
 	finalizeInterfaceDispositions(&out)
 	if err := validateInterfaceDispositions(out); err != nil {
@@ -543,9 +538,6 @@ func BuildAudit(file File, stats Stats) Audit {
 		SourceHash:                    file.SourceHash,
 		SurfaceHash:                   file.SurfaceHash,
 		SourceFiles:                   stats.SourceFiles,
-		HintFiles:                     stats.HintFiles,
-		HintProducts:                  stats.HintProducts,
-		HintTools:                     stats.HintTools,
 		InterfaceMetadata:             stats.InterfaceMetadata,
 		Coverage:                      file.Coverage,
 		SourceProducts:                append([]string(nil), stats.SourceProducts...),
@@ -1209,6 +1201,8 @@ func scalarIncomingWon(previousValue string, previousPresent bool, previousRank 
 
 func selectionPrecedence(rank int) string {
 	switch rank {
+	case selectionRankContractFinal:
+		return selectionPrecedenceContractFinal
 	case selectionRankReviewedManual:
 		return selectionPrecedenceReviewedManual
 	case selectionRankReviewedExplicit:
@@ -1648,6 +1642,8 @@ func syncProductFieldProvenance(metadata *ProductMetadata) {
 
 func precedenceRank(precedence string) int {
 	switch strings.TrimSpace(precedence) {
+	case selectionPrecedenceContractFinal:
+		return selectionRankContractFinal
 	case selectionPrecedenceReviewedManual:
 		return selectionRankReviewedManual
 	case selectionPrecedenceReviewedExplicit:
@@ -1688,26 +1684,11 @@ func loadSources(opts Options) ([]sourceFile, error) {
 		return nil, fmt.Errorf("walk product references: %w", err)
 	}
 	paths = append(paths, productPaths...)
-	if strings.TrimSpace(opts.HintsDir) != "" {
-		hintsRoot := resolvePath(opts.Root, opts.HintsDir)
-		hintPaths := []string{}
-		err := filepath.WalkDir(hintsRoot, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".json") {
-				return nil
-			}
-			hintPaths = append(hintPaths, path)
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("walk Agent hint sources: %w", err)
-		}
-		paths = append(paths, hintPaths...)
+	if hintsDir := strings.TrimSpace(opts.HintsDir); hintsDir != "" {
+		return nil, fmt.Errorf("schema_hints/ is retired; clear HintsDir and declare ProductDecl/ContractFinal instead (got %q)", hintsDir)
 	}
-	if strings.TrimSpace(opts.ManualHintsPath) != "" {
-		paths = append(paths, resolvePath(opts.Root, opts.ManualHintsPath))
+	if manualHints := strings.TrimSpace(opts.ManualHintsPath); manualHints != "" {
+		return nil, fmt.Errorf("manual hints are retired; clear ManualHintsPath and declare ProductDecl/ContractFinal instead (got %q)", manualHints)
 	}
 	if strings.TrimSpace(opts.InterfaceMetadataPath) != "" {
 		paths = append(paths, resolvePath(opts.Root, opts.InterfaceMetadataPath))

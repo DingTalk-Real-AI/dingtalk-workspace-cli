@@ -17,6 +17,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -50,14 +53,51 @@ var UnreadChats = shortcut.Shortcut{
 		"用 --exclude-muted 排除你已设置免打扰的会话；再在本地把每个会话投影成会话名、未读数和会话 ID 三个关键字段。" +
 		"这是纯只读操作，只做列表与本地投影，不会把任何会话标记为已读或未读；若没有未读会话则返回空列表。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_unread_chats",
+			CanonicalPath:  "chat.shortcut_unread_chats",
+			CLIPath:        "chat +unread-chats",
+			PrimaryCLIPath: "chat +unread-chats",
+		},
+		Description: "列出我有未读消息的会话（投影会话名/未读数/会话ID）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出我有未读消息的会话（投影会话名/未读数/会话ID）",
+			UseWhen:      []string{"当你想快速看清自己当前有哪些会话还有未读消息、方便逐个处理时使用；内部调用未读会话列表接口，可用 --count 控制返回的会话条数（不传则用服务端默认值），用 --exclude-muted 排除你已设置免打扰的会话；再在本地把每个会话投影成会话名、未读数和会话 ID 三个关键字段。这是纯只读操作，只做列表与本地投影，不会把任何会话标记为已读或未读；若没有未读会话则返回空列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws chat +unread-chats",
+				"dws chat +unread-chats --count 20",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "count", Type: shortcut.FlagInt, Desc: "返回未读会话条数（可选，不传则使用服务端默认值）", Required: false},
+		{Name: "count", Type: shortcut.FlagInt, Desc: "返回未读会话条数；显式 --count 必须大于 0，不传则使用服务端默认值", Required: false},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "是否排除已设置免打扰的会话（可选，默认 false）", Required: false},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"count"}, Description: "显式 --count 必须大于 0"},
 	},
 	Tips: []string{
 		`dws chat +unread-chats`,
 		`dws chat +unread-chats --count 20`,
 		`dws chat +unread-chats --exclude-muted`,
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Changed("count") && rt.Int("count") <= 0 {
+			return localChatOptionError("invalid_page_size", "+unread-chats 的 --count 必须大于 0", "--count")
+		}
+		return nil
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		// Build params exactly like chatMessageListUnreadConversationsCmd: count is

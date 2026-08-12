@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +21,22 @@ func resolveSheetName(cmd *cobra.Command) string {
 }
 
 func newSheetCommand() *cobra.Command {
+	// Product-level Agent routing Decl (migrated from selection/sheet.json
+	// products.sheet). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "sheet",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "导入本地 Excel，或创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
+			UseWhen: []string{
+				"用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时",
+				"用户要把本地 xlsx/xls 转换为新的钉钉在线电子表格时",
+			},
+			AvoidWhen: []string{
+				"目标是 AI 表格 Base 的结构化记录或钉钉文档正文时不要使用 sheet",
+				"只读取已上传但未转换的 xlsx/xls 节点时先用 doc download；不要把文件节点直接传给单元格命令",
+			},
+		},
+	})
 	root := &cobra.Command{
 		Use:   "sheet",
 		Short: "钉钉表格管理",
@@ -27,6 +44,7 @@ func newSheetCommand() *cobra.Command {
 
 命令结构:
   dws sheet create                              创建钉钉表格文档
+  dws sheet create-with-data                     创建表格文档并写入初始数据（可选样式）
   dws sheet list                                获取全部工作表列表
   dws sheet info                                获取指定工作表详情
   dws sheet new                                 新建工作表
@@ -93,6 +111,7 @@ func newSheetCommand() *cobra.Command {
   dws sheet chart update                         更新浮动图表
   dws sheet chart delete                         删除浮动图表
   dws sheet export                              导出表格为 xlsx（异步任务一站式：提交→轮询→可选下载）
+  dws sheet export-csv                          导出单个工作表为纯 CSV（同步，可落盘）
   dws sheet import                              导入 xlsx/xls 为在线电子表格
   dws sheet template list                       获取表格模板列表
   dws sheet template search                     搜索表格模板
@@ -111,13 +130,102 @@ func newSheetCommand() *cobra.Command {
 	floatImageCmds := newFloatImageCmds()
 	chartCmd := newChartCmd()
 	exportCmd := newExportCmd()
+	DeclareLeafMetadata(exportCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "submit_export_job",
+				CanonicalPath:  "sheet.submit_export_job",
+				CLIPath:        "sheet export",
+				PrimaryCLIPath: "sheet export",
+			},
+			Description: "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "submit_export_job"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "一站式导出 axls 为 xlsx（内部提交+轮询，可选下载）。",
+				UseWhen:      []string{"需要把在线电子表格导出为 Excel 文件或拿到 downloadUrl 时"},
+				AvoidWhen:    []string{"禁止用 range read 拼 xlsx；本地已有 xlsx 节点用 doc download；Agent 不要外层再轮询"},
+				Examples:     []string{"dws sheet export --node <NODE_ID> --output ./report.xlsx"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
+	// 建表带初始数据、csv 同步导出都是与既有叶子不同的接口种类（一条 composite
+	// 编排、一条 get_range_as_csv 直连），各自独立成叶子，不挂到 create / export 上。
+	createWithDataCmd := newSheetCreateWithDataCmd()
+	exportCsvCmd := newSheetExportCsvCmd()
 	importCmd := newSheetImportCmd()
 	templateCmd := newSheetTemplateCmd()
 	tableCmds := newTableCmds()
 	pivotTableCmd := newPivotTableCmd()
 
 	batchUpdateCmd := newBatchUpdateCmd()
+	DeclareLeafMetadata(batchUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "batch_update",
+				CanonicalPath:  "sheet.batch_update",
+				CLIPath:        "sheet batch-update",
+				PrimaryCLIPath: "sheet batch-update",
+			},
+			Description: "批量打包多个写操作原子执行（可含清除/删除，需确认后加 --yes）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "批量打包多个写操作原子执行（可含清除/删除，需确认后加 --yes）。",
+				UseWhen:      []string{"用户明确要求把多个已审查写操作作为一批执行时"},
+				AvoidWhen:    []string{"单操作请用对应原子命令；仅预览用 --dry-run，不要在未确认时加 --yes"},
+				Examples:     []string{"dws sheet batch-update --node <NODE_ID> --operations '[{\"toolName\":\"range clear\",\"input\":{\"sheet-id\":\"Sheet1\",\"range\":\"A1:B3\",\"type\":\"content\"}}]'"},
+			},
+		},
+	})
 	rangeBatchClearCmd := newRangeBatchClearCmd()
+	DeclareLeafMetadata(rangeBatchClearCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "range_batch_clear",
+				CanonicalPath:  "sheet.range_batch_clear",
+				CLIPath:        "sheet range batch-clear",
+				PrimaryCLIPath: "sheet range batch-clear",
+			},
+			Description: "批量清除多个区域（原子事务，需确认后加 --yes）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "批量清除多个区域（原子事务，需确认后加 --yes）。",
+				UseWhen:      []string{"需要一次清除多个互不相关的区域，并希望同批提交时"},
+				AvoidWhen:    []string{"只清一个区域用 range clear；混有写入/合并等操作用 batch-update"},
+				Examples:     []string{"dws sheet range batch-clear --node NODE_ID --ranges '[\"Sheet1!A1:B3\",\"Sheet2!C1:D5\"]'"},
+			},
+		},
+	})
 	rangeCmd.AddCommand(newRangeSetStyleCmd(), newRangeBatchSetStyleCmd(), rangeBatchClearCmd)
 
 	// Flag registrations for batch commands
@@ -136,7 +244,7 @@ func newSheetCommand() *cobra.Command {
 	standaloneCmds = append(standaloneCmds, mediaCmds...)
 	standaloneCmds = append(standaloneCmds, floatImageCmds...)
 	standaloneCmds = append(standaloneCmds, tableCmds...)
-	standaloneCmds = append(standaloneCmds, exportCmd, importCmd, batchUpdateCmd)
+	standaloneCmds = append(standaloneCmds, exportCmd, exportCsvCmd, importCmd, batchUpdateCmd, createWithDataCmd)
 
 	// Register cross-product aliases
 	for _, cmd := range standaloneCmds {
@@ -151,6 +259,7 @@ func newSheetCommand() *cobra.Command {
 	// Add all to root
 	root.AddCommand(standaloneCmds...)
 	root.AddCommand(rangeCmd, filterCmd, filterViewCmd, condFormatCmd, chartCmd, templateCmd, pivotTableCmd)
+	root.AddCommand(newSheetVersionCmd(), newSheetCommentCmd(), newSheetFormulaVerifyCmd())
 
 	// This is the reviewed runtime counterpart of the final Sheet Schema
 	// confirmation=user_required set. It is intentionally command-local: there
@@ -175,6 +284,8 @@ func newSheetCommand() *cobra.Command {
 		{path: "filter-view delete-criteria", operation: "删除筛选视图列条件", targetHint: "文档、工作表、筛选视图和列"},
 		{path: "range batch-clear", operation: "批量清除工作表区域", targetHint: "文档、工作表、清除范围和清除类型"},
 		{path: "range move-to", operation: "移动工作表区域", targetHint: "源工作表范围和目标位置"},
+		{path: "version revert", operation: "回滚表格版本", targetHint: "文档和目标版本号"},
+		{path: "comment delete", operation: "删除单元格评论", targetHint: "文档和评论 commentKey"},
 	}
 	for _, guard := range confirmationGuards {
 		attachSheetConfirmationGuard(root, guard.path, guard.operation, guard.targetHint)

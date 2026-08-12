@@ -18,6 +18,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/source"
 	eventtransport "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -36,17 +37,19 @@ func TestCrossPlatformCoveragePersonalEventRemainingSchemaAndSubscriptionCoverag
 		}
 	}
 
-	oldGet := personalGetSubscription
-	oldCreate := personalCreateSubscription
-	t.Cleanup(func() {
-		personalGetSubscription = oldGet
-		personalCreateSubscription = oldCreate
-	})
+	testseam.Protect(t, &personalGetSubscription)
+	testseam.Protect(t, &personalCreateSubscription)
 	client := personal.NewClient("https://example.test", personal.Identity{})
 	wantErr := errors.New("subscription")
 	personalGetSubscription = func(*personal.Client, context.Context, string) (*personal.Subscription, error) { return nil, wantErr }
 	if _, _, _, err := ensurePersonalSubscription(context.Background(), client, personal.Identity{}, personalConsumeOptions{SubscribeID: "sub"}); !errors.Is(err, wantErr) {
 		t.Fatalf("get subscription error = %v", err)
+	}
+	personalGetSubscription = func(*personal.Client, context.Context, string) (*personal.Subscription, error) {
+		return nil, nil
+	}
+	if _, _, _, err := ensurePersonalSubscription(context.Background(), client, personal.Identity{}, personalConsumeOptions{SubscribeID: "sub"}); err == nil || !strings.Contains(err.Error(), "empty subscription") {
+		t.Fatalf("nil subscription = %v", err)
 	}
 	personalGetSubscription = func(*personal.Client, context.Context, string) (*personal.Subscription, error) {
 		return &personal.Subscription{}, nil
@@ -77,6 +80,7 @@ func TestCrossPlatformCoveragePersonalEventRemainingSchemaAndSubscriptionCoverag
 func TestCrossPlatformCoveragePersonalEventRemainingConsumeCoverage(t *testing.T) {
 	oldIdentity := personalResolveEventIdentity
 	oldEnsure := personalEnsureSubscription
+	oldAttemptStore := personalNewSubscriptionAttemptStore
 	oldUpsert := personalUpsertRunState
 	oldDelete := personalDeleteSubscription
 	oldRemove := personalRemoveRunStates
@@ -88,6 +92,7 @@ func TestCrossPlatformCoveragePersonalEventRemainingConsumeCoverage(t *testing.T
 	t.Cleanup(func() {
 		personalResolveEventIdentity = oldIdentity
 		personalEnsureSubscription = oldEnsure
+		personalNewSubscriptionAttemptStore = oldAttemptStore
 		personalUpsertRunState = oldUpsert
 		personalDeleteSubscription = oldDelete
 		personalRemoveRunStates = oldRemove
@@ -97,6 +102,9 @@ func TestCrossPlatformCoveragePersonalEventRemainingConsumeCoverage(t *testing.T
 		personalNewStreamSource = oldNewSource
 		personalBusRun = oldBusRun
 	})
+	personalNewSubscriptionAttemptStore = func(string) personalSubscriptionAttemptStore {
+		return personalNoopAttemptStore{}
+	}
 
 	wantErr := errors.New("consume")
 	cmd := newPersonalCoverageCommand()
@@ -154,11 +162,11 @@ func TestCrossPlatformCoveragePersonalEventRemainingConsumeCoverage(t *testing.T
 	personalNewStreamSource = func(context.Context, personalStreamSourceOptions) (*source.PersonalSource, error) {
 		return nil, wantErr
 	}
-	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention, Common: commonConsumeOptions{Foreground: true}}); !errors.Is(err, wantErr) || deletes == 0 {
+	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention, Common: commonConsumeOptions{Foreground: true}}); !errors.Is(err, wantErr) || deletes != 0 {
 		t.Fatalf("foreground source error = %v deletes=%d", err, deletes)
 	}
 	before := deletes
-	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention, Ephemeral: true, Common: commonConsumeOptions{Foreground: true}}); !errors.Is(err, wantErr) || deletes == before {
+	if err := runPersonalEventConsume(cmd, personalConsumeOptions{EventKey: personal.EventMention, Ephemeral: true, Common: commonConsumeOptions{Foreground: true}}); !errors.Is(err, wantErr) || deletes != before {
 		t.Fatalf("ephemeral source error = %v deletes=%d", err, deletes)
 	}
 	personalNewStreamSource = func(context.Context, personalStreamSourceOptions) (*source.PersonalSource, error) { return nil, nil }

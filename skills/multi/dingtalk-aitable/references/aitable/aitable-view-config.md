@@ -16,7 +16,29 @@
 
 > card 在 Kanban 走 `kanbanCard`，在 Gallery 走 `galleryCard`，CLI 自动按 viewType dispatch（preflight 1 次 `get_views`）。timebar 仅 Gantt 支持；Calendar 服务端未暴露任何 timebar 配置。
 
-> **Gantt 视图必须两步创建**：`view create --view-type Gantt` 只创建空壳（`ganttTimebar: {}`），**必须**紧跟 `view update timebar --start-field <日期字段ID>` 绑定时间轴字段，否则视图打开是空白。`create_view` 的 `--config` 中传入 `ganttTimebar` 会被服务端忽略。
+> **Gantt 视图必须两步创建**：`view create --view-type Gantt` 只创建空壳（`ganttTimebar: {}`），**必须**紧跟 `view update timebar --start-field <日期字段ID>` 绑定时间轴字段，否则视图打开是空白。`view create --config` 不接受 `ganttTimebar`，请在创建后使用专属子命令。
+
+## 创建：view create
+
+`--view-type` 支持 `Grid`、`Kanban`、`Gantt`、`Calendar`、`Gallery`、`FormDesigner`。创建时通过 `--config` JSON 设置可见字段：
+
+```bash
+# --config JSON：可同时配置可见字段、筛选、排序和分组；主字段必须排第一
+dws aitable view create --base-id BASE_ID --table-id TABLE_ID \
+  --view-type Grid --name "任务视图" \
+  --config '{"visibleFieldIds":["fldPrimary","fldStatus","fldOwner"],"sort":[{"fieldId":"fldStatus","direction":"asc"}]}'
+```
+
+创建阶段的 `--config` 是 JSON 对象，并且只接受以下 4 个 key：
+
+| key | 类型 | 说明 |
+|---|---|---|
+| `visibleFieldIds` | `string[]` | fieldId 数组，不接受字段名；至少一个，主字段必须排第一 |
+| `filter` | `object[]` | 筛选规则数组；兼容单个 object，CLI 会自动包装为数组 |
+| `sort` | `object[]` | 排序规则数组；兼容单个 object，CLI 会自动包装为数组 |
+| `group` | `object[]` | 分组规则数组；兼容单个 object，CLI 会自动包装为数组 |
+
+描述使用独立的 `--desc '{"content":[]}'`；`description`、`fieldWidths`、`aggregate`、`kanbanCard`、`ganttTimebar`、`galleryCard` 等其他 key 会在调用服务端前被拒绝，并提示对应的 `view update` 子命令。
 
 ## 读取：view get <attr>
 
@@ -79,20 +101,20 @@ dws aitable view update timebar --view-id GANTT_ID --official-holiday=true
 
 ### view update aggregate（仅 Grid）
 
-值是 `map[fieldId]→AggregateAction string`。**设置**聚合可用；**清除**聚合当前无效（见下方警告）。
+值是 `map[fieldId]→AggregateAction string`；传 null 清除某个字段聚合。
 
 | flag | 类型 | 说明 |
 |------|------|------|
 | `--field-id` | string | 配合 `--action` 设置**单字段**聚合 |
 | `--action` | string | `SUM`/`AVG`/`MAX`/`MIN`/`MEDIAN`/`RANGE`/`TOTAL`/`DISTINCT`/`EXIST`/`UN_EXIST`/`CHECKED`/`EARLIEST_DATE` 等（按字段类型可用） |
-| `--clear-field-id` | string (CSV) | 一/多个字段 ID，本意是清除其聚合，但**当前服务端不支持清除，静默无效**（见下方警告） |
+| `--clear-field-id` | string (CSV) | 一/多个字段 ID，清除其聚合 |
 | `--json` | JSON | 完整 aggregate map |
 
 ```bash
 dws aitable view update aggregate --view-id GRID_ID --field-id fldX --action SUM
+dws aitable view update aggregate --view-id GRID_ID --clear-field-id fldA,fldB
+dws aitable view update aggregate --view-id GRID_ID --json '{"fldX":"AVG","fldY":null}'
 ```
-
-> ⚠️ **当前无法清除已设置的聚合（服务端限制）**：`--clear-field-id fldA,fldB` 与 `--json '{"fldX":null}'` 两种清除写法都返回 `success`，但用 `view get aggregate` 复核会发现聚合**原样不动**——是静默无效，不是真的清掉。这是服务端没有清除语义所致，直至服务端修复前不要依赖它。改聚合方式可行（重新 `--action` 覆盖成别的），只是无法回到"无聚合"。
 
 ### view update field-widths（仅 Grid）
 
@@ -108,11 +130,9 @@ dws aitable view update field-widths --view-id GRID_ID --json '{"fldA":120,"fldB
 
 ### view update visible-fields（通用）
 
-整组替换可见字段列表与顺序，同时兼作**隐藏/显示**入口。首列字段（primaryDoc）必须保留在数组第一位。
+整组替换可见字段列表与顺序。首列字段（primaryDoc）必须保留在数组第一位。
 
-> **传入的列表既定顺序又定可见性**：传一个比当前 columns 短的列表，缺失的字段会被真正隐藏（该字段在 `view list` 的 `custom.hiddenFields` 里变 `true`）；再传回全量列表即可解除隐藏（`hiddenFields` 变 `false`）。
->
-> ⚠️ **查隐藏状态别看这里**：`view get visible-fields` 返回的数组**包含已隐藏字段**（列的完整顺序），看不出谁被隐藏。要确认隐藏状态，读 `view get`（view list）里该视图的 `custom.hiddenFields`（`{fieldId: true|false}`）。
+> ⚠️ 注意：服务端**只接受 reorder，不接受真"隐藏字段"**——如果传入的列表比当前 columns 短，缺失的字段不会被隐藏。需要真正隐藏字段请到 AI 表格 Web UI。
 
 | flag | 类型 |
 |------|------|
@@ -120,9 +140,7 @@ dws aitable view update field-widths --view-id GRID_ID --json '{"fldA":120,"fldB
 | `--json` | string 数组 JSON（与 `--field-ids` 同传时 `--json` 优先） |
 
 ```bash
-# 只保留首列和 fldA，其余字段被隐藏
-dws aitable view update visible-fields --view-id VIEW_ID --field-ids fldPrimary,fldA
-# 传回全量列表解除隐藏
+dws aitable view update visible-fields --view-id VIEW_ID --field-ids fldPrimary,fldA,fldB
 dws aitable view update visible-fields --view-id VIEW_ID --json '["fldPrimary","fldA","fldB"]'
 ```
 

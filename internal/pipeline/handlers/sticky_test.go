@@ -157,10 +157,24 @@ func TestStickyHandler(t *testing.T) {
 			corrections: 0,
 		},
 		{
-			name:        "boolean-like value splits when type is bool",
+			name:        "boolean-like value normalizes inline when type is bool",
 			args:        []string{"--verbosetrue"},
 			flags:       specs(flagSpec{name: "verbose", typ: "bool"}),
-			want:        "--verbose true",
+			want:        "--verbose=true",
+			corrections: 1,
+		},
+		{
+			name:        "confirmation false normalizes to an inline false value",
+			args:        []string{"--yesfalse"},
+			flags:       specs(flagSpec{name: "yes", typ: "bool"}),
+			want:        "--yes=false",
+			corrections: 1,
+		},
+		{
+			name:        "model-friendly boolean no normalizes to inline false",
+			args:        []string{"--yesno"},
+			flags:       specs(flagSpec{name: "yes", typ: "bool"}),
+			want:        "--yes=false",
 			corrections: 1,
 		},
 		{

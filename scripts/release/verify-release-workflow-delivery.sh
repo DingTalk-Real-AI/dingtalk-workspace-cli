@@ -150,16 +150,16 @@ print("\t".join([
 verify_cloud_delivery() {
   cloud_identity="$1"
   cloud_run_id="$(printf '%s\n' "$cloud_identity" | cut -f1)"
-  cloud_run_attempt="$(printf '%s\n' "$cloud_identity" | cut -f2)"
+  sealed_run_attempt="$(printf '%s\n' "$cloud_identity" | cut -f2)"
   cloud_actor="$(printf '%s\n' "$cloud_identity" | cut -f3)"
   cloud_actor_id="$(printf '%s\n' "$cloud_identity" | cut -f4)"
   cloud_workflow_sha="$(printf '%s\n' "$cloud_identity" | cut -f5)"
-  [ -n "$cloud_run_id" ] && [ -n "$cloud_run_attempt" ] &&
+  [ -n "$cloud_run_id" ] && [ -n "$sealed_run_attempt" ] &&
     [ -n "$cloud_actor" ] && [ -n "$cloud_actor_id" ] &&
     [ -n "$cloud_workflow_sha" ] || return 1
 
   cloud_run_state="$(
-    github_get "repos/$REPOSITORY/actions/runs/$cloud_run_id/attempts/$cloud_run_attempt" \
+    github_get "repos/$REPOSITORY/actions/runs/$cloud_run_id" \
       | python3 -c 'import json,sys
 r=json.load(sys.stdin)
 print("\t".join(str(value) for value in (
@@ -176,6 +176,9 @@ print("\t".join(str(value) for value in (
     r.get("actor", {}).get("id", ""),
 )))'
   )" || return 1
+  cloud_run_attempt="$(printf '%s\n' "$cloud_run_state" | cut -f2)"
+  printf '%s\n' "$cloud_run_attempt" | grep -Eq '^[1-9][0-9]*$' || return 1
+  [ "$cloud_run_attempt" -ge "$sealed_run_attempt" ] || return 1
   expected_cloud_core="$(printf '%s\t%s\t%s\t.github/workflows/release.yml\tworkflow_dispatch\tcompleted\tsuccess\tmain\t%s' \
     "$cloud_run_id" "$cloud_run_attempt" "$REPOSITORY" "$cloud_workflow_sha")"
   [ "$(printf '%s\n' "$cloud_run_state" | cut -f1-9)" = "$expected_cloud_core" ] ||

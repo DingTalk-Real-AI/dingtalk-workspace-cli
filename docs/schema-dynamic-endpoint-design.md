@@ -6,17 +6,21 @@ DWS Schema 是当前二进制公开 CLI 的版本化 Agent 执行契约。它描
 
 设计遵循三条硬规则：
 
-1. **Schema 描述 CLI，不制造 CLI。** `CommandRegistry`、manual hint、metadata 和 Catalog 都不能凭空创建 Cobra 命令或 flag；registry 中的每个路径都必须精确绑定真实 runnable Cobra leaf。
+1. **Schema 描述 CLI，不制造 CLI。** `CommandRegistry`、ProductDecl / leaf `Contract`、metadata 和 Catalog 都不能凭空创建 Cobra 命令或 flag；registry 中的每个路径都必须精确绑定真实 runnable Cobra leaf。interface 事实由 leaf `Contract` / `ParamDecl` 声明（`schema_mcp_metadata` 已退役），**不得**从 MCP meta 生成 CLI flag（见 §4.1 同源决策）。
 2. **所有来源只解析一次。** 来源经过统一 resolver 进入 typed `SchemaRegistry`，所有查询、导出和门禁都消费同一个 `SchemaRegistry/SchemaIndex`。
-3. **Registry-first，Catalog 只出不进。** reviewed `CommandRegistry` 是稳定 command identity/navigation 的唯一事实源；`schema_catalog.json` 和其他生成 JSON 只是下游发布物，不能成为命令、metadata 或下一轮 Catalog 的来源。运行时 production loader 解码 embedded snapshot 只是交付边界，不是 source resolution。
+3. **Collector-first，Catalog 只出不进。** identity collector（`CollectIdentitySpecs`，遍历携带 `ContractFinal.Identity` 的 live Cobra leaves）是稳定 command identity/navigation 的唯一事实源；reviewed `schema_command_registry/` 已退役，identity 由声明（Contract）即代码提供，不再有独立的 reviewed identity 文件。production 通过 `RegisterSchemaSourceRoot` → `ResolveSchemaBuild` 组装 `SchemaRegistry`，并从它投影 ToolSpec wire 与 `ResolveMeta`。`cmd_schema_catalog` 只能生成 CI/local dump，`internal/cli/schema_catalog/`、`schema_meta_index.gob` 和 `schema_meta_index.json` 不得提交或成为运行时来源。`schema_agent_metadata/` / `schema_hints/` / `schema_command_registry/` 已退役；若存在则 policy 失败。生产 Agent selection / safety / interface 权威为 leaf `ContractFinal` 与 `ProductDecl`；`agent_metadata_inject.go` / `InstallBuildTimeAgentMetadataJSON` 仅作 `cmd_schema_catalog` CI/local dump 辅助，不得作为生产权威。
 
 Schema 不调用 MCP `tools/list`，不访问网络，也不读取用户本地 discovery cache。
+
+**flag / help / schema 参数面同源**（已决策）：Contract / LeafSpec 为 CLI 表面权威；分层字段归属与门禁 ID 见 [`flag-help-schema-homology.md`](flag-help-schema-homology.md)。
 
 ## 2. 单向数据流
 
 ```text
-schema_command_registry.json           (reviewed CommandRegistry source)
-  + reviewed manual command additions
+identity collector (CollectIdentitySpecs)
+  walks live Cobra leaves carrying ContractFinal.Identity;
+  reviewed exclusions applied; single identity source
+  (reviewed schema_command_registry/ retired)
                          |
                          v
              EffectiveCommandRegistry
@@ -28,26 +32,13 @@ schema_command_registry.json           (reviewed CommandRegistry source)
                          v
                BoundCommandRegistry
                          |
-                         +----------------------+
-                                                |
-skills/mono Markdown + internal/cli/schema_hints/*.json |
-  + schema_mcp_metadata.json                     |
-                         |                       |
-                         v                       |
-             Agent-metadata normalization       |
-                         |                       |
-                         v                       |
-             schema_agent_metadata/*.json       |
-               (generated normalized input)     |
-                         |                       |
-                         +-----------------------+
-                         |
+                         v
 live Cobra flag facts / typed parameter metadata
-  + schema_hints/metadata/*.json      (reviewed parameter overlay + safety)
-  + schema_hints/selection/*.json     (reviewed Agent selection prose)
-  + schema_parameter_bindings.json    (reviewed flag -> RPC property)
-  + schema_mcp_metadata.json          (pinned, sanitized interface facts)
-  + normalized Agent metadata
+  + leaf Contract (Safety / ContractDecl / ParamDecl → contract_final)
+  + ProductDecl (product routing prose; production Agent authority)
+  + schema_parameter_mapping_ledger.go (reviewed mapping exclusions / removals)
+  + leaf Contract.Interface / ParamDecl (declared interface facts)
+  + skills/mono Markdown              (evidence only; not concatenated)
                          |
                          v
               source adapters + resolvers
@@ -60,17 +51,14 @@ live Cobra flag facts / typed parameter metadata
              +-----------+-----------+
              |                       |
              v                       v
-     build-time typed gates    snapshot serializer
-                                     |
-                                     v
-                              schema_catalog.json
-                              (release output only)
-                                     |
-                                     v
-                           go:embed -> typed loader
+     build-time typed gates   RegisterSchemaSourceRoot
+                              -> ResolveSchemaBuild
+                              (runtime assembly; lazy Once)
                                      |
                                      v
                          SchemaRegistry + SchemaIndex
+                         + ResolveMeta projection cache
+                           (in-process map; not gob/json fixture)
                                      |
                +---------------------+------------------+
                |                     |                  |
@@ -81,9 +69,12 @@ live Cobra flag facts / typed parameter metadata
                                      |
                                      v
                          runtime query + delivery gates
+                         (cmd_schema_catalog = CI/local dump only;
+                          InstallBuildTimeAgentMetadataJSON = dump helper,
+                          not production Agent authority)
 ```
 
-`--help` 是 Cobra 自身的人类可读投影，不从 Catalog 生成。Schema projections 和 `--help` 共享同一真实 Cobra 命令面，但承担不同职责。Binder 之后不得再从 annotation、manual hint 或生成 JSON 重新解析 command identity。
+`--help` 是 Cobra 自身的人类可读投影，不从 Catalog 生成。Schema projections 和 `--help` 共享同一真实 Cobra 命令面，但承担不同职责。Binder 之后不得再从 annotation、已退役 hint overlay 或生成 JSON 重新解析 command identity。
 
 ## 3. 与 Lark 的关系
 
@@ -94,8 +85,10 @@ DWS 与 Lark 保持**架构同构**，而不是强行复制字段：
 | typed command/metadata registry | `EffectiveCommandRegistry`、`BoundCommandRegistry` 与最终 `SchemaRegistry` |
 | navigation catalog/index | 从同一 `ToolSpec` 派生的 `SchemaIndex` |
 | schema renderer/envelope | overview、product/group、leaf、`--all` projections |
+| API Commands ← 平台 OAPI meta | **不**作为 DWS 主路径；可选 1:1 MCP 透传子集见同源文档 §5 |
+| Shortcuts ← 手写声明 + Execute | LeafSpec / Shortcut + Contract 表面（路径 A） |
 
-共同点是：强类型 registry 持有已审核、已绑定、已解析的事实，index 只负责确定性导航，renderer 只投影，不重新读取来源或做 precedence。DWS 的 base Registry 与 reviewed manual command additions 在绑定前合并为唯一的 `EffectiveCommandRegistry`，因此不存在 “native-first”、“legacy registry fallback” 或 Catalog fallback。
+共同点是：强类型 registry 持有已审核、已绑定、已解析的事实，index 只负责确定性导航，renderer 只投影，不重新读取来源或做 precedence。DWS 的 identity collector 从携带 `ContractFinal.Identity` 的 live Cobra leaves 收集 identity，绑定前生成唯一的 `EffectiveCommandRegistry`（reviewed `schema_command_registry/` 已退役），因此不存在 “native-first”、“legacy registry fallback” 或 Catalog fallback。飞书也是**分层单权威**（API 用平台 meta，Shortcut 用手写契约），不是全家只有 meta——DWS 对齐的是这一分层，而不是「用 MCP meta 生成全部 CLI」。
 
 DWS 内部 resolved model 为：
 
@@ -120,26 +113,38 @@ DWS 当前对外仍保留兼容 wire：leaf 使用 flat `parameters`，安全和
 
 | 来源 | 负责内容 | 明确不负责 |
 |---|---|---|
-| `schema_command_registry.json` | reviewed `CommandRegistry`：稳定 canonical identity、primary CLI path、alias、exposure 和导航 | 创建 Cobra 命令/flag、参数、安全、endpoint/token |
-| reviewed manual command additions | 将一个精确存在的 runnable Cobra leaf 合并进 `EffectiveCommandRegistry`；必须 reviewed 且带 reason | 运行时 fallback、覆盖冲突 identity、创建命令 |
-| Go/Cobra | 路径是否真实可执行、Cobra 接受的 flag、CLI 类型/默认值、执行校验、help 文本 | 稳定 canonical identity、Agent 场景选择、虚构 RPC |
+| Contract / LeafSpec / `corecmd.Spec` | **CLI 表面权威**：flags、defaults、required、enum、关系约束、运行时 Risk；编译为 cobra 与 help | canonical identity、selection 文案、虚构 RPC |
+| identity collector（`CollectIdentitySpecs`） | 从 live Cobra leaves 的 `ContractFinal.Identity` 声明收集稳定 canonical identity、primary CLI path、alias、exposure 和导航（reviewed `schema_command_registry/` 已退役） | 创建 Cobra 命令/flag、参数、安全、endpoint/token |
+| reviewed exclusions（`ReviewedRuntimeSchemaExclusions`） | exact、reviewed、带 reason 地将指定 public runnable leaf 排除出 effective 表面 | 运行时 fallback、prefix/wildcard 排除、创建命令 |
+| Go/Cobra | Contract 编译后的可执行投影：路径是否真实可执行、Cobra 接受的 flag、DefValue、help 文本 | 稳定 canonical identity、Agent 场景选择、虚构 RPC；**不得**成为与 Contract 平行的第二套 flag 权威 |
 | native Schema identity annotations | implementation-side consistency evidence；存在时必须与 `EffectiveCommandRegistry` 精确一致 | 提供、补全、推断或覆盖 identity |
-| `schema_hints/metadata/*.json` parameter overlays | 精确覆盖现有 flag 的描述、映射、类型和 required 语义；并承载 safety / `runtime_gate` / interface | 创建命令/flag、绕过 completeness、虚构 RPC |
-| typed parameter metadata / constraints | `required_when`、one-of、互斥、联动、格式、枚举、位置参数 | 命令 identity |
-| `schema_parameter_bindings.json` | 稳定 CLI flag 到 RPC property 的映射 | 命令发现、risk 推断 |
-| `schema_mcp_metadata.json` | pinned RPC identity、接口描述和脱敏参数事实 | CLI identity、运行时路由、risk 推断 |
-| `schema_hints/selection/*.json` | reviewed selection prose（summary / use_when / avoid_when / examples） | 创建 Cobra 命令或参数、改写 safety |
+| typed parameter metadata / constraints | 由 Contract 约束投影而来的 `require_one_of` / 互斥等；以及仍需 reviewed 的 `required_when` 等 | 命令 identity |
+| `schema_parameter_mapping_ledger.go` | CLI flag 无直接 RPC property 的 exclusions / removals | 命令发现、risk 推断、创建 CLI flag；property 交付归 ParamDecl.Property |
+| leaf `Contract.Interface` / `ParamDecl` | 声明的 RPC identity 与 interface_* 事实（`schema_mcp_metadata.json` 已退役） | CLI identity、运行时路由、**创建 CLI flag**、risk 推断 |
+| ProductDecl + leaf `Contract.Selection` | reviewed selection / product routing prose（`contract_final`） | 创建 Cobra 命令或参数、改写 safety；`schema_hints/` 已退役 |
 | Skills/Markdown | 产品路由、工作流和使用建议 | 命令存在性和 flag 事实 |
-| `schema_catalog.json` 及其他 generated JSON | resolved registry 的兼容发布序列化；运行时由 production loader 解回 typed registry/index | generation/source resolution 输入、identity fallback、手工修复源 |
+| `cmd_schema_catalog` CI/local dump（可选 `schema_catalog/` / meta-index） | resolved registry 的兼容序列化快照，仅供 jq/determinism；不得提交为 runtime 来源 | production delivery、`ResolveMeta` 权威、identity fallback、手工修复源 |
 
-`schema_command_registry.json` 承载 reviewed `CommandRegistry`。Manual command addition 先以确定性规则合并进 effective registry；从 binder 开始，下游只看到一个稳定 identity/navigation 模型。旧 wire 中的 `surface_hash` / `surface_tools` 字段仅为兼容名称，语义已经是 effective Registry hash/coverage，不构成第二事实源。
+identity collector 从 live Cobra leaves 的 `ContractFinal.Identity` 声明生成 `CommandSpec`，应用 reviewed exclusions 后按确定性规则索引为 effective registry；从 binder 开始，下游只看到一个稳定 identity/navigation 模型。reviewed `schema_command_registry/` 已退役，其历史角色（稳定 canonical identity/navigation 事实源）由 collector 承接。旧 wire 中的 `surface_hash` / `surface_tools` 字段仅为兼容名称，语义已经是 effective Registry hash/coverage，不构成第二事实源。
+
+### 4.1 flag / help / schema 同源（路径 A + 嵌入）
+
+完整决策、字段归属表、`HOM-*` 门禁规划与可选 MCP 透传准入条件见 [`flag-help-schema-homology.md`](flag-help-schema-homology.md)。
+
+摘要：
+
+- **同源面**：Contract → cobra flags ≡ `--help` Flags ≡ **嵌入注解后的** schema `parameters` / 关系约束；显式 `Risk` 经 `dws.schema.risk` overlay 进 Schema Safety。
+- **嵌入点**：`command.embedContractIntoSchema` 写入 `dws.schema.contract` / property / type / required；`AnnotateConstraints` 写入 constraints；Schema 组装（`runtimeToolSpecFromMetadata` / `ResolveSchemaBuild`）消费这些注解进入 typed `SchemaRegistry`（runtime assembly；非 `go:embed` catalog 交付）。
+- **硬规则**：CLI 表面事实 = **声明（Contract 数据字段）OR 人工标注**；禁止纯推断。非 CLI 表面字段（identity / selection / interface）必须有**评审源**。声明写法见同源文档 §1.2；标注见 §1.3；**`ToolSpec` 全字段权威见 RFC §5.0.4 / 同源 §1.4**。
+- **非同源面（有意）**：identity（collector）、selection 文案（ProductDecl / leaf `Contract.Selection`）、RPC 形状（MCP meta 仅 `interface_*`）、dry-run 正能力 registry。
+- **禁止**：以 MCP meta 为主通道生成 Leaf/Shortcut 的 flag；已退役的 hint overlay 改写 type/required/default；Schema 字段无权威归属。
 
 ## 5. 统一解析与 precedence
 
 ### 5.1 Identity
 
-- Reviewed base `CommandRegistry` 是 stable canonical identity、primary path、alias 和 navigation 的唯一基础事实源。
-- Reviewed manual command addition 只能引用精确存在的 runnable Cobra leaf；它在绑定前合并进 `EffectiveCommandRegistry`。若与 base Registry 的 identity/path/alias 冲突，生成失败，不能按 precedence 静默覆盖。
+- identity collector（`CollectIdentitySpecs`）是 stable canonical identity、primary path、alias 和 navigation 的唯一基础事实源：每个携带 `ContractFinal.Identity` 的 runnable Cobra leaf（含 Hidden deprecated/migration shims）贡献一条 identity，reviewed exclusions 精确应用；reviewed `schema_command_registry/` 已退役，其历史角色由 collector 承接。
+- Collector 输出的 `CommandSpec` 在索引时 fail-closed 校验 canonical/product/path/alias/visibility 的合法性与唯一性；重复 identity、alias 复用 primary path 或 alias collision 全部失败，不能按 precedence 静默覆盖。
 - Binder 必须把 effective entry 的 primary path 和每个 alias 精确解析到同一个真实 executable leaf；stale path、phantom path、重复 identity 或 alias collision 全部失败。
 - Native identity annotation 是可选的一致性证据：存在时必须与 effective entry 精确一致；缺失不触发补写、推断或 fallback。
 - Public runnable Cobra leaf 未进入 effective registry 时，必须存在 exact、reviewed、带 reason 的 exclusion；不得用 prefix/wildcard 排除。
@@ -153,30 +158,35 @@ DWS 当前对外仍保留兼容 wire：leaf 使用 flat `parameters`，安全和
 constraint、Cobra help 和 interface resolver 提供，因此删除该过渡层没有数据迁移缺口。
 CI 同时禁止重新加入 generated native contracts 或 materialization 入口。
 
-#### CommandRegistry 输入审计
+#### Identity 输入审计（registry 已退役）
 
-`schema_command_registry.json` 是 reviewed source，不是生成快照。它必须保留
-`$schema: ./schema_command_registry.schema.json`。该 JSON Schema 对 root、product
-和 CommandSpec 全部使用 `additionalProperties: false`，并约束：
+历史上 identity 来自 reviewed `schema_command_registry/`（`registry.json` +
+`products/*.json`，由随附 JSON Schema 校验）。该 reviewed registry 已退役，
+改由 identity collector 承接：identity 现在由 `CollectIdentitySpecs` 从 live
+Cobra 树的 `ContractFinal.Identity` 声明收集，输入契约即声明本身。严格 Go
+索引（`indexCommandSpecs`）继续 fail-closed 校验：
 
 - canonical identity、`source_product_id` 和精确 CLI path 的格式；
 - `aliases` 唯一且不能复用 primary path；
 - `visibility` 只允许 `public | compat | internal`，省略时明确归一化为
   `public`；
-- primary path、alias、canonical 和 product 之间无法由 JSON Schema 表达的
-  交叉约束，继续由 Go strict loader 和 Cobra binder fail-closed 校验。
+- primary path、alias、canonical 和 product 之间的交叉唯一性约束。
 
-Registry semantic hash 覆盖 canonical、primary CLI path、alias 集合、
+Registry semantic hash 仍覆盖 canonical、primary CLI path、alias 集合、
 `source_product_id` 和 normalized visibility。格式、顺序以及省略的等价默认值
 不改变 hash；上述任一稳定契约字段变化都必须改变 hash。测试逐字段验证这一点，
 不使用当前命令数量作为常量。
 
-普通 `go generate ./internal/cli` 只把 Registry 作为 validation-only 输入并生成
-Agent metadata/Catalog 等单向下游资产，不生成或覆盖 Registry。drift policy 在生成
-前后对 reviewed Registry 做 byte-for-byte guard；独立的
-`check-schema-command-registry.sh` 在 interface/provenance/Catalog policy 之前检查
-JSON 输入契约、禁用旧 native materialization 符号，并从 Registry 动态计算审计
-数量，不能硬编码某次快照的 tool count。
+普通 `go generate ./internal/cli` 只生成
+`param_aliases_generated.go`；production Catalog / `ResolveMeta` 由 runtime
+`ResolveSchemaBuild` 装配（`deliverySchemaCatalog` Once 后缓存 Meta 投影）。
+`cmd_schema_catalog` 仅按需打 CI/local dump；其 `InstallBuildTimeAgentMetadataJSON`
+inject 仅服务 dump，生产 Agent 权威仍是 leaf `ContractFinal` / `ProductDecl`。
+不写也不 embed `schema_agent_metadata/`。drift policy 禁止已退役的
+`schema_command_registry/` 在生成前后重新出现；原独立脚本
+`check-schema-command-registry.sh` 的 registry-agnostic side guards（禁用旧
+native materialization 符号、go:generate 单轨、lazy loader 纪律）已迁入
+`check-schema-catalog.sh`。
 
 ### 5.2 Parameter
 
@@ -185,15 +195,17 @@ JSON 输入契约、禁用旧 native materialization 符号，并从 Registry �
 实现中的参数字段顺序固定为：
 
 ```text
-reviewed manual > versioned binding > command constraint > typed metadata
-                > native/Cobra contract > ToolSchemaHint > MCP metadata
-                > inference/default
+versioned binding > command constraint > typed metadata
+                > native/Cobra contract (ParamDecl / ContractFinal)
+                > MCP metadata > inference/default
 ```
 
 命令 `title` / `description` 使用独立但同样确定的文本顺序：
 
 ```text
-reviewed ToolSchemaHint > command-specific Cobra Help > MCP metadata > inference
+description: Cobra Long > ContractDecl description (contract_final) > MCP metadata > inference
+             (Long 胜出时 provenance = cobra_help / cobra_help_preferred)
+title:       ContractDecl / ContractFinal > Cobra Short > MCP metadata > inference
 ```
 
 因此多个 CLI leaf 复用同一个 RPC 时，通用 RPC 文案只能作为未选中的
@@ -219,7 +231,8 @@ Cobra hard-required 是独立的 executable fact，并通过 `cli_required`/prov
 | 问题 | 事实源 |
 |---|---|
 | 当前二进制是否暴露命令、Cobra 接受哪些 flags | `dws <path> --help` |
-| Agent 选哪个命令、参数映射/required/约束、risk/confirmation | 对应 leaf `dws schema "<path>"` |
+| Agent 选哪个命令、CLI 参数/required/约束、risk/confirmation | Agent leaf `dws schema "<path>" --compact` |
+| CLI↔RPC 参数映射、接口绑定、provenance | full leaf 配合 `--jq` / `--fields` 精确投影 |
 | 钉钉中的文档、文件、日程、消息等实际数据 | 真正执行 `dws doc read`、`dws drive search` 等 read/search/list 命令 |
 
 Schema 和 Help 冲突是契约漂移，不能静默猜测：
@@ -234,10 +247,10 @@ Schema 和 Help 冲突是契约漂移，不能静默猜测：
 
 ```bash
 dws schema                                      # 产品紧凑概览
-dws schema calendar                             # 产品摘要
-dws schema "calendar event"                    # 分组摘要
-dws schema "calendar event create"             # 完整 leaf
-dws schema "calendar event create" --compact   # 支持：裁掉 provenance/debug 字段
+dws schema calendar --compact                   # Agent 产品摘要
+dws schema "calendar event" --compact          # Agent 分组摘要
+dws schema "calendar event create" --compact   # Agent leaf
+dws schema "calendar event create"             # full leaf，仅用于映射/provenance 审计
 dws schema --all                               # 所有工具的完整 leaf 导出
 ```
 
@@ -245,36 +258,30 @@ dws schema --all                               # 所有工具的完整 leaf 导�
 
 `schema --all` 必须包含最终 `SchemaIndex` 中每个 tool 的完整 leaf 参数、约束和安全语义；无业务参数的命令也要包含空 `parameters` 对象。它用于审计、CI 和参数防丢 baseline，但输出很大，普通 Agent 命令发现不得使用，应按 overview -> product/group -> leaf 渐进查询。
 
-`--compact` 当前受支持，适合减少常规 leaf 查询上下文。`schema --all --compact` 也可执行，但会移除 provenance/debug 和接口映射字段，不能作为完整兼容性 baseline。
+`--compact` 是普通 Agent 查询的规范视图：通过正向字段白名单保留选参、约束与安全语义，full 新增字段不会自动进入 Agent 上下文。省略它的 leaf 包含参数 property、接口绑定和 provenance，只用于定向审计；`schema --all --compact` 也可执行，但不能作为完整兼容性 baseline。
 
 兼容旧二进制时，如果 Schema 查询返回 `unknown_flag: --compact`，只去掉 `--compact` 重试同一个查询。这是展示能力降级，不代表 leaf 缺失，也不能改用 Schema 查询业务数据。
 
 ## 8. 生成与发布
 
-当 Cobra、flag、identity、binding、manual hint、Agent hint 或 Skill 发生变化时：
+当 Cobra、flag、identity、binding、leaf `Contract` / ProductDecl 或 Skill 发生变化时：
 
-1. 审核真实 Cobra 变化，确认命令和 flag 已实际存在。新增或修改稳定 command identity、primary CLI path 或 alias 时，精确编辑 reviewed `CommandRegistry`（当前持久化文件为 `schema_command_registry.json`）。参数、Skill 或 metadata 单独变化时不要机械改写 Registry，也不要从旧 Catalog 反向生成它。
-2. 仅对明确例外使用 reviewed manual command addition；它必须精确引用现有 runnable leaf、带 reason，并在生成时归一化进 `EffectiveCommandRegistry`。Native identity annotation 若存在，应作为与 Registry 一致的实现断言维护，而不是用来 materialize identity。
-3. 生成 Agent metadata：
-
-   ```bash
-   make generate-schema-agent-metadata
-   ```
-
-4. 从统一 typed registry 生成最终 Catalog：
+1. 审核真实 Cobra 变化，确认命令和 flag 已实际存在。新增或修改稳定 command identity、primary CLI path 或 alias 现在通过 leaf Contract 的 `ContractFinal.Identity` 声明完成（identity collector 据此收集；reviewed `schema_command_registry/` 已退役）。参数、Skill 或 metadata 单独变化时不要机械改写 identity 声明，也不要从旧 Catalog 反向生成它。
+2. 不应进入稳定 Agent 契约的 public runnable leaf 使用 reviewed exclusions（exact path、带 reason）。Native identity annotation 若存在，应作为与 identity 声明一致的实现断言维护，而不是用来 materialize identity。
+3. 生成参数别名并验证运行时 Schema 组装。`go generate ./internal/cli` 只运行 `cmd_param_aliases`；`cmd_schema_catalog` 仅按需生成 CI/local dump。生产权威为 leaf `ContractFinal` / `ProductDecl`；CI dump 可经 `agent_metadata_inject.go` / `InstallBuildTimeAgentMetadataJSON` 在内存中注入 Agent metadata，不写 `schema_agent_metadata/`：
 
    ```bash
+   make generate-schema
+   go generate ./internal/cli
+   # 可选：生成 artifacts/ 下的 CI/local dump
    make generate-schema-catalog
    ```
 
-也可以运行 `go generate ./internal/cli` 生成正常发布资产。生成文件包括：
+`cmd_schema_agent_metadata` 可保留为非交付工具/测试，但不是 `go:generate` 入口，也不应再作为发布步骤。
 
-- `internal/cli/schema_agent_metadata/index.json`
-- `internal/cli/schema_agent_metadata/<product>.json`
-- `internal/cli/schema_agent_metadata_audit.json`
-- `internal/cli/schema_catalog.json`
+生成文件只有 `internal/cli/param_aliases_generated.go`（参数别名生成物）。`cmd_schema_catalog` 的 Catalog 和 meta-index 是可选 CI/local dump，不是交付物，且不得写入或提交到 `internal/cli/`。
 
-只编辑来源；不要手工编辑 Agent metadata 或 Catalog 输出。
+`schema_agent_metadata/`、`schema_agent_metadata_audit.json` 与 `schema_hints/` 已退役；若存在则 policy 失败。只编辑来源；不要手工编辑或提交 Catalog / meta-index dump。
 
 ## 9. Completeness 与 final-delivery invariant
 
@@ -282,19 +289,19 @@ dws schema --all                               # 所有工具的完整 leaf 导�
 
 - 每个 public runnable Cobra leaf 要么能通过最终 embedded `SchemaIndex` 查询，要么有 exact、reviewed、带 reason 的 exclusion。
 - 每个最终 canonical path、primary CLI path 和 alias 都必须解析到同一个可执行 leaf；不得有 phantom path 或 collision。
-- `EffectiveCommandRegistry`、`SchemaRegistry/SchemaIndex`、Agent metadata 和 Catalog canonical sets 必须精确一致，不能只比较 count。
+- `EffectiveCommandRegistry`、`SchemaRegistry/SchemaIndex` 与 Catalog canonical sets 必须精确一致（含组装时内存 inject 的 Agent metadata 语义），不能只比较 count。
 - Leaf payload、`--all` 中对应 tool 和 Catalog full tool 必须是同一个 resolved `ToolSpec` 的内容级等价投影，并通过 production loader round-trip。
 - overview/product/group summary 与 Catalog summary 必须等于同一个 `ToolSpec.ToSummaryPayload()`；alias 查询只允许 `cli_path` 和 `is_alias` 这两个视图字段变化。
 - 每个最终字段及 parameter field 的 provenance winner value 必须与 delivered value 精确一致；不能只验证 provenance source、count 或字段是否存在。
 - 每个 MCP `interface_ref` 必须在 pinned interface registry 精确存在；local/composite/unavailable 必须满足同一 conflict matrix。
 - `--all` 的 tool set 必须与最终 index 一对一，且每个工具包含完整参数契约。
 - 连续两次生成必须字节稳定，提交的生成物不得漂移。
+- **同源门禁（规划，见同源文档 §4）**：受管命令逐步满足 `HOM-P1`–`P3`（parameters ≡ cobra/Contract）、`HOM-S1`–`S3`（Safety/Risk 对齐）、`HOM-I1`（interface 不创建 flag）、`HOM-D1`（help ≡ schema parameters）。hints 不得作为 type/required/default 的 winner。
 
 推荐本地验证：
 
 ```bash
-make generate-schema-agent-metadata
-make generate-schema-catalog
+make generate-schema
 ./scripts/policy/check-generated-drift.sh
 ./scripts/policy/check-schema-catalog.sh
 go test ./internal/cli ./internal/app ./internal/generator/... -count=1
@@ -303,9 +310,13 @@ go test ./internal/cli ./internal/app ./internal/generator/... -count=1
 ## 10. 明确禁止
 
 - 运行时调用 MCP `tools/list` 或访问网络生成 Schema。
-- 从旧 `schema_catalog.json` 或其他 generated JSON 反向创建/补齐 Cobra leaf、flag、CommandRegistry 或下一轮 Catalog。
+- 从 `schema_catalog/` 等生成 JSON 反向创建/补齐 Cobra leaf、flag、CommandRegistry 或下一轮 Catalog。
+- 重新引入 `schema_agent_metadata/`（或 audit JSON）作为交付物、`go:embed` 目标，或把它写回 `go:generate` 入口。
+- 从 MCP meta / 已退役的 `schema_mcp_metadata` **生成或补齐** LeafSpec/Shortcut 主路径的 CLI flag（interface overlay 除外）；未满足同源文档 §5 准入条件时启用「MCP 透传生成通道」。
 - 把 native annotation、legacy registry 或 Catalog 当作 identity fallback；或在 `EffectiveCommandRegistry` 之后再次选择 identity winner。
 - renderer、query 或 gate 在 `SchemaRegistry` 之后重新读取 source 并做第二次 merge。
 - 用 prefix/wildcard exclusion 隐藏未来命令。
-- 让 manual hint、CommandRegistry 或 interface metadata 宣称一个不存在的命令、flag 或 RPC 可用。
+- 让 ProductDecl / leaf `Contract`、CommandRegistry 或 interface metadata 宣称一个不存在的命令、flag 或 RPC 可用。
+- 重新引入 `schema_hints/`（含 selection/metadata/imported/audit JSON）或任何 HintFile overlay，并在与 Contract/cobra 冲突时赢得 type/required/default。
 - 把 `schema --all` 当作普通业务数据查询，或把其完整结果无条件注入 Agent 上下文。
+- 将 LeafSpec、`+shortcut` 或 write-guard/cursor/多步命令注册为 `mcp_passthrough` 表面。

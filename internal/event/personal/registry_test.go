@@ -34,15 +34,56 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventSingleChat,
 		EventInChat,
 		EventFromUser,
+		EventAllSingleChat,
+		EventAllGroupChat,
 		EventReadO2O,
 		EventReadGroup,
 		EventRecallO2O,
 		EventRecallGroup,
 		EventReactionO2O,
 		EventReactionGroup,
+		EventGroupUpdated,
+		EventGroupMemberAdded,
+		EventGroupMemberExited,
+		EventGroupDisbanded,
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
 	}
 	if !reflect.DeepEqual(keys, want) {
 		t.Fatalf("keys = %#v, want %#v", keys, want)
+	}
+}
+
+func TestOAEventCatalogDefinitions(t *testing.T) {
+	items := Catalog("oa", true, false)
+	wantKeys := []string{
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
+	}
+	if len(items) != len(wantKeys) {
+		t.Fatalf("Catalog(oa) = %#v, want %d events", items, len(wantKeys))
+	}
+	for i, item := range items {
+		if item.EventKey != wantKeys[i] {
+			t.Fatalf("Catalog(oa)[%d].event_key = %q, want %q", i, item.EventKey, wantKeys[i])
+		}
+		if item.Category != "oa" || item.RuleType != "all" || item.Status != StatusEnabled || !item.Public {
+			t.Fatalf("Catalog(oa)[%d] = %#v, want public enabled oa/all event", i, item)
+		}
+		if len(item.RequiredParams) != 0 || item.Constraints != nil {
+			t.Fatalf("Catalog(oa)[%d] parameters = %#v/%#v, want none", i, item.RequiredParams, item.Constraints)
+		}
+		if item.Auth["identity"] != "user" {
+			t.Fatalf("Catalog(oa)[%d].auth = %#v, want user identity", i, item.Auth)
+		}
 	}
 }
 
@@ -96,7 +137,30 @@ func TestDefinitionJSONHidesInternalSchemaIDs(t *testing.T) {
 }
 
 func TestSchemaDocumentsDefaultToTransportEnvelope(t *testing.T) {
-	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
+	for _, eventKey := range []string{
+		EventMention,
+		EventSingleChat,
+		EventInChat,
+		EventFromUser,
+		EventAllSingleChat,
+		EventAllGroupChat,
+		EventReadO2O,
+		EventReadGroup,
+		EventRecallO2O,
+		EventRecallGroup,
+		EventReactionO2O,
+		EventReactionGroup,
+		EventGroupUpdated,
+		EventGroupMemberAdded,
+		EventGroupMemberExited,
+		EventGroupDisbanded,
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
+	} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
 			if !ok {
@@ -189,7 +253,7 @@ func TestSchemaDocumentsDefaultToTransportEnvelope(t *testing.T) {
 }
 
 func TestFlattenedSchemaDocumentsUseMessageDTO(t *testing.T) {
-	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser} {
+	for _, eventKey := range []string{EventMention, EventSingleChat, EventInChat, EventFromUser, EventAllSingleChat, EventAllGroupChat} {
 		t.Run(eventKey, func(t *testing.T) {
 			def, ok := Lookup(eventKey)
 			if !ok {
@@ -206,7 +270,7 @@ func TestFlattenedSchemaDocumentsUseMessageDTO(t *testing.T) {
 			wantProperties := []string{
 				"type", "event_id", "timestamp", "subscribe_id", "message_id",
 				"conversation_id", "sender", "sender_open_dingtalk_id", "content",
-				"create_time", "event_time",
+				"create_time", "event_time", "quoted_message", "forward_messages",
 			}
 			if len(props) != len(wantProperties) {
 				t.Fatalf("schema.properties = %#v, want exactly %d DTO fields", props, len(wantProperties))
@@ -220,6 +284,22 @@ func TestFlattenedSchemaDocumentsUseMessageDTO(t *testing.T) {
 				if _, ok := props[transportField]; ok {
 					t.Fatalf("flattened schema exposed transport field %q", transportField)
 				}
+			}
+			quoted := props["quoted_message"].(map[string]any)
+			if quoted["type"] != "object" {
+				t.Fatalf("quoted_message schema = %#v, want object", quoted)
+			}
+			quotedProperties, ok := quoted["properties"].(map[string]any)
+			if !ok || len(quotedProperties) != 6 {
+				t.Fatalf("quoted_message properties = %#v, want six context fields", quoted["properties"])
+			}
+			forward := props["forward_messages"].(map[string]any)
+			if forward["type"] != "array" {
+				t.Fatalf("forward_messages schema = %#v, want array", forward)
+			}
+			items, ok := forward["items"].(map[string]any)
+			if !ok || items["type"] != "object" {
+				t.Fatalf("forward_messages items = %#v, want object", forward["items"])
 			}
 		})
 	}
@@ -268,6 +348,15 @@ func TestTargetUIDEventSchemasRequireUserOrOpenDingTalkID(t *testing.T) {
 	}
 	if group.Constraints != nil {
 		t.Fatalf("group constraints = %#v, want none", group.Constraints)
+	}
+	for _, eventKey := range []string{EventAllSingleChat, EventAllGroupChat} {
+		def, _ := Lookup(eventKey)
+		if len(def.RequiredParams) != 0 {
+			t.Fatalf("%s required_params = %#v, want none", eventKey, def.RequiredParams)
+		}
+		if def.Constraints != nil {
+			t.Fatalf("%s constraints = %#v, want none", eventKey, def.Constraints)
+		}
 	}
 }
 
@@ -353,6 +442,176 @@ func TestActionSchemaDocumentsMatchOutputDTOs(t *testing.T) {
 	}
 }
 
+func TestGroupLifecycleSchemaDocumentsUseConservativePayload(t *testing.T) {
+	wantProperties := []string{"type", "event_id", "timestamp", "subscribe_id", "payload"}
+	for _, eventKey := range []string{EventGroupUpdated, EventGroupDisbanded} {
+		t.Run(eventKey, func(t *testing.T) {
+			def, ok := Lookup(eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", eventKey)
+			}
+			if want := []string{"group"}; !reflect.DeepEqual(def.RequiredParams, want) {
+				t.Fatalf("required_params = %#v, want %#v", def.RequiredParams, want)
+			}
+			doc := BuildSchemaDocumentForMode(def, true)
+			props, ok := doc.Schema["properties"].(map[string]any)
+			if !ok {
+				t.Fatalf("schema.properties = %#v", doc.Schema["properties"])
+			}
+			if len(props) != len(wantProperties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d fields", props, len(wantProperties))
+			}
+			for _, name := range wantProperties {
+				if _, ok := props[name].(map[string]any); !ok {
+					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
+			}
+			payload := props["payload"].(map[string]any)
+			if payload["type"] != "object" || payload["additionalProperties"] != true {
+				t.Fatalf("schema.properties.payload = %#v, want open object", payload)
+			}
+		})
+	}
+}
+
+func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
+	tests := []struct {
+		eventKey   string
+		properties []string
+	}{
+		{
+			eventKey: EventOAApprovalTaskCreated,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "task_id", "title", "status", "create_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalTaskFinished,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "task_id", "title", "status", "result", "create_time",
+				"finish_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalTaskRedirected,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "task_id", "title", "status", "result", "create_time",
+				"finish_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalInstanceStarted,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "title", "status", "create_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalInstanceTerminated,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "title", "status", "create_time", "finish_time", "event_time",
+			},
+		},
+		{
+			eventKey: EventOAApprovalInstanceFinished,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "title", "status", "result", "create_time", "finish_time",
+				"event_time",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.eventKey, func(t *testing.T) {
+			def, ok := Lookup(tt.eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", tt.eventKey)
+			}
+			doc := BuildSchemaDocumentForMode(def, true)
+			if doc.JQRootPath != "." {
+				t.Fatalf("jq_root_path = %q, want .", doc.JQRootPath)
+			}
+			props, ok := doc.Schema["properties"].(map[string]any)
+			if !ok || len(props) != len(tt.properties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d fields", doc.Schema["properties"], len(tt.properties))
+			}
+			for _, name := range tt.properties {
+				if _, ok := props[name].(map[string]any); !ok {
+					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
+			}
+			eventType := props["type"].(map[string]any)
+			if !reflect.DeepEqual(eventType["enum"], []string{tt.eventKey}) {
+				t.Fatalf("schema.properties.type.enum = %#v, want %q", eventType["enum"], tt.eventKey)
+			}
+			if _, ok := props["payload"]; ok {
+				t.Fatalf("schema.properties exposed generic payload: %#v", props)
+			}
+			for _, name := range []string{"timestamp", "create_time", "finish_time", "event_time"} {
+				property, exists := props[name].(map[string]any)
+				if !exists {
+					continue
+				}
+				if property["type"] != "integer" || property["format"] != "timestamp_ms" {
+					t.Fatalf("schema.properties.%s = %#v, want timestamp_ms integer", name, property)
+				}
+			}
+		})
+	}
+}
+
+func TestGroupMemberSchemaDocumentsMatchOutputDTO(t *testing.T) {
+	wantProperties := []string{
+		"type", "event_id", "timestamp", "subscribe_id", "conversation_id",
+		"operator", "operator_open_dingtalk_id", "members", "event_time",
+	}
+	for _, eventKey := range []string{EventGroupMemberAdded, EventGroupMemberExited} {
+		t.Run(eventKey, func(t *testing.T) {
+			def, ok := Lookup(eventKey)
+			if !ok {
+				t.Fatalf("Lookup(%q) failed", eventKey)
+			}
+			if want := []string{"group"}; !reflect.DeepEqual(def.RequiredParams, want) {
+				t.Fatalf("required_params = %#v, want %#v", def.RequiredParams, want)
+			}
+			doc := BuildSchemaDocumentForMode(def, true)
+			props, ok := doc.Schema["properties"].(map[string]any)
+			if !ok || len(props) != len(wantProperties) {
+				t.Fatalf("schema.properties = %#v, want exactly %d fields", doc.Schema["properties"], len(wantProperties))
+			}
+			for _, name := range wantProperties {
+				if _, ok := props[name].(map[string]any); !ok {
+					t.Fatalf("schema.properties.%s = %#v, want object", name, props[name])
+				}
+			}
+			members := props["members"].(map[string]any)
+			if members["type"] != "array" {
+				t.Fatalf("schema.properties.members = %#v, want array", members)
+			}
+			items, ok := members["items"].(map[string]any)
+			if !ok || items["type"] != "object" {
+				t.Fatalf("schema.properties.members.items = %#v, want object", members["items"])
+			}
+			memberProps, ok := items["properties"].(map[string]any)
+			if !ok || len(memberProps) != 2 {
+				t.Fatalf("schema.properties.members.items.properties = %#v", items["properties"])
+			}
+			for _, name := range []string{"nick", "open_dingtalk_id"} {
+				if _, ok := memberProps[name].(map[string]any); !ok {
+					t.Fatalf("member schema missing %q: %#v", name, memberProps)
+				}
+			}
+			if _, ok := props["payload"]; ok {
+				t.Fatalf("group member schema exposed generic payload: %#v", props)
+			}
+		})
+	}
+}
+
 func TestBuildRuleParamMention(t *testing.T) {
 	rule, param, err := BuildRuleParam(EventMention, RuleOptions{})
 	if err != nil {
@@ -363,6 +622,38 @@ func TestBuildRuleParamMention(t *testing.T) {
 	}
 	if len(param) != 0 {
 		t.Fatalf("param = %#v, want empty map", param)
+	}
+}
+
+func TestBuildRuleParamAllEvents(t *testing.T) {
+	for _, eventKey := range []string{
+		EventAllSingleChat,
+		EventAllGroupChat,
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
+	} {
+		t.Run(eventKey, func(t *testing.T) {
+			rule, param, err := BuildRuleParam(eventKey, RuleOptions{})
+			if err != nil {
+				t.Fatalf("BuildRuleParam() error = %v", err)
+			}
+			if rule != "all" || len(param) != 0 {
+				t.Fatalf("rule = %q, param = %#v; want all and empty map", rule, param)
+			}
+			for name, opts := range map[string]RuleOptions{
+				"user":             {UserID: "staff-1"},
+				"open-dingtalk-id": {OpenDingTalkID: "open-user-1"},
+				"group":            {GroupID: "cid-1"},
+			} {
+				if _, _, err := BuildRuleParam(eventKey, opts); err == nil || !strings.Contains(err.Error(), "--"+name+" is not supported for "+eventKey) {
+					t.Fatalf("%s error = %v, want unsupported flag", name, err)
+				}
+			}
+		})
 	}
 }
 
@@ -469,7 +760,7 @@ func TestBuildRuleParamActionEvents(t *testing.T) {
 		})
 	}
 
-	for _, eventKey := range []string{EventReadGroup, EventRecallGroup, EventReactionGroup} {
+	for _, eventKey := range []string{EventReadGroup, EventRecallGroup, EventReactionGroup, EventGroupUpdated, EventGroupMemberAdded, EventGroupMemberExited, EventGroupDisbanded} {
 		t.Run(eventKey, func(t *testing.T) {
 			if _, _, err := BuildRuleParam(eventKey, RuleOptions{}); err == nil || !strings.Contains(err.Error(), "--group is required for "+eventKey) {
 				t.Fatalf("missing group error = %v", err)
@@ -530,6 +821,37 @@ func TestBuildFilterQueryAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(canonical, "payload.body.openConversationId") || strings.Contains(canonical, "conversation_id") {
 		t.Fatalf("canonical = %s, want conversation_id alias mapped to payload.body.openConversationId", canonical)
+	}
+}
+
+func TestSupportsMessageFilter(t *testing.T) {
+	for _, eventKey := range []string{
+		EventMention,
+		EventSingleChat,
+		EventInChat,
+		EventFromUser,
+		EventAllSingleChat,
+		EventAllGroupChat,
+	} {
+		if !SupportsMessageFilter(eventKey) {
+			t.Fatalf("SupportsMessageFilter(%q) = false, want true", eventKey)
+		}
+	}
+	for _, eventKey := range []string{
+		EventReadO2O,
+		EventReactionGroup,
+		EventGroupUpdated,
+		EventOAApprovalTaskCreated,
+		EventOAApprovalTaskFinished,
+		EventOAApprovalTaskRedirected,
+		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceTerminated,
+		EventOAApprovalInstanceFinished,
+		"unknown_event",
+	} {
+		if SupportsMessageFilter(eventKey) {
+			t.Fatalf("SupportsMessageFilter(%q) = true, want false", eventKey)
+		}
 	}
 }
 

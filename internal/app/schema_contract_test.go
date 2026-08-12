@@ -45,7 +45,7 @@ func fullSchemaSnapshotForTest(t testing.TB) cli.SchemaCatalogSnapshot {
 	return fullSchemaSnapshot
 }
 
-func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
+func TestDeliverySchemaContractMapsToExecutableTree(t *testing.T) {
 	root := NewRootCommand()
 	effective, err := cli.BuildEffectiveCommandRegistry(root)
 	if err != nil {
@@ -63,7 +63,7 @@ func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"schema", "--all", "--format", "json"})
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute embedded schema --all: %v; stderr=%s", err, stderr.String())
+		t.Fatalf("execute delivery schema --all: %v; stderr=%s", err, stderr.String())
 	}
 	var payload struct {
 		Products []struct {
@@ -73,7 +73,7 @@ func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 		} `json:"products"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
-		t.Fatalf("decode embedded schema --all: %v", err)
+		t.Fatalf("decode delivery schema --all: %v", err)
 	}
 	actual := make(map[string]bool)
 	var duplicates []string
@@ -81,7 +81,7 @@ func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 		for _, tool := range product.Tools {
 			canonical := strings.TrimSpace(tool.CanonicalPath)
 			if canonical == "" {
-				t.Fatal("embedded schema --all contains an empty canonical path")
+				t.Fatal("delivery schema --all contains an empty canonical path")
 			}
 			if actual[canonical] {
 				duplicates = append(duplicates, canonical)
@@ -91,7 +91,7 @@ func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 	}
 	if len(duplicates) > 0 {
 		sort.Strings(duplicates)
-		t.Fatalf("embedded schema --all contains duplicate canonicals: %v", duplicates)
+		t.Fatalf("delivery schema --all contains duplicate canonicals: %v", duplicates)
 	}
 
 	var missing, extra []string
@@ -108,16 +108,16 @@ func TestEmbeddedSchemaContractMapsToExecutableTree(t *testing.T) {
 	if len(missing) > 0 || len(extra) > 0 {
 		sort.Strings(missing)
 		sort.Strings(extra)
-		t.Fatalf("embedded Schema canonical set differs from EffectiveCommandRegistry: missing=%v extra=%v", missing, extra)
+		t.Fatalf("runtime-assembled Schema canonical set differs from EffectiveCommandRegistry: missing=%v extra=%v", missing, extra)
 	}
 }
 
 func TestGeneratedSchemaContractMapsToExecutableTree(t *testing.T) {
 	root := NewRootCommand()
 	snapshot := fullSchemaSnapshotForTest(t)
-	bindings, err := cli.EmbeddedSchemaParameterBindings()
+	bindings, err := cli.LoadSchemaParameterBindings()
 	if err != nil {
-		t.Fatalf("EmbeddedSchemaParameterBindings() error = %v", err)
+		t.Fatalf("LoadSchemaParameterBindings() error = %v", err)
 	}
 	if len(snapshot.Tools) == 0 {
 		t.Fatal("generated Schema Catalog contains no tools")
@@ -370,9 +370,6 @@ func schemaContractStringSlice(value any) []string {
 // delivered set must always equal the public EffectiveCommandRegistry set.
 func schemaContractPayloadForBoundCanonicals(t *testing.T, root *cobra.Command, canonicals ...string) cli.SchemaSnapshotPayload {
 	t.Helper()
-	if _, err := cli.ApplyEmbeddedManualSchemaHints(root); err != nil {
-		t.Fatalf("apply manual Schema hints: %v", err)
-	}
 	effective, err := cli.BuildEffectiveCommandRegistry(root)
 	if err != nil {
 		t.Fatalf("build effective CommandRegistry: %v", err)
@@ -458,14 +455,14 @@ func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
 		"sheet.delete_pivot_table": "medium",
 	}
 	wantSources := map[string]string{
-		"attendance.class_create":  "internal/cli/schema_hints/metadata/attendance.json",
-		"attendance.class_update":  "internal/cli/schema_hints/metadata/attendance.json",
-		"doc.delete_comment":       "internal/cli/schema_hints/metadata/doc.json",
-		"doc.version_revert":       "internal/cli/schema_hints/metadata/doc.json",
-		"drive.publish_set":        "internal/cli/schema_hints/metadata/drive.json",
-		"drive.publish_unset":      "internal/cli/schema_hints/metadata/drive.json",
-		"sheet.chart_delete":       "internal/cli/schema_hints/metadata/sheet.json",
-		"sheet.delete_pivot_table": "internal/cli/schema_hints/metadata/sheet.json",
+		"attendance.class_create":  "corecmd.contract",
+		"attendance.class_update":  "corecmd.contract",
+		"doc.delete_comment":       "corecmd.contract",
+		"doc.version_revert":       "corecmd.contract",
+		"drive.publish_set":        "corecmd.contract",
+		"drive.publish_unset":      "corecmd.contract",
+		"sheet.chart_delete":       "corecmd.contract",
+		"sheet.delete_pivot_table": "corecmd.contract",
 	}
 	canonicals := make([]string, 0, len(wantEffects))
 	for canonical := range wantEffects {

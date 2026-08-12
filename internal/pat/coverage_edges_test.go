@@ -18,6 +18,21 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
+func TestOverallCoverageGapBatchGrantConfirmation(t *testing.T) {
+	cmd := &cobra.Command{Use: "chmod"}
+	cmd.Flags().Bool("yes", false, "")
+	if err := requireBatchGrantConfirmation(cmd, true, []string{"a", "b"}); err == nil {
+		t.Fatal("batch grant without --yes must fail")
+	}
+	_ = cmd.Flags().Set("yes", "true")
+	if err := requireBatchGrantConfirmation(cmd, true, []string{"a", "b"}); err != nil {
+		t.Fatalf("--yes should allow batch grant: %v", err)
+	}
+	if err := requireBatchGrantConfirmation(cmd, false, []string{"only"}); err != nil {
+		t.Fatalf("single-scope non-plan grant should pass: %v", err)
+	}
+}
+
 type patEdgeCaller struct {
 	results []*edition.ToolResult
 	errs    []error
@@ -442,8 +457,21 @@ func TestCrossPlatformCoverageChmodCommandRemainingBranches(t *testing.T) {
 
 	run := func(c edition.ToolCaller, args ...string) error {
 		command := newChmodCommand(c)
-		command.SetArgs(args)
-		return command.Execute()
+		root := &cobra.Command{Use: "dws"}
+		root.PersistentFlags().Bool("yes", false, "")
+		root.PersistentFlags().Bool("dry-run", false, "")
+		root.AddCommand(command)
+		// Catalog user_required: pass --dry-run when the caller is dry-run,
+		// otherwise --yes so ConfirmSafety does not mask the branch under test.
+		if c != nil && c.DryRun() {
+			args = append([]string{"chmod", "--dry-run"}, args...)
+		} else {
+			args = append([]string{"chmod", "--yes"}, args...)
+		}
+		root.SetArgs(args)
+		root.SilenceErrors = true
+		root.SilenceUsage = true
+		return root.Execute()
 	}
 	dryError := &patEdgeCaller{dryRun: true, errs: []error{errors.New("plan failed")}}
 	if err := run(dryError, "--recommend"); err == nil {
@@ -557,5 +585,43 @@ func TestCrossPlatformCoverageLegacySchemaMismatchWithoutValidationKeyword(t *te
 	legacy := map[string]any{"scope": "a"}
 	if isLegacyGrantSchemaMismatchError(errors.New("scope problem"), canonical, legacy) {
 		t.Fatal("ambiguous scope error triggered legacy fallback")
+	}
+}
+
+func TestCrossPlatformCoverageChmodValidateRequiresTargetSelection(t *testing.T) {
+	// The declared Validate hook mirrors the cobra Args gate for callers that
+	// bypass Args (the contract RunE pipeline runs Validate first): with no
+	// positional scope, no product/domain expansion, and no --recommend, the
+	// command must fail closed before any tool call.
+	cmd := newChmodCommand(&patEdgeCaller{})
+	err := cmd.RunE(cmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "accepts 1 arg(s), received 0") {
+		t.Fatalf("chmod validate without targets err = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageChmodValidateGrantTypeAndSessionRules(t *testing.T) {
+	// Pure string validation in the declared Validate hook: platform-neutral,
+	// fails closed before any tool call on both Windows and macOS.
+	cmd := newChmodCommand(&patEdgeCaller{})
+	if err := cmd.Flags().Set("grant-type", "forever"); err != nil {
+		t.Fatal(err)
+	}
+	err := cmd.RunE(cmd, []string{"mail.mail:read"})
+	if err == nil || !strings.Contains(err.Error(), `invalid --grant-type "forever"`) {
+		t.Fatalf("chmod invalid grant-type err = %v", err)
+	}
+
+	// session grants need an explicit --session-id when no session env is set.
+	t.Setenv("DINGTALK_SESSION_ID", "")
+	t.Setenv("DWS_SESSION_ID", "")
+	t.Setenv("REWIND_SESSION_ID", "")
+	cmd = newChmodCommand(&patEdgeCaller{})
+	if err := cmd.Flags().Set("grant-type", "session"); err != nil {
+		t.Fatal(err)
+	}
+	err = cmd.RunE(cmd, []string{"mail.mail:read"})
+	if err == nil || !strings.Contains(err.Error(), "--session-id is required when --grant-type is session") {
+		t.Fatalf("chmod session without session-id err = %v", err)
 	}
 }

@@ -1,0 +1,714 @@
+{
+  "version": 1,
+  "service": "chat",
+  "default_availability": "available",
+  "shortcuts": {
+    "+bot-search": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "仅绑定并投影当前用户创建的机器人搜索；无跨工具编排，默认由 bot Schema leaf 承担。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+bot-find": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "仅绑定并投影全部可用机器人搜索；底层 leaf 已接受关键词和分页参数。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+flag-create": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把 Lark Flag 意图忠实映射到 DingTalk message favorite，并为同会话最多 10 条消息提供逐项成功/失败 ledger；不改写 Pin、会话置顶或 feed-layer thread flag。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+flag-cancel": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "批量取消当前用户的 DingTalk message favorite，并逐项报告失败；不伪造 Lark 的双层 best-effort 取消。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+flag-list": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "先创建真实 message favorite，再分别通过 native leaf 与 Shortcut 读取非空列表；两层返回相同收藏项且包含新建 Fixture，已完成非空结果证明。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+feed-group-query-item": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "读取 DingTalk 会话分组后按多个 openConversationId 本地精确过滤；只有完整响应才判定 notFound，若下层仍有后续页但无可执行游标则返回 unresolved 与失败 ledger，且不伪造 Lark deleted_items。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-info": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "统一群聊 openConversationId 与单聊 openDingTalkId 两种目标，并路由到对应读取工具。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-set-top": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把会话置顶扩展为最多 10 个目标的逐项写入，统一输出 requested/succeeded/failed ledger。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-mute": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "会话免打扰是一对一状态写入；无名称解析、编排或恢复增益。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-mute-at-all": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "在真实双成员临时群中分别调用 native 与 Shortcut，两层均由 im/update_at_all_notification_off 返回 server_error_code=1002（系统繁忙）；路由和参数一致，但下层未恢复前继续隐藏。",
+      "risk": "write",
+      "availability": "unavailable",
+      "public": false,
+      "reviewed": true
+    },
+    "+conversation-mute-red-envelope": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "在真实双成员临时群中分别调用 native 与 Shortcut，两层均由 im/update_red_env_notification_off 返回 server_error_code=1002（系统繁忙）；路由和参数一致，但下层未恢复前继续隐藏。",
+      "risk": "write",
+      "availability": "unavailable",
+      "public": false,
+      "reviewed": true
+    },
+    "+conversation-mark-unread": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "标记未读是一对一会话操作；Shortcut 未增加额外语义编排。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-clear-red-point": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "清除单会话红点是一对一操作；默认由 Runtime Schema leaf 精确选择。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-clear-all-red-point": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "全局清红点是一对一批量状态写入；高影响意图应直接选择带安全事实的 leaf。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-list": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "会话分页列表只做字段投影；底层 leaf 已提供 limit/cursor/exclude-muted。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-list-top": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "将下层 singleChat 规范化为 Agent 友好的 group/direct 类型，并支持 --type all|group|direct 本地过滤。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-clear-messages": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "清空聊天记录不可逆且是一对一操作；应由 Runtime Schema leaf 的高风险门禁承载。",
+      "risk": "high-risk-write",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-mark-read": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "消息已读标记是一对一写入；无额外解析或编排。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+conversation-hide": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "隐藏会话是一对一写入；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+category-list": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "会话分组列表只做字段投影；底层 leaf 已可直接读取。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+category-list-conversations": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "按分组列会话是一对一分页读取；无跨工具编排。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+category-create": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "创建会话分组是一对一写入；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+category-delete": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "删除会话分组是一对一高风险写入；应直接使用带删除确认的 leaf。",
+      "risk": "high-risk-write",
+      "public": true,
+      "reviewed": true
+    },
+    "+category-rename": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "重命名会话分组是一对一写入；无额外语义增益。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+category-add-conversation": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "将会话加入分组是一对一关系写入；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+category-remove-conversation": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "将会话移出分组是一对一关系写入；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-search": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "群关键词搜索只做字段投影；底层 search_groups leaf 已提供分页。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-create": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "自动解析当前用户并加入初始成员以满足群主约束，规范化创建结果，同时明确不支持 Lark-only owner/description/bot/visibility 语义。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-update": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "只发布 DWS 与 lark-cli 共有的群名称更新子集；不接受或静默忽略 description。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-members-get": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "按成员 ID 批量取详情是一对一读取；默认由 Runtime Schema leaf 承担。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-transfer-owner": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "转让群主是一对一高影响治理操作；应直接使用精确 leaf 与安全确认。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-invite-url": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "群邀请链接是一对一读取；Shortcut 未增加生命周期或分享编排。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-quit": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "退出群聊是一对一成员关系写入；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-update-icon": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新群头像是一对一媒体 ID 写入；尚无本地媒体解析编排。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-update-settings": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "群 settingKey/status 是精确原子设置；Shortcut 未增加语义枚举。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-dismiss": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "解散群聊不可逆且是一对一操作；应由 Runtime Schema leaf 的高风险门禁承载。",
+      "risk": "high-risk-write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-set-history": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "新成员历史可见范围是一对一群设置；无额外编排。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-update-nick": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新本人群昵称是一对一写入；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-update-alias": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新本人群备注是一对一写入；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-list": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "对齐 lark-cli +chat-list：默认仅群聊，支持 --types group/p2p、--exclude-muted、page-size/page-token 别名，并投影 openConversationId/name/conversationType；不宣称 sort 或 bot 身份 p2p 剥离。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-list-mine": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "群主/管理员群列表只做字段投影；精确角色筛选由底层 leaf 提供。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-list-all": {
+      "disposition": "alias_internal",
+      "semantic_delta": "与 +my-groups 重复；保留旧命令兼容，默认入口使用带类型过滤和完整性语义的 +my-groups。",
+      "risk": "read",
+      "primary": "+my-groups",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-list-join-requests": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "入群申请列表是一对一分页读取；无额外审批编排。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-audit-join": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "审批单条入群申请是一对一治理写入；应直接使用带动作枚举的 leaf。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-get-by-id": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "按数字群号取群信息是一对一读取；与 openConversationId 不可互换。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-add-bot": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人入群是一对一治理写入；尚无按名称解析机器人编排。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-bots": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "群机器人列表只做字段投影；完整成员视图使用 +chat-members-list。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-remove-bot": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "移除群机器人是一对一高风险治理写入；默认由 leaf 承担。",
+      "risk": "high-risk-write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-set-admin": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "管理员设置是一对一群治理操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-mute": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "全员禁言是一对一群治理操作；默认由 leaf 精确路由。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-mute-member": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "成员禁言是一对一群治理操作；默认由 leaf 精确路由。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-role-list": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "群身份列表是一对一读取；无额外成员富化。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-role-add": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "添加群身份是一对一写入；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-role-update": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新群身份是一对一写入；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-role-remove": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "删除群身份是一对一高风险写入；默认由带确认的 leaf 承担。",
+      "risk": "high-risk-write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-role-set-user": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "覆盖成员全部群身份是一对一高影响写入；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-role-remove-user": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "移除成员指定群身份是一对一写入；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-role-query-user": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "查询成员群身份是一对一读取；无额外语义编排。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-send-by-bot": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人群发 Markdown 是一对一身份明确的发送；默认由 bot leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-batch-send-by-bot": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人批量单聊是一对一批量发送；默认由 bot leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-send-by-webhook": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "Webhook 发送是一对一 token 目标写入；默认由 bot leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-reply": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "提供当前用户纯文本引用回复的稳定入口、幂等键和 AI 标记，并通过 mget 自动补全原发送者；明确不支持 bot、富媒体或 thread writer。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-send": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "用统一 identity 参数路由 current-user、bot、webhook 发送；current-user 支持文本、Markdown、mediaId 图片、安全相对路径本地文件上传、userId 姓名解析与幂等键，bot/webhook 仍只暴露下层真实支持的文本/Markdown 能力。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-recall": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "当前用户撤回是一对一消息操作；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-recall-by-bot": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人群消息撤回是一对一身份专用操作；默认由 bot leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-batch-recall-by-bot": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "机器人单聊批量撤回是一对一批量操作；默认由 bot leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-list": {
+      "disposition": "alias_internal",
+      "semantic_delta": "群历史读取与 +chat-messages 重复；保留旧参数兼容，默认入口使用统一群/单聊投影。",
+      "risk": "read",
+      "primary": "+chat-messages",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-list-direct": {
+      "disposition": "alias_internal",
+      "semantic_delta": "单聊历史读取与 +chat-messages 重复；保留 user/openDingTalkId 兼容，默认入口使用统一历史投影。",
+      "risk": "read",
+      "primary": "+chat-messages",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-list-unread-conversations": {
+      "disposition": "alias_internal",
+      "semantic_delta": "未读会话列表与 +unread-chats 重复；保留旧入口兼容，默认使用稳定投影入口。",
+      "risk": "read",
+      "primary": "+unread-chats",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-mget": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按最多 50 个消息 ID 批量读取并输出稳定消息投影、reaction 与 resourceRefs；可用 --download-resources 统一下载 mediaId 与 fileId，复用受信任下载域、相对路径、无覆盖和原子落盘防护，对重复资源去重并逐资源返回下载失败 ledger；安全本地下载沿用 read/not_required 契约，不产生非交互确认盲区。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-query-send-status": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "发送状态查询是一对一读取；等待/轮询送达尚未形成语义编排。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-read-status": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "已读状态查询是一对一读取；默认由 Runtime Schema leaf 承担。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-add-emoji": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "添加 emoji reaction 是精确原子操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-remove-emoji": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "移除 emoji reaction 是精确原子操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-add-text-emotion": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "添加文字表情是精确原子操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-remove-text-emotion": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "移除文字表情是精确原子操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-create-text-emotion": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "创建文字表情模板是一对一写入；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-send-card": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "既可只创建流式卡片，也可在一次调用中创建、提取 bizId、写入内容并设置流式状态；dry-run 输出两步执行计划，更新失败时保留已创建的 bizId。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-update-card": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新流式卡片是一对一写入；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-resource-url": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "仅换取临时资源 URL；尚未提供安全落盘、去重和局部失败隔离，不作为默认 Semantic Shortcut。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-resource-download": {
+      "disposition": "primary_smart",
+      "semantic_delta": "统一承接消息 mediaId 与钉盘 fileId：分别复用 IM 临时资源 URL 和 drive.download_file，只允许钉钉/OSS HTTPS 下载域且重定向复验并隔离跨域凭据，再通过工作目录内安全路径、默认不覆盖、临时文件下载和原子发布输出结构化结果。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-forward": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "转发单条消息是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-combine-forward": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "使用两个真实群、两条非空源消息分别完成 native leaf 与 Shortcut 双层回归，并以 mget 回读确认两条目标合并消息均实际存在且包含完整 forwarded 子消息。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-forward-topic": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "话题转发是一对一消息操作；默认由 leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-set-pin": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "Pin 消息是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-unset-pin": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "取消 Pin 是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-list-pin": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "Pin 列表只做字段投影；无额外语义编排。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-set-top": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "置顶消息是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+messages-unset-top": {
+      "disposition": "schema_leaf",
+      "semantic_delta": "取消置顶消息是一对一操作；默认由 Runtime Schema leaf 承担。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+at-me": {
+      "disposition": "primary_smart",
+      "semantic_delta": "自动构造时间窗，分页拉取跨会话 @我 消息，并保留身份、引用、reaction、resourceRefs 与完整性；可选对资源去重后安全落盘并返回逐项失败 ledger。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+broadcast": {
+      "disposition": "primary_smart",
+      "semantic_delta": "按多人姓名逐一解析目标、拒绝歧义、生成可执行 dry-run 计划并隔离单人发送失败。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-messages": {
+      "disposition": "primary_smart",
+      "semantic_delta": "统一群聊与两类单聊目标；省略时间时自动以当前时间向前读取最近消息，并输出稳定消息身份、引用、reaction、resourceRefs、时间边界翻页和可读正文；可选对列表内资源去重后安全落盘并返回逐项失败 ledger。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+dm": {
+      "disposition": "primary_smart",
+      "semantic_delta": "把自然语言姓名安全解析为唯一用户，再以当前用户身份发送并提供真实 dry-run 计划。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+group-members": {
+      "disposition": "alias_internal",
+      "semantic_delta": "按群名列用户成员已由 +chat-members-list 覆盖；保留旧入口兼容。",
+      "risk": "read",
+      "primary": "+chat-members-list",
+      "public": true,
+      "reviewed": true
+    },
+    "+chat-members-list": {
+      "disposition": "primary_smart",
+      "semantic_delta": "支持群名唯一解析或直接会话 ID，组合用户与机器人两个下层工具并分桶输出完整性。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+my-groups": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "提供稳定群字段、本地类型过滤和可继续的分页完整性，替代重复群列表入口。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+search-msg": {
+      "disposition": "primary_smart",
+      "semantic_delta": "统一关键词、发送者、@对象、会话、消息类型和机器人来源过滤；展开下层按会话分组的 conversationMessagesList，支持精确时间窗、page-all、50 条一组 mget 富化，可选安全下载命中消息资源，并以 failure ledger 显式报告截断、富化或下载失败。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+send-to-group": {
+      "disposition": "primary_smart",
+      "semantic_delta": "按群名解析唯一会话、拒绝歧义并生成当前用户发送的真实 dry-run 计划。",
+      "risk": "write",
+      "public": true,
+      "reviewed": true
+    },
+    "+thread-replies": {
+      "disposition": "primary_smart",
+      "semantic_delta": "接受话题主消息 ID 并通过只读消息详情自动解析 conversation/thread，也接受显式 group + threadId（兼容 topicId）；拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文，使用下层毫秒级 nextCursor 安全分页以避免同秒回复漏读，并支持全量结果 asc/desc；可选对回复资源去重后安全落盘并返回逐项失败 ledger。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+unread-chats": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把未读会话投影为会话身份、名称和未读计数，并保留下层分页完整性。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    }
+  }
+}

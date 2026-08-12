@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -39,8 +40,7 @@ func (*reportTestCaller) JQ() string       { return "" }
 
 func installReportTestDeps(t *testing.T, caller *reportTestCaller) (*bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
-	previous := deps
-	t.Cleanup(func() { deps = previous })
+	testseam.Protect(t, &deps)
 	InitDeps(caller)
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}

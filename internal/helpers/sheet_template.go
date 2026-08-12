@@ -3,6 +3,7 @@ package helpers
 import (
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -36,6 +37,33 @@ func newSheetTemplateCmd() *cobra.Command {
 			return callMCPToolOnServer("sheet", "list_sheet_templates", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(templateListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "template_list",
+				CanonicalPath:  "sheet.template_list",
+				CLIPath:        "sheet template list",
+				PrimaryCLIPath: "sheet template list",
+			},
+			Description: "分页列出可用表格模板。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "分页列出可用表格模板。",
+				UseWhen:      []string{"浏览可用表格模板以便 apply 时"},
+				AvoidWhen:    []string{"按关键词搜索用 template search；应用模板建新文档用 template apply"},
+				Examples:     []string{"dws sheet template list --limit 20"},
+			},
+		},
+	})
 	templateListCmd.Flags().String("source", "", "模板来源: MY(我的模版)/PUBLIC(公开模版)，不传默认 MY")
 	templateListCmd.Flags().Int("limit", 0, "返回数量上限")
 	templateListCmd.Flags().String("cursor", "", "分页游标")
@@ -70,6 +98,33 @@ func newSheetTemplateCmd() *cobra.Command {
 			return callMCPToolOnServer("sheet", "search_sheet_templates", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(templateSearchCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "template_search",
+				CanonicalPath:  "sheet.template_search",
+				CLIPath:        "sheet template search",
+				PrimaryCLIPath: "sheet template search",
+			},
+			Description: "按关键词搜索表格模板。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按关键词搜索表格模板。",
+				UseWhen:      []string{"用户说找某个主题的表格模板时"},
+				AvoidWhen:    []string{"无关键词浏览用 template list；应用用 template apply"},
+				Examples:     []string{"dws sheet template search --query \"销售\""},
+			},
+		},
+	})
 	templateSearchCmd.Flags().String("query", "", "搜索关键词 (必填)")
 	templateSearchCmd.Flags().String("keyword", "", "--query 的别名")
 	_ = templateSearchCmd.Flags().MarkHidden("keyword")
@@ -105,6 +160,33 @@ func newSheetTemplateCmd() *cobra.Command {
 			return callMCPToolOnServer("sheet", "apply_sheet_template", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(templateApplyCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "template_apply",
+				CanonicalPath:  "sheet.template_apply",
+				CLIPath:        "sheet template apply",
+				PrimaryCLIPath: "sheet template apply",
+			},
+			Description: "应用模板创建新的电子表格文档。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "应用模板创建新的电子表格文档。",
+				UseWhen:      []string{"已有 templateId，需要据此生成新表格文档时"},
+				AvoidWhen:    []string{"空白新建用 sheet create；先搜模板用 search/list"},
+				Examples:     []string{"dws sheet template apply --template-id <TEMPLATE_ID> --name \"新表格\""},
+			},
+		},
+	})
 	templateApplyCmd.Flags().String("template-id", "", "模板 ID (必填)")
 	templateApplyCmd.Flags().String("template", "", "--template-id 的别名")
 	_ = templateApplyCmd.Flags().MarkHidden("template")

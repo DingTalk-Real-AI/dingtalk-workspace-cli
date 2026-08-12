@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -24,18 +25,20 @@ type schemaParameterMappingFlagAudit struct {
 	parameter      map[string]any
 }
 
-func TestEmbeddedCatalogMCPParameterMappingsAreComplete(t *testing.T) {
-	loaded := embeddedSchemaCatalog()
-	if !embeddedSchemaCatalogAvailable() {
-		t.Fatalf("embedded schema Catalog is unavailable: %v", embeddedSchemaCatalogError())
+func TestDeliveryCatalogMCPParameterMappingsAreComplete(t *testing.T) {
+	loaded := mustDeliverySchemaCatalogMaps(t)
+	if !deliverySchemaCatalogAvailable() {
+		t.Fatalf("delivery schema Catalog is unavailable: %v", deliverySchemaCatalogError())
 	}
 	bindings, err := runtimeSchemaParameterBindingData()
 	if err != nil {
 		t.Fatalf("runtimeSchemaParameterBindingData() error = %v", err)
 	}
+	// Pinned MCP metadata is retired. Audit declaration/exclusion structure
+	// only — no property∈pin resolution.
 	problems := auditSchemaParameterMappings(
 		loaded.Snapshot.Tools,
-		runtimeMCPMetadata(),
+		emptyPinnedMCPMetadata(),
 		bindings,
 	)
 	if len(problems) > 0 {
@@ -43,10 +46,10 @@ func TestEmbeddedCatalogMCPParameterMappingsAreComplete(t *testing.T) {
 	}
 }
 
-func TestEmbeddedCatalogDoesNotProjectHardRequiredFlagsAsOptional(t *testing.T) {
-	loaded := embeddedSchemaCatalog()
-	if !embeddedSchemaCatalogAvailable() {
-		t.Fatalf("embedded schema Catalog is unavailable: %v", embeddedSchemaCatalogError())
+func TestDeliveryCatalogDoesNotProjectHardRequiredFlagsAsOptional(t *testing.T) {
+	loaded := mustDeliverySchemaCatalogMaps(t)
+	if !deliverySchemaCatalogAvailable() {
+		t.Fatalf("delivery schema Catalog is unavailable: %v", deliverySchemaCatalogError())
 	}
 	var problems []string
 	for canonical, tool := range loaded.Snapshot.Tools {
@@ -64,7 +67,7 @@ func TestEmbeddedCatalogDoesNotProjectHardRequiredFlagsAsOptional(t *testing.T) 
 	}
 }
 
-func TestEmbeddedCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
+func TestDeliveryCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 	wantReasons := map[string]string{
 		"audit.export":       "命令读取并导出本地审计日志文件，不绑定 pinned MCP RPC",
 		"audit.tail":         "命令读取本地审计日志尾部，不绑定 pinned MCP RPC",
@@ -75,13 +78,13 @@ func TestEmbeddedCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 		"event.schema":       "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
 		"pat.browser_policy": "命令仅操作本地进程或策略文件，不调用 MCP 接口",
 	}
-	loaded := embeddedSchemaCatalog()
-	if !embeddedSchemaCatalogAvailable() {
-		t.Fatalf("embedded schema Catalog is unavailable: %v", embeddedSchemaCatalogError())
+	loaded := mustDeliverySchemaCatalogMaps(t)
+	if !deliverySchemaCatalogAvailable() {
+		t.Fatalf("delivery schema Catalog is unavailable: %v", deliverySchemaCatalogError())
 	}
 	gotLocal := make(map[string]bool)
 	for canonical, tool := range loaded.Snapshot.Tools {
-		if schemaString(tool["interface_mode"]) != InterfaceModeLocal {
+		if schemaString(tool["interface_mode"]) != contract.InterfaceModeLocal {
 			continue
 		}
 		gotLocal[canonical] = true
@@ -90,7 +93,7 @@ func TestEmbeddedCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 			t.Errorf("%s is classified local without a reviewed pure-local implementation", canonical)
 			continue
 		}
-		if schemaString(tool["availability"]) != InterfaceAvailable {
+		if schemaString(tool["availability"]) != contract.InterfaceAvailable {
 			t.Errorf("%s local availability = %q, want available", canonical, schemaString(tool["availability"]))
 		}
 		if tool["interface_ref"] != nil {
@@ -102,11 +105,15 @@ func TestEmbeddedCatalogLocalInterfacesAreExactAndReviewed(t *testing.T) {
 		provenance := schemaMap(tool["field_provenance"])
 		for _, field := range []string{"interface_mode", "availability", "interface_ref", "interface_reason"} {
 			entry := provenance[field]
-			if schemaString(entry["precedence"]) != "reviewed_explicit" {
-				t.Errorf("%s local %s precedence = %q, want reviewed_explicit", canonical, field, schemaString(entry["precedence"]))
+			prec := schemaString(entry["precedence"])
+			// Production leaf interface facts come from ContractFinal
+			// (DeclareLeafMetadata / Schema). metadata/*.json shells keep
+			// tools:{} and must not win reviewed_explicit for these fields.
+			if prec != "contract_final" {
+				t.Errorf("%s local %s precedence = %q, want contract_final", canonical, field, prec)
 			}
-			if source := schemaString(entry["source"]); !strings.Contains(source, "internal/cli/schema_hints/metadata/") {
-				t.Errorf("%s local %s source = %q, want metadata/", canonical, field, source)
+			if source := schemaString(entry["source"]); source != "corecmd.contract" {
+				t.Errorf("%s local %s source = %q, want corecmd.contract", canonical, field, source)
 			}
 		}
 	}
@@ -203,14 +210,14 @@ func TestSchemaParameterMappingAuditExclusionRules(t *testing.T) {
 				"parameters":     map[string]any{"selector": parameter},
 			},
 		}
-		if mode == InterfaceModeComposite {
+		if mode == contract.InterfaceModeComposite {
 			tools["sample.read"]["interface_ref"] = nil
 			tools["sample.read"]["interface_reason"] = "Reviewed composite fixture"
 			tools["sample.read"]["field_provenance"] = map[string]any{
-				"interface_mode":   map[string]any{"precedence": "reviewed_explicit"},
-				"availability":     map[string]any{"precedence": "reviewed_explicit"},
-				"interface_ref":    map[string]any{"precedence": "reviewed_explicit"},
-				"interface_reason": map[string]any{"precedence": "reviewed_explicit"},
+				"interface_mode":   map[string]any{"precedence": "contract_final"},
+				"availability":     map[string]any{"precedence": "contract_final"},
+				"interface_ref":    map[string]any{"precedence": "contract_final"},
+				"interface_reason": map[string]any{"precedence": "contract_final"},
 			}
 		}
 		return tools
@@ -225,32 +232,32 @@ func TestSchemaParameterMappingAuditExclusionRules(t *testing.T) {
 	}{
 		{
 			name:     "reviewed MCP mismatch",
-			tools:    tool(InterfaceModeMCP, excludedParameter("cliOnly")),
+			tools:    tool(contract.InterfaceModeMCP, excludedParameter("cliOnly")),
 			metadata: directMetadata,
 			snapshot: schemaParameterBindingSnapshot{MappingExclusions: map[string]string{key: "CLI selector is resolved before the RPC"}},
 		},
 		{
 			name:        "redundant MCP exclusion",
-			tools:       tool(InterfaceModeMCP, excludedParameter("request.child")),
+			tools:       tool(contract.InterfaceModeMCP, excludedParameter("request.child")),
 			metadata:    directMetadata,
 			snapshot:    schemaParameterBindingSnapshot{MappingExclusions: map[string]string{key: "stale"}},
 			wantProblem: "already resolves",
 		},
 		{
 			name:     "local selector",
-			tools:    tool(InterfaceModeLocal, excludedParameter("selector")),
+			tools:    tool(contract.InterfaceModeLocal, excludedParameter("selector")),
 			metadata: embeddedMCPMetadata{Tools: map[string]embeddedMCPToolMetadata{}},
 			snapshot: schemaParameterBindingSnapshot{MappingExclusions: map[string]string{key: "local planner input"}},
 		},
 		{
 			name:     "composite selector",
-			tools:    tool(InterfaceModeComposite, excludedParameter("selector")),
+			tools:    tool(contract.InterfaceModeComposite, excludedParameter("selector")),
 			metadata: embeddedMCPMetadata{Tools: map[string]embeddedMCPToolMetadata{}},
 			snapshot: schemaParameterBindingSnapshot{MappingExclusions: map[string]string{key: "fans out to multiple calls"}},
 		},
 		{
 			name:     "binding conflict",
-			tools:    tool(InterfaceModeLocal, excludedParameter("selector")),
+			tools:    tool(contract.InterfaceModeLocal, excludedParameter("selector")),
 			metadata: embeddedMCPMetadata{Tools: map[string]embeddedMCPToolMetadata{}},
 			snapshot: schemaParameterBindingSnapshot{
 				MappingExclusions: map[string]string{key: "local planner input"},
@@ -260,7 +267,7 @@ func TestSchemaParameterMappingAuditExclusionRules(t *testing.T) {
 		},
 		{
 			name:        "unknown exact key",
-			tools:       tool(InterfaceModeLocal, excludedParameter("selector")),
+			tools:       tool(contract.InterfaceModeLocal, excludedParameter("selector")),
 			metadata:    embeddedMCPMetadata{Tools: map[string]embeddedMCPToolMetadata{}},
 			snapshot:    schemaParameterBindingSnapshot{MappingExclusions: map[string]string{"sample.read --missing": "not exact"}},
 			wantProblem: "does not reference an exact final Catalog parameter",
@@ -324,7 +331,7 @@ func TestRuntimeSchemaReviewedMappingExclusionSelectsEmptyProperty(t *testing.T)
 	}
 	payload, err := (ParameterSpec{
 		Name: "local-only", Type: "boolean", Description: "test", Property: "",
-		FieldProvenance: map[string]FieldProvenance{"property": provenance},
+		FieldProvenance: map[string]contract.FieldProvenance{"property": provenance},
 	}).ToPayload()
 	if err != nil {
 		t.Fatal(err)
@@ -346,12 +353,21 @@ func TestRuntimeSchemaReviewedMappingExclusionSelectsEmptyProperty(t *testing.T)
 		t.Fatalf("empty exclusion reason error = %v", err)
 	}
 	rank, precedence := runtimeSchemaSourcePriority("reviewed_mapping_exclusion")
-	if rank != runtimeSchemaRankVersionedBinding || precedence != runtimeSchemaPrecedenceMappingExclusion {
+	if rank != runtimeSchemaRankMappingExclusion || precedence != runtimeSchemaPrecedenceMappingExclusion {
 		t.Fatalf("mapping exclusion precedence = %d/%q", rank, precedence)
 	}
-	manualWinner, err := resolveRuntimeSchemaCandidate("property", exclusion, runtimeSchemaManualCandidate("reviewedProperty", true, "reviewed override"))
-	if err != nil || manualWinner.Source != "reviewed_manual_hint" || manualWinner.Value != "reviewedProperty" {
-		t.Fatalf("reviewed manual must remain above mapping exclusion: winner=%#v err=%v", manualWinner, err)
+	// Mapping exclusion (660) outranks ParamDecl.Property native rank (655)
+	// and the generic native_annotation rank (620); retired
+	// reviewed_manual_hint / tool_schema_hint ranks are gone.
+	native := runtimeSchemaStringCandidateAtRank("nativeProperty", "native_annotation", runtimeSchemaRankParamDeclProperty, runtimeSchemaPrecedenceNativeAnnotation)
+	exclusionWinner, err := resolveRuntimeSchemaCandidate("property", exclusion, native)
+	if err != nil || exclusionWinner.Source != "reviewed_mapping_exclusion" || exclusionWinner.Value != "" {
+		t.Fatalf("mapping exclusion must outrank ParamDecl.Property: winner=%#v err=%v", exclusionWinner, err)
+	}
+	boundCandidate := runtimeSchemaStringCandidate("boundProperty", "versioned_parameter_binding")
+	paramDeclWinner, err := resolveRuntimeSchemaCandidate("property", boundCandidate, native)
+	if err != nil || paramDeclWinner.Source != "native_annotation" || paramDeclWinner.Value != "nativeProperty" {
+		t.Fatalf("ParamDecl.Property must outrank versioned binding: winner=%#v err=%v", paramDeclWinner, err)
 	}
 }
 
@@ -373,11 +389,11 @@ func TestReviewedCompositeParameterMappingRejectsInference(t *testing.T) {
 		want      bool
 	}{
 		{name: "versioned binding", parameter: parameter("request.id", "versioned_parameter_binding", ""), want: true},
-		{name: "reviewed manual", parameter: parameter("request.id", "reviewed_manual_hint", "reviewed mapping"), want: true},
-		{name: "reviewed tool hint", parameter: parameter("request.id", "tool_schema_hint", "reviewed mapping"), want: true},
+		{name: "native annotation", parameter: parameter("request.id", "native_annotation", ""), want: true},
 		{name: "mapping exclusion", parameter: parameter("", "reviewed_mapping_exclusion", "reviewed CLI-only input"), want: true},
 		{name: "flag inference", parameter: parameter("requestId", "flag_name_inference", ""), want: false},
-		{name: "unreviewed tool hint", parameter: parameter("request.id", "tool_schema_hint", ""), want: false},
+		{name: "retired tool hint", parameter: parameter("request.id", "tool_schema_hint", "reviewed mapping"), want: false},
+		{name: "retired manual hint", parameter: parameter("request.id", "reviewed_manual_hint", "reviewed mapping"), want: false},
 		{name: "nonempty exclusion", parameter: parameter("request.id", "reviewed_mapping_exclusion", "reviewed"), want: false},
 	}
 	for _, test := range tests {
@@ -394,7 +410,7 @@ func TestRuntimeCommandParameterSpecsPreserveReviewedEmptyPropertyProvenance(t *
 	cmd := &cobra.Command{Use: "query"}
 	cmd.Flags().Bool("all", false, "fetch every page")
 
-	parameters, err := runtimeCommandParameterSpecs(cmd, "aitable.query_records", nil, nil, RuntimeSchemaConstraints{})
+	parameters, err := runtimeCommandParameterSpecs(cmd, "aitable.query_records", RuntimeSchemaConstraints{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,55 +437,26 @@ func TestRuntimeCommandParameterSpecsPreserveReviewedEmptyPropertyProvenance(t *
 	}
 }
 
-func TestSchemaParameterBindingCorrectionsAreReviewed(t *testing.T) {
+func TestSchemaParameterBindingActiveBindingsRemainEmpty(t *testing.T) {
 	snapshot, err := runtimeSchemaParameterBindingData()
 	if err != nil {
 		t.Fatalf("runtimeSchemaParameterBindingData() error = %v", err)
 	}
-	required := map[string]schemaParameterBindingCorrection{
-		"calendar.search_calendar --query": {
-			OldProperty: "calendarName",
-			NewProperty: "query",
-		},
-		"minutes.query_minutes_by_tag_id --limit": {
-			OldProperty: "size",
-			NewProperty: "maxResults",
-		},
+	// Phase 2 retired every active binding (and the corrections ledger) to
+	// ParamDecl.Property. The Go mapping ledger may only carry exclusions /
+	// removals — never a non-empty versioned bindings table.
+	if len(snapshot.Bindings) != 0 {
+		t.Fatalf("active bindings = %d groups, want empty", len(snapshot.Bindings))
 	}
-	flags := finalSchemaCatalogFlagIndex(embeddedSchemaCatalog().Snapshot.Tools)
-	for key, correction := range snapshot.Corrections {
-		flag, exists := flags[key]
-		if !exists {
-			t.Errorf("correction %q does not reference an exact final Catalog parameter", key)
-			continue
-		}
-		oldProperty := strings.TrimSpace(correction.OldProperty)
-		newProperty := strings.TrimSpace(correction.NewProperty)
-		if oldProperty == "" || newProperty == "" || oldProperty == newProperty {
-			t.Errorf("correction %q has invalid old/new properties: %#v", key, correction)
-		}
-		if strings.TrimSpace(correction.Reason) == "" || !correction.Reviewed {
-			t.Errorf("correction %q is not reviewed with a non-empty reason: %#v", key, correction)
-		}
-		if got := snapshot.Bindings[flag.canonical][flag.flagName]; got != newProperty {
-			t.Errorf("correction %q active binding = %q, want new_property %q", key, got, newProperty)
-		}
-	}
-	for key, want := range required {
-		got, exists := snapshot.Corrections[key]
-		if !exists {
-			t.Errorf("required reviewed correction %q is missing", key)
-			continue
-		}
-		if got.OldProperty != want.OldProperty || got.NewProperty != want.NewProperty {
-			t.Errorf("correction %q = %q -> %q, want %q -> %q", key, got.OldProperty, got.NewProperty, want.OldProperty, want.NewProperty)
-		}
+	if len(snapshot.MappingExclusions) == 0 {
+		t.Fatal("mapping exclusions ledger is empty")
 	}
 }
 
 func auditSchemaParameterMappings(tools map[string]map[string]any, metadata embeddedMCPMetadata, snapshot schemaParameterBindingSnapshot) []string {
 	flags := finalSchemaCatalogFlagIndex(tools)
 	problems := make([]string, 0)
+	pinAvailable := len(metadata.Tools) > 0
 
 	canonicals := make([]string, 0, len(tools))
 	for canonical := range tools {
@@ -480,7 +467,7 @@ func auditSchemaParameterMappings(tools map[string]map[string]any, metadata embe
 		tool := tools[canonical]
 		mode := strings.TrimSpace(schemaString(tool["interface_mode"]))
 		availability := strings.TrimSpace(schemaString(tool["availability"]))
-		if mode == InterfaceModeComposite && availability == InterfaceAvailable {
+		if mode == contract.InterfaceModeComposite && availability == contract.InterfaceAvailable {
 			problems = append(problems, auditCompositeSchemaDisposition(canonical, tool)...)
 			if strings.HasPrefix(strings.TrimSpace(schemaString(tool["interface_reason"])), "Reviewed unpinned remote adapter:") {
 				parameters := schemaMap(tool["parameters"])
@@ -495,7 +482,12 @@ func auditSchemaParameterMappings(tools map[string]map[string]any, metadata embe
 			}
 			continue
 		}
-		if mode != InterfaceModeMCP || availability != InterfaceAvailable {
+		if mode != contract.InterfaceModeMCP || availability != contract.InterfaceAvailable {
+			continue
+		}
+		if !pinAvailable {
+			// Production: no pin. Property authority is ParamDecl / exclusions;
+			// do not require property ∈ MCP parameter map.
 			continue
 		}
 		metadataKey, pinned, resolveProblems := pinnedMCPParameterMetadata(canonical, tool, metadata)
@@ -554,13 +546,13 @@ func auditSchemaParameterMappings(tools map[string]map[string]any, metadata embe
 			problems = append(problems, fmt.Sprintf("mapping_exclusions %q must deliver an omitted property, got %q", key, flag.property))
 		}
 		switch flag.mode {
-		case InterfaceModeLocal, InterfaceModeComposite:
+		case contract.InterfaceModeLocal, contract.InterfaceModeComposite:
 			// These modes do not claim one direct MCP parameter map. The exact,
 			// reviewed reason and omitted final property are the whole contract.
 			continue
-		case InterfaceModeMCP:
-			if flag.availability != InterfaceAvailable || len(flag.metadataParams) == 0 {
-				problems = append(problems, fmt.Sprintf("mapping_exclusions %q is not attached to an available pinned MCP parameter map", key))
+		case contract.InterfaceModeMCP:
+			if flag.availability != contract.InterfaceAvailable {
+				problems = append(problems, fmt.Sprintf("mapping_exclusions %q is not attached to an available mcp tool", key))
 				continue
 			}
 			directProperty := schemaExcludedDirectPropertyCandidate(flag.parameter)
@@ -569,8 +561,14 @@ func auditSchemaParameterMappings(tools map[string]map[string]any, metadata embe
 				problems = append(problems, fmt.Sprintf("mapping_exclusions %q has no lower-priority direct property candidate to review", key))
 				continue
 			}
-			if _, resolves := flag.metadataParams[root]; resolves {
-				problems = append(problems, fmt.Sprintf("mapping_exclusions %q is stale: candidate property %q already resolves to %s", key, directProperty, flag.metadataKey))
+			if pinAvailable {
+				if len(flag.metadataParams) == 0 {
+					problems = append(problems, fmt.Sprintf("mapping_exclusions %q is not attached to an available pinned MCP parameter map", key))
+					continue
+				}
+				if _, resolves := flag.metadataParams[root]; resolves {
+					problems = append(problems, fmt.Sprintf("mapping_exclusions %q is stale: candidate property %q already resolves to %s", key, directProperty, flag.metadataKey))
+				}
 			}
 		default:
 			problems = append(problems, fmt.Sprintf("mapping_exclusions %q is only valid for mcp, local, or composite tools", key))
@@ -585,19 +583,10 @@ func reviewedCompositeParameterMapping(parameter map[string]any) (bool, string) 
 	property := strings.TrimSpace(schemaString(parameter["property"]))
 	provenance := schemaMap(parameter["field_provenance"])["property"]
 	source := strings.TrimSpace(schemaString(provenance["source"]))
-	reviewReason := strings.TrimSpace(schemaString(provenance["review_reason"]))
 	switch source {
 	case "versioned_parameter_binding", "typed_parameter_metadata", "native_annotation":
 		if property == "" {
 			return false, fmt.Sprintf("%s selected an empty property", source)
-		}
-		return true, ""
-	case "reviewed_manual_hint", "tool_schema_hint":
-		if reviewReason == "" {
-			return false, fmt.Sprintf("%s has no review_reason", source)
-		}
-		if property == "" {
-			return false, fmt.Sprintf("%s selected an empty property without a mapping exclusion", source)
 		}
 		return true, ""
 	case "reviewed_mapping_exclusion":
@@ -621,8 +610,12 @@ func auditCompositeSchemaDisposition(canonical string, tool map[string]any) []st
 	provenance := schemaMap(tool["field_provenance"])
 	for _, field := range []string{"interface_mode", "availability", "interface_ref", "interface_reason"} {
 		entry := provenance[field]
-		if strings.TrimSpace(schemaString(entry["precedence"])) != "reviewed_explicit" {
-			problems = append(problems, fmt.Sprintf("%s composite %s is not backed by reviewed_explicit provenance", canonical, field))
+		// Composite dispositions must pass through ContractFinal
+		// (declare-or-annotate). Production metadata shells are empty and
+		// must not supply reviewed_explicit for these fields.
+		precedence := strings.TrimSpace(schemaString(entry["precedence"]))
+		if precedence != "contract_final" {
+			problems = append(problems, fmt.Sprintf("%s composite %s is not backed by contract_final provenance", canonical, field))
 		}
 	}
 	return problems

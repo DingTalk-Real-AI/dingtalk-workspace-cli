@@ -199,6 +199,14 @@ func TestCrossPlatformCoverageAuditRuntimeCoverage(t *testing.T) {
 		sharedAuditSink = previousSink
 		loadTokenForProfile = previousLoader
 		auditSinkOnce, auditCloseOnce = sync.Once{}, sync.Once{}
+		// The process-wide sink was initialized by TestMain. Preserve that
+		// initialized state when restoring it: leaving auditSinkOnce unused
+		// lets a later runner overwrite the live sink without closing its
+		// .audit.lock handle, which makes TestMain cleanup fail on Windows.
+		auditSinkOnce.Do(func() {})
+		if got := setupAuditSink(); got != previousSink {
+			t.Errorf("restored audit sink = %T, want original %T", got, previousSink)
+		}
 		resetAuditIdentityCache()
 	})
 

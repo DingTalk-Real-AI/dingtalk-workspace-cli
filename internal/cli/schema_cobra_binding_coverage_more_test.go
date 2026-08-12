@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/spf13/cobra"
 )
 
@@ -160,9 +162,7 @@ func TestCrossPlatformCoverageCompatibilityLeafContractDependencyAndMetadataEdge
 	command.Flags().String("id", "", "id")
 	flag := command.Flags().Lookup("id")
 	flag.Annotations = map[string][]string{
-		runtimeSchemaManualParameterAnnotation: {"remove"},
-		runtimeSchemaManualReasonAnnotation:    {"remove"},
-		"keep":                                 {"value"},
+		"keep": {"value"},
 	}
 	metadata := RuntimeSchemaParameterMetadata{
 		Required:     []string{" id "},
@@ -296,7 +296,7 @@ func TestCrossPlatformCoverageCompatibilityPathAndHelperRemainingEdges(t *testin
 	if got := compatibilityJSON(func() {}); !strings.Contains(got, "0x") {
 		t.Fatalf("compatibilityJSON(func) = %q", got)
 	}
-	positionals := []RuntimeSchemaPositional{{Index: 0, Name: "z"}, {Index: 0, Name: "a"}, {Index: 1, Name: "x"}}
+	positionals := []contract.RuntimeSchemaPositional{{Index: 0, Name: "z"}, {Index: 0, Name: "a"}, {Index: 1, Name: "x"}}
 	command := &cobra.Command{Annotations: map[string]string{runtimeSchemaArgsAnnotation: compatibilityJSON(positionals)}}
 	got, err := strictCompatibilityPositionals(command)
 	if err != nil || got[0].Name != "a" || got[2].Index != 1 {
@@ -361,9 +361,86 @@ func TestCrossPlatformCoverageCompatibilityPathAndHelperRemainingEdges(t *testin
 	if err := validateCommandRegistryAnnotation(incomplete, "sample run", spec); err == nil || !strings.Contains(err.Error(), "incomplete native") {
 		t.Fatalf("incomplete annotation error = %v", err)
 	}
-	manual := &cobra.Command{}
-	annotateManualSchemaIdentity(manual, "other.run", "reason")
-	if err := validateCommandRegistryAnnotation(manual, "sample run", spec); err == nil || !strings.Contains(err.Error(), "manual identity") {
-		t.Fatalf("manual annotation error = %v", err)
+
+	// ContractFinal without Identity fails closed once a Contract is declared.
+	noIdentity := &cobra.Command{Use: "run"}
+	contractfinal.RegisterRuntimeContractFinal(noIdentity, contract.ContractFinalPayload{Description: "x"})
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(noIdentity) })
+	if err := validateCommandRegistryAnnotation(noIdentity, "sample run", spec); err == nil || !strings.Contains(err.Error(), "without Identity") {
+		t.Fatalf("missing Identity error = %v", err)
+	}
+	mismatch := &cobra.Command{Use: "run"}
+	contractfinal.RegisterRuntimeContractFinal(mismatch, contract.ContractFinalPayload{
+		Identity: &contract.ToolIdentitySpec{
+			ProductID: "other", Name: "run", CanonicalPath: "other.run",
+			CLIPath: "sample run", PrimaryCLIPath: "sample run",
+		},
+	})
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(mismatch) })
+	if err := validateCommandRegistryAnnotation(mismatch, "sample run", spec); err == nil || !strings.Contains(err.Error(), "Contract.Identity mismatch") {
+		t.Fatalf("Identity mismatch error = %v", err)
+	}
+	aligned := &cobra.Command{Use: "run"}
+	contractfinal.RegisterRuntimeContractFinal(aligned, contract.ContractFinalPayload{
+		Identity: &contract.ToolIdentitySpec{
+			ProductID: "sample", Name: "run", CanonicalPath: "sample.run",
+			CLIPath: "sample run", PrimaryCLIPath: "sample run",
+		},
+	})
+	t.Cleanup(func() { ClearRuntimeContractFinalForTest(aligned) })
+	if err := validateCommandRegistryAnnotation(aligned, "sample run", spec); err != nil {
+		t.Fatalf("aligned Identity must pass: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageValidateContractIdentityAgainstCommandSpecEdges(t *testing.T) {
+	path := "sample run"
+	baseSpec := CommandSpec{
+		CanonicalPath:  "sample.run",
+		PrimaryCLIPath: "sample run",
+		Aliases:        []string{"sample alias"},
+	}
+
+	if err := validateContractIdentityAgainstCommandSpec(contract.ToolIdentitySpec{}, CommandSpec{
+		CanonicalPath:  "not-a-canonical",
+		PrimaryCLIPath: path,
+	}, path); err == nil || !strings.Contains(err.Error(), "invalid canonical path") {
+		t.Fatalf("invalid canonical error = %v", err)
+	}
+
+	// CLIPath empty fills from PrimaryCLIPath (and the reverse) before compare.
+	if err := validateContractIdentityAgainstCommandSpec(contract.ToolIdentitySpec{
+		ProductID: "sample", Name: "run", CanonicalPath: "sample.run",
+		PrimaryCLIPath: "sample run", Aliases: []string{"sample alias"},
+	}, baseSpec, path); err != nil {
+		t.Fatalf("PrimaryCLIPath-only identity must pass after mutual fill: %v", err)
+	}
+	if err := validateContractIdentityAgainstCommandSpec(contract.ToolIdentitySpec{
+		ProductID: "sample", Name: "run", CanonicalPath: "sample.run",
+		CLIPath: "sample run", Aliases: []string{"sample alias"},
+	}, baseSpec, path); err != nil {
+		t.Fatalf("CLIPath-only identity must pass after mutual fill: %v", err)
+	}
+
+	// Length mismatch and same-length element mismatch both reject via set compare.
+	if err := validateContractIdentityAgainstCommandSpec(contract.ToolIdentitySpec{
+		ProductID: "sample", Name: "run", CanonicalPath: "sample.run",
+		CLIPath: "sample run", PrimaryCLIPath: "sample run",
+		Aliases: []string{"sample alias", "sample extra"},
+	}, baseSpec, path); err == nil || !strings.Contains(err.Error(), "aliases") {
+		t.Fatalf("alias length mismatch error = %v", err)
+	}
+	if err := validateContractIdentityAgainstCommandSpec(contract.ToolIdentitySpec{
+		ProductID: "sample", Name: "run", CanonicalPath: "sample.run",
+		CLIPath: "sample run", PrimaryCLIPath: "sample run",
+		Aliases: []string{"sample other"},
+	}, baseSpec, path); err == nil || !strings.Contains(err.Error(), "aliases") {
+		t.Fatalf("same-length alias member mismatch error = %v", err)
+	}
+	if stringSlicesEqualAsSet([]string{"a"}, []string{"b"}) {
+		t.Fatal("stringSlicesEqualAsSet must reject same-length unequal members")
+	}
+	if stringSlicesEqualAsSet([]string{"a"}, []string{"a", "b"}) {
+		t.Fatal("stringSlicesEqualAsSet must reject length mismatch")
 	}
 }

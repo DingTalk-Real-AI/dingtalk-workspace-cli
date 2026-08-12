@@ -195,6 +195,15 @@ func TestCrossPlatformCoverageAuthImportRejectsWindowsDPAPIBackend(t *testing.T)
 	}
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 	t.Setenv(keychain.StorageDirEnv, keychainDir)
+	// Windows stores credentials in HKCU rather than StorageDirEnv. Use a
+	// fresh registry namespace so this zero-state assertion cannot inherit a
+	// token from an earlier test in the same package binary.
+	t.Setenv(keychain.TestNamespaceEnv, root)
+	t.Cleanup(func() {
+		if err := keychain.RemoveAuthTokenEntries(keychain.Service); err != nil {
+			t.Errorf("clean import guard keychain fixture: %v", err)
+		}
+	})
 
 	importCmd := NewRootCommand()
 	importCmd.SetOut(&bytes.Buffer{})

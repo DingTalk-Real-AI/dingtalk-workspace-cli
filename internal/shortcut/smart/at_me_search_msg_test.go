@@ -20,17 +20,28 @@ import (
 
 const testCipher = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
 
-func TestAtMeProject(t *testing.T) {
+func TestCrossPlatformCoverageAtMeProject(t *testing.T) {
 	// nested sender object + plain text
 	row := atMeProject(map[string]any{
 		"sender":             map[string]any{"name": "念晨"},
 		"createTime":         "2026-07-19 13:37:03",
 		"content":            "普通消息",
+		"openMessageId":      "msg-1",
+		"msgType":            "text",
 		"conversationTitle":  "群A",
 		"openConversationId": "cid1",
+		"emotionReplyList": []any{
+			map[string]any{"emoji": "赞", "replyUsers": []any{"D1"}},
+		},
 	})
 	if row["sender"] != "念晨" || row["text"] != "普通消息" || row["conversation"] != "群A" {
 		t.Fatalf("atMeProject nested = %#v", row)
+	}
+	if row["messageId"] != "msg-1" || row["conversationId"] != "cid1" || row["messageType"] != "text" {
+		t.Errorf("atMeProject stable identity = %#v", row)
+	}
+	if reactions, ok := row["reactions"].(map[string]any); !ok || len(reactions) == 0 {
+		t.Errorf("atMeProject reactions = %#v", row["reactions"])
 	}
 
 	// encrypted content → marked (never leaked); id-only sender fallback; a
@@ -65,9 +76,18 @@ func TestAtMeProject(t *testing.T) {
 	if _, has := row["forwarded"]; has {
 		t.Errorf("atMeProject plain unexpectedly has forwarded")
 	}
+
+	row = atMeProjectWithReactions(map[string]any{
+		"emotionReplyList": []any{
+			map[string]any{"emoji": "赞", "replyUsers": []any{"D1"}},
+		},
+	}, false)
+	if _, has := row["reactions"]; has {
+		t.Errorf("atMeProject no-reactions leaked reactions: %#v", row)
+	}
 }
 
-func TestSearchMsgProject(t *testing.T) {
+func TestCrossPlatformCoverageSearchMsgProject(t *testing.T) {
 	// nested sender + plain text + messageId
 	row := searchMsgProject(map[string]any{
 		"sender":     map[string]any{"nick": "千启"},
@@ -77,6 +97,16 @@ func TestSearchMsgProject(t *testing.T) {
 	})
 	if row["sender"] != "千启" || row["text"] != "命中关键词的消息" {
 		t.Fatalf("searchMsgProject = %#v", row)
+	}
+
+	// Canonical ID precedence and rich-text extraction must match typed search.
+	row = searchMsgProject(map[string]any{
+		"openMessageId": "open-id",
+		"messageId":     "legacy-conflict",
+		"content":       map[string]any{"richText": "富文本消息"},
+	})
+	if row["messageId"] != "open-id" || row["text"] != "富文本消息" {
+		t.Fatalf("searchMsgProject canonical fields = %#v", row)
 	}
 
 	// encrypted → marker; id-only sender; forwarded "null" sender nulled.
@@ -95,7 +125,7 @@ func TestSearchMsgProject(t *testing.T) {
 		t.Errorf("searchMsgProject encrypted text = %v, want marker", row["text"])
 	}
 	fwd, ok := row["forwarded"].([]map[string]any)
-	if !ok || len(fwd) != 1 || fwd[0]["sender"] != nil {
+	if !ok || len(fwd) != 1 || fwd[0]["sender"] != nil || fwd[0]["time"] != "t" {
 		t.Errorf("searchMsgProject forwarded = %#v", row["forwarded"])
 	}
 
@@ -109,7 +139,7 @@ func TestSearchMsgProject(t *testing.T) {
 // TestSenderHelpers exercises the atMe/searchMsg sender key families directly:
 // a senderName-family key (first probe loop), a flat string under "sender"
 // (second loop), and the "null" sentinel normalisation.
-func TestSenderHelpers(t *testing.T) {
+func TestCrossPlatformCoverageSenderHelpers(t *testing.T) {
 	cases := []struct {
 		fn   func(map[string]any) any
 		name string

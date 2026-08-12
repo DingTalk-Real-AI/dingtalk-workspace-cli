@@ -62,7 +62,7 @@ var (
 	patPollDeviceFlowWithInterval = pollPatDeviceFlowWithInterval
 	patSaveAppConfig              = authpkg.SaveAppConfig
 	patExchangeCodeForToken       = authpkg.ExchangeCodeForToken
-	patSaveTokenData              = authpkg.SaveTokenData
+	patSaveTokenData              = authpkg.SaveLoginTokenData
 	patSleep                      = time.Sleep
 	patPollHTTPDo                 = (*http.Client).Do
 	patPollNewRequest             = http.NewRequestWithContext
@@ -576,8 +576,9 @@ func handlePatAuthCheck(
 	// In host-controlled PAT mode (driven solely by DINGTALK_DWS_AGENTCODE),
 	// or when flowId is absent, the CLI returns machine-readable JSON to
 	// stderr and leaves UI/polling/retry to the host. `claw-type` is NOT
-	// used for this decision — it is only forwarded on the wire via
-	// edition.MergeHeaders and surfaced in hostControl for traceability.
+	// used for this decision — its edition-fixed value is forwarded on the
+	// wire and surfaced in hostControl for traceability. DWS_AGENT_PRODUCT
+	// does not affect this PAT contract.
 	if hostOwnedPAT || patData.Data.FlowID == "" {
 		if hostOwnedPAT {
 			return executor.Result{}, &apperrors.PATError{RawJSON: enrichPATErrorForHostControl(patErr.RawJSON)}

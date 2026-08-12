@@ -66,6 +66,33 @@ func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName st
 	return convertResult(result), nil
 }
 
+type dryRunReadRunner interface {
+	RunReadOnly(context.Context, executor.Invocation) (executor.Result, error)
+}
+
+// CallReadTool executes a Shortcut's explicitly classified read lookup while
+// the outer command is in dry-run mode. Ordinary CallTool remains protected by
+// the global execution barrier. The runner capability is optional and fails
+// closed so an injected runner cannot accidentally receive a real call.
+func (a *toolCallerAdapter) CallReadTool(ctx context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	if a == nil || a.runner == nil {
+		return nil, fmt.Errorf("ToolCaller runner is not configured")
+	}
+	if !a.DryRun() {
+		return a.CallTool(ctx, productID, toolName, args)
+	}
+	readRunner, ok := a.runner.(dryRunReadRunner)
+	if !ok {
+		return nil, fmt.Errorf("ToolCaller runner does not support read-only dry-run lookups")
+	}
+	inv := executor.NewHelperInvocation("overlay."+productID+"."+toolName, productID, toolName, args)
+	result, err := readRunner.RunReadOnly(ctx, inv)
+	if err != nil {
+		return nil, err
+	}
+	return convertResult(result), nil
+}
+
 // CallToolWithToken invokes a helper with an in-memory token override. It is
 // used during login before the new token has been persisted to any profile
 // slot.

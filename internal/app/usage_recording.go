@@ -39,6 +39,19 @@ func (r recordingToolCaller) CallTool(ctx context.Context, product, tool string,
 	return res, err
 }
 
+func (r recordingToolCaller) CallReadTool(ctx context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
+	inner, ok := r.inner.(edition.ReadToolCaller)
+	if !ok {
+		return nil, fmt.Errorf("ToolCaller read-only dry-run lookup is not configured")
+	}
+	recordedArgs := cloneToolArgs(args)
+	res, err := inner.CallReadTool(ctx, product, tool, args)
+	// This is a real read even though the outer command is a dry-run. Record it
+	// as such so usage evidence does not misclassify the lookup as skipped.
+	usage.Append(product, tool, recordedArgs, err == nil, false)
+	return res, err
+}
+
 func (r recordingToolCaller) CallToolWithToken(
 	ctx context.Context,
 	token, product, tool string,

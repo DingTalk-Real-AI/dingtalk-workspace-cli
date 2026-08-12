@@ -17,9 +17,10 @@ import (
 	stderrors "errors"
 	"strings"
 	"testing"
+	"time"
 )
 
-func TestExitCodeByCategory(t *testing.T) {
+func TestCrossPlatformCoverageExitCodeByCategory(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -41,17 +42,24 @@ func TestExitCodeByCategory(t *testing.T) {
 	}
 }
 
-func TestPrintJSON(t *testing.T) {
+func TestCrossPlatformCoveragePrintJSON(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
 	if err := PrintJSON(&b, NewValidation(
 		"bad flag",
 		WithReason("missing_required_flag"),
+		WithOrigin("client"),
+		WithFailureStage("request_validation"),
+		WithExecutionStarted(false),
 		WithHint("Pass the required flag and retry."),
 		WithRetryable(true),
 		WithActions("dws schema doc.create_document", "retry command"),
 		WithSnapshot("/tmp/dws-recovery/snapshot.json"),
+		WithDetails(map[string]any{
+			"type":  "resolution",
+			"query": "项目群",
+		}),
 	)); err != nil {
 		t.Fatalf("PrintJSON() error = %v", err)
 	}
@@ -66,6 +74,11 @@ func TestPrintJSON(t *testing.T) {
 	if !strings.Contains(got, "\"reason\": \"missing_required_flag\"") {
 		t.Fatalf("expected reason in output, got %q", got)
 	}
+	if !strings.Contains(got, "\"origin\": \"client\"") ||
+		!strings.Contains(got, "\"stage\": \"request_validation\"") ||
+		!strings.Contains(got, "\"execution_started\": false") {
+		t.Fatalf("expected failure provenance in output, got %q", got)
+	}
 	if !strings.Contains(got, "\"retryable\": true") {
 		t.Fatalf("expected retryable in output, got %q", got)
 	}
@@ -75,9 +88,105 @@ func TestPrintJSON(t *testing.T) {
 	if !strings.Contains(got, "\"snapshot_path\": \"/tmp/dws-recovery/snapshot.json\"") {
 		t.Fatalf("expected snapshot path in output, got %q", got)
 	}
+	if !strings.Contains(got, "\"type\": \"resolution\"") || !strings.Contains(got, "\"query\": \"项目群\"") {
+		t.Fatalf("expected structured details in output, got %q", got)
+	}
 }
 
-func TestPrintJSON_AvailableFlags(t *testing.T) {
+func TestCrossPlatformCoverageRetryabilityTriStateAndRetryTiming(t *testing.T) {
+	t.Parallel()
+
+	next := time.Date(2026, time.July, 30, 4, 5, 6, 0, time.FixedZone("CST", 8*60*60))
+	tests := []struct {
+		name            string
+		err             error
+		wantRetryable   string
+		wantRetryAfter  bool
+		wantNextRetryAt bool
+	}{
+		{
+			name: "unknown is omitted",
+			err:  NewAPI("unknown"),
+		},
+		{
+			name:          "explicit false is preserved",
+			err:           NewValidation("terminal", WithRetryable(false)),
+			wantRetryable: `"retryable": false`,
+		},
+		{
+			name:            "explicit true with timing",
+			err:             NewAPI("transient", WithRetryable(true), WithRetryAfterSeconds(30), WithNextRetryAt(next)),
+			wantRetryable:   `"retryable": true`,
+			wantRetryAfter:  true,
+			wantNextRetryAt: true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var jsonOut strings.Builder
+			if err := PrintJSON(&jsonOut, tt.err); err != nil {
+				t.Fatalf("PrintJSON() error = %v", err)
+			}
+			gotJSON := jsonOut.String()
+			if tt.wantRetryable == "" {
+				if strings.Contains(gotJSON, `"retryable"`) {
+					t.Fatalf("unknown retryability must be omitted: %s", gotJSON)
+				}
+			} else if !strings.Contains(gotJSON, tt.wantRetryable) {
+				t.Fatalf("missing %s in %s", tt.wantRetryable, gotJSON)
+			}
+			if got := strings.Contains(gotJSON, `"retry_after_seconds": 30`); got != tt.wantRetryAfter {
+				t.Fatalf("retry_after_seconds presence = %v, want %v: %s", got, tt.wantRetryAfter, gotJSON)
+			}
+			if got := strings.Contains(gotJSON, `"next_retry_at": "2026-07-29T20:05:06Z"`); got != tt.wantNextRetryAt {
+				t.Fatalf("next_retry_at presence = %v, want %v: %s", got, tt.wantNextRetryAt, gotJSON)
+			}
+
+			var humanOut strings.Builder
+			if err := PrintHuman(&humanOut, tt.err); err != nil {
+				t.Fatalf("PrintHuman() error = %v", err)
+			}
+			gotHuman := humanOut.String()
+			if tt.wantRetryable == "" {
+				if strings.Contains(gotHuman, "Retryable:") {
+					t.Fatalf("unknown retryability must be omitted: %s", gotHuman)
+				}
+			} else {
+				want := "Retryable: true"
+				if strings.Contains(tt.wantRetryable, "false") {
+					want = "Retryable: false"
+				}
+				if !strings.Contains(gotHuman, want) {
+					t.Fatalf("missing %q in %s", want, gotHuman)
+				}
+			}
+			if tt.wantRetryAfter && !strings.Contains(gotHuman, "Retry After: 30s") {
+				t.Fatalf("missing retry delay in %s", gotHuman)
+			}
+			if tt.wantNextRetryAt && !strings.Contains(gotHuman, "Next Retry At: 2026-07-29T20:05:06Z") {
+				t.Fatalf("missing next retry time in %s", gotHuman)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageRetryTimingOptionsIgnoreInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	err := NewAPI(
+		"invalid timing",
+		WithRetryAfterSeconds(-1),
+		WithNextRetryAt(time.Time{}),
+	).(*Error)
+	if err.RetryAfterSeconds != nil || err.NextRetryAt != nil {
+		t.Fatalf("invalid retry timing was retained: %#v", err)
+	}
+}
+
+func TestCrossPlatformCoveragePrintJSON_AvailableFlags(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -98,7 +207,7 @@ func TestPrintJSON_AvailableFlags(t *testing.T) {
 	}
 }
 
-func TestPrintHuman(t *testing.T) {
+func TestCrossPlatformCoveragePrintHuman(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -107,6 +216,9 @@ func TestPrintHuman(t *testing.T) {
 		WithReason("missing_required_flag"),
 		WithOperation("calendar.list"),
 		WithServerKey("calendar"),
+		WithOrigin("client"),
+		WithFailureStage("request_validation"),
+		WithExecutionStarted(false),
 		WithHint("Pass the required flag and retry."),
 		WithRetryable(true),
 		WithActions("retry command"),
@@ -134,9 +246,19 @@ func TestPrintHuman(t *testing.T) {
 	if !strings.Contains(got, "Retryable: true") {
 		t.Fatalf("expected retryable marker in output, got %q", got)
 	}
+	for _, want := range []string{"Origin: client", "Stage: request_validation", "Execution Started: false"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in verbose output, got %q", want, got)
+		}
+	}
+
+	withoutDetails := NewValidation("empty", WithDetails(nil)).(*Error)
+	if withoutDetails.Details != nil {
+		t.Fatalf("empty details were retained: %#v", withoutDetails.Details)
+	}
 }
 
-func TestPrintHuman_NormalMode(t *testing.T) {
+func TestCrossPlatformCoveragePrintHuman_NormalMode(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -160,7 +282,7 @@ func TestPrintHuman_NormalMode(t *testing.T) {
 	}
 }
 
-func TestPrintJSONIncludesServerDiag(t *testing.T) {
+func TestCrossPlatformCoveragePrintJSONIncludesServerDiag(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -195,7 +317,7 @@ func TestPrintJSONIncludesServerDiag(t *testing.T) {
 	}
 }
 
-func TestPrintHumanIncludesServerGuidance(t *testing.T) {
+func TestCrossPlatformCoveragePrintHumanIncludesServerGuidance(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -214,12 +336,53 @@ func TestPrintHumanIncludesServerGuidance(t *testing.T) {
 	if !strings.Contains(got, "Hint: 请联系管理员开通消息搜索权益") {
 		t.Fatalf("expected server guidance in output, got %q", got)
 	}
-	if !strings.Contains(got, "Action: 开启地址: https://example.test/enable-search") {
+	if !strings.Contains(got, "Action: 处理入口: https://example.test/enable-search") {
 		t.Fatalf("expected server action URL in output, got %q", got)
 	}
 }
 
-func TestPrintJSONIncludesRPCCodeAndData(t *testing.T) {
+func TestCrossPlatformCoverageServerGuidanceAdapter(t *testing.T) {
+	t.Parallel()
+
+	hint, action := ServerGuidance(ServerDiagnostics{
+		FriendlyHint: "follow the recovery action",
+		ActionURL:    "https://example.test/recover",
+	})
+	if hint != "follow the recovery action" || action != "https://example.test/recover" {
+		t.Fatalf("ServerGuidance() = (%q, %q)", hint, action)
+	}
+}
+
+func TestCrossPlatformCoverageServerGuidanceSuppressesUnsafeActionURL(t *testing.T) {
+	t.Parallel()
+	for _, actionURL := range []string{
+		"http://example.test/help",
+		"javascript:alert(1)",
+		"https://user:secret@example.test/help",
+		"not a url",
+	} {
+		var human strings.Builder
+		err := NewAPI("server error", WithServerDiag(ServerDiagnostics{
+			FriendlyHint: "保留 Trace ID 后排查",
+			ActionURL:    actionURL,
+		}))
+		if printErr := PrintHuman(&human, err); printErr != nil {
+			t.Fatal(printErr)
+		}
+		if strings.Contains(human.String(), actionURL) || strings.Contains(human.String(), "处理入口") {
+			t.Fatalf("unsafe action URL %q leaked to human output: %q", actionURL, human.String())
+		}
+		var jsonOutput strings.Builder
+		if printErr := PrintJSON(&jsonOutput, err); printErr != nil {
+			t.Fatal(printErr)
+		}
+		if strings.Contains(jsonOutput.String(), `"action_url"`) {
+			t.Fatalf("unsafe action URL %q leaked to JSON output: %q", actionURL, jsonOutput.String())
+		}
+	}
+}
+
+func TestCrossPlatformCoveragePrintJSONIncludesRPCCodeAndData(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -241,7 +404,7 @@ func TestPrintJSONIncludesRPCCodeAndData(t *testing.T) {
 	}
 }
 
-func TestPrintHumanIncludesRPCCode_Debug(t *testing.T) {
+func TestCrossPlatformCoveragePrintHumanIncludesRPCCode_Debug(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder
@@ -262,7 +425,7 @@ func TestPrintHumanIncludesRPCCode_Debug(t *testing.T) {
 	}
 }
 
-func TestPrintHumanHidesRPCCode_Normal(t *testing.T) {
+func TestCrossPlatformCoveragePrintHumanHidesRPCCode_Normal(t *testing.T) {
 	t.Parallel()
 
 	var b strings.Builder

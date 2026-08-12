@@ -30,12 +30,12 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/configmeta"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
@@ -122,7 +122,7 @@ func logHostOwnedPATDecisionOnce() {
 	})
 }
 
-func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) executor.Runner {
+func newCommandRunnerWithFlags(flags *GlobalFlags) executor.Runner {
 	// Ensure DWS_CLIENT_ID env is populated from persisted config before
 	// resolveIdentityHeaders reads it.  This covers fresh-process cold starts
 	// where no env var has been inherited from a parent process.
@@ -140,10 +140,8 @@ func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) exe
 	transportClient.ExtraHeaders = resolveIdentityHeaders()
 	transportClient.FileLogger = FileLoggerInstance()
 	return &runtimeRunner{
-		loader:             loader,
 		transport:          transportClient,
 		globalFlags:        flags,
-		fallback:           executor.EchoRunner{},
 		scanner:            newRuntimeContentScanner(),
 		enforceContentScan: runtimeFlagEnabled(os.Getenv(runtimeContentScanEnforceEnv), false),
 		includeScanReport:  runtimeFlagEnabled(os.Getenv(runtimeContentScanReportOutputEnv), false),
@@ -151,7 +149,6 @@ func newCommandRunnerWithFlags(loader cli.CatalogLoader, flags *GlobalFlags) exe
 }
 
 type runtimeRunner struct {
-	loader             cli.CatalogLoader
 	transport          *transport.Client
 	globalFlags        *GlobalFlags
 	fallback           executor.Runner
@@ -203,27 +200,46 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 		return r.runMultiProfile(ctx, invocation, selections)
 	}
 	if strings.TrimSpace(rawProfile) != "" {
-		profile, err := authpkg.ResolveProfile(defaultConfigDir(), rawProfile)
+		profile, err := runnerResolveProfile(defaultConfigDir(), rawProfile)
 		if err != nil {
 			return executor.Result{}, apperrors.NewValidation(err.Error())
 		}
 		if profile == nil {
 			return executor.Result{}, apperrors.NewValidation(fmt.Sprintf("profile %q not found", rawProfile))
 		}
-		authpkg.SetRuntimeProfile(authpkg.ProfileSelector(*profile))
+		resolvedSelector := profileRuntimeSelector(*profile, rawProfile)
+		authpkg.SetRuntimeProfile(resolvedSelector)
 		defer authpkg.SetRuntimeProfile(rawProfile)
 	}
 
 	return r.runSingle(ctx, invocation, true)
 }
 
+// RunReadOnly executes one already-classified read lookup for a semantic
+// Shortcut that is building a dry-run plan. It clones the runtime flags and
+// clears DryRun only on that clone: the process-wide caller and every ordinary
+// ToolCaller invocation retain the global execution barrier.
+func (r *runtimeRunner) RunReadOnly(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	if r == nil {
+		return executor.Result{}, fmt.Errorf("runtime runner is not configured")
+	}
+	clone := *r
+	if r.globalFlags != nil {
+		flags := *r.globalFlags
+		flags.DryRun = false
+		clone.globalFlags = &flags
+	}
+	invocation.DryRun = false
+	return clone.Run(ctx, invocation)
+}
+
 func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invocation, prefetchToken bool) (executor.Result, error) {
-	if r.loader == nil || r.transport == nil {
+	if r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
 	r.transport.ExtraHeaders = resolveIdentityHeaders()
 
-	// Mock mode: skip catalog validation, use a placeholder endpoint.
+	// Mock mode: skip endpoint resolution, use a placeholder endpoint.
 	if r.globalFlags != nil && r.globalFlags.Mock {
 		endpoint := fmt.Sprintf("https://mock-mcp-%s.dingtalk.com", invocation.CanonicalProduct)
 		if override, ok := productEndpointOverride(invocation.CanonicalProduct); ok {
@@ -234,7 +250,7 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 
 	// Prefetch the Keychain token in the background. Keychain access costs
 	// ~70ms on macOS; starting it here lets the load overlap with endpoint
-	// resolution and catalog loading below.
+	// resolution below.
 	if prefetchToken {
 		go func() {
 			_, _ = runnerGetCachedRuntimeToken(ctx)
@@ -247,56 +263,21 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 		}
 	}
 
-	catalogStart := time.Now()
-	catalog, err := r.loader.Load(ctx)
-	RecordTiming(ctx, "catalog_load", time.Since(catalogStart))
-	if err != nil {
-		var degraded *cli.CatalogDegraded
-		if !errors.As(err, &degraded) {
-			return executor.Result{}, err
-		}
-	}
+	// Discovery is retired: endpoint resolution is the dynamic server
+	// registry only, so a direct-runtime miss is terminal.
+	return r.handleCatalogMiss(ctx, invocation, "no dynamic endpoint registered for product or tool")
+}
 
-	product, ok := catalog.FindProduct(invocation.CanonicalProduct)
-	if !ok || strings.TrimSpace(product.Endpoint) == "" {
-		return r.handleCatalogMiss(ctx, invocation, "product missing from discovery catalog and no supplement/env override")
+// profileRuntimeSelector resolves the runtime profile selector for an
+// invocation. It preserves a unique local-name selector for an unresolved
+// account (empty UserID): reducing it to corpId can select a different exact
+// account through the organization's current-account pointer. Shared by the
+// single-profile path in Run and the multi-profile path in runMultiProfile.
+func profileRuntimeSelector(profile authpkg.Profile, rawSelector string) string {
+	if strings.TrimSpace(profile.UserID) == "" {
+		return rawSelector
 	}
-	if _, ok := product.FindTool(invocation.Tool); !ok {
-		// Catalog knows the product but not the tool — this happens when the
-		// catalog entry came from SupplementServers (endpoint-only, no tool
-		// list). Trust directRuntimeEndpoint to re-resolve a working endpoint
-		// for the tool. If that also misses, fall through to handleCatalogMiss
-		// so stderr still carries the explicit not-resolved signal.
-		if endpoint, ok := directRuntimeEndpoint(invocation.CanonicalProduct, invocation.Tool); ok {
-			if r.globalFlags != nil && r.globalFlags.DryRun {
-				invocation.DryRun = true
-			}
-			return r.executeInvocation(ctx, endpoint, invocation)
-		}
-		return r.handleCatalogMiss(ctx, invocation, fmt.Sprintf("tool %q not declared by product %q in discovery catalog", invocation.Tool, invocation.CanonicalProduct))
-	}
-	if r.globalFlags != nil && r.globalFlags.DryRun {
-		invocation.DryRun = true
-	}
-
-	endpoint := product.Endpoint
-	if override, ok := productEndpointOverride(invocation.CanonicalProduct); ok {
-		endpoint = override
-	}
-	// Multi-server tool-name authority correction.
-	//
-	// When two envelope servers share the same cli.command (e.g. group-chat
-	// and im both publish `dws chat ...`), the endpoints[cmd] map in
-	// registerDynamicServer is the second-writer wins, and catalog FindProduct
-	// may pick the wrong product's Endpoint for a tool whose real owner is
-	// a different server. Cross-check the canonical tool→endpoint map: when
-	// the per-tool endpoint exists and differs from the per-product endpoint
-	// catalog returned, trust the tool-owner endpoint (the server that
-	// actually declares this tool in its toolOverrides).
-	if toolEndpoint, ok := directRuntimeToolEndpoint(invocation.Tool); ok && toolEndpoint != "" && toolEndpoint != endpoint {
-		endpoint = toolEndpoint
-	}
-	return r.executeInvocation(ctx, endpoint, invocation)
+	return authpkg.ProfileSelector(profile)
 }
 
 type multiProfileSelection struct {
@@ -350,7 +331,7 @@ func (r *runtimeRunner) runMultiProfile(ctx context.Context, invocation executor
 	failed := 0
 
 	for _, selection := range selections {
-		resolvedSelector := authpkg.ProfileSelector(selection.Profile)
+		resolvedSelector := profileRuntimeSelector(selection.Profile, selection.Selector)
 		authpkg.SetRuntimeProfile(resolvedSelector)
 		result, err := r.runSingle(ctx, cloneInvocation(invocation), false)
 
@@ -432,6 +413,33 @@ func multiProfileErrorPayload(err error) map[string]any {
 		if typed.Operation != "" {
 			payload["operation"] = typed.Operation
 		}
+		if typed.Origin != "" {
+			payload["origin"] = typed.Origin
+		}
+		if typed.FailureStage != "" {
+			payload["stage"] = typed.FailureStage
+		}
+		if typed.ExecutionStarted != nil {
+			payload["execution_started"] = *typed.ExecutionStarted
+		}
+		if typed.RetryableSet {
+			payload["retryable"] = typed.Retryable
+		}
+		if typed.Hint != "" {
+			payload["hint"] = typed.Hint
+		}
+		if len(typed.Actions) > 0 {
+			payload["actions"] = append([]string(nil), typed.Actions...)
+		}
+		if len(typed.Details) > 0 {
+			payload["details"] = typed.Details
+		}
+		if typed.ServerDiag.TraceID != "" {
+			payload["trace_id"] = typed.ServerDiag.TraceID
+		}
+		if typed.ServerDiag.ServerErrorCode != "" {
+			payload["server_error_code"] = typed.ServerDiag.ServerErrorCode
+		}
 		if code := typed.ExitCode(); code != 0 {
 			payload["exitCode"] = code
 		}
@@ -439,45 +447,51 @@ func multiProfileErrorPayload(err error) map[string]any {
 	return payload
 }
 
-// handleCatalogMiss decides what to do when discovery catalog does not cover the
-// requested product / tool and no `directRuntimeEndpoint` match fired earlier.
+// handleCatalogMiss decides what to do when the dynamic server registry has
+// no endpoint for the requested product / tool and no `directRuntimeEndpoint`
+// match fired earlier. The discovery catalog is retired; endpoint resolution
+// is the dynamic server registry only, so a registry miss here is terminal.
 //
-// Previously every catalog miss silently fell through to EchoRunner, which
+// Previously every miss silently fell through to EchoRunner, which
 // returns an empty `executor.Result{Response: nil}`. The helper-invocation
 // adapter then converted that into `&edition.ToolResult{}`, whose `Content`
 // marshals to `null`, surfacing as `{"Content": null}` at the CLI. Users had no
 // signal that endpoint resolution failed — see the fix-wukong-discovery-missing-servers plan (Phase 3) for the full trace.
 //
-// New contract:
-//   - Dry-run (invocation.DryRun or globalFlags.DryRun): keep EchoRunner so
-//     `--dry-run` still prints the planned payload without real execution.
-//   - Otherwise: return an explicit apperrors.NewAPI("endpoint_not_resolved")
-//     with the offending product/tool attached. This fails fast to stderr and
-//     makes missing envelopes / supplement gaps immediately visible.
-func (r *runtimeRunner) handleCatalogMiss(ctx context.Context, invocation executor.Invocation, detail string) (executor.Result, error) {
-	dryRun := invocation.DryRun || (r.globalFlags != nil && r.globalFlags.DryRun)
-	if dryRun {
-		invocation.DryRun = true
-		return r.fallback.Run(ctx, invocation)
-	}
+// Contract: return an explicit apperrors.NewAPI("endpoint_not_resolved")
+// with the offending product/tool attached. This fails fast to stderr and
+// makes missing envelopes / supplement gaps immediately visible. Dry-run
+// invocations never reach this path in production: Run enforces the dry-run
+// barrier before endpoint resolution, and runSingle is only re-entered via
+// Run (multi-profile and PAT retry both route back through it).
+func (r *runtimeRunner) handleCatalogMiss(_ context.Context, invocation executor.Invocation, detail string) (executor.Result, error) {
+	return executor.Result{}, endpointNotResolvedError(invocation.CanonicalProduct, invocation.Tool, detail)
+}
+
+// endpointNotResolvedError builds the shared terminal error for a dynamic
+// server registry miss. Both the runtime runner (handleCatalogMiss) and the
+// recovery runtime (resolveEndpoint) use it so endpoint misses classify
+// identically: CategoryAPI, operation "discovery.resolve", reason
+// "endpoint_not_resolved", with the product ID as the server key.
+func endpointNotResolvedError(productID, toolName, detail string) error {
 	hint := "当前命令已注册，但静态端点目录中缺少对应 product/server endpoint。这通常是服务发现下线后的同步产物缺口，不是参数错误；请不要通过反复调整 flag 重试。"
 	actions := []string{
 		"确认 internal/syncdata.StaticServers() 是否包含该 product/server",
 		"运行 sync-oss 重新生成静态端点与路由",
 		"若该能力已下线，请在 skill 与 --help 中标记 unavailable 并提供替代命令",
 	}
-	if strings.TrimSpace(invocation.CanonicalProduct) == devappProductID {
+	if strings.TrimSpace(productID) == devappProductID {
 		hint = "dev app（product id: devapp）是 helper-only 产品，命令树不依赖服务发现；真实调用需要通过 StaticServers/SupplementServers 注入 MCP endpoint，或本地调试临时设置 DINGTALK_DEVAPP_MCP_URL。"
 		actions = []string{
 			"检查 StaticServers/SupplementServers 是否包含 devapp endpoint",
 			"本地调试可临时设置 DINGTALK_DEVAPP_MCP_URL 后重试",
 		}
 	}
-	return executor.Result{}, apperrors.NewAPI(
-		fmt.Sprintf("endpoint not resolved for product %q (tool %q): %s", invocation.CanonicalProduct, invocation.Tool, detail),
+	return apperrors.NewAPI(
+		fmt.Sprintf("endpoint not resolved for product %q (tool %q): %s", productID, toolName, detail),
 		apperrors.WithOperation("discovery.resolve"),
 		apperrors.WithReason("endpoint_not_resolved"),
-		apperrors.WithServerKey(invocation.CanonicalProduct),
+		apperrors.WithServerKey(productID),
 		apperrors.WithHint(hint),
 		apperrors.WithActions(actions...),
 	)
@@ -691,7 +705,6 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	if callResult.IsError {
 		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
-		logBusinessError(r.transport.FileLogger, "mcp_tool_error", invocation, callResult.Content, diag)
 
 		// ClassifyToolResult hook: let the overlay intercept known error
 		// patterns (PAT permission, gateway-auth) before generic handling.
@@ -708,14 +721,14 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			}
 		}
 
-		mcpErr := apperrors.NewAPI(
+		mcpErr := newServerFailureAPIError(
 			extractMCPErrorMessage(callResult),
-			apperrors.WithOperation("tools/call"),
-			apperrors.WithReason("mcp_tool_error"),
-			apperrors.WithServerKey(invocation.CanonicalProduct),
-			apperrors.WithHint("MCP tool returned a business error; check tool parameters and refer to skill documentation."),
-			apperrors.WithServerDiag(diag),
+			"mcp_tool_error",
+			"MCP tool returned a business error; check tool parameters and refer to skill documentation.",
+			invocation.CanonicalProduct,
+			diag,
 		)
+		logBusinessError(r.transport.FileLogger, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
 		// PAT scope error in business response: offer human-readable output and retry
 		if isPatScopeError(mcpErr) {
 			scopeErr := extractPatScopeError(mcpErr)
@@ -733,14 +746,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	if bizErr := detectBusinessError(callResult.Content); bizErr != "" {
 		diag := transport.ExtractServerDiagnosticsFromMap(callResult.Content)
-		logBusinessError(r.transport.FileLogger, "business_error", invocation, callResult.Content, diag)
-		return executor.Result{}, apperrors.NewAPI(bizErr,
-			apperrors.WithOperation("tools/call"),
-			apperrors.WithReason("business_error"),
-			apperrors.WithServerKey(invocation.CanonicalProduct),
-			apperrors.WithHint("The API returned a business-level error. Check required parameters and values."),
-			apperrors.WithServerDiag(diag),
+		classifiedErr := newServerFailureAPIError(
+			bizErr,
+			"business_error",
+			"The API returned a business-level error. Check required parameters and values.",
+			invocation.CanonicalProduct,
+			diag,
 		)
+		logBusinessError(r.transport.FileLogger, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)
+		return executor.Result{}, classifiedErr
 	}
 
 	invocation.Implemented = true
@@ -761,13 +775,6 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		response["safety"] = scanReport
 	}
 	return executor.Result{Invocation: invocation, Response: response}, nil
-}
-
-// executeStdioInvocation dispatches a tool call through a local StdioClient
-// subprocess instead of the HTTP transport. This is used for plugin stdio
-// servers whose endpoints use the stdio:// scheme.
-func (r *runtimeRunner) executeStdioInvocation(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
-	return r.executeStdioInvocationAtEndpoint(ctx, "", invocation)
 }
 
 func (r *runtimeRunner) executeStdioInvocationAtEndpoint(
@@ -976,10 +983,9 @@ func resolveIdentityHeaders() map[string]string {
 
 	// Inject environment variable based headers for MCP gateway tracking.
 	// DINGTALK_AGENT, if set by the caller, is forwarded verbatim as the
-	// x-dingtalk-agent header. It does NOT influence claw-type (which the
-	// open-source edition pins to edition.DefaultOSSClawType via the
-	// MergeHeaders hook below) and it does NOT influence the host-owned
-	// PAT decision (driven solely by DINGTALK_DWS_AGENTCODE).
+	// x-dingtalk-agent header. It does NOT influence the edition-fixed
+	// claw-type or the host-owned PAT decision (driven solely by
+	// DINGTALK_DWS_AGENTCODE).
 	sessionID := os.Getenv(envDingtalkSessionID)
 	if sessionID == "" {
 		sessionID = os.Getenv(envDWSSessionID)
@@ -1028,11 +1034,40 @@ func resolveIdentityHeaders() map[string]string {
 		headers["x-dws-channel"] = v
 	}
 
+	// DWS_AGENT_HOST is a caller-declared runtime-form signal. Root command
+	// execution validates it strictly in PersistentPreRunE. Library callers
+	// that bypass the root command keep this best-effort API contract: invalid
+	// values are omitted rather than changing the public function signature.
+	if agentHost, err := parseAgentHost(os.Getenv(envDWSAgentHost)); err == nil && agentHost != "" {
+		headers[headerDWSAgentHost] = agentHost
+	}
+
 	if fn := edition.Get().MergeHeaders; fn != nil {
 		headers = fn(headers)
 	}
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+
+	// claw-type is the edition-fixed routing/PAT identity. Agent Product is a
+	// separate caller-declared observability and IM-display dimension.
+	clawType := resolveEditionClawType(headers)
+	headers["claw-type"] = clawType
+	headers = applyAgentProductHeader(headers)
+	agentProduct, hasAgentProduct := headers[agentproduct.HeaderName]
 	if fn := edition.Get().EnterpriseCredentialHeaders; fn != nil {
 		headers = fn(headers)
+	}
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+	// Credential hooks cannot alter either identity dimension. Restore the
+	// fixed claw-type and the validated Product Header (or its absence).
+	headers["claw-type"] = clawType
+	if hasAgentProduct {
+		headers[agentproduct.HeaderName] = agentProduct
+	} else {
+		delete(headers, agentproduct.HeaderName)
 	}
 	return headers
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -181,6 +182,36 @@ func newFilterCmd() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(filterGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "get_filter",
+				CanonicalPath:  "sheet.get_filter",
+				CLIPath:        "sheet filter get",
+				PrimaryCLIPath: "sheet filter get",
+			},
+			Description: "获取工作表全局筛选信息。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "get_filter"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取工作表全局筛选信息。",
+				UseWhen:      []string{"要查看当前全局筛选范围与列条件，或创建前确认是否已存在时"},
+				AvoidWhen:    []string{"个人筛选视图用 filter-view list/info；不要与 filter-view 混淆"},
+				Examples:     []string{"dws sheet filter get --node <NODE_ID> --sheet-id <SHEET_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterGetCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterGetCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 
@@ -218,6 +249,36 @@ func newFilterCmd() *cobra.Command {
 			return callMCPTool("create_filter", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(filterCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "create_filter",
+				CanonicalPath:  "sheet.create_filter",
+				CLIPath:        "sheet filter create",
+				PrimaryCLIPath: "sheet filter create",
+			},
+			Description: "创建全局筛选（每表仅一个；range 须含表头）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "create_filter"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建全局筛选（每表仅一个；range 须含表头）。",
+				UseWhen:      []string{"用户说筛选/过滤/只看某些行，且要影响所有协作者视图时创建全局筛选"},
+				AvoidWhen:    []string{"个人化筛选视图用 filter-view create；已存在全局筛选时先 get 再 update；禁止删行来代替筛选"},
+				Examples:     []string{"dws sheet filter create --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:E100\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterCreateCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterCreateCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterCreateCmd.Flags().String("range", "", "筛选范围，A1 表示法，须包含表头行 (必填)")
@@ -238,6 +299,36 @@ func newFilterCmd() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(filterDeleteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "delete_filter",
+				CanonicalPath:  "sheet.delete_filter",
+				CLIPath:        "sheet filter delete",
+				PrimaryCLIPath: "sheet filter delete",
+			},
+			Description: "删除全局筛选（需确认后加 --yes）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "delete_filter"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除全局筛选（需确认后加 --yes）。",
+				UseWhen:      []string{"需要移除整张表的全局筛选及全部条件时"},
+				AvoidWhen:    []string{"只清某列条件用 filter clear-criteria；删筛选视图用 filter-view delete"},
+				Examples:     []string{"dws sheet filter delete --node <NODE_ID> --sheet-id <SHEET_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterDeleteCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterDeleteCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 
@@ -274,6 +365,36 @@ func newFilterCmd() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(filterUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "update_filter",
+				CanonicalPath:  "sheet.update_filter",
+				CLIPath:        "sheet filter update",
+				PrimaryCLIPath: "sheet filter update",
+			},
+			Description: "批量更新全局筛选多列条件。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "update_filter"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "批量更新全局筛选多列条件。",
+				UseWhen:      []string{"全局筛选已存在，需要设置或替换若干列条件时"},
+				AvoidWhen:    []string{"尚无筛选时先 create；只清一列用 clear-criteria；筛选视图条件用 filter-view update-criteria"},
+				Examples:     []string{"dws sheet filter update --node <NODE_ID> --sheet-id <SHEET_ID> --criteria '[{\"column\":0,\"filterType\":\"values\",\"visibleValues\":[\"已完成\"]}]'"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterUpdateCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterUpdateCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterUpdateCmd.Flags().String("criteria", "", "筛选条件 JSON 数组 (必填)")
@@ -300,6 +421,36 @@ func newFilterCmd() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(filterClearCriteriaCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "filter_clear_criteria",
+				CanonicalPath:  "sheet.filter_clear_criteria",
+				CLIPath:        "sheet filter clear-criteria",
+				PrimaryCLIPath: "sheet filter clear-criteria",
+			},
+			Description: "清除全局筛选中某一列条件（不删筛选本身）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "clear_filter_criteria"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "清除全局筛选中某一列条件（不删筛选本身）。",
+				UseWhen:      []string{"只需取消某列过滤、保留全局筛选框架时"},
+				AvoidWhen:    []string{"删除整个全局筛选用 filter delete；筛选视图列条件用 filter-view delete-criteria"},
+				Examples:     []string{"dws sheet filter clear-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --column 1"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterClearCriteriaCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterClearCriteriaCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterClearCriteriaCmd.Flags().Int("column", 0, "列偏移量，从 0 开始 (必填)")
@@ -329,6 +480,38 @@ func newFilterCmd() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(filterSortCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "sort_filter",
+				CanonicalPath:  "sheet.sort_filter",
+				CLIPath:        "sheet filter sort",
+				PrimaryCLIPath: "sheet filter sort",
+			},
+			Description: "在全局筛选范围内按列排序（会改物理顺序）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "sort_filter"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "在全局筛选范围内按列排序（会改物理顺序）。",
+				UseWhen:      []string{"已有全局筛选，需要按某列升/降序排列筛选范围内数据时"},
+				AvoidWhen:    []string{"无筛选取区域排序用 range sort；排序不可撤销"},
+				Examples:     []string{"dws sheet filter sort --node <NODE_ID> --sheet-id <SHEET_ID> --column 0 --ascending"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "ascending", Property: "field.ascending"},
+				{Name: "column", Property: "field.column"},
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterSortCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterSortCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterSortCmd.Flags().Int("column", 0, "排序列偏移量，从 0 开始 (必填)")
@@ -368,6 +551,36 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			})
 		},
 	}
+	DeclareLeafMetadata(filterViewListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "get_filter_views",
+				CanonicalPath:  "sheet.get_filter_views",
+				CLIPath:        "sheet filter-view list",
+				PrimaryCLIPath: "sheet filter-view list",
+			},
+			Description: "列出工作表全部筛选视图概要。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "get_filter_views"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "列出工作表全部筛选视图概要。",
+				UseWhen:      []string{"用户明确说筛选视图，需要枚举 filterViewId/名称/范围时"},
+				AvoidWhen:    []string{"全局筛选用 filter get；单视图详情用 filter-view info"},
+				Examples:     []string{"dws sheet filter-view list --node <NODE_ID> --sheet-id <SHEET_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterViewListCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterViewListCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 
@@ -420,6 +633,36 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			return callMCPTool("create_filter_view", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(filterViewCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "create_filter_view",
+				CanonicalPath:  "sheet.create_filter_view",
+				CLIPath:        "sheet filter-view create",
+				PrimaryCLIPath: "sheet filter-view create",
+			},
+			Description: "创建个人筛选视图（可同时带 criteria）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "create_filter_view"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建个人筛选视图（可同时带 criteria）。",
+				UseWhen:      []string{"需要命名的个人化筛选视角且不影响其他协作者时"},
+				AvoidWhen:    []string{"影响全员的全局筛选用 filter create；只改已有视图属性用 filter-view update"},
+				Examples:     []string{"dws sheet filter-view create --node <NODE_ID> --sheet-id <SHEET_ID> --name \"销售筛选\" --range \"A1:E10\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterViewCreateCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterViewCreateCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterViewCreateCmd.Flags().String("name", "", "筛选视图名称 (必填)")
@@ -485,6 +728,36 @@ filterViewId 可通过 filter-view list 获取。
 			return callMCPTool("update_filter_view", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(filterViewUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "update_filter_view",
+				CanonicalPath:  "sheet.update_filter_view",
+				CLIPath:        "sheet filter-view update",
+				PrimaryCLIPath: "sheet filter-view update",
+			},
+			Description: "更新筛选视图名称、范围和/或多列条件。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "update_filter_view"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新筛选视图名称、范围和/或多列条件。",
+				UseWhen:      []string{"需要改筛选视图名、扩大范围或批量改多列条件时"},
+				AvoidWhen:    []string{"只改单列条件用 update-criteria；删整个视图用 delete"},
+				Examples:     []string{"dws sheet filter-view update --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --name \"新名称\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterViewUpdateCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterViewUpdateCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterViewUpdateCmd.Flags().String("filter-view-id", "", "筛选视图 ID (必填)")
@@ -518,6 +791,36 @@ filterViewId 可通过 filter-view list 获取。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(filterViewDeleteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "delete_filter_view",
+				CanonicalPath:  "sheet.delete_filter_view",
+				CLIPath:        "sheet filter-view delete",
+				PrimaryCLIPath: "sheet filter-view delete",
+			},
+			Description: "删除整个筛选视图（需确认后加 --yes）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "delete_filter_view"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除整个筛选视图（需确认后加 --yes）。",
+				UseWhen:      []string{"用户明确要删除某个筛选视图及其全部条件时"},
+				AvoidWhen:    []string{"只清某列条件用 delete-criteria；删全局筛选用 filter delete"},
+				Examples:     []string{"dws sheet filter-view delete --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterViewDeleteCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterViewDeleteCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterViewDeleteCmd.Flags().String("filter-view-id", "", "筛选视图 ID (必填)")
@@ -603,6 +906,33 @@ condition 类型支持的 operator（必须使用 kebab-case 格式）：
 			})
 		},
 	}
+	DeclareLeafMetadata(filterViewSetCriteriaCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "filter_view_update_criteria",
+				CanonicalPath:  "sheet.filter_view_update_criteria",
+				CLIPath:        "sheet filter-view update-criteria",
+				PrimaryCLIPath: "sheet filter-view update-criteria",
+			},
+			Description: "设置或更新筛选视图的单列条件。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "设置或更新筛选视图的单列条件。",
+				UseWhen:      []string{"只要精确配置某一列的 values/condition/color 条件时"},
+				AvoidWhen:    []string{"批量多列或改名改范围用 filter-view update；清除该列用 delete-criteria"},
+				Examples:     []string{"dws sheet filter-view update-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0 --filter-criteria '{\"filterType\":\"values\",\"visibleValues\":[\"销售部\"]}'"},
+			},
+		},
+	})
 	filterViewSetCriteriaCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterViewSetCriteriaCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterViewSetCriteriaCmd.Flags().String("filter-view-id", "", "筛选视图 ID (必填)")
@@ -648,6 +978,36 @@ filterViewId 可通过 filter-view list 获取。
 			})
 		},
 	}
+	DeclareLeafMetadata(filterViewClearCriteriaCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "filter_view_delete_criteria",
+				CanonicalPath:  "sheet.filter_view_delete_criteria",
+				CLIPath:        "sheet filter-view delete-criteria",
+				PrimaryCLIPath: "sheet filter-view delete-criteria",
+			},
+			Description: "清除筛选视图某列条件（需确认后加 --yes；保留视图）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "clear_filter_view_criteria"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "清除筛选视图某列条件（需确认后加 --yes；保留视图）。",
+				UseWhen:      []string{"只需取消筛选视图中某列过滤时"},
+				AvoidWhen:    []string{"删除整个筛选视图用 filter-view delete"},
+				Examples:     []string{"dws sheet filter-view delete-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterViewClearCriteriaCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterViewClearCriteriaCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterViewClearCriteriaCmd.Flags().String("filter-view-id", "", "筛选视图 ID (必填)")
@@ -670,6 +1030,37 @@ filterViewId 可通过 filter-view list 获取。`,
   dws sheet filter-view info --node NODE_ID --sheet-id SHEET_ID --filter-view-id FV_ID`,
 		RunE: runFilterViewInfo,
 	}
+	DeclareLeafMetadata(filterViewInfoCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "filter_view_info",
+				CanonicalPath:  "sheet.filter_view_info",
+				CLIPath:        "sheet filter-view info",
+				PrimaryCLIPath: "sheet filter-view info",
+			},
+			Description: "获取单个筛选视图完整配置（含 criteria）。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "get_filter_views"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取单个筛选视图完整配置（含 criteria）。",
+				UseWhen:      []string{"已知 filterViewId，需要查看名称/范围/全部条件时"},
+				AvoidWhen:    []string{"列目录用 list；列条件清单用 list-criteria；全局筛选用 filter get"},
+				Examples:     []string{"dws sheet filter-view info --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterViewInfoCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterViewInfoCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterViewInfoCmd.Flags().String("filter-view-id", "", "筛选视图 ID (必填)")
@@ -693,6 +1084,37 @@ filterViewId 可通过 filter-view list 获取。`,
   dws sheet filter-view list-criteria --node NODE_ID --sheet-id SHEET_ID --filter-view-id FV_ID`,
 		RunE: runFilterViewListCriteria,
 	}
+	DeclareLeafMetadata(filterViewListCriteriaCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "filter_view_list_criteria",
+				CanonicalPath:  "sheet.filter_view_list_criteria",
+				CLIPath:        "sheet filter-view list-criteria",
+				PrimaryCLIPath: "sheet filter-view list-criteria",
+			},
+			Description: "列出筛选视图已设置的全部列条件。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "get_filter_views"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "列出筛选视图已设置的全部列条件。",
+				UseWhen:      []string{"管理条件前需要看当前视图有哪些列条件时"},
+				AvoidWhen:    []string{"单列详情用 get-criteria；视图属性用 info"},
+				Examples:     []string{"dws sheet filter-view list-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterViewListCriteriaCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterViewListCriteriaCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterViewListCriteriaCmd.Flags().String("filter-view-id", "", "筛选视图 ID (必填)")
@@ -722,6 +1144,37 @@ filterViewId 可通过 filter-view list 获取。`,
   dws sheet filter-view get-criteria --node NODE_ID --sheet-id SHEET_ID --filter-view-id FV_ID --column 2`,
 		RunE: runFilterViewGetCriteria,
 	}
+	DeclareLeafMetadata(filterViewGetCriteriaCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "filter_view_get_criteria",
+				CanonicalPath:  "sheet.filter_view_get_criteria",
+				CLIPath:        "sheet filter-view get-criteria",
+				PrimaryCLIPath: "sheet filter-view get-criteria",
+			},
+			Description: "获取筛选视图指定列的条件详情。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "get_filter_views"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取筛选视图指定列的条件详情。",
+				UseWhen:      []string{"修改某列条件前先查看该列当前 filterType/operators 时"},
+				AvoidWhen:    []string{"全部列条件用 list-criteria"},
+				Examples:     []string{"dws sheet filter-view get-criteria --node <NODE_ID> --sheet-id <SHEET_ID> --filter-view-id <FV_ID> --column 0"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	filterViewGetCriteriaCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	filterViewGetCriteriaCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	filterViewGetCriteriaCmd.Flags().String("filter-view-id", "", "筛选视图 ID (必填)")
