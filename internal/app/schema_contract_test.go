@@ -437,8 +437,7 @@ func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
 	wantEffects := map[string]string{
 		"attendance.class_create":  "write",
 		"attendance.class_update":  "write",
-		"doc.delete_comment":       "write",
-		"doc.version_revert":       "write",
+		"doc.delete_comment":       "destructive",
 		"drive.publish_set":        "write",
 		"drive.publish_unset":      "write",
 		"sheet.chart_delete":       "write",
@@ -447,8 +446,7 @@ func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
 	wantRisks := map[string]string{
 		"attendance.class_create":  "medium",
 		"attendance.class_update":  "medium",
-		"doc.delete_comment":       "medium",
-		"doc.version_revert":       "medium",
+		"doc.delete_comment":       "high",
 		"drive.publish_set":        "medium",
 		"drive.publish_unset":      "medium",
 		"sheet.chart_delete":       "medium",
@@ -458,7 +456,6 @@ func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
 		"attendance.class_create":  "corecmd.contract",
 		"attendance.class_update":  "corecmd.contract",
 		"doc.delete_comment":       "corecmd.contract",
-		"doc.version_revert":       "corecmd.contract",
 		"drive.publish_set":        "corecmd.contract",
 		"drive.publish_unset":      "corecmd.contract",
 		"sheet.chart_delete":       "corecmd.contract",

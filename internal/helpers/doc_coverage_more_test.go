@@ -197,9 +197,12 @@ func TestCrossPlatformCoverageRunDocUploadDownloadAndMediaCoverage(t *testing.T)
 	oldArgs := os.Args
 	os.Args = []string{"dws", "doc"}
 	t.Cleanup(func() { os.Args = oldArgs })
+	installImmediateTiming(t)
 	oldPut, oldGet := httpPutFile, httpGetFile
 	t.Cleanup(func() { httpPutFile, httpGetFile = oldPut, oldGet })
-	file := filepath.Join(t.TempDir(), "file.md")
+	workspace := t.TempDir()
+	t.Chdir(workspace)
+	file := "file.md"
 	if err := os.WriteFile(file, []byte("content"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -232,8 +235,14 @@ func TestCrossPlatformCoverageRunDocUploadDownloadAndMediaCoverage(t *testing.T)
 	_ = download.RunE(download, nil)
 
 	for _, mime := range []string{"image/png", "text/markdown", "application/pdf"} {
+		verifiedBlock := `{"id":"media-block","attachment":{"resourceId":"resource"}}`
+		if mime == "image/png" {
+			verifiedBlock = `{"id":"media-block","paragraph":{"text":""},"children":[{"elementType":"image","properties":{"src":"https://image"}}]}`
+		}
 		caller := &scriptedToolCaller{steps: []scriptedToolStep{
-			{text: `{"uploadUrl":"https://upload","resourceId":"resource","resourceUrl":"https://image"}`}, {text: `{"ok":true}`},
+			{text: `{"uploadUrl":"https://upload","resourceId":"resource","resourceUrl":"https://image"}`},
+			{text: `{"blockId":"media-block"}`},
+			{text: `{"blocks":[{"id":"before"},` + verifiedBlock + `]}`},
 		}}
 		installScriptedCaller(t, caller)
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
@@ -244,8 +253,7 @@ func TestCrossPlatformCoverageRunDocUploadDownloadAndMediaCoverage(t *testing.T)
 		_ = media.Flags().Set("mime-type", mime)
 		_ = media.Flags().Set("name", "renamed")
 		_ = media.Flags().Set("index", "1")
-		_ = media.Flags().Set("where", "after")
-		_ = media.Flags().Set("ref-block", "block")
+		media.SetIn(strings.NewReader("yes\n"))
 		_ = media.RunE(media, nil)
 	}
 }

@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉钉文件管理（存储层）。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/找文件/全局搜索文件/复制/移动/重命名/删除/回收站/还原删除文件/权限管理/普通文件下载。任何文件类型都适用；文档内容编辑走 dingtalk-doc，知识库空间和空间内节点管理走 dingtalk-wiki。命令前缀：dws drive。
+description: 钉钉文件管理（存储层）。Use when 用户说 钉盘/文档空间或我的文档中的普通文件夹/上传文件/下载文件/查文件/找文件/全局搜索文件/复制/移动/重命名/删除/回收站/还原删除文件/权限管理/元信息。任何文件类型都适用；文档正文编辑走 dingtalk-doc，明确的知识库/wiki 空间和空间内节点管理走 dingtalk-wiki。命令前缀：dws drive。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -42,9 +42,11 @@ metadata:
 | "查文件元数据" | `dws drive info --node <dentryUuid>` |
 | "搜文件 / 找文件" | `dws drive search --query "<关键词>"` |
 | "下载文件" | `dws drive download --node <dentryUuid> --output <path>` |
-| "上传文件" | `dws drive upload --file <path> [--folder <id>]` |
+| "上传文件/保留原文件格式" | `dws drive upload --file <path> [--folder <id>]` |
+| "导入后在线编辑/协作编辑/转在线文档" | Word/Markdown/Text → `dws doc +import`；Excel → `dws sheet import create` |
 | "建钉盘文件夹" | `dws drive mkdir --name "<名称>" [--folder <id>]` |
-| "复制/移动/重命名/删除/权限管理" | `dws drive copy/move/rename/delete/permission ...` |
+| "在文档空间建文件夹，再移动文档并确认位置" | `dws drive mkdir` → `dws drive move --folder <新文件夹ID>` → `dws drive info --node <文档ID>` |
+| "复制/移动/重命名/删除/权限管理"（包括在线 adoc 节点） | 复制优先 `dws drive +copy`，移动优先 `dws drive +move`；重命名/删除用 `dws drive rename/delete` |
 | "回收站 / 还原删除的文件" | `dws drive recycle list` / `dws drive recycle restore --id <recycleItemId>` |
 
 ## 标准 SOP（必遵流程）
@@ -74,9 +76,9 @@ metadata:
 
 ### SOP-3 文件夹 / 复制 / 移动 / 重命名（folder-ops）
 
-**触发**：建文件夹/复制/移动/重命名。
+**触发**：建文件夹/复制/移动/重命名，包括在线文档节点和泛称“文档空间/我的文档”的普通存储操作。在线文档的节点复制/移动/重命名属于 drive；只有正文创建、读取和编辑才切 `dingtalk-doc`。
 
-1. **执行（必须）**：建钉盘文件夹 `dws drive mkdir --name "<名称>" [--folder <id>]`；复制 `drive copy --node <dentryUuid> --folder <目标>`；移动 `drive move --node <dentryUuid> --folder <目标>`；重命名 `drive rename --node <dentryUuid> --name "<新名>"`。全部加 `--format json`。
+1. **执行（必须）**：建钉盘文件夹 `dws drive mkdir --name "<名称>" [--folder <id>]`；复制 `dws drive +copy --node <dentryUuid> --folder <目标>`；移动 `dws drive +move --node <dentryUuid> --folder <目标>`；重命名 `dws drive rename --node <dentryUuid> --name "<新名>"`。全部加 `--format json`。
 2. **验证（必须）**：操作后 `drive info --node <新dentryUuid>` 或 `drive list --folder <目标>` 回读。
 
 **禁止**：未确认就移动/覆盖他人文件、跳过回读。
@@ -110,7 +112,8 @@ metadata:
 ## 跨产品协作
 
 - 文件内容编辑（钉钉文档）→ 切到 `dingtalk-doc`
-- 知识库空间 → 切到 `dingtalk-wiki`
+- “在线编辑/协作编辑/转在线/导入成在线文档”不是普通上传：Word/Markdown/Text 走 `dws doc +import`，Excel 走电子表格 `sheet import create`；`drive upload` 只表示保留原文件对象
+- 仅当用户明确说知识库/wiki/命名团队空间或知识库节点层级时 → 切到 `dingtalk-wiki`；泛称“文档空间/我的文档”仍按动作留在本 skill
 ## 局部意图与短流程
 
 - [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。

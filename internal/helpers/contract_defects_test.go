@@ -144,7 +144,7 @@ func TestDocVersionRevertNonDryRunPreflightsVersion(t *testing.T) {
 		},
 	}
 	output, err := executeContractDefectCommand(t, caller, newDocCommand,
-		"version", "revert", "--node", "node-live", "--version", "7", "--yes")
+		"version", "revert", "--node", "node-live", "--version", "7")
 	if err != nil {
 		t.Fatalf("doc version revert returned error: %v", err)
 	}
@@ -170,8 +170,8 @@ func TestDocVersionRevertPublishesRuntimeSafety(t *testing.T) {
 		t.Fatal("doc version revert must publish ContractFinal Safety")
 	}
 	if safety := *final.Safety; safety.Effect != "write" || safety.Risk != "medium" ||
-		safety.Confirmation != "user_required" || safety.Idempotency != "unknown" {
-		t.Fatalf("doc version revert Safety = %#v, want write/medium/user_required/unknown", safety)
+		safety.Confirmation != "not_required" || safety.Idempotency != "unknown" {
+		t.Fatalf("doc version revert Safety = %#v, want write/medium/not_required/unknown", safety)
 	}
 }
 

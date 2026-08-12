@@ -568,7 +568,7 @@ func newDriveCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "获取文件元数据信息",
 				UseWhen: []string{
-					"用户要查看钉盘文件/文件夹元信息（名称、类型、大小、路径、时间）时",
+					"用户要查看钉盘或文档空间文件/文件夹元信息（名称、类型、大小、路径、时间）时",
 					"准备读内容前需先判断 extension/是否在线文档，再路由到 doc read / sheet / download 时",
 				},
 				AvoidWhen: []string{
@@ -922,7 +922,7 @@ func newDriveCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建文件夹",
 				UseWhen: []string{
-					"用户要在钉盘/「我的文件」下新建普通文件夹时",
+					"用户要在钉盘/「我的文件」或泛称的普通文档空间下新建文件夹时",
 					"已知父目录 dentryUuid，要在其下建子目录时",
 				},
 				AvoidWhen: []string{
@@ -1177,21 +1177,22 @@ func newDriveCommand() *cobra.Command {
 				Reason:       "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "上传本地文件到钉盘或文档空间，或按节点 ID 确认覆盖已有文件",
+				AgentSummary: "原样上传本地文件到钉盘/文档空间，或按节点 ID 覆盖已有普通文件",
 				UseWhen: []string{
-					"用户要把本地文件上传到钉盘/我的文件（首选一条命令自动完成凭证+PUT+提交）时",
-					"上传到知识库/文档空间时加 --workspace；需要转在线文档时加 --convert",
+					"用户要保留原文件格式，把本地文件上传到钉盘/我的文件时",
+					"用户明确要求原样上传到指定知识库/文档空间时加 --workspace",
 					"用户明确要求用本地文件替换已有钉盘/文档空间文件时传 --node；该模式会覆盖远端内容并要求确认",
 				},
 				AvoidWhen: []string{
 					"常规场景不要拆成 upload-info + 手动 PUT + commit；仅自定义流式上传才用三步",
+					"用户说在线编辑、协作编辑、转在线文档或导入 Word/Markdown/Text 时，使用 dws doc +import；Excel 在线编辑使用 sheet import create",
 					"要把文件作为文档正文附件插入改用 dws doc media insert",
 					"用户明确说文档空间且走 doc 兼容入口时可用 dws doc upload，默认仍推荐本命令",
 					"用户没有明确同意替换目标文件时不要使用 --node；新建上传应使用 --folder 或目标根目录",
 				},
 				Examples: []string{
 					"dws drive upload --file ./report.pdf --format json",
-					"dws drive upload --file ./README.md --node <dentryUuid> --format json",
+					"dws drive upload --file ./archive.zip --node <dentryUuid> --format json",
 				},
 			},
 			// Composite multi-step leaf (get_upload_info → PUT → commit_upload):

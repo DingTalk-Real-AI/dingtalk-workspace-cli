@@ -12,6 +12,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -27,7 +28,7 @@ func canonicalizeHistoryShortcuts() {
 	VersionSave.Aliases = nil
 	VersionSave.Description = "手动保存当前文档版本快照"
 	VersionSave.Intent = "当用户要求保存、创建或建立当前文档版本快照时使用；只保存快照，不更新正文。"
-	VersionSave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"}
+	VersionSave.Safety = docsafety.RecoverableWrite("unknown")
 	VersionSave.Contract = versionSaveContract()
 	VersionSave.Tips = []string{`dws doc +version-save --node <DOC_ID>`}
 
@@ -56,13 +57,13 @@ func canonicalizeHistoryShortcuts() {
 	VersionRevert.Command = "+version-revert"
 	VersionRevert.Aliases = nil
 	VersionRevert.Description = "预检并回滚文档到指定历史版本"
-	VersionRevert.Intent = "当用户明确要把整篇文档恢复到某个历史版本时使用；先确认目标版本存在，再执行高风险回滚并读回验证。"
+	VersionRevert.Intent = "当用户明确要把整篇文档恢复到某个历史版本时使用；先确认目标版本存在，再执行可恢复写入并读回验证。"
 	VersionRevert.Contract = versionRevertContract()
 	VersionRevert.Tips = []string{`dws doc +version-revert --node <DOC_ID> --version 3`}
 	VersionRevert.Execute = executeHistoryRevert
 
 	compatHistorySave = compatibilityHistoryShortcut(VersionSave, "+history-save", "+version-save")
-	compatHistorySave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
+	compatHistorySave.Safety = VersionSave.Safety
 	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
 	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
 
@@ -179,8 +180,10 @@ func executeHistoryRevert(rt *shortcut.RuntimeContext) error {
 		)
 	}
 	return rt.Output(docEnvelope("doc.history_revert", map[string]any{
-		"version": target, "revertResult": reverted, "current": current, "verified": true,
-		"verification": "revert_acknowledged_and_document_readable",
+		"version": target, "revertResult": reverted, "current": current,
+		"verified": true, "acknowledged": true, "readable": true, "contentVerified": false,
+		"verificationScope": "acknowledgement_and_readability",
+		"verification":      "revert_acknowledged_and_document_readable_only",
 	},
 		map[string]any{"name": "preflight", "status": "success"},
 		map[string]any{"name": "revert", "status": "success"},

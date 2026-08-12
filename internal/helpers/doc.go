@@ -3,17 +3,21 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 
@@ -26,6 +30,16 @@ import (
 
 // httpPutFile uploads file content via HTTP PUT. Package-level for test injection.
 var httpPutFile = defaultHTTPPutFile
+
+const maxInlineDocImageSize = 20 * 1024 * 1024
+
+type docMediaInsertPosition struct {
+	Mode     string
+	HasIndex bool
+	Index    int
+	Where    string
+	RefBlock string
+}
 
 // SetHTTPPutFile overrides the HTTP PUT function (for testing). Pass nil to restore default.
 func SetHTTPPutFile(fn func(ctx context.Context, url string, headers map[string]string, filePath string, fileSize int64) error) {
@@ -492,46 +506,150 @@ func defaultHTTPGetFile(ctx context.Context, url string, headers map[string]stri
 	return nil
 }
 
-// runMediaInsert implements the three-step flow for inserting an attachment into a document:
+// ValidateDocMediaInsertCommand validates the local file and insertion-position
+// contract shared by the smart shortcut and the compatibility atomic command.
+// Keeping this check in helpers also protects direct RunE callers in tests and
+// embedded hosts instead of relying only on Cobra/Schema declarations.
+func ValidateDocMediaInsertCommand(cmd *cobra.Command) error {
+	if cmd == nil {
+		return apperrors.NewInternal("doc media insert: command is nil")
+	}
+	if _, _, err := resolveDocMediaInputPath(mustGetFlag(cmd, "file")); err != nil {
+		return err
+	}
+	_, err := readDocMediaInsertPosition(cmd)
+	return err
+}
+
+func resolveDocMediaInputPath(raw string) (string, os.FileInfo, error) {
+	path := strings.TrimSpace(raw)
+	if path == "" || filepath.IsAbs(path) {
+		return "", nil, apperrors.NewValidation("--file 只接受工作目录内已暂存文件的相对路径")
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", nil, apperrors.NewInternal(fmt.Sprintf("读取工作目录失败: %v", err))
+	}
+	realBase, err := filepath.EvalSymlinks(cwd)
+	if err != nil {
+		return "", nil, apperrors.NewInternal(fmt.Sprintf("解析工作目录失败: %v", err))
+	}
+	realPath, err := filepath.EvalSymlinks(filepath.Join(realBase, filepath.Clean(path)))
+	if err != nil {
+		return "", nil, apperrors.NewValidation(fmt.Sprintf("--file: 读取文件 %q 失败: %v", path, err))
+	}
+	rel, err := filepath.Rel(realBase, realPath)
+	if err != nil || rel == ".." || strings.HasPrefix(filepath.ToSlash(rel), "../") {
+		return "", nil, apperrors.NewValidation("--file 不能逃逸工作目录；请先把文件暂存到工作目录")
+	}
+	info, err := os.Stat(realPath)
+	if err != nil {
+		return "", nil, apperrors.NewValidation(fmt.Sprintf("--file: 读取文件 %q 失败: %v", path, err))
+	}
+	if !info.Mode().IsRegular() {
+		return "", nil, apperrors.NewValidation(fmt.Sprintf("--file %q 不是普通文件", path))
+	}
+	return realPath, info, nil
+}
+
+func readDocMediaInsertPosition(cmd *cobra.Command) (docMediaInsertPosition, error) {
+	position := docMediaInsertPosition{}
+	if cmd.Flags().Changed("index") {
+		position.HasIndex = true
+		position.Mode = "index"
+		position.Index, _ = cmd.Flags().GetInt("index")
+		if position.Index < 0 {
+			return position, apperrors.NewValidation("--index 必须大于或等于 0")
+		}
+	}
+	position.Where = strings.TrimSpace(mustGetFlag(cmd, "where"))
+	position.RefBlock = strings.TrimSpace(mustGetFlag(cmd, "ref-block"))
+	if (position.Where == "") != (position.RefBlock == "") {
+		return position, apperrors.NewValidation("--where 与 --ref-block 必须同时指定")
+	}
+	if position.Where != "" {
+		if position.Where != "before" && position.Where != "after" {
+			return position, apperrors.NewValidation("--where 只支持 before 或 after")
+		}
+		if position.HasIndex {
+			return position, apperrors.NewValidation("--index 与 --where/--ref-block 不能同时指定")
+		}
+		position.Mode = "relative"
+	}
+	if position.Mode == "" {
+		position.Mode = "end"
+	}
+	return position, nil
+}
+
+// runMediaInsert implements the four-step flow for inserting an attachment into a document:
 //  1. get_doc_attachment_upload_info → obtain uploadUrl + resourceId
 //  2. HTTP PUT file content to OSS
 //  3. insert_document_block with attachment element
+//  4. get_document_content(JSONML) read-back verification, returning the stable block ID
 func runMediaInsert(cmd *cobra.Command, _ []string) error {
+	if err := ValidateDocMediaInsertCommand(cmd); err != nil {
+		return err
+	}
 	nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 	if err != nil {
 		return err
 	}
 
-	filePath := mustGetFlag(cmd, "file")
-	if filePath == "" {
-		return fmt.Errorf("flag --file is required")
-	}
-
-	fileInfo, err := os.Stat(filePath)
+	fileArg := strings.TrimSpace(mustGetFlag(cmd, "file"))
+	filePath, fileInfo, err := resolveDocMediaInputPath(fileArg)
 	if err != nil {
-		return fmt.Errorf("cannot read file %s: %w", filePath, err)
+		return err
 	}
-	if fileInfo.IsDir() {
-		return fmt.Errorf("%s is a directory, not a file", filePath)
+	position, err := readDocMediaInsertPosition(cmd)
+	if err != nil {
+		return err
 	}
 
 	fileName, _ := cmd.Flags().GetString("name")
+	fileName = strings.TrimSpace(fileName)
 	if fileName == "" {
-		fileName = filepath.Base(filePath)
+		fileName = filepath.Base(fileArg)
 	} else if filepath.Ext(fileName) == "" {
-		if ext := filepath.Ext(filePath); ext != "" {
+		if ext := filepath.Ext(fileArg); ext != "" {
 			fileName += ext
 		}
+	}
+	if fileName != filepath.Base(fileName) || fileName == "." {
+		return apperrors.NewValidation("--name 只能是文件名，不能包含目录路径")
 	}
 
 	mimeType, _ := cmd.Flags().GetString("mime-type")
 	if mimeType == "" {
-		mimeType = inferMimeType(fileName)
+		// Display-name overrides must not silently change an image into an
+		// attachment (or vice versa); infer from the staged source file.
+		mimeType = inferMimeType(fileArg)
+	} else {
+		parsed, _, parseErr := mime.ParseMediaType(mimeType)
+		if parseErr != nil || strings.TrimSpace(parsed) == "" {
+			return apperrors.NewValidation(fmt.Sprintf("--mime-type 不是合法 MIME 类型: %q", mimeType))
+		}
+		mimeType = strings.ToLower(parsed)
 	}
 
 	fileSize := fileInfo.Size()
+	mediaKind := "attachment"
+	if strings.HasPrefix(mimeType, "image/") {
+		mediaKind = "inline_image"
+		if fileSize > maxInlineDocImageSize {
+			return apperrors.NewValidation("图片超过 20MB，不能作为正文图片插入；请压缩图片后重试，或明确改为非图片附件")
+		}
+	}
 
 	if deps.Caller.DryRun() {
+		positionPreview := map[string]any{"mode": position.Mode}
+		if position.HasIndex {
+			positionPreview["index"] = position.Index
+		}
+		if position.Mode == "relative" {
+			positionPreview["where"] = position.Where
+			positionPreview["referenceBlockId"] = position.RefBlock
+		}
 		return deps.Out.PrintJSON(map[string]any{
 			"contractVersion": "doc.operation.v1",
 			"dry_run":         true,
@@ -541,8 +659,9 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 			"complete":        true,
 			"operation":       "doc.media_insert",
 			"data": map[string]any{
-				"executed": false, "nodeId": nodeID, "file": filePath,
+				"executed": false, "nodeId": nodeID, "file": fileArg,
 				"fileName": fileName, "mimeType": mimeType, "sizeBytes": fileSize,
+				"mediaKind": mediaKind, "position": positionPreview,
 			},
 			"steps": []map[string]any{{"name": "validate_local_file", "status": "success"}},
 		})
@@ -551,9 +670,9 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	// Step 1: get upload credentials (uploadUrl + resourceId)
-	deps.Out.PrintInfo(fmt.Sprintf("[1/3] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	deps.Out.PrintInfo(fmt.Sprintf("[1/4] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
 
-	credText, err := callMCPToolReturnText(ctx, "get_doc_attachment_upload_info", map[string]any{
+	credText, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_doc_attachment_upload_info", map[string]any{
 		"nodeId":   nodeID,
 		"fileName": fileName,
 		"fileSize": float64(fileSize),
@@ -567,14 +686,24 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	if mediaKind == "inline_image" && strings.TrimSpace(resourceURL) == "" {
+		return apperrors.NewAPI(
+			"图片上传凭证缺少可插入正文的 resourceUrl，已在上传前停止",
+			apperrors.WithOperation("doc.media_insert"),
+			apperrors.WithReason("doc_media_image_url_missing"),
+			apperrors.WithFailureStage("resolve_upload"),
+			apperrors.WithRetryable(true),
+		)
+	}
 
 	// Step 2: HTTP PUT file to OSS
-	deps.Out.PrintInfo("[2/3] 上传文件到 OSS...")
+	deps.Out.PrintInfo("[2/4] 上传文件到 OSS...")
 
 	ossHeaders := map[string]string{
 		"Content-Type": mimeType,
 	}
 	if err := httpPutFile(ctx, uploadURL, ossHeaders, filePath, fileSize); err != nil {
+		redactedCause := errors.New(strings.ReplaceAll(err.Error(), uploadURL, "<redacted upload URL>"))
 		return apperrors.NewAPI(
 			"附件上传结果未知；尚未确认正文 block 已插入，请先检查文档媒体列表，禁止改用手写 HTTP",
 			apperrors.WithOperation("doc.media_insert"),
@@ -587,17 +716,15 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 				"contractVersion": "doc.operation.v1", "status": "unknown", "nodeId": nodeID,
 				"resourceId": resourceID, "fileName": fileName, "stage": "upload_oss",
 			}),
-			apperrors.WithCause(err),
+			apperrors.WithCause(redactedCause),
 		)
 	}
 
 	// Step 3: insert block into document
-	deps.Out.PrintInfo("[3/3] 插入块到文档...")
-
-	const maxInlineImageSize = 20 * 1024 * 1024 // 20MB
+	deps.Out.PrintInfo("[3/4] 插入块到文档...")
 
 	var element map[string]any
-	if strings.HasPrefix(mimeType, "image/") && resourceURL != "" && fileSize <= maxInlineImageSize {
+	if mediaKind == "inline_image" {
 		// Image files: insert as inline image (paragraph + children image)
 		element = map[string]any{
 			"blockType": "paragraph",
@@ -634,17 +761,16 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		"nodeId":  nodeID,
 		"element": element,
 	}
-	if v, _ := cmd.Flags().GetInt("index"); cmd.Flags().Changed("index") {
-		insertArgs["index"] = v
+	if position.HasIndex {
+		insertArgs["index"] = position.Index
 	}
-	if v, _ := cmd.Flags().GetString("where"); v != "" {
-		insertArgs["where"] = v
-	}
-	if v, _ := cmd.Flags().GetString("ref-block"); v != "" {
-		insertArgs["referenceBlockId"] = v
+	if position.Mode == "relative" {
+		insertArgs["where"] = position.Where
+		insertArgs["referenceBlockId"] = position.RefBlock
 	}
 
-	if err := callMCPTool("insert_document_block", insertArgs); err != nil {
+	insertText, err := callMCPToolReturnTextOnServer(ctx, "doc", "insert_document_block", insertArgs)
+	if err != nil {
 		return apperrors.NewAPI(
 			"附件已上传，但正文 block 插入结果未知；请先检查媒体列表，不要重复上传或插入",
 			apperrors.WithOperation("doc.media_insert"),
@@ -666,6 +792,91 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		)
 	}
 
+	insertedBlockID := docResponseString(insertText, "blockId", "elementId", "id")
+	deps.Out.PrintInfo("[4/4] 回读验证插入结果...")
+	verificationAttempts := 0
+	var verificationCause error
+	var verifiedTopLevelIDs []string
+	var mediaElementID string
+	insertedIndex := -1
+	for attempt := 1; attempt <= 4; attempt++ {
+		verificationAttempts = attempt
+		verificationText, verifyErr := callMCPToolReturnTextOnServer(ctx, "doc", "get_document_content", map[string]any{"nodeId": nodeID, "format": "jsonml"})
+		if verifyErr != nil {
+			verificationCause = fmt.Errorf("读取文档 JSONML 失败: %w", verifyErr)
+		} else {
+			var verification any
+			if err := json.Unmarshal([]byte(verificationText), &verification); err != nil {
+				verificationCause = fmt.Errorf("无法解析 JSONML 回读结果: %w", err)
+			} else {
+				verifiedTopLevelIDs = docTopLevelBlockIDs(verification)
+				matches := docMediaMatches(verification, resourceID, resourceURL, mediaKind)
+				if len(matches) == 1 {
+					// insert_document_block may omit an ID or return the nested image
+					// element ID. The lifecycle ID exposed to callers must be the
+					// inserted top-level block because it is the stable unit accepted
+					// by subsequent block operations.
+					insertedBlockID = matches[0].BlockID
+					mediaElementID = matches[0].MediaElementID
+				} else {
+					verificationCause = fmt.Errorf("回读需要唯一的 %s block，实际匹配 %d 个", mediaKind, len(matches))
+				}
+				if insertedBlockID != "" {
+					if !containsDocMediaBlockID(matches, insertedBlockID) {
+						verificationCause = fmt.Errorf("blockId=%s 存在性不足：未同时匹配上传资源和预期类型 %s", insertedBlockID, mediaKind)
+					} else if index, ok := verifyDocMediaPosition(verifiedTopLevelIDs, insertedBlockID, position); !ok {
+						verificationCause = fmt.Errorf("blockId=%s 已插入，但未处于请求的位置 %s", insertedBlockID, describeDocMediaPosition(position))
+					} else {
+						// Re-read the newly created block by its stable ID. This prevents
+						// a full-document identity match from being mistaken for proof
+						// that the receipt ID itself is usable.
+						targetedText, targetedErr := callMCPToolReturnTextOnServer(ctx, "doc", "get_document_content", map[string]any{
+							"nodeId": nodeID, "format": "jsonml", "scope": "section", "startBlockId": insertedBlockID,
+						})
+						if targetedErr != nil {
+							verificationCause = fmt.Errorf("按 insertedBlockId=%s 定点回读失败: %w", insertedBlockID, targetedErr)
+						} else {
+							var targeted any
+							if err := json.Unmarshal([]byte(targetedText), &targeted); err != nil {
+								verificationCause = fmt.Errorf("无法解析 insertedBlockId=%s 定点回读: %w", insertedBlockID, err)
+							} else if !docMediaIdentityMatches(docJSONMLValue(targeted), resourceID, resourceURL) || !docMediaKindMatches(docJSONMLValue(targeted), mediaKind) {
+								verificationCause = fmt.Errorf("insertedBlockId=%s 定点回读未包含预期 %s", insertedBlockID, mediaKind)
+							} else {
+								insertedIndex = index
+								verificationCause = nil
+								break
+							}
+						}
+					}
+				}
+			}
+		}
+		if attempt < 4 {
+			backoff := []time.Duration{100 * time.Millisecond, 300 * time.Millisecond, 800 * time.Millisecond}
+			helperSleep(backoff[attempt-1])
+		}
+	}
+	if verificationCause != nil {
+		return docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName, mediaKind, insertedBlockID, position, verificationCause)
+	}
+	verifiedPosition := map[string]any{
+		"mode":                 position.Mode,
+		"insertedIndex":        insertedIndex,
+		"followingBlockExists": false,
+		"followingBlockId":     nil,
+	}
+	if position.HasIndex {
+		verifiedPosition["requestedIndex"] = position.Index
+	}
+	if position.Mode == "relative" {
+		verifiedPosition["where"] = position.Where
+		verifiedPosition["referenceBlockId"] = position.RefBlock
+	}
+	if insertedIndex >= 0 && insertedIndex+1 < len(verifiedTopLevelIDs) {
+		verifiedPosition["followingBlockId"] = verifiedTopLevelIDs[insertedIndex+1]
+		verifiedPosition["followingBlockExists"] = true
+	}
+
 	return deps.Out.PrintJSON(map[string]any{
 		"contractVersion": "doc.operation.v1",
 		"ok":              true,
@@ -675,13 +886,330 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		"data": map[string]any{
 			"nodeId": nodeID, "resourceId": resourceID, "resourceUrl": resourceURL,
 			"fileName": fileName, "mimeType": mimeType, "sizeBytes": fileSize, "inserted": true,
+			"mediaKind": mediaKind, "position": verifiedPosition,
+			"insertedBlockId": insertedBlockID, "mediaElementId": mediaElementID,
+			"affectedBlockIds": []string{insertedBlockID}, "verified": true,
 		},
 		"steps": []map[string]any{
 			{"name": "resolve_upload", "status": "success"},
 			{"name": "upload_oss", "status": "success"},
 			{"name": "insert_block", "status": "success"},
+			{"name": "verify", "status": "success", "attempts": verificationAttempts},
 		},
 	})
+}
+
+func docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName, mediaKind, insertedBlockID string, position docMediaInsertPosition, cause error) error {
+	return apperrors.NewAPI(
+		"附件与正文 block 已提交，但回读尚未证明插入结果；请使用返回的稳定 ID 检查当前文档，不要重复上传",
+		apperrors.WithOperation("doc.media_insert"),
+		apperrors.WithReason("doc_media_insert_verification_failed"),
+		apperrors.WithFailureStage("verify"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithActions("运行 dws doc +media-list 检查 resourceId/blockId", "确认当前文档状态后再决定是否补操作；不要重放上传"),
+		apperrors.WithDetails(map[string]any{
+			"contractVersion": "doc.operation.v1", "status": "partial_success", "nodeId": nodeID,
+			"resourceId": resourceID, "resourceUrl": resourceURL, "fileName": fileName, "mediaKind": mediaKind,
+			"insertedBlockId": insertedBlockID, "requestedPosition": describeDocMediaPosition(position),
+			"steps": []map[string]any{
+				{"name": "resolve_upload", "status": "success"},
+				{"name": "upload_oss", "status": "success"},
+				{"name": "insert_block", "status": "success"},
+				{"name": "verify", "status": "failed"},
+			},
+		}),
+		apperrors.WithCause(cause),
+	)
+}
+
+func docResponseString(text string, keys ...string) string {
+	var payload any
+	if strings.TrimSpace(text) == "" || json.Unmarshal([]byte(text), &payload) != nil {
+		return ""
+	}
+	return docNestedString(payload, keys...)
+}
+
+func docNestedString(value any, keys ...string) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range keys {
+			if result, ok := typed[key].(string); ok && strings.TrimSpace(result) != "" {
+				return strings.TrimSpace(result)
+			}
+		}
+		for _, child := range typed {
+			if result := docNestedString(child, keys...); result != "" {
+				return result
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if result := docNestedString(child, keys...); result != "" {
+				return result
+			}
+		}
+	}
+	return ""
+}
+
+type docMediaMatch struct {
+	BlockID        string
+	MediaElementID string
+}
+
+func docMediaMatches(value any, resourceID, resourceURL, mediaKind string) []docMediaMatch {
+	blocks := docTopLevelBlocks(value)
+	result := make([]docMediaMatch, 0, len(blocks))
+	for _, block := range blocks {
+		blockID := docDirectBlockID(block)
+		if blockID == "" || !docMediaIdentityMatches(block, resourceID, resourceURL) || !docMediaKindMatches(block, mediaKind) {
+			continue
+		}
+		result = append(result, docMediaMatch{BlockID: blockID, MediaElementID: docNestedMediaElementID(block, mediaKind)})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].BlockID < result[j].BlockID })
+	return result
+}
+
+func containsDocMediaBlockID(matches []docMediaMatch, target string) bool {
+	for _, match := range matches {
+		if match.BlockID == target {
+			return true
+		}
+	}
+	return false
+}
+
+func docTopLevelBlocks(value any) []any {
+	value = docJSONMLValue(value)
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range []string{"blocks", "items", "elements", "blockList"} {
+			if blocks, ok := typed[key].([]any); ok {
+				return blocks
+			}
+		}
+		for _, key := range []string{"result", "data", "content"} {
+			if blocks := docTopLevelBlocks(typed[key]); blocks != nil {
+				return blocks
+			}
+		}
+	case []any:
+		if len(typed) > 0 {
+			if tag, ok := typed[0].(string); ok && strings.EqualFold(strings.TrimSpace(tag), "root") {
+				start := 1
+				if len(typed) > 1 {
+					if _, ok := typed[1].(map[string]any); ok {
+						start = 2
+					}
+				}
+				return typed[start:]
+			}
+		}
+		return typed
+	}
+	return nil
+}
+
+func docJSONMLValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		if raw, ok := typed["jsonml"].(string); ok && strings.TrimSpace(raw) != "" {
+			var parsed any
+			if json.Unmarshal([]byte(raw), &parsed) == nil {
+				return parsed
+			}
+		}
+		for _, key := range []string{"result", "data", "content"} {
+			if child, ok := typed[key]; ok {
+				return docJSONMLValue(child)
+			}
+		}
+	}
+	return value
+}
+
+func docDirectBlockID(value any) string {
+	if element, ok := value.([]any); ok {
+		if len(element) > 1 {
+			if attrs, ok := element[1].(map[string]any); ok {
+				for _, key := range []string{"blockId", "elementId", "id", "uuid"} {
+					if candidate, _ := attrs[key].(string); strings.TrimSpace(candidate) != "" {
+						return strings.TrimSpace(candidate)
+					}
+				}
+			}
+		}
+		return ""
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, key := range []string{"blockId", "elementId", "id", "uuid"} {
+		if candidate, _ := typed[key].(string); strings.TrimSpace(candidate) != "" {
+			return strings.TrimSpace(candidate)
+		}
+	}
+	for _, key := range []string{"element", "block"} {
+		if nested, ok := typed[key].(map[string]any); ok {
+			for _, idKey := range []string{"blockId", "elementId", "id", "uuid"} {
+				if candidate, _ := nested[idKey].(string); strings.TrimSpace(candidate) != "" {
+					return strings.TrimSpace(candidate)
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func docNestedMediaElementID(value any, mediaKind string) string {
+	switch typed := value.(type) {
+	case []any:
+		if len(typed) > 0 {
+			if tag, _ := typed[0].(string); (mediaKind == "inline_image" && (tag == "img" || tag == "image")) || (mediaKind == "attachment" && tag == "attachment") {
+				return docDirectBlockID(typed)
+			}
+		}
+		for _, child := range typed {
+			if id := docNestedMediaElementID(child, mediaKind); id != "" {
+				return id
+			}
+		}
+	case map[string]any:
+		if docMediaKindMatches(typed, mediaKind) {
+			if id := docDirectBlockID(typed); id != "" {
+				return id
+			}
+		}
+		for _, child := range typed {
+			if id := docNestedMediaElementID(child, mediaKind); id != "" {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+func docTopLevelBlockIDs(value any) []string {
+	blocks := docTopLevelBlocks(value)
+	result := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		if blockID := docDirectBlockID(block); blockID != "" {
+			result = append(result, blockID)
+		}
+	}
+	return result
+}
+
+func docMediaKindMatches(value any, mediaKind string) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		if kind, _ := typed["blockType"].(string); mediaKind == "attachment" && kind == "attachment" {
+			return true
+		}
+		if kind, _ := typed["elementType"].(string); mediaKind == "inline_image" && kind == "image" {
+			return true
+		}
+		if mediaKind == "attachment" && typed["attachment"] != nil {
+			return true
+		}
+		if mediaKind == "inline_image" && typed["image"] != nil {
+			return true
+		}
+		for _, child := range typed {
+			if docMediaKindMatches(child, mediaKind) {
+				return true
+			}
+		}
+	case []any:
+		if len(typed) > 0 {
+			if tag, _ := typed[0].(string); mediaKind == "inline_image" && (tag == "img" || tag == "image") {
+				return true
+			} else if mediaKind == "attachment" && tag == "attachment" {
+				return true
+			}
+		}
+		for _, child := range typed {
+			if docMediaKindMatches(child, mediaKind) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func verifyDocMediaPosition(ids []string, insertedBlockID string, position docMediaInsertPosition) (int, bool) {
+	insertedIndex := -1
+	for index, id := range ids {
+		if id == insertedBlockID {
+			insertedIndex = index
+			break
+		}
+	}
+	if insertedIndex < 0 {
+		return -1, false
+	}
+	switch position.Mode {
+	case "index":
+		return insertedIndex, insertedIndex == position.Index
+	case "relative":
+		referenceIndex := -1
+		for index, id := range ids {
+			if id == position.RefBlock {
+				referenceIndex = index
+				break
+			}
+		}
+		if referenceIndex < 0 {
+			return insertedIndex, false
+		}
+		if position.Where == "before" {
+			return insertedIndex, insertedIndex+1 == referenceIndex
+		}
+		return insertedIndex, insertedIndex == referenceIndex+1
+	default:
+		return insertedIndex, true
+	}
+}
+
+func describeDocMediaPosition(position docMediaInsertPosition) string {
+	switch position.Mode {
+	case "index":
+		return fmt.Sprintf("index=%d", position.Index)
+	case "relative":
+		return fmt.Sprintf("%s blockId=%s", position.Where, position.RefBlock)
+	default:
+		return "document_end"
+	}
+}
+
+func docMediaIdentityMatches(value any, resourceID, resourceURL string) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if text, ok := child.(string); ok {
+				if resourceID != "" && key == "resourceId" && text == resourceID {
+					return true
+				}
+				if resourceURL != "" && (key == "resourceUrl" || key == "src" || key == "url") && text == resourceURL {
+					return true
+				}
+			}
+			if docMediaIdentityMatches(child, resourceID, resourceURL) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if docMediaIdentityMatches(child, resourceID, resourceURL) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // parseAttachmentUploadInfo extracts uploadUrl, resourceId and resourceUrl from the MCP tool response.
@@ -701,7 +1229,14 @@ func parseAttachmentUploadInfo(text string) (uploadURL, resourceID, resourceURL 
 	resourceURL, _ = data["resourceUrl"].(string)
 
 	if uploadURL == "" || resourceID == "" {
-		err = fmt.Errorf("incomplete attachment upload info: uploadUrl=%q, resourceId=%q", uploadURL, resourceID)
+		missing := []string{}
+		if uploadURL == "" {
+			missing = append(missing, "uploadUrl")
+		}
+		if resourceID == "" {
+			missing = append(missing, "resourceId")
+		}
+		err = fmt.Errorf("incomplete attachment upload info: missing %s", strings.Join(missing, ", "))
 	}
 	return
 }
@@ -2092,10 +2627,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		},
 	}
 	DeclareLeafMetadata(blockDeleteCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "destructive", Risk: "high",
-			Confirmation: "user_required", Idempotency: "unknown",
-		},
+		Safety: docsafety.RecoverableWrite("unknown"),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -2104,15 +2636,15 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 				CLIPath:        "doc block delete",
 				PrimaryCLIPath: "doc block delete",
 			},
-			Description: "删除块元素（不可逆）",
+			Description: "删除块元素（可通过文档版本恢复）",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "delete_document_block"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "删除块元素（不可逆）",
-				UseWhen:      []string{"用户确认后删除文档中指定块元素时"},
+				AgentSummary: "删除块元素；操作按普通可恢复文档写入执行",
+				UseWhen:      []string{"删除文档中指定块元素时"},
 				AvoidWhen: []string{
 					"未确认或 blockId 不明时不要删；先 block list",
 					"删整篇文档用 doc/drive delete",
@@ -2318,10 +2850,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		},
 	}
 	DeclareLeafMetadata(deleteCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "destructive", Risk: "high",
-			Confirmation: "user_required", Idempotency: "unknown",
-		},
+		Safety: docsafety.ProtectedDelete("unknown"),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -2623,10 +3152,7 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 		RunE:    runDocMediaUpload,
 	}
 	DeclareLeafMetadata(mediaUploadCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "user_required", Idempotency: "unknown",
-		},
+		Safety: docsafety.RecoverableWrite("unknown"),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -2643,7 +3169,7 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 				Reason:       "命令先获取临时文档上传凭证，再在本地执行 OSS PUT，并仅暴露稳定的 node 绑定资源契约，不能绑定为单一 interface_ref",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "经用户确认后上传绑定到文档 nodeId 的可复用媒体资源而不插入正文",
+				AgentSummary: "上传绑定到文档 nodeId 的可复用媒体资源而不插入正文",
 				UseWhen:      []string{"为同一文档内白板的 Vector/SVG 写入准备 resourceId 和 resourceUrl 时"},
 				AvoidWhen:    []string{"需要把附件直接插入文档正文时用 doc media insert；不要跨 nodeId 复用资源"},
 				Examples:     []string{"dws doc media upload --node <DOC_ID> --file ./icon.svg --mime-type image/svg+xml --format json"},
@@ -2658,19 +3184,21 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 	mediaUploadCmd.Flags().String("file", "", "本地文件路径 (必填)")
 	mediaUploadCmd.Flags().String("name", "", "资源文件名 (默认使用本地文件名)")
 	mediaUploadCmd.Flags().String("mime-type", "", "文件 MIME 类型 (默认根据扩展名推断)")
-	mediaUploadCmd.Flags().Bool("yes", false, "确认上传可复用文档媒体资源")
+	mediaUploadCmd.Flags().Bool("yes", false, "兼容参数：普通可恢复上传无需确认")
+	_ = mediaUploadCmd.Flags().MarkHidden("yes")
 
-	mediaInsertCmd := &cobra.Command{
+	mediaInsertCmd := NewLeafCommand(LeafSpec{
 		Use:   "insert",
-		Short: "上传附件并插入文档",
-		Long: `将本地文件作为附件上传并插入到钉钉文档中（三步自动完成）。
+		Short: "上传图片或附件并插入文档正文",
+		Long: `将工作目录内已暂存的本地文件上传并插入到钉钉文档中。
 
 流程:
   1. 获取附件上传凭证 (get_doc_attachment_upload_info)
   2. HTTP PUT 上传文件到 OSS
-  3. 插入附件块到文档 (insert_document_block)
+  3. 按 MIME 类型插入正文图片或附件块 (insert_document_block)
+  4. 回读验证媒体身份、块类型和请求的插入位置
 
---mime-type 可选，不指定时根据文件扩展名自动推断。`,
+--file 只接受工作目录内的相对路径；--mime-type 省略时根据源文件扩展名推断。`,
 		Example: `  # 插入 PDF 附件
   dws doc media insert --node DOC_ID --file ./report.pdf
 
@@ -2679,13 +3207,23 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 
   # 在指定块之前插入
   dws doc media insert --node DOC_ID --file ./image.png --ref-block BLOCK_ID --where before`,
-		RunE: runMediaInsert,
-	}
-	DeclareLeafMetadata(mediaInsertCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+		Flags: []LeafFlag{
+			{Name: "node", Usage: "目标文档的标识，支持传入 URL 或 ID", Required: true, Aliases: []string{"url", "id", "node-id", "doc-id", "file-id"}, Bind: "nodeId"},
+			{Name: "file", Usage: "工作目录内已存在的相对文件路径", Required: true},
+			{Name: "name", Usage: "正文中的显示文件名（不能包含目录）"},
+			{Name: "mime-type", Usage: "MIME 类型（默认根据源文件扩展名推断）"},
+			{Name: "index", Kind: LeafInt, Usage: "顶层插入索引；--index 必须大于或等于 0，且不能与相对定位参数并用"},
+			{Name: "where", Usage: "相对位置: before / after", Enum: []string{"before", "after"}, RequiredWhen: "--ref-block is provided"},
+			{Name: "ref-block", Usage: "参考 block ID", Bind: "referenceBlockId", RequiredWhen: "--where is provided"},
 		},
+		Constraints: []LeafConstraint{
+			{Kind: LeafRequireTogether, Flags: []string{"where", "ref-block"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"index", "where"}},
+			{Kind: LeafMutuallyExclusive, Flags: []string{"index", "ref-block"}},
+			{Kind: LeafCustom, Flags: []string{"index"}, Description: "--index 必须大于或等于 0"},
+			{Kind: LeafCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内存在且不能经符号链接逃逸的相对文件"},
+		},
+		Safety: docsafety.RecoverableWrite("unknown"),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -2694,7 +3232,7 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 				CLIPath:        "doc media insert",
 				PrimaryCLIPath: "doc media insert",
 			},
-			Description: "上传本地文件并作为附件插入文档",
+			Description: "上传本地图片或文件并插入文档正文",
 			DryRun:      &contract.DryRunSpec{PreviewKind: "plan", RemoteReads: false},
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
@@ -2702,27 +3240,22 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 				Reason:       "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "上传本地文件并作为附件插入文档",
-				UseWhen:      []string{"把本地文件/图片作为附件块插入文档正文（自动 prepare+PUT+insert）时"},
+				AgentSummary: "上传工作目录内的本地图片或附件，按指定位置插入正文并回读验证",
+				UseWhen:      []string{"把本地图片显示在文档正文中，或把本地文件作为附件块插入正文时"},
 				AvoidWhen: []string{
 					"上传为独立文件用 drive/doc upload，不要与正文附件混淆",
+					"Agent 默认优先使用 doc +media-insert；仅在明确请求原子命令时使用本入口",
 					"下载正文附件用 media download",
 				},
 				Examples: []string{"dws doc media insert --node <DOC_ID> --file ./report.pdf --format json"},
 			},
 		},
+		Validate: func(cmd *cobra.Command, _ []string) error { return ValidateDocMediaInsertCommand(cmd) },
+		RunE:     runMediaInsert,
 	})
 
-	mediaInsertCmd.Flags().String("node", "", "目标文档的标识，支持传入 URL 或 ID (必填)")
-	mediaInsertCmd.Flags().String("file", "", "本地文件路径 (必填)")
-	mediaInsertCmd.Flags().String("name", "", "附件显示名称 (默认使用文件名)")
-	mediaInsertCmd.Flags().String("mime-type", "", "文件 MIME 类型 (默认根据扩展名推断)")
-	mediaInsertCmd.Flags().Int("index", 0, "插入位置索引")
-	mediaInsertCmd.Flags().String("where", "", "相对位置: before / after (配合 --ref-block)")
-	mediaInsertCmd.Flags().String("ref-block", "", "参考块 ID (配合 --where)")
-
 	// media 子命令的 --node 隐藏别名
-	mediaNodeAliasCmds := []*cobra.Command{mediaDownloadCmd, mediaUploadCmd, mediaInsertCmd}
+	mediaNodeAliasCmds := []*cobra.Command{mediaDownloadCmd, mediaUploadCmd}
 	for _, c := range mediaNodeAliasCmds {
 		c.Flags().String("url", "", "--node 的别名")
 		c.Flags().String("id", "", "--node 的别名")
@@ -3106,10 +3639,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		},
 	}
 	DeclareLeafMetadata(commentDeleteCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "user_required", Idempotency: "unknown",
-		},
+		Safety: docsafety.ProtectedDelete("unknown"),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -3298,10 +3828,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		},
 	}
 	DeclareLeafMetadata(permissionAddCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
-		},
+		Safety: docsafety.SensitiveWrite("unknown"),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -3384,10 +3911,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		},
 	}
 	DeclareLeafMetadata(permissionUpdateCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
-		},
+		Safety: docsafety.SensitiveWrite("unknown"),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -3540,10 +4064,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		},
 	}
 	DeclareLeafMetadata(permissionRemoveCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
-		},
+		Safety: docsafety.ProtectedDelete("unknown"),
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -4028,7 +4549,7 @@ CLI 内部自动完成全部流程:
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查看文档历史版本列表",
 				UseWhen:      []string{"查看文档历史版本列表以确认版本号时"},
-				AvoidWhen:    []string{"回滚用 version revert（需确认）；保存快照用 version save"},
+				AvoidWhen:    []string{"回滚用 version revert；保存快照用 version save"},
 				Examples:     []string{"dws doc version list --node <DOC_ID> --format json"},
 			},
 		},
@@ -4037,16 +4558,11 @@ CLI 内部自动完成全部流程:
 	versionListCmd.Flags().Int("limit", 0, "返回版本数量上限")
 	versionListCmd.Flags().String("cursor", "", "分页游标")
 
-	versionRevertSafety := contract.SafetySpec{
-		Effect:       "write",
-		Risk:         "medium",
-		Confirmation: "user_required",
-		Idempotency:  "unknown",
-	}
+	versionRevertSafety := docsafety.RecoverableWrite("unknown")
 	versionRevertCmd := &cobra.Command{
 		Use:     "revert",
 		Short:   "回滚文档到指定版本",
-		Example: `  dws doc version revert --node DOC_ID --version 3 --yes`,
+		Example: `  dws doc version revert --node DOC_ID --version 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
@@ -4100,7 +4616,7 @@ CLI 内部自动完成全部流程:
 				UseWhen:      []string{"用户明确要求将 adoc 回滚到指定历史版本（已从 version list 确认版本号）时"},
 				AvoidWhen: []string{
 					"只看版本列表用 version list；保存快照用 save",
-					"版本号未确认或用户未同意回滚时不要执行",
+					"版本号不存在或目标文档不明确时不要执行",
 				},
 				Examples: []string{"dws doc version revert --node <DOC_ID> --version 3 --format json"},
 			},

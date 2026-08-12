@@ -20,8 +20,14 @@
 package drive
 
 import (
+	"fmt"
+	"sort"
+	"strings"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -622,6 +628,9 @@ var Recent = shortcut.Shortcut{
 		{Name: "creator-type", Type: shortcut.FlagInt, Desc: "创建人过滤: 0=全部, 1=我创建, 2=他人创建"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 20，最大 20)"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标 (从上次结果的 nextCursor 获取)"},
+		{Name: "page-all", Type: shortcut.FlagBool, Default: "true", Desc: "有界读取全部后续页（默认 true）"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "100", Desc: "最多读取页数"},
+		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "最多返回记录数"},
 	},
 	Tips: []string{
 		`dws drive +recent`,
@@ -635,20 +644,100 @@ var Recent = shortcut.Shortcut{
 		if rt.Changed("creator-type") {
 			params["creatorType"] = rt.Int("creator-type")
 		}
-		if rt.Changed("limit") {
-			params["maxResults"] = rt.Int("limit")
+		pageSize := rt.Int("limit")
+		if pageSize <= 0 {
+			pageSize = 20
 		}
-		if rt.Changed("cursor") {
-			params["nextToken"] = rt.Str("cursor")
-		}
-		// Project the verbose raw response (logId + per-item giant docUrl noise)
-		// down to a clean {count, items:[…], nextCursor, hasMore}.
-		data, err := rt.CallMCPData("doc", "get_recent_list", params)
+		result, err := collectRecentPages(rt, params, pageSize)
 		if err != nil {
 			return err
 		}
-		return rt.Output(recentListProject(data))
+		if entries, journalErr := docwritejournal.List(rt.Command().Context()); journalErr == nil && (!rt.Changed("creator-type") || rt.Int("creator-type") != 2) {
+			mergeJournalRecent(result, entries)
+		}
+		return rt.Output(result)
 	},
+}
+
+func collectRecentPages(rt *shortcut.RuntimeContext, base map[string]any, pageSize int) (map[string]any, error) {
+	maxPages, maxItems := rt.Int("max-pages"), rt.Int("max-items")
+	if maxPages <= 0 {
+		maxPages = 100
+	}
+	if maxItems <= 0 {
+		maxItems = 500
+	}
+	pageLimit := 1
+	if rt.Bool("page-all") {
+		pageLimit = maxPages
+	}
+	cursor := rt.Str("cursor")
+	seenCursors := map[string]bool{}
+	items := []map[string]any{}
+	hasMore, complete, truncated := false, false, false
+	for page := 1; page <= pageLimit; page++ {
+		params := map[string]any{}
+		for key, value := range base {
+			params[key] = value
+		}
+		params["maxResults"] = min(pageSize, maxItems-len(items))
+		if cursor != "" {
+			params["nextToken"] = cursor
+		}
+		data, err := rt.CallMCPData("doc", "get_recent_list", params)
+		if err != nil {
+			return nil, apperrors.NewAPI(fmt.Sprintf("get_recent_list 分页在第 %d 页失败", page), apperrors.WithCause(err), apperrors.WithReason("recent_pagination_failed"))
+		}
+		projected := recentListProject(data)
+		pageItems, _ := projected["items"].([]map[string]any)
+		items = append(items, pageItems...)
+		hasMore, _ = projected["hasMore"].(bool)
+		next, _ := projected["nextCursor"].(string)
+		complete = !hasMore
+		cursor = strings.TrimSpace(next)
+		if len(items) >= maxItems && hasMore {
+			truncated = true
+			complete = false
+			break
+		}
+		if complete || !rt.Bool("page-all") {
+			break
+		}
+		if cursor == "" || seenCursors[cursor] {
+			return nil, apperrors.NewAPI("get_recent_list 返回 hasMore=true 但游标缺失或停滞", apperrors.WithReason("recent_pagination_stalled"))
+		}
+		seenCursors[cursor] = true
+		if page == pageLimit && hasMore {
+			truncated = true
+			complete = false
+		}
+	}
+	return map[string]any{"count": len(items), "items": items, "nextCursor": cursor, "hasMore": hasMore, "complete": complete, "truncated": truncated}, nil
+}
+
+func mergeJournalRecent(result map[string]any, entries []docwritejournal.Entry) {
+	items, _ := result["items"].([]map[string]any)
+	seen := map[string]bool{}
+	for _, item := range items {
+		if id, _ := item["nodeId"].(string); id != "" {
+			seen[id] = true
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].CreatedAt > entries[j].CreatedAt })
+	local := make([]map[string]any, 0, len(entries))
+	for _, entry := range entries {
+		if seen[entry.NodeID] {
+			continue
+		}
+		local = append(local, map[string]any{
+			"name": entry.Name, "nodeType": entry.DocType, "contentType": entry.DocType,
+			"accessTime": entry.CreatedAt, "docUrl": entry.URL, "nodeId": entry.NodeID,
+			"source": "local_write_journal", "indexPending": true,
+		})
+		seen[entry.NodeID] = true
+	}
+	result["items"] = append(local, items...)
+	result["count"] = len(local) + len(items)
 }
 
 // recentListProject reshapes a get_recent_list response into a clean paginated

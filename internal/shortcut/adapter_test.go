@@ -44,6 +44,7 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 			{Kind: ConstraintExactlyOne, Flags: []string{"name", "count"}, Description: "二选一"},
 			{Kind: ConstraintAtLeastOne, Flags: []string{"flag", "ids"}},
 			{Kind: ConstraintMutuallyExclusive, Flags: []string{"name", "flag"}},
+			{Kind: ConstraintRequireTogether, Flags: []string{"count", "note"}},
 			{Kind: ConstraintCustom, Flags: []string{"note"}, Description: "自定义由 Validate 保证"},
 		},
 		Validate: func(*RuntimeContext) error { return nil },
@@ -108,8 +109,8 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 	}
 
 	// All constraints, including custom declaration/help facts, are carried.
-	if len(cs.Constraints) != 4 {
-		t.Fatalf("constraints len = %d, want 4", len(cs.Constraints))
+	if len(cs.Constraints) != 5 {
+		t.Fatalf("constraints len = %d, want 5", len(cs.Constraints))
 	}
 	if cs.Constraints[0].Kind != corecmd.ExactlyOne || cs.Constraints[0].Description != "二选一" {
 		t.Fatalf("constraint[0] = %#v", cs.Constraints[0])
@@ -117,9 +118,12 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 	if cs.Constraints[1].Kind != corecmd.AtLeastOne || cs.Constraints[2].Kind != corecmd.MutuallyExclusive {
 		t.Fatalf("constraint kinds = %#v", cs.Constraints)
 	}
-	if cs.Constraints[3].Kind != corecmd.Custom ||
-		cs.Constraints[3].Description != "自定义由 Validate 保证" {
-		t.Fatalf("custom constraint = %#v", cs.Constraints[3])
+	if cs.Constraints[3].Kind != corecmd.RequireTogether {
+		t.Fatalf("require-together constraint = %#v", cs.Constraints[3])
+	}
+	if cs.Constraints[4].Kind != corecmd.Custom ||
+		cs.Constraints[4].Description != "自定义由 Validate 保证" {
+		t.Fatalf("custom constraint = %#v", cs.Constraints[4])
 	}
 	// The projected Flags slice must be a copy, not an alias of the registry's.
 	cs.Constraints[0].Flags[0] = "mutated"

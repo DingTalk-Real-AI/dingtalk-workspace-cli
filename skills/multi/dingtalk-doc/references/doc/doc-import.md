@@ -13,7 +13,7 @@ dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪�
 ## 本地文件边界
 
 - `--file` 只接受当前工作目录内已存在的相对路径；禁止绝对路径、`..` 或符号链接逃逸。
-- `--folder` 与 `--workspace` 都是可选位置；都不传时导入默认根目录，两者都有时优先 `--folder`。
+- `--folder` 与 `--workspace` 最多提供一个。两者都省略时由服务端落到默认个人文档根目录，不需要先查 wiki；只有用户明确指定知识库/wiki 目标时才解析真实 `workspaceId` 并传 `--workspace`。
 - CLI 负责上传和格式转换。不要先用 Python/Office 库解析文件，不要安装本地依赖来伪造在线导入结果，也不要手写 HTTP 上传。
 - 白名单外格式（如 HTML/PDF）自动改走原文件上传，返回 `fallback=upload`、`converted=false`；不得报告成已经转换为可编辑在线文档。
 

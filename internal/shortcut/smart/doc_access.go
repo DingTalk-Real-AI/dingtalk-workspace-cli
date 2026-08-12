@@ -10,6 +10,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -75,7 +76,7 @@ var AccessGrant = shortcut.Shortcut{
 	Description: "按姓名解析后批量授予文档权限",
 	Intent:      "当用户要给一个或多位同事授予单篇文档 READER/DOWNLOADER/EDITOR/MANAGER 权限时使用；所有姓名唯一解析成功后才执行一次批量授权。",
 	Risk:        shortcut.RiskWrite,
-	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	Safety:      docsafety.SensitiveWrite("unknown"),
 	Contract: docSmartContract("+access-grant", "按姓名解析后批量授予文档权限",
 		"当用户要给一个或多位同事授予单篇文档 READER/DOWNLOADER/EDITOR/MANAGER 权限时使用；所有姓名唯一解析成功后才执行一次批量授权。",
 		[]string{`dws doc +access-grant --node <DOC_ID> --to 张三,李四 --role READER`}, false),
@@ -103,7 +104,7 @@ var AccessChange = shortcut.Shortcut{
 	Description: "预检已有协作者后变更文档角色",
 	Intent:      "当用户要修改文档上已有协作者的权限角色时使用；先按姓名解析并读取当前权限，目标不是现有协作者时停止，不把 update 当 add。",
 	Risk:        shortcut.RiskWrite,
-	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	Safety:      docsafety.SensitiveWrite("unknown"),
 	Contract: docSmartContract("+access-change", "预检已有协作者后变更文档角色",
 		"当用户要修改文档上已有协作者的权限角色时使用；先按姓名解析并读取当前权限，目标不是现有协作者时停止，不把 update 当 add。",
 		[]string{`dws doc +access-change --node <DOC_ID> --to 张三 --role EDITOR`}, false),
@@ -139,7 +140,7 @@ var AccessRevoke = shortcut.Shortcut{
 	Description: "预检并移除指定协作者的文档权限",
 	Intent:      "当用户明确要撤销一位或多位现有协作者对单篇文档的直接权限时使用；先解析姓名并读取权限预检，再执行高风险移除。",
 	Risk:        shortcut.RiskHighWrite,
-	Safety:      contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
+	Safety:      docsafety.ProtectedDelete("unknown"),
 	Contract: docSmartContract("+access-revoke", "预检并移除指定协作者的文档权限",
 		"当用户明确要撤销一位或多位现有协作者对单篇文档的直接权限时使用；先解析姓名并读取权限预检，再执行高风险移除。",
 		[]string{`dws doc +access-revoke --node <DOC_ID> --to 张三`}, false),
@@ -178,7 +179,7 @@ var GrantAndShare = shortcut.Shortcut{
 	Description: "确保目标角色后按姓名逐人发送文档链接",
 	Intent:      "当用户要确保多人获得指定文档角色后再私信链接时使用；缺少权限时授权、角色不足时升级，无法识别当前角色则停止，再只向权限已经足够的人发送。",
 	Risk:        shortcut.RiskWrite,
-	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
+	Safety:      docsafety.SensitiveWrite("unknown"),
 	Contract: docSmartContract("+grant-and-share", "确保目标角色后按姓名逐人发送文档链接",
 		"当用户要确保多人获得指定文档角色后再私信链接时使用；缺少权限时授权、角色不足时升级，无法识别当前角色则停止，再只向权限已经足够的人发送。",
 		[]string{`dws doc +grant-and-share --node <DOC_ID> --url https://alidocs.dingtalk.com/i/nodes/<DOC_ID> --to 张三,李四 --role READER`}, false),

@@ -56,6 +56,10 @@ func TestCrossPlatformCoverageValidateJSONMLSourceAndShapes(t *testing.T) {
 	if result := ValidateJsonMLSource([]byte(`["root",{},["p",{},["span",{},"ok"]]]`)); result.HasErrors() {
 		t.Fatalf("valid JSONML errors = %v", result.Errors)
 	}
+	emptyList := []byte(`["root",{},["p",{"uuid":"li-empty","list":{"listId":"list-empty","level":0,"isOrdered":false}},["span",{"data-type":"text"},["span",{"data-type":"leaf"},""]]]]`)
+	if result := ValidateJsonMLSource(emptyList); result.HasErrors() {
+		t.Fatalf("minimal empty-list JSONML errors = %v", result.Errors)
+	}
 
 	tests := []any{
 		"not-an-array",

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-06T21:08:26.697858",
+  "generated_at": "2026-08-12T14:39:44.839171",
   "count": 357,
   "results": [
     {
@@ -2162,7 +2162,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "接受消息列表直接返回的 threadId（兼容 topicId），拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文和时间边界分页；可选对回复资源去重后安全落盘并返回逐项失败 ledger。",
+      "semantic_delta": "接受话题主消息 ID 并通过只读消息详情自动解析 conversation/thread，也接受显式 group + threadId（兼容 topicId）；拉取回复并输出稳定身份、引用、reaction、resourceRefs、可读正文，使用下层毫秒级 nextCursor 安全分页以避免同秒回复漏读，并支持全量结果 asc/desc；可选对回复资源去重后安全落盘并返回逐项失败 ledger。",
       "availability": "available"
     },
     {
@@ -2557,6 +2557,36 @@
     {
       "suite": "semantic",
       "service": "doc",
+      "command": "+cover-clear",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "以幂等 clear 语义移除当前文档封面；旧 +resource-delete 仅为隐藏兼容别名。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+cover-download",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "读取当前文档封面配置并安全下载资源到本地；旧 +resource-download 仅为隐藏兼容别名。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+cover-set",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "支持本地图片或 HTTPS 图片转存后设置文档封面；旧 +resource-update 仅为隐藏兼容别名。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
       "command": "+create",
       "risk": "write",
       "status": "reviewed_available",
@@ -2650,8 +2680,8 @@
       "command": "+history-list",
       "risk": "read",
       "status": "reviewed_available",
-      "disposition": "semantic_adapter",
-      "semantic_delta": "统一历史版本分页参数并返回可用于回滚的版本列表。",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留既有历史列表路径及稳定 Schema identity；新的 Agent 场景统一使用 +version-list。",
       "availability": "available"
     },
     {
@@ -2660,8 +2690,8 @@
       "command": "+history-revert",
       "risk": "high-risk-write",
       "status": "reviewed_available",
-      "disposition": "primary_smart",
-      "semantic_delta": "先验证目标版本存在，再执行回滚并读回当前文档状态。",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留既有历史回滚路径及稳定 Schema identity；新的 Agent 场景统一使用 +version-revert。",
       "availability": "available"
     },
     {
@@ -2670,8 +2700,8 @@
       "command": "+history-save",
       "risk": "write",
       "status": "reviewed_available",
-      "disposition": "semantic_adapter",
-      "semantic_delta": "以文档历史语义命名手动版本快照，避免暴露底层 RPC 命名。",
+      "disposition": "alias_internal",
+      "semantic_delta": "保留既有历史快照路径及稳定 Schema identity；新的 Agent 场景统一使用 +version-save。",
       "availability": "available"
     },
     {
@@ -2757,36 +2787,6 @@
     {
       "suite": "semantic",
       "service": "doc",
-      "command": "+resource-delete",
-      "risk": "high-risk-write",
-      "status": "reviewed_available",
-      "disposition": "semantic_adapter",
-      "semantic_delta": "以幂等 clear 语义移除当前文档封面。",
-      "availability": "available"
-    },
-    {
-      "suite": "semantic",
-      "service": "doc",
-      "command": "+resource-download",
-      "risk": "read",
-      "status": "reviewed_available",
-      "disposition": "primary_smart",
-      "semantic_delta": "读取当前文档封面配置并安全下载资源到本地。",
-      "availability": "available"
-    },
-    {
-      "suite": "semantic",
-      "service": "doc",
-      "command": "+resource-update",
-      "risk": "write",
-      "status": "reviewed_available",
-      "disposition": "primary_smart",
-      "semantic_delta": "支持本地图片或 HTTPS 图片转存后设置文档封面。",
-      "availability": "available"
-    },
-    {
-      "suite": "semantic",
-      "service": "doc",
       "command": "+review",
       "risk": "read",
       "status": "reviewed_available",
@@ -2841,7 +2841,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "按名称检索模板并返回可继续创建的 templateId。",
+      "semantic_delta": "按名称或关键词检索模板并返回可消歧候选和 templateId。",
       "availability": "available"
     },
     {
@@ -2860,8 +2860,8 @@
       "command": "+version-list",
       "risk": "read",
       "status": "reviewed_available",
-      "disposition": "alias_internal",
-      "semantic_delta": "保留历史版本列表命令及其稳定 Schema identity；新场景优先使用 +history-list。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "版本浏览的 Agent 主入口；统一分页参数并返回可用于回滚的版本号。",
       "availability": "available"
     },
     {
@@ -2870,8 +2870,8 @@
       "command": "+version-revert",
       "risk": "high-risk-write",
       "status": "reviewed_available",
-      "disposition": "alias_internal",
-      "semantic_delta": "保留历史版本回滚命令及其稳定 Schema identity；新场景优先使用 +history-revert。",
+      "disposition": "primary_smart",
+      "semantic_delta": "版本回滚的 Agent 主入口；先验证目标版本存在，再回滚并读回当前状态。",
       "availability": "available"
     },
     {
@@ -2880,8 +2880,8 @@
       "command": "+version-save",
       "risk": "write",
       "status": "reviewed_available",
-      "disposition": "alias_internal",
-      "semantic_delta": "保留历史版本快照命令及其稳定 Schema identity；新场景优先使用 +history-save。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "版本快照的 Agent 主入口；只保存当前快照，不隐式修改正文。",
       "availability": "available"
     },
     {

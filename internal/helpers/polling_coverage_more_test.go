@@ -19,11 +19,18 @@ type scriptedToolStep struct {
 }
 
 type scriptedToolCaller struct {
-	steps  []scriptedToolStep
-	index  int
-	format string
-	dry    bool
-	calls  int
+	steps   []scriptedToolStep
+	index   int
+	format  string
+	dry     bool
+	calls   int
+	server  string
+	tool    string
+	args    map[string]any
+	history []scriptedToolCall
+}
+
+type scriptedToolCall struct {
 	server string
 	tool   string
 	args   map[string]any
@@ -34,6 +41,7 @@ func (c *scriptedToolCaller) CallTool(_ context.Context, serverID, toolName stri
 	c.server = serverID
 	c.tool = toolName
 	c.args = args
+	c.history = append(c.history, scriptedToolCall{server: serverID, tool: toolName, args: args})
 	if len(c.steps) == 0 {
 		return &edition.ToolResult{}, nil
 	}

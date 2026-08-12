@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -72,9 +74,12 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 	oldArgs := os.Args
 	os.Args = []string{"dws", "doc"}
 	t.Cleanup(func() { os.Args = oldArgs })
+	installImmediateTiming(t)
 	oldPut, oldGet := httpPutFile, httpGetFile
 	t.Cleanup(func() { httpPutFile, httpGetFile = oldPut, oldGet })
-	file := filepath.Join(t.TempDir(), "file.txt")
+	workspace := t.TempDir()
+	t.Chdir(workspace)
+	file := "file.txt"
 	if err := os.WriteFile(file, []byte("content"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -152,17 +157,51 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 		if mime != "" {
 			_ = media.Flags().Set("mime-type", mime)
 		}
+		media.SetIn(strings.NewReader("yes\n"))
 		return media.RunE(media, nil)
 	}
 
 	t.Run("media directory", func(t *testing.T) {
-		if err := mediaCommand(t, &scriptedToolCaller{}, t.TempDir(), ""); err == nil {
+		if err := os.Mkdir("folder", 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := mediaCommand(t, &scriptedToolCaller{}, "folder", ""); err == nil {
 			t.Fatal("directory media returned nil")
 		}
 	})
 	t.Run("media missing file", func(t *testing.T) {
-		if err := mediaCommand(t, &scriptedToolCaller{}, filepath.Join(t.TempDir(), "missing"), ""); err == nil {
+		if err := mediaCommand(t, &scriptedToolCaller{}, "missing", ""); err == nil {
 			t.Fatal("missing media returned nil")
+		}
+	})
+	t.Run("media rejects absolute paths", func(t *testing.T) {
+		if err := mediaCommand(t, &scriptedToolCaller{}, filepath.Join(workspace, file), ""); err == nil || !strings.Contains(err.Error(), "相对路径") {
+			t.Fatalf("absolute media path error = %v", err)
+		}
+	})
+	t.Run("media rejects incomplete and conflicting positions", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			set  map[string]string
+		}{
+			{name: "where only", set: map[string]string{"where": "after"}},
+			{name: "negative index", set: map[string]string{"index": "-1"}},
+			{name: "index and relative", set: map[string]string{"index": "0", "where": "after", "ref-block": "ref"}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				installScriptedCaller(t, &scriptedToolCaller{})
+				root := newDocCommand()
+				media, _, _ := root.Find([]string{"media", "insert"})
+				_ = media.Flags().Set("node", "node")
+				_ = media.Flags().Set("file", file)
+				for name, value := range tc.set {
+					_ = media.Flags().Set(name, value)
+				}
+				media.SetIn(strings.NewReader("yes\n"))
+				if err := media.RunE(media, nil); err == nil {
+					t.Fatalf("position %#v unexpectedly accepted", tc.set)
+				}
+			})
 		}
 	})
 	t.Run("media dry run", func(t *testing.T) {
@@ -193,18 +232,125 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 			t.Fatal("media insert failure returned nil")
 		}
 	})
-	t.Run("large image becomes attachment", func(t *testing.T) {
+	t.Run("large image is rejected instead of silently becoming attachment", func(t *testing.T) {
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
-		large := filepath.Join(t.TempDir(), "large.png")
+		large := "large.png"
 		if err := os.WriteFile(large, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Truncate(large, 21*1024*1024); err != nil {
 			t.Fatal(err)
 		}
-		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"uploadUrl":"https://upload","resourceId":"resource","resourceUrl":"https://image"}`}, {text: `{}`}}}
-		if err := mediaCommand(t, caller, large, "image/png"); err != nil {
+		if err := mediaCommand(t, &scriptedToolCaller{}, large, "image/png"); err == nil || !strings.Contains(err.Error(), "20MB") {
+			t.Fatalf("large image error = %v", err)
+		}
+	})
+	t.Run("media verification failure is partial success", func(t *testing.T) {
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"uploadUrl":"https://upload","resourceId":"resource"}`},
+			{text: `{"blockId":"media-block"}`},
+			{text: `{"blocks":[]}`},
+		}}
+		err := mediaCommand(t, caller, file, "text/plain")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "doc_media_insert_verification_failed" || typed.Details["status"] != "partial_success" {
+			t.Fatalf("verification error = %#v", err)
+		}
+	})
+	t.Run("media verification tolerates read-after-write lag", func(t *testing.T) {
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"uploadUrl":"https://upload","resourceId":"resource"}`},
+			{text: `{"blockId":"media-block"}`},
+			{text: `{"blocks":[]}`},
+			{text: `{"blocks":[{"id":"media-block","attachment":{"resourceId":"resource"}}]}`},
+		}}
+		if err := mediaCommand(t, caller, file, "text/plain"); err != nil {
+			t.Fatalf("eventual media verification failed: %v", err)
+		}
+		if caller.calls != 5 {
+			t.Fatalf("media calls = %#v, want one credential, one insert, two full reads, and one targeted insertedBlockId read", caller.calls)
+		}
+	})
+	t.Run("media verification requires matching type and relative position", func(t *testing.T) {
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		image := "workflow.png"
+		if err := os.WriteFile(image, []byte("png"), 0o600); err != nil {
 			t.Fatal(err)
+		}
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"uploadUrl":"https://upload","resourceId":"resource","resourceUrl":"https://image"}`},
+			{text: `{"blockId":"media-block"}`},
+			{text: `{"items":[{"element":{"id":"paragraph-block","paragraph":{"text":"body"}}},{"element":{"id":"media-block","paragraph":{"text":""},"children":[{"elementType":"image","properties":{"src":"https://image"}}]}},{"element":{"id":"empty-block","paragraph":{"text":""}}}]}`},
+		}}
+		installScriptedCaller(t, caller)
+		root := newDocCommand()
+		media, _, _ := root.Find([]string{"media", "insert"})
+		_ = media.Flags().Set("node", "node")
+		_ = media.Flags().Set("file", image)
+		_ = media.Flags().Set("ref-block", "paragraph-block")
+		_ = media.Flags().Set("where", "after")
+		media.SetIn(strings.NewReader("yes\n"))
+		if err := media.RunE(media, nil); err != nil {
+			t.Fatalf("verified relative image insert failed: %v", err)
+		}
+	})
+	t.Run("media verification rejects a block id with the wrong media type", func(t *testing.T) {
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		image := "wrong-type.png"
+		if err := os.WriteFile(image, []byte("png"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"uploadUrl":"https://upload","resourceId":"resource","resourceUrl":"https://image"}`},
+			{text: `{"blockId":"media-block"}`},
+			{text: `{"blocks":[{"id":"media-block","attachment":{"resourceId":"resource"}}]}`},
+		}}
+		err := mediaCommand(t, caller, image, "image/png")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "doc_media_insert_verification_failed" {
+			t.Fatalf("wrong-type verification error = %#v", err)
+		}
+	})
+	t.Run("display name does not change source mime or inline image semantics", func(t *testing.T) {
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		image := "source.png"
+		if err := os.WriteFile(image, []byte("png"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"uploadUrl":"https://upload","resourceId":"resource","resourceUrl":"https://image"}`},
+			{text: `{"blockId":"media-block"}`},
+			{text: `{"blocks":[{"id":"media-block","paragraph":{"text":""},"children":[{"elementType":"image","properties":{"src":"https://image"}}]}]}`},
+		}}
+		installScriptedCaller(t, caller)
+		root := newDocCommand()
+		media, _, _ := root.Find([]string{"media", "insert"})
+		_ = media.Flags().Set("node", "node")
+		_ = media.Flags().Set("file", image)
+		_ = media.Flags().Set("name", "renamed.pdf")
+		media.SetIn(strings.NewReader("yes\n"))
+		if err := media.RunE(media, nil); err != nil {
+			t.Fatalf("renamed image insert failed: %v", err)
+		}
+		if len(caller.history) < 2 || caller.history[0].args["mimeType"] != "image/png" {
+			t.Fatalf("upload request did not preserve source MIME: %#v", caller.history)
+		}
+		element, _ := caller.history[1].args["element"].(map[string]any)
+		if !docMediaKindMatches(element, "inline_image") {
+			t.Fatalf("renamed source image was not inserted inline: %#v", element)
+		}
+	})
+	t.Run("media upload errors redact the temporary url", func(t *testing.T) {
+		secretURL := "https://upload.example.test/secret-token"
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error {
+			return fmt.Errorf("PUT %s: reset", secretURL)
+		}
+		err := mediaCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"uploadUrl":"` + secretURL + `","resourceId":"resource"}`}}}, file, "text/plain")
+		cause := errors.Unwrap(err)
+		if err == nil || cause == nil || strings.Contains(cause.Error(), secretURL) || !strings.Contains(cause.Error(), "<redacted upload URL>") {
+			t.Fatalf("upload error = %v, want redacted URL", err)
 		}
 	})
 }
@@ -482,4 +628,16 @@ func TestCrossPlatformCoverageDocVersionRevertCommandEdges(t *testing.T) {
 	_, _ = input.Seek(0, 0)
 	os.Stdin = input
 	_ = runDocCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"versions":[{"version":3}]}`}}}, "version", "revert", "--node=node", "--version=3")
+}
+
+func TestCrossPlatformCoverageMediaJSONMLReturnsStableContainerAndElementIDs(t *testing.T) {
+	response := map[string]any{"jsonml": `["root",{},["p",{"uuid":"container-1"},["img",{"uuid":"image-1","src":"https://resource/image.png"}]]]`}
+	matches := docMediaMatches(response, "", "https://resource/image.png", "inline_image")
+	if len(matches) != 1 || matches[0].BlockID != "container-1" || matches[0].MediaElementID != "image-1" {
+		t.Fatalf("media matches = %#v", matches)
+	}
+	ids := docTopLevelBlockIDs(response)
+	if len(ids) != 1 || ids[0] != "container-1" {
+		t.Fatalf("top-level ids = %#v", ids)
+	}
 }

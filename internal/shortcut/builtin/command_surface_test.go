@@ -129,6 +129,8 @@ func expectedShortcutLong(spec shortcut.Shortcut) string {
 				text = expectedDashed(constraint.Flags) + " 必须且只能指定一个"
 			case shortcut.ConstraintMutuallyExclusive:
 				text = expectedDashed(constraint.Flags) + " 互斥，最多指定一个"
+			case shortcut.ConstraintRequireTogether:
+				text = expectedDashed(constraint.Flags) + " 必须同时指定或同时省略"
 			}
 		}
 		lines = append(lines, "  - "+text)

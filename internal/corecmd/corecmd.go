@@ -163,6 +163,8 @@ const (
 	ExactlyOne ConstraintKind = "exactly_one"
 	// MutuallyExclusive allows at most one of Flags.
 	MutuallyExclusive ConstraintKind = "mutually_exclusive"
+	// RequireTogether requires either all Flags or none of them.
+	RequireTogether ConstraintKind = "require_together"
 	// Custom documents validation implemented by Spec.Validate. command
 	// validates the declaration and renders its help, but does not infer the
 	// command-specific runtime rule.
@@ -1012,7 +1014,7 @@ func ValidateConstraintDecls(use string, flags []FlagSpec, constraints []Constra
 	}
 	for _, constraint := range constraints {
 		switch constraint.Kind {
-		case AtLeastOne, ExactlyOne, MutuallyExclusive:
+		case AtLeastOne, ExactlyOne, MutuallyExclusive, RequireTogether:
 			if len(constraint.Flags) < 2 {
 				panic(fmt.Sprintf("command %q: constraint %s needs at least two flags", use, constraint.Kind))
 			}
@@ -1074,7 +1076,7 @@ func constraintProvided(cmd *cobra.Command, flag FlagSpec) bool {
 
 // ValidateConstraints enforces the relationship constraints. Error wording
 // matches the shortcut framework's RuntimeContext.AtLeastOne/ExactlyOne/
-// MutuallyExclusive verbatim, so atomic commands and smart shortcuts fail
+// MutuallyExclusive conventions, so atomic commands and smart shortcuts fail
 // identically for users and agents.
 func ValidateConstraints(cmd *cobra.Command, flags []FlagSpec, constraints []Constraint) error {
 	flagsByName := map[string]FlagSpec{}
@@ -1107,6 +1109,11 @@ func ValidateConstraints(cmd *cobra.Command, flags []FlagSpec, constraints []Con
 			if len(set) > 1 {
 				return apperrors.NewValidation(fmt.Sprintf(
 					"参数 %s 互斥，只能指定其一（当前指定了 %s）", dashed(constraint.Flags), dashed(set)))
+			}
+		case RequireTogether:
+			if len(set) > 0 && len(set) != len(constraint.Flags) {
+				return apperrors.NewValidation(fmt.Sprintf(
+					"参数 %s 必须同时指定（当前仅指定了 %s）", dashed(constraint.Flags), dashed(set)))
 			}
 		case Custom:
 			// The declaration is published and rendered in help. Its actual
@@ -1492,6 +1499,10 @@ func AnnotateConstraints(cmd *cobra.Command, constraints []Constraint) {
 			if len(flags) > 1 {
 				projected.MutuallyExclusive = append(projected.MutuallyExclusive, flags)
 			}
+		case RequireTogether:
+			if len(flags) > 1 {
+				projected.RequireTogether = append(projected.RequireTogether, flags)
+			}
 		}
 	}
 	runtimeannotate.AnnotateRuntimeRequiredFlags(cmd, required...)
@@ -1515,6 +1526,8 @@ func ConstraintHelp(constraints []Constraint) string {
 				text = fmt.Sprintf("%s 必须且只能指定一个", dashed(constraint.Flags))
 			case MutuallyExclusive:
 				text = fmt.Sprintf("%s 互斥，最多指定一个", dashed(constraint.Flags))
+			case RequireTogether:
+				text = fmt.Sprintf("%s 必须同时指定或同时省略", dashed(constraint.Flags))
 			}
 		}
 		lines = append(lines, "  - "+text)

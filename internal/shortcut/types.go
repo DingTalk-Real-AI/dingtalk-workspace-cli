@@ -119,6 +119,8 @@ const (
 	ConstraintExactlyOne ConstraintKind = "exactly_one"
 	// ConstraintMutuallyExclusive permits zero or one of Flags.
 	ConstraintMutuallyExclusive ConstraintKind = "mutually_exclusive"
+	// ConstraintRequireTogether requires either all Flags or none of them.
+	ConstraintRequireTogether ConstraintKind = "require_together"
 	// ConstraintCustom documents validation enforced by Shortcut.Validate.
 	ConstraintCustom ConstraintKind = "custom"
 )

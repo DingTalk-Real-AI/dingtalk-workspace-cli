@@ -266,6 +266,8 @@ func fromShortcutConstraintKind(k ConstraintKind) (corecmd.ConstraintKind, bool)
 		return corecmd.ExactlyOne, true
 	case ConstraintMutuallyExclusive:
 		return corecmd.MutuallyExclusive, true
+	case ConstraintRequireTogether:
+		return corecmd.RequireTogether, true
 	case ConstraintCustom:
 		return corecmd.Custom, true
 	default:

@@ -2062,6 +2062,36 @@ var generatedParamAliases = []ParamAliasEntry{
 		Blocked: []string{"block-id", "comment-id", "comment-key", "id", "job-id", "parent-id", "revision", "task-id", "template-id", "version"},
 	},
 	{
+		CLIPath: "doc +cover-clear",
+		Aliases: map[string]string{
+			"doc":         "node",
+			"doc-id":      "node",
+			"document-id": "node",
+			"node-id":     "node",
+		},
+		Ambiguous: []string{"file-id", "url"},
+	},
+	{
+		CLIPath: "doc +cover-download",
+		Aliases: map[string]string{
+			"doc":         "node",
+			"doc-id":      "node",
+			"document-id": "node",
+			"node-id":     "node",
+		},
+		Ambiguous: []string{"file-id", "url"},
+	},
+	{
+		CLIPath: "doc +cover-set",
+		Aliases: map[string]string{
+			"doc":         "node",
+			"doc-id":      "node",
+			"document-id": "node",
+			"node-id":     "node",
+		},
+		Ambiguous: []string{"file-id", "url"},
+	},
+	{
 		CLIPath: "doc +create",
 		Aliases: map[string]string{
 			"body":             "content",
@@ -2331,36 +2361,6 @@ var generatedParamAliases = []ParamAliasEntry{
 			"workspace-id":     "workspace",
 		},
 		Blocked: []string{"block-id", "comment-id", "comment-key", "id", "job-id", "parent-id", "revision", "task-id", "template-id", "version"},
-	},
-	{
-		CLIPath: "doc +resource-delete",
-		Aliases: map[string]string{
-			"doc":         "node",
-			"doc-id":      "node",
-			"document-id": "node",
-			"node-id":     "node",
-		},
-		Ambiguous: []string{"file-id", "url"},
-	},
-	{
-		CLIPath: "doc +resource-download",
-		Aliases: map[string]string{
-			"doc":         "node",
-			"doc-id":      "node",
-			"document-id": "node",
-			"node-id":     "node",
-		},
-		Ambiguous: []string{"file-id", "url"},
-	},
-	{
-		CLIPath: "doc +resource-update",
-		Aliases: map[string]string{
-			"doc":         "node",
-			"doc-id":      "node",
-			"document-id": "node",
-			"node-id":     "node",
-		},
-		Ambiguous: []string{"file-id", "url"},
 	},
 	{
 		CLIPath: "doc +review",

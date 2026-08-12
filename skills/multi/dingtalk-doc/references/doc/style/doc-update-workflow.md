@@ -1,316 +1,61 @@
-# 钉钉文档改写流程
+# 钉钉文档富结构更新流程
 
-本文只处理已有文档的结构和排版策略。普通执行入口固定为 `+fetch`、`+update` 或 `+checkpoint-update`；这些 shortcut 统一确认、写入与验证。原子 `doc read/update/block` 只保留给 shortcut 未公开参数的 JSONML 专家路径，使用前必须读取精确 leaf Schema。
+本页只处理已有文档中的富结构保真编辑。普通 append、overwrite、唯一文本替换和普通 block 编辑直接使用 `dws doc +update`，不读取本页。
 
-## 适用边界
+执行入口优先为 `+update/+checkpoint-update`。参数、constraint 和 confirmation 以已加载的 CommandMeta 或精确 leaf Schema 为准；不要从本文推导不存在的 flag。特别禁止把原子命令的 `--revision` 或 `--fix-jsonml` 传给 `+update`，shortcut 的并发参数是 `--expected-revision`。
 
-进入本文前，必须已经确认用户要改写的是已有钉钉文档 (`adoc`)。如果用户要新建、要操作表格 / AI 表格 / 文件 / 知识库空间 / 发消息，不要套用本文。
+## 1. 选择最小更新动作
 
-本文覆盖：
+| 用户意图 | 推荐动作 |
+|---|---|
+| 末尾增加普通正文 | `append` |
+| 整篇替换 | `overwrite` |
+| 已知唯一旧文本改为新文本 | `str_replace` |
+| 在真实 block 前/后插入 | `block_insert` + `ref-block/where` |
+| 替换或删除真实 block | `block_replace` / `block_delete` |
+| 重要整篇更新且要求恢复点 | `+checkpoint-update` |
 
-- 已有文档的局部改写、润色、章节补充
-- 段落 ↔ 列表 ↔ 表格 的形态转换
-- 块级精修（callout、分栏、附件插入）
-- overwrite 整篇改写的风险提示与执行
-- JSONML 无损结构改写的入口
+只有已有内容确实包含颜色、callout、分栏、复杂表格、附件、@人等必须保留的结构时，才读取最小 JSONML 子树或全文。不要为了修改一段普通文字默认拉取完整 JSONML。
 
-本文不覆盖：
+## 2. 最小读取
 
-- 新建文档（见 [doc-create-workflow.md](./doc-create-workflow.md)）
-- 知识库空间管理
-- 文档权限、消息分发、待办分派
+- 已知唯一旧文本：优先 `str_replace`，让 shortcut 验证唯一性。
+- 已知 block URL/ID：直接使用，不重新搜索。
+- 需要定位 block：用 `+fetch --detail with-ids` 或局部 scope 获取真实 ID。
+- 多处富结构保真覆盖：读取 full 内容并保存真实 revision；只有这种 JSONML overwrite 才考虑 `--expected-revision`。
+- 末尾追加普通正文不必预读全文；只在需要判断末尾衔接时读取末尾局部。
 
----
+正文、块、版本、媒体和样式更新属于可恢复文档写入，不强制确认，也不追加 `--yes`。目标或范围不明确时仍需消歧，但不要把消歧当成安全确认。
 
-## 一、核心原则
+## 3. Block ID 生命周期
 
-### 1.1 精准手术优于全量覆盖
+| 操作 | 旧 ID 后续使用规则 |
+|---|---|
+| `str_replace`、不改变结构的属性更新 | 未受影响的 ID 可继续使用 |
+| `block_replace` | 不复用被替换 block 的旧 ID；优先使用回执的新/受影响 ID |
+| `block_delete` | 被删除 ID 立即失效 |
+| `block_insert` / copy | 新块只使用回执的 `insertedBlockId/affectedBlockIds` |
+| `overwrite` | 旧正文 block ID 全部视为失效 |
+| `+media-insert` | 使用回执中的 `insertedBlockId/resourceId` |
 
-**默认走精准手术**——只改用户指定的章节或 block，不动其他内容。具体路径见 §3 速查表。
+下一步依赖变化后的结构且回执没有稳定 ID 时，才定点 refetch。不要每次写后全篇读取，也不要继续复用已失效 ID。
 
-### 1.2 保真约束
+## 4. 格式与内容传输
 
-改写时必须**原样保留**以下要素，**不许**替换为纯文本/姓名/链接/占位符：
+- 普通文本编辑保持 Markdown，不因中文、篇幅或文档类型切换 JSONML。
+- 只在保留已有富结构或用户明确要求富结构时使用 JSONML。
+- 用户明确格式要求高于默认样式；不得主动改写未要求的章节、颜色或布局。
+- 正文通过 cwd 相对 `@file` 或 stdin 传递，禁止绝对路径、`..` 和把用户正文作为 `printf` 格式字符串。
+- `--expected-revision` 仅用于 `--command overwrite --doc-format jsonml`；其他动作不模拟原子 revision。
 
-- `@人` 引用（用户、机器人、群）
-- `@文档` / `@群` 等卡片引用
-- 已上传的附件、图片
-- 用户原话引用块
-- 表格表头（除非语义错误且用户确认）
+如果 JSONML validator 报错，依据具体节点错误修正一次。仍失败时简化非必要结构；简化会违反用户要求则停止并说明，不做三次以上无界重试。
 
-JSONML 模式下这些元素的节点结构见 [doc-jsonml-schema.md](../format/doc-jsonml-schema.md)。
+## 5. 执行与验证
 
-### 1.3 编辑形态优先级
+1. 优先消费已加载的 CommandMeta；只有参数、constraint 或 confirmation 缺失时查询一次精确 leaf Schema。
+2. 按 Runtime gate 执行一个最小写动作；不要因 Help/Schema 探测失败而换同义原子命令。
+3. 使用 `+update` 的稳定回执和有界回读结果判断完成状态。
+4. `partial_success` 只补未完成步骤；`unknown` 或 `doc_write_verification_failed` 先读取现状，禁止重放写入。
+5. 后续步骤只消费当前回执仍有效的 ID；必要时定点 refetch。
 
-**改写已有文档优先 JSONML，markdown / element 只在 JSONML 不适用时兜底**：
-
-| 优先级 | 形态 | 适用 |
-|--------|------|------|
-| ① 首选 | `--content-format jsonml` | 保真度最高；callout / 分栏 / 表格 / @人 / 附件 / 颜色 / 嵌套结构都能 1:1 round-trip；写入端有 validator 兜底（§4.4） |
-| ② 次选 | `--content-format element`（JSON，老接口） | JSONML 不支持某个块字段时；或快速插入 callout / 分栏不想构造 JSONML 时；不保真改写正文 |
-| ③ 兜底 | markdown（不带 `--content-format` 即默认）| 纯文本追加、整篇重排骨架；callout / 分栏 / 颜色 / 部分属性会被 markdown 还原过程丢失 |
-
-实操判断：
-
-- 用户给已有 nodeId 要「改一段、改属性、加 callout、动结构」——走 §4.4 JSONML 路径
-- 用户要「在末尾追加一节纯文本 / 整篇按新骨架重写」——走 §4.2 / §4.5 markdown 路径
-- 同一次任务里两类需求都有——分别走对应路径，**不要**为了省事全部 markdown overwrite
-
-### 1.4 写入风险提示
-
-`doc update` 在以下场景可能产生**静默失败**（返回 success=true 但实际写入不完整）：
-
-- **overwrite 降级为 append**：大文档 overwrite 被后端静默降级，导致旧内容未清除、新内容追加在末尾
-- **分块 append 内容截断**：超长文档分片写入时部分片段丢失或顺序错乱
-- **编码/通道问题**：特殊终端下 UTF-8 内容传输乱码
-
-因此写入必须通过带确认与验证的 shortcut。`+update/+checkpoint-update` 返回的验证结果是主证据；禁止无条件追加一次原子 `doc read`，只有 partial/unknown 或需要定点结构检查时才用 `+fetch`。
-
----
-
-## 二、读取策略
-
-改写前必须先读现有内容，但要节省上下文。按粒度选读取方式（按 §1.3 优先级排序，**优先 JSONML**）：
-
-| 用户需求 | 读取方式 | 定位方法 |
-|----------|----------|----------|
-| 单块精修（首选）| `doc block list --node <id> --content-format jsonml` → 拿 uuid → `doc block list --node <id> --content-format jsonml --block-id <uuid>` 读子树 | 节点结构见 [doc-jsonml-schema.md](../format/doc-jsonml-schema.md) |
-| 多处保真改写 / 改 root sectPr | `+fetch --node <id> --detail full` | 解析 JSONML；担心并发覆盖时记下 revision |
-| 整篇按新骨架重写（纯文本场景）| `+fetch --node <id>` | 直接处理 markdown 全文 |
-| 末尾追加纯文本章节 | 不必读全文，直接 §4.2 append | 必要时 `+fetch --scope section` 看末尾衔接 |
-| 老接口快速找 BLOCK_ID（无需 jsonml 时）| `doc block list --node <id>` | 默认输出 JSON；用 `grep -B2 -A2 "<关键词>"` 在 children 里定位（结构 `{"blocks":[{...,"children":[...]}]}`，jq 需 `..\|.text? // empty` 递归查文本） |
-
-读取后，把改写计划告诉用户（要改哪几节、走 JSONML 还是 markdown、改成什么形态），等用户确认后再写。
-
----
-
-## 三、改写路径速查
-
-按用户请求形态查表，跳到对应详细节执行（**按 §1.3 优先级排序：JSONML 路径在前，markdown / element 兜底在后**）：
-
-| 用户请求 | 推荐路径 | 详细节 |
-|----------|----------|--------|
-| 改某一章 / 某一节（首选） | block list 拿 uuid → block update --content-format jsonml | §4.4 路径 B |
-| 改属性 / 改 mark / 改颜色不动文本 | block update --content-format jsonml | §4.4 路径 B |
-| 插入 callout / 分栏 / 嵌套结构（首选） | block insert --content-format jsonml --element '[...]' | §4.4 路径 B |
-| 多处保真改写 / 改 root sectPr | 整篇 JSONML overwrite（默认不带 --revision；并发敏感时再加） | §4.4 路径 A |
-| 中间插一段纯文本 | block insert（element JSON 或 jsonml） | §4.3 / §4.4 |
-| 末尾追加一节纯文本 | doc update --mode append（markdown） | §4.2 |
-| 整篇按新骨架重写 | overwrite 全文（优先 JSONML；纯文本可用 markdown） | §4.5 |
-| 段落转表格 / 表格转段落 | block update --content-format jsonml；或 markdown overwrite 单段 | §4.4 / §4.1 |
-| 插入附件 / 图片 | doc media insert | §4.3 |
-| 一次追加 >200KB 内容 | 分块 append + 用户风险确认 + 逐片记录 | §4.6 |
-| 兜底：纯文本快速替换某段 | doc update --content overwrite（markdown） | §4.1 |
-
----
-
-## 四、改写路径详细
-
-> **首选 JSONML（§4.4）**——保真度最高且 validator 兜底；本节其余路径（markdown / element）仅在 §1.3 列出的"次选 / 兜底"场景下使用。
-
-### 4.1 段落级 overwrite（markdown 兜底路径）
-
-> 适用范围：**纯文本**改写一段或替换某节内容。若该段含 callout / 分栏 / 颜色 / @人 / 附件 / 嵌套结构，**改走 §4.4 路径 B**——markdown 还原会丢失这些元素。
-
-```bash
-dws doc +update --node <nodeId> --command overwrite --content "<新内容>" --doc-format markdown
-```
-
-或写入临时文件：
-
-```bash
-dws doc +update --node <nodeId> --command overwrite --content @./drafts/<name>-section.md --doc-format markdown
-```
-
-> ⚠️ **overwrite 须用户确认**——尤其是整篇文档 overwrite。
-
-### 4.2 追加章节（markdown）
-
-> 适用范围：在文档末尾加 X 章 / 补充纯文本段落。追加内容若含 callout / 分栏等富结构，先用本节 append 一个占位段落，再用 §4.4 路径 B 的 `block insert --content-format jsonml` 替换/精修。
-
-```bash
-dws doc +update --node <nodeId> --command append --content @./drafts/<name>-append.md --doc-format markdown
-```
-
-按 [doc-style-guideline.md](./doc-style-guideline.md) 的元素选择规则准备追加内容。
-
-### 4.3 块级精修（element JSON 次选路径）
-
-> 适用范围：JSONML 不支持某个字段时，或快速插入 callout / 分栏不想构造 JSONML 时。**默认优先 §4.4 路径 B**（block update/insert `--content-format jsonml`），本节是老接口次选路径。
-
-```bash
-# 列出所有 block，定位 BLOCK_ID
-dws doc block list --node <nodeId>
-
-# 改一个 block 的文本
-dws doc block update --node <nodeId> --block-id <BLOCK_ID> --text "替换后的内容" --content-format element
-
-# 在某个 block 后插入
-dws doc block insert --node <nodeId> --ref-block <BLOCK_ID> --where after --heading "补充说明" --level 2 --content-format element
-
-# 插入复杂块（callout / 分栏）—— element 默认按 JSON 解析
-dws doc block insert --node <nodeId> --ref-block <BLOCK_ID> --where after --content-format element \
-  --element '{"blockType":"callout","callout":{"emoji":"⚠️","bgColor":"#FDE2E0","content":[{"text":"高风险操作，先备份"}]}}'
-
-# 若改写过程已经在用 JSONML，整段精修也可走 jsonml 路径（uuid 必须 == --block-id）
-dws doc block insert --node <nodeId> --ref-block <BLOCK_ID> --where after --content-format jsonml \
-  --element '["container",{"uuid":"co_new","subType":"colorBlocks","metadata":{"bgcolor":"#FDE2E0","border":"#F5C2C7"}},["p",{"uuid":"co_new_p1"},["span",{"data-type":"text"},["span",{"data-type":"leaf"},"高风险操作，先备份"]]]]'
-```
-
-字段结构以 [doc-block.md](../doc-block.md) 为准，不要猜。callout 字段名不确定时，先用 `doc block list --node <id> --block-type callout` 抓现有 callout 实例看真实字段。整段 JSONML 形态与可复制范例见 §4.4 与 [doc-jsonml-cookbook.md](../format/doc-jsonml-cookbook.md)。
-
-### 4.4 JSONML 无损改写（**首选路径**）
-
-> 改写已有文档**默认走本节**——保真度最高，callout / 分栏 / 表格 / @人 / 附件 / 颜色 / 嵌套都能 1:1 round-trip；写入端有 validator 兜底。其他路径（§4.1/4.2/4.3/4.5 markdown）仅在 §1.3 列出的"次选 / 兜底"场景下使用。
-
-两条子路径：
-
-**路径 B：单 block JSONML 精修（最常用——只动一个 block 时的默认选择）**
-
-```bash
-# 1. 列出所有 block 拿到 uuid
-dws doc block list --node <nodeId> --content-format jsonml
-
-# 2. 读单个 block 完整子树
-dws doc block list --node <nodeId> --content-format jsonml --block-id <BLOCK_UUID>
-
-# 3. 改完后写回（uuid 必须 == --block-id）
-dws doc block update --node <nodeId> --block-id <BLOCK_UUID> --content-format jsonml \
-  --element '["p", {"uuid": "<BLOCK_UUID>"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "新内容"]]]'
-
-# 在某个 block 前/后插入新 block
-dws doc block insert --node <nodeId> --ref-block <BLOCK_UUID> --where after --content-format jsonml \
-  --element '["container", {"uuid": "co1", "subType": "colorBlocks", "metadata": {"bgcolor": "#E8F2FE", "border": "#B3D4FC"}}, ["p", {"uuid": "co1p1"}, ["span", {"data-type": "text"}, ["span", {"data-type": "leaf"}, "提示内容"]]]]'
-```
-
-**路径 A：整篇 JSONML overwrite（一次改多处、改 root 级 sectPr 才用）**
-
-```bash
-# 1. 读出完整 JSONML 结构（输出含 revision，普通改写场景下不需要）
-dws doc +fetch --node <nodeId> --detail full --format json
-
-# 2. 解析 JSON，修改 jsonml 数组中的目标节点
-#    节点结构见 doc-jsonml-schema.md，可复制范例见 doc-jsonml-cookbook.md
-
-# 3. 写回工作目录内相对文件 ./drafts/doc_modified.json，格式 {"jsonml": [...]}
-
-# 4. 提交修改（默认直接覆盖，不做并发检查）
-dws doc +update --node <nodeId> --command overwrite --content @./drafts/doc_modified.json \
-  --doc-format jsonml
-```
-
-> **并发安全模式（担心被并发覆盖时使用）**：如果担心多 agent 同时改这篇文档，可以把第 1 步 read 返回的 `revision` 通过 `--revision <N>` 透传给第 4 步：服务端会做并发检查，版本不一致返回 `VersionConflict`，此时回到第 1 步重读重写即可。普通单 agent 改写场景默认不传 `--revision`。
-
-#### JSONML 写入端的 validator
-
-写入命令（`doc create/update` + `doc block insert/update`）走 **validate** 一步，不做结构修复：
-
-| 行为 | 缺省 | `--fix-jsonml` |
-|------|------|----------------|
-| JSON 语法修复（括号/逗号补全） | ✗ | ✓（打印 `[FIX]`） |
-| validator 阻断（HasErrors → 拒发） | ✓ | ✓ |
-| root 校验（仅 doc create/update） | ✓ | ✓ |
-
-报错格式（agent 友好）：
-
-```
-$[2][2]: paragraph child must be span wrapper, got raw string.
-Suggestion: ["span",{"data-type":"text"},["span",{"data-type":"leaf"},"<your text>"]]
-```
-
-设计要点：
-
-- 缺省为严格模式：不做结构修复，裸字符串、缺 uuid 等错误会被 validator 抦下。
-- `doc create/update` 要求 body 必须以 `["root", ...]` 为根节点，缺少会报错。`doc block insert/update` 不要求 root。
-- `--fix-jsonml`：启用 JSON 语法修复（修复 LLM 遗漏的括号/逗号），推荐 agent 调用。
-
-**何时不走本节、改用 markdown**：纯文本追加章节（§4.2）、整篇按全新骨架重写（§4.5，且无富结构需要保留时）、只在乎"加一段文字"且确认目标段落无 callout / 分栏 / 颜色 / @人 / 附件。其余场景默认本节。
-
-字段细节见 [doc-jsonml-schema.md](../format/doc-jsonml-schema.md)；可复制范例见 [doc-jsonml-cookbook.md](../format/doc-jsonml-cookbook.md)。
-
-### 4.5 整篇 overwrite
-
-适合「按新风格重写整篇」「按新骨架重组结构」。
-
-**形态选择（按 §1.3 优先级）**：
-
-- 若原文档含 callout / 分栏 / 颜色 / @人 / 附件 / 嵌套结构且需要保留——**走 §4.4 路径 A**（整篇 JSONML overwrite；默认不带 `--revision`，担心并发时再加）
-- 若是纯文本骨架重写、原文档没有富结构需要保真——走本节 markdown overwrite
-
-执行前必须先向用户**显式提示**：
-
-> 注意：本次操作将覆盖整篇文档内容（约 {size}）。可能存在以下风险：
-> - 大文档 overwrite 可能被后端静默降级为 append，导致**旧内容残留 + 新内容追加在末尾**
-> - markdown overwrite 会丢失原文档的 callout / 分栏 / 颜色等富结构；如需保真改走 §4.4 路径 A
-> - 写入完成后我会回读校验，发现异常会主动报告
->
-> 是否继续？
-
-得到确认后执行（markdown 兜底路径）：
-
-```bash
-dws doc +checkpoint-update --node <nodeId> --mode overwrite --content @./drafts/<name>-full.md
-```
-
-读取 `+checkpoint-update` 的 checkpoint、write、verify 步骤；只有 partial/unknown 时才按 §6 恢复。
-
-### 4.6 超长内容追加（分块 append）
-
-当一次性追加内容 **超过 200KB** 时，必须拆分为多片 `--mode append`，并在执行第一片**之前**向用户发出截断风险提示等待确认。
-
-完整规范（提示话术模板、触发条件、失败处理）见 [04-document.md «分块 append 截断风险提示»](../../04-document.md)。
-
-update 场景下的额外约束：
-
-1. 按段落/标题边界切分，**禁止**在表格、代码块、列表内部截断
-2. 每写一片记录已写入的最后一个标题/段落标记，供 §6 回读比对
-3. 与既有内容衔接位置不能产生悬空标题或断列表
-
----
-
-## 五、改写时的样式约束
-
-按 [doc-style-guideline.md](./doc-style-guideline.md) 处理：
-
-- **文档类型保持不变**；用户明确要求转型时除外（如从「执行型 SOP」改成「说明型接口文档」）
-- **同类信息保持一致**：改写时不要把原本统一的元素改为多种表达
-- **颜色/emoji 语义**：改写后仍满足 style guideline §5「颜色与视觉语义」的一致性
-- **不删除附件/图片**；用户明确要求时除外
-
----
-
-## 六、回读验收
-
-`+update/+checkpoint-update` 已统一确认与验证。正常成功禁止额外整篇读取；partial/unknown 或确需检查富结构时，使用最小范围 `+fetch`。
-
-校验要点：
-
-- 改写章节的关键标题、段落首句、表格表头是否符合预期
-- overwrite 后旧内容是否真的被清除
-- append 后新内容是否在期望位置
-- 表格、代码块、列表跨块元素是否完整
-- @人、附件、图片等保真要素是否原样保留
-
-### 异常处理
-
-| 现象 | 可能原因 | 处理 |
-|------|----------|------|
-| overwrite 后旧内容残留 + 新内容追加在末尾 | overwrite 被静默降级为 append | 告知用户 overwrite 降级，按下方「先清空再重建」路径修复 |
-| append 后部分片段缺失 | 分块写入丢失 | 定位缺失片段，针对该段单独再 append 一次 |
-| @人 / 附件被替换为纯文本 | 改写时未走保真约束 | 用 JSONML 无损编辑修复（§4.4）|
-| 整篇内容乱序 | 写入顺序异常 | 报告给用户；若可重做，按下方「先清空再重建」路径修复 |
-
-**禁止**在未回读的情况下向用户报告"已完成"。
-
----
-
-## 七、交付口径
-
-只报告已经验证过的信息：
-
-- 改写涉及的章节范围
-- 改写后的 nodeId 与 docUrl
-- 回读验收结果（哪些章节确认改写成功、保真要素是否完整）
-- 如有缺失或异常，说明具体位置和已采取的修复动作
-
-未回读前，不要说「内容完整」「改写完成」。
+验证内容必须对应用户诉求：目标短语是否替换、标题/段落是否处于要求位置、删除对象是否消失、媒体是否返回稳定 ID。没有渲染或截图证据时，只能报告内容和结构验证，不能宣称视觉排版完全正常。

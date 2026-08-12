@@ -80,4 +80,14 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 			t.Errorf("%s compatibility routing = %s/%s, want alias_internal/%s", command, item.Disposition, item.PrimaryCommand, primary)
 		}
 	}
+	for _, command := range []string{"+cover-set", "+cover-download", "+cover-clear"} {
+		if _, ok := registered[command]; !ok {
+			t.Errorf("missing explicit cover shortcut %s", command)
+		}
+	}
+	for _, legacy := range []string{"+resource-update", "+resource-download", "+resource-delete"} {
+		if _, ok := registered[legacy]; ok {
+			t.Errorf("legacy cover name %s is still a registered Agent-facing command", legacy)
+		}
+	}
 }

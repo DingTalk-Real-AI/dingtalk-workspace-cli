@@ -18,11 +18,26 @@ func TestCrossPlatformCoverageDocSearchPageAllContract(t *testing.T) {
 			{"documents": []any{map[string]any{"nodeId": "b", "name": "B"}, map[string]any{"nodeId": "a", "name": "A"}}, "hasMore": false},
 		},
 	}}
-	if err := runDocCoverage(t, Search, caller, "--query", "report", "--page-all", "--limit", "2"); err != nil {
+	if err := runDocCoverage(t, Search, caller, "--query", "report", "--limit", "2"); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.history) != 2 || caller.history[1].params["pageToken"] != "p2" {
 		t.Fatalf("pagination calls = %#v", caller.history)
+	}
+}
+
+func TestCrossPlatformCoverageTemplateSearchDefaultsToCompletePagination(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"search_doc_templates": {
+			{"templates": []any{map[string]any{"templateId": "a", "name": "周报 A"}}, "hasMore": true, "nextCursor": "p2"},
+			{"templates": []any{map[string]any{"templateId": "b", "name": "周报 B"}}, "hasMore": false},
+		},
+	}}
+	if err := runDocCoverage(t, TemplateSearch, caller, "--query", "周报", "--limit", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.history) != 2 || caller.history[1].params["nextCursor"] != "p2" {
+		t.Fatalf("template pagination calls = %#v", caller.history)
 	}
 }
 
