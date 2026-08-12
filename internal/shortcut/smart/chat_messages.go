@@ -120,7 +120,7 @@ var ChatMessages = shortcut.Shortcut{
 		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 typed nextPage.time 自动读取后续页；--page-limit 仅与 --page-all 一起使用且范围 1-500；--max-items 仅与 --page-all 一起使用且不能为负数；--page-delay 仅与 --page-all 一起使用且不能为负数"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 		{Name: "max-items", Type: shortcut.FlagInt, Desc: "自动翻页最多返回条数（默认 0 表示不限制）；--max-items 仅与 --page-all 一起使用且不能为负数"},
-		{Name: "max-results", Type: shortcut.FlagInt, Desc: "--max-items 的兼容别名", Hidden: true},
+		{Name: "max-results", Type: shortcut.FlagInt, Desc: "--max-items 的公开兼容别名；仅与 --page-all 一起使用且不能为负数"},
 		{Name: "page-delay", Type: shortcut.FlagInt, Desc: "自动翻页每页之间等待毫秒数（默认 0 表示不等待）；--page-delay 仅与 --page-all 一起使用且不能为负数"},
 		{Name: "output", Shorthand: "o", Type: shortcut.FlagString, Desc: "把完整结构化 ledger 原子写入工作目录内的相对 JSON 文件"},
 	}, chatshortcut.MessageResourceDownloadFlags()...),
@@ -141,6 +141,8 @@ var ChatMessages = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "显式页大小必须大于 0"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "max-items"}, Description: "--max-items 仅与 --page-all 一起使用且不能为负数"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "max-results"}, Description: "--max-results 仅与 --page-all 一起使用且不能为负数"},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"max-items", "max-results"}},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-delay"}, Description: "--page-delay 仅与 --page-all 一起使用且不能为负数"},
 		{
 			Kind:        shortcut.ConstraintCustom,

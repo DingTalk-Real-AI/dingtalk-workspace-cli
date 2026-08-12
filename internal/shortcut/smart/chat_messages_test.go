@@ -503,6 +503,18 @@ func chatMessagesRuntimeForTest(t *testing.T, values map[string]string) *shortcu
 	return shortcut.RuntimeContextForTest(cmd, ChatMessages)
 }
 
+func TestCrossPlatformCoverageChatMessagesKeepsMaxResultsPublic(t *testing.T) {
+	root := newPlatformCoverageRoot()
+	cmd, _, err := root.Find([]string{"chat", "+chat-messages"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	flag := cmd.Flags().Lookup("max-results")
+	if flag == nil || flag.Hidden {
+		t.Fatalf("--max-results must remain a visible compatibility flag: %#v", flag)
+	}
+}
+
 func TestCrossPlatformCoverageChatMessagesAdditionalValidationAndHelpers(t *testing.T) {
 	for _, values := range []map[string]string{
 		{"time": "2026-01-01", "start": "2026-01-01"},
