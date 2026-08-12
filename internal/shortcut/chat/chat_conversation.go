@@ -359,6 +359,7 @@ var ConversationList = shortcut.Shortcut{
 		stopReason := "source_complete"
 		truncatedByPageLimit := false
 		truncatedByResultLimit := false
+		unsafeResultContinuation := false
 		failures := make([]map[string]any, 0)
 		for pagesFetched < pageLimit {
 			if pagesFetched > 0 {
@@ -368,7 +369,7 @@ var ConversationList = shortcut.Shortcut{
 					break
 				}
 			}
-			params := map[string]any{"limit": rt.Int("limit")}
+			params := map[string]any{"limit": shortcut.AutoPageRequestSize(rt, rt.Int("limit"), len(convs))}
 			if cursor > 0 {
 				params["cursor"] = cursor
 			}
@@ -384,6 +385,7 @@ var ConversationList = shortcut.Shortcut{
 				break
 			}
 			pagesFetched++
+			overflowOnPage := false
 			for _, conversation := range conversationListProject(data) {
 				id := strings.TrimSpace(fmt.Sprint(conversation["openConversationId"]))
 				if id != "" && id != "<nil>" {
@@ -394,6 +396,7 @@ var ConversationList = shortcut.Shortcut{
 				}
 				if maxItems := rt.Int("max-items"); maxItems > 0 && len(convs) >= maxItems {
 					truncatedByResultLimit = true
+					overflowOnPage = true
 					continue
 				}
 				convs = append(convs, conversation)
@@ -403,6 +406,14 @@ var ConversationList = shortcut.Shortcut{
 			hasMore = hasMoreValue
 			if !known {
 				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": "下层未返回 hasMore，无法证明结果完整"})
+				break
+			}
+			if overflowOnPage {
+				hasMore = true
+				nextCursor = 0
+				unsafeResultContinuation = true
+				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": "下层返回条数超过请求的剩余额度，无法生成不跳项的安全续页游标"})
+				stopReason = "pagination_error"
 				break
 			}
 			if !hasMore {
@@ -450,7 +461,25 @@ var ConversationList = shortcut.Shortcut{
 			"partial":                len(failures) > 0,
 		}
 		chatmsg.ApplyTruncation(payload)
-		return rt.Output(payload)
+		if err := rt.Output(payload); err != nil {
+			return err
+		}
+		if stopReason == "delay_interrupted" && rt.Command().Context().Err() != nil {
+			return rt.Command().Context().Err()
+		}
+		if unsafeResultContinuation {
+			return apperrors.NewAPI(
+				fmt.Sprintf("会话列表分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+				apperrors.WithOperation("im/list_all_conversations"),
+				apperrors.WithReason("conversation_list_incomplete"),
+				apperrors.WithOrigin("mcp_gateway"),
+				apperrors.WithFailureStage("pagination"),
+				apperrors.WithExecutionStarted(true),
+				apperrors.WithRetryable(true),
+				apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
+			)
+		}
+		return nil
 	},
 }
 

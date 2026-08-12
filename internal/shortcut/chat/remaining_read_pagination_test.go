@@ -102,7 +102,7 @@ func TestCrossPlatformCoverageDirectMessagesPageLimitPublishesExecutableContinua
 
 func TestCrossPlatformCoverageChatListAllMaxItemsPublishesStableTruncation(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
-		"im/list_my_groups_pagination": `{"result":{"groups":[{"openConversationId":"g1"},{"openConversationId":"g2"}],"hasMore":true,"nextCursor":88}}`,
+		"im/list_my_groups_pagination": `{"result":{"groups":[{"openConversationId":"g1"}],"hasMore":true,"nextCursor":88}}`,
 	}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
@@ -119,6 +119,9 @@ func TestCrossPlatformCoverageChatListAllMaxItemsPublishesStableTruncation(t *te
 	if payload["count"] != float64(1) || payload["truncated"] != true ||
 		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
 		t.Fatalf("payload = %#v", payload)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].args["limit"] != 1 || payload["nextCursor"] != float64(88) {
+		t.Fatalf("unsafe continuation: calls=%#v payload=%#v", fake.calls, payload)
 	}
 }
 

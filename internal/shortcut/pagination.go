@@ -57,6 +57,21 @@ func ValidateAutoPageControls(rt *RuntimeContext) error {
 	return nil
 }
 
+// AutoPageRequestSize caps the next lower-page request to the remaining item
+// budget. A cursor returned for that request is therefore safe to resume from:
+// the CLI did not intentionally discard a suffix of the lower page.
+func AutoPageRequestSize(rt *RuntimeContext, pageSize, itemCount int) int {
+	maxItems := rt.Int("max-items")
+	if maxItems <= 0 {
+		return pageSize
+	}
+	remaining := maxItems - itemCount
+	if remaining > 0 && remaining < pageSize {
+		return remaining
+	}
+	return pageSize
+}
+
 // WaitAutoPageDelay waits between successful pages and remains cancellable so
 // a throttled pagination run cannot ignore command cancellation.
 func WaitAutoPageDelay(rt *RuntimeContext) error {

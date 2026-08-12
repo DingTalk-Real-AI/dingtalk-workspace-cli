@@ -259,6 +259,8 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 		for key, value := range baseParams {
 			params[key] = value
 		}
+		pageSize, _ := baseParams["limit"].(int)
+		params["limit"] = shortcut.AutoPageRequestSize(rt, pageSize, len(allItems))
 		params["cursor"] = cursor
 		data, err := rt.CallMCPData("chat", "search_at_me_message", params)
 		if err != nil {
@@ -273,6 +275,7 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 		}
 		pagesFetched++
 		pageItems := atMeMessageItems(data)
+		overflowOnPage := false
 		for _, item := range pageItems {
 			id := chatmsg.StableMessageID(item)
 			if id != "" && seenMessages[id] {
@@ -283,6 +286,7 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 			}
 			if maxItems := rt.Int("max-items"); maxItems > 0 && len(allItems) >= maxItems {
 				truncatedByResultLimit = true
+				overflowOnPage = true
 				continue
 			}
 			allItems = append(allItems, item)
@@ -299,6 +303,16 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 			break
 		}
 		hasMore = pageHasMore
+		if overflowOnPage {
+			hasMore = true
+			nextCursor = ""
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "@我消息下层返回条数超过请求的剩余额度，无法生成不跳项的安全续页游标",
+			})
+			stopReason = "pagination_error"
+			break
+		}
 		if !hasMore {
 			complete = !truncatedByResultLimit
 			nextCursor = ""

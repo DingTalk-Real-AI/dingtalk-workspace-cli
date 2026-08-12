@@ -85,7 +85,7 @@ func TestCrossPlatformCoverageAtMePageAllContinuesAcrossEmptyIntermediatePage(t 
 
 func TestCrossPlatformCoverageAtMeMaxItemsPublishesStableTruncation(t *testing.T) {
 	caller := &chatMessagesPagingCaller{responses: []string{
-		`{"result":{"conversationMessagesList":[{"messages":[{"openMessageId":"m1"},{"openMessageId":"m2"}]}],"hasMore":true,"nextCursor":"cursor-2"}}`,
+		`{"result":{"conversationMessagesList":[{"messages":[{"openMessageId":"m1"}]}],"hasMore":true,"nextCursor":"cursor-2"}}`,
 	}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
@@ -102,6 +102,9 @@ func TestCrossPlatformCoverageAtMeMaxItemsPublishesStableTruncation(t *testing.T
 	if payload["count"] != float64(1) || payload["truncated"] != true ||
 		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
 		t.Fatalf("payload = %#v", payload)
+	}
+	if len(caller.args) != 1 || caller.args[0]["limit"] != 1 || payload["nextCursor"] != "cursor-2" {
+		t.Fatalf("unsafe continuation: calls=%#v payload=%#v", caller.args, payload)
 	}
 }
 
@@ -133,7 +136,8 @@ func TestCrossPlatformCoverageMyGroupsPageAllUsesNumericCursorAndFiltersAfterMer
 
 func TestCrossPlatformCoverageMyGroupsMaxItemsAppliesAfterTypeFilter(t *testing.T) {
 	caller := &chatMessagesPagingCaller{responses: []string{
-		`{"result":{"groups":[{"openConversationId":"p1","groupType":"p2p"},{"openConversationId":"g1","groupType":"group"},{"openConversationId":"g2","groupType":"group"}],"hasMore":false}}`,
+		`{"result":{"groups":[{"openConversationId":"p1","groupType":"p2p"}],"hasMore":true,"nextCursor":2}}`,
+		`{"result":{"groups":[{"openConversationId":"g1","groupType":"group"}],"hasMore":true,"nextCursor":3}}`,
 	}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
@@ -150,6 +154,9 @@ func TestCrossPlatformCoverageMyGroupsMaxItemsAppliesAfterTypeFilter(t *testing.
 	if payload["count"] != float64(1) || payload["truncated"] != true ||
 		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
 		t.Fatalf("payload = %#v", payload)
+	}
+	if len(caller.args) != 2 || caller.args[0]["limit"] != 1 || caller.args[1]["limit"] != 1 || payload["nextCursor"] != float64(3) {
+		t.Fatalf("unsafe filtered continuation: calls=%#v payload=%#v", caller.args, payload)
 	}
 }
 

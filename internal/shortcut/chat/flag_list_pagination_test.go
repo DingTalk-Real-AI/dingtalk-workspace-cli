@@ -80,7 +80,7 @@ func TestCrossPlatformCoverageFlagListPageTokenAndPageLimit(t *testing.T) {
 
 func TestCrossPlatformCoverageFlagListMaxItemsPublishesStableTruncation(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
-		"im/list_message_favorites": `{"result":{"items":[{"openMessageId":"msg-1"},{"openMessageId":"msg-2"}],"hasMore":true,"nextCursor":9}}`,
+		"im/list_message_favorites": `{"result":{"items":[{"openMessageId":"msg-1"}],"hasMore":true,"nextCursor":9}}`,
 	}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
@@ -97,6 +97,9 @@ func TestCrossPlatformCoverageFlagListMaxItemsPublishesStableTruncation(t *testi
 	if payload["count"] != float64(1) || payload["truncated"] != true ||
 		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
 		t.Fatalf("payload = %#v", payload)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].args["size"] != "1" || payload["nextCursor"] != float64(9) {
+		t.Fatalf("unsafe continuation: calls=%#v payload=%#v", fake.calls, payload)
 	}
 }
 

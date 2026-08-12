@@ -974,7 +974,8 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 				break
 			}
 		}
-		params := map[string]any{"limit": baseParams["limit"]}
+		pageSize, _ := baseParams["limit"].(int)
+		params := map[string]any{"limit": shortcut.AutoPageRequestSize(rt, pageSize, len(allGroups))}
 		if cursorKey != "0" {
 			params["cursor"] = cursorValue
 		}
@@ -991,6 +992,7 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 		}
 		pagesFetched++
 		pageGroups := chatListAllProject(data)
+		overflowOnPage := false
 		for _, group := range pageGroups {
 			id := strings.TrimSpace(fmt.Sprint(group["openConversationId"]))
 			if id == "<nil>" {
@@ -1004,6 +1006,7 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 			}
 			if maxItems := rt.Int("max-items"); maxItems > 0 && len(allGroups) >= maxItems {
 				truncatedByResultLimit = true
+				overflowOnPage = true
 				continue
 			}
 			allGroups = append(allGroups, group)
@@ -1020,6 +1023,16 @@ func readAllChatListAll(rt *shortcut.RuntimeContext, baseParams map[string]any) 
 			break
 		}
 		hasMore = pageHasMore
+		if overflowOnPage {
+			hasMore = true
+			nextCursor = nil
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "已加入群列表下层返回条数超过请求的剩余额度，无法生成不跳项的安全续页游标",
+			})
+			stopReason = "pagination_error"
+			break
+		}
 		if !hasMore {
 			complete = !truncatedByResultLimit
 			nextCursor = nil

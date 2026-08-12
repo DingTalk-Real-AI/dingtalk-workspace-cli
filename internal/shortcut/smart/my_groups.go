@@ -197,7 +197,8 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 				break
 			}
 		}
-		params := map[string]any{"limit": baseParams["limit"]}
+		pageSize, _ := baseParams["limit"].(int)
+		params := map[string]any{"limit": shortcut.AutoPageRequestSize(rt, pageSize, eligibleCount)}
 		if cursorKey != "0" {
 			params["cursor"] = cursorValue
 		}
@@ -214,6 +215,7 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 		}
 		pagesFetched++
 		pageGroups := myGroupsExtract(data)
+		overflowOnPage := false
 		for _, group := range pageGroups {
 			id := myGroupsStr(group, "openConversationId", "openConversationID", "conversationId", "openCid", "cid", "id")
 			if id != "" && seenGroups[id] {
@@ -224,6 +226,7 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 			}
 			if maxItems := rt.Int("max-items"); maxItems > 0 && myGroupsMatchesFilter(rt, group) && eligibleCount >= maxItems {
 				truncatedByResultLimit = true
+				overflowOnPage = true
 				continue
 			}
 			allGroups = append(allGroups, group)
@@ -243,6 +246,16 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 			break
 		}
 		hasMore = pageHasMore
+		if overflowOnPage {
+			hasMore = true
+			nextCursor = nil
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "我的群列表下层返回的匹配条数超过请求的剩余额度，无法生成不跳项的安全续页游标",
+			})
+			stopReason = "pagination_error"
+			break
+		}
 		if !hasMore {
 			complete = !truncatedByResultLimit
 			nextCursor = nil

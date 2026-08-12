@@ -613,7 +613,8 @@ func executeFlagList(rt *shortcut.RuntimeContext) error {
 				break
 			}
 		}
-		data, callErr := rt.CallMCPData("im", "list_message_favorites", flagListRequestParams(cursor, pageSize))
+		requestPageSize := shortcut.AutoPageRequestSize(rt, pageSize, len(items))
+		data, callErr := rt.CallMCPData("im", "list_message_favorites", flagListRequestParams(cursor, requestPageSize))
 		if callErr != nil {
 			if pagesFetched == 0 {
 				return callErr
@@ -626,6 +627,7 @@ func executeFlagList(rt *shortcut.RuntimeContext) error {
 		}
 		pagesFetched++
 		pageItems := flagListItems(data)
+		overflowOnPage := false
 		for _, item := range pageItems {
 			messageID := firstNonEmptyMapString(item, "openMessageId", "messageId", "itemId", "id")
 			if messageID != "" && seenMessages[messageID] {
@@ -636,6 +638,7 @@ func executeFlagList(rt *shortcut.RuntimeContext) error {
 			}
 			if maxItems := rt.Int("max-items"); maxItems > 0 && len(items) >= maxItems {
 				truncatedByResultLimit = true
+				overflowOnPage = true
 				continue
 			}
 			items = append(items, item)
@@ -666,6 +669,16 @@ func executeFlagList(rt *shortcut.RuntimeContext) error {
 			}
 		}
 		hasMore = pageHasMore
+		if overflowOnPage {
+			hasMore = true
+			nextCursor = 0
+			failures = append(failures, map[string]any{
+				"page": pagesFetched, "stage": "pagination",
+				"error": "收藏列表下层返回条数超过请求的剩余额度，无法生成不跳项的安全续页游标",
+			})
+			stopReason = "pagination_error"
+			break
+		}
 		if !hasMore {
 			complete = !truncatedByResultLimit
 			nextCursor = 0

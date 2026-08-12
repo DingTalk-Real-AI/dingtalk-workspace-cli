@@ -15,6 +15,7 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -150,7 +151,7 @@ func TestCrossPlatformCoverageConversationListSinglePagePreservesTypedCursor(t *
 
 func TestCrossPlatformCoverageConversationListMaxItemsPublishesStableTruncation(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
-		"im/list_all_conversations": `{"result":{"conversationList":[{"openConversationId":"cid-1"},{"openConversationId":"cid-2"}],"hasMore":true,"nextCursor":2}}`,
+		"im/list_all_conversations": `{"result":{"conversationList":[{"openConversationId":"cid-1"}],"hasMore":true,"nextCursor":2}}`,
 	}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
@@ -166,6 +167,54 @@ func TestCrossPlatformCoverageConversationListMaxItemsPublishesStableTruncation(
 	}
 	if payload["count"] != float64(1) || payload["truncated"] != true ||
 		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
+		t.Fatalf("payload = %#v", payload)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].args["limit"] != 1 || payload["nextCursor"] != float64(2) {
+		t.Fatalf("unsafe continuation: calls=%#v payload=%#v", fake.calls, payload)
+	}
+}
+
+func TestCrossPlatformCoverageConversationListRejectsOversizedLimitPage(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_all_conversations": `{"result":{"conversationList":[{"openConversationId":"cid-1"},{"openConversationId":"cid-2"}],"hasMore":true,"nextCursor":2}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--max-items", "1"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("oversized lower page unexpectedly published a safe continuation")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["stopReason"] != "pagination_error" || payload["failedCount"] != float64(1) || payload["nextCursor"] != float64(0) {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageConversationListPropagatesDelayCancellation(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_all_conversations": `{"result":{"conversationList":[{"openConversationId":"cid-1"}],"hasMore":true,"nextCursor":2}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	root.SetContext(ctx)
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--page-delay", "1"})
+	if err := root.Execute(); err == nil || err != context.Canceled {
+		t.Fatalf("delay cancellation error = %v, want context.Canceled", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["stopReason"] != "delay_interrupted" || payload["failedCount"] != float64(1) {
 		t.Fatalf("payload = %#v", payload)
 	}
 }
