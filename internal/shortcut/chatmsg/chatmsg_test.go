@@ -441,6 +441,7 @@ func TestCrossPlatformCoverageReactionsNormalizesEmotionReplyList(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageApplyPaginationReadsNestedEnvelope(t *testing.T) {
+	ApplyTruncation(nil)
 	payload := map[string]any{"count": 98}
 	ApplyPagination(payload, map[string]any{
 		"result": map[string]any{

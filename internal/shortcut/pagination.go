@@ -15,8 +15,11 @@ package shortcut
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
+
+const maxAutoPageDelayMS = int64(math.MaxInt64) / int64(time.Millisecond)
 
 // AutoPageControlFlags returns the shared item and pacing controls used by
 // cursor-based shortcuts. Callers retain ownership of --page-all and their
@@ -51,8 +54,12 @@ func ValidateAutoPageControls(rt *RuntimeContext) error {
 	if rt.Int("max-items") < 0 {
 		return fmt.Errorf("--max-items 必须大于等于 0")
 	}
-	if rt.Int("page-delay") < 0 {
+	delayMS := rt.Int("page-delay")
+	if delayMS < 0 {
 		return fmt.Errorf("--page-delay 必须大于等于 0")
+	}
+	if int64(delayMS) > maxAutoPageDelayMS {
+		return fmt.Errorf("--page-delay 不能大于 %d 毫秒", maxAutoPageDelayMS)
 	}
 	return nil
 }
@@ -79,7 +86,7 @@ func WaitAutoPageDelay(rt *RuntimeContext) error {
 	if delayMS <= 0 {
 		return nil
 	}
-	timer := time.NewTimer(time.Duration(delayMS) * time.Millisecond)
+	timer := time.NewTimer(time.Duration(int64(delayMS)) * time.Millisecond)
 	defer timer.Stop()
 	select {
 	case <-rt.Command().Context().Done():

@@ -517,6 +517,16 @@ func TestCrossPlatformCoverageChatMessagesKeepsMaxResultsPublic(t *testing.T) {
 
 func TestCrossPlatformCoverageChatMessagesAdditionalValidationAndHelpers(t *testing.T) {
 	for _, values := range []map[string]string{
+		{"max-results": "1"},
+		{"max-items": "1"},
+		{"page-all": "true", "max-results": "-1"},
+		{"page-all": "true", "max-items": "1", "max-results": "1"},
+	} {
+		if err := validateChatMessages(chatMessagesRuntimeForTest(t, values)); err == nil {
+			t.Fatalf("pagination validation unexpectedly accepted %#v", values)
+		}
+	}
+	for _, values := range []map[string]string{
 		{"time": "2026-01-01", "start": "2026-01-01"},
 		{"direction": "older", "start": "2026-01-01"},
 	} {
@@ -661,6 +671,23 @@ func TestCrossPlatformCoverageChatMessagesAdditionalCollectionEdges(t *testing.T
 		)
 		if err == nil || payload["stopReason"] != "pagination_error" || len(caller.args) != 2 {
 			t.Fatalf("payload=%#v calls=%#v err=%v", payload, caller.args, err)
+		}
+	})
+
+	t.Run("canceled delay", func(t *testing.T) {
+		caller := &chatMessagesPagingCaller{responses: []string{
+			`{"result":{"hasMore":true,"nextCursor":1234,"messages":[{"openMessageId":"m1"}]}}`,
+		}}
+		rt := runtimeWith(t, caller, map[string]string{"page-delay": "1"})
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		rt.Command().SetContext(ctx)
+		payload, _, err := collectAllChatMessages(
+			rt,
+			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older"},
+		)
+		if err == nil || payload["stopReason"] != "delay_interrupted" || payload["failedCount"] != 1 {
+			t.Fatalf("payload=%#v err=%v", payload, err)
 		}
 	})
 

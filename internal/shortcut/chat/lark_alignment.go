@@ -680,14 +680,9 @@ func executeFlagList(rt *shortcut.RuntimeContext) error {
 			break
 		}
 		if !hasMore {
-			complete = !truncatedByResultLimit
+			complete = true
 			nextCursor = 0
-			if truncatedByResultLimit {
-				hasMore = true
-				stopReason = "result_limit"
-			} else {
-				stopReason = "source_complete"
-			}
+			stopReason = "source_complete"
 			break
 		}
 		if cursorErr != nil || nextCursor <= 0 || seenCursors[nextCursor] {

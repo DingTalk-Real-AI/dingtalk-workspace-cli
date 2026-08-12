@@ -5,6 +5,7 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -101,6 +102,56 @@ func TestCrossPlatformCoverageFlagListMaxItemsPublishesStableTruncation(t *testi
 	if len(fake.calls) != 1 || fake.calls[0].args["size"] != "1" || payload["nextCursor"] != float64(9) {
 		t.Fatalf("unsafe continuation: calls=%#v payload=%#v", fake.calls, payload)
 	}
+}
+
+func TestCrossPlatformCoverageFlagListFailsClosedOnOversizeAndCanceledDelay(t *testing.T) {
+	t.Run("oversized lower page", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/list_message_favorites": `{"result":{"items":[{"openMessageId":"m1"},{"openMessageId":"m2"}],"hasMore":true,"nextCursor":9}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{"chat", "+flag-list", "--page-all", "--max-items", "1"})
+		if err := root.Execute(); err == nil {
+			t.Fatal("oversized lower page unexpectedly published a continuation")
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["stopReason"] != "pagination_error" || payload["failedCount"] != float64(1) || payload["nextCursor"] != float64(0) {
+			t.Fatalf("payload = %#v", payload)
+		}
+		if len(fake.calls) != 1 || fake.calls[0].args["size"] != "1" {
+			t.Fatalf("calls = %#v", fake.calls)
+		}
+	})
+
+	t.Run("canceled delay", func(t *testing.T) {
+		fake := &larkAlignmentCaller{responses: map[string]string{
+			"im/list_message_favorites": `{"result":{"items":[{"openMessageId":"m1"}],"hasMore":true,"nextCursor":9}}`,
+		}}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		root.SetContext(ctx)
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{"chat", "+flag-list", "--page-all", "--page-delay", "1"})
+		if err := root.Execute(); err == nil {
+			t.Fatal("canceled delay unexpectedly succeeded")
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["stopReason"] != "delay_interrupted" || payload["failedCount"] != float64(1) {
+			t.Fatalf("payload = %#v", payload)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageFlagListFailureModes(t *testing.T) {

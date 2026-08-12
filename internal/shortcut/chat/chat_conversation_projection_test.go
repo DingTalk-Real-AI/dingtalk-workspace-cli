@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -216,6 +217,26 @@ func TestCrossPlatformCoverageConversationListPropagatesDelayCancellation(t *tes
 	}
 	if payload["stopReason"] != "delay_interrupted" || payload["failedCount"] != float64(1) {
 		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageConversationListAutoPageValidationAndOutputFailure(t *testing.T) {
+	helpers.InitDeps(&larkAlignmentCaller{})
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{"chat", "+conversation-list", "--max-items", "1"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("max-items without page-all unexpectedly succeeded")
+	}
+
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":false}}`,
+	}}
+	helpers.InitDeps(fake)
+	root = newPlatformCoverageRoot()
+	root.SetOut(chatOutputErrorWriter{err: errors.New("fixture output")})
+	root.SetArgs([]string{"chat", "+conversation-list"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("output error was swallowed")
 	}
 }
 

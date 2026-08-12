@@ -5,6 +5,7 @@ package smart
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -157,6 +158,83 @@ func TestCrossPlatformCoverageMyGroupsMaxItemsAppliesAfterTypeFilter(t *testing.
 	}
 	if len(caller.args) != 2 || caller.args[0]["limit"] != 1 || caller.args[1]["limit"] != 1 || payload["nextCursor"] != float64(3) {
 		t.Fatalf("unsafe filtered continuation: calls=%#v payload=%#v", caller.args, payload)
+	}
+}
+
+func TestCrossPlatformCoverageRemainingListsFailClosedOnOversizeAndCanceledDelay(t *testing.T) {
+	tests := []struct {
+		name     string
+		command  string
+		response string
+		extra    []string
+	}{
+		{
+			name:    "at-me",
+			command: "+at-me",
+			response: `{"result":{"conversationMessagesList":[{"messages":[{"openMessageId":"m1"},{"openMessageId":"m2"}]}],` +
+				`"hasMore":true,"nextCursor":"next"}}`,
+		},
+		{
+			name:     "my-groups",
+			command:  "+my-groups",
+			response: `{"result":{"groups":[{"openConversationId":"g1","groupType":"group"},{"openConversationId":"g2","groupType":"group"}],"hasMore":true,"nextCursor":2}}`,
+			extra:    []string{"--type", "group"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name+" oversized lower page", func(t *testing.T) {
+			caller := &chatMessagesPagingCaller{responses: []string{tc.response}}
+			helpers.InitDeps(caller)
+			root := newPlatformCoverageRoot()
+			var output bytes.Buffer
+			root.SetOut(&output)
+			args := append([]string{"chat", tc.command}, tc.extra...)
+			args = append(args, "--page-all", "--max-items", "1")
+			root.SetArgs(args)
+			if err := root.Execute(); err == nil {
+				t.Fatal("oversized lower page unexpectedly published a continuation")
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload["stopReason"] != "pagination_error" || payload["failedCount"] != float64(1) {
+				t.Fatalf("payload = %#v", payload)
+			}
+			if len(caller.args) != 1 || caller.args[0]["limit"] != 1 || payload["nextCursor"] != nil {
+				t.Fatalf("unsafe continuation: calls=%#v payload=%#v", caller.args, payload)
+			}
+		})
+
+		t.Run(tc.name+" canceled delay", func(t *testing.T) {
+			continuing := tc.response
+			if tc.command == "+at-me" {
+				continuing = `{"result":{"conversationMessagesList":[{"messages":[{"openMessageId":"m1"}]}],"hasMore":true,"nextCursor":"next"}}`
+			} else {
+				continuing = `{"result":{"groups":[{"openConversationId":"g1","groupType":"group"}],"hasMore":true,"nextCursor":2}}`
+			}
+			caller := &chatMessagesPagingCaller{responses: []string{continuing}}
+			helpers.InitDeps(caller)
+			root := newPlatformCoverageRoot()
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			root.SetContext(ctx)
+			var output bytes.Buffer
+			root.SetOut(&output)
+			args := append([]string{"chat", tc.command}, tc.extra...)
+			args = append(args, "--page-all", "--page-delay", "1")
+			root.SetArgs(args)
+			if err := root.Execute(); err == nil {
+				t.Fatal("canceled delay unexpectedly succeeded")
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload["stopReason"] != "delay_interrupted" || payload["failedCount"] != float64(1) {
+				t.Fatalf("payload = %#v", payload)
+			}
+		})
 	}
 }
 

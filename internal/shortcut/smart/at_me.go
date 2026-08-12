@@ -314,14 +314,9 @@ func readAllAtMePages(rt *shortcut.RuntimeContext, baseParams map[string]any) (m
 			break
 		}
 		if !hasMore {
-			complete = !truncatedByResultLimit
+			complete = true
 			nextCursor = ""
-			if truncatedByResultLimit {
-				hasMore = true
-				stopReason = "result_limit"
-			} else {
-				stopReason = "source_complete"
-			}
+			stopReason = "source_complete"
 			break
 		}
 		nextCursor = atMeCursorString(page["nextCursor"])

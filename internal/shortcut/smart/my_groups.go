@@ -257,14 +257,9 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 			break
 		}
 		if !hasMore {
-			complete = !truncatedByResultLimit
+			complete = true
 			nextCursor = nil
-			if truncatedByResultLimit {
-				hasMore = true
-				stopReason = "result_limit"
-			} else {
-				stopReason = "source_complete"
-			}
+			stopReason = "source_complete"
 			break
 		}
 		nextCursor = page["nextCursor"]

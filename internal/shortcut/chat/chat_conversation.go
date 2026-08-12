@@ -417,11 +417,7 @@ var ConversationList = shortcut.Shortcut{
 				break
 			}
 			if !hasMore {
-				complete = !truncatedByResultLimit
-				if truncatedByResultLimit {
-					hasMore = true
-					stopReason = "result_limit"
-				}
+				complete = true
 				break
 			}
 			nextCursor, err = conversationPaginationCursor(page["nextCursor"])
