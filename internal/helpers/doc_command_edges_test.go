@@ -206,6 +206,23 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 			t.Fatal("invalid media insert response returned nil")
 		}
 	})
+	t.Run("small image verifies src readback when upload also returns resource ID", func(t *testing.T) {
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"uploadUrl":"https://upload","resourceId":"resource","resourceUrl":"https://image"}`},
+			{text: `{"blockId":"media-block"}`},
+			{text: `{"blocks":[{"blockId":"media-block","jsonml":"[\"p\",{\"uuid\":\"media-block\"},[\"img\",{\"src\":\"https://image\"}]]"}],"hasMore":false}`},
+		}}
+		if err := mediaCommand(t, caller, file, "image/png"); err != nil {
+			t.Fatal(err)
+		}
+		if caller.calls != 3 {
+			t.Fatalf("media insert calls = %d, want credential, insert, and one readback", caller.calls)
+		}
+		if caller.args["format"] != "jsonml" {
+			t.Fatalf("media readback format = %#v, want jsonml", caller.args["format"])
+		}
+	})
 	t.Run("large image becomes attachment", func(t *testing.T) {
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
 		large := filepath.Join(t.TempDir(), "large.png")
@@ -337,9 +354,12 @@ func TestCrossPlatformCoverageDocMediaReadbackDefensiveEdges(t *testing.T) {
 	if nestedDocString(map[string]any{"x": []any{map[string]any{"id": " nested "}}}, "id") != "nested" || nestedDocString(3, "id") != "" {
 		t.Fatal("nested string traversal failed")
 	}
-	blocks := []any{map[string]any{"id": "block", "resourceId": "rid"}, map[string]any{"id": "url-block", "resourceUrl": "https://media"}}
-	if findVerifiedMediaBlock(blocks, "block", "rid", "") != "block" || findVerifiedMediaBlock(blocks, "", "rid", "") != "block" || findVerifiedMediaBlock(blocks, "", "", "https://media") != "url-block" || findVerifiedMediaBlock(blocks, "block", "wrong", "") != "" || findVerifiedMediaBlock(blocks, "", "missing", "") != "" {
+	blocks := []any{map[string]any{"id": "block", "resourceId": "rid"}, map[string]any{"id": "url-block", "resourceUrl": "https://media"}, map[string]any{"id": "src-block", "jsonml": `["p",{},["img",{"src":"https://image"}]]`}}
+	if findVerifiedMediaBlock(blocks, "block", "rid", "") != "block" || findVerifiedMediaBlock(blocks, "", "rid", "") != "block" || findVerifiedMediaBlock(blocks, "", "", "https://media") != "url-block" || findVerifiedMediaBlock(blocks, "src-block", "upload-resource", "https://image") != "src-block" || findVerifiedMediaBlock(blocks, "other-block", "upload-resource", "https://image") != "" || findVerifiedMediaBlock(blocks, "block", "wrong", "") != "" || findVerifiedMediaBlock(blocks, "", "missing", "") != "" {
 		t.Fatal("media block matching failed")
+	}
+	if findVerifiedMediaBlock([]any{map[string]any{"id": "bad-jsonml", "jsonml": `[`}}, "bad-jsonml", "", "https://image") != "" {
+		t.Fatal("invalid JSONML unexpectedly verified")
 	}
 	for _, tc := range []struct {
 		value any

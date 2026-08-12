@@ -758,7 +758,7 @@ func readAllDocBlocksForVerification(ctx context.Context, nodeID string) ([]any,
 	seen := map[string]bool{}
 	for start := 0; start < maxItems; start += pageSize {
 		text, err := callMCPToolReturnTextOnServer(ctx, "doc", "list_document_blocks", map[string]any{
-			"nodeId": nodeID, "format": "element", "startIndex": start, "endIndex": start + pageSize - 1,
+			"nodeId": nodeID, "format": "jsonml", "startIndex": start, "endIndex": start + pageSize - 1,
 		})
 		if err != nil {
 			return nil, err
@@ -834,14 +834,31 @@ func findVerifiedMediaBlock(blocks []any, blockID, resourceID, resourceURL strin
 		if candidateID == "" || (blockID != "" && candidateID != blockID) {
 			continue
 		}
-		if resourceID != "" && nestedDocString(value, "resourceId") == resourceID {
+		mediaValue := docMediaReadbackValue(value)
+		if resourceID != "" && nestedDocString(mediaValue, "resourceId") == resourceID {
 			return candidateID
 		}
-		if resourceID == "" && resourceURL != "" && nestedDocString(value, "resourceUrl") == resourceURL {
+		if resourceURL != "" && nestedDocString(mediaValue, "resourceUrl", "src") == resourceURL {
 			return candidateID
 		}
 	}
 	return ""
+}
+
+func docMediaReadbackValue(value any) any {
+	block, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	encoded, ok := block["jsonml"].(string)
+	if !ok || strings.TrimSpace(encoded) == "" {
+		return value
+	}
+	var decoded any
+	if json.Unmarshal([]byte(encoded), &decoded) != nil {
+		return value
+	}
+	return decoded
 }
 
 func docNumberAsInt(value any) (int, bool) {
