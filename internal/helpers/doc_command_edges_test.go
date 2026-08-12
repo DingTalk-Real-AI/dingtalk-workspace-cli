@@ -361,6 +361,9 @@ func TestCrossPlatformCoverageDocMediaReadbackDefensiveEdges(t *testing.T) {
 	if findVerifiedMediaBlock([]any{map[string]any{"id": "bad-jsonml", "jsonml": `[`}}, "bad-jsonml", "", "https://image") != "" {
 		t.Fatal("invalid JSONML unexpectedly verified")
 	}
+	if got := docMediaReadbackValue("plain"); got != "plain" {
+		t.Fatalf("non-object media readback = %#v, want unchanged value", got)
+	}
 	for _, tc := range []struct {
 		value any
 		want  bool
