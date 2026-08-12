@@ -34,11 +34,11 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 | 命令 | 用途 | 必填参数 |
 |------|------|----------|
 | `chart get` | 获取图表详情 | `--base-id` `--dashboard-id` `--chart-id` |
-| `chart create` | 创建图表 | `--base-id` `--dashboard-id` `--config` |
+| `chart create` | 创建图表 | `--base-id` `--dashboard-id` `--config` `--layout` |
 | `chart update` | 更新图表配置 | `--base-id` `--dashboard-id` `--chart-id` `--config` |
 | `chart delete` | 删除图表 | `--base-id` `--dashboard-id` `--chart-id` `--yes` |
 | `chart widgets-example` | 查看图表 widgets 配置模板 | 无 |
 
 ## 配置获取流程
 
-创建图表前，必须先调用 `chart widgets-example` 查看配置模板，了解每种图表类型需要的字段结构，然后根据实际 tableId 和 fieldId 填充配置。
+创建图表前至多调用一次 `chart widgets-example`，不要为解析其 JSONC 重复调用或编写临时解析脚本；根据真实 tableId 和 fieldId 填充 `--config`。`chart create` 必须同时传 `--layout '{"x":0,"y":0,"w":6,"h":4}'`，多图表使用互不重叠的位置。用户未指定数量时只创建足以表达目标的 1–2 个图表。取返回 chartId 后立即 `chart get`，或最后 `dashboard get` 核对 charts；回读成功即答复，缺失时不得声称成功或重复提交同一条缺参命令。
