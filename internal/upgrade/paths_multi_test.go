@@ -255,6 +255,36 @@ func TestCrossPlatformCoverageUpgradeUsesAgentSpecificRootWithoutGenericDuplicat
 	}
 }
 
+func TestCrossPlatformCoverageUpgradeUsesZCodeRootWithoutGenericDuplicate(t *testing.T) {
+	home := withFakeHome(t)
+	testseam.Swap(t, &knownSkillDirs, []string{".agents/skills", ".zcode/skills"})
+
+	genericBase := filepath.Join(home, ".agents", "skills")
+	zcodeBase := filepath.Join(home, ".zcode", "skills")
+	if err := os.MkdirAll(zcodeBase, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacyNested := filepath.Join(genericBase, "dws", "multi", "dingtalk-chat")
+	if err := os.MkdirAll(legacyNested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyNested, "SKILL.md"), []byte("old nested"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	multiRoot := writeMultiBundle(t, t.TempDir(), "dingtalk-chat")
+	result, err := UpgradeSkillLocationsWithOptions(multiRoot, SkillUpgradeOptions{Version: "1.2.3"})
+	if err != nil || len(result.Failed()) != 0 {
+		t.Fatalf("UpgradeSkillLocationsWithOptions() = %#v, %v", result, err)
+	}
+	if _, err := os.Stat(filepath.Join(zcodeBase, "dingtalk-chat", "SKILL.md")); err != nil {
+		t.Fatalf("canonical ZCode Skill missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(genericBase, "dws")); !os.IsNotExist(err) {
+		t.Fatalf("generic duplicate still visible: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageUpgradeSkillLocationsMultiFallbackPrimary(t *testing.T) {
 	home := withFakeHome(t)
 	// No agent parent dirs at all: only .agents (index 0) is attempted and the

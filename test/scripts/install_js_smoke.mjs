@@ -225,6 +225,33 @@ scenario("Codex uses its canonical root without a generic duplicate", () => {
   }
 });
 
+scenario("ZCode uses its canonical root without a generic duplicate", () => {
+  const { tmp, pkg, home } = stagePkg({
+    "mono/SKILL.md": "# mono fixture\n",
+    "multi/dingtalk-chat/SKILL.md": "# dingtalk-chat\n",
+  });
+  try {
+    writeFile(path.join(home, ".zcode", "v2", "config.json"), "{}\n");
+    writeFile(
+      path.join(home, ".agents", "skills", "dws", "multi", "dingtalk-chat", "SKILL.md"),
+      "old nested duplicate\n",
+    );
+
+    const res = runInstall(pkg, home, "multi");
+    assert.equal(res.status, 0, `exit=${res.status}\nstdout=${res.stdout}\nstderr=${res.stderr}`);
+    assert.ok(
+      fs.existsSync(path.join(home, ".zcode", "skills", "dingtalk-chat", "SKILL.md")),
+      "ZCode canonical Skill installed",
+    );
+    assert.ok(
+      !fs.existsSync(path.join(home, ".agents", "skills", "dws")),
+      "legacy generic duplicate retired",
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 scenario("empty multi/ tree falls back to mono and keeps the old multi cache", () => {
   const { tmp, pkg, home } = stagePkg({
     "SKILL.md": "# mono root copy\n",

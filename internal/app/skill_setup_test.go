@@ -348,6 +348,32 @@ func TestCrossPlatformCoverageResolveSkillSetupTargetsPrefersSpecificAgentRoot(t
 	}
 }
 
+func TestCrossPlatformCoverageResolveSkillSetupTargetsDetectsZCode(t *testing.T) {
+	home := t.TempDir()
+	testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return home, nil })
+	if err := os.MkdirAll(filepath.Join(home, ".zcode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveSkillSetupTargets("all", skillSetupModeMulti)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".zcode", "skills")
+	if len(got) != 1 || filepath.Clean(got[0]) != filepath.Clean(want) {
+		t.Fatalf("targets = %v, want [%s]", got, want)
+	}
+
+	explicit, err := resolveSkillSetupTargets("zcode", skillSetupModeMono)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMono := filepath.Join(want, "dws")
+	if len(explicit) != 1 || filepath.Clean(explicit[0]) != filepath.Clean(wantMono) {
+		t.Fatalf("explicit zcode targets = %v, want [%s]", explicit, wantMono)
+	}
+}
+
 func TestCrossPlatformCoverageInstallSkillToHomesEndToEnd(t *testing.T) {
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("# test"), 0o644); err != nil {

@@ -29,6 +29,7 @@ var skillSetupAgentHomes = []string{
 	".qoderwork/skills",
 	".gemini/skills",
 	".codex/skills",
+	".zcode/skills",
 	".github/skills",
 	".windsurf/skills",
 	".augment/skills",
