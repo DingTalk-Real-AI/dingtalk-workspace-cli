@@ -178,13 +178,45 @@ func executeHistoryRevert(rt *shortcut.RuntimeContext) error {
 			map[string]any{"available": false, "reason": "the requested revert completed; verify the current document before any further write"},
 		)
 	}
+	verified := revertResultMatchesVersion(reverted, target) || currentDocumentMatchesRestoredVersion(current, target)
+	if !verified {
+		return docPartialWriteError(
+			"doc.history_revert", "doc_history_revert_target_unproven", "verify",
+			fmt.Sprintf("版本 %d 的回滚请求已执行且文档可读，但响应没有提供目标版本证据；不要直接重试回滚", target),
+			fmt.Errorf("回读缺少目标版本 %d 的明确证据", target),
+			map[string]any{
+				"nodeId": nodeID, "version": target, "reverted": true, "verified": false,
+				"revertResult": reverted, "current": current,
+			},
+			[]map[string]any{
+				{"name": "preflight", "status": "success"},
+				{"name": "revert", "status": "success"},
+				{"name": "verify", "status": "failed"},
+			},
+			map[string]any{"available": false, "reason": "the revert may have completed; inspect version history before any further revert"},
+		)
+	}
 	return rt.Output(docEnvelope("doc.history_revert", map[string]any{
 		"version": target, "revertResult": reverted, "current": current, "verified": true,
-		"verification": "revert_acknowledged_and_document_readable",
+		"verification": "target_version_proven",
 	},
 		map[string]any{"name": "preflight", "status": "success"},
 		map[string]any{"name": "revert", "status": "success"},
 		map[string]any{"name": "verify", "status": "success"}))
+}
+
+func revertResultMatchesVersion(value map[string]any, target int) bool {
+	return versionEvidenceMatches(value, target, map[string]bool{
+		"version": true, "targetversion": true, "appliedversion": true,
+		"restoredversion": true, "revertedversion": true, "revertedtoversion": true, "sourceversion": true,
+	})
+}
+
+func currentDocumentMatchesRestoredVersion(value map[string]any, target int) bool {
+	return versionEvidenceMatches(value, target, map[string]bool{
+		"restoredfromversion": true, "revertedfromversion": true,
+		"sourceversion": true, "appliedversion": true, "targetversion": true,
+	})
 }
 
 func findHistoryVersion(rt *shortcut.RuntimeContext, nodeID string, target int) (bool, error) {

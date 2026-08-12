@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -112,6 +113,7 @@ func runDocCoverageInput(t *testing.T, declaration shortcut.Shortcut, caller *do
 
 func runDocCoveragePath(t *testing.T, declaration shortcut.Shortcut, caller *docCoverageCaller, input io.Reader, commandPath string, args ...string) error {
 	t.Helper()
+	testseam.Swap(t, &docVerifySleep, func(time.Duration) {})
 	helpers.InitDeps(caller)
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("yes", false, "")
@@ -491,6 +493,7 @@ func TestCrossPlatformCoverageDocUpdateAliasReachesNestedBranches(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageDocWritesStopOnUnknownCommitAndRequireVerification(t *testing.T) {
+	testseam.Swap(t, &docVerifyDelays, []time.Duration{})
 	unknown := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}
 	err := runDocCoverage(t, Update, unknown, "--node", "n", "--command", "append", "--content", "x", "--yes")
 	var typed *apperrors.Error
@@ -512,6 +515,7 @@ func TestCrossPlatformCoverageDocWritesStopOnUnknownCommitAndRequireVerification
 }
 
 func TestCrossPlatformCoverageDocCreateRejectsSuccessfulMismatchedReadback(t *testing.T) {
+	testseam.Swap(t, &docVerifyDelays, []time.Duration{})
 	caller := &docCoverageCaller{responses: map[string][]map[string]any{
 		"get_document_content": {{"markdown": "truncated"}},
 	}}
@@ -577,8 +581,15 @@ func TestCrossPlatformCoverageDocVersionRevertPaginationAndVerification(t *testi
 			"revert_doc_version": {{}},
 			"get_document_info":  {{"nodeId": "n", "revision": 99.0}},
 		}}
-		if err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes"); err != nil {
-			t.Fatal(err)
+		err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "doc_history_revert_target_unproven" || typed.FailureStage != "verify" || typed.Details["status"] != "partial_success" {
+			t.Fatalf("unproven revert error = %#v", err)
+		}
+		data, _ := typed.Details["data"].(map[string]any)
+		steps, _ := typed.Details["steps"].([]map[string]any)
+		if data["verified"] != false || len(steps) != 3 || steps[2]["status"] != "failed" {
+			t.Fatalf("unproven revert details = %#v", typed.Details)
 		}
 	})
 

@@ -492,10 +492,11 @@ func defaultHTTPGetFile(ctx context.Context, url string, headers map[string]stri
 	return nil
 }
 
-// runMediaInsert implements the three-step flow for inserting an attachment into a document:
+// runMediaInsert implements the four-step flow for inserting an attachment into a document:
 //  1. get_doc_attachment_upload_info → obtain uploadUrl + resourceId
 //  2. HTTP PUT file content to OSS
 //  3. insert_document_block with attachment element
+//  4. list_document_blocks → prove the uploaded resource is visible in the document
 func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 	if err != nil {
@@ -551,7 +552,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	// Step 1: get upload credentials (uploadUrl + resourceId)
-	deps.Out.PrintInfo(fmt.Sprintf("[1/3] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
+	deps.Out.PrintInfo(fmt.Sprintf("[1/4] 获取附件上传凭证 (%s, %d bytes)...", fileName, fileSize))
 
 	credText, err := callMCPToolReturnText(ctx, "get_doc_attachment_upload_info", map[string]any{
 		"nodeId":   nodeID,
@@ -569,7 +570,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Step 2: HTTP PUT file to OSS
-	deps.Out.PrintInfo("[2/3] 上传文件到 OSS...")
+	deps.Out.PrintInfo("[2/4] 上传文件到 OSS...")
 
 	ossHeaders := map[string]string{
 		"Content-Type": mimeType,
@@ -592,7 +593,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Step 3: insert block into document
-	deps.Out.PrintInfo("[3/3] 插入块到文档...")
+	deps.Out.PrintInfo("[3/4] 插入块到文档...")
 
 	const maxInlineImageSize = 20 * 1024 * 1024 // 20MB
 
@@ -644,7 +645,8 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		insertArgs["referenceBlockId"] = v
 	}
 
-	if err := callMCPTool("insert_document_block", insertArgs); err != nil {
+	insertText, err := callMCPToolReturnText(ctx, "insert_document_block", insertArgs)
+	if err != nil {
 		return apperrors.NewAPI(
 			"附件已上传，但正文 block 插入结果未知；请先检查媒体列表，不要重复上传或插入",
 			apperrors.WithOperation("doc.media_insert"),
@@ -665,6 +667,23 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 			apperrors.WithCause(err),
 		)
 	}
+	insertResult := map[string]any{}
+	if strings.TrimSpace(insertText) != "" {
+		if err := json.Unmarshal([]byte(insertText), &insertResult); err != nil {
+			return docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName,
+				fmt.Errorf("解析 insert_document_block 响应失败: %w", err))
+		}
+	}
+	insertedBlockID := nestedDocString(insertResult, "blockId", "elementId", "id")
+
+	deps.Out.PrintInfo("[4/4] 回读验证媒体块...")
+	verifiedBlockID, verifyErr := verifyInsertedDocMedia(ctx, nodeID, insertedBlockID, resourceID, resourceURL)
+	if verifyErr != nil {
+		return docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName, verifyErr)
+	}
+	if insertedBlockID == "" {
+		insertedBlockID = verifiedBlockID
+	}
 
 	return deps.Out.PrintJSON(map[string]any{
 		"contractVersion": "doc.operation.v1",
@@ -674,14 +693,167 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		"operation":       "doc.media_insert",
 		"data": map[string]any{
 			"nodeId": nodeID, "resourceId": resourceID, "resourceUrl": resourceURL,
-			"fileName": fileName, "mimeType": mimeType, "sizeBytes": fileSize, "inserted": true,
+			"blockId": insertedBlockID, "fileName": fileName, "mimeType": mimeType, "sizeBytes": fileSize,
+			"inserted": true, "verified": true,
 		},
 		"steps": []map[string]any{
 			{"name": "resolve_upload", "status": "success"},
 			{"name": "upload_oss", "status": "success"},
 			{"name": "insert_block", "status": "success"},
+			{"name": "verify", "status": "success"},
 		},
 	})
+}
+
+func docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName string, cause error) error {
+	return apperrors.NewAPI(
+		"附件已上传且插块请求已执行，但回读未能证明媒体块落库；不要直接重试上传或插入",
+		apperrors.WithOperation("doc.media_insert"),
+		apperrors.WithReason("doc_media_insert_verification_failed"),
+		apperrors.WithFailureStage("verify"),
+		apperrors.WithExecutionStarted(true),
+		apperrors.WithRetryable(false),
+		apperrors.WithActions("运行 dws doc +media-list 检查 resourceId", "确认媒体不存在后再决定是否重新执行"),
+		apperrors.WithDetails(map[string]any{
+			"contractVersion": "doc.operation.v1", "status": "partial_success", "nodeId": nodeID,
+			"resourceId": resourceID, "resourceUrl": resourceURL, "fileName": fileName, "verified": false,
+			"steps": []map[string]any{
+				{"name": "resolve_upload", "status": "success"},
+				{"name": "upload_oss", "status": "success"},
+				{"name": "insert_block", "status": "success"},
+				{"name": "verify", "status": "failed"},
+			},
+		}),
+		apperrors.WithCause(cause),
+	)
+}
+
+func verifyInsertedDocMedia(ctx context.Context, nodeID, blockID, resourceID, resourceURL string) (string, error) {
+	delays := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
+	var lastErr error
+	for attempt := 0; attempt <= len(delays); attempt++ {
+		blocks, err := readAllDocBlocksForVerification(ctx, nodeID)
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = nil
+			if found := findVerifiedMediaBlock(blocks, blockID, resourceID, resourceURL); found != "" {
+				return found, nil
+			}
+		}
+		if attempt < len(delays) {
+			helperSleep(delays[attempt])
+		}
+	}
+	if lastErr != nil {
+		return "", fmt.Errorf("媒体资源在有界回读窗口内仍无法读取: %w", lastErr)
+	}
+	return "", fmt.Errorf("媒体资源在有界回读窗口内仍不可见")
+}
+
+func readAllDocBlocksForVerification(ctx context.Context, nodeID string) ([]any, error) {
+	const pageSize = 50
+	const maxItems = 5000
+	all := make([]any, 0, pageSize)
+	seen := map[string]bool{}
+	for start := 0; start < maxItems; start += pageSize {
+		text, err := callMCPToolReturnTextOnServer(ctx, "doc", "list_document_blocks", map[string]any{
+			"nodeId": nodeID, "format": "element", "startIndex": start, "endIndex": start + pageSize - 1,
+		})
+		if err != nil {
+			return nil, err
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(text), &payload); err != nil {
+			return nil, fmt.Errorf("解析 list_document_blocks 回读失败: %w", err)
+		}
+		payload = nestedDocMap(payload)
+		blocks, ok := payload["blocks"].([]any)
+		if !ok {
+			return nil, fmt.Errorf("list_document_blocks 回读缺少 blocks 数组")
+		}
+		encoded, _ := json.Marshal(blocks)
+		key := string(encoded)
+		if key != "[]" && seen[key] {
+			return nil, fmt.Errorf("list_document_blocks 分页停滞")
+		}
+		seen[key] = true
+		all = append(all, blocks...)
+		hasMore, hasMoreKnown := payload["hasMore"].(bool)
+		if hasMoreKnown && !hasMore {
+			return all, nil
+		}
+		if total, ok := docNumberAsInt(payload["totalCount"]); ok && len(all) >= total {
+			return all, nil
+		}
+		if !hasMoreKnown && len(blocks) < pageSize {
+			return all, nil
+		}
+		if len(blocks) == 0 {
+			return nil, fmt.Errorf("list_document_blocks 声明仍有下一页但当前页为空")
+		}
+	}
+	return nil, fmt.Errorf("文档块超过安全回读上限")
+}
+
+func nestedDocMap(data map[string]any) map[string]any {
+	for _, key := range []string{"result", "data"} {
+		if nested, ok := data[key].(map[string]any); ok {
+			return nestedDocMap(nested)
+		}
+	}
+	return data
+}
+
+func nestedDocString(value any, keys ...string) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range keys {
+			if text, ok := typed[key].(string); ok && strings.TrimSpace(text) != "" {
+				return strings.TrimSpace(text)
+			}
+		}
+		for _, child := range typed {
+			if text := nestedDocString(child, keys...); text != "" {
+				return text
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if text := nestedDocString(child, keys...); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func findVerifiedMediaBlock(blocks []any, blockID, resourceID, resourceURL string) string {
+	for _, value := range blocks {
+		candidateID := nestedDocString(value, "blockId", "id", "uuid")
+		if candidateID == "" || (blockID != "" && candidateID != blockID) {
+			continue
+		}
+		if resourceID != "" && nestedDocString(value, "resourceId") == resourceID {
+			return candidateID
+		}
+		if resourceID == "" && resourceURL != "" && nestedDocString(value, "resourceUrl") == resourceURL {
+			return candidateID
+		}
+	}
+	return ""
+}
+
+func docNumberAsInt(value any) (int, bool) {
+	switch typed := value.(type) {
+	case float64:
+		if typed >= 0 && typed == float64(int(typed)) {
+			return int(typed), true
+		}
+	case int:
+		return typed, typed >= 0
+	}
+	return 0, false
 }
 
 // parseAttachmentUploadInfo extracts uploadUrl, resourceId and resourceUrl from the MCP tool response.
