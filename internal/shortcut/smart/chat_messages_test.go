@@ -613,21 +613,23 @@ func TestCrossPlatformCoverageChatMessagesAdditionalCollectionEdges(t *testing.T
 	})
 
 	t.Run("terminal result limit and unsafe continuation", func(t *testing.T) {
-		caller := &chatMessagesPagingCaller{responses: []string{
-			`{"result":{"hasMore":true,"messages":[{"openMessageId":"m2","createTime":"2026-01-03 00:00:00"},{"openMessageId":"m1","createTime":"2026-01-02 00:00:00"},{"openMessageId":"old","createTime":"2026-01-01 00:00:00"}]}}`,
-		}}
-		payload, _, err := collectAllChatMessages(
-			runtimeWith(t, caller, map[string]string{"max-results": "1"}),
-			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older", timeRange: configuredRange},
-		)
-		if err != nil || payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
-			t.Fatalf("payload=%#v err=%v", payload, err)
+		for _, flag := range []string{"max-items", "max-results"} {
+			caller := &chatMessagesPagingCaller{responses: []string{
+				`{"result":{"hasMore":true,"messages":[{"openMessageId":"m2","createTime":"2026-01-03 00:00:00"},{"openMessageId":"m1","createTime":"2026-01-02 00:00:00"},{"openMessageId":"old","createTime":"2026-01-01 00:00:00"}]}}`,
+			}}
+			payload, _, err := collectAllChatMessages(
+				runtimeWith(t, caller, map[string]string{flag: "1"}),
+				chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older", timeRange: configuredRange},
+			)
+			if err != nil || payload["truncated"] != true || payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
+				t.Fatalf("%s payload=%#v err=%v", flag, payload, err)
+			}
 		}
 
-		caller = &chatMessagesPagingCaller{responses: []string{
+		caller := &chatMessagesPagingCaller{responses: []string{
 			`{"result":{"hasMore":true,"messages":[{"openMessageId":"m1","createTime":"2026-01-03 00:00:00"}]}}`,
 		}}
-		payload, _, err = collectAllChatMessages(
+		payload, _, err := collectAllChatMessages(
 			runtimeWith(t, caller, map[string]string{"max-results": "1"}),
 			chatMessagesRequest{tool: "list_conversation_message_v2", params: map[string]any{}, direction: "older"},
 		)

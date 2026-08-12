@@ -634,6 +634,7 @@ func readAllDirectMessages(rt *shortcut.RuntimeContext, params map[string]any) (
 	payload["hasMore"] = hasMore
 	payload["stopReason"] = stopReason
 	payload["truncatedByPageLimit"] = truncatedByPageLimit
+	chatmsg.ApplyTruncation(payload)
 	payload["failedCount"] = len(failures)
 	payload["failures"] = failures
 	payload["partial"] = len(failures) > 0 && len(messages) > 0

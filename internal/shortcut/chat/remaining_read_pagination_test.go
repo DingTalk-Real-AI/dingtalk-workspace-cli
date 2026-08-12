@@ -95,7 +95,29 @@ func TestCrossPlatformCoverageDirectMessagesPageLimitPublishesExecutableContinua
 		t.Fatal(err)
 	}
 	if payload["complete"] != false || payload["hasMore"] != true ||
-		payload["truncatedByPageLimit"] != true || payload["stopReason"] != "page_limit" || payload["nextPage"] == nil {
+		payload["truncated"] != true || payload["truncatedByPageLimit"] != true || payload["stopReason"] != "page_limit" || payload["nextPage"] == nil {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatListAllMaxItemsPublishesStableTruncation(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_my_groups_pagination": `{"result":{"groups":[{"openConversationId":"g1"},{"openConversationId":"g2"}],"hasMore":true,"nextCursor":88}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+chat-list-all", "--page-all", "--max-items", "1", "--page-delay", "0"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["truncated"] != true ||
+		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
 		t.Fatalf("payload = %#v", payload)
 	}
 }

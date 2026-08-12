@@ -148,6 +148,28 @@ func TestCrossPlatformCoverageConversationListSinglePagePreservesTypedCursor(t *
 	}
 }
 
+func TestCrossPlatformCoverageConversationListMaxItemsPublishesStableTruncation(t *testing.T) {
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_all_conversations": `{"result":{"conversationList":[{"openConversationId":"cid-1"},{"openConversationId":"cid-2"}],"hasMore":true,"nextCursor":2}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+conversation-list", "--page-all", "--max-items", "1", "--page-delay", "0"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["truncated"] != true ||
+		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
 func TestCrossPlatformCoverageConversationListDeduplicatesStableIDs(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
 		"im/list_all_conversations": `{"result":{"conversationList":[{"openConversationId":"cid-1","title":"一"},{"openConversationId":"cid-1","title":"重复"}],"hasMore":false}}`,

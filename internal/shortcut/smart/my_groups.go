@@ -84,17 +84,17 @@ var MyGroups = shortcut.Shortcut{
 			},
 		},
 	},
-	Flags: []shortcut.Flag{
+	Flags: append([]shortcut.Flag{
 		{Name: "type", Type: shortcut.FlagString, Desc: "按群类型过滤（可选，如返回中的 groupType/conversationType，大小写不敏感）", Required: false},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页返回数量（默认 200）；--limit 必须在 1-200 之间", Default: "200"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，翻页传上次的 nextCursor"},
-		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 nextCursor 自动读取全部已加入群；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 nextCursor 自动读取全部已加入群；--page-limit 仅与 --page-all 一起使用且范围 1-500；--max-items/--page-delay 仅与 --page-all 一起使用；值必须大于等于 0"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-	},
-	Constraints: []shortcut.Constraint{
+	}, shortcut.AutoPageControlFlags()...),
+	Constraints: append([]shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-200 之间"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-	},
+	}, shortcut.AutoPageControlConstraints()...),
 	Tips: []string{
 		`dws chat +my-groups`,
 		`dws chat +my-groups --type group`,
@@ -115,6 +115,9 @@ func validateMyGroups(rt *shortcut.RuntimeContext) error {
 		if limit := rt.Int("page-limit"); limit < 1 || limit > myGroupsHardPageLimit {
 			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 		}
+	}
+	if err := shortcut.ValidateAutoPageControls(rt); err != nil {
+		return apperrors.NewValidation(err.Error())
 	}
 	return nil
 }
@@ -180,9 +183,20 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 	hasMore := false
 	stopReason := "source_complete"
 	truncatedByPageLimit := false
+	truncatedByResultLimit := false
+	eligibleCount := 0
 	var nextCursor any
 
 	for pagesFetched < pageLimit {
+		if pagesFetched > 0 {
+			if err := shortcut.WaitAutoPageDelay(rt); err != nil {
+				failures = append(failures, map[string]any{
+					"page": pagesFetched + 1, "stage": "delay", "cursor": cursorKey, "error": err.Error(),
+				})
+				stopReason = "delay_interrupted"
+				break
+			}
+		}
 		params := map[string]any{"limit": baseParams["limit"]}
 		if cursorKey != "0" {
 			params["cursor"] = cursorValue
@@ -208,7 +222,14 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 			if id != "" {
 				seenGroups[id] = true
 			}
+			if maxItems := rt.Int("max-items"); maxItems > 0 && myGroupsMatchesFilter(rt, group) && eligibleCount >= maxItems {
+				truncatedByResultLimit = true
+				continue
+			}
 			allGroups = append(allGroups, group)
+			if myGroupsMatchesFilter(rt, group) {
+				eligibleCount++
+			}
 		}
 
 		page := chatmsg.Pagination(data)
@@ -223,9 +244,14 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 		}
 		hasMore = pageHasMore
 		if !hasMore {
-			complete = true
+			complete = !truncatedByResultLimit
 			nextCursor = nil
-			stopReason = "source_complete"
+			if truncatedByResultLimit {
+				hasMore = true
+				stopReason = "result_limit"
+			} else {
+				stopReason = "source_complete"
+			}
 			break
 		}
 		nextCursor = page["nextCursor"]
@@ -241,8 +267,13 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 		seenCursors[nextKey] = true
 		cursorKey = nextKey
 		cursorValue = nextCursor
+		if maxItems := rt.Int("max-items"); maxItems > 0 && eligibleCount >= maxItems {
+			truncatedByResultLimit = true
+			stopReason = "result_limit"
+			break
+		}
 	}
-	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit && !truncatedByResultLimit {
 		truncatedByPageLimit = true
 		stopReason = "page_limit"
 	}
@@ -254,9 +285,11 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 	payload["hasMore"] = hasMore
 	payload["stopReason"] = stopReason
 	payload["truncatedByPageLimit"] = truncatedByPageLimit
+	payload["truncatedByResultLimit"] = truncatedByResultLimit
 	payload["failedCount"] = len(failures)
 	payload["failures"] = failures
 	payload["partial"] = len(failures) > 0 && len(allGroups) > 0
+	chatmsg.ApplyTruncation(payload)
 	if hasMore && nextCursor != nil {
 		payload["nextCursor"] = nextCursor
 	}
@@ -273,6 +306,15 @@ func readAllMyGroups(rt *shortcut.RuntimeContext, baseParams map[string]any) (ma
 		apperrors.WithRetryable(true),
 		apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
 	)
+}
+
+func myGroupsMatchesFilter(rt *shortcut.RuntimeContext, group map[string]any) bool {
+	typeFilter := strings.TrimSpace(rt.Str("type"))
+	if typeFilter == "" {
+		return true
+	}
+	groupType, _ := myGroupsProject(group)["type"].(string)
+	return strings.EqualFold(strings.TrimSpace(groupType), typeFilter)
 }
 
 func myGroupsCursorString(value any) string {

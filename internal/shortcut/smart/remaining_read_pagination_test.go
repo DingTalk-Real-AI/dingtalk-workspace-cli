@@ -83,6 +83,28 @@ func TestCrossPlatformCoverageAtMePageAllContinuesAcrossEmptyIntermediatePage(t 
 	}
 }
 
+func TestCrossPlatformCoverageAtMeMaxItemsPublishesStableTruncation(t *testing.T) {
+	caller := &chatMessagesPagingCaller{responses: []string{
+		`{"result":{"conversationMessagesList":[{"messages":[{"openMessageId":"m1"},{"openMessageId":"m2"}]}],"hasMore":true,"nextCursor":"cursor-2"}}`,
+	}}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+at-me", "--page-all", "--max-items", "1", "--page-delay", "0"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["truncated"] != true ||
+		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
 func TestCrossPlatformCoverageMyGroupsPageAllUsesNumericCursorAndFiltersAfterMerge(t *testing.T) {
 	caller := &chatMessagesPagingCaller{responses: []string{
 		`{"result":{"groups":[{"openConversationId":"g1","title":"群一","groupType":"group"}],"hasMore":true,"nextCursor":88}}`,
@@ -109,12 +131,38 @@ func TestCrossPlatformCoverageMyGroupsPageAllUsesNumericCursorAndFiltersAfterMer
 	}
 }
 
+func TestCrossPlatformCoverageMyGroupsMaxItemsAppliesAfterTypeFilter(t *testing.T) {
+	caller := &chatMessagesPagingCaller{responses: []string{
+		`{"result":{"groups":[{"openConversationId":"p1","groupType":"p2p"},{"openConversationId":"g1","groupType":"group"},{"openConversationId":"g2","groupType":"group"}],"hasMore":false}}`,
+	}}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+my-groups", "--type", "group", "--page-all", "--max-items", "1", "--page-delay", "0"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["truncated"] != true ||
+		payload["truncatedByResultLimit"] != true || payload["stopReason"] != "result_limit" {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
 func TestCrossPlatformCoverageRemainingReadPaginationValidation(t *testing.T) {
 	for _, args := range [][]string{
 		{"chat", "+at-me", "--page-limit", "2"},
+		{"chat", "+at-me", "--max-items", "1"},
+		{"chat", "+at-me", "--page-delay", "1"},
 		{"chat", "+at-me", "--page-all", "--page-limit", "501"},
+		{"chat", "+at-me", "--page-all", "--max-items", "-1"},
 		{"chat", "+my-groups", "--limit", "201"},
 		{"chat", "+my-groups", "--page-limit", "2"},
+		{"chat", "+my-groups", "--max-items", "1"},
 		{"chat", "+my-groups", "--page-all", "--page-limit", "501"},
 	} {
 		helpers.InitDeps(&chatMessagesPagingCaller{})

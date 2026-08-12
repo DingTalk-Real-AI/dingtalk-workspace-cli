@@ -510,21 +510,21 @@ var FlagList = shortcut.Shortcut{
 	Description: "分页查询当前用户收藏的消息，支持有界自动翻页",
 	Intent:      "当你要查看当前用户的 DingTalk message favorite 列表时使用；默认读取一页，明确要求全部收藏时加 --page-all，并用 --page-limit 保持有界。底层实际使用数字 cursor，结果按 openMessageId 去重并公开 complete、hasMore、nextCursor、stopReason 和 failures；它不把 message favorite 与 Pin、会话置顶或 Lark feed-layer thread flag 混为一谈。",
 	Risk:        shortcut.RiskRead,
-	Flags: []shortcut.Flag{
+	Flags: append([]shortcut.Flag{
 		{Name: "page-size", Type: shortcut.FlagInt, Default: "20", Desc: "每页数量；下游真实上限为 30，显式页大小必须在 1-30 之间"},
 		{Name: "size", Type: shortcut.FlagInt, Default: "20", Desc: "--page-size 的兼容别名；下游真实上限为 30，显式页大小必须在 1-30 之间"},
 		{Name: "page-token", Type: shortcut.FlagString, Desc: "Lark 对齐的起始分页参数；起始 cursor 必须是非负整数"},
 		{Name: "cursor", Type: shortcut.FlagInt, Default: "0", Desc: "钉钉数字分页游标；起始 cursor 必须是非负整数"},
-		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取全部收藏分页；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取全部收藏分页；--page-limit 仅与 --page-all 一起使用且范围 1-500；--max-items/--page-delay 仅与 --page-all 一起使用；值必须大于等于 0"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "20", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-	},
-	Constraints: []shortcut.Constraint{
+	}, shortcut.AutoPageControlFlags()...),
+	Constraints: append([]shortcut.Constraint{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"page-size", "size"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"page-token", "cursor"}},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-size", "size"}, Description: "显式页大小必须在 1-30 之间"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-token", "cursor"}, Description: "起始 cursor 必须是非负整数"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-	},
+	}, shortcut.AutoPageControlConstraints()...),
 	Tips: []string{
 		`dws chat +flag-list --cursor 0 --page-size 20`,
 		`dws chat +flag-list --page-size 30 --page-all --page-limit 20`,
@@ -547,6 +547,9 @@ func validateFlagList(rt *shortcut.RuntimeContext) error {
 		if limit := rt.Int("page-limit"); limit < 1 || limit > flagListHardPageLimit {
 			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 		}
+	}
+	if err := shortcut.ValidateAutoPageControls(rt); err != nil {
+		return apperrors.NewValidation(err.Error())
 	}
 	return nil
 }
@@ -598,8 +601,18 @@ func executeFlagList(rt *shortcut.RuntimeContext) error {
 	var cursorErr error
 	stopReason := "source_complete"
 	truncatedByPageLimit := false
+	truncatedByResultLimit := false
 
 	for pagesFetched < pageLimit {
+		if pagesFetched > 0 {
+			if err := shortcut.WaitAutoPageDelay(rt); err != nil {
+				failures = append(failures, map[string]any{
+					"page": pagesFetched + 1, "stage": "delay", "cursor": cursor, "error": err.Error(),
+				})
+				stopReason = "delay_interrupted"
+				break
+			}
+		}
 		data, callErr := rt.CallMCPData("im", "list_message_favorites", flagListRequestParams(cursor, pageSize))
 		if callErr != nil {
 			if pagesFetched == 0 {
@@ -620,6 +633,10 @@ func executeFlagList(rt *shortcut.RuntimeContext) error {
 			}
 			if messageID != "" {
 				seenMessages[messageID] = true
+			}
+			if maxItems := rt.Int("max-items"); maxItems > 0 && len(items) >= maxItems {
+				truncatedByResultLimit = true
+				continue
 			}
 			items = append(items, item)
 		}
@@ -650,9 +667,14 @@ func executeFlagList(rt *shortcut.RuntimeContext) error {
 		}
 		hasMore = pageHasMore
 		if !hasMore {
-			complete = true
+			complete = !truncatedByResultLimit
 			nextCursor = 0
-			stopReason = "source_complete"
+			if truncatedByResultLimit {
+				hasMore = true
+				stopReason = "result_limit"
+			} else {
+				stopReason = "source_complete"
+			}
 			break
 		}
 		if cursorErr != nil || nextCursor <= 0 || seenCursors[nextCursor] {
@@ -669,28 +691,35 @@ func executeFlagList(rt *shortcut.RuntimeContext) error {
 		}
 		seenCursors[nextCursor] = true
 		cursor = nextCursor
+		if maxItems := rt.Int("max-items"); maxItems > 0 && len(items) >= maxItems {
+			truncatedByResultLimit = true
+			stopReason = "result_limit"
+			break
+		}
 	}
 
-	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit {
+	if !complete && hasMore && len(failures) == 0 && pagesFetched >= pageLimit && !truncatedByResultLimit {
 		truncatedByPageLimit = rt.Bool("page-all")
 		if truncatedByPageLimit {
 			stopReason = "page_limit"
 		}
 	}
 	payload := map[string]any{
-		"count":                len(items),
-		"items":                items,
-		"pagesFetched":         pagesFetched,
-		"paginationKnown":      paginationKnown,
-		"complete":             complete && len(failures) == 0,
-		"hasMore":              hasMore,
-		"nextCursor":           nextCursor,
-		"stopReason":           stopReason,
-		"truncatedByPageLimit": truncatedByPageLimit,
-		"failedCount":          len(failures),
-		"failures":             failures,
-		"partial":              len(failures) > 0 && len(items) > 0,
+		"count":                  len(items),
+		"items":                  items,
+		"pagesFetched":           pagesFetched,
+		"paginationKnown":        paginationKnown,
+		"complete":               complete && len(failures) == 0,
+		"hasMore":                hasMore,
+		"nextCursor":             nextCursor,
+		"stopReason":             stopReason,
+		"truncatedByPageLimit":   truncatedByPageLimit,
+		"truncatedByResultLimit": truncatedByResultLimit,
+		"failedCount":            len(failures),
+		"failures":               failures,
+		"partial":                len(failures) > 0 && len(items) > 0,
 	}
+	chatmsg.ApplyTruncation(payload)
 	if outputErr := rt.Output(payload); outputErr != nil {
 		return outputErr
 	}

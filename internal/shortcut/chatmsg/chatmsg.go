@@ -86,6 +86,7 @@ var messageResultContractV1 = MessageResultContract{
 		"hasMore",
 		"nextPage",
 		"stopReason",
+		"truncated",
 		"truncatedByPageLimit",
 		"truncatedByResultLimit",
 		"failedCount",
@@ -122,7 +123,19 @@ func NewMessageListPayload(messages []map[string]any) map[string]any {
 		"failedCount":     0,
 		"failures":        []map[string]any{},
 		"partial":         false,
+		"truncated":       false,
 	}
+}
+
+// ApplyTruncation publishes the stable aggregate bit while preserving the
+// established reason-specific fields for compatibility and diagnosis.
+func ApplyTruncation(payload map[string]any) {
+	if payload == nil {
+		return
+	}
+	byPage, _ := payload["truncatedByPageLimit"].(bool)
+	byItems, _ := payload["truncatedByResultLimit"].(bool)
+	payload["truncated"] = byPage || byItems
 }
 
 // ListMessageItems returns message rows from the common list response envelopes.
