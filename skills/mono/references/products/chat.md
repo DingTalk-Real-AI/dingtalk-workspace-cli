@@ -565,6 +565,7 @@ Flags:
 **重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。**
 
 --group 指定群聊 openConversationId 发群消息；--user 指定用户 userId 发单聊；--open-dingtalk-id 指定用户 openDingTalkId 发单聊。三者只能选其一，不能同时指定。纯文本/Markdown 单聊传 --user 时直接走 userId 发送能力，不需要先手动查询 openDingTalkId。推荐使用 --text flag 传递消息内容（也支持位置参数）。可选 --title 作为消息标题。
+图文混排 Markdown 中，公网图片 URL 需要写成 `![图片标题](https://example.com/image.png)` 才会以内联图片展示；省略开头的 `!` 时会按链接/URL 展示，不会渲染为图片。
 若用户只提供了数字群号而非 openConversationId，需先调用 `chat group get-by-group-id` 将群号转为 openConversationId，再传入 --group。
 --群聊时可选 --at-all @所有人，或 --at-open-dingtalk-ids 指定成员（仅群聊时生效）。
 --本地图片、文件、音频或视频统一用 --msg-type file --file-path；图片会作为可下载的文件附件发送。--msg-type image --media-id 仅用于上游已经提供有效 mediaId 的场景。
@@ -585,6 +586,8 @@ Example:
   dws chat message send --open-dingtalk-id <openDingTalkId> --text "请查收"
   dws chat message send --group <openconversation_id> "hello"
   dws chat message send --group <openconversation_id> --title "周报提醒" --text "请大家本周五前提交周报"
+  # 图文混排 Markdown：公网图片 URL 需要写成 ![图片标题](URL) 才会以内联图片展示
+  dws chat message send --group <openconversation_id> --text $'这是图文说明\n\n![这个是展示图片标题](https://down.dingtalk.com/media/lQLPM5jiBEiBNjswMLAKd_CTzm8eowpEWPT_7-cA_48_48.png)'
   # 幂等发送（24h 内相同 uuid 不重复投递）
   dws chat message send --group <openconversation_id> --text "hello" --uuid "unique-id-123"
   dws chat message send --group <openconversation_id> --at-all "<@all> 请大家注意"
@@ -624,6 +627,7 @@ Flags:
   - **换行符**：消息内容按 Markdown 渲染，换行有两层要求，缺一不可：
     1. 必须使用**真实换行符**（Unicode `U+000A`），而非字面量字符串 `\n`（反斜杠 + 字母 n）。程序或大模型构造参数时，须确保已正确反转义；否则全部内容会渲染在同一行
     2. Markdown 规范下**单个换行不产生换行效果**。需要换行时请使用：段落分隔（连续两个真实换行符 `\n\n`）、行尾两个空格 + 真实换行符（硬换行 `<br>`），或直接写 HTML 的 `<br>` 标签
+  - **图文混排**：公网图片 URL 需要写成 `![图片标题](https://example.com/image.png)` 才会以内联图片展示；如果省略开头的 `!`，例如 `[图片标题](https://example.com/image.png)`，将按链接/URL 展示，不会渲染为图片
   - 本地图片、文档、压缩包、音频和视频统一使用 `--msg-type file --file-path <本地路径>`；图片会成为可下载的 file 附件，不会内联渲染，也不会生成 mediaId
   - `--msg-type image --media-id` 仅接受上游已经提供的有效 mediaId；DWS CLI 不提供本地文件到 mediaId 的上传或转换能力
   - audio/video 仍是兼容的 file 语义别名，但本地文件的推荐路径保持为 `--msg-type file --file-path`

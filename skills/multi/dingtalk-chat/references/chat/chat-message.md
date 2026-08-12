@@ -33,6 +33,7 @@
 - 发送位置消息前必须确认纬度、经度、地址名称；地图缩略图需先通过旧媒体上传链路拿到 mediaId。
 - 分享联系人名片前必须确认联系人 `openDingTalkId`，不要把 userId 直接当 `--contact-id`。
 - 消息内容按 Markdown 渲染，换行必须是真实换行符；需要换行效果时用空行、行尾两个空格或 `<br>`。
+- 图文混排 Markdown 中，公网图片 URL 需要写成 `![图片标题](https://example.com/image.png)` 才会以内联图片展示；省略开头的 `!` 时会按链接/URL 展示，不会渲染为图片。
 - 建议发送时带 `--uuid`，失败重试复用同一个值。
 - Bot/Webhook 只支持文本/Markdown；Bot 多群使用 `+messages-send --groups/--groups-file` 的逐项
   ledger。不要把 user 文件/图片能力外推到 Bot。
@@ -54,6 +55,7 @@ dws chat message send --group <openConversationId> --text "hello"
 dws chat message send --user <userId> --text "请查收"
 dws chat message send --open-dingtalk-id <openDingTalkId> --text "请查收"
 dws chat message send --group <openConversationId> --title "周报提醒" --text "请大家本周五前提交周报" --uuid <uuid>
+dws chat message send --group <openConversationId> --text $'这是图文说明\n\n![这个是展示图片标题](https://down.dingtalk.com/media/lQLPM5jiBEiBNjswMLAKd_CTzm8eowpEWPT_7-cA_48_48.png)'
 
 # @ 群成员
 dws chat message send --group <openConversationId> --at-all "<@all> 请大家注意"

@@ -2799,6 +2799,8 @@ func newChatCommand() *cobra.Command {
 
 纯文本 / Markdown 消息（默认）：
   无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。
+  图文混排时，公网图片 URL 需要写成 Markdown 图片语法：![图片标题](https://example.com/image.png)，才会以内联图片展示。
+  如果省略开头的 !，例如 [图片标题](https://example.com/image.png)，将按链接/URL 展示，不会渲染为图片。
 
 返回值与后续操作：
   发送后会返回 openTaskId。如需编辑或撤回刚发送的消息，使用
@@ -2816,6 +2818,8 @@ func newChatCommand() *cobra.Command {
   dws chat message send --user <userId> "请查收"
   dws chat message send --open-dingtalk-id <openDingTalkId> "请查收"
   dws chat message send --group <openconversation_id> --title "周报提醒" "请大家本周五前提交周报"
+  # 图文混排 Markdown：公网图片 URL 需要写成 ![图片标题](URL) 才会以内联图片展示
+  dws chat message send --group <openconversation_id> --text $'这是图文说明\n\n![这个是展示图片标题](https://down.dingtalk.com/media/lQLPM5jiBEiBNjswMLAKd_CTzm8eowpEWPT_7-cA_48_48.png)'
   # 发送本地图片或文件（图片会作为可下载的 file 附件发送）
   dws chat message send --group <openconversation_id> --msg-type file --file-path ./screenshot.png
   dws chat message send --group <openconversation_id> --msg-type file --file-path ./report.pdf
