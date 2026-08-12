@@ -233,6 +233,10 @@ function installSkillsToHomes(skillRoot) {
   let attempted = 0;
   let failed = 0;
 
+  const specificAgentDirs = AGENT_DIRS.slice(1).filter((agentDir) =>
+    fs.existsSync(path.dirname(path.join(homeDir, agentDir))),
+  );
+
   const installToBase = (baseDir) => {
     const victims = [path.join(baseDir, "dws")];
     if (fs.existsSync(baseDir)) {
@@ -252,6 +256,9 @@ function installSkillsToHomes(skillRoot) {
   };
 
   AGENT_DIRS.forEach((agentDir, index) => {
+    if (index === 0 && specificAgentDirs.length > 0) {
+      return;
+    }
     const baseDir = path.join(homeDir, agentDir);
     const parentGate = path.dirname(baseDir);
     if (index > 0 && !fs.existsSync(parentGate)) {
@@ -264,6 +271,15 @@ function installSkillsToHomes(skillRoot) {
       failed += 1;
     }
   });
+
+  if (specificAgentDirs.length > 0 && installed > 0) {
+    try {
+      retireGenericSkillRoot(homeDir, managedNames);
+    } catch (err) {
+      console.warn(`⚠️  通用 Skill 副本迁移失败: ${err.message}`);
+      failed += 1;
+    }
+  }
 
   if (attempted === 0) {
     if (installToBase(path.join(homeDir, ".agents", "skills"))) {
@@ -327,6 +343,40 @@ function readManagedSkillNames(homeDir) {
 function isManagedMultiSkillDir(dir, managedNames) {
   const name = path.basename(dir);
   return LEGACY_OFFICIAL_MULTI_SKILLS.has(name) || managedNames.has(name);
+}
+
+function retireGenericSkillRoot(homeDir, managedNames) {
+  const baseDir = path.join(homeDir, ".agents", "skills");
+  const victims = [path.join(baseDir, "dws")];
+  if (fs.existsSync(baseDir)) {
+    for (const entry of fs.readdirSync(baseDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && isManagedMultiSkillDir(path.join(baseDir, entry.name), managedNames)) {
+        victims.push(path.join(baseDir, entry.name));
+      }
+    }
+  }
+  const backups = [];
+  try {
+    for (const victim of victims) {
+      if (!backupAndRemoveSkillDir(homeDir, victim, backups)) {
+        throw new Error(`failed to back up Skill directory ${victim}`);
+      }
+    }
+  } catch (err) {
+    const restoreErrors = [];
+    for (let i = backups.length - 1; i >= 0; i -= 1) {
+      try {
+        fs.mkdirSync(path.dirname(backups[i].original), { recursive: true });
+        fs.renameSync(backups[i].backup, backups[i].original);
+      } catch (restoreErr) {
+        restoreErrors.push(`${backups[i].original}: ${restoreErr.message}`);
+      }
+    }
+    if (restoreErrors.length > 0) {
+      throw new Error(`${err.message}; generic-root rollback failed: ${restoreErrors.join("; ")}`);
+    }
+    throw err;
+  }
 }
 
 function skillDirectoryDigest(dir) {
@@ -577,6 +627,10 @@ function installMultiSkillsToHomes(multiRoot) {
   let attempted = 0;
   let failed = 0;
 
+  const specificAgentDirs = AGENT_DIRS.slice(1).filter((agentDir) =>
+    fs.existsSync(path.dirname(path.join(homeDir, agentDir))),
+  );
+
   const installToBase = (baseDir) => {
     fs.mkdirSync(baseDir, { recursive: true });
     const victims = [path.join(baseDir, "dws")];
@@ -604,6 +658,9 @@ function installMultiSkillsToHomes(multiRoot) {
   };
 
   AGENT_DIRS.forEach((agentDir, index) => {
+    if (index === 0 && specificAgentDirs.length > 0) {
+      return;
+    }
     const baseDir = path.join(homeDir, agentDir);
     const parentGate = path.dirname(baseDir);
     if (index > 0 && !fs.existsSync(parentGate)) {
@@ -616,6 +673,15 @@ function installMultiSkillsToHomes(multiRoot) {
       failed += 1;
     }
   });
+
+  if (specificAgentDirs.length > 0 && installed > 0) {
+    try {
+      retireGenericSkillRoot(homeDir, managedNames);
+    } catch (err) {
+      console.warn(`⚠️  通用 Skill 副本迁移失败: ${err.message}`);
+      failed += 1;
+    }
+  }
 
   if (attempted === 0) {
     if (installToBase(path.join(homeDir, ".agents", "skills"))) {

@@ -408,6 +408,28 @@ multi_tree_has_skills() {
   return 1
 }
 
+# Move DWS-owned copies out of the generic root once a concrete Agent root is
+# active. This prevents Agents such as Codex from discovering duplicates.
+retire_generic_skill_root() {
+  _rgs_root="$1"
+  _rgs_base="$_rgs_root/.agents/skills"
+  _rgs_stage="$(mktemp -d "${TMPDIR:-/tmp}/dws-retire-generic.XXXXXX")" || return 1
+  _rgs_backups="$_rgs_stage/backups"
+  : > "$_rgs_backups" || { rm -rf "$_rgs_stage"; return 1; }
+  for _rgs_victim in "$_rgs_base/dws" "$_rgs_base"/*; do
+    [ -d "$_rgs_victim" ] || continue
+    if [ "$(basename "$_rgs_victim")" != "dws" ] && ! is_managed_multi_skill_dir "$_rgs_victim"; then
+      continue
+    fi
+    if ! backup_and_record_skill_dir "$_rgs_victim" "$_rgs_backups"; then
+      restore_multi_skill_set /dev/null "$_rgs_backups" || true
+      rm -rf "$_rgs_stage"
+      return 1
+    fi
+  done
+  rm -rf "$_rgs_stage"
+}
+
 # Same semantics as build/npm/install.js installMultiSkillsToHomes (root = DWS_SKILLS_ROOT or PWD).
 install_multi_skills_to_root() {
   multi_src="$1"
@@ -416,6 +438,15 @@ install_multi_skills_to_root() {
   attempted=0
   failed=0
   idx=0
+  specific_agents=0
+  for specific_dir in \
+    ".claude/skills" ".cursor/skills" ".qoder/skills" ".qoderwork/skills" \
+    ".gemini/skills" ".codex/skills" ".github/skills" ".windsurf/skills" \
+    ".augment/skills" ".cline/skills" ".amp/skills" ".kiro/skills" \
+    ".trae/skills" ".openclaw/skills" ".hermes/skills"
+  do
+    [ -e "$root/$(dirname "$specific_dir")" ] && specific_agents=$((specific_agents + 1))
+  done
   for agent_dir in \
     ".agents/skills" \
     ".claude/skills" \
@@ -434,6 +465,10 @@ install_multi_skills_to_root() {
     ".openclaw/skills" \
     ".hermes/skills"
   do
+    if [ "$idx" -eq 0 ] && [ "$specific_agents" -gt 0 ]; then
+      idx=$((idx + 1))
+      continue
+    fi
     base_dir="$root/$agent_dir"
     parent_gate="$(dirname "$base_dir")"
     if [ "$idx" -gt 0 ] && [ ! -e "$parent_gate" ]; then
@@ -449,6 +484,9 @@ install_multi_skills_to_root() {
     fi
     idx=$((idx + 1))
   done
+  if [ "$specific_agents" -gt 0 ] && [ "$installed" -gt 0 ]; then
+    retire_generic_skill_root "$root" || failed=$((failed + 1))
+  fi
   if [ "$attempted" -eq 0 ] && _install_multi_to_base "$multi_src" "$root/.agents/skills" "$root" ".agents/skills"; then
     installed=$((installed + 1))
   fi
@@ -618,6 +656,15 @@ install_skills_to_root() {
   attempted=0
   failed=0
   idx=0
+  specific_agents=0
+  for specific_dir in \
+    ".claude/skills" ".cursor/skills" ".qoder/skills" ".qoderwork/skills" \
+    ".gemini/skills" ".codex/skills" ".github/skills" ".windsurf/skills" \
+    ".augment/skills" ".cline/skills" ".amp/skills" ".kiro/skills" \
+    ".trae/skills" ".openclaw/skills" ".hermes/skills"
+  do
+    [ -e "$root/$(dirname "$specific_dir")" ] && specific_agents=$((specific_agents + 1))
+  done
   for agent_dir in \
     ".agents/skills" \
     ".claude/skills" \
@@ -636,6 +683,10 @@ install_skills_to_root() {
     ".openclaw/skills" \
     ".hermes/skills"
   do
+    if [ "$idx" -eq 0 ] && [ "$specific_agents" -gt 0 ]; then
+      idx=$((idx + 1))
+      continue
+    fi
     base_dir="$root/$agent_dir"
     parent_gate="$(dirname "$base_dir")"
     if [ "$idx" -gt 0 ] && [ ! -e "$parent_gate" ]; then
@@ -655,6 +706,9 @@ install_skills_to_root() {
     fi
     idx=$((idx + 1))
   done
+  if [ "$specific_agents" -gt 0 ] && [ "$installed" -gt 0 ]; then
+    retire_generic_skill_root "$root" || failed=$((failed + 1))
+  fi
   if [ "$attempted" -eq 0 ]; then
     if [ "$root" = "$HOME" ]; then
       flabel="~/.agents/skills/$SKILL_NAME"

@@ -142,6 +142,9 @@ Agent 仍只需以 `SKILL.md` 发现和加载 Skill；统一元数据位于 Agen
 
 升级器对每个 Agent 目标执行：
 
+- 先探测具体 Agent home；只在没有任何具体 Agent 时使用 `~/.agents/skills` 通用 fallback；
+- 具体 Agent 安装成功后，将 `~/.agents/skills` 中旧的 DWS 受管副本可恢复地迁入备份，避免 Codex 等同时扫描两个根目录时重复发现同名 Skill；
+
 1. 只读计算对面布局、过期受管 Skill 和同名官方 Skill；
 2. 在目标文件系统的 staging 中复制完整新集合；
 3. staging 全部成功后，才将旧集合移入备份目录；

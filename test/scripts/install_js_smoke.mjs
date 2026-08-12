@@ -193,6 +193,38 @@ scenario("multi install lays out sibling skills and caches", () => {
   }
 });
 
+scenario("Codex uses its canonical root without a generic duplicate", () => {
+  const { tmp, pkg, home } = stagePkg({
+    "mono/SKILL.md": "# mono fixture\n",
+    "multi/dingtalk-chat/SKILL.md": "# dingtalk-chat\n",
+    "multi/dws-shared/SKILL.md": "# dws-shared\n",
+  });
+  try {
+    writeFile(path.join(home, ".codex", "config.toml"), "model = \"test\"\n");
+    writeFile(
+      path.join(home, ".agents", "skills", "dws", "multi", "dingtalk-chat", "SKILL.md"),
+      "old nested duplicate\n",
+    );
+
+    const res = runInstall(pkg, home, "multi");
+    assert.equal(res.status, 0, `exit=${res.status}\nstdout=${res.stdout}\nstderr=${res.stderr}`);
+    assert.ok(
+      fs.existsSync(path.join(home, ".codex", "skills", "dingtalk-chat", "SKILL.md")),
+      "Codex canonical Skill installed",
+    );
+    assert.ok(
+      !fs.existsSync(path.join(home, ".agents", "skills", "dingtalk-chat", "SKILL.md")),
+      "generic flat duplicate not installed",
+    );
+    assert.ok(
+      !fs.existsSync(path.join(home, ".agents", "skills", "dws")),
+      "legacy nested duplicate retired",
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 scenario("empty multi/ tree falls back to mono and keeps the old multi cache", () => {
   const { tmp, pkg, home } = stagePkg({
     "SKILL.md": "# mono root copy\n",

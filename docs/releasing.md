@@ -17,7 +17,8 @@
 
 1. 在上述 `Release` 页面选择 `Run workflow`，分支必须是默认分支 `main`。
 2. `release_operation=plan`，选择 `release_channel=beta|stable`；仅在开始新 beta 线时选择 `release_bump=patch|minor|major`。
-3. workflow summary 会给出唯一的下一版本。把对应的精确 `CHANGELOG.md` 章节通过 PR 合入 `main`。
+3. workflow summary 会给出唯一的下一版本。运行 `prepare-changelog.sh` 将已合入的
+   release fragments 汇总成对应的精确 `CHANGELOG.md` 章节，并通过唯一的 release-seal PR 合入 `main`。
 4. 再次运行，改为 `release_operation=publish`。beta 会直接进入自动化发布；stable 会在封 tag 前等待管理员签收。
 
 `plan` 是纯只读操作，不创建 tag、预留版本号或生成包。CHANGELOG 合入期间若另一个发布先占用了该版本，`publish` 会重新分配并因 CHANGELOG 章节不匹配而拒绝，需要重新 plan。`publish` 会先再次确认 dispatch SHA 仍是当前 `main`、Code Admission 和平台治理均通过，再由唯一的 write job 使用 GitHub API 原子创建 annotated tag；同一次 run 随即进入既有的跨平台构建、GitHub/npm、可选 OSS/Gitee 发布和 Homebrew 直交付 DAG。内置 `GITHUB_TOKEN` 创建的 tag 不依赖第二条 workflow 被再次触发。
@@ -94,7 +95,8 @@ main 上的候选代码 + beta CHANGELOG
 dws-release v1.2.3-beta.1
 ```
 
-如果 CHANGELOG 尚不存在，该命令只生成模板并停止。补全内容、删除所有 `TODO`，提交后通过 PR 合入 `main`；然后重新运行完全相同的命令，它会执行完整预检：
+如果 CHANGELOG 尚不存在，该命令会从 `.changes/*.md` 生成 beta 章节并归档已消费的
+fragments，然后停止。审阅生成内容并通过唯一的 release-seal PR 合入 `main`；然后重新运行完全相同的命令，它会执行完整预检：
 
 ```bash
 dws-release v1.2.3-beta.1
@@ -131,6 +133,15 @@ dws-release v1.2.3 --from-beta v1.2.3-beta.1
 ```
 
 正式版使用 `## [1.2.3] - YYYY-MM-DD`。该章节会直接成为 GitHub Release Notes。
+
+### Release fragments
+
+普通 PR 不修改 `CHANGELOG.md` 的 `Unreleased` 区域。需要面向用户发布说明的改动在
+`.changes/<unique-name>.md` 中增加一个独立 fragment；格式和允许的分类见
+[`.changes/README.md`](../.changes/README.md)。预发封板时
+`scripts/release/prepare-changelog.sh prerelease <version>` 会稳定排序并汇总所有未归档
+fragment，写入唯一版本章节后移动到 `.changes/released/<version>/`。因此并发 PR 不会争用
+`CHANGELOG.md`；唯一的 release-seal PR 同时提交生成的章节与归档移动，供审计复核。
 
 ## CI/CD 保证
 

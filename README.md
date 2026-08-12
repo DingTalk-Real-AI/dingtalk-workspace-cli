@@ -210,7 +210,7 @@ The verifier uses isolated directories and does not replace the `dws` on the cur
 The upgrade process follows a two-phase atomic flow to ensure consistency:
 
 1. **Prepare** — downloads the platform-specific binary and skill packages to a temporary directory, verifies SHA256 checksums, and extracts/validates all files. If any step fails, the upgrade aborts without modifying the existing installation.
-2. **Apply** — only after all preparations succeed, the binary is replaced and skill packages are installed to all detected agent directories (`~/.agents/skills/dws`, `~/.claude/skills/dws`, `~/.cursor/skills/dws`, etc.).
+2. **Apply** — only after all preparations succeed, the binary is replaced and skills are flattened into detected agent-specific roots (for example `~/.codex/skills/dingtalk-chat`). `~/.agents/skills` is used only when no specific Agent is detected; once a specific root is active, older DWS-managed generic copies are backed up and retired so the same Skill is not discovered twice.
 
 A backup of the current version is automatically created before each upgrade. Use `dws upgrade --rollback` to restore the previous version if needed.
 
@@ -405,7 +405,7 @@ After installing, AI tools like Claude Code / Cursor can operate DingTalk direct
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
 ```
 
-> `install.sh` installs under `$HOME/.agents/skills/` (global; multi layout is per-product siblings, mono is the `dws/` subdirectory); `install-skills.sh` installs under `./.agents/skills/` (current project).
+> Installers prefer detected agent-specific roots such as `$HOME/.codex/skills/`. They use `.agents/skills/` only as the generic fallback when no specific Agent is detected; multi layout is per-product siblings, while mono uses the `dws/` subdirectory.
 >
 > China users: prefix `DWS_GITEE_REPO` to use the Gitee mirror — see [China mirror](#china-mirror).
 

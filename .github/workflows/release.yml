@@ -2793,7 +2793,7 @@ jobs:
             fi
             if test "${{ needs.dispatch-contract.outputs.mode }}" = plan_release; then
               echo
-              echo "Plan only: no tag or package was created. Add the exact \`CHANGELOG.md\` section, merge it to main, then run publish."
+              echo "Plan only: no tag or package was created. Render pending \`.changes/*.md\` fragments into the exact \`CHANGELOG.md\` section, merge the release-seal PR to main, then run publish."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 

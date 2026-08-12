@@ -83,7 +83,10 @@ coverage is additionally selected for platform-sensitive code.
    change.
 6. Run `./scripts/release/verify-package-managers.sh` when packaging or
    installer surfaces change (run `make package` first).
-7. Update docs and `CHANGELOG.md` for behavior/interface changes.
+7. Update docs and add one `.changes/<unique-name>.md` release fragment for
+   behavior/interface changes. Do not edit `CHANGELOG.md` in an ordinary PR;
+   the release-seal workflow renders and archives fragments into the versioned
+   changelog section.
 
 ## Submission Flow
 

@@ -1288,6 +1288,12 @@ jobs:
           ./scripts/policy/check-changelog-pr.sh \
             "$mode" "$PR_BASE_SHA" HEAD
 
+      - name: Validate release fragment lifecycle
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: ./scripts/policy/check-release-fragments.sh "$PR_BASE_SHA" HEAD
+
       - name: Validate trusted main CHANGELOG-only push
         if: github.event_name == 'push' && needs.lint.outputs.changelog_only == 'true'
         env:

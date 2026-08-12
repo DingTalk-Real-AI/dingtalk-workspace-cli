@@ -681,6 +681,11 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 			if _, err := parseAgentProduct(os.Getenv(agentproduct.EnvName)); err != nil {
 				return err
 			}
+			if shouldDetectNestedSkillLayout(cmd) {
+				if found, err := detectNestedMultiSkillLayout(); err == nil && found {
+					fmt.Fprintln(cmd.ErrOrStderr(), "⚠️  检测到旧升级器留下的嵌套 Skill；请运行 dws skill setup --mode multi 查看迁移计划并确认")
+				}
+			}
 
 			authpkg.SetRuntimeProfile(flags.Profile)
 			// Apply OAuth credential overrides from CLI flags (highest priority).
