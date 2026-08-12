@@ -129,7 +129,7 @@ var MediaPreview = shortcut.Shortcut{
 }
 
 var CoverSet = shortcut.Shortcut{
-	Service: "doc", Command: "+cover-set", Aliases: []string{"+resource-update"}, Product: productDoc,
+	Service: "doc", Command: "+cover-set", Product: productDoc,
 	Description: "从本地图片或 HTTPS URL 设置文档封面",
 	Intent:      "当用户要设置或替换文档顶部封面图时使用；本地图片会先上传，HTTPS URL 由服务端转存。",
 	Risk:        shortcut.RiskWrite,
@@ -157,7 +157,7 @@ var CoverSet = shortcut.Shortcut{
 }
 
 var CoverDownload = shortcut.Shortcut{
-	Service: "doc", Command: "+cover-download", Aliases: []string{"+resource-download"}, Product: productDoc,
+	Service: "doc", Command: "+cover-download", Product: productDoc,
 	Description: "读取并安全下载当前文档封面",
 	Intent:      "当用户要把当前文档封面保存到本地时使用；先读 style，必要时用 resourceId 换临时链接，再按安全本地下载策略保存。",
 	Risk:        shortcut.RiskRead,
@@ -176,7 +176,7 @@ var CoverDownload = shortcut.Shortcut{
 }
 
 var CoverClear = shortcut.Shortcut{
-	Service: "doc", Command: "+cover-clear", Aliases: []string{"+resource-delete"}, Product: productDoc,
+	Service: "doc", Command: "+cover-clear", Product: productDoc,
 	Description: "幂等清除文档封面",
 	Intent:      "当用户明确要移除文档当前封面时使用；发送 cover clear，重复执行保持无封面状态。",
 	Risk:        shortcut.RiskWrite,
@@ -455,5 +455,28 @@ func nestedStringDeep(value any, keys ...string) string {
 }
 
 func init() {
-	shortcut.Register(MediaList, MediaInsert, MediaDownload, MediaPreview, CoverSet, CoverDownload, CoverClear, BackgroundUpdate, BackgroundDelete)
+	resourceUpdate := CoverSet
+	resourceUpdate.Command = "+resource-update"
+	resourceUpdate.Contract = withDryRun(docContract("+resource-update", resourceUpdate.Description,
+		resourceUpdate.Intent, []string{`dws doc +resource-update --node <DOC_ID> --image https://example.com/cover.png`, `dws doc +resource-update --node <DOC_ID> --file ./cover.png`}), contract.DryRunPreviewRequest, false)
+	resourceUpdate.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent"}
+	resourceUpdate.Tips = []string{`dws doc +resource-update --node <DOC_ID> --image https://example.com/cover.png`, `dws doc +resource-update --node <DOC_ID> --file ./cover.png`}
+
+	resourceDownload := CoverDownload
+	resourceDownload.Command = "+resource-download"
+	resourceDownload.Contract = docContract("+resource-download", resourceDownload.Description,
+		resourceDownload.Intent, []string{`dws doc +resource-download --node <DOC_ID> --output ./cover.png`})
+	resourceDownload.Tips = []string{`dws doc +resource-download --node <DOC_ID> --output ./cover.png`}
+
+	resourceDelete := CoverClear
+	resourceDelete.Command = "+resource-delete"
+	resourceDelete.Risk = shortcut.RiskHighWrite
+	resourceDelete.Safety = contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"}
+	resourceDelete.Contract = docContract("+resource-delete", resourceDelete.Description,
+		resourceDelete.Intent, []string{`dws doc +resource-delete --node <DOC_ID>`})
+	resourceDelete.Tips = []string{`dws doc +resource-delete --node <DOC_ID>`}
+
+	shortcut.Register(MediaList, MediaInsert, MediaDownload, MediaPreview,
+		CoverSet, CoverDownload, CoverClear, resourceUpdate, resourceDownload, resourceDelete,
+		BackgroundUpdate, BackgroundDelete)
 }

@@ -2049,8 +2049,8 @@ func TestCrossPlatformCoverageCoverShortcutsUseExplicitCanonicalNames(t *testing
 		if tc.decl.Command != tc.name {
 			t.Errorf("cover command = %q, want %q", tc.decl.Command, tc.name)
 		}
-		if !reflect.DeepEqual(tc.decl.Aliases, []string{tc.legacy}) {
-			t.Errorf("%s compatibility aliases = %#v", tc.name, tc.decl.Aliases)
+		if len(tc.decl.Aliases) != 0 {
+			t.Errorf("%s must not collapse the historical Schema identity into a Cobra alias: %#v", tc.name, tc.decl.Aliases)
 		}
 		if tc.decl.Contract.Identity.CLIPath != "doc "+tc.name || tc.decl.Contract.Identity.PrimaryCLIPath != "doc "+tc.name {
 			t.Errorf("%s contract identity = %#v", tc.name, tc.decl.Contract.Identity)

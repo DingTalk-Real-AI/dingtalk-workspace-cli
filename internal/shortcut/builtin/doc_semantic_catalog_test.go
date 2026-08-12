@@ -30,8 +30,8 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 			registered[item.Command] = item
 		}
 	}
-	if len(registered) != 47 || len(source.Shortcuts) != 47 {
-		t.Fatalf("registered/catalog = %d/%d, want 47/47", len(registered), len(source.Shortcuts))
+	if len(registered) != 50 || len(source.Shortcuts) != 50 {
+		t.Fatalf("registered/catalog = %d/%d, want 50/50", len(registered), len(source.Shortcuts))
 	}
 	var missing, stale []string
 	public, hidden := 0, 0
@@ -66,8 +66,8 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 	if len(missing) > 0 || len(stale) > 0 {
 		t.Fatalf("catalog mismatch: missing=%v stale=%v", missing, stale)
 	}
-	if public != 45 || hidden != 2 {
-		t.Fatalf("public/hidden = %d/%d, want 45/2", public, hidden)
+	if public != 45 || hidden != 5 {
+		t.Fatalf("public/hidden = %d/%d, want 45/5", public, hidden)
 	}
 
 	wantPrimaries := map[string]string{
@@ -86,8 +86,8 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 		}
 	}
 	for _, legacy := range []string{"+resource-update", "+resource-download", "+resource-delete"} {
-		if _, ok := registered[legacy]; ok {
-			t.Errorf("legacy cover name %s is still a registered Agent-facing command", legacy)
+		if item, ok := registered[legacy]; !ok || !item.Hidden || item.Disposition != shortcut.DispositionAliasInternal {
+			t.Errorf("legacy cover name %s is not a hidden compatibility command: %#v", legacy, item)
 		}
 	}
 }
