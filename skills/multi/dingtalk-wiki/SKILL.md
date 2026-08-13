@@ -1,6 +1,6 @@
 ---
 name: dingtalk-wiki
-description: 钉钉知识库与空间管理。Use when 用户明确说 知识库/wiki/创建或搜索知识库/命名的团队空间/知识库成员/知识库内节点创建、列出、搜索、复制、移动、删除或知识库动态。仅说“文档空间/我的文档”不触发本 skill：普通存储动作走 dingtalk-drive，正文读写走 dingtalk-doc。知识库节点复制移动走本 skill，普通文件复制移动走 dingtalk-drive。命令前缀：dws wiki。
+description: 钉钉知识库与空间管理。Use when 用户明确说 知识库/wiki/创建或搜索知识库/明确作为知识库类型的个人或命名团队空间/知识库成员/知识库内节点创建、列出、搜索、复制、移动、删除或知识库动态。仅说“文档空间/我的文档”不触发本 Skill：普通存储管理与全局搜索走 dingtalk-drive，正文读写走 dingtalk-doc。明确知识库空间内的节点管理走本 Skill（需 workspace）；锁定空间内单文档后，内容读写切到 dingtalk-doc。命令前缀：dws wiki。
 metadata:
   cli_version: ">=0.2.14"
   category: product

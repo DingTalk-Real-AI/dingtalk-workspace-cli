@@ -37,6 +37,21 @@ const validFlagMigrationManifestJSON = `{
   ]
 }`
 
+func optionalFlagMigrationManifestJSON() string {
+	manifest := strings.Replace(
+		validFlagMigrationManifestJSON,
+		`"before": {"present": true, "type": "string", "required": true, "scope": "local"}`,
+		`"before": {"present": true, "type": "string", "scope": "local"}`,
+		1,
+	)
+	return strings.Replace(
+		manifest,
+		`"after": {"present": true, "type": "string", "required": true, "scope": "local"}`,
+		`"after": {"present": true, "type": "string", "scope": "local"}`,
+		1,
+	)
+}
+
 func TestCrossPlatformCoverageReadFlagMigrationManifestRejectsUnknownFields(t *testing.T) {
 	_, err := ReadFlagMigrationManifest(strings.NewReader(`{
   "version": 1,
@@ -110,6 +125,9 @@ func TestCrossPlatformCoverageReadFlagMigrationManifestValidatesExactEntries(t *
 	if _, err := ReadFlagMigrationManifest(strings.NewReader(validFlagMigrationManifestJSON)); err != nil {
 		t.Fatalf("ReadFlagMigrationManifest(valid) error = %v", err)
 	}
+	if _, err := ReadFlagMigrationManifest(strings.NewReader(optionalFlagMigrationManifestJSON())); err != nil {
+		t.Fatalf("ReadFlagMigrationManifest(optional rename) error = %v", err)
+	}
 
 	tests := []struct {
 		name    string
@@ -162,24 +180,34 @@ func TestCrossPlatformCoverageReadFlagMigrationManifestValidatesExactEntries(t *
 			wantErr: "canonical flag must remain visible",
 		},
 		{
-			name: "canonical remains optional",
+			name: "required legacy becomes optional canonical",
 			input: strings.Replace(
 				validFlagMigrationManifestJSON,
 				`"after": {"present": true, "type": "string", "required": true, "scope": "local"}`,
 				`"after": {"present": true, "type": "string", "scope": "local"}`,
 				1,
 			),
-			wantErr: "canonical flag must be required after migration",
+			wantErr: "requiredness must be preserved from legacy before to canonical after",
 		},
 		{
-			name: "canonical was already required",
+			name: "optional legacy becomes required canonical",
+			input: strings.Replace(
+				optionalFlagMigrationManifestJSON(),
+				`"after": {"present": true, "type": "string", "scope": "local"}`,
+				`"after": {"present": true, "type": "string", "required": true, "scope": "local"}`,
+				1,
+			),
+			wantErr: "requiredness must be preserved from legacy before to canonical after",
+		},
+		{
+			name: "existing canonical changes requiredness",
 			input: strings.Replace(
 				validFlagMigrationManifestJSON,
 				`"before": {"present": false}`,
-				`"before": {"present": true, "type": "string", "required": true, "scope": "local"}`,
+				`"before": {"present": true, "type": "string", "scope": "local"}`,
 				1,
 			),
-			wantErr: "canonical flag must be absent or optional before migration",
+			wantErr: "canonical flag requiredness must remain unchanged when already present",
 		},
 	}
 
@@ -215,9 +243,10 @@ func TestCrossPlatformCoverageFlagMigrationManifestRejectsDuplicateAndInexactCon
 	canonicalDrift := manifest
 	canonicalDrift.Migrations = append([]FlagMigration(nil), manifest.Migrations...)
 	canonicalDrift.Migrations[0].Canonical.Before = FlagMigrationState{
-		Present: true,
-		Type:    "string",
-		Scope:   "local",
+		Present:  true,
+		Type:     "string",
+		Required: true,
+		Scope:    "local",
 	}
 	canonicalDrift.Migrations[0].Canonical.After.Type = "stringSlice"
 	if err := canonicalDrift.Validate(); err == nil || !strings.Contains(err.Error(), "canonical flag type") {

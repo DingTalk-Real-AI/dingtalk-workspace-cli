@@ -1,6 +1,6 @@
 # CLI flag 兼容迁移治理
 
-本文定义一种受控迁移：保留旧 flag 的可执行兼容性，但把它从 Help 与 Agent Schema 中隐藏，并将新的规范 flag 提升为必填。它只解决这一种精确变更，不是通用 breaking-change 豁免。
+本文定义一种受控迁移：保留旧 flag 的可执行兼容性，但把它从 Help 与 Agent Schema 中隐藏，并将新的规范 flag 设为唯一可见入口。迁移必须保持原 flag 的 requiredness：optional 只能迁到 optional，required 只能迁到 required。它只解决这一种精确变更，不是通用 breaking-change 豁免。
 
 同名 flag 的精确类型迁移属于另一类评审机制，只能进入
 `internal/interfacesnapshot/reviewed.go` 与 legacy smoke helper 的镜像表；flag rename
@@ -50,7 +50,7 @@ scripts/policy/interface-migrations/approved-flag-migrations-v1.json
 | 阶段 | PR 可以做什么 | 必须满足的快照状态 |
 |---|---|---|
 | 1. 治理审批 | 新增 `state: pending` 的精确记录；不得在同一个 PR 修改产品 surface | candidate 和 merge-base 都与记录中的 `before` 完全一致；该记录不改变 stable 的判断 |
-| 2. 产品迁移 | merge-base 已拥有 `pending` 后，按记录一次性切到精确 `after`，并把记录改为 `state: consumed` | legacy 仍存在但由 visible 变 hidden，且声明 `alias_of`；canonical 达到记录的必填状态 |
+| 2. 产品迁移 | merge-base 已拥有 `pending` 后，按记录一次性切到精确 `after`，并把记录改为 `state: consumed` | legacy 仍存在但由 visible 变 hidden，且声明 `alias_of`；canonical 的 requiredness 与 legacy 迁移前完全一致 |
 | 3. 保留回执 | 产品 PR 合入后，如果 stable 仍是 `before`，继续保留 `consumed` | merge-base 或 stable 仍有任一份尚未达到 `after` |
 | 4. 单独清理 | 当 merge-base 和 stable 都已经是 `after`，在后续 PR 删除该记录 | 两份参考快照均精确匹配 `after`；继续保留过期回执会被门禁拒绝 |
 
@@ -122,7 +122,7 @@ scripts/policy/interface-migrations/approved-flag-migrations-v1.json
 一条 base-owned、状态正确且前后快照精确匹配的记录，只会从普通兼容报告中移除以下两类预期 finding：
 
 1. legacy flag 的 `flag_became_hidden`（visible → hidden）；
-2. canonical flag 的 `required_flag_added`（新增时即必填）或 `flag_became_required`（已有 flag 从可选变必填）。
+2. required legacy 被新增的 required canonical 替代时产生的 `required_flag_added`。已有 canonical 的 requiredness 不允许借 rename 改变。
 
 以下变化仍按普通兼容规则阻塞，不能被迁移记录掩盖：
 
@@ -145,7 +145,7 @@ legacy 名改为 canonical 名。Schema adapter 只接受已经由三方 Interfa
   `required` / `cli_required` 或重写 constraint；
 - rename 前后的 `type`、`property`、`interface_type`、default、format、enum 与
   `required_when` 必须完全一致；
-- `required` / `cli_required` 只能保持不变或按审批从 `false` 提升为 `true`，禁止降低；
+- `required` / `cli_required` 必须在 rename 前后完全一致，升高或降低都失败；
 - constraint 只允许在同一 tool 内按已枚举的 legacy → canonical map 做 member 替换、
   排序与去重；group kind、非迁移 member 或 group 增删仍然阻塞；
 - 多个 legacy 指向同一 canonical 时，所有历史 parameter signature 必须一致，否则

@@ -188,7 +188,7 @@ func TestCrossPlatformCoverageFlagMigrationManifestParserEdges(t *testing.T) {
 
 func TestCrossPlatformCoverageFlagMigrationManifestRejectsEveryContractDrift(t *testing.T) {
 	optionalCanonical := func() FlagMigrationManifest {
-		manifest := coverageManifest(FlagMigrationPending)
+		manifest := coverageOptionalManifest(FlagMigrationPending)
 		manifest.Migrations[0].Canonical.Before = FlagMigrationState{
 			Present: true,
 			Type:    "string",
@@ -268,6 +268,36 @@ func TestCrossPlatformCoverageFlagMigrationManifestRejectsEveryContractDrift(t *
 			make:    func() FlagMigrationManifest { return coverageManifest(FlagMigrationPending) },
 			mutate:  func(m *FlagMigrationManifest) { m.Migrations[0].Canonical.After = FlagMigrationState{} },
 			wantErr: "canonical flag must be present after migration",
+		},
+		{
+			name:    "required legacy cannot become optional canonical",
+			make:    func() FlagMigrationManifest { return coverageManifest(FlagMigrationPending) },
+			mutate:  func(m *FlagMigrationManifest) { m.Migrations[0].Canonical.After.Required = false },
+			wantErr: "requiredness must be preserved from legacy before to canonical after",
+		},
+		{
+			name:    "optional legacy cannot become required canonical",
+			make:    func() FlagMigrationManifest { return coverageOptionalManifest(FlagMigrationPending) },
+			mutate:  func(m *FlagMigrationManifest) { m.Migrations[0].Canonical.After.Required = true },
+			wantErr: "requiredness must be preserved from legacy before to canonical after",
+		},
+		{
+			name: "existing canonical cannot change requiredness",
+			make: func() FlagMigrationManifest { return coverageManifest(FlagMigrationPending) },
+			mutate: func(manifest *FlagMigrationManifest) {
+				manifest.Migrations[0].Canonical.Before = FlagMigrationState{
+					Present: true,
+					Type:    "string",
+					Scope:   "local",
+				}
+			},
+			wantErr: "canonical flag requiredness must remain unchanged when already present",
+		},
+		{
+			name:    "hidden legacy alias is not independently required",
+			make:    func() FlagMigrationManifest { return coverageManifest(FlagMigrationPending) },
+			mutate:  func(m *FlagMigrationManifest) { m.Migrations[0].Legacy.After.Required = true },
+			wantErr: "legacy compatibility alias must not remain independently required",
 		},
 		{
 			name:    "legacy after declares alias target",
@@ -711,8 +741,32 @@ func TestCrossPlatformCoverageCompareAllWithFlagMigrationsInheritedAndOptionalCa
 		}
 	})
 
-	t.Run("existing optional canonical becomes required", func(t *testing.T) {
-		pending := coverageManifest(FlagMigrationPending)
+	t.Run("optional canonical is introduced without becoming required", func(t *testing.T) {
+		pending := coverageOptionalManifest(FlagMigrationPending)
+		consumed := coverageOptionalManifest(FlagMigrationConsumed)
+		before := coverageMigrationSnapshot(pending.Migrations[0], false, false)
+		after := coverageMigrationSnapshot(pending.Migrations[0], true, false)
+
+		ordinary := Compare(after, before, "merge-base")
+		if !hasFlagChange(ordinary.Blocking, "flag_became_hidden", pending.Migrations[0].Command, pending.Migrations[0].Legacy.Name) {
+			t.Fatalf("fixture did not create flag_became_hidden: %#v", ordinary.Blocking)
+		}
+		if hasFlagChange(ordinary.Blocking, "required_flag_added", pending.Migrations[0].Command, pending.Migrations[0].Canonical.Name) {
+			t.Fatalf("optional canonical was treated as required: %#v", ordinary.Blocking)
+		}
+		report, err := CompareAllWithFlagMigrations(
+			after,
+			map[string]Snapshot{"merge-base": before, "stable": before},
+			pending,
+			consumed,
+		)
+		if err != nil || !report.Compatible {
+			t.Fatalf("optional rename = (%#v, %v), want compatible", report, err)
+		}
+	})
+
+	t.Run("existing optional canonical remains optional", func(t *testing.T) {
+		pending := coverageOptionalManifest(FlagMigrationPending)
 		pending.Migrations[0].Canonical.Before = FlagMigrationState{
 			Present: true,
 			Type:    "string",
@@ -725,8 +779,8 @@ func TestCrossPlatformCoverageCompareAllWithFlagMigrationsInheritedAndOptionalCa
 		after := coverageMigrationSnapshot(pending.Migrations[0], true, false)
 
 		ordinary := Compare(after, before, "merge-base")
-		if !hasFlagChange(ordinary.Blocking, "flag_became_required", pending.Migrations[0].Command, pending.Migrations[0].Canonical.Name) {
-			t.Fatalf("fixture did not create flag_became_required: %#v", ordinary.Blocking)
+		if hasFlagChange(ordinary.Blocking, "flag_became_required", pending.Migrations[0].Command, pending.Migrations[0].Canonical.Name) {
+			t.Fatalf("fixture changed canonical requiredness: %#v", ordinary.Blocking)
 		}
 		report, err := CompareAllWithFlagMigrations(
 			after,
@@ -735,7 +789,54 @@ func TestCrossPlatformCoverageCompareAllWithFlagMigrationsInheritedAndOptionalCa
 			consumed,
 		)
 		if err != nil || !report.Compatible {
-			t.Fatalf("optional-to-required migration = (%#v, %v), want compatible", report, err)
+			t.Fatalf("existing optional canonical migration = (%#v, %v), want compatible", report, err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageOptionalFlagMigrationLifecycleRemainsHostile(t *testing.T) {
+	pending := coverageOptionalManifest(FlagMigrationPending)
+	consumed := coverageOptionalManifest(FlagMigrationConsumed)
+	empty := coverageEmptyManifest()
+	migration := pending.Migrations[0]
+	before := coverageMigrationSnapshot(migration, false, false)
+	after := coverageMigrationSnapshot(migration, true, false)
+
+	t.Run("candidate cannot self authorize", func(t *testing.T) {
+		_, err := CompareAllWithFlagMigrations(
+			after,
+			map[string]Snapshot{"merge-base": before, "stable": before},
+			empty,
+			pending,
+		)
+		if err == nil || !strings.Contains(err.Error(), "cannot authorize its own interface change") {
+			t.Fatalf("candidate self-authorization error = %v", err)
+		}
+	})
+
+	t.Run("partial application remains rejected", func(t *testing.T) {
+		partial := coverageMigrationSnapshot(migration, false, false)
+		partial.Commands[len(partial.Commands)-1].LocalFlags[0].Hidden = true
+		_, err := CompareAllWithFlagMigrations(
+			partial,
+			map[string]Snapshot{"merge-base": before, "stable": before},
+			pending,
+			consumed,
+		)
+		if err == nil || !strings.Contains(err.Error(), "partially applied flag migration") {
+			t.Fatalf("partial optional migration error = %v", err)
+		}
+	})
+
+	t.Run("consumed receipt remains stale after every reference converges", func(t *testing.T) {
+		_, err := CompareAllWithFlagMigrations(
+			after,
+			map[string]Snapshot{"merge-base": after, "stable": after},
+			consumed,
+			consumed,
+		)
+		if err == nil || !strings.Contains(err.Error(), "stale after all references reached the after state") {
+			t.Fatalf("stale optional migration error = %v", err)
 		}
 	})
 }
@@ -884,6 +985,13 @@ func coverageManifest(state string) FlagMigrationManifest {
 			},
 		},
 	}
+}
+
+func coverageOptionalManifest(state string) FlagMigrationManifest {
+	manifest := coverageManifest(state)
+	manifest.Migrations[0].Legacy.Before.Required = false
+	manifest.Migrations[0].Canonical.After.Required = false
+	return manifest
 }
 
 func coverageEmptyManifest() FlagMigrationManifest {

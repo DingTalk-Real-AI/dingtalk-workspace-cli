@@ -1313,6 +1313,8 @@ func validateRenamedSchemaParameter(
 	oldParameter parameterSchema,
 	newParameter parameterSchema,
 ) error {
+	// The migration authorizes only the CLI spelling change. Requiredness is
+	// part of the parameter contract in both projections and must remain exact.
 	if oldParameter.Type != newParameter.Type ||
 		oldParameter.Property != newParameter.Property ||
 		oldParameter.InterfaceType != newParameter.InterfaceType ||
@@ -1328,17 +1330,17 @@ func validateRenamedSchemaParameter(
 			migration.Canonical.Name,
 		)
 	}
-	if oldParameter.Required && !newParameter.Required {
+	if oldParameter.Required != newParameter.Required {
 		return fmt.Errorf(
-			"approved flag migration %q Schema parameter %q -> %q became optional",
+			"approved flag migration %q Schema parameter %q -> %q changed requiredness",
 			migration.Command,
 			migration.Legacy.Name,
 			migration.Canonical.Name,
 		)
 	}
-	if oldParameter.CLIRequired && !newParameter.CLIRequired {
+	if oldParameter.CLIRequired != newParameter.CLIRequired {
 		return fmt.Errorf(
-			"approved flag migration %q Schema parameter %q -> %q stopped being cli_required",
+			"approved flag migration %q Schema parameter %q -> %q changed cli_required",
 			migration.Command,
 			migration.Legacy.Name,
 			migration.Canonical.Name,

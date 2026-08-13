@@ -1,6 +1,6 @@
 ---
 name: dingtalk-doc
-description: 钉钉在线文字文档（adoc）。Use when 用户要查找、阅读、创建、生成、撰写或编辑文档正文、块/评论/附件/导入导出/模板/版本/权限，或把内容整理成文档且未明确本地文件。默认创建在线 adoc；本地 .md 走 Markdown。在线文档节点复制/移动/重命名走 dingtalk-drive，正文读写走本 Skill，知识库走 dingtalk-wiki。命令前缀：dws doc。
+description: 钉钉在线文字文档（adoc，包括「文档空间」里的在线文档）。Use when 用户要查找、阅读、创建、生成、撰写或编辑文档正文，处理块/评论/附件/导入导出(docx/markdown/pdf)/模板/版本/权限及 Markdown/JSONML 写入，或把内容整理成文档且未明确本地文件。默认创建在线 adoc；原生 .md 文件读写走 dingtalk-misc。文档空间与钉盘的文件管理，以及在线文档节点的复制/移动/重命名走 dingtalk-drive；正文读写走本 Skill；明确的知识库/wiki 空间及其节点走 dingtalk-wiki。命令前缀：dws doc。
 metadata:
   cli_version: ">=0.2.14"
   category: product
