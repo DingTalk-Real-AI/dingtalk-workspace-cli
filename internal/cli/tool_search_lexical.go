@@ -365,8 +365,9 @@ func sortedToolSearchClassKeys(set map[string]bool) []string {
 const toolSearchAvoidWhenPenalty = 0.20
 
 // toolSearchAvoidWhenShortcutNoise filters the boilerplate avoid_when that
-// every shortcut carries; it carries no intent signal.
-const toolSearchAvoidWhenShortcutNoise = "需要该 Shortcut 未公开的底层参数"
+// every shortcut carries; it carries no intent signal. Kept lowercase because
+// phrases are compared in the lowercased domain.
+const toolSearchAvoidWhenShortcutNoise = "需要该 shortcut 未公开的底层参数"
 
 // toolSearchAvoidWhenPenaltyReason returns the matched avoid_when phrase, or
 // "" when the tool should not be demoted for this query. The only match shape

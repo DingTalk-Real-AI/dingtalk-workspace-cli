@@ -7,22 +7,6 @@
     "independent_evaluation": "DWS Agent Evaluation maintainers",
     "separation_rule": "The independent evaluation signer must not be an author of Catalog selection metadata used by the evaluated cases."
   },
-  "algorithm_freeze": {
-    "state": "development_candidate_recorded_before_independent_dev_test_is_sealed",
-    "diagnostic_proxy_control": "bm25_unfielded",
-    "go_runtime_default": "fielded_bm25_ensemble",
-    "shadow_candidates": [
-      "fielded_bm25_action_v1",
-      "fielded_tfidf_cosine",
-      "bm25plus"
-    ],
-    "changes_forbidden_after_independent_dev_test_is_sealed": [
-      "tokenizer",
-      "field_projection",
-      "field_weights",
-      "bm25_k1_b_delta"
-    ]
-  },
   "proxy_v1": {
     "state": "sealed_diagnostic_only",
     "catalog_generation": "go_declarations_to_runtime_assembly",

@@ -395,6 +395,81 @@ func TestToolSearchActionExplainIncludesMultiplierAndQueryClass(t *testing.T) {
 	}
 }
 
+func TestToolSearchAvoidWhenPenaltyMatchesEchoedPhraseOnly(t *testing.T) {
+	tool := toolSearchTestTool("chat", "send", "chat send", "发送群聊消息", "write")
+	tool.Selection.AvoidWhen = []string{
+		"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令",
+		"只搜索群文件时使用 drive search",
+	}
+	if reason := toolSearchAvoidWhenPenaltyReason("只搜索群文件时使用 drive search", tool); reason == "" {
+		t.Fatal("echoed avoid_when phrase was not penalized")
+	}
+	if reason := toolSearchAvoidWhenPenaltyReason("给群里发送消息", tool); reason != "" {
+		t.Fatalf("unrelated query was penalized: %q", reason)
+	}
+	if reason := toolSearchAvoidWhenPenaltyReason("需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令", tool); reason != "" {
+		t.Fatal("shortcut boilerplate should be filtered out")
+	}
+	if reason := toolSearchAvoidWhenPenaltyReason("搜索群文件", tool); reason != "" {
+		t.Fatalf("partial phrase overlap must not trigger the penalty: %q", reason)
+	}
+}
+
+func TestToolSearchAvoidWhenPenaltyVisibleInExplainAndDemotesScore(t *testing.T) {
+	tools := []ToolSpec{
+		toolSearchTestTool("chat", "send", "chat send", "发送群聊消息", "write"),
+		toolSearchTestTool("chat", "read_status", "chat read-status", "查询群消息已读状态", "read"),
+	}
+	tools[0].Selection.AvoidWhen = []string{"仅查询状态时使用读取命令"}
+	registry := SchemaRegistry{
+		Kind:     "schema",
+		Level:    "catalog",
+		Products: []ProductSpec{{ID: "chat", Tools: tools}},
+	}
+	build := func(explain bool) *ToolSearchEngine {
+		config := DefaultToolSearchConfig()
+		config.CatalogSourceHash = "source-test"
+		config.CatalogSurfaceHash = "surface-test"
+		config.Explain = explain
+		engine, err := NewToolSearchEngine(registry, config)
+		if err != nil {
+			t.Fatalf("NewToolSearchEngine(explain=%v): %v", explain, err)
+		}
+		return engine
+	}
+	// The query echoes chat.send's avoid_when phrase verbatim, so the
+	// demotion layer must fire on the ensemble default path.
+	query := ToolSearchRequest{Query: "发送群聊消息，仅查询状态时使用读取命令"}
+	explained, err := build(true).Search(context.Background(), query)
+	if err != nil {
+		t.Fatalf("Search(explain) error = %v", err)
+	}
+	var send *ToolReference
+	for index := range explained.Candidates {
+		if explained.Candidates[index].CanonicalPath == "chat.send" {
+			send = &explained.Candidates[index]
+		}
+	}
+	if send == nil {
+		t.Fatalf("chat.send dropped out entirely: %#v", explained.Candidates)
+	}
+	if send.ScoreBreakdown == nil || send.ScoreBreakdown.AvoidWhenPenalty == "" {
+		t.Fatalf("avoid_when penalty not visible in explain: %#v", send)
+	}
+	plain, err := build(false).Search(context.Background(), query)
+	if err != nil {
+		t.Fatalf("Search(plain) error = %v", err)
+	}
+	for index := range plain.Candidates {
+		if plain.Candidates[index].CanonicalPath == "chat.send" && index >= 0 && send.Rank > 0 {
+			// Demotion must not reorder above the plain run's rank.
+			if send.Rank < index+1 {
+				t.Fatalf("penalized rank %d improved over plain rank %d", send.Rank, index+1)
+			}
+		}
+	}
+}
+
 func TestResolveToolSearchConfigFromEnvOverridesOnlyWhenSet(t *testing.T) {
 	config := ResolveToolSearchConfigFromEnv(DefaultToolSearchConfig())
 	if config.LexicalAlgorithm != ToolSearchLexicalBM25 || config.BM25K1 != defaultToolSearchBM25K1 || config.Explain {

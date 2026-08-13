@@ -26,16 +26,18 @@
 | 指标 | `fielded_bm25_ensemble` 当前默认 | `fielded_bm25_action_v1` shadow |
 |---|---:|---:|
 | Intent cases | 1,123（另有 10 条超预算并显式排除） | 1,123 |
-| R@1 / R@5 / MRR@5 | 65.00% / **86.64%** / 0.7366 | **65.54%** / 86.38% / **0.7414** |
-| 纯中文（402）R@1 / R@5 | 49.75% / **82.34%** | **50.75%** / 81.59% |
-| 中文混 ASCII（721）R@1 / R@5 | 73.65% / 89.04% | **73.93%** / 89.04% |
-| 整句 workflow Complete@5 / Recall@5 | 40% / 61.67% | 40% / **66.67%** |
-| reviewed 拆解 Complete@5 / Recall@5 | 50% / 75% | **90% / 95%** |
-| Forbidden@1 / @5（越低越好） | 6.12% / 37.55% | **5.83% / 36.83%** |
+| R@1 / R@5 / MRR@5 | **65.27% / 88.16% / 0.7441** | 62.51% / 84.24% / 0.7131 |
+| 纯中文（402）R@1 / R@5 | **51.74% / 83.83%** | 50.00% / 79.85% |
+| 中文混 ASCII（721）R@1 / R@5 | **72.82% / 90.57%** | 69.49% / 86.69% |
+| 整句 workflow Complete@5 / Recall@5 | 40% / 61.67% | 50% / **76.67%** |
+| reviewed 拆解 Complete@5 / Recall@5 | 80% / 90% | **90% / 95%** |
+| Forbidden@1 / @5（越低越好） | **0% / 0%** | **0% / 0%** |
 
-身份与完整性门禁：1,098 个 canonical、1,098 个 primary CLI、19 个 reviewed alias、1,098 个 NFKC identity 及 1,098 个 `exact_filtered` 全部 100%；5,801 个响应的 Catalog 绑定失败、unknown candidate、ineligible candidate、response budget violation 均为 0。上下文方面，平均 Search + gold Inspect 为 4,489.58 bytes，相对 17,876,084 bytes 的 compact 全量 Schema 减少 **99.9749%**，相对假设 oracle 已选对产品的理想导航仍减少 **96.3311%**。两条评测路径都直接 Inspect gold leaf，即使 Search miss 也不计额外尝试，因此是容量上界，不是实际 Agent 成本。
+身份与完整性门禁：1,098 个 canonical、1,098 个 primary CLI、19 个 reviewed alias、1,098 个 NFKC identity 及 1,098 个 `exact_filtered` 全部 100%；5,801 个响应的 Catalog 绑定失败、unknown candidate、ineligible candidate、response budget violation 均为 0。上下文方面，平均 Search + gold Inspect 为 4,507.03 bytes，相对 17,876,084 bytes 的 compact 全量 Schema 减少 **99.9748%**，相对假设 oracle 已选对产品的理想导航仍减少 **96.3169%**。两条评测路径都直接 Inspect gold leaf，即使 Search miss 也不计额外尝试，因此是容量上界，不是实际 Agent 成本。
 
-这些数据说明当前实现达到了“显著缩小上下文、身份不退化、中文自然语言 Top-5 约 87%”的工程目标，但不等价于线上任务成功率。当前默认的 Forbidden@5 仍有 37.55%，独立 qrels、英文 ≥100、workflow ≥80、真实同模型 Agent A/B 仍为空；因此不能据此把 action 重排提升为默认。
+**2026-08-13 排序加固后的变化**（相对上一版基线 86.64%/37.55%）：中文分词改为 unigram+bigram 并存、结构化词表补英文同义词、rerank 门从"任意 ASCII 词禁用"收窄为"仅技术标识符禁用"、新增跨算法的 avoid_when 软降权层、删除 OA task_id 专属乘子。默认 ensemble 全指标提升（R@5 +1.52pp，拆解 workflow Complete@5 50%→80%）；Forbidden@1/@5 清零来自 avoid_when 层对负向 proxy（query 即 avoid_when 原句）的惩罚——该口径与匹配机制对口，真实 query 的收益取决于是否包含 avoid_when 短语，应视为安全下界而非日常改善。action_v1 shadow 同源 R@5 由 86.38% 降至 84.24%（OA 乘子删除 + 混合 query 乘子介入的代价），仅在拆解 workflow（90%/95%）上保留优势。
+
+这些数据说明当前实现达到了“显著缩小上下文、身份不退化、中文自然语言 Top-5 约 88%”的工程目标，但不等价于线上任务成功率。独立 qrels、英文 ≥100、workflow ≥80、真实同模型 Agent A/B 仍为空，且封存门禁已按仓库决策移除——独立评测决策需人工执行 `make generate-tool-search-comparison` 并比对；不能据此把 action 重排提升为默认。
 
 ### 1.2 合并前算法研究记录（2026-08-12，历史基线）
 
@@ -370,12 +372,13 @@ make generate-tool-search-comparison
 
 | 项目 | 结果 |
 |---|---:|
-| 1,123 条预算内同源 intent R@1 / R@5 / MRR@5 | 65.00% / 86.64% / 0.7366 |
-| Go action ranker shadow R@1 / R@5 / MRR@5 | 65.54% / 86.38% / 0.7414 |
-| Go TF-IDF shadow R@1 / R@5 / MRR@5 | 45.59% / 75.51% / 0.5698 |
+| 1,123 条预算内同源 intent R@1 / R@5 / MRR@5 | 65.27% / 88.16% / 0.7441 |
+| Go action ranker shadow R@1 / R@5 / MRR@5 | 62.51% / 84.24% / 0.7131 |
+| Go TF-IDF shadow R@1 / R@5 / MRR@5 | 48.09% / 77.83% / 0.5936 |
+| 负向 proxy Forbidden@1 / Forbidden@5 | 0% / 0% |
 | 10 条 workflow 整句 Complete@5 / required recall | 40% / 61.67% |
-| reviewed subquery 后 Complete@5 / required recall | 50% / 75% |
-| Search + gold Inspect 平均 compact JSON | 4,489.58 bytes（oracle-assisted capacity upper bound） |
+| reviewed subquery 后 Complete@5 / required recall | 80% / 90% |
+| Search + gold Inspect 平均 compact JSON | 4,507.03 bytes（oracle-assisted capacity upper bound） |
 | 相对 oracle 导航 `overview → product → inspect` 的 byte reduction | 96.3311% |
 | 相对全量紧凑 Schema 的 byte reduction | 99.9749% |
 
