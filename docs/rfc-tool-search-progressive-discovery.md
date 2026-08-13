@@ -112,16 +112,16 @@ DWS 已经具备：
 
 | 能力 | 当前证据 | 可支持的结论 |
 |---|---:|---|
-| Go 字段 BM25 默认 | R@1 65.00%；R@5 86.64%；MRR@5 0.7366 | 独立 qrels 缺失期间采用的保守默认 |
-| Go action ranker shadow | R@1 65.54%；R@5 86.38%；MRR@5 0.7414 | R@5 低 0.27 pp；R@1/MRR@5、workflow 与负例暴露在同源 proxy 上更好，等待独立门禁 |
+| Go 字段 BM25 默认 | R@1 65.27%；R@5 88.16%；MRR@5 0.7441 | 独立 qrels 缺失期间采用的保守默认 |
+| Go action ranker shadow | R@1 62.51%；R@5 84.24%；MRR@5 0.7131 | 同源 proxy 上 R@5 低 3.92 pp；仅拆解 workflow 更好，等待独立门禁 |
 | 精确身份 | Exact Guard 后 canonical / CLI Top-1 100% | Exact Guard 是穷举契约门禁 |
-| 多工具完整性 | 默认整句 Complete@5 40% / required recall 61.67%；reviewed 拆解后 50% / 75% | 拆解结果是人工上界，不是端到端成功率；action shadow 为 90% / 95% |
+| 多工具完整性 | 默认整句 Complete@5 40% / required recall 61.67%；reviewed 拆解后 80% / 90% | 拆解结果是人工上界，不是端到端成功率；action shadow 为 90% / 95% |
 | 中文召回 | 默认算法纯中文 R@5 82.34%，中英混合 89.04% | 中文 bigram + 标识符保留可用，但纯中文仍是重点优化项 |
 | 负例暴露 | 默认 Forbidden@1 6.12%，Forbidden@5 37.55% | Top-5 仍高，必须继续建设 alternative gold / contradiction gate |
 
 相对最简单的 IDF keyword overlap，TF-IDF 在当前 proxy 集上的 R@5 从 76.91% 提升到 84.55%，提高 7.64 个百分点。这个数字可以说明“需要一个正式词法 ranker”，但因为 query 与索引元数据来自同一批作者，不能外推为线上业务收益。
 
-当前分支的纯 Go shipped-runtime 对比器直接消费运行时装配的 typed Catalog，不读取仓库中的生成 JSON。action shadow `fielded_bm25_action_v1` 相对当前默认 `fielded_bm25_ensemble`：R@1 **+0.53 pp**、R@5 **-0.27 pp**、MRR@5 **+0.47 pp**；raw workflow required recall **+5 pp**，reviewed 拆解的 Complete@5 / required recall **+40 / +20 pp**；Forbidden@5 **下降 0.72 pp**。由于这些结果来自同源 proxy，且主召回指标没有改善，action 只能继续 shadow；切换默认必须通过 sealed 独立 test 的非劣效与最小增益门禁。
+当前分支的纯 Go shipped-runtime 对比器直接消费运行时装配的 typed Catalog，不读取仓库中的生成 JSON。action shadow `fielded_bm25_action_v1` 相对当前默认 `fielded_bm25_ensemble`：R@1 **-2.76 pp**、R@5 **-3.92 pp**、MRR@5 **-0.031**；raw workflow required recall **+15 pp**，reviewed 拆解的 Complete@5 / required recall **+10 / +5 pp**；两算法的 Forbidden@1/@5 在 avoid_when 软降权层之后同为 **0**。由于这些结果来自同源 proxy，且主召回指标全面落后，action 只能继续 shadow；若未来重评，切换默认需独立数据的非劣效与最小增益人工裁决（sealed 门禁已按仓库决策移除）。
 
 合并主线前曾用固定 `gpt-5.6-sol` 做过一轮 answer-free、无业务执行的规划 smoke A/B：同一批 10 条 workflow，各 arm 一个 batch/一次 trial。该 run 绑定旧 572 工具 Catalog，已因当前 1,098 工具 surface 变化判为过期，只保留方法记录，不能作为现行效果证明。旧结果中两臂 required-tool complete/recall 都是 **100% / 100%**；精确最小计划率分别为 **90% / 70%**，plan precision 为 **95.45% / 87.50%**，额外步骤为 **1 / 3**。单 trial 无区间，不能据此通过默认开启门禁。
 
@@ -132,12 +132,12 @@ DWS 已经具备：
 | 载荷 | 大小 |
 |---|---:|
 | compact 全量 Schema | 17,876,084 bytes |
-| 平均 Search + gold Inspect | 4,489.58 bytes |
+| 平均 Search + gold Inspect | 4,507.03 bytes |
 | 理想化 overview + 正确 product + Inspect | 122,193 bytes |
 
 渐进发现把“预加载全部 Schema”变成“约 3 KB 候选 + 选中 leaf 的数 KB Schema”。实际模型 token 下降比例取决于 tokenizer 和对话编排，因此 RFC 只以字节数作为已验证证据，不给出未经测量的 token 节省承诺。
 
-用 Go 对比器逐条渲染当前 compact JSON envelope 后，Search + gold leaf Inspect 平均 **4,489.58 bytes**；相对 17,876,084 bytes 的全量 Schema 减少 **99.9749%**，相对已经假设 oracle 知道正确 product 的理想化导航也减少 **96.3311%**。评测器直接 Inspect gold，即使 Search miss 也不计额外尝试；因此这是 JSON byte 容量上界，不是 tokenizer token、真实 Agent 成本或任务成功率承诺。
+用 Go 对比器逐条渲染当前 compact JSON envelope 后，Search + gold leaf Inspect 平均 **4,507.03 bytes**；相对 17,876,084 bytes 的全量 Schema 减少 **99.9748%**，相对已经假设 oracle 知道正确 product 的理想化导航也减少 **96.3169%**。评测器直接 Inspect gold，即使 Search miss 也不计额外尝试；因此这是 JSON byte 容量上界，不是 tokenizer token、真实 Agent 成本或任务成功率承诺。
 
 ### 3.3 CLI 与工程收益
 
