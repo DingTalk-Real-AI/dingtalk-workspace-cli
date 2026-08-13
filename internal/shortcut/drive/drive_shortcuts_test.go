@@ -281,16 +281,35 @@ func TestDriveRecentPaginationAndJournalCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := map[string]any{"items": []map[string]any{{"nodeId": "remote", "name": "remote"}}}
+	result := map[string]any{
+		"items":   []map[string]any{{"nodeId": "remote", "name": "remote"}},
+		"hasMore": true, "truncated": true, "nextCursor": "server-next",
+	}
 	entries := []docwritejournal.Entry{
 		{NodeID: "remote", Name: "duplicate", CreatedAt: 1},
 		{NodeID: "older", Name: "older", CreatedAt: 2},
 		{NodeID: "newer", Name: "newer", CreatedAt: 3},
 	}
-	mergeJournalRecent(result, entries)
+	mergeJournalRecent(result, entries, 3)
 	items, _ := result["items"].([]map[string]any)
 	if len(items) != 3 || items[0]["nodeId"] != "newer" || items[1]["nodeId"] != "older" {
 		t.Fatalf("journal recent = %#v", result)
+	}
+	if result["hasMore"] != true || result["truncated"] != true || result["nextCursor"] != "server-next" {
+		t.Fatalf("journal merge changed server pagination = %#v", result)
+	}
+
+	full := map[string]any{
+		"items": []map[string]any{{"nodeId": "remote"}},
+		"count": 1, "hasMore": true, "truncated": true, "nextCursor": "p2",
+	}
+	mergeJournalRecent(full, entries, 1)
+	fullItems, _ := full["items"].([]map[string]any)
+	if len(fullItems) != 1 || fullItems[0]["nodeId"] != "remote" || full["count"] != 1 {
+		t.Fatalf("full recent page exceeded max-items = %#v", full)
+	}
+	if full["hasMore"] != true || full["truncated"] != true || full["nextCursor"] != "p2" {
+		t.Fatalf("full recent page changed pagination = %#v", full)
 	}
 }
 

@@ -21,7 +21,6 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -129,15 +128,21 @@ var Search = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		if entries, journalErr := docwritejournal.List(rt.Command().Context()); journalErr == nil {
-			mergeJournalSearchDocuments(result, entries, rt)
+		if rt.Str("cursor") == "" {
+			if entries, journalErr := docwritejournal.List(rt.Command().Context()); journalErr == nil {
+				mergeJournalSearchDocuments(result, entries, rt, effectiveJournalMaxItems(rt.Int("max-items")))
+			}
 		}
 		return rt.Output(result)
 	},
 }
 
-func mergeJournalSearchDocuments(result map[string]any, entries []docwritejournal.Entry, rt *shortcut.RuntimeContext) {
+func mergeJournalSearchDocuments(result map[string]any, entries []docwritejournal.Entry, rt *shortcut.RuntimeContext, maxItems int) {
 	documents, _ := result["documents"].([]map[string]any)
+	remaining := maxItems - len(documents)
+	if remaining <= 0 {
+		return
+	}
 	seen := map[string]bool{}
 	for _, document := range documents {
 		if id, _ := document["nodeId"].(string); id != "" {
@@ -148,15 +153,26 @@ func mergeJournalSearchDocuments(result map[string]any, entries []docwritejourna
 		if seen[entry.NodeID] || !journalEntryMatchesSearch(entry, rt) {
 			continue
 		}
+		if remaining == 0 {
+			break
+		}
 		documents = append(documents, map[string]any{
 			"nodeId": entry.NodeID, "name": entry.Name, "docType": entry.DocType,
 			"url": entry.URL, "creatorId": entry.CreatorID, "createdTime": entry.CreatedAt,
 			"source": "local_write_journal", "indexPending": true,
 		})
 		seen[entry.NodeID] = true
+		remaining--
 	}
 	result["documents"] = documents
 	result["count"] = len(documents)
+}
+
+func effectiveJournalMaxItems(value int) int {
+	if value <= 0 {
+		return 500
+	}
+	return value
 }
 
 func journalEntryMatchesSearch(entry docwritejournal.Entry, rt *shortcut.RuntimeContext) bool {
@@ -857,8 +873,8 @@ var VersionRevert = shortcut.Shortcut{
 	Product:     productDoc,
 	Description: "回滚文档到指定历史版本",
 	Intent:      "当文档被误改、你想把它整体恢复到某个历史版本时使用；先用 +version-list 找到目标版本号，再输入 node 与 version，CLI 会预检版本存在性并在写后回读验证。",
-	Risk:        shortcut.RiskWrite,
-	Safety:      docsafety.RecoverableWrite("unknown"),
+	Risk:        shortcut.RiskHighWrite,
+	Safety:      contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",

@@ -649,8 +649,10 @@ var Recent = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		if entries, journalErr := docwritejournal.List(rt.Command().Context()); journalErr == nil && (!rt.Changed("creator-type") || rt.Int("creator-type") != 2) {
-			mergeJournalRecent(result, entries)
+		if rt.Str("cursor") == "" && (!rt.Changed("creator-type") || rt.Int("creator-type") != 2) {
+			if entries, journalErr := docwritejournal.List(rt.Command().Context()); journalErr == nil {
+				mergeJournalRecent(result, entries, effectiveRecentMaxItems(rt.Int("max-items")))
+			}
 		}
 		return rt.Output(result)
 	},
@@ -722,8 +724,12 @@ func collectRecentPages(rt *shortcut.RuntimeContext, base map[string]any, pageSi
 	return map[string]any{"count": len(items), "items": items, "nextCursor": cursor, "hasMore": hasMore, "complete": complete, "truncated": truncated}, nil
 }
 
-func mergeJournalRecent(result map[string]any, entries []docwritejournal.Entry) {
+func mergeJournalRecent(result map[string]any, entries []docwritejournal.Entry, maxItems int) {
 	items, _ := result["items"].([]map[string]any)
+	remaining := maxItems - len(items)
+	if remaining <= 0 {
+		return
+	}
 	seen := map[string]bool{}
 	for _, item := range items {
 		if id, _ := item["nodeId"].(string); id != "" {
@@ -736,15 +742,26 @@ func mergeJournalRecent(result map[string]any, entries []docwritejournal.Entry) 
 		if seen[entry.NodeID] {
 			continue
 		}
+		if remaining == 0 {
+			break
+		}
 		local = append(local, map[string]any{
 			"name": entry.Name, "nodeType": entry.DocType, "contentType": entry.DocType,
 			"accessTime": entry.CreatedAt, "docUrl": entry.URL, "nodeId": entry.NodeID,
 			"source": "local_write_journal", "indexPending": true,
 		})
 		seen[entry.NodeID] = true
+		remaining--
 	}
 	result["items"] = append(local, items...)
 	result["count"] = len(local) + len(items)
+}
+
+func effectiveRecentMaxItems(value int) int {
+	if value <= 0 {
+		return 500
+	}
+	return value
 }
 
 func init() {

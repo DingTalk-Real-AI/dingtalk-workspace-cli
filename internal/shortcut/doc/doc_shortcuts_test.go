@@ -1415,6 +1415,18 @@ func TestCrossPlatformCoverageSelectionMatchesEnumerateEveryCandidate(t *testing
 }
 
 func TestCrossPlatformCoverageDocConfirmationBoundaries(t *testing.T) {
+	versionRevert := &docCoverageCaller{responses: map[string][]map[string]any{}}
+	err := runDocCoverage(t, VersionRevert, versionRevert, "--node", "n", "--version", "3")
+	if err == nil || !strings.Contains(err.Error(), "需要用户确认") {
+		t.Fatalf("version revert without --yes error = %v", err)
+	}
+	if versionRevert.calls != 0 {
+		t.Fatalf("unconfirmed version revert called MCP: %#v", versionRevert.history)
+	}
+	if VersionRevert.Risk != shortcut.RiskHighWrite || VersionRevert.Safety != (contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"}) {
+		t.Fatalf("version revert safety = %q/%#v", VersionRevert.Risk, VersionRevert.Safety)
+	}
+
 	commentDelete := &docCoverageCaller{responses: map[string][]map[string]any{}}
 	if err := runDocCoverage(t, CommentDelete, commentDelete, "--node", "n", "--comment-key", "c"); err == nil {
 		t.Fatal("comment delete without --yes must reject")
@@ -1456,6 +1468,41 @@ func TestCrossPlatformCoverageDocConfirmationBoundaries(t *testing.T) {
 				t.Fatalf("calls = %#v, want %#v", caller.history, tc.want)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageSearchJournalRespectsResultLimitAndPagination(t *testing.T) {
+	cmd := &cobra.Command{Use: "+search"}
+	rt := shortcut.RuntimeContextForTest(cmd, Search)
+	entries := []docwritejournal.Entry{
+		{NodeID: "local-1", Name: "local one", CreatedAt: 2},
+		{NodeID: "local-2", Name: "local two", CreatedAt: 1},
+	}
+
+	full := map[string]any{
+		"documents": []map[string]any{{"nodeId": "remote", "name": "remote"}},
+		"count":     1, "hasMore": true, "truncated": true, "nextCursor": "p2",
+	}
+	mergeJournalSearchDocuments(full, entries, rt, 1)
+	documents, _ := full["documents"].([]map[string]any)
+	if len(documents) != 1 || documents[0]["nodeId"] != "remote" || full["count"] != 1 {
+		t.Fatalf("full search page exceeded max-items = %#v", full)
+	}
+	if full["hasMore"] != true || full["truncated"] != true || full["nextCursor"] != "p2" {
+		t.Fatalf("search journal merge changed pagination = %#v", full)
+	}
+
+	partial := map[string]any{
+		"documents": []map[string]any{{"nodeId": "remote", "name": "remote"}},
+		"count":     1, "hasMore": false, "truncated": false, "nextCursor": "",
+	}
+	mergeJournalSearchDocuments(partial, entries, rt, 2)
+	documents, _ = partial["documents"].([]map[string]any)
+	if len(documents) != 2 || documents[1]["nodeId"] != "local-1" || partial["count"] != 2 {
+		t.Fatalf("search journal did not use remaining capacity = %#v", partial)
+	}
+	if partial["hasMore"] != false || partial["truncated"] != false || partial["nextCursor"] != "" {
+		t.Fatalf("partial search journal merge changed pagination = %#v", partial)
 	}
 }
 
