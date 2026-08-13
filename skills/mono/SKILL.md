@@ -226,24 +226,20 @@ dws <candidate.primary_cli_path> <按 schema-inspect.v1.tool_spec 组装的参�
 - 2～4 步复合意图先拆成 `subqueries`，通过 `dws schema search --request-json -` 合并候选；不要用整句话只排一次 Top-K。
 
 ```bash
-# 已知产品时的人类浏览 fallback；未知命令优先用 schema search
-# 第 1 层：产品概览（~4.5KB，列出全部产品 + 工具数 + 用途摘要）
+# 产品概览只用于人类审计
 dws schema
 
-# 第 2 层：产品级（列出该产品下全部工具的 cli_path + description + effect/risk）
-dws schema calendar --compact
+# 已知产品但命令未知：直接限定产品搜索，不加载产品全量 Schema
+dws schema search --query "创建日程" --product calendar --limit 5
 
-# 第 3 层：分组级（按命令分组列出工具摘要）
-dws schema "calendar event" --compact
-
-# 第 4 层：Agent leaf（参数契约：type/required/description/constraints/examples）
-dws schema "calendar event create" --compact
+# 选中 canonical 后读取唯一 leaf（参数契约）
+dws schema calendar.create_calendar_event --compact
 
 # --all：导出所有工具的完整 leaf Schema，仅用于 CI / 审计 / 参数 baseline
 dws schema --all --format json
 ```
 
-**`--all` 使用边界（强制）**：`--all` 会返回每个工具的完整参数、约束和安全语义，输出体积很大。仅在用户明确要求全量导出，或执行 CI、Catalog 审计、参数防丢 baseline 时使用。普通业务任务严禁使用 `--all` 做命令发现，也不要把全量结果直接注入 Agent 上下文；必须按“产品概览 → 产品/分组 → leaf”渐进查询。完整兼容性 baseline 必须使用未裁剪的 `schema --all`；`schema --all --compact` 会移除 provenance 和接口映射字段，不得作为完整 baseline。
+**`--all` 使用边界（强制）**：`--all` 会返回每个工具的完整参数、约束和安全语义，输出体积很大。仅在用户明确要求全量导出，或执行 CI、Catalog 审计、参数防丢 baseline 时使用。普通业务任务严禁使用 `--all` 做命令发现，也不要把全量结果直接注入 Agent 上下文；未知命令统一用 `schema search`，已知产品通过 `--product` 收窄，再 Inspect 唯一 leaf。完整兼容性 baseline 必须使用未裁剪的 `schema --all`；`schema --all --compact` 会移除 provenance 和接口映射字段，不得作为完整 baseline。
 
 同一个工具省略 `--compact` 的 full leaf 与 `--all` 条目是同一份 `ToolSpec` 契约；compact leaf 只做展示投影，不重新解析语义。Alias 查询不得根据 alias 重写或补猜参数。若同一视图观察到内容差异，应作为契约漂移报告，而不是选择其中一份继续执行。
 
@@ -254,7 +250,7 @@ dws schema --all --format json
 ### Schema 字段速查
 
 ```jsonc
-// leaf 级输出（dws schema "calendar event create" --compact）
+// leaf 级输出（dws schema calendar.create_calendar_event --compact）
 {
   "cli_path": "calendar event create",
   "canonical_path": "calendar.create_calendar_event",
@@ -304,7 +300,7 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
 
 `dev.*` 包含 helper-only 执行面，其中远端 helper 未进入 pinned metadata 时标记为 `composite`，不能伪装成 `local`。`event list` / `event schema` 读取内置目录和 payload 定义，属于 `local`；`event consume` / `event status` / `event stop` 同时编排远端个人订阅控制面与本地 bus/consume，属于 `composite`。实现来源不同，不改变统一查询边界：进入全局 `dws schema` 的命令须由 leaf `ContractFinal.Identity` 声明收集，并由同一 `ToolSpec` 投影到 leaf、产品/分组、`--all` 与 Catalog。不得把 Cobra 临时合成结果作为第二条 Schema 数据路径。
 
-事件需要区分两种 Schema：`dws event schema <event_key> --flatten` 查询 Agent 要消费的顶层业务字段；`dws schema "event consume" --compact` 查询 CLI 命令参数。前者是真实业务命令，后者只读取最终内嵌 SchemaRegistry；不能相互替代。
+事件需要区分两种 Schema：`dws event schema <event_key> --flatten` 查询 Agent 要消费的顶层业务字段；`dws schema event.consume --compact` 查询 CLI 命令参数。前者是真实业务命令，后者只读取最终内嵌 SchemaRegistry；不能相互替代。
 
 `source` 表示最终命令 identity 的来源，不表示运行时 backing；helper/local/MCP 实现机制读取 `interface_mode`、`availability` 和 provenance，不要假定 `dev.*` 必然是 `source=mcp:<server>`，也不要假定本地命令必然是 `source=cobra`。
 

@@ -134,7 +134,7 @@ type ToolSearchDiagnosticComparison struct {
 // retriever against the declaration-assembled Catalog without reading a
 // generated repository JSON artifact. Results belong under policy-tmp.
 func BuildDeliveryToolSearchDiagnosticComparison(ctx context.Context, workflows []ToolSearchWorkflowEvaluationCase) (ToolSearchDiagnosticComparison, error) {
-	return BuildDeliveryToolSearchDiagnosticComparisonForAlgorithm(ctx, workflows, ToolSearchLexicalBM25Action)
+	return BuildDeliveryToolSearchDiagnosticComparisonForAlgorithm(ctx, workflows, DefaultToolSearchConfig().LexicalAlgorithm)
 }
 
 // BuildDeliveryToolSearchDiagnosticComparisonForAlgorithm runs one shipped Go

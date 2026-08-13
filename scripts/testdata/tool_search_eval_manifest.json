@@ -10,7 +10,7 @@
   "algorithm_freeze": {
     "state": "development_candidate_recorded_before_independent_dev_test_is_sealed",
     "diagnostic_proxy_control": "bm25_unfielded",
-    "go_runtime_default": "fielded_bm25_action_v1",
+    "go_runtime_default": "fielded_bm25_ensemble",
     "go_source_paths": [
       "internal/cli/schema_search_command.go",
       "internal/cli/tool_search.go",
@@ -26,7 +26,7 @@
     ],
     "gate_source_sha256": "6034eb08694a5355fd6cb4a270f5b4eafd5544084d4cb812192c6b3e2b391e15",
     "shadow_candidates": [
-      "fielded_bm25_ensemble",
+      "fielded_bm25_action_v1",
       "fielded_tfidf_cosine",
       "bm25plus"
     ],
@@ -41,7 +41,7 @@
     "state": "sealed_diagnostic_only",
     "catalog_generation": "go_declarations_to_runtime_assembly",
     "catalog_build_output": ".worktrees/policy-tmp/tool-search-schema-catalog",
-    "catalog_source_hash": "sha256:106a3d2389f672f7fd0ec302c45e2391e9edaac2d34523e15d42c395abb6c499",
+    "catalog_source_hash": "sha256:02c633c075f4af915ea097d383bdcbc25fe549c172e2d3336152e30cf2906e80",
     "catalog_surface_hash": "sha256:7f9839f1ff428b52f1d032d2fa6493815c3755650b7d9fa653839e7d589482e5",
     "tool_count": 1098,
     "workflow_path": "scripts/testdata/tool_search_workflows.json",

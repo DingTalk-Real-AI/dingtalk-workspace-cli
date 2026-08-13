@@ -36,7 +36,18 @@ type ToolSearchV1Request struct {
 	ExcludeCanonical []string `json:"exclude_canonical,omitempty"`
 }
 
-var schemaSearchNewEngine = NewDeliveryToolSearchEngine
+var schemaSearchNewEngine = NewDeliveryToolSearchEngineWithConfig
+
+// schemaSearchEngineConfig resolves the search config the same way
+// NewDeliveryToolSearchEngine does (defaults + DWS_TOOL_SEARCH_* env
+// overrides), then lets an explicit --explain flag win over the env value.
+func schemaSearchEngineConfig(cmd *cobra.Command) ToolSearchConfig {
+	config := ResolveToolSearchConfigFromEnv(DefaultToolSearchConfig())
+	if explain, _ := cmd.Flags().GetBool("explain"); explain {
+		config.Explain = true
+	}
+	return config
+}
 
 func newSchemaSearchCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -66,7 +77,7 @@ DWS 对 Agent 是一个元工具：已知子命令直接执行，未知子命令
 			if err != nil {
 				return err
 			}
-			engine, err := schemaSearchNewEngine()
+			engine, err := schemaSearchNewEngine(schemaSearchEngineConfig(cmd))
 			if err != nil {
 				return err
 			}
@@ -103,6 +114,7 @@ DWS 对 Agent 是一个元工具：已知子命令直接执行，未知子命令
 	cmd.Flags().StringSlice("effect", nil, "限制 effect，可重复或逗号分隔")
 	cmd.Flags().StringSlice("exclude", nil, "排除 canonical path，可重复或逗号分隔")
 	cmd.Flags().String("request-json", "", `从 stdin 读取 JSON；值必须为 -；必含 version="tool-search.v1"，动作分解字段为 subqueries`)
+	cmd.Flags().Bool("explain", false, "在每个 candidate 上输出 score_breakdown 排序诊断（会增大响应体积，建议配合 --limit 3）")
 	return cmd
 }
 

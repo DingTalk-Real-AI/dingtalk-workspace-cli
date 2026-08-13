@@ -80,11 +80,21 @@ type independentRankingAccumulator struct {
 	zero    int
 }
 
-// BuildDeliveryToolSearchIndependentEvaluation evaluates sealed external
-// qrels with the shipped Go ranker. It never tunes parameters or reads Catalog
-// JSON; the caller owns qrels sealing and threshold enforcement.
+// BuildDeliveryToolSearchIndependentEvaluation evaluates the action-ranking
+// candidate against the shipped fielded BM25 control on sealed external qrels.
+// It never tunes parameters or reads Catalog JSON; the caller owns qrels
+// sealing and threshold enforcement. The candidate may become the runtime
+// default only after the independently frozen default-switch gate passes.
 func BuildDeliveryToolSearchIndependentEvaluation(ctx context.Context, cases []ToolSearchIndependentCase) (ToolSearchIndependentReport, error) {
-	engine, err := NewDeliveryToolSearchEngine()
+	if err := deliverySchemaCatalogError(); err != nil {
+		return ToolSearchIndependentReport{}, err
+	}
+	loaded := deliverySchemaCatalog()
+	candidateConfig := DefaultToolSearchConfig()
+	candidateConfig.LexicalAlgorithm = ToolSearchLexicalBM25Action
+	candidateConfig.CatalogSourceHash = loaded.Snapshot.SourceHash
+	candidateConfig.CatalogSurfaceHash = loaded.Snapshot.SurfaceHash
+	engine, err := NewToolSearchEngine(loaded.Registry, candidateConfig)
 	if err != nil {
 		return ToolSearchIndependentReport{}, err
 	}
@@ -92,12 +102,7 @@ func BuildDeliveryToolSearchIndependentEvaluation(ctx context.Context, cases []T
 	if err != nil {
 		return ToolSearchIndependentReport{}, err
 	}
-	if err := deliverySchemaCatalogError(); err != nil {
-		return ToolSearchIndependentReport{}, err
-	}
-	loaded := deliverySchemaCatalog()
 	controlConfig := DefaultToolSearchConfig()
-	controlConfig.LexicalAlgorithm = ToolSearchLexicalBM25
 	controlConfig.CatalogSourceHash = loaded.Snapshot.SourceHash
 	controlConfig.CatalogSurfaceHash = loaded.Snapshot.SurfaceHash
 	control, err := NewToolSearchEngine(loaded.Registry, controlConfig)

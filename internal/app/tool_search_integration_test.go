@@ -18,9 +18,14 @@ import (
 
 func TestToolSearchDeliveryActionSiblingRouting(t *testing.T) {
 	registerSchemaRuntimeDelivery()
-	engine, err := cli.NewDeliveryToolSearchEngine()
+	// This test pins the action_v1 structured sibling routing itself, decoupled
+	// from the production default (now the fielded BM25 ensemble, which has no
+	// structured multiplier and cannot right-size these sibling queries).
+	config := cli.DefaultToolSearchConfig()
+	config.LexicalAlgorithm = cli.ToolSearchLexicalBM25Action
+	engine, err := cli.NewDeliveryToolSearchEngineWithConfig(config)
 	if err != nil {
-		t.Fatalf("NewDeliveryToolSearchEngine() error = %v", err)
+		t.Fatalf("NewDeliveryToolSearchEngineWithConfig() error = %v", err)
 	}
 	tests := []struct {
 		query string
@@ -72,7 +77,12 @@ func TestToolSearchDeliveryDiagnosticTrustAndChineseSlices(t *testing.T) {
 	if report.IntentProxy.Cases != 1123 || report.IntentExcludedOverBudget != 10 {
 		t.Fatalf("intent population = %+v excluded=%d", report.IntentProxy, report.IntentExcludedOverBudget)
 	}
-	if math.Abs(report.IntentProxy.RecallAt5-0.8637577916295637) > 1e-12 {
+	// The default lexical algorithm is the fielded BM25 ensemble; this sentinel
+	// is its current hit count (990 of 1123 intent-proxy cases). History:
+	// 970/1123 = action_v1 default era; 973/1123 = ensemble with bigram-only
+	// tokenization; 990/1123 after unigram+bigram tokenization, the English
+	// vocabulary extension and the relaxed technical-identifier gate.
+	if math.Abs(report.IntentProxy.RecallAt5-990.0/1123.0) > 1e-12 {
 		t.Fatalf("Recall@5 = %.12f", report.IntentProxy.RecallAt5)
 	}
 	if report.IntentLanguageSlices["chinese_only"].Cases != 402 || report.IntentLanguageSlices["mixed_chinese_ascii"].Cases != 721 {

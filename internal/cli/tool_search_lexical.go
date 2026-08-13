@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -29,10 +30,12 @@ type ToolSearchLexicalRequest struct {
 }
 
 // LexicalHit is an internal ordering result, not a confidence probability.
+// Explain is populated only when the engine was built with Explain=true.
 type LexicalHit struct {
 	CanonicalPath string
 	Score         float64
 	MatchedFields []string
+	Explain       *ToolSearchScoreBreakdown
 }
 
 // LexicalRetriever is the zero-model local recall boundary. Implementations
@@ -44,27 +47,34 @@ type LexicalRetriever interface {
 }
 
 func newToolSearchLexicalRetriever(documents map[string]toolSearchDocument, config ToolSearchConfig) (LexicalRetriever, error) {
+	var retriever LexicalRetriever
 	switch config.LexicalAlgorithm {
 	case ToolSearchLexicalBM25Action:
-		return newToolSearchActionRetriever(newToolSearchBM25Retriever(documents, config.FieldWeights), documents), nil
+		retriever = newToolSearchActionRetriever(
+			newToolSearchBM25Retriever(documents, config.FieldWeights, config.BM25K1, config.BM25B, config.Explain),
+			documents,
+			config.Explain,
+		)
 	case ToolSearchLexicalBM25:
-		return newToolSearchBM25Retriever(documents, config.FieldWeights), nil
+		retriever = newToolSearchBM25Retriever(documents, config.FieldWeights, config.BM25K1, config.BM25B, config.Explain)
 	case ToolSearchLexicalTFIDF:
-		return newToolSearchTFIDFRetriever(documents, config.FieldWeights), nil
+		retriever = newToolSearchTFIDFRetriever(documents, config.FieldWeights, config.Explain)
 	default:
 		return nil, fmt.Errorf("unknown tool search lexical algorithm %q", config.LexicalAlgorithm)
 	}
+	return newToolSearchAvoidWhenRetriever(retriever, documents, config.Explain), nil
 }
 
 type toolSearchActionRetriever struct {
 	base      LexicalRetriever
 	documents map[string]toolSearchDocument
+	explain   bool
 }
 
 var toolSearchASCIIWordPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9._-]*`)
 
-func newToolSearchActionRetriever(base LexicalRetriever, documents map[string]toolSearchDocument) *toolSearchActionRetriever {
-	return &toolSearchActionRetriever{base: base, documents: documents}
+func newToolSearchActionRetriever(base LexicalRetriever, documents map[string]toolSearchDocument, explain bool) *toolSearchActionRetriever {
+	return &toolSearchActionRetriever{base: base, documents: documents, explain: explain}
 }
 
 func (*toolSearchActionRetriever) Name() string { return ToolSearchLexicalBM25Action }
@@ -81,17 +91,39 @@ func (r *toolSearchActionRetriever) Retrieve(ctx context.Context, request ToolSe
 		return truncateAndSortLexicalHits(hits, request.CandidateLimit), nil
 	}
 	for index := range hits {
-		hits[index].Score *= toolSearchStructuredMultiplier(query, r.documents[hits[index].CanonicalPath].tool)
+		multiplier := toolSearchStructuredMultiplier(query, r.documents[hits[index].CanonicalPath].tool)
+		hits[index].Score *= multiplier
+		if r.explain && hits[index].Explain != nil {
+			hits[index].Explain.Multiplier = &multiplier
+			hits[index].Explain.Score = hits[index].Score
+			hits[index].Explain.QueryClass = newToolSearchExplainQueryClass(query)
+		}
 	}
 	return truncateAndSortLexicalHits(hits, request.CandidateLimit), nil
 }
 
+// toolSearchHasUnclassifiedASCII reports whether the query carries a technical
+// identifier (camelCase or separator-joined tokens such as openConversationId,
+// task_id, file-path) that the compact vocabularies cannot classify. Plain
+// English words no longer disable structured reranking: they match (or fail
+// to match) the vocabularies exactly like Chinese phrases do, so mixed and
+// English queries keep the effect/product/action/entity routing instead of
+// silently degrading to raw BM25.
 func toolSearchHasUnclassifiedASCII(query string) bool {
-	for _, token := range toolSearchASCIIWordPattern.FindAllString(strings.ToLower(query), -1) {
-		switch token {
+	for _, token := range toolSearchASCIIWordPattern.FindAllString(query, -1) {
+		if len(token) < 4 {
+			continue
+		}
+		switch strings.ToLower(token) {
 		case "id", "ids", "url", "uri":
 			continue
-		default:
+		}
+		if strings.ContainsAny(token, "._-") {
+			return true
+		}
+		// Only an internal uppercase transition (openConversationId) marks a
+		// technical identifier; a capitalized plain word ("Send") does not.
+		if internal := token[1:]; strings.ToLower(internal) != internal {
 			return true
 		}
 	}
@@ -117,49 +149,49 @@ type toolSearchTermClass struct {
 }
 
 var toolSearchActionClasses = []toolSearchTermClass{
-	{name: "approve", query: []string{"同意", "批准", "审批通过"}, tool: []string{"approve"}},
-	{name: "reject", query: []string{"拒绝", "驳回"}, tool: []string{"reject"}},
-	{name: "upload", query: []string{"上传"}, tool: []string{"upload"}},
-	{name: "download", query: []string{"下载"}, tool: []string{"download"}},
-	{name: "send", query: []string{"发送", "发给", "发消息", "通知", "投递"}, tool: []string{"send", "notify"}},
-	{name: "search", query: []string{"搜索", "查找", "检索", "定位"}, tool: []string{"search", "find", "resolve"}},
-	{name: "list", query: []string{"列出", "列表", "浏览", "遍历"}, tool: []string{"list", "all"}},
-	{name: "read", query: []string{"读取", "查看", "获取", "详情", "正文"}, tool: []string{"read", "get", "detail", "info", "query"}},
-	{name: "create", query: []string{"创建", "新建"}, tool: []string{"create", "new"}},
-	{name: "add", query: []string{"添加", "追加", "增加", "授权", "授予"}, tool: []string{"add", "grant", "invite"}},
-	{name: "update", query: []string{"更新", "修改", "编辑", "重命名", "调整"}, tool: []string{"update", "edit", "rename", "set"}},
-	{name: "delete", query: []string{"删除", "移除", "清除"}, tool: []string{"delete", "remove", "clear"}},
-	{name: "complete", query: []string{"完成", "提交入库"}, tool: []string{"complete", "commit", "finish"}},
-	{name: "enable", query: []string{"启用", "开启"}, tool: []string{"enable"}},
-	{name: "disable", query: []string{"禁用", "停用", "关闭"}, tool: []string{"disable"}},
+	{name: "approve", query: []string{"同意", "批准", "审批通过", "approve"}, tool: []string{"approve"}},
+	{name: "reject", query: []string{"拒绝", "驳回", "reject"}, tool: []string{"reject"}},
+	{name: "upload", query: []string{"上传", "upload"}, tool: []string{"upload"}},
+	{name: "download", query: []string{"下载", "download"}, tool: []string{"download"}},
+	{name: "send", query: []string{"发送", "发给", "发消息", "通知", "投递", "send", "notify"}, tool: []string{"send", "notify"}},
+	{name: "search", query: []string{"搜索", "查找", "检索", "定位", "search", "find", "locate"}, tool: []string{"search", "find", "resolve"}},
+	{name: "list", query: []string{"列出", "列表", "浏览", "遍历", "list", "browse"}, tool: []string{"list", "all"}},
+	{name: "read", query: []string{"读取", "查看", "获取", "详情", "正文", "read", "fetch"}, tool: []string{"read", "get", "detail", "info", "query"}},
+	{name: "create", query: []string{"创建", "新建", "create"}, tool: []string{"create", "new"}},
+	{name: "add", query: []string{"添加", "追加", "增加", "授权", "授予", "add", "invite"}, tool: []string{"add", "grant", "invite"}},
+	{name: "update", query: []string{"更新", "修改", "编辑", "重命名", "调整", "update", "edit", "rename"}, tool: []string{"update", "edit", "rename", "set"}},
+	{name: "delete", query: []string{"删除", "移除", "清除", "delete", "remove"}, tool: []string{"delete", "remove", "clear"}},
+	{name: "complete", query: []string{"完成", "提交入库", "complete", "commit"}, tool: []string{"complete", "commit", "finish"}},
+	{name: "enable", query: []string{"启用", "开启", "enable"}, tool: []string{"enable"}},
+	{name: "disable", query: []string{"禁用", "停用", "关闭", "disable"}, tool: []string{"disable"}},
 }
 
 var toolSearchProductClasses = []toolSearchTermClass{
-	{name: "chat", query: []string{"群聊", "群消息", "会话", "单聊"}, tool: []string{"chat"}},
-	{name: "calendar", query: []string{"日程", "会议日历", "会议室"}, tool: []string{"calendar"}},
-	{name: "drive", query: []string{"钉盘", "云盘"}, tool: []string{"drive"}},
-	{name: "wiki", query: []string{"知识库"}, tool: []string{"wiki"}},
-	{name: "todo", query: []string{"待办"}, tool: []string{"todo"}},
-	{name: "minutes", query: []string{"听记", "会议纪要"}, tool: []string{"minutes"}},
-	{name: "oa", query: []string{"审批"}, tool: []string{"oa"}},
-	{name: "mail", query: []string{"邮件", "邮箱", "草稿"}, tool: []string{"mail"}},
-	{name: "sheet", query: []string{"电子表格", "工作表", "单元格"}, tool: []string{"sheet"}},
-	{name: "doc", query: []string{"在线文字文档", "文档正文", "adoc"}, tool: []string{"doc"}},
+	{name: "chat", query: []string{"群聊", "群消息", "会话", "单聊", "chat"}, tool: []string{"chat"}},
+	{name: "calendar", query: []string{"日程", "会议日历", "会议室", "calendar"}, tool: []string{"calendar"}},
+	{name: "drive", query: []string{"钉盘", "云盘", "drive"}, tool: []string{"drive"}},
+	{name: "wiki", query: []string{"知识库", "wiki"}, tool: []string{"wiki"}},
+	{name: "todo", query: []string{"待办", "todo"}, tool: []string{"todo"}},
+	{name: "minutes", query: []string{"听记", "会议纪要", "minutes"}, tool: []string{"minutes"}},
+	{name: "oa", query: []string{"审批", "oa", "approval"}, tool: []string{"oa"}},
+	{name: "mail", query: []string{"邮件", "邮箱", "草稿", "mail", "email"}, tool: []string{"mail"}},
+	{name: "sheet", query: []string{"电子表格", "工作表", "单元格", "sheet", "spreadsheet"}, tool: []string{"sheet"}},
+	{name: "doc", query: []string{"在线文字文档", "文档正文", "adoc", "doc", "document"}, tool: []string{"doc"}},
 }
 
 var toolSearchEntityClasses = []toolSearchTermClass{
 	{name: "task_id", query: []string{"任务 id", "任务id", "task id", "taskid"}, tool: []string{"任务 id", "任务id", "task id", "taskid"}},
-	{name: "task", query: []string{"任务", "task id", "taskid"}, tool: []string{"任务", "task"}},
-	{name: "permission", query: []string{"权限", "授权", "协作者"}, tool: []string{"权限", "授权", "协作者", "permission"}},
-	{name: "content", query: []string{"正文", "文档内容"}, tool: []string{"正文", "内容", "content"}},
-	{name: "status", query: []string{"状态", "已读"}, tool: []string{"状态", "已读", "status"}},
-	{name: "draft", query: []string{"草稿"}, tool: []string{"草稿", "draft"}},
-	{name: "event", query: []string{"日程"}, tool: []string{"日程", "event"}},
-	{name: "reminder", query: []string{"提醒"}, tool: []string{"提醒", "reminder"}},
-	{name: "summary", query: []string{"摘要"}, tool: []string{"摘要", "summary"}},
-	{name: "sheet", query: []string{"工作表"}, tool: []string{"工作表", "sheet"}},
-	{name: "range", query: []string{"单元格范围", "区域"}, tool: []string{"范围", "区域", "range"}},
-	{name: "group", query: []string{"群聊", "群名"}, tool: []string{"群聊", "群", "group"}},
+	{name: "task", query: []string{"任务", "task id", "taskid", "task"}, tool: []string{"任务", "task"}},
+	{name: "permission", query: []string{"权限", "授权", "协作者", "permission"}, tool: []string{"权限", "授权", "协作者", "permission"}},
+	{name: "content", query: []string{"正文", "文档内容", "content"}, tool: []string{"正文", "内容", "content"}},
+	{name: "status", query: []string{"状态", "已读", "status"}, tool: []string{"状态", "已读", "status"}},
+	{name: "draft", query: []string{"草稿", "draft"}, tool: []string{"草稿", "draft"}},
+	{name: "event", query: []string{"日程", "event"}, tool: []string{"日程", "event"}},
+	{name: "reminder", query: []string{"提醒", "reminder"}, tool: []string{"提醒", "reminder"}},
+	{name: "summary", query: []string{"摘要", "summary"}, tool: []string{"摘要", "summary"}},
+	{name: "sheet", query: []string{"工作表", "worksheet"}, tool: []string{"工作表", "sheet"}},
+	{name: "range", query: []string{"单元格范围", "区域", "range"}, tool: []string{"范围", "区域", "range"}},
+	{name: "group", query: []string{"群聊", "群名", "group"}, tool: []string{"群聊", "群", "group"}},
 }
 
 func classifyToolSearchQuery(query string) toolSearchQueryClass {
@@ -233,7 +265,6 @@ func toolSearchStructuredMultiplier(query toolSearchQueryClass, tool ToolSpec) f
 		}
 	}
 	if len(query.entities) > 0 {
-		specificTaskID := query.entities["task_id"] && query.products["oa"]
 		matched := false
 		for _, class := range toolSearchEntityClasses {
 			if query.entities[class.name] && containsAnyToolSearchPhrase(toolText, class.tool) {
@@ -241,12 +272,8 @@ func toolSearchStructuredMultiplier(query toolSearchQueryClass, tool ToolSpec) f
 				break
 			}
 		}
-		if matched && specificTaskID {
-			multiplier += 1.00
-		} else if matched {
+		if matched {
 			multiplier += 0.35
-		} else if specificTaskID {
-			multiplier -= 0.20
 		} else {
 			multiplier -= 0.10
 		}
@@ -259,7 +286,38 @@ func toolSearchStructuredMultiplier(query toolSearchQueryClass, tool ToolSpec) f
 
 func containsAnyToolSearchPhrase(text string, values []string) bool {
 	for _, value := range values {
-		if strings.Contains(text, value) {
+		if toolSearchPhraseContains(text, value) {
+			return true
+		}
+	}
+	return false
+}
+
+// toolSearchPhraseContains matches ASCII single-token values on word
+// boundaries so short English values such as "oa" cannot fire inside
+// unrelated words ("download" contains "oa"). Mixed-script or multi-word
+// values keep substring semantics, which is what Chinese phrases and values
+// like "task id" rely on.
+func toolSearchPhraseContains(text, value string) bool {
+	if value != "" && isAllToolSearchASCII(value) && !strings.ContainsAny(value, " \t") {
+		return containsToolSearchASCIIWord(text, value)
+	}
+	return strings.Contains(text, value)
+}
+
+func isAllToolSearchASCII(value string) bool {
+	for _, character := range value {
+		if character >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
+}
+
+func containsToolSearchASCIIWord(text, word string) bool {
+	word = strings.ToLower(word)
+	for _, token := range toolSearchASCIIWordPattern.FindAllString(strings.ToLower(text), -1) {
+		if token == word {
 			return true
 		}
 	}
@@ -279,18 +337,116 @@ func containsAnyToolSearchWord(text string, values []string) bool {
 	return false
 }
 
+func newToolSearchExplainQueryClass(query toolSearchQueryClass) *ToolSearchExplainQueryClass {
+	return &ToolSearchExplainQueryClass{
+		Actions:  sortedToolSearchClassKeys(query.actions),
+		Products: sortedToolSearchClassKeys(query.products),
+		Entities: sortedToolSearchClassKeys(query.entities),
+		Effect:   query.effect,
+	}
+}
+
+func sortedToolSearchClassKeys(set map[string]bool) []string {
+	if len(set) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(set))
+	for key := range set {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// toolSearchAvoidWhenPenalty is applied when a candidate's avoid_when prose
+// matches the query intent. It is a soft demotion, not an eligibility filter:
+// avoid_when is natural-language guidance (often "prefer X for that intent"),
+// so a lexical hit can be wrong and the tool must remain reachable.
+const toolSearchAvoidWhenPenalty = 0.20
+
+// toolSearchAvoidWhenShortcutNoise filters the boilerplate avoid_when that
+// every shortcut carries; it carries no intent signal.
+const toolSearchAvoidWhenShortcutNoise = "需要该 Shortcut 未公开的底层参数"
+
+// toolSearchAvoidWhenPenaltyReason returns the matched avoid_when phrase, or
+// "" when the tool should not be demoted for this query. The only match shape
+// is the query containing the avoidance prose itself (the Forbidden@5
+// evaluation proxy). Intent-overlap matching was tried and rejected: a tool's
+// own avoid_when describes the same sibling scenario space as its use_when,
+// so "shares an action/entity with the phrase" demotes the gold answer.
+func toolSearchAvoidWhenPenaltyReason(query string, tool ToolSpec) string {
+	if len(tool.Selection.AvoidWhen) == 0 {
+		return ""
+	}
+	normalized := strings.ToLower(strings.TrimSpace(query))
+	if normalized == "" {
+		return ""
+	}
+	for _, phrase := range tool.Selection.AvoidWhen {
+		phrase = strings.ToLower(strings.TrimSpace(phrase))
+		if phrase == "" || strings.Contains(phrase, toolSearchAvoidWhenShortcutNoise) {
+			continue
+		}
+		if strings.Contains(normalized, phrase) {
+			return phrase
+		}
+	}
+	return ""
+}
+
+// toolSearchAvoidWhenRetriever demotes candidates whose avoid_when prose
+// matches the query intent. It wraps every lexical algorithm, including the
+// production ensemble default, so the Forbidden exposure guard is not tied to
+// action_v1.
+type toolSearchAvoidWhenRetriever struct {
+	base      LexicalRetriever
+	documents map[string]toolSearchDocument
+	explain   bool
+}
+
+func newToolSearchAvoidWhenRetriever(base LexicalRetriever, documents map[string]toolSearchDocument, explain bool) *toolSearchAvoidWhenRetriever {
+	return &toolSearchAvoidWhenRetriever{base: base, documents: documents, explain: explain}
+}
+
+func (r *toolSearchAvoidWhenRetriever) Name() string { return r.base.Name() }
+
+func (r *toolSearchAvoidWhenRetriever) Retrieve(ctx context.Context, request ToolSearchLexicalRequest) ([]LexicalHit, error) {
+	hits, err := r.base.Retrieve(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	penalized := false
+	for index := range hits {
+		reason := toolSearchAvoidWhenPenaltyReason(request.Query, r.documents[hits[index].CanonicalPath].tool)
+		if reason == "" {
+			continue
+		}
+		hits[index].Score *= toolSearchAvoidWhenPenalty
+		if r.explain && hits[index].Explain != nil {
+			hits[index].Explain.Score = hits[index].Score
+			hits[index].Explain.AvoidWhenPenalty = reason
+		}
+		penalized = true
+	}
+	if !penalized {
+		return hits, nil
+	}
+	return truncateAndSortLexicalHits(hits, request.CandidateLimit), nil
+}
+
 type toolSearchBM25Retriever struct {
 	fieldIndex map[toolSearchField]toolSearchBM25Index
 	weights    ToolSearchFieldWeights
+	explain    bool
 }
 
-func newToolSearchBM25Retriever(documents map[string]toolSearchDocument, weights ToolSearchFieldWeights) *toolSearchBM25Retriever {
+func newToolSearchBM25Retriever(documents map[string]toolSearchDocument, weights ToolSearchFieldWeights, k1, b float64, explain bool) *toolSearchBM25Retriever {
 	fieldTerms := toolSearchFieldTerms(documents)
 	fieldIndex := make(map[toolSearchField]toolSearchBM25Index, len(toolSearchFieldOrder))
 	for _, field := range toolSearchFieldOrder {
-		fieldIndex[field] = newToolSearchBM25Index(fieldTerms[field])
+		fieldIndex[field] = newToolSearchBM25Index(fieldTerms[field], k1, b)
 	}
-	return &toolSearchBM25Retriever{fieldIndex: fieldIndex, weights: weights}
+	return &toolSearchBM25Retriever{fieldIndex: fieldIndex, weights: weights, explain: explain}
 }
 
 func (*toolSearchBM25Retriever) Name() string { return ToolSearchLexicalBM25 }
@@ -316,7 +472,11 @@ func (r *toolSearchBM25Retriever) Retrieve(ctx context.Context, request ToolSear
 			}
 		}
 		if score > 0 {
-			hits = append(hits, LexicalHit{CanonicalPath: canonical, Score: score, MatchedFields: matchedToolSearchFields(contributions)})
+			hit := LexicalHit{CanonicalPath: canonical, Score: score, MatchedFields: matchedToolSearchFields(contributions)}
+			if r.explain {
+				hit.Explain = newToolSearchBreakdown(score, contributions)
+			}
+			hits = append(hits, hit)
 		}
 	}
 	return truncateAndSortLexicalHits(hits, request.CandidateLimit), nil
@@ -335,15 +495,16 @@ type toolSearchTFIDFIndex struct {
 type toolSearchTFIDFRetriever struct {
 	fieldIndex map[toolSearchField]toolSearchTFIDFIndex
 	weights    ToolSearchFieldWeights
+	explain    bool
 }
 
-func newToolSearchTFIDFRetriever(documents map[string]toolSearchDocument, weights ToolSearchFieldWeights) *toolSearchTFIDFRetriever {
+func newToolSearchTFIDFRetriever(documents map[string]toolSearchDocument, weights ToolSearchFieldWeights, explain bool) *toolSearchTFIDFRetriever {
 	fieldTerms := toolSearchFieldTerms(documents)
 	fieldIndex := make(map[toolSearchField]toolSearchTFIDFIndex, len(toolSearchFieldOrder))
 	for _, field := range toolSearchFieldOrder {
 		fieldIndex[field] = newToolSearchTFIDFIndex(fieldTerms[field])
 	}
-	return &toolSearchTFIDFRetriever{fieldIndex: fieldIndex, weights: weights}
+	return &toolSearchTFIDFRetriever{fieldIndex: fieldIndex, weights: weights, explain: explain}
 }
 
 func (*toolSearchTFIDFRetriever) Name() string { return ToolSearchLexicalTFIDF }
@@ -369,7 +530,11 @@ func (r *toolSearchTFIDFRetriever) Retrieve(ctx context.Context, request ToolSea
 			}
 		}
 		if score > 0 {
-			hits = append(hits, LexicalHit{CanonicalPath: canonical, Score: score, MatchedFields: matchedToolSearchFields(contributions)})
+			hit := LexicalHit{CanonicalPath: canonical, Score: score, MatchedFields: matchedToolSearchFields(contributions)}
+			if r.explain {
+				hit.Explain = newToolSearchBreakdown(score, contributions)
+			}
+			hits = append(hits, hit)
 		}
 	}
 	return truncateAndSortLexicalHits(hits, request.CandidateLimit), nil

@@ -117,6 +117,13 @@ func schemaProjectionIssue(raw string) string {
 	if len(tokens) < 2 || tokens[0] != "dws" || tokens[1] != "schema" {
 		return ""
 	}
+	// schema search already returns the bounded tool-search.v1 reference
+	// envelope. It is not a leaf Schema query and deliberately does not
+	// accept --compact/--jq/--fields, so the leaf projection rule must not
+	// be applied to it.
+	if len(tokens) >= 3 && tokens[2] == "search" {
+		return ""
+	}
 	var targeted, compact, selected, all bool
 	for i := 2; i < len(tokens); i++ {
 		token := tokens[i]
@@ -271,6 +278,14 @@ func resolveCommandReference(root *cobra.Command, path string) commandResolution
 		return resolutionInvalid
 	}
 	if len(remaining) == 0 {
+		return resolutionValid
+	}
+	if cmd.Name() == "schema" && (cmd.Run != nil || cmd.RunE != nil) {
+		// `dws schema` is both a runnable parent (`schema <canonical>`) and
+		// the parent of `schema search`. parseReference intentionally stores
+		// a normalized display path, so a quoted CLI-path alias may appear as
+		// multiple remaining words here; preserve the long-standing leaf
+		// validation behavior for this one versioned inspection surface.
 		return resolutionValid
 	}
 	if !cmd.HasSubCommands() {

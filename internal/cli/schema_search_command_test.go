@@ -81,7 +81,7 @@ func TestSchemaSearchHelpDocumentsStructuredRequest(t *testing.T) {
 
 func installSchemaSearchTestEngine(t *testing.T) {
 	t.Helper()
-	testseam.Swap(t, &schemaSearchNewEngine, func() (*ToolSearchEngine, error) {
+	testseam.Swap(t, &schemaSearchNewEngine, func(ToolSearchConfig) (*ToolSearchEngine, error) {
 		return newToolSearchTestEngine(t), nil
 	})
 }

@@ -18,9 +18,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -40,6 +43,8 @@ const (
 	maxToolSearchSummaryRunes       = 256
 	maxToolSearchResponseBytes      = 8 * 1024
 	maxToolSearchRequestBytes       = 64 * 1024
+	defaultToolSearchBM25K1         = 0.9
+	defaultToolSearchBM25B          = 0.4
 )
 
 var toolSearchIdentifierPattern = regexp.MustCompile(`[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)+`)
@@ -65,6 +70,9 @@ type ToolSearchConfig struct {
 	DefaultCandidates  int
 	LexicalAlgorithm   string
 	IncludeUseWhen     bool
+	Explain            bool
+	BM25K1             float64
+	BM25B              float64
 	CatalogSourceHash  string
 	CatalogSurfaceHash string
 	FieldWeights       ToolSearchFieldWeights
@@ -75,8 +83,11 @@ func DefaultToolSearchConfig() ToolSearchConfig {
 	return ToolSearchConfig{
 		DefaultLimit:      defaultToolSearchLimit,
 		DefaultCandidates: defaultToolSearchCandidateLimit,
-		LexicalAlgorithm:  ToolSearchLexicalBM25Action,
+		LexicalAlgorithm:  ToolSearchLexicalBM25,
 		IncludeUseWhen:    false,
+		Explain:           false,
+		BM25K1:            defaultToolSearchBM25K1,
+		BM25B:             defaultToolSearchBM25B,
 		FieldWeights: ToolSearchFieldWeights{
 			Identity:    8,
 			Summary:     5,
@@ -98,24 +109,47 @@ type ToolSearchRequest struct {
 	ExcludeCanonicalPaths []string
 }
 
+// ToolSearchExplainQueryClass echoes the structured query classification used
+// by the action_v1 retriever. It is only populated under --explain so the
+// default wire response stays byte-identical.
+type ToolSearchExplainQueryClass struct {
+	Actions  []string `json:"actions,omitempty"`
+	Products []string `json:"products,omitempty"`
+	Entities []string `json:"entities,omitempty"`
+	Effect   string   `json:"effect,omitempty"`
+}
+
+// ToolSearchScoreBreakdown explains why a candidate ranked where it did. It is
+// attached to a ToolReference only when the engine is built with Explain=true.
+// FieldScores are the per-field weighted contributions; Multiplier/QueryClass
+// are filled only by the action_v1 retriever.
+type ToolSearchScoreBreakdown struct {
+	Score            float64                      `json:"score"`
+	FieldScores      map[string]float64           `json:"field_scores,omitempty"`
+	Multiplier       *float64                     `json:"multiplier,omitempty"`
+	QueryClass       *ToolSearchExplainQueryClass `json:"query_class,omitempty"`
+	AvoidWhenPenalty string                       `json:"avoid_when_penalty,omitempty"`
+}
+
 // ToolReference is intentionally smaller than a ToolSpec. An Agent must
 // inspect the selected canonical path before execution instead of guessing
 // parameters from search output.
 type ToolReference struct {
-	CanonicalPath   string   `json:"canonical_path"`
-	PrimaryCLIPath  string   `json:"primary_cli_path"`
-	ProductID       string   `json:"product_id"`
-	Title           string   `json:"title,omitempty"`
-	AgentSummary    string   `json:"agent_summary,omitempty"`
-	Effect          string   `json:"effect,omitempty"`
-	Risk            string   `json:"risk,omitempty"`
-	Confirmation    string   `json:"confirmation,omitempty"`
-	Idempotency     string   `json:"idempotency,omitempty"`
-	Rank            int      `json:"rank"`
-	MatchedFields   []string `json:"matched_fields,omitempty"`
-	RankSources     []string `json:"rank_sources"`
-	TruncatedFields []string `json:"truncated_fields,omitempty"`
-	RequiresInspect bool     `json:"requires_inspect"`
+	CanonicalPath   string                    `json:"canonical_path"`
+	PrimaryCLIPath  string                    `json:"primary_cli_path"`
+	ProductID       string                    `json:"product_id"`
+	Title           string                    `json:"title,omitempty"`
+	AgentSummary    string                    `json:"agent_summary,omitempty"`
+	Effect          string                    `json:"effect,omitempty"`
+	Risk            string                    `json:"risk,omitempty"`
+	Confirmation    string                    `json:"confirmation,omitempty"`
+	Idempotency     string                    `json:"idempotency,omitempty"`
+	Rank            int                       `json:"rank"`
+	MatchedFields   []string                  `json:"matched_fields,omitempty"`
+	RankSources     []string                  `json:"rank_sources"`
+	TruncatedFields []string                  `json:"truncated_fields,omitempty"`
+	RequiresInspect bool                      `json:"requires_inspect"`
+	ScoreBreakdown  *ToolSearchScoreBreakdown `json:"score_breakdown,omitempty"`
 	score           float64
 }
 
@@ -197,15 +231,35 @@ type ToolSearchEngine struct {
 	lexical   LexicalRetriever
 }
 
+var (
+	deliveryToolSearchEngineOnce sync.Once
+	deliveryToolSearchEngine     *ToolSearchEngine
+	deliveryToolSearchEngineErr  error
+)
+
 // NewDeliveryToolSearchEngine indexes the immutable in-memory Catalog
 // assembled from live Go declarations by RegisterSchemaSourceRoot →
 // ResolveSchemaBuild. There is no committed or runtime-read Catalog JSON.
+// The default engine is immutable for the process lifetime: the delivery
+// Catalog is frozen and DWS_TOOL_SEARCH_* overrides are read once, so the
+// engine is built once per process (a CLI invocation constructs it exactly
+// once either way; long-lived hosts such as a daemon or MCP server reuse it).
 func NewDeliveryToolSearchEngine() (*ToolSearchEngine, error) {
+	deliveryToolSearchEngineOnce.Do(func() {
+		deliveryToolSearchEngine, deliveryToolSearchEngineErr =
+			NewDeliveryToolSearchEngineWithConfig(ResolveToolSearchConfigFromEnv(DefaultToolSearchConfig()))
+	})
+	return deliveryToolSearchEngine, deliveryToolSearchEngineErr
+}
+
+// NewDeliveryToolSearchEngineWithConfig builds the delivery engine from an
+// explicit, already-resolved config. Callers that override fields (such as
+// --explain) pass a fully populated config here.
+func NewDeliveryToolSearchEngineWithConfig(config ToolSearchConfig) (*ToolSearchEngine, error) {
 	if err := deliverySchemaCatalogError(); err != nil {
 		return nil, fmt.Errorf("assemble typed Schema registry for tool search: %w", err)
 	}
 	loaded := deliverySchemaCatalog()
-	config := DefaultToolSearchConfig()
 	config.CatalogSourceHash = loaded.Snapshot.SourceHash
 	config.CatalogSurfaceHash = loaded.Snapshot.SurfaceHash
 	return NewToolSearchEngine(loaded.Registry, config)
@@ -275,6 +329,9 @@ func (e *ToolSearchEngine) Search(ctx context.Context, request ToolSearchRequest
 		response.Strategy = "exact_guard"
 		reference := toolReference(exact, 1, []string{"identity"}, []string{"exact"})
 		reference.Rank = 1
+		if e.config.Explain {
+			reference.ScoreBreakdown = &ToolSearchScoreBreakdown{Score: 1, FieldScores: map[string]float64{"identity": 1}}
+		}
 		response.Candidates = []ToolReference{reference}
 		return finalizeToolSearchResponse(response)
 	}
@@ -296,12 +353,16 @@ func (e *ToolSearchEngine) Search(ctx context.Context, request ToolSearchRequest
 	}
 	references := make([]ToolReference, 0, len(hits))
 	for _, item := range hits {
-		references = append(references, toolReference(
+		reference := toolReference(
 			e.documents[item.CanonicalPath].tool,
 			item.Score,
 			item.MatchedFields,
 			[]string{e.lexical.Name()},
-		))
+		)
+		if e.config.Explain && item.Explain != nil {
+			reference.ScoreBreakdown = item.Explain
+		}
+		references = append(references, reference)
 	}
 
 	if len(references) > request.Limit {
@@ -437,9 +498,80 @@ func normalizeToolSearchConfig(config ToolSearchConfig) ToolSearchConfig {
 	if config.FieldWeights == (ToolSearchFieldWeights{}) {
 		config.FieldWeights = defaults.FieldWeights
 	}
+	if config.BM25K1 <= 0 {
+		config.BM25K1 = defaults.BM25K1
+	}
+	if config.BM25B < 0 {
+		config.BM25B = defaults.BM25B
+	}
 	config.CatalogSourceHash = strings.TrimSpace(config.CatalogSourceHash)
 	config.CatalogSurfaceHash = strings.TrimSpace(config.CatalogSurfaceHash)
 	return config
+}
+
+// ResolveToolSearchConfigFromEnv applies optional DWS_TOOL_SEARCH_* overrides
+// on top of an existing config. Unset or unparsable variables leave the field
+// unchanged, so the default path is byte-identical when no env is present.
+// This keeps ranking experiments (e.g. re-evaluating action_v1 against
+// independent qrels) tunable and reversible without a source change.
+func ResolveToolSearchConfigFromEnv(config ToolSearchConfig) ToolSearchConfig {
+	if value := strings.TrimSpace(os.Getenv("DWS_TOOL_SEARCH_ALGORITHM")); value != "" {
+		switch value {
+		case ToolSearchLexicalBM25, ToolSearchLexicalBM25Action, ToolSearchLexicalTFIDF:
+			config.LexicalAlgorithm = value
+		}
+	}
+	if value, ok := lookupToolSearchFloatEnv("DWS_TOOL_SEARCH_K1"); ok {
+		config.BM25K1 = value
+	}
+	if value, ok := lookupToolSearchFloatEnv("DWS_TOOL_SEARCH_B"); ok {
+		config.BM25B = value
+	}
+	config.FieldWeights.Identity = lookupToolSearchFloatEnvOr("DWS_TOOL_SEARCH_WEIGHT_IDENTITY", config.FieldWeights.Identity)
+	config.FieldWeights.Summary = lookupToolSearchFloatEnvOr("DWS_TOOL_SEARCH_WEIGHT_SUMMARY", config.FieldWeights.Summary)
+	config.FieldWeights.Description = lookupToolSearchFloatEnvOr("DWS_TOOL_SEARCH_WEIGHT_DESCRIPTION", config.FieldWeights.Description)
+	config.FieldWeights.Parameters = lookupToolSearchFloatEnvOr("DWS_TOOL_SEARCH_WEIGHT_PARAMETERS", config.FieldWeights.Parameters)
+	config.FieldWeights.UseWhen = lookupToolSearchFloatEnvOr("DWS_TOOL_SEARCH_WEIGHT_USEWHEN", config.FieldWeights.UseWhen)
+	if value, ok := os.LookupEnv("DWS_TOOL_SEARCH_EXPLAIN"); ok {
+		config.Explain = parseToolSearchBoolEnv(value)
+	}
+	return config
+}
+
+func lookupToolSearchFloatEnv(name string) (float64, bool) {
+	raw, ok := os.LookupEnv(name)
+	if !ok {
+		return 0, false
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, false
+	}
+	return value, true
+}
+
+func lookupToolSearchFloatEnvOr(name string, fallback float64) float64 {
+	if value, ok := lookupToolSearchFloatEnv(name); ok {
+		return value
+	}
+	return fallback
+}
+
+func parseToolSearchBoolEnv(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func newToolSearchBreakdown(score float64, contributions map[toolSearchField]float64) *ToolSearchScoreBreakdown {
+	fieldScores := make(map[string]float64, len(contributions))
+	for field, value := range contributions {
+		fieldScores[string(field)] = value
+	}
+	return &ToolSearchScoreBreakdown{Score: score, FieldScores: fieldScores}
 }
 
 func (e *ToolSearchEngine) normalizeRequest(request ToolSearchRequest) (ToolSearchRequest, error) {
@@ -534,12 +666,12 @@ func toolSearchDocumentFields(tool ToolSpec, includeUseWhen bool) map[toolSearch
 	}
 }
 
-func newToolSearchBM25Index(documents map[string][]string) toolSearchBM25Index {
+func newToolSearchBM25Index(documents map[string][]string, k1, b float64) toolSearchBM25Index {
 	index := toolSearchBM25Index{
 		documents: make(map[string]toolSearchBM25Document, len(documents)),
 		idf:       make(map[string]float64),
-		k1:        0.9,
-		b:         0.4,
+		k1:        k1,
+		b:         b,
 	}
 	documentFrequency := make(map[string]int)
 	var totalLength int
@@ -756,11 +888,14 @@ func tokenizeToolSearchText(text string) []string {
 			ascii = ascii[:0]
 		}
 	}
+	// Emit overlapping bigrams plus unigrams. Bigrams carry phrase precision;
+	// unigrams keep single-character intents (e.g. "批") matchable against
+	// documents that only contain the composed word ("审批"). BM25's IDF
+	// naturally down-weights unigrams that fire across many documents.
 	flushChinese := func() {
-		if len(chinese) == 1 {
-			tokens = append(tokens, string(chinese))
-		} else {
-			for index := 0; index+1 < len(chinese); index++ {
+		for index := 0; index < len(chinese); index++ {
+			tokens = append(tokens, string(chinese[index:index+1]))
+			if index+1 < len(chinese) {
 				tokens = append(tokens, string(chinese[index:index+2]))
 			}
 		}
@@ -796,6 +931,10 @@ func splitToolSearchCamelCase(value string) string {
 	return builder.String()
 }
 
+// isToolSearchCJK mirrors unicode.Han (the same table the evaluation language
+// slices use) so the tokenizer and the metrics agree on what counts as
+// Chinese. The previous hard-coded U+3400..U+9FFF range silently dropped CJK
+// compatibility ideographs and extension planes as separators.
 func isToolSearchCJK(value rune) bool {
-	return value >= '\u3400' && value <= '\u9fff'
+	return unicode.Is(unicode.Han, value)
 }

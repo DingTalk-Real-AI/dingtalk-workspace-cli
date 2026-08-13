@@ -87,7 +87,7 @@ fmt:
 	$(GO_SOURCE_LIST) > "$$go_files"; \
 	xargs -0 sh -c 'if [ "$$#" -gt 0 ]; then exec gofmt -w -- "$$@"; fi' sh < "$$go_files"
 
-policy: test-auth-legacy-compat tool-search-evaluation-harness
+policy: test-auth-legacy-compat tool-search-evaluation-harness skill-mono-multi-content
 	@mkdir -p "$(POLICY_GOTMPDIR)"
 	@$(POLICY_ENV) ./scripts/policy/check-open-source-assets.sh
 	@$(POLICY_ENV) ./scripts/policy/check-skill-context-budget.sh

@@ -202,8 +202,8 @@ func TestToolSearchSubqueriesRoundRobinAndAcceptsDeepCandidateLimit(t *testing.T
 
 func TestToolSearchActionRerankDoesNotChangeNoSignalOrdering(t *testing.T) {
 	engine := newToolSearchTestEngine(t)
-	raw := newToolSearchBM25Retriever(engine.documents, engine.config.FieldWeights)
-	action := newToolSearchActionRetriever(raw, engine.documents)
+	raw := newToolSearchBM25Retriever(engine.documents, engine.config.FieldWeights, engine.config.BM25K1, engine.config.BM25B, false)
+	action := newToolSearchActionRetriever(raw, engine.documents, false)
 	request := ToolSearchLexicalRequest{
 		Query:                  "媒体路径",
 		CandidateLimit:         4,
@@ -224,8 +224,8 @@ func TestToolSearchActionRerankDoesNotChangeNoSignalOrdering(t *testing.T) {
 
 func TestToolSearchActionRerankDefersUnclassifiedTechnicalASCII(t *testing.T) {
 	engine := newToolSearchTestEngine(t)
-	raw := newToolSearchBM25Retriever(engine.documents, engine.config.FieldWeights)
-	action := newToolSearchActionRetriever(raw, engine.documents)
+	raw := newToolSearchBM25Retriever(engine.documents, engine.config.FieldWeights, engine.config.BM25K1, engine.config.BM25B, false)
+	action := newToolSearchActionRetriever(raw, engine.documents, false)
 	request := ToolSearchLexicalRequest{
 		Query:                  "读取 openConversationId 对应的群消息",
 		CandidateLimit:         4,
@@ -306,6 +306,9 @@ func TestToolSearchSubqueriesFailClosedOnExactFilteredAction(t *testing.T) {
 
 func TestDefaultToolSearchConfigExcludesUseWhen(t *testing.T) {
 	config := DefaultToolSearchConfig()
+	if config.LexicalAlgorithm != ToolSearchLexicalBM25 {
+		t.Fatalf("default lexical algorithm = %q, want independently conservative control %q", config.LexicalAlgorithm, ToolSearchLexicalBM25)
+	}
 	if config.IncludeUseWhen {
 		t.Fatal("DefaultToolSearchConfig() enables answer-bearing use_when projection")
 	}
@@ -316,9 +319,118 @@ func TestDefaultToolSearchConfigExcludesUseWhen(t *testing.T) {
 	}
 }
 
+func TestToolSearchExplainAttachesBreakdownOnlyWhenEnabled(t *testing.T) {
+	query := ToolSearchRequest{Query: "给群里发送消息"}
+	plain := newToolSearchTestEngine(t)
+	plainResponse, err := plain.Search(context.Background(), query)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(plainResponse.Candidates) == 0 || plainResponse.Candidates[0].CanonicalPath != "chat.send" {
+		t.Fatalf("plain candidates = %#v", plainResponse.Candidates)
+	}
+	plainPayload, err := json.Marshal(plainResponse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(plainPayload), "score_breakdown") {
+		t.Fatalf("explain leaked into default response: %s", plainPayload)
+	}
+	for _, candidate := range plainResponse.Candidates {
+		if candidate.ScoreBreakdown != nil {
+			t.Fatalf("default candidate carried breakdown: %#v", candidate)
+		}
+	}
+
+	explainConfig := DefaultToolSearchConfig()
+	explainConfig.Explain = true
+	explained := newToolSearchTestEngineWithConfig(t, explainConfig)
+	explainedResponse, err := explained.Search(context.Background(), query)
+	if err != nil {
+		t.Fatalf("Search(explain) error = %v", err)
+	}
+	if len(explainedResponse.Candidates) != len(plainResponse.Candidates) {
+		t.Fatalf("explain changed candidate count: %d vs %d", len(explainedResponse.Candidates), len(plainResponse.Candidates))
+	}
+	for index := range explainedResponse.Candidates {
+		plainPath := plainResponse.Candidates[index].CanonicalPath
+		candidate := explainedResponse.Candidates[index]
+		if candidate.CanonicalPath != plainPath {
+			t.Fatalf("explain changed ordering at %d: %s vs %s", index, plainPath, candidate.CanonicalPath)
+		}
+		if candidate.ScoreBreakdown == nil {
+			t.Fatalf("explained candidate missing breakdown: %#v", candidate)
+		}
+		if candidate.ScoreBreakdown.Score <= 0 || len(candidate.ScoreBreakdown.FieldScores) == 0 {
+			t.Fatalf("breakdown incomplete: %#v", candidate.ScoreBreakdown)
+		}
+		if candidate.ScoreBreakdown.Multiplier != nil || candidate.ScoreBreakdown.QueryClass != nil {
+			t.Fatalf("ensemble breakdown should not carry action fields: %#v", candidate.ScoreBreakdown)
+		}
+	}
+}
+
+func TestToolSearchActionExplainIncludesMultiplierAndQueryClass(t *testing.T) {
+	config := DefaultToolSearchConfig()
+	config.LexicalAlgorithm = ToolSearchLexicalBM25Action
+	config.Explain = true
+	engine := newToolSearchTestEngineWithConfig(t, config)
+	response, err := engine.Search(context.Background(), ToolSearchRequest{Query: "给群里发送消息"})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(response.Candidates) == 0 || response.Candidates[0].CanonicalPath != "chat.send" {
+		t.Fatalf("action candidates = %#v", response.Candidates)
+	}
+	for _, candidate := range response.Candidates {
+		if candidate.ScoreBreakdown == nil {
+			t.Fatalf("action candidate missing breakdown: %#v", candidate)
+		}
+		if candidate.ScoreBreakdown.Multiplier == nil || *candidate.ScoreBreakdown.Multiplier <= 0 {
+			t.Fatalf("action breakdown missing multiplier: %#v", candidate.ScoreBreakdown)
+		}
+		if candidate.ScoreBreakdown.QueryClass == nil || len(candidate.ScoreBreakdown.QueryClass.Actions) == 0 {
+			t.Fatalf("action breakdown missing query class: %#v", candidate.ScoreBreakdown)
+		}
+	}
+}
+
+func TestResolveToolSearchConfigFromEnvOverridesOnlyWhenSet(t *testing.T) {
+	config := ResolveToolSearchConfigFromEnv(DefaultToolSearchConfig())
+	if config.LexicalAlgorithm != ToolSearchLexicalBM25 || config.BM25K1 != defaultToolSearchBM25K1 || config.Explain {
+		t.Fatalf("no-env config changed: %#v", config)
+	}
+
+	t.Setenv("DWS_TOOL_SEARCH_ALGORITHM", ToolSearchLexicalBM25Action)
+	t.Setenv("DWS_TOOL_SEARCH_K1", "1.2")
+	t.Setenv("DWS_TOOL_SEARCH_WEIGHT_SUMMARY", "4.5")
+	t.Setenv("DWS_TOOL_SEARCH_EXPLAIN", "1")
+	config = ResolveToolSearchConfigFromEnv(DefaultToolSearchConfig())
+	if config.LexicalAlgorithm != ToolSearchLexicalBM25Action {
+		t.Fatalf("algorithm override = %q", config.LexicalAlgorithm)
+	}
+	if config.BM25K1 != 1.2 {
+		t.Fatalf("k1 override = %v", config.BM25K1)
+	}
+	if config.FieldWeights.Summary != 4.5 {
+		t.Fatalf("summary weight override = %v", config.FieldWeights.Summary)
+	}
+	if !config.Explain {
+		t.Fatal("explain override not applied")
+	}
+	if config.BM25B != defaultToolSearchBM25B {
+		t.Fatalf("unset env should keep default b, got %v", config.BM25B)
+	}
+
+	t.Setenv("DWS_TOOL_SEARCH_ALGORITHM", "not-a-real-algorithm")
+	if got := ResolveToolSearchConfigFromEnv(DefaultToolSearchConfig()).LexicalAlgorithm; got != ToolSearchLexicalBM25 {
+		t.Fatalf("invalid algorithm env should be ignored, got %q", got)
+	}
+}
+
 func TestToolSearchLexicalRetrieverCanSelectGoTFIDF(t *testing.T) {
 	engine := newToolSearchTestEngine(t)
-	engine.lexical = newToolSearchTFIDFRetriever(engine.documents, engine.config.FieldWeights)
+	engine.lexical = newToolSearchTFIDFRetriever(engine.documents, engine.config.FieldWeights, false)
 	response, err := engine.Search(context.Background(), ToolSearchRequest{
 		Query:      "给群里发送消息",
 		ProductIDs: []string{"chat"},
@@ -433,7 +545,7 @@ func TestToolSearchIsDeterministicAcrossProcesses(t *testing.T) {
 	if os.Getenv(helperEnv) == "1" {
 		engine := newToolSearchTestEngine(t)
 		tfidfEngine := newToolSearchTestEngine(t)
-		tfidfEngine.lexical = newToolSearchTFIDFRetriever(tfidfEngine.documents, tfidfEngine.config.FieldWeights)
+		tfidfEngine.lexical = newToolSearchTFIDFRetriever(tfidfEngine.documents, tfidfEngine.config.FieldWeights, false)
 		tests := []struct {
 			name    string
 			engine  *ToolSearchEngine
@@ -522,6 +634,22 @@ type toolSearchTestingT interface {
 
 func newToolSearchTestEngine(t toolSearchTestingT) *ToolSearchEngine {
 	t.Helper()
+	return newToolSearchTestEngineWithConfig(t, DefaultToolSearchConfig())
+}
+
+func newToolSearchTestEngineWithConfig(t toolSearchTestingT, config ToolSearchConfig) *ToolSearchEngine {
+	t.Helper()
+	config.CatalogSourceHash = "source-test"
+	config.CatalogSurfaceHash = "surface-test"
+	engine, err := NewToolSearchEngine(newToolSearchTestRegistry(t), config)
+	if err != nil {
+		t.Fatalf("NewToolSearchEngine() error = %v", err)
+	}
+	return engine
+}
+
+func newToolSearchTestRegistry(t toolSearchTestingT) SchemaRegistry {
+	t.Helper()
 	tools := []ToolSpec{
 		toolSearchTestTool("chat", "send", "chat send", "发送群聊消息", "write"),
 		toolSearchTestTool("chat", "read_status", "chat read-status", "查询群消息已读状态", "read"),
@@ -536,7 +664,7 @@ func newToolSearchTestEngine(t toolSearchTestingT) *ToolSearchEngine {
 	}}
 	tools[3].Interface.Availability = contract.InterfaceUnavailable
 	tools[3].Interface.Reason = "disabled in this test Catalog"
-	registry := SchemaRegistry{
+	return SchemaRegistry{
 		Kind:  "schema",
 		Level: "catalog",
 		Products: []ProductSpec{
@@ -545,14 +673,6 @@ func newToolSearchTestEngine(t toolSearchTestingT) *ToolSearchEngine {
 			{ID: "drive", Tools: tools[3:]},
 		},
 	}
-	config := DefaultToolSearchConfig()
-	config.CatalogSourceHash = "source-test"
-	config.CatalogSurfaceHash = "surface-test"
-	engine, err := NewToolSearchEngine(registry, config)
-	if err != nil {
-		t.Fatalf("NewToolSearchEngine() error = %v", err)
-	}
-	return engine
 }
 
 func toolSearchTestTool(product, name, cliPath, summary, effect string) ToolSpec {

@@ -78,7 +78,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	control, err := cli.BuildDeliveryToolSearchDiagnosticComparisonForAlgorithm(context.Background(), workflows, cli.ToolSearchLexicalBM25)
+	actionShadow, err := cli.BuildDeliveryToolSearchDiagnosticComparisonForAlgorithm(context.Background(), workflows, cli.ToolSearchLexicalBM25Action)
 	if err != nil {
 		fatal(err)
 	}
@@ -86,7 +86,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	result := comparisonOutput{Diagnostic: diagnostic, Shadows: []cli.ToolSearchDiagnosticComparison{control, shadow}}
+	result := comparisonOutput{Diagnostic: diagnostic, Shadows: []cli.ToolSearchDiagnosticComparison{actionShadow, shadow}}
 	if independentQrelsPath != "" {
 		fixture, readErr := readIndependentQrels(independentQrelsPath)
 		if readErr != nil {

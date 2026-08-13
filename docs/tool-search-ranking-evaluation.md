@@ -13,7 +13,7 @@
 >
 > 分支：`test/tool-search-ranking-eval`
 >
-> 当前 Catalog：1,098 个工具，`source_hash=sha256:106a3d2389f672f7fd0ec302c45e2391e9edaac2d34523e15d42c395abb6c499`，`surface_hash=sha256:7f9839f1ff428b52f1d032d2fa6493815c3755650b7d9fa653839e7d589482e5`
+> 当前 Catalog：1,098 个工具，`source_hash=sha256:02c633c075f4af915ea097d383bdcbc25fe549c172e2d3336152e30cf2906e80`，`surface_hash=sha256:7f9839f1ff428b52f1d032d2fa6493815c3755650b7d9fa653839e7d589482e5`
 >
 > 评测代码：[`scripts/dev/eval_tool_search_ranking.py`](../scripts/dev/eval_tool_search_ranking.py)
 
@@ -23,19 +23,19 @@
 
 当前结果由 `cmd_tool_search_comparison` 直接消费 Go 运行时声明装配结果，不读取仓库中的 Catalog JSON。评测/CI 如需检查分片，只能先运行 `cmd_schema_catalog`，在 `.worktrees/policy-tmp/tool-search-schema-catalog` 动态生成；该目录被忽略且不是生产输入。
 
-| 指标 | `fielded_bm25_action_v1` | 原始 `fielded_bm25_ensemble` control |
+| 指标 | `fielded_bm25_ensemble` 当前默认 | `fielded_bm25_action_v1` shadow |
 |---|---:|---:|
 | Intent cases | 1,123（另有 10 条超预算并显式排除） | 1,123 |
-| R@1 / R@5 / MRR@5 | **65.63% / 86.38% / 0.7417** | 65.09% / **86.64%** / 0.7370 |
-| 纯中文（402）R@1 / R@5 | **50.75%** / 81.59% | 49.75% / **82.34%** |
-| 中文混 ASCII（721）R@1 / R@5 | **73.93%** / 89.04% | 73.65% / 89.04% |
-| 整句 workflow Complete@5 / Recall@5 | 40% / **66.67%** | 40% / 61.67% |
-| reviewed 拆解 Complete@5 / Recall@5 | **90% / 95%** | 50% / 75% |
-| Forbidden@1 / @5（越低越好） | **5.83% / 36.83%** | 6.12% / 37.55% |
+| R@1 / R@5 / MRR@5 | 65.00% / **86.64%** / 0.7366 | **65.54%** / 86.38% / **0.7414** |
+| 纯中文（402）R@1 / R@5 | 49.75% / **82.34%** | **50.75%** / 81.59% |
+| 中文混 ASCII（721）R@1 / R@5 | 73.65% / 89.04% | **73.93%** / 89.04% |
+| 整句 workflow Complete@5 / Recall@5 | 40% / 61.67% | 40% / **66.67%** |
+| reviewed 拆解 Complete@5 / Recall@5 | 50% / 75% | **90% / 95%** |
+| Forbidden@1 / @5（越低越好） | 6.12% / 37.55% | **5.83% / 36.83%** |
 
-身份与完整性门禁：1,098 个 canonical、1,098 个 primary CLI、19 个 reviewed alias、1,098 个 NFKC identity 及 1,098 个 `exact_filtered` 全部 100%；5,801 个响应的 Catalog 绑定失败、unknown candidate、ineligible candidate、response budget violation 均为 0。上下文方面，平均 Search + gold Inspect 为 4,486.87 bytes，相对 17,851,126 bytes 的 compact 全量 Schema 减少 **99.9749%**，相对假设 oracle 已选对产品的理想导航仍减少 **96.3297%**。两条评测路径都直接 Inspect gold leaf，即使 Search miss 也不计额外尝试，因此是容量上界，不是实际 Agent 成本。
+身份与完整性门禁：1,098 个 canonical、1,098 个 primary CLI、19 个 reviewed alias、1,098 个 NFKC identity 及 1,098 个 `exact_filtered` 全部 100%；5,801 个响应的 Catalog 绑定失败、unknown candidate、ineligible candidate、response budget violation 均为 0。上下文方面，平均 Search + gold Inspect 为 4,489.58 bytes，相对 17,876,084 bytes 的 compact 全量 Schema 减少 **99.9749%**，相对假设 oracle 已选对产品的理想导航仍减少 **96.3311%**。两条评测路径都直接 Inspect gold leaf，即使 Search miss 也不计额外尝试，因此是容量上界，不是实际 Agent 成本。
 
-这些数据说明当前实现达到了“显著缩小上下文、身份不退化、中文自然语言 Top-5 约 86%”的工程目标，但不等价于线上任务成功率。Forbidden@5 仍有 36.83%，独立 qrels、英文 ≥100、workflow ≥80、真实同模型 Agent A/B 仍为空；因此不能据此默认开启。
+这些数据说明当前实现达到了“显著缩小上下文、身份不退化、中文自然语言 Top-5 约 87%”的工程目标，但不等价于线上任务成功率。当前默认的 Forbidden@5 仍有 37.55%，独立 qrels、英文 ≥100、workflow ≥80、真实同模型 Agent A/B 仍为空；因此不能据此把 action 重排提升为默认。
 
 ### 1.2 合并前算法研究记录（2026-08-12，历史基线）
 
@@ -370,16 +370,16 @@ make generate-tool-search-comparison
 
 | 项目 | 结果 |
 |---|---:|
-| 1,123 条预算内同源 intent R@1 / R@5 / MRR@5 | 65.63% / 86.38% / 0.7417 |
-| Go 原始字段 BM25 control R@1 / R@5 / MRR@5 | 65.09% / 86.64% / 0.7370 |
-| Go TF-IDF shadow R@1 / R@5 / MRR@5 | 45.59% / 75.51% / 0.5701 |
-| 10 条 workflow 整句 Complete@5 / required recall | 40% / 66.67% |
-| reviewed subquery 后 Complete@5 / required recall | 90% / 95% |
-| Search + gold Inspect 平均 compact JSON | 4,486.87 bytes（oracle-assisted capacity upper bound） |
-| 相对 oracle 导航 `overview → product → inspect` 的 byte reduction | 96.3297% |
+| 1,123 条预算内同源 intent R@1 / R@5 / MRR@5 | 65.00% / 86.64% / 0.7366 |
+| Go action ranker shadow R@1 / R@5 / MRR@5 | 65.54% / 86.38% / 0.7414 |
+| Go TF-IDF shadow R@1 / R@5 / MRR@5 | 45.59% / 75.51% / 0.5698 |
+| 10 条 workflow 整句 Complete@5 / required recall | 40% / 61.67% |
+| reviewed subquery 后 Complete@5 / required recall | 50% / 75% |
+| Search + gold Inspect 平均 compact JSON | 4,489.58 bytes（oracle-assisted capacity upper bound） |
+| 相对 oracle 导航 `overview → product → inspect` 的 byte reduction | 96.3311% |
 | 相对全量紧凑 Schema 的 byte reduction | 99.9749% |
 
-这解决了“Python 离线结果和 Go 生产实现混在一起”的问题：Python 表格用于记录候选算法研究，Go 表格锁定 shipped runtime。当前默认增加有界 action/product/entity 重排，相对原始字段 BM25 的 R@5 低 0.27 pp，但 R@1、MRR、workflow 与 Forbidden exposure 更优，继续作为独立 test 前的默认候选。Go TF-IDF 使用 fielded/raw-TF，而 Python 头条 TF-IDF 使用 unfielded/log-TF；当前 Go shadow 明显更差，不能因为历史 Python 的 84.55% 就切换生产默认。两边由于 Catalog、投影和 TF 定义不同，不声称逐 case parity。
+这解决了“Python 离线结果和 Go 生产实现混在一起”的问题：Python 表格用于记录候选算法研究，Go 表格锁定 shipped runtime。由于 proxy 同源且 action ranker 的整体与纯中文 R@5 分别低 0.27 / 0.75 pp，当前默认回到更简单的字段 BM25；action/product/entity 重排仅作为 shadow，由 sealed 独立 qrels 上的配对 product-cluster CI 决定是否具备切换资格。Go TF-IDF 使用 fielded/raw-TF，而 Python 头条 TF-IDF 使用 unfielded/log-TF；当前 Go shadow 明显更差，不能因为历史 Python 的 84.55% 就切换生产默认。两边由于 Catalog、投影和 TF 定义不同，不声称逐 case parity。
 
 ### 8.1 当前 release binary 冷进程与包体（Apple M3 Pro）
 
