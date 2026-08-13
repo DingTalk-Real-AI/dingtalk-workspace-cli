@@ -133,6 +133,7 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSuppressedConstraintProjectionStillValidatesAtRuntime(t *testing.T) {
+	executed := false
 	s := Shortcut{
 		Service:                      "doc",
 		Command:                      "+compat-guard",
@@ -140,7 +141,10 @@ func TestCrossPlatformCoverageSuppressedConstraintProjectionStillValidatesAtRunt
 		Flags:                        []Flag{{Name: "a"}, {Name: "b"}},
 		Constraints:                  []Constraint{{Kind: ConstraintMutuallyExclusive, Flags: []string{"a", "b"}}},
 		SuppressConstraintProjection: true,
-		Execute:                      func(*RuntimeContext) error { return nil },
+		Execute: func(*RuntimeContext) error {
+			executed = true
+			return nil
+		},
 	}
 	spec := FromShortcut(s)
 	if len(spec.Constraints) != 0 {
@@ -153,6 +157,14 @@ func TestCrossPlatformCoverageSuppressedConstraintProjectionStillValidatesAtRunt
 	cmd.SetArgs([]string{"--a", "one", "--b", "two"})
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "互斥") {
 		t.Fatalf("suppressed mutual-exclusion runtime error = %v", err)
+	}
+	validCmd := corecmd.New(spec)
+	validCmd.SetArgs([]string{"--a", "one"})
+	if err := validCmd.Execute(); err != nil {
+		t.Fatalf("valid suppressed constraint execution: %v", err)
+	}
+	if !executed {
+		t.Fatal("valid suppressed constraint execution did not reach the shortcut")
 	}
 }
 
