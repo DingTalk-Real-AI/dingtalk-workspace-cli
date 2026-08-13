@@ -6,6 +6,20 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.58-beta.6] - 2026-08-13
+
+### Fixed
+
+- **npm package verification for multi-skill installs** (#991) — aligns the
+  release verifier with the installer’s concrete Agent skill-root selection,
+  preventing valid multi-skill package layouts from failing release delivery.
+
+### Changed
+
+- **Release-seal CI classification** (#987) — recognizes the reviewed
+  CHANGELOG-and-fragment archival shape while retaining release-contract and
+  lifecycle validation, reducing unrelated CI work for release-seal PRs.
+
 ## [1.0.58-beta.5] - 2026-08-13
 
 ### Added

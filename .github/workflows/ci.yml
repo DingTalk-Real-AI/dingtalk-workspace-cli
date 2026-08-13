@@ -24,6 +24,7 @@ jobs:
       pull-requests: read
     outputs:
       changelog_only: ${{ steps.classify.outputs.changelog_only }}
+      release_seal_only: ${{ steps.classify.outputs.release_seal_only }}
       changelog_changed: ${{ steps.classify.outputs.changelog_changed }}
       docs_only: ${{ steps.classify.outputs.docs_only }}
       full_suite: ${{ steps.classify.outputs.full_suite }}
@@ -39,6 +40,7 @@ jobs:
         with:
           script: |
             let changelogOnly = false;
+            let releaseSealOnly = false;
             let changelogChanged = false;
             let docsOnly = false;
             let fullSuite = context.eventName === 'push';
@@ -162,6 +164,43 @@ jobs:
                 filename === 'go.mod' ||
                 filename === 'go.sum'
               );
+            const isExactReleaseSeal = (candidates) => {
+              const changelog = candidates.filter(
+                ({ filename, status, previous_filename }) =>
+                  filename === 'CHANGELOG.md' &&
+                  status === 'modified' &&
+                  !previous_filename
+              );
+              if (changelog.length !== 1 || candidates.length < 2) {
+                return false;
+              }
+              let version = '';
+              return candidates.every((file) => {
+                if (file.filename === 'CHANGELOG.md') {
+                  return file.status === 'modified' && !file.previous_filename;
+                }
+                if (
+                  file.status !== 'renamed' ||
+                  typeof file.filename !== 'string' ||
+                  typeof file.previous_filename !== 'string' ||
+                  file.additions !== 0 ||
+                  file.deletions !== 0
+                ) {
+                  return false;
+                }
+                const target = file.filename.match(
+                  /^\.changes\/released\/([0-9]+\.[0-9]+\.[0-9]+(?:-beta\.[1-9][0-9]*)?)\/([a-z0-9][a-z0-9._-]*\.md)$/
+                );
+                if (!target || file.previous_filename !== `.changes/${target[2]}`) {
+                  return false;
+                }
+                if (version && version !== target[1]) {
+                  return false;
+                }
+                version = target[1];
+                return true;
+              });
+            };
             const classifyFiles = (complete) => {
               const paths = files.flatMap(({ filename, previous_filename }) =>
                 [filename, previous_filename].filter(
@@ -248,19 +287,26 @@ jobs:
                 );
               }
 
-              changelogOnly =
+              const exactChangelogDiff =
                 files.length === 1 &&
                 files[0].filename === 'CHANGELOG.md' &&
                 files[0].status === 'modified' &&
                 !files[0].previous_filename;
+              releaseSealOnly = isExactReleaseSeal(files);
+              changelogOnly = exactChangelogDiff || releaseSealOnly;
               changelogChanged = files.some(
                 ({ filename, previous_filename }) =>
                   filename === 'CHANGELOG.md' ||
                   previous_filename === 'CHANGELOG.md'
               );
               classifyFiles(true);
+              if (releaseSealOnly) {
+                fullSuite = false;
+              }
               fastPathTrust = changelogOnly
-                ? 'exact pull-request revision and synthetic merge policy'
+                ? releaseSealOnly
+                  ? 'exact release-seal fragment archival and synthetic merge policy'
+                  : 'exact CHANGELOG-only revision and synthetic merge policy'
                 : docsOnly
                   ? 'documentation-only focused admission'
                   : fullSuite
@@ -295,7 +341,8 @@ jobs:
                     per_page: 100,
                   });
                 files = Array.isArray(comparison.files) ? comparison.files : [];
-                classifyFiles(files.length < 300);
+                const pushFilesComplete = files.length < 300;
+                classifyFiles(pushFilesComplete);
                 const linearFromValidatedTip =
                   comparison.status === 'ahead' &&
                   comparison.merge_base_commit?.sha === expectedBefore &&
@@ -307,8 +354,10 @@ jobs:
                   files[0].filename === 'CHANGELOG.md' &&
                   files[0].status === 'modified' &&
                   !files[0].previous_filename;
+                const exactReleaseSealDiff =
+                  pushFilesComplete && isExactReleaseSeal(files);
 
-                if (linearFromValidatedTip && exactChangelogDiff) {
+                if (linearFromValidatedTip && (exactChangelogDiff || exactReleaseSealDiff)) {
                   const requiredContexts = [
                     'Lint',
                     'Test',
@@ -359,9 +408,15 @@ jobs:
 
                   if (missing.length === 0 && nonSuccess.length === 0) {
                     changelogOnly = true;
+                    releaseSealOnly = exactReleaseSealDiff;
                     changelogChanged = true;
+                    if (releaseSealOnly) {
+                      fullSuite = false;
+                    }
                     fastPathTrust =
-                      `exact CHANGELOG-only successor of validated ${expectedBefore}`;
+                      releaseSealOnly
+                        ? `exact release-seal successor of validated ${expectedBefore}`
+                        : `exact CHANGELOG-only successor of validated ${expectedBefore}`;
                   } else {
                     fastPathTrust =
                       'predecessor Code Admission is not fully successful; ' +
@@ -376,6 +431,7 @@ jobs:
             }
 
             core.setOutput('changelog_only', String(changelogOnly));
+            core.setOutput('release_seal_only', String(releaseSealOnly));
             core.setOutput('changelog_changed', String(changelogChanged));
             core.setOutput('docs_only', String(docsOnly));
             core.setOutput('full_suite', String(fullSuite));
@@ -387,7 +443,8 @@ jobs:
             await core.summary
               .addHeading('Code Admission scope')
               .addRaw(`- Event: \`${context.eventName}\`\n`)
-              .addRaw(`- Exact modified CHANGELOG only: \`${changelogOnly}\`\n`)
+              .addRaw(`- Metadata-only fast path: \`${changelogOnly}\`\n`)
+              .addRaw(`- Release-seal fragments only: \`${releaseSealOnly}\`\n`)
               .addRaw(`- CHANGELOG touched: \`${changelogChanged}\`\n`)
               .addRaw(`- Documentation-only: \`${docsOnly}\`\n`)
               .addRaw(`- Full suite: \`${fullSuite}\`\n`)
@@ -402,7 +459,14 @@ jobs:
 
       - name: Record CHANGELOG-only fast path
         if: steps.classify.outputs.changelog_only == 'true'
-        run: echo "Lint is satisfied by the trusted CHANGELOG-only Policy path." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          RELEASE_SEAL_ONLY: ${{ steps.classify.outputs.release_seal_only }}
+        run: |
+          if [ "$RELEASE_SEAL_ONLY" = true ]; then
+            echo "Lint is satisfied by the trusted release-seal fragment Policy path." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Lint is satisfied by the trusted CHANGELOG-only Policy path." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Record documentation-only fast path
         if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only == 'true'
@@ -1256,6 +1320,7 @@ jobs:
         env:
           CLASSIFIED_CHANGELOG_CHANGED: ${{ needs.lint.outputs.changelog_changed }}
           CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
+          RELEASE_SEAL_ONLY: ${{ needs.lint.outputs.release_seal_only }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -eu
@@ -1282,7 +1347,7 @@ jobs:
           fi
 
           mode=--content-only
-          if [ "$CHANGELOG_ONLY" = true ]; then
+          if [ "$CHANGELOG_ONLY" = true ] && [ "$RELEASE_SEAL_ONLY" != true ]; then
             mode=--fast-path
           fi
           ./scripts/policy/check-changelog-pr.sh \
@@ -1294,25 +1359,41 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: ./scripts/policy/check-release-fragments.sh "$PR_BASE_SHA" HEAD
 
-      - name: Validate trusted main CHANGELOG-only push
+      - name: Validate trusted main metadata-only push
         if: github.event_name == 'push' && needs.lint.outputs.changelog_only == 'true'
         env:
           PUSH_BEFORE_SHA: ${{ github.event.before }}
           PUSH_AFTER_SHA: ${{ github.event.after }}
+          RELEASE_SEAL_ONLY: ${{ needs.lint.outputs.release_seal_only }}
         run: |
           set -eu
           test "$(git rev-parse HEAD)" = "$PUSH_AFTER_SHA" || {
             echo "checked-out push revision does not match event after SHA" >&2
             exit 1
           }
+          mode=--fast-path
+          if [ "$RELEASE_SEAL_ONLY" = true ]; then
+            mode=--content-only
+          fi
           ./scripts/policy/check-changelog-pr.sh \
-            --fast-path "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"
+            "$mode" "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"
+          if [ "$RELEASE_SEAL_ONLY" = true ]; then
+            ./scripts/policy/check-release-fragments.sh \
+              "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"
+          fi
 
       - name: Record CHANGELOG-only fast path
         if: needs.lint.outputs.changelog_only == 'true'
+        env:
+          RELEASE_SEAL_ONLY: ${{ needs.lint.outputs.release_seal_only }}
         run: |
-          echo "Only the trusted base-equivalent CHANGELOG validator ran; executable sources are unchanged." \
-            >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RELEASE_SEAL_ONLY" = true ]; then
+            echo "Only the trusted release-seal and fragment validators ran; executable sources are unchanged." \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Only the trusted base-equivalent CHANGELOG validator ran; executable sources are unchanged." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Validate scoped policy
         if: ${{ needs.lint.outputs.changelog_only != 'true' && (needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true')) }}

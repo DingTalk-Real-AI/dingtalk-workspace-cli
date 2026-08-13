@@ -70,10 +70,12 @@ func TestPackageManagerVersionVerificationReadsRawBinary(t *testing.T) {
 		t.Fatal("package-manager verifier still requires the version marker to occupy a strings(1) line")
 	}
 	for _, want := range []string{
-		"HOME_SKILL_BASES=",
+		"HOME_SPECIFIC_SKILL_BASES=",
 		`$base/dingtalk-shared/SKILL.md`,
 		`$base/dingtalk-misc/SKILL.md`,
 		"unexpected mono Skill layout",
+		`verify_npm_install "$tarball_path" "specific-agent-roots"`,
+		`verify_npm_install "$tarball_path" "generic-fallback"`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("package-manager verifier is missing multi-layout contract %q", want)
@@ -81,6 +83,60 @@ func TestPackageManagerVersionVerificationReadsRawBinary(t *testing.T) {
 	}
 	if strings.Contains(script, "HOME_SKILL_TARGETS=") {
 		t.Fatal("package-manager verifier still declares the legacy mono target contract")
+	}
+}
+
+func TestPackageManagerVerifierCoversSpecificAndFallbackSkillRoots(t *testing.T) {
+	t.Parallel()
+
+	postGoreleaserPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
+	if err != nil {
+		t.Fatalf("Abs(post-goreleaser.sh) error = %v", err)
+	}
+	verifierPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "verify-package-managers.sh"))
+	if err != nil {
+		t.Fatalf("Abs(verify-package-managers.sh) error = %v", err)
+	}
+
+	distDir := filepath.Join(t.TempDir(), "dist")
+	targets := []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"dws-linux-amd64.tar.gz",
+		"dws-linux-arm64.tar.gz",
+	}
+	hostArchive := "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
+	if runtime.GOOS == "windows" {
+		hostArchive = "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".zip"
+	}
+	foundHost := false
+	for _, target := range targets {
+		if target == hostArchive {
+			foundHost = true
+			break
+		}
+	}
+	if !foundHost {
+		targets = append(targets, hostArchive)
+	}
+	seedDistArtifacts(t, distDir, targets)
+
+	packageCmd := exec.Command("sh", postGoreleaserPath)
+	packageCmd.Env = postGoreleaserEnv(t, distDir, "v0.0.0-test", "https://downloads.example.com/dws/releases/v0.0.0-test")
+	if output, err := packageCmd.CombinedOutput(); err != nil {
+		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, output)
+	}
+
+	verifyCmd := exec.Command("sh", verifierPath, "--npm-only")
+	verifyCmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+distDir)
+	output, err := verifyCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("verify-package-managers.sh error = %v\noutput:\n%s", err, output)
+	}
+	for _, scenario := range []string{"specific-agent-roots", "generic-fallback"} {
+		if !strings.Contains(string(output), "verifying npm package install ("+scenario+")") {
+			t.Errorf("verifier output is missing %s scenario:\n%s", scenario, output)
+		}
 	}
 }
 

@@ -1019,12 +1019,47 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	}
 
 	admission := readWorkflow(".github/workflows/ci.yml")
+	policyStart := strings.Index(admission, "\n  policy:\n")
+	policyEnd := strings.Index(admission, "\n  interface-integrity:\n")
+	if policyStart < 0 || policyEnd <= policyStart {
+		t.Fatal("Code Admission workflow missing Policy job boundaries")
+	}
+	policyJob := admission[policyStart:policyEnd]
+	requirePolicyEnv := func(step, nextStep string) {
+		t.Helper()
+		start := strings.Index(policyJob, "      - name: "+step+"\n")
+		end := strings.Index(policyJob[start+1:], "      - name: "+nextStep+"\n")
+		if start < 0 || end < 0 {
+			t.Fatalf("Policy job missing %q step boundary", step)
+		}
+		block := policyJob[start : start+1+end]
+		if !strings.Contains(block, "RELEASE_SEAL_ONLY: ${{ needs.lint.outputs.release_seal_only }}") {
+			t.Errorf("Policy %q step must receive release-seal classification", step)
+		}
+	}
+	requirePolicyEnv("Validate changed CHANGELOG content", "Validate release fragment lifecycle")
+	requirePolicyEnv("Validate trusted main metadata-only push", "Record CHANGELOG-only fast path")
+	pushStart := strings.Index(admission, "} else if (context.eventName === 'push') {")
+	pushEnd := strings.Index(admission, "\n            core.setOutput('changelog_only'")
+	if pushStart < 0 || pushEnd <= pushStart {
+		t.Fatal("Code Admission workflow missing push classification boundaries")
+	}
+	pushClassification := admission[pushStart:pushEnd]
+	if strings.Contains(pushClassification, "const exactReleaseSealDiff = isExactReleaseSeal(files)") {
+		t.Error("push release-seal fast path must not trust an unguarded compare file list")
+	}
 	for _, want := range []string{
 		"name: CI",
 		"files.length === 1",
 		"files[0].filename === 'CHANGELOG.md'",
 		"files[0].status === 'modified'",
 		"!files[0].previous_filename",
+		"const isExactReleaseSeal",
+		"file.status !== 'renamed'",
+		"file.additions !== 0",
+		"file.deletions !== 0",
+		"releaseSealOnly = isExactReleaseSeal(files)",
+		"release_seal_only: ${{ steps.classify.outputs.release_seal_only }}",
 		"pre-classification",
 		"post-classification",
 		"before.changed_files !== files.length",
@@ -1048,7 +1083,8 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"mode=--fast-path",
 		`"$mode" "$PR_BASE_SHA" HEAD`,
 		`test "$(git rev-parse HEAD)" = "$PUSH_AFTER_SHA"`,
-		`--fast-path "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"`,
+		`"$mode" "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"`,
+		`./scripts/policy/check-release-fragments.sh \`,
 		"needs.lint.outputs.platform_sensitive == 'true'",
 		`COVERAGE_TARGET: "100"`,
 		`COVERAGE_ENFORCE_OVERALL: "false"`,
@@ -1060,7 +1096,9 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		`package_output="$(./scripts/ci/test-packages.sh list`,
 		"docs_only: ${{ steps.classify.outputs.docs_only }}",
 		"full_suite: ${{ steps.classify.outputs.full_suite }}",
-		"classifyFiles(files.length < 300)",
+		"const pushFilesComplete = files.length < 300",
+		"classifyFiles(pushFilesComplete)",
+		"pushFilesComplete && isExactReleaseSeal(files)",
 		"platformSensitive =",
 		"files.some(isNativeGoChange)",
 		"paths.some(isEditionSensitive)",

@@ -54,7 +54,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dws-package-verify-XXXXXX")"
-HOME_AGENT_PARENTS="
+HOME_SPECIFIC_AGENT_PARENTS="
 .claude
 .cursor
 .qoder
@@ -72,8 +72,7 @@ HOME_AGENT_PARENTS="
 .openclaw
 .hermes
 "
-HOME_SKILL_BASES="
-.agents/skills
+HOME_SPECIFIC_SKILL_BASES="
 .claude/skills
 .cursor/skills
 .qoder/skills
@@ -102,43 +101,55 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-seed_agent_homes() {
+seed_specific_agent_homes() {
   home_root="$1"
-  for parent in $HOME_AGENT_PARENTS; do
+  for parent in $HOME_SPECIFIC_AGENT_PARENTS; do
     mkdir -p "$home_root/$parent"
   done
 }
 
+verify_skill_base() {
+  home_root="$1"
+  base="$2"
+  need_file "$home_root/$base/dingtalk-shared/SKILL.md"
+  need_file "$home_root/$base/dingtalk-misc/SKILL.md"
+  [ ! -e "$home_root/$base/dws" ] || err "unexpected mono Skill layout found in $home_root/$base/dws"
+}
+
 verify_skill_targets() {
   home_root="$1"
-  for base in $HOME_SKILL_BASES; do
-    need_file "$home_root/$base/dingtalk-shared/SKILL.md"
-    need_file "$home_root/$base/dingtalk-misc/SKILL.md"
-    [ ! -e "$home_root/$base/dws" ] || err "unexpected mono Skill layout found in $home_root/$base/dws"
+  found_specific=0
+  for base in $HOME_SPECIFIC_SKILL_BASES; do
+    parent="${base%/skills}"
+    if [ -d "$home_root/$parent" ]; then
+      verify_skill_base "$home_root" "$base"
+      found_specific=1
+    fi
+  done
+
+  if [ "$found_specific" -eq 0 ]; then
+    verify_skill_base "$home_root" ".agents/skills"
+    return
+  fi
+
+  for name in dingtalk-shared dingtalk-misc dws; do
+    [ ! -e "$home_root/.agents/skills/$name" ] || \
+      err "unexpected generic Skill copy found in $home_root/.agents/skills/$name"
   done
 }
 
-verify_npm() {
-  need_cmd npm
-  need_cmd node
-  need_cmd tar
-  need_cmd unzip
-  need_file "$NPM_STAGE_DIR/package.json"
-
-  npm_home="$TMP_ROOT/npm-home"
-  npm_prefix="$TMP_ROOT/npm-prefix"
-  npm_cache="$TMP_ROOT/npm-cache"
+verify_npm_install() {
+  tarball_path="$1"
+  scenario="$2"
+  npm_home="$TMP_ROOT/npm-home-$scenario"
+  npm_prefix="$TMP_ROOT/npm-prefix-$scenario"
+  npm_cache="$TMP_ROOT/npm-cache-$scenario"
   mkdir -p "$npm_home" "$npm_prefix" "$npm_cache"
-  seed_agent_homes "$npm_home"
+  if [ "$scenario" = "specific-agent-roots" ]; then
+    seed_specific_agent_homes "$npm_home"
+  fi
 
-  say "==> verifying npm package install"
-  tarball_name="$(
-    cd "$NPM_STAGE_DIR"
-    HOME="$npm_home" npm_config_cache="$npm_cache" npm pack --silent
-  )"
-  tarball_path="$NPM_STAGE_DIR/$tarball_name"
-  need_file "$tarball_path"
-
+  say "==> verifying npm package install ($scenario)"
   HOME="$npm_home" npm_config_cache="$npm_cache" npm_config_prefix="$npm_prefix" \
     npm install -g "$tarball_path" >/dev/null
 
@@ -158,6 +169,24 @@ verify_npm() {
 
   HOME="$npm_home" npm_config_cache="$npm_cache" npm_config_prefix="$npm_prefix" \
     npm uninstall -g dingtalk-workspace-cli >/dev/null
+}
+
+verify_npm() {
+  need_cmd npm
+  need_cmd node
+  need_cmd tar
+  need_cmd unzip
+  need_file "$NPM_STAGE_DIR/package.json"
+
+  tarball_name="$(
+    cd "$NPM_STAGE_DIR"
+    HOME="$TMP_ROOT/npm-pack-home" npm_config_cache="$TMP_ROOT/npm-pack-cache" npm pack --silent
+  )"
+  tarball_path="$NPM_STAGE_DIR/$tarball_name"
+  need_file "$tarball_path"
+
+  verify_npm_install "$tarball_path" "specific-agent-roots"
+  verify_npm_install "$tarball_path" "generic-fallback"
 
   rm -f "$tarball_path"
 }
