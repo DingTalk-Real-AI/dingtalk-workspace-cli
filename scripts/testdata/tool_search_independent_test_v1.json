@@ -1,0 +1,6 @@
+{
+  "version": "tool-search-qrels.v1",
+  "state": "collecting",
+  "description": "Independently authored release-gate qrels. Queries must not be copied or paraphrased from Catalog selection metadata by the same author.",
+  "cases": []
+}

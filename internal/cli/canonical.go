@@ -23,6 +23,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// SchemaInspectV1Response is the versioned Search -> Inspect wire contract.
+// Legacy schema queries without expected hashes keep their historical flat
+// payload for human and script compatibility.
+type SchemaInspectV1Response struct {
+	Version  string            `json:"version"`
+	Catalog  CatalogVersionRef `json:"catalog"`
+	ToolSpec map[string]any    `json:"tool_spec"`
+}
+
 // schemaCommandCatalogError / payloads use deliverySchemaCatalog
 // (RegisterSchemaSourceRoot → ResolveSchemaBuild). There is no committed
 // Schema Catalog embed fallback.
@@ -72,11 +81,17 @@ func NewSchemaCommand() *cobra.Command {
 		Long: `查看当前可运行命令的 Schema 元数据。
 
 不带参数时列出产品和工具数量；传产品或分组路径逐层展开；传具体工具路径输出扁平参数 Schema（对齐 GWS：parameters 内联 required，键为 CLI flag）。普通 Agent 查询应使用 --compact：它按稳定字段白名单输出选参、约束、安全语义和已评审的返回契约。省略 --compact 的 full leaf 保留参数映射、接口绑定和 provenance，仅用于定向审计；--all 输出全部工具的完整 leaf Schema，用于审计/CI。helper、MCP 与本地 Cobra 命令均须通过 ContractFinal.Identity 声明进入收集的身份集，并从同一声明装配的 ToolSpec 投影；查询不执行服务发现或临时合成第二份 Schema。`,
-		Args:              cobra.MaximumNArgs(1),
+		Args:              cobra.MaximumNArgs(16),
 		DisableAutoGenTag: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			all, _ := cmd.Flags().GetBool("all")
 			compact, _ := cmd.Flags().GetBool("compact")
+			expectedSourceHash, _ := cmd.Flags().GetString("expected-source-hash")
+			expectedSurfaceHash, _ := cmd.Flags().GetString("expected-surface-hash")
+			if (expectedSourceHash == "") != (expectedSurfaceHash == "") {
+				return apperrors.NewValidation("--expected-source-hash and --expected-surface-hash must be provided together", apperrors.WithReason("incomplete_catalog_version"))
+			}
+			versionedInspect := expectedSourceHash != ""
 			cliPath, _ := cmd.Flags().GetString("cli-path")
 			cliPath = strings.TrimSpace(cliPath)
 			if cliPath != "" && len(args) > 0 {
@@ -90,9 +105,33 @@ func NewSchemaCommand() *cobra.Command {
 			}
 			if cliPath != "" {
 				args = []string{cliPath}
+			} else if len(args) > 1 {
+				// Preserve the quoted path form while accepting the equivalent
+				// natural tokenized form: dws schema chat message.
+				args = []string{strings.Join(args, " ")}
+			}
+			if versionedInspect {
+				if all || len(args) == 0 || !compact {
+					return apperrors.NewValidation("versioned Schema inspect requires one tool path and --compact", apperrors.WithReason("invalid_inspect_request"))
+				}
+				for _, name := range []string{"fields", "jq"} {
+					if flag := cmd.Flag(name); flag != nil && flag.Changed {
+						return apperrors.NewValidation("schema-inspect.v1 does not support --"+name, apperrors.WithReason("unsupported_output_filter"))
+					}
+				}
+				if flag := cmd.Flag("format"); flag != nil && flag.Changed && strings.TrimSpace(flag.Value.String()) != "json" {
+					return apperrors.NewValidation("schema-inspect.v1 only supports --format json", apperrors.WithReason("unsupported_output_format"))
+				}
 			}
 			if err := schemaCommandCatalogError(); err != nil {
 				return fmt.Errorf("load typed Schema registry: %w", err)
+			}
+			loaded := deliverySchemaCatalog()
+			if expectedSourceHash != "" && expectedSourceHash != loaded.Snapshot.SourceHash {
+				return apperrors.NewDiscovery("Catalog changed before Schema inspect", apperrors.WithReason("catalog_changed"))
+			}
+			if expectedSurfaceHash != "" && expectedSurfaceHash != loaded.Snapshot.SurfaceHash {
+				return apperrors.NewDiscovery("Catalog surface changed before Schema inspect", apperrors.WithReason("catalog_changed"))
 			}
 			var payload map[string]any
 			var err error
@@ -109,12 +148,22 @@ func NewSchemaCommand() *cobra.Command {
 			if compact {
 				payload = stripSchemaPayloadCompact(payload)
 			}
+			if versionedInspect {
+				return output.WriteFiltered(cmd.OutOrStdout(), output.FormatJSON, SchemaInspectV1Response{
+					Version:  "schema-inspect.v1",
+					Catalog:  CatalogVersionRef{SourceHash: loaded.Snapshot.SourceHash, SurfaceHash: loaded.Snapshot.SurfaceHash},
+					ToolSpec: payload,
+				}, "", "")
+			}
 			return output.WriteFiltered(cmd.OutOrStdout(), output.ResolveFormat(cmd, output.FormatJSON), payload, output.ResolveFields(cmd), output.ResolveJQ(cmd))
 		},
 	}
 	cmd.Flags().Bool("all", false, "输出全部工具的完整 leaf Schema（包括参数和约束，用于审计/CI）")
 	cmd.Flags().Bool("compact", false, "按稳定字段白名单输出 Agent 选参、约束、安全语义和返回契约")
 	cmd.Flags().String("cli-path", "", "按 CLI 命令路径查询")
+	cmd.Flags().String("expected-source-hash", "", "要求 Inspect 使用指定 Catalog source hash")
+	cmd.Flags().String("expected-surface-hash", "", "要求 Inspect 使用指定 Catalog surface hash")
+	cmd.AddCommand(newSchemaSearchCommand())
 	return cmd
 }
 

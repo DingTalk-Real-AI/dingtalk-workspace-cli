@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "description": "Small reviewed diagnostic set for multi-tool retrieval completeness. Not a release gate.",
+  "cases": [
+    {
+      "id": "chat-send-file-and-check-read",
+      "query": "给群里发文件，并确认群成员是否已读",
+      "subqueries": [
+        "以当前用户身份给群聊发送本地文件",
+        "查询指定消息的已读状态和人员"
+      ],
+      "required": [
+        "chat.send_personal_message",
+        "chat.query_msg_read_status"
+      ]
+    },
+    {
+      "id": "calendar-create-and-notify",
+      "query": "创建一场会议日程，然后在群里通知参会人",
+      "subqueries": [
+        "创建一场新的会议日程",
+        "以当前用户身份向群聊发送通知"
+      ],
+      "required": [
+        "calendar.create_calendar_event",
+        "chat.send_personal_message"
+      ]
+    },
+    {
+      "id": "drive-upload-and-authorize",
+      "query": "把文件上传到钉盘，再给同事开通阅读权限",
+      "subqueries": [
+        "上传本地文件到钉盘",
+        "给钉盘文件添加同事阅读权限"
+      ],
+      "required": [
+        "drive.upload",
+        "drive.add_permission"
+      ]
+    },
+    {
+      "id": "wiki-search-and-read",
+      "query": "在知识库中找到目标文档并读取正文",
+      "subqueries": [
+        "在指定知识库中搜索文档节点",
+        "读取钉钉在线文字文档正文"
+      ],
+      "required": [
+        "wiki.node_search",
+        "doc.get_document_content"
+      ]
+    },
+    {
+      "id": "todo-create-and-remind",
+      "query": "创建个人待办并为它添加到期提醒",
+      "subqueries": [
+        "创建个人待办",
+        "给已有待办添加到期提醒"
+      ],
+      "required": [
+        "todo.create_personal_todo",
+        "todo.add_todo_reminder"
+      ]
+    },
+    {
+      "id": "minutes-upload-and-summarize",
+      "query": "上传音视频生成听记，完成后读取智能摘要",
+      "subqueries": [
+        "创建听记文件上传会话",
+        "完成上传会话并创建听记",
+        "读取听记智能摘要"
+      ],
+      "required": [
+        "minutes.create_upload_session",
+        "minutes.complete_upload_session",
+        "minutes.get_minutes_ai_summary"
+      ]
+    },
+    {
+      "id": "approval-find-and-approve",
+      "query": "查询我的待审批任务并同意指定审批",
+      "subqueries": [
+        "查询当前用户待审批任务 ID",
+        "同意指定审批任务"
+      ],
+      "required": [
+        "oa.list_pending_tasks",
+        "oa.approve_processInstance"
+      ]
+    },
+    {
+      "id": "mail-draft-and-send",
+      "query": "创建一封邮件草稿，确认内容后发送草稿",
+      "subqueries": [
+        "创建邮件草稿但不发送",
+        "发送草稿箱中已有邮件草稿"
+      ],
+      "required": [
+        "mail.create_draft",
+        "mail.send_draft"
+      ]
+    },
+    {
+      "id": "chat-find-group-and-send",
+      "query": "按群名找到群聊，然后以当前用户身份发消息",
+      "subqueries": [
+        "按群名关键词搜索群聊",
+        "以当前用户身份向群聊发送消息"
+      ],
+      "required": [
+        "chat.search_groups",
+        "chat.send_personal_message"
+      ]
+    },
+    {
+      "id": "sheet-resolve-and-read",
+      "query": "先列出电子表格中的工作表，再读取指定单元格范围",
+      "subqueries": [
+        "列出电子表格文档内所有工作表",
+        "读取电子表格指定单元格范围"
+      ],
+      "required": [
+        "sheet.get_all_sheets",
+        "sheet.range_read"
+      ]
+    }
+  ]
+}

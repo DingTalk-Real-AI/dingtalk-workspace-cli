@@ -1,0 +1,102 @@
+{
+  "version": "tool-search-eval-manifest.v1",
+  "created_at": "2026-08-12T00:00:00+08:00",
+  "base_repository_commit": "5fed80fc0f1aaa4ee9123b0acf3041d0d9b45bc9",
+  "owners": {
+    "retrieval": "DWS Tool Search maintainers",
+    "independent_evaluation": "DWS Agent Evaluation maintainers",
+    "separation_rule": "The independent evaluation signer must not be an author of Catalog selection metadata used by the evaluated cases."
+  },
+  "algorithm_freeze": {
+    "state": "development_candidate_recorded_before_independent_dev_test_is_sealed",
+    "diagnostic_proxy_control": "bm25_unfielded",
+    "go_runtime_default": "fielded_bm25_action_v1",
+    "go_source_paths": [
+      "internal/cli/schema_search_command.go",
+      "internal/cli/tool_search.go",
+      "internal/cli/tool_search_agent_ab.go",
+      "internal/cli/tool_search_evaluation.go",
+      "internal/cli/tool_search_independent_evaluation.go",
+      "internal/cli/tool_search_lexical.go",
+      "internal/generator/cmd_tool_search_comparison/main.go"
+    ],
+    "go_source_sha256": "98a22a66fcc79785613feaeab6e4e607b04d8b32b8ca824eb3c26b00e98176fc",
+    "gate_source_paths": [
+      "scripts/dev/verify_tool_search_eval_manifest.py"
+    ],
+    "gate_source_sha256": "6034eb08694a5355fd6cb4a270f5b4eafd5544084d4cb812192c6b3e2b391e15",
+    "shadow_candidates": [
+      "fielded_bm25_ensemble",
+      "fielded_tfidf_cosine",
+      "bm25plus"
+    ],
+    "optional_external_candidate": "dense_provider_rrf",
+    "changes_forbidden_after_independent_dev_test_is_sealed": [
+      "tokenizer",
+      "field_projection",
+      "field_weights",
+      "bm25_k1_b_delta",
+      "rrf_k_depth"
+    ]
+  },
+  "proxy_v1": {
+    "state": "sealed_diagnostic_only",
+    "catalog_generation": "go_declarations_to_runtime_assembly",
+    "catalog_build_output": ".worktrees/policy-tmp/tool-search-schema-catalog",
+    "catalog_source_hash": "sha256:106a3d2389f672f7fd0ec302c45e2391e9edaac2d34523e15d42c395abb6c499",
+    "catalog_surface_hash": "sha256:7f9839f1ff428b52f1d032d2fa6493815c3755650b7d9fa653839e7d589482e5",
+    "tool_count": 1098,
+    "workflow_path": "scripts/testdata/tool_search_workflows.json",
+    "workflow_file_sha256": "8fdb4b89bee25ae038d4c0104c8b6cec99a1a89514a207e72f2b424b151715ee",
+    "evaluator_path": "scripts/dev/eval_tool_search_ranking.py",
+    "evaluator_file_sha256": "2957aa25ee13c16640c0ac6255577359ed34b702a0de561ed21c43267171a3cc",
+    "intent_cases": 1123,
+    "intent_excluded_over_budget": 10,
+    "chinese_only_cases": 402,
+    "mixed_chinese_ascii_cases": 721,
+    "english_cases": 0,
+    "workflow_cases": 10,
+    "release_gate": false,
+    "limitations": [
+      "Intent queries and agent summaries share selection authorship.",
+      "The devdoc slice has one binary-gold case while dev and devdoc expose the same backing search_open_platform_docs operation.",
+      "Catalog JSON is generated only under the ignored build temp directory and is never a repository input.",
+      "There are no English intent cases and only ten workflows."
+    ]
+  },
+  "independent_test_v1": {
+    "state": "collecting",
+    "path": "scripts/testdata/tool_search_independent_test_v1.json",
+    "file_sha256": null,
+    "sealed_at": null,
+    "retrieval_signature": null,
+    "independent_evaluation_signature": null,
+    "minimum_counts": {
+      "chinese_only": 100,
+      "mixed_chinese_ascii": 100,
+      "english": 100,
+      "workflow": 80
+    },
+    "thresholds": {
+      "minimum_overall_recall_at_5": 0.8,
+      "minimum_language_recall_at_5": 0.8,
+      "recall_at_5_noninferiority_margin": 0.02,
+      "minimum_default_switch_recall_at_5_gain": 0.01,
+      "default_switch_requested": false,
+      "maximum_forbidden_exposure_at_5": 0.05,
+      "maximum_sibling_exposure_at_5": 0.05,
+      "minimum_alternative_recall_at_5": 0.8,
+      "minimum_workflow_complete_at_5": 0.8,
+      "minimum_workflow_required_recall_at_5": 0.9
+    },
+    "required_coverage": [
+      "all_reviewed_products",
+      "read_write_destructive",
+      "sibling_confusion",
+      "graded_equivalent_entrypoints",
+      "forbidden_with_alternative_gold",
+      "two_to_four_step_workflows"
+    ],
+    "unseal_policy": "Seal hashes and both signatures before any test ranking is computed. A failed sealed test is retired; it is never reused for tuning."
+  }
+}
