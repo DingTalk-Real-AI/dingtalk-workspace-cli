@@ -82,8 +82,8 @@ var Search = shortcut.Shortcut{
 		{Name: "workspace-ids", Type: shortcut.FlagStringSlice, Desc: "按知识库 ID 过滤"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 10，最大 30)"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标 (上次结果的 nextPageToken)"},
-		{Name: "page-all", Type: shortcut.FlagBool, Default: "true", Desc: "有界读取全部后续页（默认 true）"},
-		{Name: "max-pages", Type: shortcut.FlagInt, Default: "100", Desc: "--page-all 最大页数"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "有界读取全部后续页"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "20", Desc: "--page-all 最大页数"},
 		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "最多返回文档数"},
 	},
 	Tips: []string{`dws doc +search --query "会议纪要"`, `dws doc +search --extensions pdf,docx`},
@@ -319,8 +319,8 @@ var List = shortcut.Shortcut{
 		{Name: "workspace", Type: shortcut.FlagString, Desc: "知识库 ID"},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 50，最大 50)"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标 (上次结果的 nextPageToken)"},
-		{Name: "page-all", Type: shortcut.FlagBool, Default: "true", Desc: "有界读取全部后续页（默认 true）"},
-		{Name: "max-pages", Type: shortcut.FlagInt, Default: "100", Desc: "--page-all 最大页数"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "有界读取全部后续页"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "20", Desc: "--page-all 最大页数"},
 		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "最多返回节点数"},
 	},
 	Tips: []string{`dws doc +list --folder DOC_FOLDER_NODE_ID`, `dws doc +list --workspace WS_ID --limit 20`},
@@ -388,7 +388,7 @@ var Copy = shortcut.Shortcut{
 	Description: "复制文档/文件到指定文件夹或知识库",
 	Intent:      "当你想保留原件、在另一个文件夹或知识库里生成一份文档/文件副本（例如以某篇文档为模板另存）时使用；输入源 node 与目标 folder/workspace，会实际创建一个副本。",
 	Risk:        shortcut.RiskWrite,
-	Safety:      docsafety.RecoverableWrite("unknown"),
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",
@@ -435,7 +435,7 @@ var Move = shortcut.Shortcut{
 	Description: "移动文档/文件到指定文件夹或知识库",
 	Intent:      "当你要整理文档归属、把某篇文档/文件从当前位置挪到另一个文件夹或知识库（原位置不再保留）时使用；输入 node 与目标 folder/workspace，会实际改变文件的存放位置。",
 	Risk:        shortcut.RiskWrite,
-	Safety:      docsafety.RecoverableWrite("unknown"),
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",
@@ -553,7 +553,7 @@ var CommentCreate = shortcut.Shortcut{
 	Description: "创建全文评论，或按 selection 创建划词评论",
 	Intent:      "当用户要对整篇文档留言，或针对文档中唯一匹配的一段文字创建精确划词评论时使用；已知 block/start/end 时也可直接走高级通道。",
 	Risk:        shortcut.RiskWrite,
-	Safety:      docsafety.RecoverableWrite("unknown"),
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: docContract("+comment-create", "创建全文评论，或按 selection 创建划词评论",
 		"当用户要对整篇文档留言，或针对文档中唯一匹配的一段文字创建精确划词评论时使用；已知 block/start/end 时也可直接走高级通道。",
 		[]string{`dws doc +comment-create --node <DOC_ID> --content "请补充数据来源"`, `dws doc +comment-create --node <DOC_ID> --selection "计划下周发布" --content "请确认日期"`},
@@ -588,7 +588,7 @@ var CommentReply = shortcut.Shortcut{
 	Description: "回复文档中的一条评论",
 	Intent:      "当你要针对某条已有评论进行回复、参与讨论或用表情贴图回应时使用；先从评论列表拿到 comment-key，再输入 node、comment-key 与 content（--emoji 则作为表情回复），会实际发布一条回复。",
 	Risk:        shortcut.RiskWrite,
-	Safety:      docsafety.RecoverableWrite("unknown"),
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",
@@ -645,7 +645,7 @@ var CommentCreateInline = shortcut.Shortcut{
 	Description: "兼容入口：按 block/start/end 创建划词评论",
 	Intent:      "仅兼容既有调用；新任务统一使用 +comment-create 的 selection 或 block/start/end 通道。",
 	Risk:        shortcut.RiskWrite,
-	Safety:      docsafety.RecoverableWrite("unknown"),
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "content", Type: shortcut.FlagString, Desc: "评论文字内容 (纯文本)", Required: true},
@@ -769,8 +769,8 @@ var VersionSave = shortcut.Shortcut{
 	Product:     productDoc,
 	Description: "手动保存文档版本快照",
 	Intent:      "当你在做重大改动前后、想手动打一个可回滚的版本存档点时使用；输入 node，会实际为该文档保存一个当前内容的历史版本快照。",
-	Risk:        shortcut.RiskWrite,
-	Safety:      docsafety.RecoverableWrite("unknown"),
+	Risk:        shortcut.RiskHighWrite,
+	Safety:      contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",

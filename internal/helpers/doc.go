@@ -2629,7 +2629,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		},
 	}
 	DeclareLeafMetadata(blockDeleteCmd, LeafSpec{
-		Safety: docsafety.RecoverableWrite("unknown"),
+		Safety: contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -3154,7 +3154,7 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 		RunE:    runDocMediaUpload,
 	}
 	DeclareLeafMetadata(mediaUploadCmd, LeafSpec{
-		Safety: docsafety.RecoverableWrite("unknown"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -3209,20 +3209,13 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
   # 在指定块之前插入
   dws doc media insert --node DOC_ID --file ./image.png --ref-block BLOCK_ID --where before`,
 		Flags: []LeafFlag{
-			{Name: "node", Usage: "目标文档的标识，支持传入 URL 或 ID", Required: true, Aliases: []string{"url", "id", "node-id", "doc-id", "file-id"}, Bind: "nodeId"},
+			{Name: "node", Usage: "目标文档的标识，支持传入 URL 或 ID", Required: true, Aliases: []string{"url", "id", "node-id", "doc-id", "file-id"}},
 			{Name: "file", Usage: "工作目录内已存在的相对文件路径", Required: true},
 			{Name: "name", Usage: "正文中的显示文件名（不能包含目录）"},
 			{Name: "mime-type", Usage: "MIME 类型（默认根据源文件扩展名推断）"},
 			{Name: "index", Kind: LeafInt, Usage: "顶层插入索引；--index 必须大于或等于 0，且不能与相对定位参数并用"},
-			{Name: "where", Usage: "相对位置: before / after", Enum: []string{"before", "after"}, RequiredWhen: "--ref-block is provided"},
-			{Name: "ref-block", Usage: "参考 block ID", Bind: "referenceBlockId", RequiredWhen: "--where is provided"},
-		},
-		Constraints: []LeafConstraint{
-			{Kind: LeafRequireTogether, Flags: []string{"where", "ref-block"}},
-			{Kind: LeafMutuallyExclusive, Flags: []string{"index", "where"}},
-			{Kind: LeafMutuallyExclusive, Flags: []string{"index", "ref-block"}},
-			{Kind: LeafCustom, Flags: []string{"index"}, Description: "--index 必须大于或等于 0"},
-			{Kind: LeafCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内存在且不能经符号链接逃逸的相对文件"},
+			{Name: "where", Usage: "相对位置: before / after"},
+			{Name: "ref-block", Usage: "参考 block ID"},
 		},
 		Safety: docsafety.RecoverableWrite("unknown"),
 		Contract: LeafContract{
@@ -3640,7 +3633,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		},
 	}
 	DeclareLeafMetadata(commentDeleteCmd, LeafSpec{
-		Safety: docsafety.ProtectedDelete("unknown"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -3829,7 +3822,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		},
 	}
 	DeclareLeafMetadata(permissionAddCmd, LeafSpec{
-		Safety: docsafety.SensitiveWrite("unknown"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -3912,7 +3905,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		},
 	}
 	DeclareLeafMetadata(permissionUpdateCmd, LeafSpec{
-		Safety: docsafety.SensitiveWrite("unknown"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -4065,7 +4058,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		},
 	}
 	DeclareLeafMetadata(permissionRemoveCmd, LeafSpec{
-		Safety: docsafety.ProtectedDelete("unknown"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -4587,7 +4580,7 @@ CLI 内部自动完成全部流程:
 	versionListCmd.Flags().Int("limit", 0, "返回版本数量上限")
 	versionListCmd.Flags().String("cursor", "", "分页游标")
 
-	versionRevertSafety := docsafety.RecoverableWrite("unknown")
+	versionRevertSafety := contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"}
 	versionRevertCmd := &cobra.Command{
 		Use:     "revert",
 		Short:   "回滚文档到指定版本",

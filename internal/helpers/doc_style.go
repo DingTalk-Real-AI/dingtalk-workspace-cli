@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	"github.com/spf13/cobra"
 )
 
@@ -51,7 +50,7 @@ func newDocStyleCommand() *cobra.Command {
 		RunE: runDocStyleCoverSet,
 	}
 	DeclareLeafMetadata(coverSetCmd, LeafSpec{
-		Safety: docsafety.RecoverableWrite("idempotent"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -81,7 +80,7 @@ func newDocStyleCommand() *cobra.Command {
 		RunE:    runDocStyleCoverClear,
 	}
 	DeclareLeafMetadata(coverClearCmd, LeafSpec{
-		Safety: docsafety.RecoverableWrite("idempotent"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -118,7 +117,7 @@ func newDocStyleCommand() *cobra.Command {
 		RunE:    runDocStyleBackgroundSet,
 	}
 	DeclareLeafMetadata(backgroundSetCmd, LeafSpec{
-		Safety: docsafety.RecoverableWrite("idempotent"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -148,7 +147,7 @@ func newDocStyleCommand() *cobra.Command {
 		RunE:    runDocStyleBackgroundClear,
 	}
 	DeclareLeafMetadata(backgroundClearCmd, LeafSpec{
-		Safety: docsafety.RecoverableWrite("idempotent"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",

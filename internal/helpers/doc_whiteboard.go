@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 )
 
 const (
@@ -249,7 +248,7 @@ CLI 生成卡片块 UUID 与白板资源 ID，插入后按块 UUID 回查并验�
 	}
 
 	DeclareLeafMetadata(insertCmd, LeafSpec{
-		Safety: docsafety.RecoverableWrite("non_idempotent"),
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",

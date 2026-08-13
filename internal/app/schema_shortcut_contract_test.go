@@ -89,7 +89,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 	if got, want := schemaContractString(leaf["canonical_path"]), "chat.shortcut_messages_read_status"; got != want {
 		t.Fatalf("shortcut leaf canonical_path = %q, want %q", got, want)
 	}
-	if got, want := schemaContractString(leaf["confirmation"]), "not_required"; got != want {
+	if got, want := schemaContractString(leaf["confirmation"]), "user_required"; got != want {
 		t.Fatalf("shortcut leaf confirmation = %q, want %q", got, want)
 	}
 	conversationID := schemaContractMap(leaf["parameters"])["conversation-id"]
@@ -320,8 +320,12 @@ func TestDeliveryDocMediaInsertEntrypointsPublishTheSameGuardrails(t *testing.T)
 	}
 	for _, cliPath := range []string{"doc +media-insert", "doc media insert"} {
 		leaf := executeShortcutSchemaQuery(t, "--cli-path", cliPath)
-		if got := schemaContractString(leaf["confirmation"]); got != "not_required" {
-			t.Errorf("%s confirmation = %q, want not_required", cliPath, got)
+		wantConfirmation := "not_required"
+		if cliPath == "doc +media-insert" {
+			wantConfirmation = "user_required"
+		}
+		if got := schemaContractString(leaf["confirmation"]); got != wantConfirmation {
+			t.Errorf("%s confirmation = %q, want %s", cliPath, got, wantConfirmation)
 		}
 		parameters := schemaContractMap(leaf["parameters"])
 		for _, name := range []string{"node", "file"} {
@@ -343,7 +347,7 @@ func TestDeliveryDocMediaInsertEntrypointsPublishTheSameGuardrails(t *testing.T)
 	}
 }
 
-func TestDeliveryDocShortcutAndLeafConfirmationSemanticsStayAligned(t *testing.T) {
+func TestDeliveryDocShortcutAndLeafSafetyMatchesPublishedContracts(t *testing.T) {
 	tests := []struct {
 		name         string
 		effect       string
@@ -351,21 +355,36 @@ func TestDeliveryDocShortcutAndLeafConfirmationSemanticsStayAligned(t *testing.T
 		confirmation string
 		cliPaths     []string
 	}{
-		{name: "content update", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +update", "doc update"}},
-		{name: "copy", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +copy", "doc copy"}},
-		{name: "move", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +move", "doc move"}},
-		{name: "comment create", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +comment-create", "doc comment create"}},
-		{name: "comment reply", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +comment-reply", "doc comment reply"}},
-		{name: "version save", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +version-save", "doc version save"}},
-		{name: "version revert", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +version-revert", "doc version revert"}},
-		{name: "media insert", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +media-insert", "doc media insert"}},
-		{name: "cover set", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +cover-set", "doc style cover set"}},
-		{name: "cover clear", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +cover-clear", "doc style cover clear"}},
-		{name: "background clear", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +background-delete", "doc style background clear"}},
-		{name: "permission grant", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +access-grant", "doc permission add"}},
-		{name: "permission change", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +access-change", "doc permission update"}},
-		{name: "permission revoke", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +access-revoke", "doc permission remove"}},
-		{name: "comment delete", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +comment-delete", "doc comment delete"}},
+		{name: "content update shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +update"}},
+		{name: "content update leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc update"}},
+		{name: "copy shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +copy"}},
+		{name: "copy leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc copy"}},
+		{name: "move shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +move"}},
+		{name: "move leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc move"}},
+		{name: "comment create shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +comment-create"}},
+		{name: "comment create leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc comment create"}},
+		{name: "comment reply shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +comment-reply"}},
+		{name: "comment reply leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc comment reply"}},
+		{name: "version save shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +version-save"}},
+		{name: "version save leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc version save"}},
+		{name: "version revert shortcut", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +version-revert"}},
+		{name: "version revert leaf", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc version revert"}},
+		{name: "media insert shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +media-insert"}},
+		{name: "media insert leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc media insert"}},
+		{name: "cover set shortcut", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +cover-set"}},
+		{name: "cover set leaf", effect: "write", risk: "low", confirmation: "not_required", cliPaths: []string{"doc style cover set"}},
+		{name: "cover clear shortcut", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +cover-clear"}},
+		{name: "cover clear leaf", effect: "write", risk: "low", confirmation: "not_required", cliPaths: []string{"doc style cover clear"}},
+		{name: "background clear shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +background-delete"}},
+		{name: "background clear leaf", effect: "write", risk: "low", confirmation: "not_required", cliPaths: []string{"doc style background clear"}},
+		{name: "permission grant", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +access-grant"}},
+		{name: "permission add leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc permission add"}},
+		{name: "permission change", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +access-change"}},
+		{name: "permission update leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc permission update"}},
+		{name: "permission revoke", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +access-revoke"}},
+		{name: "permission remove leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc permission remove"}},
+		{name: "comment delete", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +comment-delete"}},
+		{name: "comment delete leaf", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc comment delete"}},
 	}
 
 	for _, test := range tests {

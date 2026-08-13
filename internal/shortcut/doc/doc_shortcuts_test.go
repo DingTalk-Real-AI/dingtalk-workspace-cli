@@ -1440,7 +1440,7 @@ func TestCrossPlatformCoverageDocConfirmationBoundaries(t *testing.T) {
 		{
 			name: "version revert",
 			decl: VersionRevert,
-			args: []string{"--node", "n", "--version", "3"},
+			args: []string{"--node", "n", "--version", "3", "--yes"},
 			want: []docCoverageCall{
 				{tool: "list_doc_versions", params: map[string]any{"nodeId": "n"}},
 				{tool: "revert_doc_version", params: map[string]any{"nodeId": "n", "version": 3}},
@@ -2024,10 +2024,10 @@ func TestCrossPlatformCoverageVersionRoutesAreCanonicalAndHistoryRoutesAreCompat
 		}
 	}
 
-	if VersionSave.Command != "+version-save" || VersionSave.Safety.Confirmation != "not_required" {
+	if VersionSave.Command != "+version-save" || VersionSave.Safety.Confirmation != "user_required" {
 		t.Errorf("version-save command/confirmation = %s/%s", VersionSave.Command, VersionSave.Safety.Confirmation)
 	}
-	if compatHistorySave.Safety.Confirmation != VersionSave.Safety.Confirmation {
+	if compatHistorySave.Safety.Confirmation != "not_required" {
 		t.Errorf("history-save compatibility confirmation = %s", compatHistorySave.Safety.Confirmation)
 	}
 	if VersionRevert.Command != "+version-revert" || VersionRevert.Execute == nil {

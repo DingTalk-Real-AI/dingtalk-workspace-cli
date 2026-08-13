@@ -12,7 +12,6 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -28,7 +27,7 @@ func canonicalizeHistoryShortcuts() {
 	VersionSave.Aliases = nil
 	VersionSave.Description = "手动保存当前文档版本快照"
 	VersionSave.Intent = "当用户要求保存、创建或建立当前文档版本快照时使用；只保存快照，不更新正文。"
-	VersionSave.Safety = docsafety.RecoverableWrite("unknown")
+	VersionSave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"}
 	VersionSave.Contract = versionSaveContract()
 	VersionSave.Tips = []string{`dws doc +version-save --node <DOC_ID>`}
 
@@ -56,6 +55,8 @@ func canonicalizeHistoryShortcuts() {
 
 	VersionRevert.Command = "+version-revert"
 	VersionRevert.Aliases = nil
+	VersionRevert.Risk = shortcut.RiskHighWrite
+	VersionRevert.Safety = contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"}
 	VersionRevert.Description = "预检并回滚文档到指定历史版本"
 	VersionRevert.Intent = "当用户明确要把整篇文档恢复到某个历史版本时使用；先确认目标版本存在，再执行可恢复写入并读回验证。"
 	VersionRevert.Contract = versionRevertContract()
@@ -63,7 +64,7 @@ func canonicalizeHistoryShortcuts() {
 	VersionRevert.Execute = executeHistoryRevert
 
 	compatHistorySave = compatibilityHistoryShortcut(VersionSave, "+history-save", "+version-save")
-	compatHistorySave.Safety = VersionSave.Safety
+	compatHistorySave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
 	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
 	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
 
