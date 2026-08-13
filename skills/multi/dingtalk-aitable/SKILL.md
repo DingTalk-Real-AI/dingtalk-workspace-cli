@@ -61,6 +61,7 @@ metadata:
 | 更新记录 | `dws aitable record update --base-id <baseId> --table-id <tableId> --records '[{"recordId":"<id>","cells":{"<fieldId>":<值>}}]' --format json` | 先 query 拿 recordId；只传需改字段；取 `data.recordIds[]` 后回读 |
 | 删除记录 | 先 `dws aitable +record-query ...` 定位，再 `dws aitable record delete --base-id <baseId> --table-id <tableId> --record-ids <ids>` | 展示目标与影响，得到明确确认后才加 `--yes` |
 | 创建 Base / Table | `dws aitable base create --name "<名>"` / `dws aitable table create --base-id <id> --name "<名>" --fields '[...]'` | 使用创建返回的真实 ID；系统改名/加后缀时不得继续猜原名 |
+| 创建仪表盘 / 常用图表 | `python3 <本 Skill 绝对目录>/scripts/create_dashboard_chart.py <baseId> "<仪表盘名>" [--chart-specs <workspace内JSON>]` | 这是 dashboard/chart 创建的唯一首选 recipe；脚本创建、串联真实 ID、最终回读并输出可评分 ledger。图表 JSON 参数见对应 reference |
 | 复制视图 | `dws aitable view duplicate --base-id <baseId> --table-id <tableId> --view-id <源viewId> --new-name "<新名称>" --format json` | 源 viewId 来自当前表的真实返回；不要复制数据表或创建仪表盘替代 |
 | 批量追加 CSV / JSON 到已有表 | `python3 scripts/import_records.py <baseId> <tableId> <file> [batch_size]` | CSV 表头必须是 fieldId；脚本返回不完整 ledger 时不得宣称全成功 |
 | 文件导入为新数据表 | `python3 scripts/aitable_import_via_task.py <baseId> <file>` | 与“追加已有 table”不同；走 prepare → PUT → import task |
