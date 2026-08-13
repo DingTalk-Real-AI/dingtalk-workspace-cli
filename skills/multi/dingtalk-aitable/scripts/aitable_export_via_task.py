@@ -26,7 +26,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+# Runtime AI Table IDs are opaque and some table IDs are seven characters.
+RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{6,128}$")
 ALLOWED_FORMATS = {"excel", "attachment", "excel_and_attachment", "excel_with_inline_images"}
 
 

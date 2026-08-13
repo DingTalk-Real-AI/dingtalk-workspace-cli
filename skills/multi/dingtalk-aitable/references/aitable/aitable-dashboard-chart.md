@@ -4,14 +4,14 @@
 
 ```bash
 # 仅建仪表盘
-python3 <本 Skill 绝对目录>/scripts/create_dashboard_chart.py <BASE_ID> "<仪表盘名>"
+python3 <本 Skill 绝对目录>/scripts/aitable_ops.py dashboard <BASE_ID> "<仪表盘名>"
 
 # 建仪表盘和常用图表
-python3 <本 Skill 绝对目录>/scripts/create_dashboard_chart.py <BASE_ID> "<仪表盘名>" \
+python3 <本 Skill 绝对目录>/scripts/aitable_ops.py dashboard <BASE_ID> "<仪表盘名>" \
   --chart-specs <workspace内/charts.json>
 ```
 
-脚本是 `dashboard create → chart create（可选）→ dashboard get` 的唯一首选
+统一入口的 dashboard 操作是 `dashboard create → chart create（可选）→ dashboard get` 的唯一首选
 recipe，并输出 `dws-skill-script-ledger/v1`。不要在脚本前调用 config-example 或
 widgets-example，也不要在成功后重复创建或回读。
 

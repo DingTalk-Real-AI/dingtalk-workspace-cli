@@ -91,11 +91,11 @@ dws aitable table create --base-id <BASE_ID> --name "产品图片" \
 
 > **不要**使用钉盘 (drive) 上传来替代此流程！钉盘 fileId **无法**写入 attachment 字段。
 
-附件字段写入使用 `upload_attachment.py` 脚本，**2 步**完成：
+附件字段写入使用统一 `aitable_ops.py upload-attachment` 入口，**2 步**完成：
 
 ```bash
 # 步骤 1: 一键上传文件（脚本内部自动完成 prepare + PUT to OSS）
-python3 scripts/upload_attachment.py <BASE_ID> /path/to/photo.png
+python3 <本 Skill 绝对目录>/scripts/aitable_ops.py upload-attachment <BASE_ID> /path/to/photo.png
 # 输出: { "fileToken": "ft_xxx", "fileName": "photo.png", "size": 1024 }
 
 # 步骤 2: 在 record create/update 中使用 fileToken

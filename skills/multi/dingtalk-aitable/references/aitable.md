@@ -481,11 +481,7 @@ dws aitable record create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 | 脚本 | 场景 |
 |------|------|
-| [bulk_add_fields.py](../scripts/bulk_add_fields.py) | 批量添加字段 |
-| [import_records.py](../scripts/import_records.py) | 从 JSON/CSV 批量导入记录 |
-| [aitable_import_via_task.py](../scripts/aitable_import_via_task.py) | 导入 CSV/XLS/XLSX 并新建数据表（prepare + PUT + import） |
-| [aitable_export_via_task.py](../scripts/aitable_export_via_task.py) | 文件导出（export_data 轮询 + 下载） |
-| [upload_attachment.py](../scripts/upload_attachment.py) | 上传附件到 AI 表格记录 |
+| `scripts/aitable_ops.py` | dashboard/chart、导入、导出、批量字段与附件的唯一稳定入口；参数见 `references/aitable/aitable-script-recipes.md` |
 
 ## 相关产品
 

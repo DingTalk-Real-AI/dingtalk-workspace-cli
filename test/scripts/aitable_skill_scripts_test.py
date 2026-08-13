@@ -25,6 +25,7 @@ BULK_FIELDS = load_module("aitable_bulk_fields", "bulk_add_fields.py")
 UPLOAD_ATTACHMENT = load_module("aitable_upload_attachment", "upload_attachment.py")
 EXPORT_TASK = load_module("aitable_export_task", "aitable_export_via_task.py")
 IMPORT_TASK = load_module("aitable_import_task", "aitable_import_via_task.py")
+AITABLE_OPS = load_module("aitable_ops", "aitable_ops.py")
 
 
 class AITableSkillScriptsTest(unittest.TestCase):
@@ -58,6 +59,81 @@ class AITableSkillScriptsTest(unittest.TestCase):
                 os.chdir(previous)
             self.assertEqual(records[0]["cells"]["fldPhone01"], "00123")
             self.assertEqual(records[0]["cells"]["fldBool01"], "true")
+
+    def test_unified_ops_dispatches_without_cross_operation_arguments(self):
+        cases = [
+            (
+                ["dashboard", "base12345678", "概览", "--chart-specs", "charts.json"],
+                "create_dashboard_chart.py",
+                ["base12345678", "概览", "--chart-specs", "charts.json"],
+            ),
+            (
+                ["import-new", "base12345678", "data.csv"],
+                "aitable_import_via_task.py",
+                ["base12345678", "data.csv"],
+            ),
+            (
+                ["import-records", "base12345678", "table1234567", "data.json"],
+                "import_records.py",
+                ["base12345678", "table1234567", "data.json", "100"],
+            ),
+            (
+                ["export", "base12345678", "--scope", "view", "--table-id", "table1234567", "--view-id", "view12345678"],
+                "aitable_export_via_task.py",
+                ["base12345678", "--scope", "view", "--table-id", "table1234567", "--view-id", "view12345678"],
+            ),
+            (
+                ["add-fields", "base12345678", "table1234567", "fields.json"],
+                "bulk_add_fields.py",
+                ["base12345678", "table1234567", "fields.json"],
+            ),
+            (
+                ["upload-attachment", "base12345678", "report.pdf"],
+                "upload_attachment.py",
+                ["base12345678", "report.pdf"],
+            ),
+        ]
+        parser = AITABLE_OPS.parser()
+        for argv, script, expected_tail in cases:
+            with self.subTest(operation=argv[0]):
+                command = AITABLE_OPS.command_for(parser.parse_args(argv))
+                self.assertEqual(Path(command[1]).name, script)
+                self.assertEqual(command[2:], expected_tail)
+
+    def test_unified_ops_normalizes_delegated_trusted_ledger(self):
+        payload = {
+            "schema_version": "dws-skill-script-ledger/v1",
+            "script": "create_dashboard_chart.py",
+            "status": "success",
+            "ledger": [],
+        }
+        normalized = json.loads(AITABLE_OPS.normalize_output(json.dumps(payload)))
+        self.assertEqual(normalized["script"], "aitable_ops.py")
+        self.assertEqual(normalized["implementation_script"], "create_dashboard_chart.py")
+
+    def test_unified_ops_emits_export_task_ledger_with_nonempty_file(self):
+        with tempfile.TemporaryDirectory() as raw:
+            exported = Path(raw) / "result.xlsx"
+            exported.write_bytes(b"excel")
+            args = AITABLE_OPS.parser().parse_args([
+                "export", "base12345678", "--scope", "table",
+                "--table-id", "tbl1234", "--output", str(exported),
+            ])
+            payload = {
+                "status": "success",
+                "taskId": "task12345678",
+                "downloadUrl": "https://example.invalid/result.xlsx",
+                "polledTimes": 2,
+                "savedPath": str(exported),
+            }
+            normalized = json.loads(AITABLE_OPS.normalize_output(json.dumps(payload), args))
+            self.assertEqual(normalized["script"], "aitable_ops.py")
+            self.assertEqual(normalized["ledger"][0]["cli_path"], "aitable export data")
+            self.assertEqual(normalized["ledger"][0]["output_ids"]["polledTimes"], 2)
+            self.assertEqual(normalized["ledger"][0]["output_ids"]["fileSize"], 5)
+
+    def test_export_accepts_runtime_seven_character_table_id(self):
+        self.assertTrue(EXPORT_TASK.validate_resource_id("VS9pVmc"))
 
     def test_import_records_checks_ids_and_readback(self):
         with tempfile.TemporaryDirectory() as raw:

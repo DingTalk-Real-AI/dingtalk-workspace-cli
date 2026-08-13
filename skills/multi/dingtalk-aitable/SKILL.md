@@ -20,10 +20,11 @@ metadata:
 1. 命中下方高频意图时直接使用精确骨架，不先查 Help 或产品级 Schema。
 2. 路由优先级固定为：精确 recipe / 可运行脚本 > 匹配的公开 Shortcut > 原子命令。命令已确定且参数清楚时直接执行。
 3. 参数、约束或安全语义不确定时只读 leaf Schema：`dws schema --cli-path "aitable <leaf>" --format json`；只有当前 Cobra flag 不确定时才读对应 `--help`。
-4. 复杂字段、筛选、导入导出、视图、权限或工作流任务，按“低频能力与 Reference”只加载相关文件，不预读整个 `references/aitable/`。
+4. 复杂字段、筛选、视图、权限或工作流任务按“低频能力与 Reference”只加载相关文件。所有下表的 `references/aitable/...` 都是相对本 Skill 根目录的完整精确路径；不得省略中间的 `aitable/`。dashboard/chart、导入、导出、批量字段和附件统一只读 `references/aitable/aitable-script-recipes.md`，再运行 `scripts/aitable_ops.py`；不要预读整个 reference 目录或任何脚本源码。
 5. 现有骨架和 reference 都无法定位能力时，才用 Runtime Shortcut Catalog 做最后发现；不得猜 `cli_path` 或 flag。
 6. Schema、Help、reference 与实际返回冲突时采用更安全的解释并报告契约漂移；`confirmation=user_required` 时先确认，再添加 `--yes`。
-7. 用户已给足名称、字段、数据和目标时，直接按依赖链完成全部步骤；不要调用 todo 工具、分步汇报或追问已明确的信息。中间返回只用于提取下一步 ID 和判断失败，完成所有请求后再统一回读并答复。
+7. 用户已给足名称、字段、数据和目标时，直接按依赖链完成全部步骤；不要调用 todo 工具、分步汇报或追问已明确的信息。中间返回只用于提取下一步 ID 和判断失败，完成所有请求后再统一回读并答复。bundled script 参数明确时直接运行；只有参数不明确时执行统一入口的操作级 `--help`，只有契约失败、环境异常或用户要求修改脚本时才读取源码。
+8. 用户要求新建 Base 但未指定 Base 名时，根据业务目标生成简短描述性名称（例如仪表盘任务用“数据看板”）并继续；不要仅为可回退的容器名称追问。Base 只接受 Base flags，不得把 table `--fields` 传给 `base create`。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
@@ -60,19 +61,17 @@ metadata:
 | 新增记录 | `dws aitable record create --base-id <baseId> --table-id <tableId> --records '[{"cells":{"<fieldId>":<值>}}]' --format json` | 单次最多 100；取 `data.newRecordIds[]` 后立即按 ID 回读 |
 | 更新记录 | `dws aitable record update --base-id <baseId> --table-id <tableId> --records '[{"recordId":"<id>","cells":{"<fieldId>":<值>}}]' --format json` | 先 query 拿 recordId；只传需改字段；取 `data.recordIds[]` 后回读 |
 | 删除记录 | 先 `dws aitable +record-query ...` 定位，再 `dws aitable record delete --base-id <baseId> --table-id <tableId> --record-ids <ids>` | 展示目标与影响，得到明确确认后才加 `--yes` |
-| 创建 Base / Table | `dws aitable base create --name "<名>"` / `dws aitable table create --base-id <id> --name "<名>" --fields '[...]'` | 使用创建返回的真实 ID；系统改名/加后缀时不得继续猜原名 |
-| 创建仪表盘 / 常用图表 | `python3 <本 Skill 绝对目录>/scripts/create_dashboard_chart.py <baseId> "<仪表盘名>" [--chart-specs <workspace内JSON>]` | 这是 dashboard/chart 创建的唯一首选 recipe；脚本创建、串联真实 ID、最终回读并输出可评分 ledger。图表 JSON 参数见对应 reference |
+| 创建 Base / Table | `dws aitable base create --name "<名>" --format json` → `dws aitable base get --base-id <baseId> --format json`；`dws aitable table create --base-id <id> --name "<名>" --fields '[...]' --format json` → `dws aitable +table-get --base-id <id> --table-ids <tableId> --format json` | 使用创建返回的真实 ID 立即回读；创建字段时回读 `fields[]` 的名称、类型与 config；系统改名/加后缀时不得继续猜原名 |
+| 创建仪表盘 / 常用图表 | `python3 <本 Skill 绝对目录>/scripts/aitable_ops.py dashboard <baseId> "<仪表盘名>" [--chart-specs <workspace内JSON>]` | 唯一首选；完整参数与 ledger 契约只读 `references/aitable/aitable-script-recipes.md` |
 | 复制视图 | `dws aitable view duplicate --base-id <baseId> --table-id <tableId> --view-id <源viewId> --new-name "<新名称>" --format json` | 源 viewId 来自当前表的真实返回；不要复制数据表或创建仪表盘替代 |
-| 批量追加 CSV / JSON 到已有表 | `python3 scripts/import_records.py <baseId> <tableId> <file> [batch_size]` | CSV 表头必须是 fieldId；脚本返回不完整 ledger 时不得宣称全成功 |
-| 文件导入为新数据表 | `python3 scripts/aitable_import_via_task.py <baseId> <file>` | 与“追加已有 table”不同；走 prepare → PUT → import task |
-| 批量创建字段 | `python3 scripts/bulk_add_fields.py <baseId> <tableId> fields.json` | 单次最多 15；逐项检查成功/失败结果 |
-| 导出 Base / Table / View | `python3 scripts/aitable_export_via_task.py <baseId> --scope all\|table\|view [...]` | 保存路径、覆盖与异步未完成状态必须显式处理 |
-| 上传记录附件 | `python3 scripts/upload_attachment.py <baseId> <file>` | 返回 `fileToken` 后仍需按字段格式写入记录并回读 |
+| 导入 / 导出 / 批量字段 / 附件 | 先读 `references/aitable/aitable-script-recipes.md`，再运行其中唯一的 `scripts/aitable_ops.py <operation> ...` | 不直接选择底层脚本；不读源码；保留统一入口返回的退出状态与 ledger |
+
+导出完成以统一 ledger 中的真实 `taskId`、`polledTimes`、`status=success`、`fileSize>0` 和 `savedPath` 为证据；不要自己重新轮询、读脚本源码，也不要只用 `ls` 替代异步任务证据。字段类型使用 Runtime camelCase，例如 `singleSelect` / `multipleSelect`；select 写值优先传选项名字符串或 `{id,name}`，不传 `{value:...}`。
 
 ## 记录读写不变量
 
-- `record create/update` 前必须获取目标字段的 `fieldId`、`type` 与 `config`；`filterUp`、`lookup` 等只读字段不可写。完整格式只在需要时读 [aitable-cell-value.md](references/aitable/aitable-cell-value.md)。
-- 筛选和排序字段使用 `fieldId`；`--filters` 最外层是 `and|or + operands`，`--sort` 使用 `direction: asc|desc`。日期和跨表字段规则按需读 [aitable-filter-sort.md](references/aitable/aitable-filter-sort.md)。
+- `record create/update` 前必须获取目标字段的 `fieldId`、`type` 与 `config`；`filterUp`、`lookup` 等只读字段不可写。完整格式只在需要时读精确路径 `references/aitable/aitable-cell-value.md`。
+- 筛选和排序字段使用 `fieldId`；`--filters` 最外层是 `and|or + operands`，`--sort` 使用 `direction: asc|desc`。日期和跨表字段规则按需读精确路径 `references/aitable/aitable-filter-sort.md`。
 - `record query --all` 仍受 `--page-limit` 约束；分页中断或局部富化失败时保留已有结果，输出 completeness 与逐项失败 ledger，不把部分结果描述为全量。
 - 创建、更新、导入、批量建字段等写操作必须检查业务 `status`、逐项结果与返回 ID；普通写入按用户明确要求执行后回读，不能只凭退出码宣称成功。
 - 长 JSON 使用 `--records-file` / 任务文件；不得为绕过字段错误而静默丢列、改类型或删除失败项。
@@ -81,19 +80,20 @@ metadata:
 
 | 场景 | 按需读取 |
 |---|---|
-| 完整命令索引、对象 URL 与一级路由 | [aitable.md](references/aitable.md) |
-| 记录 query/create/update/delete/upsert/history/share | 对应 `references/aitable/aitable-record-*.md` |
-| 字段创建、字段 config、cellValue、公式与跨表引用 | [aitable-field.md](references/aitable/aitable-field.md)、[aitable-field-properties.md](references/aitable/aitable-field-properties.md)、[aitable-cell-value.md](references/aitable/aitable-cell-value.md)、[aitable-formula-guide.md](references/aitable/aitable-formula-guide.md) |
-| 筛选、排序、统计、全量分析 | [aitable-filter-sort.md](references/aitable/aitable-filter-sort.md)、[aitable-data-analysis-sop.md](references/aitable/aitable-data-analysis-sop.md) |
-| 导入导出、附件 | [aitable-export-import.md](references/aitable/aitable-export-import.md)、[aitable-attachment.md](references/aitable/aitable-attachment.md) |
-| 视图、表单、仪表盘与图表 | [aitable-view-config.md](references/aitable/aitable-view-config.md)、[aitable-view-extras.md](references/aitable/aitable-view-extras.md)、[aitable-form.md](references/aitable/aitable-form.md)、[aitable-dashboard-chart.md](references/aitable/aitable-dashboard-chart.md) |
-| 高级权限、自动化工作流、导航节点 | [aitable-advperm.md](references/aitable/aitable-advperm.md)、[aitable-workflow.md](references/aitable/aitable-workflow.md)、[aitable.md](references/aitable.md) 的 section 路由 |
+| 完整命令索引、对象 URL 与一级路由 | `references/aitable.md` |
+| 记录 query/create/update/delete | `references/aitable/aitable-record-query.md`、`references/aitable/aitable-record-create.md`、`references/aitable/aitable-record-update.md`、`references/aitable/aitable-record-delete.md` 中只读与当前动词一致的一份 |
+| 记录 upsert/history/share | `references/aitable/aitable-record-upsert.md`、`references/aitable/aitable-record-history.md`、`references/aitable/aitable-record-share.md` 中只读与当前动词一致的一份 |
+| 字段创建、字段 config、cellValue、公式与跨表引用 | `references/aitable/aitable-field.md`、`references/aitable/aitable-field-properties.md`、`references/aitable/aitable-cell-value.md`、`references/aitable/aitable-formula-guide.md` |
+| 筛选、排序、统计、全量分析 | `references/aitable/aitable-filter-sort.md`、`references/aitable/aitable-data-analysis-sop.md` |
+| dashboard/chart、导入导出、批量字段、附件脚本 | `references/aitable/aitable-script-recipes.md`（精确路径；只读这一份脚本契约） |
+| 视图、表单及高级 dashboard/chart 原子回退 | `references/aitable/aitable-view-config.md`、`references/aitable/aitable-view-extras.md`、`references/aitable/aitable-form.md`、`references/aitable/aitable-dashboard-chart.md` |
+| 高级权限、自动化工作流、导航节点 | `references/aitable/aitable-advperm.md`、`references/aitable/aitable-workflow.md`、`references/aitable.md` 的 section 路由 |
 
 ## 错误恢复
 
 - 路径或 flag 错误：按既定的 leaf Schema → leaf Help 顺序校正一次；仍失败则停止，不连续尝试猜测别名。
 - 命令非零、输出非 JSON、业务 `status != success`、必需 ID 缺失、批处理部分失败均视为失败；保留成功项与 ledger，禁止吞错。
-- 同名歧义、权限不足、资源不存在、字段类型漂移、分页无法推进或 Schema/Help 冲突时停止并报告。具体恢复动作按需读 [aitable-error-recovery.md](references/aitable/aitable-error-recovery.md)。
+- 同名歧义、权限不足、资源不存在、字段类型漂移、分页无法推进或 Schema/Help 冲突时停止并报告。具体恢复动作按需读精确路径 `references/aitable/aitable-error-recovery.md`。
 - 每次重试都从最新实际输出重新提取下游 ID；删除和其他 `confirmation=user_required` 操作不得自动重试或静默确认。
 
 ## 跨产品协作

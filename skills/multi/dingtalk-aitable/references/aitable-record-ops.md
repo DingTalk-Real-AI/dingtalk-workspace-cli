@@ -102,11 +102,11 @@ dws aitable record delete --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 >  **不要使用钉盘 (drive) 上传！** 钉盘 fileId 无法写入 attachment 字段。
 
-使用 `upload_attachment.py` 脚本（内部自动完成 prepare + PUT to OSS），**2 步**完成：
+使用统一 `aitable_ops.py upload-attachment` 入口（内部委派 prepare + PUT to OSS），**2 步**完成：
 
 ```bash
 # 步骤 1: 一键上传文件
-python3 scripts/upload_attachment.py <BASE_ID> /path/to/report.pdf
+python3 <本 Skill 绝对目录>/scripts/aitable_ops.py upload-attachment <BASE_ID> /path/to/report.pdf
 # 输出: { "fileToken": "ft_xxx", "fileName": "report.pdf", "size": 204800 }
 
 # 步骤 2: 在 record create/update 中使用 fileToken 写入附件字段

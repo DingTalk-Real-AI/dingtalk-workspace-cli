@@ -4,7 +4,7 @@
 
 `export data` 为异步任务：首次调用可能只返回 `taskId`，需要继续轮询。
 
-优先使用 `python3 scripts/aitable_export_via_task.py <baseId> --scope all|table|view [...]`：它检查业务状态、持续轮询、要求 HTTPS 下载地址，并在本地文件已存在时停止而不是静默覆盖。只有需要控制底层轮询参数时才走下面的原子命令。
+优先使用 `python3 <本 Skill 绝对目录>/scripts/aitable_ops.py export <baseId> --scope all|table|view [...]`。完整参数只读 `references/aitable/aitable-script-recipes.md`；统一入口检查业务状态、持续轮询、要求 HTTPS 下载地址，并在本地文件已存在时停止而不是静默覆盖。只有需要控制底层轮询参数时才走下面的原子命令。
 
 > ⚠️ **`--format` 冲突警告**：`export data` 的 `--format` 是**导出格式**（excel/attachment 等），不是全局输出格式。**此命令禁止追加全局 `--format json`**，否则会覆盖导出格式导致 `INVALID_EXPORT_FORMAT` 错误。输出默认就是 JSON，无需额外指定。
 
@@ -30,7 +30,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 > **无需手动解析 CSV/Excel 再逐条 record create**，效率极低且容易出错。
 
-新建数据表导入优先使用 `python3 scripts/aitable_import_via_task.py <baseId> <file>`，脚本封装 prepare → PUT → import 并检查每一步业务状态。追加到已有表且需要字段级类型控制时，使用 `python3 scripts/import_records.py <baseId> <tableId> <file> [batch_size]`；二者语义不同，不要自动互换。
+新建数据表导入优先使用 `python3 <本 Skill 绝对目录>/scripts/aitable_ops.py import-new <baseId> <file>`；追加到已有表使用 `python3 <本 Skill 绝对目录>/scripts/aitable_ops.py import-records <baseId> <tableId> <file> [--batch-size N]`。完整参数只读 `references/aitable/aitable-script-recipes.md`；二者语义不同，不要自动互换。
 
 ```bash
 # 第 1 步：申请上传凭证
