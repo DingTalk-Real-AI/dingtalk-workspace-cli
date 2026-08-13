@@ -792,6 +792,35 @@ func TestCrossPlatformCoverageCompareAllWithFlagMigrationsInheritedAndOptionalCa
 			t.Fatalf("existing optional canonical migration = (%#v, %v), want compatible", report, err)
 		}
 	})
+
+	t.Run("hidden canonical inherits requiredness when promoted", func(t *testing.T) {
+		pending := coverageManifest(FlagMigrationPending)
+		pending.Migrations[0].Canonical.Before = FlagMigrationState{
+			Present: true,
+			Type:    "string",
+			Hidden:  true,
+			Scope:   "local",
+		}
+		consumed := pending
+		consumed.Migrations = append([]FlagMigration(nil), pending.Migrations...)
+		consumed.Migrations[0].State = FlagMigrationConsumed
+		before := coverageMigrationSnapshot(pending.Migrations[0], false, false)
+		after := coverageMigrationSnapshot(pending.Migrations[0], true, false)
+
+		ordinary := Compare(after, before, "merge-base")
+		if !hasFlagChange(ordinary.Blocking, "flag_became_required", pending.Migrations[0].Command, pending.Migrations[0].Canonical.Name) {
+			t.Fatalf("fixture did not change canonical requiredness: %#v", ordinary.Blocking)
+		}
+		report, err := CompareAllWithFlagMigrations(
+			after,
+			map[string]Snapshot{"merge-base": before, "stable": before},
+			pending,
+			consumed,
+		)
+		if err != nil || !report.Compatible {
+			t.Fatalf("hidden canonical promotion = (%#v, %v), want compatible", report, err)
+		}
+	})
 }
 
 func TestCrossPlatformCoverageOptionalFlagMigrationLifecycleRemainsHostile(t *testing.T) {
