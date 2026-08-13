@@ -26,6 +26,8 @@ import (
 var sensitiveKeys = map[string]bool{
 	"authorization":       true,
 	"x-user-access-token": true,
+	"dws_agent_ext":       true,
+	"x-dws-agent-ext":     true,
 	"client_secret":       true,
 	"client-secret":       true,
 	"token":               true,

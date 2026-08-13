@@ -79,6 +79,7 @@ var (
 	rootPluginSyncSkills            = plugin.SyncSkills
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
 	rootNewCommandRunnerWithFlags   = newCommandRunnerWithFlags
+	rootEmitResult                  = output.EmitResult
 )
 
 // Execute runs the root command and returns the process exit code.
@@ -136,6 +137,16 @@ func Execute() (exitCode int) {
 	restoreArgs := rootNormalizeProcessProfileArgs()
 	defer restoreArgs()
 
+	// Validate MCP Agent metadata before constructing the command tree.
+	// Construction may invoke edition registration/static-server hooks and load
+	// plugin PreParse handlers, so PersistentPreRunE alone is too late for the
+	// process entry point. Retain this exact pair for the eventual invocation.
+	agentMetadata := readAgentMetadataSnapshot()
+	if err := agentMetadata.validationError(); err != nil {
+		emitEarlyAgentMetadataValidationError(err, os.Args[1:])
+		return apperrors.ExitCode(err)
+	}
+
 	timing := NewTimingCollector()
 	defer func() {
 		rootStopAllStdioClients() // Ensure child processes are terminated on exit
@@ -147,6 +158,7 @@ func Execute() (exitCode int) {
 
 	// Attach timing collector to context for use by child components
 	ctx := WithTimingCollector(context.Background(), timing)
+	ctx = contextWithAgentMetadataSnapshot(ctx, agentMetadata)
 	ctx, resultStore = output.WithResultStore(ctx)
 	var signalState *processSignalState
 	var stopSignals func()
@@ -258,6 +270,70 @@ func Execute() (exitCode int) {
 		return code
 	}
 	return 0
+}
+
+// emitEarlyAgentMetadataValidationError preserves each built-in command's
+// legacy-vs-unified output contract without running extension hooks. The
+// presentation-only tree contains reviewed open-source commands and flags but
+// deliberately omits edition registration, plugin loading, and visibility
+// hooks; callers therefore still fail before any external hook executes.
+func emitEarlyAgentMetadataValidationError(err error, args []string) {
+	format := processArgsFormat(args)
+	presentationRoot := newRootPresentationCommand()
+	_ = presentationRoot.PersistentFlags().Set("format", format)
+	if target, _, findErr := presentationRoot.Find(args); findErr == nil && target != nil && output.UsesUnifiedResult(target) {
+		target.SetOut(os.Stdout)
+		target.SetErr(os.Stderr)
+		result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
+		if _, emitErr := rootEmitResult(target, result); emitErr == nil {
+			return
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(format), "json") {
+		_ = apperrors.PrintJSON(os.Stderr, err)
+		return
+	}
+	_ = apperrors.PrintHumanAt(os.Stderr, err, apperrors.VerbosityNormal)
+}
+
+// processArgsRequestJSON preserves the CLI's machine-readable error contract
+// for validation that must occur before Cobra and its presentation flags exist.
+// The global format defaults to JSON; an explicit non-JSON format switches to
+// the human diagnostic path. Last occurrence wins, matching pflag semantics.
+func processArgsRequestJSON(args []string) bool {
+	return strings.EqualFold(strings.TrimSpace(processArgsFormat(args)), "json")
+}
+
+func processArgsFormat(args []string) string {
+	format := "json"
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if arg == "--" {
+			break
+		}
+		if value, ok := strings.CutPrefix(arg, "--format="); ok {
+			format = value
+			continue
+		}
+		if value, ok := strings.CutPrefix(arg, "-f="); ok {
+			format = value
+			continue
+		}
+		if strings.HasPrefix(arg, "-f") && len(arg) > len("-f") {
+			format = strings.TrimPrefix(arg, "-f")
+			continue
+		}
+		if arg != "--format" && arg != "-f" {
+			continue
+		}
+		if index+1 >= len(args) {
+			format = ""
+			break
+		}
+		index++
+		format = args[index]
+	}
+	return format
 }
 
 // errorInfoFromExecutionError projects the repository error model into the unified
@@ -633,12 +709,25 @@ func NewRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine) 
 }
 
 func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool) *cobra.Command {
+	return newRootCommandWithMode(rootCtx, engine, loadRuntimeExtensions, declarationOnly, false)
+}
+
+func newRootPresentationCommand() *cobra.Command {
+	return newRootCommandWithMode(context.Background(), nil, false, true, true)
+}
+
+func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, loadRuntimeExtensions bool, declarationOnly bool, presentationOnly bool) *cobra.Command {
 	if rootCtx == nil {
 		rootCtx = context.Background()
 	}
 	flags := &GlobalFlags{}
 	authpkg.SetRuntimeProfile(preparseProfileFlag(os.Args[1:]))
 	runner := rootNewCommandRunnerWithFlags(flags)
+	if snapshot, ok := agentMetadataSnapshotFromContext(rootCtx); ok {
+		if runtime, ok := runner.(*runtimeRunner); ok {
+			runtime.agentMetadata = &snapshot
+		}
+	}
 
 	root := &cobra.Command{
 		Use:               "dws",
@@ -672,14 +761,28 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 			// --output sink instead opens at Run entry (after Cobra's own
 			// validation), so validation failures still cannot strand a
 			// temporary file.
-			// Validate caller-provided identity labels before any edition hook
-			// or command network activity can run. Header-only library callers
-			// use the best-effort path in resolveIdentityHeaders instead.
+			// Validate caller-provided identity and MCP metadata before command
+			// execution hooks or network activity. The process entry point additionally
+			// validates Agent metadata before command-tree construction; direct Cobra
+			// embedding retains this execution-boundary guard.
 			if _, err := parseAgentHost(os.Getenv(envDWSAgentHost)); err != nil {
 				return err
 			}
 			if _, err := parseAgentProduct(os.Getenv(agentproduct.EnvName)); err != nil {
 				return err
+			}
+			agentMetadata, cached := agentMetadataSnapshotFromContext(cmd.Context())
+			if !cached {
+				agentMetadata = readAgentMetadataSnapshot()
+			}
+			if err := agentMetadata.validationError(); err != nil {
+				return err
+			}
+			if runtime, ok := runner.(*runtimeRunner); ok {
+				// Retain the exact validated pair for this command execution so a
+				// concurrently mutating embedding environment cannot change what is
+				// later applied after edition and credential hooks.
+				runtime.agentMetadata = &agentMetadata
 			}
 			if shouldDetectNestedSkillLayout(cmd) {
 				if found, err := detectNestedMultiSkillLayout(); err == nil && found {
@@ -777,10 +880,12 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 	// PAT authorization commands (open-source core)
 	pat.RegisterCommands(root, patCaller)
 
-	if fn := edition.Get().RegisterExtraCommands; fn != nil {
-		caller := newToolCallerAdapter(runner, flags)
-		fn(root, caller)
-		deduplicateCommands(root)
+	if !presentationOnly {
+		if fn := edition.Get().RegisterExtraCommands; fn != nil {
+			caller := newToolCallerAdapter(runner, flags)
+			fn(root, caller)
+			deduplicateCommands(root)
+		}
 	}
 	if loadRuntimeExtensions {
 		// Resolve plugins only after the complete distribution command tree is
@@ -791,7 +896,9 @@ func newRootCommandWithEngine(rootCtx context.Context, engine *pipeline.Engine, 
 			addPluginCommandsSafe(root, pluginCmds)
 		}
 	}
-	hideNonDirectRuntimeCommands(root)
+	if !presentationOnly {
+		hideNonDirectRuntimeCommands(root)
+	}
 	configureRootHelp(root)
 	// Set custom flag error handler for better UX
 	root.SetFlagErrorFunc(flagErrorWithSuggestions)
@@ -1755,17 +1862,16 @@ func distributionRootOwns(root *cobra.Command, name string) bool {
 func registerPluginHTTPServer(srv mcptypes.ServerDescriptor) {
 	AppendDynamicServer(srv)
 	productID := firstNonEmptyPluginString(srv.CLI.ID, srv.Key)
-	ClearPluginAuth(productID)
-	if len(srv.AuthHeaders) > 0 {
-		registerPluginAuthFromHeaders(srv)
-	}
+	// Register ownership for every accepted HTTP plugin, including anonymous
+	// plugins. Execution must never fall back to the built-in DingTalk OAuth or
+	// Agent-metadata path merely because a plugin has no Authorization Header.
+	RegisterPluginAuth(productID, pluginAuthFromServerDescriptor(srv))
 }
 
-// registerPluginAuthFromHeaders extracts authentication credentials from
-// a server descriptor's AuthHeaders and registers them in the global
-// PluginAuth registry. The runner uses this registry at execution time
-// to inject the correct Bearer token for third-party MCP servers.
-func registerPluginAuthFromHeaders(srv mcptypes.ServerDescriptor) {
+// pluginAuthFromServerDescriptor extracts plugin-owned credentials and custom
+// Headers. A non-nil result also acts as the HTTP plugin ownership marker for
+// anonymous plugins.
+func pluginAuthFromServerDescriptor(srv mcptypes.ServerDescriptor) *PluginAuth {
 	authToken := ""
 	extraHeaders := make(map[string]string)
 	for key, value := range srv.AuthHeaders {
@@ -1776,20 +1882,18 @@ func registerPluginAuthFromHeaders(srv mcptypes.ServerDescriptor) {
 			extraHeaders[key] = value
 		}
 	}
-	if authToken == "" {
-		return
-	}
 	var trustedDomains []string
 	if parsed, err := url.Parse(srv.Endpoint); err == nil {
 		host := parsed.Hostname()
-		trustedDomains = []string{host, "*." + host}
+		if host != "" {
+			trustedDomains = []string{host, "*." + host}
+		}
 	}
-	productID := firstNonEmptyPluginString(srv.CLI.ID, srv.Key)
-	RegisterPluginAuth(productID, &PluginAuth{
+	return &PluginAuth{
 		Token:          authToken,
 		ExtraHeaders:   extraHeaders,
 		TrustedDomains: trustedDomains,
-	})
+	}
 }
 
 // newPipelineEngine creates and configures the pipeline engine with

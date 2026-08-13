@@ -137,7 +137,6 @@ func newCommandRunnerWithFlags(flags *GlobalFlags) executor.Runner {
 		httpClient = &http.Client{Timeout: time.Duration(flags.Timeout) * time.Second}
 	}
 	transportClient := transport.NewClient(httpClient)
-	transportClient.ExtraHeaders = resolveIdentityHeaders()
 	transportClient.FileLogger = FileLoggerInstance()
 	return &runtimeRunner{
 		transport:          transportClient,
@@ -156,12 +155,14 @@ type runtimeRunner struct {
 	enforceContentScan bool
 	includeScanReport  bool
 	auditSink          audit.Sink
+	agentMetadata      *agentMetadataSnapshot
 }
 
 var (
 	runnerResolveMultiProfileSelections = resolveMultiProfileSelections
 	runnerResolveProfile                = authpkg.ResolveProfile
 	runnerGetCachedRuntimeToken         = getCachedRuntimeToken
+	runnerResolveAuthToken              = (*runtimeRunner).resolveAuthToken
 	runnerPreflightDocDownload          = (*runtimeRunner).preflightDocDownload
 	runnerCallTool                      = (*transport.Client).CallTool
 	runnerStdioEnsureInitialized        = (*transport.StdioClient).EnsureInitialized
@@ -237,7 +238,6 @@ func (r *runtimeRunner) runSingle(ctx context.Context, invocation executor.Invoc
 	if r.transport == nil {
 		return r.fallback.Run(ctx, invocation)
 	}
-	r.transport.ExtraHeaders = resolveIdentityHeaders()
 
 	// Mock mode: skip endpoint resolution, use a placeholder endpoint.
 	if r.globalFlags != nil && r.globalFlags.Mock {
@@ -543,9 +543,9 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		emitAudit(auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
 	}()
 
-	// Check if this product has plugin-level auth credentials registered.
-	// If so, use the plugin's token instead of the default DingTalk OAuth token.
-	// This allows third-party MCP servers (e.g. Bailian) to use their own API keys.
+	// Check whether this product belongs to an HTTP plugin. Every accepted
+	// plugin has an ownership record; credentials within that record are
+	// optional. Plugin requests never fall back to the default DingTalk OAuth.
 	pluginAuth, hasPluginAuth := LookupPluginAuth(invocation.CanonicalProduct)
 
 	authToken := ""
@@ -553,7 +553,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		authToken = pluginAuth.Token
 	} else if !invocation.DryRun && (r.globalFlags == nil || !r.globalFlags.Mock) {
 		var tokenErr error
-		authToken, tokenErr = r.resolveAuthToken(ctx)
+		authToken, tokenErr = runnerResolveAuthToken(r, ctx)
 		if tokenErr != nil {
 			return executor.Result{}, tokenResolutionError(tokenErr)
 		}
@@ -603,9 +603,10 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		}, nil
 	}
 
-	// Fail-fast: reject unauthenticated requests before making network calls.
-	// This provides a clear error message instead of cryptic HTTP 400 from MCP.
-	if strings.TrimSpace(authToken) == "" {
+	// Preserve a final execution-boundary guard even though the built-in token
+	// resolver normally returns either a non-empty token or an error. HTTP
+	// plugins are ownership-scoped separately and may intentionally be anonymous.
+	if !hasPluginAuth && strings.TrimSpace(authToken) == "" {
 		return executor.Result{}, apperrors.NewAuth(
 			"未登录，请先执行 dws auth login",
 			apperrors.WithReason("not_authenticated"),
@@ -616,12 +617,20 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 
 	var tc *transport.Client
 	if hasPluginAuth {
-		// Use plugin-level auth: inject the plugin's token and trust its domains.
-		tc = r.transport.WithAuth(authToken, pluginAuth.ExtraHeaders)
+		// Plugin ownership is authoritative even when the plugin is anonymous.
+		// Copy and sanitize manifest headers so plugins cannot opt themselves into
+		// DWS-owned Agent metadata by declaring the reserved names directly.
+		tc = r.transport.WithAuth(authToken, pluginRequestHeaders(pluginAuth))
 		tc.TrustedDomains = pluginAuth.TrustedDomains
 	} else {
-		// Default path: use DingTalk OAuth token with identity headers.
-		tc = r.transport.WithAuth(authToken, resolveIdentityHeaders())
+		// Default path: use DingTalk OAuth token with identity headers. Agent
+		// metadata is resolved exactly once per invocation and is excluded from
+		// helper-only service-discovery requests.
+		if r.agentMetadata != nil {
+			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation, *r.agentMetadata))
+		} else {
+			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
+		}
 	}
 
 	callCtx := ctx
@@ -1069,6 +1078,10 @@ func resolveIdentityHeaders() map[string]string {
 	} else {
 		delete(headers, agentproduct.HeaderName)
 	}
+	// Agent version and extension are intentionally MCP-request-only. Remove
+	// every case variant potentially supplied by an edition or credential hook
+	// so shared consumers such as A2A cannot inherit them.
+	removeAgentMetadataHeaders(headers)
 	return headers
 }
 
