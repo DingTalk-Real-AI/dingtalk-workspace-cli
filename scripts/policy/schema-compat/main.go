@@ -1239,7 +1239,7 @@ func normalizeSchemaFlagMigrations(
 		}
 		delete(normalizedTool.Parameters, migration.Legacy.Name)
 		if canonicalExisted {
-			if err := validateRenamedSchemaParameter(migration, oldCanonical, newCanonical); err != nil {
+			if err := validateCanonicalSchemaParameter(migration, oldCanonical, newCanonical); err != nil {
 				return schemaContract{}, err
 			}
 			normalizedCanonical := normalizedTool.Parameters[migration.Canonical.Name]
@@ -1306,6 +1306,34 @@ func schemaToolsByPrimaryPath(contract schemaContract, primaryPath string) []sch
 		return matches[i].toolID < matches[j].toolID
 	})
 	return matches
+}
+
+func validateCanonicalSchemaParameter(
+	migration interfacesnapshot.FlagMigration,
+	oldParameter parameterSchema,
+	newParameter parameterSchema,
+) error {
+	if err := validateRenamedSchemaParameter(migration, oldParameter, newParameter); err == nil {
+		return nil
+	}
+	// Match the interface receipt's one narrow requiredness transfer: a
+	// required legacy Primary may promote an already registered hidden optional
+	// canonical alias. Schema has no hidden bit, so the validated interface
+	// before-state is the authority for that fact; every non-requiredness field
+	// must still remain exact.
+	if !migration.Legacy.Before.Required ||
+		!migration.Canonical.Before.Present ||
+		!migration.Canonical.Before.Hidden ||
+		migration.Canonical.Before.Required ||
+		!migration.Canonical.After.Required ||
+		oldParameter.Required || oldParameter.CLIRequired ||
+		!newParameter.Required || !newParameter.CLIRequired {
+		return validateRenamedSchemaParameter(migration, oldParameter, newParameter)
+	}
+	relaxedOld := oldParameter
+	relaxedOld.Required = true
+	relaxedOld.CLIRequired = true
+	return validateRenamedSchemaParameter(migration, relaxedOld, newParameter)
 }
 
 func validateRenamedSchemaParameter(

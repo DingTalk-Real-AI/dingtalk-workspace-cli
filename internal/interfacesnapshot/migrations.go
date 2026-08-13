@@ -325,9 +325,12 @@ func (m FlagMigration) validate() error {
 		return fmt.Errorf("canonical flag must remain visible")
 	}
 	// Requiredness belongs to the one logical parameter. The hidden legacy
-	// spelling must not remain independently required, while the canonical
-	// spelling inherits the exact before-state contract. If the canonical flag
-	// already existed, a rename receipt cannot authorize changing it either.
+	// spelling must not remain independently required, while the visible
+	// canonical spelling inherits the legacy contract. A pre-existing visible
+	// canonical flag cannot change requiredness. The only permitted transfer is
+	// from a required legacy Primary to an already registered hidden optional
+	// canonical alias; making that alias visible without the transfer would make
+	// a previously invalid invocation valid and weaken the logical contract.
 	if m.Legacy.After.Required {
 		return fmt.Errorf("legacy compatibility alias must not remain independently required after migration")
 	}
@@ -336,7 +339,9 @@ func (m FlagMigration) validate() error {
 			"flag requiredness must be preserved from legacy before to canonical after",
 		)
 	}
-	if m.Canonical.Before.Present && m.Canonical.Before.Required != m.Canonical.After.Required {
+	if m.Canonical.Before.Present &&
+		m.Canonical.Before.Required != m.Canonical.After.Required &&
+		!m.transfersRequirednessToHiddenCanonical() {
 		return fmt.Errorf("canonical flag requiredness must remain unchanged when already present")
 	}
 	if m.Legacy.After.AliasOf != m.Canonical.Name {
@@ -375,6 +380,14 @@ func (m FlagMigration) validate() error {
 		return fmt.Errorf("legacy flag scope must remain unchanged")
 	}
 	return nil
+}
+
+func (m FlagMigration) transfersRequirednessToHiddenCanonical() bool {
+	return m.Legacy.Before.Required &&
+		m.Canonical.Before.Present &&
+		m.Canonical.Before.Hidden &&
+		!m.Canonical.Before.Required &&
+		m.Canonical.After.Required
 }
 
 func (s FlagMigrationState) validate(label string) error {
@@ -688,6 +701,10 @@ func flagMigrationAuthorizesChange(
 		if !migration.Canonical.Before.Present &&
 			migration.Canonical.After.Required &&
 			change.Kind == "required_flag_added" {
+			return true
+		}
+		if migration.transfersRequirednessToHiddenCanonical() &&
+			change.Kind == "flag_became_required" {
 			return true
 		}
 	}

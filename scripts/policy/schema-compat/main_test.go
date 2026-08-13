@@ -1442,6 +1442,39 @@ func TestCrossPlatformCoverageSchemaFlagMigrationAdapterBranches(t *testing.T) {
 	if err := validateRenamedSchemaParameter(schemaFlagMigrationAuthorizations()[0], optional, parameterSchema{CLIRequired: true}); err == nil || !strings.Contains(err.Error(), "changed cli_required") {
 		t.Fatalf("direct cli_required promotion error = %v", err)
 	}
+
+	hiddenTransfer := schemaFlagMigrationAuthorizations()[0]
+	hiddenTransfer.Legacy.Before.Required = true
+	hiddenTransfer.Canonical.Before = interfacesnapshot.FlagMigrationState{
+		Present: true,
+		Type:    "string",
+		Hidden:  true,
+		Scope:   "local",
+	}
+	hiddenTransfer.Canonical.After.Required = true
+	if err := validateCanonicalSchemaParameter(
+		hiddenTransfer,
+		optional,
+		parameterSchema{Required: true, CLIRequired: true},
+	); err != nil {
+		t.Fatalf("hidden canonical requiredness transfer error = %v", err)
+	}
+	if err := validateCanonicalSchemaParameter(
+		hiddenTransfer,
+		optional,
+		parameterSchema{Type: `"integer"`, Required: true, CLIRequired: true},
+	); err == nil || !strings.Contains(err.Error(), "non-migration field") {
+		t.Fatalf("hidden canonical semantic drift error = %v", err)
+	}
+	visibleTransfer := hiddenTransfer
+	visibleTransfer.Canonical.Before.Hidden = false
+	if err := validateCanonicalSchemaParameter(
+		visibleTransfer,
+		optional,
+		parameterSchema{Required: true, CLIRequired: true},
+	); err == nil || !strings.Contains(err.Error(), "changed requiredness") {
+		t.Fatalf("visible canonical requiredness promotion error = %v", err)
+	}
 }
 
 func TestCrossPlatformCoverageSchemaFlagMigrationRejectsPartialAndUnrelatedChanges(t *testing.T) {
