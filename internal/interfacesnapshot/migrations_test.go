@@ -5,6 +5,7 @@ package interfacesnapshot
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -50,6 +51,27 @@ func optionalFlagMigrationManifestJSON() string {
 		`"after": {"present": true, "type": "string", "scope": "local"}`,
 		1,
 	)
+}
+
+func hiddenCanonicalFlagMigrationManifestJSON() string {
+	return strings.Replace(
+		validFlagMigrationManifestJSON,
+		`"before": {"present": false}`,
+		`"before": {"present": true, "type": "string", "hidden": true, "scope": "local"}`,
+		1,
+	)
+}
+
+func TestApprovedFlagMigrationManifestRemainsValid(t *testing.T) {
+	manifest, err := os.Open("../../scripts/policy/interface-migrations/approved-flag-migrations-v1.json")
+	if err != nil {
+		t.Fatalf("open approved flag migration manifest: %v", err)
+	}
+	defer manifest.Close()
+
+	if _, err := ReadFlagMigrationManifest(manifest); err != nil {
+		t.Fatalf("approved flag migration manifest is invalid: %v", err)
+	}
 }
 
 func TestCrossPlatformCoverageReadFlagMigrationManifestRejectsUnknownFields(t *testing.T) {
@@ -127,6 +149,9 @@ func TestCrossPlatformCoverageReadFlagMigrationManifestValidatesExactEntries(t *
 	}
 	if _, err := ReadFlagMigrationManifest(strings.NewReader(optionalFlagMigrationManifestJSON())); err != nil {
 		t.Fatalf("ReadFlagMigrationManifest(optional rename) error = %v", err)
+	}
+	if _, err := ReadFlagMigrationManifest(strings.NewReader(hiddenCanonicalFlagMigrationManifestJSON())); err != nil {
+		t.Fatalf("ReadFlagMigrationManifest(hidden canonical promotion) error = %v", err)
 	}
 
 	tests := []struct {

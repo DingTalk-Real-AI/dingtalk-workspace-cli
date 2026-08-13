@@ -122,7 +122,7 @@ scripts/policy/interface-migrations/approved-flag-migrations-v1.json
 一条 base-owned、状态正确且前后快照精确匹配的记录，只会从普通兼容报告中移除以下两类预期 finding：
 
 1. legacy flag 的 `flag_became_hidden`（visible → hidden）；
-2. required legacy 被新增的 required canonical 替代时产生的 `required_flag_added`。已有 canonical 的 requiredness 不允许借 rename 改变。
+2. required legacy 被新增的 required canonical 替代时产生的 `required_flag_added`；如果 canonical 在 before 阶段只是 hidden 占位符，则允许它在转为公开拼写时继承 legacy 的 requiredness。已有的 visible canonical 不允许借 rename 改变 requiredness。
 
 以下变化仍按普通兼容规则阻塞，不能被迁移记录掩盖：
 
