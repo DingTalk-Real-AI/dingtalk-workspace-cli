@@ -6,6 +6,8 @@ package drive
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -214,6 +216,47 @@ func nestedString(data map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func driveReadbackNameMatches(data map[string]any, requested string) bool {
+	remoteName := firstString(data, "name", "fileName")
+	if remoteName == requested {
+		return true
+	}
+	extension := strings.TrimLeft(firstString(data, "extension", "fileExtension", "ext"), ".")
+	return extension != "" && remoteName+"."+extension == requested
+}
+
+func firstInt64(data map[string]any, keys ...string) (int64, bool) {
+	for _, key := range keys {
+		value, present := data[key]
+		if !present {
+			continue
+		}
+		switch typed := value.(type) {
+		case int:
+			return int64(typed), true
+		case int32:
+			return int64(typed), true
+		case int64:
+			return typed, true
+		case float64:
+			if !math.IsNaN(typed) && !math.IsInf(typed, 0) && typed == math.Trunc(typed) && typed >= math.MinInt64 && typed < math.MaxInt64 {
+				return int64(typed), true
+			}
+		case json.Number:
+			parsed, err := strconv.ParseInt(typed.String(), 10, 64)
+			if err == nil {
+				return parsed, true
+			}
+		case string:
+			parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+			if err == nil {
+				return parsed, true
+			}
+		}
+	}
+	return 0, false
 }
 
 func driveResponseError(operation, reason, message string) error {

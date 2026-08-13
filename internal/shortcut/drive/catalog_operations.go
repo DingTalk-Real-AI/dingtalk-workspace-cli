@@ -486,8 +486,22 @@ var Upload = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		if remoteName := firstString(verified, "name", "fileName"); remoteName == "" || !strings.HasPrefix(remoteName, strings.TrimSuffix(name, filepath.Ext(name))) {
+		remoteID := firstString(verified, "fileId", "dentryUuid", "nodeId", "id")
+		if remoteID == "" {
+			return driveResponseError("drive/commit_upload", "readback_missing_id", "上传后读回缺少文件 ID；无法证明读回的是已提交文件")
+		}
+		if remoteID != nodeID {
+			return driveResponseError("drive/commit_upload", "readback_id_mismatch", fmt.Sprintf("上传后读回文件 ID %q 与提交 ID %q 不一致", remoteID, nodeID))
+		}
+		if remoteName := firstString(verified, "name", "fileName"); !driveReadbackNameMatches(verified, name) {
 			return driveResponseError("drive/commit_upload", "readback_mismatch", fmt.Sprintf("上传后读回名称 %q 与请求 %q 不一致", remoteName, name))
+		}
+		remoteSize, ok := firstInt64(verified, "fileSize", "size", "byteSize", "length")
+		if !ok {
+			return driveResponseError("drive/commit_upload", "readback_missing_size", "上传后读回缺少有效文件大小；无法证明远端文件完整")
+		}
+		if remoteSize != info.Size() {
+			return driveResponseError("drive/commit_upload", "readback_size_mismatch", fmt.Sprintf("上传后读回大小 %d 与本地文件大小 %d 不一致", remoteSize, info.Size()))
 		}
 		return rt.Output(map[string]any{"success": true, "nodeId": nodeID, "sizeBytes": info.Size(), "file": verified})
 	},
