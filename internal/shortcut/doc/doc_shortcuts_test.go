@@ -1472,6 +1472,9 @@ func TestCrossPlatformCoverageDocConfirmationBoundaries(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageSearchJournalRespectsResultLimitAndPagination(t *testing.T) {
+	if got := effectiveJournalMaxItems(0); got != 500 {
+		t.Fatalf("default journal max-items = %d, want 500", got)
+	}
 	cmd := &cobra.Command{Use: "+search"}
 	rt := shortcut.RuntimeContextForTest(cmd, Search)
 	entries := []docwritejournal.Entry{

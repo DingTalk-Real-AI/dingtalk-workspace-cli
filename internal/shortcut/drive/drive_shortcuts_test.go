@@ -254,7 +254,7 @@ func TestCrossPlatformCoverageDriveCopyPreservesSchemaProperties(t *testing.T) {
 	}
 }
 
-func TestDriveRecentPaginationAndJournalCoverage(t *testing.T) {
+func TestCrossPlatformCoverageDriveRecentPaginationAndJournalCoverage(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	run := func(responses []string, args ...string) error {
 		return runDriveCoverage(t, Recent, &driveCoverageCaller{responses: map[string][]string{"get_recent_list": responses}}, args...)
@@ -289,6 +289,7 @@ func TestDriveRecentPaginationAndJournalCoverage(t *testing.T) {
 		{NodeID: "remote", Name: "duplicate", CreatedAt: 1},
 		{NodeID: "older", Name: "older", CreatedAt: 2},
 		{NodeID: "newer", Name: "newer", CreatedAt: 3},
+		{NodeID: "overflow", Name: "overflow", CreatedAt: 0},
 	}
 	mergeJournalRecent(result, entries, 3)
 	items, _ := result["items"].([]map[string]any)
