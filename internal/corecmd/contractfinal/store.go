@@ -85,6 +85,10 @@ func cloneContractFinalPayload(in contract.ContractFinalPayload) contract.Contra
 		value := *in.Pagination
 		out.Pagination = &value
 	}
+	if in.RetryPolicy != nil {
+		value := *in.RetryPolicy
+		out.RetryPolicy = &value
+	}
 	if in.Interface != nil {
 		value := *in.Interface
 		if in.Interface.Ref != nil {

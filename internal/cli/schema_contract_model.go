@@ -62,6 +62,7 @@ type ToolSpec struct {
 	DryRun          *contract.DryRunSpec
 	Result          *contract.ResultSpec
 	Pagination      *contract.PaginationSpec
+	RetryPolicy     *contract.RetryPolicySpec
 	Safety          contract.SafetySpec
 	Interface       contract.InterfaceSpec
 	Selection       contract.SelectionSpec
@@ -137,6 +138,7 @@ type RuntimeToolSpecInput struct {
 	DryRun          *contract.DryRunSpec
 	Result          *contract.ResultSpec
 	Pagination      *contract.PaginationSpec
+	RetryPolicy     *contract.RetryPolicySpec
 	Safety          contract.SafetySpec
 	Interface       contract.InterfaceSpec
 	Selection       contract.SelectionSpec
@@ -224,6 +226,8 @@ func (t ToolSpec) provenanceValue(field string) (any, bool) {
 		return t.Safety.Confirmation, true
 	case "idempotency":
 		return t.Safety.Idempotency, true
+	case "retry_policy":
+		return t.RetryPolicy, true
 	case "interface_ref":
 		return t.Interface.Ref, true
 	case "interface_mode":
@@ -556,6 +560,42 @@ func (t ToolSpec) Validate() error {
 			return fmt.Errorf("tool %s pagination cursor_parameter %q is not a declared parameter", id.CanonicalPath, pagination.CursorParameter)
 		}
 	}
+	retryPolicy, err := contract.NormalizeRetryPolicySpec(t.RetryPolicy, id.CanonicalPath)
+	if err != nil {
+		return err
+	}
+	if t.Safety.Idempotency == "conditional" {
+		if retryPolicy == nil {
+			return fmt.Errorf("tool %s idempotency=conditional requires retry_policy", id.CanonicalPath)
+		}
+	} else if retryPolicy != nil {
+		return fmt.Errorf("tool %s retry_policy requires idempotency=conditional", id.CanonicalPath)
+	}
+	if retryPolicy != nil {
+		if t.Interface.Mode != contract.InterfaceModeMCP || t.Interface.Ref == nil {
+			return fmt.Errorf("tool %s retry_policy requires an MCP interface_ref", id.CanonicalPath)
+		}
+		var keyProperty, keyType string
+		var keyPropertyProvenance contract.FieldProvenance
+		for _, parameter := range t.Parameters {
+			if parameter.Name == retryPolicy.KeyParameter {
+				keyProperty = strings.TrimSpace(parameter.Property)
+				keyType = strings.TrimSpace(parameter.Type)
+				keyPropertyProvenance = parameter.FieldProvenance["property"]
+				break
+			}
+		}
+		if keyProperty == "" {
+			return fmt.Errorf("tool %s retry_policy key_parameter %q must name a declared parameter with a non-empty interface property", id.CanonicalPath, retryPolicy.KeyParameter)
+		}
+		if keyType != "string" {
+			return fmt.Errorf("tool %s retry_policy key_parameter %q must be a string parameter", id.CanonicalPath, retryPolicy.KeyParameter)
+		}
+		if strings.TrimSpace(keyPropertyProvenance.Source) != "native_annotation" ||
+			strings.TrimSpace(keyPropertyProvenance.Precedence) != "native_annotation" {
+			return fmt.Errorf("tool %s retry_policy key_parameter %q property must come from an explicit ParamDecl", id.CanonicalPath, retryPolicy.KeyParameter)
+		}
+	}
 	if t.Interface.Mode != "" || t.Interface.Availability != "" || t.Interface.Reason != "" || t.Interface.Ref != nil {
 		if err := t.Interface.Validate(id.CanonicalPath); err != nil {
 			return err
@@ -755,6 +795,12 @@ func (t ToolSpec) normalized() ToolSpec {
 		if err == nil {
 			out.Pagination = pagination
 		}
+	}
+	if t.RetryPolicy != nil {
+		retryPolicy := *t.RetryPolicy
+		retryPolicy.Mode = strings.TrimSpace(retryPolicy.Mode)
+		retryPolicy.KeyParameter = strings.TrimSpace(retryPolicy.KeyParameter)
+		out.RetryPolicy = &retryPolicy
 	}
 	out.Positionals = append([]contract.RuntimeSchemaPositional(nil), t.Positionals...)
 	sort.Slice(out.Positionals, func(i, j int) bool {
@@ -990,6 +1036,10 @@ func (t ToolSpec) ToPayload() (map[string]any, error) {
 		value, _ := typedJSONValue(t.Pagination)
 		payload["pagination"] = value
 	}
+	if t.RetryPolicy != nil {
+		value, _ := typedJSONValue(t.RetryPolicy)
+		payload["retry_policy"] = value
+	}
 	applySafetyPayload(payload, t.Safety)
 	applyInterfacePayload(payload, t.Interface)
 	applySelectionPayload(payload, t.Selection, true)
@@ -1013,7 +1063,7 @@ func (t ToolSpec) ToSummaryPayload() (map[string]any, error) {
 	}
 	for _, key := range []string{
 		"parameters", "has_parameters", "parameter_count", "constraints",
-		"positionals", "result", "examples", "effect_source", "agent_source_refs",
+		"positionals", "result", "retry_policy", "examples", "effect_source", "agent_source_refs",
 		"field_provenance", "path", "source", "product_id", "display", "is_alias",
 	} {
 		delete(payload, key)

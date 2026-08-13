@@ -44,6 +44,11 @@ func newToolCallerAdapter(runner executor.Runner, flags *GlobalFlags) edition.To
 
 func (a *toolCallerAdapter) CallTool(ctx context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	inv := executor.NewHelperInvocation("overlay."+productID+"."+toolName, productID, toolName, args)
+	if a != nil {
+		if runtime, ok := a.runner.(*runtimeRunner); ok {
+			runtime.resolveInvocationRetry(&inv)
+		}
+	}
 	// Defense in depth for direct helper callers: global dry-run must never
 	// reach an injected/real Runner, even if a command bypasses the normal
 	// Schema leaf wrapper. EchoRunner produces the same stable dry_run envelope

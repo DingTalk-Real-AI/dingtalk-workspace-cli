@@ -32,6 +32,7 @@ type ContractFinalPayload struct {
 	DryRun      *DryRunSpec
 	Result      *ResultSpec
 	Pagination  *PaginationSpec
+	RetryPolicy *RetryPolicySpec
 	Interface   *InterfaceSpec
 	Selection   *SelectionSpec
 	Identity    *ToolIdentitySpec

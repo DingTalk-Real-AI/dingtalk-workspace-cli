@@ -4,19 +4,21 @@ import (
 	"context"
 	"reflect"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 func TestCrossPlatformCoverageInvocationBuildersAndEchoRunner(t *testing.T) {
 	params := map[string]any{"name": "value"}
 	compat := NewCompatibilityInvocation("old path", "doc", "read", params)
-	if compat.Kind != "compat_invocation" || compat.CanonicalPath != "doc.read" || !reflect.DeepEqual(compat.Params, params) {
+	if compat.Kind != "compat_invocation" || compat.CanonicalPath != "doc.read" || compat.Retry != nil || !reflect.DeepEqual(compat.Params, params) {
 		t.Fatalf("unexpected compatibility invocation: %#v", compat)
 	}
 	if got := NewCompatibilityInvocation("old", "doc", "read", nil).Params; got == nil {
 		t.Fatal("nil compatibility params were not normalized")
 	}
 	help := NewHelperInvocation("old path", "chat", "send", params)
-	if help.Kind != "helper_invocation" || help.Stage != "helper_override" {
+	if help.Kind != "helper_invocation" || help.Stage != "helper_override" || help.Retry != nil {
 		t.Fatalf("unexpected helper invocation: %#v", help)
 	}
 	if got := NewHelperInvocation("old", "chat", "send", nil).Params; got == nil {
@@ -29,8 +31,10 @@ func TestCrossPlatformCoverageInvocationBuildersAndEchoRunner(t *testing.T) {
 		t.Fatalf("EchoRunner normal result = %#v, %v", result, err)
 	}
 	compat.DryRun = true
+	retry := contract.RetryDecision{EffectiveIdempotency: "idempotent", SafeToRetry: true, Reason: "static_idempotent"}
+	compat.Retry = &retry
 	result, err = runner.Run(context.Background(), compat)
-	if err != nil || result.Response["dry_run"] != true {
+	if err != nil || result.Response["dry_run"] != true || result.Response["retry"] != &retry {
 		t.Fatalf("EchoRunner dry-run result = %#v, %v", result, err)
 	}
 }

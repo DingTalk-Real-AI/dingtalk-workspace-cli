@@ -294,6 +294,10 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 	} else if gate, ok := RuntimeContractGate(entry.Command); ok {
 		safety = applyContractGateToSafety(safety, gate)
 	}
+	retryPolicy, err := contract.NormalizeRetryPolicySpec(final.RetryPolicy, canonicalPath)
+	if err != nil {
+		return ToolSpec{}, err
+	}
 
 	positionals := final.Positionals
 	if len(positionals) == 0 {
@@ -333,7 +337,7 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 	// part of the public ToolSpec / Schema wire contract.
 	selection.ExampleDispositions = nil
 
-	provenance := contractFinalProvenance(identity, title, description, titleProv, descriptionProv, safety, interfaceSpec, selection, final.DryRun)
+	provenance := contractFinalProvenance(identity, title, description, titleProv, descriptionProv, safety, retryPolicy, interfaceSpec, selection, final.DryRun)
 
 	result, pagination := final.Result, final.Pagination
 	if !output.UsesUnifiedResult(entry.Command) {
@@ -356,6 +360,7 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		DryRun:          final.DryRun,
 		Result:          result,
 		Pagination:      pagination,
+		RetryPolicy:     retryPolicy,
 		Safety:          safety,
 		Interface:       interfaceSpec,
 		Selection:       selection,
@@ -402,7 +407,7 @@ func contractFinalTextProvenance(declared, cobra string, preferCobra bool) (stri
 // dry_run when present), so declared leaves must emit the full set, not only
 // the fields they happened to author. Title/description provenance must match
 // the real text winner (cobra_help vs contract_final).
-func contractFinalProvenance(identity contract.ToolIdentitySpec, title, description string, titleProv, descriptionProv contract.FieldProvenance, safety contract.SafetySpec, iface contract.InterfaceSpec, selection contract.SelectionSpec, dryRun *contract.DryRunSpec) map[string]contract.FieldProvenance {
+func contractFinalProvenance(identity contract.ToolIdentitySpec, title, description string, titleProv, descriptionProv contract.FieldProvenance, safety contract.SafetySpec, retryPolicy *contract.RetryPolicySpec, iface contract.InterfaceSpec, selection contract.SelectionSpec, dryRun *contract.DryRunSpec) map[string]contract.FieldProvenance {
 	prov := func(value any, sourceRef string) contract.FieldProvenance {
 		return resolvedFieldProvenance(
 			value,
@@ -453,6 +458,9 @@ func contractFinalProvenance(identity contract.ToolIdentitySpec, title, descript
 	}
 	if dryRun != nil {
 		out["dry_run"] = prov(*dryRun, "corecmd.ContractDecl")
+	}
+	if retryPolicy != nil {
+		out["retry_policy"] = prov(*retryPolicy, "corecmd.ContractDecl")
 	}
 	return out
 }
@@ -692,6 +700,9 @@ func validateFinalSchemaProvenanceCoverage(registry SchemaRegistry) error {
 			}
 			if tool.DryRun != nil {
 				require("tool "+canonical, "dry_run", tool.FieldProvenance)
+			}
+			if tool.RetryPolicy != nil {
+				require("tool "+canonical, "retry_policy", tool.FieldProvenance)
 			}
 			// interface_reason is part of the final interface contract only when
 			// the disposition requires or actually delivers a reason. An MCP or

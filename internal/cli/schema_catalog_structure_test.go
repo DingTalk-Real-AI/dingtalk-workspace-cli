@@ -102,6 +102,63 @@ func TestValidateCatalogStructureAcceptsValidEntry(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageValidateCatalogStructureConditionalRetryPolicy(t *testing.T) {
+	valid := func() map[string]any {
+		entry := validCatalogToolEntry()
+		entry["idempotency"] = "conditional"
+		parameter := entry["parameters"].(map[string]any)["base-id"].(map[string]any)
+		parameter["property"] = "baseId"
+		parameter["field_provenance"].(map[string]any)["property"] = map[string]any{"source": "native_annotation"}
+		entry["retry_policy"] = map[string]any{
+			"mode":                  contract.RetryModeDeduplicationKey,
+			"key_parameter":         "base-id",
+			"same_payload_required": true,
+		}
+		return entry
+	}
+	entry := valid()
+	if err := ValidateCatalogStructure(catalogPayload(t, entry)); err != nil {
+		t.Fatalf("ValidateCatalogStructure() error = %v", err)
+	}
+	for _, test := range []struct {
+		name   string
+		mutate func(map[string]any)
+		want   string
+	}{
+		{name: "missing policy", mutate: func(entry map[string]any) { delete(entry, "retry_policy") }, want: "requires retry_policy"},
+		{name: "policy on non conditional", mutate: func(entry map[string]any) { entry["idempotency"] = "unknown" }, want: "retry_policy requires idempotency=conditional"},
+		{name: "non object", mutate: func(entry map[string]any) { entry["retry_policy"] = "invalid" }, want: "retry_policy must be an object"},
+		{name: "unknown field", mutate: func(entry map[string]any) { entry["retry_policy"].(map[string]any)["inferred"] = true }, want: "unknown field"},
+		{name: "bad mode", mutate: func(entry map[string]any) { entry["retry_policy"].(map[string]any)["mode"] = "always" }, want: "retry_policy.mode"},
+		{name: "empty key", mutate: func(entry map[string]any) { entry["retry_policy"].(map[string]any)["key_parameter"] = " " }, want: "key_parameter must be a non-empty string"},
+		{name: "missing key parameter", mutate: func(entry map[string]any) { entry["retry_policy"].(map[string]any)["key_parameter"] = "uuid" }, want: "references missing parameter"},
+		{name: "missing property", mutate: func(entry map[string]any) {
+			delete(entry["parameters"].(map[string]any)["base-id"].(map[string]any), "property")
+		}, want: "non-empty property"},
+		{name: "non string key", mutate: func(entry map[string]any) {
+			entry["parameters"].(map[string]any)["base-id"].(map[string]any)["type"] = "integer"
+		}, want: "must have type string"},
+		{name: "inferred property", mutate: func(entry map[string]any) {
+			entry["parameters"].(map[string]any)["base-id"].(map[string]any)["field_provenance"].(map[string]any)["property"].(map[string]any)["source"] = "flag_name_inference"
+		}, want: "must come from an explicit ParamDecl"},
+		{name: "same payload false", mutate: func(entry map[string]any) { entry["retry_policy"].(map[string]any)["same_payload_required"] = false }, want: "same_payload_required must be true"},
+		{name: "non MCP", mutate: func(entry map[string]any) {
+			entry["interface_mode"] = contract.InterfaceModeLocal
+			delete(entry, "interface_ref")
+			entry["interface_reason"] = "local"
+		}, want: "requires interface_mode=mcp"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			entry := valid()
+			test.mutate(entry)
+			err := ValidateCatalogStructure(catalogPayload(t, entry))
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("ValidateCatalogStructure() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestValidateCatalogStructureAcceptsOptionalResultObject(t *testing.T) {
 	entry := validCatalogToolEntry()
 	entry["result"] = map[string]any{

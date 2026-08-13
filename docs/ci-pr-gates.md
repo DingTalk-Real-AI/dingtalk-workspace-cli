@@ -229,6 +229,52 @@ tool、parameter、mapping、positional execution、constraint 与 safety 语义
 等价证明；产品 PR 仍须证明 canonical 与 legacy 的最终运行 payload 等价并在 transport
 前拒绝冲突输入。当前迁移清单为空，不授权 PR #904。
 
+## 条件幂等与重试策略迁移
+
+静态 `idempotency` 描述命令级分类；当它是 `conditional` 时，再由实际调用参数计算
+本次调用的 effective idempotency。不能因为命令“存在一个可选 `--uuid` flag”就把
+整个命令从 `unknown` 改成无条件 `idempotent`。Schema 增加 `conditional` 状态以及
+与它配套的 `retry_policy`：
+
+```json
+{
+  "idempotency": "conditional",
+  "retry_policy": {
+    "mode": "deduplication_key",
+    "key_parameter": "uuid",
+    "same_payload_required": true
+  }
+}
+```
+
+只有调用实际提供 `uuid`，并且框架重用同一个 key 和同一份请求 payload 时，调用级
+有效幂等性才是 `idempotent`；未提供时仍是 `non_idempotent`。本契约没有发布后端
+未证明的去重时间窗。`conditional` 仅允许用于单 RPC 的 `mcp` leaf，key 必须对应
+一个存在且有非空 interface property 的真实参数。其余三种静态状态不得携带
+`retry_policy`。
+
+兼容迁移分三步治理：
+
+1. 独立治理 PR 在 Schema surface 不变时先加入契约、校验器和精确登记。本轮只登记
+   57 个 Chat 写命令：5 个 `unknown -> conditional`，52 个
+   `unknown -> non_idempotent`。
+2. 后续业务 PR 只消费这些已登记转换。5 个条件幂等命令必须逐字发布上面的策略；
+   PR #965 原先的 `unknown -> idempotent` 仍会失败。未登记工具、反向迁移、策略漂移
+   以及同一 PR 夹带的其它历史契约变化也仍会失败。
+3. 当 `main` 与当前 stable baseline 都已经覆盖迁移后，再由独立治理 PR 删除失效的
+   静态登记，避免把一次迁移审批永久留在规则中。
+
+Interface Integrity job 的兼容性 step 在 PR merge-base 建立独立 authority worktree，
+并从该 worktree 启动权威 wrapper；它不经过 candidate checkout 中的
+Makefile 或 wrapper。权威 wrapper 再从 merge-base 构建 `schema-compat` checker，
+分别比较 merge-base 和 stable。因此，在该 step 实际执行时，业务 candidate
+修改 candidate checkout 中的 Makefile、wrapper、checker 或登记表都不能给
+自己授权；只有先合入主干、经过独立评审的登记会被后续 PR 使用。
+
+CLI 评测和 Agent 消费方应把 `conditional` 与 `retry_policy` 作为一个整体读取：静态
+`conditional` 不是扣分意义上的“不知道”，也不是无条件可重试；评测应根据
+`key_parameter` 是否出现在实际调用中计算本次调用的有效幂等性。
+
 ## Required GitHub repository settings
 
 The `main` quality ruleset must enable strict required-status-check policy

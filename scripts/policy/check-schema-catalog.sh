@@ -90,7 +90,26 @@ if ! jq -e --arg registry_count "$registry_count" '
     (.effect == "read" or .effect == "write" or .effect == "destructive") and
     (.risk == "low" or .risk == "medium" or .risk == "high") and
     (.confirmation == "not_required" or .confirmation == "user_required") and
-    (.idempotency == "idempotent" or .idempotency == "non_idempotent" or .idempotency == "unknown") and
+	(.idempotency == "idempotent" or .idempotency == "non_idempotent" or .idempotency == "unknown" or .idempotency == "conditional") and
+	(if .idempotency == "conditional" then
+	  (.retry_policy | type) == "object" and
+	  (.retry_policy | keys) == ["key_parameter", "mode", "same_payload_required"] and
+	  .retry_policy.mode == "deduplication_key" and
+	  ((.retry_policy.key_parameter // "") | type) == "string" and
+	  ((.retry_policy.key_parameter // "") | length) > 0 and
+	  .retry_policy.same_payload_required == true and
+	  (.retry_policy.key_parameter as $key |
+        (.parameters[$key] | type) == "object" and
+        .parameters[$key].type == "string" and
+        ((.parameters[$key].property // "") | length) > 0 and
+        .parameters[$key].field_provenance.property.source == "native_annotation") and
+	  .interface_mode == "mcp" and
+	  (.interface_ref | type) == "object" and
+	  ((.interface_ref.product_id // "") | length) > 0 and
+	  ((.interface_ref.rpc_name // "") | length) > 0
+	else
+	  (has("retry_policy") | not)
+	end) and
 	(has("use_when") and (.use_when | type) == "array") and
 	(has("avoid_when") and (.avoid_when | type) == "array") and
 	(has("examples") and (.examples | type) == "array") and
