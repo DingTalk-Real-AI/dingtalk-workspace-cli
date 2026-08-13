@@ -153,6 +153,12 @@ jobs:
                 filename.startsWith('internal/helpers/') ||
                 filename.startsWith('internal/generator/') ||
                 filename.startsWith('internal/cli/schema') ||
+                // Parameter aliases are reduced against the live command tree.
+                // Their reverse-dependency set is too large for one focused
+                // race job, so use the existing full-suite shards.
+                filename === 'internal/cli/param_concepts.json' ||
+                filename === 'internal/cli/param_concepts.schema.json' ||
+                filename === 'internal/cli/param_aliases_generated.go' ||
                 filename.startsWith('internal/interfacesnapshot/') ||
                 filename.startsWith('internal/app/upgrade') ||
                 filename.startsWith('internal/transport/') ||
@@ -559,7 +565,8 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: ubuntu-latest
-    # cli/smoke shards need headroom beyond go test -timeout for setup + assembly.
+    # app runs several independently bounded processes; cli/smoke need headroom
+    # beyond go test -timeout for setup + assembly.
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -595,10 +602,19 @@ jobs:
           test -n "$package_output"
           mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
-          # cli/smoke own heavy NewRootCommand / Schema assembly under -race; give
-          # them a dedicated budget so remaining is not SIGTERM'd by OOM/timeout.
+          if [ "$TEST_SHARD" = "app" ]; then
+            # A single long-lived app test process retains every constructed
+            # command tree in framework registries. Isolate Schema assembly and
+            # bounded name ranges so each process releases that state on exit.
+            test "${#packages[@]}" -eq 1
+            ./scripts/ci/run-app-race-tests.sh run "${packages[0]}"
+            exit 0
+          fi
+          # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
+          # give them a dedicated package timeout on slower hosted runners.
           timeout_budget=12m
-          if [ "$TEST_SHARD" = "cli" ] || [ "$TEST_SHARD" = "smoke" ]; then
+          if [ "$TEST_SHARD" = "cli" ] ||
+             [ "$TEST_SHARD" = "smoke" ]; then
             timeout_budget=15m
           fi
           go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"

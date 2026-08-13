@@ -68,6 +68,45 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		return `{"result":[{"templateId":"fixture-template-id"}]}`
 	case "create_document":
 		return `{"nodeId":"fixture-node"}`
+	case "list_files":
+		return `{"success":true,"result":{"files":[],"hasMore":false}}`
+	case "list_recycle_items":
+		return `{"success":true,"result":{"recycleItems":[{"recycleItemId":"recycle-1","originalName":"Fixture Node"}],"hasMore":false}}`
+	case "get_star_list":
+		return `{"success":true,"result":{"starList":[],"hasMore":false}}`
+	case "list_file_versions":
+		return `{"success":true,"result":{"versions":[{"version":3,"name":"Fixture Version"}],"hasMore":false}}`
+	case "get_file_info":
+		name := "Fixture Node"
+		for index := len(c.calls) - 2; index >= 0; index-- {
+			call := c.calls[index]
+			switch call.tool {
+			case "create_folder":
+				if value, ok := call.args["name"].(string); ok {
+					name = value
+				}
+				index = -1
+			case "rename_document":
+				if value, ok := call.args["newName"].(string); ok {
+					name = value
+				}
+				index = -1
+			}
+		}
+		encoded, _ := json.Marshal(map[string]any{"success": true, "result": map[string]any{"fileId": "node-1", "name": name}})
+		return string(encoded)
+	case "get_cover", "get_node_stats":
+		return `{"success":true,"result":{"nodeId":"node-1"}}`
+	case "get_file_publish_status":
+		return `{"success":true,"result":{"fileId":"node-1","published":false}}`
+	case "create_folder", "create_shortcut":
+		return `{"success":true,"fileId":"node-1"}`
+	case "delete_document", "mark_star", "unmark_star", "restore_recycle_item", "rename_document", "revert_file_version":
+		return `{"success":true,"fileId":"node-1"}`
+	case "set_file_publish":
+		return `{"success":true}`
+	case "download_file", "download_file_version":
+		return `{"success":true,"result":{"downloadUrl":"http://invalid.test/fixture.bin","fileName":"fixture.bin"}}`
 	case "get_document_content":
 		for index := len(c.calls) - 2; index >= 0; index-- {
 			call := c.calls[index]

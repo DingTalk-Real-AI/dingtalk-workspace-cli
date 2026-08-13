@@ -929,6 +929,39 @@
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
+      "command": "dws chat message send",
+      "legacy": {
+        "name": "uuid",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "idempotency-key"
+        }
+      },
+      "canonical": {
+        "name": "idempotency-key",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": false
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 argv 兼容性，并将幂等参数规范 flag 设为唯一可见入口"
+    },
+    {
       "command": "dws chat message set-pin-msg",
       "legacy": {
         "name": "msg-id",

@@ -83,6 +83,10 @@ func TestMain(m *testing.M) {
 	// remove a TempDir while the audit lock is still open.
 	setupAuditSink()
 	openBrowserFunc = func(string) error { return nil }
+	// App tests may run in filtered CI processes. Install the same lazy Schema
+	// source factory as NewRootCommand without constructing a root so ResolveMeta
+	// tests never depend on an earlier test having initialized process state.
+	registerSchemaRuntimeDelivery()
 	code := m.Run()
 	StopAllStdioClients()
 	CloseAuditSink()
