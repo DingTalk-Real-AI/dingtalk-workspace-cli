@@ -699,14 +699,20 @@ func collectRecentPages(rt *shortcut.RuntimeContext, base map[string]any, pageSi
 			"docUrl":      {"docUrl"},
 			"nodeId":      {"nodeId"},
 		})
+		remaining := maxItems - len(items)
+		pageOverflow := len(pageItems) > remaining
+		if pageOverflow {
+			pageItems = pageItems[:remaining]
+		}
 		items = append(items, pageItems...)
 		hasMore, _ = pageContainer["hasMore"].(bool)
 		next := firstString(pageContainer, "nextCursor", "nextToken", "nextPageToken")
 		complete = !hasMore
 		cursor = strings.TrimSpace(next)
-		if len(items) >= maxItems && hasMore {
+		if pageOverflow || (len(items) >= maxItems && hasMore) {
 			truncated = true
 			complete = false
+			hasMore = true
 			break
 		}
 		if complete || !rt.Bool("page-all") {

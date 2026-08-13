@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
@@ -26,6 +27,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -42,6 +44,7 @@ type docCoverageCaller struct {
 
 func TestDocCreateJournalReplayAndReconciliationCoverage(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	configureDocJournalProfile(t)
 	testseam.Swap(t, &docVerifySleep, func(time.Duration) {})
 	run := func(declaration shortcut.Shortcut, caller *docCoverageCaller, args ...string) error {
 		return runDocCoveragePath(t, declaration, caller, strings.NewReader(""), declaration.Command, args...)
@@ -183,6 +186,7 @@ func TestDocUpdatePureMutationBranchCoverage(t *testing.T) {
 
 func TestDocSearchJournalFilterAndTemplateListCoverage(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	configureDocJournalProfile(t)
 	created := time.Now().UnixMilli()
 	for _, entry := range []docwritejournal.Entry{
 		{NodeID: "remote", Name: "remote duplicate", DocType: "ALIDOC", CreatedAt: created, WorkspaceID: "w", CreatorID: "u"},
@@ -216,6 +220,19 @@ func TestDocSearchJournalFilterAndTemplateListCoverage(t *testing.T) {
 	}
 	if err := runDocCoverage(t, TemplateList, &docCoverageCaller{failAt: 1}, "--source", "MY"); err == nil {
 		t.Fatal("template list read error succeeded")
+	}
+}
+
+func configureDocJournalProfile(t *testing.T) {
+	t.Helper()
+	err := auth.SaveProfiles(config.DefaultConfigDir(), &auth.ProfilesConfig{
+		CurrentProfile: "journal-test",
+		Profiles: []auth.Profile{{
+			Name: "journal-test", CorpID: "journal-corp", UserID: "journal-user",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("configure journal profile: %v", err)
 	}
 }
 

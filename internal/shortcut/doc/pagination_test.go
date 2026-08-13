@@ -203,3 +203,38 @@ func TestTemplatePaginationRemainingBranchCoverage(t *testing.T) {
 		})
 	}
 }
+
+func TestCrossPlatformCoverageTemplatePaginationTruncatesServerOverflow(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"search_doc_templates": {{
+			"templates": []any{
+				map[string]any{"templateId": "a"},
+				map[string]any{"templateId": "b"},
+			},
+			"hasMore":    false,
+			"nextCursor": "server-next",
+		}},
+	}}
+	declaration := Search
+	declaration.Execute = func(rt *shortcut.RuntimeContext) error {
+		items, complete, truncated, cursor, pages, err := collectTemplatePages(
+			rt,
+			"search_doc_templates",
+			map[string]any{"templateSource": "PUBLIC"},
+			docPageOptions{PageAll: true, PageSize: 10, MaxPages: 2, MaxItems: 1},
+		)
+		if err != nil {
+			return err
+		}
+		if len(items) != 1 || items[0]["templateId"] != "a" || complete || !truncated || cursor != "server-next" || pages != 1 {
+			t.Fatalf("overflow result items=%#v complete=%v truncated=%v cursor=%q pages=%d", items, complete, truncated, cursor, pages)
+		}
+		return nil
+	}
+	if err := runDocCoverage(t, declaration, caller); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.history) != 1 || caller.history[0].params["maxResults"] != 1 {
+		t.Fatalf("overflow request = %#v", caller.history)
+	}
+}

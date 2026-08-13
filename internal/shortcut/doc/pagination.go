@@ -241,8 +241,10 @@ func collectTemplatePages(rt *shortcut.RuntimeContext, tool string, base map[str
 	items := []map[string]any{}
 	complete, truncated, nextCursor, pagesRead := false, false, "", 0
 	for page := 1; page <= pageLimit; page++ {
+		remaining := options.MaxItems - len(items)
+		requestPageSize := min(options.PageSize, remaining)
 		params := cloneMap(base)
-		params["maxResults"] = min(options.PageSize, options.MaxItems-len(items))
+		params["maxResults"] = requestPageSize
 		if cursor != "" {
 			params["nextCursor"] = cursor
 		}
@@ -252,12 +254,24 @@ func collectTemplatePages(rt *shortcut.RuntimeContext, tool string, base map[str
 		}
 		pagesRead++
 		projected := collectTemplateCandidates(data)
+		pageItems := make([]map[string]any, 0, len(projected))
+		pageSeen := map[string]bool{}
 		for _, item := range projected {
 			id, _ := item["templateId"].(string)
-			if id != "" && seenItems[id] {
+			if id != "" && (seenItems[id] || pageSeen[id]) {
 				continue
 			}
 			if id != "" {
+				pageSeen[id] = true
+			}
+			pageItems = append(pageItems, item)
+		}
+		pageOverflow := len(pageItems) > remaining
+		if pageOverflow {
+			pageItems = pageItems[:remaining]
+		}
+		for _, item := range pageItems {
+			if id, _ := item["templateId"].(string); id != "" {
 				seenItems[id] = true
 			}
 			items = append(items, item)
@@ -268,14 +282,18 @@ func collectTemplatePages(rt *shortcut.RuntimeContext, tool string, base map[str
 			complete = !hasMore
 		} else if nextCursor != "" {
 			hasMore = true
-		} else if len(projected) < options.PageSize {
+		} else if len(projected) < requestPageSize {
 			complete = true
 		} else {
-			return nil, false, false, cursor, pagesRead, docPaginationError(tool, "pagination_unproven", nil, page, items, cursor)
+			hasMore = true
+			if len(items) < options.MaxItems {
+				return nil, false, false, cursor, pagesRead, docPaginationError(tool, "pagination_unproven", nil, page, items, cursor)
+			}
 		}
-		if len(items) >= options.MaxItems && hasMore {
+		if pageOverflow || (len(items) >= options.MaxItems && hasMore) {
 			truncated = true
 			complete = false
+			hasMore = true
 			break
 		}
 		if complete || !options.PageAll {

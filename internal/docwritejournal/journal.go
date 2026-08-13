@@ -66,7 +66,10 @@ func Record(ctx context.Context, entry Entry) error {
 	if entry.NodeID == "" || entry.Name == "" {
 		return fmt.Errorf("doc write journal requires nodeId and name")
 	}
-	key, creatorID := currentProfileKey()
+	key, creatorID, err := currentProfileKey()
+	if err != nil {
+		return err
+	}
 	entry.ProfileKey = key
 	if entry.CreatorID == "" {
 		entry.CreatorID = creatorID
@@ -90,9 +93,12 @@ func Record(ctx context.Context, entry Entry) error {
 }
 
 func List(ctx context.Context) ([]Entry, error) {
-	key, _ := currentProfileKey()
+	key, _, err := currentProfileKey()
+	if err != nil {
+		return nil, err
+	}
 	var result []Entry
-	err := withLockedData(ctx, func(data *fileData) bool {
+	err = withLockedData(ctx, func(data *fileData) bool {
 		before := len(data.Entries)
 		data.Entries = prune(data.Entries)
 		for _, entry := range data.Entries {
@@ -119,16 +125,24 @@ func LookupFingerprint(ctx context.Context, fingerprint string) (Entry, bool, er
 	return Entry{}, false, nil
 }
 
-func currentProfileKey() (string, string) {
+func currentProfileKey() (string, string, error) {
 	selector := strings.TrimSpace(profilectx.Get())
 	profile, err := journalResolveProfile(config.DefaultConfigDir(), selector)
-	if err == nil && profile != nil {
-		return strings.TrimSpace(profile.CorpID) + "/" + strings.TrimSpace(profile.UserID), strings.TrimSpace(profile.UserID)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve doc write journal profile: %w", err)
 	}
-	if selector != "" {
-		return "selector:" + selector, ""
+	if profile == nil {
+		return "", "", fmt.Errorf("resolve doc write journal profile: no active profile")
 	}
-	return "default", ""
+	corpID := strings.TrimSpace(profile.CorpID)
+	userID := strings.TrimSpace(profile.UserID)
+	if corpID == "" || userID == "" {
+		return "", "", fmt.Errorf("resolve doc write journal profile: profile identity requires non-empty corpId and userId")
+	}
+	// Length-prefix both identity components so the partition key cannot collide
+	// even if an identifier contains a separator used by another identifier.
+	key := fmt.Sprintf("%d:%s:%d:%s", len(corpID), corpID, len(userID), userID)
+	return key, userID, nil
 }
 
 func prune(entries []Entry) []Entry {

@@ -18,6 +18,7 @@ import (
 
 func TestJournalRecordLookupAndTTL(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	stubResolvedJournalProfile(t)
 	oldNow := now
 	clock := time.Unix(1000, 0)
 	now = func() time.Time { return clock }
@@ -44,17 +45,32 @@ func TestJournalProfilesDeduplicationAndValidation(t *testing.T) {
 	journalResolveProfile = func(string, string) (*auth.Profile, error) {
 		return &auth.Profile{CorpID: " corp ", UserID: " user "}, nil
 	}
-	if key, creator := currentProfileKey(); key != "corp/user" || creator != "user" {
-		t.Fatalf("resolved profile = %q, %q", key, creator)
+	if key, creator, err := currentProfileKey(); err != nil || key != "4:corp:4:user" || creator != "user" {
+		t.Fatalf("resolved profile = %q, %q, %v", key, creator, err)
 	}
 	journalResolveProfile = func(string, string) (*auth.Profile, error) { return nil, errors.New("missing") }
 	profilectx.Set(" team ")
-	if key, _ := currentProfileKey(); key != "selector:team" {
-		t.Fatalf("selector key = %q", key)
+	if _, _, err := currentProfileKey(); err == nil {
+		t.Fatal("selector resolution failure accepted")
 	}
 	profilectx.Set("")
-	if key, _ := currentProfileKey(); key != "default" {
-		t.Fatalf("default key = %q", key)
+	if _, _, err := currentProfileKey(); err == nil {
+		t.Fatal("default resolution failure accepted")
+	}
+	if err := Record(context.Background(), Entry{NodeID: "blocked", Name: "blocked"}); err == nil {
+		t.Fatal("record accepted unresolved profile")
+	}
+	if _, err := List(context.Background()); err == nil {
+		t.Fatal("list accepted unresolved profile")
+	}
+	for _, profile := range []*auth.Profile{nil, {CorpID: "corp"}, {UserID: "user"}} {
+		journalResolveProfile = func(string, string) (*auth.Profile, error) { return profile, nil }
+		if _, _, err := currentProfileKey(); err == nil {
+			t.Fatalf("incomplete profile accepted: %#v", profile)
+		}
+	}
+	journalResolveProfile = func(string, string) (*auth.Profile, error) {
+		return &auth.Profile{CorpID: "corp", UserID: "user"}, nil
 	}
 
 	if err := Record(context.Background(), Entry{}); err == nil {
@@ -94,6 +110,7 @@ func TestJournalProfilesDeduplicationAndValidation(t *testing.T) {
 func TestJournalStorageErrorCoverage(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("DWS_CONFIG_DIR", configDir)
+	stubResolvedJournalProfile(t)
 	oldAcquire, oldMkdir, oldRead := journalAcquireLock, journalMkdirAll, journalReadFile
 	oldMarshal, oldCreate := journalMarshal, journalCreateTemp
 	oldChmod, oldWrite, oldClose, oldRename := journalChmod, journalWrite, journalClose, journalRename
@@ -182,4 +199,13 @@ func TestJournalStorageErrorCoverage(t *testing.T) {
 	if _, err := List(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func stubResolvedJournalProfile(t *testing.T) {
+	t.Helper()
+	oldResolve := journalResolveProfile
+	journalResolveProfile = func(string, string) (*auth.Profile, error) {
+		return &auth.Profile{CorpID: "test-corp", UserID: "test-user"}, nil
+	}
+	t.Cleanup(func() { journalResolveProfile = oldResolve })
 }

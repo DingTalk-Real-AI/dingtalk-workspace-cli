@@ -314,6 +314,27 @@ func TestCrossPlatformCoverageDriveRecentPaginationAndJournalCoverage(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageDriveRecentTruncatesServerOverflow(t *testing.T) {
+	caller := &driveCoverageCaller{responses: map[string][]string{
+		"get_recent_list": {`{"recentItems":[{"nodeId":"a"},{"nodeId":"b"}],"hasMore":false,"nextCursor":"server-next"}`},
+	}}
+	declaration := Recent
+	declaration.Execute = func(rt *shortcut.RuntimeContext) error {
+		result, err := collectRecentPages(rt, nil, 20)
+		if err != nil {
+			return err
+		}
+		items, _ := result["items"].([]map[string]any)
+		if len(items) != 1 || items[0]["nodeId"] != "a" || result["complete"] != false || result["truncated"] != true || result["hasMore"] != true || result["nextCursor"] != "server-next" {
+			t.Fatalf("overflow recent result = %#v", result)
+		}
+		return nil
+	}
+	if err := runDriveCoverage(t, declaration, caller, "--page-all", "--max-items", "1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCrossPlatformCoverageDriveFirstInt64(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
