@@ -157,7 +157,7 @@ DWS 已经具备：
 
 2026-08-13 在历史 572 工具 Spike 上运行三轮 benchmark，warm Search 为 **0.556～0.574 ms**、约 **86 KB / 1,123 allocs**；当时的 engine build 为 **48.70～48.82 ms**、约 **28.5 MB / 244k allocs**。后者仍提示短生命周期 subprocess 的主要本地成本不能被 warm p95 掩盖；它不是当前声明装配版的 SLA 数值。
 
-这组历史数据证明全量扫描在当时 572 工具规模下可用，也暴露了初始化和分配仍需优化；当前 1,098 工具声明装配版必须重新建立 SLA。正式门禁必须以 release binary 独立进程测量 cold start，并以长生命周期进程测量多次 warm 请求。Host 不应为了 local-only + fusion 无条件启动两个短命进程；优先支持一次 versioned fusion request，只有真实端到端数据超预算后才评估 daemon/sidecar。
+这组历史数据证明全量扫描在当时 572 工具规模下可用，也暴露了初始化和分配仍需优化；当前 1,098 工具声明装配版必须重新建立 SLA。正式门禁必须以 release binary 独立进程测量 cold start，并以长生命周期进程测量多次 warm 请求。当前每次发现只需要一次本地 Search；只有真实端到端数据超预算后才评估 daemon/sidecar。
 
 ### 3.5 业务闭环收益
 
