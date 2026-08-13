@@ -172,7 +172,7 @@ DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.
 
 > 需要 **v1.0.7** 及以上版本。更早版本请重新执行[安装脚本](#安装)进行升级。
 
-dws 内置自升级能力，直接从 [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases) 拉取更新，支持 SHA256 完整性校验和自动备份。
+dws 内置自升级能力，正式版和 beta 版本分别通过 npm `latest` / `beta` dist-tag 解析，并在本地缓存 10 分钟。发布资产仍从 [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases) 下载，支持 SHA256 完整性校验和自动备份。
 
 ```bash
 dws upgrade                    # 交互式升级到最新版本
@@ -187,7 +187,7 @@ dws upgrade --rollback         # 回滚到上一版本
 dws upgrade -y                 # 跳过确认直接升级
 ```
 
-默认情况下，`dws upgrade` 只跟随正式 release 轨道。只有显式传入 `--beta` 时，才会选择 GitHub pre-release 里的 beta 构建。
+默认情况下，`dws upgrade` 跟随 npm `latest` 轨道。只有显式传入 `--beta` 时，才会选择发布到 npm `beta` 轨道的版本。
 
 ### 六渠道发布后验证
 

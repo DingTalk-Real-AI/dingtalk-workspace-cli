@@ -106,13 +106,18 @@ const (
 	ReleaseTrackAll     ReleaseTrack = "all"
 )
 
-// Client communicates with the GitHub Releases API.
+// Client resolves release channels through npm and retains GitHub Releases
+// for exact tags, version lists, custom repositories, and custom API mirrors.
 type Client struct {
-	httpClient *http.Client
-	owner      string
-	repo       string
-	baseURL    string // overridable for testing or mirrors
-	configErr  error
+	httpClient   *http.Client
+	owner        string
+	repo         string
+	baseURL      string // overridable for testing or mirrors
+	configErr    error
+	registryURL  string
+	assetBaseURL string
+	cachePath    string
+	now          func() time.Time
 }
 
 // NewClient creates a GitHub release client with default settings.
@@ -122,12 +127,20 @@ func NewClient() *Client {
 		baseURL = strings.TrimRight(env, "/")
 	}
 	owner, repo, configErr := repositoryFromEnv()
+	registryURL := ""
+	if configErr == nil && baseURL == gitHubAPIBase && owner == defaultOwner && repo == defaultRepo {
+		registryURL = npmRegistryBase
+	}
 	return &Client{
-		httpClient: &http.Client{Timeout: httpTimeout},
-		owner:      owner,
-		repo:       repo,
-		baseURL:    baseURL,
-		configErr:  configErr,
+		httpClient:   &http.Client{Timeout: httpTimeout},
+		owner:        owner,
+		repo:         repo,
+		baseURL:      baseURL,
+		configErr:    configErr,
+		registryURL:  registryURL,
+		assetBaseURL: fmt.Sprintf("https://github.com/%s/%s/releases/download", owner, repo),
+		cachePath:    updateCachePath(),
+		now:          time.Now,
 	}
 }
 
@@ -138,6 +151,7 @@ func NewClientWithBaseURL(baseURL string) *Client {
 		owner:      defaultOwner,
 		repo:       defaultRepo,
 		baseURL:    strings.TrimRight(baseURL, "/"),
+		now:        time.Now,
 	}
 }
 
@@ -145,6 +159,9 @@ func NewClientWithBaseURL(baseURL string) *Client {
 func (c *Client) FetchLatestRelease() (*ReleaseInfo, error) {
 	if err := c.validateConfig(); err != nil {
 		return nil, err
+	}
+	if c.registryURL != "" {
+		return c.fetchRegistryRelease(ReleaseTrackRelease)
 	}
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", c.baseURL, c.owner, c.repo)
 
@@ -171,6 +188,12 @@ func (c *Client) FetchLatestReleaseForTrack(track ReleaseTrack) (*ReleaseInfo, e
 // FetchLatestStableRelease returns the newest non-draft, non-prerelease release
 // whose tag is a formal semantic version (vX.Y.Z).
 func (c *Client) FetchLatestStableRelease() (*ReleaseInfo, error) {
+	if err := c.validateConfig(); err != nil {
+		return nil, err
+	}
+	if c.registryURL != "" {
+		return c.fetchRegistryRelease(ReleaseTrackRelease)
+	}
 	releases, err := c.fetchReleases()
 	if err != nil {
 		return nil, fmt.Errorf("获取正式 release 版本失败: %w", err)
@@ -186,6 +209,12 @@ func (c *Client) FetchLatestStableRelease() (*ReleaseInfo, error) {
 
 // FetchLatestPrerelease returns the newest non-draft prerelease.
 func (c *Client) FetchLatestPrerelease() (*ReleaseInfo, error) {
+	if err := c.validateConfig(); err != nil {
+		return nil, err
+	}
+	if c.registryURL != "" {
+		return c.fetchRegistryRelease(ReleaseTrackBeta)
+	}
 	releases, err := c.fetchReleases()
 	if err != nil {
 		return nil, fmt.Errorf("获取 beta 版本失败: %w", err)
