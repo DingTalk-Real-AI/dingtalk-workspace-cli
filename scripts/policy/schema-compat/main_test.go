@@ -1218,11 +1218,8 @@ func TestCrossPlatformCoverageSchemaFlagMigrationNormalizesExactRename(t *testin
 			t.Fatalf("normalized baseline retained legacy parameter %q", legacy)
 		}
 	}
-	if canonical := tool.Parameters["conversation-id"]; canonical.Required || canonical.CLIRequired {
-		t.Fatalf("optional canonical rename changed requiredness: %#v", canonical)
-	}
-	if canonical := tool.Parameters["message-id"]; !canonical.Required || !canonical.CLIRequired {
-		t.Fatalf("required canonical rename changed requiredness: %#v", canonical)
+	if canonical := tool.Parameters["conversation-id"]; !canonical.Required || !canonical.CLIRequired {
+		t.Fatalf("canonical required transition was not normalized: %#v", canonical)
 	}
 	if tool.Constraints != current.Products["chat"].Tools["chat.edit_message"].Constraints {
 		t.Fatalf("constraints were not normalized: %s", tool.Constraints)
@@ -1259,39 +1256,6 @@ func TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift(t *testing
 			canonical := tool.Parameters["message-id"]
 			test.mutate(&canonical)
 			tool.Parameters["message-id"] = canonical
-			product.Tools["chat.edit_message"] = tool
-			current.Products["chat"] = product
-
-			_, err := normalizeSchemaFlagMigrations(
-				schemaFlagMigrationContract(false),
-				current,
-				schemaFlagMigrationAuthorizations(),
-			)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("normalizeSchemaFlagMigrations() error = %v, want %q", err, test.want)
-			}
-		})
-	}
-
-	for _, test := range []struct {
-		name   string
-		want   string
-		mutate func(*parameterSchema)
-	}{
-		{name: "optional required promotion", want: "changed requiredness", mutate: func(parameter *parameterSchema) {
-			parameter.Required = true
-		}},
-		{name: "optional cli_required promotion", want: "changed cli_required", mutate: func(parameter *parameterSchema) {
-			parameter.CLIRequired = true
-		}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			current := schemaFlagMigrationContract(true)
-			product := current.Products["chat"]
-			tool := product.Tools["chat.edit_message"]
-			canonical := tool.Parameters["conversation-id"]
-			test.mutate(&canonical)
-			tool.Parameters["conversation-id"] = canonical
 			product.Tools["chat.edit_message"] = tool
 			current.Products["chat"] = product
 
@@ -1357,10 +1321,9 @@ func TestCrossPlatformCoverageSchemaFlagMigrationAdapterBranches(t *testing.T) {
 		t.Fatal("missing candidate product was normalized away")
 	}
 
-	canonicalOnlyMigration := schemaFlagMigrationAuthorizations()[0]
-	canonicalOnlyMigration.Legacy.Name = "legacy-not-published-in-schema"
-	canonicalOnlyBaseline := schemaFlagMigrationContract(true)
-	driftedCanonical := cloneContract(canonicalOnlyBaseline)
+	canonicalOnly := schemaFlagMigrationAuthorizations()[0]
+	canonicalOnly.Legacy.Name = "legacy-not-published-in-schema"
+	driftedCanonical := cloneContract(current)
 	product = driftedCanonical.Products["chat"]
 	tool = product.Tools["chat.edit_message"]
 	canonical := tool.Parameters["conversation-id"]
@@ -1368,7 +1331,7 @@ func TestCrossPlatformCoverageSchemaFlagMigrationAdapterBranches(t *testing.T) {
 	tool.Parameters["conversation-id"] = canonical
 	product.Tools["chat.edit_message"] = tool
 	driftedCanonical.Products["chat"] = product
-	normalized, err = normalizeSchemaFlagMigrations(canonicalOnlyBaseline, driftedCanonical, []interfacesnapshot.FlagMigration{canonicalOnlyMigration})
+	normalized, err = normalizeSchemaFlagMigrations(baseline, driftedCanonical, []interfacesnapshot.FlagMigration{canonicalOnly})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1376,24 +1339,24 @@ func TestCrossPlatformCoverageSchemaFlagMigrationAdapterBranches(t *testing.T) {
 		t.Fatalf("canonical-only Schema drift was hidden: %s", failures)
 	}
 
-	promotedCanonical := cloneContract(canonicalOnlyBaseline)
-	product = promotedCanonical.Products["chat"]
+	canonicalOptional := schemaFlagMigrationContract(true)
+	product = canonicalOptional.Products["chat"]
 	tool = product.Tools["chat.edit_message"]
 	canonical = tool.Parameters["conversation-id"]
-	canonical.Required = true
-	canonical.CLIRequired = true
+	canonical.Required = false
+	canonical.CLIRequired = false
 	tool.Parameters["conversation-id"] = canonical
 	product.Tools["chat.edit_message"] = tool
-	promotedCanonical.Products["chat"] = product
+	canonicalOptional.Products["chat"] = product
 	normalized, err = normalizeSchemaFlagMigrations(
-		canonicalOnlyBaseline,
-		promotedCanonical,
-		[]interfacesnapshot.FlagMigration{canonicalOnlyMigration},
+		canonicalOptional,
+		schemaFlagMigrationContract(true),
+		[]interfacesnapshot.FlagMigration{canonicalOnly},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if failures := strings.Join(checkCompatibility(normalized, promotedCanonical), "\n"); !strings.Contains(failures, "newly required") || !strings.Contains(failures, "newly cli_required") {
+	if failures := strings.Join(checkCompatibility(normalized, schemaFlagMigrationContract(true)), "\n"); !strings.Contains(failures, "newly required") || !strings.Contains(failures, "newly cli_required") {
 		t.Fatalf("canonical-only required promotion was hidden: %s", failures)
 	}
 
@@ -1429,18 +1392,11 @@ func TestCrossPlatformCoverageSchemaFlagMigrationAdapterBranches(t *testing.T) {
 	}
 
 	old := parameterSchema{Required: true, CLIRequired: true}
-	if err := validateRenamedSchemaParameter(schemaFlagMigrationAuthorizations()[0], old, parameterSchema{CLIRequired: true}); err == nil || !strings.Contains(err.Error(), "changed requiredness") {
+	if err := validateRenamedSchemaParameter(schemaFlagMigrationAuthorizations()[0], old, parameterSchema{CLIRequired: true}); err == nil || !strings.Contains(err.Error(), "became optional") {
 		t.Fatalf("direct required decline error = %v", err)
 	}
-	if err := validateRenamedSchemaParameter(schemaFlagMigrationAuthorizations()[0], old, parameterSchema{Required: true}); err == nil || !strings.Contains(err.Error(), "changed cli_required") {
+	if err := validateRenamedSchemaParameter(schemaFlagMigrationAuthorizations()[0], old, parameterSchema{Required: true}); err == nil || !strings.Contains(err.Error(), "stopped being cli_required") {
 		t.Fatalf("direct cli_required decline error = %v", err)
-	}
-	optional := parameterSchema{}
-	if err := validateRenamedSchemaParameter(schemaFlagMigrationAuthorizations()[0], optional, parameterSchema{Required: true}); err == nil || !strings.Contains(err.Error(), "changed requiredness") {
-		t.Fatalf("direct required promotion error = %v", err)
-	}
-	if err := validateRenamedSchemaParameter(schemaFlagMigrationAuthorizations()[0], optional, parameterSchema{CLIRequired: true}); err == nil || !strings.Contains(err.Error(), "changed cli_required") {
-		t.Fatalf("direct cli_required promotion error = %v", err)
 	}
 }
 
@@ -1515,8 +1471,9 @@ func TestCrossPlatformCoverageSchemaFlagMigrationRejectsPartialAndUnrelatedChang
 		t.Fatalf("constraint rewrite without Schema parameter evidence was hidden: %s", failures)
 	}
 
-	// A baseline that already contains only the canonical parameter is not
-	// evidence that a stray legacy name in constraints belongs to the migration.
+	// A baseline that already contains only the canonical parameter may receive
+	// a required promotion, but that is not evidence that a stray legacy name in
+	// constraints belongs to the migration.
 	canonicalOnly := schemaFlagMigrationContract(true)
 	product = canonicalOnly.Products["chat"]
 	tool = product.Tools["chat.edit_message"]
@@ -1792,10 +1749,13 @@ func schemaFlagMigrationContract(after bool) schemaContract {
 		InterfaceType: "string",
 	}
 	parameters := map[string]parameterSchema{
-		"unrelated": {Type: `"string"`, Property: "unrelated"},
+		"conversation-id": conversation,
+		"unrelated":       {Type: `"string"`, Property: "unrelated"},
 	}
-	constraints := `{"require_one_of":[["group","id"]]}`
+	constraints := `{"require_one_of":[["conversation-id","group","id"]]}`
 	if after {
+		conversation.Required = true
+		conversation.CLIRequired = true
 		parameters["conversation-id"] = conversation
 		parameters["message-id"] = legacyMessage
 		constraints = `{"require_one_of":[["conversation-id"]]}`
@@ -1828,6 +1788,7 @@ func schemaFlagMigrationAuthorizations() []interfacesnapshot.FlagMigration {
 		Scope:   "local",
 	}
 	conversationAfter := conversationBefore
+	conversationAfter.Required = true
 	messageBefore := interfacesnapshot.FlagMigrationState{
 		Present:  true,
 		Type:     "string",
@@ -1847,7 +1808,7 @@ func schemaFlagMigrationAuthorizations() []interfacesnapshot.FlagMigration {
 			},
 			Canonical: interfacesnapshot.FlagMigrationSide{
 				Name:   "conversation-id",
-				Before: interfacesnapshot.FlagMigrationState{},
+				Before: conversationBefore,
 				After:  conversationAfter,
 			},
 		},
@@ -1862,7 +1823,7 @@ func schemaFlagMigrationAuthorizations() []interfacesnapshot.FlagMigration {
 			},
 			Canonical: interfacesnapshot.FlagMigrationSide{
 				Name:   "conversation-id",
-				Before: interfacesnapshot.FlagMigrationState{},
+				Before: conversationBefore,
 				After:  conversationAfter,
 			},
 		},
