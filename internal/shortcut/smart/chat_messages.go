@@ -57,7 +57,7 @@ var ChatMessages = shortcut.Shortcut{
 	Command:     "+chat-messages",
 	Product:     "chat",
 	Description: "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
-	Intent: "当你要读取或导出一个指定群聊或单聊的消息记录时使用；可附带发送者姓名解析，无稳定身份时保留全部消息，唯一解析出稳定身份后按 senderId 筛选同一次读取结果；" +
+	Intent: "当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选过滤条件，可传姓名、userId 或 openDingTalkId，唯一解析后按 senderId 筛选同一次读取结果；不传时原样读取会话且不查询发送者身份。sender 仅是展示名，身份只比较稳定 senderId；" +
 		"群聊的 --group 可传群名或 openConversationId，单聊可传 --user 或 --open-dingtalk-id，所有目标参数互斥且必须选一个。自然群名只在唯一解析后读取，多候选会返回结构化 candidates。" +
 		"省略时间参数时默认从当前时间向前读取最近消息；兼容模式可用 --time/--direction，范围模式可用公开可选的 --start/--end/--order（兼容 --start-time/--end-time/--sort），范围语义为 [start,end)。" +
 		"全量读取用 --page-all，并由 --page-limit/--max-items 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
@@ -83,7 +83,7 @@ var ChatMessages = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
-			UseWhen: []string{"当你要读取或导出一个指定群聊或单聊的消息记录时使用；可附带发送者姓名解析，无稳定身份时保留全部消息，唯一解析出稳定身份后按 senderId 筛选同一次读取结果；" +
+			UseWhen: []string{"当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选过滤条件，可传姓名、userId 或 openDingTalkId，唯一解析后按 senderId 筛选同一次读取结果；不传时原样读取会话且不查询发送者身份。sender 仅是展示名，身份只比较稳定 senderId；" +
 				"群聊的 --group 可传群名或 openConversationId，单聊可传 --user 或 --open-dingtalk-id，所有目标参数互斥且必须选一个。自然群名只在唯一解析后读取，多候选会返回结构化 candidates。" +
 				"省略时间参数时默认从当前时间向前读取最近消息；兼容模式可用 --time/--direction，范围模式可用公开可选的 --start/--end/--order（兼容 --start-time/--end-time/--sort），范围语义为 [start,end)。" +
 				"全量读取用 --page-all，并由 --page-limit/--max-items 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
@@ -104,7 +104,8 @@ var ChatMessages = shortcut.Shortcut{
 		{Name: "user", Type: shortcut.FlagString, Desc: "单聊对方的 userId，与 --group 互斥"},
 		{Name: "user-query", Type: shortcut.FlagString, Desc: "按姓名解析唯一 openDingTalkId 的兼容入口", Hidden: true},
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊对方的 openDingTalkId，与 --group/--user 互斥"},
-		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "按姓名唯一解析发送者并筛选同一次会话读取结果（可选，可重复或逗号分隔）"},
+		{Name: "sender", Type: shortcut.FlagStringSlice, Desc: "单个或多个发送者姓名、userId 或 openDingTalkId；自动唯一解析并筛选同一次会话读取结果"},
+		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "显式按姓名唯一解析发送者的兼容入口（可选，可重复或逗号分隔）"},
 		{Name: "time", Type: shortcut.FlagString, Desc: "时间边界，如 \"2025-03-01 00:00:00\"；--time 必须是 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD；省略时从当前时间向前读取最近消息"},
 		{Name: "start", Type: shortcut.FlagString, Desc: "范围开始时间（可选、包含），支持 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD"},
 		{Name: "start-time", Type: shortcut.FlagString, Desc: "--start 的 lark-cli 对齐别名（可选、包含）"},
@@ -133,6 +134,7 @@ var ChatMessages = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"time", "start", "start-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"time", "end", "end-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"time", "order", "sort"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"sender", "sender-query"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"direction", "start", "start-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"direction", "end", "end-time"}},
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"direction", "order", "sort"}},
@@ -223,103 +225,265 @@ type chatMessagesRequest struct {
 }
 
 type chatMessagesSenderFilter struct {
-	requested   bool
-	applied     bool
-	stableIDs   map[string]bool
-	resolutions []targetresolver.UserResolution
-	failure     map[string]any
+	requested         bool
+	applied           bool
+	inputs            []string
+	inputMode         string
+	stableIDs         map[string]bool
+	hasUserIDs        bool
+	hasOpenIDs        bool
+	resolutions       []targetresolver.UserResolution
+	resolutionFailure map[string]any
+	resolutionErr     error
+	scopeErr          error
 }
 
-// resolveOptionalChatMessagesSenderFilter is deliberately local to
-// +chat-messages. Sender resolution is an optional post-read filter here: an
-// unresolved name must not suppress the command's primary conversation-list
-// result. +search-msg keeps its stricter semantics because sender identity is
-// part of the lower search request there.
+// resolveOptionalChatMessagesSenderFilter accepts the same mixed user target
+// as +search-msg while retaining --sender-query as a compatibility entry. It
+// resolves only explicitly requested senders; it never enumerates every member
+// or tries to infer a person from message display names.
 func resolveOptionalChatMessagesSenderFilter(rt *shortcut.RuntimeContext) chatMessagesSenderFilter {
-	queries := rt.StrSlice("sender-query")
+	direct := uniqueChatMessageTargets(rt.StrSlice("sender"))
+	queries := uniqueChatMessageTargets(rt.StrSlice("sender-query"))
+	inputs := direct
+	inputMode := "sender"
+	if len(inputs) == 0 {
+		inputs = queries
+		inputMode = "sender-query"
+	}
 	filter := chatMessagesSenderFilter{
-		requested: len(queries) > 0,
+		requested: len(inputs) > 0,
+		inputs:    inputs,
+		inputMode: inputMode,
 		stableIDs: map[string]bool{},
 	}
 	if !filter.requested {
 		return filter
 	}
 
-	resolutions, err := targetresolver.ResolveUsers(rt, queries, targetresolver.IdentityAny)
+	var resolutions []targetresolver.UserResolution
+	var err error
+	if len(direct) > 0 {
+		for _, value := range direct {
+			var resolved targetresolver.UserResolution
+			resolved, err = targetresolver.ResolveSenderTarget(rt, value, targetresolver.IdentityAny)
+			if err != nil {
+				break
+			}
+			resolutions = append(resolutions, resolved)
+		}
+	} else {
+		resolutions, err = targetresolver.ResolveUsers(rt, queries, targetresolver.IdentityAny)
+	}
 	if err != nil {
 		failure := map[string]any{
-			"stage":   "sender_resolution",
-			"queries": queries,
-			"error":   err.Error(),
+			"stage":  "sender_resolution",
+			"inputs": inputs,
+			"mode":   inputMode,
+			"error":  err.Error(),
 		}
 		var typed *apperrors.Error
 		if errors.As(err, &typed) {
 			if typed.Reason != "" {
 				failure["reason"] = typed.Reason
 			}
+			if typed.Hint != "" {
+				failure["hint"] = typed.Hint
+			}
 			if len(typed.Details) > 0 {
 				failure["details"] = typed.Details
 			}
 		}
-		filter.failure = failure
+		filter.resolutionFailure = failure
+		filter.resolutionErr = err
 		return filter
 	}
 
 	filter.resolutions = resolutions
-	for _, resolution := range resolutions {
-		for _, identity := range []string{
-			resolution.Selected.UserID,
-			resolution.Selected.OpenDingTalkID,
-		} {
-			if identity = strings.TrimSpace(identity); identity != "" {
-				filter.stableIDs[identity] = true
-			}
-		}
-	}
-	// ResolveUsers(IdentityAny) only returns users extracted with at least one
-	// stable userId/openDingTalkId and fails when no resolvable user remains.
+	filter.hasUserIDs, filter.hasOpenIDs = addChatMessagesResolvedSenderIDs(filter.stableIDs, resolutions)
 	filter.applied = true
 	return filter
 }
 
-// applyOptionalChatMessagesSenderFilter preserves the unfiltered message list
-// when optional resolution fails. Successful resolution filters both the
+func uniqueChatMessageTargets(values []string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	return result
+}
+
+func addChatMessagesResolvedSenderIDs(ids map[string]bool, resolutions []targetresolver.UserResolution) (bool, bool) {
+	hasUserIDs := false
+	hasOpenIDs := false
+	for _, resolution := range resolutions {
+		if identity := strings.TrimSpace(resolution.Selected.UserID); identity != "" {
+			ids[identity] = true
+			hasUserIDs = true
+		}
+		if identity := strings.TrimSpace(resolution.Selected.OpenDingTalkID); identity != "" {
+			ids[identity] = true
+			hasOpenIDs = true
+		}
+	}
+	return hasUserIDs, hasOpenIDs
+}
+
+// applyOptionalChatMessagesSenderFilter fails closed when an explicitly
+// requested sender cannot be resolved. Successful resolution filters both the
 // public projection and raw rows so exports and resource downloads cannot
 // accidentally include messages outside the requested sender set.
 func applyOptionalChatMessagesSenderFilter(
 	rt *shortcut.RuntimeContext,
 	payload map[string]any,
 	rawItems []map[string]any,
-	filter chatMessagesSenderFilter,
+	filter *chatMessagesSenderFilter,
 ) []map[string]any {
-	if !filter.requested || payload == nil {
+	if filter == nil || !filter.requested || payload == nil {
 		return rawItems
 	}
 	if !filter.applied {
 		failures, _ := payload["failures"].([]map[string]any)
 		priorFailures := len(failures)
-		failures = append(failures, filter.failure)
+		failure := filter.resolutionFailure
+		if failure == nil {
+			failure = map[string]any{
+				"stage":  "sender_resolution",
+				"inputs": filter.inputs,
+				"mode":   filter.inputMode,
+				"error":  "无法把发送者目标唯一解析为稳定身份",
+			}
+		}
+		failures = append(failures, failure)
 		payload["failures"] = failures
 		payload["failedCount"] = len(failures)
 		payload["complete"] = false
-		payload["partial"] = len(rawItems) > 0
+		payload["partial"] = false
+		payload["messages"] = []map[string]any{}
+		payload["count"] = 0
+		payload["senderFilter"] = map[string]any{
+			"requested":       true,
+			"inputs":          filter.inputs,
+			"mode":            filter.inputMode,
+			"applied":         false,
+			"status":          "resolution_failed",
+			"suppressedCount": len(rawItems),
+		}
+		payload["identityResult"] = map[string]any{
+			"status":                "resolution_failed",
+			"nameComparisonAllowed": false,
+			"stableIdField":         "senderId",
+			"hint":                  "当前发送者尚未解析为稳定身份，不能根据 sender 展示名判断该人员是否发过消息。请先完成人员解析。",
+		}
 		if priorFailures == 0 {
 			payload["stopReason"] = "sender_resolution_failed"
 		}
-		return rawItems
+		return nil
 	}
 
 	filtered := make([]map[string]any, 0, len(rawItems))
+	unverifiableMessageIDs := make([]string, 0)
 	for _, item := range rawItems {
 		identity := strings.TrimSpace(fmt.Sprint(chatmsg.SenderID(item)))
-		if identity != "" && identity != "<nil>" && filter.stableIDs[identity] {
-			filtered = append(filtered, item)
+		if identity == "" || identity == "<nil>" {
+			messageID := chatmsg.StableMessageID(item)
+			if messageID == "" {
+				messageID = "<unknown>"
+			}
+			unverifiableMessageIDs = append(unverifiableMessageIDs, messageID)
+			continue
 		}
+		if filter.stableIDs[identity] {
+			filtered = append(filtered, item)
+			continue
+		}
+		if targetresolver.LooksLikeCurrentDOpenDingTalkID(identity) {
+			if !filter.hasOpenIDs {
+				unverifiableMessageIDs = append(unverifiableMessageIDs, chatMessagesMessageID(item))
+			}
+		} else if !filter.hasUserIDs {
+			unverifiableMessageIDs = append(unverifiableMessageIDs, chatMessagesMessageID(item))
+		}
+	}
+	if len(unverifiableMessageIDs) > 0 {
+		filter.scopeErr = apperrors.NewAPI(
+			"部分消息缺少 senderId，无法证明发送者过滤范围；已阻止完整成功与导出",
+			apperrors.WithReason("chat_messages_sender_scope_unverified"),
+			apperrors.WithRetryable(false),
+			apperrors.WithHint("请保留 trace_id 并检查消息读取服务是否返回稳定 senderId"),
+			apperrors.WithDetails(map[string]any{
+				"requestedSenders":       filter.inputs,
+				"unverifiableMessageIds": uniqueChatMessageTargets(unverifiableMessageIDs),
+			}),
+		)
+		failures, _ := payload["failures"].([]map[string]any)
+		failures = append(failures, map[string]any{
+			"stage":                  "sender_scope_verification",
+			"error":                  filter.scopeErr.Error(),
+			"unverifiableMessageIds": uniqueChatMessageTargets(unverifiableMessageIDs),
+		})
+		payload["failures"] = failures
+		payload["failedCount"] = len(failures)
+		payload["complete"] = false
+		payload["partial"] = len(filtered) > 0
 	}
 	payload["messages"] = projectChatMessages(filtered, !rt.Bool("no-reactions"))
 	payload["count"] = len(filtered)
 	payload["resolvedFilters"] = map[string]any{"senders": filter.resolutions}
+	filterStatus := "applied"
+	if filter.scopeErr != nil {
+		filterStatus = "scope_unverified"
+	}
+	payload["senderFilter"] = map[string]any{
+		"requested": true,
+		"inputs":    filter.inputs,
+		"mode":      filter.inputMode,
+		"applied":   true,
+		"status":    filterStatus,
+	}
+	identityResult := map[string]any{
+		"status":                    "evaluated",
+		"nameComparisonAllowed":     false,
+		"negativeConclusionAllowed": true,
+		"stableIdField":             "senderId",
+	}
+	if filter.scopeErr != nil {
+		identityResult["status"] = "scope_unverified"
+		identityResult["negativeConclusionAllowed"] = false
+		identityResult["hint"] = "部分消息缺少稳定 senderId，当前结果不能用于断言该人员没有发过消息。"
+	}
+	payload["identityResult"] = identityResult
 	return filtered
+}
+
+func chatMessagesMessageID(item map[string]any) string {
+	messageID := chatmsg.StableMessageID(item)
+	if messageID == "" {
+		return "<unknown>"
+	}
+	return messageID
+}
+
+func attachUnfilteredSenderIdentitySemantics(payload map[string]any, filter chatMessagesSenderFilter) {
+	if payload == nil || filter.requested {
+		return
+	}
+	payload["senderFilter"] = map[string]any{
+		"requested": false,
+		"applied":   false,
+		"status":    "not_requested",
+	}
+	payload["identityResult"] = map[string]any{
+		"status":                    "requires_query_check",
+		"negativeConclusionAllowed": false,
+		"hint":                      "若原始任务包含自然人发送者条件，请先将目标人解析为唯一 userId/openDingTalkId，再与 messages[].senderId 比较；禁止直接比较 messages[].sender 展示名。",
+	}
 }
 
 func resolveChatMessagesRequest(rt *shortcut.RuntimeContext) (chatMessagesRequest, error) {
@@ -330,6 +494,11 @@ func resolveChatMessagesRequest(rt *shortcut.RuntimeContext) (chatMessagesReques
 		return chatMessagesRequest{}, apperrors.NewValidation(
 			"--open-dingtalk-id 收到的是群 openConversationId；群聊请改用 --group（兼容别名 --chat）",
 		)
+	}
+	if openID != "" {
+		if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", openID); err != nil {
+			return chatMessagesRequest{}, err
+		}
 	}
 	if groupID == "" && (rt.Str("group") != "" || rt.Str("chat-query") != "") {
 		resolved, err := targetresolver.ResolveChatTarget(rt, rt.Str("group"), rt.Str("chat-query"))
@@ -408,7 +577,8 @@ func executeChatMessages(rt *shortcut.RuntimeContext) error {
 		return err
 	}
 	senderFilter := resolveOptionalChatMessagesSenderFilter(rt)
-	rawItems = applyOptionalChatMessagesSenderFilter(rt, payload, rawItems, senderFilter)
+	rawItems = applyOptionalChatMessagesSenderFilter(rt, payload, rawItems, &senderFilter)
+	attachUnfilteredSenderIdentitySemantics(payload, senderFilter)
 	if err != nil {
 		// Full-page collection returns its failure ledger together with a
 		// non-zero error. Publish that ledger for diagnosis, but stop before
@@ -419,6 +589,22 @@ func executeChatMessages(rt *shortcut.RuntimeContext) error {
 			}
 		}
 		return err
+	}
+	if senderFilter.requested && !senderFilter.applied {
+		if payload != nil {
+			if outputErr := rt.Output(payload); outputErr != nil {
+				return outputErr
+			}
+		}
+		return senderFilter.resolutionErr
+	}
+	if senderFilter.scopeErr != nil {
+		if payload != nil {
+			if outputErr := rt.Output(payload); outputErr != nil {
+				return outputErr
+			}
+		}
+		return senderFilter.scopeErr
 	}
 	if rt.Bool("download-resources") {
 		chatshortcut.AttachMessageResourceDownloads(

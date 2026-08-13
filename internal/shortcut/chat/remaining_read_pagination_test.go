@@ -56,7 +56,7 @@ func TestCrossPlatformCoverageDirectMessagesPageAllUsesMillisecondCursor(t *test
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetArgs([]string{
-		"chat", "+messages-list-direct", "--open-dingtalk-id", "D-user",
+		"chat", "+messages-list-direct", "--open-dingtalk-id", fixtureCurrentDOpenID,
 		"--time", "2026-08-05 16:49:00", "--forward=false", "--limit", "1",
 		"--page-all", "--page-limit", "5",
 	})

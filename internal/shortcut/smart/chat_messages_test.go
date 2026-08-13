@@ -20,6 +20,7 @@ import (
 	stderrors "errors"
 	"math"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -546,7 +547,7 @@ func TestCrossPlatformCoverageChatMessagesAdditionalValidationAndHelpers(t *test
 	filter := resolveOptionalChatMessagesSenderFilter(chatMessagesRuntimeForTest(t, map[string]string{
 		"sender-query": "测试用户甲",
 	}))
-	if filter.applied || filter.failure == nil {
+	if filter.applied || filter.resolutionFailure == nil {
 		t.Fatalf("identity-free sender resolution = %#v", filter)
 	}
 
@@ -572,6 +573,148 @@ func TestCrossPlatformCoverageChatMessagesAdditionalValidationAndHelpers(t *test
 			_, _, err := chatMessagesNextCursorBoundary(tc.value)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("value=%#v err=%v wantError=%v", tc.value, err, tc.wantError)
+			}
+		})
+	}
+}
+
+func TestChatMessagesSenderScopeRejectsUnmappedIdentityFamily(t *testing.T) {
+	filter := chatMessagesSenderFilter{
+		requested:  true,
+		applied:    true,
+		inputs:     []string{"DAAAAAAAAAAAiE"},
+		inputMode:  "sender",
+		stableIDs:  map[string]bool{"DAAAAAAAAAAAiE": true},
+		hasOpenIDs: true,
+	}
+	payload := map[string]any{
+		"complete": true,
+		"failures": []map[string]any{},
+	}
+	filtered := applyOptionalChatMessagesSenderFilter(
+		chatMessagesRuntimeForTest(t, nil),
+		payload,
+		[]map[string]any{{"openMessageId": "m-user-family", "senderUserId": "user-1"}},
+		&filter,
+	)
+	if len(filtered) != 0 || filter.scopeErr == nil || payload["complete"] != false {
+		t.Fatalf("filtered=%#v filter=%#v payload=%#v", filtered, filter, payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesSenderFilterFailureEdges(t *testing.T) {
+	t.Run("direct resolution stops after first error", func(t *testing.T) {
+		fake := &platformCoverageCaller{failTool: "contact/search_contact_by_key_word"}
+		helpers.InitDeps(fake)
+		filter := resolveOptionalChatMessagesSenderFilter(chatMessagesRuntimeForTest(t, map[string]string{
+			"sender": testCurrentDOpenID + ",fixture-name,ignored-name",
+		}))
+		if filter.applied || filter.resolutionErr == nil || len(fake.calls) != 1 {
+			t.Fatalf("filter=%#v calls=%#v", filter, fake.calls)
+		}
+	})
+
+	t.Run("dedupes blanks and repeated values", func(t *testing.T) {
+		got := uniqueChatMessageTargets([]string{"", "  ", "one", "one", " two "})
+		if want := []string{"one", "two"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("targets=%#v want=%#v", got, want)
+		}
+	})
+
+	t.Run("synthesizes failure when none was supplied", func(t *testing.T) {
+		payload := map[string]any{"failures": []map[string]any{{"stage": "existing"}}}
+		filter := chatMessagesSenderFilter{requested: true, inputs: []string{"fixture"}, inputMode: "sender"}
+		if got := applyOptionalChatMessagesSenderFilter(
+			chatMessagesRuntimeForTest(t, nil), payload, []map[string]any{{"openMessageId": "hidden"}}, &filter,
+		); got != nil {
+			t.Fatalf("filtered=%#v", got)
+		}
+		if _, exists := payload["stopReason"]; exists {
+			t.Fatalf("existing failure should retain stop reason ownership: %#v", payload)
+		}
+	})
+
+	t.Run("rejects missing and unmapped identity families", func(t *testing.T) {
+		payload := map[string]any{"complete": true, "failures": []map[string]any{}}
+		filter := chatMessagesSenderFilter{
+			requested:  true,
+			applied:    true,
+			inputs:     []string{"fixture"},
+			inputMode:  "sender",
+			stableIDs:  map[string]bool{"wanted-user": true},
+			hasUserIDs: true,
+		}
+		filtered := applyOptionalChatMessagesSenderFilter(
+			chatMessagesRuntimeForTest(t, nil),
+			payload,
+			[]map[string]any{
+				{"content": "missing sender and id"},
+				{"openMessageId": "wanted", "senderUserId": "wanted-user"},
+				{"openMessageId": "open-family", "senderOpenDingTalkId": testCurrentDOpenID},
+			},
+			&filter,
+		)
+		if len(filtered) != 1 || filter.scopeErr == nil || chatMessagesMessageID(map[string]any{}) != "<unknown>" || chatMessagesMessageID(filtered[0]) != "wanted" {
+			t.Fatalf("filtered=%#v filter=%#v payload=%#v", filtered, filter, payload)
+		}
+	})
+
+	t.Run("rejects user identity when only open ids were resolved", func(t *testing.T) {
+		payload := map[string]any{"complete": true, "failures": []map[string]any{}}
+		filter := chatMessagesSenderFilter{
+			requested:  true,
+			applied:    true,
+			inputs:     []string{testCurrentDOpenID},
+			inputMode:  "sender",
+			stableIDs:  map[string]bool{testCurrentDOpenID: true},
+			hasOpenIDs: true,
+		}
+		applyOptionalChatMessagesSenderFilter(
+			chatMessagesRuntimeForTest(t, nil), payload,
+			[]map[string]any{{"senderUserId": "other-user"}}, &filter,
+		)
+		if filter.scopeErr == nil {
+			t.Fatalf("filter=%#v", filter)
+		}
+	})
+
+	if _, err := resolveChatMessagesRequest(chatMessagesRuntimeForTest(t, map[string]string{
+		"open-dingtalk-id": "not-an-open-id",
+	})); err == nil {
+		t.Fatal("invalid explicit open ID unexpectedly accepted")
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesSenderFailureOutputEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		sender string
+	}{
+		{name: "resolution", sender: "fixture-name"},
+		{name: "scope", sender: testCurrentDOpenID},
+	} {
+		t.Run(tc.name+" returns domain error", func(t *testing.T) {
+			caller := &chatMessagesPagingCaller{responses: []string{
+				`{"result":{"hasMore":false,"messages":[{"openMessageId":"m-without-sender"}]}}`,
+			}}
+			helpers.InitDeps(caller)
+			root := newPlatformCoverageRoot()
+			root.SetArgs([]string{"chat", "+chat-messages", "--conversation-id", "cid", "--sender", tc.sender})
+			if err := root.Execute(); err == nil {
+				t.Fatal("sender failure unexpectedly succeeded")
+			}
+		})
+
+		t.Run(tc.name+" prioritizes output error", func(t *testing.T) {
+			caller := &chatMessagesPagingCaller{responses: []string{
+				`{"result":{"hasMore":false,"messages":[{"openMessageId":"m-without-sender"}]}}`,
+			}}
+			helpers.InitDeps(caller)
+			root := newPlatformCoverageRoot()
+			root.SetOut(chatMessagesFailWriter{})
+			root.SetArgs([]string{"chat", "+chat-messages", "--conversation-id", "cid", "--sender", tc.sender})
+			if err := root.Execute(); err == nil || err.Error() != "fixture output failure" {
+				t.Fatalf("error=%v", err)
 			}
 		})
 	}

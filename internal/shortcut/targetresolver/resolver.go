@@ -9,6 +9,7 @@
 package targetresolver
 
 import (
+	"encoding/base64"
 	stderrors "errors"
 	"fmt"
 	"strings"
@@ -103,6 +104,274 @@ func ResolveUser(rt Reader, query string, requirement IdentityRequirement) (User
 		)
 	}
 	return resolveUserCandidates(ExtractUsers(data), query, requirement)
+}
+
+// ResolveUserTarget accepts the mixed user target used by public convenience
+// flags: a natural name, userId, or current-version openDingTalkId. The local
+// format check is deliberately a classifier rather than an existence check.
+// Format-valid IDs go directly to the downstream business API; all other
+// values use the directory resolver, which can match names and exact userIds.
+func ResolveUserTarget(rt Reader, value string, requirement IdentityRequirement) (UserResolution, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return UserResolution{}, apperrors.NewValidation(
+			"必须指定用户姓名、userId 或 openDingTalkId",
+			apperrors.WithReason("missing_target"),
+			apperrors.WithOrigin("client"),
+			apperrors.WithFailureStage("request_validation"),
+			apperrors.WithExecutionStarted(false),
+		)
+	}
+	if !LooksLikeCurrentDOpenDingTalkID(value) {
+		return ResolveUser(rt, value, requirement)
+	}
+	if requirement == IdentityUserID {
+		return UserResolution{}, apperrors.NewValidation(
+			fmt.Sprintf("用户目标参数类型不匹配：%q 符合当前版本 openDingTalkId 格式，但下游只接受 userId", value),
+			apperrors.WithReason("target_type_mismatch"),
+			apperrors.WithOrigin("client"),
+			apperrors.WithFailureStage("target_resolution"),
+			apperrors.WithExecutionStarted(false),
+			apperrors.WithRetryable(false),
+		)
+	}
+	return UserResolution{
+		Status:     StatusResolved,
+		EntityType: "user",
+		Query:      value,
+		MatchType:  "stable_id",
+		Selected:   User{OpenDingTalkID: value},
+		Profile:    profilectx.Get(),
+	}, nil
+}
+
+// ResolveSenderTarget resolves the mixed identity accepted specifically by
+// sender convenience flags. Unlike the shared name resolver, it may select a
+// unique candidate whose stable userId/openDingTalkId exactly equals the
+// supplied value. Natural-name candidates retain the shared fail-closed
+// ambiguity behavior.
+func ResolveSenderTarget(rt Reader, value string, requirement IdentityRequirement) (UserResolution, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || LooksLikeCurrentDOpenDingTalkID(value) {
+		return ResolveUserTarget(rt, value, requirement)
+	}
+
+	data, err := rt.CallMCPData("contact", "search_contact_by_key_word", map[string]any{
+		"keyword": value,
+	})
+	if err != nil {
+		return UserResolution{}, err
+	}
+	users := filterUsersByIdentity(dedupeUsers(ExtractUsers(data)), requirement)
+	stableMatches := make([]User, 0, 1)
+	for _, user := range users {
+		if strings.TrimSpace(user.UserID) == value ||
+			strings.TrimSpace(user.OpenDingTalkID) == value {
+			stableMatches = append(stableMatches, user)
+		}
+	}
+	if len(stableMatches) == 1 {
+		return UserResolution{
+			Status:     StatusResolved,
+			EntityType: "user",
+			Query:      value,
+			MatchType:  "stable_id",
+			Selected:   stableMatches[0],
+			Profile:    profilectx.Get(),
+		}, nil
+	}
+	if len(stableMatches) > 1 {
+		return UserResolution{}, newResolutionError(StatusAmbiguous, "user", value, stableMatches)
+	}
+	if cause := incompleteUserSearchCause(data, "通讯录搜索"); cause != "" {
+		return UserResolution{}, newIncompleteUserResolutionError(value, users, cause)
+	}
+	return resolveUserCandidates(users, value, requirement)
+}
+
+// ResolveStableUserTarget accepts only an exact userId or current-version
+// openDingTalkId. It is intended for flags whose contract explicitly excludes
+// natural names; no unique-name fallback is allowed.
+func ResolveStableUserTarget(rt Reader, value string, requirement IdentityRequirement) (UserResolution, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return UserResolution{}, apperrors.NewValidation(
+			"必须指定 userId 或 openDingTalkId",
+			apperrors.WithReason("missing_target"),
+			apperrors.WithOrigin("client"),
+			apperrors.WithFailureStage("request_validation"),
+			apperrors.WithExecutionStarted(false),
+		)
+	}
+	if LooksLikeCurrentDOpenDingTalkID(value) {
+		if requirement == IdentityUserID {
+			return UserResolution{}, apperrors.NewValidation(
+				fmt.Sprintf("用户目标参数类型不匹配：%q 是 openDingTalkId，但当前参数只接受 userId", value),
+				apperrors.WithReason("target_type_mismatch"),
+				apperrors.WithOrigin("client"),
+				apperrors.WithFailureStage("target_resolution"),
+				apperrors.WithExecutionStarted(false),
+				apperrors.WithRetryable(false),
+			)
+		}
+		return UserResolution{
+			Status:     StatusResolved,
+			EntityType: "user",
+			Query:      value,
+			MatchType:  "stable_id",
+			Selected:   User{OpenDingTalkID: value},
+			Profile:    profilectx.Get(),
+		}, nil
+	}
+
+	data, err := rt.CallMCPData("contact", "search_contact_by_key_word", map[string]any{
+		"keyword": value,
+	})
+	if err != nil {
+		return UserResolution{}, err
+	}
+	users := filterUsersByIdentity(dedupeUsers(ExtractUsers(data)), requirement)
+	stableMatches := make([]User, 0, 1)
+	for _, user := range users {
+		if strings.TrimSpace(user.UserID) == value ||
+			strings.TrimSpace(user.OpenDingTalkID) == value {
+			stableMatches = append(stableMatches, user)
+		}
+	}
+	if len(stableMatches) == 1 {
+		return UserResolution{
+			Status:     StatusResolved,
+			EntityType: "user",
+			Query:      value,
+			MatchType:  "stable_id",
+			Selected:   stableMatches[0],
+			Profile:    profilectx.Get(),
+		}, nil
+	}
+	if len(stableMatches) > 1 {
+		return UserResolution{}, newResolutionError(StatusAmbiguous, "user", value, stableMatches)
+	}
+	if cause := incompleteUserSearchCause(data, "通讯录搜索"); cause != "" {
+		return UserResolution{}, newIncompleteUserResolutionError(value, users, cause)
+	}
+	return UserResolution{}, apperrors.NewValidation(
+		fmt.Sprintf("%q 未精确匹配到 userId 或 openDingTalkId", value),
+		apperrors.WithReason("stable_user_identity_required"),
+		apperrors.WithOrigin("client"),
+		apperrors.WithFailureStage("target_resolution"),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithRetryable(false),
+		apperrors.WithHint("请先解析目标人员，并传入通讯录结果中原样返回的 userId 或 openDingTalkId"),
+		apperrors.WithDetails(map[string]any{
+			"providedValue": value,
+			"expectedTypes": []string{"userId", "openDingTalkId"},
+		}),
+	)
+}
+
+// LooksLikeCurrentDOpenDingTalkID reports whether value has the canonical
+// wire format emitted by the current D-version encoder. It does not decrypt
+// the value and therefore does not prove that the identity exists or is
+// accessible to the current profile.
+func LooksLikeCurrentDOpenDingTalkID(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) < 2 || value[0] != 'D' {
+		return false
+	}
+
+	encoded, ok := unescapeCurrentDOpenDingTalkID(value[1:])
+	if !ok {
+		return false
+	}
+	ciphertext, err := base64.StdEncoding.Strict().DecodeString(encoded)
+	if err != nil || len(ciphertext) == 0 || len(ciphertext)%8 != 0 {
+		return false
+	}
+
+	// Require the canonical Base64 and escape spelling. This rejects alternate
+	// but decodable strings and keeps the classifier aligned with the encoder.
+	canonical := escapeCurrentDOpenDingTalkID(base64.StdEncoding.EncodeToString(ciphertext))
+	return canonical == value[1:]
+}
+
+func unescapeCurrentDOpenDingTalkID(value string) (string, bool) {
+	var decoded strings.Builder
+	decoded.Grow(len(value))
+	for i := 0; i < len(value); i++ {
+		current := value[i]
+		if current != 'i' {
+			if !isASCIIAlphaNumeric(current) {
+				return "", false
+			}
+			decoded.WriteByte(current)
+			continue
+		}
+		if i+1 >= len(value) {
+			return "", false
+		}
+		i++
+		switch value[i] {
+		case 'i':
+			decoded.WriteByte('i')
+		case 'P':
+			decoded.WriteByte('+')
+		case 'S':
+			decoded.WriteByte('/')
+		case 'E':
+			decoded.WriteByte('=')
+		default:
+			return "", false
+		}
+	}
+	return decoded.String(), true
+}
+
+func escapeCurrentDOpenDingTalkID(value string) string {
+	var encoded strings.Builder
+	encoded.Grow(len(value))
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case 'i':
+			encoded.WriteString("ii")
+		case '+':
+			encoded.WriteString("iP")
+		case '/':
+			encoded.WriteString("iS")
+		case '=':
+			encoded.WriteString("iE")
+		default:
+			encoded.WriteByte(value[i])
+		}
+	}
+	return encoded.String()
+}
+
+func isASCIIAlphaNumeric(value byte) bool {
+	return value >= '0' && value <= '9' ||
+		value >= 'A' && value <= 'Z' ||
+		value >= 'a' && value <= 'z'
+}
+
+// ValidateExplicitOpenDingTalkID applies the current-version format contract
+// to an explicitly typed ID flag. Unlike mixed targets, an invalid explicit ID
+// must fail locally instead of falling back to a name or userId lookup.
+func ValidateExplicitOpenDingTalkID(flagName, value string) error {
+	if value == strings.TrimSpace(value) && LooksLikeCurrentDOpenDingTalkID(value) {
+		return nil
+	}
+	return apperrors.NewValidation(
+		fmt.Sprintf("%s 收到的值不符合当前 D 版本 openDingTalkId 格式", flagName),
+		apperrors.WithReason("target_type_mismatch"),
+		apperrors.WithOrigin("client"),
+		apperrors.WithFailureStage("request_validation"),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithRetryable(false),
+		apperrors.WithHint("请传通讯录或消息结果中原样返回的 openDingTalkId；姓名或 userId 请使用对应的混合目标参数"),
+		apperrors.WithDetails(map[string]any{
+			"flag":         flagName,
+			"expectedType": "current_d_openDingTalkId",
+		}),
+	)
 }
 
 // ResolveEnterpriseUser resolves an organization member through the same

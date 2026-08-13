@@ -25,6 +25,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
 // ConversationInfo gets conversation info (get_conversation_info, chat server).
@@ -71,6 +72,9 @@ var ConversationInfo = shortcut.Shortcut{
 			params["openConversationId"] = rt.Str("group")
 		}
 		if rt.Str("open-dingtalk-id") != "" {
+			if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", rt.Str("open-dingtalk-id")); err != nil {
+				return err
+			}
 			params["openDingTalkId"] = rt.Str("open-dingtalk-id")
 		}
 		if len(params) == 0 {
