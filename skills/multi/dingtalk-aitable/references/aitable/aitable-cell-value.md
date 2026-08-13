@@ -1,5 +1,7 @@
 # cells 写入/读取格式规范（cellValue 数据结构）
 
+> 加载边界：仅在已经选定 record create/update/upsert 且需要构造某种字段值时读取。先用 field get 确认 `fieldId`、`type`、`config` 和可写性；本页不负责找 Base/Table/Record，也不能把字段名当 fieldId。
+
 > 适用命令：`dws aitable record create --records`、`dws aitable record update --records`、`dws aitable record query` 返回
 >
 > 本文件是 DWS AI 表格 cellValue 的 **source of truth**。写入记录时，必须严格按此格式构造 cells 对象。

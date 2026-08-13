@@ -1,5 +1,7 @@
 # 主键文档管理
 
+> 加载边界：仅在记录的 primaryDoc 字段需要查询或创建关联文档时读取。先取得真实 baseId/tableId/recordId/fieldId；创建返回 nodeId 后，文档正文交给 Doc Skill，并持续使用该 nodeId，不再按标题搜索。
+
 ## 适用场景
 
 当需要为 AI 表格中的记录创建或查询关联的主键文档时使用。主键文档是 primaryDoc 类型字段对应的钉钉在线文档，可通过 `dws doc` 进行内容读写。

@@ -1,5 +1,7 @@
 # export & import — 导入导出
 
+> 加载边界：仅在文件与 AITable 之间迁移数据时读取。“追加到已有 Table”与“导入成新 Table”必须先分流。`taskId/importId` 只用于对应任务状态，完成后必须验证新 tableId 或本地输出文件；任务已创建不等于业务完成。
+
 ## 导出数据（两阶段轮询）
 
 `export data` 为异步任务：首次调用可能只返回 `taskId`，需要继续轮询。

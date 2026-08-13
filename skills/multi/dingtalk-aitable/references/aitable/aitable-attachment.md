@@ -1,5 +1,7 @@
 # attachment — 附件上传
 
+> 加载边界：仅在文件要写入 AITable 的 attachment 字段时读取；普通钉盘上传走 Drive。流程必须完成“申请凭证 → HTTPS PUT → 用 fileToken 写记录 → 按 recordId 回读”，拿到 fileToken 不等于附件已进入记录。
+
 > **STOP — 不要使用钉盘 (drive) 上传！** 钉盘 fileId 无法写入 attachment 字段。必须使用以下流程。
 >
 > **STOP — 严禁在 record create/update 的 cells 里直接传图片 URL！** 直传 `{"url":"https://..."}` 会导致服务端同步下载图片，批量写入时触发 TIMEOUT_ERROR。正确做法：先 `attachment upload` 获取 `fileToken`，再用 `{"fileToken":"ft_xxx"}` 写入。

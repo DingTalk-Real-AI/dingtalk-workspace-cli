@@ -1,5 +1,7 @@
 # 视图扩展操作（lock / frozen-cols / row-height / fill-color-rule / duplicate）
 
+> 加载边界：仅在用户明确操作锁定、冻结列、行高、高亮规则或复制视图时读取。所有动作复用当前 Base/Table/viewId；viewType 不支持时本地停止，写后用对应 get 或新 viewId 回读。
+
 本文档讲 5 项视图操作命令：
 
 - 锁定 / 解锁视图：`view lock` / `view get lock`

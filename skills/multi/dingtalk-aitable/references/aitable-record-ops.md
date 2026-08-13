@@ -1,5 +1,7 @@
 # 记录操作详细指南
 
+> 定位：兼容性的记录操作总览。新任务优先按需读取 `aitable/aitable-record-{query,create,update,delete,upsert}.md` 中唯一对应的叶级 Reference；不要同时加载本页和全部叶级文件。本页不得作为另一套命令发现源。
+
 ## 查询记录
 
 ```bash

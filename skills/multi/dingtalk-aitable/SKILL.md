@@ -11,23 +11,24 @@ metadata:
 
 # 钉钉 AI 表格 Skill
 
-## 前置条件 — 执行操作前必读
+## 执行入口
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dws-shared`](../dws-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
+执行任何 `dws` 操作前，完整读取 [`dws-shared`](../dws-shared/SKILL.md)，但不要预加载其 references。高频意图直接使用本文件骨架；仅特殊参数、复杂数据形态或边界不明时读取一个 branch reference。
 
 ## 加载与路由顺序
 
 1. 命中下方高频意图时直接使用精确骨架，不先查 Help 或产品级 Schema。
-2. 路由优先级固定为：精确 recipe / 可运行脚本 > 匹配的公开 Shortcut > 原子命令。命令已确定且参数清楚时直接执行。
+2. 路由优先级固定为：精确骨架 / recipe > 匹配的公开 Shortcut > 原子命令。脚本只用于 Runtime 尚未覆盖的批量、文件传输或异步编排，不与普通原子命令竞争默认入口。
 3. 参数、约束或安全语义不确定时只读 leaf Schema：`dws schema --cli-path "aitable <leaf>" --format json`；只有当前 Cobra flag 不确定时才读对应 `--help`。
 4. 复杂字段、筛选、导入导出、视图、权限或工作流任务，按“低频能力与 Reference”只加载相关文件，不预读整个 `references/aitable/`。
 5. 现有骨架和 reference 都无法定位能力时，才用 Runtime Shortcut Catalog 做最后发现；不得猜 `cli_path` 或 flag。
 6. Schema、Help、reference 与实际返回冲突时采用更安全的解释并报告契约漂移；`confirmation=user_required` 时先确认，再添加 `--yes`。
+7. 用户已给足目标、字段和数据时，按依赖链连续执行；中间结果只用于提取真实 ID 和判断停止条件，全部完成后统一回读并答复。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
 
-`aitable` 当前有 29 条公开 shortcut。完整清单保留在 Runtime Shortcut Catalog；已完成 Schema curation 的子集可通过 leaf Schema 查询。高频产品根 Skill 不重复展开完整清单。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+`aitable` 当前有 29 条公开 shortcut，完整清单保留在 Runtime Shortcut Catalog，根 Skill 不重复展开。
 
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service aitable --compact --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
@@ -43,7 +44,9 @@ metadata:
 | View / Dashboard / Chart | `viewId` / `dashboardId` / `chartId` 各自绑定当前 Base/Table，不跨对象复用 |
 | 异步任务 | `taskId` / `importId` 只用于对应导出或导入任务，不能替代业务对象 ID |
 
-所有下游 ID 都从当前链路的结构化返回中提取；同名多候选必须让用户消歧，不默认取第一项，也不复用未经本轮校验的旧 ID。
+所有下游 ID 都从当前链路的结构化返回中提取；同名多候选必须让用户消歧，不默认取第一项。Base → Table → Field/Record/View 的容器关系必须保持一致，不跨 Base 或 Table 复用子对象 ID。
+
+创建、复制、导入或新建字段/记录返回 ID 后，立即绑定同一请求中的“这个”“刚才新建的”等指代；除非用户明确转向历史资源，否则不得再按名称搜索并替换为旧对象。
 
 ## 核心意图与执行骨架
 
@@ -51,6 +54,7 @@ metadata:
 |---|---|---|
 | 按名称找 Base | `dws aitable +resolve-base --name "<名称>" --format json` | 唯一命中才继续；多候选停止并消歧 |
 | 浏览最近访问 | `dws aitable +base-list --format json` | 只代表最近访问，不得宣称全量 |
+| 搜索模板 | `dws aitable template search --query "<关键词>" --format json` | 只返回真实候选，不擅自套用模板或创建 Base |
 | 按名称找 Table | `dws aitable +resolve-table --base <baseId> --name "<表名>" --format json` | `baseId` 必须来自上一步真实返回 |
 | 取表、字段与视图目录 | `dws aitable +table-get --base-id <baseId> [--table-ids <tableId>] --format json` | `tables[].fields[]` 是字段目录；完整类型/config 再用 `+field-get` |
 | 取字段完整配置 | `dws aitable +field-get --base-id <baseId> --table-id <tableId> [--field-ids <ids>] --format json` | 写入前核对类型、只读性和 select options；按需展开以控制返回体 |
@@ -59,6 +63,7 @@ metadata:
 | 更新记录 | `dws aitable record update --base-id <baseId> --table-id <tableId> --records '[{"recordId":"<id>","cells":{"<fieldId>":<值>}}]' --format json` | 先 query 拿 recordId；只传需改字段；取 `data.recordIds[]` 后回读 |
 | 删除记录 | 先 `dws aitable +record-query ...` 定位，再 `dws aitable record delete --base-id <baseId> --table-id <tableId> --record-ids <ids>` | 展示目标与影响，得到明确确认后才加 `--yes` |
 | 创建 Base / Table | `dws aitable base create --name "<名>"` / `dws aitable table create --base-id <id> --name "<名>" --fields '[...]'` | 使用创建返回的真实 ID；系统改名/加后缀时不得继续猜原名 |
+| 复制视图 | `dws aitable view duplicate --base-id <baseId> --table-id <tableId> --view-id <viewId> --new-name "<名>"` | `viewId` 必须属于当前表；不能用复制 Table 或新建 Dashboard 替代 |
 | 批量追加 CSV / JSON 到已有表 | `python3 scripts/import_records.py <baseId> <tableId> <file> [batch_size]` | CSV 表头必须是 fieldId；脚本返回不完整 ledger 时不得宣称全成功 |
 | 文件导入为新数据表 | `python3 scripts/aitable_import_via_task.py <baseId> <file>` | 与“追加已有 table”不同；走 prepare → PUT → import task |
 | 批量创建字段 | `python3 scripts/bulk_add_fields.py <baseId> <tableId> fields.json` | 单次最多 15；逐项检查成功/失败结果 |
@@ -72,6 +77,22 @@ metadata:
 - `record query --all` 仍受 `--page-limit` 约束；分页中断或局部富化失败时保留已有结果，输出 completeness 与逐项失败 ledger，不把部分结果描述为全量。
 - 创建、更新、导入、批量建字段等写操作必须检查业务 `status`、逐项结果与返回 ID；普通写入按用户明确要求执行后回读，不能只凭退出码宣称成功。
 - 长 JSON 使用 `--records-file` / 任务文件；不得为绕过字段错误而静默丢列、改类型或删除失败项。
+
+## 写入计划与验证
+
+- 用户明确列出的“先创建、再加字段、然后写记录/建视图”等阶段是可观察的验收步骤，必须逐项真实执行；不能为了得到相似终态而折叠、重排或省略。
+- 删除 Base/Table/Field/Record、关闭高级权限、删除角色和其他高风险动作，先固化目标 ID、所属容器、影响数量、副作用与可恢复性；确认前写调用为零。
+- 批量导入、建字段和记录写入在第一笔写入前完成全部字段类型、只读性、关联表和文件边界校验；部分失败保留输入顺序与逐项 ledger。
+
+| 写入对象 | 成功后必须验证 |
+|---|---|
+| Base / Table | 使用创建返回 ID 查询对象及所属关系 |
+| Field | `+field-get` 核对 fieldId、type、config 与只读性 |
+| Record | 使用返回 recordId 按 ID 回读目标 cells |
+| View / Dashboard / Chart | 重新读取当前 Base/Table 下的对象配置 |
+| 导入 / 导出任务 | 核对 task 状态、结果对象或输出文件完整性 |
+
+退出码 0、`status=success`、空对象或仅有 taskId 都不能单独证明业务完成。字段未生效、回读不一致、分页不完整或异步任务未完成时，报告失败、部分完成或进行中，不得声称“全部完成”。
 
 ## 低频能力与 Reference
 
@@ -90,7 +111,7 @@ metadata:
 - 路径或 flag 错误：按既定的 leaf Schema → leaf Help 顺序校正一次；仍失败则停止，不连续尝试猜测别名。
 - 命令非零、输出非 JSON、业务 `status != success`、必需 ID 缺失、批处理部分失败均视为失败；保留成功项与 ledger，禁止吞错。
 - 同名歧义、权限不足、资源不存在、字段类型漂移、分页无法推进或 Schema/Help 冲突时停止并报告。具体恢复动作按需读 [aitable-error-recovery.md](references/aitable/aitable-error-recovery.md)。
-- 每次重试都从最新实际输出重新提取下游 ID；删除和其他 `confirmation=user_required` 操作不得自动重试或静默确认。
+- 已确认远端未写入且契约声明可重试时，才从最新实际输出重新提取 ID 后重试；写入状态未知、删除和其他 `confirmation=user_required` 操作不得自动重试或静默确认。
 
 ## 跨产品协作
 

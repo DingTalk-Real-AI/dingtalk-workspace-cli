@@ -1,5 +1,7 @@
 # 字段类型 config 规范（field create / table create / field update）
 
+> 加载边界：仅在创建/更新字段或建表时构造字段 `config`。先确认字段类型及当前 Table；记录 cellValue 结构读取 [aitable-cell-value.md](aitable-cell-value.md)，公式正文读取 [aitable-formula-guide.md](aitable-formula-guide.md)，不要在本页寻找记录写入路由。
+
 > 适用命令：`dws aitable field create`、`dws aitable table create --fields`、`dws aitable field update --config`
 >
 > 本文件是 DWS AI 表格字段 config 的 **source of truth**。创建/更新字段时，必须严格按此规范构造 JSON。

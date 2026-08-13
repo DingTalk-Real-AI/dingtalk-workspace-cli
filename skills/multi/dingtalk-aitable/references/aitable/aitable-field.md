@@ -1,5 +1,7 @@
 # field — 字段管理
 
+> 加载边界：仅在字段目录不足、需要完整配置或执行字段 CRUD 时读取。`baseId/tableId` 先由根 Skill 解析；写前校验类型、config、关联表和只读性，写后用 field get 回读。删除字段先固化影响并确认。
+
 ## field get — 获取字段详情
 
 ```

@@ -1,5 +1,7 @@
 # 易混淆操作与字段规则
 
+> 定位：字段操作的轻量防错入口，仅在建表/建字段前快速核对主字段、只读字段和附件边界。完整 config 读取 `aitable/aitable-field-properties.md`，cellValue 读取 `aitable/aitable-cell-value.md`；不要与两份专题同时全量加载。
+
 ## 易混淆操作 (高风险场景必读)
 
 | 用户说的 | 正确命令 | 不是这个 |

@@ -1,5 +1,7 @@
 # record query — 查询记录
 
+> 加载边界：用于目标 Base/Table 已确定后的记录查询、筛选、排序和分页。按 ID、关键词和 filters 三种模式先分流；全量结论必须检查 `--all`、page-limit、hasMore/nextCursor 和 stop reason，默认一页只能代表当前页。
+
 ## 命令格式
 
 ```

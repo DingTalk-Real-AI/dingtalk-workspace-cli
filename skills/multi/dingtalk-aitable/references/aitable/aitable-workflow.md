@@ -1,5 +1,7 @@
 # workflow — 自动化工作流管理
 
+> 加载边界：仅在创建、全量更新、启停或检查 AITable 自动化工作流时读取。create/update 使用完整 DSL，先校验并保留现状；disable 等需确认动作确认前零写入，返回 flowId 后用 get/list 验证 `valid/issues/status`。
+
 创建 / 更新 / 启停 / 查看 / 列出 Base 下的自动化工作流（"当 X 时自动 Y" 流程）。
 适用场景：用户要求创建自动化、修改流程、停掉流程、查询已有流程或恢复运行。
 

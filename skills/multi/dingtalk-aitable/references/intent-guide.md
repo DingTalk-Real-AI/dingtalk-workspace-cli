@@ -1,5 +1,7 @@
 # aitable 局部意图消歧
 
+> 定位：只处理 AITable 与 Sheet、Doc、Drive、Minutes 等 sibling 产品的边界；产品内 Base/Table/Field/Record 路由由根 Skill 负责。用户意图已经明确属于 AITable 时无需加载本页。
+
 本文件从单 Skill `intent-guide.md` 拆分而来，仅保留与本产品相关的跨产品消歧规则。
 
 | 用户说... | 真实意图 | 应该用 | 不要用 | 理由 |

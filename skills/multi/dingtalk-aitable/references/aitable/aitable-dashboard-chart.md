@@ -1,5 +1,7 @@
 # dashboard & chart — 仪表盘与图表
 
+> 加载边界：仅在用户明确操作仪表盘或图表时读取。先用当前 Base 的 dashboard list/get 获取 `dashboardId`，再获取其 `chartId`；不要用 View 或 Table 命令替代，也不要跨 Dashboard 复用 chartId。
+
 ## 建议操作顺序
 
 ```bash

@@ -1,5 +1,7 @@
 # 视图配置（view get/update <attr>）
 
+> 加载边界：仅在创建视图或读取/修改视图配置时加载。先确认 viewType 与属性支持矩阵，并绑定当前 Base/Table/viewId；写后读取同一属性验证。复制、锁定、行高和高亮规则改读 [aitable-view-extras.md](aitable-view-extras.md)。
+
 按属性局部读/写视图配置。每个属性独立子命令，typed flag 友好，agent 不必拼 JSON。
 向后兼容：`view update --config '{...}'` 一次多属性入口仍可用。
 

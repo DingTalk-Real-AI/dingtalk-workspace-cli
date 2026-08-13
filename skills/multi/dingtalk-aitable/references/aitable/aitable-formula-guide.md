@@ -1,5 +1,7 @@
 # AI 表格公式字段指南
 
+> 加载边界：仅在创建或修改 formula 字段时读取。公式字段是只读派生字段，不能通过 record create/update 写值；字段引用必须基于当前 Table 的精确名称/ID，跨表取值应先分流到 lookup/filterUp。
+
 > 当用户要创建 formula 类型字段、编写表内计算公式、做派生指标时，必须先读本文档。
 
 ## 1. 何时使用 formula 字段

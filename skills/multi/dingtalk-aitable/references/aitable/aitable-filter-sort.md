@@ -1,5 +1,7 @@
 # filters & sort — 筛选排序语法参考
 
+> 加载边界：仅在 record query 或 view 配置需要构造 filter/sort JSON 时读取。先用 field get 取得真实 fieldId 和类型；服务端可过滤时不先拉全量，本页语法不能替代分页完整性判断。
+
 > 视图（view）配置的 filter/sort/group **整体写入**请优先用 `view update filter` / `view update sort` / `view update group` 子命令，详见 [aitable-view-config.md](./aitable-view-config.md)。本文件聚焦于 `record query --filters` 与 view config filter 的语法和差异。
 
 ## filters 结构规范

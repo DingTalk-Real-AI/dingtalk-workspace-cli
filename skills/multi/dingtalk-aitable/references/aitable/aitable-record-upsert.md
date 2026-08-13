@@ -1,5 +1,7 @@
 # 行记录 Upsert（record upsert）
 
+> 加载边界：仅在同一批次明确混合“带 recordId 更新”和“不带 recordId 创建”时读取。若目标匹配逻辑仍依赖名称或业务键，先 query 并消歧；upsert 不负责猜测 recordId，部分成功必须返回逐项 ledger。
+
 按 `recordId` 是否存在，自动把入参拆分到 update 链路或 create 链路：批次混合"已存在改 + 新出现建"时用，省掉客户端按 ID 分批的逻辑。
 
 ## 命令

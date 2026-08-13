@@ -1,5 +1,7 @@
 # 行命名规则枚举键（recordNameKey）映射
 
+> 加载边界：仅在配置 Table 的行称谓时读取。自然语言名称必须映射为已审阅枚举键；本页不用于记录查找、字段名解析或写入 cells。
+
 `dws aitable table update --record-name-key <枚举键>` 用于设置数据表的"行命名规则"——卡片/详情页里"行"的展示别名。**取值是固定枚举，不是字段 ID**；传非法值服务端返回 `INVALID_RECORD_NAME_KEY`。
 
 ## 中文 → 枚举键（按 UI 下拉顺序）

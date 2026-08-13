@@ -1,5 +1,7 @@
 # 数据分析
 
+> 定位：仅在用户要求跨记录统计、聚合或业务结论时加载。普通查找、筛选和分页先按根 Skill 的 `+record-query` 骨架执行；完整分析契约以 [aitable-data-analysis-sop.md](aitable/aitable-data-analysis-sop.md) 为准，本页只保留轻量入口。
+
 > 本场景所有 recipe 均为 full。
 
 | Recipe | 行动指南（固定路线） |
