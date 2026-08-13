@@ -58,12 +58,13 @@ metadata:
 | 按名称找 Table | `dws aitable +resolve-table --base <baseId> --name "<表名>" --format json` | `baseId` 必须来自上一步真实返回 |
 | 取表、字段与视图目录 | `dws aitable +table-get --base-id <baseId> [--table-ids <tableId>] --format json` | `tables[].fields[]` 是字段目录；完整类型/config 再用 `+field-get` |
 | 取字段完整配置 | `dws aitable +field-get --base-id <baseId> --table-id <tableId> [--field-ids <ids>] --format json` | 写入前核对类型、只读性和 select options；按需展开以控制返回体 |
-| 查/搜/筛记录 | `dws aitable +record-query --base-id <baseId> --table-id <tableId> [--query <词>\|--filters '<JSON>'\|--record-ids <ids>] --format json` | ID 模式忽略 filter/sort；全量结论必须完整分页 |
+| 查/搜/筛记录 | `dws aitable +record-query --base-id <baseId> --table-id <tableId> [--query <词>\|--filters '<JSON>'\|--record-ids <ids>] --format json` | ID 模式忽略 filter/sort；不要猜 `--page-limit`，分页使用返回的 cursor 与 leaf Help 中的真实分页 flag |
 | 新增记录 | `dws aitable record create --base-id <baseId> --table-id <tableId> --records '[{"cells":{"<fieldId>":<值>}}]' --format json` | 单次最多 100；取 `data.newRecordIds[]` 后立即按 ID 回读 |
 | 更新记录 | `dws aitable record update --base-id <baseId> --table-id <tableId> --records '[{"recordId":"<id>","cells":{"<fieldId>":<值>}}]' --format json` | 先 query 拿 recordId；只传需改字段；取 `data.recordIds[]` 后回读 |
 | 删除记录 | 先 `dws aitable +record-query ...` 定位，再 `dws aitable record delete --base-id <baseId> --table-id <tableId> --record-ids <ids>` | 展示目标与影响，得到明确确认后才加 `--yes` |
 | 创建 Base / Table | `dws aitable base create --name "<名>"` / `dws aitable table create --base-id <id> --name "<名>" --fields '[...]'` | 使用创建返回的真实 ID；系统改名/加后缀时不得继续猜原名 |
 | 复制视图 | `dws aitable view duplicate --base-id <baseId> --table-id <tableId> --view-id <viewId> --new-name "<名>"` | `viewId` 必须属于当前表；不能用复制 Table 或新建 Dashboard 替代 |
+| 创建图表 | 先读 `dws aitable chart config-example --format json`，再执行 `chart create ... --config '<JSON>' --layout '<JSON>'` | `--layout` 是必填项；不能只传 config 后依据退出码声称图表已创建 |
 | 批量追加 CSV / JSON 到已有表 | `python3 scripts/import_records.py <baseId> <tableId> <file> [batch_size]` | CSV 表头必须是 fieldId；脚本返回不完整 ledger 时不得宣称全成功 |
 | 文件导入为新数据表 | `python3 scripts/aitable_import_via_task.py <baseId> <file>` | 与“追加已有 table”不同；走 prepare → PUT → import task |
 | 批量创建字段 | `python3 scripts/bulk_add_fields.py <baseId> <tableId> fields.json` | 单次最多 15；逐项检查成功/失败结果 |
@@ -74,9 +75,10 @@ metadata:
 
 - `record create/update` 前必须获取目标字段的 `fieldId`、`type` 与 `config`；`filterUp`、`lookup` 等只读字段不可写。完整格式只在需要时读 [aitable-cell-value.md](references/aitable/aitable-cell-value.md)。
 - 筛选和排序字段使用 `fieldId`；`--filters` 最外层是 `and|or + operands`，`--sort` 使用 `direction: asc|desc`。日期和跨表字段规则按需读 [aitable-filter-sort.md](references/aitable/aitable-filter-sort.md)。
-- `record query --all` 仍受 `--page-limit` 约束；分页中断或局部富化失败时保留已有结果，输出 completeness 与逐项失败 ledger，不把部分结果描述为全量。
+- 记录分页不能凭经验拼 `--page-limit`。先用当前 leaf Help 确认 page-size/cursor 的真实名称；每页读取返回 cursor，直到明确终止。分页中断或局部富化失败时保留已有结果，输出 completeness 与逐项失败 ledger，不把部分结果描述为全量。
 - 创建、更新、导入、批量建字段等写操作必须检查业务 `status`、逐项结果与返回 ID；普通写入按用户明确要求执行后回读，不能只凭退出码宣称成功。
 - 长 JSON 使用 `--records-file` / 任务文件；不得为绕过字段错误而静默丢列、改类型或删除失败项。
+- `table create --fields` 的键固定为 `fieldName` / `type` / `config`，不能写成 `name`；单选/多选类型固定为 `singleSelect` / `multipleSelect`，不能写 `select`。number formatter 不确定时先读 leaf Help，禁止猜 `INTEGER` 等值。
 
 ## 写入计划与验证
 
@@ -112,6 +114,7 @@ metadata:
 - 命令非零、输出非 JSON、业务 `status != success`、必需 ID 缺失、批处理部分失败均视为失败；保留成功项与 ledger，禁止吞错。
 - 同名歧义、权限不足、资源不存在、字段类型漂移、分页无法推进或 Schema/Help 冲突时停止并报告。具体恢复动作按需读 [aitable-error-recovery.md](references/aitable/aitable-error-recovery.md)。
 - 已确认远端未写入且契约声明可重试时，才从最新实际输出重新提取 ID 后重试；写入状态未知、删除和其他 `confirmation=user_required` 操作不得自动重试或静默确认。
+- 参数校验错误必须先吸收错误中的精确 hint，再最多纠正一次；不要重复猜同一 flag、formatter、folderId 或图表配置。目标能力已有原生命令时，不要以手工重建相似对象掩盖原命令失败。
 
 ## 跨产品协作
 

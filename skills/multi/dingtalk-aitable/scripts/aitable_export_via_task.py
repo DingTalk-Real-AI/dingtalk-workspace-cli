@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import ssl
 import subprocess
 import sys
 import time
@@ -26,7 +27,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{6,128}$")
 ALLOWED_FORMATS = {"excel", "attachment", "excel_and_attachment", "excel_with_inline_images"}
 
 
@@ -64,7 +65,12 @@ def normalize_download_url(url: str) -> str:
 def download_file(url: str, output_path: Path) -> Tuple[bool, str]:
     req = Request(url, method="GET")
     try:
-        with urlopen(req, timeout=180) as resp:
+        try:
+            import certifi
+            context = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            context = ssl.create_default_context()
+        with urlopen(req, timeout=180, context=context) as resp:
             redirected = urlparse(resp.geturl())
             if redirected.scheme != "https" or not redirected.hostname:
                 return False, "download redirect is not HTTPS"

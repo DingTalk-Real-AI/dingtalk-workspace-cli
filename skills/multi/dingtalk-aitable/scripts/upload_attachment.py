@@ -25,13 +25,14 @@ import subprocess
 import os
 import mimetypes
 import re
+import ssl
 from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
-RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
+RESOURCE_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{6,128}$')
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
 
@@ -77,15 +78,24 @@ def run_dws(args: list, dws_bin: str = 'dws') -> Optional[Dict[str, Any]]:
 def upload_to_oss(upload_url: str, file_path: Path, mime_type: str) -> bool:
     """通过 HTTP PUT 上传文件到 OSS。"""
     parsed = urlparse(upload_url)
-    if parsed.scheme != 'https' or not parsed.hostname:
-        print('错误：uploadUrl 必须是有效的 HTTPS URL', file=sys.stderr)
+    if parsed.scheme not in {'http', 'https'} or not parsed.hostname:
+        print('错误：uploadUrl 必须是有效的 HTTP(S) URL', file=sys.stderr)
         return False
+    if not parsed.hostname.endswith('.oss.aliyuncs.com'):
+        print('错误：uploadUrl 不是阿里云 OSS 地址', file=sys.stderr)
+        return False
+    upload_url = parsed._replace(scheme='https').geturl()
     file_data = file_path.read_bytes()
     req = Request(upload_url, data=file_data, method='PUT')
     req.add_header('Content-Type', mime_type)
 
     try:
-        with urlopen(req, timeout=120) as resp:
+        try:
+            import certifi
+            context = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            context = ssl.create_default_context()
+        with urlopen(req, timeout=120, context=context) as resp:
             if resp.status == 200:
                 return True
             print(f"错误：OSS 上传失败，HTTP {resp.status}", file=sys.stderr)

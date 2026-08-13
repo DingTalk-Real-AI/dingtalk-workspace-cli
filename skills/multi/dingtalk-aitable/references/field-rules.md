@@ -38,6 +38,13 @@
 
 ## 字段创建时设置 config（重要）
 
+字段 JSON 的命名和枚举是严格契约：
+
+- 批量 `--fields` 每项使用 `fieldName`，不是 `name`。
+- 单选是 `singleSelect`，多选是 `multipleSelect`；不存在通用的 `select` 类型。
+- number/date/currency formatter 只使用当前 `table create --help` 或 leaf Schema 列出的枚举；不要从别的产品或旧样例猜 `INTEGER`。
+- 第一次返回明确 hint 后只按 hint 修正一次；第二次仍失败就停止并保留部分成功 ledger。
+
 创建 singleSelect/multipleSelect 字段时，**必须设置选项 (options)**：
 
 ```bash

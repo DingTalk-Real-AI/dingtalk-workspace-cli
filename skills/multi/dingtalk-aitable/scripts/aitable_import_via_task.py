@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import ssl
 import subprocess
 import sys
 from pathlib import Path
@@ -25,12 +26,30 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{6,128}$")
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 
 
 def validate_resource_id(resource_id: str) -> bool:
     return bool(resource_id and RESOURCE_ID_PATTERN.match(resource_id.strip()))
+
+
+def normalize_oss_upload_url(upload_url: str) -> str:
+    """Accept the signed OSS URL returned by Runtime and upgrade it to HTTPS."""
+    parsed = urlparse(upload_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("uploadUrl must be a valid HTTP(S) URL")
+    if not parsed.hostname.endswith(".oss.aliyuncs.com"):
+        raise ValueError("uploadUrl host is not an Aliyun OSS endpoint")
+    return parsed._replace(scheme="https").geturl()
+
+
+def tls_context() -> ssl.SSLContext:
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
 
 
 def run_dws(dws_bin: str, args: list[str], timeout_sec: int = 120) -> Tuple[int, str, str]:
@@ -53,15 +72,16 @@ def parse_json_output(raw: str) -> Optional[Dict[str, Any]]:
 
 
 def put_file(upload_url: str, file_path: Path) -> Tuple[bool, str]:
-    parsed = urlparse(upload_url)
-    if parsed.scheme != "https" or not parsed.hostname:
-        return False, "uploadUrl must be a valid HTTPS URL"
+    try:
+        upload_url = normalize_oss_upload_url(upload_url)
+    except ValueError as exc:
+        return False, str(exc)
     payload = file_path.read_bytes()
     req = Request(upload_url, data=payload, method="PUT")
     # 关键：清空 Content-Type，避免 SignatureDoesNotMatch。
     req.add_header("Content-Type", "")
     try:
-        with urlopen(req, timeout=180) as resp:
+        with urlopen(req, timeout=180, context=tls_context()) as resp:
             if resp.status == 200:
                 return True, ""
             return False, f"unexpected HTTP status: {resp.status}"
