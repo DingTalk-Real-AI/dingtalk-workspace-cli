@@ -6,6 +6,26 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.58-beta.5] - 2026-08-13
+
+### Added
+
+- **Agent version and extended context passthrough** (Aone 85384225) — adds
+  validated `DWS_AGENT_VER` and sensitive JSON `DWS_AGENT_EXT` metadata to
+  ordinary non-plugin MCP requests without forwarding it to A2A, OAuth,
+  Discovery, or third-party plugins.
+
+- **Drive file comments** (#961) — adds `dws drive comment list` and `dws drive comment create` for comments on ordinary preview files.
+
+- **Chat automatic pagination controls** (#970) — adds bounded `--max-items` and cancellable `--page-delay` support to the core IM list shortcuts, with safe continuation metadata and truncation reporting.
+
+### Changed
+
+- **Chat message send help** - Clarifies Markdown image syntax for inline mixed text and images.
+
+- **Doc/drive/wiki routing descriptions** — clarifies the document-space container-vs-content boundary across the doc, drive, and wiki skill descriptions for more predictable first-round Agent selection, without changing CLI behavior.
+
+
 ## [1.0.58-beta.4] - 2026-08-12
 
 ### Added
