@@ -3,7 +3,7 @@
 - 状态：Proposed / Spike 已验证，尚未达到发布门禁
 - 日期：2026-08-12
 - 目标版本：分阶段交付，不绑定单一版本
-- 影响范围：`internal/cli`、Agent Host、Schema Search/Inspect
+- 影响范围：`internal/cli`、DWS Skills、Schema Search/Inspect；Agent Host 仅为可选增强
 - 关联实现：[`internal/cli/tool_search.go`](../internal/cli/tool_search.go)
 - 关联测试：[`internal/cli/tool_search_test.go`](../internal/cli/tool_search_test.go)
 - 评测实现：[`scripts/dev/eval_tool_search_ranking.py`](../scripts/dev/eval_tool_search_ranking.py)
@@ -13,12 +13,12 @@
 
 ## 1. 摘要
 
-DWS 当前由 Go 声明在运行时装配出 1,098 个工具的 typed Schema Catalog。Agent 可以按产品、分组、leaf 渐进查询，但对自然语言意图仍缺少一个稳定的工具检索入口；复合任务还会遇到只找回部分步骤、相关工具挤占 Top-K，以及结果无法证明来自哪个 Catalog 版本等问题。
+DWS 当前由 Go 声明在运行时装配出 1,098 个命令契约的 typed Schema Catalog。对 Agent 而言，**DWS 本身是一个稳定元工具**；Catalog 中的条目是 DWS 内部命令空间，不是要向 Host 动态注册的 1,098 个独立 Tool。Agent 已可按产品、分组、leaf 渐进查询，但对自然语言意图仍缺少一个稳定的子命令检索入口；复合任务还会遇到只找回部分步骤、相关命令挤占 Top-K，以及结果无法证明来自哪个 Catalog 版本等问题。
 
 本 RFC 决定采用以下架构：
 
 ```text
-Agent 任务拆解
+Agent 通过同一 DWS 元工具拆解任务
   → DWS identity resolve
       ├─ exact hit → eligibility check → exact reference / typed exact_filtered
       └─ no hit → Catalog availability / namespace / effect Hard Filter
@@ -39,7 +39,7 @@ Agent 任务拆解
 4. **Exact、Search、Inspect、Execute 必须分层。** 搜索结果不是可执行 Schema；Agent 必须精确 Inspect 后才能组装参数和执行。
 5. **多动作任务先拆解后检索。** 每个动作保留候选预算，再做集合合并和完整性校验，不能把整个工作流只当作一个 query 排一次 Top-5。
 6. **相关性不等于安全。** `avoid_when`、effect、确认、权限和幂等约束属于独立 gate；排序分数不得表述为“可信概率”。
-7. **显式 Search 是规范，自动触发只是 Host 优化。** Search query、Catalog、候选和失败必须形成可复现 transcript；Host 可基于近期可信用户消息自动调用同一个 API，但不能维护第二套隐式检索语义。
+7. **显式 Search 是规范，但只服务未知命令。** Skill/reference 已给出精确 CLI path 时直接调用 DWS；只有无法定位子命令时才走 Search → 双 hash Inspect → 同一 DWS Execute。Search query、Catalog、候选和失败必须可复现；Host 原生适配只是可选的交互优化。
 
 ### 1.1 2026-08-13 主线合并后的范围与实现状态
 
@@ -56,7 +56,20 @@ Catalog 的规范数据是 Go `ProductDecl` / `ContractDecl` 和 `ResolveSchemaB
 
 当前仍未通过：独立 qrels、真实模型配对 Agent A/B、英文切片、线上 contradiction gate 与 cold subprocess SLA。因此状态仍是 Proposed，不得把同源诊断指标表述成线上任务成功率。
 
-### 1.2 规范用语与能力标签
+### 1.2 执行模型：DWS 是单一元工具
+
+规范业务路径不需要 Codex/OpenAI 式的动态 Tool Registry：
+
+```text
+已知能力：Agent → dws <known cli path> → Cobra Execute
+未知能力：Agent → dws schema search
+                    → dws schema <canonical> --expected-*-hash
+                    → dws <primary_cli_path>
+```
+
+Search/Inspect/Execute 都是同一 DWS Tool 的子命令。因此，会话内“加载新工具”、Schema LRU 和 Host registry 改造不是 local-only 发布前置条件。如果未来 Host 愿意将该链路包装成原生 `tool_search` 调用，必须复用同一 versioned wire 和 SearchTrace，不得发布第二套身份、排序或授权语义。
+
+### 1.3 规范用语与能力标签
 
 - **MUST / 必须**：进入对应阶段的发布门禁；未满足不得声称具备该能力。
 - **SHOULD / 应**：推荐实现；偏离必须记录理由和替代风险控制。
@@ -299,7 +312,7 @@ Architecture Audit 还发现并推动修复了 Spike 中的四个问题：
 
 ### 4.10 阶段十：两种 Agent 编排范式复核
 
-补充源码核验区分了两类形态：Anthropic/OpenAI/NemoClaw/BigTool 的模型显式 search，以及 Semantic Kernel 在模型调用前用近期消息自动注入。DWS 选择显式 `tool-search.v1 → schema-inspect.v1` 作为唯一规范路径，理由是 version handshake、失败语义和 SearchTrace 可直接审计。Host MAY 用最近可信用户消息自动触发该路径以省掉模型的一次 search decision，但：
+补充源码核验区分了两类形态：Anthropic/OpenAI/NemoClaw/BigTool 的模型显式 search，以及 Semantic Kernel 在模型调用前用近期消息自动注入。这些实现面向“多个外层函数工具”；DWS 不同，它在 Agent 侧本就是一个元工具。因此 DWS 选择显式 `tool-search.v1 → schema-inspect.v1 → DWS CLI Execute` 作为唯一规范路径，理由是 version handshake、失败语义和 SearchTrace 可直接审计。Skill/Agent 直接调用这条路径就能完成闭环；Host MAY 再用最近可信用户消息自动触发以省掉模型的一次 search decision，但：
 
 - 自动触发必须生成与显式调用相同的 request/response/trace；
 - 默认只使用本轮与最近 1～2 条用户/assistant planning 消息，不拼接工具输出；
@@ -408,7 +421,7 @@ Go BM25 的 query terms MUST 每请求排序一次，再以固定顺序累加各
 
 ### 5.6 CandidateProvider 与融合
 
-**Target public boundary** 使用 stdin/stdout JSON，而不是要求外部 Host import `internal/cli`。DWS 搜索命令本身不访问远端 Provider；Agent Host 负责 provider 认证、租户隔离、egress policy、脱敏和 deadline，再把结果作为不可信输入提交给 DWS 校验/融合：
+**Target public boundary** 使用 stdin/stdout JSON，而不是要求 Skill 或外部 Host import `internal/cli`。local-only 路径由 Agent 通过 DWS 元工具直接调用，不需要 Host adapter。DWS 搜索命令本身不访问远端 Provider；只在可选外部召回启用时，Agent Host/服务才负责 provider 认证、租户隔离、egress policy、脱敏和 deadline，再把结果作为不可信输入提交给 DWS 校验/融合：
 
 ```text
 Host ── dws schema search(local-only) ──→ local lexical ranking + CatalogVersionRef
@@ -464,6 +477,8 @@ DWS 必须验证：
 
 有效候选与本地排名用 RRF 融合。`k`、depth 和权重都是实验参数，不写入稳定协议。异常语义固定为：Host 未提供 ranking、provider timeout/unavailable 时提交无 external ranking；DWS 返回逐字段相同的本地结果；external ranking 只要出现重复、unknown canonical、版本不一致或超限，整路丢弃，不做“保留部分合法项”，并返回稳定 warning code。被 product/effect/exclude/availability 过滤的合法 canonical 可以单项丢弃并计数，不视为协议损坏。原始 Provider 错误只进入 Host 脱敏 trace，不进入 Agent 可见文本。
 
+此处“逐字段相同”精确限定为 `candidates` 与同请求 local-only response 一致；envelope 有意增加 `_fallback`、`degraded` 和一个稳定 warning code。当前 Provider 失败共 5 类：`provider_timeout`、`provider_unavailable`、`provider_catalog_mismatch`、`provider_invalid_ranking`、`provider_internal`。`response_budget_exceeded` 是全局响应预算码，不是 Provider 失败。在本 RFC 核验的开源实现中，DWS 是唯一将该降级行为固化为可测试 wire 契约的实现；这是样本内结论，不是对全行业的穷尽性声称。
+
 Current Spike 默认 `CandidateLimit=20`，而续测在 572 工具上比较了 depth 20/50/100：TF-IDF+Dense 的 R@5 在被测组合中相差最多约 0.83 pp，最佳 proxy 配置出现在 depth=100,k=10；字段 BM25 的 workflow 指标却对 depth 不敏感。结论不是“必须改成 100”，而是 CandidateLimit 必须作为 dev 调参后锁定的 Projection/SearchConfig，test 只运行一次；公开默认不得凭参考项目常量或当前 proxy best 决定。
 
 ### 5.7 ToolReference
@@ -499,7 +514,7 @@ Response 同时返回：
 
 这是规范 v1 ToolReference。完整 `use_when/avoid_when` 和参数 Schema 只在 Inspect 返回，避免轻量引用膨胀；contradiction gate 仍可在 DWS 内部消费它们。公开模型接口只返回 `rank`、`matched_fields` 和 `rank_sources`，不返回 raw `score/sparse_score`。当前分支已经从 JSON DTO 移除 raw score、自由文本 warning 和完整 use/avoid，只保留进程内未导出的排序分数。
 
-当前分支已限制 query、subquery 数、summary 和总响应 bytes，并返回 `truncated/abstained/degraded` 与稳定原因码。尚未实现的预算位于 Host：累积已发现工具、单个 compact Inspect 和任务内可见 Schema 总量；这些状态必须按任务/步骤设置上限和失效，不能像 BigTool 一样在长对话中无界累积。
+当前分支已限制 query、subquery 数、summary 和总响应 bytes，并返回 `truncated/abstained/degraded` 与稳定原因码。普通 DWS 元工具路径每次 Inspect 后直接执行，不维护“已加载工具集”，因此不要把 Host 累积 Schema 状态当成 local-only 前置条件。只有可选 Host adapter 把 Inspect 结果长期注入模型工具集时，才必须实现累积已发现工具、单个 compact Inspect 和任务内可见 Schema 总量预算，且按任务/步骤失效。
 
 NemoClaw 固定 commit 提供了 query 256 chars、search output/state 各 8 KiB、64 discovered tools、120-byte name、16 KiB single schema、128 KiB visible schemas、20 results、256-char description 等工程参考。DWS 不直接复制阈值；结合当前 5 references 约 3.2 KB、full Catalog 单工具对象 median 约 16.9 KB / max 约 69.6 KB，预注册以下 `SearchBudgetV1` shadow defaults：
 
@@ -539,7 +554,7 @@ dws schema chat.query_msg_read_status --compact -f json \
 
 ### 5.9 多动作检索
 
-Agent Host 负责把：
+Skill 或 Agent planner 负责把：
 
 ```text
 给群里发文件并确认送达
@@ -934,7 +949,7 @@ go run ./internal/generator/cmd_tool_search_comparison \
 - 已增加 local-only `dws schema search`、版本化 stdin JSON 与 expected source/surface hash Inspect；
 - 已把 reviewed exclusion 从旧 runnable leaf `schema` 迁移到新 leaf `schema search`；docs/skills/generated gates 仍需发布前复核；
 - external ranking transport 已实现为不可信输入校验，但在独立门禁与 feature rollout 前不得由默认 Host 注入；
-- Host 可在 shadow 中记录新结果，但继续用现有发现路径执行。
+- DWS Skill 按“已知命令直接执行；未知命令 Search → Inspect → Execute”进行 shadow；不要为已知高频路径增加 Search 往返。
 
 ### Phase 3：Provider shadow 与融合 Alpha
 

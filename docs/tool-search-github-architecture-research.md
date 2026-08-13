@@ -8,10 +8,10 @@
 
 ## 1. 结论先行
 
-GitHub 上没有一个项目可以被 DWS 整体照搬。可复用的是不同项目各自已经验证过的边界：
+GitHub 上没有一个项目可以被 DWS 整体照搬。首先要区分执行模型：Codex/Anthropic/OpenAI 的 deferred search 面向多个外层函数工具，而 **DWS 本身就是 Agent 的一个元工具**，Catalog 条目是 DWS 子命令。因此 DWS 不需要动态将搜索结果注册成新 Host Tool；可复用的是不同项目已经验证过的检索和契约边界：
 
-1. **协议形态采用 Anthropic / OpenAI 的 deferred tool 思路。** 模型先看到搜索入口，命中后才加载完整工具定义；但两个 SDK 都没有开源托管排序实现，不能把其 BM25 名称当作 DWS 算法代码。
-2. **Agent 循环参考 LangGraph BigTool。** 检索返回稳定工具 ID，下一轮只把已选工具绑定给模型；DWS 还必须补上候选 ID 校验、Catalog 版本和执行安全。
+1. **协议形态参考 Anthropic / OpenAI 的 reference → inspect。** DWS 搜索只返回轻量引用，命中后才读完整命令契约；但 Inspect 后仍调用同一 DWS，不动态注册新外层工具。
+2. **Codex 证明本地 Tool Search 可以做到 Host 级闭环，但不应照搬其 ranker。** 当前 Codex 已有 Rust 本地 BM25、namespace、MCP/Apps 和 deferred Schema 回填；但它是英文管线，没有 DWS 的 Exact Guard、`exact_filtered`、Catalog 双 hash 与稳定 canonical tie-break。
 3. **检索内核重点参考 Ratel。** 最有价值的不是固定 `k1/b`，而是不可变索引快照、全量重建 BM25 统计、稳定 tie-break、两路深召回、RRF、模型指纹和原子向量缓存。
 4. **上下文和状态预算参考 NVIDIA NemoClaw。** query、返回文本、已发现工具数、checkpoint 状态和可见 Schema 都应有确定性上限；同时必须明确“披露不是授权”。
 5. **中文与字段策略必须由 DWS 自己评测。** ToolUniverse 甚至因模板噪声而只索引参数名、不索引参数描述，说明“字段越全越好”不成立。
@@ -65,6 +65,7 @@ reviewed CommandRegistry + Cobra + metadata
 |---|---|---|---|
 | [Anthropic Python SDK @ `009b035`](https://github.com/anthropics/anthropic-sdk-python/tree/009b035305e0724ce108ebd796935f91711fc6e1) | BM25/Regex 托管搜索的协议类型；普通 tool 也支持 defer | [`defer_loading`](https://github.com/anthropics/anthropic-sdk-python/blob/009b035305e0724ce108ebd796935f91711fc6e1/src/anthropic/types/beta/beta_tool_search_tool_bm25_20251119_param.py)、`tool_search_tool_result`、仅含 `tool_name` 的 [`tool_reference`](https://github.com/anthropics/anthropic-sdk-python/blob/009b035305e0724ce108ebd796935f91711fc6e1/src/anthropic/types/beta/beta_tool_reference_block.py)；官方 client 示例用 substring 自实现搜索 | SDK 没有 BM25/Regex 检索代码；“加载完整定义”是服务端行为，本地只有 registry/available-name 簿记；confirmation/idempotency 均未提供 |
 | [OpenAI Agents SDK @ `5250cb8`](https://github.com/openai/openai-agents-python/tree/5250cb86053f50abea9d30e7d06b8fc4b5b6adb1) | deferred function、namespace、hosted MCP 和 Responses 配置/校验 | [`ToolSearchTool`](https://github.com/openai/openai-agents-python/blob/5250cb86053f50abea9d30e7d06b8fc4b5b6adb1/src/agents/tool.py#L1511)；qualified identity、冲突检测、deferred lookup/approval key；文档建议 namespace 少于 10 个函数 | `execution="client"` 不被标准 Runner 自动执行；非 Responses 后端 fail-fast；SDK 不是本地 ranker，也不实现定义注入运行时 |
+| [OpenAI Codex @ `b1373b7`](https://github.com/openai/codex/tree/b1373b74a27d1d9b65074a873202683355cae772) | 生产 Host 级本地 Tool Search | [handler](https://github.com/openai/codex/blob/b1373b74a27d1d9b65074a873202683355cae772/codex-rs/core/src/tools/handlers/tool_search.rs)使用 Rust BM25；[tool projection](https://github.com/openai/codex/blob/b1373b74a27d1d9b65074a873202683355cae772/codex-rs/tools/src/tool_search.rs)索引 namespace/name/description/参数并把完整 deferred Schema 写入 `tool_search_output`；接通 MCP、Apps 和动态 registry | `Language::English`；无 Exact Guard/`exact_filtered`、Catalog 双 hash、查询级 product/effect/exclude filter 和显式 stable tie-break；该外层 registry 闭环不是 DWS 元工具路径的必需依赖 |
 | [NVIDIA NemoClaw @ `ac6adac`](https://github.com/NVIDIA/NemoClaw/tree/ac6adacd5a343243d470520a66f76b4ff595ad4a) | 预算完整的渐进披露 middleware | [`progressive_tool_disclosure.py`](https://github.com/NVIDIA/NemoClaw/blob/ac6adacd5a343243d470520a66f76b4ff595ad4a/agents/langchain-deepagents-code/progressive_tool_disclosure.py)限制 query、输出、state、名称、工具数和单项/总 Schema bytes；拒绝重名；checkpoint reducer 确定性 | 搜索只是 case-insensitive substring；完整 executor registry 仍在且猜名可执行；专项验证和接线脚本代表工程证据，不等于已核验生产 SLA |
 | [LangGraph BigTool @ `0bb7f92`](https://github.com/langchain-ai/langgraph-bigtool/tree/0bb7f9227d349afa4d4207c6630e800658c80894) | Search → bind selected tools → execute 的 Agent 图 | [`graph.py`](https://github.com/langchain-ai/langgraph-bigtool/blob/0bb7f9227d349afa4d4207c6630e800658c80894/langgraph_bigtool/graph.py#L45)累积 ID，并在下一轮 `bind_tools`；Store semantic search 默认每次 2 个 | unknown ID 裸字典访问导致 KeyError，坏 ID 又因只增 reducer 持续污染线程；状态无预算、无 Catalog hash/权限/恢复 |
 | [Semantic Kernel @ `c028a0c`](https://github.com/microsoft/semantic-kernel/tree/c028a0c7dc4f0814cdcbaba9d998f187a41197bf) | 框架自动用近期对话做 function vector search | [`ContextualFunctionProvider`](https://github.com/microsoft/semantic-kernel/blob/c028a0c7dc4f0814cdcbaba9d998f187a41197bf/dotnet/src/SemanticKernel.Core/Functions/ContextualSelection/ContextualFunctionProvider.cs#L94)首次懒向量化，并默认拼最近 2 条消息；FunctionStore 默认只向量化 name + description | 标记 `SKEXP0130`；collection/embedding/unknown name 均 fail-fast；外部 store 同步与生命周期由调用方负责，不存参数 Schema |
@@ -135,6 +136,8 @@ Ratel 固定 commit 的 `k1=.9/b=.4`、RRF `k=60`（0-based rank）与 depth=100
 
 - Ratel `Semantic/Hybrid` 直接返回可捕获的 `EmbedderError`；
 - Haystack 任一路 retriever 出错会让整个 `MultiRetriever` 失败。
+- Codex 对空 query/`limit=0` 返回 `RespondToModel`，对不支持的 payload 返回 `Fatal`；它没有可失败 Provider arm，因此也没有“保留本地候选、只标记降级”的对等契约。
+- Gemini CLI 公开文档定义了 discovery command/MCP 注册和 include/exclude，但未定义外部检索失败后返回稳定本地候选的协议；不应在没有对应源码/契约证据时简化成“Gemini 直接报错”。
 
 DWS CLI 的离线约束要求更强的本地兜底：
 
@@ -145,7 +148,7 @@ runtime Catalog assembly corrupt → fail closed, search unavailable
 caller context canceled → return cancellation, not stale fallback
 ```
 
-这项 fallback 是 DWS 的产品契约，需有自己的测试和 telemetry。
+这项 fallback 是 DWS 的产品契约。在本报告核验的开源实现中，DWS 是唯一把它固化为可测试 wire 契约的实现：Provider timeout、unavailable、catalog mismatch、invalid ranking 或 internal/panic 时，`candidates` 与 local-only response 逐字段一致，envelope 只有意增加 `_fallback`、`degraded` 和一个稳定、脱敏 warning code。当前共有 **5 个 Provider failure code**；第 6 个 `response_budget_exceeded` 是全局响应预算码，不能计作 Provider fallback。该契约还要继续由 timeout/panic/late-success/stale/duplicate/unknown/bulkhead 矩阵和 telemetry 锁定。
 
 ### 4.5 必须给 query、引用、状态和 Schema 设预算
 
@@ -258,7 +261,7 @@ provider_invalid_ranking
 provider_internal
 ```
 
-详细错误进入本地脱敏 trace，不进入 Agent-visible `ToolReference` 响应。
+详细错误进入本地脱敏 trace，不进入 Agent-visible `ToolReference` 响应。另有全局 `response_budget_exceeded`，用于结果超过 8 KiB 时的完整 reference 边界截断；它不表示 Provider 失败。
 
 ### 5.5 部分修复：资源预算与可观测状态
 
@@ -294,7 +297,7 @@ Spike 原先直接遍历 `queryFrequency map[string]int` 累加 BM25 分数。Go
 
 ## 6. 推荐的稳定接口
 
-规范 DTO 只保留一套，以 RFC [5.6 CandidateProvider 与融合](rfc-tool-search-progressive-discovery.md#56-candidateprovider-与融合)、[5.7 ToolReference](rfc-tool-search-progressive-discovery.md#57-toolreference) 和 [5.8 Inspect](rfc-tool-search-progressive-discovery.md#58-inspect) 为准。进程内的 `ToolSearchRequest/ToolSearchCandidateProvider` 仍是 non-public SPI；跨进程只允许依赖 `tool-search.v1` JSON。`dws schema search --request-json -` 和双 hash Inspect 已在当前分支实现，是否默认由 Host 使用仍受独立门禁约束。
+规范 DTO 只保留一套，以 RFC [5.6 CandidateProvider 与融合](rfc-tool-search-progressive-discovery.md#56-candidateprovider-与融合)、[5.7 ToolReference](rfc-tool-search-progressive-discovery.md#57-toolreference) 和 [5.8 Inspect](rfc-tool-search-progressive-discovery.md#58-inspect) 为准。进程内的 `ToolSearchRequest/ToolSearchCandidateProvider` 仍是 non-public SPI；跨进程只允许依赖 `tool-search.v1` JSON。`dws schema search --request-json -` 和双 hash Inspect 已在当前分支实现，DWS Skill/Agent 可以直接调用该链路；不依赖 Host 实现动态 Schema 注入。
 
 跨进程稳定链路是：
 
@@ -386,9 +389,9 @@ DWS 不选择某一个 GitHub 项目作为基础框架，而是组合经过源�
 
 | 能力 | 采用的模式 | DWS 的增强 |
 |---|---|---|
-| Deferred disclosure 协议 | Anthropic/OpenAI 的 defer → reference → load 形态 | 自建本地加载运行时、typed Catalog、双 hash 和 Inspect；不依赖 SDK 内不存在的本地 ranker |
-| Agent 编排 | BigTool 的显式 Search → bind → execute | 显式、versioned Search → Inspect 为规范路径；校验 unknown/stale ID，状态有界，权限仍在执行层 |
-| 自动触发（可选） | Semantic Kernel 的 recent-context retrieval | 只作为 Host optimization，复用同一 Search API/Trace；不拼工具输出，失败不拖垮模型调用 |
+| Deferred disclosure 协议 | Anthropic/OpenAI 的 defer → reference → load 形态 | DWS 不动态注册新外层工具；reference 通过双 hash Inspect 映射回同一 DWS 命令空间 |
+| Agent 编排 | BigTool/Codex 的显式 Search → load/bind → execute | DWS 元工具内的 versioned Search → Inspect → CLI Execute；校验 unknown/stale ID，权限仍在执行层 |
+| 自动触发（可选） | Semantic Kernel 的 recent-context retrieval | Skill 已能完成规范链路；Host adapter 只作为减少一次模型决策的可选 optimization，必须复用同一 Search API/Trace |
 | Namespace | OpenAI 的 qualified identity / namespace | 作为 reviewed hint 或已知产品 filter；未知、复合任务保留 global/multi-namespace recall |
 | 索引生命周期 | Ratel 的完整 BM25 统计、原子 Dense batch/rebuild | Catalog generation 绑定、build-then-swap；不照搬英文 tokenizer/model 或固定 `k1/b/depth` |
 | 多路召回与融合 | Ratel/Haystack 的独立深召回 + RRF | 稳定 `(score desc, canonical asc)`；Provider 失败逐字段回到本地结果，这是 DWS 自有契约 |

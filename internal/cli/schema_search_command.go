@@ -57,8 +57,15 @@ func newSchemaSearchCommand() *cobra.Command {
 		Long: `按自然语言或精确身份检索 ToolReference。
 
 输出固定为完整、紧凑的 tool-search.v1 JSON envelope。为保证版本、Catalog
-绑定和响应字节预算可验证，本命令不支持 --fields、--jq 或非 JSON --format。`,
+绑定和响应字节预算可验证，本命令不支持 --fields、--jq 或非 JSON --format。
+
+DWS 对 Agent 是一个元工具：已知子命令直接执行，未知子命令才使用 search。
+选中候选后，必须使用 response catalog 的 source/surface hash Inspect canonical_path，
+再按 primary_cli_path 执行；Search 结果本身不授权、不执行。`,
 		Example: `  dws schema search --query "查询群消息已读状态"
+  dws schema chat.query_msg_read_status --compact --format json \
+    --expected-source-hash "<search.catalog.source_hash>" \
+    --expected-surface-hash "<search.catalog.surface_hash>"
   printf '%s' '{"version":"tool-search.v1","query":"发群文件并确认已读","subqueries":["给群里发送文件消息","查询群消息已读状态"]}' |
     dws schema search --request-json -`,
 		Args:              cobra.NoArgs,

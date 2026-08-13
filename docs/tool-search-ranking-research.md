@@ -114,13 +114,19 @@ Agent/MCP 侧对应一个轻量 `search_tools`，返回 canonical path、摘要�
 
 `_tool_identity.py` 还实现 qualified name、bare/namespaced/deferred lookup key、合成 namespace、名字冲突诊断与 approval key；这比排序算法更值得复用。SDK 文档建议 namespace 尽量少于 10 个函数，但 `execution="client"` 明确不会由标准 Runner 执行，deferred/namespace 又是 Responses-only 特性。同样，SDK 开源的是声明、校验和 wire orchestration，**托管检索器和本地定义注入运行时均未公开**。DWS 可用 namespace 作 reviewed hint/hard filter，不应强制唯一 namespace 路由。
 
-### 3.3 MCP
+### 3.3 OpenAI Codex CLI
+
+上述“没有本地 ranker”只适用于 Agents SDK/托管 API，不适用于当前 Codex CLI。[Codex @ `b1373b7`](https://github.com/openai/codex/tree/b1373b74a27d1d9b65074a873202683355cae772) 已实现完整 Rust 本地 Tool Search：[handler](https://github.com/openai/codex/blob/b1373b74a27d1d9b65074a873202683355cae772/codex-rs/core/src/tools/handlers/tool_search.rs)使用 BM25，[projection](https://github.com/openai/codex/blob/b1373b74a27d1d9b65074a873202683355cae772/codex-rs/tools/src/tool_search.rs)索引 namespace、工具名/描述和递归参数 Schema，命中后把完整 deferred Schema 写入 `tool_search_output`。
+
+这证明 Host 原生 Search → load 闭环可以工程化，但不证明其 ranker 适合 DWS：Codex 使用 `Language::English`，没有 DWS 的 Exact Guard/`exact_filtered`、Catalog 双 hash、查询级 hard filter 和显式 stable tie-break。更重要的是执行模型不同：Codex 搜索多个外层工具，而 DWS 本身是一个元工具。DWS 的 Search 结果应双 hash Inspect 后映射回同一 CLI 命令空间，不需要复制 Codex 的动态 Registry。
+
+### 3.4 MCP
 
 [MCP Tools 规范](https://modelcontextprotocol.io/specification/draft/server/tools)中的 `tools/list` 负责枚举、分页、缓存和变更通知，不定义自然语言检索。客户端要自行建设 Catalog 搜索。
 
 [MCP 客户端最佳实践](https://modelcontextprotocol.io/docs/2026-07-28/develop/clients/client-best-practices)推荐 Search → Inspect → Execute，并列出 Regex/BM25、Embedding、小模型和混合检索。这意味着 DWS 不应修改 MCP 的 `tools/list` 语义来塞入模糊排序，而应提供独立 `search_tools` 或本地 Schema 搜索能力。
 
-### 3.4 AWS AgentCore Registry
+### 3.5 AWS AgentCore Registry
 
 [AWS 官方 Registry Search 文档](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/registry-search-records.html)披露了更完整的生产行为：关键词和语义检索并行后合并；name 对关键词排序影响最大；description 同时参与关键词和语义匹配；结构化 filter 在两路打分前应用；只有 Approved 记录可被搜索；索引采用最终一致性，刚批准的记录可能需要退避重试并用强一致读取确认状态。
 

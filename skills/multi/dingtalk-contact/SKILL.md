@@ -20,7 +20,7 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "contact +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws contact <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service contact --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "contact +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws contact <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws schema search --query "<用户意图>" --product contact --limit 5` 同时搜索原子命令和 shortcut。`dws shortcut list --service contact` 只作人工审计/兼容 fallback。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|

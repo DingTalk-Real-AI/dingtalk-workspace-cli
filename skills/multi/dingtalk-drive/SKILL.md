@@ -22,7 +22,7 @@ metadata:
 
 `drive` 当前有 28 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图按下方路由。
 
-仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service drive --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
+仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws schema search --query "<用户意图>" --product drive --limit 5` 同时搜索原子命令和 shortcut。`dws shortcut list` 只作人工审计/兼容 fallback；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## 意图表

@@ -39,7 +39,7 @@ cli_version: ">=1.0.15"
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->
 ## Shortcut 总览
 
-下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图应先按产品 Skill、意图表或任务 reference 选择唯一命令；命令已选中时直接执行，只在参数或安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service <service> --format json` 做最后回退；不要为已知高频意图加载完整产品 Catalog。
+下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图应先按产品 Skill、意图表或任务 reference 选择唯一命令；命令已选中时直接执行，只在参数或安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws schema search --query "<用户意图>" --limit 5` 搜索原子命令和 shortcut；`dws shortcut list` 只作人工审计/兼容 fallback，不要为已知高频意图加载完整产品 Catalog。
 
 | 服务 | shortcut 数 | multi skill |
 |---|---:|---|
@@ -210,7 +210,23 @@ Step 3 → 加 --yes 执行命令
 
 稳定 command identity、主 CLI path 和 alias 由 leaf `ContractFinal.Identity` 与真实 Cobra tree 精确绑定。Agent 不应读取 Catalog 文件、native annotation 或其他生成 JSON 来重新推断命令；所有运行时查询都以当前二进制交付的 Schema 投影为准。
 
+**未知命令路径**：DWS 对 Agent 是一个元工具，不要将搜索命中项动态注册成新外层工具。仅当现有 Skill/reference 都无法定位 CLI path 时执行：
+
 ```bash
+dws schema search --query "<用户意图>" --limit 5
+dws schema <candidate.canonical_path> --compact --format json \
+  --expected-source-hash "<search.catalog.source_hash>" \
+  --expected-surface-hash "<search.catalog.surface_hash>"
+dws <candidate.primary_cli_path> <按 schema-inspect.v1.tool_spec 组装的参数>
+```
+
+- `exact_filtered` 立即停止，不选 sibling 绕过；零候选、`abstained=true` 或语义无法区分时澄清。
+- `reason=catalog_changed` 时丢弃旧候选并重新 Search；只用 versioned Inspect 中的 `tool_spec` 组装参数。
+- Search/Inspect 都不授权、不执行；最后仍由同一 `dws` 的 profile、权限、confirmation 和 Cobra 校验。
+- 2～4 步复合意图先拆成 `subqueries`，通过 `dws schema search --request-json -` 合并候选；不要用整句话只排一次 Top-K。
+
+```bash
+# 已知产品时的人类浏览 fallback；未知命令优先用 schema search
 # 第 1 层：产品概览（~4.5KB，列出全部产品 + 工具数 + 用途摘要）
 dws schema
 
