@@ -12,54 +12,14 @@ import (
 	"os/exec"
 	"reflect"
 	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
-type toolSearchProviderStub struct {
-	ranking       []string
-	err           error
-	request       ToolSearchCandidateRequest
-	catalog       CatalogVersionRef
-	customCatalog bool
-	provider      string
-	version       string
-}
-
-func (s *toolSearchProviderStub) Retrieve(_ context.Context, request ToolSearchCandidateRequest) (ExternalCandidateRanking, error) {
-	s.request = request
-	catalog := request.Catalog
-	if s.customCatalog {
-		catalog = s.catalog
-	}
-	provider := s.provider
-	if provider == "" {
-		provider = "test-provider"
-	}
-	version := s.version
-	if version == "" {
-		version = "v1"
-	}
-	return ExternalCandidateRanking{
-		Catalog:          catalog,
-		Provider:         provider,
-		ProviderVersion:  version,
-		CanonicalRanking: append([]string(nil), s.ranking...),
-	}, s.err
-}
-
-type toolSearchProviderFunc func(context.Context, ToolSearchCandidateRequest) (ExternalCandidateRanking, error)
-
-func (f toolSearchProviderFunc) Retrieve(ctx context.Context, request ToolSearchCandidateRequest) (ExternalCandidateRanking, error) {
-	return f(ctx, request)
-}
-
 func TestToolSearchExactGuardReturnsInspectReference(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	response, err := engine.Search(context.Background(), ToolSearchRequest{Query: "chat send"})
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
@@ -80,7 +40,7 @@ func TestToolSearchExactGuardReturnsInspectReference(t *testing.T) {
 }
 
 func TestToolSearchExactGuardNormalizesNFKCAndAliases(t *testing.T) {
-	base := newToolSearchTestEngine(t, nil)
+	base := newToolSearchTestEngine(t)
 	registry := base.index.Registry()
 	for productIndex := range registry.Products {
 		for toolIndex := range registry.Products[productIndex].Tools {
@@ -93,7 +53,7 @@ func TestToolSearchExactGuardNormalizesNFKCAndAliases(t *testing.T) {
 	config := DefaultToolSearchConfig()
 	config.CatalogSourceHash = "source-test"
 	config.CatalogSurfaceHash = "surface-test"
-	engine, err := NewToolSearchEngine(registry, config, nil)
+	engine, err := NewToolSearchEngine(registry, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +69,7 @@ func TestToolSearchExactGuardNormalizesNFKCAndAliases(t *testing.T) {
 }
 
 func TestToolSearchExactGuardCoversIndexedIdentitySet(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	paths := engine.index.CanonicalPaths()
 	if len(paths) == 0 {
 		t.Fatal("Tool Search identity set is empty")
@@ -132,7 +92,7 @@ func TestToolSearchExactGuardCoversIndexedIdentitySet(t *testing.T) {
 }
 
 func TestToolSearchRanksChineseAndAppliesHardFilters(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	response, err := engine.Search(context.Background(), ToolSearchRequest{
 		Query:      "给群里发送消息",
 		ProductIDs: []string{"chat"},
@@ -165,7 +125,7 @@ func TestToolSearchRanksChineseAndAppliesHardFilters(t *testing.T) {
 }
 
 func TestToolSearchExactFilteredDoesNotFallThroughToSibling(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	tests := []struct {
 		name    string
 		request ToolSearchRequest
@@ -193,7 +153,7 @@ func TestToolSearchExactFilteredDoesNotFallThroughToSibling(t *testing.T) {
 }
 
 func TestToolSearchIndexesParameterDescriptionsAndExcludesUnavailableTools(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	parameterResult, err := engine.Search(context.Background(), ToolSearchRequest{Query: "本地媒体文件路径"})
 	if err != nil {
 		t.Fatalf("Search(parameter description) error = %v", err)
@@ -216,157 +176,8 @@ func TestToolSearchIndexesParameterDescriptionsAndExcludesUnavailableTools(t *te
 	}
 }
 
-func TestToolSearchProviderCanRecoverSparseMissAndRRF(t *testing.T) {
-	provider := &toolSearchProviderStub{ranking: []string{"doc.read", "chat.send"}}
-	engine := newToolSearchTestEngine(t, provider)
-	response, err := engine.Search(context.Background(), ToolSearchRequest{
-		Query:          "群聊动作",
-		Limit:          3,
-		CandidateLimit: 3,
-	})
-	if err != nil {
-		t.Fatalf("Search() error = %v", err)
-	}
-	if response.Strategy != ToolSearchLexicalBM25Action+"_provider_rrf" {
-		t.Fatalf("strategy = %q", response.Strategy)
-	}
-	if provider.request.Query != "群聊动作" || provider.request.CandidateLimit != 3 {
-		t.Fatalf("provider received %#v", provider.request)
-	}
-	if provider.request.Catalog != (CatalogVersionRef{SourceHash: "source-test", SurfaceHash: "surface-test"}) {
-		t.Fatalf("provider Catalog = %#v", provider.request.Catalog)
-	}
-	foundProviderOnly := false
-	for _, candidate := range response.Candidates {
-		if candidate.CanonicalPath == "doc.read" {
-			foundProviderOnly = true
-			if candidate.sparseScore != 0 || !stringSliceContains(candidate.RankSources, "provider") {
-				t.Fatalf("provider-only candidate = %#v", candidate)
-			}
-		}
-	}
-	if !foundProviderOnly {
-		t.Fatalf("provider-only candidate absent: %#v", response.Candidates)
-	}
-}
-
-func TestToolSearchProviderFailureAndInvalidOutputFallBack(t *testing.T) {
-	request := ToolSearchRequest{Query: "群聊消息"}
-	local, err := newToolSearchTestEngine(t, nil).Search(context.Background(), request)
-	if err != nil {
-		t.Fatalf("local Search() error = %v", err)
-	}
-	for _, test := range []struct {
-		name     string
-		provider ToolSearchCandidateProvider
-	}{
-		{name: "error", provider: &toolSearchProviderStub{err: errors.New("offline")}},
-		{name: "unknown", provider: &toolSearchProviderStub{ranking: []string{"unknown.tool"}}},
-		{name: "duplicate", provider: &toolSearchProviderStub{ranking: []string{"chat.send", "chat.send"}}},
-		{name: "stale", provider: &toolSearchProviderStub{ranking: []string{"chat.send"}, customCatalog: true, catalog: CatalogVersionRef{SourceHash: "old", SurfaceHash: "old"}}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			engine := newToolSearchTestEngine(t, test.provider)
-			response, err := engine.Search(context.Background(), request)
-			if err != nil {
-				t.Fatalf("Search() error = %v", err)
-			}
-			if response.Strategy != ToolSearchLexicalBM25Action+"_fallback" || !response.Degraded || len(response.WarningCodes) != 1 {
-				t.Fatalf("response = %#v, want deterministic fallback", response)
-			}
-			encoded, marshalErr := json.Marshal(response)
-			if marshalErr != nil {
-				t.Fatal(marshalErr)
-			}
-			if strings.Contains(string(encoded), "offline") || strings.Contains(string(encoded), "old") {
-				t.Fatalf("response leaked provider detail: %s", encoded)
-			}
-			if len(response.Candidates) == 0 || response.Candidates[0].CanonicalPath != "chat.send" {
-				t.Fatalf("fallback candidates = %#v", response.Candidates)
-			}
-			if !reflect.DeepEqual(response.Candidates, local.Candidates) {
-				t.Fatalf("fallback candidates differ from local-only\nfall: %#v\nlocal:%#v", response.Candidates, local.Candidates)
-			}
-		})
-	}
-}
-
-func TestToolSearchProviderTimeoutReturnsLocalRanking(t *testing.T) {
-	provider := toolSearchProviderFunc(func(ctx context.Context, _ ToolSearchCandidateRequest) (ExternalCandidateRanking, error) {
-		<-ctx.Done()
-		return ExternalCandidateRanking{}, ctx.Err()
-	})
-	engine := newToolSearchTestEngine(t, provider)
-	engine.config.ProviderTimeout = time.Millisecond
-	response, err := engine.Search(context.Background(), ToolSearchRequest{Query: "群聊消息"})
-	if err != nil {
-		t.Fatalf("Search() error = %v", err)
-	}
-	if !response.Degraded || response.DegradedReasonCode != toolSearchWarningProviderTimeout {
-		t.Fatalf("response = %#v", response)
-	}
-}
-
-func TestToolSearchProviderPanicReturnsLocalRanking(t *testing.T) {
-	provider := toolSearchProviderFunc(func(context.Context, ToolSearchCandidateRequest) (ExternalCandidateRanking, error) {
-		panic("provider secret")
-	})
-	engine := newToolSearchTestEngine(t, provider)
-	response, err := engine.Search(context.Background(), ToolSearchRequest{Query: "群聊消息"})
-	if err != nil {
-		t.Fatalf("Search() error = %v", err)
-	}
-	if !response.Degraded || response.DegradedReasonCode != toolSearchWarningProviderInternal {
-		t.Fatalf("response = %#v", response)
-	}
-}
-
-func TestToolSearchProviderLateSuccessIsNotAccepted(t *testing.T) {
-	provider := toolSearchProviderFunc(func(ctx context.Context, request ToolSearchCandidateRequest) (ExternalCandidateRanking, error) {
-		<-ctx.Done()
-		return ExternalCandidateRanking{
-			Catalog: request.Catalog, Provider: "late", ProviderVersion: "v1",
-			CanonicalRanking: []string{"doc.read"},
-		}, nil
-	})
-	engine := newToolSearchTestEngine(t, provider)
-	engine.config.ProviderTimeout = time.Millisecond
-	response, err := engine.Search(context.Background(), ToolSearchRequest{Query: "群聊消息"})
-	if err != nil {
-		t.Fatalf("Search() error = %v", err)
-	}
-	if !response.Degraded || response.DegradedReasonCode != toolSearchWarningProviderTimeout || response.Strategy == ToolSearchLexicalBM25Action+"_provider_rrf" {
-		t.Fatalf("response = %#v", response)
-	}
-}
-
-func TestToolSearchProviderIgnoringContextIsBulkheaded(t *testing.T) {
-	release := make(chan struct{})
-	defer close(release)
-	var starts atomic.Int32
-	provider := toolSearchProviderFunc(func(context.Context, ToolSearchCandidateRequest) (ExternalCandidateRanking, error) {
-		starts.Add(1)
-		<-release
-		return ExternalCandidateRanking{}, errors.New("released")
-	})
-	engine := newToolSearchTestEngine(t, provider)
-	engine.config.ProviderTimeout = time.Millisecond
-	for run := 0; run < 2; run++ {
-		response, err := engine.Search(context.Background(), ToolSearchRequest{Query: "群聊消息"})
-		if err != nil {
-			t.Fatalf("Search(%d) error = %v", run, err)
-		}
-		if !response.Degraded || response.DegradedReasonCode != toolSearchWarningProviderTimeout {
-			t.Fatalf("Search(%d) response = %#v", run, response)
-		}
-	}
-	if got := starts.Load(); got != 1 {
-		t.Fatalf("provider starts = %d, want one bounded stuck call", got)
-	}
-}
-
 func TestToolSearchSubqueriesRoundRobinAndAcceptsDeepCandidateLimit(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	response, err := engine.SearchSubqueries(
 		context.Background(),
 		[]string{"群聊发送消息", "读取在线文档"},
@@ -384,13 +195,13 @@ func TestToolSearchSubqueriesRoundRobinAndAcceptsDeepCandidateLimit(t *testing.T
 	if response.Candidates[0].Rank != 1 || response.Candidates[1].Rank != 2 {
 		t.Fatalf("ranks = %#v", response.Candidates)
 	}
-	if stringSliceContains(response.WarningCodes, toolSearchWarningResponseBudgetExceeded) || response.Truncated {
+	if response.Truncated {
 		t.Fatalf("internal subquery budget leaked into final response: %#v", response)
 	}
 }
 
 func TestToolSearchActionRerankDoesNotChangeNoSignalOrdering(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	raw := newToolSearchBM25Retriever(engine.documents, engine.config.FieldWeights)
 	action := newToolSearchActionRetriever(raw, engine.documents)
 	request := ToolSearchLexicalRequest{
@@ -412,7 +223,7 @@ func TestToolSearchActionRerankDoesNotChangeNoSignalOrdering(t *testing.T) {
 }
 
 func TestToolSearchActionRerankDefersUnclassifiedTechnicalASCII(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	raw := newToolSearchBM25Retriever(engine.documents, engine.config.FieldWeights)
 	action := newToolSearchActionRetriever(raw, engine.documents)
 	request := ToolSearchLexicalRequest{
@@ -437,7 +248,7 @@ func TestToolSearchActionRerankDefersUnclassifiedTechnicalASCII(t *testing.T) {
 }
 
 func TestToolSearchRejectsInvalidRequestsAndCanceledContext(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	for _, request := range []ToolSearchRequest{
 		{},
 		{Query: "query", Limit: maxToolSearchLimit + 1},
@@ -476,7 +287,7 @@ func TestToolSearchRejectsInvalidRequestsAndCanceledContext(t *testing.T) {
 }
 
 func TestToolSearchSubqueriesFailClosedOnExactFilteredAction(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	response, err := engine.SearchSubqueries(
 		context.Background(),
 		[]string{"chat.send", "查询群消息已读状态"},
@@ -506,7 +317,7 @@ func TestDefaultToolSearchConfigExcludesUseWhen(t *testing.T) {
 }
 
 func TestToolSearchLexicalRetrieverCanSelectGoTFIDF(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	engine.lexical = newToolSearchTFIDFRetriever(engine.documents, engine.config.FieldWeights)
 	response, err := engine.Search(context.Background(), ToolSearchRequest{
 		Query:      "给群里发送消息",
@@ -524,7 +335,7 @@ func TestToolSearchLexicalRetrieverCanSelectGoTFIDF(t *testing.T) {
 }
 
 func TestToolSearchLexicalRetrieverScoresOnlyEligibleDomain(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	hits, err := engine.lexical.Retrieve(context.Background(), ToolSearchLexicalRequest{
 		Query:                  "发送群聊消息",
 		CandidateLimit:         5,
@@ -554,7 +365,7 @@ func TestToolSearchResponseBudgetDropsWholeReferences(t *testing.T) {
 	config := DefaultToolSearchConfig()
 	config.CatalogSourceHash = "source-test"
 	config.CatalogSurfaceHash = "surface-test"
-	engine, err := NewToolSearchEngine(registry, config, nil)
+	engine, err := NewToolSearchEngine(registry, config)
 	if err != nil {
 		t.Fatalf("NewToolSearchEngine() error = %v", err)
 	}
@@ -569,7 +380,7 @@ func TestToolSearchResponseBudgetDropsWholeReferences(t *testing.T) {
 	if len(payload)+1 > maxToolSearchResponseBytes {
 		t.Fatalf("wire response bytes = %d, max = %d", len(payload)+1, maxToolSearchResponseBytes)
 	}
-	if !response.Truncated || !stringSliceContains(response.WarningCodes, toolSearchWarningResponseBudgetExceeded) {
+	if !response.Truncated {
 		t.Fatalf("response = %#v, want budget truncation", response)
 	}
 	for _, candidate := range response.Candidates {
@@ -620,10 +431,8 @@ func TestToolSearchTokenizesIdentifiersCamelCaseAndChineseBigrams(t *testing.T) 
 func TestToolSearchIsDeterministicAcrossProcesses(t *testing.T) {
 	const helperEnv = "DWS_TOOL_SEARCH_DETERMINISM_CHILD"
 	if os.Getenv(helperEnv) == "1" {
-		engine := newToolSearchTestEngine(t, nil)
-		provider := &toolSearchProviderStub{ranking: []string{"chat.read_status"}}
-		providerEngine := newToolSearchTestEngine(t, provider)
-		tfidfEngine := newToolSearchTestEngine(t, nil)
+		engine := newToolSearchTestEngine(t)
+		tfidfEngine := newToolSearchTestEngine(t)
 		tfidfEngine.lexical = newToolSearchTFIDFRetriever(tfidfEngine.documents, tfidfEngine.config.FieldWeights)
 		tests := []struct {
 			name    string
@@ -633,7 +442,6 @@ func TestToolSearchIsDeterministicAcrossProcesses(t *testing.T) {
 			{name: "pure_chinese", engine: engine, request: ToolSearchRequest{Query: "给群里发文件并确认消息已读", Limit: 20}},
 			{name: "mixed_identifiers", engine: engine, request: ToolSearchRequest{Query: "给群里发文件并确认消息已读 baseId openConversationId status upload", Limit: 20}},
 			{name: "exact", engine: engine, request: ToolSearchRequest{Query: "chat.read_status", Limit: 20}},
-			{name: "provider_fusion", engine: providerEngine, request: ToolSearchRequest{Query: "无词面补召回", Limit: 20}},
 			{name: "tfidf", engine: tfidfEngine, request: ToolSearchRequest{Query: "给群里发文件并确认消息已读", Limit: 20}},
 		}
 		outputs := make([]struct {
@@ -677,7 +485,7 @@ func TestToolSearchIsDeterministicAcrossProcesses(t *testing.T) {
 			if err := json.Unmarshal(output, &outputs); err != nil {
 				t.Fatalf("decode determinism golden: %v", err)
 			}
-			if len(outputs) != 5 || outputs[2].Response.Strategy != "exact_guard" || outputs[3].Response.Strategy != ToolSearchLexicalBM25Action+"_provider_rrf" || outputs[4].Response.Strategy != ToolSearchLexicalTFIDF {
+			if len(outputs) != 4 || outputs[2].Response.Strategy != "exact_guard" || outputs[3].Response.Strategy != ToolSearchLexicalTFIDF {
 				t.Fatalf("golden scenarios = %#v", outputs)
 			}
 			continue
@@ -689,7 +497,7 @@ func TestToolSearchIsDeterministicAcrossProcesses(t *testing.T) {
 }
 
 func BenchmarkToolSearchChineseQuery(b *testing.B) {
-	engine := newToolSearchTestEngine(b, nil)
+	engine := newToolSearchTestEngine(b)
 	request := ToolSearchRequest{Query: "给群里发文件并确认消息已读", Limit: 5}
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -703,7 +511,7 @@ func BenchmarkToolSearchChineseQuery(b *testing.B) {
 func BenchmarkToolSearchBuild(b *testing.B) {
 	b.ReportAllocs()
 	for index := 0; index < b.N; index++ {
-		_ = newToolSearchTestEngine(b, nil)
+		_ = newToolSearchTestEngine(b)
 	}
 }
 
@@ -712,7 +520,7 @@ type toolSearchTestingT interface {
 	Fatalf(string, ...any)
 }
 
-func newToolSearchTestEngine(t toolSearchTestingT, provider ToolSearchCandidateProvider) *ToolSearchEngine {
+func newToolSearchTestEngine(t toolSearchTestingT) *ToolSearchEngine {
 	t.Helper()
 	tools := []ToolSpec{
 		toolSearchTestTool("chat", "send", "chat send", "发送群聊消息", "write"),
@@ -740,7 +548,7 @@ func newToolSearchTestEngine(t toolSearchTestingT, provider ToolSearchCandidateP
 	config := DefaultToolSearchConfig()
 	config.CatalogSourceHash = "source-test"
 	config.CatalogSurfaceHash = "surface-test"
-	engine, err := NewToolSearchEngine(registry, config, provider)
+	engine, err := NewToolSearchEngine(registry, config)
 	if err != nil {
 		t.Fatalf("NewToolSearchEngine() error = %v", err)
 	}

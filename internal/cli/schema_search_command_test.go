@@ -40,44 +40,10 @@ func TestSchemaSearchCommandExactAndVersioned(t *testing.T) {
 	if response.Catalog != wantCatalog {
 		t.Fatalf("Catalog = %#v, want %#v", response.Catalog, wantCatalog)
 	}
-}
-
-func TestSchemaSearchCommandAcceptsValidatedExternalRanking(t *testing.T) {
-	installSchemaSearchTestEngine(t)
-	request := ToolSearchV1Request{
-		Version:        "tool-search.v1",
-		Query:          "zzzz-no-local-token-overlap",
-		Limit:          1,
-		CandidateLimit: 2,
-		ExternalRanking: &ExternalCandidateRanking{
-			Catalog:          CatalogVersionRef{SourceHash: "source-test", SurfaceHash: "surface-test"},
-			Provider:         "test-provider",
-			ProviderVersion:  "fixture-v1",
-			CanonicalRanking: []string{"chat.read_status"},
-		},
-	}
-	payload, err := json.Marshal(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := &cobra.Command{Use: "dws"}
-	root.AddCommand(NewSchemaCommand())
-	var stdout bytes.Buffer
-	root.SetOut(&stdout)
-	root.SetIn(bytes.NewReader(payload))
-	root.SetArgs([]string{"schema", "search", "--request-json", "-"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("schema search request execute: %v", err)
-	}
-	var response ToolSearchResponse
-	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if response.Strategy != ToolSearchLexicalBM25Action+"_provider_rrf" || len(response.Candidates) != 1 {
-		t.Fatalf("response = %#v", response)
-	}
-	if response.Candidates[0].CanonicalPath != "chat.read_status" {
-		t.Fatalf("candidate = %#v", response.Candidates[0])
+	for _, removed := range []string{"external_ranking", "degraded", "degraded_reason_code", "warning_codes", "_fallback"} {
+		if strings.Contains(stdout.String(), removed) {
+			t.Fatalf("removed fallback field %q leaked into response: %s", removed, stdout.String())
+		}
 	}
 }
 
@@ -85,19 +51,14 @@ func TestSchemaSearchRequestRejectsUnboundedOrAmbiguousInput(t *testing.T) {
 	if _, err := decodeToolSearchV1Request(strings.NewReader(`{"version":"tool-search.v1","query":"x","unknown":true}`)); validationReason(err) != "invalid_request_json" {
 		t.Fatal("unknown field was accepted")
 	}
+	if _, err := decodeToolSearchV1Request(strings.NewReader(`{"version":"tool-search.v1","query":"x","external_ranking":{}}`)); validationReason(err) != "invalid_request_json" {
+		t.Fatal("removed external_ranking field was accepted")
+	}
 	oversized := strings.NewReader(strings.Repeat("x", maxToolSearchRequestBytes+1))
 	if _, err := decodeToolSearchV1Request(oversized); validationReason(err) != "request_too_large" {
 		t.Fatal("oversized request was accepted")
 	}
-	_, err := validateToolSearchV1Request(ToolSearchV1Request{
-		Version:         "tool-search.v1",
-		Subqueries:      []string{"one"},
-		ExternalRanking: &ExternalCandidateRanking{},
-	})
-	if validationReason(err) != "external_ranking_with_subqueries" {
-		t.Fatal("subqueries plus one action-sized external ranking was accepted")
-	}
-	_, err = validateToolSearchV1Request(ToolSearchV1Request{Query: "x", Subqueries: []string{"x"}})
+	_, err := validateToolSearchV1Request(ToolSearchV1Request{Query: "x", Subqueries: []string{"x"}})
 	if validationReason(err) != "unsupported_version" || !strings.Contains(err.Error(), `"version":"tool-search.v1"`) || !strings.Contains(err.Error(), "subqueries") {
 		t.Fatalf("missing-version guidance = %v", err)
 	}
@@ -120,8 +81,8 @@ func TestSchemaSearchHelpDocumentsStructuredRequest(t *testing.T) {
 
 func installSchemaSearchTestEngine(t *testing.T) {
 	t.Helper()
-	testseam.Swap(t, &schemaSearchNewEngine, func(provider ToolSearchCandidateProvider) (*ToolSearchEngine, error) {
-		return newToolSearchTestEngine(t, provider), nil
+	testseam.Swap(t, &schemaSearchNewEngine, func() (*ToolSearchEngine, error) {
+		return newToolSearchTestEngine(t), nil
 	})
 }
 

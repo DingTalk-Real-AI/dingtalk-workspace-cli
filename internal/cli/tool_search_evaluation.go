@@ -149,7 +149,7 @@ func BuildDeliveryToolSearchDiagnosticComparisonForAlgorithm(ctx context.Context
 	config.LexicalAlgorithm = algorithm
 	config.CatalogSourceHash = loaded.Snapshot.SourceHash
 	config.CatalogSurfaceHash = loaded.Snapshot.SurfaceHash
-	engine, err := NewToolSearchEngine(loaded.Registry, config, nil)
+	engine, err := NewToolSearchEngine(loaded.Registry, config)
 	if err != nil {
 		return ToolSearchDiagnosticComparison{}, err
 	}

@@ -23,8 +23,6 @@ Agent 通过同一 DWS 元工具拆解任务
       ├─ exact hit → eligibility check → exact reference / typed exact_filtered
       └─ no hit → Catalog availability / namespace / effect Hard Filter
   → 可替换的轻量词法召回
-  → 可选的宿主外部候选（带 Catalog 版本）
-  → RRF / 确定性融合
   → contradiction / policy gate
   → 最多 5 个 ToolReference
   → Inspect 完整 ToolSpec
@@ -35,7 +33,7 @@ Agent 通过同一 DWS 元工具拆解任务
 
 1. **DWS CLI 不内嵌 Dense/Embedding 模型。** 当前 `dws` 二进制约 44 MiB，实验模型 `BAAI/bge-small-zh-v1.5` 约 90 MB，且需要 ONNX runtime、多平台适配和模型生命周期管理。当前 proxy 评测中的收益不足以支持将这些成本变成 CLI 的强依赖。
 2. **BM25 不是架构前提。** 词法层定义为可替换接口。Alpha 以 Okapi BM25 作为稳定 control，同时 shadow TF-IDF cosine 和 BM25+；独立 holdout 通过前不宣布任何算法胜出。
-3. **Dense 仅作为可选 CandidateProvider。** Agent Host 或已有服务可以提供独立候选集；DWS 验证 canonical、过滤非法候选并与本地词法结果融合。Provider 失败时确定性降级，本地 CLI 仍可离线工作。
+3. **不实现 CandidateProvider、外部 ranking 或 RRF fallback。** Dense/Hybrid 只保留为历史评测对照，不进入 CLI、公开协议或 Host 接入面。当前规模下，本地确定性词法检索足以支持 Alpha 验证；额外远端链路的认证、版本、超时、融合和失败状态属于过度设计。
 4. **Exact、Search、Inspect、Execute 必须分层。** 搜索结果不是可执行 Schema；Agent 必须精确 Inspect 后才能组装参数和执行。
 5. **多动作任务先拆解后检索。** 每个动作保留候选预算，再做集合合并和完整性校验，不能把整个工作流只当作一个 query 排一次 Top-5。
 6. **相关性不等于安全。** `avoid_when`、effect、确认、权限和幂等约束属于独立 gate；排序分数不得表述为“可信概率”。
@@ -43,15 +41,14 @@ Agent 通过同一 DWS 元工具拆解任务
 
 ### 1.1 2026-08-13 主线合并后的范围与实现状态
 
-本分支已合并 `upstream/main@5fed80fc`。主线移除了旧 Recovery 实现，并把 Catalog 迁移为“Go 声明即 Catalog”的运行时装配；因此本 RFC 的交付范围同步收敛为 Tool Search 与双 hash Inspect，旧 Sandbox/Recovery 工作仅保存在归档分支 `archive/sandbox-recovery-pre-main-20260813`，不会被恢复到当前分支。安全恢复仍是后续独立 RFC，不是本次 Search 发布能力。
+本分支已合并 `upstream/main@346444ea`。主线移除了旧 Recovery 实现，并把 Catalog 迁移为“Go 声明即 Catalog”的运行时装配；因此本 RFC 的交付范围同步收敛为 Tool Search 与双 hash Inspect，旧 Sandbox/Recovery 工作仅保存在归档分支 `archive/sandbox-recovery-pre-main-20260813`，不会被恢复到当前分支。安全恢复仍是后续独立 RFC，不是本次 Search 发布能力。
 
 Catalog 的规范数据是 Go `ProductDecl` / `ContractDecl` 和 `ResolveSchemaBuild` 的结构化结果。仓库不提交 Catalog JSON，也不从 JSON 加载生产索引；只有评测/CI 会调用 `cmd_schema_catalog`，把分片临时生成到被忽略的 `.worktrees/policy-tmp/tool-search-schema-catalog`。生成器、运行时 Search、评测聚合与可信度校验的核心框架均为 Go。
 
 当前 Implemented (unreleased)：
 
-- `dws schema search` 的 exact / `exact_filtered`、hard filter、Go BM25/TF-IDF、动作重排、稳定 RRF 和资源预算；
+- `dws schema search` 的 exact / `exact_filtered`、hard filter、Go BM25/TF-IDF、动作重排和资源预算；
 - `ToolReference → schema Inspect` 的 source/surface 双 hash 闭环与 typed `catalog_changed`；
-- 可选 CandidateProvider 的版本握手、超时、非法候选校验、脱敏 warning 与本地确定性降级；
 - 由运行时声明直接生成的 Go 诊断对比、中文切片、workflow、负例暴露、身份与完整性指标。
 
 当前仍未通过：独立 qrels、真实模型配对 Agent A/B、英文切片、线上 contradiction gate 与 cold subprocess SLA。因此状态仍是 Proposed，不得把同源诊断指标表述成线上任务成功率。
@@ -146,9 +143,8 @@ DWS 已经具备：
 
 - 本地轻量检索不增加第三方 Go 依赖，不要求网络、模型下载、GPU 或个人凭据。
 - 继续复用同一个 `SchemaRegistry`，避免 Catalog、CLI 和 Agent metadata 出现双事实源。
-- CandidateProvider 是可选项；外部服务超时、离线或返回非法 canonical 时，本地结果仍然可用。
 - ToolReference 携带 Catalog source/surface hash，便于审计搜索和 Inspect 是否基于同一版本。
-- 检索器、provider、policy gate 和 executor 分层后，可以独立评测、灰度和回退。
+- 检索器、policy gate 和 executor 分层后，可以独立评测与灰度。
 
 ### 3.4 性能成本与当前缺口
 
@@ -204,7 +200,7 @@ FastEmbed + `BAAI/bge-small-zh-v1.5` 的 proxy 结果显示：
 - Hybrid 会损伤精确 identity，必须由 Exact Guard 隔离；
 - 20/572 个工具文本超过 Dense 的单段 512 token 范围，Dense 在这些工具上的召回更差，需要分字段/分块。
 
-因此保留“外部可选语义补召回”，否决“纯 Dense 替换词法检索”。
+因此 Dense/Hybrid 只保留为历史实验对照，否决“纯 Dense 替换词法检索”和“外部 Provider 进入当前产品链路”。
 
 ### 4.4 阶段四：CLI 体积约束推翻内嵌模型
 
@@ -214,7 +210,6 @@ FastEmbed + `BAAI/bge-small-zh-v1.5` 的 proxy 结果显示：
 
 ```text
 DWS 本地 Exact + 轻量词法
-  + Agent Host 可选 CandidateProvider
 ```
 
 ### 4.5 阶段五：BM25 假设被重新打开
@@ -286,14 +281,14 @@ Architecture Audit 还发现并推动修复了 Spike 中的四个问题：
 源码调研改变或强化了以下决策：
 
 1. **Progressive disclosure 不是授权。** NemoClaw 明确保留完整 executor registry；隐藏工具名如果被猜中仍可能进入执行器。因此搜索/披露只优化上下文，ACL、确认、凭据和 sandbox 必须在执行层再次生效。
-2. **Provider 必须带 Catalog 版本。** 只返回 canonical 无法识别“名称仍存在但语义已变化”的旧索引；Provider request/response 都必须绑定 source/surface hash，版本不一致时整路丢弃并走本地 fallback。
+2. **外部 Provider 不进入当前方案。** 版本、认证、超时、融合与降级会显著扩大协议和故障面；历史原型已删除。
 3. **Exact 被过滤时不得 fuzzy fallback。** 明确 canonical/CLI identity 命中但因 product/effect/exclude/availability 不可用，应返回 typed `exact_filtered`，不能推荐一个相似 sibling。
 4. **索引更新必须按完整 snapshot 原子切换。** Ratel 在固定 commit 中实现了 BM25 corpus 变化后重建统计、Dense batch 先校验 model fingerprint/维度再提交；DWS 静态 Catalog 可在构造时一次完成，未来热更新选择更强的 build-then-swap 契约。
 5. **资源预算不能只有 Top-K。** 公开接口还要限制 query、subquery 数、引用/响应 bytes、单 leaf Schema bytes 和 Host 累积已发现工具状态。
-6. **外部项目没有替 DWS 实现自动降级。** Ratel Dense/Hybrid 和 Haystack 子检索失败都会抛错；DWS 的 provider 失败返回本地确定性结果是自己的契约，必须独立测试。
+6. **外部项目的多路检索失败语义不能平移到 DWS。** Ratel Dense/Hybrid 和 Haystack 子检索失败都会抛错；当前 DWS 通过删除外部检索臂直接消除这类故障面。
 7. **参数描述应按 arm 消融。** ToolUniverse keyword 的 docstring 直接证明作者因英文生物医学模板噪声只索引参数名，但其 embedding arm 又编码完整 JSON；仓库无消融，ASCII tokenizer 对中文零召回。它证明“字段策略可按通道不同”和作者设计理由，不证明中文 DWS 应排除参数描述。DWS 续测中加入参数描述仅 +0.50～0.66 pp 且 CI 跨 0，因此保持 shadow。
 8. **生产投影若包含 `use_when` 会在当前 proxy 上泄漏。** 602 条 intent 正来自 `use_when`；续测含该字段时 TF-IDF/BM25 R@5 均为 100%。因此当前分支已把 `IncludeUseWhen` 默认翻转为 `false`，含该字段的结果只能标记为 leakage upper bound，不能进入选型。
-9. **TF-IDF+Dense 是 shadow 候选。** 默认 RRF 的 proxy R@5 为 87.87%，dev sweep 最好 88.70%，高于字段 BM25+Dense；但 product-cluster CI 仍跨 0，且参数在同一 proxy 上选择，不改变“Dense 外置、独立 test 后定默认”的结论。
+9. **TF-IDF+Dense 只是历史实验。** 默认 RRF 的 proxy R@5 为 87.87%，dev sweep 最好 88.70%，但 product-cluster CI 跨 0，参数又在同一 proxy 上选择，不足以承担外部 Provider 的产品复杂度。
 10. **ToolRet 只提供指标/数据方法论。** `Comprehensiveness@K = mean(Recall@K == 1)`、分级 qrels、instruction/no-instruction 和固定一阶段候选值得采用；固定 commit 的 BM25/ColBERT 路径存在直接崩溃/错误 qrels 等缺陷、无 tests、数据集未锁 revision 且全英文，不能复制 harness 或用于中文结论。
 
 ### 4.9 阶段九：五个独立 Reviewer 复核
@@ -302,13 +297,13 @@ Architecture Audit 还发现并推动修复了 Spike 中的四个问题：
 
 | Reviewer | 审查边界 | 纳入 RFC 的关键修正 |
 |---|---|---|
-| GitHub Architecture | 固定 commit 与 DWS API 映射 | `exact_filtered` 终止；Provider 版本/身份/timeout 边界；补齐 Invocation identity/evidence |
+| GitHub Architecture | 固定 commit 与 DWS API 映射 | `exact_filtered` 终止；删除外部 Provider 边界；补齐 Invocation identity/evidence |
 | Retrieval | Ratel、ToolUniverse、Haystack、ToolRet 源码 | 纠正“自动降级”“中文支持”“缓存新鲜度”和 benchmark 可复用性过度表述 |
 | Recovery | Runner、SafetySpec、journal、probe | 发现成功状态过度推断、311/322 写工具幂等未知、journal 非原子与 Verify 缺口 |
 | Evaluation v2 | 泄漏、统计、中文/算法公平性 | 要求 ProjectionVersion、Go/Python parity、cluster CI 和预注册门禁 |
 | RFC Delivery | 协议可实施性与文档一致性 | 明确 Host/CLI stdin/stdout JSON、Search→Inspect hash closure、Contract owner/transport、唯一 normative DTO |
 
-五方共同否决了“当前 Spike 已可直接公开”的结论：定向单测通过只证明实验内核可运行，不代表 Host 边界、Inspect 版本闭环或安全恢复已经实现。因此 RFC 状态保持 Proposed，实施顺序改为“内核 → local-only Search/Inspect → Provider shadow/fusion → managed execution/recovery”。
+五方共同否决了“当前 Spike 已可直接公开”的结论：定向单测通过只证明实验内核可运行，不代表 Inspect 版本闭环或安全恢复已经实现。因此 RFC 状态保持 Proposed，实施顺序收敛为“本地内核 → local-only Search/Inspect → contradiction gate → 后续独立 execution/recovery RFC”。
 
 ### 4.10 阶段十：两种 Agent 编排范式复核
 
@@ -330,9 +325,7 @@ reviewed CommandRegistry + Cobra + reviewed metadata
                          ↓ generation
                   typed SchemaRegistry
                     ├─ SchemaIndex: Exact / Inspect
-                    └─ SearchIndex: Lexical retrieval
-                                      ↑ optional
-                         untrusted ExternalRanking
+                    └─ SearchIndex: local lexical retrieval
 ```
 
 搜索只能读取最终、已验证的 `SchemaRegistry`。不得：
@@ -373,7 +366,7 @@ resolve identity
 3. 请求指定的 effect；
 4. 调用方明确排除的 canonical；
 
-本地 Catalog availability 不等价于用户真实业务权限。Search v1 不接收“已授权”布尔值，也不输出 authorized。Host 可以基于自己的同版本 Catalog view 与 policy 结果缩小外部 Provider 的检索域，但该集合不能扩大 DWS 本地 eligible 集合，也不能作为执行授权。用户级 ACL/policy 必须由执行端基于当前 principal/tenant 和 policy revision 重新验证。
+本地 Catalog availability 不等价于用户真实业务权限。Search v1 不接收“已授权”布尔值，也不输出 authorized。用户级 ACL/policy 必须由执行端基于当前 principal/tenant 和 policy revision 重新验证。
 
 ### 5.4 LexicalRetriever
 
@@ -419,15 +412,14 @@ Go BM25 的 query terms MUST 每请求排序一次，再以固定顺序累加各
 
 `ProjectionVersion` 至少预注册两套互斥字段策略：`production_without_use_when` 与 `production_with_use_when`。前者作为无泄漏 control；后者只能在 query 由独立作者、且不来自 Catalog selection metadata 的 dev/test 上比较。当前 proxy 中 `with_use_when` 的 100% R@5 永远不得成为发布证据。
 
-### 5.6 CandidateProvider 与融合
+### 5.6 纯本地传输与排名边界
 
-**Target public boundary** 使用 stdin/stdout JSON，而不是要求 Skill 或外部 Host import `internal/cli`。local-only 路径由 Agent 通过 DWS 元工具直接调用，不需要 Host adapter。DWS 搜索命令本身不访问远端 Provider；只在可选外部召回启用时，Agent Host/服务才负责 provider 认证、租户隔离、egress policy、脱敏和 deadline，再把结果作为不可信输入提交给 DWS 校验/融合：
+公开边界固定为 stdin/stdout JSON，不要求 Skill 或 Host import `internal/cli`：
 
 ```text
-Host ── dws schema search(local-only) ──→ local lexical ranking + CatalogVersionRef
-  └── optional remote provider ─────────→ versioned canonical ranking
-                    external ranking ──→ dws schema search(fusion)
-                                           ↓ validate + RRF + ToolReference
+Agent/Host ── dws schema search ──→ local lexical ranking + CatalogVersionRef
+                                      ↓
+                                ToolReference
 ```
 
 规范 v1 DTO：
@@ -438,48 +430,23 @@ type CatalogVersionRef struct {
     SurfaceHash string `json:"surface_hash"`
 }
 
-type ExternalCandidateRanking struct {
-    Catalog          CatalogVersionRef `json:"catalog"`
-    Provider         string            `json:"provider"`
-    ProviderVersion  string            `json:"provider_version"`
-    CanonicalRanking []string          `json:"canonical_ranking"`
-}
-
 type ToolSearchV1Request struct {
-    Version          string                    `json:"version"`
-    Query            string                    `json:"query"`
-    Subqueries       []string                  `json:"subqueries,omitempty"`
-    Limit            int                       `json:"limit"`
-    CandidateLimit   int                       `json:"candidate_limit"`
-    ProductIDs       []string                  `json:"product_ids,omitempty"`
-    Effects          []string                  `json:"effects,omitempty"`
-    ExcludeCanonical []string                  `json:"exclude_canonical,omitempty"`
-    ExternalRanking  *ExternalCandidateRanking `json:"external_ranking,omitempty"`
+    Version          string   `json:"version"`
+    Query            string   `json:"query"`
+    Subqueries       []string `json:"subqueries,omitempty"`
+    Limit            int      `json:"limit"`
+    CandidateLimit   int      `json:"candidate_limit"`
+    ProductIDs       []string `json:"product_ids,omitempty"`
+    Effects          []string `json:"effects,omitempty"`
+    ExcludeCanonical []string `json:"exclude_canonical,omitempty"`
 }
 ```
 
-CLI transport 固定为 `dws schema search --request-json -`：stdin 只接受一个有总 bytes 上限的 `ToolSearchV1Request`，stdout 只写一个 `tool-search.v1` JSON envelope，诊断写 stderr。面向人的 `--query/--limit` flags 只允许 local-only 搜索，不能用 flags 或环境变量注入 ExternalRanking。第一次 local-only 与第二次 fusion 请求都重新计算本地排名；相同 Catalog/query/config 必须逐字段一致。
+CLI transport 固定为 `dws schema search --request-json -`：stdin 只接受一个有总 bytes 上限的 `ToolSearchV1Request`，stdout 只写一个 `tool-search.v1` JSON envelope，诊断写 stderr。所有请求都只在当前进程的 immutable typed Catalog 上执行本地排名；相同 Catalog/query/config 必须逐字段一致。
 
-当前分支的 `ToolSearchCandidateProvider` 已复用带双 hash、provider identity 和版本的 `ExternalCandidateRanking`，但它仍只是同进程测试/SPI，不是公开 Host 协议。公开 Host 边界是 `dws schema search --request-json -` 的 stdin/stdout JSON；远端调用仍由 Host 管理。
+当前方案明确不接受 `external_ranking`，不提供 `ToolSearchCandidateProvider`，不实现 RRF 融合，也不产生 `_fallback`、`degraded` 或 Provider warning code。这样删除远端认证、租户隔离、egress、deadline、版本对账、熔断和双路一致性等非必要故障面。未来若独立数据证明词法召回无法满足业务目标，应重新立 RFC，而不是在 v1 中保留未启用扩展点。
 
-Provider 可以由 Agent Host 的 LLM、Embedding 服务或其他召回器实现。它必须在同一 Catalog snapshot 上独立深召回，而不是只能重排本地 Top-N；否则无法补回 lexical miss。Host 应在送往 Provider 前应用 product/effect/availability 过滤，并绑定第一次 local-only Search 返回的 Catalog version；DWS 融合前仍重新解析 canonical 并执行相同 hard filter，不能信任 Host 已过滤。用户 ACL 只在 Execute 前校验，不进入 Provider 排名契约。
-
-DWS 必须验证：
-
-- canonical 存在于当前 Catalog；
-- 没有空值和重复值；
-- 候选通过相同 hard filter；
-- 数量不超过 CandidateLimit；
-- Provider 返回的 Catalog hash 与本地完全一致；
-- ExternalRanking 的 provider/version 非空且 canonical 数量在预算内。
-
-远端 deadline、认证、租户隔离、query 脱敏和 egress policy 由 Host 承担；DWS 不发起远端请求。Host 在 timeout/cancel/unavailable 时省略 `external_ranking`，因此 DWS 无需理解 Provider 的私有错误。
-
-有效候选与本地排名用 RRF 融合。`k`、depth 和权重都是实验参数，不写入稳定协议。异常语义固定为：Host 未提供 ranking、provider timeout/unavailable 时提交无 external ranking；DWS 返回逐字段相同的本地结果；external ranking 只要出现重复、unknown canonical、版本不一致或超限，整路丢弃，不做“保留部分合法项”，并返回稳定 warning code。被 product/effect/exclude/availability 过滤的合法 canonical 可以单项丢弃并计数，不视为协议损坏。原始 Provider 错误只进入 Host 脱敏 trace，不进入 Agent 可见文本。
-
-此处“逐字段相同”精确限定为 `candidates` 与同请求 local-only response 一致；envelope 有意增加 `_fallback`、`degraded` 和一个稳定 warning code。当前 Provider 失败共 5 类：`provider_timeout`、`provider_unavailable`、`provider_catalog_mismatch`、`provider_invalid_ranking`、`provider_internal`。`response_budget_exceeded` 是全局响应预算码，不是 Provider 失败。在本 RFC 核验的开源实现中，DWS 是唯一将该降级行为固化为可测试 wire 契约的实现；这是样本内结论，不是对全行业的穷尽性声称。
-
-Current Spike 默认 `CandidateLimit=20`，而续测在 572 工具上比较了 depth 20/50/100：TF-IDF+Dense 的 R@5 在被测组合中相差最多约 0.83 pp，最佳 proxy 配置出现在 depth=100,k=10；字段 BM25 的 workflow 指标却对 depth 不敏感。结论不是“必须改成 100”，而是 CandidateLimit 必须作为 dev 调参后锁定的 Projection/SearchConfig，test 只运行一次；公开默认不得凭参考项目常量或当前 proxy best 决定。
+`CandidateLimit` 只控制本地词法候选深度。它必须作为 dev 调参后锁定的 SearchConfig；test 只运行一次，公开默认不得凭参考项目常量或历史 proxy best 决定。
 
 ### 5.7 ToolReference
 
@@ -498,7 +465,7 @@ Current Spike 默认 `CandidateLimit=20`，而续测在 572 工具上比较了 d
   "idempotency": "idempotent",
   "rank": 1,
   "matched_fields": ["summary", "parameters"],
-  "rank_sources": ["tfidf_cosine", "provider"],
+  "rank_sources": ["fielded_bm25_action_v1"],
   "requires_inspect": true
 }
 ```
@@ -508,13 +475,12 @@ Response 同时返回：
 - `version: "tool-search.v1"`；
 - `catalog: {source_hash, surface_hash}`；
 - `strategy`；
-- `abstained / truncated / degraded`；
-- `warning_codes`；
+- `abstained / truncated`；
 - 多动作时的 `subqueries`。
 
 这是规范 v1 ToolReference。完整 `use_when/avoid_when` 和参数 Schema 只在 Inspect 返回，避免轻量引用膨胀；contradiction gate 仍可在 DWS 内部消费它们。公开模型接口只返回 `rank`、`matched_fields` 和 `rank_sources`，不返回 raw `score/sparse_score`。当前分支已经从 JSON DTO 移除 raw score、自由文本 warning 和完整 use/avoid，只保留进程内未导出的排序分数。
 
-当前分支已限制 query、subquery 数、summary 和总响应 bytes，并返回 `truncated/abstained/degraded` 与稳定原因码。普通 DWS 元工具路径每次 Inspect 后直接执行，不维护“已加载工具集”，因此不要把 Host 累积 Schema 状态当成 local-only 前置条件。只有可选 Host adapter 把 Inspect 结果长期注入模型工具集时，才必须实现累积已发现工具、单个 compact Inspect 和任务内可见 Schema 总量预算，且按任务/步骤失效。
+当前分支已限制 query、subquery 数、summary 和总响应 bytes，并返回 `truncated/abstained`。普通 DWS 元工具路径每次 Inspect 后直接执行，不维护“已加载工具集”，因此不要把 Host 累积 Schema 状态当成本地发布前置条件。只有可选 Host adapter 把 Inspect 结果长期注入模型工具集时，才必须实现累积已发现工具、单个 compact Inspect 和任务内可见 Schema 总量预算，且按任务/步骤失效。
 
 NemoClaw 固定 commit 提供了 query 256 chars、search output/state 各 8 KiB、64 discovered tools、120-byte name、16 KiB single schema、128 KiB visible schemas、20 results、256-char description 等工程参考。DWS 不直接复制阈值；结合当前 5 references 约 3.2 KB、full Catalog 单工具对象 median 约 16.9 KB / max 约 69.6 KB，预注册以下 `SearchBudgetV1` shadow defaults：
 
@@ -761,7 +727,7 @@ dws schema search --query "给群里发文件并确认送达" --limit 5
 
 ```text
 train：同义词、字段和规则开发
-dev：算法、权重、k1/b/delta、RRF k/depth 调参
+dev：算法、权重、k1/b/delta 调参
 test：锁定后只运行一次的发布门禁
 ```
 
@@ -794,7 +760,6 @@ test：锁定后只运行一次的发布门禁
 - unfielded；
 - fielded score ensemble；
 - 标准 BM25F；
-- optional CandidateProvider；
 - contradiction gate。
 
 Exact Guard 对所有方法共同前置，identity 单独按 pass/fail 报告。
@@ -836,7 +801,6 @@ Performance：
 - heap/index bytes；
 - allocations/query；
 - 二进制增量；
-- CandidateProvider timeout 和 fallback latency。
 
 ### 8.5 Alpha 门禁
 
@@ -849,8 +813,7 @@ Performance：
 | Projection parity | 固定 ProjectionVersion 下 Go/Python exact、filter、Top-K 逐 case 一致 |
 | Lightweight quality | 独立 test 上按预注册非劣效 margin 比较锁定 BM25；默认切换还需预注册最小增益；报告 product/tool-family cluster CI |
 | 中文质量 | 成对中文口语、混 ASCII、英文和错别字 slice 分别达到预注册阈值与最小样本量 |
-| Safety | excluded/unavailable 候选 0 泄漏；invalid provider candidate 0 泄漏 |
-| Fallback | provider timeout/error/invalid/duplicate 全部返回确定性本地结果 |
+| Safety | excluded/unavailable 候选 0 泄漏 |
 | Search output | 默认最多 5 个引用；不包含完整参数 Schema；必须要求 Inspect |
 | Latency | 当前完整 Catalog 的目标平台 warm p95 < 10 ms；release binary cold subprocess p95 单列并在 manifest 预注册，不以 warm 数字替代 |
 | Footprint | 不增加模型/runtime；Go 二进制增量目标 < 1 MiB |
@@ -923,8 +886,6 @@ go run ./internal/generator/cmd_tool_search_comparison \
 - 纯 Go Exact + 字段 BM25 分数集成；
 - 中文/identifier tokenizer；
 - Product/effect/exclude/executable hard filter；
-- CandidateProvider 独立召回和 RRF；
-- provider failure deterministic fallback；
 - Catalog source/surface hash；
 - 多动作 round-robin；
 - Python 多算法与中文评测。
@@ -932,7 +893,7 @@ go run ./internal/generator/cmd_tool_search_comparison \
 - Go shipped-runtime 诊断对比与配对 Agent A/B 聚合器；
 - 字段投影、轻量算法、纯词法/Dense RRF depth/k、cold build/warm query 续测。
 
-当前测试覆盖搜索内核、公开 transport、双 hash Inspect、provider 异常和跨进程确定性；benchmark 已记录。Go `LexicalRetriever`、BM25 control 与 TF-IDF shadow 已实现。它仍不是默认发布实现，因为倒排/分配优化、Go/Python parity 和正式独立 qrels 尚未完成。
+当前测试覆盖搜索内核、公开 transport、双 hash Inspect 和跨进程确定性；benchmark 已记录。Go `LexicalRetriever`、BM25 control 与 TF-IDF shadow 已实现。它仍不是默认发布实现，因为倒排/分配优化、Go/Python parity 和正式独立 qrels 尚未完成。
 
 ### Phase 1：检索内核
 
@@ -948,15 +909,10 @@ go run ./internal/generator/cmd_tool_search_comparison \
 
 - 已增加 local-only `dws schema search`、版本化 stdin JSON 与 expected source/surface hash Inspect；
 - 已把 reviewed exclusion 从旧 runnable leaf `schema` 迁移到新 leaf `schema search`；docs/skills/generated gates 仍需发布前复核；
-- external ranking transport 已实现为不可信输入校验，但在独立门禁与 feature rollout 前不得由默认 Host 注入；
 - DWS Skill 按“已知命令直接执行；未知命令 Search → Inspect → Execute”进行 shadow；不要为已知高频路径增加 Search 往返。
 
-### Phase 3：Provider shadow 与融合 Alpha
+### Phase 3：Contradiction gate Alpha
 
-- Host 使用第一次 local-only Search 返回的 CatalogVersionRef 调用可选 Provider；
-- 先只记录 TF-IDF、BM25、provider 候选和最终实际工具，按产品/query/effect 分析救回与退化；
-- 指标通过后才用 feature flag 提交 `external_ranking` 进入 DWS 校验和融合；
-- provider unavailable 时逐字段退回 local-only 结果；
 - contradiction gate 进入实验。
 
 ### Phase 4：后续独立 RFC（不在当前分支）
@@ -977,13 +933,13 @@ go run ./internal/generator/cmd_tool_search_comparison \
 | 方案 | 结论 | 原因 |
 |---|---|---|
 | 把 1,098 个完整 Schema 全塞上下文 | 否决 | 17.85 MB compact 载荷，工具干扰和上下文成本不可接受 |
-| 只按产品/分组手工导航 | 保留 fallback | 稳定但自然语言召回和复合任务不足 |
+| 只按产品/分组手工导航 | 保留兼容 | 稳定但自然语言召回和复合任务不足 |
 | 纯 Keyword/Jaccard | 否决为主方案 | R@5 明显落后；低 Forbidden 是低召回副作用 |
 | BM25 固定为唯一算法 | 否决 | TF-IDF 当前略高且差异未定；接口应允许替换 |
 | TF-IDF 立即替代 BM25 | 否决 | +1.50 pp CI 跨 0，且 qrels 同源 |
 | CLI 内嵌 BGE/ONNX | 否决 | 模型比当前 CLI 大，跨平台和生命周期成本过高 |
 | 远端 Dense 作为强依赖 | 否决 | 破坏离线可用性，引入延迟、隐私和可用性耦合 |
-| Host 可选 CandidateProvider | 接受 | 可补召回且能验证/降级，不扩大 CLI 基础依赖 |
+| Host 可选 CandidateProvider | 否决 | 增加认证、版本、超时、融合和失败语义，当前独立证据不足以覆盖复杂度 |
 | LLM 直接在 1,098 工具中选择 | 否决 | 上下文大、不可确定、难以审计和回归 |
 | 顶层 `dws discover` | 否决 | 与 endpoint/业务发现概念冲突，兼容面更大 |
 | `dws schema search` | 接受为 Phase 2 | 与现有 Inspect 语义一致，但需单独处理 runnable parent/exclusion 兼容 |
@@ -994,7 +950,6 @@ go run ./internal/generator/cmd_tool_search_comparison \
 
 - tool metadata 文案相似会造成 sibling confusion；
 - `avoid_when` gate 可能误杀，需要 alternative gold；
-- Host provider 可能返回旧 Catalog canonical；
 - score 不同算法不可直接比较或设统一置信阈值；
 - 复合任务拆解错误会让后续 ranker 无法补救；
 - Catalog 当前缺少完整的 requires/produces/verifies 关系；
@@ -1005,13 +960,12 @@ go run ./internal/generator/cmd_tool_search_comparison \
 
 1. 独立 test qrels 的实际人员签署与样本采集；owner 角色、最小规模、hash 和双签冻结流程已写入 `scripts/testdata/tool_search_eval_manifest.json`；
 2. TF-IDF 与 BM25 shadow 的线上采样比例；
-3. CandidateProvider 由 Agent Host 还是独立服务提供；
-4. contradiction gate 先用规则、Host LLM 还是两阶段组合；
-5. `requires/produces/verifies` 放入哪个 reviewed Schema input；
-6. Host SDK 如何把已实现的 `catalog_changed` discovery error 映射为跨语言错误类型；
-7. Contradiction gate 采用规则、Host LLM 还是两阶段，以及 alternative gold/误杀率 owner；
-8. 多动作响应预算固定 Top-5，还是按 action 数受控扩到最多 10；
-9. 公开 CLI 的 cold subprocess p95 目标，以及一次 fusion request 是否已足够避免双进程初始化。
+3. contradiction gate 先用规则、Host LLM 还是两阶段组合；
+4. `requires/produces/verifies` 放入哪个 reviewed Schema input；
+5. Host SDK 如何把已实现的 `catalog_changed` discovery error 映射为跨语言错误类型；
+6. Contradiction gate 采用规则、Host LLM 还是两阶段，以及 alternative gold/误杀率 owner；
+7. 多动作响应预算固定 Top-5，还是按 action 数受控扩到最多 10；
+8. 公开 CLI 的 cold subprocess p95 目标。
 
 ## 12. 最终决策
 
@@ -1030,4 +984,4 @@ go run ./internal/generator/cmd_tool_search_comparison \
   ⇢ Future RFC: Cobra Execute → reviewed Verify / Retry / Compensate
 ```
 
-本 RFC **不锁定** BM25、TF-IDF、字段权重、RRF 参数或 Dense 模型。当前建议是 BM25 作为 Alpha control，TF-IDF/BM25+ shadow；独立 holdout 和真实 Agent 灰度通过后再确定默认。DWS 基础 CLI 始终保持零模型依赖和离线可用。
+本 RFC **不锁定** BM25、TF-IDF 或字段权重。当前建议是 BM25 作为 Alpha control，TF-IDF/BM25+ shadow；独立 holdout 和真实 Agent 灰度通过后再确定默认。DWS 基础 CLI 始终保持零模型依赖和离线可用。

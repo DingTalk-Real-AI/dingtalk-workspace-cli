@@ -12,10 +12,10 @@ GitHub 上没有一个项目可以被 DWS 整体照搬。首先要区分执行�
 
 1. **协议形态参考 Anthropic / OpenAI 的 reference → inspect。** DWS 搜索只返回轻量引用，命中后才读完整命令契约；但 Inspect 后仍调用同一 DWS，不动态注册新外层工具。
 2. **Codex 证明本地 Tool Search 可以做到 Host 级闭环，但不应照搬其 ranker。** 当前 Codex 已有 Rust 本地 BM25、namespace、MCP/Apps 和 deferred Schema 回填；但它是英文管线，没有 DWS 的 Exact Guard、`exact_filtered`、Catalog 双 hash 与稳定 canonical tie-break。
-3. **检索内核重点参考 Ratel。** 最有价值的不是固定 `k1/b`，而是不可变索引快照、全量重建 BM25 统计、稳定 tie-break、两路深召回、RRF、模型指纹和原子向量缓存。
+3. **检索内核重点参考 Ratel 的本地部分。** 最有价值的不是固定 `k1/b`，而是不可变索引快照、全量重建 BM25 统计和稳定 tie-break；Dense/RRF 仅作为研究对照，不进入当前 DWS 产品链路。
 4. **上下文和状态预算参考 NVIDIA NemoClaw。** query、返回文本、已发现工具数、checkpoint 状态和可见 Schema 都应有确定性上限；同时必须明确“披露不是授权”。
 5. **中文与字段策略必须由 DWS 自己评测。** ToolUniverse 甚至因模板噪声而只索引参数名、不索引参数描述，说明“字段越全越好”不成立。
-6. **失败降级必须由 DWS 明确定义。** Ratel 和 Haystack 都会把某些 Dense/子检索器错误向上抛出，并不自动回退；DWS 的“provider 失败仍返回本地结果”是自己的可靠性契约，不能归因于这些项目。
+6. **删除外部 Provider 故障面。** Ratel 和 Haystack 都会把某些 Dense/子检索器错误向上抛出；DWS 当前不需要为可选增益引入认证、超时、融合和降级协议，因此已删除 Provider/fallback 原型。
 7. **搜索可信不等于执行可信。** GitHub 参考实现基本不处理 DingTalk 权限、确认、幂等、未知受理状态和补偿；这些必须继续由 DWS 的 Inspect、Cobra、Runner 和 recovery 分层承担。
 
 建议目标架构保持：
@@ -26,8 +26,6 @@ reviewed CommandRegistry + Cobra + metadata
              immutable SchemaRegistry snapshot
               ├─ identity resolve / Inspect index
               └─ local lexical index
-                        ↑ untrusted versioned external ranking
-                    deterministic validation + fusion
                         ↓ bounded ToolReference
                     exact Inspect + hash check
                         ↓
@@ -99,7 +97,7 @@ Cobra + reviewed CommandRegistry + metadata
               → Search view / Inspect view / execution identity
 ```
 
-Search 不得重新调用 `tools/list` 建第二份目录，也不得自己生成 executable identity。CandidateProvider 只能返回当前 Catalog 的 canonical path，由 DWS 再解析。
+Search 不得重新调用 `tools/list` 建第二份目录，也不得自己生成 executable identity。候选必须只来自当前 typed Catalog。
 
 ### 4.3 索引一致性比选择哪种 ranker 更基础
 
@@ -124,9 +122,9 @@ type SearchIndexSnapshot struct {
 }
 ```
 
-新 snapshot 完整构建和验证成功后再原子替换；不能让 Search、Inspect 和 CandidateProvider 分别看见不同代。
+新 snapshot 完整构建和验证成功后再原子替换；Search 与 Inspect 必须看见同一代。
 
-### 4.4 Hybrid 必须是独立深召回，且 fallback 需要单独设计
+### 4.4 Hybrid/RRF 调研结论：不进入当前方案
 
 Ratel 的 Hybrid 是 BM25 和 Dense 各自召回到 depth 100，再用 RRF 融合。Haystack 也先并发取回各路列表，再融合。共同结论是：Dense 只能重排 sparse Top-N 时，无法补回 sparse miss，不是真正的 Hybrid。
 
@@ -139,16 +137,15 @@ Ratel 固定 commit 的 `k1=.9/b=.4`、RRF `k=60`（0-based rank）与 depth=100
 - Codex 对空 query/`limit=0` 返回 `RespondToModel`，对不支持的 payload 返回 `Fatal`；它没有可失败 Provider arm，因此也没有“保留本地候选、只标记降级”的对等契约。
 - Gemini CLI 公开文档定义了 discovery command/MCP 注册和 include/exclude，但未定义外部检索失败后返回稳定本地候选的协议；不应在没有对应源码/契约证据时简化成“Gemini 直接报错”。
 
-DWS CLI 的离线约束要求更强的本地兜底：
+DWS CLI 的离线约束通过单一本地检索链满足：
 
 ```text
-local lexical success + provider success → validate + RRF
-local lexical success + provider timeout/error/invalid → local result + stable warning code
+local lexical success → bounded ToolReference
 runtime Catalog assembly corrupt → fail closed, search unavailable
-caller context canceled → return cancellation, not stale fallback
+caller context canceled → return cancellation
 ```
 
-这项 fallback 是 DWS 的产品契约。在本报告核验的开源实现中，DWS 是唯一把它固化为可测试 wire 契约的实现：Provider timeout、unavailable、catalog mismatch、invalid ranking 或 internal/panic 时，`candidates` 与 local-only response 逐字段一致，envelope 只有意增加 `_fallback`、`degraded` 和一个稳定、脱敏 warning code。当前共有 **5 个 Provider failure code**；第 6 个 `response_budget_exceeded` 是全局响应预算码，不能计作 Provider fallback。该契约还要继续由 timeout/panic/late-success/stale/duplicate/unknown/bulkhead 矩阵和 telemetry 锁定。
+历史 Provider/fallback 原型已经删除。Dense/RRF 实验仍说明多路检索应采用独立深召回，而不是只重排 sparse Top-N；但这些研究事实不再构成 DWS v1 的实现要求。若未来独立评测证明必须引入第二路召回，应通过新 RFC 重新证明收益能够覆盖新增故障面。
 
 ### 4.5 必须给 query、引用、状态和 Schema 设预算
 
@@ -198,34 +195,15 @@ OpenAI 对 namespace 的 identity、冲突校验和“每组尽量少于 10 个�
 - Exact Guard；
 - product/effect/exclude/executable hard filter；
 - canonical 稳定 tie-break；
-- 独立 CandidateProvider 召回、候选验证和 RRF；
-- provider 错误/非法候选时的本地 fallback；
 - source/surface hash；
 - 默认 Top-5 轻量 `ToolReference`；
 - 多动作 round-robin 合并。
 
 与 GitHub 参考实现对照后发现的差距及当前分支状态如下。
 
-### 5.1 已修复：Provider 版本握手
+### 5.1 已删除：Provider 与外部排名
 
-旧 Provider 接口只返回 `[]string`：
-
-```go
-Retrieve(context.Context, string, int) ([]string, error)
-```
-
-它可能基于旧 Catalog 返回“当前仍存在但语义已经改变”的 canonical。当前分支已改为与 RFC 的 `ExternalCandidateRanking` 同构，并校验 source/surface hash、provider identity、version、重复/unknown/超限；同进程接口仍不是外部 Host 的公开 Go API：
-
-```go
-type ExternalCandidateRanking struct {
-    Catalog          CatalogVersionRef
-    Provider         string
-    ProviderVersion  string
-    CanonicalRanking []string
-}
-```
-
-公开边界是 versioned stdin/stdout JSON：DWS 不访问远端服务，Host 自己处理认证、deadline、egress 与脱敏，再把 ranking 作为不可信输入交给 DWS。hash 不一致、重复、unknown 或超限时整路丢弃并 fallback，不做跨版本融合。
+当前公开边界只有 versioned stdin/stdout JSON 和本地排名。`external_ranking`、`ToolSearchCandidateProvider`、RRF、provider timeout/bulkhead、`_fallback`、`degraded` 与 provider warning codes 均已删除。双 hash 只用于 Search→Inspect 的 Catalog 一致性闭环。
 
 ### 5.2 已修复：Exact 命中但被过滤时终止
 
@@ -246,30 +224,18 @@ reason=excluded | product_mismatch | effect_mismatch | unavailable
 当前只过滤 Catalog availability、product、effect 和显式 exclude。公开输出必须继续声明：
 
 - `available_in_catalog=true` 不等于当前用户有 DingTalk 权限；
-- Host 可以用当前 principal 的 policy 结果缩小 Provider 输入，但 Search 不接收或输出 `authorized`，执行端仍需重新鉴权；
 - 不得把搜索结果或 Agent identity 用作授权依据。
 
-### 5.4 已修复：错误 warning 结构化和脱敏
+### 5.4 已简化：无外部错误协议
 
-旧 fallback warning 会拼接 `providerErr.Error()`。当前分支只返回稳定 code，原始错误不进入 Agent-visible JSON：
-
-```text
-provider_timeout
-provider_unavailable
-provider_catalog_mismatch
-provider_invalid_ranking
-provider_internal
-```
-
-详细错误进入本地脱敏 trace，不进入 Agent-visible `ToolReference` 响应。另有全局 `response_budget_exceeded`，用于结果超过 8 KiB 时的完整 reference 边界截断；它不表示 Provider 失败。
+本地检索没有 Provider 错误或降级状态。响应超过 8 KiB 时只按完整 reference 边界截断并设置 `truncated=true`，不再为这一单一状态维护 warning code 数组。
 
 ### 5.5 部分修复：资源预算与可观测状态
 
-当前分支已增加 query 256 scalars/2 KiB、最多 8 个 subquery、summary 256 scalars、response 8 KiB、provider deadline，以及 `truncated/abstained/degraded` 和稳定原因码。仍缺少 Host 侧累计 discovered/schema bytes 与只进入 trace 的每路 latency/count：
+当前分支已增加 query 256 scalars/2 KiB、最多 8 个 subquery、summary 256 scalars、response 8 KiB，以及 `truncated/abstained`。仍缺少 Host 侧累计 discovered/schema bytes：
 
 - query/subquery/response bytes 上限；
-- `truncated`、`abstained`、`degraded` 和 `degraded_reason_code`；
-- 每路 `retrieved_count`、`accepted_count`、`latency_ms`；
+- `truncated`、`abstained`；
 - 仅在 trace 中记录原始分数，Agent-visible score 明确标为 ordering-only，或直接只返回 rank。
 
 ### 5.6 已修复：词法实现可替换
@@ -293,11 +259,11 @@ Go 与 Python 对同一 Catalog/query/config 的 exact、eligible 集合和 Top-
 
 Spike 原先直接遍历 `queryFrequency map[string]int` 累加 BM25 分数。Go map 迭代顺序跨进程不稳定，浮点加法又不满足结合律，近似同分候选可能因 ulp 级差异绕过 canonical tie-break。现已改为每请求只排序一次 query term，再让所有 field/document 按固定顺序计分；测试会启动 3 个独立子进程，对完整 JSON response 做逐字节比较。
 
-这项修复只关闭了本地词法 arm 的已知不确定性。外部 Provider 仍必须自己保证稳定排序、model revision 和 canonical tie-break，DWS 融合后再执行最终稳定排序。
+这项修复关闭了当前本地词法排名的已知不确定性。外部 Provider 已不在方案范围内。
 
 ## 6. 推荐的稳定接口
 
-规范 DTO 只保留一套，以 RFC [5.6 CandidateProvider 与融合](rfc-tool-search-progressive-discovery.md#56-candidateprovider-与融合)、[5.7 ToolReference](rfc-tool-search-progressive-discovery.md#57-toolreference) 和 [5.8 Inspect](rfc-tool-search-progressive-discovery.md#58-inspect) 为准。进程内的 `ToolSearchRequest/ToolSearchCandidateProvider` 仍是 non-public SPI；跨进程只允许依赖 `tool-search.v1` JSON。`dws schema search --request-json -` 和双 hash Inspect 已在当前分支实现，DWS Skill/Agent 可以直接调用该链路；不依赖 Host 实现动态 Schema 注入。
+规范 DTO 只保留一套，以 RFC [5.6 纯本地传输与排名边界](rfc-tool-search-progressive-discovery.md#56-纯本地传输与排名边界)、[5.7 ToolReference](rfc-tool-search-progressive-discovery.md#57-toolreference) 和 [5.8 Inspect](rfc-tool-search-progressive-discovery.md#58-inspect) 为准。跨进程只允许依赖 `tool-search.v1` JSON。`dws schema search --request-json -` 和双 hash Inspect 已在当前分支实现，DWS Skill/Agent 可以直接调用该链路；不依赖 Host 实现动态 Schema 注入。
 
 跨进程稳定链路是：
 
@@ -313,8 +279,7 @@ tool-search.v1 request
 - Search 只返回引用，不返回完整参数 Schema；
 - Inspect 必须按 canonical exact 解析，并校验同一 Catalog hash；
 - Execute 不接受检索 score，只接受 Inspect 得到的 typed contract；
-- Provider 是 Host 管理的独立召回器，不得只能重排本地 Top-N；
-- Provider 失败不影响本地路径，但 Catalog/本地索引损坏必须 fail closed；
+- Catalog/本地索引损坏必须 fail closed；
 - 用户权限和 destructive confirmation 不能由 Search 决定。
 
 ## 7. 可信执行与安全恢复：GitHub 实现没有替 DWS 解决的部分
@@ -334,17 +299,14 @@ tool-search.v1 request
 
 ### Slice A：搜索内核契约
 
-- `exact_filtered`、Provider Catalog 版本、warning code 脱敏和 query/response/subquery 预算已完成；
+- `exact_filtered` 和 query/response/subquery 预算已完成；
 - Go `LexicalRetriever`、BM25 control 和 TF-IDF shadow 已完成；
 - 公开 transport 已提前实现，但默认启用仍遵循 Slice C/D 门禁。
 
-### Slice B：索引与融合门禁
+### Slice B：索引门禁
 
 - TF-IDF、BM25 共享 tokenizer/filters/tie-break；
-- provider 独立深召回；
-- RRF 参数只在 dev 调整；
 - 固定 ProjectionVersion 和 Go/Python parity；
-- provider timeout/invalid/stale/duplicate/cancel 测试。
 
 ### Slice C：公开 local-only `dws schema search`
 
@@ -352,13 +314,6 @@ tool-search.v1 request
 - 已同步 `schema` leaf/exclusion；skills 和 release command-surface 门禁仍需复核；
 - 已增加 expected source/surface hash 校验并在 compact Inspect 回传双 hash；
 - 不新增顶层 `dws discover`。
-
-### Slice D：Provider 跨进程 shadow/fusion
-
-- Host 负责远端认证、deadline、egress 和脱敏；
-- 只提交带 CatalogVersionRef 的 canonical ranking；
-- 先 shadow，指标通过后再开放 fusion feature flag；
-- provider 失败逐字段退回 local-only response。
 
 ### Future Slice E：Invocation 与 recovery（后续独立 RFC，当前不实现）
 
@@ -375,10 +330,7 @@ tool-search.v1 request
 | Catalog 同源 | Search/Inspect/Execute canonical 全量 round-trip；source/surface hash 一致 |
 | Exact | canonical、primary CLI、unique alias、NFKC、空格；exact filtered 不返回 sibling |
 | Determinism | 不同进程/hash seed 下 Top-K 成员和顺序一致 |
-| Provider | timeout/error/cancel/duplicate/unknown/stale hash/filtered candidate |
 | Budget | query、subquery 数、单 reference、总 response、Inspect Schema 超限 |
-| Hybrid | 两路各自深召回；构造 sparse miss 被 provider 补回 |
-| Fallback | Provider 故障返回逐字段相同的本地结果和稳定 warning code |
 | Security | hidden/disclosed 状态不改变 Runner ACL/confirmation；猜工具名仍被执行层拒绝 |
 | Index lifecycle | 新 snapshot 构建失败保留旧 snapshot；版本切换原子化 |
 | Future Recovery（独立 RFC） | read、幂等写、非幂等写、unknown acceptance、verify-success、manual handoff |
@@ -394,7 +346,7 @@ DWS 不选择某一个 GitHub 项目作为基础框架，而是组合经过源�
 | 自动触发（可选） | Semantic Kernel 的 recent-context retrieval | Skill 已能完成规范链路；Host adapter 只作为减少一次模型决策的可选 optimization，必须复用同一 Search API/Trace |
 | Namespace | OpenAI 的 qualified identity / namespace | 作为 reviewed hint 或已知产品 filter；未知、复合任务保留 global/multi-namespace recall |
 | 索引生命周期 | Ratel 的完整 BM25 统计、原子 Dense batch/rebuild | Catalog generation 绑定、build-then-swap；不照搬英文 tokenizer/model 或固定 `k1/b/depth` |
-| 多路召回与融合 | Ratel/Haystack 的独立深召回 + RRF | 稳定 `(score desc, canonical asc)`；Provider 失败逐字段回到本地结果，这是 DWS 自有契约 |
+| 多路召回与融合 | Ratel/Haystack 的研究对照 | 当前否决，不进入 DWS v1；稳定 `(score desc, canonical asc)` 仅用于本地词法排名 |
 | 预算/状态 | NemoClaw 的 query/output/state/Schema 多层预算 | 用 DWS 实测冻结阈值，并覆盖 ToolReference、Inspect 与 Host 累积上下文 |
 | 字段经验 | ToolUniverse 的按通道字段选择、exact bonus、完整 cache key | 做中文/中英混合字段消融；参数描述保持 shadow，不复用 ASCII tokenizer 与弱 freshness |
 | 评测定义 | ToolRet 的 graded qrels 与 Comprehensiveness | 使用 DWS 自有、带测试且锁数据版本的 harness；加入 Forbidden、Identity、Workflow、Agent/recovery 指标 |
@@ -407,8 +359,7 @@ DWS 不选择某一个 GitHub 项目作为基础框架，而是组合经过源�
       ├─ exact → eligibility → exact / exact_filtered（终止）
       └─ not found → Hard Filter
   → 可替换本地轻量召回
-  → 可选、带 Catalog 版本的外部补召回
-  → 确定性融合与预算
+  → 确定性排序与预算
   → ToolReference
   → schema-inspect.v1 hash check
   ── 当前 Tool Search RFC 边界 ──

@@ -20,7 +20,7 @@
       "internal/cli/tool_search_lexical.go",
       "internal/generator/cmd_tool_search_comparison/main.go"
     ],
-    "go_source_sha256": "f077bc027121f7348a85d966b16d13c065aa2e5db67ce2bb5a82648dd8413a25",
+    "go_source_sha256": "5847d23824c9788fec43b9361b314106a497ba1cf74ff9d1b299cf465fd75f38",
     "gate_source_paths": [
       "scripts/dev/verify_tool_search_eval_manifest.py"
     ],
@@ -30,13 +30,11 @@
       "fielded_tfidf_cosine",
       "bm25plus"
     ],
-    "optional_external_candidate": "dense_provider_rrf",
     "changes_forbidden_after_independent_dev_test_is_sealed": [
       "tokenizer",
       "field_projection",
       "field_weights",
-      "bm25_k1_b_delta",
-      "rrf_k_depth"
+      "bm25_k1_b_delta"
     ]
   },
   "proxy_v1": {

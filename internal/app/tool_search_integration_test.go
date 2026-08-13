@@ -18,7 +18,7 @@ import (
 
 func TestToolSearchDeliveryActionSiblingRouting(t *testing.T) {
 	registerSchemaRuntimeDelivery()
-	engine, err := cli.NewDeliveryToolSearchEngine(nil)
+	engine, err := cli.NewDeliveryToolSearchEngine()
 	if err != nil {
 		t.Fatalf("NewDeliveryToolSearchEngine() error = %v", err)
 	}

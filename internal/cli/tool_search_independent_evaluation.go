@@ -84,7 +84,7 @@ type independentRankingAccumulator struct {
 // qrels with the shipped Go ranker. It never tunes parameters or reads Catalog
 // JSON; the caller owns qrels sealing and threshold enforcement.
 func BuildDeliveryToolSearchIndependentEvaluation(ctx context.Context, cases []ToolSearchIndependentCase) (ToolSearchIndependentReport, error) {
-	engine, err := NewDeliveryToolSearchEngine(nil)
+	engine, err := NewDeliveryToolSearchEngine()
 	if err != nil {
 		return ToolSearchIndependentReport{}, err
 	}
@@ -100,7 +100,7 @@ func BuildDeliveryToolSearchIndependentEvaluation(ctx context.Context, cases []T
 	controlConfig.LexicalAlgorithm = ToolSearchLexicalBM25
 	controlConfig.CatalogSourceHash = loaded.Snapshot.SourceHash
 	controlConfig.CatalogSurfaceHash = loaded.Snapshot.SurfaceHash
-	control, err := NewToolSearchEngine(loaded.Registry, controlConfig, nil)
+	control, err := NewToolSearchEngine(loaded.Registry, controlConfig)
 	if err != nil {
 		return ToolSearchIndependentReport{}, err
 	}

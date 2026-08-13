@@ -15,7 +15,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,30 +24,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ToolSearchV1Request is the stable stdin transport used by Agent hosts. The
-// external ranking is untrusted input and is revalidated against the
-// declaration-assembled Catalog before it can influence the result.
+// ToolSearchV1Request is the stable stdin transport used by Agent hosts.
 type ToolSearchV1Request struct {
-	Version          string                    `json:"version"`
-	Query            string                    `json:"query"`
-	Subqueries       []string                  `json:"subqueries,omitempty"`
-	Limit            int                       `json:"limit,omitempty"`
-	CandidateLimit   int                       `json:"candidate_limit,omitempty"`
-	ProductIDs       []string                  `json:"product_ids,omitempty"`
-	Effects          []string                  `json:"effects,omitempty"`
-	ExcludeCanonical []string                  `json:"exclude_canonical,omitempty"`
-	ExternalRanking  *ExternalCandidateRanking `json:"external_ranking,omitempty"`
-}
-
-type suppliedToolSearchRanking struct {
-	ranking ExternalCandidateRanking
+	Version          string   `json:"version"`
+	Query            string   `json:"query"`
+	Subqueries       []string `json:"subqueries,omitempty"`
+	Limit            int      `json:"limit,omitempty"`
+	CandidateLimit   int      `json:"candidate_limit,omitempty"`
+	ProductIDs       []string `json:"product_ids,omitempty"`
+	Effects          []string `json:"effects,omitempty"`
+	ExcludeCanonical []string `json:"exclude_canonical,omitempty"`
 }
 
 var schemaSearchNewEngine = NewDeliveryToolSearchEngine
-
-func (p suppliedToolSearchRanking) Retrieve(context.Context, ToolSearchCandidateRequest) (ExternalCandidateRanking, error) {
-	return p.ranking, nil
-}
 
 func newSchemaSearchCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -78,11 +66,7 @@ DWS 对 Agent 是一个元工具：已知子命令直接执行，未知子命令
 			if err != nil {
 				return err
 			}
-			var provider ToolSearchCandidateProvider
-			if request.ExternalRanking != nil {
-				provider = suppliedToolSearchRanking{ranking: *request.ExternalRanking}
-			}
-			engine, err := schemaSearchNewEngine(provider)
+			engine, err := schemaSearchNewEngine()
 			if err != nil {
 				return err
 			}
@@ -202,9 +186,6 @@ func decodeToolSearchV1Request(reader io.Reader) (ToolSearchV1Request, error) {
 func validateToolSearchV1Request(request ToolSearchV1Request) (ToolSearchV1Request, error) {
 	if request.Version != "tool-search.v1" {
 		return ToolSearchV1Request{}, apperrors.NewValidation(`tool search request must include "version":"tool-search.v1"; action decomposition uses the "subqueries" array`, apperrors.WithReason("unsupported_version"))
-	}
-	if len(request.Subqueries) > 0 && request.ExternalRanking != nil {
-		return ToolSearchV1Request{}, apperrors.NewValidation("external_ranking is action-sized and cannot be combined with subqueries", apperrors.WithReason("external_ranking_with_subqueries"))
 	}
 	return request, nil
 }

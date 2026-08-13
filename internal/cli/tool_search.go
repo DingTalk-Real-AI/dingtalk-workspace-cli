@@ -16,13 +16,11 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -31,33 +29,20 @@ import (
 )
 
 const (
-	defaultToolSearchLimit           = 5
-	defaultToolSearchCandidateLimit  = 20
-	maxToolSearchLimit               = 20
-	maxToolSearchCandidateLimit      = 100
-	maxToolSearchQueryRunes          = 256
-	maxToolSearchQueryBytes          = 2 * 1024
-	maxToolSearchSubqueries          = 8
-	maxToolSearchSubqueriesBytes     = 2 * 1024
-	maxToolSearchSummaryRunes        = 256
-	maxToolSearchResponseBytes       = 8 * 1024
-	maxToolSearchRequestBytes        = 64 * 1024
-	defaultToolSearchRRFK            = 60.0
-	defaultToolSearchProviderTimeout = 2 * time.Second
-)
-
-const (
-	toolSearchWarningProviderTimeout         = "provider_timeout"
-	toolSearchWarningProviderUnavailable     = "provider_unavailable"
-	toolSearchWarningProviderCatalogMismatch = "provider_catalog_mismatch"
-	toolSearchWarningProviderInvalidRanking  = "provider_invalid_ranking"
-	toolSearchWarningProviderInternal        = "provider_internal"
-	toolSearchWarningResponseBudgetExceeded  = "response_budget_exceeded"
+	defaultToolSearchLimit          = 5
+	defaultToolSearchCandidateLimit = 20
+	maxToolSearchLimit              = 20
+	maxToolSearchCandidateLimit     = 100
+	maxToolSearchQueryRunes         = 256
+	maxToolSearchQueryBytes         = 2 * 1024
+	maxToolSearchSubqueries         = 8
+	maxToolSearchSubqueriesBytes    = 2 * 1024
+	maxToolSearchSummaryRunes       = 256
+	maxToolSearchResponseBytes      = 8 * 1024
+	maxToolSearchRequestBytes       = 64 * 1024
 )
 
 var toolSearchIdentifierPattern = regexp.MustCompile(`[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)+`)
-
-var errToolSearchProviderPanic = errors.New("tool search candidate provider panicked")
 
 // ToolSearchFieldWeights keeps lexical relevance tuning explicit and
 // versionable. The defaults are an evaluated starting point, not a contract:
@@ -78,8 +63,6 @@ type ToolSearchFieldWeights struct {
 type ToolSearchConfig struct {
 	DefaultLimit       int
 	DefaultCandidates  int
-	RRFK               float64
-	ProviderTimeout    time.Duration
 	LexicalAlgorithm   string
 	IncludeUseWhen     bool
 	CatalogSourceHash  string
@@ -92,8 +75,6 @@ func DefaultToolSearchConfig() ToolSearchConfig {
 	return ToolSearchConfig{
 		DefaultLimit:      defaultToolSearchLimit,
 		DefaultCandidates: defaultToolSearchCandidateLimit,
-		RRFK:              defaultToolSearchRRFK,
-		ProviderTimeout:   defaultToolSearchProviderTimeout,
 		LexicalAlgorithm:  ToolSearchLexicalBM25Action,
 		IncludeUseWhen:    false,
 		FieldWeights: ToolSearchFieldWeights{
@@ -136,11 +117,10 @@ type ToolReference struct {
 	TruncatedFields []string `json:"truncated_fields,omitempty"`
 	RequiresInspect bool     `json:"requires_inspect"`
 	score           float64
-	sparseScore     float64
 }
 
-// CatalogVersionRef binds Search, optional external ranking and Inspect to one
-// immutable Catalog generation.
+// CatalogVersionRef binds Search and Inspect to one immutable Catalog
+// generation.
 type CatalogVersionRef struct {
 	SourceHash  string `json:"source_hash"`
 	SurfaceHash string `json:"surface_hash"`
@@ -153,51 +133,18 @@ type ToolSearchExactFiltered struct {
 	Reason        string `json:"reason"`
 }
 
-// ToolSearchResponse carries enough provenance to detect a degraded reranker
-// without exposing a complete executable Schema.
+// ToolSearchResponse carries a bounded local ranking without exposing a
+// complete executable Schema.
 type ToolSearchResponse struct {
-	Version            string                   `json:"version"`
-	Catalog            CatalogVersionRef        `json:"catalog"`
-	Query              string                   `json:"query"`
-	Subqueries         []string                 `json:"subqueries,omitempty"`
-	Strategy           string                   `json:"strategy"`
-	Candidates         []ToolReference          `json:"candidates"`
-	ExactFiltered      *ToolSearchExactFiltered `json:"exact_filtered,omitempty"`
-	Abstained          bool                     `json:"abstained,omitempty"`
-	Truncated          bool                     `json:"truncated,omitempty"`
-	Degraded           bool                     `json:"degraded,omitempty"`
-	DegradedReasonCode string                   `json:"degraded_reason_code,omitempty"`
-	WarningCodes       []string                 `json:"warning_codes,omitempty"`
-}
-
-// ToolSearchCandidateRequest is the bounded, versioned input presented to an
-// optional independent retriever.
-type ToolSearchCandidateRequest struct {
-	Query                 string            `json:"query"`
-	CandidateLimit        int               `json:"candidate_limit"`
-	Catalog               CatalogVersionRef `json:"catalog"`
-	ProductIDs            []string          `json:"product_ids,omitempty"`
-	Effects               []string          `json:"effects,omitempty"`
-	ExcludeCanonicalPaths []string          `json:"exclude_canonical_paths,omitempty"`
-}
-
-// ExternalCandidateRanking is untrusted until DWS validates its Catalog
-// generation, provider identity and every canonical path.
-type ExternalCandidateRanking struct {
-	Catalog          CatalogVersionRef `json:"catalog"`
-	Provider         string            `json:"provider"`
-	ProviderVersion  string            `json:"provider_version"`
-	CanonicalRanking []string          `json:"canonical_ranking"`
-}
-
-// ToolSearchCandidateProvider lets an Agent host or optional service supply a
-// second, independently retrieved ranking over the complete Catalog. It is
-// deliberately not restricted to the sparse candidate set: otherwise an
-// embedding provider could rerank but never recover a BM25 miss. DWS itself
-// does not ship a model and deterministically falls back when this provider
-// fails or violates the Catalog contract.
-type ToolSearchCandidateProvider interface {
-	Retrieve(context.Context, ToolSearchCandidateRequest) (ExternalCandidateRanking, error)
+	Version       string                   `json:"version"`
+	Catalog       CatalogVersionRef        `json:"catalog"`
+	Query         string                   `json:"query"`
+	Subqueries    []string                 `json:"subqueries,omitempty"`
+	Strategy      string                   `json:"strategy"`
+	Candidates    []ToolReference          `json:"candidates"`
+	ExactFiltered *ToolSearchExactFiltered `json:"exact_filtered,omitempty"`
+	Abstained     bool                     `json:"abstained,omitempty"`
+	Truncated     bool                     `json:"truncated,omitempty"`
 }
 
 type toolSearchField string
@@ -242,23 +189,18 @@ type toolSearchQueryTerm struct {
 }
 
 // ToolSearchEngine owns one immutable in-memory index over a typed registry.
-// It performs no network calls unless a caller explicitly injects a reranker.
+// It performs no network calls and has no external-ranking path.
 type ToolSearchEngine struct {
 	index     SchemaIndex
 	config    ToolSearchConfig
 	documents map[string]toolSearchDocument
 	lexical   LexicalRetriever
-	provider  ToolSearchCandidateProvider
-	// An in-process Provider cannot be force-killed when it ignores context.
-	// This one-slot bulkhead bounds such a bug to one leaked goroutine per
-	// engine; strong isolation requires an out-of-process Provider.
-	providerSlot chan struct{}
 }
 
 // NewDeliveryToolSearchEngine indexes the immutable in-memory Catalog
 // assembled from live Go declarations by RegisterSchemaSourceRoot →
 // ResolveSchemaBuild. There is no committed or runtime-read Catalog JSON.
-func NewDeliveryToolSearchEngine(provider ToolSearchCandidateProvider) (*ToolSearchEngine, error) {
+func NewDeliveryToolSearchEngine() (*ToolSearchEngine, error) {
 	if err := deliverySchemaCatalogError(); err != nil {
 		return nil, fmt.Errorf("assemble typed Schema registry for tool search: %w", err)
 	}
@@ -266,12 +208,12 @@ func NewDeliveryToolSearchEngine(provider ToolSearchCandidateProvider) (*ToolSea
 	config := DefaultToolSearchConfig()
 	config.CatalogSourceHash = loaded.Snapshot.SourceHash
 	config.CatalogSurfaceHash = loaded.Snapshot.SurfaceHash
-	return NewToolSearchEngine(loaded.Registry, config, provider)
+	return NewToolSearchEngine(loaded.Registry, config)
 }
 
 // NewToolSearchEngine builds a deterministic local index from the same typed
 // registry used by schema overview, inspect and --all projections.
-func NewToolSearchEngine(registry SchemaRegistry, config ToolSearchConfig, provider ToolSearchCandidateProvider) (*ToolSearchEngine, error) {
+func NewToolSearchEngine(registry SchemaRegistry, config ToolSearchConfig) (*ToolSearchEngine, error) {
 	index, err := registry.Index()
 	if err != nil {
 		return nil, fmt.Errorf("index tool search registry: %w", err)
@@ -290,17 +232,15 @@ func NewToolSearchEngine(registry SchemaRegistry, config ToolSearchConfig, provi
 		return nil, err
 	}
 	return &ToolSearchEngine{
-		index:        index,
-		config:       config,
-		documents:    documents,
-		lexical:      lexical,
-		provider:     provider,
-		providerSlot: make(chan struct{}, 1),
+		index:     index,
+		config:    config,
+		documents: documents,
+		lexical:   lexical,
 	}, nil
 }
 
 // Search retrieves one action-sized query. Exact canonical or CLI identities
-// bypass relevance and reranking so semantic fusion cannot demote them.
+// bypass relevance so natural-language ranking cannot demote them.
 func (e *ToolSearchEngine) Search(ctx context.Context, request ToolSearchRequest) (ToolSearchResponse, error) {
 	if e == nil {
 		return ToolSearchResponse{}, fmt.Errorf("tool search engine is nil")
@@ -333,7 +273,7 @@ func (e *ToolSearchEngine) Search(ctx context.Context, request ToolSearchRequest
 			return finalizeToolSearchResponse(response)
 		}
 		response.Strategy = "exact_guard"
-		reference := toolReference(exact, 1, 1, []string{"identity"}, []string{"exact"})
+		reference := toolReference(exact, 1, []string{"identity"}, []string{"exact"})
 		reference.Rank = 1
 		response.Candidates = []ToolReference{reference}
 		return finalizeToolSearchResponse(response)
@@ -359,89 +299,11 @@ func (e *ToolSearchEngine) Search(ctx context.Context, request ToolSearchRequest
 		references = append(references, toolReference(
 			e.documents[item.CanonicalPath].tool,
 			item.Score,
-			item.Score,
 			item.MatchedFields,
 			[]string{e.lexical.Name()},
 		))
 	}
 
-	if e.provider != nil {
-		providerCtx := ctx
-		cancel := func() {}
-		if e.config.ProviderTimeout > 0 {
-			providerCtx, cancel = context.WithTimeout(ctx, e.config.ProviderTimeout)
-		}
-		providerResult := make(chan struct {
-			ranking ExternalCandidateRanking
-			err     error
-		}, 1)
-		providerRequest := ToolSearchCandidateRequest{
-			Query:                 request.Query,
-			CandidateLimit:        request.CandidateLimit,
-			Catalog:               e.catalogVersion(),
-			ProductIDs:            append([]string(nil), request.ProductIDs...),
-			Effects:               append([]string(nil), request.Effects...),
-			ExcludeCanonicalPaths: append([]string(nil), request.ExcludeCanonicalPaths...),
-		}
-		var external ExternalCandidateRanking
-		var providerErr error
-		select {
-		case e.providerSlot <- struct{}{}:
-			go func() {
-				defer func() {
-					<-e.providerSlot
-					if recovered := recover(); recovered != nil {
-						providerResult <- struct {
-							ranking ExternalCandidateRanking
-							err     error
-						}{err: errToolSearchProviderPanic}
-					}
-				}()
-				ranking, retrieveErr := e.provider.Retrieve(providerCtx, providerRequest)
-				providerResult <- struct {
-					ranking ExternalCandidateRanking
-					err     error
-				}{ranking: ranking, err: retrieveErr}
-			}()
-			select {
-			case result := <-providerResult:
-				external, providerErr = result.ranking, result.err
-				if providerCtx.Err() != nil {
-					providerErr = providerCtx.Err()
-				}
-			case <-providerCtx.Done():
-				providerErr = providerCtx.Err()
-			}
-		case <-providerCtx.Done():
-			providerErr = providerCtx.Err()
-		}
-		cancel()
-		if providerErr != nil {
-			if err := ctx.Err(); err != nil {
-				return ToolSearchResponse{}, err
-			}
-			code := toolSearchWarningProviderUnavailable
-			if errors.Is(providerErr, context.DeadlineExceeded) || errors.Is(providerCtx.Err(), context.DeadlineExceeded) {
-				code = toolSearchWarningProviderTimeout
-			} else if errors.Is(providerErr, errToolSearchProviderPanic) {
-				code = toolSearchWarningProviderInternal
-			}
-			markToolSearchDegraded(&response, code)
-		} else {
-			externalRanking, validateErr := e.validateExternalRanking(external, allowedProducts, allowedEffects, excluded, request.CandidateLimit)
-			if validateErr != nil {
-				markToolSearchDegraded(&response, toolSearchProviderValidationCode(validateErr))
-			} else if len(externalRanking) > 0 {
-				fused, fuseErr := e.fuseToolSearchReferences(references, externalRanking, e.config.RRFK)
-				if fuseErr != nil {
-					markToolSearchDegraded(&response, toolSearchWarningProviderInternal)
-				} else {
-					references = fused
-					response.Strategy = e.lexical.Name() + "_provider_rrf"
-				}
-			}
-		}
-	}
 	if len(references) > request.Limit {
 		references = references[:request.Limit]
 	}
@@ -540,25 +402,14 @@ func (e *ToolSearchEngine) SearchSubqueries(ctx context.Context, subqueries []st
 			break
 		}
 	}
-	warningCodes := []string{}
-	degraded := false
-	for _, result := range perQuery {
-		warningCodes = append(warningCodes, result.WarningCodes...)
-		degraded = degraded || result.Degraded
-	}
 	setToolReferenceRanks(merged)
 	response := ToolSearchResponse{
-		Version:      "tool-search.v1",
-		Catalog:      e.catalogVersion(),
-		Query:        responseQuery,
-		Subqueries:   cleaned,
-		Strategy:     "decomposed_round_robin",
-		Candidates:   merged,
-		Degraded:     degraded,
-		WarningCodes: stableUniqueStrings(warningCodes),
-	}
-	if degraded && len(response.WarningCodes) > 0 {
-		response.DegradedReasonCode = response.WarningCodes[0]
+		Version:    "tool-search.v1",
+		Catalog:    e.catalogVersion(),
+		Query:      responseQuery,
+		Subqueries: cleaned,
+		Strategy:   "decomposed_round_robin",
+		Candidates: merged,
 	}
 	return finalizeToolSearchResponse(response)
 }
@@ -579,12 +430,6 @@ func normalizeToolSearchConfig(config ToolSearchConfig) ToolSearchConfig {
 	}
 	if config.DefaultCandidates < config.DefaultLimit {
 		config.DefaultCandidates = config.DefaultLimit
-	}
-	if config.RRFK <= 0 {
-		config.RRFK = defaults.RRFK
-	}
-	if config.ProviderTimeout <= 0 {
-		config.ProviderTimeout = defaults.ProviderTimeout
 	}
 	if strings.TrimSpace(config.LexicalAlgorithm) == "" {
 		config.LexicalAlgorithm = defaults.LexicalAlgorithm
@@ -785,7 +630,7 @@ func matchedToolSearchFields(contributions map[toolSearchField]float64) []string
 	return fields
 }
 
-func toolReference(tool ToolSpec, score, sparseScore float64, matchedFields, sources []string) ToolReference {
+func toolReference(tool ToolSpec, score float64, matchedFields, sources []string) ToolReference {
 	title := truncateToolSearchRunes(tool.Title, maxToolSearchSummaryRunes)
 	agentSummary := truncateToolSearchRunes(tool.Selection.AgentSummary, maxToolSearchSummaryRunes)
 	truncatedFields := make([]string, 0, 2)
@@ -810,7 +655,6 @@ func toolReference(tool ToolSpec, score, sparseScore float64, matchedFields, sou
 		TruncatedFields: truncatedFields,
 		RequiresInspect: true,
 		score:           score,
-		sparseScore:     sparseScore,
 	}
 }
 
@@ -825,14 +669,6 @@ func cloneToolReferences(values []ToolReference) []ToolReference {
 	return out
 }
 
-type toolSearchProviderValidationError struct {
-	code string
-}
-
-func (e toolSearchProviderValidationError) Error() string {
-	return e.code
-}
-
 func (e *ToolSearchEngine) catalogVersion() CatalogVersionRef {
 	return CatalogVersionRef{
 		SourceHash:  e.config.CatalogSourceHash,
@@ -840,25 +676,7 @@ func (e *ToolSearchEngine) catalogVersion() CatalogVersionRef {
 	}
 }
 
-func markToolSearchDegraded(response *ToolSearchResponse, code string) {
-	response.Strategy += "_fallback"
-	response.Degraded = true
-	response.WarningCodes = stableUniqueStrings(append(response.WarningCodes, code))
-	if response.DegradedReasonCode == "" {
-		response.DegradedReasonCode = code
-	}
-}
-
-func toolSearchProviderValidationCode(err error) string {
-	var validationErr toolSearchProviderValidationError
-	if errors.As(err, &validationErr) {
-		return validationErr.code
-	}
-	return toolSearchWarningProviderInternal
-}
-
 func finalizeToolSearchResponse(response ToolSearchResponse) (ToolSearchResponse, error) {
-	response.WarningCodes = stableUniqueStrings(response.WarningCodes)
 	response.Abstained = response.Abstained || len(response.Candidates) == 0
 	for {
 		payload, err := json.Marshal(response)
@@ -874,7 +692,6 @@ func finalizeToolSearchResponse(response ToolSearchResponse) (ToolSearchResponse
 		}
 		response.Candidates = response.Candidates[:len(response.Candidates)-1]
 		response.Truncated = true
-		response.WarningCodes = stableUniqueStrings(append(response.WarningCodes, toolSearchWarningResponseBudgetExceeded))
 		response.Abstained = len(response.Candidates) == 0
 		setToolReferenceRanks(response.Candidates)
 	}
@@ -886,81 +703,6 @@ func truncateToolSearchRunes(value string, limit int) string {
 	}
 	runes := []rune(value)
 	return string(runes[:limit])
-}
-
-func (e *ToolSearchEngine) validateExternalRanking(ranking ExternalCandidateRanking, allowedProducts, allowedEffects, excluded map[string]bool, limit int) ([]string, error) {
-	if ranking.Catalog != e.catalogVersion() {
-		return nil, toolSearchProviderValidationError{code: toolSearchWarningProviderCatalogMismatch}
-	}
-	if strings.TrimSpace(ranking.Provider) == "" || strings.TrimSpace(ranking.ProviderVersion) == "" {
-		return nil, toolSearchProviderValidationError{code: toolSearchWarningProviderInvalidRanking}
-	}
-	if len(ranking.CanonicalRanking) > limit {
-		return nil, toolSearchProviderValidationError{code: toolSearchWarningProviderInvalidRanking}
-	}
-	seen := make(map[string]bool, len(ranking.CanonicalRanking))
-	result := make([]string, 0, len(ranking.CanonicalRanking))
-	for _, canonical := range ranking.CanonicalRanking {
-		canonical = strings.TrimSpace(canonical)
-		if canonical == "" || seen[canonical] {
-			return nil, toolSearchProviderValidationError{code: toolSearchWarningProviderInvalidRanking}
-		}
-		document, ok := e.documents[canonical]
-		if !ok {
-			return nil, toolSearchProviderValidationError{code: toolSearchWarningProviderInvalidRanking}
-		}
-		seen[canonical] = true
-		if !toolSearchEligible(document.tool, allowedProducts, allowedEffects, excluded) {
-			continue
-		}
-		result = append(result, canonical)
-		if len(result) == limit {
-			break
-		}
-	}
-	return result, nil
-}
-
-func (e *ToolSearchEngine) fuseToolSearchReferences(sparse []ToolReference, external []string, k float64) ([]ToolReference, error) {
-	byCanonical := make(map[string]ToolReference, len(sparse)+len(external))
-	for _, reference := range sparse {
-		byCanonical[reference.CanonicalPath] = reference
-	}
-	for _, canonical := range external {
-		if _, ok := byCanonical[canonical]; ok {
-			continue
-		}
-		document, ok := e.documents[canonical]
-		if !ok {
-			return nil, fmt.Errorf("canonical path %q is not in the Catalog", canonical)
-		}
-		byCanonical[canonical] = toolReference(document.tool, 0, 0, nil, []string{"provider"})
-	}
-	if len(external) == 0 {
-		return nil, fmt.Errorf("ranking is empty")
-	}
-	scores := make(map[string]float64, len(byCanonical))
-	for rank, reference := range sparse {
-		scores[reference.CanonicalPath] += 1 / (k + float64(rank+1))
-	}
-	for rank, canonical := range external {
-		scores[canonical] += 1 / (k + float64(rank+1))
-	}
-	result := make([]ToolReference, 0, len(byCanonical))
-	for canonical, reference := range byCanonical {
-		reference.score = scores[canonical]
-		if reference.sparseScore > 0 && stringSliceContains(external, canonical) {
-			reference.RankSources = stableUniqueStrings(append(reference.RankSources, "provider"))
-		}
-		result = append(result, reference)
-	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].score != result[j].score {
-			return result[i].score > result[j].score
-		}
-		return result[i].CanonicalPath < result[j].CanonicalPath
-	})
-	return result, nil
 }
 
 func toolSearchEligible(tool ToolSpec, allowedProducts, allowedEffects, excluded map[string]bool) bool {

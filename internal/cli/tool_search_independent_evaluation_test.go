@@ -10,7 +10,7 @@ import (
 )
 
 func TestEvaluateToolSearchIndependentScoresGradedSafetyAndWorkflow(t *testing.T) {
-	engine := newToolSearchTestEngine(t, nil)
+	engine := newToolSearchTestEngine(t)
 	cases := []ToolSearchIndependentCase{
 		{
 			ID: "chat", Query: "给群里发送消息", Language: "chinese_only",

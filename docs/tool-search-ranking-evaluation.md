@@ -48,13 +48,13 @@
 3. **参数描述是 shadow 字段，不是已证明噪声。** 在相同 tokenizer/ranker 下加入参数描述，TF-IDF R@5 84.55%→85.05%，BM25 83.06%→83.72%，两个 paired CI 均跨 0；10 条工作流 Complete@5 分别 30%→40%、20%→30%，样本太小不能定默认。参数类型/alias 没有带来额外 R@5 增益。
 4. **`use_when` 是明确的数据泄漏上界。** 历史实验显式开启 `use_when` 投影，而 602 条 proxy query 正来自 `use_when`；含该字段后 BM25/TF-IDF R@5 都达到 100%。当前 Go 默认已经关闭该字段。这不是生产效果，而是“拿答案原句搜答案”的上界；只有独立 qrels 可以重新评估是否值得开启。
 5. **当前数据无法执行英文门禁。** 602 条 intent 中纯中文 283 条、中文混 ASCII 319 条、英文 0 条；RFC 要求的英文 ≥100 条只能由独立数据集补齐，不能从当前 proxy 声称通过。
-6. **TF-IDF+Dense 是新的 shadow 候选，不是新默认。** 默认 `depth=100,k=60` 时 R@5=87.87%，dev sweep 最好 `depth=100,k=10` 为 88.70%；但默认候选相对 BM25 的 case CI 为 +2.16～+7.31 pp，product-cluster macro 差值却为 -2.98 pp、CI 跨 0。参数又在同一 proxy 上挑选，只能进入独立 dev/test 与 shadow。
+6. **TF-IDF+Dense 已否决为产品候选。** 默认 `depth=100,k=60` 时 R@5=87.87%，dev sweep 最好 `depth=100,k=10` 为 88.70%；但默认候选相对 BM25 的 product-cluster macro 差值为 -2.98 pp、CI 跨 0，参数又在同一 proxy 上挑选，不足以覆盖 Provider/RRF 的实现与运维复杂度。
 7. **历史 572 工具 Spike 中，冷启动而不是 warm search 是 subprocess 主要成本。** Go warm query 为约 0.59～0.63 ms、约 116 KB/op；当时的 engine build 为约 51～53 ms、31 MB/op。当前声明装配版必须重新测“进程启动 + runtime Catalog assembly + index build + Search + JSON”，不能沿用历史 warm p95。
 8. **修复了一个真实的跨进程确定性缺陷。** BM25 原先遍历 Go map 累加浮点分数；现已改为每请求排序 query term 后固定顺序累加，并以独立子进程逐字节 golden 回归。
 
-续测后的推荐顺序是：`Exact → hard filter → TF-IDF/BM25 可替换单路 control → 可选异质 Provider → RRF`。Alpha 前不启用双词法 RRF，不默认索引 `use_when`，Dense 继续外置。
+续测后的产品顺序是：`Exact → hard filter → TF-IDF/BM25 可替换单路 control`。Alpha 前不启用双词法 RRF，不默认索引 `use_when`；Dense/RRF 仅保留为历史评测对照，Provider/fallback 已从实现和协议删除。
 
-这轮实测支持“Exact + BM25 + Dense RRF”的方向，但否定了几个过早的假设：
+这轮实测曾验证“Exact + BM25 + Dense RRF”的研究上限，但后续产品决策因独立证据不足和链路复杂度否决 Provider/RRF。以下数字只解释为什么做过实验，不再代表当前架构方向：
 
 1. **Dense 单独没有优于 BM25**：Dense Recall@5 为 82.06%，普通 BM25 为 83.06%。不能因为语义模型更先进就替换词法检索。
 2. **Hybrid RRF 在当前微平均 proxy case 上有配对增益**：字段 BM25 + Dense 的 Recall@5 为 85.88%，比字段 BM25 高 3.65 个百分点；case-level 配对 bootstrap 95% 区间为 +1.33～+6.31 个百分点。product-cluster 区间跨 0，因此不能扩展为跨产品稳定结论。
@@ -63,13 +63,12 @@
 5. **单次整句检索仍不擅长多工具任务**：字段 Hybrid 的工作流 Comprehensiveness@5 只有 50%。人工正确拆解子任务后，同一检索器可达到 80%，说明瓶颈已经从“相关性”部分转移到“任务分解与集合选择”。
 6. **`avoid_when` 必须成为门禁**：最佳自然语言 Hybrid 仍会把当前 query 明确不该使用的工具放入 Top-5，暴露率为 55.61%。相关性排序不能理解业务否定关系，不能替代 contradiction/policy gate。
 
-因此，当前推荐继续验证的架构候选不是纯 BM25、纯 Dense 或裸 RRF，而是：
+因此，当前推荐继续验证的产品候选是：
 
 ```text
 Hard Filter
   → Exact Guard
-  → 字段 BM25 + Dense 深召回
-  → RRF
+  → 可替换本地轻量词法召回
   → avoid_when / policy contradiction gate
   → 多动作 query 分解与集合补全
   → Top-5 ToolReference
@@ -323,7 +322,7 @@ Hybrid 也会把 BM25 原本命中的工具挤出 Top-5：
 基于本轮数据，推荐把原方案修正为：
 
 1. **MVP 保留 Exact + BM25**，但不要宣称当前字段权重已优于 unfielded；先作为可配置实验参数。
-2. **第二阶段加入 Dense + RRF 是有实证支持的**，目标增益以 Recall@5 和 MRR 为主。
+2. **Dense + RRF 的历史 proxy 增益不足以支持产品复杂度**，不进入当前实现；如未来重启必须另立 RFC 并使用独立数据证明。
 3. **Exact Guard 是强制约束**，不是调权重选项。canonical/CLI path 的 100% Top-1 必须独立于语义融合。
 4. **`avoid_when` 进入独立 contradiction gate**。Forbidden@5 不能作为普通相关性权重优化。
 5. **多工具 query 先分解再检索**，每个动作保留候选预算，再做最小完整集合选择；不要直接对整句只取全局 Top-5。
@@ -420,7 +419,7 @@ Search 的额外步骤是 wiki space search、minutes detail read，以及两臂
 下一轮优先级：
 
 1. 业务团队补 300～500 条真实 query，其中至少 80 条多工具任务、100 条 hard negative；
-2. 按 query 模板和工具族切分 train/dev/test，再调 BM25 字段权重和 RRF arm 权重；
-3. 对比 `bge-m3`、multilingual-e5、中文 cross-encoder，并同时测 p95/内存/包体积；
+2. 按 query 模板和工具族切分 train/dev/test，再调 BM25/TF-IDF 字段权重；
+3. 继续记录 Dense/cross-encoder 的离线研究结果，但不接入产品协议；
 4. 实现 Exact Guard、permission hard filter、avoid contradiction 和 query decomposition 的端到端 shadow evaluator；
 5. 把 Recall@5、Forbidden Exposure、Comprehensiveness@5、Agent task success 与 recovery success 一起作为发布门禁。

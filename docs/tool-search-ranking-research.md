@@ -2,7 +2,9 @@
 
 > 选型更新（2026-08-12）：本文记录前期源码调研和候选参数，不代表最终
 > DWS CLI 方案。后续多算法、中文切片、CLI 体积和多 Agent 独立审计否决了
-> “内嵌 Dense”与“锁死 BM25”的假设。正式决策、整体收益和决策过程见
+> “内嵌 Dense”与“锁死 BM25”的假设。2026-08-13 又进一步删除了外部
+> CandidateProvider、RRF 与 fallback；Dense/Hybrid 只保留为历史实验。
+> 正式决策、整体收益和决策过程见
 > [`rfc-tool-search-progressive-discovery.md`](rfc-tool-search-progressive-discovery.md)；
 > 固定 commit 的源码架构复核见
 > [`tool-search-github-architecture-research.md`](tool-search-github-architecture-research.md)。
@@ -30,16 +32,15 @@ Catalog 搜索（返回轻量 ToolReference）
 查询 + 最近任务上下文
   → 权限、可用性、接口和风险策略硬过滤
   → 精确路径 / 名称 / alias 匹配
-  → BM25 词法召回 ─┐
-                    ├→ RRF 名次融合 → 确定性特征重排 → Top-K ToolReference
-  → Dense 语义召回 ─┘                            └→ 多工具集合补全
+  → 可替换本地轻量词法召回
+  → 确定性特征重排 → Top-K ToolReference
+                      └→ 多工具集合补全
 ```
 
 推荐分阶段落地：
 
 1. **第一版先做“硬过滤 + 精确匹配 + 字段化 BM25 + 稳定 Top-5”**。本地、无模型、容易回归，也能直接利用现有人工评审元数据。
-2. **独立离线评测支持语义召回有增益后，再加 Dense + RRF**。不要把 BM25 原始分和 cosine 原始分线性相加。
-3. **只在低置信度或歧义查询上做 Cross-encoder/小模型重排**，候选池控制在 20～50 个，不能让 LLM 扫全量工具。
+2. **Dense/RRF 与 Cross-encoder 只保留离线研究**。当前产品协议不预留 Provider/fallback 扩展点；如未来重启必须另立 RFC。
 4. **在线使用反馈只能来自真实执行行为和最终结果**，不能学习检索器自己的曝光结果，否则会自我强化错误。
 5. 对“给群里发文件并确认送达”这类任务，评测目标不是 Top-1，而是 Top-K 内同时覆盖“发送”和“查询状态”两个能力；这需要集合完整度指标和工作流依赖信息。
 
@@ -283,7 +284,7 @@ func weightedRRF(arms []RankedArm, k float64) []Hit {
 
 ### 6.1 API 分层
 
-建议保留 `SchemaIndex.Resolve` 的精确、无推断契约，新建独立检索层。本节是方案演进记录，不再定义第二套公开 DTO；规范 `tool-search.v1`、`ToolReference`、ExternalRanking 与 `schema-inspect.v1` 以 [RFC 5.6～5.8](rfc-tool-search-progressive-discovery.md#56-candidateprovider-与融合) 为准。当前 `internal/cli` 类型均为 non-public Spike。
+建议保留 `SchemaIndex.Resolve` 的精确、无推断契约，新建独立检索层。本节是方案演进记录，不再定义第二套公开 DTO；规范 `tool-search.v1`、`ToolReference` 与 `schema-inspect.v1` 以 [RFC 5.6～5.8](rfc-tool-search-progressive-discovery.md#56-纯本地传输与排名边界) 为准。
 
 建议分成以下组件，避免以后更换模型时重写 CLI：
 
@@ -292,8 +293,6 @@ CatalogSnapshot
   ├─ PolicyFilter
   ├─ ExactRetriever
   ├─ BM25Retriever
-  ├─ DenseRetriever（可选）
-  ├─ RRFFuser
   ├─ ConstraintReranker
   ├─ WorkflowCompleter
   └─ SearchTrace / EvalRecorder
@@ -308,9 +307,7 @@ CLI、Agent tool 和 MCP capability 都调用同一个 library service，不能�
 1. 启动时验证由 Go 声明经 `ResolveSchemaBuild` 装配的 Catalog；验证失败继续遵守当前 fail-closed 语义，不能临时从 Cobra 树拼第二份目录。
 2. BM25 索引按 Catalog hash 构建一次并复用；Catalog 变更时在新实例中完整构建。
 3. 新索引完成全部校验后原子替换；并发查询继续持有旧快照，不观察半更新状态。
-4. Dense cache key 至少包含 Catalog hash、投影版本、模型 ID、模型 revision、维度和 query/document prompt。
-5. Dense 构建或加载失败时，搜索自动降级为 Exact + BM25，并在 trace 中标记 `degraded_reason`；不能返回空列表。
-6. 排序输出必须确定：相同语料、配置和 query 跨进程返回相同 Top-K 成员和顺序。
+4. 排序输出必须确定：相同语料、配置和 query 跨进程返回相同 Top-K 成员和顺序。
 
 ### 6.3 建议的排序步骤
 
@@ -332,21 +329,13 @@ CLI、Agent tool 和 MCP capability 都调用同一个 library service，不能�
 3. Sparse Arm
    - 字段化 BM25，召回至少 min(100, candidate_count)
 
-4. Dense Arm（可选、由 Agent Host/远端 Provider 承担）
-   - 同一稳定文本投影；召回相同深度
-   - 失败则记录并跳过，不影响 Sparse
-
-5. Fusion
-   - weighted RRF，初始 k=60
-   - Exact、BM25、Dense 的权重由 benchmark 决定
-
-6. Constraint Rerank
+4. Constraint Rerank
    - `use_when` 一致性加分
    - `avoid_when` 冲突降分/淘汰
    - 明确 product、effect、对象类型约束
    - 同分以 canonical path 升序
 
-7. Workflow Completion
+5. Workflow Completion
    - 对多动作 query 识别必要 capability 集合
    - 优先选择能覆盖全部动作、且依赖可衔接的最小工具集
 
@@ -444,8 +433,7 @@ ToolRet 的 [ACL 2025 论文](https://aclanthology.org/2025.findings-acl.1258/)�
 - 同 snapshot/query 的 Top-K 成员和顺序确定性为 100%；
 - 人工评审单工具集 Recall@5 ≥ 98%；
 - 多工具集 Comprehensiveness@5 ≥ 95%；
-- Hybrid 相比 BM25 在固定测试集上有显著增益后才默认启用；
-- Dense/重排失败时 BM25 结果可用且有明确 degraded trace；
+- 本地轻量算法的默认切换必须在固定独立测试集上达到预注册门槛；
 - 搜索返回轻量引用相对 `schema --all` 的上下文体积降低至少 80%。
 
 不能只选总体平均分最高的模型。必须按以下 slice 分开看：中文口语、英文 CLI、精确标识符、跨产品、单工具、多工具、写操作、高风险、否定用例、长参数描述、低频工具。
@@ -475,16 +463,7 @@ ToolRet 的 [ACL 2025 论文](https://aclanthology.org/2025.findings-acl.1258/)�
 - 同步 `schema` runnable parent、reviewed disposition、skills 和 command surface 门禁；
 - Host shadow 新发现路径，但不改变实际执行。
 
-### Phase 3：Host Provider + RRF
-
-- 选择支持中文和工具语料的 embedding 模型；
-- 固定模型 revision 和 projection version；
-- Provider 在 Host 外置，DWS CLI 不内嵌模型/runtime；
-- Provider 认证、deadline、egress 和脱敏由 Host 管理；只提交带 CatalogVersionRef 的 canonical ranking；
-- 本地词法/Provider 各深召回后由 DWS 验证并 RRF；Provider 失败逐字段退回 local-only；
-- 通过消融实验决定字段、模型、RRF 权重和是否默认启用。
-
-### Phase 4：歧义重排与工作流覆盖
+### Phase 3：矛盾门禁与工作流覆盖
 
 - 仅对低 margin、跨产品或复杂 query 启用 Cross-encoder/小模型；
 - 候选池不超过 20～50；
@@ -518,18 +497,18 @@ ToolRet 的 [ACL 2025 论文](https://aclanthology.org/2025.findings-acl.1258/)�
 
 1. **接口**：Catalog → Search → ToolReference → Inspect → Execute，`search_tools` 与 CLI 共享实现。
 2. **第一排序器**：字段化 BM25，Exact 独立优先，硬策略先过滤，Top-K 默认 5。
-3. **融合**：Dense 只在 benchmark 证明增益后加入，使用 RRF，不融合原始分。
+3. **不做融合**：Dense/RRF/Provider/fallback 不进入当前产品方案。
 4. **确定性**：所有路径统一 `(score desc, canonical asc)`，先稳定排序全候选再截断。
-5. **可用性**：BM25 永远可用；Dense/重排可选且失败可降级；索引更新原子化。
+5. **可用性**：本地词法索引更新原子化，不引入远端检索依赖。
 6. **负向语义**：`avoid_when` 进入冲突门禁和评测，不进入正向全文。
 7. **多工具任务**：把 Comprehensiveness@5 和 plan completeness 设为一等指标。
 8. **可信与恢复**：搜索结果只说明“候选相关”，Inspect 确认契约，Execute 返回结构化回执，Verify/Recovery 使用 effect、risk、confirmation、idempotency 单独治理。
 
 这样可以同时支撑三个目标：
 
-- **让 Agent 找得到**：Exact + BM25 + 可选 Dense/RRF + 多工具补全；
+- **让 Agent 找得到**：Exact + 本地轻量词法 + 多工具补全；
 - **让返回结果可信**：唯一 Catalog、来源 hash、权限硬过滤、match reasons、Inspect 和执行后验证；
-- **让失败后安全恢复**：索引原子更新和检索降级保证“还能找到”，幂等/回执/状态机保证“不会因重试制造第二次业务副作用”。
+- **让失败后安全恢复**：索引原子更新保证检索一致性；业务幂等/回执/状态机属于后续独立执行 RFC。
 
 ## 11. 主要来源
 
