@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-12T00:10:44.511794",
-  "count": 399,
+  "generated_at": "2026-08-13T11:28:53.937421",
+  "count": 402,
   "results": [
     {
       "suite": "semantic",
@@ -2782,6 +2782,36 @@
       "status": "reviewed_available",
       "disposition": "alias_internal",
       "semantic_delta": "旧 Doc 移动入口，仅为兼容保留；新的文件移动应使用 Drive 命令。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+resource-delete",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "公开保留历史封面清除命令及其稳定 Schema identity；新场景优先使用 +cover-clear。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+resource-download",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "公开保留历史封面下载命令及其稳定 Schema identity；新场景优先使用 +cover-download。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+resource-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "alias_internal",
+      "semantic_delta": "公开保留历史封面设置命令及其稳定 Schema identity；新场景优先使用 +cover-set。",
       "availability": "available"
     },
     {

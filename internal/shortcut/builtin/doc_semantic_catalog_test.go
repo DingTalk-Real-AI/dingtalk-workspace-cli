@@ -66,8 +66,8 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 	if len(missing) > 0 || len(stale) > 0 {
 		t.Fatalf("catalog mismatch: missing=%v stale=%v", missing, stale)
 	}
-	if public != 45 || hidden != 5 {
-		t.Fatalf("public/hidden = %d/%d, want 45/5", public, hidden)
+	if public != 48 || hidden != 2 {
+		t.Fatalf("public/hidden = %d/%d, want 48/2", public, hidden)
 	}
 
 	wantPrimaries := map[string]string{
@@ -86,8 +86,8 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 		}
 	}
 	for _, legacy := range []string{"+resource-update", "+resource-download", "+resource-delete"} {
-		if item, ok := registered[legacy]; !ok || !item.Hidden || item.Disposition != shortcut.DispositionAliasInternal {
-			t.Errorf("legacy cover name %s is not a hidden compatibility command: %#v", legacy, item)
+		if item, ok := registered[legacy]; !ok || item.Hidden || item.Disposition != shortcut.DispositionAliasInternal {
+			t.Errorf("legacy cover name %s is not a visible compatibility command: %#v", legacy, item)
 		}
 	}
 }
