@@ -256,6 +256,12 @@ func TestCrossPlatformCoverageDriveCopyPreservesSchemaProperties(t *testing.T) {
 
 func TestCrossPlatformCoverageDriveRecentPaginationAndJournalCoverage(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	if got := effectiveRecentMaxItems(0); got != 500 {
+		t.Fatalf("default recent max-items = %d, want 500", got)
+	}
+	if got := effectiveRecentMaxItems(17); got != 17 {
+		t.Fatalf("explicit recent max-items = %d, want 17", got)
+	}
 	run := func(responses []string, args ...string) error {
 		return runDriveCoverage(t, Recent, &driveCoverageCaller{responses: map[string][]string{"get_recent_list": responses}}, args...)
 	}
