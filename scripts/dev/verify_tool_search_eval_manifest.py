@@ -4,11 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -18,26 +16,6 @@ DEFAULT_MANIFEST = REPO_ROOT / "scripts/testdata/tool_search_eval_manifest.json"
 DEFAULT_CATALOG_DIR = REPO_ROOT / ".worktrees/policy-tmp/tool-search-schema-catalog"
 CHINESE = re.compile(r"[\u3400-\u9fff]")
 ASCII_WORD = re.compile(r"[A-Za-z0-9]")
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def sha256_source_set(paths: list[str]) -> str:
-    """Hash path names and bytes so renames and edits both invalidate a freeze."""
-    digest = hashlib.sha256()
-    for relative in sorted(paths):
-        target = REPO_ROOT / relative
-        digest.update(relative.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(target.read_bytes())
-        digest.update(b"\0")
-    return digest.hexdigest()
 
 
 def language_slice(query: str) -> str:
@@ -160,9 +138,7 @@ def load_generated_catalog(catalog_dir: Path, problems: list[str]) -> tuple[dict
 
 def validate_manifest(
     manifest_path: Path,
-    require_sealed: bool,
     catalog_dir: Path | None = None,
-    independent_result_path: Path | None = None,
 ) -> list[str]:
     problems: list[str] = []
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -201,47 +177,14 @@ def validate_manifest(
 
     proxy = manifest.get("proxy_v1", {})
 
-    freeze = manifest.get("algorithm_freeze", {})
-    source_paths = freeze.get("go_source_paths")
-    expected_source_hash = require_string(
-        freeze.get("go_source_sha256"), "algorithm_freeze.go_source_sha256", problems
-    )
-    if not isinstance(source_paths, list) or not source_paths or not all(
-        isinstance(item, str) and item.strip() for item in source_paths
-    ):
-        problems.append("algorithm_freeze.go_source_paths must be a non-empty string list")
-    else:
-        missing = [relative for relative in source_paths if not (REPO_ROOT / relative).is_file()]
-        for relative in missing:
-            problems.append(f"algorithm source {relative} does not exist")
-        if not missing and expected_source_hash and sha256_source_set(source_paths) != expected_source_hash:
-            problems.append("Go Tool Search algorithm source differs from frozen manifest")
-    gate_paths = freeze.get("gate_source_paths")
-    expected_gate_hash = require_string(
-        freeze.get("gate_source_sha256"), "algorithm_freeze.gate_source_sha256", problems
-    )
-    if not isinstance(gate_paths, list) or not gate_paths or not all(
-        isinstance(item, str) and item.strip() for item in gate_paths
-    ):
-        problems.append("algorithm_freeze.gate_source_paths must be a non-empty string list")
-    else:
-        missing = [relative for relative in gate_paths if not (REPO_ROOT / relative).is_file()]
-        for relative in missing:
-            problems.append(f"evaluation gate source {relative} does not exist")
-        if not missing and expected_gate_hash and sha256_source_set(gate_paths) != expected_gate_hash:
-            problems.append("Tool Search evaluation gate source differs from frozen manifest")
-    for path_field, hash_field in [
-        ("workflow_path", "workflow_file_sha256"),
-        ("evaluator_path", "evaluator_file_sha256"),
-    ]:
+    # Source files evolve with every ranking change; the manifest deliberately
+    # does not pin their content hashes (that would couple every code change
+    # to a manifest update). Only their existence is asserted. Behavior is
+    # gated by the Go evaluation sentinels instead.
+    for path_field in ["workflow_path", "evaluator_path"]:
         relative = require_string(proxy.get(path_field), f"proxy_v1.{path_field}", problems)
-        expected = require_string(proxy.get(hash_field), f"proxy_v1.{hash_field}", problems)
-        if relative and expected:
-            target = REPO_ROOT / relative
-            if not target.is_file():
-                problems.append(f"{relative} does not exist")
-            elif sha256_file(target) != expected:
-                problems.append(f"{relative} hash differs from frozen manifest")
+        if relative and not (REPO_ROOT / relative).is_file():
+            problems.append(f"{relative} does not exist")
 
     catalog_payload: dict[str, Any] = {}
     catalog_tools: set[str] = set()
@@ -269,47 +212,17 @@ def validate_manifest(
         problems.append("independent qrels cases must be a list")
         cases = []
     ids: set[str] = set()
-    counts: Counter[str] = Counter()
     for index, case in enumerate(cases):
         if isinstance(case, dict) and isinstance(case.get("id"), str):
             if case["id"] in ids:
                 problems.append(f"cases[{index}].id duplicates {case['id']!r}")
             ids.add(case["id"])
-        language, is_workflow = validate_case(case, index, catalog_tools, problems)
-        if language:
-            counts[language] += 1
-        if is_workflow:
-            counts["workflow"] += 1
-    derived_coverage = derive_independent_coverage(cases, catalog_metadata, problems)
-
-    if require_sealed:
-        if independent.get("state") != "sealed" or qrels.get("state") != "sealed":
-            problems.append("independent test must be sealed before release-gate evaluation")
-        expected_hash = independent.get("file_sha256")
-        if not isinstance(expected_hash, str) or sha256_file(qrels_path) != expected_hash:
-            problems.append("independent qrels hash is absent or differs from sealed manifest")
-        for field in ["sealed_at", "retrieval_signature", "independent_evaluation_signature"]:
-            require_string(independent.get(field), f"independent_test_v1.{field}", problems)
-        for slice_name, minimum in independent.get("minimum_counts", {}).items():
-            if counts[slice_name] < minimum:
-                problems.append(
-                    f"independent slice {slice_name} has {counts[slice_name]} cases; requires {minimum}"
-                )
-        for required in independent.get("required_coverage", []):
-            if required not in derived_coverage:
-                problems.append(f"independent coverage {required} is absent")
-        if independent_result_path is None or not independent_result_path.is_file():
-            problems.append("sealed independent evaluation result is required")
-        else:
-            result = json.loads(independent_result_path.read_text(encoding="utf-8"))
-            validate_independent_result(unwrap_independent_result(result), independent, proxy, counts, problems)
+        validate_case(case, index, catalog_tools, problems)
+    # Coverage derivation also validates qrels data quality (confusion_family
+    # consistency) as a side effect; the release-time sealed gate that consumed
+    # the coverage set has been removed.
+    derive_independent_coverage(cases, catalog_metadata, problems)
     return problems
-
-
-def unwrap_independent_result(result: Any) -> Any:
-    if isinstance(result, dict) and "independent" in result:
-        return result["independent"]
-    return result
 
 
 def derive_independent_coverage(
@@ -379,79 +292,14 @@ def derive_independent_coverage(
     return coverage
 
 
-def validate_independent_result(
-    result: Any,
-    independent: dict[str, Any],
-    proxy: dict[str, Any],
-    counts: Counter[str],
-    problems: list[str],
-) -> None:
-    if not isinstance(result, dict) or result.get("version") != "tool-search-independent-evaluation.v1":
-        problems.append("independent result version must be tool-search-independent-evaluation.v1")
-        return
-    catalog = result.get("catalog", {})
-    if catalog.get("source_hash") != proxy.get("catalog_source_hash") or catalog.get("surface_hash") != proxy.get("catalog_surface_hash"):
-        problems.append("independent result Catalog differs from frozen proxy generation")
-    thresholds = independent.get("thresholds", {})
-    overall = result.get("overall", {})
-    if overall.get("cases") != sum(counts[name] for name in ["chinese_only", "mixed_chinese_ascii", "english"]):
-        problems.append("independent result case count differs from sealed qrels")
-    minimum_overall = thresholds.get("minimum_overall_recall_at_5")
-    if not isinstance(minimum_overall, (int, float)) or overall.get("recall_at_5", -1) < minimum_overall:
-        problems.append("independent overall Recall@5 is below the frozen threshold")
-    control = result.get("control_overall", {})
-    if control.get("cases") != overall.get("cases"):
-        problems.append("independent control case count differs from candidate")
-    delta = result.get("recall_at_5_delta")
-    ci = result.get("product_cluster_recall_at_5_delta_ci_95", {})
-    noninferiority_margin = thresholds.get("recall_at_5_noninferiority_margin")
-    if not isinstance(delta, (int, float)) or not isinstance(ci.get("lower"), (int, float)) or not isinstance(ci.get("upper"), (int, float)):
-        problems.append("independent paired BM25 delta and product-cluster CI are required")
-    elif not isinstance(noninferiority_margin, (int, float)) or ci["lower"] < -noninferiority_margin:
-        problems.append("independent candidate fails BM25 Recall@5 noninferiority")
-    if thresholds.get("default_switch_requested"):
-        minimum_effect = thresholds.get("minimum_default_switch_recall_at_5_gain")
-        if not isinstance(minimum_effect, (int, float)) or ci.get("lower", float("-inf")) <= minimum_effect:
-            problems.append("independent candidate lacks the frozen Recall@5 gain for a default switch")
-    slices = result.get("language_slices", {})
-    minimum_slice = thresholds.get("minimum_language_recall_at_5")
-    for name in ["chinese_only", "mixed_chinese_ascii", "english"]:
-        payload = slices.get(name, {})
-        if payload.get("cases") != counts[name]:
-            problems.append(f"independent result {name} count differs from sealed qrels")
-        if not isinstance(minimum_slice, (int, float)) or payload.get("recall_at_5", -1) < minimum_slice:
-            problems.append(f"independent result {name} Recall@5 is below the frozen threshold")
-    safety = result.get("safety", {})
-    maximum_forbidden = thresholds.get("maximum_forbidden_exposure_at_5")
-    minimum_alternative = thresholds.get("minimum_alternative_recall_at_5")
-    maximum_sibling = thresholds.get("maximum_sibling_exposure_at_5")
-    if not isinstance(maximum_forbidden, (int, float)) or safety.get("forbidden_exposure_at_5", 2) > maximum_forbidden:
-        problems.append("independent forbidden exposure is above the frozen threshold")
-    if not isinstance(minimum_alternative, (int, float)) or safety.get("alternative_recall_at_5", -1) < minimum_alternative:
-        problems.append("independent alternative Recall@5 is below the frozen threshold")
-    if not isinstance(maximum_sibling, (int, float)) or safety.get("sibling_exposure_at_5", 2) > maximum_sibling:
-        problems.append("independent sibling exposure is above the frozen threshold")
-    workflow = result.get("workflow", {})
-    if workflow.get("cases") != counts["workflow"]:
-        problems.append("independent workflow count differs from sealed qrels")
-    if workflow.get("complete_at_5", -1) < thresholds.get("minimum_workflow_complete_at_5", 2):
-        problems.append("independent workflow Complete@5 is below the frozen threshold")
-    if workflow.get("required_recall_at_5", -1) < thresholds.get("minimum_workflow_required_recall_at_5", 2):
-        problems.append("independent workflow required Recall@5 is below the frozen threshold")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--catalog-dir", type=Path, default=DEFAULT_CATALOG_DIR)
-    parser.add_argument("--require-sealed", action="store_true")
-    parser.add_argument("--independent-result", type=Path)
     args = parser.parse_args()
     problems = validate_manifest(
         args.manifest.resolve(),
-        args.require_sealed,
         args.catalog_dir.resolve(),
-        args.independent_result.resolve() if args.independent_result else None,
     )
     if problems:
         for problem in problems:

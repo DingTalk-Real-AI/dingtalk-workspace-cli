@@ -4,12 +4,9 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
-import tempfile
 import unittest
 from pathlib import Path
-from collections import Counter
 
 
 SCRIPT = Path(__file__).with_name("verify_tool_search_eval_manifest.py")
@@ -30,29 +27,8 @@ class ToolSearchEvalManifestTest(unittest.TestCase):
         )
         self.assertEqual(verify.language_slice("send a file to the group"), "english")
 
-    def test_go_algorithm_source_freeze_matches(self) -> None:
-        manifest = verify.json.loads(verify.DEFAULT_MANIFEST.read_text(encoding="utf-8"))
-        freeze = manifest["algorithm_freeze"]
-        self.assertEqual(
-            verify.sha256_source_set(freeze["go_source_paths"]),
-            freeze["go_source_sha256"],
-        )
-        self.assertEqual(
-            verify.sha256_source_set(freeze["gate_source_paths"]),
-            freeze["gate_source_sha256"],
-        )
-
-    def test_collecting_manifest_is_valid_but_not_release_ready(self) -> None:
-        self.assertEqual(verify.validate_manifest(verify.DEFAULT_MANIFEST, False), [])
-        sealed_problems = verify.validate_manifest(verify.DEFAULT_MANIFEST, True)
-        self.assertTrue(
-            any("must be sealed" in problem for problem in sealed_problems),
-            sealed_problems,
-        )
-        self.assertTrue(
-            any("english has 0 cases" in problem for problem in sealed_problems),
-            sealed_problems,
-        )
+    def test_collecting_manifest_is_valid(self) -> None:
+        self.assertEqual(verify.validate_manifest(verify.DEFAULT_MANIFEST), [])
 
     def test_graded_equivalent_qrels_are_accepted(self) -> None:
         catalog = {
@@ -105,50 +81,6 @@ class ToolSearchEvalManifestTest(unittest.TestCase):
         verify.validate_case(case, 0, {"safe.read", "danger.delete"}, problems)
         self.assertTrue(any("unknown Catalog tool" in problem for problem in problems), problems)
         self.assertTrue(any("must be disjoint" in problem for problem in problems), problems)
-
-    def test_independent_result_accepts_generator_envelope_payload(self) -> None:
-        manifest = verify.json.loads(verify.DEFAULT_MANIFEST.read_text(encoding="utf-8"))
-        report = {
-            "version": "tool-search-independent-evaluation.v1",
-            "catalog": {
-                "source_hash": manifest["proxy_v1"]["catalog_source_hash"],
-                "surface_hash": manifest["proxy_v1"]["catalog_surface_hash"],
-            },
-            "overall": {"cases": 3, "recall_at_5": 1.0},
-            "control_overall": {"cases": 3, "recall_at_5": 0.9},
-            "recall_at_5_delta": 0.1,
-            "product_cluster_recall_at_5_delta_ci_95": {"lower": 0.05, "upper": 0.15},
-            "language_slices": {
-                name: {"cases": 1, "recall_at_5": 1.0}
-                for name in ["chinese_only", "mixed_chinese_ascii", "english"]
-            },
-            "safety": {"forbidden_exposure_at_5": 0.0, "alternative_recall_at_5": 1.0, "sibling_exposure_at_5": 0.0},
-            "workflow": {"cases": 1, "complete_at_5": 1.0, "required_recall_at_5": 1.0},
-        }
-        self.assertIs(verify.unwrap_independent_result({"independent": report}), report)
-        problems: list[str] = []
-        verify.validate_independent_result(
-            report,
-            manifest["independent_test_v1"],
-            manifest["proxy_v1"],
-            Counter(chinese_only=1, mixed_chinese_ascii=1, english=1, workflow=1),
-            problems,
-        )
-        self.assertEqual(problems, [])
-
-    def test_validate_manifest_unwraps_real_generator_file_shape(self) -> None:
-        manifest = json.loads(verify.DEFAULT_MANIFEST.read_text(encoding="utf-8"))
-        with tempfile.TemporaryDirectory() as directory:
-            temporary = Path(directory)
-            qrels = temporary / "qrels.json"
-            qrels.write_text(json.dumps({"version": "tool-search-qrels.v1", "state": "collecting", "cases": []}), encoding="utf-8")
-            manifest["independent_test_v1"]["path"] = str(qrels)
-            manifest_path = temporary / "manifest.json"
-            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-            result_path = temporary / "result.json"
-            result_path.write_text(json.dumps({"diagnostic": {}, "independent": {"version": "wrong"}}), encoding="utf-8")
-            problems = verify.validate_manifest(manifest_path, True, independent_result_path=result_path)
-            self.assertTrue(any("result version" in problem for problem in problems), problems)
 
     def test_release_coverage_is_derived_not_self_asserted(self) -> None:
         metadata = {

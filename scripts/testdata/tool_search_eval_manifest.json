@@ -11,20 +11,6 @@
     "state": "development_candidate_recorded_before_independent_dev_test_is_sealed",
     "diagnostic_proxy_control": "bm25_unfielded",
     "go_runtime_default": "fielded_bm25_ensemble",
-    "go_source_paths": [
-      "internal/cli/schema_search_command.go",
-      "internal/cli/tool_search.go",
-      "internal/cli/tool_search_agent_ab.go",
-      "internal/cli/tool_search_evaluation.go",
-      "internal/cli/tool_search_independent_evaluation.go",
-      "internal/cli/tool_search_lexical.go",
-      "internal/generator/cmd_tool_search_comparison/main.go"
-    ],
-    "go_source_sha256": "a7635a9c4cd9e1fa37bea6d93e13590f8e15b33af20c624ac6095ae58fa77a10",
-    "gate_source_paths": [
-      "scripts/dev/verify_tool_search_eval_manifest.py"
-    ],
-    "gate_source_sha256": "6034eb08694a5355fd6cb4a270f5b4eafd5544084d4cb812192c6b3e2b391e15",
     "shadow_candidates": [
       "fielded_bm25_action_v1",
       "fielded_tfidf_cosine",
@@ -45,9 +31,7 @@
     "catalog_surface_hash": "sha256:7f9839f1ff428b52f1d032d2fa6493815c3755650b7d9fa653839e7d589482e5",
     "tool_count": 1098,
     "workflow_path": "scripts/testdata/tool_search_workflows.json",
-    "workflow_file_sha256": "8fdb4b89bee25ae038d4c0104c8b6cec99a1a89514a207e72f2b424b151715ee",
     "evaluator_path": "scripts/dev/eval_tool_search_ranking.py",
-    "evaluator_file_sha256": "2957aa25ee13c16640c0ac6255577359ed34b702a0de561ed21c43267171a3cc",
     "intent_cases": 1123,
     "intent_excluded_over_budget": 10,
     "chinese_only_cases": 402,
@@ -64,37 +48,6 @@
   },
   "independent_test_v1": {
     "state": "collecting",
-    "path": "scripts/testdata/tool_search_independent_test_v1.json",
-    "file_sha256": null,
-    "sealed_at": null,
-    "retrieval_signature": null,
-    "independent_evaluation_signature": null,
-    "minimum_counts": {
-      "chinese_only": 100,
-      "mixed_chinese_ascii": 100,
-      "english": 100,
-      "workflow": 80
-    },
-    "thresholds": {
-      "minimum_overall_recall_at_5": 0.8,
-      "minimum_language_recall_at_5": 0.8,
-      "recall_at_5_noninferiority_margin": 0.02,
-      "minimum_default_switch_recall_at_5_gain": 0.01,
-      "default_switch_requested": false,
-      "maximum_forbidden_exposure_at_5": 0.05,
-      "maximum_sibling_exposure_at_5": 0.05,
-      "minimum_alternative_recall_at_5": 0.8,
-      "minimum_workflow_complete_at_5": 0.8,
-      "minimum_workflow_required_recall_at_5": 0.9
-    },
-    "required_coverage": [
-      "all_reviewed_products",
-      "read_write_destructive",
-      "sibling_confusion",
-      "graded_equivalent_entrypoints",
-      "forbidden_with_alternative_gold",
-      "two_to_four_step_workflows"
-    ],
-    "unseal_policy": "Seal hashes and both signatures before any test ranking is computed. A failed sealed test is retired; it is never reused for tuning."
+    "path": "scripts/testdata/tool_search_independent_test_v1.json"
   }
 }

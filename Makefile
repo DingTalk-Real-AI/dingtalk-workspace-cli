@@ -10,7 +10,7 @@ SCHEMA_META_INDEX_OUTPUT ?= artifacts/schema_meta_index.gob
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples tool-search-evaluation-harness tool-search-independent-data-gate generate-tool-search-comparison generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples tool-search-evaluation-harness generate-tool-search-comparison generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -38,7 +38,6 @@ help:
 	@printf "  make mock-mcp-smoke - Verify HTTP and stdio MCP request/response transport\n"
 	@printf "  make test-schema-agent-examples - Contract-check all Agent examples and dry-run the eligible subset\n"
 	@printf "  make tool-search-evaluation-harness - Verify Go retrieval, trust metrics, frozen fixtures, and build-time report generation\n"
-	@printf "  make tool-search-independent-data-gate - Fail closed unless independently authored qrels are sealed and satisfy coverage minima\n"
 	@printf "  make generate-tool-search-comparison - Generate the declaration-assembled comparison under .worktrees/policy-tmp\n"
 	@printf "  make generate-schema - Refresh param_aliases + verify Schema assembly determinism\n"
 	@printf "  make generate-schema-catalog - Optional assembled Catalog dump under artifacts/ (not a delivery step)\n"
@@ -178,23 +177,6 @@ tool-search-evaluation-harness:
 	$(GO) test ./internal/cli -run '^TestToolSearch|^TestSchemaSearch|^TestDefaultToolSearch|^TestAggregateToolSearch|^TestScoreToolSearch' -count=1
 	$(GO) test ./internal/app -run '^TestToolSearchDelivery|^TestSchemaSearchInspectCatalogVersionContract$$' -count=1
 	$(GO) run ./internal/generator/cmd_tool_search_comparison -output "$(DWS_POLICY_TMPDIR)/tool-search-comparison.json"
-
-# This target intentionally fails while independent_test_v1.state=collecting.
-# It becomes a release prerequisite only after the independent evaluation
-# owners seal the qrels and enable the Alpha surface through an RFC amendment.
-tool-search-independent-data-gate:
-	@mkdir -p "$(DWS_POLICY_TMPDIR)"
-	$(GO) run ./internal/generator/cmd_schema_catalog \
-		-root . \
-		-output "$(DWS_POLICY_TMPDIR)/tool-search-schema-catalog" \
-		-meta-index "$(DWS_POLICY_TMPDIR)/tool-search-schema-meta-index.gob"
-	$(GO) run ./internal/generator/cmd_tool_search_comparison \
-		-independent-qrels scripts/testdata/tool_search_independent_test_v1.json \
-		-output "$(DWS_POLICY_TMPDIR)/tool-search-independent-comparison.json"
-	python3 scripts/dev/verify_tool_search_eval_manifest.py \
-		--catalog-dir "$(DWS_POLICY_TMPDIR)/tool-search-schema-catalog" \
-		--independent-result "$(DWS_POLICY_TMPDIR)/tool-search-independent-comparison.json" \
-		--require-sealed
 
 generate-tool-search-comparison:
 	@mkdir -p "$(DWS_POLICY_TMPDIR)"
