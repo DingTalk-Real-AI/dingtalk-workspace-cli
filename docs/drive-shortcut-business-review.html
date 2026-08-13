@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="DWS Drive Shortcut 与 lark-cli 的业务能力、真实数据 E2E 证据和平台边界分析。">
-  <title>Drive Shortcut 能力全景｜业务评审版</title>
+  <title>Drive Shortcut 能力全景｜最终业务评审版</title>
   <style>
     :root {
       color-scheme: light;
@@ -126,6 +126,7 @@
         <p class="subtitle">从 lark-cli 对齐出发，但不止于命令名：逐项审查输入、校验、多步编排、失败语义、真实字节和平台边界。</p>
         <div class="meta-row">
           <span class="meta-pill good">真实账号 E2E 已执行</span>
+          <span class="meta-pill good">最终读回合同已合入 main</span>
           <span class="meta-pill">28 个公开入口</span>
           <span class="meta-pill">统一 Result / Pagination</span>
           <span class="meta-pill">报告已移除 PII / 凭证 / 业务正文</span>
@@ -231,12 +232,12 @@
         <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +stats</code></div><div class="row-main"><p>读取访问、编辑、评论、点赞、预览和下载统计。</p><small>发现与检查</small></div><div class="badges"><span class="badge read">READ</span></div></article>
         <article class="shortcut-row" data-tool data-domain="discover" data-risk="read"><div class="command"><code>dws drive +cover</code></div><div class="row-main"><p>读取封面或缩略图；不宣称服务端多格式预览。</p><small>发现与检查</small></div><div class="badges"><span class="badge read">READ</span></div></article>
 
-        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +upload</code></div><div class="row-main"><p>上传凭证、OSS PUT、严格提交和远端元数据读回的一体化事务。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">SMART</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +upload</code></div><div class="row-main"><p>上传凭证、OSS PUT、严格提交和远端元数据读回的一体化事务；读回必须命中提交返回的精确节点 ID、精确名称与远端大小。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">SMART</span></div></article>
         <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="read"><div class="command"><code>dws drive +download</code></div><div class="row-main"><p>安全落盘、no-clobber、原子发布并验证非零字节。</p><small>文件生命周期</small></div><div class="badges"><span class="badge read">READ</span><span class="badge smart">SMART</span></div></article>
         <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +create-folder</code></div><div class="row-main"><p>创建文件夹后要求新 ID，并读回名称验证。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span></div></article>
         <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +create-shortcut</code></div><div class="row-main"><p>创建快捷方式并读回，明确区别于独立副本。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span></div></article>
         <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +copy</code></div><div class="row-main"><p>复制在线对象；普通文件预检拒绝，避免把 .dlink 当副本。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">SMART</span></div></article>
-        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +move</code></div><div class="row-main"><p>移动到指定文件夹或知识库位置，语义与 copy/shortcut 消歧。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span></div></article>
+        <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +move</code></div><div class="row-main"><p>移动到指定文件夹或知识库位置；读回必须仍是请求节点，并精确落在请求的目标文件夹或知识库。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">READ-BACK</span></div></article>
         <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +rename</code></div><div class="row-main"><p>重命名后读取真实节点，验证最终名称和扩展名。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">SMART</span></div></article>
         <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="high"><div class="command"><code>dws drive +delete</code></div><div class="row-main"><p>将确认过的节点移入回收站，要求 success=true 终态证据。</p><small>文件生命周期</small></div><div class="badges"><span class="badge high">HIGH · CONFIRM</span></div></article>
         <article class="shortcut-row" data-tool data-domain="lifecycle" data-risk="write"><div class="command"><code>dws drive +recycle-restore</code></div><div class="row-main"><p>按回收项 ID 恢复，并读回恢复后的节点。</p><small>文件生命周期</small></div><div class="badges"><span class="badge write">WRITE · CONFIRM</span><span class="badge smart">SMART</span></div></article>
@@ -266,10 +267,10 @@
       </div>
       <div class="timeline">
         <div class="event"><b>创建与发现</b><span>创建两个隔离目录并读回；+list 命中真实节点，由此发现并修复 dentryId 与 32 字符 fileId 混用。</span></div>
-        <div class="event"><b>上传与下载</b><span>真实 OSS 上传、远端元数据读回、下载、no-clobber 二次路径、大小与 SHA-256 一致性全部通过。</span></div>
+        <div class="event"><b>上传与下载</b><span>真实 OSS 上传后按提交节点精确读回，核对 ID、完整文件名与远端大小；下载、no-clobber 二次路径、大小与 SHA-256 一致性全部通过。</span></div>
         <div class="event"><b>检查与个人状态</b><span>+inspect（含 stats / publish / cover）、+stats、+cover、收藏 add→list→remove 通过。</span></div>
         <div class="event"><b>版本闭环</b><span>覆盖文件产生两个版本；history/get/download/revert 通过，回滚后最新字节与原始内容一致。</span></div>
-        <div class="event"><b>复制、移动与命名</b><span>在线文档 copy 通过；普通文件 .dlink 被修正为预检拒绝；move 往返、rename 扩展名规范化通过。</span></div>
+        <div class="event"><b>复制、移动与命名</b><span>在线文档 copy 通过；普通文件 .dlink 被修正为预检拒绝；move A→B→A 每一步均核对请求节点与目标位置，rename 扩展名规范化通过。</span></div>
         <div class="event"><b>删除与恢复</b><span>delete→recycle-list→recycle-restore 通过，真实回收响应字段已按后端形态修正。</span></div>
         <div class="event"><b>平台负向证据</b><span>publish-set 对普通文件和在线文档均明确返回不支持，因此保持 unavailable；没有把失败改写成空对象成功。</span></div>
         <div class="event"><b>清理</b><span>隔离目录进入回收站，根目录残留计数为零；本地下载产物删除。</span></div>
@@ -289,7 +290,7 @@
     </section>
   </main>
 
-  <footer><div class="wrap">依据：DWS 最终 Shortcut catalog / Schema、Drive 实现与测试、真实账号 E2E、lark-cli Drive registrations 与实现。范围仅含 Drive Shortcut 及必要跨产品路由；不包含原子命令总表。所有业务标识、凭证、签名 URL、用户信息和正文均已脱敏。</div></footer>
+  <footer><div class="wrap">依据：DWS 最终 Shortcut catalog / Schema、Drive 实现与测试、真实账号 E2E、lark-cli Drive registrations 与实现；最终读回修复已随 PR #963 合入 main。范围仅含 Drive Shortcut 及必要跨产品路由；不包含原子命令总表。所有业务标识、凭证、签名 URL、用户信息和正文均已脱敏。</div></footer>
   <script>
     const q = document.querySelector('#q');
     const domain = document.querySelector('#domain');
