@@ -1583,6 +1583,15 @@ func TestReleaseWorkflowRecoveryReusesGuardedJobs(t *testing.T) {
 			t.Errorf("%s must not fork into a recovery-specific publisher", name)
 		}
 	}
+	releaseSection := sections["release"]
+	for _, required := range []string{
+		`tmp/trusted-release-tooling/scripts/release/verify-package-managers.sh`,
+		`DWS_PACKAGE_DIST_DIR: ${{ github.workspace }}/dist`,
+	} {
+		if !strings.Contains(releaseSection, required) {
+			t.Errorf("release must verify sealed artifacts with trusted recovery tooling %q", required)
+		}
+	}
 	if strings.Count(workflow, "name: Build signed release artifacts") != 1 ||
 		strings.Count(workflow, "name: Verify Apple Developer ID signatures") != 1 ||
 		strings.Count(workflow, "name: Publish immutable GitHub Release") != 1 ||

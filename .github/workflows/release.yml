@@ -1061,7 +1061,15 @@ jobs:
         run: ./scripts/release/verify-release-artifacts.sh "$RELEASE_VERSION"
 
       - name: Verify npm package before sealing GitHub Release
-        run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
+        # Build inputs stay pinned to the sealed commit, but recovery validation
+        # must use the reviewed current tooling. Otherwise a verifier fix on
+        # main can never repair a failed immutable release.
+        env:
+          DWS_PACKAGE_DIST_DIR: ${{ github.workspace }}/dist
+        run: |
+          "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/verify-package-managers.sh" \
+            --npm-only \
+            --expected-version "$RELEASE_VERSION"
 
       - name: Reverify remote tag before sealing GitHub Release
         env:
