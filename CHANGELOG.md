@@ -6,6 +6,30 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.58] - 2026-08-13
+
+This release promotes the sealed `v1.0.58-beta.6` contents to stable.
+
+### Changed
+
+- **Expanded collaborative workflows** — adds full AI Table, Sheet, Minutes,
+  approval-event, Drive-comment, document export, and CSV workflow support,
+  including safer validation, explicit confirmation for writes, and
+  machine-readable completion receipts.
+- **More capable Chat operations** — adds robot image/file messages, toolbar
+  management, streaming-card mentions, automatic pagination controls, and
+  clearer post-send ID, Markdown-image, paging, and result-shape guidance.
+- **Reliable Agent and CLI contracts** — expands Agent-visible Chat and
+  Minutes commands, aligns bundled skills, improves schema/result envelopes,
+  and hardens parameter, pagination, runtime-token, and write-result
+  verification so ambiguous or incomplete operations fail closed.
+- **Multi-skill install and upgrade** — makes the multi-skill layout the
+  default for fresh installs and upgrades while preserving an explicit legacy
+  mono option.
+- **Safer release delivery** — strengthens release-equivalent compatibility,
+  sealing, package verification, and evaluation-dispatch checks for more
+  reliable cross-platform releases.
+
 ## [1.0.58-beta.6] - 2026-08-13
 
 ### Fixed
