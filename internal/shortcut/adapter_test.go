@@ -132,6 +132,30 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageSuppressedConstraintProjectionStillValidatesAtRuntime(t *testing.T) {
+	s := Shortcut{
+		Service:                      "doc",
+		Command:                      "+compat-guard",
+		Description:                  "兼容 Schema 的运行时约束",
+		Flags:                        []Flag{{Name: "a"}, {Name: "b"}},
+		Constraints:                  []Constraint{{Kind: ConstraintMutuallyExclusive, Flags: []string{"a", "b"}}},
+		SuppressConstraintProjection: true,
+		Execute:                      func(*RuntimeContext) error { return nil },
+	}
+	spec := FromShortcut(s)
+	if len(spec.Constraints) != 0 {
+		t.Fatalf("public constraints = %#v, want omitted compatibility projection", spec.Constraints)
+	}
+	if spec.Validate == nil {
+		t.Fatal("runtime validation must remain installed when public constraints are suppressed")
+	}
+	cmd := corecmd.New(spec)
+	cmd.SetArgs([]string{"--a", "one", "--b", "two"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "互斥") {
+		t.Fatalf("suppressed mutual-exclusion runtime error = %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageFromShortcutAliasesAndPositionalAlias(t *testing.T) {
 	executed := ""
 	s := Shortcut{

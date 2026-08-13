@@ -115,7 +115,7 @@ func expectedShortcutLong(spec shortcut.Shortcut) string {
 	if long == "" {
 		long = strings.TrimSpace(spec.Description)
 	}
-	if len(spec.Constraints) == 0 {
+	if len(spec.Constraints) == 0 || spec.SuppressConstraintProjection {
 		return long
 	}
 	lines := make([]string, 0, len(spec.Constraints))

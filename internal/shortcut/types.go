@@ -187,6 +187,12 @@ type Shortcut struct {
 	// express, such as "exactly one of --group and --user". Custom constraints
 	// describe checks implemented by Validate.
 	Constraints []Constraint
+	// SuppressConstraintProjection keeps Constraints available to runtime
+	// validation and internal discovery while omitting them from the public
+	// command Contract. Use only when a historical Schema contract cannot gain
+	// new constraint groups in the same release; Validate must still enforce the
+	// rules before execution.
+	SuppressConstraintProjection bool
 	// Tips are optional usage examples appended to --help.
 	Tips []string
 	// Hidden hides the command from listings while keeping it invocable.

@@ -711,19 +711,17 @@ func TestCrossPlatformCoverageFetchPublishesPredictiveScopeContract(t *testing.T
 	for _, flag := range Fetch.Flags {
 		flags[flag.Name] = flag
 	}
-	wantRequiredWhen := map[string]string{
-		"keyword":        "--scope=keyword",
-		"start-block-id": "--scope=range or --scope=section",
-		"tags":           "--scope=tags",
-	}
-	for name, want := range wantRequiredWhen {
-		if got := flags[name].RequiredWhen; got != want {
-			t.Errorf("--%s RequiredWhen = %q, want %q", name, got, want)
+	for _, name := range []string{"keyword", "start-block-id", "tags"} {
+		if got := flags[name].RequiredWhen; got != "" {
+			t.Errorf("--%s RequiredWhen = %q, want main-compatible public Schema", name, got)
 		}
 	}
 	if len(Fetch.Constraints) < 1 || Fetch.Constraints[0].Kind != shortcut.ConstraintExactlyOne ||
 		!reflect.DeepEqual(Fetch.Constraints[0].Flags, []string{"node", "query"}) {
 		t.Fatalf("fetch target constraint = %#v", Fetch.Constraints)
+	}
+	if !Fetch.SuppressConstraintProjection {
+		t.Fatal("fetch runtime constraints must be omitted only from the compatibility Schema projection")
 	}
 }
 
@@ -1603,25 +1601,19 @@ func TestCrossPlatformCoverageUpdateContractAndPreflight(t *testing.T) {
 	for _, flag := range Update.Flags {
 		flags[flag.Name] = flag
 	}
-	if !flags["node"].Required || !flags["command"].Required {
+	if !flags["node"].Required || flags["command"].Required {
 		t.Fatalf("unconditional required flags: node=%v command=%v", flags["node"].Required, flags["command"].Required)
 	}
-	wantRequiredWhen := map[string]string{
-		"content":        "--command is append, overwrite, block_insert, block_insert_after, or block_replace",
-		"block-id":       "--command is block_replace, block_delete, block_copy_insert, or block_copy_insert_after",
-		"after-block-id": "--command is block_insert_after or block_copy_insert_after",
-		"ref-block":      "--command is block_insert or block_copy_insert",
-		"where":          "--command is block_insert or block_copy_insert",
-		"old":            "--command=str_replace",
-		"new":            "--command=str_replace",
-	}
-	for name, want := range wantRequiredWhen {
-		if got := flags[name].RequiredWhen; got != want {
-			t.Errorf("--%s RequiredWhen = %q, want %q", name, got, want)
+	for _, name := range []string{"content", "block-id", "after-block-id", "ref-block", "where", "old", "new"} {
+		if got := flags[name].RequiredWhen; got != "" {
+			t.Errorf("--%s RequiredWhen = %q, want main-compatible public Schema", name, got)
 		}
 	}
 	if len(Update.Constraints) != 1 || Update.Constraints[0].Kind != shortcut.ConstraintCustom {
-		t.Fatalf("update must publish only the non-RequiredWhen validation residue: %#v", Update.Constraints)
+		t.Fatalf("update runtime constraint declaration = %#v", Update.Constraints)
+	}
+	if !Update.SuppressConstraintProjection {
+		t.Fatal("update runtime constraints must be omitted only from the compatibility Schema projection")
 	}
 	cmd := corecmd.New(shortcut.FromShortcut(Update))
 	for _, alias := range []string{"doc", "text"} {

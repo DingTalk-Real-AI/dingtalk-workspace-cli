@@ -67,6 +67,8 @@ func canonicalizeHistoryShortcuts() {
 	compatHistorySave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
 	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
 	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
+	compatHistoryRevert.Risk = shortcut.RiskHighWrite
+	compatHistoryRevert.Safety = contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"}
 
 	TemplateList.Description = "浏览当前用户可用的 MY/PUBLIC 文档模板"
 	TemplateList.Intent = "当用户没有明确模板名称或关键词，只要浏览自己的或公开模板并获取 templateId 时使用。"

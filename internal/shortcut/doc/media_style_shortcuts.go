@@ -58,8 +58,16 @@ var MediaInsert = shortcut.Shortcut{
 	Validate: func(rt *shortcut.RuntimeContext) error {
 		return helpers.ValidateDocMediaInsertCommand(rt.Command())
 	},
-	Tips:    []string{`dws doc +media-insert --node <DOC_ID> --file ./report.pdf`, `dws doc +media-insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where after`},
-	Execute: func(rt *shortcut.RuntimeContext) error { return helpers.RunDocMediaInsertShortcut(rt.Command()) },
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintRequireTogether, Flags: []string{"where", "ref-block"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"index", "where"}},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"index", "ref-block"}},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"index"}, Description: "--index 必须大于或等于 0"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内存在且不能经符号链接逃逸的相对文件"},
+	},
+	SuppressConstraintProjection: true,
+	Tips:                         []string{`dws doc +media-insert --node <DOC_ID> --file ./report.pdf`, `dws doc +media-insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where after`},
+	Execute:                      func(rt *shortcut.RuntimeContext) error { return helpers.RunDocMediaInsertShortcut(rt.Command()) },
 }
 
 var MediaDownload = shortcut.Shortcut{
@@ -450,6 +458,8 @@ func nestedStringDeep(value any, keys ...string) string {
 func init() {
 	resourceUpdate := CoverSet
 	resourceUpdate.Command = "+resource-update"
+	resourceUpdate.Description = "兼容入口：设置或替换文档封面"
+	resourceUpdate.Intent = "仅兼容既有 +resource-update 调用；新任务统一使用 +cover-set 设置或替换文档封面。"
 	resourceUpdate.Contract = withDryRun(docContract("+resource-update", resourceUpdate.Description,
 		resourceUpdate.Intent, []string{`dws doc +resource-update --node <DOC_ID> --image https://example.com/cover.png`, `dws doc +resource-update --node <DOC_ID> --file ./cover.png`}), contract.DryRunPreviewRequest, false)
 	resourceUpdate.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent"}
@@ -457,12 +467,16 @@ func init() {
 
 	resourceDownload := CoverDownload
 	resourceDownload.Command = "+resource-download"
+	resourceDownload.Description = "兼容入口：下载当前文档封面"
+	resourceDownload.Intent = "仅兼容既有 +resource-download 调用；新任务统一使用 +cover-download 下载当前文档封面。"
 	resourceDownload.Contract = docContract("+resource-download", resourceDownload.Description,
 		resourceDownload.Intent, []string{`dws doc +resource-download --node <DOC_ID> --output ./cover.png`})
 	resourceDownload.Tips = []string{`dws doc +resource-download --node <DOC_ID> --output ./cover.png`}
 
 	resourceDelete := CoverClear
 	resourceDelete.Command = "+resource-delete"
+	resourceDelete.Description = "兼容入口：清除文档封面"
+	resourceDelete.Intent = "仅兼容既有 +resource-delete 调用；新任务统一使用 +cover-clear 幂等清除文档封面。"
 	resourceDelete.Risk = shortcut.RiskHighWrite
 	resourceDelete.Safety = contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "idempotent"}
 	resourceDelete.Contract = docContract("+resource-delete", resourceDelete.Description,

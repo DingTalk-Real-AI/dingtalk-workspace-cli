@@ -277,6 +277,11 @@ var Fetch = shortcut.Shortcut{
 		}
 		return nil
 	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"node", "query"}, Description: fetchTargetConstraint},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"scope"}, Description: docFetchValidationConstraint},
+	},
+	SuppressConstraintProjection: true,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		target, err := docresolver.Resolve(rt, rt.Str("node"), rt.Str("query"))
 		if err != nil {
@@ -483,7 +488,8 @@ var Update = shortcut.Shortcut{
 	Constraints: []shortcut.Constraint{{
 		Kind: shortcut.ConstraintCustom, Flags: []string{"command"}, Description: docUpdateValidationConstraint,
 	}},
-	Execute: executeUpdate,
+	SuppressConstraintProjection: true,
+	Execute:                      executeUpdate,
 }
 
 var CheckpointUpdate = shortcut.Shortcut{
@@ -578,13 +584,13 @@ var Import = shortcut.Shortcut{
 		{Name: "workspace", Type: shortcut.FlagString, Desc: "可选目标知识库 ID；仅在用户明确知识库目标时使用；与 --folder 互斥"},
 		{Name: "name", Type: shortcut.FlagString, Desc: "导入后名称"},
 	},
-	Tips: []string{`dws doc +import --file ./report.docx`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`},
-	Validate: func(rt *shortcut.RuntimeContext) error {
-		if rt.Str("folder") != "" && rt.Str("workspace") != "" {
-			return apperrors.NewValidation("--folder 与 --workspace 不能同时提供")
-		}
-		return validateWorkspaceInputPath("file", rt.Str("file"))
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内已存在且不通过符号链接逃逸的相对路径"},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"folder", "workspace"}, Description: "--folder 与 --workspace 最多提供一个；两者都省略时使用默认个人文档根目录"},
 	},
+	SuppressConstraintProjection: true,
+	Tips:                         []string{`dws doc +import --file ./report.docx`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`},
+	Validate:                     func(rt *shortcut.RuntimeContext) error { return validateWorkspaceInputPath("file", rt.Str("file")) },
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		if err := helpers.RunDocImportShortcut(rt.Command()); err != nil {
 			return docUnknownWriteError("doc.import", "import", "", err)

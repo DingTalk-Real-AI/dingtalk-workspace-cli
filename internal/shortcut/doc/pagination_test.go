@@ -18,7 +18,7 @@ func TestCrossPlatformCoverageDocSearchPageAllContract(t *testing.T) {
 			{"documents": []any{map[string]any{"nodeId": "b", "name": "B"}, map[string]any{"nodeId": "a", "name": "A"}}, "hasMore": false},
 		},
 	}}
-	if err := runDocCoverage(t, Search, caller, "--query", "report", "--limit", "2"); err != nil {
+	if err := runDocCoverage(t, Search, caller, "--query", "report", "--page-all", "--limit", "2"); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.history) != 2 || caller.history[1].params["pageToken"] != "p2" {

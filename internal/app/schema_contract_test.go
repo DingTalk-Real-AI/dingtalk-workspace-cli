@@ -437,7 +437,7 @@ func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
 	wantEffects := map[string]string{
 		"attendance.class_create":  "write",
 		"attendance.class_update":  "write",
-		"doc.delete_comment":       "destructive",
+		"doc.delete_comment":       "write",
 		"drive.publish_set":        "write",
 		"drive.publish_unset":      "write",
 		"sheet.chart_delete":       "write",
@@ -446,7 +446,7 @@ func TestPromptingWritesRequireUserConfirmation(t *testing.T) {
 	wantRisks := map[string]string{
 		"attendance.class_create":  "medium",
 		"attendance.class_update":  "medium",
-		"doc.delete_comment":       "high",
+		"doc.delete_comment":       "medium",
 		"drive.publish_set":        "medium",
 		"drive.publish_unset":      "medium",
 		"sheet.chart_delete":       "medium",

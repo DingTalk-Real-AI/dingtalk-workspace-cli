@@ -19,7 +19,7 @@ const (
 	publicShortcutCount = 399
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including the hidden historical minutes.shortcut_minutes_search contract.
-	schemaPublishedShortcutCount = 401
+	schemaPublishedShortcutCount = 404
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
 	publiclyDeliveredShortcutCount = 399
 )
@@ -89,7 +89,7 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 	if got, want := schemaContractString(leaf["canonical_path"]), "chat.shortcut_messages_read_status"; got != want {
 		t.Fatalf("shortcut leaf canonical_path = %q, want %q", got, want)
 	}
-	if got, want := schemaContractString(leaf["confirmation"]), "user_required"; got != want {
+	if got, want := schemaContractString(leaf["confirmation"]), "not_required"; got != want {
 		t.Fatalf("shortcut leaf confirmation = %q, want %q", got, want)
 	}
 	conversationID := schemaContractMap(leaf["parameters"])["conversation-id"]
@@ -262,7 +262,7 @@ func assertChatGrantParameterFacts(t testing.TB, leaf map[string]any, cliPath st
 
 func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testing.T) {
 	leaf := executeShortcutSchemaQuery(t, "--cli-path", "doc +update")
-	if got, want := schemaContractString(leaf["confirmation"]), "not_required"; got != want {
+	if got, want := schemaContractString(leaf["confirmation"]), "user_required"; got != want {
 		t.Fatalf("confirmation = %q, want %q", got, want)
 	}
 	parameters := schemaContractMap(leaf["parameters"])
@@ -272,11 +272,11 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 	if required, _ := parameters["node"]["required"].(bool); !required {
 		t.Errorf("--node required = %#v, want true", parameters["node"]["required"])
 	}
-	if required, _ := parameters["command"]["required"].(bool); !required {
-		t.Errorf("--command required = %#v, want true", parameters["command"]["required"])
+	if required, _ := parameters["command"]["required"].(bool); required {
+		t.Errorf("--command required = %#v, want runtime-only operation requirement", parameters["command"]["required"])
 	}
 	wantProperties := map[string]string{
-		"node": "node", "doc": "doc", "command": "command", "content": "content", "text": "text", "doc-format": "docFormat",
+		"node": "node", "doc": "node", "command": "command", "content": "content", "text": "content", "doc-format": "docFormat",
 		"block-id": "blockId", "after-block-id": "afterBlockId", "ref-block": "referenceBlockId", "where": "where", "old": "old", "new": "new",
 		"allow-resource-delete": "allowResourceDelete", "expected-revision": "expectedRevision",
 	}
@@ -285,22 +285,13 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 			t.Errorf("--%s property = %q, want %q", name, got, want)
 		}
 	}
-	wantRequiredWhen := map[string]string{
-		"content":        "--command is append, overwrite, block_insert, block_insert_after, or block_replace",
-		"block-id":       "--command is block_replace, block_delete, block_copy_insert, or block_copy_insert_after",
-		"after-block-id": "--command is block_insert_after or block_copy_insert_after",
-		"ref-block":      "--command is block_insert or block_copy_insert",
-		"where":          "--command is block_insert or block_copy_insert",
-		"old":            "--command=str_replace",
-		"new":            "--command=str_replace",
-	}
-	for name, want := range wantRequiredWhen {
+	for _, name := range []string{"content", "block-id", "after-block-id", "ref-block", "where", "old", "new"} {
 		parameter := parameters[name]
 		if required, _ := parameter["required"].(bool); required {
-			t.Errorf("--%s required = true, want conditional requirement", name)
+			t.Errorf("--%s required = true, want runtime-only operation requirement", name)
 		}
-		if got := schemaContractString(parameter["required_when"]); got != want {
-			t.Errorf("--%s required_when = %q, want %q", name, got, want)
+		if got := schemaContractString(parameter["required_when"]); got != "" {
+			t.Errorf("--%s required_when = %q, want main-compatible public Schema", name, got)
 		}
 	}
 	for _, alias := range []string{"doc", "text"} {
@@ -314,10 +305,6 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 }
 
 func TestDeliveryDocMediaInsertEntrypointsPublishTheSameGuardrails(t *testing.T) {
-	wantConstraints := map[string]any{
-		"mutually_exclusive": [][]string{{"index", "where"}, {"index", "ref-block"}},
-		"require_together":   [][]string{{"where", "ref-block"}},
-	}
 	for _, cliPath := range []string{"doc +media-insert", "doc media insert"} {
 		leaf := executeShortcutSchemaQuery(t, "--cli-path", cliPath)
 		wantConfirmation := "not_required"
@@ -333,16 +320,13 @@ func TestDeliveryDocMediaInsertEntrypointsPublishTheSameGuardrails(t *testing.T)
 				t.Errorf("%s --%s required = %#v, want true", cliPath, name, parameters[name]["required"])
 			}
 		}
-		for name, want := range map[string]string{
-			"where":     "--ref-block is provided",
-			"ref-block": "--where is provided",
-		} {
-			if got := schemaContractString(parameters[name]["required_when"]); got != want {
-				t.Errorf("%s --%s required_when = %q, want %q", cliPath, name, got, want)
+		for _, name := range []string{"where", "ref-block"} {
+			if got := schemaContractString(parameters[name]["required_when"]); got != "" {
+				t.Errorf("%s --%s required_when = %q, want main-compatible public Schema", cliPath, name, got)
 			}
 		}
-		if got := leaf["constraints"]; !schemaContractJSONEqual(got, wantConstraints) {
-			t.Errorf("%s constraints = %#v, want %#v", cliPath, got, wantConstraints)
+		if got := leaf["constraints"]; got != nil {
+			t.Errorf("%s constraints = %#v, want omitted compatibility projection", cliPath, got)
 		}
 	}
 }
@@ -408,22 +392,13 @@ func TestDeliveryDocShortcutAndLeafSafetyMatchesPublishedContracts(t *testing.T)
 func TestDeliveryDocFetchPublishesScopeContract(t *testing.T) {
 	leaf := executeShortcutSchemaQuery(t, "--cli-path", "doc +fetch")
 	parameters := schemaContractMap(leaf["parameters"])
-	wantRequiredWhen := map[string]string{
-		"keyword":        "--scope=keyword",
-		"start-block-id": "--scope=range or --scope=section",
-		"tags":           "--scope=tags",
-	}
-	for name, want := range wantRequiredWhen {
-		if got := schemaContractString(parameters[name]["required_when"]); got != want {
-			t.Errorf("--%s required_when = %q, want %q", name, got, want)
+	for _, name := range []string{"keyword", "start-block-id", "tags"} {
+		if got := schemaContractString(parameters[name]["required_when"]); got != "" {
+			t.Errorf("--%s required_when = %q, want main-compatible public Schema", name, got)
 		}
 	}
-	constraints, _ := leaf["constraints"].(map[string]any)
-	if got := constraints["require_one_of"]; !schemaContractJSONEqual(got, [][]string{{"node", "query"}}) {
-		t.Fatalf("fetch require_one_of = %#v", got)
-	}
-	if got := constraints["mutually_exclusive"]; !schemaContractJSONEqual(got, [][]string{{"node", "query"}}) {
-		t.Fatalf("fetch mutually_exclusive = %#v", got)
+	if got := leaf["constraints"]; got != nil {
+		t.Fatalf("fetch constraints = %#v, want omitted compatibility projection", got)
 	}
 }
 
@@ -451,12 +426,8 @@ func TestDeliveryDocCommentExportImportContractsAreCanonical(t *testing.T) {
 	}
 
 	importLeaf := executeShortcutSchemaQuery(t, "--cli-path", "doc +import")
-	constraints, _ := importLeaf["constraints"].(map[string]any)
-	if got := constraints["require_one_of"]; got != nil {
-		t.Fatalf("import require_one_of = %#v, want no required target group", got)
-	}
-	if got := constraints["mutually_exclusive"]; !schemaContractJSONEqual(got, [][]string{{"folder", "workspace"}}) {
-		t.Fatalf("import mutually_exclusive = %#v, want folder/workspace", got)
+	if got := importLeaf["constraints"]; got != nil {
+		t.Fatalf("import constraints = %#v, want omitted compatibility projection", got)
 	}
 }
 
@@ -675,6 +646,12 @@ func assertDeliveryShortcutConstraints(
 	canonical string,
 ) {
 	t.Helper()
+	if declared.SuppressConstraintProjection {
+		if got := tool["constraints"]; got != nil {
+			t.Errorf("%s constraints = %#v, want omitted compatibility projection", canonical, got)
+		}
+		return
+	}
 	public := make(map[string]bool, len(declared.Flags))
 	for _, flag := range declared.Flags {
 		if !flag.Hidden {
