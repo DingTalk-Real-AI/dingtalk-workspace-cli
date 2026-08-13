@@ -20,6 +20,7 @@
 package drive
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -545,6 +546,31 @@ var Move = shortcut.Shortcut{
 		verified, err = requireDriveObject(verified, "doc/get_document_info")
 		if err != nil {
 			return err
+		}
+		remoteID := firstString(verified, "nodeId", "fileId", "dentryUuid", "id")
+		if remoteID == "" {
+			return driveResponseError("doc/move_document", "readback_missing_id", "移动后读回缺少节点 ID；无法证明读回的是已移动节点")
+		}
+		if remoteID != rt.Str("node") {
+			return driveResponseError("doc/move_document", "readback_id_mismatch", fmt.Sprintf("移动后读回节点 %q 与请求节点 %q 不一致", remoteID, rt.Str("node")))
+		}
+		if rt.Changed("folder") {
+			remoteFolder := firstString(verified, "folderId", "targetFolderId", "parentId")
+			if remoteFolder == "" {
+				return driveResponseError("doc/move_document", "readback_missing_folder", "移动后读回缺少目标文件夹 ID；无法证明移动已到达请求位置")
+			}
+			if remoteFolder != rt.Str("folder") {
+				return driveResponseError("doc/move_document", "readback_folder_mismatch", fmt.Sprintf("移动后读回文件夹 %q 与请求 %q 不一致", remoteFolder, rt.Str("folder")))
+			}
+		}
+		if rt.Changed("workspace") {
+			remoteWorkspace := firstString(verified, "workspaceId", "spaceId")
+			if remoteWorkspace == "" {
+				return driveResponseError("doc/move_document", "readback_missing_workspace", "移动后读回缺少目标知识库 ID；无法证明移动已到达请求位置")
+			}
+			if remoteWorkspace != rt.Str("workspace") {
+				return driveResponseError("doc/move_document", "readback_workspace_mismatch", fmt.Sprintf("移动后读回知识库 %q 与请求 %q 不一致", remoteWorkspace, rt.Str("workspace")))
+			}
 		}
 		return rt.Output(map[string]any{"success": true, "nodeId": rt.Str("node"), "file": verified})
 	},

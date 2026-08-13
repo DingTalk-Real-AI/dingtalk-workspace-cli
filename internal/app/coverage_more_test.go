@@ -61,11 +61,16 @@ func appRPCServer(t *testing.T, initOK, listOK bool) *httptest.Server {
 }
 
 func TestCrossPlatformCoveragePluginAuthCoverage(t *testing.T) {
-	registerPluginAuthFromHeaders(mcptypes.ServerDescriptor{Key: "fallback", Endpoint: "%", AuthHeaders: map[string]string{"Authorization": "token"}})
-	registerPluginAuthFromHeaders(mcptypes.ServerDescriptor{Key: "server", Endpoint: "https://x.test", CLI: mcptypes.CLIOverlay{ID: "cli"}, AuthHeaders: map[string]string{"Authorization": "Bearer token", "X": "Y"}})
-	registerPluginAuthFromHeaders(mcptypes.ServerDescriptor{Key: "none"})
-	if got, ok := LookupPluginAuth("cli"); !ok || got == nil || got.Token != "token" {
-		t.Fatalf("registered plugin auth = %#v, %v", got, ok)
+	fallback := pluginAuthFromServerDescriptor(mcptypes.ServerDescriptor{Key: "fallback", Endpoint: "%", AuthHeaders: map[string]string{"Authorization": "token"}})
+	if fallback == nil || fallback.Token != "token" || len(fallback.TrustedDomains) != 0 {
+		t.Fatalf("fallback plugin auth = %#v", fallback)
+	}
+	got := pluginAuthFromServerDescriptor(mcptypes.ServerDescriptor{Key: "server", Endpoint: "https://x.test", CLI: mcptypes.CLIOverlay{ID: "cli"}, AuthHeaders: map[string]string{"Authorization": "Bearer token", "X": "Y"}})
+	if got == nil || got.Token != "token" || got.ExtraHeaders["X"] != "Y" || len(got.TrustedDomains) != 2 {
+		t.Fatalf("plugin auth = %#v", got)
+	}
+	if anonymous := pluginAuthFromServerDescriptor(mcptypes.ServerDescriptor{Key: "none"}); anonymous == nil || anonymous.Token != "" {
+		t.Fatalf("anonymous plugin ownership = %#v", anonymous)
 	}
 }
 

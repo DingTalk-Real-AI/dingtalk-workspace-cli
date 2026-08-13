@@ -313,17 +313,17 @@ var ConversationList = shortcut.Shortcut{
 			Examples:     []string{"dws chat +conversation-list --limit 50"},
 		},
 	},
-	Flags: []shortcut.Flag{
+	Flags: append([]shortcut.Flag{
 		{Name: "limit", Type: shortcut.FlagInt, Default: "100", Desc: "每页数量；--limit 必须在 1-100"},
 		{Name: "cursor", Type: shortcut.FlagInt, Desc: "分页游标（首次不传或 0）"},
 		{Name: "exclude-muted", Type: shortcut.FlagBool, Desc: "排除已免打扰会话"},
-		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取全部分页；--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "自动读取全部分页；--page-limit 仅与 --page-all 一起使用且范围 1-500；--max-items/--page-delay 仅与 --page-all 一起使用；值必须大于等于 0"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-	},
-	Constraints: []shortcut.Constraint{
+	}, shortcut.AutoPageControlFlags()...),
+	Constraints: append([]shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须在 1-100"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-	},
+	}, shortcut.AutoPageControlConstraints()...),
 	Tips: []string{
 		`dws chat +conversation-list --limit 50`,
 		`dws chat +conversation-list --page-all --limit 100`,
@@ -337,6 +337,9 @@ var ConversationList = shortcut.Shortcut{
 		}
 		if pageLimit := rt.Int("page-limit"); pageLimit < 1 || pageLimit > 500 {
 			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
+		}
+		if err := shortcut.ValidateAutoPageControls(rt); err != nil {
+			return apperrors.NewValidation(err.Error())
 		}
 		return nil
 	},
@@ -353,9 +356,20 @@ var ConversationList = shortcut.Shortcut{
 		complete := false
 		hasMore := false
 		nextCursor := int64(0)
+		stopReason := "source_complete"
+		truncatedByPageLimit := false
+		truncatedByResultLimit := false
+		unsafeResultContinuation := false
 		failures := make([]map[string]any, 0)
 		for pagesFetched < pageLimit {
-			params := map[string]any{"limit": rt.Int("limit")}
+			if pagesFetched > 0 {
+				if err := shortcut.WaitAutoPageDelay(rt); err != nil {
+					failures = append(failures, map[string]any{"stage": "conversation-page-delay", "cursor": cursor, "error": err.Error()})
+					stopReason = "delay_interrupted"
+					break
+				}
+			}
+			params := map[string]any{"limit": shortcut.AutoPageRequestSize(rt, rt.Int("limit"), len(convs))}
 			if cursor > 0 {
 				params["cursor"] = cursor
 			}
@@ -371,6 +385,7 @@ var ConversationList = shortcut.Shortcut{
 				break
 			}
 			pagesFetched++
+			overflowOnPage := false
 			for _, conversation := range conversationListProject(data) {
 				id := strings.TrimSpace(fmt.Sprint(conversation["openConversationId"]))
 				if id != "" && id != "<nil>" {
@@ -379,6 +394,11 @@ var ConversationList = shortcut.Shortcut{
 					}
 					seenConversations[id] = true
 				}
+				if maxItems := rt.Int("max-items"); maxItems > 0 && len(convs) >= maxItems {
+					truncatedByResultLimit = true
+					overflowOnPage = true
+					continue
+				}
 				convs = append(convs, conversation)
 			}
 			page := chatmsg.Pagination(data)
@@ -386,6 +406,14 @@ var ConversationList = shortcut.Shortcut{
 			hasMore = hasMoreValue
 			if !known {
 				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": "下层未返回 hasMore，无法证明结果完整"})
+				break
+			}
+			if overflowOnPage {
+				hasMore = true
+				nextCursor = 0
+				unsafeResultContinuation = true
+				failures = append(failures, map[string]any{"stage": "conversation-pagination", "error": "下层返回条数超过请求的剩余额度，无法生成不跳项的安全续页游标"})
+				stopReason = "pagination_error"
 				break
 			}
 			if !hasMore {
@@ -398,27 +426,56 @@ var ConversationList = shortcut.Shortcut{
 				break
 			}
 			if !rt.Bool("page-all") {
+				stopReason = "single_page"
+				break
+			}
+			if maxItems := rt.Int("max-items"); maxItems > 0 && len(convs) >= maxItems {
+				truncatedByResultLimit = true
+				stopReason = "result_limit"
 				break
 			}
 			seenCursors[nextCursor] = true
 			cursor = nextCursor
 		}
-		if rt.Bool("page-all") && hasMore && pagesFetched == pageLimit {
-			failures = append(failures, map[string]any{"stage": "conversation-page-limit", "error": fmt.Sprintf("达到 --page-limit=%d，仍有更多会话", pageLimit)})
+		if rt.Bool("page-all") && hasMore && pagesFetched == pageLimit && !truncatedByResultLimit {
+			truncatedByPageLimit = true
+			stopReason = "page_limit"
 		}
 		payload := map[string]any{
-			"count":           len(convs),
-			"conversations":   convs,
-			"pagesFetched":    pagesFetched,
-			"complete":        complete,
-			"hasMore":         hasMore,
-			"nextCursor":      nextCursor,
-			"paginationKnown": len(failures) == 0 || hasMore,
-			"failedCount":     len(failures),
-			"failures":        failures,
-			"partial":         len(failures) > 0,
+			"count":                  len(convs),
+			"conversations":          convs,
+			"pagesFetched":           pagesFetched,
+			"complete":               complete,
+			"hasMore":                hasMore,
+			"nextCursor":             nextCursor,
+			"paginationKnown":        len(failures) == 0 || hasMore,
+			"stopReason":             stopReason,
+			"truncatedByPageLimit":   truncatedByPageLimit,
+			"truncatedByResultLimit": truncatedByResultLimit,
+			"failedCount":            len(failures),
+			"failures":               failures,
+			"partial":                len(failures) > 0,
 		}
-		return rt.Output(payload)
+		chatmsg.ApplyTruncation(payload)
+		if err := rt.Output(payload); err != nil {
+			return err
+		}
+		if stopReason == "delay_interrupted" && rt.Command().Context().Err() != nil {
+			return rt.Command().Context().Err()
+		}
+		if unsafeResultContinuation {
+			return apperrors.NewAPI(
+				fmt.Sprintf("会话列表分页未完成：成功读取 %d 页，存在 %d 个失败项", pagesFetched, len(failures)),
+				apperrors.WithOperation("im/list_all_conversations"),
+				apperrors.WithReason("conversation_list_incomplete"),
+				apperrors.WithOrigin("mcp_gateway"),
+				apperrors.WithFailureStage("pagination"),
+				apperrors.WithExecutionStarted(true),
+				apperrors.WithRetryable(true),
+				apperrors.WithHint("请根据 failures 和 nextCursor 重试"),
+			)
+		}
+		return nil
 	},
 }
 

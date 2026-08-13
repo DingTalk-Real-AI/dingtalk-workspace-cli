@@ -158,7 +158,7 @@ func TestApplyAgentProductHeader(t *testing.T) {
 	}
 }
 
-func TestRootRejectsInvalidAgentProductBeforeEditionHook(t *testing.T) {
+func TestCrossPlatformCoverageRootRejectsInvalidAgentProductBeforeEditionHook(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	const invalidValue = "DO_NOT ECHO"
 	t.Setenv(agentproduct.EnvName, invalidValue)

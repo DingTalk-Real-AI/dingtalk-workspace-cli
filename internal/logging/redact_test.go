@@ -30,6 +30,12 @@ func TestIsSensitiveKey(t *testing.T) {
 		{"authorization", true},
 		{"x-user-access-token", true},
 		{"X-User-Access-Token", true},
+		{"DWS_AGENT_EXT", true},
+		{"dws_agent_ext", true},
+		{"x-dws-agent-ext", true},
+		{"X-Dws-Agent-Ext", true},
+		{"DWS_AGENT_VER", false},
+		{"x-dws-agent-ver", false},
 		{"client_secret", true},
 		{"client-secret", true},
 		{"token", true},
@@ -128,17 +134,24 @@ func TestSanitizeArguments_Empty(t *testing.T) {
 
 func TestRedactHeaders(t *testing.T) {
 	t.Parallel()
-	headers := http.Header{
-		"Authorization": {"Bearer token123456"},
-		"Content-Type":  {"application/json"},
-	}
+	headers := make(http.Header)
+	headers.Set("Authorization", "Bearer test-credential-value")
+	headers.Set("Content-Type", "application/json")
+	headers.Set("DWS_AGENT_EXT", `{"umt":"test-umt-value"}`)
+	headers.Set("x-dws-agent-ext", `{"ua":"test-agent-value"}`)
 	attrs := RedactHeaders(headers)
-	if len(attrs) != 2 {
-		t.Fatalf("expected 2 attrs, got %d", len(attrs))
+	if len(attrs) != 4 {
+		t.Fatalf("expected 4 attrs, got %d", len(attrs))
 	}
 	for _, attr := range attrs {
-		if attr.Key == "header.authorization" && !strings.Contains(attr.Value.String(), "***") {
-			t.Fatalf("authorization should be redacted: %s", attr.Value.String())
+		switch attr.Key {
+		case "header.authorization", "header.dws_agent_ext", "header.x-dws-agent-ext":
+			if !strings.Contains(attr.Value.String(), "***") {
+				t.Fatalf("%s should be redacted: %s", attr.Key, attr.Value.String())
+			}
+			if strings.Contains(attr.Value.String(), "test-") {
+				t.Fatalf("%s leaked its original value: %s", attr.Key, attr.Value.String())
+			}
 		}
 		if attr.Key == "header.content-type" && attr.Value.String() != "application/json" {
 			t.Fatalf("content-type should not be redacted: %s", attr.Value.String())

@@ -13,11 +13,23 @@
 
 package cli
 
-import "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
+import (
+	"strings"
+	"testing"
+)
 
-// MCPIdentityHeaders returns the shared identity and edition headers that
-// overlays may pass to auxiliary clients. MCP-request-only metadata such as
-// DWS_AGENT_VER and DWS_AGENT_EXT is intentionally excluded.
-func MCPIdentityHeaders() map[string]string {
-	return app.MCPIdentityHeaders()
+func TestCrossPlatformCoverageMCPIdentityHeadersExcludeMCPOnlyMetadata(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	t.Setenv("DWS_AGENT_VER", "1.2.3")
+	t.Setenv("DWS_AGENT_EXT", `{"ua":"test-agent/1.2.3"}`)
+
+	headers := MCPIdentityHeaders()
+	if headers == nil {
+		t.Fatal("MCPIdentityHeaders() returned nil")
+	}
+	for key := range headers {
+		if strings.EqualFold(key, "x-dws-agent-ver") || strings.EqualFold(key, "x-dws-agent-ext") {
+			t.Fatalf("shared identity export leaked MCP-only Header %q", key)
+		}
+	}
 }

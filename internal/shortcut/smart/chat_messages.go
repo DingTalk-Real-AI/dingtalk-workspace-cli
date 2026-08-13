@@ -60,7 +60,7 @@ var ChatMessages = shortcut.Shortcut{
 	Intent: "当你要读取或导出一个指定群聊或单聊的消息记录时使用；可附带发送者姓名解析，无稳定身份时保留全部消息，唯一解析出稳定身份后按 senderId 筛选同一次读取结果；" +
 		"群聊的 --group 可传群名或 openConversationId，单聊可传 --user 或 --open-dingtalk-id，所有目标参数互斥且必须选一个。自然群名只在唯一解析后读取，多候选会返回结构化 candidates。" +
 		"省略时间参数时默认从当前时间向前读取最近消息；兼容模式可用 --time/--direction，范围模式可用公开可选的 --start/--end/--order（兼容 --start-time/--end-time/--sort），范围语义为 [start,end)。" +
-		"全量读取用 --page-all，并由 --page-limit/--max-results 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
+		"全量读取用 --page-all，并由 --page-limit/--max-items 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
 		"默认只读；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘。",
 	Risk: shortcut.RiskRead,
 	Safety: contract.SafetySpec{
@@ -86,7 +86,7 @@ var ChatMessages = shortcut.Shortcut{
 			UseWhen: []string{"当你要读取或导出一个指定群聊或单聊的消息记录时使用；可附带发送者姓名解析，无稳定身份时保留全部消息，唯一解析出稳定身份后按 senderId 筛选同一次读取结果；" +
 				"群聊的 --group 可传群名或 openConversationId，单聊可传 --user 或 --open-dingtalk-id，所有目标参数互斥且必须选一个。自然群名只在唯一解析后读取，多候选会返回结构化 candidates。" +
 				"省略时间参数时默认从当前时间向前读取最近消息；兼容模式可用 --time/--direction，范围模式可用公开可选的 --start/--end/--order（兼容 --start-time/--end-time/--sort），范围语义为 [start,end)。" +
-				"全量读取用 --page-all，并由 --page-limit/--max-results 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
+				"全量读取用 --page-all，并由 --page-limit/--max-items 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
 				"默认只读；--download-resources 使用工作目录内安全路径、默认不覆盖和原子落盘。"},
 			AvoidWhen: []string{"以发送者、关键词、@对象或消息类型为主的直接条件检索优先使用 +search-msg；已有一批精确消息 ID 时使用 +messages-mget。已选择会话读取时可在同一次调用附带发送者姓名，不需要再搜索消息"},
 			Examples: []string{
@@ -117,9 +117,11 @@ var ChatMessages = shortcut.Shortcut{
 		{Name: "page-size", Type: shortcut.FlagInt, Desc: "--limit 的兼容别名", Hidden: true},
 		{Name: "direction", Type: shortcut.FlagString, Enum: []string{"newer", "older"}, Desc: "时间方向 newer/older；省略时为 older，从时间边界向前读取"},
 		{Name: "no-reactions", Type: shortcut.FlagBool, Desc: "不输出消息 reaction（默认输出）"},
-		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 typed nextPage.time 自动读取后续页；--page-limit 仅与 --page-all 一起使用且范围 1-500；--max-results 仅与 --page-all 一起使用且不能为负数"},
+		{Name: "page-all", Type: shortcut.FlagBool, Desc: "沿 typed nextPage.time 自动读取后续页；--page-limit 仅与 --page-all 一起使用且范围 1-500；--max-items 仅与 --page-all 一起使用且不能为负数；--max-results 仅与 --page-all 一起使用且不能为负数；--page-delay 仅与 --page-all 一起使用且不能为负数"},
 		{Name: "page-limit", Type: shortcut.FlagInt, Default: "50", Desc: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
-		{Name: "max-results", Type: shortcut.FlagInt, Desc: "--max-results 仅与 --page-all 一起使用且不能为负数；0 表示仅受页数上限约束"},
+		{Name: "max-items", Type: shortcut.FlagInt, Desc: "自动翻页最多返回条数（默认 0 表示不限制）；--max-items 仅与 --page-all 一起使用且不能为负数"},
+		{Name: "max-results", Type: shortcut.FlagInt, Desc: "--max-items 的公开兼容别名；--max-results 仅与 --page-all 一起使用且不能为负数"},
+		{Name: "page-delay", Type: shortcut.FlagInt, Desc: "自动翻页每页之间等待毫秒数（默认 0 表示不等待）；--page-delay 仅与 --page-all 一起使用且不能为负数"},
 		{Name: "output", Shorthand: "o", Type: shortcut.FlagString, Desc: "把完整结构化 ledger 原子写入工作目录内的相对 JSON 文件"},
 	}, chatshortcut.MessageResourceDownloadFlags()...),
 	Constraints: append([]shortcut.Constraint{
@@ -138,7 +140,10 @@ var ChatMessages = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"order", "sort"}, Description: "asc 必须指定 --start/--start-time"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "显式页大小必须大于 0"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-limit"}, Description: "--page-limit 仅与 --page-all 一起使用且范围 1-500"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "max-items"}, Description: "--max-items 仅与 --page-all 一起使用且不能为负数"},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "max-results"}, Description: "--max-results 仅与 --page-all 一起使用且不能为负数"},
+		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"max-items", "max-results"}},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page-all", "page-delay"}, Description: "--page-delay 仅与 --page-all 一起使用且不能为负数"},
 		{
 			Kind:        shortcut.ConstraintCustom,
 			Flags:       []string{"output", "overwrite"},
@@ -179,16 +184,25 @@ func validateChatMessages(rt *shortcut.RuntimeContext) error {
 			return localChatOptionError("invalid_page_size", "+chat-messages 的 --"+name+" 必须大于 0", "--"+name)
 		}
 	}
-	if !rt.Bool("page-all") && (rt.Changed("page-limit") || rt.Changed("max-results")) {
-		return apperrors.NewValidation("--page-limit/--max-results 仅与 --page-all 一起使用")
+	if !rt.Bool("page-all") && rt.Changed("page-limit") {
+		return apperrors.NewValidation("--page-limit 仅与 --page-all 一起使用")
+	}
+	if !rt.Bool("page-all") && rt.Changed("max-results") {
+		return apperrors.NewValidation("--max-results 仅与 --page-all 一起使用")
 	}
 	if rt.Bool("page-all") {
 		if pageLimit := rt.Int("page-limit"); pageLimit < 1 || pageLimit > chatMessagesHardPageLimit {
 			return apperrors.NewValidation("--page-limit 必须在 1-500 之间")
 		}
-		if rt.Int("max-results") < 0 {
-			return apperrors.NewValidation("--max-results 不能小于 0")
-		}
+	}
+	if err := shortcut.ValidateAutoPageControls(rt); err != nil {
+		return apperrors.NewValidation(err.Error())
+	}
+	if rt.Int("max-results") < 0 {
+		return apperrors.NewValidation("--max-results 不能小于 0")
+	}
+	if rt.Changed("max-items") && rt.Changed("max-results") {
+		return apperrors.NewValidation("--max-items 与 --max-results 不能同时使用")
 	}
 	if rt.Changed("output") {
 		if err := chatshortcut.ValidateMessageExportOutput(rt.Str("output")); err != nil {
@@ -477,7 +491,7 @@ func collectOneChatMessagesPage(rt *shortcut.RuntimeContext, request chatMessage
 
 func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesRequest) (map[string]any, []map[string]any, error) {
 	pageLimit := defaultChatPageLimit(rt.Int("page-limit"), chatMessagesDefaultPageLimit)
-	maxResults := rt.Int("max-results")
+	maxResults := rt.IntFirst("max-items", "max-results")
 	basePageSize, _ := request.params["limit"].(int)
 	if basePageSize <= 0 {
 		basePageSize = chatMessagesAllPageSize
@@ -496,6 +510,15 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 	var nextPage map[string]any
 
 	for pagesFetched < pageLimit {
+		if pagesFetched > 0 {
+			if delayErr := shortcut.WaitAutoPageDelay(rt); delayErr != nil {
+				failures = append(failures, map[string]any{
+					"page": pagesFetched + 1, "stage": "delay", "error": delayErr.Error(),
+				})
+				stopReason = "delay_interrupted"
+				break
+			}
+		}
 		request.params["limit"] = basePageSize
 		if maxResults > 0 {
 			remaining := maxResults - len(allItems)
@@ -656,6 +679,7 @@ func collectAllChatMessages(rt *shortcut.RuntimeContext, request chatMessagesReq
 	payload["stopReason"] = stopReason
 	payload["truncatedByPageLimit"] = truncatedByPageLimit
 	payload["truncatedByResultLimit"] = truncatedByResultLimit
+	chatmsg.ApplyTruncation(payload)
 	payload["failedCount"] = len(failures)
 	payload["failures"] = failures
 	payload["partial"] = len(failures) > 0 && len(results) > 0
