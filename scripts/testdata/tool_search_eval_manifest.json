@@ -20,7 +20,7 @@
       "internal/cli/tool_search_lexical.go",
       "internal/generator/cmd_tool_search_comparison/main.go"
     ],
-    "go_source_sha256": "5847d23824c9788fec43b9361b314106a497ba1cf74ff9d1b299cf465fd75f38",
+    "go_source_sha256": "a7635a9c4cd9e1fa37bea6d93e13590f8e15b33af20c624ac6095ae58fa77a10",
     "gate_source_paths": [
       "scripts/dev/verify_tool_search_eval_manifest.py"
     ],
