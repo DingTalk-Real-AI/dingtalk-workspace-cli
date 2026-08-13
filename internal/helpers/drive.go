@@ -381,6 +381,7 @@ func newDriveCommand() *cobra.Command {
 		Long:  `钉盘：列出文件/文件夹、获取元数据和统计信息、创建快捷方式、下载、上传及管理文件。`,
 		RunE:  groupRunE,
 	}
+	installDocDelegationAuth(driveCmd)
 
 	driveListCmd := &cobra.Command{
 		Use:   "list",

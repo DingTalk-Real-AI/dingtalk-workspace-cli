@@ -52,6 +52,7 @@ func newMarkdownCommand() *cobra.Command {
 		Long:  "创建、覆盖、修补、对比和获取钉盘或文档空间中的原生 Markdown 文件。",
 		RunE:  groupRunE,
 	}
+	installDocDelegationAuth(root)
 	root.AddCommand(
 		newMarkdownFetchCmd(),
 		newMarkdownCreateCmd(),
