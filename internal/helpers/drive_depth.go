@@ -178,7 +178,8 @@ func newDocDepthRoute() driveDepthRoute {
 }
 
 // SIGINT 检查两点（出队后发首页前 + 翻页循环发每页前），入队是纯内存操作不检查。
-func runDriveListDepth(cmd *cobra.Command, route driveDepthRoute, baseArgs map[string]any, rootFolderID string, maxDepth int, pattern string, quiet bool, latest int) error {
+// filter 零值 = 未启用；启用时由 emitDriveDepthResult 管线在 pattern 之后、latest 之前筛。
+func runDriveListDepth(cmd *cobra.Command, route driveDepthRoute, baseArgs map[string]any, rootFolderID string, maxDepth int, pattern string, quiet bool, latest int, filter driveListFilter) error {
 	if deps.Caller.DryRun() {
 		return printDriveDepthDryRun(route, baseArgs, maxDepth)
 	}
@@ -209,7 +210,7 @@ func runDriveListDepth(cmd *cobra.Command, route driveDepthRoute, baseArgs map[s
 bfs:
 	for len(queue) > 0 {
 		if ctx.Err() != nil {
-			return emitDriveDepthCancelled(collected, errs, pattern, latest, maxDepth)
+			return emitDriveDepthCancelled(collected, errs, pattern, latest, maxDepth, route, filter)
 		}
 		folder := queue[0]
 		queue = queue[1:]
@@ -220,7 +221,7 @@ bfs:
 		pages := 0
 		for {
 			if ctx.Err() != nil {
-				return emitDriveDepthCancelled(collected, errs, pattern, latest, maxDepth)
+				return emitDriveDepthCancelled(collected, errs, pattern, latest, maxDepth, route, filter)
 			}
 			pages++
 			if pages > maxPagesPerFolder {
@@ -233,7 +234,7 @@ bfs:
 			args := route.buildArgs(baseArgs, folder.id, pageToken)
 			text, err := route.fetchPage(ctx, args)
 			if ctx.Err() != nil {
-				return emitDriveDepthCancelled(collected, errs, pattern, latest, maxDepth)
+				return emitDriveDepthCancelled(collected, errs, pattern, latest, maxDepth, route, filter)
 			}
 			if err != nil {
 				folderErr = err
@@ -297,7 +298,7 @@ bfs:
 			if driveDepthUnrecoverable(folderErr) {
 				// partial 照吐 stdout，错误详情走 stderr，非零退出
 				errs = append(errs, newDriveDepthError(folder, folderErr))
-				if emitErr := emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth); emitErr != nil {
+				if emitErr := emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth, route, filter); emitErr != nil {
 					return emitErr
 				}
 				return folderErr
@@ -338,18 +339,18 @@ bfs:
 		}
 	}
 
-	return emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth)
+	return emitDriveDepthResult(collected, errs, truncated, pattern, latest, maxDepth, route, filter)
 }
 
-func emitDriveDepthCancelled(items []map[string]any, errs []driveDepthError, pattern string, latest, reqDepth int) error {
-	if err := emitDriveDepthResult(items, errs, true, pattern, latest, reqDepth); err != nil {
+func emitDriveDepthCancelled(items []map[string]any, errs []driveDepthError, pattern string, latest, reqDepth int, route driveDepthRoute, filter driveListFilter) error {
+	if err := emitDriveDepthResult(items, errs, true, pattern, latest, reqDepth, route, filter); err != nil {
 		return err
 	}
 	return &driveDepthCancelledError{}
 }
 
 // depth>1 不输出 nextToken。
-func emitDriveDepthResult(items []map[string]any, errs []driveDepthError, truncated bool, pattern string, latest, reqDepth int) error {
+func emitDriveDepthResult(items []map[string]any, errs []driveDepthError, truncated bool, pattern string, latest, reqDepth int, route driveDepthRoute, filter driveListFilter) error {
 	if pattern != "" {
 		// 先递归后过滤，过滤仅作用于输出项，不阻止文件夹下钻
 		filtered := make([]map[string]any, 0, len(items))
@@ -364,8 +365,13 @@ func emitDriveDepthResult(items []map[string]any, errs []driveDepthError, trunca
 		}
 		items = filtered
 	}
+	if filter.active() {
+		// 类型（route.isFolder 反判）+ 时间（直读收集段注入的 sortTime 毫秒）区间筛
+		items = applyDriveListFilter(items, route, filter)
+	}
 	if latest > 0 {
-		items = applyDriveListLatest(items, latest)
+		// --type folder 时 latest 对过滤后的目录取 Top-N，避免「先留目录再剔目录」的空结果。
+		items = applyDriveListLatest(items, latest, filter.nodeType == "folder")
 	} else {
 		// 排列为 rel_path 树序：BFS 只决定截断时哪些条目入选，树序决定呈现顺序。
 		sort.SliceStable(items, func(i, j int) bool {
@@ -383,7 +389,7 @@ func emitDriveDepthResult(items []map[string]any, errs []driveDepthError, trunca
 			maxDepth = d
 		}
 	}
-	if latest > 0 && reqDepth == 1 {
+	if (latest > 0 || filter.active()) && reqDepth == 1 {
 		stripDriveDepthDecorations(items)
 	}
 	if items == nil {

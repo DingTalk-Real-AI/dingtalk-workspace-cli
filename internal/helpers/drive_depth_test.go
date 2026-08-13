@@ -306,7 +306,7 @@ func TestCrossPlatformCoverageEmitDriveDepthResult(t *testing.T) {
 		{"name": "a-file.xlsx", "rel_path": "a", "depth": 2, "fileId": "f1"},
 		{"name": "skip-me.csv", "rel_path": "c", "depth": 1, "fileId": "f3"},
 	}
-	if err := emitDriveDepthResult(items, nil, false, "*.xlsx", 0, 0); err != nil {
+	if err := emitDriveDepthResult(items, nil, false, "*.xlsx", 0, 0, newDrivePanDepthRoute(), driveListFilter{}); err != nil {
 		t.Fatal(err)
 	}
 	result := decodeDepthResult(t, out)
@@ -325,7 +325,7 @@ func TestCrossPlatformCoverageEmitDriveDepthResult(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := emitDriveDepthResult(nil, nil, false, "", 0, 0); err != nil {
+	if err := emitDriveDepthResult(nil, nil, false, "", 0, 0, newDrivePanDepthRoute(), driveListFilter{}); err != nil {
 		t.Fatal(err)
 	}
 	result = decodeDepthResult(t, out)
@@ -338,7 +338,7 @@ func TestCrossPlatformCoverageEmitDriveDepthResult(t *testing.T) {
 		{"name": "dup", "rel_path": "p/dup", "fileId": "a1"},
 	}
 	out.Reset()
-	if err := emitDriveDepthResult(samePath, nil, false, "", 0, 0); err != nil {
+	if err := emitDriveDepthResult(samePath, nil, false, "", 0, 0, newDrivePanDepthRoute(), driveListFilter{}); err != nil {
 		t.Fatal(err)
 	}
 	got = decodeDepthResult(t, out)["items"].([]any)
@@ -347,7 +347,7 @@ func TestCrossPlatformCoverageEmitDriveDepthResult(t *testing.T) {
 	}
 
 	deps.Out.w = failingWriter{}
-	if err := emitDriveDepthResult(nil, nil, false, "", 0, 0); err == nil {
+	if err := emitDriveDepthResult(nil, nil, false, "", 0, 0, newDrivePanDepthRoute(), driveListFilter{}); err == nil {
 		t.Fatal("failing writer returned nil")
 	}
 }
@@ -382,7 +382,7 @@ func runDepthBFS(t *testing.T, caller *scriptedToolCaller, route driveDepthRoute
 	t.Helper()
 	out := installDepthCaller(t, caller)
 	cmd := &cobra.Command{Use: "list"}
-	err := runDriveListDepth(cmd, route, map[string]any{}, root, maxDepth, pattern, true, 0)
+	err := runDriveListDepth(cmd, route, map[string]any{}, root, maxDepth, pattern, true, 0, driveListFilter{})
 	return decodeDepthResult(t, out), err
 }
 
@@ -390,7 +390,7 @@ func TestCrossPlatformCoverageRunDriveListDepthDryRun(t *testing.T) {
 	caller := &scriptedToolCaller{format: "json", dry: true}
 	out := installDepthCaller(t, caller)
 	cmd := &cobra.Command{Use: "list"}
-	if err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 2, "", true, 0); err != nil {
+	if err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 2, "", true, 0, driveListFilter{}); err != nil {
 		t.Fatal(err)
 	}
 	if caller.calls != 0 {
@@ -413,7 +413,7 @@ func TestCrossPlatformCoverageRunDriveListDepthPanBFS(t *testing.T) {
 	}}
 	out := installDepthCaller(t, caller)
 	cmd := &cobra.Command{Use: "list"}
-	if err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", false, 0); err != nil {
+	if err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", false, 0, driveListFilter{}); err != nil {
 		t.Fatal(err)
 	}
 	if caller.calls != 2 {
@@ -548,7 +548,7 @@ func TestCrossPlatformCoverageRunDriveListDepthRateLimitResumesFromFailedPage(t 
 	deps.Out.w = out
 	deps.Out.errW = io.Discard
 	cmd := &cobra.Command{Use: "list"}
-	if err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0); err != nil {
+	if err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0, driveListFilter{}); err != nil {
 		t.Fatal(err)
 	}
 	if len(caller.calls) != 3 {
@@ -593,7 +593,7 @@ func TestCrossPlatformCoverageRunDriveListDepthRootFailure(t *testing.T) {
 	}}
 	installDepthCaller(t, caller)
 	cmd := &cobra.Command{Use: "list"}
-	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0)
+	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0, driveListFilter{})
 	if err == nil {
 		t.Fatal("root failure returned nil")
 	}
@@ -610,7 +610,7 @@ func TestCrossPlatformCoverageRunDriveListDepthUnrecoverable(t *testing.T) {
 	}}
 	out := installDepthCaller(t, caller)
 	cmd := &cobra.Command{Use: "list"}
-	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0)
+	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0, driveListFilter{})
 	if err == nil {
 		t.Fatal("unrecoverable returned nil")
 	}
@@ -635,7 +635,7 @@ func TestCrossPlatformCoverageRunDriveListDepthUnrecoverableEmitFailure(t *testi
 	installDepthCaller(t, caller)
 	deps.Out.w = failingWriter{}
 	cmd := &cobra.Command{Use: "list"}
-	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0)
+	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0, driveListFilter{})
 	if err == nil || !strings.Contains(err.Error(), "write failed") {
 		t.Fatalf("err = %v, want emit failure", err)
 	}
@@ -648,7 +648,7 @@ func TestCrossPlatformCoverageRunDriveListDepthPaginationLoop(t *testing.T) {
 	}}
 	installDepthCaller(t, caller)
 	cmd := &cobra.Command{Use: "list"}
-	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0)
+	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0, driveListFilter{})
 	if err == nil || !strings.Contains(err.Error(), "cursor loop suspected") {
 		t.Fatalf("err = %v, want pagination anomaly", err)
 	}
@@ -690,7 +690,7 @@ func TestCrossPlatformCoverageRunDriveListDepthCancelled(t *testing.T) {
 	cancel()
 	cmd := &cobra.Command{Use: "list"}
 	cmd.SetContext(ctx)
-	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0)
+	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0, driveListFilter{})
 	var cancelErr *driveDepthCancelledError
 	if !errors.As(err, &cancelErr) {
 		t.Fatalf("err = %T %v, want driveDepthCancelledError", err, err)
@@ -710,7 +710,7 @@ func TestCrossPlatformCoverageRunDriveListDepthCancelledEmitFailure(t *testing.T
 	cancel()
 	cmd := &cobra.Command{Use: "list"}
 	cmd.SetContext(ctx)
-	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0)
+	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0, driveListFilter{})
 	if err == nil || !strings.Contains(err.Error(), "write failed") {
 		t.Fatalf("err = %v, want emit failure", err)
 	}
@@ -724,7 +724,7 @@ func TestCrossPlatformCoverageRunDriveListDepthFinalEmitFailure(t *testing.T) {
 	installDepthCaller(t, caller)
 	deps.Out.w = failingWriter{}
 	cmd := &cobra.Command{Use: "list"}
-	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0)
+	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0, driveListFilter{})
 	if err == nil || !strings.Contains(err.Error(), "write failed") {
 		t.Fatalf("err = %v, want emit failure", err)
 	}
@@ -772,7 +772,7 @@ func TestCrossPlatformCoverageRunDriveListDepthCancelledInsidePagination(t *test
 	out := installDepthCaller(t, caller)
 	cmd := &cobra.Command{Use: "list"}
 	cmd.SetContext(ctx)
-	err := runDriveListDepth(cmd, route, map[string]any{}, "", 3, "", true, 0)
+	err := runDriveListDepth(cmd, route, map[string]any{}, "", 3, "", true, 0, driveListFilter{})
 	var cancelErr *driveDepthCancelledError
 	if !errors.As(err, &cancelErr) {
 		t.Fatalf("err = %T %v, want driveDepthCancelledError", err, err)
@@ -801,7 +801,7 @@ func TestCrossPlatformCoverageRunDriveListDepthCancelledAfterFetch(t *testing.T)
 	deps.Out.errW = io.Discard
 	cmd := &cobra.Command{Use: "list"}
 	cmd.SetContext(ctx)
-	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0)
+	err := runDriveListDepth(cmd, newDrivePanDepthRoute(), map[string]any{}, "", 3, "", true, 0, driveListFilter{})
 	var cancelErr *driveDepthCancelledError
 	if !errors.As(err, &cancelErr) {
 		t.Fatalf("err = %T %v, want driveDepthCancelledError", err, err)

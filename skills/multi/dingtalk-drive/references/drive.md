@@ -30,6 +30,7 @@ Usage:
 Example:
   dws drive list --limit 20
   dws drive list --limit 20 --folder <dentryUuid> --order-by name --order asc
+  dws drive list --folder <dentryUuid> --type file --start 7d
 Flags:
       --limit int           每页返回数量，默认 20，最大 50 (可选)
       --cursor string       分页游标，首次不传 (可选)
@@ -37,8 +38,29 @@ Flags:
       --order-by string     排序字段: createTime|modifyTime|name (可选)
       --folder string       父节点 ID (dentryUuid)，不传则列出空间根目录 (可选)
       --space-id string     空间 ID，不传则使用「我的文件」对应 spaceId (可选)
+      --workspace string    文档空间/知识库 ID (加密 string 或 URL)，传入则路由到文档空间 (可选)
       --thumbnail           是否返回缩略图信息 (可选)
+      --pattern string      按名称通配过滤结果，如 "*日报*"（客户端过滤，无通配符时按子串匹配）(可选)
+      --depth int           递归列出子目录层级，默认 1(仅当前层)，最大 5；与 --cursor/--limit 互斥 (可选)
+      --type string         按节点类型过滤: file|folder（客户端过滤，见下节）(可选)
+      --start string        按修改时间过滤·起始，如 7d / 2026-08-01 / RFC3339 (可选)
+      --end string          按修改时间过滤·截止，语法同 --start (可选)
 ```
+
+类型/时间过滤（`--type` / `--start` / `--end`）：
+- 语义：`--type` 按节点类型（file=文件 / folder=文件夹）；`--start`/`--end` 按**修改时间**圈定区间。
+  注意与 `dws drive search` 的 `--modified-from/--modified-to` 区分：那两个收毫秒时间戳，这里收字符串语法；
+  `--type`（节点类型）与 search 的 `--file-types`（内容类型 alidoc/image/...）也不是一回事。
+- 时间语法：相对时间 `24h`/`7d`/`2w`（小时/天/周，按本机时钟换算）、RFC3339（`2026-08-01T00:00:00+08:00`）、
+  无时区 ISO8601（`2026-08-01 08:00:00`，默认 Asia/Shanghai）、仅日期（`2026-08-01`）；
+  不支持毫秒时间戳，不支持 `m` 单位。
+- 执行方式：钉盘与知识库（--workspace）两路由统一为**客户端过滤**——全量扫描当前目录后在进程内筛选；
+  与 `--depth>1` 组合时递归扫描后筛（被滤掉的条目仍占 2000 条全局上限）。
+- 互斥：与 `--versions`/`--cursor`/`--order-by`/`--order`/`--limit` 不能同时使用（过滤模式为全量扫描，
+  无游标与服务端排序语义）；可与 `--latest`/`--pattern`/`--depth` 组合，`--latest` 表示「符合条件的条目中最新 N 个」。
+- 输出形态：带过滤时输出从单页透传变为聚合形态 `{items, maxDepth, truncated, errors}`。
+- 已知代价：大目录（>2000 条）触顶截断时 `truncated=true`（退出码 0，结果每条都正确但没扫完）；
+  建议用 `--folder` 指定子目录缩小扫描范围；带关键词的过滤场景改用 `dws drive search`。
 
 ### 获取钉盘空间列表
 
