@@ -409,6 +409,9 @@ var ChatMembersGet = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +chat-members-get --id <openConversationId> --users odid1,odid2`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if err := validateExplicitOpenIDs("--users", rt.StrSlice("users")); err != nil {
+			return err
+		}
 		return rt.CallMCP("list_group_member_by_ids", map[string]any{
 			"openConversationId":    rt.Str("id"),
 			"cid":                   rt.Str("id"),

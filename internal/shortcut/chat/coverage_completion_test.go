@@ -225,7 +225,7 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 		{
 			name:      "reply write",
 			caller:    &larkAlignmentCaller{failProductTool: "chat/send_personal_message"},
-			args:      []string{"chat", "+messages-reply", "--conversation-id", "cid", "--message-id", "msg", "--ref-sender", "D-sender", "--text", "收到", "--yes"},
+			args:      []string{"chat", "+messages-reply", "--conversation-id", "cid", "--message-id", "msg", "--ref-sender", fixtureCurrentDOpenID, "--text", "收到", "--yes"},
 			wantError: "fixture lower call failed",
 		},
 	}
@@ -259,7 +259,7 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 	}}
 	helpers.InitDeps(external)
 	root = newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+chat-create", "--name", "群", "--owner-open-dingtalk-id", "D-owner", "--member-query", "外部联系人", "--yes"})
+	root.SetArgs([]string{"chat", "+chat-create", "--name", "群", "--owner-open-dingtalk-id", fixtureCurrentDOpenID, "--member-query", "外部联系人", "--yes"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -400,17 +400,17 @@ func TestCrossPlatformCoverageUnifiedSendValidationMatrix(t *testing.T) {
 	cases := [][]string{
 		{"--identity", "user", "--group", "cid", "--users", "u1", "--text", "x"},
 		{"--identity", "user", "--text", "x"},
-		{"--identity", "user", "--group", "cid", "--open-dingtalk-id", "D1", "--text", "x"},
+		{"--identity", "user", "--group", "cid", "--open-dingtalk-id", fixtureCurrentDOpenID, "--text", "x"},
 		{"--identity", "user", "--group", "cid", "--at-user-ids", "u1", "--text", "x"},
-		{"--identity", "user", "--open-dingtalk-id", "D1", "--at-all", "--text", "x"},
+		{"--identity", "user", "--open-dingtalk-id", fixtureCurrentDOpenID, "--at-all", "--text", "x"},
 		{"--identity", "bot", "--group", "cid", "--text", "x"},
 		{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--users", "u1", "--text", "x"},
-		{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--open-dingtalk-id", "D1", "--text", "x"},
+		{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--open-dingtalk-id", fixtureCurrentDOpenID, "--text", "x"},
 		{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--at-mobiles", "13800000000", "--text", "x"},
 		{"--identity", "bot", "--robot-code", "r", "--users", "u1", "--at-user-ids", "u2", "--text", "x"},
 		{"--identity", "webhook", "--text", "x"},
 		{"--identity", "webhook", "--webhook-token", "token", "--group", "cid", "--text", "x"},
-		{"--identity", "webhook", "--webhook-token", "token", "--at-open-dingtalk-ids", "D1", "--text", "x"},
+		{"--identity", "webhook", "--webhook-token", "token", "--at-open-dingtalk-ids", fixtureCurrentDOpenID, "--text", "x"},
 		{"--identity", "webhook", "--webhook-token", "token", "--uuid", "key", "--text", "x"},
 	}
 	for _, tail := range cases {
@@ -437,23 +437,23 @@ func TestCrossPlatformCoverageUnifiedSendOptionalArgumentsAndErrors(t *testing.T
 	}{
 		{
 			name: "user group mentions",
-			args: []string{"--identity", "user", "--group", "cid", "--text", "x", "--at-open-dingtalk-ids", "D1,D2", "--at-all"},
-			want: map[string]any{"atOpenDingTalkIds": []string{"D1", "D2"}, "atAll": true},
+			args: []string{"--identity", "user", "--group", "cid", "--text", "x", "--at-open-dingtalk-ids", fixtureCurrentDOpenID + "," + fixtureCurrentDOpenID2, "--at-all"},
+			want: map[string]any{"atOpenDingTalkIds": []string{fixtureCurrentDOpenID, fixtureCurrentDOpenID2}, "atAll": true},
 		},
 		{
 			name: "user direct",
-			args: []string{"--identity", "user", "--open-dingtalk-id", "D1", "--text", "x"},
-			want: map[string]any{"receiverOpenDingTalkId": "D1"},
+			args: []string{"--identity", "user", "--open-dingtalk-id", fixtureCurrentDOpenID, "--text", "x"},
+			want: map[string]any{"receiverOpenDingTalkId": fixtureCurrentDOpenID},
 		},
 		{
 			name: "bot group mentions",
-			args: []string{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--text", "x", "--at-user-ids", "u1", "--at-open-dingtalk-ids", "D1"},
-			want: map[string]any{"atUserIds": []string{"u1"}, "atOpendingtalkIds": []string{"D1"}},
+			args: []string{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--text", "x", "--at-user-ids", "u1", "--at-open-dingtalk-ids", fixtureCurrentDOpenID},
+			want: map[string]any{"atUserIds": []string{"u1"}, "atOpendingtalkIds": []string{fixtureCurrentDOpenID}},
 		},
 		{
 			name: "bot direct targets",
-			args: []string{"--identity", "bot", "--robot-code", "r", "--users", "u1", "--open-dingtalk-ids", "D1", "--text", "x", "--at-all"},
-			want: map[string]any{"userIds": []string{"u1"}, "openDingtalkIds": []string{"D1"}, "isAtAll": "true"},
+			args: []string{"--identity", "bot", "--robot-code", "r", "--users", "u1", "--open-dingtalk-ids", fixtureCurrentDOpenID, "--text", "x", "--at-all"},
+			want: map[string]any{"userIds": []string{"u1"}, "openDingtalkIds": []string{fixtureCurrentDOpenID}, "isAtAll": "true"},
 		},
 		{
 			name: "webhook mentions",
@@ -580,7 +580,7 @@ func TestCrossPlatformCoverageUnifiedSendGroupFileAndBatchBoundaries(t *testing.
 	root.SetArgs([]string{
 		"chat", "+messages-send", "--identity", "bot", "--robot-code", "r",
 		"--groups", "c1,c2", "--text", "x", "--at-user-ids", "u1",
-		"--at-open-dingtalk-ids", "D1", "--at-all", "--yes",
+		"--at-open-dingtalk-ids", fixtureCurrentDOpenID, "--at-all", "--yes",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -590,7 +590,7 @@ func TestCrossPlatformCoverageUnifiedSendGroupFileAndBatchBoundaries(t *testing.
 	}
 	for _, call := range fake.calls {
 		if !reflect.DeepEqual(call.args["atUserIds"], []string{"u1"}) ||
-			!reflect.DeepEqual(call.args["atOpendingtalkIds"], []string{"D1"}) ||
+			!reflect.DeepEqual(call.args["atOpendingtalkIds"], []string{fixtureCurrentDOpenID}) ||
 			call.args["isAtAll"] != "true" {
 			t.Fatalf("batch mention args = %#v", call.args)
 		}

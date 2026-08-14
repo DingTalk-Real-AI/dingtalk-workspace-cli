@@ -413,6 +413,13 @@ func newDriveCommand() *cobra.Command {
 				}
 			}
 
+			// --type/--start/--end 客户端过滤：激活即切 BFS 全量拉取后筛（两路由统一）；
+			// 未启用返回零值，存量分支字节级不变。互斥/非法值/start>end 在此拒绝。
+			filter, err := parseDriveListFilter(cmd)
+			if err != nil {
+				return err
+			}
+
 			// --versions 模式：列出文件历史版本（仅普通文件）
 			// 先于 --depth 校验执行：versions 模式合法使用 --limit，
 			// 不应被「--limit 与 --depth 不兼容」的误导性报错拦截。
@@ -454,7 +461,8 @@ func newDriveCommand() *cobra.Command {
 			if workspaceID != "" {
 				// depth>1 时 --pattern 放开（先递归后过滤）；--order-by/--space-id/--thumbnail
 				// 知识库无对应参数，静默忽略。
-				if depth > 1 || latest > 0 {
+				// filter 激活时 depth==1 也走 BFS 退化态（全量拉取→CLI 侧筛）。
+				if depth > 1 || latest > 0 || filter.active() {
 					quiet, _ := cmd.Flags().GetBool("quiet")
 					baseArgs := map[string]any{"workspaceId": workspaceID}
 					rootFolder := docFolderFlag(cmd, "node", "file-id")
@@ -463,7 +471,7 @@ func newDriveCommand() *cobra.Command {
 							return err
 						}
 					}
-					return runDriveListDepth(cmd, newDocDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest)
+					return runDriveListDepth(cmd, newDocDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest, filter)
 				}
 				if pattern != "" {
 					return &CLIError{
@@ -487,7 +495,9 @@ func newDriveCommand() *cobra.Command {
 				return callMCPToolOnServer("doc", "list_nodes", toolArgs)
 			}
 
-			if depth > 1 {
+			// 钉盘：filter 激活即 depth=1 单层退化态（全量翻完当前目录后 CLI 侧筛）；
+			// filter+latest 单层同走 BFS（先筛后排，不走 runDriveListLatest 凑够即停）。
+			if depth > 1 || filter.active() {
 				quiet, _ := cmd.Flags().GetBool("quiet")
 				baseArgs := map[string]any{}
 				if v, _ := cmd.Flags().GetString("space-id"); v != "" {
@@ -508,7 +518,7 @@ func newDriveCommand() *cobra.Command {
 						return err
 					}
 				}
-				return runDriveListDepth(cmd, newDrivePanDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest)
+				return runDriveListDepth(cmd, newDrivePanDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest, filter)
 			}
 
 			// 默认路由：钉盘文件列表
@@ -563,6 +573,11 @@ func newDriveCommand() *cobra.Command {
 			if v, _ := cmd.Flags().GetBool("thumbnail"); v {
 				argsMap["withThumbnail"] = true
 			}
+			// --pattern 页内过滤（现状缺口附带修复：透传即打印无法夹过滤，取回解析后筛）；
+			// 不带 pattern 时保持 callMCPTool 纯透传，存量行为不变。
+			if pattern != "" {
+				return callDriveListPageWithPattern(argsMap, pattern)
+			}
 			return callMCPTool("list_files", argsMap)
 		},
 	}
@@ -591,11 +606,13 @@ func newDriveCommand() *cobra.Command {
 					"用户要浏览「我的文件」/钉盘/网盘某目录下有哪些文件或文件夹时",
 					"已知父文件夹 dentryUuid，要列出其子项以便继续 download/copy/move 时",
 					"传 --workspace 时要列出文档空间/知识库根或子目录（与 wiki node list 场景重叠时，用户说钉盘/我的文件优先本命令）",
+					"要在已知目录内按类型/修改时间做无关键词筛选时：--type file --start 7d（钉盘与知识库路由均可，CLI 侧过滤）",
 				},
 				AvoidWhen: []string{
 					"只记得关键词、不知道所在目录时改用 dws drive search",
 					"明确要在某个知识库内按目录浏览且已有 workspaceId 时可用 dws wiki node list",
 					"要找最近打开/编辑过的文档改用 dws drive recent",
+					"带关键词的过滤改用 dws drive search（--extensions/--modified-from 等已可用）",
 				},
 				Examples: []string{
 					"dws drive list --limit 20 --format json",
@@ -1211,6 +1228,9 @@ func newDriveCommand() *cobra.Command {
 	driveListCmd.Flags().Int("depth", 1, "递归列出子目录层级，默认 1(仅当前层)，最大 5；与 --cursor/--limit 互斥；与 --workspace 组合时走知识库递归 (可选)")
 	driveListCmd.Flags().Int("latest", 0, "按修改时间取最新 N 个文件（1~50）；与 --pattern 组合时表示名称匹配的文件中最新 N 个；可与 --workspace/--depth 组合；与 --order-by/--order/--limit/--cursor 互斥 (可选)")
 	driveListCmd.Flags().Bool("quiet", false, "关闭递归进度输出(stderr)，不影响 stdout JSON (--depth>1 或 --latest 多页扫描时有效) (可选)")
+	driveListCmd.Flags().String("type", "", "按节点类型过滤: file|folder（客户端过滤：全量扫描后筛，钉盘/知识库均可用；与 --versions/--cursor/--order-by/--order/--limit 互斥）(可选)")
+	driveListCmd.Flags().String("start", "", "按修改时间过滤·起始: 相对时间如 24h/7d/2w、RFC3339、YYYY-MM-DD（客户端过滤，互斥同 --type）(可选)")
+	driveListCmd.Flags().String("end", "", "按修改时间过滤·截止: 语法同 --start（客户端过滤，互斥同 --type）(可选)")
 
 	driveInfoCmd.Flags().String("node", "", "节点 ID (dentryUuid) (必填)")
 	driveInfoCmd.Flags().String("space-id", "", "节点所属空间 ID (可选)")

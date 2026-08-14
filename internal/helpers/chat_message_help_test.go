@@ -90,3 +90,96 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsPostSendIDChain(t *testing
 		})
 	}
 }
+
+func TestCrossPlatformCoverageChatMessageHelpDocumentsOptionalTimeDefaults(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		contains []string
+		absent   []string
+	}{
+		{
+			name: "list",
+			args: []string{"message", "list", "--help"},
+			contains: []string{
+				"--time 可选，不传时默认上海时间当前时间并向旧消息拉取",
+				"默认上海时间当前时间",
+				"未传 --time 时默认 older",
+			},
+			absent: []string{"开始时间，格式: yyyy-MM-dd HH:mm:ss (必填)"},
+		},
+		{
+			name: "search",
+			args: []string{"message", "search", "--help"},
+			contains: []string{
+				"可选，不传时默认最近 7 天到当前时间",
+				"默认当前时间前 7 天",
+				"默认当前时间",
+			},
+			absent: []string{"开始时间，ISO-8601 格式 (必填)", "结束时间，ISO-8601 格式 (必填)"},
+		},
+		{
+			name: "list-by-sender",
+			args: []string{"message", "list-by-sender", "--help"},
+			contains: []string{
+				"--start 和 --end 可选，不传时默认最近 7 天到当前时间",
+				"默认当前时间前 7 天",
+				"默认当前时间",
+			},
+			absent: []string{"开始时间，ISO-8601 格式 (必填)", "结束时间，ISO-8601 格式 (必填)"},
+		},
+		{
+			name: "list-mentions",
+			args: []string{"message", "list-mentions", "--help"},
+			contains: []string{
+				"--start 和 --end 可选，不传时默认最近 7 天到当前时间",
+				"默认当前时间前 7 天",
+				"默认当前时间",
+			},
+			absent: []string{"开始时间，ISO-8601 格式 (必填)", "结束时间，ISO-8601 格式 (必填)"},
+		},
+		{
+			name: "list-all",
+			args: []string{"message", "list-all", "--help"},
+			contains: []string{
+				"--start 和 --end 可选，不传时默认最近 1 天到当前时间",
+				"默认当前时间前 1 天",
+				"默认当前时间",
+			},
+			absent: []string{"起始时间，格式: yyyy-MM-dd HH:mm:ss (必填)", "结束时间，格式: yyyy-MM-dd HH:mm:ss (必填)"},
+		},
+		{
+			name: "download-media",
+			args: []string{"message", "download-media", "--help"},
+			contains: []string{
+				"只支持聊天消息 mediaId 下载，不支持钉盘 fileId",
+				"fileId 下载请使用钉盘/drive 下载命令",
+				"仅支持聊天消息 mediaId，不支持钉盘 fileId",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := newChatCommand()
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+			cmd.SetArgs(test.args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("dws chat %s: %v\n%s", strings.Join(test.args, " "), err, output.String())
+			}
+			help := output.String()
+			for _, want := range test.contains {
+				if !strings.Contains(help, want) {
+					t.Errorf("chat message %s help missing %q:\n%s", test.name, want, help)
+				}
+			}
+			for _, unwanted := range test.absent {
+				if strings.Contains(help, unwanted) {
+					t.Errorf("chat message %s help still contains %q:\n%s", test.name, unwanted, help)
+				}
+			}
+		})
+	}
+}

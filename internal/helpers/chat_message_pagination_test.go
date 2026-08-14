@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,6 +146,356 @@ func TestChatMessagePaginationDefaultSinglePageUnchanged(t *testing.T) {
 				t.Fatalf("call = %#v, want server=%s tool=%s args=%#v", got, tt.server, tt.tool, tt.want)
 			}
 		})
+	}
+}
+
+func TestChatMessagePaginationUsesDefaultTimeWindows(t *testing.T) {
+	tests := []struct {
+		name         string
+		args         []string
+		wantTool     string
+		wantLookback time.Duration
+	}{
+		{
+			name:         "list-all defaults to one day",
+			args:         []string{"message", "list-all"},
+			wantTool:     "search_messages_by_time_range",
+			wantLookback: 24 * time.Hour,
+		},
+		{
+			name:         "list-by-sender defaults to seven days",
+			args:         []string{"message", "list-by-sender", "--sender-user-id", "u1"},
+			wantTool:     "search_messages_by_sender",
+			wantLookback: 7 * 24 * time.Hour,
+		},
+		{
+			name:         "list-mentions defaults to seven days",
+			args:         []string{"message", "list-mentions"},
+			wantTool:     "search_at_me_message",
+			wantLookback: 7 * 24 * time.Hour,
+		},
+		{
+			name:         "search defaults to seven days",
+			args:         []string{"message", "search", "--query", "发布"},
+			wantTool:     "search_messages_by_keyword",
+			wantLookback: 7 * 24 * time.Hour,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &chatMessagePaginationCaller{}
+			before := time.Now()
+			_, err := executeChatMessagePaginationCommand(t, caller, tt.args...)
+			after := time.Now()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v, want one call", caller.calls)
+			}
+			got := caller.calls[0]
+			if got.tool != tt.wantTool {
+				t.Fatalf("tool = %q, want %q", got.tool, tt.wantTool)
+			}
+			startMs := chatMessageTimeArgAsMillis(t, got.args["startTime"], tt.wantTool)
+			endMs := chatMessageTimeArgAsMillis(t, got.args["endTime"], tt.wantTool)
+			wantEndMin := before.Truncate(time.Second).UnixMilli()
+			wantEndMax := after.Add(time.Second).UnixMilli()
+			if endMs < wantEndMin || endMs > wantEndMax {
+				t.Fatalf("endTime = %d, want between %d and %d", endMs, wantEndMin, wantEndMax)
+			}
+			wantStartMin := before.Add(-tt.wantLookback).Truncate(time.Second).UnixMilli()
+			wantStartMax := after.Add(-tt.wantLookback).Add(time.Second).UnixMilli()
+			if startMs < wantStartMin || startMs > wantStartMax {
+				t.Fatalf("startTime = %d, want between %d and %d", startMs, wantStartMin, wantStartMax)
+			}
+			if tt.wantTool == "search_messages_by_time_range" {
+				assertChatMessageListAllTimeFormat(t, got.args["startTime"])
+				assertChatMessageListAllTimeFormat(t, got.args["endTime"])
+			}
+		})
+	}
+}
+
+func TestChatMessagePaginationDefaultsStartFromExplicitEnd(t *testing.T) {
+	endRaw := "2026-01-01T00:00:00+08:00"
+	endMs, err := parseISOTimeToMillis("end", endRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name         string
+		args         []string
+		wantTool     string
+		wantLookback time.Duration
+	}{
+		{
+			name:         "list-all defaults start one day before explicit end",
+			args:         []string{"message", "list-all", "--end", endRaw},
+			wantTool:     "search_messages_by_time_range",
+			wantLookback: 24 * time.Hour,
+		},
+		{
+			name:         "list-by-sender defaults start seven days before explicit end",
+			args:         []string{"message", "list-by-sender", "--sender-user-id", "u1", "--end", endRaw},
+			wantTool:     "search_messages_by_sender",
+			wantLookback: 7 * 24 * time.Hour,
+		},
+		{
+			name:         "list-mentions defaults start seven days before explicit end",
+			args:         []string{"message", "list-mentions", "--end", endRaw},
+			wantTool:     "search_at_me_message",
+			wantLookback: 7 * 24 * time.Hour,
+		},
+		{
+			name:         "search defaults start seven days before explicit end",
+			args:         []string{"message", "search", "--query", "发布", "--end", endRaw},
+			wantTool:     "search_messages_by_keyword",
+			wantLookback: 7 * 24 * time.Hour,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &chatMessagePaginationCaller{}
+			_, err := executeChatMessagePaginationCommand(t, caller, tt.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v, want one call", caller.calls)
+			}
+			got := caller.calls[0]
+			if got.tool != tt.wantTool {
+				t.Fatalf("tool = %q, want %q", got.tool, tt.wantTool)
+			}
+			startMs := chatMessageTimeArgAsMillis(t, got.args["startTime"], tt.wantTool)
+			gotEndMs := chatMessageTimeArgAsMillis(t, got.args["endTime"], tt.wantTool)
+			if gotEndMs != endMs {
+				t.Fatalf("endTime = %d, want %d", gotEndMs, endMs)
+			}
+			wantStartMs := time.UnixMilli(endMs).Add(-tt.wantLookback).UnixMilli()
+			if startMs != wantStartMs {
+				t.Fatalf("startTime = %d, want %d", startMs, wantStartMs)
+			}
+			if tt.wantTool == "search_messages_by_time_range" {
+				assertStringArg(t, got.args["startTime"], formatChatMessageListAllTime(wantStartMs))
+				assertStringArg(t, got.args["endTime"], endRaw)
+			}
+		})
+	}
+}
+
+func TestChatMessageListAllDefaultStartFromTimezoneLessEndUsesShanghai(t *testing.T) {
+	previousLocal := time.Local
+	t.Cleanup(func() { time.Local = previousLocal })
+
+	for _, loc := range []*time.Location{time.UTC, time.FixedZone("EST", -5*3600)} {
+		t.Run(loc.String(), func(t *testing.T) {
+			time.Local = loc
+			caller := &chatMessagePaginationCaller{}
+			_, err := executeChatMessagePaginationCommand(t, caller, "message", "list-all", "--end", "2026-03-01 00:00:00")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v, want one call", caller.calls)
+			}
+			got := caller.calls[0]
+			assertStringArg(t, got.args["endTime"], "2026-03-01 00:00:00")
+			assertStringArg(t, got.args["startTime"], "2026-02-28 00:00:00")
+
+			startMs, err := parseISOTimeToMillis("start", got.args["startTime"].(string))
+			if err != nil {
+				t.Fatal(err)
+			}
+			endMs, err := parseISOTimeToMillis("end", got.args["endTime"].(string))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotWindow := time.Duration(endMs-startMs) * time.Millisecond; gotWindow != 24*time.Hour {
+				t.Fatalf("window = %v, want 24h", gotWindow)
+			}
+		})
+	}
+}
+
+func TestChatMessagePaginationDefaultsEndFromNowWhenOnlyStartProvided(t *testing.T) {
+	startRaw := "2026-01-01T00:00:00+08:00"
+	startMs, err := parseISOTimeToMillis("start", startRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name     string
+		args     []string
+		wantTool string
+	}{
+		{
+			name:     "list-all defaults end to now",
+			args:     []string{"message", "list-all", "--start", startRaw},
+			wantTool: "search_messages_by_time_range",
+		},
+		{
+			name:     "list-by-sender defaults end to now",
+			args:     []string{"message", "list-by-sender", "--sender-user-id", "u1", "--start", startRaw},
+			wantTool: "search_messages_by_sender",
+		},
+		{
+			name:     "list-mentions defaults end to now",
+			args:     []string{"message", "list-mentions", "--start", startRaw},
+			wantTool: "search_at_me_message",
+		},
+		{
+			name:     "search defaults end to now",
+			args:     []string{"message", "search", "--query", "发布", "--start", startRaw},
+			wantTool: "search_messages_by_keyword",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &chatMessagePaginationCaller{}
+			before := time.Now()
+			_, err := executeChatMessagePaginationCommand(t, caller, tt.args...)
+			after := time.Now()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 1 {
+				t.Fatalf("calls = %#v, want one call", caller.calls)
+			}
+			got := caller.calls[0]
+			if got.tool != tt.wantTool {
+				t.Fatalf("tool = %q, want %q", got.tool, tt.wantTool)
+			}
+			gotStartMs := chatMessageTimeArgAsMillis(t, got.args["startTime"], tt.wantTool)
+			if gotStartMs != startMs {
+				t.Fatalf("startTime = %d, want %d", gotStartMs, startMs)
+			}
+			endMs := chatMessageTimeArgAsMillis(t, got.args["endTime"], tt.wantTool)
+			wantEndMin := before.Truncate(time.Second).UnixMilli()
+			wantEndMax := after.Add(time.Second).UnixMilli()
+			if endMs < wantEndMin || endMs > wantEndMax {
+				t.Fatalf("endTime = %d, want between %d and %d", endMs, wantEndMin, wantEndMax)
+			}
+			if tt.wantTool == "search_messages_by_time_range" {
+				assertStringArg(t, got.args["startTime"], startRaw)
+				assertChatMessageListAllTimeFormat(t, got.args["endTime"])
+			}
+		})
+	}
+}
+
+func TestChatMessageListAllRejectsInvalidTimeBounds(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "invalid start",
+			args:    []string{"message", "list-all", "--start", "not-a-time", "--end", "2020-01-01T00:00:00+08:00"},
+			wantErr: "cannot parse time for --start",
+		},
+		{
+			name:    "end before start",
+			args:    []string{"message", "list-all", "--start", "2021-01-01T00:00:00+08:00", "--end", "2020-01-01T00:00:00+08:00"},
+			wantErr: "--end must be after --start",
+		},
+		{
+			name:    "default end before future start",
+			args:    []string{"message", "list-all", "--start", "2027-01-01 00:00:00"},
+			wantErr: "--end must be after --start",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := &chatMessagePaginationCaller{}
+			_, err := executeChatMessagePaginationCommand(t, caller, tt.args...)
+			if err == nil {
+				t.Fatal("expected validation error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %q, want contains %q", err.Error(), tt.wantErr)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("calls = %#v, want no MCP call", caller.calls)
+			}
+		})
+	}
+}
+
+func numericArgAsInt64(t *testing.T, value any) int64 {
+	t.Helper()
+	switch v := value.(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case float64:
+		return int64(v)
+	case string:
+		parsed, err := parseISOTimeToMillis("time", v)
+		if err != nil {
+			t.Fatalf("parse time arg %q: %v", v, err)
+		}
+		return parsed
+	default:
+		t.Fatalf("unsupported numeric arg type %T (%#v)", value, value)
+		return 0
+	}
+}
+
+func chatMessageTimeArgAsMillis(t *testing.T, value any, tool string) int64 {
+	t.Helper()
+	if tool == "search_messages_by_time_range" {
+		return parseChatMessageListAllTimeArg(t, value).UnixMilli()
+	}
+	return numericArgAsInt64(t, value)
+}
+
+func parseChatMessageListAllTimeArg(t *testing.T, value any) time.Time {
+	t.Helper()
+	raw, ok := value.(string)
+	if !ok {
+		t.Fatalf("time arg = %#v, want time string", value)
+	}
+	if strings.Contains(raw, "T") {
+		parsedMs, err := parseISOTimeToMillis("time", raw)
+		if err != nil {
+			t.Fatalf("time arg = %q, parse err = %v", raw, err)
+		}
+		return time.UnixMilli(parsedMs)
+	}
+	parsedMs, err := parseISOTimeToMillis("time", raw)
+	if err != nil {
+		t.Fatalf("time arg = %q, parse err = %v", raw, err)
+	}
+	return time.UnixMilli(parsedMs)
+}
+
+func assertChatMessageListAllTimeFormat(t *testing.T, value any) {
+	t.Helper()
+	raw, ok := value.(string)
+	if !ok {
+		t.Fatalf("time arg = %#v, want time string", value)
+	}
+	if strings.Contains(raw, "T") {
+		t.Fatalf("time arg = %q, want yyyy-MM-dd HH:mm:ss without RFC3339 separator", raw)
+	}
+	if _, err := parseISOTimeToMillis("time", raw); err != nil {
+		t.Fatalf("time arg = %q, parse err = %v", raw, err)
+	}
+}
+
+func assertStringArg(t *testing.T, value any, want string) {
+	t.Helper()
+	got, ok := value.(string)
+	if !ok || got != want {
+		t.Fatalf("arg = %#v, want %q", value, want)
 	}
 }
 

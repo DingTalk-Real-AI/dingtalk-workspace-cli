@@ -29,6 +29,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
 const directMessagesHardPageLimit = 500
@@ -55,6 +56,9 @@ var MessagesSendByBot = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +messages-send-by-bot --robot-code <robotCode> --group <openConversationId> --title "日报" --text "## 今日完成"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if err := validateExplicitOpenIDs("--at-open-dingtalk-ids", rt.StrSlice("at-open-dingtalk-ids")); err != nil {
+			return err
+		}
 		params := map[string]any{
 			"robotCode":          rt.Str("robot-code"),
 			"openConversationId": rt.Str("group"),
@@ -93,6 +97,9 @@ var MessagesBatchSendByBot = shortcut.Shortcut{
 	},
 	Tips: []string{`dws chat +messages-batch-send-by-bot --robot-code <robotCode> --users userId1,userId2 --title "提醒" --text "请提交周报"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if err := validateExplicitOpenIDs("--open-dingtalk-ids", rt.StrSlice("open-dingtalk-ids")); err != nil {
+			return err
+		}
 		params := map[string]any{
 			"robotCode": rt.Str("robot-code"),
 			"title":     rt.Str("title"),
@@ -493,6 +500,9 @@ func executeMessagesListDirect(rt *shortcut.RuntimeContext) error {
 	}
 	switch {
 	case rt.Str("open-dingtalk-id") != "":
+		if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", rt.Str("open-dingtalk-id")); err != nil {
+			return err
+		}
 		params["openDingTalkId"] = rt.Str("open-dingtalk-id")
 	case rt.Str("user") != "":
 		params["userId"] = rt.Str("user")
@@ -1515,6 +1525,14 @@ var MessagesSendCard = shortcut.Shortcut{
 		`dws chat +messages-send-card --group <openConversationId> --at-open-dingtalk-ids <openDingTalkId> --content "任务已完成"`,
 	},
 	Validate: func(rt *shortcut.RuntimeContext) error {
+		if receiverOpenID := rt.Str("receiver-open-dingtalk-id"); receiverOpenID != "" {
+			if err := targetresolver.ValidateExplicitOpenDingTalkID("--receiver-open-dingtalk-id", receiverOpenID); err != nil {
+				return err
+			}
+		}
+		if err := validateExplicitOpenIDs("--at-open-dingtalk-ids", rt.StrSlice("at-open-dingtalk-ids")); err != nil {
+			return err
+		}
 		if status := rt.Int("flow-status"); !validCardFlowStatus(status) {
 			return fmt.Errorf("--flow-status 必须在 1-5 之间")
 		}

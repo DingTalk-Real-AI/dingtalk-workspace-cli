@@ -724,6 +724,99 @@ func TestCrossPlatformCoverageChatMessageListUsesMCPMetadataGroupKey(t *testing.
 	}
 }
 
+func TestCrossPlatformCoverageChatMessageListDefaultTimeUsesShanghaiLocation(t *testing.T) {
+	previousLocal := time.Local
+	t.Cleanup(func() { time.Local = previousLocal })
+
+	tests := []struct {
+		name       string
+		args       []string
+		wantTool   string
+		wantTarget map[string]any
+	}{
+		{
+			name:       "group",
+			args:       []string{"message", "list", "--group", "cid-1", "--limit", "50"},
+			wantTool:   "list_conversation_message_v2",
+			wantTarget: map[string]any{"openconversation_id": "cid-1"},
+		},
+		{
+			name:       "user",
+			args:       []string{"message", "list", "--user", "user-1", "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"userId": "user-1"},
+		},
+		{
+			name:       "user open DingTalk ID fallback",
+			args:       []string{"message", "list", "--user", helperCurrentDOpenID, "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"openDingTalkId": helperCurrentDOpenID},
+		},
+		{
+			name:       "open DingTalk ID",
+			args:       []string{"message", "list", "--open-dingtalk-id", helperCurrentDOpenID, "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"openDingTalkId": helperCurrentDOpenID},
+		},
+		{
+			name:       "direct user",
+			args:       []string{"message", "list-direct", "--user", "user-1", "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"userId": "user-1"},
+		},
+		{
+			name:       "direct open DingTalk ID",
+			args:       []string{"message", "list-direct", "--open-dingtalk-id", helperCurrentDOpenID, "--limit", "50"},
+			wantTool:   "list_individual_chat_message",
+			wantTarget: map[string]any{"openDingTalkId": helperCurrentDOpenID},
+		},
+	}
+
+	for _, loc := range []*time.Location{time.UTC, time.FixedZone("EST", -5*3600)} {
+		t.Run(loc.String(), func(t *testing.T) {
+			time.Local = loc
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					caller := &chatChangedContractCaller{}
+					before := time.Now()
+					err := executeChatChangedContract(t, caller, tt.args...)
+					after := time.Now()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(caller.calls) != 1 {
+						t.Fatalf("calls = %#v, want one MCP call", caller.calls)
+					}
+					if caller.calls[0].toolName != tt.wantTool {
+						t.Fatalf("tool = %q, want %q", caller.calls[0].toolName, tt.wantTool)
+					}
+					for key, want := range tt.wantTarget {
+						if got := caller.calls[0].args[key]; got != want {
+							t.Fatalf("arg %s = %#v, want %#v", key, got, want)
+						}
+					}
+					raw, ok := caller.calls[0].args["time"].(string)
+					if !ok || raw == "" {
+						t.Fatalf("time arg = %#v, want non-empty string", caller.calls[0].args["time"])
+					}
+					gotMs, err := parseISOTimeToMillis("time", raw)
+					if err != nil {
+						t.Fatalf("time arg = %q, parse err = %v", raw, err)
+					}
+					wantMin := before.Add(-time.Second).UnixMilli()
+					wantMax := after.Add(time.Second).UnixMilli()
+					if gotMs < wantMin || gotMs > wantMax {
+						t.Fatalf("time arg = %q (%d), want between %d and %d", raw, gotMs, wantMin, wantMax)
+					}
+					if caller.calls[0].args["forward"] != false {
+						t.Fatalf("forward = %#v, want false when --time is omitted", caller.calls[0].args["forward"])
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageChatAuditUsesUserIDs(t *testing.T) {
 	caller := &chatChangedContractCaller{}
 	err := executeChatChangedContract(t, caller,
@@ -786,11 +879,11 @@ func TestChatSendAndReplyDefaultToAgentProductForIMClawType(t *testing.T) {
 	}{
 		{
 			name: "send",
-			args: []string{"message", "send", "--open-dingtalk-id", "D1", "--text", "hello"},
+			args: []string{"message", "send", "--open-dingtalk-id", helperCurrentDOpenID, "--text", "hello"},
 		},
 		{
 			name: "reply",
-			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", "D1", "--text", "hello"},
+			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", helperCurrentDOpenID, "--text", "hello"},
 		},
 	}
 
@@ -819,11 +912,11 @@ func TestChatSendAndReplyDisableAITagWithEmptyClawType(t *testing.T) {
 	}{
 		{
 			name: "send",
-			args: []string{"message", "send", "--open-dingtalk-id", "D1", "--text", "hello", "--ai-tag=false"},
+			args: []string{"message", "send", "--open-dingtalk-id", helperCurrentDOpenID, "--text", "hello", "--ai-tag=false"},
 		},
 		{
 			name: "reply",
-			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", "D1", "--text", "hello", "--ai-tag=false"},
+			args: []string{"message", "reply", "--conversation-id", "cid", "--ref-msg-id", "mid", "--ref-sender", helperCurrentDOpenID, "--text", "hello", "--ai-tag=false"},
 		},
 	}
 
@@ -857,25 +950,25 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 			name: "send",
 			args: []string{
 				"message", "send", "--group", "cid",
-				"--text", "收到 @D-target 和 <@D-second>",
-				"--at-open-dingtalk-ids", "D-target,D-second",
+				"--text", "收到 @" + helperCurrentDOpenID + " 和 <@" + helperCurrentDOpenID2 + ">",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID + "," + helperCurrentDOpenID2,
 				"--at-all",
 			},
 			contentField: "text",
-			wantContent:  "<@all> 收到 <@D-target> 和 <@D-second>",
+			wantContent:  "<@all> 收到 <@" + helperCurrentDOpenID + "> 和 <@" + helperCurrentDOpenID2 + ">",
 			wantAtAll:    true,
-			wantOpenIDs:  []string{"D-target", "D-second"},
+			wantOpenIDs:  []string{helperCurrentDOpenID, helperCurrentDOpenID2},
 		},
 		{
 			name: "send keeps missing member placeholders unchanged",
 			args: []string{
 				"message", "send", "--group", "cid",
 				"--text", "DWS 发消息自测",
-				"--at-open-dingtalk-ids", "D-target",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID,
 			},
 			contentField: "text",
 			wantContent:  "DWS 发消息自测",
-			wantOpenIDs:  []string{"D-target"},
+			wantOpenIDs:  []string{helperCurrentDOpenID},
 		},
 		{
 			name: "reply",
@@ -883,15 +976,15 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
-				"--text", "收到 @D-target 和 <@D-second>",
-				"--at-open-dingtalk-ids", "D-target,D-second",
+				"--ref-sender", helperCurrentDOpenID,
+				"--text", "收到 @" + helperCurrentDOpenID + " 和 <@" + helperCurrentDOpenID2 + ">",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID + "," + helperCurrentDOpenID2,
 				"--at-all",
 			},
 			contentField: "content",
-			wantContent:  "<@all> 收到 <@D-target> 和 <@D-second>",
+			wantContent:  "<@all> 收到 <@" + helperCurrentDOpenID + "> 和 <@" + helperCurrentDOpenID2 + ">",
 			wantAtAll:    true,
-			wantOpenIDs:  []string{"D-target", "D-second"},
+			wantOpenIDs:  []string{helperCurrentDOpenID, helperCurrentDOpenID2},
 		},
 		{
 			name: "reply adds missing member placeholders",
@@ -899,13 +992,13 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
-				"--text", "DWS 回复艾特前津（非主用）自测",
-				"--at-open-dingtalk-ids", "D-target,D-second,D-target",
+				"--ref-sender", helperCurrentDOpenID,
+				"--text", "DWS synthetic reply mention test",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID + "," + helperCurrentDOpenID2 + "," + helperCurrentDOpenID,
 			},
 			contentField: "content",
-			wantContent:  "<@D-target> <@D-second> DWS 回复艾特前津（非主用）自测",
-			wantOpenIDs:  []string{"D-target", "D-second", "D-target"},
+			wantContent:  "<@" + helperCurrentDOpenID + "> <@" + helperCurrentDOpenID2 + "> DWS synthetic reply mention test",
+			wantOpenIDs:  []string{helperCurrentDOpenID, helperCurrentDOpenID2, helperCurrentDOpenID},
 		},
 		{
 			name: "reply adds missing member placeholders after at-all",
@@ -913,15 +1006,15 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", helperCurrentDOpenID,
 				"--text", "请大家确认",
-				"--at-open-dingtalk-ids", "D-target",
+				"--at-open-dingtalk-ids", helperCurrentDOpenID,
 				"--at-all",
 			},
 			contentField: "content",
-			wantContent:  "<@all> <@D-target> 请大家确认",
+			wantContent:  "<@all> <@" + helperCurrentDOpenID + "> 请大家确认",
 			wantAtAll:    true,
-			wantOpenIDs:  []string{"D-target"},
+			wantOpenIDs:  []string{helperCurrentDOpenID},
 		},
 		{
 			name: "reply at-all preserves alliance word",
@@ -929,7 +1022,7 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", helperCurrentDOpenID,
 				"--text", "联系 @alliance",
 				"--at-all",
 			},
@@ -943,7 +1036,7 @@ func TestCrossPlatformCoverageChatCurrentUserSendAndReplyMentions(t *testing.T) 
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", helperCurrentDOpenID,
 				"--text", "联系 @alliance",
 			},
 			contentField: "content",

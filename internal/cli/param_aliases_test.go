@@ -515,3 +515,68 @@ func TestGeneratedParamAliasesAreWellFormed(t *testing.T) {
 		}
 	}
 }
+
+func TestCrossPlatformCoveragePublishedSpaceWorkspaceAliasesRemainExecutable(t *testing.T) {
+	docCommands := []string{
+		"doc +access-change",
+		"doc +access-grant",
+		"doc +access-revoke",
+		"doc +copy",
+		"doc +create",
+		"doc +create-from-template",
+		"doc +grant-and-share",
+		"doc +import",
+		"doc +list",
+		"doc +move",
+		"doc create",
+		"doc file create",
+		"doc import",
+		"doc template apply",
+	}
+	for _, command := range docCommands {
+		entry, ok := LookupParamAlias(command)
+		if !ok {
+			t.Errorf("published Doc command %q has no generated parameter-alias entry", command)
+			continue
+		}
+		for _, emitted := range []string{"space", "space-id"} {
+			target, active := entry.ResolveAlias(emitted)
+			if !active || target != "workspace" {
+				t.Errorf("%s --%s resolution = active:%v target:%q, want --workspace", command, emitted, active, target)
+			}
+			if entry.IsBlocked(emitted) || entry.IsAmbiguous(emitted) {
+				t.Errorf("%s --%s remains protected after restoring its published alias", command, emitted)
+			}
+		}
+	}
+
+	driveInfo, ok := LookupParamAlias("drive info")
+	if !ok {
+		t.Fatal("published drive info command has no generated parameter-alias entry")
+	}
+	for _, emitted := range []string{"space", "workspace", "workspace-id"} {
+		target, active := driveInfo.ResolveAlias(emitted)
+		if !active || target != "space-id" {
+			t.Errorf("drive info --%s resolution = active:%v target:%q, want --space-id", emitted, active, target)
+		}
+		if driveInfo.IsBlocked(emitted) || driveInfo.IsAmbiguous(emitted) {
+			t.Errorf("drive info --%s remains protected after restoring its published alias", emitted)
+		}
+	}
+
+	// Compatibility remains exact-path scoped. Strong type spellings introduced
+	// after the split continue to guard the two value domains elsewhere.
+	for _, test := range []struct {
+		command string
+		emitted string
+	}{
+		{command: "doc create", emitted: "storage-space-id"},
+		{command: "drive +upload", emitted: "workspace-id"},
+		{command: "drive info", emitted: "knowledge-base-id"},
+	} {
+		entry, ok := LookupParamAlias(test.command)
+		if !ok || !entry.IsBlocked(test.emitted) {
+			t.Errorf("%s --%s must remain blocked outside the published compatibility set", test.command, test.emitted)
+		}
+	}
+}

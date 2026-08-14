@@ -417,8 +417,8 @@ func TestCrossPlatformCoverageChatCreateExplicitOwnerSkipsCurrentProfileAndDedup
 	root := newPlatformCoverageRoot()
 	root.SetOut(&bytes.Buffer{})
 	root.SetArgs([]string{
-		"chat", "+chat-create", "--name", "测试群", "--users", "D-owner,user-1",
-		"--owner-open-dingtalk-id", "D-owner", "--yes",
+		"chat", "+chat-create", "--name", "测试群", "--users", fixtureCurrentDOpenID + ",user-1",
+		"--owner-open-dingtalk-id", fixtureCurrentDOpenID, "--yes",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -427,24 +427,24 @@ func TestCrossPlatformCoverageChatCreateExplicitOwnerSkipsCurrentProfileAndDedup
 		t.Fatalf("explicit owner calls = %#v", fake.calls)
 	}
 	create := fake.calls[0].args
-	if create["ownerOpenDingTalkId"] != "D-owner" {
+	if create["ownerOpenDingTalkId"] != fixtureCurrentDOpenID {
 		t.Fatalf("ownerOpenDingTalkId = %#v", create["ownerOpenDingTalkId"])
 	}
-	if got, want := create["groupMembers"], []string{"D-owner", "user-1"}; !reflect.DeepEqual(got, want) {
+	if got, want := create["groupMembers"], []string{fixtureCurrentDOpenID, "user-1"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("groupMembers = %#v, want %#v", got, want)
 	}
 }
 
 func TestCrossPlatformCoverageChatCreateOwnerQueryResolvesBeforeSingleCreate(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
-		"contact/search_contact_by_key_word": `{"result":[{"name":"张三","userId":"owner-user","openDingTalkId":"D-owner"}]}`,
+		"contact/search_contact_by_key_word": `{"result":[{"name":"测试用户甲","userId":"owner-user","openDingTalkId":"` + fixtureCurrentDOpenID + `"}]}`,
 	}}
 	helpers.InitDeps(fake)
 	root := newPlatformCoverageRoot()
 	root.SetOut(&bytes.Buffer{})
 	root.SetArgs([]string{
 		"chat", "+chat-create", "--name", "测试群", "--users", "user-1",
-		"--owner-query", "张三", "--yes",
+		"--owner-query", "测试用户甲", "--yes",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -454,10 +454,10 @@ func TestCrossPlatformCoverageChatCreateOwnerQueryResolvesBeforeSingleCreate(t *
 		t.Fatalf("owner query calls = %#v", fake.calls)
 	}
 	create := fake.calls[1].args
-	if create["ownerOpenDingTalkId"] != "D-owner" {
+	if create["ownerOpenDingTalkId"] != fixtureCurrentDOpenID {
 		t.Fatalf("ownerOpenDingTalkId = %#v", create["ownerOpenDingTalkId"])
 	}
-	if got, want := create["groupMembers"], []string{"D-owner", "user-1"}; !reflect.DeepEqual(got, want) {
+	if got, want := create["groupMembers"], []string{fixtureCurrentDOpenID, "user-1"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("groupMembers = %#v, want %#v", got, want)
 	}
 }
@@ -601,7 +601,7 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileDryRunAndFailures(
 	root.SetOut(&output)
 	root.SetArgs([]string{
 		"chat", "+messages-send",
-		"--open-dingtalk-id", "D-target",
+		"--open-dingtalk-id", fixtureCurrentDOpenID,
 		"--file", "./fixture.bin",
 		"--dry-run",
 		"--yes",
@@ -773,7 +773,7 @@ func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 	root.SetArgs([]string{
 		"chat", "+messages-send-card",
 		"--group", "cid",
-		"--at-open-dingtalk-ids", "D-one,D-two,D-one",
+		"--at-open-dingtalk-ids", fixtureCurrentDOpenID + "," + fixtureCurrentDOpenID2 + "," + fixtureCurrentDOpenID,
 		"--at-all",
 		"--content", "完成",
 		"--flow-status", "3",
@@ -786,7 +786,7 @@ func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 		fake.calls[1].tool != "update_streaming_card" {
 		t.Fatalf("card calls = %#v", fake.calls)
 	}
-	if got, want := fake.calls[0].args["atOpenDingTalkIds"], []string{"D-one", "D-two"}; !reflect.DeepEqual(got, want) {
+	if got, want := fake.calls[0].args["atOpenDingTalkIds"], []string{fixtureCurrentDOpenID, fixtureCurrentDOpenID2}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("card create atOpenDingTalkIds = %#v, want %#v", got, want)
 	}
 	if fake.calls[0].args["atAll"] != true {
@@ -842,7 +842,7 @@ func TestCrossPlatformCoverageMessagesSendCardRejectsMissingRequestedAtTag(t *te
 	root.SetArgs([]string{
 		"chat", "+messages-send-card",
 		"--group", "cid",
-		"--at-open-dingtalk-ids", "D-mentioned",
+		"--at-open-dingtalk-ids", fixtureCurrentDOpenID,
 		"--content", "正文",
 		"--yes",
 	})
@@ -891,7 +891,7 @@ func TestCrossPlatformCoverageMessagesSendCardUsesExplicitOpenReceiver(t *testin
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
 		"chat", "+messages-send-card",
-		"--receiver-open-dingtalk-id", "D-direct",
+		"--receiver-open-dingtalk-id", fixtureCurrentDOpenID2,
 		"--yes",
 	})
 	if err := root.Execute(); err != nil {
@@ -902,7 +902,7 @@ func TestCrossPlatformCoverageMessagesSendCardUsesExplicitOpenReceiver(t *testin
 		fake.calls[0].tool != "create_and_send_card" {
 		t.Fatalf("card open receiver calls = %#v", fake.calls)
 	}
-	if got := fake.calls[0].args["receiverOpenDingTalkId"]; got != "D-direct" {
+	if got := fake.calls[0].args["receiverOpenDingTalkId"]; got != fixtureCurrentDOpenID2 {
 		t.Fatalf("receiverOpenDingTalkId = %#v, want D-direct", got)
 	}
 }
@@ -969,7 +969,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		root.SetArgs([]string{
 			"chat", "+messages-send-card",
 			"--group", "cid",
-			"--at-open-dingtalk-ids", "D-mentioned",
+			"--at-open-dingtalk-ids", fixtureCurrentDOpenID,
 			"--at-all",
 			"--content", "处理中",
 			"--dry-run",
@@ -990,7 +990,7 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		createArguments, _ := create["arguments"].(map[string]any)
 		update, _ := actions[1].(map[string]any)
 		updateArguments, _ := update["arguments"].(map[string]any)
-		if !reflect.DeepEqual(createArguments["atOpenDingTalkIds"], []any{"D-mentioned"}) || createArguments["atAll"] != true {
+		if !reflect.DeepEqual(createArguments["atOpenDingTalkIds"], []any{fixtureCurrentDOpenID}) || createArguments["atAll"] != true {
 			t.Fatalf("card create dry-run mentions = %#v", createArguments)
 		}
 		if _, exists := updateArguments["atOpenDingTalkIds"]; exists {
@@ -1090,16 +1090,45 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 	for _, args := range [][]string{
 		{"--group", "cid", "--content", "x", "--flow-status", "6"},
 		{"--group", "cid", "--flow-status", "2"},
-		{"--group", "cid", "--receiver-open-dingtalk-id", "D-direct"},
-		{"--receiver", "user-id", "--receiver-open-dingtalk-id", "D-direct"},
-		{"--receiver", "user-id", "--at-open-dingtalk-ids", "D-mentioned"},
-		{"--receiver-open-dingtalk-id", "D-direct", "--at-all"},
+		{"--group", "cid", "--receiver-open-dingtalk-id", fixtureCurrentDOpenID2},
+		{"--receiver", "user-id", "--receiver-open-dingtalk-id", fixtureCurrentDOpenID2},
+		{"--receiver", "user-id", "--at-open-dingtalk-ids", fixtureCurrentDOpenID},
+		{"--receiver-open-dingtalk-id", fixtureCurrentDOpenID2, "--at-all"},
 	} {
 		helpers.InitDeps(&larkAlignmentCaller{})
 		root := newPlatformCoverageRoot()
 		root.SetArgs(append([]string{"chat", "+messages-send-card"}, args...))
 		if err := root.Execute(); err == nil {
 			t.Fatalf("invalid card args succeeded: %v", args)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageExplicitOpenIDValidationEdges(t *testing.T) {
+	if err := validateExplicitOpenIDs("--open-dingtalk-ids", []string{" ", fixtureCurrentDOpenID}); err != nil {
+		t.Fatalf("blank and valid IDs: %v", err)
+	}
+	if err := validateExplicitOpenIDs("--open-dingtalk-ids", []string{fixtureCurrentDOpenID, "not-an-open-id"}); err == nil {
+		t.Fatal("invalid explicit open ID unexpectedly accepted")
+	}
+
+	for _, args := range [][]string{
+		{"chat", "+messages-send", "--open-dingtalk-id", "not-an-open-id", "--text", "x", "--yes"},
+		{"chat", "+messages-send", "--open-dingtalk-ids", "not-an-open-id", "--text", "x", "--yes"},
+		{"chat", "+messages-send", "--group", "cid", "--at-open-dingtalk-ids", "not-an-open-id", "--text", "x", "--yes"},
+		{"chat", "+messages-send-card", "--receiver-open-dingtalk-id", "not-an-open-id", "--yes"},
+		{"chat", "+messages-send-card", "--group", "cid", "--at-open-dingtalk-ids", "not-an-open-id", "--yes"},
+		{"chat", "+conversation-info", "--open-dingtalk-id", "not-an-open-id"},
+		{"chat", "+chat-members-get", "--id", "cid", "--users", "not-an-open-id"},
+		{"chat", "+messages-send-by-bot", "--robot-code", "robot", "--group", "cid", "--title", "title", "--text", "text", "--at-open-dingtalk-ids", "not-an-open-id", "--yes"},
+		{"chat", "+messages-batch-send-by-bot", "--robot-code", "robot", "--title", "title", "--text", "text", "--open-dingtalk-ids", "not-an-open-id", "--yes"},
+		{"chat", "+messages-list-direct", "--open-dingtalk-id", "not-an-open-id", "--time", "2026-01-01 00:00:00"},
+		{"chat", "+chat-create", "--name", "fixture", "--users", "user-1", "--owner-open-dingtalk-id", "not-an-open-id", "--yes"},
+	} {
+		root := newPlatformCoverageRoot()
+		root.SetArgs(args)
+		if err := root.Execute(); err == nil {
+			t.Fatalf("invalid explicit open ID unexpectedly accepted: %v", args)
 		}
 	}
 }

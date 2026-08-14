@@ -47,6 +47,25 @@ func TestCITestPackagePlanRoutesPublicTestSuites(t *testing.T) {
 	}
 }
 
+func TestCIAppRacePartitionsCoverTopLevelTestsExactlyOnce(t *testing.T) {
+	root := testPackagePlanRoot(t)
+	packages := strings.Fields(runTestPackagePlan(t, root, "list", "app"))
+	if len(packages) != 1 {
+		t.Fatalf("app package shard = %v, want exactly one package", packages)
+	}
+
+	script := filepath.Join(root, "scripts", "ci", "run-app-race-tests.sh")
+	cmd := exec.Command("sh", script, "verify", packages[0])
+	cmd.Dir = root
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s verify %s failed: %v\n%s", script, packages[0], err, output)
+	}
+	if !strings.Contains(string(output), "top-level tests exactly once") {
+		t.Fatalf("verify output = %q, want exact coverage summary", output)
+	}
+}
+
 func TestCITestPackagePlanFailsClosedWhenGoListFails(t *testing.T) {
 	root := testPackagePlanRoot(t)
 	fakeBin := t.TempDir()
