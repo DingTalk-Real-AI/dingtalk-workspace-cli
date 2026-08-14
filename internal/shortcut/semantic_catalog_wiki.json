@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "service": "wiki",
+  "default_availability": "available",
+  "shortcuts": {
+    "+space-list": {"disposition":"semantic_adapter","semantic_delta":"严格区分显式空知识库列表与缺失、畸形或内部错误响应，并保留真实分页证据。","risk":"read","public":true,"reviewed":true},
+    "+space-search": {"disposition":"semantic_adapter","semantic_delta":"按关键词搜索知识库并拒绝把缺失业务数组误报为零命中。","risk":"read","public":true,"reviewed":true},
+    "+resolve-space": {"disposition":"primary_smart","semantic_delta":"把关键词搜索收敛为唯一 workspaceId；零命中与多命中显式分流，绝不猜测。","risk":"read","public":true,"reviewed":true},
+    "+space-get": {"disposition":"schema_leaf","semantic_delta":"提供 Lark Shortcut 未单列的知识库详情入口，并要求 workspaceId 业务证据。","risk":"read","public":true,"reviewed":true},
+    "+space-create": {"disposition":"primary_smart","semantic_delta":"创建后要求 workspaceId 并通过空间详情读回验证真实落库。","risk":"write","public":true,"reviewed":true},
+    "+delete-space": {"disposition":"semantic_adapter","semantic_delta":"删除前读取影响目标，经高风险确认后只接受 success=true 终态。","risk":"high-risk-write","public":true,"reviewed":true},
+
+    "+member-add": {"disposition":"primary_smart","semantic_delta":"批量授予 Wiki 容器角色，严格校验写终态并读取成员列表验证响应链。","risk":"write","public":true,"reviewed":true},
+    "+member-update": {"disposition":"primary_smart","semantic_delta":"补充 Lark Shortcut 缺失的成员角色更新，并执行终态与列表读回校验。","risk":"write","public":true,"reviewed":true},
+    "+member-list": {"disposition":"semantic_adapter","semantic_delta":"严格验证成员数组并公开真实单次上限 50；后端无游标时不伪造 page-all。","risk":"read","public":true,"reviewed":true},
+    "+member-remove": {"disposition":"primary_smart","semantic_delta":"批量移除容器访问，严格校验写终态并读取成员列表验证响应链。","risk":"write","public":true,"reviewed":true},
+
+    "+node-list": {"disposition":"semantic_adapter","semantic_delta":"严格区分显式空目录与假空成功，稳定投影节点并保留 nextCursor/hasMore。","risk":"read","public":true,"reviewed":true},
+    "+node-get": {"disposition":"schema_leaf","semantic_delta":"统一节点 ID 或在线文档 URL 的元数据读取，补充文档域属性视角。","risk":"read","public":true,"reviewed":true},
+    "+node-search": {"disposition":"semantic_adapter","semantic_delta":"补充 Lark Wiki Shortcut 缺失的库内关键词和扩展名搜索，并拒绝假空结果。","risk":"read","public":true,"reviewed":true},
+    "+node-create": {"disposition":"primary_smart","semantic_delta":"支持七种 Wiki 节点类型，创建后要求 nodeId 并读取元数据验证。","risk":"write","public":true,"reviewed":true},
+    "+node-copy": {"disposition":"primary_smart","semantic_delta":"高风险确认后复制，必须取得新 nodeId 并读回副本，避免空响应被当作成功。","risk":"high-risk-write","public":true,"reviewed":true},
+    "+move": {"disposition":"primary_smart","semantic_delta":"同一入口覆盖 Wiki 内移动和我的文档在线节点入 Wiki，并校验目标 workspace/folder。","risk":"write","public":true,"reviewed":true},
+    "+move-to-drive": {"disposition":"primary_smart","semantic_delta":"同步移动 Wiki 节点到我的文档并读回验证 workspace 变化，免去异步任务轮询。","risk":"write","public":true,"reviewed":true},
+    "+node-delete": {"disposition":"semantic_adapter","semantic_delta":"删除前读取并核对 workspace，经高风险确认后要求 success=true 终态证据。","risk":"high-risk-write","public":true,"reviewed":true},
+
+    "+feed-list": {"disposition":"semantic_adapter","semantic_delta":"补充 Lark Shortcut 缺失的知识库协作动态查询，严格验证 feeds 并保留游标。","risk":"read","public":true,"reviewed":true},
+    "+wiki-new-doc": {"disposition":"primary_smart","semantic_delta":"按空间名精确唯一解析、创建在线文档并读回验证；零命中和歧义均显式失败。","risk":"write","public":true,"reviewed":true}
+  }
+}

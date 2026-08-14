@@ -14,7 +14,13 @@
 package smart
 
 import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -35,15 +41,25 @@ import (
 //
 //	dws wiki +resolve-space --name 产品文档
 var ResolveSpace = shortcut.Shortcut{
-	Service:     "wiki",
-	Command:     "+resolve-space",
-	Product:     "wiki",
-	Description: "按名称搜索知识空间并解析出唯一 spaceId（只读）",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "wiki",
+	Command:       "+resolve-space",
+	Product:       "wiki",
+	Description:   "按名称搜索知识空间并解析出唯一 spaceId（只读）",
 	Intent: "当你只知道某个知识空间（wiki space）的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 spaceId 时使用；" +
 		"内部按 --name 关键词调用 search_wikiSpaces 搜索知识空间，再在本地投影出每个候选的 spaceId 和 name。" +
 		"如果只命中一个知识空间就直接返回它的 spaceId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。" +
 		"这是纯只读操作，只做搜索与本地投影，不会修改任何知识空间。",
-	Risk: shortcut.RiskRead,
+	Risk:   shortcut.RiskRead,
+	Safety: contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+	Contract: corecmd.ContractDecl{
+		Description: "按名称搜索知识空间并解析出唯一 spaceId（只读）",
+		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"知识库名称解析结果","properties":{"resolved":{"type":"boolean","description":"是否唯一解析"},"spaceId":{"type":"string","description":"唯一知识库 ID"},"name":{"type":"string","description":"唯一知识库名称"},"count":{"type":"integer","description":"候选数量"},"candidates":{"type":"array","description":"需要消歧的候选知识库","items":{"type":"object","description":"知识库候选","additionalProperties":true}}},"required":["resolved"],"additionalProperties":true}`)},
+		Interface:   &contract.InterfaceSpec{Mode: contract.InterfaceModeComposite, Availability: contract.InterfaceAvailable, Reason: "Reviewed Wiki resolver: the executable CLI strictly validates search results and refuses to guess when multiple spaces match."},
+		Selection:   contract.SelectionSpec{AgentSummary: "按名称搜索知识空间并解析出唯一 spaceId（只读）", UseWhen: []string{"当你只知道某个知识空间（wiki space）的名称（或名称里的关键词）、想把它解析成可直接用于后续工具的 spaceId 时使用；内部按 --name 关键词调用 search_wikiSpaces 搜索知识空间，再在本地投影出每个候选的 spaceId 和 name。如果只命中一个知识空间就直接返回它的 spaceId；如果命中多个则列出全部候选让你消歧，绝不替你瞎猜；如果一个都没命中则提示未找到。这是纯只读操作，只做搜索与本地投影，不会修改任何知识空间。"}, AvoidWhen: []string{"只想浏览所有匹配项用 wiki +space-search；已知 workspaceId 时无需解析"}, Examples: []string{`dws wiki +resolve-space --name "产品文档"`}},
+		Identity:    contract.ToolIdentitySpec{ProductID: "wiki", Name: "shortcut_resolve_space", CanonicalPath: "wiki.shortcut_resolve_space", CLIPath: "wiki +resolve-space", PrimaryCLIPath: "wiki +resolve-space"},
+		Parameters:  []contract.ParamDecl{{Name: "name", Property: "keyword"}},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "name", Type: shortcut.FlagString, Desc: "要搜索的知识空间名称关键词（必填）", Required: true},
 	},
@@ -62,7 +78,10 @@ var ResolveSpace = shortcut.Shortcut{
 		}
 
 		// Project candidates to {spaceId, name}, defensively unwrapping the list.
-		items := resolveSpaceItems(data)
+		items, err := resolveSpaceItemsStrict(data)
+		if err != nil {
+			return err
+		}
 		candidates := make([]map[string]any, 0, len(items))
 		for _, s := range items {
 			candidates = append(candidates, map[string]any{
@@ -123,12 +142,59 @@ func resolveSpaceItems(data map[string]any) []map[string]any {
 
 // resolveSpaceID reads a space's identifier, tolerating the common id keys.
 func resolveSpaceID(s map[string]any) string {
-	for _, key := range []string{"spaceId", "space_id", "id"} {
+	for _, key := range []string{"workspaceId", "spaceId", "space_id", "id"} {
 		if v, ok := s[key].(string); ok && v != "" {
 			return v
 		}
 	}
 	return ""
+}
+
+func resolveSpaceItemsStrict(data map[string]any) ([]map[string]any, error) {
+	if len(data) == 0 {
+		return nil, apperrors.NewAPI("search_wikiSpaces 返回空响应，不能当作零命中", apperrors.WithOperation("wiki/search_wikiSpaces"), apperrors.WithReason("empty_tool_response"))
+	}
+	if success, present := data["success"]; present {
+		value, ok := success.(bool)
+		if !ok || !value {
+			return nil, apperrors.NewAPI("search_wikiSpaces 未成功", apperrors.WithOperation("wiki/search_wikiSpaces"), apperrors.WithReason("remote_failure"))
+		}
+	}
+	containers := []map[string]any{data}
+	for _, wrapper := range []string{"result", "data"} {
+		if raw, present := data[wrapper]; present {
+			inner, ok := raw.(map[string]any)
+			if !ok {
+				return nil, apperrors.NewAPI("search_wikiSpaces 响应包装不是对象", apperrors.WithOperation("wiki/search_wikiSpaces"), apperrors.WithReason("malformed_envelope"))
+			}
+			containers = append(containers, inner)
+		}
+	}
+	for _, container := range containers {
+		for _, key := range []string{"wikiSpaces", "spaces", "items", "list", "records"} {
+			raw, present := container[key]
+			if !present {
+				continue
+			}
+			list, ok := raw.([]any)
+			if !ok {
+				return nil, apperrors.NewAPI("search_wikiSpaces 业务集合不是数组", apperrors.WithOperation("wiki/search_wikiSpaces"), apperrors.WithReason("malformed_collection"))
+			}
+			out := make([]map[string]any, 0, len(list))
+			for index, item := range list {
+				object, ok := item.(map[string]any)
+				if !ok {
+					return nil, apperrors.NewAPI(fmt.Sprintf("search_wikiSpaces 第 %d 项不是对象", index), apperrors.WithOperation("wiki/search_wikiSpaces"), apperrors.WithReason("malformed_collection_item"))
+				}
+				if resolveSpaceID(object) == "" || resolveSpaceName(object) == "" {
+					return nil, apperrors.NewAPI(fmt.Sprintf("search_wikiSpaces 第 %d 项缺少名称或 workspaceId", index), apperrors.WithOperation("wiki/search_wikiSpaces"), apperrors.WithReason("malformed_collection_item"))
+				}
+				out = append(out, object)
+			}
+			return out, nil
+		}
+	}
+	return nil, apperrors.NewAPI("search_wikiSpaces 缺少 wikiSpaces 数组，不能投影为空", apperrors.WithOperation("wiki/search_wikiSpaces"), apperrors.WithReason("missing_collection"))
 }
 
 // resolveSpaceName reads a space's display name, tolerating the common name keys.
