@@ -28,9 +28,10 @@ import (
 // grant_capability + check_capability handshake on behalf of the principal.
 const (
 	FlagPrincipalUserID = "principal-user-id"
-	// capabilityServerID is the doc-business server hosting the grant/check
-	// capability tools.
-	capabilityServerID = "doc" // TODO: 确认最终 serverID
+	// capabilityServerID is the helper-only drive-internal server hosting the
+	// grant/check capability tools. It is registered as a supplement server
+	// without command prefixes, so it is only reachable by explicit server ID.
+	capabilityServerID = "drive-internal"
 	grantCapTool       = "grant_capability"
 	checkCapTool       = "check_capability"
 )
@@ -108,8 +109,8 @@ func (d *docDelegationAuthCaller) CallTool(ctx context.Context, serverID, toolNa
 }
 
 // performDelegationAuth executes grant_capability then check_capability on the
-// capability server via the inner caller (using inner avoids recursing into
-// this decorator). nodeId 为空时仍发起调用，让服务端返回明确错误（52600007）。
+// drive-internal capability server via the inner caller (using inner avoids
+// recursing into this decorator). nodeId 为空时仍发起调用，让服务端返回明确错误（52600007）。
 func (d *docDelegationAuthCaller) performDelegationAuth(ctx context.Context, toolKey string, args map[string]any) error {
 	nodeID := extractNodeId(args)
 	grantArgs := map[string]any{

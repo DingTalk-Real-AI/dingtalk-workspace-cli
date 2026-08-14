@@ -101,15 +101,28 @@ func TestOpenVisibleProductsExcludesCompatibilityOnlyCommands(t *testing.T) {
 	if byID["mcp-meta"] {
 		t.Fatal("mcp-meta is helper-only and must not appear in VisibleProducts")
 	}
+	if byID["drive-internal"] {
+		t.Fatal("drive-internal is helper-only and must not appear in VisibleProducts")
+	}
 }
 
 func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	servers := openSupplementServers()
 	foundMCPMeta := false
 	foundWhiteboard := false
+	foundDriveInternal := false
 	for _, server := range servers {
 		if server.ID == "whiteboard" {
 			foundWhiteboard = server.Endpoint == "https://mcp-gw.dingtalk.com/server/whiteboard"
+		}
+		if server.ID == "drive-internal" {
+			foundDriveInternal = true
+			if server.Endpoint != "https://mcp-gw.dingtalk.com/server/e48ff8134b3e4ff6fe3a9cbae8b440869083f0213bd8879c91b080e703162e02" {
+				t.Fatalf("drive-internal endpoint = %q, want the registered internal capability endpoint", server.Endpoint)
+			}
+			if len(server.Prefixes) != 0 {
+				t.Fatal("drive-internal must remain helper-only without command prefixes")
+			}
 		}
 		if server.ID != "mcp-meta" {
 			continue
@@ -127,5 +140,8 @@ func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	}
 	if !foundWhiteboard {
 		t.Fatal("openSupplementServers() missing helper-only whiteboard endpoint")
+	}
+	if !foundDriveInternal {
+		t.Fatal("openSupplementServers() missing helper-only drive-internal endpoint")
 	}
 }
