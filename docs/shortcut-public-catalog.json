@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-14T10:41:08.959563",
+  "generated_at": "2026-08-14T11:59:55.882207",
   "count": 418,
   "results": [
     {
@@ -3675,7 +3675,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "补充 Lark Shortcut 缺失的知识库协作动态查询，严格验证 feeds 并保留游标。",
+      "semantic_delta": "补充知识库协作动态查询，严格验证 feeds 并保留游标。",
       "availability": "available"
     },
     {
@@ -3715,7 +3715,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "补充 Lark Shortcut 缺失的成员角色更新，并执行终态与列表读回校验。",
+      "semantic_delta": "补充成员角色更新，并执行终态与列表读回校验。",
       "availability": "available"
     },
     {
@@ -3795,7 +3795,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "补充 Lark Wiki Shortcut 缺失的库内关键词和扩展名搜索，并拒绝假空结果。",
+      "semantic_delta": "补充库内关键词和扩展名搜索，并拒绝假空结果。",
       "availability": "available"
     },
     {
@@ -3825,7 +3825,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "schema_leaf",
-      "semantic_delta": "提供 Lark Shortcut 未单列的知识库详情入口，并要求 workspaceId 业务证据。",
+      "semantic_delta": "补充知识库详情入口，并要求 workspaceId 业务证据。",
       "availability": "available"
     },
     {

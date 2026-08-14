@@ -37,7 +37,7 @@ func nodeAliases() map[string][]string {
 	return map[string][]string{"nodeId": {"nodeId", "id", "dentryUuid", "fileId"}, "name": {"name", "title", "nodeName", "fileName"}, "type": {"type", "nodeType", "docType", "fileType"}, "contentType": {"contentType"}, "folderId": {"folderId", "parentId"}, "workspaceId": {"workspaceId", "spaceId"}, "url": {"docUrl", "url", "webUrl"}}
 }
 
-var NodeGet = readShortcut("+node-get", "获取知识库节点详情", "已知节点 ID 或在线文档 URL 时读取元数据；比 Lark Wiki 仅返回节点元数据的视角额外统一文档/文件属性。", "", []shortcut.Flag{{Name: "node", Type: shortcut.FlagString, Required: true, Desc: "节点 ID 或 URL"}}, []contract.ParamDecl{{Name: "node", Property: "nodeId"}}, func(rt *shortcut.RuntimeContext) error {
+var NodeGet = readShortcut("+node-get", "获取知识库节点详情", "已知节点 ID 或在线文档 URL 时读取元数据，并在节点信息之外统一返回文档/文件属性。", "", []shortcut.Flag{{Name: "node", Type: shortcut.FlagString, Required: true, Desc: "节点 ID 或 URL"}}, []contract.ParamDecl{{Name: "node", Property: "nodeId"}}, func(rt *shortcut.RuntimeContext) error {
 	data, err := rt.CallMCPData("doc", "get_document_info", map[string]any{"nodeId": rt.Str("node")})
 	if err != nil {
 		return err
@@ -191,9 +191,9 @@ func executeMove(rt *shortcut.RuntimeContext, toDrive bool) error {
 	return rt.Output(map[string]any{"success": true, "nodeId": rt.Str("node"), "node": verified})
 }
 
-var Move = writeShortcut("+move", "移动节点到知识库并读回验证", "将 Wiki 节点或我的文档在线节点移动到目标知识库/文件夹；同时覆盖 Lark 的 Wiki 内移动与 Drive 文档入 Wiki 场景。", shortcut.RiskWrite, wikiWriteSafety(true), []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "目标知识库 ID"}, {Name: "node", Type: shortcut.FlagString, Required: true, Desc: "节点 ID"}, {Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error { return executeMove(rt, false) })
+var Move = writeShortcut("+move", "移动节点到知识库并读回验证", "将 Wiki 节点或我的文档在线节点移动到目标知识库/文件夹；同一入口覆盖库内移动与在线文档入库场景。", shortcut.RiskWrite, wikiWriteSafety(true), []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "目标知识库 ID"}, {Name: "node", Type: shortcut.FlagString, Required: true, Desc: "节点 ID"}, {Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 ID"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error { return executeMove(rt, false) })
 
-var MoveToDrive = writeShortcut("+move-to-drive", "移动 Wiki 节点到我的文档", "将 Wiki 在线节点同步移动到我的文档或指定文件夹，并以元数据读回替代 Lark 异步任务轮询。", shortcut.RiskWrite, wikiWriteSafety(true), []shortcut.Flag{{Name: "node", Type: shortcut.FlagString, Required: true, Desc: "Wiki 节点 ID"}, {Name: "folder", Type: shortcut.FlagString, Desc: "我的文档目标文件夹 ID"}}, []contract.ParamDecl{{Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error { return executeMove(rt, true) })
+var MoveToDrive = writeShortcut("+move-to-drive", "移动 Wiki 节点到我的文档", "将 Wiki 在线节点同步移动到我的文档或指定文件夹，并以元数据读回证明任务完成。", shortcut.RiskWrite, wikiWriteSafety(true), []shortcut.Flag{{Name: "node", Type: shortcut.FlagString, Required: true, Desc: "Wiki 节点 ID"}, {Name: "folder", Type: shortcut.FlagString, Desc: "我的文档目标文件夹 ID"}}, []contract.ParamDecl{{Name: "node", Property: "nodeId"}, {Name: "folder", Property: "targetFolderId"}}, func(rt *shortcut.RuntimeContext) error { return executeMove(rt, true) })
 
 var NodeDelete = writeShortcut("+node-delete", "删除知识库节点", "明确确认后将节点移入回收站；先读取目标，且删除响应必须提供 success=true 终态证据。", shortcut.RiskHighWrite, wikiDeleteSafety(), []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID，用于确认影响范围"}, {Name: "node", Type: shortcut.FlagString, Required: true, Desc: "节点 ID"}}, []contract.ParamDecl{{Name: "node", Property: "nodeId"}}, func(rt *shortcut.RuntimeContext) error {
 	preflight, err := rt.CallMCPData("doc", "get_document_info", map[string]any{"nodeId": rt.Str("node")})
