@@ -137,7 +137,7 @@ func TestCrossPlatformCoverageDocFinalCommonAndCanonicalBranches(t *testing.T) {
 		t.Fatal("element canonical traversal failed")
 	}
 	if !verifyInsertedCanonicalBlock(map[string]any{"blockId": "new"}, elementTree, "ref", "after", "after", "element") ||
-		!verifyInsertedCanonicalBlock(map[string]any{}, elementTree, "ref", "after", "after", "element") ||
+		verifyInsertedCanonicalBlock(map[string]any{}, elementTree, "ref", "after", "after", "element") ||
 		verifyInsertedCanonicalBlock(map[string]any{}, elementTree, "new", "after", "after", "element") {
 		t.Fatal("inserted block verification branch contract failed")
 	}

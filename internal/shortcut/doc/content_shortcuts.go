@@ -930,6 +930,14 @@ func executeVerifiedDocMutation(
 	steps := []map[string]any{{"name": tool, "status": "started"}}
 	result, err := rt.CallMCPWriteData(productDoc, tool, params)
 	if err != nil {
+		// Insert is non-idempotent. An adjacent block with matching content may
+		// have existed before this request, so post-state alone cannot prove that
+		// an errored call created anything. Without a server operation/block ID,
+		// keep the commit state unknown and never claim or mutate a neighbouring
+		// block as this request's result.
+		if tool == "insert_document_block" {
+			return docUnknownWriteError(operation, tool, nodeID, err)
+		}
 		// Transport timeouts and empty acknowledgements do not prove failure.
 		// Reconcile the requested postcondition before returning an unknown
 		// effect so a caller never has to replay a non-idempotent write blindly.
@@ -981,25 +989,6 @@ func mutationAffectedBlockIDs(tool string, params, result, verification, verifyP
 	appendUnique(nestedString(result, "blockId", "elementId", "id"))
 	if blockID, _ := params["blockId"].(string); blockID != "" {
 		appendUnique(blockID)
-	}
-	if tool == "insert_document_block" && len(ids) == 0 {
-		referenceBlockID, _ := params["referenceBlockId"].(string)
-		where, _ := params["where"].(string)
-		format, _ := verifyParams["format"].(string)
-		blocks := orderedCanonicalBlocks(verification, format)
-		for index, block := range blocks {
-			if canonicalBlockIdentity(block, format) != referenceBlockID {
-				continue
-			}
-			candidate := index + 1
-			if where == "before" {
-				candidate = index - 1
-			}
-			if candidate >= 0 && candidate < len(blocks) {
-				appendUnique(canonicalBlockIdentity(blocks[candidate], format))
-			}
-			break
-		}
 	}
 	return ids
 }
@@ -1177,10 +1166,9 @@ func blockVerificationFormat(format string) string {
 }
 
 func verifyInsertedCanonicalBlock(result, data map[string]any, referenceBlockID, where, expected, format string) bool {
-	if insertedID := nestedString(result, "blockId", "elementId", "id"); insertedID != "" {
-		if blockContentEquals(data, insertedID, expected, format) {
-			return true
-		}
+	insertedID := nestedString(result, "blockId", "elementId", "id")
+	if insertedID == "" {
+		return false
 	}
 	blocks := orderedCanonicalBlocks(data, format)
 	for index, block := range blocks {
@@ -1191,7 +1179,9 @@ func verifyInsertedCanonicalBlock(result, data map[string]any, referenceBlockID,
 		if where == "before" {
 			candidate = index - 1
 		}
-		return candidate >= 0 && candidate < len(blocks) && canonicalBlockContent(blocks[candidate], format) == expected
+		return candidate >= 0 && candidate < len(blocks) &&
+			canonicalBlockIdentity(blocks[candidate], format) == insertedID &&
+			canonicalBlockContent(blocks[candidate], format) == expected
 	}
 	return false
 }

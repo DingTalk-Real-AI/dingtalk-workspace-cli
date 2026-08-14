@@ -157,10 +157,10 @@ func TestDocUpdatePureMutationBranchCoverage(t *testing.T) {
 	if verifyUpdatedDocumentContent(map[string]any{"markdown": "prefix\nsemantic text"}, "**semantic** text", "append", "markdown") != true {
 		t.Fatal("semantic append did not verify")
 	}
-	if !verifyInsertedCanonicalBlock(map[string]any{}, map[string]any{"blocks": []any{
+	if verifyInsertedCanonicalBlock(map[string]any{}, map[string]any{"blocks": []any{
 		map[string]any{"id": "new", "text": "copy"}, map[string]any{"id": "ref", "text": "ref"},
 	}}, "ref", "before", "copy", "element") {
-		t.Fatal("before insert did not verify")
+		t.Fatal("insert without a server block ID verified")
 	}
 	items := collectMediaItems(map[string]any{"id": "container", "children": []any{
 		map[string]any{"id": "media", "resourceId": "rid"},
@@ -1012,7 +1012,10 @@ func TestCrossPlatformCoverageDocUpdateAliasReachesNestedBranches(t *testing.T) 
 			args: []string{"--doc", "alias-node", "--command", "block_copy_insert_after", "--block-id", "block-1", "--after-block-id", "after", "--yes"},
 			responses: map[string][]map[string]any{"list_document_blocks": {
 				{"blocks": []any{map[string]any{"element": map[string]any{"id": "block-1", "paragraph": map[string]any{"text": "alpha"}}}}},
-				{"blocks": []any{map[string]any{"element": map[string]any{"id": "id-1", "paragraph": map[string]any{"text": "alpha"}}}}},
+				{"blocks": []any{
+					map[string]any{"element": map[string]any{"id": "after", "paragraph": map[string]any{"text": "reference"}}},
+					map[string]any{"element": map[string]any{"id": "id-1", "paragraph": map[string]any{"text": "alpha"}}},
+				}},
 			}},
 			wantTools: []string{"list_document_blocks", "insert_document_block", "list_document_blocks"},
 		},
@@ -1076,8 +1079,8 @@ func TestCrossPlatformCoverageDocTextMutationPreservesHeadingAndSupportsBefore(t
 		t.Fatalf("insert placement = %#v, want before", got)
 	}
 	verification := map[string]any{"blocks": []any{map[string]any{"id": "inserted", "text": "new"}, map[string]any{"id": "reference", "text": "old"}}}
-	if ids := mutationAffectedBlockIDs("insert_document_block", before.history[0].params, map[string]any{}, verification, map[string]any{"format": "element"}); len(ids) != 1 || ids[0] != "inserted" {
-		t.Fatalf("stable mutation receipt IDs = %#v", ids)
+	if ids := mutationAffectedBlockIDs("insert_document_block", before.history[0].params, map[string]any{}, verification, map[string]any{"format": "element"}); len(ids) != 0 {
+		t.Fatalf("insert receipt inferred an unproven block ID = %#v", ids)
 	}
 }
 
@@ -1090,6 +1093,20 @@ func TestCrossPlatformCoverageDocWritesStopOnUnknownCommitAndRequireVerification
 	}
 	if len(unknown.history) != 1 || unknown.history[0].tool != "update_document" {
 		t.Fatalf("unknown write was replayed or verified: %#v", unknown.history)
+	}
+
+	preexistingAdjacent := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{
+		"list_document_blocks": {{"blocks": []any{
+			map[string]any{"id": "reference", "text": "before"},
+			map[string]any{"id": "old-duplicate", "text": "duplicate"},
+		}}},
+	}}
+	err = runDocCoverage(t, Update, preexistingAdjacent, "--node", "n", "--command", "block_insert_after", "--after-block-id", "reference", "--content", "duplicate", "--yes")
+	if err == nil || !errors.As(err, &typed) || typed.Reason != "doc_write_commit_unknown" {
+		t.Fatalf("errored insert with a pre-existing duplicate = %#v", err)
+	}
+	if len(preexistingAdjacent.history) != 1 || preexistingAdjacent.history[0].tool != "insert_document_block" {
+		t.Fatalf("errored insert claimed or inspected a pre-existing block: %#v", preexistingAdjacent.history)
 	}
 
 	verificationFailure := &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{}}

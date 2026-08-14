@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -24,6 +25,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -256,6 +258,14 @@ func TestCrossPlatformCoverageDriveCopyPreservesSchemaProperties(t *testing.T) {
 
 func TestCrossPlatformCoverageDriveRecentPaginationAndJournalCoverage(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	if err := auth.SaveProfiles(config.DefaultConfigDir(), &auth.ProfilesConfig{
+		CurrentProfile: "recent-journal-test",
+		Profiles: []auth.Profile{{
+			Name: "recent-journal-test", CorpID: "recent-journal-corp", UserID: "recent-journal-user",
+		}},
+	}); err != nil {
+		t.Fatalf("configure recent journal profile: %v", err)
+	}
 	if got := effectiveRecentMaxItems(0); got != 500 {
 		t.Fatalf("default recent max-items = %d, want 500", got)
 	}
