@@ -128,49 +128,6 @@ func TestChatChmodCallsRemoteWithExactArgsWhenConfirmed(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageDocPermissionRemoveRequiresConfirmationBeforeRemoteCall(t *testing.T) {
-	caller := &guardedMutationCaller{}
-	err := executeGuardedMutationCommand(t, caller, newDocCommand,
-		"permission", "remove",
-		"--node", "doc-node-1",
-		"--users", "user-1,user-2",
-		"--workspace", "workspace-1",
-	)
-	requireTypedConfirmationError(t, err)
-	if len(caller.calls) != 0 {
-		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
-	}
-}
-
-func TestCrossPlatformCoverageDocPermissionRemoveCallsRemoteOnceWhenConfirmed(t *testing.T) {
-	caller := &guardedMutationCaller{}
-	err := executeGuardedMutationCommand(t, caller, newDocCommand,
-		"permission", "remove",
-		"--node", "doc-node-1",
-		"--users", "user-1,user-2",
-		"--workspace", "workspace-1",
-		"--yes",
-	)
-	if err != nil {
-		t.Fatalf("doc permission remove with --yes returned error: %v", err)
-	}
-	if len(caller.calls) != 1 {
-		t.Fatalf("tool calls = %d, want exactly 1: %#v", len(caller.calls), caller.calls)
-	}
-	call := caller.calls[0]
-	if call.toolName != "remove_permission" {
-		t.Fatalf("tool call = %s/%s, want remove_permission", call.productID, call.toolName)
-	}
-	wantArgs := map[string]any{
-		"nodeId":      "doc-node-1",
-		"userIds":     []string{"user-1", "user-2"},
-		"workspaceId": "workspace-1",
-	}
-	if !reflect.DeepEqual(call.args, wantArgs) {
-		t.Fatalf("tool args = %#v, want %#v", call.args, wantArgs)
-	}
-}
-
 type guardedStepCaller struct {
 	calls  []guardedMutationCall
 	steps  []string

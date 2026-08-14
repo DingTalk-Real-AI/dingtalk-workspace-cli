@@ -140,7 +140,7 @@ var AccessRevoke = shortcut.Shortcut{
 	Description: "预检并移除指定协作者的文档权限",
 	Intent:      "当用户明确要撤销一位或多位现有协作者对单篇文档的直接权限时使用；先解析姓名并读取权限预检，再执行高风险移除。",
 	Risk:        shortcut.RiskHighWrite,
-	Safety:      docsafety.ProtectedDelete("unknown"),
+	Safety:      contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: docSmartContract("+access-revoke", "预检并移除指定协作者的文档权限",
 		"当用户明确要撤销一位或多位现有协作者对单篇文档的直接权限时使用；先解析姓名并读取权限预检，再执行高风险移除。",
 		[]string{`dws doc +access-revoke --node <DOC_ID> --to 张三`}, false),

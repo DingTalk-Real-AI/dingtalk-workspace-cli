@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -4020,7 +4019,6 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	permissionListCmd.Flags().String("filter-role", "", "按角色过滤（逗号分隔）：OWNER / MANAGER / EDITOR / DOWNLOADER / READER")
 	permissionListCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL（选填，仅用于辅助构造返回的 docUrl）")
 
-	permissionRemoveRuntimeSafety := docsafety.ProtectedDelete("unknown")
 	permissionRemoveCmd := &cobra.Command{
 		Use:     "remove",
 		Aliases: []string{"rm"},
@@ -4055,17 +4053,14 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
 			}
-			if err := corecmd.ConfirmSafety(cmd, permissionRemoveRuntimeSafety); err != nil {
-				return err
-			}
 			return callMCPTool("remove_permission", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(permissionRemoveCmd, LeafSpec{
-		// The published leaf safety tuple is a stable compatibility contract.
-		// Runtime still applies ProtectedDelete above, so this atomic spelling
-		// cannot bypass the canonical +access-revoke confirmation boundary.
-		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",

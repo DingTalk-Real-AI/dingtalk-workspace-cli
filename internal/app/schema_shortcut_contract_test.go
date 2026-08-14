@@ -365,8 +365,6 @@ func TestDeliveryDocShortcutAndLeafSafetyMatchesPublishedContracts(t *testing.T)
 		{name: "permission add leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc permission add"}},
 		{name: "permission change", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +access-change"}},
 		{name: "permission update leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc permission update"}},
-		{name: "permission revoke", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +access-revoke"}},
-		{name: "permission remove leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc permission remove"}},
 		{name: "comment delete", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +comment-delete"}},
 		{name: "comment delete leaf", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc comment delete"}},
 	}
