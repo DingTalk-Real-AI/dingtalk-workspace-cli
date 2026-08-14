@@ -53,7 +53,7 @@ dws doc +create --name "<标题>" --content @./drafts/body.md --doc-format markd
 dws doc +create --name "<标题>" --content @./drafts/body.json --doc-format jsonml --format json
 ```
 
-优先消费已加载的 CommandMeta。只有目标 leaf 的参数、constraint 或 confirmation 缺失时查询一次精确 Schema。用户当前请求已明确目标、动作和参数时，按 Runtime gate 追加 `--yes`，不重复询问。
+优先消费已加载的 CommandMeta。只有目标 leaf 的参数、constraint 或 confirmation 缺失时查询一次精确 Schema。`not_required` 直接执行且不加 `--yes`；`user_required` 按两阶段确认协议执行，首次创建请求不能代替独立明确同意。
 
 `+create` 内置写入和有界回读。成功后使用回执中的真实 `nodeId`、revision 和验证状态；不要固定再读一次全文。
 

@@ -21,7 +21,7 @@ metadata:
 - 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
 - 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
 - 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
-- 按 Runtime `confirmation` 执行：`not_required` 直接执行且不加 `--yes`；`user_required` 才确认。当前请求已明确目标、动作和参数即视为本次确认并加 `--yes`；信息不全时询问。
+- `not_required` 直接执行不加 `--yes`；`user_required` 须两阶段确认：首次请求只确定意图；说明对象、动作和影响，拒绝或未明确同意时不调用，同意后才在原参数追加 `--yes`.
 - 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
 - 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
 - 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
@@ -73,7 +73,7 @@ metadata:
 - 执行预算：准备 Help 时，本轮仅查一次 leaf；`unknown command` 后只查一次 shortcut 清单。Schema 使用 `--fields use_when,avoid_when,parameters,constraints,confirmation`；禁止靠失败探测门禁。
 - block ID 必须来自真实回执或 `+fetch --detail with-ids`。Block ID 生命周期：replace/delete/overwrite 后不复用受影响 ID；insert/copy 使用回执新 ID；下步依赖新结构且回执无稳定 ID 时定点 refetch。
 - 媒体插入回执中的 `insertedBlockId` 是图片/附件容器本身，不是“图片后的空块”。只有 `position.followingBlockExists=true` 时才存在独立后继块，并且只能用 `position.followingBlockId` 清理它；`false` 时禁止删除媒体容器或重传媒体来伪造空块清理。
-- 安全模型以 leaf Schema 为准；`not_required` 不加 `--yes`；`user_required` 且用户在当前请求中已明确目标、动作和参数时加 `--yes`，否则询问。
+- 安全模型以 leaf Schema 为准，并遵循上方两阶段确认协议。
 - 参数不确定时仅查一次精确 leaf Schema；禁产品级/`--all`。
 - **空列表必须使用 JSONML**：用户要求保留无文本的列表项/列表占位时，不得用 Markdown 的裸 `-`、`*` 或 `1.`，因为它可能被规范化为普通空行或丢弃。
 - 最小空列表 JSONML：`["bulletList",{"listId":"list-1","isOrdered":false},["listItem",{},["paragraph",{},["text",{"data-type":"leaf"},""]]]]`。

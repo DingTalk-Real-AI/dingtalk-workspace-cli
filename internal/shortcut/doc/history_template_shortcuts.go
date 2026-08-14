@@ -27,6 +27,7 @@ func canonicalizeHistoryShortcuts() {
 	VersionSave.Aliases = nil
 	VersionSave.Description = "手动保存当前文档版本快照"
 	VersionSave.Intent = "当用户要求保存、创建或建立当前文档版本快照时使用；只保存快照，不更新正文。"
+	VersionSave.Risk = shortcut.RiskWrite
 	VersionSave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"}
 	VersionSave.Contract = versionSaveContract()
 	VersionSave.Tips = []string{`dws doc +version-save --node <DOC_ID>`}
@@ -64,7 +65,7 @@ func canonicalizeHistoryShortcuts() {
 	VersionRevert.Execute = executeHistoryRevert
 
 	compatHistorySave = compatibilityHistoryShortcut(VersionSave, "+history-save", "+version-save")
-	compatHistorySave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
+	compatHistorySave.Safety = VersionSave.Safety
 	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
 	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
 	compatHistoryRevert.Risk = shortcut.RiskHighWrite

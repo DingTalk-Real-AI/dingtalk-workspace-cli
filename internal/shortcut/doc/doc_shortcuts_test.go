@@ -2093,7 +2093,7 @@ func TestCrossPlatformCoverageVersionRoutesAreCanonicalAndHistoryRoutesAreCompat
 	if VersionSave.Command != "+version-save" || VersionSave.Safety.Confirmation != "user_required" {
 		t.Errorf("version-save command/confirmation = %s/%s", VersionSave.Command, VersionSave.Safety.Confirmation)
 	}
-	if compatHistorySave.Safety.Confirmation != "not_required" {
+	if compatHistorySave.Safety != VersionSave.Safety {
 		t.Errorf("history-save compatibility confirmation = %s", compatHistorySave.Safety.Confirmation)
 	}
 	if VersionRevert.Command != "+version-revert" || VersionRevert.Execute == nil {

@@ -690,7 +690,7 @@ func TestCrossPlatformCoverageDocumentRoutingContractsStayAligned(t *testing.T) 
 	if len(createWorkflow) > 12_000 || len(updateWorkflow) > 12_000 {
 		t.Errorf("Doc workflows exceed the progressive-disclosure budget: create=%d update=%d", len(createWorkflow), len(updateWorkflow))
 	}
-	for _, required := range []string{"--source MY\\|PUBLIC", "顺序或序号", "用户在当前请求中已明确", "printf"} {
+	for _, required := range []string{"--source MY\\|PUBLIC", "顺序或序号", "首次请求只确定意图", "printf"} {
 		if !strings.Contains(docSkill, required) {
 			t.Errorf("Doc Skill missing deterministic execution rule %q", required)
 		}
@@ -702,6 +702,84 @@ func TestCrossPlatformCoverageDocumentRoutingContractsStayAligned(t *testing.T) 
 	for _, required := range []string{"Use when", "创建", "生成", "撰写", "未明确本地文件", "在线 adoc"} {
 		if !strings.Contains(frontmatter[1], required) {
 			t.Errorf("Doc Skill discovery contract missing %q", required)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageMultiSkillRequiresIndependentUserConfirmation(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller(0) failed")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	read := func(parts ...string) string {
+		t.Helper()
+		content, err := os.ReadFile(filepath.Join(append([]string{root}, parts...)...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(content)
+	}
+
+	runtimeContract := read("skills", "multi", "dingtalk-shared", "references", "runtime-contract.md")
+	for _, required := range []string{
+		"not_required` 直接执行不加 `--yes`",
+		"user_required` 须两阶段确认",
+		"首次请求只确定意图",
+		"对象、动作和影响",
+		"拒绝或未明确同意时不调用",
+		"同意后才在原参数追加 `--yes`",
+	} {
+		if !strings.Contains(runtimeContract, required) {
+			t.Errorf("Runtime contract missing independent confirmation rule %q", required)
+		}
+	}
+
+	for name, text := range map[string]string{
+		"Shared Skill": read("skills", "multi", "dingtalk-shared", "SKILL.md"),
+		"Chat Skill":   read("skills", "multi", "dingtalk-chat", "SKILL.md"),
+		"Doc Skill":    read("skills", "multi", "dingtalk-doc", "SKILL.md"),
+	} {
+		for _, required := range []string{"须两阶段确认", "首次请求只确定意图", "拒绝或未明确同意时不调用"} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing generated confirmation rule %q", name, required)
+			}
+		}
+	}
+
+	createWorkflow := read("skills", "multi", "dingtalk-doc", "references", "doc", "style", "doc-create-workflow.md")
+	updateWorkflow := read("skills", "multi", "dingtalk-doc", "references", "doc", "style", "doc-update-workflow.md")
+	for name, text := range map[string]string{"Create workflow": createWorkflow, "Update workflow": updateWorkflow} {
+		for _, required := range []string{"两阶段确认", "首次", "独立明确同意"} {
+			if !strings.Contains(text, required) {
+				t.Errorf("%s missing confirmation boundary %q", name, required)
+			}
+		}
+	}
+	for _, required := range []string{"版本回退", "user_required"} {
+		if !strings.Contains(updateWorkflow, required) {
+			t.Errorf("Update workflow missing version-revert confirmation boundary %q", required)
+		}
+	}
+
+	forbidden := []string{
+		"当前请求已明确目标、动作和参数即视为本次确认",
+		"用户当前请求已明确目标、动作和参数时",
+		"用户在当前请求中已明确目标、动作和参数时加 `--yes`",
+		"不重复询问",
+	}
+	for name, text := range map[string]string{
+		"Runtime contract": runtimeContract,
+		"Shared Skill":     read("skills", "multi", "dingtalk-shared", "SKILL.md"),
+		"Chat Skill":       read("skills", "multi", "dingtalk-chat", "SKILL.md"),
+		"Doc Skill":        read("skills", "multi", "dingtalk-doc", "SKILL.md"),
+		"Create workflow":  createWorkflow,
+		"Update workflow":  updateWorkflow,
+	} {
+		for _, stale := range forbidden {
+			if strings.Contains(text, stale) {
+				t.Errorf("%s contains confirmation bypass %q", name, stale)
+			}
 		}
 	}
 }

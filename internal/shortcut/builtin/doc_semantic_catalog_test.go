@@ -41,6 +41,13 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 			missing = append(missing, command)
 			continue
 		}
+		deliveredRisk := item.Risk
+		if deliveredRisk == "" {
+			deliveredRisk = shortcut.RiskRead
+		}
+		if deliveredRisk != record.Risk {
+			t.Errorf("%s: runtime risk = %q, reviewed risk = %q", command, deliveredRisk, record.Risk)
+		}
 		if !record.Reviewed || !item.SemanticReviewed || record.SemanticDelta != item.SemanticDelta || record.Disposition != item.Disposition {
 			t.Errorf("%s: reviewed semantic delivery mismatch", command)
 		}
@@ -78,6 +85,9 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 		item := registered[command]
 		if item.Disposition != shortcut.DispositionAliasInternal || item.PrimaryCommand != primary {
 			t.Errorf("%s compatibility routing = %s/%s, want alias_internal/%s", command, item.Disposition, item.PrimaryCommand, primary)
+		}
+		if got, want := shortcut.EffectiveSafety(item), shortcut.EffectiveSafety(registered[primary]); got != want {
+			t.Errorf("%s compatibility safety = %#v, want primary %s safety %#v", command, got, primary, want)
 		}
 	}
 	for _, command := range []string{"+cover-set", "+cover-download", "+cover-clear"} {
