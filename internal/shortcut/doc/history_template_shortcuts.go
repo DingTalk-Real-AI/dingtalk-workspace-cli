@@ -65,7 +65,19 @@ func canonicalizeHistoryShortcuts() {
 	VersionRevert.Execute = executeHistoryRevert
 
 	compatHistorySave = compatibilityHistoryShortcut(VersionSave, "+history-save", "+version-save")
-	compatHistorySave.Safety = VersionSave.Safety
+	// The published +history-save confirmation field is a stable compatibility
+	// contract and cannot change in place. Keep that Schema value while enforcing
+	// the canonical +version-save gate in the compatibility executor, so the old
+	// spelling cannot bypass confirmation and existing Schema clients do not see
+	// a breaking field change.
+	compatHistorySave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
+	historySaveExecute := compatHistorySave.Execute
+	compatHistorySave.Execute = func(rt *shortcut.RuntimeContext) error {
+		if err := corecmd.ConfirmSafety(rt.Command(), VersionSave.Safety); err != nil {
+			return err
+		}
+		return historySaveExecute(rt)
+	}
 	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
 	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
 	compatHistoryRevert.Risk = shortcut.RiskHighWrite

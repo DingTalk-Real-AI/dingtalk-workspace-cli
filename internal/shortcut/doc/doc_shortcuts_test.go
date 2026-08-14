@@ -2093,8 +2093,22 @@ func TestCrossPlatformCoverageVersionRoutesAreCanonicalAndHistoryRoutesAreCompat
 	if VersionSave.Command != "+version-save" || VersionSave.Safety.Confirmation != "user_required" {
 		t.Errorf("version-save command/confirmation = %s/%s", VersionSave.Command, VersionSave.Safety.Confirmation)
 	}
-	if compatHistorySave.Safety != VersionSave.Safety {
-		t.Errorf("history-save compatibility confirmation = %s", compatHistorySave.Safety.Confirmation)
+	if compatHistorySave.Safety.Confirmation != "not_required" {
+		t.Errorf("history-save compatibility confirmation = %s, want stable not_required Schema contract", compatHistorySave.Safety.Confirmation)
+	}
+	unconfirmedSave := &docCoverageCaller{responses: map[string][]map[string]any{}}
+	if err := runDocCoverage(t, compatHistorySave, unconfirmedSave, "--node", "n"); err == nil || !strings.Contains(err.Error(), "需要用户确认") {
+		t.Fatalf("history-save compatibility route must enforce canonical confirmation: %v", err)
+	}
+	if unconfirmedSave.calls != 0 {
+		t.Fatalf("unconfirmed history-save called MCP: %#v", unconfirmedSave.history)
+	}
+	confirmedSave := &docCoverageCaller{responses: map[string][]map[string]any{}}
+	if err := runDocCoverage(t, compatHistorySave, confirmedSave, "--node", "n", "--yes"); err != nil {
+		t.Fatalf("confirmed history-save compatibility route failed: %v", err)
+	}
+	if confirmedSave.calls != 1 || len(confirmedSave.history) != 1 || confirmedSave.history[0].tool != "save_doc_version" {
+		t.Fatalf("confirmed history-save calls = %#v, want one save_doc_version", confirmedSave.history)
 	}
 	if VersionRevert.Command != "+version-revert" || VersionRevert.Execute == nil {
 		t.Errorf("version-revert canonical smart route is incomplete")
