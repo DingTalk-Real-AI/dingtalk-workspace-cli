@@ -645,6 +645,25 @@ func TestToolSearchTokenizesIdentifiersCamelCaseAndChineseBigrams(t *testing.T) 
 	}
 }
 
+func TestToolSearchQuantizedOrderingBreaksUlpTiesCanonically(t *testing.T) {
+	// Scores differing below the quantization grid must fall back to the
+	// canonical tie-break: Go's architecture-dependent FMA fusion can produce
+	// exactly such ulp-level differences for the same expression across
+	// arm64/amd64, and the deterministic wire contract must not depend on them.
+	hits := []LexicalHit{
+		{CanonicalPath: "zzz.uldp_tie", Score: 1.0000000004},
+		{CanonicalPath: "aaa.uldp_tie", Score: 1.0000000001},
+		{CanonicalPath: "mmm.clearly_higher", Score: 2},
+	}
+	got := truncateAndSortLexicalHits(hits, 3)
+	if got[0].CanonicalPath != "mmm.clearly_higher" {
+		t.Fatalf("first = %s, want mmm.clearly_higher", got[0].CanonicalPath)
+	}
+	if got[1].CanonicalPath != "aaa.uldp_tie" || got[2].CanonicalPath != "zzz.uldp_tie" {
+		t.Fatalf("ulp-level tie must order canonically, got %s then %s", got[1].CanonicalPath, got[2].CanonicalPath)
+	}
+}
+
 func TestToolSearchIsDeterministicAcrossProcesses(t *testing.T) {
 	const helperEnv = "DWS_TOOL_SEARCH_DETERMINISM_CHILD"
 	if os.Getenv(helperEnv) == "1" {

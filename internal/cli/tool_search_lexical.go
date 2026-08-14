@@ -633,10 +633,25 @@ func (i toolSearchTFIDFIndex) score(canonical string, queryFrequency map[string]
 	return dot / (document.norm * math.Sqrt(queryNormSquared))
 }
 
+// toolSearchScoreQuantum is the sort-key quantization grid. Go permits FMA
+// fusion on arm64 but not amd64, so the same ranking expression can differ in
+// the last ulp across architectures; ordering on the raw float would let that
+// ulp flip near-tied candidates past the canonical tie-break and break the
+// byte-determinism contract across CI (linux/amd64) and dev (macOS/arm64)
+// machines. Quantizing only the ordering key keeps same-architecture output
+// identical while making cross-architecture ordering agree; reported scores
+// (explain-only) are untouched.
+const toolSearchScoreQuantum = 1e9
+
+func quantizeToolSearchScore(score float64) float64 {
+	return math.Round(score*toolSearchScoreQuantum) / toolSearchScoreQuantum
+}
+
 func truncateAndSortLexicalHits(hits []LexicalHit, limit int) []LexicalHit {
 	sort.Slice(hits, func(i, j int) bool {
-		if hits[i].Score != hits[j].Score {
-			return hits[i].Score > hits[j].Score
+		left, right := quantizeToolSearchScore(hits[i].Score), quantizeToolSearchScore(hits[j].Score)
+		if left != right {
+			return left > right
 		}
 		return hits[i].CanonicalPath < hits[j].CanonicalPath
 	})
