@@ -18,26 +18,26 @@
 <body><main>
   <header class="hero">
     <h1>DWS Wiki Shortcut 全景评审</h1>
-    <p class="lead">以 lark-cli 1.0.78 的 13 个 Wiki Shortcut 为任务基线，重新审视 DWS 的空间、成员、节点与动态能力。本次不是按命令名凑数：每个入口都要求真实业务证据，缺失数组、畸形响应、空确认或读回不一致一律失败。</p>
+    <p class="lead">以 13 项成熟 Wiki 用户任务为基线，重新审视 DWS 的空间、成员、节点与动态能力。本次不是按命令名凑数：每个入口都要求真实业务证据，缺失数组、畸形响应、空确认或读回不一致一律失败。</p>
     <div class="meta"><span class="pill">评审日期 2026-08-14</span><span class="pill">独立 worktree / 独立分支</span><span class="pill">真实组织数据 E2E</span><span class="pill">报告已去标识化</span></div>
   </header>
 
   <div class="grid">
     <div class="card metric"><b>20</b><span>公开 Wiki Shortcuts</span></div>
-    <div class="card metric"><b>13/13</b><span>Lark 用户任务有对应路径</span></div>
+    <div class="card metric"><b>13/13</b><span>基线用户任务有对应路径</span></div>
     <div class="card metric"><b>7</b><span>DWS 额外场景</span></div>
     <div class="card metric"><b>20/20</b><span>真实数据能力已触达</span></div>
   </div>
 
   <section class="card">
     <h2>结论先行</h2>
-    <div class="callout ok"><strong>DWS 已形成比“API 快捷别名”更完整的 Wiki 任务层。</strong> Lark 的 13 个用户任务均有对应入口；其中 DWS 额外提供空间搜索/详情/唯一解析、成员角色更新、库内节点搜索、协作动态和按空间名新建文档。创建、复制、移动等关键写能力从“请求发出”升级为“终态 + ID + 读回”成功标准。</div>
-    <div class="callout warn" style="margin-top:12px"><strong>不能假装完全同构。</strong> DingTalk 成员接口不提供游标，单次真实上限是 50，因此无法诚实实现 Lark 的成员 <code>--page-all</code>；成员身份只接受同组织可用的 userId，不能对齐 Lark 的 email/open_id 等多种 member-id-type；节点创建也没有等价的 origin/shortcut 模式。这些差异保留为明确边界，而不是用本地循环或空结果伪装。</div>
+    <div class="callout ok"><strong>DWS 已形成比“API 快捷别名”更完整的 Wiki 任务层。</strong> 基线中的 13 个用户任务均有对应入口；DWS 还提供空间搜索/详情/唯一解析、成员角色更新、库内节点搜索、协作动态和按空间名新建文档。创建、复制、移动等关键写能力从“请求发出”升级为“终态 + ID + 读回”成功标准。</div>
+    <div class="callout warn" style="margin-top:12px"><strong>能力边界必须诚实表达。</strong> DingTalk 成员接口不提供游标，单次真实上限是 50，因此不能实现成员 <code>--page-all</code>；成员身份只接受同组织可用的 userId，无法提供 email/open_id 等多种身份模式；节点创建也没有等价的 origin/shortcut 模式。这些差异保留为明确边界，而不是用本地循环或空结果伪装。</div>
   </section>
 
   <section class="card">
-    <h2>Lark 13 项逐条映射</h2>
-    <div class="matrix"><table><thead><tr><th>Lark Shortcut</th><th>DWS 主入口</th><th>结论</th><th>DWS 视角与边界</th></tr></thead><tbody>
+    <h2>13 项基线任务逐条映射</h2>
+    <div class="matrix"><table><thead><tr><th>基线任务</th><th>DWS 主入口</th><th>结论</th><th>DWS 视角与边界</th></tr></thead><tbody>
       <tr><td><code>+space-list</code></td><td><code>wiki +space-list</code></td><td><span class="tag full">完整对齐</span></td><td>严格空集合、游标续传、自动翻页、停滞检测；支持组织/我的知识库。</td></tr>
       <tr><td><code>+space-create</code></td><td><code>wiki +space-create</code></td><td><span class="tag full">超过</span></td><td>公开真实 32 字符名称上限；创建后按 workspaceId 读回。</td></tr>
       <tr><td><code>+delete-space</code></td><td><code>wiki +delete-space</code></td><td><span class="tag full">超过</span></td><td>预读目标、高风险确认、只接受 <code>success=true</code>；兼容 <code>+space-delete</code>。</td></tr>
@@ -45,10 +45,10 @@
       <tr><td><code>+member-list</code></td><td><code>wiki +member-list</code></td><td><span class="tag partial">任务对齐</span></td><td>严格成员数组、角色过滤、真实上限 50；后端无游标，不能提供诚实的 page-all。</td></tr>
       <tr><td><code>+member-remove</code></td><td><code>wiki +member-remove</code></td><td><span class="tag partial">任务对齐</span></td><td>批量 userId，移除后读回确认成员已消失；身份类型边界同上。</td></tr>
       <tr><td><code>+node-list</code></td><td><code>wiki +node-list</code></td><td><span class="tag full">完整对齐</span></td><td>正确跨域路由 doc/list_nodes，严格空目录、分页与自动翻页。</td></tr>
-      <tr><td><code>+node-get</code></td><td><code>wiki +node-get</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 DingTalk 节点 ID/在线文档 URL并返回文档域元数据；不接受 Lark 特有 token/type 组合。</td></tr>
+      <tr><td><code>+node-get</code></td><td><code>wiki +node-get</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 DingTalk 节点 ID/在线文档 URL 并返回文档域元数据；不接受跨平台专用的 token/type 组合。</td></tr>
       <tr><td><code>+node-create</code></td><td><code>wiki +node-create</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 adoc/axls/able/appt/adraw/amind/folder 并读回；无 origin/shortcut 等价接口。</td></tr>
       <tr><td><code>+node-copy</code></td><td><code>wiki +node-copy</code></td><td><span class="tag full">超过</span></td><td>确认后要求新 nodeId 并读取副本；底层面向在线节点，不把 .dlink 当独立副本。</td></tr>
-      <tr><td><code>+move</code></td><td><code>wiki +move</code></td><td><span class="tag partial">任务对齐</span></td><td>同一入口支持 Wiki 内移动和“我的文档”在线节点入 Wiki，读回 workspace/folder；无 Lark apply 权限迁移开关。</td></tr>
+      <tr><td><code>+move</code></td><td><code>wiki +move</code></td><td><span class="tag partial">任务对齐</span></td><td>同一入口支持 Wiki 内移动和“我的文档”在线节点入 Wiki，读回 workspace/folder；底层接口没有 apply 权限迁移开关。</td></tr>
       <tr><td><code>+move-to-drive</code></td><td><code>wiki +move-to-drive</code></td><td><span class="tag full">超过</span></td><td>DWS 当前接口同步完成并读回 workspace 变化，无需暴露异步 task 轮询。</td></tr>
       <tr><td><code>+node-delete</code></td><td><code>wiki +node-delete</code></td><td><span class="tag full">超过</span></td><td>预读并核对 workspace，高风险确认，要求删除终态。</td></tr>
     </tbody></table></div>
