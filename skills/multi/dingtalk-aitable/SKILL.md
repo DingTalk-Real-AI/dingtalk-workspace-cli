@@ -17,13 +17,17 @@ metadata:
 
 ## 加载与路由顺序
 
-1. 命中下方高频意图时直接使用精确骨架，不先查 Help 或产品级 Schema。
-2. 路由优先级固定为：精确骨架 / recipe > 匹配的公开 Shortcut > 原子命令。脚本只用于 Runtime 尚未覆盖的批量、文件传输或异步编排，不与普通原子命令竞争默认入口。
+1. 先定义目标对象、父容器、用户要求的阶段和完成证据；命中下方高频意图时，把精确
+   骨架作为首选起点，不先查 Help 或产品级 Schema。
+2. 首选顺序为：精确骨架 / recipe > 匹配的公开 Shortcut > 原子命令。它用于降低
+   首调用成本，不是禁止依据 Runtime 新证据调整路径。脚本只用于 Runtime 尚未覆盖的
+   批量、文件传输或异步编排，不与普通原子命令竞争默认入口。
 3. 参数、约束或安全语义不确定时只读 leaf Schema：`dws schema --cli-path "aitable <leaf>" --format json`；只有当前 Cobra flag 不确定时才读对应 `--help`。
 4. 复杂字段、筛选、导入导出、视图、权限或工作流任务，按“低频能力与 Reference”只加载相关文件，不预读整个 `references/aitable/`。
 5. 现有骨架和 reference 都无法定位能力时，才用 Runtime Shortcut Catalog 做最后发现；不得猜 `cli_path` 或 flag。
 6. Schema、Help、reference 与实际返回冲突时采用更安全的解释并报告契约漂移；`confirmation=user_required` 时先确认，再添加 `--yes`。
-7. 用户已给足目标、字段和数据时，按依赖链连续执行；中间结果只用于提取真实 ID 和判断停止条件，全部完成后统一回读并答复。
+7. 用户已给足目标、字段和数据时，按依赖链连续执行；保留已成功步骤及真实 ID，只从
+   未完成缺口继续。每个关键结论用语义等价证据关闭后再统一答复。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
@@ -64,7 +68,7 @@ metadata:
 | 删除记录 | 先 `dws aitable +record-query ...` 定位，再 `dws aitable record delete --base-id <baseId> --table-id <tableId> --record-ids <ids>` | 展示目标与影响，得到明确确认后才加 `--yes` |
 | 创建 Base / Table | `dws aitable base create --name "<名>"` / `dws aitable table create --base-id <id> --name "<名>" --fields '[...]'` | 使用创建返回的真实 ID；系统改名/加后缀时不得继续猜原名 |
 | 复制视图 | `dws aitable view duplicate --base-id <baseId> --table-id <tableId> --view-id <viewId> --new-name "<名>"` | `viewId` 必须属于当前表；不能用复制 Table 或新建 Dashboard 替代 |
-| 创建图表 | 先读 `dws aitable chart config-example --format json`，再执行 `chart create ... --config '<JSON>' --layout '<JSON>'` | `--layout` 是必填项；不能只传 config 后依据退出码声称图表已创建 |
+| 创建图表 | 先读 `dws aitable chart widgets-example --format json`，再执行 `chart create ... --config '<JSON>' --layout '<JSON>'` | `--layout` 是必填项；不能只传 config 后依据退出码声称图表已创建 |
 | 批量追加 CSV / JSON 到已有表 | `python3 scripts/import_records.py <baseId> <tableId> <file> [batch_size]` | CSV 表头必须是 fieldId；脚本返回不完整 ledger 时不得宣称全成功 |
 | 文件导入为新数据表 | `python3 scripts/aitable_import_via_task.py <baseId> <file>` | 与“追加已有 table”不同；走 prepare → PUT → import task |
 | 批量创建字段 | `python3 scripts/bulk_add_fields.py <baseId> <tableId> fields.json` | 单次最多 15；逐项检查成功/失败结果 |
@@ -96,6 +100,11 @@ metadata:
 
 退出码 0、`status=success`、空对象或仅有 taskId 都不能单独证明业务完成。字段未生效、回读不一致、分页不完整或异步任务未完成时，报告失败、部分完成或进行中，不得声称“全部完成”。
 
+验证必须与用户点名的操作语义一致：Base 搜索只能由搜索结果中的目标命中关闭，最近
+访问列表或创建回读只能证明对象存在；复制必须有复制操作产生的新对象证据；移动必须
+回读新的父级关系；删除必须核对精确目标并确认其已不存在。邻近证据可用于诊断，不能
+替代目标步骤的完成证据。
+
 ## 低频能力与 Reference
 
 | 场景 | 按需读取 |
@@ -110,11 +119,18 @@ metadata:
 
 ## 错误恢复
 
-- 路径或 flag 错误：按既定的 leaf Schema → leaf Help 顺序校正一次；仍失败则停止，不连续尝试猜测别名。
+- 不使用全局“只准纠正一次”的硬限制。恢复预算由已观察状态和副作用风险决定，只在
+  新错误信息、leaf Schema/Help 或回读产生新证据时继续；重复同一假设或不再增加证据
+  时停止。
+- 路径、flag 或 payload 在写入前被校验拒绝：吸收精确 hint，保持目标和容器不变后
+  修正。只读调用可做有界替代探测，但不得用相邻能力冒充目标能力。
 - 命令非零、输出非 JSON、业务 `status != success`、必需 ID 缺失、批处理部分失败均视为失败；保留成功项与 ledger，禁止吞错。
 - 同名歧义、权限不足、资源不存在、字段类型漂移、分页无法推进或 Schema/Help 冲突时停止并报告。具体恢复动作按需读 [aitable-error-recovery.md](references/aitable/aitable-error-recovery.md)。
-- 已确认远端未写入且契约声明可重试时，才从最新实际输出重新提取 ID 后重试；写入状态未知、删除和其他 `confirmation=user_required` 操作不得自动重试或静默确认。
-- 参数校验错误必须先吸收错误中的精确 hint，再最多纠正一次；不要重复猜同一 flag、formatter、folderId 或图表配置。目标能力已有原生命令时，不要以手工重建相似对象掩盖原命令失败。
+- 写入已返回 ID 时保留成功状态，只补字段、记录、视图、图表或验证缺口。写入超时或
+  状态未知时先回读当前 Base/Table；只有明确未写入且契约允许时才重试。删除和其他
+  `confirmation=user_required` 操作不得自动重试或静默确认。
+- 不要重复猜同一 flag、formatter、folderId 或图表配置。目标能力已有原生命令时，
+  不要以手工重建相似对象掩盖原命令失败。
 
 ## 跨产品协作
 

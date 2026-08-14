@@ -43,7 +43,9 @@
 - 批量 `--fields` 每项使用 `fieldName`，不是 `name`。
 - 单选是 `singleSelect`，多选是 `multipleSelect`；不存在通用的 `select` 类型。
 - number/date/currency formatter 只使用当前 `table create --help` 或 leaf Schema 列出的枚举；不要从别的产品或旧样例猜 `INTEGER`。
-- 第一次返回明确 hint 后只按 hint 修正一次；第二次仍失败就停止并保留部分成功 ledger。
+- 返回明确 hint 时，只修改 hint 指向的字段契约并保持目标不变。只要写入前校验明确
+  未产生副作用且新的 Schema/Help 证据仍在收敛，就可继续修正；重复同一假设或不再
+  获得新证据时停止并保留部分成功 ledger。
 
 创建 singleSelect/multipleSelect 字段时，**必须设置选项 (options)**：
 

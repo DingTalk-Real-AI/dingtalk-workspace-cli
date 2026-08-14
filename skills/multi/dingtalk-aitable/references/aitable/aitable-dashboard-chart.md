@@ -5,9 +5,10 @@
 ## 建议操作顺序
 
 ```bash
-# 1) 先看配置模板（JSONC）
+# 1) 先看图表配置模板和当前 leaf 契约
 dws aitable dashboard config-example --format json
 dws aitable chart widgets-example --format json
+dws aitable chart create --help
 
 # 2) 先拿 dashboard，再拿 chart 详情
 dws aitable dashboard get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --format json
@@ -36,11 +37,15 @@ dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-
 | 命令 | 用途 | 必填参数 |
 |------|------|----------|
 | `chart get` | 获取图表详情 | `--base-id` `--dashboard-id` `--chart-id` |
-| `chart create` | 创建图表 | `--base-id` `--dashboard-id` `--config` |
+| `chart create` | 创建图表 | `--base-id` `--dashboard-id` `--config` `--layout` |
 | `chart update` | 更新图表配置 | `--base-id` `--dashboard-id` `--chart-id` `--config` |
 | `chart delete` | 删除图表 | `--base-id` `--dashboard-id` `--chart-id` `--yes` |
 | `chart widgets-example` | 查看图表 widgets 配置模板 | 无 |
 
 ## 配置获取流程
 
-创建图表前，必须先调用 `chart widgets-example` 查看配置模板，了解每种图表类型需要的字段结构，然后根据实际 tableId 和 fieldId 填充配置。
+创建图表前，先调用当前 Runtime 的 `chart widgets-example`（如未来命令发生变化，
+以 leaf Schema/Help 的真实命令为准），再根据实际 tableId 和 fieldId 填充配置，并
+在第一次创建时同时传入 `--config` 与 `--layout`。创建返回
+`chartId` 后用 `dashboard get`/`chart get` 回读；只有 Dashboard 存在但图表缺失时，
+图表阶段仍未完成。

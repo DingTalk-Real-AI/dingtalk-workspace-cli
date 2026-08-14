@@ -40,8 +40,8 @@ dws aitable import upload --base-id <BASE_ID> \
   --file-name data.xlsx --file-size <字节数> --format json
 # → 返回 uploadUrl 和 importId
 
-# 第 2 步：上传文件到 OSS（注意：Content-Type 必须设为空）
-curl -X PUT "<uploadUrl>" -H "Content-Type:" --data-binary @data.xlsx
+# 第 2 步：由受测 helper 上传到 OSS（Content-Type 为空）
+# 正常 Agent 执行使用 aitable_import_via_task.py，不手工拆出 curl fallback。
 
 # 第 3 步：触发导入（新建表模式）
 dws aitable import data --import-id <importId> --format json
@@ -57,7 +57,7 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 | 步骤 | 命令 | 说明 |
 |------|------|------|
 | 申请上传凭证 | `import upload --base-id <ID> --file-name <名称> --file-size <字节>` | `--file-size` 必须与实际文件大小一致 |
-| 上传文件 | HTTP PUT（curl 等） | **必须** 带 `-H "Content-Type:"` 将 Content-Type 设为空，否则 OSS 返回 403 |
+| 上传文件 | 受测 helper 的 HTTP PUT | Content-Type 必须为空，否则 OSS 返回 403；helper 需校验 OSS host，并将受信 HTTP signed URL 升级为 HTTPS |
 | 触发导入 | `import data --import-id <ID> [--table-id <TABLE_ID>]` | 同步等待，大多一次调用即返回结果；超时可用相同 importId 重试 |
 
 ### import data 参数
@@ -104,7 +104,9 @@ dws aitable import data --import-id <importId> --table-id <TABLE_ID> --format js
 > **解决方案**：
 > 1. **首选**：创建目标表时，字段名与 Excel 表头列名**保持完全一致**
 > 2. **备选**：传 `--field-mapping '{"目标字段名":"Excel列名"}'` 手动指定映射
-> 3. **兜底**：如果 import data 多次失败，改用 `record create` 逐条写入
+> 3. 如果 import data 失败，先按错误和任务状态判断是否已写入；只有用户目标允许
+> “追加已有表”、文件内容可安全解析且新建表导入明确未生效时，才提出改用
+> `record create`。逐条写入不等价于文件级导入，不能静默替代并宣称导入成功。
 
 ### 适用场景
 
