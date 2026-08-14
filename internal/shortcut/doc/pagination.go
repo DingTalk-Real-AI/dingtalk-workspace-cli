@@ -266,9 +266,8 @@ func collectTemplatePages(rt *shortcut.RuntimeContext, tool string, base map[str
 			}
 			pageItems = append(pageItems, item)
 		}
-		pageOverflow := len(pageItems) > remaining
-		if pageOverflow {
-			pageItems = pageItems[:remaining]
+		if len(pageItems) > remaining {
+			return nil, false, false, cursor, pagesRead, docPaginationError(tool, "page_size_exceeded", nil, page, items, cursor)
 		}
 		for _, item := range pageItems {
 			if id, _ := item["templateId"].(string); id != "" {
@@ -290,7 +289,7 @@ func collectTemplatePages(rt *shortcut.RuntimeContext, tool string, base map[str
 				return nil, false, false, cursor, pagesRead, docPaginationError(tool, "pagination_unproven", nil, page, items, cursor)
 			}
 		}
-		if pageOverflow || (len(items) >= options.MaxItems && hasMore) {
+		if len(items) >= options.MaxItems && hasMore {
 			truncated = true
 			complete = false
 			hasMore = true
