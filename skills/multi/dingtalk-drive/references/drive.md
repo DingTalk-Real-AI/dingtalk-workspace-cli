@@ -61,6 +61,12 @@ Flags:
 - 输出形态：带过滤时输出从单页透传变为聚合形态 `{items, maxDepth, truncated, errors}`。
 - 已知代价：大目录（>2000 条）触顶截断时 `truncated=true`（退出码 0，结果每条都正确但没扫完）；
   建议用 `--folder` 指定子目录缩小扫描范围；带关键词的过滤场景改用 `dws drive search`。
+- 与 `--latest` 组合时上一条不适用：排序基不完整的 Top-N 不是全局最新，故触顶截断**或**递归途中
+  目录读取失败都拒绝产出并报错（`LATEST_SCAN_TRUNCATED` / `LATEST_SCAN_INCOMPLETE`），不会以
+  退出码 0 交出结果；错误消息里带首个失败目录的 folder/depth/reason，以及一条复现原候选集
+  （查询域 + `--folder` + `--pattern`/`--type`/`--start`/`--end`）的恢复命令。Windows 构建下，
+  若原值含 shell 元字符则命令里只给占位符、原值另起一行以数据形式列出（cmd.exe 与 PowerShell
+  没有共同安全的引用形式），照抄时需手动替换。
 
 ### 获取钉盘空间列表
 
