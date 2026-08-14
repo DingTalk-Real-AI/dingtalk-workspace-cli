@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -31,12 +30,10 @@ type docDelegationCall struct {
 	args   map[string]any
 }
 
-// docDelegationTestCaller scripts grant/check/passthrough responses per tool
-// name and records every CallTool in order.
+// docDelegationTestCaller scripts check/passthrough responses per tool name
+// and records every CallTool in order.
 type docDelegationTestCaller struct {
 	calls    []docDelegationCall
-	grantRes *edition.ToolResult
-	grantErr error
 	checkRes *edition.ToolResult
 	checkErr error
 	passRes  *edition.ToolResult
@@ -50,10 +47,7 @@ func (c *docDelegationTestCaller) CallTool(_ context.Context, serverID, toolName
 		copied[k] = v
 	}
 	c.calls = append(c.calls, docDelegationCall{server: serverID, tool: toolName, args: copied})
-	switch toolName {
-	case grantCapTool:
-		return c.grantRes, c.grantErr
-	case checkCapTool:
+	if toolName == checkCapTool {
 		return c.checkRes, c.checkErr
 	}
 	return c.passRes, c.passErr
@@ -79,7 +73,6 @@ func (c *docDelegationReadTestCaller) CallReadTool(_ context.Context, serverID, 
 
 func newDocDelegationTestCaller() *docDelegationTestCaller {
 	return &docDelegationTestCaller{
-		grantRes: textToolResult(`{"success":true}`),
 		checkRes: textToolResult(`{"allowed":true}`),
 		passRes:  textToolResult(`{"result":"ok"}`),
 	}
@@ -89,7 +82,7 @@ func newDocDelegationAuthDecorator(inner edition.ToolCaller) *docDelegationAuthC
 	return &docDelegationAuthCaller{inner: inner, principalID: "u-principal", checked: map[string]bool{}}
 }
 
-func TestCrossPlatformCoverageDocDelegationAuthGrantCheckSuccessFlow(t *testing.T) {
+func TestCrossPlatformCoverageDocDelegationAuthCheckSuccessFlow(t *testing.T) {
 	inner := newDocDelegationTestCaller()
 	d := newDocDelegationAuthDecorator(inner)
 	args := map[string]any{"nodeId": "node-1", "content": "x"}
@@ -100,45 +93,33 @@ func TestCrossPlatformCoverageDocDelegationAuthGrantCheckSuccessFlow(t *testing.
 	if result != inner.passRes {
 		t.Fatalf("CallTool() result = %#v, want passthrough result", result)
 	}
-	if len(inner.calls) != 3 {
-		t.Fatalf("calls = %d, want 3 (grant, check, original)", len(inner.calls))
+	if len(inner.calls) != 2 {
+		t.Fatalf("calls = %d, want 2 (check, original)", len(inner.calls))
 	}
-	grant := inner.calls[0]
-	if grant.server != capabilityServerID || grant.tool != grantCapTool {
-		t.Fatalf("call[0] = %s/%s, want %s/%s", grant.server, grant.tool, capabilityServerID, grantCapTool)
-	}
-	if grant.args["userId"] != "u-principal" || grant.args["action"] != "GRANT" || grant.args["nodeId"] != "node-1" {
-		t.Fatalf("grant args = %#v", grant.args)
-	}
-	if !reflect.DeepEqual(grant.args["mcpToolKeys"], []string{"doc.update_document"}) {
-		t.Fatalf("grant mcpToolKeys = %#v", grant.args["mcpToolKeys"])
-	}
-	check := inner.calls[1]
+	check := inner.calls[0]
 	if check.server != capabilityServerID || check.tool != checkCapTool {
-		t.Fatalf("call[1] = %s/%s, want %s/%s", check.server, check.tool, capabilityServerID, checkCapTool)
+		t.Fatalf("call[0] = %s/%s, want %s/%s", check.server, check.tool, capabilityServerID, checkCapTool)
 	}
 	if check.args["userId"] != "u-principal" || check.args["mcpToolKey"] != "doc.update_document" || check.args["nodeId"] != "node-1" {
 		t.Fatalf("check args = %#v", check.args)
 	}
-	orig := inner.calls[2]
+	orig := inner.calls[1]
 	if orig.server != "doc" || orig.tool != "update_document" || orig.args["content"] != "x" {
-		t.Fatalf("call[2] = %#v, want original passthrough", orig)
+		t.Fatalf("call[1] = %#v, want original passthrough", orig)
 	}
 }
 
-func TestCrossPlatformCoverageDocDelegationAuthNoNodeIDStillCallsGrantCheck(t *testing.T) {
+func TestCrossPlatformCoverageDocDelegationAuthNoNodeIDStillCallsCheck(t *testing.T) {
 	inner := newDocDelegationTestCaller()
 	d := newDocDelegationAuthDecorator(inner)
 	if _, err := d.CallTool(context.Background(), "drive", "list_files", map[string]any{"limit": 20}); err != nil {
 		t.Fatalf("CallTool() error = %v", err)
 	}
-	if len(inner.calls) != 3 {
-		t.Fatalf("calls = %d, want 3", len(inner.calls))
+	if len(inner.calls) != 2 {
+		t.Fatalf("calls = %d, want 2 (check, original)", len(inner.calls))
 	}
-	for i := 0; i < 2; i++ {
-		if _, exists := inner.calls[i].args["nodeId"]; exists {
-			t.Fatalf("call[%d] args should omit nodeId: %#v", i, inner.calls[i].args)
-		}
+	if _, exists := inner.calls[0].args["nodeId"]; exists {
+		t.Fatalf("check args should omit nodeId: %#v", inner.calls[0].args)
 	}
 }
 
@@ -157,8 +138,8 @@ func TestCrossPlatformCoverageDocDelegationAuthDeniedWithMessage(t *testing.T) {
 	if !strings.Contains(cliErr.Message, "委托鉴权失败 [doc.update_document]") || !strings.Contains(cliErr.Message, "没有该文档的委托权限") {
 		t.Fatalf("Message = %q, want denialMessage surfaced", cliErr.Message)
 	}
-	if len(inner.calls) != 2 {
-		t.Fatalf("calls = %d, want 2 (original tool must not run)", len(inner.calls))
+	if len(inner.calls) != 1 {
+		t.Fatalf("calls = %d, want 1 (original tool must not run)", len(inner.calls))
 	}
 	if d.checked["doc.update_document"] {
 		t.Fatal("denied toolKey must not be marked checked")
@@ -211,19 +192,16 @@ func TestCrossPlatformCoverageDocDelegationAuthDedupSameToolKey(t *testing.T) {
 			t.Fatalf("CallTool(#%d) error = %v", i, err)
 		}
 	}
-	var grants, checks, originals int
+	var checks, originals int
 	for _, call := range inner.calls {
-		switch call.tool {
-		case grantCapTool:
-			grants++
-		case checkCapTool:
+		if call.tool == checkCapTool {
 			checks++
-		default:
+		} else {
 			originals++
 		}
 	}
-	if grants != 1 || checks != 1 || originals != 2 {
-		t.Fatalf("grants/checks/originals = %d/%d/%d, want 1/1/2", grants, checks, originals)
+	if checks != 1 || originals != 2 {
+		t.Fatalf("checks/originals = %d/%d, want 1/2", checks, originals)
 	}
 }
 
@@ -237,15 +215,14 @@ func TestCrossPlatformCoverageDocDelegationAuthDifferentToolKeysEachChecked(t *t
 	if _, err := d.CallTool(ctx, "wiki", "create_wikiSpace", nil); err != nil {
 		t.Fatalf("CallTool(wiki) error = %v", err)
 	}
-	var grantKeys []string
+	var checkKeys []string
 	for _, call := range inner.calls {
-		if call.tool == grantCapTool {
-			keys, _ := call.args["mcpToolKeys"].([]string)
-			grantKeys = append(grantKeys, keys...)
+		if call.tool == checkCapTool {
+			checkKeys = append(checkKeys, call.args["mcpToolKey"].(string))
 		}
 	}
-	if !reflect.DeepEqual(grantKeys, []string{"doc.update_document", "wiki.create_wikiSpace"}) {
-		t.Fatalf("grant toolKeys = %#v, want both keys checked separately", grantKeys)
+	if len(checkKeys) != 2 || checkKeys[0] != "doc.update_document" || checkKeys[1] != "wiki.create_wikiSpace" {
+		t.Fatalf("check toolKeys = %#v, want both keys checked separately", checkKeys)
 	}
 }
 
@@ -256,20 +233,7 @@ func TestCrossPlatformCoverageDocDelegationAuthNonDocServerPassthrough(t *testin
 		t.Fatalf("CallTool() error = %v", err)
 	}
 	if len(inner.calls) != 1 || inner.calls[0].tool != "send_message" {
-		t.Fatalf("calls = %#v, want direct passthrough without grant/check", inner.calls)
-	}
-}
-
-func TestCrossPlatformCoverageDocDelegationAuthGrantCallFails(t *testing.T) {
-	inner := newDocDelegationTestCaller()
-	inner.grantErr = errors.New("grant boom")
-	d := newDocDelegationAuthDecorator(inner)
-	_, err := d.CallTool(context.Background(), "doc", "update_document", nil)
-	if err == nil || !strings.Contains(err.Error(), grantCapTool) || !errors.Is(err, inner.grantErr) {
-		t.Fatalf("error = %v, want wrapped grant failure", err)
-	}
-	if len(inner.calls) != 1 {
-		t.Fatalf("calls = %d, want 1 (stop after grant failure)", len(inner.calls))
+		t.Fatalf("calls = %#v, want direct passthrough without check", inner.calls)
 	}
 }
 
@@ -281,8 +245,8 @@ func TestCrossPlatformCoverageDocDelegationAuthCheckCallFails(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), checkCapTool) || !errors.Is(err, inner.checkErr) {
 		t.Fatalf("error = %v, want wrapped check failure", err)
 	}
-	if len(inner.calls) != 2 {
-		t.Fatalf("calls = %d, want 2 (stop after check failure)", len(inner.calls))
+	if len(inner.calls) != 1 {
+		t.Fatalf("calls = %d, want 1 (stop after check failure)", len(inner.calls))
 	}
 }
 
@@ -342,14 +306,14 @@ func TestCrossPlatformCoverageDocDelegationAuthReadCallIntercepted(t *testing.T)
 	if result != readInner.readRes {
 		t.Fatalf("CallReadTool() result = %#v, want read passthrough", result)
 	}
-	if len(readInner.calls) != 2 || readInner.calls[0].tool != grantCapTool || readInner.calls[1].tool != checkCapTool {
-		t.Fatalf("calls = %#v, want grant+check on the write channel", readInner.calls)
+	if len(readInner.calls) != 1 || readInner.calls[0].tool != checkCapTool {
+		t.Fatalf("calls = %#v, want check on the write channel", readInner.calls)
 	}
 	if len(readInner.readCalls) != 1 || readInner.readCalls[0].tool != "list_nodes" {
 		t.Fatalf("readCalls = %#v, want one read passthrough", readInner.readCalls)
 	}
 	if readInner.calls[0].args["nodeId"] != "w1" {
-		t.Fatalf("grant args = %#v, want workspaceId promoted to nodeId", readInner.calls[0].args)
+		t.Fatalf("check args = %#v, want workspaceId promoted to nodeId", readInner.calls[0].args)
 	}
 }
 

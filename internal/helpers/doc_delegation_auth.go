@@ -25,14 +25,15 @@ import (
 
 // FlagPrincipalUserID is the persistent flag that enables doc-business
 // delegation auth: when set, every doc-business tool call is preceded by a
-// grant_capability + check_capability handshake on behalf of the principal.
+// check_capability verification on behalf of the principal. Granting the
+// capability to the current logged-in identity is an out-of-band action
+// performed by the principal; the CLI never calls grant_capability.
 const (
 	FlagPrincipalUserID = "principal-user-id"
 	// capabilityServerID is the helper-only drive-internal server hosting the
-	// grant/check capability tools. It is registered as a supplement server
-	// without command prefixes, so it is only reachable by explicit server ID.
+	// check_capability tool. It is registered as a supplement server without
+	// command prefixes, so it is only reachable by explicit server ID.
 	capabilityServerID = "drive-internal"
-	grantCapTool       = "grant_capability"
 	checkCapTool       = "check_capability"
 )
 
@@ -63,9 +64,9 @@ func extractNodeId(args map[string]any) string {
 }
 
 // docDelegationAuthCaller decorates edition.ToolCaller: before the first call
-// of each doc-business toolKey it performs the delegation-auth handshake
-// (grant_capability + check_capability) for the principal, then passes the
-// original call through. Non-doc-business servers bypass the handshake.
+// of each doc-business toolKey it verifies the delegation via
+// check_capability for the principal, then passes the original call through.
+// Non-doc-business servers bypass the verification.
 type docDelegationAuthCaller struct {
 	inner       edition.ToolCaller
 	principalID string
@@ -82,7 +83,7 @@ func wrapDocDelegationAuthCaller(d *docDelegationAuthCaller, inner edition.ToolC
 	return d
 }
 
-// ensureDelegationAuth runs the delegation-auth handshake once per toolKey for
+// ensureDelegationAuth runs the delegation-auth check once per toolKey for
 // doc-business servers; repeated calls of the same toolKey are deduplicated.
 func (d *docDelegationAuthCaller) ensureDelegationAuth(ctx context.Context, serverID, toolName string, args map[string]any) error {
 	if !docBusinessServers[serverID] {
@@ -99,8 +100,8 @@ func (d *docDelegationAuthCaller) ensureDelegationAuth(ctx context.Context, serv
 	return nil
 }
 
-// CallTool intercepts doc-business tool calls with the delegation-auth
-// handshake and then delegates to the inner caller.
+// CallTool intercepts doc-business tool calls with the delegation-auth check
+// and then delegates to the inner caller.
 func (d *docDelegationAuthCaller) CallTool(ctx context.Context, serverID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	if err := d.ensureDelegationAuth(ctx, serverID, toolName, args); err != nil {
 		return nil, err
@@ -108,22 +109,14 @@ func (d *docDelegationAuthCaller) CallTool(ctx context.Context, serverID, toolNa
 	return d.inner.CallTool(ctx, serverID, toolName, args)
 }
 
-// performDelegationAuth executes grant_capability then check_capability on the
-// drive-internal capability server via the inner caller (using inner avoids
-// recursing into this decorator). nodeId 为空时仍发起调用，让服务端返回明确错误（52600007）。
+// performDelegationAuth executes check_capability on the drive-internal
+// capability server via the inner caller (using inner avoids recursing into
+// this decorator). grant_capability 是委托人给当前登录身份授权的带外动作，
+// CLI 以当前登录身份运行、无法交换成委托人身份，因此不调用 grant；委托人已
+// 在服务端完成授权，这里仅执行 check 校验。nodeId 为空时仍发起调用，让服务端
+// 返回明确错误（52600007）。
 func (d *docDelegationAuthCaller) performDelegationAuth(ctx context.Context, toolKey string, args map[string]any) error {
 	nodeID := extractNodeId(args)
-	grantArgs := map[string]any{
-		"userId":      d.principalID,
-		"action":      "GRANT",
-		"mcpToolKeys": []string{toolKey},
-	}
-	if nodeID != "" {
-		grantArgs["nodeId"] = nodeID
-	}
-	if _, err := d.inner.CallTool(ctx, capabilityServerID, grantCapTool, grantArgs); err != nil {
-		return fmt.Errorf("委托授权调用 %s 失败: %w", grantCapTool, err)
-	}
 	checkArgs := map[string]any{
 		"userId":     d.principalID,
 		"mcpToolKey": toolKey,
