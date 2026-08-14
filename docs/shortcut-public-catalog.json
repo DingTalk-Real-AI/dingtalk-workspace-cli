@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-14T11:59:55.882207",
+  "generated_at": "2026-08-14T13:50:36.324505",
   "count": 418,
   "results": [
     {
@@ -3684,8 +3684,8 @@
       "command": "+member-add",
       "risk": "write",
       "status": "reviewed_available",
-      "disposition": "primary_smart",
-      "semantic_delta": "批量授予 Wiki 容器角色，严格校验写终态并读取成员列表验证响应链。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "支持 1-30 个 userId 与四类角色；严格要求写接口终态，并明确后端无法提供精确成员读回。",
       "availability": "available"
     },
     {
@@ -3704,8 +3704,8 @@
       "command": "+member-remove",
       "risk": "write",
       "status": "reviewed_available",
-      "disposition": "primary_smart",
-      "semantic_delta": "批量移除容器访问，严格校验写终态并读取成员列表验证响应链。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "支持批量 userId 移除；严格要求写接口终态，并明确后端无法提供精确成员读回。",
       "availability": "available"
     },
     {
@@ -3714,8 +3714,8 @@
       "command": "+member-update",
       "risk": "write",
       "status": "reviewed_available",
-      "disposition": "primary_smart",
-      "semantic_delta": "补充成员角色更新，并执行终态与列表读回校验。",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "补充成员角色更新；严格要求写接口终态，并明确后端无法提供精确成员读回。",
       "availability": "available"
     },
     {

@@ -6,6 +6,7 @@ package wiki
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -177,6 +178,31 @@ func nestedWikiString(data map[string]any, keys ...string) string {
 	return ""
 }
 
+func wikiStringInt(rt *shortcut.RuntimeContext, name string, fallback, min, max int) (int, error) {
+	raw := rt.Str(name)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < min || value > max {
+		return 0, fmt.Errorf("--%s 必须是 %d-%d 之间的整数", name, min, max)
+	}
+	return value, nil
+}
+
+func wikiStringSliceFirst(rt *shortcut.RuntimeContext, primary string, aliases ...string) []string {
+	if rt.Changed(primary) {
+		return rt.StrSlice(primary)
+	}
+	for _, alias := range aliases {
+		if rt.Changed(alias) {
+			values, _ := rt.Command().Flags().GetStringSlice(alias)
+			return values
+		}
+	}
+	return rt.StrSlice(primary)
+}
+
 func wikiResponseError(operation, reason, message string) error {
 	return apperrors.NewAPI(message, apperrors.WithOperation(operation), apperrors.WithOrigin("mcp"), apperrors.WithFailureStage("response_validation"), apperrors.WithRetryable(false), apperrors.WithReason(reason))
 }
@@ -218,14 +244,14 @@ type wikiPageFetcher func(cursor string, pageSize int) (map[string]any, error)
 
 func collectWikiPages(rt *shortcut.RuntimeContext, operation string, pageSize int, keys []string, fetch wikiPageFetcher) ([]any, map[string]any, error) {
 	if !rt.Bool("page-all") {
-		data, err := fetch(rt.Str("cursor"), pageSize)
+		data, err := fetch(rt.StrFirst("cursor", "page-token"), pageSize)
 		if err != nil {
 			return nil, nil, err
 		}
 		return requireWikiCollection(data, operation, keys...)
 	}
 	all := make([]any, 0)
-	cursor := rt.Str("cursor")
+	cursor := rt.StrFirst("cursor", "page-token")
 	lastPage := map[string]any{}
 	for pageNumber := 1; pageNumber <= rt.Int("page-limit"); pageNumber++ {
 		requestSize := shortcut.AutoPageRequestSize(rt, pageSize, len(all))

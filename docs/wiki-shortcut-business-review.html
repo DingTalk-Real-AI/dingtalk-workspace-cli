@@ -19,7 +19,7 @@
   <header class="hero">
     <h1>DWS Wiki Shortcut 全景评审</h1>
     <p class="lead">以 13 项成熟 Wiki 用户任务为基线，重新审视 DWS 的空间、成员、节点与动态能力。本次不是按命令名凑数：每个入口都要求真实业务证据，缺失数组、畸形响应、空确认或读回不一致一律失败。</p>
-    <div class="meta"><span class="pill">评审日期 2026-08-14</span><span class="pill">独立 worktree / 独立分支</span><span class="pill">真实组织数据 E2E</span><span class="pill">报告已去标识化</span></div>
+    <div class="meta"><span class="pill">评审日期 2026-08-14</span><span class="pill">独立 worktree / 独立分支</span><span class="pill">真实组织数据 E2E 28/28</span><span class="pill">报告已去标识化</span></div>
   </header>
 
   <div class="grid">
@@ -41,9 +41,9 @@
       <tr><td><code>+space-list</code></td><td><code>wiki +space-list</code></td><td><span class="tag full">完整对齐</span></td><td>严格空集合、游标续传、自动翻页、停滞检测；支持组织/我的知识库。</td></tr>
       <tr><td><code>+space-create</code></td><td><code>wiki +space-create</code></td><td><span class="tag full">超过</span></td><td>公开真实 32 字符名称上限；创建后按 workspaceId 读回。</td></tr>
       <tr><td><code>+delete-space</code></td><td><code>wiki +delete-space</code></td><td><span class="tag full">超过</span></td><td>预读目标、高风险确认、只接受 <code>success=true</code>；兼容 <code>+space-delete</code>。</td></tr>
-      <tr><td><code>+member-add</code></td><td><code>wiki +member-add</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 1–30 个 userId 与四种角色，读回名单和角色；不支持 email/open_id 等身份类型。</td></tr>
+      <tr><td><code>+member-add</code></td><td><code>wiki +member-add</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 1–30 个 userId 与四种角色；以写接口终态作为成功证据，不把最多 50 条的名单误作精确读回。</td></tr>
       <tr><td><code>+member-list</code></td><td><code>wiki +member-list</code></td><td><span class="tag partial">任务对齐</span></td><td>严格成员数组、角色过滤、真实上限 50；后端无游标，不能提供诚实的 page-all。</td></tr>
-      <tr><td><code>+member-remove</code></td><td><code>wiki +member-remove</code></td><td><span class="tag partial">任务对齐</span></td><td>批量 userId，移除后读回确认成员已消失；身份类型边界同上。</td></tr>
+      <tr><td><code>+member-remove</code></td><td><code>wiki +member-remove</code></td><td><span class="tag partial">任务对齐</span></td><td>支持批量 userId；只接受写接口明确终态，并公开无法进行精确成员读回的边界。</td></tr>
       <tr><td><code>+node-list</code></td><td><code>wiki +node-list</code></td><td><span class="tag full">完整对齐</span></td><td>正确跨域路由 doc/list_nodes，严格空目录、分页与自动翻页。</td></tr>
       <tr><td><code>+node-get</code></td><td><code>wiki +node-get</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 DingTalk 节点 ID/在线文档 URL 并返回文档域元数据；不接受跨平台专用的 token/type 组合。</td></tr>
       <tr><td><code>+node-create</code></td><td><code>wiki +node-create</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 adoc/axls/able/appt/adraw/amind/folder 并读回；无 origin/shortcut 等价接口。</td></tr>
@@ -58,7 +58,7 @@
     <h2>DWS 可挖掘的 7 个额外场景</h2>
     <div class="two">
       <div><h3>定位与创建链</h3><ul><li><code>+space-search</code>：严格关键词搜索。</li><li><code>+space-get</code>：空间详情与 workspaceId 证据。</li><li><code>+resolve-space</code>：唯一命中直出 ID，多命中拒绝猜测。</li><li><code>+wiki-new-doc</code>：空间名解析 → 创建 → 文档读回。</li></ul></div>
-      <div><h3>治理与巡检链</h3><ul><li><code>+member-update</code>：角色变更后读回。</li><li><code>+node-search</code>：库内关键词/扩展名搜索，严格零命中。</li><li><code>+feed-list</code>：知识库动态时间线与服务端 exclude-file 过滤。</li></ul></div>
+      <div><h3>治理与巡检链</h3><ul><li><code>+member-update</code>：角色变更终态与不可精确读回声明。</li><li><code>+node-search</code>：库内关键词/扩展名搜索，严格零命中。</li><li><code>+feed-list</code>：知识库动态时间线与服务端 exclude-file 过滤。</li></ul></div>
     </div>
   </section>
 
@@ -69,14 +69,15 @@
       <tr><td>列表投影找不到数组或遇到坏元素时返回空 slice。</td><td>把内部错误、字段漂移误报为“没有数据”。</td><td><span class="tag fixed">失败关闭</span> 只有响应中真实存在的 <code>[]</code> 才是合法空集合。</td></tr>
       <tr><td>节点列表 Shortcut 调错 Wiki MCP 服务。</td><td>真实后端 <code>success=false</code>，Mock/静态检查看不出。</td><td><span class="tag fixed">跨域路由</span> 明确调用 doc/list_nodes，并纳入真实 E2E。</td></tr>
       <tr><td>成员帮助宣称最大 200。</td><td>真实接口超过 50 直接参数错误。</td><td><span class="tag fixed">真实上限</span> Shortcut 与原子 Help 均改为 50，并在本地提前拒绝。</td></tr>
+      <tr><td>成员写操作从最多 50 条、不可分页的名单推断成员存在或缺失。</td><td>目标在截断部分时会误报写失败，或把未验证的移除报告为已读回。</td><td><span class="tag fixed">终态证据</span> 只接受写接口 <code>success=true</code>，并在结果中明确 <code>readbackAvailable=false</code>。</td></tr>
       <tr><td>知识库名称帮助宣称最大 100。</td><td>真实接口超过 32 失败。</td><td><span class="tag fixed">真实上限</span> Help 与 Shortcut 校验统一为 32。</td></tr>
-      <tr><td>复制/移动/创建只把无异常视为成功。</td><td>空确认、未知远端效果或移动未到目标仍可能被接受。</td><td><span class="tag fixed">读回证明</span> 检查 success、业务 ID、workspace/folder/role 等最终状态。</td></tr>
+      <tr><td>复制/移动/创建只把无异常视为成功。</td><td>空确认、未知远端效果或移动未到目标仍可能被接受。</td><td><span class="tag fixed">读回证明</span> 在后端具备精确查询能力时检查 success、业务 ID、workspace/folder 等最终状态。</td></tr>
     </tbody></table>
   </section>
 
   <section class="card">
     <h2>真实数据 E2E 证据矩阵</h2>
-    <p class="small">测试使用一次性空知识库、临时在线文档与一名同组织内部测试成员；所有对象在 finally 清理。报告不保存对象 ID、成员身份、组织信息、URL、trace 或原始响应。</p>
+    <p class="small">28 项业务断言全部通过。测试使用一次性空知识库、临时在线文档与一名同组织内部测试成员；所有对象在 finally 清理。报告不保存对象 ID、成员身份、组织信息、URL、trace 或原始响应。</p>
     <div class="toolbar"><input id="q" placeholder="筛选命令或证据"><select id="g"><option value="">全部分组</option><option>空间</option><option>成员</option><option>节点</option><option>动态</option></select></div>
     <div class="matrix"><table id="catalog"><thead><tr><th>分组</th><th>Shortcut</th><th>实际业务断言</th><th>状态</th></tr></thead><tbody>
       <tr><td>空间</td><td><code>+space-list</code></td><td>真实 count、hasMore、nextCursor；自动翻页返回两页结果。</td><td><span class="tag full">PASS</span></td></tr>
@@ -86,9 +87,9 @@
       <tr><td>空间</td><td><code>+space-create</code></td><td>success=true、workspaceId 非空、详情读回一致。</td><td><span class="tag full">PASS</span></td></tr>
       <tr><td>空间</td><td><code>+delete-space</code></td><td>目标预读、确认、success=true；兼容别名执行 finally 清理。</td><td><span class="tag full">PASS</span></td></tr>
       <tr><td>成员</td><td><code>+member-list</code></td><td>真实 owner 条目与显式 members 数组，limit=50。</td><td><span class="tag full">PASS</span></td></tr>
-      <tr><td>成员</td><td><code>+member-add</code></td><td>真实内部成员添加后在名单中出现且角色为 READER。</td><td><span class="tag full">PASS</span></td></tr>
-      <tr><td>成员</td><td><code>+member-update</code></td><td>同一成员读回角色变为 EDITOR。</td><td><span class="tag full">PASS</span></td></tr>
-      <tr><td>成员</td><td><code>+member-remove</code></td><td>移除后名单中不再存在该 userId。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>成员</td><td><code>+member-add</code></td><td>命令只报告写终态；一次性小规模空间另行确认名单完整且角色为 READER。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>成员</td><td><code>+member-update</code></td><td>命令只报告写终态；一次性小规模空间另行确认角色变为 EDITOR。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>成员</td><td><code>+member-remove</code></td><td>命令只报告写终态；一次性小规模空间另行确认完整名单中不存在该 userId。</td><td><span class="tag full">PASS</span></td></tr>
       <tr><td>节点</td><td><code>+node-list</code></td><td>空库返回真实 nodes:[]；有数据时验证游标与自动翻页。</td><td><span class="tag full">PASS</span></td></tr>
       <tr><td>节点</td><td><code>+node-get</code></td><td>读回 nodeId 与请求一致。</td><td><span class="tag full">PASS</span></td></tr>
       <tr><td>节点</td><td><code>+node-search</code></td><td>等待索引后按标题命中真实 nodeId。</td><td><span class="tag full">PASS</span></td></tr>
@@ -105,7 +106,7 @@
 
   <section class="card">
     <h2>成功判定与发布门</h2>
-    <div class="two"><div><h3>运行时证据层</h3><ol><li>传输/MCP 调用成功。</li><li>响应契约存在且类型正确。</li><li>写操作必须有 <code>success=true</code> 与业务 ID。</li><li>创建/复制/移动/成员变更必须读回最终状态。</li><li>集合只有显式数组才允许为空。</li></ol></div><div><h3>交付门</h3><ol><li>20/20 语义目录与注册面精确覆盖。</li><li>Contract、Safety、Result、统一输出完整。</li><li>生成漂移、Schema、确认真值、全量 Go 测试。</li><li>独立真实数据 E2E 与 finally 清理。</li><li>diff PII/密钥/本地绝对路径扫描。</li></ol></div></div>
+    <div class="two"><div><h3>运行时证据层</h3><ol><li>传输/MCP 调用成功。</li><li>响应契约存在且类型正确。</li><li>写操作必须有 <code>success=true</code>；创建类操作还必须有业务 ID。</li><li>后端具备精确查询时必须读回；不具备时明确发布不可读回，而非从截断集合推断。</li><li>集合只有显式数组才允许为空。</li></ol></div><div><h3>交付门</h3><ol><li>20/20 语义目录与注册面精确覆盖。</li><li>Contract、Safety、Result、统一输出完整。</li><li>生成漂移、Schema、确认真值、全量 Go 测试。</li><li>独立真实数据 E2E 与 finally 清理。</li><li>diff PII/密钥/本地绝对路径扫描。</li></ol></div></div>
   </section>
   <p class="footer">DWS Wiki Shortcut business review · sanitized engineering artifact</p>
 </main>
