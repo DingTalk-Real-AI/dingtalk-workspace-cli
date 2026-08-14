@@ -201,8 +201,21 @@ base_ref=$(git merge-base HEAD origin/main)
 standard PR, CI derives changed packages and their reverse-dependency test
 closure, then generates candidate and merge-base profiles with the same test
 scope and `coverpkg`. High-risk and protected-main runs use the complete
-profiles. Supporting and (when platform-selected) native profiles are
-generated before the aggregate `Coverage` context evaluates them. The
+profiles. The complete candidate profile is produced by disjoint per-shard
+helper jobs (`scripts/ci/test-packages.sh list-coverage`, kept serial with
+`-p 1` inside each shard; `verify` proves the shard union equals the
+full-suite scope exactly once) and concatenated in the aggregate job before
+enforcement. The complete merge-base profile is restored from an exact-key
+cache written by the last green `main` push of that same commit (key:
+merge-base SHA plus resolved Go version); any miss falls back to recomputing
+it in a merge-base worktree. The trusted `main` producer and PR consumer use
+the same dedicated cache profile path because GitHub includes that path in the
+cache version; the runtime-facing candidate and baseline filenames remain
+separate. Near-miss reuse is forbidden — the caches carry no prefix restore
+keys, because a neighbouring commit's profile would compare the candidate
+against the wrong baseline. Supporting and (when
+platform-selected) native profiles are generated before the aggregate
+`Coverage` context evaluates them. The
 aggregate and native gates require 100% coverage for changed executable Go
 statements. Overall coverage remains an unrounded, zero-tolerance,
 scope-matched merge-base non-regression check. Candidate and baseline profiles

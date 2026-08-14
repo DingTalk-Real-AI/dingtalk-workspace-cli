@@ -15,13 +15,13 @@ metadata:
 ## 最小 DWS 执行契约
 
 - 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
-- 已知命令直接执行，Help 不参与选路。真实 `unknown flag` 后仅查一次 leaf Help；`unknown command` 后仅查一次 shortcut 清单；禁止试探后缀。
-- 参数或安全语义不确定时仅查一次 leaf Schema（限 `use_when,avoid_when,parameters,constraints,confirmation`）；禁用产品级/`--all` 和失败探测。
-- 本地内容先暂存到 cwd，再用文件参数传递；stdin 只承载内容，不承载确认。
+- 已知命令直接执行，Help 不参与选路。`unknown flag` 后仅查一次 leaf Help；`unknown command` 后仅查一次 shortcut 清单；禁止试探后缀。
+- 参数/安全语义不确定时仅查一次 leaf Schema（限 `use_when,avoid_when,parameters,constraints,confirmation`）；禁用产品级/`--all` 和失败探测。
+- 本地内容暂存 cwd 后用文件参数传递；stdin 只承载内容，不承载确认。
 - 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
 - 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
 - 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
-- `not_required` 直接执行不加 `--yes`；`user_required` 须两阶段确认：首次请求只确定意图；说明对象、动作和影响，拒绝或未明确同意时不调用，同意后才在原参数追加 `--yes`.
+- `not_required` 直接执行不加 `--yes`；`user_required` 两阶段确认：说明对象、动作、影响；未明确同意不调用，同意后才在原参数追加 `--yes`.
 - 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
 - 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
 - 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
@@ -74,6 +74,8 @@ metadata:
 
 - `+dm`：姓名目标的简单文本/Markdown，参数空间最小。
 - `+send-to-group`：群名或稳定 ID 目标的简单文本/Markdown，避免暴露无关身份矩阵。
+- Markdown 中的公网图片必须写成 `![图片标题](https://example.com/image.png)` 才会内联展示；
+  省略开头的 `!` 时只会显示为链接。
 - `+messages-send`：文件、Bot、Webhook、复杂 @ 或幂等控制。user 已知 ID 可直接传，也可用 `--user-query` / `--chat-query` 运行同一只读解析链；Bot 多群使用 `--groups/--groups-file`，返回 `im.batch-write.v1`；bot/webhook 只使用下层真实支持的文本/Markdown 能力。
 - 文件直接传 `+messages-send --file <相对路径>`；不要先独立上传并提取 mediaId。
 - Webhook 使用 `+messages-send --as webhook --webhook-token <token>`；不要退回原子 Webhook 命令。
@@ -94,10 +96,13 @@ metadata:
 
 | 场景 | Reference |
 |---|---|
-| 复杂发送、跨会话转发、共同群或组合流程 | [01-messaging.md](references/01-messaging.md) |
-| 编辑/撤回/引用/转发/卡片/reaction/Pin/Top/Favorite | [chat-message.md](references/chat/chat-message.md) |
-| 建群、成员、管理员、群公告、群设置 | [chat-group.md](references/chat/chat-group.md) |
-| Bot 搜索、入群、群发和撤回 | [chat-bot.md](references/chat/chat-bot.md) |
+| 需要跨步骤传递真实结果的消息/群组合流程 | [01-messaging.md](references/01-messaging.md) |
+| 消息读取与查询 | [message-query](references/chat/message-query.md) |
+| 编辑、撤回、回复、转发、Pin、Top、Favorite 或 reaction 写入 | [message-actions](references/chat/message-actions.md) |
+| 位置、联系人名片、底层媒体与资源下载 | [message-media](references/chat/message-media.md) |
+| 群列表、群搜索、共同群、成员与群内机器人读取 | [group-discovery](references/chat/group-discovery.md) |
+| 建群、成员或已知机器人增删、管理员、公告与群设置 | [group-admin](references/chat/group-admin.md) |
+| 搜索未知机器人、机器人消息发送/撤回与 Webhook | [chat-bot.md](references/chat/chat-bot.md) |
 | 会话置顶、分类、红点、免打扰和隐藏 | [chat-conversation.md](references/chat/chat-conversation.md) |
 | 低频意图之间仍需消歧 | [intent-guide.md](references/intent-guide.md) |
 | 表情名称与 ID | [chat-emoji-list.md](references/chat-emoji-list.md) |

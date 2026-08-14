@@ -511,6 +511,22 @@ func flagErrorWithSuggestions(cmd *cobra.Command, err error) error {
 	// 无论哪种格式，子串 "--help' for usage." 都可被检索到。
 	tail := fmt.Sprintf("\nSee '%s --help' for usage.", cmd.CommandPath())
 	msgWithTail := errMsg + tail
+	if flag, ok := unknownFlagName(errMsg); ok && flag == "from" {
+		switch cmd.CommandPath() {
+		case "dws chat +search-msg", "dws chat +chat-messages":
+			return apperrors.NewValidation(
+				msgWithTail,
+				apperrors.WithHint("--from 在消息查询中含义不明确：按发送者过滤请使用 --sender <姓名|userId|openDingTalkId>；指定时间起点请使用 --start <RFC3339>"),
+				apperrors.WithReason("ambiguous_flag"),
+				apperrors.WithCause(err),
+				apperrors.WithActions(
+					"Use --sender <姓名|userId|openDingTalkId> to filter by sender",
+					"Use --start <RFC3339> together with --end <RFC3339> to set a time range",
+				),
+				apperrors.WithAvailableFlags(cmdutil.VisibleFlagNames(cmd)...),
+			)
+		}
+	}
 	if flag, protection, ok := reviewedFlagProtection(cmd, errMsg); ok {
 		hint := fmt.Sprintf("Parameter --%s is blocked from automatic normalization on %q; choose an explicit flag from --help.", flag, cmd.CommandPath())
 		reason := "blocked_flag"
@@ -579,14 +595,9 @@ func reviewedFlagProtection(cmd *cobra.Command, errMsg string) (string, pipeline
 	if cmd == nil {
 		return "", "", false
 	}
-	const prefix = "unknown flag: --"
-	idx := strings.Index(errMsg, prefix)
-	if idx < 0 {
+	flag, ok := unknownFlagName(errMsg)
+	if !ok {
 		return "", "", false
-	}
-	flag := strings.TrimSpace(errMsg[idx+len(prefix):])
-	if i := strings.IndexAny(flag, " =\n\t"); i >= 0 {
-		flag = flag[:i]
 	}
 	entry, ok := cli.LookupParamAlias(cmd.CommandPath())
 	if !ok {
@@ -600,6 +611,19 @@ func reviewedFlagProtection(cmd *cobra.Command, errMsg string) (string, pipeline
 		return flag, pipeline.FlagProtectionAmbiguous, true
 	}
 	return "", "", false
+}
+
+func unknownFlagName(errMsg string) (string, bool) {
+	const prefix = "unknown flag: --"
+	idx := strings.Index(errMsg, prefix)
+	if idx < 0 {
+		return "", false
+	}
+	flag := strings.TrimSpace(errMsg[idx+len(prefix):])
+	if i := strings.IndexAny(flag, " =\n\t"); i >= 0 {
+		flag = flag[:i]
+	}
+	return flag, flag != ""
 }
 
 func printExecutionError(root *cobra.Command, stdout, stderr io.Writer, err error) error {

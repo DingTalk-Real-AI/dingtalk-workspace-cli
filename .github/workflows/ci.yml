@@ -911,7 +911,7 @@ jobs:
   coverage-current:
     name: Coverage (current)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -925,10 +925,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      - name: Install archive tooling
-        if: needs.lint.outputs.full_suite == 'true'
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
 
       - name: Resolve authoritative coverage base
         env:
@@ -951,41 +947,33 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Run current unit tests with coverage
+      - name: Run scoped unit tests with coverage
         shell: bash
         env:
           DWS_PACKAGE_VERSION: 0.0.0-test
-          FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
         run: |
           set -euo pipefail
-          if [ "$FULL_SUITE" = true ]; then
+          changed_output="$(
+            ./scripts/ci/changed-test-packages.sh \
+              changed "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
+          )"
+          impacted_output="$(
+            ./scripts/ci/changed-test-packages.sh \
+              list "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
+          )"
+          if [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
+            printf 'mode: atomic\n' > coverage.txt
+            echo "No buildable Go package needs scoped coverage." \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            mapfile -t changed_packages <<< "$changed_output"
+            mapfile -t impacted_packages <<< "$impacted_output"
+            coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
             go test -count=1 -p 1 \
+              -coverpkg="$coverpkg" \
               -coverprofile=coverage.txt \
               -covermode=atomic \
-              ./ ./cmd/... ./internal/... ./skills/...
-          else
-            changed_output="$(
-              ./scripts/ci/changed-test-packages.sh \
-                changed "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
-            )"
-            impacted_output="$(
-              ./scripts/ci/changed-test-packages.sh \
-                list "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
-            )"
-            if [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
-              printf 'mode: atomic\n' > coverage.txt
-              echo "No buildable Go package needs scoped coverage." \
-                >> "$GITHUB_STEP_SUMMARY"
-            else
-              mapfile -t changed_packages <<< "$changed_output"
-              mapfile -t impacted_packages <<< "$impacted_output"
-              coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
-              go test -count=1 -p 1 \
-                -coverpkg="$coverpkg" \
-                -coverprofile=coverage.txt \
-                -covermode=atomic \
-                "${impacted_packages[@]}"
-            fi
+              "${impacted_packages[@]}"
           fi
           if [ "$(wc -l < coverage.txt)" -gt 1 ]; then
             go tool cover -func=coverage.txt
@@ -996,6 +984,66 @@ jobs:
         with:
           name: coverage-current-profile
           path: coverage.txt
+          retention-days: 1
+
+  coverage-current-full:
+    name: "Coverage (current: ${{ matrix.shard }})"
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - app
+          - cli
+          - generators
+          - helpers
+          - remaining
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install archive tooling
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Build
+        run: make build
+
+      # Each shard keeps -p 1 so the authoritative measurement stays serial
+      # inside one instrumented process group; shards run on isolated runners,
+      # and scripts/ci/test-packages.sh verify proves the shard union equals
+      # the previous single full-suite package set exactly once.
+      - name: Run current shard tests with coverage
+        shell: bash
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+          COVERAGE_SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          package_output="$(./scripts/ci/test-packages.sh list-coverage "$COVERAGE_SHARD")"
+          test -n "$package_output"
+          mapfile -t packages <<< "$package_output"
+          test "${#packages[@]}" -gt 0
+          go test -count=1 -p 1 \
+            -coverprofile="coverage-shard-$COVERAGE_SHARD.txt" \
+            -covermode=atomic \
+            "${packages[@]}"
+          go tool cover -func="coverage-shard-$COVERAGE_SHARD.txt" | tail -n 1
+
+      - name: Upload current shard coverage profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-current-shard-${{ matrix.shard }}
+          path: coverage-shard-${{ matrix.shard }}.txt
           retention-days: 1
 
   coverage-supporting:
@@ -1051,13 +1099,10 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
+        id: setup-go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      - name: Install archive tooling
-        if: needs.lint.outputs.full_suite == 'true'
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
 
       - name: Resolve authoritative coverage base
         env:
@@ -1076,7 +1121,34 @@ jobs:
           git rev-parse --verify "${base_ref}^{commit}" >/dev/null
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
+      # The merge-base full-suite profile is a pure function of the base
+      # commit. Reuse the profile published by the last green push run of
+      # exactly that commit instead of re-running the whole suite; any key
+      # mismatch falls back to authoritative recomputation. Exact key only,
+      # never prefix fallback: a near-miss profile would compare the
+      # candidate against the wrong commit.
+      - name: Restore cached merge-base coverage profile
+        id: baseline-cache
+        if: needs.lint.outputs.full_suite == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ env.COVERAGE_BASE_REF }}-go${{ steps.setup-go.outputs.go-version }}
+
+      - name: Materialize cached merge-base coverage profile
+        if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit == 'true'
+        run: |
+          set -eu
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+          cp coverage-cache.txt coverage-base.txt
+
+      - name: Install archive tooling
+        if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
       - name: Run baseline unit tests with coverage
+        if: steps.baseline-cache.outputs.cache-hit != 'true'
         shell: bash
         env:
           DWS_PACKAGE_VERSION: 0.0.0-test
@@ -1125,6 +1197,21 @@ jobs:
             fi
           )
 
+      - name: Prepare merge-base coverage profile cache
+        if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit != 'true'
+        run: |
+          set -eu
+          test -s coverage-base.txt
+          test "$(head -n 1 coverage-base.txt)" = "mode: atomic"
+          cp coverage-base.txt coverage-cache.txt
+
+      - name: Save merge-base coverage profile cache
+        if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ env.COVERAGE_BASE_REF }}-go${{ steps.setup-go.outputs.go-version }}
+
       - name: Upload baseline coverage profile
         uses: actions/upload-artifact@v4
         with:
@@ -1137,6 +1224,7 @@ jobs:
     needs:
       - lint
       - coverage-current
+      - coverage-current-full
       - coverage-supporting
       - coverage-baseline
       - coverage-darwin
@@ -1152,6 +1240,7 @@ jobs:
           FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
           PLATFORM_SENSITIVE: ${{ needs.lint.outputs.platform_sensitive }}
           CURRENT_RESULT: ${{ needs.coverage-current.result }}
+          CURRENT_FULL_RESULT: ${{ needs.coverage-current-full.result }}
           SUPPORTING_RESULT: ${{ needs.coverage-supporting.result }}
           BASELINE_RESULT: ${{ needs.coverage-baseline.result }}
           DARWIN_RESULT: ${{ needs.coverage-darwin.result }}
@@ -1159,6 +1248,7 @@ jobs:
         run: |
           failed=0
           current_expected=success
+          current_full_expected=skipped
           supporting_expected=skipped
           baseline_expected=success
           native_expected=skipped
@@ -1166,6 +1256,8 @@ jobs:
             current_expected=skipped
             baseline_expected=skipped
           elif [ "$FULL_SUITE" = true ]; then
+            current_expected=skipped
+            current_full_expected=success
             supporting_expected=success
           fi
           if [ "$CHANGELOG_ONLY" != true ] &&
@@ -1176,6 +1268,7 @@ jobs:
 
           for profile in \
             "current:$CURRENT_RESULT:$current_expected" \
+            "current shards:$CURRENT_FULL_RESULT:$current_full_expected" \
             "supporting:$SUPPORTING_RESULT:$supporting_expected" \
             "baseline:$BASELINE_RESULT:$baseline_expected"
           do
@@ -1211,6 +1304,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
+        id: setup-go
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         uses: actions/setup-go@v5
         with:
@@ -1234,11 +1328,12 @@ jobs:
           git rev-parse --verify "${base_ref}^{commit}" >/dev/null
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
-      - name: Download current coverage profile
+      - name: Download current coverage profiles
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         uses: actions/download-artifact@v4
         with:
-          name: coverage-current-profile
+          pattern: coverage-current-*
+          merge-multiple: true
           path: .
 
       - name: Download supporting coverage profiles
@@ -1254,6 +1349,26 @@ jobs:
         with:
           name: coverage-baseline-profile
           path: .
+
+      # Shard profiles cover disjoint package sets, so their block-level
+      # concatenation is the same candidate profile one serial run produced.
+      # Every expected shard must be present; a missing shard would silently
+      # shrink the scope-matched overall comparison.
+      - name: Assemble full-suite coverage profile
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f coverage.txt
+          for shard in app cli generators helpers remaining; do
+            profile="coverage-shard-$shard.txt"
+            test -f "$profile"
+            test "$(head -n 1 "$profile")" = "mode: atomic"
+          done
+          printf 'mode: atomic\n' > coverage.txt
+          for shard in app cli generators helpers remaining; do
+            tail -n +2 "coverage-shard-$shard.txt" >> coverage.txt
+          done
 
       - name: Enforce coverage gate
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
@@ -1274,6 +1389,26 @@ jobs:
           COVERAGE_DIFF_PROFILE="$policy_profile" \
           COVERAGE_ADDITIONAL_DIFF_PROFILE="$additional_profile" \
             make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
+
+      # Publish this push's full-suite profile as the merge-base cache for
+      # future PRs whose merge-base is exactly this commit. Saved only after
+      # the gate passed so a broken run never becomes a baseline. Both producer
+      # and consumer use coverage-cache.txt because the cache version includes
+      # the configured path as well as the compression tool.
+      - name: Prepare push coverage profile as merge-base cache
+        if: github.event_name == 'push' && needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        run: |
+          set -eu
+          test -s coverage.txt
+          test "$(head -n 1 coverage.txt)" = "mode: atomic"
+          cp coverage.txt coverage-cache.txt
+
+      - name: Save push coverage profile as merge-base cache
+        if: github.event_name == 'push' && needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Generate coverage report
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'

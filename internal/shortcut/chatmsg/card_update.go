@@ -27,6 +27,16 @@ var (
 	ErrCardUpdateBizIDDrift = errors.New("streaming card update returned a different bizId")
 )
 
+// CardUpdateVerification distinguishes an accepted write from an independently
+// verified write. Some server versions return success=true without an updated
+// flag or affected count; that is sufficient to report acceptance, but not to
+// claim that the card's visible content was observed after the write.
+type CardUpdateVerification struct {
+	Accepted bool
+	Verified bool
+	Evidence string
+}
+
 // NormalizeCardBizID performs only format-independent checks. bizId is an
 // opaque server-issued identifier; a stricter character or prefix contract
 // must not be invented by the CLI without an authoritative API declaration.
@@ -58,33 +68,40 @@ func isCardBizIDPlaceholder(value string) bool {
 	}
 }
 
-// VerifyStreamingCardUpdate requires affirmative evidence that the requested
-// write took effect. update_streaming_card may acknowledge an applied write
-// with success=true without returning an updated flag or affected count.
-func VerifyStreamingCardUpdate(requestedBizID string, response map[string]any) (string, error) {
+// VerifyStreamingCardUpdate separates server acceptance from affirmative
+// evidence that the requested write took effect.
+func VerifyStreamingCardUpdate(requestedBizID string, response map[string]any) (CardUpdateVerification, error) {
 	requestedBizID = strings.TrimSpace(requestedBizID)
 	observation := cardUpdateObservation{bizIDs: map[string]struct{}{}}
 	observeCardUpdate(response, &observation)
 
 	for responseBizID := range observation.bizIDs {
 		if requestedBizID != "" && responseBizID != requestedBizID {
-			return "", fmt.Errorf("%w: requested %q, response %q", ErrCardUpdateBizIDDrift, requestedBizID, responseBizID)
+			return CardUpdateVerification{}, fmt.Errorf("%w: requested %q, response %q", ErrCardUpdateBizIDDrift, requestedBizID, responseBizID)
 		}
 	}
-	if observation.positiveEvidence != "" && observation.negativeEvidence != "" {
-		return "", fmt.Errorf("%w: conflicting evidence %s and %s", ErrCardUpdateUnverified, observation.positiveEvidence, observation.negativeEvidence)
+	if observation.negativeEvidence != "" && (observation.positiveEvidence != "" || observation.acceptedEvidence != "") {
+		positive := observation.positiveEvidence
+		if positive == "" {
+			positive = observation.acceptedEvidence
+		}
+		return CardUpdateVerification{}, fmt.Errorf("%w: conflicting evidence %s and %s", ErrCardUpdateUnverified, positive, observation.negativeEvidence)
 	}
 	if observation.positiveEvidence != "" {
-		return observation.positiveEvidence, nil
+		return CardUpdateVerification{Accepted: true, Verified: true, Evidence: observation.positiveEvidence}, nil
 	}
 	if observation.negativeEvidence != "" {
-		return "", fmt.Errorf("%w: %s", ErrCardUpdateNotApplied, observation.negativeEvidence)
+		return CardUpdateVerification{}, fmt.Errorf("%w: %s", ErrCardUpdateNotApplied, observation.negativeEvidence)
 	}
-	return "", ErrCardUpdateUnverified
+	if observation.acceptedEvidence != "" {
+		return CardUpdateVerification{Accepted: true, Verified: false, Evidence: observation.acceptedEvidence}, nil
+	}
+	return CardUpdateVerification{}, ErrCardUpdateUnverified
 }
 
 type cardUpdateObservation struct {
 	bizIDs           map[string]struct{}
+	acceptedEvidence string
 	positiveEvidence string
 	negativeEvidence string
 }
@@ -107,6 +124,9 @@ func observeCardUpdate(value any, observation *cardUpdateObservation) {
 }
 
 func observeCardUpdateMap(value map[string]any, observation *cardUpdateObservation) {
+	if accepted, ok := value["success"].(bool); ok && accepted && observation.acceptedEvidence == "" {
+		observation.acceptedEvidence = "success=true"
+	}
 	for _, key := range []string{"bizId", "bizID", "biz_id"} {
 		if candidate, ok := value[key].(string); ok && strings.TrimSpace(candidate) != "" {
 			observation.bizIDs[strings.TrimSpace(candidate)] = struct{}{}
@@ -137,14 +157,7 @@ func observeCardUpdateMap(value map[string]any, observation *cardUpdateObservati
 		setNegativeCardUpdateEvidence(observation, "errorCode=non-empty")
 	}
 	if success, ok := value["success"].(bool); ok {
-		if success {
-			// Record success=true only when the same response envelope explicitly
-			// includes its business-error field. A non-empty code is already
-			// negative evidence above, so the two signals reject the conflict.
-			if hasErrorCode {
-				setPositiveCardUpdateEvidence(observation, "success=true")
-			}
-		} else {
+		if !success {
 			setNegativeCardUpdateEvidence(observation, "success=false")
 		}
 	}

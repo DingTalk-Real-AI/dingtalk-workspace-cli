@@ -14,6 +14,39 @@ func TestCITestPackagePlanCoversDefaultPackagesExactlyOnce(t *testing.T) {
 	if !strings.Contains(output, "default packages exactly once") {
 		t.Fatalf("verify output = %q, want coverage summary", output)
 	}
+	if !strings.Contains(output, "full-suite packages exactly once") {
+		t.Fatalf("verify output = %q, want coverage shard plan summary", output)
+	}
+}
+
+func TestCICoveragePackagePlanRoutesFullSuiteScope(t *testing.T) {
+	root := testPackagePlanRoot(t)
+	remaining := strings.Fields(runTestPackagePlan(t, root, "list-coverage", "remaining"))
+
+	for _, suffix := range []string{"/cmd", "/internal/output", "/skills"} {
+		if !containsPackageSuffix(remaining, suffix) {
+			t.Errorf("coverage remaining shard does not contain package ending in %q", suffix)
+		}
+	}
+	for _, suffix := range []string{
+		"/internal/app",
+		"/internal/cli",
+		"/internal/generator",
+		"/internal/helpers",
+		"/test/smoke",
+		"/test/scripts",
+		"/pkg/cmdutil",
+		"/scripts/policy/coverage-gate",
+	} {
+		if containsPackageSuffix(remaining, suffix) {
+			t.Errorf("coverage remaining shard unexpectedly contains package ending in %q", suffix)
+		}
+	}
+
+	app := strings.Fields(runTestPackagePlan(t, root, "list-coverage", "app"))
+	if !containsPackageSuffix(app, "/internal/app") {
+		t.Error("coverage app shard does not contain /internal/app")
+	}
 }
 
 func TestCITestPackagePlanRoutesPublicTestSuites(t *testing.T) {

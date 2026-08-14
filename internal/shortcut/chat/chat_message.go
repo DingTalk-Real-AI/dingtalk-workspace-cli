@@ -1644,13 +1644,20 @@ var MessagesSendCard = shortcut.Shortcut{
 		if err != nil {
 			return fmt.Errorf("卡片已创建（bizId=%s），但自动更新失败: %w", bizID, err)
 		}
-		if _, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated); err != nil {
+		verification, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
+		if err != nil {
 			return fmt.Errorf("卡片已创建（bizId=%s），但自动更新结果不可信: %w", bizID, cardUpdateVerificationError(bizID, err))
 		}
 		payload := chatmsg.ProjectStreamingCardReceipt(created, bizID)
 		payload["bizId"] = bizID
 		payload["flowStatus"] = status
 		payload["updated"] = updated
+		payload["updateAccepted"] = verification.Accepted
+		payload["updateVerified"] = verification.Verified
+		payload["updateVerificationEvidence"] = verification.Evidence
+		if verification.Accepted && !verification.Verified {
+			payload["updateWarning"] = "服务端已接受卡片更新请求，但未返回可独立证明可见内容已更新的字段；不要重复执行相同更新"
+		}
 		return rt.Output(payload)
 	},
 }
@@ -1793,11 +1800,11 @@ var MessagesUpdateCard = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		proof, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
+		verification, err := chatmsg.VerifyStreamingCardUpdate(bizID, updated)
 		if err != nil {
 			return cardUpdateVerificationError(bizID, err)
 		}
-		return rt.Output(chatmsg.ProjectStreamingCardUpdate(updated, bizID, proof))
+		return rt.Output(chatmsg.ProjectStreamingCardUpdate(updated, bizID, verification))
 	},
 }
 

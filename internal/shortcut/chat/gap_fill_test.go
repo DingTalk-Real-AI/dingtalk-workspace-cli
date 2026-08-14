@@ -1049,6 +1049,14 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 			},
 			wantError: "biz-preserved",
 		},
+		{
+			name: "unverified update preserves id",
+			fake: &larkAlignmentCaller{responses: map[string]string{
+				"im/create_and_send_card":  `{"bizId":"biz-unverified"}`,
+				"im/update_streaming_card": `{"result":{"updated":false}}`,
+			}},
+			wantError: "biz-unverified",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			helpers.InitDeps(tc.fake)
@@ -1073,6 +1081,8 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		}}
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
 		root.SetArgs([]string{
 			"chat", "+messages-send-card",
 			"--group", "cid",
@@ -1084,6 +1094,13 @@ func TestCrossPlatformCoverageMessagesSendCardDryRunAndFailureBoundaries(t *test
 		}
 		if len(fake.calls) != 2 || fake.calls[1].tool != "update_streaming_card" {
 			t.Fatalf("calls = %#v", fake.calls)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["updateAccepted"] != true || payload["updateVerified"] != false || payload["updateWarning"] == "" {
+			t.Fatalf("card payload = %#v", payload)
 		}
 	})
 
@@ -1157,12 +1174,14 @@ func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 		}
 	})
 
-	t.Run("success acknowledgement is verified", func(t *testing.T) {
+	t.Run("success acknowledgement is accepted but unverified", func(t *testing.T) {
 		fake := &larkAlignmentCaller{responses: map[string]string{
 			"im/update_streaming_card": `{"success":true,"errorCode":null}`,
 		}}
 		helpers.InitDeps(fake)
 		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
 		root.SetArgs([]string{
 			"chat", "+messages-update-card",
 			"--biz-id", "中文乱串",
@@ -1175,6 +1194,13 @@ func TestCrossPlatformCoverageMessagesUpdateCardVerifiesSuccess(t *testing.T) {
 		}
 		if len(fake.calls) != 1 || fake.calls[0].tool != "update_streaming_card" {
 			t.Fatalf("calls = %#v", fake.calls)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["accepted"] != true || payload["verified"] != false || payload["warning"] == "" {
+			t.Fatalf("payload = %#v", payload)
 		}
 	})
 

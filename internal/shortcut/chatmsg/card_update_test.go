@@ -52,19 +52,19 @@ func TestCrossPlatformCoverageVerifyStreamingCardUpdate(t *testing.T) {
 	for _, test := range []struct {
 		name      string
 		response  map[string]any
-		wantProof string
+		want      CardUpdateVerification
 		wantErrIs error
 	}{
-		{name: "updated", response: map[string]any{"result": map[string]any{"updated": true}}, wantProof: "updated=true"},
-		{name: "affected", response: map[string]any{"data": map[string]any{"affectedCount": float64(1)}}, wantProof: "affectedCount=1"},
-		{name: "boolean result", response: map[string]any{"result": true}, wantProof: "result=true"},
+		{name: "updated", response: map[string]any{"result": map[string]any{"updated": true}}, want: CardUpdateVerification{Accepted: true, Verified: true, Evidence: "updated=true"}},
+		{name: "affected", response: map[string]any{"data": map[string]any{"affectedCount": float64(1)}}, want: CardUpdateVerification{Accepted: true, Verified: true, Evidence: "affectedCount=1"}},
+		{name: "boolean result", response: map[string]any{"result": true}, want: CardUpdateVerification{Accepted: true, Verified: true, Evidence: "result=true"}},
 		{name: "boolean false result", response: map[string]any{"result": false}, wantErrIs: ErrCardUpdateNotApplied},
-		{name: "matching id", response: map[string]any{"result": map[string]any{"bizId": "biz-1", "applied": true}}, wantProof: "applied=true"},
+		{name: "matching id", response: map[string]any{"result": map[string]any{"bizId": "biz-1", "applied": true}}, want: CardUpdateVerification{Accepted: true, Verified: true, Evidence: "applied=true"}},
 		{name: "conflicting evidence", response: map[string]any{"updated": true, "applied": false}, wantErrIs: ErrCardUpdateUnverified},
 		{name: "zero affected", response: map[string]any{"affectedCount": 0}, wantErrIs: ErrCardUpdateNotApplied},
-		{name: "success acknowledgement", response: map[string]any{"success": true, "errorCode": nil}, wantProof: "success=true"},
-		{name: "success acknowledgement with empty error code", response: map[string]any{"success": true, "errorCode": "  "}, wantProof: "success=true"},
-		{name: "success without explicit error code", response: map[string]any{"success": true}, wantErrIs: ErrCardUpdateUnverified},
+		{name: "success acknowledgement", response: map[string]any{"success": true, "errorCode": nil}, want: CardUpdateVerification{Accepted: true, Verified: false, Evidence: "success=true"}},
+		{name: "success acknowledgement with empty error code", response: map[string]any{"success": true, "errorCode": "  "}, want: CardUpdateVerification{Accepted: true, Verified: false, Evidence: "success=true"}},
+		{name: "success without explicit error code", response: map[string]any{"success": true}, want: CardUpdateVerification{Accepted: true, Verified: false, Evidence: "success=true"}},
 		{name: "success conflicts with error code", response: map[string]any{"success": true, "errorCode": "InternalError"}, wantErrIs: ErrCardUpdateUnverified},
 		{name: "success conflicts with numeric error code", response: map[string]any{"success": true, "errorCode": float64(500)}, wantErrIs: ErrCardUpdateUnverified},
 		{name: "error code without success", response: map[string]any{"errorCode": "InternalError"}, wantErrIs: ErrCardUpdateNotApplied},
@@ -74,15 +74,15 @@ func TestCrossPlatformCoverageVerifyStreamingCardUpdate(t *testing.T) {
 		{name: "unrelated extension ignored", response: map[string]any{"extension": map[string]any{"updated": true}}, wantErrIs: ErrCardUpdateUnverified},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			proof, err := VerifyStreamingCardUpdate("biz-1", test.response)
+			got, err := VerifyStreamingCardUpdate("biz-1", test.response)
 			if test.wantErrIs != nil {
 				if !errors.Is(err, test.wantErrIs) {
 					t.Fatalf("VerifyStreamingCardUpdate error = %v, want errors.Is(_, %v)", err, test.wantErrIs)
 				}
 				return
 			}
-			if err != nil || proof != test.wantProof {
-				t.Fatalf("VerifyStreamingCardUpdate = %q, %v; want %q", proof, err, test.wantProof)
+			if err != nil || got != test.want {
+				t.Fatalf("VerifyStreamingCardUpdate = %#v, %v; want %#v", got, err, test.want)
 			}
 		})
 	}
