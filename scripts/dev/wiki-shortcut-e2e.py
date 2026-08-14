@@ -54,6 +54,13 @@ def check(label: str, condition: bool) -> None:
     print(f"PASS {label}")
 
 
+def member_role(data: dict, user_id: str) -> str:
+    for member in data.get("members", []):
+        if member.get("id") == user_id:
+            return str(member.get("role") or "").upper()
+    return ""
+
+
 def main() -> int:
     if not DWS.exists():
         raise E2EFailure("build ./dws first with make build")
@@ -142,12 +149,18 @@ def main() -> int:
         check("member-list", members.get("count", 0) >= 1 and isinstance(members.get("members"), list))
         added = invoke(["+member-add", "--workspace", workspace, "--users", MEMBER_ID, "--role", "READER"])
         member_added = True
-        check("member-add-readback", added.get("success") is True and added.get("verifiedBy") == "member_list_readback")
+        check("member-add-terminal", added.get("success") is True and added.get("verifiedBy") == "write_terminal_success")
+        after_add = invoke(["+member-list", "--workspace", workspace, "--limit", "50"])
+        check("member-add-fixture-readback", after_add.get("truncated") is not True and member_role(after_add, MEMBER_ID) == "READER")
         updated = invoke(["+member-update", "--workspace", workspace, "--users", MEMBER_ID, "--role", "EDITOR"])
-        check("member-update-readback", updated.get("success") is True and updated.get("verifiedBy") == "member_list_readback")
+        check("member-update-terminal", updated.get("success") is True and updated.get("verifiedBy") == "write_terminal_success")
+        after_update = invoke(["+member-list", "--workspace", workspace, "--limit", "50"])
+        check("member-update-fixture-readback", after_update.get("truncated") is not True and member_role(after_update, MEMBER_ID) == "EDITOR")
         removed = invoke(["+member-remove", "--workspace", workspace, "--users", MEMBER_ID])
         member_added = False
-        check("member-remove-readback", removed.get("success") is True and removed.get("verifiedBy") == "member_list_readback")
+        check("member-remove-terminal", removed.get("success") is True and removed.get("verifiedBy") == "write_terminal_success")
+        after_remove = invoke(["+member-list", "--workspace", workspace, "--limit", "50"])
+        check("member-remove-fixture-readback", after_remove.get("truncated") is not True and member_role(after_remove, MEMBER_ID) == "")
 
         feeds = invoke(["+feed-list", "--workspace", workspace, "--limit", "10"])
         check("feed-list", isinstance(feeds.get("feeds"), list))

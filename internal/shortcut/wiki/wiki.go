@@ -30,9 +30,13 @@ func writeShortcut(command, description, intent string, risk shortcut.Risk, safe
 
 var SpaceList = readShortcut("+space-list", "严格分页列出知识库", "浏览有权访问的组织或个人知识库，并保留服务端分页证据；只有显式 wikiSpaces:[] 才是空结果。", "spaces", []shortcut.Flag{
 	{Name: "type", Type: shortcut.FlagString, Default: "orgWikiSpace", Desc: "知识库类型", Enum: []string{"orgWikiSpace", "myWikiSpace"}},
-	{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页数量 1-50"}, {Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标", Aliases: []string{"page-token"}, AliasesVisible: true},
+	{Name: "limit", Type: shortcut.FlagString, Desc: "每页数量 1-50（默认 20）"}, {Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标", Aliases: []string{"page-token"}, AliasesVisible: true},
 }, []contract.ParamDecl{{Name: "type", Property: "wikiSpaceType"}, {Name: "limit", Property: "pageSize"}, {Name: "cursor", Property: "pageToken"}}, func(rt *shortcut.RuntimeContext) error {
-	items, page, err := collectWikiPages(rt, "wiki/list_wikiSpaces", rt.Int("limit"), []string{"wikiSpaces", "spaces"}, func(cursor string, size int) (map[string]any, error) {
+	pageSize, err := wikiStringInt(rt, "limit", 20, 1, 50)
+	if err != nil {
+		return err
+	}
+	items, page, err := collectWikiPages(rt, "wiki/list_wikiSpaces", pageSize, []string{"wikiSpaces", "spaces"}, func(cursor string, size int) (map[string]any, error) {
 		params := map[string]any{"wikiSpaceType": rt.Str("type"), "pageSize": size}
 		if cursor != "" {
 			params["pageToken"] = cursor
@@ -49,9 +53,13 @@ var SpaceList = readShortcut("+space-list", "严格分页列出知识库", "浏�
 })
 
 var SpaceSearch = readShortcut("+space-search", "严格搜索知识库", "按名称关键词定位知识库；严格验证搜索数组，避免内部异常被误报为零命中。", "spaces", []shortcut.Flag{
-	{Name: "query", Type: shortcut.FlagString, Required: true, Desc: "搜索关键词"}, {Name: "limit", Type: shortcut.FlagInt, Default: "10", Desc: "返回数量 1-20"},
-}, []contract.ParamDecl{{Name: "query", Property: "query"}, {Name: "limit", Property: "pageSize"}}, func(rt *shortcut.RuntimeContext) error {
-	data, err := rt.CallMCPData("wiki", "search_wikiSpaces", map[string]any{"keyword": rt.Str("query"), "pageSize": rt.Int("limit")})
+	{Name: "query", Type: shortcut.FlagString, Required: true, Desc: "搜索关键词"}, {Name: "limit", Type: shortcut.FlagString, Desc: "返回数量 1-20（默认 10）"},
+}, []contract.ParamDecl{{Name: "query", Property: "query"}, {Name: "limit", Property: "limit"}}, func(rt *shortcut.RuntimeContext) error {
+	pageSize, err := wikiStringInt(rt, "limit", 10, 1, 20)
+	if err != nil {
+		return err
+	}
+	data, err := rt.CallMCPData("wiki", "search_wikiSpaces", map[string]any{"keyword": rt.Str("query"), "pageSize": pageSize})
 	if err != nil {
 		return err
 	}
@@ -154,7 +162,7 @@ func memberWrite(command, tool, description, intent string, withRole bool) short
 		params = append(params, contract.ParamDecl{Name: "role", Property: "roleId"})
 	}
 	return writeShortcut(command, description, intent, shortcut.RiskWrite, wikiWriteSafety(false), memberFlags(withRole), params, func(rt *shortcut.RuntimeContext) error {
-		users := rt.StrSlice("users")
+		users := wikiStringSliceFirst(rt, "users", "user")
 		if len(users) == 0 || len(users) > 30 {
 			return fmt.Errorf("--users 必须包含 1-30 个 userId")
 		}
@@ -173,41 +181,21 @@ func memberWrite(command, tool, description, intent string, withRole bool) short
 		if err != nil {
 			return err
 		}
-		listed, err := rt.CallMCPData("wiki", "list_member", map[string]any{"workspaceId": rt.Str("workspace"), "maxResults": 50})
-		if err != nil {
-			return err
-		}
-		items, _, err := requireWikiCollection(listed, "wiki/list_member", "members")
-		if err != nil {
-			return err
-		}
-		found := make(map[string]string)
-		for _, item := range items {
-			member := item.(map[string]any)
-			id := firstWikiString(member, "id", "userId")
-			if id != "" {
-				found[id] = strings.ToUpper(firstWikiString(member, "role", "roleId"))
-			}
-		}
-		for _, user := range users {
-			role, present := found[user]
-			if tool == "remove_member" && present {
-				return wikiResponseError("wiki/"+tool, "readback_member_still_present", "成员移除后仍出现在成员列表中")
-			}
-			if tool != "remove_member" && !present {
-				return wikiResponseError("wiki/"+tool, "readback_member_missing", "成员写入后未出现在成员列表中")
-			}
-			if withRole && role != strings.ToUpper(rt.Str("role")) {
-				return wikiResponseError("wiki/"+tool, "readback_role_mismatch", "成员写入后读回角色与请求不一致")
-			}
-		}
-		return rt.Output(map[string]any{"success": true, "workspaceId": rt.Str("workspace"), "userCount": len(users), "operation": tool, "verifiedBy": "member_list_readback"})
+		return rt.Output(map[string]any{
+			"success": true, "workspaceId": rt.Str("workspace"), "userCount": len(users), "operation": tool,
+			"verifiedBy": "write_terminal_success",
+			"verification": map[string]any{
+				"status":            "terminal_response_only",
+				"readbackAvailable": false,
+				"reason":            "member_list_is_capped_and_has_no_cursor",
+			},
+		})
 	})
 }
 
-var MemberAdd = memberWrite("+member-add", "add_member", "添加知识库成员", "向知识库授予一个或多个用户容器级角色，并用成员列表读回验证响应契约。", true)
-var MemberUpdate = memberWrite("+member-update", "update_member", "更新知识库成员角色", "调整已有成员的知识库容器级角色，并用成员列表读回验证响应契约。", true)
-var MemberRemove = memberWrite("+member-remove", "remove_member", "移除知识库成员", "移除一个或多个用户的知识库容器级访问，并用成员列表读回验证响应契约。", false)
+var MemberAdd = memberWrite("+member-add", "add_member", "添加知识库成员", "向知识库授予一个或多个用户容器级角色；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", true)
+var MemberUpdate = memberWrite("+member-update", "update_member", "更新知识库成员角色", "调整已有成员的知识库容器级角色；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", true)
+var MemberRemove = memberWrite("+member-remove", "remove_member", "移除知识库成员", "移除一个或多个用户的知识库容器级访问；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", false)
 
 var MemberList = readShortcut("+member-list", "严格列出知识库成员", "列出知识库成员及角色；后端不提供可续游标且单次真实上限为 50，不伪造 page-all。", "members", []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID 或 URL"}, {Name: "limit", Type: shortcut.FlagInt, Default: "30", Desc: "返回上限 1-50"}, {Name: "filter-role", Type: shortcut.FlagStringSlice, Desc: "角色过滤"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "limit", Property: "maxResults"}, {Name: "filter-role", Property: "filterRoleIds"}}, func(rt *shortcut.RuntimeContext) error {
 	if rt.Int("limit") < 1 || rt.Int("limit") > 50 {

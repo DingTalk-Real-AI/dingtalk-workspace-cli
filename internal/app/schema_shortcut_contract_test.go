@@ -140,6 +140,20 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 	assertChatCatalogCompleteLeafContracts(t)
 }
 
+func TestDeliveryWikiSpaceSearchPreservesHistoricalParameterProperties(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-search")
+	parameters := schemaContractMap(leaf["parameters"])
+	for name, want := range map[string]string{"query": "query", "limit": "limit"} {
+		parameter := parameters[name]
+		if parameter == nil {
+			t.Fatalf("wiki +space-search missing --%s parameter: %#v", name, parameters)
+		}
+		if got := schemaContractString(parameter["property"]); got != want {
+			t.Fatalf("wiki +space-search --%s property = %q, want compatibility value %q", name, got, want)
+		}
+	}
+}
+
 func assertSchemaSummarySafety(
 	t testing.TB,
 	summaries map[string]map[string]any,
