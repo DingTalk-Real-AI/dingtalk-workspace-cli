@@ -138,15 +138,70 @@ function extractArchive(archivePath, destDir) {
       throw new Error(`dws binary not found in archive ${archivePath}`);
     }
 
-    ensureCleanDir(destDir);
+    fs.mkdirSync(destDir, { recursive: true });
     const targetName = process.platform === "win32" ? "dws.exe" : "dws";
     const targetPath = path.join(destDir, targetName);
-    fs.copyFileSync(binaryPath, targetPath);
+    const stagedPath = path.join(destDir, `.${targetName}.${process.pid}.new`);
+    const replacedPath = path.join(destDir, `.${targetName}.${process.pid}.replaced`);
+    fs.copyFileSync(binaryPath, stagedPath);
     if (process.platform !== "win32") {
-      fs.chmodSync(targetPath, 0o755);
+      fs.chmodSync(stagedPath, 0o755);
+    }
+    let replacedExisting = false;
+    try {
+      // POSIX rename replaces an existing destination atomically. Windows does
+      // not, so move the old file aside and restore it if publication fails.
+      if (process.platform === "win32" && fs.existsSync(targetPath)) {
+        fs.rmSync(replacedPath, { force: true });
+        fs.renameSync(targetPath, replacedPath);
+        replacedExisting = true;
+      }
+      fs.renameSync(stagedPath, targetPath);
+      if (replacedExisting) fs.rmSync(replacedPath, { force: true });
+    } catch (err) {
+      fs.rmSync(stagedPath, { force: true });
+      if (replacedExisting && !fs.existsSync(targetPath) && fs.existsSync(replacedPath)) {
+        fs.renameSync(replacedPath, targetPath);
+      }
+      throw err;
     }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+function expectedChecksum(checksumsPath, assetName) {
+  if (!fs.existsSync(checksumsPath)) {
+    throw new Error(`[SECURITY] checksums.txt not found at ${checksumsPath}`);
+  }
+  for (const line of fs.readFileSync(checksumsPath, "utf8").split("\n")) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length >= 2 && parts[1] === assetName) {
+      if (!/^[0-9a-f]{64}$/i.test(parts[0])) {
+        throw new Error(`[SECURITY] invalid SHA256 for ${assetName}`);
+      }
+      return parts[0].toLowerCase();
+    }
+  }
+  throw new Error(`[SECURITY] checksum entry not found for ${assetName}`);
+}
+
+function verifyEmbeddedAsset(assetPath, assetName, checksumsPath) {
+  const expected = expectedChecksum(checksumsPath, assetName);
+  const hash = crypto.createHash("sha256");
+  const fd = fs.openSync(assetPath, "r");
+  try {
+    const buffer = Buffer.alloc(64 * 1024);
+    let bytesRead;
+    while ((bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0) {
+      hash.update(buffer.subarray(0, bytesRead));
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  const actual = hash.digest("hex");
+  if (actual !== expected) {
+    throw new Error(`[SECURITY] checksum mismatch for ${assetName}: expected ${expected}, got ${actual}`);
   }
 }
 
@@ -769,12 +824,15 @@ function main() {
 
   const archivePath = path.join(assetsDir, assetName);
   const skillsPath = path.join(assetsDir, "dws-skills.zip");
+  const checksumsPath = path.join(assetsDir, "checksums.txt");
   if (!fs.existsSync(archivePath)) {
     throw new Error(`missing platform archive: ${archivePath}`);
   }
   if (!fs.existsSync(skillsPath)) {
     throw new Error(`missing skills archive: ${skillsPath}`);
   }
+  verifyEmbeddedAsset(archivePath, assetName, checksumsPath);
+  verifyEmbeddedAsset(skillsPath, "dws-skills.zip", checksumsPath);
 
   extractArchive(archivePath, vendorDir);
   extractSkills(skillsPath, skillsStaging);
@@ -812,6 +870,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  expectedChecksum,
+  verifyEmbeddedAsset,
   publishCacheAtomically,
   publishManagedMonoSkillSetAtomically,
   publishManagedMultiSkillSetAtomically,

@@ -37,6 +37,10 @@ type upgradeReleaseClient interface {
 	FetchReleaseVersions(upgrade.ReleaseTrack) ([]upgrade.VersionEntry, error)
 }
 
+type upgradeFreshReleaseClient interface {
+	FetchLatestReleaseForTrackFresh(upgrade.ReleaseTrack) (*upgrade.ReleaseInfo, error)
+}
+
 type upgradeRollbackManager interface {
 	ListBackups() ([]upgrade.BackupInfo, error)
 	RollbackTo(upgrade.BackupInfo) error
@@ -76,7 +80,11 @@ var (
 	upgradeCommandOutput    = func(name string, args ...string) ([]byte, error) {
 		return exec.Command(name, args...).CombinedOutput()
 	}
-	upgradeUserHomeDir = os.UserHomeDir
+	upgradeUserHomeDir           = os.UserHomeDir
+	detectUpgradeInstall         = upgrade.DetectInstallMethod
+	runUpgradePackageInstall     = upgrade.RunPackageManagerInstall
+	prepareUpgradePackageReplace = upgrade.PreparePackageSelfReplace
+	verifyUpgradeInstalledBinary = upgrade.VerifyInstalledBinary
 )
 
 const defaultListLimit = 10
@@ -388,6 +396,17 @@ func writeDryRunPlan(w io.Writer, currentVer, binaryAssetName string, hasSkills 
 	fmt.Fprintf(w, "  %s\n", ugDim("移除 --dry-run 以实际执行升级"))
 }
 
+func writePackageDryRunPlan(w io.Writer, currentVer, targetVersion string, detection upgrade.InstallDetection) {
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  %s 预览模式，不会下载或修改任何文件\n", ugBold("[dry-run]"))
+	fmt.Fprintf(w, "  将通过 %s 执行完整安装包升级:\n", ugCyan(string(detection.Manager)))
+	fmt.Fprintf(w, "    [1/3] 备份当前二进制 %s\n", ugDim(ensureV(currentVer)))
+	fmt.Fprintf(w, "    [2/3] 安装 %s\n", ugCyan(upgrade.NPMPackageSpec(targetVersion)))
+	fmt.Fprintf(w, "    [3/3] 校验二进制与 Skills 同版本\n")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  %s\n", ugDim("移除 --dry-run 以实际执行升级"))
+}
+
 func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	fmt.Printf("  %s\n", ugDim(fmt.Sprintf("检查更新%s...", upgradeTrackSuffix(opts.track))))
 
@@ -408,7 +427,11 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 			return fmt.Errorf("获取版本 %s 信息失败: %w", opts.targetVersion, err)
 		}
 	} else {
-		release, err = client.FetchLatestReleaseForTrack(opts.track)
+		if fresh, ok := client.(upgradeFreshReleaseClient); ok {
+			release, err = fresh.FetchLatestReleaseForTrackFresh(opts.track)
+		} else {
+			release, err = client.FetchLatestReleaseForTrack(opts.track)
+		}
 		if err != nil {
 			return fmt.Errorf("检查更新失败: %w", err)
 		}
@@ -429,11 +452,19 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		fmt.Printf("  %s  %s\n", ugBold("轨道:      "), ugYellow("beta / pre-release"))
 	}
 
+	// Detect package ownership before previewing so --dry-run describes the
+	// same path a real update would use.
+	detection := detectUpgradeInstall()
+
 	// --dry-run: preview only. Resolve the platform asset so a missing build is
 	// still reported, then describe the steps that *would* run and return before
 	// any side effect (no backup, no download, no replace). Matches the global
 	// flag's contract: "预览操作内容，不实际执行".
 	if opts.dryRun {
+		if packageUpgradeAllowed(opts, detection) {
+			writePackageDryRunPlan(os.Stdout, currentVer, release.Version, detection)
+			return nil
+		}
 		binaryAsset, err := findUpgradeBinary(release.Assets)
 		if err != nil {
 			return err
@@ -452,6 +483,14 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 			fmt.Println("已取消")
 			return nil
 		}
+	}
+
+	// Keep package-managed installations package-managed, matching lark-cli.
+	// Exact-version, custom-source, and --skip-skills flows retain the direct
+	// immutable GitHub asset path because npm postinstall owns the bundled
+	// skills and cannot honor those narrower contracts.
+	if packageUpgradeAllowed(opts, detection) {
+		return runPackageManagedUpgrade(ctx, currentVer, release.Version, detection)
 	}
 
 	binaryAsset, err := findUpgradeBinary(release.Assets)
@@ -482,23 +521,31 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	// --- Step 1: Backup ---
 	fmt.Printf("  %s 备份当前版本...", stepFmt(1))
 	rm := newUpgradeRollback()
-	_, backupErr := rm.Backup(strings.TrimPrefix(currentVer, "v"))
+	backupPath, backupErr := rm.Backup(strings.TrimPrefix(currentVer, "v"))
 	if backupErr != nil {
-		fmt.Printf(" %s %v\n", ugYellow("⚠"), backupErr)
-	} else {
-		fmt.Printf(" %s\n", ugGreen("✓"))
+		fmt.Printf(" %s\n", ugRed("✗"))
+		return fmt.Errorf("升级前无法备份当前二进制: %w", backupErr)
 	}
+	fmt.Printf(" %s\n", ugGreen("✓"))
 
-	// Fetch checksums.txt (needed for strict verification of both binary and skills)
-	var checksumsContent string
+	// Fetch checksums.txt before any release asset. A missing manifest is a
+	// hard failure: unlike the legacy best-effort path, upgrades never install
+	// an archive without an authenticated SHA256 expectation.
 	checksumsAsset := findUpgradeChecksums(release.Assets)
-	if checksumsAsset != nil {
-		checksumsPath := filepath.Join(tmpDir, "checksums.txt")
-		if _, dlErr := downloadUpgradeFile(checksumsAsset.BrowserDownloadURL, checksumsPath); dlErr == nil {
-			if data, readErr := upgradeReadFile(checksumsPath); readErr == nil {
-				checksumsContent = string(data)
-			}
-		}
+	if checksumsAsset == nil {
+		return fmt.Errorf("发布版本缺少 checksums.txt，拒绝无校验升级")
+	}
+	checksumsPath := filepath.Join(tmpDir, "checksums.txt")
+	if _, dlErr := downloadUpgradeFile(checksumsAsset.BrowserDownloadURL, checksumsPath); dlErr != nil {
+		return fmt.Errorf("下载 checksums.txt 失败: %w", dlErr)
+	}
+	checksumsData, readErr := upgradeReadFile(checksumsPath)
+	if readErr != nil {
+		return fmt.Errorf("读取 checksums.txt 失败: %w", readErr)
+	}
+	checksumsContent := string(checksumsData)
+	if strings.TrimSpace(checksumsContent) == "" {
+		return fmt.Errorf("checksums.txt 为空，拒绝无校验升级")
 	}
 
 	// --- Step 2: Download (binary + skills together) ---
@@ -603,7 +650,7 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 		})
 		if installErr != nil {
 			fmt.Printf(" %s\n", ugRed("✗"))
-			return fmt.Errorf("技能包安装失败: %w", installErr)
+			return rollbackDirectUpgrade(rm, backupPath, fmt.Errorf("技能包安装失败: %w", installErr))
 		}
 		failed := result.Failed()
 		if len(failed) > 0 {
@@ -611,7 +658,7 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 			for _, d := range failed {
 				fmt.Printf("       %s %s %s\n", ugRed("✗"), shortenHome(d.Dir), ugDim(d.Err.Error()))
 			}
-			return fmt.Errorf("技能包安装到 %d 个目录失败，请检查权限后手动重试: dws upgrade --force", len(failed))
+			return rollbackDirectUpgrade(rm, backupPath, fmt.Errorf("技能包安装到 %d 个目录失败，请检查权限后手动重试: dws upgrade --force", len(failed)))
 		}
 		succeeded := result.Succeeded()
 		fmt.Printf(" %s\n", ugGreen("✓"))
@@ -641,10 +688,83 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	return nil
 }
 
+func packageUpgradeAllowed(opts upgradeOptions, detection upgrade.InstallDetection) bool {
+	return detection.CanAutoUpdate() && opts.targetVersion == "" && !opts.skipSkills &&
+		os.Getenv("DWS_UPGRADE_URL") == "" && os.Getenv("DWS_UPGRADE_REPOSITORY") == ""
+}
+
+func runPackageManagedUpgrade(ctx context.Context, currentVer, targetVersion string, detection upgrade.InstallDetection) error {
+	fmt.Println()
+	fmt.Printf("  %s 通过 %s 升级完整安装包...\n", ugBold("[1/3]"), ugCyan(string(detection.Manager)))
+
+	rm := newUpgradeRollback()
+	backupPath, backupErr := rm.Backup(strings.TrimPrefix(currentVer, "v"))
+	if backupErr != nil {
+		return fmt.Errorf("包管理器升级前无法备份当前二进制: %w", backupErr)
+	}
+	fmt.Printf("       %s 当前二进制已备份\n", ugGreen("✓"))
+
+	restoreWindows, err := prepareUpgradePackageReplace()
+	if err != nil {
+		return err
+	}
+	result := runUpgradePackageInstall(ctx, detection.Manager, targetVersion)
+	if result.Err != nil {
+		restoreWindows()
+		restoreErr := restoreUpgradeBackup(rm, backupPath)
+		detail := strings.TrimSpace(result.Stderr + "\n" + result.Stdout)
+		if len(detail) > 2000 {
+			detail = detail[len(detail)-2000:]
+		}
+		if restoreErr != nil {
+			return fmt.Errorf("%s 安装失败: %w；自动恢复也失败: %v\n%s", detection.Manager, result.Err, restoreErr, detail)
+		}
+		return fmt.Errorf("%s 安装失败: %w\n%s", detection.Manager, result.Err, detail)
+	}
+
+	fmt.Printf("  %s 校验升级后的 dws...", ugBold("[2/3]"))
+	if err := verifyUpgradeInstalledBinary(ctx, targetVersion); err != nil {
+		restoreWindows()
+		restoreErr := restoreUpgradeBackup(rm, backupPath)
+		fmt.Printf(" %s\n", ugRed("✗"))
+		if restoreErr != nil {
+			return fmt.Errorf("%w；自动恢复也失败: %v", err, restoreErr)
+		}
+		return err
+	}
+	fmt.Printf(" %s\n", ugGreen("✓"))
+
+	fmt.Printf("  %s 完成二进制与 Skills 同版本升级", ugBold("[3/3]"))
+	if err := rm.Cleanup(5); err != nil {
+		fmt.Printf(" %s %v\n", ugYellow("⚠"), err)
+	} else {
+		fmt.Printf(" %s\n", ugGreen("✓"))
+	}
+	fmt.Println()
+	fmt.Printf("  %s\n", ugDim("──────────────────────────────────────"))
+	fmt.Printf("  %s 升级完成  %s %s %s (%s)\n", ugBoldGrn("✔"), ugDim(ensureV(currentVer)), ugBold("→"), ugBoldGrn(ensureV(targetVersion)), detection.Manager)
+	fmt.Printf("  %s\n", ugDim("──────────────────────────────────────"))
+	return nil
+}
+
+func restoreUpgradeBackup(rm upgradeRollbackManager, backupPath string) error {
+	if backupPath == "" {
+		return fmt.Errorf("升级备份路径为空")
+	}
+	return rm.RollbackTo(upgrade.BackupInfo{Path: backupPath})
+}
+
+func rollbackDirectUpgrade(rm upgradeRollbackManager, backupPath string, applyErr error) error {
+	if restoreErr := restoreUpgradeBackup(rm, backupPath); restoreErr != nil {
+		return fmt.Errorf("%w；二进制自动恢复也失败: %v", applyErr, restoreErr)
+	}
+	return fmt.Errorf("%w；已自动恢复原二进制", applyErr)
+}
+
 // strictVerifyFile performs SHA256 verification with strict semantics:
 //   - If checksum info is available and matches → ✓
 //   - If checksum info is available but MISMATCHES → error (abort upgrade)
-//   - If no checksum info at all → skip (no data to compare against)
+//   - If no checksum info is available → error (fail closed)
 func strictVerifyFile(label, filePath, fileName, assetDigest, checksumsContent string) error {
 	fmt.Printf("  %s 校验 %s...", label, fileName)
 
@@ -671,9 +791,9 @@ func strictVerifyFile(label, filePath, fileName, assetDigest, checksumsContent s
 		return nil
 	}
 
-	// No checksum info available at all
-	fmt.Printf(" %s\n", ugDim("- 跳过 (无可用校验信息)"))
-	return nil
+	// No checksum info available at all.
+	fmt.Printf(" %s\n", ugRed("✗"))
+	return fmt.Errorf("缺少 %s 的 SHA256 校验信息，拒绝安装", fileName)
 }
 
 // validateNewBinary checks the downloaded binary is valid.
@@ -703,11 +823,25 @@ func validateNewBinary(binaryPath, expectedVersion string) error {
 		}
 	}
 
-	if !strings.Contains(string(out), expectedVersion) {
-		// Not fatal, version format might differ
-		fmt.Printf("\n  注意: 版本输出中未包含 %s", expectedVersion)
+	actualVersion := parseUpgradeVersionOutput(string(out))
+	expectedVersion = strings.TrimPrefix(strings.TrimSpace(expectedVersion), "v")
+	if actualVersion == "" {
+		return fmt.Errorf("二进制未输出可识别的版本号")
+	}
+	if actualVersion != expectedVersion {
+		return fmt.Errorf("二进制版本不匹配: 期望 %s，实际 %s", expectedVersion, actualVersion)
 	}
 	return nil
+}
+
+func parseUpgradeVersionOutput(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if ok && strings.EqualFold(strings.TrimSpace(key), "version") {
+			return strings.TrimPrefix(strings.TrimSpace(value), "v")
+		}
+	}
+	return ""
 }
 
 func tryExecVersion(binaryPath string) ([]byte, error) {

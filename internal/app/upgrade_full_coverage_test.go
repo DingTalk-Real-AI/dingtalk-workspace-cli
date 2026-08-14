@@ -42,13 +42,17 @@ type fakeUpgradeRollback struct {
 	backupErr   error
 	rollbackErr error
 	cleaned     bool
+	rolledBack  bool
 }
 
 func (r *fakeUpgradeRollback) ListBackups() ([]upgradepkg.BackupInfo, error) {
 	return r.backups, r.listErr
 }
-func (r *fakeUpgradeRollback) RollbackTo(upgradepkg.BackupInfo) error { return r.rollbackErr }
-func (r *fakeUpgradeRollback) Backup(string) (string, error)          { return "backup", r.backupErr }
+func (r *fakeUpgradeRollback) RollbackTo(upgradepkg.BackupInfo) error {
+	r.rolledBack = true
+	return r.rollbackErr
+}
+func (r *fakeUpgradeRollback) Backup(string) (string, error) { return "backup", r.backupErr }
 func (r *fakeUpgradeRollback) Cleanup(int) error {
 	r.cleaned = true
 	return nil
@@ -159,6 +163,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 	oldReplace, oldInstall := replaceUpgradeSelf, installUpgradeSkills
 	oldTemp, oldRemove, oldRead, oldMkdir := upgradeMkdirTemp, upgradeRemoveAll, upgradeReadFile, upgradeMkdirAll
 	oldVerify, oldTar, oldValidate := verifyUpgradeFile, extractUpgradeTarGz, validateUpgradeBinary
+	oldDetect := detectUpgradeInstall
 	oldStdin := os.Stdin
 	t.Cleanup(func() {
 		newUpgradeReleaseClient, newUpgradeRollback = oldClient, oldRollback
@@ -169,6 +174,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 		replaceUpgradeSelf, installUpgradeSkills = oldReplace, oldInstall
 		upgradeMkdirTemp, upgradeRemoveAll, upgradeReadFile, upgradeMkdirAll = oldTemp, oldRemove, oldRead, oldMkdir
 		verifyUpgradeFile, extractUpgradeTarGz, validateUpgradeBinary = oldVerify, oldTar, oldValidate
+		detectUpgradeInstall = oldDetect
 		os.Stdin = oldStdin
 	})
 	fail := errors.New("stage failure")
@@ -183,7 +189,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 		client.latestErr, client.taggedErr = nil, nil
 		newUpgradeReleaseClient = func() upgradeReleaseClient { return client }
 		newUpgradeRollback = func() upgradeRollbackManager { return rb }
-		rb.backupErr, rb.cleaned = nil, false
+		rb.backupErr, rb.cleaned, rb.rolledBack = nil, false, false
 		ensureUpgradeDirs = func() error {
 			if stage == "ensure" {
 				return fail
@@ -191,6 +197,9 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			return nil
 		}
 		cleanupUpgradeStale = func() {}
+		detectUpgradeInstall = func() upgradepkg.InstallDetection {
+			return upgradepkg.InstallDetection{Manager: upgradepkg.PackageManagerManual}
+		}
 		upgradeNeedsUpgrade = func(string, string) bool { return stage != "not-needed" }
 		findUpgradeBinary = func([]upgradepkg.GitHubAsset) (*upgradepkg.GitHubAsset, error) {
 			if stage == "find-binary" {
@@ -203,7 +212,13 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			return &asset, nil
 		}
 		findUpgradeSkills = func([]upgradepkg.GitHubAsset) *upgradepkg.GitHubAsset { asset := skills; return &asset }
-		findUpgradeChecksums = func([]upgradepkg.GitHubAsset) *upgradepkg.GitHubAsset { asset := checksums; return &asset }
+		findUpgradeChecksums = func([]upgradepkg.GitHubAsset) *upgradepkg.GitHubAsset {
+			if stage == "checksum-missing" {
+				return nil
+			}
+			asset := checksums
+			return &asset
+		}
 		tempCalls := 0
 		upgradeMkdirTemp = func(string, string) (string, error) {
 			tempCalls++
@@ -228,6 +243,9 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 		upgradeReadFile = func(string) ([]byte, error) {
 			if stage == "checksum-read" {
 				return nil, fail
+			}
+			if stage == "checksum-empty" {
+				return []byte(" \n"), nil
 			}
 			return []byte("checksum"), nil
 		}
@@ -298,7 +316,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 
 	for _, stage := range []string{
 		"ensure", "tag-error", "latest-error", "not-needed", "cancel", "find-binary", "temp-fallback", "temp-both",
-		"backup", "checksum-download", "checksum-read", "binary-download", "skills-download", "verify-binary", "verify-skills",
+		"backup", "checksum-missing", "checksum-download", "checksum-read", "checksum-empty", "binary-download", "skills-download", "verify-binary", "verify-skills",
 		"extract-binary", "extract-tar", "binary-missing", "validate", "extract-skills", "skill-missing", "replace", "install", "install-failed-dir",
 		"success", "success-no-skills",
 	} {
@@ -330,7 +348,7 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 				opts.skipSkills = true
 			}
 			err := runUpgrade(context.Background(), opts)
-			wantError := stage != "not-needed" && stage != "cancel" && stage != "backup" && stage != "checksum-download" && stage != "checksum-read" && stage != "success" && stage != "success-no-skills"
+			wantError := stage != "not-needed" && stage != "cancel" && stage != "success" && stage != "success-no-skills"
 			if wantError && err == nil {
 				t.Fatalf("stage %s succeeded", stage)
 			}
@@ -339,6 +357,9 @@ func TestCrossPlatformCoverageRunUpgradeAllStagesCoverage(t *testing.T) {
 			}
 			if (stage == "success" || stage == "success-no-skills") && !rb.cleaned {
 				t.Fatal("successful upgrade did not clean backups")
+			}
+			if (stage == "install" || stage == "install-failed-dir") && !rb.rolledBack {
+				t.Fatal("post-replace failure did not restore the old binary")
 			}
 			if stage == "success" {
 				command := newUpgradeCommand()
@@ -396,7 +417,7 @@ func TestCrossPlatformCoverageUpgradeBinaryHelpersFailureCoverage(t *testing.T) 
 		if calls == 1 {
 			return nil, errors.New("signal: killed")
 		}
-		return []byte("version 1.0"), nil
+		return []byte("Version: v1.0"), nil
 	}
 	upgradeRepairDarwin = func(string) error { return nil }
 	if err := validateNewBinary("binary", "1.0"); err != nil {
@@ -404,8 +425,15 @@ func TestCrossPlatformCoverageUpgradeBinaryHelpersFailureCoverage(t *testing.T) 
 	}
 	upgradeRuntimeGOOS = oldGOOS
 	upgradeTryExecVersion = func(string) ([]byte, error) { return []byte("different"), nil }
-	if err := validateNewBinary("binary", "1.0"); err != nil {
-		t.Fatalf("version mismatch warning = %v", err)
+	if err := validateNewBinary("binary", "1.0"); err == nil {
+		t.Fatal("missing version accepted")
+	}
+	upgradeTryExecVersion = func(string) ([]byte, error) { return []byte("Version: v1.0.1"), nil }
+	if err := validateNewBinary("binary", "1.0"); err == nil {
+		t.Fatal("version mismatch accepted")
+	}
+	if got := parseUpgradeVersionOutput("Edition: open\nVersion: v1.2.3-beta.4\n"); got != "1.2.3-beta.4" {
+		t.Fatalf("parsed version = %q", got)
 	}
 
 	upgradeLookPath = func(string) (string, error) { return "", fail }

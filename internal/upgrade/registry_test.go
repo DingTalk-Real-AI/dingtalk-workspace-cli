@@ -5,7 +5,7 @@ package upgrade
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,26 +18,14 @@ import (
 
 func newRegistryTestClient(server *httptest.Server, cachePath string, now func() time.Time) *Client {
 	return &Client{
-		httpClient:   server.Client(),
-		owner:        defaultOwner,
-		repo:         defaultRepo,
-		baseURL:      gitHubAPIBase,
-		registryURL:  server.URL,
-		assetBaseURL: server.URL + "/releases/download",
-		cachePath:    cachePath,
-		now:          now,
+		httpClient:  server.Client(),
+		owner:       defaultOwner,
+		repo:        defaultRepo,
+		baseURL:     gitHubAPIBase,
+		registryURL: server.URL,
+		cachePath:   cachePath,
+		now:         now,
 	}
-}
-
-func serveRegistryTestChecksums(w http.ResponseWriter, r *http.Request) bool {
-	if !strings.HasSuffix(r.URL.Path, "/checksums.txt") {
-		return false
-	}
-	hash := strings.Repeat("a", 64)
-	for _, name := range registryDigestAssetNames() {
-		_, _ = fmt.Fprintf(w, "%s  %s\n", hash, name)
-	}
-	return true
 }
 
 func TestNewClientUsesRegistryOnlyForOfficialDefaults(t *testing.T) {
@@ -66,9 +54,6 @@ func TestRegistryReleaseUsesTenMinuteCache(t *testing.T) {
 	var requests atomic.Int32
 	version := "1.0.58-beta.6"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveRegistryTestChecksums(w, r) {
-			return
-		}
 		requests.Add(1)
 		if r.URL.Path != "/dingtalk-workspace-cli/beta" {
 			t.Fatalf("path = %q", r.URL.Path)
@@ -114,11 +99,92 @@ func TestRegistryReleaseUsesTenMinuteCache(t *testing.T) {
 	}
 }
 
+func TestRegistryFreshReleaseBypassesCache(t *testing.T) {
+	var requests atomic.Int32
+	version := "1.0.58"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_ = json.NewEncoder(w).Encode(npmPackageMetadata{Version: version})
+	}))
+	defer server.Close()
+
+	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	client := newRegistryTestClient(server, filepath.Join(t.TempDir(), "update-state.json"), func() time.Time { return now })
+	if _, err := client.FetchLatestReleaseForTrack(ReleaseTrackRelease); err != nil {
+		t.Fatal(err)
+	}
+	version = "1.0.59"
+	fresh, err := client.FetchLatestReleaseForTrackFresh(ReleaseTrackRelease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.Version != version || requests.Load() != 2 {
+		t.Fatalf("fresh release = %q, requests = %d", fresh.Version, requests.Load())
+	}
+}
+
+func TestFreshReleaseTrackBranches(t *testing.T) {
+	betaRegistry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(npmPackageMetadata{Version: "1.0.59-beta.1"})
+	}))
+	defer betaRegistry.Close()
+	registryClient := newRegistryTestClient(betaRegistry, "", time.Now)
+	if release, err := registryClient.FetchLatestReleaseForTrackFresh(ReleaseTrackBeta); err != nil || release.Version != "1.0.59-beta.1" {
+		t.Fatalf("fresh registry beta = %#v, %v", release, err)
+	}
+
+	githubServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]GitHubRelease{{TagName: "v1.0.59-beta.2", Prerelease: true}})
+	}))
+	defer githubServer.Close()
+	githubClient := NewClientWithBaseURL(githubServer.URL)
+	if release, err := githubClient.FetchLatestReleaseForTrackFresh(ReleaseTrackBeta); err != nil || release.Version != "1.0.59-beta.2" {
+		t.Fatalf("fresh GitHub beta = %#v, %v", release, err)
+	}
+
+	badClient := NewClientWithBaseURL(githubServer.URL)
+	badClient.configErr = errors.New("bad config")
+	for _, track := range []ReleaseTrack{ReleaseTrackRelease, ReleaseTrackBeta} {
+		if _, err := badClient.FetchLatestReleaseForTrackFresh(track); err == nil {
+			t.Fatalf("config error ignored for %s", track)
+		}
+	}
+	if _, err := githubClient.FetchLatestReleaseForTrackFresh(ReleaseTrackAll); err == nil {
+		t.Fatal("unknown fresh track accepted")
+	}
+}
+
+func TestRegistryHelperFailureEdges(t *testing.T) {
+	originalHome := upgradeUserHomeDir
+	t.Cleanup(func() { upgradeUserHomeDir = originalHome })
+	upgradeUserHomeDir = func() (string, error) { return "", errors.New("home") }
+	if got := updateCachePath(); got != "" {
+		t.Fatalf("cache path = %q", got)
+	}
+	if _, err := registryChannel(ReleaseTrackAll); err == nil {
+		t.Fatal("unknown registry channel accepted")
+	}
+	if err := validateRegistryVersion("1.0.0", ReleaseTrackAll); err == nil {
+		t.Fatal("unknown validation track accepted")
+	}
+	client := &Client{registryURL: "%", now: time.Now, httpClient: http.DefaultClient}
+	if _, err := client.fetchRegistryRelease(ReleaseTrackRelease, false); err == nil {
+		t.Fatal("invalid registry URL accepted")
+	}
+	client.registryURL = "https://registry.invalid"
+	client.httpClient = &http.Client{Transport: downloadRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("network")
+	})}
+	if _, err := client.fetchRegistryRelease(ReleaseTrackRelease, false); err == nil || !strings.Contains(err.Error(), "无法连接") {
+		t.Fatalf("registry network error = %v", err)
+	}
+	if _, err := client.fetchRegistryRelease(ReleaseTrackAll, false); err == nil {
+		t.Fatal("unknown fetch track accepted")
+	}
+}
+
 func TestRegistryReleaseBuildsVerifiedAssetURLs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveRegistryTestChecksums(w, r) {
-			return
-		}
 		if r.URL.Path != "/dingtalk-workspace-cli/latest" {
 			t.Fatalf("path = %q", r.URL.Path)
 		}
@@ -144,9 +210,6 @@ func TestRegistryReleaseBuildsVerifiedAssetURLs(t *testing.T) {
 	if want := "/releases/download/v1.0.58/dws-darwin-arm64.tar.gz"; !strings.HasSuffix(binary.BrowserDownloadURL, want) {
 		t.Fatalf("binary URL = %q", binary.BrowserDownloadURL)
 	}
-	if binary.Digest != "sha256:"+strings.Repeat("a", 64) {
-		t.Fatalf("binary digest = %q", binary.Digest)
-	}
 	if FindSkillsAsset(release.Assets) == nil || FindChecksumsAsset(release.Assets) == nil {
 		t.Fatal("registry release is missing skills or checksums asset")
 	}
@@ -154,9 +217,6 @@ func TestRegistryReleaseBuildsVerifiedAssetURLs(t *testing.T) {
 
 func TestRegistryCacheKeepsChannelsSeparate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveRegistryTestChecksums(w, r) {
-			return
-		}
 		switch r.URL.Path {
 		case "/dingtalk-workspace-cli/latest":
 			_ = json.NewEncoder(w).Encode(npmPackageMetadata{Version: "1.0.58"})
@@ -191,35 +251,6 @@ func TestRegistryCacheKeepsChannelsSeparate(t *testing.T) {
 	}
 	if len(state.Channels) != 2 {
 		t.Fatalf("cached channels = %#v", state.Channels)
-	}
-}
-
-func TestRegistryReleaseRequiresValidChecksums(t *testing.T) {
-	for _, test := range []struct {
-		name   string
-		status int
-		body   string
-		want   string
-	}{
-		{name: "missing", status: http.StatusNotFound, want: "HTTP 404"},
-		{name: "incomplete", status: http.StatusOK, body: strings.Repeat("a", 64) + "  dws-darwin-arm64.tar.gz\n", want: "缺少有效"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if strings.HasSuffix(r.URL.Path, "/checksums.txt") {
-					w.WriteHeader(test.status)
-					_, _ = w.Write([]byte(test.body))
-					return
-				}
-				_ = json.NewEncoder(w).Encode(npmPackageMetadata{Version: "1.0.58"})
-			}))
-			defer server.Close()
-			client := newRegistryTestClient(server, "", time.Now)
-			_, err := client.FetchLatestStableRelease()
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("error = %v, want %q", err, test.want)
-			}
-		})
 	}
 }
 
@@ -259,10 +290,7 @@ func TestRegistryReleaseRejectsBadMetadata(t *testing.T) {
 
 func TestRegistryCacheCorruptionAndFutureTimestampAreIgnored(t *testing.T) {
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveRegistryTestChecksums(w, r) {
-			return
-		}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
 		_ = json.NewEncoder(w).Encode(npmPackageMetadata{Version: "1.0.58"})
 	}))
@@ -295,10 +323,7 @@ func TestRegistryCacheCorruptionAndFutureTimestampAreIgnored(t *testing.T) {
 
 func TestRegistryCacheWrongTrackIsIgnored(t *testing.T) {
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveRegistryTestChecksums(w, r) {
-			return
-		}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
 		_ = json.NewEncoder(w).Encode(npmPackageMetadata{Version: "1.0.59-beta.2"})
 	}))

@@ -5,7 +5,6 @@ package upgrade
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,13 +18,12 @@ import (
 )
 
 const (
-	npmRegistryBase  = "https://registry.npmjs.org"
-	npmPackageName   = "dingtalk-workspace-cli"
-	updateCacheTTL   = 10 * time.Minute
-	updateCacheFile  = "update-state.json"
-	registryTimeout  = 5 * time.Second
-	registryMaxBody  = 256 << 10
-	checksumsMaxBody = 64 << 10
+	npmRegistryBase = "https://registry.npmjs.org"
+	npmPackageName  = "dingtalk-workspace-cli"
+	updateCacheTTL  = 10 * time.Minute
+	updateCacheFile = "update-state.json"
+	registryTimeout = 15 * time.Second
+	registryMaxBody = 256 << 10
 )
 
 type npmPackageMetadata struct {
@@ -38,9 +36,8 @@ type updateCacheState struct {
 }
 
 type updateCacheEntry struct {
-	Version   string            `json:"version"`
-	CheckedAt int64             `json:"checked_at"`
-	Digests   map[string]string `json:"digests"`
+	Version   string `json:"version"`
+	CheckedAt int64  `json:"checked_at"`
 }
 
 func updateCachePath() string {
@@ -51,7 +48,7 @@ func updateCachePath() string {
 	return filepath.Join(homeDir, ".dws", "cache", updateCacheFile)
 }
 
-func (c *Client) fetchRegistryRelease(track ReleaseTrack) (*ReleaseInfo, error) {
+func (c *Client) fetchRegistryRelease(track ReleaseTrack, useCache bool) (*ReleaseInfo, error) {
 	channel, err := registryChannel(track)
 	if err != nil {
 		return nil, err
@@ -61,9 +58,11 @@ func (c *Client) fetchRegistryRelease(track ReleaseTrack) (*ReleaseInfo, error) 
 	if c.now != nil {
 		now = c.now()
 	}
-	if entry, ok := c.cachedRegistryEntry(channel, now); ok {
-		if validateRegistryVersion(entry.Version, track) == nil && validateRegistryDigests(entry.Digests) == nil {
-			return c.releaseInfoForRegistryVersion(entry.Version, track, entry.Digests), nil
+	if useCache {
+		if entry, ok := c.cachedRegistryEntry(channel, now); ok {
+			if validateRegistryVersion(entry.Version, track) == nil {
+				return c.releaseInfoForRegistryVersion(entry.Version, track), nil
+			}
 		}
 	}
 
@@ -80,14 +79,10 @@ func (c *Client) fetchRegistryRelease(track ReleaseTrack) (*ReleaseInfo, error) 
 		return nil, fmt.Errorf("npm %s 指向已弃用版本 %s", channel, metadata.Version)
 	}
 
-	digests, err := c.fetchReleaseDigests(metadata.Version)
-	if err != nil {
-		return nil, fmt.Errorf("获取 GitHub Release 校验信息失败: %w", err)
-	}
 	c.saveRegistryEntry(channel, updateCacheEntry{
-		Version: metadata.Version, CheckedAt: now.Unix(), Digests: digests,
+		Version: metadata.Version, CheckedAt: now.Unix(),
 	})
-	return c.releaseInfoForRegistryVersion(metadata.Version, track, digests), nil
+	return c.releaseInfoForRegistryVersion(metadata.Version, track), nil
 }
 
 func registryChannel(track ReleaseTrack) (string, error) {
@@ -145,58 +140,6 @@ func (c *Client) getRegistryJSON(url string, target any) error {
 	return nil
 }
 
-func (c *Client) fetchReleaseDigests(version string) (map[string]string, error) {
-	version = strings.TrimPrefix(strings.TrimSpace(version), "v")
-	url := fmt.Sprintf("%s/v%s/%s", strings.TrimRight(c.assetBaseURL, "/"), version, checksumsName)
-	ctx, cancel := context.WithTimeout(context.Background(), registryTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", userAgent)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("无法连接到 GitHub Release: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub Release 返回 HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, checksumsMaxBody))
-	if err != nil {
-		return nil, fmt.Errorf("读取 checksums.txt 失败: %w", err)
-	}
-	digests := ParseChecksumFile(string(body))
-	if err := validateRegistryDigests(digests); err != nil {
-		return nil, err
-	}
-	return digests, nil
-}
-
-func validateRegistryDigests(digests map[string]string) error {
-	for _, name := range registryDigestAssetNames() {
-		digest := strings.TrimSpace(digests[name])
-		decoded, err := hex.DecodeString(digest)
-		if err != nil || len(decoded) != 32 {
-			return fmt.Errorf("checksums.txt 缺少有效的 %s SHA256", name)
-		}
-	}
-	return nil
-}
-
-func registryDigestAssetNames() []string {
-	return []string{
-		"dws-darwin-amd64.tar.gz",
-		"dws-darwin-arm64.tar.gz",
-		"dws-linux-amd64.tar.gz",
-		"dws-linux-arm64.tar.gz",
-		"dws-windows-amd64.zip",
-		"dws-windows-arm64.zip",
-		skillsZipName,
-	}
-}
-
 func (c *Client) cachedRegistryEntry(channel string, now time.Time) (updateCacheEntry, bool) {
 	state := c.loadUpdateCache()
 	entry, ok := state.Channels[channel]
@@ -215,14 +158,8 @@ func (c *Client) saveRegistryEntry(channel string, entry updateCacheEntry) {
 		return
 	}
 	state := c.loadUpdateCache()
-	if state.Channels == nil {
-		state.Channels = make(map[string]updateCacheEntry)
-	}
 	state.Channels[channel] = entry
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return
-	}
+	data, _ := json.MarshalIndent(state, "", "  ")
 	_ = helpers.AtomicWrite(c.cachePath, append(data, '\n'), 0o600)
 }
 
@@ -241,11 +178,11 @@ func (c *Client) loadUpdateCache() updateCacheState {
 	return state
 }
 
-func (c *Client) releaseInfoForRegistryVersion(version string, track ReleaseTrack, digests map[string]string) *ReleaseInfo {
+func (c *Client) releaseInfoForRegistryVersion(version string, track ReleaseTrack) *ReleaseInfo {
 	version = strings.TrimPrefix(version, "v")
 	tag := "v" + version
 	releaseURL := fmt.Sprintf("https://github.com/%s/%s/releases/tag/%s", c.owner, c.repo, tag)
-	downloadBase := fmt.Sprintf("%s/%s", strings.TrimRight(c.assetBaseURL, "/"), tag)
+	downloadBase := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s", c.owner, c.repo, tag)
 	assetNames := []string{
 		"dws-darwin-amd64.tar.gz",
 		"dws-darwin-arm64.tar.gz",
@@ -258,13 +195,8 @@ func (c *Client) releaseInfoForRegistryVersion(version string, track ReleaseTrac
 	}
 	assets := make([]GitHubAsset, 0, len(assetNames))
 	for _, name := range assetNames {
-		digest := ""
-		if value := digests[name]; value != "" {
-			digest = "sha256:" + value
-		}
 		assets = append(assets, GitHubAsset{
 			Name:               name,
-			Digest:             digest,
 			BrowserDownloadURL: downloadBase + "/" + name,
 		})
 	}

@@ -175,7 +175,7 @@ DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.
 
 > Requires **v1.0.7** or later. For earlier versions, please re-run the [install script](#installation) to upgrade.
 
-dws has built-in self-upgrade capability. The stable and beta channels are resolved from the npm `latest` / `beta` dist-tags and cached locally for 10 minutes. Release assets are still downloaded from [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases) with SHA256 integrity verification and automatic backup.
+dws has built-in self-upgrade capability. Stable and beta checks resolve the npm `latest` / `beta` dist-tags and cache them locally for 10 minutes; an explicit install bypasses that cache so a newly published or withdrawn version is observed immediately. npm/pnpm-owned installations update through the same package manager with an exact version, while manual installations keep using [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases). Both paths back up and verify the installed binary; direct downloads require SHA256 checksums and use bounded retries plus atomic temporary files.
 
 ```bash
 dws upgrade                    # interactive upgrade to latest version
@@ -190,7 +190,7 @@ dws upgrade --rollback         # rollback to the previous version
 dws upgrade -y                 # skip confirmation prompt
 ```
 
-By default, `dws upgrade` follows the npm `latest` channel. Use `--beta` only when you explicitly want the version published to the npm `beta` channel.
+By default, `dws upgrade` follows the npm `latest` channel. Use `--beta` only when you explicitly want the version published to the npm `beta` channel. `--version`, `--skip-skills`, and custom release sources retain the direct release-asset path because they require finer control than package postinstall provides.
 
 ### Six-channel post-release verification
 

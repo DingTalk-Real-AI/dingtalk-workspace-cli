@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
 	"github.com/spf13/cobra"
 )
 
@@ -380,8 +381,8 @@ func TestStrictVerifyFile_NoChecksumInfo(t *testing.T) {
 	os.WriteFile(filePath, []byte("content"), 0644)
 
 	err := strictVerifyFile("[1/5]", filePath, "test.tar.gz", "", "")
-	if err != nil {
-		t.Errorf("no checksum info should skip, not error: %v", err)
+	if err == nil {
+		t.Fatal("missing checksum info must fail closed")
 	}
 }
 
@@ -531,6 +532,19 @@ func TestWriteDryRunPlan_WithSkills(t *testing.T) {
 	writeDryRunPlan(&buf2, "v1.0.30", "dws-linux-amd64.tar.gz", false)
 	if strings.Contains(buf2.String(), "dws-skills.zip") {
 		t.Errorf("without skills, output should not mention dws-skills.zip, got:\n%s", buf2.String())
+	}
+}
+
+func TestWritePackageDryRunPlan(t *testing.T) {
+	var buf bytes.Buffer
+	writePackageDryRunPlan(&buf, "v1.0.30", "1.0.31-beta.1", upgrade.InstallDetection{
+		Manager: upgrade.PackageManagerPNPM,
+	})
+	out := buf.String()
+	for _, want := range []string{"dry-run", "pnpm", "dingtalk-workspace-cli@1.0.31-beta.1", "Skills"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("package dry-run output missing %q:\n%s", want, out)
+		}
 	}
 }
 
