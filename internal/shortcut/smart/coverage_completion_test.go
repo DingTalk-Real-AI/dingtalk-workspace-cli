@@ -105,7 +105,7 @@ func TestCrossPlatformCoverageChatMessagesOpenIDRoute(t *testing.T) {
 	}}
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
-	root.SetArgs([]string{"chat", "+chat-messages", "--open-dingtalk-id", "D-user", "--limit", "1", "--yes"})
+	root.SetArgs([]string{"chat", "+chat-messages", "--open-dingtalk-id", testCurrentDOpenID, "--limit", "1", "--yes"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}

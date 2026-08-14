@@ -14,6 +14,11 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 )
 
+const (
+	appFixtureCurrentDOpenID  = "DAAAAAAAAAAAiE"
+	appFixtureCurrentDOpenID2 = "DAQEBAQEBAQEiE"
+)
+
 // paramAliasCompleteCommands is deliberately keyed by the exact reviewed
 // fixture command path. Every argv is a complete, business-valid invocation:
 // required companion flags are present, time and enum values are valid, and
@@ -34,12 +39,12 @@ var paramAliasCompleteCommands = map[string][]string{
 	"chat +chat-messages":                      {"chat", "+chat-messages", "--group", "fixture-conversation"},
 	"chat +chat-add-bot":                       {"chat", "+chat-add-bot", "--id", "fixture-conversation", "--robot-code", "robot-1", "--yes"},
 	"chat +chat-audit-join":                    {"chat", "+chat-audit-join", "--group", "fixture-conversation", "--record-id", "7", "--applicant", "user-1", "--inviter", "user-2", "--status", "AuditApprove", "--yes"},
-	"chat +chat-members-get":                   {"chat", "+chat-members-get", "--id", "fixture-conversation", "--users", "D-user-1,D-user-2"},
+	"chat +chat-members-get":                   {"chat", "+chat-members-get", "--id", "fixture-conversation", "--users", appFixtureCurrentDOpenID + "," + appFixtureCurrentDOpenID2},
 	"chat +chat-members-list":                  {"chat", "+chat-members-list", "--conversation-id", "fixture-conversation", "--member-types", "user,bot"},
-	"chat +chat-mute-member":                   {"chat", "+chat-mute-member", "--group", "fixture-conversation", "--users", "D-user-1,D-user-2", "--mute-time", "3600000", "--yes"},
+	"chat +chat-mute-member":                   {"chat", "+chat-mute-member", "--group", "fixture-conversation", "--users", appFixtureCurrentDOpenID + "," + appFixtureCurrentDOpenID2, "--mute-time", "3600000", "--yes"},
 	"chat +chat-remove-bot":                    {"chat", "+chat-remove-bot", "--id", "fixture-conversation", "--bot-id", "bot-1", "--yes"},
-	"chat +chat-role-remove-user":              {"chat", "+chat-role-remove-user", "--group", "fixture-conversation", "--user", "D-user-1", "--role-ids", "role-1", "--yes"},
-	"chat +chat-transfer-owner":                {"chat", "+chat-transfer-owner", "--group", "fixture-conversation", "--new-owner", "D-user-1", "--yes"},
+	"chat +chat-role-remove-user":              {"chat", "+chat-role-remove-user", "--group", "fixture-conversation", "--user", appFixtureCurrentDOpenID, "--role-ids", "role-1", "--yes"},
+	"chat +chat-transfer-owner":                {"chat", "+chat-transfer-owner", "--group", "fixture-conversation", "--new-owner", appFixtureCurrentDOpenID, "--yes"},
 	"chat +chat-update":                        {"chat", "+chat-update", "--group", "fixture-conversation", "--name", "Fixture Renamed Group", "--yes"},
 	"chat +bot-find":                           {"chat", "+bot-find", "--query", "fixture", "--limit", "7"},
 	"chat +bot-search":                         {"chat", "+bot-search", "--name", "Fixture Bot", "--page", "2", "--size", "7"},
@@ -57,7 +62,7 @@ var paramAliasCompleteCommands = map[string][]string{
 	"chat +messages-list":                      {"chat", "+messages-list", "--group", "fixture-conversation", "--time", "2026-03-10 00:00:00", "--limit", "7"},
 	"chat +messages-list-direct":               {"chat", "+messages-list-direct", "--user", "user-1", "--time", "2026-03-10 00:00:00", "--limit", "7"},
 	"chat +messages-list-unread-conversations": {"chat", "+messages-list-unread-conversations", "--count", "7", "--exclude-muted"},
-	"chat +messages-reply":                     {"chat", "+messages-reply", "--conversation-id", "fixture-conversation", "--ref-msg-id", "message-1", "--ref-sender", "D-sender", "--text", "hello fixture", "--yes"},
+	"chat +messages-reply":                     {"chat", "+messages-reply", "--conversation-id", "fixture-conversation", "--ref-msg-id", "message-1", "--ref-sender", appFixtureCurrentDOpenID, "--text", "hello fixture", "--yes"},
 	"chat +messages-resource-download":         {"chat", "+messages-resource-download", "--resource-id", "resource-1", "--message-id", "message-1", "--open-conversation-id", "fixture-conversation", "--output", "downloads/fixture.bin"},
 	"chat +messages-set-pin":                   {"chat", "+messages-set-pin", "--open-conversation-id", "fixture-conversation", "--msg-id", "message-1", "--yes"},
 	"chat +messages-send-by-webhook":           {"chat", "+messages-send-by-webhook", "--token", "fixture-token", "--title", "Fixture Alert", "--text", "fixture", "--at-users", "user-1,user-2", "--yes"},
@@ -70,10 +75,10 @@ var paramAliasCompleteCommands = map[string][]string{
 	"chat category create-smart":               {"chat", "category", "create-smart", "--name", "Fixture Smart Category", "--keywords", "fixture,priority", "--yes"},
 	"chat category rename":                     {"chat", "category", "rename", "--category-id", "7", "--title", "Renamed Cat", "--yes"},
 	"chat group members":                       {"chat", "group", "members", "--id", "fixture-conversation"},
-	"chat group members add":                   {"chat", "group", "members", "add", "--id", "fixture-conversation", "--users", "D-user-1"},
+	"chat group members add":                   {"chat", "group", "members", "add", "--id", "fixture-conversation", "--users", appFixtureCurrentDOpenID},
 	"chat group members add-bot":               {"chat", "group", "members", "add-bot", "--id", "fixture-conversation", "--robot-code", "robot-1", "--yes"},
-	"chat group members list-by-ids":           {"chat", "group", "members", "list-by-ids", "--id", "fixture-conversation", "--users", "D-user-1,D-user-2"},
-	"chat group members remove":                {"chat", "group", "members", "remove", "--id", "fixture-conversation", "--users", "D-user-1", "--yes"},
+	"chat group members list-by-ids":           {"chat", "group", "members", "list-by-ids", "--id", "fixture-conversation", "--users", appFixtureCurrentDOpenID + "," + appFixtureCurrentDOpenID2},
+	"chat group members remove":                {"chat", "group", "members", "remove", "--id", "fixture-conversation", "--users", appFixtureCurrentDOpenID, "--yes"},
 	"chat group members remove-bot":            {"chat", "group", "members", "remove-bot", "--id", "fixture-conversation", "--bot-id", "bot-1", "--yes"},
 	"chat group rename":                        {"chat", "group", "rename", "--id", "fixture-conversation", "--name", "Fixture Renamed Group", "--yes"},
 	"chat group set-admin":                     {"chat", "group", "set-admin", "--group", "fixture-conversation", "--user", "user-1", "--yes"},
@@ -88,9 +93,9 @@ var paramAliasCompleteCommands = map[string][]string{
 	"chat message list-by-ids":                 {"chat", "message", "list-by-ids", "--msg-ids", "message-1,message-2"},
 	"chat message list-unread-conversations":   {"chat", "message", "list-unread-conversations", "--count", "7", "--exclude-muted"},
 	"chat message recall":                      {"chat", "message", "recall", "--conversation-id", "fixture-conversation", "--msg-id", "message-1", "--yes"},
-	"chat message reply":                       {"chat", "message", "reply", "--conversation-id", "fixture-conversation", "--ref-msg-id", "message-1", "--ref-sender", "D-sender", "--text", "hello fixture", "--yes"},
+	"chat message reply":                       {"chat", "message", "reply", "--conversation-id", "fixture-conversation", "--ref-msg-id", "message-1", "--ref-sender", appFixtureCurrentDOpenID, "--text", "hello fixture", "--yes"},
 	"chat message search-advanced":             {"chat", "message", "search-advanced", "--conversation-ids", "fixture-conversation", "--query", "fixture"},
-	"chat message send":                        {"chat", "message", "send", "--user", "D-recipient", "--text", "hello fixture", "--uuid", "param-alias-equivalence", "--yes"},
+	"chat message send":                        {"chat", "message", "send", "--user", appFixtureCurrentDOpenID, "--text", "hello fixture", "--idempotency-key", "param-alias-equivalence", "--yes"},
 	"chat message send-by-bot":                 {"chat", "message", "send-by-bot", "--robot-code", "robot-1", "--group", "fixture-conversation", "--title", "Fixture Alert", "--text", "@user-1 @user-2 fixture", "--at-user-ids", "user-1,user-2", "--yes"},
 	"chat message send-by-webhook":             {"chat", "message", "send-by-webhook", "--token", "fixture-token", "--title", "Fixture Alert", "--text", "fixture", "--at-users", "user-1,user-2", "--yes"},
 	"contact +dept-members":                    {"contact", "+dept-members", "--dept", "Fixture Dept"},
@@ -211,11 +216,11 @@ var paramAliasCompleteCommandVariants = map[string]map[string][]string{
 		"user": {"chat", "message", "list", "--user", "user-1", "--time", "2026-03-10 00:00:00", "--limit", "7"},
 	},
 	"chat message list-by-sender": {
-		"sender-open-dingtalk-id": {"chat", "message", "list-by-sender", "--sender-open-dingtalk-id", "D-sender", "--start", "2026-03-10T00:00:00+08:00", "--end", "2026-03-11T00:00:00+08:00", "--limit", "7", "--cursor", "0"},
+		"sender-open-dingtalk-id": {"chat", "message", "list-by-sender", "--sender-open-dingtalk-id", appFixtureCurrentDOpenID, "--start", "2026-03-10T00:00:00+08:00", "--end", "2026-03-11T00:00:00+08:00", "--limit", "7", "--cursor", "0"},
 	},
 	"chat message send": {
-		"group":     {"chat", "message", "send", "--group", "fixture-conversation", "--text", "hello fixture", "--uuid", "param-alias-equivalence-group", "--yes"},
-		"file-path": {"chat", "message", "send", "--group", "fixture-conversation", "--msg-type", "file", "--file-path", "../../go.mod", "--dentry-id", "1", "--space-id", "2", "--uuid", "param-alias-equivalence-file", "--yes"},
+		"group":     {"chat", "message", "send", "--group", "fixture-conversation", "--text", "hello fixture", "--idempotency-key", "param-alias-equivalence-group", "--yes"},
+		"file-path": {"chat", "message", "send", "--group", "fixture-conversation", "--msg-type", "file", "--file-path", "../../go.mod", "--dentry-id", "1", "--space-id", "2", "--idempotency-key", "param-alias-equivalence-file", "--yes"},
 	},
 	"chat +conversation-set-top": {
 		"conversation-ids": {"chat", "+conversation-set-top", "--conversation-ids", "fixture-conversation-1,fixture-conversation-2", "--yes"},

@@ -361,9 +361,9 @@ func TestCrossPlatformCoverageParamAliasWriteCommandFinalPayload(t *testing.T) {
 	caller := &paramAliasCaptureCaller{}
 	ctx, err := executeParamAliasE2E(t, caller,
 		"chat", "message", "send",
-		"--to-user", "D-recipient",
+		"--to-user", appFixtureCurrentDOpenID,
 		"--text", "hello alias",
-		"--uuid", "alias-e2e",
+		"--idempotency-key", "alias-e2e",
 	)
 	if err != nil {
 		t.Fatalf("chat write alias E2E error = %v", err)
@@ -375,7 +375,7 @@ func TestCrossPlatformCoverageParamAliasWriteCommandFinalPayload(t *testing.T) {
 		t.Fatalf("chat calls = %#v", caller.calls)
 	}
 	payload := caller.calls[0].args
-	if payload["receiverOpenDingTalkId"] != "D-recipient" || payload["uuid"] != "alias-e2e" || payload["msgType"] != "markdown" {
+	if payload["receiverOpenDingTalkId"] != appFixtureCurrentDOpenID || payload["uuid"] != "alias-e2e" || payload["msgType"] != "markdown" {
 		t.Fatalf("chat payload identity fields = %#v", payload)
 	}
 	content, _ := payload["content"].(string)
@@ -386,6 +386,29 @@ func TestCrossPlatformCoverageParamAliasWriteCommandFinalPayload(t *testing.T) {
 		if _, exists := payload[forbidden]; exists {
 			t.Fatalf("chat payload leaked pre-normalization field %q: %#v", forbidden, payload)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageSendLegacyUUIDAliasFinalPayload(t *testing.T) {
+	caller := &paramAliasCaptureCaller{}
+	_, err := executeParamAliasE2E(t, caller,
+		"chat", "message", "send",
+		"--group", "fixture-conversation",
+		"--text", "hello legacy uuid",
+		"--uuid", "legacy-alias-e2e",
+	)
+	if err != nil {
+		t.Fatalf("chat message send legacy uuid error = %v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != "send_personal_message" {
+		t.Fatalf("chat calls = %#v", caller.calls)
+	}
+	payload := caller.calls[0].args
+	if payload["uuid"] != "legacy-alias-e2e" || payload["openConversationId"] != "fixture-conversation" {
+		t.Fatalf("chat legacy uuid payload = %#v", payload)
+	}
+	if _, exists := payload["idempotency-key"]; exists {
+		t.Fatalf("chat payload leaked CLI-only idempotency-key: %#v", payload)
 	}
 }
 
@@ -666,11 +689,11 @@ func TestCrossPlatformCoverageSelectedParamAliasesProduceCanonicalEquivalentDryR
 			tool: "send_personal_message",
 			canonicalArgs: []string{
 				"--dry-run", "chat", "message", "send",
-				"--user", "D-recipient", "--text", "hello dry-run", "--uuid", "alias-dry-run",
+				"--user", appFixtureCurrentDOpenID, "--text", "hello dry-run", "--uuid", "alias-dry-run",
 			},
 			aliasArgs: []string{
 				"--dry-run", "chat", "message", "send",
-				"--to-user", "D-recipient", "--text", "hello dry-run", "--uuid", "alias-dry-run",
+				"--to-user", appFixtureCurrentDOpenID, "--text", "hello dry-run", "--uuid", "alias-dry-run",
 			},
 			wantCorrections: 1,
 			wantArgKeys:     []string{"clawType", "content", "msgType", "receiverOpenDingTalkId", "uuid"},

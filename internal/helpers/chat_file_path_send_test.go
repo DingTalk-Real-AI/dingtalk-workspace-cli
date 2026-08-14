@@ -178,7 +178,7 @@ func TestChatMessageSendFilePathUsesOpenDingTalkIDTarget(t *testing.T) {
 	caller := &chatFilePathCaller{}
 	commandArgs := []string{
 		"message", "send",
-		"--open-dingtalk-id=D-target",
+		"--open-dingtalk-id=" + helperCurrentDOpenID,
 		"--msg-type=file",
 		"--file-path=" + filePath,
 	}
@@ -203,7 +203,7 @@ func TestChatMessageSendFilePathUsesOpenDingTalkIDTarget(t *testing.T) {
 		server: "im",
 		tool:   "init_conversation_file_upload",
 		args: map[string]any{
-			"openDingTalkId": "D-target",
+			"openDingTalkId": helperCurrentDOpenID,
 			"fileName":       "report.pdf",
 			"fileSize":       int64(len(payload)),
 			"md5":            fileMD5,
@@ -216,7 +216,7 @@ func TestChatMessageSendFilePathUsesOpenDingTalkIDTarget(t *testing.T) {
 		server: "im",
 		tool:   "commit_conversation_file_upload",
 		args: map[string]any{
-			"openDingTalkId": "D-target",
+			"openDingTalkId": helperCurrentDOpenID,
 			"uploadKey":      "upload-key",
 			"fileName":       "report.pdf",
 			"fileSize":       int64(len(payload)),
@@ -231,7 +231,7 @@ func TestChatMessageSendFilePathUsesOpenDingTalkIDTarget(t *testing.T) {
 	if send.server != "chat" || send.tool != "send_personal_message" || send.args["msgType"] != "file" {
 		t.Fatalf("send direct target call = %#v", send)
 	}
-	if send.args["receiverOpenDingTalkId"] != "D-target" {
+	if send.args["receiverOpenDingTalkId"] != helperCurrentDOpenID {
 		t.Fatalf("send direct target = %#v", send.args)
 	}
 	if _, ok := send.args["openDingTalkId"]; ok {

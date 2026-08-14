@@ -142,6 +142,17 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 	atOpenIDs := uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids"))
 	atUserIDs := uniqueShortcutStrings(rt.StrSlice("at-user-ids"))
 	atMobiles := uniqueShortcutStrings(rt.StrSlice("at-mobiles"))
+	if openID != "" {
+		if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", openID); err != nil {
+			return err
+		}
+	}
+	if err := validateExplicitOpenIDs("--open-dingtalk-ids", openIDs); err != nil {
+		return err
+	}
+	if err := validateExplicitOpenIDs("--at-open-dingtalk-ids", atOpenIDs); err != nil {
+		return err
+	}
 	contentType, err := messagesSendContentType(rt)
 	if err != nil {
 		return err

@@ -15,24 +15,34 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 type searchMsgExecutionCaller struct {
-	calls          []platformCoverageCall
-	failSecondPage bool
-	failEnrichment bool
-	omitPagination bool
-	omitMgetItem   bool
-	failPreflight  bool
-	preflightError error
-	searchResponse string
-	wrongMgetScope bool
-	missingMgetCID bool
-	firstResponse  string
-	mgetResponse   string
-	numericZeroEnd bool
+	calls              []platformCoverageCall
+	failSecondPage     bool
+	failEnrichment     bool
+	omitPagination     bool
+	omitMgetItem       bool
+	failPreflight      bool
+	preflightError     error
+	searchResponse     string
+	wrongMgetScope     bool
+	missingMgetCID     bool
+	firstResponse      string
+	mgetResponse       string
+	numericZeroEnd     bool
+	contactResponse    string
+	groupResponse      string
+	failContactKeyword string
+	failGroupKeyword   string
 }
+
+const (
+	testCurrentDOpenID  = "DAAAAAAAAAAAiE"
+	testCurrentDOpenID2 = "DAQEBAQEBAQEiE"
+)
 
 func (f *searchMsgExecutionCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
 	f.calls = append(f.calls, platformCoverageCall{product: product, tool: tool, args: args})
@@ -45,10 +55,28 @@ func (f *searchMsgExecutionCaller) CallTool(_ context.Context, product, tool str
 		}
 		return searchMsgToolResult(`{"result":{"openConversationId":"` + args["openConversationId"].(string) + `"}}`), nil
 	}
+	if product == "contact" && tool == "search_contact_by_key_word" {
+		if f.failContactKeyword != "" && args["keyword"] == f.failContactKeyword {
+			return nil, errors.New("fixture contact failure")
+		}
+		if f.contactResponse != "" {
+			return searchMsgToolResult(f.contactResponse), nil
+		}
+		keyword := args["keyword"].(string)
+		return searchMsgToolResult(`{"result":[{"userId":"user-` + keyword + `","openDingTalkId":"` + testCurrentDOpenID + `","name":"` + keyword + `"}],"hasMore":false}`), nil
+	}
 	if product != "im" {
 		return nil, errors.New("unexpected product")
 	}
 	switch tool {
+	case "search_groups":
+		if f.failGroupKeyword != "" && args["keyword"] == f.failGroupKeyword {
+			return nil, errors.New("fixture group failure")
+		}
+		if f.groupResponse != "" {
+			return searchMsgToolResult(f.groupResponse), nil
+		}
+		return searchMsgToolResult(`{"result":[{"openConversationId":"cid-resolved-group","title":"` + args["keyword"].(string) + `"}],"hasMore":false}`), nil
 	case "search_messages":
 		if f.searchResponse != "" {
 			return searchMsgToolResult(f.searchResponse), nil
@@ -63,12 +91,12 @@ func (f *searchMsgExecutionCaller) CallTool(_ context.Context, product, tool str
 			if f.failSecondPage {
 				return nil, errors.New("second page unavailable")
 			}
-			return searchMsgToolResult(`{"result":{"messages":[{"openMessageId":"m2","openConversationId":"cid-2","content":"sparse-2"}],"hasMore":false}}`), nil
+			return searchMsgToolResult(`{"result":{"messages":[{"openMessageId":"m2","openConversationId":"cid-2","senderOpenDingTalkId":"` + testCurrentDOpenID + `","content":"sparse-2"}],"hasMore":false}}`), nil
 		}
 		if f.firstResponse != "" {
 			return searchMsgToolResult(f.firstResponse), nil
 		}
-		return searchMsgToolResult(`{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","content":"sparse-1"}],"hasMore":true,"nextCursor":"c2"}}`), nil
+		return searchMsgToolResult(`{"result":{"messages":[{"openMessageId":"m1","openConversationId":"cid-1","senderOpenDingTalkId":"` + testCurrentDOpenID + `","content":"sparse-1"}],"hasMore":true,"nextCursor":"c2"}}`), nil
 	case "list_messages_by_ids":
 		if f.failEnrichment {
 			return nil, errors.New("mget unavailable")
@@ -129,13 +157,264 @@ func executeSearchMsgResult(caller *searchMsgExecutionCaller, args ...string) (m
 	return payload, nil
 }
 
+func TestSearchMsgMixedSenderClassifiesFormatWithoutIDPreflight(t *testing.T) {
+	tests := []string{"D-prefix-fixture-user", "d-prefix-fixture-user", "测试用户甲", "fixture-user-id"}
+	for _, target := range tests {
+		t.Run(target, func(t *testing.T) {
+			caller := &searchMsgExecutionCaller{searchResponse: `{"result":{"messages":[],"hasMore":false}}`}
+			payload := executeSearchMsg(t, caller, "--sender", target, "--no-enrich")
+			if payload["complete"] != true || len(caller.calls) != 2 {
+				t.Fatalf("payload=%#v calls=%#v", payload, caller.calls)
+			}
+			if caller.calls[0].product != "contact" || caller.calls[0].tool != "search_contact_by_key_word" ||
+				caller.calls[1].tool != "search_messages" {
+				t.Fatalf("calls=%#v", caller.calls)
+			}
+			if got, want := caller.calls[1].args["senderOpenDingTakIds"], []string{testCurrentDOpenID}; !reflect.DeepEqual(got, want) {
+				t.Fatalf("senderOpenDingTakIds=%#v want=%#v", got, want)
+			}
+		})
+	}
+
+	caller := &searchMsgExecutionCaller{searchResponse: `{"result":{"messages":[],"hasMore":false}}`}
+	executeSearchMsg(t, caller, "--sender", testCurrentDOpenID, "--no-enrich")
+	if len(caller.calls) != 1 || caller.calls[0].tool != "search_messages" {
+		t.Fatalf("format-valid ID unexpectedly preflighted: %#v", caller.calls)
+	}
+}
+
+func TestSearchMsgSenderScopeFiltersBackendOverReturn(t *testing.T) {
+	caller := &searchMsgExecutionCaller{searchResponse: `{"result":{"messages":[
+		{"openMessageId":"wanted","senderOpenDingTalkId":"DAAAAAAAAAAAiE","content":"keep"},
+		{"openMessageId":"other","senderOpenDingTalkId":"DAQEBAQEBAQEiE","content":"drop"}
+	],"hasMore":false}}`}
+	payload := executeSearchMsg(t, caller, "--sender", testCurrentDOpenID, "--no-enrich")
+	if payload["count"] != float64(1) {
+		t.Fatalf("payload=%#v", payload)
+	}
+	messages := payload["messages"].([]any)
+	if messages[0].(map[string]any)["messageId"] != "wanted" {
+		t.Fatalf("messages=%#v", messages)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgSenderScopeIgnoresNonMatchingIdentityFamily(t *testing.T) {
+	caller := &searchMsgExecutionCaller{searchResponse: `{"result":{"messages":[
+		{"openMessageId":"wanted","senderOpenDingTalkId":"DAAAAAAAAAAAiE","content":"keep"},
+		{"openMessageId":"other-family","senderUserId":"other-user","content":"drop"}
+	],"hasMore":false}}`}
+	payload := executeSearchMsg(t, caller, "--sender", testCurrentDOpenID, "--no-enrich")
+	if payload["complete"] != true || payload["count"] != float64(1) || payload["failedCount"] != float64(0) {
+		t.Fatalf("payload=%#v", payload)
+	}
+
+	filtered, unverifiable := filterSearchSenderScope(
+		[]map[string]any{
+			{"openMessageId": "wanted-user", "senderUserId": "wanted-user"},
+			{"openMessageId": "other-open-family", "senderOpenDingTalkId": testCurrentDOpenID},
+		},
+		[]targetresolver.UserResolution{{Selected: targetresolver.User{UserID: "wanted-user"}}},
+	)
+	if len(filtered) != 1 || len(unverifiable) != 0 {
+		t.Fatalf("reverse family filtered=%#v unverifiable=%#v", filtered, unverifiable)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgResolutionFailureEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		caller *searchMsgExecutionCaller
+		args   []string
+	}{
+		{
+			name:   "group target",
+			caller: &searchMsgExecutionCaller{failGroupKeyword: "missing-group"},
+			args:   []string{"--group", "missing-group", "--no-enrich"},
+		},
+		{
+			name:   "sender query",
+			caller: &searchMsgExecutionCaller{failContactKeyword: "missing-query"},
+			args:   []string{"--sender-query", "missing-query", "--no-enrich"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := executeSearchMsgResult(tc.caller, tc.args...); err == nil {
+				t.Fatal("resolution failure unexpectedly succeeded")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgRejectsAmbiguousDirectSender(t *testing.T) {
+	caller := &searchMsgExecutionCaller{contactResponse: `{"result":[
+		{"userId":"fixture-user-1","name":"测试同名发送者"},
+		{"userId":"fixture-user-2","name":"测试同名发送者"}
+	],"hasMore":false}`}
+	_, err := executeSearchMsgResult(caller, "--sender", "测试同名发送者", "--no-enrich")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "resolution_ambiguous" {
+		t.Fatalf("error=%#v, want resolution_ambiguous", err)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnavailable(t *testing.T) {
+	t.Run("unrelated unique directory candidate never replaces the supplied user id", func(t *testing.T) {
+		caller := &searchMsgExecutionCaller{
+			contactResponse: `{"result":[{"userId":"other-user","name":"其他用户"}],"hasMore":false}`,
+			searchResponse: `{"result":{"messages":[
+				{"openMessageId":"wanted","senderUserId":"fixture-user-id","content":"keep"},
+				{"openMessageId":"other","senderUserId":"other-user","content":"drop"}
+			],"hasMore":false}}`,
+		}
+		payload := executeSearchMsg(t, caller, "--sender", "fixture-user-id", "--no-enrich")
+		if len(caller.calls) != 2 || caller.calls[0].tool != "search_contact_by_key_word" ||
+			caller.calls[1].tool != "search_messages" {
+			t.Fatalf("calls=%#v", caller.calls)
+		}
+		if got := caller.calls[1].args["senderUserIds"]; !reflect.DeepEqual(got, []string{"fixture-user-id"}) {
+			t.Fatalf("senderUserIds=%#v args=%#v", got, caller.calls[1].args)
+		}
+		if _, exists := caller.calls[1].args["senderOpenDingTakIds"]; exists {
+			t.Fatalf("unrelated candidate leaked into request: %#v", caller.calls[1].args)
+		}
+		if payload["complete"] != true || payload["count"] != float64(1) {
+			t.Fatalf("payload=%#v", payload)
+		}
+	})
+
+	t.Run("mixed sender preserves positive matches and blocks complete negative conclusion", func(t *testing.T) {
+		caller := &searchMsgExecutionCaller{
+			failContactKeyword: "stable-user-id",
+			searchResponse: `{"result":{"messages":[
+				{"openMessageId":"wanted","senderUserId":"stable-user-id","content":"keep"},
+				{"openMessageId":"other","senderUserId":"other-user","content":"drop"}
+			],"hasMore":false}}`,
+		}
+		payload := executeSearchMsg(t, caller, "--sender", "stable-user-id", "--no-enrich")
+		if len(caller.calls) != 2 || caller.calls[0].tool != "search_contact_by_key_word" ||
+			caller.calls[1].tool != "search_messages" {
+			t.Fatalf("calls=%#v", caller.calls)
+		}
+		if got := caller.calls[1].args["senderUserIds"]; !reflect.DeepEqual(got, []string{"stable-user-id"}) {
+			t.Fatalf("senderUserIds=%#v", got)
+		}
+		if payload["count"] != float64(1) || payload["complete"] != true || payload["failedCount"] != float64(0) {
+			t.Fatalf("payload=%#v", payload)
+		}
+		scope := payload["senderScope"].(map[string]any)
+		if _, exists := scope["status"]; exists || scope["targetsResolved"] != true {
+			t.Fatalf("senderScope=%#v", scope)
+		}
+	})
+
+	t.Run("mixed sender without a stable id match cannot produce a complete negative conclusion", func(t *testing.T) {
+		caller := &searchMsgExecutionCaller{
+			failContactKeyword: "possibly-a-name",
+			searchResponse:     `{"result":{"messages":[],"hasMore":false}}`,
+		}
+		payload := executeSearchMsg(t, caller, "--sender", "possibly-a-name", "--no-enrich")
+		if payload["count"] != float64(0) || payload["complete"] != false || payload["failedCount"] != float64(1) {
+			t.Fatalf("payload=%#v", payload)
+		}
+		scope := payload["senderScope"].(map[string]any)
+		if scope["status"] != "identity_unverified" || scope["targetsResolved"] != false {
+			t.Fatalf("senderScope=%#v", scope)
+		}
+	})
+
+	t.Run("id-only at target bypasses directory", func(t *testing.T) {
+		caller := &searchMsgExecutionCaller{
+			failContactKeyword: "stable-at-user-id",
+			searchResponse:     `{"result":{"messages":[],"hasMore":false}}`,
+		}
+		payload := executeSearchMsg(t, caller, "--at-ids", "stable-at-user-id", "--no-enrich")
+		if len(caller.calls) != 1 || caller.calls[0].tool != "search_messages" {
+			t.Fatalf("calls=%#v", caller.calls)
+		}
+		if got := caller.calls[0].args["atUserIds"]; !reflect.DeepEqual(got, []string{"stable-at-user-id"}) {
+			t.Fatalf("atUserIds=%#v", got)
+		}
+		if payload["complete"] != true {
+			t.Fatalf("payload=%#v", payload)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageSearchMsgSenderScopeFailureEdges(t *testing.T) {
+	t.Run("execute rejects senderless backend rows", func(t *testing.T) {
+		caller := &searchMsgExecutionCaller{searchResponse: `{"result":{"messages":[{"content":"missing identity"}],"hasMore":false}}`}
+		_, err := executeSearchMsgResult(caller, "--sender", testCurrentDOpenID, "--no-enrich")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "search_sender_scope_unverified" {
+			t.Fatalf("error=%#v", err)
+		}
+	})
+
+	resolutions := []targetresolver.UserResolution{{
+		Query:    "fixture-user",
+		Selected: targetresolver.User{UserID: "wanted-user"},
+	}}
+	filtered, unverifiable := filterSearchSenderScope(
+		[]map[string]any{
+			{"content": "missing identity"},
+			{"openMessageId": "wanted", "senderUserId": "wanted-user"},
+			{"openMessageId": "open-family", "senderOpenDingTalkId": testCurrentDOpenID},
+		},
+		resolutions,
+	)
+	if len(filtered) != 1 || !reflect.DeepEqual(unverifiable, []string{"<unknown>"}) {
+		t.Fatalf("filtered=%#v unverifiable=%#v", filtered, unverifiable)
+	}
+	err := searchSenderScopeUnverifiedError(
+		append(resolutions, resolutions...),
+		[]string{"message-1"},
+	)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "search_sender_scope_unverified" {
+		t.Fatalf("error=%#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgExplicitDaysMetadata(t *testing.T) {
+	caller := &searchMsgExecutionCaller{searchResponse: `{"result":{"messages":[],"hasMore":false}}`}
+	payload := executeSearchMsg(t, caller, "--query", "fixture", "--days", "3", "--no-enrich")
+	coverage := payload["timeCoverage"].(map[string]any)
+	if coverage["source"] != "explicit_days" || coverage["days"] != float64(3) {
+		t.Fatalf("coverage=%#v", coverage)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgRejectsNonConversationIDAlias(t *testing.T) {
+	caller := &searchMsgExecutionCaller{}
+	_, err := executeSearchMsgResult(caller, "--query", "fixture", "--chat-id", "group-name", "--no-enrich")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "target_type_mismatch" {
+		t.Fatalf("error=%#v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSearchMsgGroupNameAndDefaultWindowMetadata(t *testing.T) {
+	caller := &searchMsgExecutionCaller{searchResponse: `{"result":{"messages":[],"hasMore":false}}`}
+	payload := executeSearchMsg(t, caller, "--group", "项目讨论群", "--no-enrich")
+	if len(caller.calls) != 3 || caller.calls[0].tool != "search_groups" ||
+		caller.calls[1].tool != "get_conversation_info" || caller.calls[2].tool != "search_messages" {
+		t.Fatalf("calls=%#v", caller.calls)
+	}
+	coverage := payload["timeCoverage"].(map[string]any)
+	guard := payload["conclusionGuard"].(map[string]any)
+	if coverage["source"] != "implicit_default" || coverage["days"] != float64(7) ||
+		guard["absenceAcrossAllHistoryAllowed"] != false {
+		t.Fatalf("coverage=%#v guard=%#v", coverage, guard)
+	}
+}
+
 func TestCrossPlatformCoverageSearchMsgPagesAndEnrichesWithAdvancedFilters(t *testing.T) {
 	caller := &searchMsgExecutionCaller{}
 	payload := executeSearchMsg(t, caller,
 		"--query", "周报",
 		"--chat-id", "cid-1,cid-2",
-		"--sender", "42,Dsender",
-		"--at-ids", "43,Dat",
+		"--sender", testCurrentDOpenID,
+		"--at-ids", testCurrentDOpenID2,
 		"--is-at-me",
 		"--message-type", "text",
 		"--only-robot",
@@ -160,10 +439,8 @@ func TestCrossPlatformCoverageSearchMsgPagesAndEnrichesWithAdvancedFilters(t *te
 		t.Fatalf("first call = %#v", first)
 	}
 	for key, want := range map[string]any{
-		"senderUserIds":        []string{"42"},
-		"senderOpenDingTakIds": []string{"Dsender"},
-		"atUserIds":            []string{"43"},
-		"atOpenDingTakIds":     []string{"Dat"},
+		"senderOpenDingTakIds": []string{testCurrentDOpenID},
+		"atOpenDingTakIds":     []string{testCurrentDOpenID2},
 		"messageType":          "text",
 		"onlyRobotMessages":    true,
 		"searchConvType":       "group",
