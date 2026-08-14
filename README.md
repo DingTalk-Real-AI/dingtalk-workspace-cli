@@ -786,6 +786,7 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 
 ## Reference & Docs
 
+- [International DingTalk (`.io`) guide](./docs/international-region-guide.md) — international login, domestic/international profile switching, isolated testing, and troubleshooting
 - [Command Index](./docs/command-index.md) — every runtime command with description and when-to-use guidance
 - [Reference](./docs/reference.md) — environment variables, exit codes, output formats, shell completion
 - [Architecture](./docs/architecture.md) — static endpoint pipeline, command surface, transport layer

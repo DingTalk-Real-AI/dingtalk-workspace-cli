@@ -68,6 +68,27 @@ var (
 	oauthSleep = time.Sleep
 )
 
+func oauthFetchClientIDForLoginRegion(ctx context.Context, region LoginRegion) (string, error) {
+	if region.IsInternational() {
+		return FetchClientIDFromMCPForLoginRegion(ctx, region)
+	}
+	return oauthFetchClientID(ctx)
+}
+
+func oauthGetAdminsForLoginRegion(ctx context.Context, accessToken string, region LoginRegion) (*SuperAdminResponse, error) {
+	if region.IsInternational() {
+		return GetSuperAdminsForLoginRegion(ctx, accessToken, region)
+	}
+	return oauthGetAdmins(ctx, accessToken)
+}
+
+func oauthSendApplyForLoginRegion(ctx context.Context, accessToken, adminStaffID string, region LoginRegion) (*SendApplyResponse, error) {
+	if region.IsInternational() {
+		return SendCliAuthApplyForLoginRegion(ctx, accessToken, adminStaffID, region)
+	}
+	return oauthSendApply(ctx, accessToken, adminStaffID)
+}
+
 // OAuthProvider handles the DingTalk OAuth 2.0 authorization code flow.
 type OAuthProvider struct {
 	configDir    string
@@ -80,6 +101,7 @@ type OAuthProvider struct {
 	// IdentityEnricher resolves userId/userName/corpName while the freshly
 	// exchanged access token is still only in memory.
 	IdentityEnricher func(context.Context, *TokenData) error
+	LoginRegion      LoginRegion
 }
 
 // NewOAuthProvider creates a new OAuth provider.
@@ -173,7 +195,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		if p.logger != nil {
 			p.logger.Debug("fetching client ID from MCP server (OAuth flow always re-fetches)")
 		}
-		mcpClientID, mcpErr := oauthFetchClientID(ctx)
+		mcpClientID, mcpErr := oauthFetchClientIDForLoginRegion(ctx, p.LoginRegion)
 		if mcpErr != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
 		}
@@ -401,7 +423,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"授权尚未完成"}`))
 			return
 		}
-		result, err := oauthGetAdmins(ctx, token.AccessToken)
+		result, err := oauthGetAdminsForLoginRegion(ctx, token.AccessToken, p.LoginRegion)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, `{"success":false,"errorMsg":"%s"}`, err.Error())
 			return
@@ -425,7 +447,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 			_, _ = w.Write([]byte(`{"success":false,"errorMsg":"授权尚未完成"}`))
 			return
 		}
-		result, err := oauthSendApply(ctx, token.AccessToken, adminStaffID)
+		result, err := oauthSendApplyForLoginRegion(ctx, token.AccessToken, adminStaffID, p.LoginRegion)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, `{"success":false,"errorMsg":"%s"}`, err.Error())
 			return
@@ -448,7 +470,13 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		applySent := callbackApplySent
 		selectedAdminId := callbackSelectedAdminId
 		callbackTokenMu.Unlock()
-		_, _ = fmt.Fprintf(w, `{"clientId":"%s","applySent":%t,"selectedAdminId":"%s"}`, p.clientID, applySent, selectedAdminId)
+		data, _ := json.Marshal(map[string]any{
+			"clientId":        p.clientID,
+			"authorizeUrl":    AuthorizeURLForLoginRegion(p.LoginRegion),
+			"applySent":       applySent,
+			"selectedAdminId": selectedAdminId,
+		})
+		_, _ = w.Write(data)
 	})
 
 	// API endpoint: check CLI auth enabled status
@@ -491,7 +519,7 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 		_ = server.Shutdown(shutCtx)
 	}()
 
-	authURL := buildAuthURL(p.clientID, redirectURI, p.TargetCorpID)
+	authURL := buildAuthURLForRegion(p.clientID, redirectURI, p.TargetCorpID, p.LoginRegion)
 	if p.logger != nil {
 		p.logger.Debug("authorization URL", "url", authURL)
 	}

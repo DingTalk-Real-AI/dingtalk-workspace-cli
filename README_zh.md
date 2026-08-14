@@ -777,6 +777,7 @@ dws dev connect --channel auto --robot-client-id <id> --robot-client-secret <sec
 
 ## 参考与文档
 
+- [国际版（`.io`）使用手册](./docs/international-region-guide.zh-CN.md) — 国际版登录、国内/国际 profile 切换、隔离验证与排障
 - [命令索引](./docs/command-index.md) — 全部运行时命令，带描述与使用场景
 - [参考手册](./docs/reference.md) — 环境变量、退出码、输出格式、Shell 补全
 - [架构设计](./docs/architecture.md) — 静态端点管道、命令面、Transport 层

@@ -15,9 +15,13 @@ package errors
 
 import (
 	stderrors "errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 )
 
 func TestCrossPlatformCoverageExitCodeByCategory(t *testing.T) {
@@ -379,6 +383,27 @@ func TestCrossPlatformCoverageServerGuidanceSuppressesUnsafeActionURL(t *testing
 		if strings.Contains(jsonOutput.String(), `"action_url"`) {
 			t.Fatalf("unsafe action URL %q leaked to JSON output: %q", actionURL, jsonOutput.String())
 		}
+	}
+}
+
+func TestCrossPlatformCoveragePrintJSONCLIOrgNotAuthorizedUsesInternationalActionURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "mcp_url"), []byte("https://mcp.dingtalk.io\n"), config.FilePerm); err != nil {
+		t.Fatalf("WriteFile(mcp_url) error = %v", err)
+	}
+
+	var b strings.Builder
+	if err := PrintJSON(&b, NewAPI(
+		"business error",
+		WithServerDiag(ServerDiagnostics{ServerErrorCode: "CLI_ORG_NOT_AUTHORIZED"}),
+	)); err != nil {
+		t.Fatalf("PrintJSON() error = %v", err)
+	}
+
+	want := `"action_url": "https://open-dev.dingtalk.io/fe/old#/developerSettings"`
+	if got := b.String(); !strings.Contains(got, want) {
+		t.Fatalf("expected international action_url %q, got %q", want, got)
 	}
 }
 

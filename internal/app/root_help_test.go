@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -485,6 +486,80 @@ func TestInjectStaticServersMergesStaticAndSupplementServers(t *testing.T) {
 		if !ok || got != tc.endpoint {
 			t.Fatalf("directRuntimeEndpoint(%q) = %q, %v; want %q, true", tc.productID, got, ok, tc.endpoint)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageStaticDingTalkEndpointsFollowConfiguredMCPBaseURL(t *testing.T) {
+	previous := edition.Get()
+	defer edition.Override(previous)
+	defer SetDynamicServers(nil)
+
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte("https://pre-mcp.dingtalk.io\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(mcp_url) error = %v", err)
+	}
+
+	edition.Override(&edition.Hooks{
+		Name: "test",
+		StaticServers: func() []edition.ServerInfo {
+			return []edition.ServerInfo{{
+				ID:       "contact",
+				Name:     "Contact",
+				Endpoint: "https://mcp-gw.dingtalk.com/server/contact?key=abc",
+				Prefixes: []string{"user"},
+			}}
+		},
+	})
+
+	injectStaticServers()
+
+	for _, productID := range []string{"contact", "user"} {
+		got, ok := directRuntimeEndpoint(productID, "")
+		want := "https://pre-mcp-gw.dingtalk.io/server/contact?key=abc"
+		if !ok || got != want {
+			t.Fatalf("directRuntimeEndpoint(%q) = %q, %v; want %q, true", productID, got, ok, want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDingTalkEndpointsFollowSelectedTokenRegion(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	mcpURLPath := filepath.Join(configDir, "mcp_url")
+
+	if err := os.WriteFile(mcpURLPath, []byte("https://pre-mcp.dingtalk.io\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(mcp_url) error = %v", err)
+	}
+	endpoint := "https://pre-mcp-gw.dingtalk.io/server/contact?key=abc"
+	if got, want := activeDingTalkGatewayEndpointForLoginRegion(endpoint, authpkg.LoginRegionDefault), "https://pre-mcp-gw.dingtalk.com/server/contact?key=abc"; got != want {
+		t.Fatalf("domestic profile endpoint = %q, want %q", got, want)
+	}
+	if got := activeDingTalkGatewayEndpointForLoginRegion(endpoint, authpkg.LoginRegionInternational); got != endpoint {
+		t.Fatalf("international profile endpoint = %q, want %q", got, endpoint)
+	}
+
+	if err := os.WriteFile(mcpURLPath, []byte("https://mcp.dingtalk.com\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(mcp_url) error = %v", err)
+	}
+	if got, want := activeDingTalkGatewayEndpointForLoginRegion("https://mcp-gw.dingtalk.com/server/contact", authpkg.LoginRegionInternational), "https://mcp-gw.dingtalk.io/server/contact"; got != want {
+		t.Fatalf("international profile endpoint from domestic config = %q, want %q", got, want)
+	}
+}
+
+func TestCrossPlatformCoverageDingTalkEndpointUsesLoginScopedMCPOverride(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
+	restore := authpkg.PushMCPBaseURLOverride("https://pre-mcp.dingtalk.io")
+	defer restore()
+
+	got := activeDingTalkGatewayEndpointForLoginRegion(
+		"https://mcp-gw.dingtalk.com/server/contact",
+		authpkg.LoginRegionDefault,
+	)
+	want := "https://pre-mcp-gw.dingtalk.io/server/contact"
+	if got != want {
+		t.Fatalf("login-scoped endpoint = %q, want %q", got, want)
 	}
 }
 

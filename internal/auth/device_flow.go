@@ -74,6 +74,20 @@ var (
 	}
 )
 
+func deviceFetchClientIDForLoginRegion(ctx context.Context, region LoginRegion) (string, error) {
+	if region.IsInternational() {
+		return FetchClientIDFromMCPForLoginRegion(ctx, region)
+	}
+	return deviceFetchClientID(ctx)
+}
+
+func deviceGetAdminsForLoginRegion(ctx context.Context, accessToken string, region LoginRegion) (*SuperAdminResponse, error) {
+	if region.IsInternational() {
+		return GetSuperAdminsForLoginRegion(ctx, accessToken, region)
+	}
+	return deviceGetAdmins(ctx, accessToken)
+}
+
 type DeviceFlowProvider struct {
 	configDir        string
 	clientID         string
@@ -85,6 +99,7 @@ type DeviceFlowProvider struct {
 	httpClient       *http.Client
 	NoBrowser        bool
 	IdentityEnricher func(context.Context, *TokenData) error
+	LoginRegion      LoginRegion
 }
 
 func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowProvider {
@@ -102,6 +117,12 @@ func NewDeviceFlowProvider(configDir string, logger *slog.Logger) *DeviceFlowPro
 
 func (p *DeviceFlowProvider) SetBaseURL(baseURL string) {
 	p.baseURL = strings.TrimRight(baseURL, "/")
+}
+
+func (p *DeviceFlowProvider) SetLoginRegion(region LoginRegion) {
+	p.LoginRegion = region
+	p.baseURL = DeviceBaseURLForLoginRegion(region)
+	p.terminalBaseURL = MCPBaseURLForLoginRegion(region)
 }
 
 // SetTerminalBaseURL sets the terminal API base URL for device flow polling.
@@ -213,7 +234,7 @@ func (p *DeviceFlowProvider) Login(ctx context.Context) (*TokenData, error) {
 		if p.logger != nil {
 			p.logger.Debug("fetching client ID from MCP server (device flow always re-fetches)")
 		}
-		mcpClientID, mcpErr := deviceFetchClientID(ctx)
+		mcpClientID, mcpErr := deviceFetchClientIDForLoginRegion(ctx, p.LoginRegion)
 		if mcpErr != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("获取 Client ID 失败"), mcpErr)
 		}
@@ -272,6 +293,7 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 		clientID:         p.clientID,
 		logger:           p.logger,
 		IdentityEnricher: p.IdentityEnricher,
+		LoginRegion:      p.LoginRegion,
 	}
 	tokenData, err := deviceExchangeCode(oauthProvider, ctx, tokenResult.AuthCode)
 	if err != nil {
@@ -331,7 +353,7 @@ func (p *DeviceFlowProvider) loginOnce(ctx context.Context, attempt int) (*Token
 			_, _ = fmt.Fprintln(p.output(), i18n.T("   你所选择的组织管理员尚未开启「允许成员通过 CLI 访问其个人数据」的权限。"))
 			_, _ = fmt.Fprintln(p.output(), "")
 
-			admins, adminErr := deviceGetAdmins(ctx, tokenData.AccessToken)
+			admins, adminErr := deviceGetAdminsForLoginRegion(ctx, tokenData.AccessToken, p.LoginRegion)
 			if adminErr == nil && admins.Success && len(admins.Result) > 0 {
 				maxAdmins := 3
 				if len(admins.Result) < maxAdmins {

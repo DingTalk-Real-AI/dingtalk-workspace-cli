@@ -162,7 +162,7 @@ var (
 	runnerResolveMultiProfileSelections = resolveMultiProfileSelections
 	runnerResolveProfile                = authpkg.ResolveProfile
 	runnerGetCachedRuntimeToken         = getCachedRuntimeToken
-	runnerResolveAuthToken              = (*runtimeRunner).resolveAuthToken
+	runnerResolveAuthSnapshot           = (*runtimeRunner).resolveAuthSnapshot
 	runnerPreflightDocDownload          = (*runtimeRunner).preflightDocDownload
 	runnerCallTool                      = (*transport.Client).CallTool
 	runnerStdioEnsureInitialized        = (*transport.StdioClient).EnsureInitialized
@@ -552,10 +552,15 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 	if hasPluginAuth {
 		authToken = pluginAuth.Token
 	} else if !invocation.DryRun && (r.globalFlags == nil || !r.globalFlags.Mock) {
-		var tokenErr error
-		authToken, tokenErr = runnerResolveAuthToken(r, ctx)
+		snapshot, tokenErr := runnerResolveAuthSnapshot(r, ctx)
 		if tokenErr != nil {
 			return executor.Result{}, tokenResolutionError(tokenErr)
+		}
+		authToken = snapshot.AccessToken
+		if !hasDirectRuntimeEndpointOverride(invocation.CanonicalProduct) &&
+			isDingTalkMCPGatewayEndpoint(endpoint) &&
+			(snapshot.LoginRegionKnown || authpkg.MCPBaseURLOverride() != "") {
+			endpoint = activeDingTalkGatewayEndpointForLoginRegion(endpoint, snapshot.LoginRegion)
 		}
 	}
 
@@ -877,19 +882,31 @@ func (r *runtimeRunner) executeStdioInvocationAtEndpoint(
 }
 
 func (r *runtimeRunner) resolveAuthToken(ctx context.Context) (string, error) {
-	explicitToken := ""
-	if r != nil && r.globalFlags != nil {
-		explicitToken = r.globalFlags.Token
-	}
-	return resolveRuntimeAuthToken(ctx, explicitToken)
-}
-
-func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) (string, error) {
-	snapshot, err := runtimeTokenManager.Get(ctx, defaultConfigDir(), explicitToken)
+	snapshot, err := r.resolveAuthSnapshot(ctx)
 	if err != nil {
 		return "", err
 	}
 	return snapshot.AccessToken, nil
+}
+
+func (r *runtimeRunner) resolveAuthSnapshot(ctx context.Context) (AccessTokenSnapshot, error) {
+	explicitToken := ""
+	if r != nil && r.globalFlags != nil {
+		explicitToken = r.globalFlags.Token
+	}
+	return resolveRuntimeAuthSnapshot(ctx, explicitToken)
+}
+
+func resolveRuntimeAuthToken(ctx context.Context, explicitToken string) (string, error) {
+	snapshot, err := resolveRuntimeAuthSnapshot(ctx, explicitToken)
+	if err != nil {
+		return "", err
+	}
+	return snapshot.AccessToken, nil
+}
+
+func resolveRuntimeAuthSnapshot(ctx context.Context, explicitToken string) (AccessTokenSnapshot, error) {
+	return runtimeTokenManager.Get(ctx, defaultConfigDir(), explicitToken)
 }
 
 // getCachedRuntimeToken is kept as the prefetch seam used by runner tests. The
