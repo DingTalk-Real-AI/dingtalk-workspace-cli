@@ -161,7 +161,12 @@ var Create = shortcut.Shortcut{
 			return docVerificationError("doc.create", "verify", nodeID, fmt.Errorf("回读结果与完整初始内容不一致"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
 		steps = append(steps, map[string]any{"name": "verify", "status": "success", "attempts": attempts})
-		receipt := map[string]any{"nodeId": nodeID, "verified": true}
+		receipt := map[string]any{
+			"nodeId":       nodeID,
+			"result":       created,
+			"verified":     true,
+			"verification": verification,
+		}
 		if revision, ok := nestedRevision(created); ok {
 			receipt["revision"] = revision
 		} else if revision, ok := nestedRevision(verification); ok {
@@ -351,11 +356,11 @@ var Update = shortcut.Shortcut{
 	Command:     "+update",
 	Product:     productDoc,
 	Description: "追加、覆盖或按 block 精确更新文档内容",
-	Intent:      "当用户要修改已有在线文字文档时使用；支持整篇 append/overwrite、block 插入/替换/删除，以及受限的唯一纯文本 str_replace，所有模式统一使用普通可恢复写入语义。",
+	Intent:      "当用户要修改已有在线文字文档时使用；支持整篇 append/overwrite、block 插入/替换/删除，以及受限的唯一纯文本 str_replace，所有模式统一经过静态确认门禁。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: withStatefulDryRunExamples(docContract("+update", "追加、覆盖或按 block 精确更新文档内容",
-		"当用户要修改已有在线文字文档时使用；支持整篇 append/overwrite、block 插入/替换/删除，以及受限的唯一纯文本 str_replace，所有模式统一使用普通可恢复写入语义。",
+		"当用户要修改已有在线文字文档时使用；支持整篇 append/overwrite、block 插入/替换/删除，以及受限的唯一纯文本 str_replace，所有模式统一经过静态确认门禁。",
 		[]string{`dws doc +update --node <DOC_ID> --command append --content "补充说明"`, `dws doc +update --node <DOC_ID> --command block_replace --block-id <BLOCK_ID> --content "新内容"`},
 		contract.ParamDecl{Name: "node", Property: "node"},
 		contract.ParamDecl{Name: "command", Property: "command"},

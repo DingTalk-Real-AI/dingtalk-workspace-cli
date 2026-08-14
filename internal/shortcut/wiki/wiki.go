@@ -1,344 +1,237 @@
 // Copyright 2026 Alibaba Group
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0
 
-// Package wiki declares high-fidelity shortcuts for the DingTalk wiki
-// (knowledge base) service: space management, member management and node
-// management. Tool names and parameters mirror internal/helpers/wiki.go.
+// Package wiki declares reviewed, truth-preserving shortcuts for Wiki spaces,
+// members, nodes, and activity feeds.
 package wiki
 
 import (
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"fmt"
+	"strings"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
-// ── space (知识库) ────────────────────────────────────────────
+var collectionAvoid = []string{"需要原始 MCP 响应或未公开底层参数时改用对应原子命令；缺失业务数组不是合法空结果"}
 
-// SpaceCreate → create_wikiSpace
-// SpaceGet → get_wikiSpace
-// SpaceList → list_wikiSpaces
-var SpaceList = shortcut.Shortcut{
-	Service:     "wiki",
-	Command:     "+space-list",
-	Product:     "wiki",
-	Description: "列出组织 / 个人知识库",
-	Intent:      "当你想浏览自己有权限访问的知识库、拿到目标知识库的 workspaceId 却不确定具体名称时使用；可按类型（组织知识库或我的知识库）分页列出，返回知识库列表，是定位知识库的常用入口。",
-	Risk:        shortcut.RiskRead,
-	Flags: []shortcut.Flag{
-		{Name: "type", Type: shortcut.FlagString, Default: "orgWikiSpace", Desc: "知识库类型: orgWikiSpace(默认) / myWikiSpace", Enum: []string{"orgWikiSpace", "myWikiSpace"}},
-		{Name: "limit", Type: shortcut.FlagString, Desc: "每页数量 1-50 (默认 20)"},
-		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标 (首页留空)"},
-	},
-	Tips: []string{
-		`dws wiki +space-list`,
-		`dws wiki +space-list --type myWikiSpace`,
-	},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{}
-		if rt.Changed("type") {
-			params["wikiSpaceType"] = rt.Str("type")
+func readShortcut(command, description, intent, collection, example string, flags []shortcut.Flag, params []contract.ParamDecl, execute func(*shortcut.RuntimeContext) error) shortcut.Shortcut {
+	result := wikiObjectResult(description)
+	if collection != "" {
+		result = wikiCollectionResult(collection, description)
+	}
+	return shortcut.Shortcut{OutputRollout: output.RolloutUnifiedActive, Service: "wiki", Command: command, Product: "wiki", Description: description, Intent: intent, Risk: shortcut.RiskRead, Safety: wikiReadSafety(), Contract: wikiContract(command, description, intent, collectionAvoid, []string{example}, result, nil, params...), Flags: flags, Execute: execute}
+}
+
+func writeShortcut(command, description, intent, example string, risk shortcut.Risk, safety contract.SafetySpec, flags []shortcut.Flag, params []contract.ParamDecl, execute func(*shortcut.RuntimeContext) error) shortcut.Shortcut {
+	return shortcut.Shortcut{OutputRollout: output.RolloutUnifiedActive, Service: "wiki", Command: command, Product: "wiki", Description: description, Intent: intent, Risk: risk, Safety: safety, Contract: wikiContract(command, description, intent, []string{"只需读取或影响范围未确认时不要执行写操作"}, []string{example}, wikiObjectResult(description), nil, params...), Flags: flags, Execute: execute}
+}
+
+var SpaceList = readShortcut("+space-list", "严格分页列出知识库", "浏览有权访问的组织或个人知识库，并保留服务端分页证据；只有显式 wikiSpaces:[] 才是空结果。", "spaces", "dws wiki +space-list --limit 20 --format json", []shortcut.Flag{
+	{Name: "type", Type: shortcut.FlagString, Default: "orgWikiSpace", Desc: "知识库类型", Enum: []string{"orgWikiSpace", "myWikiSpace"}},
+	{Name: "limit", Type: shortcut.FlagString, Desc: "每页数量 1-50（默认 20）"}, {Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标", Aliases: []string{"page-token"}, AliasesVisible: true},
+}, []contract.ParamDecl{{Name: "type", Property: "wikiSpaceType"}, {Name: "limit", Property: "pageSize"}, {Name: "cursor", Property: "pageToken"}}, func(rt *shortcut.RuntimeContext) error {
+	pageSize, err := wikiStringInt(rt, "limit", 20, 1, 50)
+	if err != nil {
+		return err
+	}
+	items, page, err := collectWikiPages(rt, "wiki/list_wikiSpaces", pageSize, []string{"wikiSpaces", "spaces"}, func(cursor string, size int) (map[string]any, error) {
+		params := map[string]any{"wikiSpaceType": rt.Str("type"), "pageSize": size}
+		if cursor != "" {
+			params["pageToken"] = cursor
 		}
-		if rt.Changed("limit") {
-			params["pageSize"] = rt.Str("limit")
+		return rt.CallMCPData("wiki", "list_wikiSpaces", params)
+	})
+	if err != nil {
+		return err
+	}
+	spaces := projectWikiRows(items, map[string][]string{"workspaceId": {"workspaceId", "spaceId", "id"}, "name": {"name", "spaceName", "title"}, "description": {"description", "desc"}, "createTime": {"createTime", "createdAt"}, "url": {"spaceUrl", "url"}})
+	out := map[string]any{"count": len(spaces), "spaces": spaces}
+	addWikiPagination(out, page)
+	return rt.Output(out)
+})
+
+var SpaceSearch = readShortcut("+space-search", "严格搜索知识库", "按名称关键词定位知识库；严格验证搜索数组，避免内部异常被误报为零命中。", "spaces", "dws wiki +space-search --query \"产品文档\" --format json", []shortcut.Flag{
+	{Name: "query", Type: shortcut.FlagString, Required: true, Desc: "搜索关键词"}, {Name: "limit", Type: shortcut.FlagString, Desc: "返回数量 1-20（默认 10）"},
+}, []contract.ParamDecl{{Name: "query", Property: "query"}, {Name: "limit", Property: "limit"}}, func(rt *shortcut.RuntimeContext) error {
+	pageSize, err := wikiStringInt(rt, "limit", 10, 1, 20)
+	if err != nil {
+		return err
+	}
+	data, err := rt.CallMCPData("wiki", "search_wikiSpaces", map[string]any{"keyword": rt.Str("query"), "pageSize": pageSize})
+	if err != nil {
+		return err
+	}
+	items, page, err := requireWikiCollection(data, "wiki/search_wikiSpaces", "wikiSpaces", "spaces")
+	if err != nil {
+		return err
+	}
+	spaces := projectWikiRows(items, map[string][]string{"workspaceId": {"workspaceId", "spaceId", "id"}, "name": {"name", "spaceName", "title"}, "description": {"description", "desc"}, "url": {"spaceUrl", "url"}})
+	out := map[string]any{"count": len(spaces), "spaces": spaces}
+	addWikiPagination(out, page)
+	return rt.Output(out)
+})
+
+var SpaceGet = readShortcut("+space-get", "获取知识库详情", "已知 workspace ID 或知识库 URL 时读取并验证空间详情。", "", "dws wiki +space-get --workspace <workspaceId> --format json", []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID 或 URL"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}}, func(rt *shortcut.RuntimeContext) error {
+	data, err := rt.CallMCPData("wiki", "get_wikiSpace", map[string]any{"workspaceId": rt.Str("workspace")})
+	if err != nil {
+		return err
+	}
+	object, err := requireWikiObject(data, "wiki/get_wikiSpace")
+	if err != nil {
+		return err
+	}
+	if firstWikiString(object, "workspaceId", "spaceId", "id") == "" {
+		return wikiResponseError("wiki/get_wikiSpace", "missing_workspace_id", "空间详情缺少 workspaceId")
+	}
+	return rt.Output(object)
+})
+
+var SpaceCreate = writeShortcut("+space-create", "创建知识库并读回验证", "创建新的知识库容器；必须取得 workspaceId 并通过详情读回后才报告成功。", "dws wiki +space-create --name \"产品文档库\" --format json", shortcut.RiskWrite, wikiWriteSafety(false), []shortcut.Flag{{Name: "name", Type: shortcut.FlagString, Required: true, Desc: "知识库名称，不超过 32 个字符。--name 不超过 32 个字符；--desc 不超过 500 个字符"}, {Name: "desc", Type: shortcut.FlagString, Desc: "知识库描述，不超过 500 个字符。--name 不超过 32 个字符；--desc 不超过 500 个字符"}, {Name: "icon", Type: shortcut.FlagString, Desc: "图标标识"}}, []contract.ParamDecl{{Name: "name", Property: "name"}, {Name: "desc", Property: "description"}, {Name: "icon", Property: "icon"}}, func(rt *shortcut.RuntimeContext) error {
+	params := map[string]any{"name": rt.Str("name")}
+	if rt.Changed("desc") {
+		params["description"] = rt.Str("desc")
+	}
+	if rt.Changed("icon") {
+		params["icon"] = rt.Str("icon")
+	}
+	if rt.DryRun() {
+		return rt.Output(map[string]any{"dryRun": true, "executed": false, "operation": "wiki/create_wikiSpace", "arguments": params})
+	}
+	written, err := rt.CallMCPWriteDataStrict("wiki", "create_wikiSpace", params)
+	if err != nil {
+		return err
+	}
+	written, err = requireWikiWrite(written, "wiki/create_wikiSpace")
+	if err != nil {
+		return err
+	}
+	id := nestedWikiString(written, "workspaceId", "spaceId", "id")
+	if id == "" {
+		return wikiResponseError("wiki/create_wikiSpace", "missing_created_id", "创建响应没有 workspaceId；远端效果未知")
+	}
+	verified, err := rt.CallMCPData("wiki", "get_wikiSpace", map[string]any{"workspaceId": id})
+	if err != nil {
+		return err
+	}
+	verified, err = requireWikiObject(verified, "wiki/get_wikiSpace")
+	if err != nil {
+		return err
+	}
+	if firstWikiString(verified, "workspaceId", "spaceId", "id") != id {
+		return wikiResponseError("wiki/create_wikiSpace", "readback_id_mismatch", "创建后读回的 workspaceId 不一致")
+	}
+	return rt.Output(map[string]any{"success": true, "workspaceId": id, "space": verified})
+})
+
+var DeleteSpace = writeShortcut("+delete-space", "删除知识库", "用户明确确认后将整个知识库移入回收站；删除前读取目标，删除响应必须有 success=true。", "dws wiki +delete-space --workspace <workspaceId> --format json", shortcut.RiskHighWrite, wikiDeleteSafety(), []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID 或 URL"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}}, func(rt *shortcut.RuntimeContext) error {
+	preflight, err := rt.CallMCPData("wiki", "get_wikiSpace", map[string]any{"workspaceId": rt.Str("workspace")})
+	if err != nil {
+		return err
+	}
+	preflight, err = requireWikiObject(preflight, "wiki/get_wikiSpace")
+	if err != nil {
+		return err
+	}
+	if rt.DryRun() {
+		return rt.Output(map[string]any{"dryRun": true, "executed": false, "operation": "wiki/delete_wikiSpace", "target": preflight})
+	}
+	written, err := rt.CallMCPWriteDataStrict("wiki", "delete_wikiSpace", map[string]any{"workspaceId": rt.Str("workspace")})
+	if err != nil {
+		return err
+	}
+	written, err = requireWikiWrite(written, "wiki/delete_wikiSpace")
+	if err != nil {
+		return err
+	}
+	return rt.Output(map[string]any{"success": true, "workspaceId": rt.Str("workspace"), "deleted": true})
+})
+
+func memberFlags(withRole bool) []shortcut.Flag {
+	flags := []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID 或 URL"}, {Name: "users", Type: shortcut.FlagStringSlice, Required: true, Desc: "用户 userId，最多 30 个", Aliases: []string{"user"}, AliasesVisible: true}}
+	if withRole {
+		flags = append(flags, shortcut.Flag{Name: "role", Type: shortcut.FlagString, Required: true, Desc: "角色", Enum: []string{"MANAGER", "EDITOR", "DOWNLOADER", "READER"}})
+	}
+	return flags
+}
+
+func memberWrite(command, tool, description, intent, example string, withRole bool) shortcut.Shortcut {
+	params := []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "users", Property: "userIds"}}
+	if withRole {
+		params = append(params, contract.ParamDecl{Name: "role", Property: "roleId"})
+	}
+	return writeShortcut(command, description, intent, example, shortcut.RiskWrite, wikiWriteSafety(false), memberFlags(withRole), params, func(rt *shortcut.RuntimeContext) error {
+		users := wikiStringSliceFirst(rt, "users", "user")
+		if len(users) == 0 || len(users) > 30 {
+			return fmt.Errorf("--users 必须包含 1-30 个 userId")
 		}
-		if rt.Changed("cursor") {
-			params["pageToken"] = rt.Str("cursor")
+		args := map[string]any{"workspaceId": rt.Str("workspace"), "userIds": users}
+		if withRole {
+			args["roleId"] = strings.ToUpper(rt.Str("role"))
 		}
-		data, err := rt.CallMCPData("wiki", "list_wikiSpaces", params)
+		if rt.DryRun() {
+			return rt.Output(map[string]any{"dryRun": true, "executed": false, "operation": "wiki/" + tool, "arguments": args})
+		}
+		written, err := rt.CallMCPWriteDataStrict("wiki", tool, args)
 		if err != nil {
 			return err
 		}
-		spaces := spaceListProject(data)
-		return rt.Output(map[string]any{"count": len(spaces), "spaces": spaces})
-	},
-}
-
-// spaceListProject reshapes list_wikiSpaces into a clean space list
-// ({workspaceId, name, description, createTime}) — output-projection fidelity
-// for clean output. The list container and per-item field names are probed defensively
-// across candidate keys, so an unrecognized shape yields an empty list.
-func spaceListProject(data map[string]any) []map[string]any {
-	raw := wikiSpaceRawList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		if v := wikiSpaceFirst(m, "workspaceId", "workspace_id", "spaceId", "space_id", "id"); v != nil {
-			row["workspaceId"] = v
-		}
-		if v := wikiSpaceFirst(m, "name", "title", "spaceName"); v != nil {
-			row["name"] = v
-		}
-		if v := wikiSpaceFirst(m, "description", "desc"); v != nil {
-			row["description"] = v
-		}
-		if v := wikiSpaceFirst(m, "createTime", "create_time", "gmtCreate", "createdAt"); v != nil {
-			row["createTime"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// wikiSpaceRawList locates the space array across candidate container keys,
-// tolerating a nested {result|data:{list|items|spaces}} wrapper.
-func wikiSpaceRawList(data map[string]any) []any {
-	// list_wikiSpaces / search_wikiSpaces nest the space list under
-	// result.wikiSpaces (or a top-level wikiSpaces once unwrapped); "wikiSpaces"
-	// MUST be probed or +space-list / +space-search silently return empty.
-	for _, k := range []string{"result", "data", "list", "items", "wikiSpaces", "spaces", "workspaces"} {
-		if arr, ok := data[k].([]any); ok {
-			return arr
-		}
-		if inner, ok := data[k].(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "wikiSpaces", "spaces", "workspaces", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// wikiSpaceFirst returns the first present value among candidate keys.
-func wikiSpaceFirst(m map[string]any, keys ...string) any {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v
-		}
-	}
-	return nil
-}
-
-// SpaceSearch → search_wikiSpaces
-var SpaceSearch = shortcut.Shortcut{
-	Service:     "wiki",
-	Command:     "+space-search",
-	Product:     "wiki",
-	Description: "搜索知识库",
-	Intent:      "当你只记得知识库名称的部分关键词、想快速按名称定位某个知识库时使用；输入关键词返回匹配的知识库列表，比逐页 +space-list 更快找到目标 workspaceId。",
-	Risk:        shortcut.RiskRead,
-	Safety: contract.SafetySpec{
-		Effect: "read", Risk: "low",
-		Confirmation: "not_required", Idempotency: "idempotent",
-	},
-	Contract: corecmd.ContractDecl{
-		Identity: contract.ToolIdentitySpec{
-			ProductID:      "wiki",
-			Name:           "shortcut_space_search",
-			CanonicalPath:  "wiki.shortcut_space_search",
-			CLIPath:        "wiki +space-search",
-			PrimaryCLIPath: "wiki +space-search",
-		},
-		Description: "搜索知识库",
-		Interface: &contract.InterfaceSpec{
-			Mode:         "composite",
-			Availability: "available",
-			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
-		},
-		Selection: contract.SelectionSpec{
-			AgentSummary: "搜索知识库",
-			UseWhen:      []string{"当你只记得知识库名称的部分关键词、想快速按名称定位某个知识库时使用；输入关键词返回匹配的知识库列表，比逐页 +space-list 更快找到目标 workspaceId。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws wiki +space-search --query \"产品文档\""},
-		},
-	},
-	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词", Required: true},
-		{Name: "limit", Type: shortcut.FlagString, Desc: "返回数量 1-20 (默认 10)"},
-	},
-	Tips: []string{`dws wiki +space-search --query "产品文档"`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"keyword": rt.Str("query")}
-		if rt.Changed("limit") {
-			params["pageSize"] = rt.Str("limit")
-		}
-		data, err := rt.CallMCPData("wiki", "search_wikiSpaces", params)
+		written, err = requireWikiWrite(written, "wiki/"+tool)
 		if err != nil {
 			return err
 		}
-		spaces := spaceListProject(data)
-		return rt.Output(map[string]any{"count": len(spaces), "spaces": spaces})
-	},
+		return rt.Output(map[string]any{
+			"success": true, "workspaceId": rt.Str("workspace"), "userCount": len(users), "operation": tool,
+			"verifiedBy": "write_terminal_success",
+			"verification": map[string]any{
+				"status":            "terminal_response_only",
+				"readbackAvailable": false,
+				"reason":            "member_list_is_capped_and_has_no_cursor",
+			},
+		})
+	})
 }
 
-// SpaceDelete → delete_wikiSpace
-// ── member (知识库成员) ───────────────────────────────────────
+var MemberAdd = memberWrite("+member-add", "add_member", "添加知识库成员", "向知识库授予一个或多个用户容器级角色；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", "dws wiki +member-add --workspace <workspaceId> --users <userId> --role READER --format json", true)
+var MemberUpdate = memberWrite("+member-update", "update_member", "更新知识库成员角色", "调整已有成员的知识库容器级角色；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", "dws wiki +member-update --workspace <workspaceId> --users <userId> --role EDITOR --format json", true)
+var MemberRemove = memberWrite("+member-remove", "remove_member", "移除知识库成员", "移除一个或多个用户的知识库容器级访问；仅以写接口 success=true 作为终态证据，并明确成员列表无法完成精确读回。", "dws wiki +member-remove --workspace <workspaceId> --users <userId> --format json", false)
 
-// MemberAdd → add_member
-// MemberUpdate → update_member
-// MemberList → list_member
-// MemberRemove → remove_member
-// ── node (知识库节点，路由到 doc MCP server) ──────────────────
-
-// NodeList → list_nodes (doc)
-var NodeList = shortcut.Shortcut{
-	Service:     "wiki",
-	Command:     "+node-list",
-	Product:     "doc",
-	Description: "列出知识库节点",
-	Intent:      "当你要浏览某个知识库的目录结构、查看某文件夹下有哪些文档/子文件夹并拿到它们的 nodeId 时使用；输入 workspace（可选父节点 folder），分页返回该层级的节点列表，是逐层进入知识库定位文档的常用方式。",
-	Risk:        shortcut.RiskRead,
-	Flags: []shortcut.Flag{
-		{Name: "workspace", Type: shortcut.FlagString, Desc: "知识库 ID", Required: true},
-		{Name: "folder", Type: shortcut.FlagString, Desc: "父节点 nodeId (不传则列出根目录)"},
-		{Name: "limit", Type: shortcut.FlagInt, Desc: "每页数量 (默认 50，最大 50)"},
-		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标"},
-	},
-	Tips: []string{`dws wiki +node-list --workspace <workspaceId> --folder <parentNodeId>`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"workspaceId": rt.Str("workspace")}
-		if rt.Changed("folder") {
-			params["folderId"] = rt.Str("folder")
-		}
-		if rt.Changed("limit") {
-			params["pageSize"] = rt.Int("limit")
-		}
-		if rt.Changed("cursor") {
-			params["pageToken"] = rt.Str("cursor")
-		}
-		data, err := rt.CallMCPData("wiki", "list_nodes", params)
-		if err != nil {
-			return err
-		}
-		nodes := nodeListProject(data)
-		return rt.Output(map[string]any{"count": len(nodes), "nodes": nodes})
-	},
-}
-
-// nodeListProject reshapes list_nodes into a clean node list (name/nodeId/type)
-// — clean output projection. Container and field keys are probed
-// defensively across candidate aliases; an unrecognized shape yields an empty list.
-func nodeListProject(data map[string]any) []map[string]any {
-	raw := nodeListRawList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		if v := nodeListFirst(m, "name", "title", "nodeName"); v != nil {
-			row["name"] = v
-		}
-		if v := nodeListFirst(m, "nodeId", "node_id", "id", "uuid", "dentryUuid"); v != nil {
-			row["nodeId"] = v
-		}
-		if v := nodeListFirst(m, "type", "nodeType", "docType", "fileType"); v != nil {
-			row["type"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
+var MemberList = readShortcut("+member-list", "严格列出知识库成员", "列出知识库成员及角色；后端不提供可续游标且单次真实上限为 50，不伪造 page-all。", "members", "dws wiki +member-list --workspace <workspaceId> --format json", []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID 或 URL"}, {Name: "limit", Type: shortcut.FlagInt, Default: "30", Desc: "返回上限 1-50"}, {Name: "filter-role", Type: shortcut.FlagStringSlice, Desc: "角色过滤"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}, {Name: "limit", Property: "maxResults"}, {Name: "filter-role", Property: "filterRoleIds"}}, func(rt *shortcut.RuntimeContext) error {
+	if rt.Int("limit") < 1 || rt.Int("limit") > 50 {
+		return fmt.Errorf("--limit 必须在 1-50 之间；服务端不支持超过 50 或游标续页")
 	}
-	return out
-}
-
-// nodeListRawList locates the node array across candidate container keys,
-// tolerating a nested {result|data:{list|items|nodes}} wrapper.
-func nodeListRawList(data map[string]any) []any {
-	for _, k := range []string{"result", "data", "list", "items", "nodes"} {
-		if arr, ok := data[k].([]any); ok {
-			return arr
-		}
-		if inner, ok := data[k].(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "nodes", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
+	params := map[string]any{"workspaceId": rt.Str("workspace"), "maxResults": rt.Int("limit")}
+	if rt.Changed("filter-role") {
+		params["filterRoleIds"] = rt.StrSlice("filter-role")
 	}
-	return nil
-}
-
-// nodeListFirst returns the first present value among candidate keys.
-func nodeListFirst(m map[string]any, keys ...string) any {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v
-		}
+	data, err := rt.CallMCPData("wiki", "list_member", params)
+	if err != nil {
+		return err
 	}
-	return nil
-}
+	items, page, err := requireWikiCollection(data, "wiki/list_member", "members")
+	if err != nil {
+		return err
+	}
+	members := projectWikiRows(items, map[string][]string{"id": {"id", "userId"}, "name": {"name", "nick"}, "role": {"role", "roleId"}, "type": {"type"}, "outer": {"outer"}})
+	out := map[string]any{"count": len(members), "members": members}
+	addWikiPagination(out, page)
+	return rt.Output(out)
+})
 
-// NodeCreate → create_file (doc)
-// NodeCopy → copy_document (doc)
-var NodeCopy = shortcut.Shortcut{
-	Service:     "wiki",
-	Command:     "+node-copy",
-	Product:     "doc",
-	Description: "复制知识库节点",
-	Intent:      "当你想基于已有文档/文件夹快速生成一份副本（如用模板起草新文档、留档备份）时使用；指定源 node 和目标 folder，会实际在知识库中复制出一个新节点，原节点保持不变。",
-	Risk:        shortcut.RiskWrite,
-	Flags: []shortcut.Flag{
-		{Name: "workspace", Type: shortcut.FlagString, Desc: "知识库 ID", Required: true},
-		{Name: "node", Type: shortcut.FlagString, Desc: "源节点 ID", Required: true},
-		{Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 nodeId (不传则复制到根目录)"},
-	},
-	Tips: []string{`dws wiki +node-copy --workspace <workspaceId> --node <nodeId> --folder <targetFolderId>`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"nodeId":      rt.Str("node"),
-			"workspaceId": rt.Str("workspace"),
-		}
-		if rt.Changed("folder") {
-			params["targetFolderId"] = rt.Str("folder")
-		}
-		return rt.CallMCP("copy_document", params)
-	},
-}
-
-// NodeMove → move_document (doc)
-var NodeMove = shortcut.Shortcut{
-	Service:     "wiki",
-	Command:     "+node-move",
-	Product:     "doc",
-	Description: "移动知识库节点",
-	Intent:      "当你要重新整理知识库目录、把某个文档或文件夹从当前位置挪到另一个文件夹（或根目录）下时使用；指定源 node 和目标 folder，会实际改变该节点在知识库中的所属位置。",
-	Risk:        shortcut.RiskWrite,
-	Flags: []shortcut.Flag{
-		{Name: "workspace", Type: shortcut.FlagString, Desc: "知识库 ID", Required: true},
-		{Name: "node", Type: shortcut.FlagString, Desc: "源节点 ID", Required: true},
-		{Name: "folder", Type: shortcut.FlagString, Desc: "目标文件夹 nodeId (不传则移动到根目录)"},
-	},
-	Tips: []string{`dws wiki +node-move --workspace <workspaceId> --node <nodeId> --folder <targetFolderId>`},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"nodeId":      rt.Str("node"),
-			"workspaceId": rt.Str("workspace"),
-		}
-		if rt.Changed("folder") {
-			params["targetFolderId"] = rt.Str("folder")
-		}
-		return rt.CallMCP("move_document", params)
-	},
-}
-
-// NodeDelete → delete_document (doc)
-// NodeSearch → search_documents (doc)
 func init() {
-	shortcut.Register(
-		SpaceList,
-		SpaceSearch,
-		NodeList,
-		NodeCopy,
-		NodeMove,
-	)
+	DeleteSpace.Aliases = []string{"+space-delete"}
+	SpaceCreate.Validate = func(rt *shortcut.RuntimeContext) error {
+		if len([]rune(rt.Str("name"))) > 32 {
+			return fmt.Errorf("--name 不能超过 32 个字符")
+		}
+		if len([]rune(rt.Str("desc"))) > 500 {
+			return fmt.Errorf("--desc 不能超过 500 个字符")
+		}
+		return nil
+	}
+	SpaceCreate.Constraints = []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"name", "desc"}, Description: "--name 不超过 32 个字符；--desc 不超过 500 个字符"}}
+	enableWikiAutoPage(&SpaceList)
+	SpaceList.Contract.Pagination = wikiCursorPagination()
+	shortcut.Register(SpaceList, SpaceSearch, SpaceGet, SpaceCreate, DeleteSpace, MemberAdd, MemberUpdate, MemberList, MemberRemove)
 }

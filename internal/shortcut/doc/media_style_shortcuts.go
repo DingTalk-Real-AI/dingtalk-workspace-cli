@@ -228,11 +228,11 @@ var BackgroundUpdate = shortcut.Shortcut{
 var BackgroundDelete = shortcut.Shortcut{
 	Service: "doc", Command: "+background-delete", Product: productDoc,
 	Description: "清除文档背景色",
-	Intent:      "当用户明确要恢复文档默认背景、移除当前背景色时使用；执行幂等的 background clear。",
+	Intent:      "当用户明确要恢复文档默认背景、移除当前背景色时使用；执行 background clear 并要求确认。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "idempotent"},
 	Contract: docContract("+background-delete", "清除文档背景色",
-		"当用户明确要恢复文档默认背景、移除当前背景色时使用；执行幂等的 background clear。",
+		"当用户明确要恢复文档默认背景、移除当前背景色时使用；执行 background clear 并要求确认。",
 		[]string{`dws doc +background-delete --node <DOC_ID>`}),
 	Flags: []shortcut.Flag{{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true}},
 	Tips:  []string{`dws doc +background-delete --node <DOC_ID>`},

@@ -45,8 +45,8 @@ block ID 必须来自 `+fetch --detail with-ids`、真实 block 列表或前一�
 
 ## 确认与验证
 
-- `+update/+checkpoint-update` 及等价内容 leaf 属于可恢复文档写入，`confirmation=not_required`；直接执行，不询问，也不追加 `--yes`。
-- 优先消费已加载的 CommandMeta；只有参数、constraint 或 confirmation 缺失时才查询一次精确 leaf Schema。禁止先失败探测门禁。
+- `+update/+checkpoint-update` 当前 Runtime 与精确 leaf Schema 均为 `confirmation=user_required`；先说明对象、动作和影响，取得独立明确同意后才在原参数追加 `--yes`。首次请求不等于确认。
+- 优先消费已加载的 CommandMeta；只有参数、constraint 或 confirmation 缺失时才查询一次精确 leaf Schema。拒绝或未明确同意时不写入，禁止先失败探测门禁。
 - `+update --dry-run` 只读当前内容并输出真实 before/after；正式写入后只返回稳定回执并做最多三次有界回读，不会重放写操作。
 - `doc_write_verification_failed` 表示写入已经发生，必须先读取现状；禁止直接重复写入。
 - `partial_success` 只恢复未完成步骤，不能重放成功步骤。

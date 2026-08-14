@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DWS Wiki Shortcut 全景评审</title>
+  <style>
+    :root{--ink:#14213d;--muted:#5c677d;--line:#dbe4f0;--paper:#fff;--bg:#f3f7fb;--blue:#1769e0;--cyan:#00a6a6;--green:#178746;--amber:#a45b00;--red:#b42318;--shadow:0 14px 34px rgba(20,33,61,.08)}
+    *{box-sizing:border-box}body{margin:0;overflow-x:hidden;background:linear-gradient(150deg,#edf5ff 0,#f8fbff 45%,#eef8f5 100%);color:var(--ink);font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
+    main,.card,.two>*{min-width:0}main{width:min(1180px,calc(100% - 32px));margin:28px auto 72px}.hero,.card{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}
+    .hero{padding:38px;background:radial-gradient(circle at 95% 0,#dff8f3,transparent 36%),linear-gradient(135deg,#fff,#f5f9ff)}h1{font-size:34px;line-height:1.2;margin:0 0 10px}.lead{font-size:17px;color:var(--muted);max-width:900px}.meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.pill{border:1px solid #cbd9ea;border-radius:999px;padding:5px 11px;background:#fff;font-size:13px}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:18px 0}.metric{padding:20px}.metric b{display:block;font-size:31px;color:var(--blue)}.metric span{color:var(--muted)}
+    section{margin-top:22px}.card{padding:26px}h2{font-size:23px;margin:0 0 14px}h3{font-size:17px;margin:22px 0 8px}.callout{border-left:4px solid var(--blue);background:#f2f7ff;padding:14px 16px;border-radius:8px}.warn{border-color:var(--amber);background:#fff8eb}.ok{border-color:var(--green);background:#effbf4}
+    table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:11px 9px}th{color:#41516b;background:#f7f9fc;position:sticky;top:0}code{background:#edf2f8;border-radius:5px;padding:2px 5px;color:#24466e}.tag{display:inline-block;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:650;white-space:nowrap}.full{background:#e6f6ec;color:#116436}.partial{background:#fff0d5;color:#875000}.extra{background:#e8f1ff;color:#1854a5}.fixed{background:#f1eaff;color:#6338a5}
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.toolbar input,.toolbar select{border:1px solid #bdcada;border-radius:10px;padding:9px 11px;background:#fff;min-width:min(220px,100%);max-width:100%;flex:1 1 220px}.matrix{max-height:620px;overflow:auto;border:1px solid var(--line);border-radius:12px}.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}.small{color:var(--muted);font-size:13px}ul{padding-left:20px}.footer{color:var(--muted);text-align:center;margin-top:22px}@media(max-width:850px){.grid,.two{grid-template-columns:1fr 1fr}.hero{padding:25px}}@media(max-width:560px){.grid,.two{grid-template-columns:1fr}main{width:min(100% - 18px,1180px)}.card{padding:18px}h1{font-size:28px}}
+  </style>
+</head>
+<body><main>
+  <header class="hero">
+    <h1>DWS Wiki Shortcut 全景评审</h1>
+    <p class="lead">以 13 项成熟 Wiki 用户任务为基线，重新审视 DWS 的空间、成员、节点与动态能力。本次不是按命令名凑数：每个入口都要求真实业务证据，缺失数组、畸形响应、空确认或读回不一致一律失败。</p>
+    <div class="meta"><span class="pill">评审日期 2026-08-14</span><span class="pill">独立 worktree / 独立分支</span><span class="pill">真实组织数据 E2E 28/28</span><span class="pill">报告已去标识化</span></div>
+  </header>
+
+  <div class="grid">
+    <div class="card metric"><b>20</b><span>公开 Wiki Shortcuts</span></div>
+    <div class="card metric"><b>13/13</b><span>基线用户任务有对应路径</span></div>
+    <div class="card metric"><b>7</b><span>DWS 额外场景</span></div>
+    <div class="card metric"><b>20/20</b><span>真实数据能力已触达</span></div>
+  </div>
+
+  <section class="card">
+    <h2>结论先行</h2>
+    <div class="callout ok"><strong>DWS 已形成比“API 快捷别名”更完整的 Wiki 任务层。</strong> 基线中的 13 个用户任务均有对应入口；DWS 还提供空间搜索/详情/唯一解析、成员角色更新、库内节点搜索、协作动态和按空间名新建文档。创建、复制、移动等关键写能力从“请求发出”升级为“终态 + ID + 读回”成功标准。</div>
+    <div class="callout warn" style="margin-top:12px"><strong>能力边界必须诚实表达。</strong> DingTalk 成员接口不提供游标，单次真实上限是 50，因此不能实现成员 <code>--page-all</code>；成员身份只接受同组织可用的 userId，无法提供 email/open_id 等多种身份模式；节点创建也没有等价的 origin/shortcut 模式。这些差异保留为明确边界，而不是用本地循环或空结果伪装。</div>
+  </section>
+
+  <section class="card">
+    <h2>13 项基线任务逐条映射</h2>
+    <div class="matrix"><table><thead><tr><th>基线任务</th><th>DWS 主入口</th><th>结论</th><th>DWS 视角与边界</th></tr></thead><tbody>
+      <tr><td><code>+space-list</code></td><td><code>wiki +space-list</code></td><td><span class="tag full">完整对齐</span></td><td>严格空集合、游标续传、自动翻页、停滞检测；支持组织/我的知识库。</td></tr>
+      <tr><td><code>+space-create</code></td><td><code>wiki +space-create</code></td><td><span class="tag full">超过</span></td><td>公开真实 32 字符名称上限；创建后按 workspaceId 读回。</td></tr>
+      <tr><td><code>+delete-space</code></td><td><code>wiki +delete-space</code></td><td><span class="tag full">超过</span></td><td>预读目标、高风险确认、只接受 <code>success=true</code>；兼容 <code>+space-delete</code>。</td></tr>
+      <tr><td><code>+member-add</code></td><td><code>wiki +member-add</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 1–30 个 userId 与四种角色；以写接口终态作为成功证据，不把最多 50 条的名单误作精确读回。</td></tr>
+      <tr><td><code>+member-list</code></td><td><code>wiki +member-list</code></td><td><span class="tag partial">任务对齐</span></td><td>严格成员数组、角色过滤、真实上限 50；后端无游标，不能提供诚实的 page-all。</td></tr>
+      <tr><td><code>+member-remove</code></td><td><code>wiki +member-remove</code></td><td><span class="tag partial">任务对齐</span></td><td>支持批量 userId；只接受写接口明确终态，并公开无法进行精确成员读回的边界。</td></tr>
+      <tr><td><code>+node-list</code></td><td><code>wiki +node-list</code></td><td><span class="tag full">完整对齐</span></td><td>正确跨域路由 doc/list_nodes，严格空目录、分页与自动翻页。</td></tr>
+      <tr><td><code>+node-get</code></td><td><code>wiki +node-get</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 DingTalk 节点 ID/在线文档 URL 并返回文档域元数据；不接受跨平台专用的 token/type 组合。</td></tr>
+      <tr><td><code>+node-create</code></td><td><code>wiki +node-create</code></td><td><span class="tag partial">任务对齐</span></td><td>支持 adoc/axls/able/appt/adraw/amind/folder 并读回；无 origin/shortcut 等价接口。</td></tr>
+      <tr><td><code>+node-copy</code></td><td><code>wiki +node-copy</code></td><td><span class="tag full">超过</span></td><td>确认后要求新 nodeId 并读取副本；底层面向在线节点，不把 .dlink 当独立副本。</td></tr>
+      <tr><td><code>+move</code></td><td><code>wiki +move</code></td><td><span class="tag partial">任务对齐</span></td><td>同一入口支持 Wiki 内移动和“我的文档”在线节点入 Wiki，读回 workspace/folder；底层接口没有 apply 权限迁移开关。</td></tr>
+      <tr><td><code>+move-to-drive</code></td><td><code>wiki +move-to-drive</code></td><td><span class="tag full">超过</span></td><td>DWS 当前接口同步完成并读回 workspace 变化，无需暴露异步 task 轮询。</td></tr>
+      <tr><td><code>+node-delete</code></td><td><code>wiki +node-delete</code></td><td><span class="tag full">超过</span></td><td>预读并核对 workspace，高风险确认，要求删除终态。</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="card">
+    <h2>DWS 可挖掘的 7 个额外场景</h2>
+    <div class="two">
+      <div><h3>定位与创建链</h3><ul><li><code>+space-search</code>：严格关键词搜索。</li><li><code>+space-get</code>：空间详情与 workspaceId 证据。</li><li><code>+resolve-space</code>：唯一命中直出 ID，多命中拒绝猜测。</li><li><code>+wiki-new-doc</code>：空间名解析 → 创建 → 文档读回。</li></ul></div>
+      <div><h3>治理与巡检链</h3><ul><li><code>+member-update</code>：角色变更终态与不可精确读回声明。</li><li><code>+node-search</code>：库内关键词/扩展名搜索，严格零命中。</li><li><code>+feed-list</code>：知识库动态时间线与服务端 exclude-file 过滤。</li></ul></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>隐藏问题与修复</h2>
+    <table><thead><tr><th>原问题</th><th>错误风险</th><th>本次修复</th></tr></thead><tbody>
+      <tr><td>5 个旧 Wiki Shortcut 可直接执行，但只有 1 个进入公开目录。</td><td>Help、Schema、Skill 发现链与运行面漂移。</td><td><span class="tag fixed">20 项统一评审</span> 全部具备 Contract/Safety/Result 与语义目录记录。</td></tr>
+      <tr><td>列表投影找不到数组或遇到坏元素时返回空 slice。</td><td>把内部错误、字段漂移误报为“没有数据”。</td><td><span class="tag fixed">失败关闭</span> 只有响应中真实存在的 <code>[]</code> 才是合法空集合。</td></tr>
+      <tr><td>节点列表 Shortcut 调错 Wiki MCP 服务。</td><td>真实后端 <code>success=false</code>，Mock/静态检查看不出。</td><td><span class="tag fixed">跨域路由</span> 明确调用 doc/list_nodes，并纳入真实 E2E。</td></tr>
+      <tr><td>成员帮助宣称最大 200。</td><td>真实接口超过 50 直接参数错误。</td><td><span class="tag fixed">真实上限</span> Shortcut 与原子 Help 均改为 50，并在本地提前拒绝。</td></tr>
+      <tr><td>成员写操作从最多 50 条、不可分页的名单推断成员存在或缺失。</td><td>目标在截断部分时会误报写失败，或把未验证的移除报告为已读回。</td><td><span class="tag fixed">终态证据</span> 只接受写接口 <code>success=true</code>，并在结果中明确 <code>readbackAvailable=false</code>。</td></tr>
+      <tr><td>知识库名称帮助宣称最大 100。</td><td>真实接口超过 32 失败。</td><td><span class="tag fixed">真实上限</span> Help 与 Shortcut 校验统一为 32。</td></tr>
+      <tr><td>复制/移动/创建只把无异常视为成功。</td><td>空确认、未知远端效果或移动未到目标仍可能被接受。</td><td><span class="tag fixed">读回证明</span> 在后端具备精确查询能力时检查 success、业务 ID、workspace/folder 等最终状态。</td></tr>
+    </tbody></table>
+  </section>
+
+  <section class="card">
+    <h2>真实数据 E2E 证据矩阵</h2>
+    <p class="small">28 项业务断言全部通过。测试使用一次性空知识库、临时在线文档与一名同组织内部测试成员；所有对象在 finally 清理。报告不保存对象 ID、成员身份、组织信息、URL、trace 或原始响应。</p>
+    <div class="toolbar"><input id="q" placeholder="筛选命令或证据"><select id="g"><option value="">全部分组</option><option>空间</option><option>成员</option><option>节点</option><option>动态</option></select></div>
+    <div class="matrix"><table id="catalog"><thead><tr><th>分组</th><th>Shortcut</th><th>实际业务断言</th><th>状态</th></tr></thead><tbody>
+      <tr><td>空间</td><td><code>+space-list</code></td><td>真实 count、hasMore、nextCursor；自动翻页返回两页结果。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>空间</td><td><code>+space-search</code></td><td>等待搜索索引后命中一次性 workspaceId。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>空间</td><td><code>+space-get</code></td><td>读回 workspaceId 与创建结果一致。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>空间</td><td><code>+resolve-space</code></td><td>唯一名称解析为同一 workspaceId。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>空间</td><td><code>+space-create</code></td><td>success=true、workspaceId 非空、详情读回一致。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>空间</td><td><code>+delete-space</code></td><td>目标预读、确认、success=true；兼容别名执行 finally 清理。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>成员</td><td><code>+member-list</code></td><td>真实 owner 条目与显式 members 数组，limit=50。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>成员</td><td><code>+member-add</code></td><td>命令只报告写终态；一次性小规模空间另行确认名单完整且角色为 READER。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>成员</td><td><code>+member-update</code></td><td>命令只报告写终态；一次性小规模空间另行确认角色变为 EDITOR。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>成员</td><td><code>+member-remove</code></td><td>命令只报告写终态；一次性小规模空间另行确认完整名单中不存在该 userId。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>节点</td><td><code>+node-list</code></td><td>空库返回真实 nodes:[]；有数据时验证游标与自动翻页。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>节点</td><td><code>+node-get</code></td><td>读回 nodeId 与请求一致。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>节点</td><td><code>+node-search</code></td><td>等待索引后按标题命中真实 nodeId。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>节点</td><td><code>+node-create</code></td><td>分别创建 folder/adoc，均取得 nodeId 和元数据读回。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>节点</td><td><code>+node-copy</code></td><td>取得不同的新 nodeId，副本元数据可读。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>节点</td><td><code>+move</code></td><td>读回 workspaceId 与 folderId 均等于目标；兼容 +node-move。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>节点</td><td><code>+move-to-drive</code></td><td>移动后读回 workspace 发生变化，再通过 +move 移回。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>节点</td><td><code>+node-delete</code></td><td>目标预读与 workspace 核对后收到 success=true。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>节点</td><td><code>+wiki-new-doc</code></td><td>按唯一空间名创建，nodeId 与文档详情读回一致。</td><td><span class="tag full">PASS</span></td></tr>
+      <tr><td>动态</td><td><code>+feed-list</code></td><td>创建/移动操作后返回真实 feeds 数组，缺字段不会被接受。</td><td><span class="tag full">PASS</span></td></tr>
+    </tbody></table></div>
+    <p class="small">可复跑入口：<code>make build</code> 后设置临时 <code>DWS_WIKI_E2E_MEMBER_ID</code>，在交互终端运行 <code>./scripts/dev/wiki-shortcut-e2e.py</code>。脚本只输出能力标签，不输出业务对象；受保护操作及最终清理均由命令逐项获取终端确认，非交互环境会在创建测试数据前拒绝运行。</p>
+  </section>
+
+  <section class="card">
+    <h2>成功判定与发布门</h2>
+    <div class="two"><div><h3>运行时证据层</h3><ol><li>传输/MCP 调用成功。</li><li>响应契约存在且类型正确。</li><li>写操作必须有 <code>success=true</code>；创建类操作还必须有业务 ID。</li><li>后端具备精确查询时必须读回；不具备时明确发布不可读回，而非从截断集合推断。</li><li>集合只有显式数组才允许为空。</li></ol></div><div><h3>交付门</h3><ol><li>20/20 语义目录与注册面精确覆盖。</li><li>Contract、Safety、Result、统一输出完整。</li><li>生成漂移、Schema、确认真值、全量 Go 测试。</li><li>独立真实数据 E2E 与 finally 清理。</li><li>diff PII/密钥/本地绝对路径扫描。</li></ol></div></div>
+  </section>
+  <p class="footer">DWS Wiki Shortcut business review · sanitized engineering artifact</p>
+</main>
+<script>
+  const q=document.querySelector('#q'),g=document.querySelector('#g'),rows=[...document.querySelectorAll('#catalog tbody tr')];
+  function filter(){const text=q.value.trim().toLowerCase(),group=g.value;rows.forEach(r=>{const okText=!text||r.textContent.toLowerCase().includes(text),okGroup=!group||r.children[0].textContent===group;r.style.display=okText&&okGroup?'':'none'})}q.addEventListener('input',filter);g.addEventListener('change',filter);
+</script></body></html>

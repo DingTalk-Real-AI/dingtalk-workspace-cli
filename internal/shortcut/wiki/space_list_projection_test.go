@@ -18,11 +18,11 @@ import (
 	"testing"
 )
 
-// TestSpaceListProjectWikiSpacesShape guards against projection-data-loss:
+// TestCrossPlatformCoverageWikiSpaceListShape guards against projection-data-loss:
 // list_wikiSpaces / search_wikiSpaces nest the list under result.wikiSpaces;
 // the resolver must probe "wikiSpaces" or +space-list / +space-search silently
 // return empty despite the backend returning spaces.
-func TestSpaceListProjectWikiSpacesShape(t *testing.T) {
+func TestCrossPlatformCoverageWikiSpaceListShape(t *testing.T) {
 	const raw = `{"result":{"hasMore":false,"wikiSpaces":[
 		{"workspaceId":"w1","name":"R&D wiki"},
 		{"workspaceId":"w2","name":"product wiki"}
@@ -31,19 +31,47 @@ func TestSpaceListProjectWikiSpacesShape(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
-	if spaces := spaceListProject(data); len(spaces) != 2 {
+	items, _, err := requireWikiCollection(data, "wiki/list_wikiSpaces", "wikiSpaces")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spaces := projectWikiRows(items, map[string][]string{"workspaceId": {"workspaceId"}, "name": {"name"}})
+	if len(spaces) != 2 {
 		t.Fatalf("lower/upper mismatch: result.wikiSpaces has 2 entries, projection returned %d (%v)", len(spaces), spaces)
 	}
 }
 
 // TestSpaceListProjectTopLevelWikiSpaces covers the already-unwrapped shape.
-func TestSpaceListProjectTopLevelWikiSpaces(t *testing.T) {
+func TestCrossPlatformCoverageWikiSpaceListTopLevelShape(t *testing.T) {
 	const raw = `{"wikiSpaces":[{"workspaceId":"w1","name":"R&D wiki"}]}`
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
-	if spaces := spaceListProject(data); len(spaces) != 1 {
+	items, _, err := requireWikiCollection(data, "wiki/list_wikiSpaces", "wikiSpaces")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spaces := projectWikiRows(items, map[string][]string{"workspaceId": {"workspaceId"}, "name": {"name"}})
+	if len(spaces) != 1 {
 		t.Fatalf("top-level wikiSpaces: want 1, got %d (%v)", len(spaces), spaces)
+	}
+}
+
+func TestCrossPlatformCoverageWikiCollectionsRejectFalseEmptySuccess(t *testing.T) {
+	for name, data := range map[string]map[string]any{
+		"missing":   {"success": true, "hasMore": false},
+		"malformed": {"success": true, "wikiSpaces": map[string]any{}},
+		"bad item":  {"success": true, "wikiSpaces": []any{"not-an-object"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := requireWikiCollection(data, "wiki/list_wikiSpaces", "wikiSpaces"); err == nil {
+				t.Fatal("malformed response was accepted as an empty success")
+			}
+		})
+	}
+	items, _, err := requireWikiCollection(map[string]any{"success": true, "wikiSpaces": []any{}}, "wiki/list_wikiSpaces", "wikiSpaces")
+	if err != nil || len(items) != 0 {
+		t.Fatalf("explicit empty array must remain valid: items=%v err=%v", items, err)
 	}
 }

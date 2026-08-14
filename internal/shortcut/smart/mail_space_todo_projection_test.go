@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
@@ -103,6 +104,8 @@ func runShortcut(t *testing.T, fake *stubMailboxCaller, argv ...string) string {
 	root.PersistentFlags().Bool("yes", false, "")
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().String("format", "json", "")
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.AddCommand(shortcut.Commands()...)
 	var buf bytes.Buffer
 	root.SetOut(&buf)
@@ -121,6 +124,8 @@ func runShortcutErr(t *testing.T, fake *stubMailboxCaller, argv ...string) error
 	root.PersistentFlags().Bool("yes", false, "")
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().String("format", "json", "")
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.AddCommand(shortcut.Commands()...)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)

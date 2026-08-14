@@ -4,6 +4,7 @@
 package doc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -40,6 +41,7 @@ type docCoverageCaller struct {
 	responses map[string][]map[string]any
 	ctx       context.Context
 	history   []docCoverageCall
+	output    io.Writer
 }
 
 func TestDocCreateRequestsStayIndependentAndUnknownWritesFailClosed(t *testing.T) {
@@ -83,6 +85,71 @@ func TestDocCreateRequestsStayIndependentAndUnknownWritesFailClosed(t *testing.T
 	}}
 	if err := run(Create, withRevision, "--name", "revision-create", "--content", "revision body"); err != nil {
 		t.Fatalf("create revision receipt: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageDocCreatePreservesV1SuccessReceipt(t *testing.T) {
+	var output bytes.Buffer
+	caller := &docCoverageCaller{
+		output: &output,
+		responses: map[string][]map[string]any{
+			"create_document": {{
+				"nodeId":   "compat-node",
+				"name":     "compat-title",
+				"url":      "https://docs.example/compat-node",
+				"revision": 4.0,
+			}},
+			"get_document_content": {{
+				"markdown": "compat body",
+				"revision": 5.0,
+				"title":    "compat-title",
+			}},
+		},
+	}
+	if err := runDocCoverage(t, Create, caller, "--name", "compat-title", "--content", "compat body"); err != nil {
+		t.Fatal(err)
+	}
+
+	var envelope map[string]any
+	if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode create output %q: %v", output.String(), err)
+	}
+	if envelope["contractVersion"] != "doc.operation.v1" {
+		t.Fatalf("contractVersion = %#v", envelope["contractVersion"])
+	}
+	data, ok := envelope["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data = %#v", envelope["data"])
+	}
+	if data["nodeId"] != "compat-node" || data["verified"] != true || data["revision"] != 4.0 {
+		t.Fatalf("compact receipt = %#v", data)
+	}
+	result, ok := data["result"].(map[string]any)
+	if !ok || result["url"] != "https://docs.example/compat-node" || result["name"] != "compat-title" {
+		t.Fatalf("legacy result receipt = %#v", data["result"])
+	}
+	verification, ok := data["verification"].(map[string]any)
+	if !ok || verification["markdown"] != "compat body" || verification["title"] != "compat-title" {
+		t.Fatalf("legacy verification receipt = %#v", data["verification"])
+	}
+}
+
+func TestCrossPlatformCoverageDocMutationConfirmationMetadataMatchesSelectionText(t *testing.T) {
+	for name, declaration := range map[string]shortcut.Shortcut{
+		"update":            Update,
+		"background-delete": BackgroundDelete,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if declaration.Safety.Confirmation != "user_required" {
+				t.Fatalf("confirmation = %q", declaration.Safety.Confirmation)
+			}
+			if !strings.Contains(declaration.Intent, "确认") {
+				t.Fatalf("intent does not disclose confirmation gate: %q", declaration.Intent)
+			}
+		})
+	}
+	if CheckpointUpdate.Safety.Confirmation != "user_required" {
+		t.Fatalf("checkpoint-update confirmation = %q", CheckpointUpdate.Safety.Confirmation)
 	}
 }
 
@@ -559,7 +626,11 @@ func runDocCoveragePath(t *testing.T, declaration shortcut.Shortcut, caller *doc
 	service := &cobra.Command{Use: "doc"}
 	service.AddCommand(corecmd.New(shortcut.FromShortcut(declaration)))
 	root.AddCommand(service)
-	root.SetOut(io.Discard)
+	if caller.output != nil {
+		root.SetOut(caller.output)
+	} else {
+		root.SetOut(io.Discard)
+	}
 	root.SetErr(io.Discard)
 	root.SetIn(input)
 	if caller.ctx != nil {
