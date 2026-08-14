@@ -17,7 +17,87 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
+	"github.com/spf13/cobra"
 )
+
+func TestCrossPlatformCoverageChatGroupAuditJoinValidationAliasContract(t *testing.T) {
+	cmd := newChatCommand()
+	leaf, _, err := cmd.Find([]string{"group", "audit-join-validation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical := leaf.Flags().Lookup("conversation-id")
+	if canonical == nil || canonical.Hidden {
+		t.Fatalf("conversation-id flag = %#v, want visible canonical", canonical)
+	}
+	legacy := leaf.Flags().Lookup("group")
+	if legacy == nil || !legacy.Hidden {
+		t.Fatalf("group flag = %#v, want hidden compatibility alias", legacy)
+	}
+	if got := legacy.Annotations[runtimeannotate.AnnotationFlagAliasOf]; len(got) != 1 || got[0] != "conversation-id" {
+		t.Fatalf("group alias_of annotation = %#v", got)
+	}
+	if got := legacy.Annotations[runtimeannotate.AnnotationFlagAliasOrigin]; len(got) != 1 || got[0] != runtimeannotate.FlagAliasOriginCorecmdV1 {
+		t.Fatalf("group alias_origin annotation = %#v", got)
+	}
+	if got := legacy.Annotations[cobra.BashCompOneRequiredFlag]; len(got) != 0 {
+		t.Fatalf("hidden group alias kept required annotation: %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupAuditJoinValidationRestoreRequiredNoop(t *testing.T) {
+	restoreChatGroupBotsLegacyRequired(nil)
+	restoreChatPendingMigrationCanonicalRequired(nil)
+	root := &cobra.Command{Use: "chat"}
+	root.AddCommand(&cobra.Command{Use: "other"})
+	restoreChatGroupBotsLegacyRequired(root)
+	restoreChatPendingMigrationCanonicalRequired(root)
+}
+
+func TestCrossPlatformCoverageChatGroupBotsKeepsLegacyGroupFlag(t *testing.T) {
+	cmd := newChatCommand()
+	leaf, _, err := cmd.Find([]string{"group", "bots"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	group := leaf.Flags().Lookup("group")
+	if group == nil || group.Hidden {
+		t.Fatalf("group flag = %#v, want visible legacy flag", group)
+	}
+	if got := group.Annotations[cobra.BashCompOneRequiredFlag]; len(got) == 0 || got[0] != "true" {
+		t.Fatalf("group required annotation = %#v, want true", got)
+	}
+	if leaf.Flags().Lookup("conversation-id") != nil {
+		t.Fatalf("chat group bots still exposes migrated --conversation-id")
+	}
+	if leaf.Flags().Lookup("group-name") != nil {
+		t.Fatalf("chat group bots still exposes migrated --group-name")
+	}
+}
+
+func TestCrossPlatformCoverageChatPendingMigrationAliasesMatchManifest(t *testing.T) {
+	cmd := newChatCommand()
+	leaf, _, err := cmd.Find([]string{"group", "dismiss"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical := leaf.Flags().Lookup("conversation-id")
+	if canonical == nil {
+		t.Fatal("missing conversation-id flag")
+	}
+	if got := canonical.Annotations[cobra.BashCompOneRequiredFlag]; len(got) == 0 || got[0] != "true" {
+		t.Fatalf("conversation-id required annotation = %#v, want true", got)
+	}
+	legacy := leaf.Flags().Lookup("group")
+	if legacy == nil || !legacy.Hidden {
+		t.Fatalf("group flag = %#v, want hidden legacy alias", legacy)
+	}
+	if got := legacy.Annotations[runtimeannotate.AnnotationFlagAliasOf]; len(got) != 1 || got[0] != "conversation-id" {
+		t.Fatalf("group alias_of annotation = %#v", got)
+	}
+}
 
 func TestCrossPlatformCoverageChatMessageHelpDocumentsPostSendIDChain(t *testing.T) {
 	tests := []struct {
@@ -51,7 +131,7 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsPostSendIDChain(t *testing
 			contains: []string{
 				"send -> query-send-status -> edit",
 				"query-send-status --open-task-id <上一步返回的openTaskId>",
-				"edit --conversation-id <上一步返回的openConversationId> --msg-id <上一步返回的openMessageId>",
+				"edit --conversation-id <上一步返回的openConversationId> --message-id <上一步返回的openMessageId>",
 			},
 			notContain: "chat message list",
 		},
@@ -61,7 +141,7 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsPostSendIDChain(t *testing
 			contains: []string{
 				"send -> query-send-status -> recall",
 				"query-send-status --open-task-id <上一步返回的openTaskId>",
-				"recall --conversation-id <上一步返回的openConversationId> --msg-id <上一步返回的openMessageId>",
+				"recall --conversation-id <上一步返回的openConversationId> --message-id <上一步返回的openMessageId>",
 			},
 			notContain: "chat message list",
 		},
@@ -181,5 +261,93 @@ func TestCrossPlatformCoverageChatMessageHelpDocumentsOptionalTimeDefaults(t *te
 				}
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageChatReactionHelpKeepsManifestExternalAliasesVisible(t *testing.T) {
+	for _, command := range []string{"add-emoji", "remove-emoji", "add-text-emotion", "remove-text-emotion"} {
+		t.Run(command, func(t *testing.T) {
+			cmd := newChatCommand()
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+			cmd.SetArgs([]string{"message", command, "--help"})
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("chat message %s --help: %v\n%s", command, err, output.String())
+			}
+
+			help := output.String()
+			if !strings.Contains(help, "--conversation-id") {
+				t.Fatalf("chat message %s help missing --conversation-id:\n%s", command, help)
+			}
+			for _, visible := range []string{"--group", "--id", "--chat"} {
+				if !strings.Contains(help, visible+" string") {
+					t.Fatalf("chat message %s help hides manifest-external alias %s:\n%s", command, visible, help)
+				}
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupBotsHelpKeepsLegacyGroup(t *testing.T) {
+	cmd := newChatCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"group", "bots", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("chat group bots --help: %v\n%s", err, output.String())
+	}
+
+	help := output.String()
+	if !strings.Contains(help, "--group string") {
+		t.Fatalf("chat group bots help missing visible --group:\n%s", help)
+	}
+	for _, hidden := range []string{"--conversation-id", "--group-name"} {
+		if strings.Contains(help, hidden) {
+			t.Fatalf("chat group bots help exposes migrated flag %s:\n%s", hidden, help)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatSendCardHelpUsesCanonicalIDFlags(t *testing.T) {
+	cmd := newChatCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"message", "send-card", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("chat message send-card --help: %v\n%s", err, output.String())
+	}
+
+	help := output.String()
+	for _, visible := range []string{"--conversation-id", "--open-dingtalk-id"} {
+		if !strings.Contains(help, visible) {
+			t.Fatalf("send-card help missing %s:\n%s", visible, help)
+		}
+	}
+	for _, visible := range []string{"--group", "--receiver"} {
+		if !strings.Contains(help, visible+" string") {
+			t.Fatalf("send-card help hides manifest-external alias %s:\n%s", visible, help)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupAuditJoinValidationHelpUsesCanonicalConversationID(t *testing.T) {
+	cmd := newChatCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"group", "audit-join-validation", "--help"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("chat group audit-join-validation --help: %v\n%s", err, output.String())
+	}
+
+	help := output.String()
+	if !strings.Contains(help, "--conversation-id") {
+		t.Fatalf("audit-join-validation help missing --conversation-id:\n%s", help)
+	}
+	if strings.Contains(help, "--group string") {
+		t.Fatalf("audit-join-validation help exposes hidden --group alias:\n%s", help)
 	}
 }

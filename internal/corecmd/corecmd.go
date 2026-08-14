@@ -580,18 +580,7 @@ func RegisterFlags(cmd *cobra.Command, flags []FlagSpec) {
 		for _, alias := range flag.Aliases {
 			RegisterFlag(cmd, flag.Kind, alias, "", flag.Usage+" (alias)")
 			_ = cmd.Flags().MarkHidden(alias)
-			if registered := cmd.Flags().Lookup(alias); registered != nil {
-				runtimeannotate.SetFlagAnnotation(
-					registered,
-					runtimeannotate.AnnotationFlagAliasOf,
-					flag.Name,
-				)
-				runtimeannotate.SetFlagAnnotation(
-					registered,
-					runtimeannotate.AnnotationFlagAliasOrigin,
-					runtimeannotate.FlagAliasOriginCorecmdV1,
-				)
-			}
+			AnnotateFlagAlias(cmd, alias, flag.Name)
 		}
 		if flag.MarkRequired {
 			_ = cmd.MarkFlagRequired(flag.Name)
@@ -600,6 +589,30 @@ func RegisterFlags(cmd *cobra.Command, flags []FlagSpec) {
 			_ = cmd.Flags().MarkHidden(flag.Name)
 		}
 	}
+}
+
+// AnnotateFlagAlias records framework-owned evidence that aliasName is a hidden
+// compatibility alias for canonicalName. It is for commands that already own
+// their Cobra flag registration outside FlagSpec but still need the same
+// interface-snapshot alias contract as FlagSpec.Aliases.
+func AnnotateFlagAlias(cmd *cobra.Command, aliasName, canonicalName string) {
+	if cmd == nil {
+		return
+	}
+	registered := cmd.Flags().Lookup(aliasName)
+	if registered == nil {
+		return
+	}
+	runtimeannotate.SetFlagAnnotation(
+		registered,
+		runtimeannotate.AnnotationFlagAliasOf,
+		canonicalName,
+	)
+	runtimeannotate.SetFlagAnnotation(
+		registered,
+		runtimeannotate.AnnotationFlagAliasOrigin,
+		runtimeannotate.FlagAliasOriginCorecmdV1,
+	)
 }
 
 // RegisterFlag registers one flag by Kind. Default is applied at registration

@@ -116,6 +116,16 @@ func TestCrossPlatformCoverageRegisterFlagsAllKinds(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAnnotateFlagAliasIgnoresMissingInputs(t *testing.T) {
+	AnnotateFlagAlias(nil, "alias", "canonical")
+
+	cmd := newTestCommand()
+	AnnotateFlagAlias(cmd, "missing", "canonical")
+	if flag := cmd.Flags().Lookup("missing"); flag != nil {
+		t.Fatalf("unexpected missing flag registered: %#v", flag)
+	}
+}
+
 // ── effective value fallback chain ─────────────────────────────────
 
 func TestCrossPlatformCoverageEffectiveValueFallbackChain(t *testing.T) {

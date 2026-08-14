@@ -31,7 +31,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -97,7 +97,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -130,7 +130,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -163,7 +163,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -196,7 +196,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -229,7 +229,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -262,7 +262,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -295,7 +295,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -328,7 +328,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -361,7 +361,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -394,7 +394,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -427,7 +427,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -460,7 +460,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -493,7 +493,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -526,7 +526,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -559,7 +559,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -592,7 +592,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -625,7 +625,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -658,7 +658,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -691,7 +691,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -724,7 +724,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -757,7 +757,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -790,7 +790,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -823,7 +823,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -856,7 +856,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -892,7 +892,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -925,7 +925,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -991,7 +991,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -1024,7 +1024,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -1057,7 +1057,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -1090,7 +1090,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
@@ -1123,7 +1123,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {

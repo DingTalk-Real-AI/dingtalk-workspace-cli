@@ -116,8 +116,8 @@ func requireWukongWeeklySyncConfirmation(t *testing.T, err error) {
 func TestCrossPlatformCoverageWukongWeeklyChatCategoryQueries(t *testing.T) {
 	caller := &wukongWeeklySyncCaller{}
 	_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand, "category", "list-by-conv")
-	if err == nil || !strings.Contains(err.Error(), "flag --group is required") {
-		t.Fatalf("missing group error = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "missing required flag: --conversation-id") {
+		t.Fatalf("missing conversation ID error = %v", err)
 	}
 	requireWukongWeeklySyncNoCalls(t, caller)
 
@@ -378,15 +378,15 @@ func TestCrossPlatformCoverageWukongWeeklyChatUpdateNickClearSemantics(t *testin
 	if findErr != nil {
 		t.Fatal(findErr)
 	}
-	if err := updateNick.RunE(updateNick, nil); err == nil || !strings.Contains(err.Error(), "--group") {
-		t.Fatalf("direct missing group error = %v", err)
+	if err := updateNick.RunE(updateNick, nil); err == nil || !strings.Contains(err.Error(), "--conversation-id") {
+		t.Fatalf("direct missing conversation-id error = %v", err)
 	}
 
 	caller := &wukongWeeklySyncCaller{}
 	_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
 		"group", "update-nick")
-	if err == nil || !strings.Contains(err.Error(), "group") {
-		t.Fatalf("missing group error = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "conversation-id") {
+		t.Fatalf("missing conversation-id error = %v", err)
 	}
 	requireWukongWeeklySyncNoCalls(t, caller)
 
@@ -428,8 +428,8 @@ func TestCrossPlatformCoverageWukongWeeklyChatUpgradeValidationAndSafety(t *test
 		upgrade.Flags().Bool("yes", false, "")
 	}
 	_ = upgrade.Flags().Set("yes", "true")
-	if err := upgrade.RunE(upgrade, nil); err == nil || !strings.Contains(err.Error(), "--group") {
-		t.Fatalf("direct missing group error = %v", err)
+	if err := upgrade.RunE(upgrade, nil); err == nil || !strings.Contains(err.Error(), "--conversation-id") {
+		t.Fatalf("direct missing conversation-id error = %v", err)
 	}
 
 	tests := []struct {

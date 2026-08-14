@@ -479,7 +479,11 @@ func TestCrossPlatformCoverageChatReactionConversationAliasesReachCanonicalPaylo
 					if err != nil {
 						t.Fatalf("alias execution failed: %v", err)
 					}
-					if ctx == nil || len(ctx.Corrections) != 1 || ctx.Corrections[0].Original != "--"+alias || ctx.Corrections[0].Corrected != "--conversation-id" {
+					if alias == "open-conversation-id" {
+						if ctx == nil || len(ctx.Corrections) != 0 {
+							t.Fatalf("alias corrections = %#v", ctx)
+						}
+					} else if ctx == nil || len(ctx.Corrections) != 1 || ctx.Corrections[0].Original != "--"+alias || ctx.Corrections[0].Corrected != "--conversation-id" {
 						t.Fatalf("alias corrections = %#v", ctx)
 					}
 					if !reflect.DeepEqual(aliasCaller.calls, canonicalCaller.calls) {
