@@ -65,6 +65,53 @@ func TestCrossPlatformCoveragePackageUpgradeAllowed(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoveragePackageOwnershipFailsClosedWithoutManager(t *testing.T) {
+	t.Setenv("DWS_UPGRADE_URL", "")
+	t.Setenv("DWS_UPGRADE_REPOSITORY", "")
+	for _, manager := range []upgradepkg.PackageManager{upgradepkg.PackageManagerNPM, upgradepkg.PackageManagerPNPM} {
+		detection := upgradepkg.InstallDetection{Manager: manager, ResolvedPath: "/node_modules/dingtalk-workspace-cli/vendor/dws"}
+		err := validatePackageUpgradeOwnership(upgradeOptions{}, detection, "1.2.3-beta.4")
+		if err == nil || !strings.Contains(err.Error(), string(manager)) || !strings.Contains(err.Error(), "dingtalk-workspace-cli@1.2.3-beta.4") {
+			t.Fatalf("%s ownership error = %v", manager, err)
+		}
+	}
+	if err := validatePackageUpgradeOwnership(upgradeOptions{}, upgradepkg.InstallDetection{Manager: upgradepkg.PackageManagerManual}, "1.2.3"); err != nil {
+		t.Fatalf("manual install blocked: %v", err)
+	}
+	if err := validatePackageUpgradeOwnership(upgradeOptions{skipSkills: true}, upgradepkg.InstallDetection{Manager: upgradepkg.PackageManagerNPM}, "1.2.3"); err != nil {
+		t.Fatalf("explicit direct flow blocked: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageRunUpgradeRejectsUnavailablePackageOwner(t *testing.T) {
+	oldClient, oldEnsure := newUpgradeReleaseClient, ensureUpgradeDirs
+	oldCleanup, oldNeeds := cleanupUpgradeStale, upgradeNeedsUpgrade
+	oldDetect, oldVersion := detectUpgradeInstall, version
+	t.Cleanup(func() {
+		newUpgradeReleaseClient, ensureUpgradeDirs = oldClient, oldEnsure
+		cleanupUpgradeStale, upgradeNeedsUpgrade = oldCleanup, oldNeeds
+		detectUpgradeInstall, version = oldDetect, oldVersion
+	})
+	t.Setenv("DWS_UPGRADE_URL", "")
+	t.Setenv("DWS_UPGRADE_REPOSITORY", "")
+	client := &packageFreshClient{fakeUpgradeClient: &fakeUpgradeClient{latest: &upgradepkg.ReleaseInfo{Version: "1.0.1"}}}
+	newUpgradeReleaseClient = func() upgradeReleaseClient { return client }
+	ensureUpgradeDirs = func() error { return nil }
+	cleanupUpgradeStale = func() {}
+	upgradeNeedsUpgrade = func(string, string) bool { return true }
+	detectUpgradeInstall = func() upgradepkg.InstallDetection {
+		return upgradepkg.InstallDetection{Manager: upgradepkg.PackageManagerNPM, ResolvedPath: "/node_modules/dingtalk-workspace-cli/vendor/dws"}
+	}
+	version = "1.0.0"
+	err := runUpgrade(t.Context(), upgradeOptions{force: true, yes: true})
+	if err == nil || !strings.Contains(err.Error(), "npm 不在 PATH") || !strings.Contains(err.Error(), "dingtalk-workspace-cli@1.0.1") {
+		t.Fatalf("unavailable package owner = %v", err)
+	}
+	if client.freshCalls != 1 {
+		t.Fatalf("fresh calls = %d, want 1 without install-time revalidation", client.freshCalls)
+	}
+}
+
 func TestCrossPlatformCoverageRunPackageManagedUpgradeSuccessAndRecovery(t *testing.T) {
 	originalRollback := newUpgradeRollback
 	originalRun := runUpgradePackageInstall

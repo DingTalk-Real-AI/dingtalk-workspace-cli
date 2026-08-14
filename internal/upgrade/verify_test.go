@@ -6,8 +6,11 @@ package upgrade
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -44,6 +47,36 @@ func TestVerifySHA256(t *testing.T) {
 
 	if err := VerifySHA256(path, "0000000000000000000000000000000000000000000000000000000000000000"); err == nil {
 		t.Error("VerifySHA256() with wrong hash: expected error")
+	}
+}
+
+func TestCrossPlatformCoverageVerifySHA256RejectsMalformedDigests(t *testing.T) {
+	originalOpen, originalCopy := verifyOpenFile, verifyCopy
+	t.Cleanup(func() { verifyOpenFile, verifyCopy = originalOpen, originalCopy })
+	path := filepath.Join(t.TempDir(), "asset")
+	content := []byte("streamed asset")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := sha256.Sum256(content)
+	upper := strings.ToUpper(hex.EncodeToString(want[:]))
+	if err := VerifySHA256(path, "  "+upper+"  "); err != nil {
+		t.Fatalf("uppercase digest rejected: %v", err)
+	}
+	for _, digest := range []string{"", "deadbeef", strings.Repeat("z", 64)} {
+		if err := VerifySHA256(path, digest); err == nil {
+			t.Fatalf("malformed digest %q accepted", digest)
+		}
+	}
+	if err := VerifySHA256(path, strings.Repeat("0", 64)); err == nil || !strings.Contains(err.Error(), "mismatch") {
+		t.Fatalf("wrong digest error = %v", err)
+	}
+	if err := VerifySHA256(filepath.Join(t.TempDir(), "missing"), strings.Repeat("0", 64)); err == nil {
+		t.Fatal("missing file accepted")
+	}
+	verifyCopy = func(io.Writer, io.Reader) (int64, error) { return 0, errors.New("read failure") }
+	if _, err := ComputeSHA256(path); err == nil || !strings.Contains(err.Error(), "计算 SHA256") {
+		t.Fatalf("stream read error = %v", err)
 	}
 }
 

@@ -35,7 +35,13 @@ type InstallDetection struct {
 
 // CanAutoUpdate reports whether the owning package manager can update dws.
 func (d InstallDetection) CanAutoUpdate() bool {
-	return d.Manager != PackageManagerManual && d.Available
+	return d.IsPackageManaged() && d.Available
+}
+
+// IsPackageManaged reports whether npm or pnpm owns the running binary,
+// independently of whether that package manager is currently available.
+func (d InstallDetection) IsPackageManaged() bool {
+	return d.Manager == PackageManagerNPM || d.Manager == PackageManagerPNPM
 }
 
 // PackageInstallResult captures package-manager output without sending it to

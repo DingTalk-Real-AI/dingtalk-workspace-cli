@@ -65,6 +65,25 @@ func TestCrossPlatformCoverageDetectInstallFromPath(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageInstallDetectionOwnership(t *testing.T) {
+	for _, manager := range []PackageManager{PackageManagerNPM, PackageManagerPNPM} {
+		detection := InstallDetection{Manager: manager}
+		if !detection.IsPackageManaged() || detection.CanAutoUpdate() {
+			t.Fatalf("unavailable %s detection = %#v", manager, detection)
+		}
+		detection.Available = true
+		if !detection.CanAutoUpdate() {
+			t.Fatalf("available %s cannot auto-update", manager)
+		}
+	}
+	for _, manager := range []PackageManager{PackageManagerManual, "unknown"} {
+		detection := InstallDetection{Manager: manager, Available: true}
+		if detection.IsPackageManaged() || detection.CanAutoUpdate() {
+			t.Fatalf("non-package manager accepted: %#v", detection)
+		}
+	}
+}
+
 func TestCrossPlatformCoverageRunPackageManagerInstallUsesExactVersion(t *testing.T) {
 	originalLook, originalCommand := packageLookPath, packageCommand
 	t.Cleanup(func() { packageLookPath, packageCommand = originalLook, originalCommand })

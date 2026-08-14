@@ -455,6 +455,9 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	// Detect package ownership before previewing so --dry-run describes the
 	// same path a real update would use.
 	detection := detectUpgradeInstall()
+	if err := validatePackageUpgradeOwnership(opts, detection, release.Version); err != nil {
+		return err
+	}
 
 	// --dry-run: preview only. Resolve the platform asset so a missing build is
 	// still reported, then describe the steps that *would* run and return before
@@ -709,8 +712,24 @@ func revalidateUpgradeChannel(client upgradeReleaseClient, track upgrade.Release
 }
 
 func packageUpgradeAllowed(opts upgradeOptions, detection upgrade.InstallDetection) bool {
-	return detection.CanAutoUpdate() && opts.targetVersion == "" && !opts.skipSkills &&
+	return packageManagedUpgradeRequested(opts) && detection.CanAutoUpdate()
+}
+
+func packageManagedUpgradeRequested(opts upgradeOptions) bool {
+	return opts.targetVersion == "" && !opts.skipSkills &&
 		os.Getenv("DWS_UPGRADE_URL") == "" && os.Getenv("DWS_UPGRADE_REPOSITORY") == ""
+}
+
+func validatePackageUpgradeOwnership(opts upgradeOptions, detection upgrade.InstallDetection, targetVersion string) error {
+	if !packageManagedUpgradeRequested(opts) || !detection.IsPackageManaged() || detection.Available {
+		return nil
+	}
+	manager := string(detection.Manager)
+	command := fmt.Sprintf("%s install -g %s", manager, upgrade.NPMPackageSpec(targetVersion))
+	if detection.Manager == upgrade.PackageManagerPNPM {
+		command = fmt.Sprintf("pnpm add -g %s", upgrade.NPMPackageSpec(targetVersion))
+	}
+	return fmt.Errorf("检测到当前 dws 由 %s 管理，但 %s 不在 PATH 中；拒绝绕过包管理器直接替换二进制。请修复 PATH 后重试，或运行: %s", manager, manager, command)
 }
 
 func runPackageManagedUpgrade(ctx context.Context, currentVer, targetVersion string, detection upgrade.InstallDetection) error {
