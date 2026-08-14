@@ -1,6 +1,6 @@
 ---
 name: dingtalk-minutes
-description: 钉钉 AI 听记。Use when 查询听记摘要、转写、关键词、待办或分享。写文档走 dingtalk-doc；日程走 dingtalk-calendar。
+description: 钉钉 AI 听记。Use when 用户的主任务是单一听记产品查询：摘要、转写、关键词、待办或分享。同一请求还要求日程、待办等多产品汇总时，只使用 dingtalk-shared 调度入口，不要预加载本 Skill。写文档走 dingtalk-doc。
 metadata:
   cli_version: ">=0.2.14"
   category: product
