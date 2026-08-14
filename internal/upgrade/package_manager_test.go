@@ -9,13 +9,39 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
 
-func TestDetectInstallFromPath(t *testing.T) {
+func TestPackageManagerSubprocess(t *testing.T) {
+	mode := os.Getenv("DWS_PACKAGE_MANAGER_HELPER")
+	if mode == "" {
+		return
+	}
+	switch mode {
+	case "sleep":
+		time.Sleep(time.Second)
+	case "fail":
+		os.Exit(3)
+	case "no-version":
+		_, _ = os.Stdout.WriteString("Edition: open\n")
+	case "version":
+		_, _ = os.Stdout.WriteString("Version: v1.2.3-beta.4\n")
+	case "success":
+		return
+	default:
+		os.Exit(4)
+	}
+}
+
+func packageManagerHelperCommand(ctx context.Context, mode string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestPackageManagerSubprocess$")
+	cmd.Env = append(os.Environ(), "DWS_PACKAGE_MANAGER_HELPER="+mode)
+	return cmd
+}
+
+func TestCrossPlatformCoverageDetectInstallFromPath(t *testing.T) {
 	for _, test := range []struct {
 		name      string
 		path      string
@@ -39,20 +65,15 @@ func TestDetectInstallFromPath(t *testing.T) {
 	}
 }
 
-func TestRunPackageManagerInstallUsesExactVersion(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell fixture is Unix-only")
+func TestCrossPlatformCoverageRunPackageManagerInstallUsesExactVersion(t *testing.T) {
+	originalLook, originalCommand := packageLookPath, packageCommand
+	t.Cleanup(func() { packageLookPath, packageCommand = originalLook, originalCommand })
+	packageLookPath = func(name string) (string, error) { return name, nil }
+	var gotArgs string
+	packageCommand = func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		gotArgs = strings.Join(args, " ")
+		return packageManagerHelperCommand(ctx, "success")
 	}
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "args")
-	for _, name := range []string{"npm", "pnpm"} {
-		script := "#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$DWS_TEST_ARGS\"\n"
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("DWS_TEST_ARGS", logPath)
 	for _, test := range []struct {
 		manager PackageManager
 		want    string
@@ -64,9 +85,8 @@ func TestRunPackageManagerInstallUsesExactVersion(t *testing.T) {
 		if result.Err != nil {
 			t.Fatal(result.Err)
 		}
-		data, err := os.ReadFile(logPath)
-		if err != nil || strings.TrimSpace(string(data)) != test.want {
-			t.Fatalf("args = %q, %v", data, err)
+		if gotArgs != test.want {
+			t.Fatalf("args = %q, want %q", gotArgs, test.want)
 		}
 	}
 	if result := RunPackageManagerInstall(context.Background(), PackageManagerManual, "1.0.0"); result.Err == nil {
@@ -77,16 +97,13 @@ func TestRunPackageManagerInstallUsesExactVersion(t *testing.T) {
 	}
 }
 
-func TestVerifyInstalledBinaryRequiresExactVersion(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell fixture is Unix-only")
+func TestCrossPlatformCoverageVerifyInstalledBinaryRequiresExactVersion(t *testing.T) {
+	originalLook, originalCommand := packageLookPath, packageCommand
+	t.Cleanup(func() { packageLookPath, packageCommand = originalLook, originalCommand })
+	packageLookPath = func(string) (string, error) { return "dws", nil }
+	packageCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
+		return packageManagerHelperCommand(ctx, "version")
 	}
-	dir := t.TempDir()
-	path := filepath.Join(dir, "dws")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\nprintf 'Version: v1.2.3-beta.4\\n'\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	if err := VerifyInstalledBinary(context.Background(), "1.2.3-beta.4"); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +115,7 @@ func TestVerifyInstalledBinaryRequiresExactVersion(t *testing.T) {
 	}
 }
 
-func TestPreparePackageSelfReplaceWindowsRecovery(t *testing.T) {
+func TestCrossPlatformCoveragePreparePackageSelfReplaceWindowsRecovery(t *testing.T) {
 	originalExecutable, originalEval := packageExecutable, packageEvalSymlinks
 	originalGOOS := packageRuntimeGOOS
 	t.Cleanup(func() {
@@ -130,7 +147,7 @@ func TestPreparePackageSelfReplaceWindowsRecovery(t *testing.T) {
 	}
 }
 
-func TestDetectInstallMethodErrorsAndNoopPrepare(t *testing.T) {
+func TestCrossPlatformCoverageDetectInstallMethodErrorsAndNoopPrepare(t *testing.T) {
 	originalExecutable, originalEval := packageExecutable, packageEvalSymlinks
 	originalGOOS := packageRuntimeGOOS
 	t.Cleanup(func() {
@@ -149,7 +166,7 @@ func TestDetectInstallMethodErrorsAndNoopPrepare(t *testing.T) {
 	restore()
 }
 
-func TestPackageManagerFailureEdges(t *testing.T) {
+func TestCrossPlatformCoveragePackageManagerFailureEdges(t *testing.T) {
 	originalExecutable, originalEval := packageExecutable, packageEvalSymlinks
 	originalLook, originalCommand := packageLookPath, packageCommand
 	originalGOOS, originalRename := packageRuntimeGOOS, packageRename
@@ -182,7 +199,7 @@ func TestPackageManagerFailureEdges(t *testing.T) {
 	packageLookPath = func(string) (string, error) { return "/bin/sh", nil }
 	packageInstallWait = time.Millisecond
 	packageCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
-		return exec.CommandContext(ctx, "/bin/sh", "-c", "sleep 1")
+		return packageManagerHelperCommand(ctx, "sleep")
 	}
 	if result := RunPackageManagerInstall(t.Context(), PackageManagerNPM, "1.0.0"); result.Err == nil || !strings.Contains(result.Err.Error(), "超时") {
 		t.Fatalf("install timeout = %v", result.Err)
@@ -221,20 +238,20 @@ func TestPackageManagerFailureEdges(t *testing.T) {
 	packageLookPath = func(string) (string, error) { return "/bin/sh", nil }
 	packageVerifyWait = time.Millisecond
 	packageCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
-		return exec.CommandContext(ctx, "/bin/sh", "-c", "sleep 1")
+		return packageManagerHelperCommand(ctx, "sleep")
 	}
 	if err := VerifyInstalledBinary(t.Context(), "1.0.0"); err == nil || !strings.Contains(err.Error(), "超时") {
 		t.Fatalf("verify timeout = %v", err)
 	}
 	packageVerifyWait = time.Second
 	packageCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
-		return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 1")
+		return packageManagerHelperCommand(ctx, "fail")
 	}
 	if err := VerifyInstalledBinary(t.Context(), "1.0.0"); err == nil || !strings.Contains(err.Error(), "无法执行") {
 		t.Fatalf("verify execution failure = %v", err)
 	}
 	packageCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
-		return exec.CommandContext(ctx, "/bin/sh", "-c", "printf 'Edition: open\\n'")
+		return packageManagerHelperCommand(ctx, "no-version")
 	}
 	if err := VerifyInstalledBinary(t.Context(), "1.0.0"); err == nil || !strings.Contains(err.Error(), "未输出版本号") {
 		t.Fatalf("missing version = %v", err)

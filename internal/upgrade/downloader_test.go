@@ -22,7 +22,7 @@ type downloadRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f downloadRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
-func TestDownload_Success(t *testing.T) {
+func TestCrossPlatformCoverageDownloadSuccess(t *testing.T) {
 	body := "hello world binary content"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
@@ -45,7 +45,7 @@ func TestDownload_Success(t *testing.T) {
 	}
 }
 
-func TestDownload_HTTP404(t *testing.T) {
+func TestCrossPlatformCoverageDownloadHTTP404(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -58,7 +58,7 @@ func TestDownload_HTTP404(t *testing.T) {
 	}
 }
 
-func TestDownload_HTTP500_RetriesAndFails(t *testing.T) {
+func TestCrossPlatformCoverageDownloadHTTP500RetriesAndFails(t *testing.T) {
 	var attempts int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&attempts, 1)
@@ -83,7 +83,7 @@ func TestDownload_HTTP500_RetriesAndFails(t *testing.T) {
 	}
 }
 
-func TestDownloadConfigAndResponseBoundsEdges(t *testing.T) {
+func TestCrossPlatformCoverageDownloadConfigAndResponseBoundsEdges(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	}))
@@ -131,7 +131,7 @@ func TestDownloadConfigAndResponseBoundsEdges(t *testing.T) {
 	}
 }
 
-func TestDownloadFileOperationFailures(t *testing.T) {
+func TestCrossPlatformCoverageDownloadFileOperationFailures(t *testing.T) {
 	originalCreate, originalChmod := downloadCreateTemp, downloadChmod
 	originalSync, originalClose, originalRename := downloadSync, downloadClose, downloadRename
 	t.Cleanup(func() {
@@ -169,7 +169,7 @@ func TestDownloadFileOperationFailures(t *testing.T) {
 	}
 }
 
-func TestRetryDelayAndRetryAfterEdges(t *testing.T) {
+func TestCrossPlatformCoverageRetryDelayAndRetryAfterEdges(t *testing.T) {
 	if got := retryDelay(&downloadHTTPError{retryAfter: time.Minute}, 1); got != 30*time.Second {
 		t.Fatalf("retry delay cap = %s", got)
 	}
@@ -189,7 +189,7 @@ func TestRetryDelayAndRetryAfterEdges(t *testing.T) {
 	}
 }
 
-func TestDownloadIsAtomicAndRejectsIncompleteResponse(t *testing.T) {
+func TestCrossPlatformCoverageDownloadIsAtomicAndRejectsIncompleteResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Length", "10")
 		_, _ = w.Write([]byte("partial"))
@@ -215,7 +215,7 @@ func TestDownloadIsAtomicAndRejectsIncompleteResponse(t *testing.T) {
 	}
 }
 
-func TestDownloadRejectsHTTPSDowngradeAndRedirectLoops(t *testing.T) {
+func TestCrossPlatformCoverageDownloadRejectsHTTPSDowngradeAndRedirectLoops(t *testing.T) {
 	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("unsafe"))
 	}))
@@ -240,7 +240,7 @@ func TestDownloadRejectsHTTPSDowngradeAndRedirectLoops(t *testing.T) {
 	}
 }
 
-func TestDownloadRetriesRateLimitAndHonorsBounds(t *testing.T) {
+func TestCrossPlatformCoverageDownloadRetriesRateLimitAndHonorsBounds(t *testing.T) {
 	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if attempts.Add(1) == 1 {
@@ -281,7 +281,7 @@ func TestDownloadRetriesRateLimitAndHonorsBounds(t *testing.T) {
 	}
 }
 
-func TestDownload_ContextCancellation(t *testing.T) {
+func TestCrossPlatformCoverageDownloadContextCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)
 		w.Write([]byte("late"))
@@ -298,7 +298,7 @@ func TestDownload_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestDownloadWithProgress_Callback(t *testing.T) {
+func TestCrossPlatformCoverageDownloadWithProgressCallback(t *testing.T) {
 	body := make([]byte, 1024)
 	for i := range body {
 		body[i] = 'A'
@@ -327,7 +327,7 @@ func TestDownloadWithProgress_Callback(t *testing.T) {
 	}
 }
 
-func TestDownload_CreatesParentDirectories(t *testing.T) {
+func TestCrossPlatformCoverageDownloadCreatesParentDirectories(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("data"))
 	}))
@@ -343,7 +343,7 @@ func TestDownload_CreatesParentDirectories(t *testing.T) {
 	}
 }
 
-func TestDefaultDownloadConfig(t *testing.T) {
+func TestCrossPlatformCoverageDefaultDownloadConfig(t *testing.T) {
 	cfg := DefaultDownloadConfig()
 	if cfg.MaxRetries != 3 {
 		t.Errorf("MaxRetries = %d, want 3", cfg.MaxRetries)
@@ -356,7 +356,7 @@ func TestDefaultDownloadConfig(t *testing.T) {
 	}
 }
 
-func TestIsRetriable(t *testing.T) {
+func TestCrossPlatformCoverageIsRetriable(t *testing.T) {
 	tests := []struct {
 		err  error
 		want bool

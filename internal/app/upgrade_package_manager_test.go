@@ -47,7 +47,7 @@ func (r *packageRollbackFake) RollbackTo(upgradepkg.BackupInfo) error {
 }
 func (r *packageRollbackFake) Cleanup(int) error { r.cleaned = true; return r.cleanupErr }
 
-func TestPackageUpgradeAllowed(t *testing.T) {
+func TestCrossPlatformCoveragePackageUpgradeAllowed(t *testing.T) {
 	t.Setenv("DWS_UPGRADE_URL", "")
 	t.Setenv("DWS_UPGRADE_REPOSITORY", "")
 	detection := upgradepkg.InstallDetection{Manager: upgradepkg.PackageManagerNPM, Available: true}
@@ -65,7 +65,7 @@ func TestPackageUpgradeAllowed(t *testing.T) {
 	}
 }
 
-func TestRunPackageManagedUpgradeSuccessAndRecovery(t *testing.T) {
+func TestCrossPlatformCoverageRunPackageManagedUpgradeSuccessAndRecovery(t *testing.T) {
 	originalRollback := newUpgradeRollback
 	originalRun := runUpgradePackageInstall
 	originalPrepare := prepareUpgradePackageReplace
@@ -135,7 +135,7 @@ func TestRunPackageManagedUpgradeSuccessAndRecovery(t *testing.T) {
 	}
 }
 
-func TestRunUpgradeUsesPackageManagerForPreviewAndInstall(t *testing.T) {
+func TestCrossPlatformCoverageRunUpgradeUsesPackageManagerForPreviewAndInstall(t *testing.T) {
 	oldClient, oldRollback := newUpgradeReleaseClient, newUpgradeRollback
 	oldEnsure, oldCleanup, oldNeeds := ensureUpgradeDirs, cleanupUpgradeStale, upgradeNeedsUpgrade
 	oldDetect, oldRun := detectUpgradeInstall, runUpgradePackageInstall
@@ -190,7 +190,7 @@ func TestRunUpgradeUsesPackageManagerForPreviewAndInstall(t *testing.T) {
 	}
 }
 
-func TestRevalidateUpgradeChannel(t *testing.T) {
+func TestCrossPlatformCoverageRevalidateUpgradeChannel(t *testing.T) {
 	plain := &fakeUpgradeClient{}
 	if err := revalidateUpgradeChannel(plain, upgradepkg.ReleaseTrackRelease, "1.0.0"); err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestRevalidateUpgradeChannel(t *testing.T) {
 	}
 }
 
-func TestRestoreUpgradeBackupEdges(t *testing.T) {
+func TestCrossPlatformCoverageRestoreUpgradeBackupEdges(t *testing.T) {
 	if err := restoreUpgradeBackup(&packageRollbackFake{}, ""); err == nil {
 		t.Fatal("empty backup path accepted")
 	}

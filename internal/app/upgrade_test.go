@@ -331,7 +331,7 @@ func TestWriteJSON(t *testing.T) {
 
 // --- strictVerifyFile ---
 
-func TestStrictVerifyFile_MatchesChecksums(t *testing.T) {
+func TestCrossPlatformCoverageStrictVerifyFileMatchesChecksums(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.tar.gz")
 	content := []byte("valid binary content")
@@ -346,7 +346,7 @@ func TestStrictVerifyFile_MatchesChecksums(t *testing.T) {
 	}
 }
 
-func TestStrictVerifyFile_ChecksumMismatch(t *testing.T) {
+func TestCrossPlatformCoverageStrictVerifyFileChecksumMismatch(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.tar.gz")
 	os.WriteFile(filePath, []byte("tampered content"), 0644)
@@ -362,7 +362,7 @@ func TestStrictVerifyFile_ChecksumMismatch(t *testing.T) {
 	}
 }
 
-func TestStrictVerifyFile_DigestMismatch(t *testing.T) {
+func TestCrossPlatformCoverageStrictVerifyFileDigestMismatch(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.tar.gz")
 	os.WriteFile(filePath, []byte("tampered"), 0644)
@@ -375,7 +375,7 @@ func TestStrictVerifyFile_DigestMismatch(t *testing.T) {
 	}
 }
 
-func TestStrictVerifyFile_NoChecksumInfo(t *testing.T) {
+func TestCrossPlatformCoverageStrictVerifyFileNoChecksumInfo(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "test.tar.gz")
 	os.WriteFile(filePath, []byte("content"), 0644)
@@ -386,7 +386,7 @@ func TestStrictVerifyFile_NoChecksumInfo(t *testing.T) {
 	}
 }
 
-func TestStrictVerifyFile_FileNotInChecksums_FallsToDigest(t *testing.T) {
+func TestCrossPlatformCoverageStrictVerifyFileFallsBackToDigest(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "skills.zip")
 	content := []byte("skills content")

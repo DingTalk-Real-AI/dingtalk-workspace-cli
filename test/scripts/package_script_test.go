@@ -184,8 +184,9 @@ func seedDistArchive(t *testing.T, path string) {
 	}
 }
 
-// seedDistArtifacts creates minimal goreleaser output archives and a
-// checksums.txt stub so post-goreleaser.sh can run without a real build.
+// seedDistArtifacts creates minimal goreleaser output archives and an accurate
+// checksums.txt so post-goreleaser.sh and npm postinstall verification can run
+// without a real build.
 // Every archive is valid so the packaging tests exercise extraction for all
 // platforms; Darwin archives are additionally processed by the signing path.
 func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
@@ -199,11 +200,17 @@ func seedDistArtifacts(t *testing.T, distDir string, targets []string) {
 		seedDistArchive(t, p)
 	}
 
-	// Create empty checksums.txt (goreleaser creates this)
+	// GoReleaser creates checksums for the platform archives before the
+	// post-processing script adds the Skills archive entry.
 	checksums := filepath.Join(distDir, "checksums.txt")
 	var lines []string
 	for _, target := range targets {
-		lines = append(lines, "deadbeef00000000000000000000000000000000000000000000000000000000  "+target)
+		data, err := os.ReadFile(filepath.Join(distDir, target))
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", target, err)
+		}
+		digest := sha256.Sum256(data)
+		lines = append(lines, fmt.Sprintf("%x  %s", digest, target))
 	}
 	if err := os.WriteFile(checksums, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(%s) error = %v", checksums, err)

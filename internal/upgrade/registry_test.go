@@ -28,7 +28,7 @@ func newRegistryTestClient(server *httptest.Server, cachePath string, now func()
 	}
 }
 
-func TestNewClientUsesRegistryOnlyForOfficialDefaults(t *testing.T) {
+func TestCrossPlatformCoverageNewClientUsesRegistryOnlyForOfficialDefaults(t *testing.T) {
 	t.Setenv("DWS_UPGRADE_URL", "")
 	t.Setenv("DWS_UPGRADE_REPOSITORY", "")
 	client := NewClient()
@@ -50,7 +50,7 @@ func TestNewClientUsesRegistryOnlyForOfficialDefaults(t *testing.T) {
 	}
 }
 
-func TestRegistryReleaseUsesTenMinuteCache(t *testing.T) {
+func TestCrossPlatformCoverageRegistryReleaseUsesTenMinuteCache(t *testing.T) {
 	var requests atomic.Int32
 	version := "1.0.58-beta.6"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +99,7 @@ func TestRegistryReleaseUsesTenMinuteCache(t *testing.T) {
 	}
 }
 
-func TestRegistryFreshReleaseBypassesCache(t *testing.T) {
+func TestCrossPlatformCoverageRegistryFreshReleaseBypassesCache(t *testing.T) {
 	var requests atomic.Int32
 	version := "1.0.58"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -123,7 +123,7 @@ func TestRegistryFreshReleaseBypassesCache(t *testing.T) {
 	}
 }
 
-func TestFreshReleaseTrackBranches(t *testing.T) {
+func TestCrossPlatformCoverageFreshReleaseTrackBranches(t *testing.T) {
 	betaRegistry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(npmPackageMetadata{Version: "1.0.59-beta.1"})
 	}))
@@ -160,7 +160,7 @@ func TestFreshReleaseTrackBranches(t *testing.T) {
 	}
 }
 
-func TestRegistryHelperFailureEdges(t *testing.T) {
+func TestCrossPlatformCoverageRegistryHelperFailureEdges(t *testing.T) {
 	originalHome := upgradeUserHomeDir
 	t.Cleanup(func() { upgradeUserHomeDir = originalHome })
 	upgradeUserHomeDir = func() (string, error) { return "", errors.New("home") }
@@ -189,7 +189,7 @@ func TestRegistryHelperFailureEdges(t *testing.T) {
 	}
 }
 
-func TestRegistryReleaseBuildsVerifiedAssetURLs(t *testing.T) {
+func TestCrossPlatformCoverageRegistryReleaseBuildsVerifiedAssetURLs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/dingtalk-workspace-cli/latest" {
 			t.Fatalf("path = %q", r.URL.Path)
@@ -221,7 +221,7 @@ func TestRegistryReleaseBuildsVerifiedAssetURLs(t *testing.T) {
 	}
 }
 
-func TestRegistryCacheKeepsChannelsSeparate(t *testing.T) {
+func TestCrossPlatformCoverageRegistryCacheKeepsChannelsSeparate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/dingtalk-workspace-cli/latest":
@@ -260,7 +260,7 @@ func TestRegistryCacheKeepsChannelsSeparate(t *testing.T) {
 	}
 }
 
-func TestRegistryReleaseRejectsBadMetadata(t *testing.T) {
+func TestCrossPlatformCoverageRegistryReleaseRejectsBadMetadata(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		status int
@@ -294,7 +294,7 @@ func TestRegistryReleaseRejectsBadMetadata(t *testing.T) {
 	}
 }
 
-func TestRegistryCacheCorruptionAndFutureTimestampAreIgnored(t *testing.T) {
+func TestCrossPlatformCoverageRegistryCacheCorruptionAndFutureTimestampAreIgnored(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
@@ -327,7 +327,7 @@ func TestRegistryCacheCorruptionAndFutureTimestampAreIgnored(t *testing.T) {
 	}
 }
 
-func TestRegistryCacheWrongTrackIsIgnored(t *testing.T) {
+func TestCrossPlatformCoverageRegistryCacheWrongTrackIsIgnored(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
