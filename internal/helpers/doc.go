@@ -674,7 +674,7 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 				fmt.Errorf("解析 insert_document_block 响应失败: %w", err))
 		}
 	}
-	insertedBlockID := nestedDocString(insertResult, "blockId", "elementId", "id")
+	insertedBlockID := insertedDocBlockID(insertResult)
 
 	deps.Out.PrintInfo("[4/4] 回读验证媒体块...")
 	verifiedBlockID, verifyErr := verifyInsertedDocMedia(ctx, nodeID, insertedBlockID, resourceID, resourceURL)
@@ -821,6 +821,25 @@ func nestedDocString(value any, keys ...string) string {
 	case []any:
 		for _, child := range typed {
 			if text := nestedDocString(child, keys...); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+// insertedDocBlockID only accepts explicit block IDs from the insert result or
+// known response wrappers. Arbitrary IDs may belong to the document, operator,
+// or request and must not become a hard constraint for the media readback.
+func insertedDocBlockID(data map[string]any) string {
+	for _, key := range []string{"blockId", "elementId"} {
+		if text, ok := data[key].(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+	for _, wrapper := range []string{"result", "data", "content"} {
+		if inner, ok := data[wrapper].(map[string]any); ok {
+			if text := insertedDocBlockID(inner); text != "" {
 				return text
 			}
 		}
