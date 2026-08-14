@@ -4,7 +4,6 @@
 package doc
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -94,33 +93,14 @@ var Create = shortcut.Shortcut{
 		if rt.DryRun() {
 			return rt.Output(docEnvelope("doc.create", map[string]any{"executed": false, "previewKind": "plan", "create": params, "docFormat": format, "contentBytes": len(content)}))
 		}
-		fingerprint := docCreateFingerprint(rt.Str("name"), rt.Str("folder"), rt.Str("workspace"), format, content)
-		if existing, ok, lookupErr := docwritejournal.LookupFingerprint(rt.Command().Context(), fingerprint); lookupErr == nil && ok {
-			verifyTool := "get_document_info"
-			verifyParams := map[string]any{"nodeId": existing.NodeID}
-			if content != "" {
-				verifyTool = "get_document_content"
-				verifyParams["format"] = format
-			}
-			if verification, _, verifyErr := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
-				return content == "" || verifyUpdatedDocumentContent(data, content, "overwrite", format)
-			}); verifyErr == nil && (content == "" || verifyUpdatedDocumentContent(verification, content, "overwrite", format)) {
-				return rt.Output(docEnvelope("doc.create", map[string]any{
-					"nodeId": existing.NodeID, "verified": true, "idempotentReplay": true,
-				}, map[string]any{"name": "idempotency_preflight", "status": "reused_verified_document"}))
-			}
-		}
-		startedAt := time.Now()
 		created, err := rt.CallMCPWriteData(productDoc, "create_document", params)
-		steps := []map[string]any{{"name": "create_document", "status": "success"}}
 		if err != nil {
-			reconciled, reconcileErr := reconcileCreatedDocument(rt, rt.Str("name"), startedAt)
-			if reconcileErr != nil {
-				return docUnknownWriteError("doc.create", "create_document", "", err)
-			}
-			created = reconciled
-			steps = []map[string]any{{"name": "create_document", "status": "unknown"}, {"name": "reconcile_exact_title", "status": "success"}}
+			// create_document does not expose a stable idempotency key or operation
+			// ID. A same-title search cannot prove that a result belongs to this
+			// request, so fail closed instead of claiming another concurrent create.
+			return docUnknownWriteError("doc.create", "create_document", "", err)
 		}
+		steps := []map[string]any{{"name": "create_document", "status": "success"}}
 		nodeID := nestedString(created, "nodeId", "documentId", "id")
 		if nodeID == "" {
 			return docPartialWriteError(
@@ -133,7 +113,7 @@ var Create = shortcut.Shortcut{
 			)
 		}
 		_ = docwritejournal.Record(rt.Command().Context(), docwritejournal.Entry{
-			Fingerprint: fingerprint, NodeID: nodeID, Name: rt.Str("name"), DocType: "ALIDOC",
+			NodeID: nodeID, Name: rt.Str("name"), DocType: "ALIDOC",
 			URL: nestedString(created, "url", "docUrl", "nodeUrl"), FolderID: rt.Str("folder"), WorkspaceID: rt.Str("workspace"),
 		})
 		if format == "jsonml" && content != "" {
@@ -189,41 +169,6 @@ var Create = shortcut.Shortcut{
 		}
 		return rt.Output(docEnvelope("doc.create", receipt, steps...))
 	},
-}
-
-func docCreateFingerprint(name, folder, workspace, format, content string) string {
-	value := strings.Join([]string{strings.TrimSpace(name), strings.TrimSpace(folder), strings.TrimSpace(workspace), strings.TrimSpace(format), content}, "\x00")
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
-}
-
-func reconcileCreatedDocument(rt *shortcut.RuntimeContext, name string, startedAt time.Time) (map[string]any, error) {
-	var lastCount int
-	for attempt := 1; attempt <= 5; attempt++ {
-		data, err := rt.CallMCPData(productDoc, "search_documents", map[string]any{
-			"keyword": name, "createdTimeFrom": startedAt.Add(-30 * time.Second).UnixMilli(), "pageSize": 30,
-		})
-		if err == nil {
-			matches := []map[string]any{}
-			for _, candidate := range searchDocsProject(data) {
-				candidateName, _ := candidate["name"].(string)
-				nodeID, _ := candidate["nodeId"].(string)
-				if strings.TrimSpace(candidateName) == strings.TrimSpace(name) && strings.TrimSpace(nodeID) != "" {
-					matches = append(matches, candidate)
-				}
-			}
-			lastCount = len(matches)
-			if len(matches) == 1 {
-				return matches[0], nil
-			}
-			if len(matches) > 1 {
-				return nil, fmt.Errorf("创建超时对账命中 %d 个同名新文档，无法唯一确认", len(matches))
-			}
-		}
-		if attempt < 5 {
-			docVerifySleep(time.Duration(attempt) * 150 * time.Millisecond)
-		}
-	}
-	return nil, fmt.Errorf("创建超时对账未唯一命中文档（matches=%d）", lastCount)
 }
 
 const fetchTargetConstraint = "--node 与 --query 必须且只能提供一个"

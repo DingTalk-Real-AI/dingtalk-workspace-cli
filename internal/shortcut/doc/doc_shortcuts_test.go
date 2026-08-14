@@ -42,49 +42,39 @@ type docCoverageCaller struct {
 	history   []docCoverageCall
 }
 
-func TestDocCreateJournalReplayAndReconciliationCoverage(t *testing.T) {
+func TestDocCreateRequestsStayIndependentAndUnknownWritesFailClosed(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	configureDocJournalProfile(t)
-	testseam.Swap(t, &docVerifySleep, func(time.Duration) {})
 	run := func(declaration shortcut.Shortcut, caller *docCoverageCaller, args ...string) error {
 		return runDocCoveragePath(t, declaration, caller, strings.NewReader(""), declaration.Command, args...)
 	}
 
 	first := &docCoverageCaller{responses: map[string][]map[string]any{
+		"create_document":      {{"nodeId": "first-node"}},
 		"get_document_content": {{"markdown": "body", "revision": 3.0}},
 	}}
 	if err := run(Create, first, "--name", "journal-doc", "--content", "body"); err != nil {
 		t.Fatal(err)
 	}
-	replay := &docCoverageCaller{responses: map[string][]map[string]any{
+	second := &docCoverageCaller{responses: map[string][]map[string]any{
+		"create_document":      {{"nodeId": "second-node"}},
 		"get_document_content": {{"markdown": "body", "revision": 3.0}},
 	}}
-	if err := run(Create, replay, "--name", "journal-doc", "--content", "body"); err != nil {
+	if err := run(Create, second, "--name", "journal-doc", "--content", "body"); err != nil {
 		t.Fatal(err)
 	}
-	if len(replay.history) != 1 || replay.history[0].tool != "get_document_content" {
-		t.Fatalf("idempotent replay history = %#v", replay.history)
+	if len(second.history) != 2 || second.history[0].tool != "create_document" || second.history[1].tool != "get_document_content" {
+		t.Fatalf("independent second create history = %#v", second.history)
 	}
 
-	unique := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{
-		"search_documents": {{"documents": []any{map[string]any{"nodeId": "reconciled", "name": "reconcile"}}}},
+	unknown := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{
+		"search_documents": {{"documents": []any{map[string]any{"nodeId": "concurrent", "name": "same-name"}}}},
 	}}
-	if err := run(Create, unique, "--name", "reconcile"); err != nil {
-		t.Fatalf("unique reconcile: %v", err)
+	if err := run(Create, unknown, "--name", "same-name"); err == nil {
+		t.Fatal("unknown create write was reported as success")
 	}
-	multiple := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{
-		"search_documents": {{"documents": []any{
-			map[string]any{"nodeId": "a", "name": "duplicate"}, map[string]any{"nodeId": "b", "name": "duplicate"},
-		}}},
-	}}
-	if err := run(Create, multiple, "--name", "duplicate"); err == nil {
-		t.Fatal("ambiguous reconcile succeeded")
-	}
-	none := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{
-		"search_documents": {{"documents": []any{map[string]any{"nodeId": "x", "name": "other"}}}},
-	}}
-	if err := run(Create, none, "--name", "missing"); err == nil {
-		t.Fatal("missing reconcile succeeded")
+	if len(unknown.history) != 1 || unknown.history[0].tool != "create_document" {
+		t.Fatalf("unknown create must not search or continue writing: %#v", unknown.history)
 	}
 
 	withRevision := &docCoverageCaller{responses: map[string][]map[string]any{
