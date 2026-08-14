@@ -62,7 +62,7 @@ func openSupplementServers() []ServerInfo {
 		},
 		{
 			ID:       "drive-internal",
-			Name:     "Drive Internal Capability Service",
+			Name:     "钉钉知识管理-内部",
 			Endpoint: "https://mcp-gw.dingtalk.com/server/e48ff8134b3e4ff6fe3a9cbae8b440869083f0213bd8879c91b080e703162e02",
 		},
 	}
