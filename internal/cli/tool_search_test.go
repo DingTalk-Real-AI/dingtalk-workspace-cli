@@ -614,6 +614,7 @@ func TestToolSearchResponseBudgetIncludesEncoderNewline(t *testing.T) {
 	response := ToolSearchResponse{
 		Version: "tool-search.v1", Catalog: CatalogVersionRef{SourceHash: "s", SurfaceHash: "f"},
 		Strategy: "test", Candidates: []ToolReference{}, Abstained: true,
+		Hint:     toolSearchAbstainHint,
 	}
 	empty, err := json.Marshal(response)
 	if err != nil {
@@ -862,5 +863,62 @@ func TestToolSearchRejectsUnknownProduct(t *testing.T) {
 	var typed *apperrors.Error
 	if !errors.As(err, &typed) || typed.Reason != "unknown_product" {
 		t.Fatalf("unknown product error = %v, want unknown_product", err)
+	}
+}
+
+func TestToolSearchAbstainCarriesConvergenceHint(t *testing.T) {
+	engine := newToolSearchTestEngine(t)
+	response, err := engine.Search(context.Background(), ToolSearchRequest{
+		Query: "量子涨落检测器校准",
+	})
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if !response.Abstained || len(response.Candidates) != 0 {
+		t.Fatalf("expected abstained empty response, got abstained=%v candidates=%d", response.Abstained, len(response.Candidates))
+	}
+	if response.Hint == "" {
+		t.Fatal("abstained lexical response must carry a convergence hint")
+	}
+	if response.ExactFiltered != nil {
+		t.Fatalf("natural-language query must not produce exact_filtered, got %v", response.ExactFiltered)
+	}
+	// exact_filtered keeps its typed refusal and must not inherit the hint.
+	filtered, err := engine.Search(context.Background(), ToolSearchRequest{
+		Query: "chat send", ProductIDs: []string{"doc"},
+	})
+	if err != nil {
+		t.Fatalf("filtered search error: %v", err)
+	}
+	if filtered.ExactFiltered == nil {
+		t.Fatal("expected exact_filtered refusal")
+	}
+	if filtered.Hint != "" {
+		t.Fatalf("exact_filtered must keep its own reason, got extra hint %q", filtered.Hint)
+	}
+}
+
+func TestToolSearchWeakMatchFlagsFieldOnlyHits(t *testing.T) {
+	weak := ToolSearchResponse{Candidates: []ToolReference{
+		{CanonicalPath: "a", MatchedFields: []string{"parameters"}},
+		{CanonicalPath: "b", MatchedFields: []string{"description", "parameters"}},
+	}}
+	finalized, err := finalizeToolSearchResponse(weak)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !finalized.WeakMatch || finalized.Hint != toolSearchWeakMatchHint {
+		t.Fatalf("expected weak_match hint, got weak=%v hint=%q", finalized.WeakMatch, finalized.Hint)
+	}
+	strong := ToolSearchResponse{Candidates: []ToolReference{
+		{CanonicalPath: "a", MatchedFields: []string{"parameters"}},
+		{CanonicalPath: "b", MatchedFields: []string{"summary"}},
+	}}
+	finalized, err = finalizeToolSearchResponse(strong)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finalized.WeakMatch || finalized.Hint != "" {
+		t.Fatalf("summary hit must clear weak flag, got weak=%v hint=%q", finalized.WeakMatch, finalized.Hint)
 	}
 }

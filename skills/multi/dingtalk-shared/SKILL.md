@@ -93,4 +93,8 @@ python scripts/cross_product_read_summary.py --date YYYY-MM-DD --timezone <IANA_
 4. 其他错误：优先读取 JSON 错误中的 `retryable`、`retry_after_seconds`、
    `next_retry_at`、`hint` 和 `actions`。只有明确 `retryable=true` 时才按服务端节奏重试；
    缺少重试语义时用 `--verbose` 获取诊断并停止，不连续尝试替代命令。
-5. 明确不支持的能力：说明边界，不通过其他接口绕过。
+5. 能力可能不存在（如群投票、订阅、导出报表等 Catalog 未覆盖的意图）：`dws schema search` 一次
+   确认候选；返回 `abstained=true`、`weak_match=true` 的 `hint`，或候选语义与意图不符时，最多用
+   `dws schema <product> --compact` 复核一次该产品能力边界，然后如实结论"当前 CLI 不支持该能力"。
+   禁止逐个候选验证、逐产品枚举或改用无关接口绕过。
+6. 明确不支持的能力：说明边界，不通过其他接口绕过。

@@ -186,6 +186,8 @@ type ToolSearchResponse struct {
 	Candidates    []ToolReference          `json:"candidates"`
 	ExactFiltered *ToolSearchExactFiltered `json:"exact_filtered,omitempty"`
 	Abstained     bool                     `json:"abstained,omitempty"`
+	WeakMatch     bool                     `json:"weak_match,omitempty"`
+	Hint          string                   `json:"hint,omitempty"`
 	Truncated     bool                     `json:"truncated,omitempty"`
 }
 
@@ -876,8 +878,48 @@ func (e *ToolSearchEngine) catalogVersion() CatalogVersionRef {
 	}
 }
 
+// toolSearchAbstainHint is attached whenever a lexical search returns no
+// candidates. Agent evaluations showed that without an explicit convergence
+// signal, agents enumerate every product to "prove" a capability is missing
+// (a 15-turn probe for one nonexistent capability); the hint names the one
+// bounded verification step and licenses concluding "unsupported".
+const toolSearchAbstainHint = "当前 Catalog 无匹配命令。可用 dws schema <product> --compact 复核该产品能力边界；若仍无对应能力，应如实结论为不支持，不要逐产品枚举试探。"
+
+// toolSearchWeakMatchHint fires when every returned candidate matched only
+// weak fields (parameters/description/use_when) — no identity or summary hit.
+// Agent evaluations showed this is the signature of a nonexistent capability
+// phrased with common verbs ("发起一个投票" matches generic 发起/群 tools);
+// without a convergence signal agents verify every candidate and every
+// product. The hint bounds that to one verification step.
+const toolSearchWeakMatchHint = "候选仅命中弱相关字段，目标能力很可能不存在。最多用 dws schema <product> --compact 复核一次；仍无对应能力就如实结论为不支持，不要逐个候选或逐产品试探。"
+
+var toolSearchStrongMatchFields = map[string]bool{
+	string(toolSearchIdentity): true,
+	string(toolSearchSummary):  true,
+}
+
+func hasStrongToolSearchMatch(candidates []ToolReference) bool {
+	for _, candidate := range candidates {
+		for _, field := range candidate.MatchedFields {
+			if toolSearchStrongMatchFields[field] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func finalizeToolSearchResponse(response ToolSearchResponse) (ToolSearchResponse, error) {
 	response.Abstained = response.Abstained || len(response.Candidates) == 0
+	if response.Abstained && response.Hint == "" && response.ExactFiltered == nil {
+		response.Hint = toolSearchAbstainHint
+	}
+	if !response.Abstained && len(response.Candidates) > 0 && !hasStrongToolSearchMatch(response.Candidates) {
+		response.WeakMatch = true
+		if response.Hint == "" {
+			response.Hint = toolSearchWeakMatchHint
+		}
+	}
 	for {
 		payload, err := json.Marshal(response)
 		if err != nil {
@@ -893,6 +935,10 @@ func finalizeToolSearchResponse(response ToolSearchResponse) (ToolSearchResponse
 		response.Candidates = response.Candidates[:len(response.Candidates)-1]
 		response.Truncated = true
 		response.Abstained = len(response.Candidates) == 0
+		if response.Abstained {
+			response.WeakMatch = false
+			response.Hint = toolSearchAbstainHint
+		}
 		setToolReferenceRanks(response.Candidates)
 	}
 }
