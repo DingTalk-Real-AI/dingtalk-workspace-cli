@@ -126,9 +126,9 @@ func (d *docDelegationAuthCaller) performDelegationAuth(ctx context.Context, too
 	}
 	result, err := d.inner.CallTool(ctx, capabilityServerID, checkCapTool, checkArgs)
 	if err != nil {
-		return fmt.Errorf("委托鉴权调用 %s 失败: %w", checkCapTool, err)
+		return fmt.Errorf("委托鉴权校验失败: %w", err)
 	}
-	return parseCheckResult(toolKey, result)
+	return parseCheckResult(d.principalID, result)
 }
 
 // checkCapabilityResponse mirrors the check_capability response payload.
@@ -139,10 +139,12 @@ type checkCapabilityResponse struct {
 }
 
 // parseCheckResult 解析 check_capability 响应；allowed=false 时返回携带
-// denialMessage（为空时回退 denialReason）的 CLIError，Message 为用户可见文案。
-func parseCheckResult(toolKey string, result *edition.ToolResult) error {
+// denialMessage（为空时回退 denialReason）的 CLIError。报错文案保持用户视角：
+// 只透出委托人 ID 与服务端拒绝原因，不透出 toolKey 等 MCP 内部实现细节
+// （排查信息由 --verbose 输出与审计日志承担）。
+func parseCheckResult(principalID string, result *edition.ToolResult) error {
 	if result == nil {
-		return fmt.Errorf("委托鉴权 %s 返回 nil result", checkCapTool)
+		return fmt.Errorf("委托鉴权校验返回 nil result")
 	}
 	text := ""
 	for _, c := range result.Content {
@@ -152,11 +154,11 @@ func parseCheckResult(toolKey string, result *edition.ToolResult) error {
 		}
 	}
 	if text == "" {
-		return fmt.Errorf("委托鉴权 %s 返回空响应", checkCapTool)
+		return fmt.Errorf("委托鉴权校验返回空响应")
 	}
 	var parsed checkCapabilityResponse
 	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
-		return fmt.Errorf("解析 %s 响应失败: %w", checkCapTool, err)
+		return fmt.Errorf("解析委托鉴权校验响应失败: %w", err)
 	}
 	if !parsed.Allowed {
 		msg := parsed.DenialMessage
@@ -165,7 +167,7 @@ func parseCheckResult(toolKey string, result *edition.ToolResult) error {
 		}
 		return &CLIError{
 			Code:    CodeMCPToolError,
-			Message: fmt.Sprintf("委托鉴权失败 [%s]: %s", toolKey, msg),
+			Message: fmt.Sprintf("委托鉴权未通过（委托人 %s）: %s", principalID, msg),
 		}
 	}
 	return nil

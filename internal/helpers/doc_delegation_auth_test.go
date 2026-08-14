@@ -135,8 +135,11 @@ func TestCrossPlatformCoverageDocDelegationAuthDeniedWithMessage(t *testing.T) {
 	if !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
 		t.Fatalf("error = %v, want CLIError with CodeMCPToolError", err)
 	}
-	if !strings.Contains(cliErr.Message, "委托鉴权失败 [doc.update_document]") || !strings.Contains(cliErr.Message, "没有该文档的委托权限") {
-		t.Fatalf("Message = %q, want denialMessage surfaced", cliErr.Message)
+	if !strings.Contains(cliErr.Message, "委托鉴权未通过（委托人 u-principal）") || !strings.Contains(cliErr.Message, "没有该文档的委托权限") {
+		t.Fatalf("Message = %q, want principal ID and denialMessage surfaced", cliErr.Message)
+	}
+	if strings.Contains(cliErr.Message, "doc.update_document") {
+		t.Fatalf("Message = %q, must not leak internal toolKey", cliErr.Message)
 	}
 	if len(inner.calls) != 1 {
 		t.Fatalf("calls = %d, want 1 (original tool must not run)", len(inner.calls))
@@ -242,7 +245,7 @@ func TestCrossPlatformCoverageDocDelegationAuthCheckCallFails(t *testing.T) {
 	inner.checkErr = errors.New("check boom")
 	d := newDocDelegationAuthDecorator(inner)
 	_, err := d.CallTool(context.Background(), "doc", "update_document", nil)
-	if err == nil || !strings.Contains(err.Error(), checkCapTool) || !errors.Is(err, inner.checkErr) {
+	if err == nil || !strings.Contains(err.Error(), "委托鉴权校验失败") || !errors.Is(err, inner.checkErr) {
 		t.Fatalf("error = %v, want wrapped check failure", err)
 	}
 	if len(inner.calls) != 1 {
