@@ -156,7 +156,10 @@ func TestCrossPlatformCoverageDownloadFileOperationFailures(t *testing.T) {
 			case "sync":
 				downloadSync = func(*os.File) error { return failure }
 			case "close":
-				downloadClose = func(*os.File) error { return failure }
+				downloadClose = func(file *os.File) error {
+					_ = file.Close()
+					return failure
+				}
 			case "rename":
 				downloadRename = func(string, string) error { return failure }
 			}
