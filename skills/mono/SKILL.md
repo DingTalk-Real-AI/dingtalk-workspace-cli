@@ -82,7 +82,7 @@ cli_version: ">=1.0.15"
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
-| `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载                        | [drive.md](./references/products/drive.md)                     |
+| `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)                        | [drive.md](./references/products/drive.md)                     |
 | `hrbrain`         | 组织大脑：人才池管理/员工档案专项模块查询（元数据/批量数据/标签/职业历程/绩效）/结构化高级人才搜索（原始条件表达式）；区别于 `contact` 的基础通讯录档案与 `aisearch` 的通用语义找人 | [hrbrain.md](./references/products/hrbrain.md)                 |
 | `markdown`        | 原生 Markdown 文件：读取/创建/全量覆盖/字面量或 RE2 局部替换              | [markdown.md](./references/products/markdown.md)               |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |

@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉钉文件管理（存储层，覆盖钉盘与文档空间两个存储域）。Use when 用户说 钉盘/文档空间或我的文档中的普通文件夹/上传文件/下载文件/查文件/找文件/全局搜索文件/复制/移动/重命名/删除/回收站/还原删除文件/权限管理/元信息；也承接在线文档节点的这些管理动作（doc 侧同名原子命令已弃用）。文档正文编辑与导出 docx/markdown/pdf 走 dingtalk-doc；明确的知识库/wiki 空间及空间内节点管理走 dingtalk-wiki。命令前缀：dws drive。
+description: 钉钉文件管理（存储层，覆盖钉盘与文档空间两个存储域）。Use when 用户说 钉盘/文档空间或我的文档中的普通文件夹/上传文件/下载文件/查文件/找文件/全局搜索文件/复制/移动/重命名/删除/回收站/还原删除文件/权限管理/元信息/普通文件下载/本地与钉盘文件夹差异比较/整个文件夹拉到本地/整个文件夹推到钉盘/双向同步；也承接在线文档节点的这些管理动作（doc 侧同名原子命令已弃用）。文档正文编辑与导出 docx/markdown/pdf 走 dingtalk-doc；明确的知识库/wiki 空间及空间内节点管理走 dingtalk-wiki。命令前缀：dws drive。
 metadata:
   cli_version: ">=0.2.14"
   category: product
