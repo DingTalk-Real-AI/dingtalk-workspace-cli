@@ -17,6 +17,8 @@ import (
 
 const wikiCompositeReason = "Reviewed Wiki Shortcut composite: the executable CLI owns strict response validation, pagination projection, optional multi-step orchestration, read-back verification, and confirmation; no single MCP interface represents the complete command contract."
 
+const wikiSpaceSearchCompositeReason = "Reviewed Wiki space-search compatibility adapter: the published workflow properties query/limit remain stable while execution translates them to search_wikiSpaces.keyword/pageSize; redirecting an existing non-empty property requires a versioned Schema migration."
+
 func wikiContract(command, description, useWhen string, avoidWhen, examples []string, result *contract.ResultSpec, pagination *contract.PaginationSpec, params ...contract.ParamDecl) corecmd.ContractDecl {
 	name := "shortcut_" + strings.ReplaceAll(strings.TrimPrefix(command, "+"), "-", "_")
 	cliPath := "wiki " + command
@@ -26,6 +28,11 @@ func wikiContract(command, description, useWhen string, avoidWhen, examples []st
 		Selection: contract.SelectionSpec{AgentSummary: description, UseWhen: []string{useWhen}, AvoidWhen: avoidWhen, Examples: examples},
 		Identity:  contract.ToolIdentitySpec{ProductID: "wiki", Name: name, CanonicalPath: "wiki." + name, CLIPath: cliPath, PrimaryCLIPath: cliPath},
 	}
+}
+
+func wikiWithInterfaceReason(declared shortcut.Shortcut, reason string) shortcut.Shortcut {
+	declared.Contract.Interface.Reason = reason
+	return declared
 }
 
 func wikiObjectResult(description string) *contract.ResultSpec {

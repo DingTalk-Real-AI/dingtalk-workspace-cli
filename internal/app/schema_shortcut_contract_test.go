@@ -140,8 +140,17 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 	assertChatCatalogCompleteLeafContracts(t)
 }
 
-func TestDeliveryWikiSpaceSearchPreservesHistoricalParameterProperties(t *testing.T) {
+func TestDeliveryWikiSpaceSearchDeclaresCompatibilityAdapter(t *testing.T) {
 	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-search")
+	if got := schemaContractString(leaf["interface_mode"]); got != "composite" {
+		t.Fatalf("wiki +space-search interface_mode = %q, want composite", got)
+	}
+	reason := schemaContractString(leaf["interface_reason"])
+	for _, fragment := range []string{"query/limit", "search_wikiSpaces.keyword/pageSize", "versioned Schema migration"} {
+		if !strings.Contains(reason, fragment) {
+			t.Fatalf("wiki +space-search interface_reason = %q, want fragment %q", reason, fragment)
+		}
+	}
 	parameters := schemaContractMap(leaf["parameters"])
 	for name, want := range map[string]string{"query": "query", "limit": "limit"} {
 		parameter := parameters[name]

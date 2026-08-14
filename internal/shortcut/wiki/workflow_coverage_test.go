@@ -131,8 +131,17 @@ func TestCrossPlatformCoverageWikiSpaceWorkflows(t *testing.T) {
 			"wiki/search_wikiSpaces": {`{"success":true,"wikiSpaces":[{"spaceId":"w2","spaceName":"Plan"}]}`},
 		}}
 		out, err := runWikiCoverageCLI(t, caller, "+space-search", "--query", "Plan", "--limit", "12")
-		if err != nil || out["count"] != float64(1) || caller.calls[0].args["pageSize"] != 12 {
+		if err != nil || out["count"] != float64(1) || len(caller.calls) != 1 {
 			t.Fatalf("search output=%#v err=%v calls=%#v", out, err, caller.calls)
+		}
+		if got := caller.calls[0]; got.product != "wiki" || got.tool != "search_wikiSpaces" || len(got.args) != 2 || got.args["keyword"] != "Plan" || got.args["pageSize"] != 12 {
+			t.Fatalf("search call = %#v, want exact keyword/pageSize request", got)
+		}
+		if _, exists := caller.calls[0].args["query"]; exists {
+			t.Fatalf("search request leaked compatibility property query: %#v", caller.calls[0].args)
+		}
+		if _, exists := caller.calls[0].args["limit"]; exists {
+			t.Fatalf("search request leaked compatibility property limit: %#v", caller.calls[0].args)
 		}
 	})
 
