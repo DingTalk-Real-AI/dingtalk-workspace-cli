@@ -8,6 +8,7 @@
 - 关联测试：[`internal/cli/tool_search_test.go`](../internal/cli/tool_search_test.go)
 - 评测实现：[`scripts/dev/eval_tool_search_ranking.py`](../scripts/dev/eval_tool_search_ranking.py)
 - 评测报告：[`tool-search-ranking-evaluation.md`](tool-search-ranking-evaluation.md)
+- 最新审计与优化方案：[`tool-search-optimization-plan-20260814.md`](tool-search-optimization-plan-20260814.md)
 - 背景调研：[`tool-search-ranking-research.md`](tool-search-ranking-research.md)
 - GitHub 源码架构调研：[`tool-search-github-architecture-research.md`](tool-search-github-architecture-research.md)
 
@@ -116,12 +117,12 @@ DWS 已经具备：
 | Go action ranker shadow | R@1 62.51%；R@5 84.24%；MRR@5 0.7131 | 同源 proxy 上 R@5 低 3.92 pp；仅拆解 workflow 更好，等待独立门禁 |
 | 精确身份 | Exact Guard 后 canonical / CLI Top-1 100% | Exact Guard 是穷举契约门禁 |
 | 多工具完整性 | 默认整句 Complete@5 40% / required recall 61.67%；reviewed 拆解后 80% / 90% | 拆解结果是人工上界，不是端到端成功率；action shadow 为 90% / 95% |
-| 中文召回 | 默认算法纯中文 R@5 82.34%，中英混合 89.04% | 中文 bigram + 标识符保留可用，但纯中文仍是重点优化项 |
-| 负例暴露 | 默认 Forbidden@1 6.12%，Forbidden@5 37.55% | Top-5 仍高，必须继续建设 alternative gold / contradiction gate |
+| 中文召回 | 默认算法纯中文 R@5 83.83%，中英混合 90.57% | 中文 unigram+bigram + 标识符保留可用，但纯中文仍是重点优化项 |
+| 负例暴露 | 默认 Forbidden@1 0%，Forbidden@5 0.0719%（1/1,390） | 同源 avoid_when proxy 已大幅下降，但仍必须建设独立 alternative gold / contradiction gate |
 
 相对最简单的 IDF keyword overlap，TF-IDF 在当前 proxy 集上的 R@5 从 76.91% 提升到 84.55%，提高 7.64 个百分点。这个数字可以说明“需要一个正式词法 ranker”，但因为 query 与索引元数据来自同一批作者，不能外推为线上业务收益。
 
-当前分支的纯 Go shipped-runtime 对比器直接消费运行时装配的 typed Catalog，不读取仓库中的生成 JSON。action shadow `fielded_bm25_action_v1` 相对当前默认 `fielded_bm25_ensemble`：R@1 **-2.76 pp**、R@5 **-3.92 pp**、MRR@5 **-0.031**；raw workflow required recall **+15 pp**，reviewed 拆解的 Complete@5 / required recall **+10 / +5 pp**；两算法的 Forbidden@1/@5 在 avoid_when 软降权层之后同为 **0**。由于这些结果来自同源 proxy，且主召回指标全面落后，action 只能继续 shadow；若未来重评，切换默认需独立数据的非劣效与最小增益人工裁决（sealed 门禁已按仓库决策移除）。
+当前分支的纯 Go shipped-runtime 对比器直接消费运行时装配的 typed Catalog，不读取仓库中的生成 JSON。action shadow `fielded_bm25_action_v1` 相对当前默认 `fielded_bm25_ensemble`：R@1 **-2.76 pp**、R@5 **-3.92 pp**、MRR@5 **-0.031**；raw workflow required recall **+15 pp**，reviewed 拆解的 Complete@5 / required recall **+10 / +5 pp**；两算法的 Forbidden@1 同为 **0**、Forbidden@5 同为 **0.0719%**。由于这些结果来自同源 proxy，且主召回指标全面落后，action 只能继续 shadow；若未来重评，切换默认需独立数据的非劣效与最小增益人工裁决（sealed 门禁已按仓库决策移除）。
 
 合并主线前曾用固定 `gpt-5.6-sol` 做过一轮 answer-free、无业务执行的规划 smoke A/B：同一批 10 条 workflow，各 arm 一个 batch/一次 trial。该 run 绑定旧 572 工具 Catalog，已因当前 1,098 工具 surface 变化判为过期，只保留方法记录，不能作为现行效果证明。旧结果中两臂 required-tool complete/recall 都是 **100% / 100%**；精确最小计划率分别为 **90% / 70%**，plan precision 为 **95.45% / 87.50%**，额外步骤为 **1 / 3**。单 trial 无区间，不能据此通过默认开启门禁。
 
@@ -133,7 +134,7 @@ DWS 已经具备：
 |---|---:|
 | compact 全量 Schema | 17,876,084 bytes |
 | 平均 Search + gold Inspect | 4,507.03 bytes |
-| 理想化 overview + 正确 product + Inspect | 122,193 bytes |
+| 理想化 overview + 正确 product + Inspect | 122,368.95 bytes |
 
 渐进发现把“预加载全部 Schema”变成“约 3 KB 候选 + 选中 leaf 的数 KB Schema”。实际模型 token 下降比例取决于 tokenizer 和对话编排，因此 RFC 只以字节数作为已验证证据，不给出未经测量的 token 节省承诺。
 

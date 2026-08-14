@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"reflect"
@@ -500,6 +501,35 @@ func TestResolveToolSearchConfigFromEnvOverridesOnlyWhenSet(t *testing.T) {
 	t.Setenv("DWS_TOOL_SEARCH_ALGORITHM", "not-a-real-algorithm")
 	if got := ResolveToolSearchConfigFromEnv(DefaultToolSearchConfig()).LexicalAlgorithm; got != ToolSearchLexicalBM25 {
 		t.Fatalf("invalid algorithm env should be ignored, got %q", got)
+	}
+}
+
+func TestToolSearchRejectsNonFiniteAndNegativeRankingConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*ToolSearchConfig)
+	}{
+		{name: "nan k1", mutate: func(config *ToolSearchConfig) { config.BM25K1 = math.NaN() }},
+		{name: "negative k1", mutate: func(config *ToolSearchConfig) { config.BM25K1 = -1 }},
+		{name: "infinite b", mutate: func(config *ToolSearchConfig) { config.BM25B = math.Inf(1) }},
+		{name: "negative b", mutate: func(config *ToolSearchConfig) { config.BM25B = -0.1 }},
+		{name: "b above one", mutate: func(config *ToolSearchConfig) { config.BM25B = 1.01 }},
+		{name: "negative identity weight", mutate: func(config *ToolSearchConfig) { config.FieldWeights.Identity = -1 }},
+		{name: "nan summary weight", mutate: func(config *ToolSearchConfig) { config.FieldWeights.Summary = math.NaN() }},
+	}
+	registry := newToolSearchTestRegistry(t)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			config := DefaultToolSearchConfig()
+			test.mutate(&config)
+			if _, err := NewToolSearchEngine(registry, config); err == nil {
+				t.Fatalf("NewToolSearchEngine() accepted invalid config: %#v", config)
+			}
+		})
+	}
+	t.Setenv("DWS_TOOL_SEARCH_K1", "NaN")
+	if _, err := NewToolSearchEngine(registry, ResolveToolSearchConfigFromEnv(DefaultToolSearchConfig())); err == nil {
+		t.Fatal("NewToolSearchEngine() accepted NaN from DWS_TOOL_SEARCH_K1")
 	}
 }
 

@@ -272,7 +272,13 @@ func NewToolSearchEngine(registry SchemaRegistry, config ToolSearchConfig) (*Too
 	if err != nil {
 		return nil, fmt.Errorf("index tool search registry: %w", err)
 	}
+	if err := validateToolSearchConfig(config, true); err != nil {
+		return nil, err
+	}
 	config = normalizeToolSearchConfig(config)
+	if err := validateToolSearchConfig(config, false); err != nil {
+		return nil, err
+	}
 	documents := make(map[string]toolSearchDocument, len(index.CanonicalPaths()))
 	for _, product := range index.Registry().Products {
 		for _, tool := range product.Tools {
@@ -507,6 +513,31 @@ func normalizeToolSearchConfig(config ToolSearchConfig) ToolSearchConfig {
 	config.CatalogSourceHash = strings.TrimSpace(config.CatalogSourceHash)
 	config.CatalogSurfaceHash = strings.TrimSpace(config.CatalogSurfaceHash)
 	return config
+}
+
+func validateToolSearchConfig(config ToolSearchConfig, allowUnset bool) error {
+	if math.IsNaN(config.BM25K1) || math.IsInf(config.BM25K1, 0) || config.BM25K1 < 0 || (!allowUnset && config.BM25K1 == 0) {
+		return fmt.Errorf("tool search BM25 k1 must be finite and non-negative; the resolved value must be greater than zero")
+	}
+	if math.IsNaN(config.BM25B) || math.IsInf(config.BM25B, 0) || config.BM25B < 0 || config.BM25B > 1 {
+		return fmt.Errorf("tool search BM25 b must be finite and between zero and one")
+	}
+	weights := []struct {
+		name  string
+		value float64
+	}{
+		{name: "identity", value: config.FieldWeights.Identity},
+		{name: "summary", value: config.FieldWeights.Summary},
+		{name: "description", value: config.FieldWeights.Description},
+		{name: "parameters", value: config.FieldWeights.Parameters},
+		{name: "use_when", value: config.FieldWeights.UseWhen},
+	}
+	for _, weight := range weights {
+		if math.IsNaN(weight.value) || math.IsInf(weight.value, 0) || weight.value < 0 {
+			return fmt.Errorf("tool search %s field weight must be finite and non-negative", weight.name)
+		}
+	}
+	return nil
 }
 
 // ResolveToolSearchConfigFromEnv applies optional DWS_TOOL_SEARCH_* overrides

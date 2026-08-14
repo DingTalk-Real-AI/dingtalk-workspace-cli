@@ -183,3 +183,58 @@ func TestSchemaSearchRejectsIgnoredGlobalOutputFlags(t *testing.T) {
 		}
 	}
 }
+
+// BenchmarkToolSearchDeliveryChineseQuery measures the shipped search path
+// against the complete declaration-assembled Catalog. The smaller benchmark
+// in internal/cli intentionally uses a four-tool fixture and must not be used
+// as the release-scale latency or allocation number.
+func BenchmarkToolSearchDeliveryChineseQuery(b *testing.B) {
+	registerSchemaRuntimeDelivery()
+	engine, err := cli.NewDeliveryToolSearchEngineWithConfig(cli.DefaultToolSearchConfig())
+	if err != nil {
+		b.Fatalf("NewDeliveryToolSearchEngineWithConfig() error = %v", err)
+	}
+	request := cli.ToolSearchRequest{Query: "给群里发文件并确认消息已读", Limit: 5, CandidateLimit: 20}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for index := 0; index < b.N; index++ {
+		if _, searchErr := engine.Search(context.Background(), request); searchErr != nil {
+			b.Fatalf("Search() error = %v", searchErr)
+		}
+	}
+}
+
+func BenchmarkToolSearchDeliveryDecomposedWorkflow(b *testing.B) {
+	registerSchemaRuntimeDelivery()
+	engine, err := cli.NewDeliveryToolSearchEngineWithConfig(cli.DefaultToolSearchConfig())
+	if err != nil {
+		b.Fatalf("NewDeliveryToolSearchEngineWithConfig() error = %v", err)
+	}
+	request := cli.ToolSearchRequest{Query: "给群里发文件，并确认群成员是否已读", Limit: 5, CandidateLimit: 20}
+	subqueries := []string{"以当前用户身份给群聊发送本地文件", "查询指定消息的已读状态和人员"}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for index := 0; index < b.N; index++ {
+		if _, searchErr := engine.SearchSubqueries(context.Background(), subqueries, request); searchErr != nil {
+			b.Fatalf("SearchSubqueries() error = %v", searchErr)
+		}
+	}
+}
+
+func BenchmarkToolSearchDeliveryIndexBuild(b *testing.B) {
+	registerSchemaRuntimeDelivery()
+	config := cli.DefaultToolSearchConfig()
+	// Prime and cache declaration assembly so this benchmark isolates building
+	// the Tool Search projection/index. Cold process startup is measured at the
+	// release-binary boundary and reported separately.
+	if _, err := cli.NewDeliveryToolSearchEngineWithConfig(config); err != nil {
+		b.Fatalf("prime delivery Catalog: %v", err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for index := 0; index < b.N; index++ {
+		if _, err := cli.NewDeliveryToolSearchEngineWithConfig(config); err != nil {
+			b.Fatalf("NewDeliveryToolSearchEngineWithConfig() error = %v", err)
+		}
+	}
+}

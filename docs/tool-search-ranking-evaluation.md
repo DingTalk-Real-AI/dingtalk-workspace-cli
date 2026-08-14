@@ -16,6 +16,8 @@
 > 当前 Catalog：1,098 个工具，`source_hash=sha256:02c633c075f4af915ea097d383bdcbc25fe549c172e2d3336152e30cf2906e80`，`surface_hash=sha256:7f9839f1ff428b52f1d032d2fa6493815c3755650b7d9fa653839e7d589482e5`
 >
 > 评测代码：[`scripts/dev/eval_tool_search_ranking.py`](../scripts/dev/eval_tool_search_ranking.py)
+>
+> 2026-08-14 最新审计与优化路线：[`tool-search-optimization-plan-20260814.md`](tool-search-optimization-plan-20260814.md)
 
 ## 1. 结论
 
@@ -31,11 +33,11 @@
 | 中文混 ASCII（721）R@1 / R@5 | **72.82% / 90.57%** | 69.49% / 86.69% |
 | 整句 workflow Complete@5 / Recall@5 | 40% / 61.67% | 50% / **76.67%** |
 | reviewed 拆解 Complete@5 / Recall@5 | 80% / 90% | **90% / 95%** |
-| Forbidden@1 / @5（越低越好） | **0% / 0%** | **0% / 0%** |
+| Forbidden@1 / @5（越低越好） | **0% / 0.0719%**（1/1,390） | **0% / 0.0719%**（1/1,390） |
 
 身份与完整性门禁：1,098 个 canonical、1,098 个 primary CLI、19 个 reviewed alias、1,098 个 NFKC identity 及 1,098 个 `exact_filtered` 全部 100%；5,801 个响应的 Catalog 绑定失败、unknown candidate、ineligible candidate、response budget violation 均为 0。上下文方面，平均 Search + gold Inspect 为 4,507.03 bytes，相对 17,876,084 bytes 的 compact 全量 Schema 减少 **99.9748%**，相对假设 oracle 已选对产品的理想导航仍减少 **96.3169%**。两条评测路径都直接 Inspect gold leaf，即使 Search miss 也不计额外尝试，因此是容量上界，不是实际 Agent 成本。
 
-**2026-08-13 排序加固后的变化**（相对上一版基线 86.64%/37.55%）：中文分词改为 unigram+bigram 并存、结构化词表补英文同义词、rerank 门从"任意 ASCII 词禁用"收窄为"仅技术标识符禁用"、新增跨算法的 avoid_when 软降权层、删除 OA task_id 专属乘子。默认 ensemble 全指标提升（R@5 +1.52pp，拆解 workflow Complete@5 50%→80%）；Forbidden@1/@5 清零来自 avoid_when 层对负向 proxy（query 即 avoid_when 原句）的惩罚——该口径与匹配机制对口，真实 query 的收益取决于是否包含 avoid_when 短语，应视为安全下界而非日常改善。action_v1 shadow 同源 R@5 由 86.38% 降至 84.24%（OA 乘子删除 + 混合 query 乘子介入的代价），仅在拆解 workflow（90%/95%）上保留优势。
+**2026-08-13 排序加固后的变化**（相对上一版基线 86.64%/37.55%）：中文分词改为 unigram+bigram 并存、结构化词表补英文同义词、rerank 门从"任意 ASCII 词禁用"收窄为"仅技术标识符禁用"、新增跨算法的 avoid_when 软降权层、删除 OA task_id 专属乘子。默认 ensemble 全指标提升（R@5 +1.52pp，拆解 workflow Complete@5 50%→80%）；Forbidden@1 清零、Forbidden@5 降至 1/1,390 来自 avoid_when 层对负向 proxy（query 即 avoid_when 原句）的惩罚——该口径与匹配机制对口，真实 query 的收益取决于是否包含 avoid_when 短语，应视为安全下界而非日常改善。action_v1 shadow 同源 R@5 由 86.38% 降至 84.24%（OA 乘子删除 + 混合 query 乘子介入的代价），仅在拆解 workflow（90%/95%）上保留优势。
 
 这些数据说明当前实现达到了“显著缩小上下文、身份不退化、中文自然语言 Top-5 约 88%”的工程目标，但不等价于线上任务成功率。独立 qrels、英文 ≥100、workflow ≥80、真实同模型 Agent A/B 仍为空，且封存门禁已按仓库决策移除——独立评测决策需人工执行 `make generate-tool-search-comparison` 并比对；不能据此把 action 重排提升为默认。
 
@@ -375,14 +377,14 @@ make generate-tool-search-comparison
 | 1,123 条预算内同源 intent R@1 / R@5 / MRR@5 | 65.27% / 88.16% / 0.7441 |
 | Go action ranker shadow R@1 / R@5 / MRR@5 | 62.51% / 84.24% / 0.7131 |
 | Go TF-IDF shadow R@1 / R@5 / MRR@5 | 48.09% / 77.83% / 0.5936 |
-| 负向 proxy Forbidden@1 / Forbidden@5 | 0% / 0% |
+| 负向 proxy Forbidden@1 / Forbidden@5 | 0% / 0.0719%（1/1,390） |
 | 10 条 workflow 整句 Complete@5 / required recall | 40% / 61.67% |
 | reviewed subquery 后 Complete@5 / required recall | 80% / 90% |
 | Search + gold Inspect 平均 compact JSON | 4,507.03 bytes（oracle-assisted capacity upper bound） |
 | 相对 oracle 导航 `overview → product → inspect` 的 byte reduction | 96.3311% |
 | 相对全量紧凑 Schema 的 byte reduction | 99.9749% |
 
-这解决了“Python 离线结果和 Go 生产实现混在一起”的问题：Python 表格用于记录候选算法研究，Go 表格锁定 shipped runtime。由于 proxy 同源且 action ranker 的整体与纯中文 R@5 分别低 0.27 / 0.75 pp，当前默认回到更简单的字段 BM25；action/product/entity 重排仅作为 shadow，由 sealed 独立 qrels 上的配对 product-cluster CI 决定是否具备切换资格。Go TF-IDF 使用 fielded/raw-TF，而 Python 头条 TF-IDF 使用 unfielded/log-TF；当前 Go shadow 明显更差，不能因为历史 Python 的 84.55% 就切换生产默认。两边由于 Catalog、投影和 TF 定义不同，不声称逐 case parity。
+这解决了“Python 离线结果和 Go 生产实现混在一起”的问题：Python 表格用于记录候选算法研究，Go 表格锁定 shipped runtime。由于 proxy 同源且 action ranker 的整体与纯中文 R@5 分别低 3.92 / 3.98 pp，当前默认回到更简单的字段 BM25；action/product/entity 重排仅作为 shadow，由 sealed 独立 qrels 上的配对 product-cluster CI 决定是否具备切换资格。Go TF-IDF 使用 fielded/raw-TF，而 Python 头条 TF-IDF 使用 unfielded/log-TF；当前 Go shadow 明显更差，不能因为历史 Python 的 84.55% 就切换生产默认。两边由于 Catalog、投影和 TF 定义不同，不声称逐 case parity。
 
 ### 8.1 当前 release binary 冷进程与包体（Apple M3 Pro）
 
@@ -411,7 +413,7 @@ Search 的额外步骤是 wiki space search、minutes detail read，以及两臂
 
 ## 9. 局限与下一轮
 
-- 602 条 Intent 来自工具作者的 `use_when`，虽然没有被索引，语言风格仍比真实用户 query 更规范；
+- 当前 1,123 条预算内 Intent 来自工具作者的 `use_when`，虽然该字段没有被索引，语言风格仍比真实用户 query 更规范；
 - Forbidden query 是原始 `avoid_when`，目前没有结构化替代 gold，不能衡量“是否正确找到了替代工具”；
 - Workflow 只有 10 条，80% 的人工分解上限置信区间很宽；
 - 只测试一个中文小型 Dense 模型，不能推出所有 embedding/cross-encoder 的效果；
