@@ -243,7 +243,9 @@ func TestCrossPlatformCoveragePackageManagerFailureEdges(t *testing.T) {
 	if err := VerifyInstalledBinary(t.Context(), "1.0.0"); err == nil || !strings.Contains(err.Error(), "超时") {
 		t.Fatalf("verify timeout = %v", err)
 	}
-	packageVerifyWait = time.Second
+	// Race-instrumented helper subprocesses can take more than one second to
+	// start on CI; use the production verification budget for non-timeout cases.
+	packageVerifyWait = packageVerifyTimeout
 	packageCommand = func(ctx context.Context, _ string, _ ...string) *exec.Cmd {
 		return packageManagerHelperCommand(ctx, "fail")
 	}
