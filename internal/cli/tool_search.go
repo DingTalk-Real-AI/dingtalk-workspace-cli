@@ -49,6 +49,14 @@ const (
 
 var toolSearchIdentifierPattern = regexp.MustCompile(`[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)+`)
 
+// toolSearchKnownEffects is the reviewed SafetySpec effect vocabulary. The
+// hard filter compares tool.Safety.Effect against exactly these values.
+var toolSearchKnownEffects = map[string]bool{
+	"read":        true,
+	"write":       true,
+	"destructive": true,
+}
+
 // ToolSearchFieldWeights keeps lexical relevance tuning explicit and
 // versionable. The defaults are an evaluated starting point, not a contract:
 // release tuning must use a query/qrels set that is independent of the
@@ -225,10 +233,11 @@ type toolSearchQueryTerm struct {
 // ToolSearchEngine owns one immutable in-memory index over a typed registry.
 // It performs no network calls and has no external-ranking path.
 type ToolSearchEngine struct {
-	index     SchemaIndex
-	config    ToolSearchConfig
-	documents map[string]toolSearchDocument
-	lexical   LexicalRetriever
+	index         SchemaIndex
+	config        ToolSearchConfig
+	documents     map[string]toolSearchDocument
+	knownProducts map[string]bool
+	lexical       LexicalRetriever
 }
 
 var (
@@ -280,7 +289,9 @@ func NewToolSearchEngine(registry SchemaRegistry, config ToolSearchConfig) (*Too
 		return nil, err
 	}
 	documents := make(map[string]toolSearchDocument, len(index.CanonicalPaths()))
+	knownProducts := make(map[string]bool, len(index.Registry().Products))
 	for _, product := range index.Registry().Products {
+		knownProducts[product.ID] = true
 		for _, tool := range product.Tools {
 			canonical := tool.Identity.CanonicalPath
 			fields := toolSearchDocumentFields(tool, config.IncludeUseWhen)
@@ -292,10 +303,11 @@ func NewToolSearchEngine(registry SchemaRegistry, config ToolSearchConfig) (*Too
 		return nil, err
 	}
 	return &ToolSearchEngine{
-		index:     index,
-		config:    config,
-		documents: documents,
-		lexical:   lexical,
+		index:         index,
+		config:        config,
+		documents:     documents,
+		knownProducts: knownProducts,
+		lexical:       lexical,
 	}, nil
 }
 
@@ -576,6 +588,9 @@ func lookupToolSearchFloatEnv(name string) (float64, bool) {
 	}
 	value, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
+		// Ranking experiments must not silently measure defaults while the
+		// operator believes they set the value.
+		fmt.Fprintf(os.Stderr, "dws: ignoring unparsable %s=%q (%v); keeping the current value\n", name, raw, err)
 		return 0, false
 	}
 	return value, true
@@ -646,6 +661,28 @@ func (e *ToolSearchEngine) normalizeRequest(request ToolSearchRequest) (ToolSear
 	request.ProductIDs = sortedUniqueStrings(request.ProductIDs)
 	request.Effects = sortedUniqueStrings(request.Effects)
 	request.ExcludeCanonicalPaths = sortedUniqueStrings(request.ExcludeCanonicalPaths)
+	// Effect filters are case-insensitive against the reviewed vocabulary;
+	// anything else is a typed refusal instead of a silent abstain, so a
+	// caller typo cannot masquerade as "no matching tools".
+	for index, effect := range request.Effects {
+		request.Effects[index] = strings.ToLower(effect)
+	}
+	for _, effect := range request.Effects {
+		if !toolSearchKnownEffects[effect] {
+			return ToolSearchRequest{}, apperrors.NewValidation(
+				fmt.Sprintf("tool search effect must be one of read, write, destructive; got %q", effect),
+				apperrors.WithReason("invalid_effect"),
+			)
+		}
+	}
+	for _, product := range request.ProductIDs {
+		if !e.knownProducts[product] {
+			return ToolSearchRequest{}, apperrors.NewValidation(
+				fmt.Sprintf("tool search product %q is not in the current Catalog", product),
+				apperrors.WithReason("unknown_product"),
+			)
+		}
+	}
 	for field, values := range map[string][]string{
 		"product_ids":       request.ProductIDs,
 		"effects":           request.Effects,

@@ -805,3 +805,43 @@ func toolSearchTestTool(product, name, cliPath, summary, effect string) ToolSpec
 		},
 	}
 }
+
+func TestToolSearchValidatesEffectVocabularyCaseInsensitively(t *testing.T) {
+	engine := newToolSearchTestEngine(t)
+	if _, err := engine.Search(context.Background(), ToolSearchRequest{
+		Query: "查询群消息已读状态", Effects: []string{"READ"},
+	}); err != nil {
+		t.Fatalf("upper-case effect should normalize: %v", err)
+	}
+	for _, effect := range []string{"rw", "删除", "readx"} {
+		if _, err := engine.Search(context.Background(), ToolSearchRequest{
+			Query: "查询群消息已读状态", Effects: []string{effect},
+		}); err == nil {
+			t.Fatalf("effect %q accepted", effect)
+		} else {
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Reason != "invalid_effect" {
+				t.Fatalf("effect %q error = %v, want invalid_effect", effect, err)
+			}
+		}
+	}
+}
+
+func TestToolSearchRejectsUnknownProduct(t *testing.T) {
+	engine := newToolSearchTestEngine(t)
+	if _, err := engine.Search(context.Background(), ToolSearchRequest{
+		Query: "查询群消息已读状态", ProductIDs: []string{"chat"},
+	}); err != nil {
+		t.Fatalf("known product rejected: %v", err)
+	}
+	_, err := engine.Search(context.Background(), ToolSearchRequest{
+		Query: "查询群消息已读状态", ProductIDs: []string{"chta"},
+	})
+	if err == nil {
+		t.Fatal("unknown product accepted")
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "unknown_product" {
+		t.Fatalf("unknown product error = %v, want unknown_product", err)
+	}
+}

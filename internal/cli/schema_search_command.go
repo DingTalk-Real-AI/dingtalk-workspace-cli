@@ -114,7 +114,7 @@ DWS 对 Agent 是一个元工具：已知子命令直接执行，未知子命令
 	cmd.Flags().StringSlice("effect", nil, "限制 effect，可重复或逗号分隔")
 	cmd.Flags().StringSlice("exclude", nil, "排除 canonical path，可重复或逗号分隔")
 	cmd.Flags().String("request-json", "", `从 stdin 读取 JSON；值必须为 -；必含 version="tool-search.v1"，动作分解字段为 subqueries`)
-	cmd.Flags().Bool("explain", false, "在每个 candidate 上输出 score_breakdown 排序诊断（会增大响应体积，建议配合 --limit 3）")
+	cmd.Flags().Bool("explain", false, "开发诊断：输出 score_breakdown 含原始排序分（公开默认响应不含分数；仅用于离线调参，不建议线上 Agent 使用；会增大响应体积，建议配合 --limit 3）")
 	return cmd
 }
 
