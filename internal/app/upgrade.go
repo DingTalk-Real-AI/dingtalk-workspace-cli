@@ -484,6 +484,11 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 			return nil
 		}
 	}
+	if opts.targetVersion == "" {
+		if err := revalidateUpgradeChannel(client, opts.track, release.Version); err != nil {
+			return err
+		}
+	}
 
 	// Keep package-managed installations package-managed, matching lark-cli.
 	// Exact-version, custom-source, and --skip-skills flows retain the direct
@@ -685,6 +690,21 @@ func runUpgrade(ctx context.Context, opts upgradeOptions) error {
 	fmt.Printf("  %s\n", ugDim("运行 dws version 验证当前版本"))
 	fmt.Printf("  %s\n", ugDim("如遇问题，运行 dws upgrade --rollback 回滚"))
 
+	return nil
+}
+
+func revalidateUpgradeChannel(client upgradeReleaseClient, track upgrade.ReleaseTrack, expectedVersion string) error {
+	fresh, ok := client.(upgradeFreshReleaseClient)
+	if !ok {
+		return nil
+	}
+	confirmed, err := fresh.FetchLatestReleaseForTrackFresh(track)
+	if err != nil {
+		return fmt.Errorf("安装前重新确认升级轨道失败: %w", err)
+	}
+	if confirmed.Version != expectedVersion {
+		return fmt.Errorf("升级轨道已从 v%s 变更为 v%s（版本可能刚发布或撤回），请重新运行 dws upgrade", expectedVersion, confirmed.Version)
+	}
 	return nil
 }
 

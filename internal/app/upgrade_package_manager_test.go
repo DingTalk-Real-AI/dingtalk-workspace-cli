@@ -22,6 +22,21 @@ type packageRollbackFake struct {
 	cleaned     bool
 }
 
+type packageFreshClient struct {
+	*fakeUpgradeClient
+	freshCalls    int
+	freshVersions []string
+}
+
+func (c *packageFreshClient) FetchLatestReleaseForTrackFresh(upgradepkg.ReleaseTrack) (*upgradepkg.ReleaseInfo, error) {
+	call := c.freshCalls
+	c.freshCalls++
+	if call < len(c.freshVersions) {
+		return &upgradepkg.ReleaseInfo{Version: c.freshVersions[call]}, c.latestErr
+	}
+	return c.latest, c.latestErr
+}
+
 func (r *packageRollbackFake) Backup(string) (string, error) { return "backup", r.backupErr }
 func (r *packageRollbackFake) ListBackups() ([]upgradepkg.BackupInfo, error) {
 	return r.backups, r.listErr
@@ -134,9 +149,8 @@ func TestRunUpgradeUsesPackageManagerForPreviewAndInstall(t *testing.T) {
 		version = oldVersion
 	})
 	version = "1.0.0"
-	newUpgradeReleaseClient = func() upgradeReleaseClient {
-		return &fakeUpgradeClient{latest: &upgradepkg.ReleaseInfo{Version: "1.0.1"}}
-	}
+	freshClient := &packageFreshClient{fakeUpgradeClient: &fakeUpgradeClient{latest: &upgradepkg.ReleaseInfo{Version: "1.0.1"}}}
+	newUpgradeReleaseClient = func() upgradeReleaseClient { return freshClient }
 	ensureUpgradeDirs = func() error { return nil }
 	cleanupUpgradeStale = func() {}
 	upgradeNeedsUpgrade = func(string, string) bool { return true }
@@ -162,6 +176,36 @@ func TestRunUpgradeUsesPackageManagerForPreviewAndInstall(t *testing.T) {
 	}
 	if installCalls != 1 {
 		t.Fatalf("package install calls = %d", installCalls)
+	}
+	if freshClient.freshCalls != 3 {
+		t.Fatalf("fresh release calls = %d", freshClient.freshCalls)
+	}
+	freshClient.freshCalls = 0
+	freshClient.freshVersions = []string{"1.0.1", "1.0.0"}
+	if err := runUpgrade(t.Context(), upgradeOptions{force: true, yes: true}); err == nil || !strings.Contains(err.Error(), "升级轨道已从") {
+		t.Fatalf("channel race = %v", err)
+	}
+	if installCalls != 1 {
+		t.Fatal("changed channel reached package installation")
+	}
+}
+
+func TestRevalidateUpgradeChannel(t *testing.T) {
+	plain := &fakeUpgradeClient{}
+	if err := revalidateUpgradeChannel(plain, upgradepkg.ReleaseTrackRelease, "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	fresh := &packageFreshClient{fakeUpgradeClient: &fakeUpgradeClient{latest: &upgradepkg.ReleaseInfo{Version: "1.0.0"}}}
+	if err := revalidateUpgradeChannel(fresh, upgradepkg.ReleaseTrackRelease, "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	fresh.latest = &upgradepkg.ReleaseInfo{Version: "1.0.1"}
+	if err := revalidateUpgradeChannel(fresh, upgradepkg.ReleaseTrackRelease, "1.0.0"); err == nil || !strings.Contains(err.Error(), "刚发布或撤回") {
+		t.Fatalf("channel change = %v", err)
+	}
+	fresh.latestErr = errors.New("registry")
+	if err := revalidateUpgradeChannel(fresh, upgradepkg.ReleaseTrackRelease, "1.0.0"); err == nil || !strings.Contains(err.Error(), "重新确认") {
+		t.Fatalf("refresh error = %v", err)
 	}
 }
 

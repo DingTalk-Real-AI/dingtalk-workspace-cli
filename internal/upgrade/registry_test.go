@@ -134,12 +134,18 @@ func TestFreshReleaseTrackBranches(t *testing.T) {
 	}
 
 	githubServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode([]GitHubRelease{{TagName: "v1.0.59-beta.2", Prerelease: true}})
+		_ = json.NewEncoder(w).Encode([]GitHubRelease{
+			{TagName: "v1.0.59-beta.2", Prerelease: true},
+			{TagName: "v1.0.58", Prerelease: false},
+		})
 	}))
 	defer githubServer.Close()
 	githubClient := NewClientWithBaseURL(githubServer.URL)
 	if release, err := githubClient.FetchLatestReleaseForTrackFresh(ReleaseTrackBeta); err != nil || release.Version != "1.0.59-beta.2" {
 		t.Fatalf("fresh GitHub beta = %#v, %v", release, err)
+	}
+	if release, err := githubClient.FetchLatestReleaseForTrackFresh(ReleaseTrackRelease); err != nil || release.Version != "1.0.58" {
+		t.Fatalf("fresh GitHub stable = %#v, %v", release, err)
 	}
 
 	badClient := NewClientWithBaseURL(githubServer.URL)
