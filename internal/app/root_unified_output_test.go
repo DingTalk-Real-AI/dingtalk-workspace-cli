@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestExecuteEmitsStoredUnifiedResultAtSingleRootExit(t *testing.T) {
+func TestCrossPlatformCoverageExecuteEmitsStoredUnifiedResultAtSingleRootExit(t *testing.T) {
 	oldNormalize := rootNormalizeProcessProfileArgs
 	oldExecute := rootExecuteCommand
 	oldNewRoot := rootNewRootCommandWithEngine

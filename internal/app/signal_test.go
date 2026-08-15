@@ -103,7 +103,7 @@ func installSignalExecuteSeams(t *testing.T, unified bool, stdout, stderr io.Wri
 	})
 }
 
-func TestExecuteSignalEmitsOneTypedUnifiedFailure(t *testing.T) {
+func TestCrossPlatformCoverageExecuteSignalEmitsOneTypedUnifiedFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		signal  syscall.Signal
@@ -197,7 +197,7 @@ func TestSignalAfterFailedEmissionAttemptPreservesPublicationExitCode(t *testing
 	}
 }
 
-func TestSignalBeforeEmissionAttemptPreservesPublishedOutcome(t *testing.T) {
+func TestCrossPlatformCoverageSignalBeforeEmissionAttemptPreservesPublishedOutcome(t *testing.T) {
 	var stdout bytes.Buffer
 	installSignalExecuteSeams(t, true, &stdout, io.Discard)
 	testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {
@@ -229,7 +229,7 @@ func TestSignalBeforeEmissionAttemptPreservesPublishedOutcome(t *testing.T) {
 	}
 }
 
-func TestSignalAfterCompletedPrimaryPreservesEstablishedOutcome(t *testing.T) {
+func TestCrossPlatformCoverageSignalAfterCompletedPrimaryPreservesEstablishedOutcome(t *testing.T) {
 	var stdout bytes.Buffer
 	installSignalExecuteSeams(t, true, &stdout, io.Discard)
 	testseam.Swap(t, &rootExecuteCommand, func(cmd *cobra.Command) (*cobra.Command, error) {

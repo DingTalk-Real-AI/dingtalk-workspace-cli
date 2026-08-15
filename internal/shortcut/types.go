@@ -107,6 +107,12 @@ type Flag struct {
 	// compatibility escape hatch for aliases that were historically public.
 	Aliases        []string `json:"-"`
 	AliasesVisible bool     `json:"-"`
+	// Input declares extra input sources for a string flag beyond the literal
+	// command-line value: "file" enables @path (value replaced by the file
+	// content), "stdin" enables - (value replaced by stdin). "@@value" escapes
+	// to the literal "@value". Resolution happens before Required/Enum/Validate
+	// checks. Empty = flag value only.
+	Input []string `json:"input,omitempty"`
 }
 
 // ConstraintKind is a machine-readable cross-parameter or custom validation
