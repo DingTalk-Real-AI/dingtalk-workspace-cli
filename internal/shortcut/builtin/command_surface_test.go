@@ -115,7 +115,7 @@ func expectedShortcutLong(spec shortcut.Shortcut) string {
 	if long == "" {
 		long = strings.TrimSpace(spec.Description)
 	}
-	if len(spec.Constraints) == 0 || spec.SuppressConstraintProjection {
+	if len(spec.Constraints) == 0 {
 		return long
 	}
 	lines := make([]string, 0, len(spec.Constraints))
@@ -129,8 +129,6 @@ func expectedShortcutLong(spec shortcut.Shortcut) string {
 				text = expectedDashed(constraint.Flags) + " 必须且只能指定一个"
 			case shortcut.ConstraintMutuallyExclusive:
 				text = expectedDashed(constraint.Flags) + " 互斥，最多指定一个"
-			case shortcut.ConstraintRequireTogether:
-				text = expectedDashed(constraint.Flags) + " 必须同时指定或同时省略"
 			}
 		}
 		lines = append(lines, "  - "+text)

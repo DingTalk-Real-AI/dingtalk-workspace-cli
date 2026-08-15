@@ -228,10 +228,9 @@ var Fetch = shortcut.Shortcut{
 		return nil
 	},
 	Constraints: []shortcut.Constraint{
-		{Kind: shortcut.ConstraintExactlyOne, Flags: []string{"node", "query"}, Description: fetchTargetConstraint},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"node", "query"}, Description: fetchTargetConstraint},
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"scope"}, Description: docFetchValidationConstraint},
 	},
-	SuppressConstraintProjection: true,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		target, err := docresolver.Resolve(rt, rt.Str("node"), rt.Str("query"))
 		if err != nil {
@@ -438,8 +437,7 @@ var Update = shortcut.Shortcut{
 	Constraints: []shortcut.Constraint{{
 		Kind: shortcut.ConstraintCustom, Flags: []string{"command"}, Description: docUpdateValidationConstraint,
 	}},
-	SuppressConstraintProjection: true,
-	Execute:                      executeUpdate,
+	Execute: executeUpdate,
 }
 
 var CheckpointUpdate = shortcut.Shortcut{
@@ -530,17 +528,15 @@ var Import = shortcut.Shortcut{
 		[]string{`dws doc +import --file ./report.docx`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`}),
 	Flags: []shortcut.Flag{
 		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内已存在文件的相对路径", Required: true},
-		{Name: "folder", Type: shortcut.FlagString, Desc: "可选目标文件夹 ID；与 --workspace 互斥；两者都省略时使用默认个人文档根目录"},
-		{Name: "workspace", Type: shortcut.FlagString, Desc: "可选目标知识库 ID；仅在用户明确知识库目标时使用；与 --folder 互斥"},
+		{Name: "folder", Type: shortcut.FlagString, Desc: "可选目标文件夹 ID；folder/workspace 都省略时导入默认根目录"},
+		{Name: "workspace", Type: shortcut.FlagString, Desc: "可选目标知识库 ID；folder/workspace 都省略时导入默认根目录"},
 		{Name: "name", Type: shortcut.FlagString, Desc: "导入后名称"},
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内已存在且不通过符号链接逃逸的相对路径"},
-		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"folder", "workspace"}, Description: "--folder 与 --workspace 最多提供一个；两者都省略时使用默认个人文档根目录"},
 	},
-	SuppressConstraintProjection: true,
-	Tips:                         []string{`dws doc +import --file ./report.docx`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`},
-	Validate:                     func(rt *shortcut.RuntimeContext) error { return validateWorkspaceInputPath("file", rt.Str("file")) },
+	Tips:     []string{`dws doc +import --file ./report.docx`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`},
+	Validate: func(rt *shortcut.RuntimeContext) error { return validateWorkspaceInputPath("file", rt.Str("file")) },
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		if err := helpers.RunDocImportShortcut(rt.Command()); err != nil {
 			return docUnknownWriteError("doc.import", "import", "", err)

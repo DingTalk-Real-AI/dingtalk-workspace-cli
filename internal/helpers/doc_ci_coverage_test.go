@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestDocMediaFilesystemAndPositionErrorCoverage(t *testing.T) {
+func TestDocMediaFilesystemAndPositionCompatibilityCoverage(t *testing.T) {
 	oldGetwd, oldEval, oldStat := docMediaGetwd, docMediaEvalSymlinks, docMediaStat
 	t.Cleanup(func() { docMediaGetwd, docMediaEvalSymlinks, docMediaStat = oldGetwd, oldEval, oldStat })
 	if err := ValidateDocMediaInsertCommand(nil); err == nil {
@@ -52,22 +52,25 @@ func TestDocMediaFilesystemAndPositionErrorCoverage(t *testing.T) {
 	cmd.Flags().String("ref-block", "", "")
 	_ = cmd.Flags().Set("where", "sideways")
 	_ = cmd.Flags().Set("ref-block", "ref")
-	if _, err := readDocMediaInsertPosition(cmd); err == nil {
-		t.Fatal("invalid relative direction accepted")
+	if position, err := readDocMediaInsertPosition(cmd); err != nil || position.Mode != "relative" {
+		t.Fatalf("main-compatible relative position = %#v, %v", position, err)
 	}
-	for _, set := range []map[string]string{
-		{"ref-block": "ref"},
-		{"index": "1", "where": "after", "ref-block": "ref"},
+	for _, tc := range []struct {
+		set      map[string]string
+		wantMode string
+	}{
+		{set: map[string]string{"ref-block": "ref"}, wantMode: "partial_relative"},
+		{set: map[string]string{"index": "1", "where": "after", "ref-block": "ref"}, wantMode: "mixed"},
 	} {
 		cmd := &cobra.Command{Use: "insert"}
 		cmd.Flags().Int("index", 0, "")
 		cmd.Flags().String("where", "", "")
 		cmd.Flags().String("ref-block", "", "")
-		for name, value := range set {
+		for name, value := range tc.set {
 			_ = cmd.Flags().Set(name, value)
 		}
-		if _, err := readDocMediaInsertPosition(cmd); err == nil {
-			t.Fatalf("position %#v accepted", set)
+		if position, err := readDocMediaInsertPosition(cmd); err != nil || position.Mode != tc.wantMode {
+			t.Fatalf("position %#v = %#v, %v; want mode %s", tc.set, position, err, tc.wantMode)
 		}
 	}
 }
@@ -223,7 +226,7 @@ func TestDocMediaInsertVerificationBranchCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	installScriptedCaller(t, &scriptedToolCaller{})
+	installScriptedCaller(t, &scriptedToolCaller{dry: true})
 	root := newDocCommand()
 	missingFile, _, _ := root.Find([]string{"media", "insert"})
 	_ = missingFile.Flags().Set("node", "node")
@@ -241,8 +244,8 @@ func TestDocMediaInsertVerificationBranchCoverage(t *testing.T) {
 	_ = invalidPosition.Flags().Set("node", "node")
 	_ = invalidPosition.Flags().Set("file", "file.txt")
 	_ = invalidPosition.Flags().Set("where", "after")
-	if err := invalidPosition.RunE(invalidPosition, nil); err == nil {
-		t.Fatal("direct RunE accepted incomplete relative position")
+	if err := invalidPosition.RunE(invalidPosition, nil); err != nil {
+		t.Fatalf("direct RunE rejected main-compatible incomplete relative position: %v", err)
 	}
 
 	oldEval := docMediaEvalSymlinks

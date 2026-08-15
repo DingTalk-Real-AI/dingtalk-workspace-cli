@@ -505,15 +505,14 @@ func defaultHTTPGetFile(ctx context.Context, url string, headers map[string]stri
 	return nil
 }
 
-// ValidateDocMediaInsertCommand validates the local file and insertion-position
-// contract shared by the smart shortcut and the compatibility atomic command.
-// Keeping this check in helpers also protects direct RunE callers in tests and
-// embedded hosts instead of relying only on Cobra/Schema declarations.
+// ValidateDocMediaInsertCommand validates the local file contract shared by the
+// smart shortcut and the compatibility atomic command. Position flags retain
+// the main-compatible pass-through behavior and are interpreted by the service.
 func ValidateDocMediaInsertCommand(cmd *cobra.Command) error {
 	if cmd == nil {
 		return apperrors.NewInternal("doc media insert: command is nil")
 	}
-	_, _, _, err := resolveDocMediaInsertInput(cmd)
+	_, _, err := resolveDocMediaInputPath(mustGetFlag(cmd, "file"))
 	return err
 }
 
@@ -571,23 +570,18 @@ func readDocMediaInsertPosition(cmd *cobra.Command) (docMediaInsertPosition, err
 		position.HasIndex = true
 		position.Mode = "index"
 		position.Index, _ = cmd.Flags().GetInt("index")
-		if position.Index < 0 {
-			return position, apperrors.NewValidation("--index 必须大于或等于 0")
-		}
 	}
 	position.Where = strings.TrimSpace(mustGetFlag(cmd, "where"))
 	position.RefBlock = strings.TrimSpace(mustGetFlag(cmd, "ref-block"))
-	if (position.Where == "") != (position.RefBlock == "") {
-		return position, apperrors.NewValidation("--where 与 --ref-block 必须同时指定")
-	}
-	if position.Where != "" {
-		if position.Where != "before" && position.Where != "after" {
-			return position, apperrors.NewValidation("--where 只支持 before 或 after")
+	if position.Where != "" || position.RefBlock != "" {
+		switch {
+		case position.HasIndex:
+			position.Mode = "mixed"
+		case position.Where != "" && position.RefBlock != "":
+			position.Mode = "relative"
+		default:
+			position.Mode = "partial_relative"
 		}
-		if position.HasIndex {
-			return position, apperrors.NewValidation("--index 与 --where/--ref-block 不能同时指定")
-		}
-		position.Mode = "relative"
 	}
 	if position.Mode == "" {
 		position.Mode = "end"
@@ -652,8 +646,10 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		if position.HasIndex {
 			positionPreview["index"] = position.Index
 		}
-		if position.Mode == "relative" {
+		if position.Where != "" {
 			positionPreview["where"] = position.Where
+		}
+		if position.RefBlock != "" {
 			positionPreview["referenceBlockId"] = position.RefBlock
 		}
 		return deps.Out.PrintJSON(map[string]any{
@@ -770,8 +766,10 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	if position.HasIndex {
 		insertArgs["index"] = position.Index
 	}
-	if position.Mode == "relative" {
+	if position.Where != "" {
 		insertArgs["where"] = position.Where
+	}
+	if position.RefBlock != "" {
 		insertArgs["referenceBlockId"] = position.RefBlock
 	}
 
@@ -874,8 +872,10 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 	if position.HasIndex {
 		verifiedPosition["requestedIndex"] = position.Index
 	}
-	if position.Mode == "relative" {
+	if position.Where != "" {
 		verifiedPosition["where"] = position.Where
+	}
+	if position.RefBlock != "" {
 		verifiedPosition["referenceBlockId"] = position.RefBlock
 	}
 	if insertedIndex >= 0 && insertedIndex+1 < len(verifiedTopLevelIDs) {
@@ -1182,6 +1182,8 @@ func describeDocMediaPosition(position docMediaInsertPosition) string {
 		return fmt.Sprintf("index=%d", position.Index)
 	case "relative":
 		return fmt.Sprintf("%s blockId=%s", position.Where, position.RefBlock)
+	case "mixed", "partial_relative":
+		return fmt.Sprintf("index=%v where=%s blockId=%s", position.HasIndex, position.Where, position.RefBlock)
 	default:
 		return "document_end"
 	}

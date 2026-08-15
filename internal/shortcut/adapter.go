@@ -46,10 +46,6 @@ func FromShortcut(s Shortcut) corecmd.Spec {
 			)
 		}
 	}
-	constraints := s.Constraints
-	if s.SuppressConstraintProjection {
-		constraints = nil
-	}
 	return corecmd.Spec{
 		Use:           s.Command,
 		Short:         s.Description,
@@ -60,7 +56,7 @@ func FromShortcut(s Shortcut) corecmd.Spec {
 		// section, so the adapter must not pre-render it.
 		Long:        shortcutIntentProse(s),
 		Flags:       fromShortcutFlags(s.Flags),
-		Constraints: fromShortcutConstraints(constraints),
+		Constraints: fromShortcutConstraints(s.Constraints),
 		Safety:      safety,
 		Contract:    declaredContract,
 		// Preserve the shipped Shortcut Catalog provenance: Cobra remains the
@@ -157,22 +153,10 @@ func shortcutExamples(tips []string) string {
 }
 
 func fromShortcutValidate(s Shortcut) func(*cobra.Command, []string) error {
-	if s.Validate == nil && !s.SuppressConstraintProjection {
+	if s.Validate == nil {
 		return nil
 	}
 	return func(cmd *cobra.Command, _ []string) error {
-		// Compatibility-only Schema suppression must not weaken runtime
-		// validation. The command framework cannot enforce constraints that are
-		// intentionally omitted from its public Spec, so enforce the original
-		// Shortcut declarations here before the operation-specific validator.
-		if s.SuppressConstraintProjection {
-			if err := corecmd.ValidateConstraints(cmd, fromShortcutFlags(s.Flags), fromShortcutConstraints(s.Constraints)); err != nil {
-				return err
-			}
-		}
-		if s.Validate == nil {
-			return nil
-		}
 		return s.Validate(&RuntimeContext{cmd: cmd, shortcut: s})
 	}
 }
@@ -284,8 +268,6 @@ func fromShortcutConstraintKind(k ConstraintKind) (corecmd.ConstraintKind, bool)
 		return corecmd.ExactlyOne, true
 	case ConstraintMutuallyExclusive:
 		return corecmd.MutuallyExclusive, true
-	case ConstraintRequireTogether:
-		return corecmd.RequireTogether, true
 	case ConstraintCustom:
 		return corecmd.Custom, true
 	default:

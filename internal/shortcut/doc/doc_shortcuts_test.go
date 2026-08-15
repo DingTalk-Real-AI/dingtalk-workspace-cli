@@ -794,12 +794,9 @@ func TestCrossPlatformCoverageFetchPublishesPredictiveScopeContract(t *testing.T
 			t.Errorf("--%s RequiredWhen = %q, want main-compatible public Schema", name, got)
 		}
 	}
-	if len(Fetch.Constraints) < 1 || Fetch.Constraints[0].Kind != shortcut.ConstraintExactlyOne ||
+	if len(Fetch.Constraints) < 1 || Fetch.Constraints[0].Kind != shortcut.ConstraintCustom ||
 		!reflect.DeepEqual(Fetch.Constraints[0].Flags, []string{"node", "query"}) {
 		t.Fatalf("fetch target constraint = %#v", Fetch.Constraints)
-	}
-	if !Fetch.SuppressConstraintProjection {
-		t.Fatal("fetch runtime constraints must be omitted only from the compatibility Schema projection")
 	}
 }
 
@@ -981,8 +978,8 @@ func TestCrossPlatformCoverageMediaFailuresKeepStableIDsAndForbidPathEscape(t *t
 		{"--node", "n", "--file", "media.png", "--index", "-1", "--dry-run", "--yes"},
 		{"--node", "n", "--file", "media.png", "--index", "0", "--where", "after", "--ref-block", "ref", "--dry-run", "--yes"},
 	} {
-		if err := runDocCoverage(t, MediaInsert, &docCoverageCaller{responses: map[string][]map[string]any{}}, args...); err == nil {
-			t.Errorf("invalid media position unexpectedly accepted: %#v", args)
+		if err := runDocCoverage(t, MediaInsert, &docCoverageCaller{dryRun: true, responses: map[string][]map[string]any{}}, args...); err != nil {
+			t.Errorf("main-compatible media position rejected: args=%#v err=%v", args, err)
 		}
 	}
 	if err := runDocCoverage(t, Import, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--file", "/tmp/report.docx", "--workspace", "workspace-1"); err == nil {
@@ -1756,9 +1753,6 @@ func TestCrossPlatformCoverageUpdateContractAndPreflight(t *testing.T) {
 	}
 	if len(Update.Constraints) != 1 || Update.Constraints[0].Kind != shortcut.ConstraintCustom {
 		t.Fatalf("update runtime constraint declaration = %#v", Update.Constraints)
-	}
-	if !Update.SuppressConstraintProjection {
-		t.Fatal("update runtime constraints must be omitted only from the compatibility Schema projection")
 	}
 	cmd := corecmd.New(shortcut.FromShortcut(Update))
 	for _, alias := range []string{"doc", "text"} {

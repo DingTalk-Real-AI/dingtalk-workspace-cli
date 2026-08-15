@@ -179,7 +179,7 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 			t.Fatalf("absolute media path error = %v", err)
 		}
 	})
-	t.Run("media rejects incomplete and conflicting positions", func(t *testing.T) {
+	t.Run("media preserves main-compatible position pass-through", func(t *testing.T) {
 		for _, tc := range []struct {
 			name string
 			set  map[string]string
@@ -189,7 +189,7 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 			{name: "index and relative", set: map[string]string{"index": "0", "where": "after", "ref-block": "ref"}},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				installScriptedCaller(t, &scriptedToolCaller{})
+				installScriptedCaller(t, &scriptedToolCaller{dry: true})
 				root := newDocCommand()
 				media, _, _ := root.Find([]string{"media", "insert"})
 				_ = media.Flags().Set("node", "node")
@@ -198,8 +198,8 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 					_ = media.Flags().Set(name, value)
 				}
 				media.SetIn(strings.NewReader("yes\n"))
-				if err := media.RunE(media, nil); err == nil {
-					t.Fatalf("position %#v unexpectedly accepted", tc.set)
+				if err := media.RunE(media, nil); err != nil {
+					t.Fatalf("position %#v rejected: %v", tc.set, err)
 				}
 			})
 		}

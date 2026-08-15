@@ -44,7 +44,6 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 			{Kind: ConstraintExactlyOne, Flags: []string{"name", "count"}, Description: "二选一"},
 			{Kind: ConstraintAtLeastOne, Flags: []string{"flag", "ids"}},
 			{Kind: ConstraintMutuallyExclusive, Flags: []string{"name", "flag"}},
-			{Kind: ConstraintRequireTogether, Flags: []string{"count", "note"}},
 			{Kind: ConstraintCustom, Flags: []string{"note"}, Description: "自定义由 Validate 保证"},
 		},
 		Validate: func(*RuntimeContext) error { return nil },
@@ -109,8 +108,8 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 	}
 
 	// All constraints, including custom declaration/help facts, are carried.
-	if len(cs.Constraints) != 5 {
-		t.Fatalf("constraints len = %d, want 5", len(cs.Constraints))
+	if len(cs.Constraints) != 4 {
+		t.Fatalf("constraints len = %d, want 4", len(cs.Constraints))
 	}
 	if cs.Constraints[0].Kind != corecmd.ExactlyOne || cs.Constraints[0].Description != "二选一" {
 		t.Fatalf("constraint[0] = %#v", cs.Constraints[0])
@@ -118,12 +117,9 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 	if cs.Constraints[1].Kind != corecmd.AtLeastOne || cs.Constraints[2].Kind != corecmd.MutuallyExclusive {
 		t.Fatalf("constraint kinds = %#v", cs.Constraints)
 	}
-	if cs.Constraints[3].Kind != corecmd.RequireTogether {
-		t.Fatalf("require-together constraint = %#v", cs.Constraints[3])
-	}
-	if cs.Constraints[4].Kind != corecmd.Custom ||
-		cs.Constraints[4].Description != "自定义由 Validate 保证" {
-		t.Fatalf("custom constraint = %#v", cs.Constraints[4])
+	if cs.Constraints[3].Kind != corecmd.Custom ||
+		cs.Constraints[3].Description != "自定义由 Validate 保证" {
+		t.Fatalf("custom constraint = %#v", cs.Constraints[3])
 	}
 	// The projected Flags slice must be a copy, not an alias of the registry's.
 	cs.Constraints[0].Flags[0] = "mutated"
@@ -132,39 +128,38 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageSuppressedConstraintProjectionStillValidatesAtRuntime(t *testing.T) {
+func TestCrossPlatformCoverageConstraintProjectionMatchesRuntimeValidation(t *testing.T) {
 	executed := false
 	s := Shortcut{
-		Service:                      "doc",
-		Command:                      "+compat-guard",
-		Description:                  "兼容 Schema 的运行时约束",
-		Flags:                        []Flag{{Name: "a"}, {Name: "b"}},
-		Constraints:                  []Constraint{{Kind: ConstraintMutuallyExclusive, Flags: []string{"a", "b"}}},
-		SuppressConstraintProjection: true,
+		Service:     "doc",
+		Command:     "+constraint-guard",
+		Description: "声明与运行时同源的约束",
+		Flags:       []Flag{{Name: "a"}, {Name: "b"}},
+		Constraints: []Constraint{{Kind: ConstraintMutuallyExclusive, Flags: []string{"a", "b"}}},
 		Execute: func(*RuntimeContext) error {
 			executed = true
 			return nil
 		},
 	}
 	spec := FromShortcut(s)
-	if len(spec.Constraints) != 0 {
-		t.Fatalf("public constraints = %#v, want omitted compatibility projection", spec.Constraints)
+	if len(spec.Constraints) != 1 || spec.Constraints[0].Kind != corecmd.MutuallyExclusive {
+		t.Fatalf("public constraints = %#v, want declared mutual exclusion", spec.Constraints)
 	}
-	if spec.Validate == nil {
-		t.Fatal("runtime validation must remain installed when public constraints are suppressed")
+	if spec.Validate != nil {
+		t.Fatal("declarative constraints must not install a second validation path")
 	}
 	cmd := corecmd.New(spec)
 	cmd.SetArgs([]string{"--a", "one", "--b", "two"})
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "互斥") {
-		t.Fatalf("suppressed mutual-exclusion runtime error = %v", err)
+		t.Fatalf("mutual-exclusion runtime error = %v", err)
 	}
 	validCmd := corecmd.New(spec)
 	validCmd.SetArgs([]string{"--a", "one"})
 	if err := validCmd.Execute(); err != nil {
-		t.Fatalf("valid suppressed constraint execution: %v", err)
+		t.Fatalf("valid constraint execution: %v", err)
 	}
 	if !executed {
-		t.Fatal("valid suppressed constraint execution did not reach the shortcut")
+		t.Fatal("valid constraint execution did not reach the shortcut")
 	}
 }
 

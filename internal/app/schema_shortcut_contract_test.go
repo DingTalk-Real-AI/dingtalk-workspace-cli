@@ -380,7 +380,7 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 	}
 }
 
-func TestDeliveryDocMediaInsertEntrypointsPublishTheSameGuardrails(t *testing.T) {
+func TestDeliveryDocMediaInsertEntrypointsPublishMainCompatibleGuardrails(t *testing.T) {
 	for _, cliPath := range []string{"doc +media-insert", "doc media insert"} {
 		leaf := executeShortcutSchemaQuery(t, "--cli-path", cliPath)
 		wantConfirmation := "not_required"
@@ -402,7 +402,7 @@ func TestDeliveryDocMediaInsertEntrypointsPublishTheSameGuardrails(t *testing.T)
 			}
 		}
 		if got := leaf["constraints"]; got != nil {
-			t.Errorf("%s constraints = %#v, want omitted compatibility projection", cliPath, got)
+			t.Errorf("%s constraints = %#v, want main-compatible custom-only projection", cliPath, got)
 		}
 	}
 }
@@ -472,7 +472,7 @@ func TestDeliveryDocFetchPublishesScopeContract(t *testing.T) {
 		}
 	}
 	if got := leaf["constraints"]; got != nil {
-		t.Fatalf("fetch constraints = %#v, want omitted compatibility projection", got)
+		t.Fatalf("fetch constraints = %#v, want main-compatible custom-only projection", got)
 	}
 }
 
@@ -501,7 +501,7 @@ func TestDeliveryDocCommentExportImportContractsAreCanonical(t *testing.T) {
 
 	importLeaf := executeShortcutSchemaQuery(t, "--cli-path", "doc +import")
 	if got := importLeaf["constraints"]; got != nil {
-		t.Fatalf("import constraints = %#v, want omitted compatibility projection", got)
+		t.Fatalf("import constraints = %#v, want main-compatible custom-only projection", got)
 	}
 }
 
@@ -720,12 +720,6 @@ func assertDeliveryShortcutConstraints(
 	canonical string,
 ) {
 	t.Helper()
-	if declared.SuppressConstraintProjection {
-		if got := tool["constraints"]; got != nil {
-			t.Errorf("%s constraints = %#v, want omitted compatibility projection", canonical, got)
-		}
-		return
-	}
 	public := make(map[string]bool, len(declared.Flags))
 	for _, flag := range declared.Flags {
 		if !flag.Hidden {
@@ -759,10 +753,6 @@ func assertDeliveryShortcutConstraints(
 		case shortcut.ConstraintMutuallyExclusive:
 			if len(flags) > 1 {
 				want["mutually_exclusive"] = append(want["mutually_exclusive"], flags)
-			}
-		case shortcut.ConstraintRequireTogether:
-			if len(flags) > 1 {
-				want["require_together"] = append(want["require_together"], flags)
 			}
 		case shortcut.ConstraintCustom:
 			for _, flagName := range flags {
