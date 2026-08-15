@@ -37,29 +37,64 @@ func TestCrossPlatformCoverageRootExecuteAllBranchesCoverage(t *testing.T) {
 	rootNormalizeProcessProfileArgs = func() func() { return func() {} }
 	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return nil }
 	rootStopAllStdioClients = func() {}
+	var executedLeaf *cobra.Command
 	rootNewRootCommandWithEngine = func(context.Context, *pipeline.Engine) *cobra.Command {
-		return &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+		sheet := &cobra.Command{Use: "sheet"}
+		executedLeaf = &cobra.Command{Use: "read", Run: func(*cobra.Command, []string) {}}
+		sheet.AddCommand(executedLeaf)
+		root.AddCommand(sheet)
+		return root
 	}
-	rootExecuteCommand = func(cmd *cobra.Command) (*cobra.Command, error) { return cmd, nil }
-	if code := Execute(); code != 0 {
-		t.Fatalf("successful Execute code = %d", code)
+	rootExecuteCommand = func(*cobra.Command) (*cobra.Command, error) { return executedLeaf, nil }
+	if code, commandPath, errorMessage := ExecuteWithTelemetry(); code != 0 || commandPath != "sheet read" || errorMessage != "" {
+		t.Fatalf("successful ExecuteWithTelemetry = code %d path %q error %q", code, commandPath, errorMessage)
 	}
 
 	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return errors.New("alias/canonical conflict") }
-	if code := Execute(); code == 0 {
-		t.Fatal("pre-parse conflict returned zero")
+	if code, _, errorMessage := ExecuteWithTelemetry(); code == 0 || errorMessage != "alias/canonical conflict" {
+		t.Fatalf("pre-parse conflict = code %d error %q", code, errorMessage)
 	}
 	rootRunPreParse = func(*cobra.Command, *pipeline.Engine) error { return nil }
 
 	wantErr := errors.New("unknown command missing")
 	rootExecuteCommand = func(*cobra.Command) (*cobra.Command, error) { return nil, wantErr }
-	if code := Execute(); code == 0 {
-		t.Fatal("failed Execute returned zero")
+	if code, _, errorMessage := ExecuteWithTelemetry(); code == 0 || errorMessage != "unknown command" {
+		t.Fatalf("failed ExecuteWithTelemetry = code %d error %q", code, errorMessage)
 	}
 
 	rootExecuteCommand = func(*cobra.Command) (*cobra.Command, error) { panic("boom") }
-	if code := Execute(); code != 5 {
-		t.Fatalf("panic Execute code = %d", code)
+	os.Args = []string{"dws", "sheet", "read"}
+	if code, commandPath, errorMessage := ExecuteWithTelemetry(); code != 5 || commandPath != "sheet read" || errorMessage != "internal panic" {
+		t.Fatalf("panic ExecuteWithTelemetry = code %d path %q error %q", code, commandPath, errorMessage)
+	}
+}
+
+func TestCrossPlatformCoverageTelemetryCommandPath(t *testing.T) {
+	if got := telemetryCommandPath(nil); got != "dws" {
+		t.Fatalf("nil command path = %q, want dws", got)
+	}
+	if got := telemetryCommandPathForArgs(nil, nil); got != "dws" {
+		t.Fatalf("nil root command path = %q, want dws", got)
+	}
+	root := &cobra.Command{Use: "dws"}
+	sheet := &cobra.Command{Use: "sheet"}
+	read := &cobra.Command{Use: "read <range>"}
+	sheet.AddCommand(read)
+	root.AddCommand(sheet)
+	if got := telemetryCommandPath(root); got != "dws" {
+		t.Fatalf("root command path = %q, want dws", got)
+	}
+	if got := telemetryCommandPath(read); got != "sheet read" {
+		t.Fatalf("leaf command path = %q, want sheet read", got)
+	}
+	root.PersistentFlags().String("profile", "", "")
+	read.Aliases = []string{"get"}
+	if got := telemetryCommandPathForArgs(root, []string{"--profile", "corp-a", "sheet", "get", "A1:B2"}); got != "sheet read" {
+		t.Fatalf("pre-execution command path = %q, want sheet read", got)
+	}
+	if got := telemetryCommandPathForArgs(root, []string{"missing"}); got != "dws" {
+		t.Fatalf("unknown pre-execution command path = %q, want dws", got)
 	}
 }
 
