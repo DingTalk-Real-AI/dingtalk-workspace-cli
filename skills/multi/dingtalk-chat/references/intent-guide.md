@@ -22,12 +22,12 @@
 
 | 用户终点 | 对象 | Reference |
 |---|---|---|
-| 收藏或取消收藏 | 当前用户的 Favorite | [chat-message.md](chat/chat-message.md) |
-| Pin/Unpin 一条消息 | 消息 Pin | [chat-message.md](chat/chat-message.md) |
-| 置顶/取消置顶一条消息 | 消息 Top | [chat-message.md](chat/chat-message.md) |
+| 收藏或取消收藏 | 当前用户的 Favorite | [message-actions.md](chat/message-actions.md) |
+| Pin/Unpin 一条消息 | 消息 Pin | [message-actions.md](chat/message-actions.md) |
+| 置顶/取消置顶一条消息 | 消息 Top | [message-actions.md](chat/message-actions.md) |
 | 置顶/取消置顶整个会话 | 会话 Top | [chat-conversation.md](chat/chat-conversation.md) |
 | 查看置顶会话 | 会话列表 | `+conversation-list-top` |
-| 标记消息已读 | 消息读取状态 | [chat-message.md](chat/chat-message.md) |
+| 标记消息已读 | 消息读取状态 | [message-actions.md](chat/message-actions.md) |
 | 清红点、标记会话未读 | 会话状态 | [chat-conversation.md](chat/chat-conversation.md) |
 
 Favorite、消息 Pin、消息 Top 和会话 Top 不能互换，即使用户都说“收藏/钉住/置顶”。
@@ -37,7 +37,8 @@ Favorite、消息 Pin、消息 Top 和会话 Top 不能互换，即使用户都�
 | 用户终点 | 选择 |
 |---|---|
 | 已有成员 IDs 创建群 | `+chat-create` |
-| 加人、踢人、管理员、群公告、群设置 | [chat-group.md](chat/chat-group.md) |
+| 查群、查看成员、邀请链接 | [group-discovery.md](chat/group-discovery.md) |
+| 加人、踢人、管理员、群公告、群设置 | [group-admin.md](chat/group-admin.md) |
 | 找可用机器人并取得单聊 ID | `chat bot find`，不是只查自己创建机器人的 `bot search` |
 | 已知 robotCode 发送 | `+messages-send --as bot` |
 | 机器人入群、移除、批量群发或撤回 | [chat-bot.md](chat/chat-bot.md) |

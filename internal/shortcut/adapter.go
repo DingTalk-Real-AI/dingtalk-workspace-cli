@@ -217,6 +217,7 @@ func fromShortcutFlags(flags []Flag) []corecmd.FlagSpec {
 			RequiredError:  fmt.Sprintf("缺少必填参数 --%s：%s", f.Name, f.Desc),
 			Enum:           append([]string(nil), f.Enum...),
 			Aliases:        append([]string(nil), f.Aliases...),
+			Input:          append([]string(nil), f.Input...),
 		})
 	}
 	return out
