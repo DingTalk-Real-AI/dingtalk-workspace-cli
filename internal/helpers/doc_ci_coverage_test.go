@@ -17,6 +17,14 @@ func TestDocMediaFilesystemAndPositionCompatibilityCoverage(t *testing.T) {
 	if err := ValidateDocMediaInsertCommand(nil); err == nil {
 		t.Fatal("nil command accepted")
 	}
+	missingFile := &cobra.Command{Use: "insert"}
+	missingFile.Flags().String("file", "", "")
+	missingFile.Flags().Int("index", 0, "")
+	missingFile.Flags().String("where", "", "")
+	missingFile.Flags().String("ref-block", "", "")
+	if _, _, _, err := resolveDocMediaInsertInput(missingFile); err == nil {
+		t.Fatal("missing media input accepted")
+	}
 	docMediaGetwd = func() (string, error) { return "", errors.New("getwd") }
 	if _, _, err := resolveDocMediaInputPath("file"); err == nil {
 		t.Fatal("getwd failure ignored")
@@ -161,7 +169,9 @@ func TestDocMediaShapeHelperCoverage(t *testing.T) {
 	}
 	positions := []docMediaInsertPosition{
 		{Mode: "index", Index: 1}, {Mode: "relative", RefBlock: "ref", Where: "before"},
-		{Mode: "relative", RefBlock: "ref", Where: "after"}, {Mode: "end"},
+		{Mode: "relative", RefBlock: "ref", Where: "after"},
+		{Mode: "mixed", HasIndex: true, Index: 1, RefBlock: "ref", Where: "after"},
+		{Mode: "end"},
 	}
 	for _, position := range positions {
 		_, _ = verifyDocMediaPosition([]string{"before", "inserted", "ref"}, "inserted", position)
