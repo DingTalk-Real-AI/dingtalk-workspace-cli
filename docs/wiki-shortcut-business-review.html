@@ -70,6 +70,7 @@
       <tr><td>节点列表 Shortcut 调错 Wiki MCP 服务。</td><td>真实后端 <code>success=false</code>，Mock/静态检查看不出。</td><td><span class="tag fixed">跨域路由</span> 明确调用 doc/list_nodes，并纳入真实 E2E。</td></tr>
       <tr><td>成员帮助宣称最大 200。</td><td>真实接口超过 50 直接参数错误。</td><td><span class="tag fixed">真实上限</span> Shortcut 与原子 Help 均改为 50，并在本地提前拒绝。</td></tr>
       <tr><td>成员写操作从最多 50 条、不可分页的名单推断成员存在或缺失。</td><td>目标在截断部分时会误报写失败，或把未验证的移除报告为已读回。</td><td><span class="tag fixed">终态证据</span> 只接受写接口 <code>success=true</code>，并在结果中明确 <code>readbackAvailable=false</code>。</td></tr>
+      <tr><td>空间搜索的稳定工作流属性名与实际请求属性名不同。</td><td>直接改写已发布的 <code>query/limit</code> 会造成无版本 Schema 破坏；继续隐式转换又会让审计者误以为请求同名透传。</td><td><span class="tag fixed">显式复合适配</span> 最终 Schema 保留兼容属性并明确声明转换为 <code>keyword/pageSize</code>；回归测试同时锁定最终交付和精确请求参数。</td></tr>
       <tr><td>知识库名称帮助宣称最大 100。</td><td>真实接口超过 32 失败。</td><td><span class="tag fixed">真实上限</span> Help 与 Shortcut 校验统一为 32。</td></tr>
       <tr><td>复制/移动/创建只把无异常视为成功。</td><td>空确认、未知远端效果或移动未到目标仍可能被接受。</td><td><span class="tag fixed">读回证明</span> 在后端具备精确查询能力时检查 success、业务 ID、workspace/folder 等最终状态。</td></tr>
     </tbody></table>

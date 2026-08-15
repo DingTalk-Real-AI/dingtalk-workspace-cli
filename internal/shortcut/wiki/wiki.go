@@ -52,7 +52,7 @@ var SpaceList = readShortcut("+space-list", "严格分页列出知识库", "浏�
 	return rt.Output(out)
 })
 
-var SpaceSearch = readShortcut("+space-search", "严格搜索知识库", "按名称关键词定位知识库；严格验证搜索数组，避免内部异常被误报为零命中。", "spaces", "dws wiki +space-search --query \"产品文档\" --format json", []shortcut.Flag{
+var SpaceSearch = wikiWithInterfaceReason(readShortcut("+space-search", "严格搜索知识库", "按名称关键词定位知识库；严格验证搜索数组，避免内部异常被误报为零命中。", "spaces", "dws wiki +space-search --query \"产品文档\" --format json", []shortcut.Flag{
 	{Name: "query", Type: shortcut.FlagString, Required: true, Desc: "搜索关键词"}, {Name: "limit", Type: shortcut.FlagString, Desc: "返回数量 1-20（默认 10）"},
 }, []contract.ParamDecl{{Name: "query", Property: "query"}, {Name: "limit", Property: "limit"}}, func(rt *shortcut.RuntimeContext) error {
 	pageSize, err := wikiStringInt(rt, "limit", 10, 1, 20)
@@ -71,7 +71,7 @@ var SpaceSearch = readShortcut("+space-search", "严格搜索知识库", "按名
 	out := map[string]any{"count": len(spaces), "spaces": spaces}
 	addWikiPagination(out, page)
 	return rt.Output(out)
-})
+}), wikiSpaceSearchCompositeReason)
 
 var SpaceGet = readShortcut("+space-get", "获取知识库详情", "已知 workspace ID 或知识库 URL 时读取并验证空间详情。", "", "dws wiki +space-get --workspace <workspaceId> --format json", []shortcut.Flag{{Name: "workspace", Type: shortcut.FlagString, Required: true, Desc: "知识库 ID 或 URL"}}, []contract.ParamDecl{{Name: "workspace", Property: "workspaceId"}}, func(rt *shortcut.RuntimeContext) error {
 	data, err := rt.CallMCPData("wiki", "get_wikiSpace", map[string]any{"workspaceId": rt.Str("workspace")})

@@ -151,6 +151,10 @@ jobs:
                 filename.startsWith('scripts/') ||
                 filename.startsWith('verify/') ||
                 filename.startsWith('internal/helpers/') ||
+                // Shortcut declarations feed the live command tree and Schema
+                // assembly. Their reverse dependencies include the expensive
+                // app and generator packages, which must run in separate shards.
+                filename.startsWith('internal/shortcut/') ||
                 filename.startsWith('internal/generator/') ||
                 filename.startsWith('internal/cli/schema') ||
                 // Parameter aliases are reduced against the live command tree.

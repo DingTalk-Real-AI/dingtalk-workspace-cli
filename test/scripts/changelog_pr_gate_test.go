@@ -1013,6 +1013,12 @@ if (!isHighRisk("internal/helpers/minutes.go")) {
 if (isHighRisk("internal/helpersx/minutes.go")) {
   throw new Error("helper high-risk classification must respect the path boundary");
 }
+if (!isHighRisk("internal/shortcut/wiki/wiki.go")) {
+  throw new Error("shortcut changes must use the sharded full suite");
+}
+if (isHighRisk("internal/shortcuts/wiki/wiki.go")) {
+  throw new Error("shortcut high-risk classification must respect the path boundary");
+}
 for (const filename of [
   "internal/cli/param_concepts.json",
   "internal/cli/param_concepts.schema.json",
@@ -1137,6 +1143,7 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"filename.startsWith('scripts/')",
 		"filename.startsWith('verify/')",
 		"filename.startsWith('internal/helpers/')",
+		"filename.startsWith('internal/shortcut/')",
 		"filename === 'test/fixtures/cli-interface-baseline.txt'",
 		"filename.startsWith('internal/interfacesnapshot/')",
 		"filename.startsWith('internal/cobracmd/')",
