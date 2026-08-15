@@ -62,6 +62,105 @@ type DryRunSpec struct {
 	RemoteReads bool   `json:"remote_reads,omitempty"`
 }
 
+// Wait modes. Poll executes a declared read command on a cadence; event
+// subscribes to a push channel; auto prefers event and falls back to poll.
+const (
+	WaitModePoll  = "poll"
+	WaitModeEvent = "event"
+	WaitModeAuto  = "auto"
+)
+
+// WaitSpec is a positive capability declaration for terminal-state waiting
+// (approval flows, async exports, batch jobs). A nil ToolSpec.Wait means the
+// command has not declared reviewed --wait support; the flag is not
+// registered and the Schema does not publish the capability.
+//
+// Like DryRunSpec, the object is one atomic contract field: Schema only
+// projects the reviewed capability; runtime execution stays owned by the
+// command runner through the leaf's WaitPoll hook. PollCommand names the
+// read command that observes status — it is a declared, catalog-visible fact
+// (the same command an agent would poll manually), not a framework-owned
+// invocation: how one poll executes is decided by the leaf.
+type WaitSpec struct {
+	Mode          string                   `json:"mode"`
+	PollCommand   string                   `json:"poll_command,omitempty"`
+	StatusQuery   string                   `json:"status_query"`
+	Terminal      map[string]ResultOutcome `json:"terminal"`
+	PendingValues []string                 `json:"pending_values,omitempty"`
+	EventKey      string                   `json:"event_key,omitempty"`
+	MatchField    string                   `json:"match_field,omitempty"`
+	// DefaultTimeoutSecs is the reviewed default for --wait-timeout. Zero
+	// means the framework default (300s); the user flag always wins.
+	DefaultTimeoutSecs int `json:"default_timeout_secs"`
+}
+
+// Validate checks mode requirements and the terminal/pending status maps.
+// Unknown terminal outcomes, unknown modes, and mode/body mismatches fail at
+// declaration so a malformed wait capability cannot reach the wire.
+func (w WaitSpec) Validate(canonical string) error {
+	canonical = defaultString(strings.TrimSpace(canonical), "<unknown>")
+	switch strings.TrimSpace(w.Mode) {
+	case WaitModePoll, WaitModeEvent, WaitModeAuto:
+	case "":
+		return fmt.Errorf("schema tool %s wait has no mode", canonical)
+	default:
+		return fmt.Errorf("schema tool %s wait has unknown mode %q", canonical, w.Mode)
+	}
+	mode := strings.TrimSpace(w.Mode)
+	needsPoll := mode == WaitModePoll || mode == WaitModeAuto
+	if needsPoll && strings.TrimSpace(w.PollCommand) == "" {
+		return fmt.Errorf("schema tool %s wait mode %s requires poll_command", canonical, mode)
+	}
+	if needsPoll && strings.TrimSpace(w.StatusQuery) == "" {
+		return fmt.Errorf("schema tool %s wait mode %s requires status_query", canonical, mode)
+	}
+	if mode == WaitModeEvent {
+		if strings.TrimSpace(w.EventKey) == "" {
+			return fmt.Errorf("schema tool %s wait mode event requires event_key", canonical)
+		}
+		if strings.TrimSpace(w.MatchField) == "" {
+			return fmt.Errorf("schema tool %s wait mode event requires match_field", canonical)
+		}
+	}
+	if len(w.Terminal) == 0 {
+		return fmt.Errorf("schema tool %s wait has no terminal states", canonical)
+	}
+	pending := make(map[string]bool, len(w.PendingValues))
+	for _, value := range w.PendingValues {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return fmt.Errorf("schema tool %s wait has a blank pending value", canonical)
+		}
+		if _, conflict := w.Terminal[value]; conflict {
+			return fmt.Errorf("schema tool %s wait status %q is both terminal and pending", canonical, value)
+		}
+		pending[value] = true
+	}
+	nonPendingTerminal := false
+	for status, outcome := range w.Terminal {
+		if strings.TrimSpace(status) == "" {
+			return fmt.Errorf("schema tool %s wait has a blank terminal status", canonical)
+		}
+		// Terminal states must close into success or failure. Pending and
+		// partial are not wait outcomes: pending is expressed through
+		// timeout, and partial requires the typed multi-status payload only
+		// the leaf can construct.
+		if outcome != ResultOutcomeSuccess && outcome != ResultOutcomeFailure {
+			return fmt.Errorf(
+				"schema tool %s wait terminal status %q must map to success or failure, got %q",
+				canonical, status, outcome)
+		}
+		nonPendingTerminal = true
+	}
+	if !nonPendingTerminal {
+		return fmt.Errorf("schema tool %s wait has no terminal states", canonical)
+	}
+	if w.DefaultTimeoutSecs < 0 {
+		return fmt.Errorf("schema tool %s wait default_timeout_secs must be >= 0", canonical)
+	}
+	return nil
+}
+
 // ResultOutcome is one closed unified-output envelope outcome.
 type ResultOutcome string
 

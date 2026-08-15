@@ -49,12 +49,14 @@ package corecmd
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -64,6 +66,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/wait"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 )
 
@@ -273,6 +276,13 @@ type Spec struct {
 	// Orchestrate executes a multi-step command; it assembles whatever payloads
 	// it needs from the Ctx.
 	Orchestrate func(c *Ctx) error
+	// WaitPoll executes one poll of the declared Contract.Wait capability.
+	// Exactly one poll is one call; cadence, status extraction, and outcome
+	// mapping belong to the framework wait phase. Required iff Contract.Wait
+	// is declared (and forbidden otherwise) — a declared capability without a
+	// runtime implementation can never honor --wait, so New rejects it at
+	// construction.
+	WaitPoll func(c *Ctx) (wait.PollDoc, error)
 }
 
 // Ctx is the framework-neutral execution context handed to Invoke/Orchestrate.
@@ -284,6 +294,7 @@ type Ctx struct {
 	cmd   *cobra.Command
 	args  []string
 	flags map[string]FlagSpec
+	wait  *contract.WaitSpec
 }
 
 // newCtx builds the execution context for one command invocation.
@@ -346,6 +357,15 @@ func (c *Ctx) Changed(name string) bool { return c.cmd.Flags().Changed(name) }
 // DryRun reports the effective global --dry-run.
 func (c *Ctx) DryRun() bool { return BoolFlag(c.cmd, "dry-run") }
 
+// Wait reports the effective --wait flag. It is false on commands that did
+// not declare the capability: the flag is not registered there, so passing it
+// is an unknown-flag error rather than a silently ignored value.
+func (c *Ctx) Wait() bool { return BoolFlag(c.cmd, waitFlagName) }
+
+// WaitTimeoutSecs reports the effective --wait-timeout in seconds (flag
+// value, then the declared default, then the framework default).
+func (c *Ctx) WaitTimeoutSecs() int { return waitTimeoutSecs(c.cmd, c.wait) }
+
 // Yes reports the effective global --yes.
 func (c *Ctx) Yes() bool { return BoolFlag(c.cmd, "yes") }
 
@@ -365,6 +385,7 @@ func New(spec Spec) *cobra.Command {
 	validateDispatchDecl(spec)
 	validateSafetySpec(spec)
 	validateContractDecl(spec)
+	validateWaitDecl(spec)
 	// Help prose inherits the declaration when not authored separately:
 	// Selection.Examples (already contract-validated against the real flags)
 	// double as the --help Example block, keeping one authored source.
@@ -380,6 +401,7 @@ func New(spec Spec) *cobra.Command {
 		Hidden:  spec.Hidden,
 	}
 	RegisterFlags(cmd, spec.Flags)
+	registerWaitFlags(cmd, spec)
 	ValidateConstraintDecls(spec.Use, spec.Flags, spec.Constraints)
 	embedContractIntoSchema(cmd, spec)
 	AnnotateConstraints(cmd, spec.Constraints)
@@ -408,7 +430,13 @@ func New(spec Spec) *cobra.Command {
 					return err
 				}
 			}
-			return spec.RunE(cmd, args)
+			if err := spec.RunE(cmd, args); err != nil {
+				return err
+			}
+			// RunE commands emit their own output; the wait phase can only
+			// report the terminal status on stderr, never rewrite it.
+			_, err := runDeclaredWaitPhase(cmd, args, spec, nil)
+			return err
 		}
 		return cmd
 	}
@@ -417,13 +445,18 @@ func New(spec Spec) *cobra.Command {
 			return err
 		}
 		ctx := newCtx(cmd, args, spec.Flags)
+		ctx.wait = spec.Contract.Wait
 		if spec.Orchestrate != nil {
 			if !spec.ConfirmFirst {
 				if err := ConfirmSafety(cmd, spec.Safety); err != nil {
 					return err
 				}
 			}
-			return spec.Orchestrate(ctx)
+			if err := spec.Orchestrate(ctx); err != nil {
+				return err
+			}
+			_, err := runDeclaredWaitPhase(cmd, args, spec, nil)
+			return err
 		}
 		toolArgs, err := BuildArgs(cmd, spec.Flags)
 		if err != nil {
@@ -445,9 +478,19 @@ func New(spec Spec) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if BoolFlag(cmd, waitFlagName) {
+				result, err = runDeclaredWaitPhase(cmd, args, spec, result)
+				if err != nil {
+					return err
+				}
+			}
 			return output.StoreResult(cmd.Context(), result)
 		}
-		return spec.Invoke(ctx, toolArgs)
+		if err := spec.Invoke(ctx, toolArgs); err != nil {
+			return err
+		}
+		_, err = runDeclaredWaitPhase(cmd, args, spec, nil)
+		return err
 	}
 	return cmd
 }
@@ -489,6 +532,115 @@ func runDeclaredPreflight(cmd *cobra.Command, args []string, spec Spec) error {
 		return spec.Validate(cmd, args)
 	}
 	return nil
+}
+
+// Wait-phase framework flags. They are registered natively on the leaf (never
+// as FlagSpec) so they cannot leak into toolArgs / MCP payloads: --wait is a
+// client-side execution modifier, not a backend parameter. On commands that
+// did not declare Contract.Wait the flags do not exist, so passing --wait
+// fails as an unknown flag instead of being silently ignored.
+const (
+	waitFlagName        = "wait"
+	waitTimeoutFlagName = "wait-timeout"
+	defaultWaitTimeoutS = 300
+)
+
+// DefaultWaitTimeoutSecs is the framework default for --wait-timeout when the
+// declaration carries no reviewed default.
+const DefaultWaitTimeoutSecs = defaultWaitTimeoutS
+
+// validateWaitDecl enforces the declaration ⇄ implementation pairing at build
+// time: a declared Contract.Wait without a WaitPoll hook is a capability the
+// command can never honor, and a WaitPoll hook without the declaration has no
+// flags or Schema capability to serve. Both are programming errors.
+func validateWaitDecl(spec Spec) {
+	declared := spec.Contract.Wait != nil && strings.TrimSpace(spec.Contract.Wait.Mode) != ""
+	if declared && spec.WaitPoll == nil {
+		panic(fmt.Sprintf(
+			"command %q declares Contract.Wait but sets no WaitPoll: a declared wait capability must carry its runtime poll implementation",
+			spec.Use))
+	}
+	if !declared && spec.WaitPoll != nil {
+		panic(fmt.Sprintf(
+			"command %q sets WaitPoll without declaring Contract.Wait: the wait flags and Schema capability come from the declaration",
+			spec.Use))
+	}
+}
+
+// registerWaitFlags adds --wait / --wait-timeout to a leaf that declared
+// Contract.Wait. The timeout default is the reviewed declaration, falling
+// back to DefaultWaitTimeoutSecs.
+func registerWaitFlags(cmd *cobra.Command, spec Spec) {
+	decl := spec.Contract.Wait
+	if decl == nil || strings.TrimSpace(decl.Mode) == "" {
+		return
+	}
+	cmd.Flags().Bool(waitFlagName, false,
+		"等待到达命令声明的终态（如审批完成、导出结束）后再返回；未声明该能力的命令不接受此 flag")
+	timeoutDefault := decl.DefaultTimeoutSecs
+	if timeoutDefault <= 0 {
+		timeoutDefault = DefaultWaitTimeoutSecs
+	}
+	cmd.Flags().Int(waitTimeoutFlagName, timeoutDefault,
+		"等待超时秒数；超时以 pending 结束（异步受理不是失败）")
+}
+
+// runDeclaredWaitPhase runs the declared wait loop after a successful
+// dispatch. result is non-nil only on the ResultInvoke path, where the
+// unified envelope can be closed into the terminal outcome; legacy paths have
+// already emitted their output and only get a stderr summary.
+func runDeclaredWaitPhase(cmd *cobra.Command, args []string, spec Spec, result output.CommandResult) (output.CommandResult, error) {
+	if !BoolFlag(cmd, waitFlagName) {
+		return result, nil
+	}
+	decl := spec.Contract.Wait
+	timeout := time.Duration(waitTimeoutSecs(cmd, decl)) * time.Second
+	ctx := newCtx(cmd, args, spec.Flags)
+	ctx.wait = decl
+	outcome, err := wait.Run(cmd.Context(), wait.LoopSpec{
+		StatusQuery: decl.StatusQuery,
+		Terminal:    decl.Terminal,
+		Pending:     decl.PendingValues,
+		Timeout:     timeout,
+	}, func(context.Context) (wait.PollDoc, error) {
+		return spec.WaitPoll(ctx)
+	})
+	if err != nil {
+		return result, err
+	}
+	if outcome.TimedOut {
+		cmd.PrintErrf("等待超时（%s）：当前状态 %q，未到达终态，以 pending 结束\n", timeout, outcome.Status)
+		if result != nil {
+			return output.WithOutcome(result, output.OutcomePending,
+				output.WithOperationTimedOut(outcome.Status)), nil
+		}
+		return result, nil
+	}
+	if result != nil {
+		if outcome.Outcome == contract.ResultOutcomeFailure {
+			return output.WithOutcome(result, output.OutcomeFailure,
+				output.WithErrorInfo(&output.ErrorInfo{
+					Type:    "wait",
+					Subtype: "terminal_failure",
+					Message: fmt.Sprintf("等待到达失败终态：%s", outcome.Status),
+				})), nil
+		}
+		return output.WithOutcome(result, output.OutcomeSuccess), nil
+	}
+	cmd.PrintErrf("等待终态：%s（%q，%d 次轮询）\n", outcome.Outcome, outcome.Status, outcome.Attempts)
+	return result, nil
+}
+
+// waitTimeoutSecs resolves the effective timeout: explicit flag value, then
+// the reviewed declaration default, then the framework default.
+func waitTimeoutSecs(cmd *cobra.Command, decl *contract.WaitSpec) int {
+	if value, err := cmd.Flags().GetInt(waitTimeoutFlagName); err == nil && value > 0 {
+		return value
+	}
+	if decl.DefaultTimeoutSecs > 0 {
+		return decl.DefaultTimeoutSecs
+	}
+	return DefaultWaitTimeoutSecs
 }
 
 // validateDispatchDecl enforces "exactly one dispatcher" at build time. Like
@@ -1392,6 +1544,14 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 		d := *decl.DryRun
 		d.PreviewKind = strings.TrimSpace(d.PreviewKind)
 		payload.DryRun = &d
+	}
+	if decl.Wait != nil && strings.TrimSpace(decl.Wait.Mode) != "" {
+		w := *decl.Wait
+		w.Mode = strings.TrimSpace(w.Mode)
+		if err := w.Validate(decl.Identity.CanonicalPath); err != nil {
+			panic(fmt.Sprintf("command %q has invalid Contract.Wait: %v", cmd.Name(), err))
+		}
+		payload.Wait = &w
 	}
 	if decl.Result != nil {
 		result, err := contract.NormalizeResultSpec(decl.Result, decl.Identity.CanonicalPath)

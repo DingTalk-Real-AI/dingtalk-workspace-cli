@@ -1,0 +1,190 @@
+// Copyright 2026 Alibaba Group
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Package wait is the framework terminal-state wait engine behind the
+// reviewed contract.WaitSpec capability. It owns polling cadence, status
+// extraction, and status→outcome mapping; it knows nothing about Cobra, MCP,
+// or any product backend. How one poll executes is supplied by the leaf's
+// WaitPoll hook (corecmd), so "poll = an existing read command" stays a leaf
+// decision rather than a framework assumption.
+package wait
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+)
+
+// DefaultPollInterval is the cadence between polls when LoopSpec.Interval is
+// zero. The first poll runs immediately so an already-terminal resource does
+// not pay a sleep tax.
+const DefaultPollInterval = 2 * time.Second
+
+// MaxPollInterval caps the exponential backoff growth between polls so a long
+// wait cannot degenerate into effectively-blind polling.
+const MaxPollInterval = 30 * time.Second
+
+// PollDoc is one decoded poll response document (typically the unified-output
+// envelope data of the poll command).
+type PollDoc map[string]any
+
+// Poller executes one poll. Returning an error fails the wait phase; the
+// engine never retries a poller error because read commands failing is a real
+// failure, not a "not yet" signal.
+type Poller func(ctx context.Context) (PollDoc, error)
+
+// LoopSpec is the runtime-resolved projection of contract.WaitSpec plus the
+// caller-provided timeout.
+type LoopSpec struct {
+	StatusQuery string
+	Terminal    map[string]contract.ResultOutcome
+	Pending     []string
+	Timeout     time.Duration
+	Interval    time.Duration
+}
+
+// Outcome is the closed result of a wait loop. TimedOut reports deadline
+// exhaustion (Outcome is then pending — an accepted-but-not-terminal state is
+// not a process failure per the exit-code contract); Status is the last
+// observed status value.
+type Outcome struct {
+	Status   string
+	Outcome  contract.ResultOutcome
+	Attempts int
+	TimedOut bool
+}
+
+// ErrUnknownStatus reports a status value that is neither declared terminal
+// nor declared pending. Unknown fails closed: mapping it to pending could
+// hide a real state change until timeout, mapping it to success is worse.
+type ErrUnknownStatus struct {
+	Status string
+	Query  string
+}
+
+func (e *ErrUnknownStatus) Error() string {
+	return fmt.Sprintf("wait: status %q (from %q) is neither terminal nor pending", e.Status, e.Query)
+}
+
+// sleep is swappable through testseam.Swap in tests only.
+var sleep = time.Sleep
+
+// Run polls poller until a declared terminal status, deadline exhaustion, or
+// a poller error. The first poll is immediate; subsequent polls back off
+// exponentially (×1.5) from Interval, capped at MaxPollInterval.
+func Run(ctx context.Context, spec LoopSpec, poll Poller) (Outcome, error) {
+	if spec.Interval <= 0 {
+		spec.Interval = DefaultPollInterval
+	}
+	if spec.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, spec.Timeout)
+		defer cancel()
+	}
+	pending := make(map[string]bool, len(spec.Pending))
+	for _, value := range spec.Pending {
+		pending[value] = true
+	}
+	interval := spec.Interval
+	attempts := 0
+	for {
+		doc, err := poll(ctx)
+		if err != nil {
+			return Outcome{Attempts: attempts}, fmt.Errorf("wait: poll failed: %w", err)
+		}
+		attempts++
+		status, ok := ExtractStatus(doc, spec.StatusQuery)
+		if !ok {
+			return Outcome{Attempts: attempts}, fmt.Errorf(
+				"wait: status query %q not found in poll result", spec.StatusQuery)
+		}
+		if outcome, ok := spec.Terminal[status]; ok {
+			return Outcome{Status: status, Outcome: outcome, Attempts: attempts}, nil
+		}
+		if !pending[status] {
+			return Outcome{Status: status, Attempts: attempts}, &ErrUnknownStatus{Status: status, Query: spec.StatusQuery}
+		}
+		select {
+		case <-ctx.Done():
+			return Outcome{Status: status, Outcome: contract.ResultOutcomePending, Attempts: attempts, TimedOut: true}, nil
+		default:
+		}
+		sleep(interval)
+		interval = nextInterval(interval)
+	}
+}
+
+func nextInterval(current time.Duration) time.Duration {
+	next := current * 3 / 2
+	if next > MaxPollInterval {
+		next = MaxPollInterval
+	}
+	return next
+}
+
+// ExtractStatus resolves a dotted status query against a poll document. Each
+// segment walks one map level; array indexes are not supported because wait
+// targets a single resource. Numeric segments are stringified, so a document
+// decoded with json.Number keys still resolves.
+func ExtractStatus(doc PollDoc, query string) (string, bool) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return "", false
+	}
+	// PollDoc is a defined type, so its dynamic type does not satisfy a
+	// map[string]any assertion — convert once at the boundary; nested values
+	// from JSON decoding are plain maps.
+	var current any = map[string]any(doc)
+	for _, segment := range strings.Split(query, ".") {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			return "", false
+		}
+		node, ok := current.(map[string]any)
+		if !ok {
+			return "", false
+		}
+		value, ok := node[segment]
+		if !ok {
+			return "", false
+		}
+		current = value
+	}
+	switch value := current.(type) {
+	case string:
+		return value, true
+	case fmt.Stringer:
+		return value.String(), true
+	case bool:
+		return strconv.FormatBool(value), true
+	case int:
+		return strconv.Itoa(value), true
+	case int64:
+		return strconv.FormatInt(value, 10), true
+	case float64:
+		return strconv.FormatFloat(value, 'f', -1, 64), true
+	default:
+		return "", false
+	}
+}
+
+// IsUnknownStatus reports whether err is the closed fail-on-unknown error.
+func IsUnknownStatus(err error) bool {
+	var unknown *ErrUnknownStatus
+	return errors.As(err, &unknown)
+}

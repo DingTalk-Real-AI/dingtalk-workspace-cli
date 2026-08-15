@@ -354,6 +354,7 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		Constraints:     constraints,
 		Positionals:     positionals,
 		DryRun:          final.DryRun,
+		Wait:            final.Wait,
 		Result:          result,
 		Pagination:      pagination,
 		Safety:          safety,
