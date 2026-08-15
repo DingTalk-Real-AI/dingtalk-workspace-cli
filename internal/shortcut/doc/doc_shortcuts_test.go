@@ -134,6 +134,82 @@ func TestCrossPlatformCoverageDocCreatePreservesV1SuccessReceipt(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageDocMutationPreservesV1SuccessReceipt(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		writeResult  map[string]any
+		readResult   map[string]any
+		wantRevision float64
+	}{
+		{
+			name: "revision from write result",
+			writeResult: map[string]any{
+				"blockId": "inserted-block", "operationId": "operation-1", "revision": 6.0,
+			},
+			readResult: map[string]any{"blocks": []any{
+				map[string]any{"id": "inserted-block", "text": "new content"},
+				map[string]any{"id": "reference-block", "text": "existing content"},
+			}},
+			wantRevision: 6.0,
+		},
+		{
+			name: "revision from verification",
+			writeResult: map[string]any{
+				"blockId": "inserted-block", "operationId": "operation-1",
+			},
+			readResult: map[string]any{
+				"revision": 7.0,
+				"blocks": []any{
+					map[string]any{"id": "inserted-block", "text": "new content"},
+					map[string]any{"id": "reference-block", "text": "existing content"},
+				},
+			},
+			wantRevision: 7.0,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			caller := &docCoverageCaller{
+				output: &output,
+				responses: map[string][]map[string]any{
+					"insert_document_block": {tc.writeResult},
+					"list_document_blocks":  {tc.readResult},
+				},
+			}
+			if err := runDocCoverage(t, Update, caller,
+				"--node", "compat-node",
+				"--command", "block_insert",
+				"--ref-block", "reference-block",
+				"--where", "before",
+				"--content", "new content",
+				"--yes",
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			var envelope map[string]any
+			if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+				t.Fatalf("decode mutation output %q: %v", output.String(), err)
+			}
+			if envelope["contractVersion"] != "doc.operation.v1" {
+				t.Fatalf("contractVersion = %#v", envelope["contractVersion"])
+			}
+			data, ok := envelope["data"].(map[string]any)
+			if !ok || data["nodeId"] != "compat-node" || data["verified"] != true || data["revision"] != tc.wantRevision {
+				t.Fatalf("mutation receipt = %#v", envelope["data"])
+			}
+			result, ok := data["result"].(map[string]any)
+			if !ok || result["blockId"] != "inserted-block" || result["operationId"] != "operation-1" {
+				t.Fatalf("legacy result receipt = %#v", data["result"])
+			}
+			verification, ok := data["verification"].(map[string]any)
+			if !ok || !reflect.DeepEqual(verification, tc.readResult) {
+				t.Fatalf("legacy verification receipt = %#v", data["verification"])
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageDocMutationConfirmationMetadataMatchesSelectionText(t *testing.T) {
 	for name, declaration := range map[string]shortcut.Shortcut{
 		"update":            Update,

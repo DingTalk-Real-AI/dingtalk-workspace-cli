@@ -964,7 +964,16 @@ func executeVerifiedDocMutation(
 		return docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	steps = append(steps, map[string]any{"name": "verify", "status": "success", "attempts": attempts})
-	receipt := map[string]any{"nodeId": nodeID, "verified": true, "affectedBlockIds": mutationAffectedBlockIDs(tool, params, result, verification, verifyParams)}
+	receipt := map[string]any{
+		"nodeId":           nodeID,
+		"verified":         true,
+		"affectedBlockIds": mutationAffectedBlockIDs(tool, params, result, verification, verifyParams),
+		// Keep the established doc.operation.v1 success payload while adding the
+		// compact receipt fields above. Existing JSON callers use these objects to
+		// consume service-specific IDs and the complete write-after-read result.
+		"result":       result,
+		"verification": verification,
+	}
 	if revision, ok := nestedRevision(result); ok {
 		receipt["revision"] = revision
 	} else if revision, ok := nestedRevision(verification); ok {
