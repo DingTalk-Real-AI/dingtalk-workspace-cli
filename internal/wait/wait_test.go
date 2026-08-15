@@ -16,11 +16,11 @@ package wait
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func loopSpec() LoopSpec {
@@ -77,7 +77,6 @@ func TestRunReturnsTerminalOnFirstPoll(t *testing.T) {
 }
 
 func TestRunPollsUntilTerminal(t *testing.T) {
-	testseam.Swap(t, &sleep, func(time.Duration) {})
 	seen := []string{"NEW", "RUNNING", "RUNNING", "COMPLETED"}
 	index := 0
 	outcome, err := Run(context.Background(), loopSpec(), func(context.Context) (PollDoc, error) {
@@ -93,11 +92,12 @@ func TestRunPollsUntilTerminal(t *testing.T) {
 	}
 }
 
-func TestRunTimesOutAsPending(t *testing.T) {
-	testseam.Swap(t, &sleep, func(time.Duration) {})
+func TestRunTimesOutAsPendingDuringWait(t *testing.T) {
 	spec := loopSpec()
-	spec.Timeout = time.Millisecond
+	spec.Timeout = 5 * time.Millisecond
+	polls := 0
 	outcome, err := Run(context.Background(), spec, func(context.Context) (PollDoc, error) {
+		polls++
 		return PollDoc{"result": map[string]any{"status": "RUNNING"}}, nil
 	})
 	if err != nil {
@@ -106,15 +106,64 @@ func TestRunTimesOutAsPending(t *testing.T) {
 	if !outcome.TimedOut || outcome.Outcome != contract.ResultOutcomePending {
 		t.Fatalf("timedOut=%v outcome=%s", outcome.TimedOut, outcome.Outcome)
 	}
+	if outcome.Status != "RUNNING" {
+		t.Fatalf("status=%q, want last observed", outcome.Status)
+	}
+	if polls == 0 {
+		t.Fatal("timeout during wait must still have polled at least once")
+	}
+}
+
+func TestRunTimesOutAsPendingWhenPollerRespectsDeadline(t *testing.T) {
+	spec := loopSpec()
+	spec.Timeout = 5 * time.Millisecond
+	polls := 0
+	// A context-aware poller: blocks until the deadline, then reports the
+	// cancellation as an error — the loop must close it as timed-out pending,
+	// never as a poll failure.
+	outcome, err := Run(context.Background(), spec, func(ctx context.Context) (PollDoc, error) {
+		polls++
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	if err != nil {
+		t.Fatalf("deadline during poll closed as error: %v", err)
+	}
+	if !outcome.TimedOut || outcome.Outcome != contract.ResultOutcomePending {
+		t.Fatalf("timedOut=%v outcome=%s", outcome.TimedOut, outcome.Outcome)
+	}
+}
+
+func TestRunTimesOutBeforeFirstPoll(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	outcome, err := Run(ctx, loopSpec(), func(context.Context) (PollDoc, error) {
+		t.Fatal("poller ran on a pre-cancelled context")
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !outcome.TimedOut || outcome.Attempts != 0 || outcome.Outcome != contract.ResultOutcomePending {
+		t.Fatalf("timedOut=%v attempts=%d outcome=%s", outcome.TimedOut, outcome.Attempts, outcome.Outcome)
+	}
 }
 
 func TestRunFailsClosedOnUnknownStatus(t *testing.T) {
-	testseam.Swap(t, &sleep, func(time.Duration) {})
 	_, err := Run(context.Background(), loopSpec(), func(context.Context) (PollDoc, error) {
 		return PollDoc{"result": map[string]any{"status": "Mystery"}}, nil
 	})
 	if !IsUnknownStatus(err) {
 		t.Fatalf("err=%v want unknown-status", err)
+	}
+}
+
+func TestRunFailsOnMissingStatusQuery(t *testing.T) {
+	_, err := Run(context.Background(), loopSpec(), func(context.Context) (PollDoc, error) {
+		return PollDoc{"unexpected": true}, nil
+	})
+	if err == nil || !errors.Is(err, err) {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -125,5 +174,93 @@ func TestRunPropagatesPollerError(t *testing.T) {
 	})
 	if !errors.Is(err, boom) {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestUnknownStatusErrorCarriesStatusAndQuery(t *testing.T) {
+	err := &ErrUnknownStatus{Status: "Mystery", Query: "result.status"}
+	message := err.Error()
+	if !strings.Contains(message, "Mystery") || !strings.Contains(message, "result.status") {
+		t.Fatalf("message=%q", message)
+	}
+}
+
+func TestRunAppliesDefaultIntervalWhenUnset(t *testing.T) {
+	spec := loopSpec()
+	spec.Interval = 0
+	polls := 0
+	// Terminal on the second poll forces one interval wait; with Interval=0
+	// the loop must still work using DefaultPollInterval (not spin/panic).
+	_, err := Run(context.Background(), spec, func(context.Context) (PollDoc, error) {
+		polls++
+		if polls == 1 {
+			return PollDoc{"result": map[string]any{"status": "NEW"}}, nil
+		}
+		return PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if polls != 2 {
+		t.Fatalf("polls=%d", polls)
+	}
+}
+
+func TestRunTimesOutDuringWaitBetweenPolls(t *testing.T) {
+	spec := loopSpec()
+	spec.Interval = time.Hour // the deadline wins long before the next poll
+	spec.Timeout = 5 * time.Millisecond
+	outcome, err := Run(context.Background(), spec, func(context.Context) (PollDoc, error) {
+		return PollDoc{"result": map[string]any{"status": "RUNNING"}}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !outcome.TimedOut || outcome.Outcome != contract.ResultOutcomePending || outcome.Status != "RUNNING" {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+}
+
+type stringStatus string
+
+func (s stringStatus) String() string { return string(s) }
+
+func TestExtractStatusCoversScalarShapes(t *testing.T) {
+	doc := PollDoc{
+		"result": map[string]any{
+			"flag":     true,
+			"small":    7,
+			"big":      int64(9007199254740993),
+			"fraction": 1.5,
+			"custom":   stringStatus("CUSTOM"),
+			"nested":   map[string]any{"deep": "x"},
+		},
+	}
+	cases := map[string]string{
+		"result.flag":     "true",
+		"result.small":    "7",
+		"result.big":      "9007199254740993",
+		"result.fraction": "1.5",
+		"result.custom":   "CUSTOM",
+	}
+	for query, want := range cases {
+		if got, ok := ExtractStatus(doc, query); !ok || got != want {
+			t.Fatalf("query=%s got=%q ok=%v want=%q", query, got, ok, want)
+		}
+	}
+	if _, ok := ExtractStatus(doc, "result.nested"); ok {
+		t.Fatal("non-scalar nested map must not resolve")
+	}
+	if _, ok := ExtractStatus(doc, "result..flag"); ok {
+		t.Fatal("empty segment must not resolve")
+	}
+}
+
+func TestNextIntervalCapsAtMax(t *testing.T) {
+	if got := nextInterval(MaxPollInterval); got != MaxPollInterval {
+		t.Fatalf("nextInterval(max)=%s", got)
+	}
+	if got := nextInterval(10 * time.Millisecond); got != 15*time.Millisecond {
+		t.Fatalf("nextInterval(10ms)=%s", got)
 	}
 }

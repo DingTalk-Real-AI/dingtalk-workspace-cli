@@ -81,12 +81,12 @@ func (e *ErrUnknownStatus) Error() string {
 	return fmt.Sprintf("wait: status %q (from %q) is neither terminal nor pending", e.Status, e.Query)
 }
 
-// sleep is swappable through testseam.Swap in tests only.
-var sleep = time.Sleep
-
 // Run polls poller until a declared terminal status, deadline exhaustion, or
 // a poller error. The first poll is immediate; subsequent polls back off
-// exponentially (×1.5) from Interval, capped at MaxPollInterval.
+// exponentially (×1.5) from Interval, capped at MaxPollInterval. Deadline
+// exhaustion anywhere — before a poll, during a poll (a context-aware poller
+// returns ctx.Err()), or during the wait between polls — always closes as
+// timed-out pending with the last observed status, never as a poll failure.
 func Run(ctx context.Context, spec LoopSpec, poll Poller) (Outcome, error) {
 	if spec.Interval <= 0 {
 		spec.Interval = DefaultPollInterval
@@ -100,11 +100,21 @@ func Run(ctx context.Context, spec LoopSpec, poll Poller) (Outcome, error) {
 	for _, value := range spec.Pending {
 		pending[value] = true
 	}
+	timedOut := func(status string, attempts int) Outcome {
+		return Outcome{Status: status, Outcome: contract.ResultOutcomePending, Attempts: attempts, TimedOut: true}
+	}
 	interval := spec.Interval
 	attempts := 0
+	lastStatus := ""
 	for {
+		if ctx.Err() != nil {
+			return timedOut(lastStatus, attempts), nil
+		}
 		doc, err := poll(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				return timedOut(lastStatus, attempts), nil
+			}
 			return Outcome{Attempts: attempts}, fmt.Errorf("wait: poll failed: %w", err)
 		}
 		attempts++
@@ -113,18 +123,20 @@ func Run(ctx context.Context, spec LoopSpec, poll Poller) (Outcome, error) {
 			return Outcome{Attempts: attempts}, fmt.Errorf(
 				"wait: status query %q not found in poll result", spec.StatusQuery)
 		}
+		lastStatus = status
 		if outcome, ok := spec.Terminal[status]; ok {
 			return Outcome{Status: status, Outcome: outcome, Attempts: attempts}, nil
 		}
 		if !pending[status] {
 			return Outcome{Status: status, Attempts: attempts}, &ErrUnknownStatus{Status: status, Query: spec.StatusQuery}
 		}
+		timer := time.NewTimer(interval)
 		select {
 		case <-ctx.Done():
-			return Outcome{Status: status, Outcome: contract.ResultOutcomePending, Attempts: attempts, TimedOut: true}, nil
-		default:
+			timer.Stop()
+			return timedOut(status, attempts), nil
+		case <-timer.C:
 		}
-		sleep(interval)
 		interval = nextInterval(interval)
 	}
 }

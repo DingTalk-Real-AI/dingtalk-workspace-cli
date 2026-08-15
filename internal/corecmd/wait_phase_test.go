@@ -16,9 +16,9 @@ package corecmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -122,8 +122,77 @@ func expectPanic(t *testing.T, fn func(), want string) {
 	fn()
 }
 
+func TestWaitTimeoutFlagDefaultsComeFromDeclaration(t *testing.T) {
+	stub := func(*Ctx) (wait.PollDoc, error) {
+		return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+	}
+	declared := New(baseWaitSpec(waitTestDecl(), stub))
+	if value, err := declared.Flags().GetInt(waitTimeoutFlagName); err != nil || value != 60 {
+		t.Fatalf("declared default=%d/%v, want reviewed 60", value, err)
+	}
+	decl := waitTestDecl()
+	decl.Wait.DefaultTimeoutSecs = 0
+	fallback := New(baseWaitSpec(decl, stub))
+	if value, err := fallback.Flags().GetInt(waitTimeoutFlagName); err != nil || value != DefaultWaitTimeoutSecs {
+		t.Fatalf("fallback default=%d/%v, want framework %d", value, err, DefaultWaitTimeoutSecs)
+	}
+	// A non-positive explicit value falls back to the framework default.
+	fallback.SetArgs([]string{"--wait-timeout", "0", "--wait"})
+	if err := fallback.Flags().Set(waitTimeoutFlagName, "0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := waitTimeoutSecs(fallback); got != DefaultWaitTimeoutSecs {
+		t.Fatalf("waitTimeoutSecs=%d, want %d", got, DefaultWaitTimeoutSecs)
+	}
+}
+
+func TestResultInvokeWaitPollErrorFailsTheCommand(t *testing.T) {
+	boom := errors.New("rpc down")
+	cmd := New(baseWaitSpec(waitTestDecl(), func(*Ctx) (wait.PollDoc, error) {
+		return nil, boom
+	}))
+	cmd.SetArgs([]string{"--wait"})
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "rpc down") {
+		t.Fatalf("err=%v, want poll error surfaced", err)
+	}
+}
+
+func TestResultInvokeWaitUnknownStatusFailsClosed(t *testing.T) {
+	cmd := New(baseWaitSpec(waitTestDecl(), func(*Ctx) (wait.PollDoc, error) {
+		return wait.PollDoc{"result": map[string]any{"status": "Mystery"}}, nil
+	}))
+	cmd.SetArgs([]string{"--wait"})
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	err := cmd.Execute()
+	if err == nil || !wait.IsUnknownStatus(err) {
+		t.Fatalf("err=%v, want unknown-status", err)
+	}
+}
+
+func TestWaitCtxAccessorsExposeDeclaredCapability(t *testing.T) {
+	var gotWait bool
+	var gotTimeout int
+	cmd := New(baseWaitSpec(waitTestDecl(), func(c *Ctx) (wait.PollDoc, error) {
+		gotWait = c.Wait()
+		gotTimeout = c.WaitTimeoutSecs()
+		return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+	}))
+	cmd.SetArgs([]string{"--wait", "--wait-timeout", "90"})
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !gotWait || gotTimeout != 90 {
+		t.Fatalf("ctx accessors=%v/%d", gotWait, gotTimeout)
+	}
+}
+
 func TestResultInvokeWaitClosesEnvelopeOutcome(t *testing.T) {
-	wait.SwapSleepForTest(t, func(time.Duration) {})
 	cmd := New(baseWaitSpec(waitTestDecl(), func(*Ctx) (wait.PollDoc, error) {
 		return wait.PollDoc{"result": map[string]any{"status": "REJECTED"}}, nil
 	}))
@@ -139,8 +208,11 @@ func TestResultInvokeWaitClosesEnvelopeOutcome(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if code, emitted := output.StoredExitCode(store); !emitted || code == 0 {
-		t.Fatalf("stored code/emitted=%d/%v, want non-zero for terminal failure", code, emitted)
+	if code, emitted := output.StoredExitCode(store); !emitted || code != 8 {
+		t.Fatalf("stored code/emitted=%d/%v, want dedicated wait-terminal-failure code 8", code, emitted)
+	}
+	if !strings.Contains(stdout.String(), `"type": "wait"`) {
+		t.Fatalf("stdout=%s, want error.type wait", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), `"outcome": "failure"`) {
 		t.Fatalf("stdout=%s", stdout.String())
@@ -148,7 +220,6 @@ func TestResultInvokeWaitClosesEnvelopeOutcome(t *testing.T) {
 }
 
 func TestResultInvokeWaitTimeoutKeepsPending(t *testing.T) {
-	wait.SwapSleepForTest(t, func(time.Duration) {})
 	polls := 0
 	cmd := New(baseWaitSpec(waitTestDecl(), func(*Ctx) (wait.PollDoc, error) {
 		polls++
@@ -177,23 +248,70 @@ func TestResultInvokeWaitTimeoutKeepsPending(t *testing.T) {
 	}
 }
 
-func TestInvokeWithoutWaitFlagSkipsPhase(t *testing.T) {
+func TestWaitDeclRequiresResultInvokeDispatcher(t *testing.T) {
+	// A declared wait on the legacy Invoke path would observe a failure
+	// terminal while still exiting 0 — construction must reject it.
+	expectPanic(t, func() {
+		New(Spec{
+			Use:      "wait-sample",
+			Safety:   contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+			Contract: waitTestDecl(),
+			WaitPoll: func(*Ctx) (wait.PollDoc, error) { return nil, nil },
+			Invoke:   func(*Ctx, map[string]any) error { return nil },
+		})
+	}, "ResultInvoke")
+}
+
+func TestResultInvokeWithoutWaitFlagSkipsPhase(t *testing.T) {
 	polled := false
-	cmd := New(Spec{
-		Use:      "wait-sample",
-		Safety:   contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
-		Contract: waitTestDecl(),
-		WaitPoll: func(*Ctx) (wait.PollDoc, error) {
-			polled = true
-			return nil, nil
-		},
-		Invoke: func(*Ctx, map[string]any) error { return nil },
-	})
+	cmd := New(baseWaitSpec(waitTestDecl(), func(*Ctx) (wait.PollDoc, error) {
+		polled = true
+		return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+	}))
 	cmd.SetArgs(nil)
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
 	if polled {
 		t.Fatal("wait phase ran without --wait")
 	}
+}
+
+func TestAttachContractPanicsOnInvalidWaitDeclaration(t *testing.T) {
+	decl := waitTestDecl()
+	decl.Wait.Mode = "event" // not implemented
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			t.Fatal("expected panic on invalid Contract.Wait")
+		}
+		if message, ok := recovered.(string); !ok || !strings.Contains(message, "Contract.Wait") {
+			t.Fatalf("panic=%v", recovered)
+		}
+	}()
+	AttachContract(&cobra.Command{Use: "wait-sample"}, contract.SafetySpec{
+		Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
+	}, decl, "", "")
+}
+
+func TestContractDeclEmptyTreatsWaitAsAuthored(t *testing.T) {
+	// Only Wait is authored: empty() must report non-empty through the Wait
+	// branch (before validateContractDecl then fails on the missing prose).
+	decl := ContractDecl{Wait: &contract.WaitSpec{
+		Mode:        contract.WaitModePoll,
+		PollCommand: "oa approval-instance get",
+		StatusQuery: "result.status",
+		Terminal:    map[string]contract.ResultOutcome{"COMPLETED": contract.ResultOutcomeSuccess},
+	}}
+	if decl.Empty() {
+		t.Fatal("Wait-only declaration must count as authored")
+	}
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected validateContractDecl to reject the missing prose")
+		}
+	}()
+	validateContractDecl(Spec{Use: "wait-only", Contract: decl})
 }

@@ -28,25 +28,6 @@ func TestWaitSpecValidateAcceptsReviewedShapes(t *testing.T) {
 			PendingValues:      []string{"NEW", "RUNNING"},
 			DefaultTimeoutSecs: 600,
 		},
-		{
-			Mode:       WaitModeEvent,
-			EventKey:   "bpms_instance_change",
-			MatchField: "process_instance_id",
-			Terminal: map[string]ResultOutcome{
-				"COMPLETED": ResultOutcomeSuccess,
-			},
-		},
-		{
-			Mode:        WaitModeAuto,
-			PollCommand: "doc export get",
-			StatusQuery: "status",
-			EventKey:    "export_finished",
-			MatchField:  "job_id",
-			Terminal: map[string]ResultOutcome{
-				"SUCCESS": ResultOutcomeSuccess,
-				"FAILED":  ResultOutcomeFailure,
-			},
-		},
 	}
 	for i, spec := range cases {
 		if err := spec.Validate("sample.tool"); err != nil {
@@ -75,20 +56,24 @@ func TestWaitSpecValidateRejectsMalformedShapes(t *testing.T) {
 			PollCommand: "oa approval-instance get",
 			Terminal:    terminal,
 		},
-		"event without event_key": {
-			Mode:       WaitModeEvent,
-			MatchField: "id",
-			Terminal:   terminal,
+		"event mode not implemented": {
+			Mode:     "event",
+			Terminal: terminal,
 		},
-		"event without match_field": {
-			Mode:     WaitModeEvent,
-			EventKey: "bpms_instance_change",
+		"auto mode not implemented": {
+			Mode:     "auto",
 			Terminal: terminal,
 		},
 		"no terminal states": {
 			Mode:        WaitModePoll,
 			PollCommand: "oa approval-instance get",
 			StatusQuery: "status",
+		},
+		"blank terminal status": {
+			Mode:        WaitModePoll,
+			PollCommand: "oa approval-instance get",
+			StatusQuery: "status",
+			Terminal:    map[string]ResultOutcome{" ": ResultOutcomeSuccess},
 		},
 		"terminal outcome pending": {
 			Mode:        WaitModePoll,

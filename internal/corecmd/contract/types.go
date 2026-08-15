@@ -62,13 +62,13 @@ type DryRunSpec struct {
 	RemoteReads bool   `json:"remote_reads,omitempty"`
 }
 
-// Wait modes. Poll executes a declared read command on a cadence; event
-// subscribes to a push channel; auto prefers event and falls back to poll.
-const (
-	WaitModePoll  = "poll"
-	WaitModeEvent = "event"
-	WaitModeAuto  = "auto"
-)
+// WaitModePoll is the only implemented wait mode: the framework polls the
+// leaf's WaitPoll hook on a cadence. Event-driven waiting (subscribe to a
+// push channel, fall back to poll) is a planned capability and will add its
+// own mode constant plus execution path — until then declaring anything but
+// poll fails validation instead of silently executing polls behind an event
+// declaration.
+const WaitModePoll = "poll"
 
 // WaitSpec is a positive capability declaration for terminal-state waiting
 // (approval flows, async exports, batch jobs). A nil ToolSpec.Wait means the
@@ -87,8 +87,6 @@ type WaitSpec struct {
 	StatusQuery   string                   `json:"status_query"`
 	Terminal      map[string]ResultOutcome `json:"terminal"`
 	PendingValues []string                 `json:"pending_values,omitempty"`
-	EventKey      string                   `json:"event_key,omitempty"`
-	MatchField    string                   `json:"match_field,omitempty"`
 	// DefaultTimeoutSecs is the reviewed default for --wait-timeout. Zero
 	// means the framework default (300s); the user flag always wins.
 	DefaultTimeoutSecs int `json:"default_timeout_secs"`
@@ -99,28 +97,19 @@ type WaitSpec struct {
 // declaration so a malformed wait capability cannot reach the wire.
 func (w WaitSpec) Validate(canonical string) error {
 	canonical = defaultString(strings.TrimSpace(canonical), "<unknown>")
-	switch strings.TrimSpace(w.Mode) {
-	case WaitModePoll, WaitModeEvent, WaitModeAuto:
-	case "":
+	if strings.TrimSpace(w.Mode) == "" {
 		return fmt.Errorf("schema tool %s wait has no mode", canonical)
-	default:
-		return fmt.Errorf("schema tool %s wait has unknown mode %q", canonical, w.Mode)
 	}
-	mode := strings.TrimSpace(w.Mode)
-	needsPoll := mode == WaitModePoll || mode == WaitModeAuto
-	if needsPoll && strings.TrimSpace(w.PollCommand) == "" {
-		return fmt.Errorf("schema tool %s wait mode %s requires poll_command", canonical, mode)
+	if strings.TrimSpace(w.Mode) != WaitModePoll {
+		return fmt.Errorf(
+			"schema tool %s wait mode %q is not implemented; only %q is available today",
+			canonical, w.Mode, WaitModePoll)
 	}
-	if needsPoll && strings.TrimSpace(w.StatusQuery) == "" {
-		return fmt.Errorf("schema tool %s wait mode %s requires status_query", canonical, mode)
+	if strings.TrimSpace(w.PollCommand) == "" {
+		return fmt.Errorf("schema tool %s wait mode %s requires poll_command", canonical, WaitModePoll)
 	}
-	if mode == WaitModeEvent {
-		if strings.TrimSpace(w.EventKey) == "" {
-			return fmt.Errorf("schema tool %s wait mode event requires event_key", canonical)
-		}
-		if strings.TrimSpace(w.MatchField) == "" {
-			return fmt.Errorf("schema tool %s wait mode event requires match_field", canonical)
-		}
+	if strings.TrimSpace(w.StatusQuery) == "" {
+		return fmt.Errorf("schema tool %s wait mode %s requires status_query", canonical, WaitModePoll)
 	}
 	if len(w.Terminal) == 0 {
 		return fmt.Errorf("schema tool %s wait has no terminal states", canonical)
@@ -136,7 +125,6 @@ func (w WaitSpec) Validate(canonical string) error {
 		}
 		pending[value] = true
 	}
-	nonPendingTerminal := false
 	for status, outcome := range w.Terminal {
 		if strings.TrimSpace(status) == "" {
 			return fmt.Errorf("schema tool %s wait has a blank terminal status", canonical)
@@ -150,10 +138,6 @@ func (w WaitSpec) Validate(canonical string) error {
 				"schema tool %s wait terminal status %q must map to success or failure, got %q",
 				canonical, status, outcome)
 		}
-		nonPendingTerminal = true
-	}
-	if !nonPendingTerminal {
-		return fmt.Errorf("schema tool %s wait has no terminal states", canonical)
 	}
 	if w.DefaultTimeoutSecs < 0 {
 		return fmt.Errorf("schema tool %s wait default_timeout_secs must be >= 0", canonical)
