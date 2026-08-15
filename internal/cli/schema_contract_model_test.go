@@ -995,9 +995,13 @@ func TestToolSpecWaitCapabilityIsPositiveOnly(t *testing.T) {
 		t.Fatalf("nil capability unexpectedly emitted wait: %#v", payload["wait"])
 	}
 
-	base.Wait = &contract.WaitSpec{Mode: "event"} // not implemented
-	if _, err := ToolSpecFromRuntime(base); err == nil || !strings.Contains(err.Error(), "not implemented") {
+	base.Wait = &contract.WaitSpec{Mode: "webhook"}
+	if _, err := ToolSpecFromRuntime(base); err == nil || !strings.Contains(err.Error(), "unknown mode") {
 		t.Fatalf("invalid mode error = %v", err)
+	}
+	base.Wait = &contract.WaitSpec{Mode: contract.WaitModeEvent, StatusQuery: "status", Terminal: map[string]contract.ResultOutcome{"DONE": contract.ResultOutcomeSuccess}}
+	if _, err := ToolSpecFromRuntime(base); err == nil || !strings.Contains(err.Error(), "requires event_key") {
+		t.Fatalf("event mode body error = %v", err)
 	}
 
 	base.Wait = &contract.WaitSpec{

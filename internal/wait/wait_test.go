@@ -16,6 +16,7 @@ package wait
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -262,5 +263,103 @@ func TestNextIntervalCapsAtMax(t *testing.T) {
 	}
 	if got := nextInterval(10 * time.Millisecond); got != 15*time.Millisecond {
 		t.Fatalf("nextInterval(10ms)=%s", got)
+	}
+}
+
+type fakeEventStream struct {
+	events []PollDoc
+	err    error // returned after events are exhausted (nil = clean end)
+	block  bool  // hold until the context deadline
+}
+
+func (f *fakeEventStream) Recv(ctx context.Context) (PollDoc, error) {
+	if f.block {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if len(f.events) > 0 {
+		doc := f.events[0]
+		f.events = f.events[1:]
+		return doc, nil
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+	return nil, io.EOF
+}
+
+func eventLoopSpec() EventLoopSpec {
+	return EventLoopSpec{
+		StatusQuery: "result.status",
+		MatchField:  "process_instance_id",
+		Terminal: map[string]contract.ResultOutcome{
+			"COMPLETED": contract.ResultOutcomeSuccess,
+			"REJECTED":  contract.ResultOutcomeFailure,
+		},
+		Pending: []string{"RUNNING"},
+	}
+}
+
+func approvalEvent(instance, status string) PollDoc {
+	return PollDoc{"process_instance_id": instance, "result": map[string]any{"status": status}}
+}
+
+func TestRunEventReturnsCorrelatedTerminal(t *testing.T) {
+	stream := &fakeEventStream{events: []PollDoc{
+		approvalEvent("other-instance", "COMPLETED"), // other resource: ignored
+		approvalEvent("job-1", "RUNNING"),            // correlated pending: kept waiting
+		approvalEvent("job-1", "COMPLETED"),
+	}}
+	outcome, err := RunEvent(context.Background(), eventLoopSpec(), "job-1", stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome.Outcome != contract.ResultOutcomeSuccess || outcome.Status != "COMPLETED" {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+}
+
+func TestRunEventFailsClosedOnUnknownCorrelatedStatus(t *testing.T) {
+	stream := &fakeEventStream{events: []PollDoc{approvalEvent("job-1", "Mystery")}}
+	_, err := RunEvent(context.Background(), eventLoopSpec(), "job-1", stream)
+	if !IsUnknownStatus(err) {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRunEventRejectsCorrelatedEventWithoutStatus(t *testing.T) {
+	stream := &fakeEventStream{events: []PollDoc{
+		{"process_instance_id": "job-1"}, // correlated but no status document
+	}}
+	_, err := RunEvent(context.Background(), eventLoopSpec(), "job-1", stream)
+	if err == nil || !strings.Contains(err.Error(), "status query") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRunEventStreamEndSurfacesFallbackSentinel(t *testing.T) {
+	stream := &fakeEventStream{events: []PollDoc{approvalEvent("job-1", "RUNNING")}}
+	_, err := RunEvent(context.Background(), eventLoopSpec(), "job-1", stream)
+	if !errors.Is(err, ErrEventStreamEnded) {
+		t.Fatalf("err=%v, want ErrEventStreamEnded", err)
+	}
+
+	failing := &fakeEventStream{err: errors.New("transport reset")}
+	_, err = RunEvent(context.Background(), eventLoopSpec(), "job-1", failing)
+	if !errors.Is(err, ErrEventStreamEnded) {
+		t.Fatalf("err=%v, want ErrEventStreamEnded wrapping the transport error", err)
+	}
+}
+
+func TestRunEventTimesOutAsPendingWhileBlocked(t *testing.T) {
+	spec := eventLoopSpec()
+	spec.Timeout = 5 * time.Millisecond
+	stream := &fakeEventStream{block: true}
+	outcome, err := RunEvent(context.Background(), spec, "job-1", stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !outcome.TimedOut || outcome.Outcome != contract.ResultOutcomePending {
+		t.Fatalf("outcome=%+v", outcome)
 	}
 }

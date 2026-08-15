@@ -200,3 +200,74 @@ func IsUnknownStatus(err error) bool {
 	var unknown *ErrUnknownStatus
 	return errors.As(err, &unknown)
 }
+
+// EventStream is the leaf-owned push subscription consumed by the event
+// phase (the WaitEvents hook in corecmd). Recv delivers the next decoded
+// event document; it returns an error or io.EOF-style termination when the
+// stream ends — the engine treats non-terminal termination as a stream
+// failure the caller (auto mode) may fall back from.
+type EventStream interface {
+	Recv(ctx context.Context) (PollDoc, error)
+}
+
+// EventLoopSpec is the event-phase projection of contract.WaitSpec.
+type EventLoopSpec struct {
+	StatusQuery string
+	MatchField  string
+	Terminal    map[string]contract.ResultOutcome
+	Pending     []string
+	Timeout     time.Duration
+}
+
+// ErrEventStreamEnded reports a stream that terminated before a terminal
+// status. Auto mode uses it to fall back to polling; strict event mode
+// surfaces it as a wait failure.
+var ErrEventStreamEnded = errors.New("wait: event stream ended before a terminal status")
+
+// RunEvent consumes stream until a correlated event reaches a declared
+// terminal status, the deadline exhausts, or the stream ends. Events whose
+// MatchField value does not equal resource are ignored (other resources on
+// the same channel); a correlated event with an unknown status fails closed
+// exactly like a poll would.
+func RunEvent(ctx context.Context, spec EventLoopSpec, resource string, stream EventStream) (Outcome, error) {
+	if spec.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, spec.Timeout)
+		defer cancel()
+	}
+	pending := make(map[string]bool, len(spec.Pending))
+	for _, value := range spec.Pending {
+		pending[value] = true
+	}
+	attempts := 0
+	lastStatus := ""
+	for {
+		doc, err := stream.Recv(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return Outcome{Status: lastStatus, Outcome: contract.ResultOutcomePending, Attempts: attempts, TimedOut: true}, nil
+			}
+			// Wrap with ErrEventStreamEnded so auto mode can fall back to
+			// polling while correlated-status failures (unknown status,
+			// missing status query) stay non-recoverable.
+			return Outcome{Attempts: attempts}, fmt.Errorf("%w: %v", ErrEventStreamEnded, err)
+		}
+		attempts++
+		correlated, ok := ExtractStatus(doc, spec.MatchField)
+		if !ok || correlated != resource {
+			continue
+		}
+		status, ok := ExtractStatus(doc, spec.StatusQuery)
+		if !ok {
+			return Outcome{Attempts: attempts}, fmt.Errorf(
+				"wait: status query %q not found in event document", spec.StatusQuery)
+		}
+		lastStatus = status
+		if outcome, ok := spec.Terminal[status]; ok {
+			return Outcome{Status: status, Outcome: outcome, Attempts: attempts}, nil
+		}
+		if !pending[status] {
+			return Outcome{Status: status, Attempts: attempts}, &ErrUnknownStatus{Status: status, Query: spec.StatusQuery}
+		}
+	}
+}

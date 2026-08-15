@@ -62,13 +62,15 @@ type DryRunSpec struct {
 	RemoteReads bool   `json:"remote_reads,omitempty"`
 }
 
-// WaitModePoll is the only implemented wait mode: the framework polls the
-// leaf's WaitPoll hook on a cadence. Event-driven waiting (subscribe to a
-// push channel, fall back to poll) is a planned capability and will add its
-// own mode constant plus execution path — until then declaring anything but
-// poll fails validation instead of silently executing polls behind an event
-// declaration.
-const WaitModePoll = "poll"
+// Wait modes. Poll executes the leaf's WaitPoll hook on a cadence. Event
+// consumes the leaf's WaitEvents push stream and correlates events to the
+// accepted resource. Auto prefers the event stream and falls back to polling
+// when the stream ends before a terminal status.
+const (
+	WaitModePoll  = "poll"
+	WaitModeEvent = "event"
+	WaitModeAuto  = "auto"
+)
 
 // WaitSpec is a positive capability declaration for terminal-state waiting
 // (approval flows, async exports, batch jobs). A nil ToolSpec.Wait means the
@@ -77,16 +79,29 @@ const WaitModePoll = "poll"
 //
 // Like DryRunSpec, the object is one atomic contract field: Schema only
 // projects the reviewed capability; runtime execution stays owned by the
-// command runner through the leaf's WaitPoll hook. PollCommand names the
-// read command that observes status — it is a declared, catalog-visible fact
-// (the same command an agent would poll manually), not a framework-owned
-// invocation: how one poll executes is decided by the leaf.
+// command runner through the leaf's WaitPoll / WaitEvents hooks. PollCommand
+// names the read command that observes status — it is a declared,
+// catalog-visible fact (the same command an agent would poll manually), not
+// a framework-owned invocation: how one poll or event subscription executes
+// is decided by the leaf.
 type WaitSpec struct {
 	Mode          string                   `json:"mode"`
 	PollCommand   string                   `json:"poll_command,omitempty"`
 	StatusQuery   string                   `json:"status_query"`
 	Terminal      map[string]ResultOutcome `json:"terminal"`
 	PendingValues []string                 `json:"pending_values,omitempty"`
+	// EventKey is the push channel key the WaitEvents hook subscribes to
+	// (event/auto modes). Declared for the catalog; the transport stays
+	// leaf-owned.
+	EventKey string `json:"event_key,omitempty"`
+	// MatchField is the event-document path holding the resource identifier
+	// (event/auto modes); its value must equal the ResourceQuery resolution
+	// of the accepted result.
+	MatchField string `json:"match_field,omitempty"`
+	// ResourceQuery is the dotted path into the accepted result data that
+	// yields the resource identifier correlated against MatchField
+	// (event/auto modes).
+	ResourceQuery string `json:"resource_query,omitempty"`
 	// DefaultTimeoutSecs is the reviewed default for --wait-timeout. Zero
 	// means the framework default (300s); the user flag always wins.
 	DefaultTimeoutSecs int `json:"default_timeout_secs"`
@@ -100,16 +115,30 @@ func (w WaitSpec) Validate(canonical string) error {
 	if strings.TrimSpace(w.Mode) == "" {
 		return fmt.Errorf("schema tool %s wait has no mode", canonical)
 	}
-	if strings.TrimSpace(w.Mode) != WaitModePoll {
-		return fmt.Errorf(
-			"schema tool %s wait mode %q is not implemented; only %q is available today",
-			canonical, w.Mode, WaitModePoll)
+	mode := strings.TrimSpace(w.Mode)
+	switch mode {
+	case WaitModePoll, WaitModeEvent, WaitModeAuto:
+	default:
+		return fmt.Errorf("schema tool %s wait has unknown mode %q", canonical, w.Mode)
 	}
-	if strings.TrimSpace(w.PollCommand) == "" {
-		return fmt.Errorf("schema tool %s wait mode %s requires poll_command", canonical, WaitModePoll)
+	needsPoll := mode == WaitModePoll || mode == WaitModeAuto
+	if needsPoll && strings.TrimSpace(w.PollCommand) == "" {
+		return fmt.Errorf("schema tool %s wait mode %s requires poll_command", canonical, mode)
+	}
+	needsEvent := mode == WaitModeEvent || mode == WaitModeAuto
+	if needsEvent {
+		if strings.TrimSpace(w.EventKey) == "" {
+			return fmt.Errorf("schema tool %s wait mode %s requires event_key", canonical, mode)
+		}
+		if strings.TrimSpace(w.MatchField) == "" {
+			return fmt.Errorf("schema tool %s wait mode %s requires match_field", canonical, mode)
+		}
+		if strings.TrimSpace(w.ResourceQuery) == "" {
+			return fmt.Errorf("schema tool %s wait mode %s requires resource_query", canonical, mode)
+		}
 	}
 	if strings.TrimSpace(w.StatusQuery) == "" {
-		return fmt.Errorf("schema tool %s wait mode %s requires status_query", canonical, WaitModePoll)
+		return fmt.Errorf("schema tool %s wait mode %s requires status_query", canonical, mode)
 	}
 	if len(w.Terminal) == 0 {
 		return fmt.Errorf("schema tool %s wait has no terminal states", canonical)

@@ -87,3 +87,16 @@ func TestWithOperationTimedOutWithoutOperationInfoLeavesEnvelopeUntouched(t *tes
 		t.Fatalf("err=%v, want pending-requires-operation rejection", err)
 	}
 }
+
+func TestDataAccessorReturnsDeepCopy(t *testing.T) {
+	result := pendingAcceptedResult()
+	data, ok := result.Data().(map[string]any)
+	if !ok {
+		t.Fatalf("data=%#v", result.Data())
+	}
+	data["id"] = "mutated"
+	again := result.Data().(map[string]any)
+	if again["id"] != "job-1" {
+		t.Fatalf("Data() aliased internal state: %#v", again)
+	}
+}

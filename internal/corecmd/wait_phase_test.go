@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -192,6 +193,183 @@ func TestWaitCtxAccessorsExposeDeclaredCapability(t *testing.T) {
 	}
 }
 
+func eventTestDecl(mode string) ContractDecl {
+	decl := waitTestDecl()
+	decl.Wait.Mode = mode
+	decl.Wait.EventKey = "bpms_instance_change"
+	decl.Wait.MatchField = "process_instance_id"
+	decl.Wait.ResourceQuery = "id"
+	return decl
+}
+
+type scriptedStream struct {
+	events []wait.PollDoc
+	err    error
+}
+
+func (s *scriptedStream) Recv(context.Context) (wait.PollDoc, error) {
+	if len(s.events) > 0 {
+		doc := s.events[0]
+		s.events = s.events[1:]
+		return doc, nil
+	}
+	if s.err != nil {
+		return nil, s.err
+	}
+	return nil, io.EOF
+}
+
+func TestValidateWaitDeclPairsModeWithHooks(t *testing.T) {
+	poll := func(*Ctx) (wait.PollDoc, error) { return nil, nil }
+	events := func(*Ctx) (wait.EventStream, error) { return nil, nil }
+	cases := []struct {
+		name       string
+		mode       string
+		waitPoll   bool
+		waitEvents bool
+		want       string
+	}{
+		{"event without WaitEvents", contract.WaitModeEvent, false, false, "WaitEvents"},
+		{"auto without WaitPoll", contract.WaitModeAuto, false, true, "WaitPoll"},
+		{"poll with WaitEvents", contract.WaitModePoll, true, true, "WaitEvents"},
+		{"event with WaitPoll", contract.WaitModeEvent, true, true, "WaitPoll"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			expectPanic(t, func() {
+				New(Spec{
+					Use:           "wait-sample",
+					OutputRollout: output.RolloutUnifiedActive,
+					Safety:        contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+					Contract:      eventTestDecl(tc.mode),
+					ResultInvoke: func(*Ctx, map[string]any) (output.CommandResult, error) {
+						return output.Pending(map[string]any{}, nil), nil
+					},
+					WaitPoll:   hookOrNil(tc.waitPoll, poll),
+					WaitEvents: eventHookOrNil(tc.waitEvents, events),
+				})
+			}, tc.want)
+		})
+	}
+}
+
+func hookOrNil(set bool, hook func(*Ctx) (wait.PollDoc, error)) func(*Ctx) (wait.PollDoc, error) {
+	if !set {
+		return nil
+	}
+	return hook
+}
+
+func eventHookOrNil(set bool, hook func(*Ctx) (wait.EventStream, error)) func(*Ctx) (wait.EventStream, error) {
+	if !set {
+		return nil
+	}
+	return hook
+}
+
+func runWaitModeCommand(t *testing.T, decl ContractDecl, poll func(*Ctx) (wait.PollDoc, error), events func(*Ctx) (wait.EventStream, error), args ...string) (string, error) {
+	t.Helper()
+	cmd := New(Spec{
+		Use:           "wait-sample",
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+		Contract:      decl,
+		ResultInvoke: func(*Ctx, map[string]any) (output.CommandResult, error) {
+			return output.Pending(map[string]any{"id": "job-1"}, &output.OperationInfo{
+				ID: "job-1", State: "NEW", NextCommand: "dws wait-sample --id job-1",
+			}), nil
+		},
+		WaitPoll:   poll,
+		WaitEvents: events,
+	})
+	cmd.SetArgs(append([]string{"--wait"}, args...))
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.PersistentPostRunE = func(executed *cobra.Command, _ []string) error {
+		_, _, err := output.EmitStoredResult(executed)
+		return err
+	}
+	err := cmd.Execute()
+	return stdout.String(), err
+}
+
+func TestEventModeClosesEnvelopeFromCorrelatedEvent(t *testing.T) {
+	stream := &scriptedStream{events: []wait.PollDoc{
+		{"process_instance_id": "other", "result": map[string]any{"status": "COMPLETED"}},
+		{"process_instance_id": "job-1", "result": map[string]any{"status": "REJECTED"}},
+	}}
+	stdout, err := runWaitModeCommand(t, eventTestDecl(contract.WaitModeEvent), nil, func(*Ctx) (wait.EventStream, error) {
+		return stream, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, `"outcome": "failure"`) || !strings.Contains(stdout, `"type": "wait"`) {
+		t.Fatalf("stdout=%s", stdout)
+	}
+}
+
+func TestEventModeSurfacesStreamEndAsError(t *testing.T) {
+	_, err := runWaitModeCommand(t, eventTestDecl(contract.WaitModeEvent), nil, func(*Ctx) (wait.EventStream, error) {
+		return &scriptedStream{}, nil
+	})
+	if err == nil || !errors.Is(err, wait.ErrEventStreamEnded) {
+		t.Fatalf("err=%v, want stream-ended", err)
+	}
+}
+
+func TestEventModeRejectsUnresolvableResource(t *testing.T) {
+	decl := eventTestDecl(contract.WaitModeEvent)
+	decl.Wait.ResourceQuery = "missing"
+	_, err := runWaitModeCommand(t, decl, nil, func(*Ctx) (wait.EventStream, error) {
+		return &scriptedStream{}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "resource query") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestAutoModeFallsBackToPollOnStreamEnd(t *testing.T) {
+	polled := false
+	stdout, err := runWaitModeCommand(t, eventTestDecl(contract.WaitModeAuto),
+		func(*Ctx) (wait.PollDoc, error) {
+			polled = true
+			return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+		},
+		func(*Ctx) (wait.EventStream, error) {
+			return &scriptedStream{}, nil // ends immediately
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !polled {
+		t.Fatal("auto mode did not fall back to polling")
+	}
+	if !strings.Contains(stdout, `"outcome": "success"`) {
+		t.Fatalf("stdout=%s", stdout)
+	}
+}
+
+func TestAutoModeFallsBackToPollOnSubscriptionFailure(t *testing.T) {
+	polled := false
+	_, err := runWaitModeCommand(t, eventTestDecl(contract.WaitModeAuto),
+		func(*Ctx) (wait.PollDoc, error) {
+			polled = true
+			return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+		},
+		func(*Ctx) (wait.EventStream, error) {
+			return nil, errors.New("no subscriber credential")
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !polled {
+		t.Fatal("auto mode did not fall back to polling on subscription failure")
+	}
+}
+
 func TestResultInvokeWaitClosesEnvelopeOutcome(t *testing.T) {
 	cmd := New(baseWaitSpec(waitTestDecl(), func(*Ctx) (wait.PollDoc, error) {
 		return wait.PollDoc{"result": map[string]any{"status": "REJECTED"}}, nil
@@ -314,4 +492,38 @@ func TestContractDeclEmptyTreatsWaitAsAuthored(t *testing.T) {
 		}
 	}()
 	validateContractDecl(Spec{Use: "wait-only", Contract: decl})
+}
+
+func TestEventModeRejectsNonObjectResultData(t *testing.T) {
+	cmd := New(Spec{
+		Use:           "wait-sample",
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+		Contract:      eventTestDecl(contract.WaitModeEvent),
+		ResultInvoke: func(*Ctx, map[string]any) (output.CommandResult, error) {
+			return output.Pending([]any{"not", "an", "object"}, &output.OperationInfo{
+				ID: "job-1", State: "NEW", NextCommand: "dws wait-sample",
+			}), nil
+		},
+		WaitEvents: func(*Ctx) (wait.EventStream, error) {
+			return &scriptedStream{}, nil
+		},
+	})
+	cmd.SetArgs([]string{"--wait"})
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "not an object") {
+		t.Fatalf("err=%v, want non-object data rejection", err)
+	}
+}
+
+func TestEventModeSubscriptionFailureSurfacesInStrictMode(t *testing.T) {
+	decl := eventTestDecl(contract.WaitModeEvent)
+	_, err := runWaitModeCommand(t, decl, nil, func(*Ctx) (wait.EventStream, error) {
+		return nil, errors.New("no subscriber credential")
+	})
+	if err == nil || !strings.Contains(err.Error(), "subscription failed") {
+		t.Fatalf("err=%v, want subscription failure surfaced", err)
+	}
 }

@@ -287,11 +287,15 @@ type Spec struct {
 	Orchestrate func(c *Ctx) error
 	// WaitPoll executes one poll of the declared Contract.Wait capability.
 	// Exactly one poll is one call; cadence, status extraction, and outcome
-	// mapping belong to the framework wait phase. Required iff Contract.Wait
-	// is declared (and forbidden otherwise) — a declared capability without a
-	// runtime implementation can never honor --wait, so New rejects it at
-	// construction.
+	// mapping belong to the framework wait phase. Required for poll/auto
+	// declarations — a declared capability without a runtime implementation
+	// can never honor --wait, so New rejects the pairing at construction.
 	WaitPoll func(c *Ctx) (wait.PollDoc, error)
+	// WaitEvents opens the push subscription of the declared Contract.Wait
+	// capability (event/auto modes). The framework owns correlation and
+	// status mapping; the leaf owns the transport. Auto mode falls back to
+	// WaitPoll when the stream ends before a terminal status.
+	WaitEvents func(c *Ctx) (wait.EventStream, error)
 }
 
 // Ctx is the framework-neutral execution context handed to Invoke/Orchestrate.
@@ -556,21 +560,43 @@ const DefaultWaitTimeoutSecs = defaultWaitTimeoutS
 // and would observe a failure terminal while still exiting 0. All three
 // mismatches are programming errors.
 func validateWaitDecl(spec Spec) {
-	declared := spec.Contract.Wait != nil && strings.TrimSpace(spec.Contract.Wait.Mode) != ""
-	if declared && spec.WaitPoll == nil {
-		panic(fmt.Sprintf(
-			"command %q declares Contract.Wait but sets no WaitPoll: a declared wait capability must carry its runtime poll implementation",
-			spec.Use))
+	decl := spec.Contract.Wait
+	declared := decl != nil && strings.TrimSpace(decl.Mode) != ""
+	if !declared {
+		if spec.WaitPoll != nil || spec.WaitEvents != nil {
+			panic(fmt.Sprintf(
+				"command %q sets a wait hook without declaring Contract.Wait: the wait flags and Schema capability come from the declaration",
+				spec.Use))
+		}
+		return
 	}
-	if declared && spec.ResultInvoke == nil {
+	if spec.ResultInvoke == nil {
 		panic(fmt.Sprintf(
 			"command %q declares Contract.Wait without ResultInvoke: wait closes the unified-result envelope, which legacy Invoke/Orchestrate/RunE paths cannot rewrite",
 			spec.Use))
 	}
-	if !declared && spec.WaitPoll != nil {
+	mode := strings.TrimSpace(decl.Mode)
+	needsPoll := mode == contract.WaitModePoll || mode == contract.WaitModeAuto
+	needsEvent := mode == contract.WaitModeEvent || mode == contract.WaitModeAuto
+	if needsPoll && spec.WaitPoll == nil {
 		panic(fmt.Sprintf(
-			"command %q sets WaitPoll without declaring Contract.Wait: the wait flags and Schema capability come from the declaration",
-			spec.Use))
+			"command %q declares wait mode %s but sets no WaitPoll: a declared wait capability must carry its runtime poll implementation",
+			spec.Use, mode))
+	}
+	if needsEvent && spec.WaitEvents == nil {
+		panic(fmt.Sprintf(
+			"command %q declares wait mode %s but sets no WaitEvents: a declared event wait must carry its runtime subscription",
+			spec.Use, mode))
+	}
+	if !needsPoll && spec.WaitPoll != nil {
+		panic(fmt.Sprintf(
+			"command %q declares wait mode %s but sets WaitPoll: the declaration decides which hooks run",
+			spec.Use, mode))
+	}
+	if !needsEvent && spec.WaitEvents != nil {
+		panic(fmt.Sprintf(
+			"command %q declares wait mode %s but sets WaitEvents: the declaration decides which hooks run",
+			spec.Use, mode))
 	}
 }
 
@@ -602,14 +628,7 @@ func runDeclaredWaitPhase(cmd *cobra.Command, args []string, spec Spec, result o
 	decl := spec.Contract.Wait
 	timeout := time.Duration(waitTimeoutSecs(cmd)) * time.Second
 	ctx := newCtx(cmd, args, spec.Flags)
-	outcome, err := wait.Run(cmd.Context(), wait.LoopSpec{
-		StatusQuery: decl.StatusQuery,
-		Terminal:    decl.Terminal,
-		Pending:     decl.PendingValues,
-		Timeout:     timeout,
-	}, func(context.Context) (wait.PollDoc, error) {
-		return spec.WaitPoll(ctx)
-	})
+	outcome, err := runWaitLoop(cmd.Context(), decl, timeout, spec, ctx, result)
 	if err != nil {
 		return result, err
 	}
@@ -627,6 +646,81 @@ func runDeclaredWaitPhase(cmd *cobra.Command, args []string, spec Spec, result o
 			})), nil
 	}
 	return output.WithOutcome(result, output.OutcomeSuccess), nil
+}
+
+// runWaitLoop executes the declared wait mode. One deadline spans the event
+// phase and an auto-mode poll fallback (the inner loops run without their
+// own timeouts and inherit this context's deadline).
+func runWaitLoop(parent context.Context, decl *contract.WaitSpec, timeout time.Duration, spec Spec, ctx *Ctx, result output.CommandResult) (wait.Outcome, error) {
+	loopCtx := parent
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		loopCtx, cancel = context.WithTimeout(parent, timeout)
+		defer cancel()
+	}
+	mode := strings.TrimSpace(decl.Mode)
+	if mode == contract.WaitModePoll {
+		return wait.Run(loopCtx, wait.LoopSpec{
+			StatusQuery: decl.StatusQuery,
+			Terminal:    decl.Terminal,
+			Pending:     decl.PendingValues,
+		}, func(context.Context) (wait.PollDoc, error) {
+			return spec.WaitPoll(ctx)
+		})
+	}
+	resource, err := waitResource(decl, result)
+	if err != nil {
+		return wait.Outcome{}, err
+	}
+	stream, err := spec.WaitEvents(ctx)
+	if err != nil {
+		if mode == contract.WaitModeAuto {
+			// Subscription failed before any event: fall back to polling.
+			return pollWithSpec(loopCtx, decl, spec, ctx)
+		}
+		return wait.Outcome{}, fmt.Errorf("wait: event subscription failed: %w", err)
+	}
+	eventSpec := wait.EventLoopSpec{
+		StatusQuery: decl.StatusQuery,
+		MatchField:  decl.MatchField,
+		Terminal:    decl.Terminal,
+		Pending:     decl.PendingValues,
+	}
+	outcome, err := wait.RunEvent(loopCtx, eventSpec, resource, stream)
+	if err == nil {
+		return outcome, nil
+	}
+	if mode == contract.WaitModeAuto && errors.Is(err, wait.ErrEventStreamEnded) {
+		// Stream ended before a terminal status: fall back to polling under
+		// the same deadline.
+		return pollWithSpec(loopCtx, decl, spec, ctx)
+	}
+	return outcome, err
+}
+
+// pollWithSpec runs the poll loop for an auto-mode fallback.
+func pollWithSpec(loopCtx context.Context, decl *contract.WaitSpec, spec Spec, ctx *Ctx) (wait.Outcome, error) {
+	return wait.Run(loopCtx, wait.LoopSpec{
+		StatusQuery: decl.StatusQuery,
+		Terminal:    decl.Terminal,
+		Pending:     decl.PendingValues,
+	}, func(context.Context) (wait.PollDoc, error) {
+		return spec.WaitPoll(ctx)
+	})
+}
+
+// waitResource resolves the resource identifier an event stream correlates
+// against, from the accepted result data via the declared ResourceQuery.
+func waitResource(decl *contract.WaitSpec, result output.CommandResult) (string, error) {
+	data, ok := result.Data().(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("wait: accepted result data is not an object; cannot resolve resource %q", decl.ResourceQuery)
+	}
+	resource, ok := wait.ExtractStatus(wait.PollDoc(data), decl.ResourceQuery)
+	if !ok || strings.TrimSpace(resource) == "" {
+		return "", fmt.Errorf("wait: resource query %q not found in accepted result data", decl.ResourceQuery)
+	}
+	return resource, nil
 }
 
 // waitTimeoutSecs resolves the effective timeout. The flag is registered

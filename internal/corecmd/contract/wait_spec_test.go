@@ -56,13 +56,34 @@ func TestWaitSpecValidateRejectsMalformedShapes(t *testing.T) {
 			PollCommand: "oa approval-instance get",
 			Terminal:    terminal,
 		},
-		"event mode not implemented": {
-			Mode:     "event",
-			Terminal: terminal,
+		"event without event_key": {
+			Mode:          WaitModeEvent,
+			MatchField:    "process_instance_id",
+			ResourceQuery: "id",
+			StatusQuery:   "result.status",
+			Terminal:      terminal,
 		},
-		"auto mode not implemented": {
-			Mode:     "auto",
-			Terminal: terminal,
+		"event without match_field": {
+			Mode:          WaitModeEvent,
+			EventKey:      "bpms_instance_change",
+			ResourceQuery: "id",
+			StatusQuery:   "result.status",
+			Terminal:      terminal,
+		},
+		"event without resource_query": {
+			Mode:        WaitModeEvent,
+			EventKey:    "bpms_instance_change",
+			MatchField:  "process_instance_id",
+			StatusQuery: "result.status",
+			Terminal:    terminal,
+		},
+		"auto missing poll_command": {
+			Mode:          WaitModeAuto,
+			EventKey:      "export_finished",
+			MatchField:    "job_id",
+			ResourceQuery: "job_id",
+			StatusQuery:   "status",
+			Terminal:      terminal,
 		},
 		"no terminal states": {
 			Mode:        WaitModePoll,

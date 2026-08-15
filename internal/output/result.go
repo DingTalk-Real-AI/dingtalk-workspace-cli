@@ -19,6 +19,10 @@ import (
 type CommandResult interface {
 	Outcome() Outcome
 	ExitCode() int
+	// Data returns the accepted payload (already deep-copied). The wait
+	// phase reads it to resolve the resource identifier an event stream
+	// correlates against.
+	Data() any
 	envelope() *Envelope
 }
 
@@ -30,6 +34,7 @@ type commandResult struct {
 
 func (r *commandResult) Outcome() Outcome { return r.env.Outcome }
 func (r *commandResult) ExitCode() int    { return r.exitCode }
+func (r *commandResult) Data() any        { return cloneResultData(r.env.Data) }
 func (r *commandResult) envelope() *Envelope {
 	copy := cloneEnvelope(r.env)
 	return &copy
