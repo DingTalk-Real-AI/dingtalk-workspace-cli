@@ -129,6 +129,245 @@ func Value() string {
 	}
 }
 
+// shardChangedPackagesShards mirrors the shard names scripts/ci/test-packages.sh
+// asserts complete coverage for in its verify mode. Keeping the list here in
+// full is deliberate: the union assertion below fails if a shard is added
+// upstream without being selected, and an unknown-shard error fails if one is
+// removed, so shard-plan drift cannot silently shrink focused-test coverage.
+var shardChangedPackagesShards = []string{
+	"app",
+	"generators",
+	"helpers",
+	"cli",
+	"smoke",
+	"remaining",
+	"release-scripts",
+}
+
+func TestChangedTestPackagesShardSelectionCoversEveryImpactedPackageExactlyOnce(t *testing.T) {
+	repository := newShardChangedPackagesRepository(t)
+	baseRef := commitChangedTestPackagesFixture(t, repository, "initial shard fixture")
+
+	writeChangedTestPackagesFixture(t, repository, "core/core.go", `package core
+
+func Value() string {
+	return "changed"
+}
+`)
+	headRef := commitChangedTestPackagesFixture(t, repository, "change core")
+
+	impacted := runChangedTestPackages(t, repository, "list", baseRef, headRef)
+	if len(impacted) == 0 {
+		t.Fatal("shard fixture produced no impacted packages")
+	}
+
+	owner := map[string]string{}
+	union := make([]string, 0, len(impacted))
+	for _, shard := range shardChangedPackagesShards {
+		for _, pkg := range runChangedTestPackagesShard(t, repository, shard, baseRef, headRef) {
+			if previous, ok := owner[pkg]; ok {
+				t.Fatalf("package %q selected by both shard %q and %q", pkg, previous, shard)
+			}
+			owner[pkg] = shard
+			union = append(union, pkg)
+		}
+	}
+
+	slices.Sort(union)
+	if !slices.Equal(union, impacted) {
+		t.Fatalf("shard selection union = %q, want every impacted package %q", union, impacted)
+	}
+}
+
+func TestChangedTestPackagesShardSelectionFailsClosedOnUnknownShard(t *testing.T) {
+	repository := newShardChangedPackagesRepository(t)
+	baseRef := commitChangedTestPackagesFixture(t, repository, "initial shard fixture")
+
+	writeChangedTestPackagesFixture(t, repository, "core/core.go", `package core
+
+func Value() string {
+	return "changed"
+}
+`)
+	headRef := commitChangedTestPackagesFixture(t, repository, "change core")
+
+	script := filepath.Join(repository, "scripts", "ci", "changed-test-packages.sh")
+	command := exec.Command(script, "list-shard", "nonexistent", baseRef, headRef)
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("unknown shard unexpectedly succeeded:\n%s", output)
+	}
+	// An unknown shard must abort rather than report an empty selection: a
+	// silently empty shard would let a mistyped CI shard name skip every test
+	// while still reporting success.
+	if !strings.Contains(string(output), "unknown test package shard") {
+		t.Fatalf("unknown shard failure = %q, want fail-closed diagnostic", output)
+	}
+	if strings.TrimSpace(string(output)) == "" {
+		t.Fatal("unknown shard produced empty output instead of a diagnostic")
+	}
+}
+
+func TestChangedTestPackagesShardSelectionIsEmptyForUnaffectedShard(t *testing.T) {
+	repository := newShardChangedPackagesRepository(t)
+	baseRef := commitChangedTestPackagesFixture(t, repository, "initial shard fixture")
+
+	writeChangedTestPackagesFixture(t, repository, "internal/helpers/helpers.go", `package helpers
+
+import "example.com/shardfixture/core"
+
+func Value() string {
+	return core.Value() + " helpers changed"
+}
+`)
+	headRef := commitChangedTestPackagesFixture(t, repository, "change helpers only")
+
+	if selected := runChangedTestPackagesShard(t, repository, "helpers", baseRef, headRef); len(selected) == 0 {
+		t.Fatal("helpers shard selected nothing for a helpers-only change")
+	}
+	// An unaffected shard is a normal outcome and must exit zero with no
+	// output so the CI step can no-op instead of failing the job.
+	if selected := runChangedTestPackagesShard(t, repository, "app", baseRef, headRef); len(selected) != 0 {
+		t.Fatalf("app shard = %q, want empty for a helpers-only change", selected)
+	}
+}
+
+func TestChangedTestPackagesShardSelectionRejectsMissingShardArgument(t *testing.T) {
+	repository := newShardChangedPackagesRepository(t)
+	baseRef := commitChangedTestPackagesFixture(t, repository, "initial shard fixture")
+
+	script := filepath.Join(repository, "scripts", "ci", "changed-test-packages.sh")
+	command := exec.Command(script, "list-shard", baseRef, baseRef)
+	command.Dir = repository
+	output, err := command.CombinedOutput()
+	if err == nil {
+		t.Fatalf("list-shard without a shard argument unexpectedly succeeded:\n%s", output)
+	}
+	if !strings.Contains(string(output), "usage:") {
+		t.Fatalf("missing shard argument failure = %q, want usage diagnostic", output)
+	}
+}
+
+func runChangedTestPackagesShard(t *testing.T, repository, shard, baseRef, headRef string) []string {
+	t.Helper()
+
+	output := runChangedTestPackagesCommand(
+		t,
+		repository,
+		filepath.Join(repository, "scripts", "ci", "changed-test-packages.sh"),
+		"list-shard",
+		shard,
+		baseRef,
+		headRef,
+	)
+	return strings.Fields(output)
+}
+
+// newShardChangedPackagesRepository builds a fixture whose directory layout
+// matches every shard scripts/ci/test-packages.sh knows about, so shard
+// selection can be exercised without depending on the real repository's working
+// tree state. Every package imports core, letting a single core edit mark the
+// whole module impacted.
+func newShardChangedPackagesRepository(t *testing.T) string {
+	t.Helper()
+
+	repository := t.TempDir()
+	for path, contents := range map[string]string{
+		"go.mod": `module example.com/shardfixture
+
+go 1.22
+`,
+		"core/core.go": `package core
+
+func Value() string {
+	return "core"
+}
+`,
+		"internal/app/app.go": `package app
+
+import "example.com/shardfixture/core"
+
+func Value() string {
+	return core.Value() + " app"
+}
+`,
+		"internal/generator/gen/gen.go": `package gen
+
+import "example.com/shardfixture/core"
+
+func Value() string {
+	return core.Value() + " gen"
+}
+`,
+		"internal/helpers/helpers.go": `package helpers
+
+import "example.com/shardfixture/core"
+
+func Value() string {
+	return core.Value() + " helpers"
+}
+`,
+		"internal/cli/cli.go": `package cli
+
+import "example.com/shardfixture/core"
+
+func Value() string {
+	return core.Value() + " cli"
+}
+`,
+		"test/smoke/smoke.go": `package smoke
+
+import "example.com/shardfixture/core"
+
+func Value() string {
+	return core.Value() + " smoke"
+}
+`,
+		"test/scripts/scripts.go": `package scripts
+
+import "example.com/shardfixture/core"
+
+func Value() string {
+	return core.Value() + " scripts"
+}
+`,
+		"pkg/extra/extra.go": `package extra
+
+import "example.com/shardfixture/core"
+
+func Value() string {
+	return core.Value() + " extra"
+}
+`,
+	} {
+		writeChangedTestPackagesFixture(t, repository, path, contents)
+	}
+
+	projectRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve project root: %v", err)
+	}
+	for _, name := range []string{"changed-test-packages.sh", "test-packages.sh"} {
+		script, err := os.ReadFile(filepath.Join(projectRoot, "scripts", "ci", name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		scriptPath := filepath.Join(repository, "scripts", "ci", name)
+		if err := os.MkdirAll(filepath.Dir(scriptPath), 0o755); err != nil {
+			t.Fatalf("create script directory: %v", err)
+		}
+		if err := os.WriteFile(scriptPath, script, 0o755); err != nil {
+			t.Fatalf("copy %s: %v", name, err)
+		}
+	}
+
+	runChangedTestPackagesCommand(t, repository, "git", "init", "-q", "-b", "main")
+	runChangedTestPackagesCommand(t, repository, "git", "config", "user.name", "DWS CI")
+	runChangedTestPackagesCommand(t, repository, "git", "config", "user.email", "dws-ci@example.invalid")
+	return repository
+}
+
 func newChangedTestPackagesRepository(t *testing.T) string {
 	t.Helper()
 

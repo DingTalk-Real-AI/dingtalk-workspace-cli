@@ -1151,13 +1151,13 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		"filename.startsWith('pkg/cmdutil/')",
 		"filename === 'skills_embed.go'",
 		"filename.startsWith('test/mock_mcp/')",
-		"name: Test (changed packages)",
+		`name: "Test (focused: ${{ matrix.shard }})"`,
 		"changed-test-packages.sh",
 		"Verify authoritative synthetic merge",
 		`test "$(git rev-parse HEAD^1)" = "$PR_BASE_SHA"`,
 		`test "$(git rev-parse HEAD^2)" = "$PR_HEAD_SHA"`,
 		`echo "TEST_HEAD_REF=$(git rev-parse HEAD)"`,
-		"list \"$TEST_BASE_REF\" \"$TEST_HEAD_REF\"",
+		`list-shard "$TEST_SHARD" "$TEST_BASE_REF" "$TEST_HEAD_REF"`,
 		"needs.lint.outputs.full_suite != 'true'",
 		`name: "Test (race: ${{ matrix.shard }})"`,
 		"name: Test (workflow and release contracts)",
@@ -1217,8 +1217,30 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	if !strings.Contains(focusedJob, "timeout-minutes: 20") {
 		t.Error("focused test job must allow the scoped race suite up to 20 minutes")
 	}
-	if !strings.Contains(focusedJob, `go test -v -race -count=1 -timeout=15m "${packages[@]}"`) {
-		t.Error("focused race tests must retain enough package-level time for internal/app")
+	// The focused path fans the impacted set across the same shards as test-race
+	// and runs each shard the way test-race runs it, so no single job carries
+	// internal/app together with its reverse dependencies. internal/app keeps its
+	// package-level headroom through the process-isolating helper instead of one
+	// long -timeout, which is strictly stronger: every process releases the
+	// framework registries it populated. release-scripts is asserted because its
+	// dedicated job only runs at full-suite or release-sensitive scope, so losing
+	// it here would silently stop testing test/scripts changes.
+	for _, want := range []string{
+		`if [ "$TEST_SHARD" = "app" ]; then`,
+		`test "${#packages[@]}" -eq 1`,
+		`./scripts/ci/run-app-race-tests.sh run "${packages[0]}"`,
+		`if [ "$TEST_SHARD" = "release-scripts" ]; then`,
+		`go test -v -count=1 -timeout=10m "${packages[@]}"`,
+		"timeout_budget=12m",
+		`if [ "$TEST_SHARD" = "cli" ] ||`,
+		`[ "$TEST_SHARD" = "smoke" ]; then`,
+		"timeout_budget=15m",
+		`go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"`,
+		"- release-scripts",
+	} {
+		if !strings.Contains(focusedJob, want) {
+			t.Errorf("focused test job missing shard contract %q", want)
+		}
 	}
 
 	raceStart := focusedEnd

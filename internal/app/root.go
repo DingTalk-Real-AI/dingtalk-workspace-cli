@@ -80,10 +80,19 @@ var (
 	rootAuthLoadTokenData           = authpkg.LoadTokenData
 	rootNewCommandRunnerWithFlags   = newCommandRunnerWithFlags
 	rootEmitResult                  = output.EmitResult
+	rootInstallProcessSignalContext = installProcessSignalContext
 )
 
 // Execute runs the root command and returns the process exit code.
-func Execute() (exitCode int) {
+func Execute() int {
+	exitCode, _, _ := ExecuteWithTelemetry()
+	return exitCode
+}
+
+// ExecuteWithTelemetry runs the root command and additionally returns a
+// privacy-safe command path and error summary for the official CLI entrypoint.
+func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage string) {
+	commandPath = "dws"
 	var (
 		root        *cobra.Command
 		executed    *cobra.Command
@@ -91,11 +100,15 @@ func Execute() (exitCode int) {
 	)
 	defer func() {
 		if r := recover(); r != nil {
+			errorMessage = "internal panic"
 			target := executed
 			if target == nil && root != nil {
 				if found, _, err := root.Find(os.Args[1:]); err == nil {
 					target = found
 				}
+			}
+			if target != nil {
+				commandPath = telemetryCommandPath(target)
 			}
 			if code, attempted, _, _ := output.StoredEmissionState(resultStore); attempted {
 				exitCode = code
@@ -121,6 +134,7 @@ func Execute() (exitCode int) {
 		CloseFileLogger()
 		if executed != nil {
 			if err := closeOutputSink(executed); err != nil {
+				errorMessage = telemetryErrorSummary(err)
 				if code, handled, emitErr := emitOutputPublicationFailure(executed, err); handled && emitErr == nil {
 					exitCode = code
 				} else {
@@ -144,7 +158,9 @@ func Execute() (exitCode int) {
 	agentMetadata := readAgentMetadataSnapshot()
 	if err := agentMetadata.validationError(); err != nil {
 		emitEarlyAgentMetadataValidationError(err, os.Args[1:])
-		return apperrors.ExitCode(err)
+		errorMessage = telemetryErrorSummary(err)
+		exitCode = apperrors.ExitCode(err)
+		return
 	}
 
 	timing := NewTimingCollector()
@@ -162,12 +178,13 @@ func Execute() (exitCode int) {
 	ctx, resultStore = output.WithResultStore(ctx)
 	var signalState *processSignalState
 	var stopSignals func()
-	ctx, signalState, stopSignals = installProcessSignalContext(ctx, resultStore)
+	ctx, signalState, stopSignals = rootInstallProcessSignalContext(ctx, resultStore)
 	defer stopSignals()
 
 	initStart := time.Now()
 	engine := newPipelineEngine()
 	root = rootNewRootCommandWithEngine(ctx, engine)
+	commandPath = telemetryCommandPath(root)
 	timing.Record("cmd_init", time.Since(initStart))
 
 	// Run PreParse handlers on raw argv before Cobra parses flags.
@@ -182,15 +199,23 @@ func Execute() (exitCode int) {
 			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
 			code, emitErr := output.EmitResult(target, result)
 			if emitErr == nil {
-				return code
+				errorMessage = telemetryErrorSummary(err)
+				exitCode = code
+				return
 			}
 		}
 		_ = printExecutionError(root, os.Stdout, os.Stderr, err)
-		return apperrors.ExitCode(err)
+		errorMessage = telemetryErrorSummary(err)
+		exitCode = apperrors.ExitCode(err)
+		return
 	}
+	commandPath = telemetryCommandPathForArgs(root, os.Args[1:])
 
 	var err error
 	executed, err = rootExecuteCommand(root)
+	if executed != nil {
+		commandPath = telemetryCommandPath(executed)
+	}
 	// PersistentPostRunE normally commits or aborts the transactional output
 	// sink. Finalize once more at the process boundary so custom execution
 	// seams, embedding callers, or future hook changes cannot leave publication
@@ -222,7 +247,9 @@ func Execute() (exitCode int) {
 				// successfully emitted result into a contradictory 130/143 process
 				// status; likewise, a failed publication must retain its internal
 				// error code instead of being relabelled as cancellation.
-				return code
+				errorMessage = telemetryErrorSummary(interrupted)
+				exitCode = code
+				return
 			}
 		}
 		var publicationErr *outputPublicationError
@@ -233,20 +260,26 @@ func Execute() (exitCode int) {
 	if err != nil {
 		if executed == nil {
 			executed = root
+			commandPath = telemetryCommandPath(root)
 		}
 		if code, attempted, _, _ := output.StoredEmissionState(resultStore); attempted {
 			var publicationErr *outputPublicationError
 			if stderrors.As(err, &publicationErr) {
+				errorMessage = telemetryErrorSummary(publicationErr)
 				if failureCode, handled, emitErr := emitOutputPublicationFailure(executed, publicationErr); handled {
 					if emitErr == nil {
-						return failureCode
+						exitCode = failureCode
+						return
 					}
 					fmt.Fprintf(executed.ErrOrStderr(), "Warning: emit output publication failure: %v\n", emitErr)
 				}
-				return apperrors.ExitCode(publicationErr)
+				exitCode = apperrors.ExitCode(publicationErr)
+				return
 			}
 			fmt.Fprintf(executed.ErrOrStderr(), "Warning: command hook failed after result emission: %v\n", err)
-			return code
+			errorMessage = telemetryErrorSummary(err)
+			exitCode = code
+			return
 		}
 		err = rewordRequiredFlagError(err)
 		var raw apperrors.RawStderrError
@@ -254,7 +287,9 @@ func Execute() (exitCode int) {
 			result := output.FailureWithExitCode(errorInfoFromExecutionError(err), apperrors.ExitCode(err))
 			code, emitErr := output.EmitResult(executed, result)
 			if emitErr == nil {
-				return code
+				errorMessage = telemetryErrorSummary(err)
+				exitCode = code
+				return
 			}
 			err = apperrors.NewInternal("emit failure result: "+emitErr.Error(), apperrors.WithCause(emitErr))
 		}
@@ -264,12 +299,42 @@ func Execute() (exitCode int) {
 			_, _ = fmt.Fprintln(os.Stderr)
 		}
 		_ = printExecutionError(executed, os.Stdout, os.Stderr, err)
-		return apperrors.ExitCode(err)
+		errorMessage = telemetryErrorSummary(err)
+		exitCode = apperrors.ExitCode(err)
+		return
 	}
 	if code, emitted := output.StoredExitCode(resultStore); emitted {
-		return code
+		exitCode = code
+		return
 	}
-	return 0
+	return
+}
+
+func telemetryCommandPath(command *cobra.Command) string {
+	if command == nil {
+		return "dws"
+	}
+	path := strings.TrimSpace(command.CommandPath())
+	root := command.Root()
+	rootName := strings.TrimSpace(root.Name())
+	if path == rootName {
+		return rootName
+	}
+	if rootName != "" {
+		path = strings.TrimSpace(strings.TrimPrefix(path, rootName+" "))
+	}
+	return path
+}
+
+func telemetryCommandPathForArgs(root *cobra.Command, args []string) string {
+	if root == nil {
+		return "dws"
+	}
+	command, _, err := root.Find(args)
+	if err != nil || command == nil {
+		return telemetryCommandPath(root)
+	}
+	return telemetryCommandPath(command)
 }
 
 // emitEarlyAgentMetadataValidationError preserves each built-in command's
@@ -959,17 +1024,36 @@ func installReviewedFlagProtectionHandlers(root *cobra.Command) {
 }
 
 func preparseProfileFlag(args []string) string {
+	profile, _, valid := preparseProfileSelection(args)
+	if !valid {
+		return ""
+	}
+	return profile
+}
+
+func preparseProfileSelection(args []string) (profile string, specified, valid bool) {
 	args, _ = normalizeProfileFlagArgs(args)
+	valid = true
 	for i := 0; i < len(args); i++ {
 		arg := strings.TrimSpace(args[i])
 		switch {
-		case arg == "--profile" && i+1 < len(args):
-			return strings.TrimSpace(args[i+1])
+		case arg == "--profile":
+			specified = true
+			if i+1 >= len(args) || strings.HasPrefix(strings.TrimSpace(args[i+1]), "-") {
+				profile = ""
+				valid = false
+				continue
+			}
+			profile = strings.TrimSpace(args[i+1])
+			valid = profile != ""
+			i++
 		case strings.HasPrefix(arg, "--profile="):
-			return strings.TrimSpace(strings.TrimPrefix(arg, "--profile="))
+			specified = true
+			profile = strings.TrimSpace(strings.TrimPrefix(arg, "--profile="))
+			valid = profile != ""
 		}
 	}
-	return ""
+	return profile, specified, valid
 }
 
 func normalizeProcessProfileArgs() func() {
