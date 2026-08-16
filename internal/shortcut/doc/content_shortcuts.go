@@ -1449,7 +1449,7 @@ func semanticMarkdownProjection(raw string) string {
 	raw = orderedListMark.ReplaceAllString(raw, "$1")
 	var projected strings.Builder
 	for _, char := range raw {
-		if unicode.IsLetter(char) || unicode.IsNumber(char) || strings.ContainsRune("%+-−.$￥¥/:@#", char) {
+		if unicode.IsLetter(char) || unicode.IsNumber(char) || strings.ContainsRune("%+-−.$￥¥/:@#=<>!&|", char) {
 			projected.WriteRune(unicode.ToLower(char))
 		}
 	}

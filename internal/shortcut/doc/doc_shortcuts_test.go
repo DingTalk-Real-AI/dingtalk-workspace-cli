@@ -1543,6 +1543,22 @@ func TestCrossPlatformCoverageUpdateVerificationNormalizesMarkdownRoundTrip(t *t
 	if verifyUpdatedDocumentContent(map[string]any{"markdown": "1. 完成率变化 10%\n2. 覆盖 18 个区域。"}, "1) 完成率变化 -10%；2) 覆盖 18 个区域。", "overwrite", "markdown") {
 		t.Fatal("ordered list with a changed numeric sign passed semantic verification")
 	}
+	for _, tc := range []struct {
+		name     string
+		expected string
+		actual   string
+	}{
+		{name: "changed comparison operator", expected: "a < b", actual: "a > b"},
+		{name: "missing assignment operator", expected: "x = 1", actual: "x 1"},
+		{name: "changed logical operator", expected: "ready && valid", actual: "ready || valid"},
+		{name: "changed operand order", expected: "left | right", actual: "right | left"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if verifyUpdatedDocumentContent(map[string]any{"markdown": tc.actual}, tc.expected, "overwrite", "markdown") {
+				t.Fatalf("semantic verification accepted expected %q as actual %q", tc.expected, tc.actual)
+			}
+		})
+	}
 }
 
 func TestCrossPlatformCoverageSelectionMatchesEnumerateEveryCandidate(t *testing.T) {
