@@ -17,6 +17,7 @@ func TestCrossPlatformCoverageAITablePageParsingRemainingEdges(t *testing.T) {
 		"trailing invalid JSON":              `{"records":[]} {`,
 		"data not object":                    `{"data":[]}`,
 		"missing records with nextCursor":    `{"data":{"nextCursor":"c"}}`,
+		"missing records with hasMore":       `{"data":{"hasMore":true}}`,
 		"missing records with invalid count": `{"data":{"totalCount":"invalid"}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -27,7 +28,7 @@ func TestCrossPlatformCoverageAITablePageParsingRemainingEdges(t *testing.T) {
 	}
 }
 
-func TestParseRecordQueryPageEmptyFinalPage(t *testing.T) {
+func TestCrossPlatformCoverageParseRecordQueryPageEmptyFinalPage(t *testing.T) {
 	t.Run("without totalCount", func(t *testing.T) {
 		page, err := parseRecordQueryPage(`{"data":{}}`)
 		if err != nil {

@@ -109,6 +109,7 @@ func TestCrossPlatformCoverageRecordQueryCLIFailsClosedE2E(t *testing.T) {
 		{name: "invalid json", steps: []recordQueryE2EStep{recordQueryTextStep("{")}},
 		{name: "null payload", steps: []recordQueryE2EStep{recordQueryTextStep("null")}},
 		{name: "missing records", steps: []recordQueryE2EStep{recordQueryTextStep(`{"data":{"nextCursor":"c"}}`)}},
+		{name: "missing records with has more", steps: []recordQueryE2EStep{recordQueryTextStep(`{"data":{"hasMore":true}}`)}},
 		{name: "records wrong type", steps: []recordQueryE2EStep{recordQueryTextStep(`{"records":{}}`)}},
 		{name: "records null", steps: []recordQueryE2EStep{recordQueryTextStep(`{"records":null}`)}},
 		{name: "record item wrong type", steps: []recordQueryE2EStep{recordQueryTextStep(`{"records":["bad"]}`)}},

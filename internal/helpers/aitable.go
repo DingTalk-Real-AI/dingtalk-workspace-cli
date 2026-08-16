@@ -284,6 +284,9 @@ func parseRecordQueryPage(text string) (paging.Page, error) {
 		if nextCursor != "" {
 			return paging.Page{}, fmt.Errorf("query_records response is missing records")
 		}
+		if hasMore, ok := payload["hasMore"].(bool); ok && hasMore {
+			return paging.Page{}, fmt.Errorf("query_records reported hasMore=true without a next cursor")
+		}
 		totalCount, err := parseOptionalNonNegativeInt(payload["totalCount"])
 		if err != nil {
 			return paging.Page{}, fmt.Errorf("query_records totalCount: %w", err)
