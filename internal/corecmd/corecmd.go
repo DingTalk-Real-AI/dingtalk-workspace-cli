@@ -393,6 +393,9 @@ func New(spec Spec) *cobra.Command {
 	ValidateConstraintDecls(spec.Use, spec.Flags, spec.Constraints)
 	embedContractIntoSchema(cmd, spec)
 	AnnotateConstraints(cmd, spec.Constraints)
+	if help := SelectionHelp(spec.Contract.Selection); help != "" {
+		cmd.Long = strings.TrimRight(cmd.Long, "\n") + help
+	}
 	if help := ConstraintHelp(spec.Constraints); help != "" {
 		cmd.Long = strings.TrimRight(cmd.Long, "\n") + help
 	}
@@ -1594,6 +1597,51 @@ func ConstraintHelp(constraints []Constraint) string {
 		lines = append(lines, "  - "+text)
 	}
 	return "\n\n参数约束：\n" + strings.Join(lines, "\n")
+}
+
+// SelectionHelp renders the --help Selection guidance sections — "Avoid
+// when", "Prerequisites", "Tips" — so an agent exploring via --help sees the
+// same guidance the Runtime Schema publishes in --compact. UseWhen is not
+// rendered: today every declared UseWhen restates the Long intent prose
+// verbatim (the reviewed-contract generators copy Intent into it), so a
+// rendered section would either duplicate the prose or need a dedup rule that
+// knows about that data-layer shortcut; add the section back once authored
+// UseWhen content diverges from the prose. Examples stay in the cobra Example
+// block. Returns "" when nothing renders.
+func SelectionHelp(selection contract.SelectionSpec) string {
+	var sections []string
+	if items := guidanceItems(selection.AvoidWhen); len(items) > 0 {
+		sections = append(sections, renderGuidance("Avoid when:", items))
+	}
+	if items := guidanceItems(selection.Prerequisites); len(items) > 0 {
+		sections = append(sections, renderGuidance("Prerequisites:", items))
+	}
+	if items := guidanceItems(selection.Tips); len(items) > 0 {
+		sections = append(sections, renderGuidance("Tips:", items))
+	}
+	if len(sections) == 0 {
+		return ""
+	}
+	return "\n\n" + strings.Join(sections, "\n\n")
+}
+
+// guidanceItems returns the non-blank trimmed guidance entries.
+func guidanceItems(items []string) []string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		if text := strings.TrimSpace(item); text != "" {
+			lines = append(lines, text)
+		}
+	}
+	return lines
+}
+
+func renderGuidance(title string, items []string) string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		lines = append(lines, "  - "+item)
+	}
+	return title + "\n" + strings.Join(lines, "\n")
 }
 
 func dashed(flags []string) string {

@@ -948,6 +948,98 @@ func TestCrossPlatformCoverageConstraintHelp(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageSelectionHelp(t *testing.T) {
+	if got := SelectionHelp(contract.SelectionSpec{}); got != "" {
+		t.Fatalf("empty selection help = %q", got)
+	}
+	if got := SelectionHelp(contract.SelectionSpec{
+		AvoidWhen: []string{"  ", ""},
+	}); got != "" {
+		t.Fatalf("blank-only selection help = %q", got)
+	}
+	// UseWhen is not rendered — every declared UseWhen restates the Long
+	// prose today; the other three sections render with the schema --compact
+	// vocabulary. The exact-string assertion pins the blank line between
+	// sections, which Contains/Index-style checks cannot catch.
+	help := SelectionHelp(contract.SelectionSpec{
+		UseWhen:       []string{"与正文相同的意图描述"},
+		AvoidWhen:     []string{"新任务一律改用 +messages-send --as bot", " "},
+		Prerequisites: []string{"robotCode ← +bot-find"},
+		Tips:          []string{"发送后可用 +messages-query-send-status 追踪"},
+	})
+	want := "Avoid when:\n" +
+		"  - 新任务一律改用 +messages-send --as bot\n" +
+		"\n" +
+		"Prerequisites:\n" +
+		"  - robotCode ← +bot-find\n" +
+		"\n" +
+		"Tips:\n" +
+		"  - 发送后可用 +messages-query-send-status 追踪"
+	if help != "\n\n"+want {
+		t.Fatalf("selection help mismatch\n got: %q\nwant: %q", help, "\n\n"+want)
+	}
+	if strings.Contains(help, "When to use") || strings.Contains(help, "意图描述") {
+		t.Fatalf("use-when must not render:\n%s", help)
+	}
+}
+
+func TestCrossPlatformCoverageNewCommandSelectionHelpOrdering(t *testing.T) {
+	cmd := New(Spec{
+		Use:   "leaf",
+		Short: "S",
+		Long:  "L",
+		Flags: []FlagSpec{
+			{Name: "a", Usage: "A"},
+			{Name: "b", Usage: "B"},
+		},
+		Constraints: []Constraint{{Kind: AtLeastOne, Flags: []string{"a", "b"}}},
+		Safety:      testWriteSafety(),
+		Contract: ContractDecl{
+			Description: "D",
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "dev",
+				Name:           "send_thing",
+				CanonicalPath:  "dev.send_thing",
+				CLIPath:        "dev send",
+				PrimaryCLIPath: "dev send",
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode: "mcp", Availability: "available",
+				Ref: &contract.InterfaceRefSpec{ProductID: "dev", RPCName: "op"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "s", UseWhen: []string{"u"},
+				AvoidWhen:     []string{"避免场景"},
+				Prerequisites: []string{"前置事项"},
+				Tips:          []string{"提示事项"},
+				Examples:      []string{"dws leaf"},
+			},
+		},
+		Invoke: func(*Ctx, map[string]any) error { return nil },
+	})
+	if !strings.HasPrefix(cmd.Long, "L") {
+		t.Fatalf("Long = %q", cmd.Long)
+	}
+	positions := map[string]int{
+		"Avoid when:":    strings.Index(cmd.Long, "Avoid when:"),
+		"Prerequisites:": strings.Index(cmd.Long, "Prerequisites:"),
+		"Tips:":          strings.Index(cmd.Long, "Tips:"),
+		"参数约束：":          strings.Index(cmd.Long, "参数约束："),
+	}
+	for title, pos := range positions {
+		if pos < 0 {
+			t.Fatalf("Long missing %q section:\n%s", title, cmd.Long)
+		}
+	}
+	order := []string{"Avoid when:", "Prerequisites:", "Tips:", "参数约束："}
+	for i := 1; i < len(order); i++ {
+		if positions[order[i-1]] > positions[order[i]] {
+			t.Fatalf("sections out of order %q after %q:\n%s",
+				order[i], order[i-1], cmd.Long)
+		}
+	}
+}
+
 // ── unified builder ────────────────────────────────────────────────
 
 func TestCrossPlatformCoverageNewCommandOrchestration(t *testing.T) {

@@ -259,6 +259,23 @@ func TestCrossPlatformCoverageSchemaCompactProjectionEdges(t *testing.T) {
 	if stripSchemaPayloadCompact(nil) != nil {
 		t.Fatal("nil compact payload should stay nil")
 	}
+	// The full guidance vocabulary survives the Agent allowlist so help and
+	// schema --compact can render the same four sections.
+	guidance := stripSchemaPayloadCompact(map[string]any{
+		"use_when":      []any{"u"},
+		"avoid_when":    []any{"a"},
+		"prerequisites": []any{"p"},
+		"tips":          []any{"t"},
+		"workflow_refs": []any{"w"},
+	})
+	for _, key := range []string{"use_when", "avoid_when", "prerequisites", "tips"} {
+		if _, exists := guidance[key]; !exists {
+			t.Fatalf("compact should keep guidance key %q: %#v", key, guidance)
+		}
+	}
+	if _, exists := guidance["workflow_refs"]; exists {
+		t.Fatalf("compact should drop workflow_refs: %#v", guidance)
+	}
 	if got := stripSchemaParametersCompact("raw"); got != "raw" {
 		t.Fatalf("raw parameters = %#v", got)
 	}
