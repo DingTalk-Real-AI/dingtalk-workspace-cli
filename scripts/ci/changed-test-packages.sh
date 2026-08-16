@@ -7,16 +7,32 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 
 usage() {
-  printf '%s\n' "usage: $0 <changed|list> BASE_REF HEAD_REF" >&2
+  printf '%s\n' \
+    "usage: $0 <changed|list> BASE_REF HEAD_REF" \
+    "       $0 list-shard SHARD BASE_REF HEAD_REF" >&2
   exit 2
 }
 
-[ "${1:-}" = changed ] || [ "${1:-}" = list ] || usage
-[ "$#" -eq 3 ] || usage
-
-MODE="$1"
-BASE_REF="$2"
-HEAD_REF="$3"
+# list-shard narrows the impacted set to one test shard so focused CI runs can
+# fan the same package plan across the shard matrix instead of testing every
+# impacted package in a single long-lived job.
+SHARD=""
+case "${1:-}" in
+  changed|list)
+    [ "$#" -eq 3 ] || usage
+    MODE="$1"
+    BASE_REF="$2"
+    HEAD_REF="$3"
+    ;;
+  list-shard)
+    [ "$#" -eq 4 ] || usage
+    MODE="$1"
+    SHARD="$2"
+    BASE_REF="$3"
+    HEAD_REF="$4"
+    ;;
+  *) usage ;;
+esac
 
 cd "$ROOT"
 git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null || {
@@ -116,9 +132,29 @@ while IFS= read -r file; do
   [ "$embedded_owner_found" = true ] || continue
 done < "$files"
 
+# emit_selection prints the planned packages, restricted to SHARD when the
+# caller asked for one. Restriction reuses scripts/ci/test-packages.sh as the
+# single source of shard membership, which also means an unknown shard name
+# aborts there instead of being reported as an empty selection: a silently empty
+# shard would let a mistyped CI shard name skip every test and still succeed.
+emit_selection() {
+  selection="$1"
+  if [ -z "$SHARD" ]; then
+    cat "$selection"
+    return 0
+  fi
+  shard_packages="$workdir/shard-packages"
+  "$ROOT/scripts/ci/test-packages.sh" list "$SHARD" > "$shard_packages"
+  LC_ALL=C sort -u "$shard_packages" -o "$shard_packages"
+  LC_ALL=C sort -u "$selection" -o "$selection"
+  # An empty intersection is a normal outcome for a shard no change touched, so
+  # comm's silence must not be treated as an error.
+  LC_ALL=C comm -12 "$selection" "$shard_packages"
+}
+
 LC_ALL=C sort -u "$changed_packages" -o "$changed_packages"
 if [ "$MODE" = changed ] || [ ! -s "$changed_packages" ]; then
-  cat "$changed_packages"
+  emit_selection "$changed_packages"
   exit 0
 fi
 
@@ -133,4 +169,5 @@ while IFS= read -r package; do
 done < "$all_packages" > "$impacted_packages"
 
 cat "$changed_packages" >> "$impacted_packages"
-LC_ALL=C sort -u "$impacted_packages"
+LC_ALL=C sort -u "$impacted_packages" -o "$impacted_packages"
+emit_selection "$impacted_packages"

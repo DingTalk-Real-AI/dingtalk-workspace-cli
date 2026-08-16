@@ -513,11 +513,28 @@ jobs:
         run: node .github/reviewer-routing.test.js
 
   test-focused:
-    name: Test (changed packages)
+    name: "Test (focused: ${{ matrix.shard }})"
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}
     runs-on: ubuntu-latest
+    # Each shard owns one bounded slice of the impacted set, so no single job
+    # carries internal/app together with every reverse dependency. The shard
+    # list and per-shard execution below mirror test-race, which runs the same
+    # shards at full-suite scope; release-scripts is included because its
+    # dedicated job only runs at full-suite or release-sensitive scope, and
+    # dropping it here would stop testing test/scripts changes entirely.
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - app
+          - generators
+          - helpers
+          - cli
+          - smoke
+          - remaining
+          - release-scripts
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -546,23 +563,77 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Test changed packages and reverse dependencies
+      - name: Select impacted packages for shard
+        id: select
         shell: bash
         env:
-          DWS_PACKAGE_VERSION: 0.0.0-test
+          TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
           package_output="$(
             ./scripts/ci/changed-test-packages.sh \
-              list "$TEST_BASE_REF" "$TEST_HEAD_REF"
+              list-shard "$TEST_SHARD" "$TEST_BASE_REF" "$TEST_HEAD_REF"
           )"
           if [ -z "$package_output" ]; then
-            echo "No buildable Go package is affected by this revision." \
+            echo "No buildable Go package in shard $TEST_SHARD is affected by this revision." \
               >> "$GITHUB_STEP_SUMMARY"
+            echo "affected=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          mapfile -t packages <<< "$package_output"
-          go test -v -race -count=1 -timeout=15m "${packages[@]}"
+          # The package list travels through a file rather than a step output:
+          # reading it with `mapfile < file` has unambiguous line semantics,
+          # whereas a here-string over a multi-line output would append an extra
+          # empty element if the value ever carried a trailing newline, and an
+          # empty element would reach go test as an empty package argument.
+          printf '%s\n' "$package_output" > "$RUNNER_TEMP/focused-shard-packages.txt"
+          echo "affected=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        if: ${{ matrix.shard == 'remaining' && steps.select.outputs.affected == 'true' }}
+        run: make build
+
+      - name: Install archive tooling
+        if: ${{ matrix.shard == 'release-scripts' && steps.select.outputs.affected == 'true' }}
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Test shard with Race Detection
+        if: ${{ steps.select.outputs.affected == 'true' }}
+        shell: bash
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+          TEST_SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          mapfile -t packages < "$RUNNER_TEMP/focused-shard-packages.txt"
+          test "${#packages[@]}" -gt 0
+          for package in "${packages[@]}"; do
+            test -n "$package" || {
+              echo "shard package list contains an empty entry" >&2
+              exit 1
+            }
+          done
+          if [ "$TEST_SHARD" = "app" ]; then
+            # A single long-lived app test process retains every constructed
+            # command tree in framework registries. Isolate Schema assembly and
+            # bounded name ranges so each process releases that state on exit.
+            test "${#packages[@]}" -eq 1
+            ./scripts/ci/run-app-race-tests.sh run "${packages[0]}"
+            exit 0
+          fi
+          if [ "$TEST_SHARD" = "release-scripts" ]; then
+            # Mirror the dedicated release-contract job: these suites shell out
+            # to archive tooling and are not race-instrumented there.
+            go test -v -count=1 -timeout=10m "${packages[@]}"
+            exit 0
+          fi
+          # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
+          # give them a dedicated package timeout on slower hosted runners.
+          timeout_budget=12m
+          if [ "$TEST_SHARD" = "cli" ] ||
+             [ "$TEST_SHARD" = "smoke" ]; then
+            timeout_budget=15m
+          fi
+          go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 
   test-race:
     name: "Test (race: ${{ matrix.shard }})"
@@ -715,7 +786,7 @@ jobs:
           failed=0
           if [ "$CHANGELOG_ONLY" = true ] || [ "$DOCS_ONLY" = true ]; then
             for shard in \
-              "changed packages:$FOCUSED_RESULT" \
+              "focused shards:$FOCUSED_RESULT" \
               "race shards:$RACE_RESULT" \
               "release scripts:$RELEASE_SCRIPTS_RESULT" \
               "cross-platform compile:$CROSS_PLATFORM_RESULT" \
@@ -744,7 +815,7 @@ jobs:
             release_expected=success
           fi
           for shard in \
-            "changed packages:$FOCUSED_RESULT:$focused_expected" \
+            "focused shards:$FOCUSED_RESULT:$focused_expected" \
             "race shards:$RACE_RESULT:$race_expected" \
             "release scripts:$RELEASE_SCRIPTS_RESULT:$release_expected" \
             "cross-platform compile:$CROSS_PLATFORM_RESULT:success"
