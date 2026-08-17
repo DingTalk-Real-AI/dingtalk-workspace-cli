@@ -33,6 +33,8 @@ Flags:
 - **被截断时**（达到 page-limit 但仍有数据）：输出中包含 `"hasMore": true` 和 `"cursor": "..."` 字段，可通过 `--cursor` 从断点继续拉取
 - 适用于需要一次性获取全量数据的场景（如导出、统计、批量处理）
 
+当精确计数或集合依赖分页查询时，优先使用 `--all --page-limit 0`；否则持续传回 `nextCursor`/`cursor`，直到游标为空且 `hasMore` 不为 true。写入响应返回的完整 ID 列表可直接作为该批证据；截断页、局部计数或最终链接数不能替代分页完成信号。
+
 ```bash
 # 默认（最多 50 页 = 5000 条）
 dws aitable record query --base-id X --table-id Y --all

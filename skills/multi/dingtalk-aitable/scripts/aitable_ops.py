@@ -17,7 +17,7 @@ def command_for(args: argparse.Namespace) -> list[str]:
     if args.operation == "dashboard":
         command = [
             "create_dashboard_chart.py", args.base_id, args.dashboard_name,
-            *(["--chart-specs", args.chart_specs] if args.chart_specs else []),
+            *(["--chart-specs-file", args.chart_specs_file] if args.chart_specs_file else []),
         ]
     elif args.operation == "import-new":
         command = ["aitable_import_via_task.py", args.base_id, args.file]
@@ -56,7 +56,10 @@ def parser() -> argparse.ArgumentParser:
     dashboard = sub.add_parser("dashboard", help="create and read back a dashboard/chart")
     dashboard.add_argument("base_id")
     dashboard.add_argument("dashboard_name")
-    dashboard.add_argument("--chart-specs", help="workspace JSON array of chart specs")
+    dashboard.add_argument(
+        "--chart-specs-file", "--chart-specs", dest="chart_specs_file",
+        help="workspace-local file containing a JSON array of chart specs",
+    )
 
     import_new = sub.add_parser("import-new", help="import CSV/XLS/XLSX as a new table")
     import_new.add_argument("base_id")

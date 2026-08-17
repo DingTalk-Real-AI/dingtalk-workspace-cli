@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 RESOURCE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
@@ -52,12 +52,24 @@ def parse_json_output(raw: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def put_file(upload_url: str, file_path: Path) -> Tuple[bool, str]:
+def normalize_upload_url(upload_url: str) -> str:
     parsed = urlparse(upload_url)
-    if parsed.scheme != "https" or not parsed.hostname:
-        return False, "uploadUrl must be a valid HTTPS URL"
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("uploadUrl must be a valid HTTP(S) URL")
+    if parsed.username or parsed.password:
+        raise ValueError("uploadUrl must not contain user info")
+    if parsed.scheme == "http":
+        parsed = parsed._replace(scheme="https")
+    return urlunparse(parsed)
+
+
+def put_file(upload_url: str, file_path: Path) -> Tuple[bool, str]:
+    try:
+        secure_upload_url = normalize_upload_url(upload_url)
+    except ValueError as exc:
+        return False, str(exc)
     payload = file_path.read_bytes()
-    req = Request(upload_url, data=payload, method="PUT")
+    req = Request(secure_upload_url, data=payload, method="PUT")
     # 关键：清空 Content-Type，避免 SignatureDoesNotMatch。
     req.add_header("Content-Type", "")
     try:

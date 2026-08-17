@@ -63,9 +63,9 @@ class AITableSkillScriptsTest(unittest.TestCase):
     def test_unified_ops_dispatches_without_cross_operation_arguments(self):
         cases = [
             (
-                ["dashboard", "base12345678", "概览", "--chart-specs", "charts.json"],
+                ["dashboard", "base12345678", "概览", "--chart-specs-file", "charts.json"],
                 "create_dashboard_chart.py",
-                ["base12345678", "概览", "--chart-specs", "charts.json"],
+                ["base12345678", "概览", "--chart-specs-file", "charts.json"],
             ),
             (
                 ["import-new", "base12345678", "data.csv"],
@@ -251,7 +251,7 @@ elif args[:3] == ['aitable', 'field', 'get']:
             self.assertEqual(payload["verifiedCount"], 1)
             self.assertEqual(payload["ledger"][1]["error"], "duplicate")
 
-    def test_upload_helpers_reject_plain_http_urls(self):
+    def test_upload_helpers_use_secure_urls(self):
         with tempfile.TemporaryDirectory() as raw:
             file_path = Path(raw) / "file.bin"
             file_path.write_bytes(b"x")
@@ -260,9 +260,13 @@ elif args[:3] == ['aitable', 'field', 'get']:
                     "http://example.com/upload", file_path, "application/octet-stream"
                 )
             )
-            ok, error = IMPORT_TASK.put_file("http://example.com/upload", file_path)
+            self.assertEqual(
+                IMPORT_TASK.normalize_upload_url("http://example.com/upload?signature=x"),
+                "https://example.com/upload?signature=x",
+            )
+            ok, error = IMPORT_TASK.put_file("ftp://example.com/upload", file_path)
             self.assertFalse(ok)
-            self.assertIn("HTTPS", error)
+            self.assertIn("HTTP(S)", error)
 
     def test_export_helpers_reject_http_and_existing_output(self):
         with self.assertRaises(ValueError):

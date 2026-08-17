@@ -20,16 +20,16 @@ metadata:
 1. 命中下方高频意图时直接使用精确骨架，不先查 Help 或产品级 Schema。
 2. 路由优先级固定为：精确 recipe / 可运行脚本 > 匹配的公开 Shortcut > 原子命令。命令已确定且参数清楚时直接执行。
 3. 参数、约束或安全语义不确定时只读 leaf Schema：`dws schema --cli-path "aitable <leaf>" --format json`；只有当前 Cobra flag 不确定时才读对应 `--help`。
-4. 复杂字段、筛选、视图、权限或工作流任务按“低频能力与 Reference”只加载相关文件。所有下表的 `references/aitable/...` 都是相对本 Skill 根目录的完整精确路径；不得省略中间的 `aitable/`。dashboard/chart、导入、导出、批量字段和附件统一只读 `references/aitable/aitable-script-recipes.md`，再运行 `scripts/aitable_ops.py`；不要预读整个 reference 目录或任何脚本源码。
+4. 复杂任务按下表只读相关 Reference；路径相对本 Skill 根目录且必须保留 `aitable/`。脚本型任务只读 `references/aitable/aitable-script-recipes.md`，再运行 `scripts/aitable_ops.py`；不预读目录或源码。
 5. 现有骨架和 reference 都无法定位能力时，才用 Runtime Shortcut Catalog 做最后发现；不得猜 `cli_path` 或 flag。
 6. Schema、Help、reference 与实际返回冲突时采用更安全的解释并报告契约漂移；`confirmation=user_required` 时先确认，再添加 `--yes`。
-7. 用户已给足名称、字段、数据和目标时，直接按依赖链完成全部步骤；不要调用 todo 工具、分步汇报或追问已明确的信息。中间返回只用于提取下一步 ID 和判断失败，完成所有请求后再统一回读并答复。bundled script 参数明确时直接运行；只有参数不明确时执行统一入口的操作级 `--help`，只有契约失败、环境异常或用户要求修改脚本时才读取源码。
+7. 输入完整时直接完成依赖链，不调用 todo、不分步汇报或重复追问；中间响应只提取 ID/错误，最后统一回读答复。脚本参数明确就执行；不明确才读操作级 `--help`，仅契约失败、环境异常或用户要求修改时读源码。
 8. 用户要求新建 Base 但未指定 Base 名时，根据业务目标生成简短描述性名称（例如仪表盘任务用“数据看板”）并继续；不要仅为可回退的容器名称追问。Base 只接受 Base flags，不得把 table `--fields` 传给 `base create`。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
 
-`aitable` 当前有 29 条公开 shortcut。完整清单保留在 Runtime Shortcut Catalog；已完成 Schema curation 的子集可通过 leaf Schema 查询。高频产品根 Skill 不重复展开完整清单。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+29 条公开 shortcut 保留在 Runtime Catalog，不在根 Skill 展开。已知意图直接走下方路由；仅参数/安全语义不确定时读 leaf Schema，Cobra flags 不确定时读 leaf Help。
 
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service aitable --compact --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
@@ -62,7 +62,7 @@ metadata:
 | 更新记录 | `dws aitable record update --base-id <baseId> --table-id <tableId> --records '[{"recordId":"<id>","cells":{"<fieldId>":<值>}}]' --format json` | 先 query 拿 recordId；只传需改字段；取 `data.recordIds[]` 后回读 |
 | 删除记录 | 先 `dws aitable +record-query ...` 定位，再 `dws aitable record delete --base-id <baseId> --table-id <tableId> --record-ids <ids>` | 展示目标与影响，得到明确确认后才加 `--yes` |
 | 创建 Base / Table | `dws aitable base create --name "<名>" --format json` → `dws aitable base get --base-id <baseId> --format json`；`dws aitable table create --base-id <id> --name "<名>" --fields '[...]' --format json` → `dws aitable +table-get --base-id <id> --table-ids <tableId> --format json` | 使用创建返回的真实 ID 立即回读；创建字段时回读 `fields[]` 的名称、类型与 config；系统改名/加后缀时不得继续猜原名 |
-| 创建仪表盘 / 常用图表 | `python3 <本 Skill 绝对目录>/scripts/aitable_ops.py dashboard <baseId> "<仪表盘名>" [--chart-specs <workspace内JSON>]` | 唯一首选；完整参数与 ledger 契约只读 `references/aitable/aitable-script-recipes.md` |
+| 创建仪表盘 / 常用图表 | `python3 <本 Skill 绝对目录>/scripts/aitable_ops.py dashboard <baseId> "<仪表盘名>" [--chart-specs-file <workspace内JSON文件>]` | 唯一首选；完整参数与 ledger 契约只读 `references/aitable/aitable-script-recipes.md` |
 | 复制视图 | `dws aitable view duplicate --base-id <baseId> --table-id <tableId> --view-id <源viewId> --new-name "<新名称>" --format json` | 源 viewId 来自当前表的真实返回；不要复制数据表或创建仪表盘替代 |
 | 导入 / 导出 / 批量字段 / 附件 | 先读 `references/aitable/aitable-script-recipes.md`，再运行其中唯一的 `scripts/aitable_ops.py <operation> ...` | 不直接选择底层脚本；不读源码；保留统一入口返回的退出状态与 ledger |
 
@@ -72,7 +72,8 @@ metadata:
 
 - `record create/update` 前必须获取目标字段的 `fieldId`、`type` 与 `config`；`filterUp`、`lookup` 等只读字段不可写。完整格式只在需要时读精确路径 `references/aitable/aitable-cell-value.md`。
 - 筛选和排序字段使用 `fieldId`；`--filters` 最外层是 `and|or + operands`，`--sort` 使用 `direction: asc|desc`。日期和跨表字段规则按需读精确路径 `references/aitable/aitable-filter-sort.md`。
-- `record query --all` 仍受 `--page-limit` 约束；分页中断或局部富化失败时保留已有结果，输出 completeness 与逐项失败 ledger，不把部分结果描述为全量。
+- **Complete evidence:** if an exact total/set relies on paginated output, use `--all --page-limit 0` or iterate until `nextCursor` is empty and `hasMore` is false. A complete write-result ID list is sufficient; a truncated page is not.
+- **Capability proof:** with write authorization, create minimal prerequisites, execute, and read back. Help/Schema alone is unverified.
 - 创建、更新、导入、批量建字段等写操作必须检查业务 `status`、逐项结果与返回 ID；普通写入按用户明确要求执行后回读，不能只凭退出码宣称成功。
 - 长 JSON 使用 `--records-file` / 任务文件；不得为绕过字段错误而静默丢列、改类型或删除失败项。
 

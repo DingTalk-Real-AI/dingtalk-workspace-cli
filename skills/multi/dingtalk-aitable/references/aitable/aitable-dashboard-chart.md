@@ -8,7 +8,7 @@ python3 <本 Skill 绝对目录>/scripts/aitable_ops.py dashboard <BASE_ID> "<�
 
 # 建仪表盘和常用图表
 python3 <本 Skill 绝对目录>/scripts/aitable_ops.py dashboard <BASE_ID> "<仪表盘名>" \
-  --chart-specs <workspace内/charts.json>
+  --chart-specs-file <workspace内/charts.json>
 ```
 
 统一入口的 dashboard 操作是 `dashboard create → chart create（可选）→ dashboard get` 的唯一首选

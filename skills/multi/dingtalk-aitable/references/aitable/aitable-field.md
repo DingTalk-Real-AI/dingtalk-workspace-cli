@@ -87,6 +87,8 @@ dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> \
 
 创建 `lookup`（关联引用）和 `filterUp`（查找引用）字段时，config 格式有严格要求：
 
+当用户要求判断此能力且已授权创建资源时，不要只读 Help/Schema 后下结论：创建最小目标表及必需字段，执行一次真实字段创建并用 `field get` 回读。若没有写入授权，只能报告“接口声明支持但未实际验证”。
+
 #### bidirectionalLink / unidirectionalLink（关联字段）
 
 ```bash

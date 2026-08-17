@@ -3,7 +3,7 @@
 
 Examples:
   python3 create_dashboard_chart.py BASE_ID "状态分析仪表盘"
-  python3 create_dashboard_chart.py BASE_ID "状态分析仪表盘" --chart-specs charts.json
+  python3 create_dashboard_chart.py BASE_ID "状态分析仪表盘" --chart-specs-file charts.json
 
 charts.json is a JSON array. Each item accepts:
   name, chart_type, table_id, measure_type, measure_field_id,
@@ -193,7 +193,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("base_id", help="Target AI Table baseId")
     parser.add_argument("dashboard_name", help="Dashboard name")
-    parser.add_argument("--chart-specs", help="Workspace-local JSON chart spec file")
+    parser.add_argument(
+        "--chart-specs-file", "--chart-specs", dest="chart_specs_file",
+        help="Workspace-local file containing a JSON array of chart specs",
+    )
     parser.add_argument("--dws", default="dws", help="dws executable")
     args = parser.parse_args()
 
@@ -202,7 +205,7 @@ def main() -> int:
     if not RESOURCE_ID_PATTERN.fullmatch(base_id) or not dashboard_name:
         parser.error("base_id and dashboard_name are required and must be valid")
     try:
-        specs = validate_specs(safe_json_file(args.chart_specs)) if args.chart_specs else []
+        specs = validate_specs(safe_json_file(args.chart_specs_file)) if args.chart_specs_file else []
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
 
