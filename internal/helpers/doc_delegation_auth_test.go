@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -131,15 +132,21 @@ func TestCrossPlatformCoverageDocDelegationAuthDeniedWithMessage(t *testing.T) {
 	if err == nil {
 		t.Fatal("CallTool() error = nil, want denial error")
 	}
-	var cliErr *CLIError
-	if !errors.As(err, &cliErr) || cliErr.Code != CodeMCPToolError {
-		t.Fatalf("error = %v, want CLIError with CodeMCPToolError", err)
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Category != apperrors.CategoryAPI {
+		t.Fatalf("error = %v, want structured API-category error", err)
 	}
-	if !strings.Contains(cliErr.Message, "委托鉴权未通过（委托人 u-principal）") || !strings.Contains(cliErr.Message, "没有该文档的委托权限") {
-		t.Fatalf("Message = %q, want principal ID and denialMessage surfaced", cliErr.Message)
+	if typed.Reason != "delegation_denied" {
+		t.Fatalf("Reason = %q, want delegation_denied", typed.Reason)
 	}
-	if strings.Contains(cliErr.Message, "doc.update_document") {
-		t.Fatalf("Message = %q, must not leak internal toolKey", cliErr.Message)
+	if !strings.Contains(typed.Message, "委托鉴权未通过（委托人 u-principal）") || !strings.Contains(typed.Message, "没有该文档的委托权限") {
+		t.Fatalf("Message = %q, want principal ID and denialMessage surfaced", typed.Message)
+	}
+	if strings.Contains(typed.Message, "doc.update_document") {
+		t.Fatalf("Message = %q, must not leak internal toolKey", typed.Message)
+	}
+	if strings.Contains(err.Error(), "[") {
+		t.Fatalf("Error() = %q, must not carry technical [CODE] prefix", err.Error())
 	}
 	if len(inner.calls) != 1 {
 		t.Fatalf("calls = %d, want 1 (original tool must not run)", len(inner.calls))

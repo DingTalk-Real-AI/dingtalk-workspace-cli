@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -139,9 +140,12 @@ type checkCapabilityResponse struct {
 }
 
 // parseCheckResult 解析 check_capability 响应；allowed=false 时返回携带
-// denialMessage（为空时回退 denialReason）的 CLIError。报错文案保持用户视角：
-// 只透出委托人 ID 与服务端拒绝原因，不透出 toolKey 等 MCP 内部实现细节
-// （排查信息由 --verbose 输出与审计日志承担）。
+// denialMessage（为空时回退 denialReason）的结构化 API 错误。报错文案保持
+// 用户视角：只透出委托人 ID 与服务端拒绝原因，不透出 toolKey 等 MCP 内部
+// 实现细节（排查信息由 --verbose 输出与审计日志承担）。这里用
+// apperrors.NewAPI 而非 CLIError：委托鉴权拒绝是服务端业务性拒绝，应呈现
+// category=api/code=1；CLIError 走 PrintJSON 时 category 会兜底成 internal
+// 且 Error() 带 [CODE] 技术前缀，与 code=1 自相矛盾。
 func parseCheckResult(principalID string, result *edition.ToolResult) error {
 	if result == nil {
 		return fmt.Errorf("委托鉴权校验返回 nil result")
@@ -165,10 +169,10 @@ func parseCheckResult(principalID string, result *edition.ToolResult) error {
 		if strings.TrimSpace(msg) == "" {
 			msg = parsed.DenialReason
 		}
-		return &CLIError{
-			Code:    CodeMCPToolError,
-			Message: fmt.Sprintf("委托鉴权未通过（委托人 %s）: %s", principalID, msg),
-		}
+		return apperrors.NewAPI(
+			fmt.Sprintf("委托鉴权未通过（委托人 %s）: %s", principalID, msg),
+			apperrors.WithReason("delegation_denied"),
+		)
 	}
 	return nil
 }
