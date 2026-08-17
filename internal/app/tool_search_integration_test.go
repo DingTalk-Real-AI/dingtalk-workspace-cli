@@ -73,13 +73,10 @@ func TestToolSearchDeliveryDiagnosticTrustAndChineseSlices(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildDeliveryToolSearchDiagnosticComparison() error = %v", err)
 	}
-	// Absolute population/hit counts (1123 intent cases, 990/1123 Recall@5, 1098
-	// tools, 402 chinese_only, 721 mixed_chinese_ascii) were removed: they were
-	// pinned to one Catalog generation and went stale as soon as main added
-	// tools, which turned a real trust gate into a size-drift failure. The
-	// observed values are logged for CI forensics and the headline numbers stay
-	// in the generated comparison JSON (make generate-tool-search-comparison);
-	// what this test enforces is the size-independent trust contract below.
+	// Do not pin absolute Catalog-size counts here: they go stale when main
+	// adds tools. Enforce the size-independent trust contract below; observed
+	// counts are logged for CI forensics and live in the generated comparison
+	// JSON (make generate-tool-search-comparison).
 	t.Logf("intent proxy = %+v excluded_over_budget=%d", report.IntentProxy, report.IntentExcludedOverBudget)
 	t.Logf("language slices = %+v", report.IntentLanguageSlices)
 	t.Logf("context comparison = %+v", report.Context)

@@ -325,7 +325,10 @@ func schemaPayloadFromLoadedCatalog(loaded loadedSchemaCatalog, args []string) (
 			}
 		}
 	}
-	return nil, apperrors.NewValidation("unknown runtime schema path " + strconvQuote(raw))
+	// The message carries the path-form boundary because it is the one surface
+	// an Agent is guaranteed to see at failure time.
+	return nil, apperrors.NewValidation("unknown runtime schema path " + strconvQuote(raw) +
+		": canonical paths contain dots and must be a single argument (e.g. dws schema chat.query_msg_read_status), while space-separated tokens resolve as a CLI path")
 }
 
 func schemaCatalogSnapshotHash(snapshot SchemaCatalogSnapshot) string {

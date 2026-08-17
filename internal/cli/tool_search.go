@@ -268,9 +268,11 @@ func resetDeliveryToolSearchEngineState() {
 // The default engine is memoized per Catalog generation: the delivery Catalog
 // is frozen and DWS_TOOL_SEARCH_* overrides are read once, so the engine is
 // built once per process (a CLI invocation constructs it exactly once either
-// way; long-lived hosts such as a daemon or MCP server reuse it).
-// Re-registering the source root resets Catalog delivery, which invalidates
-// this memo so the engine can never serve a stale Catalog or stale hashes.
+// way; long-lived hosts such as a daemon or MCP server reuse it). The memo
+// serves long-lived hosts: the shipped schema search command rebuilds per
+// invocation through NewDeliveryToolSearchEngineWithConfig. Re-registering
+// the source root resets Catalog delivery, which invalidates this memo so
+// the engine can never serve a stale Catalog or stale hashes.
 func NewDeliveryToolSearchEngine() (*ToolSearchEngine, error) {
 	deliveryToolSearchEngineOnce.Do(func() {
 		deliveryToolSearchEngine, deliveryToolSearchEngineErr =
