@@ -2,8 +2,11 @@ package helpers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 const (
@@ -132,6 +135,13 @@ func WrapErrorWithOperation(err error, operation string) error {
 		return err
 	}
 	if _, ok := err.(*PATError); ok {
+		return err
+	}
+	// 已被结构化分类的错误（internal/errors.Error，如委托鉴权拒绝）直通，
+	// 不再二次分类：与上方 CLIError/PATError 直通同语义。用 errors.As
+	// 穿透 Cause 链，与 PrintJSON 侧的识别逻辑同源。
+	var structured *apperrors.Error
+	if errors.As(err, &structured) {
 		return err
 	}
 	msg := err.Error()

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
@@ -63,6 +65,14 @@ func TestCrossPlatformCoverageWrapErrorClassifiesEveryErrorFamily(t *testing.T) 
 	pat := &PATError{RawJSON: `{}`}
 	if WrapError(pat) != pat {
 		t.Fatal("WrapError changed an existing PATError")
+	}
+	structured := apperrors.NewAPI("委托鉴权未通过", apperrors.WithReason("delegation_denied"))
+	if WrapErrorWithOperation(structured, "doc/get_document_content") != structured {
+		t.Fatal("WrapError must pass through a structured apperrors.Error unchanged")
+	}
+	wrappedStructured := fmt.Errorf("outer: %w", structured)
+	if WrapError(wrappedStructured) != wrappedStructured {
+		t.Fatal("WrapError must pass through errors wrapping a structured apperrors.Error")
 	}
 
 	tests := []struct {
