@@ -180,7 +180,7 @@ def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
     if service == "drive":
         discovery = """已知意图按下方路由。"""
     else:
-        discovery = """已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。"""
+        discovery = """已知意图按下方路由；参数或安全语义不确定时读 leaf Schema，flag 不确定时读 leaf Help。"""
     return f"""{PRODUCT_START}
 ## Shortcut 发现（按需）
 

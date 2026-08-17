@@ -679,7 +679,8 @@ func collectRecentPages(rt *shortcut.RuntimeContext, base map[string]any, pageSi
 		for key, value := range base {
 			params[key] = value
 		}
-		params["maxResults"] = min(pageSize, maxItems-len(items))
+		requestPageSize := min(pageSize, maxItems-len(items))
+		params["maxResults"] = requestPageSize
 		if cursor != "" {
 			params["nextToken"] = cursor
 		}
@@ -717,10 +718,29 @@ func collectRecentPages(rt *shortcut.RuntimeContext, base map[string]any, pageSi
 			)
 		}
 		items = append(items, pageItems...)
-		hasMore, _ = pageContainer["hasMore"].(bool)
+		pageHasMore, hasMoreKnown := pageContainer["hasMore"].(bool)
 		next := firstString(pageContainer, "nextCursor", "nextToken", "nextPageToken")
-		complete = !hasMore
 		cursor = strings.TrimSpace(next)
+		switch {
+		case hasMoreKnown:
+			hasMore = pageHasMore
+			complete = !pageHasMore
+		case cursor != "":
+			hasMore = true
+			complete = false
+		case len(rawItems) < requestPageSize:
+			hasMore = false
+			complete = true
+		default:
+			return nil, apperrors.NewAPI(
+				"get_recent_list 未返回 hasMore 或下一页游标，无法确认是否终页",
+				apperrors.WithOperation("drive/recent"),
+				apperrors.WithReason("recent_pagination_unproven"),
+				apperrors.WithFailureStage("pagination"),
+				apperrors.WithExecutionStarted(false),
+				apperrors.WithRetryable(false),
+			)
+		}
 		if len(items) >= maxItems && hasMore {
 			truncated = true
 			complete = false

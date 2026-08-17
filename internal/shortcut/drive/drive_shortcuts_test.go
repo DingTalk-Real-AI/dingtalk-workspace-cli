@@ -297,6 +297,26 @@ func TestCrossPlatformCoverageDriveRecentPaginationAndJournalCoverage(t *testing
 	if err := run([]string{`{"recentItems":[],"hasMore":true,"nextCursor":"p2"}`}, "--page-all", "--max-pages", "1"); err != nil {
 		t.Fatal(err)
 	}
+	unknownHasMore := &driveCoverageCaller{responses: map[string][]string{
+		"get_recent_list": {
+			`{"recentItems":[{"nodeId":"a"}],"nextCursor":"p2"}`,
+			`{"recentItems":[{"nodeId":"b"}],"hasMore":false}`,
+		},
+	}}
+	if err := runDriveCoverage(t, Recent, unknownHasMore, "--page-all"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(unknownHasMore.history, ",") != "get_recent_list,get_recent_list" {
+		t.Fatalf("missing hasMore did not follow next cursor: %v", unknownHasMore.history)
+	}
+	if err := run([]string{`{"recentItems":[]}`}, "--page-all", "--limit", "1"); err != nil {
+		t.Fatalf("short terminal page without pagination metadata failed: %v", err)
+	}
+	err := run([]string{`{"recentItems":[{"nodeId":"a"}]}`}, "--page-all", "--limit", "1")
+	var paginationErr *apperrors.Error
+	if !errors.As(err, &paginationErr) || paginationErr.Reason != "recent_pagination_unproven" {
+		t.Fatalf("full page without pagination metadata error = %#v", err)
+	}
 
 	result := map[string]any{
 		"items":   []map[string]any{{"nodeId": "remote", "name": "remote"}},
