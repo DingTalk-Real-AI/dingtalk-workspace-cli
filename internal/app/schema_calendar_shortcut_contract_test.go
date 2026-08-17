@@ -28,4 +28,22 @@ func TestCrossPlatformCoverageCalendarAgendaFinalSchemaPreservesCompositePropert
 	if got := schemaContractString(tool["interface_mode"]); got != "composite" {
 		t.Fatalf("calendar.shortcut_agenda interface_mode=%q, want composite", got)
 	}
+	result := schemaContractMap(tool["result"])
+	dataSchema := schemaContractMap(result["data_schema"])
+	properties := schemaContractMap(dataSchema["properties"])
+	for _, field := range []string{"hasMore", "nextCursor"} {
+		if _, exists := properties[field]; exists {
+			t.Fatalf("calendar.shortcut_agenda Result data_schema leaked pagination field %q", field)
+		}
+	}
+	if properties["complete"] == nil {
+		t.Fatal("calendar.shortcut_agenda Result data_schema is missing complete")
+	}
+	pagination, ok := tool["pagination"].(map[string]any)
+	if !ok {
+		t.Fatalf("calendar.shortcut_agenda pagination=%T, want object", tool["pagination"])
+	}
+	if got := schemaContractString(pagination["meta_path"]); got != "meta.pagination" {
+		t.Fatalf("calendar.shortcut_agenda pagination meta_path=%q, want meta.pagination", got)
+	}
 }

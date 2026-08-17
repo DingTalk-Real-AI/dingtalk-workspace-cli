@@ -4,6 +4,9 @@
 package calendar
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"math"
 	"strconv"
 	"strings"
@@ -38,6 +41,21 @@ func TestCrossPlatformCoverageCalendarCommonBranches(t *testing.T) {
 	}
 	if calendarReadShortcut("+x", "x", "x", "items", nil, nil, nil).Contract.Result == nil {
 		t.Fatal("collection read shortcut did not build a result")
+	}
+	collectionResult := calendarCollectionResult("items", "items")
+	var collectionSchema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(collectionResult.DataSchema, &collectionSchema); err != nil {
+		t.Fatalf("decode collection result schema: %v", err)
+	}
+	for _, field := range []string{"hasMore", "nextCursor"} {
+		if _, exists := collectionSchema.Properties[field]; exists {
+			t.Fatalf("pagination field %q leaked into business Result schema", field)
+		}
+	}
+	if _, exists := collectionSchema.Properties["complete"]; !exists {
+		t.Fatal("collection Result schema lost business completeness evidence")
 	}
 	if calendarWriteShortcut("+x", "x", "x", "dws calendar +x", nil, nil, nil).Safety.Confirmation != "user_required" {
 		t.Fatal("write shortcut did not build safety")
@@ -177,6 +195,44 @@ func TestCrossPlatformCoverageCalendarCommonBranches(t *testing.T) {
 	}
 	if err := runCalendarCoverage(t, legacyPage, &calendarCoverageCaller{responses: map[string][]string{}}, "--event", "event-1"); err != nil {
 		t.Fatalf("legacy pagination output: %v", err)
+	}
+
+	unifiedPage := EventGet
+	unifiedPage.OutputRollout = output.RolloutUnifiedActive
+	cmd := corecmd.New(shortcut.FromShortcut(unifiedPage))
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	rt := shortcut.RuntimeContextForTest(cmd, unifiedPage)
+	if err := outputCalendarPage(rt, map[string]any{"count": 1, "items": []any{map[string]any{"id": "item-1"}}}, calendarPageEvidence{Known: true, HasMore: true, NextCursor: "cursor-2"}); err != nil {
+		t.Fatalf("store unified pagination result: %v", err)
+	}
+	if code, emitted, err := output.EmitStoredResult(cmd); err != nil || !emitted || code != 0 {
+		t.Fatalf("emit unified pagination result: code=%d emitted=%v err=%v", code, emitted, err)
+	}
+	var envelope struct {
+		Data map[string]any `json:"data"`
+		Meta struct {
+			Pagination *struct {
+				EndpointExhausted bool   `json:"endpoint_exhausted"`
+				NextToken         string `json:"next_token"`
+			} `json:"pagination"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode unified pagination output: %v\n%s", err, stdout.String())
+	}
+	for _, field := range []string{"hasMore", "nextCursor"} {
+		if _, exists := envelope.Data[field]; exists {
+			t.Fatalf("pagination field %q leaked into business data: %s", field, stdout.String())
+		}
+	}
+	if envelope.Data["complete"] != false {
+		t.Fatalf("business completeness=%#v, want false: %s", envelope.Data["complete"], stdout.String())
+	}
+	if envelope.Meta.Pagination == nil || envelope.Meta.Pagination.EndpointExhausted || envelope.Meta.Pagination.NextToken != "cursor-2" {
+		t.Fatalf("pagination meta=%+v: %s", envelope.Meta.Pagination, stdout.String())
 	}
 }
 

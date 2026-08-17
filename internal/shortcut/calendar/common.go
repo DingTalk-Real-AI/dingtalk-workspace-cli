@@ -66,7 +66,7 @@ func calendarCollectionResult(collection, description string) *contract.ResultSp
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 		DataSchema: json.RawMessage(fmt.Sprintf(
-			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","description":"本页有效业务记录数量"},%q:{"type":"array","description":%q,"items":{"type":"object","description":"Calendar 业务条目","additionalProperties":true}},"complete":{"type":"boolean","description":"服务端分页证据是否证明结果已完整"},"hasMore":{"type":"boolean","description":"服务端是否明确仍有后续页"},"nextCursor":{"type":"string","description":"服务端返回的下一页游标"}},"required":["count",%q,"complete"],"additionalProperties":true}`,
+			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","description":"本页有效业务记录数量"},%q:{"type":"array","description":%q,"items":{"type":"object","description":"Calendar 业务条目","additionalProperties":true}},"complete":{"type":"boolean","description":"服务端分页证据是否证明结果已完整"}},"required":["count",%q,"complete"],"additionalProperties":true}`,
 			description, collection, description, collection,
 		)),
 	}
