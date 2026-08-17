@@ -3201,7 +3201,7 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 				Reason:       "命令先获取临时文档上传凭证，再在本地执行 OSS PUT，并仅暴露稳定的 node 绑定资源契约，不能绑定为单一 interface_ref",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "上传绑定到文档 nodeId 的可复用媒体资源而不插入正文",
+				AgentSummary: "经用户确认后上传绑定到文档 nodeId 的可复用媒体资源而不插入正文",
 				UseWhen:      []string{"为同一文档内白板的 Vector/SVG 写入准备 resourceId 和 resourceUrl 时"},
 				AvoidWhen:    []string{"需要把附件直接插入文档正文时用 doc media insert；不要跨 nodeId 复用资源"},
 				Examples:     []string{"dws doc media upload --node <DOC_ID> --file ./icon.svg --mime-type image/svg+xml --format json"},
@@ -3216,7 +3216,7 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 	mediaUploadCmd.Flags().String("file", "", "本地文件路径 (必填)")
 	mediaUploadCmd.Flags().String("name", "", "资源文件名 (默认使用本地文件名)")
 	mediaUploadCmd.Flags().String("mime-type", "", "文件 MIME 类型 (默认根据扩展名推断)")
-	mediaUploadCmd.Flags().Bool("yes", false, "兼容参数：普通可恢复上传无需确认")
+	mediaUploadCmd.Flags().Bool("yes", false, "确认上传可复用文档媒体资源")
 
 	mediaInsertCmd := NewLeafCommand(LeafSpec{
 		Use:   "insert",

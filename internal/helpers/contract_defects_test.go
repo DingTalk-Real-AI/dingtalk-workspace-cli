@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -172,6 +174,40 @@ func TestDocVersionRevertPublishesRuntimeSafety(t *testing.T) {
 	if safety := *final.Safety; safety.Effect != "write" || safety.Risk != "medium" ||
 		safety.Confirmation != "user_required" || safety.Idempotency != "unknown" {
 		t.Fatalf("doc version revert Safety = %#v, want write/medium/user_required/unknown", safety)
+	}
+}
+
+func TestCrossPlatformCoverageDocMediaUploadRequiresConfirmation(t *testing.T) {
+	cmd, remaining, err := newDocCommand().Find([]string{"media", "upload"})
+	if err != nil || len(remaining) != 0 {
+		t.Fatalf("find doc media upload: command=%v remaining=%v err=%v", cmd, remaining, err)
+	}
+	final, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok || final.Safety == nil || final.Selection == nil {
+		t.Fatal("doc media upload must publish ContractFinal Safety and Selection")
+	}
+	if final.Safety.Confirmation != "user_required" ||
+		!strings.Contains(final.Selection.AgentSummary, "经用户确认后") {
+		t.Fatalf("doc media upload contract = safety %#v selection %#v", final.Safety, final.Selection)
+	}
+	yesFlag := cmd.Flags().Lookup("yes")
+	if yesFlag == nil || !strings.Contains(yesFlag.Usage, "确认上传") || strings.Contains(yesFlag.Usage, "无需确认") {
+		t.Fatalf("doc media upload --yes usage = %#v", yesFlag)
+	}
+
+	file := filepath.Join(t.TempDir(), "icon.svg")
+	if err := os.WriteFile(file, []byte("<svg/>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	caller := &contractDefectCaller{}
+	_, err = executeContractDefectCommand(t, caller, newDocCommand,
+		"media", "upload", "--node", "node-1", "--file", file)
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
+		t.Fatalf("doc media upload without --yes error = %#v, want confirmation_required", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("doc media upload without --yes calls = %#v, want none", caller.calls)
 	}
 }
 
