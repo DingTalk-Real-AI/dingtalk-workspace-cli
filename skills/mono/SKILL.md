@@ -45,7 +45,7 @@ cli_version: ">=1.0.15"
 |---|---:|---|
 | `aitable` | 92 | `dingtalk-aitable` |
 | `attendance` | 19 | `dingtalk-misc` |
-| `calendar` | 20 | `dingtalk-calendar` |
+| `calendar` | 27 | `dingtalk-calendar` |
 | `chat` | 98 | `dingtalk-chat` |
 | `contact` | 14 | `dingtalk-contact` |
 | `devapp` | 19 | `dingtalk-misc` |
@@ -57,7 +57,7 @@ cli_version: ">=1.0.15"
 | `oa` | 7 | `dingtalk-misc` |
 | `report` | 2 | `dingtalk-misc` |
 | `sheet` | 2 | `dingtalk-misc` |
-| `todo` | 11 | `dingtalk-todo` |
+| `todo` | 21 | `dingtalk-todo` |
 | `wiki` | 20 | `dingtalk-wiki` |
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_END -->
 

@@ -98,16 +98,18 @@ var Week = shortcut.Shortcut{
 			"endTime":    startOfNextWeek.UnixMilli(),
 		}
 
-		data, err := rt.CallMCPData("calendar", "list_calendar_events", params)
+		events, err := calendarSmartListAll(rt, params)
 		if err != nil {
 			return err
 		}
 
 		// Same {title,start,end,location,eventId} projection as +today/+tomorrow.
-		return rt.Output(map[string]any{"events": calendarProjectEvents(data)})
+		projected := calendarProjectEvents(events)
+		return rt.Output(map[string]any{"count": len(projected), "events": projected, "complete": true})
 	},
 }
 
 func init() {
+	finalizeCalendarSmart(&Week, "完整翻页并严格校验的本周日程")
 	shortcut.Register(Week)
 }

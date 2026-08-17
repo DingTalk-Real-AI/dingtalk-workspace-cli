@@ -102,7 +102,7 @@ var FreeSlots = shortcut.Shortcut{
 
 		// List the day's events (a little wider than the work window so events
 		// spanning the edges are captured).
-		data, err := rt.CallMCPData("calendar", "list_calendar_events", map[string]any{
+		events, err := calendarSmartListAll(rt, map[string]any{
 			"startTime":  day.UnixMilli(),
 			"endTime":    day.AddDate(0, 0, 1).UnixMilli(),
 			"calendarId": "primary",
@@ -114,7 +114,7 @@ var FreeSlots = shortcut.Shortcut{
 		// Collect and clip busy intervals to the work window.
 		type interval struct{ start, end time.Time }
 		var busy []interval
-		for _, e := range shortcutNextEventList(data) {
+		for _, e := range events {
 			s, ok := shortcutNextEventStart(e)
 			if !ok {
 				continue
@@ -156,6 +156,7 @@ var FreeSlots = shortcut.Shortcut{
 			"slotCount": len(free),
 			"freeSlots": free,
 			"allBusy":   len(free) == 0,
+			"complete":  true,
 		})
 	},
 }
@@ -170,5 +171,6 @@ func freeSlotEntry(start, end time.Time) map[string]any {
 }
 
 func init() {
+	finalizeCalendarSmart(&FreeSlots, "完整事件集上计算的工作时段空档")
 	shortcut.Register(FreeSlots)
 }

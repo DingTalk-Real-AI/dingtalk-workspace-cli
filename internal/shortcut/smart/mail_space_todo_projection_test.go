@@ -111,8 +111,12 @@ func runShortcut(t *testing.T, fake *stubMailboxCaller, argv ...string) string {
 	root.SetOut(&buf)
 	root.SetErr(io.Discard)
 	root.SetArgs(argv)
-	if err := root.Execute(); err != nil {
+	executed, err := root.ExecuteC()
+	if err != nil {
 		t.Fatalf("execute %v: %v", argv, err)
+	}
+	if _, _, err := output.EmitStoredResult(executed); err != nil {
+		t.Fatalf("emit %v: %v", argv, err)
 	}
 	return buf.String()
 }
@@ -173,14 +177,15 @@ func TestCreatedTodosProjectsCards(t *testing.T) {
 		"get_user_todos_in_current_org": `{"result":{"todoCards":[
 			{"subject":"todoA","taskId":"111","dueTime":1784686500000},
 			{"subject":"todoB","taskId":"222"}
-		]}}`,
+		],"hasMore":false}}`,
 	}}
 	out := runShortcut(t, fake, "todo", "+created-todos", "--format", "json")
 	var d map[string]any
 	if err := json.Unmarshal([]byte(out), &d); err != nil {
 		t.Fatalf("output not json: %q", out)
 	}
-	created, _ := d["created"].([]any)
+	payload, _ := d["data"].(map[string]any)
+	created, _ := payload["created"].([]any)
 	if len(created) != 2 {
 		t.Fatalf("lower/upper mismatch: 2 todos in backend, projection created=%d (%s)", len(created), out)
 	}
