@@ -1033,7 +1033,7 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 				if verifyErr == nil && verifyUpdatedDocumentContent(verification, content, mode, format) {
 					steps = append(steps, map[string]any{"name": stepName, "status": "unknown"}, map[string]any{"name": "reconcile", "status": "success", "attempts": attempts})
 					return rt.Output(docEnvelope("doc.update", map[string]any{
-						"nodeId": nodeID, "mode": mode, "verified": true, "reconciledAfterWriteError": true,
+						"nodeId": nodeID, "mode": mode, "verified": true, "verification": verification, "reconciledAfterWriteError": true,
 					}, steps...))
 				}
 			}
@@ -1062,7 +1062,7 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 		return docVerificationError("doc.update", "verify", nodeID, fmt.Errorf("回读结果未包含预期内容"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	steps = append(steps, map[string]any{"name": "verify", "status": "success", "attempts": attempts})
-	receipt := map[string]any{"nodeId": nodeID, "mode": mode, "chunksWritten": len(chunks), "verified": true}
+	receipt := map[string]any{"nodeId": nodeID, "mode": mode, "chunksWritten": len(chunks), "verified": true, "verification": verification}
 	if revision, ok := nestedRevision(lastResult); ok {
 		receipt["revision"] = revision
 	} else if revision, ok := nestedRevision(verification); ok {

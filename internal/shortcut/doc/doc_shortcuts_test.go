@@ -211,6 +211,75 @@ func TestCrossPlatformCoverageDocMutationPreservesV1SuccessReceipt(t *testing.T)
 	}
 }
 
+func TestCrossPlatformCoverageDocContentMutationPreservesV1Verification(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		command        string
+		failAt         int
+		readResult     map[string]any
+		wantReconciled bool
+	}{
+		{
+			name:       "append success",
+			command:    "append",
+			readResult: map[string]any{"markdown": "existing\nfinal body", "revision": 7.0},
+		},
+		{
+			name:       "overwrite success",
+			command:    "overwrite",
+			readResult: map[string]any{"markdown": "final body", "revision": 7.0},
+		},
+		{
+			name:           "overwrite reconcile success",
+			command:        "overwrite",
+			failAt:         1,
+			readResult:     map[string]any{"markdown": "final body", "revision": 7.0},
+			wantReconciled: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			caller := &docCoverageCaller{
+				failAt: tc.failAt,
+				output: &output,
+				responses: map[string][]map[string]any{
+					"get_document_content": {tc.readResult},
+				},
+			}
+			if err := runDocCoverage(t, Update, caller,
+				"--node", "compat-node",
+				"--command", tc.command,
+				"--content", "final body",
+				"--yes",
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			var envelope map[string]any
+			if err := json.Unmarshal(output.Bytes(), &envelope); err != nil {
+				t.Fatalf("decode update output %q: %v", output.String(), err)
+			}
+			if envelope["contractVersion"] != "doc.operation.v1" {
+				t.Fatalf("contractVersion = %#v", envelope["contractVersion"])
+			}
+			data, ok := envelope["data"].(map[string]any)
+			if !ok || data["nodeId"] != "compat-node" || data["mode"] != tc.command || data["verified"] != true {
+				t.Fatalf("content mutation receipt = %#v", envelope["data"])
+			}
+			verification, ok := data["verification"].(map[string]any)
+			if !ok || !reflect.DeepEqual(verification, tc.readResult) {
+				t.Fatalf("legacy verification receipt = %#v", data["verification"])
+			}
+			if got := data["reconciledAfterWriteError"] == true; got != tc.wantReconciled {
+				t.Fatalf("reconciledAfterWriteError = %v, want %v", got, tc.wantReconciled)
+			}
+			if !tc.wantReconciled && data["chunksWritten"] != 1.0 {
+				t.Fatalf("chunksWritten = %#v", data["chunksWritten"])
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageDocMutationConfirmationMetadataMatchesSelectionText(t *testing.T) {
 	for name, declaration := range map[string]shortcut.Shortcut{
 		"update":            Update,
