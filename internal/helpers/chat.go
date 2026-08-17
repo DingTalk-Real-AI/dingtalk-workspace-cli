@@ -3413,10 +3413,11 @@ func newChatCommand() *cobra.Command {
 	chatMessageSendByBotCmd := &cobra.Command{
 		Use:   "send-by-bot",
 		Short: "机器人发送消息（--conversation-id 群聊 / --users 单聊）",
-		Long: `群聊：传 --conversation-id 指定群；单聊：传 --users 或 --open-dingtalk-ids 指定用户列表，与 --conversation-id 只能选其一，不能同时指定。省略 --msg-type 时发送 Markdown；图片使用 --msg-type image --image-url；本地文件使用 --msg-type file --file-path，CLI 完成上传后发送。
+		Long: `群聊：传 --conversation-id 指定群；单聊：传 --users 或 --open-dingtalk-ids 指定用户列表，与 --conversation-id 只能选其一，不能同时指定。省略 --msg-type 时发送 Markdown；图片使用 --msg-type image --image-url；本地文件使用 --msg-type file --file-path，CLI 完成上传后发送。机器人引用回复仅支持群聊 Markdown，同时传 --reply（原消息 openMessageId）和 --ref-sender（原消息发送者 openDingTalkId）；回复可省略 --title，CLI 会从正文生成标题。
 
 ⚠️ 重要：该接口会真实发送消息到目标会话，不可用于测试或试探性调用。调用前必须确认消息内容和接收对象无误。`,
 		Example: `  dws chat message send-by-bot --robot-code <robot-code> --conversation-id <openconversation_id> --title "日报" --text "## 今日完成..."
+  dws chat message send-by-bot --robot-code <robot-code> --conversation-id <openconversation_id> --reply <openMessageId> --ref-sender <openDingTalkId> --text "收到"
   dws chat message send-by-bot --robot-code <robot-code> --conversation-id <openconversation_id> --msg-type image --image-url "https://example.com/image.png"
   dws chat message send-by-bot --robot-code <robot-code> --conversation-id <openconversation_id> --msg-type file --file-path ./report.pdf
   dws chat message send-by-bot --robot-code <robot-code> --users userId1,userId2 --title "提醒" --text "请提交周报"
@@ -3433,9 +3434,16 @@ func newChatCommand() *cobra.Command {
 			text := mustGetFlag(cmd, "text")
 			imageURL := strings.TrimSpace(mustGetFlag(cmd, "image-url"))
 			filePath := mustGetFlag(cmd, "file-path")
+			referenceOpenMessageID := strings.TrimSpace(mustGetFlag(cmd, "reply"))
+			refSender := strings.TrimSpace(mustGetFlag(cmd, "ref-sender"))
+			replyChanged := cmd.Flags().Changed("reply")
+			refSenderChanged := cmd.Flags().Changed("ref-sender")
 
 			if err := validateRequiredFlags(cmd, "robot-code"); err != nil {
 				return err
+			}
+			if replyChanged != refSenderChanged || (replyChanged && (referenceOpenMessageID == "" || refSender == "")) {
+				return fmt.Errorf("--reply and --ref-sender must be specified together")
 			}
 			if msgType == "" {
 				if imageURL != "" {
@@ -3448,8 +3456,17 @@ func newChatCommand() *cobra.Command {
 			}
 			switch msgType {
 			case "markdown":
-				if err := validateRequiredFlags(cmd, "title", "text"); err != nil {
-					return err
+				if referenceOpenMessageID != "" {
+					if err := validateRequiredFlags(cmd, "text"); err != nil {
+						return err
+					}
+					if title == "" {
+						title = sanitizeTitleFromText(text)
+					}
+				} else {
+					if err := validateRequiredFlags(cmd, "title", "text"); err != nil {
+						return err
+					}
 				}
 			case "image":
 				if imageURL == "" {
@@ -3473,6 +3490,22 @@ func newChatCommand() *cobra.Command {
 			}
 			if chatID == "" && !hasDirectTarget {
 				return fmt.Errorf("--conversation-id or --users/--open-dingtalk-ids is required")
+			}
+
+			if referenceOpenMessageID != "" {
+				if chatID == "" {
+					return fmt.Errorf("--reply and --ref-sender are only supported with --conversation-id")
+				}
+				if msgType != "markdown" {
+					return fmt.Errorf("--reply and --ref-sender only support Markdown group messages")
+				}
+				if !isOpenDingTalkID(refSender) {
+					resolved, err := resolveOpenDingTalkID(cmd.Context(), refSender)
+					if err != nil {
+						return err
+					}
+					refSender = resolved
+				}
 			}
 
 			userIDs := splitCommaList(usersStr)
@@ -3540,6 +3573,10 @@ func newChatCommand() *cobra.Command {
 					toolArgs["msgKey"] = "sampleMarkdownDX"
 				}
 				toolArgs["openConversationId"] = chatID
+				if referenceOpenMessageID != "" {
+					toolArgs["referenceOpenMessageId"] = referenceOpenMessageID
+					toolArgs["srcMsgSendOpenDingTalkId"] = refSender
+				}
 				if len(atUserIds) > 0 {
 					toolArgs["atUserIds"] = atUserIds
 				}
@@ -3586,17 +3623,20 @@ func newChatCommand() *cobra.Command {
 				CLIPath:        "chat message send-by-bot",
 				PrimaryCLIPath: "chat message send-by-bot",
 			},
-			Description: "以应用机器人身份发送 Markdown、图片或文件群消息或批量单聊",
+			Description: "以应用机器人身份发送 Markdown、图片或文件群消息、群聊引用回复或批量单聊",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "composite",
 				Availability: "available",
 				Reason:       "命令包含多个 RPC、条件分派或本地 HTTP/文件步骤，不能绑定为单一 interface_ref",
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "以应用机器人身份发送 Markdown、图片或文件群消息或批量单聊",
-				UseWhen:      []string{"已有 robotCode 且需要机器人身份投递 Markdown、图片或文件时"},
+				AgentSummary: "以应用机器人身份发送 Markdown、图片或文件群消息、群聊引用回复或批量单聊",
+				UseWhen:      []string{"已有 robotCode 且需要机器人身份投递 Markdown、图片或文件时", "需要机器人在群聊中引用回复一条已有消息时"},
 				AvoidWhen:    []string{"个人身份发送或自定义 Webhook 告警不要使用"},
-				Examples:     []string{"dws chat message send-by-bot --robot-code <robotCode> --group <openConversationId> --title \"日报\" --text \"今日进展\""},
+				Examples: []string{
+					"dws chat message send-by-bot --robot-code <robotCode> --group <openConversationId> --title \"日报\" --text \"今日进展\"",
+					"dws chat message send-by-bot --robot-code <robotCode> --group <openConversationId> --reply <openMessageId> --ref-sender <openDingTalkId> --text \"收到\"",
+				},
 			},
 			// Keep title/text required_when out of Schema: the runtime switch above
 			// enforces Markdown inputs, while adding it breaks merge-base compatibility.
@@ -3605,6 +3645,8 @@ func newChatCommand() *cobra.Command {
 				{Name: "msg-type", RequiredWhen: "image-url or file-path is provided", Enum: []string{"markdown", "image", "file"}},
 				{Name: "image-url", RequiredWhen: "msg-type is image"},
 				{Name: "file-path", RequiredWhen: "msg-type is file"},
+				{Name: "reply", Property: "referenceOpenMessageId", RequiredWhen: "ref-sender is provided", InterfaceType: "string"},
+				{Name: "ref-sender", Property: "srcMsgSendOpenDingTalkId", RequiredWhen: "reply is provided", InterfaceType: "string"},
 			},
 		},
 	})
@@ -4768,7 +4810,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatMessageSendByBotCmd.Flags().String("conversation-id", "", "群聊 openConversationId（群聊时必填）")
 	chatMessageSendByBotCmd.Flags().String("users", "", "用户 userId 列表，逗号分隔，最多20个（单聊时必填）")
 	chatMessageSendByBotCmd.Flags().String("msg-type", "", "消息类型: markdown/image/file（省略时为 markdown；图片使用 image --image-url；本地文件使用 file --file-path）")
-	chatMessageSendByBotCmd.Flags().String("title", "", "Markdown 消息标题（发送 Markdown 时必填）")
+	chatMessageSendByBotCmd.Flags().String("title", "", "Markdown 消息标题（发送普通 Markdown 时必填；引用回复省略时从正文生成）")
 	chatMessageSendByBotCmd.Flags().String("text", "", "Markdown 消息内容（发送 Markdown 时必填；稳定换行用空行，转义形式写 \\n\\n，不要只写 \\n）")
 	chatMessageSendByBotCmd.Flags().String("image-url", "", "公网图片 URL（msgType=image 时必填）")
 	chatMessageSendByBotCmd.Flags().String("file-path", "", "本地文件路径（msgType=file 时直接上传并按 file 消息发送）")
@@ -4776,9 +4818,13 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatMessageSendByBotCmd.Flags().String("open-dingtalk-ids", "", "用户 openDingtalkId 列表，逗号分隔（单聊时可替代 --users，可选）")
 	chatMessageSendByBotCmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingtalkId 列表，逗号分隔（仅群聊时生效，可选）")
 	chatMessageSendByBotCmd.Flags().Bool("at-all", false, "@所有人（可选），服务端接收字符串 true/false")
+	chatMessageSendByBotCmd.Flags().String("reply", "", "被引用消息的 openMessageId（仅群聊 Markdown；必须与 --ref-sender 同时使用）")
+	chatMessageSendByBotCmd.Flags().String("ref-sender", "", "被引用消息发送者的 openDingTalkId（仅群聊 Markdown；必须与 --reply 同时使用）")
+	chatMessageSendByBotCmd.MarkFlagsRequiredTogether("reply", "ref-sender")
 	cli.AnnotateRuntimeConstraints(chatMessageSendByBotCmd, cli.RuntimeSchemaConstraints{
 		MutuallyExclusive: [][]string{{"group", "users"}},
 		RequireOneOf:      [][]string{{"group", "users"}},
+		RequireTogether:   [][]string{{"reply", "ref-sender"}},
 	})
 	cli.AnnotateRuntimeFlagFormat(chatMessageSendByBotCmd, "file-path", "file-path")
 

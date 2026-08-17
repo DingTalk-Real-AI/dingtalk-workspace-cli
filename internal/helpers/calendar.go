@@ -230,7 +230,7 @@ func newCalendarCommand() *cobra.Command {
 		Long: `管理钉钉日历：日程、参会人、会议室、闲忙、附件、日历本、访问权限。调用前必须先使用 --help 查看参数结构。
 
 命令结构:
-  dws calendar event       [list|get|create|update|delete|suggest|respond|instances]  日程管理
+  dws calendar event       [list|get|create|update|delete|suggest|respond|instances|share-info]  日程管理
   dws calendar attendee    [list|add|delete]                 参会人管理
   dws calendar room        [search|add|delete|list-groups]   会议室管理
   dws calendar busy        search                           闲忙查询 (可查人、查会议室)
@@ -2259,7 +2259,87 @@ func newCalendarCommand() *cobra.Command {
 	eventInstancesCmd.Flags().Int("count", 0, "")
 	_ = eventInstancesCmd.Flags().MarkHidden("count")
 
-	eventCmd.AddCommand(eventListCmd, eventGetCmd, eventCreateCmd, eventUpdateCmd, eventDeleteCmd, eventSuggestCmd, eventRespondCmd, eventInstancesCmd)
+	eventShareInfoCmd := &cobra.Command{
+		Use:     "share-info",
+		Aliases: []string{"share_info"},
+		Short:   "获取日程的分享信息",
+		Long:    `根据日程 ID 获取日程的分享信息，展示日程主题、组织人、地点、入会信息等，用于向他人分享日程。eventId 可通过 dws calendar event list 获取。`,
+		Example: `  dws calendar event share-info --id EVENT_ID
+  dws calendar event share-info --id EVENT_ID --language zh-CN
+  dws calendar event share-info --id EVENT_ID --calendar-id primary`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			eventID, err := mustFlagOrFallback(cmd, "id", "event", "event-id", "eventId")
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{"eventId": eventID}
+			if v := flagOrFallback(cmd, "calendar-id", "calendarId", "calendar"); v != "" {
+				toolArgs["calendarId"] = v
+			}
+			if v := flagOrFallback(cmd, "language", "lang"); v != "" {
+				toolArgs["language"] = v
+			}
+			return callMCPTool("get_event_share_info", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(eventShareInfoCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "calendar",
+				Name:           "get_event_share_info",
+				CanonicalPath:  "calendar.get_event_share_info",
+				CLIPath:        "calendar event share-info",
+				PrimaryCLIPath: "calendar event share-info",
+				Aliases:        []string{"calendar event share_info"},
+			},
+			Description: "获取日程的分享信息",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "get_event_share_info"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取日程的分享信息（主题、组织人、地点、入会信息等）",
+				UseWhen:      []string{"已知 eventId，需要获取日程分享信息或入会信息用于分享给他人时"},
+				AvoidWhen: []string{
+					"要查看日程详情改用 dws calendar event get",
+					"未知 eventId 时先 dws calendar event list",
+				},
+				Examples: []string{
+					"dws calendar event share-info --id <EVENT_ID>",
+					"dws calendar event share-info --id <EVENT_ID> --language zh-CN",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "eventId", Required: boolPtr(true)},
+				{Name: "calendar-id", Property: "calendarId"},
+				{Name: "language", Property: "language"},
+			},
+		},
+	})
+
+	// EventShareInfo flags
+	eventShareInfoCmd.Flags().String("id", "", "日程 ID (必填)")
+	eventShareInfoCmd.Flags().String("event", "", "")
+	_ = eventShareInfoCmd.Flags().MarkHidden("event")
+	eventShareInfoCmd.Flags().String("event-id", "", "")
+	_ = eventShareInfoCmd.Flags().MarkHidden("event-id")
+	eventShareInfoCmd.Flags().String("eventId", "", "")
+	_ = eventShareInfoCmd.Flags().MarkHidden("eventId")
+	eventShareInfoCmd.Flags().String("calendar-id", "", "日历 ID (默认 primary 主日历)")
+	eventShareInfoCmd.Flags().String("calendarId", "", "")
+	_ = eventShareInfoCmd.Flags().MarkHidden("calendarId")
+	eventShareInfoCmd.Flags().String("calendar", "", "")
+	_ = eventShareInfoCmd.Flags().MarkHidden("calendar")
+	eventShareInfoCmd.Flags().String("language", "", "语言代码 (可选，如 zh-CN)")
+	eventShareInfoCmd.Flags().String("lang", "", "")
+	_ = eventShareInfoCmd.Flags().MarkHidden("lang")
+
+	eventCmd.AddCommand(eventListCmd, eventGetCmd, eventCreateCmd, eventUpdateCmd, eventDeleteCmd, eventSuggestCmd, eventRespondCmd, eventInstancesCmd, eventShareInfoCmd)
 
 	// participant
 	participantCmd.PersistentFlags().String("event", "", "日程 ID (必填)")
