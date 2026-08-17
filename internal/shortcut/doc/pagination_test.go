@@ -26,18 +26,45 @@ func TestCrossPlatformCoverageDocSearchPageAllContract(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageTemplateSearchDefaultsToCompletePagination(t *testing.T) {
-	caller := &docCoverageCaller{responses: map[string][]map[string]any{
-		"search_doc_templates": {
-			{"templates": []any{map[string]any{"templateId": "a", "name": "周报 A"}}, "hasMore": true, "nextCursor": "p2"},
-			{"templates": []any{map[string]any{"templateId": "b", "name": "周报 B"}}, "hasMore": false},
-		},
-	}}
-	if err := runDocCoverage(t, TemplateSearch, caller, "--query", "周报", "--limit", "1"); err != nil {
-		t.Fatal(err)
-	}
-	if len(caller.history) != 2 || caller.history[1].params["nextCursor"] != "p2" {
-		t.Fatalf("template pagination calls = %#v", caller.history)
+func TestCrossPlatformCoverageTemplateLimitPreservesTotalResultCap(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		declaration shortcut.Shortcut
+		tool        string
+		args        []string
+	}{
+		{name: "list", declaration: TemplateList, tool: "list_doc_templates"},
+		{name: "search", declaration: TemplateSearch, tool: "search_doc_templates", args: []string{"--query", "周报"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &docCoverageCaller{responses: map[string][]map[string]any{
+				tc.tool: {
+					{"templates": []any{map[string]any{"templateId": "a", "name": "周报 A"}}, "hasMore": true, "nextCursor": "p2"},
+					{"templates": []any{map[string]any{"templateId": "b", "name": "周报 B"}}, "hasMore": false},
+				},
+			}}
+			args := append(append([]string{}, tc.args...), "--limit", "1")
+			if err := runDocCoverage(t, tc.declaration, caller, args...); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.history) != 1 || caller.history[0].params["maxResults"] != 1 {
+				t.Fatalf("template limit calls = %#v", caller.history)
+			}
+
+			caller = &docCoverageCaller{responses: map[string][]map[string]any{
+				tc.tool: {
+					{"templates": []any{map[string]any{"templateId": "a", "name": "周报 A"}}, "hasMore": true, "nextCursor": "p2"},
+					{"templates": []any{map[string]any{"templateId": "b", "name": "周报 B"}}, "hasMore": false},
+				},
+			}}
+			args = append(args, "--max-items", "2")
+			if err := runDocCoverage(t, tc.declaration, caller, args...); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.history) != 2 || caller.history[1].params["nextCursor"] != "p2" {
+				t.Fatalf("template max-items calls = %#v", caller.history)
+			}
+		})
 	}
 }
 

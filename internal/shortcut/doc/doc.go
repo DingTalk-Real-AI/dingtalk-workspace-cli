@@ -961,8 +961,12 @@ var TemplateList = shortcut.Shortcut{
 		if pageSize <= 0 {
 			pageSize = 50
 		}
+		maxItems := rt.Int("max-items")
+		if rt.Changed("limit") && !rt.Changed("max-items") {
+			maxItems = pageSize
+		}
 		candidates, complete, truncated, nextCursor, pagesRead, err := collectTemplatePages(rt, "list_doc_templates", params, docPageOptions{
-			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: rt.Int("max-items"), Cursor: rt.Str("cursor"),
+			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: maxItems, Cursor: rt.Str("cursor"),
 		})
 		if err != nil {
 			return err
@@ -1021,12 +1025,16 @@ var TemplateSearch = shortcut.Shortcut{
 		if pageSize <= 0 {
 			pageSize = 50
 		}
+		maxItems := rt.Int("max-items")
+		if rt.Changed("limit") && !rt.Changed("max-items") {
+			maxItems = pageSize
+		}
 		params := map[string]any{"searchName": rt.Str("query")}
 		if v := rt.Str("source"); v != "" {
 			params["templateSource"] = v
 		}
 		candidates, complete, truncated, nextCursor, pagesRead, err := collectTemplatePages(rt, "search_doc_templates", params, docPageOptions{
-			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: rt.Int("max-items"), Cursor: rt.Str("cursor"),
+			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: maxItems, Cursor: rt.Str("cursor"),
 		})
 		if err != nil {
 			return err
