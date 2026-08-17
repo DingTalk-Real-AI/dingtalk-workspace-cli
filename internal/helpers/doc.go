@@ -536,7 +536,22 @@ var (
 	docMediaGetwd        = os.Getwd
 	docMediaEvalSymlinks = filepath.EvalSymlinks
 	docMediaStat         = os.Stat
+	docMediaVerifyWait   = waitForDocMediaVerification
 )
+
+func waitForDocMediaVerification(ctx context.Context, delay time.Duration) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
 
 func resolveDocMediaInputPath(raw string) (string, os.FileInfo, error) {
 	path := strings.TrimSpace(raw)
@@ -868,7 +883,10 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		}
 		if attempt < 4 {
 			backoff := []time.Duration{100 * time.Millisecond, 300 * time.Millisecond, 800 * time.Millisecond}
-			helperSleep(backoff[attempt-1])
+			if waitErr := docMediaVerifyWait(ctx, backoff[attempt-1]); waitErr != nil {
+				verificationCause = waitErr
+				break
+			}
 		}
 	}
 	if verificationCause != nil {

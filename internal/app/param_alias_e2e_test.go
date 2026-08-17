@@ -65,7 +65,7 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 	case "list_doc_versions":
 		return `{"result":{"items":[{"version":3}]}}`
 	case "revert_doc_version":
-		return `{"version":3}`
+		return `{"revertedToVersion":3}`
 	case "search_doc_templates":
 		return `{"result":[{"templateId":"fixture-template-id"}]}`
 	case "create_document":

@@ -4,10 +4,14 @@
 package doc
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -20,6 +24,9 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/docresolver"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/renderer/html"
 )
 
 var (
@@ -30,13 +37,23 @@ var (
 	docMkdirTemp    = os.MkdirTemp
 	docRemoveAll    = os.RemoveAll
 	docDownload     = localio.Download
-	docVerifySleep  = time.Sleep
+	docVerifyWait   = waitForDocVerification
+	docVerifyDelays = []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
 	orderedListMark = regexp.MustCompile(`(?m)(^|[\n;；])\s*\d+[.)、]\s*`)
+	docMarkdown     = goldmark.New(
+		goldmark.WithExtensions(extension.Table),
+		goldmark.WithRendererOptions(html.WithUnsafe()),
+	)
+	docMarkdownConvert = func(source []byte, writer io.Writer) error {
+		return docMarkdown.Convert(source, writer)
+	}
 )
 
-const docVerificationMaxAttempts = 3
-
 const (
+	docBlockReadPageSize = 50
+	docBlockReadMaxItems = 5000
+	docMarkdownVerifyMax = 2 * 1024 * 1024
+
 	docFetchValidationConstraint  = "range/section/tags/keyword 的条件参数按 scope 校验；--end-block-id 仅限 range；历史 revision 当前不支持"
 	docUpdateValidationConstraint = "JSONML 不支持 append；--expected-revision 仅支持 overwrite+jsonml；其余动作参数按 --command 的 RequiredWhen 校验"
 )
@@ -596,7 +613,7 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 			params["element"] = map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": content}}
 		}
 		return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block", params, node,
-			"list_document_blocks", map[string]any{"nodeId": node, "format": verificationFormat},
+			"list_document_blocks", map[string]any{"nodeId": node, "format": verificationFormat, "__allBlocks": true},
 			func(result, data map[string]any) bool {
 				return verifyInsertedBlock(result, data, referenceBlockID, where, content, rt.Str("doc-format"))
 			})
@@ -618,7 +635,7 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 			params["element"] = element
 		}
 		return executeVerifiedDocMutation(rt, "doc.update", "update_document_block", params, node,
-			"list_document_blocks", map[string]any{"nodeId": node, "blockId": blockID, "format": verificationFormat},
+			"list_document_blocks", map[string]any{"nodeId": node, "format": verificationFormat, "__allBlocks": true},
 			func(_, data map[string]any) bool {
 				return blockContentEquals(data, blockID, content, rt.Str("doc-format"))
 			})
@@ -632,13 +649,16 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		}
 		block := findCanonicalBlock(current, blockID, "jsonml")
 		if block == nil {
+			block = findBlock(current, blockID)
+		}
+		if block == nil && len(current) > 0 {
 			return apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到要删除的 block；删除后的 ID 禁止复用")
 		}
-		if containsResourceReference(block) && !rt.Bool("allow-resource-delete") {
+		if block != nil && containsResourceReference(block) && !rt.Bool("allow-resource-delete") {
 			return apperrors.NewValidation("UNSAFE_RESOURCE_DELETE: 目标 block 是图片或附件容器，不是图片后的空块。若任务只是清理媒体后的空段落，禁止覆盖此保护或重传媒体；仅当 media insert 回执的 position.followingBlockExists=true 时，才可使用 position.followingBlockId 删除那个独立空块。删除媒体资源必须由用户单独明确要求")
 		}
 		return executeVerifiedDocMutation(rt, "doc.update", "delete_document_block", map[string]any{"nodeId": node, "blockId": blockID}, node,
-			"list_document_blocks", map[string]any{"nodeId": node, "format": "element"},
+			"list_document_blocks", map[string]any{"nodeId": node, "format": "element", "__allBlocks": true},
 			func(_, data map[string]any) bool { return findBlock(data, blockID) == nil })
 	case "str_replace":
 		return executePlainTextReplace(rt, node)
@@ -823,7 +843,7 @@ func nestedRevision(value any) (int, bool) {
 }
 
 func executePlainTextReplace(rt *shortcut.RuntimeContext, nodeID string) error {
-	data, err := rt.CallMCPData(productDoc, "list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element"})
+	data, err := readAllDocumentBlocks(rt, map[string]any{"nodeId": nodeID, "format": "element"})
 	if err != nil {
 		return err
 	}
@@ -843,7 +863,7 @@ func executePlainTextReplace(rt *shortcut.RuntimeContext, nodeID string) error {
 	updated := strings.Replace(matchedText, rt.Str("old"), rt.Str("new"), 1)
 	return executeVerifiedDocMutation(rt, "doc.update", "update_document_block",
 		map[string]any{"nodeId": nodeID, "blockId": blockID, "element": element}, nodeID,
-		"list_document_blocks", map[string]any{"nodeId": nodeID, "blockId": blockID, "format": "element"},
+		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element", "__allBlocks": true},
 		func(_, data map[string]any) bool { return blockContentEquals(data, blockID, updated, "markdown") })
 }
 
@@ -899,7 +919,7 @@ func replaceTextFields(value any, oldText, newText string) int {
 }
 
 func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID, referenceBlockID, where string) error {
-	data, err := rt.CallMCPData(productDoc, "list_document_blocks", map[string]any{"nodeId": nodeID, "blockId": rt.Str("block-id"), "format": "element"})
+	data, err := readAllDocumentBlocks(rt, map[string]any{"nodeId": nodeID, "format": "element"})
 	if err != nil {
 		return err
 	}
@@ -914,7 +934,7 @@ func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID, referenceBlockID, whe
 	stripBlockIDs(block)
 	return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block",
 		map[string]any{"nodeId": nodeID, "referenceBlockId": referenceBlockID, "where": where, "element": block}, nodeID,
-		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element"},
+		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element", "__allBlocks": true},
 		func(result, data map[string]any) bool {
 			return verifyInsertedCanonicalBlock(result, data, referenceBlockID, where, expectedContent, "markdown")
 		})
@@ -1071,22 +1091,195 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 	return rt.Output(docEnvelope("doc.update", receipt, steps...))
 }
 
-func readDocVerification(rt *shortcut.RuntimeContext, tool string, params map[string]any, matches func(map[string]any) bool) (map[string]any, int, error) {
+func readDocVerification(rt *shortcut.RuntimeContext, tool string, rawParams map[string]any, matches func(map[string]any) bool) (map[string]any, int, error) {
+	params := cloneMap(rawParams)
+	allBlocks, _ := params["__allBlocks"].(bool)
+	delete(params, "__allBlocks")
 	var last map[string]any
-	for attempt := 1; attempt <= docVerificationMaxAttempts; attempt++ {
-		data, err := rt.CallMCPData(productDoc, tool, params)
+	var lastErr error
+	for attempt := 0; attempt <= len(docVerifyDelays); attempt++ {
+		var data map[string]any
+		var err error
+		if allBlocks && tool == "list_document_blocks" {
+			data, err = readAllDocumentBlocks(rt, params)
+		} else {
+			data, err = rt.CallMCPData(productDoc, tool, params)
+		}
 		if err != nil {
-			return nil, attempt, err
+			lastErr = err
+		} else {
+			last = data
+			lastErr = nil
+			if matches == nil || matches(data) {
+				return data, attempt + 1, nil
+			}
 		}
-		last = data
-		if matches == nil || matches(data) {
-			return data, attempt, nil
-		}
-		if attempt < docVerificationMaxAttempts {
-			docVerifySleep(100 * time.Millisecond)
+		if attempt < len(docVerifyDelays) {
+			if err := docVerifyWait(rt.Command().Context(), docVerifyDelays[attempt]); err != nil {
+				return nil, attempt + 1, err
+			}
 		}
 	}
-	return last, docVerificationMaxAttempts, nil
+	if lastErr != nil {
+		return nil, len(docVerifyDelays) + 1, lastErr
+	}
+	return last, len(docVerifyDelays) + 1, nil
+}
+
+func waitForDocVerification(ctx context.Context, delay time.Duration) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func readAllDocumentBlocks(rt *shortcut.RuntimeContext, base map[string]any) (map[string]any, error) {
+	all := make([]any, 0, docBlockReadPageSize)
+	seenPageIdentities := map[string]bool{}
+	var firstPage map[string]any
+	for start := 0; start < docBlockReadMaxItems; start += docBlockReadPageSize {
+		params := cloneMap(base)
+		params["startIndex"] = start
+		params["endIndex"] = start + docBlockReadPageSize - 1
+		page, err := rt.CallMCPData(productDoc, "list_document_blocks", params)
+		if err != nil {
+			return nil, err
+		}
+		if firstPage == nil {
+			firstPage = page
+		}
+		blocks, ok := documentBlockEntries(page)
+		if !ok {
+			return nil, fmt.Errorf("list_document_blocks 回读缺少 blocks 数组")
+		}
+		pageIdentity := documentBlockPageIdentity(blocks)
+		if pageIdentity != "" && seenPageIdentities[pageIdentity] {
+			return nil, fmt.Errorf("list_document_blocks 分页停滞，无法证明回读完整")
+		}
+		if pageIdentity != "" {
+			seenPageIdentities[pageIdentity] = true
+		}
+		all = append(all, blocks...)
+		hasMore, known, _ := docPageState(page)
+		if known && !hasMore {
+			return completedDocumentBlockRead(firstPage, page, all, len(all), start == 0), nil
+		}
+		if !known {
+			if total, ok := nestedNonNegativeInt(page, "totalCount", "total_count"); ok && len(all) >= total {
+				return completedDocumentBlockRead(firstPage, page, all, total, start == 0), nil
+			}
+		}
+		if !known && len(blocks) < docBlockReadPageSize {
+			return completedDocumentBlockRead(firstPage, page, all, len(all), start == 0), nil
+		}
+		if len(blocks) == 0 {
+			return nil, fmt.Errorf("list_document_blocks 声明仍有下一页但当前页为空，无法证明回读完整")
+		}
+	}
+	return nil, fmt.Errorf("list_document_blocks 超过 %d 个块，无法在安全上限内完成回读", docBlockReadMaxItems)
+}
+
+func completedDocumentBlockRead(firstPage, lastPage map[string]any, blocks []any, total int, singlePage bool) map[string]any {
+	if singlePage {
+		return firstPage
+	}
+	result := map[string]any{"blocks": blocks, "hasMore": false, "totalCount": total}
+	if revision, ok := nestedRevision(lastPage); ok {
+		result["revision"] = revision
+	} else if revision, ok := nestedRevision(firstPage); ok {
+		result["revision"] = revision
+	}
+	return result
+}
+
+func documentBlockPageIdentity(blocks []any) string {
+	if len(blocks) == 0 {
+		return ""
+	}
+	ids := make([]string, 0, len(blocks))
+	for _, value := range blocks {
+		id := ""
+		switch block := value.(type) {
+		case map[string]any:
+			id = blockIdentity(block, "")
+			if id == "" {
+				if element, ok := block["element"].(map[string]any); ok {
+					id = blockIdentity(element, "")
+				}
+			}
+		case []any:
+			id = jsonMLBlockIdentity(block)
+		}
+		if id == "" {
+			return ""
+		}
+		ids = append(ids, id)
+	}
+	encoded, _ := json.Marshal(ids)
+	return string(encoded)
+}
+
+func documentBlockEntries(value any) ([]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range []string{"blocks", "items"} {
+			if blocks, ok := typed[key].([]any); ok {
+				return blocks, true
+			}
+		}
+		if encoded, ok := typed["jsonml"].(string); ok {
+			var decoded any
+			if json.Unmarshal([]byte(encoded), &decoded) == nil {
+				blocks := orderedJSONMLBlocks(decoded)
+				values := make([]any, len(blocks))
+				for index := range blocks {
+					values[index] = blocks[index]
+				}
+				return values, true
+			}
+		}
+		for _, key := range []string{"result", "data"} {
+			if nested, ok := typed[key]; ok {
+				if blocks, found := documentBlockEntries(nested); found {
+					return blocks, true
+				}
+			}
+		}
+	}
+	return nil, false
+}
+
+func nestedNonNegativeInt(value any, keys ...string) (int, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range keys {
+			if raw, ok := typed[key]; ok {
+				switch number := raw.(type) {
+				case float64:
+					if number >= 0 && number == float64(int(number)) {
+						return int(number), true
+					}
+				case int:
+					if number >= 0 {
+						return number, true
+					}
+				}
+			}
+		}
+		for _, key := range []string{"result", "data"} {
+			if result, ok := nestedNonNegativeInt(typed[key], keys...); ok {
+				return result, true
+			}
+		}
+	}
+	return 0, false
 }
 
 func splitDocMarkdown(content string, maxRunes int) []string {
@@ -1140,11 +1333,17 @@ func containsText(value any, needle string) bool {
 }
 
 func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool {
-	expected = normalizeDocumentContentForVerification(expected, format)
+	expectedRaw := expected
+	expected = normalizeDocumentContentForVerification(expectedRaw, format)
 	for _, candidate := range documentContentCandidates(value, format) {
-		actual := normalizeDocumentContentForVerification(candidate, format)
+		actualRaw := candidate
+		actual := normalizeDocumentContentForVerification(actualRaw, format)
 		if mode == "overwrite" {
-			if actual == expected || (format == "markdown" && knownMarkdownRendererEquivalent(actual, expected)) {
+			if actual == expected || (format == "markdown" && (knownMarkdownRendererEquivalent(actual, expected) || stripReadbackDocumentTitle(actual) == expected)) {
+				return true
+			}
+			if format == "markdown" && (markdownSemanticallyEquivalent(actualRaw, expectedRaw) ||
+				markdownSemanticallyEquivalent(stripReadbackDocumentTitle(actualRaw), expectedRaw)) {
 				return true
 			}
 			continue
@@ -1158,9 +1357,47 @@ func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool
 			if expectedRendered != "" && (actualRendered == expectedRendered || strings.HasSuffix(actualRendered, "\n"+expectedRendered)) {
 				return true
 			}
+			if markdownSemanticallyEndsWith(actualRaw, expectedRaw) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func markdownSemanticallyEquivalent(left, right string) bool {
+	leftFingerprint, leftOK := markdownSemanticFingerprint(left)
+	rightFingerprint, rightOK := markdownSemanticFingerprint(right)
+	return leftOK && rightOK && leftFingerprint == rightFingerprint
+}
+
+func markdownSemanticallyEndsWith(content, suffix string) bool {
+	contentFingerprint, contentOK := markdownSemanticFingerprint(content)
+	suffixFingerprint, suffixOK := markdownSemanticFingerprint(suffix)
+	return contentOK && suffixOK && strings.HasSuffix(contentFingerprint, suffixFingerprint)
+}
+
+func markdownSemanticFingerprint(source string) (string, bool) {
+	if len(source) > docMarkdownVerifyMax {
+		return "", false
+	}
+	var rendered bytes.Buffer
+	if err := docMarkdownConvert([]byte(source), &rendered); err != nil {
+		return "", false
+	}
+	return rendered.String(), true
+}
+
+func stripReadbackDocumentTitle(content string) string {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || !strings.HasPrefix(strings.TrimSpace(lines[0]), "# ") {
+		return content
+	}
+	lines = lines[1:]
+	for len(lines) > 0 && strings.TrimSpace(lines[0]) == "" {
+		lines = lines[1:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func verifyInsertedBlock(result, data map[string]any, referenceBlockID, where, expected, format string) bool {
@@ -1362,6 +1599,10 @@ func orderedDocumentBlocks(value any) []map[string]any {
 	walk = func(current any) {
 		switch typed := current.(type) {
 		case map[string]any:
+			if element, ok := typed["element"].(map[string]any); ok && blockIdentity(element, "") != "" {
+				blocks = append(blocks, element)
+				return
+			}
 			if blockIdentity(typed, "") != "" {
 				blocks = append(blocks, typed)
 				return
@@ -1422,9 +1663,23 @@ func normalizeDocumentContentForVerification(raw, format string) string {
 func normalizeMarkdownForVerification(raw string) string {
 	raw = strings.ReplaceAll(strings.ReplaceAll(raw, "\r\n", "\n"), "\r", "\n")
 	lines := make([]string, 0, strings.Count(raw, "\n")+1)
+	inFence := false
 	for _, line := range strings.Split(raw, "\n") {
-		line = strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			lines = append(lines, trimmed)
+			continue
+		}
+		if inFence {
+			lines = append(lines, strings.TrimRight(line, " \t"))
+			continue
+		}
+		line = trimmed
 		if line == "" {
+			if len(lines) > 0 && lines[len(lines)-1] != "" {
+				lines = append(lines, "")
+			}
 			continue
 		}
 		if strings.Contains(line, "|") {
@@ -1437,6 +1692,9 @@ func normalizeMarkdownForVerification(raw string) string {
 			line = strings.Join(strings.Fields(line), " ")
 		}
 		lines = append(lines, line)
+	}
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
 	}
 	return strings.Join(lines, "\n")
 }
@@ -1460,33 +1718,98 @@ func normalizeJSONMLForVerification(raw string) string {
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
 		return normalizeMarkdownForVerification(raw)
 	}
-	var tokens []string
-	var walk func(any)
-	walk = func(current any) {
+	var normalize func(any) any
+	normalize = func(current any) any {
 		switch typed := current.(type) {
 		case []any:
-			start := 0
-			if len(typed) > 0 {
-				if tag, ok := typed[0].(string); ok {
-					tokens = append(tokens, "<"+strings.ToLower(strings.TrimSpace(tag))+">")
-					start = 1
+			if len(typed) == 0 {
+				return []any{}
+			}
+			tag, isElement := typed[0].(string)
+			if !isElement {
+				out := make([]any, 0, len(typed))
+				for _, child := range typed {
+					out = append(out, normalize(child))
+				}
+				return out
+			}
+			start := 1
+			attrs := map[string]any{}
+			if len(typed) > 1 {
+				if declared, ok := typed[1].(map[string]any); ok {
+					attrs, _ = normalize(declared).(map[string]any)
+					attrs = removeGeneratedJSONMLDefaults(tag, attrs)
+					start = 2
 				}
 			}
+			children := make([]any, 0, len(typed)-start)
 			for _, child := range typed[start:] {
-				walk(child)
+				normalized := normalize(child)
+				if normalized != nil {
+					children = append(children, normalized)
+				}
 			}
+			if strings.EqualFold(tag, "span") && isGeneratedTextSpan(attrs) {
+				if len(children) == 1 {
+					return children[0]
+				}
+				return children
+			}
+			out := []any{strings.ToLower(tag), attrs}
+			out = append(out, children...)
+			return out
 		case map[string]any:
-			// JSONML maps contain element attributes. Server-generated UUIDs and
-			// default attributes do not change the authored document content.
-			return
-		case string:
-			if text := normalizeMarkdownForVerification(typed); text != "" {
-				tokens = append(tokens, text)
+			out := make(map[string]any, len(typed))
+			for key, child := range typed {
+				normalizedKey := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
+				if normalizedKey == "uuid" || normalizedKey == "blockid" || normalizedKey == "elementid" || normalizedKey == "index" {
+					continue
+				}
+				out[normalizedKey] = normalize(child)
 			}
+			return out
+		case string:
+			return strings.ReplaceAll(strings.ReplaceAll(typed, "\r\n", "\n"), "\r", "\n")
 		}
+		return current
 	}
-	walk(value)
-	return strings.Join(tokens, "\n")
+	encoded, _ := json.Marshal(normalize(value))
+	return string(encoded)
+}
+
+var generatedJSONMLAttributeDefaults = map[string]map[string]any{
+	"hr": {"sz": float64(1)},
+	"tc": {"colspan": float64(1), "rowspan": float64(1), "valign": "middle"},
+	"code": {
+		"code": "", "syntax": "plaintext", "theme": "default",
+		"wrap": true, "showlinenumber": true, "fold": false,
+	},
+}
+
+func removeGeneratedJSONMLDefaults(tag string, attrs map[string]any) map[string]any {
+	defaults := generatedJSONMLAttributeDefaults[strings.ToLower(tag)]
+	out := make(map[string]any, len(attrs))
+	for key, value := range attrs {
+		if object, ok := value.(map[string]any); ok && len(object) == 0 {
+			continue
+		}
+		if defaultValue, ok := defaults[key]; ok && reflect.DeepEqual(value, defaultValue) {
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func isGeneratedTextSpan(attrs map[string]any) bool {
+	if len(attrs) == 0 {
+		return true
+	}
+	if len(attrs) != 1 {
+		return false
+	}
+	value, ok := attrs["datatype"].(string)
+	return ok && (value == "text" || value == "leaf")
 }
 
 func executeExport(rt *shortcut.RuntimeContext) error {
