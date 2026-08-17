@@ -57,6 +57,21 @@ func withDryRun(decl corecmd.ContractDecl, kind string, remoteReads bool) corecm
 	return decl
 }
 
+func withStatefulDryRunExamples(decl corecmd.ContractDecl, kind, reason string, indexes ...int) corecmd.ContractDecl {
+	decl = withDryRun(decl, kind, true)
+	for _, index := range indexes {
+		index := index
+		decl.Selection.ExampleDispositions = append(decl.Selection.ExampleDispositions, contract.ExampleDisposition{
+			Index:      &index,
+			Mode:       contract.ExampleDispositionModeContractOnly,
+			ReasonCode: contract.ExampleDispositionReasonStatefulPreflight,
+			Reason:     reason,
+			Reviewed:   true,
+		})
+	}
+	return decl
+}
+
 func readShortcutContent(rt *shortcut.RuntimeContext, flag string) (string, error) {
 	raw := rt.Str(flag)
 	if raw == "-" {

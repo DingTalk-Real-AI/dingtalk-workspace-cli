@@ -21,6 +21,7 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -127,8 +128,96 @@ var Search = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
+		if rt.Str("cursor") == "" {
+			if entries, journalErr := docwritejournal.List(rt.Command().Context()); journalErr == nil {
+				mergeJournalSearchDocuments(result, entries, rt, effectiveJournalMaxItems(rt.Int("max-items")))
+			}
+		}
 		return rt.Output(result)
 	},
+}
+
+func mergeJournalSearchDocuments(result map[string]any, entries []docwritejournal.Entry, rt *shortcut.RuntimeContext, maxItems int) {
+	documents, _ := result["documents"].([]map[string]any)
+	remaining := maxItems - len(documents)
+	if remaining <= 0 {
+		return
+	}
+	seen := map[string]bool{}
+	for _, document := range documents {
+		if id, _ := document["nodeId"].(string); id != "" {
+			seen[id] = true
+		}
+	}
+	for _, entry := range entries {
+		if seen[entry.NodeID] || !journalEntryMatchesSearch(entry, rt) {
+			continue
+		}
+		if remaining == 0 {
+			break
+		}
+		documents = append(documents, map[string]any{
+			"nodeId": entry.NodeID, "name": entry.Name, "docType": entry.DocType,
+			"url": entry.URL, "creatorId": entry.CreatorID, "createdTime": entry.CreatedAt,
+			"source": "local_write_journal", "indexPending": true,
+		})
+		seen[entry.NodeID] = true
+		remaining--
+	}
+	result["documents"] = documents
+	result["count"] = len(documents)
+}
+
+func effectiveJournalMaxItems(value int) int {
+	if value <= 0 {
+		return 500
+	}
+	return value
+}
+
+func journalEntryMatchesSearch(entry docwritejournal.Entry, rt *shortcut.RuntimeContext) bool {
+	if query := strings.ToLower(rt.Str("query")); query != "" && !strings.Contains(strings.ToLower(entry.Name), query) {
+		return false
+	}
+	if rt.Changed("visited-from") || rt.Changed("visited-to") || rt.Changed("editor-uids") || rt.Changed("mentioned-uids") {
+		return false
+	}
+	if rt.Changed("created-from") && entry.CreatedAt < int64(rt.Int("created-from")) {
+		return false
+	}
+	if rt.Changed("created-to") && entry.CreatedAt > int64(rt.Int("created-to")) {
+		return false
+	}
+	if rt.Changed("workspace-ids") && !containsFold(rt.StrSlice("workspace-ids"), entry.WorkspaceID) {
+		return false
+	}
+	if rt.Changed("creator-uids") && !containsFold(rt.StrSlice("creator-uids"), entry.CreatorID) {
+		return false
+	}
+	if rt.Changed("extensions") {
+		accepted := false
+		for _, extension := range rt.StrSlice("extensions") {
+			extension = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(extension)), ".")
+			if extension == "adoc" || extension == "alidoc" || strings.EqualFold(extension, entry.DocType) {
+				accepted = true
+				break
+			}
+		}
+		if !accepted {
+			return false
+		}
+	}
+	return true
+}
+
+func containsFold(values []string, target string) bool {
+	target = strings.TrimSpace(target)
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), target) {
+			return true
+		}
+	}
+	return false
 }
 
 // searchDocsProject reshapes the raw search_documents response into a clean
@@ -315,10 +404,7 @@ var Copy = shortcut.Shortcut{
 	Description: "复制文档/文件到指定文件夹或知识库",
 	Intent:      "当你想保留原件、在另一个文件夹或知识库里生成一份文档/文件副本（例如以某篇文档为模板另存）时使用；输入源 node 与目标 folder/workspace，会实际创建一个副本。",
 	Risk:        shortcut.RiskWrite,
-	Safety: contract.SafetySpec{
-		Effect: "write", Risk: "medium",
-		Confirmation: "user_required", Idempotency: "unknown",
-	},
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",
@@ -365,10 +451,7 @@ var Move = shortcut.Shortcut{
 	Description: "移动文档/文件到指定文件夹或知识库",
 	Intent:      "当你要整理文档归属、把某篇文档/文件从当前位置挪到另一个文件夹或知识库（原位置不再保留）时使用；输入 node 与目标 folder/workspace，会实际改变文件的存放位置。",
 	Risk:        shortcut.RiskWrite,
-	Safety: contract.SafetySpec{
-		Effect: "write", Risk: "medium",
-		Confirmation: "user_required", Idempotency: "unknown",
-	},
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",
@@ -486,10 +569,7 @@ var CommentCreate = shortcut.Shortcut{
 	Description: "创建全文评论，或按 selection 创建划词评论",
 	Intent:      "当用户要对整篇文档留言，或针对文档中唯一匹配的一段文字创建精确划词评论时使用；已知 block/start/end 时也可直接走高级通道。",
 	Risk:        shortcut.RiskWrite,
-	Safety: contract.SafetySpec{
-		Effect: "write", Risk: "medium",
-		Confirmation: "user_required", Idempotency: "unknown",
-	},
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: docContract("+comment-create", "创建全文评论，或按 selection 创建划词评论",
 		"当用户要对整篇文档留言，或针对文档中唯一匹配的一段文字创建精确划词评论时使用；已知 block/start/end 时也可直接走高级通道。",
 		[]string{`dws doc +comment-create --node <DOC_ID> --content "请补充数据来源"`, `dws doc +comment-create --node <DOC_ID> --selection "计划下周发布" --content "请确认日期"`},
@@ -524,10 +604,7 @@ var CommentReply = shortcut.Shortcut{
 	Description: "回复文档中的一条评论",
 	Intent:      "当你要针对某条已有评论进行回复、参与讨论或用表情贴图回应时使用；先从评论列表拿到 comment-key，再输入 node、comment-key 与 content（--emoji 则作为表情回复），会实际发布一条回复。",
 	Risk:        shortcut.RiskWrite,
-	Safety: contract.SafetySpec{
-		Effect: "write", Risk: "medium",
-		Confirmation: "user_required", Idempotency: "unknown",
-	},
+	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",
@@ -708,11 +785,8 @@ var VersionSave = shortcut.Shortcut{
 	Product:     productDoc,
 	Description: "手动保存文档版本快照",
 	Intent:      "当你在做重大改动前后、想手动打一个可回滚的版本存档点时使用；输入 node，会实际为该文档保存一个当前内容的历史版本快照。",
-	Risk:        shortcut.RiskWrite,
-	Safety: contract.SafetySpec{
-		Effect: "write", Risk: "medium",
-		Confirmation: "user_required", Idempotency: "unknown",
-	},
+	Risk:        shortcut.RiskHighWrite,
+	Safety:      contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",
@@ -798,12 +872,9 @@ var VersionRevert = shortcut.Shortcut{
 	Command:     "+version-revert",
 	Product:     productDoc,
 	Description: "回滚文档到指定历史版本",
-	Intent:      "当文档被误改、你想把它整体恢复到某个历史版本时使用；先用 +version-list 找到目标版本号，再输入 node 与 version，会实际把文档内容覆盖回该版本，属于高风险写操作，需谨慎确认。",
+	Intent:      "当文档被误改、你想把它整体恢复到某个历史版本时使用；先用 +version-list 找到目标版本号，再输入 node 与 version，CLI 会预检版本存在性并在写后回读验证。",
 	Risk:        shortcut.RiskHighWrite,
-	Safety: contract.SafetySpec{
-		Effect: "destructive", Risk: "high",
-		Confirmation: "user_required", Idempotency: "unknown",
-	},
+	Safety:      contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",
@@ -820,7 +891,7 @@ var VersionRevert = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "回滚文档到指定历史版本",
-			UseWhen:      []string{"当文档被误改、你想把它整体恢复到某个历史版本时使用；先用 +version-list 找到目标版本号，再输入 node 与 version，会实际把文档内容覆盖回该版本，属于高风险写操作，需谨慎确认。"},
+			UseWhen:      []string{"当文档被误改、你想把它整体恢复到某个历史版本时使用；先用 +version-list 找到目标版本号，再输入 node 与 version，CLI 会预检版本存在性并在写后回读验证。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws doc +version-revert --node DOC_ID --version 3"},
 		},
@@ -829,7 +900,7 @@ var VersionRevert = shortcut.Shortcut{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true},
 		{Name: "version", Type: shortcut.FlagInt, Desc: "目标版本号 (从 +version-list 获取)", Required: true},
 	},
-	Tips: []string{`dws doc +version-revert --node DOC_ID --version 3 --yes`},
+	Tips: []string{`dws doc +version-revert --node DOC_ID --version 3`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return rt.CallMCP("revert_doc_version", map[string]any{
 			"nodeId":  rt.Str("node"),
@@ -876,6 +947,9 @@ var TemplateList = shortcut.Shortcut{
 		{Name: "source", Type: shortcut.FlagString, Desc: "模板来源: MY / PUBLIC (默认 MY)", Enum: []string{"MY", "PUBLIC"}},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "返回数量上限"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标"},
+		{Name: "page-all", Type: shortcut.FlagBool, Default: "true", Desc: "有界读取全部后续页（默认 true）"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "100", Desc: "最多读取页数"},
+		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "最多返回模板数"},
 	},
 	Tips: []string{`dws doc +template-list --source PUBLIC`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -883,13 +957,24 @@ var TemplateList = shortcut.Shortcut{
 		if v := rt.Str("source"); v != "" {
 			params["templateSource"] = v
 		}
-		if rt.Changed("limit") {
-			params["maxResults"] = rt.Int("limit")
+		pageSize := rt.Int("limit")
+		if pageSize <= 0 {
+			pageSize = 50
 		}
-		if v := rt.Str("cursor"); v != "" {
-			params["nextCursor"] = v
+		maxItems := rt.Int("max-items")
+		if rt.Changed("limit") && !rt.Changed("max-items") {
+			maxItems = pageSize
 		}
-		return rt.CallMCP("list_doc_templates", params)
+		candidates, complete, truncated, nextCursor, stopReason, pagesRead, err := collectTemplatePages(rt, "list_doc_templates", params, docPageOptions{
+			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: maxItems, Cursor: rt.Str("cursor"),
+		})
+		if err != nil {
+			return err
+		}
+		return rt.Output(docEnvelope("doc.template_list", map[string]any{
+			"source": rt.Str("source"), "count": len(candidates), "templates": candidates,
+			"complete": complete, "truncated": truncated, "hasMore": !complete, "nextCursor": nextCursor, "stopReason": stopReason, "pagesRead": pagesRead,
+		}))
 	},
 }
 
@@ -930,6 +1015,9 @@ var TemplateSearch = shortcut.Shortcut{
 		{Name: "source", Type: shortcut.FlagString, Desc: "模板来源: MY / PUBLIC (默认 MY)", Enum: []string{"MY", "PUBLIC"}},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "返回数量上限"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标"},
+		{Name: "page-all", Type: shortcut.FlagBool, Default: "true", Desc: "有界读取全部后续页（默认 true）"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "100", Desc: "最多读取页数"},
+		{Name: "max-items", Type: shortcut.FlagInt, Default: "500", Desc: "最多返回模板数"},
 	},
 	Tips: []string{`dws doc +template-search --query "周报"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -937,23 +1025,19 @@ var TemplateSearch = shortcut.Shortcut{
 		if pageSize <= 0 {
 			pageSize = 50
 		}
-		params := map[string]any{"searchName": rt.Str("query"), "maxResults": pageSize}
+		maxItems := rt.Int("max-items")
+		if rt.Changed("limit") && !rt.Changed("max-items") {
+			maxItems = pageSize
+		}
+		params := map[string]any{"searchName": rt.Str("query")}
 		if v := rt.Str("source"); v != "" {
 			params["templateSource"] = v
 		}
-		if v := rt.Str("cursor"); v != "" {
-			params["nextCursor"] = v
-		}
-		found, err := rt.CallMCPData(productDoc, "search_doc_templates", params)
+		candidates, complete, truncated, nextCursor, stopReason, pagesRead, err := collectTemplatePages(rt, "search_doc_templates", params, docPageOptions{
+			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: maxItems, Cursor: rt.Str("cursor"),
+		})
 		if err != nil {
 			return err
-		}
-		candidates := collectTemplateCandidates(found)
-		hasMore, hasMoreKnown, nextCursor := docPageState(found)
-		nextCursor = strings.TrimSpace(nextCursor)
-		complete := hasMoreKnown && !hasMore
-		if !hasMoreKnown && nextCursor == "" && len(candidates) < pageSize {
-			complete = true
 		}
 		globalComplete := complete && rt.Str("cursor") == ""
 		status := "selection_required"
@@ -976,8 +1060,11 @@ var TemplateSearch = shortcut.Shortcut{
 			"count":      len(candidates),
 			"candidates": candidates,
 			"complete":   complete,
+			"truncated":  truncated,
+			"pagesRead":  pagesRead,
 			"hasMore":    !complete,
 			"nextCursor": nextCursor,
+			"stopReason": stopReason,
 			"selection": map[string]any{
 				"status":     status,
 				"templateId": selectedTemplateID,

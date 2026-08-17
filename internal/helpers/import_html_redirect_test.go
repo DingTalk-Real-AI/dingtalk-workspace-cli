@@ -49,6 +49,9 @@ func htmlFallbackCommand(t *testing.T, filePath string) *cobra.Command {
 			t.Fatalf("set import file: %v", err)
 		}
 	}
+	if err := cmd.Flags().Set("workspace", "workspace-fallback-test"); err != nil {
+		t.Fatalf("set import workspace: %v", err)
+	}
 	return cmd
 }
 
@@ -166,6 +169,9 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 		t.Cleanup(func() { SetHTTPPutFile(nil) })
 
 		cmd := htmlFallbackCommand(t, writeImportFixture(t, "html"))
+		if err := cmd.Flags().Set("workspace", ""); err != nil {
+			t.Fatal(err)
+		}
 		if err := cmd.Flags().Set("folder-id", "folder-abc"); err != nil {
 			t.Fatal(err)
 		}

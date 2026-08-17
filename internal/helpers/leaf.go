@@ -113,6 +113,10 @@ const (
 	LeafExactlyOne = corecmd.ExactlyOne
 	// LeafMutuallyExclusive 允许 Flags 中最多提供一个。
 	LeafMutuallyExclusive = corecmd.MutuallyExclusive
+	// LeafRequireTogether 要求 Flags 同时提供或同时省略。
+	LeafRequireTogether = corecmd.RequireTogether
+	// LeafCustom 声明由 Validate 执行的命令特定规则。
+	LeafCustom = corecmd.Custom
 )
 
 // LeafConstraint 声明一组 flag 的关系约束（corecmd.Constraint 的别名）。框架

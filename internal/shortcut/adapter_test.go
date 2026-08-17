@@ -128,6 +128,41 @@ func TestCrossPlatformCoverageFromShortcutMapsSharedBase(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageConstraintProjectionMatchesRuntimeValidation(t *testing.T) {
+	executed := false
+	s := Shortcut{
+		Service:     "doc",
+		Command:     "+constraint-guard",
+		Description: "声明与运行时同源的约束",
+		Flags:       []Flag{{Name: "a"}, {Name: "b"}},
+		Constraints: []Constraint{{Kind: ConstraintMutuallyExclusive, Flags: []string{"a", "b"}}},
+		Execute: func(*RuntimeContext) error {
+			executed = true
+			return nil
+		},
+	}
+	spec := FromShortcut(s)
+	if len(spec.Constraints) != 1 || spec.Constraints[0].Kind != corecmd.MutuallyExclusive {
+		t.Fatalf("public constraints = %#v, want declared mutual exclusion", spec.Constraints)
+	}
+	if spec.Validate != nil {
+		t.Fatal("declarative constraints must not install a second validation path")
+	}
+	cmd := corecmd.New(spec)
+	cmd.SetArgs([]string{"--a", "one", "--b", "two"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "互斥") {
+		t.Fatalf("mutual-exclusion runtime error = %v", err)
+	}
+	validCmd := corecmd.New(spec)
+	validCmd.SetArgs([]string{"--a", "one"})
+	if err := validCmd.Execute(); err != nil {
+		t.Fatalf("valid constraint execution: %v", err)
+	}
+	if !executed {
+		t.Fatal("valid constraint execution did not reach the shortcut")
+	}
+}
+
 func TestCrossPlatformCoverageFromShortcutAliasesAndPositionalAlias(t *testing.T) {
 	executed := ""
 	s := Shortcut{

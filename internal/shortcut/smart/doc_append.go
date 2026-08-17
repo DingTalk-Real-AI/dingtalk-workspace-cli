@@ -43,11 +43,8 @@ var DocAppend = shortcut.Shortcut{
 		"内部用文档更新的“追加(append)”模式，把你给的文本安全地拼到文档末尾，" +
 		"不需要你先去查文档块列表、算末尾位置或手工拼块结构。" +
 		"会真实写入文档内容。",
-	Risk: shortcut.RiskWrite,
-	Safety: contract.SafetySpec{
-		Effect: "write", Risk: "medium",
-		Confirmation: "user_required", Idempotency: "unknown",
-	},
+	Risk:   shortcut.RiskWrite,
+	Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",

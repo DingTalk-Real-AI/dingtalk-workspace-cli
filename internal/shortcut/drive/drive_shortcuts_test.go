@@ -111,6 +111,21 @@ func TestCrossPlatformCoverageDriveCollectionsRejectFalseEmptySuccess(t *testing
 	}
 }
 
+func TestCrossPlatformCoverageDriveRecentPreservesMainSinglePageBehavior(t *testing.T) {
+	caller := &driveCoverageCaller{responses: map[string][]string{
+		"get_recent_list": {
+			`{"success":true,"recentItems":[{"nodeId":"n1","name":"recent"}]}`,
+			`{"success":true,"recentItems":[{"nodeId":"n2","name":"unexpected second page"}]}`,
+		},
+	}}
+	if err := runDriveCoverage(t, Recent, caller, "--limit", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(caller.history, ","); got != "get_recent_list" {
+		t.Fatalf("drive +recent calls = %q, want single-page passthrough", got)
+	}
+}
+
 func TestCrossPlatformCoverageDriveCreateAndInspectReadback(t *testing.T) {
 	caller := &driveCoverageCaller{responses: map[string][]string{
 		"create_folder": {driveJSON(map[string]any{"success": true, "result": map[string]any{"fileId": "folder-1"}})},

@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	publicShortcutCount = 434
+	publicShortcutCount = 437
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including the hidden historical minutes.shortcut_minutes_search contract.
-	schemaPublishedShortcutCount = 437
+	schemaPublishedShortcutCount = 440
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 434
+	publiclyDeliveredShortcutCount = 437
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
@@ -342,36 +342,137 @@ func TestDeliveryDocUpdateShortcutPublishesCompleteConditionalContract(t *testin
 		t.Fatalf("confirmation = %q, want %q", got, want)
 	}
 	parameters := schemaContractMap(leaf["parameters"])
-	if got, want := len(parameters), 11; got != want {
+	if got, want := len(parameters), 14; got != want {
 		t.Fatalf("parameter count = %d, want %d: %#v", got, want, parameters)
 	}
 	if required, _ := parameters["node"]["required"].(bool); !required {
 		t.Errorf("--node required = %#v, want true", parameters["node"]["required"])
 	}
 	if required, _ := parameters["command"]["required"].(bool); required {
-		t.Errorf("--command required = true, want runtime custom validation")
+		t.Errorf("--command required = %#v, want runtime-only operation requirement", parameters["command"]["required"])
 	}
 	wantProperties := map[string]string{
 		"node": "node", "doc": "node", "command": "command", "content": "content", "text": "content", "doc-format": "docFormat",
-		"block-id": "blockId", "after-block-id": "afterBlockId", "old": "old", "new": "new",
-		"expected-revision": "expectedRevision",
+		"block-id": "blockId", "after-block-id": "afterBlockId", "ref-block": "referenceBlockId", "where": "where", "old": "old", "new": "new",
+		"allow-resource-delete": "allowResourceDelete", "expected-revision": "expectedRevision",
 	}
 	for name, want := range wantProperties {
 		if got := schemaContractString(parameters[name]["property"]); got != want {
 			t.Errorf("--%s property = %q, want %q", name, got, want)
 		}
 	}
-	for _, name := range []string{"content", "block-id", "after-block-id", "old", "new"} {
+	for _, name := range []string{"content", "block-id", "after-block-id", "ref-block", "where", "old", "new"} {
 		parameter := parameters[name]
 		if required, _ := parameter["required"].(bool); required {
-			t.Errorf("--%s required = true, want runtime custom validation", name)
+			t.Errorf("--%s required = true, want runtime-only operation requirement", name)
 		}
 		if got := schemaContractString(parameter["required_when"]); got != "" {
-			t.Errorf("--%s required_when = %q, want compatibility-safe custom validation", name, got)
+			t.Errorf("--%s required_when = %q, want main-compatible public Schema", name, got)
+		}
+	}
+	for _, alias := range []string{"doc", "text"} {
+		if _, exists := parameters[alias]; !exists {
+			t.Errorf("visible compatibility alias --%s missing from Schema", alias)
 		}
 	}
 	if constraints, exists := leaf["constraints"]; exists && constraints != nil {
 		t.Fatalf("enum-discriminated requirements must not be mispublished as relationship constraints: %#v", constraints)
+	}
+}
+
+func TestDeliveryDocMediaInsertEntrypointsPublishMainCompatibleGuardrails(t *testing.T) {
+	for _, cliPath := range []string{"doc +media-insert", "doc media insert"} {
+		leaf := executeShortcutSchemaQuery(t, "--cli-path", cliPath)
+		wantConfirmation := "not_required"
+		if cliPath == "doc +media-insert" {
+			wantConfirmation = "user_required"
+		}
+		if got := schemaContractString(leaf["confirmation"]); got != wantConfirmation {
+			t.Errorf("%s confirmation = %q, want %s", cliPath, got, wantConfirmation)
+		}
+		parameters := schemaContractMap(leaf["parameters"])
+		for _, name := range []string{"node", "file"} {
+			if required, _ := parameters[name]["required"].(bool); !required {
+				t.Errorf("%s --%s required = %#v, want true", cliPath, name, parameters[name]["required"])
+			}
+		}
+		for _, name := range []string{"where", "ref-block"} {
+			if got := schemaContractString(parameters[name]["required_when"]); got != "" {
+				t.Errorf("%s --%s required_when = %q, want main-compatible public Schema", cliPath, name, got)
+			}
+		}
+		if got := leaf["constraints"]; got != nil {
+			t.Errorf("%s constraints = %#v, want main-compatible custom-only projection", cliPath, got)
+		}
+	}
+}
+
+func TestDeliveryDocShortcutAndLeafSafetyMatchesPublishedContracts(t *testing.T) {
+	tests := []struct {
+		name         string
+		effect       string
+		risk         string
+		confirmation string
+		cliPaths     []string
+	}{
+		{name: "content update shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +update"}},
+		{name: "content update leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc update"}},
+		{name: "copy shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +copy"}},
+		{name: "copy leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc copy"}},
+		{name: "move shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +move"}},
+		{name: "move leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc move"}},
+		{name: "comment create shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +comment-create"}},
+		{name: "comment create leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc comment create"}},
+		{name: "comment reply shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +comment-reply"}},
+		{name: "comment reply leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc comment reply"}},
+		{name: "version save shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +version-save"}},
+		{name: "version save leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc version save"}},
+		{name: "version revert shortcut", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +version-revert"}},
+		{name: "version revert leaf", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc version revert"}},
+		{name: "media insert shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +media-insert"}},
+		{name: "media insert leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc media insert"}},
+		{name: "cover set shortcut", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +cover-set"}},
+		{name: "cover set leaf", effect: "write", risk: "low", confirmation: "not_required", cliPaths: []string{"doc style cover set"}},
+		{name: "cover clear shortcut", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +cover-clear"}},
+		{name: "cover clear leaf", effect: "write", risk: "low", confirmation: "not_required", cliPaths: []string{"doc style cover clear"}},
+		{name: "background clear shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +background-delete"}},
+		{name: "background clear leaf", effect: "write", risk: "low", confirmation: "not_required", cliPaths: []string{"doc style background clear"}},
+		{name: "permission grant", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +access-grant"}},
+		{name: "permission add leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc permission add"}},
+		{name: "permission change", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +access-change"}},
+		{name: "permission update leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc permission update"}},
+		{name: "comment delete", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +comment-delete"}},
+		{name: "comment delete leaf", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc comment delete"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for _, cliPath := range test.cliPaths {
+				leaf := executeShortcutSchemaQuery(t, "--cli-path", cliPath)
+				if got := schemaContractString(leaf["effect"]); got != test.effect {
+					t.Errorf("%s effect = %q, want %q", cliPath, got, test.effect)
+				}
+				if got := schemaContractString(leaf["risk"]); got != test.risk {
+					t.Errorf("%s risk = %q, want %q", cliPath, got, test.risk)
+				}
+				if got := schemaContractString(leaf["confirmation"]); got != test.confirmation {
+					t.Errorf("%s confirmation = %q, want %q", cliPath, got, test.confirmation)
+				}
+			}
+		})
+	}
+}
+
+func TestDeliveryDocFetchPublishesScopeContract(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "doc +fetch")
+	parameters := schemaContractMap(leaf["parameters"])
+	for _, name := range []string{"keyword", "start-block-id", "tags"} {
+		if got := schemaContractString(parameters[name]["required_when"]); got != "" {
+			t.Errorf("--%s required_when = %q, want main-compatible public Schema", name, got)
+		}
+	}
+	if got := leaf["constraints"]; got != nil {
+		t.Fatalf("fetch constraints = %#v, want main-compatible custom-only projection", got)
 	}
 }
 
@@ -399,9 +500,8 @@ func TestDeliveryDocCommentExportImportContractsAreCanonical(t *testing.T) {
 	}
 
 	importLeaf := executeShortcutSchemaQuery(t, "--cli-path", "doc +import")
-	constraints, _ := importLeaf["constraints"].(map[string]any)
-	if requireOneOf, ok := constraints["require_one_of"]; ok && !schemaContractJSONEqual(requireOneOf, [][]string{}) {
-		t.Fatalf("import unexpectedly requires a target: %#v", constraints)
+	if got := importLeaf["constraints"]; got != nil {
+		t.Fatalf("import constraints = %#v, want main-compatible custom-only projection", got)
 	}
 }
 

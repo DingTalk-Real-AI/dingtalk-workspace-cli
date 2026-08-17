@@ -18,7 +18,7 @@ func RunDocMediaInsertShortcut(cmd *cobra.Command) error {
 	return runMediaInsert(cmd, nil)
 }
 
-// RunDocResourceUpdateShortcut shares the cover upload/transfer pipeline.
-func RunDocResourceUpdateShortcut(cmd *cobra.Command) error {
+// RunDocCoverSetShortcut shares the cover upload/transfer pipeline.
+func RunDocCoverSetShortcut(cmd *cobra.Command) error {
 	return runDocStyleCoverSet(cmd, nil)
 }

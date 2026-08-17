@@ -12,15 +12,15 @@
 | 群聊、消息、机器人、Webhook、群成员 | [`dingtalk-chat`](../../dingtalk-chat/SKILL.md) |
 | 实时监听未来 IM 消息、reaction、已读、撤回、群生命周期或 OA 审批变化 | [`dingtalk-event`](../../dingtalk-event/SKILL.md) |
 | 已有 userId 的用户详情、部门、角色、组织关系 | [`dingtalk-contact`](../../dingtalk-contact/SKILL.md) |
-| 文档正文读取、创建、更新、块编辑、媒体和导出 | [`dingtalk-doc`](../../dingtalk-doc/SKILL.md) |
-| 文件搜索、上传下载、复制移动、重命名、权限 | [`dingtalk-drive`](../../dingtalk-drive/SKILL.md) |
+| 在线文档正文读取、创建、更新、块编辑、正文媒体和导出；未指定本地路径的“生成/写一篇文档” | [`dingtalk-doc`](../../dingtalk-doc/SKILL.md) |
+| 文件搜索、上传下载、节点复制/移动/重命名、权限；包括在线 adoc 节点和普通“文档空间/我的文档”中的文件夹、元信息操作 | [`dingtalk-drive`](../../dingtalk-drive/SKILL.md) |
 | 邮件查询、搜索、读取和发送 | [`dingtalk-mail`](../../dingtalk-mail/SKILL.md) |
 | 听记列表、摘要、转写、关键字和标题 | [`dingtalk-minutes`](../../dingtalk-minutes/SKILL.md) |
 | 待办创建、查询、更新、完成和删除 | [`dingtalk-todo`](../../dingtalk-todo/SKILL.md) |
-| 知识库/钉盘空间、空间节点和成员管理 | [`dingtalk-wiki`](../../dingtalk-wiki/SKILL.md) |
+| 用户明确说知识库/wiki/命名团队空间、知识库节点层级或空间成员管理 | [`dingtalk-wiki`](../../dingtalk-wiki/SKILL.md) |
 | 姓名模糊找人、负责人、上下级、工号、手机号语义线索、企业知识和行为记录搜索 | [`dingtalk-aisearch`](../../dingtalk-aisearch/SKILL.md) |
 | 完整手机号精确反查，或已有 userId 后查人员详情、部门和角色 | [`dingtalk-contact`](../../dingtalk-contact/SKILL.md) |
-| Markdown / `.md` 内容读取、创建、覆盖、局部修改或版本差异比较 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`markdown.md`](../../dingtalk-misc/references/markdown.md) |
+| 明确要求本地/原生 Markdown 文件或给出 `.md` 路径后的读取、创建、覆盖、局部修改或版本差异比较 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`markdown.md`](../../dingtalk-misc/references/markdown.md) |
 | 组织大脑、人才池、员工档案专项、职业历程、绩效、结构化人才搜索 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`hrbrain.md`](../../dingtalk-misc/references/hrbrain.md) |
 | PAT 行为授权、scope 授权、授权浏览器策略 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`pat.md`](../../dingtalk-misc/references/pat.md) |
 | 切换组织、跨组织、多组织、profile 管理 | [`dingtalk-misc`](../../dingtalk-misc/SKILL.md) → [`profile.md`](../../dingtalk-misc/references/profile.md) |
@@ -34,9 +34,11 @@ reference，不要加载全部长尾产品文档。
 
 - `aisearch person`：按姓名、职责、上下级、工号或手机号线索语义找人；`contact`：
   完整手机号精确反查，或拿到 userId 后查详情、部门和角色；`mail`：邮件内容与收发。
-- `drive`：对任何文件都成立的存储操作；`doc`：文档正文和块内容；`wiki`：空间与
+- `drive`：对任何文件（包括在线 adoc 节点）都成立的复制、移动、重命名等存储操作；`doc`：文档正文和块内容；`wiki`：空间与
   节点组织。
-- `.md` 内容读写走 `markdown`（`dingtalk-misc`）；复制、移动、删除等实体操作走 `drive`。
+- 未指定本地路径的“生成文档/写一篇文档”在钉钉/DWS 语境中创建在线 adoc；明确要求本地/原生 `.md` 或给出 `.md` 路径时才走 `markdown`（`dingtalk-misc`）。复制、移动、重命名、删除等实体操作走 `drive`。
+- 本地文件“在线编辑/协作编辑/转在线”：Word/Markdown/Text 走 `doc +import`，Excel 走电子表格导入；只有要求保留原文件对象时才走 `drive upload`。
+- “文档空间/我的文档”本身不触发 wiki：正文操作走 `doc`，文件夹、移动、元信息等存储操作走 `drive`；只有明确知识库/wiki/命名团队空间语义才走 `wiki`。
 - `aitable`：字段/记录式数据表；`sheet`：单元格、公式、多工作表。`sheet` 位于
   [`dingtalk-misc`](../../dingtalk-misc/references/sheet.md)。
 - `calendar`：日历事件、参会人和会议室；视频会议（conference）当前 CLI 不支持，请在钉钉客户端操作；

@@ -199,7 +199,7 @@ func TestCrossPlatformCoverageDocStyleCoverSetNilContextFallback(t *testing.T) {
 	if err := coverSet.Flags().Set("file", path); err != nil {
 		t.Fatal(err)
 	}
-	if err := runDocStyleCoverSet(coverSet, nil); err != nil {
+	if err := RunDocCoverSetShortcut(coverSet); err != nil {
 		t.Fatal(err)
 	}
 	if caller.calls != 2 {

@@ -101,6 +101,7 @@ func docImportFlowConfig() importFlowConfig {
 		supportedFormatsText: "docx, doc, xlsx, xls, md, txt, xmind, mark",
 		folderFlags:          []string{"folder", "folder-id"},
 		workspaceFlags:       []string{"workspace", "workspace-id"},
+		requireTarget:        false,
 		nextCommand:          "dws doc import get --task-id %s",
 		poll:                 defaultImportPollPolicy(),
 		// 白名单外的格式改走文档空间的文件上传链路
@@ -190,7 +191,15 @@ func prepareImportFile(cmd *cobra.Command, args []string, cfg importFlowConfig) 
 	folder := importFlagValue(cmd, cfg.folderFlags...)
 	workspace := importFlagValue(cmd, cfg.workspaceFlags...)
 	if cfg.requireTarget && folder == "" && workspace == "" {
-		return preparedImportFile{}, fmt.Errorf("--folder-token 与 --workspace 至少需要提供一个（导入目标位置）")
+		folderFlag := "folder"
+		if len(cfg.folderFlags) > 0 {
+			folderFlag = cfg.folderFlags[0]
+		}
+		workspaceFlag := "workspace"
+		if len(cfg.workspaceFlags) > 0 {
+			workspaceFlag = cfg.workspaceFlags[0]
+		}
+		return preparedImportFile{}, fmt.Errorf("--%s 与 --%s 至少需要提供一个（导入目标位置）", folderFlag, workspaceFlag)
 	}
 
 	return preparedImportFile{
@@ -221,9 +230,15 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 	if label == "" {
 		label = "无扩展名"
 	}
+	targetDescription := "默认个人文档根目录"
+	if file.folder != "" {
+		targetDescription = "--folder 指定的目标位置"
+	} else if file.workspace != "" {
+		targetDescription = "--workspace 指定的目标位置"
+	}
 	deps.Out.PrintWarning(fmt.Sprintf(
-		"%s 文件不支持转换为在线文档（支持: %s），已自动改走文件上传链路，以原文件形式存入 --folder/--workspace 指定的目标位置；如需在线文档，请先将内容转换为 md 后重新执行 doc import；上传到钉盘请用 dws drive upload",
-		label, cfg.supportedFormatsText))
+		"%s 文件不支持转换为在线文档（支持: %s），已自动改走文件上传链路，以原文件形式存入%s；如需在线文档，请先将内容转换为 md 后重新执行 doc import；上传到钉盘请用 dws drive upload",
+		label, cfg.supportedFormatsText, targetDescription))
 
 	// prepareImportFile 的 name 去掉了扩展名；上传保留原始文件名形态
 	uploadName := file.name

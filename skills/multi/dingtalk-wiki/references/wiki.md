@@ -341,7 +341,7 @@ Flags:
 - 用户说"我的知识库/知识库列表/有哪些知识库" → `space list`
 - 用户说"列出钉盘空间/钉盘团队空间" → `space list --type orgSpace`
 - 用户说"搜索知识库/找知识库" → `space search`
-- 用户说"我的文档/个人空间" → `space list --type myWikiSpace`
+- 用户仅说“我的文档/个人空间”时按具体动作走 `doc` 或 `drive`，不进入 wiki；只有明确说“个人知识库”并需要知识库空间 ID 时才用 `space list --type myWikiSpace`
 - 用户说"知识库下的文件/知识库里有哪些文档/浏览知识库内容" → `node list`（需 `--workspace`）
 - 用户说"在知识库里搜文档/空间内搜索" → `node search`（需 `--workspace` + `--query`）
 - 用户说"在知识库里创建文档/新建文件夹" → `node create`（需 `--workspace` + `--name`）
@@ -373,6 +373,8 @@ Flags:
 - **wiki space list --type orgSpace/mySpace**（列出钉盘空间）vs **wiki space list**（默认列出知识库）
 
 ## 核心工作流
+
+以下 `myWikiSpace` 命令是明确个人知识库语义下的低层能力，不是泛称“文档空间/我的文档”的默认前置步骤。
 
 ```bash
 # 列出我有权访问的组织知识库

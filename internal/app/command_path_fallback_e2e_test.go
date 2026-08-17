@@ -314,16 +314,16 @@ func TestCrossPlatformCoverageReviewedDocHistorySaveFallbacksPreserveArguments(t
 			if err != nil {
 				t.Fatal(err)
 			}
-			if ctx == nil || ctx.Command != "dws doc +history-save" || len(ctx.Corrections) == 0 {
-				t.Fatalf("history-save fallback context = %#v", ctx)
+			if ctx == nil || ctx.Command != "dws doc +version-save" || len(ctx.Corrections) == 0 {
+				t.Fatalf("version-save fallback context = %#v", ctx)
 			}
-			wantArgs := []string{"doc", "+history-save", "--node", "node-fixture", "--mock", "--format", "json"}
+			wantArgs := []string{"doc", "+version-save", "--node", "node-fixture", "--mock", "--format", "json"}
 			if !reflect.DeepEqual(ctx.Args, wantArgs) {
-				t.Fatalf("history-save fallback args = %v, want %v", ctx.Args, wantArgs)
+				t.Fatalf("version-save fallback args = %v, want %v", ctx.Args, wantArgs)
 			}
 			correction := ctx.Corrections[0]
 			if correction.Handler != "command-path-fallback" || correction.Kind != "reviewed-fallback" {
-				t.Fatalf("history-save correction = %#v", correction)
+				t.Fatalf("version-save correction = %#v", correction)
 			}
 		})
 	}
@@ -559,9 +559,12 @@ func TestCrossPlatformCoverageDocCommandFallbackNamesStayOutOfHelpSchemaAndShort
 			}
 		}
 	}
+	tools := fullSchemaSnapshotForTest(t).Tools
 	for path := range invalidShortcuts {
-		if _, ok := cli.ResolveMeta("doc " + path); ok {
-			t.Fatalf("invalid path %q leaked into embedded Schema", path)
+		for _, tool := range tools {
+			if schemaContractString(tool["cli_path"]) == "doc "+path {
+				t.Fatalf("invalid path %q leaked into assembled Schema", path)
+			}
 		}
 	}
 	for _, declared := range shortcut.All() {

@@ -136,9 +136,9 @@ func TestCrossPlatformCoverageDocFinalCommonAndCanonicalBranches(t *testing.T) {
 	if len(orderedCanonicalBlocks(elementTree, "element")) != 2 || canonicalBlockIdentity(elementTree, "element") != "" || canonicalBlockIdentity("bad", "element") != "" {
 		t.Fatal("element canonical traversal failed")
 	}
-	if !verifyInsertedCanonicalBlock(map[string]any{"blockId": "new"}, elementTree, "ref", "after", "element") ||
-		!verifyInsertedCanonicalBlock(map[string]any{}, elementTree, "ref", "after", "element") ||
-		verifyInsertedCanonicalBlock(map[string]any{}, elementTree, "new", "after", "element") {
+	if !verifyInsertedCanonicalBlock(map[string]any{"blockId": "new"}, elementTree, "ref", "after", "after", "element") ||
+		verifyInsertedCanonicalBlock(map[string]any{}, elementTree, "ref", "after", "after", "element") ||
+		verifyInsertedCanonicalBlock(map[string]any{}, elementTree, "new", "after", "after", "element") {
 		t.Fatal("inserted block verification branch contract failed")
 	}
 	if blockContentEquals(map[string]any{}, "missing", "after", "element") {
@@ -319,7 +319,7 @@ func TestCrossPlatformCoverageDocFinalExecutionFailureBranches(t *testing.T) {
 	if err := os.WriteFile("media.bin", []byte("media"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_ = runDocCoverage(t, ResourceUpdate, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--file", "media.bin", "--dry-run", "--yes")
+	_ = runDocCoverage(t, CoverSet, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--file", "media.bin", "--dry-run", "--yes")
 	if err := runDocCoverage(t, Import, &docCoverageCaller{dryRun: true, responses: map[string][]map[string]any{}}, "--file", "media.bin", "--folder", "f", "--dry-run"); err != nil {
 		t.Fatal(err)
 	}

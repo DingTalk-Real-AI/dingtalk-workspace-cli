@@ -12,11 +12,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
@@ -37,6 +39,7 @@ var (
 	docDownload     = localio.Download
 	docVerifyWait   = waitForDocVerification
 	docVerifyDelays = []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
+	orderedListMark = regexp.MustCompile(`(?m)(^|[\n;；])\s*(\d+)[.)、]\s*`)
 	docMarkdown     = goldmark.New(
 		goldmark.WithExtensions(extension.Table),
 		goldmark.WithRendererOptions(html.WithUnsafe()),
@@ -50,6 +53,9 @@ const (
 	docBlockReadPageSize = 50
 	docBlockReadMaxItems = 5000
 	docMarkdownVerifyMax = 2 * 1024 * 1024
+
+	docFetchValidationConstraint  = "range/section/tags/keyword 的条件参数按 scope 校验；--end-block-id 仅限 range；历史 revision 当前不支持"
+	docUpdateValidationConstraint = "JSONML 不支持 append；--expected-revision 仅支持 overwrite+jsonml；其余动作参数按 --command 的 RequiredWhen 校验"
 )
 
 var Create = shortcut.Shortcut{
@@ -106,10 +112,13 @@ var Create = shortcut.Shortcut{
 		}
 		created, err := rt.CallMCPWriteData(productDoc, "create_document", params)
 		if err != nil {
+			// create_document does not expose a stable idempotency key or operation
+			// ID. A same-title search cannot prove that a result belongs to this
+			// request, so fail closed instead of claiming another concurrent create.
 			return docUnknownWriteError("doc.create", "create_document", "", err)
 		}
-		nodeID := nestedString(created, "nodeId", "documentId", "id")
 		steps := []map[string]any{{"name": "create_document", "status": "success"}}
+		nodeID := nestedString(created, "nodeId", "documentId", "id")
 		if nodeID == "" {
 			return docPartialWriteError(
 				"doc.create", "doc_create_missing_node_id", "resolve_created_document",
@@ -120,6 +129,10 @@ var Create = shortcut.Shortcut{
 				map[string]any{"available": false, "reason": "create_document did not return nodeId; locate the new document in DingTalk"},
 			)
 		}
+		_ = docwritejournal.Record(rt.Command().Context(), docwritejournal.Entry{
+			NodeID: nodeID, Name: rt.Str("name"), DocType: "ALIDOC",
+			URL: nestedString(created, "url", "docUrl", "nodeUrl"), FolderID: rt.Str("folder"), WorkspaceID: rt.Str("workspace"),
+		})
 		if format == "jsonml" && content != "" {
 			if _, err := rt.CallMCPWriteData(productDoc, "update_document", map[string]any{"nodeId": nodeID, "format": "jsonml", "jsonml": content, "mode": "overwrite"}); err != nil {
 				return docPartialWriteError(
@@ -155,7 +168,7 @@ var Create = shortcut.Shortcut{
 			verifyTool = "get_document_content"
 			verifyParams["format"] = format
 		}
-		verification, err := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
+		verification, attempts, err := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
 			return content == "" || verifyUpdatedDocumentContent(data, content, "overwrite", format)
 		})
 		if err != nil {
@@ -164,8 +177,19 @@ var Create = shortcut.Shortcut{
 		if content != "" && !verifyUpdatedDocumentContent(verification, content, "overwrite", format) {
 			return docVerificationError("doc.create", "verify", nodeID, fmt.Errorf("回读结果与完整初始内容不一致"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
-		steps = append(steps, map[string]any{"name": "verify", "status": "success"})
-		return rt.Output(docEnvelope("doc.create", map[string]any{"nodeId": nodeID, "result": created, "verified": true, "verification": verification}, steps...))
+		steps = append(steps, map[string]any{"name": "verify", "status": "success", "attempts": attempts})
+		receipt := map[string]any{
+			"nodeId":       nodeID,
+			"result":       created,
+			"verified":     true,
+			"verification": verification,
+		}
+		if revision, ok := nestedRevision(created); ok {
+			receipt["revision"] = revision
+		} else if revision, ok := nestedRevision(verification); ok {
+			receipt["revision"] = revision
+		}
+		return rt.Output(docEnvelope("doc.create", receipt, steps...))
 	},
 }
 
@@ -190,9 +214,9 @@ var Fetch = shortcut.Shortcut{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL；" + fetchTargetConstraint},
 		{Name: "query", Type: shortcut.FlagString, Desc: "文档标题或关键词；跨页唯一解析后读取；" + fetchTargetConstraint},
 		{Name: "detail", Type: shortcut.FlagString, Default: "simple", Desc: "输出细节", Enum: []string{"simple", "with-ids", "full"}},
-		{Name: "scope", Type: shortcut.FlagString, Default: "full", Desc: "读取范围；keyword 时 --keyword 不能为空", Enum: []string{"full", "outline", "range", "section", "keyword", "tags"}},
+		{Name: "scope", Type: shortcut.FlagString, Default: "full", Desc: "读取范围；" + docFetchValidationConstraint, Enum: []string{"full", "outline", "range", "section", "keyword", "tags"}},
 		{Name: "start-block-id", Type: shortcut.FlagString, Desc: "range/section 起始块 ID"},
-		{Name: "end-block-id", Type: shortcut.FlagString, Desc: "range 结束块 ID"},
+		{Name: "end-block-id", Type: shortcut.FlagString, Desc: "range 结束块 ID；仅支持 --scope=range"},
 		{Name: "keyword", Type: shortcut.FlagString, Desc: "keyword 范围搜索词，不能为空，支持 foo|bar"},
 		{Name: "tags", Type: shortcut.FlagStringSlice, Desc: "tags 范围的 JSONML tag"},
 		{Name: "context-before", Type: shortcut.FlagInt, Desc: "关键词命中前的上下文字符数"},
@@ -205,14 +229,24 @@ var Fetch = shortcut.Shortcut{
 		if rt.Changed("revision") {
 			return apperrors.NewValidation("HISTORICAL_READ_UNSUPPORTED: 当前接口不能读取指定历史 revision")
 		}
-		if rt.Str("scope") == "keyword" && rt.Str("keyword") == "" {
+		scope := rt.Str("scope")
+		if scope == "keyword" && rt.Str("keyword") == "" {
 			return apperrors.NewValidation("--scope keyword 时必须提供 --keyword")
+		}
+		if (scope == "range" || scope == "section") && rt.Str("start-block-id") == "" {
+			return apperrors.NewValidation("--scope range/section 时必须提供 --start-block-id")
+		}
+		if scope == "tags" && len(rt.StrSlice("tags")) == 0 {
+			return apperrors.NewValidation("--scope tags 时必须提供 --tags")
+		}
+		if rt.Changed("end-block-id") && scope != "range" {
+			return apperrors.NewValidation("--end-block-id 仅支持 --scope range")
 		}
 		return nil
 	},
 	Constraints: []shortcut.Constraint{
 		{Kind: shortcut.ConstraintCustom, Flags: []string{"node", "query"}, Description: fetchTargetConstraint},
-		{Kind: shortcut.ConstraintCustom, Flags: []string{"scope", "keyword"}, Description: "--scope keyword 时 --keyword 不能为空"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"scope"}, Description: docFetchValidationConstraint},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		target, err := docresolver.Resolve(rt, rt.Str("node"), rt.Str("query"))
@@ -341,7 +375,7 @@ var Update = shortcut.Shortcut{
 	Intent:      "当用户要修改已有在线文字文档时使用；支持整篇 append/overwrite、block 插入/替换/删除，以及受限的唯一纯文本 str_replace，所有模式统一经过静态确认门禁。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"},
-	Contract: docContract("+update", "追加、覆盖或按 block 精确更新文档内容",
+	Contract: withStatefulDryRunExamples(docContract("+update", "追加、覆盖或按 block 精确更新文档内容",
 		"当用户要修改已有在线文字文档时使用；支持整篇 append/overwrite、block 插入/替换/删除，以及受限的唯一纯文本 str_replace，所有模式统一经过静态确认门禁。",
 		[]string{`dws doc +update --node <DOC_ID> --command append --content "补充说明"`, `dws doc +update --node <DOC_ID> --command block_replace --block-id <BLOCK_ID> --content "新内容"`},
 		contract.ParamDecl{Name: "node", Property: "node"},
@@ -350,20 +384,27 @@ var Update = shortcut.Shortcut{
 		contract.ParamDecl{Name: "doc-format", Property: "docFormat"},
 		contract.ParamDecl{Name: "block-id", Property: "blockId"},
 		contract.ParamDecl{Name: "after-block-id", Property: "afterBlockId"},
+		contract.ParamDecl{Name: "ref-block", Property: "referenceBlockId"},
+		contract.ParamDecl{Name: "where", Property: "where"},
 		contract.ParamDecl{Name: "old", Property: "old"},
 		contract.ParamDecl{Name: "new", Property: "new"},
+		contract.ParamDecl{Name: "allow-resource-delete", Property: "allowResourceDelete"},
 		contract.ParamDecl{Name: "expected-revision", Property: "expectedRevision"},
 		contract.ParamDecl{Name: "doc", Property: "node"},
-		contract.ParamDecl{Name: "text", Property: "content"}),
+		contract.ParamDecl{Name: "text", Property: "content"}), contract.DryRunPreviewDiff,
+		"dry-run 必须读取目标文档或 block 的实时内容才能生成真实差异；隔离 Agent 示例没有远端文档 fixture", 0, 1),
 	Flags: []shortcut.Flag{
 		{Name: "node", Type: shortcut.FlagString, Desc: "文档 ID 或 URL", Required: true, Aliases: []string{"doc"}, AliasesVisible: true},
-		{Name: "command", Type: shortcut.FlagString, Desc: "更新动作；不能为空", Enum: []string{"append", "overwrite", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert_after"}},
+		{Name: "command", Type: shortcut.FlagString, Desc: "更新动作；" + docUpdateValidationConstraint, Enum: []string{"append", "overwrite", "block_insert", "block_insert_after", "block_replace", "block_delete", "str_replace", "block_copy_insert", "block_copy_insert_after"}},
 		{Name: "content", Type: shortcut.FlagString, Desc: docRequiredContentInputDescription, Aliases: []string{"text"}, AliasesVisible: true},
 		{Name: "doc-format", Type: shortcut.FlagString, Default: "markdown", Desc: "内容格式", Enum: []string{"markdown", "jsonml"}},
 		{Name: "block-id", Type: shortcut.FlagString, Desc: "目标或源 block ID；相关动作要求时不能为空"},
-		{Name: "after-block-id", Type: shortcut.FlagString, Desc: "插入位置参考 block ID；相关动作要求时不能为空"},
+		{Name: "after-block-id", Type: shortcut.FlagString, Desc: "兼容参数：旧版 after 插入的参考 block ID"},
+		{Name: "ref-block", Type: shortcut.FlagString, Desc: "block_insert/block_copy_insert 的参考 block ID"},
+		{Name: "where", Type: shortcut.FlagString, Desc: "相对参考 block 的插入位置", Enum: []string{"before", "after"}},
 		{Name: "old", Type: shortcut.FlagString, Desc: "str_replace 原文字，不能为空"},
 		{Name: "new", Type: shortcut.FlagString, Desc: "str_replace 新文字；--old 不能为空，新值可为空但参数必须显式提供"},
+		{Name: "allow-resource-delete", Type: shortcut.FlagBool, Desc: "block_delete 高级保护开关：明确允许删除含图片/附件后代的容器 block"},
 		{Name: "expected-revision", Type: shortcut.FlagInt, Desc: "仅 overwrite+jsonml：传给服务端执行原子 revision 条件写"},
 	},
 	Tips: []string{`dws doc +update --node <DOC_ID> --command append --content "补充说明"`, `dws doc +update --node <DOC_ID> --command block_replace --block-id <BLOCK_ID> --content "新内容"`},
@@ -376,13 +417,13 @@ var Update = shortcut.Shortcut{
 			return apperrors.NewValidation("缺少 --command")
 		}
 		switch command {
-		case "append", "overwrite", "block_insert_after", "block_replace":
+		case "append", "overwrite", "block_insert", "block_insert_after", "block_replace":
 			if rt.StrFirst("content", "text") == "" {
 				return apperrors.NewValidation("该更新动作的 --content 不能为空")
 			}
 		}
 		switch command {
-		case "block_replace", "block_delete", "block_copy_insert_after":
+		case "block_replace", "block_delete", "block_copy_insert", "block_copy_insert_after":
 			if rt.Str("block-id") == "" {
 				return apperrors.NewValidation("该 block 操作必须提供 --block-id")
 			}
@@ -391,6 +432,12 @@ var Update = shortcut.Shortcut{
 		case "block_insert_after", "block_copy_insert_after":
 			if rt.Str("after-block-id") == "" {
 				return apperrors.NewValidation("该 block 操作必须提供 --after-block-id")
+			}
+		}
+		switch command {
+		case "block_insert", "block_copy_insert":
+			if rt.Str("ref-block") == "" || rt.Str("where") == "" {
+				return apperrors.NewValidation("该 block 操作必须同时提供 --ref-block 和 --where before|after")
 			}
 		}
 		if command == "str_replace" && (rt.Str("old") == "" || !rt.Changed("new")) {
@@ -404,8 +451,10 @@ var Update = shortcut.Shortcut{
 		}
 		return nil
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"command", "content", "block-id", "after-block-id", "old", "new"}, Description: "依 command 校验，所需文本或 block 参数不能为空"}},
-	Execute:     executeUpdate,
+	Constraints: []shortcut.Constraint{{
+		Kind: shortcut.ConstraintCustom, Flags: []string{"command"}, Description: docUpdateValidationConstraint,
+	}},
+	Execute: executeUpdate,
 }
 
 var CheckpointUpdate = shortcut.Shortcut{
@@ -446,9 +495,7 @@ var CheckpointUpdate = shortcut.Shortcut{
 				append(steps, map[string]any{"name": "update", "status": "failed"}, map[string]any{"name": "verify", "status": "not_started"}))
 		}
 		steps = append(steps, map[string]any{"name": "update", "status": "success"})
-		verification, err := readDocVerification(rt, "get_document_content", map[string]any{"nodeId": rt.Str("node"), "format": "markdown"}, func(data map[string]any) bool {
-			return verifyUpdatedDocumentContent(data, content, rt.Str("mode"), "markdown")
-		})
+		verification, err := rt.CallMCPData(productDoc, "get_document_content", map[string]any{"nodeId": rt.Str("node"), "format": "markdown"})
 		if err != nil {
 			return checkpointPartialWriteError(rt.Str("node"), checkpoint, "verify", "doc_checkpoint_verification_failed", err,
 				append(steps, map[string]any{"name": "verify", "status": "failed"}))
@@ -490,11 +537,11 @@ var Import = shortcut.Shortcut{
 	Command:     "+import",
 	Product:     productDoc,
 	Description: "上传本地文件并等待转换成在线文档对象；白名单外格式自动改走文件上传原样入库",
-	Intent:      "当用户要把工作目录内的 doc/docx/xls/xlsx/md/txt/xmind/mark 相对路径文件导入为钉钉在线对象，并可指定目标文件夹或知识库时使用；白名单外格式（html/pdf 等）自动按原文件上传入库，结果带 fallback=upload、converted=false 标记。",
+	Intent:      "当用户要把工作目录内的 doc/docx/xls/xlsx/md/txt/xmind/mark 相对路径文件导入为钉钉在线对象时使用；目标可省略并使用默认个人文档根目录，仅在用户明确指定时传目标文件夹或知识库；白名单外格式（html/pdf 等）自动按原文件上传入库，结果带 fallback=upload、converted=false 标记。",
 	Risk:        shortcut.RiskWrite,
 	Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
 	Contract: docContract("+import", "上传本地文件并等待转换成在线文档对象；白名单外格式自动改走文件上传原样入库",
-		"当用户要把工作目录内的 doc/docx/xls/xlsx/md/txt/xmind/mark 相对路径文件导入为钉钉在线对象，并可指定目标文件夹或知识库时使用；白名单外格式（html/pdf 等）自动按原文件上传入库，结果带 fallback=upload、converted=false 标记。",
+		"当用户要把工作目录内的 doc/docx/xls/xlsx/md/txt/xmind/mark 相对路径文件导入为钉钉在线对象时使用；目标可省略并使用默认个人文档根目录，仅在用户明确指定时传目标文件夹或知识库；白名单外格式（html/pdf 等）自动按原文件上传入库，结果带 fallback=upload、converted=false 标记。",
 		[]string{`dws doc +import --file ./report.docx`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`}),
 	Flags: []shortcut.Flag{
 		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内已存在文件的相对路径", Required: true},
@@ -502,9 +549,11 @@ var Import = shortcut.Shortcut{
 		{Name: "workspace", Type: shortcut.FlagString, Desc: "可选目标知识库 ID；folder/workspace 都省略时导入默认根目录"},
 		{Name: "name", Type: shortcut.FlagString, Desc: "导入后名称"},
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内已存在且不通过符号链接逃逸的相对路径"}},
-	Tips:        []string{`dws doc +import --file ./report.docx`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`},
-	Validate:    func(rt *shortcut.RuntimeContext) error { return validateWorkspaceInputPath("file", rt.Str("file")) },
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内已存在且不通过符号链接逃逸的相对路径"},
+	},
+	Tips:     []string{`dws doc +import --file ./report.docx`, `dws doc +import --file ./notes.md --workspace <WORKSPACE_ID> --name "会议纪要"`},
+	Validate: func(rt *shortcut.RuntimeContext) error { return validateWorkspaceInputPath("file", rt.Str("file")) },
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		if err := helpers.RunDocImportShortcut(rt.Command()); err != nil {
 			return docUnknownWriteError("doc.import", "import", "", err)
@@ -530,14 +579,13 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		}
 	}
 	nodeID := rt.StrFirst("node", "doc")
-	plan := map[string]any{"nodeId": nodeID, "command": command, "blockId": rt.Str("block-id"), "afterBlockId": rt.Str("after-block-id"), "contentBytes": len(content)}
+	plan := map[string]any{"nodeId": nodeID, "command": command, "blockId": rt.Str("block-id"), "afterBlockId": rt.Str("after-block-id"), "referenceBlockId": rt.Str("ref-block"), "where": rt.Str("where"), "contentBytes": len(content)}
 	if rt.Changed("expected-revision") {
 		plan["expectedRevision"] = rt.Int("expected-revision")
 		plan["optimisticCheck"] = "server_enforced"
 	}
 	if rt.DryRun() {
-		plan["executed"] = false
-		return rt.Output(docEnvelope("doc.update", plan))
+		return previewDocUpdate(rt, nodeID, content, plan)
 	}
 	node := nodeID
 	switch command {
@@ -555,19 +603,19 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 			params["markdown"] = content
 		}
 		return executeVerifiedDocContentMutation(rt, params, node, content, command, rt.Str("doc-format"))
-	case "block_insert_after":
+	case "block_insert", "block_insert_after":
 		verificationFormat := blockVerificationFormat(rt.Str("doc-format"))
-		params := map[string]any{"nodeId": node, "referenceBlockId": rt.Str("after-block-id"), "where": "after"}
+		referenceBlockID, where := updateInsertionTarget(rt, command)
+		params := map[string]any{"nodeId": node, "referenceBlockId": referenceBlockID, "where": where}
 		if rt.Str("doc-format") == "jsonml" {
 			params["format"], params["jsonml"] = "jsonml", content
 		} else {
 			params["element"] = map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": content}}
 		}
-		referenceBlockID := rt.Str("after-block-id")
 		return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block", params, node,
 			"list_document_blocks", map[string]any{"nodeId": node, "format": verificationFormat, "__allBlocks": true},
 			func(result, data map[string]any) bool {
-				return verifyInsertedBlock(result, data, referenceBlockID, content, rt.Str("doc-format"))
+				return verifyInsertedBlock(result, data, referenceBlockID, where, content, rt.Str("doc-format"))
 			})
 	case "block_replace":
 		blockID := rt.Str("block-id")
@@ -576,7 +624,15 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		if rt.Str("doc-format") == "jsonml" {
 			params["format"], params["jsonml"] = "jsonml", content
 		} else {
-			params["element"] = map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": content}}
+			current, readErr := rt.CallMCPData(productDoc, "list_document_blocks", map[string]any{"nodeId": node, "blockId": blockID, "format": "element"})
+			if readErr != nil {
+				return readErr
+			}
+			element, elementErr := buildTypePreservingTextElement(findBlock(current, blockID), content)
+			if elementErr != nil {
+				return elementErr
+			}
+			params["element"] = element
 		}
 		return executeVerifiedDocMutation(rt, "doc.update", "update_document_block", params, node,
 			"list_document_blocks", map[string]any{"nodeId": node, "format": verificationFormat, "__allBlocks": true},
@@ -585,16 +641,170 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 			})
 	case "block_delete":
 		blockID := rt.Str("block-id")
+		current, readErr := rt.CallMCPData(productDoc, "get_document_content", map[string]any{
+			"nodeId": node, "format": "jsonml", "scope": "section", "startBlockId": blockID,
+		})
+		if readErr != nil {
+			return readErr
+		}
+		block := findCanonicalBlock(current, blockID, "jsonml")
+		if block == nil {
+			if fallback := findBlock(current, blockID); fallback != nil {
+				block = fallback
+			}
+		}
+		if block == nil && len(current) > 0 {
+			return apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到要删除的 block；删除后的 ID 禁止复用")
+		}
+		if block != nil && containsResourceReference(block) && !rt.Bool("allow-resource-delete") {
+			return apperrors.NewValidation("UNSAFE_RESOURCE_DELETE: 目标 block 是图片或附件容器，不是图片后的空块。若任务只是清理媒体后的空段落，禁止覆盖此保护或重传媒体；仅当 media insert 回执的 position.followingBlockExists=true 时，才可使用 position.followingBlockId 删除那个独立空块。删除媒体资源必须由用户单独明确要求")
+		}
 		return executeVerifiedDocMutation(rt, "doc.update", "delete_document_block", map[string]any{"nodeId": node, "blockId": blockID}, node,
 			"list_document_blocks", map[string]any{"nodeId": node, "format": "element", "__allBlocks": true},
 			func(_, data map[string]any) bool { return findBlock(data, blockID) == nil })
 	case "str_replace":
 		return executePlainTextReplace(rt, node)
-	case "block_copy_insert_after":
-		return executeBlockCopy(rt, node)
+	case "block_copy_insert", "block_copy_insert_after":
+		referenceBlockID, where := updateInsertionTarget(rt, command)
+		return executeBlockCopy(rt, node, referenceBlockID, where)
 	default:
 		return apperrors.NewValidation(fmt.Sprintf("不支持的 update command %q", command))
 	}
+}
+
+func updateInsertionTarget(rt *shortcut.RuntimeContext, command string) (string, string) {
+	if command == "block_insert_after" || command == "block_copy_insert_after" {
+		return rt.Str("after-block-id"), "after"
+	}
+	return rt.Str("ref-block"), rt.Str("where")
+}
+
+func previewDocUpdate(rt *shortcut.RuntimeContext, nodeID, content string, plan map[string]any) error {
+	command := rt.Str("command")
+	format := rt.Str("doc-format")
+	var before, after any
+	var target map[string]any
+
+	switch command {
+	case "append", "overwrite":
+		current, err := rt.CallMCPData(productDoc, "get_document_content", map[string]any{"nodeId": nodeID, "format": format})
+		if err != nil {
+			return err
+		}
+		currentContent := ""
+		if candidates := documentContentCandidates(current, format); len(candidates) > 0 {
+			currentContent = candidates[0]
+		}
+		before = currentContent
+		if command == "append" && currentContent != "" {
+			after = strings.TrimRight(currentContent, "\n") + "\n" + content
+		} else {
+			after = content
+		}
+		target = map[string]any{"scope": "document"}
+	case "block_insert", "block_insert_after":
+		referenceBlockID, where := updateInsertionTarget(rt, command)
+		current, err := rt.CallMCPData(productDoc, "list_document_blocks", map[string]any{"nodeId": nodeID, "blockId": referenceBlockID, "format": blockVerificationFormat(format)})
+		if err != nil {
+			return err
+		}
+		if findCanonicalBlock(current, referenceBlockID, format) == nil {
+			return apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到插入参考 block")
+		}
+		before = nil
+		after = content
+		target = map[string]any{"referenceBlockId": referenceBlockID, "where": where}
+	case "block_replace", "block_delete":
+		blockID := rt.Str("block-id")
+		current, err := rt.CallMCPData(productDoc, "list_document_blocks", map[string]any{"nodeId": nodeID, "blockId": blockID, "format": blockVerificationFormat(format)})
+		if err != nil {
+			return err
+		}
+		block := findCanonicalBlock(current, blockID, format)
+		if block == nil {
+			return apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到目标 block")
+		}
+		before = canonicalBlockContent(block, format)
+		if command == "block_replace" {
+			after = content
+		}
+		target = map[string]any{"blockId": blockID}
+	case "str_replace":
+		current, err := rt.CallMCPData(productDoc, "list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element"})
+		if err != nil {
+			return err
+		}
+		blockID, matched, err := resolveUniquePlainTextMatch(current, rt.Str("old"))
+		if err != nil {
+			return err
+		}
+		before = matched
+		after = strings.Replace(matched, rt.Str("old"), rt.Str("new"), 1)
+		target = map[string]any{"blockId": blockID}
+	case "block_copy_insert", "block_copy_insert_after":
+		referenceBlockID, where := updateInsertionTarget(rt, command)
+		current, err := rt.CallMCPData(productDoc, "list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element"})
+		if err != nil {
+			return err
+		}
+		source := findBlock(current, rt.Str("block-id"))
+		if source == nil || findBlock(current, referenceBlockID) == nil {
+			return apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到源 block 或插入参考 block")
+		}
+		before = nil
+		after = canonicalBlockContent(source, "markdown")
+		target = map[string]any{"sourceBlockId": rt.Str("block-id"), "referenceBlockId": referenceBlockID, "where": where}
+	default:
+		return apperrors.NewValidation(fmt.Sprintf("不支持的 update command %q", command))
+	}
+
+	plan["executed"] = false
+	plan["target"] = target
+	plan["before"] = before
+	plan["after"] = after
+	payload := docEnvelope("doc.update", plan)
+	payload["dry_run"] = true
+	payload["preview_kind"] = contract.DryRunPreviewDiff
+	return rt.Output(payload)
+}
+
+func buildTypePreservingTextElement(block map[string]any, content string) (map[string]any, error) {
+	if block == nil {
+		return nil, apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到要替换的 block")
+	}
+	element, err := cloneBlockElement(block)
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range []string{"heading", "paragraph"} {
+		if body, ok := element[key].(map[string]any); ok {
+			body["text"] = content
+			delete(element, "children")
+			stripBlockIDs(element)
+			return element, nil
+		}
+	}
+	return nil, apperrors.NewValidation("UNSAFE_BLOCK_REPLACE: Markdown 文本替换仅支持段落或标题 block；其他富结构请使用 --doc-format jsonml")
+}
+
+var (
+	cloneBlockMarshal   = json.Marshal
+	cloneBlockUnmarshal = json.Unmarshal
+)
+
+func cloneBlockElement(block map[string]any) (map[string]any, error) {
+	encoded, err := cloneBlockMarshal(block)
+	if err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("复制 block 失败: %v", err))
+	}
+	var cloned map[string]any
+	if err := cloneBlockUnmarshal(encoded, &cloned); err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("复制 block 失败: %v", err))
+	}
+	if nested, ok := cloned["element"].(map[string]any); ok {
+		cloned = nested
+	}
+	return cloned, nil
 }
 
 func nestedRevision(value any) (int, bool) {
@@ -639,7 +849,27 @@ func executePlainTextReplace(rt *shortcut.RuntimeContext, nodeID string) error {
 	if err != nil {
 		return err
 	}
-	oldText := rt.Str("old")
+	blockID, matchedText, err := resolveUniquePlainTextMatch(data, rt.Str("old"))
+	if err != nil {
+		return err
+	}
+	element, err := cloneBlockElement(findBlock(data, blockID))
+	if err != nil {
+		return err
+	}
+	replacements := replaceTextFields(element, rt.Str("old"), rt.Str("new"))
+	if replacements != 1 {
+		return apperrors.NewValidation(fmt.Sprintf("UNSAFE_RICH_TEXT_REPLACE: 目标 block 中需要唯一文本片段匹配，实际 %d 处", replacements))
+	}
+	stripBlockIDs(element)
+	updated := strings.Replace(matchedText, rt.Str("old"), rt.Str("new"), 1)
+	return executeVerifiedDocMutation(rt, "doc.update", "update_document_block",
+		map[string]any{"nodeId": nodeID, "blockId": blockID, "element": element}, nodeID,
+		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element", "__allBlocks": true},
+		func(_, data map[string]any) bool { return blockContentEquals(data, blockID, updated, "markdown") })
+}
+
+func resolveUniquePlainTextMatch(data map[string]any, oldText string) (string, string, error) {
 	type match struct{ blockID, text string }
 	matches := []match{}
 	var walk func(any, string)
@@ -663,17 +893,34 @@ func executePlainTextReplace(rt *shortcut.RuntimeContext, nodeID string) error {
 	}
 	walk(data, "")
 	if len(matches) != 1 {
-		return apperrors.NewValidation(fmt.Sprintf("UNSAFE_RICH_TEXT_REPLACE: 需要唯一普通文本块匹配，实际 %d 处", len(matches)))
+		return "", "", apperrors.NewValidation(fmt.Sprintf("UNSAFE_RICH_TEXT_REPLACE: 需要唯一普通文本块匹配，实际 %d 处", len(matches)))
 	}
-	updated := strings.Replace(matches[0].text, oldText, rt.Str("new"), 1)
-	blockID := matches[0].blockID
-	return executeVerifiedDocMutation(rt, "doc.update", "update_document_block",
-		map[string]any{"nodeId": nodeID, "blockId": blockID, "element": map[string]any{"blockType": "paragraph", "paragraph": map[string]any{"text": updated}}}, nodeID,
-		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element", "__allBlocks": true},
-		func(_, data map[string]any) bool { return blockContentEquals(data, blockID, updated, "markdown") })
+	return matches[0].blockID, matches[0].text, nil
 }
 
-func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID string) error {
+func replaceTextFields(value any, oldText, newText string) int {
+	replacements := 0
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			if key == "text" {
+				if text, ok := child.(string); ok && strings.Contains(text, oldText) {
+					typed[key] = strings.Replace(text, oldText, newText, 1)
+					replacements++
+				}
+				continue
+			}
+			replacements += replaceTextFields(child, oldText, newText)
+		}
+	case []any:
+		for _, child := range typed {
+			replacements += replaceTextFields(child, oldText, newText)
+		}
+	}
+	return replacements
+}
+
+func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID, referenceBlockID, where string) error {
 	data, err := readAllDocumentBlocks(rt, map[string]any{"nodeId": nodeID, "format": "element"})
 	if err != nil {
 		return err
@@ -687,12 +934,11 @@ func executeBlockCopy(rt *shortcut.RuntimeContext, nodeID string) error {
 	}
 	expectedContent := canonicalBlockContent(block, "markdown")
 	stripBlockIDs(block)
-	referenceBlockID := rt.Str("after-block-id")
 	return executeVerifiedDocMutation(rt, "doc.update", "insert_document_block",
-		map[string]any{"nodeId": nodeID, "referenceBlockId": referenceBlockID, "where": "after", "element": block}, nodeID,
+		map[string]any{"nodeId": nodeID, "referenceBlockId": referenceBlockID, "where": where, "element": block}, nodeID,
 		"list_document_blocks", map[string]any{"nodeId": nodeID, "format": "element", "__allBlocks": true},
 		func(result, data map[string]any) bool {
-			return verifyInsertedCanonicalBlock(result, data, referenceBlockID, expectedContent, "markdown")
+			return verifyInsertedCanonicalBlock(result, data, referenceBlockID, where, expectedContent, "markdown")
 		})
 }
 
@@ -707,10 +953,30 @@ func executeVerifiedDocMutation(
 	steps := []map[string]any{{"name": tool, "status": "started"}}
 	result, err := rt.CallMCPWriteData(productDoc, tool, params)
 	if err != nil {
+		// Insert is non-idempotent. An adjacent block with matching content may
+		// have existed before this request, so post-state alone cannot prove that
+		// an errored call created anything. Without a server operation/block ID,
+		// keep the commit state unknown and never claim or mutate a neighbouring
+		// block as this request's result.
+		if tool == "insert_document_block" {
+			return docUnknownWriteError(operation, tool, nodeID, err)
+		}
+		// Transport timeouts and empty acknowledgements do not prove failure.
+		// Reconcile the requested postcondition before returning an unknown
+		// effect so a caller never has to replay a non-idempotent write blindly.
+		verification, attempts, verifyErr := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
+			return verify != nil && verify(map[string]any{}, data)
+		})
+		if verifyErr == nil && verify != nil && verify(map[string]any{}, verification) {
+			return rt.Output(docEnvelope(operation, map[string]any{
+				"nodeId": nodeID, "verified": true, "reconciledAfterWriteError": true,
+				"affectedBlockIds": mutationAffectedBlockIDs(tool, params, map[string]any{}, verification, verifyParams),
+			}, map[string]any{"name": tool, "status": "unknown"}, map[string]any{"name": "reconcile", "status": "success", "attempts": attempts}))
+		}
 		return docUnknownWriteError(operation, tool, nodeID, err)
 	}
 	steps[0]["status"] = "success"
-	verification, err := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
+	verification, attempts, err := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
 		return verify == nil || verify(result, data)
 	})
 	if err != nil {
@@ -719,13 +985,44 @@ func executeVerifiedDocMutation(
 	if verify != nil && !verify(result, verification) {
 		return docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
-	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
-	return rt.Output(docEnvelope(operation, map[string]any{
-		"nodeId":       nodeID,
-		"verified":     true,
+	steps = append(steps, map[string]any{"name": "verify", "status": "success", "attempts": attempts})
+	receipt := map[string]any{
+		"nodeId":           nodeID,
+		"verified":         true,
+		"affectedBlockIds": mutationAffectedBlockIDs(tool, params, result, verification, verifyParams),
+		// Keep the established doc.operation.v1 success payload while adding the
+		// compact receipt fields above. Existing JSON callers use these objects to
+		// consume service-specific IDs and the complete write-after-read result.
 		"result":       result,
 		"verification": verification,
-	}, steps...))
+	}
+	if revision, ok := nestedRevision(result); ok {
+		receipt["revision"] = revision
+	} else if revision, ok := nestedRevision(verification); ok {
+		receipt["revision"] = revision
+	}
+	return rt.Output(docEnvelope(operation, receipt, steps...))
+}
+
+func mutationAffectedBlockIDs(tool string, params, result, verification, verifyParams map[string]any) []string {
+	ids := []string{}
+	appendUnique := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		for _, existing := range ids {
+			if existing == value {
+				return
+			}
+		}
+		ids = append(ids, value)
+	}
+	appendUnique(nestedString(result, "blockId", "elementId", "id"))
+	if blockID, _ := params["blockId"].(string); blockID != "" {
+		appendUnique(blockID)
+	}
+	return ids
 }
 
 func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams map[string]any, nodeID, content, mode, format string) error {
@@ -735,6 +1032,7 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 		firstParams["markdown"] = chunks[0]
 	}
 	steps := make([]map[string]any, 0, len(chunks)+1)
+	var lastResult map[string]any
 	for index, chunk := range chunks {
 		params := firstParams
 		if index > 0 {
@@ -746,6 +1044,21 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 		}
 		result, err := rt.CallMCPWriteData(productDoc, "update_document", params)
 		if err != nil {
+			// Overwrite has an exact postcondition and is safe to reconcile.
+			// Append may already contain the same suffix before this call, so it
+			// must remain unknown unless a future server revision/idempotency key
+			// can prove the transition.
+			if mode == "overwrite" {
+				verification, attempts, verifyErr := readDocVerification(rt, "get_document_content", map[string]any{"nodeId": nodeID, "format": format}, func(data map[string]any) bool {
+					return verifyUpdatedDocumentContent(data, content, mode, format)
+				})
+				if verifyErr == nil && verifyUpdatedDocumentContent(verification, content, mode, format) {
+					steps = append(steps, map[string]any{"name": stepName, "status": "unknown"}, map[string]any{"name": "reconcile", "status": "success", "attempts": attempts})
+					return rt.Output(docEnvelope("doc.update", map[string]any{
+						"nodeId": nodeID, "mode": mode, "verified": true, "verification": verification, "reconciledAfterWriteError": true,
+					}, steps...))
+				}
+			}
 			if index == 0 {
 				return docUnknownWriteError("doc.update", stepName, nodeID, err)
 			}
@@ -758,9 +1071,10 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 				map[string]any{"available": false, "reason": "inspect current content before resuming from a confirmed missing boundary"},
 			)
 		}
+		lastResult = result
 		steps = append(steps, map[string]any{"name": stepName, "status": "success"})
 	}
-	verification, err := readDocVerification(rt, "get_document_content", map[string]any{"nodeId": nodeID, "format": format}, func(data map[string]any) bool {
+	verification, attempts, err := readDocVerification(rt, "get_document_content", map[string]any{"nodeId": nodeID, "format": format}, func(data map[string]any) bool {
 		return verifyUpdatedDocumentContent(data, content, mode, format)
 	})
 	if err != nil {
@@ -769,13 +1083,17 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 	if !verifyUpdatedDocumentContent(verification, content, mode, format) {
 		return docVerificationError("doc.update", "verify", nodeID, fmt.Errorf("回读结果未包含预期内容"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
-	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
-	return rt.Output(docEnvelope("doc.update", map[string]any{
-		"nodeId": nodeID, "mode": mode, "chunksWritten": len(chunks), "verified": true, "verification": verification,
-	}, steps...))
+	steps = append(steps, map[string]any{"name": "verify", "status": "success", "attempts": attempts})
+	receipt := map[string]any{"nodeId": nodeID, "mode": mode, "chunksWritten": len(chunks), "verified": true, "verification": verification}
+	if revision, ok := nestedRevision(lastResult); ok {
+		receipt["revision"] = revision
+	} else if revision, ok := nestedRevision(verification); ok {
+		receipt["revision"] = revision
+	}
+	return rt.Output(docEnvelope("doc.update", receipt, steps...))
 }
 
-func readDocVerification(rt *shortcut.RuntimeContext, tool string, rawParams map[string]any, verify func(map[string]any) bool) (map[string]any, error) {
+func readDocVerification(rt *shortcut.RuntimeContext, tool string, rawParams map[string]any, matches func(map[string]any) bool) (map[string]any, int, error) {
 	params := cloneMap(rawParams)
 	allBlocks, _ := params["__allBlocks"].(bool)
 	delete(params, "__allBlocks")
@@ -794,20 +1112,20 @@ func readDocVerification(rt *shortcut.RuntimeContext, tool string, rawParams map
 		} else {
 			last = data
 			lastErr = nil
-			if verify == nil || verify(data) {
-				return data, nil
+			if matches == nil || matches(data) {
+				return data, attempt + 1, nil
 			}
 		}
 		if attempt < len(docVerifyDelays) {
 			if err := docVerifyWait(rt.Command().Context(), docVerifyDelays[attempt]); err != nil {
-				return nil, err
+				return nil, attempt + 1, err
 			}
 		}
 	}
 	if lastErr != nil {
-		return nil, lastErr
+		return nil, len(docVerifyDelays) + 1, lastErr
 	}
-	return last, nil
+	return last, len(docVerifyDelays) + 1, nil
 }
 
 func waitForDocVerification(ctx context.Context, delay time.Duration) error {
@@ -827,6 +1145,7 @@ func waitForDocVerification(ctx context.Context, delay time.Duration) error {
 func readAllDocumentBlocks(rt *shortcut.RuntimeContext, base map[string]any) (map[string]any, error) {
 	all := make([]any, 0, docBlockReadPageSize)
 	seenPageIdentities := map[string]bool{}
+	var firstPage map[string]any
 	for start := 0; start < docBlockReadMaxItems; start += docBlockReadPageSize {
 		params := cloneMap(base)
 		params["startIndex"] = start
@@ -834,6 +1153,9 @@ func readAllDocumentBlocks(rt *shortcut.RuntimeContext, base map[string]any) (ma
 		page, err := rt.CallMCPData(productDoc, "list_document_blocks", params)
 		if err != nil {
 			return nil, err
+		}
+		if firstPage == nil {
+			firstPage = page
 		}
 		blocks, ok := documentBlockEntries(page)
 		if !ok {
@@ -849,21 +1171,34 @@ func readAllDocumentBlocks(rt *shortcut.RuntimeContext, base map[string]any) (ma
 		all = append(all, blocks...)
 		hasMore, known, _ := docPageState(page)
 		if known && !hasMore {
-			return map[string]any{"blocks": all, "hasMore": false, "totalCount": len(all)}, nil
+			return completedDocumentBlockRead(firstPage, page, all, len(all), start == 0), nil
 		}
 		if !known {
 			if total, ok := nestedNonNegativeInt(page, "totalCount", "total_count"); ok && len(all) >= total {
-				return map[string]any{"blocks": all, "hasMore": false, "totalCount": total}, nil
+				return completedDocumentBlockRead(firstPage, page, all, total, start == 0), nil
 			}
 		}
 		if !known && len(blocks) < docBlockReadPageSize {
-			return map[string]any{"blocks": all, "hasMore": false, "totalCount": len(all)}, nil
+			return completedDocumentBlockRead(firstPage, page, all, len(all), start == 0), nil
 		}
 		if len(blocks) == 0 {
 			return nil, fmt.Errorf("list_document_blocks 声明仍有下一页但当前页为空，无法证明回读完整")
 		}
 	}
 	return nil, fmt.Errorf("list_document_blocks 超过 %d 个块，无法在安全上限内完成回读", docBlockReadMaxItems)
+}
+
+func completedDocumentBlockRead(firstPage, lastPage map[string]any, blocks []any, total int, singlePage bool) map[string]any {
+	if singlePage {
+		return firstPage
+	}
+	result := map[string]any{"blocks": blocks, "hasMore": false, "totalCount": total}
+	if revision, ok := nestedRevision(lastPage); ok {
+		result["revision"] = revision
+	} else if revision, ok := nestedRevision(firstPage); ok {
+		result["revision"] = revision
+	}
+	return result
 }
 
 func documentBlockPageIdentity(blocks []any) string {
@@ -1006,7 +1341,7 @@ func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool
 		actualRaw := candidate
 		actual := normalizeDocumentContentForVerification(actualRaw, format)
 		if mode == "overwrite" {
-			if actual == expected || (format == "markdown" && stripReadbackDocumentTitle(actual) == expected) {
+			if actual == expected || (format == "markdown" && (knownMarkdownRendererEquivalent(actual, expected) || stripReadbackDocumentTitle(actual) == expected)) {
 				return true
 			}
 			if format == "markdown" && (markdownSemanticallyEquivalent(actualRaw, expectedRaw) ||
@@ -1018,8 +1353,15 @@ func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool
 		if actual == expected || strings.HasSuffix(actual, "\n"+expected) {
 			return true
 		}
-		if format == "markdown" && markdownSemanticallyEndsWith(actualRaw, expectedRaw) {
-			return true
+		if format == "markdown" {
+			actualRendered := normalizeKnownMarkdownRendererEquivalences(actual)
+			expectedRendered := normalizeKnownMarkdownRendererEquivalences(expected)
+			if expectedRendered != "" && (actualRendered == expectedRendered || strings.HasSuffix(actualRendered, "\n"+expectedRendered)) {
+				return true
+			}
+			if markdownSemanticallyEndsWith(actualRaw, expectedRaw) {
+				return true
+			}
 		}
 	}
 	return false
@@ -1060,8 +1402,8 @@ func stripReadbackDocumentTitle(content string) string {
 	return strings.Join(lines, "\n")
 }
 
-func verifyInsertedBlock(result, data map[string]any, referenceBlockID, expected, format string) bool {
-	return verifyInsertedCanonicalBlock(result, data, referenceBlockID, normalizeDocumentContentForVerification(expected, format), format)
+func verifyInsertedBlock(result, data map[string]any, referenceBlockID, where, expected, format string) bool {
+	return verifyInsertedCanonicalBlock(result, data, referenceBlockID, where, normalizeDocumentContentForVerification(expected, format), format)
 }
 
 func blockVerificationFormat(format string) string {
@@ -1071,18 +1413,23 @@ func blockVerificationFormat(format string) string {
 	return "element"
 }
 
-func verifyInsertedCanonicalBlock(result, data map[string]any, referenceBlockID, expected, format string) bool {
-	if insertedID := nestedString(result, "blockId", "elementId", "id"); insertedID != "" {
-		if blockContentEquals(data, insertedID, expected, format) {
-			return true
-		}
+func verifyInsertedCanonicalBlock(result, data map[string]any, referenceBlockID, where, expected, format string) bool {
+	insertedID := nestedString(result, "blockId", "elementId", "id")
+	if insertedID == "" {
+		return false
 	}
 	blocks := orderedCanonicalBlocks(data, format)
 	for index, block := range blocks {
-		if canonicalBlockIdentity(block, format) != referenceBlockID || index+1 >= len(blocks) {
+		if canonicalBlockIdentity(block, format) != referenceBlockID {
 			continue
 		}
-		return canonicalBlockContent(blocks[index+1], format) == expected
+		candidate := index + 1
+		if where == "before" {
+			candidate = index - 1
+		}
+		return candidate >= 0 && candidate < len(blocks) &&
+			canonicalBlockIdentity(blocks[candidate], format) == insertedID &&
+			canonicalBlockContent(blocks[candidate], format) == expected
 	}
 	return false
 }
@@ -1096,11 +1443,6 @@ func blockContentEquals(data map[string]any, blockID, expected, format string) b
 }
 
 func canonicalBlockContent(value any, format string) string {
-	if values, ok := value.(map[string]any); ok {
-		if element, ok := values["element"].(map[string]any); ok {
-			value = element
-		}
-	}
 	if format == "jsonml" {
 		if values, ok := value.(map[string]any); ok {
 			if encoded, ok := values["jsonml"].(string); ok {
@@ -1124,7 +1466,8 @@ func canonicalBlockContent(value any, format string) string {
 				return
 			}
 			for key, child := range typed {
-				if key == "id" || key == "blockId" || key == "uuid" || key == "blockType" {
+				switch key {
+				case "id", "blockId", "uuid", "blockType", "elementType", "type", "level", "viewType":
 					continue
 				}
 				walk(child)
@@ -1358,6 +1701,20 @@ func normalizeMarkdownForVerification(raw string) string {
 	return strings.Join(lines, "\n")
 }
 
+// normalizeKnownMarkdownRendererEquivalences accepts only the one reviewed
+// structural rewrite performed by the document renderer: ordered-list markers
+// may change style and inline separators may become line breaks. All other
+// Markdown syntax remains byte-significant after whitespace normalization.
+func normalizeKnownMarkdownRendererEquivalences(raw string) string {
+	raw = orderedListMark.ReplaceAllString(raw, "\n<ordered-list-item:$2>")
+	return normalizeMarkdownForVerification(raw)
+}
+
+func knownMarkdownRendererEquivalent(actual, expected string) bool {
+	expected = normalizeKnownMarkdownRendererEquivalences(expected)
+	return expected != "" && normalizeKnownMarkdownRendererEquivalences(actual) == expected
+}
+
 func normalizeJSONMLForVerification(raw string) string {
 	var value any
 	if err := json.Unmarshal([]byte(raw), &value); err != nil {
@@ -1418,29 +1775,19 @@ func normalizeJSONMLForVerification(raw string) string {
 		}
 		return current
 	}
-	// normalize only receives values decoded by encoding/json, so the resulting
-	// tree is always JSON-marshalable.
 	encoded, _ := json.Marshal(normalize(value))
 	return string(encoded)
 }
 
 var generatedJSONMLAttributeDefaults = map[string]map[string]any{
-	"hr": {
-		"sz": float64(1),
-	},
-	"tc": {
-		"colspan": float64(1), "rowspan": float64(1), "valign": "middle",
-	},
+	"hr": {"sz": float64(1)},
+	"tc": {"colspan": float64(1), "rowspan": float64(1), "valign": "middle"},
 	"code": {
 		"code": "", "syntax": "plaintext", "theme": "default",
 		"wrap": true, "showlinenumber": true, "fold": false,
 	},
 }
 
-// removeGeneratedJSONMLDefaults drops only defaults declared by the reviewed
-// JSONML schema, plus empty server style objects. Other attributes remain part
-// of the semantic fingerprint so links, formatting, and table layout stay
-// strict.
 func removeGeneratedJSONMLDefaults(tag string, attrs map[string]any) map[string]any {
 	defaults := generatedJSONMLAttributeDefaults[strings.ToLower(tag)]
 	out := make(map[string]any, len(attrs))

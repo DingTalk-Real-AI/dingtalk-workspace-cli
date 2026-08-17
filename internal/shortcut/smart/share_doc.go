@@ -20,6 +20,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -41,11 +42,8 @@ var ShareDoc = shortcut.Shortcut{
 	Intent: "当你手上已经有一个文档链接、想直接私信发给某个人而不必先查 userId 时使用；" +
 		"内部先按姓名搜通讯录解析出唯一用户，再用 openDingTalkId 把链接拼成一条 Markdown 消息发出去，" +
 		"姓名匹配到多人时会列出候选让你区分。只发链接、不读取或改动文档本身，会真实发出消息。",
-	Risk: shortcut.RiskWrite,
-	Safety: contract.SafetySpec{
-		Effect: "write", Risk: "medium",
-		Confirmation: "user_required", Idempotency: "unknown",
-	},
+	Risk:   shortcut.RiskWrite,
+	Safety: docsafety.SensitiveWrite("unknown"),
 	Contract: corecmd.ContractDecl{
 		Identity: contract.ToolIdentitySpec{
 			ProductID:      "doc",

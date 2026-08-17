@@ -186,9 +186,9 @@ var generatedCommandPathFallbacks = []CommandPathFallback{
 	{
 		From:         "doc +create-version",
 		Mode:         "rewrite",
-		To:           "doc +history-save",
+		To:           "doc +version-save",
 		Reviewed:     true,
-		ReviewReason: "202608 supplemental Doc badcase emitted +create-version while explicitly trying to save the current document as a recoverable history snapshot. +history-save is the unique current canonical shortcut for that operation and accepts the same --node value without parameter transformation.",
+		ReviewReason: "202608 supplemental Doc badcase emitted +create-version while explicitly trying to save the current document as a recoverable history snapshot. +version-save is the canonical shortcut for that operation and accepts the same --node value without parameter transformation.",
 	},
 	{
 		From:         "doc +list-templates",
@@ -200,9 +200,9 @@ var generatedCommandPathFallbacks = []CommandPathFallback{
 	{
 		From:         "doc +save-version",
 		Mode:         "rewrite",
-		To:           "doc +history-save",
+		To:           "doc +version-save",
 		Reviewed:     true,
-		ReviewReason: "202608 supplemental Doc badcase emitted the verb/object inversion +save-version for a current-version snapshot. +history-save is the unique current canonical shortcut with the same document-node contract; the legacy +version-save path is not selected as the fallback target.",
+		ReviewReason: "202608 supplemental Doc badcase emitted the verb/object inversion +save-version for a current-version snapshot. +version-save is the canonical shortcut with the same document-node contract.",
 	},
 	{
 		From:         "doc +search-template",
@@ -214,9 +214,9 @@ var generatedCommandPathFallbacks = []CommandPathFallback{
 	{
 		From:         "doc +snapshot",
 		Mode:         "rewrite",
-		To:           "doc +history-save",
+		To:           "doc +version-save",
 		Reviewed:     true,
-		ReviewReason: "202608 supplemental Doc badcase emitted +snapshot during an explicit save-current-version workflow. The current +history-save selection contract names this exact recoverable history-snapshot operation, so the reviewed rewrite preserves the --node value and does not infer an update or export workflow.",
+		ReviewReason: "202608 supplemental Doc badcase emitted +snapshot during an explicit save-current-version workflow. The current +version-save selection contract names this exact recoverable history-snapshot operation, so the reviewed rewrite preserves the --node value and does not infer an update or export workflow.",
 	},
 	{
 		From:         "doc +template",
@@ -228,16 +228,16 @@ var generatedCommandPathFallbacks = []CommandPathFallback{
 	{
 		From:         "doc +version",
 		Mode:         "ambiguous",
-		Candidates:   []string{"doc +history-list", "doc +history-save", "doc +history-revert"},
+		Candidates:   []string{"doc +version-list", "doc +version-save", "doc +version-revert"},
 		Reviewed:     true,
-		ReviewReason: "202608 Doc experiments emitted the family-like +version without choosing list, save, or revert. The write and high-risk revert operations cannot be selected from an umbrella name; present the canonical history shortcuts and stop.",
+		ReviewReason: "202608 Doc experiments emitted the family-like +version without choosing list, save, or revert. The write and high-risk revert operations cannot be selected from an umbrella name; present the three canonical version shortcuts and stop.",
 	},
 	{
 		From:         "doc +version-create",
 		Mode:         "rewrite",
-		To:           "doc +history-save",
+		To:           "doc +version-save",
 		Reviewed:     true,
-		ReviewReason: "202608 supplemental Doc badcase emitted +version-create while saving the current document version. +history-save is the unique current canonical snapshot shortcut and the path-only rewrite leaves its real execution and safety contract authoritative.",
+		ReviewReason: "202608 supplemental Doc badcase emitted +version-create while saving the current document version. +version-save is the canonical snapshot shortcut and the path-only rewrite leaves its real execution and safety contract authoritative.",
 	},
 	{
 		From:         "oa +list-processes",

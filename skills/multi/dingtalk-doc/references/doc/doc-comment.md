@@ -23,7 +23,7 @@ dws doc +comment-delete --node <DOC_ID> --comment-key <COMMENT_KEY>
 - 全文与划词评论统一使用公开的 `+comment-create`：优先传唯一 `--selection`；已知真实 block 时传 `--block-id --start --end`，CLI 自动回读并校验 `selectedText`。不要选用未公开的 `+comment-create-inline`。
 - `--mention` 传单个 uid 或逗号分隔列表，例如 `--mention 550582,123456`；不要传 JSON 数组。
 - 列表用 `--limit` 控制页大小（兼容 `--page-size`），有 `nextToken` 时原样传给 `--cursor`；不能把单页当作全部评论。
-- 创建、回复、删除等写操作执行前消费 leaf Schema `confirmation`；需确认时先询问，示例不得预填 `--yes`。
+- 创建、回复和更新评论属于普通写入，不强制确认；永久删除评论属于受保护删除，必须按 leaf Schema `confirmation=user_required` 确认。示例不得预填 `--yes`。
 - 删除不可恢复，必须核对 node 与 commentKey。部分或未知结果不得自动重试。
 
 只有 shortcut 未公开必要字段时，才读取精确原子 leaf Schema；不要加载整份评论参考或产品 Catalog 来猜参数。

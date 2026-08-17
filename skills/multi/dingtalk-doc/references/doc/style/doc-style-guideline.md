@@ -1,5 +1,7 @@
 # 钉钉文档排版规范
 
+> 本页是可选样式资料，不是 Agent 的默认执行流程。普通纪要、周报、方案和长文本不要读取本页；用户明确要求始终高于本页默认，不能因为样式建议增加图片、分栏、颜色、标题或业务内容。
+
 本文规定 DWS 创建或编辑钉钉文档时的排版判断方法。核心流程：**确定文档类型 → 选骨架 → 按读者任务选元素 → 按视觉语义统一表达 → 软约束自检**。
 
 > 本文只定义内容结构和视觉规范，不定义命令路由。写入统一使用 `+create/+update/+checkpoint-update`，读取使用 `+fetch`，媒体使用 `+media-*`；原子命令仅用于精确 Schema 支持的专家路径。流程见 [doc-create-workflow.md](./doc-create-workflow.md) 和 [doc-update-workflow.md](./doc-update-workflow.md)。

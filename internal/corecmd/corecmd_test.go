@@ -705,6 +705,18 @@ func TestCrossPlatformCoverageValidateConstraints(t *testing.T) {
 		t.Fatalf("mutually_exclusive(2) err = %v", err)
 	}
 
+	together := []Constraint{{Kind: RequireTogether, Flags: []string{"a", "b"}}}
+	if err := ValidateConstraints(build(), flags, together); err != nil {
+		t.Fatalf("require_together(0) err = %v", err)
+	}
+	if err := ValidateConstraints(build("a"), flags, together); err == nil ||
+		!strings.Contains(err.Error(), "参数 --a、--b 必须同时指定（当前仅指定了 --a）") {
+		t.Fatalf("require_together(1) err = %v", err)
+	}
+	if err := ValidateConstraints(build("a", "b"), flags, together); err != nil {
+		t.Fatalf("require_together(2) err = %v", err)
+	}
+
 	// no constraints → nil
 	if err := ValidateConstraints(build(), flags, nil); err != nil {
 		t.Fatalf("no constraints err = %v", err)
@@ -840,20 +852,21 @@ func TestCrossPlatformCoverageBoolFlag(t *testing.T) {
 
 func TestCrossPlatformCoverageAnnotateConstraints(t *testing.T) {
 	cmd := newTestCommand()
-	for _, name := range []string{"a", "b", "c", "d", "e", "f"} {
+	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 		cmd.Flags().String(name, "", "")
 	}
 	AnnotateConstraints(cmd, []Constraint{
 		{Kind: AtLeastOne, Flags: []string{"a", "b"}},
 		{Kind: ExactlyOne, Flags: []string{"c", "d"}},
 		{Kind: MutuallyExclusive, Flags: []string{"e", "f"}},
+		{Kind: RequireTogether, Flags: []string{"g", "h"}},
 	})
 	encoded := cmd.Annotations["dws.schema.constraints"]
 	if !strings.Contains(encoded, `"require_one_of"`) || !strings.Contains(encoded, `"mutually_exclusive"`) {
 		t.Fatalf("annotation = %s", encoded)
 	}
 	// exactly_one projects into BOTH require_one_of and mutually_exclusive
-	for _, want := range []string{`["a","b"]`, `["c","d"]`, `["e","f"]`} {
+	for _, want := range []string{`["a","b"]`, `["c","d"]`, `["e","f"]`, `["g","h"]`} {
 		if !strings.Contains(encoded, want) {
 			t.Fatalf("annotation missing %s: %s", want, encoded)
 		}
@@ -933,13 +946,15 @@ func TestCrossPlatformCoverageConstraintHelp(t *testing.T) {
 		{Kind: AtLeastOne, Flags: []string{"a", "b"}},
 		{Kind: ExactlyOne, Flags: []string{"c", "d"}},
 		{Kind: MutuallyExclusive, Flags: []string{"e", "f"}},
-		{Kind: AtLeastOne, Flags: []string{"g", "h"}, Description: "自定义文案"},
+		{Kind: RequireTogether, Flags: []string{"g", "h"}},
+		{Kind: AtLeastOne, Flags: []string{"i", "j"}, Description: "自定义文案"},
 	})
 	for _, want := range []string{
 		"参数约束：",
 		"--a、--b 至少指定一个",
 		"--c、--d 必须且只能指定一个",
 		"--e、--f 互斥，最多指定一个",
+		"--g、--h 必须同时指定或同时省略",
 		"  - 自定义文案",
 	} {
 		if !strings.Contains(help, want) {

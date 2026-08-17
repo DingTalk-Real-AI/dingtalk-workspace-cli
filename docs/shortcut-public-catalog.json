@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-08-17T15:52:13.675461",
-  "count": 435,
+  "count": 438,
   "results": [
     {
       "suite": "semantic",
@@ -2687,6 +2687,36 @@
     {
       "suite": "semantic",
       "service": "doc",
+      "command": "+cover-clear",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "以幂等 clear 语义移除当前文档封面；旧 +resource-delete 仅为隐藏兼容别名。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+cover-download",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "读取当前文档封面配置并安全下载资源到本地；旧 +resource-download 仅为隐藏兼容别名。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
+      "command": "+cover-set",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "支持本地图片或 HTTPS 图片转存后设置文档封面；旧 +resource-update 仅为隐藏兼容别名。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "doc",
       "command": "+create",
       "risk": "write",
       "status": "reviewed_available",
@@ -2890,8 +2920,8 @@
       "command": "+resource-delete",
       "risk": "high-risk-write",
       "status": "reviewed_available",
-      "disposition": "semantic_adapter",
-      "semantic_delta": "以幂等 clear 语义移除当前文档封面。",
+      "disposition": "alias_internal",
+      "semantic_delta": "公开保留历史封面清除命令及其稳定 Schema identity；新场景优先使用 +cover-clear。",
       "availability": "available"
     },
     {
@@ -2900,8 +2930,8 @@
       "command": "+resource-download",
       "risk": "read",
       "status": "reviewed_available",
-      "disposition": "primary_smart",
-      "semantic_delta": "读取当前文档封面配置并安全下载资源到本地。",
+      "disposition": "alias_internal",
+      "semantic_delta": "公开保留历史封面下载命令及其稳定 Schema identity；新场景优先使用 +cover-download。",
       "availability": "available"
     },
     {
@@ -2910,8 +2940,8 @@
       "command": "+resource-update",
       "risk": "write",
       "status": "reviewed_available",
-      "disposition": "primary_smart",
-      "semantic_delta": "支持本地图片或 HTTPS 图片转存后设置文档封面。",
+      "disposition": "alias_internal",
+      "semantic_delta": "公开保留历史封面设置命令及其稳定 Schema identity；新场景优先使用 +cover-set。",
       "availability": "available"
     },
     {

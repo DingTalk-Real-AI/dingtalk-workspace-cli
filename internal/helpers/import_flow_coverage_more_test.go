@@ -14,6 +14,7 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"strings"
@@ -33,10 +34,52 @@ func importCoverageCommand(t *testing.T, filePath string) *cobra.Command {
 	if err := cmd.Flags().Set("file", filePath); err != nil {
 		t.Fatalf("set import file: %v", err)
 	}
+	if err := cmd.Flags().Set("workspace", "workspace-coverage"); err != nil {
+		t.Fatalf("set import workspace: %v", err)
+	}
 	return cmd
 }
 
 func TestCrossPlatformCoverageImportFlowRemainingBranches(t *testing.T) {
+	t.Run("targetless doc import omits target fields from the session", func(t *testing.T) {
+		previousDeps := deps
+		previousArgs := os.Args
+		t.Cleanup(func() {
+			deps = previousDeps
+			os.Args = previousArgs
+			SetHTTPPutFile(nil)
+		})
+
+		caller := &sheetImportCaller{responses: map[string][]string{
+			"create_import_session": {`{"sessionId":"session-default-root","uploadUrl":"https://upload.example.test/object"}`},
+			"confirm_import":        {`{"taskId":"task-default-root"}`},
+			"query_import_task":     {`{"status":"completed","documentUrl":"https://alidocs.dingtalk.com/i/nodes/node-default-root"}`},
+		}}
+		InitDeps(caller)
+		var output bytes.Buffer
+		deps.Out.w = &output
+		os.Args = []string{"dws", "doc"}
+		SetHTTPPutFile(func(context.Context, string, map[string]string, string, int64) error { return nil })
+
+		cmd := importCoverageCommand(t, writeImportFixture(t, "md"))
+		if err := cmd.Flags().Set("workspace", ""); err != nil {
+			t.Fatal(err)
+		}
+		cfg := docImportFlowConfig()
+		cfg.poll.maxPolls = 1
+		cfg.poll.interval = func(int) time.Duration { return 0 }
+		cfg.poll.wait = func(context.Context, time.Duration) error { return nil }
+		if err := runImportCommand(cmd, nil, cfg); err != nil {
+			t.Fatalf("targetless doc import failed: %v", err)
+		}
+		if len(caller.calls) != 3 {
+			t.Fatalf("targetless doc import calls = %#v, want create/confirm/query", caller.calls)
+		}
+		if args := caller.calls[0].args; args["targetFolderId"] != nil || args["workspaceId"] != nil {
+			t.Fatalf("default-root session unexpectedly carries target fields: %#v", args)
+		}
+	})
+
 	t.Run("missing flag aliases are skipped", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "import"}
 		cmd.Flags().String("folder", "", "")

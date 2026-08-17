@@ -26,4 +26,4 @@ dws doc +update --node <DOC_ID> --command block_delete --block-id <BLOCK_ID>
 2. 读取精确 `doc block` leaf Schema，确认当前 flags。
 3. 用原子 block 命令只改目标块；JSONML update 的 uuid 必须等于目标 block ID。
 
-图片和附件不得手写临时 URL 或 OSS 请求，统一走 [`doc-media.md`](doc-media.md) 的 `+media-insert/+media-download`。删除与覆盖的确认以 Runtime gate 为准，示例不得预填 `--yes`。
+图片和附件不得手写临时 URL 或 OSS 请求，统一走 [`doc-media.md`](doc-media.md) 的 `+media-insert/+media-download`。块插入、替换、删除与覆盖统一通过 `+update` 执行；当前 Runtime 与精确 leaf Schema 均为 `confirmation=user_required`，必须取得独立明确同意后才追加 `--yes`。

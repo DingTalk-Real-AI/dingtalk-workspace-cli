@@ -155,7 +155,7 @@ func newWikiCommand() *cobra.Command {
 				"查找或管理知识库、知识库内节点及知识库成员时",
 			},
 			AvoidWhen: []string{
-				"需要编辑在线文档正文时使用 doc；只管理钉盘普通文件时使用 drive",
+				"需要编辑在线文档正文时使用 doc；只说文档空间/我的文档，或管理普通文件夹、移动和元信息时使用 drive",
 			},
 		},
 	})
@@ -350,16 +350,16 @@ func newWikiCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "列出当前用户可访问的知识库或钉盘空间",
 				UseWhen: []string{
-					"列出组织知识库（默认）、我的文档(--type myWikiSpace)、钉盘企业空间(--type orgSpace)或我的文件(--type mySpace)时",
-					"需要 workspaceId / rootFolderId 作为后续 node/drive 操作前置时",
+					"用户明确要求列出知识库，或盘点知识库/钉盘空间容器时",
+					"明确需要 workspaceId / rootFolderId 作为知识库或空间管理操作前置时",
 				},
 				AvoidWhen: []string{
 					"按名称搜知识库用 space search",
 					"看单个知识库详情用 space get",
+					"仅说文档空间/我的文档并要建文件夹、移动或查元信息时使用 drive，不要为默认位置调用 wiki",
 				},
 				Examples: []string{
 					"dws wiki space list --format json",
-					"dws wiki space list --type myWikiSpace --format json",
 				},
 			},
 		},
@@ -417,7 +417,7 @@ func newWikiCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "根据关键词搜索当前用户有权限访问的知识库列表，匹配知识库名称和描述",
 				UseWhen:      []string{"按关键词搜索有权访问的组织知识库时"},
-				AvoidWhen:    []string{"直接列全部知识库用 space list；我的文档用 list --type myWikiSpace"},
+				AvoidWhen:    []string{"直接列全部知识库用 space list；仅说文档空间/我的文档且无知识库语义时改用 doc/drive"},
 				Examples:     []string{"dws wiki space search --query \"产品文档\" --format json"},
 			},
 			Parameters: []contract.ParamDecl{

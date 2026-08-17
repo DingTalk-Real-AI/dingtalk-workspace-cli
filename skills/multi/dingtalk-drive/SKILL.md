@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉钉文件管理（存储层，覆盖钉盘与文档空间两个存储域）。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/找文件/全局搜索文件/最近编辑的文档/复制/移动/重命名/删除/回收站/还原删除文件/文件权限管理/普通文件下载/本地与钉盘文件夹差异比较/整个文件夹拉到本地/整个文件夹推到钉盘/双向同步。对钉钉文档仅处理其作为文件的管理操作，文档本体及其内容操作归 dingtalk-doc；知识库空间与空间内节点组织归 dingtalk-wiki。命令前缀：dws drive。
+description: 钉钉文件管理（存储层，覆盖钉盘与文档空间两个存储域）。Use when 用户说 钉盘/文档空间或我的文档中的普通文件夹/上传文件/下载文件/查文件/找文件/全局搜索文件/最近编辑的文档/复制/移动/重命名/删除/回收站/还原删除文件/文件权限管理/元信息/普通文件下载/本地与钉盘文件夹差异比较/整个文件夹拉到本地/整个文件夹推到钉盘/双向同步。对在线文档仅处理其作为文件的管理操作（doc 侧同名原子命令已弃用）；文档本体、正文及导出 docx/markdown/pdf 归 dingtalk-doc，知识库空间与空间内节点组织归 dingtalk-wiki。命令前缀：dws drive。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -30,6 +30,7 @@ metadata:
 | 用户说 | 命令 |
 |--------|------|
 | "看钉盘文件 / 文件夹列表" | `dws drive +list [--folder <dentryUuid>]` |
+| "浏览文档空间 / 我的文档目录" | `dws drive list --workspace <workspaceId或URL> [--folder <nodeId>]`；没有稳定 workspace 时停止并询问 |
 | "钉盘目录树" | `python scripts/drive_tree_list.py --depth 2` |
 | "查文件元数据/统计/公开状态/封面" | `dws drive +inspect --node <dentryUuid> [--include-stats/--include-publish/--include-cover]` |
 | "搜文件 / 找文件" | `dws drive +search --query "<关键词>"` |
@@ -51,9 +52,9 @@ metadata:
 
 **触发**：找文件/搜文件/我的文件/最近文件/最近编辑的文档/某文档在哪。
 
-1. **选源（必须）**：最近访问 → `dws drive +recent --limit <n> --format json`（翻页用上次返回的 `nextCursor` 传 `--cursor`）；最近编辑 → `dws drive +recent --operate-type 1 --limit <n> --format json`（不传 `--operate-type` 默认为 0 最近访问，会混入仅打开过的文档）；按内容/名称全局搜 → `dws drive +search --query "<关键词>" --format json`；浏览某目录 → `dws drive +list --folder <dentryUuid> --format json`。
+1. **选源（必须）**：最近访问 → `dws drive +recent --limit <n> --format json`（翻页用上次返回的 `nextCursor` 传 `--cursor`）；最近编辑 → `dws drive +recent --operate-type 1 --limit <n> --format json`（不传 `--operate-type` 默认为 0 最近访问，会混入仅打开过的文档）；按内容/名称全局搜 → `dws drive +search --query "<关键词>" --format json`；浏览钉盘目录 → `dws drive +list --folder <dentryUuid> --format json`；浏览文档空间目录 → `dws drive list --workspace <workspaceId或URL> [--folder <nodeId>] --format json`，缺少稳定 workspace 时停止并询问。
 2. **解析（必须）**：取真实 `dentryUuid`（= `id`/`nodeId`）；多候选让用户确认，**禁止**默认取第一个。
-3. **下钻（必须）**：根目录没命中时，进入最相关文件夹继续 `drive +list --folder`，必要时 `python scripts/drive_tree_list.py --depth 2` 递归，**禁止**只看根目录就放弃。
+3. **下钻（必须）**：钉盘根目录没命中时，进入最相关文件夹继续 `drive +list --folder`，必要时 `python scripts/drive_tree_list.py --depth 2` 递归；文档空间则复用同一真实 `--workspace` 并传 `drive list --workspace <workspaceId或URL> --folder <nodeId>`，**禁止**丢失存储域或只看根目录就放弃。
 4. **回读元数据（必须）**：命中后 `dws drive +inspect --node <dentryUuid> --format json`，按 `extension` 确认类型。
 
 **禁止**：编造 dentryUuid、只看根目录放弃、用 `drive +list` 替代 `drive +search` 做全局查找。
@@ -70,7 +71,7 @@ metadata:
 
 ### SOP-3 文件夹 / 复制 / 移动 / 重命名（folder-ops）
 
-**触发**：建文件夹/复制/移动/重命名。
+**触发**：建文件夹/复制/移动/重命名，包括在线文档节点和泛称“文档空间/我的文档”的普通存储操作。在线文档的节点复制/移动/重命名属于 drive；只有正文创建、读取和编辑才切 `dingtalk-doc`。
 
 1. **执行（必须）**：建钉盘文件夹 `dws drive +create-folder --name "<名称>" [--folder <id>]`；复制 `drive +copy --node <dentryUuid> --folder <目标>`；移动 `drive +move --node <dentryUuid> --folder <目标>`；重命名 `drive +rename --node <dentryUuid> --name "<新名>"`。全部加 `--format json`。
 2. **验证（必须）**：这些 shortcut 内部已经读回；调用方仍须检查 `ok=true`、`outcome=success` 和 `data` 中的 nodeId/对象，不能只看进程退出码。
@@ -97,16 +98,17 @@ metadata:
 
 ## 高频硬约束
 
-- 查找文件不要只看根目录后放弃；根目录没命中时，进入最相关的目标文件夹继续 `drive +list --folder <dentryUuid>`，必要时用目录树脚本递归到合理深度。
+- 查找文件不要只看根目录后放弃；钉盘下钻使用 `drive +list --folder <dentryUuid>`，文档空间下钻必须保留 `drive list --workspace <workspaceId或URL> --folder <nodeId>`，不得把文档空间节点误传给钉盘 Shortcut。
 - `drive +list` 默认 `--limit 20`，自动化场景里保守使用 `--limit 50` 以内并处理 `nextCursor` 翻页；不要因为参数边界报错反复重试。
-- 全局找文件优先 `drive +search --query`；指定目录浏览用 `drive +list`，命中后必须 `drive +inspect --node <dentryUuid> --format json` 回读元数据。
+- 全局找文件优先 `drive +search --query`；钉盘目录浏览用 `drive +list`，文档空间目录浏览用 `drive list --workspace`，命中后必须 `drive +inspect --node <dentryUuid> --format json` 回读元数据。
 - 删除、覆盖、移动等破坏性操作必须确认；上传、创建文件夹、下载后要读回或列目录验证。
 - 所有 `dws drive` 命令加 `--format json`。
 
 ## 跨产品协作
 
 - 文件内容编辑（钉钉文档）→ 切到 `dingtalk-doc`
-- 知识库空间 → 切到 `dingtalk-wiki`
+- “在线编辑/协作编辑/转在线/导入成在线文档”不是普通上传：Word/Markdown/Text 走 `dws doc +import`，Excel 走电子表格 `sheet import create`；`drive upload` 只表示保留原文件对象
+- 仅当用户明确说知识库/wiki/命名团队空间或知识库节点层级时 → 切到 `dingtalk-wiki`；泛称“文档空间/我的文档”仍按动作留在本 skill
 ## 局部意图与短流程
 
 - [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。

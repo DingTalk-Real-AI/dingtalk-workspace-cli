@@ -141,12 +141,12 @@ func TestCrossPlatformCoverageCommandPathFallbackAuditCoverage(t *testing.T) {
 		"chat +list-robot":          "chat +chat-bots",
 		"chat +list-robots":         "chat +chat-bots",
 		"chat +rename-group":        "chat +chat-update",
-		"doc +create-version":       "doc +history-save",
+		"doc +create-version":       "doc +version-save",
 		"doc +list-templates":       "doc +template-list",
-		"doc +save-version":         "doc +history-save",
+		"doc +save-version":         "doc +version-save",
 		"doc +search-template":      "doc +template-search",
-		"doc +snapshot":             "doc +history-save",
-		"doc +version-create":       "doc +history-save",
+		"doc +snapshot":             "doc +version-save",
+		"doc +version-create":       "doc +version-save",
 	}
 	for from, to := range rewrites {
 		entry, ok := LookupCommandPathFallback(from)
@@ -174,7 +174,7 @@ func TestCrossPlatformCoverageCommandPathFallbackAuditCoverage(t *testing.T) {
 		"chat +send-media":                 {"chat +messages-send", "chat message send"},
 		"oa +list-processes":               {"oa +list-forms", "oa +my-initiated", "oa approval list-initiated"},
 		"doc +template":                    {"doc +template-list", "doc +template-search", "doc +create-from-template"},
-		"doc +version":                     {"doc +history-list", "doc +history-save", "doc +history-revert"},
+		"doc +version":                     {"doc +version-list", "doc +version-save", "doc +version-revert"},
 	}
 	for from, candidates := range ambiguous {
 		entry, ok := LookupCommandPathFallback(from)

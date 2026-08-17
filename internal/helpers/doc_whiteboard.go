@@ -248,10 +248,7 @@ CLI 生成卡片块 UUID 与白板资源 ID，插入后按块 UUID 回查并验�
 	}
 
 	DeclareLeafMetadata(insertCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "user_required", Idempotency: "non_idempotent",
-		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "non_idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",

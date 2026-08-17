@@ -50,10 +50,7 @@ func newDocStyleCommand() *cobra.Command {
 		RunE: runDocStyleCoverSet,
 	}
 	DeclareLeafMetadata(coverSetCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "low",
-			Confirmation: "not_required", Idempotency: "idempotent",
-		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -83,10 +80,7 @@ func newDocStyleCommand() *cobra.Command {
 		RunE:    runDocStyleCoverClear,
 	}
 	DeclareLeafMetadata(coverClearCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "low",
-			Confirmation: "not_required", Idempotency: "idempotent",
-		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -123,10 +117,7 @@ func newDocStyleCommand() *cobra.Command {
 		RunE:    runDocStyleBackgroundSet,
 	}
 	DeclareLeafMetadata(backgroundSetCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "low",
-			Confirmation: "not_required", Idempotency: "idempotent",
-		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",
@@ -156,10 +147,7 @@ func newDocStyleCommand() *cobra.Command {
 		RunE:    runDocStyleBackgroundClear,
 	}
 	DeclareLeafMetadata(backgroundClearCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "low",
-			Confirmation: "not_required", Idempotency: "idempotent",
-		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
 				ProductID:      "doc",

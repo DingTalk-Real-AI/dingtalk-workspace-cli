@@ -1,6 +1,6 @@
 ---
 name: dingtalk-wiki
-description: 钉钉知识库与空间管理。Use when 用户说 知识库/wiki/创建知识库/搜索知识库空间/我的文档/团队空间/空间成员/在指定知识库内的节点创建/列出/搜索/复制/移动/删除/知识库动态。知识库空间与空间内节点管理走本 skill（节点操作需 workspace）；未指定空间的全局文件管理与搜索走 dingtalk-drive，空间内单文档内容读写先用本 skill 定位再切到 dingtalk-doc。命令前缀：dws wiki。
+description: 钉钉知识库与空间管理。Use when 用户明确说 知识库/wiki/创建或搜索知识库/明确作为知识库类型的个人或命名团队空间/知识库成员/知识库内节点创建、列出、搜索、复制、移动、删除或知识库动态。仅说“文档空间/我的文档”不触发本 Skill：普通存储管理与全局搜索走 dingtalk-drive，正文读写走 dingtalk-doc。明确知识库空间内的节点管理走本 Skill（需 workspace）；锁定空间内单文档后，内容读写切到 dingtalk-doc。命令前缀：dws wiki。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -34,9 +34,8 @@ metadata:
 |--------|------|
 | "创建知识库" | `dws wiki space create --name "<名称>" [--desc "<描述>"]` |
 | "搜索组织知识库空间" | `dws wiki space search --type orgWikiSpace --query "<关键词>"` |
-| "我的文档 / 个人知识库" | `dws wiki space search --type myWikiSpace` |
 | "列出知识库" | `dws wiki space list` |
-| "列出我的文档空间" | `dws wiki space list --type myWikiSpace` |
+| "列出个人知识库（明确知识库语义）" | `dws wiki space list --type myWikiSpace` |
 | "列出知识库里的文件/节点" | `dws wiki node list --workspace <WS_ID>` |
 | "在知识库里搜" | `dws wiki node search --workspace <WS_ID> --query "<关键词>"` |
 | "在知识库里创建文档节点" | `dws wiki node create --workspace <WS_ID> --type adoc --name "<名称>"` |
@@ -48,9 +47,9 @@ metadata:
 
 ### SOP-1 找知识库（find-space）
 
-**触发**：找知识库/列表空间/某知识库在哪。
+**触发**：明确找知识库/wiki、列知识库或查某个命名知识库。
 
-1. **执行（必须）**：`dws wiki space list --format json`（列所有知识库/钉盘空间）；按名称找 `dws wiki space search --type orgWikiSpace --query "<名称>" --format json`。
+1. **执行（必须）**：指定名称的团队/组织知识库执行 `dws wiki space search --type orgWikiSpace --query "<名称>" --format json`；明确要求个人知识库时执行 `dws wiki space list --type myWikiSpace --format json`；只有用户明确要求列出所有知识库时才执行 `dws wiki space list --format json`。
 2. **解析（必须）**：取真实 `workspaceId`；多候选让用户确认，**禁止**默认取第一个。`hasMore=true` 用 `nextPageToken` 翻页。
 
 **禁止**：编造 workspaceId、把空间名当 ID。
@@ -87,9 +86,9 @@ metadata:
 ## 高频硬约束
 
 - `space search` 用 `--query`，不要用 `--keyword`；组织知识库显式加 `--type orgWikiSpace`。
-- 用户说"我的文档/个人空间/my workspace"时必须用 `dws wiki space search --type myWikiSpace --format json`；该模式不需要 keyword。
-- 用户给空关键词时，不要构造空 `--query ""`；若语义是我的文档则用 `--type myWikiSpace`，否则请用户补关键词。
-- 搜到空间后复用返回的 `workspaceId/id`；空间内节点创建/列表/搜索用 `wiki node`，具体文档内容读写切到 `dingtalk-doc`，复制/移动切到 `dingtalk-drive`。
+- 裸“文档空间/我的文档/个人空间”不是知识库路由条件：普通文件夹、移动和元信息走 `dingtalk-drive`，正文读写走 `dingtalk-doc`；不得为获取默认位置先调用 wiki。
+- 用户给空关键词时不要构造空 `--query ""`；明确要搜索组织知识库但没给关键词时，请用户补关键词。
+- 搜到知识库后复用返回的 `workspaceId/id`；知识库内节点创建/列表/搜索/复制/移动用 `wiki node`，具体文档内容读写切到 `dingtalk-doc`。
 - 所有 `dws wiki` 命令加 `--format json`。
 
 ## 跨产品协作

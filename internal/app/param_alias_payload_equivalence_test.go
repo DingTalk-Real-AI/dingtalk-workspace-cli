@@ -468,7 +468,7 @@ func TestCrossPlatformCoverageReviewedParamAliasesHaveCompleteTemplatesAndRepres
 		}
 		executedRepresentatives[caseKey] = true
 		t.Run(fixture.Command+"/"+fixture.Emitted, func(t *testing.T) {
-
+			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 			canonicalCaller := &paramAliasCaptureCaller{}
 			_, canonicalErr := executeParamAliasPayloadE2E(t, canonicalCaller, canonicalArgs...)
 			if canonicalErr != nil {
@@ -478,6 +478,10 @@ func TestCrossPlatformCoverageReviewedParamAliasesHaveCompleteTemplatesAndRepres
 				t.Fatalf("complete canonical command reached no final transport payload: args=%v", canonicalArgs)
 			}
 
+			// The canonical and alias invocations must start from equivalent
+			// persistent state. In particular, doc +create now records a
+			// cross-process idempotency journal after the first invocation.
+			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 			aliasCaller := &paramAliasCaptureCaller{}
 			ctx, aliasErr := executeParamAliasPayloadE2E(t, aliasCaller, aliasArgs...)
 			if aliasErr != nil {

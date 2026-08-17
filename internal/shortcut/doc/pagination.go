@@ -30,7 +30,7 @@ func collectDocPages(
 		options.PageSize = 30
 	}
 	if options.MaxPages <= 0 {
-		options.MaxPages = 20
+		options.MaxPages = 100
 	}
 	if options.MaxItems <= 0 {
 		options.MaxItems = 500
@@ -219,4 +219,97 @@ func docPageState(data map[string]any) (bool, bool, string) {
 	}
 	walk(data)
 	return hasMore, known, next
+}
+
+func collectTemplatePages(rt *shortcut.RuntimeContext, tool string, base map[string]any, options docPageOptions) ([]map[string]any, bool, bool, string, string, int, error) {
+	if options.PageSize <= 0 {
+		options.PageSize = 50
+	}
+	if options.MaxPages <= 0 {
+		options.MaxPages = 100
+	}
+	if options.MaxItems <= 0 {
+		options.MaxItems = 500
+	}
+	pageLimit := 1
+	if options.PageAll {
+		pageLimit = options.MaxPages
+	}
+	cursor := strings.TrimSpace(options.Cursor)
+	seenCursors := map[string]bool{}
+	seenItems := map[string]bool{}
+	items := []map[string]any{}
+	complete, truncated, nextCursor, stopReason, pagesRead := false, false, "", "", 0
+	for page := 1; page <= pageLimit; page++ {
+		remaining := options.MaxItems - len(items)
+		requestPageSize := min(options.PageSize, remaining)
+		params := cloneMap(base)
+		params["maxResults"] = requestPageSize
+		if cursor != "" {
+			params["nextCursor"] = cursor
+		}
+		data, err := rt.CallMCPData(productDoc, tool, params)
+		if err != nil {
+			return nil, false, false, cursor, stopReason, pagesRead, docPaginationError(tool, "page_read_failed", err, page, items, cursor)
+		}
+		pagesRead++
+		projected := collectTemplateCandidates(data)
+		pageItems := make([]map[string]any, 0, len(projected))
+		pageSeen := map[string]bool{}
+		for _, item := range projected {
+			id, _ := item["templateId"].(string)
+			if id != "" && (seenItems[id] || pageSeen[id]) {
+				continue
+			}
+			if id != "" {
+				pageSeen[id] = true
+			}
+			pageItems = append(pageItems, item)
+		}
+		if len(pageItems) > remaining {
+			return nil, false, false, cursor, stopReason, pagesRead, docPaginationError(tool, "page_size_exceeded", nil, page, items, cursor)
+		}
+		for _, item := range pageItems {
+			if id, _ := item["templateId"].(string); id != "" {
+				seenItems[id] = true
+			}
+			items = append(items, item)
+		}
+		hasMore, known, next := docPageState(data)
+		nextCursor = strings.TrimSpace(next)
+		if known {
+			complete = !hasMore
+		} else if nextCursor != "" {
+			hasMore = true
+		} else if len(projected) < requestPageSize {
+			complete = true
+		} else {
+			hasMore = true
+			stopReason = "pagination_unproven"
+			if options.PageAll && len(items) < options.MaxItems {
+				return nil, false, false, cursor, stopReason, pagesRead, docPaginationError(tool, stopReason, nil, page, items, cursor)
+			}
+		}
+		if len(items) >= options.MaxItems && hasMore {
+			truncated = true
+			complete = false
+			hasMore = true
+			stopReason = "max_items"
+			break
+		}
+		if complete || !options.PageAll {
+			break
+		}
+		if nextCursor == "" || seenCursors[nextCursor] {
+			return nil, false, false, cursor, stopReason, pagesRead, docPaginationError(tool, "stalled_cursor", nil, page, items, nextCursor)
+		}
+		seenCursors[nextCursor] = true
+		cursor = nextCursor
+		if page == pageLimit && hasMore {
+			truncated = true
+			complete = false
+			stopReason = "max_pages"
+		}
+	}
+	return items, complete, truncated, nextCursor, stopReason, pagesRead, nil
 }

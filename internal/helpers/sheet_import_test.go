@@ -322,7 +322,7 @@ func TestCrossPlatformCoverageSheetImportGetDryRunJSONIsSingleDocument(t *testin
 	}
 }
 
-func TestDocImportConfigPreservesExistingContract(t *testing.T) {
+func TestDocImportConfigUsesOptionalServerTarget(t *testing.T) {
 	cfg := docImportFlowConfig()
 	for _, ext := range []string{"docx", "doc", "xlsx", "xls", "md", "txt", "xmind", "mark"} {
 		if !cfg.supportedFormats[ext] {
@@ -330,11 +330,11 @@ func TestDocImportConfigPreservesExistingContract(t *testing.T) {
 		}
 	}
 	if cfg.requireTarget || cfg.includeNodeID || cfg.timeoutAsResult {
-		t.Fatalf("doc import compatibility changed: %#v", cfg)
+		t.Fatalf("unexpected doc import contract: %#v", cfg)
 	}
 }
 
-func TestCrossPlatformCoverageDocImportDryRunStillAcceptsMarkdownWithoutTarget(t *testing.T) {
+func TestCrossPlatformCoverageDocImportDryRunAllowsDefaultPersonalRoot(t *testing.T) {
 	previousDeps := deps
 	previousArgs := os.Args
 	t.Cleanup(func() {
@@ -353,10 +353,26 @@ func TestCrossPlatformCoverageDocImportDryRunStillAcceptsMarkdownWithoutTarget(t
 	root.SilenceUsage = true
 	root.SetArgs([]string{"import", "--file", filePath})
 	if err := root.Execute(); err != nil {
-		t.Fatalf("doc import dry-run changed behavior: %v", err)
+		t.Fatalf("targetless doc import dry-run failed: %v", err)
 	}
 	if len(caller.calls) != 0 {
-		t.Fatalf("dry-run made %d remote calls", len(caller.calls))
+		t.Fatalf("targetless dry-run made %d remote calls", len(caller.calls))
+	}
+	var targetlessPayload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &targetlessPayload); err != nil {
+		t.Fatalf("targetless doc import dry-run stdout must be one JSON document: %v\n%s", err, output.String())
+	}
+	if targetlessPayload["operation"] != "导入本地文件为在线文档" || targetlessPayload["dry_run"] != true {
+		t.Fatalf("unexpected targetless dry-run output: %#v", targetlessPayload)
+	}
+
+	output.Reset()
+	root = newDocCommand()
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"import", "--file", filePath, "--workspace", "workspace-arbitrary"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("targeted doc import dry-run failed: %v", err)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {

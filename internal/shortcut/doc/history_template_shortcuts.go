@@ -27,6 +27,7 @@ func canonicalizeHistoryShortcuts() {
 	VersionSave.Aliases = nil
 	VersionSave.Description = "手动保存当前文档版本快照"
 	VersionSave.Intent = "当用户要求保存、创建或建立当前文档版本快照时使用；只保存快照，不更新正文。"
+	VersionSave.Risk = shortcut.RiskWrite
 	VersionSave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "user_required", Idempotency: "unknown"}
 	VersionSave.Contract = versionSaveContract()
 	VersionSave.Tips = []string{`dws doc +version-save --node <DOC_ID>`}
@@ -55,16 +56,19 @@ func canonicalizeHistoryShortcuts() {
 
 	VersionRevert.Command = "+version-revert"
 	VersionRevert.Aliases = nil
+	VersionRevert.Risk = shortcut.RiskHighWrite
+	VersionRevert.Safety = contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"}
 	VersionRevert.Description = "预检并回滚文档到指定历史版本"
-	VersionRevert.Intent = "当用户明确要把整篇文档恢复到某个历史版本时使用；先确认目标版本存在，再执行高风险回滚并读回验证。"
+	VersionRevert.Intent = "当用户明确要把整篇文档恢复到某个历史版本时使用；先确认目标版本存在，再执行可恢复写入并读回验证。"
 	VersionRevert.Contract = versionRevertContract()
 	VersionRevert.Tips = []string{`dws doc +version-revert --node <DOC_ID> --version 3`}
 	VersionRevert.Execute = executeHistoryRevert
 
 	compatHistorySave = compatibilityHistoryShortcut(VersionSave, "+history-save", "+version-save")
-	compatHistorySave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
 	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
 	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
+	compatHistoryRevert.Risk = shortcut.RiskHighWrite
+	compatHistoryRevert.Safety = contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"}
 
 	TemplateList.Description = "浏览当前用户可用的 MY/PUBLIC 文档模板"
 	TemplateList.Intent = "当用户没有明确模板名称或关键词，只要浏览自己的或公开模板并获取 templateId 时使用。"
@@ -223,54 +227,6 @@ func currentDocumentMatchesRestoredVersion(value map[string]any, target int) boo
 	})
 }
 
-func findHistoryVersion(rt *shortcut.RuntimeContext, nodeID string, target int) (bool, error) {
-	const maxPages = 20
-	cursor := ""
-	seenCursors := map[string]bool{}
-	for page := 1; page <= maxPages; page++ {
-		params := map[string]any{"nodeId": nodeID}
-		if cursor != "" {
-			params["nextCursor"] = cursor
-		}
-		versions, err := rt.CallMCPData(productDoc, "list_doc_versions", params)
-		if err != nil {
-			return false, err
-		}
-		if containsVersion(versions, target) {
-			return true, nil
-		}
-		hasMore, hasMoreKnown, nextCursor := docPageState(versions)
-		nextCursor = strings.TrimSpace(nextCursor)
-		if hasMoreKnown && !hasMore {
-			return false, nil
-		}
-		if nextCursor == "" {
-			if hasMoreKnown && hasMore {
-				return false, historyVersionPaginationError("missing_next_cursor", page, cursor)
-			}
-			return false, nil
-		}
-		if seenCursors[nextCursor] {
-			return false, historyVersionPaginationError("stalled_cursor", page, nextCursor)
-		}
-		seenCursors[nextCursor] = true
-		cursor = nextCursor
-	}
-	return false, historyVersionPaginationError("max_pages", maxPages, cursor)
-}
-
-func historyVersionPaginationError(reason string, page int, cursor string) error {
-	return apperrors.NewAPI(
-		"文档版本预检无法证明分页已经完整，已停止回滚",
-		apperrors.WithOperation("doc.history_revert"),
-		apperrors.WithReason("doc_history_version_"+reason),
-		apperrors.WithFailureStage("preflight"),
-		apperrors.WithExecutionStarted(false),
-		apperrors.WithRetryable(true),
-		apperrors.WithDetails(map[string]any{"page": page, "cursor": cursor, "targetVerified": false}),
-	)
-}
-
 func versionEvidenceMatches(value any, target int, acceptedKeys map[string]bool) bool {
 	switch typed := value.(type) {
 	case map[string]any:
@@ -279,10 +235,8 @@ func versionEvidenceMatches(value any, target int, acceptedKeys map[string]bool)
 			if versionEvidenceRequestEchoKeys[normalized] {
 				continue
 			}
-			if acceptedKeys[normalized] {
-				if versionNumberMatches(child, target) {
-					return true
-				}
+			if acceptedKeys[normalized] && versionNumberMatches(child, target) {
+				return true
 			}
 			if versionEvidenceMatches(child, target, acceptedKeys) {
 				return true
@@ -323,10 +277,8 @@ func revertResponseHasExplicitFailure(value any) bool {
 			if (normalized == "status" || normalized == "state") && revertStatusIsFailure(child) {
 				return true
 			}
-			if normalized == "errorcode" || normalized == "code" {
-				if revertErrorCodeIsFailure(child) {
-					return true
-				}
+			if (normalized == "errorcode" || normalized == "code") && revertErrorCodeIsFailure(child) {
+				return true
 			}
 			if revertResponseHasExplicitFailure(child) {
 				return true
@@ -377,6 +329,54 @@ func revertErrorCodeIsFailure(value any) bool {
 	default:
 		return false
 	}
+}
+
+func findHistoryVersion(rt *shortcut.RuntimeContext, nodeID string, target int) (bool, error) {
+	const maxPages = 20
+	cursor := ""
+	seenCursors := map[string]bool{}
+	for page := 1; page <= maxPages; page++ {
+		params := map[string]any{"nodeId": nodeID}
+		if cursor != "" {
+			params["nextCursor"] = cursor
+		}
+		versions, err := rt.CallMCPData(productDoc, "list_doc_versions", params)
+		if err != nil {
+			return false, err
+		}
+		if containsVersion(versions, target) {
+			return true, nil
+		}
+		hasMore, hasMoreKnown, nextCursor := docPageState(versions)
+		nextCursor = strings.TrimSpace(nextCursor)
+		if hasMoreKnown && !hasMore {
+			return false, nil
+		}
+		if nextCursor == "" {
+			if hasMoreKnown && hasMore {
+				return false, historyVersionPaginationError("missing_next_cursor", page, cursor)
+			}
+			return false, nil
+		}
+		if seenCursors[nextCursor] {
+			return false, historyVersionPaginationError("stalled_cursor", page, nextCursor)
+		}
+		seenCursors[nextCursor] = true
+		cursor = nextCursor
+	}
+	return false, historyVersionPaginationError("max_pages", maxPages, cursor)
+}
+
+func historyVersionPaginationError(reason string, page int, cursor string) error {
+	return apperrors.NewAPI(
+		"文档版本预检无法证明分页已经完整，已停止回滚",
+		apperrors.WithOperation("doc.history_revert"),
+		apperrors.WithReason("doc_history_version_"+reason),
+		apperrors.WithFailureStage("preflight"),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithRetryable(true),
+		apperrors.WithDetails(map[string]any{"page": page, "cursor": cursor, "targetVerified": false}),
+	)
 }
 
 func versionNumberMatches(value any, target int) bool {

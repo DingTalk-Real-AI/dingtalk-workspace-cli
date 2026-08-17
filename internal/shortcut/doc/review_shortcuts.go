@@ -10,6 +10,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -82,7 +83,7 @@ var CommentDelete = shortcut.Shortcut{
 	Description: "永久删除指定文档评论",
 	Intent:      "当用户明确要求永久删除某条文档评论，且已核对 node 与 commentKey 时使用；不可用于标记 resolved。",
 	Risk:        shortcut.RiskHighWrite,
-	Safety:      contract.SafetySpec{Effect: "destructive", Risk: "high", Confirmation: "user_required", Idempotency: "unknown"},
+	Safety:      docsafety.ProtectedDelete("unknown"),
 	Contract: docContract("+comment-delete", "永久删除指定文档评论",
 		"当用户明确要求永久删除某条文档评论，且已核对 node 与 commentKey 时使用；不可用于标记 resolved。",
 		[]string{`dws doc +comment-delete --node <DOC_ID> --comment-key <COMMENT_KEY>`}),
