@@ -30,10 +30,14 @@ dws chat +chat-messages --group <群名或openConversationId> --format json
 dws chat +chat-messages --group <openConversationId> --page-all --page-limit 50 --format json
 ```
 
-可附带非必填的 `--sender-query <姓名>`：未传时返回全部消息；未解析出稳定 ID 时保留
-全部消息并记录失败；唯一解析出 userId/openDingTalkId 后，按消息 `senderId` 筛选同一次
-读取结果，覆盖最终 `messages/count` 并返回 `resolvedFilters`。不得用展示名字符串比较否定
-已经成功解析的稳定发送者身份。
+可附带非必填的 `--sender-query <姓名>`：未传时返回全部消息；唯一解析出
+userId/openDingTalkId 后，按消息 `senderId` 筛选同一次读取结果，覆盖最终
+`messages/count` 并返回 `resolvedFilters`。解析失败、不完整或存在歧义时抑制未过滤消息，
+返回 `sender_resolution_failed`，不得把全量消息当作发送者筛选结果。
+
+`--sender` 是姓名、userId 或 openDingTalkId 的混合入口。通讯录无法确认输入类型时，可按
+原值 userId 精确过滤并交付命中消息，但结果必须保留 `identity_unverified`，不得把字符串命中
+升级为已验证身份，也不得据此作完整否定结论。
 
 ```bash
 dws chat +chat-messages --group "项目群" --sender-query "测试用户甲" --page-all --format json

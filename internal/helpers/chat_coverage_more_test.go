@@ -446,6 +446,100 @@ func TestCrossPlatformCoverageChatBotRichMediaCoverage(t *testing.T) {
 		if caller.tool != "batch_send_robot_msg_to_users" || caller.args["msgType"] != "sampleMarkdownDX" {
 			t.Fatalf("direct markdown call = %s %#v", caller.tool, caller.args)
 		}
+		if _, exists := caller.args["referenceOpenMessageId"]; exists {
+			t.Fatalf("ordinary direct message unexpectedly contains reply fields: %#v", caller.args)
+		}
+	})
+
+	t.Run("group Markdown reference reply", func(t *testing.T) {
+		const senderOpenDingTalkID = "DAAAAAAAAAAAiE"
+		caller := &scriptedToolCaller{}
+		if err := runChatCoverageCommand(t, caller,
+			"message", "send-by-bot", "--robot-code", "robot", "--conversation-id", "group",
+			"--reply", "message-id", "--ref-sender", senderOpenDingTalkID,
+			"--text", "received",
+		); err != nil {
+			t.Fatal(err)
+		}
+		if caller.tool != "send_robot_group_message" ||
+			caller.args["referenceOpenMessageId"] != "message-id" ||
+			caller.args["srcMsgSendOpenDingTalkId"] != senderOpenDingTalkID ||
+			caller.args["title"] != "received" {
+			t.Fatalf("group reference reply call = %s %#v", caller.tool, caller.args)
+		}
+	})
+
+	t.Run("group reference reply resolves sender user ID", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"result":[{"userId":"sender-user","openDingTalkId":"D-sender"}]}`},
+			{text: `{}`},
+		}}
+		if err := runChatCoverageCommand(t, caller,
+			"message", "send-by-bot", "--robot-code", "robot", "--conversation-id", "group",
+			"--reply", "message-id", "--ref-sender", "sender-user",
+			"--title", "reply", "--text", "received",
+		); err != nil {
+			t.Fatal(err)
+		}
+		if caller.tool != "send_robot_group_message" || caller.args["srcMsgSendOpenDingTalkId"] != "D-sender" {
+			t.Fatalf("resolved group reference reply = %s %#v", caller.tool, caller.args)
+		}
+	})
+
+	t.Run("direct RunE enforces paired reply flags", func(t *testing.T) {
+		err := runChatCoverageDirect(t, []string{"message", "send-by-bot"}, map[string]string{
+			"robot-code":      "robot",
+			"conversation-id": "group",
+			"reply":           "message-id",
+			"title":           "reply",
+			"text":            "received",
+		})
+		if err == nil || !strings.Contains(err.Error(), "must be specified together") {
+			t.Fatalf("direct RunE paired reply flags error = %v", err)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "reply requires sender", args: []string{"--reply", "message-id"}, want: "ref-sender"},
+		{name: "sender requires reply", args: []string{"--ref-sender", "D-sender"}, want: "reply"},
+		{name: "paired reply flags reject empty values", args: []string{"--reply=", "--ref-sender="}, want: "specified together"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{
+				"message", "send-by-bot", "--robot-code", "robot", "--conversation-id", "group",
+				"--title", "reply", "--text", "received",
+			}
+			err := runChatCoverageCommand(t, &scriptedToolCaller{}, append(args, tc.args...)...)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("paired reply flags error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+
+	t.Run("reference reply is group only", func(t *testing.T) {
+		err := runChatCoverageCommand(t, &scriptedToolCaller{},
+			"message", "send-by-bot", "--robot-code", "robot", "--users", "user",
+			"--reply", "message-id", "--ref-sender", "D-sender",
+			"--title", "reply", "--text", "received",
+		)
+		if err == nil || !strings.Contains(err.Error(), "only supported with --conversation-id") {
+			t.Fatalf("direct reference reply error = %v", err)
+		}
+	})
+
+	t.Run("reference reply rejects rich media", func(t *testing.T) {
+		err := runChatCoverageCommand(t, &scriptedToolCaller{},
+			"message", "send-by-bot", "--robot-code", "robot", "--conversation-id", "group",
+			"--reply", "message-id", "--ref-sender", "D-sender",
+			"--msg-type", "image", "--image-url", "https://example.test/image.png",
+		)
+		if err == nil || !strings.Contains(err.Error(), "only support Markdown") {
+			t.Fatalf("rich-media reference reply error = %v", err)
+		}
 	})
 
 	t.Run("direct image", func(t *testing.T) {

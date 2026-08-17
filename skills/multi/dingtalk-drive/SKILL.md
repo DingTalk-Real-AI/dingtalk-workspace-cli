@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉钉文件管理（存储层，覆盖钉盘与文档空间两个存储域）。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/找文件/全局搜索文件/复制/移动/重命名/删除/回收站/还原删除文件/权限管理/普通文件下载/本地与钉盘文件夹差异比较/整个文件夹拉到本地/整个文件夹推到钉盘/双向同步；也承接钉钉文档的这些管理动作（doc 侧同名原子命令已弃用）。文档正文编辑与导出 docx/markdown/pdf 走 dingtalk-doc，知识库空间与空间内节点组织走 dingtalk-wiki。命令前缀：dws drive。
+description: 钉钉文件管理（存储层，覆盖钉盘与文档空间两个存储域）。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/找文件/全局搜索文件/最近编辑的文档/复制/移动/重命名/删除/回收站/还原删除文件/文件权限管理/普通文件下载/本地与钉盘文件夹差异比较/整个文件夹拉到本地/整个文件夹推到钉盘/双向同步。对钉钉文档仅处理其作为文件的管理操作，文档本体及其内容操作归 dingtalk-doc；知识库空间与空间内节点组织归 dingtalk-wiki。命令前缀：dws drive。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -49,9 +49,9 @@ metadata:
 
 ### SOP-1 找文件（find-file）
 
-**触发**：找文件/搜文件/我的文件/最近文件/某文档在哪。
+**触发**：找文件/搜文件/我的文件/最近文件/最近编辑的文档/某文档在哪。
 
-1. **选源（必须）**：最近访问 → `dws drive +recent --limit <n> --format json`（翻页用上次返回的 `nextCursor` 传 `--cursor`）；按内容/名称全局搜 → `dws drive +search --query "<关键词>" --format json`；浏览某目录 → `dws drive +list --folder <dentryUuid> --format json`。
+1. **选源（必须）**：最近访问 → `dws drive +recent --limit <n> --format json`（翻页用上次返回的 `nextCursor` 传 `--cursor`）；最近编辑 → `dws drive +recent --operate-type 1 --limit <n> --format json`（不传 `--operate-type` 默认为 0 最近访问，会混入仅打开过的文档）；按内容/名称全局搜 → `dws drive +search --query "<关键词>" --format json`；浏览某目录 → `dws drive +list --folder <dentryUuid> --format json`。
 2. **解析（必须）**：取真实 `dentryUuid`（= `id`/`nodeId`）；多候选让用户确认，**禁止**默认取第一个。
 3. **下钻（必须）**：根目录没命中时，进入最相关文件夹继续 `drive +list --folder`，必要时 `python scripts/drive_tree_list.py --depth 2` 递归，**禁止**只看根目录就放弃。
 4. **回读元数据（必须）**：命中后 `dws drive +inspect --node <dentryUuid> --format json`，按 `extension` 确认类型。

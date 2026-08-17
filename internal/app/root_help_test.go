@@ -462,6 +462,53 @@ func TestCalendarEventListDryRunPreviewsOnly(t *testing.T) {
 	}
 }
 
+func TestCalendarEventShareInfoDryRunPreviewsOnly(t *testing.T) {
+	got, err := executeRootCaptureStdout(t, []string{
+		"--dry-run", "calendar", "event", "share-info",
+		"--id", "EVT_001",
+		"--language", "zh-CN",
+		"--calendar-id", "primary",
+	})
+	if err != nil {
+		t.Fatalf("calendar event share-info --dry-run error = %v\n%s", err, got)
+	}
+	for _, want := range []string{"get_event_share_info", "eventId", "EVT_001", "zh-CN", "primary"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("calendar event share-info dry-run output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestCalendarEventShareInfoRequiresEventID(t *testing.T) {
+	got, err := executeRootCaptureStdout(t, []string{
+		"--dry-run", "calendar", "event", "share-info",
+	})
+	if err == nil {
+		t.Fatalf("calendar event share-info without --id: expected error, got nil\n%s", got)
+	}
+	if strings.Contains(got, "\"executed\": true") {
+		t.Fatalf("share-info without --id must not execute:\n%s", got)
+	}
+}
+
+func TestCalendarEventShareInfoOmitsOptionalArgs(t *testing.T) {
+	got, err := executeRootCaptureStdout(t, []string{
+		"--dry-run", "calendar", "event", "share-info",
+		"--id", "EVT_001",
+	})
+	if err != nil {
+		t.Fatalf("calendar event share-info --dry-run with only --id error = %v\n%s", err, got)
+	}
+	if !strings.Contains(got, "\"eventId\"") {
+		t.Fatalf("calendar event share-info dry-run output missing eventId:\n%s", got)
+	}
+	for _, unwanted := range []string{"\"calendarId\"", "\"language\""} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("calendar event share-info dry-run with only --id should not contain %q:\n%s", unwanted, got)
+		}
+	}
+}
+
 func TestRootKeepsSVIPChatCompatibilityFlags(t *testing.T) {
 	root := NewRootCommand()
 
