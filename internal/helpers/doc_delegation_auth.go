@@ -52,12 +52,16 @@ const (
 )
 
 // docBusinessServers 文档业务域服务器白名单：仅这些 server 上的工具调用会触发
-// 委托鉴权拦截，其余 server 直接透传。markdown 域工具（原生 Markdown 文件
-// 读写）同样以 ProductID "markdown" 发起调用，需一并纳入前置委托鉴权检查；
-// 缺失时 markdown.go 注册的装饰器因白名单不命中而成为死旗标。
+// 委托鉴权拦截，其余 server 直接透传。markdown 子命令（fetch/create/overwrite/
+// patch/diff）的数据面调用全部复用 drive/doc 域函数（markdown.go →
+// uploadToDrive/uploadToDocSpace 等），工具键形如 drive.get_upload_info、
+// doc.commit_uploaded_file，自功能初始提交起即经 drive/doc 条目拦截；全仓
+// 无任何以 "markdown" 为 serverID 的调用点，故不设 markdown 条目（设置也
+// 永不命中）。markdown.go 的 installDocDelegationAuth 注册仍保留：
+// --principal-user-id flag 安装需要它。
 var docBusinessServers = map[string]bool{
 	"drive": true, "doc": true, "sheet": true,
-	"wiki": true, "doc-comment": true, "markdown": true,
+	"wiki": true, "doc-comment": true,
 }
 
 // extractNodeId 从工具入参中提取资源标识。服务端 nodeId 统一承载节点

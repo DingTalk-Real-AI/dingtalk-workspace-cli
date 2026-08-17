@@ -299,31 +299,52 @@ func TestCrossPlatformCoverageDocDelegationAuthNonDocServerPassthrough(t *testin
 	}
 }
 
-// TestCrossPlatformCoverageDocDelegationAuthMarkdownServerIntercepted 回归守护
-// markdown 白名单激活：markdown.go 已注册装饰器，但 markdown 域此前不在
-// docBusinessServers 中导致检查从未发起（死旗标）。激活后 markdown serverID
-// 的工具调用必须与 doc 域同构：check 发起、拒绝阻断原调用、错误形态一致。
-func TestCrossPlatformCoverageDocDelegationAuthMarkdownServerIntercepted(t *testing.T) {
-	// 场景 1：check 发起且通过后原调用透传。
-	inner := newDocDelegationTestCaller()
-	d := newDocDelegationAuthDecorator(inner)
-	if _, err := d.CallTool(context.Background(), "markdown", "save_file", map[string]any{"nodeId": "md-1"}); err != nil {
-		t.Fatalf("CallTool() error = %v", err)
-	}
-	if len(inner.calls) != 2 || inner.calls[0].tool != checkCapTool {
-		t.Fatalf("calls = %#v, want check followed by the original markdown call", inner.calls)
-	}
-	if inner.calls[0].args["mcpToolKey"] != "markdown.save_file" || inner.calls[0].args["nodeId"] != "md-1" {
-		t.Fatalf("check args = %#v, want mcpToolKey markdown.save_file with nodeId", inner.calls[0].args)
+// TestCrossPlatformCoverageDocDelegationAuthMarkdownOverwriteRealSeam 以
+// markdown overwrite 实际发出的工具调用形态验证真实接缝：markdown 子命令的
+// 数据面调用全部复用 drive/doc 域函数（markdown.go → uploadToDrive/
+// uploadToDocSpace），工具键形如 drive.get_upload_info / doc.
+// get_file_upload_info，自功能初始提交起即经 drive/doc 白名单条目拦截，
+// 全仓无以 "markdown" 为 serverID 的调用点。本测试钉住该真实形态：
+// check 以 drive.get_upload_info 先行发起、nodeId 从 overwriteFileId 提升，
+// 拒绝时阻断原调用、错误形态与 doc 域一致。
+func TestCrossPlatformCoverageDocDelegationAuthMarkdownOverwriteRealSeam(t *testing.T) {
+	// uploadToDrive 覆盖模式 step1 入参的真实形态（drive.go）：fileName/
+	// fileSize/mimeType/spaceId/overwriteFileId，排他地不携带 parentId。
+	args := map[string]any{
+		"fileName":        "notes.md",
+		"fileSize":        float64(128),
+		"mimeType":        "text/markdown",
+		"spaceId":         "sp-1",
+		"overwriteFileId": "node-42",
 	}
 
-	// 场景 2：拒绝时阻断原调用，错误形态与 doc 域一致。
+	// 场景 1：check 先行发起（toolKey 形如 drive.get_upload_info）、nodeId
+	// 从 overwriteFileId 提升、通过后原调用透传。
+	inner := newDocDelegationTestCaller()
+	d := newDocDelegationAuthDecorator(inner)
+	if _, err := d.CallTool(context.Background(), "drive", "get_upload_info", args); err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	if len(inner.calls) != 2 || inner.calls[0].tool != checkCapTool || inner.calls[1].tool != "get_upload_info" {
+		t.Fatalf("calls = %#v, want check followed by the original drive call", inner.calls)
+	}
+	if inner.calls[0].args["mcpToolKey"] != "drive.get_upload_info" {
+		t.Fatalf("check args = %#v, want mcpToolKey drive.get_upload_info", inner.calls[0].args)
+	}
+	if inner.calls[0].args["nodeId"] != "node-42" {
+		t.Fatalf("check args = %#v, want nodeId promoted from overwriteFileId", inner.calls[0].args)
+	}
+	if !d.checked["drive.get_upload_info"] {
+		t.Fatal("drive.get_upload_info must be marked checked after the passing check")
+	}
+
+	// 场景 2：同一真实形态下拒绝时阻断原调用，错误形态与 doc 域一致。
 	inner2 := newDocDelegationTestCaller()
 	inner2.checkRes = textToolResult(`{"allowed":false,"denialReason":"NO_PERM","denialMessage":"没有该文档的委托权限"}`)
 	d2 := newDocDelegationAuthDecorator(inner2)
-	_, err := d2.CallTool(context.Background(), "markdown", "save_file", map[string]any{"nodeId": "md-1"})
+	_, err := d2.CallTool(context.Background(), "drive", "get_upload_info", args)
 	if err == nil {
-		t.Fatal("CallTool() error = nil, want markdown denial error")
+		t.Fatal("CallTool() error = nil, want markdown-overwrite denial error")
 	}
 	if len(inner2.calls) != 1 || inner2.calls[0].tool != checkCapTool {
 		t.Fatalf("calls = %#v, want only the check call (original blocked)", inner2.calls)
@@ -338,8 +359,16 @@ func TestCrossPlatformCoverageDocDelegationAuthMarkdownServerIntercepted(t *test
 	if !errors.As(err, &typed) || typed.Category != apperrors.CategoryAPI || typed.Reason != "delegation_denied" {
 		t.Fatalf("error = %v, want API-category delegation_denied like the doc domain", err)
 	}
-	if d2.checked["markdown.save_file"] {
-		t.Fatal("denied markdown toolKey must not be marked checked")
+	if d2.checked["drive.get_upload_info"] {
+		t.Fatal("denied toolKey must not be marked checked")
+	}
+
+	// 场景 3（文档性断言）：markdown 子命令经 drive/doc 条目拦截，白名单
+	// 不含 "markdown" 键——全仓无以 "markdown" 为 serverID 的调用点，该条目
+	// 永不命中（曾存在的条目及"markdown 域工具以 ProductID markdown 发起
+	// 调用"的注释均为错误认知，已回退）。
+	if docBusinessServers["markdown"] {
+		t.Fatal(`docBusinessServers must not contain a "markdown" entry: no call site uses serverID "markdown"; markdown subcommands ride the drive/doc entries`)
 	}
 }
 
