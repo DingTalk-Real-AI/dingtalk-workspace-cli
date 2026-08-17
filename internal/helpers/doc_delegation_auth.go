@@ -44,10 +44,12 @@ const (
 )
 
 // docBusinessServers 文档业务域服务器白名单：仅这些 server 上的工具调用会触发
-// 委托鉴权拦截，其余 server 直接透传。
+// 委托鉴权拦截，其余 server 直接透传。markdown 域工具（原生 Markdown 文件
+// 读写）同样以 ProductID "markdown" 发起调用，需一并纳入前置委托鉴权检查；
+// 缺失时 markdown.go 注册的装饰器因白名单不命中而成为死旗标。
 var docBusinessServers = map[string]bool{
 	"drive": true, "doc": true, "sheet": true,
-	"wiki": true, "doc-comment": true,
+	"wiki": true, "doc-comment": true, "markdown": true,
 }
 
 // extractNodeId 从工具入参中提取资源标识。服务端 nodeId 统一承载节点

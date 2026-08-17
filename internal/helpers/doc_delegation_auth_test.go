@@ -255,6 +255,50 @@ func TestCrossPlatformCoverageDocDelegationAuthNonDocServerPassthrough(t *testin
 	}
 }
 
+// TestCrossPlatformCoverageDocDelegationAuthMarkdownServerIntercepted 回归守护
+// markdown 白名单激活：markdown.go 已注册装饰器，但 markdown 域此前不在
+// docBusinessServers 中导致检查从未发起（死旗标）。激活后 markdown serverID
+// 的工具调用必须与 doc 域同构：check 发起、拒绝阻断原调用、错误形态一致。
+func TestCrossPlatformCoverageDocDelegationAuthMarkdownServerIntercepted(t *testing.T) {
+	// 场景 1：check 发起且通过后原调用透传。
+	inner := newDocDelegationTestCaller()
+	d := newDocDelegationAuthDecorator(inner)
+	if _, err := d.CallTool(context.Background(), "markdown", "save_file", map[string]any{"nodeId": "md-1"}); err != nil {
+		t.Fatalf("CallTool() error = %v", err)
+	}
+	if len(inner.calls) != 2 || inner.calls[0].tool != checkCapTool {
+		t.Fatalf("calls = %#v, want check followed by the original markdown call", inner.calls)
+	}
+	if inner.calls[0].args["mcpToolKey"] != "markdown.save_file" || inner.calls[0].args["nodeId"] != "md-1" {
+		t.Fatalf("check args = %#v, want mcpToolKey markdown.save_file with nodeId", inner.calls[0].args)
+	}
+
+	// 场景 2：拒绝时阻断原调用，错误形态与 doc 域一致。
+	inner2 := newDocDelegationTestCaller()
+	inner2.checkRes = textToolResult(`{"allowed":false,"denialReason":"NO_PERM","denialMessage":"没有该文档的委托权限"}`)
+	d2 := newDocDelegationAuthDecorator(inner2)
+	_, err := d2.CallTool(context.Background(), "markdown", "save_file", map[string]any{"nodeId": "md-1"})
+	if err == nil {
+		t.Fatal("CallTool() error = nil, want markdown denial error")
+	}
+	if len(inner2.calls) != 1 || inner2.calls[0].tool != checkCapTool {
+		t.Fatalf("calls = %#v, want only the check call (original blocked)", inner2.calls)
+	}
+	if !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_DENIED]") {
+		t.Fatalf("Error() = %q, want [DELEGATION_AUTH_DENIED] prefix", err.Error())
+	}
+	if strings.Contains(err.Error(), "MCP_TOOL_ERROR") {
+		t.Fatalf("Error() = %q, must not carry MCP_TOOL_ERROR", err.Error())
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Category != apperrors.CategoryAPI || typed.Reason != "delegation_denied" {
+		t.Fatalf("error = %v, want API-category delegation_denied like the doc domain", err)
+	}
+	if d2.checked["markdown.save_file"] {
+		t.Fatal("denied markdown toolKey must not be marked checked")
+	}
+}
+
 func TestCrossPlatformCoverageDocDelegationAuthCheckCallFails(t *testing.T) {
 	inner := newDocDelegationTestCaller()
 	inner.checkErr = errors.New("check boom")
