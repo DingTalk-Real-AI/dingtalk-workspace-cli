@@ -80,6 +80,7 @@ python scripts/cross_product_read_summary.py --date YYYY-MM-DD --timezone <IANA_
 
 - 该脚本只调用真实 `dws` 只读命令，并发采集后只返回汇总所需字段。
 - 用户只要其中部分类别时，必须用 `--include` 只读取被请求的产品；三类都要时可省略。
+- 需要先与用户确认采集范围时，加 `--dry-run`：只打印将执行的只读 `dws` 命令清单，不发起任何调用；其输出的 `readOnly`、`commands` 是执行计划，不能当作业务数据回答用户。
 - 命中时不读取 calendar/todo/minutes 产品 Skill 或行动指南，不运行 `--help` / Schema Search，不重复执行同一 list。
 - 一类数据为空或失败时，按脚本 JSON 的分类结果如实说明，不用其他产品数据替代。
 - 只有用户要求了该脚本未覆盖的字段、时间范围或写操作，才增量加载对应产品 Skill。

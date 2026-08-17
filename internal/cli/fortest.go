@@ -35,6 +35,12 @@ func resetSchemaSourceRootAtomicForTest() {
 	schemaSourceRoot = atomic.Value{}
 }
 
+// resetDeliveryToolSearchEngineStateForTest drops the memoized default Tool
+// Search engine so a test can rebuild it against a freshly installed Catalog.
+func resetDeliveryToolSearchEngineStateForTest() {
+	resetDeliveryToolSearchEngineState()
+}
+
 // clearDeclaredDryRunCapabilitiesForTest resets the declared index (tests only).
 func clearDeclaredDryRunCapabilitiesForTest() {
 	declaredDryRunCapabilities.Range(func(key, _ any) bool {

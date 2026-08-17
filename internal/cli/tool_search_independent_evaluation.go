@@ -12,6 +12,14 @@ import (
 	"strings"
 )
 
+// The product-cluster paired bootstrap uses a fixed sample count and seed so a
+// sealed qrels run stays reproducible; both are published in the report so an
+// auditor does not have to read them out of the source.
+const (
+	toolSearchIndependentBootstrapSamples = 10_000
+	toolSearchIndependentBootstrapSeed    = 20260813
+)
+
 // ToolSearchIndependentQrel is an independently authored graded relevance
 // judgment. Relevance uses the frozen 1..3 qrels scale.
 type ToolSearchIndependentQrel struct {
@@ -64,6 +72,11 @@ type ToolSearchIndependentReport struct {
 	LanguageSlices     map[string]ToolSearchIndependentRankingMetrics `json:"language_slices"`
 	Safety             ToolSearchIndependentSafetyMetrics             `json:"safety"`
 	Workflow           ToolSearchWorkflowMetrics                      `json:"workflow"`
+	// BootstrapSamples/BootstrapSeed are set only by the paired delivery
+	// evaluation that computes ProductClusterCI95; they make that interval
+	// reproducible without reading the source.
+	BootstrapSamples int   `json:"bootstrap_samples,omitempty"`
+	BootstrapSeed    int64 `json:"bootstrap_seed,omitempty"`
 }
 
 type ToolSearchConfidenceInterval struct {
@@ -116,10 +129,12 @@ func BuildDeliveryToolSearchIndependentEvaluation(ctx context.Context, cases []T
 	report.ControlAlgorithm = control.lexical.Name()
 	report.ControlOverall = controlReport.Overall
 	report.RecallAt5Delta = report.Overall.RecallAt5 - report.ControlOverall.RecallAt5
-	report.ProductClusterCI95, err = pairedProductClusterRecallCI(ctx, engine, control, cases, 10_000, 20260813)
+	report.ProductClusterCI95, err = pairedProductClusterRecallCI(ctx, engine, control, cases, toolSearchIndependentBootstrapSamples, toolSearchIndependentBootstrapSeed)
 	if err != nil {
 		return ToolSearchIndependentReport{}, err
 	}
+	report.BootstrapSamples = toolSearchIndependentBootstrapSamples
+	report.BootstrapSeed = toolSearchIndependentBootstrapSeed
 	return report, nil
 }
 

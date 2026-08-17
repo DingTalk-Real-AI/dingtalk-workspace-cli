@@ -303,6 +303,57 @@ func TestToolSearchSubqueriesFailClosedOnExactFilteredAction(t *testing.T) {
 	if response.ExactFiltered == nil || response.ExactFiltered.CanonicalPath != "chat.send" {
 		t.Fatalf("exact_filtered = %#v", response.ExactFiltered)
 	}
+	// The refusal must keep the same candidates wire shape as every other
+	// strategy: a nil slice would encode as null instead of [].
+	if response.Candidates == nil {
+		t.Fatal("decomposed_exact_filtered returned nil candidates; want an empty slice")
+	}
+	payload, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if !strings.Contains(string(payload), `"candidates":[]`) {
+		t.Fatalf("response JSON omits an empty candidates array: %s", payload)
+	}
+}
+
+// TestDeliveryToolSearchEngineMemoInvalidatedOnCatalogReset pins the memo to
+// one Catalog generation. The engine caches the Catalog source/surface hashes
+// it indexed, so a Catalog delivery reset (RegisterSchemaSourceRoot and the
+// ForTest resetters) must force a rebuild instead of serving stale hashes.
+func TestDeliveryToolSearchEngineMemoInvalidatedOnCatalogReset(t *testing.T) {
+	t.Cleanup(func() {
+		resetDeliveryToolSearchEngineStateForTest()
+		RestorePackageCLISchemaDeliveryForTest()
+	})
+	resetDeliveryToolSearchEngineStateForTest()
+	first, err := NewDeliveryToolSearchEngine()
+	if err != nil {
+		t.Fatalf("NewDeliveryToolSearchEngine() error = %v", err)
+	}
+	second, err := NewDeliveryToolSearchEngine()
+	if err != nil {
+		t.Fatalf("NewDeliveryToolSearchEngine() second call error = %v", err)
+	}
+	if first != second {
+		t.Fatal("memoized delivery engine rebuilt without a Catalog reset")
+	}
+	loaded := deliverySchemaCatalog()
+	if got := first.catalogVersion(); got.SourceHash != loaded.Snapshot.SourceHash || got.SurfaceHash != loaded.Snapshot.SurfaceHash {
+		t.Fatalf("engine catalog version = %#v, want the delivered Catalog hashes", got)
+	}
+
+	resetDeliverySchemaCatalogStateForTest()
+	if deliveryToolSearchEngine != nil {
+		t.Fatal("Catalog delivery reset left the memoized engine installed")
+	}
+	third, err := NewDeliveryToolSearchEngine()
+	if err != nil {
+		t.Fatalf("NewDeliveryToolSearchEngine() after reset error = %v", err)
+	}
+	if third == first {
+		t.Fatal("engine was reused across a Catalog delivery reset")
+	}
 }
 
 func TestDefaultToolSearchConfigExcludesUseWhen(t *testing.T) {
@@ -614,7 +665,7 @@ func TestToolSearchResponseBudgetIncludesEncoderNewline(t *testing.T) {
 	response := ToolSearchResponse{
 		Version: "tool-search.v1", Catalog: CatalogVersionRef{SourceHash: "s", SurfaceHash: "f"},
 		Strategy: "test", Candidates: []ToolReference{}, Abstained: true,
-		Hint:     toolSearchAbstainHint,
+		Hint: toolSearchAbstainHint,
 	}
 	empty, err := json.Marshal(response)
 	if err != nil {
@@ -843,6 +894,33 @@ func TestToolSearchValidatesEffectVocabularyCaseInsensitively(t *testing.T) {
 			if !errors.As(err, &typed) || typed.Reason != "invalid_effect" {
 				t.Fatalf("effect %q error = %v, want invalid_effect", effect, err)
 			}
+		}
+	}
+}
+
+func TestToolSearchRejectsDangerousFilterUnicodeBeforeVocabulary(t *testing.T) {
+	// Control/Bidi characters must be refused before the effect vocabulary and
+	// Catalog product checks run, otherwise the rejected value is echoed back
+	// through an invalid_effect / unknown_product message that can carry
+	// invisible characters into a terminal or log line.
+	engine := newToolSearchTestEngine(t)
+	for name, request := range map[string]ToolSearchRequest{
+		"effect_control_char":  {Query: "查询群消息已读状态", Effects: []string{"read\u0007"}},
+		"effect_bidi_override": {Query: "查询群消息已读状态", Effects: []string{"read\u202e"}},
+		"product_bidi_override": {
+			Query: "查询群消息已读状态", ProductIDs: []string{"chat\u202e"},
+		},
+		"exclude_control_char": {
+			Query: "查询群消息已读状态", ExcludeCanonicalPaths: []string{"chat.send\u0000"},
+		},
+	} {
+		_, err := engine.Search(context.Background(), request)
+		if err == nil {
+			t.Fatalf("%s: dangerous filter unicode accepted", name)
+		}
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "dangerous_filter_unicode" {
+			t.Fatalf("%s: error = %v, want dangerous_filter_unicode", name, err)
 		}
 	}
 }

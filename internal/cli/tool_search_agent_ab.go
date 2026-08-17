@@ -25,6 +25,16 @@ const (
 	ToolSearchAgentArmSearchInspect = "search_inspect"
 )
 
+// Bootstrap resampling uses fixed seeds so a report can be re-derived from the
+// same paired runs. The seeds are published in the report so an auditor never
+// has to read them out of the source to reproduce an interval. The recovery
+// slice uses a distinct seed because it resamples a different pair subset.
+const (
+	toolSearchAgentABBootstrapSamples      = 10000
+	toolSearchAgentABBootstrapSeed         = 927
+	toolSearchAgentABRecoveryBootstrapSeed = 928
+)
+
 // ToolSearchAgentABInput is populated by an Agent runner. Every case/trial
 // must have both arms so the comparison remains paired.
 type ToolSearchAgentABInput struct {
@@ -80,7 +90,12 @@ type ToolSearchAgentABReport struct {
 	DirectSchema  ToolSearchAgentABArmMetrics       `json:"direct_schema"`
 	SearchInspect ToolSearchAgentABArmMetrics       `json:"search_inspect"`
 	Deltas        map[string]ToolSearchAgentABDelta `json:"deltas"`
-	Method        string                            `json:"method"`
+	// BootstrapSamples/BootstrapSeed/RecoveryBootstrapSeed are published so an
+	// auditor can reproduce every interval without reading the source.
+	BootstrapSamples      int    `json:"bootstrap_samples"`
+	BootstrapSeed         int64  `json:"bootstrap_seed"`
+	RecoveryBootstrapSeed int64  `json:"recovery_bootstrap_seed"`
+	Method                string `json:"method"`
 }
 
 // ToolSearchAgentPlanOutput is the strict final response of a non-executing
@@ -327,7 +342,7 @@ func AggregateToolSearchAgentAB(input ToolSearchAgentABInput) (ToolSearchAgentAB
 	}
 	deltas := make(map[string]ToolSearchAgentABDelta, len(metrics)+1)
 	for _, metric := range metrics {
-		low, high := toolSearchCaseClusterBootstrap(pairs, metric.value, 10000, 927)
+		low, high := toolSearchCaseClusterBootstrap(pairs, metric.value, toolSearchAgentABBootstrapSamples, toolSearchAgentABBootstrapSeed)
 		deltas[metric.name] = ToolSearchAgentABDelta{
 			DirectSchema:  metric.direct,
 			SearchInspect: metric.search,
@@ -348,7 +363,7 @@ func AggregateToolSearchAgentAB(input ToolSearchAgentABInput) (ToolSearchAgentAB
 		}
 		if len(recoveryPairs) > 0 {
 			value := func(run ToolSearchAgentABRun) float64 { return boolFloat(run.RecoverySucceeded) }
-			low, high := toolSearchCaseClusterBootstrap(recoveryPairs, value, 10000, 928)
+			low, high := toolSearchCaseClusterBootstrap(recoveryPairs, value, toolSearchAgentABBootstrapSamples, toolSearchAgentABRecoveryBootstrapSeed)
 			directRecovery := meanAgentRunValue(recoveryPairs, false, value)
 			searchRecovery := meanAgentRunValue(recoveryPairs, true, value)
 			deltas["recovery_success_rate_paired_attempts"] = ToolSearchAgentABDelta{
@@ -361,14 +376,22 @@ func AggregateToolSearchAgentAB(input ToolSearchAgentABInput) (ToolSearchAgentAB
 		}
 	}
 	return ToolSearchAgentABReport{
-		Version:       "tool-search-agent-ab-report.v1",
-		Catalog:       input.Catalog,
-		Cases:         len(caseSet),
-		PairedTrials:  len(pairs),
-		DirectSchema:  directMetrics,
-		SearchInspect: searchMetrics,
-		Deltas:        deltas,
-		Method:        "paired by case_id/trial; 95% percentile bootstrap clustered by case_id; 10000 resamples; fixed seed",
+		Version:               "tool-search-agent-ab-report.v1",
+		Catalog:               input.Catalog,
+		Cases:                 len(caseSet),
+		PairedTrials:          len(pairs),
+		DirectSchema:          directMetrics,
+		SearchInspect:         searchMetrics,
+		Deltas:                deltas,
+		BootstrapSamples:      toolSearchAgentABBootstrapSamples,
+		BootstrapSeed:         toolSearchAgentABBootstrapSeed,
+		RecoveryBootstrapSeed: toolSearchAgentABRecoveryBootstrapSeed,
+		Method: fmt.Sprintf(
+			"paired by case_id/trial; 95%% percentile bootstrap clustered by case_id; %d resamples; fixed seed %d (recovery slice seed %d)",
+			toolSearchAgentABBootstrapSamples,
+			toolSearchAgentABBootstrapSeed,
+			toolSearchAgentABRecoveryBootstrapSeed,
+		),
 	}, nil
 }
 

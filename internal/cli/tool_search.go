@@ -130,7 +130,10 @@ type ToolSearchExplainQueryClass struct {
 // ToolSearchScoreBreakdown explains why a candidate ranked where it did. It is
 // attached to a ToolReference only when the engine is built with Explain=true.
 // FieldScores are the per-field weighted contributions; Multiplier/QueryClass
-// are filled only by the action_v1 retriever.
+// are filled only by the action_v1 retriever. Score is the raw, unquantized
+// value: ordering uses a key quantized at toolSearchScoreQuantum, so two
+// candidates can report scores that differ in the last ulp while sorting as a
+// canonical-path tie. Do not recompute the published order from these numbers.
 type ToolSearchScoreBreakdown struct {
 	Score            float64                      `json:"score"`
 	FieldScores      map[string]float64           `json:"field_scores,omitempty"`
@@ -248,13 +251,26 @@ var (
 	deliveryToolSearchEngineErr  error
 )
 
+// resetDeliveryToolSearchEngineState clears the memoized default engine so the
+// next NewDeliveryToolSearchEngine rebuilds against the current Catalog. The
+// engine indexes one Catalog generation and caches its source/surface hashes,
+// so it must never outlive the Catalog it was built from; Catalog delivery
+// reset calls this.
+func resetDeliveryToolSearchEngineState() {
+	deliveryToolSearchEngineOnce = sync.Once{}
+	deliveryToolSearchEngine = nil
+	deliveryToolSearchEngineErr = nil
+}
+
 // NewDeliveryToolSearchEngine indexes the immutable in-memory Catalog
 // assembled from live Go declarations by RegisterSchemaSourceRoot →
 // ResolveSchemaBuild. There is no committed or runtime-read Catalog JSON.
-// The default engine is immutable for the process lifetime: the delivery
-// Catalog is frozen and DWS_TOOL_SEARCH_* overrides are read once, so the
-// engine is built once per process (a CLI invocation constructs it exactly
-// once either way; long-lived hosts such as a daemon or MCP server reuse it).
+// The default engine is memoized per Catalog generation: the delivery Catalog
+// is frozen and DWS_TOOL_SEARCH_* overrides are read once, so the engine is
+// built once per process (a CLI invocation constructs it exactly once either
+// way; long-lived hosts such as a daemon or MCP server reuse it).
+// Re-registering the source root resets Catalog delivery, which invalidates
+// this memo so the engine can never serve a stale Catalog or stale hashes.
 func NewDeliveryToolSearchEngine() (*ToolSearchEngine, error) {
 	deliveryToolSearchEngineOnce.Do(func() {
 		deliveryToolSearchEngine, deliveryToolSearchEngineErr =
@@ -449,11 +465,15 @@ func (e *ToolSearchEngine) SearchSubqueries(ctx context.Context, subqueries []st
 		}
 		if result.ExactFiltered != nil {
 			return finalizeToolSearchResponse(ToolSearchResponse{
-				Version:       "tool-search.v1",
-				Catalog:       e.catalogVersion(),
-				Query:         responseQuery,
-				Subqueries:    cleaned,
-				Strategy:      "decomposed_exact_filtered",
+				Version:    "tool-search.v1",
+				Catalog:    e.catalogVersion(),
+				Query:      responseQuery,
+				Subqueries: cleaned,
+				Strategy:   "decomposed_exact_filtered",
+				// An empty candidate list must stay an empty JSON array here too:
+				// a nil slice would encode as null and break callers that treat
+				// the wire shape of candidates as stable across every strategy.
+				Candidates:    []ToolReference{},
 				Abstained:     true,
 				ExactFiltered: result.ExactFiltered,
 			})
@@ -663,6 +683,25 @@ func (e *ToolSearchEngine) normalizeRequest(request ToolSearchRequest) (ToolSear
 	request.ProductIDs = sortedUniqueStrings(request.ProductIDs)
 	request.Effects = sortedUniqueStrings(request.Effects)
 	request.ExcludeCanonicalPaths = sortedUniqueStrings(request.ExcludeCanonicalPaths)
+	// Dangerous Unicode is rejected before any vocabulary or Catalog check so a
+	// control/Bidi character always surfaces as dangerous_filter_unicode instead
+	// of being echoed back through an invalid_effect / unknown_product message.
+	// The filter order is a fixed slice, not a map, so the reported field name
+	// stays deterministic across processes.
+	for _, filter := range []struct {
+		field  string
+		values []string
+	}{
+		{field: "product_ids", values: request.ProductIDs},
+		{field: "effects", values: request.Effects},
+		{field: "exclude_canonical", values: request.ExcludeCanonicalPaths},
+	} {
+		for _, value := range filter.values {
+			if err := apperrors.RejectControlChars(value, filter.field); err != nil {
+				return ToolSearchRequest{}, apperrors.NewValidation(err.Error(), apperrors.WithReason("dangerous_filter_unicode"))
+			}
+		}
+	}
 	// Effect filters are case-insensitive against the reviewed vocabulary;
 	// anything else is a typed refusal instead of a silent abstain, so a
 	// caller typo cannot masquerade as "no matching tools".
@@ -683,17 +722,6 @@ func (e *ToolSearchEngine) normalizeRequest(request ToolSearchRequest) (ToolSear
 				fmt.Sprintf("tool search product %q is not in the current Catalog", product),
 				apperrors.WithReason("unknown_product"),
 			)
-		}
-	}
-	for field, values := range map[string][]string{
-		"product_ids":       request.ProductIDs,
-		"effects":           request.Effects,
-		"exclude_canonical": request.ExcludeCanonicalPaths,
-	} {
-		for _, value := range values {
-			if err := apperrors.RejectControlChars(value, field); err != nil {
-				return ToolSearchRequest{}, apperrors.NewValidation(err.Error(), apperrors.WithReason("dangerous_filter_unicode"))
-			}
 		}
 	}
 	return request, nil

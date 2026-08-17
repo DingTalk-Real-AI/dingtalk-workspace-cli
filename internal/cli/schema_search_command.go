@@ -108,13 +108,13 @@ DWS 对 Agent 是一个元工具：已知子命令直接执行，未知子命令
 		},
 	}
 	cmd.Flags().String("query", "", "自然语言意图或 canonical/CLI path")
-	cmd.Flags().Int("limit", defaultToolSearchLimit, "返回引用数量")
-	cmd.Flags().Int("candidate-limit", defaultToolSearchCandidateLimit, "每路召回候选数量")
+	cmd.Flags().Int("limit", defaultToolSearchLimit, fmt.Sprintf("返回引用数量（1-%d；0 表示沿用默认值 %d）", maxToolSearchLimit, defaultToolSearchLimit))
+	cmd.Flags().Int("candidate-limit", defaultToolSearchCandidateLimit, fmt.Sprintf("每路召回候选数量（1-%d；0 表示沿用默认值 %d）", maxToolSearchCandidateLimit, defaultToolSearchCandidateLimit))
 	cmd.Flags().StringSlice("product", nil, "限制产品 ID，可重复或逗号分隔")
 	cmd.Flags().StringSlice("effect", nil, "限制 effect，可重复或逗号分隔")
 	cmd.Flags().StringSlice("exclude", nil, "排除 canonical path，可重复或逗号分隔")
 	cmd.Flags().String("request-json", "", `从 stdin 读取 JSON；值必须为 -；必含 version="tool-search.v1"，动作分解字段为 subqueries`)
-	cmd.Flags().Bool("explain", false, "开发诊断：输出 score_breakdown 含原始排序分（公开默认响应不含分数；仅用于离线调参，不建议线上 Agent 使用；会增大响应体积，建议配合 --limit 3）")
+	cmd.Flags().Bool("explain", false, "开发诊断：输出 score_breakdown 含原始排序分（公开默认响应不含分数；仅用于离线调参，不建议线上 Agent 使用；会增大响应体积，建议配合 --limit 3）。score_breakdown.score 是未量化的原始分，排序键使用量化到 1e-9 的值，两者末位可能不同，不要用它复算候选顺序")
 	return cmd
 }
 
