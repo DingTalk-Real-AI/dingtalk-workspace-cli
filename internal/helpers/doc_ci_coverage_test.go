@@ -7,9 +7,18 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
+
+func TestCrossPlatformCoverageDocMediaVerificationWaitHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := waitForDocMediaVerification(ctx, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("verification wait error = %v, want context canceled", err)
+	}
+}
 
 func TestCrossPlatformCoverageDocMediaFilesystemAndPositionValidation(t *testing.T) {
 	oldGetwd, oldEval, oldStat := docMediaGetwd, docMediaEvalSymlinks, docMediaStat

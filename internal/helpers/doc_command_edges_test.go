@@ -262,6 +262,23 @@ func TestCrossPlatformCoverageDocUploadAndMediaErrorEdges(t *testing.T) {
 			t.Fatalf("verification error = %#v", err)
 		}
 	})
+	t.Run("media verification wait failure stops retries", func(t *testing.T) {
+		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
+		waitErr := errors.New("verification wait interrupted")
+		oldWait := docMediaVerifyWait
+		docMediaVerifyWait = func(context.Context, time.Duration) error { return waitErr }
+		t.Cleanup(func() { docMediaVerifyWait = oldWait })
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"uploadUrl":"https://upload","resourceId":"resource"}`},
+			{text: `{"blockId":"media-block"}`},
+			{text: `{"blocks":[]}`},
+		}}
+		err := mediaCommand(t, caller, file, "text/plain")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "doc_media_insert_verification_failed" || !errors.Is(err, waitErr) {
+			t.Fatalf("verification wait error = %#v", err)
+		}
+	})
 	t.Run("media verification tolerates read-after-write lag", func(t *testing.T) {
 		httpPutFile = func(context.Context, string, map[string]string, string, int64) error { return nil }
 		caller := &scriptedToolCaller{steps: []scriptedToolStep{

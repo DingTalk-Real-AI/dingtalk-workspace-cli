@@ -73,6 +73,7 @@ func TestCrossPlatformCoverageDocDeleteReadbackConsumesEveryPage(t *testing.T) {
 		firstPage[index] = map[string]any{"id": fmt.Sprintf("block-%d", index), "text": "body"}
 	}
 	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"jsonml": `["root",{},["p",{"uuid":"target"},"body"]]`}},
 		"list_document_blocks": {
 			{"blocks": firstPage, "hasMore": true, "totalCount": 51},
 			{"blocks": []any{map[string]any{"id": "target", "text": "stale"}}, "hasMore": false, "totalCount": 51},
@@ -299,10 +300,13 @@ func TestCrossPlatformCoverageDocReadbackDefensiveEdges(t *testing.T) {
 		for index := range blocks {
 			blocks[index] = map[string]any{"blockType": "paragraph"}
 		}
-		caller := &docCoverageCaller{responses: map[string][]map[string]any{"list_document_blocks": {
-			{"blocks": blocks, "hasMore": true, "totalCount": 2 * docBlockReadPageSize},
-			{"blocks": blocks, "hasMore": false, "totalCount": 2 * docBlockReadPageSize},
-		}}}
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{
+			"get_document_content": {{"jsonml": `["root",{},["p",{"uuid":"target"},"body"]]`}},
+			"list_document_blocks": {
+				{"blocks": blocks, "hasMore": true, "totalCount": 2 * docBlockReadPageSize},
+				{"blocks": blocks, "hasMore": false, "totalCount": 2 * docBlockReadPageSize},
+			},
+		}}
 		if err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "block_delete", "--block-id", "target", "--yes"); err != nil {
 			t.Fatal(err)
 		}
@@ -319,7 +323,10 @@ func TestCrossPlatformCoverageDocReadbackDefensiveEdges(t *testing.T) {
 
 	t.Run("total count terminates pagination", func(t *testing.T) {
 		testseam.Swap(t, &docVerifyDelays, []time.Duration{})
-		caller := &docCoverageCaller{responses: map[string][]map[string]any{"list_document_blocks": {{"blocks": []any{map[string]any{"id": "other"}}, "totalCount": 1}}}}
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{
+			"get_document_content": {{"jsonml": `["root",{},["p",{"uuid":"target"},"body"]]`}},
+			"list_document_blocks": {{"blocks": []any{map[string]any{"id": "other"}}, "totalCount": 1}},
+		}}
 		if err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "block_delete", "--block-id", "target", "--yes"); err != nil {
 			t.Fatal(err)
 		}
@@ -327,10 +334,13 @@ func TestCrossPlatformCoverageDocReadbackDefensiveEdges(t *testing.T) {
 
 	t.Run("explicit has more overrides inconsistent total count", func(t *testing.T) {
 		testseam.Swap(t, &docVerifyDelays, []time.Duration{})
-		caller := &docCoverageCaller{responses: map[string][]map[string]any{"list_document_blocks": {
-			{"blocks": []any{map[string]any{"id": "first"}}, "hasMore": true, "totalCount": 1},
-			{"blocks": []any{map[string]any{"id": "second"}}, "hasMore": false, "totalCount": 2},
-		}}}
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{
+			"get_document_content": {{"jsonml": `["root",{},["p",{"uuid":"target"},"body"]]`}},
+			"list_document_blocks": {
+				{"blocks": []any{map[string]any{"id": "first"}}, "hasMore": true, "totalCount": 1},
+				{"blocks": []any{map[string]any{"id": "second"}}, "hasMore": false, "totalCount": 2},
+			},
+		}}
 		if err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "block_delete", "--block-id", "target", "--yes"); err != nil {
 			t.Fatal(err)
 		}
@@ -368,6 +378,27 @@ func TestCrossPlatformCoverageDocReadbackDefensiveEdges(t *testing.T) {
 	}
 	if _, ok := documentBlockEntries(nil); ok {
 		t.Fatal("nil produced blocks")
+	}
+
+	lastRevision := completedDocumentBlockRead(
+		map[string]any{"blocks": []any{map[string]any{"id": "first"}}},
+		map[string]any{"revision": 7.0},
+		[]any{map[string]any{"id": "first"}},
+		1,
+		false,
+	)
+	if lastRevision["revision"] != 7 {
+		t.Fatalf("last-page revision = %#v", lastRevision)
+	}
+	firstRevision := completedDocumentBlockRead(
+		map[string]any{"revision": 8.0},
+		map[string]any{"blocks": []any{}},
+		[]any{map[string]any{"id": "first"}},
+		1,
+		false,
+	)
+	if firstRevision["revision"] != 8 {
+		t.Fatalf("first-page revision fallback = %#v", firstRevision)
 	}
 
 	for _, tc := range []struct {

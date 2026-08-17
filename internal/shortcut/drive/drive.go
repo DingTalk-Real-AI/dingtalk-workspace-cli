@@ -700,16 +700,28 @@ func collectRecentPages(rt *shortcut.RuntimeContext, base map[string]any, pageSi
 			"nodeId":      {"nodeId"},
 		})
 		remaining := maxItems - len(items)
-		pageOverflow := len(pageItems) > remaining
-		if pageOverflow {
-			pageItems = pageItems[:remaining]
+		if len(pageItems) > remaining {
+			return nil, apperrors.NewAPI(
+				fmt.Sprintf("get_recent_list 第 %d 页返回 %d 条，超过剩余额度 %d", page, len(pageItems), remaining),
+				apperrors.WithOperation("drive/recent"),
+				apperrors.WithReason("recent_pagination_page_size_exceeded"),
+				apperrors.WithFailureStage("pagination"),
+				apperrors.WithExecutionStarted(false),
+				apperrors.WithRetryable(false),
+				apperrors.WithDetails(map[string]any{
+					"page":       page,
+					"nextCursor": cursor,
+					"count":      len(items),
+					"items":      items,
+				}),
+			)
 		}
 		items = append(items, pageItems...)
 		hasMore, _ = pageContainer["hasMore"].(bool)
 		next := firstString(pageContainer, "nextCursor", "nextToken", "nextPageToken")
 		complete = !hasMore
 		cursor = strings.TrimSpace(next)
-		if pageOverflow || (len(items) >= maxItems && hasMore) {
+		if len(items) >= maxItems && hasMore {
 			truncated = true
 			complete = false
 			hasMore = true

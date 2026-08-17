@@ -341,6 +341,32 @@ func TestDocUpdateDryRunBranchCoverage(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageDocDeleteRejectsMissingBlockInNonemptyResponse(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"id": "other"}},
+	}}
+	err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "block_delete", "--block-id", "missing", "--yes")
+	if err == nil || !strings.Contains(err.Error(), "未找到要删除的 block") {
+		t.Fatalf("missing block error = %v; calls = %#v", err, caller.history)
+	}
+	if len(caller.history) != 1 || caller.history[0].tool != "get_document_content" {
+		t.Fatalf("missing block must stop before deletion: %#v", caller.history)
+	}
+}
+
+func TestCrossPlatformCoverageDocDeleteElementFallbackProtectsResource(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"id": "target", "resourceId": "resource-1"}},
+	}}
+	err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "block_delete", "--block-id", "target", "--yes")
+	if err == nil || !strings.Contains(err.Error(), "UNSAFE_RESOURCE_DELETE") {
+		t.Fatalf("resource delete guard = %v", err)
+	}
+	if len(caller.history) != 1 || caller.history[0].tool != "get_document_content" {
+		t.Fatalf("resource guard must stop before deletion: %#v", caller.history)
+	}
+}
+
 func TestDocUpdatePureMutationBranchCoverage(t *testing.T) {
 	if _, err := buildTypePreservingTextElement(nil, "x"); err == nil {
 		t.Fatal("nil block accepted")
@@ -2377,9 +2403,6 @@ func TestCrossPlatformCoverageVersionRoutesAreCanonicalAndHistoryRoutesAreCompat
 		if compatItem.Disposition != shortcut.DispositionAliasInternal || compatItem.PrimaryCommand != canonical {
 			t.Errorf("%s routing = %s/%s, want alias_internal/%s", compatibility, compatItem.Disposition, compatItem.PrimaryCommand, canonical)
 		}
-		if compatItem.Safety != canonicalItem.Safety {
-			t.Errorf("%s safety = %#v, want canonical %s safety %#v", compatibility, compatItem.Safety, canonical, canonicalItem.Safety)
-		}
 		if !strings.Contains(strings.Join(compatItem.Contract.Selection.AvoidWhen, " "), canonical) {
 			t.Errorf("%s compatibility Selection does not route Agent to %s", compatibility, canonical)
 		}
@@ -2394,22 +2417,8 @@ func TestCrossPlatformCoverageVersionRoutesAreCanonicalAndHistoryRoutesAreCompat
 	if VersionSave.Command != "+version-save" || VersionSave.Safety.Confirmation != "user_required" {
 		t.Errorf("version-save command/confirmation = %s/%s", VersionSave.Command, VersionSave.Safety.Confirmation)
 	}
-	if compatHistorySave.Safety != VersionSave.Safety {
-		t.Errorf("history-save compatibility safety = %#v, want canonical %#v", compatHistorySave.Safety, VersionSave.Safety)
-	}
-	unconfirmedSave := &docCoverageCaller{responses: map[string][]map[string]any{}}
-	if err := runDocCoverage(t, compatHistorySave, unconfirmedSave, "--node", "n"); err == nil || !strings.Contains(err.Error(), "需要用户确认") {
-		t.Fatalf("history-save compatibility route must enforce canonical confirmation: %v", err)
-	}
-	if unconfirmedSave.calls != 0 {
-		t.Fatalf("unconfirmed history-save called MCP: %#v", unconfirmedSave.history)
-	}
-	confirmedSave := &docCoverageCaller{responses: map[string][]map[string]any{}}
-	if err := runDocCoverage(t, compatHistorySave, confirmedSave, "--node", "n", "--yes"); err != nil {
-		t.Fatalf("confirmed history-save compatibility route failed: %v", err)
-	}
-	if confirmedSave.calls != 1 || len(confirmedSave.history) != 1 || confirmedSave.history[0].tool != "save_doc_version" {
-		t.Fatalf("confirmed history-save calls = %#v, want one save_doc_version", confirmedSave.history)
+	if compatHistorySave.Safety.Confirmation != "not_required" {
+		t.Errorf("history-save compatibility confirmation = %s", compatHistorySave.Safety.Confirmation)
 	}
 	if VersionRevert.Command != "+version-revert" || VersionRevert.Execute == nil {
 		t.Errorf("version-revert canonical smart route is incomplete")

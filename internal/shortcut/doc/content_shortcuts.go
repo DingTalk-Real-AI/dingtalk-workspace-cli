@@ -649,7 +649,9 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		}
 		block := findCanonicalBlock(current, blockID, "jsonml")
 		if block == nil {
-			block = findBlock(current, blockID)
+			if fallback := findBlock(current, blockID); fallback != nil {
+				block = fallback
+			}
 		}
 		if block == nil && len(current) > 0 {
 			return apperrors.NewValidation("DOCUMENT_NOT_FOUND: 未找到要删除的 block；删除后的 ID 禁止复用")

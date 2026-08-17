@@ -20,6 +20,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
@@ -330,24 +331,23 @@ func TestCrossPlatformCoverageDriveRecentPaginationAndJournalCoverage(t *testing
 	}
 }
 
-func TestCrossPlatformCoverageDriveRecentTruncatesServerOverflow(t *testing.T) {
+func TestCrossPlatformCoverageDriveRecentRejectsServerOverflow(t *testing.T) {
 	caller := &driveCoverageCaller{responses: map[string][]string{
 		"get_recent_list": {`{"recentItems":[{"nodeId":"a"},{"nodeId":"b"}],"hasMore":false,"nextCursor":"server-next"}`},
 	}}
-	declaration := Recent
-	declaration.Execute = func(rt *shortcut.RuntimeContext) error {
-		result, err := collectRecentPages(rt, nil, 20)
-		if err != nil {
-			return err
-		}
-		items, _ := result["items"].([]map[string]any)
-		if len(items) != 1 || items[0]["nodeId"] != "a" || result["complete"] != false || result["truncated"] != true || result["hasMore"] != true || result["nextCursor"] != "server-next" {
-			t.Fatalf("overflow recent result = %#v", result)
-		}
-		return nil
+	err := runDriveCoverage(t, Recent, caller, "--page-all", "--max-items", "1")
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "recent_pagination_page_size_exceeded" {
+		t.Fatalf("overflow recent error = %#v", err)
 	}
-	if err := runDriveCoverage(t, declaration, caller, "--page-all", "--max-items", "1"); err != nil {
-		t.Fatal(err)
+	if got, ok := typed.Details["items"].([]map[string]any); !ok || len(got) != 0 {
+		t.Fatalf("overflow error exposed partial current page: %#v", typed.Details)
+	}
+	if typed.Details["nextCursor"] != "" || typed.Details["count"] != 0 {
+		t.Fatalf("overflow error published unusable continuation: %#v", typed.Details)
+	}
+	if len(caller.history) != 1 || caller.history[0] != "get_recent_list" {
+		t.Fatalf("overflow recent calls = %#v", caller.history)
 	}
 }
 
