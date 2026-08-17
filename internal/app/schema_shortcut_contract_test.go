@@ -433,7 +433,7 @@ func TestDeliveryDocShortcutAndLeafSafetyMatchesPublishedContracts(t *testing.T)
 		{name: "media insert leaf", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc media insert"}},
 		{name: "cover set shortcut", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +cover-set"}},
 		{name: "cover set leaf", effect: "write", risk: "low", confirmation: "not_required", cliPaths: []string{"doc style cover set"}},
-		{name: "cover clear shortcut", effect: "write", risk: "medium", confirmation: "not_required", cliPaths: []string{"doc +cover-clear"}},
+		{name: "cover clear shortcut", effect: "destructive", risk: "high", confirmation: "user_required", cliPaths: []string{"doc +cover-clear"}},
 		{name: "cover clear leaf", effect: "write", risk: "low", confirmation: "not_required", cliPaths: []string{"doc style cover clear"}},
 		{name: "background clear shortcut", effect: "write", risk: "medium", confirmation: "user_required", cliPaths: []string{"doc +background-delete"}},
 		{name: "background clear leaf", effect: "write", risk: "low", confirmation: "not_required", cliPaths: []string{"doc style background clear"}},

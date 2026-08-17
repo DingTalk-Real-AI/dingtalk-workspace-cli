@@ -1144,8 +1144,7 @@ func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool
 	for _, candidate := range documentContentCandidates(value, format) {
 		actual := normalizeDocumentContentForVerification(candidate, format)
 		if mode == "overwrite" {
-			expectedSemantic := semanticMarkdownProjection(expected)
-			if actual == expected || (format == "markdown" && expectedSemantic != "" && semanticMarkdownProjection(actual) == expectedSemantic) {
+			if actual == expected || (format == "markdown" && knownMarkdownRendererEquivalent(actual, expected)) {
 				return true
 			}
 			continue
@@ -1154,9 +1153,9 @@ func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool
 			return true
 		}
 		if format == "markdown" {
-			actualSemantic := semanticMarkdownProjection(actual)
-			expectedSemantic := semanticMarkdownProjection(expected)
-			if expectedSemantic != "" && (actualSemantic == expectedSemantic || strings.HasSuffix(actualSemantic, expectedSemantic)) {
+			actualRendered := normalizeKnownMarkdownRendererEquivalences(actual)
+			expectedRendered := normalizeKnownMarkdownRendererEquivalences(expected)
+			if expectedRendered != "" && (actualRendered == expectedRendered || strings.HasSuffix(actualRendered, "\n"+expectedRendered)) {
 				return true
 			}
 		}
@@ -1442,18 +1441,18 @@ func normalizeMarkdownForVerification(raw string) string {
 	return strings.Join(lines, "\n")
 }
 
-// semanticMarkdownProjection compares authored text after Markdown renderers have
-// normalized ordered-list markers, separators, spacing, and line wrapping. It keeps
-// letters, numbers, and semantic operators so missing or changed facts cannot pass.
-func semanticMarkdownProjection(raw string) string {
-	raw = orderedListMark.ReplaceAllString(raw, "$1")
-	var projected strings.Builder
-	for _, char := range raw {
-		if unicode.IsLetter(char) || unicode.IsNumber(char) || strings.ContainsRune("%+-−.$￥¥/:@#=<>!&|", char) {
-			projected.WriteRune(unicode.ToLower(char))
-		}
-	}
-	return projected.String()
+// normalizeKnownMarkdownRendererEquivalences accepts only the one reviewed
+// structural rewrite performed by the document renderer: ordered-list markers
+// may change style and inline separators may become line breaks. All other
+// Markdown syntax remains byte-significant after whitespace normalization.
+func normalizeKnownMarkdownRendererEquivalences(raw string) string {
+	raw = orderedListMark.ReplaceAllString(raw, "\n<ordered-list-item>")
+	return normalizeMarkdownForVerification(raw)
+}
+
+func knownMarkdownRendererEquivalent(actual, expected string) bool {
+	expected = normalizeKnownMarkdownRendererEquivalences(expected)
+	return expected != "" && normalizeKnownMarkdownRendererEquivalences(actual) == expected
 }
 
 func normalizeJSONMLForVerification(raw string) string {

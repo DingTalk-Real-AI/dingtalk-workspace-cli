@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestDocMediaFilesystemAndPositionCompatibilityCoverage(t *testing.T) {
+func TestCrossPlatformCoverageDocMediaFilesystemAndPositionValidation(t *testing.T) {
 	oldGetwd, oldEval, oldStat := docMediaGetwd, docMediaEvalSymlinks, docMediaStat
 	t.Cleanup(func() { docMediaGetwd, docMediaEvalSymlinks, docMediaStat = oldGetwd, oldEval, oldStat })
 	if err := ValidateDocMediaInsertCommand(nil); err == nil {
@@ -24,6 +24,15 @@ func TestDocMediaFilesystemAndPositionCompatibilityCoverage(t *testing.T) {
 	missingFile.Flags().String("ref-block", "", "")
 	if _, _, _, err := resolveDocMediaInsertInput(missingFile); err == nil {
 		t.Fatal("missing media input accepted")
+	}
+	invalidPosition := &cobra.Command{Use: "insert"}
+	invalidPosition.Flags().String("file", "file", "")
+	invalidPosition.Flags().Int("index", 0, "")
+	invalidPosition.Flags().String("where", "", "")
+	invalidPosition.Flags().String("ref-block", "", "")
+	_ = invalidPosition.Flags().Set("where", "after")
+	if _, _, _, err := resolveDocMediaInsertInput(invalidPosition); err == nil {
+		t.Fatal("invalid media position reached filesystem resolution")
 	}
 	docMediaGetwd = func() (string, error) { return "", errors.New("getwd") }
 	if _, _, err := resolveDocMediaInputPath("file"); err == nil {
@@ -58,28 +67,52 @@ func TestDocMediaFilesystemAndPositionCompatibilityCoverage(t *testing.T) {
 	cmd.Flags().Int("index", 0, "")
 	cmd.Flags().String("where", "", "")
 	cmd.Flags().String("ref-block", "", "")
-	_ = cmd.Flags().Set("where", "sideways")
+	_ = cmd.Flags().Set("where", "after")
 	_ = cmd.Flags().Set("ref-block", "ref")
 	if position, err := readDocMediaInsertPosition(cmd); err != nil || position.Mode != "relative" {
-		t.Fatalf("main-compatible relative position = %#v, %v", position, err)
+		t.Fatalf("relative position = %#v, %v", position, err)
 	}
 	for _, tc := range []struct {
-		set      map[string]string
-		wantMode string
+		name string
+		set  map[string]string
 	}{
-		{set: map[string]string{"ref-block": "ref"}, wantMode: "partial_relative"},
-		{set: map[string]string{"index": "1", "where": "after", "ref-block": "ref"}, wantMode: "mixed"},
+		{name: "negative index", set: map[string]string{"index": "-1"}},
+		{name: "missing where", set: map[string]string{"ref-block": "ref"}},
+		{name: "missing reference", set: map[string]string{"where": "after"}},
+		{name: "mixed position modes", set: map[string]string{"index": "1", "where": "after", "ref-block": "ref"}},
+		{name: "unknown where", set: map[string]string{"where": "sideways", "ref-block": "ref"}},
 	} {
-		cmd := &cobra.Command{Use: "insert"}
-		cmd.Flags().Int("index", 0, "")
-		cmd.Flags().String("where", "", "")
-		cmd.Flags().String("ref-block", "", "")
-		for name, value := range tc.set {
-			_ = cmd.Flags().Set(name, value)
-		}
-		if position, err := readDocMediaInsertPosition(cmd); err != nil || position.Mode != tc.wantMode {
-			t.Fatalf("position %#v = %#v, %v; want mode %s", tc.set, position, err, tc.wantMode)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "insert"}
+			cmd.Flags().Int("index", 0, "")
+			cmd.Flags().String("where", "", "")
+			cmd.Flags().String("ref-block", "", "")
+			for name, value := range tc.set {
+				_ = cmd.Flags().Set(name, value)
+			}
+			if _, err := readDocMediaInsertPosition(cmd); err == nil {
+				t.Fatalf("invalid position %#v was accepted", tc.set)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageDocMediaInvalidPositionStopsBeforeUpload(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("media.bin", []byte("media"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	caller := &scriptedToolCaller{}
+	installScriptedCaller(t, caller)
+	root := newDocCommand()
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetArgs([]string{"media", "insert", "--node", "node", "--file", "media.bin", "--index", "1", "--where", "after", "--ref-block", "ref"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("invalid mixed position unexpectedly succeeded")
+	}
+	if caller.calls != 0 {
+		t.Fatalf("invalid position reached upload credential request: %#v", caller.history)
 	}
 }
 
@@ -254,8 +287,8 @@ func TestDocMediaInsertVerificationBranchCoverage(t *testing.T) {
 	_ = invalidPosition.Flags().Set("node", "node")
 	_ = invalidPosition.Flags().Set("file", "file.txt")
 	_ = invalidPosition.Flags().Set("where", "after")
-	if err := invalidPosition.RunE(invalidPosition, nil); err != nil {
-		t.Fatalf("direct RunE rejected main-compatible incomplete relative position: %v", err)
+	if err := invalidPosition.RunE(invalidPosition, nil); err == nil {
+		t.Fatal("direct RunE accepted incomplete relative position")
 	}
 
 	oldEval := docMediaEvalSymlinks

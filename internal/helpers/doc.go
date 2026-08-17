@@ -505,24 +505,29 @@ func defaultHTTPGetFile(ctx context.Context, url string, headers map[string]stri
 	return nil
 }
 
-// ValidateDocMediaInsertCommand validates the local file contract shared by the
-// smart shortcut and the compatibility atomic command. Position flags retain
-// the main-compatible pass-through behavior and are interpreted by the service.
+// ValidateDocMediaInsertCommand validates the local file and position contract
+// shared by the smart shortcut and the compatibility atomic command.
 func ValidateDocMediaInsertCommand(cmd *cobra.Command) error {
 	if cmd == nil {
 		return apperrors.NewInternal("doc media insert: command is nil")
+	}
+	if _, err := readDocMediaInsertPosition(cmd); err != nil {
+		return err
 	}
 	_, _, err := resolveDocMediaInputPath(mustGetFlag(cmd, "file"))
 	return err
 }
 
 func resolveDocMediaInsertInput(cmd *cobra.Command) (string, os.FileInfo, docMediaInsertPosition, error) {
+	position, err := readDocMediaInsertPosition(cmd)
+	if err != nil {
+		return "", nil, docMediaInsertPosition{}, err
+	}
 	filePath, fileInfo, err := resolveDocMediaInputPath(mustGetFlag(cmd, "file"))
 	if err != nil {
 		return "", nil, docMediaInsertPosition{}, err
 	}
-	position, err := readDocMediaInsertPosition(cmd)
-	return filePath, fileInfo, position, err
+	return filePath, fileInfo, position, nil
 }
 
 var docMediaResolveInsertInput = resolveDocMediaInsertInput
@@ -568,22 +573,28 @@ func readDocMediaInsertPosition(cmd *cobra.Command) (docMediaInsertPosition, err
 	position := docMediaInsertPosition{}
 	if cmd.Flags().Changed("index") {
 		position.HasIndex = true
-		position.Mode = "index"
 		position.Index, _ = cmd.Flags().GetInt("index")
+		if position.Index < 0 {
+			return docMediaInsertPosition{}, apperrors.NewValidation("--index 必须大于或等于 0")
+		}
 	}
 	position.Where = strings.TrimSpace(mustGetFlag(cmd, "where"))
 	position.RefBlock = strings.TrimSpace(mustGetFlag(cmd, "ref-block"))
-	if position.Where != "" || position.RefBlock != "" {
-		switch {
-		case position.HasIndex:
-			position.Mode = "mixed"
-		case position.Where != "" && position.RefBlock != "":
-			position.Mode = "relative"
-		default:
-			position.Mode = "partial_relative"
-		}
+	if position.HasIndex && (position.Where != "" || position.RefBlock != "") {
+		return docMediaInsertPosition{}, apperrors.NewValidation("--index 不能与 --where 或 --ref-block 同时使用")
 	}
-	if position.Mode == "" {
+	if (position.Where == "") != (position.RefBlock == "") {
+		return docMediaInsertPosition{}, apperrors.NewValidation("--where 与 --ref-block 必须同时提供")
+	}
+	if position.Where != "" && position.Where != "before" && position.Where != "after" {
+		return docMediaInsertPosition{}, apperrors.NewValidation("--where 仅支持 before 或 after")
+	}
+	switch {
+	case position.HasIndex:
+		position.Mode = "index"
+	case position.Where != "":
+		position.Mode = "relative"
+	default:
 		position.Mode = "end"
 	}
 	return position, nil

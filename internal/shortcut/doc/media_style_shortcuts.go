@@ -51,14 +51,19 @@ var MediaInsert = shortcut.Shortcut{
 		{Name: "file", Type: shortcut.FlagString, Desc: "工作目录内已存在的相对文件路径", Required: true},
 		{Name: "name", Type: shortcut.FlagString, Desc: "显示名称"},
 		{Name: "mime-type", Type: shortcut.FlagString, Desc: "MIME 类型"},
-		{Name: "index", Type: shortcut.FlagInt, Desc: "顶层插入索引"},
-		{Name: "where", Type: shortcut.FlagString, Desc: "相对参考块的位置", Enum: []string{"before", "after"}},
-		{Name: "ref-block", Type: shortcut.FlagString, Desc: "参考 block ID"},
+		{Name: "index", Type: shortcut.FlagInt, Desc: "顶层插入索引；位置可省略；--index 必须非负且不能与相对位置并用；--where 与 --ref-block 必须同时提供，where 仅支持 before/after"},
+		{Name: "where", Type: shortcut.FlagString, Desc: "相对参考块的位置；位置可省略；--index 必须非负且不能与相对位置并用；--where 与 --ref-block 必须同时提供，where 仅支持 before/after", Enum: []string{"before", "after"}},
+		{Name: "ref-block", Type: shortcut.FlagString, Desc: "参考 block ID；位置可省略；--index 必须非负且不能与相对位置并用；--where 与 --ref-block 必须同时提供，where 仅支持 before/after"},
 	},
-	Validate:    func(rt *shortcut.RuntimeContext) error { return validateWorkspaceInputPath("file", rt.Str("file")) },
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内存在且不能经符号链接逃逸的相对文件"}},
-	Tips:        []string{`dws doc +media-insert --node <DOC_ID> --file ./report.pdf`, `dws doc +media-insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where after`},
-	Execute:     func(rt *shortcut.RuntimeContext) error { return helpers.RunDocMediaInsertShortcut(rt.Command()) },
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return helpers.ValidateDocMediaInsertCommand(rt.Command())
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"file"}, Description: "--file 必须是工作目录内存在且不能经符号链接逃逸的相对文件"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"index", "where", "ref-block"}, Description: "位置可省略；--index 必须非负且不能与相对位置并用；--where 与 --ref-block 必须同时提供，where 仅支持 before/after"},
+	},
+	Tips:    []string{`dws doc +media-insert --node <DOC_ID> --file ./report.pdf`, `dws doc +media-insert --node <DOC_ID> --file ./image.png --ref-block <BLOCK_ID> --where after`},
+	Execute: func(rt *shortcut.RuntimeContext) error { return helpers.RunDocMediaInsertShortcut(rt.Command()) },
 }
 
 var MediaDownload = shortcut.Shortcut{
@@ -171,8 +176,8 @@ var CoverClear = shortcut.Shortcut{
 	Service: "doc", Command: "+cover-clear", Product: productDoc,
 	Description: "幂等清除文档封面",
 	Intent:      "当用户明确要移除文档当前封面时使用；发送 cover clear，重复执行保持无封面状态。",
-	Risk:        shortcut.RiskWrite,
-	Safety:      docsafety.RecoverableWrite("idempotent"),
+	Risk:        shortcut.RiskHighWrite,
+	Safety:      docsafety.ProtectedDelete("idempotent"),
 	Contract: docContract("+cover-clear", "幂等清除文档封面",
 		"当用户明确要移除文档当前封面时使用；发送 cover clear，重复执行保持无封面状态。",
 		[]string{`dws doc +cover-clear --node <DOC_ID>`}),

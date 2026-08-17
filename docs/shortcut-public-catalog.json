@@ -2558,7 +2558,7 @@
       "suite": "semantic",
       "service": "doc",
       "command": "+cover-clear",
-      "risk": "write",
+      "risk": "high-risk-write",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
       "semantic_delta": "以幂等 clear 语义移除当前文档封面；旧 +resource-delete 仅为隐藏兼容别名。",

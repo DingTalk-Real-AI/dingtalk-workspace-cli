@@ -22,6 +22,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docsafety"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -297,8 +298,8 @@ func TestDocUpdatePureMutationBranchCoverage(t *testing.T) {
 	if got := replaceTextFields([]any{map[string]any{"text": "old"}}, "old", "new"); got != 1 {
 		t.Fatalf("array replacements = %d", got)
 	}
-	if verifyUpdatedDocumentContent(map[string]any{"markdown": "prefix\nsemantic text"}, "**semantic** text", "append", "markdown") != true {
-		t.Fatal("semantic append did not verify")
+	if verifyUpdatedDocumentContent(map[string]any{"markdown": "prefix\nsemantic text"}, "**semantic** text", "append", "markdown") {
+		t.Fatal("append with lost emphasis passed verification")
 	}
 	if verifyInsertedCanonicalBlock(map[string]any{}, map[string]any{"blocks": []any{
 		map[string]any{"id": "new", "text": "copy"}, map[string]any{"id": "ref", "text": "ref"},
@@ -1054,8 +1055,12 @@ func TestCrossPlatformCoverageMediaFailuresKeepStableIDsAndForbidPathEscape(t *t
 		{"--node", "n", "--file", "media.png", "--index", "-1", "--dry-run", "--yes"},
 		{"--node", "n", "--file", "media.png", "--index", "0", "--where", "after", "--ref-block", "ref", "--dry-run", "--yes"},
 	} {
-		if err := runDocCoverage(t, MediaInsert, &docCoverageCaller{dryRun: true, responses: map[string][]map[string]any{}}, args...); err != nil {
-			t.Errorf("main-compatible media position rejected: args=%#v err=%v", args, err)
+		caller := &docCoverageCaller{dryRun: true, responses: map[string][]map[string]any{}}
+		if err := runDocCoverage(t, MediaInsert, caller, args...); err == nil {
+			t.Errorf("invalid media position accepted: args=%#v", args)
+		}
+		if len(caller.history) != 0 {
+			t.Errorf("invalid media position reached upload: args=%#v calls=%#v", args, caller.history)
 		}
 	}
 	if err := runDocCoverage(t, Import, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--file", "/tmp/report.docx", "--workspace", "workspace-1"); err == nil {
@@ -1534,6 +1539,9 @@ func TestCrossPlatformCoverageUpdateVerificationNormalizesMarkdownRoundTrip(t *t
 	if !verifyUpdatedDocumentContent(map[string]any{"markdown": renderedList}, orderedFacts, "overwrite", "markdown") {
 		t.Fatal("semantically equivalent ordered-list rendering failed verification")
 	}
+	if !verifyUpdatedDocumentContent(map[string]any{"markdown": "已有内容\n" + renderedList}, orderedFacts, "append", "markdown") {
+		t.Fatal("ordered-list renderer equivalence failed append verification")
+	}
 	if verifyUpdatedDocumentContent(map[string]any{"markdown": "1. 完成率达到 93%"}, orderedFacts, "overwrite", "markdown") {
 		t.Fatal("ordered list with a missing fact passed semantic verification")
 	}
@@ -1552,6 +1560,11 @@ func TestCrossPlatformCoverageUpdateVerificationNormalizesMarkdownRoundTrip(t *t
 		{name: "missing assignment operator", expected: "x = 1", actual: "x 1"},
 		{name: "changed logical operator", expected: "ready && valid", actual: "ready || valid"},
 		{name: "changed operand order", expected: "left | right", actual: "right | left"},
+		{name: "lost emphasis", expected: "**重点**", actual: "重点"},
+		{name: "lost strikethrough", expected: "~~废弃~~", actual: "废弃"},
+		{name: "lost link", expected: "[说明](https://example.com)", actual: "说明"},
+		{name: "lost heading", expected: "# 标题", actual: "标题"},
+		{name: "lost list marker", expected: "- 项目", actual: "项目"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if verifyUpdatedDocumentContent(map[string]any{"markdown": tc.actual}, tc.expected, "overwrite", "markdown") {
@@ -1619,6 +1632,17 @@ func TestCrossPlatformCoverageDocConfirmationBoundaries(t *testing.T) {
 		t.Fatalf("unconfirmed comment delete called MCP: %#v", commentDelete.history)
 	}
 
+	coverClear := &docCoverageCaller{responses: map[string][]map[string]any{}}
+	if err := runDocCoverage(t, CoverClear, coverClear, "--node", "n"); err == nil {
+		t.Fatal("cover clear without --yes must reject")
+	}
+	if coverClear.calls != 0 {
+		t.Fatalf("unconfirmed cover clear called MCP: %#v", coverClear.history)
+	}
+	if CoverClear.Risk != shortcut.RiskHighWrite || CoverClear.Safety != docsafety.ProtectedDelete("idempotent") {
+		t.Fatalf("cover clear safety = %q/%#v", CoverClear.Risk, CoverClear.Safety)
+	}
+
 	tests := []struct {
 		name string
 		decl shortcut.Shortcut
@@ -1628,7 +1652,7 @@ func TestCrossPlatformCoverageDocConfirmationBoundaries(t *testing.T) {
 		{
 			name: "resource clear",
 			decl: CoverClear,
-			args: []string{"--node", "n"},
+			args: []string{"--node", "n", "--yes"},
 			want: []docCoverageCall{{tool: "update_document_style", params: map[string]any{"nodeId": "n", "cover": map[string]any{"action": "clear"}}}},
 		},
 		{
