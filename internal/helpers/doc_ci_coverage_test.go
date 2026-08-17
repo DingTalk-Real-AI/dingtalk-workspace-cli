@@ -140,18 +140,12 @@ func TestDocMediaRunEInputResolverFailureCoverage(t *testing.T) {
 }
 
 func TestDocMediaShapeHelperCoverage(t *testing.T) {
-	for _, tc := range []struct {
-		value any
-		keys  []string
-	}{
-		{map[string]any{"result": map[string]any{"id": " nested "}}, []string{"id"}},
-		{[]any{map[string]any{"id": "array"}}, []string{"id"}},
-		{map[string]any{"bad": true}, []string{"id"}},
-	} {
-		_ = docNestedString(tc.value, tc.keys...)
+	if got := insertedDocBlockID(map[string]any{"id": "document", "result": map[string]any{"data": map[string]any{"blockId": " block "}}}); got != "block" {
+		t.Fatalf("trusted inserted block ID = %q, want block", got)
 	}
-	_ = docResponseString("", "id")
-	_ = docResponseString("{", "id")
+	if got := insertedDocBlockID(map[string]any{"id": "document", "operator": map[string]any{"id": "operator"}, "data": map[string]any{"request": map[string]any{"id": "request"}}}); got != "" {
+		t.Fatalf("untrusted inserted block ID = %q, want empty", got)
+	}
 
 	for _, value := range []any{
 		map[string]any{"items": []any{"item"}},

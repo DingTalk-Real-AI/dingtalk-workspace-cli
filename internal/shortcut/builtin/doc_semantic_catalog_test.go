@@ -86,12 +86,8 @@ func TestCrossPlatformCoverageDocSemanticCatalogExactlyCoversRegisteredSurface(t
 		if item.Disposition != shortcut.DispositionAliasInternal || item.PrimaryCommand != primary {
 			t.Errorf("%s compatibility routing = %s/%s, want alias_internal/%s", command, item.Disposition, item.PrimaryCommand, primary)
 		}
-		// +history-save must preserve its published not_required Schema field for
-		// compatibility; its executor separately enforces +version-save safety.
-		if command != "+history-save" {
-			if got, want := shortcut.EffectiveSafety(item), shortcut.EffectiveSafety(registered[primary]); got != want {
-				t.Errorf("%s compatibility safety = %#v, want primary %s safety %#v", command, got, primary, want)
-			}
+		if got, want := shortcut.EffectiveSafety(item), shortcut.EffectiveSafety(registered[primary]); got != want {
+			t.Errorf("%s compatibility safety = %#v, want primary %s safety %#v", command, got, primary, want)
 		}
 	}
 	for _, command := range []string{"+cover-set", "+cover-download", "+cover-clear"} {

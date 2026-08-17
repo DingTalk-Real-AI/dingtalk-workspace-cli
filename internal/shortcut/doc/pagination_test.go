@@ -190,11 +190,11 @@ func TestCrossPlatformCoverageTemplatePaginationRemainingBranchCoverage(t *testi
 		t.Helper()
 		declaration := Search
 		declaration.Execute = func(rt *shortcut.RuntimeContext) error {
-			items, complete, truncated, cursor, pages, err := collectTemplatePages(rt, "search_doc_templates", map[string]any{"templateSource": "PUBLIC"}, options)
+			items, complete, truncated, cursor, stopReason, pages, err := collectTemplatePages(rt, "search_doc_templates", map[string]any{"templateSource": "PUBLIC"}, options)
 			if err != nil {
 				return err
 			}
-			return rt.Output(map[string]any{"items": items, "complete": complete, "truncated": truncated, "cursor": cursor, "pages": pages})
+			return rt.Output(map[string]any{"items": items, "complete": complete, "truncated": truncated, "cursor": cursor, "stopReason": stopReason, "pages": pages})
 		}
 		return runDocCoverage(t, declaration, caller)
 	}
@@ -231,6 +231,42 @@ func TestCrossPlatformCoverageTemplatePaginationRemainingBranchCoverage(t *testi
 	}
 }
 
+func TestCrossPlatformCoverageTemplateSinglePageReportsUnprovenPagination(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"search_doc_templates": {{
+			"templates": []any{map[string]any{"templateId": "a"}},
+		}},
+	}}
+	var (
+		gotItems      []map[string]any
+		gotComplete   bool
+		gotTruncated  bool
+		gotNextCursor string
+		gotStopReason string
+		gotPages      int
+	)
+	declaration := Search
+	declaration.Execute = func(rt *shortcut.RuntimeContext) error {
+		var err error
+		gotItems, gotComplete, gotTruncated, gotNextCursor, gotStopReason, gotPages, err = collectTemplatePages(
+			rt,
+			"search_doc_templates",
+			map[string]any{"templateSource": "PUBLIC"},
+			docPageOptions{PageAll: false, PageSize: 1, MaxPages: 2, MaxItems: 10},
+		)
+		return err
+	}
+	if err := runDocCoverage(t, declaration, caller); err != nil {
+		t.Fatal(err)
+	}
+	if len(gotItems) != 1 || gotComplete || gotTruncated || gotNextCursor != "" || gotStopReason != "pagination_unproven" || gotPages != 1 {
+		t.Fatalf(
+			"single-page result = items:%d complete:%v truncated:%v cursor:%q stop:%q pages:%d",
+			len(gotItems), gotComplete, gotTruncated, gotNextCursor, gotStopReason, gotPages,
+		)
+	}
+}
+
 func TestCrossPlatformCoverageTemplatePaginationRejectsServerPageOverflow(t *testing.T) {
 	for _, tool := range []string{"search_doc_templates", "list_doc_templates"} {
 		t.Run(tool, func(t *testing.T) {
@@ -246,7 +282,7 @@ func TestCrossPlatformCoverageTemplatePaginationRejectsServerPageOverflow(t *tes
 			}}
 			declaration := Search
 			declaration.Execute = func(rt *shortcut.RuntimeContext) error {
-				_, _, _, _, _, err := collectTemplatePages(
+				_, _, _, _, _, _, err := collectTemplatePages(
 					rt,
 					tool,
 					map[string]any{"templateSource": "PUBLIC"},

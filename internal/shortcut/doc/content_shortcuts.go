@@ -39,7 +39,7 @@ var (
 	docDownload     = localio.Download
 	docVerifyWait   = waitForDocVerification
 	docVerifyDelays = []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}
-	orderedListMark = regexp.MustCompile(`(?m)(^|[\n;；])\s*\d+[.)、]\s*`)
+	orderedListMark = regexp.MustCompile(`(?m)(^|[\n;；])\s*(\d+)[.)、]\s*`)
 	docMarkdown     = goldmark.New(
 		goldmark.WithExtensions(extension.Table),
 		goldmark.WithRendererOptions(html.WithUnsafe()),
@@ -1706,7 +1706,7 @@ func normalizeMarkdownForVerification(raw string) string {
 // may change style and inline separators may become line breaks. All other
 // Markdown syntax remains byte-significant after whitespace normalization.
 func normalizeKnownMarkdownRendererEquivalences(raw string) string {
-	raw = orderedListMark.ReplaceAllString(raw, "\n<ordered-list-item>")
+	raw = orderedListMark.ReplaceAllString(raw, "\n<ordered-list-item:$2>")
 	return normalizeMarkdownForVerification(raw)
 }
 

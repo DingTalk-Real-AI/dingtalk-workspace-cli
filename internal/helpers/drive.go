@@ -3008,10 +3008,10 @@ func newDriveCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "获取当前用户最近访问或编辑过的文档列表",
 				UseWhen: []string{
-					"用户要看最近访问或最近编辑的文档列表时（默认最近访问 operate-type=0）",
-					"需要按我创建/他人创建或文档类型过滤最近项时",
+					"需要 Shortcut 未公开的 --file-types 或 --org-ids 过滤最近项时",
 				},
 				AvoidWhen: []string{
+					"普通最近访问/最近编辑及创建人过滤优先使用 dws drive +recent",
 					"按关键词全局搜文件改用 dws drive search",
 					"浏览某目录内容改用 dws drive list",
 				},

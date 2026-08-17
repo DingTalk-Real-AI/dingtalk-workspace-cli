@@ -30,6 +30,7 @@ metadata:
 | 用户说 | 命令 |
 |--------|------|
 | "看钉盘文件 / 文件夹列表" | `dws drive +list [--folder <dentryUuid>]` |
+| "浏览文档空间 / 我的文档目录" | `dws drive list --workspace <workspaceId或URL> [--folder <nodeId>]`；没有稳定 workspace 时停止并询问 |
 | "钉盘目录树" | `python scripts/drive_tree_list.py --depth 2` |
 | "查文件元数据/统计/公开状态/封面" | `dws drive +inspect --node <dentryUuid> [--include-stats/--include-publish/--include-cover]` |
 | "搜文件 / 找文件" | `dws drive +search --query "<关键词>"` |
@@ -51,9 +52,9 @@ metadata:
 
 **触发**：找文件/搜文件/我的文件/最近文件/最近编辑的文档/某文档在哪。
 
-1. **选源（必须）**：最近访问 → `dws drive +recent --limit <n> --format json`（翻页用上次返回的 `nextCursor` 传 `--cursor`）；最近编辑 → `dws drive +recent --operate-type 1 --limit <n> --format json`（不传 `--operate-type` 默认为 0 最近访问，会混入仅打开过的文档）；按内容/名称全局搜 → `dws drive +search --query "<关键词>" --format json`；浏览某目录 → `dws drive +list --folder <dentryUuid> --format json`。
+1. **选源（必须）**：最近访问 → `dws drive +recent --limit <n> --format json`（翻页用上次返回的 `nextCursor` 传 `--cursor`）；最近编辑 → `dws drive +recent --operate-type 1 --limit <n> --format json`（不传 `--operate-type` 默认为 0 最近访问，会混入仅打开过的文档）；按内容/名称全局搜 → `dws drive +search --query "<关键词>" --format json`；浏览钉盘目录 → `dws drive +list --folder <dentryUuid> --format json`；浏览文档空间目录 → `dws drive list --workspace <workspaceId或URL> [--folder <nodeId>] --format json`，缺少稳定 workspace 时停止并询问。
 2. **解析（必须）**：取真实 `dentryUuid`（= `id`/`nodeId`）；多候选让用户确认，**禁止**默认取第一个。
-3. **下钻（必须）**：根目录没命中时，进入最相关文件夹继续 `drive +list --folder`，必要时 `python scripts/drive_tree_list.py --depth 2` 递归，**禁止**只看根目录就放弃。
+3. **下钻（必须）**：钉盘根目录没命中时，进入最相关文件夹继续 `drive +list --folder`，必要时 `python scripts/drive_tree_list.py --depth 2` 递归；文档空间则复用同一真实 `--workspace` 并传 `drive list --workspace <workspaceId或URL> --folder <nodeId>`，**禁止**丢失存储域或只看根目录就放弃。
 4. **回读元数据（必须）**：命中后 `dws drive +inspect --node <dentryUuid> --format json`，按 `extension` 确认类型。
 
 **禁止**：编造 dentryUuid、只看根目录放弃、用 `drive +list` 替代 `drive +search` 做全局查找。
@@ -97,9 +98,9 @@ metadata:
 
 ## 高频硬约束
 
-- 查找文件不要只看根目录后放弃；根目录没命中时，进入最相关的目标文件夹继续 `drive +list --folder <dentryUuid>`，必要时用目录树脚本递归到合理深度。
+- 查找文件不要只看根目录后放弃；钉盘下钻使用 `drive +list --folder <dentryUuid>`，文档空间下钻必须保留 `drive list --workspace <workspaceId或URL> --folder <nodeId>`，不得把文档空间节点误传给钉盘 Shortcut。
 - `drive +list` 默认 `--limit 20`，自动化场景里保守使用 `--limit 50` 以内并处理 `nextCursor` 翻页；不要因为参数边界报错反复重试。
-- 全局找文件优先 `drive +search --query`；指定目录浏览用 `drive +list`，命中后必须 `drive +inspect --node <dentryUuid> --format json` 回读元数据。
+- 全局找文件优先 `drive +search --query`；钉盘目录浏览用 `drive +list`，文档空间目录浏览用 `drive list --workspace`，命中后必须 `drive +inspect --node <dentryUuid> --format json` 回读元数据。
 - 删除、覆盖、移动等破坏性操作必须确认；上传、创建文件夹、下载后要读回或列目录验证。
 - 所有 `dws drive` 命令加 `--format json`。
 

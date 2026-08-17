@@ -1691,6 +1691,12 @@ func TestCrossPlatformCoverageUpdateVerificationNormalizesMarkdownRoundTrip(t *t
 	if verifyUpdatedDocumentContent(map[string]any{"markdown": "1. 完成率达到 39%\n2. 覆盖 18 个区域。"}, orderedFacts, "overwrite", "markdown") {
 		t.Fatal("ordered list with a changed number passed semantic verification")
 	}
+	if verifyUpdatedDocumentContent(map[string]any{"markdown": "2027. 年度报告"}, "2026. 年度报告", "overwrite", "markdown") {
+		t.Fatal("changed year was treated as an equivalent ordered-list marker")
+	}
+	if !verifyUpdatedDocumentContent(map[string]any{"markdown": "10. 第十项"}, "10) 第十项", "overwrite", "markdown") {
+		t.Fatal("same multi-digit ordered-list ordinal with renderer punctuation change did not verify")
+	}
 	if verifyUpdatedDocumentContent(map[string]any{"markdown": "1. 完成率变化 10%\n2. 覆盖 18 个区域。"}, "1) 完成率变化 -10%；2) 覆盖 18 个区域。", "overwrite", "markdown") {
 		t.Fatal("ordered list with a changed numeric sign passed semantic verification")
 	}
@@ -2417,8 +2423,20 @@ func TestCrossPlatformCoverageVersionRoutesAreCanonicalAndHistoryRoutesAreCompat
 	if VersionSave.Command != "+version-save" || VersionSave.Safety.Confirmation != "user_required" {
 		t.Errorf("version-save command/confirmation = %s/%s", VersionSave.Command, VersionSave.Safety.Confirmation)
 	}
-	if compatHistorySave.Safety.Confirmation != "not_required" {
+	if compatHistorySave.Safety.Confirmation != "user_required" {
 		t.Errorf("history-save compatibility confirmation = %s", compatHistorySave.Safety.Confirmation)
+	}
+	unconfirmed := &docCoverageCaller{responses: map[string][]map[string]any{
+		"save_doc_version": {{"version": 1}},
+	}}
+	if err := runDocCoverage(t, compatHistorySave, unconfirmed, "--node", "n"); err == nil || !strings.Contains(err.Error(), "需要用户确认") || unconfirmed.calls != 0 {
+		t.Fatalf("history-save without confirmation err=%v calls=%d", err, unconfirmed.calls)
+	}
+	confirmed := &docCoverageCaller{responses: map[string][]map[string]any{
+		"save_doc_version": {{"version": 1}},
+	}}
+	if err := runDocCoverage(t, compatHistorySave, confirmed, "--node", "n", "--yes"); err != nil || confirmed.calls != 1 {
+		t.Fatalf("confirmed history-save err=%v calls=%d", err, confirmed.calls)
 	}
 	if VersionRevert.Command != "+version-revert" || VersionRevert.Execute == nil {
 		t.Errorf("version-revert canonical smart route is incomplete")

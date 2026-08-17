@@ -65,7 +65,6 @@ func canonicalizeHistoryShortcuts() {
 	VersionRevert.Execute = executeHistoryRevert
 
 	compatHistorySave = compatibilityHistoryShortcut(VersionSave, "+history-save", "+version-save")
-	compatHistorySave.Safety = contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"}
 	compatHistoryList = compatibilityHistoryShortcut(VersionList, "+history-list", "+version-list")
 	compatHistoryRevert = compatibilityHistoryShortcut(VersionRevert, "+history-revert", "+version-revert")
 	compatHistoryRevert.Risk = shortcut.RiskHighWrite

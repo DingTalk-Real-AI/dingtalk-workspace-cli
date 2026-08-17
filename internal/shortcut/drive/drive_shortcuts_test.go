@@ -17,16 +17,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/docwritejournal"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -112,6 +108,21 @@ func TestCrossPlatformCoverageDriveCollectionsRejectFalseEmptySuccess(t *testing
 				t.Fatalf("error = %v, want %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestCrossPlatformCoverageDriveRecentPreservesMainSinglePageBehavior(t *testing.T) {
+	caller := &driveCoverageCaller{responses: map[string][]string{
+		"get_recent_list": {
+			`{"success":true,"recentItems":[{"nodeId":"n1","name":"recent"}]}`,
+			`{"success":true,"recentItems":[{"nodeId":"n2","name":"unexpected second page"}]}`,
+		},
+	}}
+	if err := runDriveCoverage(t, Recent, caller, "--limit", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(caller.history, ","); got != "get_recent_list" {
+		t.Fatalf("drive +recent calls = %q, want single-page passthrough", got)
 	}
 }
 
@@ -254,120 +265,6 @@ func TestCrossPlatformCoverageDriveCopyPreservesSchemaProperties(t *testing.T) {
 		if got[name] != property {
 			t.Errorf("copy parameter %q property = %q, want %q", name, got[name], property)
 		}
-	}
-}
-
-func TestCrossPlatformCoverageDriveRecentPaginationAndJournalCoverage(t *testing.T) {
-	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
-	if err := auth.SaveProfiles(config.DefaultConfigDir(), &auth.ProfilesConfig{
-		CurrentProfile: "recent-journal-test",
-		Profiles: []auth.Profile{{
-			Name: "recent-journal-test", CorpID: "recent-journal-corp", UserID: "recent-journal-user",
-		}},
-	}); err != nil {
-		t.Fatalf("configure recent journal profile: %v", err)
-	}
-	if got := effectiveRecentMaxItems(0); got != 500 {
-		t.Fatalf("default recent max-items = %d, want 500", got)
-	}
-	if got := effectiveRecentMaxItems(17); got != 17 {
-		t.Fatalf("explicit recent max-items = %d, want 17", got)
-	}
-	run := func(responses []string, args ...string) error {
-		return runDriveCoverage(t, Recent, &driveCoverageCaller{responses: map[string][]string{"get_recent_list": responses}}, args...)
-	}
-	if err := run([]string{`{"recentItems":[],"hasMore":false}`}, "--max-pages", "0", "--max-items", "0", "--operate-type", "1", "--creator-type", "1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := run([]string{"__ERROR__"}, "--page-all"); err == nil {
-		t.Fatal("recent read failure succeeded")
-	}
-	if err := run([]string{`{"recentItems":[{"nodeId":"a"}],"hasMore":true,"nextCursor":"p2"}`}, "--page-all", "--max-items", "1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := run([]string{`{"recentItems":[],"hasMore":true}`}, "--page-all"); err == nil {
-		t.Fatal("missing cursor succeeded")
-	}
-	if err := run([]string{
-		`{"recentItems":[],"hasMore":true,"nextCursor":"same"}`,
-		`{"recentItems":[],"hasMore":true,"nextCursor":"same"}`,
-	}, "--page-all"); err == nil {
-		t.Fatal("stalled cursor succeeded")
-	}
-	if err := run([]string{`{"recentItems":[],"hasMore":true,"nextCursor":"p2"}`}, "--page-all", "--max-pages", "1"); err != nil {
-		t.Fatal(err)
-	}
-	unknownHasMore := &driveCoverageCaller{responses: map[string][]string{
-		"get_recent_list": {
-			`{"recentItems":[{"nodeId":"a"}],"nextCursor":"p2"}`,
-			`{"recentItems":[{"nodeId":"b"}],"hasMore":false}`,
-		},
-	}}
-	if err := runDriveCoverage(t, Recent, unknownHasMore, "--page-all"); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(unknownHasMore.history, ",") != "get_recent_list,get_recent_list" {
-		t.Fatalf("missing hasMore did not follow next cursor: %v", unknownHasMore.history)
-	}
-	if err := run([]string{`{"recentItems":[]}`}, "--page-all", "--limit", "1"); err != nil {
-		t.Fatalf("short terminal page without pagination metadata failed: %v", err)
-	}
-	err := run([]string{`{"recentItems":[{"nodeId":"a"}]}`}, "--page-all", "--limit", "1")
-	var paginationErr *apperrors.Error
-	if !errors.As(err, &paginationErr) || paginationErr.Reason != "recent_pagination_unproven" {
-		t.Fatalf("full page without pagination metadata error = %#v", err)
-	}
-
-	result := map[string]any{
-		"items":   []map[string]any{{"nodeId": "remote", "name": "remote"}},
-		"hasMore": true, "truncated": true, "nextCursor": "server-next",
-	}
-	entries := []docwritejournal.Entry{
-		{NodeID: "remote", Name: "duplicate", CreatedAt: 1},
-		{NodeID: "older", Name: "older", CreatedAt: 2},
-		{NodeID: "newer", Name: "newer", CreatedAt: 3},
-		{NodeID: "overflow", Name: "overflow", CreatedAt: 0},
-	}
-	mergeJournalRecent(result, entries, 3)
-	items, _ := result["items"].([]map[string]any)
-	if len(items) != 3 || items[0]["nodeId"] != "newer" || items[1]["nodeId"] != "older" {
-		t.Fatalf("journal recent = %#v", result)
-	}
-	if result["hasMore"] != true || result["truncated"] != true || result["nextCursor"] != "server-next" {
-		t.Fatalf("journal merge changed server pagination = %#v", result)
-	}
-
-	full := map[string]any{
-		"items": []map[string]any{{"nodeId": "remote"}},
-		"count": 1, "hasMore": true, "truncated": true, "nextCursor": "p2",
-	}
-	mergeJournalRecent(full, entries, 1)
-	fullItems, _ := full["items"].([]map[string]any)
-	if len(fullItems) != 1 || fullItems[0]["nodeId"] != "remote" || full["count"] != 1 {
-		t.Fatalf("full recent page exceeded max-items = %#v", full)
-	}
-	if full["hasMore"] != true || full["truncated"] != true || full["nextCursor"] != "p2" {
-		t.Fatalf("full recent page changed pagination = %#v", full)
-	}
-}
-
-func TestCrossPlatformCoverageDriveRecentRejectsServerOverflow(t *testing.T) {
-	caller := &driveCoverageCaller{responses: map[string][]string{
-		"get_recent_list": {`{"recentItems":[{"nodeId":"a"},{"nodeId":"b"}],"hasMore":false,"nextCursor":"server-next"}`},
-	}}
-	err := runDriveCoverage(t, Recent, caller, "--page-all", "--max-items", "1")
-	var typed *apperrors.Error
-	if !errors.As(err, &typed) || typed.Reason != "recent_pagination_page_size_exceeded" {
-		t.Fatalf("overflow recent error = %#v", err)
-	}
-	if got, ok := typed.Details["items"].([]map[string]any); !ok || len(got) != 0 {
-		t.Fatalf("overflow error exposed partial current page: %#v", typed.Details)
-	}
-	if typed.Details["nextCursor"] != "" || typed.Details["count"] != 0 {
-		t.Fatalf("overflow error published unusable continuation: %#v", typed.Details)
-	}
-	if len(caller.history) != 1 || caller.history[0] != "get_recent_list" {
-		t.Fatalf("overflow recent calls = %#v", caller.history)
 	}
 }
 

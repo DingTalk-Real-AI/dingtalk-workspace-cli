@@ -965,7 +965,7 @@ var TemplateList = shortcut.Shortcut{
 		if rt.Changed("limit") && !rt.Changed("max-items") {
 			maxItems = pageSize
 		}
-		candidates, complete, truncated, nextCursor, pagesRead, err := collectTemplatePages(rt, "list_doc_templates", params, docPageOptions{
+		candidates, complete, truncated, nextCursor, stopReason, pagesRead, err := collectTemplatePages(rt, "list_doc_templates", params, docPageOptions{
 			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: maxItems, Cursor: rt.Str("cursor"),
 		})
 		if err != nil {
@@ -973,7 +973,7 @@ var TemplateList = shortcut.Shortcut{
 		}
 		return rt.Output(docEnvelope("doc.template_list", map[string]any{
 			"source": rt.Str("source"), "count": len(candidates), "templates": candidates,
-			"complete": complete, "truncated": truncated, "hasMore": !complete, "nextCursor": nextCursor, "pagesRead": pagesRead,
+			"complete": complete, "truncated": truncated, "hasMore": !complete, "nextCursor": nextCursor, "stopReason": stopReason, "pagesRead": pagesRead,
 		}))
 	},
 }
@@ -1033,7 +1033,7 @@ var TemplateSearch = shortcut.Shortcut{
 		if v := rt.Str("source"); v != "" {
 			params["templateSource"] = v
 		}
-		candidates, complete, truncated, nextCursor, pagesRead, err := collectTemplatePages(rt, "search_doc_templates", params, docPageOptions{
+		candidates, complete, truncated, nextCursor, stopReason, pagesRead, err := collectTemplatePages(rt, "search_doc_templates", params, docPageOptions{
 			PageAll: rt.Bool("page-all"), PageSize: pageSize, MaxPages: rt.Int("max-pages"), MaxItems: maxItems, Cursor: rt.Str("cursor"),
 		})
 		if err != nil {
@@ -1064,6 +1064,7 @@ var TemplateSearch = shortcut.Shortcut{
 			"pagesRead":  pagesRead,
 			"hasMore":    !complete,
 			"nextCursor": nextCursor,
+			"stopReason": stopReason,
 			"selection": map[string]any{
 				"status":     status,
 				"templateId": selectedTemplateID,

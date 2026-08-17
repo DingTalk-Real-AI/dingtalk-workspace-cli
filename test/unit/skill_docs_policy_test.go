@@ -658,6 +658,11 @@ func TestCrossPlatformCoverageDocumentRoutingContractsStayAligned(t *testing.T) 
 	if !strings.Contains(driveSkill, "dws drive +create-folder") || !strings.Contains(driveSkill, "drive +move --node") || !strings.Contains(driveSkill, "dws drive +inspect --node") {
 		t.Error("Drive Skill does not publish the folder -> move -> info storage flow")
 	}
+	for _, required := range []string{"dws drive list --workspace", "不得把文档空间节点误传给钉盘 Shortcut"} {
+		if !strings.Contains(driveSkill, required) {
+			t.Errorf("Drive Skill missing document-space storage route %q", required)
+		}
+	}
 	for _, required := range []string{"生成文档", "本地", ".md", "在线"} {
 		if !strings.Contains(docSkill, required) || !strings.Contains(routing, required) {
 			t.Errorf("online-document/local-Markdown boundary missing %q", required)

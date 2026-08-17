@@ -822,7 +822,16 @@ func runMediaInsert(cmd *cobra.Command, _ []string) error {
 		)
 	}
 
-	insertedBlockID := docResponseString(insertText, "blockId", "elementId", "id")
+	insertResult := map[string]any{}
+	if strings.TrimSpace(insertText) != "" {
+		if err := json.Unmarshal([]byte(insertText), &insertResult); err != nil {
+			return docMediaInsertVerificationError(
+				nodeID, resourceID, resourceURL, fileName, mediaKind, "", position,
+				fmt.Errorf("解析 insert_document_block 响应失败: %w", err),
+			)
+		}
+	}
+	insertedBlockID := insertedDocBlockID(insertResult)
 	deps.Out.PrintInfo("[4/4] 回读验证插入结果...")
 	verificationAttempts := 0
 	var verificationCause error
@@ -958,31 +967,19 @@ func docMediaInsertVerificationError(nodeID, resourceID, resourceURL, fileName, 
 	)
 }
 
-func docResponseString(text string, keys ...string) string {
-	var payload any
-	if strings.TrimSpace(text) == "" || json.Unmarshal([]byte(text), &payload) != nil {
-		return ""
+// insertedDocBlockID only accepts explicit block IDs from the insert result or
+// known response wrappers. Arbitrary IDs may belong to the document, operator,
+// or request and must not become a hard constraint for the media readback.
+func insertedDocBlockID(data map[string]any) string {
+	for _, key := range []string{"blockId", "elementId"} {
+		if text, ok := data[key].(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
 	}
-	return docNestedString(payload, keys...)
-}
-
-func docNestedString(value any, keys ...string) string {
-	switch typed := value.(type) {
-	case map[string]any:
-		for _, key := range keys {
-			if result, ok := typed[key].(string); ok && strings.TrimSpace(result) != "" {
-				return strings.TrimSpace(result)
-			}
-		}
-		for _, child := range typed {
-			if result := docNestedString(child, keys...); result != "" {
-				return result
-			}
-		}
-	case []any:
-		for _, child := range typed {
-			if result := docNestedString(child, keys...); result != "" {
-				return result
+	for _, wrapper := range []string{"result", "data", "content"} {
+		if inner, ok := data[wrapper].(map[string]any); ok {
+			if text := insertedDocBlockID(inner); text != "" {
+				return text
 			}
 		}
 	}
