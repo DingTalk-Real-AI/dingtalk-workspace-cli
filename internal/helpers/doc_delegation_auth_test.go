@@ -151,6 +151,11 @@ func TestCrossPlatformCoverageDocDelegationAuthDeniedWithMessage(t *testing.T) {
 	if !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_DENIED]") {
 		t.Fatalf("Error() = %q, want [DELEGATION_AUTH_DENIED] prefix", err.Error())
 	}
+	// 退出码契约：渲染侧 apperrors.ExitCode 经 errors.As 穿透 CLIError.Cause
+	// 命中 CategoryAPI，恢复退出码 1（缺失 Cause 时未知码会退化为 rc=5）。
+	if code := apperrors.ExitCode(err); code != apperrors.ExitCodeAPI {
+		t.Fatalf("ExitCode() = %d, want %d", code, apperrors.ExitCodeAPI)
+	}
 	// 守卫：CLIError 外壳必须在 WrapErrorWithOperation 直通分支原样返回，
 	// 防止未来有人移除直通分支时拒绝错误被模式分类重包装成 MCP_TOOL_ERROR。
 	if passthrough := WrapErrorWithOperation(err, "doc/update_document"); passthrough != err {
@@ -171,6 +176,36 @@ func TestCrossPlatformCoverageDocDelegationAuthDeniedFallsBackToReason(t *testin
 	_, err := d.CallTool(context.Background(), "doc", "update_document", nil)
 	if err == nil || !strings.Contains(err.Error(), "NO_PERM") {
 		t.Fatalf("error = %v, want fallback to denialReason", err)
+	}
+}
+
+// TestCrossPlatformCoverageDocDelegationAuthDeniedSurvivesRealPipeline 把拒绝
+// 外壳推经 helpers 层真实出口漏斗 parseMCPToolTextResult（helpers.go 工具调用
+// 统一的 err 出口形态：先 reclassifyPATFromError、再 WrapError），断言返回的
+// 仍是同一个 *CLIError 实例且 Code 未被改写。这是无需 stub 框架 runner 的
+// 最窄真实接缝：PAT 重分类对非 PAT 文案返回 nil，随后 WrapError 命中
+// CLIError 直通分支，两层均不得改写拒绝外壳。
+func TestCrossPlatformCoverageDocDelegationAuthDeniedSurvivesRealPipeline(t *testing.T) {
+	inner := newDocDelegationTestCaller()
+	inner.checkRes = textToolResult(`{"allowed":false,"denialReason":"NO_PERM","denialMessage":"没有该文档的委托权限"}`)
+	d := newDocDelegationAuthDecorator(inner)
+	_, err := d.CallTool(context.Background(), "doc", "update_document", map[string]any{"nodeId": "n1"})
+	if err == nil {
+		t.Fatal("CallTool() error = nil, want denial error")
+	}
+	text, pipeErr := parseMCPToolTextResult("doc", "update_document", nil, err)
+	if text != "" {
+		t.Fatalf("parseMCPToolTextResult() text = %q, want empty on error", text)
+	}
+	if pipeErr != err {
+		t.Fatalf("parseMCPToolTextResult() error = %v (%T), want the same denial instance (%T)", pipeErr, pipeErr, err)
+	}
+	var cliErr *CLIError
+	if !errors.As(pipeErr, &cliErr) || cliErr.Code != codeDelegationDenied {
+		t.Fatalf("pipeline error = %v, want unchanged Code %q", pipeErr, codeDelegationDenied)
+	}
+	if strings.Contains(pipeErr.Error(), "MCP_TOOL_ERROR") {
+		t.Fatalf("pipeline error = %q, must not carry MCP_TOOL_ERROR", pipeErr.Error())
 	}
 }
 
@@ -301,11 +336,41 @@ func TestCrossPlatformCoverageDocDelegationAuthMarkdownServerIntercepted(t *test
 
 func TestCrossPlatformCoverageDocDelegationAuthCheckCallFails(t *testing.T) {
 	inner := newDocDelegationTestCaller()
-	inner.checkErr = errors.New("check boom")
+	// 底层错误文本故意包含 "tool"：裸 fmt.Errorf 会被 WrapErrorWithOperation
+	// 的 "tool" 模式重分类成 MCP_TOOL_ERROR，外壳必须阻止这种重包装。
+	inner.checkErr = errors.New("tool check boom")
 	d := newDocDelegationAuthDecorator(inner)
 	_, err := d.CallTool(context.Background(), "doc", "update_document", nil)
-	if err == nil || !strings.Contains(err.Error(), "委托鉴权校验失败") || !errors.Is(err, inner.checkErr) {
-		t.Fatalf("error = %v, want wrapped check failure", err)
+	if err == nil {
+		t.Fatal("CallTool() error = nil, want wrapped check failure")
+	}
+	if !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_CHECK_FAILED]") {
+		t.Fatalf("Error() = %q, want [DELEGATION_AUTH_CHECK_FAILED] prefix", err.Error())
+	}
+	if !strings.Contains(err.Error(), "委托鉴权校验失败: tool check boom") {
+		t.Fatalf("Error() = %q, want underlying error text preserved", err.Error())
+	}
+	if strings.Contains(err.Error(), "MCP_TOOL_ERROR") {
+		t.Fatalf("Error() = %q, must not carry MCP_TOOL_ERROR", err.Error())
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Category != apperrors.CategoryAPI {
+		t.Fatalf("error = %v, want structured API-category error", err)
+	}
+	if typed.Reason != "delegation_check_failed" {
+		t.Fatalf("Reason = %q, want delegation_check_failed", typed.Reason)
+	}
+	if code := apperrors.ExitCode(err); code != apperrors.ExitCodeAPI {
+		t.Fatalf("ExitCode() = %d, want %d", code, apperrors.ExitCodeAPI)
+	}
+	// WithCause 保留底层错误链：errors.Is 仍能命中原始错误。
+	if !errors.Is(err, inner.checkErr) {
+		t.Fatalf("error = %v, want underlying checkErr in the chain", err)
+	}
+	// 守卫：外壳必须在 WrapErrorWithOperation 直通分支原样返回，防止底层
+	// 文本命中 "tool" 模式时被重包装成 MCP_TOOL_ERROR。
+	if passthrough := WrapErrorWithOperation(err, "doc/update_document"); passthrough != err {
+		t.Fatalf("WrapErrorWithOperation() = %v, want the check-failure shell passed through unchanged", passthrough)
 	}
 	if len(inner.calls) != 1 {
 		t.Fatalf("calls = %d, want 1 (stop after check failure)", len(inner.calls))
@@ -384,8 +449,19 @@ func TestCrossPlatformCoverageDocDelegationAuthReadCallDenied(t *testing.T) {
 	readInner.checkRes = textToolResult(`{"allowed":false,"denialReason":"NO_PERM"}`)
 	d := newDocDelegationAuthDecorator(readInner)
 	wrapped := wrapDocDelegationAuthCaller(d, readInner).(*docDelegationAuthReadCaller)
-	if _, err := wrapped.CallReadTool(context.Background(), "wiki", "list_nodes", nil); err == nil {
+	_, err := wrapped.CallReadTool(context.Background(), "wiki", "list_nodes", nil)
+	if err == nil {
 		t.Fatal("CallReadTool() error = nil, want denial")
+	}
+	if !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_DENIED]") {
+		t.Fatalf("Error() = %q, want [DELEGATION_AUTH_DENIED] prefix", err.Error())
+	}
+	if strings.Contains(err.Error(), "MCP_TOOL_ERROR") {
+		t.Fatalf("Error() = %q, must not carry MCP_TOOL_ERROR", err.Error())
+	}
+	// 读通道拒绝同样依赖 WrapError 的 CLIError 直通分支，不得被模式分类改写。
+	if passthrough := WrapError(err); passthrough != err {
+		t.Fatalf("WrapError() = %v, want the denial shell passed through unchanged", passthrough)
 	}
 	if len(readInner.readCalls) != 0 {
 		t.Fatalf("readCalls = %#v, want read blocked on denial", readInner.readCalls)

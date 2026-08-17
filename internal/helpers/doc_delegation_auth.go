@@ -41,6 +41,12 @@ const (
 	// 结构化 apperrors 错误（CategoryAPI），由渲染侧 errors.As 穿透 Cause 链
 	// 恢复 category=api、reason 与退出码 1；缺失 Cause 时未知码会退化为 rc=5。
 	codeDelegationDenied = "DELEGATION_AUTH_DENIED"
+	// codeDelegationCheckFailed 是 check_capability 调用本身失败（网络异常、
+	// 服务端错误等）时的本地错误码，与 codeDelegationDenied 同样使用 CLIError
+	// 外壳 + CategoryAPI Cause 的直通形态：裸 fmt.Errorf 会被
+	// WrapErrorWithOperation 模式分类重包装（底层文本含 "tool" 时透出
+	// MCP_TOOL_ERROR 前缀且退出码不确定），外壳则保证 category=api 与退出码 1。
+	codeDelegationCheckFailed = "DELEGATION_AUTH_CHECK_FAILED"
 )
 
 // docBusinessServers 文档业务域服务器白名单：仅这些 server 上的工具调用会触发
@@ -134,7 +140,15 @@ func (d *docDelegationAuthCaller) performDelegationAuth(ctx context.Context, too
 	}
 	result, err := d.inner.CallTool(ctx, capabilityServerID, checkCapTool, checkArgs)
 	if err != nil {
-		return fmt.Errorf("委托鉴权校验失败: %w", err)
+		msg := fmt.Sprintf("委托鉴权校验失败: %v", err)
+		check := apperrors.NewAPI(msg,
+			apperrors.WithReason("delegation_check_failed"),
+			// WithCause 保留底层错误链（CLIError→apperrors.Error→底层错误），
+			// errors.Is/As 仍可命中原始错误；Cause 必须是 *apperrors.Error
+			// （CategoryAPI）以保证渲染侧退出码恢复为 1。
+			apperrors.WithCause(err),
+		)
+		return &CLIError{Code: codeDelegationCheckFailed, Message: msg, Cause: check}
 	}
 	return parseCheckResult(d.principalID, result)
 }
