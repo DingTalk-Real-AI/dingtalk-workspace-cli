@@ -9,7 +9,9 @@
 - <!-- dws-intent: chat.conversation.list-top -->查看置顶会话默认使用 `dws chat +conversation-list-top`；
   原子 `list-top-conversations` 只在需要原始响应时作为 fallback。
 - <!-- dws-intent: chat.read.conversation -->取得目标会话后读取或导出消息记录，默认使用 `dws chat +chat-messages`；
-  可附带非必填的 `--sender-query` 解析姓名：无稳定 ID 返回全部，唯一解析成功后按 `senderId` 筛选同一次读取结果。不要回到原子 `message list`，也不要补跑 `+search-msg`。直接条件检索优先使用 `+search-msg`。
+  可附带非必填的 `--sender-query` 解析姓名：唯一解析成功后按 `senderId` 筛选同一次读取结果；
+  解析失败、不完整或存在歧义时抑制未过滤消息并返回 `sender_resolution_failed`。不要回到原子
+  `message list`，也不要补跑 `+search-msg`。直接条件检索优先使用 `+search-msg`。
 
 ## 必读约束
 
