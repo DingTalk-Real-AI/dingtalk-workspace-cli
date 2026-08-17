@@ -618,15 +618,11 @@ func completeMinutesUpload(rt *shortcut.RuntimeContext, sessionID string, timeou
 		}
 		message := strings.ToLower(err.Error())
 		retryable := strings.Contains(message, "still uploading") || strings.Contains(message, "wait and retry") || strings.Contains(message, "正在上传")
-		if !retryable || time.Now().Add(interval).After(deadline) {
+		if !retryable || minutesPollDeadlineReached(deadline, interval) {
 			return nil, attempts, err
 		}
-		timer := time.NewTimer(interval)
-		select {
-		case <-rt.Command().Context().Done():
-			timer.Stop()
-			return nil, attempts, rt.Command().Context().Err()
-		case <-timer.C:
+		if err := waitMinutesInterval(rt, interval); err != nil {
+			return nil, attempts, err
 		}
 	}
 }

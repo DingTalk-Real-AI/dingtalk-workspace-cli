@@ -52,6 +52,8 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 	switch tool {
 	case "list_calendar_events":
 		return `{"result":{"events":[]}}`
+	case "query_records":
+		return `{"success":true,"status":"success","error":{},"data":{}}`
 	case "search_mail_users":
 		return `{"users":[{"name":"Fixture User","email":"fixture@example.com","id":"fixture-user"}]}`
 	case "search_dept_by_keyword":
