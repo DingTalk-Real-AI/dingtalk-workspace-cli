@@ -145,8 +145,16 @@ func TestCrossPlatformCoverageDocDelegationAuthDeniedWithMessage(t *testing.T) {
 	if strings.Contains(typed.Message, "doc.update_document") {
 		t.Fatalf("Message = %q, must not leak internal toolKey", typed.Message)
 	}
-	if strings.Contains(err.Error(), "[") {
-		t.Fatalf("Error() = %q, must not carry technical [CODE] prefix", err.Error())
+	if strings.Contains(err.Error(), "MCP_TOOL_ERROR") {
+		t.Fatalf("Error() = %q, must not carry MCP_TOOL_ERROR", err.Error())
+	}
+	if !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_DENIED]") {
+		t.Fatalf("Error() = %q, want [DELEGATION_AUTH_DENIED] prefix", err.Error())
+	}
+	// 守卫：CLIError 外壳必须在 WrapErrorWithOperation 直通分支原样返回，
+	// 防止未来有人移除直通分支时拒绝错误被模式分类重包装成 MCP_TOOL_ERROR。
+	if passthrough := WrapErrorWithOperation(err, "doc/update_document"); passthrough != err {
+		t.Fatalf("WrapErrorWithOperation() = %v, want the denial error passed through unchanged", passthrough)
 	}
 	if len(inner.calls) != 1 {
 		t.Fatalf("calls = %d, want 1 (original tool must not run)", len(inner.calls))

@@ -36,6 +36,11 @@ const (
 	// command prefixes, so it is only reachable by explicit server ID.
 	capabilityServerID = "drive-internal"
 	checkCapTool       = "check_capability"
+	// codeDelegationDenied 是本文件私有的本地错误码，仅用于委托鉴权拒绝的
+	// CLIError 外壳。它不进入 errors.go 的公共错误码表：外壳依赖 Cause 携带
+	// 结构化 apperrors 错误（CategoryAPI），由渲染侧 errors.As 穿透 Cause 链
+	// 恢复 category=api、reason 与退出码 1；缺失 Cause 时未知码会退化为 rc=5。
+	codeDelegationDenied = "DELEGATION_AUTH_DENIED"
 )
 
 // docBusinessServers 文档业务域服务器白名单：仅这些 server 上的工具调用会触发
@@ -140,12 +145,13 @@ type checkCapabilityResponse struct {
 }
 
 // parseCheckResult 解析 check_capability 响应；allowed=false 时返回携带
-// denialMessage（为空时回退 denialReason）的结构化 API 错误。报错文案保持
+// denialMessage（为空时回退 denialReason）的拒绝错误。报错文案保持
 // 用户视角：只透出委托人 ID 与服务端拒绝原因，不透出 toolKey 等 MCP 内部
-// 实现细节（排查信息由 --verbose 输出与审计日志承担）。这里用
-// apperrors.NewAPI 而非 CLIError：委托鉴权拒绝是服务端业务性拒绝，应呈现
-// category=api/code=1；CLIError 走 PrintJSON 时 category 会兜底成 internal
-// 且 Error() 带 [CODE] 技术前缀，与 code=1 自相矛盾。
+// 实现细节（排查信息由 --verbose 输出与审计日志承担）。这里返回 CLIError
+// 外壳 + 结构化 Cause 而非裸 apperrors：外壳在 WrapErrorWithOperation 第一
+// 分支直通，不会被模式分类二次包装（杜绝 MCP_TOOL_ERROR 等技术前缀）；
+// 渲染侧经 errors.As 穿透 Cause 链恢复 category=api、reason=delegation_denied
+// 与退出码 1，故 Cause 必填不可省略。
 func parseCheckResult(principalID string, result *edition.ToolResult) error {
 	if result == nil {
 		return fmt.Errorf("委托鉴权校验返回 nil result")
@@ -165,14 +171,13 @@ func parseCheckResult(principalID string, result *edition.ToolResult) error {
 		return fmt.Errorf("解析委托鉴权校验响应失败: %w", err)
 	}
 	if !parsed.Allowed {
-		msg := parsed.DenialMessage
-		if strings.TrimSpace(msg) == "" {
-			msg = parsed.DenialReason
+		detail := parsed.DenialMessage
+		if strings.TrimSpace(detail) == "" {
+			detail = parsed.DenialReason
 		}
-		return apperrors.NewAPI(
-			fmt.Sprintf("委托鉴权未通过（委托人 %s）: %s", principalID, msg),
-			apperrors.WithReason("delegation_denied"),
-		)
+		msg := fmt.Sprintf("委托鉴权未通过（委托人 %s）: %s", principalID, detail)
+		denial := apperrors.NewAPI(msg, apperrors.WithReason("delegation_denied"))
+		return &CLIError{Code: codeDelegationDenied, Message: msg, Cause: denial}
 	}
 	return nil
 }
