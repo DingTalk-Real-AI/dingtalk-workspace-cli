@@ -42,10 +42,12 @@ const (
 	// 恢复 category=api、reason 与退出码 1；缺失 Cause 时未知码会退化为 rc=5。
 	codeDelegationDenied = "DELEGATION_AUTH_DENIED"
 	// codeDelegationCheckFailed 是 check_capability 调用本身失败（网络异常、
-	// 服务端错误等）时的本地错误码，与 codeDelegationDenied 同样使用 CLIError
-	// 外壳 + CategoryAPI Cause 的直通形态：裸 fmt.Errorf 会被
-	// WrapErrorWithOperation 模式分类重包装（底层文本含 "tool" 时透出
-	// MCP_TOOL_ERROR 前缀且退出码不确定），外壳则保证 category=api 与退出码 1。
+	// 服务端错误等）或响应异常（nil result、空响应、JSON 解析失败）时的本地
+	// 错误码，与 codeDelegationDenied 同样使用 CLIError 外壳 + CategoryAPI
+	// Cause 的直通形态：裸 fmt.Errorf 会被 WrapErrorWithOperation 模式分类
+	// 重包装（底层文本含 "tool" 时透出 MCP_TOOL_ERROR 前缀；解析失败文案命中
+	// JSON 模式 → INPUT_INVALID_JSON 退出码 3、其余 → UNCLASSIFIED 退出码 5，
+	// 同类故障退出码分裂），外壳则统一保证 category=api 与退出码 1。
 	codeDelegationCheckFailed = "DELEGATION_AUTH_CHECK_FAILED"
 )
 
@@ -61,13 +63,15 @@ var docBusinessServers = map[string]bool{
 // extractNodeId 从工具入参中提取资源标识。服务端 nodeId 统一承载节点
 // （dentryUuid/URL）与知识库（纯数字 ID/URL），由服务端自动识别类型分流，
 // 因此这里只需按优先级取第一个非空 string：
-//   - 优先级 1（节点/文件标识）：nodeId → fileId → node_id
+//   - 优先级 1（节点/文件标识）：nodeId → fileId → node_id → overwriteFileId
+//     → overwriteNodeId（覆盖上传场景下 step1 入参排他地携带 overwrite 键，
+//     缺失时 check 请求不带 nodeId、会被服务端 52600007 误拒）
 //   - 优先级 2（知识库/空间标识）：workspaceId → spaceId → workspace_id → space_id
 //
 // 全部缺失时返回 ""（调用方仍会发起鉴权，由服务端返回明确错误）。
 func extractNodeId(args map[string]any) string {
 	for _, key := range []string{
-		"nodeId", "fileId", "node_id",
+		"nodeId", "fileId", "node_id", "overwriteFileId", "overwriteNodeId",
 		"workspaceId", "spaceId", "workspace_id", "space_id",
 	} {
 		if v, ok := args[key].(string); ok && v != "" {
@@ -160,17 +164,32 @@ type checkCapabilityResponse struct {
 	DenialMessage string `json:"denialMessage"`
 }
 
+// checkBadResponseError 统一包装 check_capability 响应异常（nil result、空
+// 响应、JSON 解析失败）为与 check 调用失败同构的 CLIError 外壳：Code 同为
+// codeDelegationCheckFailed，Message 为简短事实文案，Cause 是携带同消息与
+// reason=delegation_check_bad_response 的 CategoryAPI 结构化错误，渲染侧经
+// errors.As 穿透 Cause 链恢复 category=api 与退出码 1。detail 中已全文嵌入
+// 底层错误（仓库惯例：底层错误全文嵌入 Message，不做截断）。
+func checkBadResponseError(detail string) error {
+	msg := "委托鉴权校验失败: check_capability " + detail
+	return &CLIError{
+		Code:    codeDelegationCheckFailed,
+		Message: msg,
+		Cause:   apperrors.NewAPI(msg, apperrors.WithReason("delegation_check_bad_response")),
+	}
+}
+
 // parseCheckResult 解析 check_capability 响应；allowed=false 时返回携带
 // denialMessage（为空时回退 denialReason）的拒绝错误。报错文案保持
 // 用户视角：只透出委托人 ID 与服务端拒绝原因，不透出 toolKey 等 MCP 内部
-// 实现细节（排查信息由 --verbose 输出与审计日志承担）。这里返回 CLIError
-// 外壳 + 结构化 Cause 而非裸 apperrors：外壳在 WrapErrorWithOperation 第一
-// 分支直通，不会被模式分类二次包装（杜绝 MCP_TOOL_ERROR 等技术前缀）；
-// 渲染侧经 errors.As 穿透 Cause 链恢复 category=api、reason=delegation_denied
-// 与退出码 1，故 Cause 必填不可省略。
+// 实现细节（排查信息由 --verbose 输出与审计日志承担）。所有错误路径一律
+// 返回 CLIError 外壳 + 结构化 Cause 而非裸 apperrors/fmt.Errorf：外壳在
+// WrapErrorWithOperation 第一分支直通，不会被模式分类二次包装（杜绝
+// MCP_TOOL_ERROR 等技术前缀与退出码分裂）；渲染侧经 errors.As 穿透 Cause
+// 链恢复 category=api、reason 与退出码 1，故 Cause 必填不可省略。
 func parseCheckResult(principalID string, result *edition.ToolResult) error {
 	if result == nil {
-		return fmt.Errorf("委托鉴权校验返回 nil result")
+		return checkBadResponseError("返回空结果")
 	}
 	text := ""
 	for _, c := range result.Content {
@@ -180,11 +199,11 @@ func parseCheckResult(principalID string, result *edition.ToolResult) error {
 		}
 	}
 	if text == "" {
-		return fmt.Errorf("委托鉴权校验返回空响应")
+		return checkBadResponseError("返回空响应")
 	}
 	var parsed checkCapabilityResponse
 	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
-		return fmt.Errorf("解析委托鉴权校验响应失败: %w", err)
+		return checkBadResponseError(fmt.Sprintf("响应解析失败: %v", err))
 	}
 	if !parsed.Allowed {
 		detail := parsed.DenialMessage

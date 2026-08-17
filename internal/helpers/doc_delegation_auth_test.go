@@ -218,12 +218,21 @@ func TestCrossPlatformCoverageDocDelegationAuthExtractNodeID(t *testing.T) {
 		{"nodeId", map[string]any{"nodeId": "n1"}, "n1"},
 		{"fileId", map[string]any{"fileId": "f1"}, "f1"},
 		{"node_id", map[string]any{"node_id": "n2"}, "n2"},
+		{"overwriteFileId", map[string]any{"overwriteFileId": "of1"}, "of1"},
+		{"overwriteNodeId", map[string]any{"overwriteNodeId": "on1"}, "on1"},
 		{"workspaceId", map[string]any{"workspaceId": "w1"}, "w1"},
 		{"spaceId", map[string]any{"spaceId": "s1"}, "s1"},
 		{"workspace_id", map[string]any{"workspace_id": "w2"}, "w2"},
 		{"space_id", map[string]any{"space_id": "s2"}, "s2"},
 		{"node beats workspace", map[string]any{"workspaceId": "w1", "fileId": "f1"}, "f1"},
 		{"nodeId beats fileId", map[string]any{"fileId": "f1", "nodeId": "n1"}, "n1"},
+		// 覆盖上传场景：step1 入参排他地携带 overwrite 键，且优先级 1 组
+		// 整体优先于优先级 2 组（否则 check 误抓 spaceId/workspaceId 作为
+		// nodeId，导致服务端 52600007 误拒）。
+		{"nodeId beats overwrite keys", map[string]any{"overwriteFileId": "of1", "overwriteNodeId": "on1", "nodeId": "n1"}, "n1"},
+		{"overwriteFileId beats overwriteNodeId", map[string]any{"overwriteNodeId": "on1", "overwriteFileId": "of1"}, "of1"},
+		{"overwriteFileId beats space keys", map[string]any{"spaceId": "s1", "overwriteFileId": "of1"}, "of1"},
+		{"overwriteNodeId beats workspace keys", map[string]any{"workspaceId": "w1", "overwriteNodeId": "on1"}, "on1"},
 		{"empty string skipped", map[string]any{"nodeId": "", "spaceId": "s1"}, "s1"},
 		{"non-string skipped", map[string]any{"nodeId": 42, "spaceId": "s1"}, "s1"},
 		{"none found", map[string]any{"other": "x"}, ""},
@@ -372,21 +381,42 @@ func TestCrossPlatformCoverageDocDelegationAuthCheckCallFails(t *testing.T) {
 	if passthrough := WrapErrorWithOperation(err, "doc/update_document"); passthrough != err {
 		t.Fatalf("WrapErrorWithOperation() = %v, want the check-failure shell passed through unchanged", passthrough)
 	}
+	// 真实漏斗守卫（与 DeniedSurvivesRealPipeline 同法）：把 CHECK_FAILED
+	// 外壳推经 helpers 层工具调用统一错误出口 parseMCPToolTextResult，断言
+	// 返回同一实例且 Code 未被改写，防止未来被 reclassify/WrapError 二次
+	// 包装。
+	text, pipeErr := parseMCPToolTextResult("doc", "update_document", nil, err)
+	if text != "" {
+		t.Fatalf("parseMCPToolTextResult() text = %q, want empty on error", text)
+	}
+	if pipeErr != err {
+		t.Fatalf("parseMCPToolTextResult() error = %v (%T), want the same check-failure instance (%T)", pipeErr, pipeErr, err)
+	}
+	var pipeCLI *CLIError
+	if !errors.As(pipeErr, &pipeCLI) || pipeCLI.Code != codeDelegationCheckFailed {
+		t.Fatalf("pipeline error = %v, want unchanged Code %q", pipeErr, codeDelegationCheckFailed)
+	}
 	if len(inner.calls) != 1 {
 		t.Fatalf("calls = %d, want 1 (stop after check failure)", len(inner.calls))
 	}
 }
 
+// TestCrossPlatformCoverageDocDelegationAuthCheckResponseInvalid 覆盖
+// check_capability 响应异常三分支（nil result、空响应、JSON 解析失败）：
+// 三分支统一 CLIError 外壳，断言前缀 DELEGATION_AUTH_CHECK_FAILED、无
+// MCP_TOOL_ERROR、category=api、reason=delegation_check_bad_response、
+// 退出码 1（裸 fmt.Errorf 会经模式分类致退出码分裂：解析失败 →
+// INPUT_INVALID_JSON→3、其余 → UNCLASSIFIED→5）。
 func TestCrossPlatformCoverageDocDelegationAuthCheckResponseInvalid(t *testing.T) {
 	cases := []struct {
 		name    string
 		result  *edition.ToolResult
 		wantSub string
 	}{
-		{"nil result", nil, "nil result"},
-		{"empty content", &edition.ToolResult{}, "空响应"},
-		{"whitespace text", &edition.ToolResult{Content: []edition.ContentBlock{{Type: "image", Text: "img"}, {Type: "text", Text: "   "}}}, "空响应"},
-		{"invalid JSON", textToolResult("not-json"), "解析"},
+		{"nil result", nil, "返回空结果"},
+		{"empty content", &edition.ToolResult{}, "返回空响应"},
+		{"whitespace text", &edition.ToolResult{Content: []edition.ContentBlock{{Type: "image", Text: "img"}, {Type: "text", Text: "   "}}}, "返回空响应"},
+		{"invalid JSON", textToolResult("not-json"), "响应解析失败"},
 	}
 	for _, tc := range cases {
 		inner := newDocDelegationTestCaller()
@@ -395,6 +425,29 @@ func TestCrossPlatformCoverageDocDelegationAuthCheckResponseInvalid(t *testing.T
 		_, err := d.CallTool(context.Background(), "doc", "update_document", nil)
 		if err == nil || !strings.Contains(err.Error(), tc.wantSub) {
 			t.Fatalf("%s: error = %v, want message containing %q", tc.name, err, tc.wantSub)
+		}
+		if !strings.HasPrefix(err.Error(), "[DELEGATION_AUTH_CHECK_FAILED]") {
+			t.Fatalf("%s: Error() = %q, want [DELEGATION_AUTH_CHECK_FAILED] prefix", tc.name, err.Error())
+		}
+		if strings.Contains(err.Error(), "MCP_TOOL_ERROR") {
+			t.Fatalf("%s: Error() = %q, must not carry MCP_TOOL_ERROR", tc.name, err.Error())
+		}
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Category != apperrors.CategoryAPI {
+			t.Fatalf("%s: error = %v, want structured API-category error", tc.name, err)
+		}
+		if typed.Reason != "delegation_check_bad_response" {
+			t.Fatalf("%s: Reason = %q, want delegation_check_bad_response", tc.name, typed.Reason)
+		}
+		var cliErr *CLIError
+		if !errors.As(err, &cliErr) || cliErr.Code != codeDelegationCheckFailed {
+			t.Fatalf("%s: error = %v, want CLIError code %q", tc.name, err, codeDelegationCheckFailed)
+		}
+		if code := apperrors.ExitCode(err); code != apperrors.ExitCodeAPI {
+			t.Fatalf("%s: ExitCode() = %d, want %d", tc.name, code, apperrors.ExitCodeAPI)
+		}
+		if len(inner.calls) != 1 {
+			t.Fatalf("%s: calls = %d, want 1 (original blocked on bad response)", tc.name, len(inner.calls))
 		}
 	}
 }
