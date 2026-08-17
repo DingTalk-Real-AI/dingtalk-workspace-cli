@@ -10,11 +10,13 @@ func TestCrossPlatformCoverageProjectStreamingCardReceipt(t *testing.T) {
 	complete := ProjectStreamingCardReceipt(map[string]any{
 		"result": map[string]any{
 			"bizId":              "biz-1",
+			"openTaskId":         "task-1",
 			"openMessageId":      "msg-1",
 			"openConversationId": "cid-1",
 		},
 	}, "biz-1")
-	if complete["contractVersion"] != StreamingCardContractVersion || complete["referencePairAvailable"] != true {
+	if complete["contractVersion"] != StreamingCardContractVersion || complete["referencePairAvailable"] != true ||
+		complete["bizId"] != "biz-1" || complete["openTaskId"] != "task-1" {
 		t.Fatalf("complete receipt = %#v", complete)
 	}
 	ref, _ := complete["cardRef"].(map[string]any)
@@ -25,9 +27,23 @@ func TestCrossPlatformCoverageProjectStreamingCardReceipt(t *testing.T) {
 		t.Fatalf("complete receipt has capability gap: %#v", complete)
 	}
 
-	partial := ProjectStreamingCardReceipt(map[string]any{"result": map[string]any{"bizId": "biz-2"}}, "biz-2")
-	if partial["referencePairAvailable"] != false || partial["capabilityGap"] == "" {
+	partial := ProjectStreamingCardReceipt(map[string]any{
+		"result": map[string]any{"bizId": "biz-2", "openTaskId": "task-2"},
+	}, "biz-2")
+	if partial["referencePairAvailable"] != false || partial["openTaskId"] != "task-2" {
 		t.Fatalf("partial receipt = %#v", partial)
+	}
+	if _, exists := partial["capabilityGap"]; exists {
+		t.Fatalf("queryable partial receipt has capability gap: %#v", partial)
+	}
+	actions, _ := partial["nextActions"].([]map[string]any)
+	if len(actions) != 2 || actions[1]["cliPath"] != "chat message query-send-status" {
+		t.Fatalf("partial nextActions = %#v", actions)
+	}
+
+	missingTask := ProjectStreamingCardReceipt(map[string]any{"result": map[string]any{"bizId": "biz-3"}}, "biz-3")
+	if missingTask["capabilityGap"] == "" {
+		t.Fatalf("missing-task receipt = %#v", missingTask)
 	}
 }
 

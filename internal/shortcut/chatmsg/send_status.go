@@ -138,7 +138,7 @@ func firstSendStatusString(value any, keys ...string) string {
 				return strings.TrimSpace(candidate)
 			}
 		}
-		for _, key := range []string{"result", "data", "response", "content", "message"} {
+		for _, key := range []string{"result", "data", "response", "content", "message", "card"} {
 			if candidate := firstSendStatusString(typed[key], keys...); candidate != "" {
 				return candidate
 			}

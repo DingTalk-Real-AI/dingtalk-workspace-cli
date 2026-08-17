@@ -45,6 +45,13 @@ func TestCrossPlatformCoverageChatMessageReceiptActionsBindToRunnableCommands(t 
 				"status":             "SUCCESS",
 			}, "task-ready"),
 		},
+		{
+			name: "streaming card awaiting status",
+			payload: chatmsg.ProjectStreamingCardReceipt(map[string]any{
+				"bizId":      "biz-card",
+				"openTaskId": "task-card",
+			}, "biz-card"),
+		},
 	}
 
 	root := NewRootCommand()

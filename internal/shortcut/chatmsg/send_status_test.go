@@ -85,7 +85,7 @@ func TestCrossPlatformCoverageFirstSendStatusStringTraversesArrays(t *testing.T)
 	value := []any{
 		nil,
 		map[string]any{"result": []any{
-			map[string]any{"openTaskId": "  task-from-array  "},
+			map[string]any{"card": map[string]any{"openTaskId": "  task-from-array  "}},
 		}},
 	}
 	if got := firstSendStatusString(value, "openTaskId"); got != "task-from-array" {

@@ -6131,6 +6131,9 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 群聊创建卡片时可通过 --at-open-dingtalk-ids @指定成员，或通过 --at-all @所有人。
 创建时无需传入卡片内容，后续通过 update-card 更新内容。
 
+发送成功会返回 bizId 和 openTaskId：使用 bizId 调用 update-card 更新内容；需要确认消息投递结果或取得
+openMessageId 时，执行 dws chat message query-send-status --open-task-id <openTaskId>。
+
 注意：send-card 必须和 update-card 搭配使用。发送卡片后，使用返回的 bizId 调用 update-card 更新内容，
 最后一次更新必须将 --flow-status 设为 3（finish），否则卡片会一直处于"生成中"的加载状态。
 flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成(FINISH)，4=执行中(EXECUTING)，5=错误(ERROR)。`,
@@ -6195,7 +6198,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建并向群聊或单聊发送互动卡片；群聊创建时可 @成员或 @所有人",
-				UseWhen:      []string{"需要创建卡片且已准备接收会话或用户时；群聊创建可同时指定 @成员或 @所有人"},
+				UseWhen:      []string{"需要卡片式交互且已准备接收会话或用户时；群聊创建可同时指定 @成员或 @所有人；成功结果中的 bizId 用于更新卡片，openTaskId 可交给 chat message query-send-status 查询消息投递状态"},
 				AvoidWhen:    []string{"只发送普通文本时使用 send 或 send-by-bot"},
 				Examples:     []string{"dws chat message send-card --group <openConversationId>"},
 			},

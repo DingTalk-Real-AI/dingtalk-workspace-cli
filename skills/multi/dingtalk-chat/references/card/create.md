@@ -4,7 +4,9 @@
 Runtime 会唯一解析为 openDingTalkId；已有 openDingTalkId 时传
 `--receiver-open-dingtalk-id`。三种目标严格三选一。
 
-- 只传目标：创建卡片并从真实结果取得 `bizId`，供后续更新。
+- 只传目标：创建卡片并从真实结果取得 `bizId` 和 `openTaskId`。`bizId` 供后续更新；
+  `openTaskId` 可传给 `dws chat message query-send-status --open-task-id <openTaskId>`
+  查询消息投递状态。发送命令本身不轮询。
 - 同时传 `--content`：Runtime 串行执行 create → 从返回提取 `bizId` → update；默认
   `--flow-status 3`。
 - 群聊可传 `--at-open-dingtalk-ids` 或 `--at-all`；艾特对象只进入初始
@@ -23,5 +25,6 @@ Runtime 会唯一解析为 openDingTalkId；已有 openDingTalkId 时传
 
 ```bash
 dws chat +messages-send-card --group <openConversationId> --at-open-dingtalk-ids <mentionedOpenDingTalkId> --content "请确认"
+dws chat message query-send-status --open-task-id <上一步返回的openTaskId>
 dws chat +messages-send-card --group <openConversationId> --at-all --content "请大家确认"
 ```

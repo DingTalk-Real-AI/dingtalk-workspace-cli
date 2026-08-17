@@ -763,7 +763,7 @@ func TestCrossPlatformCoverageMessagesSendTextModesAndExecuteGuard(t *testing.T)
 
 func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 	fake := &larkAlignmentCaller{responses: map[string]string{
-		"im/create_and_send_card":  `{"result":{"card":{"biz_id":"biz-1","atTag":"<a atId=D-one>甲</a> <a atId=D-two>乙</a> "}}}`,
+		"im/create_and_send_card":  `{"result":{"card":{"biz_id":"biz-1","openTaskId":"task-card-1","atTag":"<a atId=D-one>甲</a> <a atId=D-two>乙</a> "}}}`,
 		"im/update_streaming_card": `{"result":{"updated":true}}`,
 	}}
 	helpers.InitDeps(fake)
@@ -807,8 +807,12 @@ func TestCrossPlatformCoverageMessagesSendCardOneCallLifecycle(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload["bizId"] != "biz-1" || payload["ok"] != true {
+	if payload["bizId"] != "biz-1" || payload["openTaskId"] != "task-card-1" || payload["ok"] != true {
 		t.Fatalf("card output = %#v", payload)
+	}
+	receipt, _ := payload["sendReceipt"].(map[string]any)
+	if receipt["openTaskId"] != "task-card-1" {
+		t.Fatalf("card sendReceipt = %#v", receipt)
 	}
 }
 

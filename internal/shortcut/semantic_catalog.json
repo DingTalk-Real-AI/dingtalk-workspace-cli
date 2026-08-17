@@ -550,7 +550,7 @@
     },
     "+messages-send-card": {
       "disposition": "semantic_adapter",
-      "semantic_delta": "既可只创建流式卡片，也可在一次调用中创建、提取 bizId、写入内容并设置流式状态；dry-run 输出两步执行计划，更新失败时保留已创建的 bizId。",
+      "semantic_delta": "既可只创建流式卡片，也可在一次调用中创建、提取 bizId、写入内容并设置流式状态；成功结果保留 bizId 与 openTaskId，并引导复用消息状态查询；dry-run 输出两步执行计划，更新失败时保留已创建的 bizId。",
       "risk": "write",
       "public": true,
       "reviewed": true

@@ -2392,6 +2392,8 @@ dws chat message send --group <openConversationId> --msg-type image --media-id "
 
 群聊传 --group，单聊传 --receiver，二者互斥。群聊创建时可通过 --at-open-dingtalk-ids @指定成员，或通过 --at-all @所有人。
 
+发送成功会返回 `bizId` 和 `openTaskId`：`bizId` 用于 update-card；需要确认消息投递结果或取得 `openMessageId` 时，执行 `dws chat message query-send-status --open-task-id <openTaskId>`。发送命令本身不轮询。
+
 **注意：send-card 必须和 update-card 搭配使用。** 创建卡片时无需传入内容，后续通过 update-card 更新内容，最后一次更新必须将 --flow-status 设为 3（finish），否则卡片会一直处于"生成中"的加载状态。
 flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成(FINISH)，4=执行中(EXECUTING)，5=错误(ERROR)。
 ```
@@ -2455,7 +2457,7 @@ Flags:
 | `chat message create-text-emotion` | `emotionId` | add-text-emotion 的 --emotion-id |
 | `chat category list` | `categoryId` | category list-conversations 的 --category-id |
 | `chat group get-by-group-id` | `openConversationId` | 同 chat search，将群号转为 openConversationId |
-| `chat message send-card` | `bizId` | update-card 的 --biz-id |
+| `chat message send-card` | `bizId` + `openTaskId` | bizId 用于 update-card 的 --biz-id；openTaskId 用于 query-send-status 的 --open-task-id |
 | `chat message list` | `openMessageId` | message reply 的 --ref-msg-id、message forward 的 --msg-id |
 | `chat search` | `openConversationId` | set-top 的 --conversation-id、group-mute / group-mute-member 的 --group |
 

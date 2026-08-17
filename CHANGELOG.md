@@ -208,6 +208,11 @@ This release promotes the sealed `v1.0.58-beta.6` contents to stable.
 
 ### Changed
 
+- **Streaming-card send receipt handoff** — `chat message send-card` and
+  `chat +messages-send-card` now document the returned `bizId` / `openTaskId`
+  split. The high-level shortcut projects both identifiers at the top level and
+  links `openTaskId` to the existing one-shot `query-send-status` command
+  without adding automatic polling.
 - **Minutes `permission apply --policy` type** — `--policy` is now declared as
   an `int` flag and its required check uses `Flags().Changed`, matching the
   numeric-parameter convention. `--help` reports `int` instead of `string`;
