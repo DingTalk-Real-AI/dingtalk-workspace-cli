@@ -15,9 +15,13 @@
 
 package busctl
 
-import "os"
+import (
+	"os"
+	"testing"
+)
 
-// stopSignal is only the fallback after the graceful IPC stop path fails or
-// times out. Go maps os.Kill to TerminateProcess on Windows; os.Interrupt is
-// unsupported and returns syscall.EWINDOWS.
-func stopSignal() os.Signal { return os.Kill }
+func TestCrossPlatformCoverageWindowsStopFallbackUsesKill(t *testing.T) {
+	if stopSignal() != os.Kill {
+		t.Fatalf("stopSignal() = %v, want os.Kill", stopSignal())
+	}
+}

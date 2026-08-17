@@ -1220,7 +1220,8 @@ func newEventStopCommandWithFlags(globalFlags ...*GlobalFlags) *cobra.Command {
 			editionName := editionNameOrDefault()
 			clientIDHash := dwsevent.ClientIDHash(clientID)
 			workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
-			if err := eventStopBus(busctl.StopConfig{WorkDir: workDir}); err != nil {
+			ipcEndpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindAppStream, clientIDHash)
+			if err := eventStopBus(busctl.StopConfig{WorkDir: workDir, IPCEndpoint: ipcEndpoint}); err != nil {
 				if errors.Is(err, busctl.ErrNotRunning) {
 					fmt.Fprintln(c.OutOrStdout(), "bus is not running")
 					return nil
