@@ -50,14 +50,14 @@ func init() {
 		Name:         "DWS_TRUSTED_DOMAINS",
 		Category:     configmeta.CategoryNetwork,
 		Description:  "信任的 HTTPS 域名白名单 (逗号分隔，* 信任所有)",
-		DefaultValue: "*.dingtalk.com",
-		Example:      "*.dingtalk.com,custom.example.com",
+		DefaultValue: "*.dingtalk.com,*.dingtalk.io",
+		Example:      "*.dingtalk.com,*.dingtalk.io,custom.example.com",
 	})
 }
 
 const (
 	trustedDomainsEnv     = "DWS_TRUSTED_DOMAINS"
-	defaultTrustedDomains = "*.dingtalk.com"
+	defaultTrustedDomains = "*.dingtalk.com,*.dingtalk.io"
 
 	// defaultHTTPTimeout is the default timeout for HTTP transport requests.
 	defaultHTTPTimeout = 30 * time.Second
@@ -654,7 +654,7 @@ func shouldPreserveEndpointQuery(parsed *url.URL) bool {
 		return false
 	}
 	switch strings.ToLower(parsed.Hostname()) {
-	case "mcp-gw.dingtalk.com", "pre-mcp-gw.dingtalk.com":
+	case "mcp-gw.dingtalk.com", "pre-mcp-gw.dingtalk.com", "mcp-gw.dingtalk.io", "pre-mcp-gw.dingtalk.io":
 		return true
 	default:
 		return false

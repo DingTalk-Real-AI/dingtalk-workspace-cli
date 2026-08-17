@@ -19,9 +19,12 @@
 | 用户终点 | 返回入口 |
 |---|---|
 | 姓名/群名简单发送、文件、Bot、Webhook、复杂 @ | 根 Skill Golden Route |
-| 单会话消息、跨会话搜索、资源下载 | [消息任务级流程](01-messaging.md) |
-| 引用、转发、卡片、reaction、Pin/Top/Favorite | [chat-message](chat/chat-message.md) |
-| 基础建群、成员、公告、管理员和群设置 | [chat-group](chat/chat-group.md) |
+| 消息读取、条件搜索、@我、Favorite/reaction 查询和批量详情 | [message-query](chat/message-query.md) |
+| 编辑、撤回、引用、转发、reaction/Pin/Top/Favorite 写入 | [message-actions](chat/message-actions.md) |
+| 位置、名片、资源下载和特殊媒体 fallback | [message-media](chat/message-media.md) |
+| 群列表、群搜索、成员读取、Bot 列表和邀请链接 | [group-discovery](chat/group-discovery.md) |
+| 建群、改群、成员写入、管理员、禁言、公告和群设置 | [group-admin](chat/group-admin.md) |
+| 跨步骤消息/群组合流程 | [消息任务级流程](01-messaging.md) |
 | Bot 搜索、进群和撤回 | [chat-bot](chat/chat-bot.md) |
 | 会话置顶、状态和分组 | [chat-conversation](chat/chat-conversation.md) |
 | 相邻低频意图仍需消歧 | [intent-guide](intent-guide.md) |

@@ -34,6 +34,7 @@ Usage:
 Example:
   dws drive list --limit 20
   dws drive list --limit 20 --folder <dentryUuid> --order-by name --order asc
+  dws drive list --folder <dentryUuid> --type file --start 7d
 Flags:
       --limit int           每页返回数量，默认 20，最大 50 (可选)
       --cursor string       分页游标，首次不传 (可选)
@@ -43,9 +44,35 @@ Flags:
       --space-id string     钉盘空间 ID (纯数字)，不传则使用「我的文件」对应 spaceId (可选)
       --workspace string    文档空间/知识库 ID (加密 string 或 URL)，传入则路由到文档空间 (可选)
       --thumbnail           是否返回缩略图信息 (可选，仅钉盘)
+      --pattern string      按名称通配过滤结果，如 "*日报*"（客户端过滤，无通配符时按子串匹配）(可选)
+      --depth int           递归列出子目录层级，默认 1(仅当前层)，最大 5；与 --cursor/--limit 互斥 (可选)
+      --type string         按节点类型过滤: file|folder（客户端过滤，见下节）(可选)
+      --start string        按修改时间过滤·起始，如 7d / 2026-08-01 / RFC3339 (可选)
+      --end string          按修改时间过滤·截止，语法同 --start (可选)
 ```
 
 > 统一入口：默认列钉盘空间（`--space-id` 纯数字）；传 `--workspace` 时路由到文档空间/知识库列表。
+
+类型/时间过滤（`--type` / `--start` / `--end`）：
+- 语义：`--type` 按节点类型（file=文件 / folder=文件夹）；`--start`/`--end` 按**修改时间**圈定区间。
+  注意与 `dws drive search` 的 `--modified-from/--modified-to` 区分：那两个收毫秒时间戳，这里收字符串语法；
+  `--type`（节点类型）与 search 的 `--file-types`（内容类型 alidoc/image/...）也不是一回事。
+- 时间语法：相对时间 `24h`/`7d`/`2w`（小时/天/周，按本机时钟换算）、RFC3339（`2026-08-01T00:00:00+08:00`）、
+  无时区 ISO8601（`2026-08-01 08:00:00`，默认 Asia/Shanghai）、仅日期（`2026-08-01`）；
+  不支持毫秒时间戳，不支持 `m` 单位。
+- 执行方式：钉盘与知识库（--workspace）两路由统一为**客户端过滤**——全量扫描当前目录后在进程内筛选；
+  与 `--depth>1` 组合时递归扫描后筛（被滤掉的条目仍占 2000 条全局上限）。
+- 互斥：与 `--versions`/`--cursor`/`--order-by`/`--order`/`--limit` 不能同时使用（过滤模式为全量扫描，
+  无游标与服务端排序语义）；可与 `--latest`/`--pattern`/`--depth` 组合，`--latest` 表示「符合条件的条目中最新 N 个」。
+- 输出形态：带过滤时输出从单页透传变为聚合形态 `{items, maxDepth, truncated, errors}`。
+- 已知代价：大目录（>2000 条）触顶截断时 `truncated=true`（退出码 0，结果每条都正确但没扫完）；
+  建议用 `--folder` 指定子目录缩小扫描范围；带关键词的过滤场景改用 `dws drive search`。
+- 与 `--latest` 组合时上一条不适用：排序基不完整的 Top-N 不是全局最新，故触顶截断**或**递归途中
+  目录读取失败都拒绝产出并报错（`LATEST_SCAN_TRUNCATED` / `LATEST_SCAN_INCOMPLETE`），不会以
+  退出码 0 交出结果；错误消息里带首个失败目录的 folder/depth/reason，以及一条复现原候选集
+  （查询域 + `--folder` + `--pattern`/`--type`/`--start`/`--end`）的恢复命令。Windows 构建下，
+  若原值含 shell 元字符则命令里只给占位符、原值另起一行以数据形式列出（cmd.exe 与 PowerShell
+  没有共同安全的引用形式），照抄时需手动替换。
 
 ### 获取钉盘空间列表
 
@@ -343,6 +370,211 @@ Flags:
 
 > **注意**：还原操作可能是异步的（返回 `async=true` 和 `taskId`）。
 
+### 比较本地文件夹与钉盘文件夹的差异
+
+只读命令：比较本地文件夹与钉盘文件夹的差异——本地取 `--local-folder`（**绝对路径**），钉盘取 `--remote-folder`（文件夹 dentryUuid，**必传**）指向的文件夹，按精确 MD5（默认）或快速 modified_time（`--quick`）逐文件比对。两侧各自递归遍历，`rel_path` 相对各自根目录。
+
+```
+Usage:
+  dws drive status [flags]
+Example:
+  dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid>
+  dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid> --space-id xxxx
+  dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid> --quick
+Flags:
+      --local-folder string   本地文件夹绝对路径 (必填)
+      --remote-folder string    钉盘文件夹 ID (dentryUuid) (必填)
+      --space-id string         钉盘空间 ID，不传则使用「我的文件」(可选)
+      --quick                   快速模式：只比较 modified_time，不计算 MD5 (可选)
+```
+
+输出五类差异（`rel_path` 始终以 `/` 分隔、相对各自根目录）：
+
+| 字段 | 含义 |
+|------|------|
+| `new_local` | 仅本地存在 |
+| `new_remote` | 仅钉盘存在 |
+| `modified` | 两侧都存在且本次检测判定为已变更（exact 比 MD5，quick 比 modified_time） |
+| `unchanged` | 两侧都存在且本次检测判定为未变更 |
+| `unknown` | 两侧都存在，但 exact 模式下**远端未返回可靠 MD5**、无法核对内容——既不判 unchanged 也不判 modified，如实归入此类（quick 模式不会产生 unknown） |
+
+输出 schema：
+
+```json
+{
+  "detection": "exact",
+  "new_local":  [{"rel_path": "..."}],
+  "new_remote": [{"rel_path": "..."}],
+  "modified":   [{"rel_path": "..."}],
+  "unchanged":  [{"rel_path": "..."}],
+  "unknown":    [{"rel_path": "..."}]
+}
+```
+
+注意事项：
+
+- 默认 `detection=exact`（比较 MD5）；传 `--quick` 后 `detection=quick`（只比较 modified_time，best-effort）。
+- exact 模式**只在能拿到远端 MD5 时才判定 unchanged/modified**；远端缺失 MD5 的文件一律进入 `unknown`，绝不会因大小 / mtime 恰好相同而被误报为 unchanged。当前 `list_files` 通常不返回 MD5，因此这类文件多会落在 `unknown`——请据此决定是否用 `pull`/`push` 强制对齐。
+- 本地 hash 仅在文件双端都存在、远端有 MD5、且非 `--quick` 模式时才按需计算。
+- 远端文件或文件夹名称若无法安全、无歧义地映射到本地路径（如 `..`、路径分隔符、盘符或目标平台保留名），命令会中止整棵远端树并返回失败；不会静默跳过后继续报告不完整结果。
+- 只比对钉盘 `type=file` 的二进制文件；在线文档（docx/sheet/bitable/mindnote/slides）与快捷方式（shortcut）会被跳过。本地只比对常规文件（符号链接、设备文件忽略）。
+- `--local-folder` 必须是绝对路径（相对路径会被直接拒绝）；`--remote-folder` 必传，是钉盘侧待比对文件夹的 dentryUuid（可用 `dws drive list` 查到）。
+
+### 把钉盘文件夹拉取（镜像）到本地
+
+只写本地命令：把 `--remote-folder` 指向的钉盘文件夹**单向、文件级**镜像到本地 `--local-folder`（Drive → 本地）。递归下载所有 `type=file` 的文件，子目录自动创建。**执行前必须获得用户确认；非交互环境先用 `--dry-run` 预览，确认后再加 `--yes`。**
+
+```
+Usage:
+  dws drive pull [flags]
+Example:
+  dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid>
+  dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists smart
+  dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid> --space-id xxxx
+Flags:
+      --local-folder string   本地文件夹绝对路径 (必填)
+      --remote-folder string    钉盘文件夹 ID (dentryUuid) (必填)
+      --space-id string         钉盘空间 ID，不传则使用「我的文件」(可选)
+      --if-exists string        本地文件已存在时的策略: skip|smart|overwrite (默认 skip；命令写本地，执行需确认)
+```
+
+`--if-exists` 策略：
+
+| 值 | 行为 |
+|----|------|
+| `skip`（默认） | 本地已存在则保持不动，只新增 |
+| `smart`（推荐增量同步） | 本地 `modified_time` 已 ≥ 远端 `modified_time` 则跳过；时间戳缺失/非法时退回安全路径继续下载 |
+| `overwrite` | 总是下载覆盖（Drive 作为权威源） |
+
+输出 schema：
+
+```json
+{
+  "summary": {"downloaded": 0, "skipped": 0, "failed": 0},
+  "items": [
+    {"rel_path": "sub/a.txt", "action": "downloaded"},
+    {"rel_path": "b.txt", "action": "skipped"},
+    {"rel_path": "c.bin", "action": "failed", "error": "..."}
+  ]
+}
+```
+
+注意事项：
+
+- 只下载钉盘 `type=file` 的二进制文件；在线文档与快捷方式会被跳过。`rel_path` 始终以 `/` 分隔。
+- 下载目标始终被约束在 `--local-folder` 之内：远端名称含 `..`、路径分隔符、盘符或目标平台保留名等不可安全映射成分时，命令会在下载前中止整棵远端树；拼接后仍逃逸出根目录的路径记为 `failed`、不会落盘。
+- 镜像采用跨平台一致的路径等价规则：远端树中若出现 `A/a`、Unicode NFC/NFD 异写，或等价目录前缀下的不同子树，会在任何下载前整批失败，避免不同文件系统得到不一致结果。
+- 下载成功后本地文件 mtime 会对齐到远端 `modified_time`，便于后续 `--if-exists smart` 增量同步跳过。
+- `summary.failed > 0` 时命令以**非零退出码**退出；结构化 `summary + items` 仍打印在 stdout 上，stderr 只保留简短失败说明。脚本/agent 直接看 exit code 即可判断成败。
+
+### 把本地文件夹推送（镜像）到钉盘
+
+只写远端命令：把本地 `--local-folder` **单向、文件级**镜像到钉盘 `--remote-folder` 文件夹（本地 → Drive）。递归遍历本地文件与子目录（含空目录），缺失的远端目录按需创建（已存在则复用、不重建），文件按 `--if-exists` 新建/覆盖/跳过。**执行前必须获得用户确认；非交互环境先用 `--dry-run` 预览，确认后再加 `--yes`。只新增/覆盖，不删除远端多余文件。**
+
+```
+Usage:
+  dws drive push [flags]
+Example:
+  dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid>
+  dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists smart
+  dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists overwrite
+Flags:
+      --local-folder string   本地文件夹绝对路径 (必填)
+      --remote-folder string    钉盘目标文件夹 ID (dentryUuid) (必填)
+      --space-id string         钉盘空间 ID，不传则使用「我的文件」(可选)
+      --if-exists string        远端文件已存在时的策略: skip|smart|overwrite (默认 skip；命令写钉盘，执行需确认)
+```
+
+`--if-exists` 策略（与 pull 一样默认 `skip`，避免未显式选择时覆盖既有文件）：
+
+| 值 | 行为 |
+|----|------|
+| `skip`（默认） | 远端已存在则保持不动，只新增 |
+| `smart` | 增量同步：远端 `modified_time` 已 ≥ 本地则跳过，否则走覆盖路径 |
+| `overwrite` | 覆盖远端同名文件（原地覆盖，保留 fileId，不产生重名副本） |
+
+输出 schema（`action`：`uploaded` / `overwritten` / `skipped` / `folder_created` / `failed`）：
+
+```json
+{
+  "summary": {"uploaded": 0, "skipped": 0, "failed": 0, "aborted": false},
+  "items": [
+    {"rel_path": "sub", "action": "folder_created"},
+    {"rel_path": "a.txt", "action": "uploaded", "size_bytes": 11},
+    {"rel_path": "b.txt", "action": "overwritten", "size_bytes": 8},
+    {"rel_path": "c.txt", "action": "skipped", "size_bytes": 5},
+    {"rel_path": "d.bin", "action": "failed", "size_bytes": 0, "error": "..."}
+  ]
+}
+```
+
+注意事项：
+
+- 只上传/覆盖 `type=file`；`summary.uploaded` 同时统计新建与覆盖，**不含目录**。
+- `overwrite` / `smart` 命中覆盖分支时走**覆盖上传**（`get_upload_info` 与 `commit_upload` 两阶段都携带远端 `overwriteFileId`、不传 `parentId`），在原文件上原地覆盖、保留 fileId，不会在同目录新建重名副本。
+- 本地子目录（含空目录）整体镜像：缺失的按需 `create_folder`（以 `folder_created` 留痕），已存在的远端目录复用其 fileId、不重建、不出现在 `items[]`。
+- 本地名称若含反斜杠、控制字符等无法安全映射到钉盘的成分，或双端存在 `A/a`、Unicode NFC/NFD、等价祖先前缀或文件/目录类型歧义，命令会在任何创建或上传前整批失败；不会只跳过冲突项后继续写入。
+- `summary.failed > 0` 时命令以**非零退出码**退出；结构化 `summary + items` 仍打印在 stdout 上，脚本/agent 直接看 exit code 判断成败。
+
+### 本地文件夹与钉盘文件夹双向同步
+
+读写命令：把本地 `--local-folder` 与钉盘 `--remote-folder` 做**文件级双向同步**。**这是写操作，非交互环境下必须显式加 `--yes`；先用 `--dry-run` 看清将发生什么。**先按 `status` 同源逻辑算出五类差异，再分别处理：`new_remote` 下载到本地、`new_local` 上传到钉盘、两侧都变更的 `modified` 按 `--on-conflict` 策略消解；`unchanged` 与 `unknown` 一律跳过、不动。**只新增/覆盖，两侧都不删除多余文件。**
+
+```
+Usage:
+  dws drive sync [flags]
+Example:
+  dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid>
+  dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid> --on-conflict local-wins
+  dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid> --on-conflict keep-both
+  dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid> --quick
+Flags:
+      --local-folder string    本地文件夹绝对路径 (必填)
+      --remote-folder string   钉盘文件夹 ID (dentryUuid) (必填)
+      --space-id string        钉盘空间 ID，不传则使用「我的文件」(可选)
+      --on-conflict string     两侧都变更时的策略: skip|remote-wins|local-wins|keep-both|ask (默认 skip；命令写双端，执行需确认)
+      --quick                  快速模式：只比较 modified_time，不计算 MD5 (可选)
+```
+
+`--on-conflict` 仅作用于 `modified`（两侧都存在且都变更）的文件：
+
+| 值 | 行为 |
+|----|------|
+| `skip`（默认） | 两侧都不动，两边内容都保留，计入 `skipped` |
+| `remote-wins` | 下载远端覆盖本地（需 `--yes`） |
+| `local-wins` | 覆盖上传本地到远端（原地覆盖、保留 fileId；需 `--yes`） |
+| `keep-both` | 先在同一目录以不覆盖的原子硬链接保留本地副本（`名.conflict-<fileId 末 8 位>.扩展名`），再把远端拉到原名；拉取失败时原文件与候选副本都保留并报告失败，不做可能误伤并发文件的回滚 |
+| `ask` | 逐个交互询问；`--dry-run` 或非交互环境下等价于跳过 |
+
+输出 schema（`action`：`downloaded` / `uploaded` / `overwritten` / `folder_created` / `renamed_local` / `skipped` / `failed`；其中 `renamed_local` 是兼容动作名，表示已成功保留本地冲突副本；`direction`：`pull` / `push` / `conflict`）：
+
+```json
+{
+  "detection": "exact",
+  "diff": {
+    "new_local":  [{"rel_path": "a.txt"}],
+    "new_remote": [{"rel_path": "b.txt"}],
+    "modified":   [{"rel_path": "c.txt"}],
+    "unchanged":  [],
+    "unknown":    []
+  },
+  "summary": {"pulled": 1, "pushed": 1, "skipped": 0, "failed": 0},
+  "items": [
+    {"rel_path": "b.txt", "action": "downloaded", "direction": "pull"},
+    {"rel_path": "a.txt", "action": "uploaded", "direction": "push"},
+    {"rel_path": "c.txt", "action": "overwritten", "direction": "conflict"}
+  ]
+}
+```
+
+注意事项：
+
+- 复用 `status`/`pull`/`push` 的全部安全约束：只处理 `type=file`（在线文档、快捷方式跳过）；远端名称含 `..`、路径分隔符、盘符或目标平台保留名等不可安全映射成分时会在任何同步写入前中止整棵远端树，拼接后逃逸出 `--local-folder` 的路径记为 `failed` 不落盘；下载走「先写临时文件、成功才原子 rename」，失败绝不破坏本地原文件。
+- `--dry-run` 只算差异并输出独立 JSON 预览对象，不触发任何下载/上传/改名/落盘；差异位于顶层预览对象的 `plan.diff`（同时包含 `dry_run=true`、`executed=false` 与 `preview_kind=plan`）。
+- 双端存在 `A/a`、Unicode NFC/NFD、等价祖先前缀或文件/目录类型歧义时，`sync` 会在任何一侧写入前整批失败；本地无法安全映射到钉盘的名称同样 fail-closed。
+- `unknown`（exact 模式远端无可靠 MD5）一律计入 `skipped`、不做任何写操作；需要强制对齐时改用单向的 `pull`/`push`。
+- `summary.failed > 0` 时命令以**非零退出码**退出，结构化结果仍打印在 stdout 上。
+
 ## 意图判断
 
 用户说"我的文件/钉盘/网盘/云盘" → `list`
@@ -365,6 +597,10 @@ Flags:
 用户说"公开文件/互联网公开/设置公开/让互联网所有人可访问" → `publish set`
 用户说"关闭公开/取消公开/取消互联网访问" → `publish unset`
 用户说"查看公开状态/是否公开/发布状态" → `publish get`
+用户说"比较本地和云盘/看哪些文件变了/同步差异/diff" → `status`
+用户说"把钉盘文件夹拉到本地/下载整个文件夹/镜像/同步到本地/pull" → `pull`
+用户说"把本地文件夹传到钉盘/推送整个文件夹/上传目录/同步到云端/push" → `push`
+用户说"双向同步/两边同步/本地和云盘互相同步/让两边一致/sync" → `sync`（默认两侧都变更时跳过；要覆盖须显式给 `--on-conflict` 并加 `--yes`）
 
 关键区分: drive(文件管理) vs doc(文档内容读写) vs wiki(空间管理)
 
@@ -413,6 +649,23 @@ dws drive delete --node <dentryUuid> --yes --format json
 # 8. 查看回收站并还原文件
 dws drive recycle list --format json
 dws drive recycle restore --id <recycleItemId> --format json
+
+# 9. 比较本地文件夹与钉盘文件夹的差异（只读；remote-folder 必传，用 list 查 dentryUuid）
+dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid> --format json
+dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid> --space-id <spaceId> --format json
+dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid> --quick --format json
+
+# 10. 把钉盘文件夹镜像到本地（Drive → 本地；smart 为推荐的增量同步）
+dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid> --format json
+dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists smart --format json
+
+# 11. 把本地文件夹镜像到钉盘（本地 → Drive；默认 skip 只新增，smart 增量，overwrite 覆盖）
+dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid> --format json
+dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists smart --format json
+
+# 12. 本地与钉盘双向同步（默认 --on-conflict=skip 两侧都不动；要覆盖须显式选策略并加 --yes）
+dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid> --format json
+dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid> --on-conflict keep-both --format json
 ```
 
 ## 文档空间管理命令
@@ -531,6 +784,7 @@ dws drive move --node <源文件dentryUuid> --folder <目标space的rootFolderId
 # ── 场景 C: 复制钉盘文件到钉盘 space 下的子文件夹 ──
 dws drive list --space-id <TARGET_SPACE_ID> --format json
 dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --format json
+
 ```
 
 ## 上下文传递表

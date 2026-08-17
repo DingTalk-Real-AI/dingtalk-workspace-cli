@@ -70,10 +70,12 @@ func TestPackageManagerVersionVerificationReadsRawBinary(t *testing.T) {
 		t.Fatal("package-manager verifier still requires the version marker to occupy a strings(1) line")
 	}
 	for _, want := range []string{
-		"HOME_SKILL_BASES=",
+		"HOME_SPECIFIC_SKILL_BASES=",
 		`$base/dingtalk-shared/SKILL.md`,
 		`$base/dingtalk-misc/SKILL.md`,
 		"unexpected mono Skill layout",
+		`verify_npm_install "$tarball_path" "specific-agent-roots"`,
+		`verify_npm_install "$tarball_path" "generic-fallback"`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("package-manager verifier is missing multi-layout contract %q", want)
@@ -81,6 +83,60 @@ func TestPackageManagerVersionVerificationReadsRawBinary(t *testing.T) {
 	}
 	if strings.Contains(script, "HOME_SKILL_TARGETS=") {
 		t.Fatal("package-manager verifier still declares the legacy mono target contract")
+	}
+}
+
+func TestPackageManagerVerifierCoversSpecificAndFallbackSkillRoots(t *testing.T) {
+	t.Parallel()
+
+	postGoreleaserPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
+	if err != nil {
+		t.Fatalf("Abs(post-goreleaser.sh) error = %v", err)
+	}
+	verifierPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "verify-package-managers.sh"))
+	if err != nil {
+		t.Fatalf("Abs(verify-package-managers.sh) error = %v", err)
+	}
+
+	distDir := filepath.Join(t.TempDir(), "dist")
+	targets := []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"dws-linux-amd64.tar.gz",
+		"dws-linux-arm64.tar.gz",
+	}
+	hostArchive := "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
+	if runtime.GOOS == "windows" {
+		hostArchive = "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".zip"
+	}
+	foundHost := false
+	for _, target := range targets {
+		if target == hostArchive {
+			foundHost = true
+			break
+		}
+	}
+	if !foundHost {
+		targets = append(targets, hostArchive)
+	}
+	seedDistArtifacts(t, distDir, targets)
+
+	packageCmd := exec.Command("sh", postGoreleaserPath)
+	packageCmd.Env = postGoreleaserEnv(t, distDir, "v0.0.0-test", "https://downloads.example.com/dws/releases/v0.0.0-test")
+	if output, err := packageCmd.CombinedOutput(); err != nil {
+		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, output)
+	}
+
+	verifyCmd := exec.Command("sh", verifierPath, "--npm-only")
+	verifyCmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+distDir)
+	output, err := verifyCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("verify-package-managers.sh error = %v\noutput:\n%s", err, output)
+	}
+	for _, scenario := range []string{"specific-agent-roots", "generic-fallback"} {
+		if !strings.Contains(string(output), "verifying npm package install ("+scenario+")") {
+			t.Errorf("verifier output is missing %s scenario:\n%s", scenario, output)
+		}
 	}
 }
 
@@ -1163,6 +1219,136 @@ func TestReleaseWorkflowParallelizesSealedValidationWithoutWeakeningPublication(
 		if !strings.Contains(publish, required) {
 			t.Errorf("immutable publication is not blocked by parallel validation %q", required)
 		}
+	}
+}
+
+func TestReleaseWorkflowHidesOnlyVerifiedSealedTagFromCompatibilityBaseline(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	validation := releaseWorkflowSection(t, workflow, "  release-validation:\n", "\n  release-plan:\n")
+	preparedView := releaseWorkflowSection(
+		t,
+		validation,
+		"      - name: Prepare delivered-stable compatibility ref view\n",
+		"\n      - name: Set up Go\n",
+	)
+	script := releaseWorkflowRunScript(
+		t,
+		validation,
+		"Prepare delivered-stable compatibility ref view",
+		"Set up Go",
+	)
+
+	if !strings.Contains(preparedView, "if: ${{ matrix.check == 'compatibility' }}") {
+		t.Fatal("delivered-stable ref view must run only for the compatibility matrix leg")
+	}
+	for _, required := range []string{
+		"RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}",
+		"RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}",
+		"RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}",
+		"PREVIOUS_STABLE: ${{ needs.release-contract.outputs.previous_stable }}",
+		"PREVIOUS_STABLE_COMMIT: ${{ needs.release-contract.outputs.previous_stable_commit }}",
+	} {
+		if !strings.Contains(preparedView, required) {
+			t.Errorf("delivered-stable compatibility view is missing %q", required)
+		}
+	}
+	for _, required := range []string{
+		`test "$RELEASE_VERSION" != "$PREVIOUS_STABLE"`,
+		`test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"`,
+		`test "$(git rev-parse --verify "refs/tags/${RELEASE_VERSION}")" = "$RELEASE_TAG_OBJECT"`,
+		`test "$(git rev-parse --verify "refs/tags/${RELEASE_VERSION}^{commit}")" = "$RELEASE_COMMIT"`,
+		`test "$(git rev-parse --verify "${PREVIOUS_STABLE}^{commit}")" = "$PREVIOUS_STABLE_COMMIT"`,
+		`git update-ref -d "refs/tags/${RELEASE_VERSION}" "$RELEASE_TAG_OBJECT"`,
+		`git show-ref --verify --quiet "refs/tags/${RELEASE_VERSION}"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("delivered-stable compatibility view is missing %q", required)
+		}
+	}
+
+	verifiedTag := strings.Index(validation, "verify-github-tag-authority.sh")
+	deleteLocalTag := strings.Index(validation, "git update-ref -d")
+	compatibility := strings.Index(validation, "check-command-compatibility.sh")
+	if verifiedTag == -1 || deleteLocalTag == -1 || compatibility == -1 ||
+		verifiedTag > deleteLocalTag || deleteLocalTag > compatibility {
+		t.Fatal("release tag authority verification, local candidate removal, and compatibility checking must stay ordered")
+	}
+	for _, forbidden := range []string{"git push --delete", "github.rest.git.deleteRef"} {
+		if strings.Contains(workflow, forbidden) {
+			t.Errorf("release workflow must not delete a remote ref: found %q", forbidden)
+		}
+	}
+
+	repo, err := os.MkdirTemp(".", ".release-compatibility-test-")
+	if err != nil {
+		t.Fatalf("MkdirTemp(release compatibility test repository) error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(repo); err != nil {
+			t.Errorf("RemoveAll(%s) error = %v", repo, err)
+		}
+	})
+	mustRun(t, repo, "git", "init", "-b", "main")
+	mustRun(t, repo, "git", "config", "user.name", "Release Compatibility Test")
+	mustRun(t, repo, "git", "config", "user.email", "release-compatibility@example.com")
+	mustWriteFile(t, filepath.Join(repo, "tracked"), []byte("stable\n"), 0o644)
+	mustRun(t, repo, "git", "add", "tracked")
+	mustRun(t, repo, "git", "commit", "-m", "stable release")
+	previousStableCommit := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD"))
+	mustRun(t, repo, "git", "tag", "-a", "v1.0.57", "-m", "v1.0.57")
+	mustWriteFile(t, filepath.Join(repo, "tracked"), []byte("sealed\n"), 0o644)
+	mustRun(t, repo, "git", "commit", "-am", "sealed release")
+	releaseCommit := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD"))
+	mustRun(t, repo, "git", "tag", "-a", "v1.0.58", "-m", "v1.0.58")
+	releaseTagObject := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "refs/tags/v1.0.58"))
+
+	run := func(tagObject string) ([]byte, error) {
+		cmd := exec.Command("sh", "-c", script)
+		cmd.Dir = repo
+		cmd.Env = make([]string, 0, len(os.Environ())+5)
+		for _, entry := range os.Environ() {
+			if strings.HasPrefix(entry, "RELEASE_VERSION=") ||
+				strings.HasPrefix(entry, "RELEASE_COMMIT=") ||
+				strings.HasPrefix(entry, "RELEASE_TAG_OBJECT=") ||
+				strings.HasPrefix(entry, "PREVIOUS_STABLE=") ||
+				strings.HasPrefix(entry, "PREVIOUS_STABLE_COMMIT=") {
+				continue
+			}
+			cmd.Env = append(cmd.Env, entry)
+		}
+		cmd.Env = append(cmd.Env,
+			"RELEASE_VERSION=v1.0.58",
+			"RELEASE_COMMIT="+releaseCommit,
+			"RELEASE_TAG_OBJECT="+tagObject,
+			"PREVIOUS_STABLE=v1.0.57",
+			"PREVIOUS_STABLE_COMMIT="+previousStableCommit,
+		)
+		return cmd.CombinedOutput()
+	}
+
+	if output, err := run(releaseTagObject); err != nil {
+		t.Fatalf("prepared compatibility ref view failed: %v\noutput:\n%s", err, output)
+	}
+	candidateTag := exec.Command("git", "rev-parse", "--verify", "refs/tags/v1.0.58")
+	candidateTag.Dir = repo
+	if _, err := candidateTag.CombinedOutput(); err == nil {
+		t.Fatal("prepared compatibility ref view left the sealed candidate tag visible")
+	}
+	mustRun(t, repo, "git", "cat-file", "-e", releaseTagObject+"^{tag}")
+	if got := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "refs/tags/v1.0.57^{commit}")); got != previousStableCommit {
+		t.Fatalf("previous stable tag commit = %s, want %s", got, previousStableCommit)
+	}
+	if got := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD")); got != releaseCommit {
+		t.Fatalf("HEAD after prepared compatibility ref view = %s, want %s", got, releaseCommit)
+	}
+
+	mustRun(t, repo, "git", "update-ref", "refs/tags/v1.0.58", releaseTagObject)
+	if output, err := run(strings.Repeat("0", 40)); err == nil {
+		t.Fatalf("prepared compatibility ref view unexpectedly accepted a mismatched tag object\noutput:\n%s", output)
+	}
+	if got := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "refs/tags/v1.0.58")); got != releaseTagObject {
+		t.Fatalf("mismatched tag object removed or changed the local sealed tag: got %s, want %s", got, releaseTagObject)
 	}
 }
 

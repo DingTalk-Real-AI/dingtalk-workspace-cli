@@ -21,7 +21,9 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -39,11 +41,16 @@ type imReadResultCaller struct {
 	results   map[string]*edition.ToolResult
 	errors    map[string]error
 	calls     []imReadResultCall
+	args      map[string]any
 	dryRun    bool
 }
 
-func (c *imReadResultCaller) CallTool(_ context.Context, productID, toolName string, _ map[string]any) (*edition.ToolResult, error) {
+func (c *imReadResultCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
 	c.calls = append(c.calls, imReadResultCall{productID: productID, toolName: toolName})
+	c.args = map[string]any{}
+	for k, v := range args {
+		c.args[k] = v
+	}
 	if err := c.errors[toolName]; err != nil {
 		return nil, err
 	}
@@ -200,6 +207,37 @@ func TestCrossPlatformCoverageChatMessageListProjectsStableFieldsAndPreservesLeg
 	legacyMessages, ok := legacy["messages"].([]any)
 	if !ok || len(legacyMessages) != 2 {
 		t.Fatalf("legacy result.messages = %#v", legacy["messages"])
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListDefaultsTimeAndOlderDirection(t *testing.T) {
+	payload := `{"result":{"messages":[],"hasMore":false}}`
+	caller := &imReadResultCaller{responses: map[string]string{"list_conversation_message_v2": payload}}
+	loc := shanghaiLocation()
+
+	before := time.Now().In(loc)
+	_, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "list", "--group", "cid-1", "--limit", "50")
+	after := time.Now().In(loc)
+	if err != nil {
+		t.Fatalf("chat message list returned error: %v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0] != (imReadResultCall{productID: "chat", toolName: "list_conversation_message_v2"}) {
+		t.Fatalf("calls = %#v, want chat/list_conversation_message_v2", caller.calls)
+	}
+	if got := caller.args["forward"]; got != false {
+		t.Fatalf("forward = %#v, want false when --time is omitted", got)
+	}
+	timeRaw, ok := caller.args["time"].(string)
+	if !ok || strings.TrimSpace(timeRaw) == "" {
+		t.Fatalf("time arg = %#v, want generated current time", caller.args["time"])
+	}
+	gotTime, err := time.ParseInLocation("2006-01-02 15:04:05", timeRaw, loc)
+	if err != nil {
+		t.Fatalf("parse generated time %q: %v", timeRaw, err)
+	}
+	if gotTime.Before(before.Add(-time.Second)) || gotTime.After(after.Add(time.Second)) {
+		t.Fatalf("time = %s, want between %s and %s", gotTime, before, after)
 	}
 }
 

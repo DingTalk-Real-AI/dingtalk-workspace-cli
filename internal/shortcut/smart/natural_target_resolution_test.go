@@ -22,7 +22,7 @@ func TestCrossPlatformCoverageNaturalSearchAndSenderFlagsStayPublicOptional(t *t
 		want  []string
 	}{
 		{name: "search natural adapters", flags: SearchMsg.Flags, want: []string{"chat-query", "sender-query"}},
-		{name: "chat messages natural adapters", flags: ChatMessages.Flags, want: []string{"chat-query", "sender-query"}},
+		{name: "chat messages natural adapters", flags: ChatMessages.Flags, want: []string{"chat-query", "sender", "sender-query"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -160,7 +160,7 @@ func TestCrossPlatformCoverageChatMessagesOptionallyFiltersResolvedSenderByEithe
 	root.SetOut(&output)
 	root.SetArgs([]string{
 		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
-		"--sender-query", "测试用户甲", "--page-all",
+		"--sender", "测试用户甲", "--page-all",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
@@ -201,7 +201,64 @@ func TestCrossPlatformCoverageChatMessagesOptionallyFiltersResolvedSenderByEithe
 	}
 }
 
-func TestCrossPlatformCoverageChatMessagesSenderResolutionFailureKeepsUnfilteredMessages(t *testing.T) {
+func TestChatMessagesFormatValidSenderSkipsDirectoryAndFiltersStableID(t *testing.T) {
+	fake := &platformCoverageCaller{
+		chatMessagesResult: `{"result":{"hasMore":false,"messages":[
+			{"openMessageId":"wanted","sender":"目标展示名","senderOpenDingTalkId":"DAAAAAAAAAAAiE","content":"保留"},
+			{"openMessageId":"other","sender":"其他人","senderOpenDingTalkId":"DAQEBAQEBAQEiE","content":"过滤"}
+		]}}`,
+	}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
+		"--sender", "DAAAAAAAAAAAiE", "--page-all",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != "list_conversation_message_v2" {
+		t.Fatalf("format-valid sender unexpectedly preflighted: %#v", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["count"] != float64(1) || payload["complete"] != true {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
+func TestChatMessagesWithoutSenderDoesNotResolveEveryMessageIdentity(t *testing.T) {
+	fake := &platformCoverageCaller{chatMessagesResult: `{"result":{"hasMore":false,"messages":[
+		{"openMessageId":"m1","sender":"群昵称一","senderOpenDingTalkId":"D1","content":"一"},
+		{"openMessageId":"m2","sender":"群昵称二","senderOpenDingTalkId":"D2","content":"二"}
+	]}}`}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+chat-messages", "--group", "cid-fixture-chat-0001", "--page-all"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0].tool != "list_conversation_message_v2" {
+		t.Fatalf("calls=%#v", fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	identity := payload["identityResult"].(map[string]any)
+	if payload["count"] != float64(2) || identity["status"] != "requires_query_check" ||
+		identity["negativeConclusionAllowed"] != false {
+		t.Fatalf("payload=%#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatMessagesSenderResolutionFailureStopsWithoutUnfilteredMessages(t *testing.T) {
 	fake := &platformCoverageCaller{
 		contactSearchResult: `{"result":[]}`,
 		chatMessagesResult: `{"result":{"hasMore":false,"messages":[
@@ -216,22 +273,26 @@ func TestCrossPlatformCoverageChatMessagesSenderResolutionFailureKeepsUnfiltered
 		"chat", "+chat-messages", "--group", "cid-fixture-chat-0001",
 		"--sender-query", "不存在的人", "--page-all",
 	})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("optional sender failure stopped message read: %v", err)
+	if err := root.Execute(); err == nil {
+		t.Fatal("sender resolution failure unexpectedly succeeded")
 	}
 	if len(fake.calls) != 2 || fake.calls[0].tool != "list_conversation_message_v2" ||
 		fake.calls[1].tool != "search_contact_by_key_word" {
-		t.Fatalf("calls = %#v, want message read followed by non-blocking failed resolve", fake.calls)
+		t.Fatalf("calls = %#v, want message read followed by failed resolve", fake.calls)
 	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
 		t.Fatalf("decode output: %v\n%s", err, output.String())
 	}
-	if payload["count"] != float64(1) || payload["complete"] != false ||
-		payload["partial"] != true || payload["failedCount"] != float64(1) ||
+	if payload["count"] != float64(0) || payload["complete"] != false ||
+		payload["partial"] != false || payload["failedCount"] != float64(1) ||
 		payload["stopReason"] != "sender_resolution_failed" {
-		t.Fatalf("unfiltered fallback payload = %#v", payload)
+		t.Fatalf("fail-closed payload = %#v", payload)
+	}
+	messages, ok := payload["messages"].([]any)
+	if !ok || len(messages) != 0 {
+		t.Fatalf("failed resolution leaked unfiltered messages: %#v", payload["messages"])
 	}
 	if _, exists := payload["resolvedFilters"]; exists {
 		t.Fatalf("failed resolution unexpectedly published resolvedFilters: %#v", payload)

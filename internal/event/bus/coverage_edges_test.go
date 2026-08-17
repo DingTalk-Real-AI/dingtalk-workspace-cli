@@ -361,13 +361,18 @@ func TestCrossPlatformCoverageDaemonMethodEdges(t *testing.T) {
 		}
 		return nil, net.ErrClosed
 	}}
-	d := &daemon{listener: l, log: logger, hub: NewHub(1), idleStop: make(chan struct{})}
+	d := &daemon{listener: l, log: logger, hub: NewHub(1), idleStop: make(chan struct{}), stopReq: make(chan string, 1)}
 	d.acceptLoop(context.Background())
 	d.shuttingDown.Store(true)
 	d.acceptLoop(context.Background())
 	d.triggerShutdown("test")
-	if !l.closed {
-		t.Fatal("trigger did not close listener")
+	select {
+	case reason := <-d.stopReq:
+		if reason != "test" {
+			t.Fatalf("stop reason = %q", reason)
+		}
+	default:
+		t.Fatal("trigger did not notify lifecycle loop")
 	}
 
 	d = &daemon{listener: &scriptedListener{accept: func() (net.Conn, error) { return nil, net.ErrClosed }}, log: logger, hub: NewHub(1), idleStop: make(chan struct{})}

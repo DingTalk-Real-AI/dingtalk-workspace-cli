@@ -388,7 +388,10 @@ range update 与合并区域冲突时返回 MERGED_CELLS_CONFLICT 的行为。
   csv            带 [row=N] 行号前缀的 CSV 文本
   colIndices     列字母映射数组（定位列用 colIndices[j]，禁止手数逗号）
   rowIndices     行号映射数组
-  hasMore        是否因 maxChars 截断
+  hasMore        目标范围是否还有未返回数据
+  truncationReasons  部分返回原因：max_cells / max_chars
+  resolvedRange  未传 --range 时底层解析出的完整目标范围
+  returnedRange  本次实际完整返回的范围
 
 取值模式（--value-render-option）：
   formatted_value  格式化后的展示值（默认），如 ¥1,000.00、2025-06-01
@@ -398,8 +401,13 @@ range update 与合并区域冲突时返回 MERGED_CELLS_CONFLICT 的行为。
 与 range read 的区别：
   - CSV 格式 token 消耗约为 JSON 的 1/3
   - 支持选择取值模式
-  - 自动防爆（max-chars 截断 + has_more 标志）
+  - 自动防爆（30,000 单元格 / max-chars 上限 + hasMore 标志）
   - [row=N] 前缀防止行号计算错误
+
+当 hasMore=true 时本命令不会自动续读；请结合目标范围和
+returnedRange 从下一行显式传 --range。max_cells 不能通过增大
+--max-chars 解决。收到 forbidden.document.sizeOverLimit 表示工作簿整体
+无法装载，应创建更小副本或拆分工作簿，缩小 --range 不能解决。
 
 注意：csv-get 不返回合并单元格结构。查看合并范围请使用
 dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 mergedRanges。`,

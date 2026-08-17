@@ -562,6 +562,16 @@ func TestSanitizeJSONRPCEndpointPreservesDingTalkMCPGatewayQuery(t *testing.T) {
 			endpoint: "https://mcp-gw.dingtalk.com/server/demo?key=secret#frag",
 			want:     "https://mcp-gw.dingtalk.com/server/demo?key=secret",
 		},
+		{
+			name:     "prepub international gateway",
+			endpoint: "https://pre-mcp-gw.dingtalk.io/server/demo?key=secret#frag",
+			want:     "https://pre-mcp-gw.dingtalk.io/server/demo?key=secret",
+		},
+		{
+			name:     "prod international gateway",
+			endpoint: "https://mcp-gw.dingtalk.io/server/demo?key=secret#frag",
+			want:     "https://mcp-gw.dingtalk.io/server/demo?key=secret",
+		},
 	}
 
 	for _, tt := range cases {

@@ -1220,7 +1220,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	}
 
 	busState := "personal bus stopped"
-	if err := personalStopBus(busctl.StopConfig{WorkDir: workDir}); err != nil {
+	if err := personalStopBus(busctl.StopConfig{WorkDir: workDir, IPCEndpoint: ipcEndpoint}); err != nil {
 		if errors.Is(err, busctl.ErrNotRunning) {
 			busState = "personal bus is not running"
 		} else {

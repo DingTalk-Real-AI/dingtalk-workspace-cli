@@ -1354,15 +1354,16 @@ func TestDeliveryCatalogChatParamDeclsFrom87910880Reviewed(t *testing.T) {
 		interfaceType string
 	}{
 		{"chat message edit", "conversation-id", "openConversationId", true, ""},
-		{"chat message edit", "msg-id", "openMessageId", true, ""},
+		{"chat message edit", "message-id", "openMessageId", true, ""},
 		{"chat message edit", "at-open-dingtalk-ids", "atOpenDingTalkIds", false, "array"},
+		{"chat message update-text-emotion", "message-id", "openMsgId", true, ""},
+		{"chat message send", "idempotency-key", "uuid", false, ""},
 		{"chat message send-card", "at-all", "atAll", false, ""},
 		{"chat message send-card", "at-open-dingtalk-ids", "atOpenDingTalkIds", false, "array"},
-		{"chat message update-text-emotion", "msg-id", "openMsgId", true, ""},
 		{"chat message update-text-emotion", "old-emotion-id", "oldEmotionId", true, ""},
 		{"chat category batch-info", "category-ids", "categoryIds", true, "array"},
-		{"chat category list-by-conv", "group", "openConversationId", true, ""},
-		{"chat group update-nick", "group", "openConversationId", true, ""},
+		{"chat category list-by-conv", "conversation-id", "openConversationId", true, ""},
+		{"chat group update-nick", "conversation-id", "", true, ""},
 		{"chat group upgrade-to-external", "extension", "extension", false, "object"},
 		{"chat +messages-send-card", "receiver-open-dingtalk-id", "receiverOpenDingTalkId", false, ""},
 		{"chat message list-favorites", "size", "", false, "string"},
@@ -1396,7 +1397,8 @@ func TestDeliveryCatalogChatParamDeclsFrom87910880Reviewed(t *testing.T) {
 		}
 	}
 
-	// Hidden conversation aliases must stay unpublished (merge-base parity).
+	// Manifest-covered migrations hide legacy aliases; manifest-external
+	// commands keep their existing visible flags for compatibility.
 	editLeaf, err := queryDeliverySchemaPayload([]string{"chat message edit"})
 	if err != nil {
 		t.Fatal(err)
@@ -1407,14 +1409,65 @@ func TestDeliveryCatalogChatParamDeclsFrom87910880Reviewed(t *testing.T) {
 			t.Fatalf("chat message edit unexpectedly publishes hidden alias --%s", hidden)
 		}
 	}
+	sendLeaf, err = queryDeliverySchemaPayload([]string{"chat message send"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sendParams = schemaMap(sendLeaf["parameters"])
+	if _, ok := sendParams["uuid"]; ok {
+		t.Fatal("chat message send unexpectedly publishes hidden alias --uuid")
+	}
 	listByConv, err := queryDeliverySchemaPayload([]string{"chat category list-by-conv"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	listParams := schemaMap(listByConv["parameters"])
-	for _, hidden := range []string{"conversation-id", "id"} {
-		if _, ok := listParams[hidden]; ok {
-			t.Fatalf("chat category list-by-conv unexpectedly publishes hidden alias --%s", hidden)
+	if _, ok := listParams["conversation-id"]; !ok {
+		t.Fatalf("chat category list-by-conv missing public canonical --conversation-id")
+	}
+	if _, ok := listParams["group"]; !ok {
+		t.Fatalf("chat category list-by-conv unexpectedly hides manifest-external --group")
+	}
+	if _, ok := listParams["id"]; ok {
+		t.Fatalf("chat category list-by-conv unexpectedly publishes hidden alias --id")
+	}
+
+	for _, path := range []string{
+		"chat message add-emoji",
+		"chat message remove-emoji",
+		"chat message add-text-emotion",
+		"chat message remove-text-emotion",
+	} {
+		leaf, err := queryDeliverySchemaPayload([]string{path})
+		if err != nil {
+			t.Fatal(err)
+		}
+		params := schemaMap(leaf["parameters"])
+		if _, ok := params["conversation-id"]; !ok {
+			t.Fatalf("%s missing public canonical --conversation-id", path)
+		}
+		for _, visible := range []string{"group", "id", "chat"} {
+			if _, ok := params[visible]; !ok {
+				t.Fatalf("%s unexpectedly hides manifest-external --%s", path, visible)
+			}
+		}
+	}
+
+	groupBots, err := queryDeliverySchemaPayload([]string{"chat group bots"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	groupBotsParams := schemaMap(groupBots["parameters"])
+	group := groupBotsParams["group"]
+	if group == nil {
+		t.Fatal("chat group bots missing public legacy --group")
+	}
+	if group["property"] != "openConversationId" {
+		t.Fatalf("chat group bots --group property = %#v, want openConversationId", group["property"])
+	}
+	for _, migrated := range []string{"conversation-id", "group-name"} {
+		if _, ok := groupBotsParams[migrated]; ok {
+			t.Fatalf("chat group bots unexpectedly publishes migrated --%s", migrated)
 		}
 	}
 }

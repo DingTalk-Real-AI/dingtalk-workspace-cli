@@ -4,6 +4,7 @@
 package minutes
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -372,7 +373,7 @@ func runMinutesMindmap(rt *shortcut.RuntimeContext, id string, timeout, interval
 			payload := map[string]any{"operation": "minutes.mindmap", "complete": false, "taskUuid": id, "taskStatus": status, "attempts": attempts, "result": result, "recovery": map[string]any{"taskUuid": id, "nextAction": "inspect source transcript; do not assume an empty mind map"}}
 			return payload, minutesCompositeError("minutes_mindmap_failed", "poll", payload)
 		}
-		if time.Now().Add(interval).After(deadline) {
+		if minutesPollDeadlineReached(deadline, interval) {
 			payload := map[string]any{"operation": "minutes.mindmap", "complete": false, "taskUuid": id, "taskStatus": status, "attempts": attempts, "recovery": map[string]any{"taskUuid": id, "nextAction": "dws minutes mind-graph status --id <taskUuid>"}}
 			return payload, minutesCompositeError("minutes_mindmap_timeout", "poll", payload)
 		}
@@ -422,7 +423,7 @@ func runMinutesSpeakerInsights(rt *shortcut.RuntimeContext, id string, timeout, 
 			payload := map[string]any{"operation": "minutes.speaker_insights", "complete": false, "taskUuid": id, "taskId": taskID, "attempts": attempts, "stage": "poll", "recovery": map[string]any{"taskUuid": id, "taskId": taskID, "nextAction": "dws minutes speaker summary get --ids <taskUuid>"}}
 			return payload, callErr
 		}
-		if time.Now().Add(interval).After(deadline) {
+		if minutesPollDeadlineReached(deadline, interval) {
 			payload := map[string]any{"operation": "minutes.speaker_insights", "complete": false, "taskUuid": id, "taskId": taskID, "attempts": attempts, "stage": "poll", "recovery": map[string]any{"taskUuid": id, "taskId": taskID, "nextAction": "dws minutes speaker summary get --ids <taskUuid>"}}
 			return payload, minutesCompositeError("minutes_speaker_insights_timeout", "poll", payload)
 		}
@@ -614,6 +615,17 @@ func executeMinutesShare(rt *shortcut.RuntimeContext) error {
 }
 
 func executeMinutesUnshare(rt *shortcut.RuntimeContext) error {
+	if !rt.DryRun() {
+		for _, id := range minutesIDs(rt) {
+			data, err := rt.CallMCPData("minutes", "get_minutes_basic_info", map[string]any{"taskUuid": id})
+			if err != nil {
+				return fmt.Errorf("minutes unshare preflight for %s: %w", id, err)
+			}
+			if _, err := minutesdata.Basic(id, data); err != nil {
+				return fmt.Errorf("minutes unshare preflight for %s: %w", id, err)
+			}
+		}
+	}
 	return executeMinutesPermissionLedger(rt, "unshare", "remove_member_permission", func(member string) map[string]any {
 		return map[string]any{"uuids": minutesIDs(rt), "memberUids": []string{member}}
 	})
@@ -631,7 +643,11 @@ func executeMinutesPermissionLedger(rt *shortcut.RuntimeContext, operation, tool
 	for index, member := range members {
 		data, err := rt.CallMCPWriteDataStrict("minutes", tool, params(member))
 		if err == nil {
-			err = minutesdata.RequireWriteAcknowledgement(operation, data)
+			if operation == "unshare" {
+				err = minutesdata.RequirePermissionMutationAcknowledgement(operation, minutesIDs(rt), []string{member}, data)
+			} else {
+				err = minutesdata.RequireWriteAcknowledgement(operation, data)
+			}
 		}
 		if err != nil {
 			failures = append(failures, map[string]any{"memberUid": member, "error": err.Error()})
@@ -708,7 +724,7 @@ func waitMinutesArtifacts(rt *shortcut.RuntimeContext, id string, artifacts []st
 	for {
 		attempts++
 		bundle, failures := collectMinutesArtifactsOnce(rt, id, artifacts, pageLimit)
-		if len(failures) == 0 || time.Now().Add(interval).After(deadline) {
+		if len(failures) == 0 || minutesPollDeadlineReached(deadline, interval) {
 			return bundle, failures, attempts
 		}
 		if err := waitMinutesInterval(rt, interval); err != nil {
@@ -720,12 +736,20 @@ func waitMinutesArtifacts(rt *shortcut.RuntimeContext, id string, artifacts []st
 func waitMinutesInterval(rt *shortcut.RuntimeContext, interval time.Duration) error {
 	timer := time.NewTimer(interval)
 	defer timer.Stop()
+	commandContext := rt.Command().Context()
+	if commandContext == nil {
+		commandContext = context.Background()
+	}
 	select {
-	case <-rt.Command().Context().Done():
-		return rt.Command().Context().Err()
+	case <-commandContext.Done():
+		return commandContext.Err()
 	case <-timer.C:
 		return nil
 	}
+}
+
+func minutesPollDeadlineReached(deadline time.Time, interval time.Duration) bool {
+	return !time.Now().Add(interval).Before(deadline)
 }
 
 func outputWorkflowResult(rt *shortcut.RuntimeContext, payload map[string]any, failed bool, reason, stage string) error {

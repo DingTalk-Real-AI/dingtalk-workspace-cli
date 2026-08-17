@@ -712,9 +712,9 @@ func TestCrossPlatformCoverageAgentMetadataMCPAndPluginScoping(t *testing.T) {
 	// calls must fail before preflight or transport while anonymous plugins remain
 	// valid above.
 	resolveCalled := false
-	testseam.Swap(t, &runnerResolveAuthToken, func(*runtimeRunner, context.Context) (string, error) {
+	testseam.Swap(t, &runnerResolveAuthSnapshot, func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
 		resolveCalled = true
-		return "", nil
+		return AccessTokenSnapshot{}, nil
 	})
 	callsBefore := len(captured)
 	unauthenticated := &runtimeRunner{

@@ -72,6 +72,8 @@ metadata:
 
 - `+dm`：姓名目标的简单文本/Markdown，参数空间最小。
 - `+send-to-group`：群名或稳定 ID 目标的简单文本/Markdown，避免暴露无关身份矩阵。
+- Markdown 中的公网图片必须写成 `![图片标题](https://example.com/image.png)` 才会内联展示；
+  省略开头的 `!` 时只会显示为链接。
 - `+messages-send`：文件、Bot、Webhook、复杂 @ 或幂等控制。user 已知 ID 可直接传，也可用 `--user-query` / `--chat-query` 运行同一只读解析链；Bot 多群使用 `--groups/--groups-file`，返回 `im.batch-write.v1`；bot/webhook 只使用下层真实支持的文本/Markdown 能力。
 - 文件直接传 `+messages-send --file <相对路径>`；不要先独立上传并提取 mediaId。
 - Webhook 使用 `+messages-send --as webhook --webhook-token <token>`；不要退回原子 Webhook 命令。
@@ -92,10 +94,13 @@ metadata:
 
 | 场景 | Reference |
 |---|---|
-| 复杂发送、跨会话转发、共同群或组合流程 | [01-messaging.md](references/01-messaging.md) |
-| 编辑/撤回/引用/转发/卡片/reaction/Pin/Top/Favorite | [chat-message.md](references/chat/chat-message.md) |
-| 建群、成员、管理员、群公告、群设置 | [chat-group.md](references/chat/chat-group.md) |
-| Bot 搜索、入群、群发和撤回 | [chat-bot.md](references/chat/chat-bot.md) |
+| 需要跨步骤传递真实结果的消息/群组合流程 | [01-messaging.md](references/01-messaging.md) |
+| 消息读取与查询 | [message-query](references/chat/message-query.md) |
+| 编辑、撤回、回复、转发、Pin、Top、Favorite 或 reaction 写入 | [message-actions](references/chat/message-actions.md) |
+| 位置、联系人名片、底层媒体与资源下载 | [message-media](references/chat/message-media.md) |
+| 群列表、群搜索、共同群、成员与群内机器人读取 | [group-discovery](references/chat/group-discovery.md) |
+| 建群、成员或已知机器人增删、管理员、公告与群设置 | [group-admin](references/chat/group-admin.md) |
+| 搜索未知机器人、机器人消息发送/撤回与 Webhook | [chat-bot.md](references/chat/chat-bot.md) |
 | 会话置顶、分类、红点、免打扰和隐藏 | [chat-conversation.md](references/chat/chat-conversation.md) |
 | 低频意图之间仍需消歧 | [intent-guide.md](references/intent-guide.md) |
 | 表情名称与 ID | [chat-emoji-list.md](references/chat-emoji-list.md) |

@@ -16,9 +16,13 @@ package bus
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
+
+	eventlock "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/lock"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestAcquire_WritesOurPID(t *testing.T) {
@@ -110,6 +114,109 @@ func TestReadHolderPID_MalformedReturnsZero(t *testing.T) {
 	if got := ReadHolderPID(path); got != 0 {
 		t.Fatalf("ReadHolderPID(malformed) = %d, want 0", got)
 	}
+}
+
+func TestCrossPlatformCoverageValidateHolderOwnershipHeldLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), LockFileName)
+	held, err := busTryAcquire(path)
+	if err != nil {
+		t.Fatalf("hold lock: %v", err)
+	}
+	defer held.Close()
+	if err := truncateAndWritePID(held.File(), os.Getpid()); err != nil {
+		t.Fatalf("write holder PID: %v", err)
+	}
+
+	owned, err := ValidateHolderOwnership(path, os.Getpid())
+	if err != nil {
+		t.Fatalf("ValidateHolderOwnership: %v", err)
+	}
+	if !owned {
+		t.Fatal("held lock was not attributed to its recorded PID")
+	}
+}
+
+func TestCrossPlatformCoverageValidateHolderOwnershipClearsReusedPID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), LockFileName)
+	// The current PID is alive but deliberately does not hold this lock. This
+	// models a stale daemon PID that the OS has reassigned to another process.
+	if err := os.WriteFile(path, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o600); err != nil {
+		t.Fatalf("write stale PID: %v", err)
+	}
+
+	owned, err := ValidateHolderOwnership(path, os.Getpid())
+	if err != nil {
+		t.Fatalf("ValidateHolderOwnership: %v", err)
+	}
+	if owned {
+		t.Fatal("live reused PID without the bus lock was accepted as owner")
+	}
+	if got := ReadHolderPID(path); got != 0 {
+		t.Fatalf("stale PID after validation = %d, want cleared", got)
+	}
+}
+
+func TestCrossPlatformCoverageValidateHolderOwnershipRejectsMismatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), LockFileName)
+	if err := os.WriteFile(path, []byte("123\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	owned, err := ValidateHolderOwnership(path, 456)
+	if err != nil || owned {
+		t.Fatalf("ValidateHolderOwnership mismatch = %v, %v", owned, err)
+	}
+}
+
+func TestCrossPlatformCoverageValidateHolderOwnershipErrors(t *testing.T) {
+	errInjected := errors.New("injected ownership validation failure")
+	writeLivePID := func(t *testing.T) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), LockFileName)
+		if err := os.WriteFile(path, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	t.Run("probe", func(t *testing.T) {
+		path := writeLivePID(t)
+		testseam.Swap(t, &busTryAcquire, func(string) (*eventlock.File, error) {
+			return nil, errInjected
+		})
+		if _, err := ValidateHolderOwnership(path, os.Getpid()); !errors.Is(err, errInjected) {
+			t.Fatalf("probe error = %v", err)
+		}
+	})
+
+	t.Run("seek", func(t *testing.T) {
+		path := writeLivePID(t)
+		testseam.Swap(t, &busSeek, func(*os.File, int64, int) (int64, error) {
+			return 0, errInjected
+		})
+		if _, err := ValidateHolderOwnership(path, os.Getpid()); !errors.Is(err, errInjected) {
+			t.Fatalf("seek error = %v", err)
+		}
+	})
+
+	t.Run("read", func(t *testing.T) {
+		path := writeLivePID(t)
+		testseam.Swap(t, &busReadAll, func(io.Reader) ([]byte, error) {
+			return nil, errInjected
+		})
+		if _, err := ValidateHolderOwnership(path, os.Getpid()); !errors.Is(err, errInjected) {
+			t.Fatalf("read error = %v", err)
+		}
+	})
+
+	t.Run("clear", func(t *testing.T) {
+		path := writeLivePID(t)
+		testseam.Swap(t, &busTruncate, func(*os.File, int64) error {
+			return errInjected
+		})
+		if _, err := ValidateHolderOwnership(path, os.Getpid()); !errors.Is(err, errInjected) {
+			t.Fatalf("clear error = %v", err)
+		}
+	})
 }
 
 func TestAcquire_AfterReleaseReclaimable(t *testing.T) {

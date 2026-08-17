@@ -52,6 +52,11 @@ var ChatCreate = shortcut.Shortcut{
 		`dws chat +chat-create --name "合作群" --member-query "张三,李四" --type EXTERNAL`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if ownerOpenID := rt.Str("owner-open-dingtalk-id"); ownerOpenID != "" {
+			if err := targetresolver.ValidateExplicitOpenDingTalkID("--owner-open-dingtalk-id", ownerOpenID); err != nil {
+				return err
+			}
+		}
 		resolvedMembers, err := targetresolver.ResolveUsers(
 			rt,
 			rt.StrSlice("member-query"),
@@ -339,7 +344,7 @@ func findOpenDingTalkID(value any) string {
 	switch typed := value.(type) {
 	case map[string]any:
 		for _, key := range []string{"senderOpenDingTalkId", "senderOpenDingtalkId", "openDingTalkId", "openDingtalkId"} {
-			if candidate := strings.TrimSpace(fmt.Sprint(typed[key])); isOpenID(candidate) {
+			if candidate := strings.TrimSpace(fmt.Sprint(typed[key])); candidate != "" && candidate != "<nil>" {
 				return candidate
 			}
 		}
@@ -374,7 +379,7 @@ func findMessageSenderOpenDingTalkID(message map[string]any) string {
 		"senderOpenDingtalkId",
 		"senderOpenId",
 	} {
-		if candidate := strings.TrimSpace(fmt.Sprint(message[key])); isOpenID(candidate) {
+		if candidate := strings.TrimSpace(fmt.Sprint(message[key])); candidate != "" && candidate != "<nil>" {
 			return candidate
 		}
 	}

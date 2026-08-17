@@ -145,6 +145,15 @@ type FlagSpec struct {
 	// alike) and makes a whitespace-only value count as empty in required checks.
 	Trim bool
 
+	// Input declares extra input sources for a KindString flag beyond the
+	// literal command-line value: InputFile enables @path (value replaced by
+	// the file content), InputStdin enables - (value replaced by stdin).
+	// "@@value" always escapes to the literal "@value". Only explicit CLI
+	// tokens are resolved; EnvVar fallback and registration defaults pass
+	// through unchanged. Resolution runs before required/enum/constraint/
+	// Validate checks, so they see the payload content. Empty = flag value only.
+	Input []string
+
 	// Schema parameter final facts (embedded to dws.schema.*; assembly pass-through).
 	Enum              []string // accepted values
 	Format            string   // machine-readable format (e.g. uri)
@@ -365,6 +374,7 @@ func New(spec Spec) *cobra.Command {
 	validateDispatchDecl(spec)
 	validateSafetySpec(spec)
 	validateContractDecl(spec)
+	validateInputSpecs(spec.Use, spec.Flags)
 	// Help prose inherits the declaration when not authored separately:
 	// Selection.Examples (already contract-validated against the real flags)
 	// double as the --help Example block, keeping one authored source.
@@ -476,6 +486,11 @@ func runDeclaredPreflight(cmd *cobra.Command, args []string, spec Spec) error {
 			return err
 		}
 	}
+	// Input resolution rewrites explicit @file / stdin values in place so the
+	// required/enum/constraint/Validate stages below check the payload content.
+	if err := resolveInputFlags(cmd, spec.Flags); err != nil {
+		return err
+	}
 	if err := ValidateRequired(cmd, spec.Flags); err != nil {
 		return err
 	}
@@ -578,18 +593,7 @@ func RegisterFlags(cmd *cobra.Command, flags []FlagSpec) {
 		for _, alias := range flag.Aliases {
 			RegisterFlag(cmd, flag.Kind, alias, "", flag.Usage+" (alias)")
 			_ = cmd.Flags().MarkHidden(alias)
-			if registered := cmd.Flags().Lookup(alias); registered != nil {
-				runtimeannotate.SetFlagAnnotation(
-					registered,
-					runtimeannotate.AnnotationFlagAliasOf,
-					flag.Name,
-				)
-				runtimeannotate.SetFlagAnnotation(
-					registered,
-					runtimeannotate.AnnotationFlagAliasOrigin,
-					runtimeannotate.FlagAliasOriginCorecmdV1,
-				)
-			}
+			AnnotateFlagAlias(cmd, alias, flag.Name)
 		}
 		if flag.MarkRequired {
 			_ = cmd.MarkFlagRequired(flag.Name)
@@ -598,6 +602,30 @@ func RegisterFlags(cmd *cobra.Command, flags []FlagSpec) {
 			_ = cmd.Flags().MarkHidden(flag.Name)
 		}
 	}
+}
+
+// AnnotateFlagAlias records framework-owned evidence that aliasName is a hidden
+// compatibility alias for canonicalName. It is for commands that already own
+// their Cobra flag registration outside FlagSpec but still need the same
+// interface-snapshot alias contract as FlagSpec.Aliases.
+func AnnotateFlagAlias(cmd *cobra.Command, aliasName, canonicalName string) {
+	if cmd == nil {
+		return
+	}
+	registered := cmd.Flags().Lookup(aliasName)
+	if registered == nil {
+		return
+	}
+	runtimeannotate.SetFlagAnnotation(
+		registered,
+		runtimeannotate.AnnotationFlagAliasOf,
+		canonicalName,
+	)
+	runtimeannotate.SetFlagAnnotation(
+		registered,
+		runtimeannotate.AnnotationFlagAliasOrigin,
+		runtimeannotate.FlagAliasOriginCorecmdV1,
+	)
 }
 
 // RegisterFlag registers one flag by Kind. Default is applied at registration

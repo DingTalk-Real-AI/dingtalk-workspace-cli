@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	publicShortcutCount = 399
+	publicShortcutCount = 418
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including the hidden historical minutes.shortcut_minutes_search contract.
-	schemaPublishedShortcutCount = 401
+	schemaPublishedShortcutCount = 420
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 399
+	publiclyDeliveredShortcutCount = 418
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
@@ -140,6 +140,78 @@ func TestDeliveryShortcutProgressiveQueriesReturnCompleteContracts(t *testing.T)
 	assertChatCatalogCompleteLeafContracts(t)
 }
 
+func TestDeliveryWikiSpaceSearchDeclaresCompatibilityAdapter(t *testing.T) {
+	leaf := executeShortcutSchemaQuery(t, "--cli-path", "wiki +space-search")
+	if got := schemaContractString(leaf["interface_mode"]); got != "composite" {
+		t.Fatalf("wiki +space-search interface_mode = %q, want composite", got)
+	}
+	reason := schemaContractString(leaf["interface_reason"])
+	for _, fragment := range []string{"query/limit", "search_wikiSpaces.keyword/pageSize", "versioned Schema migration"} {
+		if !strings.Contains(reason, fragment) {
+			t.Fatalf("wiki +space-search interface_reason = %q, want fragment %q", reason, fragment)
+		}
+	}
+	parameters := schemaContractMap(leaf["parameters"])
+	for name, want := range map[string]string{"query": "query", "limit": "limit"} {
+		parameter := parameters[name]
+		if parameter == nil {
+			t.Fatalf("wiki +space-search missing --%s parameter: %#v", name, parameters)
+		}
+		if got := schemaContractString(parameter["property"]); got != want {
+			t.Fatalf("wiki +space-search --%s property = %q, want compatibility value %q", name, got, want)
+		}
+	}
+}
+
+func TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters(t *testing.T) {
+	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
+	checked := 0
+	for _, declared := range shortcut.All() {
+		if declared.Service != "wiki" || declared.UserDefined || !shortcut.InPublicCatalog(declared.Service, declared.Command) {
+			continue
+		}
+		checked++
+		canonical := shortcutSchemaCanonical(declared)
+		tool := tools[canonical]
+		if tool == nil {
+			t.Fatalf("delivery schema --all is missing %s", canonical)
+		}
+		examples := schemaContractStringSlice(tool["examples"])
+		if len(examples) == 0 {
+			t.Fatalf("%s has no delivered examples", canonical)
+		}
+		for _, example := range examples {
+			argv, err := cli.ParseAgentExampleArgv(example)
+			if err != nil {
+				t.Fatalf("%s example %q is not valid argv: %v", canonical, example, err)
+			}
+			for _, flag := range declared.Flags {
+				if !flag.Required {
+					continue
+				}
+				names := append([]string{flag.Name}, flag.Aliases...)
+				if !schemaExampleHasLongFlag(argv, names...) {
+					t.Errorf("%s example %q is missing required --%s", canonical, example, flag.Name)
+				}
+			}
+		}
+	}
+	if checked != 20 {
+		t.Fatalf("checked Wiki shortcut examples = %d, want 20", checked)
+	}
+}
+
+func schemaExampleHasLongFlag(argv []string, names ...string) bool {
+	for _, argument := range argv {
+		for _, name := range names {
+			if argument == "--"+name || strings.HasPrefix(argument, "--"+name+"=") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func assertSchemaSummarySafety(
 	t testing.TB,
 	summaries map[string]map[string]any,
@@ -207,7 +279,11 @@ func assertChatCatalogCompleteLeafContracts(t testing.TB) {
 	})
 
 	auditJoin := executeShortcutSchemaQuery(t, "--cli-path", "chat group audit-join-validation")
+	assertSchemaLeafParameterRequired(t, auditJoin, "chat group audit-join-validation", "conversation-id", true)
 	assertSchemaLeafParameterEnum(t, auditJoin, "chat group audit-join-validation", "status", []string{"AuditApprove", "AuditDelete"})
+	if parameters := schemaContractMap(auditJoin["parameters"]); parameters["group"] != nil {
+		t.Fatalf("chat group audit-join-validation publishes hidden --group alias: %#v", parameters["group"])
+	}
 }
 
 func assertSchemaLeafParameterRequired(t testing.TB, leaf map[string]any, cliPath, name string, want bool) {

@@ -413,6 +413,13 @@ func newDriveCommand() *cobra.Command {
 				}
 			}
 
+			// --type/--start/--end 客户端过滤：激活即切 BFS 全量拉取后筛（两路由统一）；
+			// 未启用返回零值，存量分支字节级不变。互斥/非法值/start>end 在此拒绝。
+			filter, err := parseDriveListFilter(cmd)
+			if err != nil {
+				return err
+			}
+
 			// --versions 模式：列出文件历史版本（仅普通文件）
 			// 先于 --depth 校验执行：versions 模式合法使用 --limit，
 			// 不应被「--limit 与 --depth 不兼容」的误导性报错拦截。
@@ -454,7 +461,8 @@ func newDriveCommand() *cobra.Command {
 			if workspaceID != "" {
 				// depth>1 时 --pattern 放开（先递归后过滤）；--order-by/--space-id/--thumbnail
 				// 知识库无对应参数，静默忽略。
-				if depth > 1 || latest > 0 {
+				// filter 激活时 depth==1 也走 BFS 退化态（全量拉取→CLI 侧筛）。
+				if depth > 1 || latest > 0 || filter.active() {
 					quiet, _ := cmd.Flags().GetBool("quiet")
 					baseArgs := map[string]any{"workspaceId": workspaceID}
 					rootFolder := docFolderFlag(cmd, "node", "file-id")
@@ -463,7 +471,7 @@ func newDriveCommand() *cobra.Command {
 							return err
 						}
 					}
-					return runDriveListDepth(cmd, newDocDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest)
+					return runDriveListDepth(cmd, newDocDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest, filter)
 				}
 				if pattern != "" {
 					return &CLIError{
@@ -487,7 +495,9 @@ func newDriveCommand() *cobra.Command {
 				return callMCPToolOnServer("doc", "list_nodes", toolArgs)
 			}
 
-			if depth > 1 {
+			// 钉盘：filter 激活即 depth=1 单层退化态（全量翻完当前目录后 CLI 侧筛）；
+			// filter+latest 单层同走 BFS（先筛后排，不走 runDriveListLatest 凑够即停）。
+			if depth > 1 || filter.active() {
 				quiet, _ := cmd.Flags().GetBool("quiet")
 				baseArgs := map[string]any{}
 				if v, _ := cmd.Flags().GetString("space-id"); v != "" {
@@ -508,7 +518,7 @@ func newDriveCommand() *cobra.Command {
 						return err
 					}
 				}
-				return runDriveListDepth(cmd, newDrivePanDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest)
+				return runDriveListDepth(cmd, newDrivePanDepthRoute(), baseArgs, rootFolder, depth, pattern, quiet, latest, filter)
 			}
 
 			// 默认路由：钉盘文件列表
@@ -563,6 +573,11 @@ func newDriveCommand() *cobra.Command {
 			if v, _ := cmd.Flags().GetBool("thumbnail"); v {
 				argsMap["withThumbnail"] = true
 			}
+			// --pattern 页内过滤（现状缺口附带修复：透传即打印无法夹过滤，取回解析后筛）；
+			// 不带 pattern 时保持 callMCPTool 纯透传，存量行为不变。
+			if pattern != "" {
+				return callDriveListPageWithPattern(argsMap, pattern)
+			}
 			return callMCPTool("list_files", argsMap)
 		},
 	}
@@ -591,11 +606,13 @@ func newDriveCommand() *cobra.Command {
 					"用户要浏览「我的文件」/钉盘/网盘某目录下有哪些文件或文件夹时",
 					"已知父文件夹 dentryUuid，要列出其子项以便继续 download/copy/move 时",
 					"传 --workspace 时要列出文档空间/知识库根或子目录（与 wiki node list 场景重叠时，用户说钉盘/我的文件优先本命令）",
+					"要在已知目录内按类型/修改时间做无关键词筛选时：--type file --start 7d（钉盘与知识库路由均可，CLI 侧过滤）",
 				},
 				AvoidWhen: []string{
 					"只记得关键词、不知道所在目录时改用 dws drive search",
 					"明确要在某个知识库内按目录浏览且已有 workspaceId 时可用 dws wiki node list",
 					"要找最近打开/编辑过的文档改用 dws drive recent",
+					"带关键词的过滤改用 dws drive search（--extensions/--modified-from 等已可用）",
 				},
 				Examples: []string{
 					"dws drive list --limit 20 --format json",
@@ -1209,8 +1226,11 @@ func newDriveCommand() *cobra.Command {
 	driveListCmd.Flags().String("node", "", "文件 ID (dentryUuid) 或 URL (--versions 模式下必填)")
 	driveListCmd.Flags().String("pattern", "", "按名称通配过滤结果，如 \"*日报*\" (客户端过滤) (可选)")
 	driveListCmd.Flags().Int("depth", 1, "递归列出子目录层级，默认 1(仅当前层)，最大 5；与 --cursor/--limit 互斥；与 --workspace 组合时走知识库递归 (可选)")
-	driveListCmd.Flags().Int("latest", 0, "按修改时间取最新 N 个文件（1~50）；与 --pattern 组合时表示名称匹配的文件中最新 N 个；可与 --workspace/--depth 组合；与 --order-by/--order/--limit/--cursor 互斥 (可选)")
+	driveListCmd.Flags().Int("latest", 0, "按修改时间取最新 N 个文件（1~50）；与 --pattern 组合时表示名称匹配的文件中最新 N 个；可与 --workspace/--depth 组合；与 --order-by/--order/--limit/--cursor 互斥；扫描触发 2000 条上限或途中目录读取失败时报错，不产出不完整的 Top-N (可选)")
 	driveListCmd.Flags().Bool("quiet", false, "关闭递归进度输出(stderr)，不影响 stdout JSON (--depth>1 或 --latest 多页扫描时有效) (可选)")
+	driveListCmd.Flags().String("type", "", "按节点类型过滤: file|folder（客户端过滤：全量扫描后筛，钉盘/知识库均可用；与 --versions/--cursor/--order-by/--order/--limit 互斥）(可选)")
+	driveListCmd.Flags().String("start", "", "按修改时间过滤·起始: 相对时间如 24h/7d/2w、RFC3339、YYYY-MM-DD（客户端过滤，互斥同 --type）(可选)")
+	driveListCmd.Flags().String("end", "", "按修改时间过滤·截止: 语法同 --start（客户端过滤，互斥同 --type）(可选)")
 
 	driveInfoCmd.Flags().String("node", "", "节点 ID (dentryUuid) (必填)")
 	driveInfoCmd.Flags().String("space-id", "", "节点所属空间 ID (可选)")
@@ -3279,6 +3299,274 @@ func newDriveCommand() *cobra.Command {
 		RegisterCrossProductAliases(child)
 	}
 
+	driveStatusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "比较本地文件夹与钉盘文件夹的差异",
+		Long: `比较本地文件夹与钉盘文件夹的差异：本地取 --local-folder（绝对路径），钉盘取
+--remote-folder（文件夹 dentryUuid）指向的文件夹，按精确 MD5（默认）或快速
+modified_time（--quick）逐文件比对。两侧各自递归遍历，rel_path 相对各自根目录。
+
+输出五类差异：
+  new_local   仅本地存在
+  new_remote  仅钉盘存在
+  modified    两侧都存在且本次检测判定为已变更
+  unchanged   两侧都存在且本次检测判定为未变更
+  unknown     两侧都存在，但 exact 模式下远端无可靠 MD5、无法核对内容（不判 unchanged/modified）
+
+只比对钉盘 type=file 的二进制文件（跳过在线文档与快捷方式）；本地只比对常规文件。`,
+		Example: `  dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid>
+  dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid> --space-id xxxx
+  dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid> --quick`,
+		RunE: runDriveStatus,
+	}
+	driveStatusCmd.Flags().String("local-folder", "", "本地文件夹绝对路径 (必填)")
+	driveStatusCmd.Flags().String("remote-folder", "", "钉盘文件夹 ID (dentryUuid) (必填)")
+	driveStatusCmd.Flags().String("space-id", "", "钉盘空间 ID，不传则使用「我的文件」(可选)")
+	driveStatusCmd.Flags().Bool("quick", false, "快速模式：只比较 modified_time，不计算 MD5 (可选)")
+
+	drivePullCmd := &cobra.Command{
+		Use:   "pull",
+		Short: "把钉盘文件夹单向镜像到本地（Drive → 本地）",
+		Long: `递归下载钉盘 --remote-folder 文件夹下所有 type=file 的文件到本地
+--local-folder 对应路径（子目录自动创建），单向、文件级镜像。
+
+已存在的本地文件按 --if-exists 处理：
+  skip       默认，安全：本地已存在则保持不动，只新增
+  smart      推荐增量同步：本地 modified_time 已 ≥ 远端时则跳过下载
+  overwrite  总是下载覆盖（Drive 作为权威源）
+
+该命令会写入本地文件系统，执行前需要用户确认；非交互环境先用 --dry-run
+预览，确认后以相同参数追加 --yes 执行。
+
+输出 summary（downloaded/skipped/failed）与逐文件 items。
+若有文件下载失败，命令以非零退出码退出，结构化结果仍在 stdout。`,
+		Example: `  dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid>
+  dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists smart
+  dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid> --space-id xxxx`,
+		RunE: runDrivePull,
+	}
+	drivePullCmd.Flags().String("local-folder", "", "本地文件夹绝对路径 (必填)")
+	drivePullCmd.Flags().String("remote-folder", "", "钉盘文件夹 ID (dentryUuid) (必填)")
+	drivePullCmd.Flags().String("space-id", "", "钉盘空间 ID，不传则使用「我的文件」(可选)")
+	drivePullCmd.Flags().String("if-exists", "skip", "本地文件已存在时的策略: skip|smart|overwrite；命令会写本地，执行需确认 (可选)")
+
+	drivePushCmd := &cobra.Command{
+		Use:   "push",
+		Short: "把本地文件夹单向镜像到钉盘（本地 → Drive）",
+		Long: `递归把本地 --local-folder 下的文件与子目录（含空目录）镜像到钉盘
+--remote-folder 文件夹：缺失的目录按需创建（已存在则复用，不重建），文件按
+--if-exists 处理。文件级镜像——只新增/覆盖，不删除远端多余文件。
+
+已存在的远端文件按 --if-exists 处理：
+  skip       默认，安全：已存在则保持不动，只新增
+  smart      增量同步：远端 modified_time 已 ≥ 本地时跳过，否则走覆盖路径
+  overwrite  覆盖远端同名文件
+
+该命令会写入钉盘，执行前需要用户确认；非交互环境先用 --dry-run 预览，
+确认后以相同参数追加 --yes 执行。
+
+输出 summary（uploaded/skipped/failed，uploaded 含新建与覆盖）与逐条 items
+（含 folder_created）。若有文件失败，命令以非零退出码退出，结构化结果仍在 stdout。`,
+		Example: `  dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid>
+  dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists smart
+  dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists overwrite`,
+		RunE: runDrivePush,
+	}
+	drivePushCmd.Flags().String("local-folder", "", "本地文件夹绝对路径 (必填)")
+	drivePushCmd.Flags().String("remote-folder", "", "钉盘目标文件夹 ID (dentryUuid) (必填)")
+	drivePushCmd.Flags().String("space-id", "", "钉盘空间 ID，不传则使用「我的文件」(可选)")
+	drivePushCmd.Flags().String("if-exists", "skip", "远端文件已存在时的策略: skip|smart|overwrite；命令会写钉盘，执行需确认 (可选)")
+
+	driveSyncCmd := &cobra.Command{
+		Use:   "sync",
+		Short: "本地文件夹与钉盘文件夹双向同步（本地 ⇄ Drive）",
+		Long: `把本地 --local-folder 与钉盘 --remote-folder 做文件级双向同步：先按精确 MD5
+（默认）或快速 modified_time（--quick）算出差异，再按方向执行：
+  new_local   仅本地存在  → 上传到钉盘（缺失的远端目录按需创建）
+  new_remote  仅钉盘存在  → 下载到本地
+  modified    两侧都变更  → 按 --on-conflict 解决
+  unchanged   两侧一致    → 不动
+
+两侧都变更时的 --on-conflict 策略：
+  skip         默认，两侧都不动并保留两边内容
+  remote-wins  拉取远端覆盖本地
+  local-wins   上传本地覆盖远端
+  keep-both    本地文件改名保留，再拉取远端到原路径
+  ask          交互式逐个询问
+
+exact 模式下远端无可靠 MD5、内容无法核对的文件归入 unknown 并跳过（可改用 --quick）。
+文件级同步——只新增/覆盖，不删除任何一侧的多余文件。输出 summary（pulled/pushed/
+skipped/failed）、diff 与逐条 items；有失败则以非零退出码退出，结构化结果仍在 stdout。
+
+该命令会同时写入本地与钉盘，执行前需要用户确认；非交互环境先用 --dry-run
+预览，确认后以相同参数追加 --yes 执行。`,
+		Example: `  dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid>
+  dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid> --on-conflict local-wins
+  dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid> --quick --on-conflict keep-both`,
+		RunE: runDriveSync,
+	}
+	driveSyncCmd.Flags().String("local-folder", "", "本地文件夹绝对路径 (必填)")
+	driveSyncCmd.Flags().String("remote-folder", "", "钉盘文件夹 ID (dentryUuid) (必填)")
+	driveSyncCmd.Flags().String("space-id", "", "钉盘空间 ID，不传则使用「我的文件」(可选)")
+	driveSyncCmd.Flags().String("on-conflict", "skip", "两侧都变更时的策略: skip|remote-wins|local-wins|keep-both|ask；命令会写双端，执行需确认 (可选)")
+	driveSyncCmd.Flags().Bool("quick", false, "快速模式：只比较 modified_time，不计算 MD5 (可选)")
+
+	DeclareLeafMetadata(driveStatusCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "drive",
+				Name:           "folder_status",
+				CanonicalPath:  "drive.folder_status",
+				CLIPath:        "drive status",
+				PrimaryCLIPath: "drive status",
+			},
+			Description: "比较本地文件夹与钉盘文件夹的差异，只读不落盘。",
+			Result:      driveFolderStatusResultSpec(),
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed composite workflow: the command recursively lists the remote folder through drive/list_files, walks the local tree, and compares both sides by MD5 or modification time; no single pinned RPC represents the diff.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "比较本地文件夹与钉盘文件夹的差异，只读不落盘。",
+				UseWhen:      []string{"需要先看清本地与钉盘之间哪些文件新增、变更或一致，再决定拉取还是推送时"},
+				AvoidWhen:    []string{"只要单个文件的元数据用 drive info；要真正传输文件用 drive pull / push / sync"},
+				Examples: []string{
+					"dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid>",
+					"dws drive status --local-folder /abs/path/repo --remote-folder <dentryUuid> --quick",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "local-folder", Required: boolPtr(true)},
+				{Name: "remote-folder", Required: boolPtr(true)},
+			},
+		},
+	})
+	DeclareLeafMetadata(drivePullCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "drive",
+				Name:           "folder_pull",
+				CanonicalPath:  "drive.folder_pull",
+				CLIPath:        "drive pull",
+				PrimaryCLIPath: "drive pull",
+			},
+			Description: "把钉盘文件夹单向镜像到本地；写操作需确认，默认跳过本地既有文件。",
+			DryRun: &contract.DryRunSpec{
+				PreviewKind: contract.DryRunPreviewPlan,
+				RemoteReads: true,
+			},
+			Result: driveFolderPullResultSpec(),
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed composite workflow: the command recursively lists the remote folder through drive/list_files and then downloads each file through drive/download_file plus an HTTP GET into a temporary file committed by an atomic rename; no single pinned RPC represents the mirror.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "把钉盘文件夹单向镜像到本地；写操作需确认，默认跳过本地既有文件。",
+				UseWhen:      []string{"需要把整个钉盘文件夹拉到本地目录时"},
+				AvoidWhen:    []string{"只下载单个文件用 drive download；要把本地推到钉盘用 drive push；要双向对齐用 drive sync"},
+				Examples: []string{
+					"dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid>",
+					"dws drive pull --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists smart --dry-run",
+				},
+				ExampleDispositions: driveFolderStatefulExampleDispositions(),
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "local-folder", Required: boolPtr(true)},
+				{Name: "remote-folder", Required: boolPtr(true)},
+			},
+		},
+	})
+	DeclareLeafMetadata(drivePushCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "drive",
+				Name:           "folder_push",
+				CanonicalPath:  "drive.folder_push",
+				CLIPath:        "drive push",
+				PrimaryCLIPath: "drive push",
+			},
+			Description: "把本地文件夹单向镜像到钉盘；写操作需确认，默认跳过远端既有文件。",
+			DryRun: &contract.DryRunSpec{
+				PreviewKind: contract.DryRunPreviewPlan,
+				RemoteReads: true,
+			},
+			Result: driveFolderPushResultSpec(),
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed composite workflow: the command recursively lists the remote folder through drive/list_files, creates missing folders through drive/create_folder, and uploads each file through drive/get_upload_info plus an HTTP PUT and drive/commit_upload; no single pinned RPC represents the mirror.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "把本地文件夹单向镜像到钉盘；写操作需确认，默认跳过远端既有文件。",
+				UseWhen:      []string{"需要把整个本地目录推送到钉盘文件夹时"},
+				AvoidWhen:    []string{"只上传单个文件用 drive upload；要把钉盘拉到本地用 drive pull；要双向对齐用 drive sync"},
+				Examples: []string{
+					"dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid>",
+					"dws drive push --local-folder /abs/path/repo --remote-folder <dentryUuid> --if-exists smart --dry-run",
+				},
+				ExampleDispositions: driveFolderStatefulExampleDispositions(),
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "local-folder", Required: boolPtr(true)},
+				{Name: "remote-folder", Required: boolPtr(true)},
+			},
+		},
+	})
+	DeclareLeafMetadata(driveSyncCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "drive",
+				Name:           "folder_sync",
+				CanonicalPath:  "drive.folder_sync",
+				CLIPath:        "drive sync",
+				PrimaryCLIPath: "drive sync",
+			},
+			Description: "本地与钉盘文件夹双向同步；写操作需确认，默认跳过双端冲突。",
+			DryRun: &contract.DryRunSpec{
+				PreviewKind: contract.DryRunPreviewPlan,
+				RemoteReads: true,
+			},
+			Result: driveFolderSyncResultSpec(),
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed composite workflow: the command computes the same diff as drive status and then resolves it in both directions through drive/download_file, drive/create_folder, drive/get_upload_info and drive/commit_upload according to --on-conflict; no single pinned RPC represents the bidirectional sync.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "本地与钉盘文件夹双向同步；写操作需确认，默认跳过双端冲突。",
+				UseWhen:      []string{"需要让本地目录与钉盘文件夹互相补齐时"},
+				AvoidWhen:    []string{"只需单方向镜像用 drive pull / push；只想看差异用 drive status"},
+				Examples: []string{
+					"dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid>",
+					"dws drive sync --local-folder /abs/path/repo --remote-folder <dentryUuid> --on-conflict remote-wins --dry-run",
+				},
+				ExampleDispositions: driveFolderStatefulExampleDispositions(),
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "local-folder", Required: boolPtr(true)},
+				{Name: "remote-folder", Required: boolPtr(true)},
+			},
+		},
+	})
+
 	driveCmd.AddCommand(
 		driveListCmd,
 		driveListSpacesCmd,
@@ -3302,6 +3590,11 @@ func newDriveCommand() *cobra.Command {
 		drivePermissionCmd,
 		drivePublishCmd,
 		recycleCmd,
+		// 同步命令：status / pull / push / sync
+		driveStatusCmd,
+		drivePullCmd,
+		drivePushCmd,
+		driveSyncCmd,
 		driveStarCmd,
 		driveCoverCmd,
 		driveRevertCmd,

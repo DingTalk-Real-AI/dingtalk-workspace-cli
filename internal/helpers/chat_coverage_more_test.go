@@ -14,6 +14,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	helperCurrentDOpenID  = "DAAAAAAAAAAAiE"
+	helperCurrentDOpenID2 = "DAQEBAQEBAQEiE"
+)
+
 func newChatFlagTestCommand() *cobra.Command {
 	cmd := &cobra.Command{Use: "chat"}
 	cmd.Flags().String("forward", "", "")
@@ -35,6 +40,22 @@ func newChatFlagTestCommand() *cobra.Command {
 	cmd.Flags().Bool("all", false, "")
 	cmd.Flags().StringArray("permParam", nil, "")
 	return cmd
+}
+
+func TestNativeChatIDSplitUsesCurrentDFormat(t *testing.T) {
+	userIDs, openIDs := splitChatIDValues([]string{
+		helperCurrentDOpenID,
+		"D-prefix-fixture-user",
+		"d-prefix-fixture-user",
+		"D-invalid",
+		"fixture-user-id",
+	})
+	if len(openIDs) != 1 || openIDs[0] != helperCurrentDOpenID {
+		t.Fatalf("open IDs=%#v", openIDs)
+	}
+	if got := strings.Join(userIDs, ","); got != "D-prefix-fixture-user,d-prefix-fixture-user,D-invalid,fixture-user-id" {
+		t.Fatalf("user IDs=%#v", userIDs)
+	}
 }
 
 func TestCrossPlatformCoverageChatDirectionAndScalarCoverage(t *testing.T) {
@@ -151,18 +172,18 @@ func TestCrossPlatformCoverageChatContactMappingCoverage(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageResolveOpenDingTalkIDsCoverage(t *testing.T) {
-	if id, err := resolveOpenDingTalkID(context.Background(), "D-direct"); err != nil || id != "D-direct" {
+	if id, err := resolveOpenDingTalkID(context.Background(), helperCurrentDOpenID); err != nil || id != helperCurrentDOpenID {
 		t.Fatalf("direct ID = %q, %v", id, err)
 	}
 	if _, err := resolveOpenDingTalkID(context.Background(), ""); err == nil {
 		t.Fatal("empty ID unexpectedly resolved")
 	}
-	if ids, err := resolveOpenDingTalkIDs(context.Background(), []string{" D1 ", ""}); err != nil || ids[0] != "D1" {
+	if ids, err := resolveOpenDingTalkIDs(context.Background(), []string{" " + helperCurrentDOpenID + " ", ""}); err != nil || ids[0] != helperCurrentDOpenID {
 		t.Fatalf("direct IDs = %#v, %v", ids, err)
 	}
-	caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}}}
+	caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"` + helperCurrentDOpenID2 + `"}]}`}}}
 	installScriptedCaller(t, caller)
-	if ids, err := resolveOpenDingTalkIDs(context.Background(), []string{"u1", "u1"}); err != nil || ids[1] != "D1" {
+	if ids, err := resolveOpenDingTalkIDs(context.Background(), []string{"u1", "u1"}); err != nil || ids[1] != helperCurrentDOpenID2 {
 		t.Fatalf("resolved IDs = %#v, %v", ids, err)
 	}
 	caller.steps = []scriptedToolStep{{text: `{}`}, {text: `{}`}}

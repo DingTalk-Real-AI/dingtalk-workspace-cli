@@ -13,9 +13,11 @@ Runtime 会唯一解析为 openDingTalkId；已有 openDingTalkId 时传
   或艾特占位符。
 - `--dry-run` 仍执行只读 userId 解析，只输出两步计划，不执行写入。
 
-自动更新结果不确定时，不要再次更新或重复创建；保留返回结果并告知用户。若结果中已经
-包含 `openTaskId`，可以按用户需要查询一次投递状态；该查询只确认消息投递，不代表卡片
-正文已经更新成功。
+创建成功后保留真实 `bizId`。自动更新返回 `verified=true` 时已有明确生效证据；返回
+`accepted=true, verified=false` 时仅表示服务端已接受请求但未提供独立更新证据，应如实说明，
+不要重复创建或重复执行相同更新。只有错误明确标记 `retryable=true` 时，才使用原 `bizId`
+重试；明确未应用或 `bizId` 不一致时停止并保留真实错误。若结果中已经包含 `openTaskId`，
+可以按用户需要查询一次投递状态；该查询只确认消息投递，不代表卡片正文已经更新成功。
 
 当前内容仅为 streaming text，不接受 Lark Card JSON、组件树或按钮 callback。
 

@@ -83,7 +83,8 @@ Example:
     {"toolName":"range update","input":{"sheet-id":"Sheet1","range":"A1","values":[[{"type":"text","text":"hello"}]]}},
     {"toolName":"merge-cells","input":{"sheet-id":"Sheet1","range":"A1:B1","merge-type":"mergeAll"}},
     {"toolName":"update-dimension","input":{"sheet-id":"Sheet1","dimension":"ROWS","start-index":"1","length":1,"pixel-size":40}},
-    {"toolName":"group-dimension","input":{"sheet-id":"Sheet1","range":"3:7","group-state":"expand"}}
+    {"toolName":"group-dimension","input":{"sheet-id":"Sheet1","range":"3:7","group-state":"expand"}},
+    {"toolName":"set-dropdown","input":{"sheet-id":"Sheet1","range":"C2:C100","source-sheet-id":"SourceSheet","source-range":"T1:T3"}}
   ]'
   dws sheet batch-update --node <NODE_ID> --continue-on-error --operations '[...]'
 Flags:
@@ -101,6 +102,9 @@ Notes:
   - operations 最多 20 条
   - 当需要对多个区域执行相同清除时，优先使用 `range batch-clear`（更简洁）
   - `csv-put` 子操作与独立命令语义一致：CSV 字段值以 `=` 开头时按公式解析；前加单引号时写入以 `=` 开头的字面文本
+  - `set-dropdown` 的 `input` 中，Inline 使用 `options`；SourceRange 使用 `source-sheet-id` + `source-range`，两种模式必须且只能选一个。顶层 `colors` / `source-colors` 会被拒绝；Inline 颜色写在 `options[].color`，SourceRange 颜色写入暂不支持
+  - `set-dropdown` SourceRange 在已验证的重命名、引用前插入行/列、删除引用前行的场景会自动调整；已验证的 `move-dimension` 会使其变为 `invalid`。其他未覆盖删除/移动场景后先回读，仅 `invalid` 时重新选源写入
+  - `source-range` 按 `toolName` 解释：`set-dropdown` 中是下拉候选项来源；`range fill` / `range copy-to` / `range move-to` 中是待填充、复制或移动的数据源区域
   - 典型场景：先插入行列再写入数据、先清除再写入、批量合并+调整行高列宽
   - `group-dimension` 在 batch 中只适合默认展开分组；需要 `--group-state fold` 时请使用独立 `dws sheet group-dimension`
   - `table-put` 不支持放进 batch-update；结构化 table 请用独立 `dws sheet table-put`

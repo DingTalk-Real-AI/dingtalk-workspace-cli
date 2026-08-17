@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,6 +29,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
+	"github.com/google/uuid"
 )
 
 var (
@@ -51,7 +53,7 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 		"code":         code,
 		"grantType":    "authorization_code",
 	}
-	resp, err := p.postJSON(ctx, UserAccessTokenURL, body)
+	resp, err := p.postJSON(ctx, UserAccessTokenURLForLoginRegion(p.loginRegion()), body)
 	if err != nil {
 		return nil, err
 	}
@@ -62,6 +64,7 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	// Snapshot credentials used for this token (for refresh)
 	data.ClientID = clientID
 	data.Source = resolveCredentialSource()
+	p.applyLoginRegionToToken(data)
 	// Save clientSecret for future refresh (even if env changes)
 	if err := oauthSaveClientSecret(clientID, clientSecret); err != nil {
 		// Log warning but don't fail login
@@ -91,11 +94,36 @@ func ExchangeCodeForToken(ctx context.Context, configDir, code string) (*TokenDa
 	return data, nil
 }
 
+func (p *OAuthProvider) loginRegion() LoginRegion {
+	if p == nil {
+		return LoginRegionDefault
+	}
+	return p.LoginRegion
+}
+
+func (p *OAuthProvider) useTokenLoginRegion(data *TokenData) {
+	if p == nil || p.LoginRegion != LoginRegionDefault || data == nil {
+		return
+	}
+	if region := LoginRegion(strings.TrimSpace(data.LoginRegion)); region != LoginRegionDefault {
+		p.LoginRegion = region
+	}
+}
+
+func (p *OAuthProvider) applyLoginRegionToToken(data *TokenData) {
+	if data == nil {
+		return
+	}
+	if region := p.loginRegion(); region != LoginRegionDefault {
+		data.LoginRegion = string(region)
+	}
+}
+
 // exchangeCodeViaMCP exchanges auth code for token via MCP proxy.
 // This is used when client secret is not available (server-side secret management).
 func (p *OAuthProvider) exchangeCodeViaMCP(ctx context.Context, code string) (*TokenData, error) {
 	clientID := ClientID()
-	url := GetMCPBaseURL() + MCPOAuthTokenPath
+	url := MCPBaseURLForLoginRegion(p.loginRegion()) + MCPOAuthTokenPath
 	body := map[string]string{
 		"clientId":  clientID,
 		"authCode":  code,
@@ -112,6 +140,7 @@ func (p *OAuthProvider) exchangeCodeViaMCP(ctx context.Context, code string) (*T
 	// Snapshot credentials used for this token (for refresh)
 	data.ClientID = clientID
 	data.Source = "mcp"
+	p.applyLoginRegionToToken(data)
 	// MCP mode doesn't need to save clientSecret (server-side managed)
 	return data, nil
 }
@@ -120,8 +149,10 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 	// Use stored Source to determine refresh path (not current runtime state)
 	// This ensures refresh works even if environment variables changed since login
 	if data.Source == "mcp" {
+		p.useTokenLoginRegion(data)
 		return p.refreshViaMCP(ctx, data)
 	}
+	p.useTokenLoginRegion(data)
 
 	// Direct mode: use stored clientId and load saved clientSecret
 	clientID := data.ClientID
@@ -145,7 +176,7 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 		"refreshToken": data.RefreshToken,
 		"grantType":    "refresh_token",
 	}
-	resp, err := p.postJSON(ctx, UserAccessTokenURL, body)
+	resp, err := p.postJSON(ctx, UserAccessTokenURLForLoginRegion(p.loginRegion()), body)
 	if err != nil {
 		return nil, err
 	}
@@ -156,6 +187,7 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 	// Preserve original credentials info
 	updated.ClientID = data.ClientID
 	updated.Source = data.Source
+	updated.LoginRegion = data.LoginRegion
 	updated.PersistentCode = data.PersistentCode
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
@@ -185,7 +217,7 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 		return nil, fmt.Errorf("无法刷新 token: 缺少 clientId，请重新登录")
 	}
 
-	url := GetMCPBaseURL() + MCPRefreshTokenPath
+	url := MCPBaseURLForLoginRegion(p.loginRegion()) + MCPRefreshTokenPath
 	body := map[string]string{
 		"clientId":     clientID,
 		"refreshToken": data.RefreshToken,
@@ -202,6 +234,7 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 	// Preserve original credentials info
 	updated.ClientID = data.ClientID
 	updated.Source = data.Source
+	updated.LoginRegion = data.LoginRegion
 	updated.PersistentCode = data.PersistentCode
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
@@ -371,6 +404,10 @@ func firstNonEmpty(values ...string) string {
 }
 
 func buildAuthURL(clientID, redirectURI, targetCorpID string) string {
+	return buildAuthURLForRegion(clientID, redirectURI, targetCorpID, LoginRegionDefault)
+}
+
+func buildAuthURLForRegion(clientID, redirectURI, targetCorpID string, region LoginRegion) string {
 	params := url.Values{
 		"client_id":     {clientID},
 		"redirect_uri":  {redirectURI},
@@ -381,7 +418,7 @@ func buildAuthURL(clientID, redirectURI, targetCorpID string) string {
 	if targetCorpID = strings.TrimSpace(targetCorpID); targetCorpID != "" {
 		params.Set("corpId", targetCorpID)
 	}
-	return AuthorizeURL + "?" + params.Encode()
+	return AuthorizeURLForLoginRegion(region) + "?" + params.Encode()
 }
 
 const successHTML = `<!doctype html>
@@ -937,14 +974,15 @@ const notEnabledHTML = `<!doctype html>
           clientId = status.clientId || "";
           applySent = status.applySent || false;
           selectedAdminId = status.selectedAdminId || "";
+          const authorizeUrl = status.authorizeUrl || "";
 
-          if (clientId) {
+          if (clientId && authorizeUrl) {
             const port = location.port;
             const redirectUri = encodeURIComponent(
               "http://127.0.0.1:" + port + "/callback"
             );
             backLink.href =
-              "https://login.dingtalk.com/oauth2/auth?client_id=" +
+              authorizeUrl + "?client_id=" +
               clientId +
               "&prompt=consent&redirect_uri=" +
               redirectUri +
@@ -1398,6 +1436,7 @@ const mcpRequestMaxRetries = 3
 // false negatives caused by momentary network issues.
 func (p *OAuthProvider) CheckCLIAuthEnabled(ctx context.Context, accessToken string) (*CLIAuthStatus, error) {
 	var lastErr error
+	traceID := cliAuthTraceID()
 	for attempt := 0; attempt < mcpRequestMaxRetries; attempt++ {
 		if attempt > 0 {
 			select {
@@ -1406,7 +1445,7 @@ func (p *OAuthProvider) CheckCLIAuthEnabled(ctx context.Context, accessToken str
 			case <-oauthRetryAfter(time.Duration(attempt) * time.Second):
 			}
 		}
-		status, err := p.doCheckCLIAuthEnabled(ctx, accessToken)
+		status, err := p.doCheckCLIAuthEnabledAttempt(ctx, accessToken, attempt+1, traceID)
 		if err == nil {
 			return status, nil
 		}
@@ -1416,16 +1455,27 @@ func (p *OAuthProvider) CheckCLIAuthEnabled(ctx context.Context, accessToken str
 }
 
 func (p *OAuthProvider) doCheckCLIAuthEnabled(ctx context.Context, accessToken string) (*CLIAuthStatus, error) {
-	url := GetMCPBaseURL() + CLIAuthEnabledPath
+	return p.doCheckCLIAuthEnabledAttempt(ctx, accessToken, 1, cliAuthTraceID())
+}
+
+func (p *OAuthProvider) doCheckCLIAuthEnabledAttempt(ctx context.Context, accessToken string, attempt int, traceID string) (*CLIAuthStatus, error) {
+	url := MCPBaseURLForLoginRegion(p.loginRegion()) + CLIAuthEnabledPath
 	req, err := oauthNewRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("x-user-access-token", accessToken)
+	applyCLIAuthTraceHeaders(req, traceID)
 	if ch := os.Getenv("DWS_CHANNEL"); ch != "" {
 		req.Header.Set("x-dws-channel", ch)
 	}
 	applyEditionEnterpriseCredentialHeaders(req)
+	slog.Debug("auth.cli_auth_enabled.request",
+		"attempt", attempt,
+		"url", url,
+		"trace_id", traceID,
+		"channel", os.Getenv("DWS_CHANNEL"),
+	)
 
 	client := p.httpClient
 	if client == nil {
@@ -1433,9 +1483,23 @@ func (p *OAuthProvider) doCheckCLIAuthEnabled(ctx context.Context, accessToken s
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		slog.Debug("auth.cli_auth_enabled.error",
+			"attempt", attempt,
+			"url", url,
+			"trace_id", traceID,
+			"error", err,
+		)
 		return nil, fmt.Errorf("sending request: %w", err)
 	}
 	defer resp.Body.Close()
+	slog.Debug("auth.cli_auth_enabled.response",
+		"attempt", attempt,
+		"url", url,
+		"status", resp.StatusCode,
+		"trace_id", traceID,
+		"response_trace_id", cliAuthResponseTraceID(resp.Header),
+		"eagleeye_rpc_id", resp.Header.Get("EagleEye-RpcId"),
+	)
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
 	if err != nil {
@@ -1449,9 +1513,42 @@ func (p *OAuthProvider) doCheckCLIAuthEnabled(ctx context.Context, accessToken s
 	return &status, nil
 }
 
+func cliAuthTraceID() string {
+	if traceID := strings.TrimSpace(os.Getenv("DINGTALK_TRACE_ID")); traceID != "" {
+		return traceID
+	}
+	return strings.ReplaceAll(uuid.NewString(), "-", "")
+}
+
+func applyCLIAuthTraceHeaders(req *http.Request, traceID string) {
+	if req == nil || traceID == "" {
+		return
+	}
+	req.Header.Set("EagleEye-TraceId", traceID)
+	req.Header.Set("X-Dingtalk-Trace-Id", traceID)
+}
+
+func cliAuthResponseTraceID(headers http.Header) string {
+	for _, key := range []string{
+		"EagleEye-TraceId",
+		"X-Trace-Id",
+		"X-Request-Id",
+		"X-Dingtalk-Trace-Id",
+	} {
+		if value := strings.TrimSpace(headers.Get(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 // GetSuperAdmins fetches the list of corp super admins.
 // It retries up to mcpRequestMaxRetries times on transient errors.
 func GetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminResponse, error) {
+	return GetSuperAdminsForLoginRegion(ctx, accessToken, LoginRegionDefault)
+}
+
+func GetSuperAdminsForLoginRegion(ctx context.Context, accessToken string, region LoginRegion) (*SuperAdminResponse, error) {
 	var lastErr error
 	for attempt := 0; attempt < mcpRequestMaxRetries; attempt++ {
 		if attempt > 0 {
@@ -1461,7 +1558,7 @@ func GetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminRespons
 			case <-oauthRetryAfter(time.Duration(attempt) * time.Second):
 			}
 		}
-		result, err := doGetSuperAdmins(ctx, accessToken)
+		result, err := doGetSuperAdminsForLoginRegion(ctx, accessToken, region)
 		if err == nil {
 			return result, nil
 		}
@@ -1471,7 +1568,11 @@ func GetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminRespons
 }
 
 func doGetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminResponse, error) {
-	url := GetMCPBaseURL() + SuperAdminPath
+	return doGetSuperAdminsForLoginRegion(ctx, accessToken, LoginRegionDefault)
+}
+
+func doGetSuperAdminsForLoginRegion(ctx context.Context, accessToken string, region LoginRegion) (*SuperAdminResponse, error) {
+	url := MCPBaseURLForLoginRegion(region) + SuperAdminPath
 	req, err := oauthNewRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -1500,6 +1601,10 @@ func doGetSuperAdmins(ctx context.Context, accessToken string) (*SuperAdminRespo
 // SendCliAuthApply sends a CLI auth apply request to the specified admin.
 // It retries up to mcpRequestMaxRetries times on transient errors.
 func SendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (*SendApplyResponse, error) {
+	return SendCliAuthApplyForLoginRegion(ctx, accessToken, adminStaffID, LoginRegionDefault)
+}
+
+func SendCliAuthApplyForLoginRegion(ctx context.Context, accessToken, adminStaffID string, region LoginRegion) (*SendApplyResponse, error) {
 	var lastErr error
 	for attempt := 0; attempt < mcpRequestMaxRetries; attempt++ {
 		if attempt > 0 {
@@ -1509,7 +1614,7 @@ func SendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (*S
 			case <-oauthRetryAfter(time.Duration(attempt) * time.Second):
 			}
 		}
-		result, err := doSendCliAuthApply(ctx, accessToken, adminStaffID)
+		result, err := doSendCliAuthApplyForLoginRegion(ctx, accessToken, adminStaffID, region)
 		if err == nil {
 			return result, nil
 		}
@@ -1519,7 +1624,11 @@ func SendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (*S
 }
 
 func doSendCliAuthApply(ctx context.Context, accessToken, adminStaffID string) (*SendApplyResponse, error) {
-	url := GetMCPBaseURL() + SendCliAuthApplyPath + "?adminStaffId=" + adminStaffID
+	return doSendCliAuthApplyForLoginRegion(ctx, accessToken, adminStaffID, LoginRegionDefault)
+}
+
+func doSendCliAuthApplyForLoginRegion(ctx context.Context, accessToken, adminStaffID string, region LoginRegion) (*SendApplyResponse, error) {
+	url := MCPBaseURLForLoginRegion(region) + SendCliAuthApplyPath + "?adminStaffId=" + adminStaffID
 	req, err := oauthNewRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -1557,6 +1666,10 @@ type ClientIDResponse struct {
 // This is used when no client ID is provided via flags, config, or env vars.
 // It retries up to mcpRequestMaxRetries times on transient errors.
 func FetchClientIDFromMCP(ctx context.Context) (string, error) {
+	return FetchClientIDFromMCPForLoginRegion(ctx, LoginRegionDefault)
+}
+
+func FetchClientIDFromMCPForLoginRegion(ctx context.Context, region LoginRegion) (string, error) {
 	var lastErr error
 	for attempt := 0; attempt < mcpRequestMaxRetries; attempt++ {
 		if attempt > 0 {
@@ -1566,7 +1679,7 @@ func FetchClientIDFromMCP(ctx context.Context) (string, error) {
 			case <-oauthRetryAfter(time.Duration(attempt) * time.Second):
 			}
 		}
-		id, err := doFetchClientIDFromMCP(ctx)
+		id, err := doFetchClientIDFromMCPForLoginRegion(ctx, region)
 		if err == nil {
 			return id, nil
 		}
@@ -1576,7 +1689,11 @@ func FetchClientIDFromMCP(ctx context.Context) (string, error) {
 }
 
 func doFetchClientIDFromMCP(ctx context.Context) (string, error) {
-	url := GetMCPBaseURL() + ClientIDPath
+	return doFetchClientIDFromMCPForLoginRegion(ctx, LoginRegionDefault)
+}
+
+func doFetchClientIDFromMCPForLoginRegion(ctx context.Context, region LoginRegion) (string, error) {
+	url := MCPBaseURLForLoginRegion(region) + ClientIDPath
 	req, err := oauthNewRequest(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)

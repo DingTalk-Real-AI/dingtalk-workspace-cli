@@ -237,6 +237,42 @@ func TestReduceLeafParamAliasesRemainingEdges(t *testing.T) {
 	})
 }
 
+func TestCrossPlatformCoverageReduceLeafParamAliasesBindExcludesRealFlags(t *testing.T) {
+	entry, problems := reduceLeafParamAliases(
+		"demo cmd",
+		realMap(realFlag{name: "id"}, realFlag{name: "name"}, realFlag{name: "query"}),
+		[]Concept{
+			{ID: "base_id", Members: []string{"base-id", "base-token"}, Excludes: []string{"keyword", "name", "query", "unsafe"}},
+			{ID: "query", Members: []string{"query", "keyword"}},
+		},
+		CommandOverride{Bind: map[string]string{"id": "base_id"}},
+	)
+	if len(problems) != 0 {
+		t.Fatalf("reduceLeafParamAliases() problems = %v", problems)
+	}
+	if entry == nil {
+		t.Fatal("reduceLeafParamAliases() entry = nil")
+	}
+	if entry.Aliases["base-id"] != "id" || entry.Aliases["base-token"] != "id" {
+		t.Fatalf("bound aliases = %#v, want base-id/base-token -> id", entry.Aliases)
+	}
+	if entry.Aliases["keyword"] != "query" {
+		t.Fatalf("query alias = %#v, want keyword -> query", entry.Aliases)
+	}
+	if containsParamAlias(entry.Blocked, "keyword") {
+		t.Fatalf("excluded alias entered blocked list: %#v", entry.Blocked)
+	}
+	if containsParamAlias(entry.Blocked, "name") {
+		t.Fatalf("real excluded flag entered blocked list: %#v", entry.Blocked)
+	}
+	if containsParamAlias(entry.Blocked, "query") {
+		t.Fatalf("claimed real excluded flag entered blocked list: %#v", entry.Blocked)
+	}
+	if !containsParamAlias(entry.Blocked, "unsafe") {
+		t.Fatalf("non-real excluded flag was not blocked: %#v", entry.Blocked)
+	}
+}
+
 func TestParamAliasEntryLookupMethods(t *testing.T) {
 	entry := ParamAliasEntry{
 		Aliases:   map[string]string{"uid": "user"},
@@ -457,6 +493,22 @@ func TestReduceLeafParamAliasesExcludesProtectFuzzyButDoNotOverrideAnotherConcep
 	}
 }
 
+func TestReduceLeafParamAliasesExcludesDoNotBlockRealFlag(t *testing.T) {
+	concepts := []Concept{
+		{ID: "single_id", Members: []string{"id", "item-id"}, Excludes: []string{"item-ids"}},
+	}
+	entry, problems := reduceLeafParamAliases("demo cmd", realMap(realFlag{name: "id"}, realFlag{name: "item-ids"}), concepts, CommandOverride{})
+	if len(problems) != 0 {
+		t.Fatalf("unexpected problems: %v", problems)
+	}
+	if entry == nil {
+		t.Fatal("expected a reduced entry")
+	}
+	if containsParamAlias(entry.Blocked, "item-ids") {
+		t.Fatalf("real exclude was blocked: %#v", entry)
+	}
+}
+
 func TestReduceLeafParamAliasesRejectsProtectionOrScopedAliasOnRealFlag(t *testing.T) {
 	real := realMap(realFlag{name: "user-id"}, realFlag{name: "user"})
 	for name, override := range map[string]CommandOverride{
@@ -469,6 +521,58 @@ func TestReduceLeafParamAliasesRejectsProtectionOrScopedAliasOnRealFlag(t *testi
 				t.Fatal("real native flag was allowed to be reclassified")
 			}
 		})
+	}
+}
+
+func TestGeneratedParamAliasesBlockPluralListSpellingsOnSingleIDCommands(t *testing.T) {
+	entries := make(map[string]ParamAliasEntry, len(generatedParamAliases))
+	for _, entry := range generatedParamAliases {
+		entries[entry.CLIPath] = entry
+	}
+	assertBlocked := func(path string, names ...string) {
+		t.Helper()
+		entry, ok := entries[path]
+		if !ok {
+			t.Fatalf("missing generated alias entry for %q", path)
+		}
+		for _, name := range names {
+			if !entry.IsBlocked(cmdutil.Morph(name)) {
+				t.Fatalf("%s: %q not blocked; entry = %#v", path, name, entry)
+			}
+		}
+	}
+
+	for _, path := range []string{
+		"chat message add-emoji",
+		"chat message remove-emoji",
+		"chat message add-text-emotion",
+		"chat message remove-text-emotion",
+	} {
+		assertBlocked(path, "msg-ids", "message-ids")
+	}
+	for _, path := range []string{
+		"chat message send",
+		"chat conversation-info",
+		"chat category add-conv",
+		"chat category remove-conv",
+		"chat message list",
+		"chat message list-mentions",
+		"chat message recall-by-bot",
+		"chat message search",
+	} {
+		assertBlocked(path, "conversation-ids")
+	}
+}
+
+func TestGeneratedParamAliasesKeepAuditJoinUserRoleAmbiguous(t *testing.T) {
+	entry, ok := LookupParamAlias("chat group audit-join-validation")
+	if !ok {
+		t.Fatal("missing generated alias entry for chat group audit-join-validation")
+	}
+	for _, name := range []string{"user", "user-id", "userid", "uid", "staff-id"} {
+		if !entry.IsAmbiguous(cmdutil.Morph(name)) {
+			t.Fatalf("%q not ambiguous; entry = %#v", name, entry)
+		}
 	}
 }
 
@@ -512,6 +616,71 @@ func TestGeneratedParamAliasesAreWellFormed(t *testing.T) {
 				}
 				classified[name] = kind
 			}
+		}
+	}
+}
+
+func TestCrossPlatformCoveragePublishedSpaceWorkspaceAliasesRemainExecutable(t *testing.T) {
+	docCommands := []string{
+		"doc +access-change",
+		"doc +access-grant",
+		"doc +access-revoke",
+		"doc +copy",
+		"doc +create",
+		"doc +create-from-template",
+		"doc +grant-and-share",
+		"doc +import",
+		"doc +list",
+		"doc +move",
+		"doc create",
+		"doc file create",
+		"doc import",
+		"doc template apply",
+	}
+	for _, command := range docCommands {
+		entry, ok := LookupParamAlias(command)
+		if !ok {
+			t.Errorf("published Doc command %q has no generated parameter-alias entry", command)
+			continue
+		}
+		for _, emitted := range []string{"space", "space-id"} {
+			target, active := entry.ResolveAlias(emitted)
+			if !active || target != "workspace" {
+				t.Errorf("%s --%s resolution = active:%v target:%q, want --workspace", command, emitted, active, target)
+			}
+			if entry.IsBlocked(emitted) || entry.IsAmbiguous(emitted) {
+				t.Errorf("%s --%s remains protected after restoring its published alias", command, emitted)
+			}
+		}
+	}
+
+	driveInfo, ok := LookupParamAlias("drive info")
+	if !ok {
+		t.Fatal("published drive info command has no generated parameter-alias entry")
+	}
+	for _, emitted := range []string{"space", "workspace", "workspace-id"} {
+		target, active := driveInfo.ResolveAlias(emitted)
+		if !active || target != "space-id" {
+			t.Errorf("drive info --%s resolution = active:%v target:%q, want --space-id", emitted, active, target)
+		}
+		if driveInfo.IsBlocked(emitted) || driveInfo.IsAmbiguous(emitted) {
+			t.Errorf("drive info --%s remains protected after restoring its published alias", emitted)
+		}
+	}
+
+	// Compatibility remains exact-path scoped. Strong type spellings introduced
+	// after the split continue to guard the two value domains elsewhere.
+	for _, test := range []struct {
+		command string
+		emitted string
+	}{
+		{command: "doc create", emitted: "storage-space-id"},
+		{command: "drive +upload", emitted: "workspace-id"},
+		{command: "drive info", emitted: "knowledge-base-id"},
+	} {
+		entry, ok := LookupParamAlias(test.command)
+		if !ok || !entry.IsBlocked(test.emitted) {
+			t.Errorf("%s --%s must remain blocked outside the published compatibility set", test.command, test.emitted)
 		}
 	}
 }

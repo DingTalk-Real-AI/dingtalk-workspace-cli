@@ -97,6 +97,7 @@ type TokenData struct {
 	ClientID       string    `json:"client_id,omitempty"` // Associated app client ID for refresh
 	UpdatedAt      string    `json:"updated_at,omitempty"`
 	Source         string    `json:"source,omitempty"`
+	LoginRegion    string    `json:"login_region,omitempty"`
 	// LegacyOrgScopedProfile is an in-memory destination for an explicitly
 	// matched historical profile whose userId was never resolved. It is never
 	// persisted as token material.

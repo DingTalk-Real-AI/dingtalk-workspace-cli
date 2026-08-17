@@ -424,6 +424,87 @@ func TestBuildAuthURLIncludesTargetCorpID(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageBuildAuthURLForInternationalRegion(t *testing.T) {
+	authURL := buildAuthURLForRegion("client-id", "http://127.0.0.1:1234/callback", "", LoginRegionInternational)
+	if !strings.HasPrefix(authURL, InternationalAuthorizeURL+"?") {
+		t.Fatalf("auth URL = %s, want international authorize host", authURL)
+	}
+}
+
+func TestCrossPlatformCoverageNotEnabledHTMLUsesRegionAwareAuthorizeURL(t *testing.T) {
+	if !strings.Contains(notEnabledHTML, "status.authorizeUrl") {
+		t.Fatal("not-enabled page must read the authorize URL from the regional login status")
+	}
+	if strings.Contains(notEnabledHTML, `"https://login.dingtalk.com/oauth2/auth?client_id="`) {
+		t.Fatal("not-enabled page must not hard-code the domestic authorize URL")
+	}
+}
+
+func TestCrossPlatformCoverageLoginRegionEndpointDefaults(t *testing.T) {
+	if got := AuthorizeURLForLoginRegion(LoginRegionDefault); got != AuthorizeURL {
+		t.Fatalf("default authorize URL = %q, want %q", got, AuthorizeURL)
+	}
+	if got := DeviceBaseURLForLoginRegion(LoginRegionDefault); got != DefaultDeviceBaseURL {
+		t.Fatalf("default device base URL = %q, want %q", got, DefaultDeviceBaseURL)
+	}
+	if got := UserAccessTokenURLForLoginRegion(LoginRegionInternational); got != InternationalUserAccessTokenURL {
+		t.Fatalf("international user access token URL = %q, want %q", got, InternationalUserAccessTokenURL)
+	}
+	if got := MCPBaseURLForLoginRegion(LoginRegionInternational); got != InternationalMCPBaseURL {
+		t.Fatalf("international MCP base URL = %q, want %q", got, InternationalMCPBaseURL)
+	}
+	if got := DeviceBaseURLForLoginRegion(LoginRegionInternational); got != InternationalDeviceBaseURL {
+		t.Fatalf("international device base URL = %q, want %q", got, InternationalDeviceBaseURL)
+	}
+}
+
+func TestCrossPlatformCoverageOAuthProviderLoginRegionHelpers(t *testing.T) {
+	var nilProvider *OAuthProvider
+	if got := nilProvider.loginRegion(); got != LoginRegionDefault {
+		t.Fatalf("nil provider login region = %q", got)
+	}
+	nilProvider.useTokenLoginRegion(&TokenData{LoginRegion: string(LoginRegionInternational)})
+	nilProvider.applyLoginRegionToToken(&TokenData{})
+
+	provider := &OAuthProvider{}
+	provider.useTokenLoginRegion(nil)
+	provider.useTokenLoginRegion(&TokenData{LoginRegion: string(LoginRegionInternational)})
+	if provider.LoginRegion != LoginRegionInternational {
+		t.Fatalf("provider login region = %q, want international", provider.LoginRegion)
+	}
+	provider.useTokenLoginRegion(&TokenData{LoginRegion: string(LoginRegionDefault)})
+	provider.applyLoginRegionToToken(nil)
+	token := &TokenData{}
+	provider.applyLoginRegionToToken(token)
+	if token.LoginRegion != string(LoginRegionInternational) {
+		t.Fatalf("token login region = %q, want international", token.LoginRegion)
+	}
+}
+
+func TestCrossPlatformCoverageMCPBaseURLOverrideAffectsInternationalRegion(t *testing.T) {
+	restore := PushMCPBaseURLOverride("https://pre-mcp.dingtalk.io/")
+	defer restore()
+
+	if got := MCPBaseURLForLoginRegion(LoginRegionInternational); got != "https://pre-mcp.dingtalk.io" {
+		t.Fatalf("international MCP base URL = %q, want override", got)
+	}
+}
+
+func TestCrossPlatformCoverageLoginBaseURLOverrideAffectsInternationalRegion(t *testing.T) {
+	restore := PushLoginBaseURLOverride("https://pre-login.dingtalk.io/")
+	defer restore()
+
+	if got := DeviceBaseURLForLoginRegion(LoginRegionInternational); got != "https://pre-login.dingtalk.io" {
+		t.Fatalf("international device base URL = %q, want override", got)
+	}
+	if got := AuthorizeURLForLoginRegion(LoginRegionInternational); got != "https://pre-login.dingtalk.io/oauth2/auth" {
+		t.Fatalf("international authorize URL = %q, want override", got)
+	}
+	if got := UserAccessTokenURLForLoginRegion(LoginRegionInternational); got != "https://pre-login.dingtalk.io/v1.0/oauth2/userAccessToken" {
+		t.Fatalf("international user access token URL = %q, want override", got)
+	}
+}
+
 func buildTokenDataFromResponse(resp tokenResponse) *TokenData {
 	if resp.AccessToken == "" {
 		return nil

@@ -18,7 +18,7 @@ help:
 	@printf "Available targets:\n"
 	@printf "  make build         - Build the dws CLI binary\n"
 	@printf "  make test          - Run the Go test suite\n"
-	@printf "  make test-plan     - Verify every default Go package belongs to one CI test shard\n"
+	@printf "  make test-plan     - Verify CI test and full-suite coverage package plans cover their scopes exactly once\n"
 	@printf "  make test-auth-legacy-compat - Run stable legacy authentication compatibility regressions\n"
 	@printf "  make lint          - Run formatting checks, go vet, and staticcheck\n"
 	@printf "  make format-check  - Check all repository Go source files with gofmt\n"

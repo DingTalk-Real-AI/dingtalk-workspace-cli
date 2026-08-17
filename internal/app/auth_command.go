@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,7 +50,23 @@ type authLoginConfig struct {
 	TargetCorpID                   string
 	HistoryProfileSelector         string
 	HistoryProfileSelectorExplicit bool
+	International                  bool
+	PreURL                         string
+	MCPURL                         string
 }
+
+type authLoginEndpointOverrides struct {
+	LoginURL string
+	MCPURL   string
+}
+
+type authLoginMCPPersistence uint8
+
+const (
+	authLoginMCPUseDefault authLoginMCPPersistence = iota
+	authLoginMCPUseManagedRegion
+	authLoginMCPUseExplicitOverride
+)
 
 type authLoginGuideAction string
 
@@ -103,12 +121,17 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 支持的登录方式:
   - OAuth Loopback 流 (默认): 本机自动起 127.0.0.1 监听接收回调，浏览器授权后自动完成
   - OAuth 设备流 (--device): 显示 user_code + 短 URL，适合 SSH 远程 / 容器 / 无头环境
+  - 自有应用 OAuth (--client-id/--client-secret): 使用指定应用完成用户授权
   - 直接提供 Token (--token): 跳过授权，使用已有 token
 
 不支持的登录方式:
   - 邮箱/密码登录
   - 手机号/验证码登录
-  - 应用凭证 (AppKey/AppSecret) 直接登录
+  - 无用户授权的纯应用凭证 (client_credentials) 登录
+
+区域:
+  - 默认使用国内钉钉 .com 登录与服务端点
+  - --intl（或 --international）使用国际版 .io 登录；后续业务命令按所选 profile 自动路由
 
 注意: SSH 远程或无头环境（无本地浏览器可访问远端的 127.0.0.1）请使用 --device，
       否则 OAuth 回调会跳到本机不可达的 127.0.0.1 链接，授权完成后无法回写 token。
@@ -116,6 +139,9 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 示例:
   dws auth login              # 本机登录并新增/刷新一个组织 profile
   dws auth login --profile <corpId>  # 指定本次授权目标组织，不持久切换当前组织
+  dws auth login --intl       # 使用钉钉国际版 .io 登录入口
+  dws auth login --intl --pre-url https://pre-login.dingtalk.io
+  dws auth login --intl --pre-url https://pre-mcp.dingtalk.io
   dws auth login --recommend  # 无交互批量授权服务端推荐权限
   dws auth login --device     # SSH 远程 / 无头环境登录 (设备流)
   dws auth login --force      # 兼容保留；login 默认已忽略缓存并进入授权流程
@@ -126,6 +152,22 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			var preOverrides authLoginEndpointOverrides
+			if cfg.PreURL != "" {
+				var err error
+				preOverrides, err = authLoginEndpointOverridesForPreURL(cfg.PreURL)
+				if err != nil {
+					return err
+				}
+				restoreLoginBaseURL := authpkg.PushLoginBaseURLOverride(preOverrides.LoginURL)
+				defer restoreLoginBaseURL()
+			}
+			mcpBaseURL, mcpPersistence, err := authLoginMCPBaseURLForConfig(cfg, preOverrides)
+			if err != nil {
+				return err
+			}
+			restoreMCPBaseURL := authpkg.PushMCPBaseURLOverride(mcpBaseURL)
+			defer restoreMCPBaseURL()
 			configDir := defaultConfigDir()
 			var tokenData *authpkg.TokenData
 			format, _ := cmd.Root().PersistentFlags().GetString("format")
@@ -139,6 +181,9 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 					AccessToken: cfg.Token,
 					ExpiresAt:   time.Now().Add(config.ManualTokenExpiry),
 				}
+				if cfg.International {
+					tokenData.LoginRegion = string(authpkg.LoginRegionInternational)
+				}
 				if err := authSaveTokenData(configDir, tokenData); err != nil {
 					return apperrors.NewInternal(fmt.Sprintf("failed to persist auth token: %v", err))
 				}
@@ -149,6 +194,9 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				provider := authpkg.NewDeviceFlowProvider(configDir, nil)
 				provider.Output = cmd.ErrOrStderr()
 				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
+				if cfg.International {
+					provider.SetLoginRegion(authpkg.LoginRegionInternational)
+				}
 				provider.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
 					return enrichAuthLoginProfileFromContact(ctx, configDir, patCaller, data, authLoginHistoryHint{
 						Selector: cfg.HistoryProfileSelector,
@@ -167,6 +215,9 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				provider.Output = cmd.ErrOrStderr()
 				provider.NoBrowser, _ = cmd.Flags().GetBool("no-browser")
 				provider.TargetCorpID = cfg.TargetCorpID
+				if cfg.International {
+					provider.LoginRegion = authpkg.LoginRegionInternational
+				}
 				provider.IdentityEnricher = func(ctx context.Context, data *authpkg.TokenData) error {
 					return enrichAuthLoginProfileFromContact(ctx, configDir, patCaller, data, authLoginHistoryHint{
 						Selector: cfg.HistoryProfileSelector,
@@ -180,6 +231,11 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 				}
 			}
 
+			if tokenData != nil {
+				if err := persistAuthLoginMCPBaseURL(configDir, mcpBaseURL, mcpPersistence); err != nil {
+					return apperrors.NewInternal(fmt.Sprintf("failed to persist MCP URL: %v", err))
+				}
+			}
 			ResetRuntimeTokenCache()
 			clearCompatCache()
 			w := cmd.OutOrStdout()
@@ -278,6 +334,10 @@ func newAuthLoginCommand(patCaller edition.ToolCaller) *cobra.Command {
 	}
 	cmd.Flags().String("token", "", "Access token")
 	cmd.Flags().Bool("device", false, "Use device authorization flow")
+	cmd.Flags().Bool("intl", false, "Use DingTalk international (.io) login and service endpoints")
+	cmd.Flags().Bool("international", false, "Use DingTalk international (.io) login and service endpoints")
+	cmd.Flags().String("pre-url", "", "Override pre-release login/MCP base URL for this login")
+	cmd.Flags().String("mcp-url", "", "Override MCP base URL for this login")
 	cmd.Flags().Bool("force", false, "兼容保留；login 默认已忽略缓存并进入授权流程")
 	cmd.Flags().Bool("recommend", false, "登录成功后无交互批量授权服务端推荐权限")
 	// Hidden compatibility flags
@@ -967,6 +1027,7 @@ func newAuthResetCommand() *cobra.Command {
 				return apperrors.NewInternal(fmt.Sprintf("failed to reset token data: %v", err))
 			}
 			_ = authRemove(filepath.Join(configDir, "mcp_url"))
+			_ = authRemove(filepath.Join(configDir, config.ManagedMCPURLRegionFileName))
 			_ = authRemove(filepath.Join(configDir, "token"))
 			_ = authDeleteAppConfig(configDir)
 			ResetRuntimeTokenCache()
@@ -1225,6 +1286,14 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 	if err != nil {
 		return authLoginConfig{}, apperrors.NewInternal("failed to read --device")
 	}
+	intl, err := cmd.Flags().GetBool("intl")
+	if err != nil {
+		return authLoginConfig{}, apperrors.NewInternal("failed to read --intl")
+	}
+	international, err := cmd.Flags().GetBool("international")
+	if err != nil {
+		return authLoginConfig{}, apperrors.NewInternal("failed to read --international")
+	}
 	force, err := cmd.Flags().GetBool("force")
 	if err != nil {
 		return authLoginConfig{}, apperrors.NewInternal("failed to read --force")
@@ -1232,6 +1301,14 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 	recommend, err := cmd.Flags().GetBool("recommend")
 	if err != nil {
 		return authLoginConfig{}, apperrors.NewInternal("failed to read --recommend")
+	}
+	preURL, err := cmd.Flags().GetString("pre-url")
+	if err != nil {
+		return authLoginConfig{}, apperrors.NewInternal("failed to read --pre-url")
+	}
+	mcpURL, err := cmd.Flags().GetString("mcp-url")
+	if err != nil {
+		return authLoginConfig{}, apperrors.NewInternal("failed to read --mcp-url")
 	}
 	yes := false
 	profileSelector := ""
@@ -1266,7 +1343,170 @@ func resolveAuthLoginConfig(cmd *cobra.Command) (authLoginConfig, error) {
 		TargetCorpID:                   targetCorpID,
 		HistoryProfileSelector:         historyProfileSelector,
 		HistoryProfileSelectorExplicit: historyProfileSelectorExplicit,
+		International:                  intl || international,
+		PreURL:                         strings.TrimSpace(preURL),
+		MCPURL:                         strings.TrimSpace(mcpURL),
 	}, nil
+}
+
+func authLoginEndpointOverridesForPreURL(raw string) (authLoginEndpointOverrides, error) {
+	parsed, normalized, err := normalizeAuthLoginBaseURL(raw, "--pre-url")
+	if err != nil {
+		return authLoginEndpointOverrides{}, err
+	}
+	host := strings.ToLower(parsed.Hostname())
+	switch {
+	case strings.HasPrefix(host, "pre-login."):
+		return authLoginEndpointOverrides{
+			LoginURL: normalized,
+			MCPURL:   authLoginURLWithHost(parsed, "pre-mcp."+strings.TrimPrefix(host, "pre-login.")),
+		}, nil
+	case strings.HasPrefix(host, "pre-mcp."):
+		return authLoginEndpointOverrides{
+			LoginURL: authLoginURLWithHost(parsed, "pre-login."+strings.TrimPrefix(host, "pre-mcp.")),
+			MCPURL:   normalized,
+		}, nil
+	default:
+		return authLoginEndpointOverrides{}, apperrors.NewValidation("--pre-url must be a pre-login.* or pre-mcp.* URL")
+	}
+}
+
+func authLoginMCPBaseURLForConfig(cfg authLoginConfig, preOverrides authLoginEndpointOverrides) (string, authLoginMCPPersistence, error) {
+	if cfg.MCPURL != "" {
+		_, normalized, err := normalizeAuthLoginBaseURL(cfg.MCPURL, "--mcp-url")
+		if err != nil {
+			return "", authLoginMCPUseDefault, err
+		}
+		return normalized, authLoginMCPUseExplicitOverride, nil
+	}
+	if cfg.PreURL != "" {
+		if preOverrides.MCPURL == "" {
+			var err error
+			preOverrides, err = authLoginEndpointOverridesForPreURL(cfg.PreURL)
+			if err != nil {
+				return "", authLoginMCPUseDefault, err
+			}
+		}
+		return preOverrides.MCPURL, authLoginMCPUseExplicitOverride, nil
+	}
+	if cfg.International {
+		return authpkg.InternationalMCPBaseURL, authLoginMCPUseManagedRegion, nil
+	}
+	return authpkg.DefaultMCPBaseURL, authLoginMCPUseDefault, nil
+}
+
+func persistAuthLoginMCPBaseURL(configDir, mcpBaseURL string, persistence authLoginMCPPersistence) error {
+	mcpURLPath := filepath.Join(configDir, "mcp_url")
+	managedRegionPath := filepath.Join(configDir, config.ManagedMCPURLRegionFileName)
+
+	switch persistence {
+	case authLoginMCPUseExplicitOverride:
+		if err := removeAuthLoginManagedMCPRegion(managedRegionPath); err != nil {
+			return fmt.Errorf("clear managed MCP region: %w", err)
+		}
+		if err := authAtomicWrite(mcpURLPath, []byte(mcpBaseURL), config.FilePerm); err != nil {
+			return fmt.Errorf("save explicit MCP URL: %w", err)
+		}
+		return nil
+	case authLoginMCPUseManagedRegion:
+		managedURL, managedErr := authReadFile(managedRegionPath)
+		if managedErr != nil && !os.IsNotExist(managedErr) {
+			return fmt.Errorf("read managed MCP region: %w", managedErr)
+		}
+		currentURL, currentErr := authReadFile(mcpURLPath)
+		switch {
+		case currentErr == nil && os.IsNotExist(managedErr):
+			return nil
+		case currentErr == nil && strings.TrimSpace(string(currentURL)) != strings.TrimSpace(string(managedURL)):
+			return removeAuthLoginManagedMCPRegion(managedRegionPath)
+		case currentErr != nil && !os.IsNotExist(currentErr):
+			return fmt.Errorf("read MCP URL: %w", currentErr)
+		}
+		if err := authAtomicWrite(managedRegionPath, []byte(mcpBaseURL), config.FilePerm); err != nil {
+			return fmt.Errorf("save managed MCP region: %w", err)
+		}
+		if err := authAtomicWrite(mcpURLPath, []byte(mcpBaseURL), config.FilePerm); err != nil {
+			_ = authRemove(managedRegionPath)
+			return fmt.Errorf("save managed MCP URL: %w", err)
+		}
+		return nil
+	case authLoginMCPUseDefault:
+		managedURL, err := authReadFile(managedRegionPath)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read managed MCP region: %w", err)
+		}
+		currentURL, err := authReadFile(mcpURLPath)
+		if os.IsNotExist(err) {
+			return removeAuthLoginManagedMCPRegion(managedRegionPath)
+		}
+		if err != nil {
+			return fmt.Errorf("read MCP URL: %w", err)
+		}
+		if strings.TrimSpace(string(currentURL)) != strings.TrimSpace(string(managedURL)) {
+			return removeAuthLoginManagedMCPRegion(managedRegionPath)
+		}
+		if err := authAtomicWrite(mcpURLPath, []byte(mcpBaseURL), config.FilePerm); err != nil {
+			return fmt.Errorf("restore default MCP URL: %w", err)
+		}
+		return removeAuthLoginManagedMCPRegion(managedRegionPath)
+	default:
+		return fmt.Errorf("unsupported MCP persistence mode %d", persistence)
+	}
+}
+
+func removeAuthLoginManagedMCPRegion(path string) error {
+	if err := authRemove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func normalizeAuthLoginBaseURL(raw, flagName string) (*url.URL, string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, "", apperrors.NewValidation(flagName + " cannot be empty")
+	}
+	if !strings.Contains(value, "://") {
+		value = "https://" + value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return nil, "", apperrors.NewValidation(fmt.Sprintf("invalid %s: %v", flagName, err))
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, "", apperrors.NewValidation(flagName + " must use http or https")
+	}
+	if parsed.Hostname() == "" {
+		return nil, "", apperrors.NewValidation(flagName + " must include a host")
+	}
+	if parsed.Scheme == "http" && !isAuthLoginLoopbackHost(parsed.Hostname()) {
+		return nil, "", apperrors.NewValidation(flagName + " must use HTTPS, except for a loopback HTTP test endpoint")
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	return parsed, strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func isAuthLoginLoopbackHost(host string) bool {
+	if strings.EqualFold(strings.TrimSpace(host), "localhost") {
+		return true
+	}
+	ip := net.ParseIP(strings.TrimSpace(host))
+	return ip != nil && ip.IsLoopback()
+}
+
+func authLoginURLWithHost(parsed *url.URL, host string) string {
+	copyURL := *parsed
+	if port := parsed.Port(); port != "" {
+		copyURL.Host = net.JoinHostPort(host, port)
+	} else {
+		copyURL.Host = host
+	}
+	return strings.TrimRight(copyURL.String(), "/")
 }
 
 func authLoginForcesAuthorization(_ authLoginConfig) bool {

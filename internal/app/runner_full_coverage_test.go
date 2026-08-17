@@ -127,12 +127,14 @@ func TestCrossPlatformCoverageRunnerRemainingRoutingCoverage(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageRunnerRemainingExecutionCoverage(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	oldEdition := edition.Get()
 	oldPreflight := runnerPreflightDocDownload
 	oldCall := runnerCallTool
 	oldHandle := runnerHandlePatAuthCheck
 	oldRetry := runnerRetryWithPatAuthRetry
 	oldCapture := runnerCaptureRuntimeFailure
+	oldResolveSnapshot := runnerResolveAuthSnapshot
 	t.Cleanup(func() {
 		edition.Override(oldEdition)
 		runnerPreflightDocDownload = oldPreflight
@@ -140,6 +142,7 @@ func TestCrossPlatformCoverageRunnerRemainingExecutionCoverage(t *testing.T) {
 		runnerHandlePatAuthCheck = oldHandle
 		runnerRetryWithPatAuthRetry = oldRetry
 		runnerCaptureRuntimeFailure = oldCapture
+		runnerResolveAuthSnapshot = oldResolveSnapshot
 	})
 
 	pluginAuthMu.Lock()
@@ -168,6 +171,27 @@ func TestCrossPlatformCoverageRunnerRemainingExecutionCoverage(t *testing.T) {
 	if got, err := r.executeInvocation(context.Background(), "https://example.test", inv); err != nil || !got.Invocation.Implemented {
 		t.Fatalf("default auth execution = %#v, %v", got, err)
 	}
+	runnerResolveAuthSnapshot = func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
+		return AccessTokenSnapshot{
+			AccessToken:      "international-token",
+			LoginRegion:      authpkg.LoginRegionInternational,
+			LoginRegionKnown: true,
+		}, nil
+	}
+	successfulCall := runnerCallTool
+	routedEndpoint := ""
+	runnerCallTool = func(_ *transport.Client, _ context.Context, endpoint, _ string, _ map[string]any) (transport.ToolCallResult, error) {
+		routedEndpoint = endpoint
+		return transport.ToolCallResult{Content: map[string]any{"value": 1}}, nil
+	}
+	if _, err := r.executeInvocation(context.Background(), "https://mcp-gw.dingtalk.com/server/contact", inv); err != nil {
+		t.Fatalf("international auth execution = %v", err)
+	}
+	if routedEndpoint != "https://mcp-gw.dingtalk.io/server/contact" {
+		t.Fatalf("international routed endpoint = %q", routedEndpoint)
+	}
+	runnerResolveAuthSnapshot = oldResolveSnapshot
+	runnerCallTool = successfulCall
 
 	wantErr := errors.New("preflight")
 	runnerPreflightDocDownload = func(*runtimeRunner, context.Context, *transport.Client, string, executor.Invocation) error {
@@ -361,6 +385,12 @@ func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *test
 	}
 	if got, err := resolveRuntimeAuthToken(context.Background(), " runtime "); err != nil || got != "runtime" {
 		t.Fatalf("runtime explicit token = %q, %v", got, err)
+	}
+	edition.Override(&edition.Hooks{TokenProvider: func(context.Context, func() (string, error)) (string, error) {
+		return "", errors.New("snapshot failed")
+	}})
+	if _, err := r.resolveAuthToken(context.Background()); err == nil || !strings.Contains(err.Error(), "snapshot failed") {
+		t.Fatalf("resolveAuthToken error = %v", err)
 	}
 
 	t.Setenv(envDWSChannel, "channel")

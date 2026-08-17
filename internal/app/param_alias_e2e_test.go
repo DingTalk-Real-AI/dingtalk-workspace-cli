@@ -52,6 +52,8 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 	switch tool {
 	case "list_calendar_events":
 		return `{"result":{"events":[]}}`
+	case "query_records":
+		return `{"success":true,"status":"success","error":{},"data":{}}`
 	case "search_mail_users":
 		return `{"users":[{"name":"Fixture User","email":"fixture@example.com","id":"fixture-user"}]}`
 	case "search_dept_by_keyword":
@@ -63,11 +65,50 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 	case "list_doc_versions":
 		return `{"result":{"items":[{"version":3}]}}`
 	case "revert_doc_version":
-		return `{"version":3}`
+		return `{"revertedToVersion":3}`
 	case "search_doc_templates":
 		return `{"result":[{"templateId":"fixture-template-id"}]}`
 	case "create_document":
 		return `{"nodeId":"fixture-node"}`
+	case "list_files":
+		return `{"success":true,"result":{"files":[],"hasMore":false}}`
+	case "list_recycle_items":
+		return `{"success":true,"result":{"recycleItems":[{"recycleItemId":"recycle-1","originalName":"Fixture Node"}],"hasMore":false}}`
+	case "get_star_list":
+		return `{"success":true,"result":{"starList":[],"hasMore":false}}`
+	case "list_file_versions":
+		return `{"success":true,"result":{"versions":[{"version":3,"name":"Fixture Version"}],"hasMore":false}}`
+	case "get_file_info":
+		name := "Fixture Node"
+		for index := len(c.calls) - 2; index >= 0; index-- {
+			call := c.calls[index]
+			switch call.tool {
+			case "create_folder":
+				if value, ok := call.args["name"].(string); ok {
+					name = value
+				}
+				index = -1
+			case "rename_document":
+				if value, ok := call.args["newName"].(string); ok {
+					name = value
+				}
+				index = -1
+			}
+		}
+		encoded, _ := json.Marshal(map[string]any{"success": true, "result": map[string]any{"fileId": "node-1", "name": name}})
+		return string(encoded)
+	case "get_cover", "get_node_stats":
+		return `{"success":true,"result":{"nodeId":"node-1"}}`
+	case "get_file_publish_status":
+		return `{"success":true,"result":{"fileId":"node-1","published":false}}`
+	case "create_folder", "create_shortcut":
+		return `{"success":true,"fileId":"node-1"}`
+	case "delete_document", "mark_star", "unmark_star", "restore_recycle_item", "rename_document", "revert_file_version":
+		return `{"success":true,"fileId":"node-1"}`
+	case "set_file_publish":
+		return `{"success":true}`
+	case "download_file", "download_file_version":
+		return `{"success":true,"result":{"downloadUrl":"http://invalid.test/fixture.bin","fileName":"fixture.bin"}}`
 	case "get_document_content":
 		for index := len(c.calls) - 2; index >= 0; index-- {
 			call := c.calls[index]
@@ -322,9 +363,9 @@ func TestCrossPlatformCoverageParamAliasWriteCommandFinalPayload(t *testing.T) {
 	caller := &paramAliasCaptureCaller{}
 	ctx, err := executeParamAliasE2E(t, caller,
 		"chat", "message", "send",
-		"--to-user", "D-recipient",
+		"--to-user", appFixtureCurrentDOpenID,
 		"--text", "hello alias",
-		"--uuid", "alias-e2e",
+		"--idempotency-key", "alias-e2e",
 	)
 	if err != nil {
 		t.Fatalf("chat write alias E2E error = %v", err)
@@ -336,7 +377,7 @@ func TestCrossPlatformCoverageParamAliasWriteCommandFinalPayload(t *testing.T) {
 		t.Fatalf("chat calls = %#v", caller.calls)
 	}
 	payload := caller.calls[0].args
-	if payload["receiverOpenDingTalkId"] != "D-recipient" || payload["uuid"] != "alias-e2e" || payload["msgType"] != "markdown" {
+	if payload["receiverOpenDingTalkId"] != appFixtureCurrentDOpenID || payload["uuid"] != "alias-e2e" || payload["msgType"] != "markdown" {
 		t.Fatalf("chat payload identity fields = %#v", payload)
 	}
 	content, _ := payload["content"].(string)
@@ -347,6 +388,29 @@ func TestCrossPlatformCoverageParamAliasWriteCommandFinalPayload(t *testing.T) {
 		if _, exists := payload[forbidden]; exists {
 			t.Fatalf("chat payload leaked pre-normalization field %q: %#v", forbidden, payload)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageSendLegacyUUIDAliasFinalPayload(t *testing.T) {
+	caller := &paramAliasCaptureCaller{}
+	_, err := executeParamAliasE2E(t, caller,
+		"chat", "message", "send",
+		"--group", "fixture-conversation",
+		"--text", "hello legacy uuid",
+		"--uuid", "legacy-alias-e2e",
+	)
+	if err != nil {
+		t.Fatalf("chat message send legacy uuid error = %v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != "send_personal_message" {
+		t.Fatalf("chat calls = %#v", caller.calls)
+	}
+	payload := caller.calls[0].args
+	if payload["uuid"] != "legacy-alias-e2e" || payload["openConversationId"] != "fixture-conversation" {
+		t.Fatalf("chat legacy uuid payload = %#v", payload)
+	}
+	if _, exists := payload["idempotency-key"]; exists {
+		t.Fatalf("chat payload leaked CLI-only idempotency-key: %#v", payload)
 	}
 }
 
@@ -417,7 +481,11 @@ func TestCrossPlatformCoverageChatReactionConversationAliasesReachCanonicalPaylo
 					if err != nil {
 						t.Fatalf("alias execution failed: %v", err)
 					}
-					if ctx == nil || len(ctx.Corrections) != 1 || ctx.Corrections[0].Original != "--"+alias || ctx.Corrections[0].Corrected != "--conversation-id" {
+					if alias == "open-conversation-id" {
+						if ctx == nil || len(ctx.Corrections) != 0 {
+							t.Fatalf("alias corrections = %#v", ctx)
+						}
+					} else if ctx == nil || len(ctx.Corrections) != 1 || ctx.Corrections[0].Original != "--"+alias || ctx.Corrections[0].Corrected != "--conversation-id" {
 						t.Fatalf("alias corrections = %#v", ctx)
 					}
 					if !reflect.DeepEqual(aliasCaller.calls, canonicalCaller.calls) {
@@ -627,11 +695,11 @@ func TestCrossPlatformCoverageSelectedParamAliasesProduceCanonicalEquivalentDryR
 			tool: "send_personal_message",
 			canonicalArgs: []string{
 				"--dry-run", "chat", "message", "send",
-				"--user", "D-recipient", "--text", "hello dry-run", "--uuid", "alias-dry-run",
+				"--user", appFixtureCurrentDOpenID, "--text", "hello dry-run", "--uuid", "alias-dry-run",
 			},
 			aliasArgs: []string{
 				"--dry-run", "chat", "message", "send",
-				"--to-user", "D-recipient", "--text", "hello dry-run", "--uuid", "alias-dry-run",
+				"--to-user", appFixtureCurrentDOpenID, "--text", "hello dry-run", "--uuid", "alias-dry-run",
 			},
 			wantCorrections: 1,
 			wantArgKeys:     []string{"clawType", "content", "msgType", "receiverOpenDingTalkId", "uuid"},
