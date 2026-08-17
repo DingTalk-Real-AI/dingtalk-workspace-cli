@@ -23,7 +23,15 @@ func TestCrossPlatformCoverageSheetBatchOperationTranslationCoversEveryMapping(t
 		"group-state": "fold",
 	}
 	for name, mapping := range batchOpDispatch {
-		got, err := translateBatchOp(map[string]any{"toolName": name, "input": input})
+		opInput := input
+		if name == "set-dropdown" {
+			opInput = make(map[string]any, len(input))
+			for key, value := range input {
+				opInput[key] = value
+			}
+			delete(opInput, "source-range")
+		}
+		got, err := translateBatchOp(map[string]any{"toolName": name, "input": opInput})
 		if err != nil {
 			t.Errorf("translateBatchOp(%q): %v", name, err)
 			continue
