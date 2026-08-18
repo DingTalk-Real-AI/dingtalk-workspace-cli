@@ -53,6 +53,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -637,7 +638,10 @@ func runDeclaredWaitPhase(cmd *cobra.Command, args []string, spec Spec, result o
 		return result, nil
 	}
 	decl := spec.Contract.Wait
-	timeout := time.Duration(waitTimeoutSecs(cmd)) * time.Second
+	timeout, err := waitTimeoutDuration(int64(waitTimeoutSecs(cmd)))
+	if err != nil {
+		return result, err
+	}
 	ctx := newCtx(cmd, args, spec.Flags)
 	outcome, err := runWaitLoop(cmd.Context(), decl, timeout, spec, ctx, result)
 	if err != nil {
@@ -758,6 +762,26 @@ func waitTimeoutSecs(cmd *cobra.Command) int {
 		return value
 	}
 	return DefaultWaitTimeoutSecs
+}
+
+// maxWaitTimeoutSecs is the largest second count that still fits in a
+// time.Duration. Multiplying a larger int by time.Second overflows to a
+// non-positive duration, which would skip the deadline and wait forever.
+const maxWaitTimeoutSecs = math.MaxInt64 / int64(time.Second)
+
+// waitTimeoutDuration converts a resolved second count into the wait-phase
+// deadline. Values that cannot be represented as a positive time.Duration
+// are rejected as validation errors instead of silently disabling timeout.
+func waitTimeoutDuration(secs int64) (time.Duration, error) {
+	if secs <= 0 {
+		secs = DefaultWaitTimeoutSecs
+	}
+	if secs > maxWaitTimeoutSecs {
+		return 0, apperrors.NewValidation(fmt.Sprintf(
+			"参数 --%s 取值 %d 超出可表示范围（最大 %d 秒）",
+			waitTimeoutFlagName, secs, maxWaitTimeoutSecs))
+	}
+	return time.Duration(secs) * time.Second, nil
 }
 
 // validateDispatchDecl enforces "exactly one dispatcher" at build time. Like

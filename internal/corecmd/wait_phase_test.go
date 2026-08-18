@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +147,43 @@ func TestWaitTimeoutFlagDefaultsComeFromDeclaration(t *testing.T) {
 	}
 	if got := waitTimeoutSecs(fallback); got != DefaultWaitTimeoutSecs {
 		t.Fatalf("waitTimeoutSecs=%d, want %d", got, DefaultWaitTimeoutSecs)
+	}
+}
+
+func TestWaitTimeoutDurationRejectsOverflowingSeconds(t *testing.T) {
+	// math.MaxInt64 (9223372036854775807) is a legal pflag int on 64-bit
+	// platforms and overflows time.Duration(secs)*time.Second to a negative
+	// value, which would disable the wait deadline.
+	if _, err := waitTimeoutDuration(math.MaxInt64); err == nil || !strings.Contains(err.Error(), "超出可表示范围") {
+		t.Fatalf("err=%v, want overflow validation", err)
+	}
+	d, err := waitTimeoutDuration(maxWaitTimeoutSecs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d <= 0 || d != time.Duration(maxWaitTimeoutSecs)*time.Second {
+		t.Fatalf("duration=%d, want the largest representable timeout", d)
+	}
+}
+
+func TestResultInvokeWaitTimeoutOverflowIsValidationError(t *testing.T) {
+	if int64(math.MaxInt) <= maxWaitTimeoutSecs {
+		t.Skip("platform int cannot overflow time.Duration")
+	}
+	polled := false
+	cmd := New(baseWaitSpec(waitTestDecl(), func(context.Context, *Ctx) (wait.PollDoc, error) {
+		polled = true
+		return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+	}))
+	cmd.SetArgs([]string{"--wait", "--wait-timeout", strconv.Itoa(math.MaxInt)})
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "超出可表示范围") {
+		t.Fatalf("err=%v, want overflow validation", err)
+	}
+	if polled {
+		t.Fatal("overflowing --wait-timeout must not start the wait loop")
 	}
 }
 
