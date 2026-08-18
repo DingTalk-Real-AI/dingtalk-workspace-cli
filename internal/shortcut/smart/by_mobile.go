@@ -14,13 +14,11 @@
 package smart
 
 import (
-	"fmt"
 	"strconv"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -86,18 +84,25 @@ var ByMobile = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		userID := byMobileExtractUserID(data)
-		if userID == "" {
-			return apperrors.NewValidation(
-				fmt.Sprintf("没找到绑定手机号 %q 的用户；确认号码正确、且该人在当前组织通讯录中。", mobile))
+		user, err := strictMobileContactUser(data)
+		if err != nil {
+			return err
 		}
 
 		// Step 2 — fetch and print the full profile of the resolved user.
 		// get_user_info_by_user_ids takes {user_id_list} (see helpers.contact
 		// user get).
-		return rt.CallMCP("get_user_info_by_user_ids", map[string]any{
-			"user_id_list": []string{userID},
+		data, err = rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
+			"user_id_list": []string{user.userID},
 		})
+		if err != nil {
+			return err
+		}
+		profile, err := strictUserDetail(data, user.userID, "contact/get_user_info_by_user_ids")
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"profile": profile})
 	},
 }
 
@@ -154,5 +159,6 @@ func byMobileUserIDFromMap(m map[string]any) string {
 }
 
 func init() {
+	finalizeContactSmart(&ByMobile)
 	shortcut.Register(ByMobile)
 }
