@@ -106,9 +106,10 @@ func TestCrossPlatformCoverageAiSearchSelectorsFailBeforeRemoteCall(t *testing.T
 func TestCrossPlatformCoverageUnavailableAiSearchMakesNoRemoteCall(t *testing.T) {
 	caller := &aisearchCaller{payload: `{"success":true,"result":[]}`}
 	helpers.InitDepsForTest(t, caller)
-	declaration := SearchBehavior
-	if err := declaration.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: declaration.Command}, declaration)); err == nil || !strings.Contains(err.Error(), "cannot prove query relevance") {
-		t.Errorf("%s unavailable error = %v", declaration.Command, err)
+	for _, declaration := range []shortcut.Shortcut{SearchEnterprise, SearchBehavior} {
+		if err := declaration.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: declaration.Command}, declaration)); err == nil || !strings.Contains(err.Error(), "cannot prove query relevance") {
+			t.Errorf("%s unavailable error = %v", declaration.Command, err)
+		}
 	}
 	if caller.calls != 0 {
 		t.Fatalf("unavailable searches made %d remote calls", caller.calls)
@@ -146,24 +147,21 @@ func TestCrossPlatformCoverageAiSearchExactShortcutMapping(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageAiSearchEnterpriseExactMappingAndSourceGuard(t *testing.T) {
+func TestCrossPlatformCoverageAiSearchEnterpriseHardenedMapperSourceGuard(t *testing.T) {
 	caller := &aisearchCaller{payload: `{"success":true,"result":[{"sourceType":"im","openConversationId":"cid-fixture"}]}`}
 	helpers.InitDepsForTest(t, caller)
 
 	declaration := SearchEnterprise
 	declaration.OutputRollout = output.RolloutLegacyOnly
-	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
-	root.PersistentFlags().Bool("yes", false, "")
-	root.PersistentFlags().Bool("dry-run", false, "")
-	root.PersistentFlags().String("format", "json", "")
-	service := &cobra.Command{Use: "aisearch"}
-	service.AddCommand(corecmd.New(shortcut.FromShortcut(declaration)))
-	root.AddCommand(service)
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"aisearch", "+search-enterprise", "--queries", "fixture", "--types", "im", "--time-range", "过去一周"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("exact enterprise execution: %v", err)
+	command := &cobra.Command{Use: "+search-enterprise"}
+	command.Flags().StringSlice("queries", []string{"fixture"}, "")
+	command.Flags().StringSlice("types", []string{"im"}, "")
+	command.Flags().String("time-range", "过去一周", "")
+	runtime := shortcut.RuntimeContextForTest(command, declaration)
+	if err := executeSearchForSource(runtime, "search_enterprise", map[string]any{
+		"queries": []string{"fixture"}, "searchTypes": []string{"im"}, "timeRange": "过去一周",
+	}, []string{"openConversationId", "url"}, "im"); err != nil {
+		t.Fatalf("hardened enterprise mapper: %v", err)
 	}
 	if caller.calls != 1 || caller.product != "aisearch" || caller.tool != "search_enterprise" {
 		t.Fatalf("call = count:%d product:%q tool:%q", caller.calls, caller.product, caller.tool)
@@ -180,7 +178,13 @@ func TestCrossPlatformCoverageAiSearchEnterpriseExactMappingAndSourceGuard(t *te
 	badCommand.Flags().StringSlice("queries", []string{"fixture"}, "")
 	badCommand.Flags().StringSlice("types", []string{"im"}, "")
 	badCommand.Flags().String("time-range", "", "")
-	if err := declaration.Execute(shortcut.RuntimeContextForTest(badCommand, declaration)); err == nil || !strings.Contains(err.Error(), "来源") {
+	if err := executeSearchForSource(
+		shortcut.RuntimeContextForTest(badCommand, declaration),
+		"search_enterprise",
+		map[string]any{"queries": []string{"fixture"}, "searchTypes": []string{"im"}},
+		[]string{"openConversationId", "url"},
+		"im",
+	); err == nil || !strings.Contains(err.Error(), "来源") {
 		t.Fatalf("source drift error = %v", err)
 	}
 }
@@ -211,7 +215,7 @@ func TestCrossPlatformCoverageAiSearchCatalogAndContracts(t *testing.T) {
 	if registered["+search-person"].Hidden || registered["+search-person"].Availability != shortcut.AvailabilityAvailable {
 		t.Fatalf("search-person visibility/availability = hidden:%v availability:%q", registered["+search-person"].Hidden, registered["+search-person"].Availability)
 	}
-	for _, command := range []string{"+search-behavior"} {
+	for _, command := range []string{"+search-enterprise", "+search-behavior"} {
 		if !registered[command].Hidden || registered[command].Availability != shortcut.AvailabilityUnavailable {
 			t.Errorf("%s must remain hidden/unavailable: hidden=%v availability=%q", command, registered[command].Hidden, registered[command].Availability)
 		}

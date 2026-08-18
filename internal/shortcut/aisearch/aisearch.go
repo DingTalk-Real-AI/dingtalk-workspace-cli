@@ -68,7 +68,8 @@ func aisearchContract(command, description, intent string, available bool, flags
 }
 
 // SearchPerson is the only public AiSearch Shortcut. Exact live evidence
-// proves both a known non-empty user fixture and an explicit random zero hit.
+// proves both a known non-empty user fixture and an explicit zero hit in the
+// phone dimension using a value longer than any valid phone number.
 var SearchPerson = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
 	Service:       "aisearch", Command: "+search-person", Product: "aisearch",
@@ -101,23 +102,22 @@ var SearchPerson = shortcut.Shortcut{
 	},
 }
 
-// SearchEnterprise exposes only the IM slice. Exact live evidence proves that
-// this narrowed interface returns stable IM identities for a known fixture and
-// an explicit empty collection for a guaranteed-random marker. Other content
-// types remain routed to the atomic command until their relevance contract is
-// equally trustworthy.
+// SearchEnterprise remains registered but unavailable. The IM slice can return
+// stable identities for a known fixture, but a fresh random marker also
+// returned a business object, so the service cannot prove a legitimate zero
+// result or strict query relevance.
 var SearchEnterprise = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
 	Service:       "aisearch", Command: "+search-enterprise", Product: "aisearch",
 	Description: "按主题搜索企业知识、消息、邮件与协作内容",
-	Intent:      "需要按关键词搜索企业即时消息时使用；当前只公开已通过已知非空与保证零命中验证的 IM 类型。",
+	Intent:      "需要按关键词搜索企业即时消息时使用；当前因随机查询仍返回业务对象，无法证明严格相关性与合法零结果，保持不可用。",
 	Risk:        shortcut.RiskRead,
 	Safety:      aisearchReadSafety,
 	Contract: aisearchContract(
 		"+search-enterprise",
 		"按主题搜索企业知识、消息、邮件与协作内容",
-		"需要按关键词搜索企业即时消息时使用；当前只公开已通过已知非空与保证零命中验证的 IM 类型。",
-		true,
+		"需要按关键词搜索企业即时消息时使用；当前因随机查询仍返回业务对象，无法证明严格相关性与合法零结果，保持不可用。",
+		false,
 		[]contract.ParamDecl{{Name: "queries"}, {Name: "types", Property: "searchTypes"}, {Name: "time-range", Property: "timeRange"}},
 		`dws aisearch +search-enterprise --queries "发布方案" --types im --format json`,
 	),
@@ -132,13 +132,7 @@ var SearchEnterprise = shortcut.Shortcut{
 	}},
 	Validate: validateEnterprise,
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"queries": rt.StrSlice("queries"), "searchTypes": []string{"im"},
-		}
-		if timeRange := strings.TrimSpace(rt.Str("time-range")); timeRange != "" {
-			params["timeRange"] = timeRange
-		}
-		return executeSearchForSource(rt, "search_enterprise", params, []string{"openConversationId", "url"}, "im")
+		return unavailableSearch("aisearch/search_enterprise")
 	},
 }
 
