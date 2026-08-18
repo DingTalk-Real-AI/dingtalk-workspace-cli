@@ -79,6 +79,8 @@ Flags:
 |------|------|----------------|----------|
 | `record query` | 查询/搜索记录 | [aitable-record-query.md](./aitable/aitable-record-query.md) | 先 `field get` 拿 fieldId；`--all` 自动翻页；filters 结构见 reference |
 | `record get` | 按 ID 取记录（`record query --record-ids` 的窄别名） | [aitable-record-query.md](./aitable/aitable-record-query.md) | 已知 recordId 时首选；必填 `--record-ids`（单次最多 100 条）；未暴露 filters/sort/query/cursor/limit |
+| `record stats` | 不分组的服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 大写；最多 20 项，同字段不可重复；全量统计省略 limit |
+| `record group-stats` | 分组、去重和高级服务端聚合 | [aitable-record-stats.md](./aitable/aitable-record-stats.md) | statsType 小写；group 为 JSON 数组字符串；最多 1000 个分组 |
 | `record create` | 新增记录 | [aitable-record-create.md](./aitable/aitable-record-create.md) | cells key 必须是 fieldId 不是字段名；单次最多 100 条 |
 | `record update` | 更新记录（每条独立 cells） | [aitable-record-update.md](./aitable/aitable-record-update.md) | 需先 query 拿 recordId；`cells` key 支持 fieldId 或当前表内唯一字段名，推荐 fieldId；`--records` 是 `[{recordId,cells},...]` 数组 |
 | `record batch-update` | 批量更新（同一 cells 应用到多条 recordId） | [aitable-record-update.md](./aitable/aitable-record-update.md)、[aitable-cell-value.md](./aitable/aitable-cell-value.md) | 适合"统一标记完成/统一改负责人"等共享 patch 场景；`--cells` 是 JSON object（key=fieldId，value 按字段类型见 cell-value.md），与 record update 的单条 cells 结构完全一致；必填 `--record-ids` `--cells`；单次最多 100 条 |
@@ -357,6 +359,8 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"记录/行/数据/row":
 - 查看/搜索 → `record query`（读 [aitable-record-query.md](./aitable/aitable-record-query.md)）
+- 总数/求和/平均值/中位数/完整率等标量统计 → `record stats`（读 [aitable-record-stats.md](./aitable/aitable-record-stats.md)）
+- 分组统计/唯一实体计数/去重率 → `record group-stats`（读 [aitable-record-stats.md](./aitable/aitable-record-stats.md)）
 - 找空行 / 没填东西的行 → `record query-empty`（读 [aitable-record-query.md](./aitable/aitable-record-query.md)）
 - 已知 recordId 反查字段值 → `record get`（按 ID 取专用，等价 `record query --record-ids`）
 - 添加/写入 → `record create`（读 [aitable-record-create.md](./aitable/aitable-record-create.md)）
@@ -388,7 +392,7 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 
 用户说"筛选/过滤/filter" → 读 [aitable-filter-sort.md](./aitable/aitable-filter-sort.md)
 
-用户说"统计/分析/聚合/TOP N/全量" → 读 [aitable-data-analysis-sop.md](./aitable/aitable-data-analysis-sop.md)
+用户说"统计/分析/聚合/TOP N/全量" → 先读 [aitable-data-analysis-sop.md](./aitable/aitable-data-analysis-sop.md)，聚合参数见 [aitable-record-stats.md](./aitable/aitable-record-stats.md)
 
 用户说"公式/formula/计算字段/派生指标" → 读 [aitable-formula-guide.md](./aitable/aitable-formula-guide.md)
 

@@ -520,6 +520,102 @@ func normalizeFilters(parsed any) any {
 	}
 }
 
+type aitableStatsItem struct {
+	FieldID   string `json:"fieldId"`
+	StatsType string `json:"statsType"`
+}
+
+func aitableStatsValidationf(format string, args ...any) error {
+	return apperrors.NewValidation(fmt.Sprintf(format, args...))
+}
+
+func parseAitableStatsItems(raw string, uppercase, uniqueFields bool, maxItems int) ([]map[string]any, error) {
+	var items []aitableStatsItem
+	if err := json.Unmarshal([]byte(raw), &items); err != nil {
+		return nil, aitableStatsValidationf("--stats 必须是 JSON 数组: %v", err)
+	}
+	var strictItems []aitableStatsItem
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&strictItems); err != nil {
+		return nil, aitableStatsValidationf("--stats 包含不支持的字段: %v", err)
+	}
+	items = strictItems
+	if len(items) == 0 {
+		return nil, aitableStatsValidationf("--stats 至少需要一个统计项")
+	}
+	if maxItems > 0 && len(items) > maxItems {
+		return nil, aitableStatsValidationf("--stats 单次最多支持 %d 个统计项，got %d", maxItems, len(items))
+	}
+
+	seenFields := make(map[string]struct{}, len(items))
+	out := make([]map[string]any, 0, len(items))
+	for index, item := range items {
+		item.FieldID = strings.TrimSpace(item.FieldID)
+		item.StatsType = strings.TrimSpace(item.StatsType)
+		if item.FieldID == "" || item.StatsType == "" {
+			return nil, aitableStatsValidationf("--stats[%d] 的 fieldId 和 statsType 均不能为空", index)
+		}
+		if uniqueFields {
+			if _, exists := seenFields[item.FieldID]; exists {
+				return nil, aitableStatsValidationf("--stats 中 fieldId %q 重复；query_records_stats 要求同一字段的多个统计类型拆成多次调用", item.FieldID)
+			}
+			seenFields[item.FieldID] = struct{}{}
+		}
+		if uppercase && item.StatsType != strings.ToUpper(item.StatsType) {
+			return nil, aitableStatsValidationf("--stats[%d].statsType 必须使用大写枚举值，got %q", index, item.StatsType)
+		}
+		if !uppercase && item.StatsType != strings.ToLower(item.StatsType) {
+			return nil, aitableStatsValidationf("--stats[%d].statsType 必须使用小写值，got %q", index, item.StatsType)
+		}
+		out = append(out, map[string]any{"fieldId": item.FieldID, "statsType": item.StatsType})
+	}
+	return out, nil
+}
+
+func parseAitableObjectFlag(name, raw string) (map[string]any, error) {
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	var value map[string]any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, aitableStatsValidationf("--%s 必须是 JSON 对象: %v", name, err)
+	}
+	if value == nil {
+		return nil, aitableStatsValidationf("--%s 必须是 JSON 对象，不能是 null", name)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, aitableStatsValidationf("--%s 只能包含一个 JSON 对象", name)
+		}
+		return nil, aitableStatsValidationf("--%s 包含无效的尾随内容: %v", name, err)
+	}
+	return value, nil
+}
+
+func validateAitableStatsFilters(value map[string]any, rawJSON string) error {
+	if err := validateFiltersStructure(value, rawJSON); err != nil {
+		return aitableStatsValidationf("%v", err)
+	}
+	return nil
+}
+
+func validateAitableArrayDSL(name, raw string) error {
+	var value []any
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return aitableStatsValidationf("--%s 必须是 JSON 数组字符串: %v", name, err)
+	}
+	if len(value) == 0 {
+		return aitableStatsValidationf("--%s 至少需要一个条目", name)
+	}
+	for index, item := range value {
+		if _, ok := item.(map[string]any); !ok {
+			return aitableStatsValidationf("--%s[%d] 必须是 JSON 对象，got %T", name, index, item)
+		}
+	}
+	return nil
+}
+
 // normalizeViewConfigFilter 将 view config 中的 filter 字段规范化为服务端要求的数组格式。
 // 服务端 POJO 要求 config.filter 为 []FilterRule（JSON array）。
 // 常见错误格式：
@@ -1098,7 +1194,7 @@ func newAitableCommand() *cobra.Command {
   dws aitable base       [list|search|get|get-primary-doc-id|create|update|delete|copy]  Base 管理
   dws aitable table      [get|create|update|delete]                                     数据表管理
   dws aitable field      [get|create|update|delete|search-options]                      字段管理
-  dws aitable record     [query|create|update|delete]                                   记录管理
+  dws aitable record     [query|stats|group-stats|create|update|delete]                 记录管理
   dws aitable view       [get|create|update|delete]                                     视图管理
   dws aitable form       [list|delete|update]                                           表单管理
   dws aitable form field [list|update|hide]                                             表单字段管理
@@ -2242,6 +2338,199 @@ newFieldName、config、aiConfig 至少传入一项。
 				{Name: "filters", Property: "filters", InterfaceType: "object"},
 				{Name: "sort", Property: "sort", InterfaceType: "array"},
 			},
+		},
+	})
+
+	recordStatsCmd := &cobra.Command{
+		Use:   "stats",
+		Short: "整表或过滤后的字段聚合统计",
+		Long: `对单张数据表执行不分组的服务端聚合，底层调用 query_records_stats。
+适用于记录计数、求和、平均值、最大值、最小值、中位数、去重数、完整率等标量统计。
+
+--stats 是 JSON 数组，单次最多 20 项；每项必须包含 fieldId 和大写 statsType。
+同一个 fieldId 不能在一次请求中重复，如需对同一字段计算多个指标，请拆成多次调用。
+常用 statsType：COUNT、COUNT_COLUMN、SUM、AVG、MAX、MIN、MEDIAN、STANDARD_DEVIATION、RANGE、
+DISTINCT、DISTINCT_RATIO、EXISTS、UN_EXISTS、EXIST_RATIO、UN_EXIST_RATIO、CHECKED、UN_CHECKED、
+CHECKED_RATIO、UN_CHECKED_RATIO、LATEST_DATE、EARLIEST_DATE、DATE_RANGE、DATE_RANGE_MONTH。
+
+需要统计全部匹配记录时不要传 --limit；limit 会改变参与统计的记录范围。
+lt/gt/lte/gte 的过滤值必须使用 JSON 数字；单选/多选过滤建议使用 field get 返回的选项 ID。`,
+		Example: `  dws aitable record stats --base-id BASE_ID --table-id TABLE_ID --stats '[{"fieldId":"fldAmount","statsType":"SUM"}]'
+  dws aitable record stats --base-id BASE_ID --table-id TABLE_ID --filters '{"operator":"and","operands":[{"operator":"gt","operands":["fldAmount",0]}]}' --stats '[{"fieldId":"fldTitle","statsType":"COUNT"}]'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-id", "stats"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			stats, err := parseAitableStatsItems(mustGetFlag(cmd, "stats"), true, true, 20)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"baseId":  baseID,
+				"tableId": mustGetFlag(cmd, "table-id"),
+				"stats":   stats,
+			}
+			if raw, _ := cmd.Flags().GetString("filters"); raw != "" {
+				filters, err := parseAitableObjectFlag("filters", raw)
+				if err != nil {
+					return err
+				}
+				if err := validateAitableStatsFilters(filters, raw); err != nil {
+					return err
+				}
+				toolArgs["filters"] = normalizeFilters(filters)
+			}
+			if raw, _ := cmd.Flags().GetString("sort"); raw != "" {
+				if err := validateAitableArrayDSL("sort", raw); err != nil {
+					return err
+				}
+				// query_records_stats 的 MCP Schema 将 sort 定义为 JSON 数组编码后的字符串，
+				// 与 query_records 使用的数组类型不同。
+				toolArgs["sort"] = raw
+			}
+			if value, _ := cmd.Flags().GetInt("limit"); cmd.Flags().Changed("limit") {
+				if value <= 0 {
+					return aitableStatsValidationf("--limit 必须大于 0；统计全部匹配记录时请省略该参数")
+				}
+				toolArgs["limit"] = value
+			}
+			if value, _ := cmd.Flags().GetString("keyword"); value != "" {
+				toolArgs["keyword"] = value
+			}
+			if value, _ := cmd.Flags().GetString("search-field-ids"); value != "" {
+				toolArgs["searchFieldIds"] = parseCSVValues(value)
+			}
+			if value, _ := cmd.Flags().GetString("data-version"); value != "" {
+				toolArgs["dataVersion"] = value
+			}
+			return callAitableTool("query_records_stats", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(recordStatsCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "query_records_stats",
+				CanonicalPath:  "aitable.query_records_stats",
+				CLIPath:        "aitable record stats",
+				PrimaryCLIPath: "aitable record stats",
+			},
+			Description: "对整表或过滤后的记录执行不分组字段聚合。",
+			Interface:   aitableMCPInterface("query_records_stats"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "对整表或过滤后的记录执行不分组字段聚合。",
+				UseWhen:      []string{"需要记录总数、SUM/AVG/MAX/MIN、中位数、去重数、完整率等标量统计时，优先服务端聚合"},
+				AvoidWhen:    []string{"需要按字段分组或使用 query_stats 高级聚合时用 record group-stats；需要行级明细时用 record query"},
+				Examples:     []string{`dws aitable record stats --base-id <BASE_ID> --table-id <TABLE_ID> --stats '[{"fieldId":"<FIELD_ID>","statsType":"COUNT"}]'`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
+				{Name: "stats", Property: "stats", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "filters", Property: "filters", InterfaceType: "object"},
+				{Name: "search-field-ids", Property: "searchFieldIds", InterfaceType: "array"},
+				{Name: "data-version", Property: "dataVersion"},
+			},
+			Result: aitableRecordsStatsResultSpec(),
+		},
+	})
+
+	recordGroupStatsCmd := &cobra.Command{
+		Use:   "group-stats",
+		Short: "分组、去重及高级聚合统计",
+		Long: `对单张数据表执行分组或高级服务端聚合，底层调用 query_stats，最多返回 1000 个分组。
+适用于按一个或多个字段分组、条件唯一实体计数，以及 distinct、distinct_ratio 等高级统计。
+
+--stats 是 JSON 数组，每项包含 fieldId 和小写 statsType。基础类型为 sum、avg、count、max、min；
+部分后端也支持 median、distinct、distinct_ratio 等高级类型，不支持时服务端会返回明确错误。
+--group 是 JSON 数组编码后的字符串，不分组的 DISTINCT 标量统计可以省略。
+不要依赖服务端 limit 选择 Top N；应在不超过 1000 个分组时获取完整结果后再排序。`,
+		Example: `  dws aitable record group-stats --base-id BASE_ID --table-id TABLE_ID --group '[{"fieldId":"fldCategory","direction":"ASC","fieldConfig":null,"arraySplitMode":true}]' --stats '[{"fieldId":"fldAmount","statsType":"sum"}]'
+  dws aitable record group-stats --base-id BASE_ID --table-id TABLE_ID --stats '[{"fieldId":"fldStore","statsType":"distinct"}]'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-id", "stats"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			stats, err := parseAitableStatsItems(mustGetFlag(cmd, "stats"), false, false, 0)
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"baseId":  baseID,
+				"tableId": mustGetFlag(cmd, "table-id"),
+				"stats":   stats,
+			}
+			if raw, _ := cmd.Flags().GetString("filters"); raw != "" {
+				filters, err := parseAitableObjectFlag("filters", raw)
+				if err != nil {
+					return err
+				}
+				if err := validateAitableStatsFilters(filters, raw); err != nil {
+					return err
+				}
+				toolArgs["filters"] = normalizeFilters(filters)
+			}
+			if raw, _ := cmd.Flags().GetString("group"); raw != "" {
+				if err := validateAitableArrayDSL("group", raw); err != nil {
+					return err
+				}
+				toolArgs["group"] = raw
+			}
+			if raw, _ := cmd.Flags().GetString("sort"); raw != "" {
+				if err := validateAitableArrayDSL("sort", raw); err != nil {
+					return err
+				}
+				toolArgs["sortDsl"] = raw
+			}
+			if value, _ := cmd.Flags().GetInt("limit"); cmd.Flags().Changed("limit") {
+				if value < 1 || value > 1000 {
+					return aitableStatsValidationf("--limit 必须在 [1, 1000] 范围内，got %d", value)
+				}
+				toolArgs["limit"] = value
+			}
+			if value, _ := cmd.Flags().GetString("data-version"); value != "" {
+				toolArgs["dataVersion"] = value
+			}
+			return callAitableTool("query_stats", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(recordGroupStatsCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "query_stats",
+				CanonicalPath:  "aitable.query_stats",
+				CLIPath:        "aitable record group-stats",
+				PrimaryCLIPath: "aitable record group-stats",
+			},
+			Description: "按字段分组，或执行去重等高级聚合统计。",
+			Interface:   aitableMCPInterface("query_stats"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按字段分组，或执行去重等高级聚合统计。",
+				UseWhen:      []string{"需要各分类/实体的分组统计，或对满足条件的门店、客户、商品等执行 DISTINCT 唯一计数时"},
+				AvoidWhen:    []string{"普通不分组 COUNT/SUM/AVG/MAX/MIN 优先用 record stats；原始记录和 Top N 明细用 record query"},
+				Examples:     []string{`dws aitable record group-stats --base-id <BASE_ID> --table-id <TABLE_ID> --stats '[{"fieldId":"<FIELD_ID>","statsType":"distinct"}]'`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
+				{Name: "stats", Property: "stats", Required: boolPtr(true), InterfaceType: "array"},
+				{Name: "filters", Property: "filters", InterfaceType: "object"},
+				{Name: "group", Property: "group"},
+				{Name: "sort", Property: "sortDsl"},
+				{Name: "data-version", Property: "dataVersion"},
+			},
+			Result: aitableGroupedStatsResultSpec(),
 		},
 	})
 
@@ -7230,6 +7519,23 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordQueryCmd.Flags().Int("page-limit", 50, "自动翻页最大页数（仅 --all 时生效）。默认 50 页（约 5000 条）；设为 0 表示显式不限页数；超限时错误详情保留已取记录和续传 cursor")
 	recordQueryCmd.Flags().String("view-id", "", "视图 ID（record query 不支持按视图过滤，此参数会被忽略并给出提示）")
 	_ = recordQueryCmd.Flags().MarkHidden("view-id")
+	recordStatsCmd.Flags().String("base-id", "", "Base ID（通过 base get 确认目标）(必填)")
+	recordStatsCmd.Flags().String("table-id", "", "Table ID（通过 table get 获取）(必填)")
+	recordStatsCmd.Flags().String("stats", "", `统计项 JSON 数组（必填），例如 [{"fieldId":"fldAmount","statsType":"SUM"}]；statsType 必须大写，最多 20 项且 fieldId 不得重复`)
+	recordStatsCmd.Flags().String("filters", "", "结构化过滤条件 JSON 对象；数值比较值必须是 JSON 数字")
+	recordStatsCmd.Flags().String("sort", "", `参与统计记录的排序 DSL（JSON 数组字符串），例如 [{"fieldId":"fldDate","direction":"ASC"}]`)
+	recordStatsCmd.Flags().Int("limit", 0, "参与统计的最大记录数；省略表示统计全部匹配记录")
+	recordStatsCmd.Flags().String("keyword", "", "全文关键词，仅匹配的记录参与统计")
+	recordStatsCmd.Flags().String("search-field-ids", "", "关键词搜索字段 ID 列表，逗号分隔；仅 --keyword 非空时生效")
+	recordStatsCmd.Flags().String("data-version", "", "可选数据版本；通常省略以使用最新版本")
+	recordGroupStatsCmd.Flags().String("base-id", "", "Base ID（通过 base get 确认目标）(必填)")
+	recordGroupStatsCmd.Flags().String("table-id", "", "Table ID（通过 table get 获取）(必填)")
+	recordGroupStatsCmd.Flags().String("stats", "", `统计项 JSON 数组（必填），例如 [{"fieldId":"fldAmount","statsType":"sum"}]；statsType 必须小写`)
+	recordGroupStatsCmd.Flags().String("filters", "", "结构化过滤条件 JSON 对象；数值比较值必须是 JSON 数字")
+	recordGroupStatsCmd.Flags().String("group", "", `分组字段 DSL（JSON 数组字符串）；不分组的 distinct 统计可省略`)
+	recordGroupStatsCmd.Flags().String("sort", "", "统计结果排序 DSL（JSON 数组字符串），映射到 MCP sortDsl")
+	recordGroupStatsCmd.Flags().Int("limit", 0, "返回的分组结果数，范围 1-1000；省略表示不额外限制")
+	recordGroupStatsCmd.Flags().String("data-version", "", "可选数据版本；通常省略以使用最新版本")
 	recordCreateCmd.Flags().String("base-id", "", "Base ID，可通过 base list 或 base search 获取 (必填)")
 	recordCreateCmd.Flags().String("table-id", "", "Table ID，可通过 base get 获取 (必填)")
 	recordCreateCmd.Flags().String("records", "", "待创建的记录列表 JSON 数组，单次最多 100 条 (必填)")
@@ -7294,7 +7600,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	recordPrimaryDocCreateCmd.Flags().String("record-id", "", "目标 Record ID (必填)")
 
 	recordCmd.AddCommand(
-		recordQueryCmd, recordCreateCmd,
+		recordQueryCmd, recordStatsCmd, recordGroupStatsCmd, recordCreateCmd,
 		recordUpdateCmd, recordDeleteCmd,
 		recordBatchUpdateCmd,
 		recordHistoryListCmd,

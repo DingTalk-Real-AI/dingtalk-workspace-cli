@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -57,7 +58,7 @@ func (f *docCoverageCaller) CallTool(_ context.Context, _, tool string, params m
 	}
 	value := docCoveragePayload(tool)
 	if tool == "revert_doc_version" {
-		value = map[string]any{"version": params["version"]}
+		value = map[string]any{"revertedToVersion": params["version"]}
 	}
 	if queue := f.responses[tool]; len(queue) > 0 {
 		value = queue[0]
@@ -112,6 +113,7 @@ func runDocCoverageInput(t *testing.T, declaration shortcut.Shortcut, caller *do
 
 func runDocCoveragePath(t *testing.T, declaration shortcut.Shortcut, caller *docCoverageCaller, input io.Reader, commandPath string, args ...string) error {
 	t.Helper()
+	testseam.Swap(t, &docVerifyWait, func(context.Context, time.Duration) error { return nil })
 	helpers.InitDeps(caller)
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("yes", false, "")
@@ -491,6 +493,7 @@ func TestCrossPlatformCoverageDocUpdateAliasReachesNestedBranches(t *testing.T) 
 }
 
 func TestCrossPlatformCoverageDocWritesStopOnUnknownCommitAndRequireVerification(t *testing.T) {
+	testseam.Swap(t, &docVerifyDelays, []time.Duration{})
 	unknown := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}
 	err := runDocCoverage(t, Update, unknown, "--node", "n", "--command", "append", "--content", "x", "--yes")
 	var typed *apperrors.Error
@@ -512,6 +515,7 @@ func TestCrossPlatformCoverageDocWritesStopOnUnknownCommitAndRequireVerification
 }
 
 func TestCrossPlatformCoverageDocCreateRejectsSuccessfulMismatchedReadback(t *testing.T) {
+	testseam.Swap(t, &docVerifyDelays, []time.Duration{})
 	caller := &docCoverageCaller{responses: map[string][]map[string]any{
 		"get_document_content": {{"markdown": "truncated"}},
 	}}
@@ -577,10 +581,58 @@ func TestCrossPlatformCoverageDocVersionRevertPaginationAndVerification(t *testi
 			"revert_doc_version": {{}},
 			"get_document_info":  {{"nodeId": "n", "revision": 99.0}},
 		}}
-		if err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes"); err != nil {
-			t.Fatal(err)
+		err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes")
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "doc_history_revert_target_unproven" || typed.FailureStage != "verify" || typed.Details["status"] != "partial_success" {
+			t.Fatalf("unproven revert error = %#v", err)
+		}
+		data, _ := typed.Details["data"].(map[string]any)
+		steps, _ := typed.Details["steps"].([]map[string]any)
+		if data["verified"] != false || len(steps) != 3 || steps[2]["status"] != "failed" {
+			t.Fatalf("unproven revert details = %#v", typed.Details)
 		}
 	})
+
+	for _, test := range []struct {
+		name     string
+		response map[string]any
+		current  map[string]any
+		wantOK   bool
+	}{
+		{name: "explicit server evidence", response: map[string]any{"data": map[string]any{"revertResult": map[string]any{"revertedToVersion": 3}}}, wantOK: true},
+		{name: "bare request parameter echo", response: map[string]any{"version": 3}},
+		{name: "nested request parameter echo", response: map[string]any{"data": map[string]any{"request": map[string]any{"nodeId": "n", "version": 3}}}},
+		{name: "accepted field inside request echo", response: map[string]any{"data": map[string]any{"request": map[string]any{"targetVersion": 3}}}},
+		{name: "nested business failure with request echo", response: map[string]any{"data": map[string]any{"success": false, "errorCode": "REVERT_FAILED", "request": map[string]any{"version": 3}}}},
+		{name: "failed status overrides target evidence", response: map[string]any{"data": map[string]any{"status": "FAILED", "revertResult": map[string]any{"revertedToVersion": 3}}}},
+		{name: "failed code overrides target evidence", response: map[string]any{"data": map[string]any{"code": "REVERT_FAILED", "revertResult": map[string]any{"revertedToVersion": 3}}}},
+		{
+			name:     "nested business failure overrides all evidence",
+			response: map[string]any{"data": map[string]any{"state": "FAILURE", "revertResult": map[string]any{"revertedToVersion": 3}}},
+			current:  map[string]any{"targetVersion": 3},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			responses := map[string][]map[string]any{
+				"revert_doc_version": {test.response},
+			}
+			if test.current != nil {
+				responses["get_document_info"] = []map[string]any{test.current}
+			}
+			caller := &docCoverageCaller{responses: responses}
+			err := runDocCoverage(t, VersionRevert, caller, "--node", "n", "--version", "3", "--yes")
+			if test.wantOK {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			var typed *apperrors.Error
+			if !errors.As(err, &typed) || typed.Reason != "doc_history_revert_target_unproven" || typed.Details["status"] != "partial_success" {
+				t.Fatalf("request echo response %#v produced %#v", test.response, err)
+			}
+		})
+	}
 
 	for _, test := range []struct {
 		name      string

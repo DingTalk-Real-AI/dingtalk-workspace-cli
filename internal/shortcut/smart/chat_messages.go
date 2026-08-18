@@ -57,7 +57,7 @@ var ChatMessages = shortcut.Shortcut{
 	Command:     "+chat-messages",
 	Product:     "chat",
 	Description: "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
-	Intent: "当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选过滤条件，可传姓名、userId 或 openDingTalkId：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 筛选，但无稳定 senderId 命中不得作完整否定结论。不传时原样读取会话且不查询发送者身份。sender 仅是展示名，身份只比较稳定 senderId；" +
+	Intent: "当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选的姓名、userId 或 openDingTalkId 混合入口：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 筛选并保留 identity_unverified，可交付精确命中但不能把原值升级为已验证身份或作完整否定结论。--sender-query 只按姓名唯一解析，解析失败会抑制未过滤消息并返回错误。不传发送者条件时原样读取会话且不查询发送者身份。sender 展示名不参与身份比较；" +
 		"群聊的 --group 可传群名或 openConversationId，单聊可传 --user 或 --open-dingtalk-id，所有目标参数互斥且必须选一个。自然群名只在唯一解析后读取，多候选会返回结构化 candidates。" +
 		"省略时间参数时默认从当前时间向前读取最近消息；兼容模式可用 --time/--direction，范围模式可用公开可选的 --start/--end/--order（兼容 --start-time/--end-time/--sort），范围语义为 [start,end)。" +
 		"全量读取用 --page-all，并由 --page-limit/--max-items 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
@@ -83,7 +83,7 @@ var ChatMessages = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "读取指定群聊或单聊的消息记录，支持有界全量分页与原子 JSON 导出",
-			UseWhen: []string{"当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选过滤条件，可传姓名、userId 或 openDingTalkId：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 筛选，但无稳定 senderId 命中不得作完整否定结论。不传时原样读取会话且不查询发送者身份。sender 仅是展示名，身份只比较稳定 senderId；" +
+			UseWhen: []string{"当你要读取或导出一个指定群聊或单聊的消息记录时使用；--sender 是可选的姓名、userId 或 openDingTalkId 混合入口：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 筛选并保留 identity_unverified，可交付精确命中但不能把原值升级为已验证身份或作完整否定结论。--sender-query 只按姓名唯一解析，解析失败会抑制未过滤消息并返回错误。不传发送者条件时原样读取会话且不查询发送者身份。sender 展示名不参与身份比较；" +
 				"群聊的 --group 可传群名或 openConversationId，单聊可传 --user 或 --open-dingtalk-id，所有目标参数互斥且必须选一个。自然群名只在唯一解析后读取，多候选会返回结构化 candidates。" +
 				"省略时间参数时默认从当前时间向前读取最近消息；兼容模式可用 --time/--direction，范围模式可用公开可选的 --start/--end/--order（兼容 --start-time/--end-time/--sort），范围语义为 [start,end)。" +
 				"全量读取用 --page-all，并由 --page-limit/--max-items 保持有界；结果公开 complete、hasMore、nextPage、stopReason、截断和逐页失败，不能把部分结果称为完整。--output 把同一 ledger 原子写为工作目录内 JSON。" +
@@ -104,8 +104,8 @@ var ChatMessages = shortcut.Shortcut{
 		{Name: "user", Type: shortcut.FlagString, Desc: "单聊对方的 userId，与 --group 互斥"},
 		{Name: "user-query", Type: shortcut.FlagString, Desc: "按姓名解析唯一 openDingTalkId 的兼容入口", Hidden: true},
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊对方的 openDingTalkId，与 --group/--user 互斥"},
-		{Name: "sender", Type: shortcut.FlagStringSlice, Desc: "单个或多个发送者姓名、userId 或 openDingTalkId；姓名唯一解析，稳定 ID 精确路由，通讯录故障不阻断原值 userId 筛选"},
-		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "显式按姓名唯一解析发送者的兼容入口（可选，可重复或逗号分隔）"},
+		{Name: "sender", Type: shortcut.FlagStringSlice, Desc: "单个或多个发送者姓名、userId 或 openDingTalkId；姓名唯一解析，稳定 ID 精确路由，通讯录无法分类时按原值 userId 筛选并保留身份未验证状态"},
+		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "显式按姓名唯一解析发送者的兼容入口；解析失败时抑制未过滤消息并返回错误（可选，可重复或逗号分隔）"},
 		{Name: "time", Type: shortcut.FlagString, Desc: "时间边界，如 \"2025-03-01 00:00:00\"；--time 必须是 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD；省略时从当前时间向前读取最近消息"},
 		{Name: "start", Type: shortcut.FlagString, Desc: "范围开始时间（可选、包含），支持 RFC3339、YYYY-MM-DD HH:mm:ss 或 YYYY-MM-DD"},
 		{Name: "start-time", Type: shortcut.FlagString, Desc: "--start 的 lark-cli 对齐别名（可选、包含）"},
@@ -418,7 +418,7 @@ func applyOptionalChatMessagesSenderFilter(
 		payload["complete"] = false
 		payload["partial"] = len(filtered) > 0
 	}
-	unverifiedSenderInputs := chatMessagesUnverifiedSenderInputs(filtered, filter.resolutions)
+	unverifiedSenderInputs := chatMessagesUnverifiedSenderInputs(filter.resolutions)
 	if len(unverifiedSenderInputs) > 0 {
 		failures, _ := payload["failures"].([]map[string]any)
 		failures = append(failures, map[string]any{
@@ -470,18 +470,11 @@ func applyOptionalChatMessagesSenderFilter(
 }
 
 func chatMessagesUnverifiedSenderInputs(
-	messages []map[string]any,
 	resolutions []targetresolver.UserResolution,
 ) []string {
-	observed := map[string]bool{}
-	for _, message := range messages {
-		if senderID := strings.TrimSpace(fmt.Sprint(chatmsg.SenderID(message))); senderID != "" && senderID != "<nil>" {
-			observed[senderID] = true
-		}
-	}
 	values := make([]string, 0)
 	for _, resolution := range resolutions {
-		if targetresolver.IsUnverifiedUserIDResolution(resolution) && !observed[resolution.Selected.UserID] {
+		if targetresolver.IsUnverifiedUserIDResolution(resolution) {
 			values = append(values, resolution.Query)
 		}
 	}

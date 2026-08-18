@@ -52,6 +52,8 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 	switch tool {
 	case "list_calendar_events":
 		return `{"result":{"events":[]}}`
+	case "query_records":
+		return `{"success":true,"status":"success","error":{},"data":{}}`
 	case "search_mail_users":
 		return `{"users":[{"name":"Fixture User","email":"fixture@example.com","id":"fixture-user"}]}`
 	case "search_dept_by_keyword":
@@ -63,9 +65,11 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 	case "list_doc_versions":
 		return `{"result":{"items":[{"version":3}]}}`
 	case "revert_doc_version":
-		return `{"version":3}`
+		return `{"revertedToVersion":3}`
 	case "search_doc_templates":
 		return `{"result":[{"templateId":"fixture-template-id"}]}`
+	case "list_workflows":
+		return `{"workflows":[]}`
 	case "create_document":
 		return `{"nodeId":"fixture-node"}`
 	case "list_files":

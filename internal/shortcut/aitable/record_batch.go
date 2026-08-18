@@ -98,7 +98,7 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 			step.Status = "unknown"
 			step.Error = writeErr.Error()
 		}
-		remaining, verifyErr := queryRecordsByIDs(rt, baseID, tableID, batch)
+		remaining, verifyErr := queryDeletedRecordsByIDs(rt, baseID, tableID, batch)
 		if verifyErr == nil && len(remaining) > 0 {
 			verifyErr = fmt.Errorf("read-back still contains deleted record IDs: %s", strings.Join(recordIDs(remaining), ","))
 		}
@@ -303,20 +303,33 @@ func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 }
 
 func queryRecordsByIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]map[string]any, error) {
-	data, err := rt.CallMCPData(serverMain, "query_records", map[string]any{
-		"baseId": baseID, "tableId": tableID, "recordIds": ids, "limit": len(ids),
-	})
+	window, err := queryRecordWindow(rt, map[string]any{
+		"baseId": baseID, "tableId": tableID, "recordIds": ids,
+	}, len(ids))
 	if err != nil {
 		return nil, err
 	}
-	records, found := findRecords(data)
-	if !found {
-		return nil, fmt.Errorf("query_records read-back is missing records")
+	// Exact-ID verification below compares every requested ID with the returned
+	// records. The service can publish a continuation even after all requested
+	// IDs are present, so hasMore is not evidence that this bounded read-back is
+	// incomplete.
+	return window.Records, nil
+}
+
+func queryDeletedRecordsByIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]map[string]any, error) {
+	remaining := make([]map[string]any, 0)
+	for offset := 0; offset < len(ids); offset += recordQueryServicePageSize {
+		end := minInt(offset+recordQueryServicePageSize, len(ids))
+		chunk := ids[offset:end]
+		window, err := queryRecordWindow(rt, map[string]any{
+			"baseId": baseID, "tableId": tableID, "recordIds": chunk,
+		}, len(chunk))
+		if err != nil {
+			return nil, err
+		}
+		remaining = append(remaining, window.Records...)
 	}
-	if responseHasMore(data) {
-		return nil, fmt.Errorf("query_records read-back is incomplete")
-	}
-	return records, nil
+	return remaining, nil
 }
 
 func recordIDs(records []map[string]any) []string {

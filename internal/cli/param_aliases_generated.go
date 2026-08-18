@@ -11,20 +11,335 @@ package cli
 // the reviewed concept dictionary. Each entry binds one runnable Cobra leaf.
 var generatedParamAliases = []ParamAliasEntry{
 	{
+		CLIPath: "aitable +advperm-disable",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +advperm-enable",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +attachment-put",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +attachment-remove",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +attachment-upload",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"file-size":  "size",
+		},
+	},
+	{
+		CLIPath: "aitable +base-copy",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +base-delete",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +base-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +base-get-primary-doc-id",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +base-list",
+		Aliases: map[string]string{
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"size":            "limit",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "offset", "page"},
+	},
+	{
+		CLIPath: "aitable +base-schema-snapshot",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
 		CLIPath: "aitable +base-search",
 		Aliases: map[string]string{
-			"keyword":     "query",
-			"keywords":    "query",
-			"q":           "query",
-			"search-word": "query",
+			"keyword":         "query",
+			"keywords":        "query",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-token":      "cursor",
+			"q":               "query",
+			"search-word":     "query",
 		},
-		Blocked: []string{"name", "subject", "text", "title"},
+		Blocked: []string{"name", "offset", "page", "subject", "text", "title"},
+	},
+	{
+		CLIPath: "aitable +base-update",
+		Aliases: map[string]string{
+			"base":        "base-id",
+			"base-token":  "base-id",
+			"description": "desc",
+		},
+		Blocked: []string{"config", "field-description"},
+	},
+	{
+		CLIPath: "aitable +chart-delete",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +chart-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +chart-share-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +chart-share-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +chart-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +dashboard-arrange",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +dashboard-delete",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +dashboard-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +dashboard-share-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +dashboard-share-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +dashboard-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +export-data",
+		Aliases: map[string]string{
+			"base":          "base-id",
+			"base-token":    "base-id",
+			"export-format": "format",
+			"table":         "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +field-delete",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
 	},
 	{
 		CLIPath: "aitable +field-get",
 		Aliases: map[string]string{
 			"base":       "base-id",
 			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +field-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +find-record",
+		Aliases: map[string]string{
+			"base-id":     "base",
+			"base-token":  "base",
+			"keyword":     "query",
+			"keywords":    "query",
+			"q":           "query",
+			"search-word": "query",
+			"table-id":    "table",
+		},
+		Blocked: []string{"name", "source-table-id", "subject", "table-ids", "target-table-id", "text", "title"},
+	},
+	{
+		CLIPath: "aitable +form-delete",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +form-field-hide",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +form-field-list",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +form-field-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +form-list",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +form-share-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +form-share-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +form-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"desc":       "description",
+			"table":      "table-id",
+		},
+		Blocked: []string{"config", "field-description", "name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +import-data",
+		Aliases: map[string]string{
+			"table": "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +import-upload",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"size":       "file-size",
 		},
 	},
 	{
@@ -35,18 +350,256 @@ var generatedParamAliases = []ParamAliasEntry{
 		},
 	},
 	{
-		CLIPath: "aitable +record-query",
+		CLIPath: "aitable +record-bulk-patch",
+		Aliases: map[string]string{
+			"base":        "base-id",
+			"base-token":  "base-id",
+			"keyword":     "query",
+			"keywords":    "query",
+			"q":           "query",
+			"search-word": "query",
+			"table":       "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "subject", "table-ids", "target-table-id", "text", "title"},
+	},
+	{
+		CLIPath: "aitable +record-delete",
 		Aliases: map[string]string{
 			"base":       "base-id",
 			"base-token": "base-id",
+			"table":      "table-id",
 		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +record-history-list",
+		Aliases: map[string]string{
+			"base":        "base-id",
+			"base-token":  "base-id",
+			"max-result":  "limit",
+			"max-results": "limit",
+			"page-size":   "limit",
+			"per-page":    "limit",
+			"size":        "limit",
+			"table":       "table-id",
+			"take":        "limit",
+			"top":         "limit",
+		},
+		Blocked: []string{"count", "cursor", "name", "page", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +record-primary-doc-create",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +record-primary-doc-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +record-query",
+		Aliases: map[string]string{
+			"base":            "base-id",
+			"base-token":      "base-id",
+			"keyword":         "query",
+			"keywords":        "query",
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"q":               "query",
+			"search-word":     "query",
+			"size":            "limit",
+			"table":           "table-id",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "name", "offset", "page", "source-table-id", "subject", "table-ids", "target-table-id", "text", "title"},
+	},
+	{
+		CLIPath: "aitable +record-query-empty",
+		Aliases: map[string]string{
+			"base":            "base-id",
+			"base-token":      "base-id",
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"size":            "limit",
+			"table":           "table-id",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "name", "offset", "page", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +record-share-links",
+		Aliases: map[string]string{
+			"base-id":    "base",
+			"base-token": "base",
+			"table-id":   "table",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
 	},
 	{
 		CLIPath: "aitable +record-share-url",
 		Aliases: map[string]string{
 			"base":       "base-id",
 			"base-token": "base-id",
+			"table":      "table-id",
 		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +record-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +record-upsert",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +record-upsert-by-key",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +resolve-table",
+		Aliases: map[string]string{
+			"base-id":    "base",
+			"base-token": "base",
+		},
+	},
+	{
+		CLIPath: "aitable +role-create",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +role-delete",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +role-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +role-list",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +role-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +section-create",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +section-delete",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +section-list-empty",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +section-list-nodes",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +section-move-node",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +section-rename",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +section-reorder",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable +table-copy",
+		Aliases: map[string]string{
+			"table-id": "source-table-id",
+		},
+		Ambiguous: []string{"base", "base-id", "base-token"},
+	},
+	{
+		CLIPath: "aitable +table-delete",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
 	},
 	{
 		CLIPath: "aitable +table-get",
@@ -56,16 +609,1155 @@ var generatedParamAliases = []ParamAliasEntry{
 		},
 	},
 	{
-		CLIPath: "aitable record query",
+		CLIPath: "aitable +table-update",
 		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"desc":       "description",
+			"table":      "table-id",
+		},
+		Blocked: []string{"config", "field-description", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +template-search",
+		Aliases: map[string]string{
+			"keyword":         "query",
+			"keywords":        "query",
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"q":               "query",
+			"search-word":     "query",
+			"size":            "limit",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "name", "offset", "page", "subject", "text", "title"},
+	},
+	{
+		CLIPath: "aitable +view-delete",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-duplicate",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-get-frozen-cols",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-get-lock",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-get-row-height",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-lock",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-preset-apply",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-set-fill-color-rule",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-set-frozen-cols",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-set-row-height",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +view-update",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +workflow-deploy",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"flow-id":    "workflow-id",
+		},
+		Blocked: []string{"id", "task-id"},
+	},
+	{
+		CLIPath: "aitable +workflow-disable",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"flow-id":    "workflow-id",
+		},
+		Blocked: []string{"id", "task-id"},
+	},
+	{
+		CLIPath: "aitable +workflow-enable",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"flow-id":    "workflow-id",
+		},
+		Blocked: []string{"id", "task-id"},
+	},
+	{
+		CLIPath: "aitable +workflow-get",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"flow-id":    "workflow-id",
+		},
+		Blocked: []string{"id", "task-id"},
+	},
+	{
+		CLIPath: "aitable +workflow-list",
+		Aliases: map[string]string{
+			"base":        "base-id",
+			"base-token":  "base-id",
 			"max-result":  "limit",
 			"max-results": "limit",
+			"page-size":   "limit",
 			"per-page":    "limit",
 			"size":        "limit",
 			"take":        "limit",
 			"top":         "limit",
 		},
-		Blocked: []string{"count", "page"},
+		Blocked: []string{"count", "cursor", "page"},
+	},
+	{
+		CLIPath: "aitable advperm disable",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable advperm enable",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable advperm role-create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable advperm role-delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable advperm role-get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable advperm role-list",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable advperm role-update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable attachment upload",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"file-size":  "size",
+		},
+	},
+	{
+		CLIPath: "aitable base copy",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable base delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable base get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable base get-primary-doc-id",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable base list",
+		Aliases: map[string]string{
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"size":            "limit",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "offset", "page"},
+	},
+	{
+		CLIPath: "aitable base search",
+		Aliases: map[string]string{
+			"keywords":        "query",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-token":      "cursor",
+			"q":               "query",
+			"search-word":     "query",
+		},
+		Blocked: []string{"name", "offset", "page", "subject", "text", "title"},
+	},
+	{
+		CLIPath: "aitable base update",
+		Aliases: map[string]string{
+			"base-token":  "base-id",
+			"description": "desc",
+		},
+		Blocked: []string{"config", "field-description"},
+	},
+	{
+		CLIPath: "aitable chart create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable chart delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable chart get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable chart share get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable chart share update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable chart update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable dashboard arrange",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable dashboard create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable dashboard delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable dashboard get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable dashboard share get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable dashboard share update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable dashboard update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable export data",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable field create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable field delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable field get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable field list",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable field search-options",
+		Aliases: map[string]string{
+			"base-token":  "base-id",
+			"keywords":    "keyword",
+			"max-result":  "limit",
+			"max-results": "limit",
+			"page-size":   "limit",
+			"per-page":    "limit",
+			"q":           "keyword",
+			"query":       "keyword",
+			"search-word": "keyword",
+			"size":        "limit",
+			"table":       "table-id",
+			"take":        "limit",
+			"top":         "limit",
+		},
+		Blocked: []string{"count", "cursor", "name", "page", "source-table-id", "subject", "table-ids", "target-table-id", "text", "title"},
+	},
+	{
+		CLIPath: "aitable field update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"desc":       "description",
+			"table":      "table-id",
+		},
+		Blocked: []string{"config", "field-description", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form field hide",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form field list",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form field update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form list",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form questions create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form questions delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form share get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form share update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable form update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"desc":       "description",
+			"table":      "table-id",
+		},
+		Blocked: []string{"config", "field-description", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable import data",
+		Aliases: map[string]string{
+			"table": "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable import upload",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"size":       "file-size",
+		},
+	},
+	{
+		CLIPath: "aitable info",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable list",
+		Aliases: map[string]string{
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"size":            "limit",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "offset", "page"},
+	},
+	{
+		CLIPath: "aitable record batch-update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record history-list",
+		Aliases: map[string]string{
+			"base-token":  "base-id",
+			"max-result":  "limit",
+			"max-results": "limit",
+			"page-size":   "limit",
+			"per-page":    "limit",
+			"size":        "limit",
+			"table":       "table-id",
+			"take":        "limit",
+			"top":         "limit",
+		},
+		Blocked: []string{"count", "cursor", "name", "page", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record list",
+		Aliases: map[string]string{
+			"keywords":        "query",
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"q":               "query",
+			"search-word":     "query",
+			"size":            "limit",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "name", "offset", "page", "subject", "text", "title"},
+	},
+	{
+		CLIPath: "aitable record primary-doc-create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record primary-doc-get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record query",
+		Aliases: map[string]string{
+			"base-token":      "base-id",
+			"keywords":        "query",
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"q":               "query",
+			"search-word":     "query",
+			"size":            "limit",
+			"table":           "table-id",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "name", "offset", "page", "source-table-id", "subject", "table-ids", "target-table-id", "text", "title"},
+	},
+	{
+		CLIPath: "aitable record query-empty",
+		Aliases: map[string]string{
+			"base-token":      "base-id",
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"size":            "limit",
+			"table":           "table-id",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "name", "offset", "page", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record share-url",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable record upsert",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable search",
+		Aliases: map[string]string{
+			"keywords":        "query",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-token":      "cursor",
+			"q":               "query",
+			"search-word":     "query",
+		},
+		Blocked: []string{"name", "offset", "page", "subject", "text", "title"},
+	},
+	{
+		CLIPath: "aitable section create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable section delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable section list-empty",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable section list-nodes",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable section move-node",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable section rename",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable section reorder",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable table create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable table delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable table get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable table list",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable table update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"desc":       "description",
+			"table":      "table-id",
+		},
+		Blocked: []string{"config", "field-description", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable template search",
+		Aliases: map[string]string{
+			"keywords":        "query",
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"q":               "query",
+			"search-word":     "query",
+			"size":            "limit",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "name", "offset", "page", "subject", "text", "title"},
+	},
+	{
+		CLIPath: "aitable view create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view delete",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view duplicate",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get aggregate",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get card",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get field-widths",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get fill-color-rule",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get filter",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get frozen-cols",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get group",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get lock",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get row-height",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get sort",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get timebar",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view get visible-fields",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view list",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view lock",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update aggregate",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update card",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update field-widths",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update fill-color-rule",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update filter",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update frozen-cols",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update group",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update name",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update row-height",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update sort",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update timebar",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable view update visible-fields",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable workflow create",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+		},
+	},
+	{
+		CLIPath: "aitable workflow disable",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"flow-id":    "workflow-id",
+		},
+		Blocked: []string{"id", "task-id"},
+	},
+	{
+		CLIPath: "aitable workflow enable",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"flow-id":    "workflow-id",
+		},
+		Blocked: []string{"id", "task-id"},
+	},
+	{
+		CLIPath: "aitable workflow get",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"flow-id":    "workflow-id",
+		},
+		Blocked: []string{"id", "task-id"},
+	},
+	{
+		CLIPath: "aitable workflow history",
+		Aliases: map[string]string{
+			"base-token":  "base-id",
+			"end-time":    "before-time",
+			"flow-id":     "workflow-id",
+			"limit":       "size",
+			"max-result":  "size",
+			"max-results": "size",
+			"page-index":  "page",
+			"page-size":   "size",
+			"per-page":    "size",
+			"start-time":  "after-time",
+			"take":        "size",
+			"top":         "size",
+		},
+		Blocked: []string{"count", "current-page", "cursor", "id", "next-cursor", "next-token", "offset", "page-no", "page-number", "page-token", "task-id"},
+	},
+	{
+		CLIPath: "aitable workflow list",
+		Aliases: map[string]string{
+			"base-token":  "base-id",
+			"max-result":  "limit",
+			"max-results": "limit",
+			"page-size":   "limit",
+			"per-page":    "limit",
+			"size":        "limit",
+			"take":        "limit",
+			"top":         "limit",
+		},
+		Blocked: []string{"count", "cursor", "page"},
+	},
+	{
+		CLIPath: "aitable workflow run",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"flow-id":    "workflow-id",
+			"table":      "table-id",
+		},
+		Blocked: []string{"id", "name", "record-id", "source-table-id", "table-ids", "target-table-id", "task-id"},
+	},
+	{
+		CLIPath: "aitable workflow update",
+		Aliases: map[string]string{
+			"base-token": "base-id",
+			"flow-id":    "workflow-id",
+		},
+		Blocked: []string{"id", "task-id"},
 	},
 	{
 		CLIPath: "attendance +check-result",

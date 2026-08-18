@@ -6,6 +6,37 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.59-beta.2] - 2026-08-17
+
+### Added
+
+- **Privacy-safe CLI telemetry** (#1009) — reports reviewed command outcomes and profile identity dimensions while excluding command arguments, output, paths, device fingerprints, and automatic system dimensions; `DO_NOT_TRACK=1` disables reporting.
+
+- **Feedback survey entry in root help** (#1019) — `dws --help` now closes with a Feedback section linking the user-experience survey form.
+
+- **Wiki Shortcut workflows** — publishes 20 reviewed space, member, node, and
+  activity shortcuts with strict collection validation, cursor handling,
+  write-terminal evidence, safe read-backs where the backend supports them,
+  task-oriented routing, and documented backend
+  boundaries.
+
+### Changed
+
+- **Chat IM ID flags** (#954) — standardizes chat command entry points on `--conversation-id` for conversation IDs and `--message-id` for message IDs, so help, Schema, and Agent recommendations use the same canonical flags.
+- **Legacy chat flag compatibility** (#954) — keeps older chat IM ID flags such as `--group`, `--id`, `--chat`, `--open-conversation-id`, `--msg-id`, and `--open-message-id` working as compatibility aliases where applicable, while hiding migrated aliases from recommended help and Schema surfaces.
+- **Chat group bots target flag** (#954) — keeps `dws chat group bots` on the visible `--group` flag; this command does not register `--group-name`, and `--group` accepts either an openConversationId or a uniquely resolved group name.
+
+- **Faster Schema Catalog assembly** — projects typed values into payload JSON
+  without re-running a validation scan over documents `json.Marshal` has just
+  produced, cutting roughly a third of the projection work across the full tool
+  set. Untrusted JSON input keeps its existing validation.
+
+### Fixed
+
+- **Chat card update evidence** — distinguishes an accepted update request from an independently verified visible update, preserving the real `bizId` and warning callers not to repeat an unverified write.
+- **Chat command guidance** — splits message and group references by task and explains that `--from` is ambiguous between sender and time-range intent.
+
+
 ## [1.0.59-beta.1] - 2026-08-14
 
 ### Added

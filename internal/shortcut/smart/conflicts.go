@@ -83,7 +83,7 @@ var Conflicts = shortcut.Shortcut{
 		// Target day window in local time.
 		dayStart, dayEnd := calendarDayRange(rt.Int("in-days"))
 
-		data, err := rt.CallMCPData("calendar", "list_calendar_events", map[string]any{
+		events, err := calendarSmartListAll(rt, map[string]any{
 			"startTime":  dayStart.UnixMilli(),
 			"endTime":    dayEnd.UnixMilli(),
 			"calendarId": "primary",
@@ -100,7 +100,7 @@ var Conflicts = shortcut.Shortcut{
 			end   time.Time
 		}
 		var evs []ev
-		for _, e := range shortcutNextEventList(data) {
+		for _, e := range events {
 			start, ok := shortcutNextEventStart(e)
 			if !ok {
 				continue
@@ -139,25 +139,33 @@ var Conflicts = shortcut.Shortcut{
 			"conflictCount": len(conflicts),
 			"hasConflict":   len(conflicts) > 0,
 			"conflicts":     conflicts,
+			"complete":      true,
 		})
 	},
 }
 
-// conflictsEndTime parses an event's end time from end.dateTime (RFC3339).
+// conflictsEndTime parses a timed event or a legitimate all-day event.
 func conflictsEndTime(e map[string]any) (time.Time, bool) {
 	end, ok := e["end"].(map[string]any)
-	if !ok {
-		return time.Time{}, false
+	if ok {
+		if dt, ok := end["dateTime"].(string); ok && dt != "" {
+			t, err := time.Parse(time.RFC3339, dt)
+			return t, err == nil
+		}
+		if date, ok := end["date"].(string); ok && date != "" {
+			t, err := time.ParseInLocation("2006-01-02", date, time.Local)
+			return t, err == nil
+		}
 	}
-	dt, ok := end["dateTime"].(string)
-	if !ok || dt == "" {
-		return time.Time{}, false
+	for _, key := range []string{"endTime", "endDateTime"} {
+		if dt, ok := e[key].(string); ok && dt != "" {
+			t, err := time.Parse(time.RFC3339, dt)
+			if err == nil {
+				return t, true
+			}
+		}
 	}
-	t, err := time.Parse(time.RFC3339, dt)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return t, true
+	return time.Time{}, false
 }
 
 func conflictsLabel(title string, start, end time.Time) string {
@@ -179,5 +187,6 @@ func conflictsMin(a, b time.Time) time.Time {
 }
 
 func init() {
+	finalizeCalendarSmart(&Conflicts, "完整事件集上的时间冲突分析")
 	shortcut.Register(Conflicts)
 }

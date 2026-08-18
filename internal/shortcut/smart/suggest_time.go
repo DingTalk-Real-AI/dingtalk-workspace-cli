@@ -80,6 +80,9 @@ var SuggestTime = shortcut.Shortcut{
 		`dws calendar +suggest-time --with 张三,李四,王五 --start "2026-03-10T09:00:00+08:00" --end "2026-03-10T18:00:00+08:00" --duration 30`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		if err := calendarSmartValidateRange(rt.Str("start"), rt.Str("end")); err != nil {
+			return err
+		}
 		// Step 1 — resolve every participant name to a unique userId.
 		names := rt.StrSlice("with")
 		if len(names) == 0 {
@@ -127,46 +130,15 @@ var SuggestTime = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.Output(map[string]any{"suggestions": suggestTimeSlots(data)})
+		suggestions, err := calendarSmartSuggestedSlots(data)
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"count": len(suggestions), "suggestions": suggestions, "complete": true})
 	},
 }
 
-// suggestTimeSlots flattens a list_suggested_event_times response
-// (result.recommendEventTimes[]) into a clean {start,end,conflicts} list. Null
-// entries in timeConflictAttendees are dropped so "conflicts" only appears when
-// there is a real conflicting attendee.
-func suggestTimeSlots(data map[string]any) []map[string]any {
-	out := []map[string]any{}
-	root, ok := data["result"].(map[string]any)
-	if !ok {
-		root = data
-	}
-	slots, _ := root["recommendEventTimes"].([]any)
-	for _, s := range slots {
-		sm, ok := s.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{
-			"start": sm["startTime"],
-			"end":   sm["endTime"],
-		}
-		if raw, ok := sm["timeConflictAttendees"].([]any); ok {
-			conflicts := []any{}
-			for _, c := range raw {
-				if c != nil {
-					conflicts = append(conflicts, c)
-				}
-			}
-			if len(conflicts) > 0 {
-				row["conflicts"] = conflicts
-			}
-		}
-		out = append(out, row)
-	}
-	return out
-}
-
 func init() {
+	finalizeCalendarSmart(&SuggestTime, "严格校验的共同空闲建议时段")
 	shortcut.Register(SuggestTime)
 }

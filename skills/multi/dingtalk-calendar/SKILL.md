@@ -38,6 +38,7 @@ metadata:
 | `dws calendar +my-free` | read | 查我自己在某时间段的忙闲（默认今天，无需输入姓名） |
 | `dws calendar +next-event` | read | 查看接下来最近的一个日程（默认扫描未来 7 天） |
 | `dws calendar +reschedule` | write | 改一个已有日程的时间（只动开始/结束时间，其他字段不变） |
+| `dws calendar +room-find` | read | 按时间段搜索可用会议室（不传时间默认当前起 1 小时） |
 | `dws calendar +room-groups` | read | 会议室分组列表 |
 | `dws calendar +room-search` | read | 按名称模糊搜索会议室（不检查可用性） |
 | `dws calendar +suggest-time` | read | 按姓名解析多位参与者，推荐大家都有空的可开会时间段（自动解析 userId） |

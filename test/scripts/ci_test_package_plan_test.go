@@ -99,6 +99,74 @@ func TestCIAppRacePartitionsCoverTopLevelTestsExactlyOnce(t *testing.T) {
 	}
 }
 
+// TestCIAppRacePartitionMatrixMatchesHelper pins the workflow's app partition
+// shards to the partition set the helper actually runs. The partitions are
+// separate CI jobs now, so the helper's own "covered exactly once" check can no
+// longer prove the whole package ran: a partition the helper knows about but no
+// matrix shard dispatches would silently stop running while every job stays
+// green. Both directions are asserted so a stale matrix shard fails too.
+func TestCIAppRacePartitionMatrixMatchesHelper(t *testing.T) {
+	root := testPackagePlanRoot(t)
+	script := filepath.Join(root, "scripts", "ci", "run-app-race-tests.sh")
+	cmd := exec.Command("sh", script, "list-partitions")
+	cmd.Dir = root
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s list-partitions failed: %v\n%s", script, err, output)
+	}
+	partitions := strings.Fields(string(output))
+	if len(partitions) == 0 {
+		t.Fatalf("list-partitions returned no partitions: %q", output)
+	}
+
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatalf("read ci.yml: %v", err)
+	}
+	admission := string(workflow)
+
+	for _, job := range []struct {
+		name      string
+		startMark string
+		endMark   string
+	}{
+		{"test-focused", "\n  test-focused:\n", "\n  test-race:\n"},
+		{"test-race", "\n  test-race:\n", "\n  test-release-scripts:\n"},
+	} {
+		start := strings.Index(admission, job.startMark)
+		end := strings.Index(admission, job.endMark)
+		if start < 0 || end <= start {
+			t.Fatalf("ci.yml is missing %s job boundaries", job.name)
+		}
+		body := admission[start:end]
+
+		for _, partition := range partitions {
+			want := "- app-" + partition
+			if !strings.Contains(body, want) {
+				t.Errorf("%s matrix is missing shard %q for a partition the helper runs", job.name, want)
+			}
+		}
+
+		for _, line := range strings.Split(body, "\n") {
+			shard := strings.TrimSpace(line)
+			if !strings.HasPrefix(shard, "- app-") {
+				continue
+			}
+			name := strings.TrimPrefix(shard, "- app-")
+			matched := false
+			for _, partition := range partitions {
+				if partition == name {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				t.Errorf("%s matrix shard %q has no matching helper partition", job.name, shard)
+			}
+		}
+	}
+}
+
 func TestCITestPackagePlanFailsClosedWhenGoListFails(t *testing.T) {
 	root := testPackagePlanRoot(t)
 	fakeBin := t.TempDir()

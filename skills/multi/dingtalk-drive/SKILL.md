@@ -1,6 +1,6 @@
 ---
 name: dingtalk-drive
-description: 钉钉文件管理（存储层，覆盖钉盘与文档空间两个存储域）。Use when 用户说 钉盘/上传文件/下载文件/文件夹/查文件/找文件/全局搜索文件/复制/移动/重命名/删除/回收站/还原删除文件/权限管理/普通文件下载/本地与钉盘文件夹差异比较/整个文件夹拉到本地/整个文件夹推到钉盘/双向同步；也承接钉钉文档的这些管理动作（doc 侧同名原子命令已弃用）。文档正文编辑与导出 docx/markdown/pdf 走 dingtalk-doc，知识库空间与空间内节点组织走 dingtalk-wiki。命令前缀：dws drive。
+description: 钉钉文件管理（存储层，覆盖钉盘与文档空间）。Use when 用户说 钉盘/文档空间/我的文档中的普通文件或文件夹、查找/上传/下载/复制/移动/重命名/删除/回收站/权限/元信息，或本地与钉盘文件夹比较、拉取、推送、双向同步；也承接在线文档节点的存储管理。文档正文编辑与导出走 dingtalk-doc；明确的知识库空间及空间内节点组织走 dingtalk-wiki。命令前缀：dws drive。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -9,13 +9,21 @@ metadata:
       - dws
 ---
 
-# 钉盘 Skill
+# 钉盘
 
-## 前置条件 — 执行操作前必读
+<!-- DWS_RUNTIME_CONTRACT_START -->
+## 最小 DWS 执行契约
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
-
-> 命令参考：[drive.md](references/drive.md)。
+- 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
+- 已知命令直接执行。只有 leaf 参数或安全语义不确定时读取精确 Schema，只有 Cobra flag 不确定时读取精确 leaf Help；不要加载产品级 Catalog 代替选路。
+- 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
+- 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
+- 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
+- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；需要确认时先说明对象、动作与影响，再追加 `--yes`。
+- 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
+- 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
+- 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
+<!-- DWS_RUNTIME_CONTRACT_END -->
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
@@ -25,88 +33,91 @@ metadata:
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service drive --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
 
-## 意图表
+## Golden Route
 
-| 用户说 | 命令 |
-|--------|------|
-| "看钉盘文件 / 文件夹列表" | `dws drive +list [--folder <dentryUuid>]` |
-| "钉盘目录树" | `python scripts/drive_tree_list.py --depth 2` |
-| "查文件元数据/统计/公开状态/封面" | `dws drive +inspect --node <dentryUuid> [--include-stats/--include-publish/--include-cover]` |
-| "搜文件 / 找文件" | `dws drive +search --query "<关键词>"` |
-| "下载文件" | `dws drive +download --node <dentryUuid> --output <工作目录内相对路径>` |
-| "上传文件" | `dws drive +upload --file <工作目录内相对路径> [--folder <id>]` |
-| "建钉盘文件夹 / 建快捷方式" | `dws drive +create-folder ...` / `dws drive +create-shortcut ...` |
-| "复制/移动/重命名/删除" | `dws drive +copy/+move/+rename/+delete ...` |
-| "回收站 / 还原删除的文件" | `dws drive +recycle-list` / `dws drive +recycle-restore --id <recycleItemId>` |
-| "收藏 / 取消收藏 / 收藏列表" | `dws drive +star-add/+star-remove/+star-list ...` |
-| "查/关互联网公开" | `dws drive +publish-get/+publish-unset ...`；开启公开当前无已验证 eligible 节点，不推荐 Agent 调用 |
-| "普通文件历史版本" | `dws drive +version-history/+version-get/+version-download/+version-revert ...` |
-| "在线文档评论/导入导出/权限" | 切到 `dws doc +comment-* / +import / +export / +access-*` |
+| 用户意图 | 唯一推荐入口 | 关键边界 |
+|---|---|---|
+| 全局按名称或关键词找文件 | `dws drive +search --query <关键词>` | 多候选停止；在线文档正文搜索走 `doc +search` |
+| 浏览根目录或已知文件夹 | `dws drive +list [--folder <dentryUuid>]` | 默认一页，处理 nextCursor |
+| 发现钉盘企业空间或“我的文件”空间 | `dws wiki space list --type <orgSpace\|mySpace> --format json` | Drive 只读前置；orgSpace 按 nextToken 续页，取 spaceId/rootFolderId 后回到 Drive |
+| 查看最近访问/编辑 | `dws drive +recent [--operate-type 1] --limit <N>` | 1=最近编辑；默认最近访问 |
+| 查看节点类型和元数据 | `dws drive +inspect --node <dentryUuid>` | 按需加 stats/publish/cover，不为普通列表强制调用 |
+| 下载普通文件 | `dws drive +download --node <dentryUuid> --output <相对路径>` | 当前 shortcut 接受 ID；在线文档用 `doc +export` |
+| 上传新文件或覆盖普通文件 | `dws drive +upload --file <相对路径>` | 新建可加 folder；覆盖改加 node，二者互斥 |
+| 创建文件夹 | `dws drive +create-folder --name <名称> [--folder <ID>]` | Shortcut 已提交并读回 |
+| 复制在线文档节点 | `dws drive +copy --node <ID> [--folder <目标ID>]` | 普通钉盘文件会被拒绝；Base 结构复制走 AITable `+base-copy --base-id <ID> --target-folder-id <真实ID> --only-struct` |
+| 移动节点 | `dws drive +move --node <ID> --folder <目标ID>` | 破坏性变更，按 Runtime confirmation |
+| 重命名节点 | `dws drive +rename --node <ID> --name <新名称>` | 写后检查最终名称 |
+| 比较本地与钉盘文件夹 | `dws drive status --local-folder <绝对路径> --remote-folder <folderId>` | 只读；默认精确 MD5，不先拉取或推送 |
+| 钉盘文件夹拉到本地 | `dws drive pull --local-folder <绝对路径> --remote-folder <folderId> --if-exists skip` | 安全默认不覆盖；先以相同参数 `--dry-run`，再按确认执行 |
+| 本地文件夹推到钉盘 | `dws drive push --local-folder <绝对路径> --remote-folder <folderId> --if-exists skip` | 安全默认不覆盖；先 dry-run；不会删除远端多余文件 |
+| 双向补齐文件夹 | `dws drive sync --local-folder <绝对路径> --remote-folder <folderId> --on-conflict skip` | 先 dry-run；冲突策略必须显式保留 |
 
-## 标准 SOP（必遵流程）
+### 低频入口
 
-> 命中以下意图**必须**按对应 SOP 顺序执行；**禁止**跳步、替换命令、编造 dentryUuid/nodeId。每条命令必须带 `--format json`。破坏性操作（删除/移动/覆盖/公开）**必须**先与用户确认。
+- 删除/恢复：`+delete/+recycle-list/+recycle-restore`；版本：`+version-history/+version-get/+version-download/+version-revert`。
+- 收藏：`+star-*`；公开状态：`+publish-get/+publish-unset`（`+publish-set` 不进入 Agent 路由）；统计/封面用 `+inspect`；快捷方式用 `+create-shortcut`。
+- 目录树只用有界 `+list` 逐层遍历。
 
-### SOP-1 找文件（find-file）
+兼容别名不选路：`+info`→`+inspect`，`+find-file`→`+search`，`+search-docs`→`doc +search`。
 
-**触发**：找文件/搜文件/我的文件/最近文件/某文档在哪。
+## 当前最短路径
 
-1. **选源（必须）**：最近访问 → `dws drive +recent --limit <n> --format json`（翻页用上次返回的 `nextCursor` 传 `--cursor`）；按内容/名称全局搜 → `dws drive +search --query "<关键词>" --format json`；浏览某目录 → `dws drive +list --folder <dentryUuid> --format json`。
-2. **解析（必须）**：取真实 `dentryUuid`（= `id`/`nodeId`）；多候选让用户确认，**禁止**默认取第一个。
-3. **下钻（必须）**：根目录没命中时，进入最相关文件夹继续 `drive +list --folder`，必要时 `python scripts/drive_tree_list.py --depth 2` 递归，**禁止**只看根目录就放弃。
-4. **回读元数据（必须）**：命中后 `dws drive +inspect --node <dentryUuid> --format json`，按 `extension` 确认类型。
+- 已知 dentryUuid：直接执行 inspect/download/list/move/rename，禁止先 search；仅确认是受支持的在线文档节点后才执行 copy。
+- 目标 Drive 空间未知：先明确企业空间 `orgSpace` 或“我的文件”`mySpace`，用 `dws wiki space list --type <类型> --format json` 发现空间；`orgSpace` 在 `nextToken` 非空时以 `--cursor <nextToken>` 续页，`mySpace` 固定单条且不分页。按后续命令取真实 spaceId 或 rootFolderId 后立即回到 Drive；已知这些 ID 时不做空间发现。
+- 只有名称：`+search` → 唯一候选的 nodeId → 目标命令；不得自动选择第一项。
+- 只有文件夹层级：从最近的已知 folder ID 开始 `+list`，不要从根目录无界递归。
+- 上传新文件：单条 `+upload`；不要退回 upload-info + 手写 HTTP + commit。
+- copy/move/rename/create-folder 已内置写后读取时，不再由 Agent重复执行 `+inspect`。
+- 文件夹方向已明确时直接 `status/pull/push/sync`，不先 status；写操作先用完全相同参数 dry-run，再正式执行。
+- 搜索结果 `type=able` 后按业务动词重路由：结构复制/删除/Base 内操作走 AITable。结构复制按当前 leaf 提供源 Base ID 和真实 `--target-folder-id`；缺少目标 ID 时停止，不猜根 ID或发明 `--target-root`。
+- `+inspect/+download/+list` 只保证 dentryUuid；只有 URL 时先用 `dws drive info --node <URL> --format json` 解析并核对 nodeId。
 
-**禁止**：编造 dentryUuid、只看根目录放弃、用 `drive +list` 替代 `drive +search` 做全局查找。
+最短路径不省略类型检查、确认、传输验证或写后校验。
 
-### SOP-2 上传 / 下载（upload-download）
+## 关键结果语义
 
-**触发**：上传文件/下载文件/传到钉盘/用本地文件覆盖已有文件。
+- `+list/+search/+recent` 检查集合、hasMore 和 nextCursor；缺少集合不能当空结果，多候选禁止默认第一项。
+- `+download` 验证相对路径存在且 sizeBytes > 0；`+upload` 检查最终 nodeId、名称、类型和大小。只有源端与结果都提供可比哈希时才核对 checksum；缺失时保留现有证据，不虚构端到端校验和。
+- copy/move/rename/create-folder 检查 `ok/outcome` 和读回；`partial_success` 不是完成。
+- status 检查分类集合；pull/push/sync 检查 summary 和逐项结果，failed/unknown 必须保留。
+- 分页未结束时返回 continuation；目录树或大列表必须有最大深度、页数和条目数。
+- 未知写入效果先 inspect/list 回读，不盲目重放写操作。
 
-1. **上传（必须）**：先把文件暂存到工作目录，再执行 `dws drive +upload --file <相对路径> [--folder <dentryUuid>] --format json`；shortcut 内部已提交并回读远端元数据，返回取 `data.nodeId`。
-2. **覆盖（必须）**：先 `dws drive +inspect --node <dentryUuid> --format json`，记录真实 `extension` 和原 `name`。`extension=md` 切 `dingtalk-misc` 的 `references/markdown.md`；其他普通文件在用户确认后执行 `dws drive +upload --node <dentryUuid> --file <相对路径> --file-name "<原name>" --format json`。`adoc` / `axls` / `able` 切对应内容 skill/reference，不按普通文件覆盖。
-3. **下载（必须）**：先 `dws drive +inspect --node <dentryUuid> --format json` 判断类型——`extension=adoc` 切 `dingtalk-doc` 用 `doc +export`；普通文件执行 `dws drive +download --node <dentryUuid> --output <工作目录内相对路径> --format json`，并校验 `data.sizeBytes > 0` 和本地文件真实存在。
+## 参数与安全边界
 
-**禁止**：对在线文档用 `drive +download`（会失败）、普通文件覆盖时省略 `--file-name` 导致隐式重命名、只看退出码而不检查统一结果。
+- `--node`、`--folder` 使用 dentryUuid/fileId，不使用数字型 dentryId；回收站 restore 使用 recycleItemId。
+- `+list --limit` 最大 50，`+search --limit` 最大 30；超过时分页，不以非法参数反复试错。
+- 写操作只按精确 leaf Runtime 判定确认；已明确授权具体对象、动作与影响时，首次正式执行直接带 `--yes`，否则先确认。预览不带，参数变化重新确认；禁止用缺少 `--yes` 的失败探测。
+- 普通文件覆盖前确认真实类型和原名称；adoc/axls/able 不按普通文件覆盖。
+- 单文件 Shortcut 的本地输入输出使用 cwd 相对路径且禁止 `..`；文件夹 `status/pull/push/sync` 按 leaf 契约使用绝对 `--local-folder`。
+- 文件夹同步默认精确 MD5；仅在用户接受时间戳近似时用 `--quick`，且不会删除任一侧多余文件。
+- 参数不确定时只查一次精确 leaf Schema；禁止产品级 Schema。
 
-### SOP-3 文件夹 / 复制 / 移动 / 重命名（folder-ops）
+## 按需加载
 
-**触发**：建文件夹/复制/移动/重命名。
+Golden Route 参数足够时禁止读取 reference。其余最多读取一个精确 reference：
 
-1. **执行（必须）**：建钉盘文件夹 `dws drive +create-folder --name "<名称>" [--folder <id>]`；复制 `drive +copy --node <dentryUuid> --folder <目标>`；移动 `drive +move --node <dentryUuid> --folder <目标>`；重命名 `drive +rename --node <dentryUuid> --name "<新名>"`。全部加 `--format json`。
-2. **验证（必须）**：这些 shortcut 内部已经读回；调用方仍须检查 `ok=true`、`outcome=success` 和 `data` 中的 nodeId/对象，不能只看进程退出码。
+| 触发条件 | Reference |
+|---|---|
+| URL、文件类型或跨产品边界 | [intent-guide](references/intent-guide.md) |
+| 文件夹比较、拉取、推送或双向同步 | [folder-sync](references/folder-sync.md) |
+| 低频权限、版本、回收站、公开状态 | [drive reference](references/drive.md) 的对应章节 |
+| 文档查询、导入和模板保形流程 | [lite-recipes](references/lite-recipes.md) |
 
-**禁止**：未确认就移动/覆盖他人文件、跳过回读。
+## 错误最短路径
 
-### SOP-4 回收站（recycle）
+1. 零/多候选、类型不明或分页不完整：停止写入，返回候选或 continuation。
+2. `unknown flag`：只查一次当前 leaf Help；`unknown command`：只查一次 Drive shortcut 清单。
+3. 普通下载遇到在线文档类型：切 `doc +export`，不重复尝试 Drive download。
+4. 传输中断：保留本地临时状态或 checkpoint；先判断能否续传。
+5. 写入效果未知：按 nodeId 回读；无法证明时报告 unknown。
+6. 普通文件 `+copy` 被拒绝时不要重试或伪装成功；独立副本改走经用户授权的 download→upload。AITable 结构复制缺少或无法验证目标文件夹时停止，不猜 ID或创建测试文件夹。
 
-**触发**：删文件/回收站/还原。
+## 跨产品边界
 
-1. **删除（必须）**：`dws drive +delete --node <dentryUuid> --format json`（**必须**先与用户确认，再由执行层添加 `--yes`）。
-2. **还原（必须）**：`dws drive +recycle-list --format json` 按 `originalName/originalPath` 确认目标并取 `recycleItemId` → 用户确认后执行 `dws drive +recycle-restore --id <recycleItemId> --format json`；成功时 Shortcut 会用服务返回的 nodeId 读回。
-
-**禁止**：未确认就删除、把 `dentryUuid` 当 `recycleItemId` 传给 restore。
-
-### SOP-5 互联网公开（publish）
-
-**触发**：互联网公开/取消公开/查公开状态。
-
-1. **执行（必须）**：查状态 `dws drive +publish-get --node <dentryUuid> --format json`；用户确认后关闭公开 `dws drive +publish-unset --node <dentryUuid> --format json`。`+publish-set` 在普通文件和在线文档真实夹具上均返回 `operation.notSupported`，当前不进入 Agent 公开入口；只有未来先找到服务端明确支持的 eligible 节点并通过真实 set→get→unset 闭环后才能启用。
-2. **边界（必须）**：对外公开前**必须**与用户确认边界与后果。
-
-**禁止**：未确认就改变公开状态；把 `operation.notSupported` 当成功；在没有 eligible 节点真实闭环的情况下启用 `+publish-set`。
-
-## 高频硬约束
-
-- 查找文件不要只看根目录后放弃；根目录没命中时，进入最相关的目标文件夹继续 `drive +list --folder <dentryUuid>`，必要时用目录树脚本递归到合理深度。
-- `drive +list` 默认 `--limit 20`，自动化场景里保守使用 `--limit 50` 以内并处理 `nextCursor` 翻页；不要因为参数边界报错反复重试。
-- 全局找文件优先 `drive +search --query`；指定目录浏览用 `drive +list`，命中后必须 `drive +inspect --node <dentryUuid> --format json` 回读元数据。
-- 删除、覆盖、移动等破坏性操作必须确认；上传、创建文件夹、下载后要读回或列目录验证。
-- 所有 `dws drive` 命令加 `--format json`。
-
-## 跨产品协作
-
-- 文件内容编辑（钉钉文档）→ 切到 `dingtalk-doc`
-- 知识库空间 → 切到 `dingtalk-wiki`
-## 局部意图与短流程
-
-- [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。
+- 普通文件/文件夹及在线文档节点的存储管理 → Drive；正文/内容分别走 Doc、Sheet、AITable。
+- able 外层移动/重命名走 Drive；结构复制、Base 删除（`+base-delete`）及 Base 内操作走 AITable。
+- 明确知识库 workspace 层级 → Wiki；泛称“文档空间/我的文档”仍走 Drive。
+- 钉盘存储空间发现例外地复用 managed `dws wiki space list --type orgSpace|mySpace`；只取真实 spaceId/rootFolderId 后回到 Drive。spaceId 用于空间参数，rootFolderId 才可作为空间根目录 folder；`orgWikiSpace/myWikiSpace` 返回 workspaceId，不能混入 Drive 参数。
+- Word/Markdown/Text 转在线文档用 `doc +import`；Drive upload 只保留原文件。

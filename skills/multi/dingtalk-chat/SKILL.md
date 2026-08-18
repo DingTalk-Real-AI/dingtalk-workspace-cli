@@ -62,7 +62,7 @@ metadata:
 | 已知资源引用单独下载 | `dws chat +messages-resource-download` |
 | 按关键词搜索群 | `dws chat +chat-search` |
 | 查看消息收藏 | `dws chat +flag-list` |
-| <!-- dws-intent: chat.reply.quote -->引用回复 | `dws chat +messages-reply`；成功结果保留新消息/会话/投递与原消息来源上下文 |
+| <!-- dws-intent: chat.reply.quote -->引用回复 | 人：`dws chat +messages-reply`；成功结果保留新消息/会话/投递与原消息来源上下文。Bot 群：`dws chat message send-by-bot --conversation-id <cid> --reply <mid> --ref-sender <sid>` |
 | 撤回当前用户消息 | `dws chat +messages-recall --msg-id <openMessageId>`；可省略会话 ID，由 CLI 只读补齐；兼容单值 `--message-ids` |
 | 已知话题主消息 ID 或 thread/topic ID 读取回复 | `dws chat +thread-replies` |
 | <!-- dws-intent: chat.create.group -->按成员 ID 或姓名创建群聊 | `dws chat +chat-create`；成员/群主均可自然解析，任一歧义都会在创建前整体停止 |

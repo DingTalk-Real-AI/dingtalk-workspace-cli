@@ -87,27 +87,68 @@ var Reschedule = shortcut.Shortcut{
 		if start == "" || end == "" {
 			return apperrors.NewValidation("--start 与 --end 都必须提供（ISO8601 时间字符串）")
 		}
+		if err := calendarSmartValidateRange(start, end); err != nil {
+			return err
+		}
 
 		// Step 1 — confirm the event exists. eventId param copied verbatim from the
 		// helper's `event get` call site (get_calendar_detail).
-		if _, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{
+		preflight, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{
 			"eventId": eventID,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
+		}
+		if _, err := calendarSmartRequireEvent(preflight, "calendar/get_calendar_detail", eventID); err != nil {
+			return err
+		}
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"success":  true,
+				"dryRun":   true,
+				"executed": false,
+				"eventId":  eventID,
+				"start":    start,
+				"end":      end,
+			})
 		}
 
 		// Step 2 — update ONLY the time. eventId + startDateTime/endDateTime (ISO
 		// strings, not millis) copied verbatim from the helper's `event update`
 		// call site (update_calendar_event). No other field is passed, so nothing
 		// else on the event is changed.
-		return rt.CallMCP("update_calendar_event", map[string]any{
+		written, err := rt.CallMCPWriteDataStrict("calendar", "update_calendar_event", map[string]any{
 			"eventId":       eventID,
 			"startDateTime": start,
 			"endDateTime":   end,
+		})
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartWriteReceipt(written, "calendar/update_calendar_event"); err != nil {
+			return err
+		}
+		readback, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{"eventId": eventID})
+		if err != nil {
+			return err
+		}
+		event, err := calendarSmartRequireEvent(readback, "calendar/get_calendar_detail", eventID)
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartVerifyEventTimes(event, start, end); err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{
+			"success":  true,
+			"eventId":  eventID,
+			"verified": true,
+			"event":    event,
 		})
 	},
 }
 
 func init() {
+	finalizeCalendarSmart(&Reschedule, "已改期并通过精确时间读回验证的日程")
 	shortcut.Register(Reschedule)
 }

@@ -304,5 +304,6 @@ func newSheetCommentCmd() *cobra.Command {
 	}
 
 	commentCmd.AddCommand(commentListCmd, commentCreateCmd, commentReplyCmd, commentUpdateCmd, commentDeleteCmd)
+	commentCmd.AddCommand(newCommentBaseCommands("sheet")...)
 	return commentCmd
 }

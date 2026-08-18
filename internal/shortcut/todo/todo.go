@@ -22,6 +22,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -29,12 +30,13 @@ import (
 // CreateSub maps helper `create_personal_sub_todo`.
 // GetMyTasks maps helper `get_user_todos_in_current_org`.
 var GetMyTasks = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+get-my-tasks",
-	Product:     "todo",
-	Description: "查询当前组织下我的待办列表",
-	Intent:      "当你想查看自己在当前组织下的待办清单、盘点未完成事项或按条件筛选任务时使用；可按完成状态、优先级、角色（创建者/执行者/参与者）和截止时间范围过滤并分页，返回匹配的待办列表。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+get-my-tasks",
+	Product:       "todo",
+	Description:   "查询当前组织下我的待办列表",
+	Intent:        "当你想查看自己在当前组织下的待办清单、盘点未完成事项或按条件筛选任务时使用；可按完成状态、优先级、角色（创建者/执行者/参与者）和截止时间范围过滤并分页，返回匹配的待办列表。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -48,6 +50,7 @@ var GetMyTasks = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +get-my-tasks",
 		},
 		Description: "查询当前组织下我的待办列表",
+		Result:      todoPagedCollectionResult("todos", "当前组织下我的待办列表"),
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -68,12 +71,22 @@ var GetMyTasks = shortcut.Shortcut{
 		{Name: "role-types", Type: shortcut.FlagStringSlice, Default: "executor", Desc: "角色类型: creator/executor/participant"},
 		{Name: "plan-finish-start", Type: shortcut.FlagInt, Desc: "截止时间范围开始（Unix 毫秒时间戳）"},
 		{Name: "plan-finish-end", Type: shortcut.FlagInt, Desc: "截止时间范围结束（Unix 毫秒时间戳）"},
+		{Name: "all", Type: shortcut.FlagBool, Desc: "遍历全部分页；达到安全页数上限仍有下一页时失败"},
+		{Name: "max-pages", Type: shortcut.FlagInt, Default: "40", Desc: "--all 的最大页数（1-40）"},
 	},
 	Tips: []string{`dws todo +get-my-tasks --status false --priority 40,30`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		page, err := strconv.Atoi(rt.Str("page"))
+		if err != nil || page < 1 {
+			return todoResponseError("todo/+get-my-tasks", "invalid_page", "--page 必须是大于 0 的整数")
+		}
+		size, err := strconv.Atoi(rt.Str("size"))
+		if err != nil || size < 1 || size > 20 {
+			return todoResponseError("todo/+get-my-tasks", "invalid_page_size", "--size 必须是 1 到 20 的整数；后端已知不支持更大值")
+		}
 		params := map[string]any{
-			"pageNum":  rt.Str("page"),
-			"pageSize": rt.Str("size"),
+			"pageNum":  strconv.Itoa(page),
+			"pageSize": strconv.Itoa(size),
 		}
 		if rt.Changed("status") {
 			params["todoStatus"] = rt.Str("status")
@@ -81,9 +94,11 @@ var GetMyTasks = shortcut.Shortcut{
 		if rt.Changed("priority") {
 			var ps []int
 			for _, p := range rt.StrSlice("priority") {
-				if n, err := strconv.Atoi(p); err == nil {
-					ps = append(ps, n)
+				n, err := strconv.Atoi(p)
+				if err != nil || (n != 10 && n != 20 && n != 30 && n != 40) {
+					return todoResponseError("todo/+get-my-tasks", "invalid_priority", "--priority 仅接受 10/20/30/40")
 				}
+				ps = append(ps, n)
 			}
 			if ps != nil {
 				params["priorityList"] = ps
@@ -94,19 +109,69 @@ var GetMyTasks = shortcut.Shortcut{
 			roles = []string{"executor"}
 		}
 		params["roleTypes"] = roles
+		for _, role := range roles {
+			if role != "creator" && role != "executor" && role != "participant" {
+				return todoResponseError("todo/+get-my-tasks", "invalid_role_type", "--role-types 仅接受 creator/executor/participant")
+			}
+		}
 		if rt.Changed("plan-finish-start") {
 			params["planFinishDateStart"] = rt.Int("plan-finish-start")
 		}
 		if rt.Changed("plan-finish-end") {
 			params["planFinishDateEnd"] = rt.Int("plan-finish-end")
 		}
-		data, err := rt.CallMCPData("todo", "get_user_todos_in_current_org", params)
+		if rt.Bool("all") {
+			maxPages := rt.Int("max-pages")
+			if maxPages < 1 || maxPages > todoMaxPages {
+				return todoResponseError("todo/+get-my-tasks", "invalid_page_limit", "--max-pages 必须是 1 到 40")
+			}
+			delete(params, "pageNum")
+			delete(params, "pageSize")
+			cards, err := listAllTodoCards(rt, params, maxPages)
+			if err != nil {
+				return err
+			}
+			return rt.Output(map[string]any{"count": len(cards), "todos": cards, "complete": true})
+		}
+		data, err := rt.CallMCPReadData("todo", "get_user_todos_in_current_org", params)
 		if err != nil {
 			return err
 		}
-		cards := getMyTasksProject(data)
-		return rt.Output(map[string]any{"count": len(cards), "todos": cards})
+		cards, err := getMyTasksProjectStrict(data)
+		if err != nil {
+			return err
+		}
+		hasMore, err := todoHasMore(data)
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"count": len(cards), "todos": cards, "page": page, "size": size, "hasMore": hasMore})
 	},
+}
+
+func getMyTasksProjectStrict(data map[string]any) ([]map[string]any, error) {
+	raw, err := requireTodoCollection(data, "todo/get_user_todos_in_current_org", "todoCards")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(raw))
+	for i, m := range raw {
+		if todoStableString(m, "taskId", "todoId", "id") == "" {
+			return nil, todoResponseError("todo/get_user_todos_in_current_org", "missing_stable_id", "待办列表第 "+strconv.Itoa(i)+" 项缺少稳定 taskId")
+		}
+		out = append(out, projectTodoCard(m))
+	}
+	return out, nil
+}
+
+func projectTodoCard(m map[string]any) map[string]any {
+	row := map[string]any{"taskId": todoStableString(m, "taskId", "todoId", "id")}
+	for _, k := range []string{"subject", "dueTime", "priority", "finalStatusStage", "creatorId"} {
+		if v, ok := m[k]; ok {
+			row[k] = v
+		}
+	}
+	return row
 }
 
 // getMyTasksProject reshapes get_user_todos_in_current_org into a clean todo
@@ -142,12 +207,13 @@ func getMyTasksProject(data map[string]any) []map[string]any {
 
 // ListSub maps helper `list_sub_tasks`.
 var ListSub = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+list-sub",
-	Product:     "todo",
-	Description: "查询子待办列表",
-	Intent:      "当你已知某个待办任务 ID、想了解它被拆解出的所有子任务时使用；输入父任务 ID，返回其下的子待办列表。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+list-sub",
+	Product:       "todo",
+	Description:   "查询子待办列表",
+	Intent:        "当你已知某个待办任务 ID、想了解它被拆解出的所有子任务时使用；输入父任务 ID，返回其下的子待办列表。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -161,6 +227,7 @@ var ListSub = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +list-sub",
 		},
 		Description: "查询子待办列表",
+		Result:      todoCollectionResult("subTasks", "指定父待办的子待办列表"),
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -186,9 +253,35 @@ var ListSub = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		subs := listSubProject(data)
+		subs, err := listSubProjectStrict(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(subs), "subTasks": subs})
 	},
+}
+
+func listSubProjectStrict(data map[string]any) ([]map[string]any, error) {
+	raw, err := requireTodoCollection(data, "todo/list_sub_tasks", "list", "items", "subTasks", "subTaskList")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(raw))
+	for i, m := range raw {
+		id := todoStableString(m, "taskId", "id", "subTaskId")
+		if id == "" {
+			return nil, todoResponseError("todo/list_sub_tasks", "missing_stable_id", "子待办列表第 "+strconv.Itoa(i)+" 项缺少稳定 taskId")
+		}
+		row := map[string]any{"taskId": id}
+		if v := listSubFirst(m, "subject", "title", "name", "content"); v != nil {
+			row["subject"] = v
+		}
+		if v := listSubFirst(m, "dueTime", "dueDate", "deadline"); v != nil {
+			row["dueTime"] = v
+		}
+		out = append(out, row)
+	}
+	return out, nil
 }
 
 // listSubProject reshapes list_sub_tasks into a clean sub-todo list
@@ -259,12 +352,13 @@ func listSubFirst(m map[string]any, keys ...string) any {
 // Complete maps helper `update_todo_done_status`.
 // Get maps helper `get_todo_detail`.
 var Get = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+get",
-	Product:     "todo",
-	Description: "查询待办详情",
-	Intent:      "当你已知某条待办的任务 ID、想查看它的完整信息（标题、执行者、截止时间、优先级、状态等）时使用；输入任务 ID，返回该待办的详细内容。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+get",
+	Product:       "todo",
+	Description:   "查询待办详情",
+	Intent:        "当你已知某条待办的任务 ID、想查看它的完整信息（标题、执行者、截止时间、优先级、状态等）时使用；输入任务 ID，返回该待办的详细内容。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -278,6 +372,7 @@ var Get = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +get",
 		},
 		Description: "查询待办详情",
+		Result:      todoObjectResult("待办详情"),
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -295,9 +390,11 @@ var Get = shortcut.Shortcut{
 	},
 	Tips: []string{`dws todo +get --task-id <taskId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_todo_detail", map[string]any{
-			"taskId": rt.Str("task-id"),
-		})
+		detail, err := readTodoDetail(rt, rt.Str("task-id"))
+		if err != nil {
+			return err
+		}
+		return rt.Output(detail)
 	},
 }
 
@@ -309,12 +406,13 @@ var Get = shortcut.Shortcut{
 // AddReminder maps helper `add_todo_reminder`.
 // ListAttachment maps helper `list_todo_attachment`.
 var ListAttachment = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+list-attachment",
-	Product:     "todo",
-	Description: "查询待办任务的附件列表",
-	Intent:      "当你想查看某条待办上挂了哪些附件、或需要拿到附件 ID 以便后续删除时使用；输入任务 ID，返回该待办的附件列表。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+list-attachment",
+	Product:       "todo",
+	Description:   "查询待办任务的附件列表",
+	Intent:        "当你想查看某条待办上挂了哪些附件、或需要拿到附件 ID 以便后续删除时使用；输入任务 ID，返回该待办的附件列表。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -328,6 +426,7 @@ var ListAttachment = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +list-attachment",
 		},
 		Description: "查询待办任务的附件列表",
+		Result:      todoCollectionResult("attachments", "待办附件列表"),
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -353,9 +452,34 @@ var ListAttachment = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		atts := listAttachmentProject(data)
+		atts, err := listAttachmentProjectStrict(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(atts), "attachments": atts})
 	},
+}
+
+func listAttachmentProjectStrict(data map[string]any) ([]map[string]any, error) {
+	raw, err := requireTodoCollection(data, "todo/list_todo_attachment", "list", "items", "attachments", "attachmentList")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(raw))
+	for i, m := range raw {
+		id := todoStableString(m, "attachmentId", "id", "fileId", "dentryId")
+		if id == "" {
+			return nil, todoResponseError("todo/list_todo_attachment", "missing_stable_id", "附件列表第 "+strconv.Itoa(i)+" 项缺少稳定 ID")
+		}
+		row := map[string]any{"attachmentId": id}
+		for _, pair := range [][2]string{{"fileName", "name"}, {"fileSize", "size"}, {"fileType", "type"}} {
+			if v := listAttachmentFirst(m, pair[0], pair[1]); v != nil {
+				row[pair[0]] = v
+			}
+		}
+		out = append(out, row)
+	}
+	return out, nil
 }
 
 // listAttachmentProject reshapes list_todo_attachment into a clean attachment
@@ -428,12 +552,13 @@ func listAttachmentFirst(m map[string]any, keys ...string) any {
 // AddComment maps helper `add_todo_comment`.
 // ListComment maps helper `list_todo_comment`.
 var ListComment = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+list-comment",
-	Product:     "todo",
-	Description: "查询待办评论列表",
-	Intent:      "当你想查看某条待办下的讨论记录、了解协作沟通历史或获取评论 ID 以便删除时使用；输入任务 ID 并可分页，返回该待办的评论列表。",
-	Risk:        shortcut.RiskRead,
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+list-comment",
+	Product:       "todo",
+	Description:   "查询待办评论列表",
+	Intent:        "当你想查看某条待办下的讨论记录、了解协作沟通历史或获取评论 ID 以便删除时使用；输入任务 ID 并可分页，返回该待办的评论列表。",
+	Risk:          shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
 		Confirmation: "not_required", Idempotency: "idempotent",
@@ -447,6 +572,7 @@ var ListComment = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +list-comment",
 		},
 		Description: "查询待办评论列表",
+		Result:      todoCollectionResult("comments", "待办评论列表"),
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
@@ -466,17 +592,50 @@ var ListComment = shortcut.Shortcut{
 	},
 	Tips: []string{`dws todo +list-comment --task-id <taskId>`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		page, err := strconv.Atoi(rt.Str("page"))
+		if err != nil || page < 1 {
+			return todoResponseError("todo/+list-comment", "invalid_page", "--page 必须是大于 0 的整数")
+		}
+		size, err := strconv.Atoi(rt.Str("size"))
+		if err != nil || size < 1 || size > todoPageSize {
+			return todoResponseError("todo/+list-comment", "invalid_page_size", "--size 必须是 1 到 20 的整数")
+		}
 		data, err := rt.CallMCPData("todo", "list_todo_comment", map[string]any{
 			"taskId":   rt.Str("task-id"),
-			"page":     rt.Str("page"),
-			"pageSize": rt.Str("size"),
+			"page":     strconv.Itoa(page),
+			"pageSize": strconv.Itoa(size),
 		})
 		if err != nil {
 			return err
 		}
-		comments := listCommentProject(data)
+		comments, err := listCommentProjectStrict(data)
+		if err != nil {
+			return err
+		}
 		return rt.Output(map[string]any{"count": len(comments), "comments": comments})
 	},
+}
+
+func listCommentProjectStrict(data map[string]any) ([]map[string]any, error) {
+	raw, err := requireTodoCollection(data, "todo/list_todo_comment", "list", "items", "comments", "commentList")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(raw))
+	for i, m := range raw {
+		id := todoStableString(m, "commentId", "id")
+		if id == "" {
+			return nil, todoResponseError("todo/list_todo_comment", "missing_stable_id", "评论列表第 "+strconv.Itoa(i)+" 项缺少稳定 commentId")
+		}
+		row := map[string]any{"commentId": id}
+		for _, pair := range [][2]string{{"content", "text"}, {"creatorId", "userId"}, {"createTime", "createdTime"}} {
+			if v := listCommentFirst(m, pair[0], pair[1]); v != nil {
+				row[pair[0]] = v
+			}
+		}
+		out = append(out, row)
+	}
+	return out, nil
 }
 
 // listCommentProject reshapes list_todo_comment into a clean comment list

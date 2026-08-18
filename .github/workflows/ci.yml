@@ -513,11 +513,38 @@ jobs:
         run: node .github/reviewer-routing.test.js
 
   test-focused:
-    name: Test (changed packages)
+    name: "Test (focused: ${{ matrix.shard }})"
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}
     runs-on: ubuntu-latest
+    # Each shard owns one bounded slice of the impacted set, so no single job
+    # carries internal/app together with every reverse dependency. The shard
+    # list and per-shard execution below mirror test-race, which runs the same
+    # shards at full-suite scope; release-scripts is included because its
+    # dedicated job only runs at full-suite or release-sensitive scope, and
+    # dropping it here would stop testing test/scripts changes entirely.
+    # internal/app is carried by one shard per bounded partition rather than a
+    # single app shard: the partitions used to run end to end inside one job,
+    # where the Schema partition alone owned most of the wall clock. The
+    # app-<partition> names are pinned to the helper's partition set by
+    # TestCIAppRacePartitionMatrixMatchesHelper, so a partition can never lose
+    # its job silently.
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - app-schema
+          - app-a-b
+          - app-c
+          - app-d-r
+          - app-s-z-example-fuzz
+          - generators
+          - helpers
+          - cli
+          - smoke
+          - remaining
+          - release-scripts
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -546,37 +573,110 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Test changed packages and reverse dependencies
+      - name: Select impacted packages for shard
+        id: select
+        shell: bash
+        env:
+          TEST_SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          # Every app partition shard tests the same single internal/app
+          # package, so the impacted-package query uses the base shard name and
+          # the partition only selects which tests run.
+          package_shard="$TEST_SHARD"
+          case "$TEST_SHARD" in
+            app-*) package_shard=app ;;
+          esac
+          package_output="$(
+            ./scripts/ci/changed-test-packages.sh \
+              list-shard "$package_shard" "$TEST_BASE_REF" "$TEST_HEAD_REF"
+          )"
+          if [ -z "$package_output" ]; then
+            echo "No buildable Go package in shard $TEST_SHARD is affected by this revision." \
+              >> "$GITHUB_STEP_SUMMARY"
+            echo "affected=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The package list travels through a file rather than a step output:
+          # reading it with `mapfile < file` has unambiguous line semantics,
+          # whereas a here-string over a multi-line output would append an extra
+          # empty element if the value ever carried a trailing newline, and an
+          # empty element would reach go test as an empty package argument.
+          printf '%s\n' "$package_output" > "$RUNNER_TEMP/focused-shard-packages.txt"
+          echo "affected=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        if: ${{ matrix.shard == 'remaining' && steps.select.outputs.affected == 'true' }}
+        run: make build
+
+      - name: Install archive tooling
+        if: ${{ matrix.shard == 'release-scripts' && steps.select.outputs.affected == 'true' }}
+        run: sudo apt-get update && sudo apt-get install -y zip unzip
+
+      - name: Test shard with Race Detection
+        if: ${{ steps.select.outputs.affected == 'true' }}
         shell: bash
         env:
           DWS_PACKAGE_VERSION: 0.0.0-test
+          TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          package_output="$(
-            ./scripts/ci/changed-test-packages.sh \
-              list "$TEST_BASE_REF" "$TEST_HEAD_REF"
-          )"
-          if [ -z "$package_output" ]; then
-            echo "No buildable Go package is affected by this revision." \
-              >> "$GITHUB_STEP_SUMMARY"
+          mapfile -t packages < "$RUNNER_TEMP/focused-shard-packages.txt"
+          test "${#packages[@]}" -gt 0
+          for package in "${packages[@]}"; do
+            test -n "$package" || {
+              echo "shard package list contains an empty entry" >&2
+              exit 1
+            }
+          done
+          case "$TEST_SHARD" in
+            app-*)
+              # A single long-lived app test process retains every constructed
+              # command tree in framework registries. Each partition is its own
+              # job, so that state is released when the process exits and the
+              # partitions run concurrently instead of end to end. The helper
+              # still verifies that the partition patterns cover every top-level
+              # test exactly once before running the one it was asked for.
+              test "${#packages[@]}" -eq 1
+              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              exit 0
+              ;;
+          esac
+          if [ "$TEST_SHARD" = "release-scripts" ]; then
+            # Mirror the dedicated release-contract job: these suites shell out
+            # to archive tooling and are not race-instrumented there.
+            go test -v -count=1 -timeout=10m "${packages[@]}"
             exit 0
           fi
-          mapfile -t packages <<< "$package_output"
-          go test -v -race -count=1 -timeout=15m "${packages[@]}"
+          # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
+          # give them a dedicated package timeout on slower hosted runners.
+          timeout_budget=12m
+          if [ "$TEST_SHARD" = "cli" ] ||
+             [ "$TEST_SHARD" = "smoke" ]; then
+            timeout_budget=15m
+          fi
+          go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 
   test-race:
     name: "Test (race: ${{ matrix.shard }})"
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: ubuntu-latest
-    # app runs several independently bounded processes; cli/smoke need headroom
-    # beyond go test -timeout for setup + assembly.
+    # internal/app is split across one shard per bounded partition so the
+    # partitions run concurrently and each releases its framework registries
+    # when the process exits; cli/smoke need headroom beyond go test -timeout for
+    # setup + assembly. The app-<partition> names are pinned to the helper's
+    # partition set by TestCIAppRacePartitionMatrixMatchesHelper.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - app
+          - app-schema
+          - app-a-b
+          - app-c
+          - app-d-r
+          - app-s-z-example-fuzz
           - generators
           - helpers
           - cli
@@ -602,18 +702,30 @@ jobs:
           TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          package_output="$(./scripts/ci/test-packages.sh list "$TEST_SHARD")"
+          # Every app partition shard tests the same single internal/app
+          # package, so the package query uses the base shard name and the
+          # partition only selects which tests run.
+          package_shard="$TEST_SHARD"
+          case "$TEST_SHARD" in
+            app-*) package_shard=app ;;
+          esac
+          package_output="$(./scripts/ci/test-packages.sh list "$package_shard")"
           test -n "$package_output"
           mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
-          if [ "$TEST_SHARD" = "app" ]; then
-            # A single long-lived app test process retains every constructed
-            # command tree in framework registries. Isolate Schema assembly and
-            # bounded name ranges so each process releases that state on exit.
-            test "${#packages[@]}" -eq 1
-            ./scripts/ci/run-app-race-tests.sh run "${packages[0]}"
-            exit 0
-          fi
+          case "$TEST_SHARD" in
+            app-*)
+              # A single long-lived app test process retains every constructed
+              # command tree in framework registries. Each partition is its own
+              # job, so that state is released when the process exits and the
+              # partitions run concurrently instead of end to end. The helper
+              # still verifies that the partition patterns cover every top-level
+              # test exactly once before running the one it was asked for.
+              test "${#packages[@]}" -eq 1
+              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              exit 0
+              ;;
+          esac
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
           timeout_budget=12m
@@ -715,7 +827,7 @@ jobs:
           failed=0
           if [ "$CHANGELOG_ONLY" = true ] || [ "$DOCS_ONLY" = true ]; then
             for shard in \
-              "changed packages:$FOCUSED_RESULT" \
+              "focused shards:$FOCUSED_RESULT" \
               "race shards:$RACE_RESULT" \
               "release scripts:$RELEASE_SCRIPTS_RESULT" \
               "cross-platform compile:$CROSS_PLATFORM_RESULT" \
@@ -744,7 +856,7 @@ jobs:
             release_expected=success
           fi
           for shard in \
-            "changed packages:$FOCUSED_RESULT:$focused_expected" \
+            "focused shards:$FOCUSED_RESULT:$focused_expected" \
             "race shards:$RACE_RESULT:$race_expected" \
             "release scripts:$RELEASE_SCRIPTS_RESULT:$release_expected" \
             "cross-platform compile:$CROSS_PLATFORM_RESULT:success"

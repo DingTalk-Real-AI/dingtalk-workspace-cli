@@ -733,7 +733,7 @@ var RecordQuery = shortcut.Shortcut{
 		if rt.Changed("cursor") {
 			params["cursor"] = rt.Str("cursor")
 		}
-		return rt.CallMCP("query_records", params)
+		return executeRecordQuery(rt, params)
 	},
 }
 

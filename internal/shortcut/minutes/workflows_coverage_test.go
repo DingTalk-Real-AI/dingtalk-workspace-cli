@@ -323,7 +323,10 @@ func TestCrossPlatformCoverageMinutesPermissionLedgerBranchesE2E(t *testing.T) {
 	if err := runMinutesAlignmentCLIWithWriter(t, &minutesE2ECaller{}, minutesFailWriter{}, "minutes", "+unshare", "--id", "u1", "--member-uids", "m1", "--dry-run"); err == nil {
 		t.Fatal("unshare dry-run output failure accepted")
 	}
-	unshare := &minutesE2ECaller{responses: map[string][]string{"minutes/remove_member_permission": {`{"success":true,"result":{}}`}}}
+	unshare := &minutesE2ECaller{responses: map[string][]string{
+		"minutes/get_minutes_basic_info":   {`{"success":true,"result":{"taskUuid":"u1"}}`},
+		"minutes/remove_member_permission": {`{"success":true,"result":{"resultMap":{"u1":["m1"]}}}`},
+	}}
 	payload, _, err := runMinutesAlignmentCLI(t, unshare, "minutes", "+unshare", "--id", "u1", "--member-uids", "m1", "--yes")
 	if err != nil || payload["complete"] != true || payload["succeeded"] != float64(1) {
 		t.Fatalf("unshare payload=%#v err=%v", payload, err)
@@ -337,10 +340,30 @@ func TestCrossPlatformCoverageMinutesPermissionLedgerBranchesE2E(t *testing.T) {
 	if args["coverPermission"] != "true" || len(args["roleSubResourceIds"].([]string)) != 2 {
 		t.Fatalf("share args=%#v", args)
 	}
-	continueFailure := &minutesE2ECaller{responses: map[string][]string{"minutes/remove_member_permission": {`{"result":{}}`, `{"success":true,"result":{}}`}}}
+	continueFailure := &minutesE2ECaller{responses: map[string][]string{
+		"minutes/get_minutes_basic_info": {`{"success":true,"result":{"taskUuid":"u1"}}`},
+		"minutes/remove_member_permission": {
+			`{"result":{}}`,
+			`{"success":true,"result":{"resultMap":{"u1":["m2"]}}}`,
+		},
+	}}
 	payload, output, err := runMinutesAlignmentCLI(t, continueFailure, "minutes", "+unshare", "--id", "u1", "--member-uids", "m1,m2", "--failure-policy", "continue", "--yes")
 	if err == nil || output == "" || payload["failed"] != float64(1) || payload["succeeded"] != float64(1) {
 		t.Fatalf("continue ledger payload=%#v err=%v", payload, err)
+	}
+
+	missing := &minutesE2ECaller{responses: map[string][]string{
+		"minutes/get_minutes_basic_info": {`{"success":true,"result":{}}`},
+	}}
+	payload, output, err = runMinutesAlignmentCLI(t, missing, "minutes", "+unshare", "--id", "missing", "--member-uids", "m1", "--yes")
+	if err == nil || payload != nil || output != "" || missing.counts["minutes/remove_member_permission"] != 0 {
+		t.Fatalf("missing minutes reached unshare: payload=%#v output=%q err=%v calls=%#v", payload, output, err, missing.counts)
+	}
+
+	preflightFailure := &minutesE2ECaller{failAt: map[string]int{"minutes/get_minutes_basic_info": 1}}
+	payload, output, err = runMinutesAlignmentCLI(t, preflightFailure, "minutes", "+unshare", "--id", "unavailable", "--member-uids", "m1", "--yes")
+	if err == nil || payload != nil || output != "" || preflightFailure.counts["minutes/remove_member_permission"] != 0 {
+		t.Fatalf("failed preflight reached unshare: payload=%#v output=%q err=%v calls=%#v", payload, output, err, preflightFailure.counts)
 	}
 }
 
@@ -419,10 +442,9 @@ func TestCrossPlatformCoverageMinutesArtifactWaitAndOutput(t *testing.T) {
 		t.Fatalf("cancel failures=%#v", failures)
 	}
 	cmd = &cobra.Command{Use: "wait"}
-	cmd.SetContext(context.Background())
 	rt = shortcut.RuntimeContextForTest(cmd, ExportPack)
 	if err := waitMinutesInterval(rt, 0); err != nil {
-		t.Fatalf("timer wait: %v", err)
+		t.Fatalf("timer wait with unset command context: %v", err)
 	}
 
 	cmd.SetOut(minutesFailWriter{})
@@ -564,7 +586,7 @@ func TestCrossPlatformCoverageMinutesExportPackBranchesE2E(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageMinutesExportPathAndJSONFaults(t *testing.T) {
-	if _, _, _, err := prepareExportTarget("../escape"); err == nil {
+	if _, _, _, err := prepareExportTarget(filepath.Join("..", "escape")); err == nil {
 		t.Fatal("unsafe target accepted")
 	}
 	for _, test := range []struct {
@@ -590,7 +612,7 @@ func TestCrossPlatformCoverageMinutesExportPathAndJSONFaults(t *testing.T) {
 			}
 		}},
 		{name: "escape", run: func(t *testing.T) {
-			testseam.Swap(t, &minutesRel, func(string, string) (string, error) { return "../escape", nil })
+			testseam.Swap(t, &minutesRel, func(string, string) (string, error) { return filepath.Join("..", "escape"), nil })
 			if _, _, _, err := prepareExportTarget("pack"); err == nil {
 				t.Fatal("rel escape accepted")
 			}
@@ -602,7 +624,7 @@ func TestCrossPlatformCoverageMinutesExportPathAndJSONFaults(t *testing.T) {
 			}
 		}},
 		{name: "parent", run: func(t *testing.T) {
-			testseam.Swap(t, &minutesRel, func(string, string) (string, error) { return "parent/pack", nil })
+			testseam.Swap(t, &minutesRel, func(string, string) (string, error) { return filepath.Join("parent", "pack"), nil })
 			testseam.Swap(t, &minutesLstat, func(string) (os.FileInfo, error) { return nil, errors.New("parent") })
 			if _, _, _, err := prepareExportTarget("pack"); err == nil {
 				t.Fatal("unsafe parent accepted")

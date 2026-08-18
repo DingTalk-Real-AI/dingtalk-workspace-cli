@@ -85,112 +85,130 @@ var Book = shortcut.Shortcut{
 		`dws calendar +book --title "Q1 复盘会" --start "2026-03-10T14:00:00+08:00" --end "2026-03-10T15:00:00+08:00" --with 张三,李四`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		start := rt.Str("start")
+		end := rt.Str("end")
+		if err := calendarSmartValidateRange(start, end); err != nil {
+			return err
+		}
 		// create_calendar_event params copied verbatim from the helper's create
 		// call site: summary + startDateTime/endDateTime (ISO strings, not millis).
 		createArgs := map[string]any{
 			"summary":       rt.Str("title"),
-			"startDateTime": rt.Str("start"),
-			"endDateTime":   rt.Str("end"),
-		}
-
-		// Fast path: no participants → create and print in one step.
-		if !rt.Changed("with") || strings.TrimSpace(rt.Str("with")) == "" {
-			return rt.CallMCP("create_calendar_event", createArgs)
+			"startDateTime": start,
+			"endDateTime":   end,
 		}
 
 		// Step 1 — resolve every participant name to a unique userId BEFORE
 		// creating the event, so an unknown/ambiguous name fails cheaply without
 		// leaving a dangling event behind.
 		var userIDs []string
-		for _, name := range strings.Split(rt.Str("with"), ",") {
-			name = strings.TrimSpace(name)
-			if name == "" {
-				continue
+		var userNames []string
+		withPeople := rt.Changed("with") && strings.TrimSpace(rt.Str("with")) != ""
+		if withPeople {
+			for _, name := range strings.Split(rt.Str("with"), ",") {
+				name = strings.TrimSpace(name)
+				if name == "" {
+					continue
+				}
+				user, err := resolveUser(rt, name)
+				if err != nil {
+					return err
+				}
+				userIDs = append(userIDs, user.userID)
+				userNames = append(userNames, user.name)
 			}
-			user, err := resolveUser(rt, name)
-			if err != nil {
-				return err
+			if len(userIDs) == 0 {
+				return apperrors.NewValidation("--with 需要至少一个有效的参会人姓名")
 			}
-			userIDs = append(userIDs, user.userID)
-		}
-		if len(userIDs) == 0 {
-			return apperrors.NewValidation("--with 需要至少一个有效的参会人姓名")
 		}
 
 		// Under --dry-run we resolved names (reads) to validate them, but must not
 		// create the event or send invites. Preview what would happen and return.
 		if rt.DryRun() {
 			return rt.Output(map[string]any{
-				"dryRun":      true,
-				"wouldCreate": createArgs,
-				"wouldInvite": userIDs,
+				"success":      true,
+				"dryRun":       true,
+				"executed":     false,
+				"wouldCreate":  createArgs,
+				"inviteeCount": len(userIDs),
 			})
 		}
 
-		// Step 2 — create the event and pull the eventId from the response.
-		created, err := rt.CallMCPWriteData("calendar", "create_calendar_event", createArgs)
+		// Step 2 — create the event and require an explicit terminal receipt plus
+		// a stable id. Empty/unknown write acknowledgements are never success.
+		created, err := rt.CallMCPWriteDataStrict("calendar", "create_calendar_event", createArgs)
 		if err != nil {
 			return err
 		}
-		eventID := shortcutExtractEventID(created)
+		if err := calendarSmartWriteReceipt(created, "calendar/create_calendar_event"); err != nil {
+			return err
+		}
+		eventID := calendarSmartEventID(created)
 		if eventID == "" {
-			return apperrors.NewValidation("日程创建成功但无法从返回结果中解析 eventId，已跳过邀请参会人")
+			return calendarSmartError("calendar/create_calendar_event", "missing_event_id", "创建回执缺少稳定日程 id，远端效果未知")
 		}
 
 		// Step 3 — add all participants in one batch. attendeesToAdd copied
 		// verbatim from the helper's `attendee add` call site.
-		if _, err := rt.CallMCPWriteData("calendar", "add_calendar_participant", map[string]any{
-			"eventId":        eventID,
-			"attendeesToAdd": userIDs,
-		}); err != nil {
-			// Rollback: delete the just-created event so we never leave a
-			// half-built event without its intended attendees.
-			_, delErr := rt.CallMCPWriteData("calendar", "delete_calendar_event", map[string]any{
-				"eventId": eventID,
+		if len(userIDs) > 0 {
+			added, addErr := rt.CallMCPWriteDataStrict("calendar", "add_calendar_participant", map[string]any{
+				"eventId":        eventID,
+				"attendeesToAdd": userIDs,
 			})
-			if delErr != nil {
-				return apperrors.NewValidation(fmt.Sprintf(
-					"添加参会人失败：%v；且回滚删除日程 %s 也失败：%v（请手动删除该日程）",
-					err, eventID, delErr))
+			if addErr == nil {
+				addErr = calendarSmartWriteReceipt(added, "calendar/add_calendar_participant")
 			}
-			return apperrors.NewValidation(fmt.Sprintf(
-				"添加参会人失败：%v；已回滚删除日程 %s", err, eventID))
+			if addErr != nil {
+				// Rollback itself is not enough: verify the newly-created event is
+				// absent before saying rollback succeeded.
+				if rollbackErr := calendarSmartDeleteAndVerify(rt, eventID); rollbackErr != nil {
+					return apperrors.NewValidation(fmt.Sprintf(
+						"添加参会人失败：%v；回滚删除或删除后验证失败：%v，请人工核查日程状态",
+						addErr, rollbackErr))
+				}
+				return apperrors.NewValidation(fmt.Sprintf("添加参会人失败：%v；新建日程已回滚并验证不存在", addErr))
+			}
 		}
 
-		// Step 4 — success: print the final event detail (eventId + attendees).
-		return rt.CallMCP("get_calendar_detail", map[string]any{"eventId": eventID})
+		// Step 4 — prove the final state before returning one composed result.
+		readback, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{"eventId": eventID})
+		if err != nil {
+			return err
+		}
+		event, err := calendarSmartRequireEvent(readback, "calendar/get_calendar_detail", eventID)
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartVerifyCreatedEvent(event, eventID, rt.Str("title"), start, end); err != nil {
+			return err
+		}
+		if len(userIDs) > 0 {
+			participants, err := rt.CallMCPData("calendar", "get_calendar_participants", map[string]any{"eventId": eventID})
+			if err != nil {
+				return err
+			}
+			present, err := calendarSmartAttendees(participants)
+			if err != nil {
+				return err
+			}
+			currentUserID, err := calendarSmartCurrentUserID(rt, present)
+			if err != nil {
+				return err
+			}
+			if err := calendarSmartVerifyAttendees(present, userIDs, userNames, currentUserID); err != nil {
+				return err
+			}
+		}
+		return rt.Output(map[string]any{
+			"success":  true,
+			"eventId":  eventID,
+			"verified": true,
+			"event":    event,
+		})
 	},
 }
 
-// shortcutExtractEventID digs the eventId out of a create_calendar_event
-// response, tolerating the common shapes ({eventId}, {id}, {result:{...}},
-// {event:{...}}) since the exact envelope is not guaranteed.
-func shortcutExtractEventID(data map[string]any) string {
-	if data == nil {
-		return ""
-	}
-	if id := shortcutPickID(data); id != "" {
-		return id
-	}
-	for _, key := range []string{"result", "event", "data"} {
-		if nested, ok := data[key].(map[string]any); ok {
-			if id := shortcutPickID(nested); id != "" {
-				return id
-			}
-		}
-	}
-	return ""
-}
-
-func shortcutPickID(m map[string]any) string {
-	for _, k := range []string{"eventId", "id"} {
-		if v, ok := m[k].(string); ok && strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 func init() {
+	finalizeCalendarSmart(&Book, "已创建并通过精确读回验证的日程")
 	shortcut.Register(Book)
 }
