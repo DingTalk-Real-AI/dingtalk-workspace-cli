@@ -35,6 +35,7 @@ import (
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/ding"
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/doc"
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/drive"
+	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/live"
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/mail"
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutes"
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/oa"
