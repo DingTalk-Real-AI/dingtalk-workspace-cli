@@ -399,7 +399,7 @@ var ListRoleMembers = shortcut.Shortcut{
 	Command:     "+list-role-members",
 	Product:     "contact",
 	Description: "查询角色下的成员列表",
-	Intent:      "当你已知某个角色 ID、想列出该角色（标签）下的全部成员以便群发通知或统计人群时使用；输入角色 ID（--id），返回该角色下的用户列表，通常先用 +search-role 拿到角色 ID 再调用。",
+	Intent:      "当你已知某个角色 ID、想列出该角色（标签）下的全部成员以便群发通知或统计人群时使用；输入角色 ID（--id），返回该角色下的用户列表；按名称找角色时先用 contact label get 原子命令取得角色 ID。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -421,7 +421,7 @@ var ListRoleMembers = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "查询角色下的成员列表",
-			UseWhen:      []string{"当你已知某个角色 ID、想列出该角色（标签）下的全部成员以便群发通知或统计人群时使用；输入角色 ID（--id），返回该角色下的用户列表，通常先用 +search-role 拿到角色 ID 再调用。"},
+			UseWhen:      []string{"当你已知某个角色 ID、想列出该角色（标签）下的全部成员以便群发通知或统计人群时使用；输入角色 ID（--id），返回该角色下的用户列表；按名称找角色时先用 contact label get 原子命令取得角色 ID。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +list-role-members --id 12345"},
 		},
