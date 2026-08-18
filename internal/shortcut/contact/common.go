@@ -19,6 +19,8 @@ import (
 const (
 	contactCompositeReason   = "Reviewed Contact Shortcut adapter: the executable CLI owns strict success, collection, item, stable-identity, and unified-output validation."
 	contactUnavailableReason = "Exact live-leaf probes across multiple authorized profiles could not safely produce a guaranteed zero-result fixture, so empty-result truth cannot be proved without guessing."
+	contactRolesGapReason    = "Exact raw role enumeration returned a malformed role element without a stable labelId or name; strict collection validation must reject the whole response."
+	contactRosterGapReason   = "Exact raw roster probes are blocked by the current authorization or platform capability before a typed business response is available."
 )
 
 var contactReadSafety = contract.SafetySpec{
@@ -78,8 +80,8 @@ func finalizeContactShortcut(item *shortcut.Shortcut, result *contract.ResultSpe
 	}
 }
 
-func unavailableContact(operation string) error {
-	return responsecheck.Error(operation, "capability_unavailable", contactUnavailableReason)
+func unavailableContact(operation, reason string) error {
+	return responsecheck.Error(operation, "capability_unavailable", reason)
 }
 
 func contactEnvelope(data map[string]any, operation string) (map[string]any, error) {
@@ -132,24 +134,109 @@ func strictUserSearch(data map[string]any, operation string, allowMissingResult 
 	return projectUsers(items, operation)
 }
 
-func strictMobileSearch(data map[string]any, operation string) ([]map[string]any, error) {
+func strictMobileKeywordSearch(data map[string]any, operation string) ([]map[string]any, error) {
+	users, err := strictUserSearch(data, operation, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(users) > 1 {
+		return nil, responsecheck.Error(operation, "ambiguous_mobile_match", fmt.Sprintf("手机号关键词匹配到 %d 个用户；拒绝猜测唯一身份", len(users)))
+	}
+	return users, nil
+}
+
+func strictFollowings(data map[string]any, operation, expectedOpenID string) ([]map[string]any, error) {
 	envelope, err := contactEnvelope(data, operation)
 	if err != nil {
 		return nil, err
 	}
-	raw, present := envelope["result"]
-	if !present || raw == nil {
-		return nil, responsecheck.Error(operation, "missing_result", "手机号搜索未返回显式 result；不能把缺失详情当作成功的空结果")
+	result, ok := envelope["result"].(map[string]any)
+	if !ok || result == nil {
+		return nil, responsecheck.Error(operation, "malformed_result", fmt.Sprintf("响应 result 应为对象，实际为 %T", envelope["result"]))
 	}
-	item, ok := raw.(map[string]any)
-	if !ok || len(item) == 0 {
-		return nil, responsecheck.Error(operation, "malformed_result", fmt.Sprintf("响应 result 应为非空用户对象，实际为 %T", raw))
+	raw, present := result["models"]
+	if !present {
+		return nil, responsecheck.Error(operation, "missing_collection", "响应缺少显式 result.models 集合")
 	}
-	users, err := projectUsers([]map[string]any{item}, operation)
+	items, ok := raw.([]any)
+	if !ok {
+		return nil, responsecheck.Error(operation, "malformed_collection", fmt.Sprintf("响应 result.models 应为数组，实际为 %T", raw))
+	}
+	out := make([]map[string]any, 0, len(items))
+	seen := make(map[string]bool, len(items))
+	for index, rawItem := range items {
+		item, ok := rawItem.(map[string]any)
+		if !ok || item == nil {
+			return nil, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("响应 result.models[%d] 应为对象，实际为 %T", index, rawItem))
+		}
+		openID := contactString(item, "openDingTalkId")
+		if openID == "" {
+			openID = contactString(item, "openDingtalkId")
+		}
+		if openID == "" {
+			return nil, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("响应 result.models[%d] 缺少 openDingTalkId", index))
+		}
+		if seen[openID] {
+			return nil, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("响应包含重复 openDingTalkId（索引 %d）", index))
+		}
+		seen[openID] = true
+		if expectedOpenID == "" || openID == expectedOpenID {
+			out = append(out, map[string]any{"openDingTalkId": openID})
+		}
+	}
+	return out, nil
+}
+
+func strictRoles(data map[string]any, operation string) ([]map[string]any, error) {
+	envelope, err := contactEnvelope(data, operation)
 	if err != nil {
 		return nil, err
 	}
-	return users, nil
+	rawGroups, present := envelope["result"]
+	if !present {
+		return nil, responsecheck.Error(operation, "missing_collection", "响应缺少显式 result 角色分组集合")
+	}
+	groups, ok := rawGroups.([]any)
+	if !ok {
+		return nil, responsecheck.Error(operation, "malformed_collection", fmt.Sprintf("响应 result 应为数组，实际为 %T", rawGroups))
+	}
+	out := make([]map[string]any, 0)
+	seen := map[int64]bool{}
+	for groupIndex, rawGroup := range groups {
+		group, ok := rawGroup.(map[string]any)
+		if !ok || group == nil {
+			return nil, responsecheck.Error(operation, "malformed_group", fmt.Sprintf("响应 result[%d] 应为对象，实际为 %T", groupIndex, rawGroup))
+		}
+		groupName := contactString(group, "groupName")
+		if groupName == "" {
+			return nil, responsecheck.Error(operation, "malformed_group", fmt.Sprintf("响应 result[%d] 缺少 groupName", groupIndex))
+		}
+		rawLabels, present := group["labels"]
+		if !present {
+			return nil, responsecheck.Error(operation, "missing_collection", fmt.Sprintf("响应 result[%d] 缺少 labels 集合", groupIndex))
+		}
+		labels, ok := rawLabels.([]any)
+		if !ok {
+			return nil, responsecheck.Error(operation, "malformed_collection", fmt.Sprintf("响应 result[%d].labels 应为数组，实际为 %T", groupIndex, rawLabels))
+		}
+		for labelIndex, rawLabel := range labels {
+			label, ok := rawLabel.(map[string]any)
+			if !ok || label == nil {
+				return nil, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("响应 result[%d].labels[%d] 应为对象，实际为 %T", groupIndex, labelIndex, rawLabel))
+			}
+			id, ok := contactInt64(label["labelId"])
+			name := contactString(label, "name")
+			if !ok || id <= 0 || name == "" {
+				return nil, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("响应 result[%d].labels[%d] 缺少有效 labelId/name", groupIndex, labelIndex))
+			}
+			if seen[id] {
+				return nil, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("响应包含重复 labelId（分组 %d，索引 %d）", groupIndex, labelIndex))
+			}
+			seen[id] = true
+			out = append(out, map[string]any{"labelId": id, "name": name, "groupName": groupName})
+		}
+	}
+	return out, nil
 }
 
 func projectUsers(items []map[string]any, operation string) ([]map[string]any, error) {

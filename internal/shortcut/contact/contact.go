@@ -56,12 +56,24 @@ var ListFollowings = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +list-followings"},
 		},
+		Parameters: []contract.ParamDecl{{Name: "open-id"}},
+	},
+	Flags: []shortcut.Flag{
+		{Name: "open-id", Type: shortcut.FlagString, Desc: "可选；仅保留 openDingTalkId 精确匹配的特别关注，用于确定性存在性检查"},
 	},
 	Tips: []string{
 		`dws contact +list-followings`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return unavailableContact("contact/list_my_followings")
+		data, err := rt.CallMCPData("contact", "list_my_followings", map[string]any{})
+		if err != nil {
+			return err
+		}
+		followings, err := strictFollowings(data, "contact/list_my_followings", rt.Str("open-id"))
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"count": len(followings), "followings": followings})
 	},
 }
 
@@ -226,13 +238,16 @@ var SearchMobile = shortcut.Shortcut{
 		`dws contact +search-mobile --mobile 13800138000`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		data, err := rt.CallMCPData("contact", "search_user_by_mobile", map[string]any{
-			"mobile": rt.Str("mobile"),
+		if err := rt.RequireAll("mobile"); err != nil {
+			return err
+		}
+		data, err := rt.CallMCPData("contact", "search_contact_by_key_word", map[string]any{
+			"keyword": rt.Str("mobile"),
 		})
 		if err != nil {
 			return err
 		}
-		users, err := strictMobileSearch(data, "contact/search_user_by_mobile")
+		users, err := strictMobileKeywordSearch(data, "contact/search_contact_by_key_word")
 		if err != nil {
 			return err
 		}
@@ -278,7 +293,7 @@ var ListRoles = shortcut.Shortcut{
 		`dws contact +list-roles`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return unavailableContact("contact/get_org_labels")
+		return unavailableContact("contact/get_org_labels", contactRolesGapReason)
 	},
 }
 
@@ -689,7 +704,7 @@ var ListRosterFields = shortcut.Shortcut{
 		`dws contact +list-roster-fields`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return unavailableContact("hrmregister/list_authorized_roster_fields")
+		return unavailableContact("hrmregister/list_authorized_roster_fields", contactRosterGapReason)
 	},
 }
 
@@ -710,12 +725,12 @@ var GetRoster = shortcut.Shortcut{
 		`dws contact +get-roster --staff-id STAFF_ID --fields fieldCode1,fieldCode2`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return unavailableContact("hrmregister/get_authorized_emp_rosterInfo")
+		return unavailableContact("hrmregister/get_authorized_emp_rosterInfo", contactRosterGapReason)
 	},
 }
 
 func init() {
-	finalizeContactShortcut(&ListFollowings, contactCollectionResult("followings", ListFollowings.Description), false)
+	finalizeContactShortcut(&ListFollowings, contactCollectionResult("followings", ListFollowings.Description), true)
 	finalizeContactShortcut(&SearchUser, contactCollectionResult("users", SearchUser.Description), true)
 	finalizeContactShortcut(&SearchMobile, contactCollectionResult("users", SearchMobile.Description), true)
 	finalizeContactShortcut(&ListRoles, contactCollectionResult("roles", ListRoles.Description), false)
@@ -724,6 +739,9 @@ func init() {
 	finalizeContactShortcut(&ListDeptMembers, contactCollectionResult("members", ListDeptMembers.Description), true)
 	finalizeContactShortcut(&ListRosterFields, contactCollectionResult("fields", ListRosterFields.Description), false)
 	finalizeContactShortcut(&GetRoster, contactObjectResult(GetRoster.Description), false)
+	ListRoles.Contract.Interface.Reason = contactRolesGapReason
+	ListRosterFields.Contract.Interface.Reason = contactRosterGapReason
+	GetRoster.Contract.Interface.Reason = contactRosterGapReason
 	shortcut.Register(
 		ListFollowings,
 		SearchUser,

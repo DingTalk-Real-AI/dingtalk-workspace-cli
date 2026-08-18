@@ -52,6 +52,7 @@ func TestCrossPlatformCoverageLiveListStrictProjection(t *testing.T) {
 		{"success": true, "result": map[string]any{"total": float64(4), "hasFinish": true, "liveDetailModelList": []any{}}},
 		{"success": true, "result": map[string]any{"total": float64(1), "hasFinish": true, "liveDetailModelList": []any{"bad"}}},
 		{"success": true, "result": map[string]any{"total": float64(1), "hasFinish": true, "liveDetailModelList": []any{map[string]any{"title": "no-id"}}}},
+		{"success": true, "result": map[string]any{"total": float64(2), "hasFinish": true, "liveDetailModelList": []any{map[string]any{"liveId": "duplicate"}, map[string]any{"liveId": "duplicate"}}}},
 	}
 	for index, data := range broken {
 		if got, projectErr := projectLiveList(data); projectErr == nil {

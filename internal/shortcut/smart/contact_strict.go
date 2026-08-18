@@ -96,26 +96,6 @@ func strictResolveContactUser(rt *shortcut.RuntimeContext, name string) (contact
 	}
 }
 
-func strictMobileContactUser(data map[string]any) (contactUser, error) {
-	envelope, err := strictContactEnvelope(data, "contact/search_user_by_mobile")
-	if err != nil {
-		return contactUser{}, err
-	}
-	raw, present := envelope["result"]
-	if !present || raw == nil {
-		return contactUser{}, responsecheck.Error("contact/search_user_by_mobile", "not_found_unproven", "手机号搜索未返回显式 result；不能把缺失详情当作成功空结果")
-	}
-	item, ok := raw.(map[string]any)
-	if !ok || len(item) == 0 {
-		return contactUser{}, responsecheck.Error("contact/search_user_by_mobile", "malformed_result", fmt.Sprintf("响应 result 应为非空对象，实际为 %T", raw))
-	}
-	user := contactUser{userID: strictContactString(item, "userId"), name: strictContactString(item, "orgUserName")}
-	if user.userID == "" {
-		return contactUser{}, responsecheck.Error("contact/search_user_by_mobile", "missing_stable_identity", "手机号搜索结果缺少 userId")
-	}
-	return user, nil
-}
-
 func strictUserDetail(data map[string]any, expectedUserID, operation string) (map[string]any, error) {
 	if _, err := strictContactEnvelope(data, operation); err != nil {
 		return nil, err

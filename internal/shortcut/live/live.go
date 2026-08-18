@@ -92,10 +92,16 @@ func projectLiveList(data map[string]any) (map[string]any, error) {
 	if total != len(items) {
 		return nil, responsecheck.Error(operation, "inconsistent_total", fmt.Sprintf("响应 total=%d、项目数=%d 且 hasFinish=true，不能证明完整列表", total, len(items)))
 	}
+	seen := make(map[string]bool, len(items))
 	for index, item := range items {
-		if liveStableID(item) == "" {
+		id := liveStableID(item)
+		if id == "" {
 			return nil, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("直播结果第 %d 项缺少稳定直播 ID", index))
 		}
+		if seen[id] {
+			return nil, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("直播结果第 %d 项重复稳定直播 ID", index))
+		}
+		seen[id] = true
 	}
 	return map[string]any{"count": total, "lives": items, "complete": true}, nil
 }

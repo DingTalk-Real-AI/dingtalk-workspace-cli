@@ -63,7 +63,7 @@ func TestCrossPlatformCoverageContactSemanticCatalogExactlyCoversRegisteredSurfa
 			}
 		}
 	}
-	if public != 12 || unavailable != 4 {
-		t.Fatalf("public/unavailable = %d/%d, want 12/4", public, unavailable)
+	if public != 13 || unavailable != 3 {
+		t.Fatalf("public/unavailable = %d/%d, want 13/3", public, unavailable)
 	}
 }

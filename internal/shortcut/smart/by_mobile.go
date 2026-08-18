@@ -14,8 +14,6 @@
 package smart
 
 import (
-	"strconv"
-
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
@@ -74,17 +72,10 @@ var ByMobile = shortcut.Shortcut{
 		}
 		mobile := rt.Str("mobile")
 
-		// Step 1 — look up the userId bound to this mobile number.
-		// search_user_by_mobile takes {mobile} (see helpers.contact
-		// search-mobile). The gateway shape is not guaranteed, so probe common
-		// containers/field names defensively.
-		data, err := rt.CallMCPData("contact", "search_user_by_mobile", map[string]any{
-			"mobile": mobile,
-		})
-		if err != nil {
-			return err
-		}
-		user, err := strictMobileContactUser(data)
+		// Step 1 — resolve the mobile through the keyword endpoint. Unlike
+		// search_user_by_mobile, this endpoint publishes an explicit result
+		// array for both the known match and the guaranteed zero-match case.
+		user, err := strictResolveContactUser(rt, mobile)
 		if err != nil {
 			return err
 		}
@@ -92,7 +83,7 @@ var ByMobile = shortcut.Shortcut{
 		// Step 2 — fetch and print the full profile of the resolved user.
 		// get_user_info_by_user_ids takes {user_id_list} (see helpers.contact
 		// user get).
-		data, err = rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
+		data, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
 			"user_id_list": []string{user.userID},
 		})
 		if err != nil {
@@ -104,58 +95,6 @@ var ByMobile = shortcut.Shortcut{
 		}
 		return rt.Output(map[string]any{"profile": profile})
 	},
-}
-
-// byMobileExtractUserID pulls a single userId out of a search_user_by_mobile
-// response. The exact shape is not contractually fixed, so it probes a few
-// likely containers (top-level, result, data, user) and field names
-// (userId/userid/user_id), tolerating both string and numeric encodings.
-func byMobileExtractUserID(data map[string]any) string {
-	if data == nil {
-		return ""
-	}
-	if id := byMobileUserIDFromMap(data); id != "" {
-		return id
-	}
-	for _, key := range []string{"result", "data", "user", "userInfo"} {
-		switch v := data[key].(type) {
-		case map[string]any:
-			if id := byMobileUserIDFromMap(v); id != "" {
-				return id
-			}
-		case []any:
-			for _, it := range v {
-				if m, ok := it.(map[string]any); ok {
-					if id := byMobileUserIDFromMap(m); id != "" {
-						return id
-					}
-				}
-			}
-		case string:
-			if v != "" {
-				return v
-			}
-		case float64:
-			return strconv.FormatInt(int64(v), 10)
-		}
-	}
-	return ""
-}
-
-func byMobileUserIDFromMap(m map[string]any) string {
-	for _, key := range []string{"userId", "userid", "user_id", "userID", "id"} {
-		switch v := m[key].(type) {
-		case string:
-			if v != "" && v != "0" {
-				return v
-			}
-		case float64:
-			if v != 0 {
-				return strconv.FormatInt(int64(v), 10)
-			}
-		}
-	}
-	return ""
 }
 
 func init() {

@@ -13,10 +13,10 @@
     },
     "+search-enterprise": {
       "disposition": "semantic_adapter",
-      "semantic_delta": "严格校验搜索响应，但随机零命中标记仍返回非空完整业务对象，当前无法证明相关性或合法空结果。",
+      "semantic_delta": "仅公开已隔离验证的 IM 搜索子集；严格要求显式 success/result 数组、稳定会话身份与 sourceType=im，exact live 同时证明已知非空和保证零命中。其他内容类型路由到原子命令。",
       "risk": "read",
-      "availability": "unavailable",
-      "public": false,
+      "availability": "available",
+      "public": true,
       "reviewed": true
     },
     "+search-behavior": {

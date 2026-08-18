@@ -101,36 +101,44 @@ var SearchPerson = shortcut.Shortcut{
 	},
 }
 
-// SearchEnterprise remains registered but unavailable. The service returned
-// non-empty full business rows for a guaranteed-random marker during the exact
-// live audit, so exposing it would make zero-hit results unprovable.
+// SearchEnterprise exposes only the IM slice. Exact live evidence proves that
+// this narrowed interface returns stable IM identities for a known fixture and
+// an explicit empty collection for a guaranteed-random marker. Other content
+// types remain routed to the atomic command until their relevance contract is
+// equally trustworthy.
 var SearchEnterprise = shortcut.Shortcut{
 	OutputRollout: output.RolloutUnifiedActive,
 	Service:       "aisearch", Command: "+search-enterprise", Product: "aisearch",
 	Description: "按主题搜索企业知识、消息、邮件与协作内容",
-	Intent:      "需要按主题和内容类型搜索企业知识或协作内容时使用；当前因零命中相关性合同不足保持不可用。",
+	Intent:      "需要按关键词搜索企业即时消息时使用；当前只公开已通过已知非空与保证零命中验证的 IM 类型。",
 	Risk:        shortcut.RiskRead,
 	Safety:      aisearchReadSafety,
 	Contract: aisearchContract(
 		"+search-enterprise",
 		"按主题搜索企业知识、消息、邮件与协作内容",
-		"需要按主题和内容类型搜索企业知识或协作内容时使用；当前因零命中相关性合同不足保持不可用。",
-		false,
+		"需要按关键词搜索企业即时消息时使用；当前只公开已通过已知非空与保证零命中验证的 IM 类型。",
+		true,
 		[]contract.ParamDecl{{Name: "queries"}, {Name: "types", Property: "searchTypes"}, {Name: "time-range", Property: "timeRange"}},
-		`dws aisearch +search-enterprise --queries "发布方案" --types document,im --format json`,
+		`dws aisearch +search-enterprise --queries "发布方案" --types im --format json`,
 	),
 	Flags: []shortcut.Flag{
-		{Name: "queries", Type: shortcut.FlagStringSlice, Desc: "内容关键词列表；汇总场景可留空"},
-		{Name: "types", Type: shortcut.FlagStringSlice, Default: "all", Desc: "内容类型：all/document/im/calendar/todo/minute/report/image/link/notable/baike/mail"},
+		{Name: "queries", Type: shortcut.FlagStringSlice, Required: true, Desc: "即时消息关键词列表"},
+		{Name: "types", Type: shortcut.FlagStringSlice, Default: "im", Desc: "已审核内容类型；--types 当前必须且只能为 im"},
 		{Name: "time-range", Type: shortcut.FlagString, Desc: "服务端自然语言时间范围，如今天、本周或过去一月"},
 	},
 	Constraints: []shortcut.Constraint{{
 		Kind: shortcut.ConstraintCustom, Flags: []string{"types"},
-		Description: "--types 只能包含已审核内容类型，all 不能与其他类型并用",
+		Description: "--types 当前必须且只能为 im",
 	}},
 	Validate: validateEnterprise,
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return unavailableSearch("aisearch/search_enterprise")
+		params := map[string]any{
+			"queries": rt.StrSlice("queries"), "searchTypes": []string{"im"},
+		}
+		if timeRange := strings.TrimSpace(rt.Str("time-range")); timeRange != "" {
+			params["timeRange"] = timeRange
+		}
+		return executeSearchForSource(rt, "search_enterprise", params, []string{"openConversationId", "url"}, "im")
 	},
 }
 
@@ -185,7 +193,20 @@ func validatePerson(rt *shortcut.RuntimeContext) error {
 }
 
 func validateEnterprise(rt *shortcut.RuntimeContext) error {
-	return validateSearchTypes(rt.StrSlice("types"))
+	queries := rt.StrSlice("queries")
+	if len(queries) == 0 {
+		return responsecheck.Error("aisearch/search_enterprise", "empty_query", "--queries 至少需要一个非空即时消息关键词")
+	}
+	for _, query := range queries {
+		if strings.TrimSpace(query) == "" {
+			return responsecheck.Error("aisearch/search_enterprise", "empty_query", "--queries 不能包含空关键词")
+		}
+	}
+	types := rt.StrSlice("types")
+	if len(types) != 1 || strings.TrimSpace(types[0]) != "im" {
+		return responsecheck.Error("aisearch/search_enterprise", "unsupported_search_type", "--types 当前必须且只能为 im；其他类型请使用 aisearch enterprise 原子命令")
+	}
+	return nil
 }
 
 func validateBehavior(rt *shortcut.RuntimeContext) error {
@@ -246,6 +267,24 @@ func executeSearch(rt *shortcut.RuntimeContext, tool string, params map[string]a
 	matches, err := projectSearch(data, operation, identityKeys)
 	if err != nil {
 		return err
+	}
+	return rt.Output(map[string]any{"count": len(matches), "matches": matches})
+}
+
+func executeSearchForSource(rt *shortcut.RuntimeContext, tool string, params map[string]any, identityKeys []string, expectedSource string) error {
+	operation := "aisearch/" + tool
+	data, err := rt.CallMCPReadData("aisearch", tool, params)
+	if err != nil {
+		return err
+	}
+	matches, err := projectSearch(data, operation, identityKeys)
+	if err != nil {
+		return err
+	}
+	for index, item := range matches {
+		if source := firstNonEmptyString(item, "sourceType"); source != expectedSource {
+			return responsecheck.Error(operation, "unexpected_item_source", fmt.Sprintf("响应 result[%d] 来源 %q 与已审核类型 %q 不一致", index, source, expectedSource))
+		}
 	}
 	return rt.Output(map[string]any{"count": len(matches), "matches": matches})
 }
