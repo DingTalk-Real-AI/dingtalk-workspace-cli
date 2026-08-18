@@ -181,6 +181,55 @@ func newContactDeptCreateCommand() *cobra.Command {
 	return cmd
 }
 
+func newContactLabelCreateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "创建角色",
+		Long: `在指定父标签组下创建角色（标签）。--name 为角色名称，--parent-id 为父标签组ID（0 表示根标签组）。
+该写操作执行前需要确认，自动化场景在用户明确授权后传 --yes。`,
+		Example: `  dws contact label create --name "管理员" --parent-id 0
+  dws contact label create --name "财务" --parent 12345`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlagWithAliases(cmd, "name", "label-name", "labelName"); err != nil {
+				return err
+			}
+			name := strings.TrimSpace(flagOrFallback(cmd, "name", "label-name", "labelName"))
+			if name == "" {
+				return fmt.Errorf("--%s 不能为空", contactFirstSetFlagName(cmd, "name", "label-name", "labelName"))
+			}
+			if err := validateRequiredFlagWithAliases(cmd, "parent-id", "parentId", "parent", "label-parent-id", "labelParentId"); err != nil {
+				return err
+			}
+			parentIDRaw := strings.TrimSpace(flagOrFallback(cmd, "parent-id", "parentId", "parent", "label-parent-id", "labelParentId"))
+			parentID, err := strconv.ParseInt(parentIDRaw, 10, 64)
+			if err != nil {
+				return fmt.Errorf("--parent-id must be an integer: %w", err)
+			}
+			return callMCPTool("add_label", map[string]any{
+				"parentId": parentID,
+				"labelModel": map[string]any{
+					"name": name,
+				},
+			})
+		},
+	}
+	cmd.Flags().String("name", "", "角色名称 (必填)")
+	cmd.Flags().String("label-name", "", "--name 的别名")
+	_ = cmd.Flags().MarkHidden("label-name")
+	cmd.Flags().String("parent-id", "", "父标签组 ID (必填，0 表示根标签组)")
+	cmd.Flags().String("parentId", "", "--parent-id 的别名")
+	cmd.Flags().String("parent", "", "--parent-id 的别名")
+	cmd.Flags().String("label-parent-id", "", "--parent-id 的别名")
+	cmd.Flags().String("labelParentId", "", "--parent-id 的别名")
+	_ = cmd.Flags().MarkHidden("parentId")
+	_ = cmd.Flags().MarkHidden("parent")
+	_ = cmd.Flags().MarkHidden("label-parent-id")
+	_ = cmd.Flags().MarkHidden("labelParentId")
+	cli.AnnotateRuntimeRequiredFlags(cmd, "name", "parent-id")
+	return cmd
+}
+
 func newContactDeptUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "update",
@@ -431,6 +480,7 @@ func newContactCommand() *cobra.Command {
   - contact user get-self/search/search-mobile/get: 通讯录用户查询
   - contact user invite/update/update-self/update-ownness: 邀请与更新员工
   - contact dept search/get-info/list-children/list-members/create/update: 部门查询与管理
+  - contact label create/list/get/list-members: 角色创建与查询
   - contact relation list-my-followings: 特别关注人查询
 
 企业管理功能：
@@ -707,10 +757,11 @@ func newContactCommand() *cobra.Command {
 	contactLabelCmd := &cobra.Command{
 		Use:     "label",
 		Aliases: []string{"role"},
-		Short:   "角色查询",
-		Long: `角色查询：获取企业所有角色列表、根据角色名称查询角色ID、根据角色ID查询角色下的成员。
+		Short:   "角色查询与管理",
+		Long: `角色查询与管理：创建角色、获取企业所有角色列表、根据角色名称查询角色ID、根据角色ID查询角色下的成员。
 
 【何时用哪个命令】
+  - 创建角色                     → contact label create
   - 获取企业所有角色列表           → contact label list
   - 根据角色名称查询角色ID       → contact label get
   - 根据角色ID查询角色下的成员   → contact label list-members
@@ -794,7 +845,39 @@ func newContactCommand() *cobra.Command {
 		RunE:    runContactLabelList,
 	}
 
-	contactLabelCmd.AddCommand(contactLabelListAllCmd, contactLabelGetCmd, contactLabelListMembersCmd)
+	contactLabelCreateCmd := newContactLabelCreateCommand()
+	DeclareLeafMetadata(contactLabelCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "contact",
+				Name:           "add_label",
+				CanonicalPath:  "contact.add_label",
+				CLIPath:        "contact label create",
+				PrimaryCLIPath: "contact label create",
+			},
+			Description: "在指定父标签组下创建角色（标签）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the executable CLI maps label creation flags to contact/add_label, which is absent from the pinned MCP metadata snapshot.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "在指定父标签组下创建角色（标签）",
+				UseWhen:      []string{"用户明确要求新建角色，且已确认角色名称和父标签组ID"},
+				AvoidWhen:    []string{"修改已有角色应使用 contact label update；仅查找角色应使用 contact label get 或 contact label list"},
+				Examples:     []string{"dws contact label create --name \"管理员\" --parent-id 0"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "name", Property: "labelModel.name", Required: boolPtr(true)},
+				{Name: "parent-id", Property: "parentId", Required: boolPtr(true), InterfaceType: "integer"},
+			},
+		},
+	})
+	contactLabelCmd.AddCommand(contactLabelCreateCmd, contactLabelListAllCmd, contactLabelGetCmd, contactLabelListMembersCmd)
 
 	contactDeptCmd := &cobra.Command{Use: "dept", Short: "部门查询", RunE: groupRunE}
 

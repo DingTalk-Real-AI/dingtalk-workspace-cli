@@ -1239,6 +1239,14 @@ func TestDeliveryCatalogContactParamDeclsMatchMergeBaseContract(t *testing.T) {
 			absent: []string{"dept-name", "super-dept", "super-dept-id"},
 		},
 		{
+			path: "contact label create",
+			params: map[string]wantParam{
+				"name":       {property: "labelModel.name", required: true},
+				"parent-id":  {property: "parentId", required: true, interfaceType: "integer"},
+			},
+			absent: []string{"label-name", "parentId", "parent", "label-parent-id", "labelParentId"},
+		},
+		{
 			path: "contact dept update",
 			params: map[string]wantParam{
 				"dept":   {property: "deptId", required: true, interfaceType: "integer"},

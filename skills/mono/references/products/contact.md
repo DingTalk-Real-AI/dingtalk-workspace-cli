@@ -294,9 +294,26 @@ Notes:
   - 默认要求确认；自动化场景在已获得用户确认后显式传 --yes
 ```
 
-### label (角色查询)
+### label (角色管理)
 
 > **角色ID = labelId**：用户提到"角色ID"时，均指通讯录 label 系统中的角色ID，**不是部门ID也不是userId**。查角色成员用 `label list-members --id <角色ID>`，不要传给 `dept get-info` 或 `user get`。
+
+#### 创建角色
+```
+Usage:
+  dws contact label create [flags]
+Example:
+  dws contact label create --name "管理员" --parent-id 0
+  dws contact label create --name "财务" --parent-id 12345 --yes
+Flags:
+      --name string        角色名称 (必填)
+      --parent-id string   父标签组 ID (必填，0 表示根标签组)
+      --yes                跳过确认提示
+Notes:
+  - 在指定父标签组下创建新角色（标签），0 表示根标签组
+  - 该写操作执行前需要确认，自动化场景传 --yes 跳过
+  - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
+```
 
 #### 获取企业所有角色列表
 ```
@@ -422,6 +439,7 @@ Notes:
 用户说"子部门/下设部门/部门有哪些下级部门/枚举二级部门" → `dept list-children`（需父 deptId；只有部门名先 `dept search`）
 用户说"部门有谁/部门成员/人员名单" → `dept list-members`（需 deptId；**仅本部门不含下级**，含下级先 `dept list-children` 再合并查）
 用户说"创建/新建部门" → `dept create`（部门名必填；是否创建部门群必须显式选择）
+用户说"创建角色/新建角色/添加角色" → `label create`（需角色名称 + 父标签组ID）
 用户说"更新部门/改部门名/调整上级部门" → `dept update`（部门 ID 和新名称必填）
 用户查询涵盖"角色"（主管/管理员/财务/HR/总经理等任意角色名）→ 统一走 `contact label` 链路，按下方决策树选命令：
 - 不知道角色名 / 枚举所有角色 → `label list`
@@ -547,6 +565,7 @@ dws contact account update --user-id user001 --nick "新昵称" --yes --format j
 | `user get-self/search` | `orgAuthEmail` | mail message send 的 --to/--cc (跨产品) |
 | `user get-self/search` | `userId` | profile get 的 --staff-id |
 | `user profile fields` | `fieldCode` | profile get 的 --fields |
+| `label create` | `labelId` | `label list-members` 的 --id |
 | `label list` | `labelId` / `name` | `label get --names` 或 `label list-members --id` |
 | `label get` | `labelId` | `label list-members` 的 --id |
 | `dept search/list-children/create` | `deptId` | dept get-info/list-children/list-members/update 的 --dept/--depts |
