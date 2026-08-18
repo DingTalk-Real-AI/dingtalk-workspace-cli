@@ -25,6 +25,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 
 	// Service packages — each registers its shortcuts from init().
+	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aisearch"
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/aitable"
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/attendance"
 	_ "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/calendar"

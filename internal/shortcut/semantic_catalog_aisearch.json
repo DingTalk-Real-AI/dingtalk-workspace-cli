@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "service": "aisearch",
+  "default_availability": "available",
+  "shortcuts": {
+    "+search-person": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "对 enterprise_person_search 增加显式 success/result 数组、坏元素、来源类型和稳定人员身份校验；exact live 已同时证明已知非空与随机零命中。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+search-enterprise": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格校验搜索响应，但随机零命中标记仍返回非空完整业务对象，当前无法证明相关性或合法空结果。",
+      "risk": "read",
+      "availability": "unavailable",
+      "public": false,
+      "reviewed": true
+    },
+    "+search-behavior": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格校验行为搜索响应，但随机零命中标记仍返回非空完整业务对象，当前无法证明相关性或合法空结果。",
+      "risk": "read",
+      "availability": "unavailable",
+      "public": false,
+      "reviewed": true
+    }
+  }
+}
