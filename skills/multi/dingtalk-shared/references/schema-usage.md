@@ -1,6 +1,6 @@
-# Schema 渐进查询
+# DWS 命令发现与 Schema Inspect
 
-`dws schema` 内嵌当前二进制公开命令面的结构化契约。**Agent 选择命令、读取参数映射/约束和安全语义时优先渐进查询 leaf Schema**；真正组装执行参数前，用 `--help` 确认当前 Cobra 接受的 flags。
+`dws` 对 Agent 是一个稳定元工具；Catalog 中的命令是它的内部命令空间，不是需要向 Host 动态注册的一组新工具。`dws schema search` 用来找到未知子命令，`dws schema <canonical> --compact` 用来检查选中命令的结构化契约，最后仍通过同一个 `dws` 执行。
 
 本节同时适用于基础/原子命令与公开内建 `+` shortcut。用户自定义或未公开 shortcut 不进入发布 Schema；是否可执行仍以当前 Cobra help 为准。
 
@@ -14,20 +14,56 @@
 
 稳定 command identity 已与真实 Cobra tree 绑定。不要读取 Catalog 文件、native annotation 或其他生成 JSON 来重新推断命令。
 
-## 四层查询
+## 未知命令：Search → Inspect → Execute
+
+仅当当前 Skill、意图表和任务 reference 都没有给出精确 CLI path 时，才执行一次本地命令搜索：
 
 ```bash
-# 第 1 层：产品概览（列出产品 + 工具数 + 用途摘要）
+dws schema search --query "查询群消息已读状态" --limit 5
+```
+
+1. 只从 `candidates` 选择与用户动作一致的候选；不把 rank/score 当授权或成功概率。零候选、多个语义无法区分或 `abstained=true` 时停止并澄清。
+2. `exact_filtered` 表示用户精确指定的命令被过滤；立即停止，不选择同名 sibling 绕过。
+3. 选中候选后，使用 response `catalog.source_hash` 和 `catalog.surface_hash` 精确 Inspect `canonical_path`：
+
+```bash
+dws schema chat.query_msg_read_status --compact --expected-source-hash "<search.catalog.source_hash>" --expected-surface-hash "<search.catalog.surface_hash>"
+```
+
+4. 只使用 `schema-inspect.v1.tool_spec` 组装参数，并按候选的 `primary_cli_path` 调用同一个 `dws`。`reason=catalog_changed` 时丢弃旧候选，重新 Search，不混用两代 Schema。
+5. 执行阶段仍以实时 profile、权限、confirmation 和 Cobra 校验为准；Search/Inspect 都不代表授权或业务成功。
+
+例如 Inspect 返回的 ToolSpec 确认参数后，最后仍执行：
+
+```bash
+dws chat message read-status \
+  --conversation-id "<真实返回的 openConversationId>" \
+  --message-id "<真实返回的 openMessageId>" \
+  --format json
+```
+
+### 复合意图
+
+先把 2～4 个有时序的动作拆成 `subqueries`，不要用整句话只排一次 Top-K：
+
+```bash
+printf '%s' '{"version":"tool-search.v1","query":"给群里发文件并确认送达","subqueries":["给群里发送文件消息","查询消息发送状态","查询群消息已读状态"]}' |
+  dws schema search --request-json -
+```
+
+对每个选中的 canonical 分别做双 hash Inspect；按任务依赖顺序执行，后续 ID 只能来自前一步真实返回。
+
+## 已知产品时的有界导航
+
+```bash
+# 产品概览只用于人类审计
 dws schema
 
-# 第 2 层：产品级（该产品工具的 cli_path + description + effect/risk）
-dws schema calendar --compact
+# 已知产品但命令未知：直接限定产品搜索，不加载产品全量 Schema
+dws schema search --query "创建日程" --product calendar --limit 5
 
-# 第 3 层：分组级
-dws schema "calendar event" --compact
-
-# 第 4 层：Agent leaf（参数契约）
-dws schema "calendar event create" --compact
+# 选中 canonical 后读取唯一 leaf（参数契约）
+dws schema calendar.create_calendar_event --compact
 
 # --all：全量 leaf，仅 CI / 审计 / 参数 baseline
 dws schema --all --format json
@@ -35,7 +71,7 @@ dws schema --all --format json
 
 ### `--all` 边界（强制）
 
-`--all` 输出体积很大。仅在用户明确要求全量导出，或 CI / Catalog 审计 / 参数防丢 baseline 时使用。普通业务任务严禁用 `--all` 做命令发现，也不要把全量结果注入 Agent 上下文；必须按「产品概览 → 产品/分组 → leaf」渐进查询。
+`--all` 输出体积很大。仅在用户明确要求全量导出，或 CI / Catalog 审计 / 参数防丢 baseline 时使用。普通业务任务严禁用 `--all` 做命令发现，也不要把全量结果注入 Agent 上下文。未知命令统一用 `schema search`，已知产品通过 `--product` 收窄。
 
 完整兼容性 baseline 必须使用未裁剪的 `schema --all`；`schema --all --compact` 会移除 provenance 和接口映射字段，不得作为完整 baseline。
 
@@ -83,6 +119,6 @@ Schema 与 Help 冲突是**契约漂移**：执行参数只用 Cobra 接受的 f
 ### 两类易混 Schema
 
 - `dws event schema <event_key> --flatten`：事件业务字段
-- `dws schema "event consume" --compact`：CLI 命令参数
+- `dws schema event.consume --compact`：CLI 命令参数
 
 二者不可互相替代。

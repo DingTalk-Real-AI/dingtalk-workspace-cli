@@ -63,12 +63,15 @@ func storeSchemaSourceRootFn(fn func() *cobra.Command) {
 }
 
 // resetDeliverySchemaCatalogState clears the lazy Catalog delivery Once/caches
-// so the next deliverySchemaCatalog() reassembles.
+// so the next deliverySchemaCatalog() reassembles. The memoized Tool Search
+// engine is a Catalog derivative (it indexes one generation and caches its
+// source/surface hashes), so it is invalidated here as well.
 func resetDeliverySchemaCatalogState() {
 	runtimeDeliverySchemaCatalogOnce = sync.Once{}
 	runtimeDeliverySchemaCatalog = loadedSchemaCatalog{}
 	runtimeDeliverySchemaCatalogErr = nil
 	runtimeDeliverySchemaCatalogLazyCount.Store(0)
+	resetDeliveryToolSearchEngineState()
 }
 
 // resetSchemaDeliveryState clears ResolveMeta lookup state and Catalog delivery

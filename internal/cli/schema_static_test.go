@@ -7,10 +7,29 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+func TestSchemaHelpDocumentsCanonicalAndCLIPathForms(t *testing.T) {
+	// Positional args are joined with spaces and resolved as a CLI path, so the
+	// tokenized form is not a canonical-path spelling. Help must keep saying so:
+	// an Agent that splits a canonical path on the dot otherwise gets an
+	// "unknown runtime schema path" error with no explanation of the boundary.
+	long := NewSchemaCommand().Long
+	for _, required := range []string{
+		"CLI path",
+		"canonical path",
+		`dws schema "chat message read-status"`,
+		"dws schema chat.query_msg_read_status",
+	} {
+		if !strings.Contains(long, required) {
+			t.Fatalf("schema long help omits the path-form boundary %q:\n%s", required, long)
+		}
+	}
+}
 
 func TestSchemaUsesDeliveryCatalogWithoutRuntimeLoad(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}

@@ -93,7 +93,9 @@ func testCommandRoot() *cobra.Command {
 	root := &cobra.Command{Use: "dws", Args: cobra.NoArgs}
 	auth := &cobra.Command{Use: "auth", Args: cobra.NoArgs}
 	auth.AddCommand(&cobra.Command{Use: "login", Aliases: []string{"signin"}})
-	root.AddCommand(auth, &cobra.Command{Use: "schema [path]", Args: cobra.MaximumNArgs(1)})
+	schema := &cobra.Command{Use: "schema [path]", Args: cobra.MaximumNArgs(1), Run: func(*cobra.Command, []string) {}}
+	schema.AddCommand(&cobra.Command{Use: "search"})
+	root.AddCommand(auth, schema)
 	return root
 }
 
@@ -125,10 +127,12 @@ func TestResolveCommandReference(t *testing.T) {
 	auth.AddCommand(&cobra.Command{Use: "login", Aliases: []string{"signin"}})
 	sheet := &cobra.Command{Use: "sheet", Args: cobra.NoArgs}
 	sheet.AddCommand(&cobra.Command{Use: "read"})
+	schema := &cobra.Command{Use: "schema [path]", Args: cobra.MaximumNArgs(1), Run: func(*cobra.Command, []string) {}}
+	schema.AddCommand(&cobra.Command{Use: "search"})
 	root.AddCommand(
 		auth,
 		sheet,
-		&cobra.Command{Use: "schema [path]", Args: cobra.MaximumNArgs(1)},
+		schema,
 		&cobra.Command{Use: "plugin-info <name>", Args: cobra.ExactArgs(1)},
 	)
 
@@ -145,6 +149,7 @@ func TestResolveCommandReference(t *testing.T) {
 		{name: "top-level placeholder", path: "dws <cmd>", want: resolutionSkip},
 		{name: "nested placeholder", path: "dws sheet <command>", want: resolutionSkip},
 		{name: "quoted positional argument", path: "dws schema dev app create", want: resolutionValid},
+		{name: "schema search subcommand", path: "dws schema search", want: resolutionValid},
 		{name: "leaf positional argument", path: "dws plugin-info example", want: resolutionValid},
 	}
 
@@ -204,6 +209,9 @@ func testCrossPlatformCoverageSchemaProjectionIssue(t *testing.T) {
 		wantErr bool
 	}{
 		{command: `dws schema`, wantErr: false},
+		{command: `dws schema search`, wantErr: false},
+		{command: `dws schema search --query "create a calendar event" --limit 5`, wantErr: false},
+		{command: `dws schema search --request-json -`, wantErr: false},
 		{command: `dws schema --all --format json`, wantErr: false},
 		{command: `dws schema calendar`, wantErr: true},
 		{command: `dws schema "calendar event create" -f json`, wantErr: true},

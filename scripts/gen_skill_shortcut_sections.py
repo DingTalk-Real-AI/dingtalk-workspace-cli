@@ -136,7 +136,7 @@ def mono_overview(items: list[dict[str, Any]]) -> str:
     return f"""{MONO_START}
 ## Shortcut 总览
 
-下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图应先按产品 Skill、意图表或任务 reference 选择唯一命令；命令已选中时直接执行，只在参数或安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service <service> --format json` 做最后回退；不要为已知高频意图加载完整产品 Catalog。
+下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图应先按产品 Skill、意图表或任务 reference 选择唯一命令；命令已选中时直接执行，只在参数或安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws schema search --query "<用户意图>" --limit 5` 搜索原子命令和 shortcut；`dws shortcut list` 只作人工审计/兼容 fallback，不要为已知高频意图加载完整产品 Catalog。
 
 | 服务 | shortcut 数 | multi skill |
 |---|---:|---|
@@ -157,7 +157,7 @@ def product_section(service: str, rows: list[dict[str, Any]]) -> str:
     return f"""{PRODUCT_START}
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "{service} +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws {service} <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service {service} --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "{service} +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws {service} <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws schema search --query "<用户意图>" --product {service} --limit 5` 同时搜索原子命令和 shortcut。`dws shortcut list --service {service}` 只作人工审计/兼容 fallback。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
@@ -179,7 +179,7 @@ def compact_product_section(service: str, rows: list[dict[str, Any]]) -> str:
 
 `{md_escape(service)}` 当前有 {public_count} 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。{discovery}
 
-仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service {md_escape(service)} --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
+仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws schema search --query "<用户意图>" --product {md_escape(service)} --limit 5` 同时搜索原子命令和 shortcut。`dws shortcut list` 只作人工审计/兼容 fallback；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 {PRODUCT_END}"""
 
 

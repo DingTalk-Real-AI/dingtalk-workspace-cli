@@ -39,7 +39,7 @@ cli_version: ">=1.0.15"
 <!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->
 ## Shortcut 总览
 
-下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图应先按产品 Skill、意图表或任务 reference 选择唯一命令；命令已选中时直接执行，只在参数或安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service <service> --format json` 做最后回退；不要为已知高频意图加载完整产品 Catalog。
+下面只统计当前公开 catalog 中的 shortcut，不展开完整明细。已知意图应先按产品 Skill、意图表或任务 reference 选择唯一命令；命令已选中时直接执行，只在参数或安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws schema search --query "<用户意图>" --limit 5` 搜索原子命令和 shortcut；`dws shortcut list` 只作人工审计/兼容 fallback，不要为已知高频意图加载完整产品 Catalog。
 
 | 服务 | shortcut 数 | multi skill |
 |---|---:|---|
@@ -210,24 +210,36 @@ Step 3 → 加 --yes 执行命令
 
 稳定 command identity、主 CLI path 和 alias 由 leaf `ContractFinal.Identity` 与真实 Cobra tree 精确绑定。Agent 不应读取 Catalog 文件、native annotation 或其他生成 JSON 来重新推断命令；所有运行时查询都以当前二进制交付的 Schema 投影为准。
 
+**未知命令路径**：DWS 对 Agent 是一个元工具，不要将搜索命中项动态注册成新外层工具。仅当现有 Skill/reference 都无法定位 CLI path 时执行：
+
 ```bash
-# 第 1 层：产品概览（~4.5KB，列出全部产品 + 工具数 + 用途摘要）
+dws schema search --query "<用户意图>" --limit 5
+dws schema <candidate.canonical_path> --compact --format json \
+  --expected-source-hash "<search.catalog.source_hash>" \
+  --expected-surface-hash "<search.catalog.surface_hash>"
+dws <candidate.primary_cli_path> <按 schema-inspect.v1.tool_spec 组装的参数>
+```
+
+- `exact_filtered` 立即停止，不选 sibling 绕过；零候选、`abstained=true` 或语义无法区分时澄清。
+- `reason=catalog_changed` 时丢弃旧候选并重新 Search；只用 versioned Inspect 中的 `tool_spec` 组装参数。
+- Search/Inspect 都不授权、不执行；最后仍由同一 `dws` 的 profile、权限、confirmation 和 Cobra 校验。
+- 2～4 步复合意图先拆成 `subqueries`，通过 `dws schema search --request-json -` 合并候选；不要用整句话只排一次 Top-K。
+
+```bash
+# 产品概览只用于人类审计
 dws schema
 
-# 第 2 层：产品级（列出该产品下全部工具的 cli_path + description + effect/risk）
-dws schema calendar --compact
+# 已知产品但命令未知：直接限定产品搜索，不加载产品全量 Schema
+dws schema search --query "创建日程" --product calendar --limit 5
 
-# 第 3 层：分组级（按命令分组列出工具摘要）
-dws schema "calendar event" --compact
-
-# 第 4 层：Agent leaf（参数契约：type/required/description/constraints/examples）
-dws schema "calendar event create" --compact
+# 选中 canonical 后读取唯一 leaf（参数契约）
+dws schema calendar.create_calendar_event --compact
 
 # --all：导出所有工具的完整 leaf Schema，仅用于 CI / 审计 / 参数 baseline
 dws schema --all --format json
 ```
 
-**`--all` 使用边界（强制）**：`--all` 会返回每个工具的完整参数、约束和安全语义，输出体积很大。仅在用户明确要求全量导出，或执行 CI、Catalog 审计、参数防丢 baseline 时使用。普通业务任务严禁使用 `--all` 做命令发现，也不要把全量结果直接注入 Agent 上下文；必须按“产品概览 → 产品/分组 → leaf”渐进查询。完整兼容性 baseline 必须使用未裁剪的 `schema --all`；`schema --all --compact` 会移除 provenance 和接口映射字段，不得作为完整 baseline。
+**`--all` 使用边界（强制）**：`--all` 会返回每个工具的完整参数、约束和安全语义，输出体积很大。仅在用户明确要求全量导出，或执行 CI、Catalog 审计、参数防丢 baseline 时使用。普通业务任务严禁使用 `--all` 做命令发现，也不要把全量结果直接注入 Agent 上下文；未知命令统一用 `schema search`，已知产品通过 `--product` 收窄，再 Inspect 唯一 leaf。完整兼容性 baseline 必须使用未裁剪的 `schema --all`；`schema --all --compact` 会移除 provenance 和接口映射字段，不得作为完整 baseline。
 
 同一个工具省略 `--compact` 的 full leaf 与 `--all` 条目是同一份 `ToolSpec` 契约；compact leaf 只做展示投影，不重新解析语义。Alias 查询不得根据 alias 重写或补猜参数。若同一视图观察到内容差异，应作为契约漂移报告，而不是选择其中一份继续执行。
 
@@ -238,7 +250,7 @@ dws schema --all --format json
 ### Schema 字段速查
 
 ```jsonc
-// leaf 级输出（dws schema "calendar event create" --compact）
+// leaf 级输出（dws schema calendar.create_calendar_event --compact）
 {
   "cli_path": "calendar event create",
   "canonical_path": "calendar.create_calendar_event",
@@ -288,7 +300,7 @@ Schema 与 Help 冲突是**契约漂移**，不得静默猜测或把两边字段
 
 `dev.*` 包含 helper-only 执行面，其中远端 helper 未进入 pinned metadata 时标记为 `composite`，不能伪装成 `local`。`event list` / `event schema` 读取内置目录和 payload 定义，属于 `local`；`event consume` / `event status` / `event stop` 同时编排远端个人订阅控制面与本地 bus/consume，属于 `composite`。实现来源不同，不改变统一查询边界：进入全局 `dws schema` 的命令须由 leaf `ContractFinal.Identity` 声明收集，并由同一 `ToolSpec` 投影到 leaf、产品/分组、`--all` 与 Catalog。不得把 Cobra 临时合成结果作为第二条 Schema 数据路径。
 
-事件需要区分两种 Schema：`dws event schema <event_key> --flatten` 查询 Agent 要消费的顶层业务字段；`dws schema "event consume" --compact` 查询 CLI 命令参数。前者是真实业务命令，后者只读取最终内嵌 SchemaRegistry；不能相互替代。
+事件需要区分两种 Schema：`dws event schema <event_key> --flatten` 查询 Agent 要消费的顶层业务字段；`dws schema event.consume --compact` 查询 CLI 命令参数。前者是真实业务命令，后者只读取最终内嵌 SchemaRegistry；不能相互替代。
 
 `source` 表示最终命令 identity 的来源，不表示运行时 backing；helper/local/MCP 实现机制读取 `interface_mode`、`availability` 和 provenance，不要假定 `dev.*` 必然是 `source=mcp:<server>`，也不要假定本地命令必然是 `source=cobra`。
 

@@ -1,0 +1,37 @@
+{
+  "version": "tool-search-eval-manifest.v1",
+  "created_at": "2026-08-12T00:00:00+08:00",
+  "base_repository_commit": "5fed80fc0f1aaa4ee9123b0acf3041d0d9b45bc9",
+  "owners": {
+    "retrieval": "DWS Tool Search maintainers",
+    "independent_evaluation": "DWS Agent Evaluation maintainers",
+    "separation_rule": "The independent evaluation signer must not be an author of Catalog selection metadata used by the evaluated cases."
+  },
+  "proxy_v1": {
+    "state": "sealed_diagnostic_only",
+    "catalog_generation": "go_declarations_to_runtime_assembly",
+    "catalog_build_output": ".worktrees/policy-tmp/tool-search-schema-catalog",
+    "catalog_source_hash": "sha256:02c633c075f4af915ea097d383bdcbc25fe549c172e2d3336152e30cf2906e80",
+    "catalog_surface_hash": "sha256:7f9839f1ff428b52f1d032d2fa6493815c3755650b7d9fa653839e7d589482e5",
+    "tool_count": 1098,
+    "workflow_path": "scripts/testdata/tool_search_workflows.json",
+    "evaluator_path": "scripts/dev/eval_tool_search_ranking.py",
+    "intent_cases": 1123,
+    "intent_excluded_over_budget": 10,
+    "chinese_only_cases": 402,
+    "mixed_chinese_ascii_cases": 721,
+    "english_cases": 0,
+    "workflow_cases": 10,
+    "release_gate": false,
+    "limitations": [
+      "Intent queries and agent summaries share selection authorship.",
+      "The devdoc slice has one binary-gold case while dev and devdoc expose the same backing search_open_platform_docs operation.",
+      "Catalog JSON is generated only under the ignored build temp directory and is never a repository input.",
+      "There are no English intent cases and only ten workflows."
+    ]
+  },
+  "independent_test_v1": {
+    "state": "collecting",
+    "path": "scripts/testdata/tool_search_independent_test_v1.json"
+  }
+}

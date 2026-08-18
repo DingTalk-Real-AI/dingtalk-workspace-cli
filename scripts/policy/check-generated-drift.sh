@@ -116,5 +116,6 @@ fi
 
 # Assembly determinism validates fresh CI/local Catalog dumps.
 "$ROOT/scripts/policy/check-schema-assembly.sh"
+python3 "$ROOT/scripts/policy/check-shortcut-public-catalog-drift.py"
 
 printf 'generated drift check: ok\n'

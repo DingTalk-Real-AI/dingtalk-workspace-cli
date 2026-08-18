@@ -10,7 +10,7 @@ SCHEMA_META_INDEX_OUTPUT ?= artifacts/schema_meta_index.gob
 POLICY_ENV = DWS_POLICY_TMPDIR="$(DWS_POLICY_TMPDIR)" GOTMPDIR="$(POLICY_GOTMPDIR)"
 GO_SOURCE_LIST = git ls-files -z --cached --others --exclude-standard -- '*.go'
 
-.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
+.PHONY: all help build rebuild test test-plan test-auth-legacy-compat lint format-check fmt policy edition-test interface-integrity authoritative-interface-integrity coverage-gate coverage-gate-platform update-interface-baseline reset-interface-baseline schema-compatibility skill-command-integrity skill-context-budget multi-im-skill-chain-integrity cli-smoke mock-mcp-smoke test-schema-agent-examples tool-search-evaluation-harness generate-tool-search-comparison generate-schema fetch-mcp-metadata generate-schema-catalog package release release-pre release-stable changelog-pre changelog-stable publish-homebrew-formula setup-hooks
 
 all: setup-hooks fmt lint build test rebuild
 
@@ -37,6 +37,8 @@ help:
 	@printf "  make cli-smoke     - Verify help for every public top-level command\n"
 	@printf "  make mock-mcp-smoke - Verify HTTP and stdio MCP request/response transport\n"
 	@printf "  make test-schema-agent-examples - Contract-check all Agent examples and dry-run the eligible subset\n"
+	@printf "  make tool-search-evaluation-harness - Verify Go retrieval, trust metrics, frozen fixtures, and build-time report generation\n"
+	@printf "  make generate-tool-search-comparison - Generate the declaration-assembled comparison under .worktrees/policy-tmp\n"
 	@printf "  make generate-schema - Refresh param_aliases + verify Schema assembly determinism\n"
 	@printf "  make generate-schema-catalog - Optional assembled Catalog dump under artifacts/ (not a delivery step)\n"
 	@printf "  make package       - Build all release artifacts locally\n"
@@ -84,7 +86,7 @@ fmt:
 	$(GO_SOURCE_LIST) > "$$go_files"; \
 	xargs -0 sh -c 'if [ "$$#" -gt 0 ]; then exec gofmt -w -- "$$@"; fi' sh < "$$go_files"
 
-policy: test-auth-legacy-compat
+policy: test-auth-legacy-compat tool-search-evaluation-harness skill-mono-multi-content
 	@mkdir -p "$(POLICY_GOTMPDIR)"
 	@$(POLICY_ENV) ./scripts/policy/check-open-source-assets.sh
 	@$(POLICY_ENV) ./scripts/policy/check-skill-context-budget.sh
@@ -160,6 +162,25 @@ mock-mcp-smoke:
 
 test-schema-agent-examples:
 	DWS_AGENT_EXAMPLES_DRY_RUN=1 $(GO) test -v -count=1 ./internal/app -run '^TestAgentExamplesDryRun$$'
+
+tool-search-evaluation-harness:
+	python3 -m unittest \
+		scripts/dev/eval_tool_search_ranking_test.py \
+		scripts/dev/verify_tool_search_eval_manifest_test.py
+	@mkdir -p "$(DWS_POLICY_TMPDIR)"
+	$(GO) run ./internal/generator/cmd_schema_catalog \
+		-root . \
+		-output "$(DWS_POLICY_TMPDIR)/tool-search-schema-catalog" \
+		-meta-index "$(DWS_POLICY_TMPDIR)/tool-search-schema-meta-index.gob"
+	python3 scripts/dev/verify_tool_search_eval_manifest.py \
+		--catalog-dir "$(DWS_POLICY_TMPDIR)/tool-search-schema-catalog"
+	$(GO) test ./internal/cli -run '^TestToolSearch|^TestSchemaSearch|^TestDefaultToolSearch|^TestAggregateToolSearch|^TestScoreToolSearch' -count=1
+	$(GO) test ./internal/app -run '^TestToolSearchDelivery|^TestSchemaSearchInspectCatalogVersionContract$$' -count=1
+	$(GO) run ./internal/generator/cmd_tool_search_comparison -output "$(DWS_POLICY_TMPDIR)/tool-search-comparison.json"
+
+generate-tool-search-comparison:
+	@mkdir -p "$(DWS_POLICY_TMPDIR)"
+	$(GO) run ./internal/generator/cmd_tool_search_comparison -output "$(DWS_POLICY_TMPDIR)/tool-search-comparison.json"
 
 # generate-schema refreshes param_aliases_generated.go and verifies that
 # ResolveSchemaBuild assembly is deterministic. Catalog is runtime-assembled
