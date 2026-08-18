@@ -73,6 +73,17 @@ func TestWithOperationTimedOutMarksStateAndKeepsResumeFacts(t *testing.T) {
 	}
 }
 
+func TestWithOperationTimedOutEmptyStatePreservesExisting(t *testing.T) {
+	result := WithOutcome(pendingAcceptedResult(), OutcomePending, WithOperationTimedOut(""))
+	op := result.envelope().Meta.Operation
+	if op.State != "NEW" || !op.TimedOut {
+		t.Fatalf("operation=%+v, want original state kept and timed_out set", op)
+	}
+	if err := ValidateResult(result); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWithOperationTimedOutWithoutOperationInfoLeavesEnvelopeUntouched(t *testing.T) {
 	// A result without operation info keeps nil — ValidateResult must then
 	// reject the pending envelope instead of the option synthesizing fake

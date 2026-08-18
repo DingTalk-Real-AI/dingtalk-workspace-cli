@@ -103,7 +103,12 @@ func WithOperationTimedOut(state string) ResultOption {
 			return
 		}
 		operation := *env.Meta.Operation
-		operation.State = state
+		// A subscribe/poll that never observed a status still times out
+		// against the accepted pending result: keep the original state
+		// rather than wiping it to empty (pending requires operation.state).
+		if strings.TrimSpace(state) != "" {
+			operation.State = state
+		}
 		operation.TimedOut = true
 		env.Meta.Operation = &operation
 	}}

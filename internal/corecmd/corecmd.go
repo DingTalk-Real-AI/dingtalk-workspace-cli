@@ -290,12 +290,16 @@ type Spec struct {
 	// mapping belong to the framework wait phase. Required for poll/auto
 	// declarations — a declared capability without a runtime implementation
 	// can never honor --wait, so New rejects the pairing at construction.
-	WaitPoll func(c *Ctx) (wait.PollDoc, error)
+	// ctx is the wait-phase deadline (--wait-timeout); leaf I/O must honor
+	// it so a blocked poll cannot outlive the declared timeout.
+	WaitPoll func(ctx context.Context, c *Ctx) (wait.PollDoc, error)
 	// WaitEvents opens the push subscription of the declared Contract.Wait
 	// capability (event/auto modes). The framework owns correlation and
 	// status mapping; the leaf owns the transport. Auto mode falls back to
-	// WaitPoll when the stream ends before a terminal status.
-	WaitEvents func(c *Ctx) (wait.EventStream, error)
+	// WaitPoll when the stream ends before a terminal status. ctx is the
+	// same wait-phase deadline as WaitPoll; subscription setup must honor
+	// it so --wait-timeout can cancel a blocked subscribe.
+	WaitEvents func(ctx context.Context, c *Ctx) (wait.EventStream, error)
 }
 
 // Ctx is the framework-neutral execution context handed to Invoke/Orchestrate.
@@ -621,8 +625,15 @@ func registerWaitFlags(cmd *cobra.Command, spec Spec) {
 // runDeclaredWaitPhase runs the declared wait loop after a successful
 // ResultInvoke dispatch and closes the accepted unified envelope into the
 // wait outcome (validateWaitDecl guarantees the ResultInvoke pairing).
+// Only a pending accepted result is waitable: success / failure / partial
+// are already terminal and must be returned unchanged. Waiting on a
+// business failure would let WithOutcome(..., success) overwrite it into
+// an illegal success-with-error envelope.
 func runDeclaredWaitPhase(cmd *cobra.Command, args []string, spec Spec, result output.CommandResult) (output.CommandResult, error) {
 	if !BoolFlag(cmd, waitFlagName) {
+		return result, nil
+	}
+	if result == nil || result.Outcome() != output.OutcomePending {
 		return result, nil
 	}
 	decl := spec.Contract.Wait
@@ -650,7 +661,10 @@ func runDeclaredWaitPhase(cmd *cobra.Command, args []string, spec Spec, result o
 
 // runWaitLoop executes the declared wait mode. One deadline spans the event
 // phase and an auto-mode poll fallback (the inner loops run without their
-// own timeouts and inherit this context's deadline).
+// own timeouts and inherit this context's deadline). The deadline is
+// forwarded to WaitPoll / WaitEvents and bound onto the cobra command so
+// leaf I/O that reads either the hook ctx or Command().Context() is
+// cancelled when --wait-timeout expires.
 func runWaitLoop(parent context.Context, decl *contract.WaitSpec, timeout time.Duration, spec Spec, ctx *Ctx, result output.CommandResult) (wait.Outcome, error) {
 	loopCtx := parent
 	if timeout > 0 {
@@ -658,22 +672,34 @@ func runWaitLoop(parent context.Context, decl *contract.WaitSpec, timeout time.D
 		loopCtx, cancel = context.WithTimeout(parent, timeout)
 		defer cancel()
 	}
+	if ctx != nil && ctx.cmd != nil {
+		prev := ctx.cmd.Context()
+		ctx.cmd.SetContext(loopCtx)
+		defer ctx.cmd.SetContext(prev)
+	}
 	mode := strings.TrimSpace(decl.Mode)
 	if mode == contract.WaitModePoll {
 		return wait.Run(loopCtx, wait.LoopSpec{
 			StatusQuery: decl.StatusQuery,
 			Terminal:    decl.Terminal,
 			Pending:     decl.PendingValues,
-		}, func(context.Context) (wait.PollDoc, error) {
-			return spec.WaitPoll(ctx)
+		}, func(pollCtx context.Context) (wait.PollDoc, error) {
+			return spec.WaitPoll(pollCtx, ctx)
 		})
 	}
 	resource, err := waitResource(decl, result)
 	if err != nil {
 		return wait.Outcome{}, err
 	}
-	stream, err := spec.WaitEvents(ctx)
+	stream, err := spec.WaitEvents(loopCtx, ctx)
 	if err != nil {
+		if loopCtx.Err() != nil {
+			// Subscribe blocked until the wait deadline: same contract as a
+			// cancelled poll — close as timed-out pending, do not surface
+			// ctx.Err() as a subscription failure (and do not poll-fallback
+			// in auto mode; the shared deadline is already exhausted).
+			return wait.Outcome{Outcome: contract.ResultOutcomePending, TimedOut: true}, nil
+		}
 		if mode == contract.WaitModeAuto {
 			// Subscription failed before any event: fall back to polling.
 			return pollWithSpec(loopCtx, decl, spec, ctx)
@@ -704,8 +730,8 @@ func pollWithSpec(loopCtx context.Context, decl *contract.WaitSpec, spec Spec, c
 		StatusQuery: decl.StatusQuery,
 		Terminal:    decl.Terminal,
 		Pending:     decl.PendingValues,
-	}, func(context.Context) (wait.PollDoc, error) {
-		return spec.WaitPoll(ctx)
+	}, func(pollCtx context.Context) (wait.PollDoc, error) {
+		return spec.WaitPoll(pollCtx, ctx)
 	})
 }
 
