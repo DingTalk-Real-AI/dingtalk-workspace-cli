@@ -1398,14 +1398,20 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 	if strings.TrimSpace(currentLong) == "" && strings.TrimSpace(long) != "" {
 		currentLong = long
 	}
+	// Drop guidance appended for a previous declaration: AttachContract
+	// overwrites the prior ContractFinal, so --help must re-render the updated
+	// guidance instead of stacking the stale block on top of it.
+	base, tail := splitSelectionHelp(currentLong)
 	// The guidance sections are anchored "after the intent prose"; without
 	// authored prose they must not become the whole Long, or catalog assembly
 	// would flip the delivered description winner from Contract.Description
 	// (contract_final) to the guidance text (cobra_help).
-	if strings.TrimSpace(currentLong) != "" {
-		if help := SelectionHelp(decl.Selection); help != "" && !strings.Contains(currentLong, help) {
-			cmd.Long = strings.TrimRight(currentLong, "\n") + help
-		}
+	if help := SelectionHelp(decl.Selection); help != "" && strings.TrimSpace(base) != "" {
+		cmd.Long = strings.TrimRight(base, "\n") + help + tail
+	} else if base+tail != currentLong {
+		// The updated declaration no longer renders guidance; publish the
+		// prose without the stale block (constraint suffix preserved).
+		cmd.Long = base + tail
 	}
 
 	payload := contract.ContractFinalPayload{
@@ -1644,6 +1650,30 @@ func guidanceItems(items []string) []string {
 		}
 	}
 	return lines
+}
+
+// splitSelectionHelp splits a Long that may carry a previously appended
+// SelectionHelp block into the pristine prose (base) and whatever New
+// appended after the guidance (tail — the constraint section, when present),
+// dropping the stale block itself. Re-attaching an updated declaration then
+// re-renders guidance between the two instead of stacking versions. The block
+// is located by its generated section titles (each is preceded by a blank
+// line and followed by an item list, which authored prose never reproduces).
+func splitSelectionHelp(long string) (base, tail string) {
+	cut := -1
+	for _, title := range []string{"Avoid when:", "Prerequisites:", "Tips:"} {
+		if i := strings.Index(long, "\n\n"+title+"\n"); i >= 0 && (cut < 0 || i < cut) {
+			cut = i
+		}
+	}
+	if cut < 0 {
+		return long, ""
+	}
+	rest := long[cut+2:]
+	if j := strings.Index(rest, "\n\n参数约束："); j >= 0 {
+		return long[:cut], rest[j:]
+	}
+	return long[:cut], ""
 }
 
 func renderGuidance(title string, items []string) string {

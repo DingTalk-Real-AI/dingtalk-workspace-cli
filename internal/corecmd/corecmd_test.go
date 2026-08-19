@@ -1040,6 +1040,63 @@ func TestCrossPlatformCoverageNewCommandSelectionHelpOrdering(t *testing.T) {
 	}
 }
 
+// Re-attaching an updated ContractDecl must replace the previously rendered
+// guidance instead of stacking both versions, and must keep the constraint
+// section New appended after the guidance.
+func TestCrossPlatformCoverageAttachContractReplacesSelectionHelp(t *testing.T) {
+	constraints := []Constraint{{Kind: AtLeastOne, Flags: []string{"a", "b"}}}
+	declFor := func(avoid ...string) ContractDecl {
+		return ContractDecl{
+			Description: "D",
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "dev",
+				Name:           "send_thing",
+				CanonicalPath:  "dev.send_thing",
+				CLIPath:        "dev send",
+				PrimaryCLIPath: "dev send",
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode: "mcp", Availability: "available",
+				Ref: &contract.InterfaceRefSpec{ProductID: "dev", RPCName: "op"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "s", UseWhen: []string{"u"},
+				AvoidWhen: avoid, Examples: []string{"dws leaf"},
+			},
+		}
+	}
+	cmd := New(Spec{
+		Use:         "leaf",
+		Short:       "S",
+		Long:        "L",
+		Flags:       []FlagSpec{{Name: "a", Usage: "A"}, {Name: "b", Usage: "B"}},
+		Constraints: constraints,
+		Safety:      testWriteSafety(),
+		Contract:    declFor("旧避免场景"),
+		Invoke:      func(*Ctx, map[string]any) error { return nil },
+	})
+
+	updated := declFor("新避免场景")
+	AttachContract(cmd, testWriteSafety(), updated, "S", "L")
+	want := "L" + SelectionHelp(updated.Selection) + ConstraintHelp(constraints)
+	if cmd.Long != want {
+		t.Fatalf("re-attached Long = %q, want %q", cmd.Long, want)
+	}
+	if strings.Contains(cmd.Long, "旧避免场景") {
+		t.Fatalf("stale guidance survived the re-attach:\n%s", cmd.Long)
+	}
+
+	// A declaration whose guidance renders to nothing (blank-only items pass
+	// the completeness check but render no section) publishes the prose plus
+	// the constraint section, with no leftover block.
+	bare := declFor("  ")
+	AttachContract(cmd, testWriteSafety(), bare, "S", "L")
+	want = "L" + ConstraintHelp(constraints)
+	if cmd.Long != want {
+		t.Fatalf("guidance-free Long = %q, want %q", cmd.Long, want)
+	}
+}
+
 // ── unified builder ────────────────────────────────────────────────
 
 func TestCrossPlatformCoverageNewCommandOrchestration(t *testing.T) {
