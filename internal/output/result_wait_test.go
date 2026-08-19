@@ -111,3 +111,55 @@ func TestDataAccessorReturnsDeepCopy(t *testing.T) {
 		t.Fatalf("Data() aliased internal state: %#v", again)
 	}
 }
+
+func TestWithOperationTerminalStateSyncsStateAndClearsTimedOut(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		outcome Outcome
+	}{
+		{"success", OutcomeSuccess},
+		{"failure", OutcomeFailure},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := []ResultOption{WithOperationTerminalState("COMPLETED")}
+			if tc.outcome == OutcomeFailure {
+				opts = append(opts, WithErrorInfo(&ErrorInfo{
+					Type: "wait", Subtype: "terminal_failure", Message: "等待到达失败终态：COMPLETED",
+				}))
+			}
+			result := WithOutcome(pendingAcceptedResult(), tc.outcome, opts...)
+			op := result.envelope().Meta.Operation
+			if op.State != "COMPLETED" || op.TimedOut {
+				t.Fatalf("operation=%+v, want terminal state synced and timed_out cleared", op)
+			}
+			if op.ID != "job-1" || op.NextCommand != "dws wait-sample --id job-1" {
+				t.Fatalf("operation=%+v, want resume identity facts preserved", op)
+			}
+			if err := ValidateResult(result); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestWithOperationTerminalStateBlankKeepsObservedState(t *testing.T) {
+	// A terminal observation that carries no status must keep the last known
+	// state rather than wipe it: operation.state may never be emptied by a
+	// close transition.
+	result := WithOutcome(pendingAcceptedResult(), OutcomeSuccess, WithOperationTerminalState("  "))
+	op := result.envelope().Meta.Operation
+	if op.State != "NEW" || op.TimedOut {
+		t.Fatalf("operation=%+v, want original state kept and timed_out cleared", op)
+	}
+	if err := ValidateResult(result); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWithOperationTerminalStateWithoutOperationInfoLeavesEnvelopeUntouched(t *testing.T) {
+	result := WithOutcome(Success(map[string]any{"ok": true}), OutcomeSuccess, WithOperationTerminalState("COMPLETED"))
+	env := result.envelope()
+	if env.Meta != nil && env.Meta.Operation != nil {
+		t.Fatalf("operation=%+v, want untouched", env.Meta.Operation)
+	}
+}

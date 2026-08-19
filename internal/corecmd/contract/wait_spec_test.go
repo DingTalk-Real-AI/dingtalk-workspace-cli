@@ -148,3 +148,80 @@ func TestWaitSpecValidateRejectsMalformedShapes(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeWaitSpecTrimsStatusValuesIntoWireForm(t *testing.T) {
+	in := &WaitSpec{
+		Mode:               "  poll  ",
+		PollCommand:        " oa approval-instance get ",
+		StatusQuery:        " result.status ",
+		Terminal:           map[string]ResultOutcome{" COMPLETED ": ResultOutcomeSuccess, "REJECTED": ResultOutcomeFailure},
+		PendingValues:      []string{" NEW ", "RUNNING"},
+		DefaultTimeoutSecs: 60,
+	}
+	out, err := NormalizeWaitSpec(in, "sample.tool")
+	if err != nil {
+		t.Fatalf("NormalizeWaitSpec() error = %v", err)
+	}
+	if out.Mode != WaitModePoll || out.PollCommand != "oa approval-instance get" || out.StatusQuery != "result.status" {
+		t.Fatalf("normalized scalars: %#v", out)
+	}
+	if len(out.Terminal) != 2 {
+		t.Fatalf("terminal=%#v, want two trimmed keys", out.Terminal)
+	}
+	if got := out.Terminal["COMPLETED"]; got != ResultOutcomeSuccess {
+		t.Fatalf("terminal[COMPLETED]=%q, want success (key must be trimmed)", got)
+	}
+	if _, padded := out.Terminal[" COMPLETED "]; padded {
+		t.Fatal("padded terminal key survived normalization")
+	}
+	for i, want := range []string{"NEW", "RUNNING"} {
+		if out.PendingValues[i] != want {
+			t.Fatalf("pending[%d]=%q, want %q", i, out.PendingValues[i], want)
+		}
+	}
+	// The input declaration must stay untouched (defensive copy).
+	if _, padded := in.Terminal[" COMPLETED "]; !padded {
+		t.Fatal("NormalizeWaitSpec mutated its input terminal map")
+	}
+	if in.PendingValues[0] != " NEW " {
+		t.Fatal("NormalizeWaitSpec mutated its input pending values")
+	}
+}
+
+func TestNormalizeWaitSpecRejectsDuplicatesAndConflictsAfterTrim(t *testing.T) {
+	terminal := map[string]ResultOutcome{"COMPLETED": ResultOutcomeSuccess}
+	cases := map[string]*WaitSpec{
+		"terminal keys collapsing after trim": {
+			Mode:        WaitModePoll,
+			PollCommand: "oa approval-instance get",
+			StatusQuery: "status",
+			Terminal:    map[string]ResultOutcome{"COMPLETED": ResultOutcomeSuccess, " COMPLETED ": ResultOutcomeFailure},
+		},
+		"pending values collapsing after trim": {
+			Mode:          WaitModePoll,
+			PollCommand:   "oa approval-instance get",
+			StatusQuery:   "status",
+			Terminal:      terminal,
+			PendingValues: []string{"NEW", " NEW "},
+		},
+		"terminal/pending conflict hidden by padding": {
+			Mode:          WaitModePoll,
+			PollCommand:   "oa approval-instance get",
+			StatusQuery:   "status",
+			Terminal:      terminal,
+			PendingValues: []string{" COMPLETED "},
+		},
+	}
+	for name, spec := range cases {
+		if _, err := NormalizeWaitSpec(spec, "sample.tool"); err == nil {
+			t.Fatalf("%s: expected error, got nil", name)
+		}
+	}
+}
+
+func TestNormalizeWaitSpecNilReturnsNil(t *testing.T) {
+	out, err := NormalizeWaitSpec(nil, "sample.tool")
+	if err != nil || out != nil {
+		t.Fatalf("NormalizeWaitSpec(nil) = %#v, %v", out, err)
+	}
+}

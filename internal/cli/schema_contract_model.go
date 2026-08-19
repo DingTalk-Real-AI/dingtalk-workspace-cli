@@ -752,9 +752,14 @@ func (t ToolSpec) normalized() ToolSpec {
 		out.DryRun = &dryRun
 	}
 	if t.Wait != nil {
-		wait := *t.Wait
-		wait.Mode = strings.TrimSpace(wait.Mode)
-		out.Wait = &wait
+		// NormalizeWaitSpec is the single canonical form shared with the
+		// declaration path: trimmed status values, duplicate/conflict
+		// rejection, defensive copy. Invalid declarations are rejected by
+		// ToolSpec.Validate below, which runs the same normalization
+		// through WaitSpec.Validate.
+		if wait, err := contract.NormalizeWaitSpec(t.Wait, id.CanonicalPath); err == nil {
+			out.Wait = wait
+		}
 	}
 	if t.Result != nil {
 		result, err := contract.NormalizeResultSpec(t.Result, id.CanonicalPath)

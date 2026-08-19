@@ -27,6 +27,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/wait"
 )
@@ -163,6 +164,15 @@ func TestWaitTimeoutDurationRejectsOverflowingSeconds(t *testing.T) {
 	}
 	if d <= 0 || d != time.Duration(maxWaitTimeoutSecs)*time.Second {
 		t.Fatalf("duration=%d, want the largest representable timeout", d)
+	}
+	// Non-positive second counts fall back to the framework default instead
+	// of disabling the deadline (waitTimeoutSecs already maps a zero/negative
+	// flag to the default; this keeps the conversion itself fail-safe).
+	if got, err := waitTimeoutDuration(0); err != nil || got != time.Duration(DefaultWaitTimeoutSecs)*time.Second {
+		t.Fatalf("duration/err=%d/%v, want framework default", got, err)
+	}
+	if got, err := waitTimeoutDuration(-5); err != nil || got != time.Duration(DefaultWaitTimeoutSecs)*time.Second {
+		t.Fatalf("duration/err=%d/%v, want framework default", got, err)
 	}
 }
 
@@ -435,6 +445,54 @@ func TestResultInvokeWaitClosesEnvelopeOutcome(t *testing.T) {
 	if !strings.Contains(stdout.String(), `"outcome": "failure"`) {
 		t.Fatalf("stdout=%s", stdout.String())
 	}
+	// The final emitted envelope must carry the observed terminal status in
+	// meta.operation.state — the acceptance-phase state ("NEW") must not
+	// survive the close (P1 regression guard).
+	if !strings.Contains(stdout.String(), `"state": "REJECTED"`) {
+		t.Fatalf("stdout=%s, want operation.state synced to the terminal status", stdout.String())
+	}
+	if strings.Contains(stdout.String(), `"state": "NEW"`) {
+		t.Fatalf("stdout=%s, acceptance-phase operation.state leaked into the terminal envelope", stdout.String())
+	}
+	if strings.Contains(stdout.String(), `"timed_out": true`) {
+		t.Fatalf("stdout=%s, terminal close must not claim timed_out", stdout.String())
+	}
+}
+
+func TestResultInvokeWaitSuccessCloseSyncsOperationState(t *testing.T) {
+	cmd := New(baseWaitSpec(waitTestDecl(), func(context.Context, *Ctx) (wait.PollDoc, error) {
+		return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+	}))
+	cmd.SetArgs([]string{"--wait"})
+	ctx, store := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.PersistentPostRunE = func(executed *cobra.Command, _ []string) error {
+		_, _, err := output.EmitStoredResult(executed)
+		return err
+	}
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if code, emitted := output.StoredExitCode(store); !emitted || code != 0 {
+		t.Fatalf("stored code/emitted=%d/%v, want success exit 0", code, emitted)
+	}
+	if !strings.Contains(stdout.String(), `"outcome": "success"`) {
+		t.Fatalf("stdout=%s", stdout.String())
+	}
+	// Success close must publish the terminal status, never the stale
+	// acceptance-phase state (no outcome=success with state=processing/NEW).
+	if !strings.Contains(stdout.String(), `"state": "COMPLETED"`) {
+		t.Fatalf("stdout=%s, want operation.state synced to the terminal status", stdout.String())
+	}
+	if strings.Contains(stdout.String(), `"state": "NEW"`) {
+		t.Fatalf("stdout=%s, acceptance-phase operation.state leaked into the success envelope", stdout.String())
+	}
+	// Operation identity (id / next_command) survives the terminal close.
+	if !strings.Contains(stdout.String(), `"id": "job-1"`) || !strings.Contains(stdout.String(), `"next_command"`) {
+		t.Fatalf("stdout=%s, want operation id/next_command preserved", stdout.String())
+	}
 }
 
 func TestResultInvokeWaitTimeoutKeepsPending(t *testing.T) {
@@ -512,6 +570,63 @@ func TestAttachContractPanicsOnInvalidWaitDeclaration(t *testing.T) {
 	AttachContract(&cobra.Command{Use: "wait-sample"}, contract.SafetySpec{
 		Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
 	}, decl, "", "")
+}
+
+func TestWaitDeclPaddedStatusValuesAreNormalized(t *testing.T) {
+	// A declaration whose status values carry surrounding whitespace must be
+	// canonicalized at construction so the runtime wait engine and the
+	// published Schema agree: the backend returns "COMPLETED" verbatim, and
+	// a padded terminal key would fail closed as an unknown status.
+	decl := waitTestDecl()
+	decl.Wait.Terminal = map[string]contract.ResultOutcome{
+		" COMPLETED ": contract.ResultOutcomeSuccess,
+		"\tREJECTED":  contract.ResultOutcomeFailure,
+	}
+	decl.Wait.PendingValues = []string{" NEW ", "RUNNING "}
+	cmd := New(baseWaitSpec(decl, func(context.Context, *Ctx) (wait.PollDoc, error) {
+		return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+	}))
+	cmd.SetArgs([]string{"--wait"})
+	ctx, store := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	cmd.PersistentPostRunE = func(executed *cobra.Command, _ []string) error {
+		_, _, err := output.EmitStoredResult(executed)
+		return err
+	}
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("padded declaration must still reach the terminal status: %v", err)
+	}
+	if code, emitted := output.StoredExitCode(store); !emitted || code != 0 {
+		t.Fatalf("stored code/emitted=%d/%v, want success", code, emitted)
+	}
+	final, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok || final.Wait == nil {
+		t.Fatal("registered ContractFinal lost the wait capability")
+	}
+	if _, ok := final.Wait.Terminal["COMPLETED"]; !ok {
+		t.Fatalf("registered terminal table not trimmed: %#v", final.Wait.Terminal)
+	}
+	for _, value := range final.Wait.PendingValues {
+		if strings.TrimSpace(value) != value {
+			t.Fatalf("registered pending value %q not trimmed", value)
+		}
+	}
+}
+
+func TestNewPanicsOnDuplicateOrConflictingWaitStatusesAfterTrim(t *testing.T) {
+	// Values that collapse onto one status after trimming are programming
+	// errors: silently merging them would pick one outcome for two authored
+	// declarations.
+	dupTerminal := waitTestDecl()
+	dupTerminal.Wait.Terminal = map[string]contract.ResultOutcome{
+		"COMPLETED":  contract.ResultOutcomeSuccess,
+		" COMPLETED": contract.ResultOutcomeFailure,
+	}
+	expectPanic(t, func() { New(baseWaitSpec(dupTerminal, nil)) }, "Contract.Wait")
+
+	conflict := waitTestDecl()
+	conflict.Wait.PendingValues = []string{" COMPLETED "}
+	expectPanic(t, func() { New(baseWaitSpec(conflict, nil)) }, "Contract.Wait")
 }
 
 func TestContractDeclEmptyTreatsWaitAsAuthored(t *testing.T) {

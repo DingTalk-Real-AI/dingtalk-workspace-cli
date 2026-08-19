@@ -114,6 +114,28 @@ func WithOperationTimedOut(state string) ResultOption {
 	}}
 }
 
+// WithOperationTerminalState closes the envelope's async operation at the observed
+// terminal status (契约规范 §2.2: 终态封装必须同步 operation.state — a success or
+// failure close that kept the acceptance-phase state would emit a
+// self-contradicting envelope such as outcome=success with
+// operation.state=processing). The declared id / next_command facts are kept
+// as the operation identity, and timed_out is cleared: the §2.2 anti-spoof
+// rule forbids a timed-out claim on an operation that reached a terminal
+// state. A result without operation info is left untouched.
+func WithOperationTerminalState(state string) ResultOption {
+	return ResultOption{apply: func(env *Envelope) {
+		if env.Meta == nil || env.Meta.Operation == nil {
+			return
+		}
+		operation := *env.Meta.Operation
+		if strings.TrimSpace(state) != "" {
+			operation.State = state
+		}
+		operation.TimedOut = false
+		env.Meta.Operation = &operation
+	}}
+}
+
 // WithOutcome rewraps an existing result with a new outcome, preserving data,
 // meta, identity, and any error info (subject to the opts). The corecmd wait
 // phase uses it to close an accepted result into its terminal (or timed-out

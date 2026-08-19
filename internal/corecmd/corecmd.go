@@ -402,6 +402,7 @@ func New(spec Spec) *cobra.Command {
 	validateDispatchDecl(spec)
 	validateSafetySpec(spec)
 	validateContractDecl(spec)
+	normalizeWaitDecl(&spec)
 	validateWaitDecl(spec)
 	validateInputSpecs(spec.Use, spec.Flags)
 	// Help prose inherits the declaration when not authored separately:
@@ -555,6 +556,27 @@ const (
 // declaration carries no reviewed default.
 const DefaultWaitTimeoutSecs = defaultWaitTimeoutS
 
+// normalizeWaitDecl rewrites the spec's declared Wait in place with its
+// canonical form (contract.NormalizeWaitSpec): trimmed status values,
+// duplicate/conflict rejection, defensive copy. The runtime wait phase and
+// AttachContract both read spec.Contract.Wait, so normalizing once at
+// construction guarantees the wait engine, the Schema wire, and the
+// registered ContractFinal payload all see identical status tables — a
+// padded declaration can no longer publish a Schema its own runtime treats
+// as unknown statuses. An invalid declaration panics here, next to the
+// authoring mistake, with the same message Validate reports.
+func normalizeWaitDecl(spec *Spec) {
+	decl := spec.Contract.Wait
+	if decl == nil || strings.TrimSpace(decl.Mode) == "" {
+		return
+	}
+	normalized, err := contract.NormalizeWaitSpec(decl, spec.Contract.Identity.CanonicalPath)
+	if err != nil {
+		panic(fmt.Sprintf("command %q has invalid Contract.Wait: %v", spec.Use, err))
+	}
+	spec.Contract.Wait = normalized
+}
+
 // validateWaitDecl enforces the declaration ⇄ implementation pairing at build
 // time: a declared Contract.Wait without a WaitPoll hook is a capability the
 // command can never honor, and a WaitPoll hook without the declaration has no
@@ -654,13 +676,15 @@ func runDeclaredWaitPhase(cmd *cobra.Command, args []string, spec Spec, result o
 	}
 	if outcome.Outcome == contract.ResultOutcomeFailure {
 		return output.WithOutcome(result, output.OutcomeFailure,
+			output.WithOperationTerminalState(outcome.Status),
 			output.WithErrorInfo(&output.ErrorInfo{
 				Type:    "wait",
 				Subtype: "terminal_failure",
 				Message: fmt.Sprintf("等待到达失败终态：%s", outcome.Status),
 			})), nil
 	}
-	return output.WithOutcome(result, output.OutcomeSuccess), nil
+	return output.WithOutcome(result, output.OutcomeSuccess,
+		output.WithOperationTerminalState(outcome.Status)), nil
 }
 
 // runWaitLoop executes the declared wait mode. One deadline spans the event
@@ -1687,12 +1711,11 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 		payload.DryRun = &d
 	}
 	if decl.Wait != nil && strings.TrimSpace(decl.Wait.Mode) != "" {
-		w := *decl.Wait
-		w.Mode = strings.TrimSpace(w.Mode)
-		if err := w.Validate(decl.Identity.CanonicalPath); err != nil {
+		waitSpec, err := contract.NormalizeWaitSpec(decl.Wait, decl.Identity.CanonicalPath)
+		if err != nil {
 			panic(fmt.Sprintf("command %q has invalid Contract.Wait: %v", cmd.Name(), err))
 		}
-		payload.Wait = &w
+		payload.Wait = waitSpec
 	}
 	if decl.Result != nil {
 		result, err := contract.NormalizeResultSpec(decl.Result, decl.Identity.CanonicalPath)

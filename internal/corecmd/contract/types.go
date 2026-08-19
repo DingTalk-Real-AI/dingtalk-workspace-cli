@@ -110,68 +110,105 @@ type WaitSpec struct {
 // Validate checks mode requirements and the terminal/pending status maps.
 // Unknown terminal outcomes, unknown modes, and mode/body mismatches fail at
 // declaration so a malformed wait capability cannot reach the wire.
+// Validation delegates to NormalizeWaitSpec so the acceptance rules can never
+// drift from the normalization the wire and the runtime wait engine share.
 func (w WaitSpec) Validate(canonical string) error {
-	canonical = defaultString(strings.TrimSpace(canonical), "<unknown>")
-	if strings.TrimSpace(w.Mode) == "" {
-		return fmt.Errorf("schema tool %s wait has no mode", canonical)
+	_, err := NormalizeWaitSpec(&w, canonical)
+	return err
+}
+
+// NormalizeWaitSpec returns a validated, canonical, defensively copied wait
+// contract. It is shared by declaration (corecmd.New / AttachContract),
+// ToolSpec, and snapshot paths, mirroring NormalizeResultSpec. Status values
+// are trimmed into their wire form: the wait engine compares backend
+// statuses verbatim against these tables, so a padded declaration
+// (" processing ") would publish a Schema that its own runtime treats as an
+// unknown status. Values collapsing onto one value after trimming (duplicate
+// pending values, duplicate terminal keys, terminal/pending conflicts) are
+// rejected instead of silently merged.
+func NormalizeWaitSpec(in *WaitSpec, canonical string) (*WaitSpec, error) {
+	if in == nil {
+		return nil, nil
 	}
-	mode := strings.TrimSpace(w.Mode)
-	switch mode {
+	canonical = defaultString(strings.TrimSpace(canonical), "<unknown>")
+	out := &WaitSpec{
+		Mode:               strings.TrimSpace(in.Mode),
+		PollCommand:        strings.TrimSpace(in.PollCommand),
+		StatusQuery:        strings.TrimSpace(in.StatusQuery),
+		EventKey:           strings.TrimSpace(in.EventKey),
+		MatchField:         strings.TrimSpace(in.MatchField),
+		ResourceQuery:      strings.TrimSpace(in.ResourceQuery),
+		DefaultTimeoutSecs: in.DefaultTimeoutSecs,
+	}
+	if out.Mode == "" {
+		return nil, fmt.Errorf("schema tool %s wait has no mode", canonical)
+	}
+	switch out.Mode {
 	case WaitModePoll, WaitModeEvent, WaitModeAuto:
 	default:
-		return fmt.Errorf("schema tool %s wait has unknown mode %q", canonical, w.Mode)
+		return nil, fmt.Errorf("schema tool %s wait has unknown mode %q", canonical, out.Mode)
 	}
-	needsPoll := mode == WaitModePoll || mode == WaitModeAuto
-	if needsPoll && strings.TrimSpace(w.PollCommand) == "" {
-		return fmt.Errorf("schema tool %s wait mode %s requires poll_command", canonical, mode)
+	needsPoll := out.Mode == WaitModePoll || out.Mode == WaitModeAuto
+	if needsPoll && out.PollCommand == "" {
+		return nil, fmt.Errorf("schema tool %s wait mode %s requires poll_command", canonical, out.Mode)
 	}
-	needsEvent := mode == WaitModeEvent || mode == WaitModeAuto
+	needsEvent := out.Mode == WaitModeEvent || out.Mode == WaitModeAuto
 	if needsEvent {
-		if strings.TrimSpace(w.EventKey) == "" {
-			return fmt.Errorf("schema tool %s wait mode %s requires event_key", canonical, mode)
+		if out.EventKey == "" {
+			return nil, fmt.Errorf("schema tool %s wait mode %s requires event_key", canonical, out.Mode)
 		}
-		if strings.TrimSpace(w.MatchField) == "" {
-			return fmt.Errorf("schema tool %s wait mode %s requires match_field", canonical, mode)
+		if out.MatchField == "" {
+			return nil, fmt.Errorf("schema tool %s wait mode %s requires match_field", canonical, out.Mode)
 		}
-		if strings.TrimSpace(w.ResourceQuery) == "" {
-			return fmt.Errorf("schema tool %s wait mode %s requires resource_query", canonical, mode)
+		if out.ResourceQuery == "" {
+			return nil, fmt.Errorf("schema tool %s wait mode %s requires resource_query", canonical, out.Mode)
 		}
 	}
-	if strings.TrimSpace(w.StatusQuery) == "" {
-		return fmt.Errorf("schema tool %s wait mode %s requires status_query", canonical, mode)
+	if out.StatusQuery == "" {
+		return nil, fmt.Errorf("schema tool %s wait mode %s requires status_query", canonical, out.Mode)
 	}
-	if len(w.Terminal) == 0 {
-		return fmt.Errorf("schema tool %s wait has no terminal states", canonical)
+	if len(in.Terminal) == 0 {
+		return nil, fmt.Errorf("schema tool %s wait has no terminal states", canonical)
 	}
-	pending := make(map[string]bool, len(w.PendingValues))
-	for _, value := range w.PendingValues {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return fmt.Errorf("schema tool %s wait has a blank pending value", canonical)
+	out.Terminal = make(map[string]ResultOutcome, len(in.Terminal))
+	for status, outcome := range in.Terminal {
+		status = strings.TrimSpace(status)
+		if status == "" {
+			return nil, fmt.Errorf("schema tool %s wait has a blank terminal status", canonical)
 		}
-		if _, conflict := w.Terminal[value]; conflict {
-			return fmt.Errorf("schema tool %s wait status %q is both terminal and pending", canonical, value)
-		}
-		pending[value] = true
-	}
-	for status, outcome := range w.Terminal {
-		if strings.TrimSpace(status) == "" {
-			return fmt.Errorf("schema tool %s wait has a blank terminal status", canonical)
+		if _, dup := out.Terminal[status]; dup {
+			return nil, fmt.Errorf("schema tool %s wait has duplicate terminal status %q", canonical, status)
 		}
 		// Terminal states must close into success or failure. Pending and
 		// partial are not wait outcomes: pending is expressed through
 		// timeout, and partial requires the typed multi-status payload only
 		// the leaf can construct.
 		if outcome != ResultOutcomeSuccess && outcome != ResultOutcomeFailure {
-			return fmt.Errorf(
+			return nil, fmt.Errorf(
 				"schema tool %s wait terminal status %q must map to success or failure, got %q",
 				canonical, status, outcome)
 		}
+		out.Terminal[status] = outcome
 	}
-	if w.DefaultTimeoutSecs < 0 {
-		return fmt.Errorf("schema tool %s wait default_timeout_secs must be >= 0", canonical)
+	seenPending := make(map[string]bool, len(in.PendingValues))
+	for _, value := range in.PendingValues {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return nil, fmt.Errorf("schema tool %s wait has a blank pending value", canonical)
+		}
+		if _, conflict := out.Terminal[value]; conflict {
+			return nil, fmt.Errorf("schema tool %s wait status %q is both terminal and pending", canonical, value)
+		}
+		if seenPending[value] {
+			return nil, fmt.Errorf("schema tool %s wait has duplicate pending value %q", canonical, value)
+		}
+		seenPending[value] = true
+		out.PendingValues = append(out.PendingValues, value)
 	}
-	return nil
+	if in.DefaultTimeoutSecs < 0 {
+		return nil, fmt.Errorf("schema tool %s wait default_timeout_secs must be >= 0", canonical)
+	}
+	return out, nil
 }
 
 // ResultOutcome is one closed unified-output envelope outcome.
