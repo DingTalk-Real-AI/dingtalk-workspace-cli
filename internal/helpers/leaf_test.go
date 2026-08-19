@@ -483,12 +483,12 @@ func TestDeclareLeafMetadataSelectionHelpPastedOnce(t *testing.T) {
 			},
 			Interface: &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "dev", RPCName: "x"}},
 			Selection: contract.SelectionSpec{
-				AgentSummary:   "summary",
+				AgentSummary:  "summary",
 				AvoidWhen:     []string{"仅在此场景下禁用"},
-				Prerequisites:  []string{"先完成 prerequisite"},
-				Tips:           []string{"后续建议"},
-				UseWhen:        []string{"u"},
-				Examples:       []string{"dws x"},
+				Prerequisites: []string{"先完成 prerequisite"},
+				Tips:          []string{"后续建议"},
+				UseWhen:       []string{"u"},
+				Examples:      []string{"dws x"},
 			},
 		},
 	}
@@ -507,6 +507,37 @@ func TestDeclareLeafMetadataSelectionHelpPastedOnce(t *testing.T) {
 	}
 	if got := strings.Count(base.Long, "Avoid when:"); got != 1 {
 		t.Fatalf("Avoid when rendered %d times after second attach", got)
+	}
+}
+
+// Without authored intent prose the guidance sections must not become the
+// whole Long: catalog assembly prefers Cobra Long for the delivered
+// description, so an empty Long has to stay empty and keep the declared
+// Contract.Description as the description winner.
+func TestDeclareLeafMetadataSelectionHelpSkippedWithoutIntentProse(t *testing.T) {
+	base := &cobra.Command{Use: "x", Short: "x", RunE: func(*cobra.Command, []string) error { return nil }}
+	spec := LeafSpec{
+		Contract: LeafContract{
+			Description: "desc",
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "dev",
+				Name:           "x",
+				CanonicalPath:  "dev.x",
+				CLIPath:        "dev x",
+				PrimaryCLIPath: "dev x",
+			},
+			Interface: &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "dev", RPCName: "x"}},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "summary",
+				UseWhen:      []string{"u"},
+				AvoidWhen:    []string{"仅在此场景下禁用"},
+				Examples:     []string{"dws x"},
+			},
+		},
+	}
+	DeclareLeafMetadata(base, spec)
+	if base.Long != "" {
+		t.Fatalf("empty long rewritten to %q, want empty so the declared description keeps winning", base.Long)
 	}
 }
 

@@ -1398,8 +1398,14 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 	if strings.TrimSpace(currentLong) == "" && strings.TrimSpace(long) != "" {
 		currentLong = long
 	}
-	if help := SelectionHelp(decl.Selection); help != "" && !strings.Contains(currentLong, help) {
-		cmd.Long = strings.TrimRight(currentLong, "\n") + help
+	// The guidance sections are anchored "after the intent prose"; without
+	// authored prose they must not become the whole Long, or catalog assembly
+	// would flip the delivered description winner from Contract.Description
+	// (contract_final) to the guidance text (cobra_help).
+	if strings.TrimSpace(currentLong) != "" {
+		if help := SelectionHelp(decl.Selection); help != "" && !strings.Contains(currentLong, help) {
+			cmd.Long = strings.TrimRight(currentLong, "\n") + help
+		}
 	}
 
 	payload := contract.ContractFinalPayload{
