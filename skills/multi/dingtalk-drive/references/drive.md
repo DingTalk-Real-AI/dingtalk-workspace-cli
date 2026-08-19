@@ -72,6 +72,7 @@ dws drive +publish-unset --node <dentryUuid>
 | 意图 | managed leaf |
 |---|---|
 | 查看成员权限 | `drive permission list` |
+| 查询节点权限设置（权限模式/分享范围/策略） | `permission get-setting` |
 | 添加、修改、移除成员 | `permission add` / `update` / `remove` |
 | 转移所有者 | `permission transfer-owner` |
 | 查看可申请权限和审批人 | `permission apply-info` |

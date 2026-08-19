@@ -2264,6 +2264,60 @@ func newDriveCommand() *cobra.Command {
 	drivePermListCmd.Flags().String("filter-role", "", "按角色过滤: OWNER / MANAGER / EDITOR / DOWNLOADER / READER")
 	drivePermListCmd.Flags().String("workspace", "", "知识库 ID (选填)")
 
+	drivePermGetSettingCmd := &cobra.Command{
+		Use:   "get-setting",
+		Short: "查询节点权限设置",
+		Long: `查询文档空间节点的权限设置，返回三部分配置：
+
+- permissionMode: 权限模式（INHERITED 继承上级 / INDEPENDENT 独立管理）
+- shareScope: 分享范围（可见范围、链接分享设置）
+- policies: 权限策略列表（水印、组织外分享、成员邀请门槛等）
+
+查询协作者列表请改用 permission list。`,
+		Example: `  dws drive permission get-setting --node DOC_ID`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			return callMCPToolOnServer("doc", "get_permission_setting", map[string]any{"nodeId": nodeID})
+		},
+	}
+	DeclareLeafMetadata(drivePermGetSettingCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "drive",
+				Name:           "get_permission_setting",
+				CanonicalPath:  "drive.get_permission_setting",
+				CLIPath:        "drive permission get-setting",
+				PrimaryCLIPath: "drive permission get-setting",
+			},
+			Description: "查询文档空间节点的权限设置（权限模式/分享范围/权限策略）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "get_permission_setting"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询文档空间节点的权限设置（权限模式/分享范围/权限策略）",
+				UseWhen:      []string{"查看节点权限模式/分享范围/水印等权限策略配置时"},
+				AvoidWhen: []string{
+					"查协作者清单用 permission list",
+					"查可申请角色与审批人用 permission apply-info",
+				},
+				Examples: []string{"dws drive permission get-setting --node <ID> --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
+	drivePermGetSettingCmd.Flags().String("node", "", "目标节点 ID 或 URL (必填)")
+
 	drivePermRemoveCmd := &cobra.Command{
 		Use:     "remove",
 		Aliases: []string{"rm"},
@@ -2332,7 +2386,7 @@ func newDriveCommand() *cobra.Command {
 	drivePermRemoveCmd.Flags().String("workspace", "", "知识库 ID (选填)")
 
 	// permission 子命令 --node 隐藏别名（保持与迁移前 doc 命令一致）
-	for _, c := range []*cobra.Command{drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermRemoveCmd} {
+	for _, c := range []*cobra.Command{drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermGetSettingCmd, drivePermRemoveCmd} {
 		c.Flags().String("url", "", "")
 		c.Flags().String("id", "", "")
 		c.Flags().String("node-id", "", "")
@@ -2564,7 +2618,7 @@ func newDriveCommand() *cobra.Command {
 	drivePermApplyCmd.Flags().String("notify-mode", "", "通知方式: DEFAULT / MSG_ACCOUNT / SINGLE_CHAT")
 	drivePermApplyCmd.Flags().String("reason", "", "申请理由，最长 200 字符")
 
-	drivePermissionCmd.AddCommand(drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermRemoveCmd, drivePermTransferOwnerCmd, drivePermApplyInfoCmd, drivePermApplyCmd)
+	drivePermissionCmd.AddCommand(drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermGetSettingCmd, drivePermRemoveCmd, drivePermTransferOwnerCmd, drivePermApplyInfoCmd, drivePermApplyCmd)
 
 	// --node 隐藏别名（保持与迁移前 doc 命令一致）
 	driveNodeAliasCmds := []*cobra.Command{

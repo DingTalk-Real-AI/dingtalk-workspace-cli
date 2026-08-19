@@ -594,6 +594,7 @@ Flags:
 用户说"回收站/查看回收站/回收站列表/回收站里有什么" → `recycle list`
 用户说"恢复文件/还原删除的文件/从回收站恢复/还原回收站文件" → `recycle restore`
 用户说"给文档授权/分享权限" → `permission add`
+用户说"权限设置/权限模式/分享范围/水印等策略配置" → `permission get-setting`
 用户说"公开文件/互联网公开/设置公开/让互联网所有人可访问" → `publish set`
 用户说"关闭公开/取消公开/取消互联网访问" → `publish unset`
 用户说"查看公开状态/是否公开/发布状态" → `publish get`
@@ -712,6 +713,7 @@ Usage:
   dws drive permission add --node <ID> --users uid1,uid2 --role READER
   dws drive permission update --node <ID> --users uid1 --role EDITOR
   dws drive permission list --node <ID>
+  dws drive permission get-setting --node <ID>
   dws drive permission remove --node <ID> --users uid1
 Flags:
       --node string        目标节点 ID 或 URL (必填)
@@ -721,6 +723,8 @@ Flags:
       --limit int          返回成员数上限 (仅 list，默认 30，最大 200)
       --filter-role string 按角色过滤: OWNER / MANAGER / EDITOR / DOWNLOADER / READER (仅 list)
 ```
+
+`get-setting` 返回节点权限配置（不是成员清单）：`permissionMode`（INHERITED 继承上级 / INDEPENDENT 独立管理）、`shareScope`（可见范围与链接分享设置）、`policies`（水印、组织外分享、添加成员门槛等策略列表）。查询协作者清单仍用 `permission list`。
 
 ### 文件互联网公开发布
 
