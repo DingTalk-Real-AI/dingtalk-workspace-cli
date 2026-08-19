@@ -180,6 +180,19 @@ type OAApprovalInstanceStartedOutput struct {
 	EventTime         int64  `json:"event_time" description:"审批实例事件业务时间" format:"timestamp_ms"`
 }
 
+type OAApprovalInstanceCCOutput struct {
+	Type              string `json:"type" description:"事件类型，固定为当前 event_key"`
+	EventID           string `json:"event_id" description:"事件 ID，可用于去重"`
+	Timestamp         int64  `json:"timestamp" description:"事件发生时间戳" format:"timestamp_ms"`
+	SubscribeID       string `json:"subscribe_id" description:"订阅 ID"`
+	ProcessInstanceID string `json:"process_instance_id" description:"审批实例 ID"`
+	ProcessCode       string `json:"process_code" description:"审批流程模板编码"`
+	Title             string `json:"title" description:"审批标题"`
+	Status            string `json:"status" description:"审批实例到达抄送节点时的状态"`
+	CreateTime        int64  `json:"create_time" description:"审批实例创建时间" format:"timestamp_ms"`
+	EventTime         int64  `json:"event_time" description:"审批抄送事件业务时间" format:"timestamp_ms"`
+}
+
 type OAApprovalInstanceTerminatedOutput struct {
 	Type              string `json:"type" description:"事件类型，固定为当前 event_key"`
 	EventID           string `json:"event_id" description:"事件 ID，可用于去重"`
@@ -667,6 +680,19 @@ func projectOAApprovalEvent(ev transport.Event, base baseEventOutput, raw json.R
 			CreateTime:        payload.Body.CreateTime,
 			EventTime:         payload.EventTime,
 		}, nil
+	case EventOAApprovalInstanceCC:
+		return OAApprovalInstanceCCOutput{
+			Type:              base.Type,
+			EventID:           base.EventID,
+			Timestamp:         base.Timestamp,
+			SubscribeID:       base.SubscribeID,
+			ProcessInstanceID: payload.Body.ProcessInstanceID,
+			ProcessCode:       payload.Body.ProcessCode,
+			Title:             payload.Body.Title,
+			Status:            payload.Body.Status,
+			CreateTime:        payload.Body.CreateTime,
+			EventTime:         payload.EventTime,
+		}, nil
 	case EventOAApprovalInstanceTerminated:
 		return OAApprovalInstanceTerminatedOutput{
 			Type:              base.Type,
@@ -871,6 +897,8 @@ func outputTypeForEvent(eventKey string) reflect.Type {
 		return reflect.TypeOf(OAApprovalTaskRedirectedOutput{})
 	case eventKey == EventOAApprovalInstanceStarted:
 		return reflect.TypeOf(OAApprovalInstanceStartedOutput{})
+	case eventKey == EventOAApprovalInstanceCC:
+		return reflect.TypeOf(OAApprovalInstanceCCOutput{})
 	case eventKey == EventOAApprovalInstanceTerminated:
 		return reflect.TypeOf(OAApprovalInstanceTerminatedOutput{})
 	case eventKey == EventOAApprovalInstanceFinished:
@@ -906,6 +934,7 @@ func isOAEvent(eventKey string) bool {
 		eventKey == EventOAApprovalTaskFinished ||
 		eventKey == EventOAApprovalTaskRedirected ||
 		eventKey == EventOAApprovalInstanceStarted ||
+		eventKey == EventOAApprovalInstanceCC ||
 		eventKey == EventOAApprovalInstanceTerminated ||
 		eventKey == EventOAApprovalInstanceFinished
 }
