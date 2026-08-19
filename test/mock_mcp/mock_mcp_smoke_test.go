@@ -513,7 +513,7 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 			t.Fatalf("reply failed: %v\nstdout=%s\nstderr=%s", err, stdout, stderr)
 		}
 		calls := snapshot()
-		if len(calls) != 3 || calls[0].tool != "list_messages_by_ids" || calls[1].tool != "get_conversation_info" || calls[2].tool != "send_personal_message" {
+		if len(calls) != 1 || calls[0].tool != "send_personal_message" {
 			t.Fatalf("reply calls = %#v", calls)
 		}
 		var payload map[string]any
@@ -544,10 +544,6 @@ func multiIMMockResponse(tool string, arguments map[string]any, mcpBaseURL, reso
 			return `{"result":{"hasMore":false,"messages":[{"openMessageId":"msg-resource","openConversationId":"cid-resources","sender":{"name":"测试用户甲","openDingTalkId":"` + mockCurrentDOpenID + `","senderType":"user"},"msgType":"file","content":"{\"mediaId\":\"@media-1\"}","createTime":"2026-08-03 10:00:00"}]}}`
 		}
 		return `{"result":{"hasMore":false,"messages":[{"openMessageId":"msg-1","openConversationId":"cid-1","sender":{"name":"测试用户甲","openDingTalkId":"` + mockCurrentDOpenID + `","senderType":"user"},"msgType":"text","content":"进度正常","createTime":"2026-08-03 10:00:00"}]}}`
-	case "list_messages_by_ids":
-		return `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid-1","senderOpenDingTalkId":"` + mockCurrentDOpenID + `","content":"进度正常"}]}}`
-	case "get_conversation_info":
-		return `{"result":{"openConversationId":"cid-1","convThreadEnabled":false}}`
 	case "get_resource_download_url":
 		body, _ := json.Marshal(map[string]any{"result": map[string]any{
 			"resourceUrl": resourceURL,
