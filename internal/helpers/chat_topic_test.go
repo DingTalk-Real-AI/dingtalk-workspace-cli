@@ -128,23 +128,34 @@ func TestCrossPlatformCoverageAtomicTopicDryRunStoresOneResult(t *testing.T) {
 
 func TestCrossPlatformCoverageAtomicTopicListsPublishPaginationInMeta(t *testing.T) {
 	for _, test := range []struct {
-		name     string
-		response map[string]string
-		args     []string
+		name      string
+		response  map[string]string
+		args      []string
+		wantItems float64
 	}{
 		{
 			name: "topics",
 			response: map[string]string{
 				"chat/list_conversation_message_v2": `{"result":{"messages":[{"openMessageId":"root-1","openConvThreadId":"thread-1"}],"hasMore":true,"nextCursor":1787000000123}}`,
 			},
-			args: []string{"topic", "list", "--open-topic-id", "topic-1"},
+			args:      []string{"topic", "list", "--open-topic-id", "topic-1"},
+			wantItems: 1,
+		},
+		{
+			name: "topics filtered empty page",
+			response: map[string]string{
+				"chat/list_conversation_message_v2": `{"result":{"messages":[{"openMessageId":"ordinary-1"}],"hasMore":true,"nextCursor":1787000000123}}`,
+			},
+			args:      []string{"topic", "list", "--open-topic-id", "topic-1"},
+			wantItems: 0,
 		},
 		{
 			name: "replies",
 			response: map[string]string{
 				"chat/list_topic_replies": `{"result":{"messages":[{"openMessageId":"reply-1"}],"hasMore":true,"nextCursor":1787000000123}}`,
 			},
-			args: []string{"topic", "list-replies", "--open-topic-id", "topic-1", "--open-conv-thread-id", "thread-1"},
+			args:      []string{"topic", "list-replies", "--open-topic-id", "topic-1", "--open-conv-thread-id", "thread-1"},
+			wantItems: 1,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -164,7 +175,8 @@ func TestCrossPlatformCoverageAtomicTopicListsPublishPaginationInMeta(t *testing
 			}
 			meta, _ := envelope["meta"].(map[string]any)
 			pagination, _ := meta["pagination"].(map[string]any)
-			if pagination["endpoint_exhausted"] != false || pagination["next_token"] == "" || pagination["pages"] != float64(1) || pagination["items"] != float64(1) {
+			gotItems, _ := pagination["items"].(float64)
+			if pagination["endpoint_exhausted"] != false || pagination["next_token"] == "" || pagination["pages"] != float64(1) || gotItems != test.wantItems {
 				t.Fatalf("pagination = %#v", pagination)
 			}
 		})
@@ -261,6 +273,27 @@ func TestCrossPlatformCoverageChatTopicSurfaceAndLegacyVisibility(t *testing.T) 
 			}
 		}
 	}
+	legacySend, _, legacySendErr := root.Find([]string{"message", "send"})
+	if legacySendErr != nil {
+		t.Fatalf("find legacy message send: %v", legacySendErr)
+	}
+	for _, path := range [][]string{{"topic", "send"}, {"topic", "reply"}} {
+		topicSend, _, topicSendErr := root.Find(path)
+		if topicSendErr != nil {
+			t.Fatalf("find %v: %v", path, topicSendErr)
+		}
+		for _, name := range []string{"content", "file", "at-all", "at-open-dingtalk-ids"} {
+			if legacySend.Flags().Lookup(name).Usage != topicSend.Flags().Lookup(name).Usage {
+				t.Fatalf("%v --%s help = %q, want legacy %q", path, name, topicSend.Flags().Lookup(name).Usage, legacySend.Flags().Lookup(name).Usage)
+			}
+		}
+		for _, alias := range []string{"text", "body", "message", "markdown", "file-path", "uuid"} {
+			flag := topicSend.Flags().Lookup(alias)
+			if flag == nil || !flag.Hidden {
+				t.Fatalf("%v --%s compatibility alias = %#v, want hidden", path, alias, flag)
+			}
+		}
+	}
 }
 
 func TestCrossPlatformCoverageAtomicTopicReplyUsesDirectThreadTarget(t *testing.T) {
@@ -323,6 +356,36 @@ func TestCrossPlatformCoverageAtomicTopicCompatibilityMappings(t *testing.T) {
 		}
 	})
 
+	for _, test := range []struct {
+		name       string
+		topicPath  string
+		targetFlag string
+		target     string
+	}{
+		{name: "send mentions", topicPath: "send", targetFlag: "--open-topic-id", target: "topic-1"},
+		{name: "reply mentions", topicPath: "reply", targetFlag: "--open-conv-thread-id", target: "thread-1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			legacy := &chatTopicCaller{}
+			if err := executeAtomicTopicCommand(t, legacy,
+				"message", "send", "--conversation-id", test.target, "--content", "通知 <@user-open-id> <@all>",
+				"--at-open-dingtalk-ids", "user-open-id", "--at-all"); err != nil {
+				t.Fatal(err)
+			}
+			topic := &chatTopicCaller{}
+			if err := executeAtomicTopicCommand(t, topic,
+				"topic", test.topicPath, test.targetFlag, test.target, "--content", "通知 <@user-open-id> <@all>",
+				"--at-open-dingtalk-ids", "user-open-id", "--at-all"); err != nil {
+				t.Fatal(err)
+			}
+			if len(legacy.calls) != 1 || len(topic.calls) != 1 ||
+				legacy.calls[0].product != topic.calls[0].product || legacy.calls[0].tool != topic.calls[0].tool ||
+				!reflect.DeepEqual(legacy.calls[0].args, topic.calls[0].args) {
+				t.Fatalf("legacy=%#v topic=%#v", legacy.calls, topic.calls)
+			}
+		})
+	}
+
 	t.Run("list", func(t *testing.T) {
 		responses := map[string]string{
 			"chat/list_conversation_message_v2": `{"result":{"messages":[],"hasMore":false}}`,
@@ -350,12 +413,12 @@ func TestCrossPlatformCoverageAtomicTopicCompatibilityMappings(t *testing.T) {
 		}
 		legacy := &chatTopicCaller{responses: responses}
 		if err := executeAtomicTopicCommand(t, legacy,
-			"message", "list", "--conversation-id", "topic-1", "--limit", "20"); err != nil {
+			"message", "list", "--conversation-id", "topic-1"); err != nil {
 			t.Fatal(err)
 		}
 		topic := &chatTopicCaller{responses: responses}
 		if err := executeAtomicTopicCommand(t, topic,
-			"topic", "list", "--open-topic-id", "topic-1", "--limit", "20"); err != nil {
+			"topic", "list", "--open-topic-id", "topic-1"); err != nil {
 			t.Fatal(err)
 		}
 		if len(legacy.calls) != 1 || len(topic.calls) != 1 {
@@ -397,14 +460,14 @@ func TestCrossPlatformCoverageAtomicTopicCompatibilityMappings(t *testing.T) {
 		if err := executeAtomicTopicCommand(t, legacy,
 			"message", "send", "--conversation-id", "thread-1", "--msg-type", "file",
 			"--dentry-id", "101", "--space-id", "202", "--file-name", "fixture.txt",
-			"--file-type", "txt", "--file-size", "12", "--file-path", "/fixture.txt"); err != nil {
+			"--file-type", "txt", "--file-size", "12", "--file", "/fixture.txt"); err != nil {
 			t.Fatal(err)
 		}
 		topic := &chatTopicCaller{}
 		if err := executeAtomicTopicCommand(t, topic,
 			"topic", "reply", "--open-conv-thread-id", "thread-1", "--msg-type", "file",
 			"--dentry-id", "101", "--space-id", "202", "--file-name", "fixture.txt",
-			"--file-type", "txt", "--file-size", "12", "--file-path", "/fixture.txt"); err != nil {
+			"--file-type", "txt", "--file-size", "12", "--file", "/fixture.txt"); err != nil {
 			t.Fatal(err)
 		}
 		if len(legacy.calls) != 1 || len(topic.calls) != 1 ||

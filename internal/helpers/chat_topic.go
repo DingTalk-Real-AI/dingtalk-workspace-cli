@@ -161,7 +161,7 @@ func newChatTopicSendCommand(use, targetFlag, targetDescription string, sendRunE
 		Use:     use,
 		Short:   description,
 		Long:    description + "。支持文本或 Markdown、已有 mediaId 图片，以及本地 file/audio/video；发送后立即返回 openTaskId，不在命令内轮询状态。",
-		Example: fmt.Sprintf("  dws chat topic %s --%s <%s> --text \"内容\"", use, targetFlag, targetFlag),
+		Example: fmt.Sprintf("  dws chat topic %s --%s <%s> --content \"内容\"", use, targetFlag, targetFlag),
 		Args:    cobra.MaximumNArgs(1),
 		PreRunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Flags().Set("conversation-id", mustGetFlag(cmd, targetFlag))
@@ -180,7 +180,7 @@ func newChatTopicSendCommand(use, targetFlag, targetDescription string, sendRunE
 				AgentSummary: description,
 				UseWhen:      []string{description + "，并沿用异步 openTaskId 发送契约时"},
 				AvoidWhen:    []string{"普通群聊或单聊消息使用 chat message send；引用回复普通消息使用 chat message reply"},
-				Examples:     []string{fmt.Sprintf("dws chat topic %s --%s <%s> --text \"内容\"", use, targetFlag, targetFlag)},
+				Examples:     []string{fmt.Sprintf("dws chat topic %s --%s <%s> --content \"内容\"", use, targetFlag, targetFlag)},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: targetFlag, Property: "openConversationId", Required: boolPtr(true)},
@@ -195,9 +195,9 @@ func newChatTopicSendCommand(use, targetFlag, targetDescription string, sendRunE
 			},
 		},
 	})
-	cli.AnnotateRuntimePositionals(cmd, contract.RuntimeSchemaPositional{Name: "content", Type: "string", Description: "消息内容（也可使用 --text）", Required: false, Index: 0})
+	cli.AnnotateRuntimePositionals(cmd, contract.RuntimeSchemaPositional{Name: "content", Type: "string", Description: "消息内容（也可使用 --content）", Required: false, Index: 0})
 	cli.AnnotateRuntimeFlagEnum(cmd, "msg-type", "image", "file", "audio", "video")
-	cli.AnnotateRuntimeFlagFormat(cmd, "file-path", "file-path")
+	cli.AnnotateRuntimeFlagFormat(cmd, "file", "file-path")
 	return cmd
 }
 
@@ -206,13 +206,25 @@ func registerChatTopicSendFlags(cmd *cobra.Command, targetFlag, targetDescriptio
 	_ = cmd.MarkFlagRequired(targetFlag)
 	cmd.Flags().String("conversation-id", "", "内部目标映射")
 	_ = cmd.Flags().MarkHidden("conversation-id")
-	cmd.Flags().String("text", "", "文本或 Markdown 内容")
+	corecmd.RegisterFlags(cmd, []corecmd.FlagSpec{{
+		Name:    "content",
+		Usage:   "消息内容（推荐方式，也可用位置参数传递。内容含换行/特殊字符时必须使用此 flag）",
+		Aliases: []string{"text"},
+	}})
+	for _, alias := range []string{"body", "message", "markdown"} {
+		cmd.Flags().String(alias, "", "--content 的兼容别名")
+		_ = cmd.Flags().MarkHidden(alias)
+	}
 	cmd.Flags().String("title", "", "消息标题")
-	cmd.Flags().Bool("at-all", false, "@所有人")
-	cmd.Flags().String("at-open-dingtalk-ids", "", "@成员 openDingTalkId，逗号分隔")
+	cmd.Flags().Bool("at-all", false, "@所有人（仅群聊时生效，可选）,设置时，消息内容中一定要包含对应的占位符<@all>")
+	cmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效，可选）,设置--at-open-dingtalk-ids openDingTalkId1,openDingTalkId2时，消息内容中一定要包含对应格式的占位符<@openDingTalkId1> <@openDingTalkId2>")
 	cmd.Flags().String("media-id", "", "已有图片 mediaId")
 	cmd.Flags().String("msg-type", "", "内容类型: image/file/audio/video")
-	cmd.Flags().String("file-path", "", "本地文件路径")
+	corecmd.RegisterFlags(cmd, []corecmd.FlagSpec{{
+		Name:    "file",
+		Usage:   "本地文件路径（msgType=file/audio/video 时直接上传并按 file 消息发送）",
+		Aliases: []string{"file-path"},
+	}})
 	cmd.Flags().Int64("dentry-id", 0, "文件 dentryId（与 --space-id 成对传入时跳过自动上传）")
 	cmd.Flags().Int64("space-id", 0, "空间 ID（与 --dentry-id 成对传入时跳过自动上传）")
 	cmd.Flags().String("file-name", "", "文件名")
@@ -270,7 +282,7 @@ func newChatTopicListCommand() *cobra.Command {
 	cmd.Flags().String("open-topic-id", "", "话题圈 openTopicId (必填)")
 	_ = cmd.MarkFlagRequired("open-topic-id")
 	cmd.Flags().String("time", "", "开始时间，格式: yyyy-MM-dd HH:mm:ss（可选，默认上海时间当前时间）")
-	cmd.Flags().Int("limit", 50, "每页返回数量")
+	cmd.Flags().Int("limit", 0, "返回数量，不传则不限制")
 	cmd.Flags().String("direction", "", "时间方向: newer=从给定时间往现在拉，older=从给定时间往以前拉（未传 --time 时默认 older）")
 	cmd.Flags().String("forward", "false", "兼容方向参数")
 	_ = cmd.Flags().MarkHidden("forward")
@@ -552,7 +564,7 @@ func topicQuoteReplyDisabledError() error {
 	return apperrors.NewValidation(
 		"话题圈不支持引用消息回复；请使用 chat topic reply 向 openConvThreadId 直接追加回复",
 		apperrors.WithReason("topic_quote_reply_disabled"),
-		apperrors.WithHint("使用 dws chat topic reply --open-conv-thread-id <openConvThreadId> --text <content>"),
+		apperrors.WithHint("使用 dws chat topic reply --open-conv-thread-id <openConvThreadId> --content <content>"),
 	)
 }
 
