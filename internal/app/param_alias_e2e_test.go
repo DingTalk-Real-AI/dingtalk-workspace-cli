@@ -51,7 +51,38 @@ func (c *paramAliasCaptureCaller) CallTool(_ context.Context, server, tool strin
 func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string {
 	switch tool {
 	case "list_calendar_events":
-		return `{"result":{"events":[]}}`
+		return `{"success":true,"result":{"events":[],"hasMore":false,"nextCursor":""}}`
+	case "get_calendar_detail":
+		return c.paramAliasCalendarDetailResponse()
+	case "get_calendar_participants":
+		return `{"success":true,"result":{"participants":[{"userId":"fixture-user","displayName":"Fixture User"},{"userId":"user-2","displayName":"User Two"}]}}`
+	case "search_calendar":
+		return `{"success":true,"result":{"calendars":[]}}`
+	case "search_rooms":
+		return `{"success":true,"result":{"rooms":[]}}`
+	case "query_available_meeting_room":
+		return `{"success":true,"result":{"rooms":[],"hasMore":false}}`
+	case "list_meeting_room_groups":
+		return `{"success":true,"result":{"groups":[]}}`
+	case "query_busy_status":
+		return `{"success":true,"result":[]}`
+	case "list_suggested_event_times":
+		return `{"success":true,"result":{"recommendEventTimes":[]}}`
+	case "create_calendar_event":
+		return `{"success":true,"result":{"eventId":"event-1"}}`
+	case "update_calendar_event", "delete_calendar_event", "add_calendar_participant", "remove_calendar_participant":
+		return `{"success":true}`
+	case "respond":
+		status := "accepted"
+		if call := c.lastParamAliasCall(); call != nil {
+			if value, ok := call.args["responseStatus"].(string); ok && value != "" {
+				status = value
+			}
+		}
+		encoded, _ := json.Marshal(map[string]any{"success": true, "result": map[string]any{"responseStatus": status}})
+		return string(encoded)
+	case "get_current_user_profile":
+		return `{"success":true,"result":{"userId":"user-1","name":"Fixture Current User"}}`
 	case "query_records":
 		return `{"success":true,"status":"success","error":{},"data":{}}`
 	case "search_mail_users":
@@ -125,6 +156,41 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 	default:
 		return `{}`
 	}
+}
+
+func (c *paramAliasCaptureCaller) lastParamAliasCall() *paramAliasToolCall {
+	if len(c.calls) == 0 {
+		return nil
+	}
+	return &c.calls[len(c.calls)-1]
+}
+
+func (c *paramAliasCaptureCaller) paramAliasCalendarDetailResponse() string {
+	event := map[string]any{
+		"eventId":       "event-1",
+		"summary":       "Fixture Meeting",
+		"description":   "fixture description",
+		"startDateTime": "2026-03-10T09:00:00+08:00",
+		"endDateTime":   "2026-03-10T10:00:00+08:00",
+	}
+	for _, call := range c.calls {
+		switch call.tool {
+		case "create_calendar_event", "update_calendar_event":
+			for _, key := range []string{"eventId", "summary", "description", "startDateTime", "endDateTime", "timeZone", "location", "freeBusy"} {
+				if value, ok := call.args[key]; ok {
+					event[key] = value
+				}
+			}
+		case "respond":
+			if value, ok := call.args["responseStatus"]; ok {
+				event["responseStatus"] = value
+			}
+		case "delete_calendar_event":
+			event["status"] = "cancelled"
+		}
+	}
+	encoded, _ := json.Marshal(map[string]any{"success": true, "result": event})
+	return string(encoded)
 }
 
 func (*paramAliasCaptureCaller) Format() string { return "json" }
