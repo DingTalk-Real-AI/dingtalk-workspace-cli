@@ -2161,10 +2161,10 @@ func TestWaitResourceStronglyTypedDTOs(t *testing.T) {
 			wantResource: "ptr-789",
 		},
 		{
-			name:         "nested struct dotted query",
-			data:         NestedDTO{},
-			query:        "meta.resource_id",
-			wantResource: "",
+			name:          "nested struct dotted query",
+			data:          NestedDTO{},
+			query:         "meta.resource_id",
+			wantResource:  "",
 			wantErrSubstr: "not found",
 		},
 		{
