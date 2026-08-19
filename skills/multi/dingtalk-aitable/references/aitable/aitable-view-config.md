@@ -130,7 +130,7 @@ dws aitable view update field-widths --view-id GRID_ID --json '{"fldA":120,"fldB
 
 ### view update visible-fields（通用）
 
-整组替换可见字段列表与顺序。首列字段（primaryDoc）必须保留在数组第一位。
+整组替换可见字段列表与顺序。`field get` 返回的第一个字段是系统行索引/主字段；无论它显示为 text 还是 primaryDoc，都必须保留在数组第一位，且不能隐藏。不要仅凭字段类型猜主字段。
 
 > ⚠️ 注意：服务端**只接受 reorder，不接受真"隐藏字段"**——如果传入的列表比当前 columns 短，缺失的字段不会被隐藏。需要真正隐藏字段请到 AI 表格 Web UI。
 
@@ -143,6 +143,24 @@ dws aitable view update field-widths --view-id GRID_ID --json '{"fldA":120,"fldB
 dws aitable view update visible-fields --view-id VIEW_ID --field-ids fldPrimary,fldA,fldB
 dws aitable view update visible-fields --view-id VIEW_ID --json '["fldPrimary","fldA","fldB"]'
 ```
+
+### 列顺序最短闭环
+
+用户说“客户名称最左、状态在金额前”时，不要用通用 `+view-update --config` 探索：
+
+1. `dws aitable field get --base-id <B> --table-id <T> --format json` 取字段有序列表；第一个 fieldId 固定为数组第 1 项。目标 viewId 从真实上下文或 `view get` 返回中取得。
+2. `dws aitable view get visible-fields ...` 取当前完整列数组；必须保留全部现有字段，因为该接口只支持 reorder，不是真隐藏。
+3. 只重排目标：`[主字段, 客户名称, ..., 状态, 金额, ...]`，其他字段保持相对顺序；一次执行 `view update visible-fields`。
+4. 再次 `view get visible-fields`，数组完全一致才算完成。遇到 `PRIMARY_FIELD_CANNOT_BE_MOVED/HIDDEN` 立即停止，重新按步骤 1 构造一次；禁止继续猜排列。
+
+“固定/冻结左侧列”与“放到最左边”不是同一操作。只有 Grid 支持冻结；若要冻结主字段后的目标列，需要冻结前 N 列（例如目标位于第 2 列则 count=2）：
+
+```bash
+dws aitable +view-set-frozen-cols --base-id <B> --table-id <T> --view-id <V> --count <N>
+dws aitable +view-get-frozen-cols --base-id <B> --table-id <T> --view-id <V>
+```
+
+Kanban/Gallery 等视图只调整列顺序，不尝试冻结。
 
 ### view update filter / sort / group（通用，纯 --json）
 

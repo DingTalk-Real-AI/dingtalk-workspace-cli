@@ -264,7 +264,7 @@ func TestRootChatMediaUploadWithoutAppCredentialsReturnsMigrationValidation(t *t
 	}
 
 	got := output.String() + "\n" + err.Error()
-	for _, want := range []string{"已下线", "chat message send --msg-type file --file-path"} {
+	for _, want := range []string{"已下线", "chat message send --msg-type file --file"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("chat media upload migration output missing %q:\n%s", want, got)
 		}
@@ -439,7 +439,7 @@ func TestChatFileUploadDownlinedButMessageFileSendStays(t *testing.T) {
 		t.Fatalf("chat file upload error = nil, want downline error\n%s", got)
 	}
 	got = got + "\n" + err.Error()
-	for _, want := range []string{"已下线", "upload_conversation_file_by_url", "chat message send --msg-type file --file-path"} {
+	for _, want := range []string{"已下线", "upload_conversation_file_by_url", "chat message send --msg-type file --file"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("chat file upload output missing %q:\n%s", want, got)
 		}

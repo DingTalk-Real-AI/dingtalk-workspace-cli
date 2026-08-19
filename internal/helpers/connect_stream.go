@@ -1259,7 +1259,7 @@ func runStreamConnector(ctx context.Context, channel, clientID, clientSecret str
 		}
 		// Structured-text fallback: DingTalk leaves data.Text.Content blank on
 		// markdown / richText callbacks (the body ships in data.Content). Without
-		// this, `dws chat message send --group ... --text ...` — which defaults
+		// this, `dws chat message send --conversation-id ... --content ...` — which defaults
 		// to msgType=markdown — hits the drop branch below and the bot looks
 		// dead to the sender.
 		if text == "" {

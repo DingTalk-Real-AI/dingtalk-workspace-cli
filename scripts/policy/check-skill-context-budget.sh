@@ -168,6 +168,7 @@ done
 for forbidden_route in \
 	"## 标准 SOP" \
 	"dws aisearch person --keyword" \
+	"dws aisearch person --query" \
 	"dws chat message send-by-webhook" \
 	"dt_media_upload" \
 	"MUST 先用 Read"

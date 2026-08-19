@@ -67,7 +67,7 @@ metadata:
 
 **触发**：建待办/任务提醒/指派任务/TODO。
 
-1. **解析执行者（必须）**：指定姓名 → `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId`；未指定 → `dws contact user get-self --format json` 取当前用户 `userId`；多人逐个搜索后英文逗号拼接。
+1. **解析执行者（必须）**：指定姓名 → `dws aisearch person --query "<姓名>" --dimension name --format json` 取 `userId`；未指定 → `dws contact user get-self --format json` 取当前用户 `userId`；多人逐个搜索后英文逗号拼接。
 2. **执行（必须）**：`dws todo task create --title "<标题>" --executors <userId>[,<userId2>...] --priority <10/20/30/40> --format json`；有截止时间加 `--due "<ISO>"`；循环待办加 `--due "<首次截止ISO>" --recurrence "DTSTART:<UTC>\nRRULE:FREQ=DAILY;INTERVAL=1"`。
 3. **验证（必须）**：从返回取 `taskId`/`todoTaskId`，立即 `dws todo task get --task-id <taskId> --format json` 回读。
 

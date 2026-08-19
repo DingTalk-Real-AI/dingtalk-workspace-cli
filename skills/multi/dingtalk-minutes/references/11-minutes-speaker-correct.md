@@ -83,7 +83,7 @@ ffmpeg -y -ss 465 -i audio.mp3 -t 10 -c copy tmp/发言人3_片段.mp3 -loglevel
 
 | 优先级 | 路径 | 做什么 |
 |--------|------|--------|
-| ① 最高 | 人员 + 组织架构 | `dws aisearch person --keyword <姓名> --dimension name` → userId，再 `dws contact user get --ids <userId>` 补部门/职级等详情 |
+| ① 最高 | 人员 + 组织架构 | `dws aisearch person --query <姓名> --dimension name` → userId，再 `dws contact user get --ids <userId>` 补部门/职级等详情 |
 | ② 高 | 聊天记录 | `dws chat message list` 获取与目标人的近期 IM 消息 → 工作内容/语言风格/职责线索 |
 | ③ 兜底 | 本人文档 | `dws drive search --query <姓名>` 取前 3 篇标题+摘要 → 角色精确信号 |
 
@@ -112,7 +112,7 @@ ffmpeg -y -ss 465 -i audio.mp3 -t 10 -c copy tmp/发言人3_片段.mp3 -loglevel
 
 确认对应关系后，**必须先查询通讯录获取 dingUid**：
 
-1. 调用 `dws aisearch person --keyword "<姓名>" --dimension name --format json`
+1. 调用 `dws aisearch person --query "<姓名>" --dimension name --format json`
 2. 从返回结果提取 `userId`（长整型数字，即 dingUid）
 3. 根据匹配结果执行替换：
 

@@ -5,14 +5,17 @@ package aitable
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/spf13/cobra"
 )
@@ -25,11 +28,18 @@ func runAITableCompositeCLI(t *testing.T, caller *upsertByKeyCaller, command str
 	root.PersistentFlags().Bool("dry-run", false, "")
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(shortcut.Commands()...)
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	stdout := &bytes.Buffer{}
 	root.SetOut(stdout)
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs(append([]string{"aitable", command}, args...))
-	err := root.Execute()
+	executed, err := root.ExecuteC()
+	if err == nil && output.UsesUnifiedResult(executed) {
+		if _, _, emitErr := output.EmitStoredResult(executed); emitErr != nil {
+			return stdout.String(), emitErr
+		}
+	}
 	return stdout.String(), err
 }
 
@@ -197,6 +207,8 @@ func TestCrossPlatformCoverageBaseBootstrapInputValidation(t *testing.T) {
 		"fields not array":   `[{"name":"T","fields":{}}]`,
 		"field not object":   `[{"name":"T","fields":[1]}]`,
 		"field missing type": `[{"name":"T","fields":[{"fieldName":"F"}]}]`,
+		"duplicate field":    `[{"name":"T","fields":[{"fieldName":"F","type":"text"},{"fieldName":" F ","type":"number"}]}]`,
+		"field config array": `[{"name":"T","fields":[{"fieldName":"F","type":"text","config":[]}]}]`,
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -238,6 +250,10 @@ func TestCrossPlatformCoverageBaseBootstrapExecuteRejectsInvalidTablesE2E(t *tes
 	if err == nil || out != "" {
 		t.Fatalf("invalid bootstrap tables = output:%q err:%v", out, err)
 	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || len(typed.Actions) != 1 || len(typed.AvailableFlags) != 4 {
+		t.Fatalf("invalid bootstrap recovery = %#v", err)
+	}
 }
 
 func TestCrossPlatformCoverageBaseBootstrapFailureStagesE2E(t *testing.T) {
@@ -256,6 +272,7 @@ func TestCrossPlatformCoverageBaseBootstrapFailureStagesE2E(t *testing.T) {
 		{name: "verify table error", steps: []upsertByKeyStep{{text: `{"baseId":"b"}`}, {text: `{"baseId":"b"}`}, {text: `{"tableId":"t"}`}, {err: errors.New("verify table failed")}}},
 		{name: "verify table wrong id", steps: []upsertByKeyStep{{text: `{"baseId":"b"}`}, {text: `{"baseId":"b"}`}, {text: `{"tableId":"t"}`}, {text: `{"tables":[]}`}}},
 		{name: "verify fields error", steps: []upsertByKeyStep{{text: `{"baseId":"b"}`}, {text: `{"baseId":"b"}`}, {text: `{"tableId":"t"}`}, {text: `{"tables":[{"tableId":"t"}]}`}, {err: errors.New("verify fields failed")}}},
+		{name: "verify fields missing collection", steps: []upsertByKeyStep{{text: `{"baseId":"b"}`}, {text: `{"baseId":"b"}`}, {text: `{"tableId":"t"}`}, {text: `{"tables":[{"tableId":"t"}]}`}, {text: `{}`}}},
 		{name: "verify fields mismatch", steps: []upsertByKeyStep{{text: `{"baseId":"b"}`}, {text: `{"baseId":"b"}`}, {text: `{"tableId":"t"}`}, {text: `{"tables":[{"tableId":"t"}]}`}, {text: `{"fields":[]}`}}, extra: []string{"--folder-id", "folder", "--template-id", "template"}, withField: true},
 	}
 	for _, tc := range cases {
@@ -270,6 +287,139 @@ func TestCrossPlatformCoverageBaseBootstrapFailureStagesE2E(t *testing.T) {
 			out, err := runAITableCompositeCLI(t, &upsertByKeyCaller{steps: tc.steps}, "+base-bootstrap", args...)
 			if err == nil || out != "" {
 				t.Fatalf("bootstrap failure = output:%q err:%v", out, err)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageBaseBootstrapFailurePublishesExactRecovery(t *testing.T) {
+	out, err := runAITableCompositeCLI(t, &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{}`}}},
+		"+base-bootstrap", "--name", "Project", "--tables", marshalBootstrapTables(t, nil), "--yes")
+	if out != "" || err == nil {
+		t.Fatalf("bootstrap recovery = output:%q err:%v", out, err)
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || len(typed.Actions) != 1 || len(typed.AvailableFlags) != 4 {
+		t.Fatalf("bootstrap typed recovery = %#v", err)
+	}
+	if typed.Actions[0] != `dws aitable +base-search --query Project --format json` {
+		t.Fatalf("bootstrap next command = %#v", typed.Actions)
+	}
+}
+
+func TestCrossPlatformCoverageAITableRecoveryCommandsQuoteUntrustedValues(t *testing.T) {
+	t.Run("base name", func(t *testing.T) {
+		name := `项目 $(touch /tmp/pwn) 'Q'`
+		out, err := runAITableCompositeCLI(t, &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{}`}}},
+			"+base-bootstrap", "--name", name, "--tables", marshalBootstrapTables(t, nil), "--yes")
+		if out != "" || err == nil {
+			t.Fatalf("hostile base name recovery = output:%q err:%v", out, err)
+		}
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || len(typed.Actions) != 1 {
+			t.Fatalf("hostile base name error = %#v", err)
+		}
+		want := `dws aitable +base-search --query '项目 $(touch /tmp/pwn) '\''Q'\''' --format json`
+		if runtime.GOOS == "windows" {
+			want = `dws aitable +base-search --query REPLACE_QUERY --format json`
+		}
+		if typed.Actions[0] != want {
+			t.Fatalf("base name recovery = %q, want %q", typed.Actions[0], want)
+		}
+	})
+
+	t.Run("base id", func(t *testing.T) {
+		baseID := `base;printf hacked`
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: mustJSON(t, map[string]any{"baseId": baseID})},
+			{err: errors.New("verify base failed")},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+base-bootstrap",
+			"--name", "Project", "--tables", marshalBootstrapTables(t, nil), "--yes")
+		if out != "" || err == nil {
+			t.Fatalf("hostile base id recovery = output:%q err:%v", out, err)
+		}
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || len(typed.Actions) != 1 {
+			t.Fatalf("hostile base id error = %#v", err)
+		}
+		want := `dws aitable +base-get --base-id 'base;printf hacked' --format json`
+		if runtime.GOOS == "windows" {
+			want = `dws aitable +base-get --base-id REPLACE_BASE_ID --format json`
+		}
+		if typed.Actions[0] != want {
+			t.Fatalf("base id recovery = %q, want %q", typed.Actions[0], want)
+		}
+	})
+
+	t.Run("base and table ids", func(t *testing.T) {
+		baseID := `base id;exit 1`
+		tableID := "table`uname`'x"
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: mustJSON(t, map[string]any{"tableId": tableID})},
+			{err: errors.New("verify table failed")},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+table-bootstrap",
+			"--base-id", baseID, "--name", "任务", "--fields", `[]`, "--yes")
+		if out != "" || err == nil {
+			t.Fatalf("hostile table ids recovery = output:%q err:%v", out, err)
+		}
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || len(typed.Actions) != 1 {
+			t.Fatalf("hostile table ids error = %#v", err)
+		}
+		want := `dws aitable +table-get --base-id 'base id;exit 1' --table-id 'table` + "`uname`" + `'\''x' --format json`
+		if runtime.GOOS == "windows" {
+			want = `dws aitable +table-get --base-id REPLACE_BASE_ID --table-id REPLACE_TABLE_ID --format json`
+		}
+		if typed.Actions[0] != want {
+			t.Fatalf("table ids recovery = %q, want %q", typed.Actions[0], want)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageAITableRecoveryCommandsUseWindowsPlaceholders(t *testing.T) {
+	tests := []struct {
+		name string
+		argv []string
+		want string
+	}{
+		{
+			name: "query ampersand",
+			argv: []string{"dws", "aitable", "+base-search", "--query", "x&calc", "--format", "json"},
+			want: "dws aitable +base-search --query REPLACE_QUERY --format json",
+		},
+		{
+			name: "base id pipe",
+			argv: []string{"dws", "aitable", "+base-get", "--base-id", "base|whoami", "--format", "json"},
+			want: "dws aitable +base-get --base-id REPLACE_BASE_ID --format json",
+		},
+		{
+			name: "table id variable expansion",
+			argv: []string{"dws", "aitable", "+table-get", "--base-id", "base", "--table-id", "%PATH%", "--format", "json"},
+			want: "dws aitable +table-get --base-id base --table-id REPLACE_TABLE_ID --format json",
+		},
+		{
+			name: "portable values stay inline",
+			argv: []string{"dws", "aitable", "+table-get", "--base-id", "base-1", "--table-id", "table_2", "--format", "json"},
+			want: "dws aitable +table-get --base-id base-1 --table-id table_2 --format json",
+		},
+		{
+			name: "unknown argument fallback",
+			argv: []string{"dws", "aitable", "unsafe value"},
+			want: "dws aitable REPLACE_VALUE",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := aitableRecoveryCommandForPlatform("windows", tc.argv...)
+			if got != tc.want {
+				t.Fatalf("windows recovery = %q, want %q", got, tc.want)
+			}
+			for _, hostile := range []string{"&", "|", "%PATH%"} {
+				if strings.Contains(got, hostile) {
+					t.Fatalf("windows recovery contains hostile token %q: %s", hostile, got)
+				}
 			}
 		})
 	}
@@ -302,8 +452,20 @@ func TestCrossPlatformCoverageBaseCompositeShapeHelpers(t *testing.T) {
 	if _, ok := findNamedObjectList(map[string]any{"tables": []any{"bad"}}, "tables"); ok {
 		t.Fatal("non-object list item must fail")
 	}
-	if containsAllFieldNames([]map[string]any{{"fieldName": "A"}}, []any{map[string]any{"fieldName": "B"}}) {
+	if err := verifyDeclaredFieldStructures([]map[string]any{{"fieldName": "A", "fieldType": "text"}}, []any{map[string]any{"fieldName": "B", "type": "text"}}); err == nil {
 		t.Fatal("missing field name must fail")
+	}
+	if err := verifyDeclaredFieldStructures(nil, []any{"bad"}); err == nil {
+		t.Fatal("non-object declaration must fail")
+	}
+	if declaredValueMatches("bad", map[string]any{"x": 1}) {
+		t.Fatal("object declaration must not match a scalar")
+	}
+	if declaredValueMatches("bad", []any{}) || declaredValueMatches([]any{}, []any{1}) {
+		t.Fatal("array declaration must require an array of equal length")
+	}
+	if declaredValueMatches([]any{1}, []any{2}) {
+		t.Fatal("array declaration must compare each item")
 	}
 	if got := findStringByKeys(map[string]any{"items": []any{map[string]any{"nested": " value "}}}, "nested"); got != "value" {
 		t.Fatalf("nested array string = %q", got)

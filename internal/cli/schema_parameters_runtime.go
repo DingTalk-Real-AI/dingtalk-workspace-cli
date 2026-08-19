@@ -77,7 +77,7 @@ func cloneRuntimeSchemaStringMap(source map[string]string) map[string]string {
 
 func init() {
 	RegisterRuntimeSchemaParameterMetadata("aisearch.enterprise_person_search", RuntimeSchemaParameterMetadata{
-		Required: []string{"keyword"},
+		Required: []string{"query"},
 	})
 	RegisterRuntimeSchemaParameterMetadata("aitable.export_data", RuntimeSchemaParameterMetadata{
 		RequiredWhen: map[string]string{
@@ -146,8 +146,8 @@ func init() {
 	})
 	RegisterRuntimeSchemaParameterMetadata("chat.send_personal_message", RuntimeSchemaParameterMetadata{
 		RequiredWhen: map[string]string{
-			"media-id":  "msg-type is image",
-			"file-path": "msg-type is file or audio or video",
+			"media-id": "msg-type is image",
+			"file":     "msg-type is file or audio or video",
 		},
 		Examples: map[string]string{"media-id": "@lADP_schema_smoke"},
 	})

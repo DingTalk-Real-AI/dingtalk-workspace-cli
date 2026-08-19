@@ -121,15 +121,15 @@ dws chat +messages-send --as webhook --webhook-token <webhook-token> --title "�
 以下是底层 fallback，不作为默认选路：
 
 ```bash
-dws chat message send-by-webhook --token <webhook-token> --title "告警" --text "CPU 超 90% @10" --at-all
-dws chat message send-by-webhook --token <webhook-token> --title "test" --text "hi @118785" --at-users 118785
+dws chat message send-by-webhook --token <webhook-token> --title "告警" --content "CPU 超 90% @10" --at-all
+dws chat message send-by-webhook --token <webhook-token> --title "test" --content "hi @118785" --at-users 118785
 ```
 
 关键规则：
 
-- `--token`、`--title`、`--text` 必填。
-- `--at-all` 时 `--text` 中需包含 `@10`。
-- `--at-users` 或 `--at-mobiles` 时，`--text` 中需包含对应 `@userId` 或 `@手机号`，否则 @ 不生效。
+- `--token`、`--title`、`--content` 必填。
+- `--at-all` 时 `--content` 中需包含 `@10`。
+- `--at-users` 或 `--at-mobiles` 时，`--content` 中需包含对应 `@userId` 或 `@手机号`，否则 @ 不生效。
 
 ### 机器人进群
 
@@ -167,13 +167,13 @@ dws chat +messages-send --as bot --robot-code <robot-code> --group <openConversa
 
 ```bash
 dws chat bot find --query "玉澜" --format json
-dws chat message send --open-dingtalk-id <openDingTalkId> --text "你好" --format json
+dws chat message send --open-dingtalk-id <openDingTalkId> --content "你好" --format json
 ```
 
 ### 机器人 @ 指定人
 
 ```bash
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 dws chat +messages-send --as bot --robot-code <robot-code> --group <openConversationId> --at-user-ids userId1 --title "提醒" --text "@userId1 请查收" --format json
 ```
 
