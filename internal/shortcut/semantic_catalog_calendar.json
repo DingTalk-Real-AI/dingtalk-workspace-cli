@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "service": "calendar",
+  "default_availability": "available",
+  "shortcuts": {
+    "+agenda": {"disposition":"semantic_adapter","semantic_delta":"严格验证 result.events 与分页证据，稳定投影 id 为 eventId；显式空数组才是空日程。","risk":"read","public":true,"reviewed":true},
+    "+get": {"disposition":"schema_leaf","semantic_delta":"严格读取日程对象并把稳定 id 规范化为 eventId，拒绝空响应和对象漂移。","risk":"read","public":true,"reviewed":true},
+    "+create": {"disposition":"primary_smart","semantic_delta":"创建响应必须给出 eventId/id，且标题和起止时间通过详情读回后才成功。","risk":"write","public":true,"reviewed":true},
+    "+update": {"disposition":"primary_smart","semantic_delta":"组合字段与参会人分阶段更新，明确非事务步骤并以详情和参会人列表读回验证。","risk":"write","public":true,"reviewed":true},
+    "+rsvp": {"disposition":"semantic_adapter","semantic_delta":"把直白 RSVP 动作映射为 responseStatus，拒绝空 ack，并在写后读取日程终态。","risk":"write","public":true,"reviewed":true},
+    "+search-event": {"disposition":"semantic_adapter","semantic_delta":"在服务端日程当前页按标题、描述和地点过滤，同时保留 hasMore/nextCursor，绝不把单页零命中当全局未找到。","risk":"read","public":true,"reviewed":true},
+    "+suggestion": {"disposition":"schema_leaf","semantic_delta":"直接按 userId 查询建议时段，严格区分显式空 recommendEventTimes 与缺失或畸形响应。","risk":"read","public":true,"reviewed":true},
+
+    "+attendee-list": {"disposition":"semantic_adapter","semantic_delta":"严格验证参会人数组并投影显示名、响应状态和 self；真实后端不返回稳定参会人 userId，因此不伪造身份字段。","risk":"read","public":true,"reviewed":true},
+    "+room-search": {"disposition":"semantic_adapter","semantic_delta":"按名称查询会议室但不声称检查时间可用性；缺失会议室数组直接失败。","risk":"read","public":true,"reviewed":true},
+    "+room-find": {"disposition":"semantic_adapter","semantic_delta":"按单个未来时间段严格查询可用会议室，公开真实 page/pageSize/hasMore 证据和后端筛选边界。","risk":"read","public":true,"reviewed":true},
+    "+room-groups": {"disposition":"semantic_adapter","semantic_delta":"严格读取 result.groupList，避免会议室分组被响应 wrapper 漂移静默清空。","risk":"read","public":true,"reviewed":true},
+    "+freebusy": {"disposition":"semantic_adapter","semantic_delta":"统一按用户或会议室 ID 查询指定范围闲忙，并声明至少一类目标约束。","risk":"read","public":true,"reviewed":true},
+    "+book-list": {"disposition":"semantic_adapter","semantic_delta":"严格验证日历本数组并稳定投影 calendarId，缺失数组不再误报为空。","risk":"read","public":true,"reviewed":true},
+    "+book-search": {"disposition":"semantic_adapter","semantic_delta":"按日历本名称搜索并严格区分零命中与协议错误。","risk":"read","public":true,"reviewed":true},
+
+    "+book": {"disposition":"primary_smart","semantic_delta":"按参会人姓名解析后创建日程，并在多步骤路径提供失败回滚与详情读回。","risk":"write","public":true,"reviewed":true},
+    "+cancel-event": {"disposition":"primary_smart","semantic_delta":"删除前读取并展示目标，经高风险确认后取消指定日程。","risk":"high-risk-write","public":true,"reviewed":true},
+    "+conflicts": {"disposition":"primary_smart","semantic_delta":"在指定范围分析重叠日程并输出冲突对，避免人工逐项比对。","risk":"read","public":true,"reviewed":true},
+    "+free": {"disposition":"primary_smart","semantic_delta":"按姓名解析参与者后查询闲忙，省去手工 userId 解析。","risk":"read","public":true,"reviewed":true},
+    "+free-slots": {"disposition":"primary_smart","semantic_delta":"从已有日程计算工作时段内空档，并显式输出满足时长的候选区间。","risk":"read","public":true,"reviewed":true},
+    "+invite": {"disposition":"primary_smart","semantic_delta":"按姓名唯一解析用户后邀请到已有日程。","risk":"write","public":true,"reviewed":true},
+    "+my-free": {"disposition":"primary_smart","semantic_delta":"以当前用户身份查询一个时间段是否空闲。","risk":"read","public":true,"reviewed":true},
+    "+next-event": {"disposition":"primary_smart","semantic_delta":"在未来时间窗内定位最近的下一场日程。","risk":"read","public":true,"reviewed":true},
+    "+reschedule": {"disposition":"primary_smart","semantic_delta":"修改前读取目标日程，再更新完整起止时间。","risk":"write","public":true,"reviewed":true},
+    "+suggest-time": {"disposition":"primary_smart","semantic_delta":"按姓名逐个唯一解析参与者，再查询大家共同可用的建议时间。","risk":"read","public":true,"reviewed":true},
+    "+today": {"disposition":"primary_smart","semantic_delta":"查询并整理今天的日程视图。","risk":"read","public":true,"reviewed":true},
+    "+tomorrow": {"disposition":"primary_smart","semantic_delta":"查询并整理明天的日程视图。","risk":"read","public":true,"reviewed":true},
+    "+week": {"disposition":"primary_smart","semantic_delta":"查询并按日期整理本周日程。","risk":"read","public":true,"reviewed":true},
+
+    "+find-room": {"disposition":"alias_internal","semantic_delta":"兼容旧的双时间参数会议室查询入口；新调用统一使用 +room-find。","risk":"read","availability":"deprecated","primary":"+room-find","public":false,"reviewed":true},
+    "+respond-event": {"disposition":"alias_internal","semantic_delta":"兼容旧的 accept/decline/tentative 响应入口；新调用统一使用 +rsvp。","risk":"write","availability":"deprecated","primary":"+rsvp","public":false,"reviewed":true}
+  }
+}

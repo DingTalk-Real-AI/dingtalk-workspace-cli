@@ -92,7 +92,7 @@ Favorite、消息 Pin、消息 Top 与会话 Top 是四种对象，不能互换�
 |---|---|
 | `chat bot search` | 搜索当前用户创建的机器人并取得 `robotCode` |
 | `chat bot find` | 搜索可用机器人并取得机器人 `openDingTalkId` |
-| `chat message send-by-bot` | `+messages-send --as bot` 未发布的真实底层字段 |
+| `chat message send-by-bot` | `+messages-send --as bot` 未发布的真实底层字段，包括机器人群聊引用回复的 `--reply` / `--ref-sender` |
 | `chat message recall-by-bot` | 使用 `processQueryKey` 撤回机器人消息 |
 | `chat message send-by-webhook` | `+messages-send --as webhook` 未发布的真实底层字段 |
 
@@ -124,7 +124,7 @@ Favorite、消息 Pin、消息 Top 与会话 Top 是四种对象，不能互换�
 | `+messages-send` | `openTaskId` 查询投递状态；它不是消息 ID |
 | `+chat-messages` / `+search-msg` / `+messages-mget` | 回复、转发、撤回、资源操作使用的真实消息/会话/thread ID |
 | `chat bot search` | `robotCode`；不能当机器人 `openDingTalkId` |
-| `chat message send-by-bot` | `processQueryKey`，仅用于机器人撤回 |
+| `chat message send-by-bot` | `processQueryKey` 用于机器人撤回；群聊引用回复还需消息查询返回的 `openMessageId` 与原发送者 `openDingTalkId` |
 
 显式稳定 ID 当前不携带可验证的 profile provenance；调用方必须保证来源，不得宣称所有
 跨 profile 误用都会在本地写入前被拦截。

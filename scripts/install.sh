@@ -71,22 +71,52 @@ DWS_LAST_SKILL_BACKUP=""
 backup_and_remove_skill_dir() {
   _bed_dir="$1"
   DWS_LAST_SKILL_BACKUP=""
-  [ -d "$_bed_dir" ] || return 0
+  [ -e "$_bed_dir" ] || [ -L "$_bed_dir" ] || return 0
   _bed_root="${HOME}/.dws/skill-backups"
   _bed_stamp="$(date -u +%Y%m%d-%H%M%S)"
   _bed_name="$(basename "$_bed_dir")"
-  _bed_target="$_bed_root/$_bed_stamp/$_bed_name"
+  _bed_stamp_root="$_bed_root/$_bed_stamp"
+  _bed_target="$_bed_stamp_root/$_bed_name"
   _bed_i=1
-  while [ -e "$_bed_target" ]; do
-    _bed_target="$_bed_root/$_bed_stamp-$_bed_i/$_bed_name"
+  # Bump not only when the payload path is taken but also when the stamp
+  # root exists without a verified ownership marker: a same-second foreign
+  # directory must never be stamped DWS-owned and made prunable. A
+  # marker-verified root from this run's same second stays reusable.
+  while [ -e "$_bed_target" ] || [ -L "$_bed_target" ] ||
+    { [ -d "$_bed_stamp_root" ] && ! is_current_run_backup_stamp "$_bed_stamp_root" &&
+      [ "$(cat "$_bed_stamp_root/.dws-skill-backup" 2>/dev/null)" != "dws skill backup v1" ]; }; do
+    _bed_stamp_root="$_bed_root/$_bed_stamp-$_bed_i"
+    _bed_target="$_bed_stamp_root/$_bed_name"
     _bed_i=$((_bed_i + 1))
     if [ "$_bed_i" -gt 1000 ]; then
       say "  ⚠️  备份目录冲突，保留原目录 $_bed_dir"
       return 1
     fi
   done
-  mkdir -p "$(dirname "$_bed_target")" 2>/dev/null || {
+  _bed_stamp_root="$(dirname "$_bed_target")"
+  record_current_run_backup_stamp "$_bed_stamp_root"
+  # Freshness must be sampled before mkdir: the collision loop tests the
+  # payload path, so a second backup in the same stamp second reuses this
+  # root while a sibling payload from this run already lives in it.
+  _bed_fresh=1
+  [ ! -d "$_bed_stamp_root" ] || _bed_fresh=0
+  mkdir -p "$_bed_stamp_root" 2>/dev/null || {
     say "  ⚠️  无法创建备份目录，保留原目录 $_bed_dir"
+    return 1
+  }
+  # Ownership proof, the exact bytes Go's writeSkillBackupMarker stamps: a
+  # stamp-shaped name alone is not evidence, so pruning only ever removes
+  # roots carrying this marker — it must exist before any payload moves in.
+  printf '%s\n' 'dws skill backup v1' > "$_bed_stamp_root/.dws-skill-backup" 2>/dev/null || {
+    # Non-recursive cleanup, sibling protection: only a root this call
+    # created may be dropped, and only the marker plus an empty root (rmdir
+    # refuses a non-empty directory) — rm -rf here would destroy a completed
+    # same-second sibling backup whose original is already moved away.
+    if [ "$_bed_fresh" -eq 1 ]; then
+      rm -f "$_bed_stamp_root/.dws-skill-backup"
+      rmdir "$_bed_stamp_root" 2>/dev/null || true
+    fi
+    say "  ⚠️  无法写入备份所有权标记，保留原目录 $_bed_dir"
     return 1
   }
   if mv "$_bed_dir" "$_bed_target" 2>/dev/null; then
@@ -96,6 +126,88 @@ backup_and_remove_skill_dir() {
   fi
   say "  ⚠️  备份失败，保留原目录 $_bed_dir"
   return 1
+}
+
+# prune_skill_backups keeps only the newest DWS_SKILL_BACKUP_KEEP stamped
+# backup directories from earlier runs under $HOME/.dws/skill-backups,
+# matching Go's skillBackupKeep / pruneSkillBackups. Only stamp-shaped roots
+# carrying the .dws-skill-backup marker with the exact expected content are
+# counted or removed: foreign data with a stamp-like name never consumes a
+# keep slot and is never deleted, silently. Stamp directories created
+# by the current process are never pruned (mirroring Go's run-root registry
+# and install.js's currentRunBackupRoots), so a migration that retires more
+# than DWS_SKILL_BACKUP_KEEP batches stays reversible. Best-effort: a removal
+# failure is reported, never fatal.
+DWS_SKILL_BACKUP_KEEP=5
+
+# Stamp directories created by this run, recorded by
+# backup_and_remove_skill_dir so pruning can never delete a backup the
+# running migration may still need to roll back to.
+DWS_CURRENT_RUN_BACKUP_STAMPS=""
+
+record_current_run_backup_stamp() {
+  case " $DWS_CURRENT_RUN_BACKUP_STAMPS " in
+    *" $1 "*) return 0 ;;
+  esac
+  DWS_CURRENT_RUN_BACKUP_STAMPS="${DWS_CURRENT_RUN_BACKUP_STAMPS} $1"
+}
+
+# is_current_run_backup_stamp reports whether the stamp root was created by
+# this very process. Such a root is ours by construction and stays reusable
+# even when its marker cannot be re-verified mid-run (for example a
+# permission failure after the first payload moved in).
+is_current_run_backup_stamp() {
+  case " $DWS_CURRENT_RUN_BACKUP_STAMPS " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
+
+# is_skill_backup_stamp accepts only directory names with the stamp shape DWS
+# itself writes: UTC YYYYmmdd-HHMMSS, with an optional -N collision suffix.
+# Shape is necessary but not sufficient — pruning additionally verifies the
+# .dws-skill-backup ownership marker — while any other entry in the backup
+# root is foreign (user data, unrelated tooling) and is preserved so pruning
+# can never remove a directory it cannot prove DWS created.
+is_skill_backup_stamp() {
+  case "$1" in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9])
+      return 0 ;;
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-*)
+      # base stamp is YYYYMMDD-HHMMSS (15 chars) + suffix dash (16th); strip
+      # those 16 chars and require the remainder to be all digits.
+      _isbs_suffix="${1#????????????????}"
+      case "$_isbs_suffix" in
+        ""|*[!0-9]*) return 1 ;;
+      esac
+      return 0 ;;
+  esac
+  return 1
+}
+
+prune_skill_backups() {
+  _psb_root="${HOME}/.dws/skill-backups"
+  [ -d "$_psb_root" ] || return 0
+  _psb_total=0
+  for _psb_entry in "$_psb_root"/*; do
+    [ -d "$_psb_entry" ] || continue
+    is_skill_backup_stamp "${_psb_entry##*/}" || continue
+    [ "$(cat "$_psb_entry/.dws-skill-backup" 2>/dev/null)" = "dws skill backup v1" ] || continue
+    _psb_total=$((_psb_total + 1))
+  done
+  [ "$_psb_total" -gt "$DWS_SKILL_BACKUP_KEEP" ] || return 0
+  _psb_drop=$((_psb_total - DWS_SKILL_BACKUP_KEEP))
+  for _psb_entry in "$_psb_root"/*; do
+    [ "$_psb_drop" -gt 0 ] || break
+    [ -d "$_psb_entry" ] || continue
+    is_skill_backup_stamp "${_psb_entry##*/}" || continue
+    [ "$(cat "$_psb_entry/.dws-skill-backup" 2>/dev/null)" = "dws skill backup v1" ] || continue
+    case " $DWS_CURRENT_RUN_BACKUP_STAMPS " in
+      *" $_psb_entry "*) continue ;;
+    esac
+    rm -rf "$_psb_entry" || say "  ⚠️  旧 Skill 备份清理失败: $_psb_entry"
+    _psb_drop=$((_psb_drop - 1))
+  done
 }
 
 # A dingtalk-* prefix alone is not ownership evidence: market/user skills may
@@ -139,6 +251,40 @@ sha256_stdin() {
   else
     return 1
   fi
+}
+
+# sha256_file <path>: content digest used by skill_dir_content_digest. Never
+# emits on failure. Callers that capture its status directly detect that
+# failure; skill_dir_content_digest cannot — see the pipeline caveat there:
+# POSIX sh returns only the right-hand pipeline status, so a subshell exit on
+# its left side is discarded and digest-failure detection stays best-effort.
+sha256_file() {
+  if need_cmd sha256sum; then
+    sha256sum "$1" 2>/dev/null | awk '{print $1}'
+  elif need_cmd shasum; then
+    shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'
+  elif need_cmd openssl; then
+    openssl dgst -sha256 -r "$1" 2>/dev/null | awk '{print $1}'
+  else
+    return 1
+  fi
+}
+
+verify_release_asset_checksum() {
+  _checksum_asset="$1"
+  _checksum_path="$2"
+  _checksum_dir="$3"
+  _checksum_url="$(asset_url checksums.txt)"
+  [ -n "$_checksum_url" ] || err "Could not resolve checksums.txt for ${VERSION}."
+  download "$_checksum_url" "$_checksum_dir/checksums.txt" 2>/dev/null || \
+    err "Could not download checksums.txt for ${VERSION}; refusing unverified ${_checksum_asset}."
+  _checksum_expected="$(awk -v file="$_checksum_asset" '$2 == file {print $1; exit}' "$_checksum_dir/checksums.txt")"
+  [ -n "$_checksum_expected" ] || err "${_checksum_asset} is missing from checksums.txt."
+  _checksum_actual="$(sha256_stdin < "$_checksum_path")" || \
+    err "Could not compute SHA256 for ${_checksum_asset}; install sha256sum, shasum, or openssl."
+  [ "$_checksum_actual" = "$_checksum_expected" ] || \
+    err "SHA256 checksum mismatch for ${_checksum_asset}. Expected ${_checksum_expected}, got ${_checksum_actual}."
+  say "✅ SHA256 checksum verified: ${_checksum_asset}"
 }
 
 digest_skill_dir() {
@@ -208,36 +354,291 @@ backup_and_record_skill_dir() {
   backup_and_remove_skill_dir "$_bars_victim" || return 1
   if [ -n "$DWS_LAST_SKILL_BACKUP" ]; then
     if ! printf '%s\n%s\n' "$_bars_victim" "$DWS_LAST_SKILL_BACKUP" >> "$_bars_manifest"; then
-      mv "$DWS_LAST_SKILL_BACKUP" "$_bars_victim" 2>/dev/null || say "  ⚠️  备份记录失败且无法自动恢复: $_bars_victim（备份位于 $DWS_LAST_SKILL_BACKUP）"
+      mv "$DWS_LAST_SKILL_BACKUP" "$_bars_victim" 2>/dev/null || say "  ⚠️  备份记录失败且无法自动恢复: ${_bars_victim}（备份位于 ${DWS_LAST_SKILL_BACKUP}）"
       return 1
     fi
   fi
 }
 
+# restore_quarantine_no_replace <quarantined> <dest>
+# Puts an unmatched quarantined object back onto dest without replacing
+# anything that occupied dest after the claim. Directories use mkdir-claim
+# plus child moves; links are created at dest; files hard-link then drop
+# the quarantine copy.
+restore_quarantine_no_replace() {
+  _rqn_src="$1"
+  _rqn_dest="$2"
+  if [ -L "$_rqn_src" ]; then
+    _rqn_target="$(readlink "$_rqn_src")" || return 1
+    if ! ln -s "$_rqn_target" "$_rqn_dest" 2>/dev/null || ! [ -L "$_rqn_dest" ]; then
+      _rqn_nested="$_rqn_dest/${_rqn_target##*/}"
+      if [ -L "$_rqn_nested" ] && [ "$(readlink "$_rqn_nested" 2>/dev/null)" = "$_rqn_target" ]; then
+        rm -f "$_rqn_nested"
+      fi
+      return 1
+    fi
+    rm -f "$_rqn_src"
+    return 0
+  fi
+  if [ -d "$_rqn_src" ]; then
+    mkdir "$_rqn_dest" 2>/dev/null || return 1
+    _rqn_failed=0
+    for _rqn_child in "$_rqn_src"/* "$_rqn_src"/.[!.]* "$_rqn_src"/..?*; do
+      [ -e "$_rqn_child" ] || [ -L "$_rqn_child" ] || continue
+      if ! mv "$_rqn_child" "$_rqn_dest/"; then
+        _rqn_failed=1
+        break
+      fi
+    done
+    if [ "$_rqn_failed" -eq 0 ]; then
+      rmdir "$_rqn_src" 2>/dev/null || return 1
+      return 0
+    fi
+    for _rqn_child in "$_rqn_dest"/* "$_rqn_dest"/.[!.]* "$_rqn_dest"/..?*; do
+      [ -e "$_rqn_child" ] || [ -L "$_rqn_child" ] || continue
+      mv "$_rqn_child" "$_rqn_src/" || return 1
+    done
+    rmdir "$_rqn_dest" 2>/dev/null || return 1
+    return 1
+  fi
+  if [ -f "$_rqn_src" ]; then
+    # Shell `ln` treats an occupied directory as a container. Refuse that
+    # dest and drop any nested name instead of leaving a hardlink inside it.
+    if ! ln "$_rqn_src" "$_rqn_dest" 2>/dev/null || [ -d "$_rqn_dest" ]; then
+      _rqn_nested="$_rqn_dest/$(basename "$_rqn_src")"
+      [ -f "$_rqn_nested" ] && rm -f "$_rqn_nested"
+      return 1
+    fi
+    rm -f "$_rqn_src"
+    return 0
+  fi
+  return 1
+}
+
+# quarantine_retract_or_restore <dest> <expected-inode> [expected-link-target]
+# Prove ownership at dest first (inode plus child names for directories).
+# Quarantining before that check would move a concurrent replacement off its
+# original path. Linux overlayfs recycles inodes, so inode alone is not
+# enough — a dest whose children no longer match the recorded publication
+# stays put. After a matching dest is claimed, identity is re-checked in
+# quarantine; a mismatch is restored with no-replace.
+quarantine_retract_or_restore() {
+  _qrr_dest="$1"
+  _qrr_inode="$2"
+  _qrr_link_target="${3-}"
+  if [ ! -e "$_qrr_dest" ] && [ ! -L "$_qrr_dest" ]; then
+    return 0
+  fi
+  _qrr_owned=0
+  if [ -n "$_qrr_link_target" ]; then
+    if [ -L "$_qrr_dest" ] &&
+       [ "$(readlink "$_qrr_dest" 2>/dev/null)" = "$_qrr_link_target" ] &&
+       [ "$(skill_link_inode "$_qrr_dest")" = "$_qrr_inode" ]; then
+      _qrr_owned=1
+    fi
+  elif [ "$(skill_dir_identity "$_qrr_dest")" = "$_qrr_inode" ]; then
+    _qrr_owned=1
+  fi
+  if [ "$_qrr_owned" -eq 0 ]; then
+    say "  ⚠️  跳过回滚已被并发修改的 Skill 路径: $_qrr_dest"
+    return 1
+  fi
+  _qrr_parent="$(dirname "$_qrr_dest")"
+  _qrr_base="$(basename "$_qrr_dest")"
+  _qrr_root="$(mktemp -d "$_qrr_parent/.${_qrr_base}.rollback.XXXXXX")" || return 1
+  _qrr_payload="$_qrr_root/payload"
+  if ! mv "$_qrr_dest" "$_qrr_payload"; then
+    rmdir "$_qrr_root" 2>/dev/null || rm -rf "$_qrr_root"
+    if [ ! -e "$_qrr_dest" ] && [ ! -L "$_qrr_dest" ]; then
+      return 0
+    fi
+    say "  ⚠️  无法隔离待回滚 Skill: $_qrr_dest"
+    return 1
+  fi
+  _qrr_owned=0
+  if [ -n "$_qrr_link_target" ]; then
+    if [ -L "$_qrr_payload" ] &&
+       [ "$(readlink "$_qrr_payload" 2>/dev/null)" = "$_qrr_link_target" ] &&
+       [ "$(skill_link_inode "$_qrr_payload")" = "$_qrr_inode" ]; then
+      _qrr_owned=1
+    fi
+  elif [ "$(skill_dir_identity "$_qrr_payload")" = "$_qrr_inode" ]; then
+    _qrr_owned=1
+  fi
+  if [ "$_qrr_owned" -eq 1 ]; then
+    rm -rf "$_qrr_root" || return 1
+    return 0
+  fi
+  if restore_quarantine_no_replace "$_qrr_payload" "$_qrr_dest"; then
+    rmdir "$_qrr_root" 2>/dev/null || true
+    say "  ⚠️  跳过回滚已被并发修改的 Skill 路径: $_qrr_dest"
+    return 1
+  fi
+  say "  ⚠️  跳过回滚已被并发修改的 Skill 路径: $_qrr_dest（并发对象保留于 $_qrr_payload）"
+  return 1
+}
+
 # restore_multi_skill_set <published-manifest> <backup-manifest>
 # Removes partial new publications, then restores every old directory from
-# its exact backup path. Paths containing newlines are outside the supported
-# installer path contract; spaces are preserved.
+# its exact backup path. Publication manifest entries are <dest>:<inode>
+# pairs recorded at publish time. Dest is claimed into quarantine first;
+# identity is re-checked there so a concurrent replacement is renamed back
+# instead of being deleted by path. Paths containing newlines are outside
+# the supported installer path contract; spaces are preserved.
 restore_multi_skill_set() {
   _rms_published="$1"
   _rms_backups="$2"
   _rms_ok=1
   if [ -f "$_rms_published" ]; then
-    while IFS= read -r _rms_dest; do
-      [ -n "$_rms_dest" ] || continue
-      rm -rf "$_rms_dest" || _rms_ok=0
+    while IFS= read -r _rms_entry; do
+      [ -n "$_rms_entry" ] || continue
+      _rms_dest="${_rms_entry%:*}"
+      _rms_inode="${_rms_entry##*:}"
+      [ "$_rms_dest" != "$_rms_entry" ] || { say "  ⚠️  跳过格式异常的发布记录: $_rms_entry"; _rms_ok=0; continue; }
+      quarantine_retract_or_restore "$_rms_dest" "$_rms_inode" || _rms_ok=0
     done < "$_rms_published"
   fi
   if [ -f "$_rms_backups" ]; then
     while IFS= read -r _rms_original && IFS= read -r _rms_backup; do
       [ -n "$_rms_backup" ] || continue
-      if [ -e "$_rms_original" ] || ! mkdir -p "$(dirname "$_rms_original")" || ! mv "$_rms_backup" "$_rms_original"; then
-        say "  ⚠️  无法恢复原 Skill: $_rms_original（备份保留于 $_rms_backup）"
+      if ! mkdir -p "$(dirname "$_rms_original")" || ! restore_quarantine_no_replace "$_rms_backup" "$_rms_original"; then
+        say "  ⚠️  无法恢复原 Skill: ${_rms_original}（备份保留于 ${_rms_backup}）"
         _rms_ok=0
       fi
     done < "$_rms_backups"
   fi
   [ "$_rms_ok" -eq 1 ]
+}
+
+# A link publication manifest stores destination/target/inode triples. Rollback
+# only removes links that still have the identity created by this transaction;
+# a path concurrently replaced with a file, directory, or new link is preserved.
+skill_link_inode() {
+  _sli_entry="$(ls -di "$1" 2>/dev/null)" || return 1
+  printf '%s\n' "$_sli_entry" | awk '{print $1}'
+}
+
+# Directory publication identity is inode, a stable child-name list, and a
+# recursive content digest. Inode reuse on Linux overlayfs would otherwise
+# make a concurrent directory look owned, and an in-place content edit after
+# publish (same inode, same names) would otherwise be retracted as this
+# transaction's object. The token has no colon so dest:identity manifest
+# parsing stays dest="${entry%:*}" / identity="${entry##*:}".
+skill_dir_identity() {
+  _sdi_inode="$(skill_link_inode "$1")" || return 1
+  if [ -L "$1" ] || [ ! -d "$1" ]; then
+    printf '%s\n' "$_sdi_inode"
+    return 0
+  fi
+  _sdi_names="$(LC_ALL=C ls -A "$1" 2>/dev/null | tr '\n' ',')"
+  _sdi_digest="$(skill_dir_content_digest "$1")" || return 1
+  printf '%s,%s,%s\n' "$_sdi_inode" "$_sdi_names" "$_sdi_digest"
+}
+
+# Recursive content digest over a published tree: for each path (LC_ALL=C
+# sorted, relative) emit path, type+permission bits from ls -ld, and either
+# the sha256 of the file content or the symlink target. Sorted-path lines are
+# piped through sha256_stdin, so one opaque token covers renames, mode flips,
+# content edits and link retargets — the same in-place-edit guarantee the Go
+# fingerprint provides. Failure detection is asymmetric and best-effort: with
+# no hash tool installed sha256_stdin itself returns 1 and the identity
+# genuinely fails, but an unreadable file only exits the left-hand subshell —
+# /bin/sh has no pipefail, so the pipeline returns sha256_stdin's status and
+# the digest is computed over a truncated stream instead of failing.
+skill_dir_content_digest() {
+  (
+    cd "$1" 2>/dev/null || exit 1
+    find . -print 2>/dev/null |
+      LC_ALL=C sort |
+      while IFS= read -r _sdcd_path; do
+        _sdcd_mode="$(ls -ld "$_sdcd_path" 2>/dev/null | cut -c1-10)"
+        if [ -L "$_sdcd_path" ]; then
+          printf '%s|%s|link|%s\n' "$_sdcd_path" "$_sdcd_mode" "$(readlink "$_sdcd_path" 2>/dev/null)"
+        elif [ -d "$_sdcd_path" ]; then
+          printf '%s|%s|dir\n' "$_sdcd_path" "$_sdcd_mode"
+        elif [ -f "$_sdcd_path" ]; then
+          _sdcd_hash="$(sha256_file "$_sdcd_path")" || exit 1
+          printf '%s|%s|file|%s\n' "$_sdcd_path" "$_sdcd_mode" "$_sdcd_hash"
+        else
+          printf '%s|%s|other\n' "$_sdcd_path" "$_sdcd_mode"
+        fi
+      done
+  ) | sha256_stdin
+}
+
+skill_link_matches() {
+  [ -L "$1" ] || return 1
+  _slm_target="$(readlink "$1" 2>/dev/null)" || return 1
+  [ "$_slm_target" = "$2" ] || return 1
+  _slm_expected_inode="${3-}"
+  [ -z "$_slm_expected_inode" ] || [ "$(skill_link_inode "$1")" = "$_slm_expected_inode" ]
+}
+
+restore_linked_skill_set() {
+  _rls_published="$1"
+  _rls_backups="$2"
+  _rls_ok=1
+  if [ -f "$_rls_published" ]; then
+    while IFS= read -r _rls_dest && IFS= read -r _rls_target && IFS= read -r _rls_inode; do
+      [ -n "$_rls_dest" ] || continue
+      quarantine_retract_or_restore "$_rls_dest" "$_rls_inode" "$_rls_target" || _rls_ok=0
+    done < "$_rls_published"
+  fi
+  restore_multi_skill_set /dev/null "$_rls_backups" || _rls_ok=0
+  [ "$_rls_ok" -eq 1 ]
+}
+
+cleanup_nested_staged_link() {
+  _cnsl_nested="$1/$2"
+  _cnsl_target="$3"
+  _cnsl_inode="${4-}"
+  if skill_link_matches "$_cnsl_nested" "$_cnsl_target" "$_cnsl_inode"; then
+    rm -f "$_cnsl_nested"
+  fi
+}
+
+# publish_skill_dir_no_replace <staged-dir> <dest> <published-manifest>
+# Publishes a staged Skill directory with an atomic no-replace claim: mkdir
+# fails with EEXIST when anything a concurrent writer created occupies the
+# destination, so the claim itself is the existence check — plain `mv` after a
+# backup could still replace a concurrently created object. Staged children
+# then move into the claim one by one (each rename targets a path inside a
+# directory this transaction owns, so no step replaces a foreign object; the
+# staging directory is created under the same umask as the claim, so their
+# modes match by construction). A failed child move relocates the children
+# back and removes only the claim. On success the destination's inode is
+# recorded as <dest>:<inode,child-names,content-digest> so rollback only ever
+# deletes this transaction's object even when the filesystem recycles the
+# claim inode or the published files are edited in place afterwards.
+publish_skill_dir_no_replace() {
+  _psd_stage="$1"
+  _psd_dest="$2"
+  _psd_manifest="$3"
+
+  if ! mkdir "$_psd_dest" 2>/dev/null; then
+    return 1
+  fi
+  _psd_failed=0
+  for _psd_child in "$_psd_stage"/* "$_psd_stage"/.[!.]* "$_psd_stage"/..?*; do
+    [ -e "$_psd_child" ] || [ -L "$_psd_child" ] || continue
+    if ! mv "$_psd_child" "$_psd_dest/"; then
+      _psd_failed=1
+      break
+    fi
+  done
+  if [ "$_psd_failed" -eq 0 ]; then
+    _psd_inode="$(skill_dir_identity "$_psd_dest")" || _psd_failed=1
+    if [ "$_psd_failed" -eq 0 ] && printf '%s:%s\n' "$_psd_dest" "$_psd_inode" >> "$_psd_manifest"; then
+      return 0
+    fi
+    _psd_failed=1
+  fi
+  for _psd_child in "$_psd_dest"/* "$_psd_dest"/.[!.]* "$_psd_dest"/..?*; do
+    [ -e "$_psd_child" ] || [ -L "$_psd_child" ] || continue
+    mv "$_psd_child" "$_psd_stage/" || return 1
+  done
+  rmdir "$_psd_dest" 2>/dev/null || return 1
+  return 1
 }
 
 # publish_skill_cache <source> <cache-dir>
@@ -627,12 +1028,7 @@ _install_mono_to_base() {
   done
 
   _mono_dest="$_mono_base/$SKILL_NAME"
-  printf '%s\n' "$_mono_dest" >> "$_mono_published" || {
-    restore_multi_skill_set "$_mono_published" "$_mono_backups" || true
-    rm -rf "$_mono_stage"
-    return 1
-  }
-  if ! mv "$_mono_stage/$SKILL_NAME" "$_mono_dest"; then
+  if ! publish_skill_dir_no_replace "$_mono_stage/$SKILL_NAME" "$_mono_dest" "$_mono_published"; then
     say "  ⚠️  mono Skill 集合发布失败，正在恢复原集合: $_mono_dest"
     restore_multi_skill_set "$_mono_published" "$_mono_backups" || say "  ⚠️  原 Skill 集合自动恢复不完整，请检查上方备份路径"
     rm -rf "$_mono_stage"
@@ -643,17 +1039,100 @@ _install_mono_to_base() {
   say "✅ Skills → ${_mono_label} (${_mono_count} files)"
 }
 
-# Move DWS-owned copies out of the generic root once a concrete Agent root is
-# active. This prevents Agents such as Codex from discovering the same Skill
-# through both ~/.agents/skills and ~/.codex/skills.
-retire_generic_skill_root() {
+# Exact upstream registry (76 IDs): id|classification|effective-global-root.
+# `-` means no global directory; `.agents/skills` means canonical-direct.
+# Not readonly: the library must stay re-sourceable inside one shell.
+DWS_UPSTREAM_AGENT_REGISTRY='aider-desk|N|.aider-desk/skills amp|U|.config/agents/skills antigravity|U|.gemini/antigravity/skills antigravity-cli|U|.gemini/antigravity-cli/skills astrbot|N|.astrbot/data/skills autohand-code|N|.autohand/skills augment|N|.augment/skills bob|N|.bob/skills claude-code|N|.claude/skills openclaw|N|.openclaw/skills cline|U|.agents/skills codearts-agent|N|.codeartsdoer/skills codebuddy|N|.codebuddy/skills codemaker|N|.codemaker/skills codestudio|N|.codestudio/skills codex|U|.codex/skills command-code|N|.commandcode/skills continue|N|.continue/skills cortex|N|.snowflake/cortex/skills crush|N|.config/crush/skills cursor|U|.cursor/skills deepagents|U|.deepagents/agent/skills devin|N|.config/devin/skills dexto|U|.agents/skills droid|N|.factory/skills eve|N|- firebender|U|.firebender/skills forgecode|N|.forge/skills gemini-cli|U|.gemini/skills github-copilot|U|.copilot/skills goose|N|.config/goose/skills grok|N|.grok/skills hermes-agent|N|.hermes/skills inference-sh|N|.inferencesh/skills jazz|N|.jazz/skills junie|N|.junie/skills iflow-cli|N|.iflow/skills kilo|N|.kilocode/skills kimchi|N|.config/kimchi/harness/skills kimi-code-cli|U|.agents/skills kiro-cli|N|.kiro/skills kode|N|.kode/skills lingma|N|.lingma/skills loaf|U|.agents/skills mcpjam|N|.mcpjam/skills minimax-code|N|.minimax/skills mistral-vibe|N|.vibe/skills moxby|N|.moxby/skills mux|N|.mux/skills opencode|U|.config/opencode/skills openhands|N|.openhands/skills ona|N|.ona/skills pi|N|.pi/agent/skills qoder|N|.qoder/skills qoder-cn|N|.qoder-cn/skills qwen-code|N|.qwen/skills replit|U|.config/agents/skills reasonix|N|.reasonix/skills rovodev|N|.rovodev/skills roo|N|.roo/skills tabnine-cli|N|.tabnine/agent/skills terramind|N|.terramind/skills tinycloud|N|.tinycloud/skills trae|N|.trae/skills trae-cn|N|.trae-cn/skills warp|U|.agents/skills windsurf|N|.codeium/windsurf/skills zed|U|.agents/skills zcode|N|.zcode/skills zencoder|N|.zencoder/skills zenflow|N|.zencoder/skills neovate|N|.neovate/skills pochi|N|.pochi/skills promptscript|U|- adal|N|.adal/skills universal|U|.config/agents/skills'
+upstream_agent_registry() {
+  for _uar_record in $DWS_UPSTREAM_AGENT_REGISTRY; do printf '%s\n' "$_uar_record"; done
+}
+
+# DWS-only compatibility roots, same id|classification|root format. Qoderwork
+# stays a real non-universal install target; the other four are global paths
+# older DWS installers wrote by mistake, so they are retired like universal
+# roots. Kept separate so the upstream pin above stays byte-comparable.
+DWS_LEGACY_AGENT_ROOTS='dws-qoderwork|N|.qoderwork/skills dws-legacy-github|U|.github/skills dws-legacy-windsurf|U|.windsurf/skills dws-legacy-cline|U|.cline/skills dws-legacy-amp|U|.amp/skills'
+legacy_agent_roots() {
+  for _lar_record in $DWS_LEGACY_AGENT_ROOTS; do printf '%s\n' "$_lar_record"; done
+}
+
+# ~/.agents/skills is the canonical store under the universal convention.
+# Universal Agents read it directly; other Agents receive relative links and
+# fall back to copies only when links are unavailable.
+#
+# Both agent_skill_dirs and is_universal_agent_dir are DERIVED from the pinned
+# registries above, so a registry edit changes real install behaviour instead of
+# only a test count, and pin/behaviour drift is impossible by construction.
+is_universal_agent_dir() {
+  for _iua_record in $DWS_UPSTREAM_AGENT_REGISTRY $DWS_LEGACY_AGENT_ROOTS; do
+    [ "${_iua_record##*|}" = "$1" ] || continue
+    case "$_iua_record" in
+      *"|U|"*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+# Effective global roots from vercel-labs/skills, in pinned registry order and
+# de-duplicated (amp/replit/universal and zencoder/zenflow share a root).
+# Records without a global root (`-`) and canonical-direct records
+# (`.agents/skills`) are not per-Agent targets and are skipped.
+agent_skill_dirs() {
+  { upstream_agent_registry; legacy_agent_roots; } | awk -F'|' '
+    $3 != "-" && $3 != ".agents/skills" && !seen[$3]++ { print $3 }'
+}
+
+resolve_agent_skill_base() {
+  _ras_root="$1"; _ras_agent="$2"
+  case "$_ras_agent" in
+    ".claude/skills") [ -n "${CLAUDE_CONFIG_DIR:-}" ] && { printf '%s\n' "$CLAUDE_CONFIG_DIR/skills"; return; } ;;
+    ".codex/skills") [ -n "${CODEX_HOME:-}" ] && { printf '%s\n' "$CODEX_HOME/skills"; return; } ;;
+    ".hermes/skills") [ -n "${HERMES_HOME:-}" ] && { printf '%s\n' "$HERMES_HOME/skills"; return; } ;;
+    ".autohand/skills") [ -n "${AUTOHAND_HOME:-}" ] && { printf '%s\n' "$AUTOHAND_HOME/skills"; return; } ;;
+    ".grok/skills") [ -n "${GROK_HOME:-}" ] && { printf '%s\n' "$GROK_HOME/skills"; return; } ;;
+    ".vibe/skills") [ -n "${VIBE_HOME:-}" ] && { printf '%s\n' "$VIBE_HOME/skills"; return; } ;;
+    ".openclaw/skills")
+      for _ras_name in .openclaw .clawdbot .moltbot; do
+        [ -d "$_ras_root/$_ras_name" ] && { printf '%s\n' "$_ras_root/$_ras_name/skills"; return; }
+      done ;;
+    ".config/opencode/skills") printf '%s\n' "${XDG_CONFIG_HOME:-$_ras_root/.config}/opencode/skills"; return ;;
+    ".config/agents/skills") printf '%s\n' "${XDG_CONFIG_HOME:-$_ras_root/.config}/agents/skills"; return ;;
+    ".config/crush/skills") printf '%s\n' "${XDG_CONFIG_HOME:-$_ras_root/.config}/crush/skills"; return ;;
+    ".config/devin/skills") printf '%s\n' "${XDG_CONFIG_HOME:-$_ras_root/.config}/devin/skills"; return ;;
+    ".config/goose/skills") printf '%s\n' "${XDG_CONFIG_HOME:-$_ras_root/.config}/goose/skills"; return ;;
+    ".config/kimchi/harness/skills") printf '%s\n' "${XDG_CONFIG_HOME:-$_ras_root/.config}/kimchi/harness/skills"; return ;;
+  esac
+  printf '%s\n' "$_ras_root/$_ras_agent"
+}
+
+agent_skill_base_detected() {
+  _asbd_agent="$1"; _asbd_base="$2"
+  case "$_asbd_agent" in
+    ".config/kimchi/harness/skills"|".tabnine/agent/skills") [ -d "$(dirname "$(dirname "$_asbd_base")")" ] ;;
+    ".zcode/skills") [ -d "$(dirname "$_asbd_base")" ] || [ -d "/Applications/ZCode.app" ] ;;
+    ".minimax/skills") [ -d "$(dirname "$_asbd_base")" ] || [ -d "/Applications/MiniMax Code.app" ] ;;
+    *) [ -d "$(dirname "$_asbd_base")" ] ;;
+  esac
+}
+
+same_physical_skill_root() {
+  [ -d "$1" ] && [ -d "$2" ] || return 1
+  # CDPATH= and -- are required: an exported CDPATH makes `cd` echo the resolved
+  # directory into the command substitution, which would silently report two
+  # identical roots as different.
+  _sps_left="$(CDPATH= cd -- "$1" 2>/dev/null && pwd -P)" || return 1
+  _sps_right="$(CDPATH= cd -- "$2" 2>/dev/null && pwd -P)" || return 1
+  [ "$_sps_left" = "$_sps_right" ]
+}
+
+retire_agent_skill_root() {
   _rgs_root="$1"
-  _rgs_base="$_rgs_root/.agents/skills"
-  _rgs_stage="$(mktemp -d "${TMPDIR:-/tmp}/dws-retire-generic.XXXXXX")" || return 1
+  _rgs_base="$2"
+  _rgs_stage="$(mktemp -d "${TMPDIR:-/tmp}/dws-retire-agent.XXXXXX")" || return 1
   _rgs_backups="$_rgs_stage/backups"
   : > "$_rgs_backups" || { rm -rf "$_rgs_stage"; return 1; }
   for _rgs_victim in "$_rgs_base/dws" "$_rgs_base"/*; do
-    [ -d "$_rgs_victim" ] || continue
+    [ -e "$_rgs_victim" ] || [ -L "$_rgs_victim" ] || continue
     if [ "$(basename "$_rgs_victim")" != "dws" ] && ! is_managed_multi_skill_dir "$_rgs_victim"; then
       continue
     fi
@@ -666,6 +1145,136 @@ retire_generic_skill_root() {
   rm -rf "$_rgs_stage"
 }
 
+# link_canonical_skills_to_base <root> <base> <mode> [bundle-src]
+# <bundle-src> is the installed multi bundle and is REQUIRED in multi mode: the
+# link set must come from the bundle, never from the whole canonical store.
+# ~/.agents/skills is now shared, so third-party/user Skills live there too and
+# must not be published into every detected Agent root (they are absent from
+# skills-state.json, so nothing could ever reclaim those links). Go
+# publishLinkedUpgradeTarget and build/npm/install.js pass the bundle skill list
+# the same way.
+link_canonical_skills_to_base() {
+  _lcs_root="$1"
+  _lcs_base="$2"
+  _lcs_mode="$3"
+  _lcs_bundle="${4-}"
+  _lcs_canonical="$_lcs_root/.agents/skills"
+  mkdir -p "$_lcs_base" || return 1
+  same_physical_skill_root "$_lcs_base" "$_lcs_canonical" && return 0
+  if [ "$_lcs_mode" = "mono" ]; then
+    _lcs_names="dws"
+  else
+    [ -n "$_lcs_bundle" ] && [ -d "$_lcs_bundle" ] || return 1
+    _lcs_names=""
+    for _lcs_skill in "$_lcs_bundle"/*/; do
+      [ -f "${_lcs_skill}SKILL.md" ] || continue
+      _lcs_names="$_lcs_names $(basename "$_lcs_skill")"
+    done
+    [ -n "$_lcs_names" ] || return 1
+  fi
+  # Collision pre-flight: the victim loop below deliberately refuses to back up
+  # entries that are not DWS-managed, and publication must never replace them.
+  # Report the exact colliding paths before touching anything, so the fall back
+  # to the legacy full-copy layout is observable and actionable.
+  _lcs_collision=0
+  for _lcs_name in $_lcs_names; do
+    _lcs_dest="$_lcs_base/$_lcs_name"
+    { [ -e "$_lcs_dest" ] || [ -L "$_lcs_dest" ]; } || continue
+    same_physical_skill_root "$_lcs_dest" "$_lcs_canonical/$_lcs_name" && continue
+    [ "$_lcs_name" = "dws" ] && continue
+    is_managed_multi_skill_dir "$_lcs_dest" && continue
+    say "  ⚠️  $_lcs_dest 已存在且不是 DWS 安装的 Skill，无法在此建立指向 $_lcs_canonical/$_lcs_name 的共享链接"
+    _lcs_collision=1
+  done
+  if [ "$_lcs_collision" -eq 1 ]; then
+    say "  ⚠️  已保留上述目录（不会删除用户数据），该 Agent 改用独立副本方式安装；"
+    say "      移走或改名后重新运行安装即可切换为共享 $_lcs_canonical 布局。"
+    return 1
+  fi
+  _lcs_base_real="$(CDPATH= cd -- "$_lcs_base" && pwd -P)" || return 1
+  _lcs_stage="$(mktemp -d "$_lcs_base/.dws-link-set.XXXXXX")" || return 1
+  _lcs_backups="$_lcs_stage/.backups"
+  _lcs_published="$_lcs_stage/.published"
+  _lcs_stage_token="$(basename "$_lcs_stage")"
+  : > "$_lcs_backups" || { rm -rf "$_lcs_stage"; return 1; }
+  : > "$_lcs_published" || { rm -rf "$_lcs_stage"; return 1; }
+  _lcs_publish_names=""
+  for _lcs_name in $_lcs_names; do
+    if same_physical_skill_root "$_lcs_base/$_lcs_name" "$_lcs_canonical/$_lcs_name"; then
+      continue
+    fi
+    _lcs_target_real="$(CDPATH= cd -- "$_lcs_canonical/$_lcs_name" && pwd -P)" || { rm -rf "$_lcs_stage"; return 1; }
+    _lcs_link_target="$(awk -v from="$_lcs_base_real" -v to="$_lcs_target_real" 'BEGIN { nf=split(from,f,"/"); nt=split(to,t,"/"); i=1; while(i<=nf&&i<=nt&&f[i]==t[i])i++; out=""; for(j=i;j<=nf;j++)if(f[j]!="")out=out"../"; for(j=i;j<=nt;j++)if(t[j]!="")out=out t[j](j<nt?"/":""); if(out=="")out="."; print out }')"
+    _lcs_stage_name="${_lcs_stage_token}.${_lcs_name}"
+    ln -s "$_lcs_link_target" "$_lcs_stage/$_lcs_stage_name" || { rm -rf "$_lcs_stage"; return 1; }
+    _lcs_publish_names="$_lcs_publish_names $_lcs_name"
+  done
+  for _lcs_victim in "$_lcs_base/dws" "$_lcs_base"/*; do
+    [ -e "$_lcs_victim" ] || [ -L "$_lcs_victim" ] || continue
+    [ "$_lcs_victim" = "$_lcs_stage" ] && continue
+    same_physical_skill_root "$_lcs_victim" "$_lcs_canonical/$(basename "$_lcs_victim")" && continue
+    if [ "$(basename "$_lcs_victim")" != "dws" ] && ! is_managed_multi_skill_dir "$_lcs_victim"; then
+      continue
+    fi
+    if ! backup_and_record_skill_dir "$_lcs_victim" "$_lcs_backups"; then
+      restore_multi_skill_set /dev/null "$_lcs_backups" || true
+      rm -rf "$_lcs_stage"
+      return 1
+    fi
+  done
+  for _lcs_name in $_lcs_publish_names; do
+    _lcs_dest="$_lcs_base/$_lcs_name"
+    _lcs_stage_name="${_lcs_stage_token}.${_lcs_name}"
+    _lcs_staged="$_lcs_stage/$_lcs_stage_name"
+    _lcs_link_target="$(readlink "$_lcs_staged" 2>/dev/null)" || {
+      restore_linked_skill_set "$_lcs_published" "$_lcs_backups" || true
+      rm -rf "$_lcs_stage"
+      return 1
+    }
+    # Publish by creating the link directly at the destination: symlink(2)
+    # refuses an occupied path with EEXIST, so the creation itself is the
+    # atomic no-replace check. `mv` after any pre-check could still replace a
+    # file or symlink a concurrent writer created in between, and `ln -P`
+    # stays unusable (absent from BusyBox `ln`, which silently degraded every
+    # non-universal Agent to the copy layout on Alpine and most containers).
+    if ! ln -s "$_lcs_link_target" "$_lcs_dest" 2>/dev/null; then
+      restore_linked_skill_set "$_lcs_published" "$_lcs_backups" || true
+      rm -rf "$_lcs_stage"
+      return 1
+    fi
+    # A directory that appeared at the destination turns `ln -s` into a
+    # container: the link lands inside it under the target basename. Remove
+    # exactly our link after an identity check and roll back; the foreign
+    # directory stays untouched.
+    if [ ! -L "$_lcs_dest" ]; then
+      _lcs_nested_name="${_lcs_link_target##*/}"
+      _lcs_nested_inode="$(skill_link_inode "$_lcs_dest/$_lcs_nested_name" 2>/dev/null)" || _lcs_nested_inode=""
+      cleanup_nested_staged_link "$_lcs_dest" "$_lcs_nested_name" "$_lcs_link_target" "$_lcs_nested_inode" || true
+      restore_linked_skill_set "$_lcs_published" "$_lcs_backups" || true
+      rm -rf "$_lcs_stage"
+      return 1
+    fi
+    _lcs_inode="$(skill_link_inode "$_lcs_dest")" || {
+      restore_linked_skill_set "$_lcs_published" "$_lcs_backups" || true
+      rm -rf "$_lcs_stage"
+      return 1
+    }
+    if ! skill_link_matches "$_lcs_dest" "$_lcs_link_target" "$_lcs_inode"; then
+      restore_linked_skill_set "$_lcs_published" "$_lcs_backups" || true
+      rm -rf "$_lcs_stage"
+      return 1
+    fi
+    if ! printf '%s\n%s\n%s\n' "$_lcs_dest" "$_lcs_link_target" "$_lcs_inode" >> "$_lcs_published"; then
+      if skill_link_matches "$_lcs_dest" "$_lcs_link_target" "$_lcs_inode"; then rm -f "$_lcs_dest" || true; fi
+      restore_linked_skill_set "$_lcs_published" "$_lcs_backups" || true
+      rm -rf "$_lcs_stage"
+      return 1
+    fi
+    say "  ↪ Skills → $_lcs_dest"
+  done
+  rm -rf "$_lcs_stage"
+}
+
 # Install skill tree into all agent homes (same rules as build/npm/install.js installSkillsToHomes).
 # Installing mono removes proven DWS-managed multi leftovers for mutual exclusion,
 # mirroring `dws skill setup --mode mono`.
@@ -673,90 +1282,48 @@ install_skills_to_homes() {
   skill_src="$1"
   root="${HOME}"
   installed=0
-  attempted=0
+  attempted=1
   failed=0
-  idx=0
-  specific_agents=0
-  for specific_dir in \
-    ".claude/skills" ".cursor/skills" ".qoder/skills" ".qoderwork/skills" \
-    ".gemini/skills" ".codex/skills" ".zcode/skills" ".github/skills" ".windsurf/skills" \
-    ".augment/skills" ".cline/skills" ".amp/skills" ".kiro/skills" \
-    ".trae/skills" ".openclaw/skills" ".hermes/skills"
+  retire_failed=0
+  if _install_mono_to_base "$skill_src" "$root/.agents/skills" "~/.agents/skills/$SKILL_NAME"; then installed=1; else failed=1; fi
+  [ "$installed" -gt 0 ] || { say "  ⚠️  未安装任何 mono Skill：所有检测到的 Agent 目标均失败"; return 1; }
+  for agent_dir in $(agent_skill_dirs)
   do
-    [ -e "$root/$(dirname "$specific_dir")" ] && specific_agents=$((specific_agents + 1))
-  done
-  for agent_dir in \
-    ".agents/skills" \
-    ".claude/skills" \
-    ".cursor/skills" \
-    ".qoder/skills" \
-    ".qoderwork/skills" \
-    ".gemini/skills" \
-    ".codex/skills" \
-    ".zcode/skills" \
-    ".github/skills" \
-    ".windsurf/skills" \
-    ".augment/skills" \
-    ".cline/skills" \
-    ".amp/skills" \
-    ".kiro/skills" \
-    ".trae/skills" \
-    ".openclaw/skills" \
-    ".hermes/skills"
-  do
-    if [ "$idx" -eq 0 ] && [ "$specific_agents" -gt 0 ]; then
-      idx=$((idx + 1))
-      continue
-    fi
-    base_dir="$root/$agent_dir"
-    parent_gate="$(dirname "$base_dir")"
-    if [ "$idx" -gt 0 ] && [ ! -e "$parent_gate" ]; then
-      idx=$((idx + 1))
-      continue
-    fi
+    base_dir="$(resolve_agent_skill_base "$root" "$agent_dir")"
+    agent_skill_base_detected "$agent_dir" "$base_dir" || continue
+    same_physical_skill_root "$base_dir" "$root/.agents/skills" && continue
     attempted=$((attempted + 1))
-    case "$root" in
-      "$HOME")
-        label="~/$agent_dir/$SKILL_NAME"
-        ;;
-      *)
-        label="$root/$agent_dir/$SKILL_NAME"
-        ;;
-    esac
-    if _install_mono_to_base "$skill_src" "$base_dir" "$label"; then
+    if is_universal_agent_dir "$agent_dir"; then
+      retire_agent_skill_root "$root" "$base_dir" || retire_failed=$((retire_failed + 1))
+      continue
+    fi
+    if link_canonical_skills_to_base "$root" "$base_dir" mono; then
       installed=$((installed + 1))
     else
-      failed=$((failed + 1))
+      if _install_mono_to_base "$skill_src" "$base_dir" "$base_dir/$SKILL_NAME"; then
+        say "  ℹ️  $base_dir 已自动使用兼容方式安装，可正常使用"
+        installed=$((installed + 1))
+      else
+        failed=$((failed + 1))
+      fi
     fi
-    idx=$((idx + 1))
   done
-  if [ "$specific_agents" -gt 0 ] && [ "$installed" -gt 0 ]; then
-    retire_generic_skill_root "$root" || failed=$((failed + 1))
-  fi
-  if [ "$attempted" -eq 0 ]; then
-    case "$root" in
-      "$HOME")
-        flabel="~/.agents/skills/$SKILL_NAME"
-        ;;
-      *)
-        flabel="$root/.agents/skills/$SKILL_NAME"
-        ;;
-    esac
-    if _install_mono_to_base "$skill_src" "$root/.agents/skills" "$flabel"; then
-      installed=$((installed + 1))
-    else
-      failed=$((failed + 1))
-    fi
-  fi
   if [ "$installed" -eq 0 ]; then
     say "  ⚠️  未安装任何 mono Skill：所有检测到的 Agent 目标均失败"
     return 1
+  fi
+  if [ "$retire_failed" -gt 0 ]; then
+    printf '  ⚠️  有 %s 个 Agent 旧副本未能迁移（安装已完成，可稍后手动删除）\n' "$retire_failed"
   fi
   if [ "$failed" -gt 0 ]; then
     say "  ⚠️  有 ${failed} 个 Agent 目标安装 mono Skill 失败"
     return 1
   fi
   rm -f "$SKILL_STATE_ROOT/skills-state.json"
+  say "✅ DWS Skills 安装完成"
+  say "   统一安装位置：$root/.agents/skills"
+  say "   已自动适配本机上检测到的 Agent"
+  say "ℹ️  下一步：请重启已打开的 Agent，使新 Skills 生效"
 }
 
 # multi_tree_has_skills returns 0 only when the given multi bundle directory
@@ -783,71 +1350,48 @@ install_multi_skills_to_homes() {
   multi_src="$1"
   root="${HOME}"
   installed=0
-  attempted=0
+  attempted=1
   failed=0
-  idx=0
-  specific_agents=0
-  for specific_dir in \
-    ".claude/skills" ".cursor/skills" ".qoder/skills" ".qoderwork/skills" \
-    ".gemini/skills" ".codex/skills" ".zcode/skills" ".github/skills" ".windsurf/skills" \
-    ".augment/skills" ".cline/skills" ".amp/skills" ".kiro/skills" \
-    ".trae/skills" ".openclaw/skills" ".hermes/skills"
+  retire_failed=0
+  if _install_multi_to_base "$multi_src" "$root/.agents/skills" "$root" ".agents/skills"; then installed=1; else failed=1; fi
+  [ "$installed" -gt 0 ] || { say "  ⚠️  未安装任何 multi Skill：所有检测到的 Agent 目标均失败"; return 1; }
+  for agent_dir in $(agent_skill_dirs)
   do
-    [ -e "$root/$(dirname "$specific_dir")" ] && specific_agents=$((specific_agents + 1))
-  done
-  for agent_dir in \
-    ".agents/skills" \
-    ".claude/skills" \
-    ".cursor/skills" \
-    ".qoder/skills" \
-    ".qoderwork/skills" \
-    ".gemini/skills" \
-    ".codex/skills" \
-    ".zcode/skills" \
-    ".github/skills" \
-    ".windsurf/skills" \
-    ".augment/skills" \
-    ".cline/skills" \
-    ".amp/skills" \
-    ".kiro/skills" \
-    ".trae/skills" \
-    ".openclaw/skills" \
-    ".hermes/skills"
-  do
-    if [ "$idx" -eq 0 ] && [ "$specific_agents" -gt 0 ]; then
-      idx=$((idx + 1))
-      continue
-    fi
-    base_dir="$root/$agent_dir"
-    parent_gate="$(dirname "$base_dir")"
-    if [ "$idx" -gt 0 ] && [ ! -e "$parent_gate" ]; then
-      idx=$((idx + 1))
-      continue
-    fi
+    base_dir="$(resolve_agent_skill_base "$root" "$agent_dir")"
+    agent_skill_base_detected "$agent_dir" "$base_dir" || continue
+    same_physical_skill_root "$base_dir" "$root/.agents/skills" && continue
     attempted=$((attempted + 1))
-    if _install_multi_to_base "$multi_src" "$base_dir" "$root" "$agent_dir"; then
+    if is_universal_agent_dir "$agent_dir"; then
+      retire_agent_skill_root "$root" "$base_dir" || retire_failed=$((retire_failed + 1))
+      continue
+    fi
+    if link_canonical_skills_to_base "$root" "$base_dir" multi "$multi_src"; then
       installed=$((installed + 1))
     else
-      failed=$((failed + 1))
-      say "  ⚠️  跳过 ${base_dir}（备份或复制失败，未完成 multi 安装）"
+      if _install_multi_to_base "$multi_src" "$base_dir" "$root" "$agent_dir"; then
+        say "  ℹ️  $base_dir 已自动使用兼容方式安装，可正常使用"
+        installed=$((installed + 1))
+      else
+        failed=$((failed + 1))
+      fi
     fi
-    idx=$((idx + 1))
   done
-  if [ "$specific_agents" -gt 0 ] && [ "$installed" -gt 0 ]; then
-    retire_generic_skill_root "$root" || failed=$((failed + 1))
-  fi
-  if [ "$attempted" -eq 0 ] && _install_multi_to_base "$multi_src" "$root/.agents/skills" "$root" ".agents/skills"; then
-    installed=$((installed + 1))
-  fi
   if [ "$installed" -eq 0 ]; then
     say "  ⚠️  未安装任何 multi Skill：所有检测到的 Agent 目标均失败"
     return 1
+  fi
+  if [ "$retire_failed" -gt 0 ]; then
+    printf '  ⚠️  有 %s 个 Agent 旧副本未能迁移（安装已完成，可稍后手动删除）\n' "$retire_failed"
   fi
   if [ "$failed" -gt 0 ]; then
     say "  ⚠️  有 ${failed} 个 Agent 目标安装失败"
     return 1
   fi
   write_skills_state "$multi_src" "install.sh" || return 1
+  say "✅ DWS Skills 安装完成"
+  say "   统一安装位置：$root/.agents/skills"
+  say "   已自动适配本机上检测到的 Agent"
+  say "ℹ️  下一步：请重启已打开的 Agent，使新 Skills 生效"
 }
 
 _install_multi_to_base() {
@@ -922,12 +1466,7 @@ _install_multi_to_base() {
     [ -f "${skill_dir}SKILL.md" ] || continue
     _name="$(basename "$skill_dir")"
     _dest="$_base/$_name"
-    printf '%s\n' "$_dest" >> "$_ms_published" || {
-      restore_multi_skill_set "$_ms_published" "$_ms_backups" || true
-      rm -rf "$_ms_stage"
-      return 1
-    }
-    if ! mv "$_ms_stage/$_name" "$_dest"; then
+    if ! publish_skill_dir_no_replace "$_ms_stage/$_name" "$_dest" "$_ms_published"; then
       say "  ⚠️  multi Skill 集合发布失败，正在恢复原集合: $_dest"
       restore_multi_skill_set "$_ms_published" "$_ms_backups" || say "  ⚠️  原 Skill 集合自动恢复不完整，请检查上方备份路径"
       rm -rf "$_ms_stage"
@@ -1018,32 +1557,7 @@ install_binary() {
 
   download "$download_url" "$tmpdir/$archive_name"
 
-  # Download and verify SHA256 checksum
-  checksum_url="$(asset_url checksums.txt)"
-  if download "$checksum_url" "$tmpdir/checksums.txt" 2>/dev/null; then
-    expected="$(awk -v file="$archive_name" '$2 == file {print $1; exit}' "$tmpdir/checksums.txt")"
-    if [ -n "$expected" ]; then
-      if need_cmd sha256sum; then
-        actual="$(sha256sum "$tmpdir/$archive_name" | awk '{print $1}')"
-      elif need_cmd shasum; then
-        actual="$(shasum -a 256 "$tmpdir/$archive_name" | awk '{print $1}')"
-      else
-        actual=""
-      fi
-      if [ -n "$actual" ] && [ "$actual" != "$expected" ]; then
-        err "SHA256 checksum mismatch! Expected ${expected}, got ${actual}. Aborting."
-      fi
-      if [ -n "$actual" ]; then
-        say "✅ SHA256 checksum verified"
-      else
-        say "⚠️  Could not compute checksum (sha256sum/shasum not found); skipping verification"
-      fi
-    else
-      say "⚠️  Archive not found in checksums.txt; skipping verification"
-    fi
-  else
-    say "⚠️  Could not download checksums.txt; skipping verification"
-  fi
+  verify_release_asset_checksum "$archive_name" "$tmpdir/$archive_name" "$tmpdir"
 
   say "📦 Extracting..."
   tar xzf "$tmpdir/$archive_name" -C "$tmpdir"
@@ -1107,6 +1621,8 @@ install_skills() {
       err "Cannot download skills from GitHub and no local source checkout found."
     fi
   fi
+
+  verify_release_asset_checksum "$skills_archive" "$tmpdir_skills/$skills_archive" "$tmpdir_skills"
 
   extract_root="$tmpdir_skills/skills"
   mkdir -p "$extract_root"
@@ -1205,6 +1721,10 @@ main() {
     install_binary
     install_skills
   fi
+
+  # Every transaction of this run has finished, so old stamped archives can no
+  # longer be needed for a rollback.
+  prune_skill_backups
 
   printf '\n'
   say "🎉 Installation complete!"

@@ -9,7 +9,7 @@
 ### 查询主键文档
 
 ```bash
-dws aitable record primary-doc-get --base-id BASE_ID --table-id TABLE_ID --record-id RECORD_ID
+dws aitable +record-primary-doc-get --base-id BASE_ID --table-id TABLE_ID --record-id RECORD_ID
 ```
 
 **参数：**
@@ -22,7 +22,7 @@ dws aitable record primary-doc-get --base-id BASE_ID --table-id TABLE_ID --recor
 ### 创建主键文档
 
 ```bash
-dws aitable record primary-doc-create --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --record-id RECORD_ID
+dws aitable +record-primary-doc-create --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --record-id RECORD_ID
 ```
 
 **参数：**
@@ -38,6 +38,7 @@ dws aitable record primary-doc-create --base-id BASE_ID --table-id TABLE_ID --fi
 ## 注意事项
 
 - `fieldId` 必须是 primaryDoc 类型，否则返回 `INVALID_FIELD_TYPE` 错误
+- `primaryDoc` 是建表时的首字段能力，不能在已有普通首字段之后补建，也不能把普通字段改成 primaryDoc。需要该能力时应新建以 primaryDoc 为首字段的数据表并迁移数据；未经用户明确授权不要自动迁移。
 - 传入不存在的 `recordId` 会返回 `RECORD_NOT_FOUND` 错误
 - 创建后可通过 `dws doc update --node <nodeId>` 写入文档内容，或 `dws doc read --node <nodeId>` 读取
 
@@ -47,8 +48,8 @@ dws aitable record primary-doc-create --base-id BASE_ID --table-id TABLE_ID --fi
 # 1. 查询字段目录，拿到 primaryDoc 字段的 fieldId
 dws aitable field get --base-id BASE_ID --table-id TABLE_ID
 
-# 2. 为某条记录创建主键文档
-dws aitable record primary-doc-create --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --record-id RECORD_ID
+# 2. 为记录创建主键文档
+dws aitable +record-primary-doc-create --base-id BASE_ID --table-id TABLE_ID --field-id FIELD_ID --record-id RECORD_ID
 
 # 3. 拿到返回的 nodeId，用 dws doc 写入内容
 dws doc update --node <data.nodeId> --content "# 项目方案\n\n文档正文内容..."

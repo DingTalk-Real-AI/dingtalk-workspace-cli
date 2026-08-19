@@ -17,16 +17,16 @@
 │   → record query --sort '[{"fieldId":"xxx","direction":"desc"}]' --limit 5
 │
 ├─ 全量统计（如"一共多少条"、"所有记录的总销售额"）
-│   → record query --all --field-ids <目标字段>
-│   → 本地计算 count / sum / avg
+│   → record stats --stats '[{"fieldId":"...","statsType":"COUNT|SUM|AVG|..."}]'
 │
 ├─ 分组统计（如"每个状态各有多少条"）
-│   → record query --all --field-ids <分组字段>,<度量字段>
-│   → 本地按分组字段 groupby 再聚合
+│   → record group-stats --group '[...]' --stats '[{"fieldId":"...","statsType":"count"}]'
+│
+├─ 条件唯一实体数（如"有索赔单的门店共有多少家"）
+│   → record group-stats --filters '{...}' --stats '[{"fieldId":"<实体字段>","statsType":"distinct"}]'
 │
 └─ 判断全局结论（如"是否所有记录都满足条件"）
-    → record query --all（或用 --filters 反向筛选不满足的）
-    → 基于全量结果判断
+    → record stats 对反向过滤结果 COUNT；只有需要行级证据时再 record query
 ```
 
 ## 2. 核心规则
@@ -50,15 +50,15 @@
 | 按日期降序取最新5条 | `--sort '[...]' --limit 5` | `--all` 拉全量再本地 sort + slice |
 | 模糊搜索标题含"Q1" | `--filters` 用 `contain` 操作符 | 全量拉取再本地 grep |
 
-### 2.3 服务端无法完成时，才用 --all + 本地计算
+### 2.3 聚合必须优先在服务端完成
 
-以下场景服务端 filters/sort 无法满足，需要 `--all` 后本地处理：
+以下场景均有服务端聚合入口，不得先用 `record query --all` 下载全表计算：
 
-- SUM / AVG / COUNT / MAX / MIN 聚合
-- 分组统计（GROUP BY）
-- 多字段联合计算（如"销售额 = 单价 × 数量"）
-- 去重计数（COUNT DISTINCT）
-- 百分比/占比计算
+- `record stats`：不分组的 COUNT / SUM / AVG / MAX / MIN / MEDIAN / DISTINCT / 完整率等
+- `record group-stats`：分组统计，以及不带 group 的条件 DISTINCT 唯一计数
+- 任意条件比率：分别聚合分子与分母，再对齐范围和 `dataVersion` 计算
+
+只有用户要求记录明细、少量样本校验、精确分位数输入，或聚合接口明确返回不支持/错误时，才允许使用 `record query`。需要先逐行运算再聚合的指标（例如两个日期相减）必须使用表内已有且可聚合的公式字段；没有该字段时停止并请用户先在 AI 表格页面创建，不能下载全表本地二次计算。
 
 ### 2.4 --all 使用注意
 
@@ -122,7 +122,8 @@ dws aitable record query \
 
 | 用户诉求 | 优先方案 | 不要误走 |
 |---------|---------|---------|
-| 一次性统计/临时分析 | `record query --all` + 本地聚合 | 不要创建 formula 字段 |
+| 一次性标量统计 | `record stats` | 不要 `record query --all` 后本地聚合 |
+| 分组/去重统计 | `record group-stats` | 不要下载全表 groupby / 去重 |
 | 长期展示派生指标 | 创建 formula 字段（见 [formula-guide](./aitable-formula-guide.md)） | 不要每次手算再手动写入 |
 | 按条件筛选记录 | `record query --filters` | 不要 `--all` 拉全量再本地 filter |
 | 取最新/最大/前N | `--sort + --limit` | 不要 `--all` 再本地排序取前N |

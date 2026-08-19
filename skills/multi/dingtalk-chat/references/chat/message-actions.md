@@ -63,12 +63,12 @@ Runtime 规范化结果为准，不把裸展示名当稳定身份。
 
 ## 引用回复与转发
 
-引用回复默认使用 `+messages-reply`。`--conversation-id` 和消息 ID 来自真实查询；
+引用回复默认使用 `+messages-reply`。`--group` 和消息 ID 来自真实查询；
 `--ref-sender` 可省略时让 CLI 只读补齐，不手工猜发送者身份。
 
 ```bash
-dws chat +messages-reply --conversation-id <openConversationId> \
-  --message-id <openMessageId> --text "收到" --format json
+dws chat +messages-reply --group <openConversationId> \
+  --message-id <openMessageId> --content "收到" --format json
 ```
 
 | 动作 | 入口 | 关键上下文 |

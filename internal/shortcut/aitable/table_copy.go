@@ -136,10 +136,13 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 	}
 	targetFieldsData, err := rt.CallMCPData(serverMain, "get_fields", map[string]any{"baseId": targetBase, "tableId": targetTable})
 	targetFields, found := findNamedObjectList(targetFieldsData, "fields", "fieldList")
-	if err != nil || !found || !containsAllFieldNames(targetFields, createFields) {
-		if err == nil {
-			err = fmt.Errorf("target field read-back does not contain the copied field set")
-		}
+	if err == nil && !found {
+		err = fmt.Errorf("target field read-back is missing the fields collection")
+	}
+	if err == nil {
+		err = verifyDeclaredFieldStructures(targetFields, createFields)
+	}
+	if err != nil {
 		result.Status = "partial_success"
 		result.Checkpoint = map[string]any{"targetTableId": targetTable, "step": "repair target fields"}
 		return compositeError(result, err, false)

@@ -186,6 +186,7 @@ func Run(ctx context.Context, cfg Config) error {
 		dedup:    dd,
 		started:  time.Now().UTC(),
 		idleStop: make(chan struct{}),
+		stopReq:  make(chan string, 1),
 	}
 
 	// 4. Signal ready BEFORE accepting consumers (avoids a slow-fork
@@ -263,6 +264,9 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	case <-d.idleStop:
 		log.Info("bus: idle timeout reached, shutting down")
+	case reason := <-d.stopReq:
+		shutdownReason = reason
+		log.Info("bus: shutdown requested via IPC", "reason", reason)
 	}
 
 	// 7. Graceful shutdown — cancel runCtx first so all background
@@ -292,6 +296,7 @@ type daemon struct {
 	shutdownMu   sync.Mutex
 	shuttingDown atomic.Bool
 	idleStop     chan struct{}
+	stopReq      chan string
 
 	credentialHandoffMu sync.Mutex
 	terminalMu          sync.RWMutex
@@ -749,15 +754,17 @@ func (d *daemon) idleWatch(ctx context.Context) {
 	}
 }
 
-// triggerShutdown is called from RPC handlers that want to end the bus.
-// It works by closing the listener (which unblocks Run's select via the
-// source error path, indirectly). For v1 a full ctx-cancellation hook is
-// out of scope; busctl/stop also sends SIGTERM which is the authoritative
-// shutdown path.
+// triggerShutdown is called from RPC handlers that want to end the bus. The
+// buffered request wakes Run's lifecycle select, which then cancels the cloud
+// source and performs the same graceful shutdown used for signals and idle
+// expiry. It is intentionally non-blocking so repeated stop requests cannot
+// strand connection handlers.
 func (d *daemon) triggerShutdown(reason string) {
 	d.log.Info("bus: shutdown triggered via IPC", "reason", reason)
-	_ = d.listener.Close() // unblocks Accept(), but doesn't kill Source
-	// Best-effort: a future version wires a context.CancelFunc here.
+	select {
+	case d.stopReq <- reason:
+	default:
+	}
 }
 
 // shutdown performs the graceful tear-down sequence:

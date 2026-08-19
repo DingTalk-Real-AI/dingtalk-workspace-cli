@@ -6,7 +6,7 @@
 
 ### create-todo
 
-1. 确定执行者：指定姓名 → `aisearch person --keyword "<姓名>" --dimension name` → `userId`；未指定 → `contact user get-self` → `userId`；多人 → 逐个搜索逗号拼接。
+1. 确定执行者：指定姓名 → `aisearch person --query "<姓名>" --dimension name` → `userId`；未指定 → `contact user get-self` → `userId`；多人 → 逐个搜索逗号拼接。
 2. 创建：`todo task create --title "<标题>" --executors <userId>[,<userId2>...] --priority <优先级>`（可选 `--due "<截止ISO>"`）→ `todoTaskId`
 
 ### todo-query-ops
@@ -82,7 +82,7 @@ dws minutes list shared --query "ROI" --format json
   - 执行前检查特殊字符（引号/书名号/括号等），若包含先提示用户确认去除
   - 替换成功后追问是否加热词：`minutes hot-word add --words "新文字"`
 - **替换发言人**：先统一搜人取得 dingUid → `minutes speaker replace --id <taskUuid> --from "发言人X" --to "姓名" --target-uid <userId>`
-  - 查询 dingUid：`aisearch person --keyword "姓名" --dimension name --format json` → 取 `userId`
+  - 查询 dingUid：`aisearch person --query "姓名" --dimension name --format json` → 取 `userId`
   - 多个匹配 → 列出候选让用户选；无匹配 → 不带 `--target-uid` 执行
 - **修改标题**：`minutes update title --id <taskUuid> --title "新标题"`
 - **修改摘要**：`minutes update summary --id <taskUuid> --content "新内容"`
@@ -103,7 +103,7 @@ dws minutes list shared --query "ROI" --format json
 ### minutes-permission（权限管理）
 
 - 添加成员：`minutes permission add --ids <uuid1,uuid2> --member-uids <uid1,uid2> --policy 4`
-  - 需先通过 `aisearch person --keyword "<姓名>" --dimension name` 获取目标 userId
+  - 需先通过 `aisearch person --query "<姓名>" --dimension name` 获取目标 userId
   - policy：0=不可见 / 1=仅查看 / 2=查看+下载 / 3=查看+下载+编辑 / 4=全部权限
 - 移除成员：`minutes permission remove --ids <uuid1,uuid2> --member-uids <uid1,uid2>`
 

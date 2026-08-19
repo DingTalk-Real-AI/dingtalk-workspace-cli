@@ -524,7 +524,7 @@ Flags:
    > 4. **跳过** — 暂不处理发言人识别
 
    根据用户选择分别处理：
-   - 选 1 → 进入 `minutes-speaker-summarize` recipe 的智能推断流程（见 [10-minutes-speaker-match.md](10-minutes-speaker-match.md)）。**智能匹配核心：同时发起三路查询、不串行等待**：① 人员+组织架构 `dws aisearch person --keyword <姓名> --dimension name` → userId，再用 `dws contact user get --ids <userId>` 补部门/职级；② 聊天记录 `dws chat message list` → 工作内容/语言风格/职责线索；③ 本人文档 `dws doc search --keyword <姓名>` 前 3 篇 → 角色精确信号。**判定**：通讯录+聊天两路一致即可确认角色（通常无需查文档），仅一路或矛盾时补查文档兜底、两路以上一致才下结论；部门名 ≠ 角色。**文档角色对照**：PRD/需求/商业化方案→产品经理，视觉规范/原型/交互评审→产品设计师，技术方案/架构→研发，分析报告/底表→数据分析师。**置信度分支**：> 70% 输出匹配结果并执行替换，< 70% 不输出、请用户补充信息或改用手动设置
+   - 选 1 → 进入 `minutes-speaker-summarize` recipe 的智能推断流程（见 [10-minutes-speaker-match.md](10-minutes-speaker-match.md)）。**智能匹配核心：同时发起三路查询、不串行等待**：① 人员+组织架构 `dws aisearch person --query <姓名> --dimension name` → userId，再用 `dws contact user get --ids <userId>` 补部门/职级；② 聊天记录 `dws chat message list` → 工作内容/语言风格/职责线索；③ 本人文档 `dws doc search --query <姓名>` 前 3 篇 → 角色精确信号。**判定**：通讯录+聊天两路一致即可确认角色（通常无需查文档），仅一路或矛盾时补查文档兜底、两路以上一致才下结论；部门名 ≠ 角色。**文档角色对照**：PRD/需求/商业化方案→产品经理，视觉规范/原型/交互评审→产品设计师，技术方案/架构→研发，分析报告/底表→数据分析师。**置信度分支**：> 70% 输出匹配结果并执行替换，< 70% 不输出、请用户补充信息或改用手动设置
    - 选 2 → 请用户提供日程链接或参会人姓名列表：
      - 有日程链接 → 从链接提取 eventId → `dws calendar participant list --event <eventId>` 获取参与人 → 与转写发言人数量/顺序对照匹配 → 展示匹配结果请用户确认 → 确认后逐条执行 `speaker replace`
      - 有参会人名单（用户直接列出姓名）→ 与转写中匿名发言人做数量对照 → 结合发言内容/角色推断匹配 → 展示匹配结果请用户确认 → 确认后逐条执行 `speaker replace`
@@ -811,7 +811,7 @@ Step 7: 引导用户替换发言人（调用 speaker replace 写回听记）
 
 | 路径 | 命令 | 得到什么 |
 |------|------|----------|
-| ① 人员与组织架构 | `dws aisearch person --keyword "目标人名" --dimension name` → userId，再用 `dws contact user get --ids <userId>` 补详情 | 职能大类（技术/产品/设计/管理）+ 是否存在该人 |
+| ① 人员与组织架构 | `dws aisearch person --query "目标人名" --dimension name` → userId，再用 `dws contact user get --ids <userId>` 补详情 | 职能大类（技术/产品/设计/管理）+ 是否存在该人 |
 | ② 本人创建的文档 | `dws doc search --keyword "目标人名/真名"` 至少获取 3 篇标题 | 角色精确信号（PM写PRD、研发写技术方案、设计师写视觉规范）|
 | ③ 近期日程类型 | `dws calendar event list` | 职能边界（参加什么类型的会）|
 | ④ 聊天记录 | `dws chat message list` 获取与目标人的近期 IM 消息 | 语言风格/工作内容/职责线索 |
@@ -887,7 +887,7 @@ Step 7: 引导用户替换发言人（调用 speaker replace 写回听记）
 > "目前这篇听记中 [人名] 的发言仍显示为『发言人X』。要我帮你把听记里的『发言人X』全部替换为『[人名]』吗？替换后纪要和待办中的发言人也会同步更新。
 > 确认后我会执行：`dws minutes speaker replace --id <taskUuid> --from "发言人X" --to "[人名]"`"
 
-- 用户确认 → **先统一搜人** `dws aisearch person --keyword "[人名]" --dimension name --format json` 获取该人员的 userId（长整型 dingUid）：
+- 用户确认 → **先统一搜人** `dws aisearch person --query "[人名]" --dimension name --format json` 获取该人员的 userId（长整型 dingUid）：
   - 唯一匹配 → 告知用户匹配结果，确认后执行 `dws minutes speaker replace --id <taskUuid> --from "发言人X" --to "[人名]" --target-uid <userId> --format json`
   - 多个匹配 → 列出候选（姓名+部门+userId）让用户选择后执行
   - 无匹配 → 提示用户未在通讯录中找到此人，执行不带 `--target-uid` 的替换：`dws minutes speaker replace --id <taskUuid> --from "发言人X" --to "[人名]" --format json`
@@ -1490,7 +1490,7 @@ tagId 可通过 `dws minutes tag list` 获取。
 
 1. 用户提供目标姓名（如"张三"）后，**AI 主动调用通讯录模糊查询**：
    ```
-   dws aisearch person --keyword "张三" --dimension name --format json
+   dws aisearch person --query "张三" --dimension name --format json
    ```
 2. 从返回结果中提取匹配的人员列表，每条包含 `userId`（长整型数字，即 dingUid）和姓名：
    - **唯一匹配** → 直接向用户确认："通讯录中找到『张三（userId: 123456789）』，确认将发言人替换为此人并关联通讯录身份？"
@@ -1521,7 +1521,7 @@ tagId 可通过 `dws minutes tag list` 获取。
 **AI 识别到上述模式时，必须执行以下流程：**
 
 1. **解析映射关系**：提取所有 `源发言人 → 目标姓名` 的配对
-2. **批量人员查询**：对每个目标姓名调用 `dws aisearch person --keyword "<姓名>" --dimension name --format json`，获取 userId（dingUid）。将查询结果汇总后一并向用户确认
+2. **批量人员查询**：对每个目标姓名调用 `dws aisearch person --query "<姓名>" --dimension name --format json`，获取 userId（dingUid）。将查询结果汇总后一并向用户确认
 3. **向用户确认**：展示解析结果（含通讯录匹配）并请求确认，格式如下：
 
 > 我识别到以下发言人对应关系，并已从通讯录中匹配到对应人员：
@@ -1771,11 +1771,11 @@ tagId 可通过 `dws minutes tag list` 获取。
 - 用户提到"移除/取消/删除/不让...看"等移除权限语义 → `permission remove`
 - 用户提到"我没权限/打不开/帮我申请/申请查看权限/申请编辑权限"等**为自己申请**语义 → `permission apply`（只需 `--id` + `--policy`；**不需要也不接受 `--member-uids`**，当前用户身份由系统自动识别；未说明权限等级时先与用户确认要 2（可编辑）/ 3（可查看下载）/ 4（仅查看））
 - `permission add` 的 `--policy` 是必填参数，没有默认值。用户未指定权限类型时，先确认要 0（管理员）/ 1（所有者）/ 2（可编辑）/ 3（可查看下载）/ 4（仅查看）；即使确认选择 4，命令中仍必须显式传入 `--policy 4`
-- `permission add` / `permission remove` 需要目标成员的钉钉 UID：如果用户未提供 member-uids，需要先引导用户提供（可通过 `dws aisearch person --keyword "姓名" --dimension name` 查询）；`permission apply` 不适用这一条
+- `permission add` / `permission remove` 需要目标成员的钉钉 UID：如果用户未提供 member-uids，需要先引导用户提供（可通过 `dws aisearch person --query "姓名" --dimension name` 查询）；`permission apply` 不适用这一条
 
 **典型执行链路：**
 1. 用户说"把张三加到这个听记中" → AI 需获取张三的 UID
-2. 调用 `dws aisearch person --keyword "张三" --dimension name --format json` 获取 UID
+2. 调用 `dws aisearch person --query "张三" --dimension name --format json` 获取 UID
 3. 调用 `dws minutes permission add --ids <taskUuid> --member-uids <uid> --policy 4 --format json`
 
 ### 听记标签/分组查询
@@ -2305,7 +2305,7 @@ https://shanji.dingtalk.com/app/transcribes/76327569643231383535353939365f343638
 5. 用户确认 → **Step 6 结构化总结输出**：提取发言人2 的全部发言，输出张三的核心观点、关键决策、待办等
 6. **Step 7 引导替换发言人**（必须执行）：
    > "目前这篇听记中张三的发言仍显示为『发言人2』。要我帮你把听记里的『发言人2』全部替换为『张三』吗？替换后纪要和待办中的发言人也会同步更新。"
-7. 用户确认 → **先统一搜人获取 dingUid**：调用 `dws aisearch person --keyword "张三" --dimension name --format json`
+7. 用户确认 → **先统一搜人获取 dingUid**：调用 `dws aisearch person --query "张三" --dimension name --format json`
    - 唯一匹配（如返回 userId=123456789）→ 执行 `dws minutes speaker replace --id <taskUuid> --from "发言人2" --to "张三" --target-uid 123456789 --format json`
    - 多个匹配 → 列出候选（姓名+部门+userId）让用户选择后执行
    - 无匹配 → 提示用户通讯录未找到，执行不带 `--target-uid` 的替换：`dws minutes speaker replace --id <taskUuid> --from "发言人2" --to "张三" --format json`
@@ -2350,7 +2350,7 @@ https://shanji.dingtalk.com/app/transcribes/<taskUuid> 分析下木兰讲了什�
 
 | 路径 | 命令 | 结果 |
 |------|------|------|
-| ① 人员与组织架构 | `dws aisearch person --keyword "木兰" --dimension name` → `dws contact user get --ids <userId>` | 木兰 = **王佳明**，X 事业群-X 事业部-X-X-**产品设计部**，上级临渊（王临一）|
+| ① 人员与组织架构 | `dws aisearch person --query "木兰" --dimension name` → `dws contact user get --ids <userId>` | 木兰 = **王佳明**，X 事业群-X 事业部-X-X-**产品设计部**，上级临渊（王临一）|
 | ② 文档产出 | `dws drive search --query "王佳明"`（按需）| 多为设计稿/原型，进一步印证设计师角色 |
 
 **Step 5：定向匹配 + 置信度判断**
@@ -2455,7 +2455,7 @@ Step 2 **[禁止]** 看到全是匿名编号 → 没有继续走 Step 3-4，反�
 |--------|------------|------|
 | 在转写文本里 grep "木兰" 字符串作为存在性判断 | 铁律 1 | 99% 听记的发言人都是匿名编号，搜不到字面是默认场景，根本不构成"没参会"的证据 |
 | 用 AI 摘要的"参与人=拾光"推断"木兰没参会" | 铁律 2 | AI 摘要"参与人"字段只截取最显著的 1-2 人，**不是**完整参会名册 |
-| 全程没调用过一次 `dws aisearch person --keyword "木兰" --dimension name` | 铁律 3 | 人员搜索是 Step 4 的必跑项，拿到 userId 后再由 contact 补详情 |
+| 全程没调用过一次 `dws aisearch person --query "木兰" --dimension name` | 铁律 3 | 人员搜索是 Step 4 的必跑项，拿到 userId 后再由 contact 补详情 |
 | 一旦字面搜不到就放弃身份推断，把任务甩给用户 | 铁律 4 | 这恰恰把发言人识别功能的核心价值（把匿名编号映射到真实人）完全抹掉了 |
 
 **[正确] 应该这样执行（与案例 6 一致）：**
@@ -2463,7 +2463,7 @@ Step 2 **[禁止]** 看到全是匿名编号 → 没有继续走 Step 3-4，反�
 1. **Step 1**：从 URL 提取 taskUuid → `dws minutes get transcription` 自动翻页拉全部
 2. **Step 2**：检查 `speakerNick` 字段是否含"木兰"——发现全是匿名编号 → **不要在转写文本里 grep "木兰"，立即并发触发 Step 3 + Step 4 ①**
 3. **Step 3**（与 Step 4 ① 并发）：在转写里做发言人画像（每位发言人的发言量、主题、互斥线索）
-4. **Step 4 ①**（与 Step 3 并发，必跑）：`dws aisearch person --keyword "木兰" --dimension name` → userId，再 `dws contact user get --ids <userId>` 补部门等详情
+4. **Step 4 ①**（与 Step 3 并发，必跑）：`dws aisearch person --query "木兰" --dimension name` → userId，再 `dws contact user get --ids <userId>` 补部门等详情
 5. **Step 5**：把"产品设计部 + 设计师角色"信号回投到画像 → 锁定发言人1（UI/交互设计视角高度匹配）+ 与拾光的同部门协作信号 → 置信度 ≈ 75% → 走分支 A
 6. **Step 5 用户确认**：展示发言人1 的代表性片段请用户确认
 7. **Step 6**：四段式结构化总结（核心观点/关注点/Action Item/立场态度）
@@ -2478,7 +2478,7 @@ Step 2 **[禁止]** 看到全是匿名编号 → 没有继续走 Step 3-4，反�
 3. **`dws aisearch person` 是 Step 4 ① 的必跑项**：先找到人员并取得 userId，再用 `dws contact user get` 补部门等详情；拿到"木兰=王佳明，产品设计部"后，Step 5 的角色匹配才有可靠锚点。
 
 4. **想说"找不到 X"前的四个自检问题**（任何一个回答"没"都禁止给"找不到"结论）：
-   - 人员搜了吗？(`dws aisearch person --keyword "X" --dimension name`)
+   - 人员搜了吗？(`dws aisearch person --query "X" --dimension name`)
    - 文档查了吗？(`dws drive search --query "X"`)
    - 聊天记录查了吗？(`dws chat message list`)
    - 基于角色在转写里做模式匹配了吗？（设计师 vs 研发 vs 管理者的发言特征）

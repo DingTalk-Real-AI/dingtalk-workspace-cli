@@ -4,7 +4,7 @@
 >
 >  **搜人容错说明**（无需主动使用）：CLI 兼容下列 alias 兜底，模型偶尔写 `search` / `find` / `query` / `contact` / `people` 等也能跑通——但**搜人输出和文档以 `person` 为准**。
 >
->  搜人的 keyword flag 同样兼容 `--name` / `--q` / `--query` / `--text` 兜底，规范用法是 `--keyword`。
+> 搜人的规范参数是 `--query`；旧 `--keyword`（含 `-w`）及历史隐藏参数 `--name` / `--q` / `--text` 继续兼容，新的示例统一使用 `--query`。
 
 ## 企业人员搜索
 
@@ -14,15 +14,15 @@
 Usage:
   dws aisearch person [flags]
 Example:
-  dws aisearch person --keyword "张三" --dimension name --format json
-  dws aisearch person --keyword "产品部" --dimension department --format json
-  dws aisearch person --keyword "五道" --dimension supervisor --format json
-  dws aisearch person --keyword "AI搜问" --dimension duty --format json
-  dws aisearch person --keyword "李四" --dimension name,department --format json
-  dws aisearch person --keyword "13800138000" --dimension phone --format json
-  dws aisearch person --keyword "W12345" --dimension jobNumber --format json
+  dws aisearch person --query "张三" --dimension name --format json
+  dws aisearch person --query "产品部" --dimension department --format json
+  dws aisearch person --query "五道" --dimension supervisor --format json
+  dws aisearch person --query "AI搜问" --dimension duty --format json
+  dws aisearch person --query "李四" --dimension name,department --format json
+  dws aisearch person --query "13800138000" --dimension phone --format json
+  dws aisearch person --query "W12345" --dimension jobNumber --format json
 Flags:
-      --keyword string     搜索关键词 (必填，如人名、技能关键词等)
+      --query string       搜索关键词 (必填，如人名、技能关键词等)
       --dimension string   查询维度，多个用逗号分隔 (默认 "all")
 ```
 

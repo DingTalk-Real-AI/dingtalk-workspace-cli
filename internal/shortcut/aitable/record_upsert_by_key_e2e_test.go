@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -265,6 +266,473 @@ func recordListJSON(t *testing.T, records []map[string]any) string {
 	return string(raw)
 }
 
+func pagedRecordQueryResponse(t *testing.T, records []map[string]any, args map[string]any) string {
+	t.Helper()
+	limit, ok := args["limit"].(int)
+	if !ok || limit < 1 || limit > recordQueryServicePageSize {
+		t.Fatalf("query_records limit = %#v, want 1..%d", args["limit"], recordQueryServicePageSize)
+	}
+	offset := 0
+	if cursor, _ := args["cursor"].(string); cursor != "" {
+		if _, err := fmt.Sscanf(cursor, "offset-%d", &offset); err != nil {
+			t.Fatalf("invalid test cursor %q: %v", cursor, err)
+		}
+	}
+	end := minInt(offset+limit, len(records))
+	pageRecords := records[offset:end]
+	data := map[string]any{"records": pageRecords, "hasMore": end < len(records), "totalCount": len(records)}
+	if end < len(records) {
+		data["nextCursor"] = fmt.Sprintf("offset-%d", end)
+	}
+	raw, err := json.Marshal(map[string]any{
+		"success": true,
+		"hasMore": end < len(records),
+		"page":    offset/recordQueryServicePageSize + 1,
+		"size":    limit,
+		"data":    data,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func runRecordQueryShortcutCLI(t *testing.T, caller *upsertByKeyCaller, limit int, extra ...string) (map[string]any, error) {
+	t.Helper()
+	helpers.InitDepsForTest(t, caller)
+	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
+	root.PersistentFlags().Bool("yes", false, "")
+	root.PersistentFlags().Bool("dry-run", false, "")
+	root.PersistentFlags().String("format", "json", "")
+	root.AddCommand(shortcut.Commands()...)
+	stdout := &bytes.Buffer{}
+	root.SetOut(stdout)
+	root.SetErr(&bytes.Buffer{})
+	args := []string{"aitable", "+record-query", "--base-id", "base", "--table-id", "table", "--limit", fmt.Sprint(limit)}
+	root.SetArgs(append(args, extra...))
+	err := root.Execute()
+	if stdout.Len() == 0 {
+		return nil, err
+	}
+	var payload map[string]any
+	if decodeErr := json.Unmarshal(stdout.Bytes(), &payload); decodeErr != nil {
+		t.Fatalf("decode record query output %q: %v", stdout.String(), decodeErr)
+	}
+	return payload, err
+}
+
+func TestCrossPlatformCoverageRecordQueryProjectsRequestedFieldsE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{}
+	caller.callFn = func(_ int, product, tool string, args map[string]any) (string, error) {
+		if product != serverMain || tool != "query_records" {
+			t.Fatalf("record projection call = %s/%s", product, tool)
+		}
+		recordIDs, _ := args["recordIds"].([]string)
+		fieldIDs, _ := args["fieldIds"].([]string)
+		if !slices.Equal(recordIDs, []string{"r1", "r2"}) || !slices.Equal(fieldIDs, []string{"fldName", "fldStatus"}) {
+			t.Fatalf("record projection args = %#v", args)
+		}
+		return pagedRecordQueryResponse(t, []map[string]any{
+			{"recordId": "r1", "cells": map[string]any{"fldName": "青云制造", "fldStatus": "跟进中"}},
+			{"recordId": "r2", "cells": map[string]any{"fldName": "远海物流", "fldStatus": "已成交"}},
+		}, args), nil
+	}
+	payload, err := runRecordQueryShortcutCLI(t, caller, 2,
+		"--record-ids", "r1,r2", "--field-ids", "fldName,fldStatus")
+	if err != nil || payload["success"] != true || len(caller.calls) != 1 {
+		t.Fatalf("record projection = payload:%#v err:%v calls:%#v", payload, err, caller.calls)
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil || bytes.Contains(raw, []byte("fldAmount")) {
+		t.Fatalf("record projection leaked an unrequested field: %s (err=%v)", raw, err)
+	}
+}
+
+func TestCrossPlatformCoverageRecordQueryServicePageBoundariesE2E(t *testing.T) {
+	for _, size := range []int{20, 21, 22, 100} {
+		t.Run(fmt.Sprintf("size_%d", size), func(t *testing.T) {
+			records := updateFixtureRecords(0, size, "可见")
+			caller := &upsertByKeyCaller{}
+			caller.callFn = func(_ int, _, tool string, args map[string]any) (string, error) {
+				if tool != "query_records" {
+					return "", fmt.Errorf("unexpected tool %s", tool)
+				}
+				return pagedRecordQueryResponse(t, records, args), nil
+			}
+			payload, err := runRecordQueryShortcutCLI(t, caller, size)
+			if err != nil {
+				t.Fatalf("record query size %d: %v", size, err)
+			}
+			data, ok := payload["data"].(map[string]any)
+			if !ok || payload["success"] != true || data["hasMore"] != false || data["totalCount"] != float64(size) || len(data["records"].([]any)) != size {
+				t.Fatalf("record query size %d payload = %#v", size, payload)
+			}
+			wantCalls := (size + recordQueryServicePageSize - 1) / recordQueryServicePageSize
+			if len(caller.calls) != wantCalls || data["page"] != float64(wantCalls) || data["size"] != float64(size) {
+				t.Fatalf("record query size %d calls=%d payload=%#v, want calls=%d", size, len(caller.calls), payload, wantCalls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageRecordQueryDryRunStopsBeforeTransportE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{}
+	payload, err := runRecordQueryShortcutCLI(t, caller, 5, "--query", "needle", "--dry-run")
+	if err != nil {
+		t.Fatalf("record query dry-run error = %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("record query dry-run crossed transport: %#v", caller.calls)
+	}
+	arguments, _ := payload["arguments"].(map[string]any)
+	if payload["dry_run"] != true || payload["executed"] != false || payload["tool"] != "query_records" ||
+		arguments["baseId"] != "base" || arguments["tableId"] != "table" || arguments["keyword"] != "needle" || arguments["limit"] != float64(5) {
+		t.Fatalf("record query dry-run payload = %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageRecordQueryDryRunRejectsInvalidLocalPlanE2E(t *testing.T) {
+	for _, testCase := range []struct {
+		name  string
+		limit int
+		extra []string
+		want  string
+	}{
+		{name: "zero limit", limit: 0, extra: []string{"--dry-run"}, want: "--limit must be in [1,100]"},
+		{name: "excessive limit", limit: recordBatchSize + 1, extra: []string{"--dry-run"}, want: "--limit must be in [1,100]"},
+		{name: "empty record IDs", limit: 100, extra: []string{"--record-ids", " ", "--dry-run"}, want: "至少包含一个非空 recordId"},
+		{
+			name:  "excessive record IDs",
+			limit: 100,
+			extra: []string{"--record-ids", strings.Join(recordIDFixtures(recordBatchSize+1), ","), "--dry-run"},
+			want:  "at most 100 unique IDs",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			caller := &upsertByKeyCaller{}
+			payload, err := runRecordQueryShortcutCLI(t, caller, testCase.limit, testCase.extra...)
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("record query dry-run error = %v, want %q (payload=%#v)", err, testCase.want, payload)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("invalid record query dry-run crossed transport: %#v", caller.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageRecordQueryExactIDsIgnoreResidualContinuationE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{callFn: func(call int, _, tool string, args map[string]any) (string, error) {
+		if tool != "query_records" {
+			return "", fmt.Errorf("unexpected tool %s", tool)
+		}
+		if call != 0 {
+			return "", errors.New("exact-ID query followed residual continuation")
+		}
+		if args["limit"] != 2 {
+			t.Fatalf("exact-ID service limit = %#v, want 2", args["limit"])
+		}
+		ids, ok := args["recordIds"].([]string)
+		if !ok || !slices.Equal(ids, []string{"r1", "r2"}) {
+			t.Fatalf("exact-ID request IDs = %#v", args["recordIds"])
+		}
+		return `{"success":true,"data":{"records":[{"recordId":"r1"},{"recordId":"r2"}],"hasMore":true,"nextCursor":"residual"}}`, nil
+	}}
+	payload, err := runRecordQueryShortcutCLI(t, caller, 100, "--record-ids", "r2,r1,r2")
+	data, _ := payload["data"].(map[string]any)
+	if err != nil || len(caller.calls) != 1 || data["hasMore"] != false || data["size"] != float64(2) {
+		t.Fatalf("exact-ID payload=%#v calls=%d err=%v", payload, len(caller.calls), err)
+	}
+	if _, exists := data["nextCursor"]; exists {
+		t.Fatalf("exact-ID payload retained residual cursor: %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageRecordQueryFailureAndContinuationBranches(t *testing.T) {
+	t.Run("non-positive window limit", func(t *testing.T) {
+		caller := &upsertByKeyCaller{}
+		helpers.InitDepsForTest(t, caller)
+		rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+		if _, err := queryRecordWindow(rt, nil, 0); err == nil {
+			t.Fatal("non-positive record query window limit accepted")
+		}
+	})
+
+	t.Run("initial cursor cycle", func(t *testing.T) {
+		caller := &upsertByKeyCaller{callFn: func(_ int, _, tool string, _ map[string]any) (string, error) {
+			if tool != "query_records" {
+				return "", fmt.Errorf("unexpected tool %s", tool)
+			}
+			return `{"success":true,"data":{"records":[{"recordId":"r1"}],"hasMore":true,"nextCursor":"seed"}}`, nil
+		}}
+		helpers.InitDepsForTest(t, caller)
+		rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+		if _, err := queryRecordWindow(rt, map[string]any{"cursor": " seed "}, 2); err == nil || !strings.Contains(err.Error(), "cursor cycle") {
+			t.Fatalf("initial cursor cycle error = %v", err)
+		}
+	})
+
+	t.Run("strict explicit empty shape", func(t *testing.T) {
+		for _, data := range []map[string]any{
+			{"success": true, "status": "success", "data": map[string]any{"unexpected": true}},
+			{"success": true, "status": "success", "data": map[string]any{}, "error": "bad"},
+		} {
+			if explicitEmptyRecordQuery(data) {
+				t.Fatalf("invalid empty-query envelope accepted: %#v", data)
+			}
+		}
+	})
+
+	t.Run("explicit empty page", func(t *testing.T) {
+		caller := &upsertByKeyCaller{callFn: func(_ int, _, _ string, _ map[string]any) (string, error) {
+			return `{"success":true,"status":"success","error":{},"data":{}}`, nil
+		}}
+		helpers.InitDepsForTest(t, caller)
+		rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+		window, err := queryRecordWindow(rt, map[string]any{}, 1)
+		if err != nil || len(window.Records) != 0 || window.Pages != 1 || window.HasMore || window.NextCursor != "" {
+			t.Fatalf("explicit empty window=%#v err=%v", window, err)
+		}
+	})
+
+	t.Run("missing records collection", func(t *testing.T) {
+		caller := &upsertByKeyCaller{callFn: func(_ int, _, _ string, _ map[string]any) (string, error) {
+			return `{}`, nil
+		}}
+		helpers.InitDepsForTest(t, caller)
+		rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+		if _, err := queryRecordWindow(rt, map[string]any{}, 1); err == nil || !strings.Contains(err.Error(), "missing the records collection") {
+			t.Fatalf("missing records error = %v", err)
+		}
+	})
+
+	t.Run("changing cursors cannot hide sustained empty pages", func(t *testing.T) {
+		caller := &upsertByKeyCaller{callFn: func(call int, _, tool string, _ map[string]any) (string, error) {
+			if tool != "query_records" {
+				return "", fmt.Errorf("unexpected tool %s", tool)
+			}
+			return fmt.Sprintf(
+				`{"success":true,"data":{"records":[],"hasMore":true,"nextCursor":"empty-%d"}}`,
+				call,
+			), nil
+		}}
+		helpers.InitDepsForTest(t, caller)
+		rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+		if _, err := queryRecordWindow(rt, map[string]any{}, 1); err == nil || !strings.Contains(err.Error(), "no progress") {
+			t.Fatalf("sustained empty pages error = %v", err)
+		}
+		if len(caller.calls) != recordQueryMaxConsecutiveEmptyPages {
+			t.Fatalf("query calls = %d, want %d", len(caller.calls), recordQueryMaxConsecutiveEmptyPages)
+		}
+	})
+
+	t.Run("invalid shortcut limit", func(t *testing.T) {
+		caller := &upsertByKeyCaller{}
+		helpers.InitDepsForTest(t, caller)
+		cmd := &cobra.Command{Use: "query"}
+		cmd.Flags().Int("limit", 0, "")
+		if err := cmd.Flags().Set("limit", "0"); err != nil {
+			t.Fatal(err)
+		}
+		rt := shortcut.RuntimeContextForTest(cmd, RecordQuery)
+		if err := executeRecordQuery(rt, map[string]any{}); err == nil {
+			t.Fatal("invalid shortcut limit accepted")
+		}
+	})
+
+	t.Run("invalid exact-ID request", func(t *testing.T) {
+		for _, testCase := range []struct {
+			name   string
+			params map[string]any
+			want   string
+		}{
+			{name: "wrong type", params: map[string]any{"recordIds": 1}, want: "string list"},
+			{name: "empty", params: map[string]any{"recordIds": []string{" "}}, want: "至少包含一个非空 recordId"},
+			{name: "over service limit", params: map[string]any{"recordIds": recordIDFixtures(recordBatchSize + 1)}, want: "at most 100 unique IDs"},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				caller := &upsertByKeyCaller{}
+				helpers.InitDepsForTest(t, caller)
+				rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+				err := executeRecordQuery(rt, testCase.params)
+				if err == nil || !strings.Contains(err.Error(), testCase.want) {
+					t.Fatalf("exact-ID request error = %v, want %q", err, testCase.want)
+				}
+				if len(caller.calls) != 0 {
+					t.Fatalf("invalid exact-ID request made %d service calls", len(caller.calls))
+				}
+			})
+		}
+	})
+
+	t.Run("invalid exact-ID response", func(t *testing.T) {
+		caller := &upsertByKeyCaller{callFn: func(_ int, _, tool string, _ map[string]any) (string, error) {
+			if tool != "query_records" {
+				return "", fmt.Errorf("unexpected tool %s", tool)
+			}
+			return `{"success":true,"data":{"records":[{"recordId":"other"}]}}`, nil
+		}}
+		if _, err := runRecordQueryShortcutCLI(t, caller, 100, "--record-ids", "r1"); err == nil || !strings.Contains(err.Error(), "unexpected recordId") {
+			t.Fatalf("unexpected exact-ID response error = %v", err)
+		}
+
+		if _, err := validateExactRecordQuery([]map[string]any{{}}, []string{"r1"}); err == nil || !strings.Contains(err.Error(), "missing recordId") {
+			t.Fatalf("missing exact-ID response error = %v", err)
+		}
+		duplicate := []map[string]any{{"recordId": "r1"}, {"recordId": "r1"}}
+		if _, err := validateExactRecordQuery(duplicate, []string{"r1", "r2"}); err == nil || !strings.Contains(err.Error(), "duplicate recordId") {
+			t.Fatalf("duplicate exact-ID response error = %v", err)
+		}
+	})
+
+	t.Run("shortcut query failure", func(t *testing.T) {
+		caller := &upsertByKeyCaller{callFn: func(_ int, _, _ string, _ map[string]any) (string, error) {
+			return "", errors.New("query unavailable")
+		}}
+		helpers.InitDepsForTest(t, caller)
+		rt := shortcut.RuntimeContextForTest(&cobra.Command{Use: "query"}, RecordQuery)
+		if err := executeRecordQuery(rt, map[string]any{}); err == nil || !strings.Contains(err.Error(), "query unavailable") {
+			t.Fatalf("shortcut query failure = %v", err)
+		}
+	})
+
+	t.Run("bounded continuation is published", func(t *testing.T) {
+		records := updateFixtureRecords(0, 21, "visible")
+		caller := &upsertByKeyCaller{callFn: func(_ int, _, tool string, args map[string]any) (string, error) {
+			if tool != "query_records" {
+				return "", fmt.Errorf("unexpected tool %s", tool)
+			}
+			return pagedRecordQueryResponse(t, records, args), nil
+		}}
+		payload, err := runRecordQueryShortcutCLI(t, caller, 20)
+		data, _ := payload["data"].(map[string]any)
+		if err != nil || data["hasMore"] != true || data["nextCursor"] != "offset-20" {
+			t.Fatalf("bounded continuation payload=%#v err=%v", payload, err)
+		}
+	})
+
+	t.Run("delete readback follows active continuation to absence", func(t *testing.T) {
+		caller := &upsertByKeyCaller{callFn: func(call int, _, tool string, args map[string]any) (string, error) {
+			if tool != "query_records" {
+				return `{"deletedCount":1}`, nil
+			}
+			if call == 1 {
+				if _, exists := args["cursor"]; exists {
+					t.Fatalf("first deletion readback unexpectedly has cursor: %#v", args)
+				}
+				return `{"success":true,"data":{"records":[],"hasMore":true,"nextCursor":"c1"}}`, nil
+			}
+			if args["cursor"] != "c1" {
+				t.Fatalf("continued deletion readback cursor = %#v", args["cursor"])
+			}
+			return `{"success":true,"data":{"records":[],"hasMore":false}}`, nil
+		}}
+		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
+		if err != nil || out == "" || len(caller.calls) != 3 {
+			t.Fatalf("delete continued absence output=%q error=%v calls=%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("delete readback follows active continuation to remaining record", func(t *testing.T) {
+		caller := &upsertByKeyCaller{callFn: func(call int, _, tool string, _ map[string]any) (string, error) {
+			if tool != "query_records" {
+				return `{"deletedCount":1}`, nil
+			}
+			if call == 1 {
+				return `{"success":true,"data":{"records":[],"hasMore":true,"nextCursor":"c1"}}`, nil
+			}
+			return `{"success":true,"data":{"records":[{"recordId":"r1"}],"hasMore":false}}`, nil
+		}}
+		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
+		if err == nil || out != "" || len(caller.calls) != 3 {
+			t.Fatalf("delete continued remaining output=%q error=%v calls=%#v", out, err, caller.calls)
+		}
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "aitable_composite_unknown" {
+			t.Fatalf("delete continued remaining error = %#v", err)
+		}
+	})
+
+	t.Run("delete readback fails closed on empty continuation stall", func(t *testing.T) {
+		caller := &upsertByKeyCaller{callFn: func(call int, _, tool string, _ map[string]any) (string, error) {
+			if tool != "query_records" {
+				return `{"deletedCount":1}`, nil
+			}
+			return fmt.Sprintf(`{"success":true,"data":{"records":[],"hasMore":true,"nextCursor":"c%d"}}`, call), nil
+		}}
+		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
+		if err == nil || out != "" || len(caller.calls) != recordQueryMaxConsecutiveEmptyPages+1 {
+			t.Fatalf("delete stalled continuation output=%q error=%v calls=%#v", out, err, caller.calls)
+		}
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "aitable_composite_unknown" {
+			t.Fatalf("delete stalled continuation error = %#v", err)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageRecordWriteReadbackUsesStableServicePagesE2E(t *testing.T) {
+	for _, operation := range []string{"update", "upsert", "delete"} {
+		for _, size := range []int{21, 22, 100} {
+			t.Run(fmt.Sprintf("%s_%d", operation, size), func(t *testing.T) {
+				records := updateFixtureRecords(0, size, "完成")
+				caller := &upsertByKeyCaller{}
+				queryCalls := 0
+				caller.callFn = func(_ int, _, tool string, args map[string]any) (string, error) {
+					if tool != "query_records" {
+						return `{"success":true}`, nil
+					}
+					queryCalls++
+					if operation == "delete" {
+						ids := args["recordIds"].([]string)
+						empty := make([]map[string]any, len(ids))
+						response := pagedRecordQueryResponse(t, empty, args)
+						var payload map[string]any
+						if err := json.Unmarshal([]byte(response), &payload); err != nil {
+							t.Fatal(err)
+						}
+						page := payload["data"].(map[string]any)
+						page["records"] = []any{}
+						raw, _ := json.Marshal(payload)
+						return string(raw), nil
+					}
+					response := pagedRecordQueryResponse(t, records, args)
+					var payload map[string]any
+					if err := json.Unmarshal([]byte(response), &payload); err != nil {
+						t.Fatal(err)
+					}
+					page := payload["data"].(map[string]any)
+					if len(page["records"].([]any))+recordQueryServicePageSize*(queryCalls-1) >= size {
+						// The live service can retain a continuation after it has
+						// returned every requested record ID. Exact-ID verification
+						// must use ID coverage, not this advisory bit.
+						page["hasMore"] = true
+						page["nextCursor"] = "ignored-after-complete-id-set"
+						payload["hasMore"] = true
+					}
+					raw, _ := json.Marshal(payload)
+					return string(raw), nil
+				}
+
+				var out string
+				var err error
+				if operation == "delete" {
+					out, err = runRecordDeleteCLI(t, caller, recordIDs(records))
+				} else {
+					out, err = runRecordBatchCLI(t, caller, "+record-"+operation, records)
+				}
+				if err != nil || out == "" {
+					t.Fatalf("%s size %d false negative: output=%q err=%v", operation, size, out, err)
+				}
+				wantQueries := (size + recordQueryServicePageSize - 1) / recordQueryServicePageSize
+				if queryCalls != wantQueries {
+					t.Fatalf("%s size %d query calls=%d, want %d", operation, size, queryCalls, wantQueries)
+				}
+			})
+		}
+	}
+}
+
 func TestCrossPlatformCoverageRecordUpdateAutoChunksAndVerifiesE2E(t *testing.T) {
 	records := updateFixtureRecords(0, 101, "完成")
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
@@ -395,6 +863,10 @@ func TestCrossPlatformCoverageRecordDeleteAutoChunksAndProvesAbsenceE2E(t *testi
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: `{"deletedCount":100}`},
 		{text: `{"data":{"records":[]}}`},
+		{text: `{"data":{"records":[]}}`},
+		{text: `{"data":{"records":[]}}`},
+		{text: `{"data":{"records":[]}}`},
+		{text: `{"data":{"records":[]}}`},
 		{text: `{"deletedCount":1}`},
 		{text: `{"data":{"records":[]}}`},
 	}}
@@ -407,7 +879,7 @@ func TestCrossPlatformCoverageRecordDeleteAutoChunksAndProvesAbsenceE2E(t *testi
 			t.Fatalf("delete output missing %s: %s", want, out)
 		}
 	}
-	if len(caller.calls) != 4 || caller.calls[0].tool != "delete_records" || caller.calls[1].tool != "query_records" {
+	if len(caller.calls) != 8 || caller.calls[0].tool != "delete_records" || caller.calls[1].tool != "query_records" || caller.calls[6].tool != "delete_records" {
 		t.Fatalf("delete call sequence = %#v", caller.calls)
 	}
 }
@@ -418,6 +890,17 @@ func TestCrossPlatformCoverageRecordDeleteEmptyReplyRecoveredOnlyByAbsenceE2E(t 
 		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
 		if err != nil || !strings.Contains(out, `"status": "recovered"`) {
 			t.Fatalf("delete recovered = output:%q err:%v", out, err)
+		}
+	})
+
+	t.Run("explicit service success with empty data proves deletion", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"deletedCount":1}`},
+			{text: `{"success":true,"status":"success","error":{},"data":{}}`},
+		}}
+		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
+		if err != nil || !strings.Contains(out, `"status": "verified_absent"`) {
+			t.Fatalf("delete explicit empty success = output:%q err:%v", out, err)
 		}
 	})
 
@@ -449,6 +932,10 @@ func TestCrossPlatformCoverageRecordDeletePartialCheckpointE2E(t *testing.T) {
 	ids := recordIDFixtures(101)
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 		{text: `{"deletedCount":100}`},
+		{text: `{"records":[]}`},
+		{text: `{"records":[]}`},
+		{text: `{"records":[]}`},
+		{text: `{"records":[]}`},
 		{text: `{"records":[]}`},
 		{text: `{"deletedCount":0}`},
 		{text: `{"records":[{"recordId":"r100","cells":{}}]}`},

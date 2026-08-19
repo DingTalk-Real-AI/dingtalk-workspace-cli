@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -1017,14 +1017,20 @@ reset-reminder 写入的提醒规则。提醒写命令的成功响应只能作�
 		Short: "上传待办附件",
 		Long: `上传待办附件
 ⚠️ 重要：该接口会上传文件到附件，不可用于测试或试探性调用。调用前必须确认待办存在。`,
-		Example: `  dws todo task add-attachment --task-id <taskId> --file-path <filePath>
+		Example: `  dws todo task add-attachment --task-id <taskId> --file <filePath>
   # 查询 taskId: dws todo task list`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "task-id", "file-path"); err != nil {
-				return err
+			filePath := flagOrFallback(cmd, "file-path", "file")
+			taskID := mustGetFlag(cmd, "task-id")
+			if taskID == "" && filePath == "" {
+				return validateRequiredFlags(cmd, "task-id", "file")
 			}
-
-			filePath, _ := cmd.Flags().GetString("file-path")
+			if taskID == "" {
+				return validateRequiredFlags(cmd, "task-id")
+			}
+			if filePath == "" {
+				return validateRequiredFlags(cmd, "file")
+			}
 			meta, err := buildTodoLocalFileMeta(filePath, "", "")
 			if err != nil {
 				return err
@@ -1092,8 +1098,8 @@ reset-reminder 写入的提醒规则。提醒写命令的成功响应只能作�
 					"要添加执行人/参与人/提醒时改用对应 add 命令",
 				},
 				Examples: []string{
-					"dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf",
-					"dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf --format json",
+					"dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf",
+					"dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf --format json",
 				},
 			},
 			Parameters: []contract.ParamDecl{
@@ -1247,7 +1253,11 @@ reset-reminder 写入的提醒规则。提醒写命令的成功响应只能作�
 	todoTaskListSubCmd.Flags().String("task-id", "", "待办任务 ID (必填)")
 	todoTaskListAttachmentCmd.Flags().String("task-id", "", "待办任务 ID (必填)")
 	todoTaskAddAttachment.Flags().String("task-id", "", "待办任务 ID (必填)")
-	todoTaskAddAttachment.Flags().String("file-path", "", "本地文件路径（必填）")
+	corecmd.RegisterFlags(todoTaskAddAttachment, []corecmd.FlagSpec{{
+		Name:    "file",
+		Usage:   "本地文件路径（必填）",
+		Aliases: []string{"file-path"},
+	}})
 	todoTaskRemoveAttachmentCmd.Flags().String("task-id", "", "待办任务 ID (必填)")
 	todoTaskRemoveAttachmentCmd.Flags().String("attachment-id", "", "待办附件 ID（必填）")
 

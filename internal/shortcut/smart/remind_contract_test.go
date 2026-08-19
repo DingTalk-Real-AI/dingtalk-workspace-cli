@@ -34,8 +34,8 @@ func TestRemindShortcutWritesAtOnlyAsDueTime(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute +remind: %v", err)
 	}
-	if len(fake.calls) != 2 {
-		t.Fatalf("tool calls = %#v, want profile read plus todo create", fake.calls)
+	if len(fake.calls) != 3 {
+		t.Fatalf("tool calls = %#v, want profile read, todo create and detail verification", fake.calls)
 	}
 	call := fake.calls[1]
 	if call.product != "todo" || call.tool != "create_personal_todo" {
@@ -50,6 +50,9 @@ func TestRemindShortcutWritesAtOnlyAsDueTime(t *testing.T) {
 	}
 	if _, exists := request["reminderRules"]; exists {
 		t.Fatalf("unexpected reminderRules in %#v", request)
+	}
+	if got := fake.calls[2].tool; got != "get_todo_detail" {
+		t.Fatalf("verification call = %q, want get_todo_detail", got)
 	}
 }
 

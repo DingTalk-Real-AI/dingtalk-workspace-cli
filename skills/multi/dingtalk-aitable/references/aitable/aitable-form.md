@@ -33,6 +33,16 @@ dws aitable form field list --base-id BASE_ID --table-id TABLE_ID --view-id VIEW
 dws aitable form share get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
 ```
 
+开启并取得可发送链接的最短闭环使用 canonical shortcut：
+
+```bash
+dws aitable form create --base-id BASE_ID --table-id TABLE_ID --name "表单名" --format json
+dws aitable +form-share-update --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --enabled true --format json
+dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --format json
+```
+
+从最后一次返回直接读取 `data.shareFormUuid`，分享地址为 `https://alidocs.dingtalk.com/i/form/{shareFormUuid}`。字段已存在时不要再调用 Help、Catalog、`form get`，也不要换 `--verbose`、`raw`、`pretty` 重复请求。用户还要求发送时，把该完整 URL 交给 Chat 的发送命令并检查真实发送回执。
+
 ## 要点
 
 - **创建表单**有两种等价方式：

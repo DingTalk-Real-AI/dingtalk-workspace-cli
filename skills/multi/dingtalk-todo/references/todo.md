@@ -212,9 +212,9 @@ Flags:
 Usage:
   dws todo task add-attachment [flags]
 Example:
-  dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf
+  dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf
 Flags:
-      --file-path string   本地文件路径 (必填)
+      --file string        本地文件路径 (必填)
       --task-id string     待办任务 ID (必填)
 ```
 
@@ -442,7 +442,7 @@ dws todo task reset-reminder --task-id <taskId> --reminder-rules '<reminderRules
 # 18. 查询子待办列表
 dws todo task list-sub --task-id <taskId> --format json
 # 19. 上传待办附件
-dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf --format json
+dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf --format json
 # 20. 查询待办附件列表
 dws todo task list-attachment --task-id <taskId> --format json
 # 21. 删除待办附件
@@ -494,7 +494,7 @@ dws todo tag delete --tag-codes code1,code2 --yes --format json
 - `task add-reminder` 用于为待办添加提醒，`--base-time` 支持 `dueTime`（基于截止时间偏移，待办必须有截止时间）和 `customTime`（自定义时间戳）两种模式
 - `task reset-reminder` 用于重置待办提醒规则，不传 `--reminder-rules` 则清除所有提醒
 - `task list-sub` 用于查询指定待办的子待办列表，需通过 `task list` 或 `task create` 获取父待办 ID
-- `task add-attachment` 用于上传本地文件作为待办附件，`--file-path` 为本地文件绝对路径；该操作不可逆，调用前必须确认待办存在
+- `task add-attachment` 用于上传本地文件作为待办附件，`--file` 为本地文件绝对路径；该操作不可逆，调用前必须确认待办存在
 - `task list-attachment` 用于查询指定待办的附件列表
 - `task remove-attachment` 用于删除待办附件，为不可逆操作，执行前需用户确认；`--attachment-id` 可通过 `task list-attachment` 获取
 - `tag list` 用于查询当前用户已有的标签列表，返回的 `tagCode` 可用于 `tag add` / `tag update` / `tag delete`

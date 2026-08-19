@@ -28,6 +28,12 @@ var driveSemanticCatalogJSON []byte
 //go:embed semantic_catalog_wiki.json
 var wikiSemanticCatalogJSON []byte
 
+//go:embed semantic_catalog_calendar.json
+var calendarSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_todo.json
+var todoSemanticCatalogJSON []byte
+
 type semanticCatalogFile struct {
 	Version      int                              `json:"version"`
 	Service      string                           `json:"service"`
@@ -52,6 +58,8 @@ var reviewedSemanticCatalog = mustLoadSemanticCatalogs(
 	minutesSemanticCatalogJSON,
 	driveSemanticCatalogJSON,
 	wikiSemanticCatalogJSON,
+	calendarSemanticCatalogJSON,
+	todoSemanticCatalogJSON,
 )
 
 func mustLoadSemanticCatalogs(sources ...[]byte) map[string]semanticCatalogRecord {

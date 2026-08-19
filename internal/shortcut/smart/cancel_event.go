@@ -27,8 +27,8 @@ import (
 // confirm-before-delete safety net so you never wipe the wrong eventId.
 //
 // Steps: first pull the event's detail via get_calendar_detail (so a bad or
-// stale eventId fails clearly before any destructive write, and the title is
-// surfaced back to the user). Then delete it via delete_calendar_event.
+// stale eventId fails clearly before any destructive write). Then delete it via
+// delete_calendar_event and verify the event is absent.
 // Replaces `calendar event get --id` (verify it's the right one) →
 // `calendar event delete --id` (destroy it).
 //
@@ -43,7 +43,7 @@ var CancelEvent = shortcut.Shortcut{
 	Product:     "calendar",
 	Description: "取消（删除）一个已有日程（删除前先确认它真实存在）",
 	Intent: "当你想取消/删除一个已经存在的日程时使用；" +
-		"内部先用 eventId 拉一次日程详情确认它真实存在并回显标题，再执行删除，" +
+		"内部先用 eventId 拉一次日程详情确认它真实存在，再执行删除并验证它已不存在，" +
 		"避免因 eventId 写错而误删别的日程。" +
 		"如果 eventId 查不到会直接报错，不会盲目删除。" +
 		"这是高危写操作，会真实删除该日程，框架会二次确认。",
@@ -68,7 +68,7 @@ var CancelEvent = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "取消（删除）一个已有日程（删除前先确认它真实存在）",
-			UseWhen:      []string{"当你想取消/删除一个已经存在的日程时使用；内部先用 eventId 拉一次日程详情确认它真实存在并回显标题，再执行删除，避免因 eventId 写错而误删别的日程。如果 eventId 查不到会直接报错，不会盲目删除。这是高危写操作，会真实删除该日程，框架会二次确认。"},
+			UseWhen:      []string{"当你想取消/删除一个已经存在的日程时使用；内部先用 eventId 拉一次日程详情确认它真实存在，再执行删除并验证它已不存在，避免因 eventId 写错而误删别的日程。如果 eventId 查不到会直接报错，不会盲目删除。这是高危写操作，会真实删除该日程，框架会二次确认。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws calendar +cancel-event --event EVENT_ID"},
 		},
@@ -92,60 +92,35 @@ var CancelEvent = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
+		if _, err := calendarSmartRequireEvent(detail, "calendar/get_calendar_detail", eventID); err != nil {
+			return err
+		}
 
-		// Defensively surface the event title so the user can see what is about to
-		// be cancelled. Structure is unknown, so probe several candidate fields at
-		// both the top level and under a nested detail/event/data wrapper; if none
-		// match we simply skip the projection and proceed to delete.
-		title := cancelEventExtractTitle(detail)
-		if title != "" {
-			_ = rt.Output(map[string]any{
-				"eventId": eventID,
-				"title":   title,
-				"action":  "about_to_cancel",
+		// Never print the pre-delete event detail: it may carry title, attendee,
+		// location, or meeting-room PII and would also create a second JSON value.
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"success":  true,
+				"dryRun":   true,
+				"executed": false,
+				"eventId":  eventID,
 			})
 		}
 
-		// Step 2 — delete the event. eventId param copied verbatim from the
-		// helper's `event delete` call site (delete_calendar_event).
-		return rt.CallMCP("delete_calendar_event", map[string]any{
-			"eventId": eventID,
+		// Step 2 — require a terminal delete receipt and then prove absence.
+		if err := calendarSmartDeleteAndVerify(rt, eventID); err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{
+			"success":  true,
+			"eventId":  eventID,
+			"deleted":  true,
+			"verified": true,
 		})
 	},
 }
 
-// cancelEventExtractTitle defensively digs a human-readable event title out of
-// a get_calendar_detail response. It checks common title-ish keys at the top
-// level and inside a single nested wrapper (detail/event/data/result), and
-// returns "" when nothing usable is found.
-func cancelEventExtractTitle(data map[string]any) string {
-	if data == nil {
-		return ""
-	}
-	if t := cancelEventTitleFromMap(data); t != "" {
-		return t
-	}
-	for _, k := range []string{"detail", "event", "data", "result"} {
-		if nested, ok := data[k].(map[string]any); ok {
-			if t := cancelEventTitleFromMap(nested); t != "" {
-				return t
-			}
-		}
-	}
-	return ""
-}
-
-func cancelEventTitleFromMap(m map[string]any) string {
-	for _, k := range []string{"summary", "title", "subject", "name"} {
-		if v, ok := m[k].(string); ok {
-			if s := strings.TrimSpace(v); s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
 func init() {
+	finalizeCalendarSmart(&CancelEvent, "已删除并通过缺席读回验证的日程")
 	shortcut.Register(CancelEvent)
 }

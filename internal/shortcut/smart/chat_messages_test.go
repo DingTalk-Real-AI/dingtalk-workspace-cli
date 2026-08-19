@@ -631,7 +631,7 @@ func TestCrossPlatformCoverageChatMessagesSenderFilterFailureEdges(t *testing.T)
 		}
 	})
 
-	t.Run("unverified mixed sender becomes verified by an exact sender id match", func(t *testing.T) {
+	t.Run("unverified mixed sender remains unverified after an exact sender id match", func(t *testing.T) {
 		payload := map[string]any{"complete": true, "failures": []map[string]any{}}
 		resolution := targetresolver.UserResolution{
 			Status:     targetresolver.StatusResolved,
@@ -655,12 +655,17 @@ func TestCrossPlatformCoverageChatMessagesSenderFilterFailureEdges(t *testing.T)
 				{"openMessageId": "other", "senderUserId": "other-user"},
 			}, &filter,
 		)
-		if len(filtered) != 1 || payload["complete"] != true || len(payload["failures"].([]map[string]any)) != 0 {
+		if len(filtered) != 1 || payload["complete"] != false || payload["partial"] != true ||
+			payload["failedCount"] != 1 || len(payload["failures"].([]map[string]any)) != 1 {
 			t.Fatalf("filtered=%#v payload=%#v", filtered, payload)
 		}
 		identity := payload["identityResult"].(map[string]any)
-		if identity["status"] != "evaluated" || identity["negativeConclusionAllowed"] != true {
+		if identity["status"] != "identity_unverified" || identity["negativeConclusionAllowed"] != false {
 			t.Fatalf("identityResult=%#v", identity)
+		}
+		filterResult := payload["senderFilter"].(map[string]any)
+		if filterResult["status"] != "identity_unverified" {
+			t.Fatalf("senderFilter=%#v", filterResult)
 		}
 	})
 

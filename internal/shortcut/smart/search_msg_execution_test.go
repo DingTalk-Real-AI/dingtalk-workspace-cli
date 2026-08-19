@@ -277,8 +277,13 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 		if _, exists := caller.calls[1].args["senderOpenDingTakIds"]; exists {
 			t.Fatalf("unrelated candidate leaked into request: %#v", caller.calls[1].args)
 		}
-		if payload["complete"] != true || payload["count"] != float64(1) {
+		if payload["complete"] != false || payload["count"] != float64(1) ||
+			payload["failedCount"] != float64(1) {
 			t.Fatalf("payload=%#v", payload)
+		}
+		scope := payload["senderScope"].(map[string]any)
+		if scope["status"] != "identity_unverified" || scope["targetsResolved"] != false {
+			t.Fatalf("senderScope=%#v", scope)
 		}
 	})
 
@@ -298,11 +303,11 @@ func TestCrossPlatformCoverageSearchMsgStableUserIDContinuesWhenDirectoryIsUnava
 		if got := caller.calls[1].args["senderUserIds"]; !reflect.DeepEqual(got, []string{"stable-user-id"}) {
 			t.Fatalf("senderUserIds=%#v", got)
 		}
-		if payload["count"] != float64(1) || payload["complete"] != true || payload["failedCount"] != float64(0) {
+		if payload["count"] != float64(1) || payload["complete"] != false || payload["failedCount"] != float64(1) {
 			t.Fatalf("payload=%#v", payload)
 		}
 		scope := payload["senderScope"].(map[string]any)
-		if _, exists := scope["status"]; exists || scope["targetsResolved"] != true {
+		if scope["status"] != "identity_unverified" || scope["targetsResolved"] != false {
 			t.Fatalf("senderScope=%#v", scope)
 		}
 	})

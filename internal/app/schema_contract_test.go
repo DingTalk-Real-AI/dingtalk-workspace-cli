@@ -400,6 +400,7 @@ func schemaContractPayloadForBoundCanonicals(t *testing.T, root *cobra.Command, 
 func TestChatSchemaSeparatesSendAndReply(t *testing.T) {
 	snapshot := schemaContractPayloadForBoundCanonicals(t, NewRootCommand(),
 		"chat.send_personal_message",
+		"chat.send_robot_message",
 		"chat.reply_personal_message",
 	)
 
@@ -418,6 +419,19 @@ func TestChatSchemaSeparatesSendAndReply(t *testing.T) {
 	if _, exists := snapshot.Tools["chat.upload_conversation_file"]; exists {
 		t.Fatal("downlined chat file upload must not be advertised in Schema")
 	}
+
+	botReply := snapshot.Tools["chat.send_robot_message"]
+	botParams := schemaContractMap(botReply["parameters"])
+	if got := schemaContractString(botParams["reply"]["property"]); got != "referenceOpenMessageId" {
+		t.Fatalf("bot --reply property = %q", got)
+	}
+	if got := schemaContractString(botParams["ref-sender"]["property"]); got != "srcMsgSendOpenDingTalkId" {
+		t.Fatalf("bot --ref-sender property = %q", got)
+	}
+	if got, ok := botParams["title"]["required"].(bool); !ok || got {
+		t.Fatalf("bot --title required = %#v, want false for conditional Markdown input", botParams["title"]["required"])
+	}
+	assertSchemaContractConstraintGroup(t, botReply, "require_together", []string{"reply", "ref-sender"})
 }
 
 func TestCalendarAttendeeDeleteSchemaMatchesRuntimeGate(t *testing.T) {

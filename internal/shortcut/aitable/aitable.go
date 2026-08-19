@@ -659,8 +659,8 @@ var RecordQuery = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+record-query",
 	Product:     serverMain,
-	Description: "查询表格记录（按 ID 取 / 条件筛选 / 关键词 / 分页）",
-	Intent:      "当你要读取表格里的行数据——按 recordId 精确取、按结构化条件筛选、按关键词全文搜索或分页遍历时使用；返回匹配记录及其单元格值。",
+	Description: "查询表格记录（按 ID / 条件 / 关键词，并支持字段投影和分页）",
+	Intent:      "读取表格行数据；可按 recordId 精确取、按条件筛选、按关键词搜索，并用 fieldIds 只返回用户要求的字段以避免无关数据和 token 消耗。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -674,17 +674,20 @@ var RecordQuery = shortcut.Shortcut{
 			CLIPath:        "aitable +record-query",
 			PrimaryCLIPath: "aitable +record-query",
 		},
-		Description: "查询表格记录（按 ID 取 / 条件筛选 / 关键词 / 分页）",
+		Description: "查询表格记录（按 ID / 条件 / 关键词，并支持字段投影和分页）",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "查询表格记录（按 ID 取 / 条件筛选 / 关键词 / 分页）",
-			UseWhen:      []string{"当你要读取表格里的行数据——按 recordId 精确取、按结构化条件筛选、按关键词全文搜索或分页遍历时使用；返回匹配记录及其单元格值。"},
+			AgentSummary: "查询表格记录（按 ID / 条件 / 关键词，并支持字段投影和分页）",
+			UseWhen:      []string{"读取表格行数据；可按 recordId 精确取、按条件筛选、按关键词搜索，并用 fieldIds 只返回用户要求的字段以避免无关数据和 token 消耗。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws aitable +record-query --base-id B --table-id T --query \"关键词\" --limit 50"},
+			Examples: []string{
+				"dws aitable +record-query --base-id B --table-id T --query \"关键词\" --limit 50",
+				"dws aitable +record-query --base-id B --table-id T --record-ids R1,R2 --field-ids F_NAME,F_STATUS",
+			},
 		},
 	},
 	Flags: []shortcut.Flag{
@@ -698,7 +701,10 @@ var RecordQuery = shortcut.Shortcut{
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "单次最大记录数，默认 100（可选）"},
 		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标（可选）"},
 	},
-	Tips: []string{`dws aitable +record-query --base-id B --table-id T --query "关键词" --limit 50`},
+	Tips: []string{
+		`dws aitable +record-query --base-id B --table-id T --query "关键词" --limit 50`,
+		`dws aitable +record-query --base-id B --table-id T --record-ids R1,R2 --field-ids F_NAME,F_STATUS`,
+	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		params := map[string]any{
 			"baseId":  rt.Str("base-id"),
@@ -733,7 +739,7 @@ var RecordQuery = shortcut.Shortcut{
 		if rt.Changed("cursor") {
 			params["cursor"] = rt.Str("cursor")
 		}
-		return rt.CallMCP("query_records", params)
+		return executeRecordQuery(rt, params)
 	},
 }
 
@@ -3110,6 +3116,7 @@ func init() {
 		BaseSchemaSnapshot,
 		BaseBootstrap,
 		TableGet,
+		TableBootstrap,
 		TableCopy,
 		TableUpdate,
 		TableDelete,

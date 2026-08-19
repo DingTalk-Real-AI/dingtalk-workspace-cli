@@ -35,7 +35,7 @@ import (
 // search hits through list_messages_by_ids in chunks of 50. A later-page or
 // enrichment failure never turns a partial result into a false success: the
 // output carries an explicit failure ledger and complete=false.
-const searchMsgIntent = "当你要按关键词、发送者、@对象、消息类型、机器人来源或会话范围组合搜索 IM 消息时使用；可搜索单个、多个或全部会话。--group/--groups 接受群名或 openConversationId，--sender/--senders 接受姓名、userId 或 openDingTalkId：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 执行，但无稳定 senderId 命中不得作完整否定结论。默认查询近 7 天，也可指定精确起止时间和输出顺序。" +
+const searchMsgIntent = "当你要按关键词、发送者、@对象、消息类型、机器人来源或会话范围组合搜索 IM 消息时使用；可搜索单个、多个或全部会话。--group/--groups 接受群名或 openConversationId，--sender/--senders 接受姓名、userId 或 openDingTalkId：姓名优先唯一解析，稳定 ID 精确路由；通讯录无法分类时仍按原值 userId 执行并保留 identity_unverified，可交付精确命中但不能把原值升级为已验证身份或作完整否定结论。默认查询近 7 天，也可指定精确起止时间和输出顺序。" +
 	"显式指定会话时会先验证 CID，再执行有界全局扫描并在本地精确过滤，避免下层忽略非法 CID 或群聊 CID。" +
 	"--page-all 会连续拉取游标页，默认再按消息 ID 分批富化详情；任何续页或富化失败都会保留已取得结果并返回逐项失败 ledger，绝不把截断结果标成完整。" +
 	"--download-resources 使用安全本地路径、默认不覆盖和原子落盘。"
@@ -86,7 +86,7 @@ var SearchMsg = shortcut.Shortcut{
 		{Name: "groups", Type: shortcut.FlagStringSlice, Desc: "多个群名或 openConversationId；可混合输入并逐项唯一解析"},
 		{Name: "chat-id", Type: shortcut.FlagStringSlice, Desc: "--groups 的 lark-cli 对齐别名；只接受 openConversationId"},
 		{Name: "chat-query", Type: shortcut.FlagStringSlice, Desc: "显式按群名唯一解析的兼容入口（可选，可重复或逗号分隔）"},
-		{Name: "senders", Type: shortcut.FlagStringSlice, Desc: "多个发送者姓名、userId 或 openDingTalkId；姓名唯一解析，稳定 ID 精确路由，通讯录故障不阻断原值 userId 查询"},
+		{Name: "senders", Type: shortcut.FlagStringSlice, Desc: "多个发送者姓名、userId 或 openDingTalkId；姓名唯一解析，稳定 ID 精确路由，通讯录无法分类时按原值 userId 查询并保留身份未验证状态"},
 		{Name: "sender", Type: shortcut.FlagStringSlice, Desc: "单个或多个发送者姓名、userId 或 openDingTalkId；--senders 的兼容别名，保留同样的三态解析与安全降级语义"},
 		{Name: "sender-query", Type: shortcut.FlagStringSlice, Desc: "显式按姓名唯一解析的兼容入口（可选，可重复或逗号分隔）"},
 		{Name: "at-me", Type: shortcut.FlagBool, Desc: "只搜索 @我 的消息"},
@@ -278,7 +278,7 @@ var SearchMsg = shortcut.Shortcut{
 				return searchSenderScopeUnverifiedError(resolvedFilters.Senders, unverifiableMessageIDs)
 			}
 		}
-		unverifiedSenderInputs := searchUnverifiedSenderInputs(messages, resolvedFilters.Senders)
+		unverifiedSenderInputs := searchUnverifiedSenderInputs(resolvedFilters.Senders)
 		if len(unverifiedSenderInputs) > 0 {
 			failures = append(failures, map[string]any{
 				"stage":  "sender_identity_verification",
@@ -701,18 +701,11 @@ func filterSearchSenderScope(
 }
 
 func searchUnverifiedSenderInputs(
-	messages []map[string]any,
 	resolutions []targetresolver.UserResolution,
 ) []string {
-	observed := map[string]bool{}
-	for _, message := range messages {
-		if senderID := strings.TrimSpace(fmt.Sprint(chatmsg.SenderID(message))); senderID != "" && senderID != "<nil>" {
-			observed[senderID] = true
-		}
-	}
 	values := make([]string, 0)
 	for _, resolution := range resolutions {
-		if targetresolver.IsUnverifiedUserIDResolution(resolution) && !observed[resolution.Selected.UserID] {
+		if targetresolver.IsUnverifiedUserIDResolution(resolution) {
 			values = append(values, resolution.Query)
 		}
 	}
