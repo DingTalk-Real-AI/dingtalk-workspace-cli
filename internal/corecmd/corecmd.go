@@ -50,6 +50,7 @@ package corecmd
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -765,9 +766,29 @@ func pollWithSpec(loopCtx context.Context, decl *contract.WaitSpec, spec Spec, c
 
 // waitResource resolves the resource identifier an event stream correlates
 // against, from the accepted result data via the declared ResourceQuery.
+// result.Data() returns any deep-copied business payload, which may be a
+// map[string]any, struct, or struct pointer. We normalize via JSON round-trip
+// to support all valid result types uniformly.
 func waitResource(decl *contract.WaitSpec, result output.CommandResult) (string, error) {
-	data, ok := result.Data().(map[string]any)
-	if !ok {
+	raw := result.Data()
+	if raw == nil {
+		return "", fmt.Errorf("wait: accepted result data is nil; cannot resolve resource %q", decl.ResourceQuery)
+	}
+	// Fast path: already a map.
+	if data, ok := raw.(map[string]any); ok {
+		resource, ok := wait.ExtractStatus(wait.PollDoc(data), decl.ResourceQuery)
+		if !ok || strings.TrimSpace(resource) == "" {
+			return "", fmt.Errorf("wait: resource query %q not found in accepted result data", decl.ResourceQuery)
+		}
+		return resource, nil
+	}
+	// Slow path: struct or struct pointer. Normalize via JSON round-trip.
+	jsonBytes, err := json.Marshal(raw)
+	if err != nil {
+		return "", fmt.Errorf("wait: accepted result data cannot be serialized to JSON: %w", err)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(jsonBytes, &data); err != nil {
 		return "", fmt.Errorf("wait: accepted result data is not an object; cannot resolve resource %q", decl.ResourceQuery)
 	}
 	resource, ok := wait.ExtractStatus(wait.PollDoc(data), decl.ResourceQuery)

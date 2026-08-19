@@ -26,6 +26,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
@@ -2118,5 +2119,113 @@ func TestCrossPlatformCoverageEmbedContractSkipsBlankAndHiddenFlags(t *testing.T
 		if strings.Contains(key, "ghost") {
 			t.Fatalf("hidden flag must not be annotated: %s", key)
 		}
+	}
+}
+
+// TestWaitResourceStronglyTypedDTOs verifies waitResource handles struct and
+// struct pointer results via JSON normalization (P1 fix for auto-CR).
+func TestWaitResourceStronglyTypedDTOs(t *testing.T) {
+	type TaskDTO struct {
+		TaskID string `json:"task_id"`
+		Status string `json:"status"`
+	}
+	type NestedDTO struct {
+		Meta struct {
+			ResourceID string `json:"resource_id"`
+		} `json:"meta"`
+	}
+
+	tests := []struct {
+		name          string
+		data          any
+		query         string
+		wantResource  string
+		wantErrSubstr string
+	}{
+		{
+			name:         "map[string]any fast path",
+			data:         map[string]any{"task_id": "abc123"},
+			query:        "task_id",
+			wantResource: "abc123",
+		},
+		{
+			name:         "struct value",
+			data:         TaskDTO{TaskID: "struct-456", Status: "running"},
+			query:        "task_id",
+			wantResource: "struct-456",
+		},
+		{
+			name:         "struct pointer",
+			data:         &TaskDTO{TaskID: "ptr-789", Status: "pending"},
+			query:        "task_id",
+			wantResource: "ptr-789",
+		},
+		{
+			name:         "nested struct dotted query",
+			data:         NestedDTO{},
+			query:        "meta.resource_id",
+			wantResource: "",
+			wantErrSubstr: "not found",
+		},
+		{
+			name: "nested struct with value",
+			data: func() NestedDTO {
+				var d NestedDTO
+				d.Meta.ResourceID = "nested-xyz"
+				return d
+			}(),
+			query:        "meta.resource_id",
+			wantResource: "nested-xyz",
+		},
+		{
+			name:          "nil data",
+			data:          nil,
+			query:         "task_id",
+			wantErrSubstr: "nil",
+		},
+		{
+			name:          "non-object data (string)",
+			data:          "not-an-object",
+			query:         "task_id",
+			wantErrSubstr: "not an object",
+		},
+		{
+			name:          "non-object data (slice)",
+			data:          []string{"a", "b"},
+			query:         "task_id",
+			wantErrSubstr: "not an object",
+		},
+		{
+			name:          "missing query field in struct",
+			data:          TaskDTO{TaskID: "abc"},
+			query:         "nonexistent",
+			wantErrSubstr: "not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decl := &contract.WaitSpec{
+				ResourceQuery: tt.query,
+			}
+			result := output.Success(tt.data)
+			resource, err := waitResource(decl, result)
+
+			if tt.wantErrSubstr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErrSubstr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErrSubstr) {
+					t.Errorf("error = %q; want substring %q", err.Error(), tt.wantErrSubstr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resource != tt.wantResource {
+				t.Errorf("resource = %q; want %q", resource, tt.wantResource)
+			}
+		})
 	}
 }
