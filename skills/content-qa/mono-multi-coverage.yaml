@@ -176,9 +176,6 @@ orphan_scripts_allowlist:
   - path: dingtalk-misc/scripts/report_received_today.py
     disposition: defer
     reason: "pending report.md reference"
-  - path: dingtalk-drive/scripts/drive_tree_list.py
-    disposition: defer
-    reason: "mono drive.md references the helper; multi routes trees via bounded +list"
 
 # Skills allowed to omit references/ directory.
 skills_without_references_allowlist: []
