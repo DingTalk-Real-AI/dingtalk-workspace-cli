@@ -56,7 +56,7 @@ Bot 多群用 `--groups` 或 `--groups-file`，Runtime 去重后输出
 <!-- DWS_CAPABILITY_BOUNDARY_CONTRACT_START -->
 | capability | supported | current route / boundary |
 |---|---:|---|
-| `thread-write` | `false` | quote reply with +messages-reply; thread reading with +thread-replies |
+| `thread-write` | `true` | chat topic reply writes directly to openConvThreadId |
 | `bot-rich-media` | `false` | bot text/markdown, or current-user file/image send |
 | `card-action-callback` | `false` | streaming text card create/update only |
 | `resource-resume` | `false` | atomic whole-file download with explicit retry |
@@ -66,3 +66,5 @@ Bot 多群用 `--groups` 或 `--groups-file`，Runtime 去重后输出
 
 `supported=false` 是执行门禁，不是待猜测字段。只有 lower interface、Runtime、测试、Schema 和
 此页同时升级后，才能改变对外承诺。
+
+话题圈会话仍禁止引用消息回复；向话题追加回复使用 `chat topic reply`。

@@ -94,6 +94,7 @@ metadata:
 
 | 场景 | Reference |
 |---|---|
+| 话题圈创建、发布、浏览、回复、查回复和整条转发 | [topic](references/chat/topic.md) |
 | 需要跨步骤传递真实结果的消息/群组合流程 | [01-messaging.md](references/01-messaging.md) |
 | 消息读取与查询 | [message-query](references/chat/message-query.md) |
 | 编辑、撤回、回复、转发、Pin、Top、Favorite 或 reaction 写入 | [message-actions](references/chat/message-actions.md) |

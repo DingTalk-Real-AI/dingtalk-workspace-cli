@@ -171,6 +171,34 @@ func TestParamAliasHelperEdges(t *testing.T) {
 	}
 }
 
+func TestReduceParamAliasesKeepsHiddenRunnableCompatibilityLeaf(t *testing.T) {
+	useParamConceptLoader(t, ParamConcepts{
+		Version: 1,
+		Overrides: []CommandOverride{{
+			CommandPath:   "chat legacy",
+			ScopedAliases: map[string]string{"old-id": "canonical-id"},
+		}},
+	}, nil)
+
+	root := &cobra.Command{Use: "dws"}
+	chat := &cobra.Command{Use: "chat"}
+	legacy := &cobra.Command{Use: "legacy", Hidden: true, Run: func(*cobra.Command, []string) {}}
+	legacy.Flags().String("canonical-id", "", "canonical")
+	chat.AddCommand(legacy)
+	root.AddCommand(chat)
+
+	entries, err := ReduceParamAliases(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].CLIPath != "chat legacy" || entries[0].Aliases["old-id"] != "canonical-id" {
+		t.Fatalf("entries = %#v", entries)
+	}
+	if legacy.IsAvailableCommand() {
+		t.Fatal("hidden compatibility leaf became discoverable")
+	}
+}
+
 func TestReduceLeafParamAliasesRemainingEdges(t *testing.T) {
 	t.Run("pending reviewed bind blocks non-real members", func(t *testing.T) {
 		entry, problems := reduceLeafParamAliases(
