@@ -51,7 +51,7 @@ func TestCrossPlatformCoverageShellQuoteArgRoundTrip(t *testing.T) {
 
 	for _, want := range values {
 		t.Run(want, func(t *testing.T) {
-			quoted := shellQuoteArg(want)
+			quoted := ShellQuoteArg(want)
 
 			// 1) 未被拆参也未被吞掉：位置参数个数必须恰好为 1。
 			//    引用失效时 "sp 7" 会变 2 个、"" 会变 0 个、$(id) 会变 id 的输出词数。

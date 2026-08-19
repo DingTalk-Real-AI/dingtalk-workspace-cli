@@ -193,7 +193,7 @@
 { "name": "项目负责人", "value": "[\"userId1\",\"userId2\"]" }
 ```
 
-> **严禁直接写姓名。** 必须先通过 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 查询获取 userId；多结果时须让用户消歧确认。
+> **严禁直接写姓名。** 必须先通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 查询获取 userId；多结果时须让用户消歧确认。
 
 ### DepartmentField（部门控件）
 

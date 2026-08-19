@@ -53,4 +53,4 @@
 | Recipe             | 行动指南（固定路线） |
 | ------------------ | ------------------- |
 | schedule-meeting   | **见上文「两准则」**、**「搜房失败硬门禁」**。**未给时段且仅说「发起/开个会」**→ 当前 CLI 不支持实时视频会议，告知用户请在钉钉客户端操作。**未给时段但有预约意图**：追问具体开始/结束时间。**已有时段后**：1. 先用 `+room-find` 在用户允许范围内取得真实 `roomId`（用户没要求会议室则跳过）；2. 用 `+book` 创建日程并按姓名邀请参会人；3. 有 `roomId` 时用 `room add --event <eventId> --rooms <roomId>` 绑定；4. 读回同一 `eventId` 验证。用户点名会议室时给 `+room-find` 传 `--room-name`，不得使用 `--query`。连续 2 次空结果或任意一次 `roomId invalid` 时立即收束；若限定范围内无 roomId 或无空房，直接汇报失败，除非用户明确放宽范围或改时间。 |
-| reschedule-meeting | 1. `calendar event list --start "<起始ISO>" --end "<结束ISO>"` → 取 `eventId` 2. `calendar event update --id <eventId> --start "<新起始ISO>" --end "<新结束ISO>"` 更新时间 3. `chat search --query "<群名>"` → 取 `openConversationId` → `chat message send --group <openConversationId> --text "<变更通知>"` 通知变更 |
+| reschedule-meeting | 1. `calendar event list --start "<起始ISO>" --end "<结束ISO>"` → 取 `eventId` 2. `calendar event update --id <eventId> --start "<新起始ISO>" --end "<新结束ISO>"` 更新时间 3. `chat search --query "<群名>"` → 取 `openConversationId` → `chat message send --conversation-id <openConversationId> --content "<变更通知>"` 通知变更 |

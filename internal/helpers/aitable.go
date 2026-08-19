@@ -791,15 +791,29 @@ const aitableMaxRetries = 3
 // callAitableTool 是 aitable 专用的 MCP 调用入口，带自动重试。
 // 替代直接调用 callMCPTool，对网络抖动和服务端瞬态错误进行透明重试。
 func callAitableTool(toolName string, args map[string]any) error {
+	return callAitableToolContext(context.Background(), toolName, args)
+}
+
+func callAitableToolContext(ctx context.Context, toolName string, args map[string]any) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var lastErr error
 	for attempt := 0; attempt <= aitableMaxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if attempt > 0 {
 			backoff := time.Duration(1<<(attempt-1)) * time.Second // 1s, 2s, 4s
 			fmt.Fprintf(os.Stderr, "[aitable retry %d/%d] %s after %v...\n", attempt, aitableMaxRetries, toolName, backoff)
-			helperSleep(backoff)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-helperAfter(backoff):
+			}
 		}
 
-		err := callMCPTool(toolName, args)
+		err := callMCPToolContext(ctx, toolName, args)
 		if err == nil {
 			return nil
 		}
@@ -1877,7 +1891,7 @@ config 结构参考：
 			if v, _ := cmd.Flags().GetString("field-ids"); v != "" {
 				toolArgs["fieldIds"] = parseCSVValues(v)
 			}
-			return callAitableTool("get_fields", toolArgs)
+			return callAitableToolContext(cmd.Context(), "get_fields", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(fieldGetCmd, LeafSpec{

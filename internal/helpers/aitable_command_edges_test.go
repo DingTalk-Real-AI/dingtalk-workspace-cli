@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -17,6 +18,22 @@ type aitableCommandCoverageCaller struct {
 	err      error
 	response map[string]string
 }
+
+type aitableCommandContextKey struct{}
+
+type aitableCommandContextCaller struct {
+	value any
+}
+
+func (c *aitableCommandContextCaller) CallTool(ctx context.Context, _, _ string, _ map[string]any) (*edition.ToolResult, error) {
+	c.value = ctx.Value(aitableCommandContextKey{})
+	return nil, context.Canceled
+}
+
+func (*aitableCommandContextCaller) Format() string { return "json" }
+func (*aitableCommandContextCaller) DryRun() bool   { return false }
+func (*aitableCommandContextCaller) Fields() string { return "" }
+func (*aitableCommandContextCaller) JQ() string     { return "" }
 
 func (c *aitableCommandCoverageCaller) CallTool(_ context.Context, _, tool string, _ map[string]any) (*edition.ToolResult, error) {
 	if c.err != nil {
@@ -67,6 +84,11 @@ func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T
 	oldDeps, oldSleep := deps, helperSleep
 	t.Cleanup(func() { deps, helperSleep = oldDeps, oldSleep })
 	helperSleep = func(time.Duration) {}
+	testseam.Swap(t, &helperAfter, func(time.Duration) <-chan time.Time {
+		ready := make(chan time.Time, 1)
+		ready <- time.Time{}
+		return ready
+	})
 
 	retryable := fmt.Errorf("timeout: retryable: true")
 	caller := &aitableTestCaller{errors: []error{retryable, retryable, retryable, retryable}}
@@ -85,6 +107,48 @@ func TestCrossPlatformCoverageAitableRetryWrappersExhaustAndRecover(t *testing.T
 	installAitableDeps(t, caller)
 	if err := callAitableHelperTool("retry", nil); err == nil {
 		t.Fatal("exhausted helper retries returned nil")
+	}
+
+	caller = &aitableTestCaller{}
+	installAitableDeps(t, caller)
+	if err := callAitableToolContext(nil, "nil-context", nil); err != nil {
+		t.Fatalf("nil context was not normalized: %v", err)
+	}
+
+	caller = &aitableTestCaller{errors: []error{retryable}}
+	installAitableDeps(t, caller)
+	ctx, cancel := context.WithCancel(context.Background())
+	backoffPending := make(chan time.Time)
+	testseam.Swap(t, &helperAfter, func(time.Duration) <-chan time.Time {
+		cancel()
+		return backoffPending
+	})
+	if err := callAitableToolContext(ctx, "cancel-during-backoff", nil); err != context.Canceled {
+		t.Fatalf("cancel during retry backoff = %v, want %v", err, context.Canceled)
+	}
+}
+
+func TestCrossPlatformCoverageAitableFieldListPreservesCommandContext(t *testing.T) {
+	old := deps
+	t.Cleanup(func() { deps = old })
+	caller := &aitableCommandContextCaller{}
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+	deps.Out.errW = io.Discard
+
+	root := newAitableCommand()
+	installExampleGlobalFlags(root)
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"field", "list", "--base-id=b", "--table-id=t"})
+	ctx := context.WithValue(context.Background(), aitableCommandContextKey{}, "field-list-context")
+	if err := root.ExecuteContext(ctx); err == nil {
+		t.Fatal("field list context probe unexpectedly succeeded")
+	}
+	if caller.value != "field-list-context" {
+		t.Fatalf("field list caller context value = %#v", caller.value)
 	}
 }
 

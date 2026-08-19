@@ -21,12 +21,12 @@ metadata:
 
 | 用户说 | 命令 |
 |--------|------|
-| "找张三 / 张三是谁" | `dws aisearch person --keyword "张三" --dimension name` |
-| "谁负责 XX / XX 负责人是谁" | `dws aisearch person --keyword "<XX>" --dimension duty` |
-| "张三的上级 / 下级" | `dws aisearch person --keyword "张三" --dimension supervisor`（或 `subordinate`） |
-| "X 部门有哪些人" | `dws aisearch person --keyword "<部门>" --dimension department` |
-| "工号 12345 是谁" | `dws aisearch person --keyword "<工号>" --dimension jobNumber` |
-| "按手机号线索语义搜人" | `dws aisearch person --keyword "<手机号线索>" --dimension phone` |
+| "找张三 / 张三是谁" | `dws aisearch person --query "张三" --dimension name` |
+| "谁负责 XX / XX 负责人是谁" | `dws aisearch person --query "<XX>" --dimension duty` |
+| "张三的上级 / 下级" | `dws aisearch person --query "张三" --dimension supervisor`（或 `subordinate`） |
+| "X 部门有哪些人" | `dws aisearch person --query "<部门>" --dimension department` |
+| "工号 12345 是谁" | `dws aisearch person --query "<工号>" --dimension jobNumber` |
+| "按手机号线索语义搜人" | `dws aisearch person --query "<手机号线索>" --dimension phone` |
 | "完整手机号精确反查" | `dws contact user search-mobile --mobile "<完整手机号>"` |
 | "最近 OKR 相关邮件 / 项目相关文档" | `dws aisearch enterprise --queries "<主题>" --types mail/document --time-range "<时间>"` |
 | "我发过/创建过/分享过/收到过什么" | `dws aisearch behavior --queries "<主题>" --behavior-type <动作> --direction <方向>` |
@@ -39,8 +39,8 @@ metadata:
 
 **触发**：姓名模糊找人/谁负责/查上下级/部门成员/工号反查/手机号线索语义搜人。
 
-1. **定维度（必须）**：姓名→`name`、"谁负责 XX"→`duty`、部门成员→`department`、上级/下级→`supervisor`/`subordinate`、工号→`jobNumber`、手机号语义线索→`phone`；完整手机号精确反查切到 `dingtalk-contact` 的 `user search-mobile`；不确定→`all`。`--keyword` 必须按用户原文**完整保真**，切勿截断、改昵称、扩同音字。
-2. **执行（必须）**：`dws aisearch person --keyword "<完整值>" --dimension <维度> --format json`。
+1. **定维度（必须）**：姓名→`name`、"谁负责 XX"→`duty`、部门成员→`department`、上级/下级→`supervisor`/`subordinate`、工号→`jobNumber`、手机号语义线索→`phone`；完整手机号精确反查切到 `dingtalk-contact` 的 `user search-mobile`；不确定→`all`。`--query` 必须按用户原文**完整保真**，切勿截断、改昵称、扩同音字。
+2. **执行（必须）**：`dws aisearch person --query "<完整值>" --dimension <维度> --format json`。
 3. **解析（必须）**：从 JSON 取 `userId` / `openDingTalkId`；**多候选必须输出让用户选，禁止默认取第一个、禁止编造**未返回的人员字段。
 4. **衔接（必须）**：要邮箱/部门/职位/主管等详情 → 切 `dingtalk-contact` 执行 `dws contact user get --ids <userId> --format json`；发消息 → `dingtalk-chat`；发 DING → `dingtalk-misc`（`references/ding.md`）。
 5. **失败（必须）**：未命中最多换 1 个维度重试一次（如 `name`→`department`/`jobNumber`/`phone`），仍保留完整目标值；仍无果**必须如实告知**。
@@ -67,7 +67,7 @@ metadata:
 
 ## 高频硬约束
 
-- 搜索目标必须完整保真：姓名、工号、手机号、部门名按用户原文完整传入 `--keyword`，严禁自行截断、拆字、改昵称或扩展同音字。
+- 搜索目标必须完整保真：姓名、工号、手机号、部门名按用户原文完整传入 `--query`，严禁自行截断、拆字、改昵称或扩展同音字。
 - 首次未命中时最多换维度重试一次（如 name → department/jobNumber/phone），仍必须保留完整目标值；不要用半截姓名扩大搜索。
 - 找到候选后，如用户要邮箱、部门、职位、主管等详情，必须切到 `dingtalk-contact` 执行 `contact user get --ids <userId> --format json` 补全。
 - 多候选且无法唯一判断时输出候选并询问；不要默认取第一个，也不要编造未返回的人员信息。

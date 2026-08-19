@@ -57,7 +57,7 @@ Usage:
 Example:
   dws ding message send-personal --users openDingTalkId1,openDingTalkId2 --content "请查看"
   dws ding message send-personal --type call --users openDingTalkId1 --content "紧急告警"
-  # 查询 openDingTalkId: dws aisearch person --keyword "姓名" --dimension name
+  # 查询 openDingTalkId: dws aisearch person --query "姓名" --dimension name
 Flags:
       --users string     接收者 openDingTalkId 列表，逗号分隔 (必填)
       --content string   DING 内容 (必填)
@@ -66,7 +66,7 @@ Flags:
 
 注意:
   - 与 `ding message send`（机器人身份）不同：send-personal 以当前用户身份发送，无需 --robot-code
-  - 接收者使用 openDingTalkId（非 userId），可通过 `dws aisearch person --keyword "姓名" --dimension name` 获取
+  - 接收者使用 openDingTalkId（非 userId），可通过 `dws aisearch person --query "姓名" --dimension name` 获取
   - sms/call 类型有通信费用，使用前需和用户确认
 ```
 
@@ -92,7 +92,7 @@ Usage:
 Example:
   dws ding message send-by-message --group <openConversationId> --message-id <openMessageId> --users id1,id2
   dws ding message send-by-message --group <openConversationId> --message-id <openMessageId> --users id1 --type sms
-  # 查询 openDingTalkId: dws aisearch person --keyword "姓名" --dimension name
+  # 查询 openDingTalkId: dws aisearch person --query "姓名" --dimension name
   # 查询 openConversationId: dws chat search --keyword "群名"
 Flags:
       --group string       原消息所在会话 openConversationId (必填)
@@ -103,7 +103,7 @@ Flags:
 
 注意:
   - 与 `send-personal` 不同: send-by-message 是将已有聊天消息转发为 DING，需要指定原消息的会话和消息 ID
-  - 接收者使用 openDingTalkId，可通过 `dws aisearch person --keyword "姓名" --dimension name` 获取
+  - 接收者使用 openDingTalkId，可通过 `dws aisearch person --query "姓名" --dimension name` 获取
   - sms/call 类型有通信费用，使用前需和用户确认
 ```
 
@@ -157,7 +157,7 @@ dws ding message recall-personal --id <OPEN_DING_ID> --format json
 ## 注意事项
 - `--robot-code` 从钉钉开放平台 应用管理 → 机器人 中获取，也可设环境变量 `DINGTALK_DING_ROBOT_CODE`
 - `send` / `recall` 是机器人身份，需要 --robot-code；`send-personal` / `recall-personal` / `send-by-message` 是用户身份，无需 robot-code
-- `send` 接收者使用 userId；`send-personal` / `send-by-message` 接收者使用 openDingTalkId（可通过 `dws aisearch person --keyword "姓名" --dimension name` 获取）
+- `send` 接收者使用 userId；`send-personal` / `send-by-message` 接收者使用 openDingTalkId（可通过 `dws aisearch person --query "姓名" --dimension name` 获取）
 - `send-by-message` 是将已有聊天消息转发为 DING，需指定 --group 和 --message-id
 - sms/call 类型有通信费用，使用前需和用户确认
 - 默认 `--type app` 为应用内 DING（免费）

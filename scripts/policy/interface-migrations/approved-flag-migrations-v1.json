@@ -1158,6 +1158,321 @@
       },
       "state": "pending",
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
+    },
+    {
+      "command": "dws aisearch",
+      "legacy": {
+        "name": "keyword",
+        "before": {"present": true, "type": "string", "shorthand": "w", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "shorthand": "w", "scope": "local", "alias_of": "query"}
+      },
+      "canonical": {
+        "name": "query",
+        "before": {"present": true, "type": "string", "hidden": true, "scope": "local"},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws aisearch person",
+      "legacy": {
+        "name": "keyword",
+        "before": {"present": true, "type": "string", "shorthand": "w", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "shorthand": "w", "scope": "local", "alias_of": "query"}
+      },
+      "canonical": {
+        "name": "query",
+        "before": {"present": true, "type": "string", "hidden": true, "scope": "local"},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat +broadcast",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat +dm",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat +messages-batch-send-by-bot",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat +messages-reply",
+      "legacy": {
+        "name": "conversation-id",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "group"}
+      },
+      "canonical": {
+        "name": "group",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat +messages-reply",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat +messages-send-by-bot",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat +messages-send-by-webhook",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat +send-to-group",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat message reply",
+      "legacy": {
+        "name": "conversation-id",
+        "before": {"present": true, "type": "string", "required": true, "scope": "local"},
+        "after": {"present": true, "type": "string", "required": false, "hidden": true, "scope": "local", "alias_of": "group"}
+      },
+      "canonical": {
+        "name": "group",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "required": true, "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat message reply",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "required": true, "scope": "local"},
+        "after": {"present": true, "type": "string", "required": false, "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "required": true, "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat message send",
+      "legacy": {
+        "name": "file-path",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "file"}
+      },
+      "canonical": {
+        "name": "file",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat message send",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": true, "type": "string", "hidden": true, "scope": "local"},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat message send-by-bot",
+      "legacy": {
+        "name": "file-path",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "file"}
+      },
+      "canonical": {
+        "name": "file",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "pending",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat message send-by-bot",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "pending",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws chat message send-by-webhook",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "required": true, "scope": "local"},
+        "after": {"present": true, "type": "string", "required": false, "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "required": true, "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws doc +doc-append",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws doc block insert",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws doc block update",
+      "legacy": {
+        "name": "text",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "content"}
+      },
+      "canonical": {
+        "name": "content",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
+    },
+    {
+      "command": "dws todo task add-attachment",
+      "legacy": {
+        "name": "file-path",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "hidden": true, "scope": "local", "alias_of": "file"}
+      },
+      "canonical": {
+        "name": "file",
+        "before": {"present": false},
+        "after": {"present": true, "type": "string", "scope": "local"}
+      },
+      "state": "consumed",
+      "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
     }
   ]
 }

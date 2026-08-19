@@ -470,7 +470,7 @@ Notes:
 dws contact user get-self --format json
 
 # 2. 按名字搜索人员 — 统一从 AI 搜问取得 userId/openDingTalkId
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 
 # 3. 查看部门结构 — 提取 deptId
 dws contact dept search --query "技术部" --format json

@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // ──────────────────────────────────────────────────────────
@@ -1018,7 +1018,7 @@ func inferMimeType(fileName string) string {
 }
 
 // buildBlockElement 从 flags 构建块元素 JSON 对象。
-// 优先级: --element (原始 JSON) > --heading > --text
+// 优先级: --element (原始 JSON) > --heading > --text (旧名) > --content
 func buildBlockElement(cmd *cobra.Command) (any, error) {
 	if raw, _ := cmd.Flags().GetString("element"); raw != "" {
 		var obj any
@@ -1037,13 +1037,13 @@ func buildBlockElement(cmd *cobra.Command) (any, error) {
 			"heading":   map[string]any{"text": h, "level": level},
 		}, nil
 	}
-	if t, _ := cmd.Flags().GetString("text"); t != "" {
+	if t := flagOrFallback(cmd, "text", "content"); t != "" {
 		return map[string]any{
 			"blockType": "paragraph",
 			"paragraph": map[string]any{"text": t},
 		}, nil
 	}
-	return nil, fmt.Errorf("block content required: --text / --heading / --element")
+	return nil, fmt.Errorf("block content required: --content / --heading / --element")
 }
 
 // buildNodeTransferRunE creates a RunE handler for copy/move commands.
@@ -2127,12 +2127,12 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		Use:   "insert",
 		Short: "插入块元素",
 		Long: `向文档插入块元素。通过 --element 传入 JSON 格式的块元素。
-可用 --text 快速插入段落，--heading + --level 快速插入标题。
+可用 --content 快速插入段落，--heading + --level 快速插入标题。
 
 块类型: paragraph, heading, blockquote, callout, columns,
         orderedList, unorderedList, table, sheet, attachment, slot`,
 		Example: `  # 快捷插入段落
-  dws doc block insert --node DOC_ID --text "这是一段文字"
+  dws doc block insert --node DOC_ID --content "这是一段文字"
 
   # 快捷插入标题
   dws doc block insert --node DOC_ID --heading "二级标题" --level 2
@@ -2155,7 +2155,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
   dws doc block insert --node DOC_ID --element '{"blockType":"unorderedList","unorderedList":{"list":{"listId":"list-2"}},"children":[{"text":"第二项"}]}'
 
   # 在指定位置之前插入
-  dws doc block insert --node DOC_ID --text "插入内容" --ref-block BLOCK_ID --where before`,
+  dws doc block insert --node DOC_ID --content "插入内容" --ref-block BLOCK_ID --where before`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
@@ -2241,14 +2241,14 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "向文档插入块元素",
-				UseWhen:      []string{"在文档中插入新块（段落/标题等）；简单场景用 --text/--heading，复杂块用 --element JSON"},
+				UseWhen:      []string{"在文档中插入新块（段落/标题等）；简单场景用 --content/--heading，复杂块用 --element JSON"},
 				AvoidWhen: []string{
 					"整篇追加 Markdown 优先 doc update --mode append",
 					"插入本地文件附件优先 doc media insert",
 					"删块用 block delete；改已有块用 block update",
 				},
 				Examples: []string{
-					"dws doc block insert --node <DOC_ID> --text \"这是一段文字\" --format json",
+					"dws doc block insert --node <DOC_ID> --content \"这是一段文字\" --format json",
 					"dws doc block insert --node <DOC_ID> --heading \"二级标题\" --level 2 --format json",
 				},
 			},
@@ -2265,8 +2265,8 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		Use:   "update",
 		Short: "更新块元素",
 		Long: `更新文档中指定块的内容或样式。需提供 --block-id 和块元素内容。
-可用 --text 快速更新为段落，--heading + --level 快速更新为标题。`,
-		Example: `  dws doc block update --node DOC_ID --block-id BLOCK_ID --text "新内容"    # 查询 nodeId: dws doc search --query "..." 或 dws doc list  # 查询 blockId: dws doc block list --node <nodeId>
+可用 --content 快速更新为段落，--heading + --level 快速更新为标题。`,
+		Example: `  dws doc block update --node DOC_ID --block-id BLOCK_ID --content "新内容"    # 查询 nodeId: dws doc search --query "..." 或 dws doc list  # 查询 blockId: dws doc block list --node <nodeId>
   dws doc block update --node DOC_ID --block-id BLOCK_ID --element '{"blockType":"heading","heading":{"text":"新标题","level":1}}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "block-id"); err != nil {
@@ -2338,7 +2338,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 					"插入新块用 block insert；删除用 block delete",
 					"改文档显示名用 rename；整篇覆盖用 update overwrite",
 				},
-				Examples: []string{"dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --text \"新内容\" --format json"},
+				Examples: []string{"dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content \"新内容\" --format json"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "content-format", Property: "format"},
@@ -2748,7 +2748,6 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 
 	// block insert
 	blockInsertCmd.Flags().String("node", "", "文档 ID 或 URL (必填)")
-	blockInsertCmd.Flags().String("text", "", "快捷: 段落文本内容")
 	blockInsertCmd.Flags().String("heading", "", "快捷: 标题文本")
 	blockInsertCmd.Flags().Int("level", 1, "标题级别 1-6 (配合 --heading)")
 	blockInsertCmd.Flags().String("element", "", "块元素 JSON (高级)")
@@ -2762,7 +2761,6 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	// block update
 	blockUpdateCmd.Flags().String("node", "", "文档 ID 或 URL (必填)")
 	blockUpdateCmd.Flags().String("block-id", "", "目标块 ID (必填)")
-	blockUpdateCmd.Flags().String("text", "", "快捷: 段落文本内容")
 	blockUpdateCmd.Flags().String("heading", "", "快捷: 标题文本")
 	blockUpdateCmd.Flags().Int("level", 1, "标题级别 1-6 (配合 --heading)")
 	blockUpdateCmd.Flags().String("element", "", "块元素 JSON (高级)")
@@ -4643,6 +4641,16 @@ CLI 内部自动完成全部流程:
 		for _, child := range parent.Commands() {
 			RegisterCrossProductAliases(child)
 		}
+	}
+	// Register the block content Primary after the cross-product pass. Registering
+	// --content earlier would make the global content/markdown group expand a new
+	// --markdown alias onto these commands, which is outside this migration.
+	for _, cmd := range []*cobra.Command{blockInsertCmd, blockUpdateCmd} {
+		corecmd.RegisterFlags(cmd, []corecmd.FlagSpec{{
+			Name:    "content",
+			Usage:   "快捷: 段落文本内容",
+			Aliases: []string{"text"},
+		}})
 	}
 
 	// ── deprecated 标记：文件管理命令已迁移到 drive ──

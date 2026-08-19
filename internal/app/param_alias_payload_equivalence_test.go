@@ -73,12 +73,12 @@ var paramAliasCompleteCommands = map[string][]string{
 	"chat +messages-list":                      {"chat", "+messages-list", "--group", "fixture-conversation", "--time", "2026-03-10 00:00:00", "--limit", "7"},
 	"chat +messages-list-direct":               {"chat", "+messages-list-direct", "--user", "user-1", "--time", "2026-03-10 00:00:00", "--limit", "7"},
 	"chat +messages-list-unread-conversations": {"chat", "+messages-list-unread-conversations", "--count", "7", "--exclude-muted"},
-	"chat +messages-reply":                     {"chat", "+messages-reply", "--conversation-id", "fixture-conversation", "--ref-msg-id", "message-1", "--ref-sender", appFixtureCurrentDOpenID, "--text", "hello fixture", "--yes"},
+	"chat +messages-reply":                     {"chat", "+messages-reply", "--group", "fixture-conversation", "--ref-msg-id", "message-1", "--ref-sender", appFixtureCurrentDOpenID, "--content", "hello fixture", "--yes"},
 	"chat +messages-resource-download":         {"chat", "+messages-resource-download", "--resource-id", "resource-1", "--message-id", "message-1", "--open-conversation-id", "fixture-conversation", "--output", "downloads/fixture.bin"},
 	"chat +messages-set-pin":                   {"chat", "+messages-set-pin", "--open-conversation-id", "fixture-conversation", "--msg-id", "message-1", "--yes"},
-	"chat +messages-send-by-webhook":           {"chat", "+messages-send-by-webhook", "--token", "fixture-token", "--title", "Fixture Alert", "--text", "fixture", "--at-users", "user-1,user-2", "--yes"},
+	"chat +messages-send-by-webhook":           {"chat", "+messages-send-by-webhook", "--token", "fixture-token", "--title", "Fixture Alert", "--content", "fixture", "--at-users", "user-1,user-2", "--yes"},
 	"chat +search-msg":                         {"chat", "+search-msg", "--group", "fixture-conversation", "--query", "fixture", "--start", "2026-03-10T00:00:00+08:00", "--end", "2026-03-11T00:00:00+08:00", "--no-enrich"},
-	"chat +send-to-group":                      {"chat", "+send-to-group", "--group", "Fixture Group", "--text", "hello fixture", "--yes"},
+	"chat +send-to-group":                      {"chat", "+send-to-group", "--group", "Fixture Group", "--content", "hello fixture", "--yes"},
 	"chat +unread-chats":                       {"chat", "+unread-chats", "--count", "7", "--exclude-muted"},
 	"chat bot find":                            {"chat", "bot", "find", "--query", "fixture", "--limit", "7"},
 	"chat bot search":                          {"chat", "bot", "search", "--name", "Fixture Bot", "--page", "2", "--size", "7"},
@@ -104,11 +104,11 @@ var paramAliasCompleteCommands = map[string][]string{
 	"chat message list-by-ids":                 {"chat", "message", "list-by-ids", "--msg-ids", "message-1,message-2"},
 	"chat message list-unread-conversations":   {"chat", "message", "list-unread-conversations", "--count", "7", "--exclude-muted"},
 	"chat message recall":                      {"chat", "message", "recall", "--conversation-id", "fixture-conversation", "--msg-id", "message-1", "--yes"},
-	"chat message reply":                       {"chat", "message", "reply", "--conversation-id", "fixture-conversation", "--ref-msg-id", "message-1", "--ref-sender", appFixtureCurrentDOpenID, "--text", "hello fixture", "--yes"},
+	"chat message reply":                       {"chat", "message", "reply", "--group", "fixture-conversation", "--ref-msg-id", "message-1", "--ref-sender", appFixtureCurrentDOpenID, "--content", "hello fixture", "--yes"},
 	"chat message search-advanced":             {"chat", "message", "search-advanced", "--conversation-ids", "fixture-conversation", "--query", "fixture"},
-	"chat message send":                        {"chat", "message", "send", "--user", appFixtureCurrentDOpenID, "--text", "hello fixture", "--idempotency-key", "param-alias-equivalence", "--yes"},
+	"chat message send":                        {"chat", "message", "send", "--user", appFixtureCurrentDOpenID, "--content", "hello fixture", "--idempotency-key", "param-alias-equivalence", "--yes"},
 	"chat message send-by-bot":                 {"chat", "message", "send-by-bot", "--robot-code", "robot-1", "--group", "fixture-conversation", "--title", "Fixture Alert", "--text", "@user-1 @user-2 fixture", "--at-user-ids", "user-1,user-2", "--yes"},
-	"chat message send-by-webhook":             {"chat", "message", "send-by-webhook", "--token", "fixture-token", "--title", "Fixture Alert", "--text", "fixture", "--at-users", "user-1,user-2", "--yes"},
+	"chat message send-by-webhook":             {"chat", "message", "send-by-webhook", "--token", "fixture-token", "--title", "Fixture Alert", "--content", "fixture", "--at-users", "user-1,user-2", "--yes"},
 	"contact +dept-members":                    {"contact", "+dept-members", "--dept", "Fixture Dept"},
 	"contact +list-sub-depts":                  {"contact", "+list-sub-depts", "--dept", "1"},
 	"contact +resolve-dept":                    {"contact", "+resolve-dept", "--name", "Fixture Dept"},
@@ -127,7 +127,7 @@ var paramAliasCompleteCommands = map[string][]string{
 	"doc +copy":                                {"doc", "+copy", "--node", "node-1", "--workspace", "workspace-1", "--yes"},
 	"doc +create":                              {"doc", "+create", "--name", "Fixture Document", "--content", "fixture body", "--doc-format", "markdown"},
 	"doc +create-from-template":                {"doc", "+create-from-template", "--query", "fixture template", "--name", "Fixture From Template", "--folder", "folder-1", "--workspace", "workspace-1"},
-	"doc +doc-append":                          {"doc", "+doc-append", "--doc", "node-1", "--text", "fixture appendix", "--yes"},
+	"doc +doc-append":                          {"doc", "+doc-append", "--doc", "node-1", "--content", "fixture appendix", "--yes"},
 	"doc +export-submit":                       {"doc", "+export-submit", "--node", "node-1", "--export-format", "docx"},
 	"doc +fetch":                               {"doc", "+fetch", "--node", "node-1", "--scope", "section", "--start-block-id", "block-1"},
 	"doc +find-doc":                            {"doc", "+find-doc", "--query", "fixture", "--limit", "7"},
@@ -143,8 +143,8 @@ var paramAliasCompleteCommands = map[string][]string{
 	"doc +version-save":                        {"doc", "+version-save", "--node", "node-1", "--yes"},
 	"doc +update":                              {"doc", "+update", "--node", "node-1", "--command", "overwrite", "--content", `["root",{}]`, "--doc-format", "jsonml", "--expected-revision", "1", "--yes"},
 	"doc +export":                              {"doc", "+export", "--node", "node-1", "--export-format", "docx", "--output", "exports/fixture.docx"},
-	"doc block insert":                         {"doc", "block", "insert", "--node", "node-1", "--text", "fixture paragraph", "--yes"},
-	"doc block update":                         {"doc", "block", "update", "--node", "node-1", "--block-id", "block-1", "--text", "fixture paragraph", "--yes"},
+	"doc block insert":                         {"doc", "block", "insert", "--node", "node-1", "--content", "fixture paragraph", "--yes"},
+	"doc block update":                         {"doc", "block", "update", "--node", "node-1", "--block-id", "block-1", "--content", "fixture paragraph", "--yes"},
 	"doc comment create":                       {"doc", "comment", "create", "--node", "node-1", "--content", "fixture comment", "--yes"},
 	"doc comment create-inline":                {"doc", "comment", "create-inline", "--node", "node-1", "--block-id", "block-1", "--start", "0", "--end", "7", "--content", "fixture comment", "--yes"},
 	"doc comment delete":                       {"doc", "comment", "delete", "--node", "node-1", "--comment-key", "comment-1", "--yes"},
@@ -207,7 +207,7 @@ var paramAliasCompleteCommandVariants = map[string]map[string][]string{
 		"workspace": {"doc", "+copy", "--node", "node-1", "--workspace", "workspace-1", "--yes"},
 	},
 	"doc block insert": {
-		"parent-block": {"doc", "block", "insert", "--node", "node-1", "--parent-block", "parent-block-1", "--index", "0", "--text", "fixture paragraph", "--yes"},
+		"parent-block": {"doc", "block", "insert", "--node", "node-1", "--parent-block", "parent-block-1", "--index", "0", "--content", "fixture paragraph", "--yes"},
 	},
 	"doc +inspect": {
 		"include-permissions": {"doc", "+inspect", "--node", "node-1", "--include-permissions"},
@@ -230,8 +230,8 @@ var paramAliasCompleteCommandVariants = map[string]map[string][]string{
 		"sender-open-dingtalk-id": {"chat", "message", "list-by-sender", "--sender-open-dingtalk-id", appFixtureCurrentDOpenID, "--start", "2026-03-10T00:00:00+08:00", "--end", "2026-03-11T00:00:00+08:00", "--limit", "7", "--cursor", "0"},
 	},
 	"chat message send": {
-		"group":     {"chat", "message", "send", "--group", "fixture-conversation", "--text", "hello fixture", "--idempotency-key", "param-alias-equivalence-group", "--yes"},
-		"file-path": {"chat", "message", "send", "--group", "fixture-conversation", "--msg-type", "file", "--file-path", "../../go.mod", "--dentry-id", "1", "--space-id", "2", "--idempotency-key", "param-alias-equivalence-file", "--yes"},
+		"group": {"chat", "message", "send", "--group", "fixture-conversation", "--content", "hello fixture", "--idempotency-key", "param-alias-equivalence-group", "--yes"},
+		"file":  {"chat", "message", "send", "--group", "fixture-conversation", "--msg-type", "file", "--file", "../../go.mod", "--dentry-id", "1", "--space-id", "2", "--idempotency-key", "param-alias-equivalence-file", "--yes"},
 	},
 	"chat +conversation-set-top": {
 		"conversation-ids": {"chat", "+conversation-set-top", "--conversation-ids", "fixture-conversation-1,fixture-conversation-2", "--yes"},
@@ -271,7 +271,6 @@ var paramAliasNewIMCases = []struct {
 	{command: "chat message list-favorites", emitted: "limit", canonical: "size"},
 	{command: "chat message list-unread-conversations", emitted: "limit", canonical: "count"},
 	{command: "chat message list-unread-conversations", emitted: "size", canonical: "count"},
-	{command: "chat message send", emitted: "file", canonical: "file-path"},
 	{command: "chat message send-by-bot", emitted: "at-users", canonical: "at-user-ids"},
 	{command: "chat message send-by-webhook", emitted: "at-user-ids", canonical: "at-users"},
 	{command: "chat +chat-update", emitted: "chat-id", canonical: "group"},
@@ -289,7 +288,7 @@ var paramAliasNewIMCases = []struct {
 	{command: "chat +chat-members-get", emitted: "chat", canonical: "id"},
 	{command: "chat +messages-list", emitted: "start", canonical: "time"},
 	{command: "chat +messages-reply", emitted: "msg-id", canonical: "ref-msg-id"},
-	{command: "chat +messages-reply", emitted: "chat", canonical: "conversation-id"},
+	{command: "chat +messages-reply", emitted: "chat", canonical: "group"},
 	{command: "chat +flag-cancel", emitted: "group", canonical: "conversation-id"},
 	{command: "chat +flag-cancel", emitted: "chat", canonical: "conversation-id"},
 	{command: "chat +flag-create", emitted: "group", canonical: "conversation-id"},
@@ -554,7 +553,11 @@ var paramAliasRepresentativePayloadCases = map[string]bool{
 	paramAliasPayloadCaseKey("doc +update", "revision"):                              true, // optimistic edit revision alias
 	paramAliasPayloadCaseKey("doc +access-grant", "doc-id"):                          true, // permission write keeps document identity
 	paramAliasPayloadCaseKey("doc +version-revert", "version-number"):                true, // high-write version role with canonical confirmation
-	paramAliasPayloadCaseKey("doc block insert", "content"):                          true, // block write content alias
+	paramAliasPayloadCaseKey("chat +messages-reply", "conversation-id"):              true, // renamed conversation Primary keeps final reply payload
+	paramAliasPayloadCaseKey("chat message send", "file-path"):                       true, // renamed local-file Primary reaches the same final payload
+	paramAliasPayloadCaseKey("doc +doc-append", "text"):                              true, // shortcut content rename keeps append payload
+	paramAliasPayloadCaseKey("doc block insert", "text"):                             true, // block write content compatibility alias
+	paramAliasPayloadCaseKey("doc block update", "text"):                             true, // update uses the same typed compatibility path
 	paramAliasPayloadCaseKey("doc block insert", "parent-block-id"):                  true, // scoped block-role alias
 	paramAliasPayloadCaseKey("doc comment delete", "comment-id"):                     true, // destructive comment-key alias
 	paramAliasPayloadCaseKey("doc comment reply", "mentioned-open-conversation-ids"): true, // list-valued group mention role

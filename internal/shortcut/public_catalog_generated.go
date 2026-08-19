@@ -75,6 +75,7 @@ func generatedPublicShortcutCatalog() map[string]struct{} {
 		"aitable\u0000+section-move-node":               {},
 		"aitable\u0000+section-rename":                  {},
 		"aitable\u0000+section-reorder":                 {},
+		"aitable\u0000+table-bootstrap":                 {},
 		"aitable\u0000+table-copy":                      {},
 		"aitable\u0000+table-delete":                    {},
 		"aitable\u0000+table-get":                       {},

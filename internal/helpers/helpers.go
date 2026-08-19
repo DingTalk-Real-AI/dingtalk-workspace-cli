@@ -155,7 +155,18 @@ func callMCPToolReturnTextOnServer(ctx context.Context, serverID, toolName strin
 // ReadToolCaller capability; if unavailable, it fails closed instead of
 // returning a synthetic dry-run envelope that looks like business data.
 func CallMCPReadToolTextOnServer(serverID, toolName string, args map[string]any) (string, error) {
-	return callMCPReadToolReturnTextOnServer(context.Background(), serverID, toolName, args)
+	return CallMCPReadToolTextOnServerContext(context.Background(), serverID, toolName, args)
+}
+
+// CallMCPReadToolTextOnServerContext is the cancellable form used by Cobra
+// commands and composite shortcuts. Keeping the caller context attached to the
+// transport lets SIGTERM/parent deadlines stop an in-flight MCP read and return
+// a structured error instead of leaving the CLI silent until the host kills it.
+func CallMCPReadToolTextOnServerContext(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return callMCPReadToolReturnTextOnServer(ctx, serverID, toolName, args)
 }
 
 func callMCPReadToolReturnTextOnServer(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
@@ -266,7 +277,17 @@ func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResul
 // print path. Exported for the shortcut layer's multi-step ("smart") shortcuts,
 // which chain several tool calls and need each intermediate result as data.
 func CallMCPToolTextOnServer(serverID, toolName string, args map[string]any) (string, error) {
-	return callMCPToolReturnTextOnServer(context.Background(), serverID, toolName, args)
+	return CallMCPToolTextOnServerContext(context.Background(), serverID, toolName, args)
+}
+
+// CallMCPToolTextOnServerContext invokes one MCP tool while preserving the
+// command's cancellation and deadline. Legacy callers may continue using
+// CallMCPToolTextOnServer, which intentionally retains background context.
+func CallMCPToolTextOnServerContext(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return callMCPToolReturnTextOnServer(ctx, serverID, toolName, args)
 }
 
 // CallMCPToolDataOnServer invokes one tool without printing and decodes its
@@ -293,7 +314,11 @@ func CallMCPToolDataOnServer(ctx context.Context, serverID, toolName string, arg
 // callMCPTool 是通用的 MCP 工具调用入口：自动路由 → 调用 → 格式化输出。
 // 通过 resolveProductID() 自动确定目标 MCP Server，JSON 输出使用默认的 HTML 转义。
 func callMCPTool(toolName string, args map[string]any) error {
-	return callMCPToolInternalOpts("", toolName, args, false)
+	return callMCPToolContext(context.Background(), toolName, args)
+}
+
+func callMCPToolContext(ctx context.Context, toolName string, args map[string]any) error {
+	return callMCPToolInternalOptsContext(ctx, "", toolName, args, false)
 }
 
 // callMCPToolUnescaped 与 callMCPTool 功能相同，但 JSON 输出禁用 HTML 转义。
@@ -306,13 +331,20 @@ func callMCPToolUnescaped(toolName string, args map[string]any) error {
 // callMCPToolOnServer 在指定的 MCP Server 上调用工具，跳过 resolveProductID() 的自动路由。
 // 用于需要显式指定 serverID 的场景（如 credit 等多 server 产品）。
 func callMCPToolOnServer(serverID, toolName string, args map[string]any) error {
-	return callMCPToolInternalOpts(serverID, toolName, args, false)
+	return callMCPToolInternalOptsContext(context.Background(), serverID, toolName, args, false)
 }
 
 // CallMCPToolOnServer is the exported version of callMCPToolOnServer for use
 // by extension packages that live in separate Go packages.
 func CallMCPToolOnServer(serverID, toolName string, args map[string]any) error {
 	return callMCPToolOnServer(serverID, toolName, args)
+}
+
+// CallMCPToolOnServerContext is the cancellable print-path variant for
+// Shortcut execution. It preserves the same output and error projection as the
+// legacy wrapper while allowing the root signal context to abort transport.
+func CallMCPToolOnServerContext(ctx context.Context, serverID, toolName string, args map[string]any) error {
+	return callMCPToolInternalOptsContext(ctx, serverID, toolName, args, false)
 }
 
 // GroupRunE is the exported version of groupRunE for use by extension packages.
@@ -343,7 +375,13 @@ func MustGetStringFlag(cmd *cobra.Command, name string) string {
 //  3. 错误分类：网关错误 → 未登录 → PAT 错误 → 业务错误
 //  4. 根据 --format 标志选择输出格式（json / table / raw）
 func callMCPToolInternalOpts(explicitServerID, toolName string, args map[string]any, unescapeHTML bool) error {
-	ctx := context.Background()
+	return callMCPToolInternalOptsContext(context.Background(), explicitServerID, toolName, args, unescapeHTML)
+}
+
+func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolName string, args map[string]any, unescapeHTML bool) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// DryRun 模式：仅预览工具名和参数，不实际调用 MCP Server
 	if deps.Caller.DryRun() {
