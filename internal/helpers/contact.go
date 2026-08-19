@@ -868,7 +868,7 @@ func newContactCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "在指定父标签组下创建角色（标签）",
 				UseWhen:      []string{"用户明确要求新建角色，且已确认角色名称和父标签组ID"},
-				AvoidWhen:    []string{"修改已有角色应使用 contact label update；仅查找角色应使用 contact label get 或 contact label list"},
+				AvoidWhen:    []string{"当前 CLI 暂不支持修改已有角色；仅查找角色应使用 contact label get 或 contact label list"},
 				Examples:     []string{"dws contact label create --name \"管理员\" --parent-id 0"},
 			},
 			Parameters: []contract.ParamDecl{
