@@ -1095,6 +1095,25 @@ func TestCrossPlatformCoverageAttachContractReplacesSelectionHelp(t *testing.T) 
 	if cmd.Long != want {
 		t.Fatalf("guidance-free Long = %q, want %q", cmd.Long, want)
 	}
+
+	// Without constraints the stale block is the Long's tail; the update must
+	// still replace it rather than stack both versions.
+	unconstrained := New(Spec{
+		Use:      "leaf",
+		Short:    "S",
+		Long:     "L",
+		Safety:   testWriteSafety(),
+		Contract: declFor("旧避免场景"),
+		Invoke:   func(*Ctx, map[string]any) error { return nil },
+	})
+	AttachContract(unconstrained, testWriteSafety(), updated, "S", "L")
+	want = "L" + SelectionHelp(updated.Selection)
+	if unconstrained.Long != want {
+		t.Fatalf("unconstrained re-attached Long = %q, want %q", unconstrained.Long, want)
+	}
+	if strings.Contains(unconstrained.Long, "旧避免场景") {
+		t.Fatalf("stale guidance survived the unconstrained re-attach:\n%s", unconstrained.Long)
+	}
 }
 
 // ── unified builder ────────────────────────────────────────────────
