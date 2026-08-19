@@ -106,13 +106,13 @@ const {
   rollbackPublishedSkillPath,
 } = require(installJsSource);
 
-assert.equal(UPSTREAM_AGENTS.length, 76, "the complete upstream Agent registry is pinned");
-assert.equal(new Set(UPSTREAM_AGENTS.map(({ id }) => id)).size, 76, "upstream Agent IDs are unique");
+assert.equal(UPSTREAM_AGENTS.length, 77, "the complete upstream Agent registry is pinned");
+assert.equal(new Set(UPSTREAM_AGENTS.map(({ id }) => id)).size, 77, "upstream Agent IDs are unique");
 assert.equal(UPSTREAM_AGENTS.filter(({ universal }) => universal).length, 19, "upstream universal classification is pinned");
-assert.equal(UPSTREAM_AGENTS.filter(({ universal }) => !universal).length, 57, "upstream non-universal classification is pinned");
+assert.equal(UPSTREAM_AGENTS.filter(({ universal }) => !universal).length, 58, "upstream non-universal classification is pinned");
 assert.equal(UPSTREAM_AGENTS.filter(({ agentDir }) => agentDir === null).length, 2, "no-global Agents are retained in the registry");
 assert.equal(UPSTREAM_AGENTS.filter(({ agentDir }) => agentDir === ".agents/skills").length, 6, "canonical-direct Agents need no target");
-assert.equal(resolvedAgentTargets(path.join(os.tmpdir(), "dws-registry-home")).length, 70, "65 upstream roots, qoderwork, and 4 migration roots are deduplicated");
+assert.equal(resolvedAgentTargets(path.join(os.tmpdir(), "dws-registry-home")).length, 71, "66 upstream roots, qoderwork, and 4 migration roots are deduplicated");
 const detectionHome = fs.mkdtempSync(path.join(os.tmpdir(), "dws-agent-detect-"));
 fs.mkdirSync(path.join(detectionHome, ".config", "kimchi"), { recursive: true });
 fs.mkdirSync(path.join(detectionHome, ".tabnine"), { recursive: true });

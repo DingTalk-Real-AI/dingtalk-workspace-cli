@@ -81,6 +81,7 @@ $AgentRegistry = @(
     [pscustomobject]@{ Id = "deepagents"; Universal = $true; Dir = ".deepagents\agent\skills" },
     [pscustomobject]@{ Id = "devin"; Universal = $false; Dir = ".config\devin\skills" },
     [pscustomobject]@{ Id = "dexto"; Universal = $true; Dir = ".agents\skills" },
+    [pscustomobject]@{ Id = "dsh"; Universal = $false; Dir = ".dsh\skills" },
     [pscustomobject]@{ Id = "droid"; Universal = $false; Dir = ".factory\skills" },
     [pscustomobject]@{ Id = "eve"; Universal = $false; Dir = $null },
     [pscustomobject]@{ Id = "firebender"; Universal = $true; Dir = ".firebender\skills" },

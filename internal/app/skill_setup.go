@@ -47,6 +47,7 @@ var skillSetupAgentHomes = []string{
 	".snowflake/cortex/skills",
 	".config/crush/skills",
 	".config/devin/skills",
+	".dsh/skills",
 	".factory/skills",
 	".forge/skills",
 	".config/goose/skills",

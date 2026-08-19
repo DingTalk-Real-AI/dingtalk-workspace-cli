@@ -80,6 +80,7 @@ cursor|1|.cursor/skills
 deepagents|1|.deepagents/agent/skills
 devin|0|.config/devin/skills
 dexto|1|.agents/skills
+dsh|0|.dsh/skills
 droid|0|.factory/skills
 eve|0|-
 firebender|1|.firebender/skills
