@@ -30,7 +30,7 @@ dws chat conversation-info --user <userId> --format json
 dws chat conversation-info --open-dingtalk-id <openDingTalkId> --format json
 ```
 
-`--group`、`--user`、`--open-dingtalk-id` 互斥且必须指定一个。文件/音视频发送不再依赖调用方读取 spaceId；直接用 `message send --msg-type file|audio|video --file-path`。
+`--group`、`--user`、`--open-dingtalk-id` 互斥且必须指定一个。文件/音视频发送不再依赖调用方读取 spaceId；直接用 `message send --msg-type file|audio|video --file`。
 
 ### 会话列表与红点
 
@@ -114,7 +114,7 @@ dws chat category add-conv --group <openConversationId> --category-ids 123,456
 ### 获取单聊会话 ID 后置顶
 
 ```bash
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 dws chat conversation-info --user <userId> --format json
 dws chat set-top --conversation-id <openConversationId> --format json
 ```
@@ -139,7 +139,7 @@ dws chat category list-conversations --category-id <categoryId> --format json
 ### 智能会话分组
 
 ```bash
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 dws chat category create-smart --name "项目组" --keywords "项目,开发" --format json
 dws chat category create-smart --name "团队群" --members openDingTalkId1,openDingTalkId2 --format json
 dws chat category create-smart --name "重点群" --keywords "重点" --members openDingTalkId1 --format json

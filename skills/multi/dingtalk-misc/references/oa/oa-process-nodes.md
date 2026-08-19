@@ -127,7 +127,7 @@
 }
 ```
 
-- `workNo` 必须通过 `dws aisearch person --keyword "<工号>" --dimension jobNumber --format json` 获取，**严禁编造**
+- `workNo` 必须通过 `dws aisearch person --query "<工号>" --dimension jobNumber --format json` 获取，**严禁编造**
 - 在 `create-instance` 中对应 `directAppointedApprovers` 的 `staffIds`
 
 ### 2. 直属主管（target_formula / reportLineManager）
@@ -337,7 +337,7 @@
 
 | 字段 | 说明 |
 |------|------|
-| `staffIds` | 审批人 userId 列表（通过 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 获取；多结果须消歧） |
+| `staffIds` | 审批人 userId 列表（通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 获取；多结果须消歧） |
 | `taskActionType` | `NONE`（单人）/ `AND`（会签）/ `OR`（或签） |
 | `staffId` | 留空字符串 |
 
@@ -369,6 +369,6 @@
 2. 根据节点中的 `activityType` 和 `targetSelect` 判断是否需要传入 `directAppointedApprovers` 或 `targetSelectActioners`
 3. 如果预测返回 `targetSelect: true` 的自选节点，`targetSelectActioners` 必填
 4. 如果用户要求覆盖默认流程，使用 `directAppointedApprovers`
-5. **所有 userId 必须通过 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 获取，严禁填姓名；多结果须消歧**
+5. **所有 userId 必须通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 获取，严禁填姓名；多结果须消歧**
 
 > **交互优化：** 若用户在 `forecast-process` 前已指定审批人/抄送人姓名，`forecast-process` 返回自选节点后应自动映射，仅对未覆盖的自选节点追问，不要重复询问。详见 [oa.md](../oa.md) 交互优化原则。

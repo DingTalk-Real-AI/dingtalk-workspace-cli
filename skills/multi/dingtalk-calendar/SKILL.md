@@ -75,7 +75,7 @@ metadata:
 
 **触发**：建日程/约会议/加日程。
 
-1. **解析与会人（必须）**：对每个姓名 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId`，多人逗号拼接。
+1. **解析与会人（必须）**：对每个姓名 `dws aisearch person --query "<姓名>" --dimension name --format json` 取 `userId`，多人逗号拼接。
 2. **执行（必须）**：`dws calendar event create --title "<主题>" --start "<ISO>" --end "<ISO>" --attendees <userId1,userId2> --format json`（按需加 `--location`/`--desc`/`--rooms`）。
 3. **验证（必须）**：从返回 `result.id` 取日程 ID（下游参数语义称 `eventId`），再执行 `dws calendar event list --start "<ISO>" --end "<ISO>" --format json` 复核标题、描述和时段。
 
@@ -85,7 +85,7 @@ metadata:
 
 **触发**：某人/会议室是否有空/找空闲时段/避免冲突。
 
-1. **解析对象（必须）**：姓名 → `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId`；会议室用 `roomId`。
+1. **解析对象（必须）**：姓名 → `dws aisearch person --query "<姓名>" --dimension name --format json` 取 `userId`；会议室用 `roomId`。
 2. **收敛时段（必须）**：`--start`/`--end` **必须**由用户给出或明确收敛；时段不明确**必须先追问**，**禁止**默认全天窗口。
 3. **执行（必须）**：`dws calendar busy search --users <userId1,userId2> --start "<ISO>" --end "<ISO>" --format json`（查会议室换 `--rooms <roomId...>`，可同时传）。**禁止**用 `event list` 扫日程替代闲忙查询。
 4. **空闲时段（必须）**：找共同空闲用 `python scripts/calendar_free_slot_finder.py`。

@@ -683,8 +683,8 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 **chat_chat_message_send_001**
 - Prompt: 在群 openConvABC 发一条消息：大家好
-- Expected: `dws chat message send --group openConvABC "大家好" --format json`
-- Flags: `--group` = `openConvABC`
+- Expected: `dws chat message send --conversation-id openConvABC "大家好" --format json`
+- Flags: `--conversation-id` = `openConvABC`
 
 **chat_chat_message_send_002**
 - Prompt: 给userId123发一条私聊消息，标题是提醒，内容是请查收报告
@@ -693,42 +693,42 @@ Agent 安装 dws skill 后，仅依据 skill 提供的参考文档，将自然�
 
 **chat_chat_message_send_003**
 - Prompt: 在群 groupId456 发一条带标题的通知：周报提醒，请大家本周五前提交周报
-- Expected: `dws chat message send --group groupId456 --title "周报提醒" "请大家本周五前提交周报" --format json`
-- Flags: `--group` = `groupId456`, `--title` = `周报提醒`
+- Expected: `dws chat message send --conversation-id groupId456 --title "周报提醒" "请大家本周五前提交周报" --format json`
+- Flags: `--conversation-id` = `groupId456`, `--title` = `周报提醒`
 
 #### `dws chat message send-by-bot`
 
 **chat_chat_message_send_by_bot_001**
 - Prompt: 机器人发送群聊消息，text 为 ## 今日完成..., title 为 日报
 - Expected: `dws chat message send-by-bot --group <openconversation_id> --robot-code <robot-code> --text "## 今日完成..." --title 日报 --format json`
-- Flags: `--group` = `<openconversation_id>`, `--robot-code` = `<robot-code>`, `--text` = `## 今日完成...`, `--title` = `日报`
+- Flags: `--text` = `## 今日完成...`, `--group` = `<openconversation_id>`, `--robot-code` = `<robot-code>`, `--title` = `日报`
 
 **chat_chat_message_send_by_bot_002**
 - Prompt: 用机器人myBot给userId1和userId2发私聊消息，标题是通知，内容是请查收周报
 - Expected: `dws chat message send-by-bot --robot-code myBot --users userId1,userId2 --title "通知" --text "请查收周报" --format json`
-- Flags: `--robot-code` = `myBot`, `--text` = `请查收周报`, `--title` = `通知`, `--users` = `userId1,userId2`
+- Flags: `--text` = `请查收周报`, `--robot-code` = `myBot`, `--title` = `通知`, `--users` = `userId1,userId2`
 
 #### `dws chat message send-by-webhook`
 
 **chat_chat_message_send_by_webhook_001**
 - Prompt: 通过 Webhook token1 发一条告警消息：CPU 超 90%
-- Expected: `dws chat message send-by-webhook --text "CPU 超 90%" --title 告警 --token token1 --format json`
-- Flags: `--text` = `CPU 超 90%`, `--title` = `告警`, `--token` = `token1`
+- Expected: `dws chat message send-by-webhook --content "CPU 超 90%" --title 告警 --token token1 --format json`
+- Flags: `--content` = `CPU 超 90%`, `--title` = `告警`, `--token` = `token1`
 
 **chat_chat_message_send_by_webhook_002**
 - Prompt: 通过webhook发群消息，token是tokenABC，标题告警，内容CPU使用率超过90%，@所有人
-- Expected: `dws chat message send-by-webhook --token tokenABC --title "告警" --text "CPU使用率超过90%" --at-all --format json`
-- Flags: `--at-all`, `--text` = `CPU使用率超过90%`, `--title` = `告警`, `--token` = `tokenABC`
+- Expected: `dws chat message send-by-webhook --token tokenABC --title "告警" --content "CPU使用率超过90%" --at-all --format json`
+- Flags: `--at-all`, `--content` = `CPU使用率超过90%`, `--title` = `告警`, `--token` = `tokenABC`
 
 **chat_chat_message_send_by_webhook_003**
 - Prompt: 用 Webhook tokenXYZ 发消息，标题是「审批提醒」，内容是「请及时审批」，并@用户 user001 和 user002
-- Expected: `dws chat message send-by-webhook --token tokenXYZ --title "审批提醒" --text "@user001 @user002 请及时审批" --at-users user001,user002 --format json`
-- Flags: `--at-users` = `user001,user002`, `--text` = `@user001 @user002 请及时审批`, `--title` = `审批提醒`, `--token` = `tokenXYZ`
+- Expected: `dws chat message send-by-webhook --token tokenXYZ --title "审批提醒" --content "@user001 @user002 请及时审批" --at-users user001,user002 --format json`
+- Flags: `--at-users` = `user001,user002`, `--content` = `@user001 @user002 请及时审批`, `--title` = `审批提醒`, `--token` = `tokenXYZ`
 
 **chat_chat_message_send_by_webhook_004**
 - Prompt: 用 Webhook tokenDEF 发通知，标题是「会议通知」，内容是「请参加今日下午的会议」，并@手机号 13800138000 和 13900139000
-- Expected: `dws chat message send-by-webhook --token tokenDEF --title "会议通知" --text "@13800138000 @13900139000 请参加今日下午的会议" --at-mobiles 13800138000,13900139000 --format json`
-- Flags: `--at-mobiles` = `13800138000,13900139000`, `--text` = `@13800138000 @13900139000 请参加今日下午的会议`, `--title` = `会议通知`, `--token` = `tokenDEF`
+- Expected: `dws chat message send-by-webhook --token tokenDEF --title "会议通知" --content "@13800138000 @13900139000 请参加今日下午的会议" --at-mobiles 13800138000,13900139000 --format json`
+- Flags: `--at-mobiles` = `13800138000,13900139000`, `--content` = `@13800138000 @13900139000 请参加今日下午的会议`, `--title` = `会议通知`, `--token` = `tokenDEF`
 
 #### `dws chat search`
 

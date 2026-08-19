@@ -614,7 +614,7 @@ Flags:
 
 **导出文档/导出为Word**: 导出是内容层操作，走 `doc export`，不属于 drive。
 
-把图片/文件发到群里一般直接用 `chat message send --msg-type file --file-path <本地路径>`（见 [chat.md](./chat.md)），无需先经 drive 上传。
+把图片/文件发到群里一般直接用 `chat message send --msg-type file --file <本地路径>`（见 [chat.md](./chat.md)），无需先经 drive 上传。
 
 ## 核心工作流
 
@@ -834,4 +834,4 @@ dws drive copy --node <源文件dentryUuid> --folder <目标文件夹fileId> --f
 - [doc](./doc.md) — 文档内容读写（Markdown/块级编辑/导出），不是文件存储
 - [markdown](./markdown.md) — 钉盘或文档空间中原生 `.md` 文件的读取、创建、覆盖与局部替换
 - [wiki](./wiki.md) — 知识库/空间管理层（空间列表、节点创建、空间内搜索、成员管理）
-- [chat](./chat.md) — 发送图片/文件消息用 `chat message send --msg-type file --file-path`
+- [chat](./chat.md) — 发送图片/文件消息用 `chat message send --msg-type file --file`

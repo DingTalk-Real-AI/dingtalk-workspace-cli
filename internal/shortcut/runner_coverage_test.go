@@ -14,14 +14,71 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
+
+type runtimeContextKey struct{}
+
+type runtimeContextCaller struct {
+	value any
+}
+
+func (c *runtimeContextCaller) CallTool(ctx context.Context, _ string, _ string, _ map[string]any) (*edition.ToolResult, error) {
+	c.value = ctx.Value(runtimeContextKey{})
+	return nil, errors.New("stop after context capture")
+}
+
+func (*runtimeContextCaller) Format() string { return "json" }
+func (*runtimeContextCaller) DryRun() bool   { return false }
+func (*runtimeContextCaller) Fields() string { return "" }
+func (*runtimeContextCaller) JQ() string     { return "" }
 
 func TestCrossPlatformCoverageRuntimeContextForTest(t *testing.T) {
 	cmd := &cobra.Command{Use: "run"}
 	rt := RuntimeContextForTest(cmd, Shortcut{Service: "sample", Command: "run"})
 	if rt == nil || rt.cmd != cmd || rt.shortcut.Service != "sample" {
 		t.Fatalf("RuntimeContextForTest = %#v", rt)
+	}
+}
+
+func TestCrossPlatformCoverageRuntimeMCPCallsPreserveCommandContext(t *testing.T) {
+	caller := &runtimeContextCaller{}
+	old := helpers.GetCaller()
+	t.Cleanup(func() { helpers.InitDeps(old) })
+	helpers.InitDeps(caller)
+
+	ctx := context.WithValue(context.Background(), runtimeContextKey{}, "command-context")
+	cmd := &cobra.Command{Use: "+write"}
+	cmd.SetContext(ctx)
+	output.SetCommandRollout(cmd, output.RolloutDualValidate)
+	rt := RuntimeContextForTest(cmd, Shortcut{Service: "aitable", Command: "+write"})
+	if err := rt.CallMCP("update_records", map[string]any{"id": "r1"}); err == nil {
+		t.Fatal("dual-validate context capture unexpectedly succeeded")
+	}
+	if caller.value != "command-context" {
+		t.Fatalf("dual-validate caller context value = %#v", caller.value)
+	}
+	if _, err := rt.CallMCPWriteDataStrict("aitable", "update_records", map[string]any{"id": "r1"}); err == nil {
+		t.Fatal("capture caller unexpectedly succeeded")
+	}
+	if caller.value != "command-context" {
+		t.Fatalf("caller context value = %#v", caller.value)
+	}
+
+	dryCaller := &dualValidateCaller{format: "json", dryRun: true}
+	helpers.InitDeps(dryCaller)
+	dryCmd := &cobra.Command{Use: "+read"}
+	dryCmd.Flags().Bool("dry-run", true, "")
+	output.SetCommandRollout(dryCmd, output.RolloutDualValidate)
+	var dryOut bytes.Buffer
+	helpers.GetFormatter().SetWriters(&dryOut, &dryOut)
+	dryRT := RuntimeContextForTest(dryCmd, Shortcut{Service: "aitable", Command: "+read"})
+	if err := dryRT.CallMCP("get_fields", map[string]any{"baseId": "b"}); err != nil {
+		t.Fatalf("dual-validate dry-run call = %v", err)
+	}
+	if !strings.Contains(dryOut.String(), `"dry_run": true`) {
+		t.Fatalf("dual-validate dry-run output = %q", dryOut.String())
 	}
 }
 

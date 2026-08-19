@@ -321,6 +321,33 @@ func runRecordQueryShortcutCLI(t *testing.T, caller *upsertByKeyCaller, limit in
 	return payload, err
 }
 
+func TestCrossPlatformCoverageRecordQueryProjectsRequestedFieldsE2E(t *testing.T) {
+	caller := &upsertByKeyCaller{}
+	caller.callFn = func(_ int, product, tool string, args map[string]any) (string, error) {
+		if product != serverMain || tool != "query_records" {
+			t.Fatalf("record projection call = %s/%s", product, tool)
+		}
+		recordIDs, _ := args["recordIds"].([]string)
+		fieldIDs, _ := args["fieldIds"].([]string)
+		if !slices.Equal(recordIDs, []string{"r1", "r2"}) || !slices.Equal(fieldIDs, []string{"fldName", "fldStatus"}) {
+			t.Fatalf("record projection args = %#v", args)
+		}
+		return pagedRecordQueryResponse(t, []map[string]any{
+			{"recordId": "r1", "cells": map[string]any{"fldName": "青云制造", "fldStatus": "跟进中"}},
+			{"recordId": "r2", "cells": map[string]any{"fldName": "远海物流", "fldStatus": "已成交"}},
+		}, args), nil
+	}
+	payload, err := runRecordQueryShortcutCLI(t, caller, 2,
+		"--record-ids", "r1,r2", "--field-ids", "fldName,fldStatus")
+	if err != nil || payload["success"] != true || len(caller.calls) != 1 {
+		t.Fatalf("record projection = payload:%#v err:%v calls:%#v", payload, err, caller.calls)
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil || bytes.Contains(raw, []byte("fldAmount")) {
+		t.Fatalf("record projection leaked an unrequested field: %s (err=%v)", raw, err)
+	}
+}
+
 func TestCrossPlatformCoverageRecordQueryServicePageBoundariesE2E(t *testing.T) {
 	for _, size := range []int{20, 21, 22, 100} {
 		t.Run(fmt.Sprintf("size_%d", size), func(t *testing.T) {

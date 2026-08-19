@@ -91,3 +91,7 @@ dws drive +publish-unset --node <dentryUuid>
 2. 分页、递归或过滤未完成时保留 cursor/truncated/errors，不包装成全量成功。
 3. 写入超时或响应丢失先按 nodeId、名称、路径和大小回读，不能盲目重放。
 4. 在线文档误入普通下载/覆盖时切 Doc、Sheet 或 AITable；不要用 Drive 重试改变内容。
+
+## 辅助脚本
+
+- [drive_tree_list.py](../scripts/drive_tree_list.py)：递归列出钉盘目录树；普通浏览仍优先使用 `dws drive +list`。

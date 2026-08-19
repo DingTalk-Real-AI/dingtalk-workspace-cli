@@ -43,7 +43,7 @@ cli_version: ">=1.0.15"
 
 | 服务 | shortcut 数 | multi skill |
 |---|---:|---|
-| `aitable` | 92 | `dingtalk-aitable` |
+| `aitable` | 93 | `dingtalk-aitable` |
 | `attendance` | 19 | `dingtalk-misc` |
 | `calendar` | 27 | `dingtalk-calendar` |
 | `chat` | 98 | `dingtalk-chat` |

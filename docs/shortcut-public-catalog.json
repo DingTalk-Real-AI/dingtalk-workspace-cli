@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-17T15:52:13.675461",
-  "count": 435,
+  "generated_at": "2026-08-18T17:38:50.904696",
+  "count": 436,
   "results": [
     {
       "suite": "semantic",
@@ -489,7 +489,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "统一 ID、筛选、关键词和分页查询，并投影稳定的 records/count/cursor 结果。",
+      "semantic_delta": "统一 ID、筛选、关键词、字段投影和分页查询；fieldIds 只返回用户要求的列，并投影稳定的 records/count/cursor 结果。",
       "availability": "available"
     },
     {
@@ -690,6 +690,16 @@
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
       "semantic_delta": "按当前父目录语义调整文件夹展示顺序。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+table-bootstrap",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "在已有 Base 中声明式创建一张表和字段，字段自动分片，逐层读回验证并发布可恢复检查点。",
       "availability": "available"
     },
     {

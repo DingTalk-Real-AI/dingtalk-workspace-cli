@@ -59,7 +59,7 @@ RUNTIME_CONTRACT_END = "<!-- DWS_RUNTIME_CONTRACT_END -->"
 # here only after verifying that the product skill has its own reviewed routing
 # section and intent table; compacting a sparse skill without an alternative
 # route would make its shortcuts harder to discover.
-COMPACT_PRODUCT_SERVICES = {"chat", "doc", "drive"}
+COMPACT_PRODUCT_SERVICES = {"aitable", "chat", "doc", "drive"}
 
 
 def md_escape(value: Any) -> str:

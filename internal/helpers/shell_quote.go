@@ -2,7 +2,7 @@ package helpers
 
 import "strings"
 
-// shellQuoteArg 按 POSIX sh 规则把 s 引用成可安全放进可复制命令的单个 argv 元素。
+// ShellQuoteArg 按 POSIX sh 规则把 s 引用成可安全放进可复制命令的单个 argv 元素。
 //
 // 为什么需要它：错误提示里的恢复命令是给用户直接复制到 shell 执行的，其中的查询域取自用户
 // 输入（--workspace 的常见形态就是带查询串的 URL）。裸拼接下，合法 URL 里的 `&` 就会把命令
@@ -21,7 +21,7 @@ import "strings"
 //
 // 空串必须显式引用成一对空单引号，否则该参数会从 argv 里整个消失，后面的 token 会被前一个
 // flag 吞掉。
-func shellQuoteArg(s string) string {
+func ShellQuoteArg(s string) string {
 	if s == "" {
 		return "''"
 	}
@@ -41,7 +41,7 @@ func shellValueIsBare(s string) bool {
 // driveLatestPosixScopeValue 是 POSIX shell 下把用户值放进可复制命令的策略：单引号内 sh 不做
 // 任何展开，因此含元字符的值引用后即可安全内联。第二个返回值恒为 true。
 func driveLatestPosixScopeValue(value string) (string, bool) {
-	return shellQuoteArg(value), true
+	return ShellQuoteArg(value), true
 }
 
 // driveLatestWindowsScopeValue 是 Windows 构建下的策略：只内联本身就安全的值，其余一律不进

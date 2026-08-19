@@ -19,14 +19,28 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
+
+// promoteLegacyChatString copies an explicitly supplied legacy flag into the
+// new canonical flag. Cobra validates MarkFlagRequired after PreRunE, and the
+// overwrite also preserves the migration rule that a legacy value wins when
+// both spellings are present.
+func promoteLegacyChatString(cmd *cobra.Command, canonical, legacy string) error {
+	if !cmd.Flags().Changed(legacy) {
+		return nil
+	}
+	value, err := cmd.Flags().GetString(legacy)
+	if err != nil {
+		return err
+	}
+	return cmd.Flags().Set(canonical, value)
+}
 
 func callProjectedChatMessages(cmd *cobra.Command, toolName string, args map[string]any, search bool) error {
 	if deps.Caller.DryRun() {
@@ -3144,7 +3158,7 @@ func newChatCommand() *cobra.Command {
   --open-dingtalk-id   单聊接收人 openDingTalkId
 
 纯文本 / Markdown 消息（默认）：
-  无需指定 --msg-type，直接传消息内容即可。推荐使用 --text flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。
+  无需指定 --msg-type，直接传消息内容即可。推荐使用 --content flag 传递内容（尤其当内容含换行、引号等特殊字符时），也支持位置参数。可选 --title 作为消息标题。
   图文混排时，公网图片 URL 需要写成 Markdown 图片语法：![图片标题](https://example.com/image.png)，才会以内联图片展示。
   如果省略开头的 !，例如 [图片标题](https://example.com/image.png)，将按链接/URL 展示，不会渲染为图片。
 
@@ -3154,24 +3168,24 @@ func newChatCommand() *cobra.Command {
   获取 openMessageId 和 openConversationId，无需再按消息内容反查。
 
 本地图片 / 文件消息：
-  统一使用 --msg-type file --file-path <本地路径>。CLI 会完成上传并按 file 消息发送；
+  统一使用 --msg-type file --file <本地路径>。CLI 会完成上传并按 file 消息发送；
   .png/.jpg 也会显示为可下载的文件附件，不会生成 mediaId 或渲染成内联图片。
 
 旧版内联图片消息：
   仅当上游已经提供有效 mediaId 时，使用 --msg-type image --media-id。
   当前 CLI 不提供本地文件到 mediaId 的上传能力。`,
-		Example: `  dws chat message send --conversation-id <openconversation_id> "hello"
-  dws chat message send --user <userId> "请查收"
-  dws chat message send --open-dingtalk-id <openDingTalkId> "请查收"
-  dws chat message send --conversation-id <openconversation_id> --title "周报提醒" "请大家本周五前提交周报"
+		Example: `  dws chat message send --conversation-id <openconversation_id> --content "hello"
+  dws chat message send --user <userId> --content "请查收"
+  dws chat message send --open-dingtalk-id <openDingTalkId> --content "请查收"
+  dws chat message send --conversation-id <openconversation_id> --title "周报提醒" --content "请大家本周五前提交周报"
   # 图文混排 Markdown：公网图片 URL 需要写成 ![图片标题](URL) 才会以内联图片展示
-  dws chat message send --conversation-id <openconversation_id> --text $'这是图文说明\n\n![这个是展示图片标题](https://down.dingtalk.com/media/lQLPM5jiBEiBNjswMLAKd_CTzm8eowpEWPT_7-cA_48_48.png)'
+  dws chat message send --conversation-id <openconversation_id> --content $'这是图文说明\n\n![这个是展示图片标题](https://down.dingtalk.com/media/lQLPM5jiBEiBNjswMLAKd_CTzm8eowpEWPT_7-cA_48_48.png)'
   # 发送本地图片或文件（图片会作为可下载的 file 附件发送）
-  dws chat message send --conversation-id <openconversation_id> --msg-type file --file-path ./screenshot.png
-  dws chat message send --conversation-id <openconversation_id> --msg-type file --file-path ./report.pdf
+  dws chat message send --conversation-id <openconversation_id> --msg-type file --file ./screenshot.png
+  dws chat message send --conversation-id <openconversation_id> --msg-type file --file ./report.pdf
   # 发送本地音频/视频（audio/video 是 file 的语义别名）
-  dws chat message send --conversation-id <openconversation_id> --msg-type audio --file-path ./recording.mp3
-  dws chat message send --conversation-id <openconversation_id> --msg-type video --file-path ./demo.mp4
+  dws chat message send --conversation-id <openconversation_id> --msg-type audio --file ./recording.mp3
+  dws chat message send --conversation-id <openconversation_id> --msg-type video --file ./demo.mp4
   # 旧版内联图片：仅当上游已经持有有效 mediaId 时使用
   dws chat message send --conversation-id <openconversation_id> --msg-type image --media-id <mediaId>
 # 查询群 ID: dws chat search --query "群名"
@@ -3250,7 +3264,7 @@ func newChatCommand() *cobra.Command {
 					contentJSON = fmt.Sprintf(`{"mediaId":"%s"}`, mediaId)
 				case "file", "audio", "video":
 					serviceMsgType = "file"
-					filePath, _ := cmd.Flags().GetString("file-path")
+					filePath := flagOrFallback(cmd, "file-path", "file")
 					dentryId, _ := cmd.Flags().GetInt64("dentry-id")
 					spaceId, _ := cmd.Flags().GetInt64("space-id")
 					if (dentryId == 0) != (spaceId == 0) {
@@ -3281,7 +3295,7 @@ func newChatCommand() *cobra.Command {
 							}
 							contentJSON, _ = buildConversationFileContent(dentryId, spaceId, meta)
 						} else if dentryId == 0 || spaceId == 0 {
-							return fmt.Errorf("--file-path must be a readable local file, or pass legacy --dentry-id and --space-id: %w", err)
+							return fmt.Errorf("--file must be a readable local file, or pass legacy --dentry-id and --space-id: %w", err)
 						}
 					}
 					if contentJSON == "" {
@@ -3289,7 +3303,7 @@ func newChatCommand() *cobra.Command {
 						fileType, _ := cmd.Flags().GetString("file-type")
 						fileSize, _ := cmd.Flags().GetInt64("file-size")
 						if dentryId == 0 || spaceId == 0 || fileName == "" {
-							return fmt.Errorf("readable local --file-path is required for msgType=file; legacy flags --dentry-id, --space-id, --file-name are still supported")
+							return fmt.Errorf("readable local --file is required for msgType=file; legacy flags --dentry-id, --space-id, --file-name are still supported")
 						}
 						contentJSON = fmt.Sprintf(`{"dentryId":%d,"spaceId":%d,"fileName":"%s","fileType":"%s","filePath":"%s","fileSize":%d}`,
 							dentryId, spaceId, fileName, fileType, filePath, fileSize)
@@ -3335,7 +3349,7 @@ func newChatCommand() *cobra.Command {
 				text = args[0]
 			}
 			if text == "" {
-				return fmt.Errorf("message content required (use --text or positional arg, or --media-id for image)")
+				return fmt.Errorf("message content required (use --content or positional arg, or --media-id for image)")
 			}
 			title, _ := cmd.Flags().GetString("title")
 			if title == "" {
@@ -3395,7 +3409,7 @@ func newChatCommand() *cobra.Command {
 				AgentSummary: "以当前用户身份发送群聊或单聊消息",
 				UseWhen:      []string{"用户明确要以个人身份发送文本或媒体消息时；响应返回 openTaskId 后用 chat message query-send-status 确认投递并取得后续操作所需的消息 ID"},
 				AvoidWhen:    []string{"机器人身份或 Webhook 发送应使用对应命令"},
-				Examples:     []string{"dws chat message send --group <openConversationId> \"项目已更新\""},
+				Examples:     []string{"dws chat message send --group <openConversationId> --content \"项目已更新\""},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "ai-tag", Property: "clawType", InterfaceType: "string"},
@@ -3716,19 +3730,25 @@ func newChatCommand() *cobra.Command {
 	chatMessageSendByWebhookCmd := &cobra.Command{
 		Use:   "send-by-webhook",
 		Short: "自定义机器人 Webhook 发送群消息",
-		Long: `通过自定义机器人 Webhook 发送群消息。@ 人时需在 --text 中包含 @userId 或 @手机号，否则 @ 不生效。
+		Long: `通过自定义机器人 Webhook 发送群消息。@ 人时需在 --content 中包含 @userId 或 @手机号，否则 @ 不生效。
 
 ⚠️ 重要：该接口会真实发送消息到目标群聊，不可用于测试或试探性调用。调用前必须确认消息内容无误。`,
-		Example: `  dws chat message send-by-webhook --token <webhook-token> --title "告警" --text "CPU 超 90%" --at-all
-  dws chat message send-by-webhook --token <webhook-token> --title "test" --text "hi @118785" --at-users 118785`,
+		Example: `  dws chat message send-by-webhook --token <webhook-token> --title "告警" --content "CPU 超 90%" --at-all
+  dws chat message send-by-webhook --token <webhook-token> --title "test" --content "hi @118785" --at-users 118785`,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return promoteLegacyChatString(cmd, "content", "text")
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "token", "title", "text"); err != nil {
+			if err := promoteLegacyChatString(cmd, "content", "text"); err != nil {
+				return err
+			}
+			if err := validateRequiredFlags(cmd, "token", "title", "content"); err != nil {
 				return err
 			}
 			toolArgs := map[string]any{
 				"robotToken": mustGetFlag(cmd, "token"),
 				"title":      mustGetFlag(cmd, "title"),
-				"text":       mustGetFlag(cmd, "text"),
+				"text":       mustGetFlag(cmd, "content"),
 			}
 			if v, _ := cmd.Flags().GetBool("at-all"); v {
 				toolArgs["isAtAll"] = true
@@ -3803,11 +3823,12 @@ func newChatCommand() *cobra.Command {
 					"使用企业机器人 robot-code 发消息时用 chat message send-by-bot",
 					"以个人身份发消息时用 chat message send",
 				},
-				Examples: []string{"dws chat message send-by-webhook --token <webhook-token> --title \"告警\" --text \"CPU 超 90%\" --at-all"},
+				Examples: []string{"dws chat message send-by-webhook --token <webhook-token> --title \"告警\" --content \"CPU 超 90%\" --at-all"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "at-all", Property: "isAtAll"},
 				{Name: "at-users", Property: "atUserIds"},
+				{Name: "content", Property: "text"},
 				{Name: "token", Property: "robotToken"},
 			},
 		},
@@ -4356,7 +4377,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 		Example: `  dws chat message recall --conversation-id <openConversationId> --message-id <openMessageId>
 
   # 发送后撤回：send -> query-send-status -> recall
-  dws chat message send --conversation-id <openConversationId> --text "待撤回的内容"
+  dws chat message send --conversation-id <openConversationId> --content "待撤回的内容"
   dws chat message query-send-status --open-task-id <上一步返回的openTaskId>
   dws chat message recall --conversation-id <上一步返回的openConversationId> --message-id <上一步返回的openMessageId>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -4417,7 +4438,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 		Example: `  dws chat message edit --conversation-id <openConversationId> --message-id <openMessageId> --text "更新后的内容"
 
   # 发送后编辑：send -> query-send-status -> edit
-  dws chat message send --conversation-id <openConversationId> --text "原始内容"
+  dws chat message send --conversation-id <openConversationId> --content "原始内容"
   dws chat message query-send-status --open-task-id <上一步返回的openTaskId>
   dws chat message edit --conversation-id <上一步返回的openConversationId> --message-id <上一步返回的openMessageId> --text "更新后的内容"
 
@@ -4753,21 +4774,19 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatMessageSendCmd.Flags().String("user", "", "单聊接收人 userId（单聊时与 --open-dingtalk-id 二选一）")
 	chatMessageSendCmd.Flags().String("open-dingtalk-id", "", "单聊接收人 openDingTalkId（单聊时与 --user 二选一）")
 	chatMessageSendCmd.Flags().String("title", "", "消息标题，显示在消息列表（可选，未指定时使用消息内容）")
-	// 别名注册: --text/--content/--body/--message/--markdown → 位置参数
-	chatMessageSendCmd.Flags().String("text", "", "消息内容（推荐方式，也可用位置参数传递。内容含换行/特殊字符时必须使用此 flag）")
-	chatMessageSendCmd.Flags().String("content", "", "--text 的别名")
-	chatMessageSendCmd.Flags().String("body", "", "--text 的别名")
-	chatMessageSendCmd.Flags().String("message", "", "--text 的别名")
-	chatMessageSendCmd.Flags().String("markdown", "", "--text 的别名")
-	// --text 不再隐藏，作为首选传参方式展示在 help 中
-	_ = chatMessageSendCmd.Flags().MarkHidden("content")
-	_ = chatMessageSendCmd.Flags().MarkHidden("body")
-	_ = chatMessageSendCmd.Flags().MarkHidden("message")
-	_ = chatMessageSendCmd.Flags().MarkHidden("markdown")
+	corecmd.RegisterFlags(chatMessageSendCmd, []corecmd.FlagSpec{{
+		Name:    "content",
+		Usage:   "消息内容（推荐方式，也可用位置参数传递。内容含换行/特殊字符时必须使用此 flag）",
+		Aliases: []string{"text"},
+	}})
+	for _, alias := range []string{"body", "message", "markdown"} {
+		chatMessageSendCmd.Flags().String(alias, "", "--content 的兼容别名")
+		_ = chatMessageSendCmd.Flags().MarkHidden(alias)
+	}
 	chatMessageSendCmd.Flags().Bool("at-all", false, "@所有人（仅群聊时生效，可选）,设置时，消息内容中一定要包含对应的占位符<@all>")
 	chatMessageSendCmd.Flags().String("at-open-dingtalk-ids", "", "@指定成员的 openDingTalkId 列表，逗号分隔（仅群聊时生效，可选）,设置--at-open-dingtalk-ids openDingTalkId1,openDingTalkId2时，消息内容中一定要包含对应格式的占位符<@openDingTalkId1> <@openDingTalkId2>")
 	chatMessageSendCmd.Flags().String("media-id", "", "上游已提供的图片 mediaId（仅旧版 msgType=image；CLI 不提供本地上传到 mediaId）")
-	chatMessageSendCmd.Flags().String("msg-type", "", "富媒体消息类型: image/file/audio/video/location/profile（本地图片/文件推荐 file --file-path；image 仅接受已有 mediaId）")
+	chatMessageSendCmd.Flags().String("msg-type", "", "富媒体消息类型: image/file/audio/video/location/profile（本地图片/文件推荐 file --file；image 仅接受已有 mediaId）")
 	chatMessageSendCmd.Flags().String("latitude", "", "位置消息纬度（msgType=location 时必填）")
 	chatMessageSendCmd.Flags().String("longitude", "", "位置消息经度（msgType=location 时必填）")
 	chatMessageSendCmd.Flags().String("location-name", "", "位置消息地址名称（msgType=location 时必填）")
@@ -4777,7 +4796,11 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	chatMessageSendCmd.Flags().Int64("space-id", 0, "空间 ID（与 --dentry-id 成对传入时跳过自动上传）")
 	chatMessageSendCmd.Flags().String("file-name", "", "文件名")
 	chatMessageSendCmd.Flags().String("file-type", "", "文件类型/扩展名")
-	chatMessageSendCmd.Flags().String("file-path", "", "本地文件路径（msgType=file/audio/video 时直接上传并按 file 消息发送）")
+	corecmd.RegisterFlags(chatMessageSendCmd, []corecmd.FlagSpec{{
+		Name:    "file",
+		Usage:   "本地文件路径（msgType=file/audio/video 时直接上传并按 file 消息发送）",
+		Aliases: []string{"file-path"},
+	}})
 	chatMessageSendCmd.Flags().Int64("file-size", 0, "文件大小，单位字节")
 	_ = chatMessageSendCmd.Flags().MarkHidden("dentry-id")
 	_ = chatMessageSendCmd.Flags().MarkHidden("space-id")
@@ -4798,12 +4821,12 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	cli.AnnotateRuntimePositionals(chatMessageSendCmd, contract.RuntimeSchemaPositional{
 		Name:        "content",
 		Type:        "string",
-		Description: "消息内容（也可使用 --text；富媒体消息可省略）",
+		Description: "消息内容（也可使用 --content；富媒体消息可省略）",
 		Required:    false,
 		Index:       0,
 	})
 	cli.AnnotateRuntimeFlagEnum(chatMessageSendCmd, "msg-type", "image", "file", "audio", "video")
-	cli.AnnotateRuntimeFlagFormat(chatMessageSendCmd, "file-path", "file-path")
+	cli.AnnotateRuntimeFlagFormat(chatMessageSendCmd, "file", "file-path")
 
 	chatMessageSendByBotCmd.Flags().String("robot-code", "", "机器人 Code (必填)")
 	_ = chatMessageSendByBotCmd.MarkFlagRequired("robot-code")
@@ -4838,8 +4861,12 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatMessageSendByWebhookCmd.MarkFlagRequired("token")
 	chatMessageSendByWebhookCmd.Flags().String("title", "", "消息标题 (必填)")
 	_ = chatMessageSendByWebhookCmd.MarkFlagRequired("title")
-	chatMessageSendByWebhookCmd.Flags().String("text", "", "消息内容 (必填)")
-	_ = chatMessageSendByWebhookCmd.MarkFlagRequired("text")
+	corecmd.RegisterFlags(chatMessageSendByWebhookCmd, []corecmd.FlagSpec{{
+		Name:    "content",
+		Usage:   "消息内容 (必填)",
+		Aliases: []string{"text"},
+	}})
+	_ = chatMessageSendByWebhookCmd.MarkFlagRequired("content")
 	chatMessageSendByWebhookCmd.Flags().Bool("at-all", false, "@ 所有人")
 	chatMessageSendByWebhookCmd.Flags().String("at-mobiles", "", "@ 指定手机号，逗号分隔")
 	chatMessageSendByWebhookCmd.Flags().String("at-users", "", "@ 指定用户，逗号分隔")
@@ -5049,7 +5076,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 		Use:   "conversation-info",
 		Short: "获取会话基础信息",
 		Long: `获取指定会话的基础信息。
-发送本地文件消息请优先使用 dws chat message send --msg-type file --file-path <本地文件>，CLI 不再要求调用方获取或传递 spaceId。`,
+发送本地文件消息请优先使用 dws chat message send --msg-type file --file <本地文件>，CLI 不再要求调用方获取或传递 spaceId。`,
 		Example: `  dws chat conversation-info --conversation-id <openConversationId> --format json
   dws chat conversation-info --user <userId> --format json
   dws chat conversation-info --open-dingtalk-id <openDingTalkId> --format json`,
@@ -5164,11 +5191,11 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 		Hidden: true,
 		Long: `chat file upload 已下线，不再调用 chat/upload_conversation_file_by_url。
 
-发送本地文件消息请改用 chat message send --msg-type file --file-path；该路径仍然可用，CLI 内部会完成本地文件上传和消息发送。`,
-		Example: `  dws chat message send --conversation-id <openConversationId> --msg-type file --file-path ./report.pdf --format json
-  dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file-path ./report.pdf --format json`,
+发送本地文件消息请改用 chat message send --msg-type file --file；该路径仍然可用，CLI 内部会完成本地文件上传和消息发送。`,
+		Example: `  dws chat message send --conversation-id <openConversationId> --msg-type file --file ./report.pdf --format json
+  dws chat message send --open-dingtalk-id <openDingTalkId> --msg-type file --file ./report.pdf --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("chat file upload 已下线；chat/upload_conversation_file_by_url 当前不可用。发送本地文件请改用: dws chat message send --msg-type file --file-path <本地路径>")
+			return fmt.Errorf("chat file upload 已下线；chat/upload_conversation_file_by_url 当前不可用。发送本地文件请改用: dws chat message send --msg-type file --file <本地路径>")
 		},
 	}
 	chatFileUploadCmd.Flags().String("conversation-id", "", "群聊 openConversationId（群聊时使用）")
@@ -6934,10 +6961,22 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
   - 群聊：dws chat search --query "群名"
   - 单聊：dws chat conversation-info --open-dingtalk-id <openDingTalkId>
           （人员信息可通过 dws contact user search --keyword "姓名" --format json 获取）`,
-		Example: `  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "收到，马上处理"
-  dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text "请看一下" --at-open-dingtalk-ids <mentionedOpenDingTalkId>`,
+		Example: `  dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content "收到，马上处理"
+  dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content "请看一下" --at-open-dingtalk-ids <mentionedOpenDingTalkId>`,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := promoteLegacyChatString(cmd, "group", "conversation-id"); err != nil {
+				return err
+			}
+			return promoteLegacyChatString(cmd, "content", "text")
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "conversation-id", "ref-msg-id", "ref-sender", "text"); err != nil {
+			if err := promoteLegacyChatString(cmd, "group", "conversation-id"); err != nil {
+				return err
+			}
+			if err := promoteLegacyChatString(cmd, "content", "text"); err != nil {
+				return err
+			}
+			if err := validateRequiredFlags(cmd, "group", "ref-msg-id", "ref-sender", "content"); err != nil {
 				return err
 			}
 			refSender := mustGetFlag(cmd, "ref-sender")
@@ -6954,7 +6993,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				clawType = edition.ClawType()
 			}
 			toolArgs := map[string]any{
-				"openConversationId": mustGetFlag(cmd, "conversation-id"),
+				"openConversationId": mustGetFlag(cmd, "group"),
 				"msgType":            "reply",
 				"clawType":           clawType,
 			}
@@ -6962,7 +7001,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			atOpenIDs := mustGetFlag(cmd, "at-open-dingtalk-ids")
 			replyText := applyCurrentUserGroupMentions(
 				toolArgs,
-				mustGetFlag(cmd, "text"),
+				mustGetFlag(cmd, "content"),
 				atOpenIDs,
 				atAll,
 			)
@@ -7004,24 +7043,32 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 				AgentSummary: "引用指定消息发送个人回复",
 				UseWhen:      []string{"用户要针对某条已有消息进行引用回复时"},
 				AvoidWhen:    []string{"无需引用上下文的普通消息使用 chat message send"},
-				Examples:     []string{"dws chat message reply --conversation-id <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --text \"收到\""},
+				Examples:     []string{"dws chat message reply --group <openConversationId> --ref-msg-id <openMessageId> --ref-sender <openDingTalkId> --content \"收到\""},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "ai-tag", Property: "clawType", InterfaceType: "string"},
 				{Name: "at-all", Property: "atAll", Required: boolPtr(false), InterfaceType: "boolean"},
 				{Name: "at-open-dingtalk-ids", Property: "atOpenDingTalkIds", Required: boolPtr(false), InterfaceType: "array"},
-				{Name: "conversation-id", Property: "openConversationId"},
+				{Name: "group", Property: "openConversationId"},
 			},
 		},
 	})
-	chatMessageReplyCmd.Flags().String("conversation-id", "", "会话 openConversationId (必填，支持单聊/群聊)")
-	_ = chatMessageReplyCmd.MarkFlagRequired("conversation-id")
+	corecmd.RegisterFlags(chatMessageReplyCmd, []corecmd.FlagSpec{{
+		Name:    "group",
+		Usage:   "会话 openConversationId (必填，支持单聊/群聊)",
+		Aliases: []string{"conversation-id"},
+	}})
+	_ = chatMessageReplyCmd.MarkFlagRequired("group")
 	chatMessageReplyCmd.Flags().String("ref-msg-id", "", "被引用的消息 openMessageId (必填)")
 	_ = chatMessageReplyCmd.MarkFlagRequired("ref-msg-id")
 	chatMessageReplyCmd.Flags().String("ref-sender", "", "被引用消息的发送者 openDingTalkId (必填)")
 	_ = chatMessageReplyCmd.MarkFlagRequired("ref-sender")
-	chatMessageReplyCmd.Flags().String("text", "", "回复内容 (必填)")
-	_ = chatMessageReplyCmd.MarkFlagRequired("text")
+	corecmd.RegisterFlags(chatMessageReplyCmd, []corecmd.FlagSpec{{
+		Name:    "content",
+		Usage:   "回复内容 (必填)",
+		Aliases: []string{"text"},
+	}})
+	_ = chatMessageReplyCmd.MarkFlagRequired("content")
 	chatMessageReplyCmd.Flags().String("uuid", "", "幂等键（可选）")
 	chatMessageReplyCmd.Flags().Bool("ai-tag", true, "消息是否带 AI 发送角标（默认 true）")
 	chatMessageReplyCmd.Flags().Bool("at-all", false, "@所有人（仅群聊时生效；正文缺少 <@all> 时自动补齐）")

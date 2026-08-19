@@ -68,9 +68,9 @@ func init() {
 	registerRequireOneOf("devdoc.search_open_platform_docs_rag", "query", "keyword")
 	registerRequireOneOf("event.consume", "event_key", "subscribe-id")
 	registerExclusiveOneOf("event.stop", "all", "subscribe_id")
-	registerRequireOneOf("doc.insert_document_block", "text", "heading", "element")
+	registerRequireOneOf("doc.insert_document_block", "content", "heading", "element")
 	registerExclusiveOneOf("doc.update_document", "content", "content-file")
-	registerRequireOneOf("doc.update_document_block", "text", "heading", "element")
+	registerRequireOneOf("doc.update_document_block", "content", "heading", "element")
 	registerRequireOneOf("pat.batch_grant", "scope", "product", "products", "domain", "domains", "recommend")
 	registerRequireOneOf("mail.search_mail_users", "keyword", "employee-no")
 	// --body is a hidden compatibility alias for the public --content flag.

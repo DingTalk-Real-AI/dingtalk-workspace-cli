@@ -11,7 +11,7 @@
 >
 > **CRITICAL — 根部门**：钉钉根部门 `deptId=1`。`dept` 系列命令查根部门统一传 `--dept 1` 或 `--depts 1`，不要传 `self / me / root / 0`。
 >
-> **CRITICAL — 搜人首选 aisearch**：凡是"找人/搜人/谁负责 XX/某事项/某项目的人/上级/下级/团队成员"——**第一反应**是 `dws aisearch person`（详见 [aisearch.md](./aisearch.md)），不是 `contact user search`，**更不是反问用户要文档链接**。典型反例：用户说"查询集团推进事项"= 问"集团推进事项这个职责/项目下的人是谁"，正确做法是 `dws aisearch person --keyword "集团推进事项" --dimension duty --format json`。
+> **CRITICAL — 搜人首选 aisearch**：凡是"找人/搜人/谁负责 XX/某事项/某项目的人/上级/下级/团队成员"——**第一反应**是 `dws aisearch person`（详见 [aisearch.md](./aisearch.md)），不是 `contact user search`，**更不是反问用户要文档链接**。典型反例：用户说"查询集团推进事项"= 问"集团推进事项这个职责/项目下的人是谁"，正确做法是 `dws aisearch person --query "集团推进事项" --dimension duty --format json`。
 
 ## 命令总览
 

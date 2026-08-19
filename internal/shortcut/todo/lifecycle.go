@@ -435,7 +435,7 @@ var UploadAttachment = shortcut.Shortcut{
 		{Name: "file-path", Type: shortcut.FlagString, Desc: "本地文件路径", Required: true},
 	},
 	Execute: func(*shortcut.RuntimeContext) error {
-		return apperrors.NewValidation("+upload-attachment 暂不复制原子上传事务；请使用 dws todo task add-attachment --task-id <TASK_ID> --file-path <PATH>")
+		return apperrors.NewValidation("+upload-attachment 暂不复制原子上传事务；请使用 dws todo task add-attachment --task-id <TASK_ID> --file <PATH>")
 	},
 }
 

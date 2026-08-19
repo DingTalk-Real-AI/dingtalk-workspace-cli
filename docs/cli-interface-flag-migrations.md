@@ -41,7 +41,7 @@ PR merge-base 同时拥有快照生成器、比较器和已审批清单。门禁
 scripts/policy/interface-migrations/approved-flag-migrations-v1.json
 ```
 
-清单使用严格 JSON 解析：版本、字段名大小写、JSON 值类型、命令路径和 flag 名都必须精确；拒绝重复键、未知键、scalar `null` 与尾随 JSON 值，`reason` 不能为空；禁止 `*`、`?`、前缀规则或其他 wildcard。当前清单登记了 IM ID rename 的 `pending` 记录；`pending` 只记录已评审计划，候选与 merge-base 仍必须精确匹配 `before`，因此本治理 PR **不授权 PR #904 或任何产品接口变化**。
+清单使用严格 JSON 解析：版本、字段名大小写、JSON 值类型、命令路径和 flag 名都必须精确；拒绝重复键、未知键、scalar `null` 与尾随 JSON 值，`reason` 不能为空；禁止 `*`、`?`、前缀规则或其他 wildcard。清单中的 `pending` 记录只记录已评审计划，并授权其精确列出的后续产品迁移；候选与 merge-base 仍必须精确匹配 `before`，不能授权同一个提交中的接口变化，也不能作为其他命令或参数的通配豁免。
 
 ## 两阶段迁移与回执清理
 

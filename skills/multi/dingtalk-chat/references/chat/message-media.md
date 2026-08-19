@@ -22,7 +22,7 @@
 位置消息必须确认纬度、经度、地址名称和地图缩略图 mediaId：
 
 ```bash
-dws chat message send --group <openConversationId> --msg-type location \
+dws chat message send --conversation-id <openConversationId> --msg-type location \
   --latitude <纬度> --longitude <经度> --location-name <地址名称> \
   --map-thumbnail-url "@mediaId"
 ```
@@ -30,7 +30,7 @@ dws chat message send --group <openConversationId> --msg-type location \
 联系人名片的 `--contact-id` 必须是联系人 `openDingTalkId`，不能把 userId 直接代入：
 
 ```bash
-dws chat message send --group <openConversationId> \
+dws chat message send --conversation-id <openConversationId> \
   --msg-type profile --contact-id <openDingTalkId>
 ```
 
@@ -42,7 +42,7 @@ dws chat message query-send-status --open-task-id <openTaskId> --format json
 
 检查真实 `sendStatus`、`openMessageId` 和 `openConversationId`。
 
-原子 `message send` 只在 Shortcut 缺少真实必需字段时使用。群聊目标用 `--group`；单聊目标
+原子 `message send` 只在 Shortcut 缺少真实必需字段时使用。群聊目标用 `--conversation-id`；单聊目标
 用 `--user` 或 `--open-dingtalk-id`，三者通常互斥。发送前核对接收对象、消息类型和资源来源。
 
 ## 资源下载

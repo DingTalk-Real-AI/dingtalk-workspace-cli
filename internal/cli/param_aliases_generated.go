@@ -2450,14 +2450,14 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "chat +messages-reply",
 		Aliases: map[string]string{
-			"chat":                 "conversation-id",
-			"chat-id":              "conversation-id",
+			"chat":                 "group",
+			"chat-id":              "group",
 			"msg-id":               "ref-msg-id",
-			"open-conversation-id": "conversation-id",
+			"open-conversation-id": "group",
 			"open-message-id":      "ref-msg-id",
 			"ref-message-id":       "ref-msg-id",
 		},
-		Blocked: []string{"conversation-ids", "dest-conversation-id", "group", "group-id", "group-ids", "group-name", "id", "message-ids", "msg-ids", "name", "open-conversation-ids", "open-message-ids", "source", "src-conversation-id", "src-msg-id", "target"},
+		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "id", "message-ids", "msg-ids", "name", "open-conversation-ids", "open-message-ids", "source", "src-conversation-id", "src-msg-id", "target"},
 	},
 	{
 		CLIPath: "chat +messages-resource-download",
@@ -3205,10 +3205,9 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "chat message reply",
 		Aliases: map[string]string{
-			"chat":                 "conversation-id",
-			"chat-id":              "conversation-id",
-			"group":                "conversation-id",
-			"open-conversation-id": "conversation-id",
+			"chat":                 "group",
+			"chat-id":              "group",
+			"open-conversation-id": "group",
 			"ref-message-id":       "ref-msg-id",
 		},
 		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "id", "message-id", "msg-id", "msg-ids", "name", "open-conversation-ids", "open-message-id", "source", "src-conversation-id", "src-msg-id", "staff-id", "target", "uid", "user", "user-id", "userid"},
@@ -3229,7 +3228,6 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "chat message send",
 		Aliases: map[string]string{
-			"file":     "file-path",
 			"staff-id": "user",
 			"to-user":  "user",
 			"uid":      "user",
@@ -3701,8 +3699,7 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "doc +doc-append",
 		Aliases: map[string]string{
-			"body":        "text",
-			"content":     "text",
+			"body":        "content",
 			"dentry-uuid": "doc",
 			"doc-id":      "doc",
 			"document-id": "doc",
@@ -4164,8 +4161,7 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "doc block insert",
 		Aliases: map[string]string{
-			"body":               "text",
-			"content":            "text",
+			"body":               "content",
 			"dentry-uuid":        "node",
 			"doc":                "node",
 			"document-id":        "node",
@@ -4188,8 +4184,7 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "doc block update",
 		Aliases: map[string]string{
-			"body":        "text",
-			"content":     "text",
+			"body":        "content",
 			"dentry-uuid": "node",
 			"doc":         "node",
 			"document-id": "node",
