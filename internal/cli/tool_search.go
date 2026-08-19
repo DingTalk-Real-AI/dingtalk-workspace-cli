@@ -32,6 +32,11 @@ import (
 )
 
 const (
+	// toolSearchNamedProductBoost lifts a full-display-name-matched product just
+	// above the previous top hit so one candidate survives the Top-K cut. It is
+	// not a relevance opinion: it only guarantees presence for a query that
+	// explicitly names the product.
+	toolSearchNamedProductBoost     = 0.01
 	defaultToolSearchLimit          = 5
 	defaultToolSearchCandidateLimit = 20
 	maxToolSearchLimit              = 20
@@ -238,11 +243,12 @@ type toolSearchQueryTerm struct {
 // ToolSearchEngine owns one immutable in-memory index over a typed registry.
 // It performs no network calls and has no external-ranking path.
 type ToolSearchEngine struct {
-	index         SchemaIndex
-	config        ToolSearchConfig
-	documents     map[string]toolSearchDocument
-	knownProducts map[string]bool
-	lexical       LexicalRetriever
+	index            SchemaIndex
+	config           ToolSearchConfig
+	documents        map[string]toolSearchDocument
+	knownProducts    map[string]bool
+	productNameCores map[string]string
+	lexical          LexicalRetriever
 }
 
 var (
@@ -310,11 +316,13 @@ func NewToolSearchEngine(registry SchemaRegistry, config ToolSearchConfig) (*Too
 	}
 	documents := make(map[string]toolSearchDocument, len(index.CanonicalPaths()))
 	knownProducts := make(map[string]bool, len(index.Registry().Products))
+	productNameCores := make(map[string]string, len(index.Registry().Products))
 	for _, product := range index.Registry().Products {
 		knownProducts[product.ID] = true
+		productNameCores[product.ID] = toolSearchProductDisplayName(product.Name, product.Description)
 		for _, tool := range product.Tools {
 			canonical := tool.Identity.CanonicalPath
-			fields := toolSearchDocumentFields(tool, config.IncludeUseWhen)
+			fields := toolSearchDocumentFields(tool, product.Name, product.Description, config.IncludeUseWhen)
 			documents[canonical] = toolSearchDocument{tool: tool, fields: fields}
 		}
 	}
@@ -323,12 +331,98 @@ func NewToolSearchEngine(registry SchemaRegistry, config ToolSearchConfig) (*Too
 		return nil, err
 	}
 	return &ToolSearchEngine{
-		index:         index,
-		config:        config,
-		documents:     documents,
-		knownProducts: knownProducts,
-		lexical:       lexical,
+		index:            index,
+		config:           config,
+		documents:        documents,
+		knownProducts:    knownProducts,
+		productNameCores: productNameCores,
+		lexical:          lexical,
 	}, nil
+}
+
+// toolSearchProductDisplayName returns the product's display name, folded to
+// a containment core. Runtime assembly may carry the display name in Name or
+// Description; prefer the first non-empty candidate.
+func toolSearchProductDisplayName(name, description string) string {
+	display := strings.TrimSpace(name)
+	if display == "" {
+		display = strings.TrimSpace(description)
+	}
+	if display == "" {
+		return ""
+	}
+	return toolSearchProductNameCore(display)
+}
+
+// toolSearchNamedProductID returns the product whose distinctive display-name
+// tokens all appear in the query tokens. Distinctive tokens are the display
+// name's multi-rune tokens (unigrams carry no product identity); a product is
+// only "named" when at least two such tokens match, which excludes partial
+// confounders like the shared 「表格」 bigram alone (「AI 表格操作」 needs both
+// 「ai」 and 「表格」). If two products' names both match, no preference is
+// applied.
+func toolSearchNamedProductID(query string, productNameCores map[string]string) string {
+	normalizedQuery := toolSearchProductNameKey(query)
+	if normalizedQuery == "" {
+		return ""
+	}
+	var match string
+	var matchCoreLen int
+	for productID, core := range productNameCores {
+		if core == "" || !strings.Contains(normalizedQuery, core) {
+			continue
+		}
+		coreLen := len([]rune(core))
+		if match != "" && match != productID {
+			// Two products' name cores both appear; prefer the longer
+			// (more specific) core, and stay neutral on ties.
+			if coreLen > matchCoreLen {
+				match, matchCoreLen = productID, coreLen
+			} else if coreLen == matchCoreLen {
+				return ""
+			}
+			continue
+		}
+		match, matchCoreLen = productID, coreLen
+	}
+	return match
+}
+
+// toolSearchProductNameKey folds a string for product-name containment
+// matching: NFKC normalize, drop ASCII/inner spaces, and lowercase latin
+// letters, so 「钉钉AI表格」 contains the key of 「AI 表格操作」.
+func toolSearchProductNameKey(value string) string {
+	if value = strings.TrimSpace(value); value == "" {
+		return ""
+	}
+	folded := norm.NFKC.String(value)
+	var builder strings.Builder
+	for _, r := range folded {
+		switch {
+		case unicode.IsSpace(r) || r == '　':
+			continue
+		case r >= 'A' && r <= 'Z':
+			builder.WriteRune(r + ('a' - 'A'))
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
+}
+
+// toolSearchProductNameCore derives the containment key of a product display
+// name by trimming trailing generic action words (「操作」「管理」 etc.) that
+// never appear in user queries but would break substring containment.
+func toolSearchProductNameCore(display string) string {
+	key := toolSearchProductNameKey(display)
+	for _, suffix := range []string{"操作", "管理", "工具", "服务"} {
+		if suffixLen := len([]rune(suffix)); len([]rune(key)) > suffixLen {
+			if trimmed := strings.TrimSuffix(key, suffix); toolSearchProductNameKey(trimmed) != "" && trimmed != key {
+				return trimmed
+			}
+		}
+	}
+	return key
 }
 
 // Search retrieves one action-sized query. Exact canonical or CLI identities
@@ -389,6 +483,36 @@ func (e *ToolSearchEngine) Search(ctx context.Context, request ToolSearchRequest
 	if err != nil {
 		return ToolSearchResponse{}, fmt.Errorf("retrieve local tool candidates: %w", err)
 	}
+
+	// Query-side product-name preference: when the query contains a
+	// product's display-name core (e.g. 「AI表格」), guarantee that
+	// product's best candidate survives the shared-bigram confound even
+	// when every sibling candidate outscores it (the Top-K cut happens
+	// inside Retrieve, so a post-hoc multiplier on truncated hits cannot
+	// rescue it). Fetch the named product's top hit over its own eligible
+	// subset and lift it just above the global best score.
+	namedProduct := toolSearchNamedProductID(request.Query, e.productNameCores)
+	if namedProduct != "" && toolSearchHasProduct(e.index.Registry().Products, namedProduct) {
+		namedEligible := make([]string, 0, 8)
+		for _, canonical := range eligibleCanonical {
+			if e.documents[canonical].tool.Identity.ProductID == namedProduct {
+				namedEligible = append(namedEligible, canonical)
+			}
+		}
+		if len(namedEligible) > 0 {
+			namedHits, namedErr := e.lexical.Retrieve(ctx, ToolSearchLexicalRequest{
+				Query:                  request.Query,
+				CandidateLimit:         1,
+				EligibleCanonicalPaths: namedEligible,
+			})
+			if namedErr != nil {
+				return ToolSearchResponse{}, fmt.Errorf("retrieve named product candidates: %w", namedErr)
+			}
+			if len(namedHits) > 0 {
+				hits = toolSearchMergeNamedHit(hits, namedHits[0], namedProduct, e.documents)
+			}
+		}
+	}
 	references := make([]ToolReference, 0, len(hits))
 	for _, item := range hits {
 		reference := toolReference(
@@ -409,6 +533,51 @@ func (e *ToolSearchEngine) Search(ctx context.Context, request ToolSearchRequest
 	setToolReferenceRanks(references)
 	response.Candidates = references
 	return finalizeToolSearchResponse(response)
+}
+
+// toolSearchHasProduct reports whether the registry contains productID.
+func toolSearchHasProduct(products []ProductSpec, productID string) bool {
+	for _, product := range products {
+		if product.ID == productID {
+			return true
+		}
+	}
+	return false
+}
+
+// toolSearchMergeNamedHit inserts the named product's best hit just above the
+// current global best so one candidate survives the Top-K cut, and marks it
+// with the product-name rank source. Deterministic: ties keep canonical-path
+// order.
+func toolSearchMergeNamedHit(hits []LexicalHit, named LexicalHit, namedProduct string, documents map[string]toolSearchDocument) []LexicalHit {
+	inHits := false
+	for _, hit := range hits {
+		if hit.CanonicalPath == named.CanonicalPath {
+			inHits = true
+			break
+		}
+	}
+	if !inHits {
+		hits = append(hits, named)
+	}
+	topScore := 0.0
+	for _, hit := range hits {
+		if hit.Score > topScore {
+			topScore = hit.Score
+		}
+	}
+	for i := range hits {
+		if documents[hits[i].CanonicalPath].tool.Identity.ProductID == namedProduct && hits[i].Score < topScore {
+			hits[i].Score = topScore + hits[i].Score*toolSearchNamedProductBoost
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool {
+		if hits[i].Score == hits[j].Score {
+			return hits[i].CanonicalPath < hits[j].CanonicalPath
+		}
+		return hits[i].Score > hits[j].Score
+	})
+	return hits
 }
 
 // SearchSubqueries merges action-sized searches round-robin so one action
@@ -729,7 +898,7 @@ func (e *ToolSearchEngine) normalizeRequest(request ToolSearchRequest) (ToolSear
 	return request, nil
 }
 
-func toolSearchDocumentFields(tool ToolSpec, includeUseWhen bool) map[toolSearchField]string {
+func toolSearchDocumentFields(tool ToolSpec, productName, productDescription string, includeUseWhen bool) map[toolSearchField]string {
 	identity := []string{
 		tool.Identity.CanonicalPath,
 		tool.Identity.Path,
@@ -739,6 +908,18 @@ func toolSearchDocumentFields(tool ToolSpec, includeUseWhen bool) map[toolSearch
 		tool.Identity.CLIName,
 		tool.Identity.Group,
 		tool.Identity.ProductID,
+	}
+	// Fold the product display name (e.g. 「AI 表格操作」, 「钉钉表格管理」)
+	// into the identity field. Natural-language queries name products by
+	// their display name; without this fold, a sibling product whose
+	// summaries repeat a shared bigram (「表格」) crowds the named product
+	// out of Top-K before BM25F weighting can distinguish them. Runtime
+	// assembly may carry the display name in Name or Description (both
+	// derive from the cobra top-level Short), so fold both, deduped.
+	for _, candidate := range []string{productName, productDescription} {
+		if candidate = strings.TrimSpace(candidate); candidate != "" {
+			identity = append(identity, candidate)
+		}
 	}
 	identity = append(identity, tool.Identity.Aliases...)
 	parameters := make([]string, 0, len(tool.Parameters)*4)

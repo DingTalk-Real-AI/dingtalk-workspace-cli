@@ -365,7 +365,7 @@ func TestDefaultToolSearchConfigExcludesUseWhen(t *testing.T) {
 		t.Fatal("DefaultToolSearchConfig() enables answer-bearing use_when projection")
 	}
 	tool := toolSearchTestTool("chat", "send", "chat send", "发送消息", "write")
-	fields := toolSearchDocumentFields(tool, config.IncludeUseWhen)
+	fields := toolSearchDocumentFields(tool, "chat", "群聊 / 消息 / 机器人", config.IncludeUseWhen)
 	if fields[toolSearchUseWhen] != "" {
 		t.Fatalf("default use_when field = %q", fields[toolSearchUseWhen])
 	}
@@ -998,5 +998,118 @@ func TestToolSearchWeakMatchFlagsFieldOnlyHits(t *testing.T) {
 	}
 	if finalized.WeakMatch || finalized.Hint != "" {
 		t.Fatalf("summary hit must clear weak flag, got weak=%v hint=%q", finalized.WeakMatch, finalized.Hint)
+	}
+}
+
+// TestToolSearchProductNameConflictRoutesChineseProductName reproduces the
+// measured eval failure: queries naming a product in Chinese (「…钉钉AI表格」)
+// lost the named product to a sibling product whose summaries use the shared
+// confounding bigram. The fix folds product display names into tool identity
+// so the named product wins; the bare confounding term still prefers the
+// spreadsheet product.
+func TestToolSearchProductNameConflictRoutesChineseProductName(t *testing.T) {
+	registry := newToolSearchProductNameConflictRegistry(t)
+	config := DefaultToolSearchConfig()
+	config.CatalogSourceHash = "source-test"
+	config.CatalogSurfaceHash = "surface-test"
+	engine, err := NewToolSearchEngine(registry, config)
+	if err != nil {
+		t.Fatalf("NewToolSearchEngine() error = %v", err)
+	}
+
+	// A query that names the aitable-like product in Chinese must surface it in Top5.
+	named, err := engine.Search(context.Background(), ToolSearchRequest{
+		Query: "帮我搜一下「评测项目管理」钉钉AI表格",
+	})
+	if err != nil {
+		t.Fatalf("Search(named) error = %v", err)
+	}
+	if !toolSearchCandidatesContainProduct(named.Candidates, "bitable") {
+		t.Fatalf("named-product query Top5 = %v, want a bitable candidate", toolSearchCanonicalPaths(named.Candidates))
+	}
+
+	// A spreadsheet-intent query must still prefer the sheet-like product.
+	sheet, err := engine.Search(context.Background(), ToolSearchRequest{
+		Query: "导入本地 Excel，或创建、读取、编辑和导出钉钉在线电子表格",
+	})
+	if err != nil {
+		t.Fatalf("Search(sheet) error = %v", err)
+	}
+	if len(sheet.Candidates) == 0 || sheet.Candidates[0].ProductID != "sheetlike" {
+		t.Fatalf("spreadsheet query Top1 = %v, want sheetlike first", toolSearchCanonicalPaths(sheet.Candidates))
+	}
+}
+
+func toolSearchCandidatesContainProduct(candidates []ToolReference, productID string) bool {
+	for _, candidate := range candidates {
+		if candidate.ProductID == productID {
+			return true
+		}
+	}
+	return false
+}
+
+func toolSearchCanonicalPaths(candidates []ToolReference) []string {
+	paths := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		paths = append(paths, candidate.CanonicalPath)
+	}
+	return paths
+}
+
+// newToolSearchProductNameConflictRegistry mirrors the real aitable/sheet
+// proportions: the sheet-like product has many tools whose summaries repeat the
+// confounding term 「表格」, while the bitable-like product has fewer tools that
+// also mention it. Product display names carry the distinguishing tokens
+// (「AI表格」/「多维表」 vs 「电子表格」).
+func newToolSearchProductNameConflictRegistry(t *testing.T) SchemaRegistry {
+	t.Helper()
+	// Real Catalog proportions that produce the measured failure: ~90
+	// spreadsheet tools each repeating the confounding bigram 「表格」, a
+	// larger bitable-like product whose summaries also use it sparsely, and
+	// two dozen unrelated products whose prose dilutes the shared "ai"
+	// token's IDF.
+	sheetTools := make([]ToolSpec, 0, 90)
+	for index := 0; index < 90; index++ {
+		name := fmt.Sprintf("sheet_tool_%03d", index)
+		sheetTools = append(sheetTools, toolSearchTestTool("sheetlike", name,
+			"sheetlike tool "+strings.ReplaceAll(name, "_", " "),
+			"创建、读取、编辑和导出钉钉在线电子表格的工作表、区域、筛选与格式", "read"))
+	}
+	bitableTools := make([]ToolSpec, 0, 200)
+	for index := 0; index < 200; index++ {
+		name := fmt.Sprintf("bitable_tool_%03d", index)
+		summary := "管理数据表字段记录视图"
+		if index < 8 {
+			summary = "按名称搜索 AI 表格 Base"
+		}
+		bitableTools = append(bitableTools, toolSearchTestTool("bitable", name,
+			"bitable tool "+strings.ReplaceAll(name, "_", " "), summary, "read"))
+	}
+	noiseProducts := make([]ProductSpec, 0, 25)
+	for index := 0; index < 25; index++ {
+		productID := fmt.Sprintf("noise%02d", index)
+		tools := make([]ToolSpec, 0, 30)
+		for toolIndex := 0; toolIndex < 30; toolIndex++ {
+			tools = append(tools, toolSearchTestTool(productID,
+				fmt.Sprintf("tool_%03d", toolIndex),
+				fmt.Sprintf("%s tool %03d", productID, toolIndex),
+				"AI 助手驱动的流程自动化与智能提醒", "read"))
+		}
+		noiseProducts = append(noiseProducts, ProductSpec{
+			ID: productID, Name: fmt.Sprintf("噪声产品%02d", index), Tools: tools,
+		})
+	}
+	// Mirror runtime assembly: the display name rides in Description
+	// (Name is empty for runtime products); sheet-like names carry the
+	// shared 「表格」 bigram plus a suite token, bitable-like names carry
+	// the distinguishing 「AI表格」 sequence and a trailing generic word.
+	return SchemaRegistry{
+		Kind:  "schema",
+		Level: "catalog",
+		Products: append([]ProductSpec{
+			{ID: "sheetlike", Description: "钉钉表格管理", Tools: sheetTools},
+			{ID: "bitable", Description: "AI 表格操作", Tools: bitableTools},
+		}, noiseProducts...),
 	}
 }
