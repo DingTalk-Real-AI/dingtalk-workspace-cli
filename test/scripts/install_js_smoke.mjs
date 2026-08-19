@@ -45,6 +45,7 @@
 
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -130,6 +131,12 @@ function stagePkg(zipEntries, emptyDirs = []) {
   }
   sh("zip", ["-qr", path.join(assets, "dws-skills.zip"), "."], { cwd: zipStage });
 
+  const checksumLines = [assetName, "dws-skills.zip"].map((name) => {
+    const digest = crypto.createHash("sha256").update(fs.readFileSync(path.join(assets, name))).digest("hex");
+    return `${digest}  ${name}`;
+  });
+  writeFile(path.join(assets, "checksums.txt"), `${checksumLines.join("\n")}\n`);
+
   return { tmp, pkg, home: path.join(tmp, "home") };
 }
 
@@ -188,6 +195,25 @@ scenario("multi install lays out sibling skills and caches", () => {
     assert.ok(fs.existsSync(path.join(home, ".dws", "skills", "multi", "dingtalk-test", "SKILL.md")), "multi cache filled");
     assert.equal(fs.readFileSync(path.join(home, ".dws", "skills", "mono", "SKILL.md"), "utf8"), "# mono fixture\n", "mono cache from mono/ tree");
     assert.ok(fs.existsSync(path.join(pkg, "vendor", "dws")), "binary installed into vendor/");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+scenario("tampered embedded archive fails closed and preserves vendor binary", () => {
+  const { tmp, pkg, home } = stagePkg({
+    "mono/SKILL.md": "# mono fixture\n",
+    "multi/dingtalk-test/SKILL.md": "# dingtalk-test\n",
+  });
+  try {
+    const vendorBinary = path.join(pkg, "vendor", "dws");
+    writeFile(vendorBinary, "old-binary\n", 0o755);
+    fs.appendFileSync(path.join(pkg, "assets", assetName), "tampered");
+
+    const res = runInstall(pkg, home, "multi");
+    assert.notEqual(res.status, 0, "tampered archive must fail postinstall");
+    assert.match(res.stderr, /checksum mismatch/);
+    assert.equal(fs.readFileSync(vendorBinary, "utf8"), "old-binary\n");
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

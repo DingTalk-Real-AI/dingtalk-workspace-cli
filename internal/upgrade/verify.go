@@ -7,18 +7,31 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
 
+var (
+	verifyOpenFile = os.Open
+	verifyCopy     = io.Copy
+)
+
 // VerifySHA256 verifies a file against its expected SHA256 hash.
 func VerifySHA256(filePath, expectedHash string) error {
+	expectedHash = strings.ToLower(strings.TrimSpace(expectedHash))
+	if len(expectedHash) != sha256.Size*2 {
+		return fmt.Errorf("无效的 SHA256：需要 %d 位十六进制摘要", sha256.Size*2)
+	}
+	if _, err := hex.DecodeString(expectedHash); err != nil {
+		return fmt.Errorf("无效的 SHA256 十六进制摘要: %w", err)
+	}
+
 	actual, err := ComputeSHA256(filePath)
 	if err != nil {
 		return err
 	}
 
-	expectedHash = strings.ToLower(strings.TrimSpace(expectedHash))
 	if actual != expectedHash {
 		return fmt.Errorf("SHA256 mismatch: want %s, got %s", expectedHash[:16], actual[:16])
 	}
@@ -27,12 +40,17 @@ func VerifySHA256(filePath, expectedHash string) error {
 
 // ComputeSHA256 computes the SHA256 hash of a file.
 func ComputeSHA256(filePath string) (string, error) {
-	data, err := os.ReadFile(filePath)
+	file, err := verifyOpenFile(filePath)
 	if err != nil {
 		return "", fmt.Errorf("读取文件失败: %w", err)
 	}
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:]), nil
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := verifyCopy(hash, file); err != nil {
+		return "", fmt.Errorf("计算 SHA256 失败: %w", err)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // ParseChecksumFile parses a SHA256SUMS-style file.

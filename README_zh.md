@@ -172,7 +172,7 @@ DWS_GITEE_REPO=DingTalk-Real-AI/dingtalk-workspace-cli curl -fsSL https://gitee.
 
 > 需要 **v1.0.7** 及以上版本。更早版本请重新执行[安装脚本](#安装)进行升级。
 
-dws 内置自升级能力，直接从 [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases) 拉取更新，支持 SHA256 完整性校验和自动备份。
+dws 内置自升级能力：正式版和 beta 检查分别通过 npm `latest` / `beta` dist-tag 解析，并在本地缓存 10 分钟；真正执行升级时会绕过缓存，并在用户确认后再次校验轨道，立即感知刚发布或刚撤回的版本。npm/pnpm 安装会继续使用原包管理器并锁定精确版本，手工安装则继续从 [GitHub Releases](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/releases) 下载；如果原包管理器不在 `PATH` 中，升级会停止，不会静默覆盖由包管理器持有的二进制。两条路径都会先备份并校验升级后的二进制；直接下载强制要求格式严格的 SHA256，采用流式哈希、有界重试和临时文件原子落盘。
 
 ```bash
 dws upgrade                    # 交互式升级到最新版本
@@ -187,7 +187,7 @@ dws upgrade --rollback         # 回滚到上一版本
 dws upgrade -y                 # 跳过确认直接升级
 ```
 
-默认情况下，`dws upgrade` 只跟随正式 release 轨道。只有显式传入 `--beta` 时，才会选择 GitHub pre-release 里的 beta 构建。
+默认情况下，`dws upgrade` 跟随 npm `latest` 轨道。只有显式传入 `--beta` 时，才会选择发布到 npm `beta` 轨道的版本。`--version`、`--skip-skills` 和自定义发布源仍走直接 Release 资产链路，因为这些场景需要比 npm postinstall 更细的控制。
 
 ### 六渠道发布后验证
 
