@@ -1689,7 +1689,7 @@ func embedContractDecl(cmd *cobra.Command, spec Spec) {
 	if spec.Contract.empty() {
 		return
 	}
-	AttachContract(cmd, spec.Safety, spec.Contract, spec.Short, spec.Long)
+	attachContractPayload(cmd, spec.Safety, spec.Contract, spec.Short, spec.Long)
 }
 
 // AttachContract registers a ContractFinal overlay on an existing leaf without
@@ -1705,7 +1705,32 @@ func embedContractDecl(cmd *cobra.Command, spec Spec) {
 // only. Catalog assembly may prefer Cobra Long for delivered description
 // (Short never enters description) and must stamp provenance to the real
 // winner (cobra_help vs contract_final). Declared Title still wins over Short.
+//
+// Contract.Wait is rejected here: this overlay path has no Spec, so there is
+// nowhere to pair the WaitPoll / WaitEvents hooks, register --wait /
+// --wait-timeout, or run the wait phase — publishing the declaration would
+// advertise a capability the CLI rejects at flag parse (declaration ⇄ runtime
+// drift). Commands that declare wait must be built through the managed New
+// construction, which validates the pairing and owns the wait phase.
 func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl ContractDecl, short, long string) {
+	if decl.Wait != nil && strings.TrimSpace(decl.Wait.Mode) != "" {
+		name := "<nil>"
+		if cmd != nil {
+			name = cmd.Name()
+		}
+		panic(fmt.Sprintf(
+			"command %q declares Contract.Wait on AttachContract: the overlay path cannot run it (no WaitPoll/WaitEvents pairing, no --wait/--wait-timeout registration, no wait phase); declare wait through the managed corecmd.New construction instead",
+			name))
+	}
+	attachContractPayload(cmd, safety, decl, short, long)
+}
+
+// attachContractPayload is the managed registration behind AttachContract.
+// Only New's construction (via embedContractDecl) may carry Contract.Wait:
+// by the time it reaches here, validateWaitDecl has proved the declaration ⇄
+// hook pairing, registerWaitFlags has bound --wait/--wait-timeout, and the
+// dispatch pipeline owns the wait phase.
+func attachContractPayload(cmd *cobra.Command, safety contract.SafetySpec, decl ContractDecl, short, long string) {
 	if cmd == nil || decl.empty() {
 		return
 	}

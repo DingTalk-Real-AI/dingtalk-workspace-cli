@@ -900,3 +900,38 @@ func TestWaitTimeoutCancelsBlockingPollAfterAutoFallback(t *testing.T) {
 		t.Fatalf("stdout=%s", stdout.String())
 	}
 }
+
+func TestAttachContractRejectsWaitDeclaration(t *testing.T) {
+	// The Tier2 overlay path (AttachContract / DeclareLeafMetadata) has no
+	// Spec: it cannot pair WaitPoll/WaitEvents, register --wait flags, or run
+	// the wait phase. Publishing the declaration there would advertise a
+	// catalog capability the CLI rejects at flag parse.
+	expectPanic(t, func() {
+		AttachContract(newTestCommand(), testWriteSafety(), waitTestDecl(), "s", "l")
+	}, "Contract.Wait on AttachContract")
+	expectPanic(t, func() {
+		AttachContract(nil, testWriteSafety(), waitTestDecl(), "s", "l")
+	}, "Contract.Wait on AttachContract")
+
+	// A wait declaration without a mode authors nothing (empty() ignores it)
+	// and must not trip the rejection.
+	decl := waitTestDecl()
+	decl.Wait = &contract.WaitSpec{}
+	AttachContract(newTestCommand(), testWriteSafety(), decl, "s", "l")
+}
+
+func TestNewManagedPathStillPublishesWaitCapability(t *testing.T) {
+	// The managed New construction keeps publishing Contract.Wait into the
+	// ContractFinal store: validateWaitDecl proved the hook pairing and
+	// registerWaitFlags bound --wait before embedContractDecl runs.
+	cmd := New(baseWaitSpec(waitTestDecl(), func(context.Context, *Ctx) (wait.PollDoc, error) {
+		return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+	}))
+	if cmd.Flags().Lookup("wait") == nil {
+		t.Fatal("managed wait construction must register --wait")
+	}
+	final, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok || final.Wait == nil || final.Wait.Mode != contract.WaitModePoll {
+		t.Fatalf("managed construction must publish the wait capability, final=%#v ok=%v", final.Wait, ok)
+	}
+}
