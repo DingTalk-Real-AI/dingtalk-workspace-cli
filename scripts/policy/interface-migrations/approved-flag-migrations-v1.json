@@ -761,6 +761,39 @@
       "reason": "保留旧 argv 兼容性，并将 IM ID 规范 flag 设为唯一可见入口"
     },
     {
+      "command": "dws chat group-role set-user",
+      "legacy": {
+        "name": "role-ids",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "hidden": true,
+          "alias_of": "role-id"
+        }
+      },
+      "canonical": {
+        "name": "role-id",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local",
+          "required": true
+        }
+      },
+      "state": "consumed",
+      "reason": "保留旧 argv 兼容性，并将单值群身份 flag 设为唯一可见入口"
+    },
+    {
       "command": "dws chat group-role update",
       "legacy": {
         "name": "group",

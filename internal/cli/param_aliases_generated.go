@@ -3422,7 +3422,7 @@ var generatedParamAliases = []ParamAliasEntry{
 			"uid":      "user",
 			"userid":   "user",
 		},
-		Blocked: []string{"at-user-ids", "conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "name", "open-conversation-ids", "role-id", "source", "src-conversation-id", "target", "to-user", "user-ids", "users"},
+		Blocked: []string{"at-user-ids", "conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "name", "open-conversation-ids", "source", "src-conversation-id", "target", "to-user", "user-ids", "users"},
 	},
 	{
 		CLIPath: "chat group-role update",

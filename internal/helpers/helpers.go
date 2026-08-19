@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -305,7 +306,14 @@ func CallMCPToolDataOnServer(ctx context.Context, serverID, toolName string, arg
 		return map[string]any{}, nil
 	}
 	var data any
-	if err := json.Unmarshal([]byte(text), &data); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(text))
+	if err := decoder.Decode(&data); err != nil {
+		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", toolName, err))
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			err = fmt.Errorf("存在多个 JSON 值")
+		}
 		return nil, apperrors.NewInternal(fmt.Sprintf("解析 %s 返回失败: %v", toolName, err))
 	}
 	return data, nil

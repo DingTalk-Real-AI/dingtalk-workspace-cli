@@ -30,6 +30,10 @@ var expectedPackagedSkillTargets = []string{
 	".augment/skills/dingtalk-shared",
 	".cline/skills/dingtalk-shared",
 	".amp/skills/dingtalk-shared",
+	".copilot/skills/dingtalk-shared",
+	".config/opencode/skills/dingtalk-shared",
+	".config/agents/skills/dingtalk-shared",
+	".codeium/windsurf/skills/dingtalk-shared",
 	".kiro/skills/dingtalk-shared",
 	".trae/skills/dingtalk-shared",
 	".openclaw/skills/dingtalk-shared",
@@ -70,9 +74,12 @@ func TestPackageManagerVersionVerificationReadsRawBinary(t *testing.T) {
 		t.Fatal("package-manager verifier still requires the version marker to occupy a strings(1) line")
 	}
 	for _, want := range []string{
-		"HOME_SPECIFIC_SKILL_BASES=",
-		`$base/dingtalk-shared/SKILL.md`,
-		`$base/dingtalk-misc/SKILL.md`,
+		"UPSTREAM_AGENT_REGISTRY=",
+		"verify_compatible_skill_base",
+		`diff -qr "$canonical/$name" "$target"`,
+		"broken canonical Skill link",
+		"Skill link does not resolve to canonical source",
+		"Skill copy fallback differs from canonical source",
 		"unexpected mono Skill layout",
 		`verify_npm_install "$tarball_path" "specific-agent-roots"`,
 		`verify_npm_install "$tarball_path" "generic-fallback"`,
@@ -128,15 +135,118 @@ func TestPackageManagerVerifierCoversSpecificAndFallbackSkillRoots(t *testing.T)
 	}
 
 	verifyCmd := exec.Command("sh", verifierPath, "--npm-only")
-	verifyCmd.Env = append(os.Environ(), "DWS_PACKAGE_DIST_DIR="+distDir)
+	hostXDG := filepath.Join(t.TempDir(), "host-xdg")
+	verifyCmd.Env = replaceTestEnv(os.Environ(),
+		"DWS_PACKAGE_DIST_DIR", distDir,
+		"XDG_CONFIG_HOME", hostXDG,
+	)
 	output, err := verifyCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("verify-package-managers.sh error = %v\noutput:\n%s", err, output)
+	}
+	if _, err := os.Stat(hostXDG); !os.IsNotExist(err) {
+		t.Fatalf("package verifier touched inherited XDG_CONFIG_HOME %s: %v", hostXDG, err)
 	}
 	for _, scenario := range []string{"specific-agent-roots", "generic-fallback"} {
 		if !strings.Contains(string(output), "verifying npm package install ("+scenario+")") {
 			t.Errorf("verifier output is missing %s scenario:\n%s", scenario, output)
 		}
+	}
+}
+
+func TestPackageManagerVerifierAcceptsOnlyCorrectLinksOrCopies(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "verify-package-managers.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	cut := strings.Index(text, "\nverify_npm_install()")
+	if cut < 0 {
+		t.Fatal("verify-package-managers.sh helper boundary missing")
+	}
+	library := filepath.Join(t.TempDir(), "verifier-lib.sh")
+	mustWriteFile(t, library, data[:cut], 0o755)
+
+	for _, tc := range []struct {
+		name    string
+		prepare func(t *testing.T, home, base string)
+		wantOK  bool
+	}{
+		{
+			name: "correct-link",
+			prepare: func(t *testing.T, _, base string) {
+				t.Helper()
+				// The canonical layout publishes RELATIVE links; the verifier now
+				// rejects absolute targets, so the fixture must match production.
+				if err := os.Symlink(filepath.Join("..", "..", ".agents", "skills", "dingtalk-shared"), filepath.Join(base, "dingtalk-shared")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantOK: true,
+		},
+		{
+			name: "complete-copy",
+			prepare: func(t *testing.T, _, base string) {
+				t.Helper()
+				mustWriteFile(t, filepath.Join(base, "dingtalk-shared", "SKILL.md"), []byte("canonical\n"), 0o644)
+			},
+			wantOK: true,
+		},
+		{
+			name: "wrong-link",
+			prepare: func(t *testing.T, home, base string) {
+				t.Helper()
+				wrong := filepath.Join(home, "wrong", "dingtalk-shared")
+				mustWriteFile(t, filepath.Join(wrong, "SKILL.md"), []byte("canonical\n"), 0o644)
+				if err := os.Symlink(wrong, filepath.Join(base, "dingtalk-shared")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantOK: false,
+		},
+		{
+			name: "broken-link",
+			prepare: func(t *testing.T, home, base string) {
+				t.Helper()
+				if err := os.Symlink(filepath.Join(home, "missing"), filepath.Join(base, "dingtalk-shared")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantOK: false,
+		},
+		{
+			name: "different-copy",
+			prepare: func(t *testing.T, _, base string) {
+				t.Helper()
+				mustWriteFile(t, filepath.Join(base, "dingtalk-shared", "SKILL.md"), []byte("different\n"), 0o644)
+			},
+			wantOK: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			base := filepath.Join(home, ".claude", "skills")
+			mustWriteFile(t, filepath.Join(home, ".agents", "skills", "dingtalk-shared", "SKILL.md"), []byte("canonical\n"), 0o644)
+			if err := os.MkdirAll(base, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			tc.prepare(t, home, base)
+			cmd := exec.Command("sh", "-c", `. "$DWS_TEST_LIBRARY"; verify_compatible_skill_base "$DWS_TEST_HOME" "$DWS_TEST_BASE"`)
+			cmd.Env = append(os.Environ(), "DWS_TEST_LIBRARY="+library, "DWS_TEST_HOME="+home, "DWS_TEST_BASE="+base)
+			output, err := cmd.CombinedOutput()
+			if tc.wantOK && err != nil {
+				t.Fatalf("verifier rejected valid target: %v\n%s", err, output)
+			}
+			if !tc.wantOK && err == nil {
+				t.Fatalf("verifier accepted invalid target\n%s", output)
+			}
+		})
 	}
 }
 

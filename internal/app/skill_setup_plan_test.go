@@ -48,16 +48,13 @@ func TestCrossPlatformCoverageSkillSetupPlanPreviewDeclineAndExecutionMatch(t *t
 	backupCalls, copyCalls := []string{}, 0
 	testseam.Swap(t, &skillSetupBackupAndRemove, func(_ string, path string) (string, error) {
 		backupCalls = append(backupCalls, path)
+		if err := os.RemoveAll(path); err != nil {
+			return "", err
+		}
 		return "backup", nil
 	})
 	testseam.Swap(t, &skillSetupCopyDir, func(string, string) error { copyCalls++; return nil })
 	testseam.Swap(t, &skillSetupWriteFile, func(string, []byte, os.FileMode) error { return nil })
-	testseam.Swap(t, &skillSetupPublishRename, func(src, dest string) error {
-		if err := os.RemoveAll(dest); err != nil {
-			return err
-		}
-		return os.Rename(src, dest)
-	})
 	dryRunCmd := skillSetupCoverageCommand(t, skillSetupModeMulti, false)
 	var dryRunOut bytes.Buffer
 	dryRunCmd.SetOut(&dryRunOut)
@@ -119,6 +116,9 @@ func TestCrossPlatformCoverageSkillSetupPlanPreviewDeclineAndExecutionMatch(t *t
 
 	// A filtered multi plan replaces only selected same-name skills and leaves
 	// unselected siblings out of the backup set.
+	if err := os.MkdirAll(filepath.Join(dest, "dws"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	filtered, err := buildSkillSetupPlan(skillSetupModeMulti, source, []string{dest}, []string{"dingtalk-a"}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -149,55 +149,38 @@ func TestCrossPlatformCoverageSkillSetupMonoPlanIncludesSameNameTarget(t *testin
 func TestCrossPlatformCoverageSkillSetupGenericCleanupDerivesHomeFromConcreteTarget(t *testing.T) {
 	home := t.TempDir()
 	dest := filepath.Join(home, ".codex", "skills")
-	genericMono := filepath.Join(home, ".agents", "skills", "dws")
-	if err := os.MkdirAll(genericMono, 0o755); err != nil {
+	canonical := filepath.Join(home, ".agents", "skills")
+	oldCodex := filepath.Join(dest, "dingtalk-chat")
+	if err := os.MkdirAll(oldCodex, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) {
 		return "", errors.New("transient HOME failure")
 	})
 
-	plan, err := buildSkillSetupPlan(skillSetupModeMulti, "source", []string{dest}, []string{"dingtalk-chat"}, true)
+	plan, err := buildSkillSetupPlan(skillSetupModeMulti, "source", []string{canonical, dest}, []string{"dingtalk-chat"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Targets) != 2 || !plan.Targets[1].CleanupOnly || plan.Targets[1].Destination != filepath.Dir(genericMono) {
-		t.Fatalf("generic cleanup target = %#v", plan.Targets)
+	if len(plan.Targets) != 2 || !plan.Targets[1].CleanupOnly || plan.Targets[1].Destination != dest {
+		t.Fatalf("universal cleanup target = %#v", plan.Targets)
 	}
-	if len(plan.Targets[1].Backups) != 1 || plan.Targets[1].Backups[0].Path != genericMono {
-		t.Fatalf("generic cleanup backups = %#v", plan.Targets[1].Backups)
+	if len(plan.Targets[1].Backups) != 1 || plan.Targets[1].Backups[0].Path != oldCodex {
+		t.Fatalf("universal cleanup backups = %#v", plan.Targets[1].Backups)
 	}
 	var preview bytes.Buffer
 	renderSkillSetupPlan(&preview, plan)
-	if !strings.Contains(preview.String(), "仅迁移旧的通用 DWS 副本") {
-		t.Fatalf("generic cleanup preview missing: %s", preview.String())
+	if !strings.Contains(preview.String(), "改用统一安装位置") {
+		t.Fatalf("universal cleanup preview missing: %s", preview.String())
 	}
 
-	t.Run("managed multi and scan failure", func(t *testing.T) {
-		managedDir := filepath.Join(home, ".agents", "skills", "dingtalk-chat")
-		if err := os.MkdirAll(managedDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		target, targetErr := genericSkillCleanupTarget([]string{dest}, map[string]bool{"dingtalk-chat": true})
-		if targetErr != nil || target == nil || len(target.Backups) != 2 {
-			t.Fatalf("managed generic cleanup = %#v, %v", target, targetErr)
-		}
-		failure := errors.New("generic scan failure")
-		testseam.Swap(t, &skillSetupReadDir, func(string) ([]os.DirEntry, error) { return nil, failure })
-		if _, targetErr := genericSkillCleanupTarget([]string{dest}, nil); !errors.Is(targetErr, failure) {
-			t.Fatalf("generic scan error = %v", targetErr)
-		}
-		if _, planErr := buildSkillSetupPlan(skillSetupModeMulti, "source", []string{dest}, []string{"dingtalk-chat"}, true); !errors.Is(planErr, failure) {
-			t.Fatalf("generic cleanup plan error = %v", planErr)
-		}
-	})
 }
 
 func TestCrossPlatformCoverageSkillSetupCleanupOnlyExecutionBranches(t *testing.T) {
 	failure := errors.New("cleanup failure")
 	cleanup := skillSetupTargetPlan{Destination: "generic", CleanupOnly: true, Backups: []skillSetupBackup{{Path: "old"}}}
 
-	t.Run("prior skip suppresses cleanup", func(t *testing.T) {
+	t.Run("cleanup runs even after an install skip", func(t *testing.T) {
 		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return t.TempDir(), nil })
 		plan := &skillSetupPlan{Mode: skillSetupModeMono, Source: "missing", Targets: []skillSetupTargetPlan{{Destination: "install"}, cleanup}}
 		installed, skipped, err := executeSkillSetupPlan(plan, io.Discard, io.Discard)
@@ -206,11 +189,14 @@ func TestCrossPlatformCoverageSkillSetupCleanupOnlyExecutionBranches(t *testing.
 		}
 	})
 
+	// A cleanup-only target installs nothing, so its failure is a warning and
+	// must never increment skipped — runSkillSetup turns any skipped count into
+	// a hard error and would fail an otherwise complete installation.
 	t.Run("home failure keeps generic copy", func(t *testing.T) {
 		testseam.Swap(t, &skillSetupUserHomeDir, func() (string, error) { return "", failure })
 		var stderr bytes.Buffer
 		_, skipped, err := executeSkillSetupPlan(&skillSetupPlan{Mode: skillSetupModeMono, Targets: []skillSetupTargetPlan{cleanup}}, io.Discard, &stderr)
-		if err != nil || skipped != 1 || !strings.Contains(stderr.String(), "保留通用 Skill 副本") {
+		if err != nil || skipped != 0 || !strings.Contains(stderr.String(), "保留 universal Agent 旧副本") {
 			t.Fatalf("cleanup HOME failure = (%d, %v, %q)", skipped, err, stderr.String())
 		}
 	})
@@ -220,7 +206,7 @@ func TestCrossPlatformCoverageSkillSetupCleanupOnlyExecutionBranches(t *testing.
 		testseam.Swap(t, &skillSetupBackupAndRemove, func(string, string) (string, error) { return "", failure })
 		var stderr bytes.Buffer
 		_, skipped, err := executeSkillSetupPlan(&skillSetupPlan{Mode: skillSetupModeMono, Targets: []skillSetupTargetPlan{cleanup}}, io.Discard, &stderr)
-		if err != nil || skipped != 1 || !strings.Contains(stderr.String(), "迁移失败") {
+		if err != nil || skipped != 0 || !strings.Contains(stderr.String(), "迁移失败") {
 			t.Fatalf("cleanup backup failure = (%d, %v, %q)", skipped, err, stderr.String())
 		}
 	})
@@ -247,11 +233,13 @@ func TestCrossPlatformCoverageSkillSetupPlanDeduplicatesAndFailsClosed(t *testin
 		t.Fatal(err)
 	}
 	testseam.Swap(t, &skillSetupStat, func(string) (os.FileInfo, error) { return nil, failure })
+	testseam.Swap(t, &skillSetupLstat, func(string) (os.FileInfo, error) { return nil, failure })
 	if _, err := buildSkillSetupPlan(skillSetupModeMono, "source", []string{monoDest}, nil, false); err == nil || !strings.Contains(err.Error(), "\u68c0\u67e5\u5c06\u88ab\u66ff\u6362") {
 		t.Fatalf("replacement stat error = %v", err)
 	}
 
 	testseam.Swap(t, &skillSetupStat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
+	testseam.Swap(t, &skillSetupLstat, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
 	testseam.Swap(t, &skillSetupReadDir, func(string) ([]os.DirEntry, error) { return nil, failure })
 	if _, err := buildSkillSetupPlan(skillSetupModeMulti, "source", []string{dest}, []string{"dingtalk-a"}, false); err == nil || !strings.Contains(err.Error(), "\u626b\u63cf\u8fc7\u671f") {
 		t.Fatalf("stale scan error = %v", err)

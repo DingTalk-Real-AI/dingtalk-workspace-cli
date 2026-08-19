@@ -437,23 +437,23 @@ Flags:
       --role-id string   群身份 openRoleId，由 group-role list 返回 (必填)
 ```
 
-#### 设置用户群身份 — 覆盖指定用户在群中的全部群身份（传空则清除所有身份）
+#### 设置用户群身份 — 覆盖指定用户在群中的全部群身份
 ```
 Usage:
   dws chat group-role set-user [flags]
 Example:
-  dws chat group-role set-user --group <openConversationId> --user <userId> --role-ids roleId1,roleId2
+  dws chat group-role set-user --group <openConversationId> --user <userId> --role-id <openRoleId>
   # 查询人员: dws aisearch person --query "姓名" --dimension name
   # 查询 role-id: dws chat group-role list --group <openConversationId>
 Flags:
-      --group string      群聊 openConversationId (必填)
-      --user string       用户 userId（必填）
-      --role-ids string   群身份 openRoleId 列表，逗号分隔 (必填)，传空字符串则清除该用户所有群身份
+      --group string     群聊 openConversationId (必填)
+      --user string      用户 userId（必填）
+      --role-id string   群身份 openRoleId，由 group-role list 返回
 ```
 
 #### 移除用户的指定群身份 — 从用户身上移除指定的群身份（不影响其他群身份）
 
-> ⚠️ 当前不可用：该命令当前调用常失败（服务端返回 1002 系统繁忙），多为服务端侧限制。需要清除某人身份时，用 `chat group-role set-user --role-ids ""`（传空 role-ids 覆盖为无身份）兜底；但 set-user 会清掉该用户的**全部**身份，无法只移除其中一个。
+> ⚠️ 当前不可用：该命令当前调用常失败（服务端返回 1002 系统繁忙），多为服务端侧限制。set-user 会清掉该用户的**全部**身份，无法只移除其中一个。
 ```
 Usage:
   dws chat group-role remove-user [flags]
@@ -2457,7 +2457,7 @@ Flags:
 | `chat conversation-info` | `newCSpaceIdIM` | 独立钉盘存储流程的共享空间 ID；不是发送本地聊天附件的前置条件 |
 | `chat file upload` | 无（已下线） | 不要调用；常规发图/发文件用 `chat message send --msg-type file --file` |
 | `chat message list` | `openMsgId` | message read-status 的 --message-id |
-| `chat group-role list` | `openRoleId` | group-role update/remove/set-user/remove-user 的 --role-id |
+| `chat group-role list` | `openRoleId` | group-role update/remove/set-user 的 --role-id；remove-user 的 --role-ids |
 | `chat message create-text-emotion` | `emotionId` | add-text-emotion 的 --emotion-id |
 | `chat category list` | `categoryId` | category list-conversations 的 --category-id |
 | `chat group get-by-group-id` | `openConversationId` | 同 chat search，将群号转为 openConversationId |
@@ -2494,7 +2494,7 @@ Flags:
 - `send-by-bot` 群聊传 `--conversation-id`，单聊传 `--users` 或 `--open-dingtalk-ids`，与群目标互斥且必选其一；机器人群聊 Markdown 引用回复必须同时传 `--reply <openMessageId>` 与 `--ref-sender <senderOpenDingTalkId>`，单聊、图片和文件不支持引用回复；群聊时可选 `--at-user-ids` @指定成员（传 userId 列表）或 `--at-open-dingtalk-ids` @指定成员（传 openDingTalkId 列表），content 中需包含对应 @标识；`--at-all` @所有人；群聊场景如果返回"机器人不存在"错误，需先通过 `chat group members add-bot --conversation-id <openConversationId> --robot-code <robot-code>` 将机器人邀请进群后再发送
 - `recall-by-bot` 群聊传 `--group` + `--keys`，单聊仅传 `--keys`（不传 `--group` 即为单聊撤回）
 - `send-by-webhook` 支持 `--at-all`、`--at-mobiles`、`--at-users` 进行 @ 操作，但需在 `--content` 中包含 `@userId` 或 `@手机号` 才能生效；`--at-all` @所有人时需在 `--content` 中包含 `@10`
-- `chat group-role` 系列命令用于管理群的自定义身份标签：`list` 查列表，`add` 创建，`update` 改名，`remove` 删除；`set-user` 覆盖某人全部身份（传空 --role-ids 则清除），`remove-user` 仅移除指定身份，`query-user` 查询某人当前身份；用户用 `--user <userId>`
+- `chat group-role` 系列命令用于管理群的自定义身份标签：`list` 查列表，`add` 创建，`update` 改名，`remove` 删除；`set-user` 用单个 `--role-id` 覆盖某人全部身份（不支持传空值清除），`remove-user` 仅移除指定身份，`query-user` 查询某人当前身份；用户用 `--user <userId>`
 - 消息**换行符**（`send` / `send-by-webhook` 使用 `--content`，`send-by-bot` 使用 `--text`）有两层要求：(1) 必须是**真实换行符** `U+000A`，不是字面量 `\n`；(2) Markdown 规范下单换行不生效，需用空行 `\n\n`（段落分隔）或行尾两空格 + 换行 / `<br>`（硬换行）
 - `chat group transfer-owner` 转让群主，需传 --group（openConversationId）；新群主 userId 用 `--user`，openDingTalkId 用 `--new-owner`
 - `chat group invite-url` 获取群邀请链接，需传 --group（openConversationId），可选 --expires-seconds 指定有效期（秒，0=永久）

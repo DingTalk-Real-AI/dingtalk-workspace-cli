@@ -58,6 +58,12 @@ func TestCrossPlatformCoverageFramework2MCPDataEdges(t *testing.T) {
 		t.Fatalf("decoded data=%#v err=%v", data, err)
 	}
 
+	InitDeps(&coverageErrorCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"count":7}`}}}})
+	data, err = CallMCPToolDataOnServer(context.Background(), "dev", "get_thing", nil)
+	if err != nil || data.(map[string]any)["count"] != float64(7) {
+		t.Fatalf("legacy float64 number data=%#v err=%v", data, err)
+	}
+
 	InitDeps(&coverageErrorCaller{err: errors.New("transport failed")})
 	if _, err := CallMCPToolDataOnServer(context.Background(), "dev", "get_thing", nil); err == nil {
 		t.Fatal("expected transport error")
@@ -72,6 +78,16 @@ func TestCrossPlatformCoverageFramework2MCPDataEdges(t *testing.T) {
 	InitDeps(&coverageErrorCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: "{"}}}})
 	if _, err := CallMCPToolDataOnServer(context.Background(), "dev", "get_thing", nil); err == nil {
 		t.Fatal("expected invalid JSON error")
+	}
+
+	InitDeps(&coverageErrorCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{} {}`}}}})
+	if _, err := CallMCPToolDataOnServer(context.Background(), "dev", "get_thing", nil); err == nil || !strings.Contains(err.Error(), "存在多个 JSON 值") {
+		t.Fatalf("multiple JSON values error = %v", err)
+	}
+
+	InitDeps(&coverageErrorCaller{result: &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{} {`}}}})
+	if _, err := CallMCPToolDataOnServer(context.Background(), "dev", "get_thing", nil); err == nil || !strings.Contains(err.Error(), "解析 get_thing 返回失败") {
+		t.Fatalf("trailing invalid JSON error = %v", err)
 	}
 }
 
