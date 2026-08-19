@@ -20,7 +20,13 @@ category: Added
   and the last observed state (exit 0). Deadline exhaustion during a poll,
   during event consumption, or between polls always closes as timed-out
   pending, never as a poll/stream failure; a correlated event with an
-  unknown status fails closed exactly like a poll. The capability is
+  unknown status fails closed exactly like a poll. The pairing also closes
+  the overlay path: `AttachContract` / Tier2 metadata attaches cannot
+  publish a wait declaration (no hooks, no flags, no wait phase behind
+  it) — only the managed `New` construction can. At Schema assembly every
+  `poll_command` is resolved against the bound registry and must name a
+  delivered, agent-visible read command, so the declared manual resume
+  path cannot drift from the command tree. The capability is
   projected into the Schema catalog (`wait` key) alongside `dry_run`. No
   business command declares it yet; approval/export/batch adoption lands
   separately.
