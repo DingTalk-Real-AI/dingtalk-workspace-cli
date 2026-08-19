@@ -393,9 +393,6 @@ func New(spec Spec) *cobra.Command {
 	ValidateConstraintDecls(spec.Use, spec.Flags, spec.Constraints)
 	embedContractIntoSchema(cmd, spec)
 	AnnotateConstraints(cmd, spec.Constraints)
-	if help := SelectionHelp(spec.Contract.Selection); help != "" {
-		cmd.Long = strings.TrimRight(cmd.Long, "\n") + help
-	}
 	if help := ConstraintHelp(spec.Constraints); help != "" {
 		cmd.Long = strings.TrimRight(cmd.Long, "\n") + help
 	}
@@ -1392,11 +1389,18 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 	// short/long remain in the signature so call sites keep passing Cobra prose;
 	// Catalog assembly (not this store) prefers Long for description and may
 	// use Short only as a title fallback after declared Title.
-	_, _ = short, long
+	_ = short
 	// Reuse NewCommand's completeness rules so bind-time attaches cannot ship
 	// a partial declaration that would only fail in generated artifacts.
 	validateContractDecl(Spec{Use: cmd.Name(), Safety: safety, Contract: decl})
 	validateSafetySpec(Spec{Use: cmd.Name(), Safety: safety})
+	currentLong := cmd.Long
+	if strings.TrimSpace(currentLong) == "" && strings.TrimSpace(long) != "" {
+		currentLong = long
+	}
+	if help := SelectionHelp(decl.Selection); help != "" && !strings.Contains(currentLong, help) {
+		cmd.Long = strings.TrimRight(currentLong, "\n") + help
+	}
 
 	payload := contract.ContractFinalPayload{
 		Title:       strings.TrimSpace(decl.Title),
