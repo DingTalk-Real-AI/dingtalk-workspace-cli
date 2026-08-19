@@ -73,3 +73,6 @@ coverage-*.txt
 
 # stray compiled generator binary (source lives in internal/generator/cmd_param_aliases/)
 /cmd_param_aliases
+
+# Local product-skill design materials (not for repository pushes)
+/design-dws-product-skills/
