@@ -237,7 +237,7 @@ var FeedList = readShortcut("+feed-list", "严格分页列出知识库动态", "
 	if err != nil {
 		return err
 	}
-	feeds := projectWikiRows(items, map[string][]string{"id": {"id", "feedId"}, "type": {"type", "feedType", "action"}, "time": {"time", "createTime"}, "name": {"name", "title", "fileName"}, "nodeId": {"nodeId", "fileId"}})
+	feeds := projectWikiRowsPreservingSource(items, map[string][]string{"id": {"id", "feedId"}, "type": {"type", "feedType", "action"}, "time": {"time", "createTime"}, "name": {"name", "title", "fileName"}, "nodeId": {"nodeId", "fileId"}})
 	out := map[string]any{"count": len(feeds), "feeds": feeds}
 	addWikiPagination(out, page)
 	return rt.Output(out)

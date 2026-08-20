@@ -84,9 +84,43 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 		return rt.Output(result)
 	}
 
-	for offset := 0; offset < len(ids); offset += recordBatchSize {
-		end := minInt(offset+recordBatchSize, len(ids))
-		batch := ids[offset:end]
+	existingIDs, err := queryExistingRecordIDs(rt, baseID, tableID, ids)
+	if err != nil {
+		return err
+	}
+	existingSet := make(map[string]bool, len(existingIDs))
+	for _, id := range existingIDs {
+		existingSet[id] = true
+	}
+	missingIDs := make([]string, 0, len(ids)-len(existingIDs))
+	for _, id := range ids {
+		if !existingSet[id] {
+			missingIDs = append(missingIDs, id)
+		}
+	}
+	result.Resolved = map[string]any{
+		"existingRecordIds": existingIDs,
+		"missingRecordIds":  missingIDs,
+	}
+	result.Plan = nil
+	for offset := 0; offset < len(existingIDs); offset += recordBatchSize {
+		end := minInt(offset+recordBatchSize, len(existingIDs))
+		result.Plan = append(result.Plan, compositeStep{
+			Index: len(result.Plan) + 1, Name: "delete existing record batch", Tool: "delete_records",
+			Status: "planned", Offset: offset, Count: end - offset,
+		})
+	}
+	if len(existingIDs) == 0 {
+		result.Status = "unchanged"
+		result.Executed = false
+		result.Verification = map[string]any{"status": "verified_absent_before_write", "missingCount": len(missingIDs)}
+		result.Result = map[string]any{"deletedCount": 0, "missingCount": len(missingIDs), "batchCount": 0}
+		return rt.Output(result)
+	}
+
+	for offset := 0; offset < len(existingIDs); offset += recordBatchSize {
+		end := minInt(offset+recordBatchSize, len(existingIDs))
+		batch := existingIDs[offset:end]
 		writeData, writeErr := rt.CallMCPWriteDataStrict(serverMain, "delete_records", map[string]any{
 			"baseId": baseID, "tableId": tableID, "recordIds": batch,
 		})
@@ -109,7 +143,7 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 			step.Status = "unknown"
 			result.CompletedSteps = append(result.CompletedSteps, step)
 			result.CompletedCount = offset
-			result.FailedCount = len(ids) - offset
+			result.FailedCount = len(existingIDs) - offset
 			result.Status = "unknown"
 			if offset > 0 {
 				result.Status = "partial_success"
@@ -130,9 +164,47 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 		result.CompletedCount = end
 		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "delete_records", "offset": offset, "recordIds": batch})
 	}
-	result.Verification = map[string]any{"status": "verified_absent", "verifiedCount": len(ids)}
-	result.Result = map[string]any{"deletedCount": len(ids), "batchCount": len(result.CompletedSteps)}
+	result.Verification = map[string]any{
+		"status": "verified_absent", "verifiedCount": len(existingIDs),
+		"missingBeforeWriteCount": len(missingIDs),
+	}
+	result.Result = map[string]any{
+		"deletedCount": len(existingIDs), "missingCount": len(missingIDs),
+		"batchCount": len(result.CompletedSteps),
+	}
 	return rt.Output(result)
+}
+
+func queryExistingRecordIDs(rt *shortcut.RuntimeContext, baseID, tableID string, ids []string) ([]string, error) {
+	records, err := queryDeletedRecordsByIDs(rt, baseID, tableID, ids)
+	if err != nil {
+		return nil, err
+	}
+	wanted := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		wanted[id] = true
+	}
+	present := make(map[string]bool, len(records))
+	for index, record := range records {
+		id := recordID(record)
+		if id == "" {
+			return nil, fmt.Errorf("delete preflight record %d is missing recordId", index)
+		}
+		if !wanted[id] {
+			return nil, fmt.Errorf("delete preflight returned unexpected recordId %q", id)
+		}
+		if present[id] {
+			return nil, fmt.Errorf("delete preflight returned duplicate recordId %q", id)
+		}
+		present[id] = true
+	}
+	existing := make([]string, 0, len(present))
+	for _, id := range ids {
+		if present[id] {
+			existing = append(existing, id)
+		}
+	}
+	return existing, nil
 }
 
 func parseRecordIDs(values []string) ([]string, error) {

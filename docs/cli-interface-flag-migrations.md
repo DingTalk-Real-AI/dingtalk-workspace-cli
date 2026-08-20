@@ -68,6 +68,17 @@ optional bool legacy flag，不能隐藏仍由 Cobra hard-required 的参数。�
 `replacement_constant.value` 与 legacy `no_opt` 都必须是 `true`；negative flag、默认即
 `true` 或固定 `false` 的语义不在本轮证明范围，必须另行设计，不能借本清单放行。
 
+如果 `command_move` 的参数 `from` 在更早 stable 中仍使用另一历史名称，Schema adapter
+只能把同一 legacy command 上、已经由 base-owned lifecycle 返回且
+`state=consumed` 的 flag rename 回执作为前驱边。例如
+`group → conversation-id` 与 `conversation-id → open-topic-id` 可以组合，但不能把
+candidate 自增的 pending 记录、其他命令的同名参数、参数概念词典或 CLI alias 当作证据。
+首次消费 pending command 回执时，merge-base 的 normalized Schema 必须真实发布中间参数，
+并逐跳验证参数签名和 constraints；command 回执合入为 consumed 后，中间 Schema 已从 main
+消失，此时保留的两份 consumed 回执可继续对 stable 做受限重放，直到 stable 也达到 after
+并按 lifecycle 清理。两种阶段都拒绝残留 predecessor/intermediate、字段漂移、环、分叉、
+target 碰撞或 primary path/tool identity 不唯一；positionals 不在该组合授权面内。
+
 `replacement_constant` 不是清单自报即可成立的例外。after 阶段的 Interface Snapshot
 必须从 replacement 命令的同一份框架运行时声明中捕获完全一致的 property/value，缺失、
 值不符或额外常量都会使 lifecycle 落入 partial。对于 #1054，`dws chat topic create`

@@ -3,6 +3,7 @@ package helpers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,6 +190,116 @@ func TestCrossPlatformCoverageDrivePush_dryRunPlansWithoutRemoteWrites(t *testin
 	}
 }
 
+func TestCrossPlatformCoverageDrivePushDryRunPublishesPlannedNotExecutedActions(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "local.txt"), "local")
+	caller := syncCaller(nil)
+	caller.dryRun = true
+
+	var out bytes.Buffer
+	testseam.Swap(t, &deps, &Deps{Caller: caller, Out: &Formatter{w: &out}})
+	testseam.Swap(t, &os.Args, []string{"dws", "drive", "push"})
+	cmd := findDriveSubcommand(t, "push")
+	mustSetFlags(t, cmd, map[string]string{"local-folder": dir, "remote-folder": "ROOT"})
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("dry-run push: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("decode dry-run push: %v\n%s", err, out.String())
+	}
+	plan := payload["plan"].(map[string]any)
+	summary := plan["summary"].(map[string]any)
+	if summary["uploaded"] != float64(0) || summary["planned_uploads"] != float64(1) {
+		t.Fatalf("dry-run summary reports execution instead of a plan: %#v", summary)
+	}
+	items := plan["items"].([]any)
+	if got := items[0].(map[string]any)["action"]; got != "planned_upload" {
+		t.Fatalf("dry-run action = %v, want planned_upload", got)
+	}
+}
+
+func TestCrossPlatformCoverageDriveSyncDryRunReturnsRealActionPlan(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "local.txt"), "local")
+	mustWrite(t, filepath.Join(dir, "shared.txt"), "shared")
+	if err := os.Mkdir(filepath.Join(dir, "empty-folder"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	caller := syncCaller(map[string]string{
+		"ROOT": `{"result":{"items":[{"name":"remote.txt","type":"file","fileId":"R","modifyTime":2},{"name":"shared.txt","type":"file","fileId":"S","modifyTime":2}],"nextToken":""}}`,
+	})
+	caller.dryRun = true
+
+	var out bytes.Buffer
+	testseam.Swap(t, &deps, &Deps{Caller: caller, Out: &Formatter{w: &out}})
+	testseam.Swap(t, &os.Args, []string{"dws", "drive", "sync"})
+	cmd := findDriveSubcommand(t, "sync")
+	mustSetFlags(t, cmd, map[string]string{"local-folder": dir, "remote-folder": "ROOT"})
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatalf("dry-run sync: %v", err)
+	}
+
+	var payload driveSyncDryRunResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("decode dry-run sync: %v\n%s", err, out.String())
+	}
+	if payload.Executed || payload.Plan.Summary.Pulled != 0 || payload.Plan.Summary.Pushed != 0 || payload.Plan.Summary.Skipped != 0 {
+		t.Fatalf("dry-run plan summary = %+v, executed=%v", payload.Plan.Summary, payload.Executed)
+	}
+	if payload.Plan.Summary.PlannedPulls != 1 || payload.Plan.Summary.PlannedPushes != 1 ||
+		payload.Plan.Summary.PlannedSkips != 1 || payload.Plan.Summary.PlannedFolders != 1 {
+		t.Fatalf("dry-run planned summary = %+v", payload.Plan.Summary)
+	}
+	actions := map[string]int{}
+	for _, item := range payload.Plan.Items {
+		actions[item.Action]++
+	}
+	if len(payload.Plan.Items) != 4 || actions["planned_download"] != 1 || actions["planned_upload"] != 1 ||
+		actions["planned_skip"] != 1 || actions["planned_folder_create"] != 1 {
+		t.Fatalf("dry-run action plan = %#v", payload.Plan.Items)
+	}
+	for _, tool := range []string{"download_file", "get_upload_info", "commit_upload", "create_folder"} {
+		if calls := caller.callsFor(tool); len(calls) != 0 {
+			t.Fatalf("dry-run called %s: %#v", tool, calls)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageDriveSyncDryRunPlanBranchMatrix(t *testing.T) {
+	remoteFiles := map[string]*remoteFile{
+		"conflict.txt": {FileID: "remote-file"},
+	}
+	remoteFolders := map[string]string{"": "root", "existing": "existing-id"}
+	localDirs := []string{"existing", "new", "missing/child"}
+	localFiles := map[string]localPushFile{"conflict.txt": {}, "new/file.txt": {}}
+
+	for _, policy := range []string{syncConflictRemoteWins, syncConflictLocalWins, syncConflictKeepBoth, syncConflictAsk, syncConflictSkip} {
+		t.Run(policy, func(t *testing.T) {
+			res := &driveSyncResult{}
+			appendDriveSyncDryRunPlan(res, driveSyncDryRunPlanInput{
+				LocalDirs: localDirs, LocalByRel: localFiles, RemoteFiles: remoteFiles, RemoteFolders: remoteFolders,
+				NewLocal: []string{"new/file.txt", "missing/file.txt"}, NewRemote: []string{"remote.txt"},
+				Modified: []string{"conflict.txt"}, Unknown: []string{"unknown.txt"}, OnConflict: policy,
+			})
+			if res.Summary.PlannedSkips == 0 || res.Summary.PlannedFolders == 0 || res.Summary.PlannedPulls == 0 || res.Summary.Failed != 2 {
+				t.Fatalf("dry-run plan summary for %s = %#v; items=%#v", policy, res.Summary, res.Items)
+			}
+			switch policy {
+			case syncConflictRemoteWins, syncConflictKeepBoth:
+				if res.Summary.PlannedPulls < 2 {
+					t.Fatalf("%s planned pulls = %d", policy, res.Summary.PlannedPulls)
+				}
+			case syncConflictLocalWins:
+				if res.Summary.PlannedPushes < 2 {
+					t.Fatalf("local wins planned pushes = %d", res.Summary.PlannedPushes)
+				}
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageDrivePull_dryRunPlanBranches(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "skip.txt"), "skip")
@@ -242,7 +353,7 @@ func TestCrossPlatformCoverageDrivePush_dryRunPlanBranches(t *testing.T) {
 		[]string{"existing", "missing/child"}, files("orphan/a.txt", "skip.txt", "new.txt")); err != nil {
 		t.Fatalf("skip plan: %v", err)
 	}
-	if text := out.String(); !strings.Contains(text, pushActionFailed) || !strings.Contains(text, pushActionSkipped) || !strings.Contains(text, pushActionUploaded) {
+	if text := out.String(); !strings.Contains(text, pushActionFailed) || !strings.Contains(text, pushActionPlannedSkip) || !strings.Contains(text, pushActionPlannedUpload) {
 		t.Fatalf("skip plan did not cover failed/skipped/uploaded: %s", text)
 	}
 	out.Reset()
@@ -250,14 +361,14 @@ func TestCrossPlatformCoverageDrivePush_dryRunPlanBranches(t *testing.T) {
 		files("smart-skip.txt", "smart-overwrite.txt")); err != nil {
 		t.Fatalf("smart plan: %v", err)
 	}
-	if text := out.String(); !strings.Contains(text, pushActionSkipped) || !strings.Contains(text, pushActionOverwritten) {
+	if text := out.String(); !strings.Contains(text, pushActionPlannedSkip) || !strings.Contains(text, pushActionPlannedOverwrite) {
 		t.Fatalf("smart plan did not cover skip/overwrite: %s", text)
 	}
 	out.Reset()
 	if err := printDrivePushDryRun(ifExistsOverwrite, remoteFiles, remoteFolders, nil, files("overwrite.txt")); err != nil {
 		t.Fatalf("overwrite plan: %v", err)
 	}
-	if !strings.Contains(out.String(), pushActionOverwritten) {
+	if !strings.Contains(out.String(), pushActionPlannedOverwrite) {
 		t.Fatalf("overwrite plan must overwrite existing file: %s", out.String())
 	}
 }

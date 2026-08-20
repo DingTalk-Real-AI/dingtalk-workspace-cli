@@ -173,8 +173,9 @@ func main() {
 	currentSnapshot := flag.String("migration-current-snapshot", "", "candidate interface snapshot")
 	baseSnapshot := flag.String("migration-base-snapshot", "", "base interface snapshot")
 	stableSnapshot := flag.String("migration-stable-snapshot", "", "stable interface snapshot")
-	_ = flag.String("approved-command-migrations", "", "base command ledger")
-	_ = flag.String("candidate-command-migrations", "", "candidate command ledger")
+	migrationBaseSchema := flag.String("migration-base-schema", "", "merge-base Schema contract")
+	approvedCommand := flag.String("approved-command-migrations", "", "base command ledger")
+	candidateCommand := flag.String("candidate-command-migrations", "", "candidate command ledger")
 	flag.Parse()
 
 	if *normalize != "" {
@@ -213,6 +214,29 @@ func main() {
 			fmt.Fprintf(os.Stderr, "stable Schema guard input %s does not contain %q: %s\n", fixture.path, fixture.want, data)
 			os.Exit(2)
 		}
+	}
+	commandPair := *approvedCommand != "" || *candidateCommand != ""
+	if commandPair && (*approvedCommand == "" || *candidateCommand == "") {
+		fmt.Fprintln(os.Stderr, "stable Schema guard received a partial command migration pair")
+		os.Exit(2)
+	}
+	if commandPair {
+		data, err := os.ReadFile(*migrationBaseSchema)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if !strings.Contains(string(data), "BASE_AUTHORITY") {
+			fmt.Fprintf(os.Stderr, "migration base Schema is not base-owned: %s\n", data)
+			os.Exit(2)
+		}
+		fmt.Fprintln(os.Stdout, "BASE_SCHEMA_LINEAGE=BASE_AUTHORITY")
+	} else {
+		if *migrationBaseSchema != "" {
+			fmt.Fprintln(os.Stderr, "flag-only Schema check received command migration lineage")
+			os.Exit(2)
+		}
+		fmt.Fprintln(os.Stdout, "FLAG_ONLY_SCHEMA_LINEAGE_OMITTED")
 	}
 	currentData, err := os.ReadFile(*current)
 	if err != nil {
@@ -418,9 +442,16 @@ func TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority(t *testi
 			authorityMarker: "BASE_SCHEMA_CHECKER_ENFORCED",
 		},
 		{
-			name:            "governed checker protects stable Schema contract",
+			name:              "governed checker protects stable Schema contract",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			checkerMode:       "stable-schema-guard",
+			authorityMarker:   "STABLE_SCHEMA_CONTRACT_ENFORCED",
+		},
+		{
+			name:            "lineage capable checker omits command lineage for flag-only governance",
 			baseGovernance:  "complete",
-			checkerMode:     "stable-schema-guard",
+			checkerMode:     "flag-only-schema-guard",
 			authorityMarker: "STABLE_SCHEMA_CONTRACT_ENFORCED",
 		},
 		{
@@ -611,7 +642,7 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 	switch test.baseGovernance {
 	case "complete":
 		checkerSource := governedSchemaCheckerSource
-		if test.checkerMode == "stable-schema-guard" {
+		if test.checkerMode == "stable-schema-guard" || test.checkerMode == "flag-only-schema-guard" {
 			checkerSource = stableSchemaGuardCheckerSource
 		}
 		schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "schema-compat", "main.go"), checkerSource, 0o644)
@@ -793,6 +824,12 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 		}
 		if test.baseGovernance == "complete" && strings.Count(got, "BASE_INTERFACE_HELPER_GENERATE=BASE") != 3 {
 			t.Fatalf("governed Schema check did not generate three base-owned interface snapshots; output:\n%s", got)
+		}
+		if test.checkerMode == "stable-schema-guard" && strings.Count(got, "BASE_SCHEMA_LINEAGE=BASE_AUTHORITY") != 2 {
+			t.Fatalf("governed Schema check did not pass the base-owned Schema lineage to both historical checks; output:\n%s", got)
+		}
+		if test.checkerMode == "flag-only-schema-guard" && strings.Count(got, "FLAG_ONLY_SCHEMA_LINEAGE_OMITTED") != 2 {
+			t.Fatalf("flag-only Schema check received command migration lineage; output:\n%s", got)
 		}
 
 		wrongStable := exec.Command(

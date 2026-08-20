@@ -403,6 +403,11 @@ CANDIDATE_RAW="$TMP_ROOT/candidate-schema.json"
 	go build -o "$CANDIDATE_BIN" ./cmd
 )
 
+CHECKER_SUPPORTS_MIGRATION_BASE_SCHEMA=false
+if "$CHECKER" --help 2>&1 | grep -Fq -- 'migration-base-schema'; then
+	CHECKER_SUPPORTS_MIGRATION_BASE_SCHEMA=true
+fi
+
 mkdir -p "$TMP_ROOT/base-home" "$TMP_ROOT/stable-home" "$TMP_ROOT/candidate-home"
 HOME="$TMP_ROOT/base-home" DWS_LANG=zh \
 	"$BASE_BIN" schema --all --format json >"$BASE_RAW"
@@ -468,23 +473,22 @@ check_with_migrations() {
 	historical_kind="$1"
 	historical_ref="$2"
 	historical_baseline="$3"
+	set -- \
+		--approved-flag-migrations "$APPROVED_MANIFEST" \
+		--candidate-flag-migrations "$CANDIDATE_MANIFEST" \
+		--migration-current-snapshot "$CURRENT_INTERFACE_SNAPSHOT" \
+		--migration-base-snapshot "$BASE_INTERFACE_SNAPSHOT" \
+		--migration-stable-snapshot "$STABLE_INTERFACE_SNAPSHOT"
 	if [ "$USE_COMMAND_MIGRATION_GOVERNANCE" = true ]; then
-		check_schema_contract "$historical_kind" "$historical_ref" "$historical_baseline" \
-			--approved-flag-migrations "$APPROVED_MANIFEST" \
-			--candidate-flag-migrations "$CANDIDATE_MANIFEST" \
+		set -- "$@" \
 			--approved-command-migrations "$APPROVED_COMMAND_MANIFEST" \
-			--candidate-command-migrations "$CANDIDATE_COMMAND_MANIFEST" \
-			--migration-current-snapshot "$CURRENT_INTERFACE_SNAPSHOT" \
-			--migration-base-snapshot "$BASE_INTERFACE_SNAPSHOT" \
-			--migration-stable-snapshot "$STABLE_INTERFACE_SNAPSHOT"
-	else
-		check_schema_contract "$historical_kind" "$historical_ref" "$historical_baseline" \
-			--approved-flag-migrations "$APPROVED_MANIFEST" \
-			--candidate-flag-migrations "$CANDIDATE_MANIFEST" \
-			--migration-current-snapshot "$CURRENT_INTERFACE_SNAPSHOT" \
-			--migration-base-snapshot "$BASE_INTERFACE_SNAPSHOT" \
-			--migration-stable-snapshot "$STABLE_INTERFACE_SNAPSHOT"
+			--candidate-command-migrations "$CANDIDATE_COMMAND_MANIFEST"
 	fi
+	if [ "$USE_COMMAND_MIGRATION_GOVERNANCE" = true ] &&
+		[ "$CHECKER_SUPPORTS_MIGRATION_BASE_SCHEMA" = true ]; then
+		set -- "$@" --migration-base-schema "$BASELINE"
+	fi
+	check_schema_contract "$historical_kind" "$historical_ref" "$historical_baseline" "$@"
 }
 
 check_with_migrations "PR merge-base" "$BASE_REF" "$BASELINE"

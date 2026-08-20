@@ -294,6 +294,29 @@ func TestCrossPlatformCoverageWikiReadWorkflows(t *testing.T) {
 	})
 }
 
+func TestCrossPlatformCoverageWikiFeedListPreservesBusinessPayload(t *testing.T) {
+	caller := &wikiCoverageCaller{responses: map[string][]string{
+		"wiki/list_workspace_feeds": {`{"success":true,"feeds":[{"type":1,"time":1750067400000,"content":{"doc":{"name":"Important","docKey":"dk1"}},"users":[{"nick":"Alice","userId":"u1"}],"futureField":{"value":"keep"}}],"hasMore":false}`},
+	}}
+	out, err := runWikiCoverageCLI(t, caller, "+feed-list", "--workspace", "w")
+	if err != nil {
+		t.Fatal(err)
+	}
+	feeds := out["feeds"].([]any)
+	feed := feeds[0].(map[string]any)
+	content, contentOK := feed["content"].(map[string]any)
+	users, usersOK := feed["users"].([]any)
+	if !contentOK || content["doc"].(map[string]any)["name"] != "Important" {
+		t.Fatalf("content was lost or changed: %#v", feed)
+	}
+	if !usersOK || users[0].(map[string]any)["nick"] != "Alice" {
+		t.Fatalf("users were lost or changed: %#v", feed)
+	}
+	if _, ok := feed["futureField"]; !ok {
+		t.Fatalf("unknown feed business fields must be preserved: %#v", feed)
+	}
+}
+
 func TestCrossPlatformCoverageWikiWriteWorkflows(t *testing.T) {
 	t.Run("confirmation gates precede every remote call", func(t *testing.T) {
 		for _, tc := range []struct {

@@ -233,6 +233,53 @@ func TestCrossPlatformCoverageSchemaCommandMigrationNormalizationEdges(t *testin
 		t.Fatalf("constraint drift was hidden: %s", failures)
 	}
 
+	unchangedLegacyConstraints := cloneContract(current)
+	product = unchangedLegacyConstraints.Products["chat"]
+	tool = product.Tools["chat.move"]
+	tool.Constraints = baseline.Products["chat"].Tools["chat.move"].Constraints
+	product.Tools["chat.move"] = tool
+	unchangedLegacyConstraints.Products["chat"] = product
+	if _, err := normalizeSchemaCommandMigrations(baseline, unchangedLegacyConstraints, migrations); err == nil ||
+		!strings.Contains(err.Error(), "still reference legacy Schema constraint parameter") {
+		t.Fatalf("unchanged legacy constraints error=%v", err)
+	}
+
+	mixedLegacyConstraints := cloneContract(current)
+	product = mixedLegacyConstraints.Products["chat"]
+	tool = product.Tools["chat.move"]
+	tool.Constraints = `{"require_together":[["keep","new-id","old-id"]]}`
+	product.Tools["chat.move"] = tool
+	mixedLegacyConstraints.Products["chat"] = product
+	if _, err := normalizeSchemaCommandMigrations(baseline, mixedLegacyConstraints, migrations); err == nil ||
+		!strings.Contains(err.Error(), "still reference legacy Schema constraint parameter") {
+		t.Fatalf("mixed legacy constraints error=%v", err)
+	}
+
+	malformedHistoricalConstraints := cloneContract(baseline)
+	product = malformedHistoricalConstraints.Products["chat"]
+	tool = product.Tools["chat.move"]
+	tool.Constraints = "{"
+	product.Tools["chat.move"] = tool
+	malformedHistoricalConstraints.Products["chat"] = product
+	if _, err := normalizeSchemaCommandMigrations(malformedHistoricalConstraints, current, migrations); err == nil ||
+		!strings.Contains(err.Error(), "historical Schema constraints are not canonicalizable") {
+		t.Fatalf("malformed historical constraints error=%v", err)
+	}
+
+	malformedCurrentConstraints := cloneContract(current)
+	product = malformedCurrentConstraints.Products["chat"]
+	tool = product.Tools["chat.move"]
+	tool.Constraints = "{"
+	product.Tools["chat.move"] = tool
+	malformedCurrentConstraints.Products["chat"] = product
+	if _, err := normalizeSchemaCommandMigrations(baseline, malformedCurrentConstraints, migrations); err == nil ||
+		!strings.Contains(err.Error(), "current Schema constraints are not canonicalizable") {
+		t.Fatalf("malformed current constraints error=%v", err)
+	}
+	if source, found := migratedConstraintSourceParameter("{", map[string]string{"legacy": "canonical"}); found || source != "" {
+		t.Fatalf("malformed migrated constraint source = %q, %v", source, found)
+	}
+
 	extractionWrongSource := cloneContract(current)
 	product = extractionWrongSource.Products["chat"]
 	tool = product.Tools["chat.create_group"]
@@ -657,6 +704,508 @@ func TestCrossPlatformCoverageSchemaCommandMigrationLifecycleAndRun(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoverageSchemaCommandMigrationComposesHistoricalFlagLineage(t *testing.T) {
+	directory := t.TempDir()
+	stableContract, baseContract, currentContract := schemaCommandLineageContracts()
+	baselinePath := filepath.Join(directory, "stable-schema.json")
+	baseSchemaPath := filepath.Join(directory, "base-schema.json")
+	currentPath := filepath.Join(directory, "current-schema.json")
+	approvedFlagPath := filepath.Join(directory, "approved-flags.json")
+	candidateFlagPath := filepath.Join(directory, "candidate-flags.json")
+	approvedCommandPath := filepath.Join(directory, "approved-commands.json")
+	candidateCommandPath := filepath.Join(directory, "candidate-commands.json")
+	currentSnapshotPath := filepath.Join(directory, "current-snapshot.json")
+	baseSnapshotPath := filepath.Join(directory, "base-snapshot.json")
+	stableSnapshotPath := filepath.Join(directory, "stable-snapshot.json")
+
+	writeSchemaContractFile(t, baselinePath, stableContract)
+	writeSchemaContractFile(t, baseSchemaPath, baseContract)
+	writeRawSchemaContractFile(t, currentPath, currentContract)
+	writeFlagMigrationManifestFile(t, approvedFlagPath, schemaCommandLineageFlagManifest())
+	writeFlagMigrationManifestFile(t, candidateFlagPath, schemaCommandLineageFlagManifest())
+	writeCommandMigrationManifestFile(t, approvedCommandPath, schemaCommandLineageManifest(interfacesnapshot.CommandMigrationPending))
+	writeCommandMigrationManifestFile(t, candidateCommandPath, schemaCommandLineageManifest(interfacesnapshot.CommandMigrationConsumed))
+	writeInterfaceSnapshotFile(t, currentSnapshotPath, schemaCommandLineageSnapshot(true, true))
+	writeInterfaceSnapshotFile(t, baseSnapshotPath, schemaCommandLineageSnapshot(true, false))
+	writeInterfaceSnapshotFile(t, stableSnapshotPath, schemaCommandLineageSnapshot(false, false))
+
+	args := []string{
+		"--check", baselinePath,
+		"--current", currentPath,
+		"--migration-base-schema", baseSchemaPath,
+		"--approved-flag-migrations", approvedFlagPath,
+		"--candidate-flag-migrations", candidateFlagPath,
+		"--approved-command-migrations", approvedCommandPath,
+		"--candidate-command-migrations", candidateCommandPath,
+		"--migration-current-snapshot", currentSnapshotPath,
+		"--migration-base-snapshot", baseSnapshotPath,
+		"--migration-stable-snapshot", stableSnapshotPath,
+	}
+	var stdout, stderr strings.Builder
+	if code := run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("pending command lineage code=%d stderr=%s", code, stderr.String())
+	}
+
+	withoutBaseSchema := append([]string(nil), args[:4]...)
+	withoutBaseSchema = append(withoutBaseSchema, args[6:]...)
+	stderr.Reset()
+	if code := run(withoutBaseSchema, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "requires --migration-base-schema") {
+		t.Fatalf("missing migration base Schema code=%d stderr=%q", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := run([]string{
+		"--check", baselinePath,
+		"--current", currentPath,
+		"--migration-base-schema", baseSchemaPath,
+	}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "requires both flag and command") {
+		t.Fatalf("orphan migration base Schema code=%d stderr=%q", code, stderr.String())
+	}
+	missingBaseSchema := append([]string(nil), args...)
+	missingBaseSchema[5] = filepath.Join(directory, "missing-base-schema.json")
+	stderr.Reset()
+	if code := run(missingBaseSchema, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "read migration merge-base Schema contract") {
+		t.Fatalf("unreadable migration base Schema code=%d stderr=%q", code, stderr.String())
+	}
+
+	// After the command move is merged, the merge-base Schema is already at the
+	// final name. The two consumed receipts must keep the stable lineage durable
+	// until the stable release itself reaches the after state.
+	writeSchemaContractFile(t, baseSchemaPath, currentContract)
+	writeCommandMigrationManifestFile(t, approvedCommandPath, schemaCommandLineageManifest(interfacesnapshot.CommandMigrationConsumed))
+	writeInterfaceSnapshotFile(t, baseSnapshotPath, schemaCommandLineageSnapshot(true, true))
+	stdout.Reset()
+	stderr.Reset()
+	if code := run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("consumed command lineage code=%d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCommandMigrationLineageFailsClosed(t *testing.T) {
+	tests := []struct {
+		name         string
+		commandState string
+		mutate       func(*schemaContract, *schemaContract, *schemaContract, *[]interfacesnapshot.FlagMigration, *[]interfacesnapshot.CommandMigration)
+		want         string
+	}{
+		{
+			name:         "pending merge-base missing intermediate",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					delete(tool.Parameters, "conversation-id")
+				})
+			},
+			want: "merge-base Schema lacks intermediate parameter",
+		},
+		{
+			name:         "merge-base missing source tool",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				product := base.Products["chat"]
+				delete(product.Tools, "chat.list_topic_replies")
+				base.Products["chat"] = product
+			},
+			want: "merge-base Schema lacks source tool",
+		},
+		{
+			name:         "pending merge-base parameter drift",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationParameter(base, "chat.list_topic_replies", "conversation-id", func(parameter *parameterSchema) {
+					parameter.Property = "differentProperty"
+				})
+			},
+			want: "changed a non-migration field",
+		},
+		{
+			name:         "pending merge-base wrong path",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.PrimaryCLIPath = "chat unrelated"
+				})
+			},
+			want: "merge-base Schema source tool has primary_cli_path",
+		},
+		{
+			name:         "pending merge-base already publishes final",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Parameters["open-topic-id"] = tool.Parameters["conversation-id"]
+				})
+			},
+			want: "already publishes final parameter",
+		},
+		{
+			name:         "pending flag receipt",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, _, _ *schemaContract, flags *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				(*flags)[0].State = interfacesnapshot.FlagMigrationPending
+			},
+			want: "requires a consumed flag migration receipt",
+		},
+		{
+			name:         "flag receipt belongs to another command",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, _, _ *schemaContract, flags *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				(*flags)[0].Command = "dws chat message other"
+			},
+			want: `historical Schema tool lacks parameter "conversation-id"`,
+		},
+		{
+			name:         "current retains predecessor",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(stable, _, current *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(current, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Parameters["group"] = stable.Products["chat"].Tools["chat.list_topic_replies"].Parameters["group"]
+				})
+			},
+			want: "current Schema still publishes predecessor parameter",
+		},
+		{
+			name:         "pending current constraints retain predecessor",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, _, current *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(current, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Constraints = `{"require_together":[["group","open-conv-thread-id","open-topic-id"]]}`
+				})
+			},
+			want: "current Schema constraints still reference predecessor parameter",
+		},
+		{
+			name:         "consumed current constraints retain predecessor",
+			commandState: interfacesnapshot.CommandMigrationConsumed,
+			mutate: func(_, _, current *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(current, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Constraints = `{"require_together":[["group","open-conv-thread-id","open-topic-id"]]}`
+				})
+			},
+			want: "current Schema constraints still reference predecessor parameter",
+		},
+		{
+			name:         "current retains intermediate",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, base, current *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(current, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Parameters["conversation-id"] = base.Products["chat"].Tools["chat.list_topic_replies"].Parameters["conversation-id"]
+				})
+			},
+			want: `still publishes legacy Schema parameter "conversation-id"`,
+		},
+		{
+			name:         "consumed merge-base final drift",
+			commandState: interfacesnapshot.CommandMigrationConsumed,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationParameter(base, "chat.list_topic_replies", "open-topic-id", func(parameter *parameterSchema) {
+					parameter.Required = false
+				})
+			},
+			want: "changed a non-name field",
+		},
+		{
+			name:         "consumed merge-base wrong path",
+			commandState: interfacesnapshot.CommandMigrationConsumed,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.PrimaryCLIPath = "chat unrelated"
+				})
+			},
+			want: "consumed command migration",
+		},
+		{
+			name:         "consumed merge-base missing final",
+			commandState: interfacesnapshot.CommandMigrationConsumed,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					delete(tool.Parameters, "open-topic-id")
+				})
+			},
+			want: "merge-base Schema lacks final parameter",
+		},
+		{
+			name:         "consumed merge-base retains intermediate",
+			commandState: interfacesnapshot.CommandMigrationConsumed,
+			mutate: func(stable, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Parameters["conversation-id"] = stable.Products["chat"].Tools["chat.list_topic_replies"].Parameters["group"]
+				})
+			},
+			want: "still publishes intermediate parameter",
+		},
+		{
+			name:         "pending constraints drift",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Constraints = `{"require_one_of":[["conversation-id"]]}`
+				})
+			},
+			want: "changed merge-base Schema constraints",
+		},
+		{
+			name:         "pending current keeps intermediate constraints",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, base, current *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(current, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Constraints = base.Products["chat"].Tools["chat.list_topic_replies"].Constraints
+				})
+			},
+			want: "still reference legacy Schema constraint parameter",
+		},
+		{
+			name:         "merge-base retains predecessor",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(stable, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Parameters["group"] = stable.Products["chat"].Tools["chat.list_topic_replies"].Parameters["group"]
+				})
+			},
+			want: "merge-base Schema still publishes predecessor parameter",
+		},
+		{
+			name:         "historical constraints malformed",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(stable, _, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(stable, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Constraints = "not-json"
+				})
+			},
+			want: "historical Schema constraints are not canonicalizable",
+		},
+		{
+			name:         "merge-base constraints malformed",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Constraints = "not-json"
+				})
+			},
+			want: "merge-base Schema constraints are not canonicalizable",
+		},
+		{
+			name:         "consumed constraints drift",
+			commandState: interfacesnapshot.CommandMigrationConsumed,
+			mutate: func(_, base, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(base, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Constraints = `{"require_one_of":[["open-topic-id"]]}`
+				})
+			},
+			want: "changed merge-base Schema constraints",
+		},
+		{
+			name:         "target collision",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(stable, _, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				mutateSchemaCommandMigrationTool(stable, "chat.list_topic_replies", func(tool *toolSchema) {
+					tool.Parameters["open-topic-id"] = tool.Parameters["group"]
+				})
+			},
+			want: "target \"open-topic-id\" already exists",
+		},
+		{
+			name:         "lineage cycle",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, _, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, commands *[]interfacesnapshot.CommandMigration) {
+				(*commands)[0].Schema.Parameters[0].To = "group"
+			},
+			want: "lineage cycle",
+		},
+		{
+			name:         "unsupported command receipt state",
+			commandState: "unknown",
+			mutate: func(_, _, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+			},
+			want: "unsupported lineage state",
+		},
+		{
+			name:         "duplicate historical path",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(stable, _, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, _ *[]interfacesnapshot.CommandMigration) {
+				product := stable.Products["chat"]
+				product.Tools["chat.duplicate"] = product.Tools["chat.list_topic_replies"]
+				stable.Products["chat"] = product
+			},
+			want: "matches 2 historical Schema tools",
+		},
+		{
+			name:         "source tool fork",
+			commandState: interfacesnapshot.CommandMigrationPending,
+			mutate: func(_, _, _ *schemaContract, _ *[]interfacesnapshot.FlagMigration, commands *[]interfacesnapshot.CommandMigration) {
+				fork := (*commands)[0]
+				fork.Legacy.Command = "dws chat message fork"
+				fork.Replacement.Command = "dws chat topic fork"
+				*commands = append(*commands, fork)
+			},
+			want: "fork Schema source tool",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stable, baseBefore, current := schemaCommandLineageContracts()
+			base := baseBefore
+			if test.commandState == interfacesnapshot.CommandMigrationConsumed {
+				base = cloneContract(current)
+			}
+			flags := append([]interfacesnapshot.FlagMigration(nil), schemaCommandLineageFlagManifest().Migrations...)
+			commands := append([]interfacesnapshot.CommandMigration(nil), schemaCommandLineageManifest(test.commandState).Migrations...)
+			test.mutate(&stable, &base, &current, &flags, &commands)
+			if _, err := normalizeSchemaCommandMigrationLineage(stable, base, current, flags, commands); err == nil ||
+				!strings.Contains(err.Error(), test.want) {
+				t.Fatalf("lineage error=%v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCommandMigrationLineagePreservesOrdinaryChecks(t *testing.T) {
+	stable, base, current := schemaCommandLineageContracts()
+	mutateSchemaCommandMigrationTool(&current, "chat.list_topic_replies", func(tool *toolSchema) {
+		tool.Positionals = []positionalSchema{{Name: "open-topic-id", Index: 0, Type: "string", Required: true}}
+	})
+	normalized, err := normalizeSchemaCommandMigrationLineage(
+		stable,
+		base,
+		current,
+		schemaCommandLineageFlagManifest().Migrations,
+		schemaCommandLineageManifest(interfacesnapshot.CommandMigrationPending).Migrations,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, current), "\n"); !strings.Contains(failures, "changed positionals") {
+		t.Fatalf("lineage hid positional drift: %s", failures)
+	}
+
+	// Multiple historical names may converge only when every predecessor carries
+	// the exact same contract and every receipt is already consumed.
+	stable, base, current = schemaCommandLineageContracts()
+	mutateSchemaCommandMigrationTool(&stable, "chat.list_topic_replies", func(tool *toolSchema) {
+		tool.Parameters["id"] = tool.Parameters["group"]
+	})
+	flags := schemaCommandLineageFlagManifest().Migrations
+	second := flags[0]
+	second.Legacy.Name = "id"
+	flags = append(flags, second)
+	normalized, err = normalizeSchemaCommandMigrationLineage(
+		stable,
+		base,
+		current,
+		flags,
+		schemaCommandLineageManifest(interfacesnapshot.CommandMigrationPending).Migrations,
+	)
+	if err != nil {
+		t.Fatalf("equivalent predecessor aliases should pass: %v", err)
+	}
+	if failures := checkCompatibility(normalized, current); len(failures) != 0 {
+		t.Fatalf("equivalent predecessor aliases remained incompatible: %v", failures)
+	}
+
+	mutateSchemaCommandMigrationParameter(&stable, "chat.list_topic_replies", "id", func(parameter *parameterSchema) {
+		parameter.Property = "differentProperty"
+	})
+	if _, err := normalizeSchemaCommandMigrationLineage(
+		stable,
+		base,
+		current,
+		flags,
+		schemaCommandLineageManifest(interfacesnapshot.CommandMigrationPending).Migrations,
+	); err == nil || !strings.Contains(err.Error(), "changed a non-migration field") {
+		t.Fatalf("drifted predecessor alias error=%v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCommandMigrationLineageDefensiveEdges(t *testing.T) {
+	stable, base, current := schemaCommandLineageContracts()
+	flags := schemaCommandLineageFlagManifest().Migrations
+	commands := schemaCommandLineageManifest(interfacesnapshot.CommandMigrationPending).Migrations
+
+	flagExtraction := schemaCommandMigrationAuthorizations()[1]
+	if _, err := stageSchemaCommandMigrationPredecessors(stable, base, current, flags, []interfacesnapshot.CommandMigration{flagExtraction}); err != nil {
+		t.Fatalf("non-move command migration should be ignored: %v", err)
+	}
+
+	missingTool := cloneContract(stable)
+	product := missingTool.Products["chat"]
+	delete(product.Tools, "chat.list_topic_replies")
+	missingTool.Products["chat"] = product
+	if _, err := stageSchemaCommandMigrationPredecessors(missingTool, base, current, flags, commands); err != nil {
+		t.Fatalf("missing historical source should remain for the ordinary checker: %v", err)
+	}
+	if _, err := stageSchemaCommandMigrationPredecessors(current, current, current, flags, schemaCommandLineageManifest(interfacesnapshot.CommandMigrationConsumed).Migrations); err != nil {
+		t.Fatalf("already-after historical source should be a no-op: %v", err)
+	}
+	wrongPath := cloneContract(stable)
+	mutateSchemaCommandMigrationTool(&wrongPath, "chat.list_topic_replies", func(tool *toolSchema) {
+		tool.PrimaryCLIPath = "chat unrelated"
+	})
+	if _, err := stageSchemaCommandMigrationPredecessors(wrongPath, base, current, flags, commands); err != nil {
+		t.Fatalf("wrong historical path should remain for the command normalizer: %v", err)
+	}
+
+	bothNames := cloneContract(stable)
+	mutateSchemaCommandMigrationTool(&bothNames, "chat.list_topic_replies", func(tool *toolSchema) {
+		tool.Parameters["conversation-id"] = tool.Parameters["group"]
+	})
+	if _, err := stageSchemaCommandMigrationPredecessors(bothNames, base, current, flags, commands); err == nil ||
+		!strings.Contains(err.Error(), "publishes both predecessor") {
+		t.Fatalf("ambiguous predecessor error=%v", err)
+	}
+
+	duplicatePath := cloneContract(stable)
+	product = duplicatePath.Products["chat"]
+	product.Tools["chat.duplicate"] = product.Tools["chat.list_topic_replies"]
+	duplicatePath.Products["chat"] = product
+	if _, err := stageSchemaCommandMigrationPredecessors(duplicatePath, base, current, flags, commands); err == nil ||
+		!strings.Contains(err.Error(), "requires one exact historical Schema tool") {
+		t.Fatalf("duplicate primary path error=%v", err)
+	}
+
+	forkStable, forkBase, forkCurrent := schemaCommandLineageContracts()
+	mutateSchemaCommandMigrationTool(&forkBase, "chat.list_topic_replies", func(tool *toolSchema) {
+		tool.Parameters["other-mid"] = tool.Parameters["conversation-id"]
+	})
+	mutateSchemaCommandMigrationTool(&forkCurrent, "chat.list_topic_replies", func(tool *toolSchema) {
+		tool.Parameters["other-final"] = tool.Parameters["open-topic-id"]
+	})
+	forkFlags := append([]interfacesnapshot.FlagMigration(nil), flags...)
+	forkFlag := flags[0]
+	forkFlag.Canonical.Name = "other-mid"
+	forkFlags = append(forkFlags, forkFlag)
+	forkCommands := schemaCommandLineageManifest(interfacesnapshot.CommandMigrationPending).Migrations
+	forkCommands[0].Schema.Parameters = append(forkCommands[0].Schema.Parameters,
+		interfacesnapshot.CommandParameterMigration{From: "other-mid", To: "other-final"})
+	if _, err := stageSchemaCommandMigrationPredecessors(forkStable, forkBase, forkCurrent, forkFlags, forkCommands); err == nil ||
+		!strings.Contains(err.Error(), "forks Schema predecessor") {
+		t.Fatalf("forked predecessor error=%v", err)
+	}
+
+	cycleStable, cycleBase, _ := schemaCommandLineageContracts()
+	mutateSchemaCommandMigrationTool(&cycleStable, "chat.list_topic_replies", func(tool *toolSchema) {
+		tool.Parameters["id"] = tool.Parameters["group"]
+	})
+	mutateSchemaCommandMigrationTool(&cycleBase, "chat.list_topic_replies", func(tool *toolSchema) {
+		tool.Parameters["other-mid"] = tool.Parameters["conversation-id"]
+	})
+	cycleFlags := append([]interfacesnapshot.FlagMigration(nil), flags...)
+	cycleFlag := flags[0]
+	cycleFlag.Legacy.Name = "id"
+	cycleFlag.Canonical.Name = "other-mid"
+	cycleFlags = append(cycleFlags, cycleFlag)
+	cycleCommands := schemaCommandLineageManifest(interfacesnapshot.CommandMigrationPending).Migrations
+	cycleCommands[0].Schema.Parameters[0].To = "id"
+	cycleCommands[0].Schema.Parameters = append(cycleCommands[0].Schema.Parameters,
+		interfacesnapshot.CommandParameterMigration{From: "other-mid", To: "other-final"})
+	missingCurrent := schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{}}
+	if _, err := stageSchemaCommandMigrationPredecessors(cycleStable, cycleBase, missingCurrent, cycleFlags, cycleCommands); err == nil ||
+		!strings.Contains(err.Error(), "lineage cycle") {
+		t.Fatalf("cross-lineage cycle error=%v", err)
+	}
+}
+
 func schemaCommandMigrationContract(after bool) schemaContract {
 	id := parameterSchema{Type: `"string"`, Property: "resourceId", Required: true, CLIRequired: true}
 	keep := parameterSchema{Type: `"string"`, Property: "keep"}
@@ -720,6 +1269,155 @@ func schemaCommandMigrationContract(after bool) schemaContract {
 		tools["chat.move"] = move
 	}
 	return schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{"chat": {Tools: tools}}}
+}
+
+func schemaCommandLineageContracts() (schemaContract, schemaContract, schemaContract) {
+	conversation := parameterSchema{
+		Type:          `"string"`,
+		Property:      "openconversationId",
+		InterfaceType: "string",
+		Required:      true,
+		CLIRequired:   true,
+	}
+	topic := parameterSchema{
+		Type:          `"string"`,
+		Property:      "openConversationThreadId",
+		InterfaceType: "string",
+		Required:      true,
+		CLIRequired:   true,
+	}
+	tool := toolSchema{
+		PrimaryCLIPath: "chat message list-topic-replies",
+		InterfaceMode:  "mcp",
+		InterfaceRef:   `{"product_id":"im","rpc_name":"list_topic_replies"}`,
+		Availability:   "available",
+		Parameters: map[string]parameterSchema{
+			"group":    conversation,
+			"topic-id": topic,
+		},
+		Constraints:  `{"require_together":[["group","topic-id"]]}`,
+		Effect:       "read",
+		Risk:         "low",
+		Confirmation: "not_required",
+		Idempotency:  "idempotent",
+	}
+	stable := schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{
+		"chat": {Tools: map[string]toolSchema{"chat.list_topic_replies": tool}},
+	}}
+
+	base := cloneContract(stable)
+	mutateSchemaCommandMigrationTool(&base, "chat.list_topic_replies", func(tool *toolSchema) {
+		delete(tool.Parameters, "group")
+		tool.Parameters["conversation-id"] = conversation
+		tool.Constraints = `{"require_together":[["conversation-id","topic-id"]]}`
+	})
+
+	current := cloneContract(base)
+	mutateSchemaCommandMigrationTool(&current, "chat.list_topic_replies", func(tool *toolSchema) {
+		delete(tool.Parameters, "conversation-id")
+		delete(tool.Parameters, "topic-id")
+		tool.Parameters["open-topic-id"] = conversation
+		tool.Parameters["open-conv-thread-id"] = topic
+		tool.PrimaryCLIPath = "chat topic list-replies"
+		tool.Constraints = `{"require_together":[["open-conv-thread-id","open-topic-id"]]}`
+	})
+	return stable, base, current
+}
+
+func schemaCommandLineageFlagManifest() interfacesnapshot.FlagMigrationManifest {
+	beforeCanonical := interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Hidden: true, Scope: "local"}
+	afterCanonical := interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Required: true, Scope: "local"}
+	return interfacesnapshot.FlagMigrationManifest{
+		Version: interfacesnapshot.FlagMigrationManifestVersion,
+		Migrations: []interfacesnapshot.FlagMigration{{
+			Command: "dws chat message list-topic-replies",
+			Legacy: interfacesnapshot.FlagMigrationSide{
+				Name:   "group",
+				Before: interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Required: true, Scope: "local"},
+				After:  interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Hidden: true, Scope: "local", AliasOf: "conversation-id"},
+			},
+			Canonical: interfacesnapshot.FlagMigrationSide{
+				Name:   "conversation-id",
+				Before: beforeCanonical,
+				After:  afterCanonical,
+			},
+			State:  interfacesnapshot.FlagMigrationConsumed,
+			Reason: "preserve the reviewed group to conversation-id lineage",
+		}},
+	}
+}
+
+func schemaCommandLineageManifest(state string) interfacesnapshot.CommandMigrationManifest {
+	return interfacesnapshot.CommandMigrationManifest{
+		Version: interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{{
+			Kind: interfacesnapshot.CommandMigrationMove,
+			Legacy: interfacesnapshot.CommandMigrationSide{
+				Command: "dws chat message list-topic-replies",
+				Before:  interfacesnapshot.CommandMigrationState{Present: true, Runnable: true},
+				After:   interfacesnapshot.CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+			},
+			Replacement: interfacesnapshot.CommandMigrationSide{
+				Command: "dws chat topic list-replies",
+				Before:  interfacesnapshot.CommandMigrationState{},
+				After:   interfacesnapshot.CommandMigrationState{Present: true, Runnable: true},
+			},
+			Schema: interfacesnapshot.CommandMigrationSchema{
+				ProductID:         "chat",
+				SourceToolID:      "chat.list_topic_replies",
+				ReplacementToolID: "chat.list_topic_replies",
+				Parameters: []interfacesnapshot.CommandParameterMigration{
+					{From: "conversation-id", To: "open-topic-id"},
+					{From: "topic-id", To: "open-conv-thread-id"},
+				},
+			},
+			State:  state,
+			Reason: "move topic reply listing while retaining the legacy command",
+		}},
+	}
+}
+
+func schemaCommandLineageSnapshot(flagAfter, commandAfter bool) interfacesnapshot.Snapshot {
+	legacyFlags := []interfacesnapshot.Flag{
+		{Name: "conversation-id", Type: "string", Hidden: true},
+		{Name: "group", Type: "string", Required: true},
+		{Name: "topic-id", Type: "string", Required: true},
+	}
+	if flagAfter {
+		legacyFlags[0].Hidden = false
+		legacyFlags[0].Required = true
+		legacyFlags[1].Required = false
+		legacyFlags[1].Hidden = true
+		legacyFlags[1].AliasOf = "conversation-id"
+	}
+	commands := []interfacesnapshot.Command{
+		{Path: "dws", Runnable: true, Aliases: []string{}, LocalFlags: []interfacesnapshot.Flag{}, InheritedFlags: []interfacesnapshot.Flag{}},
+		{
+			Path:           "dws chat message list-topic-replies",
+			Runnable:       true,
+			Aliases:        []string{},
+			LocalFlags:     legacyFlags,
+			InheritedFlags: []interfacesnapshot.Flag{},
+		},
+	}
+	if commandAfter {
+		commands[1].Hidden = true
+		commands = append(commands, interfacesnapshot.Command{
+			Path:           "dws chat topic list-replies",
+			Runnable:       true,
+			Aliases:        []string{},
+			LocalFlags:     []interfacesnapshot.Flag{},
+			InheritedFlags: []interfacesnapshot.Flag{},
+		})
+	}
+	return interfacesnapshot.Snapshot{
+		SchemaVersion: interfacesnapshot.SchemaVersion,
+		Rules: interfacesnapshot.Rules{
+			ExcludedCommandSubtrees: []string{"dws __complete", "dws __completeNoDesc", "dws completion", "dws help"},
+			ExcludedFlags:           []string{"help"},
+		},
+		Commands: commands,
+	}
 }
 
 func schemaCommandMigrationAuthorizations() []interfacesnapshot.CommandMigration {

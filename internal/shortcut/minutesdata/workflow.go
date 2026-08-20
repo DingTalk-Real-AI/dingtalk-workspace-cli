@@ -33,7 +33,8 @@ func RequireWriteAcknowledgement(operation string, data map[string]any) error {
 // RequirePermissionMutationAcknowledgement validates the target-level payload
 // returned by add/remove_member_permission. The backend's top-level
 // success=true is not sufficient: historically it also accompanied a
-// resultMap that merely echoed nonexistent task UUIDs.
+// resultMap that merely echoed nonexistent task UUIDs, and it does not prove
+// that every requested task/member pair was changed.
 func RequirePermissionMutationAcknowledgement(operation string, taskUUIDs, memberUIDs []string, data map[string]any) error {
 	if err := validateEnvelope(data); err != nil {
 		return err

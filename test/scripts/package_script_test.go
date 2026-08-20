@@ -1303,11 +1303,23 @@ func TestReleaseWorkflowParallelizesSealedValidationWithoutWeakeningPublication(
 		"- e2e",
 		"verify-github-tag-authority.sh",
 		"go test -v -count=1 -timeout=5m ./test/scripts/... -run '^TestRelease'",
-		"check-command-compatibility.sh",
+		`tmp/trusted-release-tooling/scripts/release/check-release-compatibility.sh`,
+		`--repo-root "$GITHUB_WORKSPACE"`,
+		`--base-ref HEAD`,
+		`--stable-ref "$PREVIOUS_STABLE"`,
+		`--candidate-ref HEAD`,
 		"test-multi-profile-e2e.sh",
 	} {
 		if !strings.Contains(validation, required) {
 			t.Errorf("parallel release validation is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"./scripts/policy/check-command-compatibility.sh",
+		"./scripts/policy/check-authoritative-schema-compatibility.sh",
+	} {
+		if strings.Contains(validation, forbidden) {
+			t.Errorf("parallel release validation bypasses the shared compatibility runner with %q", forbidden)
 		}
 	}
 
@@ -1379,7 +1391,7 @@ func TestReleaseWorkflowHidesOnlyVerifiedSealedTagFromCompatibilityBaseline(t *t
 
 	verifiedTag := strings.Index(validation, "verify-github-tag-authority.sh")
 	deleteLocalTag := strings.Index(validation, "git update-ref -d")
-	compatibility := strings.Index(validation, "check-command-compatibility.sh")
+	compatibility := strings.Index(validation, "tmp/trusted-release-tooling/scripts/release/check-release-compatibility.sh")
 	if verifiedTag == -1 || deleteLocalTag == -1 || compatibility == -1 ||
 		verifiedTag > deleteLocalTag || deleteLocalTag > compatibility {
 		t.Fatal("release tag authority verification, local candidate removal, and compatibility checking must stay ordered")
