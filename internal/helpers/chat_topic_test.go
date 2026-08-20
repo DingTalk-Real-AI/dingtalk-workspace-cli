@@ -619,6 +619,7 @@ func TestCrossPlatformCoverageAtomicTopicQuoteReplyDryRunSkipsRemotePreflight(t 
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			testseam.Protect(t, &deps)
 			caller := &chatTopicCaller{dryRun: true}
 			if err := runChatCoverageCommand(t, caller, test.args...); err != nil {
 				t.Fatal(err)
