@@ -2124,6 +2124,13 @@ func TestCrossPlatformCoverageEmbedContractSkipsBlankAndHiddenFlags(t *testing.T
 
 // TestWaitResourceStronglyTypedDTOs verifies waitResource handles struct and
 // struct pointer results via JSON normalization (P1 fix for auto-CR).
+// UnmarshalableDTO cannot round-trip through encoding/json (channels are
+// unsupported), driving the waitResource slow path's marshal error.
+type UnmarshalableDTO struct {
+	TaskID string `json:"task_id"`
+	Ch     chan int
+}
+
 func TestWaitResourceStronglyTypedDTOs(t *testing.T) {
 	type TaskDTO struct {
 		TaskID string `json:"task_id"`
@@ -2200,6 +2207,12 @@ func TestWaitResourceStronglyTypedDTOs(t *testing.T) {
 			data:          TaskDTO{TaskID: "abc"},
 			query:         "nonexistent",
 			wantErrSubstr: "not found",
+		},
+		{
+			name:          "unmarshalable payload (channel field)",
+			data:          UnmarshalableDTO{TaskID: "chan"},
+			query:         "task_id",
+			wantErrSubstr: "cannot be serialized to JSON",
 		},
 	}
 

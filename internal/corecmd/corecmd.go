@@ -1757,11 +1757,12 @@ func attachContractPayload(cmd *cobra.Command, safety contract.SafetySpec, decl 
 		payload.DryRun = &d
 	}
 	if decl.Wait != nil && strings.TrimSpace(decl.Wait.Mode) != "" {
-		waitSpec, err := contract.NormalizeWaitSpec(decl.Wait, decl.Identity.CanonicalPath)
-		if err != nil {
-			panic(fmt.Sprintf("command %q has invalid Contract.Wait: %v", cmd.Name(), err))
-		}
-		payload.Wait = waitSpec
+		// Wait reaches this store only through New's construction:
+		// normalizeWaitDecl already canonicalized and validated the
+		// declaration in place (invalid wait panics there), and
+		// AttachContract rejects wait declarations outright. The store
+		// deep-copies the terminal map on registration.
+		payload.Wait = decl.Wait
 	}
 	if decl.Result != nil {
 		result, err := contract.NormalizeResultSpec(decl.Result, decl.Identity.CanonicalPath)
