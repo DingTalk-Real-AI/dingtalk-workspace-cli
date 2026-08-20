@@ -6,6 +6,34 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.59] - 2026-08-20
+
+This release promotes the sealed `v1.0.59-beta.4` contents to stable.
+
+It includes the complete user-visible changes introduced across `v1.0.59-beta.1` through
+`v1.0.59-beta.4`, whose detailed release notes remain below, plus the additional changes
+merged after the final beta seal.
+
+### Added
+
+- **Chat personal emotions** (#1046) — adds `chat emotion list`, `chat emotion send`, and
+  `chat emotion favorite` for current-user personal favorite emotion listing, sending, and
+  favoriting.
+
+- **Minutes, DingTalk tasks, and Wiki parameter aliases** (#1066) — accepts reviewed
+  equivalent parameter names while retaining ambiguity guards and existing command behavior.
+
+### Changed
+
+- **DingTalk document Skill guidance** (#1033) — improves document workflows with a
+  shortcut-first, scoped-read, stable-ID reuse, confirmation, and result-verification route.
+
+### Fixed
+
+- **Shortcut functional workflows** (#1050) — fixes truthful Drive push/sync previews,
+  strict AITable write verification and deletion accounting, lossless Wiki feeds, and
+  false-success handling across task, Contact, Minutes, and Wiki operations.
+
 ## [1.0.59-beta.4] - 2026-08-20
 
 ### Added
