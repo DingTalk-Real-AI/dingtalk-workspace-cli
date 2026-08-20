@@ -34,6 +34,7 @@ func TestCrossPlatformCoverageContactSemanticCatalogExactlyCoversRegisteredSurfa
 	if len(registered) != 16 || len(source.Shortcuts) != 16 {
 		t.Fatalf("registered/catalog = %d/%d, want 16/16", len(registered), len(source.Shortcuts))
 	}
+	wantCompatibilityVisible := map[string]bool{"+list-roles": true}
 	public, unavailable := 0, 0
 	for command, record := range source.Shortcuts {
 		item, ok := registered[command]
@@ -58,9 +59,19 @@ func TestCrossPlatformCoverageContactSemanticCatalogExactlyCoversRegisteredSurfa
 			}
 		} else {
 			unavailable++
-			if availability != shortcut.AvailabilityUnavailable || !item.Hidden || shortcut.InPublicCatalog("contact", command) || item.OutputRollout != output.RolloutLegacyOnly || item.Contract.Result != nil {
+			if availability != shortcut.AvailabilityUnavailable || shortcut.InPublicCatalog("contact", command) || item.OutputRollout != output.RolloutLegacyOnly || item.Contract.Result != nil {
 				t.Errorf("%s unavailable visibility drift", command)
 			}
+			if record.CompatibilityVisible {
+				if item.Hidden || !item.CompatibilityVisible {
+					t.Errorf("%s compatibility visibility drift", command)
+				}
+			} else if !item.Hidden || item.CompatibilityVisible {
+				t.Errorf("%s hidden unavailable visibility drift", command)
+			}
+		}
+		if record.CompatibilityVisible != wantCompatibilityVisible[command] {
+			t.Errorf("%s compatibility-visible=%v, want %v", command, record.CompatibilityVisible, wantCompatibilityVisible[command])
 		}
 	}
 	if public != 13 || unavailable != 3 {
