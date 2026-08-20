@@ -75,6 +75,7 @@ type releaseTestRepo struct {
 	prepare    string
 	render     string
 	releaseCmd string
+	compat     string
 	lib        string
 	verify     string
 }
@@ -110,8 +111,203 @@ func newReleaseTestRepo(t *testing.T) *releaseTestRepo {
 		prepare:    filepath.Join(sourceRoot, "scripts", "release", "prepare-changelog.sh"),
 		render:     filepath.Join(sourceRoot, "scripts", "release", "render-release-fragments.sh"),
 		releaseCmd: filepath.Join(sourceRoot, "scripts", "release", "release.sh"),
+		compat:     filepath.Join(sourceRoot, "scripts", "release", "check-release-compatibility.sh"),
 		lib:        filepath.Join(sourceRoot, "scripts", "release", "release-lib.sh"),
 		verify:     filepath.Join(sourceRoot, "scripts", "release", "verify-release-artifacts.sh"),
+	}
+}
+
+func seedReleaseCompatibilityRefs(t *testing.T, repo string) (stable, base, candidate string) {
+	t.Helper()
+	mustRun(t, repo, "git", "config", "user.name", "Release Compatibility Test")
+	mustRun(t, repo, "git", "config", "user.email", "release-compatibility-test@example.com")
+	mustWriteFile(t, filepath.Join(repo, "seed.txt"), []byte("stable\n"), 0o644)
+	mustRun(t, repo, "git", "add", "seed.txt")
+	mustRun(t, repo, "git", "commit", "-m", "stable")
+	mustRun(t, repo, "git", "tag", "stable-ref")
+	stable = strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD^{commit}"))
+
+	mustWriteFile(t, filepath.Join(repo, "seed.txt"), []byte("base\n"), 0o644)
+	mustRun(t, repo, "git", "add", "seed.txt")
+	mustRun(t, repo, "git", "commit", "-m", "base")
+	mustRun(t, repo, "git", "branch", "base-ref")
+	base = strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD^{commit}"))
+
+	mustWriteFile(t, filepath.Join(repo, "seed.txt"), []byte("candidate\n"), 0o644)
+	mustRun(t, repo, "git", "add", "seed.txt")
+	mustRun(t, repo, "git", "commit", "-m", "candidate")
+	mustRun(t, repo, "git", "branch", "candidate-ref")
+	candidate = strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD^{commit}"))
+	return stable, base, candidate
+}
+
+func TestReleaseCompatibilityCheckRunsCLIAndSchemaWithExactRefs(t *testing.T) {
+	t.Parallel()
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	runner := filepath.Join(sourceRoot, "scripts", "release", "check-release-compatibility.sh")
+	repo := t.TempDir()
+	mustRun(t, repo, "git", "init", "-b", "main")
+	stable, base, candidate := seedReleaseCompatibilityRefs(t, repo)
+
+	trace := filepath.Join(t.TempDir(), "compatibility.log")
+	checker := func(name string) []byte {
+		return []byte("#!/bin/sh\nset -eu\nprintf '" + name + ":%s\\n' \"$*\" >> \"$TRACE\"\n")
+	}
+	mustWriteFile(t, filepath.Join(repo, "scripts", "policy", "check-authoritative-interface-baselines.sh"), checker("cli"), 0o755)
+	mustWriteFile(t, filepath.Join(repo, "scripts", "policy", "check-authoritative-schema-compatibility.sh"), checker("schema"), 0o755)
+
+	cmd := exec.Command(
+		runner,
+		"--repo-root", repo,
+		"--base-ref", "base-ref",
+		"--stable-ref", "stable-ref",
+		"--candidate-ref", "candidate-ref",
+	)
+	cmd.Env = append(os.Environ(), "TRACE="+trace)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("release compatibility check error = %v\noutput:\n%s", err, output)
+	}
+	got, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", trace, err)
+	}
+	want := fmt.Sprintf("cli:--base-ref %s --stable-ref %s --candidate-ref %s\n", base, stable, candidate) +
+		fmt.Sprintf("schema:--base-ref %s --stable-ref %s --candidate-ref %s\n", base, stable, candidate)
+	if string(got) != want {
+		t.Fatalf("release compatibility calls = %q, want %q", got, want)
+	}
+}
+
+func TestReleaseCompatibilityCheckFreezesRefsBeforeRunningEitherChecker(t *testing.T) {
+	t.Parallel()
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	runner := filepath.Join(sourceRoot, "scripts", "release", "check-release-compatibility.sh")
+	repo := t.TempDir()
+	mustRun(t, repo, "git", "init", "-b", "main")
+	stable, base, candidate := seedReleaseCompatibilityRefs(t, repo)
+
+	trace := filepath.Join(t.TempDir(), "compatibility.log")
+	resolveAndLog := `
+base="$2"
+stable="$4"
+candidate="$6"
+printf '%s:%s:%s:%s\n' "$CHECK_NAME" \
+  "$(git -C "$REPO_ROOT_FOR_TEST" rev-parse --verify "${base}^{commit}")" \
+  "$(git -C "$REPO_ROOT_FOR_TEST" rev-parse --verify "${stable}^{commit}")" \
+  "$(git -C "$REPO_ROOT_FOR_TEST" rev-parse --verify "${candidate}^{commit}")" >> "$TRACE"
+`
+	mustWriteFile(t, filepath.Join(repo, "scripts", "policy", "check-authoritative-interface-baselines.sh"), []byte("#!/bin/sh\nset -eu\nCHECK_NAME=cli\n"+resolveAndLog+"git -C \"$REPO_ROOT_FOR_TEST\" update-ref refs/heads/base-ref \"$MUTATE_TO\"\n"), 0o755)
+	mustWriteFile(t, filepath.Join(repo, "scripts", "policy", "check-authoritative-schema-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nCHECK_NAME=schema\n"+resolveAndLog), 0o755)
+
+	cmd := exec.Command(
+		runner,
+		"--repo-root", repo,
+		"--base-ref", "base-ref",
+		"--stable-ref", "stable-ref",
+		"--candidate-ref", "candidate-ref",
+	)
+	cmd.Env = append(os.Environ(), "TRACE="+trace, "REPO_ROOT_FOR_TEST="+repo, "MUTATE_TO="+candidate)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("release compatibility check error = %v\noutput:\n%s", err, output)
+	}
+	got, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", trace, err)
+	}
+	want := fmt.Sprintf("cli:%s:%s:%s\nschema:%s:%s:%s\n", base, stable, candidate, base, stable, candidate)
+	if string(got) != want {
+		t.Fatalf("release compatibility resolved commits = %q, want %q", got, want)
+	}
+	if moved := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "base-ref^{commit}")); moved != candidate {
+		t.Fatalf("mutating checker did not move base-ref: got %s, want %s", moved, candidate)
+	}
+}
+
+func TestReleaseCompatibilityCheckStopsBeforeSchemaWhenCLIFails(t *testing.T) {
+	t.Parallel()
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	runner := filepath.Join(sourceRoot, "scripts", "release", "check-release-compatibility.sh")
+	repo := t.TempDir()
+	mustRun(t, repo, "git", "init", "-b", "main")
+	seedReleaseCompatibilityRefs(t, repo)
+
+	trace := filepath.Join(t.TempDir(), "compatibility.log")
+	mustWriteFile(t, filepath.Join(repo, "scripts", "policy", "check-authoritative-interface-baselines.sh"), []byte("#!/bin/sh\nprintf 'cli\\n' >> \"$TRACE\"\nexit 17\n"), 0o755)
+	mustWriteFile(t, filepath.Join(repo, "scripts", "policy", "check-authoritative-schema-compatibility.sh"), []byte("#!/bin/sh\nprintf 'schema\\n' >> \"$TRACE\"\n"), 0o755)
+
+	cmd := exec.Command(
+		runner,
+		"--repo-root", repo,
+		"--base-ref", "base-ref",
+		"--stable-ref", "stable-ref",
+		"--candidate-ref", "candidate-ref",
+	)
+	cmd.Env = append(os.Environ(), "TRACE="+trace)
+	output, err := cmd.CombinedOutput()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 17 {
+		t.Fatalf("release compatibility CLI failure = %v, want exit 17\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "error: authoritative CLI compatibility failed") {
+		t.Fatalf("release compatibility CLI failure has no boundary message:\n%s", output)
+	}
+	got, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", trace, err)
+	}
+	if string(got) != "cli\n" {
+		t.Fatalf("checks after CLI failure = %q, want only CLI", got)
+	}
+}
+
+func TestReleaseCompatibilityCheckFailsWhenSchemaFails(t *testing.T) {
+	t.Parallel()
+	sourceRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("Abs(repo root) error = %v", err)
+	}
+	runner := filepath.Join(sourceRoot, "scripts", "release", "check-release-compatibility.sh")
+	repo := t.TempDir()
+	mustRun(t, repo, "git", "init", "-b", "main")
+	seedReleaseCompatibilityRefs(t, repo)
+
+	trace := filepath.Join(t.TempDir(), "compatibility.log")
+	mustWriteFile(t, filepath.Join(repo, "scripts", "policy", "check-authoritative-interface-baselines.sh"), []byte("#!/bin/sh\nprintf 'cli\\n' >> \"$TRACE\"\n"), 0o755)
+	mustWriteFile(t, filepath.Join(repo, "scripts", "policy", "check-authoritative-schema-compatibility.sh"), []byte("#!/bin/sh\nprintf 'schema\\n' >> \"$TRACE\"\nexit 19\n"), 0o755)
+
+	cmd := exec.Command(
+		runner,
+		"--repo-root", repo,
+		"--base-ref", "base-ref",
+		"--stable-ref", "stable-ref",
+		"--candidate-ref", "candidate-ref",
+	)
+	cmd.Env = append(os.Environ(), "TRACE="+trace)
+	output, err := cmd.CombinedOutput()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 19 {
+		t.Fatalf("release compatibility Schema failure = %v, want exit 19\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(string(output), "error: authoritative Schema compatibility failed") {
+		t.Fatalf("release compatibility Schema failure has no boundary message:\n%s", output)
+	}
+	got, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", trace, err)
+	}
+	if string(got) != "cli\nschema\n" {
+		t.Fatalf("checks before Schema failure = %q, want CLI then Schema", got)
 	}
 }
 
@@ -2631,12 +2827,35 @@ func TestReleaseCommandRejectsDifferentFetchAndPushRepositories(t *testing.T) {
 	}
 }
 
+func TestReleaseCommandRunsCLIAndSchemaCompatibilityInInitialPreflight(t *testing.T) {
+	r := newReleaseTestRepo(t)
+	installReleaseCommandFixture(t, r)
+	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(betaSection())), 0o644)
+	r.commitAndPush(t, "install release compatibility fixture")
+
+	output, err := runReleaseScript(t, r.root, filepath.Join(r.root, "scripts", "release", "release.sh"),
+		"prerelease", "v1.0.1-beta.1", "--remote", "origin",
+	)
+	if err != nil {
+		t.Fatalf("release validation error = %v\noutput:\n%s", err, output)
+	}
+	head := strings.TrimSpace(mustOutput(t, r.root, "git", "rev-parse", "HEAD^{commit}"))
+	stable := strings.TrimSpace(mustOutput(t, r.root, "git", "rev-parse", "v1.0.0^{commit}"))
+	for _, want := range []string{
+		fmt.Sprintf("cli-compatibility --base-ref %s --stable-ref %s --candidate-ref %s", head, stable, head),
+		fmt.Sprintf("schema-compatibility --base-ref %s --stable-ref %s --candidate-ref %s", head, stable, head),
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("initial release preflight is missing %q\noutput:\n%s", want, output)
+		}
+	}
+}
+
 func TestReleaseCommandRechecksAdvancedStableAuthority(t *testing.T) {
 	r := newReleaseTestRepo(t)
 	installReleaseCommandFixture(t, r)
 	section := "## [1.0.2-beta.1] - 2026-07-11\n\n### Changed\n\n- Validate a candidate after stable authority advances.\n\n"
 	mustWriteFile(t, filepath.Join(r.root, "CHANGELOG.md"), []byte(releaseChangelog(section)), 0o644)
-	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-command-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nprintf 'compatibility %s\\n' \"$*\"\n"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\nbuild:\n\t@:\npolicy:\n\t@:\npackage:\n\t@git tag -a v1.0.1 -m 'Release v1.0.1'\n\t@git push origin refs/tags/v1.0.1\n"), 0o644)
 	r.commitAndPush(t, "install advancing release fixture")
 
@@ -2646,20 +2865,28 @@ func TestReleaseCommandRechecksAdvancedStableAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatalf("release validation error = %v\noutput:\n%s", err, output)
 	}
-	if !strings.Contains(output, "Stable authority advanced from v1.0.0 to v1.0.1") ||
-		!strings.Contains(output, "--stable-ref v1.0.1") {
-		t.Fatalf("advanced stable command tree was not rechecked:\n%s", output)
+	head := strings.TrimSpace(mustOutput(t, r.root, "git", "rev-parse", "HEAD^{commit}"))
+	stable := strings.TrimSpace(mustOutput(t, r.root, "git", "rev-parse", "v1.0.1^{commit}"))
+	for _, want := range []string{
+		"Stable authority advanced from v1.0.0 to v1.0.1",
+		fmt.Sprintf("cli-compatibility --base-ref %s --stable-ref %s --candidate-ref %s", head, stable, head),
+		fmt.Sprintf("schema-compatibility --base-ref %s --stable-ref %s --candidate-ref %s", head, stable, head),
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("advanced stable authority recheck is missing %q\noutput:\n%s", want, output)
+		}
 	}
 }
 
 func installReleaseCommandFixture(t *testing.T, r *releaseTestRepo) {
 	t.Helper()
-	for _, source := range []string{r.lib, r.contract, r.releaseCmd} {
+	for _, source := range []string{r.lib, r.contract, r.releaseCmd, r.compat} {
 		releaseCopyFile(t, source, filepath.Join(r.root, "scripts", "release", filepath.Base(source)), 0o755)
 	}
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "verify-package-managers.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "scripts", "release", "verify-release-artifacts.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
-	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-command-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nexit 0\n"), 0o755)
+	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-authoritative-interface-baselines.sh"), []byte("#!/bin/sh\nset -eu\nprintf 'cli-compatibility %s\\n' \"$*\"\n"), 0o755)
+	mustWriteFile(t, filepath.Join(r.root, "scripts", "policy", "check-authoritative-schema-compatibility.sh"), []byte("#!/bin/sh\nset -eu\nprintf 'schema-compatibility %s\\n' \"$*\"\n"), 0o755)
 	mustWriteFile(t, filepath.Join(r.root, "Makefile"), []byte("test:\n\t@:\nbuild:\n\t@:\npolicy:\n\t@:\npackage:\n\t@:\n"), 0o644)
 }
 

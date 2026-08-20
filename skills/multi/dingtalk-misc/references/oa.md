@@ -638,6 +638,30 @@ Flags:
       --query string   查询关键词，可选
 ```
 
+### 以管理员身份查询审批实例列表
+
+> **IMPORTANT：** 需要当前用户具备 OA 审批管理员权限，否则查不到数据。只查个人维度的审批时改用 `list-pending` / `list-executed` / `list-initiated` / `list-cc`。
+
+```
+Usage:
+  dws oa approval list-by-admin [flags]
+Example:
+  dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --cursor 0 --limit 20
+  dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --statuses RUNNING,COMPLETED --user-ids "userId1,userId2"
+  # 高级用法：传入完整 JSON（startTime/endTime 为 yyyy-MM-dd HH:mm:ss 格式字符串）
+  dws oa approval list-by-admin --request '{"processCode":"PROC-xxx","startTime":"2026-03-10 00:00:00","cursor":0,"pageSize":20}'
+Flags:
+      --process-code string   审批模板 processCode（简单模式必填）
+      --start string          开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)（简单模式必填）
+      --end string            结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)（可选）
+      --cursor string         分页游标，首次传 0（默认 "0"）
+      --limit string          每页大小，最大 20（默认 "20"）
+      --user-ids string       按发起人 userId 过滤，多个用逗号分隔（可选）
+      --statuses string       按审批状态过滤，多个用逗号分隔（可选，如 RUNNING、TERMINATED、COMPLETED）
+      --request string        完整请求体 JSON（高级模式，与简单模式互斥）
+```
+MCP 工具: `get_process_instances_by_admin`；参数封装在 `ProcessInstanceListQueryRequest`（processCode、startTime 必填，endTime、userIds、statuses、cursor、pageSize 可选；startTime/endTime 为 `yyyy-MM-dd HH:mm:ss` 格式字符串，简单模式的 ISO-8601 入参会自动转换）。processCode 可从 `list-forms` / `search-forms` 获取，返回的 processInstanceId 可用于 `detail` / `records` / `tasks`。
+
 ### 转交审批任务
 ```
 Usage:
@@ -757,6 +781,7 @@ Flags:
 用户说"抄送我的审批单/抄送我的XX审批/CC我的XX/查抄送我的XX" → `approval list-cc`，将 XX 作为 `--query` 关键字传入（可搜索表单名称或表单详情内容）
   - 示例："查抄送我的补卡审批单" → `approval list-cc --query 补卡`
   - 示例："抄送我的审批单"（无关键词）→ `approval list-cc`
+用户说"以管理员身份查审批/全员审批单/统计某个模板的审批单/企业内审批记录" → `approval list-by-admin`（需 --process-code 和 --start，且当前用户需具备 OA 管理员权限）
 用户说"转交审批/转交任务" → `approval redirect-task`（需 --task-id 和 --to-actioner-id）
 用户说"评论审批/添加评论/写评论" → `approval oa-comments`（需 --instance-id 和 --content）
 用户说"抄送审批/添加抄送人" → `approval oa-cc-noticer`（需 --instance-id 和 --users）
@@ -814,6 +839,9 @@ dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关
 dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词 --format json
 # 11. 抄送我的审批单
 dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词 --format json
+
+# 11b. 以管理员身份跨用户查询某模板的审批实例列表（需 OA 管理员权限）
+dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --cursor 0 --limit 20 --format json
 
 # 12. 转交审批任务（taskId 来自 tasks，toActionerId 来自 aisearch person）
 dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --format json
@@ -879,6 +907,7 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 | `create-instance` | `result`（processInstanceId） | detail / tasks / records / revoke 等的 --instance-id，可跟踪已发起的审批 |
 | `ding-info` | `userId` | ding message send 的 --users（多个逗号拼接）；**robotCode 优先走 `$DINGTALK_DING_ROBOT_CODE` 环境变量，content 由 agent 根据审批上下文撰写；返回空时报错并停止** |
 | `revert-activities` | `activityId`, `revertAction`, `activityName` | revert-task 的 --target-activity-id 和 --action；**返回空时必须告知用户"无可回退节点"** |
+| `list-by-admin` | `processInstanceId` | detail / records / tasks 的 --instance-id |
 
 ## 注意事项
 
@@ -900,6 +929,7 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 - `--remark` 审批意见虽为可选，但建议填写以留存审批痕迹
 - `list-initiated` 的 `--process-code` 可从 `list-forms`、`search-forms` 或 `detail` 返回中提取
 - 已知表单名称关键字时优先用 `search-forms`；需枚举全部表单时用 `list-forms`
+- `list-by-admin` 需要当前用户具备 OA 审批管理员权限，否则查不到数据；只查个人维度审批时改用 `list-pending` / `list-executed` / `list-initiated` / `list-cc`。高级模式 `--request` 中 `startTime`/`endTime` 为 `yyyy-MM-dd HH:mm:ss` 格式字符串（不再接受毫秒时间戳）；`pageSize` 上限为 20，超过会报错（简单模式为 `--limit`）
 - 催办必须两步串联：`ding-info` 仅返回被催办人 `userId`，不返回 robotCode/content；需再调用 `dws ding message send`，其中 `--robot-code` 优先使用环境变量 `$DINGTALK_DING_ROBOT_CODE`，若无则向用户确认；`--content` 由 agent 根据审批上下文撰写催办文案；**严禁跳过 `ding-info` 直接猜测 userId**
 - 催办文案建议格式：`"请尽快审批《{表单名}》（提交人：{发起人}，提交时间：{时间}）"`
 - `ding-info` 返回空或报错时，必须明确告知用户"无法获取该任务的被催办人信息"并停止

@@ -68,6 +68,34 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		return `{"success":true,"result":[]}`
 	case "list_suggested_event_times":
 		return `{"success":true,"result":{"recommendEventTimes":[]}}`
+	case "list_by_keyword_and_time_range":
+		return `{"success":true,"result":{"itemList":[{"taskUuid":"u1","startTime":1}]}}`
+	case "get_minutes_basic_info":
+		return `{"success":true,"result":{"taskUuid":"u1","title":"Fixture Minutes"}}`
+	case "get_minutes_transcription":
+		return `{"success":true,"result":{"paragraphList":[],"hasNext":false}}`
+	case "create_personal_todo":
+		return `{"success":true,"result":{"taskId":"task-1"}}`
+	case "get_todo_detail":
+		return `{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","subject":"Fixture Todo","isDone":false}}}`
+	case "get_user_todos_in_current_org":
+		return `{"success":true,"result":{"todoCards":[],"hasMore":false}}`
+	case "add_todo_reminder":
+		return `{"success":true}`
+	case "copy_document":
+		return `{"success":true,"nodeId":"copy-1"}`
+	case "move_document", "add_member", "update_member", "remove_member":
+		return `{"success":true}`
+	case "get_document_info":
+		if len(c.calls) > 1 {
+			switch c.calls[len(c.calls)-2].tool {
+			case "copy_document":
+				return `{"success":true,"nodeId":"copy-1","workspaceId":"workspace-1","folderId":"folder-1"}`
+			case "move_document":
+				return `{"success":true,"nodeId":"node-1","workspaceId":"drive-1","folderId":"folder-1"}`
+			}
+		}
+		return `{"success":true,"nodeId":"node-1","workspaceId":"source-1","folderId":"source-folder"}`
 	case "create_calendar_event":
 		return `{"success":true,"result":{"eventId":"event-1"}}`
 	case "update_calendar_event", "delete_calendar_event", "add_calendar_participant", "remove_calendar_participant":

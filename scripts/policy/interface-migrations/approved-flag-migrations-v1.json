@@ -790,7 +790,7 @@
           "required": true
         }
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "保留旧 argv 兼容性，并将单值群身份 flag 设为唯一可见入口"
     },
     {

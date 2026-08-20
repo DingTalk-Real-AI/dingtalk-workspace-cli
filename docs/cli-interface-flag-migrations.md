@@ -1,6 +1,8 @@
-# CLI flag 兼容迁移治理
+# CLI Help / Schema 兼容迁移治理
 
 本文定义一种受控迁移：保留旧 flag 的可执行兼容性，但把它从 Help 与 Agent Schema 中隐藏，并将新的规范 flag 设为唯一可见入口。迁移必须保持原 flag 的 requiredness：optional 只能迁到 optional，required 只能迁到 required。它只解决这一种精确变更，不是通用 breaking-change 豁免。
+
+同一套 base-owned lifecycle 也治理两类跨命令迁移：旧命令保留执行能力但从 Help / Schema 导航隐藏，并迁到新的公开命令路径；或把旧命令中的一个可选 flag 拆成新的专用命令。跨命令迁移只允许清单精确声明的 `command_became_hidden` / `flag_became_hidden` 及其 Schema 投影，不是通用 command-path breaking-change 豁免。
 
 同名 flag 的精确类型迁移属于另一类评审机制，只能进入
 `internal/interfacesnapshot/reviewed.go` 与 legacy smoke helper 的镜像表；flag rename
@@ -31,7 +33,7 @@ Smoke fixture，不参与迁移审批。
 同时提供 `--base` 与 `--stable`；核心 lifecycle 也拒绝缺失 stable 的非空清单，避免
 调用方因漏传历史参考而提前清理 consumed receipt。
 
-PR merge-base 同时拥有快照生成器、比较器和已审批清单。门禁用这套 base-owned helper 检查同一个已提交 candidate revision、merge-base 与 stable，candidate 不能通过修改自己的 Go 比较 helper 来放宽规则。candidate 中的清单只参与迁移状态流转，不能批准同一个 PR 引入的接口变化。首次引入本机制时，merge-base 尚无迁移解析器；bootstrap 会用 merge-base 已有的 modern Interface Snapshot 做不带豁免的普通比较，并只接受 candidate 中逐字匹配的空清单，不会让 candidate 新增的 comparator 决定本 PR 是否兼容。bootstrap 无法让旧 helper 证明新治理实现本身正确，因此本治理 PR 的新 parser、lifecycle、launcher 与 hostile tests 仍是必须由真人评审的受保护策略变更；它们合入后才成为后续 PR 的 base-owned authority。
+PR merge-base 同时拥有快照生成器、比较器和已审批清单。门禁用这套 base-owned helper 检查同一个已提交 candidate revision、merge-base 与 stable，candidate 不能通过修改自己的 Go 比较 helper 来放宽规则。candidate 中的清单只参与迁移状态流转，不能批准同一个 PR 引入的接口变化。首次引入 flag 机制时，merge-base 尚无迁移解析器；bootstrap 会用 merge-base 已有的 modern Interface Snapshot 做不带豁免的普通比较，并只接受 candidate 中逐字匹配的空 flag 清单。后续引入 command migration 扩展时，base 已拥有 flag comparator；bootstrap 仍只执行 base-owned 普通比较，不向旧 helper 传入新的 command ledger，因此允许随治理 PR 提交仍处于 before 的 pending 计划，也不会授予任何迁移豁免。bootstrap 无法让旧 helper 证明新治理实现本身正确，因此本治理 PR 的新 parser、lifecycle、launcher 与 hostile tests 仍是必须由真人评审的受保护策略变更；它们合入后才成为后续 PR 的 base-owned authority。
 
 这条边界保护比较规则和审批数据，不是任意代码沙箱。GitHub workflow / launcher 的变更仍由仓库保护规则和真人评审负责；candidate Cobra 构建也会执行 candidate 代码，因此对同一 runner 上的主动恶意代码，需要独立进程或文件系统隔离，不能把本门禁描述成已经解决。
 
@@ -39,9 +41,65 @@ PR merge-base 同时拥有快照生成器、比较器和已审批清单。门禁
 
 ```text
 scripts/policy/interface-migrations/approved-flag-migrations-v1.json
+scripts/policy/interface-migrations/approved-command-migrations-v1.json
 ```
 
 清单使用严格 JSON 解析：版本、字段名大小写、JSON 值类型、命令路径和 flag 名都必须精确；拒绝重复键、未知键、scalar `null` 与尾随 JSON 值，`reason` 不能为空；禁止 `*`、`?`、前缀规则或其他 wildcard。清单中的 `pending` 记录只记录已评审计划，并授权其精确列出的后续产品迁移；候选与 merge-base 仍必须精确匹配 `before`，不能授权同一个提交中的接口变化，也不能作为其他命令或参数的通配豁免。
+
+## 跨命令迁移原语
+
+`approved-command-migrations-v1.json` 只接受两种 `kind`：
+
+| kind | CLI after 状态 | Schema 允许的精确投影 |
+|---|---|---|
+| `command_move` | legacy 命令仍 runnable、由 visible 变 hidden；replacement 由 absent 变 visible runnable | 同一 stable tool identity 的 `primary_cli_path` 改到 replacement；只允许清单列出的参数改名，参数类型、property、requiredness、default 等必须等价 |
+| `flag_extraction` | legacy 命令保持 visible runnable；指定 legacy flag 仍可执行但由 visible 变 hidden；replacement 由 absent 变 visible runnable | source tool 只删除指定参数；replacement tool 必须位于精确的新路径，并保持 source 的 interface 与 safety identity；清单必须完整列出每个 source 参数到 replacement 参数或常量 property 的承接关系 |
+
+`command_move` 只能隐藏没有子命令的 legacy leaf，且 legacy 与 replacement
+不得互为祖先路径；整棵命令树的迁移需要单独设计逐叶治理，不能复用这一原语。
+稳定 Schema tool 可以继续接受普通的 optional 参数新增，但不得借路径迁移引入清单未登记的
+`required`、`cli_required` 或 `required_when` 参数；参数改名的目标也不得与历史
+Schema 中已有的其他参数重名，避免把两个历史参数静默合并。`flag_extraction` 只接受
+optional bool legacy flag，不能隐藏仍由 Cobra hard-required 的参数。它必须对 source tool
+的全部历史参数逐项声明：普通参数使用精确 `from` → `to`（同名也必须显式写出），且恰好
+一个与 legacy flag 同名的 `from` 使用 `replacement_constant`，不得同时声明 `to`；所有
+`from` 与 replacement 参数/property 目标必须唯一。legacy bool flag 的 `no_opt` 必须等于
+常量布尔值的字符串形式。v1 只治理 optional bool flag 的 `NoOpt=true` 激活分支，因此
+`replacement_constant.value` 与 legacy `no_opt` 都必须是 `true`；negative flag、默认即
+`true` 或固定 `false` 的语义不在本轮证明范围，必须另行设计，不能借本清单放行。
+
+如果 `command_move` 的参数 `from` 在更早 stable 中仍使用另一历史名称，Schema adapter
+只能把同一 legacy command 上、已经由 base-owned lifecycle 返回且
+`state=consumed` 的 flag rename 回执作为前驱边。例如
+`group → conversation-id` 与 `conversation-id → open-topic-id` 可以组合，但不能把
+candidate 自增的 pending 记录、其他命令的同名参数、参数概念词典或 CLI alias 当作证据。
+首次消费 pending command 回执时，merge-base 的 normalized Schema 必须真实发布中间参数，
+并逐跳验证参数签名和 constraints；command 回执合入为 consumed 后，中间 Schema 已从 main
+消失，此时保留的两份 consumed 回执可继续对 stable 做受限重放，直到 stable 也达到 after
+并按 lifecycle 清理。两种阶段都拒绝残留 predecessor/intermediate、字段漂移、环、分叉、
+target 碰撞或 primary path/tool identity 不唯一；positionals 不在该组合授权面内。
+
+`replacement_constant` 不是清单自报即可成立的例外。after 阶段的 Interface Snapshot
+必须从 replacement 命令的同一份框架运行时声明中捕获完全一致的 property/value，缺失、
+值不符或额外常量都会使 lifecycle 落入 partial。对于 #1054，`dws chat topic create`
+必须通过 `NewLeafCommand` 的 `ConstParams` 声明并实际注入
+`convThreadEnabled=true`；手写 `RunE` 固定值、Cobra annotation 或只改清单都不能提供这份
+同源证据，Snapshot 只读取 `corecmd` 包内私有注册表公开的只读副本。第一次向旧快照增加
+bool 常量证据属于 bootstrap；一旦任一历史快照已记录该
+证据，普通 Interface Compare 会持续要求 property/value 集合完全一致，因此 ledger 清理后
+删除、翻转或增加常量仍会阻塞。若 candidate 改动 command ledger，则
+`internal/corecmd/corecmd.go`、`internal/corecmd/interface_const_params.go` 与
+`internal/helpers/leaf.go` 三份执行/证据桥必须保持 base Git blob 不变；框架演进必须先用
+独立 PR 合入，不能和产品消费混在一起。
+
+replacement 必须保留 source 已发布的 dry-run 能力：历史 `dry_run` 非空时不得删除或改值；
+历史未声明时允许 replacement 新增 dry-run。这与普通 Schema 兼容规则保持同一单调边界。
+
+两种迁移都要求旧 argv 继续可执行。删除旧命令、删除旧 flag、把 legacy 改成 non-runnable、改变未登记的历史参数、改变 interface / safety，或只完成部分 before → after 转换都会 fail closed。命令别名会先规范到 reference 的 canonical path，但清单本身仍只能记录精确 canonical 命令，不能用 alias 或前缀扩大授权。
+
+跨命令清单复用下文同一套 `pending → consumed → cleanup` 生命周期。治理 PR 只能新增 `pending` 且产品 surface 必须仍是 before；后续产品 PR 才能一次性切到 after 并改为 `consumed`。candidate 新增的 pending 记录不能批准自己的改动。
+
+当前首批 pending 记录覆盖 `chat topic` 收口：`chat group create --thread` 拆到 `chat topic create`，以及 `chat message list-topic-replies` / `forward-topic` 迁到对应的 `chat topic` 命令。前一条完整登记 `name` / `type` / `users` 的同名承接，以及 `thread` → `convThreadEnabled=true` 的常量承接。产品 PR 消费这些记录时只能把三条 `state` 改为 `consumed`，不得改写其 before、after、Schema mapping、constant 或 reason。
 
 ## 两阶段迁移与回执清理
 

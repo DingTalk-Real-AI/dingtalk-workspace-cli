@@ -219,6 +219,9 @@ func ResolveBaseName(reader Reader, name string, allowFuzzy bool) (Resolution, e
 			all = append(all, Candidate{ID: id, Name: candidateName})
 		}
 		next, hasMore, hasMoreKnown := pagination(data)
+		if hasMoreKnown && !hasMore {
+			return selectCandidate("base", query, dedupe(all), allowFuzzy)
+		}
 		if next == "" {
 			if hasMoreKnown && hasMore {
 				return Resolution{}, incomplete("base", query, all, "search_bases 声明有后续页但没有 cursor")

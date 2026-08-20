@@ -91,22 +91,32 @@ func validateFlagMigrationJSONSchema(data []byte) error {
 }
 
 func validateMigrationJSONValue(decoder *json.Decoder, path string, schema reflect.Type) error {
+	return validateLabeledMigrationJSONValue(decoder, path, schema, "flag")
+}
+
+func validateLabeledMigrationJSONValue(decoder *json.Decoder, path string, schema reflect.Type, label string) error {
 	token, err := decoder.Token()
 	if err != nil {
-		return fmt.Errorf("read flag migration manifest value at %s: %w", path, err)
+		return fmt.Errorf("read %s migration manifest value at %s: %w", label, path, err)
+	}
+	for schema.Kind() == reflect.Pointer {
+		if token == nil {
+			return migrationJSONTypeError(path, schema.Elem(), token, label)
+		}
+		schema = schema.Elem()
 	}
 
 	switch schema.Kind() {
 	case reflect.Struct:
 		if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
-			return migrationJSONTypeError(path, schema, token)
+			return migrationJSONTypeError(path, schema, token, label)
 		}
 		fields := migrationJSONFields(schema)
 		seen := make(map[string]bool, len(fields))
 		for decoder.More() {
 			keyToken, keyErr := decoder.Token()
 			if keyErr != nil {
-				return fmt.Errorf("read flag migration manifest field at %s: %w", path, keyErr)
+				return fmt.Errorf("read %s migration manifest field at %s: %w", label, path, keyErr)
 			}
 			// encoding/json guarantees object member names are string tokens.
 			key := keyToken.(string)
@@ -115,57 +125,58 @@ func validateMigrationJSONValue(decoder *json.Decoder, path string, schema refle
 				for canonical := range fields {
 					if strings.EqualFold(key, canonical) {
 						return fmt.Errorf(
-							"flag migration manifest contains non-canonical field %q at %s (want %q)",
+							"%s migration manifest contains non-canonical field %q at %s (want %q)",
+							label,
 							key,
 							path,
 							canonical,
 						)
 					}
 				}
-				return fmt.Errorf("flag migration manifest contains unknown field %q at %s", key, path)
+				return fmt.Errorf("%s migration manifest contains unknown field %q at %s", label, key, path)
 			}
 			if seen[key] {
-				return fmt.Errorf("flag migration manifest contains duplicate field %q at %s", key, path)
+				return fmt.Errorf("%s migration manifest contains duplicate field %q at %s", label, key, path)
 			}
 			seen[key] = true
-			if err := validateMigrationJSONValue(decoder, path+"."+key, fieldSchema); err != nil {
+			if err := validateLabeledMigrationJSONValue(decoder, path+"."+key, fieldSchema, label); err != nil {
 				return err
 			}
 		}
 		if _, closeErr := decoder.Token(); closeErr != nil {
-			return fmt.Errorf("close flag migration manifest object at %s: %w", path, closeErr)
+			return fmt.Errorf("close %s migration manifest object at %s: %w", label, path, closeErr)
 		}
 		return nil
 	case reflect.Slice:
 		if delimiter, ok := token.(json.Delim); !ok || delimiter != '[' {
-			return migrationJSONTypeError(path, schema, token)
+			return migrationJSONTypeError(path, schema, token, label)
 		}
 		for index := 0; decoder.More(); index++ {
-			if err := validateMigrationJSONValue(decoder, fmt.Sprintf("%s[%d]", path, index), schema.Elem()); err != nil {
+			if err := validateLabeledMigrationJSONValue(decoder, fmt.Sprintf("%s[%d]", path, index), schema.Elem(), label); err != nil {
 				return err
 			}
 		}
 		if _, closeErr := decoder.Token(); closeErr != nil {
-			return fmt.Errorf("close flag migration manifest array at %s: %w", path, closeErr)
+			return fmt.Errorf("close %s migration manifest array at %s: %w", label, path, closeErr)
 		}
 		return nil
 	case reflect.String:
 		if _, ok := token.(string); !ok {
-			return migrationJSONTypeError(path, schema, token)
+			return migrationJSONTypeError(path, schema, token, label)
 		}
 		return nil
 	case reflect.Int:
 		if _, ok := token.(json.Number); !ok {
-			return migrationJSONTypeError(path, schema, token)
+			return migrationJSONTypeError(path, schema, token, label)
 		}
 		return nil
 	case reflect.Bool:
 		if _, ok := token.(bool); !ok {
-			return migrationJSONTypeError(path, schema, token)
+			return migrationJSONTypeError(path, schema, token, label)
 		}
 		return nil
 	default:
-		return fmt.Errorf("flag migration manifest value at %s has unsupported Go schema type %s", path, schema)
+		return fmt.Errorf("%s migration manifest value at %s has unsupported Go schema type %s", label, path, schema)
 	}
 }
 
@@ -188,9 +199,10 @@ func migrationJSONFields(schema reflect.Type) map[string]reflect.Type {
 	return fields
 }
 
-func migrationJSONTypeError(path string, want reflect.Type, token json.Token) error {
+func migrationJSONTypeError(path string, want reflect.Type, token json.Token, label string) error {
 	return fmt.Errorf(
-		"flag migration manifest value at %s must be %s, got %s",
+		"%s migration manifest value at %s must be %s, got %s",
+		label,
 		path,
 		migrationJSONKindDescription(want),
 		migrationJSONTokenDescription(token),

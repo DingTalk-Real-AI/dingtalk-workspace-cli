@@ -232,6 +232,67 @@ var paramAliasCompleteCommands = map[string][]string{
 	"report list":                              {"report", "list", "--start", "2026-03-10T00:00:00+08:00", "--end", "2026-03-10T23:59:59+08:00"},
 }
 
+// paramAliasCandidateCompleteCommands contains complete invocations for the
+// reviewed Minutes/TODO/Wiki joint draft. Keeping candidate-only commands in a
+// separate map lets this test file land before the draft replaces the formal
+// param_concepts.json: inactive candidate templates are ignored, while every
+// command becomes mandatory as soon as one of its reviewed aliases is active.
+var paramAliasCandidateCompleteCommands = map[string][]string{
+	"minutes +detail":             {"minutes", "+detail", "--ids", "u1,u2"},
+	"minutes +latest":             {"minutes", "+latest", "--keyword", "fixture"},
+	"minutes +list-all":           {"minutes", "+list-all", "--limit", "7"},
+	"minutes +record-pause":       {"minutes", "+record-pause", "--id", "u1", "--yes"},
+	"minutes +replace-batch":      {"minutes", "+replace-batch", "--id", "u1", "--pair", "old=>new", "--yes"},
+	"minutes +search":             {"minutes", "+search", "--query", "fixture", "--cursor", "cursor-1"},
+	"minutes +share":              {"minutes", "+share", "--ids", "u1,u2", "--member-uids", "user-1,user-2", "--permission", "view", "--yes"},
+	"minutes +speaker-replace":    {"minutes", "+speaker-replace", "--id", "u1", "--from", "old", "--to", "new", "--target-uid", "user-1", "--yes"},
+	"minutes +summary":            {"minutes", "+summary", "--id", "u1", "--content", "fixture", "--yes"},
+	"minutes +transcript":         {"minutes", "+transcript", "--keyword", "fixture"},
+	"minutes +upload-and-analyze": {"minutes", "+upload-and-analyze", "--resume-id", "u1", "--yes"},
+	"minutes audio-memo list":     {"minutes", "audio-memo", "list", "--max", "7"},
+	"minutes get batch":           {"minutes", "get", "batch", "--ids", "u1,u2"},
+	"minutes hot-word add":        {"minutes", "hot-word", "add", "--words", "DWS,Minutes"},
+	"minutes list all":            {"minutes", "list", "all", "--end", "2026-03-10T23:59:59+08:00"},
+	"minutes list mine":           {"minutes", "list", "mine", "--start", "2026-03-10T00:00:00+08:00"},
+	"minutes replace-text":        {"minutes", "replace-text", "--id", "u1", "--search", "old", "--replace", "new"},
+	"minutes tag query":           {"minutes", "tag", "query", "--tag-id", "tag-1"},
+	"minutes update title":        {"minutes", "update", "title", "--id", "u1", "--title", "Fixture Minutes"},
+	"minutes upload complete":     {"minutes", "upload", "complete", "--session-id", "session-1"},
+	"todo +assign":                {"todo", "+assign", "--task", "Fixture Todo", "--to", "Fixture User", "--yes"},
+	"todo +assign-multi":          {"todo", "+assign-multi", "--task", "Fixture Todo", "--to", "Fixture User,User Two", "--yes"},
+	"todo +comment":               {"todo", "+comment", "--task-id", "task-1", "--content", "fixture comment", "--yes"},
+	"todo +complete":              {"todo", "+complete", "--task-id", "task-1", "--yes"},
+	"todo +create":                {"todo", "+create", "--title", "Fixture Todo", "--executors", "user-1,user-2", "--due", "2026-03-10T18:00:00+08:00", "--yes"},
+	"todo +due-today":             {"todo", "+due-today", "--role-types", "executor"},
+	"todo +get-my-tasks":          {"todo", "+get-my-tasks", "--role-types", "executor", "--priority", "40", "--page", "2", "--size", "7"},
+	"todo +get-related-tasks":     {"todo", "+get-related-tasks", "--role-types", "creator,executor", "--status", "false"},
+	"todo +list-comment":          {"todo", "+list-comment", "--task-id", "task-1", "--page", "2"},
+	"todo +remind":                {"todo", "+remind", "--task", "Fixture Todo", "--at", "2026-03-10T18:00:00+08:00", "--yes"},
+	"todo +reminder":              {"todo", "+reminder", "--task-id", "task-1", "--base-time", "customTime", "--at", "2026-03-10T18:00:00+08:00", "--yes"},
+	"todo +reopen":                {"todo", "+reopen", "--task-id", "task-1", "--yes"},
+	"todo +search":                {"todo", "+search", "--query", "fixture", "--status", "false"},
+	"todo +todo-done":             {"todo", "+todo-done", "--task", "Fixture Todo", "--yes"},
+	"todo +update":                {"todo", "+update", "--task-id", "task-1", "--title", "Fixture Updated Todo", "--yes"},
+	"todo comment add":            {"todo", "comment", "add", "--task-id", "task-1", "--content", "fixture comment", "--yes"},
+	"todo comment list":           {"todo", "comment", "list", "--task-id", "task-1", "--page", "2", "--size", "7"},
+	"todo task add-executor":      {"todo", "task", "add-executor", "--task-id", "task-1", "--executors", "user-1,user-2", "--yes"},
+	"todo task add-participant":   {"todo", "task", "add-participant", "--task-id", "task-1", "--participants", "user-1,user-2", "--yes"},
+	"todo task add-reminder":      {"todo", "task", "add-reminder", "--task-id", "task-1", "--base-time", "customTime", "--reminder-time-stamp", "2026-03-10T18:00:00+08:00", "--yes"},
+	"todo task create":            {"todo", "task", "create", "--title", "Fixture Todo", "--executors", "user-1,user-2", "--due", "2026-03-10T18:00:00+08:00", "--yes"},
+	"todo task create-sub":        {"todo", "task", "create-sub", "--parent-id", "task-parent", "--title", "Fixture Sub Todo", "--executors", "user-1", "--yes"},
+	"todo task done":              {"todo", "task", "done", "--task-id", "task-1", "--status", "true", "--yes"},
+	"todo task get":               {"todo", "task", "get", "--task-id", "task-1"},
+	"todo task list":              {"todo", "task", "list", "--role-types", "executor", "--page", "2", "--size", "7"},
+	"todo task update":            {"todo", "task", "update", "--task-id", "task-1", "--done", "true", "--yes"},
+	"wiki +member-add":            {"wiki", "+member-add", "--workspace", "workspace-1", "--user", "user-1", "--role", "READER", "--yes"},
+	"wiki +member-remove":         {"wiki", "+member-remove", "--workspace", "workspace-1", "--user", "user-1", "--yes"},
+	"wiki +member-update":         {"wiki", "+member-update", "--workspace", "workspace-1", "--user", "user-1", "--role", "EDITOR", "--yes"},
+	"wiki +move":                  {"wiki", "+move", "--workspace", "workspace-1", "--node", "node-1", "--folder", "folder-1", "--yes"},
+	"wiki +move-to-drive":         {"wiki", "+move-to-drive", "--node", "node-1", "--folder", "folder-1", "--yes"},
+	"wiki +node-copy":             {"wiki", "+node-copy", "--workspace", "workspace-1", "--node", "node-1", "--folder", "folder-1", "--yes"},
+	"wiki +node-delete":           {"wiki", "+node-delete", "--workspace", "workspace-1", "--node", "node-1", "--yes"},
+}
+
 // A command can expose more than one mutually exclusive canonical route. In
 // that case the shared command template above cannot contain every canonical
 // flag at once, so select a fixture-specific complete invocation here.
@@ -531,6 +592,20 @@ var paramAliasNewConfirmationCases = []struct {
 	{command: "drive +version-revert", emitted: "version-number", canonical: "version"},
 }
 
+// Candidate confirmation cases become active with the joint draft. One write
+// workflow per product plus TODO's reminder workflow proves semantic aliasing
+// cannot move execution across the shared --yes barrier.
+var paramAliasCandidateConfirmationCases = []struct {
+	command   string
+	emitted   string
+	canonical string
+}{
+	{command: "minutes +record-pause", emitted: "uuid", canonical: "id"},
+	{command: "todo +create", emitted: "deadline", canonical: "due"},
+	{command: "todo +reminder", emitted: "reminder-time-stamp", canonical: "at"},
+	{command: "wiki +node-copy", emitted: "node-id", canonical: "node"},
+}
+
 // paramAliasRepresentativePayloadCases keeps final transport coverage across
 // old concept aliases, command overrides, native compatibility flags, read and
 // write commands, and different products. Every reviewed alias is still
@@ -598,6 +673,30 @@ var paramAliasRepresentativePayloadCases = map[string]bool{
 	paramAliasPayloadCaseKey("drive info", "workspace"):                              true, // published numeric storage-space compatibility remains payload-equivalent
 	paramAliasPayloadCaseKey("mail folder update", "folder-id"):                      true, // write-command identifier alias
 	paramAliasPayloadCaseKey("report list", "from-date"):                             true, // date-range concept alias
+}
+
+// Candidate representatives exercise the final transport boundary for each
+// Minutes/TODO/Wiki alias family. They are required only when the exact fixture
+// exists in the loaded reviewed table, so the tests are mergeable before the
+// joint draft is promoted to internal/cli/param_concepts.json.
+var paramAliasCandidateRepresentativePayloadCases = map[string]bool{
+	paramAliasPayloadCaseKey("minutes +latest", "query"):               true,
+	paramAliasPayloadCaseKey("minutes +transcript", "query"):           true,
+	paramAliasPayloadCaseKey("minutes get batch", "uuids"):             true,
+	paramAliasPayloadCaseKey("minutes update title", "task-uuid"):      true,
+	paramAliasPayloadCaseKey("minutes upload complete", "upload-id"):   true,
+	paramAliasPayloadCaseKey("todo +create", "deadline"):               true,
+	paramAliasPayloadCaseKey("todo +get-my-tasks", "current-page"):     true,
+	paramAliasPayloadCaseKey("todo +reminder", "reminder-time-stamp"):  true,
+	paramAliasPayloadCaseKey("todo comment add", "text"):               true,
+	paramAliasPayloadCaseKey("todo task add-executor", "executor-ids"): true,
+	paramAliasPayloadCaseKey("todo task get", "todo-id"):               true,
+	paramAliasPayloadCaseKey("todo task update", "status"):             true,
+	paramAliasPayloadCaseKey("wiki +member-add", "user-id"):            true,
+	paramAliasPayloadCaseKey("wiki +member-remove", "uid"):             true,
+	paramAliasPayloadCaseKey("wiki +member-update", "user-id"):         true,
+	paramAliasPayloadCaseKey("wiki +move-to-drive", "node-id"):         true,
+	paramAliasPayloadCaseKey("wiki +node-copy", "node-id"):             true,
 }
 
 // paramAliasCalendarPayloadCases keeps the full reviewed Calendar expansion
@@ -709,6 +808,7 @@ func TestCrossPlatformCoverageReviewedParamAliasesHaveCompleteTemplatesAndRepres
 	}
 
 	activeCommands := make(map[string]bool)
+	activeFixtureCases := make(map[string]bool)
 	activeCases := 0
 	executedRepresentatives := make(map[string]bool)
 	for _, fixture := range concepts.Fixture {
@@ -717,6 +817,8 @@ func TestCrossPlatformCoverageReviewedParamAliasesHaveCompleteTemplatesAndRepres
 		}
 		activeCommands[fixture.Command] = true
 		activeCases++
+		caseKey := paramAliasPayloadCaseKey(fixture.Command, fixture.Emitted)
+		activeFixtureCases[caseKey] = true
 		complete, ok := paramAliasCompleteCommand(fixture.Command, fixture.Expect)
 		if !ok {
 			t.Errorf("reviewed active fixture %q/%q has no complete-command E2E template", fixture.Command, fixture.Emitted)
@@ -729,8 +831,7 @@ func TestCrossPlatformCoverageReviewedParamAliasesHaveCompleteTemplatesAndRepres
 			continue
 		}
 
-		caseKey := paramAliasPayloadCaseKey(fixture.Command, fixture.Emitted)
-		if !paramAliasRepresentativePayloadCases[caseKey] {
+		if !paramAliasRepresentativePayloadCases[caseKey] && !paramAliasCandidateRepresentativePayloadCases[caseKey] {
 			continue
 		}
 		executedRepresentatives[caseKey] = true
@@ -742,26 +843,43 @@ func TestCrossPlatformCoverageReviewedParamAliasesHaveCompleteTemplatesAndRepres
 	if activeCases == 0 {
 		t.Fatal("reviewed fixture contains no active alias cases")
 	}
+	templateCommands := make(map[string]bool, len(paramAliasCompleteCommands)+len(paramAliasCandidateCompleteCommands))
 	for command := range paramAliasCompleteCommands {
 		if !activeCommands[command] {
 			t.Errorf("complete-command E2E template %q has no active reviewed fixture", command)
 		}
+		templateCommands[command] = true
+	}
+	for command := range paramAliasCandidateCompleteCommands {
+		if activeCommands[command] {
+			templateCommands[command] = true
+		}
 	}
 	for command := range activeCommands {
-		if _, ok := paramAliasCompleteCommands[command]; !ok {
+		if !templateCommands[command] {
 			t.Errorf("active reviewed command %q has no complete-command E2E template", command)
 		}
 	}
-	if len(activeCommands) != len(paramAliasCompleteCommands) {
-		t.Fatalf("complete-command coverage = %d templates for %d active commands (%d active cases)", len(paramAliasCompleteCommands), len(activeCommands), activeCases)
+	if len(activeCommands) != len(templateCommands) {
+		t.Fatalf("complete-command coverage = %d templates for %d active commands (%d active cases)", len(templateCommands), len(activeCommands), activeCases)
 	}
 	for caseKey := range paramAliasRepresentativePayloadCases {
 		if !executedRepresentatives[caseKey] {
 			t.Errorf("representative final-payload case %q has no active reviewed fixture", caseKey)
 		}
 	}
-	if len(executedRepresentatives) != len(paramAliasRepresentativePayloadCases) {
-		t.Fatalf("representative final-payload coverage = %d, want %d", len(executedRepresentatives), len(paramAliasRepresentativePayloadCases))
+	activeRepresentatives := len(paramAliasRepresentativePayloadCases)
+	for caseKey := range paramAliasCandidateRepresentativePayloadCases {
+		if !activeFixtureCases[caseKey] {
+			continue
+		}
+		activeRepresentatives++
+		if !executedRepresentatives[caseKey] {
+			t.Errorf("candidate representative final-payload case %q was not executed", caseKey)
+		}
+	}
+	if len(executedRepresentatives) != activeRepresentatives {
+		t.Fatalf("representative final-payload coverage = %d, want %d", len(executedRepresentatives), activeRepresentatives)
 	}
 }
 
@@ -1091,7 +1209,20 @@ func TestCrossPlatformCoverageNewAITableDeleteDisableAliasesPreserveConfirmation
 }
 
 func TestCrossPlatformCoverageNewParamAliasesCannotBypassConfirmation(t *testing.T) {
-	for _, test := range paramAliasNewConfirmationCases {
+	tests := append([]struct {
+		command   string
+		emitted   string
+		canonical string
+	}{}, paramAliasNewConfirmationCases...)
+	for _, candidate := range paramAliasCandidateConfirmationCases {
+		entry, exists := cli.LookupParamAlias(candidate.command)
+		target, active := entry.ResolveAlias(candidate.emitted)
+		if exists && active && target == candidate.canonical {
+			tests = append(tests, candidate)
+		}
+	}
+
+	for _, test := range tests {
 		test := test
 		t.Run(test.command+"/"+test.emitted, func(t *testing.T) {
 			complete, ok := paramAliasCompleteCommand(test.command, test.canonical)
@@ -1173,6 +1304,10 @@ func paramAliasCompleteCommand(command, canonical string) ([]string, bool) {
 			return variant, true
 		}
 	}
+	if ok {
+		return complete, true
+	}
+	complete, ok = paramAliasCandidateCompleteCommands[command]
 	return complete, ok
 }
 
