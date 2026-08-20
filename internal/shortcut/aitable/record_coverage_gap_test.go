@@ -4,11 +4,14 @@
 package aitable
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"testing"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 func TestCrossPlatformCoverageRecordObjectAndIDValidation(t *testing.T) {
@@ -87,6 +90,137 @@ func TestCrossPlatformCoverageRecordDeleteDryRunAndDualFailureE2E(t *testing.T) 
 	out, err = runRecordDeleteCLI(t, &upsertByKeyCaller{}, recordIDFixtures(maxCompositeRecordRun+1))
 	if err == nil || out != "" {
 		t.Fatalf("delete excessive IDs = output:%q err:%v", out, err)
+	}
+}
+
+func TestCrossPlatformCoverageRecordPrimaryDocPreflightAndNormalizationE2E(t *testing.T) {
+	t.Run("record not found is classified", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
+			{text: `{"records":[]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "missing")
+		var typed *apperrors.Error
+		if err == nil || out != "" || !errors.As(err, &typed) || typed.Reason != "RESOURCE_NOT_FOUND" {
+			t.Fatalf("missing primary-doc record = output:%q err:%#v", out, err)
+		}
+	})
+
+	t.Run("table without primary doc field is normalized", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"text","type":"text"}]}`},
+			{text: `{"records":[{"recordId":"r1","cells":{"text":"x"}}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+		if err != nil || !strings.Contains(out, `"status": "no_primary_doc_field"`) || !strings.Contains(out, `"exists": false`) || len(caller.calls) != 2 {
+			t.Fatalf("no primary field = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("empty primary doc cell is unassociated", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
+			{text: `{"records":[{"recordId":"r1","cells":{}}]}`},
+			{text: `{"data":{"nodeId":null}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+		if err != nil || !strings.Contains(out, `"status": "unassociated"`) || !strings.Contains(out, `"exists": false`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_primary_doc" {
+			t.Fatalf("unassociated primary doc = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("known helper no-record error is unassociated", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
+			{text: `{"records":[{"recordId":"r1","cells":{}}]}`},
+			{err: errors.New("no record")},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+		if err != nil || !strings.Contains(out, `"status": "unassociated"`) || !strings.Contains(out, `"exists": false`) || len(caller.calls) != 3 {
+			t.Fatalf("no-record primary doc = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("associated doc is resolved through helper", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"fields":[{"fieldId":"primary","type":"primaryDoc"}]}`},
+			{text: `{"records":[{"recordId":"r1","cells":{"primary":{"associated":true}}}]}`},
+			{text: `{"data":{"nodeId":"node-1"}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+		if err != nil || !strings.Contains(out, `"nodeId": "node-1"`) || !strings.Contains(out, `"exists": true`) || len(caller.calls) != 3 || caller.calls[2].tool != "get_primary_doc" {
+			t.Fatalf("associated primary doc = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+}
+
+func TestCrossPlatformCoverageRecordPrimaryDocFailureAndShapeEdgesE2E(t *testing.T) {
+	cases := []struct {
+		name  string
+		steps []upsertByKeyStep
+	}{
+		{name: "fields transport", steps: []upsertByKeyStep{{err: context.Canceled}}},
+		{name: "missing fields collection", steps: []upsertByKeyStep{{text: `{}`}}},
+		{name: "primary field missing id", steps: []upsertByKeyStep{{text: `{"fields":[{"type":"primaryDoc"}]}`}}},
+		{name: "record query error", steps: []upsertByKeyStep{{text: `{"fields":[]}`}, {err: context.DeadlineExceeded}}},
+		{name: "wrong record identity", steps: []upsertByKeyStep{{text: `{"fields":[]}`}, {text: `{"records":[{"recordId":"other"}]}`}}},
+		{name: "helper unknown error", steps: []upsertByKeyStep{{text: `{"fields":[{"fieldId":"p","type":"primaryDoc"}]}`}, {text: `{"records":[{"recordId":"r1"}]}`}, {err: errors.New("permission denied")}}},
+		{name: "helper missing node", steps: []upsertByKeyStep{{text: `{"fields":[{"fieldId":"p","type":"primaryDoc"}]}`}, {text: `{"records":[{"recordId":"r1"}]}`}, {text: `{"data":{"message":"ok"}}`}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := runAITableCompositeCLI(t, &upsertByKeyCaller{steps: tc.steps}, "+record-primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "r1")
+			if err == nil || out != "" {
+				t.Fatalf("primary doc failure = output:%q err:%v", out, err)
+			}
+		})
+	}
+
+	for _, value := range []any{
+		map[string]any{"exists": false},
+		map[string]any{"dentryUuid": ""},
+		map[string]any{"status": "NO_RECORD"},
+		map[string]any{"data": map[string]any{"result": map[string]any{"status": "unassociated"}}},
+	} {
+		if !knownPrimaryDocUnassociatedData(value) {
+			t.Errorf("known unassociated shape not recognized: %#v", value)
+		}
+	}
+	if knownPrimaryDocUnassociatedData([]any{"unrelated"}) || knownPrimaryDocUnassociatedData(nil) {
+		t.Fatal("unrelated shapes must not be unassociated")
+	}
+	for _, value := range []any{
+		map[string]any{"metadata": map[string]any{"exists": false}},
+		map[string]any{"items": []any{map[string]any{"nodeId": nil}}},
+	} {
+		if knownPrimaryDocUnassociatedData(value) {
+			t.Errorf("unrelated nested marker must not be unassociated: %#v", value)
+		}
+	}
+	if got := primaryDocNodeID(map[string]any{"metadata": map[string]any{"nodeId": "wrong"}}); got != "" {
+		t.Fatalf("unrelated nested nodeId = %q, want empty", got)
+	}
+	if got := primaryDocNodeID(map[string]any{"data": map[string]any{"response": map[string]any{"dentryUuid": " node-1 "}}}); got != "node-1" {
+		t.Fatalf("known envelope nodeId = %q, want node-1", got)
+	}
+}
+
+func TestCrossPlatformCoverageRecordDeleteRejectsMalformedPreflightRecordsE2E(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		records string
+	}{
+		{name: "missing id", records: `[{"cells":{}}]`},
+		{name: "unexpected id", records: `[{"recordId":"other"}]`},
+		{name: "duplicate id", records: `[{"recordId":"r1"},{"recordId":"r1"}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"records":` + tc.records + `}`}}}
+			out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
+			if err == nil || out != "" || len(caller.calls) != 1 {
+				t.Fatalf("delete malformed preflight = output:%q err:%v calls:%#v", out, err, caller.calls)
+			}
+		})
 	}
 }
 

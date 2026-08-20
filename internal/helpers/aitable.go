@@ -7,6 +7,8 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -124,6 +126,83 @@ func resolveWorkflowDSL(cmd *cobra.Command) (map[string]any, error) {
 		return nil, fmt.Errorf("--dsl must be a JSON object, got null")
 	}
 	return dsl, nil
+}
+
+// executeAitableWorkflowPublish executes a publish exactly once, then requires
+// the reviewed valid/flowId envelope before rendering any success output.
+// create_workflow is non-idempotent, so transport uncertainty is never retried.
+func executeAitableWorkflowPublish(toolName string, args map[string]any) error {
+	if deps.Caller.DryRun() {
+		return callMCPToolOnServer("aitable", toolName, args)
+	}
+	raw, err := callMCPToolReturnTextOnServer(context.Background(), "aitable", toolName, args)
+	if err != nil {
+		return err
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil || envelope == nil {
+		return fmt.Errorf("%s response is not a JSON object", toolName)
+	}
+	valid, validFound, flowID, err := strictAitableWorkflowPublishResult(envelope)
+	if err != nil {
+		return fmt.Errorf("%s response validation failed: %w", toolName, err)
+	}
+	if !validFound {
+		return fmt.Errorf("%s response is missing valid", toolName)
+	}
+	if !valid {
+		return fmt.Errorf("%s returned valid=false; inspect issues and correct the workflow DSL", toolName)
+	}
+	if flowID == "" {
+		return fmt.Errorf("%s response is missing a non-empty flowId", toolName)
+	}
+	return RenderLegacyMCPText(toolName, raw)
+}
+
+func strictAitableWorkflowPublishResult(envelope map[string]any) (valid bool, validFound bool, flowID string, err error) {
+	var visit func(map[string]any) error
+	visit = func(object map[string]any) error {
+		if raw, exists := object["valid"]; exists {
+			value, ok := raw.(bool)
+			if !ok {
+				return fmt.Errorf("valid must be boolean, got %T", raw)
+			}
+			if validFound && valid != value {
+				return fmt.Errorf("conflicting valid values")
+			}
+			valid, validFound = value, true
+		}
+		for _, key := range []string{"flowId", "workflowId"} {
+			raw, exists := object[key]
+			if !exists {
+				continue
+			}
+			value, ok := raw.(string)
+			value = strings.TrimSpace(value)
+			if !ok || value == "" {
+				return fmt.Errorf("%s must be a non-empty string", key)
+			}
+			if flowID != "" && flowID != value {
+				return fmt.Errorf("conflicting workflow IDs")
+			}
+			flowID = value
+		}
+		for _, key := range []string{"data", "result", "response"} {
+			if nested, ok := object[key].(map[string]any); ok {
+				if err := visit(nested); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if envelope == nil {
+		return false, false, "", fmt.Errorf("empty response")
+	}
+	if err := visit(envelope); err != nil {
+		return false, false, "", err
+	}
+	return valid, validFound, flowID, nil
 }
 
 func validateWorkflowRunFlags(cmd *cobra.Command, _ []string) error {
@@ -1182,6 +1261,290 @@ func runAitableViewUpdateArray(cmd *cobra.Command, blockKey string) error {
 		return err
 	}
 	return callUpdateViewWithBlock(baseID, tableID, viewID, blockKey, cfgMap[blockKey], nil)
+}
+
+func runAitableViewUpdateFilter(cmd *cobra.Command) error {
+	baseID, tableID, viewID, _, err := viewUpdateCommonPreflight(cmd, "filter", nil, false)
+	if err != nil {
+		return err
+	}
+	jsonStr, _ := cmd.Flags().GetString("json")
+	if jsonStr == "" {
+		return fmt.Errorf("必须指定 --json 传入 filter JSON 数组")
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
+		return fmt.Errorf("--json 解析失败: %v", err)
+	}
+	cfgMap := map[string]any{"filter": parsed}
+	if err := normalizeViewConfigBlock(cfgMap); err != nil {
+		return err
+	}
+	filter, _ := cfgMap["filter"].([]any)
+	fieldTypes, err := loadAitableFieldTypes(context.Background(), baseID, tableID)
+	if err != nil {
+		return err
+	}
+	if err := validateAitableViewFilter(filter, fieldTypes); err != nil {
+		return err
+	}
+	toolArgs := map[string]any{
+		"baseId": baseID, "tableId": tableID, "viewId": viewID,
+		"config": map[string]any{"filter": filter},
+	}
+	if deps.Caller.DryRun() {
+		return deps.Out.PrintJSON(map[string]any{
+			"dry_run": true, "executed": false, "tool": "update_view", "arguments": toolArgs,
+		})
+	}
+	if _, err := callMCPToolReturnTextOnServer(context.Background(), "aitable", "update_view", toolArgs); err != nil {
+		return err
+	}
+	var actual any
+	var readBackErr error
+	for attempt := 0; attempt < aitableViewFilterReadbackAttempts; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(1<<(attempt-1)) * time.Second
+			if backoff > 8*time.Second {
+				backoff = 8 * time.Second
+			}
+			aitableViewFilterReadbackSleep(backoff)
+		}
+		view, _, err := getViewRaw(context.Background(), baseID, tableID, viewID)
+		if err != nil {
+			readBackErr = err
+			continue
+		}
+		actualViewID, _ := view["viewId"].(string)
+		if actualViewID != viewID {
+			readBackErr = fmt.Errorf("update_view read-back returned viewId %q, want %q", actualViewID, viewID)
+			continue
+		}
+		actual = walkViewPath(view, "filter")
+		if persistedViewFilterMatches(actual, filter) {
+			readBackErr = nil
+			break
+		}
+		readBackErr = fmt.Errorf("update_view filter read-back mismatch: got %s, want %s", compactJSON(actual), compactJSON(filter))
+	}
+	if readBackErr != nil {
+		return &CLIError{Code: CodeMCPToolError, Message: readBackErr.Error(), Suggestion: "重新读取 view get filter，确认服务端支持所用字段类型和操作符后再试"}
+	}
+	return deps.Out.PrintJSON(map[string]any{
+		"success": true,
+		"data":    map[string]any{"baseId": baseID, "tableId": tableID, "viewId": viewID, "filter": filter, "verified": true},
+	})
+}
+
+const aitableViewFilterReadbackAttempts = 6
+
+var aitableViewFilterReadbackSleep = time.Sleep
+
+func persistedViewFilterMatches(actual any, expected []any) bool {
+	if reflect.DeepEqual(actual, expected) {
+		return true
+	}
+	root, ok := actual.(map[string]any)
+	if !ok || root["operator"] != "and" {
+		return false
+	}
+	operands, ok := root["operands"].([]any)
+	return ok && reflect.DeepEqual(operands, expected)
+}
+
+func loadAitableFieldTypes(ctx context.Context, baseID, tableID string) (map[string]string, error) {
+	raw, err := callMCPReadToolReturnTextOnServer(ctx, "aitable", "get_fields", map[string]any{"baseId": baseID, "tableId": tableID})
+	if err != nil {
+		return nil, err
+	}
+	var payload any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil, fmt.Errorf("get_fields response is not valid JSON: %v", err)
+	}
+	fields, ok := findAitableObjectList(payload, "fields", "fieldList")
+	if !ok {
+		return nil, fmt.Errorf("get_fields response is missing the fields collection")
+	}
+	types := make(map[string]string, len(fields))
+	for index, field := range fields {
+		fieldID, _ := field["fieldId"].(string)
+		if strings.TrimSpace(fieldID) == "" {
+			fieldID, _ = field["id"].(string)
+		}
+		fieldType, _ := field["type"].(string)
+		if strings.TrimSpace(fieldType) == "" {
+			fieldType, _ = field["fieldType"].(string)
+		}
+		if strings.TrimSpace(fieldID) == "" || strings.TrimSpace(fieldType) == "" {
+			return nil, fmt.Errorf("get_fields field %d is missing fieldId or type", index)
+		}
+		types[strings.TrimSpace(fieldID)] = strings.TrimSpace(fieldType)
+	}
+	return types, nil
+}
+
+func findAitableObjectList(value any, names ...string) ([]map[string]any, bool) {
+	wanted := make([]string, 0, len(names))
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		name = strings.ToLower(name)
+		if !seen[name] {
+			wanted = append(wanted, name)
+			seen[name] = true
+		}
+	}
+	var walk func(any) ([]map[string]any, bool)
+	walk = func(current any) ([]map[string]any, bool) {
+		switch typed := current.(type) {
+		case map[string]any:
+			keys := make([]string, 0, len(typed))
+			for key := range typed {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, name := range wanted {
+				for _, key := range keys {
+					if !strings.EqualFold(key, name) {
+						continue
+					}
+					items, ok := typed[key].([]any)
+					if !ok {
+						return nil, false
+					}
+					out := make([]map[string]any, 0, len(items))
+					for _, item := range items {
+						object, ok := item.(map[string]any)
+						if !ok {
+							return nil, false
+						}
+						out = append(out, object)
+					}
+					return out, true
+				}
+			}
+			for _, key := range keys {
+				if found, ok := walk(typed[key]); ok {
+					return found, true
+				}
+			}
+		case []any:
+			for _, child := range typed {
+				if found, ok := walk(child); ok {
+					return found, true
+				}
+			}
+		}
+		return nil, false
+	}
+	return walk(value)
+}
+
+func validateAitableViewFilter(filter []any, fieldTypes map[string]string) error {
+	for index, raw := range filter {
+		condition, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("filter[%d] must be an object", index)
+		}
+		if err := validateAitableViewFilterCondition(condition, fieldTypes); err != nil {
+			return fmt.Errorf("filter[%d]: %w", index, err)
+		}
+	}
+	return nil
+}
+
+func validateAitableViewFilterCondition(condition map[string]any, fieldTypes map[string]string) error {
+	operator, _ := condition["operator"].(string)
+	operator = strings.TrimSpace(operator)
+	if operator == "" || !validFilterOperators[operator] {
+		return fmt.Errorf("unsupported operator %q", operator)
+	}
+	operands, ok := condition["operands"].([]any)
+	if !ok {
+		return fmt.Errorf("operator %s requires an operands array", operator)
+	}
+	if operator == "and" || operator == "or" {
+		return fmt.Errorf("logical operator %s is not supported by the persisted view protocol; pass a flat array of leaf conditions (combined as AND)", operator)
+	}
+	wantOperands := 2
+	if operator == "exist" || operator == "un_exist" {
+		wantOperands = 1
+	}
+	if len(operands) != wantOperands {
+		return fmt.Errorf("operator %s requires %d operands", operator, wantOperands)
+	}
+	fieldID, ok := operands[0].(string)
+	fieldID = strings.TrimSpace(fieldID)
+	if !ok || fieldID == "" {
+		return fmt.Errorf("operator %s requires a fieldId as its first operand", operator)
+	}
+	fieldType, exists := fieldTypes[fieldID]
+	if !exists {
+		return fmt.Errorf("filter references unknown fieldId %q", fieldID)
+	}
+	if isAitableDateFieldType(fieldType) && !isAitableDateFilterOperator(operator) {
+		return fmt.Errorf("operator %s is invalid for %s field %s; use date_eq/before/after/not_before/not_after/exist/un_exist", operator, fieldType, fieldID)
+	}
+	if operator == "any_of" || operator == "all_of" || operator == "none_of" {
+		if !strings.EqualFold(fieldType, "multipleSelect") && !strings.EqualFold(fieldType, "multiSelect") {
+			return fmt.Errorf("operator %s requires a multipleSelect field, got %s", operator, fieldType)
+		}
+		if operator == "any_of" {
+			if values, ok := operands[1].([]any); ok {
+				if err := validateAitableMultiSelectOptionNames(values); err != nil {
+					return err
+				}
+				return fmt.Errorf("multipleSelect any_of with multiple values is not supported by the persisted view protocol; use one scalar option or separate views")
+			}
+		}
+		if err := validateAitableMultiSelectFilterValue(operands[1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAitableMultiSelectOptionNames(values []any) error {
+	if len(values) == 0 {
+		return fmt.Errorf("multipleSelect any_of array must not be empty")
+	}
+	for index, value := range values {
+		text, ok := value.(string)
+		text = strings.TrimSpace(text)
+		if !ok || text == "" {
+			return fmt.Errorf("multipleSelect any_of value %d must be a non-empty option-name string", index)
+		}
+	}
+	return nil
+}
+
+func isAitableDateFieldType(fieldType string) bool {
+	return strings.EqualFold(fieldType, "date") ||
+		strings.EqualFold(fieldType, "createdTime") ||
+		strings.EqualFold(fieldType, "lastModifiedTime")
+}
+
+func isAitableDateFilterOperator(operator string) bool {
+	switch operator {
+	case "date_eq", "before", "after", "not_before", "not_after", "exist", "un_exist":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateAitableMultiSelectFilterValue(value any) error {
+	if typed, ok := value.(string); ok && strings.TrimSpace(typed) != "" {
+		return nil
+	}
+	return fmt.Errorf("multipleSelect filter value must be one option-name string; the persisted view protocol does not support a multi-value OR expression")
+}
+
+func compactJSON(value any) string {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%#v", value)
+	}
+	return string(raw)
 }
 
 func newAitableCommand() *cobra.Command {
@@ -4076,7 +4439,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 若传对象会自动 wrap 为数组；其他非法格式拒绝。`,
 		Example: `  dws aitable view update filter --view-id VIEW_ID --json '[{"operator":"and","operands":[{"operator":"eq","operands":["fldX","value"]}]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAitableViewUpdateArray(cmd, "filter")
+			return runAitableViewUpdateFilter(cmd)
 		},
 	}
 	DeclareLeafMetadata(viewUpdateFilterCmd, LeafSpec{
@@ -5282,7 +5645,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			}
 			// create_workflow is non-idempotent. Bypass the retry wrapper to
 			// prevent an uncertain first response from creating a duplicate.
-			return callMCPToolOnServer("aitable", "create_workflow", toolArgs)
+			return executeAitableWorkflowPublish("create_workflow", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(workflowCreateCmd, LeafSpec{
@@ -5376,7 +5739,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 			if locale, _ := cmd.Flags().GetString("locale"); strings.TrimSpace(locale) != "" {
 				toolArgs["locale"] = locale
 			}
-			return callAitableTool("update_workflow", toolArgs)
+			return executeAitableWorkflowPublish("update_workflow", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(workflowUpdateCmd, LeafSpec{

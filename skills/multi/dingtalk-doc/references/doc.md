@@ -26,9 +26,13 @@
 dws doc +template-search --query "周报" --source PUBLIC --format json
 ```
 
+来源按用户原话守门：“我的模板/我这边”只查 `MY`，明确“公开/钉钉模板库”才查 `PUBLIC`；不得为了凑结果跨来源扩展。未指定来源时保持默认 `MY`。
+
 - `selection.status=resolved`：取唯一候选的 `templateId`。
-- `selection.status=not_found`：报告零命中后停止。
+- `selection.status=not_found`：报告零命中后停止；不得改用语义不相干的热门模板，更不得擅自创建文档。
 - `selection.status=selection_required`：展示候选并要求用户选择，禁止默认第一项。
+
+若返回 `hasMore=true`，沿原 query/source 使用 cursor 继续搜索；只有服务端返回完整结果后才能判断零命中或完整候选集。
 
 选定后只创建一次：
 
