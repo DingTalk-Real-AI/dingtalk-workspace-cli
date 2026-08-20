@@ -17,7 +17,7 @@ metadata:
 - 已知意图直接走下方 Golden Route。只有 leaf 参数或安全语义不确定时读取单个 compact Schema，只有 Cobra flag 不确定时读取精确 leaf Help。
 - 所有目标解析、读取、写入和验证使用同一 profile。`eventId`、`roomId`、`calendarId`、`userId` 只取真实返回；零命中或多候选时停止消歧。
 - 写操作按 Runtime confirmation gate 执行：先解析并展示目标；需要确认时获得确认后才加 `--yes`。退出码为 0 不等于业务完成，必须检查结构化 outcome 和读回证据。
-- 默认只加载一个操作 Reference：通用原子命令读 [calendar.md](references/calendar.md)；涉及会议室预订读 [03-meeting.md](references/03-meeting.md)。
+- 默认只加载一个操作 Reference：通用原子命令读 [calendar.md](references/calendar.md)；涉及会议室预订读 [03-meeting.md](references/03-meeting.md)；遇到写后读回不一致、长分页或多步清理时改读更短的 [执行收束](references/execution-bounds.md)，不要同时加载完整命令参考。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
@@ -67,6 +67,18 @@ metadata:
 
 当用户需要 shortcut 未公开的字段、共享日历、循环规则、附件、ACL 或会议室绑定时，才降级到 [calendar.md](references/calendar.md) 的单个原子 leaf。
 
+## 最短完成路径
+
+- 按用户验收项维护最小资源台账；后续更新、恢复、读回和清理只用同一创建回执的 `eventId/roomId/aclId`，禁止从宽泛列表换用相似旧资源。
+- 已知路由直接执行；仅在 `unknown flag/command` 后查一次精确 leaf Help并最多修正一次。`+book` 只覆盖标题、时间和姓名；需地点、忙闲、循环、提醒或创建时订房时直接用 `event create`。
+- 原请求已明确“办完后删除/取消/恢复/撤销”即已授权收尾，到达该步通过 Runtime gate 加 `--yes`，不重复询问；任务中途失败或预算将尽也先清理本轮临时资源。
+- 只保留下一步所需的 ID、游标、时间、状态和验收字段，不把完整列表或原始 JSON 反复送回上下文。
+
+## 有限搜索与 Token 预算
+
+- 标题定位先用合理时间窗和精确关键词；普通定位限 1 个时间窗、2 个关键词、2 页，未唯一命中即收束。仅用户明确要求完整遍历时翻到 `hasMore=false`，优先最大 `--limit`；指定小页长则本地循环聚合匹配/计数/去重与最终分页证据。
+- 不试探不存在的 flags，不用同义词扫描数十页，不逐间重复 busy 查询。前置资源不存在、系统日历不可修改或绑定被拒时直接报告边界；详细预算与 commit-unknown 协调见 [执行收束](references/execution-bounds.md)。
+
 ## 资源与安全约束
 
 - 时间必须是带时区的 ISO-8601，且 `end > start`。预约意图缺少起止时间时先追问；不要自设全天窗口。`+today/+tomorrow/+week` 和自身声明默认窗口的只读 shortcut 除外。
@@ -77,14 +89,18 @@ metadata:
 - 用户指定时间或会议室时不得擅自换时间、换房或扩大地点范围。允许范围无空房时停止并说明，若要继续必须让用户明确放宽条件。
 - 分页必须跟随 `nextCursor` 或 page 语义，检测 cursor 丢失、停滞和循环；不得把第一页当全量。
 - 非事务多步写入发生 partial、pending 或 commit-unknown 时如实报告已完成与未完成步骤，先读回协调，禁止盲目重试非幂等创建。
+- 创建回执失败但包含 `eventId`，或报 `readback_attendee_missing` / 读回字段缺失时，视为“可能已提交”：先对该 `eventId` 做详情与参会人协调；只有回执没有 ID 时才用精确标题+起止时间唯一定位。不得再次创建，也不得借用当天列表中的其他 eventId。
+- 推荐时间必须核对返回候选的实际时长等于用户要求的分钟数；无足够时长就明确无可用候选，禁止把 30 分钟候选表述成 60 分钟。
 
 ## 写后验证
 
 - 创建：以结构化结果中的 `eventId` 为身份，读回核对标题、起止时间和预期参会人。
+- 创建命令报告读回失败但同一 `eventId` 的详情已存在时，分别记录“事件已创建”和“哪些字段尚未验证”；补做缺失字段的精确读回，不把整个创建当作可安全重放。
 - 邀请 / 移除参会人：读取参会人列表核对目标；底层不提供稳定 userId 时不得伪造身份字段。
 - 改期 / 更新：读回同一 `eventId`，核对实际变更字段并确认未意外覆盖其他字段。
 - 订房 / 换房：读回同一日程，并用对应时段的会议室闲忙或日程详情确认绑定；仅有空响应不能证明成功。
 - 取消：读回明确为不存在；权限错误、超时或缺少不存在证据时不得报告成功。
+- 清理优先级高于附加汇总：任务后段出现查询失败、订房失败或 Token/时间预算将尽时，先清理本轮台账中的所有临时资源，再报告未完成项。每个删除必须使用其对应创建回执的 ID。
 
 ## 产品边界
 
