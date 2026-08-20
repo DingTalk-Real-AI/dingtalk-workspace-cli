@@ -121,6 +121,36 @@ func TestCrossPlatformCoverageSemanticCatalogRejectsInvalidRecords(t *testing.T)
 				}
 			}
 		}`,
+		"compatibility-visible public": `{
+			"version": 1,
+			"service": "chat",
+			"default_availability": "available",
+			"shortcuts": {
+				"+messages": {
+					"disposition": "semantic_adapter",
+					"semantic_delta": "reviewed",
+					"risk": "read",
+					"public": true,
+					"compatibility_visible": true,
+					"reviewed": true
+				}
+			}
+		}`,
+		"compatibility-visible available": `{
+			"version": 1,
+			"service": "chat",
+			"default_availability": "available",
+			"shortcuts": {
+				"+messages": {
+					"disposition": "semantic_adapter",
+					"semantic_delta": "reviewed",
+					"risk": "read",
+					"public": false,
+					"compatibility_visible": true,
+					"reviewed": true
+				}
+			}
+		}`,
 	}
 	original := semanticCatalogJSON
 	t.Cleanup(func() { semanticCatalogJSON = original })
@@ -169,6 +199,16 @@ func TestCrossPlatformCoveragePublicCatalogSemanticAndGeneratedLookups(t *testin
 	}
 	if InPublicCatalog("unknown", "+missing") {
 		t.Fatal("unknown shortcut is public")
+	}
+}
+
+func TestCrossPlatformCoverageCompatibilityVisibleStaysNonPublic(t *testing.T) {
+	item, ok := applyReviewedSemanticCatalog(Shortcut{Service: "attendance", Command: "+get-summary"})
+	if !ok || item.Hidden || !item.CompatibilityVisible || item.Availability != AvailabilityUnavailable {
+		t.Fatalf("compatibility-visible semantic item = %#v, found=%v", item, ok)
+	}
+	if InPublicCatalog(item.Service, item.Command) {
+		t.Fatal("compatibility-visible unavailable shortcut entered the public catalog")
 	}
 }
 

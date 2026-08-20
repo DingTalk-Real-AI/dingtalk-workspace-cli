@@ -8,6 +8,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -322,6 +323,95 @@ func newOAAttachmentCommand() *cobra.Command {
 	return attachmentCmd
 }
 
+// oaAdminQueryMaxPageSize is the pageSize upper bound of
+// get_process_instances_by_admin.
+const oaAdminQueryMaxPageSize = float64(20)
+
+// validateOARequestProcessCode checks the processCode field of a decoded
+// --request payload: the tool requires it, and the backend answers a bad
+// processCode with success:true and an empty list, so reject it client-side.
+func validateOARequestProcessCode(request map[string]any) error {
+	v, ok := request["processCode"]
+	if !ok {
+		return fmt.Errorf("--request 缺少必填字段 processCode")
+	}
+	s, ok := v.(string)
+	if !ok || s == "" {
+		return fmt.Errorf("--request processCode 必须为非空字符串")
+	}
+	return nil
+}
+
+// validateOARequestPageSize checks the pageSize field of a decoded
+// --request payload (json.Number values from decodeOARequest).
+func validateOARequestPageSize(request map[string]any) error {
+	v, ok := request["pageSize"]
+	if !ok {
+		return nil
+	}
+	n, ok := v.(json.Number)
+	if !ok {
+		return fmt.Errorf("pageSize 必须为数字")
+	}
+	f, err := n.Float64()
+	if err != nil || f < 1 || f > oaAdminQueryMaxPageSize {
+		return fmt.Errorf("pageSize 必须在 1-%d 之间，got: %s", int(oaAdminQueryMaxPageSize), n.String())
+	}
+	return nil
+}
+
+// oaAdminTimeLayout is the startTime/endTime wire format of
+// get_process_instances_by_admin since the 2026-08 MCP contract update
+// (both fields changed from epoch millis to strings).
+const oaAdminTimeLayout = "2006-01-02 15:04:05"
+
+// oaAdminTimeLayoutHint is the user-facing spelling of the layout used in
+// error messages.
+const oaAdminTimeLayoutHint = "yyyy-MM-dd HH:mm:ss"
+
+var oaAdminTimeZone = time.FixedZone("Asia/Shanghai", 8*3600)
+
+// formatOAAdminQueryTime renders a millisecond timestamp into the
+// yyyy-MM-dd HH:mm:ss string required by get_process_instances_by_admin.
+func formatOAAdminQueryTime(ms int64) string {
+	return time.UnixMilli(ms).In(oaAdminTimeZone).Format(oaAdminTimeLayout)
+}
+
+// validateOARequestTimeRange checks startTime/endTime of a decoded
+// --request payload: startTime is required, both must be
+// yyyy-MM-dd HH:mm:ss strings, and endTime must be strictly after
+// startTime (matching simple mode's ValidateTimeRange).
+func validateOARequestTimeRange(request map[string]any) error {
+	startRaw, ok := request["startTime"]
+	if !ok {
+		return fmt.Errorf("--request 缺少必填字段 startTime")
+	}
+	startStr, ok := startRaw.(string)
+	if !ok {
+		return fmt.Errorf("startTime 必须为 %s 格式字符串", oaAdminTimeLayoutHint)
+	}
+	start, err := time.ParseInLocation(oaAdminTimeLayout, startStr, oaAdminTimeZone)
+	if err != nil {
+		return fmt.Errorf("startTime 必须为 %s 格式，got: %s", oaAdminTimeLayoutHint, startStr)
+	}
+	endRaw, ok := request["endTime"]
+	if !ok {
+		return nil
+	}
+	endStr, ok := endRaw.(string)
+	if !ok {
+		return fmt.Errorf("endTime 必须为 %s 格式字符串", oaAdminTimeLayoutHint)
+	}
+	end, err := time.ParseInLocation(oaAdminTimeLayout, endStr, oaAdminTimeZone)
+	if err != nil {
+		return fmt.Errorf("endTime 必须为 %s 格式，got: %s", oaAdminTimeLayoutHint, endStr)
+	}
+	if !end.After(start) {
+		return fmt.Errorf("--request endTime 必须晚于 startTime")
+	}
+	return nil
+}
+
 // ──────────────────────────────────────────────────────────
 // dws oa — OA 审批
 // MCP tools（tools/list）: list_pending_approvals, get_processInstance_detail,
@@ -329,7 +419,8 @@ func newOAAttachmentCommand() *cobra.Command {
 // get_processInstance_records, list_initiated_instances, list_pending_tasks,
 // list_user_visible_process, append_task, search_form, oa_ding_user, revert_task,
 // get_inst_revert_activities, get_process_schema, forecast_process,
-// start_process_instance, get_attachment_download_url, auth_download_file,
+// start_process_instance, get_process_instances_by_admin,
+// get_attachment_download_url, auth_download_file,
 // auth_preview_attachment
 // ──────────────────────────────────────────────────────────
 
@@ -1432,6 +1523,129 @@ func newOaCommand() *cobra.Command {
 			},
 		},
 	})
+	// 以管理员身份查询审批实例列表
+	listByAdminSimpleFlags := []string{"process-code", "start", "end", "cursor", "limit", "user-ids", "statuses"}
+	approvalListByAdminCmd := &cobra.Command{
+		Use: "list-by-admin", Short: "以管理员身份查询审批模板的实例列表",
+		Example: `  dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --cursor 0 --limit 20
+  dws oa approval list-by-admin --request '{"processCode":"PROC-xxx","startTime":"2026-03-10 00:00:00","cursor":0,"pageSize":20,"statuses":["RUNNING"]}'`,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Cobra 的 flag group 校验（英文报错）在 PreRunE 之后执行，
+			// 这里先校验同一组约束，保证用户看到的是中文错误。
+			request, _ := cmd.Flags().GetString("request")
+			processCode, _ := cmd.Flags().GetString("process-code")
+			if request == "" && processCode == "" {
+				return fmt.Errorf("--request、--process-code 至少指定一个")
+			}
+			if request != "" {
+				for _, name := range listByAdminSimpleFlags {
+					if cmd.Flags().Changed(name) {
+						return fmt.Errorf("--request 与 --%s 不能同时指定", name)
+					}
+				}
+			}
+			if processCode != "" && !cmd.Flags().Changed("start") {
+				return fmt.Errorf("--process-code、--start 必须同时指定（缺少 --start）")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if raw, _ := cmd.Flags().GetString("request"); raw != "" {
+				request, err := decodeOARequest(raw)
+				if err != nil {
+					return fmt.Errorf("--request JSON 解析失败: %w", err)
+				}
+				if err := validateOARequestProcessCode(request); err != nil {
+					return err
+				}
+				if err := validateOARequestPageSize(request); err != nil {
+					return err
+				}
+				if err := validateOARequestTimeRange(request); err != nil {
+					return err
+				}
+				return callMCPTool("get_process_instances_by_admin", map[string]any{"ProcessInstanceListQueryRequest": request})
+			}
+			if err := validateRequiredFlags(cmd, "process-code", "start"); err != nil {
+				return err
+			}
+			startMs, err := parseISOTimeToMillis("start", mustGetFlag(cmd, "start"))
+			if err != nil {
+				return err
+			}
+			cursor, err := strconv.ParseFloat(mustGetFlag(cmd, "cursor"), 64)
+			if err != nil {
+				return fmt.Errorf("--cursor 必须为数字: %w", err)
+			}
+			pageSize, err := strconv.ParseFloat(mustGetFlag(cmd, "limit"), 64)
+			if err != nil {
+				return fmt.Errorf("--limit 必须为数字: %w", err)
+			}
+			if pageSize < 1 || pageSize > oaAdminQueryMaxPageSize {
+				return fmt.Errorf("--limit 必须在 1-%d 之间，got: %s", int(oaAdminQueryMaxPageSize), mustGetFlag(cmd, "limit"))
+			}
+			request := map[string]any{
+				"processCode": mustGetFlag(cmd, "process-code"),
+				"startTime":   formatOAAdminQueryTime(startMs),
+				"cursor":      cursor,
+				"pageSize":    pageSize,
+			}
+			if v, _ := cmd.Flags().GetString("end"); v != "" {
+				endMs, err := parseISOTimeToMillis("end", v)
+				if err != nil {
+					return err
+				}
+				if err := validateTimeRange(startMs, endMs); err != nil {
+					return err
+				}
+				request["endTime"] = formatOAAdminQueryTime(endMs)
+			}
+			if v, _ := cmd.Flags().GetString("user-ids"); v != "" {
+				request["userIds"] = strings.Split(v, ",")
+			}
+			if v, _ := cmd.Flags().GetString("statuses"); v != "" {
+				request["statuses"] = strings.Split(v, ",")
+			}
+			return callMCPTool("get_process_instances_by_admin", map[string]any{"ProcessInstanceListQueryRequest": request})
+		},
+	}
+	DeclareLeafMetadata(approvalListByAdminCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "oa",
+				Name:           "get_process_instances_by_admin",
+				CanonicalPath:  "oa.get_process_instances_by_admin",
+				CLIPath:        "oa approval list-by-admin",
+				PrimaryCLIPath: "oa approval list-by-admin",
+			},
+			Description: "以管理员身份获取审批单列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "oa", RPCName: "get_process_instances_by_admin"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "以管理员身份按模板、时间范围、状态与用户查询企业内审批实例列表",
+				UseWhen:      []string{"具备 OA 审批管理员权限，需要跨用户统计或检索某模板下的审批实例时"},
+				AvoidWhen: []string{
+					"只查自己的待办/已办/已发起/抄送时改用 list-pending / list-executed / list-initiated / list-cc",
+					"无 OA 管理员权限时不要使用，该命令查不到数据",
+				},
+				Examples: []string{
+					"dws oa approval list-by-admin --process-code <code> --start \"2026-03-10T00:00:00+08:00\" --cursor 0 --limit 20",
+					"dws oa approval list-by-admin --process-code <code> --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --statuses RUNNING,COMPLETED --user-ids \"userId1,userId2\"",
+				},
+			},
+			// Simple-mode flags are mapping exclusions (encoded inside ProcessInstanceListQueryRequest).
+			Parameters: []contract.ParamDecl{
+				{Name: "request", Property: "ProcessInstanceListQueryRequest", InterfaceType: "object"},
+			},
+		},
+	})
 	approvalCreateCmd := &cobra.Command{
 		Use: "create-instance", Short: "发起审批实例（需要 --yes 确认）",
 		Example: "dws oa approval create-instance --process-code <processCode> --form-values '{\"事由\":\"测试\"}' --yes",
@@ -1610,6 +1824,27 @@ func newOaCommand() *cobra.Command {
 		RequireTogether:   [][]string{{"process-code", "dept-id", "form-values"}},
 	})
 
+	approvalListByAdminCmd.Flags().String("process-code", "", "审批模板 processCode（简单模式使用；与 --request 互斥）")
+	approvalListByAdminCmd.Flags().String("start", "", "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)（简单模式使用；与 --request 互斥）")
+	approvalListByAdminCmd.Flags().String("end", "", "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)（可选）")
+	approvalListByAdminCmd.Flags().String("cursor", "0", "分页游标，首次传 0")
+	approvalListByAdminCmd.Flags().String("limit", "20", "每页大小，最大 20")
+	approvalListByAdminCmd.Flags().String("user-ids", "", "按发起人 userId 过滤，多个用逗号分隔（可选）")
+	approvalListByAdminCmd.Flags().String("statuses", "", "按审批状态过滤，多个用逗号分隔（可选，如 RUNNING、TERMINATED、COMPLETED）")
+	approvalListByAdminCmd.Flags().String("request", "", "完整请求 JSON（高级模式；与简单模式参数互斥）")
+	approvalListByAdminCmd.MarkFlagsOneRequired("request", "process-code")
+	approvalListByAdminCmd.MarkFlagsRequiredTogether("process-code", "start")
+	listByAdminMutuallyExclusive := make([][]string, 0, len(listByAdminSimpleFlags))
+	for _, name := range listByAdminSimpleFlags {
+		approvalListByAdminCmd.MarkFlagsMutuallyExclusive("request", name)
+		listByAdminMutuallyExclusive = append(listByAdminMutuallyExclusive, []string{"request", name})
+	}
+	cli.AnnotateRuntimeConstraints(approvalListByAdminCmd, cli.RuntimeSchemaConstraints{
+		MutuallyExclusive: listByAdminMutuallyExclusive,
+		RequireOneOf:      [][]string{{"request", "process-code"}},
+		RequireTogether:   [][]string{{"process-code", "start"}},
+	})
+
 	approvalCreateCmd.Flags().String("process-code", "", "审批模板 processCode（简单模式使用；与 --request 互斥）")
 	approvalCreateCmd.Flags().String("dept-id", "-1", "发起人部门 ID")
 	approvalCreateCmd.Flags().String("form-values", "", "表单值 JSON（简单模式使用；与 --request 互斥）")
@@ -1656,6 +1891,7 @@ func newOaCommand() *cobra.Command {
 		approvalRevertTaskCmd,
 		approvalFormSchemaCmd,
 		approvalForecastCmd,
+		approvalListByAdminCmd,
 		approvalCreateCmd,
 	)
 	approvalCmd.AddCommand(newOAAttachmentCommand())
