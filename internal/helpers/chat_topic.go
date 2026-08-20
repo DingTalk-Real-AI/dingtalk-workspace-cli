@@ -427,21 +427,17 @@ func chatTopicPaginationMeta(operation string, data map[string]any, sourceItems 
 	chatmsg.ApplyMessagePagination(projection, data, sourceItems, direction)
 	known, _ := projection["paginationKnown"].(bool)
 	hasMore, hasMoreKnown := projection["hasMore"].(bool)
-	failedCount, _ := projection["failedCount"].(int)
-	if !known || !hasMoreKnown || failedCount != 0 {
+	if !known || !hasMoreKnown {
 		return nil, chatTopicPaginationError(operation, "下层响应缺少可靠的分页终态或续页游标")
 	}
 	nextToken := ""
 	if hasMore {
 		nextPage, _ := projection["nextPage"].(map[string]any)
 		nextToken, _ = nextPage["time"].(string)
-		if strings.TrimSpace(nextToken) == "" {
-			return nil, chatTopicPaginationError(operation, "下层响应无法生成可执行的下一页时间边界")
-		}
 	}
 	pagination, err := output.NewPagination(!hasMore, nextToken)
 	if err != nil {
-		return nil, chatTopicPaginationError(operation, err.Error())
+		return nil, chatTopicPaginationError(operation, "下层响应无法生成可执行的下一页时间边界")
 	}
 	pagination.Pages = 1
 	pagination.Items = businessCount

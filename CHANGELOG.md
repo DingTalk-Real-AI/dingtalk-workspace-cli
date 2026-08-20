@@ -6,6 +6,19 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.59-beta.5] - 2026-08-20
+
+### Added
+
+- **Chat personal emotions** — adds `chat emotion list`, `chat emotion send`, and `chat emotion favorite` for current-user personal favorite emotion listing, sending, and favoriting.
+
+- **Minutes, DingTalk tasks, and Wiki parameter aliases** — adds reviewed parameter-name normalization, ambiguity guards, and end-to-end payload coverage for the three products.
+
+### Fixed
+
+- **Shortcut functional workflows** (#1050) — fixes truthful Drive push/sync previews, strict AITable write verification and deletion accounting, lossless Wiki feeds, and false-success handling across task, Contact, Minutes, and Wiki operations.
+
+
 ## [1.0.59-beta.4] - 2026-08-20
 
 ### Added

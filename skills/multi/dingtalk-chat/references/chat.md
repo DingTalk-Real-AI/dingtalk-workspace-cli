@@ -57,8 +57,10 @@
 | `message add-emoji` / `remove-emoji` | 默认 emoji reaction |
 | `message create-text-emotion` / `add-text-emotion` / `update-text-emotion` / `remove-text-emotion` | 文字表情 |
 | `message list-emotion-replies` | 批量 reaction/文字回应 |
+| `emotion list` / `send` / `favorite` | 当前用户个人收藏表情列表、发送和新增 |
 
 Favorite、消息 Pin、消息 Top 与会话 Top 是四种对象，不能互换。
+个人收藏表情与消息 reaction/文字回应不同；发送收藏表情使用 `chat emotion send`，给已有消息贴表情使用 `chat message add-emoji` 或 `chat message add-text-emotion`。
 
 ## 群与成员底层能力
 
