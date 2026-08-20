@@ -11,11 +11,13 @@ metadata:
 
 # 钉钉待办 Skill
 
-## 前置条件 — 执行操作前必读
+## 执行契约
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
-
-> 命令参考：[todo.md](references/todo.md)；剧本：[02-task.md](references/02-task.md)。
+- 只用 `dws` 操作钉钉待办，命令统一加 `--format json`，并按结构化业务返回判断结果。
+- 已知路线直接执行；仅在 leaf 参数或安全语义不确定时查精确 Schema，在 flag 不确定时查精确 Help。不要先枚举整个 Catalog，也不要连续猜命令。
+- 后续 ID 必须来自本次真实返回；零匹配、多匹配或类型不明时停止并消歧。
+- 写操作遵循最终 Runtime gate。需要确认时先说明对象、动作和影响，用户确认后才追加 `--yes`；不要把 `--yes` 写进存储示例。
+- 写后必须核验。非幂等写超时、缺少稳定 ID 或读回失败时先对账，禁止盲目重放。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
@@ -44,80 +46,50 @@ metadata:
 | `dws todo +update` | write | 更新待办并读回验证 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
-## 意图表
+## 路由优先级
 
-| 用户说 | 命令 |
-|--------|------|
-| "建一条待办给张三" | `dws todo task create --title "<标题>" --executors <userId>` |
-| "较高 / 高优先级待办" | `dws todo task create ... --priority 30`（10低/20普通/30较高/40紧急） |
-| "紧急 / 最高优先级 / 立即处理" | `dws todo task create ... --priority 40` |
-| "循环待办（每天）" | `dws todo task create ... --due "<首次截止ISO>" --recurrence "DTSTART:<UTC>\nRRULE:FREQ=DAILY;INTERVAL=1"` |
-| "批量建待办" | 按 SOP-4 逐条创建、收集 `taskId` 并批量回读 |
-| "今天 / 本周未完成待办" | `python scripts/todo_daily_summary.py [today\|tomorrow\|week]` |
-| "逾期待办" | `python scripts/todo_overdue_check.py` |
-| "标记完成 / 重开" | `dws todo task done --task-id <taskId> --status true\|false` |
-| "修改标题/截止时间/优先级" | `dws todo task update --task-id <taskId> ...` |
-| "删除待办" | `dws todo task delete --task-id <taskId>`（需用户确认） |
+上面的通用 shortcut 优先规则只适用于单一、完整命中的请求。本 Skill 的实际优先级是：
 
-## 标准 SOP（必遵流程）
+1. **组合生命周期 → 原子命令闭环**：同一请求含创建后再列表、更新、完成、提醒、评论、附件、成员、子待办、标签或清理时，先读 [组合流程](references/02-task.md)，全程使用 `todo task/comment/tag ...` 原子命令。不要用 `+remind` / `+create` 代替组合流程的第一步，也不要混用两套返回结构。
+2. **确定性批量/汇总 → 脚本**：批量创建、今天/明天/本周汇总、逾期扫描分别用 bundled scripts。
+3. **单一意图 → Shortcut**：只在一个 shortcut 已经覆盖完整目标、校验和结果形态时直接使用。
+4. **未知低频能力 → 精确 Reference/Help**：只读当前操作的小节，不要枚举后试错。
 
-> 命中以下意图**必须**按对应 SOP 顺序执行；**禁止**跳步、替换命令、编造 taskId。每条命令必须带 `--format json`。创建/完成/删除后**必须**回读验证，不要凭创建返回或口头计划就结束。
+## 高频路线
 
-### SOP-1 建待办（create-todo）
+| 用户意图 | 首选入口 | 边界 |
+|---|---|---|
+| 给自己创建一条普通待办 | `dws todo +remind --task "<标题>" [--at "<截止ISO>"] --format json` | `--at` 是截止时间，不是独立提醒 |
+| 按姓名给一人/多人指派一条待办 | `+assign` / `+assign-multi` | 任一姓名不唯一就停止，不能猜 `userId` |
+| 已有 `userId`，只创建并回读一条待办 | `dws todo +create --title "<标题>" --executors <USER_ID> ... --format json` | 结果必须含稳定 `taskId` 且读回一致 |
+| 创建后还要做其他操作 | `dws todo task create ... --format json` | 从 `result.taskId` 进入同一原子命令闭环 |
+| 按状态、优先级、角色、日期或页码枚举 | `dws todo task list ... --format json` | `--status false/true`；`hasMore=true` 继续翻页 |
+| 当前组织我的待办 / 与我相关的全部待办 | `+get-my-tasks` / `+get-related-tasks` | 后者是创建人、执行人、参与人并集 |
+| 按标题关键词定位 / 已知 ID 查详情 | `+search --query ...` / `+get --task-id ...` | 零个或多个候选时停止消歧 |
+| 已知 ID 完成、重开、更新 | `+complete` / `+reopen` / `+update` | shortcut 会做状态检查或读回核验 |
+| 今天到期 / 逾期 | `+due-today` / `+overdue` | 空集合也是成功结果 |
+| 设置或清除独立提醒 | `+reminder` | 上游无提醒查询接口，只能报告写回执，不能声称读回 |
 
-**触发**：建待办/任务提醒/指派任务/TODO。
+## 组合任务闭环
 
-1. **解析执行者（必须）**：指定姓名 → `dws aisearch person --query "<姓名>" --dimension name --format json` 取 `userId`；未指定 → `dws contact user get-self --format json` 取当前用户 `userId`；多人逐个搜索后英文逗号拼接。
-2. **执行（必须）**：`dws todo task create --title "<标题>" --executors <userId>[,<userId2>...] --priority <10/20/30/40> --format json`；有截止时间加 `--due "<ISO>"`；循环待办加 `--due "<首次截止ISO>" --recurrence "DTSTART:<UTC>\nRRULE:FREQ=DAILY;INTERVAL=1"`。
-3. **验证（必须）**：从返回取 `taskId`/`todoTaskId`，立即 `dws todo task get --task-id <taskId> --format json` 回读。
+1. 执行前列出用户要求的全部资源动作及顺序；同一链路使用同一个 profile。
+2. 原子创建必须先取得执行人：未指定执行人用 `dws contact me --format json`；指定姓名用 `dws aisearch person --query "<姓名>" --dimension name --format json` 并唯一匹配。
+3. 创建后只从 `result.taskId` 提取稳定 ID。后续评论、附件和标签编号分别来自 `comment list`、`task list-attachment`、`tag create/list` 的真实返回。
+4. 每次写后使用对应 read/list 核验；提醒例外，只保留终端写回执。最后仅清理本次创建且已经记录 ID 的对象。
 
-**禁止**：跳过执行者解析直接传姓名、用 `task detail` 取详情（正确是 `task get`）、创建后不回读。
+## 关键约束
 
-### SOP-2 查询待办（query-todo）
+- 公开命令统一使用 `--task-id`；不要在新命令中使用隐藏兼容别名 `--id` / `--ids`。
+- 优先级：低=10、普通=20、较高/高/重要=30、紧急/最高/P0=40。
+- `--due` 与 `+remind --at` 表示 deadline；独立 reminder 用 `+reminder` 或原子 `task add-reminder`。
+- `task list` 用 `--status`，不要写 `--done`；详情命令是 `task get`，不存在 `task detail`。
+- “待办标签”始终使用 `dws todo tag ...`，绝不能解释为 Git tag、文档标签或其他产品标签。
+- 本地文件作为待办附件时使用 `task add-attachment --file <绝对路径>`；先确认待办存在，不得用上传动作试探权限。
+- 会后行动项先走 `dingtalk-minutes` 取真实内容；OA 审批走 `dingtalk-misc`；时间块和会议走 `dingtalk-calendar`。
 
-**触发**：查待办/今天本周待办/未完成/已完成。
+## 按需参考
 
-1. **执行（必须）**：`dws todo task list --status false|true --format json`（`false`=未完成、`true`=已完成、不传=全部）；`hasMore=true` 必须翻页。
-2. **摘要脚本（必须）**：今天/本周未完成 → `python scripts/todo_daily_summary.py today|tomorrow|week`；逾期 → `python scripts/todo_overdue_check.py`。
-3. **详情（必须）**：`dws todo task get --task-id <taskId> --format json`；按主题筛选先 `task list` 再按标题过滤，**禁止**编造主题查询 flag。
-
-**禁止**：写 `--done true`（用 `--status true`）、编造主题筛选参数。
-
-### SOP-3 完成 / 重开 / 改 / 删（mutate-todo）
-
-**触发**：标记完成/重开/改标题截止优先级/删待办。
-
-1. **执行（必须）**：完成/重开 `dws todo task done --task-id <taskId> --status true|false --format json`；修改 `dws todo task update --task-id <taskId> ...`；删除 `dws todo task delete --task-id <taskId>`（**必须**先与用户确认）。
-2. **验证（必须）**：`task done`/`update` 后用 `task get` 或对应 `task list --status ...` 回读确认；`delete` 后用 `task get` 确认已不存在或列表已移除。
-
-**禁止**：未确认就删除、用 `update --done`（首选 `task done --status`）、改动后不回读。
-
-### SOP-4 批量建待办（batch-create）
-
-**触发**：批量建待办/一次建多条。
-
-1. **解析（必须）**：执行者姓名先批量解析成真实 `userId`；单批最多 30 条。
-2. **执行（必须）**：对每条待办执行 `dws todo task create --title "<标题>" --executors <userId> --priority <10/20/30/40> [--due "<ISO>"] --format json`，逐条收集返回的 `taskId`/`todoTaskId`。可并行执行，但不得丢失“输入条目 → taskId”对应关系。
-3. **验证（必须）**：对全部新建 `taskId` 执行 `dws todo task get --task-id <taskId> --format json` 回读；多 ID 按共享并行规则处理，全部成功后才能报告批量创建完成。
-
-**禁止**：只统计创建命令退出码、不保留 taskId、创建后不回读、在执行者位置传姓名。
-
-## 参数硬约束
-
-- 任务详情只用 `dws todo task get --task-id <taskId>`；不要写 `task detail`。
-- 完成状态首选 `dws todo task done --task-id <taskId> --status true|false`；若用 `update`，也必须是 `--task-id` + `--done true|false`。
-- 查询列表完成状态用 `dws todo task list --status false|true --format json`。不要写 `--done true` 作为可见参数，虽然兼容但不作为推荐写法。
-- `--id` / `--ids` 是隐藏兼容别名，文档和生成命令统一写 `--task-id`，减少模型漂移。
-- 优先级映射：低=10，普通=20，较高/高/重要=30，紧急/最高/P0/马上处理=40；不要把"较高"写成 40。
-- 截止时间必须是 ISO-8601。相对日期按当前日期计算；例如周五说"下周二"就是紧接下一个自然周的周二，不要再加一周。
-- 创建、标记完成、重开、删除后必须 `task get` 或对应 `task list --status ...` 验证，不要只凭创建返回或口头计划结束。
-- 所有 dws 命令带 `--format json`。
-
-## 跨产品协作
-
-- 执行人是人名 → 先用 `dingtalk-aisearch` 拿 `userId`
-- 会后从听记自动建待办 → 切到 `dingtalk-minutes`
-- 项目进度汇总写文档 → 切到 `dingtalk-doc`
-## 局部意图与短流程
-
-- [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。
+- [单步与短流程](references/lite-recipes.md)
+- [组合生命周期与动态 ID 传递](references/02-task.md)
+- [局部意图消歧](references/intent-guide.md)
+- [完整原子命令参考](references/todo.md)
