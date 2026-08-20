@@ -2280,7 +2280,7 @@ func newDriveCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return callMCPToolOnServer("doc", "get_permission_setting", map[string]any{"nodeId": nodeID})
+			return callMCPToolOnServer("drive", "get_permission_setting", map[string]any{"nodeId": nodeID})
 		},
 	}
 	DeclareLeafMetadata(drivePermGetSettingCmd, LeafSpec{
@@ -2300,7 +2300,7 @@ func newDriveCommand() *cobra.Command {
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
-				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "get_permission_setting"},
+				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "get_permission_setting"},
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询文档空间节点的权限设置（权限模式/分享范围/权限策略）",

@@ -11,7 +11,7 @@ import (
 
 // ── drive permission get-setting：跨产品路由与 --node 别名归一化 ──
 
-func TestCrossPlatformCoverageDrivePermissionGetSettingRoutesToDoc(t *testing.T) {
+func TestCrossPlatformCoverageDrivePermissionGetSettingRoutesToDrive(t *testing.T) {
 	caller := &guardedMutationCaller{}
 	err := executeGuardedMutationCommand(t, caller, newDriveCommand,
 		"permission", "get-setting", "--node", "node-1")
@@ -22,7 +22,7 @@ func TestCrossPlatformCoverageDrivePermissionGetSettingRoutesToDoc(t *testing.T)
 		t.Fatalf("calls = %#v, want exactly one", caller.calls)
 	}
 	call := caller.calls[0]
-	if call.productID != "doc" || call.toolName != "get_permission_setting" {
+	if call.productID != "drive" || call.toolName != "get_permission_setting" {
 		t.Fatalf("call = %#v", call)
 	}
 	if len(call.args) != 1 || call.args["nodeId"] != "node-1" {
@@ -42,7 +42,7 @@ func TestCrossPlatformCoverageDrivePermissionGetSettingHiddenAliases(t *testing.
 			t.Fatalf("alias --%s calls = %#v, want exactly one", alias, caller.calls)
 		}
 		call := caller.calls[0]
-		if call.productID != "doc" || call.toolName != "get_permission_setting" {
+		if call.productID != "drive" || call.toolName != "get_permission_setting" {
 			t.Fatalf("alias --%s call = %#v", alias, call)
 		}
 		if call.args["nodeId"] != "node-alias" {
