@@ -18,26 +18,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func runChatTopicCreate(cmd *cobra.Command) error {
-	if err := validateRequiredFlags(cmd, "name", "users"); err != nil {
-		return err
-	}
-	groupType := strings.ToUpper(mustGetFlag(cmd, "type"))
-	switch groupType {
-	case "INTERNAL", "EXTERNAL", "NORMAL":
-	default:
-		return fmt.Errorf("invalid --type %q, supported: INTERNAL, EXTERNAL, NORMAL", groupType)
-	}
-
-	requestedMembers := parseCSVValues(mustGetFlag(cmd, "users"))
+func runChatTopicCreate(cmd *cobra.Command, toolArgs map[string]any) error {
+	requestedMembers, _ := toolArgs["groupMembers"].([]string)
 	if deps.Caller.DryRun() {
 		members := append([]string{"<current-user-id>"}, requestedMembers...)
-		return storeChatTopicDryRun(cmd, "im", "create_group_conversation", map[string]any{
-			"groupName":         mustGetFlag(cmd, "name"),
-			"groupMembers":      members,
-			"groupType":         groupType,
-			"convThreadEnabled": true,
-		})
+		toolArgs["groupMembers"] = members
+		return storeChatTopicDryRun(cmd, "im", "create_group_conversation", toolArgs)
 	}
 
 	currentUserID, err := getCurrentUserID(cmd.Context())
@@ -53,12 +39,7 @@ func runChatTopicCreate(cmd *cobra.Command) error {
 		}
 	}
 
-	toolArgs := map[string]any{
-		"groupName":    mustGetFlag(cmd, "name"),
-		"groupMembers": members,
-		"groupType":    groupType,
-	}
-	toolArgs["convThreadEnabled"] = true
+	toolArgs["groupMembers"] = members
 	raw, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", "create_group_conversation", toolArgs)
 	if err != nil {
 		return err
@@ -111,23 +92,30 @@ func newChatTopicCommand(sendRunE func(*cobra.Command, []string) error) *cobra.C
 }
 
 func newChatTopicCreateCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "create",
-		Short:   "创建话题圈",
-		Long:    "创建一个话题圈，固定开启话题模式。返回结果使用 openTopicId。",
-		Example: `  dws chat topic create --name "项目话题圈" --users userId1,userId2`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runChatTopicCreate(cmd)
-		},
-	}
-	cmd.Flags().String("name", "", "话题圈名称 (必填)")
-	_ = cmd.MarkFlagRequired("name")
-	cmd.Flags().String("users", "", "成员 userId 或 openDingTalkId，逗号分隔 (必填)")
-	_ = cmd.MarkFlagRequired("users")
-	cmd.Flags().String("type", "INTERNAL", "话题圈类型: INTERNAL/EXTERNAL/NORMAL")
-	DeclareLeafMetadata(cmd, LeafSpec{
+	return NewLeafCommand(LeafSpec{
+		Use:           "create",
+		Short:         "创建话题圈",
+		Long:          "创建一个话题圈，固定开启话题模式。返回结果使用 openTopicId。",
+		Example:       `  dws chat topic create --name "项目话题圈" --users userId1,userId2`,
 		OutputRollout: output.RolloutUnifiedActive,
-		Safety:        contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
+		Tool:          "create_group_conversation",
+		Flags: []LeafFlag{
+			{Name: "name", Usage: "话题圈名称 (必填)", Required: true, MarkRequired: true, Bind: "groupName"},
+			{Name: "users", Usage: "成员 userId 或 openDingTalkId，逗号分隔 (必填)", Required: true, MarkRequired: true, Bind: "groupMembers", Transform: func(raw string) (any, error) {
+				return parseCSVValues(raw), nil
+			}},
+			{Name: "type", Usage: "话题圈类型: INTERNAL/EXTERNAL/NORMAL", Default: "INTERNAL", Bind: "groupType", Transform: func(raw string) (any, error) {
+				groupType := strings.ToUpper(raw)
+				switch groupType {
+				case "INTERNAL", "EXTERNAL", "NORMAL":
+					return groupType, nil
+				default:
+					return nil, fmt.Errorf("invalid --type %q, supported: INTERNAL, EXTERNAL, NORMAL", groupType)
+				}
+			}},
+		},
+		ConstParams: map[string]any{"convThreadEnabled": true},
+		Safety:      contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "unknown"},
 		Contract: LeafContract{
 			Identity:    contract.ToolIdentitySpec{ProductID: "chat", Name: "create_topic_conversation", CanonicalPath: "chat.create_topic_conversation", CLIPath: "chat topic create", PrimaryCLIPath: "chat topic create"},
 			Description: "创建话题圈并返回 openTopicId",
@@ -144,8 +132,10 @@ func newChatTopicCreateCommand() *cobra.Command {
 				DataSchema: json.RawMessage(`{"type":"object","description":"话题圈创建响应","properties":{"result":{"type":"object","description":"创建结果","properties":{"openTopicId":{"type":"string","description":"新话题圈 openTopicId"}},"additionalProperties":true}},"additionalProperties":true}`),
 			},
 		},
+		Call: func(cmd *cobra.Command, _ string, toolArgs map[string]any) error {
+			return runChatTopicCreate(cmd, toolArgs)
+		},
 	})
-	return cmd
 }
 
 func newChatTopicSendCommand(use, targetFlag, targetDescription string, sendRunE func(*cobra.Command, []string) error) *cobra.Command {

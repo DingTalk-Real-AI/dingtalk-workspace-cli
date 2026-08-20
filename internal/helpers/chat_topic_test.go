@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
@@ -254,6 +255,10 @@ func TestCrossPlatformCoverageChatTopicSurfaceAndLegacyVisibility(t *testing.T) 
 	create, _, err := root.Find([]string{"group", "create"})
 	if err != nil || create.Flags().Lookup("thread") == nil || !create.Flags().Lookup("thread").Hidden {
 		t.Fatalf("legacy --thread flag is not hidden: command=%v error=%v", create, err)
+	}
+	topicCreate, _, err := root.Find([]string{"topic", "create"})
+	if err != nil || !corecmd.InterfaceBoolConstParams(topicCreate)["convThreadEnabled"] {
+		t.Fatalf("topic create const params = %#v, error=%v", corecmd.InterfaceBoolConstParams(topicCreate), err)
 	}
 	for _, paths := range []struct {
 		legacy []string
