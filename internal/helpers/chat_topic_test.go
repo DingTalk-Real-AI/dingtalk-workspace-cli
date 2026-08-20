@@ -598,6 +598,38 @@ func TestCrossPlatformCoverageAtomicTopicBotQuoteReplyIsRejectedBeforeWrite(t *t
 	}
 }
 
+func TestCrossPlatformCoverageAtomicTopicQuoteReplyDryRunSkipsRemotePreflight(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "message reply",
+			args: []string{
+				"message", "reply", "--conversation-id", "conversation-1", "--ref-msg-id", "message-1",
+				"--ref-sender", "DAAAAAAAAAAAiE", "--text", "dry-run reply",
+			},
+		},
+		{
+			name: "message send-by-bot reply",
+			args: []string{
+				"message", "send-by-bot", "--robot-code", "robot-1", "--conversation-id", "conversation-1",
+				"--reply", "message-1", "--ref-sender", "DAAAAAAAAAAAiE", "--text", "dry-run reply",
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &chatTopicCaller{dryRun: true}
+			if err := runChatCoverageCommand(t, caller, test.args...); err != nil {
+				t.Fatal(err)
+			}
+			if len(caller.calls) != 0 {
+				t.Fatalf("dry-run made remote calls: %#v", caller.calls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageAtomicTopicQuoteGuardFailsClosedWhenConversationLookupFails(t *testing.T) {
 	caller := &chatTopicCaller{
 		responses: map[string]string{

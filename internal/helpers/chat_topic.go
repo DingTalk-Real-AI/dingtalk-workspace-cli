@@ -555,6 +555,9 @@ func topicQuoteReplyDisabledError() error {
 }
 
 func guardTopicQuoteReply(cmd *cobra.Command, openConversationID, openMessageID string) error {
+	if deps.Caller.DryRun() {
+		return nil
+	}
 	raw, err := callMCPToolReturnTextOnServer(cmd.Context(), "im", "list_messages_by_ids", map[string]any{
 		"openMsgIds": []string{openMessageID},
 	})
