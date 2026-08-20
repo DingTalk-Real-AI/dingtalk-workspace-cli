@@ -32,6 +32,8 @@ func main() {
 	currentSnapshot := flag.String("migration-current-snapshot", "", "candidate interface snapshot")
 	baseSnapshot := flag.String("migration-base-snapshot", "", "base interface snapshot")
 	stableSnapshot := flag.String("migration-stable-snapshot", "", "stable interface snapshot")
+	_ = flag.String("approved-command-migrations", "", "base command ledger")
+	_ = flag.String("candidate-command-migrations", "", "candidate command ledger")
 	flag.Parse()
 
 	if *normalize != "" {
@@ -171,6 +173,8 @@ func main() {
 	currentSnapshot := flag.String("migration-current-snapshot", "", "candidate interface snapshot")
 	baseSnapshot := flag.String("migration-base-snapshot", "", "base interface snapshot")
 	stableSnapshot := flag.String("migration-stable-snapshot", "", "stable interface snapshot")
+	_ = flag.String("approved-command-migrations", "", "base command ledger")
+	_ = flag.String("candidate-command-migrations", "", "candidate command ledger")
 	flag.Parse()
 
 	if *normalize != "" {
@@ -282,6 +286,27 @@ var (
 func AuthorityMarker() string { return "BASE" }
 `
 
+const schemaCommandGovernedSnapshotSource = `package interfacesnapshot
+
+import (
+	"example.com/dws-schema-compat-authority-test/internal/corecmd"
+	"example.com/dws-schema-compat-authority-test/internal/corecmd/runtimeannotate"
+)
+
+var (
+	_ = runtimeannotate.AnnotationFlagAliasOf
+	_ = runtimeannotate.AnnotationFlagAliasOrigin
+	_ = runtimeannotate.FlagAliasOriginCorecmdV1
+)
+
+func AuthorityMarker() string {
+	if corecmd.InterfaceBoolConstParams() != "BASE" {
+		return "UNTRUSTED_CONST_PARAMS"
+	}
+	return "BASE"
+}
+`
+
 const schemaBaseSnapshotSource = `package interfacesnapshot
 
 func AuthorityMarker() string { return "BASE" }
@@ -306,6 +331,54 @@ const (
 )
 `
 
+func schemaConstParamsRegistrySource(marker string) string {
+	return fmt.Sprintf(`package corecmd
+
+type constParamsRegistry struct{}
+
+func (constParamsRegistry) Store(any, any) {}
+
+var interfaceBoolConstParamsRegistry constParamsRegistry
+
+func attachInterfaceBoolConstParams() {}
+
+func InterfaceBoolConstParams() string { return %q }
+`, marker)
+}
+
+const schemaBaseCorecmdBridgeSource = `package corecmd
+
+func boolConstParams(map[string]any) map[string]bool {
+	return map[string]bool{"convThreadEnabled": true}
+}
+
+func installConstParamsEvidence() { attachInterfaceBoolConstParams() }
+`
+
+const schemaForgedCorecmdBridgeSource = `package corecmd
+
+func boolConstParams(map[string]any) map[string]bool {
+	return map[string]bool{"convThreadEnabled": false}
+}
+
+func installConstParamsEvidence() { attachInterfaceBoolConstParams() }
+`
+
+const schemaBaseLeafAdapterSource = `package helpers
+
+func forwardToolArgs(toolArgs map[string]any) map[string]any {
+	return toolArgs
+}
+`
+
+const schemaForgedLeafAdapterSource = `package helpers
+
+func forwardToolArgs(toolArgs map[string]any) map[string]any {
+	delete(toolArgs, "convThreadEnabled")
+	return toolArgs
+}
+`
+
 const candidateNoopSource = `package main
 
 import "fmt"
@@ -327,12 +400,14 @@ func main() {
 }
 
 type authorityScenario struct {
-	name              string
-	baseGovernance    string
-	candidateMutation string
-	checkerMode       string
-	want              string
-	authorityMarker   string
+	name                   string
+	baseGovernance         string
+	commandGovernance      string
+	commandManifestChanged bool
+	candidateMutation      string
+	checkerMode            string
+	want                   string
+	authorityMarker        string
 }
 
 func TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority(t *testing.T) {
@@ -352,6 +427,85 @@ func TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority(t *testi
 			name:            "bootstrap uses old base checker and committed canonical empty ledger",
 			baseGovernance:  "none",
 			authorityMarker: "OLD_BASE_STABLE_SCHEMA_CHECKER_ENFORCED",
+		},
+		{
+			name:              "command governed base owns bool ConstParams contract",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "change-const-params-protocol",
+			authorityMarker:   "BASE_SCHEMA_CHECKER_ENFORCED",
+		},
+		{
+			name:              "command governance bootstrap preserves candidate bool ConstParams contract",
+			baseGovernance:    "complete",
+			commandGovernance: "bootstrap",
+			authorityMarker:   "BASE_SCHEMA_CHECKER_ENFORCED",
+		},
+		{
+			name:              "command governed candidate cannot delete bool ConstParams contract",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "delete-const-params-contract",
+			want:              "must preserve the complete Schema command migration governance artifact set",
+		},
+		{
+			name:              "same package candidate cannot call private ConstParams writer",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "forge-const-params-token",
+			want:              "may not access framework-owned bool ConstParams registry",
+		},
+		{
+			name:              "candidate cannot reopen private ConstParams reader",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "forge-const-params-reader",
+			want:              "may not access framework-owned bool ConstParams registry",
+		},
+		{
+			name:              "same package candidate cannot store directly in ConstParams registry",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "forge-const-params-registry-store",
+			want:              "may not access framework-owned bool ConstParams registry",
+		},
+		{
+			name:                   "changed command manifest rejects forged corecmd bool ConstParams bridge",
+			baseGovernance:         "complete",
+			commandGovernance:      "complete",
+			commandManifestChanged: true,
+			candidateMutation:      "forge-corecmd-bool-const-params",
+			want:                   "candidate command migration manifest differs from base; protected bridge must preserve the base Git blob: internal/corecmd/corecmd.go",
+		},
+		{
+			name:                   "changed command manifest rejects tampered ConstParams protocol",
+			baseGovernance:         "complete",
+			commandGovernance:      "complete",
+			commandManifestChanged: true,
+			candidateMutation:      "change-const-params-protocol",
+			want:                   "candidate command migration manifest differs from base; protected bridge must preserve the base Git blob: internal/corecmd/interface_const_params.go",
+		},
+		{
+			name:                   "changed command manifest rejects tampered leaf adapter",
+			baseGovernance:         "complete",
+			commandGovernance:      "complete",
+			commandManifestChanged: true,
+			candidateMutation:      "forge-leaf-adapter",
+			want:                   "candidate command migration manifest differs from base; protected bridge must preserve the base Git blob: internal/helpers/leaf.go",
+		},
+		{
+			name:                   "changed command manifest allows base identical bridges",
+			baseGovernance:         "complete",
+			commandGovernance:      "complete",
+			commandManifestChanged: true,
+			authorityMarker:        "BASE_SCHEMA_CHECKER_ENFORCED",
+		},
+		{
+			name:              "unchanged command manifest allows independent corecmd change",
+			baseGovernance:    "complete",
+			commandGovernance: "complete",
+			candidateMutation: "forge-corecmd-bool-const-params",
+			authorityMarker:   "BASE_SCHEMA_CHECKER_ENFORCED",
 		},
 		{
 			name:           "partial base fails closed",
@@ -479,6 +633,19 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 	default:
 		t.Fatalf("unknown base governance state %q", test.baseGovernance)
 	}
+	switch test.commandGovernance {
+	case "":
+	case "complete":
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "snapshot.go"), schemaCommandGovernedSnapshotSource, 0o644)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "command_migrations.go"), "package interfacesnapshot\n", 0o644)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "corecmd.go"), schemaBaseCorecmdBridgeSource, 0o644)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go"), schemaConstParamsRegistrySource("BASE"), 0o644)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "helpers", "leaf.go"), schemaBaseLeafAdapterSource, 0o644)
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "interface-migrations", "approved-command-migrations-v1.json"), "{\"version\":1,\"migrations\":[]}\n", 0o644)
+	case "bootstrap":
+	default:
+		t.Fatalf("unknown command governance state %q", test.commandGovernance)
+	}
 	schemaRun(t, fixtureRoot, "git", "add", ".")
 	schemaRun(t, fixtureRoot, "git", "commit", "-m", "base authority")
 	baseRef := strings.TrimSpace(schemaRun(t, fixtureRoot, "git", "rev-parse", "HEAD"))
@@ -508,6 +675,17 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 		candidateLedger = "{\"version\":1,\"migrations\":[{\"candidate\":\"COMMITTED\"}]}\n"
 	}
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "interface-migrations", "approved-flag-migrations-v1.json"), candidateLedger, 0o644)
+	if test.commandGovernance == "complete" || test.commandGovernance == "bootstrap" {
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "command_migrations.go"), "package interfacesnapshot\n", 0o644)
+		if test.commandGovernance == "bootstrap" {
+			schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go"), schemaConstParamsRegistrySource("CANDIDATE"), 0o644)
+		}
+		commandManifest := "{\"version\":1,\"migrations\":[]}\n"
+		if test.commandManifestChanged {
+			commandManifest = "{\"version\":1,\"migrations\":[{\"candidate\":\"PENDING\"}]}\n"
+		}
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "interface-migrations", "approved-command-migrations-v1.json"), commandManifest, 0o644)
+	}
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "SNAPSHOT_MARKER"), "COMMITTED_CANDIDATE\n", 0o644)
 	switch test.candidateMutation {
 	case "":
@@ -534,6 +712,34 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 			"package evil\n\nconst forged = \"dws.compat.alias_of\"\n",
 			0o644,
 		)
+	case "delete-const-params-contract":
+		if err := os.Remove(filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go")); err != nil {
+			t.Fatalf("remove candidate bool ConstParams registry: %v", err)
+		}
+	case "forge-const-params-token":
+		schemaWriteFile(t,
+			filepath.Join(fixtureRoot, "internal", "corecmd", "evil_const_params.go"),
+			"package corecmd\n\nfunc forgeConstParams() { attachInterfaceBoolConstParams() }\n",
+			0o644,
+		)
+	case "forge-const-params-reader":
+		schemaWriteFile(t,
+			filepath.Join(fixtureRoot, "internal", "evil", "forged.go"),
+			"package evil\n\nconst forged = \"InterfaceBoolConstParams\"\n",
+			0o644,
+		)
+	case "forge-const-params-registry-store":
+		schemaWriteFile(t,
+			filepath.Join(fixtureRoot, "internal", "corecmd", "evil_const_params.go"),
+			"package corecmd\n\nfunc forgeConstParamsStore() { interfaceBoolConstParamsRegistry.Store(nil, map[string]bool{\"forged\": true}) }\n",
+			0o644,
+		)
+	case "forge-corecmd-bool-const-params":
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "corecmd.go"), schemaForgedCorecmdBridgeSource, 0o644)
+	case "change-const-params-protocol":
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go"), schemaConstParamsRegistrySource("CANDIDATE"), 0o644)
+	case "forge-leaf-adapter":
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "helpers", "leaf.go"), schemaForgedLeafAdapterSource, 0o644)
 	case "symlink-helper-parent":
 		helperPath := filepath.Join(fixtureRoot, "internal", "interfacesnapshot")
 		alternatePath := filepath.Join(fixtureRoot, "internal", "interfacesnapshot-alt")

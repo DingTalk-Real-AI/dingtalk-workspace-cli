@@ -157,6 +157,16 @@ func runCompare(args []string, stdout, stderr io.Writer) (bool, error) {
 		"",
 		"candidate flag migration manifest",
 	)
+	approvedCommandMigrationsPath := flags.String(
+		"approved-command-migrations",
+		"",
+		"merge-base-owned approved command migration manifest",
+	)
+	candidateCommandMigrationsPath := flags.String(
+		"candidate-command-migrations",
+		"",
+		"candidate command migration manifest",
+	)
 	if err := flags.Parse(args); err != nil {
 		return false, err
 	}
@@ -174,8 +184,13 @@ func runCompare(args []string, stdout, stderr io.Writer) (bool, error) {
 			"--approved-flag-migrations and --candidate-flag-migrations must be provided together",
 		)
 	}
-	if *approvedMigrationsPath != "" && (*basePath == "" || *stablePath == "") {
-		return false, fmt.Errorf("flag migration compare requires both --base and --stable")
+	if (*approvedCommandMigrationsPath == "") != (*candidateCommandMigrationsPath == "") {
+		return false, fmt.Errorf(
+			"--approved-command-migrations and --candidate-command-migrations must be provided together",
+		)
+	}
+	if (*approvedMigrationsPath != "" || *approvedCommandMigrationsPath != "") && (*basePath == "" || *stablePath == "") {
+		return false, fmt.Errorf("migration compare requires both --base and --stable")
 	}
 
 	current, err := readSnapshot(*currentPath)
@@ -197,7 +212,39 @@ func runCompare(args []string, stdout, stderr io.Writer) (bool, error) {
 	}
 
 	report := interfacesnapshot.CompareAll(current, references)
-	if *approvedMigrationsPath != "" {
+	if *approvedCommandMigrationsPath != "" {
+		flagApproved := interfacesnapshot.FlagMigrationManifest{Version: interfacesnapshot.FlagMigrationManifestVersion, Migrations: []interfacesnapshot.FlagMigration{}}
+		flagCandidate := flagApproved
+		if *approvedMigrationsPath != "" {
+			flagApproved, err = readFlagMigrationManifest(*approvedMigrationsPath)
+			if err != nil {
+				return false, fmt.Errorf("read approved flag migrations: %w", err)
+			}
+			flagCandidate, err = readFlagMigrationManifest(*candidateMigrationsPath)
+			if err != nil {
+				return false, fmt.Errorf("read candidate flag migrations: %w", err)
+			}
+		}
+		commandApproved, readErr := readCommandMigrationManifest(*approvedCommandMigrationsPath)
+		if readErr != nil {
+			return false, fmt.Errorf("read approved command migrations: %w", readErr)
+		}
+		commandCandidate, readErr := readCommandMigrationManifest(*candidateCommandMigrationsPath)
+		if readErr != nil {
+			return false, fmt.Errorf("read candidate command migrations: %w", readErr)
+		}
+		report, err = interfacesnapshot.CompareAllWithInterfaceMigrations(
+			current,
+			references,
+			flagApproved,
+			flagCandidate,
+			commandApproved,
+			commandCandidate,
+		)
+		if err != nil {
+			return false, fmt.Errorf("validate interface migration lifecycle: %w", err)
+		}
+	} else if *approvedMigrationsPath != "" {
 		approved, readErr := readFlagMigrationManifest(*approvedMigrationsPath)
 		if readErr != nil {
 			return false, fmt.Errorf("read approved flag migrations: %w", readErr)
@@ -232,6 +279,15 @@ func readFlagMigrationManifest(path string) (interfacesnapshot.FlagMigrationMani
 	}
 	defer file.Close()
 	return interfacesnapshot.ReadFlagMigrationManifest(file)
+}
+
+func readCommandMigrationManifest(path string) (interfacesnapshot.CommandMigrationManifest, error) {
+	file, err := os.Open(filepath.Clean(path))
+	if err != nil {
+		return interfacesnapshot.CommandMigrationManifest{}, err
+	}
+	defer file.Close()
+	return interfacesnapshot.ReadCommandMigrationManifest(file)
 }
 
 func validateHelpRendering(root *cobra.Command, snapshot interfacesnapshot.Snapshot) error {
@@ -280,5 +336,5 @@ func readSnapshot(path string) (interfacesnapshot.Snapshot, error) {
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage:")
 	fmt.Fprintln(w, "  interface-snapshot generate [--output FILE]")
-	fmt.Fprintln(w, "  interface-snapshot compare --current FILE [--base FILE] [--stable FILE] [--approved-flag-migrations FILE --candidate-flag-migrations FILE]")
+	fmt.Fprintln(w, "  interface-snapshot compare --current FILE [--base FILE] [--stable FILE] [--approved-flag-migrations FILE --candidate-flag-migrations FILE] [--approved-command-migrations FILE --candidate-command-migrations FILE]")
 }

@@ -135,6 +135,63 @@ func TestCrossPlatformCoverageCompareAllowsRenameWhenOldPathIsAlias(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoverageCompareAllowsBoolConstParamsBootstrapAddition(t *testing.T) {
+	base := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws send"),
+	)
+	current := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws send"),
+	)
+	current.Commands[1].BoolConstParams = map[string]bool{"convThreadEnabled": true}
+
+	comparison := Compare(current, base, "base")
+	if !comparison.Compatible || len(comparison.Blocking) != 0 || len(comparison.Additions) != 0 {
+		t.Fatalf("ordinary Compare treated bootstrapped bool ConstParams evidence as a compatibility change: %#v", comparison)
+	}
+}
+
+func TestCrossPlatformCoverageCompareBlocksBoolConstParamsDriftAfterBootstrap(t *testing.T) {
+	base := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws send"),
+	)
+	base.Commands[1].BoolConstParams = map[string]bool{"convThreadEnabled": true}
+
+	for _, test := range []struct {
+		name    string
+		current map[string]bool
+	}{
+		{name: "removed", current: nil},
+		{name: "value flipped", current: map[string]bool{"convThreadEnabled": false}},
+		{name: "extra key", current: map[string]bool{"convThreadEnabled": true, "other": false}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			current := testSnapshot(
+				testCommand("dws"),
+				testCommand("dws send"),
+			)
+			current.Commands[1].BoolConstParams = test.current
+
+			comparison := Compare(current, base, "base")
+			if comparison.Compatible {
+				t.Fatalf("historical bool ConstParams drift was accepted: %#v", comparison)
+			}
+			if len(comparison.Blocking) != 1 {
+				t.Fatalf("blocking=%#v, want exactly one durable contract change", comparison.Blocking)
+			}
+			change := comparison.Blocking[0]
+			if change.Kind != "bool_const_params_changed" || change.Path != "dws send" {
+				t.Fatalf("blocking=%#v, want bool_const_params_changed at dws send", comparison.Blocking)
+			}
+			if len(comparison.Additions) != 0 {
+				t.Fatalf("bool ConstParams drift also produced additions: %#v", comparison.Additions)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageCompareBlocksRemovedAlias(t *testing.T) {
 	base := testSnapshot(
 		testCommand("dws"),

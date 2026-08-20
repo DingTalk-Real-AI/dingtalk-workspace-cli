@@ -1589,7 +1589,7 @@ func TestCrossPlatformCoverageSchemaMigrationCLIRequiresCompleteCheckInputs(t *t
 		"--migration-stable-snapshot", "stable.json",
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"--check", "baseline.json", "--current", "schema.json", "--approved-flag-migrations", "approved.json"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "all five") {
+	if code := run([]string{"--check", "baseline.json", "--current", "schema.json", "--approved-flag-migrations", "approved.json"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "both flag manifests") {
 		t.Fatalf("partial migration inputs code=%d stderr=%q", code, stderr.String())
 	}
 

@@ -71,6 +71,9 @@ func CompareAll(current Snapshot, references map[string]Snapshot) Report {
 //     alias),
 //   - flags accepted at each command path may not disappear, change type, or
 //     become required; an existing path may not gain a new required flag,
+//   - once bool ConstParams evidence exists, its exact property/value map is a
+//     durable contract; adding the first evidence to an older snapshot remains
+//     a silent bootstrap,
 //   - new commands and flags are allowed.
 //
 // The single exception to the type rule is an individually reviewed migration
@@ -153,6 +156,14 @@ func Compare(current, baseline Snapshot, reference string) Comparison {
 }
 
 func compareCommandContract(result *Comparison, acceptedPath string, oldCommand, newCommand Command) {
+	if len(oldCommand.BoolConstParams) > 0 && !reflect.DeepEqual(oldCommand.BoolConstParams, newCommand.BoolConstParams) {
+		result.Blocking = append(result.Blocking, Change{
+			Kind:   "bool_const_params_changed",
+			Path:   acceptedPath,
+			Before: fmt.Sprintf("%v", oldCommand.BoolConstParams),
+			After:  fmt.Sprintf("%v", newCommand.BoolConstParams),
+		})
+	}
 	if oldCommand.Runnable && !newCommand.Runnable {
 		result.Blocking = append(result.Blocking, Change{
 			Kind:   "command_became_non_runnable",
