@@ -935,3 +935,36 @@ func TestNewManagedPathStillPublishesWaitCapability(t *testing.T) {
 		t.Fatalf("managed construction must publish the wait capability, final=%#v ok=%v", final.Wait, ok)
 	}
 }
+
+func TestEventModeRejectsNilStreamWithoutError(t *testing.T) {
+	// A leaf or subscription adapter returning (nil, nil) is a broken
+	// subscription: strict event mode must fail through the unified error
+	// envelope instead of panicking inside RunEvent's first Recv.
+	_, err := runWaitModeCommand(t, eventTestDecl(contract.WaitModeEvent), nil,
+		func(context.Context, *Ctx) (wait.EventStream, error) {
+			return nil, nil
+		})
+	if err == nil || !strings.Contains(err.Error(), "subscription returned no stream") {
+		t.Fatalf("nil stream without error must fail closed, got err=%v", err)
+	}
+}
+
+func TestAutoModeFallsBackToPollOnNilStream(t *testing.T) {
+	// Auto mode treats a (nil, nil) subscription like any other
+	// subscription failure: fall back to polling under the same deadline.
+	polled := false
+	_, err := runWaitModeCommand(t, eventTestDecl(contract.WaitModeAuto),
+		func(context.Context, *Ctx) (wait.PollDoc, error) {
+			polled = true
+			return wait.PollDoc{"result": map[string]any{"status": "COMPLETED"}}, nil
+		},
+		func(context.Context, *Ctx) (wait.EventStream, error) {
+			return nil, nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !polled {
+		t.Fatal("auto mode did not fall back to polling on nil stream")
+	}
+}

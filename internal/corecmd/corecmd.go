@@ -737,6 +737,20 @@ func runWaitLoop(parent context.Context, decl *contract.WaitSpec, timeout time.D
 		return wait.Outcome{}, err
 	}
 	stream, err := spec.WaitEvents(loopCtx, ctx)
+	if err == nil && stream == nil {
+		// (nil, nil) from the leaf or a subscription adapter is a broken
+		// subscription, not an event source: strict event mode fails
+		// through the unified envelope instead of panicking inside
+		// RunEvent's first Recv; auto mode falls back to polling like any
+		// other subscription failure. A deadline that already expired
+		// during subscribe still closes as timed-out pending via the
+		// err != nil branch below (no poll fallback on an exhausted
+		// shared deadline).
+		if mode == contract.WaitModeAuto && loopCtx.Err() == nil {
+			return pollWithSpec(loopCtx, decl, spec, ctx)
+		}
+		err = errors.New("subscription returned no stream")
+	}
 	if err != nil {
 		if loopCtx.Err() != nil {
 			// Subscribe blocked until the wait deadline: same contract as a
