@@ -3,7 +3,7 @@
 Every runtime command the `dws` CLI exposes when loaded with the **pre** environment configuration.
 
 - **Products**: 13
-- **Total commands**: 160
+- **Total commands**: 163
 - **Generated from**: `internal/plugin` command descriptors — the same code path the CLI uses at runtime.
 
 > Auto-generated. Update plugin descriptors in `internal/plugin/`, not this file.
@@ -33,7 +33,7 @@ Every command inherits these flags (documented here once, not repeated per comma
 - [`dws aitable` — AI Tables](#dws-aitable) · 41 commands
 - [`dws attendance` — Attendance](#dws-attendance) · 4 commands
 - [`dws calendar` — Calendar](#dws-calendar) · 14 commands
-- [`dws chat` — Group Chat / IM](#dws-chat) · 23 commands
+- [`dws chat` — Group Chat / IM](#dws-chat) · 26 commands
 - [`dws contact` — Contact Directory](#dws-contact) · 6 commands
 - [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 2 commands
 - [`dws ding` — DING Messages](#dws-ding) · 2 commands
@@ -134,12 +134,15 @@ _Calendar events, participants, meeting rooms, and busy-status queries._
 
 _Group chats, conversations, messages, and robot/webhook integrations._
 
-**23 commands**
+**26 commands**
 
 | Command | Description | When to use |
 |---|---|---|
 | `dws chat bot search` | Search robots (bots) created by the current user by keyword. | When the agent needs to resolve one of its own bots by name to a robot code before sending bot messages. |
 | `dws chat conversation-info` | Retrieve basic metadata for a conversation (single chat or group chat) by conversation ID. | When the agent needs context about a conversation (name, type, member count) before operating on it. |
+| `dws chat emotion favorite` | Add a media ID to the current user's personal favorite emotions. | When the agent needs to save an available mediaId as a reusable personal emotion, optionally preserving source message context. |
+| `dws chat emotion list` | List the current user's personal favorite emotions. | When the agent needs to inspect available personal emotions or resolve an emotionId/mediaId before sending. |
+| `dws chat emotion send` | Send a personal favorite emotion to a group or direct chat as the authenticated user. | When the agent needs to send a known personal emotion mediaId to exactly one group, userId, or openDingTalkId target. |
 | `dws chat group create` | Create a new internal group chat with a set of initial members. | When the agent needs to spin up a dedicated group for a new project, incident, or discussion thread. |
 | `dws chat group members` | List members of a group chat; can also be used against the current user to enumerate their groups' members. | When the agent needs the roster of a group before mentioning, removing, or auditing members. |
 | `dws chat group members add` | Add one or more users to an existing group chat. | When the agent expands a group to include additional participants. |

@@ -17,13 +17,14 @@ type chatSemanticCatalogFixture struct {
 	Service      string                `json:"service"`
 	Availability shortcut.Availability `json:"default_availability"`
 	Shortcuts    map[string]struct {
-		Disposition   shortcut.SemanticDisposition `json:"disposition"`
-		SemanticDelta string                       `json:"semantic_delta"`
-		Risk          shortcut.Risk                `json:"risk"`
-		Availability  shortcut.Availability        `json:"availability"`
-		Primary       string                       `json:"primary"`
-		Public        bool                         `json:"public"`
-		Reviewed      bool                         `json:"reviewed"`
+		Disposition          shortcut.SemanticDisposition `json:"disposition"`
+		SemanticDelta        string                       `json:"semantic_delta"`
+		Risk                 shortcut.Risk                `json:"risk"`
+		Availability         shortcut.Availability        `json:"availability"`
+		Primary              string                       `json:"primary"`
+		Public               bool                         `json:"public"`
+		CompatibilityVisible bool                         `json:"compatibility_visible"`
+		Reviewed             bool                         `json:"reviewed"`
 	} `json:"shortcuts"`
 }
 

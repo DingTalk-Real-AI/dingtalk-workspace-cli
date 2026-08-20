@@ -7,11 +7,16 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
+
+const viewPresetReadbackAttempts = 8
+
+var viewPresetSleep = time.Sleep
 
 var ViewPresetApply = shortcut.Shortcut{
 	Service:     "aitable",
@@ -100,23 +105,39 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	if action == "create" {
 		viewID = findStringByKeys(writeData, "viewId")
 	}
-	readBack, verifyErr := rt.CallMCPData(serverMain, "get_views", map[string]any{"baseId": baseID, "tableId": tableID})
-	verifiedViews, found := findNamedObjectList(readBack, "views", "viewList")
-	if verifyErr == nil && !found {
-		verifyErr = fmt.Errorf("get_views read-back is missing the views collection")
-	}
-	verifiedMatches := viewsByExactName(verifiedViews, name)
-	if verifyErr == nil && len(verifiedMatches) != 1 {
-		verifyErr = fmt.Errorf("view read-back matched %d exact-name views, want 1", len(verifiedMatches))
-	}
-	if verifyErr == nil {
-		actualID := stringValue(verifiedMatches[0], "viewId", "id")
-		if actualID == "" || (viewID != "" && actualID != viewID) {
-			verifyErr = fmt.Errorf("view read-back identity mismatch: got %q, response %q", actualID, viewID)
-		} else if !presetViewMatches(verifiedMatches[0], viewType, config) {
-			verifyErr = fmt.Errorf("view read-back does not contain the declared type/config")
-		} else {
-			viewID = actualID
+	var verifiedMatches []map[string]any
+	var verifyErr error
+	for attempt := 0; attempt < viewPresetReadbackAttempts; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(1<<(attempt-1)) * time.Second
+			if backoff > 12*time.Second {
+				backoff = 12 * time.Second
+			}
+			viewPresetSleep(backoff)
+		}
+		readBack, readErr := rt.CallMCPData(serverMain, "get_views", map[string]any{"baseId": baseID, "tableId": tableID})
+		verifyErr = readErr
+		verifiedViews, found := findNamedObjectList(readBack, "views", "viewList")
+		if verifyErr == nil && !found {
+			verifyErr = fmt.Errorf("get_views read-back is missing the views collection")
+		}
+		verifiedMatches = viewsByExactName(verifiedViews, name)
+		if verifyErr == nil && len(verifiedMatches) != 1 {
+			verifyErr = fmt.Errorf("view read-back matched %d exact-name views, want 1", len(verifiedMatches))
+			if len(verifiedMatches) > 1 {
+				break
+			}
+		}
+		if verifyErr == nil {
+			actualID := stringValue(verifiedMatches[0], "viewId", "id")
+			if actualID == "" || (viewID != "" && actualID != viewID) {
+				verifyErr = fmt.Errorf("view read-back identity mismatch: got %q, response %q", actualID, viewID)
+			} else if !presetViewMatches(verifiedMatches[0], viewType, config) {
+				verifyErr = fmt.Errorf("view read-back does not contain the declared type/config")
+			} else {
+				viewID = actualID
+				break
+			}
 		}
 	}
 	if verifyErr != nil {
@@ -153,8 +174,71 @@ func presetViewMatches(view map[string]any, viewType string, config map[string]a
 	if actualType != "" && actualType != viewType {
 		return false
 	}
-	actualConfig, ok := view["config"].(map[string]any)
-	return ok && mapContains(actualConfig, config)
+	actualConfig := make(map[string]any, len(config))
+	if nested, ok := view["config"].(map[string]any); ok {
+		for key, value := range nested {
+			actualConfig[key] = value
+		}
+	}
+	for key := range config {
+		if value, ok := view[key]; ok {
+			actualConfig[key] = value
+		}
+	}
+	if _, wanted := config["visibleFieldIds"]; wanted {
+		if visible, ok := projectedVisibleFieldIDs(view); ok {
+			actualConfig["visibleFieldIds"] = visible
+		}
+	}
+	return mapContains(actualConfig, config)
+}
+
+// get_views projects visible fields as columns plus hiddenFields instead of
+// echoing create_view's config.visibleFieldIds input. Different deployments
+// return hiddenFields either as a fieldId-keyed object or a parallel array.
+func projectedVisibleFieldIDs(view map[string]any) ([]any, bool) {
+	columns, columnsOK := view["columns"].([]any)
+	custom, customOK := view["custom"].(map[string]any)
+	if !columnsOK || !customOK {
+		return nil, false
+	}
+	if hidden, ok := custom["hiddenFields"].(map[string]any); ok {
+		visible := make([]any, 0, len(columns))
+		for _, column := range columns {
+			fieldID, fieldOK := column.(string)
+			if !fieldOK {
+				return nil, false
+			}
+			isHidden, exists := hidden[fieldID]
+			if !exists {
+				return nil, false
+			}
+			hiddenFlag, hiddenTypeOK := isHidden.(bool)
+			if !hiddenTypeOK {
+				return nil, false
+			}
+			if !hiddenFlag {
+				visible = append(visible, fieldID)
+			}
+		}
+		return visible, true
+	}
+	hidden, hiddenOK := custom["hiddenFields"].([]any)
+	if !hiddenOK || len(columns) != len(hidden) {
+		return nil, false
+	}
+	visible := make([]any, 0, len(columns))
+	for index, column := range columns {
+		fieldID, fieldOK := column.(string)
+		isHidden, hiddenTypeOK := hidden[index].(bool)
+		if !fieldOK || !hiddenTypeOK {
+			return nil, false
+		}
+		if !isHidden {
+			visible = append(visible, fieldID)
+		}
+	}
+	return visible, true
 }
 
 func mapContains(actual, expected map[string]any) bool {

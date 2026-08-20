@@ -612,11 +612,18 @@ func TestCrossPlatformCoverageRecordQueryFailureAndContinuationBranches(t *testi
 	})
 
 	t.Run("delete readback follows active continuation to absence", func(t *testing.T) {
-		caller := &upsertByKeyCaller{callFn: func(call int, _, tool string, args map[string]any) (string, error) {
+		written := false
+		verificationPage := 0
+		caller := &upsertByKeyCaller{callFn: func(_ int, _, tool string, args map[string]any) (string, error) {
 			if tool != "query_records" {
+				written = true
 				return `{"deletedCount":1}`, nil
 			}
-			if call == 1 {
+			if !written {
+				return `{"success":true,"data":{"records":[{"recordId":"r1"}],"hasMore":false}}`, nil
+			}
+			verificationPage++
+			if verificationPage == 1 {
 				if _, exists := args["cursor"]; exists {
 					t.Fatalf("first deletion readback unexpectedly has cursor: %#v", args)
 				}
@@ -628,23 +635,30 @@ func TestCrossPlatformCoverageRecordQueryFailureAndContinuationBranches(t *testi
 			return `{"success":true,"data":{"records":[],"hasMore":false}}`, nil
 		}}
 		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
-		if err != nil || out == "" || len(caller.calls) != 3 {
+		if err != nil || out == "" || len(caller.calls) != 4 {
 			t.Fatalf("delete continued absence output=%q error=%v calls=%#v", out, err, caller.calls)
 		}
 	})
 
 	t.Run("delete readback follows active continuation to remaining record", func(t *testing.T) {
-		caller := &upsertByKeyCaller{callFn: func(call int, _, tool string, _ map[string]any) (string, error) {
+		written := false
+		verificationPage := 0
+		caller := &upsertByKeyCaller{callFn: func(_ int, _, tool string, _ map[string]any) (string, error) {
 			if tool != "query_records" {
+				written = true
 				return `{"deletedCount":1}`, nil
 			}
-			if call == 1 {
+			if !written {
+				return `{"success":true,"data":{"records":[{"recordId":"r1"}],"hasMore":false}}`, nil
+			}
+			verificationPage++
+			if verificationPage == 1 {
 				return `{"success":true,"data":{"records":[],"hasMore":true,"nextCursor":"c1"}}`, nil
 			}
 			return `{"success":true,"data":{"records":[{"recordId":"r1"}],"hasMore":false}}`, nil
 		}}
 		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
-		if err == nil || out != "" || len(caller.calls) != 3 {
+		if err == nil || out != "" || len(caller.calls) != 4 {
 			t.Fatalf("delete continued remaining output=%q error=%v calls=%#v", out, err, caller.calls)
 		}
 		var typed *apperrors.Error
@@ -654,14 +668,21 @@ func TestCrossPlatformCoverageRecordQueryFailureAndContinuationBranches(t *testi
 	})
 
 	t.Run("delete readback fails closed on empty continuation stall", func(t *testing.T) {
-		caller := &upsertByKeyCaller{callFn: func(call int, _, tool string, _ map[string]any) (string, error) {
+		written := false
+		verificationPage := 0
+		caller := &upsertByKeyCaller{callFn: func(_ int, _, tool string, _ map[string]any) (string, error) {
 			if tool != "query_records" {
+				written = true
 				return `{"deletedCount":1}`, nil
 			}
-			return fmt.Sprintf(`{"success":true,"data":{"records":[],"hasMore":true,"nextCursor":"c%d"}}`, call), nil
+			if !written {
+				return `{"success":true,"data":{"records":[{"recordId":"r1"}],"hasMore":false}}`, nil
+			}
+			verificationPage++
+			return fmt.Sprintf(`{"success":true,"data":{"records":[],"hasMore":true,"nextCursor":"c%d"}}`, verificationPage), nil
 		}}
 		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
-		if err == nil || out != "" || len(caller.calls) != recordQueryMaxConsecutiveEmptyPages+1 {
+		if err == nil || out != "" || len(caller.calls) != recordQueryMaxConsecutiveEmptyPages+2 {
 			t.Fatalf("delete stalled continuation output=%q error=%v calls=%#v", out, err, caller.calls)
 		}
 		var typed *apperrors.Error
@@ -678,21 +699,26 @@ func TestCrossPlatformCoverageRecordWriteReadbackUsesStableServicePagesE2E(t *te
 				records := updateFixtureRecords(0, size, "完成")
 				caller := &upsertByKeyCaller{}
 				queryCalls := 0
+				writeSeen := false
 				caller.callFn = func(_ int, _, tool string, args map[string]any) (string, error) {
 					if tool != "query_records" {
+						writeSeen = true
 						return `{"success":true}`, nil
 					}
 					queryCalls++
 					if operation == "delete" {
 						ids := args["recordIds"].([]string)
-						empty := make([]map[string]any, len(ids))
-						response := pagedRecordQueryResponse(t, empty, args)
+						requested := make([]map[string]any, 0, len(ids))
+						if !writeSeen {
+							for _, id := range ids {
+								requested = append(requested, map[string]any{"recordId": id})
+							}
+						}
+						response := pagedRecordQueryResponse(t, requested, args)
 						var payload map[string]any
 						if err := json.Unmarshal([]byte(response), &payload); err != nil {
 							t.Fatal(err)
 						}
-						page := payload["data"].(map[string]any)
-						page["records"] = []any{}
 						raw, _ := json.Marshal(payload)
 						return string(raw), nil
 					}
@@ -725,6 +751,9 @@ func TestCrossPlatformCoverageRecordWriteReadbackUsesStableServicePagesE2E(t *te
 					t.Fatalf("%s size %d false negative: output=%q err=%v", operation, size, out, err)
 				}
 				wantQueries := (size + recordQueryServicePageSize - 1) / recordQueryServicePageSize
+				if operation == "delete" {
+					wantQueries *= 2
+				}
 				if queryCalls != wantQueries {
 					t.Fatalf("%s size %d query calls=%d, want %d", operation, size, queryCalls, wantQueries)
 				}
@@ -860,15 +889,20 @@ func recordIDFixtures(count int) []string {
 
 func TestCrossPlatformCoverageRecordDeleteAutoChunksAndProvesAbsenceE2E(t *testing.T) {
 	ids := recordIDFixtures(101)
-	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-		{text: `{"deletedCount":100}`},
-		{text: `{"data":{"records":[]}}`},
-		{text: `{"data":{"records":[]}}`},
-		{text: `{"data":{"records":[]}}`},
-		{text: `{"data":{"records":[]}}`},
-		{text: `{"data":{"records":[]}}`},
-		{text: `{"deletedCount":1}`},
-		{text: `{"data":{"records":[]}}`},
+	writes := 0
+	caller := &upsertByKeyCaller{callFn: func(_ int, _, tool string, args map[string]any) (string, error) {
+		if tool == "delete_records" {
+			writes++
+			return fmt.Sprintf(`{"deletedCount":%d}`, len(args["recordIds"].([]string))), nil
+		}
+		requested := args["recordIds"].([]string)
+		records := make([]map[string]any, 0, len(requested))
+		if writes == 0 {
+			for _, id := range requested {
+				records = append(records, map[string]any{"recordId": id})
+			}
+		}
+		return recordListJSON(t, records), nil
 	}}
 	out, err := runRecordDeleteCLI(t, caller, ids)
 	if err != nil {
@@ -879,14 +913,43 @@ func TestCrossPlatformCoverageRecordDeleteAutoChunksAndProvesAbsenceE2E(t *testi
 			t.Fatalf("delete output missing %s: %s", want, out)
 		}
 	}
-	if len(caller.calls) != 8 || caller.calls[0].tool != "delete_records" || caller.calls[1].tool != "query_records" || caller.calls[6].tool != "delete_records" {
+	if len(caller.calls) != 14 || caller.calls[0].tool != "query_records" || caller.calls[6].tool != "delete_records" || caller.calls[12].tool != "delete_records" {
 		t.Fatalf("delete call sequence = %#v", caller.calls)
 	}
 }
 
+func TestCrossPlatformCoverageRecordDeleteDoesNotCountMissingIDsE2E(t *testing.T) {
+	t.Run("all requested IDs were already absent", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"success":true,"data":{"records":[],"hasMore":false}}`}}}
+		out, err := runRecordDeleteCLI(t, caller, []string{"missing-1", "missing-2"})
+		if err != nil || len(caller.calls) != 1 || caller.calls[0].tool != "query_records" ||
+			!strings.Contains(out, `"deletedCount": 0`) || !strings.Contains(out, `"missingCount": 2`) {
+			t.Fatalf("already absent delete = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("only records proven present are counted", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"success":true,"data":{"records":[{"recordId":"r1"}],"hasMore":false}}`},
+			{text: `{"deletedCount":1}`},
+			{text: `{"success":true,"data":{"records":[],"hasMore":false}}`},
+		}}
+		out, err := runRecordDeleteCLI(t, caller, []string{"missing", "r1"})
+		if err != nil || !strings.Contains(out, `"deletedCount": 1`) || !strings.Contains(out, `"missingCount": 1`) {
+			t.Fatalf("mixed delete = output:%q err:%v", out, err)
+		}
+		deleted := caller.calls[1].args["recordIds"].([]string)
+		if !slices.Equal(deleted, []string{"r1"}) {
+			t.Fatalf("delete target IDs = %#v", deleted)
+		}
+	})
+}
+
 func TestCrossPlatformCoverageRecordDeleteEmptyReplyRecoveredOnlyByAbsenceE2E(t *testing.T) {
 	t.Run("legal empty collection proves deletion", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: ""}, {text: `{"records":[]}`}}}
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"records":[{"recordId":"r1"}]}`}, {text: ""}, {text: `{"records":[]}`},
+		}}
 		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
 		if err != nil || !strings.Contains(out, `"status": "recovered"`) {
 			t.Fatalf("delete recovered = output:%q err:%v", out, err)
@@ -895,6 +958,7 @@ func TestCrossPlatformCoverageRecordDeleteEmptyReplyRecoveredOnlyByAbsenceE2E(t 
 
 	t.Run("explicit service success with empty data proves deletion", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"records":[{"recordId":"r1"}]}`},
 			{text: `{"deletedCount":1}`},
 			{text: `{"success":true,"status":"success","error":{},"data":{}}`},
 		}}
@@ -905,7 +969,9 @@ func TestCrossPlatformCoverageRecordDeleteEmptyReplyRecoveredOnlyByAbsenceE2E(t 
 	})
 
 	t.Run("missing records contract is unknown", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"deletedCount":1}`}, {text: `{"data":{}}`}}}
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"records":[{"recordId":"r1"}]}`}, {text: `{"deletedCount":1}`}, {text: `{"data":{}}`},
+		}}
 		out, err := runRecordDeleteCLI(t, caller, []string{"r1"})
 		if err == nil || out != "" {
 			t.Fatalf("delete missing records = output:%q err:%v", out, err)
@@ -918,6 +984,7 @@ func TestCrossPlatformCoverageRecordDeleteEmptyReplyRecoveredOnlyByAbsenceE2E(t 
 
 	t.Run("remaining record is not success", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"records":[{"recordId":"r1"}]}`},
 			{text: `{"deletedCount":0}`},
 			{text: `{"records":[{"recordId":"r1","cells":{"fld":"still here"}}]}`},
 		}}
@@ -930,15 +997,22 @@ func TestCrossPlatformCoverageRecordDeleteEmptyReplyRecoveredOnlyByAbsenceE2E(t 
 
 func TestCrossPlatformCoverageRecordDeletePartialCheckpointE2E(t *testing.T) {
 	ids := recordIDFixtures(101)
-	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-		{text: `{"deletedCount":100}`},
-		{text: `{"records":[]}`},
-		{text: `{"records":[]}`},
-		{text: `{"records":[]}`},
-		{text: `{"records":[]}`},
-		{text: `{"records":[]}`},
-		{text: `{"deletedCount":0}`},
-		{text: `{"records":[{"recordId":"r100","cells":{}}]}`},
+	writes := 0
+	caller := &upsertByKeyCaller{callFn: func(_ int, _, tool string, args map[string]any) (string, error) {
+		if tool == "delete_records" {
+			writes++
+			return `{"deletedCount":0}`, nil
+		}
+		requested := args["recordIds"].([]string)
+		records := make([]map[string]any, 0, len(requested))
+		if writes == 0 {
+			for _, id := range requested {
+				records = append(records, map[string]any{"recordId": id})
+			}
+		} else if writes == 2 {
+			records = append(records, map[string]any{"recordId": "r100", "cells": map[string]any{}})
+		}
+		return recordListJSON(t, records), nil
 	}}
 	out, err := runRecordDeleteCLI(t, caller, ids)
 	if err == nil || out != "" {

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -337,8 +338,15 @@ func TestCrossPlatformCoverageMessagesSendRoutesIdentitySpecificTransports(t *te
 				}
 			}
 			if tt.bodyKey == "content" {
+				rawContent := call.args[tt.bodyKey].(string)
+				if strings.Contains(rawContent, `\u003c`) || strings.Contains(rawContent, `\u003e`) {
+					t.Errorf("content = %q; current-user mention tokens must remain literal", rawContent)
+				}
+				if !strings.Contains(rawContent, "<@"+fixtureCurrentDOpenID+">") {
+					t.Errorf("content = %q; missing literal current-user mention token", rawContent)
+				}
 				var content map[string]string
-				if err := json.Unmarshal([]byte(call.args[tt.bodyKey].(string)), &content); err != nil {
+				if err := json.Unmarshal([]byte(rawContent), &content); err != nil {
 					t.Fatal(err)
 				}
 				if content["text"] != tt.body {

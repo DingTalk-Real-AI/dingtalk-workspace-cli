@@ -39,6 +39,11 @@ const (
 	pushActionSkipped       = "skipped"        // 按 --if-exists 跳过
 	pushActionFolderCreated = "folder_created" // 新建远端目录（不计入 uploaded）
 	pushActionFailed        = "failed"
+
+	pushActionPlannedUpload       = "planned_upload"
+	pushActionPlannedOverwrite    = "planned_overwrite"
+	pushActionPlannedSkip         = "planned_skip"
+	pushActionPlannedFolderCreate = "planned_folder_create"
 )
 
 // localPushFile 描述一个待推送的本地常规文件。
@@ -79,10 +84,13 @@ type drivePushItem struct {
 
 // drivePushSummary 是各动作的计数汇总。uploaded 同时统计新建与覆盖。
 type drivePushSummary struct {
-	Uploaded int  `json:"uploaded"`
-	Skipped  int  `json:"skipped"`
-	Failed   int  `json:"failed"`
-	Aborted  bool `json:"aborted"`
+	Uploaded       int  `json:"uploaded"`
+	Skipped        int  `json:"skipped"`
+	Failed         int  `json:"failed"`
+	Aborted        bool `json:"aborted"`
+	PlannedUploads int  `json:"planned_uploads,omitempty"`
+	PlannedSkips   int  `json:"planned_skips,omitempty"`
+	PlannedFolders int  `json:"planned_folders,omitempty"`
 }
 
 type drivePushResult struct {
@@ -380,7 +388,8 @@ func printDrivePushDryRunWithPreflight(ifExists string, remoteFiles map[string]*
 			continue
 		}
 		plannedFolders[dir] = "dry-run-planned-folder"
-		plan.Items = append(plan.Items, drivePushItem{RelPath: dir, Action: pushActionFolderCreated})
+		plan.Summary.PlannedFolders++
+		plan.Items = append(plan.Items, drivePushItem{RelPath: dir, Action: pushActionPlannedFolderCreate})
 	}
 	for _, lf := range localFiles {
 		size := lf.Size
@@ -390,25 +399,25 @@ func printDrivePushDryRunWithPreflight(ifExists string, remoteFiles map[string]*
 			plan.Items = append(plan.Items, drivePushItem{RelPath: lf.RelPath, Action: pushActionFailed, SizeBytes: &size, Error: "父目录未能创建"})
 			continue
 		}
-		action := pushActionUploaded
+		action := pushActionPlannedUpload
 		if rf, exists := remoteFiles[lf.RelPath]; exists {
 			switch ifExists {
 			case ifExistsSkip:
-				action = pushActionSkipped
+				action = pushActionPlannedSkip
 			case ifExistsSmart:
 				if rf.ModifiedTimeValid && rf.ModifiedTime >= lf.ModTimeMillis {
-					action = pushActionSkipped
+					action = pushActionPlannedSkip
 				} else {
-					action = pushActionOverwritten
+					action = pushActionPlannedOverwrite
 				}
 			case ifExistsOverwrite:
-				action = pushActionOverwritten
+				action = pushActionPlannedOverwrite
 			}
 		}
-		if action == pushActionSkipped {
-			plan.Summary.Skipped++
+		if action == pushActionPlannedSkip {
+			plan.Summary.PlannedSkips++
 		} else {
-			plan.Summary.Uploaded++
+			plan.Summary.PlannedUploads++
 		}
 		plan.Items = append(plan.Items, drivePushItem{RelPath: lf.RelPath, Action: action, SizeBytes: &size})
 	}
@@ -811,7 +820,10 @@ func defaultPushPutOpenedFile(ctx context.Context, url string, headers map[strin
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("failed to seek upload file: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, file)
+	// net/http owns and closes Request.Body after RoundTrip. The *os.File belongs
+	// to pushUploadFilePinned, which must stat it after PUT before commit_upload;
+	// wrap it in a no-op closer so HTTP completion cannot close that shared handle.
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, io.NopCloser(file))
 	if err != nil {
 		return fmt.Errorf("failed to create upload request: %w", err)
 	}

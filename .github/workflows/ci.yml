@@ -512,6 +512,12 @@ jobs:
         if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         run: node .github/reviewer-routing.test.js
 
+      - name: Test npm installer smoke (prune, backup, publish)
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        env:
+          XDG_CONFIG_HOME: ""
+        run: node test/scripts/install_js_smoke.mjs
+
   test-focused:
     name: "Test (focused: ${{ matrix.shard }})"
     needs: lint
@@ -611,7 +617,13 @@ jobs:
 
       - name: Install archive tooling
         if: ${{ matrix.shard == 'release-scripts' && steps.select.outputs.affected == 'true' }}
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Test shard with Race Detection
         if: ${{ steps.select.outputs.affected == 'true' }}
@@ -751,7 +763,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Test release scripts
         shell: bash
@@ -1129,7 +1147,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Build
         run: make build
@@ -1180,7 +1204,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Run policy and shortcut coverage
         run: |
@@ -1261,7 +1291,13 @@ jobs:
 
       - name: Install archive tooling
         if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit != 'true'
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Run baseline unit tests with coverage
         if: steps.baseline-cache.outputs.cache-hit != 'true'

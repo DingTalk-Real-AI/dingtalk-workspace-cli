@@ -1,11 +1,13 @@
 package helpers
 
 import (
+	stderrors "errors"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -107,9 +109,16 @@ func TestCrossPlatformCoverageProxySubCommandCoverage(t *testing.T) {
 
 func executeWikiEdge(t *testing.T, args ...string) error {
 	t.Helper()
+	_, err := executeWikiEdgeWithCaller(t, args...)
+	return err
+}
+
+func executeWikiEdgeWithCaller(t *testing.T, args ...string) (*scriptedToolCaller, error) {
+	t.Helper()
 	oldDeps := deps
 	oldArgs := os.Args
-	InitDeps(&scriptedToolCaller{})
+	caller := &scriptedToolCaller{}
+	InitDeps(caller)
 	deps.Out.w = io.Discard
 	deps.Out.errW = io.Discard
 	t.Cleanup(func() {
@@ -125,7 +134,7 @@ func executeWikiEdge(t *testing.T, args ...string) error {
 	root.SetIn(os.Stdin)
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "wiki"}, args...)
-	return root.Execute()
+	return caller, root.Execute()
 }
 
 func TestCrossPlatformCoverageWikiRoutingAndValidationEdges(t *testing.T) {
@@ -151,6 +160,20 @@ func TestCrossPlatformCoverageWikiRoutingAndValidationEdges(t *testing.T) {
 		if err := executeWikiEdge(t, args...); err == nil {
 			t.Fatalf("Execute(%v) returned nil", args)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWikiMemberAddRejectsOwner(t *testing.T) {
+	caller, err := executeWikiEdgeWithCaller(t, "member", "add", "--workspace", "space", "--users", "u1", "--role", "OWNER")
+	if err == nil || !strings.Contains(strings.ToUpper(err.Error()), "OWNER") {
+		t.Fatalf("member add OWNER error = %v, want local OWNER rejection", err)
+	}
+	var appErr *apperrors.Error
+	if !stderrors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("member add OWNER error = %#v, want validation category", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("member add OWNER made %d remote calls, want 0", caller.calls)
 	}
 }
 

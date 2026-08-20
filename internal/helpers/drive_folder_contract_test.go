@@ -93,7 +93,23 @@ func TestCrossPlatformCoverageDriveFolderContractsPublishResultAndDryRun(t *test
 			if name == "sync" {
 				assertDriveSyncResultSchema(t, final.Result.DataSchema)
 			}
+			if name == "push" {
+				assertDrivePushResultSchema(t, final.Result.DataSchema)
+			}
 		})
+	}
+}
+
+func assertDrivePushResultSchema(t *testing.T, raw json.RawMessage) {
+	t.Helper()
+	properties := resultSchemaProperties(t, raw)
+	plan := schemaObjectProperty(t, properties, "plan")
+	summary := schemaObjectProperty(t, schemaProperties(t, plan), "summary")
+	summaryProperties := schemaProperties(t, summary)
+	for _, name := range []string{"planned_uploads", "planned_skips", "planned_folders"} {
+		if _, ok := summaryProperties[name]; !ok {
+			t.Fatalf("push plan summary schema is missing %s", name)
+		}
 	}
 }
 
@@ -133,6 +149,13 @@ func assertDriveSyncResultSchema(t *testing.T, raw json.RawMessage) {
 	planProperties := schemaProperties(t, plan)
 	planDiff := schemaObjectProperty(t, planProperties, "diff")
 	assertSchemaRequired(t, planDiff, "new_local", "new_remote", "modified", "unchanged", "unknown")
+	planSummary := schemaObjectProperty(t, planProperties, "summary")
+	planSummaryProperties := schemaProperties(t, planSummary)
+	for _, name := range []string{"planned_pulls", "planned_pushes", "planned_skips", "planned_folders"} {
+		if _, ok := planSummaryProperties[name]; !ok {
+			t.Fatalf("sync plan summary schema is missing %s", name)
+		}
+	}
 
 	var schema map[string]any
 	if err := json.Unmarshal(raw, &schema); err != nil {

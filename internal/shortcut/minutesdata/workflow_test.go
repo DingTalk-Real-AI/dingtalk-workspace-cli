@@ -26,6 +26,26 @@ func TestCrossPlatformCoverageMinutesWorkflowShapesRejectUnknownE2E(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoverageMinutesPermissionMutationRequiresExactResultMap(t *testing.T) {
+	for _, data := range []map[string]any{
+		{"success": true, "result": map[string]any{}},
+		{"success": true, "result": map[string]any{"resultMap": map[string]any{}}},
+		{"success": true, "result": map[string]any{"resultMap": map[string]any{"u1": []any{}}}},
+		{"success": true, "result": map[string]any{"resultMap": map[string]any{"other": []any{"m1"}}}},
+	} {
+		if err := RequirePermissionMutationAcknowledgement("unshare", []string{"u1"}, []string{"m1"}, data); err == nil {
+			t.Fatalf("incomplete permission acknowledgement accepted: %#v", data)
+		}
+	}
+	valid := map[string]any{
+		"success": true,
+		"result":  map[string]any{"resultMap": map[string]any{"u1": []any{"m1"}}},
+	}
+	if err := RequirePermissionMutationAcknowledgement("unshare", []string{"u1"}, []string{"m1"}, valid); err != nil {
+		t.Fatalf("valid permission acknowledgement rejected: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageMinutesWorkflowObservedShapesE2E(t *testing.T) {
 	record, err := RecordResult("pause", "u1", map[string]any{"success": true, "result": map[string]any{"cmd": "pause", "uuid": "u1"}})
 	if err != nil || record["cmd"] != "pause" {

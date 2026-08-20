@@ -27,6 +27,38 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func resolveChatGroupRoleSetUserRoleIDs(cmd *cobra.Command) ([]string, error) {
+	roleIDChanged := cmd.Flags().Changed("role-id")
+	roleIDsChanged := cmd.Flags().Changed("role-ids")
+	switch {
+	case roleIDChanged && roleIDsChanged:
+		// PreRunE rejects callers that explicitly pass both flags. Reaching this
+		// branch means the hidden legacy flag was promoted to satisfy Cobra's
+		// required marker on the public canonical flag.
+		return parseCSVValues(mustGetFlag(cmd, "role-ids")), nil
+	case roleIDChanged:
+		roleIDs := parseCSVValues(mustGetFlag(cmd, "role-id"))
+		if len(roleIDs) == 0 {
+			return nil, apperrors.NewValidation("--role-id 不能为空")
+		}
+		if len(roleIDs) > 1 {
+			return nil, apperrors.NewValidation("--role-id 只允许指定一个群身份")
+		}
+		return roleIDs, nil
+	case roleIDsChanged:
+		return parseCSVValues(mustGetFlag(cmd, "role-ids")), nil
+	default:
+		return nil, apperrors.NewValidation("缺少必填参数 --role-id")
+	}
+}
+
+func prepareChatGroupRoleSetUserRoleID(cmd *cobra.Command) error {
+	if cmd.Flags().Changed("role-id") && cmd.Flags().Changed("role-ids") {
+		return apperrors.NewValidation("--role-id 与 --role-ids 不能同时指定")
+	}
+	return promoteLegacyChatString(cmd, "role-id", "role-ids")
+}
+
 // promoteLegacyChatString copies an explicitly supplied legacy flag into the
 // new canonical flag. Cobra validates MarkFlagRequired after PreRunE, and the
 // overwrite also preserves the migration rule that a legacy value wins when
@@ -7753,17 +7785,23 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatGroupRoleSetUserCmd := &cobra.Command{
 		Use:   "set-user",
 		Short: "设置用户的群身份（覆盖该用户的全部群身份）",
-		Example: `  dws chat group-role set-user --conversation-id <openConversationId> --user <userId> --role-ids roleId1,roleId2
+		Example: `  dws chat group-role set-user --conversation-id <openConversationId> --user <userId> --role-id <openRoleId>
   # 查询人员: dws contact user search --keyword "姓名" --format json
   # 查询 role-id: dws chat group-role list --conversation-id <openConversationId>`,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return prepareChatGroupRoleSetUserRoleID(cmd)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "conversation-id", "role-ids"); err != nil {
+			if err := validateRequiredFlags(cmd, "conversation-id"); err != nil {
 				return err
 			}
 			if err := validateRequiredFlagWithAliases(cmd, "user", "userId"); err != nil {
 				return err
 			}
-			roleIDs := parseCSVValues(mustGetFlag(cmd, "role-ids"))
+			roleIDs, err := resolveChatGroupRoleSetUserRoleIDs(cmd)
+			if err != nil {
+				return err
+			}
 			user := flagOrFallback(cmd, "user", "userId")
 			toolArgs := map[string]any{
 				"openConversationId": flagOrFallback(cmd, "conversation-id", "group", "id", "chat"),
@@ -7798,13 +7836,13 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "为指定群成员设置自定义角色",
-				UseWhen:      []string{"需要把一个或多个已有角色分配给成员时"},
+				UseWhen:      []string{"需要把一个已有角色分配给成员时"},
 				AvoidWhen:    []string{"创建新角色定义时使用 chat group-role add"},
-				Examples:     []string{"dws chat group-role set-user --conversation-id <openConversationId> --user <userId> --role-ids roleId1,roleId2"},
+				Examples:     []string{"dws chat group-role set-user --conversation-id <openConversationId> --user <userId> --role-id <openRoleId>"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "conversation-id", Property: "openConversationId"},
-				{Name: "role-ids", Property: "openRoleIds"},
+				{Name: "role-id", Property: "openRoleIds"},
 				{Name: "user", Property: "openDingTalkId"},
 			},
 		},
@@ -7814,8 +7852,11 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	chatGroupRoleSetUserCmd.Flags().String("user", "", "用户 userId（必填）")
 	chatGroupRoleSetUserCmd.Flags().String("userId", "", "--user 的别名")
 	_ = chatGroupRoleSetUserCmd.Flags().MarkHidden("userId")
-	chatGroupRoleSetUserCmd.Flags().String("role-ids", "", "群身份 openRoleId 列表，逗号分隔 (必填)，传空字符串则清除该用户所有群身份")
-	_ = chatGroupRoleSetUserCmd.MarkFlagRequired("role-ids")
+	chatGroupRoleSetUserCmd.Flags().String("role-id", "", "群身份 openRoleId，由 group-role list 返回 (必填)")
+	chatGroupRoleSetUserCmd.Flags().String("role-ids", "", "已隐藏的兼容参数：群身份 openRoleId 列表，逗号分隔")
+	_ = chatGroupRoleSetUserCmd.Flags().MarkHidden("role-ids")
+	corecmd.AnnotateFlagAlias(chatGroupRoleSetUserCmd, "role-ids", "role-id")
+	_ = chatGroupRoleSetUserCmd.MarkFlagRequired("role-id")
 
 	chatGroupRoleRemoveUserCmd := &cobra.Command{
 		Use:     "remove-user",
@@ -10528,7 +10569,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	chatCategoryCmd.AddCommand(chatCategoryCreateSmartCmd)
 	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageAddFavoriteCmd, chatMessageRemoveFavoriteCmd, chatMessageListFavoritesCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd, chatMessageListEmotionRepliesCmd)
 
-	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd, newChatToolbarCommand())
+	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd, newChatToolbarCommand(), newChatEmotionCommand())
 
 	// Keep the v1.0.56 command surface recognizable while directing callers to
 	// the supported nested commands. The chat root's "im" alias makes these

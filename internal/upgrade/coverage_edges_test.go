@@ -264,7 +264,7 @@ func TestCrossPlatformCoverageUpgradePathsAndSkillsEdges(t *testing.T) {
 	}
 	knownSkillDirs = []string{".agents/skills", ".real/skills", ".missing/skills", ".present/skills"}
 	result, err := UpgradeSkillLocations(source)
-	if err != nil || len(result.Succeeded()) != 1 || len(result.Failed()) != 0 {
+	if err != nil || len(result.Succeeded()) != 2 || len(result.Failed()) != 0 {
 		t.Fatalf("skill upgrade = %#v, %v", result, err)
 	}
 	knownSkillDirs = []string{".real/skills"}
@@ -579,7 +579,10 @@ func TestCrossPlatformCoverageUpgradePathInjectedFailures(t *testing.T) {
 	})
 	home := t.TempDir()
 	upgradeUserHomeDir = func() (string, error) { return home, nil }
-	knownSkillDirs = []string{".agents/skills"}
+	knownSkillDirs = []string{".agents/skills", ".claude/skills"}
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	calls := 0
 	upgradeCopyDir = func(src, dst string) error {
 		calls++
@@ -593,8 +596,8 @@ func TestCrossPlatformCoverageUpgradePathInjectedFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := UpgradeSkillLocations(source)
-	if err != nil || len(result.Succeeded()) != 1 || len(result.Results) != 1 {
-		t.Fatalf("replaced primary fallback = %#v, %v", result, err)
+	if err == nil || len(result.Failed()) != 1 || len(result.Succeeded()) != 0 {
+		t.Fatalf("canonical failure = %#v, %v", result, err)
 	}
 	failure := errors.New("ensure failed")
 	upgradeEnsureDir = func(string, os.FileMode) error { return failure }
