@@ -968,3 +968,69 @@ func TestAutoModeFallsBackToPollOnNilStream(t *testing.T) {
 		t.Fatal("auto mode did not fall back to polling on nil stream")
 	}
 }
+
+func TestAutoFallbackTimeoutKeepsEventPhaseLastStatus(t *testing.T) {
+	// The event phase observes a pending status (RUNNING) before the stream
+	// ends; the auto fallback poll then blocks until the shared deadline.
+	// The timed-out envelope must report the event phase's RUNNING — not
+	// regress to the accepted result's NEW.
+	started := make(chan struct{})
+	cmd := New(Spec{
+		Use:           "wait-sample",
+		OutputRollout: output.RolloutUnifiedActive,
+		Safety:        contract.SafetySpec{Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent"},
+		Contract:      eventTestDecl(contract.WaitModeAuto),
+		ResultInvoke: func(*Ctx, map[string]any) (output.CommandResult, error) {
+			return output.Pending(map[string]any{"id": "job-1"}, &output.OperationInfo{
+				ID: "job-1", State: "NEW", NextCommand: "dws wait-sample --id job-1",
+			}), nil
+		},
+		WaitEvents: func(context.Context, *Ctx) (wait.EventStream, error) {
+			return &scriptedStream{events: []wait.PollDoc{
+				{"process_instance_id": "job-1", "result": map[string]any{"status": "RUNNING"}},
+			}}, nil // one pending event, then stream end → poll fallback
+		},
+		WaitPoll: func(ctx context.Context, _ *Ctx) (wait.PollDoc, error) {
+			close(started)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	})
+	cmd.SetArgs([]string{"--wait", "--wait-timeout", "1"})
+	ctx, store := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.PersistentPostRunE = func(executed *cobra.Command, _ []string) error {
+		_, _, err := output.EmitStoredResult(executed)
+		return err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Execute() }()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("auto-fallback blocking poll never started")
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("timeout wait must exit 0 (pending is not failure): %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("blocked auto-fallback poll was not cancelled by --wait-timeout")
+	}
+	if code, emitted := output.StoredExitCode(store); !emitted || code != 0 {
+		t.Fatalf("stored code/emitted=%d/%v", code, emitted)
+	}
+	emitted := stdout.String()
+	if !strings.Contains(emitted, `"outcome": "pending"`) {
+		t.Fatalf("stdout=%s", emitted)
+	}
+	if !strings.Contains(emitted, `"state": "RUNNING"`) || strings.Contains(emitted, `"state": "NEW"`) {
+		t.Fatalf("timed-out envelope must keep the event phase's last status RUNNING, stdout=%s", emitted)
+	}
+	if !strings.Contains(emitted, `"timed_out": true`) {
+		t.Fatalf("timed-out envelope must mark meta.operation.timed_out, stdout=%s", emitted)
+	}
+}

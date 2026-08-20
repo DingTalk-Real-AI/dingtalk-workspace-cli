@@ -249,8 +249,11 @@ func RunEvent(ctx context.Context, spec EventLoopSpec, resource string, stream E
 			}
 			// Wrap with ErrEventStreamEnded so auto mode can fall back to
 			// polling while correlated-status failures (unknown status,
-			// missing status query) stay non-recoverable.
-			return Outcome{Attempts: attempts}, fmt.Errorf("%w: %v", ErrEventStreamEnded, err)
+			// missing status query) stay non-recoverable. The outcome keeps
+			// the last correlated status: auto's fallback poll carries it
+			// so a timeout before its first completed poll still reports
+			// the state the events already observed.
+			return Outcome{Status: lastStatus, Attempts: attempts}, fmt.Errorf("%w: %v", ErrEventStreamEnded, err)
 		}
 		attempts++
 		correlated, ok := ExtractStatus(doc, spec.MatchField)

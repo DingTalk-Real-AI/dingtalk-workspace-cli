@@ -747,7 +747,7 @@ func runWaitLoop(parent context.Context, decl *contract.WaitSpec, timeout time.D
 		// err != nil branch below (no poll fallback on an exhausted
 		// shared deadline).
 		if mode == contract.WaitModeAuto && loopCtx.Err() == nil {
-			return pollWithSpec(loopCtx, decl, spec, ctx)
+			return pollWithSpec(loopCtx, decl, spec, ctx, "")
 		}
 		err = errors.New("subscription returned no stream")
 	}
@@ -760,8 +760,9 @@ func runWaitLoop(parent context.Context, decl *contract.WaitSpec, timeout time.D
 			return wait.Outcome{Outcome: contract.ResultOutcomePending, TimedOut: true}, nil
 		}
 		if mode == contract.WaitModeAuto {
-			// Subscription failed before any event: fall back to polling.
-			return pollWithSpec(loopCtx, decl, spec, ctx)
+			// Subscription failed before any event: fall back to polling
+			// with no carried status (nothing was observed).
+			return pollWithSpec(loopCtx, decl, spec, ctx, "")
 		}
 		return wait.Outcome{}, fmt.Errorf("wait: event subscription failed: %w", err)
 	}
@@ -777,21 +778,35 @@ func runWaitLoop(parent context.Context, decl *contract.WaitSpec, timeout time.D
 	}
 	if mode == contract.WaitModeAuto && errors.Is(err, wait.ErrEventStreamEnded) {
 		// Stream ended before a terminal status: fall back to polling under
-		// the same deadline.
-		return pollWithSpec(loopCtx, decl, spec, ctx)
+		// the same deadline, carrying the event phase's last observed status.
+		// A blocked fallback poll can consume the whole deadline without
+		// ever returning a document; without the carried status the
+		// timed-out envelope would regress meta.operation.state to the
+		// accepted result's original state instead of the state the events
+		// already proved.
+		return pollWithSpec(loopCtx, decl, spec, ctx, outcome.Status)
 	}
 	return outcome, err
 }
 
-// pollWithSpec runs the poll loop for an auto-mode fallback.
-func pollWithSpec(loopCtx context.Context, decl *contract.WaitSpec, spec Spec, ctx *Ctx) (wait.Outcome, error) {
-	return wait.Run(loopCtx, wait.LoopSpec{
+// pollWithSpec runs the poll loop for an auto-mode fallback. eventStatus is
+// the last status the event phase observed before falling back ("" when the
+// subscription itself failed, before any event). When the poll loop ends
+// without observing a status of its own — a first poll that blocks until the
+// shared deadline — the carried event status is adopted so the timed-out
+// envelope keeps reporting the real last known state.
+func pollWithSpec(loopCtx context.Context, decl *contract.WaitSpec, spec Spec, ctx *Ctx, eventStatus string) (wait.Outcome, error) {
+	outcome, err := wait.Run(loopCtx, wait.LoopSpec{
 		StatusQuery: decl.StatusQuery,
 		Terminal:    decl.Terminal,
 		Pending:     decl.PendingValues,
 	}, func(pollCtx context.Context) (wait.PollDoc, error) {
 		return spec.WaitPoll(pollCtx, ctx)
 	})
+	if eventStatus != "" && outcome.Status == "" {
+		outcome.Status = eventStatus
+	}
+	return outcome, err
 }
 
 // waitResource resolves the resource identifier an event stream correlates
