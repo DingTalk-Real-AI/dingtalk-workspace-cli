@@ -1059,6 +1059,10 @@ func resolveSkillSetupBase(home, target string) string {
 		if custom := strings.TrimSpace(skillSetupGetenv("VIBE_HOME")); custom != "" {
 			return filepath.Join(custom, "skills")
 		}
+	case "dsh":
+		if custom := strings.TrimSpace(skillSetupGetenv("DSH_HOME")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
 	case "openclaw":
 		return resolveOpenClawSetupBase(home)
 	case "opencode", "amp", "replit", "universal", "crush", "devin", "goose", "kimchi":
