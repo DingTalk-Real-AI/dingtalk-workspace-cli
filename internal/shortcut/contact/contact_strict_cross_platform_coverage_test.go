@@ -6,6 +6,7 @@ package contact
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -18,6 +19,7 @@ import (
 
 type contactCaller struct {
 	payload string
+	err     error
 	calls   int
 	product string
 	tool    string
@@ -27,6 +29,9 @@ type contactCaller struct {
 func (caller *contactCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
 	caller.calls++
 	caller.product, caller.tool, caller.args = product, tool, args
+	if caller.err != nil {
+		return nil, caller.err
+	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: caller.payload}}}, nil
 }
 func (*contactCaller) Format() string { return "json" }
@@ -56,6 +61,8 @@ func TestCrossPlatformCoverageContactStrictSearchAndCollections(t *testing.T) {
 		{"success": true, "result": []any{"bad"}},
 		{"success": true, "result": []any{map[string]any{}}},
 		{"success": true, "result": []any{map[string]any{"name": "no-id"}}},
+		{"success": true, "result": []any{map[string]any{"userId": "same"}, map[string]any{"userId": "same"}}},
+		{"success": true, "result": []any{map[string]any{"userId": "good", "name": float64(1)}}},
 		{"success": true, "errorCode": "FAILED", "result": []any{}},
 	}
 	for index, data := range broken {
@@ -70,13 +77,36 @@ func TestCrossPlatformCoverageContactStrictSearchAndCollections(t *testing.T) {
 		t.Fatalf("valid members rejected: got=%v err=%v", got, projectErr)
 	}
 	for _, data := range []map[string]any{
+		{"success": false},
 		{"success": true},
 		{"success": true, "deptUserList": map[string]any{}},
-		{"success": true, "deptUserList": []any{map[string]any{}}},
+		{"success": true, "deptUserList": []any{map[string]any{"unexpected": true}}},
 		{"success": true, "deptUserList": []any{map[string]any{"userInfo": map[string]any{"name": "no-id"}}}},
+		{"success": true, "deptUserList": []any{map[string]any{"userInfo": map[string]any{"userId": "same"}}, map[string]any{"userInfo": map[string]any{"userId": "same"}}}},
+		{"success": true, "deptUserList": []any{map[string]any{"userInfo": map[string]any{"userId": "good", "name": true}}}},
 	} {
 		if got, projectErr := strictMembers(data, "contact/members", "deptUserList"); projectErr == nil {
 			t.Errorf("broken members returned success: %v", got)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageContactSubDepartmentsRejectBadIdentityAndShape(t *testing.T) {
+	depts, err := strictSubDepts(map[string]any{
+		"success": true,
+		"result":  []any{map[string]any{"deptId": float64(1), "deptName": "Fixture"}},
+	}, "contact/sub-depts")
+	if err != nil || len(depts) != 1 || depts[0]["deptId"] != int64(1) {
+		t.Fatalf("valid sub departments rejected: depts=%v err=%v", depts, err)
+	}
+	for _, broken := range []map[string]any{
+		{"success": true},
+		{"success": true, "result": []any{map[string]any{"deptId": float64(0)}}},
+		{"success": true, "result": []any{map[string]any{"deptId": float64(1)}, map[string]any{"deptId": float64(1)}}},
+		{"success": true, "result": []any{map[string]any{"deptId": float64(1), "deptName": map[string]any{}}}},
+	} {
+		if got, projectErr := strictSubDepts(broken, "contact/sub-depts"); projectErr == nil {
+			t.Errorf("broken sub departments returned success: %v", got)
 		}
 	}
 }
@@ -132,6 +162,45 @@ func TestCrossPlatformCoverageContactRequiredSearchInputsFailBeforeRemoteCall(t 
 	}
 }
 
+func TestCrossPlatformCoverageContactInputConstraintsFailBeforeRemoteCall(t *testing.T) {
+	caller := &contactCaller{payload: `{"success":true,"result":[]}`}
+	helpers.InitDepsForTest(t, caller)
+	tests := []struct {
+		declaration shortcut.Shortcut
+		flag        string
+		value       string
+	}{
+		{SearchUser, "query", "   "},
+		{SearchMobile, "mobile", "   "},
+		{ListRoleMembers, "id", "0"},
+		{ListRoleMembers, "id", "not-a-number"},
+		{ListSubDepts, "dept", "0"},
+		{ListDeptMembers, "depts", "1,1"},
+		{ListDeptMembers, "depts", "1,invalid"},
+		{ListFollowings, "open-id", "   "},
+	}
+	for _, test := range tests {
+		command := &cobra.Command{Use: test.declaration.Command}
+		switch test.declaration.Command {
+		case "+list-sub-depts":
+			command.Flags().Int(test.flag, 0, "")
+		case "+list-dept-members":
+			command.Flags().StringSlice(test.flag, nil, "")
+		default:
+			command.Flags().String(test.flag, "", "")
+		}
+		if err := command.Flags().Set(test.flag, test.value); err != nil {
+			t.Fatalf("set %s %s: %v", test.declaration.Command, test.flag, err)
+		}
+		if err := test.declaration.Validate(shortcut.RuntimeContextForTest(command, test.declaration)); err == nil {
+			t.Errorf("%s accepted invalid %s=%q", test.declaration.Command, test.flag, test.value)
+		}
+	}
+	if caller.calls != 0 {
+		t.Fatalf("invalid inputs made %d remote calls", caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageUnavailableContactMakesNoRemoteCall(t *testing.T) {
 	caller := &contactCaller{payload: `{"success":true,"result":[]}`}
 	helpers.InitDepsForTest(t, caller)
@@ -176,8 +245,10 @@ func TestCrossPlatformCoverageContactFollowingsAndRolesRejectBadElements(t *test
 		t.Fatalf("followings mapping = calls:%d product:%q tool:%q", caller.calls, caller.product, caller.tool)
 	}
 	for _, broken := range []map[string]any{
+		{"success": false},
 		{"success": true},
 		{"success": true, "result": map[string]any{}},
+		{"success": true, "result": map[string]any{"models": map[string]any{}}},
 		{"success": true, "result": map[string]any{"models": []any{"bad"}}},
 		{"success": true, "result": map[string]any{"models": []any{map[string]any{}}}},
 		{"success": true, "result": map[string]any{"models": []any{map[string]any{"openDingTalkId": "same"}, map[string]any{"openDingTalkId": "same"}}}},
@@ -198,8 +269,14 @@ func TestCrossPlatformCoverageContactFollowingsAndRolesRejectBadElements(t *test
 		t.Fatalf("strict roles = %#v, err=%v", roles, err)
 	}
 	for _, broken := range []map[string]any{
+		{"success": false},
 		{"success": true},
 		{"success": true, "result": map[string]any{}},
+		{"success": true, "result": []any{"bad"}},
+		{"success": true, "result": []any{map[string]any{"labels": []any{}}}},
+		{"success": true, "result": []any{map[string]any{"groupName": "Fixture"}}},
+		{"success": true, "result": []any{map[string]any{"groupName": "Fixture", "labels": map[string]any{}}}},
+		{"success": true, "result": []any{map[string]any{"groupName": "Fixture", "labels": []any{"bad"}}}},
 		{"success": true, "result": []any{map[string]any{"groupName": "Fixture", "labels": []any{map[string]any{"labelId": nil, "name": ""}}}}},
 		{"success": true, "result": []any{map[string]any{"groupName": "Fixture", "labels": []any{map[string]any{"labelId": float64(1), "name": "One"}, map[string]any{"labelId": float64(1), "name": "Duplicate"}}}}},
 	} {
@@ -207,15 +284,20 @@ func TestCrossPlatformCoverageContactFollowingsAndRolesRejectBadElements(t *test
 			t.Errorf("broken roles returned success: %#v", got)
 		}
 	}
+	if users, err := projectUsers([]map[string]any{{"openDingTalkId": "open-only"}}, "contact/users"); err != nil || users[0]["openDingTalkId"] != "open-only" {
+		t.Fatalf("open-ID-only user rejected: %#v err=%v", users, err)
+	}
+	if members, err := strictMembers(map[string]any{"success": true, "deptUserList": []any{map[string]any{"userInfo": map[string]any{"userId": "u1", "name": "Fixture"}}}}, "contact/members", "deptUserList"); err != nil || members[0]["name"] != "Fixture" {
+		t.Fatalf("named member rejected: %#v err=%v", members, err)
+	}
 }
 
 func TestCrossPlatformCoverageContactDirectContracts(t *testing.T) {
-	items := []*shortcut.Shortcut{
-		&ListFollowings, &SearchUser, &SearchMobile, &ListRoles, &ListRoleMembers,
-		&ListSubDepts, &ListDeptMembers, &ListRosterFields, &GetRoster,
+	available := []*shortcut.Shortcut{
+		&ListFollowings, &SearchUser, &SearchMobile, &ListRoleMembers, &ListSubDepts, &ListDeptMembers,
 	}
-	for _, item := range items {
-		if item.OutputRollout != output.RolloutUnifiedActive || item.Contract.Result == nil || strings.TrimSpace(item.Safety.Effect) == "" {
+	for _, item := range available {
+		if item.OutputRollout != output.RolloutUnifiedActive || item.Contract.Result == nil || len(item.Contract.Result.SensitivePaths) == 0 || strings.TrimSpace(item.Safety.Effect) == "" {
 			t.Errorf("%s lacks Contract/Result/Safety/unified output", item.Command)
 			continue
 		}
@@ -223,5 +305,125 @@ func TestCrossPlatformCoverageContactDirectContracts(t *testing.T) {
 		if err := json.Unmarshal(item.Contract.Result.DataSchema, &schema); err != nil || schema["type"] != "object" {
 			t.Errorf("%s invalid Result schema: schema=%v err=%v", item.Command, schema, err)
 		}
+	}
+	for _, item := range []*shortcut.Shortcut{&ListRoles, &ListRosterFields, &GetRoster} {
+		if item.OutputRollout != output.RolloutLegacyOnly || item.Contract.Result != nil || item.Contract.Interface == nil || item.Contract.Interface.Availability != "unavailable" {
+			t.Errorf("%s unavailable delivery drift: rollout=%q result=%v interface=%#v", item.Command, item.OutputRollout, item.Contract.Result, item.Contract.Interface)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageContactPrimitiveMatrices(t *testing.T) {
+	for index, test := range []struct {
+		value any
+		want  bool
+	}{
+		{nil, false}, {"", false}, {"0", false}, {"SUCCESS", false}, {"bad", true},
+		{float64(0), false}, {float64(1), true}, {0, false}, {1, true}, {false, false}, {true, true},
+		{map[string]any{}, false}, {map[string]any{"x": 1}, true}, {[]any{}, false}, {[]any{1}, true}, {struct{}{}, true},
+	} {
+		if got := contactFailureValue(test.value); got != test.want {
+			t.Errorf("failure matrix %d = %v, want %v", index, got, test.want)
+		}
+	}
+	for index, test := range []struct {
+		value any
+		want  int64
+		ok    bool
+	}{
+		{float64(7), 7, true}, {float64(7.5), 0, false}, {int64(8), 8, true}, {9, 9, true},
+		{json.Number("10"), 10, true}, {json.Number("bad"), 0, false}, {" 11 ", 11, true}, {"bad", 0, false}, {true, 0, false},
+	} {
+		got, ok := contactInt64(test.value)
+		if got != test.want || ok != test.ok {
+			t.Errorf("integer matrix %d = (%d,%v), want (%d,%v)", index, got, ok, test.want, test.ok)
+		}
+	}
+	if got := normalizedContactIDList([]string{" 1 ", "2"}); len(got) != 2 || got[0] != "1" || got[1] != "2" {
+		t.Fatalf("normalized IDs = %#v", got)
+	}
+	if _, err := strictUserSearch(map[string]any{"success": true}, "contact/test", true); err == nil {
+		t.Fatal("missing optional-result evidence returned success")
+	}
+	if _, err := strictMobileKeywordSearch(map[string]any{"success": true, "result": []any{map[string]any{"userId": "1"}, map[string]any{"userId": "2"}}}, "contact/test"); err == nil {
+		t.Fatal("ambiguous mobile search returned success")
+	}
+}
+
+func TestCrossPlatformCoverageContactValidatorsAcceptCanonicalInputs(t *testing.T) {
+	command := &cobra.Command{Use: "contact"}
+	command.Flags().String("required", " value ", "")
+	command.Flags().String("optional", " value ", "")
+	command.Flags().String("id", " 7 ", "")
+	command.Flags().Int("dept", 7, "")
+	command.Flags().StringSlice("depts", []string{" 7 ", "8"}, "")
+	rt := shortcut.RuntimeContextForTest(command, SearchUser)
+	for _, err := range []error{
+		validateContactNonBlank(rt, "contact/test", "required"),
+		validateContactOptionalNonBlank(rt, "contact/test", "optional"),
+		validateContactPositiveStringID(rt, "contact/test", "id"),
+		validateContactPositiveInt(rt, "contact/test", "dept"),
+		validateContactPositiveIDList(rt, "contact/test", "depts"),
+	} {
+		if err != nil {
+			t.Fatalf("canonical validation failed: %v", err)
+		}
+	}
+	command.Flags().StringSlice("empty-list", nil, "")
+	if err := validateContactPositiveIDList(rt, "contact/test", "empty-list"); err == nil {
+		t.Fatal("empty ID list returned success")
+	}
+}
+
+func TestCrossPlatformCoverageContactDirectExecutors(t *testing.T) {
+	tests := []struct {
+		declaration shortcut.Shortcut
+		flag        string
+		value       string
+		payload     string
+		tool        string
+	}{
+		{ListFollowings, "open-id", "open-1", `{"success":true,"result":{"models":[{"openDingTalkId":"open-1"}]}}`, "list_my_followings"},
+		{SearchUser, "query", "fixture", `{"success":true,"result":[{"userId":"user-1"}]}`, "search_contact_by_key_word"},
+		{SearchMobile, "mobile", "fixture", `{"success":true,"result":[{"userId":"user-1"}]}`, "search_contact_by_key_word"},
+		{ListRoleMembers, "id", "7", `{"success":true,"labelUserList":[{"userInfo":{"userId":"user-1"}}]}`, "get_label_members_by_labelId"},
+		{ListSubDepts, "dept", "7", `{"success":true,"result":[{"deptId":8}]}`, "get_sub_depts_by_dept_id"},
+		{ListDeptMembers, "depts", " 7 ,8", `{"success":true,"deptUserList":[{"userInfo":{"userId":"user-1"}}]}`, "get_dept_members_by_deptId"},
+	}
+	for _, test := range tests {
+		t.Run(test.declaration.Command, func(t *testing.T) {
+			caller := &contactCaller{payload: test.payload}
+			helpers.InitDepsForTest(t, caller)
+			declaration := test.declaration
+			declaration.OutputRollout = output.RolloutLegacyOnly
+			command := &cobra.Command{Use: declaration.Command}
+			switch declaration.Command {
+			case "+list-sub-depts":
+				command.Flags().Int(test.flag, 0, "")
+			case "+list-dept-members":
+				command.Flags().StringSlice(test.flag, nil, "")
+			default:
+				command.Flags().String(test.flag, "", "")
+			}
+			if err := command.Flags().Set(test.flag, test.value); err != nil {
+				t.Fatal(err)
+			}
+			rt := shortcut.RuntimeContextForTest(command, declaration)
+			if err := declaration.Execute(rt); err != nil {
+				t.Fatalf("success execution: %v", err)
+			}
+			if caller.tool != test.tool {
+				t.Fatalf("tool=%q want=%q", caller.tool, test.tool)
+			}
+			caller.err = errors.New("transport")
+			if err := declaration.Execute(rt); err == nil {
+				t.Fatal("transport error returned success")
+			}
+			caller.err = nil
+			caller.payload = `{"success":true}`
+			if err := declaration.Execute(rt); err == nil {
+				t.Fatal("projection error returned success")
+			}
+		})
 	}
 }

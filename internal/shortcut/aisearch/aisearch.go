@@ -30,9 +30,14 @@ func aisearchResult(description string) *contract.ResultSpec {
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 		DataSchema: json.RawMessage(fmt.Sprintf(
-			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","description":"当前响应中通过严格校验的命中数量"},"matches":{"type":"array","description":"通过 success、集合、元素和稳定身份校验的搜索命中；该接口不发布分页或全局完整性承诺","items":{"type":"object","description":"带稳定身份和来源类型的搜索命中","additionalProperties":true}}},"required":["count","matches"],"additionalProperties":false}`,
+			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","minimum":0,"description":"当前响应中通过严格校验的命中数量"},"matches":{"type":"array","description":"通过 success、集合、元素和稳定身份校验的搜索命中；该接口不发布分页或全局完整性承诺","items":{"type":"object","description":"带稳定身份和来源类型的搜索命中","properties":{"userId":{"type":"string","minLength":1,"description":"稳定用户 ID"},"openDingTalkId":{"type":"string","minLength":1,"description":"稳定开放用户 ID"},"url":{"type":"string","minLength":1,"description":"稳定资源 URL"},"sourceType":{"type":"string","minLength":1,"description":"命中来源类型"}},"required":["sourceType"],"additionalProperties":true}}},"required":["count","matches"],"additionalProperties":false}`,
 			description,
 		)),
+		SensitivePaths: []string{
+			"matches.userId", "matches.openDingTalkId", "matches.url", "matches.name",
+			"matches.mobile", "matches.phone", "matches.jobNumber", "matches.email",
+			"matches.department", "matches.position", "matches.duty",
+		},
 	}
 }
 
@@ -44,9 +49,8 @@ func aisearchContract(command, description, intent string, available bool, flags
 		availability = contract.InterfaceUnavailable
 		reason = aisearchZeroGapReason
 	}
-	return corecmd.ContractDecl{
+	decl := corecmd.ContractDecl{
 		Description: description,
-		Result:      aisearchResult(description),
 		Identity: contract.ToolIdentitySpec{
 			ProductID: "aisearch", Name: name, CanonicalPath: "aisearch." + name,
 			CLIPath: "aisearch " + command, PrimaryCLIPath: "aisearch " + command,
@@ -65,6 +69,10 @@ func aisearchContract(command, description, intent string, available bool, flags
 		},
 		Parameters: flags,
 	}
+	if available {
+		decl.Result = aisearchResult(description)
+	}
+	return decl
 }
 
 // SearchPerson is the only public AiSearch Shortcut. Exact live evidence
@@ -87,13 +95,13 @@ var SearchPerson = shortcut.Shortcut{
 		`dws aisearch +search-person --query "产品" --dimensions duty,department --format json`,
 	),
 	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Required: true, Desc: "人员搜索关键词"},
+		{Name: "query", Type: shortcut.FlagString, Required: true, Desc: "人员搜索关键词；--query 不能为空白"},
 		{Name: "dimensions", Type: shortcut.FlagStringSlice, Default: "all", Desc: "搜索维度；--dimensions 只能包含 all/name/department/position/duty/supervisor/subordinate/phone/jobNumber，all 不能与其他维度并用"},
 	},
-	Constraints: []shortcut.Constraint{{
-		Kind: shortcut.ConstraintCustom, Flags: []string{"dimensions"},
-		Description: "--dimensions 只能包含 all/name/department/position/duty/supervisor/subordinate/phone/jobNumber，all 不能与其他维度并用",
-	}},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"query"}, Description: "--query 不能为空白"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"dimensions"}, Description: "--dimensions 只能包含 all/name/department/position/duty/supervisor/subordinate/phone/jobNumber，all 不能与其他维度并用"},
+	},
 	Validate: validatePerson,
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		return executeSearch(rt, "enterprise_person_search", map[string]any{
@@ -107,7 +115,7 @@ var SearchPerson = shortcut.Shortcut{
 // returned a business object, so the service cannot prove a legitimate zero
 // result or strict query relevance.
 var SearchEnterprise = shortcut.Shortcut{
-	OutputRollout: output.RolloutUnifiedActive,
+	OutputRollout: output.RolloutLegacyOnly,
 	Service:       "aisearch", Command: "+search-enterprise", Product: "aisearch",
 	Description: "按主题搜索企业知识、消息、邮件与协作内容",
 	Intent:      "需要按关键词搜索企业即时消息时使用；当前因随机查询仍返回业务对象，无法证明严格相关性与合法零结果，保持不可用。",
@@ -139,7 +147,7 @@ var SearchEnterprise = shortcut.Shortcut{
 // SearchBehavior remains registered but unavailable for the same zero-match
 // relevance gap as SearchEnterprise.
 var SearchBehavior = shortcut.Shortcut{
-	OutputRollout: output.RolloutUnifiedActive,
+	OutputRollout: output.RolloutLegacyOnly,
 	Service:       "aisearch", Command: "+search-behavior", Product: "aisearch",
 	Description: "搜索发送、创建、分享、编辑或接收等企业行为记录",
 	Intent:      "用户明确询问谁发送、创建、分享、编辑或接收过什么时使用；当前因零命中相关性合同不足保持不可用。",
@@ -180,6 +188,9 @@ func unavailableSearch(operation string) error {
 }
 
 func validatePerson(rt *shortcut.RuntimeContext) error {
+	if strings.TrimSpace(rt.Str("query")) == "" {
+		return responsecheck.Error("aisearch/enterprise_person_search", "empty_query", "--query 不能为空白")
+	}
 	return validateValues("--dimensions", rt.StrSlice("dimensions"), map[string]bool{
 		"all": true, "name": true, "department": true, "position": true, "duty": true,
 		"supervisor": true, "subordinate": true, "phone": true, "jobNumber": true,
@@ -291,15 +302,53 @@ func projectSearch(data map[string]any, operation string, identityKeys []string)
 	if err != nil {
 		return nil, err
 	}
+	out := make([]map[string]any, 0, len(items))
+	seen := make(map[string]bool, len(items))
 	for index, item := range items {
-		if firstNonEmptyString(item, "sourceType") == "" {
+		projected := make(map[string]any, len(item))
+		for key, value := range item {
+			projected[key] = value
+		}
+		source, ok := projected["sourceType"].(string)
+		source = strings.TrimSpace(source)
+		if !ok || source == "" {
 			return nil, responsecheck.Error(operation, "missing_item_source", fmt.Sprintf("响应 result[%d] 缺少非空 sourceType", index))
 		}
-		if firstNonEmptyString(item, identityKeys...) == "" {
+		projected["sourceType"] = source
+		candidateKeys := append([]string(nil), identityKeys...)
+		for _, key := range []string{"userId", "openDingTalkId", "url", "openConversationId"} {
+			if !contains(candidateKeys, key) {
+				candidateKeys = append(candidateKeys, key)
+			}
+		}
+		for _, key := range candidateKeys {
+			raw, present := projected[key]
+			if !present || raw == nil {
+				delete(projected, key)
+				continue
+			}
+			value, valid := raw.(string)
+			if !valid {
+				return nil, responsecheck.Error(operation, "malformed_item_identity", fmt.Sprintf("响应 result[%d].%s 必须是字符串", index, key))
+			}
+			value = strings.TrimSpace(value)
+			if value == "" {
+				delete(projected, key)
+				continue
+			}
+			projected[key] = value
+		}
+		identity := firstNonEmptyString(projected, identityKeys...)
+		if identity == "" {
 			return nil, responsecheck.Error(operation, "missing_item_identity", fmt.Sprintf("响应 result[%d] 缺少稳定身份", index))
 		}
+		if seen[identity] {
+			return nil, responsecheck.Error(operation, "duplicate_item_identity", fmt.Sprintf("响应 result[%d] 重复稳定身份", index))
+		}
+		seen[identity] = true
+		out = append(out, projected)
 	}
-	return items, nil
+	return out, nil
 }
 
 func hasConflictingError(data map[string]any) bool {

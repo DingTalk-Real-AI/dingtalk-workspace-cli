@@ -21,7 +21,7 @@ import (
 const liveListGapReason = "Exact bounded live probes returned total greater than zero together with hasFinish=true and an empty liveDetailModelList; the response cannot prove either a complete list or a legitimate empty result."
 
 var ListMyLives = shortcut.Shortcut{
-	OutputRollout: output.RolloutUnifiedActive,
+	OutputRollout: output.RolloutLegacyOnly,
 	Service:       "live", Command: "+list-my-lives", Product: "live",
 	Description: "查看当前用户发起的直播列表与基础统计",
 	Intent:      "需要查看本人发起的直播、状态或观看统计时使用；当前因下游列表数量与完成状态矛盾保持不可用。",
@@ -46,10 +46,6 @@ var ListMyLives = shortcut.Shortcut{
 				"下游列表总数、完成状态和项目数组未自洽前不要把空数组当作没有直播",
 			},
 			Examples: []string{"dws live +list-my-lives --format json"},
-		},
-		Result: &contract.ResultSpec{
-			Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
-			DataSchema: json.RawMessage(`{"type":"object","description":"严格校验且完整的当前用户直播列表","properties":{"count":{"type":"integer","description":"与下游 total 完全一致的直播数量"},"lives":{"type":"array","description":"带稳定直播身份的完整列表","items":{"type":"object","description":"带稳定直播身份的直播记录","additionalProperties":true}},"complete":{"type":"boolean","description":"下游明确报告且可由数量一致性证明的完结状态"}},"required":["count","lives","complete"],"additionalProperties":false}`),
 		},
 	},
 	Execute: func(*shortcut.RuntimeContext) error {

@@ -48,17 +48,17 @@ func TestCrossPlatformCoverageAiSearchSemanticCatalogExactlyCoversRegisteredSurf
 		if !record.Reviewed || !item.SemanticReviewed || item.SemanticDelta != record.SemanticDelta || item.Risk != record.Risk {
 			t.Errorf("%s semantic facts drifted", command)
 		}
-		if item.Contract.Empty() || item.Contract.Result == nil || strings.TrimSpace(item.Safety.Effect) == "" || item.OutputRollout != output.RolloutUnifiedActive {
-			t.Errorf("%s lacks Contract/Result/Safety/unified output", command)
+		if item.Contract.Empty() || strings.TrimSpace(item.Safety.Effect) == "" {
+			t.Errorf("%s lacks Contract/Safety", command)
 		}
 		if record.Public {
 			public++
-			if availability != shortcut.AvailabilityAvailable || item.Hidden || !shortcut.InPublicCatalog("aisearch", command) {
+			if availability != shortcut.AvailabilityAvailable || item.Hidden || !shortcut.InPublicCatalog("aisearch", command) || item.OutputRollout != output.RolloutUnifiedActive || item.Contract.Result == nil {
 				t.Errorf("%s public availability drift", command)
 			}
 		} else {
 			unavailable++
-			if availability != shortcut.AvailabilityUnavailable || !item.Hidden || shortcut.InPublicCatalog("aisearch", command) {
+			if availability != shortcut.AvailabilityUnavailable || !item.Hidden || shortcut.InPublicCatalog("aisearch", command) || item.OutputRollout != output.RolloutLegacyOnly || item.Contract.Result != nil {
 				t.Errorf("%s unavailable visibility drift", command)
 			}
 		}

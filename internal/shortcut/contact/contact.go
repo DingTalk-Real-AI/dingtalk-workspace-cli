@@ -59,7 +59,11 @@ var ListFollowings = shortcut.Shortcut{
 		Parameters: []contract.ParamDecl{{Name: "open-id"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "open-id", Type: shortcut.FlagString, Desc: "可选；仅保留 openDingTalkId 精确匹配的特别关注，用于确定性存在性检查"},
+		{Name: "open-id", Type: shortcut.FlagString, Desc: "可选；仅保留 openDingTalkId 精确匹配的特别关注，用于确定性存在性检查；显式传入时不能为空白"},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"open-id"}, Description: "--open-id 显式传入时不能为空白"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateContactOptionalNonBlank(rt, "contact/list_my_followings", "open-id")
 	},
 	Tips: []string{
 		`dws contact +list-followings`,
@@ -143,9 +147,16 @@ var SearchUser = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +search-user --query \"张三\""},
 		},
+		// Keep the published merge-base property name. Execute remains a reviewed
+		// composite adapter from --query to the downstream keyword field.
+		Parameters: []contract.ParamDecl{{Name: "query", Property: "query"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词", Required: true},
+		{Name: "query", Type: shortcut.FlagString, Desc: "搜索关键词；--query 不能为空白", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"query"}, Description: "--query 不能为空白"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateContactNonBlank(rt, "contact/search_contact_by_key_word", "query")
 	},
 	Tips: []string{
 		`dws contact +search-user --query "张三"`,
@@ -230,9 +241,14 @@ var SearchMobile = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +search-mobile --mobile 13800138000"},
 		},
+		Parameters: []contract.ParamDecl{{Name: "mobile", Property: "keyword"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "mobile", Type: shortcut.FlagString, Desc: "手机号", Required: true},
+		{Name: "mobile", Type: shortcut.FlagString, Desc: "手机号；--mobile 不能为空白", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"mobile"}, Description: "--mobile 不能为空白"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateContactNonBlank(rt, "contact/search_contact_by_key_word", "mobile")
 	},
 	Tips: []string{
 		`dws contact +search-mobile --mobile 13800138000`,
@@ -425,9 +441,14 @@ var ListRoleMembers = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +list-role-members --id 12345"},
 		},
+		Parameters: []contract.ParamDecl{{Name: "id", Property: "labelId"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "id", Type: shortcut.FlagString, Desc: "角色 ID", Required: true},
+		{Name: "id", Type: shortcut.FlagString, Desc: "角色 ID；--id 必须为正整数", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"id"}, Description: "--id 必须为正整数"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateContactPositiveStringID(rt, "contact/get_label_members_by_labelId", "id")
 	},
 	Tips: []string{
 		`dws contact +list-role-members --id 12345`,
@@ -552,9 +573,14 @@ var ListSubDepts = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +list-sub-depts --dept 1"},
 		},
+		Parameters: []contract.ParamDecl{{Name: "dept", Property: "deptId"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "dept", Type: shortcut.FlagInt, Desc: "部门 ID（钉钉根部门为 1）", Required: true},
+		{Name: "dept", Type: shortcut.FlagInt, Desc: "部门 ID（钉钉根部门为 1）；--dept 必须大于 0", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"dept"}, Description: "--dept 必须大于 0"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateContactPositiveInt(rt, "contact/get_sub_depts_by_dept_id", "dept")
 	},
 	Tips: []string{
 		`dws contact +list-sub-depts --dept 1`,
@@ -670,16 +696,21 @@ var ListDeptMembers = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +list-dept-members --depts 12345,67890"},
 		},
+		Parameters: []contract.ParamDecl{{Name: "depts", Property: "deptIds"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "depts", Type: shortcut.FlagStringSlice, Desc: "部门 ID 列表，逗号分隔", Required: true},
+		{Name: "depts", Type: shortcut.FlagStringSlice, Desc: "部门 ID 列表，逗号分隔；--depts 每项都必须为正整数且不能重复", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"depts"}, Description: "--depts 每项都必须为正整数且不能重复"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateContactPositiveIDList(rt, "contact/get_dept_members_by_deptId", "depts")
 	},
 	Tips: []string{
 		`dws contact +list-dept-members --depts 12345,67890`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		data, err := rt.CallMCPData("contact", "get_dept_members_by_deptId", map[string]any{
-			"deptIds": rt.StrSlice("depts"),
+			"deptIds": normalizedContactIDList(rt.StrSlice("depts")),
 		})
 		if err != nil {
 			return err

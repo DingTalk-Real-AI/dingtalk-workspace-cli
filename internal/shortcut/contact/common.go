@@ -28,12 +28,29 @@ var contactReadSafety = contract.SafetySpec{
 }
 
 func contactCollectionResult(collection, description string) *contract.ResultSpec {
+	itemSchema := `{"type":"object","description":"带稳定身份的已校验项目","additionalProperties":true}`
+	sensitive := []string{}
+	switch collection {
+	case "followings":
+		itemSchema = `{"type":"object","description":"带稳定开放用户身份的特别关注联系人","properties":{"openDingTalkId":{"type":"string","minLength":1,"description":"稳定开放用户 ID"}},"required":["openDingTalkId"],"additionalProperties":false}`
+		sensitive = []string{"followings.openDingTalkId"}
+	case "users":
+		itemSchema = `{"type":"object","description":"至少带 userId 或 openDingTalkId 之一的通讯录用户","properties":{"name":{"type":"string","description":"用户姓名"},"userId":{"type":"string","minLength":1,"description":"稳定用户 ID"},"flowerName":{"type":"string","description":"用户花名"},"openDingTalkId":{"type":"string","minLength":1,"description":"稳定开放用户 ID"},"title":{"type":"string","description":"职位名称"}},"additionalProperties":false}`
+		sensitive = []string{"users.name", "users.userId", "users.flowerName", "users.openDingTalkId", "users.title"}
+	case "members":
+		itemSchema = `{"type":"object","description":"带稳定用户身份的成员","properties":{"userId":{"type":"string","minLength":1,"description":"稳定用户 ID"},"name":{"type":"string","description":"成员姓名"}},"required":["userId"],"additionalProperties":false}`
+		sensitive = []string{"members.userId", "members.name"}
+	case "depts":
+		itemSchema = `{"type":"object","description":"带稳定部门身份的直属子部门","properties":{"deptId":{"type":"integer","minimum":1,"description":"稳定部门 ID"},"deptName":{"type":"string","description":"部门名称"}},"required":["deptId"],"additionalProperties":false}`
+		sensitive = []string{"depts.deptName"}
+	}
 	return &contract.ResultSpec{
 		Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
 		DataSchema: json.RawMessage(fmt.Sprintf(
-			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","description":"当前响应中通过严格校验的项目数量"},%q:{"type":"array","description":%q,"items":{"type":"object","description":"带稳定身份的已校验项目","additionalProperties":true}}},"required":["count",%q],"additionalProperties":false}`,
-			description, collection, description, collection,
+			`{"type":"object","description":%q,"properties":{"count":{"type":"integer","minimum":0,"description":"当前响应中通过严格校验的项目数量"},%q:{"type":"array","description":%q,"items":%s}},"required":["count",%q],"additionalProperties":false}`,
+			description, collection, description, itemSchema, collection,
 		)),
+		SensitivePaths: sensitive,
 	}
 }
 
@@ -74,6 +91,8 @@ func finalizeContactShortcut(item *shortcut.Shortcut, result *contract.ResultSpe
 	if !available {
 		availability = contract.InterfaceUnavailable
 		reason = contactUnavailableReason
+		item.OutputRollout = output.RolloutLegacyOnly
+		item.Contract.Result = nil
 	}
 	item.Contract.Interface = &contract.InterfaceSpec{
 		Mode: contract.InterfaceModeComposite, Availability: availability, Reason: reason,
@@ -82,6 +101,65 @@ func finalizeContactShortcut(item *shortcut.Shortcut, result *contract.ResultSpe
 
 func unavailableContact(operation, reason string) error {
 	return responsecheck.Error(operation, "capability_unavailable", reason)
+}
+
+func validateContactNonBlank(rt *shortcut.RuntimeContext, operation string, flags ...string) error {
+	for _, flag := range flags {
+		if strings.TrimSpace(rt.Str(flag)) == "" {
+			return responsecheck.Error(operation, "empty_parameter", "--"+flag+" 不能为空白")
+		}
+	}
+	return nil
+}
+
+func validateContactOptionalNonBlank(rt *shortcut.RuntimeContext, operation, flag string) error {
+	if rt.Changed(flag) && strings.TrimSpace(rt.Str(flag)) == "" {
+		return responsecheck.Error(operation, "empty_parameter", "--"+flag+" 显式传入时不能为空白")
+	}
+	return nil
+}
+
+func validateContactPositiveStringID(rt *shortcut.RuntimeContext, operation, flag string) error {
+	value := strings.TrimSpace(rt.Str(flag))
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed <= 0 {
+		return responsecheck.Error(operation, "invalid_parameter", "--"+flag+" 必须为正整数")
+	}
+	return nil
+}
+
+func validateContactPositiveInt(rt *shortcut.RuntimeContext, operation, flag string) error {
+	if rt.Int(flag) <= 0 {
+		return responsecheck.Error(operation, "invalid_parameter", "--"+flag+" 必须大于 0")
+	}
+	return nil
+}
+
+func validateContactPositiveIDList(rt *shortcut.RuntimeContext, operation, flag string) error {
+	values := rt.StrSlice(flag)
+	if len(values) == 0 {
+		return responsecheck.Error(operation, "empty_parameter", "--"+flag+" 至少需要一个正整数 ID")
+	}
+	seen := make(map[int64]bool, len(values))
+	for _, value := range values {
+		parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err != nil || parsed <= 0 {
+			return responsecheck.Error(operation, "invalid_parameter", "--"+flag+" 每项都必须为正整数")
+		}
+		if seen[parsed] {
+			return responsecheck.Error(operation, "duplicate_parameter", "--"+flag+" 不能包含重复 ID")
+		}
+		seen[parsed] = true
+	}
+	return nil
+}
+
+func normalizedContactIDList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, strings.TrimSpace(value))
+	}
+	return out
 }
 
 func contactEnvelope(data map[string]any, operation string) (map[string]any, error) {
@@ -241,13 +319,28 @@ func strictRoles(data map[string]any, operation string) ([]map[string]any, error
 
 func projectUsers(items []map[string]any, operation string) ([]map[string]any, error) {
 	out := make([]map[string]any, 0, len(items))
+	seen := make(map[string]bool, len(items))
 	for index, item := range items {
-		if contactString(item, "userId") == "" && contactString(item, "openDingTalkId") == "" {
+		userID := contactString(item, "userId")
+		openID := contactString(item, "openDingTalkId")
+		if userID == "" && openID == "" {
 			return nil, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("用户结果第 %d 项缺少 userId/openDingTalkId", index))
 		}
+		identity := userID
+		if identity == "" {
+			identity = openID
+		}
+		if seen[identity] {
+			return nil, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("用户结果第 %d 项重复稳定身份", index))
+		}
+		seen[identity] = true
 		row := map[string]any{}
 		for _, key := range []string{"name", "userId", "flowerName", "openDingTalkId", "title"} {
-			if value, ok := item[key]; ok && value != nil {
+			value, present, valid := contactOptionalString(item, key)
+			if !valid {
+				return nil, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("用户结果第 %d 项的 %s 必须是字符串", index, key))
+			}
+			if present && value != "" {
 				row[key] = value
 			}
 		}
@@ -265,6 +358,7 @@ func strictMembers(data map[string]any, operation, path string) ([]map[string]an
 		return nil, err
 	}
 	out := make([]map[string]any, 0, len(items))
+	seen := make(map[string]bool, len(items))
 	for index, item := range items {
 		user, ok := item["userInfo"].(map[string]any)
 		if !ok || len(user) == 0 {
@@ -274,8 +368,16 @@ func strictMembers(data map[string]any, operation, path string) ([]map[string]an
 		if id == "" {
 			return nil, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("%s[%d] 缺少 userId", path, index))
 		}
+		if seen[id] {
+			return nil, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("%s[%d] 重复 userId", path, index))
+		}
+		seen[id] = true
 		row := map[string]any{"userId": id}
-		if name := contactString(user, "name"); name != "" {
+		name, _, valid := contactOptionalString(user, "name")
+		if !valid {
+			return nil, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("%s[%d].userInfo.name 必须是字符串", path, index))
+		}
+		if name != "" {
 			row["name"] = name
 		}
 		out = append(out, row)
@@ -292,13 +394,22 @@ func strictSubDepts(data map[string]any, operation string) ([]map[string]any, er
 		return nil, err
 	}
 	out := make([]map[string]any, 0, len(items))
+	seen := make(map[int64]bool, len(items))
 	for index, item := range items {
 		id, ok := contactInt64(item["deptId"])
 		if !ok || id <= 0 {
 			return nil, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("部门结果第 %d 项缺少有效 deptId", index))
 		}
+		if seen[id] {
+			return nil, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("部门结果第 %d 项重复 deptId", index))
+		}
+		seen[id] = true
 		row := map[string]any{"deptId": id}
-		if name := contactString(item, "deptName"); name != "" {
+		name, _, valid := contactOptionalString(item, "deptName")
+		if !valid {
+			return nil, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("部门结果第 %d 项的 deptName 必须是字符串", index))
+		}
+		if name != "" {
 			row["deptName"] = name
 		}
 		out = append(out, row)
@@ -309,6 +420,18 @@ func strictSubDepts(data map[string]any, operation string) ([]map[string]any, er
 func contactString(object map[string]any, key string) string {
 	value, _ := object[key].(string)
 	return strings.TrimSpace(value)
+}
+
+func contactOptionalString(object map[string]any, key string) (string, bool, bool) {
+	raw, present := object[key]
+	if !present || raw == nil {
+		return "", present, true
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return "", true, false
+	}
+	return strings.TrimSpace(value), true, true
 }
 
 func contactInt64(value any) (int64, bool) {

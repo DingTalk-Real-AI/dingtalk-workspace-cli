@@ -15,16 +15,76 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/responsecheck"
 )
 
-func contactSmartResult(description string) *contract.ResultSpec {
-	return &contract.ResultSpec{
-		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
-		DataSchema: json.RawMessage(fmt.Sprintf(`{"type":"object","description":%q,"additionalProperties":true}`, description)),
+func contactSmartResult(item *shortcut.Shortcut) *contract.ResultSpec {
+	result := &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure}}
+	switch item.Command {
+	case "+by-mobile", "+lookup":
+		result.DataSchema = json.RawMessage(fmt.Sprintf(`{"type":"object","description":%q,"properties":{"profile":{"type":"object","description":"与请求稳定身份精确绑定的用户详情","properties":{"userId":{"type":"string","minLength":1,"description":"稳定用户 ID"},"orgUserId":{"type":"string","minLength":1,"description":"稳定组织用户 ID"}},"additionalProperties":true}},"required":["profile"],"additionalProperties":false}`, item.Description))
+		result.SensitivePaths = []string{"profile.userId", "profile.orgUserId", "profile.orgUserName", "profile.orgUserMobile", "profile.orgAuthEmail", "profile.orgEmail", "profile.depts.deptName"}
+	case "+dept-members", "+team":
+		result.DataSchema = json.RawMessage(fmt.Sprintf(`{"type":"object","description":%q,"properties":{"count":{"type":"integer","minimum":0,"description":"严格校验的直属成员数量"},"members":{"type":"array","description":"带稳定 userId 的直属成员","items":{"type":"object","description":"带稳定用户身份的直属成员","properties":{"userId":{"type":"string","minLength":1,"description":"稳定用户 ID"},"name":{"type":"string","description":"成员姓名"}},"required":["userId"],"additionalProperties":false}}},"required":["count","members"],"additionalProperties":false}`, item.Description))
+		result.SensitivePaths = []string{"members.userId", "members.name"}
+	case "+org":
+		result.DataSchema = json.RawMessage(fmt.Sprintf(`{"type":"object","description":%q,"properties":{"department":{"type":"object","description":"与用户主部门 ID 精确绑定的部门详情","properties":{"deptId":{"type":"integer","minimum":1,"description":"稳定部门 ID"},"deptName":{"type":"string","description":"部门名称"}},"required":["deptId"],"additionalProperties":true}},"required":["department"],"additionalProperties":false}`, item.Description))
+		result.SensitivePaths = []string{"department.deptName"}
+	case "+resolve-dept":
+		result.DataSchema = json.RawMessage(fmt.Sprintf(`{"type":"object","description":%q,"properties":{"resolved":{"type":"boolean","description":"是否唯一解析为一个部门"},"deptId":{"type":"string","minLength":1,"description":"唯一命中时的稳定部门 ID"},"name":{"type":"string","description":"唯一命中时的部门名称"},"count":{"type":"integer","minimum":0,"description":"多命中时的候选数量"},"candidates":{"type":"array","description":"多命中时供消歧的部门候选","items":{"type":"object","description":"带稳定部门身份的候选","properties":{"deptId":{"type":"string","minLength":1,"description":"稳定部门 ID"},"name":{"type":"string","description":"部门名称"}},"required":["deptId","name"],"additionalProperties":false}}},"required":["resolved"],"additionalProperties":false}`, item.Description))
+		result.SensitivePaths = []string{"name", "candidates.name"}
+	case "+me":
+		result.DataSchema = json.RawMessage(fmt.Sprintf(`{"type":"object","description":%q,"properties":{"userId":{"type":"string","minLength":1,"description":"当前用户稳定 ID"},"name":{"type":"string","description":"当前用户姓名"},"mobile":{"type":"string","description":"当前用户手机号"},"email":{"type":"string","description":"当前用户邮箱"},"org":{"type":"string","description":"当前用户组织名称"},"dept":{"type":"string","description":"当前用户主部门名称"}},"required":["userId"],"additionalProperties":false}`, item.Description))
+		result.SensitivePaths = []string{"userId", "name", "mobile", "email", "org", "dept"}
+	default:
+		result.DataSchema = json.RawMessage(fmt.Sprintf(`{"type":"object","description":%q,"additionalProperties":true}`, item.Description))
 	}
+	return result
 }
 
 func finalizeContactSmart(item *shortcut.Shortcut) {
 	item.OutputRollout = output.RolloutUnifiedActive
-	item.Contract.Result = contactSmartResult(item.Description)
+	item.Contract.Result = contactSmartResult(item)
+	operation := "contact/" + strings.TrimPrefix(item.Command, "+")
+	requiredStrings := make([]string, 0, len(item.Flags))
+	for index := range item.Flags {
+		flag := &item.Flags[index]
+		if flag.Required && flag.Type == shortcut.FlagString {
+			requiredStrings = append(requiredStrings, flag.Name)
+			fact := "--" + flag.Name + " 不能为空白"
+			if !strings.Contains(flag.Desc, fact) {
+				flag.Desc += "；" + fact
+			}
+			item.Constraints = append(item.Constraints, shortcut.Constraint{Kind: shortcut.ConstraintCustom, Flags: []string{flag.Name}, Description: fact})
+		}
+	}
+	previousValidate := item.Validate
+	if previousValidate != nil || len(requiredStrings) > 0 {
+		item.Validate = func(rt *shortcut.RuntimeContext) error {
+			if previousValidate != nil {
+				if err := previousValidate(rt); err != nil {
+					return err
+				}
+			}
+			return validateContactSmartNonBlank(rt, operation, requiredStrings...)
+		}
+	}
+	switch item.Command {
+	case "+by-mobile":
+		item.Contract.Parameters = []contract.ParamDecl{{Name: "mobile", Property: "keyword"}}
+	case "+dept-members":
+		item.Contract.Parameters = []contract.ParamDecl{{Name: "dept", Property: "query"}}
+	case "+lookup", "+org", "+team":
+		item.Contract.Parameters = []contract.ParamDecl{{Name: "name", Property: "keyword"}}
+	case "+resolve-dept":
+		item.Contract.Parameters = []contract.ParamDecl{{Name: "name", Property: "query"}}
+	}
+}
+
+func validateContactSmartNonBlank(rt *shortcut.RuntimeContext, operation string, flags ...string) error {
+	for _, flag := range flags {
+		if strings.TrimSpace(rt.Str(flag)) == "" {
+			return responsecheck.Error(operation, "empty_parameter", "--"+flag+" 不能为空白")
+		}
+	}
+	return nil
 }
 
 func strictContactEnvelope(data map[string]any, operation string) (map[string]any, error) {
@@ -75,6 +135,7 @@ func strictResolveContactUser(rt *shortcut.RuntimeContext, name string) (contact
 		return contactUser{}, err
 	}
 	users := make([]contactUser, 0, len(items))
+	seen := make(map[string]bool, len(items))
 	for index, item := range items {
 		user := contactUser{
 			userID:         strictContactString(item, "userId"),
@@ -84,6 +145,10 @@ func strictResolveContactUser(rt *shortcut.RuntimeContext, name string) (contact
 		if user.userID == "" {
 			return contactUser{}, responsecheck.Error("contact/search_contact_by_key_word", "missing_stable_identity", fmt.Sprintf("用户结果第 %d 项缺少 userId", index))
 		}
+		if seen[user.userID] {
+			return contactUser{}, responsecheck.Error("contact/search_contact_by_key_word", "duplicate_stable_identity", fmt.Sprintf("用户结果第 %d 项重复 userId", index))
+		}
+		seen[user.userID] = true
 		users = append(users, user)
 	}
 	switch len(users) {
@@ -161,6 +226,7 @@ func strictContactMembers(data map[string]any, operation string) ([]map[string]a
 		return nil, err
 	}
 	out := make([]map[string]any, 0, len(items))
+	seen := make(map[string]bool, len(items))
 	for index, item := range items {
 		user, ok := item["userInfo"].(map[string]any)
 		if !ok || len(user) == 0 {
@@ -170,8 +236,16 @@ func strictContactMembers(data map[string]any, operation string) ([]map[string]a
 		if id == "" {
 			return nil, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("部门成员第 %d 项缺少 userId", index))
 		}
+		if seen[id] {
+			return nil, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("部门成员第 %d 项重复 userId", index))
+		}
+		seen[id] = true
 		row := map[string]any{"userId": id}
-		if name := strictContactString(user, "name"); name != "" {
+		name, _, valid := strictContactOptionalString(user, "name")
+		if !valid {
+			return nil, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("部门成员第 %d 项的 name 必须是字符串", index))
+		}
+		if name != "" {
 			row["name"] = name
 		}
 		out = append(out, row)
@@ -194,6 +268,10 @@ func strictDeptDetail(data map[string]any, expectedID int64, operation string) (
 	if expectedID > 0 && id != expectedID {
 		return nil, responsecheck.Error(operation, "identity_mismatch", "部门详情稳定身份与请求不一致")
 	}
+	if _, _, valid := strictContactOptionalString(detail, "deptName"); !valid {
+		return nil, responsecheck.Error(operation, "malformed_result", "部门详情 deptName 必须是字符串")
+	}
+	detail["deptId"] = id
 	return detail, nil
 }
 
@@ -202,6 +280,8 @@ func strictPrimaryDeptID(model map[string]any, operation string) (int64, error) 
 	if !ok || len(raw) == 0 {
 		return 0, responsecheck.Error(operation, "missing_collection", "用户详情缺少非空 depts 数组")
 	}
+	seen := make(map[int64]bool, len(raw))
+	var primary int64
 	for index, item := range raw {
 		dept, ok := item.(map[string]any)
 		if !ok || len(dept) == 0 {
@@ -211,9 +291,15 @@ func strictPrimaryDeptID(model map[string]any, operation string) (int64, error) 
 		if !ok || id <= 0 {
 			return 0, responsecheck.Error(operation, "missing_stable_identity", fmt.Sprintf("depts[%d] 缺少有效 deptId", index))
 		}
-		return id, nil
+		if seen[id] {
+			return 0, responsecheck.Error(operation, "duplicate_stable_identity", fmt.Sprintf("depts[%d] 重复 deptId", index))
+		}
+		seen[id] = true
+		if index == 0 {
+			primary = id
+		}
 	}
-	return 0, responsecheck.Error(operation, "missing_stable_identity", "用户详情没有可用 deptId")
+	return primary, nil
 }
 
 func strictWhoami(data map[string]any) (map[string]any, error) {
@@ -251,6 +337,18 @@ func strictContactFirst(object map[string]any, keys ...string) string {
 func strictContactString(object map[string]any, key string) string {
 	value, _ := object[key].(string)
 	return strings.TrimSpace(value)
+}
+
+func strictContactOptionalString(object map[string]any, key string) (string, bool, bool) {
+	raw, present := object[key]
+	if !present || raw == nil {
+		return "", present, true
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return "", true, false
+	}
+	return strings.TrimSpace(value), true, true
 }
 
 func strictContactInt64(value any) (int64, bool) {

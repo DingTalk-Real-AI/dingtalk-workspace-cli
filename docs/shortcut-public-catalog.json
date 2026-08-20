@@ -1,7 +1,17 @@
 {
-  "generated_at": "2026-08-20T11:51:44.156046",
+  "generated_at": "2026-08-21T01:19:43.787136",
   "count": 416,
   "results": [
+    {
+      "suite": "semantic",
+      "service": "aisearch",
+      "command": "+search-person",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "对 enterprise_person_search 增加显式 success/result 数组、坏元素、来源类型和稳定人员身份校验；exact live 已同时证明已知非空与 phone 维度不可存在号码的显式零命中。",
+      "availability": "available"
+    },
     {
       "suite": "semantic",
       "service": "aitable",
@@ -2263,102 +2273,134 @@
       "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+by-mobile",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "使用显式数组的关键词能力按手机号唯一解析 userId，再读取并核对唯一用户详情；exact live 已证明已知唯一与保证零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+dept-members",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按部门名唯一解析 deptId 后列直属成员；搜索候选和成员集合均逐项严格校验，绝不猜测多匹配。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+list-dept-members",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按 deptId 列直属成员，严格要求显式 deptUserList、userInfo 对象及稳定 userId；已验证非空与随机零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+list-followings",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格要求 success、result.models 数组、对象元素、唯一稳定 openDingTalkId；可用 --open-id 做本地精确筛选，exact live 已证明已知非空与保证零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+list-role-members",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按角色列成员，严格要求 success、显式 labelUserList、userInfo 对象及稳定 userId；已验证非空与随机零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "contact",
-      "command": "+list-roles",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+list-sub-depts",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按父部门列直属子部门，严格要求显式 result 数组与有效 deptId；已验证非空与随机零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+lookup",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按姓名唯一解析稳定 userId 后读取并核对唯一用户详情；零命中和多命中均错误关闭。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+me",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "读取当前用户唯一详情并严格要求 orgEmployeeModel 与稳定 userId，再投影最小自身份字段。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+org",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按姓名解析用户、核对用户详情与主 deptId，再读取并核对部门详情的稳定身份。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+resolve-dept",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按名称返回唯一 deptId 或显式候选；严格要求 deptList 数组、有效且不重复的 deptId 与部门名。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+search-mobile",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "改走会发布显式 result 数组的通讯录关键词能力，并严格要求最多一个稳定用户身份；exact live 已证明手机号已知唯一与保证零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+search-user",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按姓名搜索并严格要求 success、显式 result 数组、非空对象和稳定 userId/openDingTalkId；已验证非空与随机零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+team",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按姓名解析用户和主部门后列直属成员；每一步校验 success、稳定身份及显式成员集合。",
+      "availability": "available"
     },
     {
       "suite": "write",

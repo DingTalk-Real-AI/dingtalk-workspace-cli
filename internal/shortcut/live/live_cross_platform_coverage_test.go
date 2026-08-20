@@ -74,11 +74,40 @@ func TestCrossPlatformCoverageUnavailableLiveMakesNoRemoteCall(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageLiveContract(t *testing.T) {
-	if ListMyLives.OutputRollout != output.RolloutUnifiedActive || ListMyLives.Contract.Result == nil || strings.TrimSpace(ListMyLives.Safety.Effect) == "" {
-		t.Fatal("Live shortcut lacks Contract/Result/Safety/unified output")
+	if ListMyLives.OutputRollout != output.RolloutLegacyOnly || ListMyLives.Contract.Result != nil || strings.TrimSpace(ListMyLives.Safety.Effect) == "" || ListMyLives.Contract.Interface == nil || ListMyLives.Contract.Interface.Availability != "unavailable" {
+		t.Fatalf("Live unavailable contract drift: rollout=%q result=%v interface=%#v", ListMyLives.OutputRollout, ListMyLives.Contract.Result, ListMyLives.Contract.Interface)
 	}
-	var schema map[string]any
-	if err := json.Unmarshal(ListMyLives.Contract.Result.DataSchema, &schema); err != nil || schema["type"] != "object" {
-		t.Fatalf("invalid Result schema: schema=%v err=%v", schema, err)
+}
+
+func TestCrossPlatformCoverageLivePrimitiveMatrices(t *testing.T) {
+	for index, test := range []struct {
+		value any
+		want  bool
+	}{
+		{nil, false}, {"", false}, {"0", false}, {"success", false}, {"bad", true},
+		{float64(0), false}, {float64(1), true}, {0, false}, {1, true}, {false, false}, {true, true},
+		{map[string]any{}, false}, {map[string]any{"x": 1}, true}, {[]any{}, false}, {[]any{1}, true}, {struct{}{}, true},
+	} {
+		if got := liveFailureValue(test.value); got != test.want {
+			t.Errorf("failure matrix %d = %v, want %v", index, got, test.want)
+		}
+	}
+	for index, test := range []struct {
+		value any
+		want  int
+		ok    bool
+	}{
+		{float64(7), 7, true}, {float64(-1), 0, false}, {float64(7.5), 0, false},
+		{8, 8, true}, {-1, -1, false}, {json.Number("9"), 9, true}, {json.Number("bad"), 0, false}, {"9", 0, false},
+	} {
+		got, ok := liveNonNegativeInt(test.value)
+		if got != test.want || ok != test.ok {
+			t.Errorf("integer matrix %d = (%d,%v), want (%d,%v)", index, got, ok, test.want, test.ok)
+		}
+	}
+	for _, field := range []string{"liveId", "liveUuid", "uuid", "id"} {
+		if got := liveStableID(map[string]any{field: " stable "}); got != "stable" {
+			t.Errorf("stable ID field %s = %q", field, got)
+		}
 	}
 }

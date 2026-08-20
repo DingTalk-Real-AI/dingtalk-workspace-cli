@@ -45,7 +45,7 @@ func TestCrossPlatformCoverageLiveSemanticCatalogExactlyCoversRegisteredSurface(
 	if !item.Hidden || item.Availability != shortcut.AvailabilityUnavailable || shortcut.InPublicCatalog("live", item.Command) {
 		t.Fatalf("Live visibility drift: hidden=%v availability=%q", item.Hidden, item.Availability)
 	}
-	if item.Contract.Empty() || item.Contract.Result == nil || strings.TrimSpace(item.Safety.Effect) == "" || item.OutputRollout != output.RolloutUnifiedActive {
-		t.Fatal("Live shortcut lacks Contract/Result/Safety/unified output")
+	if item.Contract.Empty() || strings.TrimSpace(item.Safety.Effect) == "" || item.Contract.Result != nil || item.OutputRollout != output.RolloutLegacyOnly {
+		t.Fatal("Live unavailable shortcut contract drift")
 	}
 }
