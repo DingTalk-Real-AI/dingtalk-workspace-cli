@@ -330,7 +330,7 @@ func TestCrossPlatformCoverageUpstreamAgentEnumerationAndEffectiveRoots(t *testi
 	custom := map[string]string{
 		"AUTOHAND_HOME": filepath.Join(home, "autohand-home"), "CLAUDE_CONFIG_DIR": filepath.Join(home, "claude-home"),
 		"CODEX_HOME": filepath.Join(home, "codex-home"), "GROK_HOME": filepath.Join(home, "grok-home"),
-		"HERMES_HOME": filepath.Join(home, "hermes-home"), "VIBE_HOME": filepath.Join(home, "vibe-home"),
+		"DSH_HOME": filepath.Join(home, "dsh-home"), "HERMES_HOME": filepath.Join(home, "hermes-home"), "VIBE_HOME": filepath.Join(home, "vibe-home"),
 		"XDG_CONFIG_HOME": filepath.Join(home, "xdg"),
 	}
 	testseam.Swap(t, &skillSetupGetenv, func(name string) string { return custom[name] })
@@ -338,6 +338,7 @@ func TestCrossPlatformCoverageUpstreamAgentEnumerationAndEffectiveRoots(t *testi
 		"autohand-code": filepath.Join(custom["AUTOHAND_HOME"], "skills"),
 		"claude-code":   filepath.Join(custom["CLAUDE_CONFIG_DIR"], "skills"),
 		"codex":         filepath.Join(custom["CODEX_HOME"], "skills"),
+		"dsh":           filepath.Join(custom["DSH_HOME"], "skills"),
 		"grok":          filepath.Join(custom["GROK_HOME"], "skills"),
 		"hermes-agent":  filepath.Join(custom["HERMES_HOME"], "skills"),
 		"mistral-vibe":  filepath.Join(custom["VIBE_HOME"], "skills"),
