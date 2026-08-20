@@ -66,3 +66,59 @@ func TestSafeChatSelfTestReportsUnavailableBackend(t *testing.T) {
 		t.Fatalf("JSON output should carry available=false, got: %s", out.String())
 	}
 }
+
+func newSafeChatDecryptForTest() (*bytes.Buffer, func(kv ...string) error, func(args ...string) error) {
+	var out bytes.Buffer
+	cmd := newSafeChatDecryptCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	flags := cmd.Flags()
+	withFlags := func(kv ...string) error {
+		for i := 0; i+1 < len(kv); i += 2 {
+			if err := flags.Set(kv[i], kv[i+1]); err != nil {
+				return err
+			}
+		}
+		return cmd.RunE(cmd, nil)
+	}
+	withArgs := func(args ...string) error {
+		return cmd.RunE(cmd, args)
+	}
+	return &out, withFlags, withArgs
+}
+
+func TestSafeChatDecryptRequiresInput(t *testing.T) {
+	_, _, runArgs := newSafeChatDecryptForTest()
+	err := runArgs()
+	if err == nil || !strings.Contains(err.Error(), "缺少密文输入") {
+		t.Fatalf("decrypt without input should fail with a clear message, got: %v", err)
+	}
+}
+
+func TestSafeChatDecryptRejectsMultipleInputs(t *testing.T) {
+	var out bytes.Buffer
+	cmd := newSafeChatDecryptCommand()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := cmd.Flags().Set("text", "xxx"); err != nil {
+		t.Fatal(err)
+	}
+	err := cmd.RunE(cmd, []string{"yyy"})
+	if err == nil || !strings.Contains(err.Error(), "三选一") {
+		t.Fatalf("decrypt with both --text and positional should fail, got: %v", err)
+	}
+}
+
+func TestSafeChatDecryptReportsUnavailableBackend(t *testing.T) {
+	out, run, _ := newSafeChatDecryptForTest()
+	err := run("text", "somecipher", "json", "true")
+	if err == nil {
+		t.Skip("safechat backend compiled in; unavailability path not reachable")
+	}
+	if !strings.Contains(err.Error(), "safechat") {
+		t.Fatalf("error should explain the build tag, got: %v", err)
+	}
+	if !strings.Contains(out.String(), `"available":false`) {
+		t.Fatalf("JSON output should carry available=false, got: %s", out.String())
+	}
+}
