@@ -1,0 +1,40 @@
+name: Diag NPM Token
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    name: Safe npm credential diagnostic
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify npm registry and credential
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -eu
+
+          if test -z "$NODE_AUTH_TOKEN"; then
+            echo "NPM_TOKEN is unavailable to this workflow."
+            exit 1
+          fi
+
+          npm ping --registry=https://registry.npmjs.org
+          npm whoami --registry=https://registry.npmjs.org
+
+          if npm access list collaborators dingtalk-workspace-cli \
+            --registry=https://registry.npmjs.org >/dev/null; then
+            echo "Package collaborator access: available"
+          else
+            echo "Package collaborator access: unavailable"
+            exit 1
+          fi
