@@ -944,6 +944,7 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 		newCatalogCommand(),
 		newConfigCommand(),
 		newDoctorCommand(),
+		newSafeChatCommand(),
 		newRecoveryCommand(),
 		newEventCommand(flags),
 		newAuditCommand(),
