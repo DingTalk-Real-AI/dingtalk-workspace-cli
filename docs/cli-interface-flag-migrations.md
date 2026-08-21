@@ -1,6 +1,11 @@
 # CLI Help / Schema 兼容迁移治理
 
-本文定义一种受控迁移：保留旧 flag 的可执行兼容性，但把它从 Help 与 Agent Schema 中隐藏，并将新的规范 flag 设为唯一可见入口。迁移必须保持原 flag 的 requiredness：optional 只能迁到 optional，required 只能迁到 required。它只解决这一种精确变更，不是通用 breaking-change 豁免。
+本文定义两种受控 flag 迁移：
+
+1. `flag_rename`：保留旧 flag 的可执行兼容性，但把它从 Help 与 Agent Schema 中隐藏，并将新的规范 flag 设为唯一可见入口；rename 必须保持原 flag 的 requiredness，optional 只能迁到 optional，required 只能迁到 required。
+2. `requiredness_change`：同一个公开 flag 从 optional 精确提升为 required；flag 的名称、类型、作用域、可见性、shorthand、`no_opt` 与 alias 关系必须保持不变。
+
+两种原语都只放行清单精确登记的变化，不是通用 breaking-change 豁免，也不得在同一 command/flag 上叠加以绕过 rename 的 requiredness 保持规则。
 
 同一套 base-owned lifecycle 也治理两类跨命令迁移：旧命令保留执行能力但从 Help / Schema 导航隐藏，并迁到新的公开命令路径；或把旧命令中的一个可选 flag 拆成新的专用命令。跨命令迁移只允许清单精确声明的 `command_became_hidden` / `flag_became_hidden` 及其 Schema 投影，不是通用 command-path breaking-change 豁免。
 
@@ -44,7 +49,9 @@ scripts/policy/interface-migrations/approved-flag-migrations-v1.json
 scripts/policy/interface-migrations/approved-command-migrations-v1.json
 ```
 
-清单使用严格 JSON 解析：版本、字段名大小写、JSON 值类型、命令路径和 flag 名都必须精确；拒绝重复键、未知键、scalar `null` 与尾随 JSON 值，`reason` 不能为空；禁止 `*`、`?`、前缀规则或其他 wildcard。清单中的 `pending` 记录只记录已评审计划，并授权其精确列出的后续产品迁移；候选与 merge-base 仍必须精确匹配 `before`，不能授权同一个提交中的接口变化，也不能作为其他命令或参数的通配豁免。
+清单使用严格 JSON 解析：版本、字段名大小写、JSON 值类型、命令路径和 flag 名都必须精确；拒绝重复键、未知键、scalar `null` 与尾随 JSON 值，`reason` 不能为空；禁止 `*`、`?`、前缀规则或其他 wildcard。历史未声明 `kind` 的记录按 `flag_rename` 解释；新增同名 requiredness 迁移必须显式写 `kind: requiredness_change` 和单一 `flag` before/after。清单中的 `pending` 记录只记录已评审计划，并授权其精确列出的后续产品迁移；候选与 merge-base 仍必须精确匹配 `before`，不能授权同一个提交中的接口变化，也不能作为其他命令或参数的通配豁免。
+
+首次引入一个旧 merge-base 不认识的新 `kind` 时，机制 PR 不得同时写入该 kind 的 pending 记录，因为旧的 base-owned 严格解析器会拒绝未知字段。必须先合入 parser、lifecycle、CLI/Schema adapter 与 hostile tests；待这些实现成为新的 merge-base authority 后，再用独立治理审批 PR 新增 pending，最后才由产品 PR 消费。
 
 ## 跨命令迁移原语
 
@@ -103,12 +110,12 @@ replacement 必须保留 source 已发布的 dry-run 能力：历史 `dry_run` �
 
 ## 两阶段迁移与回执清理
 
-每条迁移以 `(command, legacy flag, canonical flag)` 为唯一精确键，并经历以下生命周期：
+rename 以 `(kind, command, legacy flag, canonical flag)` 为唯一精确键；requiredness change 以 `(kind, command, flag)` 为唯一精确键。二者经历同一生命周期：
 
 | 阶段 | PR 可以做什么 | 必须满足的快照状态 |
 |---|---|---|
 | 1. 治理审批 | 新增 `state: pending` 的精确记录；不得在同一个 PR 修改产品 surface | candidate 和 merge-base 都与记录中的 `before` 完全一致；该记录不改变 stable 的判断 |
-| 2. 产品迁移 | merge-base 已拥有 `pending` 后，按记录一次性切到精确 `after`，并把记录改为 `state: consumed` | legacy 仍存在但由 visible 变 hidden，且声明 `alias_of`；canonical 的 requiredness 与 legacy 迁移前完全一致 |
+| 2. 产品迁移 | merge-base 已拥有 `pending` 后，按记录一次性切到精确 `after`，并把记录改为 `state: consumed` | rename 的 legacy 仍存在但由 visible 变 hidden，且声明 `alias_of`，canonical requiredness 保持不变；requiredness change 只把同名 flag 从 optional 提升为 required |
 | 3. 保留回执 | 产品 PR 合入后，如果 stable 仍是 `before`，继续保留 `consumed` | merge-base 或 stable 仍有任一份尚未达到 `after` |
 | 4. 惰性保留或清理 | 当 merge-base 和 stable 都已经是 `after`，该记录不再提供任何授权；后续 PR 可以原样保留或删除 | 两份参考快照均精确匹配 `after`；保留时仍必须是不可改写的 `consumed`，接口偏离 `after` 继续失败 |
 
@@ -157,6 +164,27 @@ replacement 必须保留 source 已发布的 dry-run 能力：历史 `dry_run` �
 
 产品迁移 PR 必须保持同一条记录的命令、flag、before/after 和 reason 不变，只把 `pending` 改成 `consumed`。
 
+同名 flag requiredness 迁移的清单结构如下；示例不代表已经审批：
+
+```json
+{
+  "version": 1,
+  "migrations": [
+    {
+      "kind": "requiredness_change",
+      "command": "dws report entry submit",
+      "flag": {
+        "name": "to-user-ids",
+        "before": {"present": true, "type": "string", "scope": "local"},
+        "after": {"present": true, "type": "string", "required": true, "scope": "local"}
+      },
+      "state": "pending",
+      "reason": "Reject report submissions that have no visible recipient."
+    }
+  ]
+}
+```
+
 ## `alias_of` 是框架来源的受评审关系证据
 
 `alias_of` 不是 Schema 同义词、参数概念词典或任意文字声明。它只能由 `FlagSpec.Aliases` 写入，并与内部 origin `corecmd.flag_spec_aliases.v1` 成对出现；每次 Interface Integrity 都会在已提交的 detached candidate 上执行源码门禁，禁止其他生产文件写入或复刻这些 evidence token。Interface Snapshot 会验证：
@@ -177,10 +205,11 @@ replacement 必须保留 source 已发布的 dry-run 能力：历史 `dry_run` �
 
 ## 豁免边界
 
-一条 base-owned、状态正确且前后快照精确匹配的记录，只会从普通兼容报告中移除以下两类预期 finding：
+一条 base-owned、状态正确且前后快照精确匹配的记录，只会从普通兼容报告中移除以下三类预期 finding：
 
 1. legacy flag 的 `flag_became_hidden`（visible → hidden）；
 2. required legacy 被新增的 required canonical 替代时产生的 `required_flag_added`；如果 canonical 在 before 阶段只是 hidden 占位符，则允许它在转为公开拼写时继承 legacy 的 requiredness。已有的 visible canonical 不允许借 rename 改变 requiredness。
+3. `requiredness_change` 中同名 flag 从 optional 提升为 required 时产生的 `flag_became_required`。
 
 以下变化仍按普通兼容规则阻塞，不能被迁移记录掩盖：
 
@@ -188,6 +217,7 @@ replacement 必须保留 source 已发布的 dry-run 能力：历史 `dry_run` �
 - flag 类型或迁移记录中的 scope、shorthand、`no_opt` 漂移；
 - `alias_of` 缺失、指向变化或 alias chain；
 - 命令路径及任何无关的阻塞性接口变化；
+- requiredness change 同时发生的 rename、隐藏、类型、scope、shorthand、`no_opt` 或 alias 漂移；
 - 不精确、部分完成、超出记录范围的 surface 变化。
 
 ## Schema 投影边界
@@ -214,6 +244,12 @@ adapter 先构造经过上述验证的历史 contract 副本，再调用原 Sche
 变为 optional”或 property 漂移等伪兼容。`consumed` 回执在 merge-base Schema 已经处于
 canonical-only `after` 状态时不需要再次投影；adapter 保持 baseline 不变，由原 checker
 验证 candidate 是否仍与该 canonical contract 兼容。
+
+`requiredness_change` 的 Schema adapter 只把历史同名 parameter 的 `required` 与
+`cli_required` 提升到 candidate 的 `true` 值，并要求 candidate 两者都为 `true`。parameter
+不存在、tool/path 不匹配时不制造 Schema surface；type、property、interface type、default、
+format、enum、`required_when`、constraints、positionals 与 safety 等全部字段仍交给原 checker，
+任何不相干漂移继续阻塞。
 
 ## 本地验证
 

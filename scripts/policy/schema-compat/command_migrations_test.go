@@ -1080,6 +1080,29 @@ func TestCrossPlatformCoverageSchemaCommandMigrationLineagePreservesOrdinaryChec
 		t.Fatalf("lineage hid positional drift: %s", failures)
 	}
 
+	requiredness := interfacesnapshot.FlagMigration{
+		Kind:    interfacesnapshot.FlagMigrationRequirednessChange,
+		Command: "dws report cli-only",
+		Flag: &interfacesnapshot.FlagMigrationSide{
+			Name:   "recipient",
+			Before: interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Scope: "local"},
+			After:  interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Required: true, Scope: "local"},
+		},
+		State:  interfacesnapshot.FlagMigrationConsumed,
+		Reason: "Exercise requiredness receipts beside command lineage without treating them as renames.",
+	}
+	flagsWithRequiredness := append([]interfacesnapshot.FlagMigration(nil), schemaCommandLineageFlagManifest().Migrations...)
+	flagsWithRequiredness = append(flagsWithRequiredness, requiredness)
+	if _, err := normalizeSchemaCommandMigrationLineage(
+		stable,
+		base,
+		current,
+		flagsWithRequiredness,
+		schemaCommandLineageManifest(interfacesnapshot.CommandMigrationPending).Migrations,
+	); err != nil {
+		t.Fatalf("requiredness receipt interfered with command lineage: %v", err)
+	}
+
 	// Multiple historical names may converge only when every predecessor carries
 	// the exact same contract and every receipt is already consumed.
 	stable, base, current = schemaCommandLineageContracts()

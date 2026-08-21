@@ -1229,6 +1229,144 @@ func TestCrossPlatformCoverageSchemaFlagMigrationNormalizesExactRename(t *testin
 	}
 }
 
+func TestCrossPlatformCoverageSchemaFlagRequirednessMigration(t *testing.T) {
+	baseline := schemaContract{
+		Version: schemaContractVersion,
+		Products: map[string]productSchema{
+			"report": {
+				Tools: map[string]toolSchema{
+					"report.entry_submit": {
+						PrimaryCLIPath: "report entry submit",
+						Parameters: map[string]parameterSchema{
+							"to-user-ids": {Type: `"string"`, Property: "toUserIds", InterfaceType: "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+	current := cloneContract(baseline)
+	product := current.Products["report"]
+	tool := product.Tools["report.entry_submit"]
+	parameter := tool.Parameters["to-user-ids"]
+	parameter.Required = true
+	parameter.CLIRequired = true
+	tool.Parameters["to-user-ids"] = parameter
+	product.Tools["report.entry_submit"] = tool
+	current.Products["report"] = product
+
+	migration := interfacesnapshot.FlagMigration{
+		Kind:    interfacesnapshot.FlagMigrationRequirednessChange,
+		Command: "dws report entry submit",
+		Flag: &interfacesnapshot.FlagMigrationSide{
+			Name:   "to-user-ids",
+			Before: interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Scope: "local"},
+			After:  interfacesnapshot.FlagMigrationState{Present: true, Type: "string", Required: true, Scope: "local"},
+		},
+		State:  interfacesnapshot.FlagMigrationConsumed,
+		Reason: "Reject report submissions that have no visible recipient.",
+	}
+	normalized, err := normalizeSchemaFlagMigrations(baseline, current, []interfacesnapshot.FlagMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := checkCompatibility(normalized, current); len(failures) != 0 {
+		t.Fatalf("exact requiredness migration should pass after normalization: %v", failures)
+	}
+
+	t.Run("non-requiredness drift remains blocked", func(t *testing.T) {
+		drifted := cloneContract(current)
+		product := drifted.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		parameter := tool.Parameters["to-user-ids"]
+		parameter.Type = `"array"`
+		tool.Parameters["to-user-ids"] = parameter
+		product.Tools["report.entry_submit"] = tool
+		drifted.Products["report"] = product
+		normalized, err := normalizeSchemaFlagMigrations(baseline, drifted, []interfacesnapshot.FlagMigration{migration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := strings.Join(checkCompatibility(normalized, drifted), "\n"); !strings.Contains(failures, "changed type") {
+			t.Fatalf("requiredness migration hid type drift: %s", failures)
+		}
+	})
+
+	t.Run("partial Schema projection fails closed", func(t *testing.T) {
+		partial := cloneContract(current)
+		product := partial.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		parameter := tool.Parameters["to-user-ids"]
+		parameter.CLIRequired = false
+		tool.Parameters["to-user-ids"] = parameter
+		product.Tools["report.entry_submit"] = tool
+		partial.Products["report"] = product
+		if _, err := normalizeSchemaFlagMigrations(baseline, partial, []interfacesnapshot.FlagMigration{migration}); err == nil || !strings.Contains(err.Error(), "required and cli_required") {
+			t.Fatalf("partial requiredness projection error = %v", err)
+		}
+	})
+
+	t.Run("CLI-only migration does not manufacture Schema", func(t *testing.T) {
+		cliOnly := migration
+		cliOnly.Command = "dws report cli-only"
+		normalized, err := normalizeSchemaFlagMigrations(baseline, current, []interfacesnapshot.FlagMigration{cliOnly})
+		if err != nil || !reflect.DeepEqual(normalized, baseline) {
+			t.Fatalf("CLI-only requiredness migration = %#v, %v", normalized, err)
+		}
+	})
+
+	t.Run("duplicate historical path fails closed", func(t *testing.T) {
+		duplicate := cloneContract(baseline)
+		product := duplicate.Products["report"]
+		product.Tools["report.duplicate"] = product.Tools["report.entry_submit"]
+		duplicate.Products["report"] = product
+		if _, err := normalizeSchemaFlagMigrations(duplicate, current, []interfacesnapshot.FlagMigration{migration}); err == nil || !strings.Contains(err.Error(), "matches 2") {
+			t.Fatalf("duplicate requiredness Schema path error = %v", err)
+		}
+	})
+
+	t.Run("missing historical parameter is not authority", func(t *testing.T) {
+		missing := cloneContract(baseline)
+		product := missing.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		delete(tool.Parameters, "to-user-ids")
+		product.Tools["report.entry_submit"] = tool
+		missing.Products["report"] = product
+		normalized, err := normalizeSchemaFlagMigrations(missing, current, []interfacesnapshot.FlagMigration{migration})
+		if err != nil || !reflect.DeepEqual(normalized, missing) {
+			t.Fatalf("missing historical requiredness parameter = %#v, %v", normalized, err)
+		}
+	})
+
+	t.Run("missing current tool stays visible to ordinary checker", func(t *testing.T) {
+		missing := cloneContract(current)
+		delete(missing.Products, "report")
+		normalized, err := normalizeSchemaFlagMigrations(baseline, missing, []interfacesnapshot.FlagMigration{migration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := checkCompatibility(normalized, missing); len(failures) == 0 {
+			t.Fatal("requiredness migration hid missing current Schema tool")
+		}
+	})
+
+	t.Run("missing current parameter stays visible to ordinary checker", func(t *testing.T) {
+		missing := cloneContract(current)
+		product := missing.Products["report"]
+		tool := product.Tools["report.entry_submit"]
+		delete(tool.Parameters, "to-user-ids")
+		product.Tools["report.entry_submit"] = tool
+		missing.Products["report"] = product
+		normalized, err := normalizeSchemaFlagMigrations(baseline, missing, []interfacesnapshot.FlagMigration{migration})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if failures := strings.Join(checkCompatibility(normalized, missing), "\n"); !strings.Contains(failures, "lost parameter") {
+			t.Fatalf("requiredness migration hid missing current parameter: %s", failures)
+		}
+	})
+}
+
 func TestCrossPlatformCoverageSchemaFlagMigrationRejectsSemanticDrift(t *testing.T) {
 	tests := []struct {
 		name   string

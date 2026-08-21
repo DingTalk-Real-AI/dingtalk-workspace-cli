@@ -1261,9 +1261,9 @@ type schemaToolRef struct {
 }
 
 // normalizeSchemaFlagMigrations projects only an already-authorized CLI flag
-// rename onto a cloned historical Schema contract. The ordinary compatibility
-// checker still makes the final decision; this adapter never drops findings by
-// matching their rendered text.
+// rename or requiredness change onto a cloned historical Schema contract. The
+// ordinary compatibility checker still makes the final decision; this adapter
+// never drops findings by matching their rendered text.
 func normalizeSchemaFlagMigrations(
 	baseline schemaContract,
 	current schemaContract,
@@ -1273,6 +1273,14 @@ func normalizeSchemaFlagMigrations(
 	renamesByTool := map[schemaToolRef]map[string]string{}
 
 	for _, migration := range migrations {
+		if migration.EffectiveKind() == interfacesnapshot.FlagMigrationRequirednessChange {
+			var err error
+			normalized, err = normalizeSchemaFlagRequirednessMigration(normalized, baseline, current, migration)
+			if err != nil {
+				return schemaContract{}, err
+			}
+			continue
+		}
 		primaryPath := strings.TrimPrefix(migration.Command, "dws ")
 		matches := schemaToolsByPrimaryPath(baseline, primaryPath)
 		if len(matches) == 0 {
@@ -1394,6 +1402,65 @@ func normalizeSchemaFlagMigrations(
 	return normalized, nil
 }
 
+func normalizeSchemaFlagRequirednessMigration(
+	normalized schemaContract,
+	baseline schemaContract,
+	current schemaContract,
+	migration interfacesnapshot.FlagMigration,
+) (schemaContract, error) {
+	primaryPath := strings.TrimPrefix(migration.Command, "dws ")
+	matches := schemaToolsByPrimaryPath(baseline, primaryPath)
+	if len(matches) == 0 {
+		// A reviewed CLI-only command has no Schema compatibility surface.
+		return normalized, nil
+	}
+	if len(matches) != 1 {
+		return schemaContract{}, fmt.Errorf(
+			"approved flag requiredness migration %q matches %d historical Schema tools",
+			migration.Command,
+			len(matches),
+		)
+	}
+
+	ref := matches[0]
+	oldTool := baseline.Products[ref.productID].Tools[ref.toolID]
+	oldParameter, existed := oldTool.Parameters[migration.Flag.Name]
+	if !existed {
+		// CLI requiredness is not authority to create or mutate an unrelated
+		// historical Schema parameter.
+		return normalized, nil
+	}
+	newProduct, productExists := current.Products[ref.productID]
+	newTool, toolExists := newProduct.Tools[ref.toolID]
+	if !productExists || !toolExists || newTool.PrimaryCLIPath != primaryPath {
+		// Preserve the baseline so the ordinary checker reports the missing tool
+		// or primary path change.
+		return normalized, nil
+	}
+	newParameter, exists := newTool.Parameters[migration.Flag.Name]
+	if !exists {
+		// Preserve the baseline so the ordinary checker reports parameter loss.
+		return normalized, nil
+	}
+	if !newParameter.Required || !newParameter.CLIRequired {
+		return schemaContract{}, fmt.Errorf(
+			"approved flag requiredness migration %q Schema parameter %q must be required and cli_required",
+			migration.Command,
+			migration.Flag.Name,
+		)
+	}
+
+	normalizedProduct := normalized.Products[ref.productID]
+	normalizedTool := normalizedProduct.Tools[ref.toolID]
+	normalizedParameter := oldParameter
+	normalizedParameter.Required = newParameter.Required
+	normalizedParameter.CLIRequired = newParameter.CLIRequired
+	normalizedTool.Parameters[migration.Flag.Name] = normalizedParameter
+	normalizedProduct.Tools[ref.toolID] = normalizedTool
+	normalized.Products[ref.productID] = normalizedProduct
+	return normalized, nil
+}
+
 // normalizeSchemaCommandMigrationLineage composes two independently reviewed
 // migration receipts without inventing a second alias authority. A consumed
 // flag migration may supply the historical predecessor of a command_move
@@ -1482,6 +1549,9 @@ func stageSchemaCommandMigrationPredecessors(
 		for _, parameter := range migration.Schema.Parameters {
 			if _, direct := oldTool.Parameters[parameter.From]; direct {
 				for _, flagMigration := range flagMigrations {
+					if flagMigration.EffectiveKind() != interfacesnapshot.FlagMigrationRename {
+						continue
+					}
 					if flagMigration.Command != migration.Legacy.Command ||
 						flagMigration.Canonical.Name != parameter.From {
 						continue
@@ -1501,6 +1571,9 @@ func stageSchemaCommandMigrationPredecessors(
 
 			predecessors := make([]interfacesnapshot.FlagMigration, 0, 1)
 			for _, flagMigration := range flagMigrations {
+				if flagMigration.EffectiveKind() != interfacesnapshot.FlagMigrationRename {
+					continue
+				}
 				if flagMigration.Command != migration.Legacy.Command ||
 					flagMigration.Canonical.Name != parameter.From {
 					continue
