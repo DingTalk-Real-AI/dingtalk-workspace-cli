@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,10 +34,19 @@ type keyClient struct {
 
 // newKeyClient creates a new key client with the given configuration.
 func newKeyClient(cfg Config) *keyClient {
+	// Read InsecureSkipVerify from environment variable.
+	// Default is false (secure). Set SAFECHAT_INSECURE_SKIP_VERIFY=true to disable verification
+	// for testing with self-signed certificates.
+	insecureSkipVerify := false
+	if envVal := os.Getenv("SAFECHAT_INSECURE_SKIP_VERIFY"); envVal != "" {
+		if parsed, err := strconv.ParseBool(envVal); err == nil {
+			insecureSkipVerify = parsed
+		}
+	}
+
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			// Allow connecting to enterprise private servers with self-signed certs
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: insecureSkipVerify,
 		},
 		MaxIdleConns:       10,
 		IdleConnTimeout:    30 * time.Second,
