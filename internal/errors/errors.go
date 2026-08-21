@@ -58,6 +58,8 @@ const (
 //	5  internal       （CategoryInternal 与兜底：非结构化错误、panic 收敛均归 5）
 //	6  discovery      （CategoryDiscovery）
 //	7  partial_failure（部分成功专用码，见 ExitCodePartial）
+//	8  wait           （--wait 观察到失败终态的专用码，见 internal/output
+//	                   的 exitCodeWait；不设 Category，仅经统一信封产出）
 //
 // ExitCodePartial is the partial-result exit code shared with internal/output.
 // It is not returned for CategoryPartial errors because they lack the typed

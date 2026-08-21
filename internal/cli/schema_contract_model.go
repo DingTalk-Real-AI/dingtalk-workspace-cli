@@ -60,6 +60,7 @@ type ToolSpec struct {
 	Constraints     RuntimeSchemaConstraints
 	Positionals     []contract.RuntimeSchemaPositional
 	DryRun          *contract.DryRunSpec
+	Wait            *contract.WaitSpec
 	Result          *contract.ResultSpec
 	Pagination      *contract.PaginationSpec
 	Safety          contract.SafetySpec
@@ -135,6 +136,7 @@ type RuntimeToolSpecInput struct {
 	Constraints     RuntimeSchemaConstraints
 	Positionals     []contract.RuntimeSchemaPositional
 	DryRun          *contract.DryRunSpec
+	Wait            *contract.WaitSpec
 	Result          *contract.ResultSpec
 	Pagination      *contract.PaginationSpec
 	Safety          contract.SafetySpec
@@ -542,6 +544,11 @@ func (t ToolSpec) Validate() error {
 			return err
 		}
 	}
+	if t.Wait != nil {
+		if err := t.Wait.Validate(id.CanonicalPath); err != nil {
+			return err
+		}
+	}
 	if t.Result != nil {
 		if _, err := contract.NormalizeResultSpec(t.Result, id.CanonicalPath); err != nil {
 			return err
@@ -743,6 +750,16 @@ func (t ToolSpec) normalized() ToolSpec {
 		dryRun := *t.DryRun
 		dryRun.PreviewKind = strings.TrimSpace(dryRun.PreviewKind)
 		out.DryRun = &dryRun
+	}
+	if t.Wait != nil {
+		// NormalizeWaitSpec is the single canonical form shared with the
+		// declaration path: trimmed status values, duplicate/conflict
+		// rejection, defensive copy. Invalid declarations are rejected by
+		// ToolSpec.Validate below, which runs the same normalization
+		// through WaitSpec.Validate.
+		if wait, err := contract.NormalizeWaitSpec(t.Wait, id.CanonicalPath); err == nil {
+			out.Wait = wait
+		}
 	}
 	if t.Result != nil {
 		result, err := contract.NormalizeResultSpec(t.Result, id.CanonicalPath)
@@ -981,6 +998,10 @@ func (t ToolSpec) ToPayload() (map[string]any, error) {
 	if t.DryRun != nil {
 		value, _ := typedJSONValue(t.DryRun)
 		payload["dry_run"] = value
+	}
+	if t.Wait != nil {
+		value, _ := typedJSONValue(t.Wait)
+		payload["wait"] = value
 	}
 	if t.Result != nil {
 		value, _ := typedJSONValue(t.Result)

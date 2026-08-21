@@ -169,6 +169,9 @@ func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtim
 	if err != nil {
 		return SchemaRegistry{}, fmt.Errorf("build typed Schema registry: %w", err)
 	}
+	if err := validateWaitPollCommands(registry, bound); err != nil {
+		return SchemaRegistry{}, err
+	}
 	// Derive Agent metadata summary from the assembled ContractFinal /
 	// ProductDecl surface so runtime delivery and cmd_schema_catalog dumps
 	// share one Catalog blob (inject remains validation-only for the dump).
@@ -177,6 +180,63 @@ func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtim
 		return SchemaRegistry{}, fmt.Errorf("encode Agent metadata summary: %w", err)
 	}
 	return registry, nil
+}
+
+// validateWaitPollCommands resolves every declared wait poll_command against
+// the exact bound registry that produced the Schema. PollCommand is a
+// catalog-visible fact — the read command an agent would run manually while
+// waiting — so a declaration naming a command that is missing from the bound
+// registry (typo, removed leaf), excluded from delivery (non-public
+// visibility), or not a read command publishes a resume path the runtime
+// cannot honor. Field-level validation only proves poll_command is non-empty;
+// this is the one assembly phase that sees the complete registry and the
+// final tool set at once, so the cross-tool resolution lives here. Both the
+// canonical form ("oa.approval_instance.get") and the CLI path form
+// ("oa approval-instance get") resolve; the canonical identity of the
+// resolved command is the anchor for the visibility and effect checks.
+func validateWaitPollCommands(registry SchemaRegistry, bound BoundCommandRegistry) error {
+	index, err := registry.Index()
+	if err != nil {
+		return err
+	}
+	for _, product := range registry.Products {
+		for _, tool := range product.Tools {
+			if tool.Wait == nil ||
+				(tool.Wait.Mode != contract.WaitModePoll && tool.Wait.Mode != contract.WaitModeAuto) {
+				continue
+			}
+			canonical := tool.Identity.CanonicalPath
+			target := strings.TrimSpace(tool.Wait.PollCommand)
+			resolved := ""
+			if boundTarget, ok := bound.ByCanonical[target]; ok {
+				resolved = boundTarget.CanonicalPath
+			} else if boundTarget, ok := bound.ByCLIPath[normalizeSchemaCLIPath(target)]; ok {
+				resolved = boundTarget.CanonicalPath
+			}
+			if resolved == "" {
+				return fmt.Errorf(
+					"schema tool %s wait mode %s poll_command %q does not resolve to a bound catalog command: the declared manual resume path must name an existing executable command",
+					canonical, tool.Wait.Mode, target)
+			}
+			if boundTarget := bound.ByCanonical[resolved]; boundTarget.Visibility != SchemaVisibilityPublic {
+				return fmt.Errorf(
+					"schema tool %s wait mode %s poll_command %q resolves to non-public command %s: the manual resume path must stay agent-visible",
+					canonical, tool.Wait.Mode, target, boundTarget.Visibility)
+			}
+			targetTool, ok := index.Resolve(resolved)
+			if !ok {
+				return fmt.Errorf(
+					"schema tool %s wait mode %s poll_command %q resolves to %s but it is missing from the delivered Schema: the manual resume path must be catalog-visible",
+					canonical, tool.Wait.Mode, target, resolved)
+			}
+			if targetTool.Safety.Effect != "read" {
+				return fmt.Errorf(
+					"schema tool %s wait mode %s poll_command %q resolves to %s command %s: polling observes status, so the target must be a read command",
+					canonical, tool.Wait.Mode, target, targetTool.Safety.Effect, resolved)
+			}
+		}
+	}
+	return nil
 }
 
 func runtimeToolSpecFromMetadata(entry runtimeSchemaEntry, metadata runtimeSchemaMetadataSources) (ToolSpec, error) {
@@ -354,6 +414,7 @@ func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.C
 		Constraints:     constraints,
 		Positionals:     positionals,
 		DryRun:          final.DryRun,
+		Wait:            final.Wait,
 		Result:          result,
 		Pagination:      pagination,
 		Safety:          safety,
