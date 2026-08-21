@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-21T01:19:43.787136",
+  "generated_at": "2026-08-21T17:17:39.552223",
   "count": 416,
   "results": [
     {
@@ -2279,7 +2279,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "使用显式数组的关键词能力按手机号唯一解析 userId，再读取并核对唯一用户详情；exact live 已证明已知唯一与保证零命中。",
+      "semantic_delta": "使用专用手机号精确查询接口解析稳定 userId；专用接口 success=true 且省略 result 是经真实双层验证的精确零命中编码，未命中返回 typed nonzero；命中后读取并精确核对同一用户详情，null、错型、坏身份或详情 ID 不一致均失败。",
       "availability": "available"
     },
     {
@@ -2379,7 +2379,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
-      "semantic_delta": "改走会发布显式 result 数组的通讯录关键词能力，并严格要求最多一个稳定用户身份；exact live 已证明手机号已知唯一与保证零命中。",
+      "semantic_delta": "使用专用手机号精确查询接口取得稳定 userId，并直接投影该接口返回的受审身份字段，不额外依赖用户详情权限；专用接口 success=true 且省略 result 是经真实双层验证的精确零命中编码，null、空对象、数组或坏身份均失败。",
       "availability": "available"
     },
     {

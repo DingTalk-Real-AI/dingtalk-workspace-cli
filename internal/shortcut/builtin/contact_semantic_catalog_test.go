@@ -73,6 +73,14 @@ func TestCrossPlatformCoverageContactSemanticCatalogExactlyCoversRegisteredSurfa
 		if record.CompatibilityVisible != wantCompatibilityVisible[command] {
 			t.Errorf("%s compatibility-visible=%v, want %v", command, record.CompatibilityVisible, wantCompatibilityVisible[command])
 		}
+		if command == "+search-mobile" || command == "+by-mobile" {
+			if !strings.Contains(record.SemanticDelta, "专用手机号精确查询接口") {
+				t.Errorf("%s must describe the dedicated exact mobile interface", command)
+			}
+			if strings.Contains(record.SemanticDelta, "关键词能力") || strings.Contains(record.SemanticDelta, "关键词数组") {
+				t.Errorf("%s must not describe the retired keyword-search route", command)
+			}
+		}
 	}
 	if public != 13 || unavailable != 3 {
 		t.Fatalf("public/unavailable = %d/%d, want 13/3", public, unavailable)

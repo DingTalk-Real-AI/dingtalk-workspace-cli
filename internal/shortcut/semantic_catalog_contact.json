@@ -12,7 +12,7 @@
     "+list-dept-members": {"disposition":"semantic_adapter","semantic_delta":"按 deptId 列直属成员，严格要求显式 deptUserList、userInfo 对象及稳定 userId；已验证非空与随机零命中。","risk":"read","public":true,"reviewed":true},
     "+list-roster-fields": {"disposition":"semantic_adapter","semantic_delta":"exact raw 在当前授权/平台层被阻断，未获得可校验的业务字段集合；保持 unavailable 并在 0 次远程调用时 fail closed。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
     "+get-roster": {"disposition":"semantic_adapter","semantic_delta":"exact raw 使用随机员工夹具仍在当前授权/平台层被阻断，无法安全获得业务详情合同；保持 unavailable 并在 0 次远程调用时 fail closed。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
-    "+by-mobile": {"disposition":"primary_smart","semantic_delta":"使用显式数组的关键词能力按手机号唯一解析 userId，再读取并核对唯一用户详情；exact live 已证明已知唯一与保证零命中。","risk":"read","public":true,"reviewed":true},
+    "+by-mobile": {"disposition":"primary_smart","semantic_delta":"使用专用手机号精确查询接口解析稳定 userId；专用接口 success=true 且省略 result 是经真实双层验证的精确零命中编码，未命中返回 typed nonzero；命中后读取并精确核对同一用户详情，null、错型、坏身份或详情 ID 不一致均失败。","risk":"read","public":true,"reviewed":true},
     "+dept-members": {"disposition":"primary_smart","semantic_delta":"按部门名唯一解析 deptId 后列直属成员；搜索候选和成员集合均逐项严格校验，绝不猜测多匹配。","risk":"read","public":true,"reviewed":true},
     "+lookup": {"disposition":"primary_smart","semantic_delta":"按姓名唯一解析稳定 userId 后读取并核对唯一用户详情；零命中和多命中均错误关闭。","risk":"read","public":true,"reviewed":true},
     "+org": {"disposition":"primary_smart","semantic_delta":"按姓名解析用户、核对用户详情与主 deptId，再读取并核对部门详情的稳定身份。","risk":"read","public":true,"reviewed":true},
