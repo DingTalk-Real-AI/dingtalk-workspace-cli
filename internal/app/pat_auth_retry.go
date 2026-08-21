@@ -907,12 +907,12 @@ func tryOpenBrowser(rawURL string) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	
+
 	// Wait for process to prevent resource leak
 	// Run in goroutine to avoid blocking browser launch
 	go func() {
 		_ = cmd.Wait()
 	}()
-	
+
 	return nil
 }
