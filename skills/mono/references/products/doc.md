@@ -552,14 +552,16 @@ Example:
   dws doc permission list --node <DOC_ID>
   dws doc permission list --node <DOC_ID> --limit 50
   dws doc permission list --node <DOC_ID> --filter-role EDITOR
+  dws doc permission list --node <DOC_ID> --next-token <上次返回的 nextToken>
 Flags:
       --node string          目标文档/文件夹的 ID 或 URL (必填)
       --workspace string     所属知识库 ID (选填)
-      --limit int             返回数量上限，最大 200 (默认 50)
+      --limit int             返回数量上限，最大 50 (默认 30)
       --filter-role string   按角色过滤: MANAGER / EDITOR / DOWNLOADER / READER (选填)
+      --next-token string    分页游标，首次不传，后续传入上一次返回的 nextToken (选填)
 ```
 
-> 接口不支持游标分页，使用 `--limit` 一次性拉取。
+> 底层一次性返回全量成员后在内存中按 pageSize 分页；当 `hasMore` 为 true 时，传入 `--next-token` 即可获取下一页。
 
 ### 导出在线文档为 docx（一体化命令）
 ```

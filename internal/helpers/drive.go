@@ -2044,25 +2044,51 @@ func newDriveCommand() *cobra.Command {
 		Short: "添加协作者",
 		Long: `为文档空间节点添加协作成员并授予指定角色。
 
-支持的角色 (--role): MANAGER / EDITOR / DOWNLOADER / READER`,
+两种传参方式（互斥）：
+  旧格式：--users 传入逗号分隔的 userId 列表 + --role 指定统一角色（仅 USER 类型）
+  新格式：--members 传入 JSON 数组，支持四种成员类型，每个 member 携带独立 roleId
+
+成员类型说明：
+  USER          用户，id 为用户 userId，需携带 corpId（标识用户所属组织）
+  DEPT          部门，id 为部门 ID，需携带 corpId（标识部门所属组织）
+  CONVERSATION  群聊，id 为群聊 conversationId（cid 开头），无需 corpId
+  TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId。当用户要求"添加角色组"或"添加角色标签"时使用此类型
+
+支持的角色: MANAGER / EDITOR / DOWNLOADER / READER
+--notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 true。`,
 		Example: `  dws drive permission add --node DOC_ID --users uid1 --role READER
-  dws drive permission add --node DOC_ID --users uid1,uid2 --role EDITOR`,
+  dws drive permission add --node DOC_ID --users uid1,uid2 --role EDITOR
+  dws drive permission add --node DOC_ID --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"}]' --notify
+  dws drive permission add --node DOC_ID --members '[{"type":"CONVERSATION","id":"cidXXX","roleId":"READER"},{"type":"TAG","id":"tagId1","roleId":"EDITOR","corpId":"xxx"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "role"); err != nil {
+			if err := validateMembersExclusivity(cmd); err != nil {
 				return err
 			}
-			userIds, err := collectUserIDs(cmd)
-			if err != nil {
-				return err
+			toolArgs := map[string]any{"nodeId": nodeID}
+			members, mErr := collectMembers(cmd, false)
+			if mErr != nil {
+				return mErr
 			}
-			toolArgs := map[string]any{
-				"nodeId":  nodeID,
-				"roleId":  normalizePermissionRole(mustGetFlag(cmd, "role")),
-				"userIds": userIds,
+			if len(members) > 0 {
+				toolArgs["members"] = members
+				if cmd.Flags().Changed("notify") {
+					notify, _ := cmd.Flags().GetBool("notify")
+					toolArgs["notify"] = notify
+				}
+			} else {
+				if err := validateRequiredFlags(cmd, "role"); err != nil {
+					return err
+				}
+				userIds, err := collectUserIDs(cmd)
+				if err != nil {
+					return err
+				}
+				toolArgs["roleId"] = normalizePermissionRole(mustGetFlag(cmd, "role"))
+				toolArgs["userIds"] = userIds
 			}
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
@@ -2103,7 +2129,9 @@ func newDriveCommand() *cobra.Command {
 				Examples: []string{"dws drive permission add --node <ID> --users uid1,uid2 --role READER --format json"},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "members", Property: "members"},
 				{Name: "node", Property: "nodeId"},
+				{Name: "notify", Property: "notify"},
 				{Name: "role", Property: "roleId"},
 				{Name: "users", Property: "userIds"},
 				{Name: "workspace", Property: "workspaceId"},
@@ -2111,35 +2139,63 @@ func newDriveCommand() *cobra.Command {
 		},
 	})
 	drivePermAddCmd.Flags().String("node", "", "目标节点 ID 或 URL (必填)")
-	drivePermAddCmd.Flags().String("users", "", "用户 userId 列表，逗号分隔 (必填)")
+	drivePermAddCmd.Flags().String("users", "", "用户 userId 列表，逗号分隔 (旧格式)")
 	drivePermAddCmd.Flags().String("user", "", "")
 	_ = drivePermAddCmd.Flags().MarkHidden("user")
-	drivePermAddCmd.Flags().String("role", "", "角色: MANAGER / EDITOR / DOWNLOADER / READER (必填)")
+	drivePermAddCmd.Flags().String("role", "", "角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填)")
 	drivePermAddCmd.Flags().String("workspace", "", "知识库 ID (选填)")
+	drivePermAddCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥")
+	drivePermAddCmd.Flags().Bool("notify", true, "是否通知被添加的成员（仅 --members 新格式时生效）")
 
 	drivePermUpdateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "更新协作者权限",
 		Long: `更新文档空间节点已有协作者的权限角色。
 
-支持的角色 (--role): MANAGER / EDITOR / DOWNLOADER / READER`,
-		Example: `  dws drive permission update --node DOC_ID --users uid1 --role EDITOR`,
+两种传参方式（互斥）：
+  旧格式：--users 传入逗号分隔的 userId 列表 + --role 指定统一角色（仅 USER 类型）
+  新格式：--members 传入 JSON 数组，支持四种成员类型，每个 member 携带独立 roleId
+
+成员类型说明：
+  USER          用户，id 为用户 userId，需携带 corpId
+  DEPT          部门，id 为部门 ID，需携带 corpId
+  CONVERSATION  群聊，id 为群聊 conversationId（cid 开头），无需 corpId
+  TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId
+
+支持的角色: MANAGER / EDITOR / DOWNLOADER / READER
+--notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知，默认 false。`,
+		Example: `  dws drive permission update --node DOC_ID --users uid1 --role EDITOR
+  dws drive permission update --node DOC_ID --members '[{"type":"USER","id":"uid1","roleId":"EDITOR","corpId":"xxx"}]' --notify=false
+  dws drive permission update --node DOC_ID --members '[{"type":"TAG","id":"tagId1","roleId":"READER","corpId":"xxx"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "role"); err != nil {
+			if err := validateMembersExclusivity(cmd); err != nil {
 				return err
 			}
-			userIds, err := collectUserIDs(cmd)
-			if err != nil {
-				return err
+			toolArgs := map[string]any{"nodeId": nodeID}
+			members, mErr := collectMembers(cmd, false)
+			if mErr != nil {
+				return mErr
 			}
-			toolArgs := map[string]any{
-				"nodeId":  nodeID,
-				"roleId":  normalizePermissionRole(mustGetFlag(cmd, "role")),
-				"userIds": userIds,
+			if len(members) > 0 {
+				toolArgs["members"] = members
+				if cmd.Flags().Changed("notify") {
+					notify, _ := cmd.Flags().GetBool("notify")
+					toolArgs["notify"] = notify
+				}
+			} else {
+				if err := validateRequiredFlags(cmd, "role"); err != nil {
+					return err
+				}
+				userIds, err := collectUserIDs(cmd)
+				if err != nil {
+					return err
+				}
+				toolArgs["roleId"] = normalizePermissionRole(mustGetFlag(cmd, "role"))
+				toolArgs["userIds"] = userIds
 			}
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
@@ -2176,7 +2232,9 @@ func newDriveCommand() *cobra.Command {
 				Examples: []string{"dws drive permission update --node <ID> --users uid1 --role EDITOR --format json"},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "members", Property: "members"},
 				{Name: "node", Property: "nodeId"},
+				{Name: "notify", Property: "notify"},
 				{Name: "role", Property: "roleId"},
 				{Name: "users", Property: "userIds"},
 				{Name: "workspace", Property: "workspaceId"},
@@ -2184,33 +2242,41 @@ func newDriveCommand() *cobra.Command {
 		},
 	})
 	drivePermUpdateCmd.Flags().String("node", "", "目标节点 ID 或 URL (必填)")
-	drivePermUpdateCmd.Flags().String("users", "", "用户 userId 列表，逗号分隔 (必填)")
+	drivePermUpdateCmd.Flags().String("users", "", "用户 userId 列表，逗号分隔 (旧格式)")
 	drivePermUpdateCmd.Flags().String("user", "", "")
 	_ = drivePermUpdateCmd.Flags().MarkHidden("user")
-	drivePermUpdateCmd.Flags().String("role", "", "新角色: MANAGER / EDITOR / DOWNLOADER / READER (必填)")
+	drivePermUpdateCmd.Flags().String("role", "", "新角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填)")
 	drivePermUpdateCmd.Flags().String("workspace", "", "知识库 ID (选填)")
+	drivePermUpdateCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥")
+	drivePermUpdateCmd.Flags().Bool("notify", false, "是否通知被变更的成员（仅 --members 新格式时生效）")
 
 	drivePermListCmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "查询协作者列表",
-		Long:    `查询文档空间节点的协作者列表。`,
+		Long: `查询文档空间节点的协作者列表，支持分页和角色过滤。
+
+底层一次性返回全量成员后在内存中按 pageSize 分页，支持通过 nextToken 翻页。
+出参包含 totalCount、hasMore 和 nextToken。
+当 hasMore 为 true 时，传入下一次请求的 --next-token 即可获取下一页。`,
 		Example: `  dws drive permission list --node DOC_ID
-  dws drive permission list --node DOC_ID --limit 100 --filter-role MANAGER,EDITOR`,
+  dws drive permission list --node DOC_ID --limit 50 --filter-role MANAGER,EDITOR
+  dws drive permission list --node DOC_ID --next-token <上次返回的 nextToken>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
 			toolArgs := map[string]any{"nodeId": nodeID}
-			limit := 0
 			if cmd.Flags().Changed("limit") {
-				limit, _ = cmd.Flags().GetInt("limit")
+				limit, _ := cmd.Flags().GetInt("limit")
+				toolArgs["pageSize"] = limit
 			} else if cmd.Flags().Changed("max-results") {
-				limit, _ = cmd.Flags().GetInt("max-results")
+				limit, _ := cmd.Flags().GetInt("max-results")
+				toolArgs["pageSize"] = limit
 			}
-			if limit > 0 {
-				toolArgs["maxResults"] = limit
+			if v := flagOrFallback(cmd, "next-token", "cursor", "page-token"); v != "" {
+				toolArgs["nextToken"] = v
 			}
 			if v := mustGetFlag(cmd, "filter-role"); v != "" {
 				toolArgs["filterRoleIds"] = parseRoleList(v)
@@ -2251,38 +2317,60 @@ func newDriveCommand() *cobra.Command {
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "filter-role", Property: "filterRoleIds"},
-				{Name: "limit", Property: "maxResults"},
+				{Name: "limit", Property: "pageSize"},
+				{Name: "next-token", Property: "nextToken"},
 				{Name: "node", Property: "nodeId"},
 				{Name: "workspace", Property: "workspaceId"},
 			},
 		},
 	})
 	drivePermListCmd.Flags().String("node", "", "目标节点 ID 或 URL (必填)")
-	drivePermListCmd.Flags().Int("limit", 30, "返回成员数上限，默认 30，最大 200")
+	drivePermListCmd.Flags().Int("limit", 30, "返回成员数上限，默认 30，最大 50")
 	drivePermListCmd.Flags().Int("max-results", 0, "")
 	_ = drivePermListCmd.Flags().MarkHidden("max-results")
 	drivePermListCmd.Flags().String("filter-role", "", "按角色过滤: OWNER / MANAGER / EDITOR / DOWNLOADER / READER")
+	drivePermListCmd.Flags().String("next-token", "", "分页游标，首次不传，后续传入上一次返回的 nextToken")
 	drivePermListCmd.Flags().String("workspace", "", "知识库 ID (选填)")
 
 	drivePermRemoveCmd := &cobra.Command{
 		Use:     "remove",
 		Aliases: []string{"rm"},
 		Short:   "移除协作者权限",
-		Long:    `从文档空间节点移除协作成员的权限。`,
+		Long: `从文档空间节点移除协作成员的权限。
+
+两种传参方式（互斥）：
+  旧格式：--users 传入逗号分隔的 userId 列表（仅 USER 类型）
+  新格式：--members 传入 JSON 数组，支持四种成员类型，只需 type 和 id（USER/DEPT/TAG 还需 corpId）
+
+成员类型说明：
+  USER          用户，id 为用户 userId，需携带 corpId
+  DEPT          部门，id 为部门 ID，需携带 corpId
+  CONVERSATION  群聊，id 为群聊 conversationId（cid 开头），无需 corpId
+  TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId`,
 		Example: `  dws drive permission remove --node DOC_ID --users uid1
-  dws drive permission remove --node DOC_ID --users uid1,uid2`,
+  dws drive permission remove --node DOC_ID --users uid1,uid2
+  dws drive permission remove --node DOC_ID --members '[{"type":"USER","id":"uid1","corpId":"xxx"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
-			userIds, err := collectUserIDs(cmd)
-			if err != nil {
+			if err := validateMembersExclusivity(cmd); err != nil {
 				return err
 			}
-			toolArgs := map[string]any{
-				"nodeId":  nodeID,
-				"userIds": userIds,
+			toolArgs := map[string]any{"nodeId": nodeID}
+			members, mErr := collectMembers(cmd, true)
+			if mErr != nil {
+				return mErr
+			}
+			if len(members) > 0 {
+				toolArgs["members"] = members
+			} else {
+				userIds, err := collectUserIDs(cmd)
+				if err != nil {
+					return err
+				}
+				toolArgs["userIds"] = userIds
 			}
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
@@ -2319,6 +2407,7 @@ func newDriveCommand() *cobra.Command {
 				Examples: []string{"dws drive permission remove --node <ID> --users uid1 --format json"},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "members", Property: "members"},
 				{Name: "node", Property: "nodeId"},
 				{Name: "users", Property: "userIds"},
 				{Name: "workspace", Property: "workspaceId"},
@@ -2326,9 +2415,10 @@ func newDriveCommand() *cobra.Command {
 		},
 	})
 	drivePermRemoveCmd.Flags().String("node", "", "目标节点 ID 或 URL (必填)")
-	drivePermRemoveCmd.Flags().String("users", "", "用户 userId 列表，逗号分隔 (必填)")
+	drivePermRemoveCmd.Flags().String("users", "", "用户 userId 列表，逗号分隔 (旧格式)")
 	drivePermRemoveCmd.Flags().String("user", "", "")
 	_ = drivePermRemoveCmd.Flags().MarkHidden("user")
+	drivePermRemoveCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），只需 type 和 id（USER/DEPT/TAG 还需 corpId），与 --users 互斥")
 	drivePermRemoveCmd.Flags().String("workspace", "", "知识库 ID (选填)")
 
 	// permission 子命令 --node 隐藏别名（保持与迁移前 doc 命令一致）

@@ -5723,7 +5723,7 @@ var generatedParamAliases = []ParamAliasEntry{
 			"top":                    "limit",
 			"wiki-workspace-id":      "workspace",
 		},
-		Blocked: []string{"count", "cursor", "dentry-id", "dingdrive-space-id", "drive-space-id", "folder", "folder-id", "page", "permission", "role", "space", "space-id", "storage-space-id"},
+		Blocked: []string{"count", "dentry-id", "dingdrive-space-id", "drive-space-id", "folder", "folder-id", "page", "permission", "role", "space", "space-id", "storage-space-id"},
 	},
 	{
 		CLIPath: "drive permission remove",
@@ -7423,7 +7423,7 @@ var generatedParamAliases = []ParamAliasEntry{
 			"top":               "limit",
 			"wiki-workspace-id": "workspace",
 		},
-		Blocked:   []string{"count", "cursor", "dentry-id", "dingdrive-space-id", "drive-space-id", "folder", "folder-id", "name", "node", "node-id", "open-dingtalk-id", "page", "page-all", "role", "space", "space-id", "storage-space-id", "user-id", "user-ids", "users"},
+		Blocked:   []string{"count", "dentry-id", "dingdrive-space-id", "drive-space-id", "folder", "folder-id", "name", "node", "node-id", "open-dingtalk-id", "page", "page-all", "role", "space", "space-id", "storage-space-id", "user-id", "user-ids", "users"},
 		Ambiguous: []string{"id"},
 	},
 	{

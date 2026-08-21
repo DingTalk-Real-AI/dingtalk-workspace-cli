@@ -237,6 +237,26 @@ func getSystemDEKReadOnly(service string) ([]byte, error) {
 	return key, err
 }
 
+func decodeSystemDEK(encodedKey string) ([]byte, bool) {
+	key, err := base64.StdEncoding.DecodeString(encodedKey)
+	return key, err == nil && len(key) == dekBytes
+}
+
+func readStoredSystemDEK(service string, runtime darwinKeychainRuntime) ([]byte, error) {
+	encodedKey, err := runtime.get(service, "dek")
+	if err == nil {
+		key, ok := decodeSystemDEK(encodedKey)
+		if ok {
+			return key, nil
+		}
+		return nil, fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)
+	}
+	if errors.Is(err, keyring.ErrNotFound) {
+		return nil, fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)
+	}
+	return nil, NewUnavailableError("read DEK from macOS Keychain", err)
+}
+
 func getSystemDEKReadOnlyWithRuntime(service string, runtime darwinKeychainRuntime) ([]byte, error, <-chan struct{}) {
 	if err := runtime.checkAvailable(); err != nil {
 		return nil, err, finishedDarwinKeychainWorker()
@@ -244,18 +264,7 @@ func getSystemDEKReadOnlyWithRuntime(service string, runtime darwinKeychainRunti
 
 	const operation = "read DEK from macOS Keychain"
 	worker := startDarwinKeychainWorker(operation, func() ([]byte, error) {
-		encodedKey, err := runtime.get(service, "dek")
-		if err == nil {
-			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
-			if decodeErr == nil && len(key) == dekBytes {
-				return key, nil
-			}
-			return nil, fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)
-		}
-		if errors.Is(err, keyring.ErrNotFound) {
-			return nil, fmt.Errorf("read DEK from macOS Keychain: %w", ErrDEKMissing)
-		}
-		return nil, NewUnavailableError("read DEK from macOS Keychain", err)
+		return readStoredSystemDEK(service, runtime)
 	})
 
 	return waitDarwinKeychainWorker(runtime.timeout, operation, worker)
@@ -276,27 +285,29 @@ func getOrCreateDEKWithRuntime(service string, runtime darwinKeychainRuntime) ([
 
 	const operation = "read or create DEK in macOS Keychain"
 	worker := startDarwinKeychainWorker(operation, func() ([]byte, error) {
-		// Try to get existing DEK from system Keychain
-		encodedKey, err := runtime.get(service, "dek")
+		key, err := readStoredSystemDEK(service, runtime)
 		if err == nil {
-			key, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
-			if decodeErr == nil && len(key) == dekBytes {
-				return key, nil
-			}
-		} else if !errors.Is(err, keyring.ErrNotFound) {
-			return nil, NewUnavailableError("read DEK from macOS Keychain", err)
+			return key, nil
+		}
+		if !IsDEKMissing(err) {
+			return nil, err
 		}
 
-		// Generate new DEK if not found or invalid
-		key := make([]byte, dekBytes)
+		// Generate a candidate only when the slot is empty or unreadable.
+		// Concurrent writers must not replace a DEK another process just stored.
+		key = make([]byte, dekBytes)
 		if _, randErr := runtime.randRead(key); randErr != nil {
 			return nil, randErr
 		}
-
-		// Store in system Keychain
-		encodedKey = base64.StdEncoding.EncodeToString(key)
-		if setErr := runtime.set(service, "dek", encodedKey); setErr != nil {
+		if setErr := runtime.set(service, "dek", base64.StdEncoding.EncodeToString(key)); setErr != nil {
+			existing, getErr := readStoredSystemDEK(service, runtime)
+			if getErr == nil {
+				return existing, nil
+			}
 			return nil, NewUnavailableError("store DEK in macOS Keychain", setErr)
+		}
+		if existing, getErr := readStoredSystemDEK(service, runtime); getErr == nil {
+			return existing, nil
 		}
 		return key, nil
 	})

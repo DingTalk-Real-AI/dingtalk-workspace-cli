@@ -206,8 +206,18 @@ func TestCrossPlatformCoverageDriveAliasAndDownloadVersion(t *testing.T) {
 		if err := executePR868Command(t, newDriveCommand(), "permission", "list", "--node", "n1", "--max-results", "10"); err != nil {
 			t.Fatalf("permission list: %v", err)
 		}
-		if caller.args["maxResults"] != 10 {
-			t.Fatalf("maxResults=%#v", caller.args["maxResults"])
+		if caller.args["pageSize"] != 10 {
+			t.Fatalf("pageSize=%#v", caller.args["pageSize"])
+		}
+	})
+	t.Run("permission list next-token pagination", func(t *testing.T) {
+		caller := &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[]}`}}}
+		installScriptedCaller(t, caller)
+		if err := executePR868Command(t, newDriveCommand(), "permission", "list", "--node", "n1", "--next-token", "50"); err != nil {
+			t.Fatalf("permission list --next-token: %v", err)
+		}
+		if caller.args["nextToken"] != "50" {
+			t.Fatalf("nextToken=%#v", caller.args["nextToken"])
 		}
 	})
 	t.Run("cover file-id alias", func(t *testing.T) {

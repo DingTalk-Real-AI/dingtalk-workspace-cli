@@ -4,6 +4,8 @@ go 1.25.9
 
 replace gitlab.alibaba-inc.com/aes/aem-go-sdk => ./third_party/aem-go-sdk
 
+replace safechat-go-sdk => ./third_party/safechat-go-sdk
+
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/RealAlexandreAI/json-repair v0.0.15
@@ -24,6 +26,7 @@ require (
 	golang.org/x/crypto v0.49.0
 	golang.org/x/sys v0.42.0
 	golang.org/x/text v0.35.0
+	safechat-go-sdk v0.0.0
 )
 
 require (

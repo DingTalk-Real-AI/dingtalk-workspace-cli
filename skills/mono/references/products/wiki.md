@@ -169,15 +169,17 @@ Usage:
   dws wiki member list [flags]
 Example:
   dws wiki member list --workspace <WS_ID>
-  dws wiki member list --workspace <WS_ID> --limit 100
+  dws wiki member list --workspace <WS_ID> --limit 50
   dws wiki member list --workspace <WS_ID> --filter-role EDITOR
+  dws wiki member list --workspace <WS_ID> --next-token <上次返回的 nextToken>
 Flags:
       --workspace string     目标知识库 ID 或 URL (必填)
-      --limit int            返回成员数上限，默认 30，最大 200
+      --limit int            返回成员数上限，默认 30，最大 50
       --filter-role string   按角色过滤，逗号分隔: OWNER / MANAGER / EDITOR / DOWNLOADER / READER (选填)
+      --next-token string    分页游标，首次不传，后续传入上一次返回的 nextToken (选填)
 ```
 
-> 接口不支持游标分页，使用 `--limit` 一次性拉取。
+> 底层一次性返回全量成员后在内存中按 pageSize 分页；当 `hasMore` 为 true 时，传入 `--next-token` 即可获取下一页。
 
 > ⚠️ **返回字段限制**：`member list` 每条只返回 `name` / `role` / `type` 三个字段，**不含 userId**（服务端不返回）。因此**无法**从 `member list` 拿到 userId 再去串联 `member update` / `member remove`。要对某人改角色 / 移除，需另行拿到其 userId（例如用 `dws contact user search --query "<姓名>"` 按姓名反查）。
 
