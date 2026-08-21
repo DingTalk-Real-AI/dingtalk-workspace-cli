@@ -112,6 +112,13 @@ func validateContactNonBlank(rt *shortcut.RuntimeContext, operation string, flag
 	return nil
 }
 
+func validateContactMobile(rt *shortcut.RuntimeContext, operation, flag string) error {
+	if _, err := normalizeContactMobile(rt.Str(flag)); err != nil {
+		return responsecheck.Error(operation, "invalid_mobile", "--"+flag+" 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号")
+	}
+	return nil
+}
+
 func validateContactOptionalNonBlank(rt *shortcut.RuntimeContext, operation, flag string) error {
 	if rt.Changed(flag) && strings.TrimSpace(rt.Str(flag)) == "" {
 		return responsecheck.Error(operation, "empty_parameter", "--"+flag+" 显式传入时不能为空白")
@@ -221,6 +228,95 @@ func strictMobileKeywordSearch(data map[string]any, operation string) ([]map[str
 		return nil, responsecheck.Error(operation, "ambiguous_mobile_match", fmt.Sprintf("手机号关键词匹配到 %d 个用户；拒绝猜测唯一身份", len(users)))
 	}
 	return users, nil
+}
+
+func strictMobileDetail(data map[string]any, expectedUserID, expectedMobile, operation string) error {
+	envelope, err := contactEnvelope(data, operation)
+	if err != nil {
+		return err
+	}
+	items, err := responsecheck.RequireObjectCollection(envelope, operation, "result")
+	if err != nil {
+		return err
+	}
+	if len(items) != 1 {
+		return responsecheck.Error(operation, "unexpected_detail_count", fmt.Sprintf("手机号候选详情应唯一，实际返回 %d 项", len(items)))
+	}
+	model, ok := items[0]["orgEmployeeModel"].(map[string]any)
+	if !ok || len(model) == 0 {
+		return responsecheck.Error(operation, "malformed_result", "手机号候选详情缺少非空 orgEmployeeModel")
+	}
+	actualUserID := contactString(model, "orgUserId")
+	if actualUserID == "" {
+		actualUserID = contactString(model, "userId")
+	}
+	if actualUserID == "" {
+		return responsecheck.Error(operation, "missing_stable_identity", "手机号候选详情缺少 userId/orgUserId")
+	}
+	if actualUserID != expectedUserID {
+		return responsecheck.Error(operation, "identity_mismatch", "手机号候选详情稳定身份与关键词候选不一致")
+	}
+	actualMobile, present, valid := contactOptionalString(model, "orgUserMobile")
+	if !present || !valid || actualMobile == "" {
+		return responsecheck.Error(operation, "missing_mobile_evidence", "手机号候选详情缺少可核验的 orgUserMobile")
+	}
+	stateCode, _, valid := contactOptionalString(model, "stateCode")
+	if !valid {
+		return responsecheck.Error(operation, "malformed_mobile_evidence", "手机号候选详情 stateCode 必须是字符串")
+	}
+	if !contactMobileMatches(expectedMobile, actualMobile, stateCode) {
+		return responsecheck.Error(operation, "mobile_mismatch", "手机号候选详情与请求手机号不一致")
+	}
+	return nil
+}
+
+func normalizeContactMobile(value string) (string, error) {
+	return normalizeContactMobilePart(value, 6)
+}
+
+func normalizeContactMobilePart(value string, minimumDigits int) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", fmt.Errorf("empty mobile")
+	}
+	var digits strings.Builder
+	for index, r := range trimmed {
+		switch {
+		case r >= '0' && r <= '9':
+			digits.WriteRune(r)
+		case r == '+' && index == 0:
+		case r == ' ' || r == '-' || r == '(' || r == ')':
+		default:
+			return "", fmt.Errorf("invalid mobile character")
+		}
+	}
+	normalized := digits.String()
+	if strings.HasPrefix(normalized, "00") {
+		normalized = strings.TrimPrefix(normalized, "00")
+	}
+	if len(normalized) < minimumDigits {
+		return "", fmt.Errorf("mobile too short")
+	}
+	return normalized, nil
+}
+
+func contactMobileMatches(expected, actual, stateCode string) bool {
+	expectedDigits, err := normalizeContactMobile(expected)
+	if err != nil {
+		return false
+	}
+	actualDigits, err := normalizeContactMobile(actual)
+	if err != nil {
+		return false
+	}
+	if expectedDigits == actualDigits {
+		return true
+	}
+	stateDigits, err := normalizeContactMobilePart(stateCode, 1)
+	if err != nil {
+		return false
+	}
+	return !strings.HasPrefix(actualDigits, stateDigits) && expectedDigits == stateDigits+actualDigits
 }
 
 func strictFollowings(data map[string]any, operation, expectedOpenID string) ([]map[string]any, error) {

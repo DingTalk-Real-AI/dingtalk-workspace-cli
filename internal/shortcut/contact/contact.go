@@ -21,6 +21,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/responsecheck"
 )
 
 // GetSelf 获取当前登录用户信息（我是谁 / 本人）。
@@ -244,17 +245,20 @@ var SearchMobile = shortcut.Shortcut{
 		Parameters: []contract.ParamDecl{{Name: "mobile", Property: "keyword"}},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "mobile", Type: shortcut.FlagString, Desc: "手机号；--mobile 不能为空白", Required: true},
+		{Name: "mobile", Type: shortcut.FlagString, Desc: "手机号；--mobile 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号", Required: true},
 	},
-	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"mobile"}, Description: "--mobile 不能为空白"}},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"mobile"}, Description: "--mobile 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号"}},
 	Validate: func(rt *shortcut.RuntimeContext) error {
-		return validateContactNonBlank(rt, "contact/search_contact_by_key_word", "mobile")
+		return validateContactMobile(rt, "contact/search_contact_by_key_word", "mobile")
 	},
 	Tips: []string{
 		`dws contact +search-mobile --mobile 13800138000`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		if err := rt.RequireAll("mobile"); err != nil {
+			return err
+		}
+		if err := validateContactMobile(rt, "contact/search_contact_by_key_word", "mobile"); err != nil {
 			return err
 		}
 		data, err := rt.CallMCPData("contact", "search_contact_by_key_word", map[string]any{
@@ -266,6 +270,21 @@ var SearchMobile = shortcut.Shortcut{
 		users, err := strictMobileKeywordSearch(data, "contact/search_contact_by_key_word")
 		if err != nil {
 			return err
+		}
+		if len(users) == 1 {
+			userID := contactString(users[0], "userId")
+			if userID == "" {
+				return responsecheck.Error("contact/search_contact_by_key_word", "missing_stable_identity", "手机号关键词候选缺少可用于详情读回的 userId")
+			}
+			detail, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
+				"user_id_list": []string{userID},
+			})
+			if err != nil {
+				return err
+			}
+			if err := strictMobileDetail(detail, userID, rt.Str("mobile"), "contact/get_user_info_by_user_ids"); err != nil {
+				return err
+			}
 		}
 		return rt.Output(map[string]any{"count": len(users), "users": users})
 	},

@@ -18,21 +18,37 @@ import (
 )
 
 type contactCaller struct {
-	payload string
-	err     error
-	calls   int
-	product string
-	tool    string
-	args    map[string]any
+	payload  string
+	payloads map[string]string
+	err      error
+	errors   map[string]error
+	calls    int
+	product  string
+	tool     string
+	args     map[string]any
+	history  []contactCall
+}
+
+type contactCall struct {
+	tool string
+	args map[string]any
 }
 
 func (caller *contactCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
 	caller.calls++
 	caller.product, caller.tool, caller.args = product, tool, args
+	caller.history = append(caller.history, contactCall{tool: tool, args: args})
 	if caller.err != nil {
 		return nil, caller.err
 	}
-	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: caller.payload}}}, nil
+	if err := caller.errors[tool]; err != nil {
+		return nil, err
+	}
+	payload := caller.payload
+	if toolPayload, ok := caller.payloads[tool]; ok {
+		payload = toolPayload
+	}
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: payload}}}, nil
 }
 func (*contactCaller) Format() string { return "json" }
 func (*contactCaller) DryRun() bool   { return false }
@@ -112,11 +128,14 @@ func TestCrossPlatformCoverageContactSubDepartmentsRejectBadIdentityAndShape(t *
 }
 
 func TestCrossPlatformCoverageContactSearchMobileUsesReviewedObjectShape(t *testing.T) {
-	caller := &contactCaller{payload: `{"success":true,"result":[{"userId":"stable-user","name":"Fixture"}]}`}
+	caller := &contactCaller{payloads: map[string]string{
+		"search_contact_by_key_word": `{"success":true,"result":[{"userId":"stable-user","name":"Fixture"}]}`,
+		"get_user_info_by_user_ids":  `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"stable-user","orgUserMobile":"13800138000","stateCode":"86"}}]}`,
+	}}
 	helpers.InitDepsForTest(t, caller)
 	cmd := &cobra.Command{Use: "+search-mobile"}
 	cmd.Flags().String("mobile", "", "")
-	if err := cmd.Flags().Set("mobile", "fixture-mobile"); err != nil {
+	if err := cmd.Flags().Set("mobile", "+86 138-0013-8000"); err != nil {
 		t.Fatal(err)
 	}
 	declaration := SearchMobile
@@ -124,17 +143,127 @@ func TestCrossPlatformCoverageContactSearchMobileUsesReviewedObjectShape(t *test
 	if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err != nil {
 		t.Fatalf("search-mobile: %v", err)
 	}
-	if caller.calls != 1 || caller.product != "contact" || caller.tool != "search_contact_by_key_word" || caller.args["keyword"] != "fixture-mobile" {
-		t.Fatalf("mapping = calls:%d product:%q tool:%q args:%v", caller.calls, caller.product, caller.tool, caller.args)
+	if caller.calls != 2 || caller.product != "contact" || caller.history[0].tool != "search_contact_by_key_word" || caller.history[0].args["keyword"] != "+86 138-0013-8000" || caller.history[1].tool != "get_user_info_by_user_ids" {
+		t.Fatalf("mapping = calls:%d product:%q history:%#v", caller.calls, caller.product, caller.history)
 	}
 
-	caller.payload = `{"success":true,"result":[]}`
+	caller.calls, caller.history = 0, nil
+	caller.payloads["search_contact_by_key_word"] = `{"success":true,"result":[]}`
 	if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err != nil {
 		t.Fatalf("explicit mobile zero rejected: %v", err)
 	}
-	caller.payload = `{"success":true}`
+	if caller.calls != 1 || caller.history[0].tool != "search_contact_by_key_word" {
+		t.Fatalf("zero match must stop after explicit search result: %#v", caller.history)
+	}
+	caller.payloads["search_contact_by_key_word"] = `{"success":true}`
 	if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err == nil {
 		t.Fatal("missing result must not become a successful empty search")
+	}
+
+	caller.payloads["search_contact_by_key_word"] = `{"success":true,"result":[{"userId":"stable-user"}]}`
+	for name, detail := range map[string]string{
+		"wrong identity":    `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"other","orgUserMobile":"13800138000"}}]}`,
+		"missing mobile":    `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"stable-user"}}]}`,
+		"wrong mobile type": `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"stable-user","orgUserMobile":7}}]}`,
+		"mobile mismatch":   `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"stable-user","orgUserMobile":"13900139000"}}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			caller.payloads["get_user_info_by_user_ids"] = detail
+			caller.calls, caller.history = 0, nil
+			if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err == nil {
+				t.Fatal("unverified mobile candidate returned success")
+			}
+			if caller.calls != 2 {
+				t.Fatalf("verification calls=%d history=%#v", caller.calls, caller.history)
+			}
+		})
+	}
+
+	caller.errors = map[string]error{"get_user_info_by_user_ids": errors.New("detail transport")}
+	caller.calls, caller.history = 0, nil
+	if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err == nil {
+		t.Fatal("detail transport failure returned success")
+	}
+	if caller.calls != 2 {
+		t.Fatalf("detail transport calls=%d history=%#v", caller.calls, caller.history)
+	}
+	caller.errors = nil
+	caller.payloads["search_contact_by_key_word"] = `{"success":true,"result":[{"openDingTalkId":"open-only"}]}`
+	caller.calls, caller.history = 0, nil
+	if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err == nil {
+		t.Fatal("mobile candidate without userId returned success")
+	}
+	if caller.calls != 1 {
+		t.Fatalf("missing userId calls=%d history=%#v", caller.calls, caller.history)
+	}
+	invalidCommand := &cobra.Command{Use: "+search-mobile"}
+	invalidCommand.Flags().String("mobile", "", "")
+	if err := invalidCommand.Flags().Set("mobile", "not-a-phone"); err != nil {
+		t.Fatal(err)
+	}
+	caller.calls, caller.history = 0, nil
+	if err := declaration.Execute(shortcut.RuntimeContextForTest(invalidCommand, declaration)); err == nil {
+		t.Fatal("invalid mobile reached execution")
+	}
+	if caller.calls != 0 {
+		t.Fatalf("invalid mobile made calls: %#v", caller.history)
+	}
+}
+
+func TestCrossPlatformCoverageContactMobileProofHelperMatrix(t *testing.T) {
+	valid := map[string]any{
+		"success": true,
+		"result": []any{map[string]any{"orgEmployeeModel": map[string]any{
+			"orgUserId": "stable-user", "orgUserMobile": "13800138000",
+		}}},
+	}
+	if err := strictMobileDetail(valid, "stable-user", "13800138000", "contact/detail"); err != nil {
+		t.Fatalf("exact mobile proof rejected: %v", err)
+	}
+	for _, broken := range []map[string]any{
+		{"success": false},
+		{"success": true},
+		{"success": true, "result": []any{}},
+		{"success": true, "result": []any{map[string]any{}, map[string]any{}}},
+		{"success": true, "result": []any{map[string]any{}}},
+		{"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{}}}},
+		{"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{"orgUserMobile": "13800138000"}}}},
+		{"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{"orgUserId": "stable-user", "orgUserMobile": "13800138000", "stateCode": 86}}}},
+	} {
+		if err := strictMobileDetail(broken, "stable-user", "13800138000", "contact/detail"); err == nil {
+			t.Errorf("broken mobile detail returned success: %#v", broken)
+		}
+	}
+
+	for input, want := range map[string]string{
+		"+86 138-0013-8000": "8613800138000",
+		"008613800138000":   "8613800138000",
+		"(138) 0013-8000":   "13800138000",
+	} {
+		if got, err := normalizeContactMobile(input); err != nil || got != want {
+			t.Errorf("normalize %q = %q, %v; want %q", input, got, err, want)
+		}
+	}
+	for _, input := range []string{"", "123", "1+3800138000", "13800x138000"} {
+		if got, err := normalizeContactMobile(input); err == nil {
+			t.Errorf("invalid mobile %q normalized to %q", input, got)
+		}
+	}
+	for _, test := range []struct {
+		expected, actual, state string
+		want                    bool
+	}{
+		{"13800138000", "13800138000", "", true},
+		{"+8613800138000", "13800138000", "86", true},
+		{"8613800138000", "8613800138000", "86", true},
+		{"bad", "13800138000", "86", false},
+		{"13800138000", "bad", "86", false},
+		{"13800138000", "13900139000", "", false},
+		{"13800138000", "8613800138000", "86", false},
+	} {
+		if got := contactMobileMatches(test.expected, test.actual, test.state); got != test.want {
+			t.Errorf("mobile match (%q,%q,%q)=%v want %v", test.expected, test.actual, test.state, got, test.want)
+		}
 	}
 }
 
@@ -172,6 +301,7 @@ func TestCrossPlatformCoverageContactInputConstraintsFailBeforeRemoteCall(t *tes
 	}{
 		{SearchUser, "query", "   "},
 		{SearchMobile, "mobile", "   "},
+		{SearchMobile, "mobile", "not-a-phone"},
 		{ListRoleMembers, "id", "0"},
 		{ListRoleMembers, "id", "not-a-number"},
 		{ListSubDepts, "dept", "0"},
@@ -385,7 +515,6 @@ func TestCrossPlatformCoverageContactDirectExecutors(t *testing.T) {
 	}{
 		{ListFollowings, "open-id", "open-1", `{"success":true,"result":{"models":[{"openDingTalkId":"open-1"}]}}`, "list_my_followings"},
 		{SearchUser, "query", "fixture", `{"success":true,"result":[{"userId":"user-1"}]}`, "search_contact_by_key_word"},
-		{SearchMobile, "mobile", "fixture", `{"success":true,"result":[{"userId":"user-1"}]}`, "search_contact_by_key_word"},
 		{ListRoleMembers, "id", "7", `{"success":true,"labelUserList":[{"userInfo":{"userId":"user-1"}}]}`, "get_label_members_by_labelId"},
 		{ListSubDepts, "dept", "7", `{"success":true,"result":[{"deptId":8}]}`, "get_sub_depts_by_dept_id"},
 		{ListDeptMembers, "depts", " 7 ,8", `{"success":true,"deptUserList":[{"userInfo":{"userId":"user-1"}}]}`, "get_dept_members_by_deptId"},

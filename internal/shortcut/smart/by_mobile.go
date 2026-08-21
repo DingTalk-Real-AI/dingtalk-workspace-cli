@@ -23,10 +23,9 @@ import (
 // ByMobile: find a person by phone number and return their full profile in one
 // step.
 //
-// Steps: look the mobile up via search_user_by_mobile → resolve to a userId
-// (error clearly if nobody is bound to that number) → fetch full detail via
-// get_user_info_by_user_ids. Replaces `contact user search-mobile` (copy the
-// userId) → `contact user get --ids <id>`.
+// Steps: find one candidate through keyword search → fetch the same userId's
+// full detail → require the returned orgUserMobile to exactly match the
+// normalized request. A unique keyword candidate alone is never mobile proof.
 //
 //	dws contact +by-mobile --mobile 13800138000
 var ByMobile = shortcut.Shortcut{
@@ -63,7 +62,11 @@ var ByMobile = shortcut.Shortcut{
 		},
 	},
 	Flags: []shortcut.Flag{
-		{Name: "mobile", Type: shortcut.FlagString, Desc: "手机号", Required: true},
+		{Name: "mobile", Type: shortcut.FlagString, Desc: "手机号；--mobile 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"mobile"}, Description: "--mobile 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return validateContactSmartMobile(rt, "contact/by-mobile", "mobile")
 	},
 	Tips: []string{`dws contact +by-mobile --mobile 13800138000`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -75,21 +78,7 @@ var ByMobile = shortcut.Shortcut{
 		// Step 1 — resolve the mobile through the keyword endpoint. Unlike
 		// search_user_by_mobile, this endpoint publishes an explicit result
 		// array for both the known match and the guaranteed zero-match case.
-		user, err := strictResolveContactUser(rt, mobile)
-		if err != nil {
-			return err
-		}
-
-		// Step 2 — fetch and print the full profile of the resolved user.
-		// get_user_info_by_user_ids takes {user_id_list} (see helpers.contact
-		// user get).
-		data, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
-			"user_id_list": []string{user.userID},
-		})
-		if err != nil {
-			return err
-		}
-		profile, err := strictUserDetail(data, user.userID, "contact/get_user_info_by_user_ids")
+		_, profile, err := strictResolveContactUserByMobile(rt, mobile)
 		if err != nil {
 			return err
 		}
