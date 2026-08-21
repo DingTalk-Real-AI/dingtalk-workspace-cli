@@ -6,6 +6,7 @@ package doc
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,8 +24,12 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/docresolver"
 	"github.com/yuin/goldmark"
+	goldmarkast "github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
+	extensionast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/renderer/html"
+	goldmarktext "github.com/yuin/goldmark/text"
+	goldmarkutil "github.com/yuin/goldmark/util"
 )
 
 var (
@@ -84,7 +89,7 @@ var Create = shortcut.Shortcut{
 		}
 		format := rt.Str("doc-format")
 		if format == "jsonml" && content != "" {
-			content, err = validateJSONML(content)
+			content, err = validateJSONMLBody(rt.Command(), content)
 			if err != nil {
 				return err
 			}
@@ -165,7 +170,8 @@ var Create = shortcut.Shortcut{
 			return docVerificationError("doc.create", "verify", nodeID, fmt.Errorf("回读结果与完整初始内容不一致"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
 		steps = append(steps, map[string]any{"name": "verify", "status": "success"})
-		return rt.Output(docEnvelope("doc.create", map[string]any{"nodeId": nodeID, "result": created, "verified": true, "verification": verification}, steps...))
+		verificationSummary := compactDocVerification(verification, content, "overwrite", format, nil)
+		return rt.Output(docEnvelope("doc.create", map[string]any{"nodeId": nodeID, "result": created, "verified": true, "verification": verificationSummary}, steps...))
 	},
 }
 
@@ -471,7 +477,8 @@ var CheckpointUpdate = shortcut.Shortcut{
 				append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
 		steps = append(steps, map[string]any{"name": "verify", "status": "success"})
-		return rt.Output(docEnvelope("doc.checkpoint_update", map[string]any{"nodeId": rt.Str("node"), "verified": true, "verification": verification}, steps...))
+		verificationSummary := compactDocVerification(verification, content, rt.Str("mode"), "markdown", nil)
+		return rt.Output(docEnvelope("doc.checkpoint_update", map[string]any{"nodeId": rt.Str("node"), "verified": true, "verification": verificationSummary}, steps...))
 	},
 }
 
@@ -537,7 +544,12 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 		return err
 	}
 	if rt.Str("doc-format") == "jsonml" && content != "" {
-		content, err = validateJSONML(content)
+		switch command {
+		case "overwrite":
+			content, err = validateJSONMLBody(rt.Command(), content)
+		case "block_insert_after", "block_replace":
+			content, err = validateJSONMLNode(rt.Command(), content)
+		}
 		if err != nil {
 			return err
 		}
@@ -733,11 +745,12 @@ func executeVerifiedDocMutation(
 		return docVerificationError(operation, "verify", nodeID, fmt.Errorf("回读结果未匹配预期变更"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
+	verificationSummary := compactDocVerification(verification, "", "", "", params)
 	return rt.Output(docEnvelope(operation, map[string]any{
 		"nodeId":       nodeID,
 		"verified":     true,
 		"result":       result,
-		"verification": verification,
+		"verification": verificationSummary,
 	}, steps...))
 }
 
@@ -783,9 +796,79 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 		return docVerificationError("doc.update", "verify", nodeID, fmt.Errorf("回读结果未包含预期内容"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
+	verificationSummary := compactDocVerification(verification, content, mode, format, nil)
 	return rt.Output(docEnvelope("doc.update", map[string]any{
-		"nodeId": nodeID, "mode": mode, "chunksWritten": len(chunks), "verified": true, "verification": verification,
+		"nodeId": nodeID, "mode": mode, "chunksWritten": len(chunks), "verified": true, "verification": verificationSummary,
 	}, steps...))
+}
+
+const docVerificationExcerptRunes = 160
+
+// compactDocVerification keeps the proof that a write was read back while
+// avoiding a second copy of the full document or block collection in the
+// Shortcut result. Full content remains available through doc +fetch.
+func compactDocVerification(value map[string]any, expected, mode, format string, mutation map[string]any) map[string]any {
+	summary := map[string]any{"verified": true}
+	if expected != "" {
+		summary["kind"] = "content"
+		summary["format"] = format
+		summary["mode"] = mode
+		summary["expectedBytes"] = len(expected)
+		candidate := matchingDocumentContent(value, expected, mode, format)
+		if candidate != "" {
+			normalized := normalizeDocumentContentForVerification(candidate, format)
+			digest := sha256.Sum256([]byte(normalized))
+			summary["readbackBytes"] = len(candidate)
+			summary["readbackSha256"] = fmt.Sprintf("%x", digest[:])
+			summary["evidenceExcerpt"] = docVerificationExcerpt(candidate, mode, docVerificationExcerptRunes)
+		}
+		return summary
+	}
+
+	if blocks, ok := documentBlockEntries(value); ok {
+		summary["kind"] = "blocks"
+		summary["readbackBlockCount"] = len(blocks)
+		if blockID := nestedString(mutation, "blockId"); blockID != "" {
+			summary["targetBlockId"] = blockID
+		}
+		if referenceBlockID := nestedString(mutation, "referenceBlockId"); referenceBlockID != "" {
+			summary["referenceBlockId"] = referenceBlockID
+		}
+		return summary
+	}
+
+	summary["kind"] = "metadata"
+	for _, key := range []string{"nodeId", "folderId", "workspaceId", "name", "contentType", "revision"} {
+		if text := nestedString(value, key); text != "" {
+			summary[key] = text
+		}
+	}
+	if revision, ok := nestedNonNegativeInt(value, "revision"); ok {
+		summary["revision"] = revision
+	}
+	return summary
+}
+
+func matchingDocumentContent(value map[string]any, expected, mode, format string) string {
+	for _, candidate := range documentContentCandidates(value, format) {
+		if verifyUpdatedDocumentContent(map[string]any{"content": candidate}, expected, mode, format) {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func docVerificationExcerpt(content, mode string, maxRunes int) string {
+	runes := []rune(strings.TrimSpace(content))
+	if maxRunes <= 0 || len(runes) <= maxRunes {
+		return string(runes)
+	}
+	if mode == "append" {
+		return "…" + string(runes[len(runes)-maxRunes:])
+	}
+	head := maxRunes / 2
+	tail := maxRunes - head
+	return string(runes[:head]) + "…" + string(runes[len(runes)-tail:])
 }
 
 func readDocVerification(rt *shortcut.RuntimeContext, tool string, rawParams map[string]any, verify func(map[string]any) bool) (map[string]any, error) {
@@ -1041,12 +1124,22 @@ func verifyUpdatedDocumentContent(value any, expected, mode, format string) bool
 func markdownSemanticallyEquivalent(left, right string) bool {
 	leftFingerprint, leftOK := markdownSemanticFingerprint(left)
 	rightFingerprint, rightOK := markdownSemanticFingerprint(right)
+	if leftOK && rightOK && leftFingerprint == rightFingerprint {
+		return true
+	}
+	leftFingerprint, leftOK = markdownServiceSemanticFingerprint(left)
+	rightFingerprint, rightOK = markdownServiceSemanticFingerprint(right)
 	return leftOK && rightOK && leftFingerprint == rightFingerprint
 }
 
 func markdownSemanticallyEndsWith(content, suffix string) bool {
 	contentFingerprint, contentOK := markdownSemanticFingerprint(content)
 	suffixFingerprint, suffixOK := markdownSemanticFingerprint(suffix)
+	if contentOK && suffixOK && strings.HasSuffix(contentFingerprint, suffixFingerprint) {
+		return true
+	}
+	contentFingerprint, contentOK = markdownServiceSemanticFingerprint(content)
+	suffixFingerprint, suffixOK = markdownServiceSemanticFingerprint(suffix)
 	return contentOK && suffixOK && strings.HasSuffix(contentFingerprint, suffixFingerprint)
 }
 
@@ -1059,6 +1152,148 @@ func markdownSemanticFingerprint(source string) (string, bool) {
 		return "", false
 	}
 	return rendered.String(), true
+}
+
+// markdownServiceSemanticFingerprint preserves Markdown structure and authored
+// values while ignoring layout-only normalization performed by the document
+// service, such as hard/soft line breaks, list tightness, and insignificant
+// whitespace. Exact rendered HTML remains the first comparison path above.
+func markdownServiceSemanticFingerprint(source string) (string, bool) {
+	if len(source) > docMarkdownVerifyMax {
+		return "", false
+	}
+	sourceBytes := []byte(normalizeDocInputLineEndings(source))
+	document := docMarkdown.Parser().Parse(goldmarktext.NewReader(sourceBytes))
+	builder := markdownFingerprintBuilder{}
+	err := goldmarkast.Walk(document, func(node goldmarkast.Node, entering bool) (goldmarkast.WalkStatus, error) {
+		if node.Kind() == goldmarkast.KindDocument {
+			return goldmarkast.WalkContinue, nil
+		}
+		if !entering {
+			if markdownFingerprintIsLeaf(node) {
+				return goldmarkast.WalkContinue, nil
+			}
+			builder.token("close", markdownFingerprintNodeKind(node))
+			return goldmarkast.WalkContinue, nil
+		}
+
+		switch typed := node.(type) {
+		case *goldmarkast.Text:
+			builder.text(string(typed.Value(sourceBytes)))
+			return goldmarkast.WalkContinue, nil
+		case *goldmarkast.String:
+			builder.text(string(typed.Value))
+			return goldmarkast.WalkContinue, nil
+		case *goldmarkast.CodeSpan:
+			var value strings.Builder
+			for child := typed.FirstChild(); child != nil; child = child.NextSibling() {
+				if textNode, ok := child.(*goldmarkast.Text); ok {
+					value.Write(textNode.Value(sourceBytes))
+				}
+			}
+			builder.token("code_span", value.String())
+			return goldmarkast.WalkSkipChildren, nil
+		case *goldmarkast.CodeBlock:
+			builder.token("code_block", string(typed.Lines().Value(sourceBytes)))
+			return goldmarkast.WalkSkipChildren, nil
+		case *goldmarkast.FencedCodeBlock:
+			builder.token("fenced_code", string(typed.Language(sourceBytes))+"\x00"+string(typed.Lines().Value(sourceBytes)))
+			return goldmarkast.WalkSkipChildren, nil
+		case *goldmarkast.HTMLBlock:
+			value := append([]byte(nil), typed.Lines().Value(sourceBytes)...)
+			if typed.HasClosure() {
+				value = append(value, typed.ClosureLine.Value(sourceBytes)...)
+			}
+			builder.token("html_block", string(value))
+			return goldmarkast.WalkSkipChildren, nil
+		case *goldmarkast.RawHTML:
+			builder.token("raw_html", string(typed.Segments.Value(sourceBytes)))
+			return goldmarkast.WalkSkipChildren, nil
+		case *goldmarkast.AutoLink:
+			builder.token("auto_link", string(typed.URL(sourceBytes)))
+			return goldmarkast.WalkSkipChildren, nil
+		case *goldmarkast.LinkReferenceDefinition:
+			builder.token("link_reference", string(typed.Label)+"\x00"+string(typed.Destination)+"\x00"+string(typed.Title))
+			return goldmarkast.WalkSkipChildren, nil
+		case *goldmarkast.Heading:
+			builder.token("open", fmt.Sprintf("heading:%d", typed.Level))
+		case *goldmarkast.List:
+			builder.token("open", fmt.Sprintf("list:%t:%d", typed.IsOrdered(), typed.Start))
+		case *goldmarkast.Emphasis:
+			builder.token("open", fmt.Sprintf("emphasis:%d", typed.Level))
+		case *goldmarkast.Link:
+			builder.token("open", "link:"+string(typed.Destination)+"\x00"+string(typed.Title))
+		case *goldmarkast.Image:
+			builder.token("open", "image:"+string(typed.Destination)+"\x00"+string(typed.Title))
+		case *extensionast.Table:
+			alignments := make([]string, len(typed.Alignments))
+			for index, alignment := range typed.Alignments {
+				alignments[index] = alignment.String()
+			}
+			builder.token("open", "table:"+strings.Join(alignments, ","))
+		case *extensionast.TableCell:
+			builder.token("open", "table_cell:"+typed.Alignment.String())
+		default:
+			builder.token("open", markdownFingerprintNodeKind(node))
+		}
+		return goldmarkast.WalkContinue, nil
+	})
+	if err != nil {
+		return "", false
+	}
+	builder.flushText()
+	return builder.value.String(), true
+}
+
+type markdownFingerprintBuilder struct {
+	value       strings.Builder
+	pendingText strings.Builder
+}
+
+func (builder *markdownFingerprintBuilder) text(value string) {
+	value = string(goldmarkutil.UnescapePunctuations([]byte(value)))
+	value = strings.Join(strings.Fields(value), " ")
+	if value == "" {
+		return
+	}
+	if builder.pendingText.Len() > 0 {
+		builder.pendingText.WriteByte(' ')
+	}
+	builder.pendingText.WriteString(value)
+}
+
+func (builder *markdownFingerprintBuilder) token(kind, value string) {
+	builder.flushText()
+	fmt.Fprintf(&builder.value, "%s:%d:%s;", kind, len(value), value)
+}
+
+func (builder *markdownFingerprintBuilder) flushText() {
+	if builder.pendingText.Len() == 0 {
+		return
+	}
+	value := builder.pendingText.String()
+	fmt.Fprintf(&builder.value, "text:%d:%s;", len(value), value)
+	builder.pendingText.Reset()
+}
+
+func markdownFingerprintIsLeaf(node goldmarkast.Node) bool {
+	switch node.(type) {
+	case *goldmarkast.Text, *goldmarkast.String, *goldmarkast.CodeSpan, *goldmarkast.CodeBlock,
+		*goldmarkast.FencedCodeBlock, *goldmarkast.HTMLBlock, *goldmarkast.RawHTML,
+		*goldmarkast.AutoLink, *goldmarkast.LinkReferenceDefinition:
+		return true
+	default:
+		return false
+	}
+}
+
+func markdownFingerprintNodeKind(node goldmarkast.Node) string {
+	switch node.(type) {
+	case *goldmarkast.Paragraph, *goldmarkast.TextBlock:
+		return "paragraph"
+	default:
+		return node.Kind().String()
+	}
 }
 
 func stripReadbackDocumentTitle(content string) string {

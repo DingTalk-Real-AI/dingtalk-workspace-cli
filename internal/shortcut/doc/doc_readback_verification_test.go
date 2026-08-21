@@ -4,11 +4,13 @@
 package doc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -39,7 +41,61 @@ func TestCrossPlatformCoverageDocReadbackRetriesStaleContent(t *testing.T) {
 	}
 }
 
+func TestCompactDocVerificationKeepsBoundedContentEvidence(t *testing.T) {
+	expected := "新增结论：本周发布完成"
+	readback := strings.Repeat("历史正文\n", 2000) + expected
+	summary := compactDocVerification(map[string]any{"markdown": readback}, expected, "append", "markdown", nil)
+	if summary["verified"] != true || summary["kind"] != "content" || summary["mode"] != "append" {
+		t.Fatalf("summary = %#v", summary)
+	}
+	if summary["readbackBytes"] != len(readback) || summary["readbackSha256"] == "" {
+		t.Fatalf("summary evidence = %#v", summary)
+	}
+	excerpt, _ := summary["evidenceExcerpt"].(string)
+	if !strings.Contains(excerpt, expected) || len([]rune(excerpt)) > docVerificationExcerptRunes+1 {
+		t.Fatalf("excerpt = %q", excerpt)
+	}
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > 800 || bytes.Contains(encoded, []byte(strings.Repeat("历史正文", 20))) {
+		t.Fatalf("verification summary is not compact: %d bytes", len(encoded))
+	}
+}
+
+func TestCompactDocVerificationSummarizesBlockReadback(t *testing.T) {
+	summary := compactDocVerification(map[string]any{
+		"blocks": []any{
+			map[string]any{"blockId": "block-1", "paragraph": map[string]any{"text": strings.Repeat("a", 2000)}},
+			map[string]any{"blockId": "block-2", "paragraph": map[string]any{"text": strings.Repeat("b", 2000)}},
+		},
+	}, "", "", "", map[string]any{"blockId": "block-1"})
+	if summary["verified"] != true || summary["kind"] != "blocks" || summary["readbackBlockCount"] != 2 || summary["targetBlockId"] != "block-1" {
+		t.Fatalf("summary = %#v", summary)
+	}
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > 300 {
+		t.Fatalf("block verification summary is not compact: %s", encoded)
+	}
+}
+
+func TestMarkdownServiceEscapedNumericLabelAndSoftBreakAreEquivalent(t *testing.T) {
+	expected := "# 文学分析要点\n\n**1. 五幕结构**\n正文内容。\n\n**2. 核心冲突**\n- 条目一\n- 条目二\n"
+	server := "# 文学分析要点\n\n**1\\. 五幕结构** 正文内容。\n\n**2\\. 核心冲突**\n- 条目一\n- 条目二\n"
+	if verifyUpdatedDocumentContent(map[string]any{"markdown": server}, expected, "overwrite", "markdown") {
+		return
+	}
+	expectedFingerprint, _ := markdownServiceSemanticFingerprint(expected)
+	serverFingerprint, _ := markdownServiceSemanticFingerprint(server)
+	t.Fatalf("escaped numeric label and soft break failed semantic verification:\nexpected: %s\nserver:   %s", expectedFingerprint, serverFingerprint)
+}
+
 func TestCrossPlatformCoverageDocReadbackStopsOnCancellation(t *testing.T) {
+	//lint:ignore SA1012 This regression verifies the documented nil-context fallback.
 	if err := waitForDocVerification(nil, time.Nanosecond); err != nil {
 		t.Fatalf("completed verification wait = %v", err)
 	}
@@ -178,6 +234,59 @@ func TestCrossPlatformCoverageMarkdownSemanticRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageMarkdownServiceLineBreakNormalization(t *testing.T) {
+	input := strings.Join([]string{
+		"### 一、五幕结构",
+		"",
+		"**第一幕：宿命相遇**  ",
+		"维罗纳街头爆发冲突。",
+		"",
+		"1. **家族世仇 vs. 个体爱情**  ",
+		"   旧秩序压制青年自由恋爱。",
+		"",
+		"2. **命运偶然 vs. 人为选择**  ",
+		"   偶然事件与冲动选择共同造成悲剧。",
+	}, "\n")
+	server := strings.Join([]string{
+		"### 一、五幕结构",
+		"",
+		"**第一幕：宿命相遇**   维罗纳街头爆发冲突。",
+		"",
+		"1. **家族世仇 vs. 个体爱情**   旧秩序压制青年自由恋爱。",
+		"2. **命运偶然 vs. 人为选择**   偶然事件与冲动选择共同造成悲剧。",
+	}, "\n")
+	if !verifyUpdatedDocumentContent(map[string]any{"markdown": server}, input, "overwrite", "markdown") {
+		inputFingerprint, _ := markdownServiceSemanticFingerprint(input)
+		serverFingerprint, _ := markdownServiceSemanticFingerprint(server)
+		t.Fatalf("service line-break and list-tightness normalization failed verification:\ninput:  %s\nserver: %s", inputFingerprint, serverFingerprint)
+	}
+	missingListItem := strings.Replace(server, "2. **命运偶然 vs. 人为选择**   偶然事件与冲动选择共同造成悲剧。", "", 1)
+	if verifyUpdatedDocumentContent(map[string]any{"markdown": missingListItem}, input, "overwrite", "markdown") {
+		t.Fatal("missing list item passed semantic verification")
+	}
+	changedText := strings.Replace(server, "共同造成悲剧", "不会造成悲剧", 1)
+	if verifyUpdatedDocumentContent(map[string]any{"markdown": changedText}, input, "overwrite", "markdown") {
+		t.Fatal("changed document text passed semantic verification")
+	}
+}
+
+func TestCrossPlatformCoverageDocContentInputNormalizesLineEndings(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("body.md", []byte("first\r\nsecond\rthird"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := "first\nsecond\nthird"
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": want}},
+	}}
+	if err := runDocCoverage(t, Create, caller, "--name", "normalized", "--content", "@body.md"); err != nil {
+		t.Fatal(err)
+	}
+	if got := caller.history[0].params["markdown"]; got != want {
+		t.Fatalf("create markdown = %#v, want normalized line endings %#v", got, want)
+	}
+}
+
 func TestCrossPlatformCoverageMarkdownSemanticDifferencesRemainStrict(t *testing.T) {
 	for _, test := range []struct {
 		name  string
@@ -187,6 +296,7 @@ func TestCrossPlatformCoverageMarkdownSemanticDifferencesRemainStrict(t *testing
 		{name: "emphasis", left: `*important*`, right: `\*important\*`},
 		{name: "inline code", left: "`sales_data`", right: "`sales\\_data`"},
 		{name: "fenced code", left: "```\nsales_data\n```", right: "```\nsales\\_data\n```"},
+		{name: "link destination", left: "[source](https://example.com/a)", right: "[source](https://example.com/b)"},
 		{name: "table alignment", left: "|a|\n|---|\n|x|", right: "|a|\n|:---|\n|x|"},
 		{name: "table columns", left: "|a|b|\n|---|---|\n|x|y|", right: "|a|\n|---|\n|x|"},
 		{name: "table content", left: "|a|\n|---|\n|x|", right: "|a|\n|---|\n|y|"},

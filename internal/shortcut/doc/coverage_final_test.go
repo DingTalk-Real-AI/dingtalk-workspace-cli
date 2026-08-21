@@ -13,6 +13,7 @@ import (
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
+	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageDocFinalCommonAndCanonicalBranches(t *testing.T) {
@@ -57,7 +58,7 @@ func TestCrossPlatformCoverageDocFinalCommonAndCanonicalBranches(t *testing.T) {
 			}
 		})
 	}
-	if _, err := validateJSONML(`["",{}]`); err == nil {
+	if _, err := validateJSONMLNode(&cobra.Command{}, `["",{}]`); err == nil {
 		t.Fatal("empty JSONML tag succeeded")
 	}
 

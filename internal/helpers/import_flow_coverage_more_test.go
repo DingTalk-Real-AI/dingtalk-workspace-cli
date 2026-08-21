@@ -64,6 +64,7 @@ func TestCrossPlatformCoverageImportFlowRemainingBranches(t *testing.T) {
 		t.Cleanup(func() { os.Args = oldArgs })
 
 		installScriptedCaller(t, &scriptedToolCaller{steps: []scriptedToolStep{
+			{text: `{"wikiSpaces":[{"workspaceId":"my-space"}]}`},
 			{text: `{"sessionId":"session-1","uploadUrl":"https://upload.example.test/object"}`},
 			{text: `{"taskId":"task-1"}`},
 			{text: `{"status":"processing"}`},
