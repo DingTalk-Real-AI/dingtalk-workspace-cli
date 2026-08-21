@@ -14,11 +14,11 @@
 
 **`room search --available`**（与传入的 `--start` / `--end` 配对）：返回的是在**该整段时段内**可被预订的空闲会议室（不是「有一段空就算」）；脚本与用户手工选房均应沿用同一时间窗，避免误以为分段凑满即等价于整段可用。
 
-**`dws calendar room search` 合法参数**（与 [calendar.md](./calendar.md) 一致）：仅 `--start`、`--end`、`--group-id`（可选）、`--available`（可选）、`--format json` 等；**禁止使用 `--query`**，否则会报 `unknown flag: --query`。
+**会议室名称参数**：shortcut 使用 `dws calendar +room-find --room-name "<核心专名>"`；原子命令使用 `dws calendar room search --room-name "<核心专名>"`。两者都不支持 `--query`。只知道名称、无需检查时段可用性时用 `+room-search --room-name`。
 
 **地点归组早停**：若用户给的是同一地点范围（如“西溪园区 C6 楼 3-5 层”或具体楼层/楼栋），先用 `room list-groups` 找到**最相关的承载 group**（通常是该楼层；若楼层下无会议室则为直接挂会议室的上一级）。在这个最相关 group 下查不到有效 `rooms[].roomId` 或空房时，**不得**再跳去别的同级/异地 group 继续搜；同一地点的会议室不会散落在别的 group 里。只有用户明确放宽到别的楼层、楼栋或园区，才能重新解析新的 group 并继续。
 
-**用户点名具体会议室（如「C6-4-06-N / 贡嘎山」）**：**不要**尝试 `room search --query "<名称>"`；**禁止**把用户原文（含「C6-4-06-N 贡嘎山」整句）或展示名当作 `room add --rooms` 的 `roomId`。用户输入**几乎从不会是**有效 `roomId`。须先 `dws calendar room list-groups` 定位所在楼层/分组的 `group-id`，再 `dws calendar room search --start "<ISO>" --end "<ISO>" --group-id <GROUP_ID> [--available] --format json`，在返回 `rooms[]` 中对 `roomName`、`name` 等与用户表述匹配，**仅**取 JSON 里的 `roomId`（典型为小写十六进制串，长度以返回为准），最后 `dws calendar room add --event <eventId> --rooms <roomId>`。该时段无匹配或房间忙 → 如实告知；**禁止**为通过校验而编造、拼接或猜测 `roomId`。
+**用户点名具体会议室（如「C6-4-06-N / 贡嘎山」）**：**不要**尝试 `--query`；**禁止**把用户原文或展示名当作 `room add --rooms` 的 `roomId`。用 `dws calendar +room-find --room-name "<核心专名>" --start "<ISO>" --end "<ISO>" [--group-id <GROUP_ID>] --format json`，在返回会议室中按名称匹配，**仅**取真实 `roomId`，最后 `dws calendar room add --event <eventId> --rooms <roomId>`。该时段无匹配或房间忙则如实告知；禁止编造、拼接或猜测 `roomId`。
 
 ### 搜房失败硬门禁（园区/范围搜尽仍无 roomId）
 
@@ -52,5 +52,12 @@
 
 | Recipe             | 行动指南（固定路线） |
 | ------------------ | ------------------- |
-| schedule-meeting   | **见上文「两准则」**、**「搜房失败硬门禁」**。**未给时段且仅说「发起/开个会」**→ 不走本 recipe；当前 CLI 不支持实时视频会议，告知用户请在钉钉客户端操作。**未给时段但有预约意图**（"安排""约""定"等词）：追问具体开始/结束时间。**已有时段后**，按固定顺序执行：1. `dws calendar event create` 建日程；2. 有参会人则 `dws calendar participant add`；3. 再处理会议室。**无明确会议室范围**：可直接 `python scripts/calendar_schedule_meeting.py --title "<主题>" --start "<起始>" --end "<结束>" [--users <userIds>] [--book-room] [--dry-run]`。**有明确范围（某楼/层）**：先 `dws calendar room list-groups`，锁定该地点**最相关的承载 group**；若只有一个地点，`--room-group-id` 应只传这个最相关 group，**不要**把同楼内多个楼层 group 打包传入碰运气。只有用户明确给出多个允许地点时，才把这些 `group-id` 一并传给 `python scripts/calendar_schedule_meeting.py ... --book-room --room-group-id "<id1,id2,...>"`。**用户点名具体会议室**：须手工 `dws calendar room search --start "<ISO>" --end "<ISO>" --group-id <GROUP_ID> [--available] --format json`（**无** `--query`），在 JSON 中匹配名称取 **`rooms[].roomId` 唯一真值** → `dws calendar room add --event <eventId> --rooms <roomId>`；**不得**把用户输入的会议室名当 `roomId`。**一旦连续 2 次空结果 / 任意一次 `roomId invalid`**：**必须回读本节并立即收束判断**；若整园/限定范围内搜尽仍无 roomId 或无空房 → **下一条消息必须直接向用户汇报失败结论**；否则只能向用户确认是否放宽范围/改时间。**禁止**假设 roomId、禁止无 ID 调用 `room add`、禁止用日程详情绕路、禁止继续猜测 Mock/测试环境。细则见「会议室搜索早停」。 |
+| schedule-meeting   | **见上文「两准则」**、**「搜房失败硬门禁」**。**未给时段且仅说「发起/开个会」**→ 当前 CLI 不支持实时视频会议，告知用户请在钉钉客户端操作。**未给时段但有预约意图**：追问具体开始/结束时间。**已有时段后**：1. 先用 `+room-find` 在用户允许范围内取得真实 `roomId`（用户没要求会议室则跳过）；2. 用 `+book` 创建日程并按姓名邀请参会人；3. 有 `roomId` 时用 `room add --event <eventId> --rooms <roomId>` 绑定；4. 读回同一 `eventId` 验证。用户点名会议室时给 `+room-find` 传 `--room-name`，不得使用 `--query`。连续 2 次空结果或任意一次 `roomId invalid` 时立即收束；若限定范围内无 roomId 或无空房，直接汇报失败，除非用户明确放宽范围或改时间。 |
 | reschedule-meeting | 1. `calendar event list --start "<起始ISO>" --end "<结束ISO>"` → 取 `eventId` 2. `calendar event update --id <eventId> --start "<新起始ISO>" --end "<新结束ISO>"` 更新时间 3. `chat search --query "<群名>"` → 取 `openConversationId` → `chat message send --conversation-id <openConversationId> --content "<变更通知>"` 通知变更 |
+
+### 换期、换人、换房组合流程
+
+1. 在写入前解析旧/新参会人的不同真实 `userId`，并分别为原时段和新时段各取得一个真实可用 `roomId`；两间房必须不同。任一前置缺失即收束，不要创建半成品。
+2. 创建一次日程并记录唯一 `eventId`，加入旧参会人和原房间后读回。
+3. 对同一 `eventId` 依次改期、移除旧人、加入新人、移除原房、加入新房；每步只用台账中的 ID，不重新按标题搜索。
+4. 最终一次读回同时核对新时间、新参会人和新会议室，再用同一 `eventId` 删除并验证。若中途失败，保存真实 partial 状态并优先清理本轮已创建资源。
