@@ -1,103 +1,126 @@
 // Copyright 2026 Alibaba Group
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0
 
-// Package report declares declarative shortcuts for the DingTalk
-// "报告/日志" (OA 周报应用) MCP tools. Each shortcut is a thin wrapper over a
-// single MCP tool call; tool names and parameter keys mirror the DWS report
-// helper (internal/helpers/report.go) verbatim.
+// Package report registers strict declarative shortcuts for DingTalk reports.
 package report
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
-
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
-// reportParseISOMillis parses an ISO-8601 timestamp (e.g. 2026-03-10T00:00:00+08:00)
-// into Unix milliseconds, matching the helper's parseISOTimeToMillis behavior.
-func reportParseISOMillis(name, s string) (int64, error) {
-	s = strings.TrimSpace(s)
-	t, err := time.Parse(time.RFC3339, s)
+const (
+	reportMaximumInboxDays  = 180
+	reportMaximumOutboxDays = 20
+)
+
+func reportParseISOMillis(name, value string) (int64, error) {
+	parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(value))
 	if err != nil {
-		return 0, fmt.Errorf("--%s 时间格式无效，需 ISO-8601（如 2026-03-10T00:00:00+08:00）: %v", name, err)
+		return 0, apperrors.NewValidation(
+			fmt.Sprintf("--%s 时间格式无效，需 ISO-8601（如 2026-03-10T00:00:00+08:00）", name),
+			apperrors.WithReason("invalid_time_format"),
+		)
 	}
-	return t.UnixMilli(), nil
+	return parsed.UnixMilli(), nil
 }
 
-// TemplateList lists the report templates available to the current user.
-// TemplateGet reads a single report template's field definitions by name.
-// InboxList lists reports received by the current user within a time window.
+func reportValidatePage(cursor, size int) error {
+	if cursor < 0 {
+		return apperrors.NewValidation("--cursor 不能小于 0", apperrors.WithReason("invalid_cursor"))
+	}
+	if size < 1 || size > 20 {
+		return apperrors.NewValidation("--size 必须在 1 到 20 之间", apperrors.WithReason("invalid_page_size"))
+	}
+	return nil
+}
+
+func reportValidateRange(startName, startValue, endName, endValue string, maximumDays int) (int64, int64, error) {
+	start, err := reportParseISOMillis(startName, startValue)
+	if err != nil {
+		return 0, 0, err
+	}
+	end, err := reportParseISOMillis(endName, endValue)
+	if err != nil {
+		return 0, 0, err
+	}
+	if end <= start {
+		return 0, 0, apperrors.NewValidation("结束时间必须晚于开始时间", apperrors.WithReason("invalid_time_range"))
+	}
+	if maximumDays > 0 && end-start > int64(maximumDays)*int64(24*time.Hour/time.Millisecond) {
+		return 0, 0, apperrors.NewValidation(
+			fmt.Sprintf("时间范围不能超过 %d 天", maximumDays),
+			apperrors.WithReason("time_range_too_large"),
+		)
+	}
+	return start, end, nil
+}
+
+func reportValidateContinuation(page reportPageEvidence, current int, operation string) error {
+	if !page.HasMore {
+		return nil
+	}
+	next, err := strconv.ParseInt(page.Next, 10, 64)
+	if err != nil || next <= int64(current) {
+		return reportResponseError(operation, "stalled_cursor", "Report continuation cursor 没有严格前进")
+	}
+	return nil
+}
+
 var InboxList = shortcut.Shortcut{
-	Service:     "report",
-	Command:     "+inbox-list",
-	Product:     "report",
-	Description: "列出我收到的日报（按时间范围分页）",
-	Intent:      "当你要查看下属或同事发给自己的日报周报、想在某个时间段内浏览或审阅收到的汇报时使用；输入起止时间（ISO-8601），可按发送人 staffId 过滤，分页返回收到的日报列表及其 reportId，供后续 +entry-get 读正文。",
-	Risk:        shortcut.RiskRead,
-	Safety: contract.SafetySpec{
-		Effect: "read", Risk: "low",
-		Confirmation: "not_required", Idempotency: "idempotent",
-	},
-	Contract: corecmd.ContractDecl{
-		Identity: contract.ToolIdentitySpec{
-			ProductID:      "report",
-			Name:           "shortcut_inbox_list",
-			CanonicalPath:  "report.shortcut_inbox_list",
-			CLIPath:        "report +inbox-list",
-			PrimaryCLIPath: "report +inbox-list",
+	Service: "report", Command: "+inbox-list", Product: "report",
+	Description:   "列出我收到的日志",
+	Intent:        "需要按明确时间范围读取别人发给我的日志摘要并取得稳定 reportId 时使用；后端必须提供可验证的终止或严格前进 cursor。",
+	Risk:          shortcut.RiskRead,
+	Safety:        reportReadSafety(),
+	OutputRollout: output.RolloutUnifiedActive,
+	Contract: reportContract(
+		"+inbox-list", "列出我收到的日志",
+		"需要按明确时间范围读取别人发给我的日志摘要并取得稳定 reportId 时使用；后端必须提供可验证的终止或严格前进 cursor。",
+		reportCollectionResult("reports", "严格验证的收件箱日志页"), reportPagination(),
+		[]contract.ParamDecl{
+			{Name: "start", Property: "start"}, {Name: "end", Property: "end"},
+			{Name: "cursor", Property: "cursor"}, {Name: "size", Property: "size"},
+			{Name: "sender-user-ids", Property: "senderUserIds", InterfaceType: "array"},
 		},
-		Description: "列出我收到的日报（按时间范围分页）",
-		Interface: &contract.InterfaceSpec{
-			Mode:         "composite",
-			Availability: "available",
-			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
-		},
-		Selection: contract.SelectionSpec{
-			AgentSummary: "列出我收到的日报（按时间范围分页）",
-			UseWhen:      []string{"当你要查看下属或同事发给自己的日报周报、想在某个时间段内浏览或审阅收到的汇报时使用；输入起止时间（ISO-8601），可按发送人 staffId 过滤，分页返回收到的日报列表及其 reportId，供后续 +entry-get 读正文。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws report +inbox-list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20"},
-		},
-	},
+		"dws report +inbox-list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20",
+	),
 	Flags: []shortcut.Flag{
-		{Name: "start", Type: shortcut.FlagString, Desc: "开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)", Required: true},
-		{Name: "end", Type: shortcut.FlagString, Desc: "结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)", Required: true},
-		{Name: "cursor", Type: shortcut.FlagInt, Default: "0", Desc: "分页游标，首次传 0"},
-		{Name: "size", Type: shortcut.FlagInt, Default: "20", Desc: "每页条数，最大 20"},
-		{Name: "sender-user-ids", Type: shortcut.FlagStringSlice, Desc: "发送人 staffId 列表，逗号分隔，过滤指定发送人"},
+		{Name: "start", Type: shortcut.FlagString, Desc: "开始时间 ISO-8601；结束时间必须晚于开始时间，跨度不得超过 180 天", Required: true},
+		{Name: "end", Type: shortcut.FlagString, Desc: "结束时间 ISO-8601；结束时间必须晚于开始时间，跨度不得超过 180 天", Required: true},
+		{Name: "cursor", Type: shortcut.FlagInt, Default: "0", Desc: "分页游标；--cursor 不能小于 0，续页 cursor 必须严格前进"},
+		{Name: "size", Type: shortcut.FlagInt, Default: "20", Desc: "每页条数；--size 必须在 1 到 20 之间"},
+		{Name: "sender-user-ids", Type: shortcut.FlagStringSlice, Desc: "发送人 staffId 列表"},
 	},
-	Tips: []string{
-		`dws report +inbox-list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --size 20`,
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "结束时间必须晚于开始时间，跨度不得超过 180 天"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"cursor"}, Description: "--cursor 不能小于 0，续页 cursor 必须严格前进"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"size"}, Description: "--size 必须在 1 到 20 之间"},
 	},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		startMs, err := reportParseISOMillis("start", rt.Str("start"))
-		if err != nil {
+	Tips: []string{`dws report +inbox-list --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --cursor 0 --size 20`},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := reportValidatePage(rt.Int("cursor"), rt.Int("size")); err != nil {
 			return err
 		}
-		endMs, err := reportParseISOMillis("end", rt.Str("end"))
+		_, _, err := reportValidateRange("start", rt.Str("start"), "end", rt.Str("end"), reportMaximumInboxDays)
+		return err
+	},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		const operation = "report/get_received_report_list"
+		start, end, err := reportValidateRange("start", rt.Str("start"), "end", rt.Str("end"), reportMaximumInboxDays)
 		if err != nil {
 			return err
 		}
 		params := map[string]any{
-			"startTime": startMs,
-			"endTime":   endMs,
-			"cursor":    rt.Int("cursor"),
-			"size":      rt.Int("size"),
+			"startTime": start, "endTime": end,
+			"cursor": rt.Int("cursor"), "size": rt.Int("size"),
 		}
 		if rt.Changed("sender-user-ids") {
 			params["senderUserIds"] = rt.StrSlice("sender-user-ids")
@@ -106,192 +129,164 @@ var InboxList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		reports := reportEntryListProject(data)
-		return rt.Output(map[string]any{"count": len(reports), "reports": reports})
+		reports, page, err := reportProjectEntries(data, operation)
+		if err != nil {
+			return err
+		}
+		if err := reportValidateContinuation(page, rt.Int("cursor"), operation); err != nil {
+			return err
+		}
+		return outputReportPage(rt, "reports", reports, page)
 	},
 }
 
-// reportEntryListProject reshapes the raw report-list responses
-// (get_received_report_list / get_send_report_list) into a clean, stable list
-// of report summaries — the output-projection fidelity the framework applies to
-// every list command. Both the list container and the per-item field names are
-// probed defensively across candidate keys so the projection tolerates
-// response-shape drift and never fabricates data: an empty/unknown shape yields
-// an empty list rather than a crash.
-func reportEntryListProject(data map[string]any) []map[string]any {
-	raw := reportEntryListResolveList(data)
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		if v, ok := reportEntryListFirst(m, "reportId", "report_id", "id"); ok {
-			row["reportId"] = v
-		}
-		if v, ok := reportEntryListFirst(m, "templateName", "template_name", "reportTemplateName"); ok {
-			row["templateName"] = v
-		}
-		if v, ok := reportEntryListFirst(m, "creatorName", "creator_name", "creatorUserName", "senderName", "authorName"); ok {
-			row["creatorName"] = v
-		}
-		if v, ok := reportEntryListFirst(m, "creatorUserId", "creator_user_id", "creatorId", "senderUserId", "userId"); ok {
-			row["creatorUserId"] = v
-		}
-		if v, ok := reportEntryListFirst(m, "createTime", "create_time", "gmtCreate", "sendTime"); ok {
-			row["createTime"] = v
-		}
-		if v, ok := reportEntryListFirst(m, "modifiedTime", "modified_time", "gmtModified", "modifyTime"); ok {
-			row["modifiedTime"] = v
-		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
-	}
-	return out
-}
-
-// reportEntryListResolveList locates the list payload inside the response,
-// tolerating a bare top-level array or nesting one level under a common
-// envelope key.
-func reportEntryListResolveList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	// get_received_report_list / get_send_report_list nest the list under
-	// result.report_list (snake_case); "report_list" MUST be probed — the
-	// camelCase "reportList" alone leaves +inbox-list / +outbox-list silently
-	// empty despite the backend returning reports.
-	for _, key := range []string{"result", "data", "list", "items", "report_list", "reportList", "records"} {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "report_list", "reportList", "records", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
-}
-
-// reportEntryListFirst returns the first present candidate key's value.
-func reportEntryListFirst(m map[string]any, keys ...string) (any, bool) {
-	for _, k := range keys {
-		if v, ok := m[k]; ok {
-			return v, true
-		}
-	}
-	return nil, false
-}
-
-// OutboxList lists reports sent/created by the current user.
 var OutboxList = shortcut.Shortcut{
-	Service:     "report",
-	Command:     "+outbox-list",
-	Product:     "report",
-	Description: "列出我发出的日报（可选时间/模版名过滤）",
-	Intent:      "当你要回顾自己写过、提交过的日报周报，比如确认某天是否已交、找回历史汇报内容或统计提交情况时使用；可按创建/修改时间范围和模版名过滤，分页返回自己发出的日报列表及 reportId，供后续 +entry-get 查看正文。",
-	Risk:        shortcut.RiskRead,
-	Safety: contract.SafetySpec{
-		Effect: "read", Risk: "low",
-		Confirmation: "not_required", Idempotency: "idempotent",
-	},
-	Contract: corecmd.ContractDecl{
-		Identity: contract.ToolIdentitySpec{
-			ProductID:      "report",
-			Name:           "shortcut_outbox_list",
-			CanonicalPath:  "report.shortcut_outbox_list",
-			CLIPath:        "report +outbox-list",
-			PrimaryCLIPath: "report +outbox-list",
+	Service: "report", Command: "+outbox-list", Product: "report",
+	Description:   "列出我发出的日志",
+	Intent:        "需要按创建或修改时间回顾自己提交的日志并取得稳定 reportId 时使用；每次创建或修改时间窗不得超过 20 天。",
+	Risk:          shortcut.RiskRead,
+	Safety:        reportReadSafety(),
+	OutputRollout: output.RolloutUnifiedActive,
+	Contract: reportContract(
+		"+outbox-list", "列出我发出的日志",
+		"需要按创建或修改时间回顾自己提交的日志并取得稳定 reportId 时使用；每次创建或修改时间窗不得超过 20 天。",
+		reportCollectionResult("reports", "严格验证的发件箱日志页"), reportPagination(),
+		[]contract.ParamDecl{
+			{Name: "cursor", Property: "cursor"}, {Name: "size", Property: "size"},
+			{Name: "start", Property: "start"}, {Name: "end", Property: "end"},
+			{Name: "modified-start", Property: "modifiedStart"}, {Name: "modified-end", Property: "modifiedEnd"},
+			{Name: "template-name", Property: "templateName"},
 		},
-		Description: "列出我发出的日报（可选时间/模版名过滤）",
-		Interface: &contract.InterfaceSpec{
-			Mode:         "composite",
-			Availability: "available",
-			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
-		},
-		Selection: contract.SelectionSpec{
-			AgentSummary: "列出我发出的日报（可选时间/模版名过滤）",
-			UseWhen:      []string{"当你要回顾自己写过、提交过的日报周报，比如确认某天是否已交、找回历史汇报内容或统计提交情况时使用；可按创建/修改时间范围和模版名过滤，分页返回自己发出的日报列表及 reportId，供后续 +entry-get 查看正文。"},
-			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples: []string{
-				"dws report +outbox-list --cursor 0 --size 20",
-				"dws report +outbox-list --cursor 0 --size 20 --template-name \"日报\"",
-			},
-		},
-	},
+		"dws report +outbox-list --cursor 0 --size 20",
+	),
 	Flags: []shortcut.Flag{
-		{Name: "cursor", Type: shortcut.FlagInt, Default: "0", Desc: "分页游标，首次传 0"},
-		{Name: "size", Type: shortcut.FlagInt, Default: "20", Desc: "每页条数，最大 20"},
-		{Name: "start", Type: shortcut.FlagString, Desc: "创建开始时间 ISO-8601 (可选，服务端单次跨度上限 20 天)"},
-		{Name: "end", Type: shortcut.FlagString, Desc: "创建结束时间 ISO-8601 (可选)"},
-		{Name: "modified-start", Type: shortcut.FlagString, Desc: "修改开始时间 ISO-8601 (可选)"},
-		{Name: "modified-end", Type: shortcut.FlagString, Desc: "修改结束时间 ISO-8601 (可选)"},
-		{Name: "template-name", Type: shortcut.FlagString, Desc: "日志模板名称 (可选，不传查全部)"},
+		{Name: "cursor", Type: shortcut.FlagInt, Default: "0", Desc: "分页游标；--cursor 不能小于 0，续页 cursor 必须严格前进"},
+		{Name: "size", Type: shortcut.FlagInt, Default: "20", Desc: "每页条数；--size 必须在 1 到 20 之间"},
+		{Name: "start", Type: shortcut.FlagString, Desc: "创建开始时间 ISO-8601；创建时间范围必须有效且不得超过 20 天"},
+		{Name: "end", Type: shortcut.FlagString, Desc: "创建结束时间 ISO-8601；创建时间范围必须有效且不得超过 20 天"},
+		{Name: "modified-start", Type: shortcut.FlagString, Desc: "修改开始时间 ISO-8601；修改时间必须成对提供、范围有效且不得超过 20 天"},
+		{Name: "modified-end", Type: shortcut.FlagString, Desc: "修改结束时间 ISO-8601；修改时间必须成对提供、范围有效且不得超过 20 天"},
+		{Name: "template-name", Type: shortcut.FlagString, Desc: "日志模板名称"},
 	},
-	Tips: []string{
-		`dws report +outbox-list --cursor 0 --size 20`,
-		`dws report +outbox-list --cursor 0 --size 20 --template-name "日报"`,
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"cursor"}, Description: "--cursor 不能小于 0，续页 cursor 必须严格前进"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"size"}, Description: "--size 必须在 1 到 20 之间"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "创建时间范围必须有效且不得超过 20 天"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"modified-start", "modified-end"}, Description: "修改时间必须成对提供、范围有效且不得超过 20 天"},
 	},
-	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{
-			"cursor": rt.Int("cursor"),
-			"size":   rt.Int("size"),
+	Tips: []string{"dws report +outbox-list --cursor 0 --size 20"},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := reportValidatePage(rt.Int("cursor"), rt.Int("size")); err != nil {
+			return err
 		}
-		if rt.Changed("start") {
-			ms, err := reportParseISOMillis("start", rt.Str("start"))
-			if err != nil {
+		if rt.Changed("start") && rt.Changed("end") {
+			if _, _, err := reportValidateRange("start", rt.Str("start"), "end", rt.Str("end"), reportMaximumOutboxDays); err != nil {
 				return err
 			}
-			params["startTime"] = ms
 		}
-		if rt.Changed("end") {
-			ms, err := reportParseISOMillis("end", rt.Str("end"))
-			if err != nil {
-				return err
-			}
-			params["endTime"] = ms
+		if rt.Changed("modified-start") != rt.Changed("modified-end") {
+			return apperrors.NewValidation("--modified-start 与 --modified-end 必须同时提供", apperrors.WithReason("incomplete_modified_range"))
 		}
 		if rt.Changed("modified-start") {
-			ms, err := reportParseISOMillis("modified-start", rt.Str("modified-start"))
-			if err != nil {
-				return err
-			}
-			params["modifiedStartTime"] = ms
+			_, _, err := reportValidateRange("modified-start", rt.Str("modified-start"), "modified-end", rt.Str("modified-end"), reportMaximumOutboxDays)
+			return err
 		}
-		if rt.Changed("modified-end") {
-			ms, err := reportParseISOMillis("modified-end", rt.Str("modified-end"))
-			if err != nil {
-				return err
-			}
-			params["modifiedEndTime"] = ms
+		return nil
+	},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		const operation = "report/get_send_report_list"
+		now := time.Now()
+		defaultEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
+		startValue := defaultEnd.Add(-reportMaximumOutboxDays * 24 * time.Hour).Format(time.RFC3339)
+		endValue := defaultEnd.Format(time.RFC3339)
+		if rt.Changed("start") {
+			startValue = rt.Str("start")
 		}
-		if rt.Changed("template-name") {
-			params["report_template_name"] = rt.Str("template-name")
+		if rt.Changed("end") {
+			endValue = rt.Str("end")
+		}
+		start, end, err := reportValidateRange("start", startValue, "end", endValue, reportMaximumOutboxDays)
+		if err != nil {
+			return err
+		}
+		params := map[string]any{
+			"cursor": rt.Int("cursor"), "size": rt.Int("size"),
+			"startTime": start, "endTime": end,
+		}
+		if rt.Changed("modified-start") {
+			modifiedStart, modifiedEnd, rangeErr := reportValidateRange("modified-start", rt.Str("modified-start"), "modified-end", rt.Str("modified-end"), reportMaximumOutboxDays)
+			if rangeErr != nil {
+				return rangeErr
+			}
+			params["modifiedStartTime"], params["modifiedEndTime"] = modifiedStart, modifiedEnd
+		}
+		if name := strings.TrimSpace(rt.Str("template-name")); name != "" {
+			params["report_template_name"] = name
 		}
 		data, err := rt.CallMCPData("report", "get_send_report_list", params)
 		if err != nil {
 			return err
 		}
-		reports := reportEntryListProject(data)
-		return rt.Output(map[string]any{"count": len(reports), "reports": reports})
+		reports, page, err := reportProjectEntries(data, operation)
+		if err != nil {
+			return err
+		}
+		if err := reportValidateContinuation(page, rt.Int("cursor"), operation); err != nil {
+			return err
+		}
+		return outputReportPage(rt, "reports", reports, page)
 	},
 }
 
-// EntryGet reads the full body of a single report by id.
-// EntryStats reads the read-receipt statistics of a single report.
-// EntrySubmit submits a new report against a template.
+var TemplateSearch = shortcut.Shortcut{
+	Service: "report", Command: "+template-search", Product: "report",
+	Description:   "按名称搜索可用日志模板",
+	Intent:        "需要从当前用户全部可用日志模板中按名称查找稳定 templateId，或在提交日志前确认模板是否存在时使用。",
+	Risk:          shortcut.RiskRead,
+	Safety:        reportReadSafety(),
+	OutputRollout: output.RolloutUnifiedActive,
+	Contract: reportContract(
+		"+template-search", "按名称搜索可用日志模板",
+		"需要从当前用户全部可用日志模板中按名称查找稳定 templateId，或在提交日志前确认模板是否存在时使用。",
+		reportTemplateSearchResult(), nil,
+		[]contract.ParamDecl{{Name: "query", Property: "report_template_name"}},
+		"dws report +template-search --query 周报",
+	),
+	Flags:       []shortcut.Flag{{Name: "query", Type: shortcut.FlagString, Desc: "模板名称关键词，不区分大小写；--query 不能为空", Required: true}},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"query"}, Description: "--query 不能为空"}},
+	Tips:        []string{"dws report +template-search --query 周报"},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if strings.TrimSpace(rt.Str("query")) == "" {
+			return apperrors.NewValidation("--query 不能为空", apperrors.WithReason("empty_query"))
+		}
+		return nil
+	},
+	Execute: func(rt *shortcut.RuntimeContext) error {
+		const operation = "report/get_available_report_templates"
+		data, err := rt.CallMCPData("report", "get_available_report_templates", map[string]any{})
+		if err != nil {
+			return err
+		}
+		templates, err := reportProjectTemplates(data, operation)
+		if err != nil {
+			return err
+		}
+		query := strings.ToLower(strings.TrimSpace(rt.Str("query")))
+		matches := make([]map[string]any, 0)
+		for _, template := range templates {
+			if strings.Contains(strings.ToLower(template["name"].(string)), query) {
+				matches = append(matches, template)
+			}
+		}
+		payload := map[string]any{"count": len(matches), "templates": matches}
+		if !output.UsesUnifiedResult(rt.Command()) {
+			return rt.Output(payload)
+		}
+		meta := &output.Meta{Count: output.NewCount(len(matches))}
+		return output.StoreResult(rt.Command().Context(), output.Success(payload, output.WithMeta(meta)))
+	},
+}
+
 func init() {
-	shortcut.Register(
-		InboxList,
-		OutboxList,
-	)
+	shortcut.Register(InboxList, OutboxList, TemplateSearch)
 }

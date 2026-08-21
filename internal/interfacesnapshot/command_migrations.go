@@ -479,8 +479,8 @@ func evaluateCommandMigrationLifecycle(
 				}
 			}
 			if allAfter {
-				if exists {
-					return nil, fmt.Errorf("consumed command migration %s is stale after all references reached the after state", approved.displayKey())
+				if exists && proposed.State != CommandMigrationConsumed {
+					return nil, fmt.Errorf("candidate changed consumed command migration %s back to pending", approved.displayKey())
 				}
 				continue
 			}

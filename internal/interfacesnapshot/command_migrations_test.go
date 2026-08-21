@@ -383,9 +383,9 @@ func TestCrossPlatformCoverageCommandMigrationLifecycleEdges(t *testing.T) {
 		{"after pending receipt", after, map[string]Snapshot{"main": before, "stable": before}, pending, pending, "without marking it consumed"},
 		{"partial", partial, map[string]Snapshot{"main": before, "stable": before}, pending, consumed, "partially applied"},
 		{"consumed drift", before, map[string]Snapshot{"main": after, "stable": before}, consumed, consumed, "drifted from consumed"},
-		{"stale receipt", after, map[string]Snapshot{"main": after, "stable": after}, consumed, consumed, "stale after all references"},
 		{"early cleanup", after, map[string]Snapshot{"main": after, "stable": before}, consumed, empty, "must retain consumed"},
 		{"consumed back to pending", after, map[string]Snapshot{"main": after, "stable": before}, consumed, pending, "must retain consumed"},
+		{"inert consumed back to pending", after, map[string]Snapshot{"main": after, "stable": after}, consumed, pending, "back to pending"},
 		{"candidate added consumed", after, map[string]Snapshot{"main": before, "stable": before}, empty, consumed, "must start pending"},
 		{"candidate base mismatch", before, map[string]Snapshot{"main": after, "stable": before}, empty, pending, "does not match"},
 	} {
@@ -401,6 +401,9 @@ func TestCrossPlatformCoverageCommandMigrationLifecycleEdges(t *testing.T) {
 	}
 	if got, err := AuthorizeCommandMigrations(after, map[string]Snapshot{"main": after, "stable": after}, consumed, empty); err != nil || len(got) != 0 {
 		t.Fatalf("cleaned stale receipt=%#v, %v", got, err)
+	}
+	if got, err := AuthorizeCommandMigrations(after, map[string]Snapshot{"main": after, "stable": after}, consumed, consumed); err != nil || len(got) != 0 {
+		t.Fatalf("retained inert receipt=%#v, %v", got, err)
 	}
 	if got, err := AuthorizeCommandMigrations(before, map[string]Snapshot{"main": before, "stable": before}, empty, pending); err != nil || len(got) != 0 {
 		t.Fatalf("candidate pending plan=%#v, %v", got, err)

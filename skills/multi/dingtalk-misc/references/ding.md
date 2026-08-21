@@ -173,10 +173,7 @@ dws ding message recall-personal --id <OPEN_DING_ID> --format json
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws ding +list` | read | 查询 DING 消息列表 |
-| `dws ding +recall-personal` | high-risk-write | 撤回本人发起的 DING |
 | `dws ding +receiver-status` | read | 查询 DING 消息接收人已读状态 |
-| `dws ding +send-personal` | write | 以本人身份发送 DING 给指定人 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## 意图表

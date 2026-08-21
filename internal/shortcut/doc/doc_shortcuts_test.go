@@ -132,6 +132,31 @@ func runDocCoveragePath(t *testing.T, declaration shortcut.Shortcut, caller *doc
 	return root.Execute()
 }
 
+func TestCrossPlatformCoverageCommentReplyRejectsUnsupportedEmojiBeforeRPC(t *testing.T) {
+	for _, content := range []string{"😄", "乱码"} {
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
+		err := runDocCoverage(t, CommentReply, caller,
+			"--node", "node-1", "--comment-key", "comment-1",
+			"--content", content, "--emoji", "--yes")
+		if err == nil {
+			t.Fatalf("unsupported reaction %q accepted", content)
+		}
+		if caller.calls != 0 {
+			t.Fatalf("unsupported reaction %q reached RPC %d time(s)", content, caller.calls)
+		}
+	}
+
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
+	if err := runDocCoverage(t, CommentReply, caller,
+		"--node", "node-1", "--comment-key", "comment-1",
+		"--content", "鼓掌", "--emoji", "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	if caller.calls != 1 || caller.history[0].params["emoji"] != true {
+		t.Fatalf("valid reaction call = %#v", caller.history)
+	}
+}
+
 func TestCrossPlatformCoverageRevisionSelectionAndKeywordUseLiveShapes(t *testing.T) {
 	revisionPayload := map[string]any{"data": map[string]any{"revision": json.Number("9")}}
 	if got, ok := nestedRevision(revisionPayload); !ok || got != 9 {

@@ -76,7 +76,7 @@ candidate 自增的 pending 记录、其他命令的同名参数、参数概念�
 首次消费 pending command 回执时，merge-base 的 normalized Schema 必须真实发布中间参数，
 并逐跳验证参数签名和 constraints；command 回执合入为 consumed 后，中间 Schema 已从 main
 消失，此时保留的两份 consumed 回执可继续对 stable 做受限重放，直到 stable 也达到 after
-并按 lifecycle 清理。两种阶段都拒绝残留 predecessor/intermediate、字段漂移、环、分叉、
+并让回执转为惰性记录或由独立 PR 清理。两种阶段都拒绝残留 predecessor/intermediate、字段漂移、环、分叉、
 target 碰撞或 primary path/tool identity 不唯一；positionals 不在该组合授权面内。
 
 `replacement_constant` 不是清单自报即可成立的例外。after 阶段的 Interface Snapshot
@@ -97,7 +97,7 @@ replacement 必须保留 source 已发布的 dry-run 能力：历史 `dry_run` �
 
 两种迁移都要求旧 argv 继续可执行。删除旧命令、删除旧 flag、把 legacy 改成 non-runnable、改变未登记的历史参数、改变 interface / safety，或只完成部分 before → after 转换都会 fail closed。命令别名会先规范到 reference 的 canonical path，但清单本身仍只能记录精确 canonical 命令，不能用 alias 或前缀扩大授权。
 
-跨命令清单复用下文同一套 `pending → consumed → cleanup` 生命周期。治理 PR 只能新增 `pending` 且产品 surface 必须仍是 before；后续产品 PR 才能一次性切到 after 并改为 `consumed`。candidate 新增的 pending 记录不能批准自己的改动。
+跨命令清单复用下文同一套 `pending → consumed → inert/cleanup` 生命周期。治理 PR 只能新增 `pending` 且产品 surface 必须仍是 before；后续产品 PR 才能一次性切到 after 并改为 `consumed`。candidate 新增的 pending 记录不能批准自己的改动。
 
 当前首批 pending 记录覆盖 `chat topic` 收口：`chat group create --thread` 拆到 `chat topic create`，以及 `chat message list-topic-replies` / `forward-topic` 迁到对应的 `chat topic` 命令。前一条完整登记 `name` / `type` / `users` 的同名承接，以及 `thread` → `convThreadEnabled=true` 的常量承接。产品 PR 消费这些记录时只能把三条 `state` 改为 `consumed`，不得改写其 before、after、Schema mapping、constant 或 reason。
 
@@ -110,9 +110,9 @@ replacement 必须保留 source 已发布的 dry-run 能力：历史 `dry_run` �
 | 1. 治理审批 | 新增 `state: pending` 的精确记录；不得在同一个 PR 修改产品 surface | candidate 和 merge-base 都与记录中的 `before` 完全一致；该记录不改变 stable 的判断 |
 | 2. 产品迁移 | merge-base 已拥有 `pending` 后，按记录一次性切到精确 `after`，并把记录改为 `state: consumed` | legacy 仍存在但由 visible 变 hidden，且声明 `alias_of`；canonical 的 requiredness 与 legacy 迁移前完全一致 |
 | 3. 保留回执 | 产品 PR 合入后，如果 stable 仍是 `before`，继续保留 `consumed` | merge-base 或 stable 仍有任一份尚未达到 `after` |
-| 4. 单独清理 | 当 merge-base 和 stable 都已经是 `after`，在后续 PR 删除该记录 | 两份参考快照均精确匹配 `after`；继续保留过期回执会被门禁拒绝 |
+| 4. 惰性保留或清理 | 当 merge-base 和 stable 都已经是 `after`，该记录不再提供任何授权；后续 PR 可以原样保留或删除 | 两份参考快照均精确匹配 `after`；保留时仍必须是不可改写的 `consumed`，接口偏离 `after` 继续失败 |
 
-因此，新增 `pending` 和修改产品 surface 不能发生在同一个 PR；candidate 自己新增的记录不能 self-approve。迁移也不能部分执行：legacy、canonical、`alias_of` 或状态只要有一项不匹配，门禁即失败。
+因此，新增 `pending` 和修改产品 surface 不能发生在同一个 PR；candidate 自己新增的记录不能 self-approve。迁移也不能部分执行：legacy、canonical、`alias_of` 或状态只要有一项不匹配，门禁即失败。stable 发布只会让已经追平的 `consumed` 回执变成无授权效果的审计记录，不会在没有代码变更时让后续业务 PR 失去合规性；清理仍可作为独立的账本压缩动作，但不再是下一个 PR 的强制前置条件。
 
 下面只是清单结构示例，不代表已审批命令；实际字段必须从 Interface Snapshot 核对：
 

@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/commentreaction"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
@@ -154,6 +155,9 @@ func newSheetCommentCmd() *cobra.Command {
 				"replyCommentKey": mustGetFlag(cmd, "comment-key"),
 			}
 			if v, _ := cmd.Flags().GetBool("emoji"); v {
+				if err := commentreaction.Validate(mustGetFlag(cmd, "content")); err != nil {
+					return err
+				}
 				toolArgs["emoji"] = true
 			}
 			if v, _ := cmd.Flags().GetString("mention"); v != "" {

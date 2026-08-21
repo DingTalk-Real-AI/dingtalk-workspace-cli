@@ -231,7 +231,6 @@ var paramAliasCompleteCommands = map[string][]string{
 	"mail message search":                      {"mail", "message", "search", "--email", "fixture@example.com", "--query", "subject:fixture"},
 	"mail thread list":                         {"mail", "thread", "list", "--email", "fixture@example.com", "--folder", "folder-1", "--limit", "7"},
 	"mail user search":                         {"mail", "user", "search", "--keyword", "fixture"},
-	"oa +list-executed":                        {"oa", "+list-executed", "--limit", "7", "--page", "1"},
 	"oa +search-forms":                         {"oa", "+search-forms", "--query", "fixture"},
 	"oa approval search-forms":                 {"oa", "approval", "search-forms", "--query", "fixture"},
 	"report list":                              {"report", "list", "--start", "2026-03-10T00:00:00+08:00", "--end", "2026-03-10T23:59:59+08:00"},

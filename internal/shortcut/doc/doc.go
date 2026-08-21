@@ -19,6 +19,7 @@ package doc
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/commentreaction"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
@@ -564,6 +565,9 @@ var CommentReply = shortcut.Shortcut{
 			"replyCommentKey": rt.Str("comment-key"),
 		}
 		if rt.Bool("emoji") {
+			if err := commentreaction.Validate(rt.Str("content")); err != nil {
+				return err
+			}
 			params["emoji"] = true
 		}
 		if rt.Changed("mention") {

@@ -963,12 +963,6 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws oa +list-cc` | read | 获取抄送当前用户的审批单列表 |
-| `dws oa +list-executed` | read | 获取当前用户已经处理过的审批单列表 |
-| `dws oa +list-forms` | read | 获取当前用户可见的审批表单列表 |
-| `dws oa +list-pending` | read | 查询待我处理的审批（时间范围为 epoch 毫秒） |
-| `dws oa +list-submitted` | read | 获取当前用户已发起的审批单列表 |
-| `dws oa +my-initiated` | read | 列出我发起（提交）的审批单据 |
 | `dws oa +search-forms` | read | 按关键字模糊搜索当前用户可见的审批表单 |
 <!-- VISIBLE_SHORTCUTS_END -->
 

@@ -1212,6 +1212,51 @@ Flags:
       --msg-ids string   消息 ID 列表，逗号分隔 (必填)
 ```
 
+### emotion (个人收藏表情)
+
+#### 列出个人收藏表情
+```
+Usage:
+  dws chat emotion list [flags]
+Example:
+  dws chat emotion list --format json
+```
+当前用户身份由 MCP server 注入，无业务参数。
+
+#### 发送个人收藏表情
+```
+Usage:
+  dws chat emotion send [flags]
+Example:
+  dws chat emotion send --media-id <mediaId> --group <openConversationId>
+  dws chat emotion send --media-id <mediaId> --emotion-id <emotionId> --user <userId>
+  dws chat emotion send --media-id <mediaId> --open-dingtalk-id <openDingTalkId> --uuid <idempotencyKey>
+Flags:
+      --media-id string            表情媒体 ID (必填)
+      --emotion-id string          表情 ID (可选)
+      --conversation-id string     群聊 openConversationId（与 --group 等价）
+      --group string               群聊 openConversationId
+      --user string                单聊接收人 userId，CLI 会解析为 openDingTalkId
+      --open-dingtalk-id string    单聊接收人 openDingTalkId
+      --uuid string                幂等键
+      --idempotency-key string     幂等键（--uuid 等价）
+```
+目标参数 `--conversation-id/--group`、`--user`、`--open-dingtalk-id` 三选一。该命令会真实发送表情，执行前必须确认目标和 mediaId。
+
+#### 新增个人收藏表情
+```
+Usage:
+  dws chat emotion favorite [flags]
+Example:
+  dws chat emotion favorite --media-id <mediaId> --name "赞"
+  dws chat emotion favorite --media-id <mediaId> --source-conversation-id <cid> --source-message-id <mid>
+Flags:
+      --media-id string                  待收藏 mediaId (必填)
+      --name string                      表情名称
+      --source-conversation-id string    来源会话 ID，需与 --source-message-id 成对指定
+      --source-message-id string         来源消息 ID，需与 --source-conversation-id 成对指定
+```
+
 ### list-top-conversations (置顶会话)
 
 #### 拉取置顶会话列表
@@ -2129,6 +2174,9 @@ Flags:
 用户说"群公告/发布公告/修改公告/查看公告/定时公告" → `chat group notice create/edit/get/list`
 用户说"批量查消息/按ID查消息/根据消息ID查" → `chat message list-by-ids`
 用户说"批量查消息回复/表情回复/文字回复/消息回应列表" → `chat message list-emotion-replies`
+用户说"查看个人收藏表情/列出我的收藏表情" → `chat emotion list`
+用户说"发送个人收藏表情/发表情包" → `chat emotion send`
+用户说"收藏表情/新增个人收藏表情" → `chat emotion favorite`
 用户说"emoji回应/表情回应/给消息加表情" → `chat message add-emoji`
 用户说"取消emoji回应/移除表情回应" → `chat message remove-emoji`
 用户说"文字表情回应/添加文字表情" → `chat message add-text-emotion`
@@ -2200,6 +2248,7 @@ Flags:
 - `chat message list-emotion-replies` — 批量拉取消息的表情回复和文字回复
 - `chat message add-text-emotion` / `update-text-emotion` / `remove-text-emotion` — 对消息添加、原地更新或移除文字表情回应
 - `chat message create-text-emotion` — 创建文字表情模板，返回 emotionId 供 add-text-emotion 使用
+- `chat emotion list` / `send` / `favorite` — 当前用户个人收藏表情列表、发送和新增；不同于消息 reaction/文字回应
 - `chat category list` — 获取用户自定义会话分组列表
 - `chat category list-conversations` — 拉取指定分组下的会话列表
 - `chat category create-smart` — 创建智能会话分组（可指定群名称关键词和成员作为匹配规则）

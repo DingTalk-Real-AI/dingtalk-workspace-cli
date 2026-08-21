@@ -889,7 +889,7 @@ func TestCrossPlatformCoverageCompareAllWithFlagMigrationsRetainsConsumedReceipt
 	}
 }
 
-func TestCrossPlatformCoverageCompareAllWithFlagMigrationsRequiresCleanupAfterAllReferencesCatchUp(t *testing.T) {
+func TestCrossPlatformCoverageCompareAllWithFlagMigrationsAllowsRetentionOrCleanupAfterAllReferencesCatchUp(t *testing.T) {
 	after := testFlagMigrationSnapshot(true, true)
 	consumed := testFlagMigrationManifest(FlagMigrationConsumed)
 	references := map[string]Snapshot{
@@ -897,11 +897,15 @@ func TestCrossPlatformCoverageCompareAllWithFlagMigrationsRequiresCleanupAfterAl
 		"stable":     after,
 	}
 
-	if report, err := CompareAllWithFlagMigrations(after, references, consumed, consumed); err == nil {
-		t.Fatalf("stale consumed receipt was accepted after every reference caught up: %#v", report)
+	report, err := CompareAllWithFlagMigrations(after, references, consumed, consumed)
+	if err != nil {
+		t.Fatalf("inert consumed receipt was rejected after every reference caught up: %v", err)
+	}
+	if !report.Compatible {
+		t.Fatalf("inert consumed receipt changed compatibility: %#v", report.Comparisons)
 	}
 
-	report, err := CompareAllWithFlagMigrations(after, references, consumed, testEmptyFlagMigrationManifest())
+	report, err = CompareAllWithFlagMigrations(after, references, consumed, testEmptyFlagMigrationManifest())
 	if err != nil {
 		t.Fatalf("cleanup of stale consumed receipt was rejected: %v", err)
 	}

@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-21T09:31:55.740755",
-  "count": 423,
+  "generated_at": "2026-08-20T11:51:44.156046",
+  "count": 416,
   "results": [
     {
       "suite": "semantic",
@@ -2494,32 +2494,14 @@
       "status": "real-ok"
     },
     {
-      "suite": "read",
-      "service": "ding",
-      "command": "+list",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "write",
-      "service": "ding",
-      "command": "+recall-personal",
-      "risk": "high-risk-write",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "ding",
       "command": "+receiver-status",
       "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "write",
-      "service": "ding",
-      "command": "+send-personal",
-      "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按稳定 openDingId 精确查询，严格拒绝缺集合、错型、空集合、坏元素与身份不匹配；current HEAD exact Shortcut 与 owning atomic/raw 的请求身份、1 项结果和完整接收行集合一致。",
+      "availability": "available"
     },
     {
       "suite": "semantic",
@@ -3602,67 +3584,54 @@
       "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-cc",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-executed",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-forms",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-pending",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-submitted",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+my-initiated",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "oa",
       "command": "+search-forms",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按关键字搜索可发起审批定义，严格要求显式 result 数组和稳定 processCode；已完成已知非空与保证零命中证明。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "report",
       "command": "+inbox-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、result.report_list、稳定 reportId 与 hasMore/cursor；current HEAD exact 与 owning atomic 同场景已知页均为 20 项、稳定身份集合和 next cursor 一致，独立未来范围均为 0 且明确终止。终止页回显 cursor 只作已验证收据且不发布 next_token。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "report",
       "command": "+outbox-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证发件箱集合、稳定 reportId 和分页终止证据；current HEAD exact 与 owning atomic 同场景已知页均为 1 项且身份一致，独立未来范围均为 0 并明确终止。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "report",
+      "command": "+report-latest",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "完整验证默认最近 20 天或显式不超过 20 天的发件箱；current HEAD exact 所选稳定 reportId 与 owning atomic 候选和精确详情身份一致，严格详情字段计数双层均为 3。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "report",
+      "command": "+template-search",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "在严格验证完整可用模板集合、稳定 templateId 与名称后执行本地不区分大小写搜索；current HEAD exact 与 owning atomic 完整集合过滤的已知结果均为 1 且身份一致，随机 UUID 查询均为 0。",
+      "availability": "available"
     },
     {
       "suite": "read",

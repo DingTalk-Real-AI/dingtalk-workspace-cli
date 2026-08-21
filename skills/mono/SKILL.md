@@ -49,13 +49,13 @@ cli_version: ">=1.0.15"
 | `chat` | 98 | `dingtalk-chat` |
 | `contact` | 14 | `dingtalk-contact` |
 | `devapp` | 19 | `dingtalk-misc` |
-| `ding` | 4 | `dingtalk-misc` |
+| `ding` | 1 | `dingtalk-misc` |
 | `doc` | 45 | `dingtalk-doc` |
 | `drive` | 28 | `dingtalk-drive` |
 | `mail` | 8 | `dingtalk-mail` |
 | `minutes` | 27 | `dingtalk-minutes` |
-| `oa` | 7 | `dingtalk-misc` |
-| `report` | 2 | `dingtalk-misc` |
+| `oa` | 1 | `dingtalk-misc` |
+| `report` | 4 | `dingtalk-misc` |
 | `sheet` | 2 | `dingtalk-misc` |
 | `todo` | 21 | `dingtalk-todo` |
 | `wiki` | 20 | `dingtalk-wiki` |

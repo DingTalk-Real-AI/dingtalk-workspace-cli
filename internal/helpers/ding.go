@@ -17,6 +17,16 @@ import (
 // remindType: 服务端 API 1=应用内 2=短信 3=电话
 var dingRemindTypeMap = map[string]int{"app": 1, "sms": 2, "call": 3}
 
+var dingPersonalRemindTypeMap = map[string]string{"app": "APP", "sms": "SMS", "call": "PHONE"}
+
+func dingPersonalRemindType(value string) (string, error) {
+	remindType, ok := dingPersonalRemindTypeMap[strings.ToLower(strings.TrimSpace(value))]
+	if !ok {
+		return "", fmt.Errorf("--type must be one of app, sms, call")
+	}
+	return remindType, nil
+}
+
 func newDingCommand() *cobra.Command {
 	// Product-level Agent routing Decl (migrated from selection/ding.json
 	// products.ding). Catalog assembly stamps provenance contract_final.
@@ -232,11 +242,15 @@ func newDingCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "users", "content"); err != nil {
 				return err
 			}
+			remindType, err := dingPersonalRemindType(mustGetFlag(cmd, "type"))
+			if err != nil {
+				return err
+			}
 			users := parseCSVValues(mustGetFlag(cmd, "users"))
 			toolArgs := map[string]any{
 				"receiverOpenDingTalkIds": users,
 				"content":                 mustGetFlag(cmd, "content"),
-				"remindType":              mustGetFlag(cmd, "type"),
+				"remindType":              remindType,
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v
@@ -262,12 +276,16 @@ func newDingCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "group", "message-id", "users"); err != nil {
 				return err
 			}
+			remindType, err := dingPersonalRemindType(mustGetFlag(cmd, "type"))
+			if err != nil {
+				return err
+			}
 			users := parseCSVValues(mustGetFlag(cmd, "users"))
 			toolArgs := map[string]any{
 				"openConversationId":      mustGetFlag(cmd, "group"),
 				"openMessageId":           mustGetFlag(cmd, "message-id"),
 				"receiverOpenDingTalkIds": users,
-				"remindType":              mustGetFlag(cmd, "type"),
+				"remindType":              remindType,
 			}
 			if v, _ := cmd.Flags().GetString("uuid"); v != "" {
 				toolArgs["uuid"] = v

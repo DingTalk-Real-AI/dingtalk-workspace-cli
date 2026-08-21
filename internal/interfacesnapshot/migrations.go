@@ -579,8 +579,8 @@ func evaluateFlagMigrationLifecycle(
 				}
 			}
 			if allReferencesAfter {
-				if exists {
-					return nil, fmt.Errorf("consumed flag migration %s is stale after all references reached the after state", approved.displayKey())
+				if exists && proposed.State != FlagMigrationConsumed {
+					return nil, fmt.Errorf("candidate changed consumed flag migration %s back to pending", approved.displayKey())
 				}
 				continue
 			}
