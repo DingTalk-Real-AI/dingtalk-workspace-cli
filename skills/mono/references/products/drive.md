@@ -730,7 +730,8 @@ get-setting 返回字段说明：
 - `permissionMode` — INHERITED（继承上级）/ INDEPENDENT（独立管理），未知时为 null
 - `shareScope` — `visibility`（PRIVATE/ORGANIZATION/PUBLIC）；`partnerIncluded`、`defaultRole`、`canSearch`、`canRecommend` 仅 ORGANIZATION 有意义；`linkShare`：`requirePassword`（密码明文不返回）、`expireAt`/`expireDays`（未设置为 null）、`forCurrentNode`
 - `policies[]` — 每项含 `code`（策略码）、`name`/`description`（中文名与值语义说明，随行必带）、`value`（当前值）、`inherited`（true=继承上级配置）、`allowedValues`（可设置值域）；未下发或不支持的策略不返回；`node_spread_scope` 仅文件夹类节点返回
-- `value` 按策略分型：开关型（external_share、external_share_manager_only、member_invite_org_only、permission_apply、external_permission_apply、watermark、node_move_forbidden）为 ENABLED/DISABLED；member_invite、comment 为 READER/DOWNLOADER/EDITOR/MANAGER_AND_ABOVE（无 NOBODY）；node_spread、online_content_copy 为 DOWNLOADER/EDITOR/MANAGER_AND_ABOVE 或 NOBODY（无 READER_AND_ABOVE）；node_spread_scope 为 ALL_NODES（限制对所有节点生效）/ PREVIEWABLE_ONLY（仅对可预览的节点生效）
+- `value` 按策略分型：开关型（external_share、external_share_manager_only、member_invite_org_only、permission_apply、external_permission_apply、watermark、node_move_forbidden）为 ENABLED/DISABLED；member_invite、comment 为 READER/DOWNLOADER/EDITOR/MANAGER_AND_ABOVE（无 NOBODY）；node_spread、online_content_copy 为 DOWNLOADER/EDITOR/MANAGER_AND_ABOVE 或 NOBODY（无 READER_AND_ABOVE）；node_spread_scope 为 ALL_NODES（限制对所有文档生效）/ PREVIEWABLE_ONLY（仅对可预览的文档生效）
+- `name`/`description` 示例（文案与产品权限设置页一致）：external_share「添加企业外协作者」：是否允许添加企业外的人为协作者（ENABLED=允许，DISABLED=禁止）；node_spread「谁可以下载、创建副本、打印」：允许哪些角色及以上的用户下载、创建副本、打印；NOBODY=所有人禁止下载、创建副本、打印；node_move_forbidden「禁止移动」：是否禁止移动到其他知识库或团队共享文件夹（ENABLED=禁止移动，DISABLED=允许移动）
 - 方向语义：NOBODY=该操作对所有人禁止；XXX_AND_ABOVE=不低于该角色才允许
 
 ### 文件互联网公开发布

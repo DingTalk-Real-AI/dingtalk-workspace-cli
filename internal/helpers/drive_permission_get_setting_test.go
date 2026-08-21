@@ -159,7 +159,7 @@ func TestCrossPlatformCoverageDrivePermissionGetSettingResultContract(t *testing
 		t.Fatalf("value = %#v", itemProperties["value"])
 	}
 	valueDescription, _ := value["description"].(string)
-	for _, fragment := range []string{"ENABLED/DISABLED", "READER_AND_ABOVE", "NOBODY", "ALL_NODES", "PREVIEWABLE_ONLY", "不低于该角色才允许", "所有人禁止", "限制对所有节点生效", "仅对可预览的节点"} {
+	for _, fragment := range []string{"ENABLED/DISABLED", "READER_AND_ABOVE", "NOBODY", "ALL_NODES", "PREVIEWABLE_ONLY", "不低于该角色才允许", "所有人禁止", "限制对所有文档生效", "仅对可预览的文档"} {
 		if !strings.Contains(valueDescription, fragment) {
 			t.Fatalf("value description missing %q: %s", fragment, valueDescription)
 		}
