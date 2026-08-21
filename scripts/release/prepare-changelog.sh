@@ -64,8 +64,37 @@ release_date="${DWS_RELEASE_DATE:-$(TZ=Asia/Shanghai date +%F)}"
 section="$(mktemp "${TMPDIR:-/tmp}/dws-changelog-section.XXXXXX")"
 output="$(mktemp "${TMPDIR:-/tmp}/dws-changelog-output.XXXXXX")"
 fragments="$(mktemp "${TMPDIR:-/tmp}/dws-changelog-fragments.XXXXXX")"
-cleanup() { rm -f "$section" "$output" "$fragments"; }
+fragment_entries="$(mktemp "${TMPDIR:-/tmp}/dws-changelog-fragment-entries.XXXXXX")"
+cleanup() { rm -f "$section" "$output" "$fragments" "$fragment_entries"; }
 trap cleanup EXIT HUP INT TERM
+
+render_fragments=false
+if [ "$CHANNEL" = "prerelease" ]; then
+  render_fragments=true
+else
+  if [ -e "$CHANGES_DIR" ] && [ ! -d "$CHANGES_DIR" ]; then
+    printf 'release fragments path is not a directory: %s\n' "$CHANGES_DIR" >&2
+    exit 1
+  fi
+  if [ -d "$CHANGES_DIR" ]; then
+    find "$CHANGES_DIR" -mindepth 1 -maxdepth 1 -print | sort >"$fragment_entries"
+    while IFS= read -r entry; do
+      base="${entry##*/}"
+      if [ "$base" = 'README.md' ] && [ -f "$entry" ] && [ ! -L "$entry" ]; then
+        continue
+      fi
+      if [ "$base" = 'released' ] && [ -d "$entry" ] && [ ! -L "$entry" ]; then
+        continue
+      fi
+      render_fragments=true
+      break
+    done <"$fragment_entries"
+  fi
+fi
+
+if [ "$render_fragments" = true ]; then
+  "$SCRIPT_DIR/render-release-fragments.sh" "$CHANGES_DIR" >"$fragments"
+fi
 
 {
   printf '## [%s] - %s\n\n' "$semver" "$release_date"
@@ -73,8 +102,11 @@ trap cleanup EXIT HUP INT TERM
     printf 'This release promotes the sealed `%s` contents to stable.\n\n' "$FROM_BETA"
     printf '### Changed\n\n'
     printf -- '- TODO: summarize the complete user-visible release promoted from `%s`.\n' "$FROM_BETA"
+    if [ -s "$fragments" ]; then
+      printf '\n### Changes since `%s`\n\n' "$FROM_BETA"
+      cat "$fragments"
+    fi
   else
-    "$SCRIPT_DIR/render-release-fragments.sh" "$CHANGES_DIR" >"$fragments"
     cat "$fragments"
   fi
 } > "$section"
@@ -106,14 +138,18 @@ fi
 [ "$inserted" -eq 1 ] || { printf 'CHANGELOG is missing ## [Unreleased]\n' >&2; exit 1; }
 cp "$output" "$CHANGELOG"
 
-if [ "$CHANNEL" = "prerelease" ]; then
+if [ -s "$fragments" ]; then
   archive_dir="$CHANGES_DIR/released/$semver"
   mkdir -p "$archive_dir"
   find "$CHANGES_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.md' ! -name 'README.md' -exec mv {} "$archive_dir"/ \;
 fi
 
 if [ "$CHANNEL" = "stable" ]; then
-  printf 'Prepared CHANGELOG template for %s. Replace TODO, review, commit, and merge it before release.\n' "$VERSION"
+  if [ -s "$fragments" ]; then
+    printf 'Prepared CHANGELOG template and archived post-beta release fragments for %s. Replace TODO, review, commit, and merge the release-seal PR before release.\n' "$VERSION"
+  else
+    printf 'Prepared CHANGELOG template for %s. Replace TODO, review, commit, and merge it before release.\n' "$VERSION"
+  fi
 else
   printf 'Prepared CHANGELOG and archived release fragments for %s. Review, commit, and merge the release-seal PR before release.\n' "$VERSION"
 fi

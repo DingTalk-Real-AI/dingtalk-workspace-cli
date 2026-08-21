@@ -99,7 +99,7 @@ Flags:
 - `--font-line` 为单选：`underline` 置下划线、`line-through` 置删除线、`none` 清除两者
 - 至少需传入一个样式参数。单次调用建议：行数 ≤ 1000，单元格总数 ≤ 5000（服务端硬限 30000）
 - 枚举值按驼峰书写：`autoWrap`、`bold`、`normal`、`center`、`italic` 等
-- 底层走 `set_cell_range` 的 `cellStyles`（仅设样式、保留原值），因此**纯样式设置可直接作用于含合并单元格的区域**，无需先取消合并
+- 纯样式设置只修改样式并保留原值，因此可直接作用于含合并单元格的区域，无需先取消合并
 
 ### 批量设置单元格样式（服务端原子事务）
 ```
@@ -161,7 +161,7 @@ Flags:
 - 所有项在下发前先做本地校验（每项与 `set-style` 一致：至少一项样式字段 + rows ≤ 1000 + rows×cols ≤ 30000 + 枚举合法），**任一项校验不过即整批不下发**
 - 批量上限：最多 **100 个区域**，且**所有区域累计不超过 200000 个单元格**（一次请求要把全部单元格矩阵建好，累计量才是真正的峰值约束）。超限同样是下发前本地报错、整批不执行；请拆成多次调用
 - `--continue-on-error` 透传给服务端：遇失败继续执行其余项（软批量）
-- 底层每项走 `set_cell_range` 的 `cellStyles`/`borderStyles`，因此纯样式批量同样可作用于含合并单元格的区域
+- 批量纯样式设置同样只修改样式并保留原值，可直接作用于含合并单元格的区域
 
 ### 合并单元格
 ```
@@ -304,7 +304,7 @@ dws sheet merge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:C3" --m
 - ★ `range update` / `range set-style` / `range batch-set-style` 单次调用上限（强制）：行数 ≤ 1000，单元格总数（行×列）建议≤ 5000（服务端硬限 30000）；超限请拆分多次调用。CLI 会在调用前做本地预校验，服务端超 30000 会直接报错
 - `range set-style` / `range batch-set-style` 的样式枚举按驼峰书写：`wordWrap` 取 `overflow`/`clip`/`autoWrap`，`fontWeight` 取 `bold`/`normal`，`hAlign` 取 `left`/`center`/`right`/`general`，`vAlign` 取 `top`/`middle`/`bottom`，`fontStyle` 取 `normal`/`italic`；背景色/字体颜色统一使用 `#RRGGBB` 格式
 - `--font-line` 取 `none`/`underline`/`line-through`（单选，非驼峰）：`underline` 置下划线、`line-through` 置删除线、`none` 同时清除；`--font-family` 传字体族名（如 `Arial`/`微软雅黑`）；`--font-style`/`--font-line`/`--font-family` 均为整区共用标量，无 `*-json` 逐格形式
-- `range set-style` / `range batch-set-style` 底层走 `set_cell_range` 的 `cellStyles`（仅设样式、保留原值）；纯样式设置可直接作用于**含合并单元格**的区域，无需先取消合并（写值到合并区仍会被拦截）
+- `range set-style` / `range batch-set-style` 只修改样式并保留原值；可直接作用于**含合并单元格**的区域，无需先取消合并（写值到合并区仍会被拦截）
 - `range update` 支持通过 `cellStyles` 在写值时附带 per-cell 样式，适合少量单元格写值 + 样式一步到位的场景。批量设置整片区域的统一样式时，仍应使用 `set-style` / `batch-set-style`
 - `merge-cells` 合并时只保留左上角单元格的值，其他单元格的值会被丢弃
 - `merge-cells` 的 `--merge-type` 不传时默认为 `mergeAll`（合并所有单元格）

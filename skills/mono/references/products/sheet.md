@@ -54,6 +54,7 @@
 | 图片写入单元格 / 浮动图片 | `write-image` / `media-upload` + `create-float-image` | [sheet-media-image](sheet/sheet-media-image.md) | 用 `range update` 写图片 |
 | 条件高亮 / 标红 / 数据条 / 色阶 | `cond-format` | [sheet-conditional-format](sheet/sheet-conditional-format.md) | 用静态 `set-style` 冒充条件格式 |
 | 单元格评论 / 批注 / @人讨论 | `comment list/create/reply/update/delete` | [sheet-comment](sheet/sheet-comment.md) | 把评论内容写进单元格值 |
+| 查询当前 revision / 复核两个 revision 间的编辑 | `revision-get` / `changeset-get` | [sheet-revision-changeset](sheet/sheet-revision-changeset.md) | 把 revision 当历史快照 version，或把前向 change 当成当前最终值 |
 
 ## 触发必读
 
@@ -63,6 +64,7 @@
 - 涉及合并、冻结、工作表增删改、最后非空边界：先读 [sheet-workbook](./sheet/sheet-workbook.md)。
 - 涉及行列插删、隐藏、尺寸、移动、分组：先读 [sheet-dimension-operations](./sheet/sheet-dimension-operations.md)。
 - 涉及多个写操作一次提交：先读 [sheet-batch-operations](./sheet/sheet-batch-operations.md)。
+- 涉及 revision、changeset、编辑审计、语义变更、撤销或状态重置：先读 [sheet-revision-changeset](./sheet/sheet-revision-changeset.md)。
 
 ## Reference 索引
 
@@ -82,13 +84,14 @@
 | [sheet-filter](sheet/sheet-filter.md) | 全局筛选。当用户说"筛选"、"过滤"、"只看某些行"（未说"筛选视图"）时使用。禁止用"删除不符合条件的行"代替筛选。命令：`filter get`/`create`/`delete`/`update`/`clear-criteria`/`sort` |
 | [sheet-filter-view](sheet/sheet-filter-view.md) | 筛选视图（个人化，不影响协作者）。当用户明确说"筛选视图"时使用，与全局筛选相互独立。命令：`filter-view list`/`create`/`update`/`delete`/`info`/`update-criteria`/`delete-criteria`/`list-criteria`/`get-criteria` |
 | [sheet-conditional-format](sheet/sheet-conditional-format.md) | 条件格式规则。触发词：标红/标黄/高亮/突出/标记/数据条/色阶/颜色随数据变 → **强制**走条件格式，禁止 `range set-style` 静态样式替代。命令：`cond-format list`/`create`/`update`/`delete` |
-| [sheet-export](sheet/sheet-export.md) | 导出表格为 xlsx。当用户说“导出”、“下载xlsx”、“存为Excel”时使用。单命令一站式，CLI 内部自动轮询，禁止 Agent 侧重试。命令：`export` |
+| [sheet-export](sheet/sheet-export.md) | 导出表格为 xlsx。当用户说“导出”、“下载xlsx”、“存为Excel”时使用。单命令会自动等待结果，禁止 Agent 侧重复调用。命令：`export` |
 | [sheet-import](sheet/sheet-import.md) | 导入本地表格文件为在线电子表格。当用户说“导入表格”、“把xlsx传成在线表格”、“上传Excel变在线表格”时使用。Agent 入口为 `import create`，`import` 保留兼容；超时后只用 `import get` 续查，禁止重新创建或用 `drive upload` 代替。命令：`import create`/`import get` |
 | [sheet-chart](sheet/sheet-chart.md) | 浮动图表管理。当用户说“画图/数据可视化/趋势图/对比图/占比图/柱形图/折线图/饼图”时使用。禁止用本地脚本生成静态图片替代。命令：`chart list`/`create`/`update`/`delete` |
 | [sheet-pivot-table](sheet/sheet-pivot-table.md) | 透视表管理。当用户说“透视表/分组汇总/交叉分析/按X统计Y”时使用。禁止用公式拼汇总表替代。命令：`pivot-table list`/`create`/`update`/`delete` |
 | [sheet-comment](sheet/sheet-comment.md) | 单元格评论管理。当用户说“给单元格加评论/批注”、“看某格的评论”、“回复/更新/删除评论”、“@某人讨论这个数据”时使用。评论锚定单元格（`--sheet-id`+`--range`），禁止把评论写进单元格值。命令：`comment list`/`create`/`reply`/`update`/`delete` |
 | sheet-template | 表格模板管理。当用户说“用模板创建表格”、“搜索模板”、“模板列表”时使用。命令：`template list`/`template search`/`template apply` |
-| [sheet-version](./sheet/sheet-version.md) | 表格历史版本管理。当用户说“保存版本/存个快照/看历史版本/版本列表/回滚到某个版本/恢复到之前的表格”时使用。回滚为危险操作，默认二次确认；版本号从 `version list` 获取。命令：`version save`/`version list`/`version revert` |
+| [sheet-version](./sheet/sheet-version.md) | 表格历史版本管理。当用户说“保存版本/存个快照/看历史版本/版本列表/回滚到某个版本或精确 revision/恢复到之前的表格”时使用。回滚为危险操作，默认二次确认；通常从 `version list` 选目标，用户明确要求时也可使用同一工作簿中已确认且仍可恢复的 revision。命令：`version save`/`version list`/`version revert` |
+| [sheet-revision-changeset](./sheet/sheet-revision-changeset.md) | 工作簿 revision 与语义化前向 changeset。当用户说“当前 revision/两个版本之间改了什么/复核编辑/回滚到了哪里”时使用。命令：`revision-get`/`changeset-get` |
 
 ## 全局硬约束
 
@@ -99,12 +102,12 @@
 5. **最后非空坐标只用 A1 语义**：`sheet info` 通过 `nonEmptyRange` 返回 A1/UI 边界；优先使用 `nonEmptyRange.range`，需要追加行/列时使用 `nonEmptyRange.lastRow` / `nonEmptyRange.lastColumn`。不要使用旧的 0-based 字段 `lastNonEmptyRow` / `lastNonEmptyColumn`
 6. **`range update` 维度校验**：`--values` 行列数必须与 `--range` 完全一致；只接 `--values` 一个数据参数，cell `type` 仅支持 `text` / `richText`；整格超链接通过 cell-level `hyperlink` 表达，富文本片段链接才使用 `richText.texts[].type="link"`
 7. **dataValidation 三语义**：不传 `dataValidation` 字段=保留原 DV；`dataValidation:{type:"none"}`=显式清除；`dataValidation:{type:"dropdown"/"checkbox",...}`=覆盖。`{}` 跳过亦保留原 DV
-8. **hyperlink 三语义**：不传 `hyperlink` 字段=保留原整格超链接；`hyperlink:{type:"none"}`=显式清除；`hyperlink:{type:"path"/"sheet"/"range",link,...}`=覆盖。Agent 调用不要用 `hyperlink:null`，避免网关/Schema 过滤 null 字段
+8. **hyperlink 三语义**：不传 `hyperlink` 字段=保留原整格超链接；`hyperlink:{type:"none"}`=显式清除；`hyperlink:{type:"path"/"sheet"/"range",link,...}`=覆盖。不要用 `hyperlink:null`，该写法不能可靠表达清除
 9. **样式写法**：cell-level 样式用 `cellStyles` 或 `range set-style`；richText 片段级样式才用子项 `style`。不要在 `type:"text"` 顶层使用旧 `style` 字段
 10. **用专用命令不用组合模拟**：搜索→`find`、替换→`replace`、清空→`range clear`、排序→`range sort`、填充→`range fill`、复制区域→`range copy-to`、移动区域→`range move-to`、移动行列→`move-dimension`
 11. **大批量 CSV 值/公式用 `csv-put`**（>5 行或 >20 单元格，且无需富格式），不用 `range update`；需要 dataframe/table 语义（列名、dtypes、formats、跨 sheet specs）时用 `table-get` / `table-put`
 12. **单元格图片用 `write-image`**（`range update` 不支持图片参数）
-13. **`export` / `import create` 禁止自行轮询**（CLI 内部已完成渐进式退避，最多 30 次约 5 分钟）；导入超时只按返回的 `next_command` 调用 `import get`，导出失败或超时直接转述，不自动重调
+13. **`export` / `import create` 禁止自行轮询**（命令会自动等待结果，最长约 5 分钟）；导入超时只按返回的 `next_command` 调用 `import get`，导出失败或超时直接转述，不自动重调
 14. **单次调用上限**：`range update` / `set-style` 行数 ≤ 1000，单元格总数建议 ≤ 5000（硬限 30000）
 15. **大整数精度保护**：超过 `9007199254740991` 的整数和长数字标识符必须按文本写入；`table-put` 中不要使用 JSON number 或 `int64` / `uint64` dtype，改用字符串值 + `object` dtype + `formats`/`cellStyles` 的 `@`
 16. **批量写操作推荐用 `batch-update`**：对多个区域重复调用同一写入工具时，推荐合并为单次原子请求（详见 [sheet-batch-operations](./sheet/sheet-batch-operations.md)）；逐个调用非原子，中途失败会留下半成品。结构化 table 例外，`table-put` 不进 `batch-update`
@@ -115,9 +118,10 @@
 - **公式**：支持通过 `range update` 写入、通过 `range read --value-render-option formula` 回读公式文本、通过 `formula-verify` 按错误类型聚合扫描、通过 `raw_value` / `formatted_value` 回读计算结果。只有 `formula-verify` 返回 `status=success`、`hasMore=false`、`totalErrors=0` 时，才能声称本次目标范围未发现公式错误；这仍不等价于业务数值一定正确。
 - **视觉规范**：当前不维护独立的表格视觉方案文档；样式、条件格式、图表分别按对应子文档执行。
 - **结构化 table**：`table-get` / `table-put` 是 table/dataframe 语义入口，不嵌入 `batch-update`；需要原子组合时只组合已支持的单元格/结构写操作。
-- **历史版本**：支持通过 `version save`/`list`/`revert` 手动保存快照、查看版本列表、回滚到指定版本（底层复用 doc 域版本能力）；回滚为危险操作，需二次确认。
+- **历史版本与 revision**：`version save`/`list` 管理选定的历史版本；`version revert` 通常回滚到列表项，也可在用户明确要求时回滚到同一工作簿中已确认且仍可恢复的精确 revision。列表项 `version` 可作为 changeset 查询锚点，但相邻历史版本之间可能包含多个 revision；禁止猜测未确认的 revision。
 - **单元格评论**：支持通过 `comment create`/`list`/`reply`/`update`/`delete` 管理锚定在 `--sheet-id` + `--range` 的评论；评论与单元格值相互独立，详见 [sheet-comment](sheet/sheet-comment.md)。
-- **未暴露或未确认能力**：迷你图、历史 changeset 等能力未在本入口承诺；只有出现稳定 DWS 命令和可回读语义后再补充。
+- **changeset 边界**：返回的是 `EDIT`/`UNDO`/`STATE_RESET` 事件及提交时的前向语义 change，不是统一的单元格 `oldValue/newValue` diff，也不保证代表当前最终状态；需要最终值必须额外回读。
+- **未暴露或未确认能力**：迷你图等能力未在本入口承诺；只有出现稳定 DWS 命令和可回读语义后再补充。
 
 ## URL 粘贴场景
 
@@ -144,7 +148,7 @@ dws sheet import create --file ./report.xls --folder-token <FOLDER_TOKEN> --name
 dws sheet import create --file ./data.xls --workspace <WORKSPACE_ID>
 ```
 - 支持 `.xlsx` / `.xls`，固定产出**在线电子表格**；只新建、不覆盖已有表格
-- CLI 内部自动完成「创建会话→上传→确认→渐进式退避轮询」（最多 30 次约 5 分钟），**禁止 Agent 侧再实现轮询或重试**
+- 命令会自动上传、确认并等待结果（最长约 5 分钟），**禁止 Agent 侧再实现轮询或重试**
 - 导入结果返回 `documentUrl` / `nodeId`，`nodeId` 可直接作为后续 `sheet` 命令的 `--node`
 - **禁止用 `dws drive upload --convert` 代替**：drive upload 只上传文件、不在表格导入闭环内，产出不保证为可编辑在线电子表格
 

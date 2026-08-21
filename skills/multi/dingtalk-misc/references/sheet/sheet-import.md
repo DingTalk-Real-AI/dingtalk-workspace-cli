@@ -6,7 +6,7 @@
 
 - 支持本地 `xlsx` / `xls`，文件上限 20MB
 - `--folder-token` 与 `--workspace` 至少提供一个
-- CLI 内部完成创建会话、上传文件、确认转换和轮询，Agent 不要自行拆分或重试
+- `import create` 会自动上传文件、确认转换并等待结果，Agent 不要自行拆分或重试
 - `drive upload` 只上传二进制文件，不会转换为可编辑的在线表格，不能替代本命令
 
 ## 命令

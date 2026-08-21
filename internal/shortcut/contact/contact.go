@@ -162,8 +162,13 @@ var SearchUser = shortcut.Shortcut{
 // the clean output projection applied to every list command.
 // Field names are probed defensively across candidate keys.
 func searchUserProject(data map[string]any) []map[string]any {
-	raw, ok := data["result"].([]any)
-	if !ok {
+	var raw []any
+	switch result := data["result"].(type) {
+	case []any:
+		raw = result
+	case map[string]any:
+		raw = []any{result}
+	default:
 		return []map[string]any{}
 	}
 	out := make([]map[string]any, 0, len(raw))

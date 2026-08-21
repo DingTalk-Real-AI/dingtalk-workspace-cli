@@ -136,6 +136,53 @@ func TestCrossPlatformCoverageOAAttachmentDeliveredSchemaMatchesExecutableHelp(t
 	}
 }
 
+// TestCrossPlatformCoverageOAAttachmentUploadDeliversCompositeSchema 验证合并后的
+// upload 命令以 composite 接口模式交付：它内部串联 init/commit 两个 RPC 与本地 HTTP PUT，
+// 无法绑定单一 interface_ref，因此不进入上面按 mcp 模式断言的表驱动用例。
+func TestCrossPlatformCoverageOAAttachmentUploadDeliversCompositeSchema(t *testing.T) {
+	snapshot := fullSchemaSnapshotForTest(t)
+	tool := snapshot.Tools["oa.attachment_upload"]
+	if tool == nil {
+		t.Fatal("oa.attachment_upload is missing from final Schema")
+	}
+	if got := schemaContractString(tool["primary_cli_path"]); got != "oa approval attachment upload" {
+		t.Fatalf("primary_cli_path = %q, want oa approval attachment upload", got)
+	}
+	if got := schemaContractString(tool["interface_mode"]); got != "composite" {
+		t.Fatalf("interface_mode = %q, want composite", got)
+	}
+	if got := schemaContractString(tool["availability"]); got != "available" {
+		t.Fatalf("availability = %q, want available", got)
+	}
+	if got := schemaContractString(tool["interface_reason"]); got == "" {
+		t.Fatal("composite upload command must document an interface reason")
+	}
+	if got := schemaContractString(tool["effect"]); got != "write" {
+		t.Fatalf("effect = %q, want write", got)
+	}
+	if got := schemaContractString(tool["risk"]); got != "low" {
+		t.Fatalf("risk = %q, want low", got)
+	}
+	if got := schemaContractString(tool["confirmation"]); got != "not_required" {
+		t.Fatalf("confirmation = %q, want not_required", got)
+	}
+	parameters := schemaContractMap(tool["parameters"])
+	for _, flag := range []string{"file", "file-name", "md5"} {
+		if parameters[flag] == nil {
+			t.Fatalf("upload --%s is missing from final Schema", flag)
+		}
+	}
+	if required, _ := parameters["file"]["required"].(bool); !required {
+		t.Fatalf("upload --file required = %#v, want true", parameters["file"]["required"])
+	}
+	result := schemaContractMap(tool["result"])
+	dataSchema := schemaContractMap(result["data_schema"])
+	properties := schemaContractMap(dataSchema["properties"])
+	if properties["fileId"] == nil {
+		t.Fatal("upload Result data_schema is missing fileId")
+	}
+}
+
 func oaAttachmentResultContract(t *testing.T, tool map[string]any, resultType string, fields map[string]string, sensitivePaths []string) map[string]any {
 	t.Helper()
 	result, ok := tool["result"].(map[string]any)

@@ -2698,9 +2698,11 @@ jobs:
               ;;
             compatibility)
               test -n "$PREVIOUS_STABLE"
-              ./scripts/policy/check-command-compatibility.sh \
+              "$GITHUB_WORKSPACE/tmp/trusted-release-tooling/scripts/release/check-release-compatibility.sh" \
+                --repo-root "$GITHUB_WORKSPACE" \
                 --base-ref HEAD \
-                --stable-ref "$PREVIOUS_STABLE"
+                --stable-ref "$PREVIOUS_STABLE" \
+                --candidate-ref HEAD
               ;;
             e2e)
               bash scripts/dev/test-multi-profile-e2e.sh

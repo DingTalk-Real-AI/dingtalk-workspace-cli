@@ -184,11 +184,11 @@ candidate SHA。
 `check-interface-baseline.sh` 不再作为本地或 CI 的兼容性审批入口，也不能用于批准
 flag 迁移。
 
-Schema compatibility 使用同一组 base、stable、candidate refs 和同一份 base-owned flag
-migration ledger。merge-base-owned checker 分别规范化 merge-base 与 stable 的完整
-Schema，并让 candidate 对两份历史 contract 独立执行检查；它只把已通过 Interface
-lifecycle 的 exact rename 规范化到当前历史副本，不会维护第二份 allowlist，也不会
-放宽其他 Schema 历史字段。
+Schema compatibility 使用同一组 base、stable、candidate refs，以及 base-owned flag
+与 command migration ledgers。merge-base-owned checker 分别规范化 merge-base 与
+stable 的完整 Schema，并让 candidate 对两份历史 contract 独立执行检查；它只把已通过
+Interface lifecycle 的 exact rename、command move 或 flag extraction 规范化到当前历史
+副本，不会维护第二份 allowlist，也不会放宽其他 Schema 历史字段。
 
 For a release-seal branch that archives rendered fragments:
 

@@ -43,6 +43,7 @@ const (
 	EventOAApprovalTaskFinished       = "user_oa_approval_task_finished"
 	EventOAApprovalTaskRedirected     = "user_oa_approval_task_redirected"
 	EventOAApprovalInstanceStarted    = "user_oa_approval_instance_started"
+	EventOAApprovalInstanceCC         = "user_oa_approval_instance_cc"
 	EventOAApprovalInstanceTerminated = "user_oa_approval_instance_terminated"
 	EventOAApprovalInstanceFinished   = "user_oa_approval_instance_finished"
 )
@@ -316,6 +317,17 @@ var definitions = []Definition{
 		EventKey:       EventOAApprovalInstanceStarted,
 		DisplayName:    "发起审批单",
 		Description:    "审批实例已发起",
+		Category:       "oa",
+		RuleType:       "all",
+		Status:         StatusEnabled,
+		RequiredParams: nil,
+		Auth:           map[string]any{"identity": "user"},
+		Public:         true,
+	},
+	{
+		EventKey:       EventOAApprovalInstanceCC,
+		DisplayName:    "审批单抄送",
+		Description:    "审批实例到达抄送节点，发送给被抄送人",
 		Category:       "oa",
 		RuleType:       "all",
 		Status:         StatusEnabled,

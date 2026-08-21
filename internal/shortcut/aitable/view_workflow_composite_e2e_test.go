@@ -7,13 +7,21 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 const workflowDSLFixture = `{"version":"workflow-dsl/v1","name":"提醒","nodes":[]}`
 
+func disableViewPresetSleep(t *testing.T) {
+	t.Helper()
+	testseam.Swap(t, &viewPresetSleep, func(time.Duration) {})
+}
+
 func TestCrossPlatformCoverageViewPresetCreateUpdateAndVerificationE2E(t *testing.T) {
+	disableViewPresetSleep(t)
 	t.Run("create and verify exact config", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 			{text: `{"views":[]}`},
@@ -27,6 +35,32 @@ func TestCrossPlatformCoverageViewPresetCreateUpdateAndVerificationE2E(t *testin
 		}
 		if len(caller.calls) != 3 || caller.calls[1].tool != "create_view" {
 			t.Fatalf("view create calls = %#v", caller.calls)
+		}
+	})
+
+	t.Run("projected columns and hidden flags verify visible field config", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"views":[]}`},
+			{text: `{"data":{"viewId":"v1"}}`},
+			{text: `{"views":[{"viewId":"v1","viewName":"投影","viewType":"Grid","columns":["f1","f2","f3"],"custom":{"hiddenFields":[false,true,false]}}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
+			"--base-id", "base", "--table-id", "table", "--name", "投影", "--view-type", "Grid", "--config", `{"visibleFieldIds":["f1","f3"]}`, "--yes")
+		if err != nil || !strings.Contains(out, `"status": "verified"`) {
+			t.Fatalf("projected view preset = output:%q err:%v", out, err)
+		}
+	})
+
+	t.Run("projected columns and keyed hidden flags verify visible field config", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"views":[]}`},
+			{text: `{"data":{"viewId":"v1"}}`},
+			{text: `{"views":[{"viewId":"v1","viewName":"投影对象","viewType":"Grid","columns":["f1","f2","f3"],"custom":{"hiddenFields":{"f1":true,"f2":false,"f3":false}}}]}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
+			"--base-id", "base", "--table-id", "table", "--name", "投影对象", "--view-type", "Grid", "--config", `{"visibleFieldIds":["f2","f3"]}`, "--yes")
+		if err != nil || !strings.Contains(out, `"status": "verified"`) {
+			t.Fatalf("keyed projected view preset = output:%q err:%v", out, err)
 		}
 	})
 
@@ -52,7 +86,26 @@ func TestCrossPlatformCoverageViewPresetCreateUpdateAndVerificationE2E(t *testin
 	})
 }
 
+func TestCrossPlatformCoverageViewPresetRetriesUntilTerminalStateE2E(t *testing.T) {
+	disableViewPresetSleep(t)
+	steps := []upsertByKeyStep{
+		{text: `{"views":[]}`},
+		{text: `{"data":{"viewId":"v1"}}`},
+	}
+	for attempt := 0; attempt < viewPresetReadbackAttempts-1; attempt++ {
+		steps = append(steps, upsertByKeyStep{text: `{"views":[]}`})
+	}
+	steps = append(steps, upsertByKeyStep{text: `{"views":[{"viewId":"v1","viewName":"X","viewType":"Grid","config":{"visibleFieldIds":["f1"]}}]}`})
+	caller := &upsertByKeyCaller{steps: steps}
+	out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",
+		"--base-id", "base", "--table-id", "table", "--name", "X", "--view-type", "Grid", "--config", `{"visibleFieldIds":["f1"]}`, "--yes")
+	if err != nil || !strings.Contains(out, `"status": "verified"`) || len(caller.calls) != viewPresetReadbackAttempts+2 {
+		t.Fatalf("eventual view preset = output:%q err:%v calls:%#v", out, err, caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageViewPresetAmbiguousOrMismatchedIsNotSuccessE2E(t *testing.T) {
+	disableViewPresetSleep(t)
 	t.Run("duplicate name stops before write", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"views":[{"viewId":"v1","viewName":"X"},{"viewId":"v2","viewName":"X"}]}`}}}
 		out, err := runAITableCompositeCLI(t, caller, "+view-preset-apply",

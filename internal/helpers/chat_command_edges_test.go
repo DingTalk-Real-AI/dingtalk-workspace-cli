@@ -243,6 +243,155 @@ func TestCrossPlatformCoverageChatGroupUpdateIconRejectsBlankMediaID(t *testing.
 	}
 }
 
+func TestChatGroupRoleSetUserAcceptsSingleRoleIDAndLegacyRoleIDs(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "public single role id",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-id=r1"},
+			want: []string{"r1"},
+		},
+		{
+			name: "hidden legacy role ids",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids=r1,r2"},
+			want: []string{"r1", "r2"},
+		},
+		{
+			name: "hidden legacy empty role ids",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids="},
+			want: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			if err := runChatCoverageCommand(t, caller, tc.args...); err != nil {
+				t.Fatal(err)
+			}
+			if caller.calls != 1 {
+				t.Fatalf("tool calls = %d, want 1", caller.calls)
+			}
+			if got := caller.args["openRoleIds"]; !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("openRoleIds = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestChatGroupRoleSetUserRejectsConflictingRoleFlags(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	caller := &scriptedToolCaller{}
+	err := runChatCoverageCommand(t, caller,
+		"group-role", "set-user", "--group=cid", "--user=D1", "--role-id=r1", "--role-ids=r2")
+	if err == nil {
+		t.Fatal("set-user accepted --role-id with --role-ids, want validation error")
+	}
+	if !strings.Contains(err.Error(), "--role-id 与 --role-ids 不能同时指定") {
+		t.Fatalf("error = %v", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("tool calls = %d, want 0", caller.calls)
+	}
+}
+
+func TestChatGroupRoleSetUserRejectsMultiplePublicRoleIDs(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	caller := &scriptedToolCaller{}
+	err := runChatCoverageCommand(t, caller,
+		"group-role", "set-user", "--group=cid", "--user=D1", "--role-id=r1,r2")
+	if err == nil {
+		t.Fatal("set-user accepted multiple --role-id values, want validation error")
+	}
+	if !strings.Contains(err.Error(), "--role-id 只允许指定一个群身份") {
+		t.Fatalf("error = %v", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("tool calls = %d, want 0", caller.calls)
+	}
+}
+
+func TestChatGroupRoleSetUserRejectsMissingOrEmptyPublicRoleID(t *testing.T) {
+	previousDeps, previousArgs := deps, os.Args
+	os.Args = []string{"dws", "chat"}
+	t.Cleanup(func() { deps, os.Args = previousDeps, previousArgs })
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "missing public role id",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1"},
+			want: "role-id",
+		},
+		{
+			name: "empty public role id",
+			args: []string{"group-role", "set-user", "--group=cid", "--user=D1", "--role-id="},
+			want: "--role-id 不能为空",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &scriptedToolCaller{}
+			err := runChatCoverageCommand(t, caller, tc.args...)
+			if err == nil {
+				t.Fatal("set-user accepted a missing or empty --role-id, want validation error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+			if caller.calls != 0 {
+				t.Fatalf("tool calls = %d, want 0", caller.calls)
+			}
+		})
+	}
+}
+
+func TestChatGroupRoleSetUserRoleIDResolverDefensiveBranches(t *testing.T) {
+	newCommand := func(t *testing.T) *cobra.Command {
+		t.Helper()
+		cmd := &cobra.Command{}
+		cmd.Flags().String("role-id", "", "")
+		cmd.Flags().String("role-ids", "", "")
+		return cmd
+	}
+
+	t.Run("legacy flag without pre-run promotion", func(t *testing.T) {
+		cmd := newCommand(t)
+		if err := cmd.Flags().Set("role-ids", "r1,r2"); err != nil {
+			t.Fatal(err)
+		}
+		got, err := resolveChatGroupRoleSetUserRoleIDs(cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"r1", "r2"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("role IDs = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("no role flag", func(t *testing.T) {
+		_, err := resolveChatGroupRoleSetUserRoleIDs(newCommand(t))
+		if err == nil || !strings.Contains(err.Error(), "缺少必填参数 --role-id") {
+			t.Fatalf("error = %v, want missing --role-id validation", err)
+		}
+	})
+}
+
 func TestCrossPlatformCoverageChatCommandValidationAndSuccessEdges(t *testing.T) {
 	previousDeps, previousArgs := deps, os.Args
 	os.Args = []string{"dws", "chat"}
@@ -293,7 +442,7 @@ func TestCrossPlatformCoverageChatCommandValidationAndSuccessEdges(t *testing.T)
 		{"group", "audit-join-validation", "--conversation-id=cid", "--record-id=1", "--applicant=D1", "--inviter=D2", "--status=AuditApprove", "--description=ok"},
 		{"mark-read", "--conversation-id=cid", "--message-id=mid"},
 		{"text", "translate", "--query=hello", "--to=zh_CN"},
-		{"group-role", "set-user", "--group=cid", "--user=D1", "--role-ids=r1"},
+		{"group-role", "set-user", "--group=cid", "--user=D1", "--role-id=r1"},
 		{"group-role", "remove-user", "--group=cid", "--user=D1", "--role-ids=r1"},
 		{"group-role", "query-user", "--group=cid", "--user=D1"},
 		{"group", "set-admin", "--group=cid", "--users=u1,D1"},
@@ -523,7 +672,7 @@ func TestCrossPlatformCoverageChatIMIDMigrationRequiredFlagErrors(t *testing.T) 
 		{name: "role add missing conversation", path: []string{"group-role", "add"}, flag: map[string]string{"name": "role"}, want: "conversation-id"},
 		{name: "role update missing conversation", path: []string{"group-role", "update"}, flag: map[string]string{"role-id": "r1", "name": "role"}, want: "conversation-id"},
 		{name: "role remove missing conversation", path: []string{"group-role", "remove"}, flag: map[string]string{"role-id": "r1"}, want: "conversation-id"},
-		{name: "role set user missing conversation", path: []string{"group-role", "set-user"}, flag: map[string]string{"user": "D1", "role-ids": "r1"}, want: "conversation-id"},
+		{name: "role set user missing conversation", path: []string{"group-role", "set-user"}, flag: map[string]string{"user": "D1", "role-id": "r1"}, want: "conversation-id"},
 		{name: "role remove user missing conversation", path: []string{"group-role", "remove-user"}, flag: map[string]string{"user": "D1", "role-ids": "r1"}, want: "conversation-id"},
 		{name: "role query user missing conversation", path: []string{"group-role", "query-user"}, flag: map[string]string{"user": "D1"}, want: "conversation-id"},
 		{name: "bots missing legacy group", path: []string{"group", "bots"}, want: "group"},

@@ -32,10 +32,16 @@ func ValidateInputSchema(params map[string]any, schema map[string]any) error {
 	if params == nil {
 		params = map[string]any{}
 	}
-	if err := validateSchemaValue("$", params, schema); err != nil {
+	if err := ValidateJSONSchemaValue(params, schema); err != nil {
 		return apperrors.NewValidation(fmt.Sprintf("input schema validation failed: %v", err))
 	}
 	return nil
+}
+
+// ValidateJSONSchemaValue validates one decoded JSON value against the
+// required/type/enum/properties/items subset used by reviewed CLI contracts.
+func ValidateJSONSchemaValue(value any, schema map[string]any) error {
+	return validateSchemaValue("$", value, schema)
 }
 
 func validateSchemaValue(path string, value any, schema map[string]any) error {

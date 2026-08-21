@@ -192,6 +192,7 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
 	updated.UserName = data.UserName
+	updated.RepairOrganizationMirror = data.RepairOrganizationMirror
 	if updated.CorpName == "" {
 		updated.CorpName = data.CorpName
 	}
@@ -239,6 +240,7 @@ func (p *OAuthProvider) refreshViaMCP(ctx context.Context, data *TokenData) (*To
 	updated.CorpID = data.CorpID
 	updated.UserID = data.UserID
 	updated.UserName = data.UserName
+	updated.RepairOrganizationMirror = data.RepairOrganizationMirror
 	if updated.CorpName == "" {
 		updated.CorpName = data.CorpName
 	}

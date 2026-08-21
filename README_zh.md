@@ -19,7 +19,7 @@
 </p>
 
 > [!IMPORTANT]
-> **共创阶段**：本项目涉及钉钉企业数据访问，需企业管理员授权后方可使用。欢迎加入钉钉 DWS 共创群获取支持与最新动态。详见下方 [开始使用](#开始使用)。
+> **钉钉 DWS CLI 已全面开放，欢迎使用**：本项目涉及钉钉企业数据访问，需企业管理员授权后方可使用。欢迎加入钉钉 DWS 共创群获取支持与最新动态。详见下方 [开始使用](#开始使用)。
 >
 > <img src="https://img.alicdn.com/imgextra/i1/O1CN01WJyAsJ1prD2ovQACM_!!6000000005413-2-tps-718-720.png" alt="dws 开源沟通群二维码" width="150">
 
@@ -476,7 +476,7 @@ multi setup 或 upgrade 后，DWS 会把官方 bundle 快照和统一所有权�
 <details>
 <summary><strong>个人事件订阅</strong> — 实时接收钉钉消息，驱动事件触发的 Agent</summary>
 
-`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应、群生命周期，以及六个 OA 审批任务/实例事件。
+`dws event consume` 使用当前 OAuth 登录用户建立托管的 Stream WebSocket 长连接，并把每条事件以 NDJSON 一行输出到 stdout。当前公开目录覆盖指定范围和全量单聊/群消息、指定发送人、已读/撤回/表情回应、群生命周期，以及七个 OA 审批任务/实例事件。
 
 默认 `ndjson`、`json`、`pretty` 输出保留兼容 transport envelope（`type`、`event_type`、字符串 `data`、`headers`），`compact` 继续沿用原 processor。Agent 或新脚本显式加 `--flatten` 后，输出稳定的顶层业务字段。`--format` 控制 JSON 序列化，`--flatten` 控制数据结构，且不能与 `-f raw` 或 `--debug-raw-events` 同时使用。
 
@@ -524,12 +524,13 @@ dws event consume user_im_group_disbanded --group <openConversationId> --flatten
 dws event +listen-im --kind sender --user <userId> \
   --events message,read,recall -f ndjson
 
-# 一个进程监听全部六个公开 OA 审批事件
+# 一个进程监听全部七个公开 OA 审批事件
 dws event consume \
   user_oa_approval_task_created \
   user_oa_approval_task_finished \
   user_oa_approval_task_redirected \
   user_oa_approval_instance_started \
+  user_oa_approval_instance_cc \
   user_oa_approval_instance_terminated \
   user_oa_approval_instance_finished \
   --flatten -f ndjson

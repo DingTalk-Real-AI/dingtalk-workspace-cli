@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -313,10 +314,43 @@ func TestCrossPlatformCoverageTodoCreateAndUpdate(t *testing.T) {
 	}
 	updateSuccess := &todoCoverageCaller{responses: map[string][]string{
 		"update_todo_task": {`{"success":true}`},
-		"get_todo_detail":  {`{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","subject":"x","priority":40}}}`},
+		"get_todo_detail":  {`{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","subject":"x","priority":40,"dueTime":1786932000000}}}`},
 	}}
-	if err := runTodoCoverage(t, Update, updateSuccess, "--task-id", "task-1", "--title", "x", "--priority", "40", "--yes"); err != nil {
+	if err := runTodoCoverage(t, Update, updateSuccess, "--task-id", "task-1", "--title", "x", "--priority", "40", "--due", todoCoverageTime, "--yes"); err != nil {
 		t.Fatal(err)
+	}
+	if todoUpdateFieldMatches("dueTime", float64(1786932000000), int64(1786932000001)) {
+		t.Fatal("different dueTime milliseconds matched")
+	}
+	for _, tc := range []struct {
+		value any
+		want  int64
+		ok    bool
+	}{
+		{value: int(40), want: 40, ok: true},
+		{value: int64(1786932000000), want: 1786932000000, ok: true},
+		{value: float64(40), want: 40, ok: true},
+		{value: json.Number("40"), want: 40, ok: true},
+		{value: " 40 ", want: 40, ok: true},
+		{value: float64(math.MinInt64), want: math.MinInt64, ok: true},
+		{value: 1786932000000.5},
+		{value: math.NaN()},
+		{value: math.Inf(1)},
+		{value: math.Inf(-1)},
+		{value: float64(math.MaxInt64)},
+		{value: 1e300},
+		{value: -1e300},
+		{value: json.Number("not-a-number")},
+		{value: "not-a-number"},
+		{value: true},
+	} {
+		got, ok := todoExactInteger(tc.value)
+		if got != tc.want || ok != tc.ok {
+			t.Fatalf("todoExactInteger(%#v) = %d/%v, want %d/%v", tc.value, got, ok, tc.want, tc.ok)
+		}
+	}
+	if todoUpdateFieldMatches("unknown", 1, 1) {
+		t.Fatal("unknown update field matched")
 	}
 }
 

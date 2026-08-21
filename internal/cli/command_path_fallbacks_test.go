@@ -172,7 +172,7 @@ func TestCrossPlatformCoverageCommandPathFallbackAuditCoverage(t *testing.T) {
 		"chat +send-file":                  {"chat +messages-send", "chat message send"},
 		"chat +send-image":                 {"chat +messages-send", "chat message send"},
 		"chat +send-media":                 {"chat +messages-send", "chat message send"},
-		"oa +list-processes":               {"oa +list-forms", "oa +my-initiated", "oa approval list-initiated"},
+		"oa +list-processes":               {"oa +search-forms", "oa approval list-submitted", "oa approval list-initiated"},
 		"doc +template":                    {"doc +template-list", "doc +template-search", "doc +create-from-template"},
 		"doc +version":                     {"doc +history-list", "doc +history-save", "doc +history-revert"},
 	}

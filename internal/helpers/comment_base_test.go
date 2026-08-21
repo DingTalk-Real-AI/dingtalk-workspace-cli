@@ -135,6 +135,29 @@ func TestCrossPlatformCoverageCommentReactReplyForcesEmojiTrue(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageCommentReactionsRejectUnsupportedValuesBeforeRPC(t *testing.T) {
+	for _, surface := range []string{"doc", "sheet"} {
+		for _, test := range []struct {
+			name string
+			args []string
+		}{
+			{name: "react unicode", args: []string{"comment", "react-reply", "--node", "node-1", "--comment-key", "comment-1", "--reaction", "😄"}},
+			{name: "react garbage", args: []string{"comment", "react-reply", "--node", "node-1", "--comment-key", "comment-1", "--reaction", "乱码"}},
+			{name: "reply unicode", args: []string{"comment", "reply", "--node", "node-1", "--comment-key", "comment-1", "--content", "👏", "--emoji"}},
+		} {
+			t.Run(surface+"/"+test.name, func(t *testing.T) {
+				caller := &docCommentMutationCaller{}
+				if err := executeCommentBaseCommand(t, caller, surface, test.args...); err == nil {
+					t.Fatal("unsupported reaction accepted")
+				}
+				if len(caller.calls) != 0 {
+					t.Fatalf("unsupported reaction reached RPC: %#v", caller.calls)
+				}
+			})
+		}
+	}
+}
+
 func TestCrossPlatformCoverageCommentReactReplyGuidesDingTalkEmojiNames(t *testing.T) {
 	for _, surface := range []struct {
 		name string

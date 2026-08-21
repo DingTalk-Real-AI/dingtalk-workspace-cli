@@ -78,6 +78,7 @@ func TestCrossPlatformCoverageOAAttachmentDeliveryPolicy(t *testing.T) {
 			"dws oa approval attachment download-url",
 			"dws oa approval attachment authorize-download",
 			"dws oa approval attachment authorize-preview",
+			"dws oa approval attachment upload",
 			"临时下载链接",
 			"最多 10",
 			"最多 20",

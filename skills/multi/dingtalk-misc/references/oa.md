@@ -31,13 +31,14 @@ Flags:
       --instance-id string   审批实例 ID (必填)
 ```
 
-### 审批附件授权与下载
+### 审批附件授权、上传与下载
 
 先从 `approval detail` 的返回中取得审批实例 `processInstanceId`、附件 `fileId`，以及授权下载所需的 `spaceId`。根据目标选择命令：
 
 - 需要单个附件的临时下载链接：`attachment download-url`
 - 已有钉盘 `spaceId/fileId`，需要为当前用户批量开通下载权限：`attachment authorize-download`
 - 需要在审批场景内批量预览附件：`attachment authorize-preview`
+- 需要把本地文件上传为审批附件（自动完成初始化+PUT+提交）：`attachment upload`
 
 #### 获取审批附件临时下载链接
 
@@ -81,6 +82,21 @@ Flags:
 ```
 
 该命令只授权审批场景内的附件预览，不等同于下载授权。附件来自审批评论时增加 `--with-comment-attachment`。
+
+#### 上传本地文件为审批附件
+
+```
+Usage:
+  dws oa approval attachment upload [flags]
+Example:
+  dws oa approval attachment upload --file ./合同.pdf --format json
+Flags:
+      --file string        本地文件路径 (必填)
+      --file-name string   完整文件名，例如 合同.pdf (可选，默认取本地文件名)
+      --md5 string         文件原始字节内容的 MD5，32位十六进制字符串 (可选，不传则自动计算)
+```
+
+该命令一条命令完成审批附件上传的全部三步：先调用 `oa/init_attachment_upload_info` 初始化获取 OSS 上传地址与签名凭证，再将本地文件二进制 HTTP PUT 上传到 OSS，最后调用 `oa/commit_attachment_upload_info` 提交入库；返回结果包含 fileId、spaceId、fileName、fileSize、fileType。`--file-name` 不传时默认使用本地文件名，`--md5` 不传时自动根据文件内容计算，无需手动初始化或提交。
 
 ### 同意审批
 
@@ -295,7 +311,7 @@ Flags:
 
 - **严禁跳过 `form-schema`。** 未拿到表单 Schema 前，不得调用 `create-instance`。
 - **严禁复用旧的 Schema 结果。** 每次发起实例前都必须重新调用 `form-schema`，模板可能已被修改。
-- **严禁在存在不支持必填控件时强行发起。** 若 `form-schema` 返回的必填控件中有不支持类型（如附件等），直接告知用户不支持通过 CLI 发起。
+- **严禁在存在不支持必填控件时强行发起。** 若 `form-schema` 返回的必填控件中有不支持类型（如计算公式、流水号、OCR 等），直接告知用户不支持通过 CLI 发起。**注意：附件控件 `DDAttachment` 已支持通过 CLI 提交**，先用 `dws oa approval attachment upload --file <path>` 获取字段再组装为 value 提交，不属于不支持类型。
 - **严禁把 `form-schema` 返回的 `content` 当成可直接提交的 payload 模板。**
 - **严禁把姓名直接写进 `approvers`、`ccList`、`directAppointedApprovers`、`targetSelectActioners` 或表单人员控件。** 必须先通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 转成 userId。
 - **严禁在未得到用户确认前直接执行真实提单。**
@@ -414,7 +430,7 @@ Flags:
 | 部门控件 | `DepartmentField` | 部门 ID | `"12345"` | 多部门传 JSON 数组；multiple=true 时支持多选                      |
 | 省市区控件 | `AddressField` | JSON 数组字符串 | `'["浙江省","杭州市","西湖区"]'` | 三级联动；needDetail=true 时末尾加详细地址                         |
 | 图片控件 | `DDPhotoField` | URL 数组转义字符串 | `"[\"http://example.com/img1.jpg\"]"` | 支持 URL 直接提交；**不支持本地文件上传** |
-| 附件控件 | `DDAttachment` | JSON 数组转义字符串 | `"[{\"spaceId\":\"xxx\",\"fileName\":\"a.pdf\",\"fileSize\":\"333\",\"fileType\":\"pdf\",\"fileId\":\"xxx\"}]"` | **当前不支持通过 CLI 提交**，需钉盘上传接口获取 fileId 等字段 |
+| 附件控件 | `DDAttachment` | JSON 数组转义字符串 | `"[{\"spaceId\":\"xxx\",\"fileName\":\"a.pdf\",\"fileSize\":\"333\",\"fileType\":\"pdf\",\"fileId\":\"xxx\"}]"` | **支持通过 CLI 提交**：先用 `dws oa approval attachment upload --file <path>` 获取 fileId/spaceId/fileName/fileSize/fileType，再组装为 DDAttachment value 提交 |
 | 评分控件 | `StarRatingField` | 数字字符串 | `"4"` | limit 控制最大星数（默认 5）                                    |
 | 关联审批单 | `RelateField` | 审批实例 ID | `"q-xxx"` | 须为当前组织下已存在的实例                                         |
 | 明细控件 | `TableField` | JSON 数组字符串 | `'[{"子控件名":"值1"},{"子控件名":"值2"}]'` | 不可嵌套 TableField；不可含 DDMultiSelectField/DDPhotoField；最大 100 行 |
@@ -429,8 +445,18 @@ Flags:
 - `CalculateField`（计算公式）— 由系统自动计算
 - `SeqNumberField`（流水号）— 由系统自动生成
 - `OcrTextField` / `OcrIdCardField`（OCR 识别）— 需要客户端交互
-- **`DDAttachment`（附件控件）— 当前不支持通过 CLI 提交**，value 需要 spaceId、fileName、fileSize、fileType、fileId 字段，须通过钉盘上传附件接口获取
 - **套件类控件（暂不支持）** — `InvoiceField`（发票）、`RecipientAccountField`（收款账户）等业务套件控件当前暂不支持通过 CLI 发起，包含这些控件的审批模板请直接在钉钉客户端操作
+
+> **`DDAttachment`（附件控件）已支持通过 CLI 提交：** 采用两步流程——先用 `dws oa approval attachment upload --file <path>` 上传本地文件，返回 `fileId`、`spaceId`、`fileName`、`fileSize`、`fileType`；再将这些字段组装为 DDAttachment value（JSON 数组转义字符串）随 `create-instance` 提交。示例：
+>
+> ```bash
+> # 1) 上传附件，拿到 fileId/spaceId/fileName/fileSize/fileType
+> dws oa approval attachment upload --file ./a.pdf
+> # 2) 组装 value 后先向用户展示提单汇总；确认前不要追加 --yes
+> dws oa approval create-instance --process-code PROC-xxx \
+>   --form-values '{"附件":"[{\"spaceId\":\"163xxx\",\"fileName\":\"a.pdf\",\"fileSize\":\"333\",\"fileType\":\"pdf\",\"fileId\":\"643xxx\"}]"}'
+> # 用户确认模板、表单值、流程路径和人员后，才可在同一命令末尾追加 --yes
+> ```
 
 > **部分支持的控件：** `DDPhotoField`（图片控件）**支持通过 URL 直接提交**（见上方速查表），仅不支持本地文件上传（CLI 未封装钉盘 CDN 上传流程）。若用户只有本地文件，需告知在钉钉客户端补充。
 
@@ -638,6 +664,30 @@ Flags:
       --query string   查询关键词，可选
 ```
 
+### 以管理员身份查询审批实例列表
+
+> **IMPORTANT：** 需要当前用户具备 OA 审批管理员权限，否则查不到数据。只查个人维度的审批时改用 `list-pending` / `list-executed` / `list-initiated` / `list-cc`。
+
+```
+Usage:
+  dws oa approval list-by-admin [flags]
+Example:
+  dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --cursor 0 --limit 20
+  dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --statuses RUNNING,COMPLETED --user-ids "userId1,userId2"
+  # 高级用法：传入完整 JSON（startTime/endTime 为 yyyy-MM-dd HH:mm:ss 格式字符串）
+  dws oa approval list-by-admin --request '{"processCode":"PROC-xxx","startTime":"2026-03-10 00:00:00","cursor":0,"pageSize":20}'
+Flags:
+      --process-code string   审批模板 processCode（简单模式必填）
+      --start string          开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)（简单模式必填）
+      --end string            结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)（可选）
+      --cursor string         分页游标，首次传 0（默认 "0"）
+      --limit string          每页大小，最大 20（默认 "20"）
+      --user-ids string       按发起人 userId 过滤，多个用逗号分隔（可选）
+      --statuses string       按审批状态过滤，多个用逗号分隔（可选，如 RUNNING、TERMINATED、COMPLETED）
+      --request string        完整请求体 JSON（高级模式，与简单模式互斥）
+```
+MCP 工具: `get_process_instances_by_admin`；参数封装在 `ProcessInstanceListQueryRequest`（processCode、startTime 必填，endTime、userIds、statuses、cursor、pageSize 可选；startTime/endTime 为 `yyyy-MM-dd HH:mm:ss` 格式字符串，简单模式的 ISO-8601 入参会自动转换）。processCode 可从 `list-forms` / `search-forms` 获取，返回的 processInstanceId 可用于 `detail` / `records` / `tasks`。
+
 ### 转交审批任务
 ```
 Usage:
@@ -724,6 +774,7 @@ Flags:
 用户说"下载审批附件/获取审批附件下载链接" → `approval attachment download-url`（需 --instance-id 和 --file-id；评论附件增加 --with-comment-attachment）
 用户说"授权下载审批钉盘文件/批量开通附件下载权限" → `approval attachment authorize-download`（需 --file-infos，最多 10 项）
 用户说"预览审批附件/批量授权预览附件" → `approval attachment authorize-preview`（需 --instance-id 和 --file-ids，最多 20 项；评论附件增加 --with-comment-attachment）
+用户说"上传审批附件/把文件上传为审批附件" → `approval attachment upload`（需 --file；可选 --file-name 默认本地文件名、--md5 自动计算；一条命令完成 init+put+commit）
 用户说"同意审批/批准" → 先 `tasks` 获取 taskId，再 `approve`
 用户说"拒绝审批/驳回" → 先 `tasks` 获取 taskId，再 `reject`
 用户说"撤回审批/取消审批" → `approval revoke`
@@ -757,6 +808,7 @@ Flags:
 用户说"抄送我的审批单/抄送我的XX审批/CC我的XX/查抄送我的XX" → `approval list-cc`，将 XX 作为 `--query` 关键字传入（可搜索表单名称或表单详情内容）
   - 示例："查抄送我的补卡审批单" → `approval list-cc --query 补卡`
   - 示例："抄送我的审批单"（无关键词）→ `approval list-cc`
+用户说"以管理员身份查审批/全员审批单/统计某个模板的审批单/企业内审批记录" → `approval list-by-admin`（需 --process-code 和 --start，且当前用户需具备 OA 管理员权限）
 用户说"转交审批/转交任务" → `approval redirect-task`（需 --task-id 和 --to-actioner-id）
 用户说"评论审批/添加评论/写评论" → `approval oa-comments`（需 --instance-id 和 --content）
 用户说"抄送审批/添加抄送人" → `approval oa-cc-noticer`（需 --instance-id 和 --users）
@@ -814,6 +866,9 @@ dws oa approval list-executed --limit <pageSize> --page <pageNumber> --query 关
 dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query 关键词 --format json
 # 11. 抄送我的审批单
 dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词 --format json
+
+# 11b. 以管理员身份跨用户查询某模板的审批实例列表（需 OA 管理员权限）
+dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --cursor 0 --limit 20 --format json
 
 # 12. 转交审批任务（taskId 来自 tasks，toActionerId 来自 aisearch person）
 dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --format json
@@ -879,6 +934,7 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 | `create-instance` | `result`（processInstanceId） | detail / tasks / records / revoke 等的 --instance-id，可跟踪已发起的审批 |
 | `ding-info` | `userId` | ding message send 的 --users（多个逗号拼接）；**robotCode 优先走 `$DINGTALK_DING_ROBOT_CODE` 环境变量，content 由 agent 根据审批上下文撰写；返回空时报错并停止** |
 | `revert-activities` | `activityId`, `revertAction`, `activityName` | revert-task 的 --target-activity-id 和 --action；**返回空时必须告知用户"无可回退节点"** |
+| `list-by-admin` | `processInstanceId` | detail / records / tasks 的 --instance-id |
 
 ## 注意事项
 
@@ -900,6 +956,7 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 - `--remark` 审批意见虽为可选，但建议填写以留存审批痕迹
 - `list-initiated` 的 `--process-code` 可从 `list-forms`、`search-forms` 或 `detail` 返回中提取
 - 已知表单名称关键字时优先用 `search-forms`；需枚举全部表单时用 `list-forms`
+- `list-by-admin` 需要当前用户具备 OA 审批管理员权限，否则查不到数据；只查个人维度审批时改用 `list-pending` / `list-executed` / `list-initiated` / `list-cc`。高级模式 `--request` 中 `startTime`/`endTime` 为 `yyyy-MM-dd HH:mm:ss` 格式字符串（不再接受毫秒时间戳）；`pageSize` 上限为 20，超过会报错（简单模式为 `--limit`）
 - 催办必须两步串联：`ding-info` 仅返回被催办人 `userId`，不返回 robotCode/content；需再调用 `dws ding message send`，其中 `--robot-code` 优先使用环境变量 `$DINGTALK_DING_ROBOT_CODE`，若无则向用户确认；`--content` 由 agent 根据审批上下文撰写催办文案；**严禁跳过 `ding-info` 直接猜测 userId**
 - 催办文案建议格式：`"请尽快审批《{表单名}》（提交人：{发起人}，提交时间：{时间}）"`
 - `ding-info` 返回空或报错时，必须明确告知用户"无法获取该任务的被催办人信息"并停止
@@ -933,12 +990,6 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws oa +list-cc` | read | 获取抄送当前用户的审批单列表 |
-| `dws oa +list-executed` | read | 获取当前用户已经处理过的审批单列表 |
-| `dws oa +list-forms` | read | 获取当前用户可见的审批表单列表 |
-| `dws oa +list-pending` | read | 查询待我处理的审批（时间范围为 epoch 毫秒） |
-| `dws oa +list-submitted` | read | 获取当前用户已发起的审批单列表 |
-| `dws oa +my-initiated` | read | 列出我发起（提交）的审批单据 |
 | `dws oa +search-forms` | read | 按关键字模糊搜索当前用户可见的审批表单 |
 <!-- VISIBLE_SHORTCUTS_END -->
 

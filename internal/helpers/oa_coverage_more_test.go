@@ -131,6 +131,51 @@ func TestCrossPlatformCoverageOAApprovalCreateInstanceRequiresExplicitYes(t *tes
 	}
 }
 
+func TestCrossPlatformCoverageOAApprovalListByAdminMapsSimpleOptions(t *testing.T) {
+	caller := &scriptedToolCaller{}
+	err := executeOACommand(t, caller,
+		"approval", "list-by-admin",
+		"--process-code", "PROC",
+		"--start", "2030-01-01T09:00:00+08:00",
+		"--end", "2030-01-01T10:00:00+08:00",
+		"--cursor", "5",
+		"--limit", "20",
+		"--user-ids", "user-1,user-2",
+		"--statuses", "RUNNING,COMPLETED",
+	)
+	if err != nil {
+		t.Fatalf("list by admin: %v", err)
+	}
+	if caller.server != "oa" || caller.tool != "get_process_instances_by_admin" {
+		t.Fatalf("called %s/%s, want oa/get_process_instances_by_admin", caller.server, caller.tool)
+	}
+	request, ok := caller.args["ProcessInstanceListQueryRequest"].(map[string]any)
+	if !ok {
+		t.Fatalf("request payload = %#v", caller.args)
+	}
+	if got := request["processCode"]; got != "PROC" {
+		t.Fatalf("processCode = %#v", got)
+	}
+	if got := request["cursor"]; got != float64(5) {
+		t.Fatalf("cursor = %#v", got)
+	}
+	if got := request["pageSize"]; got != float64(20) {
+		t.Fatalf("pageSize = %#v", got)
+	}
+	if got := request["startTime"]; got != "2030-01-01 09:00:00" {
+		t.Fatalf("startTime = %#v", got)
+	}
+	if got := request["endTime"]; got != "2030-01-01 10:00:00" {
+		t.Fatalf("endTime = %#v", got)
+	}
+	if got := request["userIds"]; len(got.([]string)) != 2 || got.([]string)[0] != "user-1" || got.([]string)[1] != "user-2" {
+		t.Fatalf("userIds = %#v", got)
+	}
+	if got := request["statuses"]; len(got.([]string)) != 2 || got.([]string)[0] != "RUNNING" || got.([]string)[1] != "COMPLETED" {
+		t.Fatalf("statuses = %#v", got)
+	}
+}
+
 func TestCrossPlatformCoverageOAApprovalNewCommandValidationAndRequestModes(t *testing.T) {
 	validCases := []struct {
 		name string
@@ -156,6 +201,26 @@ func TestCrossPlatformCoverageOAApprovalNewCommandValidationAndRequestModes(t *t
 			name: "create request mode",
 			args: []string{"approval", "create-instance", "--request", `{"processCode":"PROC"}`, "--yes"},
 			tool: "start_process_instance",
+		},
+		{
+			name: "list-by-admin simple mode",
+			args: []string{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00"},
+			tool: "get_process_instances_by_admin",
+		},
+		{
+			name: "list-by-admin request mode",
+			args: []string{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+			tool: "get_process_instances_by_admin",
+		},
+		{
+			name: "list-by-admin request mode without pageSize",
+			args: []string{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","cursor":0}`},
+			tool: "get_process_instances_by_admin",
+		},
+		{
+			name: "list-by-admin request mode with endTime",
+			args: []string{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","endTime":"2030-01-01 23:59:59","cursor":0,"pageSize":20}`},
+			tool: "get_process_instances_by_admin",
 		},
 	}
 	for _, tc := range validCases {
@@ -188,6 +253,31 @@ func TestCrossPlatformCoverageOAApprovalNewCommandValidationAndRequestModes(t *t
 		{"approval", "create-instance", "--process-code", "PROC", "--form-values", `{}`, "--dept-id", "bad", "--yes"},
 		{"approval", "create-instance", "--process-code", "PROC", "--form-values", `{}`, "--approvers", "u", "--approvers-action-type", "bad", "--yes"},
 		{"approval", "create-instance", "--process-code", "PROC", "--form-values", `{}`, "--cc-list", "u", "--cc-position", "bad", "--yes"},
+		{"approval", "list-by-admin"},
+		{"approval", "list-by-admin", "--process-code", "PROC"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T10:00:00+08:00", "--end", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T10:00:00+08:00", "--end", "2030-01-01T09:00:00+08:00"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--cursor", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "bad"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "21"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", "2030-01-01T09:00:00+08:00", "--limit", "0"},
+		{"approval", "list-by-admin", "--process-code", "PROC", "--start", ""},
+		{"approval", "list-by-admin", "--request", "{"},
+		{"approval", "list-by-admin", "--request", "null"},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC"}`, "--process-code", "PROC"},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":21}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":"20"}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":1893459600000,"cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 10:00:00","endTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","endTime":1893463200000,"cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","endTime":"NOT-A-TIME","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","endTime":"2030-01-01","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"PROC","startTime":"2030-01-01 09:00:00","endTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":"","startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
+		{"approval", "list-by-admin", "--request", `{"processCode":123,"startTime":"2030-01-01 09:00:00","cursor":0,"pageSize":20}`},
 	}
 	for _, args := range invalidCases {
 		caller := &scriptedToolCaller{}

@@ -68,7 +68,28 @@ if [ "$archive_changed" = true ]; then
       index($0, heading) == 1 { found = 1; next }
       found && /^## / { exit }
       found { print }
-    ' >"$tmp_root/actual-notes"
+    ' >"$tmp_root/actual-section"
+  case "$release_version" in
+    *-beta.*)
+      cp "$tmp_root/actual-section" "$tmp_root/actual-notes"
+      ;;
+    *)
+      stable_beta="$(sed -n 's/^### Changes since `\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta\.[1-9][0-9]*\)`$/\1/p' "$tmp_root/actual-section")"
+      [ "$(printf '%s\n' "$stable_beta" | sed '/^$/d' | wc -l | tr -d '[:space:]')" -eq 1 ] || {
+        printf '%s\n' 'error: stable release-seal with archived fragments requires exactly one ### Changes since `vX.Y.Z-beta.N` boundary' >&2
+        exit 1
+      }
+      . "$ROOT/scripts/release/release-lib.sh"
+      [ "$(release_core_tag "$stable_beta")" = "v$release_version" ] || {
+        printf 'error: stable post-beta fragment boundary %s does not match release v%s\n' "$stable_beta" "$release_version" >&2
+        exit 1
+      }
+      awk '
+        found { print }
+        /^### Changes since `v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta\.[1-9][0-9]*`$/ { found = 1 }
+      ' "$tmp_root/actual-section" >"$tmp_root/actual-notes"
+      ;;
+  esac
   normalize_notes() {
     awk '
       /^[[:space:]]*$/ && !started { next }

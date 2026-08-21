@@ -93,7 +93,7 @@ func TestCrossPlatformCoverageSheetCommentCommands(t *testing.T) {
 				"comment", "reply",
 				"--node", "node-1",
 				"--comment-key", "ck-1",
-				"--content", "heart",
+				"--content", "比心",
 				"--emoji",
 				"--mention", "uid1",
 			},
@@ -102,7 +102,7 @@ func TestCrossPlatformCoverageSheetCommentCommands(t *testing.T) {
 				toolName:  "reply_comment",
 				args: map[string]any{
 					"nodeId":           "node-1",
-					"content":          "heart",
+					"content":          "比心",
 					"replyCommentKey":  "ck-1",
 					"emoji":            true,
 					"mentionedUserIds": []string{"uid1"},

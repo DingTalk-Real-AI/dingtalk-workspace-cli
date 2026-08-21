@@ -14,7 +14,7 @@ usage() {
 # Single source of truth for the partition set. CI runs one job per partition and
 # pins its shard names to this list, so a name that appears here without a
 # dispatch entry below fails closed rather than silently skipping tests.
-APP_PARTITIONS='schema a-b c d-r s-z-example-fuzz'
+APP_PARTITIONS='schema a-b c-a-l c-m-r c-s-z c-other d-r s-z-example-fuzz'
 
 mode="${1:-}"
 partition=""
@@ -66,7 +66,10 @@ fi
 
 schema_count=0
 ab_count=0
-c_count=0
+cal_count=0
+cmr_count=0
+csz_count=0
+cother_count=0
 dr_count=0
 sz_count=0
 unmatched_count=0
@@ -75,7 +78,10 @@ while IFS= read -r test_name; do
 	case "$test_name" in
 		Test*Schema*) schema_count=$((schema_count + 1)) ;;
 		Test[A-B]*) ab_count=$((ab_count + 1)) ;;
-		TestC*) c_count=$((c_count + 1)) ;;
+		TestCrossPlatformCoverage[A-L]*) cal_count=$((cal_count + 1)) ;;
+		TestCrossPlatformCoverage[M-R]*) cmr_count=$((cmr_count + 1)) ;;
+		TestCrossPlatformCoverage[S-Z]*) csz_count=$((csz_count + 1)) ;;
+		TestC*) cother_count=$((cother_count + 1)) ;;
 		Test[D-R]*) dr_count=$((dr_count + 1)) ;;
 		Test[S-Z]*|Example*|Fuzz*) sz_count=$((sz_count + 1)) ;;
 		*)
@@ -96,7 +102,10 @@ classified=''
 for spec in \
 	"schema:$schema_count" \
 	"a-b:$ab_count" \
-	"c:$c_count" \
+	"c-a-l:$cal_count" \
+	"c-m-r:$cmr_count" \
+	"c-s-z:$csz_count" \
+	"c-other:$cother_count" \
 	"d-r:$dr_count" \
 	"s-z-example-fuzz:$sz_count"
 do
@@ -133,14 +142,14 @@ for name in $classified; do
 done
 
 total_count="$(wc -l < "$tests" | tr -d ' ')"
-assigned_count=$((schema_count + ab_count + c_count + dr_count + sz_count))
+assigned_count=$((schema_count + ab_count + cal_count + cmr_count + csz_count + cother_count + dr_count + sz_count))
 if [ "$assigned_count" -ne "$total_count" ]; then
 	printf 'app race partitions assigned %s tests, want %s\n' "$assigned_count" "$total_count" >&2
 	exit 1
 fi
 
-printf 'app race partitions cover %s top-level tests exactly once: schema=%s a-b=%s c=%s d-r=%s s-z-example-fuzz=%s\n' \
-	"$total_count" "$schema_count" "$ab_count" "$c_count" "$dr_count" "$sz_count"
+printf 'app race partitions cover %s top-level tests exactly once: schema=%s a-b=%s c-a-l=%s c-m-r=%s c-s-z=%s c-other=%s d-r=%s s-z-example-fuzz=%s\n' \
+	"$total_count" "$schema_count" "$ab_count" "$cal_count" "$cmr_count" "$csz_count" "$cother_count" "$dr_count" "$sz_count"
 
 if [ "$mode" = "verify" ]; then
 	exit 0
@@ -198,7 +207,10 @@ run_named_partition() {
 	case "$1" in
 		schema) run_partition schema no-race "$schema_pattern" ;;
 		a-b) run_partition a-b race '^Test[A-B]' "$schema_pattern" ;;
-		c) run_partition c race '^TestC' "$schema_pattern" ;;
+		c-a-l) run_partition c-a-l race '^TestCrossPlatformCoverage[A-L]' "$schema_pattern" ;;
+		c-m-r) run_partition c-m-r race '^TestCrossPlatformCoverage[M-R]' "$schema_pattern" ;;
+		c-s-z) run_partition c-s-z race '^TestCrossPlatformCoverage[S-Z]' "$schema_pattern" ;;
+		c-other) run_partition c-other race '^TestC' '^Test.*Schema|^TestCrossPlatformCoverage' ;;
 		d-r) run_partition d-r race '^Test[D-R]' "$schema_pattern" ;;
 		s-z-example-fuzz)
 			run_partition s-z-example-fuzz race '^(Test[S-Z]|Example|Fuzz)' "$schema_pattern"
