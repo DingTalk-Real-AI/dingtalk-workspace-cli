@@ -147,13 +147,57 @@ maintainer pool. A current-head approval or change request is preserved; after
 a new push, stale activity does not suppress a fresh request, and an
 outstanding change requester is preferred for continuity.
 
-The branch ruleset keeps one human approval and all nine strict required
-contexts, and requires someone other than the latest pusher to approve after
-the most recent head update. Repository auto-merge is enabled for ready PRs,
-so a PR merges after that approval and the current revision's nine checks are
-green. If `main` advances, strict checks rerun before merge. The reviewer
-router is orchestration, not a quality context, and must not be added to the
-ruleset.
+The branch rulesets keep one human approval and all nine strict required
+contexts, require someone other than the latest pusher to approve after the
+most recent head update, and restrict `main` updates to the dedicated Reviewer
+Router App in pull-request mode plus the designated Formula publisher in
+always/break-glass mode. Repository auto-merge is enabled for ready PRs, so the
+App-owned request merges after that approval and the current revision's nine
+checks are green. If `main` advances, strict checks rerun before merge. The
+reviewer routing job uses the built-in `GITHUB_TOKEN` to request reviewers with
+`Contents: read` and `Pull requests: write`. A separate base-owned cleanup job
+isolates the merge-authority permissions (`Contents: write` and `Pull
+requests: write`), revalidates the exact event base/head, and uses the built-in
+token only to disable an existing request owned by `github-actions[bot]` or one
+whose title or merge metadata requests that GitHub skip workflows; it never
+enables auto-merge. The job then mints a current-repository installation token
+for the dedicated Reviewer Router GitHub App, proves its emitted slug matches
+the reviewed `REVIEWER_ROUTER_APP_SLUG`, replaces every non-App request, and
+enables native auto-merge with fixed metadata. This
+identity boundary is required because GitHub suppresses
+most workflow events created by the built-in token; using it for auto-merge would
+silently skip the merge commit's protected-main CI and baseline-cache
+producer. Token minting or takeover fails closed without falling back to
+`GITHUB_TOKEN`: the unsafe request is cleared before credentials are read, and
+the required `Test` context live-verifies the exact `main-merge-writers` update
+rule and requires its own built-in token to report
+`current_user_can_bypass: never`. The minted App separately requires
+`pull_requests_only` on that writer rule and `never` on every other active main
+ruleset before it can enable or reconcile auto-merge. GitHub hides the complete
+`bypass_actors` list from low-privilege callers, so the rollout audit must still
+keep the writer list at exactly the Reviewer App plus `PeterGuy326` (ID
+`47820304`). The required check finally accepts a null or exact App-owned
+request after a short takeover grace period. Null is safe from the suppressed
+event path because the built-in Actions identity cannot update `main`; other
+permitted identities produce either a main push or the trusted closed-PR
+repair. Drafts skip the identity step, while `ready_for_review`, `edited`,
+`auto_merge_enabled`, and `auto_merge_disabled` explicitly start fresh admission
+for readiness, title, and merge-request changes. Router does not react to
+`auto_merge_disabled`, so a
+human can deliberately leave the PR manual-only for break-glass handling.
+Reviewer routing remains available. The protected-main push that deploys the
+workflow automatically migrates every open, ready non-App request and repairs
+unsafe App metadata; it disables workflow-skipping requests for correction. A
+manual `workflow_dispatch` from `main` is the idempotent retry path.
+Reconciliation never enables an originally null request. The reviewer router
+is orchestration, not a quality context, and
+must not be added to the ruleset.
+
+GitHub may omit `pull_request_target` for security-sensitive head branch names,
+including names that look like commit SHAs. Those PRs cannot use Router App
+takeover or the closed-event repair: rename the branch for the supported path,
+or use the designated break-glass identity with a safe final message so main
+push CI remains the exact-SHA producer.
 
 ## Running focused gates locally
 
@@ -213,7 +257,72 @@ the same dedicated cache profile path because GitHub includes that path in the
 cache version; the runtime-facing candidate and baseline filenames remain
 separate. Near-miss reuse is forbidden — the caches carry no prefix restore
 keys, because a neighbouring commit's profile would compare the candidate
-against the wrong baseline. Supporting and (when
+against the wrong baseline. CI concurrency is keyed by PR number plus exact
+event base/head SHA. Duplicate runs for that exact revision may cancel each
+other, but a later revision cannot kill an earlier cold-cache producer. Main
+runs use the pushed SHA, so a newer main push cannot cancel a predecessor's
+producer.
+
+Every supported main advancement path has an exact-SHA producer. The required
+`Test` context rejects GitHub workflow-skip directives in PR and auto-merge
+metadata, reruns when that metadata is enabled, disabled, or edited, and
+verifies the live App/writer-ruleset identity contract. Reviewer Router
+additionally binds auto-merge to the exact head OID and writes a fixed safe
+merge headline/body. The sole break-glass publisher must retain a safe final
+message; the release-controlled Formula-only path
+is the sole supported use of `[skip ci]`. A full source push
+saves the assembled profile after the aggregate gate passes. A trusted
+documentation or release-seal push independently verifies that the complete
+`before...after` diff contains only the reviewed metadata allowlist, restores
+only the exact `before` cache, recomputes the full profile if the chain is
+cold, and makes that helper a dependency of the required `Coverage` context.
+Release-generated Formula commits intentionally retain `[skip ci]`; after
+their nine synthetic contexts are sealed, an independent release-governance
+job creates an acknowledgement and emits a `coverage-baseline-promote`
+repository dispatch. The default-branch promotion
+workflow revalidates the exact single-parent Formula identity, successful
+parent and target contexts, and main containment before it promotes the exact
+parent cache or performs the same full fallback. Every target-main producer
+follows its save with a lookup-only restore and requires
+`cache-hit=true` for the exact key; this turns the cache action's otherwise
+warning-only upload failure or prefix match into a hard failure. Formula
+promotion additionally updates one release-created `Coverage Baseline Cache`
+check. A separate confirmation job waits for that exact check-run ID while npm
+and mirrors remain dependent only on the immutable publication job; cache
+failure therefore makes the final delivery gate red without creating a
+partially published release. Once Formula sealing exposes its SHA, a later
+publication verification failure cannot suppress that confirmation job.
+
+A separate base-owned `pull_request_target: closed` safety net covers the final
+merged SHA even if a human or integration changes the merge message after PR
+checks finish. Skip directives alone do not suppress `pull_request_target`,
+subject to GitHub's separate security-sensitive branch-name restriction above.
+That job executes no PR code and only dispatches after binding the exact
+closed/merged PR head, base, merge SHA, and `main` containment. Because GitHub
+makes default-branch caches read-only to `pull_request_target`, the dispatcher first
+waits up to one minute for a run from the exact protected
+`.github/workflows/ci.yml` workflow and exits when that normal producer exists.
+A successful main CI hard-verifies the exact key itself. A completed
+non-success run starts a separate base-owned `workflow_run` dispatcher, which
+binds the exact CI workflow ID/path, run ID/attempt, conclusion, upstream
+repository, `main` branch, and head SHA. That trigger is also cache-read-only,
+so either trusted dispatcher uses `repository_dispatch`; its producer
+revalidates the merged-PR or failed-CI identity, checks out the contained SHA,
+and produces/verifies the exact full cache.
+An hourly schedule and a main-only manual dispatch repair the event-time main
+SHA after a direct break-glass push or cache eviction. The dispatch exception
+is intentional: unlike an ordinary event created by `GITHUB_TOKEN`, GitHub
+allows `repository_dispatch` to start another workflow. A legacy built-in-token
+merge can suppress the closed event too, which is why the required `Test`
+identity gate and dedicated Reviewer Router App are still mandatory.
+
+A cold miss can still occur during a producer race or after cache eviction,
+but it remains fail-safe: the PR recomputes the authoritative baseline with a
+30-minute job budget and saves a PR-scoped copy for same-PR reruns. It is no
+longer possible for a supported main-advance path to omit its producer
+silently. That PR-scoped fallback save remains a best-effort acceleration and
+does not replace the normal push, metadata, Formula, and merged-PR repair
+producers. Supporting and (when
 platform-selected) native profiles are generated before the aggregate
 `Coverage` context evaluates them. The
 aggregate and native gates require 100% coverage for changed executable Go
@@ -265,4 +374,11 @@ unproducible required context.
 
 The branch ruleset also requires one approval after the latest push. Enable
 repository auto-merge and automatic head-branch deletion; keep the base-owned
-reviewer router outside the required-context list.
+reviewer router outside the required-context list. Install its dedicated
+GitHub App only on this repository with `Contents: read and write` and `Pull
+requests: read and write`; do not grant Actions, Workflows, or Administration.
+Give it pull-request-only bypass on `main-merge-writers` and no bypass on any
+other ruleset. Store the App client ID and lowercase slug in repository
+variables `REVIEWER_ROUTER_APP_CLIENT_ID` and `REVIEWER_ROUTER_APP_SLUG`, and
+its private key in repository secret `REVIEWER_ROUTER_APP_PRIVATE_KEY`. Do not
+reuse release, Homebrew, or personal tokens for this boundary.

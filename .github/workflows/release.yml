@@ -1112,6 +1112,9 @@ jobs:
     needs: [release-contract, release-validation, release, verify-darwin-signatures]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      coverage_baseline_required: ${{ steps.seal-formula.outputs.coverage_baseline_required }}
+      coverage_baseline_commit: ${{ steps.seal-formula.outputs.coverage_baseline_commit }}
     permissions:
       checks: write
       contents: write
@@ -1495,6 +1498,7 @@ jobs:
           DWS_GIT_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
 
       - name: Seal Formula-only Code Admission contexts
+        id: seal-formula
         if: ${{ github.repository_owner == 'DingTalk-Real-AI' }}
         uses: actions/github-script@v7
         env:
@@ -1515,6 +1519,8 @@ jobs:
             const sourcePath = channel === "stable"
               ? "dist/homebrew/dingtalk-workspace-cli.rb"
               : "dist/homebrew/dingtalk-workspace-cli-beta.rb";
+            core.setOutput("coverage_baseline_required", "false");
+            core.setOutput("coverage_baseline_commit", "");
             const expectedMessage = channel === "stable"
               ? `chore: update formula for ${version} [skip ci]`
               : `chore: update beta formula for ${version} [skip ci]`;
@@ -1650,6 +1656,11 @@ jobs:
                 },
               });
             }
+            core.setOutput("coverage_baseline_required", "true");
+            core.setOutput("coverage_baseline_commit", commit);
+            core.info(
+              `Formula-only Code Admission is sealed for ${commit}; the independent confirmation job will dispatch its exact-SHA cache producer.`,
+            );
 
       - name: Reverify exact immutable npm package
         run: ./scripts/release/verify-package-managers.sh --npm-only --expected-version "$RELEASE_VERSION"
@@ -2177,6 +2188,117 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  coverage-baseline-confirmation:
+    name: Confirm Formula coverage baseline
+    # Once Formula sealing has exposed a target SHA, later publication
+    # verification failures must not orphan its exact-main cache producer.
+    if: ${{ !cancelled() && (needs.publish-release.result == 'success' || needs.publish-release.outputs.coverage_baseline_required == 'true') }}
+    needs: publish-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      checks: write
+      contents: write
+    steps:
+      - name: Require exact Formula cache acknowledgement
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          BASELINE_REQUIRED: ${{ needs.publish-release.outputs.coverage_baseline_required }}
+          FORMULA_COMMIT: ${{ needs.publish-release.outputs.coverage_baseline_commit }}
+        with:
+          script: |
+            const rawRequired = process.env.BASELINE_REQUIRED;
+            if (!['true', 'false'].includes(rawRequired)) {
+              throw new Error(`Formula baseline requirement is invalid: ${rawRequired || 'empty'}`);
+            }
+            const required = rawRequired === 'true';
+            const targetSha = process.env.FORMULA_COMMIT;
+            if (!required) {
+              if (targetSha) {
+                throw new Error('Formula baseline outputs are inconsistent for a no-op publication');
+              }
+              core.info('Formula was already current; no new exact-SHA cache acknowledgement is required.');
+              return;
+            }
+            if (!/^[0-9a-f]{40}$/.test(targetSha)) {
+              throw new Error('Formula baseline target output is malformed');
+            }
+            const expectedExternalId = `release-${context.runId}-${targetSha}`;
+            let promotionCheck;
+            try {
+              const created = await github.rest.checks.create({
+                ...context.repo,
+                name: 'Coverage Baseline Cache',
+                head_sha: targetSha,
+                status: 'queued',
+                external_id: expectedExternalId,
+                output: {
+                  title: 'Waiting for exact-SHA baseline promotion',
+                  summary:
+                    'The independent release governance job is waiting for the default-branch cache producer.',
+                },
+              });
+              promotionCheck = created.data;
+              await github.rest.repos.createDispatchEvent({
+                ...context.repo,
+                event_type: 'coverage-baseline-promote',
+                client_payload: {
+                  target_sha: targetSha,
+                  source_run_id: String(context.runId),
+                  check_run_id: String(promotionCheck.id),
+                },
+              });
+            } catch (error) {
+              if (promotionCheck) {
+                try {
+                  await github.rest.checks.update({
+                    ...context.repo,
+                    check_run_id: promotionCheck.id,
+                    status: 'completed',
+                    conclusion: 'failure',
+                    completed_at: new Date().toISOString(),
+                    output: {
+                      title: 'Coverage baseline dispatch failed',
+                      summary: `Release could not dispatch the exact-SHA producer: ${error.message}`,
+                    },
+                  });
+                } catch (cleanupError) {
+                  core.error(
+                    `Could not close failed cache acknowledgement ${promotionCheck.id}: ${cleanupError.message}`,
+                  );
+                }
+              }
+              throw error;
+            }
+            const checkRunId = promotionCheck.id;
+            for (let attempt = 1; attempt <= 180; attempt += 1) {
+              const {data: currentCheck} = await github.rest.checks.get({
+                ...context.repo,
+                check_run_id: checkRunId,
+              });
+              if (
+                currentCheck.head_sha !== targetSha ||
+                currentCheck.name !== 'Coverage Baseline Cache' ||
+                currentCheck.external_id !== expectedExternalId ||
+                currentCheck.app?.slug !== 'github-actions'
+              ) {
+                throw new Error('Formula baseline promotion acknowledgement changed identity');
+              }
+              if (currentCheck.status === 'completed') {
+                if (currentCheck.conclusion !== 'success') {
+                  throw new Error(
+                    `Formula baseline promotion failed with ${currentCheck.conclusion || 'unknown'}`,
+                  );
+                }
+                core.info(`Formula baseline promotion completed for ${targetSha}.`);
+                return;
+              }
+              if (attempt < 180) {
+                await new Promise(resolve => setTimeout(resolve, 10000));
+              }
+            }
+            throw new Error(`Formula baseline promotion timed out for ${targetSha}`);
+
   release-delivery-gate:
     name: Release delivery gate
     if: ${{ !cancelled() }}
@@ -2189,6 +2311,7 @@ jobs:
       - verify-darwin-signatures
       - publish-release
       - publish-channels
+      - coverage-baseline-confirmation
       - mirror-gitee-release
       - repair-npm
       - repair-channel
@@ -2211,6 +2334,7 @@ jobs:
           DARWIN_SIGNATURE_RESULT: ${{ needs.verify-darwin-signatures.result }}
           PUBLISH_RELEASE_RESULT: ${{ needs.publish-release.result }}
           PUBLISH_CHANNELS_RESULT: ${{ needs.publish-channels.result }}
+          COVERAGE_BASELINE_CONFIRMATION_RESULT: ${{ needs.coverage-baseline-confirmation.result }}
           MIRROR_GITEE_RESULT: ${{ needs.mirror-gitee-release.result }}
           REPAIR_NPM_RESULT: ${{ needs.repair-npm.result }}
           REPAIR_CHANNEL_RESULT: ${{ needs.repair-channel.result }}
@@ -2234,6 +2358,7 @@ jobs:
             require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" success
             require_result publish-release "$PUBLISH_RELEASE_RESULT" success
             require_result publish-channels "$PUBLISH_CHANNELS_RESULT" success
+            require_result coverage-baseline-confirmation "$COVERAGE_BASELINE_CONFIRMATION_RESULT" success
             if test "$GITEE_FALLBACK_ENABLED" = true; then
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" success
             else
@@ -2273,6 +2398,7 @@ jobs:
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result coverage-baseline-confirmation "$COVERAGE_BASELINE_CONFIRMATION_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
@@ -2294,6 +2420,7 @@ jobs:
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result coverage-baseline-confirmation "$COVERAGE_BASELINE_CONFIRMATION_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
@@ -2309,6 +2436,7 @@ jobs:
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result coverage-baseline-confirmation "$COVERAGE_BASELINE_CONFIRMATION_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-channel "$REPAIR_CHANNEL_RESULT" skipped
               require_cloud_jobs_skipped
@@ -2323,6 +2451,7 @@ jobs:
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result coverage-baseline-confirmation "$COVERAGE_BASELINE_CONFIRMATION_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_cloud_jobs_skipped
@@ -2337,6 +2466,7 @@ jobs:
               require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" skipped
               require_result publish-release "$PUBLISH_RELEASE_RESULT" skipped
               require_result publish-channels "$PUBLISH_CHANNELS_RESULT" skipped
+              require_result coverage-baseline-confirmation "$COVERAGE_BASELINE_CONFIRMATION_RESULT" skipped
               require_result mirror-gitee-release "$MIRROR_GITEE_RESULT" skipped
               require_result repair-npm "$REPAIR_NPM_RESULT" skipped
               require_cloud_jobs_skipped

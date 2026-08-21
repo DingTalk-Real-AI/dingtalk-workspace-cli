@@ -1,0 +1,529 @@
+name: Coverage Baseline Repair
+
+run-name: Repair coverage baseline from ${{ github.event_name }}
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [closed]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  repository_dispatch:
+    types: [coverage-baseline-repair]
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+# pull_request_target and workflow_run are allowed to inspect only GitHub API
+# data and dispatch the trusted producer. GitHub deliberately makes both
+# triggers read-only for the default-branch cache, so all checkout and cache
+# writes live in repository_dispatch, schedule, or main-only workflow_dispatch.
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-baseline-repair-${{ github.event_name == 'pull_request_target' && github.event.pull_request.merge_commit_sha || github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event_name == 'repository_dispatch' && github.event.client_payload.merge_commit_sha || github.sha }}
+  cancel-in-progress: false
+  # Retain every pending repair for one target. actionlint v1.7.12's bundled
+  # schema predates GitHub's concurrency.queue support.
+  queue: max
+
+jobs:
+  dispatch-merged-pr:
+    if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: read
+    steps:
+      # Never check out or execute pull-request content in this privileged
+      # base-owned event. Re-read the merged PR, bind every immutable identity,
+      # prove the result is in main, and send only those values to the producer.
+      - name: Dispatch trusted merged-PR repair
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const eventPull = context.payload.pull_request;
+            const fullCommit = /^[0-9a-f]{40}$/;
+            const pullNumber = Number(eventPull?.number);
+            const headSha = eventPull?.head?.sha;
+            const baseSha = eventPull?.base?.sha;
+            const mergeCommitSha = eventPull?.merge_commit_sha;
+            if (
+              context.payload.repository?.full_name !==
+                'DingTalk-Real-AI/dingtalk-workspace-cli' ||
+              context.payload.repository?.default_branch !== 'main' ||
+              !Number.isSafeInteger(pullNumber) ||
+              pullNumber <= 0 ||
+              !fullCommit.test(headSha || '') ||
+              !fullCommit.test(baseSha || '') ||
+              !fullCommit.test(mergeCommitSha || '')
+            ) {
+              throw new Error('closed PR event has an invalid repository or revision identity');
+            }
+
+            const {data: currentPull} = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber,
+            });
+            if (
+              currentPull.number !== pullNumber ||
+              currentPull.state !== 'closed' ||
+              currentPull.merged !== true ||
+              !currentPull.merged_at ||
+              currentPull.base.ref !== 'main' ||
+              currentPull.base.sha !== baseSha ||
+              currentPull.head.sha !== headSha ||
+              currentPull.merge_commit_sha !== mergeCommitSha
+            ) {
+              throw new Error(`PR #${pullNumber} no longer matches the merged-main event`);
+            }
+
+            async function requireMainContainment(targetSha) {
+              let lastState = 'not checked';
+              for (let attempt = 1; attempt <= 6; attempt += 1) {
+                try {
+                  const {data: branch} = await github.rest.repos.getBranch({
+                    owner,
+                    repo,
+                    branch: 'main',
+                  });
+                  const {data: comparison} =
+                    await github.rest.repos.compareCommitsWithBasehead({
+                      owner,
+                      repo,
+                      basehead: `${targetSha}...${branch.commit.sha}`,
+                    });
+                  lastState = comparison.status;
+                  if (['ahead', 'identical'].includes(comparison.status)) {
+                    return;
+                  }
+                } catch (error) {
+                  lastState = error.message;
+                }
+                if (attempt < 6) {
+                  await new Promise(resolve => setTimeout(resolve, 5000));
+                }
+              }
+              throw new Error(
+                `${targetSha} is not contained in protected main after retries: ${lastState}`,
+              );
+            }
+            await requireMainContainment(mergeCommitSha);
+
+            // Normal App or human merges emit a protected-main push run whose
+            // CI producer owns this exact key. Give Actions event delivery a
+            // short visibility window and avoid a duplicate full-suite repair.
+            // A workflow-skip directive or suppressed built-in-token event has
+            // no such run, so only that missing-event path reaches dispatch.
+            const {data: ciWorkflow} = await github.rest.actions.getWorkflow({
+              owner,
+              repo,
+              workflow_id: '.github/workflows/ci.yml',
+            });
+            if (
+              ciWorkflow.name !== 'CI' ||
+              ciWorkflow.path !== '.github/workflows/ci.yml' ||
+              ciWorkflow.state !== 'active'
+            ) {
+              throw new Error('protected CI workflow identity is not active or exact');
+            }
+            for (let attempt = 1; attempt <= 12; attempt += 1) {
+              const {data: workflowRuns} =
+                await github.rest.actions.listWorkflowRunsForRepo({
+                  owner,
+                  repo,
+                  branch: 'main',
+                  event: 'push',
+                  per_page: 100,
+                });
+              const exactPushRun = workflowRuns.workflow_runs.find(run =>
+                run.name === 'CI' &&
+                run.workflow_id === ciWorkflow.id &&
+                run.path === ciWorkflow.path &&
+                run.event === 'push' &&
+                run.head_sha === mergeCommitSha &&
+                run.head_branch === 'main' &&
+                ['queued', 'in_progress', 'completed'].includes(run.status),
+              );
+              if (exactPushRun) {
+                core.info(
+                  `CI push run ${exactPushRun.id} already owns the exact-SHA producer for ${mergeCommitSha}; repair dispatch is unnecessary.`,
+                );
+                return;
+              }
+              if (attempt < 12) {
+                await new Promise(resolve => setTimeout(resolve, 5000));
+              }
+            }
+
+            // repository_dispatch is one of GitHub's explicit GITHUB_TOKEN
+            // recursion exceptions and receives default-branch cache-write scope.
+            await github.rest.repos.createDispatchEvent({
+              owner,
+              repo,
+              event_type: 'coverage-baseline-repair',
+              client_payload: {
+                source: 'merged_pr',
+                pull_number: String(pullNumber),
+                head_sha: headSha,
+                base_sha: baseSha,
+                merge_commit_sha: mergeCommitSha,
+                source_run_id: String(context.runId),
+              },
+            });
+            core.info(
+              `Dispatched exact-SHA coverage repair for merged PR #${pullNumber} at ${mergeCommitSha}.`,
+            );
+
+  dispatch-failed-ci:
+    if: >-
+      ${{
+        github.event_name == 'workflow_run' &&
+        github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli' &&
+        github.event.workflow_run.name == 'CI' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.status == 'completed' &&
+        github.event.workflow_run.conclusion != 'success'
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      # workflow_run cannot write the default-branch cache. Re-read the exact
+      # completed CI run from Actions, bind it to the protected CI workflow and
+      # main revision, then use the repository_dispatch recursion exception.
+      - name: Dispatch trusted failed-CI repair
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const upstream = 'DingTalk-Real-AI/dingtalk-workspace-cli';
+            const eventRun = context.payload.workflow_run;
+            const fullCommit = /^[0-9a-f]{40}$/;
+            const runID = Number(eventRun?.id);
+            const runAttempt = Number(eventRun?.run_attempt);
+            const headSha = eventRun?.head_sha;
+            const conclusion = eventRun?.conclusion;
+            if (
+              context.payload.repository?.full_name !== upstream ||
+              context.payload.repository?.default_branch !== 'main' ||
+              !Number.isSafeInteger(runID) ||
+              runID <= 0 ||
+              !Number.isSafeInteger(runAttempt) ||
+              runAttempt <= 0 ||
+              eventRun?.name !== 'CI' ||
+              eventRun?.event !== 'push' ||
+              eventRun?.head_branch !== 'main' ||
+              eventRun?.status !== 'completed' ||
+              typeof conclusion !== 'string' ||
+              conclusion.length === 0 ||
+              conclusion === 'success' ||
+              !fullCommit.test(headSha || '')
+            ) {
+              throw new Error('workflow_run event is not one completed non-success main CI push');
+            }
+
+            const {data: ciWorkflow} = await github.rest.actions.getWorkflow({
+              owner,
+              repo,
+              workflow_id: '.github/workflows/ci.yml',
+            });
+            const {data: currentRun} = await github.rest.actions.getWorkflowRun({
+              owner,
+              repo,
+              run_id: runID,
+            });
+            if (
+              ciWorkflow.name !== 'CI' ||
+              ciWorkflow.path !== '.github/workflows/ci.yml' ||
+              eventRun.workflow_id !== ciWorkflow.id ||
+              currentRun.id !== runID ||
+              currentRun.workflow_id !== ciWorkflow.id ||
+              currentRun.name !== 'CI' ||
+              currentRun.event !== 'push' ||
+              currentRun.head_branch !== 'main' ||
+              currentRun.head_sha !== headSha ||
+              currentRun.run_attempt !== runAttempt ||
+              currentRun.status !== 'completed' ||
+              currentRun.conclusion !== conclusion ||
+              currentRun.conclusion === 'success' ||
+              currentRun.repository?.full_name !== upstream ||
+              currentRun.head_repository?.full_name !== upstream
+            ) {
+              throw new Error(`CI workflow run ${runID} no longer matches the completed event`);
+            }
+
+            await github.rest.repos.createDispatchEvent({
+              owner,
+              repo,
+              event_type: 'coverage-baseline-repair',
+              client_payload: {
+                source: 'failed_ci',
+                workflow_run_id: String(runID),
+                workflow_run_attempt: String(runAttempt),
+                workflow_conclusion: conclusion,
+                merge_commit_sha: headSha,
+                source_run_id: String(context.runId),
+              },
+            });
+            core.info(
+              `Dispatched exact-SHA coverage repair for ${conclusion} CI run ${runID} at ${headSha}.`,
+            );
+
+  repair:
+    if: ${{ github.event_name == 'repository_dispatch' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Resolve trusted main repair target
+        id: resolve-target
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const fullCommit = /^[0-9a-f]{40}$/;
+            if (
+              context.payload.repository?.full_name !==
+                'DingTalk-Real-AI/dingtalk-workspace-cli' ||
+              context.payload.repository?.default_branch !== 'main'
+            ) {
+              throw new Error('coverage repair is restricted to the protected upstream repository');
+            }
+
+            async function requireMainContainment(targetSha) {
+              let lastState = 'not checked';
+              for (let attempt = 1; attempt <= 6; attempt += 1) {
+                try {
+                  const {data: branch} = await github.rest.repos.getBranch({
+                    owner,
+                    repo,
+                    branch: 'main',
+                  });
+                  const {data: comparison} =
+                    await github.rest.repos.compareCommitsWithBasehead({
+                      owner,
+                      repo,
+                      basehead: `${targetSha}...${branch.commit.sha}`,
+                    });
+                  lastState = comparison.status;
+                  if (['ahead', 'identical'].includes(comparison.status)) {
+                    return branch.commit.sha;
+                  }
+                } catch (error) {
+                  lastState = error.message;
+                }
+                if (attempt < 6) {
+                  await new Promise(resolve => setTimeout(resolve, 5000));
+                }
+              }
+              throw new Error(
+                `${targetSha} is not contained in protected main after retries: ${lastState}`,
+              );
+            }
+
+            let targetSha;
+            if (context.eventName === 'repository_dispatch') {
+              const payload = context.payload.client_payload || {};
+              const sourceRunIDText = String(payload.source_run_id || '');
+              if (!/^[1-9][0-9]*$/.test(sourceRunIDText)) {
+                throw new Error('coverage-baseline-repair payload has an invalid source run');
+              }
+              if (payload.source === 'merged_pr') {
+                const rawPullNumber = String(payload.pull_number || '');
+                const pullNumber = Number(rawPullNumber);
+                const headSha = payload.head_sha;
+                const baseSha = payload.base_sha;
+                targetSha = payload.merge_commit_sha;
+                if (
+                  !/^[1-9][0-9]*$/.test(rawPullNumber) ||
+                  !Number.isSafeInteger(pullNumber) ||
+                  !fullCommit.test(headSha || '') ||
+                  !fullCommit.test(baseSha || '') ||
+                  !fullCommit.test(targetSha || '')
+                ) {
+                  throw new Error('coverage-baseline-repair payload has an invalid PR identity');
+                }
+                const {data: currentPull} = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                });
+                if (
+                  currentPull.number !== pullNumber ||
+                  currentPull.state !== 'closed' ||
+                  currentPull.merged !== true ||
+                  !currentPull.merged_at ||
+                  currentPull.base.ref !== 'main' ||
+                  currentPull.base.sha !== baseSha ||
+                  currentPull.head.sha !== headSha ||
+                  currentPull.merge_commit_sha !== targetSha
+                ) {
+                  throw new Error(
+                    `repair payload no longer matches merged PR #${pullNumber}`,
+                  );
+                }
+              } else if (payload.source === 'failed_ci') {
+                const rawWorkflowRunID = String(payload.workflow_run_id || '');
+                const workflowRunID = Number(rawWorkflowRunID);
+                const rawWorkflowRunAttempt = String(payload.workflow_run_attempt || '');
+                const workflowRunAttempt = Number(rawWorkflowRunAttempt);
+                const workflowConclusion = payload.workflow_conclusion;
+                targetSha = payload.merge_commit_sha;
+                if (
+                  !/^[1-9][0-9]*$/.test(rawWorkflowRunID) ||
+                  !Number.isSafeInteger(workflowRunID) ||
+                  !/^[1-9][0-9]*$/.test(rawWorkflowRunAttempt) ||
+                  !Number.isSafeInteger(workflowRunAttempt) ||
+                  typeof workflowConclusion !== 'string' ||
+                  workflowConclusion.length === 0 ||
+                  workflowConclusion === 'success' ||
+                  !fullCommit.test(targetSha || '')
+                ) {
+                  throw new Error('coverage-baseline-repair payload has an invalid CI identity');
+                }
+                const {data: ciWorkflow} = await github.rest.actions.getWorkflow({
+                  owner,
+                  repo,
+                  workflow_id: '.github/workflows/ci.yml',
+                });
+                const {data: currentRun} = await github.rest.actions.getWorkflowRun({
+                  owner,
+                  repo,
+                  run_id: workflowRunID,
+                });
+                if (
+                  ciWorkflow.name !== 'CI' ||
+                  ciWorkflow.path !== '.github/workflows/ci.yml' ||
+                  currentRun.id !== workflowRunID ||
+                  currentRun.workflow_id !== ciWorkflow.id ||
+                  currentRun.name !== 'CI' ||
+                  currentRun.event !== 'push' ||
+                  currentRun.head_branch !== 'main' ||
+                  currentRun.head_sha !== targetSha ||
+                  currentRun.run_attempt !== workflowRunAttempt ||
+                  currentRun.status !== 'completed' ||
+                  currentRun.conclusion !== workflowConclusion ||
+                  currentRun.conclusion === 'success' ||
+                  currentRun.repository?.full_name !==
+                    'DingTalk-Real-AI/dingtalk-workspace-cli' ||
+                  currentRun.head_repository?.full_name !==
+                    'DingTalk-Real-AI/dingtalk-workspace-cli'
+                ) {
+                  throw new Error(
+                    `repair payload no longer matches failed CI run ${workflowRunID}`,
+                  );
+                }
+              } else {
+                throw new Error('coverage-baseline-repair payload has an unknown source');
+              }
+              await requireMainContainment(targetSha);
+            } else {
+              if (context.ref !== 'refs/heads/main') {
+                throw new Error('scheduled and manual repair must run from refs/heads/main');
+              }
+              // github.sha is the default-branch tip that keyed this workflow's
+              // concurrency group. Keep the producer bound to that exact
+              // event-time target even if main advances while this run queues.
+              targetSha = context.sha;
+              if (!fullCommit.test(targetSha || '')) {
+                throw new Error('protected main did not resolve to one full commit SHA');
+              }
+              await requireMainContainment(targetSha);
+            }
+            core.setOutput('target_sha', targetSha);
+            core.info(`Resolved protected-main coverage repair target ${targetSha}.`);
+
+      - name: Check out exact protected-main target
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ steps.resolve-target.outputs.target_sha }}
+
+      - name: Verify checked-out repair target
+        env:
+          TARGET_SHA: ${{ steps.resolve-target.outputs.target_sha }}
+        run: test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Restore exact target coverage profile
+        id: target-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ steps.resolve-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}
+
+      - name: Validate existing exact target profile
+        if: steps.target-cache.outputs.cache-hit == 'true'
+        run: |
+          set -eu
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+
+      - name: Install archive tooling for cold repair
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
+
+      - name: Recompute complete target coverage profile
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: |
+          set -euo pipefail
+          go test -count=1 -p 1 \
+            -coverprofile=coverage-cache.txt \
+            -covermode=atomic \
+            ./ ./cmd/... ./internal/... ./skills/...
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+
+      - name: Save exact protected-main coverage profile
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ steps.resolve-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}
+
+      # Cache uploads are fail-open warnings. A lookup-only restore plus the
+      # explicit cache-hit assertion makes an absent or partial key fail hard.
+      - name: Verify exact protected-main coverage cache exists
+        id: target-cache-verification
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ steps.resolve-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}
+          lookup-only: true
+          fail-on-cache-miss: true
+
+      - name: Require exact protected-main coverage cache
+        env:
+          EXACT_CACHE_HIT: ${{ steps.target-cache-verification.outputs.cache-hit }}
+        run: test "$EXACT_CACHE_HIT" = true

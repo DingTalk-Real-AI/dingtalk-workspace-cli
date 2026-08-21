@@ -4,3 +4,13 @@ paths:
       # GitHub Actions added concurrency.queue in 2026. actionlint v1.7.12's
       # bundled workflow schema has not caught up with the platform syntax.
       - 'unexpected key "queue" for "concurrency" section'
+  .github/workflows/coverage-baseline-promotion.yml:
+    ignore:
+      # Serialize every acknowledgement for one Formula target without
+      # allowing Actions' default single-pending replacement to orphan a run.
+      - 'unexpected key "queue" for "concurrency" section'
+  .github/workflows/coverage-baseline-repair.yml:
+    ignore:
+      # Keep the closed-event dispatcher and its exact-SHA producer queued for
+      # the same target instead of replacing either half of the repair chain.
+      - 'unexpected key "queue" for "concurrency" section'

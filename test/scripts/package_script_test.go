@@ -2082,6 +2082,7 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		"- verify-darwin-signatures",
 		"- publish-release",
 		"- publish-channels",
+		"- coverage-baseline-confirmation",
 		"- mirror-gitee-release",
 		"- repair-npm",
 		"- repair-channel",
@@ -2091,6 +2092,7 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		`RELEASE_VALIDATION_RESULT: ${{ needs.release-validation.result }}`,
 		`RELEASE_PLAN_RESULT: ${{ needs.release-plan.result }}`,
 		`SEAL_RELEASE_RESULT: ${{ needs.seal-release.result }}`,
+		`COVERAGE_BASELINE_CONFIRMATION_RESULT: ${{ needs.coverage-baseline-confirmation.result }}`,
 		"require_publication",
 		`require_result release-contract "$RELEASE_CONTRACT_RESULT" success`,
 		`require_result release-validation "$RELEASE_VALIDATION_RESULT" success`,
@@ -2098,6 +2100,8 @@ func TestReleaseWorkflowDeliveryGateFailsClosed(t *testing.T) {
 		`require_result verify-darwin-signatures "$DARWIN_SIGNATURE_RESULT" success`,
 		`require_result publish-release "$PUBLISH_RELEASE_RESULT" success`,
 		`require_result publish-channels "$PUBLISH_CHANNELS_RESULT" success`,
+		`require_result coverage-baseline-confirmation "$COVERAGE_BASELINE_CONFIRMATION_RESULT" success`,
+		`require_result coverage-baseline-confirmation "$COVERAGE_BASELINE_CONFIRMATION_RESULT" skipped`,
 		"workflow_dispatch:recover_release",
 		"workflow_dispatch:create_release",
 		"workflow_dispatch:plan_release",
@@ -2438,8 +2442,12 @@ func TestReleaseWorkflowSealsOnlyVerifiedFormulaCommitContexts(t *testing.T) {
 	}
 
 	for _, required := range []string{
+		"timeout-minutes: 30",
+		`coverage_baseline_required: ${{ steps.seal-formula.outputs.coverage_baseline_required }}`,
+		`coverage_baseline_commit: ${{ steps.seal-formula.outputs.coverage_baseline_commit }}`,
 		"id: homebrew-stable",
 		"id: homebrew-beta",
+		"id: seal-formula",
 		`FORMULA_CHANGED: ${{ steps.homebrew-stable.outputs.formula_changed || steps.homebrew-beta.outputs.formula_changed }}`,
 		`FORMULA_COMMIT: ${{ steps.homebrew-stable.outputs.published_commit || steps.homebrew-beta.outputs.published_commit }}`,
 	} {
@@ -2481,6 +2489,8 @@ func TestReleaseWorkflowSealsOnlyVerifiedFormulaCommitContexts(t *testing.T) {
 		`head_sha: commit`,
 		`status: "completed"`,
 		`conclusion: "success"`,
+		`core.setOutput("coverage_baseline_required", "true")`,
+		`core.setOutput("coverage_baseline_commit", commit)`,
 	} {
 		if !strings.Contains(seal, required) {
 			t.Errorf("Formula-only Code Admission sealing is missing %q", required)
@@ -2492,12 +2502,17 @@ func TestReleaseWorkflowSealsOnlyVerifiedFormulaCommitContexts(t *testing.T) {
 		}
 	}
 	if strings.Count(seal, "github.rest.checks.create") != 1 {
-		t.Error("Formula-only checks must be created only by the single verified context loop")
+		t.Error("Formula sealing must write only the reviewed Code Admission contexts")
 	}
 	for _, forbidden := range []string{
 		"head_sha: context.sha",
 		"head_sha: parent",
 		"head_sha: branch.data.commit.sha",
+		"github.rest.checks.get",
+		"promotionComplete",
+		"setTimeout(resolve, 10000)",
+		"Coverage Baseline Cache",
+		"github.rest.repos.createDispatchEvent",
 	} {
 		if strings.Contains(seal, forbidden) {
 			t.Errorf("Formula-only Code Admission must not mark an unverified head green: found %q", forbidden)
@@ -2505,6 +2520,9 @@ func TestReleaseWorkflowSealsOnlyVerifiedFormulaCommitContexts(t *testing.T) {
 	}
 
 	createCheck := strings.Index(seal, "github.rest.checks.create")
+	if createCheck == -1 {
+		t.Error("Formula sealing must create the verified Code Admission contexts")
+	}
 	for name, marker := range map[string]string{
 		"single-parent Formula-only identity": "const exactFormulaCommit",
 		"successful parent contexts":          "invalidParentContexts.length > 0",
@@ -2514,6 +2532,67 @@ func TestReleaseWorkflowSealsOnlyVerifiedFormulaCommitContexts(t *testing.T) {
 		index := strings.Index(seal, marker)
 		if index == -1 || createCheck == -1 || index > createCheck {
 			t.Errorf("%s must be verified before any success check is created", name)
+		}
+	}
+}
+
+func TestReleaseWorkflowConfirmsFormulaCacheWithoutBlockingChannels(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	publishJob := releaseWorkflowSection(t, workflow, "  publish-release:\n", "\n  publish-channels:\n")
+	channelsJob := releaseWorkflowSection(t, workflow, "  publish-channels:\n", "\n  mirror-gitee-release:\n")
+	confirmation := releaseWorkflowSection(
+		t,
+		workflow,
+		"  coverage-baseline-confirmation:\n",
+		"\n  release-delivery-gate:\n",
+	)
+
+	for _, required := range []string{
+		`if: ${{ !cancelled() && (needs.publish-release.result == 'success' || needs.publish-release.outputs.coverage_baseline_required == 'true') }}`,
+		"needs: publish-release",
+		"timeout-minutes: 35",
+		"checks: write",
+		"contents: write",
+		`BASELINE_REQUIRED: ${{ needs.publish-release.outputs.coverage_baseline_required }}`,
+		`FORMULA_COMMIT: ${{ needs.publish-release.outputs.coverage_baseline_commit }}`,
+		"if (!['true', 'false'].includes(rawRequired))",
+		"Formula baseline requirement is invalid",
+		"github.rest.checks.create",
+		"name: 'Coverage Baseline Cache'",
+		"status: 'queued'",
+		"external_id: expectedExternalId",
+		"github.rest.repos.createDispatchEvent",
+		"event_type: 'coverage-baseline-promote'",
+		"source_run_id: String(context.runId)",
+		"check_run_id: String(promotionCheck.id)",
+		"github.rest.checks.update",
+		"conclusion: 'failure'",
+		"github.rest.checks.get",
+		"currentCheck.head_sha !== targetSha",
+		"currentCheck.external_id !== expectedExternalId",
+		"currentCheck.app?.slug !== 'github-actions'",
+		"for (let attempt = 1; attempt <= 180; attempt += 1)",
+		"currentCheck.conclusion !== 'success'",
+		"await new Promise(resolve => setTimeout(resolve, 10000))",
+		"Formula baseline promotion timed out",
+	} {
+		if !strings.Contains(confirmation, required) {
+			t.Errorf("Formula baseline confirmation missing %q", required)
+		}
+	}
+	if strings.Contains(channelsJob, "coverage-baseline-confirmation") ||
+		strings.Contains(channelsJob, "needs.coverage-baseline-confirmation") {
+		t.Error("cache acknowledgement must not block npm or mirror publication")
+	}
+	for _, forbidden := range []string{
+		"Coverage Baseline Cache",
+		"github.rest.repos.createDispatchEvent",
+		"github.rest.checks.get",
+		"promotionComplete",
+	} {
+		if strings.Contains(publishJob, forbidden) {
+			t.Errorf("irreversible publication job must not own cache lifecycle marker %q", forbidden)
 		}
 	}
 }
