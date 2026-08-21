@@ -18,7 +18,7 @@ dws wiki +member-remove --workspace <workspaceId> --users <userId> --format json
 
 ## 列表完整性
 
-`+member-list` 的服务端单次上限为 50，且没有可续游标。结果能证明“本次返回的成员”，不能据此断言大型知识库的完整成员全集。不要伪造 `--page-all` 或不断提高 limit。
+`+member-list` 的服务端单次上限为 50（`--limit` / pageSize 最大 50）。超过 50 人时用 `--next-token` 翻页：首次调用不传，后续把上一次响应中的 `nextToken` 传入 `--next-token`，直到 `hasMore` 为 false。出参 `totalCount` 为全量成员总数，可用于核对是否拉全。不要伪造 `--page-all` 或不断提高 limit 超过 50。
 
 ## 写入验证
 

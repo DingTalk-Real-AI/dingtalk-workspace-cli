@@ -531,9 +531,17 @@ func newWikiCommand() *cobra.Command {
 		Short: "添加知识库成员",
 		Long: `为指定知识库添加一个或多个成员，并授予指定角色。
 
-通过 --users 传入逗号分隔的 userId 列表，多个用户将被授予同一角色。
+两种传参方式（互斥）：
+  旧格式：--users 传入逗号分隔的 userId 列表 + --role 指定统一角色（仅 USER 类型）
+  新格式：--members 传入 JSON 数组，支持四种成员类型，每个 member 携带独立 roleId
 
-支持的角色 (--role)（必须大写）：
+成员类型说明：
+  USER          用户，id 为用户 userId，需携带 corpId（标识用户所属组织）
+  DEPT          部门，id 为部门 ID，需携带 corpId（标识部门所属组织）
+  CONVERSATION  群聊，id 为群聊 conversationId（cid 开头），无需 corpId
+  TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId。当用户要求"添加角色组"或"添加角色标签"时使用此类型
+
+支持的角色（大小写不敏感）：
   MANAGER     管理员，可读写、管理成员
   EDITOR      编辑者，可查看、编辑、上传内容
   DOWNLOADER  查看下载者，可查看并下载内容
@@ -543,34 +551,55 @@ func newWikiCommand() *cobra.Command {
 - OWNER 角色不可通过此接口添加，知识库创建者默认为所有者。
 - 操作者需具备知识库的 OWNER 或 MANAGER 权限。
 - 单次请求最多 30 个成员，超出请分批调用。
+- --notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 true。
 
 支持通过 --workspace 传入知识库 ID 或知识库 URL，系统自动识别。
 用户 uid 可通过「钉钉通讯录」相关命令检索，如:
   dws contact user search --keyword "姓名"`,
 		Example: `  dws wiki member add --workspace <workspaceId> --users uid1 --role READER
   dws wiki member add --workspace <workspaceId> --users uid1,uid2,uid3 --role EDITOR
-  dws wiki member add --workspace "https://alidocs.dingtalk.com/i/spaces/xxx/overview" --users uid1 --role MANAGER`,
+  dws wiki member add --workspace "https://alidocs.dingtalk.com/i/spaces/xxx/overview" --users uid1 --role MANAGER
+  dws wiki member add --workspace <workspaceId> --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"},{"type":"DEPT","id":"deptId1","roleId":"EDITOR","corpId":"xxx"}]' --notify`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID, err := mustFlagOrFallback(cmd, "workspace", "workspace-id")
 			if err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "role"); err != nil {
+			if err := validateMembersExclusivity(cmd); err != nil {
 				return err
 			}
-			role := normalizePermissionRole(mustGetFlag(cmd, "role"))
-			if role == "OWNER" {
-				return apperrors.NewValidation("OWNER 角色不可通过 wiki member add 添加")
+			toolArgs := map[string]any{"workspaceId": workspaceID}
+			members, mErr := collectMembers(cmd, false)
+			if mErr != nil {
+				return mErr
 			}
-			userIds, err := collectUserIDs(cmd)
-			if err != nil {
-				return err
+			if len(members) > 0 {
+				for _, m := range members {
+					if r, _ := m["roleId"].(string); r == "OWNER" {
+						return apperrors.NewValidation("OWNER 角色不可通过 wiki member add 添加")
+					}
+				}
+				toolArgs["members"] = members
+				if cmd.Flags().Changed("notify") {
+					notify, _ := cmd.Flags().GetBool("notify")
+					toolArgs["notify"] = notify
+				}
+			} else {
+				if err := validateRequiredFlags(cmd, "role"); err != nil {
+					return err
+				}
+				role := normalizePermissionRole(mustGetFlag(cmd, "role"))
+				if role == "OWNER" {
+					return apperrors.NewValidation("OWNER 角色不可通过 wiki member add 添加")
+				}
+				userIds, err := collectUserIDs(cmd)
+				if err != nil {
+					return err
+				}
+				toolArgs["roleId"] = role
+				toolArgs["userIds"] = userIds
 			}
-			return callMCPTool("add_member", map[string]any{
-				"workspaceId": workspaceID,
-				"roleId":      role,
-				"userIds":     userIds,
-			})
+			return callMCPTool("add_member", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(memberAddCmd, LeafSpec{
@@ -605,6 +634,8 @@ func newWikiCommand() *cobra.Command {
 				},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "members", Property: "members"},
+				{Name: "notify", Property: "notify"},
 				{Name: "role", Property: "roleId"},
 				{Name: "users", Property: "userIds"},
 				{Name: "workspace", Property: "workspaceId"},
@@ -613,17 +644,29 @@ func newWikiCommand() *cobra.Command {
 	})
 
 	memberAddCmd.Flags().String("workspace", "", "知识库 ID 或 URL (必填)")
-	memberAddCmd.Flags().String("users", "", "被添加的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)")
+	memberAddCmd.Flags().String("users", "", "被添加的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)")
 	memberAddCmd.Flags().String("user", "", "")
 	_ = memberAddCmd.Flags().MarkHidden("user")
-	memberAddCmd.Flags().String("role", "", "权限角色: MANAGER / EDITOR / DOWNLOADER / READER (必填，大小写不敏感)")
+	memberAddCmd.Flags().String("role", "", "权限角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填，大小写不敏感)")
+	memberAddCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥")
+	memberAddCmd.Flags().Bool("notify", true, "是否通知被添加的成员（仅 --members 新格式时生效）")
 
 	memberUpdateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "更新知识库成员权限",
 		Long: `更新指定知识库已有成员的角色。
 
-支持的角色 (--role)（必须大写）：
+两种传参方式（互斥）：
+  旧格式：--users 传入逗号分隔的 userId 列表 + --role 指定统一角色（仅 USER 类型）
+  新格式：--members 传入 JSON 数组，支持四种成员类型，每个 member 携带独立 roleId
+
+成员类型说明：
+  USER          用户，id 为用户 userId，需携带 corpId
+  DEPT          部门，id 为部门 ID，需携带 corpId
+  CONVERSATION  群聊，id 为群聊 conversationId（cid 开头），无需 corpId
+  TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId
+
+支持的角色（大小写不敏感）：
   MANAGER     管理员
   EDITOR      编辑者
   DOWNLOADER  查看下载者
@@ -633,27 +676,44 @@ func newWikiCommand() *cobra.Command {
 - OWNER 角色不可通过此接口变更。
 - 同一成员在同一知识库只能拥有一个角色，变更后旧角色自动替换。
 - 操作者需具备知识库的 OWNER 或 MANAGER 权限。
+- --notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知，默认 false。
 
 仅可更新已存在成员关系的成员，新增成员请使用 dws wiki member add。`,
 		Example: `  dws wiki member update --workspace <workspaceId> --users uid1 --role EDITOR
-  dws wiki member update --workspace <workspaceId> --users uid1,uid2 --role READER`,
+  dws wiki member update --workspace <workspaceId> --users uid1,uid2 --role READER
+  dws wiki member update --workspace <workspaceId> --members '[{"type":"USER","id":"uid1","roleId":"EDITOR","corpId":"xxx"}]' --notify=false
+  dws wiki member update --workspace <workspaceId> --members '[{"type":"TAG","id":"tagId1","roleId":"READER","corpId":"xxx"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID, err := mustFlagOrFallback(cmd, "workspace", "workspace-id")
 			if err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "role"); err != nil {
+			if err := validateMembersExclusivity(cmd); err != nil {
 				return err
 			}
-			userIds, err := collectUserIDs(cmd)
-			if err != nil {
-				return err
+			toolArgs := map[string]any{"workspaceId": workspaceID}
+			members, mErr := collectMembers(cmd, false)
+			if mErr != nil {
+				return mErr
 			}
-			return callMCPTool("update_member", map[string]any{
-				"workspaceId": workspaceID,
-				"roleId":      normalizePermissionRole(mustGetFlag(cmd, "role")),
-				"userIds":     userIds,
-			})
+			if len(members) > 0 {
+				toolArgs["members"] = members
+				if cmd.Flags().Changed("notify") {
+					notify, _ := cmd.Flags().GetBool("notify")
+					toolArgs["notify"] = notify
+				}
+			} else {
+				if err := validateRequiredFlags(cmd, "role"); err != nil {
+					return err
+				}
+				userIds, err := collectUserIDs(cmd)
+				if err != nil {
+					return err
+				}
+				toolArgs["roleId"] = normalizePermissionRole(mustGetFlag(cmd, "role"))
+				toolArgs["userIds"] = userIds
+			}
+			return callMCPTool("update_member", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(memberUpdateCmd, LeafSpec{
@@ -682,6 +742,8 @@ func newWikiCommand() *cobra.Command {
 				Examples:     []string{"dws wiki member update --workspace <WS_ID> --users uid1 --role EDITOR --format json"},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "members", Property: "members"},
+				{Name: "notify", Property: "notify"},
 				{Name: "role", Property: "roleId"},
 				{Name: "users", Property: "userIds"},
 				{Name: "workspace", Property: "workspaceId"},
@@ -690,10 +752,12 @@ func newWikiCommand() *cobra.Command {
 	})
 
 	memberUpdateCmd.Flags().String("workspace", "", "知识库 ID 或 URL (必填)")
-	memberUpdateCmd.Flags().String("users", "", "被更新的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)")
+	memberUpdateCmd.Flags().String("users", "", "被更新的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)")
 	memberUpdateCmd.Flags().String("user", "", "")
 	_ = memberUpdateCmd.Flags().MarkHidden("user")
-	memberUpdateCmd.Flags().String("role", "", "新权限角色: MANAGER / EDITOR / DOWNLOADER / READER (必填，大小写不敏感)")
+	memberUpdateCmd.Flags().String("role", "", "新权限角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填，大小写不敏感)")
+	memberUpdateCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥")
+	memberUpdateCmd.Flags().Bool("notify", false, "是否通知被变更的成员（仅 --members 新格式时生效）")
 
 	memberListCmd := &cobra.Command{
 		Use:     "list",
@@ -701,12 +765,14 @@ func newWikiCommand() *cobra.Command {
 		Short:   "查询知识库成员列表",
 		Long: `查询指定知识库的成员列表，返回每位成员的 userId、姓名、角色等信息。
 
-注意：底层不支持游标分页，--limit 仅控制单次返回的最大条数（最大 50）。
-若结果被截断（出参 truncated=true），可通过 --filter-role 收窄查询范围；
+底层一次性返回全量成员后在内存中按 pageSize 分页，支持通过 nextToken 翻页。
+出参包含 totalCount（全量成员总数）、hasMore（是否还有下一页）和 nextToken（下一页游标）。
+当 hasMore 为 true 时，传入下一次请求的 --next-token 即可获取下一页。
 ORG 类型授权不会出现在查询结果中。`,
 		Example: `  dws wiki member list --workspace <workspaceId>
-  dws wiki member list --workspace <workspaceId> --limit 100
-  dws wiki member list --workspace <workspaceId> --filter-role MANAGER,EDITOR`,
+  dws wiki member list --workspace <workspaceId> --limit 50
+  dws wiki member list --workspace <workspaceId> --filter-role MANAGER,EDITOR
+  dws wiki member list --workspace <workspaceId> --next-token <上次返回的 nextToken>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID, err := mustFlagOrFallback(cmd, "workspace", "workspace-id")
 			if err != nil {
@@ -715,17 +781,15 @@ ORG 类型授权不会出现在查询结果中。`,
 			toolArgs := map[string]any{
 				"workspaceId": workspaceID,
 			}
-			limit := 0
 			if cmd.Flags().Changed("limit") {
-				limit, _ = cmd.Flags().GetInt("limit")
+				limit, _ := cmd.Flags().GetInt("limit")
+				toolArgs["pageSize"] = limit
 			} else if cmd.Flags().Changed("max-results") {
-				limit, _ = cmd.Flags().GetInt("max-results")
+				limit, _ := cmd.Flags().GetInt("max-results")
+				toolArgs["pageSize"] = limit
 			}
-			if limit > 0 {
-				if limit > 50 {
-					return fmt.Errorf("--limit 不能超过 50；底层成员接口不提供游标续页")
-				}
-				toolArgs["maxResults"] = limit
+			if v := flagOrFallback(cmd, "next-token", "cursor", "page-token"); v != "" {
+				toolArgs["nextToken"] = v
 			}
 			if v := mustGetFlag(cmd, "filter-role"); v != "" {
 				toolArgs["filterRoleIds"] = parseRoleList(v)
@@ -763,22 +827,34 @@ ORG 类型授权不会出现在查询结果中。`,
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "filter-role", Property: "filterRoleIds"},
-				{Name: "limit", Property: "maxResults"},
+				{Name: "limit", Property: "pageSize"},
+				{Name: "next-token", Property: "nextToken"},
 				{Name: "workspace", Property: "workspaceId"},
 			},
 		},
 	})
 
 	memberListCmd.Flags().String("workspace", "", "知识库 ID 或 URL (必填)")
-	memberListCmd.Flags().Int("limit", 30, "返回成员数上限，默认 30，最大 50；底层不支持游标续页")
+	memberListCmd.Flags().Int("limit", 30, "返回成员数上限，默认 30，最大 50")
 	memberListCmd.Flags().Int("max-results", 0, "")
 	_ = memberListCmd.Flags().MarkHidden("max-results")
 	memberListCmd.Flags().String("filter-role", "", "按角色过滤（逗号分隔）：OWNER / MANAGER / EDITOR / DOWNLOADER / READER")
+	memberListCmd.Flags().String("next-token", "", "分页游标，首次不传，后续传入上一次返回的 nextToken")
 
 	memberRemoveCmd := &cobra.Command{
 		Use:   "remove",
 		Short: "移除知识库成员",
-		Long: `从指定知识库中移除一个或多个成员（仅支持 USER 类型）。
+		Long: `从指定知识库中移除一个或多个成员。
+
+两种传参方式（互斥）：
+  旧格式：--users 传入逗号分隔的 userId 列表（仅 USER 类型）
+  新格式：--members 传入 JSON 数组，支持四种成员类型，只需 type 和 id（USER/DEPT/TAG 还需 corpId）
+
+成员类型说明：
+  USER          用户，id 为用户 userId，需携带 corpId
+  DEPT          部门，id 为部门 ID，需携带 corpId
+  CONVERSATION  群聊，id 为群聊 conversationId（cid 开头），无需 corpId
+  TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId
 
 移除后相关用户将无法访问该知识库下的内容（除非通过节点级权限另行授权）。
 
@@ -787,20 +863,31 @@ ORG 类型授权不会出现在查询结果中。`,
 - 操作者需具备知识库的 OWNER 或 MANAGER 权限。
 - 单次请求最多 30 个成员，超出请分批调用。`,
 		Example: `  dws wiki member remove --workspace <workspaceId> --users uid1
-  dws wiki member remove --workspace <workspaceId> --users uid1,uid2,uid3`,
+  dws wiki member remove --workspace <workspaceId> --users uid1,uid2,uid3
+  dws wiki member remove --workspace <workspaceId> --members '[{"type":"USER","id":"uid1","corpId":"xxx"},{"type":"DEPT","id":"deptId1","corpId":"xxx"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workspaceID, err := mustFlagOrFallback(cmd, "workspace", "workspace-id")
 			if err != nil {
 				return err
 			}
-			userIds, err := collectUserIDs(cmd)
-			if err != nil {
+			if err := validateMembersExclusivity(cmd); err != nil {
 				return err
 			}
-			return callMCPTool("remove_member", map[string]any{
-				"workspaceId": workspaceID,
-				"userIds":     userIds,
-			})
+			toolArgs := map[string]any{"workspaceId": workspaceID}
+			members, mErr := collectMembers(cmd, true)
+			if mErr != nil {
+				return mErr
+			}
+			if len(members) > 0 {
+				toolArgs["members"] = members
+			} else {
+				userIds, err := collectUserIDs(cmd)
+				if err != nil {
+					return err
+				}
+				toolArgs["userIds"] = userIds
+			}
+			return callMCPTool("remove_member", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(memberRemoveCmd, LeafSpec{
@@ -816,14 +903,14 @@ ORG 类型授权不会出现在查询结果中。`,
 				CLIPath:        "wiki member remove",
 				PrimaryCLIPath: "wiki member remove",
 			},
-			Description: "从指定知识库中移除一个或多个成员（仅支持 USER 类型）",
+			Description: "从指定知识库中移除一个或多个成员",
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "wiki", RPCName: "remove_member"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "从指定知识库中移除一个或多个成员（仅支持 USER 类型）",
+				AgentSummary: "从指定知识库中移除一个或多个成员",
 				UseWhen:      []string{"从知识库移除成员访问（离职/清理）时"},
 				AvoidWhen: []string{
 					"改角色用 update；节点级权限用 drive permission remove",
@@ -832,15 +919,17 @@ ORG 类型授权不会出现在查询结果中。`,
 				Examples: []string{"dws wiki member remove --workspace <WS_ID> --users uid1 --format json"},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "members", Property: "members"},
 				{Name: "users", Property: "userIds"},
 				{Name: "workspace", Property: "workspaceId"},
 			},
 		},
 	})
 	memberRemoveCmd.Flags().String("workspace", "", "知识库 ID 或 URL (必填)")
-	memberRemoveCmd.Flags().String("users", "", "被移除的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)")
+	memberRemoveCmd.Flags().String("users", "", "被移除的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)")
 	memberRemoveCmd.Flags().String("user", "", "")
 	_ = memberRemoveCmd.Flags().MarkHidden("user")
+	memberRemoveCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），只需 type 和 id（USER/DEPT/TAG 还需 corpId），与 --users 互斥")
 
 	// member 子命令的 --workspace-id 隐藏别名（LLMs derive from API field "workspaceId"）
 	memberAliasCmds := []*cobra.Command{memberAddCmd, memberUpdateCmd, memberListCmd, memberRemoveCmd}

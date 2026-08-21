@@ -710,17 +710,40 @@ dws wiki node create --type folder --name "文件夹名" --workspace <WORKSPACE_
 ```
 Usage:
   dws drive permission add --node <ID> --users uid1,uid2 --role READER
+  dws drive permission add --node <ID> --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"},{"type":"TAG","id":"tagId1","roleId":"EDITOR","corpId":"xxx"}]' --notify
   dws drive permission update --node <ID> --users uid1 --role EDITOR
+  dws drive permission update --node <ID> --members '[{"type":"USER","id":"uid1","roleId":"EDITOR","corpId":"xxx"}]' --notify=false
+  dws drive permission update --node <ID> --members '[{"type":"CONVERSATION","id":"cidXXX","roleId":"READER"}]'
   dws drive permission list --node <ID>
+  dws drive permission list --node <ID> --limit 50 --next-token <上次返回的 nextToken>
   dws drive permission remove --node <ID> --users uid1
+  dws drive permission remove --node <ID> --members '[{"type":"USER","id":"uid1","corpId":"xxx"},{"type":"DEPT","id":"deptId1","corpId":"xxx"}]'
 Flags:
-      --node string        目标节点 ID 或 URL (必填)
-      --users string       用户 userId 列表，逗号分隔 (add/update/remove 必填)
-      --role string        角色: MANAGER / EDITOR / DOWNLOADER / READER (add/update 必填)
-      --workspace string   知识库 ID (选填)
-      --limit int          返回成员数上限 (仅 list，默认 30，最大 200)
-      --filter-role string 按角色过滤: OWNER / MANAGER / EDITOR / DOWNLOADER / READER (仅 list)
+      --node string          目标节点 ID 或 URL (必填)
+      --users string         用户 userId 列表，逗号分隔 (旧格式)
+      --role string          角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填)
+      --members string       成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥
+      --notify bool          是否通知被添加/变更的成员 (仅 --members 新格式时生效，add 默认 true，update 默认 false)
+      --limit int            返回成员数上限 (仅 list，默认 30，最大 50)
+      --filter-role string   按角色过滤 (仅 list)
+      --next-token string    分页游标，首次不传，后续传入上一次返回的 nextToken (仅 list)
+      --workspace string     知识库 ID (选填)
 ```
+
+> **add / update / remove 支持两种传参方式（互斥）**：
+> - 旧格式：`--users` 传入逗号分隔的 userId 列表 + `--role` 指定统一角色（仅 USER 类型）
+> - 新格式：`--members` 传入 JSON 数组，支持 USER/DEPT/CONVERSATION/TAG 四种成员类型，每个 member 携带独立 `roleId`（remove 只需 type 和 id，但 USER/DEPT/TAG 仍需 corpId）
+>
+> **成员类型说明**：
+> - `USER` — 用户，id 为用户 userId，需携带 `corpId`（标识用户所属组织）
+> - `DEPT` — 部门，id 为部门 ID，需携带 `corpId`（标识部门所属组织）
+> - `CONVERSATION` — 群聊，id 为群聊 conversationId（cid 开头），无需 `corpId`
+> - `TAG` — 角色标签（也称角色组），id 为角色标签 ID，需携带 `corpId`。当用户要求"添加角色组"或"添加角色标签"时使用此类型
+>
+> **重要约束**：
+> - `--notify` 仅在新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），add 默认 true，update 默认 false
+> - 单次请求最多 30 个成员，超出请分批调用
+> - list 命令底层一次性返回全量成员后在内存中按 pageSize 分页，当 `hasMore` 为 true 时，传入 `--next-token` 即可获取下一页
 
 ### 文件互联网公开发布
 
