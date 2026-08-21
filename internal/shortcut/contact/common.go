@@ -261,35 +261,6 @@ func strictMobileLookup(data map[string]any, operation string) (map[string]any, 
 	return row, true, nil
 }
 
-func strictMobileUserDetail(data map[string]any, expectedUserID, operation string) (map[string]any, error) {
-	envelope, err := contactEnvelope(data, operation)
-	if err != nil {
-		return nil, err
-	}
-	items, err := responsecheck.RequireObjectCollection(envelope, operation, "result")
-	if err != nil {
-		return nil, err
-	}
-	if len(items) != 1 {
-		return nil, responsecheck.Error(operation, "unexpected_detail_count", fmt.Sprintf("手机号查询详情应唯一，实际返回 %d 项", len(items)))
-	}
-	model, ok := items[0]["orgEmployeeModel"].(map[string]any)
-	if !ok || len(model) == 0 {
-		return nil, responsecheck.Error(operation, "malformed_result", "手机号查询详情缺少非空 orgEmployeeModel")
-	}
-	actualUserID := contactString(model, "orgUserId")
-	if actualUserID == "" {
-		actualUserID = contactString(model, "userId")
-	}
-	if actualUserID == "" {
-		return nil, responsecheck.Error(operation, "missing_stable_identity", "手机号查询详情缺少 userId/orgUserId")
-	}
-	if actualUserID != expectedUserID {
-		return nil, responsecheck.Error(operation, "identity_mismatch", "手机号查询详情稳定身份与精确查询结果不一致")
-	}
-	return model, nil
-}
-
 func normalizeContactMobile(value string) (string, error) {
 	return normalizeContactMobilePart(value, 6)
 }

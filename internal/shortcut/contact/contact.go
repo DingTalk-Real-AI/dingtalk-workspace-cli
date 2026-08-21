@@ -242,7 +242,7 @@ var SearchMobile = shortcut.Shortcut{
 			Examples:     []string{"dws contact +search-mobile --mobile 13800138000"},
 		},
 		// Keep the merge-base Schema property. Execute uses the dedicated exact
-		// mobile interface and binds its stable userId to an exact detail readback.
+		// mobile interface and returns its reviewed stable-identity projection.
 		Parameters: []contract.ParamDecl{{Name: "mobile", Property: "mobile"}},
 	},
 	Flags: []shortcut.Flag{
@@ -274,16 +274,6 @@ var SearchMobile = shortcut.Shortcut{
 		}
 		if !found {
 			return rt.Output(map[string]any{"count": 0, "users": []map[string]any{}})
-		}
-		userID := contactString(user, "userId")
-		detail, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
-			"user_id_list": []string{userID},
-		})
-		if err != nil {
-			return err
-		}
-		if _, err := strictMobileUserDetail(detail, userID, "contact/get_user_info_by_user_ids"); err != nil {
-			return err
 		}
 		return rt.Output(map[string]any{"count": 1, "users": []map[string]any{user}})
 	},
