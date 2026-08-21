@@ -231,55 +231,63 @@ func strictUserSearch(data map[string]any, operation string, allowMissingResult 
 	return projectUsers(items, operation)
 }
 
-func strictMobileKeywordSearch(data map[string]any, operation string) ([]map[string]any, error) {
-	users, err := strictUserSearch(data, operation, false)
+// strictMobileLookup decodes the dedicated exact-mobile interface. The live
+// service returns one result object for a match and omits result for a
+// successful no-match. That omission is reviewed only for this exact lookup;
+// null, empty objects, arrays, and malformed identities remain failures.
+func strictMobileLookup(data map[string]any, operation string) (map[string]any, bool, error) {
+	envelope, err := contactEnvelope(data, operation)
+	if err != nil {
+		return nil, false, err
+	}
+	raw, present := envelope["result"]
+	if !present {
+		return nil, false, nil
+	}
+	result, ok := raw.(map[string]any)
+	if !ok || len(result) == 0 {
+		return nil, false, responsecheck.Error(operation, "malformed_result", "手机号精确查询 result 必须是非空对象")
+	}
+	userID := contactString(result, "userId")
+	if userID == "" {
+		return nil, false, responsecheck.Error(operation, "missing_stable_identity", "手机号精确查询结果缺少非空 userId")
+	}
+	row := map[string]any{"userId": userID}
+	if name, present, valid := contactOptionalString(result, "orgUserName"); !valid {
+		return nil, false, responsecheck.Error(operation, "malformed_optional_field", "手机号精确查询 orgUserName 必须是字符串")
+	} else if present && name != "" {
+		row["name"] = name
+	}
+	return row, true, nil
+}
+
+func strictMobileUserDetail(data map[string]any, expectedUserID, operation string) (map[string]any, error) {
+	envelope, err := contactEnvelope(data, operation)
 	if err != nil {
 		return nil, err
 	}
-	if len(users) > 1 {
-		return nil, responsecheck.Error(operation, "ambiguous_mobile_match", fmt.Sprintf("手机号关键词匹配到 %d 个用户；拒绝猜测唯一身份", len(users)))
-	}
-	return users, nil
-}
-
-func strictMobileDetail(data map[string]any, expectedUserID, expectedMobile, operation string) error {
-	envelope, err := contactEnvelope(data, operation)
-	if err != nil {
-		return err
-	}
 	items, err := responsecheck.RequireObjectCollection(envelope, operation, "result")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(items) != 1 {
-		return responsecheck.Error(operation, "unexpected_detail_count", fmt.Sprintf("手机号候选详情应唯一，实际返回 %d 项", len(items)))
+		return nil, responsecheck.Error(operation, "unexpected_detail_count", fmt.Sprintf("手机号查询详情应唯一，实际返回 %d 项", len(items)))
 	}
 	model, ok := items[0]["orgEmployeeModel"].(map[string]any)
 	if !ok || len(model) == 0 {
-		return responsecheck.Error(operation, "malformed_result", "手机号候选详情缺少非空 orgEmployeeModel")
+		return nil, responsecheck.Error(operation, "malformed_result", "手机号查询详情缺少非空 orgEmployeeModel")
 	}
 	actualUserID := contactString(model, "orgUserId")
 	if actualUserID == "" {
 		actualUserID = contactString(model, "userId")
 	}
 	if actualUserID == "" {
-		return responsecheck.Error(operation, "missing_stable_identity", "手机号候选详情缺少 userId/orgUserId")
+		return nil, responsecheck.Error(operation, "missing_stable_identity", "手机号查询详情缺少 userId/orgUserId")
 	}
 	if actualUserID != expectedUserID {
-		return responsecheck.Error(operation, "identity_mismatch", "手机号候选详情稳定身份与关键词候选不一致")
+		return nil, responsecheck.Error(operation, "identity_mismatch", "手机号查询详情稳定身份与精确查询结果不一致")
 	}
-	actualMobile, present, valid := contactOptionalString(model, "orgUserMobile")
-	if !present || !valid || actualMobile == "" {
-		return responsecheck.Error(operation, "missing_mobile_evidence", "手机号候选详情缺少可核验的 orgUserMobile")
-	}
-	stateCode, _, valid := contactOptionalString(model, "stateCode")
-	if !valid {
-		return responsecheck.Error(operation, "malformed_mobile_evidence", "手机号候选详情 stateCode 必须是字符串")
-	}
-	if !contactMobileMatches(expectedMobile, actualMobile, stateCode) {
-		return responsecheck.Error(operation, "mobile_mismatch", "手机号候选详情与请求手机号不一致")
-	}
-	return nil
+	return model, nil
 }
 
 func normalizeContactMobile(value string) (string, error) {
@@ -310,25 +318,6 @@ func normalizeContactMobilePart(value string, minimumDigits int) (string, error)
 		return "", fmt.Errorf("mobile too short")
 	}
 	return normalized, nil
-}
-
-func contactMobileMatches(expected, actual, stateCode string) bool {
-	expectedDigits, err := normalizeContactMobile(expected)
-	if err != nil {
-		return false
-	}
-	actualDigits, err := normalizeContactMobile(actual)
-	if err != nil {
-		return false
-	}
-	if expectedDigits == actualDigits {
-		return true
-	}
-	stateDigits, err := normalizeContactMobilePart(stateCode, 1)
-	if err != nil {
-		return false
-	}
-	return !strings.HasPrefix(actualDigits, stateDigits) && expectedDigits == stateDigits+actualDigits
 }
 
 func strictFollowings(data map[string]any, operation, expectedOpenID string) ([]map[string]any, error) {

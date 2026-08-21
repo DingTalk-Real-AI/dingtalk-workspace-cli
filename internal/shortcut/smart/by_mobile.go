@@ -23,9 +23,10 @@ import (
 // ByMobile: find a person by phone number and return their full profile in one
 // step.
 //
-// Steps: find one candidate through keyword search → fetch the same userId's
-// full detail → require the returned orgUserMobile to exactly match the
-// normalized request. A unique keyword candidate alone is never mobile proof.
+// Steps: resolve the number through the dedicated exact-mobile interface →
+// fetch the same stable userId's full detail. The detail endpoint does not
+// expose mobile under every permission profile, so identity is bound to the
+// dedicated lookup result rather than inferred from keyword search.
 //
 //	dws contact +by-mobile --mobile 13800138000
 var ByMobile = shortcut.Shortcut{
@@ -75,9 +76,7 @@ var ByMobile = shortcut.Shortcut{
 		}
 		mobile := rt.Str("mobile")
 
-		// Step 1 — resolve the mobile through the keyword endpoint. Unlike
-		// search_user_by_mobile, this endpoint publishes an explicit result
-		// array for both the known match and the guaranteed zero-match case.
+		// Step 1 — resolve the mobile through the dedicated exact interface.
 		_, profile, err := strictResolveContactUserByMobile(rt, mobile)
 		if err != nil {
 			return err

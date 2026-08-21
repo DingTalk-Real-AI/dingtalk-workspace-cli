@@ -21,7 +21,6 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/responsecheck"
 )
 
 // GetSelf 获取当前登录用户信息（我是谁 / 本人）。
@@ -242,8 +241,8 @@ var SearchMobile = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +search-mobile --mobile 13800138000"},
 		},
-		// Keep the merge-base Schema property. Execute is a reviewed composite
-		// adapter from --mobile to keyword plus an exact detail readback.
+		// Keep the merge-base Schema property. Execute uses the dedicated exact
+		// mobile interface and binds its stable userId to an exact detail readback.
 		Parameters: []contract.ParamDecl{{Name: "mobile", Property: "mobile"}},
 	},
 	Flags: []shortcut.Flag{
@@ -251,7 +250,7 @@ var SearchMobile = shortcut.Shortcut{
 	},
 	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"mobile"}, Description: "--mobile 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号"}},
 	Validate: func(rt *shortcut.RuntimeContext) error {
-		return validateContactMobile(rt, "contact/search_contact_by_key_word", "mobile")
+		return validateContactMobile(rt, "contact/search_user_by_mobile", "mobile")
 	},
 	Tips: []string{
 		`dws contact +search-mobile --mobile 13800138000`,
@@ -260,35 +259,33 @@ var SearchMobile = shortcut.Shortcut{
 		if err := rt.RequireAll("mobile"); err != nil {
 			return err
 		}
-		if err := validateContactMobile(rt, "contact/search_contact_by_key_word", "mobile"); err != nil {
+		if err := validateContactMobile(rt, "contact/search_user_by_mobile", "mobile"); err != nil {
 			return err
 		}
-		data, err := rt.CallMCPData("contact", "search_contact_by_key_word", map[string]any{
-			"keyword": rt.Str("mobile"),
+		data, err := rt.CallMCPData("contact", "search_user_by_mobile", map[string]any{
+			"mobile": rt.Str("mobile"),
 		})
 		if err != nil {
 			return err
 		}
-		users, err := strictMobileKeywordSearch(data, "contact/search_contact_by_key_word")
+		user, found, err := strictMobileLookup(data, "contact/search_user_by_mobile")
 		if err != nil {
 			return err
 		}
-		if len(users) == 1 {
-			userID := contactString(users[0], "userId")
-			if userID == "" {
-				return responsecheck.Error("contact/search_contact_by_key_word", "missing_stable_identity", "手机号关键词候选缺少可用于详情读回的 userId")
-			}
-			detail, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
-				"user_id_list": []string{userID},
-			})
-			if err != nil {
-				return err
-			}
-			if err := strictMobileDetail(detail, userID, rt.Str("mobile"), "contact/get_user_info_by_user_ids"); err != nil {
-				return err
-			}
+		if !found {
+			return rt.Output(map[string]any{"count": 0, "users": []map[string]any{}})
 		}
-		return rt.Output(map[string]any{"count": len(users), "users": users})
+		userID := contactString(user, "userId")
+		detail, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
+			"user_id_list": []string{userID},
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := strictMobileUserDetail(detail, userID, "contact/get_user_info_by_user_ids"); err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"count": 1, "users": []map[string]any{user}})
 	},
 }
 

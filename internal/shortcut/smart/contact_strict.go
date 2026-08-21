@@ -172,9 +172,16 @@ func strictResolveContactUserByMobile(rt *shortcut.RuntimeContext, mobile string
 	if _, err := normalizeContactSmartMobile(mobile); err != nil {
 		return contactUser{}, nil, responsecheck.Error("contact/by-mobile", "invalid_mobile", "--mobile 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号")
 	}
-	user, err := strictResolveContactUser(rt, mobile)
+	lookup, err := rt.CallMCPData("contact", "search_user_by_mobile", map[string]any{"mobile": mobile})
 	if err != nil {
 		return contactUser{}, nil, err
+	}
+	user, found, err := strictContactMobileLookup(lookup, "contact/search_user_by_mobile")
+	if err != nil {
+		return contactUser{}, nil, err
+	}
+	if !found {
+		return contactUser{}, nil, responsecheck.Error("contact/search_user_by_mobile", "not_found", "未找到绑定该手机号的通讯录用户")
 	}
 	data, err := rt.CallMCPData("contact", "get_user_info_by_user_ids", map[string]any{
 		"user_id_list": []string{user.userID},
@@ -186,18 +193,39 @@ func strictResolveContactUserByMobile(rt *shortcut.RuntimeContext, mobile string
 	if err != nil {
 		return contactUser{}, nil, err
 	}
-	actualMobile, present, valid := strictContactOptionalString(profile, "orgUserMobile")
-	if !present || !valid || actualMobile == "" {
-		return contactUser{}, nil, responsecheck.Error("contact/get_user_info_by_user_ids", "missing_mobile_evidence", "手机号候选详情缺少可核验的 orgUserMobile")
-	}
-	stateCode, _, valid := strictContactOptionalString(profile, "stateCode")
-	if !valid {
-		return contactUser{}, nil, responsecheck.Error("contact/get_user_info_by_user_ids", "malformed_mobile_evidence", "手机号候选详情 stateCode 必须是字符串")
-	}
-	if !contactSmartMobileMatches(mobile, actualMobile, stateCode) {
-		return contactUser{}, nil, responsecheck.Error("contact/get_user_info_by_user_ids", "mobile_mismatch", "手机号候选详情与请求手机号不一致")
-	}
 	return user, profile, nil
+}
+
+// strictContactMobileLookup accepts the dedicated exact-mobile wire only. A
+// successful response with no result is the reviewed no-match encoding seen
+// from this interface; null and every malformed present result fail closed.
+func strictContactMobileLookup(data map[string]any, operation string) (contactUser, bool, error) {
+	envelope, err := strictContactEnvelope(data, operation)
+	if err != nil {
+		return contactUser{}, false, err
+	}
+	raw, present := envelope["result"]
+	if !present {
+		return contactUser{}, false, nil
+	}
+	result, ok := raw.(map[string]any)
+	if !ok || len(result) == 0 {
+		return contactUser{}, false, responsecheck.Error(operation, "malformed_result", "手机号精确查询 result 必须是非空对象")
+	}
+	user := contactUser{
+		userID:         strictContactString(result, "userId"),
+		openDingTalkID: strictContactString(result, "openDingTalkId"),
+		name:           strictContactString(result, "orgUserName"),
+	}
+	if user.userID == "" {
+		return contactUser{}, false, responsecheck.Error(operation, "missing_stable_identity", "手机号精确查询结果缺少非空 userId")
+	}
+	for _, key := range []string{"orgUserName", "openDingTalkId"} {
+		if _, _, valid := strictContactOptionalString(result, key); !valid {
+			return contactUser{}, false, responsecheck.Error(operation, "malformed_optional_field", "手机号精确查询 "+key+" 必须是字符串")
+		}
+	}
+	return user, true, nil
 }
 
 func normalizeContactSmartMobile(value string) (string, error) {
@@ -228,25 +256,6 @@ func normalizeContactSmartMobilePart(value string, minimumDigits int) (string, e
 		return "", fmt.Errorf("mobile too short")
 	}
 	return normalized, nil
-}
-
-func contactSmartMobileMatches(expected, actual, stateCode string) bool {
-	expectedDigits, err := normalizeContactSmartMobile(expected)
-	if err != nil {
-		return false
-	}
-	actualDigits, err := normalizeContactSmartMobile(actual)
-	if err != nil {
-		return false
-	}
-	if expectedDigits == actualDigits {
-		return true
-	}
-	stateDigits, err := normalizeContactSmartMobilePart(stateCode, 1)
-	if err != nil {
-		return false
-	}
-	return !strings.HasPrefix(actualDigits, stateDigits) && expectedDigits == stateDigits+actualDigits
 }
 
 func strictUserDetail(data map[string]any, expectedUserID, operation string) (map[string]any, error) {

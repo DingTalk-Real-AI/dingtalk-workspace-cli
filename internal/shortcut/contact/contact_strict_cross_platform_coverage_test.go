@@ -129,8 +129,8 @@ func TestCrossPlatformCoverageContactSubDepartmentsRejectBadIdentityAndShape(t *
 
 func TestCrossPlatformCoverageContactSearchMobileUsesReviewedObjectShape(t *testing.T) {
 	caller := &contactCaller{payloads: map[string]string{
-		"search_contact_by_key_word": `{"success":true,"result":[{"userId":"stable-user","name":"Fixture"}]}`,
-		"get_user_info_by_user_ids":  `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"stable-user","orgUserMobile":"13800138000","stateCode":"86"}}]}`,
+		"search_user_by_mobile":     `{"success":true,"result":{"userId":"stable-user","orgUserName":"Fixture"}}`,
+		"get_user_info_by_user_ids": `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"stable-user"}}]}`,
 	}}
 	helpers.InitDepsForTest(t, caller)
 	cmd := &cobra.Command{Use: "+search-mobile"}
@@ -143,29 +143,28 @@ func TestCrossPlatformCoverageContactSearchMobileUsesReviewedObjectShape(t *test
 	if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err != nil {
 		t.Fatalf("search-mobile: %v", err)
 	}
-	if caller.calls != 2 || caller.product != "contact" || caller.history[0].tool != "search_contact_by_key_word" || caller.history[0].args["keyword"] != "+86 138-0013-8000" || caller.history[1].tool != "get_user_info_by_user_ids" {
+	if caller.calls != 2 || caller.product != "contact" || caller.history[0].tool != "search_user_by_mobile" || caller.history[0].args["mobile"] != "+86 138-0013-8000" || caller.history[1].tool != "get_user_info_by_user_ids" {
 		t.Fatalf("mapping = calls:%d product:%q history:%#v", caller.calls, caller.product, caller.history)
 	}
 
 	caller.calls, caller.history = 0, nil
-	caller.payloads["search_contact_by_key_word"] = `{"success":true,"result":[]}`
+	caller.payloads["search_user_by_mobile"] = `{"success":true}`
 	if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err != nil {
-		t.Fatalf("explicit mobile zero rejected: %v", err)
+		t.Fatalf("reviewed exact-mobile zero rejected: %v", err)
 	}
-	if caller.calls != 1 || caller.history[0].tool != "search_contact_by_key_word" {
-		t.Fatalf("zero match must stop after explicit search result: %#v", caller.history)
+	if caller.calls != 1 || caller.history[0].tool != "search_user_by_mobile" {
+		t.Fatalf("zero match must stop after exact lookup: %#v", caller.history)
 	}
-	caller.payloads["search_contact_by_key_word"] = `{"success":true}`
+	caller.payloads["search_user_by_mobile"] = `{"success":true,"result":null}`
 	if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err == nil {
-		t.Fatal("missing result must not become a successful empty search")
+		t.Fatal("null result must not become a successful empty search")
 	}
 
-	caller.payloads["search_contact_by_key_word"] = `{"success":true,"result":[{"userId":"stable-user"}]}`
+	caller.payloads["search_user_by_mobile"] = `{"success":true,"result":{"userId":"stable-user"}}`
 	for name, detail := range map[string]string{
-		"wrong identity":    `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"other","orgUserMobile":"13800138000"}}]}`,
-		"missing mobile":    `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"stable-user"}}]}`,
-		"wrong mobile type": `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"stable-user","orgUserMobile":7}}]}`,
-		"mobile mismatch":   `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"stable-user","orgUserMobile":"13900139000"}}]}`,
+		"wrong identity": `{"success":true,"result":[{"orgEmployeeModel":{"orgUserId":"other"}}]}`,
+		"missing model":  `{"success":true,"result":[{}]}`,
+		"missing detail": `{"success":true,"result":[]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			caller.payloads["get_user_info_by_user_ids"] = detail
@@ -188,7 +187,7 @@ func TestCrossPlatformCoverageContactSearchMobileUsesReviewedObjectShape(t *test
 		t.Fatalf("detail transport calls=%d history=%#v", caller.calls, caller.history)
 	}
 	caller.errors = nil
-	caller.payloads["search_contact_by_key_word"] = `{"success":true,"result":[{"openDingTalkId":"open-only"}]}`
+	caller.payloads["search_user_by_mobile"] = `{"success":true,"result":{"openDingTalkId":"open-only"}}`
 	caller.calls, caller.history = 0, nil
 	if err := declaration.Execute(shortcut.RuntimeContextForTest(cmd, declaration)); err == nil {
 		t.Fatal("mobile candidate without userId returned success")
@@ -211,14 +210,36 @@ func TestCrossPlatformCoverageContactSearchMobileUsesReviewedObjectShape(t *test
 }
 
 func TestCrossPlatformCoverageContactMobileProofHelperMatrix(t *testing.T) {
-	valid := map[string]any{
-		"success": true,
-		"result": []any{map[string]any{"orgEmployeeModel": map[string]any{
-			"orgUserId": "stable-user", "orgUserMobile": "13800138000",
-		}}},
+	user, found, err := strictMobileLookup(map[string]any{
+		"success": true, "result": map[string]any{"userId": "stable-user", "orgUserName": "Fixture"},
+	}, "contact/mobile")
+	if err != nil || !found || user["userId"] != "stable-user" || user["name"] != "Fixture" {
+		t.Fatalf("exact mobile result rejected: user=%#v found=%v err=%v", user, found, err)
 	}
-	if err := strictMobileDetail(valid, "stable-user", "13800138000", "contact/detail"); err != nil {
-		t.Fatalf("exact mobile proof rejected: %v", err)
+	if user, found, err := strictMobileLookup(map[string]any{"success": true}, "contact/mobile"); err != nil || found || user != nil {
+		t.Fatalf("reviewed no-match rejected: user=%#v found=%v err=%v", user, found, err)
+	}
+	for _, broken := range []map[string]any{
+		{"success": false},
+		{"success": true, "result": nil},
+		{"success": true, "result": []any{}},
+		{"success": true, "result": map[string]any{}},
+		{"success": true, "result": map[string]any{"orgUserName": "no-id"}},
+		{"success": true, "result": map[string]any{"userId": "stable-user", "orgUserName": 7}},
+	} {
+		if user, found, err := strictMobileLookup(broken, "contact/mobile"); err == nil {
+			t.Errorf("broken mobile lookup returned success: user=%#v found=%v data=%#v", user, found, broken)
+		}
+	}
+	if _, err := strictMobileUserDetail(map[string]any{
+		"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{"orgUserId": "stable-user"}}},
+	}, "stable-user", "contact/detail"); err != nil {
+		t.Fatalf("stable detail readback rejected: %v", err)
+	}
+	if _, err := strictMobileUserDetail(map[string]any{
+		"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{"userId": "stable-user"}}},
+	}, "stable-user", "contact/detail"); err != nil {
+		t.Fatalf("userId fallback detail rejected: %v", err)
 	}
 	for _, broken := range []map[string]any{
 		{"success": false},
@@ -227,11 +248,11 @@ func TestCrossPlatformCoverageContactMobileProofHelperMatrix(t *testing.T) {
 		{"success": true, "result": []any{map[string]any{}, map[string]any{}}},
 		{"success": true, "result": []any{map[string]any{}}},
 		{"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{}}}},
-		{"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{"orgUserMobile": "13800138000"}}}},
-		{"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{"orgUserId": "stable-user", "orgUserMobile": "13800138000", "stateCode": 86}}}},
+		{"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{"orgUserName": "no-id"}}}},
+		{"success": true, "result": []any{map[string]any{"orgEmployeeModel": map[string]any{"orgUserId": "other"}}}},
 	} {
-		if err := strictMobileDetail(broken, "stable-user", "13800138000", "contact/detail"); err == nil {
-			t.Errorf("broken mobile detail returned success: %#v", broken)
+		if profile, err := strictMobileUserDetail(broken, "stable-user", "contact/detail"); err == nil {
+			t.Errorf("broken mobile detail returned success: profile=%#v data=%#v", profile, broken)
 		}
 	}
 
@@ -247,22 +268,6 @@ func TestCrossPlatformCoverageContactMobileProofHelperMatrix(t *testing.T) {
 	for _, input := range []string{"", "123", "1+3800138000", "13800x138000"} {
 		if got, err := normalizeContactMobile(input); err == nil {
 			t.Errorf("invalid mobile %q normalized to %q", input, got)
-		}
-	}
-	for _, test := range []struct {
-		expected, actual, state string
-		want                    bool
-	}{
-		{"13800138000", "13800138000", "", true},
-		{"+8613800138000", "13800138000", "86", true},
-		{"8613800138000", "8613800138000", "86", true},
-		{"bad", "13800138000", "86", false},
-		{"13800138000", "bad", "86", false},
-		{"13800138000", "13900139000", "", false},
-		{"13800138000", "8613800138000", "86", false},
-	} {
-		if got := contactMobileMatches(test.expected, test.actual, test.state); got != test.want {
-			t.Errorf("mobile match (%q,%q,%q)=%v want %v", test.expected, test.actual, test.state, got, test.want)
 		}
 	}
 }
@@ -495,9 +500,6 @@ func TestCrossPlatformCoverageContactPrimitiveMatrices(t *testing.T) {
 	}
 	if _, err := strictUserSearch(map[string]any{"success": true}, "contact/test", true); err == nil {
 		t.Fatal("missing optional-result evidence returned success")
-	}
-	if _, err := strictMobileKeywordSearch(map[string]any{"success": true, "result": []any{map[string]any{"userId": "1"}, map[string]any{"userId": "2"}}}, "contact/test"); err == nil {
-		t.Fatal("ambiguous mobile search returned success")
 	}
 }
 
