@@ -287,13 +287,54 @@ func TestCrossPlatformCoverageContactInputConstraintsFailBeforeRemoteCall(t *tes
 func TestCrossPlatformCoverageUnavailableContactMakesNoRemoteCall(t *testing.T) {
 	caller := &contactCaller{payload: `{"success":true,"result":[]}`}
 	helpers.InitDepsForTest(t, caller)
-	for _, declaration := range []shortcut.Shortcut{ListRoles, ListRosterFields, GetRoster} {
-		if err := declaration.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: declaration.Command}, declaration)); err == nil {
-			t.Errorf("%s unavailable error = %v", declaration.Command, err)
-		}
+	if err := ListRoles.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: ListRoles.Command}, ListRoles)); err == nil {
+		t.Errorf("%s unavailable error = %v", ListRoles.Command, err)
 	}
 	if caller.calls != 0 {
 		t.Fatalf("unavailable Contact shortcuts made %d calls", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageRosterCompatibilityDelegatesToLegacyMCP(t *testing.T) {
+	caller := &contactCaller{payload: `{"success":true,"result":[]}`}
+	helpers.InitDepsForTest(t, caller)
+
+	listDeclaration := ListRosterFields
+	listDeclaration.OutputRollout = output.RolloutLegacyOnly
+	if err := listDeclaration.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: listDeclaration.Command}, listDeclaration)); err != nil {
+		t.Fatalf("list roster fields compatibility call: %v", err)
+	}
+	if caller.calls != 1 || caller.product != "hrmregister" || caller.tool != "list_authorized_roster_fields" || len(caller.args) != 0 {
+		t.Fatalf("list roster fields mapping = calls:%d product:%q tool:%q args:%#v", caller.calls, caller.product, caller.tool, caller.args)
+	}
+
+	caller.calls, caller.history = 0, nil
+	getCommand := &cobra.Command{Use: GetRoster.Command}
+	getCommand.Flags().String("staff-id", "", "")
+	getCommand.Flags().StringSlice("fields", nil, "")
+	if err := getCommand.Flags().Set("staff-id", "fixture-staff"); err != nil {
+		t.Fatal(err)
+	}
+	if err := getCommand.Flags().Set("fields", "field-a,field-b"); err != nil {
+		t.Fatal(err)
+	}
+	getDeclaration := GetRoster
+	getDeclaration.OutputRollout = output.RolloutLegacyOnly
+	if err := getDeclaration.Execute(shortcut.RuntimeContextForTest(getCommand, getDeclaration)); err != nil {
+		t.Fatalf("get roster compatibility call: %v", err)
+	}
+	fields, ok := caller.args["fieldCodeList"].([]string)
+	if caller.calls != 1 || caller.product != "hrmregister" || caller.tool != "get_authorized_emp_rosterInfo" || caller.args["staffId"] != "fixture-staff" || !ok || len(fields) != 2 || fields[0] != "field-a" || fields[1] != "field-b" {
+		t.Fatalf("get roster mapping = calls:%d product:%q tool:%q args:%#v", caller.calls, caller.product, caller.tool, caller.args)
+	}
+
+	caller.err = errors.New("permission denied")
+	caller.calls = 0
+	if err := listDeclaration.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: listDeclaration.Command}, listDeclaration)); err == nil {
+		t.Fatal("list roster fields swallowed downstream error")
+	}
+	if caller.calls != 1 {
+		t.Fatalf("downstream error calls = %d, want 1", caller.calls)
 	}
 }
 

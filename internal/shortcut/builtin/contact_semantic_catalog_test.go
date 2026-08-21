@@ -81,6 +81,14 @@ func TestCrossPlatformCoverageContactSemanticCatalogExactlyCoversRegisteredSurfa
 				t.Errorf("%s must not describe the retired keyword-search route", command)
 			}
 		}
+		if command == "+list-roster-fields" || command == "+get-roster" {
+			if !strings.Contains(record.SemanticDelta, "历史 CLI 继续透传原 MCP 调用与真实错误") {
+				t.Errorf("%s must preserve the historical direct CLI execution path", command)
+			}
+			if strings.Contains(record.SemanticDelta, "0 次远程调用") {
+				t.Errorf("%s must not claim a zero-call unavailable runtime", command)
+			}
+		}
 	}
 	if public != 13 || unavailable != 3 {
 		t.Fatalf("public/unavailable = %d/%d, want 13/3", public, unavailable)

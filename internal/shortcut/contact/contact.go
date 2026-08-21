@@ -743,7 +743,7 @@ var ListRosterFields = shortcut.Shortcut{
 		`dws contact +list-roster-fields`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return unavailableContact("hrmregister/list_authorized_roster_fields", contactRosterGapReason)
+		return rt.CallMCP("list_authorized_roster_fields", map[string]any{})
 	},
 }
 
@@ -764,7 +764,14 @@ var GetRoster = shortcut.Shortcut{
 		`dws contact +get-roster --staff-id STAFF_ID --fields fieldCode1,fieldCode2`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return unavailableContact("hrmregister/get_authorized_emp_rosterInfo", contactRosterGapReason)
+		params := map[string]any{}
+		if rt.Changed("staff-id") {
+			params["staffId"] = rt.Str("staff-id")
+		}
+		if rt.Changed("fields") {
+			params["fieldCodeList"] = rt.StrSlice("fields")
+		}
+		return rt.CallMCP("get_authorized_emp_rosterInfo", params)
 	},
 }
 
