@@ -726,6 +726,13 @@ Flags:
 
 `get-setting` 返回节点权限配置（不是成员清单）：`permissionMode`（INHERITED 继承上级 / INDEPENDENT 独立管理）、`shareScope`（可见范围与链接分享设置）、`policies`（水印、组织外分享、添加成员门槛等策略列表）。查询协作者清单仍用 `permission list`。
 
+get-setting 返回字段说明：
+- `permissionMode` — INHERITED（继承上级）/ INDEPENDENT（独立管理），未知时为 null
+- `shareScope` — `visibility`（PRIVATE/ORGANIZATION/PUBLIC）；`partnerIncluded`、`defaultRole`、`canSearch`、`canRecommend` 仅 ORGANIZATION 有意义；`linkShare`：`requirePassword`（密码明文不返回）、`expireAt`/`expireDays`（未设置为 null）、`forCurrentNode`
+- `policies[]` — 每项含 `code`（策略码）、`value`（当前值）、`inherited`（true=继承上级配置）、`allowedValues`（可设置值域）；未下发或不支持的策略不返回；`node_spread_scope` 仅文件夹类节点返回
+- `value` 按策略分型：开关型（external_share、external_share_manager_only、member_invite_org_only、permission_apply、external_permission_apply、watermark、node_move_forbidden）为 ON/OFF；member_invite、comment 为 READER/DOWNLOADER/EDITOR/MANAGER_AND_ABOVE（无 NOBODY）；node_spread、online_content_copy 为 DOWNLOADER/EDITOR/MANAGER_AND_ABOVE 或 NOBODY（无 READER_AND_ABOVE）；node_spread_scope 为 ALL_CONTENT（可传播全部内容）/ PREVIEWABLE_ONLY（仅可预览文件）
+- 方向语义：NOBODY=该操作对所有人禁止；XXX_AND_ABOVE=不低于该角色才允许
+
 ### 文件互联网公开发布
 
 管理文件的互联网公开发布状态。公开后任何人通过链接即可访问，无需登录钉钉。操作者需要是文件的管理员或拥有者。

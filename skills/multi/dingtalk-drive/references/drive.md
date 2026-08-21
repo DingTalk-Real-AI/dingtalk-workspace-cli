@@ -80,6 +80,8 @@ dws drive +publish-unset --node <dentryUuid>
 
 只在意图命中时读取一个精确 leaf Schema。成员变更、转移所有者、发起申请和公开状态变更必须明确节点、用户、角色与影响范围。转移所有者时，在构造最终命令前必须让用户分别明确决定 `--reserve-role <MANAGER|EDITOR|DOWNLOADER|READER|NONE>` 和 `--recursive=<true|false>`；Agent 不得根据默认值、对象类型或便捷性自行选择任一项。两项决策与目标、新所有者均明确后，才按 Runtime confirmation 构造首次正式调用。
 
+`permission get-setting` 返回 `permissionMode`（INHERITED/INDEPENDENT，未知时为 null）、`shareScope`（可见范围与链接分享，密码明文不返回；`partnerIncluded`、`defaultRole` 等仅 ORGANIZATION 有意义）和 `policies[]`（code/value/inherited/allowedValues；未下发的策略不返回，`node_spread_scope` 仅文件夹）。`value` 按策略分型：开关型为 ON/OFF；member_invite、comment 为 READER/DOWNLOADER/EDITOR/MANAGER_AND_ABOVE；node_spread、online_content_copy 为 DOWNLOADER/EDITOR/MANAGER_AND_ABOVE 或 NOBODY；node_spread_scope 为 ALL_CONTENT（可传播全部内容）/ PREVIEWABLE_ONLY（仅可预览文件）。NOBODY=该操作对所有人禁止；XXX_AND_ABOVE=不低于该角色才允许。
+
 发起权限申请先只读执行 `permission apply-info`。正式 `permission apply` 会通知审批人；调用前必须向用户逐项回显并确认资源、申请角色、审批人和理由。Agent 不得默认选择第一位审批人、最高/最低角色或代写申请理由；用户未明确同意完整申请内容时停在确认环节。
 
 ## 快捷方式节点
