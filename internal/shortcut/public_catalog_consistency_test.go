@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -24,8 +25,9 @@ func TestCrossPlatformCoveragePublicCatalogArtifactsStayConsistent(t *testing.T)
 	var catalog struct {
 		Count   int `json:"count"`
 		Results []struct {
-			Service string `json:"service"`
-			Command string `json:"command"`
+			Service       string `json:"service"`
+			Command       string `json:"command"`
+			SemanticDelta string `json:"semantic_delta"`
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(raw, &catalog); err != nil {
@@ -49,6 +51,14 @@ func TestCrossPlatformCoveragePublicCatalogArtifactsStayConsistent(t *testing.T)
 		seen[key] = struct{}{}
 		if _, generated := publicShortcutCatalog[key]; !generated {
 			t.Fatalf("public catalog result %d is missing from generated Go keys: %q", i, key)
+		}
+		if row.Service == "contact" && (row.Command == "+search-mobile" || row.Command == "+by-mobile") {
+			if !strings.Contains(row.SemanticDelta, "专用手机号精确查询接口") {
+				t.Fatalf("public catalog result %d %q has stale mobile lookup semantics", i, key)
+			}
+			if strings.Contains(row.SemanticDelta, "关键词能力") || strings.Contains(row.SemanticDelta, "关键词数组") {
+				t.Fatalf("public catalog result %d %q references the retired keyword-search route", i, key)
+			}
 		}
 	}
 	for key := range publicShortcutCatalog {

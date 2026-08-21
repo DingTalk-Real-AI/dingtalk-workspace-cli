@@ -40,6 +40,15 @@ var attendanceSemanticCatalogJSON []byte
 //go:embed semantic_catalog_mail.json
 var mailSemanticCatalogJSON []byte
 
+//go:embed semantic_catalog_aisearch.json
+var aisearchSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_contact.json
+var contactSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_live.json
+var liveSemanticCatalogJSON []byte
+
 //go:embed semantic_catalog_oa.json
 var oaSemanticCatalogJSON []byte
 
@@ -78,6 +87,9 @@ var reviewedSemanticCatalog = mustLoadSemanticCatalogs(
 	todoSemanticCatalogJSON,
 	attendanceSemanticCatalogJSON,
 	mailSemanticCatalogJSON,
+	aisearchSemanticCatalogJSON,
+	contactSemanticCatalogJSON,
+	liveSemanticCatalogJSON,
 	oaSemanticCatalogJSON,
 	dingSemanticCatalogJSON,
 	reportSemanticCatalogJSON,

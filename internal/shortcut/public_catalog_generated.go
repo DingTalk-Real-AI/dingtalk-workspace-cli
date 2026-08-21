@@ -6,6 +6,7 @@ package shortcut
 // command discovery and skill generation.
 func generatedPublicShortcutCatalog() map[string]struct{} {
 	return map[string]struct{}{
+		"aisearch\u0000+search-person":                  {},
 		"aitable\u0000+advperm-disable":                 {},
 		"aitable\u0000+advperm-enable":                  {},
 		"aitable\u0000+attachment-put":                  {},
@@ -237,7 +238,6 @@ func generatedPublicShortcutCatalog() map[string]struct{} {
 		"contact\u0000+list-dept-members":               {},
 		"contact\u0000+list-followings":                 {},
 		"contact\u0000+list-role-members":               {},
-		"contact\u0000+list-roles":                      {},
 		"contact\u0000+list-sub-depts":                  {},
 		"contact\u0000+lookup":                          {},
 		"contact\u0000+me":                              {},

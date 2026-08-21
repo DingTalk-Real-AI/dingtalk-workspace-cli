@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "service": "aisearch",
+  "default_availability": "available",
+  "shortcuts": {
+    "+search-person": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "对 enterprise_person_search 增加显式 success/result 数组、坏元素、来源类型和稳定人员身份校验；exact live 已同时证明已知非空与 phone 维度不可存在号码的显式零命中。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+search-enterprise": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "IM 搜索可返回稳定会话身份，但 fresh 随机查询仍返回业务对象，无法证明严格相关性或合法零结果；保持 unavailable，其他内容类型继续路由到原子命令。",
+      "risk": "read",
+      "availability": "unavailable",
+      "public": false,
+      "reviewed": true
+    },
+    "+search-behavior": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格校验行为搜索响应，但随机零命中标记仍返回非空完整业务对象，当前无法证明相关性或合法空结果。",
+      "risk": "read",
+      "availability": "unavailable",
+      "public": false,
+      "reviewed": true
+    }
+  }
+}
