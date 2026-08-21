@@ -1,17 +1,21 @@
-# drive 局部意图消歧
+# Drive 局部意图消歧
 
-本文件从单 Skill `intent-guide.md` 拆分而来，仅保留与本产品相关的跨产品消歧规则。
+| 用户表达 | 应用 | 不应用 | 理由 |
+|---|---|---|---|
+| 全局找文件、最近文件、浏览已知“我的文件”/文档空间目录 | Drive | Wiki node | 未限定知识库 workspace，属于普通存储域 |
+| 列出/发现钉盘企业空间或“我的文件”空间 | managed `dws wiki space list --type orgSpace|mySpace` 发现 spaceId/rootFolderId 后回 Drive | `wiki +space-list` 的 orgWikiSpace/myWikiSpace | Drive 存储空间前置；spaceId、rootFolderId 与知识库 workspaceId 不可互换 |
+| 明确知识库内列节点、移动节点、搜索节点 | Wiki | Drive | workspace 内层级由 Wiki 管理 |
+| 普通文件或文件夹移动、重命名、删除 | Drive | Doc | 节点存储动作不修改正文 |
+| 普通文件创建独立副本 | Drive download→upload | Drive `+copy` | 当前 `+copy` 会拒绝普通钉盘文件，避免把 `.dlink` 快捷方式伪装成副本 |
+| adoc 正文读取、编辑或导出 | Doc | Drive download | Drive 只管理节点；在线文档需要格式转换 |
+| 本地 xlsx/xls/csv 节点下载后分析 | Drive + 本地工具 | Sheet range read | 上传的普通文件不是 axls 在线表格 |
+| axls 在线表格导出为 xlsx | Sheet export | Drive download | export 执行格式转换 |
+| able 记录、字段、视图 | AITable | Drive | 表内业务数据不属于存储节点动作 |
+| able 仅复制结构、删除 Base | AITable `+base-copy --base-id <ID> --target-folder-id <真实ID> --only-struct` / `+base-delete --base-id <ID>` | Drive copy/delete | 当前 main 要求真实目标文件夹 ID；缺少时停止，禁止发明 `--target-root`、完整复制后逐表删数据或用 Drive 猜根 ID |
+| Base 内 Table/Dashboard/Section 节点操作 | AITable `+table-*` / `+section-*` | Drive | nsheet 节点不是独立 Drive dentry |
+| 整个 Base 移到普通文件夹、外层存储重命名 | Drive | AITable 表内命令 | 这是 Base 外层存储位置/名称动作 |
+| Word/Markdown/Text 转在线文档 | Doc `+import` | Drive upload | import 会创建在线文档；upload 只保留原文件 |
+| “上传文件”但未指定目标 | Drive `+upload` | — | 默认按普通文件上传到钉盘 |
+| “照这个文档做一份同样格式的” | Drive `+copy` + `+rename`，再由 Doc 局部更新副本 | 读取后重建 | 先复制可保留在线文档版式 |
 
-| 用户说... | 真实意图 | 应该用 | 不要用 | 理由 |
-|---|---|---|---|---|
-| "参照这个生成同样的 / 按模板生成 / 复刻 X / 同样的模板 X 月份的" + 已有 alidocs URL | 模板保形生成同形态变体 | `drive copy + drive rename + doc block update` → 见 [best_practices/04-document.md `template-based-generation`](../../dingtalk-doc/references/04-document.md#template-based-generation) | `doc read + doc create`（重写链） | adoc → markdown 是有损投影，read+create 会丢行高/单元格背景色/字号；copy 在 adoc 层保形复制后只在副本上局部修改 |
-| "读一下这个 xlsx 的数据" / xlsx 节点链接 | 下载本地表格文件 | `dws drive +download --node --output <相对路径>` | `sheet range read` | xlsx / xls / xlsm / csv 是上传的本地文件（`contentType=DOCUMENT`），sheet 命令只支持在线表格；Shortcut 会验证真实本地字节 |
-| "把这个在线表格导出为 xlsx 文件" | 在线表格格式转换 | `dws sheet export` | `dws drive download` | `export` 是 axls → xlsx 的导出转换；`download` 只能下载已有的 xlsx 节点 |
-| "帮我把这个文件传到网盘" | 钉盘上传 | `drive +upload` | — | 文件上传是存储层操作，归 drive；Shortcut 负责提交和读回 |
-| "上传文件到钉盘/我的文件" | 钉盘上传 | `drive +upload` | — | 提到"钉盘/网盘/我的文件"→ drive |
-| "上传文件"（未指定目标） | 默认钉盘 | `drive +upload` | — | 未明确目标时默认上传到钉盘 |
-| "帮我看看知识库里的文件" | 知识库节点列表 | `wiki node list --workspace` | `drive list` | 明确"知识库"上下文 → wiki node list |
-| "列出钉盘团队空间" | 列出钉盘空间 | `wiki space list --type orgSpace` | `drive list-spaces` | 空间管理归 wiki，drive list-spaces 已 deprecated |
-| "在知识库里搜方案" | 空间内搜索 | `wiki node search --workspace` | `drive search` | 指定了空间上下文 → wiki node search |
-| "搜一下有没有叫XX的文件" | 全局搜索 | `drive +search` | `wiki node search` | 未指定空间 → Drive Shortcut 严格搜索 |
-| "整理一下XX项目的所有讨论" | 跨源主题归档 | #5 generate-topic-report | #4 write-doc | #4 侧重单篇文档创作；按主题跨听记/群消息汇总属于工作汇报 |
+URL 本身不能证明产品类型。当前 Drive shortcut 的公开参数主要接受 ID；只有 URL 时先用 `dws drive info --node <URL> --format json` 预检并取真实 nodeId/nodeType。

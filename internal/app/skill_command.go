@@ -117,36 +117,112 @@ type CliSkillDTO struct {
 // (skill_setup.go) MUST have a matching path value here — enforced by
 // TestAgentSkillPathsCoversSetupHomes.
 var agentSkillPaths = map[string]string{
-	// `agents` is the generic-agent sentinel: install scripts and `setup`
-	// special-case ~/.agents/skills as a no-checks-required fallback so a
-	// fresh machine without any IDE/agent registry still gets skills.
-	"agents":    ".agents/skills",
-	"qoder":     ".qoder/skills",
-	"qoderwork": ".qoderwork/skills",
+	// Universal agents. Those without an independent global directory map
+	// directly to the canonical ~/.agents/skills store.
+	"agents":          ".agents/skills",
+	"amp":             filepath.Join(".config", "agents", "skills"),
+	"antigravity":     ".gemini/antigravity/skills",
+	"antigravity-cli": ".gemini/antigravity-cli/skills",
+	"codex":           ".codex/skills",
+	"cursor":          ".cursor/skills",
+	"deepagents":      ".deepagents/agent/skills",
+	"firebender":      ".firebender/skills",
+	"gemini-cli":      ".gemini/skills",
+	"github-copilot":  ".copilot/skills",
+	"opencode":        filepath.Join(".config", "opencode", "skills"),
+	"replit":          filepath.Join(".config", "agents", "skills"),
+	"universal":       filepath.Join(".config", "agents", "skills"),
+	"cline":           ".agents/skills",
+	"dexto":           ".agents/skills",
+	"kimi-code-cli":   ".agents/skills",
+	"loaf":            ".agents/skills",
+	"warp":            ".agents/skills",
+	"zed":             ".agents/skills",
+
+	// Non-universal agents with global Skill directories.
+	"aider-desk":     ".aider-desk/skills",
+	"astrbot":        ".astrbot/data/skills",
+	"autohand-code":  ".autohand/skills",
+	"augment":        ".augment/skills",
+	"bob":            ".bob/skills",
+	"claude-code":    ".claude/skills",
+	"openclaw":       ".openclaw/skills",
+	"codearts-agent": ".codeartsdoer/skills",
+	"codebuddy":      ".codebuddy/skills",
+	"codemaker":      ".codemaker/skills",
+	"codestudio":     ".codestudio/skills",
+	"command-code":   ".commandcode/skills",
+	"continue":       ".continue/skills",
+	"cortex":         ".snowflake/cortex/skills",
+	"crush":          filepath.Join(".config", "crush", "skills"),
+	"devin":          filepath.Join(".config", "devin", "skills"),
+	"droid":          ".factory/skills",
+	"forgecode":      ".forge/skills",
+	"goose":          filepath.Join(".config", "goose", "skills"),
+	"grok":           ".grok/skills",
+	"hermes-agent":   ".hermes/skills",
+	"inference-sh":   ".inferencesh/skills",
+	"jazz":           ".jazz/skills",
+	"junie":          ".junie/skills",
+	"iflow-cli":      ".iflow/skills",
+	"kilo":           ".kilocode/skills",
+	"kimchi":         filepath.Join(".config", "kimchi", "harness", "skills"),
+	"kiro-cli":       ".kiro/skills",
+	"kode":           ".kode/skills",
+	"lingma":         ".lingma/skills",
+	"mcpjam":         ".mcpjam/skills",
+	"minimax-code":   ".minimax/skills",
+	"mistral-vibe":   ".vibe/skills",
+	"moxby":          ".moxby/skills",
+	"mux":            ".mux/skills",
+	"openhands":      ".openhands/skills",
+	"ona":            ".ona/skills",
+	"pi":             ".pi/agent/skills",
+	"qoder":          ".qoder/skills",
+	"qoder-cn":       ".qoder-cn/skills",
+	"qwen-code":      ".qwen/skills",
+	"reasonix":       ".reasonix/skills",
+	"rovodev":        ".rovodev/skills",
+	"roo":            ".roo/skills",
+	"tabnine-cli":    ".tabnine/agent/skills",
+	"terramind":      ".terramind/skills",
+	"tinycloud":      ".tinycloud/skills",
+	"trae":           ".trae/skills",
+	"trae-cn":        ".trae-cn/skills",
+	"windsurf":       ".codeium/windsurf/skills",
+	"zcode":          ".zcode/skills",
+	"zencoder":       ".zencoder/skills",
+	"zenflow":        ".zencoder/skills",
+	"neovate":        ".neovate/skills",
+	"pochi":          ".pochi/skills",
+	"adal":           ".adal/skills",
+
+	// DWS compatibility aliases and DWS-only integrations.
 	"claude":    ".claude/skills",
-	"cursor":    ".cursor/skills",
-	"codex":     ".codex/skills",
-	"zcode":     ".zcode/skills",
-	"opencode":  filepath.Join(".config", "opencode", "skills"),
-	// IDE / agent registries also probed by `dws skill setup --target all`.
-	"gemini":   ".gemini/skills",
-	"github":   ".github/skills",
-	"windsurf": ".windsurf/skills",
-	"augment":  ".augment/skills",
-	"cline":    ".cline/skills",
-	"amp":      ".amp/skills",
-	"kiro":     ".kiro/skills",
-	"trae":     ".trae/skills",
-	"openclaw": ".openclaw/skills",
-	"hermes":   ".hermes/skills",
+	"gemini":    ".gemini/skills",
+	"github":    ".copilot/skills",
+	"hermes":    ".hermes/skills",
+	"kiro":      ".kiro/skills",
+	"qoderwork": ".qoderwork/skills",
+}
+
+// Eve has project-scoped Skill directories but no upstream globalSkillsDir.
+// Keep it in the advertised enumeration while failing explicitly instead of
+// pretending that a global install configured Eve.
+var unsupportedGlobalAgentTargets = map[string]string{
+	"eve":          "Eve 不支持全局 Skill 安装，请在 Eve 项目内配置 agent/skills",
+	"promptscript": "PromptScript 不支持全局 Skill 安装，请在项目内使用 .agents/skills",
 }
 
 // supportedTargets returns a sorted, comma-separated list of supported
 // targets. Sorted so help text and error messages stay stable across runs
 // (Go map iteration order is intentionally randomized).
 func supportedTargets() string {
-	targets := make([]string, 0, len(agentSkillPaths)+1)
+	targets := make([]string, 0, len(agentSkillPaths)+len(unsupportedGlobalAgentTargets)+1)
 	for target := range agentSkillPaths {
+		targets = append(targets, target)
+	}
+	for target := range unsupportedGlobalAgentTargets {
 		targets = append(targets, target)
 	}
 	sort.Strings(targets)
@@ -182,9 +258,26 @@ func formatAgentSkillPathsForHelp() string {
 	sort.Strings(names)
 	var b strings.Builder
 	for _, n := range names {
-		fmt.Fprintf(&b, "  %-*s -> ~/%s/\n", maxWidth, n, agentSkillPaths[n])
+		installPath := agentSkillPaths[n]
+		if isUniversalSkillInstallTarget(n) {
+			installPath = ".agents/skills"
+		}
+		fmt.Fprintf(&b, "  %-*s -> ~/%s/\n", maxWidth, n, installPath)
 	}
 	return b.String()
+}
+
+// Universal Agents discover the shared ~/.agents/skills store directly. A
+// marketplace install addressed to one of those Agent IDs must therefore
+// publish to canonical instead of recreating an Agent-private duplicate.
+func isUniversalSkillInstallTarget(target string) bool {
+	rel, ok := agentSkillPaths[target]
+	if !ok {
+		return false
+	}
+	base := filepath.Join("__home__", rel)
+	canonical := filepath.Join("__home__", ".agents", "skills")
+	return sameSkillSetupPath(base, canonical) || isUniversalSkillSetupBase(base)
 }
 
 func buildSkillCommand() *cobra.Command {
@@ -485,8 +578,13 @@ func resolveSkillTargetPath(target string) (string, error) {
 		return os.Getwd()
 	}
 
-	// Look up predefined agent paths
-	relPath, ok := agentSkillPaths[strings.ToLower(target)]
+	target = strings.ToLower(target)
+	if reason, unsupported := unsupportedGlobalAgentTargets[target]; unsupported {
+		return "", errors.New(reason)
+	}
+
+	// Look up predefined agent paths.
+	_, ok := agentSkillPaths[target]
 	if !ok {
 		return "", fmt.Errorf("unsupported target")
 	}
@@ -496,7 +594,11 @@ func resolveSkillTargetPath(target string) (string, error) {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	return filepath.Join(homeDir, relPath), nil
+	destination := resolveSkillSetupBase(homeDir, target)
+	if isUniversalSkillInstallTarget(target) {
+		destination = filepath.Join(homeDir, ".agents", "skills")
+	}
+	return destination, nil
 }
 
 // fetchSkillDownloadInfo calls the download API to get the skill download URL.

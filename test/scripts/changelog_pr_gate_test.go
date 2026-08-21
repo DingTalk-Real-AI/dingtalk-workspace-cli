@@ -305,6 +305,52 @@ func TestChangelogPRContentOnlyAcceptsReleaseFragmentArchival(t *testing.T) {
 	}
 }
 
+func TestReleaseFragmentPolicyAcceptsStablePostBetaArchival(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	changelogGateWrite(t, repo.root, ".changes/1236-stable-followup.md", "---\ncategory: Fixed\n---\n\n- Stable follow-up.\n", 0o644)
+	repo.commit(t, "add post-beta release fragment")
+	sealBase := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+	changelogGateWrite(t, repo.root, "CHANGELOG.md", `# Changelog
+
+## [Unreleased]
+
+## [1.0.1] - 2026-07-17
+
+This release promotes the sealed `+"`v1.0.1-beta.1`"+` contents to stable.
+
+### Changed
+
+- Promote the complete beta release to stable.
+
+### Changes since `+"`v1.0.1-beta.1`"+`
+
+### Fixed
+
+- Stable follow-up.
+
+## [1.0.0] - 2026-07-01
+
+### Added
+
+- Initial release.
+`, 0o644)
+	archiveDir := filepath.Join(repo.root, ".changes", "released", "1.0.1")
+	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll stable archive: %v", err)
+	}
+	if err := os.Rename(
+		filepath.Join(repo.root, ".changes", "1236-stable-followup.md"),
+		filepath.Join(archiveDir, "1236-stable-followup.md"),
+	); err != nil {
+		t.Fatalf("Rename stable release fragment: %v", err)
+	}
+	repo.commit(t, "seal stable release notes")
+
+	if output, err := repo.runFragmentPolicy(t, sealBase, "HEAD"); err != nil {
+		t.Fatalf("release fragment policy rejected stable seal: %v\noutput:\n%s", err, output)
+	}
+}
+
 func TestReleaseFragmentPolicyRejectsInvalidActiveFragmentAndWrongArchiveVersion(t *testing.T) {
 	t.Run("invalid active fragment", func(t *testing.T) {
 		repo := newChangelogGateRepo(t)
@@ -1157,7 +1203,7 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		`test "$(git rev-parse HEAD^1)" = "$PR_BASE_SHA"`,
 		`test "$(git rev-parse HEAD^2)" = "$PR_HEAD_SHA"`,
 		`echo "TEST_HEAD_REF=$(git rev-parse HEAD)"`,
-		`list-shard "$TEST_SHARD" "$TEST_BASE_REF" "$TEST_HEAD_REF"`,
+		`list-shard "$package_shard" "$TEST_BASE_REF" "$TEST_HEAD_REF"`,
 		"needs.lint.outputs.full_suite != 'true'",
 		`name: "Test (race: ${{ matrix.shard }})"`,
 		"name: Test (workflow and release contracts)",
@@ -1219,16 +1265,20 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 	}
 	// The focused path fans the impacted set across the same shards as test-race
 	// and runs each shard the way test-race runs it, so no single job carries
-	// internal/app together with its reverse dependencies. internal/app keeps its
-	// package-level headroom through the process-isolating helper instead of one
-	// long -timeout, which is strictly stronger: every process releases the
-	// framework registries it populated. release-scripts is asserted because its
-	// dedicated job only runs at full-suite or release-sensitive scope, so losing
-	// it here would silently stop testing test/scripts changes.
+	// internal/app together with its reverse dependencies. internal/app is split
+	// further into one shard per bounded partition, which keeps its package-level
+	// headroom through the process-isolating helper instead of one long -timeout
+	// and is strictly stronger than a single app job: every partition process
+	// releases the framework registries it populated, and the partitions run
+	// concurrently rather than end to end. Each partition shard still selects the
+	// same single internal/app package, so the impacted-package query maps the
+	// shard name back to app. release-scripts is asserted because its dedicated
+	// job only runs at full-suite or release-sensitive scope, so losing it here
+	// would silently stop testing test/scripts changes.
 	for _, want := range []string{
-		`if [ "$TEST_SHARD" = "app" ]; then`,
+		`app-*) package_shard=app ;;`,
 		`test "${#packages[@]}" -eq 1`,
-		`./scripts/ci/run-app-race-tests.sh run "${packages[0]}"`,
+		`./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"`,
 		`if [ "$TEST_SHARD" = "release-scripts" ]; then`,
 		`go test -v -count=1 -timeout=10m "${packages[@]}"`,
 		"timeout_budget=12m",
@@ -1249,14 +1299,16 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		t.Fatal("Code Admission workflow missing race test job boundaries")
 	}
 	raceJob := admission[raceStart:raceEnd]
-	// The app shard uses independently bounded test processes so process-global
-	// command registries are released before the Schema assembly peak. Other full
-	// race shards retain the dynamic package timeout: default/floor 12m, with
-	// cli/smoke raised to 15m on slower hosted runners.
+	// internal/app is carried by one shard per bounded partition, so process-global
+	// command registries are released with each partition process and the Schema
+	// assembly peak no longer sits in front of the other partitions. Each
+	// partition shard resolves back to the same single internal/app package.
+	// Other full race shards retain the dynamic package timeout: default/floor
+	// 12m, with cli/smoke raised to 15m on slower hosted runners.
 	for _, want := range []string{
-		`if [ "$TEST_SHARD" = "app" ]; then`,
+		`app-*) package_shard=app ;;`,
 		`test "${#packages[@]}" -eq 1`,
-		`./scripts/ci/run-app-race-tests.sh run "${packages[0]}"`,
+		`./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"`,
 		"timeout_budget=12m",
 		`if [ "$TEST_SHARD" = "cli" ] ||`,
 		`[ "$TEST_SHARD" = "smoke" ]; then`,

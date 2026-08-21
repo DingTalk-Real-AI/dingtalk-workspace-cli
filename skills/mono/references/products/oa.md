@@ -27,6 +27,57 @@ Flags:
       --instance-id string   审批实例 ID (必填)
 ```
 
+### 审批附件授权与下载
+
+先从 `approval detail` 的返回中取得审批实例 `processInstanceId`、附件 `fileId`，以及授权下载所需的 `spaceId`。根据目标选择命令：
+
+- 需要单个附件的临时下载链接：`attachment download-url`
+- 已有钉盘 `spaceId/fileId`，需要为当前用户批量开通下载权限：`attachment authorize-download`
+- 需要在审批场景内批量预览附件：`attachment authorize-preview`
+
+#### 获取审批附件临时下载链接
+
+```
+Usage:
+  dws oa approval attachment download-url [flags]
+Example:
+  dws oa approval attachment download-url --instance-id <processInstanceId> --file-id <fileId> --format json
+Flags:
+      --instance-id string          审批实例 ID (必填)
+      --file-id string              审批附件文件 ID (必填)
+      --with-comment-attachment     是否包含评论中的附件 (可选，默认不包含)
+```
+
+该命令只返回临时下载链接，不会自动保存文件。链接包含 OSS 签名参数，应在生成后立即使用；JSON 输出中的 `&` 是签名参数分隔符，复制链接时必须完整保留。附件来自审批评论时增加 `--with-comment-attachment`。
+
+#### 批量授权下载审批钉盘文件
+
+```
+Usage:
+  dws oa approval attachment authorize-download [flags]
+Example:
+  dws oa approval attachment authorize-download --file-infos '[{"spaceId":27827223951,"fileId":"232271651278"}]' --format json
+Flags:
+      --file-infos string   文件信息 JSON 数组 (必填)，每项包含数字类型 spaceId 和字符串类型 fileId，最多 10 项
+```
+
+该命令为当前用户开通文件下载权限，但不返回下载链接。需要链接时继续调用 `attachment download-url`。
+
+#### 批量授权预览审批附件
+
+```
+Usage:
+  dws oa approval attachment authorize-preview [flags]
+Example:
+  dws oa approval attachment authorize-preview --instance-id <processInstanceId> --file-ids <fileId1>,<fileId2> --format json
+Flags:
+      --instance-id string          审批实例 ID (必填)
+      --file-ids strings            附件 ID 列表，逗号分隔 (必填)，最多 20 项
+      --with-comment-attachment     是否包含评论中的附件 (可选，默认不包含)
+```
+
+该命令只授权审批场景内的附件预览，不等同于下载授权。附件来自审批评论时增加 `--with-comment-attachment`。
+
 ### 同意审批
 
 > **CAUTION:** 审批决策不可撤回 — 执行前必须向用户确认。
@@ -200,7 +251,7 @@ Flags:
    a. 向用户展示每个节点的名称、类型、已指定处理人
    b. 若 targetSelect == true：
       - 提示用户"节点「{activityName}」需要您自选{actorType}人"
-      - 使用 dws aisearch person --keyword "<姓名>" --dimension name --format json 帮用户查找并选人
+      - 使用 dws aisearch person --query "<姓名>" --dimension name --format json 帮用户查找并选人
       - 记录 activityId 和用户选择的 userIds
 3. 将自选结果组装为 targetSelectActioners，传入 create-instance 高级模式 --request
 ```
@@ -234,7 +285,7 @@ Flags:
 - **如果用户明确给出 `processCode`，固定走 `form-schema` → 收集表单值 → `forecast-process` → 自选节点选人 → `create-instance`**，不要跳过 `form-schema` 直接拼请求。
 - **`form-schema` 返回的 `content` 不是创建 payload 的原样模板。** 它主要用于识别控件 `label`（即 name）、`id`、控件类型（componentName）和选项值范围；真正的 `formComponentValues` 中 `value` 结构以本文的控件值格式表为准。
 - **`forecast-process` 返回的自选节点必须在发起前让用户选人。** 若 `workflowActivityRuleVOs` 中有 `targetSelect: true` 的节点，必须提示用户选择处理人，并将结果通过 `targetSelectActioners` 传入 `create-instance`。
-- **所有人员类参数使用 userId。** 若用户给的是姓名，先用 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 解析成 userId。**严禁把姓名直接写进** `approvers`、`ccList`、`directAppointedApprovers`、`targetSelectActioners` 或表单人员控件。
+- **所有人员类参数使用 userId。** 若用户给的是姓名，先用 `dws aisearch person --query "<姓名>" --dimension name --format json` 解析成 userId。**严禁把姓名直接写进** `approvers`、`ccList`、`directAppointedApprovers`、`targetSelectActioners` 或表单人员控件。
 - **创建实例前一次性汇总确认。** `create-instance` 是写操作，执行前一次性展示模板、表单值、流程预测结果和审批人/抄送人供用户确认。
 
 #### 严禁行为
@@ -243,7 +294,7 @@ Flags:
 - **严禁复用旧的 Schema 结果。** 每次发起实例前都必须重新调用 `form-schema`，模板可能已被修改。
 - **严禁在存在不支持必填控件时强行发起。** 若 `form-schema` 返回的必填控件中有不支持类型（如附件等），直接告知用户不支持通过 CLI 发起。
 - **严禁把 `form-schema` 返回的 `content` 当成可直接提交的 payload 模板。**
-- **严禁把姓名直接写进 `approvers`、`ccList`、`directAppointedApprovers`、`targetSelectActioners` 或表单人员控件。** 必须先通过 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 转成 userId。
+- **严禁把姓名直接写进 `approvers`、`ccList`、`directAppointedApprovers`、`targetSelectActioners` 或表单人员控件。** 必须先通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 转成 userId。
 - **严禁在未得到用户确认前直接执行真实提单。**
 - **严禁猜测控件名称或选项值。** 必须从 `form-schema` 返回中提取。
 - **严禁跳过 `forecast-process` 中的自选节点选人。** 若预测返回 `targetSelect: true` 的节点，必须让用户选人后再发起。
@@ -256,7 +307,7 @@ Flags:
 | 已拿到 `processCode` | 直接 `form-schema --process-code <code>` |
 | 已拿到 Schema | 向用户展示控件列表，收集表单值 |
 | 已收集表单值 | `forecast-process` 预测流程走向 |
-| 预测返回有 `targetSelect: true` 节点 | 让用户为自选节点选人（`dws aisearch person --keyword "<姓名>" --dimension name --format json` 解析姓名） |
+| 预测返回有 `targetSelect: true` 节点 | 让用户为自选节点选人（`dws aisearch person --query "<姓名>" --dimension name --format json` 解析姓名） |
 | 预测完成，自选节点已选人 | 汇总确认后 `create-instance --yes` |
 | 用户明确说"不走模板流程，直接指定审批人" | 使用 `directAppointedApprovers`（高级模式） |
 
@@ -268,7 +319,7 @@ Flags:
 3. 检查 Schema 中是否有不支持的必填控件  → 若有则直接告知用户不支持发起
 4. 收集表单值                       → 向用户展示控件列表，收集用户填写的表单值
 5. forecast-process                  → 根据表单值预测流程走向，识别自选节点
-6. 自选节点选人                       → 若预测返回 targetSelect=true 的节点，让用户选人（用 dws aisearch person --keyword "<姓名>" --dimension name --format json 解析姓名）
+6. 自选节点选人                       → 若预测返回 targetSelect=true 的节点，让用户选人（用 dws aisearch person --query "<姓名>" --dimension name --format json 解析姓名）
 7. 汇总确认后 create-instance --yes  → 展示完整信息（表单值 + 流程路径 + 审批人），用户确认后执行发起
 ```
 
@@ -283,7 +334,7 @@ Flags:
 2. **流程预测后再选自选审批人（步骤 5→6）：** `forecast-process` 返回流程路径和自选节点后：
    - 先向用户展示完整的流程路径（经过哪些节点、各节点处理人）
    - 对 `targetSelect: true` 的节点，提示用户"节点「{activityName}」需要您自选{actorType}人"
-   - 用 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 帮用户查找并选人
+   - 用 `dws aisearch person --query "<姓名>" --dimension name --format json` 帮用户查找并选人
    - 若有多个自选节点，一次性收集所有自选节点的选人结果
 
 3. **单次汇总确认（步骤 7）：** 发起前一次性展示完整信息供用户确认：
@@ -334,7 +385,7 @@ Flags:
 - 先用 `form-schema` 识别有哪些控件、每个控件的 `label`（name）、`componentName`（type）、选项值范围以及明细子控件结构。
 - **`form-schema` 返回的 `content` 不是可直接提交的原样模板。** 它提供控件定义，`value` 结构须按下方控件值格式表组装。
 - 提交时必须保证每个控件的 `name`（即 label）与 Schema 中的 `props.label` **完全一致**。
-- 如果用户提供的是人员信息，先用 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 转成 userId 后再写入对应控件。
+- 如果用户提供的是人员信息，先用 `dws aisearch person --query "<姓名>" --dimension name --format json` 转成 userId 后再写入对应控件。
 - 单选/多选控件提交的是选项文本（option value），该值从 `form-schema` 返回的选项定义中取得。
 - `InnerContactField`、`DepartmentField`、`TableField`、`DDDateRangeField`、`DDAttachment` 等控件的 `value` 结构各不相同，必须按下方格式表单独组装，不要套用文本控件的写法。
 - `TextNote`（文字说明）不收集数据，**不要**出现在 `formComponentValues` 中。
@@ -417,7 +468,7 @@ Flags:
   }
 ]
 ```
-- `staffIds`：审批人 userId 列表（必须通过 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 获取，严禁填姓名）
+- `staffIds`：审批人 userId 列表（必须通过 `dws aisearch person --query "<姓名>" --dimension name --format json` 获取，严禁填姓名）
 - `taskActionType`：`NONE`（单人审批）/ `AND`（会签）/ `OR`（或签）
 
 **targetSelectActioners（模板有自选审批节点时使用）：**
@@ -583,6 +634,30 @@ Flags:
       --query string   查询关键词，可选
 ```
 
+### 以管理员身份查询审批实例列表
+
+> **IMPORTANT：** 需要当前用户具备 OA 审批管理员权限，否则查不到数据。只查个人维度的审批时改用 `list-pending` / `list-executed` / `list-initiated` / `list-cc`。
+
+```
+Usage:
+  dws oa approval list-by-admin [flags]
+Example:
+  dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --cursor 0 --limit 20
+  dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --statuses RUNNING,COMPLETED --user-ids "userId1,userId2"
+  # 高级用法：传入完整 JSON（startTime/endTime 为 yyyy-MM-dd HH:mm:ss 格式字符串）
+  dws oa approval list-by-admin --request '{"processCode":"PROC-xxx","startTime":"2026-03-10 00:00:00","cursor":0,"pageSize":20}'
+Flags:
+      --process-code string   审批模板 processCode（简单模式必填）
+      --start string          开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)（简单模式必填）
+      --end string            结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)（可选）
+      --cursor string         分页游标，首次传 0（默认 "0"）
+      --limit string          每页大小，最大 20（默认 "20"）
+      --user-ids string       按发起人 userId 过滤，多个用逗号分隔（可选）
+      --statuses string       按审批状态过滤，多个用逗号分隔（可选，如 RUNNING、TERMINATED、COMPLETED）
+      --request string        完整请求体 JSON（高级模式，与简单模式互斥）
+```
+MCP 工具: `get_process_instances_by_admin`；参数封装在 `ProcessInstanceListQueryRequest`（processCode、startTime 必填，endTime、userIds、statuses、cursor、pageSize 可选；startTime/endTime 为 `yyyy-MM-dd HH:mm:ss` 格式字符串，简单模式的 ISO-8601 入参会自动转换）。processCode 可从 `list-forms` / `search-forms` 获取，返回的 processInstanceId 可用于 `detail` / `records` / `tasks`。
+
 ### 转交审批任务
 ```
 Usage:
@@ -667,6 +742,9 @@ Flags:
 
 用户说"待审批/待处理审批" → `approval list-pending`
 用户说"审批详情/看审批" → `approval detail`
+用户说"下载审批附件/获取审批附件下载链接" → `approval attachment download-url`（需 --instance-id 和 --file-id；评论附件增加 --with-comment-attachment）
+用户说"授权下载审批钉盘文件/批量开通附件下载权限" → `approval attachment authorize-download`（需 --file-infos，最多 10 项）
+用户说"预览审批附件/批量授权预览附件" → `approval attachment authorize-preview`（需 --instance-id 和 --file-ids，最多 20 项；评论附件增加 --with-comment-attachment）
 用户说"同意审批/批准" → 先 `tasks` 获取 taskId，再 `approve`
 用户说"拒绝审批/驳回" → 先 `tasks` 获取 taskId，再 `reject`
 用户说"撤回审批/取消审批" → `approval revoke`
@@ -689,6 +767,7 @@ Flags:
 用户说"我发起的审批单" -> `approval list-submitted`
 用户说"我审批/处理过的审批单" -> `approval list-executed`
 用户说"抄送我的审批单" -> `approval list-cc`
+用户说"以管理员身份查审批/全员审批单/统计某个模板的审批单/企业内审批记录" → `approval list-by-admin`（需 --process-code 和 --start，且当前用户需具备 OA 管理员权限）
 用户说"转交审批/转交任务" → `approval redirect-task`（需 --task-id 和 --to-actioner-id）
 用户说"评论审批/添加评论/写评论" → `approval oa-comments`（需 --instance-id 和 --content）
 用户说"抄送审批/添加抄送人" → `approval oa-cc-noticer`（需 --instance-id 和 --users）
@@ -738,6 +817,9 @@ dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query �
 # 11. 抄送我的审批单 
 dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词 --format json
 
+# 11b. 以管理员身份跨用户查询某模板的审批实例列表（需 OA 管理员权限）
+dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --cursor 0 --limit 20 --format json
+
 # 12. 转交审批任务（taskId 来自 tasks，toActionerId 来自 contact user search）
 dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --format json
 dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --remark "请帮忙处理" --format json
@@ -757,7 +839,7 @@ dws oa approval form-schema --process-code <code> --format json
 # 18c. 收集表单值（向用户展示控件列表，用户填写后组装 form-values）
 # 18d. 流程预测（根据表单值预测审批走向，识别自选审批人节点；processCode/deptId/formValues 必填，userId 由登录态自动填充）
 dws oa approval forecast-process --process-code <code> --dept-id -1 --form-values '{"单行输入框":"测试内容"}' --format json
-# 18e. 若 forecast 返回 targetSelect=true 的节点，用 dws aisearch person --keyword "<姓名>" --dimension name --format json 帮用户选人
+# 18e. 若 forecast 返回 targetSelect=true 的节点，用 dws aisearch person --query "<姓名>" --dimension name --format json 帮用户选人
 # 18f. 发起审批实例（form-values 的 key 须与 Schema 中控件 label 一致）
 dws oa approval create-instance --process-code <code> --form-values '{"单行输入框":"测试内容"}' --yes --format json
 # 18g. 发起并指定审批人和抄送人
@@ -780,6 +862,7 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 | `forecast-process` | `workflowActivityRuleVOs`（`activityId`, `targetSelect`, `activityActioners`, `workflowActor`） | ① 向用户展示流程走向和各节点处理人；② `targetSelect: true` 的节点需用户自选审批人，`workflowActor.actorKey` 作为 `targetSelectActioners` 的 `actionerKey` 传入 create-instance |
 | `search-forms` → `form-schema` → `forecast-process` | `processCode` → 字段定义 → 流程走向 + 自选节点 | create-instance 的完整上下文：表单值 + 流程路径 + targetSelectActioners |
 | `create-instance` | `result`（processInstanceId） | detail / tasks / records / revoke 等的 --instance-id，可跟踪已发起的审批 |
+| `list-by-admin` | `processInstanceId` | detail / records / tasks 的 --instance-id |
 
 ## 注意事项
 
@@ -790,6 +873,7 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 - `--remark` 审批意见虽为可选，但建议填写以留存审批痕迹
 - `list-initiated` 的 `--process-code` 可从 `list-forms`、`search-forms` 或 `detail` 返回中提取。当 `list-forms` 返回 `processCodeList` 为空（`totalCount -1`）时，用 `search-forms --query <表单名>`（如 `--query 报销`）按名称精准拿 `processCode` 更稳
 - `list-initiated` 的 `--start` / `--end` 区间有后端上限（约 120 天）。超过上限会返回误导性的 `business_error: 时间戳无效`（实为区间过长，不是时间格式问题）。跨度大时请拆成多段短区间分别查询
+- `list-by-admin` 需要当前用户具备 OA 审批管理员权限，否则查不到数据；只查个人维度审批时改用 `list-pending` / `list-executed` / `list-initiated` / `list-cc`。高级模式 `--request` 中 `startTime`/`endTime` 为 `yyyy-MM-dd HH:mm:ss` 格式字符串（不再接受毫秒时间戳）；`pageSize` 上限为 20，超过会报错（简单模式为 `--limit`）
 
 - `form-schema` 的 `--process-code` 可从 `list-forms`、`search-forms` 或 `detail` 返回中提取；返回的 `content` 字段为 JSON 字符串，需解析后查看表单组件（items）定义。
 - `create-instance` 发起前**必须先阅读** [oa-form-components.md](oa/oa-form-components.md)（控件值格式）和 [oa-process-nodes.md](oa/oa-process-nodes.md)（流程节点规则），再调用 `form-schema` 获取表单字段定义，确保 `--form-values` 中的 key 与控件 label 完全一致。

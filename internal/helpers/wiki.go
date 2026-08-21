@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -557,13 +558,17 @@ func newWikiCommand() *cobra.Command {
 			if err := validateRequiredFlags(cmd, "role"); err != nil {
 				return err
 			}
+			role := normalizePermissionRole(mustGetFlag(cmd, "role"))
+			if role == "OWNER" {
+				return apperrors.NewValidation("OWNER 角色不可通过 wiki member add 添加")
+			}
 			userIds, err := collectUserIDs(cmd)
 			if err != nil {
 				return err
 			}
 			return callMCPTool("add_member", map[string]any{
 				"workspaceId": workspaceID,
-				"roleId":      normalizePermissionRole(mustGetFlag(cmd, "role")),
+				"roleId":      role,
 				"userIds":     userIds,
 			})
 		},

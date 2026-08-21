@@ -26,15 +26,22 @@ metadata:
 |---|---|---|
 | `dws todo +assign` | write | 按姓名给某人创建并指派一条待办（自动解析 userId） |
 | `dws todo +assign-multi` | write | 把一条待办按姓名一次性指派给多个人（自动把每个姓名解析成 userId） |
+| `dws todo +comment` | write | 添加待办评论并读回验证 |
+| `dws todo +create` | write | 创建待办并读回验证 |
 | `dws todo +created-todos` | read | 列出我创建的待办（我作为创建人 creator 发起的待办，而非分配给我执行的） |
+| `dws todo +due-today` | read | 列出我今天到期的待办 |
 | `dws todo +get` | read | 查询待办详情 |
 | `dws todo +get-my-tasks` | read | 查询当前组织下我的待办列表 |
+| `dws todo +get-related-tasks` | read | 一次性列出与我相关的全部待办（我作为创建人/执行人/参与人三种角色的并集，按 taskId 去重） |
 | `dws todo +list-attachment` | read | 查询待办任务的附件列表 |
 | `dws todo +list-comment` | read | 查询待办评论列表 |
 | `dws todo +list-sub` | read | 查询子待办列表 |
 | `dws todo +overdue` | read | 列出我已过期未完成的待办 |
 | `dws todo +remind` | write | 给自己创建一条带可选截止时间的待办 |
+| `dws todo +reminder` | write | 设置或清除待办提醒（仅终端回执） |
+| `dws todo +search` | read | 搜索与我相关的全部待办 |
 | `dws todo +todo-done` | write | 按标题关键词把我的某条待办标记完成（自动定位 taskId） |
+| `dws todo +update` | write | 更新待办并读回验证 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## 意图表
@@ -60,7 +67,7 @@ metadata:
 
 **触发**：建待办/任务提醒/指派任务/TODO。
 
-1. **解析执行者（必须）**：指定姓名 → `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId`；未指定 → `dws contact user get-self --format json` 取当前用户 `userId`；多人逐个搜索后英文逗号拼接。
+1. **解析执行者（必须）**：指定姓名 → `dws aisearch person --query "<姓名>" --dimension name --format json` 取 `userId`；未指定 → `dws contact user get-self --format json` 取当前用户 `userId`；多人逐个搜索后英文逗号拼接。
 2. **执行（必须）**：`dws todo task create --title "<标题>" --executors <userId>[,<userId2>...] --priority <10/20/30/40> --format json`；有截止时间加 `--due "<ISO>"`；循环待办加 `--due "<首次截止ISO>" --recurrence "DTSTART:<UTC>\nRRULE:FREQ=DAILY;INTERVAL=1"`。
 3. **验证（必须）**：从返回取 `taskId`/`todoTaskId`，立即 `dws todo task get --task-id <taskId> --format json` 回读。
 

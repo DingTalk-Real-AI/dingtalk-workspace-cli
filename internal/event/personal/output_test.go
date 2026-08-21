@@ -173,6 +173,8 @@ func personalOAData(eventKey string) string {
 		body["finishTime"] = int64(1785229199000)
 	case EventOAApprovalInstanceStarted:
 		body["status"] = "RUNNING"
+	case EventOAApprovalInstanceCC:
+		body["status"] = "RUNNING"
 	case EventOAApprovalInstanceTerminated:
 		body["status"] = "TERMINATED"
 		body["finishTime"] = int64(1785229199000)
@@ -522,6 +524,21 @@ func TestCrossPlatformCoverageProjectOutputOAEvents(t *testing.T) {
 			},
 		},
 		{
+			eventKey: EventOAApprovalInstanceCC,
+			want: OAApprovalInstanceCCOutput{
+				Type:              EventOAApprovalInstanceCC,
+				EventID:           "oa-event",
+				Timestamp:         1785229200123,
+				SubscribeID:       "outer-sub",
+				ProcessInstanceID: "process-instance-1",
+				ProcessCode:       "PROC-TEST-1",
+				Title:             "测试审批",
+				Status:            "RUNNING",
+				CreateTime:        1785229100000,
+				EventTime:         1785229199000,
+			},
+		},
+		{
 			eventKey: EventOAApprovalInstanceTerminated,
 			want: OAApprovalInstanceTerminatedOutput{
 				Type:              EventOAApprovalInstanceTerminated,
@@ -785,6 +802,7 @@ func TestCrossPlatformCoverageProjectOutputRejectsInvalidOAPayloads(t *testing.T
 		EventOAApprovalTaskFinished,
 		EventOAApprovalTaskRedirected,
 		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
 	} {

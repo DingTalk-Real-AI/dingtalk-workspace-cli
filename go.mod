@@ -18,6 +18,7 @@ require (
 	github.com/muesli/termenv v0.16.0
 	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-beta.1
 	github.com/spf13/cobra v1.10.2
+	github.com/yuin/goldmark v1.8.5
 	github.com/zalando/go-keyring v0.2.8
 	gitlab.alibaba-inc.com/aes/aem-go-sdk v0.3.0
 	golang.org/x/crypto v0.49.0

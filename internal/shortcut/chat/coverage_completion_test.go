@@ -437,7 +437,7 @@ func TestCrossPlatformCoverageUnifiedSendOptionalArgumentsAndErrors(t *testing.T
 	}{
 		{
 			name: "user group mentions",
-			args: []string{"--identity", "user", "--group", "cid", "--text", "x", "--at-open-dingtalk-ids", fixtureCurrentDOpenID + "," + fixtureCurrentDOpenID2, "--at-all"},
+			args: []string{"--identity", "user", "--group", "cid", "--text", "@" + fixtureCurrentDOpenID + " <@" + fixtureCurrentDOpenID2 + "> x", "--at-open-dingtalk-ids", fixtureCurrentDOpenID + "," + fixtureCurrentDOpenID2, "--at-all"},
 			want: map[string]any{"atOpenDingTalkIds": []string{fixtureCurrentDOpenID, fixtureCurrentDOpenID2}, "atAll": true},
 		},
 		{
@@ -502,6 +502,69 @@ func TestCrossPlatformCoverageUnifiedSendOptionalArgumentsAndErrors(t *testing.T
 
 	if got := shortcutMessageTitle(strings.Repeat("界", 45)); len([]rune(got)) != 40 {
 		t.Fatalf("long generated title has %d runes", len([]rune(got)))
+	}
+}
+
+func TestCrossPlatformCoverageMessagesSendRejectsMismatchedCurrentUserMentions(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		atIDs   string
+		atAll   bool
+		wantErr string
+	}{
+		{
+			name:    "declared member missing from body",
+			body:    "请查收",
+			atIDs:   fixtureCurrentDOpenID,
+			wantErr: "必须在正文中使用对应",
+		},
+		{
+			name:    "declared member only appears as a longer token prefix",
+			body:    "@" + fixtureCurrentDOpenID + "_suffix 请查收",
+			atIDs:   fixtureCurrentDOpenID,
+			wantErr: "必须在正文中使用对应",
+		},
+		{
+			name:    "body member missing from declaration",
+			body:    "<@" + fixtureCurrentDOpenID + "> 请查收",
+			wantErr: "必须同时通过 --at-open-dingtalk-ids 声明",
+		},
+		{
+			name:    "body at-all missing from declaration",
+			body:    "<@all> 请查收",
+			wantErr: "必须同时指定 --at-all",
+		},
+		{
+			name:    "bare body member missing from declaration",
+			body:    "@" + fixtureCurrentDOpenID + " 请查收",
+			wantErr: "必须同时通过 --at-open-dingtalk-ids 声明",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			args := []string{
+				"chat", "+messages-send", "--identity", "user",
+				"--group", "cid", "--markdown", tt.body, "--yes",
+			}
+			if tt.atIDs != "" {
+				args = append(args, "--at-open-dingtalk-ids", tt.atIDs)
+			}
+			if tt.atAll {
+				args = append(args, "--at-all")
+			}
+			root.SetArgs(args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %v, want %q", err, tt.wantErr)
+			}
+			if len(fake.calls) != 0 {
+				t.Fatalf("invalid mention contract reached lower service: %#v", fake.calls)
+			}
+		})
 	}
 }
 

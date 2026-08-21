@@ -17,8 +17,7 @@ package busctl
 
 import "os"
 
-// stopSignal returns the graceful-shutdown signal for Windows. The Go
-// runtime maps os.Interrupt to TerminateProcess for non-console-group
-// processes — not truly graceful, but acceptable for v1 (Windows graceful
-// shutdown via Ctrl+Break is in the v2 backlog, plan §16).
-func stopSignal() os.Signal { return os.Interrupt }
+// stopSignal is only the fallback after the graceful IPC stop path fails or
+// times out. Go maps os.Kill to TerminateProcess on Windows; os.Interrupt is
+// unsupported and returns syscall.EWINDOWS.
+func stopSignal() os.Signal { return os.Kill }

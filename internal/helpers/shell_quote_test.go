@@ -69,8 +69,8 @@ func TestCrossPlatformCoverageShellQuoteArg(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := shellQuoteArg(tc.in); got != tc.want {
-				t.Fatalf("shellQuoteArg(%q)\n got: %s\nwant: %s", tc.in, got, tc.want)
+			if got := ShellQuoteArg(tc.in); got != tc.want {
+				t.Fatalf("ShellQuoteArg(%q)\n got: %s\nwant: %s", tc.in, got, tc.want)
 			}
 		})
 	}

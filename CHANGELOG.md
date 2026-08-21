@@ -6,6 +6,150 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.59] - 2026-08-20
+
+This release promotes the sealed `v1.0.59-beta.5` contents to stable.
+
+### Changed
+
+- **Chat personal emotions** — adds commands to list, send, and favorite the current user's personal favorite emotions.
+
+- **Minutes, DingTalk tasks, and Wiki parameter aliases** — adds reviewed parameter-name normalization, ambiguity guards, and end-to-end payload coverage.
+
+- **Shortcut functional workflows** — fixes Drive preview accuracy, AITable write verification and deletion accounting, Wiki feeds, and false-success handling across task, Contact, Minutes, and Wiki operations.
+
+## [1.0.59-beta.5] - 2026-08-20
+
+### Added
+
+- **Chat personal emotions** — adds `chat emotion list`, `chat emotion send`, and `chat emotion favorite` for current-user personal favorite emotion listing, sending, and favoriting.
+
+- **Minutes, DingTalk tasks, and Wiki parameter aliases** — adds reviewed parameter-name normalization, ambiguity guards, and end-to-end payload coverage for the three products.
+
+### Fixed
+
+- **Shortcut functional workflows** (#1050) — fixes truthful Drive push/sync previews, strict AITable write verification and deletion accounting, lossless Wiki feeds, and false-success handling across task, Contact, Minutes, and Wiki operations.
+
+
+## [1.0.59-beta.4] - 2026-08-20
+
+### Added
+
+- **招聘职位管理** (#976) — 新增招聘职位列表、详情查询和职位创建命令。
+
+- **OA admin approval query** — `oa approval list-by-admin` queries approval instances of a template with admin scope, with simple flags and an advanced `--request` mode; `startTime`/`endTime` use `yyyy-MM-dd HH:mm:ss` strings per the 2026-08 MCP contract update (ISO-8601 flag inputs auto-convert), and pageSize/time format are validated client-side with localized errors.
+
+### Changed
+
+- **Attendance and Mail Shortcuts** (#1045) — publishes only capabilities with
+  strict response, identity, pagination, and real-data verification while
+  retaining historical CLI discovery and argument compatibility for commands
+  that remain unavailable to agents. Mailbox auto-resolution now accepts both
+  reviewed string and object response shapes, and Attendance date ranges cover
+  the complete requested end date without dropping cross-midnight punches whose
+  actual check time is inside the requested range. The schedule query remains
+  CLI-compatible but is withheld from the Agent catalog because its downstream
+  service returns a successful process exit with a null body for both populated
+  and empty ranges.
+
+- **Chat group roles** (#1058) — exposes the single-value `--role-id` flag for assigning one custom group role while preserving hidden `--role-ids` compatibility.
+
+- **CLI compatibility governance** — adds a reviewed two-stage path for hiding retained legacy commands or optional `NoOpt=true` boolean flags from Help and Schema when their activated capability moves to a dedicated command, with legacy-leaf, complete parameter/constant mapping, durable runtime constant evidence, protected framework bridges, dry-run preservation, parameter-collision, and fail-closed required-parameter checks.
+
+### Fixed
+
+- **Canonical Agent Skills** (#996) — installs bundled DWS Skills once under `~/.agents/skills`, migrates duplicate Agent copies, and matches the upstream 76-Agent registry across Go, npm, Shell, and PowerShell. Non-universal Agents use directory links — junctions on Windows from the npm and PowerShell installers, symbolic links from `dws upgrade` / `dws skill setup` — with a safe copy fallback when link creation is unavailable (including Windows without Developer Mode); custom/XDG homes and OpenClaw legacy aliases are preserved. Upgrades now back up and restore Skills safely across external volumes by staging, lexically copying links (including dangling links), verifying contents, and deleting the source only after publication succeeds. Atomic no-replace publication and identity-checked quarantine rollback preserve concurrent user changes instead of overwriting or recursively deleting them; filesystems that reject the no-replace flag (NFS, FUSE, overlayfs) keep the no-clobber contract by holding the claimed destination for the entire transaction — renaming over the claim where the platform permits it, otherwise moving the source children into it — instead of unlinking the claim and retrying a plain rename, which opened a window where a concurrent directory could be overwritten. A degraded child-move that cannot consume the emptied source shell fails the publication loudly with the destination retained, so a failed move never silently discards staging data. When the fresh mkdir-claim identity captured by the child-move fallback — dev:ino on POSIX, the volume file ID on Windows — no longer matches the destination, the publication reports `ErrSkillPathPublicationUncertain` and keeps the destination: the object may belong to a concurrent writer, and the mono/multi upgrade copy fallbacks as well as `dws skill setup` honor the sentinel by surfacing the state instead of retrying over (and displacing) it. npm same-volume and cross-volume moves, PowerShell recoverably moves, and npm canonical-link / copied-set confirmation follow the same occupy-then-confirm contract. Same-volume publication and restore use a no-replace primitive (mkdir-claim plus child move, symlink-at-dest, or hard-link plus retract) so a dest that becomes occupied after any pre-check is refused instead of replaced. A rollback that has already quarantined dest re-checks identity in quarantine and restores an unmatched object onto dest with that same no-replace publish, so dest is not left empty with the concurrent object hidden unless the restore itself fails (then both locations are named). The npm installer now proves ownership at dest (inode, device, fingerprint) before any quarantine rename, matching Go: a concurrent replacement is left on the original path, and only a post-quarantine identity change is restored with no-replace. Go identity proofs report a stable file identity on every platform — dev:ino on Linux and macOS, the volume file ID on Windows — with the post-publish content fingerprint as the backstop against inode recycling; Shell copied-set rollback proves dest first with inode, child names, and a recursive content digest (sorted paths, mode bits, file hashes, link targets) for the same reason, so an in-place content edit after publish is preserved rather than retracted as this transaction's object. The npm installer's mono and multi set copy publication claims the destination with an atomic mkdir before moving the staged children into it, and canonical link publication creates the symlink or junction directly at the destination, so a concurrently created file, symlink, or directory is refused atomically instead of being replaced by Node's replacing rename or linked into by `ln -P` on POSIX or Windows. The standalone event/devapp copy publishers use the same mkdir claim instead of `mv`ing a staging directory onto dest. Shell copied-set and link rollback claim dest into quarantine before deleting, so a concurrent writer's file, symlink, or directory is renamed back instead of being deleted by a path-blind `rm` after an inode pre-check. Because that degraded publication has no atomic no-clobber primitive for a link, `dws skill setup` falls back to a direct copy when a link fails to *publish* as well as when it fails to stage, so non-universal Agents are still configured on those filesystems — except when the failure reports the uncertain sentinel, which retains the destination for manual inspection instead of retrying over it. Failing to retire an obsolete Agent copy is now a warning rather than an install failure. Every install surface prunes `~/.dws/skill-backups` to the newest 5 batches from earlier runs while never deleting a backup taken by the run in progress, so a migration that retires more than 5 batches stays reversible; stamp roots created before the ownership marker existed are preserved rather than pruned. Standalone installers verify every downloaded release asset against `checksums.txt`, and the npm engine declaration now reflects the actual Node 16.7+ API floor.
+
+- **Chat user mentions** — preserves literal `<@openDingTalkId>` tokens in current-user Markdown messages and rejects mismatches between message-body mentions and mention flags before sending.
+- **Chat direct media** — uses the IM upload target field for current-user direct file, audio, and video uploads, then uses the Chat receiver field for final message delivery.
+
+
+## [1.0.59-beta.3] - 2026-08-19
+
+### Added
+
+- **Robot group reference replies** (#928) — `chat message send-by-bot` supports paired `--reply` and `--ref-sender` flags for Markdown replies that quote an existing group message.
+
+- **AI Table server-side statistics** — adds `dws aitable record stats` for
+  ungrouped record-set metrics through `query_records_stats`, plus `dws aitable
+  record group-stats` for grouped, distinct, and advanced aggregation through
+  `query_stats`; both commands validate their JSON aggregation contracts before
+  dispatch.
+
+- **Calendar event share-info** (#980) — adds `dws calendar event share-info` to fetch a calendar event's share info (title, organizer, location, join info) for sharing with others; supports `--calendar-id` and `--language`.
+
+- **Calendar and To-do Shortcut workflows** — aligns 47 public task-oriented
+  entries with lark-cli where the DingTalk backend supports equivalent
+  semantics, rejects malformed or missing collections instead of returning
+  false empty success, preserves truthful pagination, and requires stable
+  identifiers plus read-back or explicit terminal receipts for writes. Adds
+  deterministic contract coverage, a PII-safe live E2E runner, and a sanitized
+  capability review with documented platform boundaries.
+
+- **Doc and Sheet comment lifecycle commands** — adds `comment batch-query`,
+  `comment resolve`, `comment restore`, and the lightweight
+  `comment react-reply` to both `dws doc` and `dws sheet`. The two domains share
+  the same `doc-comment` MCP capabilities; batch queries preserve input order
+  for repeated `topicId:commentKey` references, while reaction replies require
+  DingTalk reaction names such as `憨笑` or `鼓掌` rather than raw Unicode emoji.
+
+- **Sheet SourceRange dropdowns** — supports range-backed dropdowns across direct, cell, and batch write paths, with structured readback for valid and invalid references. Batch `set-dropdown` now rejects unsupported top-level `colors` / `source-colors`; Inline colors belong in `options[].color`, while SourceRange color writes remain unsupported.
+- **Sheet read completion metadata** — documents and preserves returned ranges, truncation reasons, and partial-read status for large range and CSV reads.
+
+### Changed
+
+- **AI Table parameter aliases** — accepts reviewed equivalent spellings for Base, table, workflow, search, pagination, and description parameters while keeping role-changing or semantically ambiguous inputs blocked.
+
+- **Doc/drive description scope** — restates the `dingtalk-doc` description as document-entity-and-content operations with an explicit exclusion list, and narrows `dingtalk-drive` to file-level management of DingTalk documents, so first-round Agent selection separates content work from file management without changing CLI behavior.
+
+### Fixed
+
+- **Aitable pagination and Minutes unshare verification** (#1006) — keeps
+  record queries on the service's 20-record page boundary so multi-page reads
+  and mutation readbacks no longer report false retryable failures, preserves
+  `totalCount` when supplied, validates `--dry-run` plans before transport,
+  follows active deletion readback continuations before proving absence, and
+  rejects Minutes unshare success until the listening note exists and the
+  service acknowledges the exact task and member targets.
+
+- **Document write verification** (#960) — avoids false partial-success results when normalized Markdown, paginated blocks, inline images, or version reverts are confirmed by server readback. Document reverts and media inserts now require explicit readback evidence and report partial success when the server cannot prove the requested result.
+
+- **Chat sender identity guards** — preserves unverified mixed sender inputs after exact message `senderId` matches and aligns `--sender-query` Skill guidance with fail-closed Runtime behavior.
+
+- **Windows event bus lifecycle** — start event consumers without unsupported inherited file descriptors, stop buses through local IPC with a termination fallback, and preserve subscription cleanup when startup fails.
+
+
+## [1.0.59-beta.2] - 2026-08-17
+
+### Added
+
+- **Privacy-safe CLI telemetry** (#1009) — reports reviewed command outcomes and profile identity dimensions while excluding command arguments, output, paths, device fingerprints, and automatic system dimensions; `DO_NOT_TRACK=1` disables reporting.
+
+- **Feedback survey entry in root help** (#1019) — `dws --help` now closes with a Feedback section linking the user-experience survey form.
+
+- **Wiki Shortcut workflows** — publishes 20 reviewed space, member, node, and
+  activity shortcuts with strict collection validation, cursor handling,
+  write-terminal evidence, safe read-backs where the backend supports them,
+  task-oriented routing, and documented backend
+  boundaries.
+
+### Changed
+
+- **Chat IM ID flags** (#954) — standardizes chat command entry points on `--conversation-id` for conversation IDs and `--message-id` for message IDs, so help, Schema, and Agent recommendations use the same canonical flags.
+- **Legacy chat flag compatibility** (#954) — keeps older chat IM ID flags such as `--group`, `--id`, `--chat`, `--open-conversation-id`, `--msg-id`, and `--open-message-id` working as compatibility aliases where applicable, while hiding migrated aliases from recommended help and Schema surfaces.
+- **Chat group bots target flag** (#954) — keeps `dws chat group bots` on the visible `--group` flag; this command does not register `--group-name`, and `--group` accepts either an openConversationId or a uniquely resolved group name.
+
+- **Faster Schema Catalog assembly** — projects typed values into payload JSON
+  without re-running a validation scan over documents `json.Marshal` has just
+  produced, cutting roughly a third of the projection work across the full tool
+  set. Untrusted JSON input keeps its existing validation.
+
+### Fixed
+
+- **Chat card update evidence** — distinguishes an accepted update request from an independently verified visible update, preserving the real `bizId` and warning callers not to repeat an unverified write.
+- **Chat command guidance** — splits message and group references by task and explains that `--from` is ambiguous between sender and time-range intent.
+
+
 ## [1.0.59-beta.1] - 2026-08-14
 
 ### Added

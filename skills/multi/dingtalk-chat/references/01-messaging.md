@@ -11,7 +11,7 @@
 
 ## 群聊消息
 
-<!-- dws-intent: chat.read.conversation -->读取或导出指定群聊/单聊的消息记录时使用 `dws chat +chat-messages`。可附带非必填的 `--sender-query <姓名>`：没有稳定 ID 时保留全部消息，唯一解析成功后按 userId/openDingTalkId 筛选同一次读取结果并返回 `resolvedFilters`，不要补跑 `+search-msg`。
+<!-- dws-intent: chat.read.conversation -->读取或导出指定群聊/单聊的消息记录时使用 `dws chat +chat-messages`。可附带非必填的 `--sender-query <姓名>`：唯一解析成功后按稳定 `senderId` 筛选同一次读取结果并返回 `resolvedFilters`；解析失败、不完整或存在歧义时抑制未过滤消息并返回 `sender_resolution_failed`，不要补跑 `+search-msg`。混合姓名/ID 入口 `--sender` 无法经通讯录确认类型时可按原值 userId 精确过滤，但必须保留 `identity_unverified`。
 
 用户以发送者、关键词、@对象或消息类型为主要条件直接检索时优先使用 `+search-msg`；范围可以是单个、多个或全部会话。
 

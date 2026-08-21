@@ -32,7 +32,7 @@
 |----------|----------------|----------|
 | 查我发过的日志 / 我创建的日志 | `dws report outbox list --cursor 0 --size 20 --format json` | 从返回里取 `reportId`，再执行 `dws report entry get --report-id <reportId> --format json` |
 | 查我收到的日志 / 别人发给我的日志 | `dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json` | 必须先按用户时间词补齐完整 ISO 起止时间；用户只说“最近/近期/最近收到”时默认最近 7 天；取 `reportId` 后调用 `entry get` |
-| 按发件人查收到的日志 | 先 `dws aisearch person --keyword "<姓名>" --dimension name --format json`，再 `dws report inbox list ... --sender-user-ids <userId/staffId> --format json` | 只能在收件箱中过滤发件人；没有匹配时说明未找到，不得改选其他发件人 |
+| 按发件人查收到的日志 | 先 `dws aisearch person --query "<姓名>" --dimension name --format json`，再 `dws report inbox list ... --sender-user-ids <userId/staffId> --format json` | 只能在收件箱中过滤发件人；没有匹配时说明未找到，不得改选其他发件人 |
 | 查看某条日志正文 / 日志详情 | `dws report entry get --report-id <reportId> --format json` | 如果用户没给 `reportId`，先用 `outbox list` 或 `inbox list` 找候选 |
 | 总结最近收到的日志 / 汇总多篇日志内容 | 先 `dws report inbox list ... --size 20 --format json`，选前 5 篇或实际返回数量，再对每个 `reportId` 逐条执行 `dws report entry get --report-id <reportId> --format json` | 不得只调用一次 list 后直接总结；不得把多篇合并成一次 detail 调用 |
 | 查某条日志统计 / 已读统计 | `dws report entry stats --report-id <reportId> --format json` | 如果用户没给 `reportId`，先用 `outbox list` 或 `inbox list` 找候选 |
@@ -46,7 +46,7 @@
 | "有哪些日志模板 / 日报模板 / 模板列表 / 有什么模板可以用" | `dws report template list --format json` | 禁止 ai-seek / enterprise_search 等通用搜索代理绕行 |
 | "日报模板 / 周报模板"（指定类型） | 先 `dws report template list --format json`，再从返回结果中按名称包含「日报」或「周报」筛选 | 不得虚构模板；不得跳过 `template list` 直接编造模板名 |
 | "今天收到的日志 / 最近收到的日志 / 别人发我的日志" | `dws report inbox list --start ... --end ... --cursor 0 --size 20 --format json`；“最近/近期/最近收到”默认最近 7 天 | 禁止 grep_search / session_search / ai-seek 替代 |
-| "过山发给我的日志 / 按发件人查收件箱" | 先 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 ID，再 `dws report inbox list ... --sender-user-ids <id> --format json` | 禁止用 `outbox list --user-id` 查他人已发日志；禁止返回其他发件人的日志 |
+| "过山发给我的日志 / 按发件人查收件箱" | 先 `dws aisearch person --query "<姓名>" --dimension name --format json` 取 ID，再 `dws report inbox list ... --sender-user-ids <id> --format json` | 禁止用 `outbox list --user-id` 查他人已发日志；禁止返回其他发件人的日志 |
 | "总结最近收到的 5 篇日志 / 合并多篇日志内容" | 先 `inbox list` 获取候选，再对选中的每个 `reportId` 逐条 `dws report entry get --report-id <ID> --format json` | 禁止停在 skill 激活或反问时间范围；不足 5 篇按实际数量总结并说明 |
 | "日志模板详情 / 模板具体结构 / 模板有哪些字段" | 两步：① `dws report template list --format json` 获取模板名 → ② `dws report template get --name "<模版名>" --format json` | 禁止跳过第①步直接猜模板名调 `template get` |
 | "日志ID xxx 详情 / 查一下日志编号 xxx" | 直接 `dws report entry get --report-id <ID> --format json` | 禁止反问用户确认 ID 是否正确；返回不存在则如实告知，不得虚构 |
@@ -99,7 +99,7 @@ dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT2
 dws report entry get --report-id <reportId> --format json
 
 # 按发件人过滤收件箱
-dws aisearch person --keyword "<姓名>" --dimension name --format json
+dws aisearch person --query "<姓名>" --dimension name --format json
 dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --sender-user-ids <userId或staffId> --cursor 0 --size 20 --format json
 
 # 总结最近收到的多篇日志
@@ -449,8 +449,10 @@ dws report outbox list --cursor 0 --size 20 --format json
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws report +inbox-list` | read | 列出我收到的日报（按时间范围分页） |
-| `dws report +outbox-list` | read | 列出我发出的日报（可选时间/模版名过滤） |
+| `dws report +inbox-list` | read | 列出我收到的日志 |
+| `dws report +outbox-list` | read | 列出我发出的日志 |
+| `dws report +report-latest` | read | 读取我最近提交的一篇日志详情 |
+| `dws report +template-search` | read | 按名称搜索可用日志模板 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## 意图表
@@ -471,7 +473,7 @@ dws report outbox list --cursor 0 --size 20 --format json
 
 1. 收到的日志：把用户时间词转换为 Asia/Shanghai 的完整 ISO 起止时间，再执行 `dws report inbox list --start "<YYYY-MM-DDT00:00:00+08:00>" --end "<YYYY-MM-DDT23:59:59+08:00>" --cursor 0 --size 20 --format json`；用户只说“最近 / 近期 / 最近收到 / 最近一周”时默认最近 7 天。
 2. 我发过 / 我创建 / 已发送：第一条查询必须用 `dws report outbox list --cursor 0 --size 20 --format json`；有时间范围时补 `--start` / `--end`。
-3. 按发件人过滤收件箱：先 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId/staffId`，再给 `inbox list` 加 `--sender-user-ids <id>`；空结果必须说明未找到该发件人的日志，不得改选其他人。
+3. 按发件人过滤收件箱：先 `dws aisearch person --query "<姓名>" --dimension name --format json` 取 `userId/staffId`，再给 `inbox list` 加 `--sender-user-ids <id>`；空结果必须说明未找到该发件人的日志，不得改选其他人。
 4. 用户要正文、详情、汇总或总结多篇日志时，对选中的每篇日志逐条执行 `dws report entry get --report-id <reportId> --format json`；不足 5 篇按实际数量说明。
 
 ### check-report-read-status

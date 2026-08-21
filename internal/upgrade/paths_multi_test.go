@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -22,6 +23,16 @@ func withFakeHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home, nil })
+	// Host-installed macOS apps must not make a fake HOME appear to have extra
+	// detected Agents. Tests that exercise application-based detection can
+	// override this seam explicitly.
+	testseam.Swap(t, &upgradeStat, func(path string) (os.FileInfo, error) {
+		applications := filepath.Join(string(filepath.Separator), "Applications")
+		if path == filepath.Join(applications, "ZCode.app") || path == filepath.Join(applications, "MiniMax Code.app") {
+			return nil, os.ErrNotExist
+		}
+		return os.Stat(path)
+	})
 	return home
 }
 
@@ -124,8 +135,7 @@ func TestCrossPlatformCoverageBundleSkillNamesLayouts(t *testing.T) {
 func TestCrossPlatformCoverageUpgradeSkillLocationsMulti(t *testing.T) {
 	home := withFakeHome(t)
 
-	// A concrete Agent root wins over the generic .agents fallback; .claude
-	// installs and .cursor is skipped.
+	// .agents is canonical; detected Claude receives links and Cursor is skipped.
 	agentsBase := filepath.Join(home, ".agents", "skills")
 	claudeBase := filepath.Join(home, ".claude", "skills")
 	for _, base := range []string{agentsBase, claudeBase} {
@@ -193,17 +203,19 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMulti(t *testing.T) {
 
 	// Succeeded entries report the agent home base in multi mode.
 	succeeded := result.Succeeded()
-	if len(succeeded) != 1 {
-		t.Fatalf("Succeeded() len = %d, want 1 (%v)", len(succeeded), result.Results)
+	if len(succeeded) != 2 {
+		t.Fatalf("Succeeded() len = %d, want 2 (%v)", len(succeeded), result.Results)
 	}
-	wantDirs := map[string]bool{claudeBase: true}
+	wantDirs := map[string]bool{agentsBase: true, claudeBase: true}
 	for _, d := range succeeded {
 		if !wantDirs[d.Dir] {
 			t.Errorf("unexpected succeeded dir %q", d.Dir)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(agentsBase, "dws")); !os.IsNotExist(err) {
-		t.Fatalf("generic mono duplicate still visible: %v", err)
+	for _, name := range []string{"dingtalk-chat", "dws-shared"} {
+		if _, err := os.Stat(filepath.Join(agentsBase, name, "SKILL.md")); err != nil {
+			t.Fatalf("canonical Skill missing: %v", err)
+		}
 	}
 
 	// Multi cache refreshed under the fake home.
@@ -216,7 +228,7 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMulti(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageUpgradeUsesAgentSpecificRootWithoutGenericDuplicate(t *testing.T) {
+func TestCrossPlatformCoverageUpgradeUsesCanonicalRootWithoutCodexDuplicate(t *testing.T) {
 	home := withFakeHome(t)
 	testseam.Swap(t, &knownSkillDirs, []string{".agents/skills", ".codex/skills"})
 
@@ -241,12 +253,12 @@ func TestCrossPlatformCoverageUpgradeUsesAgentSpecificRootWithoutGenericDuplicat
 		t.Fatalf("UpgradeSkillLocationsWithOptions() = %#v, %v", result, err)
 	}
 
-	want := filepath.Join(codexBase, "dingtalk-chat", "SKILL.md")
+	want := filepath.Join(genericBase, "dingtalk-chat", "SKILL.md")
 	if _, err := os.Stat(want); err != nil {
-		t.Fatalf("canonical Codex Skill missing at %s: %v", want, err)
+		t.Fatalf("canonical Skill missing at %s: %v", want, err)
 	}
 	for _, duplicate := range []string{
-		filepath.Join(genericBase, "dingtalk-chat", "SKILL.md"),
+		filepath.Join(codexBase, "dingtalk-chat"),
 		filepath.Join(genericBase, "dws", "multi", "dingtalk-chat", "SKILL.md"),
 	} {
 		if _, err := os.Stat(duplicate); !os.IsNotExist(err) {
@@ -502,6 +514,9 @@ func TestUpgradeMonoCleansPreStateOfficialAndPreservesCustom(t *testing.T) {
 // mono-only package path).
 func TestCrossPlatformCoverageUpgradeSkillLocationsMonoFallbackAfterCopyFailure(t *testing.T) {
 	home := withFakeHome(t)
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	agentsBase := filepath.Join(home, ".agents", "skills")
 	if err := os.MkdirAll(filepath.Join(agentsBase, "dws"), 0o755); err != nil {
 		t.Fatal(err)
@@ -526,21 +541,15 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMonoFallbackAfterCopyFailure(
 	}
 
 	result, err := UpgradeSkillLocations(mono)
-	if err != nil {
-		t.Fatalf("UpgradeSkillLocations() error = %v", err)
-	}
-	if failed := result.Failed(); len(failed) != 0 {
-		t.Fatalf("fallback should replace the failed entry with OK, got failed=%v", failed)
-	}
-	if got := len(result.Succeeded()); got != 1 {
-		t.Fatalf("Succeeded() len = %d, want 1 (%v)", got, result.Results)
+	if err == nil || len(result.Failed()) != 1 || len(result.Succeeded()) != 0 {
+		t.Fatalf("canonical copy failure = %#v, %v", result, err)
 	}
 	data, err := os.ReadFile(filepath.Join(agentsBase, "dws", "SKILL.md"))
 	if err != nil {
 		t.Fatalf("mono fallback install missing: %v", err)
 	}
-	if string(data) != "# mono" {
-		t.Errorf("mono content = %q, want refreshed package", data)
+	if string(data) != "old" {
+		t.Errorf("mono content = %q, want original preserved", data)
 	}
 }
 
@@ -574,22 +583,22 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMonoReadDirErrorFailsHome(t *
 	}
 
 	result, err := UpgradeSkillLocations(mono)
-	if err != nil {
-		t.Fatalf("UpgradeSkillLocations() error = %v (fallback should not run: .claude succeeded)", err)
+	if err == nil {
+		t.Fatal("canonical read failure must fail the upgrade")
 	}
 	failed := result.Failed()
 	if len(failed) != 1 {
 		t.Fatalf("Failed() len = %d, want 1 (%v)", len(failed), result.Results)
 	}
-	wantDir := agentsBase
+	wantDir := filepath.Join(agentsBase, "dws")
 	if failed[0].Dir != wantDir || failed[0].Err == nil {
 		t.Fatalf("failed entry = %#v, want dir %q with non-nil err", failed[0], wantDir)
 	}
 	if !strings.Contains(failed[0].Err.Error(), "读取技能目录失败") {
 		t.Fatalf("failed err should mention the read failure, got %v", failed[0].Err)
 	}
-	if got := len(result.Succeeded()); got != 1 {
-		t.Fatalf("Succeeded() len = %d, want 1 (.claude)", got)
+	if got := len(result.Succeeded()); got != 0 {
+		t.Fatalf("Succeeded() len = %d, want 0", got)
 	}
 	// Mono must NOT have been laid down next to the unreadable multi state.
 	if _, err := os.Stat(filepath.Join(agentsBase, "dws")); !os.IsNotExist(err) {
@@ -603,6 +612,9 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMonoReadDirErrorFailsHome(t *
 // installing multi next to the stale skills.
 func TestCrossPlatformCoverageUpgradeSkillLocationsMultiFallbackCleanupFailure(t *testing.T) {
 	home := withFakeHome(t)
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	agentsBase := filepath.Join(home, ".agents", "skills")
 	staleDir := filepath.Join(agentsBase, "dingtalk-stale")
 	if err := os.MkdirAll(staleDir, 0o755); err != nil {
@@ -613,10 +625,10 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMultiFallbackCleanupFailure(t
 	}
 	useUpgradeManagedNames(t, filepath.Base(staleDir))
 
-	origRename := upgradeRename
-	testseam.Swap(t, &upgradeRename, func(src, dst string) error {
+	origRename := skillPathRenameNoReplace
+	testseam.Swap(t, &skillPathRenameNoReplace, func(src, dst string) (string, error) {
 		if strings.Contains(src, "dingtalk-stale") {
-			return errors.New("injected backup failure")
+			return "", errors.New("injected backup failure")
 		}
 		return origRename(src, dst)
 	})
@@ -628,8 +640,8 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMultiFallbackCleanupFailure(t
 	if err == nil {
 		t.Fatal("multi fallback cleanup failure must return an error")
 	}
-	if !strings.Contains(err.Error(), "回退到主目录也失败") {
-		t.Fatalf("error should mention the fallback cleanup failure, got %v", err)
+	if !strings.Contains(err.Error(), "canonical Skill 安装失败") {
+		t.Fatalf("error should mention the canonical cleanup failure, got %v", err)
 	}
 	if failed := result.Failed(); len(failed) != 1 {
 		t.Fatalf("Failed() len = %d, want 1 (%v)", len(failed), result.Results)
@@ -643,8 +655,17 @@ func TestCrossPlatformCoverageUpgradeSkillLocationsMultiFallbackCleanupFailure(t
 	}
 }
 
+// seedSkillBackupMarker stamps a backup root as DWS-owned, the way every
+// install surface does before any payload moves in.
+func seedSkillBackupMarker(t *testing.T, root string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(root, skillBackupMarkerName), []byte(skillBackupMarkerContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestCrossPlatformCoverageBackupAndRemoveSkillDirEdges pins the fail-safe
-// contract of the backup helper: non-dir paths are no-ops, a colliding backup
+// contract of the backup helper: all lexical paths are preserved, a colliding backup
 // target gets a numbered stamp, and any failure (mkdir / rename / unresolvable
 // collision) leaves the original directory untouched with an error.
 func TestCrossPlatformCoverageBackupAndRemoveSkillDirEdges(t *testing.T) {
@@ -654,8 +675,8 @@ func TestCrossPlatformCoverageBackupAndRemoveSkillDirEdges(t *testing.T) {
 	// backup. Inject it through the path seam so this branch is portable to
 	// Windows, where chmod-based permission failures are not reliable.
 	statFailurePath := filepath.Join(home, "stat-failure")
-	origStat := upgradeStat
-	testseam.Swap(t, &upgradeStat, func(path string) (os.FileInfo, error) {
+	origStat := upgradeLstat
+	testseam.Swap(t, &upgradeLstat, func(path string) (os.FileInfo, error) {
 		if path == statFailurePath {
 			return nil, errors.New("injected stat failure")
 		}
@@ -665,16 +686,16 @@ func TestCrossPlatformCoverageBackupAndRemoveSkillDirEdges(t *testing.T) {
 		t.Fatalf("stat failure = (%q, %v), want wrapped error", got, err)
 	}
 
-	// Regular file: no-op, no backup.
+	// Regular file: preserve it instead of allowing a later rename to overwrite it.
 	filePath := filepath.Join(home, "not-a-dir")
 	if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := backupAndRemoveSkillDir(home, filePath); got != "" || err != nil {
-		t.Fatalf("regular file = (%q, %v), want no-op", got, err)
+	if got, err := backupAndRemoveSkillDir(home, filePath); got == "" || err != nil {
+		t.Fatalf("regular file = (%q, %v), want backup", got, err)
 	}
-	if _, err := os.Stat(filePath); err != nil {
-		t.Fatalf("regular file must survive: %v", err)
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Fatalf("regular file must move into backup: %v", err)
 	}
 
 	// A skill directory outside home falls back to its basename instead of
@@ -722,6 +743,46 @@ func TestCrossPlatformCoverageBackupAndRemoveSkillDirEdges(t *testing.T) {
 		t.Fatalf("victim must be gone after backup, stat err=%v", err)
 	}
 
+	// A dangling link at the first backup target is still an occupied lexical
+	// path and must select a numbered target rather than being overwritten.
+	danglingVictim := filepath.Join(home, ".agents", "skills", "dangling-collision")
+	if err := os.MkdirAll(danglingVictim, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	danglingTaken := filepath.Join(home, skillBackupSubdir, "20260810-000000", ".agents-skills-dangling-collision")
+	if err := os.Symlink("missing-backup", danglingTaken); err == nil {
+		got, err = backupAndRemoveSkillDir(home, danglingVictim)
+		if err != nil {
+			t.Fatalf("backup with dangling collision error = %v", err)
+		}
+		want = filepath.Join(home, skillBackupSubdir, "20260810-000000-1", ".agents-skills-dangling-collision")
+		if got != want {
+			t.Fatalf("dangling collision backup path = %q, want %q", got, want)
+		}
+	} else if runtime.GOOS != "windows" {
+		t.Fatal(err)
+	}
+
+	// An unreadable target probe is not equivalent to a free path.
+	probeVictim := filepath.Join(home, "probe-victim")
+	if err := os.MkdirAll(probeVictim, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	probeTarget := filepath.Join(home, skillBackupSubdir, "20260810-000000", "probe-victim")
+	testseam.Swap(t, &upgradeLstat, func(path string) (os.FileInfo, error) {
+		if path == probeTarget {
+			return nil, errors.New("target probe denied")
+		}
+		return os.Lstat(path)
+	})
+	if _, err := backupAndRemoveSkillDir(home, probeVictim); err == nil || !strings.Contains(err.Error(), "检查备份目标失败") {
+		t.Fatalf("target probe error = %v", err)
+	}
+	if _, err := os.Stat(probeVictim); err != nil {
+		t.Fatalf("probe victim must survive target check failure: %v", err)
+	}
+	testseam.Swap(t, &upgradeLstat, os.Lstat)
+
 	// Unresolvable collision (>1000 numbered stamps taken) fails and keeps dir.
 	victim2 := filepath.Join(home, "victim2")
 	if err := os.MkdirAll(victim2, 0o755); err != nil {
@@ -749,7 +810,7 @@ func TestCrossPlatformCoverageBackupAndRemoveSkillDirEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	testseam.Swap(t, &upgradeMkdirAll, func(string, os.FileMode) error { return errors.New("mkdir denied") })
-	if _, err := backupAndRemoveSkillDir(home, victim3); err == nil || !strings.Contains(err.Error(), "创建备份目录失败") {
+	if _, err := backupAndRemoveSkillDir(home, victim3); err == nil || !strings.Contains(err.Error(), "创建备份根目录失败") {
 		t.Fatalf("mkdir error = %v", err)
 	}
 	if _, err := os.Stat(victim3); err != nil {
@@ -762,14 +823,14 @@ func TestCrossPlatformCoverageBackupAndRemoveSkillDirEdges(t *testing.T) {
 	if err := os.MkdirAll(victim4, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	testseam.Swap(t, &upgradeRename, func(string, string) error { return errors.New("rename denied") })
+	testseam.Swap(t, &skillPathRenameNoReplace, func(string, string) (string, error) { return "", errors.New("rename denied") })
 	if _, err := backupAndRemoveSkillDir(home, victim4); err == nil || !strings.Contains(err.Error(), "备份技能目录失败") {
 		t.Fatalf("rename error = %v", err)
 	}
 	if _, err := os.Stat(victim4); err != nil {
 		t.Fatalf("victim4 must survive rename failure: %v", err)
 	}
-	testseam.Swap(t, &upgradeRename, os.Rename)
+	testseam.Swap(t, &skillPathRenameNoReplace, renameSkillPathNoReplace)
 }
 
 // TestCrossPlatformCoveragePruneSkillBackupsEdges pins the backup retention:
@@ -779,9 +840,11 @@ func TestCrossPlatformCoveragePruneSkillBackupsEdges(t *testing.T) {
 	home := t.TempDir()
 	root := filepath.Join(home, skillBackupSubdir)
 	for i := 0; i < skillBackupKeep+2; i++ {
-		if err := os.MkdirAll(filepath.Join(root, fmt.Sprintf("20260810-00000%d", i)), 0o755); err != nil {
+		stampDir := filepath.Join(root, fmt.Sprintf("20260810-00000%d", i))
+		if err := os.MkdirAll(stampDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
+		seedSkillBackupMarker(t, stampDir)
 	}
 	if err := pruneSkillBackups(home); err != nil {
 		t.Fatalf("pruneSkillBackups() error = %v", err)
@@ -814,15 +877,97 @@ func TestCrossPlatformCoveragePruneSkillBackupsEdges(t *testing.T) {
 	// Removal failure is reported as the first error. Seed more than
 	// skillBackupKeep dirs again so the prune loop actually runs.
 	for i := 0; i < skillBackupKeep+2; i++ {
-		if err := os.MkdirAll(filepath.Join(root, fmt.Sprintf("20260811-00000%d", i)), 0o755); err != nil {
+		stampDir := filepath.Join(root, fmt.Sprintf("20260811-00000%d", i))
+		if err := os.MkdirAll(stampDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
+		seedSkillBackupMarker(t, stampDir)
 	}
 	testseam.Swap(t, &upgradeRemoveAll, func(string) error { return errors.New("remove denied") })
 	if err := pruneSkillBackups(home); err == nil {
 		t.Fatal("removal failure must surface")
 	}
 	testseam.Swap(t, &upgradeRemoveAll, os.RemoveAll)
+}
+
+// TestCrossPlatformCoveragePruneSkillBackupsPreservesUnknown pins that
+// pruneSkillBackups only retires directories whose names match the DWS backup
+// stamp format. Any foreign directory in the backup root must survive even when
+// more than skillBackupKeep stamped backups exist.
+func TestCrossPlatformCoveragePruneSkillBackupsPreservesUnknown(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, skillBackupSubdir)
+	for i := 0; i < skillBackupKeep+2; i++ {
+		stampDir := filepath.Join(root, fmt.Sprintf("20260910-00000%d", i))
+		if err := os.MkdirAll(stampDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		seedSkillBackupMarker(t, stampDir)
+	}
+	// A collision-suffixed stamp is still a valid DWS backup and is eligible.
+	suffixed := filepath.Join(root, "20260910-000000-7")
+	if err := os.MkdirAll(suffixed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seedSkillBackupMarker(t, suffixed)
+	// Stamp-shaped names without a verifying marker are foreign data too:
+	// the name format alone proves nothing.
+	unmarked := filepath.Join(root, "20260901-000000")
+	if err := os.MkdirAll(unmarked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(unmarked, "user-data.txt"), []byte("must survive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wrongMarker := filepath.Join(root, "20260902-000000")
+	if err := os.MkdirAll(wrongMarker, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wrongMarker, skillBackupMarkerName), []byte("not dws"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unknown := []string{
+		"user-personal-backup",
+		"20260910-000000-abc", // stamp-shaped but non-numeric suffix
+		"20260910-00000",      // too short
+		"notes",
+		"20260901-000000", // stamp-shaped but unmarked
+		"20260902-000000", // stamp-shaped but wrong marker content
+	}
+	for _, name := range unknown {
+		if err := os.MkdirAll(filepath.Join(root, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := pruneSkillBackups(home); err != nil {
+		t.Fatalf("pruneSkillBackups() error = %v", err)
+	}
+
+	for _, name := range unknown {
+		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
+			t.Errorf("unknown backup entry %s must be preserved, stat err=%v", name, err)
+		}
+	}
+	// Only marker-proven backups beyond skillBackupKeep are pruned; foreign
+	// entries (including unmarked stamp-shaped ones) are excluded from the
+	// count, so the proven total stays at skillBackupKeep.
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proven := 0
+	for _, e := range entries {
+		if isSkillBackupStamp(e.Name()) && skillBackupMarkerValid(filepath.Join(root, e.Name())) {
+			proven++
+		}
+	}
+	if proven != skillBackupKeep {
+		t.Errorf("marker-proven backups after prune = %d, want %d", proven, skillBackupKeep)
+	}
+	if data, err := os.ReadFile(filepath.Join(unmarked, "user-data.txt")); err != nil || string(data) != "must survive" {
+		t.Errorf("unmarked stamp-shaped data must survive, got %q, %v", data, err)
+	}
 }
 
 // TestCrossPlatformCoverageResolveSkillSrcLayouts pins every fallback branch of
@@ -888,88 +1033,27 @@ func TestCrossPlatformCoverageResolveSkillSrcLayouts(t *testing.T) {
 // TestCrossPlatformCoverageMonoUpgradeBackupAndFallbackEdges pins the mono
 // path's fail-loud backup semantics and every primary-fallback outcome.
 func TestCrossPlatformCoverageMonoUpgradeBackupAndFallbackEdges(t *testing.T) {
-	originalDirs := append([]string(nil), knownSkillDirs...)
-	t.Cleanup(func() { knownSkillDirs = originalDirs })
-
 	mono := t.TempDir()
 	if err := os.WriteFile(filepath.Join(mono, "SKILL.md"), []byte("# mono"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	// Per-home backup failure marks that home failed; another home still wins.
 	home := withFakeHome(t)
-	knownSkillDirs = []string{".agents/skills", ".claude/skills"}
+	testseam.Swap(t, &knownSkillDirs, []string{".agents/skills", ".claude/skills"})
 	os.MkdirAll(filepath.Join(home, ".agents", "skills", "dws"), 0o755)
 	os.WriteFile(filepath.Join(home, ".agents", "skills", "dws", "SKILL.md"), []byte("old"), 0o644)
 	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
-	testseam.Swap(t, &upgradeRename, func(src, dst string) error {
+	testseam.Swap(t, &skillPathRenameNoReplace, func(src, dst string) (string, error) {
 		if strings.Contains(src, ".agents") {
-			return errors.New("backup denied")
+			return "", errors.New("backup denied")
 		}
-		return os.Rename(src, dst)
+		return renameSkillPathNoReplace(src, dst)
 	})
 	result, err := UpgradeSkillLocations(mono)
-	if err != nil {
-		t.Fatalf("UpgradeSkillLocations() error = %v", err)
-	}
-	if failed := result.Failed(); len(failed) != 1 || failed[0].Err == nil {
-		t.Fatalf("failed = %v, want exactly 1 backup-failed home", failed)
+	if err == nil || len(result.Failed()) != 1 || len(result.Succeeded()) != 0 {
+		t.Fatalf("canonical backup failure = %#v, %v", result, err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "dws", "SKILL.md")); err != nil {
-		t.Fatalf("failed home must keep its original dws/: %v", err)
-	}
-	if got := len(result.Succeeded()); got != 1 {
-		t.Fatalf("Succeeded() len = %d, want 1 (.claude)", got)
-	}
-	testseam.Swap(t, &upgradeRename, os.Rename)
-
-	// Fallback cleanup failure: only a blacklisted home in the main loop, then
-	// the primary cleanup hits a stale dir whose backup fails.
-	home2 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home2, nil })
-	knownSkillDirs = []string{".real/skills"}
-	stale := filepath.Join(home2, ".agents", "skills", "dingtalk-stale")
-	os.MkdirAll(stale, 0o755)
-	useUpgradeManagedNames(t, filepath.Base(stale))
-	testseam.Swap(t, &upgradeRename, func(string, string) error { return errors.New("backup denied") })
-	if _, err := UpgradeSkillLocations(mono); err == nil || !strings.Contains(err.Error(), "回退到主目录也失败") {
-		t.Fatalf("fallback cleanup error = %v", err)
-	}
-	if _, err := os.Stat(stale); err != nil {
-		t.Fatalf("stale dir must survive failed cleanup: %v", err)
-	}
-
-	// Fallback backup failure of the primary dws/ itself.
-	home3 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home3, nil })
-	os.MkdirAll(filepath.Join(home3, ".agents", "skills", "dws"), 0o755)
-	if _, err := UpgradeSkillLocations(mono); err == nil || !strings.Contains(err.Error(), "回退到主目录也失败") {
-		t.Fatalf("fallback backup error = %v", err)
-	}
-	testseam.Swap(t, &upgradeRename, os.Rename)
-
-	// Fallback copy failure: everything fails loud.
-	home4 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home4, nil })
-	testseam.Swap(t, &upgradeCopyDir, func(string, string) error { return errors.New("copy denied") })
-	if _, err := UpgradeSkillLocations(mono); err == nil || !strings.Contains(err.Error(), "回退到主目录也失败") {
-		t.Fatalf("fallback copy error = %v", err)
-	}
-	testseam.Swap(t, &upgradeCopyDir, copyDir)
-
-	// Fallback append (no prior entry for the primary dir): a blacklisted-only
-	// main loop leaves no primary entry, so the fallback appends a fresh OK.
-	home5 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home5, nil })
-	result, err = UpgradeSkillLocations(mono)
-	if err != nil {
-		t.Fatalf("fallback append error = %v", err)
-	}
-	if got := len(result.Succeeded()); got != 1 {
-		t.Fatalf("Succeeded() len = %d, want 1 appended primary", got)
-	}
-	if _, err := os.Stat(filepath.Join(home5, ".agents", "skills", "dws", "SKILL.md")); err != nil {
-		t.Fatalf("fallback append install missing: %v", err)
+		t.Fatalf("failed canonical home must keep its original dws/: %v", err)
 	}
 }
 
@@ -977,15 +1061,10 @@ func TestCrossPlatformCoverageMonoUpgradeBackupAndFallbackEdges(t *testing.T) {
 // path's blacklisted branch, per-skill backup/copy failures, and the primary
 // fallback outcomes (cleanup OK + backup/copy failure, fresh append).
 func TestCrossPlatformCoverageMultiUpgradeBackupAndFallbackEdges(t *testing.T) {
-	originalDirs := append([]string(nil), knownSkillDirs...)
-	t.Cleanup(func() { knownSkillDirs = originalDirs })
-
 	extract := t.TempDir()
 	multiRoot := writeMultiBundle(t, extract, "dingtalk-chat")
-
-	// Blacklisted entry is reported, non-blacklisted installs.
 	home := withFakeHome(t)
-	knownSkillDirs = []string{".real/skills", ".agents/skills"}
+	testseam.Swap(t, &knownSkillDirs, []string{".real/skills", ".agents/skills"})
 	os.MkdirAll(filepath.Join(home, ".agents"), 0o755)
 	result, err := UpgradeSkillLocations(multiRoot)
 	if err != nil {
@@ -1003,119 +1082,33 @@ func TestCrossPlatformCoverageMultiUpgradeBackupAndFallbackEdges(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".real")); !os.IsNotExist(err) {
 		t.Fatalf("blacklisted home must never be touched, stat err=%v", err)
 	}
+	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "dingtalk-chat", "SKILL.md")); err != nil {
+		t.Fatalf("canonical install missing: %v", err)
+	}
+}
 
-	// A detected concrete Agent root wins over .agents. A failure while retiring
-	// the old generic copy is surfaced after the concrete root succeeds.
-	home2 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home2, nil })
-	knownSkillDirs = []string{".agents/skills", ".claude/skills"}
-	os.MkdirAll(filepath.Join(home2, ".agents", "skills", "dingtalk-chat"), 0o755)
-	os.MkdirAll(filepath.Join(home2, ".claude"), 0o755)
-	testseam.Swap(t, &upgradeRename, func(src, dst string) error {
-		if strings.Contains(src, ".agents") {
-			return errors.New("backup denied")
-		}
-		return os.Rename(src, dst)
-	})
-	result, err = UpgradeSkillLocations(multiRoot)
+// The production wrappers that used to bundle these two steps were removed as
+// dead code; the test keeps exercising the live building blocks they composed.
+func cleanupMultiLeftoversForTest(homeDir, baseDir string) error {
+	victims, err := managedMultiSkillVictims(baseDir, readManagedSkillNames(homeDir))
 	if err != nil {
-		t.Fatalf("UpgradeSkillLocations() error = %v", err)
+		return err
 	}
-	if failed := result.Failed(); len(failed) != 1 || failed[0].Err == nil {
-		t.Fatalf("failed = %v, want 1 backup-failed home", failed)
+	if _, err := backupSkillSet(homeDir, victims); err != nil {
+		return fmt.Errorf("备份并清理 multi 残留失败: %w", err)
 	}
-	if _, err := os.Stat(filepath.Join(home2, ".agents", "skills", "dingtalk-chat")); err != nil {
-		t.Fatalf("failed home must keep its original skill: %v", err)
-	}
-	testseam.Swap(t, &upgradeRename, os.Rename)
+	return nil
+}
 
-	// Per-skill copy failure on the concrete home fails that home; with no
-	// successful concrete target, the generic copy is left untouched.
-	home3 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home3, nil })
-	os.MkdirAll(filepath.Join(home3, ".claude"), 0o755)
-	testseam.Swap(t, &upgradeCopyDir, func(src, dst string) error {
-		if strings.Contains(dst, ".claude") {
-			return errors.New("copy denied")
-		}
-		return copyDir(src, dst)
-	})
-	result, err = UpgradeSkillLocations(multiRoot)
+func cleanupOppositeModeLeftoversForTest(homeDir, destBase string, skillSet map[string]bool) error {
+	victims, err := oppositeModeSkillVictims(destBase, skillSet, readManagedSkillNames(homeDir))
 	if err != nil {
-		t.Fatalf("UpgradeSkillLocations() error = %v", err)
+		return err
 	}
-	if failed := result.Failed(); len(failed) != 1 || failed[0].Err == nil {
-		t.Fatalf("failed = %v, want 1 copy-failed home", failed)
+	if _, err := backupSkillSet(homeDir, victims); err != nil {
+		return fmt.Errorf("备份并清理对面模式残留失败: %w", err)
 	}
-	testseam.Swap(t, &upgradeCopyDir, copyDir)
-
-	// Fallback backup failure: the same-name bundle skill refresh is what
-	// fails (cleanup succeeds, the per-skill backup does not).
-	home4 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home4, nil })
-	knownSkillDirs = []string{".real/skills"}
-	os.MkdirAll(filepath.Join(home4, ".agents", "skills", "dingtalk-chat"), 0o755)
-	testseam.Swap(t, &upgradeRename, func(src, dst string) error {
-		if strings.Contains(src, "dingtalk-chat") {
-			return errors.New("backup denied")
-		}
-		return os.Rename(src, dst)
-	})
-	if _, err := UpgradeSkillLocations(multiRoot); err == nil || !strings.Contains(err.Error(), "回退到主目录也失败") {
-		t.Fatalf("fallback backup error = %v", err)
-	}
-	testseam.Swap(t, &upgradeRename, os.Rename)
-
-	// Fallback copy failure.
-	home5 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home5, nil })
-	testseam.Swap(t, &upgradeCopyDir, func(string, string) error { return errors.New("copy denied") })
-	if _, err := UpgradeSkillLocations(multiRoot); err == nil || !strings.Contains(err.Error(), "回退到主目录也失败") {
-		t.Fatalf("fallback copy error = %v", err)
-	}
-	testseam.Swap(t, &upgradeCopyDir, copyDir)
-
-	// Fallback append: blacklisted-only main loop → fresh OK entry appended.
-	home6 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home6, nil })
-	result, err = UpgradeSkillLocations(multiRoot)
-	if err != nil {
-		t.Fatalf("fallback append error = %v", err)
-	}
-	if got := len(result.Succeeded()); got != 1 {
-		t.Fatalf("Succeeded() len = %d, want 1 appended primary (%v)", got, result.Results)
-	}
-	if _, err := os.Stat(filepath.Join(home6, ".agents", "skills", "dingtalk-chat", "SKILL.md")); err != nil {
-		t.Fatalf("fallback append install missing: %v", err)
-	}
-
-	// Fallback replace: the main loop fails the primary home on a transient
-	// copy error, the fallback retry succeeds and replaces the failed entry.
-	home7 := t.TempDir()
-	testseam.Swap(t, &upgradeUserHomeDir, func() (string, error) { return home7, nil })
-	knownSkillDirs = []string{".agents/skills"}
-	origCopy := upgradeCopyDir
-	attempts := 0
-	testseam.Swap(t, &upgradeCopyDir, func(src, dst string) error {
-		attempts++
-		if attempts == 1 {
-			return errors.New("transient copy failure")
-		}
-		return origCopy(src, dst)
-	})
-	result, err = UpgradeSkillLocations(multiRoot)
-	if err != nil {
-		t.Fatalf("fallback replace error = %v", err)
-	}
-	if got := len(result.Succeeded()); got != 1 {
-		t.Fatalf("Succeeded() len = %d, want 1 replaced primary (%v)", got, result.Results)
-	}
-	if failed := result.Failed(); len(failed) != 0 {
-		t.Fatalf("failed entry must be replaced by OK, got %v", failed)
-	}
-	if _, err := os.Stat(filepath.Join(home7, ".agents", "skills", "dingtalk-chat", "SKILL.md")); err != nil {
-		t.Fatalf("fallback replace install missing: %v", err)
-	}
+	return nil
 }
 
 // TestCrossPlatformCoverageCleanupLeftoversEdges pins the cleanup helpers:
@@ -1127,40 +1120,40 @@ func TestCrossPlatformCoverageCleanupLeftoversEdges(t *testing.T) {
 
 	// Read failure (non-ENOENT) surfaces from both cleanups.
 	testseam.Swap(t, &upgradeReadDir, func(string) ([]os.DirEntry, error) { return nil, errors.New("read denied") })
-	if err := cleanupMultiLeftovers(home, base); err == nil || !strings.Contains(err.Error(), "读取技能目录失败") {
-		t.Fatalf("cleanupMultiLeftovers read error = %v", err)
+	if err := cleanupMultiLeftoversForTest(home, base); err == nil || !strings.Contains(err.Error(), "读取技能目录失败") {
+		t.Fatalf("cleanupMultiLeftoversForTest read error = %v", err)
 	}
-	if err := cleanupOppositeModeLeftovers(home, base, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "读取技能目录失败") {
-		t.Fatalf("cleanupOppositeModeLeftovers read error = %v", err)
+	if err := cleanupOppositeModeLeftoversForTest(home, base, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "读取技能目录失败") {
+		t.Fatalf("cleanupOppositeModeLeftoversForTest read error = %v", err)
 	}
 	testseam.Swap(t, &upgradeReadDir, os.ReadDir)
 
 	// Backup failure of a multi leftover aborts cleanupMultiLeftovers.
 	os.MkdirAll(filepath.Join(base, "dingtalk-stale"), 0o755)
 	useUpgradeManagedNames(t, "dingtalk-stale")
-	testseam.Swap(t, &upgradeRename, func(string, string) error { return errors.New("backup denied") })
-	if err := cleanupMultiLeftovers(home, base); err == nil || !strings.Contains(err.Error(), "备份并清理 multi 残留失败") {
+	testseam.Swap(t, &skillPathRenameNoReplace, func(string, string) (string, error) { return "", errors.New("backup denied") })
+	if err := cleanupMultiLeftoversForTest(home, base); err == nil || !strings.Contains(err.Error(), "备份并清理 multi 残留失败") {
 		t.Fatalf("cleanupMultiLeftovers backup error = %v", err)
 	}
 
 	// Backup failure of the mono leftover aborts the opposite-mode cleanup.
 	os.MkdirAll(filepath.Join(base, "dws"), 0o755)
-	if err := cleanupOppositeModeLeftovers(home, base, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "备份并清理对面模式残留失败") {
+	if err := cleanupOppositeModeLeftoversForTest(home, base, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "备份并清理对面模式残留失败") {
 		t.Fatalf("opposite cleanup mono backup error = %v", err)
 	}
-	testseam.Swap(t, &upgradeRename, os.Rename)
+	testseam.Swap(t, &skillPathRenameNoReplace, renameSkillPathNoReplace)
 
 	// Backup failure of a stale (non-mono) skill aborts with its own message.
-	testseam.Swap(t, &upgradeRename, func(src, dst string) error {
+	testseam.Swap(t, &skillPathRenameNoReplace, func(src, dst string) (string, error) {
 		if strings.Contains(src, "dingtalk-stale") {
-			return errors.New("backup denied")
+			return "", errors.New("backup denied")
 		}
-		return os.Rename(src, dst)
+		return renameSkillPathNoReplace(src, dst)
 	})
-	if err := cleanupOppositeModeLeftovers(home, base, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "备份并清理对面模式残留失败") {
+	if err := cleanupOppositeModeLeftoversForTest(home, base, map[string]bool{}); err == nil || !strings.Contains(err.Error(), "备份并清理对面模式残留失败") {
 		t.Fatalf("opposite cleanup stale backup error = %v", err)
 	}
-	testseam.Swap(t, &upgradeRename, os.Rename)
+	testseam.Swap(t, &skillPathRenameNoReplace, renameSkillPathNoReplace)
 
 	// Success matrix: mono leftover + stale skill removed into backups, bundle
 	// skill and regular file preserved.
@@ -1168,7 +1161,7 @@ func TestCrossPlatformCoverageCleanupLeftoversEdges(t *testing.T) {
 	skillSet := map[string]bool{"dingtalk-keep": true}
 	os.MkdirAll(filepath.Join(base, "dingtalk-keep"), 0o755)
 	os.WriteFile(filepath.Join(base, "regular-file"), []byte("x"), 0o644)
-	if err := cleanupOppositeModeLeftovers(home, base, skillSet); err != nil {
+	if err := cleanupOppositeModeLeftoversForTest(home, base, skillSet); err != nil {
 		t.Fatalf("cleanupOppositeModeLeftovers() error = %v", err)
 	}
 	for _, gone := range []string{"dws", "dingtalk-stale"} {
@@ -1188,7 +1181,7 @@ func TestCrossPlatformCoverageCleanupLeftoversEdges(t *testing.T) {
 	}
 
 	// cleanupMultiLeftovers on a missing base is a no-op.
-	if err := cleanupMultiLeftovers(home, filepath.Join(home, "missing")); err != nil {
+	if err := cleanupMultiLeftoversForTest(home, filepath.Join(home, "missing")); err != nil {
 		t.Fatalf("missing base must be a no-op, got %v", err)
 	}
 }

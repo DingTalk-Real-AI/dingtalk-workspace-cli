@@ -141,6 +141,67 @@ func TestDaemon_RunStartsAndShutsDownCleanly(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageDaemonIPCStopShutsDownCleanly(t *testing.T) {
+	workDir := shortTempDir(t)
+	identityHash := dwsevent.IdentityHash(workDir)
+	endpoint := dwsevent.IPCEndpoint(workDir, "open", dwsevent.SourceKindAppStream, identityHash)
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- Run(context.Background(), Config{
+			WorkDir:      workDir,
+			IPCEndpoint:  endpoint,
+			ClientID:     "ding_ipc_stop_test",
+			Edition:      "open",
+			SourceKind:   dwsevent.SourceKindAppStream,
+			IdentityHash: identityHash,
+			Source:       &fakeSource{},
+		})
+	}()
+
+	var conn net.Conn
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		var err error
+		conn, err = transport.Dial(endpoint)
+		if err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if conn == nil {
+		t.Fatal("bus IPC endpoint did not become ready")
+	}
+	w := transport.NewWriter(conn)
+	r := transport.NewReader(conn)
+	if err := w.WriteJSON(transport.Hello{
+		Type:        transport.FrameTypeHello,
+		ConsumerPID: os.Getpid(),
+		Role:        transport.HelloRoleStop,
+	}); err != nil {
+		t.Fatalf("write stop hello: %v", err)
+	}
+	var bye transport.Bye
+	if err := r.ReadJSON(&bye); err != nil {
+		t.Fatalf("read stop response: %v", err)
+	}
+	_ = conn.Close()
+	if bye.Type != transport.FrameTypeBye || bye.Reason != "stop_request" {
+		t.Fatalf("stop response = %#v", bye)
+	}
+
+	select {
+	case err := <-runDone:
+		if err != nil {
+			t.Fatalf("Run returned after IPC stop: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not return after IPC stop")
+	}
+	if pid := ReadHolderPID(filepath.Join(workDir, LockFileName)); pid != 0 {
+		t.Fatalf("bus lock retained pid %d after IPC stop", pid)
+	}
+}
+
 func TestDaemon_ConsumerReceivesEvents(t *testing.T) {
 	skipOnWindows(t, "uses Unix socket dial")
 	workDir := shortTempDir(t)

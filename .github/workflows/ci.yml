@@ -512,6 +512,12 @@ jobs:
         if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         run: node .github/reviewer-routing.test.js
 
+      - name: Test npm installer smoke (prune, backup, publish)
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        env:
+          XDG_CONFIG_HOME: ""
+        run: node test/scripts/install_js_smoke.mjs
+
   test-focused:
     name: "Test (focused: ${{ matrix.shard }})"
     needs: lint
@@ -523,12 +529,26 @@ jobs:
     # shards at full-suite scope; release-scripts is included because its
     # dedicated job only runs at full-suite or release-sensitive scope, and
     # dropping it here would stop testing test/scripts changes entirely.
+    # internal/app is carried by one shard per bounded partition rather than a
+    # single app shard: the partitions used to run end to end inside one job,
+    # where the Schema partition alone owned most of the wall clock. The
+    # app-<partition> names are pinned to the helper's partition set by
+    # TestCIAppRacePartitionMatrixMatchesHelper, so a partition can never lose
+    # its job silently. The CrossPlatformCoverage-heavy C range is split again
+    # to retain headroom on runners reclaimed near the five-minute mark.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - app
+          - app-schema
+          - app-a-b
+          - app-c-a-l
+          - app-c-m-r
+          - app-c-s-z
+          - app-c-other
+          - app-d-r
+          - app-s-z-example-fuzz
           - generators
           - helpers
           - cli
@@ -570,9 +590,16 @@ jobs:
           TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
+          # Every app partition shard tests the same single internal/app
+          # package, so the impacted-package query uses the base shard name and
+          # the partition only selects which tests run.
+          package_shard="$TEST_SHARD"
+          case "$TEST_SHARD" in
+            app-*) package_shard=app ;;
+          esac
           package_output="$(
             ./scripts/ci/changed-test-packages.sh \
-              list-shard "$TEST_SHARD" "$TEST_BASE_REF" "$TEST_HEAD_REF"
+              list-shard "$package_shard" "$TEST_BASE_REF" "$TEST_HEAD_REF"
           )"
           if [ -z "$package_output" ]; then
             echo "No buildable Go package in shard $TEST_SHARD is affected by this revision." \
@@ -594,7 +621,13 @@ jobs:
 
       - name: Install archive tooling
         if: ${{ matrix.shard == 'release-scripts' && steps.select.outputs.affected == 'true' }}
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Test shard with Race Detection
         if: ${{ steps.select.outputs.affected == 'true' }}
@@ -612,14 +645,19 @@ jobs:
               exit 1
             }
           done
-          if [ "$TEST_SHARD" = "app" ]; then
-            # A single long-lived app test process retains every constructed
-            # command tree in framework registries. Isolate Schema assembly and
-            # bounded name ranges so each process releases that state on exit.
-            test "${#packages[@]}" -eq 1
-            ./scripts/ci/run-app-race-tests.sh run "${packages[0]}"
-            exit 0
-          fi
+          case "$TEST_SHARD" in
+            app-*)
+              # A single long-lived app test process retains every constructed
+              # command tree in framework registries. Each partition is its own
+              # job, so that state is released when the process exits and the
+              # partitions run concurrently instead of end to end. The helper
+              # still verifies that the partition patterns cover every top-level
+              # test exactly once before running the one it was asked for.
+              test "${#packages[@]}" -eq 1
+              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              exit 0
+              ;;
+          esac
           if [ "$TEST_SHARD" = "release-scripts" ]; then
             # Mirror the dedicated release-contract job: these suites shell out
             # to archive tooling and are not race-instrumented there.
@@ -640,14 +678,25 @@ jobs:
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: ubuntu-latest
-    # app runs several independently bounded processes; cli/smoke need headroom
-    # beyond go test -timeout for setup + assembly.
+    # internal/app is split across one shard per bounded partition so the
+    # partitions run concurrently and each releases its framework registries
+    # when the process exits; cli/smoke need headroom beyond go test -timeout for
+    # setup + assembly. The app-<partition> names are pinned to the helper's
+    # partition set by TestCIAppRacePartitionMatrixMatchesHelper. The
+    # CrossPlatformCoverage-heavy C range is split again for runner headroom.
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - app
+          - app-schema
+          - app-a-b
+          - app-c-a-l
+          - app-c-m-r
+          - app-c-s-z
+          - app-c-other
+          - app-d-r
+          - app-s-z-example-fuzz
           - generators
           - helpers
           - cli
@@ -673,18 +722,30 @@ jobs:
           TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          package_output="$(./scripts/ci/test-packages.sh list "$TEST_SHARD")"
+          # Every app partition shard tests the same single internal/app
+          # package, so the package query uses the base shard name and the
+          # partition only selects which tests run.
+          package_shard="$TEST_SHARD"
+          case "$TEST_SHARD" in
+            app-*) package_shard=app ;;
+          esac
+          package_output="$(./scripts/ci/test-packages.sh list "$package_shard")"
           test -n "$package_output"
           mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
-          if [ "$TEST_SHARD" = "app" ]; then
-            # A single long-lived app test process retains every constructed
-            # command tree in framework registries. Isolate Schema assembly and
-            # bounded name ranges so each process releases that state on exit.
-            test "${#packages[@]}" -eq 1
-            ./scripts/ci/run-app-race-tests.sh run "${packages[0]}"
-            exit 0
-          fi
+          case "$TEST_SHARD" in
+            app-*)
+              # A single long-lived app test process retains every constructed
+              # command tree in framework registries. Each partition is its own
+              # job, so that state is released when the process exits and the
+              # partitions run concurrently instead of end to end. The helper
+              # still verifies that the partition patterns cover every top-level
+              # test exactly once before running the one it was asked for.
+              test "${#packages[@]}" -eq 1
+              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              exit 0
+              ;;
+          esac
           # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
           # give them a dedicated package timeout on slower hosted runners.
           timeout_budget=12m
@@ -710,7 +771,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Test release scripts
         shell: bash
@@ -1088,7 +1155,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Build
         run: make build
@@ -1139,7 +1212,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Run policy and shortcut coverage
         run: |
@@ -1220,7 +1299,13 @@ jobs:
 
       - name: Install archive tooling
         if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit != 'true'
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Run baseline unit tests with coverage
         if: steps.baseline-cache.outputs.cache-hit != 'true'

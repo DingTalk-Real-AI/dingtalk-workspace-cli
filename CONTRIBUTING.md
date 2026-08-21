@@ -74,9 +74,9 @@ coverage is additionally selected for platform-sensitive code.
    `make authoritative-interface-integrity BASE_REF=<merge-base> STABLE_REF=<latest-GA-tag> CANDIDATE_REF=<candidate-sha>`.
    The Make target delegates to the authoritative wrapper; CI does not invoke a
    second comparator or the legacy fixture checker. See
-   [CLI flag compatibility migration governance](docs/cli-interface-flag-migrations.md)
+   [CLI Help / Schema compatibility migration governance](docs/cli-interface-flag-migrations.md)
    for the reviewed two-stage `pending` → `consumed` lifecycle.
-   Agent-visible flag migrations must also run
+   Agent-visible flag or command-path migrations must also run
    `make schema-compatibility BASE_REF=<merge-base> STABLE_REF=<latest-GA-tag> CANDIDATE_REF=<candidate-sha>`;
    it consumes the same base-owned ledger rather than a second exception list.
 5. Run `./scripts/policy/check-generated-drift.sh` when generated artifacts may

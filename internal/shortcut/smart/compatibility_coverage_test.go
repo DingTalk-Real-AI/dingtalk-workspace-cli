@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -65,6 +66,10 @@ func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool strin
 		}
 	case "contact/get_current_user_profile":
 		text = `{"result":{"userId":"u1"}}`
+	case "todo/create_personal_todo":
+		text = `{"success":true,"result":{"taskId":"todo-created"}}`
+	case "todo/get_todo_detail":
+		text = `{"success":true,"result":{"todoDetailModel":{"taskId":"todo-created","subject":"交周报","isDone":false}}}`
 	case "im/search_groups":
 		text = `{"result":[{"openConversationId":"cid-1","title":"项目冲刺"}]}`
 	case "chat/list_conversation_message_v2":
@@ -112,6 +117,8 @@ func (f *platformCoverageCaller) JQ() string     { return "" }
 
 func newPlatformCoverageRoot() *cobra.Command {
 	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.PersistentFlags().Bool("yes", false, "")

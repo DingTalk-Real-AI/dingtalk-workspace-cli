@@ -9,7 +9,9 @@
 - <!-- dws-intent: chat.conversation.list-top -->查看置顶会话默认使用 `dws chat +conversation-list-top`；
   原子 `list-top-conversations` 只在需要原始响应时作为 fallback。
 - <!-- dws-intent: chat.read.conversation -->取得目标会话后读取或导出消息记录，默认使用 `dws chat +chat-messages`；
-  可附带非必填的 `--sender-query` 解析姓名：无稳定 ID 返回全部，唯一解析成功后按 `senderId` 筛选同一次读取结果。不要回到原子 `message list`，也不要补跑 `+search-msg`。直接条件检索优先使用 `+search-msg`。
+  可附带非必填的 `--sender-query` 解析姓名：唯一解析成功后按 `senderId` 筛选同一次读取结果；
+  解析失败、不完整或存在歧义时抑制未过滤消息并返回 `sender_resolution_failed`。不要回到原子
+  `message list`，也不要补跑 `+search-msg`。直接条件检索优先使用 `+search-msg`。
 
 ## 必读约束
 
@@ -28,7 +30,7 @@ dws chat conversation-info --user <userId> --format json
 dws chat conversation-info --open-dingtalk-id <openDingTalkId> --format json
 ```
 
-`--group`、`--user`、`--open-dingtalk-id` 互斥且必须指定一个。文件/音视频发送不再依赖调用方读取 spaceId；直接用 `message send --msg-type file|audio|video --file-path`。
+`--group`、`--user`、`--open-dingtalk-id` 互斥且必须指定一个。文件/音视频发送不再依赖调用方读取 spaceId；直接用 `message send --msg-type file|audio|video --file`。
 
 ### 会话列表与红点
 
@@ -112,7 +114,7 @@ dws chat category add-conv --group <openConversationId> --category-ids 123,456
 ### 获取单聊会话 ID 后置顶
 
 ```bash
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 dws chat conversation-info --user <userId> --format json
 dws chat set-top --conversation-id <openConversationId> --format json
 ```
@@ -137,7 +139,7 @@ dws chat category list-conversations --category-id <categoryId> --format json
 ### 智能会话分组
 
 ```bash
-dws aisearch person --keyword "张三" --dimension name --format json
+dws aisearch person --query "张三" --dimension name --format json
 dws chat category create-smart --name "项目组" --keywords "项目,开发" --format json
 dws chat category create-smart --name "团队群" --members openDingTalkId1,openDingTalkId2 --format json
 dws chat category create-smart --name "重点群" --keywords "重点" --members openDingTalkId1 --format json

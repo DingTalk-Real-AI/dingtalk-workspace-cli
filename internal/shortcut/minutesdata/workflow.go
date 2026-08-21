@@ -30,6 +30,62 @@ func RequireWriteAcknowledgement(operation string, data map[string]any) error {
 	return fmt.Errorf("minutes %s response has no explicit successful acknowledgement", operation)
 }
 
+// RequirePermissionMutationAcknowledgement validates the target-level payload
+// returned by add/remove_member_permission. The backend's top-level
+// success=true is not sufficient: historically it also accompanied a
+// resultMap that merely echoed nonexistent task UUIDs, and it does not prove
+// that every requested task/member pair was changed.
+func RequirePermissionMutationAcknowledgement(operation string, taskUUIDs, memberUIDs []string, data map[string]any) error {
+	if err := validateEnvelope(data); err != nil {
+		return err
+	}
+	if success, ok := data["success"].(bool); !ok || !success {
+		return fmt.Errorf("minutes %s response has no explicit success=true", operation)
+	}
+	result, ok := data["result"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("minutes %s response has no result object", operation)
+	}
+	resultMap, ok := result["resultMap"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("minutes %s response has no result.resultMap object", operation)
+	}
+	if len(resultMap) != len(taskUUIDs) {
+		return fmt.Errorf("minutes %s resultMap covers %d task UUIDs, want %d", operation, len(resultMap), len(taskUUIDs))
+	}
+	wantMembers := make(map[string]bool, len(memberUIDs))
+	for _, member := range memberUIDs {
+		wantMembers[strings.TrimSpace(member)] = true
+	}
+	for _, taskUUID := range taskUUIDs {
+		rawMembers, exists := resultMap[taskUUID]
+		if !exists {
+			return fmt.Errorf("minutes %s resultMap is missing task UUID %s", operation, taskUUID)
+		}
+		members, ok := rawMembers.([]any)
+		if !ok {
+			return fmt.Errorf("minutes %s resultMap[%s] has type %T, want array", operation, taskUUID, rawMembers)
+		}
+		gotMembers := make(map[string]bool, len(members))
+		for index, member := range members {
+			value := stringField(map[string]any{"member": member}, "member")
+			if value == "" {
+				return fmt.Errorf("minutes %s resultMap[%s][%d] is not a member UID", operation, taskUUID, index)
+			}
+			gotMembers[value] = true
+		}
+		if len(gotMembers) != len(wantMembers) {
+			return fmt.Errorf("minutes %s resultMap[%s] member coverage mismatch", operation, taskUUID)
+		}
+		for member := range wantMembers {
+			if !gotMembers[member] {
+				return fmt.Errorf("minutes %s resultMap[%s] is missing member UID %s", operation, taskUUID, member)
+			}
+		}
+	}
+	return nil
+}
+
 // RecordResult validates the gateway's observed listening-note command result.
 func RecordResult(expectedCmd, taskUUID string, data map[string]any) (map[string]any, error) {
 	if err := RequireWriteAcknowledgement("record "+expectedCmd, data); err != nil {

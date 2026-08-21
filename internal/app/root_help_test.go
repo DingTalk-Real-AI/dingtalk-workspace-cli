@@ -264,7 +264,7 @@ func TestRootChatMediaUploadWithoutAppCredentialsReturnsMigrationValidation(t *t
 	}
 
 	got := output.String() + "\n" + err.Error()
-	for _, want := range []string{"已下线", "chat message send --msg-type file --file-path"} {
+	for _, want := range []string{"已下线", "chat message send --msg-type file --file"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("chat media upload migration output missing %q:\n%s", want, got)
 		}
@@ -439,7 +439,7 @@ func TestChatFileUploadDownlinedButMessageFileSendStays(t *testing.T) {
 		t.Fatalf("chat file upload error = nil, want downline error\n%s", got)
 	}
 	got = got + "\n" + err.Error()
-	for _, want := range []string{"已下线", "upload_conversation_file_by_url", "chat message send --msg-type file --file-path"} {
+	for _, want := range []string{"已下线", "upload_conversation_file_by_url", "chat message send --msg-type file --file"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("chat file upload output missing %q:\n%s", want, got)
 		}
@@ -458,6 +458,53 @@ func TestCalendarEventListDryRunPreviewsOnly(t *testing.T) {
 	for _, want := range []string{"list_calendar_events", "startTime", "endTime"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("calendar dry-run output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestCalendarEventShareInfoDryRunPreviewsOnly(t *testing.T) {
+	got, err := executeRootCaptureStdout(t, []string{
+		"--dry-run", "calendar", "event", "share-info",
+		"--id", "EVT_001",
+		"--language", "zh-CN",
+		"--calendar-id", "primary",
+	})
+	if err != nil {
+		t.Fatalf("calendar event share-info --dry-run error = %v\n%s", err, got)
+	}
+	for _, want := range []string{"get_event_share_info", "eventId", "EVT_001", "zh-CN", "primary"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("calendar event share-info dry-run output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestCalendarEventShareInfoRequiresEventID(t *testing.T) {
+	got, err := executeRootCaptureStdout(t, []string{
+		"--dry-run", "calendar", "event", "share-info",
+	})
+	if err == nil {
+		t.Fatalf("calendar event share-info without --id: expected error, got nil\n%s", got)
+	}
+	if strings.Contains(got, "\"executed\": true") {
+		t.Fatalf("share-info without --id must not execute:\n%s", got)
+	}
+}
+
+func TestCalendarEventShareInfoOmitsOptionalArgs(t *testing.T) {
+	got, err := executeRootCaptureStdout(t, []string{
+		"--dry-run", "calendar", "event", "share-info",
+		"--id", "EVT_001",
+	})
+	if err != nil {
+		t.Fatalf("calendar event share-info --dry-run with only --id error = %v\n%s", err, got)
+	}
+	if !strings.Contains(got, "\"eventId\"") {
+		t.Fatalf("calendar event share-info dry-run output missing eventId:\n%s", got)
+	}
+	for _, unwanted := range []string{"\"calendarId\"", "\"language\""} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("calendar event share-info dry-run with only --id should not contain %q:\n%s", unwanted, got)
 		}
 	}
 }
