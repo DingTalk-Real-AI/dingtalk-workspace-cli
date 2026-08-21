@@ -184,7 +184,10 @@ func TestDocImportPlacementMismatchIsPartialSuccess(t *testing.T) {
 
 func TestParsePersonalDocWorkspaceIDRejectsAmbiguousResponse(t *testing.T) {
 	for _, text := range []string{
+		`{`,
 		`{"wikiSpaces":[]}`,
+		`{"wikiSpaces":"not-a-list"}`,
+		`{"wikiSpaces":[1]}`,
 		`{"wikiSpaces":[{"workspaceId":"a"},{"workspaceId":"b"}]}`,
 		`{"wikiSpaces":[{"name":"我的文档"}]}`,
 	} {
@@ -192,4 +195,60 @@ func TestParsePersonalDocWorkspaceIDRejectsAmbiguousResponse(t *testing.T) {
 			t.Fatalf("parsePersonalDocWorkspaceID(%s) unexpectedly succeeded", text)
 		}
 	}
+}
+
+func TestCrossPlatformCoverageDocImportTargetDefensiveBranches(t *testing.T) {
+	if err := resolveDefaultDocImportTarget(context.Background(), nil); err != nil {
+		t.Fatalf("nil import target: %v", err)
+	}
+	for _, file := range []*preparedImportFile{{folder: "folder-1"}, {workspace: "space-1"}} {
+		if err := resolveDefaultDocImportTarget(context.Background(), file); err != nil {
+			t.Fatalf("explicit import target: %v", err)
+		}
+	}
+
+	for _, text := range []string{`{`, `{}`, `[]`} {
+		if _, err := parseImportedDocumentInfo(text); err == nil {
+			t.Fatalf("parseImportedDocumentInfo(%q) unexpectedly succeeded", text)
+		}
+	}
+	if info, err := parseImportedDocumentInfo(`{"data":{"document":{"nodeId":"node-1"}}}`); err != nil || info["nodeId"] != "node-1" {
+		t.Fatalf("nested document info = %#v, %v", info, err)
+	}
+
+	for _, test := range []struct {
+		raw  string
+		want string
+	}{
+		{"https://alidocs.dingtalk.com/i/nodes/n?workspaceId=space-query", "space-query"},
+		{"https://alidocs.dingtalk.com/i/nodes/node-path", "node-path"},
+		{"https://alidocs.dingtalk.com/i/spaces/space-path", "space-path"},
+		{"https://alidocs.dingtalk.com/i/folders/folder-path", "folder-path"},
+		{"https://alidocs.dingtalk.com/unknown/path", "https://alidocs.dingtalk.com/unknown/path"},
+		{"plain-id", "plain-id"},
+	} {
+		if got := canonicalImportTargetID(test.raw); got != test.want {
+			t.Fatalf("canonicalImportTargetID(%q) = %q, want %q", test.raw, got, test.want)
+		}
+	}
+
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+	verifyFailure := func(t *testing.T, file preparedImportFile, response, documentURL string) {
+		t.Helper()
+		responses := map[string][]string{}
+		if response != "" {
+			responses["get_document_info"] = []string{response}
+		}
+		InitDeps(&sheetImportCaller{responses: responses})
+		if _, _, err := verifyImportedDocumentPlacement(context.Background(), file, "task-1", documentURL); err == nil {
+			t.Fatal("placement verification unexpectedly succeeded")
+		}
+	}
+	verifyFailure(t, preparedImportFile{}, "", "")
+	verifyFailure(t, preparedImportFile{}, "", "https://alidocs.dingtalk.com/i/nodes/node-1")
+	verifyFailure(t, preparedImportFile{}, `{`, "https://alidocs.dingtalk.com/i/nodes/node-1")
+	verifyFailure(t, preparedImportFile{}, `{}`, "https://alidocs.dingtalk.com/i/nodes/node-1")
+	verifyFailure(t, preparedImportFile{}, `{"nodeId":"other"}`, "https://alidocs.dingtalk.com/i/nodes/node-1")
+	verifyFailure(t, preparedImportFile{workspace: "space-1"}, `{"nodeId":"node-1","workspaceId":"wrong"}`, "https://alidocs.dingtalk.com/i/nodes/node-1")
 }

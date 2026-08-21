@@ -61,6 +61,9 @@ func TestCrossPlatformCoverageDocFinalCommonAndCanonicalBranches(t *testing.T) {
 	if _, err := validateJSONMLNode(&cobra.Command{}, `["",{}]`); err == nil {
 		t.Fatal("empty JSONML tag succeeded")
 	}
+	if _, err := validateJSONMLNode(&cobra.Command{}, ""); err == nil {
+		t.Fatal("empty JSONML node reached shortcut validation")
+	}
 
 	validation := classifyDocWriteFailure(apperrors.NewValidation("bad"))
 	if validation.reason != "invalid_input" || validation.executionStarted {

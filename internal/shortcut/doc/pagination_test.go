@@ -90,6 +90,23 @@ func TestCrossPlatformCoverageDocTemplateListPageAll(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageDocTemplateListDefaultsAndFailure(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"list_doc_templates": {{"templates": []any{}, "hasMore": false}},
+	}}
+	if err := runDocCoverage(t, TemplateList, caller, "--source", "PUBLIC"); err != nil {
+		t.Fatal(err)
+	}
+	if len(caller.history) != 1 || caller.history[0].params["maxResults"] != 20 {
+		t.Fatalf("template defaults = %#v", caller.history)
+	}
+
+	failure := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}
+	if err := runDocCoverage(t, TemplateList, failure, "--source", "PUBLIC"); err == nil {
+		t.Fatal("template-list MCP failure succeeded")
+	}
+}
+
 func TestCrossPlatformCoverageDocPaginationControlsRequirePageAll(t *testing.T) {
 	caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
 	if err := runDocCoverage(t, Search, caller, "--query", "report", "--max-items", "1"); err == nil {
@@ -97,6 +114,21 @@ func TestCrossPlatformCoverageDocPaginationControlsRequirePageAll(t *testing.T) 
 	}
 	if len(caller.history) != 0 {
 		t.Fatalf("invalid pagination reached MCP: %#v", caller.history)
+	}
+}
+
+func TestCrossPlatformCoverageDocPaginationRejectsNonPositiveBounds(t *testing.T) {
+	for _, args := range [][]string{
+		{"--query", "report", "--page-all", "--max-pages", "0"},
+		{"--query", "report", "--page-all", "--max-items", "0"},
+	} {
+		caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
+		if err := runDocCoverage(t, Search, caller, args...); err == nil {
+			t.Fatalf("invalid pagination bounds %v succeeded", args)
+		}
+		if len(caller.history) != 0 {
+			t.Fatalf("invalid pagination bounds %v reached MCP: %#v", args, caller.history)
+		}
 	}
 }
 

@@ -19,6 +19,8 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 )
 
 func TestCrossPlatformCoverageDocReadbackRetriesStaleContent(t *testing.T) {
@@ -80,6 +82,19 @@ func TestCompactDocVerificationSummarizesBlockReadback(t *testing.T) {
 	}
 	if len(encoded) > 300 {
 		t.Fatalf("block verification summary is not compact: %s", encoded)
+	}
+}
+
+func TestCrossPlatformCoverageDocVerificationMetadataAndMissingContent(t *testing.T) {
+	summary := compactDocVerification(map[string]any{
+		"nodeId": "node-1", "folderId": "folder-1", "workspaceId": "space-1",
+		"name": "report", "contentType": "ALIDOC", "revision": 3.0,
+	}, "", "", "", nil)
+	if summary["kind"] != "metadata" || summary["nodeId"] != "node-1" || summary["revision"] != 3 {
+		t.Fatalf("metadata summary = %#v", summary)
+	}
+	if got := matchingDocumentContent(map[string]any{"markdown": "old"}, "new", "overwrite", "markdown"); got != "" {
+		t.Fatalf("unexpected matching content = %q", got)
 	}
 }
 
@@ -311,9 +326,31 @@ func TestCrossPlatformCoverageMarkdownSemanticDifferencesRemainStrict(t *testing
 	if _, ok := markdownSemanticFingerprint(oversized); ok {
 		t.Fatal("oversized Markdown entered semantic verification")
 	}
+	if _, ok := markdownServiceSemanticFingerprint(oversized); ok {
+		t.Fatal("oversized Markdown entered service semantic verification")
+	}
 	testseam.Swap(t, &docMarkdownConvert, func([]byte, io.Writer) error { return errors.New("render") })
 	if _, ok := markdownSemanticFingerprint("body"); ok {
 		t.Fatal("failed Markdown render produced a semantic fingerprint")
+	}
+}
+
+func TestCrossPlatformCoverageMarkdownServiceFingerprintNodeKinds(t *testing.T) {
+	for _, source := range []string{
+		"    indented code\n",
+		"<script>\nalert('x')\n</script>\n",
+		"before <span>inline</span> after\n",
+		"<https://example.com/path>\n",
+		"[ref]: https://example.com/path \"title\"\n\n[link][ref]\n",
+		"![alt](https://example.com/image.png \"title\")\n",
+	} {
+		if fingerprint, ok := markdownServiceSemanticFingerprint(source); !ok || fingerprint == "" {
+			t.Fatalf("fingerprint failed for %q: %q/%v", source, fingerprint, ok)
+		}
+	}
+	testseam.Swap(t, &docMarkdown, goldmark.New(goldmark.WithExtensions(extension.Typographer)))
+	if fingerprint, ok := markdownServiceSemanticFingerprint("before -- after"); !ok || fingerprint == "" {
+		t.Fatalf("typographer string fingerprint = %q/%v", fingerprint, ok)
 	}
 }
 
