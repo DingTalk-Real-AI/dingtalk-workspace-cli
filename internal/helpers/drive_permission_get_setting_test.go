@@ -138,9 +138,9 @@ func TestCrossPlatformCoverageDrivePermissionGetSettingResultContract(t *testing
 	if !ok {
 		t.Fatalf("policies items = %#v", policies["items"])
 	}
-	assertSchemaRequired(t, items, "code")
+	assertSchemaRequired(t, items, "code", "name", "description")
 	itemProperties := schemaProperties(t, items)
-	if got := sortedContractSchemaKeys(itemProperties); !reflect.DeepEqual(got, []string{"allowedValues", "code", "inherited", "value"}) {
+	if got := sortedContractSchemaKeys(itemProperties); !reflect.DeepEqual(got, []string{"allowedValues", "code", "description", "inherited", "name", "value"}) {
 		t.Fatalf("policy item properties = %#v", got)
 	}
 	code, ok := itemProperties["code"].(map[string]any)
@@ -159,9 +159,19 @@ func TestCrossPlatformCoverageDrivePermissionGetSettingResultContract(t *testing
 		t.Fatalf("value = %#v", itemProperties["value"])
 	}
 	valueDescription, _ := value["description"].(string)
-	for _, fragment := range []string{"ON/OFF", "READER_AND_ABOVE", "NOBODY", "ALL_CONTENT", "PREVIEWABLE_ONLY", "不低于该角色才允许", "所有人禁止"} {
+	for _, fragment := range []string{"ENABLED/DISABLED", "READER_AND_ABOVE", "NOBODY", "ALL_NODES", "PREVIEWABLE_ONLY", "不低于该角色才允许", "所有人禁止", "限制对所有节点生效", "仅对可预览的节点"} {
 		if !strings.Contains(valueDescription, fragment) {
 			t.Fatalf("value description missing %q: %s", fragment, valueDescription)
+		}
+	}
+	for _, field := range []string{"name", "description"} {
+		entry, ok := itemProperties[field].(map[string]any)
+		if !ok || entry["type"] != "string" {
+			t.Fatalf("policy item %s = %#v, want string schema", field, itemProperties[field])
+		}
+		entryDescription, _ := entry["description"].(string)
+		if !strings.Contains(entryDescription, "确定性字段") || !strings.Contains(entryDescription, "只要该策略返回就必带") {
+			t.Fatalf("policy item %s description = %q", field, entryDescription)
 		}
 	}
 	inherited, ok := itemProperties["inherited"].(map[string]any)

@@ -2337,12 +2337,14 @@ func newDriveCommand() *cobra.Command {
         "type":"object",
         "description":"权限策略项",
         "properties":{
-          "code":{"type":"string","enum":["external_share","external_share_manager_only","member_invite","member_invite_org_only","comment","permission_apply","external_permission_apply","watermark","node_spread","online_content_copy","node_move_forbidden","node_spread_scope"],"description":"external_share=允许分享到组织外；external_share_manager_only=仅管理员可分享到组织外；member_invite=添加成员的角色门槛；member_invite_org_only=仅可添加组织内成员；comment=评论权限门槛；permission_apply=允许申请权限；external_permission_apply=允许组织外用户申请权限；watermark=水印；node_spread=转发/下载等传播的允许门槛；online_content_copy=在线文档内容复制的允许门槛；node_move_forbidden=是否禁止移动节点（ON=禁止移动，OFF=允许移动）；node_spread_scope=文件夹传播范围（仅文件夹类节点）。"},
-          "value":{"type":["string","null"],"description":"取值随策略类型不同：开关型（external_share、external_share_manager_only、member_invite_org_only、permission_apply、external_permission_apply、watermark、node_move_forbidden）为 ON/OFF；阈值型（member_invite、comment）为 READER_AND_ABOVE/DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE，阈值型（node_spread、online_content_copy）为 DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE/NOBODY，均表示不低于该角色才允许对应操作，NOBODY 表示所有人禁止；二值型（node_spread_scope）：ALL_CONTENT=可传播全部内容，PREVIEWABLE_ONLY=开启限制、仅支持可预览文件；未知值时为 null"},
+          "code":{"type":"string","enum":["external_share","external_share_manager_only","member_invite","member_invite_org_only","comment","permission_apply","external_permission_apply","watermark","node_spread","online_content_copy","node_move_forbidden","node_spread_scope"],"description":"external_share=允许分享到组织外；external_share_manager_only=仅管理员可分享到组织外；member_invite=添加成员的角色门槛；member_invite_org_only=仅可添加组织内成员；comment=评论权限门槛；permission_apply=允许申请权限；external_permission_apply=允许组织外用户申请权限；watermark=水印；node_spread=转发/下载等传播的允许门槛；online_content_copy=在线文档内容复制的允许门槛；node_move_forbidden=是否禁止移动节点（ENABLED=禁止移动，DISABLED=允许移动）；node_spread_scope=文件夹传播范围（仅文件夹类节点）。"},
+          "name":{"type":"string","description":"策略的中文名称，文案与产品权限设置页一致；为确定性字段，只要该策略返回就必带"},
+          "description":{"type":"string","description":"策略的含义说明，解释该策略管控的行为及各取值的语义；为确定性字段，只要该策略返回就必带"},
+          "value":{"type":["string","null"],"description":"取值随策略类型不同：开关型（external_share、external_share_manager_only、member_invite_org_only、permission_apply、external_permission_apply、watermark、node_move_forbidden）为 ENABLED/DISABLED；阈值型（member_invite、comment）为 READER_AND_ABOVE/DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE，阈值型（node_spread、online_content_copy）为 DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE/NOBODY，均表示不低于该角色才允许对应操作，NOBODY 表示所有人禁止；二值型（node_spread_scope）：ALL_NODES=下载与传播限制对所有节点生效，PREVIEWABLE_ONLY=仅对可预览的节点（如在线文档、图片、视频）生效；未知值时为 null"},
           "inherited":{"type":["boolean","null"],"description":"true 表示该策略值继承自上级（父节点/知识库）配置；未下发时为 null"},
           "allowedValues":{"type":["array","null"],"items":{"type":"string"},"description":"该策略当前可设置的取值（与 value 同一值域），未下发时为 null"}
         },
-        "required":["code"],
+        "required":["code","name","description"],
         "additionalProperties":true
       }
     }

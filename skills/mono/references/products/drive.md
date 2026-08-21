@@ -729,8 +729,8 @@ Flags:
 get-setting 返回字段说明：
 - `permissionMode` — INHERITED（继承上级）/ INDEPENDENT（独立管理），未知时为 null
 - `shareScope` — `visibility`（PRIVATE/ORGANIZATION/PUBLIC）；`partnerIncluded`、`defaultRole`、`canSearch`、`canRecommend` 仅 ORGANIZATION 有意义；`linkShare`：`requirePassword`（密码明文不返回）、`expireAt`/`expireDays`（未设置为 null）、`forCurrentNode`
-- `policies[]` — 每项含 `code`（策略码）、`value`（当前值）、`inherited`（true=继承上级配置）、`allowedValues`（可设置值域）；未下发或不支持的策略不返回；`node_spread_scope` 仅文件夹类节点返回
-- `value` 按策略分型：开关型（external_share、external_share_manager_only、member_invite_org_only、permission_apply、external_permission_apply、watermark、node_move_forbidden）为 ON/OFF；member_invite、comment 为 READER/DOWNLOADER/EDITOR/MANAGER_AND_ABOVE（无 NOBODY）；node_spread、online_content_copy 为 DOWNLOADER/EDITOR/MANAGER_AND_ABOVE 或 NOBODY（无 READER_AND_ABOVE）；node_spread_scope 为 ALL_CONTENT（可传播全部内容）/ PREVIEWABLE_ONLY（仅可预览文件）
+- `policies[]` — 每项含 `code`（策略码）、`name`/`description`（中文名与值语义说明，随行必带）、`value`（当前值）、`inherited`（true=继承上级配置）、`allowedValues`（可设置值域）；未下发或不支持的策略不返回；`node_spread_scope` 仅文件夹类节点返回
+- `value` 按策略分型：开关型（external_share、external_share_manager_only、member_invite_org_only、permission_apply、external_permission_apply、watermark、node_move_forbidden）为 ENABLED/DISABLED；member_invite、comment 为 READER/DOWNLOADER/EDITOR/MANAGER_AND_ABOVE（无 NOBODY）；node_spread、online_content_copy 为 DOWNLOADER/EDITOR/MANAGER_AND_ABOVE 或 NOBODY（无 READER_AND_ABOVE）；node_spread_scope 为 ALL_NODES（限制对所有节点生效）/ PREVIEWABLE_ONLY（仅对可预览的节点生效）
 - 方向语义：NOBODY=该操作对所有人禁止；XXX_AND_ABOVE=不低于该角色才允许
 
 ### 文件互联网公开发布
