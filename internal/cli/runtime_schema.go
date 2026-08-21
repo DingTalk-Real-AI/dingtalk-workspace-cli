@@ -1061,6 +1061,7 @@ var schemaCompactPayloadKeys = map[string]bool{
 	"parameters": true, "constraints": true, "positionals": true, "dry_run": true,
 	"result": true, "pagination": true,
 	"examples": true, "use_when": true, "avoid_when": true,
+	"prerequisites": true, "tips": true,
 }
 
 // schemaCompactParamKeys is the reviewed parameter allowlist for Agent command
