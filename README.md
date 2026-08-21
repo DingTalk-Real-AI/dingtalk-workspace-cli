@@ -210,7 +210,7 @@ The verifier uses isolated directories and does not replace the `dws` on the cur
 The upgrade process follows a two-phase atomic flow to ensure consistency:
 
 1. **Prepare** — downloads the platform-specific binary and skill packages to a temporary directory, verifies SHA256 checksums, and extracts/validates all files. If any step fails, the upgrade aborts without modifying the existing installation.
-2. **Apply** — only after all preparations succeed, the binary is replaced and skills are flattened into detected agent-specific roots (for example `~/.codex/skills/dingtalk-chat`). `~/.agents/skills` is used only when no specific Agent is detected; once a specific root is active, older DWS-managed generic copies are backed up and retired so the same Skill is not discovered twice.
+2. **Apply** — only after all preparations succeed, the binary is replaced and skills are flattened into the canonical `~/.agents/skills` root. Agents classified by the pinned compatibility registry as supporting the universal root read it directly; other detected Agents receive links to the canonical copy, with a direct-copy fallback when links are unavailable. Older DWS-managed agent-specific copies are backed up and retired so the same Skill is not discovered twice.
 
 A backup of the current version is automatically created before each upgrade. Use `dws upgrade --rollback` to restore the previous version if needed.
 
@@ -405,7 +405,7 @@ After installing, AI tools like Claude Code / Cursor can operate DingTalk direct
 curl -fsSL https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/main/scripts/install-skills.sh | sh
 ```
 
-> Installers prefer detected agent-specific roots such as `$HOME/.codex/skills/`. They use `.agents/skills/` only as the generic fallback when no specific Agent is detected; multi layout is per-product siblings, while mono uses the `dws/` subdirectory.
+> Installers use `$HOME/.agents/skills/` as the canonical global store, following the universal `.agents/skills` convention. Agents classified by the pinned compatibility registry as universal read that root directly; detected non-universal Agents receive links to it (or copies when links are unavailable). Multi layout is per-product siblings, while mono uses the `dws/` subdirectory.
 >
 > China users: prefix `DWS_GITEE_REPO` to use the Gitee mirror — see [China mirror](#china-mirror).
 
@@ -482,7 +482,7 @@ Env vars: `DWS_SKILL_MODE=mono|multi` (also honored by `install.sh` / `install.p
 <details>
 <summary><strong>Personal Event Subscription</strong> — real-time DingTalk messages for event-driven agents</summary>
 
-`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, and six OA approval task/instance events.
+`dws event consume` subscribes as the currently logged-in user over a managed Stream WebSocket and emits each event as one NDJSON line on stdout. The public catalog covers scoped and all one-to-one/group messages, specified senders, read/recall/reaction events, group lifecycle events, and seven OA approval task/instance events.
 
 The default `ndjson`, `json`, and `pretty` output preserves the transport envelope (`type`, `event_type`, string `data`, and `headers`) for existing scripts; `compact` retains its existing processor. Add `--flatten` to emit the stable top-level business fields used by Agent workflows. `--format` controls JSON serialization; `--flatten` controls the data structure and cannot be combined with `-f raw` or `--debug-raw-events`.
 
@@ -530,12 +530,13 @@ dws event consume user_im_group_disbanded --group <openConversationId> --flatten
 dws event +listen-im --kind sender --user <userId> \
   --events message,read,recall -f ndjson
 
-# Listen for all six public OA approval events in one process
+# Listen for all seven public OA approval events in one process
 dws event consume \
   user_oa_approval_task_created \
   user_oa_approval_task_finished \
   user_oa_approval_task_redirected \
   user_oa_approval_instance_started \
+  user_oa_approval_instance_cc \
   user_oa_approval_instance_terminated \
   user_oa_approval_instance_finished \
   --flatten -f ndjson

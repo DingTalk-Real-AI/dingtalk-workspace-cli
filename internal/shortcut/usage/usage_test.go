@@ -47,6 +47,11 @@ func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) 
 		Service: "coverage-usage",
 		Command: "+hidden",
 	})
+	shortcut.Register(shortcut.Shortcut{
+		Service:              "coverage-usage",
+		Command:              "+compatibility-visible",
+		CompatibilityVisible: true,
+	})
 
 	execute := func(args ...string) map[string]any {
 		t.Helper()
@@ -66,8 +71,19 @@ func TestCrossPlatformCoverageShortcutListFiltersHiddenAndService(t *testing.T) 
 
 	publicRows := execute("--service", "coverage-usage")
 	allRows := execute("--service", "coverage-usage", "--all")
-	if publicRows["count"].(float64) != 0 || allRows["count"].(float64) != 1 {
+	if publicRows["count"].(float64) != 0 || allRows["count"].(float64) != 2 {
 		t.Fatalf("hidden shortcuts were not filtered: public=%v all=%v", publicRows["count"], allRows["count"])
+	}
+	rows := allRows["shortcuts"].([]any)
+	foundCompatibilityVisible := false
+	for _, value := range rows {
+		row := value.(map[string]any)
+		if row["command"] == "+compatibility-visible" {
+			foundCompatibilityVisible = row["compatibility_visible"] == true && row["public"] == false
+		}
+	}
+	if !foundCompatibilityVisible {
+		t.Fatalf("compatibility-visible shortcut row lost its non-public marker: %#v", rows)
 	}
 	missing := execute("--service", "__missing__")
 	if missing["count"].(float64) != 0 {

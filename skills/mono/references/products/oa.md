@@ -634,6 +634,30 @@ Flags:
       --query string   查询关键词，可选
 ```
 
+### 以管理员身份查询审批实例列表
+
+> **IMPORTANT：** 需要当前用户具备 OA 审批管理员权限，否则查不到数据。只查个人维度的审批时改用 `list-pending` / `list-executed` / `list-initiated` / `list-cc`。
+
+```
+Usage:
+  dws oa approval list-by-admin [flags]
+Example:
+  dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --cursor 0 --limit 20
+  dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --end "2026-03-10T23:59:59+08:00" --statuses RUNNING,COMPLETED --user-ids "userId1,userId2"
+  # 高级用法：传入完整 JSON（startTime/endTime 为 yyyy-MM-dd HH:mm:ss 格式字符串）
+  dws oa approval list-by-admin --request '{"processCode":"PROC-xxx","startTime":"2026-03-10 00:00:00","cursor":0,"pageSize":20}'
+Flags:
+      --process-code string   审批模板 processCode（简单模式必填）
+      --start string          开始时间 ISO-8601 (如 2026-03-10T00:00:00+08:00)（简单模式必填）
+      --end string            结束时间 ISO-8601 (如 2026-03-10T23:59:59+08:00)（可选）
+      --cursor string         分页游标，首次传 0（默认 "0"）
+      --limit string          每页大小，最大 20（默认 "20"）
+      --user-ids string       按发起人 userId 过滤，多个用逗号分隔（可选）
+      --statuses string       按审批状态过滤，多个用逗号分隔（可选，如 RUNNING、TERMINATED、COMPLETED）
+      --request string        完整请求体 JSON（高级模式，与简单模式互斥）
+```
+MCP 工具: `get_process_instances_by_admin`；参数封装在 `ProcessInstanceListQueryRequest`（processCode、startTime 必填，endTime、userIds、statuses、cursor、pageSize 可选；startTime/endTime 为 `yyyy-MM-dd HH:mm:ss` 格式字符串，简单模式的 ISO-8601 入参会自动转换）。processCode 可从 `list-forms` / `search-forms` 获取，返回的 processInstanceId 可用于 `detail` / `records` / `tasks`。
+
 ### 转交审批任务
 ```
 Usage:
@@ -743,6 +767,7 @@ Flags:
 用户说"我发起的审批单" -> `approval list-submitted`
 用户说"我审批/处理过的审批单" -> `approval list-executed`
 用户说"抄送我的审批单" -> `approval list-cc`
+用户说"以管理员身份查审批/全员审批单/统计某个模板的审批单/企业内审批记录" → `approval list-by-admin`（需 --process-code 和 --start，且当前用户需具备 OA 管理员权限）
 用户说"转交审批/转交任务" → `approval redirect-task`（需 --task-id 和 --to-actioner-id）
 用户说"评论审批/添加评论/写评论" → `approval oa-comments`（需 --instance-id 和 --content）
 用户说"抄送审批/添加抄送人" → `approval oa-cc-noticer`（需 --instance-id 和 --users）
@@ -792,6 +817,9 @@ dws oa approval list-submitted --limit <pageSize> --page <pageNumber> --query �
 # 11. 抄送我的审批单 
 dws oa approval list-cc --limit <pageSize> --page <pageNumber> --query 关键词 --format json
 
+# 11b. 以管理员身份跨用户查询某模板的审批实例列表（需 OA 管理员权限）
+dws oa approval list-by-admin --process-code <code> --start "2026-03-10T00:00:00+08:00" --cursor 0 --limit 20 --format json
+
 # 12. 转交审批任务（taskId 来自 tasks，toActionerId 来自 contact user search）
 dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --format json
 dws oa approval redirect-task --task-id <taskId> --to-actioner-id <userId> --remark "请帮忙处理" --format json
@@ -834,6 +862,7 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 | `forecast-process` | `workflowActivityRuleVOs`（`activityId`, `targetSelect`, `activityActioners`, `workflowActor`） | ① 向用户展示流程走向和各节点处理人；② `targetSelect: true` 的节点需用户自选审批人，`workflowActor.actorKey` 作为 `targetSelectActioners` 的 `actionerKey` 传入 create-instance |
 | `search-forms` → `form-schema` → `forecast-process` | `processCode` → 字段定义 → 流程走向 + 自选节点 | create-instance 的完整上下文：表单值 + 流程路径 + targetSelectActioners |
 | `create-instance` | `result`（processInstanceId） | detail / tasks / records / revoke 等的 --instance-id，可跟踪已发起的审批 |
+| `list-by-admin` | `processInstanceId` | detail / records / tasks 的 --instance-id |
 
 ## 注意事项
 
@@ -844,6 +873,7 @@ dws oa approval create-instance --request '{"processCode":"PROC-xxx","deptId":-1
 - `--remark` 审批意见虽为可选，但建议填写以留存审批痕迹
 - `list-initiated` 的 `--process-code` 可从 `list-forms`、`search-forms` 或 `detail` 返回中提取。当 `list-forms` 返回 `processCodeList` 为空（`totalCount -1`）时，用 `search-forms --query <表单名>`（如 `--query 报销`）按名称精准拿 `processCode` 更稳
 - `list-initiated` 的 `--start` / `--end` 区间有后端上限（约 120 天）。超过上限会返回误导性的 `business_error: 时间戳无效`（实为区间过长，不是时间格式问题）。跨度大时请拆成多段短区间分别查询
+- `list-by-admin` 需要当前用户具备 OA 审批管理员权限，否则查不到数据；只查个人维度审批时改用 `list-pending` / `list-executed` / `list-initiated` / `list-cc`。高级模式 `--request` 中 `startTime`/`endTime` 为 `yyyy-MM-dd HH:mm:ss` 格式字符串（不再接受毫秒时间戳）；`pageSize` 上限为 20，超过会报错（简单模式为 `--limit`）
 
 - `form-schema` 的 `--process-code` 可从 `list-forms`、`search-forms` 或 `detail` 返回中提取；返回的 `content` 字段为 JSON 字符串，需解析后查看表单组件（items）定义。
 - `create-instance` 发起前**必须先阅读** [oa-form-components.md](oa/oa-form-components.md)（控件值格式）和 [oa-process-nodes.md](oa/oa-process-nodes.md)（流程节点规则），再调用 `form-schema` 获取表单字段定义，确保 `--form-values` 中的 key 与控件 label 完全一致。

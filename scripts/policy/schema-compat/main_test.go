@@ -1589,7 +1589,7 @@ func TestCrossPlatformCoverageSchemaMigrationCLIRequiresCompleteCheckInputs(t *t
 		"--migration-stable-snapshot", "stable.json",
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"--check", "baseline.json", "--current", "schema.json", "--approved-flag-migrations", "approved.json"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "all five") {
+	if code := run([]string{"--check", "baseline.json", "--current", "schema.json", "--approved-flag-migrations", "approved.json"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "both flag manifests") {
 		t.Fatalf("partial migration inputs code=%d stderr=%q", code, stderr.String())
 	}
 
@@ -1739,11 +1739,12 @@ func TestCrossPlatformCoverageSchemaConsumedReceiptIsNoOpForAfterBaseline(t *tes
 		t.Fatalf("consumed receipt did not preserve compatibility: %v", failures)
 	}
 
-	// Once stable also reaches after, retaining the consumed receipt is stale;
-	// deleting it yields no authorization and the already-after Schema passes.
+	// Once stable also reaches after, retaining or deleting the consumed receipt
+	// yields no authorization and the already-after Schema passes.
 	writeInterfaceSnapshotFile(t, stableSnapshotPath, schemaFlagMigrationSnapshot(true))
-	if _, err := authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath); err == nil || !strings.Contains(err.Error(), "stale after all references reached the after state") {
-		t.Fatalf("stale consumed receipt error = %v", err)
+	migrations, err = authorizeSchemaFlagMigrations(approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath)
+	if err != nil || len(migrations) != 0 {
+		t.Fatalf("retained consumed receipt authorizations = %#v, %v", migrations, err)
 	}
 	emptyManifest := interfacesnapshot.FlagMigrationManifest{
 		Version:    interfacesnapshot.FlagMigrationManifestVersion,

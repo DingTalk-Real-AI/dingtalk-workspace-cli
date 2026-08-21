@@ -449,8 +449,10 @@ dws report outbox list --cursor 0 --size 20 --format json
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws report +inbox-list` | read | 列出我收到的日报（按时间范围分页） |
-| `dws report +outbox-list` | read | 列出我发出的日报（可选时间/模版名过滤） |
+| `dws report +inbox-list` | read | 列出我收到的日志 |
+| `dws report +outbox-list` | read | 列出我发出的日志 |
+| `dws report +report-latest` | read | 读取我最近提交的一篇日志详情 |
+| `dws report +template-search` | read | 按名称搜索可用日志模板 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## 意图表

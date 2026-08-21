@@ -24,6 +24,7 @@ type aitableTestCaller struct {
 	responses []string
 	errors    []error
 	calls     []aitableTestCall
+	dryRun    bool
 }
 
 func (c *aitableTestCaller) CallTool(_ context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
@@ -38,8 +39,11 @@ func (c *aitableTestCaller) CallTool(_ context.Context, server, tool string, arg
 	}
 	return textToolResult(response), nil
 }
+func (c *aitableTestCaller) CallReadTool(ctx context.Context, server, tool string, args map[string]any) (*edition.ToolResult, error) {
+	return c.CallTool(ctx, server, tool, args)
+}
 func (*aitableTestCaller) Format() string { return "json" }
-func (*aitableTestCaller) DryRun() bool   { return false }
+func (c *aitableTestCaller) DryRun() bool { return c.dryRun }
 func (*aitableTestCaller) Fields() string { return "" }
 func (*aitableTestCaller) JQ() string     { return "" }
 

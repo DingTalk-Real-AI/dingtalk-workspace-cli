@@ -50,6 +50,7 @@ func TestCatalogEnabledEvents(t *testing.T) {
 		EventOAApprovalTaskFinished,
 		EventOAApprovalTaskRedirected,
 		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
 	}
@@ -65,6 +66,7 @@ func TestOAEventCatalogDefinitions(t *testing.T) {
 		EventOAApprovalTaskFinished,
 		EventOAApprovalTaskRedirected,
 		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
 	}
@@ -158,6 +160,7 @@ func TestSchemaDocumentsDefaultToTransportEnvelope(t *testing.T) {
 		EventOAApprovalTaskFinished,
 		EventOAApprovalTaskRedirected,
 		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
 	} {
@@ -510,6 +513,13 @@ func TestOAEventSchemaDocumentsMatchOutputDTO(t *testing.T) {
 			},
 		},
 		{
+			eventKey: EventOAApprovalInstanceCC,
+			properties: []string{
+				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
+				"process_code", "title", "status", "create_time", "event_time",
+			},
+		},
+		{
 			eventKey: EventOAApprovalInstanceTerminated,
 			properties: []string{
 				"type", "event_id", "timestamp", "subscribe_id", "process_instance_id",
@@ -633,6 +643,7 @@ func TestBuildRuleParamAllEvents(t *testing.T) {
 		EventOAApprovalTaskFinished,
 		EventOAApprovalTaskRedirected,
 		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
 	} {
@@ -845,6 +856,7 @@ func TestSupportsMessageFilter(t *testing.T) {
 		EventOAApprovalTaskFinished,
 		EventOAApprovalTaskRedirected,
 		EventOAApprovalInstanceStarted,
+		EventOAApprovalInstanceCC,
 		EventOAApprovalInstanceTerminated,
 		EventOAApprovalInstanceFinished,
 		"unknown_event",

@@ -195,6 +195,11 @@ type Shortcut struct {
 	Tips []string
 	// Hidden hides the command from listings while keeping it invocable.
 	Hidden bool
+	// CompatibilityVisible preserves a historically visible CLI command while
+	// keeping it out of the Agent/public Shortcut catalog. Such a command is
+	// shown only by `dws shortcut list --all`; Availability independently says
+	// whether the historical execution path remains callable.
+	CompatibilityVisible bool
 	// Disposition is the reviewed semantic relation to the Runtime Schema leaf
 	// surface. It determines default Agent discovery independently from live
 	// fixture evidence.

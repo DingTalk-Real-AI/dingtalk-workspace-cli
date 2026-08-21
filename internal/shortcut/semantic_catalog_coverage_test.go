@@ -121,6 +121,21 @@ func TestCrossPlatformCoverageSemanticCatalogRejectsInvalidRecords(t *testing.T)
 				}
 			}
 		}`,
+		"compatibility-visible public": `{
+			"version": 1,
+			"service": "chat",
+			"default_availability": "available",
+			"shortcuts": {
+				"+messages": {
+					"disposition": "semantic_adapter",
+					"semantic_delta": "reviewed",
+					"risk": "read",
+					"public": true,
+					"compatibility_visible": true,
+					"reviewed": true
+				}
+			}
+		}`,
 	}
 	original := semanticCatalogJSON
 	t.Cleanup(func() { semanticCatalogJSON = original })
@@ -169,6 +184,38 @@ func TestCrossPlatformCoveragePublicCatalogSemanticAndGeneratedLookups(t *testin
 	}
 	if InPublicCatalog("unknown", "+missing") {
 		t.Fatal("unknown shortcut is public")
+	}
+}
+
+func TestCrossPlatformCoverageCompatibilityVisibleStaysNonPublic(t *testing.T) {
+	item, ok := applyReviewedSemanticCatalog(Shortcut{Service: "attendance", Command: "+get-summary"})
+	if !ok || item.Hidden || !item.CompatibilityVisible || item.Availability != AvailabilityUnavailable {
+		t.Fatalf("compatibility-visible semantic item = %#v, found=%v", item, ok)
+	}
+	if InPublicCatalog(item.Service, item.Command) {
+		t.Fatal("compatibility-visible unavailable shortcut entered the public catalog")
+	}
+
+	available := map[string]semanticCatalogRecord{}
+	loadSemanticCatalog([]byte(`{
+		"version":1,
+		"service":"compatibility-test",
+		"default_availability":"unavailable",
+		"shortcuts":{
+			"+legacy":{
+				"disposition":"semantic_adapter",
+				"semantic_delta":"historical CLI path remains executable but is not Agent-public",
+				"risk":"write",
+				"availability":"available",
+				"public":false,
+				"compatibility_visible":true,
+				"reviewed":true
+			}
+		}
+	}`), available)
+	record := available[publicCatalogKey("compatibility-test", "+legacy")]
+	if record.Public || !record.CompatibilityVisible || record.Availability != AvailabilityAvailable {
+		t.Fatalf("available compatibility record = %#v", record)
 	}
 }
 
