@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -251,4 +252,109 @@ func TestCrossPlatformCoverageDocImportTargetDefensiveBranches(t *testing.T) {
 	verifyFailure(t, preparedImportFile{}, `{}`, "https://alidocs.dingtalk.com/i/nodes/node-1")
 	verifyFailure(t, preparedImportFile{}, `{"nodeId":"other"}`, "https://alidocs.dingtalk.com/i/nodes/node-1")
 	verifyFailure(t, preparedImportFile{workspace: "space-1"}, `{"nodeId":"node-1","workspaceId":"wrong"}`, "https://alidocs.dingtalk.com/i/nodes/node-1")
+}
+
+func TestCrossPlatformCoverageDocImportGetVerifiesOriginalTarget(t *testing.T) {
+	previousDeps := deps
+	previousArgs := os.Args
+	t.Cleanup(func() {
+		deps = previousDeps
+		os.Args = previousArgs
+	})
+	os.Args = []string{"dws", "doc"}
+
+	caller := &sheetImportCaller{responses: map[string][]string{
+		"query_import_task": {`{"status":"completed","documentUrl":"https://alidocs.dingtalk.com/i/nodes/node-2"}`},
+		"get_document_info": {`{"result":{"nodeId":"node-2","workspaceId":"space-2","name":"report"}}`},
+	}}
+	InitDeps(caller)
+	var output bytes.Buffer
+	deps.Out.w = &output
+	deps.Out.errW = &output
+
+	cmd := &cobra.Command{Use: "get"}
+	cmd.Flags().String("task-id", "task-2", "")
+	cmd.Flags().String("folder", "", "")
+	cmd.Flags().String("workspace", "space-2", "")
+	if err := runImportGetCommand(cmd, docImportFlowConfig()); err != nil {
+		t.Fatalf("doc import get: %v", err)
+	}
+	if len(caller.calls) != 2 || caller.calls[0].tool != "query_import_task" || caller.calls[1].tool != "get_document_info" {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, output.String())
+	}
+	if result["nodeId"] != "node-2" || result["verified"] != true {
+		t.Fatalf("result = %#v", result)
+	}
+	target, _ := result["target"].(map[string]any)
+	if target["source"] != "workspace_flag" || target["workspaceId"] != "space-2" {
+		t.Fatalf("target = %#v", target)
+	}
+}
+
+func TestCrossPlatformCoverageDocImportGetRequiresOriginalTarget(t *testing.T) {
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+	caller := &sheetImportCaller{responses: map[string][]string{}}
+	InitDeps(caller)
+	cmd := &cobra.Command{Use: "get"}
+	cmd.Flags().String("task-id", "task-2", "")
+	cmd.Flags().String("folder", "", "")
+	cmd.Flags().String("workspace", "", "")
+	if err := runImportGetCommand(cmd, docImportFlowConfig()); err == nil || !strings.Contains(err.Error(), "完整 next_command") {
+		t.Fatalf("missing target error = %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("missing target reached MCP: %#v", caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageDocImportGetDryRunIncludesTarget(t *testing.T) {
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+	caller := &sheetImportCaller{dryRun: true}
+	InitDeps(caller)
+	var output bytes.Buffer
+	deps.Out.w = &output
+
+	cmd := &cobra.Command{Use: "get"}
+	cmd.Flags().String("task-id", "task-2", "")
+	cmd.Flags().String("folder", "", "")
+	cmd.Flags().String("workspace", "space-2", "")
+	if err := runImportGetCommand(cmd, docImportFlowConfig()); err != nil {
+		t.Fatalf("doc import get dry-run: %v", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("dry-run reached MCP: %#v", caller.calls)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, output.String())
+	}
+	if result["dry_run"] != true || result["executed"] != false {
+		t.Fatalf("result = %#v", result)
+	}
+	target, _ := result["target"].(map[string]any)
+	if target["source"] != "workspace_flag" || target["workspaceId"] != "space-2" {
+		t.Fatalf("target = %#v", target)
+	}
+}
+
+func TestCrossPlatformCoverageDocImportRecoveryCommandCarriesEveryTarget(t *testing.T) {
+	got := importRecoveryCommand(docImportFlowConfig(), "task-1", preparedImportFile{
+		folder: "folder;unsafe", workspace: "https://alidocs.test/space?id=1&kind=doc",
+	})
+	for _, want := range []string{
+		"dws doc import get --task-id task-1",
+		"--folder 'folder;unsafe'",
+		"--workspace 'https://alidocs.test/space?id=1&kind=doc'",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("recovery command = %q, want %q", got, want)
+		}
+	}
 }

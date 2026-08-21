@@ -683,7 +683,7 @@ func TestCrossPlatformCoverageDocExportImportCommandEdges(t *testing.T) {
 		{"failed empty", []scriptedToolStep{{text: `{"status":"failed"}`}}, false},
 	} {
 		t.Run("import get "+tc.name, func(t *testing.T) {
-			_ = run(t, tc.steps, tc.dry, "import", "get", "--task-id=task")
+			_ = run(t, tc.steps, tc.dry, "import", "get", "--task-id=task", "--workspace=workspace")
 		})
 	}
 }

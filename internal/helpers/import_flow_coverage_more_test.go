@@ -77,7 +77,7 @@ func TestCrossPlatformCoverageImportFlowRemainingBranches(t *testing.T) {
 		cfg.poll.interval = func(int) time.Duration { return 0 }
 		cfg.poll.wait = func(context.Context, time.Duration) error { return nil }
 		err := runImportCommand(importCoverageCommand(t, writeImportFixture(t, "md")), nil, cfg)
-		if err == nil || !strings.Contains(err.Error(), "手动查询") {
+		if err == nil || !strings.Contains(err.Error(), "手动查询") || !strings.Contains(err.Error(), "--workspace my-space") {
 			t.Fatalf("runImportCommand() error = %v, want manual-query timeout", err)
 		}
 	})
@@ -90,6 +90,8 @@ func TestCrossPlatformCoverageImportFlowRemainingBranches(t *testing.T) {
 		installScriptedCaller(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"status":"processing"}`}}})
 		cmd := &cobra.Command{Use: "get"}
 		cmd.Flags().String("task-id", "task-1", "")
+		cmd.Flags().String("folder", "", "")
+		cmd.Flags().String("workspace", "workspace-1", "")
 		if err := runImportGetCommand(cmd, docImportFlowConfig()); err != nil {
 			t.Fatalf("runImportGetCommand() error = %v", err)
 		}
