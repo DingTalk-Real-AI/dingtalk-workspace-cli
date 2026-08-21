@@ -1,6 +1,6 @@
 ---
 name: dingtalk-misc
-description: 长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/考勤/直播/DING紧急消息/开放平台应用管理/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索/文档内嵌白板/钉钉招聘/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/PAT行为授权/多组织profile。Use when 用户提到上述任一产品，或查待审批/同意拒绝转交撤销审批/打卡/排班/OKR/日报周报/单元格读写/白板节点读写/招聘职位/JD/创建职位/搜索安装技能/开发者后台应用/人才池/员工档案/职业历程/绩效/原生.md文件/PAT授权/切换组织/跨组织/profile 等相关操作。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
+description: 长尾产品集合技能，覆盖低频钉钉产品：OA审批查询与处理/考勤/直播/DING紧急消息/开放平台应用管理/Agoal目标管理/日志日报周报/电子表格/开放平台文档搜索/文档内嵌白板/钉钉招聘/DWS技能市场安装/组织大脑Hrbrain/原生Markdown/PAT行为授权/多组织profile/教育班级学生管理。Use when 用户提到上述任一产品，或查待审批/同意拒绝转交撤销审批/打卡/排班/OKR/日报周报/单元格读写/白板节点读写/招聘职位/JD/创建职位/搜索安装技能/开发者后台应用/人才池/员工档案/职业历程/绩效/原生.md文件/PAT授权/切换组织/跨组织/profile/教育/班级/学生/学校/花名册/家校 等相关操作。未来审批任务或实例变化的实时监听不属于本 skill，应使用 dingtalk-event。命中后由本 skill 的「产品索引表」定位具体子产品和命令前缀，再按对应子产品说明执行。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -37,6 +37,7 @@ metadata:
 | 原生 Markdown / `.md` 原文 / 覆盖 Markdown / 局部替换 Markdown | 原生 `.md` 文件读取、创建、全量覆盖与局部替换 | `dws markdown` | [markdown.md](references/markdown.md) |
 | PAT 授权 / 行为权限 / scope 授权 / 一次性授权 / 会话授权 / 永久授权 / 授权浏览器策略 | PAT 行为授权与本地浏览器策略 | `dws pat` | [pat.md](references/pat.md) |
 | 切换组织 / 换组织 / 跨组织 / 多组织 / profile / 看登录了哪些组织 | 多组织 / profile 管理与跨组织取数 | `dws profile` / `dws auth` / `--profile` | [profile.md](references/profile.md) |
+| 教育 / 班级 / 学生 / 学校 / 家长 / 花名册 / 家校 / 班级圈 / 成长记录 | 教育组织、班级和学生管理（Draft，Binary 命令待就绪） | `dws education` | [education.md](references/education.md) |
 | 宜搭 / AI应用脚本 / 财务辅助脚本（未产品化） | **无**稳定命令面；仅仓库内辅助脚本 | （非默认路由） | [unsupported-scripts.md](references/unsupported-scripts.md) |
 
 ## 说明

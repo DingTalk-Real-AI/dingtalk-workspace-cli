@@ -112,6 +112,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/recruit.md
+  - mono: education
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/education.md
 
 omit_coverage:
   - mono: simple
