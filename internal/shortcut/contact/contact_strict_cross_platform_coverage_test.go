@@ -284,14 +284,34 @@ func TestCrossPlatformCoverageContactInputConstraintsFailBeforeRemoteCall(t *tes
 	}
 }
 
-func TestCrossPlatformCoverageUnavailableContactMakesNoRemoteCall(t *testing.T) {
-	caller := &contactCaller{payload: `{"success":true,"result":[]}`}
+func TestCrossPlatformCoverageListRolesCompatibilityUsesStrictLegacyMCP(t *testing.T) {
+	caller := &contactCaller{payload: `{"success":true,"result":[{"groupName":"Fixture group","labels":[{"labelId":1,"name":"Fixture role"}]}]}`}
 	helpers.InitDepsForTest(t, caller)
-	if err := ListRoles.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: ListRoles.Command}, ListRoles)); err == nil {
-		t.Errorf("%s unavailable error = %v", ListRoles.Command, err)
+	declaration := ListRoles
+	declaration.OutputRollout = output.RolloutLegacyOnly
+	if err := declaration.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: declaration.Command}, declaration)); err != nil {
+		t.Fatalf("list roles compatibility call: %v", err)
 	}
-	if caller.calls != 0 {
-		t.Fatalf("unavailable Contact shortcuts made %d calls", caller.calls)
+	if caller.calls != 1 || caller.product != "contact" || caller.tool != "get_org_labels" || len(caller.args) != 0 {
+		t.Fatalf("list roles mapping = calls:%d product:%q tool:%q args:%#v", caller.calls, caller.product, caller.tool, caller.args)
+	}
+
+	caller.calls = 0
+	caller.payload = `{"success":true,"result":[{"groupName":"Fixture group","labels":[{"labelId":1,"name":"Fixture role"},{"name":"Missing identity"}]}]}`
+	if err := declaration.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: declaration.Command}, declaration)); err == nil {
+		t.Fatal("list roles accepted a malformed role element")
+	}
+	if caller.calls != 1 {
+		t.Fatalf("malformed response calls = %d, want 1", caller.calls)
+	}
+
+	caller.calls = 0
+	caller.err = errors.New("permission denied")
+	if err := declaration.Execute(shortcut.RuntimeContextForTest(&cobra.Command{Use: declaration.Command}, declaration)); err == nil {
+		t.Fatal("list roles swallowed downstream error")
+	}
+	if caller.calls != 1 {
+		t.Fatalf("downstream error calls = %d, want 1", caller.calls)
 	}
 }
 

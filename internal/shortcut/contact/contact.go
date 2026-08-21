@@ -317,7 +317,15 @@ var ListRoles = shortcut.Shortcut{
 		`dws contact +list-roles`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return unavailableContact("contact/get_org_labels", contactRolesGapReason)
+		data, err := rt.CallMCPData("contact", "get_org_labels", map[string]any{})
+		if err != nil {
+			return err
+		}
+		roles, err := strictRoles(data, "contact/get_org_labels")
+		if err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"count": len(roles), "roles": roles})
 	},
 }
 

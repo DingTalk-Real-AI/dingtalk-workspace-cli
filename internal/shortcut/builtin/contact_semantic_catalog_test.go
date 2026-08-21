@@ -89,6 +89,14 @@ func TestCrossPlatformCoverageContactSemanticCatalogExactlyCoversRegisteredSurfa
 				t.Errorf("%s must not claim a zero-call unavailable runtime", command)
 			}
 		}
+		if command == "+list-roles" {
+			if !strings.Contains(record.SemanticDelta, "历史 CLI 继续执行严格 get_org_labels 适配") || !strings.Contains(record.SemanticDelta, "整批拒绝") {
+				t.Errorf("%s must preserve strict historical CLI execution while remaining Agent unavailable", command)
+			}
+			if strings.Contains(record.SemanticDelta, "0 次远程调用") {
+				t.Errorf("%s must not claim a zero-call unavailable runtime", command)
+			}
+		}
 	}
 	if public != 13 || unavailable != 3 {
 		t.Fatalf("public/unavailable = %d/%d, want 13/3", public, unavailable)
