@@ -2,9 +2,12 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -584,5 +587,101 @@ func TestCrossPlatformCoverageAitableViewFilterFailureAndShapeEdges(t *testing.T
 	}
 	if persistedViewFilterMatches("bad", nil) || persistedViewFilterMatches(map[string]any{"operator": "or"}, nil) {
 		t.Fatal("invalid persisted wrapper must not match")
+	}
+}
+
+func TestCrossPlatformCoverageAitableChartExampleProjectionAndSemanticFilterReadBack(t *testing.T) {
+	payload := map[string]any{
+		"status": "success",
+		"data": `{
+			// legacy JSONC comment
+			"HISTOGRAM":{"chartType":"HISTOGRAM","sheet":"sheet_001","filter":[]},
+			"PIE":{"chartType":"PIE","sheet":"sheet_001","filter":[]},
+		}`,
+	}
+	projected, err := ProjectAitableChartExamples(payload, "histogram")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projected["chartType"] != "HISTOGRAM" || projected["config"].(map[string]any)["chartType"] != "HISTOGRAM" {
+		t.Fatalf("chart projection = %#v", projected)
+	}
+	layout := projected["layout"].(map[string]any)
+	if layout["x"] != 0 || layout["y"] != 0 || layout["w"] != 12 || layout["h"] != 6 {
+		t.Fatalf("chart layout = %#v", layout)
+	}
+	catalog, err := ProjectAitableChartExamples(payload, "")
+	if err != nil || catalog["config"] != nil || len(catalog["chartTypes"].([]string)) != 2 {
+		t.Fatalf("chart catalog = %#v, %v", catalog, err)
+	}
+	if _, err := ProjectAitableChartExamples(payload, "unknown"); err == nil {
+		t.Fatal("unknown chart type must fail")
+	}
+
+	aliases := map[string]map[string]string{"fldStatus": {"opt-1": "跟进中", "跟进中": "跟进中"}}
+	expected := []any{map[string]any{"operator": "eq", "operands": []any{"fldStatus", "跟进中"}}}
+	actual := map[string]any{"operator": "and", "operands": []any{map[string]any{"operator": "eq", "operands": []any{"fldStatus", "opt-1"}}}}
+	if !persistedViewFilterMatchesWithOptions(actual, expected, aliases) {
+		t.Fatalf("option ID/name filter should be equivalent: actual=%#v expected=%#v", actual, expected)
+	}
+	if persistedViewFilterMatchesWithOptions(actual, expected, map[string]map[string]string{}) {
+		t.Fatal("unproven option ID/name equivalence must fail closed")
+	}
+	extracted := aitableFieldOptionAliases(map[string]any{
+		"config": map[string]any{
+			"id": "not-an-option", "name": "config-name",
+			"options": []any{map[string]any{"id": "opt-1", "name": "跟进中"}},
+		},
+	})
+	if extracted["opt-1"] != "跟进中" || extracted["跟进中"] != "跟进中" || extracted["not-an-option"] != "" {
+		t.Fatalf("field option aliases = %#v", extracted)
+	}
+
+	if _, err := decodeAitableChartExamplesDepth(map[string]any{}, 5); err == nil {
+		t.Fatal("over-nested chart response must fail")
+	}
+	originalRepair := repairAitableChartJSON
+	t.Cleanup(func() { repairAitableChartJSON = originalRepair })
+	repairAitableChartJSON = func(string) (string, error) { return "", errors.New("repair failed") }
+	if _, err := decodeAitableChartExamples("broken"); err == nil {
+		t.Fatal("chart repair error must be preserved")
+	}
+	repairAitableChartJSON = func(string) (string, error) { return "[", nil }
+	if _, err := decodeAitableChartExamples("broken"); err == nil {
+		t.Fatal("invalid repaired chart JSON must fail")
+	}
+	repairAitableChartJSON = func(string) (string, error) { return `"same"`, nil }
+	if _, err := decodeAitableChartExamples("same"); err == nil {
+		t.Fatal("self-identical encoded chart string must fail")
+	}
+	repairAitableChartJSON = originalRepair
+
+	nonSliceWrapper := map[string]any{"operator": "and", "operands": "bad"}
+	if got := unwrapPersistedViewFilter(nonSliceWrapper); !reflect.DeepEqual(got, nonSliceWrapper) {
+		t.Fatalf("non-slice filter wrapper = %#v", got)
+	}
+	for _, value := range []any{json.Number("1.25"), float64(1.25), 1, int64(1), "1.25"} {
+		if _, ok := aitableDecimal(value); !ok {
+			t.Fatalf("aitableDecimal(%T) was not recognized", value)
+		}
+	}
+	if !aitableFilterValueEquivalent(float64(1.25), json.Number("1.250"), nil, "") {
+		t.Fatal("decimal filter values should be semantically equivalent")
+	}
+
+	oldDeps := deps
+	t.Cleanup(func() { deps = oldDeps })
+	InitDeps(&aitableTestCaller{responses: []string{`{"fields":[{"fieldId":"fldStatus","type":"singleSelect","config":{"options":[{"id":"opt-1","name":"跟进中"}]}}]}`}})
+	fieldCatalog, err := loadAitableFieldCatalog(context.Background(), "base", "table")
+	if err != nil || fieldCatalog.Types["fldStatus"] != "singleSelect" || fieldCatalog.OptionAliases["fldStatus"]["opt-1"] != "跟进中" {
+		t.Fatalf("field catalog = %#v, %v", fieldCatalog, err)
+	}
+}
+
+func TestCrossPlatformCoverageAitablePrimaryDocAbsentLeaf(t *testing.T) {
+	absent := errors.New(`[MCP_TOOL_ERROR] {"data":{},"error":{"code":"-1","message":"no record","retryable":true,"type":"SYSTEM_ERROR"}}`)
+	if err := runAitableCoverageCommand(t, &aitableCommandCoverageCaller{err: absent},
+		"record", "primary-doc-get", "--base-id", "base", "--table-id", "table", "--record-id", "record"); err != nil {
+		t.Fatalf("primary-doc absence should be a successful empty read: %v", err)
 	}
 }

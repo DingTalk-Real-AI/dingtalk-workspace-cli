@@ -6,7 +6,7 @@
 | 搜索 Base 候选、按关键词找 Base、检查某 Base 是否存在 | AITable | 直接使用 `+base-search --query`；即使关键词像人名，只要对象是 Base，也不得改走 `aisearch person` |
 | 表格链接，需要读取记录 | AITable | 先用 `+url-resolve` 取稳定 ID，再用 `+record-query` |
 | 只有 Base/Table 名称，需要读取记录 | AITable | 先用 `+resolve-base` / `+resolve-table` 唯一解析，再查询记录 |
-| 只复制 Base 结构、删除整个 Base | AITable | 复制到已知文档文件夹用 `+base-copy --target-folder-id ... --only-struct`；删除用真实 baseId。不要 Drive 完整复制后逐表删数据 |
+| 只复制 Base 结构、删除整个 Base | AITable | 复制到已知文档文件夹用 `+base-copy --target-folder-id <FOLDER_DENTRY_UUID> --only-struct`；只接受真实文件夹 dentryUuid，不得把 URL、路径、数字 ID、nodeId、spaceId 或 workspaceId 轮流试错。删除用真实 baseId，不要 Drive 完整复制后逐表删数据 |
 | Base 整体移动到普通文件夹、外层存储重命名 | Drive | 这是 Base 作为单个存储节点的外层位置/名称动作 |
 | Base 内 Table、Dashboard、Section 的复制/移动/重命名/删除 | AITable | 这些是 Base 内 nsheet/业务结构，不是独立 Drive dentry |
 | Base 角色、高级权限 | AITable | `+role-*` / `+advperm-*`；仅普通文件 ACL 才走 Drive |

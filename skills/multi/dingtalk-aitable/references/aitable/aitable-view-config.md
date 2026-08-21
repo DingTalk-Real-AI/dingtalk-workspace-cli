@@ -3,6 +3,16 @@
 按属性局部读/写视图配置。每个属性独立子命令，typed flag 友好，agent 不必拼 JSON。
 向后兼容：`view update --config '{...}'` 一次多属性入口仍可用。
 
+## 列表与创建入口
+
+只查看某张表的视图时直接列出，不先加载配置或查询 Help：
+
+```bash
+dws aitable view list --base-id <BASE_ID> --table-id <TABLE_ID> --format json
+```
+
+返回的真实 viewId 用于后续 get/update/duplicate。只有进入复杂配置时才继续阅读本文件下方属性矩阵。
+
 ## viewType × 支持矩阵
 
 | viewType | card | timebar | aggregate | filter / sort / group | visible-fields | field-widths | name |
@@ -21,6 +31,8 @@
 ## 创建：view create
 
 `--view-type` 支持 `Grid`、`Kanban`、`Gantt`、`Calendar`、`Gallery`、`FormDesigner`。创建时通过 `--config` JSON 设置可见字段：
+
+准确 flag 是 `--view-type`，不是 `--type`；CLI 会兼容历史误用并把枚举大小写归一，但新命令始终使用下列 canonical 写法，无需先执行 Help。
 
 ```bash
 # --config JSON：可同时配置可见字段、筛选、排序和分组；主字段必须排第一

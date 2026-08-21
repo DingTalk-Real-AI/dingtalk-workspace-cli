@@ -281,10 +281,13 @@ func newAisearchCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "企业内找人：按姓名/部门/职位/职责/上下级/手机号/工号筛选",
 				UseWhen: []string{
-					"找人、谁负责某事、查上级/下级、按手机号或工号定位人员",
+					"用户明确要找人、同事、负责人、上级/下级，或按手机号、工号定位人员",
 					"需要把维度词映射到 --dimension，关键词只保留目标实体",
 				},
 				AvoidWhen: []string{
+					"当前或上一阶段对象是 AI 表格 Base、Table 或记录时禁止使用；即使关键词像姓名，也应继续使用 AITable 的资源搜索或操作命令",
+					"仅出现一个像姓名的关键词、但用户没有表达找人或人员关系意图时禁止使用",
+					"搜索 AI 表格 Base 候选时用 aitable +base-search",
 					"已有 userId 只需详情时用 contact user get",
 					"精确通讯录关键词搜同事/好友且不涉及职责语义时可用 contact user search",
 					"搜企业知识内容时用 aisearch enterprise；搜行为记录时用 aisearch behavior",

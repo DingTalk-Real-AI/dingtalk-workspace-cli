@@ -29,7 +29,7 @@ type compositeResult struct {
 	Verification    map[string]any   `json:"verification,omitempty"`
 	Checkpoint      map[string]any   `json:"checkpoint,omitempty"`
 	NextCommand     string           `json:"nextCommand,omitempty"`
-	KnownEffects    []map[string]any `json:"knownSideEffects,omitempty"`
+	KnownEffects    []map[string]any `json:"knownSideEffects"`
 	Warnings        []string         `json:"warnings,omitempty"`
 	Result          map[string]any   `json:"result,omitempty"`
 }
@@ -52,6 +52,7 @@ func newCompositeResult(operation string) compositeResult {
 		Operation:       operation,
 		Status:          "success",
 		Executed:        true,
+		KnownEffects:    []map[string]any{},
 	}
 }
 
@@ -92,6 +93,15 @@ func compositeError(result compositeResult, cause error, retryable bool) error {
 	if result.Status == "success" {
 		result.Status = "unknown"
 	}
+	if result.Checkpoint == nil {
+		result.Checkpoint = map[string]any{"nextStep": "stop and inspect the known effects before any retry"}
+	}
+	hint := "inspect error.details.result before retrying; unknown means the remote effect could not be proven"
+	if result.NextCommand != "" {
+		hint = "execute only error.details.result.nextCommand to reconcile the checkpoint; do not replay the write"
+	} else if !retryable {
+		hint = "stop: no safe automatic retry or reconciliation command is available"
+	}
 	options := []apperrors.Option{
 		apperrors.WithOperation("aitable." + result.Operation),
 		apperrors.WithOrigin("mcp"),
@@ -99,7 +109,7 @@ func compositeError(result compositeResult, cause error, retryable bool) error {
 		apperrors.WithExecutionStarted(result.Executed),
 		apperrors.WithRetryable(retryable),
 		apperrors.WithReason("aitable_composite_" + result.Status),
-		apperrors.WithHint("inspect error.details.result before retrying; unknown means the remote effect could not be proven"),
+		apperrors.WithHint(hint),
 		apperrors.WithDetails(map[string]any{"result": result}),
 		apperrors.WithCause(cause),
 	}

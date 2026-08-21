@@ -2,15 +2,37 @@
 
 ## 建议操作顺序
 
-```bash
-# 1) 只在缺少配置结构时读取模板
-dws aitable dashboard config-example --format json
-dws aitable +chart-widgets-example --format json
+只查看 Base 中已有 Dashboard 时，先从 nsheet 节点目录取得真实 dashboardId，再读取目标详情；不要猜 ID，也不要为了列表创建 Dashboard：
 
-# 2) 先拿 dashboard，再拿 chart 详情
-dws aitable dashboard get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --format json
+```bash
+dws aitable +section-list-nodes --base-id <BASE_ID> --format json
+dws aitable +dashboard-get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --format json
+```
+
+创建 Dashboard 后保留真实 dashboardId，并在创建 Chart 前做一次读回。创建回执缺少 ID、读回失败或返回 `retryable=false` 时停止，不得重新创建 Dashboard 或轮换 dashboardId。
+
+```bash
+dws aitable dashboard create --base-id <BASE_ID> --name <名称> --format json
+dws aitable +dashboard-get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --format json
+```
+
+## 唯一 Chart Golden Route
+
+已有合法 config 时跳过第 1 步；缺结构时只取目标类型，命令返回标准 JSON `{chartType,config,layout}`，不再返回需要自行清洗的全量 JSONC。
+
+```bash
+# 1) 仅缺 config 时调用一次；TYPE 如 HISTOGRAM / PIE / SUMMARY
+dws aitable +chart-widgets-example --chart-type <TYPE> --format json
+
+# 2) 替换为本任务真实 tableId/viewId/fieldId；layout 原样使用或在 12 列网格内调整
+dws aitable chart create --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> \
+  --config '<上一步返回的config>' --layout '{"x":0,"y":0,"w":12,"h":6}' --format json
+
+# 3) 只用创建回执中的真实 chartId 验证
 dws aitable chart get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --chart-id <CHART_ID> --format json
 ```
+
+layout 的准确结构只有 `x/y/w/h`：`x,y` 为网格坐标，`w` 为 1–12 列宽，`h` 为正数高度；不要使用 `row/column/rowCount/columnCount`。
 
 只按名称创建、改名并确认时，不需要读取配置示例或 Help：
 
@@ -48,8 +70,8 @@ dws aitable +dashboard-get --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --f
 | `chart create` | 创建图表 | `--base-id` `--dashboard-id` `--config` `--layout` |
 | `chart update` | 更新图表配置 | `--base-id` `--dashboard-id` `--chart-id` `--config` |
 | `chart delete` | 删除图表 | `--base-id` `--dashboard-id` `--chart-id` | 不可逆；由 Runtime 请求确认，Reference 不携带确认绕过参数 |
-| `+chart-widgets-example` | 查看所有图表类型的 widgets 模板 | 无 |
+| `+chart-widgets-example` | 返回标准 JSON 的图表 config 与 layout；不传类型只列可用类型 | 可选 `--chart-type <TYPE>` |
 
 ## 配置获取流程
 
-已有符合当前 leaf Schema 的合法 config 时直接创建/更新，不读取模板。只有缺少结构时调用一次 `+chart-widgets-example`；该命令当前返回所有图表类型示例，随后只使用目标类型，并按真实 tableId/fieldId 填充后执行。
+已有符合当前 leaf Schema 的合法 config 时直接创建/更新，不读取模板。只有缺少结构时调用一次 `+chart-widgets-example --chart-type <TYPE>`，按真实 tableId/viewId/fieldId 替换占位值后立即执行；禁止重复调用示例、用 Python 清洗输出或探索其他 Chart 路径。

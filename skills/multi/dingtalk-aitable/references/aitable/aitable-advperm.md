@@ -32,7 +32,7 @@ dws aitable advperm enable --base-id BASE_ID --format json
 ### advperm disable — 关闭高级权限（高危）
 
 ```bash
-dws aitable advperm disable --base-id BASE_ID --yes --format json
+dws aitable advperm disable --base-id BASE_ID --format json
 ```
 
 返回 `{baseId, enabled: false}`。关闭后所有角色配置即刻失效，全员回退到默认权限。涉及多人协作或敏感数据务必和用户二次确认，建议先 `role-list` 留底。
@@ -151,7 +151,7 @@ dws aitable advperm role-update --base-id BASE_ID --role-id ROLE_ID \
 ### advperm role-delete — 删除自定义角色（不可逆）
 
 ```bash
-dws aitable advperm role-delete --base-id BASE_ID --role-id ROLE_ID --yes --format json
+dws aitable advperm role-delete --base-id BASE_ID --role-id ROLE_ID --format json
 ```
 
 要求同时满足：
@@ -240,12 +240,12 @@ dws aitable advperm role-update --base-id BASE_ID --role-id ROLE_ID --name "新�
 
 ```bash
 dws aitable advperm role-list --base-id BASE_ID --format json
-dws aitable advperm role-delete --base-id BASE_ID --role-id ROLE_ID --yes --format json
+dws aitable advperm role-delete --base-id BASE_ID --role-id ROLE_ID --format json
 ```
 
 ### 关闭高级权限（恢复全员可见）
 
 ```bash
 dws aitable advperm role-list --base-id BASE_ID --format json > /tmp/roles-backup.json
-dws aitable advperm disable --base-id BASE_ID --yes --format json
+dws aitable advperm disable --base-id BASE_ID --format json
 ```

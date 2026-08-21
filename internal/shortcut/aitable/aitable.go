@@ -26,6 +26,7 @@ import (
 	"fmt"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
@@ -219,13 +220,15 @@ func baseListFirst(m map[string]any, keys ...string) (any, bool) {
 	return nil, false
 }
 
+const baseSearchIntent = "当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；当前或上一阶段对象是 Base 时，即使关键词像姓名也必须继续搜索 Base，不切换到人员搜索；输入名称关键词，返回匹配的 Base 列表。"
+
 // BaseSearch 按名称关键词搜索 AI 表格（search_bases）。
 var BaseSearch = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+base-search",
 	Product:     serverMain,
 	Description: "按名称关键词搜索 AI 表格 Base",
-	Intent:      "当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。",
+	Intent:      baseSearchIntent,
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -247,7 +250,7 @@ var BaseSearch = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按名称关键词搜索 AI 表格 Base",
-			UseWhen:      []string{"当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。"},
+			UseWhen:      []string{baseSearchIntent},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws aitable +base-search --query \"项目管理\""},
 		},
@@ -713,7 +716,7 @@ var RecordQuery = shortcut.Shortcut{
 			params["fieldIds"] = rt.StrSlice("field-ids")
 		}
 		if rt.Changed("filters") {
-			f, err := parseJSONAny("filters", rt.Str("filters"))
+			f, err := parseRecordFilters(rt.Str("filters"))
 			if err != nil {
 				return err
 			}
@@ -2343,8 +2346,8 @@ var ChartWidgetsExample = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+chart-widgets-example",
 	Product:     serverMain,
-	Description: "获取所有图表类型的 widget config 示例",
-	Intent:      "当你准备创建或修改图表、需要先参考各类图表 widget config 的示例结构时使用；返回所有图表类型的配置示例。",
+	Description: "按图表类型返回标准 JSON widget config 与准确 layout 示例",
+	Intent:      "创建或修改图表且缺少 config 结构时使用；传 --chart-type 只取目标类型，不传时只列可用类型。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -2358,22 +2361,31 @@ var ChartWidgetsExample = shortcut.Shortcut{
 			CLIPath:        "aitable +chart-widgets-example",
 			PrimaryCLIPath: "aitable +chart-widgets-example",
 		},
-		Description: "获取所有图表类型的 widget config 示例",
+		Description: "按图表类型返回标准 JSON widget config 与准确 layout 示例",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "获取所有图表类型的 widget config 示例",
-			UseWhen:      []string{"当你准备创建或修改图表、需要先参考各类图表 widget config 的示例结构时使用；返回所有图表类型的配置示例。"},
+			AgentSummary: "按图表类型返回标准 JSON widget config 与准确 layout 示例",
+			UseWhen:      []string{"创建或修改图表且缺少 config 结构时使用；传 --chart-type 只取目标类型，不传时只列可用类型。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws aitable +chart-widgets-example"},
+			Examples:     []string{"dws aitable +chart-widgets-example --chart-type HISTOGRAM"},
 		},
 	},
-	Tips: []string{`dws aitable +chart-widgets-example`},
+	Flags: []shortcut.Flag{{Name: "chart-type", Type: shortcut.FlagString, Desc: "只返回指定图表类型；不传时列出可用类型"}},
+	Tips:  []string{`dws aitable +chart-widgets-example --chart-type HISTOGRAM`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_dashboard_widgets_example", map[string]any{})
+		data, err := rt.CallMCPData(serverMain, "get_dashboard_widgets_example", map[string]any{})
+		if err != nil {
+			return err
+		}
+		projection, err := helpers.ProjectAitableChartExamples(data, rt.Str("chart-type"))
+		if err != nil {
+			return err
+		}
+		return rt.Output(projection)
 	},
 }
 

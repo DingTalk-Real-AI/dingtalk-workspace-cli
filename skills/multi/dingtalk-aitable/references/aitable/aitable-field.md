@@ -164,7 +164,7 @@ Flags:
 Usage:
   dws aitable field delete [flags]
 Example:
-  dws aitable field delete --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID> --yes
+  dws aitable field delete --base-id <BASE_ID> --table-id <TABLE_ID> --field-id <FIELD_ID>
 Flags:
       --base-id string    Base ID (必填)
       --field-id string   待删除字段 ID (必填)

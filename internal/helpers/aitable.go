@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/big"
 	"os"
 	"reflect"
 	"sort"
@@ -15,7 +16,9 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/mcpwire"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/paging"
+	jsonrepair "github.com/RealAlexandreAI/json-repair"
 	"github.com/spf13/cobra"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -986,6 +989,31 @@ func requireViewType(actual, attr string, expected []string) error {
 	}
 }
 
+// canonicalAitableViewType accepts the stable server enum without making
+// callers discover its capitalization through Help or a failed remote call.
+// The accepted value domain is unchanged; only ASCII case is normalized.
+func canonicalAitableViewType(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	canonical := map[string]string{
+		"grid":         "Grid",
+		"formdesigner": "FormDesigner",
+		"gantt":        "Gantt",
+		"calendar":     "Calendar",
+		"kanban":       "Kanban",
+		"gallery":      "Gallery",
+	}
+	if normalized, ok := canonical[strings.ToLower(value)]; ok {
+		return normalized, nil
+	}
+	return "", apperrors.NewValidation(
+		fmt.Sprintf("invalid --view-type %q", value),
+		apperrors.WithReason("invalid_enum"),
+		apperrors.WithHint("--view-type 只接受 Grid、FormDesigner、Gantt、Calendar、Kanban、Gallery（大小写不敏感）"),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithActions("Retry the same command with one allowed --view-type value"),
+	)
+}
+
 // dispatchCardKey 把 "card" 子命令分发到 kanbanCard / galleryCard 服务端字段名。
 // 仅 Kanban、Gallery 两类视图支持 card；其他视图返回 CLIError。
 func dispatchCardKey(viewType string) (string, error) {
@@ -1121,6 +1149,19 @@ func isAitableRetryableError(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
+	if details, ok := mcpwire.ParseError(err); ok && details.Retryable != nil && !*details.Retryable {
+		return false
+	}
+	if mcpwire.IsPrimaryDocAbsent(err) {
+		return false
+	}
+
+	// An authoritative server retryable:false must win over broad text such
+	// as SYSTEM_ERROR.  Retrying those terminal failures caused 1s/2s/4s waits
+	// and repeated non-idempotent recovery attempts.
+	if strings.Contains(msg, `"retryable":false`) || strings.Contains(msg, `"retryable": false`) {
+		return false
+	}
 
 	// 网络瞬态错误
 	retryablePatterns := []string{
@@ -1281,11 +1322,11 @@ func runAitableViewUpdateFilter(cmd *cobra.Command) error {
 		return err
 	}
 	filter, _ := cfgMap["filter"].([]any)
-	fieldTypes, err := loadAitableFieldTypes(context.Background(), baseID, tableID)
+	fieldCatalog, err := loadAitableFieldCatalog(context.Background(), baseID, tableID)
 	if err != nil {
 		return err
 	}
-	if err := validateAitableViewFilter(filter, fieldTypes); err != nil {
+	if err := validateAitableViewFilter(filter, fieldCatalog.Types); err != nil {
 		return err
 	}
 	toolArgs := map[string]any{
@@ -1321,7 +1362,7 @@ func runAitableViewUpdateFilter(cmd *cobra.Command) error {
 			continue
 		}
 		actual = walkViewPath(view, "filter")
-		if persistedViewFilterMatches(actual, filter) {
+		if persistedViewFilterMatchesWithOptions(actual, filter, fieldCatalog.OptionAliases) {
 			readBackErr = nil
 			break
 		}
@@ -1340,32 +1381,137 @@ const aitableViewFilterReadbackAttempts = 6
 
 var aitableViewFilterReadbackSleep = time.Sleep
 
-func persistedViewFilterMatches(actual any, expected []any) bool {
-	if reflect.DeepEqual(actual, expected) {
-		return true
-	}
-	root, ok := actual.(map[string]any)
-	if !ok || root["operator"] != "and" {
-		return false
-	}
-	operands, ok := root["operands"].([]any)
-	return ok && reflect.DeepEqual(operands, expected)
-}
-
-func loadAitableFieldTypes(ctx context.Context, baseID, tableID string) (map[string]string, error) {
-	raw, err := callMCPReadToolReturnTextOnServer(ctx, "aitable", "get_fields", map[string]any{"baseId": baseID, "tableId": tableID})
+// ProjectAitableChartExamples turns the legacy JSONC string returned by
+// get_dashboard_widgets_example into a small, ordinary JSON payload. Callers
+// should normally request one chart type; an empty type intentionally returns
+// only the catalog so agents do not ingest every example.
+func ProjectAitableChartExamples(payload any, requestedType string) (map[string]any, error) {
+	examples, err := decodeAitableChartExamples(payload)
 	if err != nil {
 		return nil, err
 	}
+	types := make([]string, 0, len(examples))
+	for chartType, config := range examples {
+		if _, ok := config.(map[string]any); ok {
+			types = append(types, chartType)
+		}
+	}
+	sort.Strings(types)
+	layout := map[string]any{"x": 0, "y": 0, "w": 12, "h": 6}
+	layoutContract := map[string]any{
+		"keys": []string{"x", "y", "w", "h"}, "columns": 12,
+		"rules": []string{"0 <= x < 12", "y >= 0", "1 <= w <= 12", "h > 0", "x + w <= 12"},
+	}
+	chartType := strings.ToUpper(strings.TrimSpace(requestedType))
+	if chartType == "" {
+		return map[string]any{
+			"chartTypes": types, "layout": layout, "layoutContract": layoutContract,
+			"nextCommand": "dws aitable +chart-widgets-example --chart-type TYPE --format json",
+		}, nil
+	}
+	config, exists := examples[chartType]
+	if !exists {
+		return nil, fmt.Errorf("unknown --chart-type %q; available values: %s", requestedType, strings.Join(types, ", "))
+	}
+	return map[string]any{
+		"chartType": chartType, "config": config, "layout": layout, "layoutContract": layoutContract,
+	}, nil
+}
+
+func decodeAitableChartExamples(payload any) (map[string]any, error) {
+	return decodeAitableChartExamplesDepth(payload, 0)
+}
+
+var repairAitableChartJSON = jsonrepair.RepairJSON
+
+func decodeAitableChartExamplesDepth(payload any, depth int) (map[string]any, error) {
+	if depth > 4 {
+		return nil, fmt.Errorf("chart examples response exceeded the supported envelope depth")
+	}
+	switch value := payload.(type) {
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("chart examples response contains an empty data string")
+		}
+		var decoded any
+		if err := json.Unmarshal([]byte(value), &decoded); err != nil {
+			repaired, repairErr := repairAitableChartJSON(value)
+			if repairErr != nil {
+				return nil, fmt.Errorf("chart examples are not valid JSON/JSONC: %w", repairErr)
+			}
+			if err := json.Unmarshal([]byte(repaired), &decoded); err != nil {
+				return nil, fmt.Errorf("repaired chart examples are not valid JSON: %w", err)
+			}
+		}
+		if decodedString, ok := decoded.(string); ok && decodedString == value {
+			return nil, fmt.Errorf("chart examples response contains a self-identical encoded string")
+		}
+		return decodeAitableChartExamplesDepth(decoded, depth+1)
+	case map[string]any:
+		for _, key := range []string{"data", "result"} {
+			if nested, exists := value[key]; exists {
+				if examples, err := decodeAitableChartExamplesDepth(nested, depth+1); err == nil && len(examples) > 0 {
+					return examples, nil
+				}
+			}
+		}
+		if _, hasStatus := value["status"]; hasStatus {
+			return nil, fmt.Errorf("chart examples response is missing a decodable data object")
+		}
+		return value, nil
+	default:
+		return nil, fmt.Errorf("chart examples response has unsupported shape %T", payload)
+	}
+}
+
+func persistedViewFilterMatches(actual any, expected []any) bool {
+	return persistedViewFilterMatchesWithOptions(actual, expected, nil)
+}
+
+func persistedViewFilterMatchesWithOptions(actual any, expected []any, optionAliases map[string]map[string]string) bool {
+	actual = unwrapPersistedViewFilter(actual)
+	return aitableFilterValueEquivalent(actual, expected, optionAliases, "")
+}
+
+func unwrapPersistedViewFilter(actual any) any {
+	root, ok := actual.(map[string]any)
+	if !ok || root["operator"] != "and" {
+		return actual
+	}
+	operands, ok := root["operands"].([]any)
+	if !ok {
+		return actual
+	}
+	return operands
+}
+
+type aitableFieldCatalog struct {
+	Types         map[string]string
+	OptionAliases map[string]map[string]string
+}
+
+func loadAitableFieldTypes(ctx context.Context, baseID, tableID string) (map[string]string, error) {
+	catalog, err := loadAitableFieldCatalog(ctx, baseID, tableID)
+	if err != nil {
+		return nil, err
+	}
+	return catalog.Types, nil
+}
+
+func loadAitableFieldCatalog(ctx context.Context, baseID, tableID string) (aitableFieldCatalog, error) {
+	raw, err := callMCPReadToolReturnTextOnServer(ctx, "aitable", "get_fields", map[string]any{"baseId": baseID, "tableId": tableID})
+	if err != nil {
+		return aitableFieldCatalog{}, err
+	}
 	var payload any
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return nil, fmt.Errorf("get_fields response is not valid JSON: %v", err)
+		return aitableFieldCatalog{}, fmt.Errorf("get_fields response is not valid JSON: %v", err)
 	}
 	fields, ok := findAitableObjectList(payload, "fields", "fieldList")
 	if !ok {
-		return nil, fmt.Errorf("get_fields response is missing the fields collection")
+		return aitableFieldCatalog{}, fmt.Errorf("get_fields response is missing the fields collection")
 	}
-	types := make(map[string]string, len(fields))
+	catalog := aitableFieldCatalog{Types: make(map[string]string, len(fields)), OptionAliases: make(map[string]map[string]string)}
 	for index, field := range fields {
 		fieldID, _ := field["fieldId"].(string)
 		if strings.TrimSpace(fieldID) == "" {
@@ -1376,11 +1522,135 @@ func loadAitableFieldTypes(ctx context.Context, baseID, tableID string) (map[str
 			fieldType, _ = field["fieldType"].(string)
 		}
 		if strings.TrimSpace(fieldID) == "" || strings.TrimSpace(fieldType) == "" {
-			return nil, fmt.Errorf("get_fields field %d is missing fieldId or type", index)
+			return aitableFieldCatalog{}, fmt.Errorf("get_fields field %d is missing fieldId or type", index)
 		}
-		types[strings.TrimSpace(fieldID)] = strings.TrimSpace(fieldType)
+		fieldID = strings.TrimSpace(fieldID)
+		catalog.Types[fieldID] = strings.TrimSpace(fieldType)
+		if aliases := aitableFieldOptionAliases(field); len(aliases) > 0 {
+			catalog.OptionAliases[fieldID] = aliases
+		}
 	}
-	return types, nil
+	return catalog, nil
+}
+
+func aitableFieldOptionAliases(field map[string]any) map[string]string {
+	aliases := map[string]string{}
+	var walk func(any, bool)
+	walk = func(value any, insideOptions bool) {
+		switch current := value.(type) {
+		case map[string]any:
+			if insideOptions {
+				name, _ := current["name"].(string)
+				name = strings.TrimSpace(name)
+				if name != "" {
+					aliases[name] = name
+					for _, key := range []string{"id", "optionId", "option_id"} {
+						if id, ok := current[key].(string); ok && strings.TrimSpace(id) != "" {
+							aliases[strings.TrimSpace(id)] = name
+						}
+					}
+				}
+			}
+			for key, nested := range current {
+				keyIsOptions := strings.Contains(strings.ToLower(key), "option")
+				walk(nested, insideOptions || keyIsOptions)
+			}
+		case []any:
+			for _, nested := range current {
+				walk(nested, insideOptions)
+			}
+		}
+	}
+	walk(field, false)
+	return aliases
+}
+
+func aitableFilterValueEquivalent(actual, expected any, optionAliases map[string]map[string]string, fieldID string) bool {
+	if reflect.DeepEqual(actual, expected) {
+		return true
+	}
+	if aitableDecimalEquivalent(actual, expected) {
+		return true
+	}
+	if actualMap, ok := actual.(map[string]any); ok {
+		expectedMap, ok := expected.(map[string]any)
+		if !ok || len(actualMap) != len(expectedMap) {
+			return false
+		}
+		leafFieldID := fieldID
+		if operands, ok := actualMap["operands"].([]any); ok && len(operands) > 0 {
+			if id, ok := operands[0].(string); ok {
+				leafFieldID = id
+			}
+		}
+		for key, expectedValue := range expectedMap {
+			actualValue, exists := actualMap[key]
+			if !exists || !aitableFilterValueEquivalent(actualValue, expectedValue, optionAliases, leafFieldID) {
+				return false
+			}
+		}
+		return true
+	}
+	if actualList, ok := actual.([]any); ok {
+		expectedList, ok := expected.([]any)
+		if !ok || len(actualList) != len(expectedList) {
+			return false
+		}
+		listFieldID := fieldID
+		if len(actualList) > 0 {
+			if id, ok := actualList[0].(string); ok {
+				listFieldID = id
+			}
+		}
+		for index := range actualList {
+			if !aitableFilterValueEquivalent(actualList[index], expectedList[index], optionAliases, listFieldID) {
+				return false
+			}
+		}
+		return true
+	}
+	actualString, actualIsString := actual.(string)
+	expectedString, expectedIsString := expected.(string)
+	if actualIsString && expectedIsString && fieldID != "" {
+		aliases := optionAliases[fieldID]
+		if len(aliases) > 0 {
+			actualCanonical, actualKnown := aliases[strings.TrimSpace(actualString)]
+			expectedCanonical, expectedKnown := aliases[strings.TrimSpace(expectedString)]
+			return actualKnown && expectedKnown && actualCanonical == expectedCanonical
+		}
+	}
+	return false
+}
+
+func aitableDecimalEquivalent(actual, expected any) bool {
+	if _, ok := actual.(string); ok {
+		if _, bothStrings := expected.(string); bothStrings {
+			return false
+		}
+	}
+	left, leftOK := aitableDecimal(actual)
+	right, rightOK := aitableDecimal(expected)
+	return leftOK && rightOK && left.Cmp(right) == 0
+}
+
+func aitableDecimal(value any) (*big.Rat, bool) {
+	var raw string
+	switch number := value.(type) {
+	case json.Number:
+		raw = number.String()
+	case float64:
+		raw = strconv.FormatFloat(number, 'g', -1, 64)
+	case int:
+		raw = strconv.Itoa(number)
+	case int64:
+		raw = strconv.FormatInt(number, 10)
+	case string:
+		raw = strings.TrimSpace(number)
+	default:
+		return nil, false
+	}
+	parsed, ok := new(big.Rat).SetString(raw)
+	return parsed, ok
 }
 
 func findAitableObjectList(value any, names ...string) ([]map[string]any, bool) {
@@ -1718,9 +1988,12 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 			Interface:   aitableMCPInterface("search_bases"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。",
-				UseWhen:      []string{"用户要找某个 AI 表格/多维表，按名称检索时优先使用"},
-				AvoidWhen:    []string{"只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"},
-				Examples:     []string{"dws aitable base search --query \"项目\""},
+				UseWhen: []string{
+					"用户要找某个 AI 表格/多维表，按名称检索时优先使用",
+					"当前或上一阶段对象是 Base 时，即使查询关键词像姓名，也搜索 Base，不切到 aisearch person",
+				},
+				AvoidWhen: []string{"只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"},
+				Examples:  []string{"dws aitable base search --query \"项目\""},
 			},
 		},
 	})
@@ -1799,9 +2072,9 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 			Description: "创建 AI 表格 Base。",
 			Interface:   aitableMCPInterface("create_base"),
 			Selection: contract.SelectionSpec{
-				AgentSummary: "创建 AI 表格 Base。",
-				UseWhen:      []string{"需要新建一份 AI 多维表（able）时"},
-				AvoidWhen:    []string{"创建在线电子表格用 sheet create；复制已有 Base 用 base copy"},
+				AgentSummary: "只创建一个 AI 表格 Base，并返回后续操作应复用的稳定 baseId。",
+				UseWhen:      []string{"只需要新建空白或模板 Base、不同时创建数据表和字段时；创建结果返回 baseId，后续核验与写入直接复用该 ID"},
+				AvoidWhen:    []string{"同时创建 Base、数据表和字段用 +base-bootstrap；复制已有 Base 用 base copy；创建在线电子表格用 sheet create"},
 				Examples:     []string{"dws aitable base create --name \"项目跟踪\""},
 			},
 			Parameters: []contract.ParamDecl{
@@ -1907,9 +2180,9 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 
 权限要求：需要对源 Base 有"阅读"权限，且对目标文件夹有"编辑"权限。
 
-注意：--target-folder-id 参数如果传入的是文档/文件夹 URL（如 https://alidocs.dingtalk.com/i/nodes/xxx），
-需要先调用文档的 dws 命令（如 dws doc info --node URL）获取 dentryUuid，再将 dentryUuid 传入本命令。
-MCP 层不会会自动解析 URL，必须直接传入 dentryUuid 以避免报错。`,
+注意：--target-folder-id 必须传 dws doc info 返回的 folderId。
+rootFolderId、fileId/nodeId、数字 dentryId、spaceId、workspaceId 都不是 copy_base 接受的 folderId。
+如果当前只有文件夹 URL、路径或其他类型 ID，应停止并取得该接口实际接受的文件夹 dentryUuid，不要轮流替换 ID。`,
 		Example: `  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_ID
   dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_ID --only-struct
   # 查询 baseId: dws aitable base list
@@ -3489,11 +3762,23 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 			if err != nil {
 				return err
 			}
-			return callAitableHelperTool("get_primary_doc", map[string]any{
+			err = callAitableHelperTool("get_primary_doc", map[string]any{
 				"baseId":   baseID,
 				"tableId":  mustGetFlag(cmd, "table-id"),
 				"recordId": mustGetFlag(cmd, "record-id"),
 			})
+			if mcpwire.IsPrimaryDocAbsent(err) {
+				return deps.Out.PrintJSON(map[string]any{
+					"success": true,
+					"status":  "success",
+					"data": map[string]any{
+						"exists": false,
+						"nodeId": nil,
+					},
+					"summary": "The record has no primary document.",
+				})
+			}
+			return err
 		},
 	}
 	DeclareLeafMetadata(recordPrimaryDocGetCmd, LeafSpec{
@@ -3511,7 +3796,7 @@ Windows 用户注意：如果 --records JSON 很长，请使用 --records-file �
 			Selection: contract.SelectionSpec{
 				AgentSummary: "查询记录主键文档 nodeId。",
 				UseWhen:      []string{"需要打开记录关联的主键文档时"},
-				AvoidWhen:    []string{"无文档时会报错；创建用 primary-doc-create"},
+				AvoidWhen:    []string{"需要创建主键文档时用 primary-doc-create；无文档时本命令成功返回 exists=false、nodeId=null"},
 				Examples:     []string{"dws aitable record primary-doc-get --base-id <BASE_ID> --table-id <TABLE_ID> --record-id <RECORD_ID>"},
 			},
 		},
@@ -4027,10 +4312,14 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 			if err != nil {
 				return err
 			}
+			viewType, err := canonicalAitableViewType(mustGetFlag(cmd, "view-type"))
+			if err != nil {
+				return err
+			}
 			toolArgs := map[string]any{
 				"baseId":   baseID,
 				"tableId":  mustGetFlag(cmd, "table-id"),
-				"viewType": mustGetFlag(cmd, "view-type"),
+				"viewType": viewType,
 			}
 			if v, _ := cmd.Flags().GetString("name"); v != "" {
 				toolArgs["viewName"] = v
@@ -6467,12 +6756,20 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 
 	chartWidgetsExampleCmd := &cobra.Command{
 		Use:   "widgets-example",
-		Short: "获取图表配置示例",
-		Long: `返回所有图表类型的 widget config 示例（JSONC 格式，含注释说明每个字段的含义和约束）。
-可作为 chart create / chart update 的 --config 参数结构参考，根据目标图表类型选取对应示例。`,
-		Example: `  dws aitable chart widgets-example`,
+		Short: "获取标准 JSON 图表配置示例",
+		Long: `返回标准 JSON 图表 config 与准确的 x/y/w/h layout。
+传 --chart-type 时只返回该类型，避免全量模板消耗；不传时只列可用类型。`,
+		Example: `  dws aitable chart widgets-example --chart-type HISTOGRAM`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return callAitableTool("get_dashboard_widgets_example", map[string]any{})
+			raw, err := callMCPReadToolReturnTextOnServer(cmd.Context(), "aitable", "get_dashboard_widgets_example", map[string]any{})
+			if err != nil {
+				return err
+			}
+			projection, err := ProjectAitableChartExamples(raw, mustGetFlag(cmd, "chart-type"))
+			if err != nil {
+				return err
+			}
+			return deps.Out.PrintJSON(projection)
 		},
 	}
 	DeclareLeafMetadata(chartWidgetsExampleCmd, LeafSpec{
@@ -6491,7 +6788,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 				AgentSummary: "查看图表 widgets 配置模板。",
 				UseWhen:      []string{"创建/更新图表前需要 widgets JSON 样例时"},
 				AvoidWhen:    []string{"仪表盘配置样例用 dashboard config-example"},
-				Examples:     []string{"dws aitable chart widgets-example"},
+				Examples:     []string{"dws aitable chart widgets-example --chart-type HISTOGRAM"},
 			},
 		},
 	})
@@ -6553,7 +6850,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
   同一行的图表保持高度一致，每行的图表宽度相加需要正好将整行填满。`,
 		Example: `  dws aitable chart create --base-id BASE_ID --dashboard-id DASHBOARD_ID \
     --config '{"chartName":"销售柱图","chartType":"bar",...}' \
-    --layout '{"x":0,"y":0,"w":6,"h":4}'
+    --layout '{"x":0,"y":0,"w":12,"h":6}'
   # 先获取配置示例: dws aitable chart widgets-example`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "dashboard-id", "config", "layout"); err != nil {
@@ -6587,7 +6884,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 				AgentSummary: "创建图表。",
 				UseWhen:      []string{"在仪表盘下新建图表时；先参考 widgets-example"},
 				AvoidWhen:    []string{"电子表格浮动图用 sheet chart；更新用 chart update"},
-				Examples:     []string{"dws aitable chart create --base-id BASE_ID --dashboard-id DASHBOARD_ID --config '{\"chartName\":\"销售柱图\",\"chartType\":\"bar\",...}' --layout '{\"x\":0,\"y\":0,\"w\":6,\"h\":4}'"},
+				Examples:     []string{"dws aitable chart create --base-id BASE_ID --dashboard-id DASHBOARD_ID --config '<CONFIG_FROM_WIDGETS_EXAMPLE>' --layout '{\"x\":0,\"y\":0,\"w\":12,\"h\":6}'"},
 			},
 		},
 	})
@@ -7746,7 +8043,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	baseGetPrimaryDocIdCmd.Flags().String("table-id", "", "Table ID，可通过 list_tables 或 get_base 获取 (必填)")
 	baseGetPrimaryDocIdCmd.Flags().String("record-id", "", "记录 ID (必填)")
 	baseCopyCmd.Flags().String("base-id", "", "源 Base ID (必填)")
-	baseCopyCmd.Flags().String("target-folder-id", "", "目标文件夹 ID (必填, 不传会复制失败)")
+	baseCopyCmd.Flags().String("target-folder-id", "", "目标文档目录 folderId (必填；来自 dws doc info 的 folderId)")
 	baseCopyCmd.Flags().Bool("only-struct", false, "是否仅复制结构（不含数据），默认 false 表示完整复制")
 	baseCmd.AddCommand(
 		baseListCmd, baseSearchCmd, baseGetCmd,
@@ -8317,13 +8614,14 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	)
 
 	// chart
+	chartWidgetsExampleCmd.Flags().String("chart-type", "", "只返回指定图表类型的标准 JSON config；不传时列出可用类型")
 	chartGetCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	chartGetCmd.Flags().String("dashboard-id", "", "所属 Dashboard ID (必填)")
 	chartGetCmd.Flags().String("chart-id", "", "目标 Chart ID（通过 dashboard get 获取）(必填)")
 	chartCreateCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	chartCreateCmd.Flags().String("dashboard-id", "", "所属 Dashboard ID (必填)")
 	chartCreateCmd.Flags().String("config", "", "图表配置 JSON，结构参考 chart widgets-example (必填)")
-	chartCreateCmd.Flags().String("layout", "", "图表布局 JSON，如 {\"x\":0,\"y\":0,\"w\":6,\"h\":4} (必填)")
+	chartCreateCmd.Flags().String("layout", "", "图表布局 JSON，仅接受 x/y/w/h，如 {\"x\":0,\"y\":0,\"w\":12,\"h\":6} (必填)")
 	chartUpdateCmd.Flags().String("base-id", "", "所属 Base ID (必填)")
 	chartUpdateCmd.Flags().String("dashboard-id", "", "所属 Dashboard ID (必填)")
 	chartUpdateCmd.Flags().String("chart-id", "", "目标 Chart ID (必填)")

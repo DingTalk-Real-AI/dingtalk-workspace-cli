@@ -79,6 +79,11 @@ func executeWorkflowDeploy(rt *shortcut.RuntimeContext) error {
 	if writeErr != nil {
 		result.Status = "unknown"
 		result.Checkpoint = map[string]any{"nextStep": "resolve workflow existence and definition before retrying", "workflowId": workflowID}
+		if workflowID == "" {
+			result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+workflow-list", "--base-id", baseID, "--format", "json")
+		} else {
+			result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+workflow-get", "--base-id", baseID, "--workflow-id", workflowID, "--format", "json")
+		}
 		return compositeError(result, writeErr, false)
 	}
 	valid, validFound, responseID, publishErr := workflowPublishResult(writeData)
@@ -95,6 +100,7 @@ func executeWorkflowDeploy(rt *shortcut.RuntimeContext) error {
 	workflowID = responseID
 	result.Resolved["workflowId"] = workflowID
 	result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": tool, "workflowId": workflowID})
+	result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+workflow-get", "--base-id", baseID, "--workflow-id", workflowID, "--format", "json")
 	readBack, verifyErr := rt.CallMCPData(serverHelper, "get_workflow", map[string]any{"baseId": baseID, "workflowId": workflowID})
 	if verifyErr != nil || !deepContainsString(readBack, workflowID) {
 		if verifyErr == nil {
@@ -115,7 +121,9 @@ func executeWorkflowDeploy(rt *shortcut.RuntimeContext) error {
 				listErr = fmt.Errorf("workflow list does not show %s as RUNNING", workflowID)
 			}
 			result.Status = "partial_success"
-			result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "enable_workflow", "workflowId": workflowID, "response": enableData})
+			if enableErr == nil && len(enableData) > 0 {
+				result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "enable_workflow", "workflowId": workflowID, "response": enableData})
+			}
 			result.Checkpoint = map[string]any{"workflowId": workflowID, "nextStep": "inspect and enable workflow"}
 			return compositeError(result, listErr, action == "update")
 		}
@@ -125,6 +133,7 @@ func executeWorkflowDeploy(rt *shortcut.RuntimeContext) error {
 	result.CompletedSteps = append([]compositeStep{{Index: 1, Name: action + " workflow", Tool: tool, Status: "completed", Result: writeData}}, result.CompletedSteps...)
 	result.Verification = map[string]any{"status": "verified", "valid": true, "workflowId": workflowID, "running": rt.Bool("enable")}
 	result.Result = map[string]any{"action": action, "workflowId": workflowID, "valid": true}
+	result.NextCommand = ""
 	return rt.Output(result)
 }
 

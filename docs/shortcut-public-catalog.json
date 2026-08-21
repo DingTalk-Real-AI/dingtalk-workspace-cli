@@ -199,7 +199,7 @@
       "risk": "read",
       "status": "reviewed_available",
       "disposition": "schema_leaf",
-      "semantic_delta": "返回所有图表类型的 widget config 示例，供构造合法图表配置。",
+      "semantic_delta": "按图表类型返回标准 JSON widget config 与 x/y/w/h layout；不传类型时只列可用类型。",
       "availability": "available"
     },
     {

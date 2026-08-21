@@ -143,6 +143,19 @@ func TestCrossPlatformCoverageResolveBaseStopsOnAuthoritativeTerminalCursor(t *t
 	}
 }
 
+func TestCrossPlatformCoverageResolveBaseNameExplicitExhaustionIgnoresResidualCursor(t *testing.T) {
+	reader := &resolverReader{steps: []resolverStep{{data: map[string]any{"data": map[string]any{
+		"bases": []any{map[string]any{"baseId": "b1", "baseName": "项目管理"}},
+		// The service may echo the request cursor after endpoint exhaustion.
+		"nextCursor": "residual",
+		"hasMore":    false,
+	}}}}}
+	got, err := ResolveBaseName(reader, "项目管理", false)
+	if err != nil || got.Selected.ID != "b1" || len(reader.calls) != 1 {
+		t.Fatalf("resolution = %#v, err=%v, calls=%#v", got, err, reader.calls)
+	}
+}
+
 func TestCrossPlatformCoverageResolveNameFuzzyIsExplicitAndAmbiguityFails(t *testing.T) {
 	data := map[string]any{"bases": []any{
 		map[string]any{"baseId": "b1", "baseName": "项目管理归档"},

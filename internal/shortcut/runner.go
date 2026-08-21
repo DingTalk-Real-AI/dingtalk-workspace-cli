@@ -320,6 +320,12 @@ func (rt *RuntimeContext) commandContext() context.Context {
 	return context.Background()
 }
 
+// Context exposes the command-scoped cancellation signal to bounded Shortcut
+// orchestration without exposing the underlying Cobra command.
+func (rt *RuntimeContext) Context() context.Context {
+	return rt.commandContext()
+}
+
 // Output prints a (typically reshaped/projected) payload honouring the root
 // --format/--jq/--fields flags. Multi-step shortcuts use it to emit a clean,
 // composed result instead of the raw MCP response — the output-projection

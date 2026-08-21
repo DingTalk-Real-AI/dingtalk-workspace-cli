@@ -17,7 +17,7 @@ dws aitable +record-primary-doc-get --base-id BASE_ID --table-id TABLE_ID --reco
 - `--table-id`（必填）：Table ID
 - `--record-id`（必填）：Record ID
 
-**返回：** `data.nodeId` — 主键文档的 nodeId，可直接传给 `dws doc read/update` 的 `--node` 参数。若该记录尚未创建主键文档，`nodeId` 为 null。
+**返回：** `data.nodeId` — 主键文档的 nodeId，可直接传给 `dws doc read/update` 的 `--node` 参数。若该记录尚未创建主键文档，命令成功返回 `data.exists=false`、`data.nodeId=null`；权限、记录不存在或其他系统错误仍然失败。
 
 ### 创建主键文档
 

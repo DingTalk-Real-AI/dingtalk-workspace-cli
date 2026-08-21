@@ -123,10 +123,12 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 		}
 		result.Status = "unknown"
 		result.Checkpoint = map[string]any{"nextStep": "locate the target table by exact name before retrying"}
+		result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+list-tables", "--base", targetBase, "--format", "json")
 		return compositeError(result, err, false)
 	}
 	result.Resolved["targetTableId"] = targetTable
 	result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_table", "baseId": targetBase, "tableId": targetTable})
+	result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+table-get", "--base-id", targetBase, "--table-id", targetTable, "--format", "json")
 	for offset := initialEnd; offset < len(createFields); offset += 15 {
 		end := minInt(offset+15, len(createFields))
 		_, fieldErr := rt.CallMCPWriteDataStrict(serverMain, "create_fields", map[string]any{"baseId": targetBase, "tableId": targetTable, "fields": createFields[offset:end]})
@@ -190,6 +192,7 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 			result.CompletedCount = createdCount
 			result.FailedCount = len(sourceRecords) - createdCount
 			result.Checkpoint = map[string]any{"targetTableId": targetTable, "nextRecordOffset": offset}
+			result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-query", "--base-id", targetBase, "--table-id", targetTable, "--limit", "100", "--format", "json")
 			return compositeError(result, writeErr, false)
 		}
 		actual, verifyErr := queryRecordsByIDs(rt, targetBase, targetTable, createdIDs)
@@ -200,7 +203,8 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 			result.Status = "partial_success"
 			result.CompletedCount = createdCount
 			result.FailedCount = len(sourceRecords) - createdCount
-			result.Checkpoint = map[string]any{"targetTableId": targetTable, "nextRecordOffset": offset}
+			result.Checkpoint = map[string]any{"targetTableId": targetTable, "nextRecordOffset": offset, "recordIds": createdIDs}
+			result.NextCommand = recordQueryRecoveryCommand(targetBase, targetTable, createdIDs)
 			return compositeError(result, verifyErr, false)
 		}
 		createdCount = end
@@ -209,6 +213,7 @@ func executeTableCopy(rt *shortcut.RuntimeContext) error {
 	result.CompletedCount = createdCount
 	result.Verification = map[string]any{"status": "verified", "fieldCount": len(createFields), "recordCount": createdCount}
 	result.Result = map[string]any{"targetBaseId": targetBase, "targetTableId": targetTable, "fieldCount": len(createFields), "recordCount": createdCount}
+	result.NextCommand = ""
 	return rt.Output(result)
 }
 

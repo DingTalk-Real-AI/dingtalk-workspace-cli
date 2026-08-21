@@ -156,6 +156,38 @@ func TestCrossPlatformCoverageAitableFlagAndJSONNormalizers(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAitableViewTypeCanonicalization(t *testing.T) {
+	for input, want := range map[string]string{
+		"Grid": "Grid", "grid": "Grid", "KANBAN": "Kanban",
+		" formdesigner ": "FormDesigner", "gallery": "Gallery",
+	} {
+		got, err := canonicalAitableViewType(input)
+		if err != nil || got != want {
+			t.Errorf("canonicalAitableViewType(%q) = %q, %v; want %q", input, got, err, want)
+		}
+	}
+	if _, err := canonicalAitableViewType("board"); err == nil {
+		t.Fatal("unknown view type must fail before remote execution")
+	}
+}
+
+func TestCrossPlatformCoverageAitableViewCreateSendsCanonicalType(t *testing.T) {
+	oldDeps, oldArgs := deps, os.Args
+	t.Cleanup(func() { deps, os.Args = oldDeps, oldArgs })
+	os.Args = []string{"dws", "aitable", "--yes"}
+	caller := &aitableTestCaller{}
+	if err := runAitableCoverageCommand(t, caller,
+		"view", "create", "--base-id=b", "--table-id=t", "--view-type=kanban"); err != nil {
+		t.Fatalf("view create failed: %v", err)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("remote calls = %d, want 1", len(caller.calls))
+	}
+	if got := caller.calls[0].args["viewType"]; got != "Kanban" {
+		t.Fatalf("viewType payload = %#v, want Kanban", got)
+	}
+}
+
 func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	config := map[string]any{
 		"filter": map[string]any{"operator": "and", "operands": []any{}},
@@ -184,7 +216,7 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
 		want bool
-	}{{nil, false}, {errors.New("timeout"), true}, {errors.New("SYSTEM_ERROR"), true}, {errors.New("retryable: true"), true}, {errors.New("bad request"), false}} {
+	}{{nil, false}, {errors.New("timeout"), true}, {errors.New("SYSTEM_ERROR"), true}, {errors.New("retryable: true"), true}, {errors.New(`{"error":{"code":"DASHBOARD_NOT_FOUND","retryable":false}}`), false}, {errors.New(`[MCP_TOOL_ERROR] {"error":{"code":"-1","message":"no record","retryable":true,"type":"SYSTEM_ERROR"}}`), false}, {errors.New(`SYSTEM_ERROR {"retryable": false}`), false}, {errors.New("bad request"), false}} {
 		if got := isAitableRetryableError(tc.err); got != tc.want {
 			t.Errorf("isAitableRetryableError(%v) = %v", tc.err, got)
 		}

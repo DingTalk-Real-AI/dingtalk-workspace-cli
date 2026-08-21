@@ -684,3 +684,31 @@ func TestCrossPlatformCoveragePublishedSpaceWorkspaceAliasesRemainExecutable(t *
 		}
 	}
 }
+
+func TestCrossPlatformCoverageAitableReviewedRecoveryAliases(t *testing.T) {
+	tests := []struct {
+		command string
+		emitted string
+		want    string
+	}{
+		{command: "aitable field update", emitted: "field-name", want: "name"},
+		{command: "aitable +field-update", emitted: "field-name", want: "name"},
+		{command: "aitable view create", emitted: "type", want: "view-type"},
+		{command: "aitable view duplicate", emitted: "name", want: "new-name"},
+		{command: "aitable +view-duplicate", emitted: "name", want: "new-name"},
+	}
+	for _, test := range tests {
+		entry, ok := LookupParamAlias(test.command)
+		if !ok {
+			t.Errorf("%s has no generated parameter-alias entry", test.command)
+			continue
+		}
+		got, active := entry.ResolveAlias(test.emitted)
+		if !active || got != test.want {
+			t.Errorf("%s --%s resolution = active:%v target:%q, want --%s", test.command, test.emitted, active, got, test.want)
+		}
+		if entry.IsBlocked(test.emitted) || entry.IsAmbiguous(test.emitted) {
+			t.Errorf("%s --%s remains protected after exact-path review", test.command, test.emitted)
+		}
+	}
+}

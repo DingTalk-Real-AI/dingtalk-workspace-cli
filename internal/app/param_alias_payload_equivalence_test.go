@@ -32,6 +32,7 @@ const (
 var paramAliasCompleteCommands = map[string][]string{
 	"aitable +base-search":                     {"aitable", "+base-search", "--query", "fixture"},
 	"aitable +export-data":                     {"aitable", "+export-data", "--base-id", "base-1", "--scope", "all", "--format", "excel"},
+	"aitable +field-update":                    {"aitable", "+field-update", "--base-id", "base-1", "--table-id", "table-1", "--field-id", "field-1", "--name", "Fixture Field", "--yes"},
 	"aitable +field-get":                       {"aitable", "+field-get", "--base-id", "base-1", "--table-id", "table-1"},
 	"aitable +find-record":                     {"aitable", "+find-record", "--base", "base-1", "--table", "table-1", "--query", "fixture"},
 	"aitable +list-tables":                     {"aitable", "+list-tables", "--base", "base-1"},
@@ -39,12 +40,16 @@ var paramAliasCompleteCommands = map[string][]string{
 	"aitable +record-share-links":              {"aitable", "+record-share-links", "--base", "base-1", "--table", "table-1", "--record-ids", "record-1"},
 	"aitable +record-share-url":                {"aitable", "+record-share-url", "--base-id", "base-1", "--table-id", "table-1", "--record-ids", "record-1"},
 	"aitable +table-get":                       {"aitable", "+table-get", "--base-id", "base-1"},
+	"aitable +view-duplicate":                  {"aitable", "+view-duplicate", "--base-id", "base-1", "--table-id", "table-1", "--view-id", "view-1", "--new-name", "Fixture View Copy", "--yes"},
 	"aitable +workflow-list":                   {"aitable", "+workflow-list", "--base-id", "base-1", "--limit", "7"},
 	"aitable attachment upload":                {"aitable", "attachment", "upload", "--base-id", "base-1", "--file-name", "fixture.txt", "--size", "7"},
 	"aitable base list":                        {"aitable", "base", "list", "--cursor", "cursor-1", "--limit", "7"},
 	"aitable base update":                      {"aitable", "base", "update", "--base-id", "base-1", "--name", "Fixture Base", "--desc", "fixture description"},
+	"aitable field update":                     {"aitable", "field", "update", "--base-id", "base-1", "--table-id", "table-1", "--field-id", "field-1", "--name", "Fixture Field", "--yes"},
 	"aitable field search-options":             {"aitable", "field", "search-options", "--base-id", "base-1", "--table-id", "table-1", "--field-id", "field-1", "--keyword", "fixture", "--limit", "7"},
 	"aitable record query":                     {"aitable", "record", "query", "--base-id", "base-1", "--table-id", "table-1", "--limit", "7"},
+	"aitable view create":                      {"aitable", "view", "create", "--base-id", "base-1", "--table-id", "table-1", "--view-type", "Kanban", "--name", "Fixture View", "--yes"},
+	"aitable view duplicate":                   {"aitable", "view", "duplicate", "--base-id", "base-1", "--table-id", "table-1", "--view-id", "view-1", "--new-name", "Fixture View Copy", "--yes"},
 	"aitable workflow get":                     {"aitable", "workflow", "get", "--base-id", "base-1", "--workflow-id", "workflow-1"},
 	"aitable workflow history":                 {"aitable", "workflow", "history", "--base-id", "base-1", "--workflow-id", "workflow-1", "--after-time", "1000", "--before-time", "2000", "--page", "2", "--size", "25"},
 	"aitable workflow run":                     {"aitable", "workflow", "run", "--base-id", "base-1", "--workflow-id", "workflow-1", "--table-id", "table-1", "--record-ids", "record-1", "--yes"},
@@ -618,16 +623,21 @@ var paramAliasCandidateConfirmationCases = []struct {
 // macOS app suite beyond its package-level 10-minute timeout.
 var paramAliasRepresentativePayloadCases = map[string]bool{
 	paramAliasPayloadCaseKey("aitable +export-data", "export-format"):                true, // shortcut-local export format keeps the final payload
+	paramAliasPayloadCaseKey("aitable +field-update", "field-name"):                  true, // exact-path field display-name recovery
 	paramAliasPayloadCaseKey("aitable +find-record", "base-id"):                      true, // shortcut Base ID compatibility
 	paramAliasPayloadCaseKey("aitable +find-record", "table-id"):                     true, // shortcut Table ID compatibility
 	paramAliasPayloadCaseKey("aitable +record-query", "base"):                        true, // concept alias on a shortcut read
 	paramAliasPayloadCaseKey("aitable +record-share-links", "base-id"):               true, // observed experiment Base ID spelling
 	paramAliasPayloadCaseKey("aitable +record-share-links", "table-id"):              true, // observed experiment Table ID spelling
+	paramAliasPayloadCaseKey("aitable +view-duplicate", "name"):                      true, // copied-view display-name recovery
 	paramAliasPayloadCaseKey("aitable +workflow-list", "max-results"):                true, // shortcut pagination-size alias
 	paramAliasPayloadCaseKey("aitable attachment upload", "file-size"):               true, // byte-size command override
 	paramAliasPayloadCaseKey("aitable base list", "next-cursor"):                     true, // cursor concept alias
 	paramAliasPayloadCaseKey("aitable base update", "description"):                   true, // plain description alias on a write command
+	paramAliasPayloadCaseKey("aitable field update", "field-name"):                   true, // raw field display-name recovery
 	paramAliasPayloadCaseKey("aitable field search-options", "query"):                true, // search keyword concept alias
+	paramAliasPayloadCaseKey("aitable view create", "type"):                          true, // raw view-type recovery preserves enum payload
+	paramAliasPayloadCaseKey("aitable view duplicate", "name"):                       true, // raw copied-view display-name recovery
 	paramAliasPayloadCaseKey("aitable workflow get", "flow-id"):                      true, // workflow ID concept alias
 	paramAliasPayloadCaseKey("aitable workflow history", "base-token"):               true, // Base ID concept alias
 	paramAliasPayloadCaseKey("aitable workflow history", "end-time"):                 true, // upper time-bound override

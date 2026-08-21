@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -100,7 +102,11 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 			apperrors.WithExecutionStarted(false),
 		)
 	}
-	cells[keyFieldID] = keyValue
+	expectedCells := make(map[string]any, len(cells)+1)
+	for fieldID, value := range cells {
+		expectedCells[fieldID] = value
+	}
+	expectedCells[keyFieldID] = keyValue
 
 	baseID, tableID := rt.Str("base-id"), rt.Str("table-id")
 	preflight, err := queryUniqueRecordByKey(rt, baseID, tableID, keyFieldID, keyValue)
@@ -112,6 +118,10 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 	if preflight != nil {
 		action, tool = "update", "update_records"
 		writeRecord["recordId"] = recordID(preflight)
+	} else {
+		// A create must persist the unique key. An update sends only the cells
+		// the caller asked to modify; the key is selection state, not a patch.
+		writeRecord["cells"] = expectedCells
 	}
 	params := map[string]any{
 		"baseId": baseID, "tableId": tableID,
@@ -140,7 +150,7 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 
 	verified, verifyErr := queryUniqueRecordByKey(rt, baseID, tableID, keyFieldID, keyValue)
 	if verifyErr == nil && verified != nil {
-		verifyErr = verifyRecordCells(verified, cells)
+		verifyErr = verifyRecordCells(verified, expectedCells)
 	}
 	if verifyErr != nil || verified == nil {
 		result.Status = "unknown"
@@ -162,6 +172,10 @@ func executeRecordUpsertByKey(rt *shortcut.RuntimeContext) error {
 			"nextStep":   "query the unique key again and verify its cells before retrying",
 			"keyFieldId": keyFieldID,
 			"keyValue":   keyValue,
+		}
+		filters := map[string]any{"operator": "and", "operands": []any{map[string]any{"operator": "eq", "operands": []any{keyFieldID, keyValue}}}}
+		if encoded, marshalErr := json.Marshal(filters); marshalErr == nil {
+			result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+record-query", "--base-id", baseID, "--table-id", tableID, "--filters", string(encoded), "--format", "json")
 		}
 		return compositeError(result, verifyErr, retryable)
 	}
@@ -284,23 +298,30 @@ func findRecords(data map[string]any) ([]map[string]any, bool) {
 }
 
 func responseHasMore(data map[string]any) bool {
+	value, _ := responseHasMoreKnown(data)
+	return value
+}
+
+func responseHasMoreKnown(data map[string]any) (bool, bool) {
 	if data == nil {
-		return false
+		return false, false
 	}
-	if value, ok := data["hasMore"].(bool); ok && value {
-		return true
+	if value, ok := data["hasMore"].(bool); ok {
+		return value, true
+	}
+	for _, key := range []string{"data", "result", "pagination", "page"} {
+		if nested, ok := data[key].(map[string]any); ok {
+			if value, known := responseHasMoreKnown(nested); known {
+				return value, true
+			}
+		}
 	}
 	for _, key := range []string{"nextCursor", "cursor"} {
 		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
-			return true
+			return true, true
 		}
 	}
-	for _, key := range []string{"data", "result", "pagination", "page"} {
-		if nested, ok := data[key].(map[string]any); ok && responseHasMore(nested) {
-			return true
-		}
-	}
-	return false
+	return false, false
 }
 
 func recordID(record map[string]any) string {
@@ -319,11 +340,152 @@ func verifyRecordCells(record map[string]any, expected map[string]any) error {
 	}
 	for fieldID, want := range expected {
 		got, exists := actual[fieldID]
-		if !exists || !reflect.DeepEqual(got, want) {
+		if !exists || !recordCellEquivalent(got, want) {
 			return fmt.Errorf("read-back mismatch for field %s: got %#v, want %#v", fieldID, got, want)
 		}
 	}
 	return nil
+}
+
+type recordSelectionOption struct{ aliases map[string]struct{} }
+
+// recordCellEquivalent preserves exact comparison for arbitrary payloads but
+// treats select values according to their business meaning. The write API
+// accepts option names while read-back commonly expands them to {id,name}
+// objects; multiple-select order is not semantically significant.
+func recordCellEquivalent(actual, expected any) bool {
+	if reflect.DeepEqual(actual, expected) {
+		return true
+	}
+	if recordNumericEquivalent(actual, expected) {
+		return true
+	}
+	actualSelection, actualMultiple, actualOK := normalizeRecordSelection(actual)
+	expectedSelection, expectedMultiple, expectedOK := normalizeRecordSelection(expected)
+	if !actualOK || !expectedOK || actualMultiple != expectedMultiple || len(actualSelection) != len(expectedSelection) {
+		return false
+	}
+	matched := make([]bool, len(expectedSelection))
+	for _, got := range actualSelection {
+		found := false
+		for index, want := range expectedSelection {
+			if !matched[index] && recordSelectionAliasesOverlap(got, want) {
+				matched[index] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func recordNumericEquivalent(actual, expected any) bool {
+	// Two strings remain text. Decimal-string equivalence is enabled only when
+	// the other side is a JSON numeric value, as happens for number/currency
+	// write versus read-back representations.
+	if _, actualString := actual.(string); actualString {
+		if _, expectedString := expected.(string); expectedString {
+			return false
+		}
+	}
+	actualNumber, actualOK := recordNumber(actual)
+	expectedNumber, expectedOK := recordNumber(expected)
+	return actualOK && expectedOK && actualNumber.Cmp(expectedNumber) == 0
+}
+
+func recordNumber(value any) (*big.Rat, bool) {
+	var raw string
+	switch number := value.(type) {
+	case json.Number:
+		raw = number.String()
+	case float64:
+		raw = strconv.FormatFloat(number, 'g', -1, 64)
+	case float32:
+		raw = strconv.FormatFloat(float64(number), 'g', -1, 32)
+	case int:
+		raw = strconv.Itoa(number)
+	case int64:
+		raw = strconv.FormatInt(number, 10)
+	case int32:
+		raw = strconv.FormatInt(int64(number), 10)
+	case uint:
+		raw = strconv.FormatUint(uint64(number), 10)
+	case uint64:
+		raw = strconv.FormatUint(number, 10)
+	case uint32:
+		raw = strconv.FormatUint(uint64(number), 10)
+	case string:
+		raw = strings.TrimSpace(number)
+	default:
+		return nil, false
+	}
+	parsed, ok := new(big.Rat).SetString(raw)
+	return parsed, ok
+}
+
+func normalizeRecordSelection(value any) ([]recordSelectionOption, bool, bool) {
+	if option, ok := recordSelectionValue(value); ok {
+		return []recordSelectionOption{option}, false, true
+	}
+
+	var values []any
+	switch typed := value.(type) {
+	case []any:
+		values = typed
+	case []string:
+		values = make([]any, 0, len(typed))
+		for _, item := range typed {
+			values = append(values, item)
+		}
+	default:
+		return nil, false, false
+	}
+	options := make([]recordSelectionOption, 0, len(values))
+	for _, item := range values {
+		option, ok := recordSelectionValue(item)
+		if !ok {
+			return nil, false, false
+		}
+		options = append(options, option)
+	}
+	return options, true, true
+}
+
+func recordSelectionValue(value any) (recordSelectionOption, bool) {
+	if token, ok := value.(string); ok {
+		token = strings.TrimSpace(token)
+		return recordSelectionOption{aliases: map[string]struct{}{token: {}}}, token != ""
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return recordSelectionOption{}, false
+	}
+	for key := range object {
+		switch key {
+		case "id", "optionId", "option_id", "name":
+		default:
+			return recordSelectionOption{}, false
+		}
+	}
+	aliases := map[string]struct{}{}
+	for _, key := range []string{"id", "optionId", "option_id", "name"} {
+		if token, ok := object[key].(string); ok && strings.TrimSpace(token) != "" {
+			aliases[strings.TrimSpace(token)] = struct{}{}
+		}
+	}
+	return recordSelectionOption{aliases: aliases}, len(aliases) > 0
+}
+
+func recordSelectionAliasesOverlap(left, right recordSelectionOption) bool {
+	for alias := range left.aliases {
+		if _, ok := right.aliases[alias]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func sortedMapKeys(values map[string]any) []string {

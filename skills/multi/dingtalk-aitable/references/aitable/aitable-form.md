@@ -64,7 +64,7 @@ dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW
 | `form get` | 按 viewId 取单个表单 | `--base-id` `--table-id` `--view-id` | 内部基于 list_form_views 过滤 |
 | `form create` | 创建表单视图 | `--base-id` `--table-id` `--name` | viewType=FormDesigner |
 | `form update` | 更新表单 | `--base-id` `--table-id` `--view-id` | `--title`/`--name`（等价）和 `--description` 至少传一项；同时传 title/name 时 title 优先 |
-| `form delete` | 删除表单 | `--base-id` `--table-id` `--view-id` `--yes` | 不可逆 |
+| `form delete` | 删除表单 | `--base-id` `--table-id` `--view-id` | 不可逆；由 Runtime 请求确认 |
 
 ## form field 子命令
 
@@ -81,7 +81,7 @@ dws aitable +form-share-get --base-id BASE_ID --table-id TABLE_ID --view-id VIEW
 | 命令 | 用途 | 必填参数 | 说明 |
 |------|------|----------|------|
 | `form questions create` | 添加题目 | `--base-id` `--table-id` + (`--fields` 或 `--name --type`) | 入参与 `field create` 完全一致 |
-| `form questions delete` | 删除题目 | `--base-id` `--table-id` `--field-id` `--yes` | 入参与 `field delete` 完全一致；不可逆；批量需多次调用 |
+| `form questions delete` | 删除题目 | `--base-id` `--table-id` `--field-id` | 入参与 `field delete` 完全一致；不可逆；由 Runtime 请求确认 |
 
 ## form share 子命令
 

@@ -149,7 +149,8 @@ func executeRecordDeleteBatches(rt *shortcut.RuntimeContext) error {
 				result.Status = "partial_success"
 			}
 			result.Verification = map[string]any{"status": "failed", "error": verifyErr.Error(), "batchOffset": offset}
-			result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize}
+			result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize, "recordIds": batch}
+			result.NextCommand = recordQueryRecoveryCommand(baseID, tableID, batch)
 			if writeErr != nil {
 				result.Warnings = append(result.Warnings, "write response error: "+writeErr.Error())
 			}
@@ -287,7 +288,11 @@ func executeRecordBatches(
 				result.Status = "partial_success"
 			}
 			result.Verification = map[string]any{"status": "failed", "error": verifyErr.Error(), "batchOffset": offset}
-			result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize}
+			batchIDs := recordIDs(batch)
+			result.Checkpoint = map[string]any{"nextOffset": offset, "batchSize": recordBatchSize, "recordIds": batchIDs}
+			if len(batchIDs) > 0 {
+				result.NextCommand = recordQueryRecoveryCommand(baseID, tableID, batchIDs)
+			}
 			if writeErr != nil {
 				result.Warnings = append(result.Warnings, "write response error: "+writeErr.Error())
 			}
@@ -314,6 +319,10 @@ func executeRecordBatches(
 	result.Verification = map[string]any{"status": "verified", "verifiedCount": len(records)}
 	result.Result = map[string]any{"processedCount": len(records), "batchCount": len(result.CompletedSteps)}
 	return rt.Output(result)
+}
+
+func recordQueryRecoveryCommand(baseID, tableID string, recordIDs []string) string {
+	return aitableRecoveryCommand("dws", "aitable", "+record-query", "--base-id", baseID, "--table-id", tableID, "--record-ids", strings.Join(recordIDs, ","), "--format", "json")
 }
 
 func verifyUpdateBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batch []map[string]any, _ map[string]any) (map[string]any, error) {
