@@ -19,19 +19,21 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 type Invocation struct {
-	Kind             string         `json:"kind"`
-	Stage            string         `json:"stage"`
-	Implemented      bool           `json:"implemented"`
-	DryRun           bool           `json:"dry_run,omitempty"`
-	CanonicalProduct string         `json:"canonical_product"`
-	Tool             string         `json:"tool"`
-	CanonicalPath    string         `json:"canonical_path"`
-	LegacyPath       string         `json:"legacy_path,omitempty"`
-	Params           map[string]any `json:"params"`
+	Kind             string                  `json:"kind"`
+	Stage            string                  `json:"stage"`
+	Implemented      bool                    `json:"implemented"`
+	DryRun           bool                    `json:"dry_run,omitempty"`
+	CanonicalProduct string                  `json:"canonical_product"`
+	Tool             string                  `json:"tool"`
+	CanonicalPath    string                  `json:"canonical_path"`
+	LegacyPath       string                  `json:"legacy_path,omitempty"`
+	Params           map[string]any          `json:"params"`
+	Retry            *contract.RetryDecision `json:"retry,omitempty"`
 }
 
 type Result struct {
@@ -47,13 +49,17 @@ type EchoRunner struct{}
 
 func (EchoRunner) Run(_ context.Context, invocation Invocation) (Result, error) {
 	if invocation.DryRun {
+		response := map[string]any{
+			"dry_run": true,
+			"request": ToolCallRequest(invocation.Tool, invocation.Params),
+			"note":    "execution skipped by --dry-run",
+		}
+		if invocation.Retry != nil {
+			response["retry"] = invocation.Retry
+		}
 		return Result{
 			Invocation: invocation,
-			Response: map[string]any{
-				"dry_run": true,
-				"request": ToolCallRequest(invocation.Tool, invocation.Params),
-				"note":    "execution skipped by --dry-run",
-			},
+			Response:   response,
 		}, nil
 	}
 	return Result{Invocation: invocation}, nil

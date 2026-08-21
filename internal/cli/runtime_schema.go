@@ -1057,6 +1057,7 @@ var schemaCompactPayloadKeys = map[string]bool{
 	"canonical_path": true, "cli_path": true,
 	"agent_summary": true, "description": true,
 	"effect": true, "risk": true, "confirmation": true, "idempotency": true,
+	"retry_policy":   true,
 	"interface_mode": true, "availability": true, "interface_reason": true,
 	"parameters": true, "constraints": true, "positionals": true, "dry_run": true,
 	"result": true, "pagination": true,

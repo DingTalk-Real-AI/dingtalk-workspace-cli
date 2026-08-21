@@ -15,6 +15,7 @@ package cli
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -79,7 +80,7 @@ func TestSafetyForCLIPathTrimsWhitespace(t *testing.T) {
 	if !ok2 {
 		t.Fatal("trimmed lookup failed; whitespace not trimmed")
 	}
-	if s1 != s2 {
+	if !reflect.DeepEqual(s1, s2) {
 		t.Errorf("whitespace-trimmed result differs: %+v vs %+v", s1, s2)
 	}
 }
@@ -161,7 +162,7 @@ func TestResolveMetaAliasLookup(t *testing.T) {
 	if aliased.Identity.CLIPath != primary.Identity.CLIPath || aliased.Identity.Canonical != primary.Identity.Canonical {
 		t.Fatalf("alias metadata = %+v, want same identity as primary %+v", aliased.Identity, primary.Identity)
 	}
-	if aliased.Safety != primary.Safety {
+	if !reflect.DeepEqual(aliased.Safety, primary.Safety) {
 		t.Fatalf("alias safety = %+v, want %+v", aliased.Safety, primary.Safety)
 	}
 }

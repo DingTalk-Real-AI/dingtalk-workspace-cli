@@ -67,6 +67,7 @@ type schemaToolWire struct {
 	DryRun              *contract.DryRunSpec                `json:"dry_run"`
 	Result              *contract.ResultSpec                `json:"result"`
 	Pagination          *contract.PaginationSpec            `json:"pagination"`
+	RetryPolicy         *contract.RetryPolicySpec           `json:"retry_policy"`
 	Effect              string                              `json:"effect"`
 	EffectSource        string                              `json:"effect_source"`
 	Risk                string                              `json:"risk"`
@@ -271,6 +272,7 @@ func schemaToolSpecFromWire(wire schemaToolWire) (ToolSpec, error) {
 		DryRun:         wire.DryRun,
 		Result:         wire.Result,
 		Pagination:     wire.Pagination,
+		RetryPolicy:    wire.RetryPolicy,
 		Safety: contract.SafetySpec{
 			Effect:       wire.Effect,
 			EffectSource: wire.EffectSource,

@@ -14,12 +14,50 @@
 package corecmd
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 )
+
+func TestCrossPlatformCoverageContractRetryPolicyFailsFast(t *testing.T) {
+	if (ContractDecl{RetryPolicy: &contract.RetryPolicySpec{}}).Empty() {
+		t.Fatal("RetryPolicy-only ContractDecl must not be empty")
+	}
+	assertPanic := func(name, want string, spec Spec) {
+		t.Helper()
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				recovered := recover()
+				if recovered == nil || !strings.Contains(fmt.Sprint(recovered), want) {
+					t.Fatalf("panic = %v, want %q", recovered, want)
+				}
+			}()
+			validateContractDecl(spec)
+		})
+	}
+	assertPanic("conditional without contract", "requires Contract.RetryPolicy", Spec{
+		Use: "send", Safety: contract.SafetySpec{Idempotency: "conditional"},
+	})
+	minimal := ContractDecl{Description: "description"}
+	assertPanic("conditional without policy", "requires Contract.RetryPolicy", Spec{
+		Use: "send", Safety: contract.SafetySpec{Idempotency: "conditional"}, Contract: minimal,
+	})
+	minimal.RetryPolicy = &contract.RetryPolicySpec{Mode: contract.RetryModeDeduplicationKey, KeyParameter: "uuid", SamePayloadRequired: true}
+	assertPanic("policy without explicit ParamDecl property", "requires Contract.Parameters with an explicit ParamDecl.Property", Spec{
+		Use: "send", Safety: contract.SafetySpec{Idempotency: "conditional"}, Contract: minimal,
+	})
+	minimal.Parameters = []contract.ParamDecl{{Name: "uuid", Property: "requestUuid"}}
+	assertPanic("policy without conditional", "requires Safety.Idempotency=conditional", Spec{
+		Use: "send", Safety: contract.SafetySpec{Idempotency: "unknown"}, Contract: minimal,
+	})
+	minimal.RetryPolicy.SamePayloadRequired = false
+	assertPanic("invalid policy", "invalid Contract.RetryPolicy", Spec{
+		Use: "send", Safety: contract.SafetySpec{Idempotency: "conditional"}, Contract: minimal,
+	})
+}
 
 func TestCrossPlatformCoverageNewCommandEmbedsFullContractDeclAsFinalSource(t *testing.T) {
 	cmd := New(Spec{
@@ -35,11 +73,12 @@ func TestCrossPlatformCoverageNewCommandEmbedsFullContractDeclAsFinalSource(t *t
 		},
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
-			Confirmation: "user_required", Idempotency: "retryable",
+			Confirmation: "user_required", Idempotency: "conditional",
 		},
 		Contract: ContractDecl{
 			Title:       "Create Title",
 			Description: "Create Desc",
+			Parameters:  []contract.ParamDecl{{Name: "mode", Property: "mode"}},
 			Positionals: []contract.RuntimeSchemaPositional{{Name: "id", Required: true, Index: 0}},
 			DryRun:      &contract.DryRunSpec{PreviewKind: "invocation", RemoteReads: true},
 			Result: &contract.ResultSpec{
@@ -47,6 +86,11 @@ func TestCrossPlatformCoverageNewCommandEmbedsFullContractDeclAsFinalSource(t *t
 				DataSchema: []byte(`{"type":"object"}`),
 			},
 			Pagination: &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "cursor"},
+			RetryPolicy: &contract.RetryPolicySpec{
+				Mode:                contract.RetryModeDeduplicationKey,
+				KeyParameter:        "mode",
+				SamePayloadRequired: true,
+			},
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
@@ -78,7 +122,7 @@ func TestCrossPlatformCoverageNewCommandEmbedsFullContractDeclAsFinalSource(t *t
 	if final.Title != "Create Title" || final.Description != "Create Desc" {
 		t.Fatalf("title/desc = %q %q (payload stores declared Contract text; Catalog may prefer Cobra Long)", final.Title, final.Description)
 	}
-	if final.Safety == nil || final.Safety.Confirmation != "user_required" || final.Safety.Idempotency != "retryable" {
+	if final.Safety == nil || final.Safety.Confirmation != "user_required" || final.Safety.Idempotency != "conditional" {
 		t.Fatalf("safety = %#v", final.Safety)
 	}
 	if final.DryRun == nil || final.DryRun.PreviewKind != "invocation" || !final.DryRun.RemoteReads {
@@ -89,6 +133,14 @@ func TestCrossPlatformCoverageNewCommandEmbedsFullContractDeclAsFinalSource(t *t
 	}
 	if final.Pagination == nil || final.Pagination.CursorParameter != "cursor" || final.Pagination.MetaPath != contract.PaginationMetaPath {
 		t.Fatalf("pagination = %#v", final.Pagination)
+	}
+	if final.RetryPolicy == nil || final.RetryPolicy.KeyParameter != "mode" || !final.RetryPolicy.SamePayloadRequired {
+		t.Fatalf("retry_policy = %#v", final.RetryPolicy)
+	}
+	final.RetryPolicy.KeyParameter = "mutated"
+	again, ok := contractfinal.RuntimeContractFinal(cmd)
+	if !ok || again.RetryPolicy == nil || again.RetryPolicy.KeyParameter != "mode" {
+		t.Fatalf("stored retry_policy was not defensively copied: %#v", again.RetryPolicy)
 	}
 	if final.Interface == nil || final.Interface.Mode != "mcp" || final.Interface.Ref == nil || final.Interface.Ref.RPCName != "create_thing" {
 		t.Fatalf("interface = %#v", final.Interface)

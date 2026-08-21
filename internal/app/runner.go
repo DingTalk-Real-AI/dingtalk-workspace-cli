@@ -30,6 +30,8 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/audit"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
@@ -139,23 +141,25 @@ func newCommandRunnerWithFlags(flags *GlobalFlags) executor.Runner {
 	transportClient := transport.NewClient(httpClient)
 	transportClient.FileLogger = FileLoggerInstance()
 	return &runtimeRunner{
-		transport:          transportClient,
-		globalFlags:        flags,
-		scanner:            newRuntimeContentScanner(),
-		enforceContentScan: runtimeFlagEnabled(os.Getenv(runtimeContentScanEnforceEnv), false),
-		includeScanReport:  runtimeFlagEnabled(os.Getenv(runtimeContentScanReportOutputEnv), false),
+		transport:            transportClient,
+		globalFlags:          flags,
+		resolveToolCallRetry: cli.ResolveToolCallRetry,
+		scanner:              newRuntimeContentScanner(),
+		enforceContentScan:   runtimeFlagEnabled(os.Getenv(runtimeContentScanEnforceEnv), false),
+		includeScanReport:    runtimeFlagEnabled(os.Getenv(runtimeContentScanReportOutputEnv), false),
 	}
 }
 
 type runtimeRunner struct {
-	transport          *transport.Client
-	globalFlags        *GlobalFlags
-	fallback           executor.Runner
-	scanner            safety.Scanner
-	enforceContentScan bool
-	includeScanReport  bool
-	auditSink          audit.Sink
-	agentMetadata      *agentMetadataSnapshot
+	transport            *transport.Client
+	globalFlags          *GlobalFlags
+	fallback             executor.Runner
+	scanner              safety.Scanner
+	enforceContentScan   bool
+	includeScanReport    bool
+	auditSink            audit.Sink
+	agentMetadata        *agentMetadataSnapshot
+	resolveToolCallRetry func(productID, rpcName string, args map[string]any) contract.RetryDecision
 }
 
 var (
@@ -174,6 +178,7 @@ var (
 )
 
 func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation) (executor.Result, error) {
+	r.resolveInvocationRetry(&invocation)
 	// Global dry-run is an execution barrier, not merely a transport option.
 	// Return a deterministic local preview before profile resolution, catalog
 	// discovery, Keychain/token prefetch, auth, stateful preflight or transport.
@@ -214,6 +219,14 @@ func (r *runtimeRunner) Run(ctx context.Context, invocation executor.Invocation)
 	}
 
 	return r.runSingle(ctx, invocation, true)
+}
+
+func (r *runtimeRunner) resolveInvocationRetry(invocation *executor.Invocation) {
+	if invocation == nil || invocation.Retry != nil || r == nil || r.resolveToolCallRetry == nil {
+		return
+	}
+	decision := r.resolveToolCallRetry(invocation.CanonicalProduct, invocation.Tool, invocation.Params)
+	invocation.Retry = &decision
 }
 
 // RunReadOnly executes one already-classified read lookup for a semantic
@@ -500,6 +513,7 @@ func endpointNotResolvedError(productID, toolName, detail string) error {
 func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, invocation executor.Invocation) (result executor.Result, retErr error) {
 	// Route stdio:// endpoints to the local StdioClient — no HTTP, no auth.
 	if IsStdioEndpoint(endpoint) {
+		defer func() { enforceInvocationRetrySafety(invocation, retErr) }()
 		return r.executeStdioInvocationAtEndpoint(ctx, endpoint, invocation)
 	}
 
@@ -542,6 +556,9 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			retErr == nil, time.Since(invokeStart), errCat, errReason)
 		emitAudit(auditSink, execID, invokeStart, invocation, endpoint, retErr, version)
 	}()
+	// Register this defer after the audit defer so the fail-closed safety value
+	// is what logging and audit observers see as well as what the caller gets.
+	defer func() { enforceInvocationRetrySafety(invocation, retErr) }()
 
 	// Check whether this product belongs to an HTTP plugin. Every accepted
 	// plugin has an ownership record; credentials within that record are
@@ -580,14 +597,18 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		if argsJSON, err := json.Marshal(invocation.Params); err == nil {
 			fmt.Fprintf(os.Stderr, "DRY-RUN Arguments: %s\n", argsJSON)
 		}
+		response := map[string]any{
+			"dry_run":  true,
+			"endpoint": transport.RedactURL(endpoint),
+			"request":  executor.ToolCallRequest(invocation.Tool, invocation.Params),
+			"note":     "execution skipped by --dry-run",
+		}
+		if invocation.Retry != nil {
+			response["retry"] = invocation.Retry
+		}
 		return executor.Result{
 			Invocation: invocation,
-			Response: map[string]any{
-				"dry_run":  true,
-				"endpoint": transport.RedactURL(endpoint),
-				"request":  executor.ToolCallRequest(invocation.Tool, invocation.Params),
-				"note":     "execution skipped by --dry-run",
-			},
+			Response:   response,
 		}, nil
 	}
 
@@ -636,6 +657,9 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		} else {
 			tc = r.transport.WithAuth(authToken, resolveMCPRequestHeadersForInvocation(invocation))
 		}
+	}
+	if invocation.Retry == nil || !invocation.Retry.SafeToRetry {
+		tc.MaxRetries = 0
 	}
 
 	callCtx := ctx
@@ -789,6 +813,24 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 		response["safety"] = scanReport
 	}
 	return executor.Result{Invocation: invocation, Response: response}, nil
+}
+
+// enforceInvocationRetrySafety intersects server/API retry hints with the
+// invocation's reviewed idempotency decision. Auth and PAT recovery have
+// independent one-shot retry protocols and are deliberately left untouched.
+func enforceInvocationRetrySafety(invocation executor.Invocation, err error) {
+	if invocation.Retry != nil && invocation.Retry.SafeToRetry {
+		return
+	}
+	var typed *apperrors.Error
+	if errors.As(err, &typed) && typed.Category == apperrors.CategoryAPI {
+		typed.Retryable = false
+		typed.RetryableSet = true
+		// Server backoff hints describe transience, not replay safety. Keeping
+		// them next to retryable=false invites an Agent to bypass the contract.
+		typed.RetryAfterSeconds = nil
+		typed.NextRetryAt = nil
+	}
 }
 
 func (r *runtimeRunner) executeStdioInvocationAtEndpoint(

@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
@@ -205,10 +206,16 @@ func TestCrossPlatformCoverageExecuteInvocationClassifiesObservedMCPMetadataFail
 		transport:   client,
 		globalFlags: &GlobalFlags{Token: "local-test-token"},
 	}
+	retry := contract.RetryDecision{
+		EffectiveIdempotency: "idempotent",
+		SafeToRetry:          true,
+		Reason:               "static_idempotent",
+	}
 	_, err := runner.executeInvocation(context.Background(), server.URL, executor.Invocation{
 		CanonicalProduct: "im",
 		Tool:             "list_conversations",
 		Params:           map[string]any{"pageSize": 100},
+		Retry:            &retry,
 	})
 	var typed *apperrors.Error
 	if !errors.As(err, &typed) {

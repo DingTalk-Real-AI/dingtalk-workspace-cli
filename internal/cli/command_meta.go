@@ -28,6 +28,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // CommandMeta is the complete runtime metadata view for a single command.
@@ -56,8 +58,9 @@ type CommandSelection struct {
 }
 
 var (
-	metaByCLIPathOnce sync.Once
-	metaByCLIPath     map[string]CommandMeta
+	metaByCLIPathOnce        sync.Once
+	metaByCLIPath            map[string]CommandMeta
+	toolCallRetryByInterface map[InterfaceRefKey]toolCallRetryResolution
 )
 
 // Counter names retain "MetaIndex" for RuntimeSchemaMetadataLoadCounts
@@ -75,10 +78,12 @@ func installDeliveryCommandMeta(loaded loadedSchemaCatalog, err error) {
 	if err != nil {
 		runtimeDeliverySchemaMetaIndexErr = err
 		metaByCLIPath = nil
+		toolCallRetryByInterface = nil
 		metaByCLIPathOnce.Do(func() {})
 		return
 	}
 	metaByCLIPath = buildMetaByCLIPath(loaded)
+	toolCallRetryByInterface = buildToolCallRetryLookup(loaded)
 	runtimeDeliverySchemaMetaIndexErr = nil
 	metaByCLIPathOnce.Do(func() {})
 }
@@ -124,6 +129,7 @@ func buildMetaByCLIPathFromRegistry(registry SchemaRegistry) map[string]CommandM
 					Risk:         tool.Safety.Risk,
 					Confirmation: tool.Safety.Confirmation,
 					Idempotency:  tool.Safety.Idempotency,
+					RetryPolicy:  cloneRetryPolicy(tool.RetryPolicy),
 				},
 				Selection: CommandSelection{
 					AgentSummary: tool.Selection.AgentSummary,
@@ -163,6 +169,7 @@ func buildMetaByCLIPathFromSnapshotTools(tools map[string]map[string]any) map[st
 				Risk:         schemaString(tool["risk"]),
 				Confirmation: schemaString(tool["confirmation"]),
 				Idempotency:  schemaString(tool["idempotency"]),
+				RetryPolicy:  retryPolicyFromSchemaValue(tool["retry_policy"]),
 			},
 			Selection: CommandSelection{
 				AgentSummary: schemaString(tool["agent_summary"]),
@@ -211,4 +218,14 @@ func ResolveMeta(cliPath string) (CommandMeta, bool) {
 	panicIfMetaIndexUnusable(runtimeDeliverySchemaMetaIndexErr)
 	m, ok := metaByCLIPath[cliPath]
 	return m, ok
+}
+
+// ResolveInvocationSafety returns the effective retry decision for one CLI
+// invocation. The arguments map is keyed by declared CLI parameter names.
+func ResolveInvocationSafety(cliPath string, arguments map[string]any) (contract.RetryDecision, bool) {
+	meta, ok := ResolveMeta(cliPath)
+	if !ok {
+		return contract.RetryDecision{}, false
+	}
+	return meta.Safety.Resolve(arguments), true
 }

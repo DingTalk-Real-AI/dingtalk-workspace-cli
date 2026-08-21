@@ -77,6 +77,7 @@ func resetDeliverySchemaCatalogState() {
 func resetSchemaDeliveryState() {
 	metaByCLIPathOnce = sync.Once{}
 	metaByCLIPath = nil
+	toolCallRetryByInterface = nil
 	runtimeDeliverySchemaMetaIndexErr = nil
 	runtimeDeliverySchemaMetaIndexLazyCount.Store(0)
 	resetDeliverySchemaCatalogState()

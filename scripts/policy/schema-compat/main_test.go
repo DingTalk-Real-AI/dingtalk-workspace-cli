@@ -177,6 +177,25 @@ func TestNormalizeCompleteSchemaPayload(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageNormalizeRetryPolicyCanonicalJSON(t *testing.T) {
+	body := strings.Replace(
+		completeSchemaJSON,
+		`"idempotency":"unknown",`,
+		`"idempotency":"conditional","retry_policy":{"same_payload_required":true,"mode":"deduplication_key","key_parameter":"uuid"},`,
+		1,
+	)
+	path := filepath.Join(t.TempDir(), "schema.json")
+	writeTestFile(t, path, body)
+
+	contract, err := normalizeRawFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := contract.Products["doc"].Tools["doc.create"].RetryPolicy; got != reviewedUUIDRetryPolicy {
+		t.Fatalf("retry_policy = %s, want canonical %s", got, reviewedUUIDRetryPolicy)
+	}
+}
+
 func TestSchemaCompatibilityIgnoresPositionalDescription(t *testing.T) {
 	directory := t.TempDir()
 	baselinePath := filepath.Join(directory, "baseline.json")
@@ -410,6 +429,208 @@ func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 			failures := strings.Join(checkCompatibility(baselineContract(), current), "\n")
 			if !strings.Contains(failures, test.want) {
 				t.Fatalf("failures=%q, want %q", failures, test.want)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageReviewedIdempotencyTransitionTableIsExact(t *testing.T) {
+	if err := validateReviewedIdempotencyTransitions(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(reviewedIdempotencyTransitions), 57; got != want {
+		t.Fatalf("reviewed idempotency transitions = %d, want %d", got, want)
+	}
+
+	conditional := map[string]bool{}
+	nonIdempotent := 0
+	for key, transition := range reviewedIdempotencyTransitions {
+		switch key.To {
+		case "conditional":
+			conditional[key.ToolPath] = true
+			if transition.RetryPolicy != reviewedUUIDRetryPolicy {
+				t.Errorf("%s retry_policy = %s", key.ToolPath, transition.RetryPolicy)
+			}
+		case "non_idempotent":
+			nonIdempotent++
+		}
+	}
+	wantConditional := map[string]bool{
+		"chat/chat.combine_forward_messages": true,
+		"chat/chat.forward_message":          true,
+		"chat/chat.reply_personal_message":   true,
+		"chat/chat.send_personal_message":    true,
+		"chat/chat.share_group_invite_url":   true,
+	}
+	if !reflect.DeepEqual(conditional, wantConditional) {
+		t.Fatalf("conditional transitions = %#v, want %#v", conditional, wantConditional)
+	}
+	if nonIdempotent != 52 {
+		t.Fatalf("non_idempotent transitions = %d, want 52", nonIdempotent)
+	}
+}
+
+func TestCrossPlatformCoverageReviewedIdempotencyTransitionTableRejectsInvalidEntries(t *testing.T) {
+	original := reviewedIdempotencyTransitions
+	defer func() { reviewedIdempotencyTransitions = original }()
+
+	tests := []struct {
+		name       string
+		key        idempotencyTransitionKey
+		transition reviewedIdempotencyTransitionSpec
+		want       string
+	}{
+		{
+			name:       "invalid tool path",
+			key:        idempotencyTransitionKey{From: "unknown", To: "non_idempotent"},
+			transition: reviewedIdempotencyTransitionSpec{Reason: "reviewed"},
+			want:       "invalid tool path",
+		},
+		{
+			name:       "invalid from",
+			key:        idempotencyTransitionKey{ToolPath: "chat/chat.send", From: "idempotent", To: "non_idempotent"},
+			transition: reviewedIdempotencyTransitionSpec{Reason: "reviewed"},
+			want:       "unsupported from",
+		},
+		{
+			name:       "missing reason",
+			key:        idempotencyTransitionKey{ToolPath: "chat/chat.send", From: "unknown", To: "non_idempotent"},
+			transition: reviewedIdempotencyTransitionSpec{},
+			want:       "has no review reason",
+		},
+		{
+			name:       "invalid conditional policy",
+			key:        idempotencyTransitionKey{ToolPath: "chat/chat.send", From: "unknown", To: "conditional"},
+			transition: reviewedIdempotencyTransitionSpec{RetryPolicy: `{`, Reason: "reviewed"},
+			want:       "non-canonical retry policy",
+		},
+		{
+			name:       "non idempotent policy",
+			key:        idempotencyTransitionKey{ToolPath: "chat/chat.send", From: "unknown", To: "non_idempotent"},
+			transition: reviewedIdempotencyTransitionSpec{RetryPolicy: reviewedUUIDRetryPolicy, Reason: "reviewed"},
+			want:       "non_idempotent transition has retry policy",
+		},
+		{
+			name:       "invalid to",
+			key:        idempotencyTransitionKey{ToolPath: "chat/chat.send", From: "unknown", To: "idempotent"},
+			transition: reviewedIdempotencyTransitionSpec{Reason: "reviewed"},
+			want:       "unsupported to",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			reviewedIdempotencyTransitions = map[idempotencyTransitionKey]reviewedIdempotencyTransitionSpec{
+				test.key: test.transition,
+			}
+			if err := validateReviewedIdempotencyTransitions(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("validateReviewedIdempotencyTransitions() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+
+	reviewedIdempotencyTransitions = map[idempotencyTransitionKey]reviewedIdempotencyTransitionSpec{
+		{From: "unknown", To: "non_idempotent"}: {Reason: "reviewed"},
+	}
+	failures := checkCompatibility(baselineContract(), baselineContract())
+	if len(failures) != 1 || !strings.Contains(failures[0], "invalid reviewed idempotency transition table") {
+		t.Fatalf("checkCompatibility() failures = %v", failures)
+	}
+}
+
+func TestCrossPlatformCoverageReviewedIdempotencyTransitionsFailClosed(t *testing.T) {
+	oldTool := toolSchema{Idempotency: "unknown", Risk: "medium"}
+	conditional := oldTool
+	conditional.Idempotency = "conditional"
+	conditional.RetryPolicy = reviewedUUIDRetryPolicy
+	nonIdempotent := oldTool
+	nonIdempotent.Idempotency = "non_idempotent"
+
+	if failures := checkToolCompatibility("chat/chat.send_personal_message", oldTool, conditional); len(failures) != 0 {
+		t.Fatalf("exact conditional transition failed: %v", failures)
+	}
+	if failures := checkToolCompatibility("chat/chat.dismiss_group", oldTool, nonIdempotent); len(failures) != 0 {
+		t.Fatalf("exact non_idempotent transition failed: %v", failures)
+	}
+	baseline := schemaContract{Version: schemaContractVersion, Products: map[string]productSchema{
+		"chat": {Tools: map[string]toolSchema{"chat.send_personal_message": oldTool}},
+	}}
+	current := cloneContract(baseline)
+	current.Products["chat"].Tools["chat.send_personal_message"] = conditional
+	if failures := checkCompatibility(baseline, current); len(failures) != 0 {
+		t.Fatalf("exact transition through final compatibility seam failed: %v", failures)
+	}
+
+	tests := []struct {
+		name     string
+		toolPath string
+		oldTool  toolSchema
+		newTool  toolSchema
+		want     string
+	}{
+		{
+			name:     "unlisted tool",
+			toolPath: "chat/chat.unreviewed_write",
+			oldTool:  oldTool,
+			newTool:  conditional,
+			want:     "changed idempotency",
+		},
+		{
+			name:     "old unconditional idempotent proposal stays blocked",
+			toolPath: "chat/chat.send_personal_message",
+			oldTool:  oldTool,
+			newTool:  toolSchema{Idempotency: "idempotent", Risk: "medium"},
+			want:     "changed idempotency",
+		},
+		{
+			name:     "wrong policy",
+			toolPath: "chat/chat.send_personal_message",
+			oldTool:  oldTool,
+			newTool:  toolSchema{Idempotency: "conditional", RetryPolicy: `{"key_parameter":"request_id","mode":"deduplication_key","same_payload_required":true}`, Risk: "medium"},
+			want:     "changed retry_policy",
+		},
+		{
+			name:     "missing policy",
+			toolPath: "chat/chat.send_personal_message",
+			oldTool:  oldTool,
+			newTool:  toolSchema{Idempotency: "conditional", Risk: "medium"},
+			want:     "changed idempotency",
+		},
+		{
+			name:     "reverse direction",
+			toolPath: "chat/chat.send_personal_message",
+			oldTool:  conditional,
+			newTool:  oldTool,
+			want:     "changed idempotency",
+		},
+		{
+			name:     "non idempotent cannot carry policy",
+			toolPath: "chat/chat.dismiss_group",
+			oldTool:  oldTool,
+			newTool:  toolSchema{Idempotency: "non_idempotent", RetryPolicy: reviewedUUIDRetryPolicy, Risk: "medium"},
+			want:     "changed retry_policy",
+		},
+		{
+			name:     "conditional policy drift after publication",
+			toolPath: "chat/chat.send_personal_message",
+			oldTool:  conditional,
+			newTool:  toolSchema{Idempotency: "conditional", RetryPolicy: `{"key_parameter":"uuid","mode":"deduplication_key","same_payload_required":false}`, Risk: "medium"},
+			want:     "changed retry_policy",
+		},
+		{
+			name:     "unrelated drift cannot hitchhike",
+			toolPath: "chat/chat.send_personal_message",
+			oldTool:  oldTool,
+			newTool:  toolSchema{Idempotency: "conditional", RetryPolicy: reviewedUUIDRetryPolicy, Risk: "high"},
+			want:     "changed risk",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			failures := strings.Join(checkToolCompatibility(test.toolPath, test.oldTool, test.newTool), "\n")
+			if !strings.Contains(failures, test.want) {
+				t.Fatalf("failures = %q, want %q", failures, test.want)
 			}
 		})
 	}
@@ -2164,6 +2385,9 @@ func writeRawSchemaContractFile(t *testing.T, path string, contract schemaContra
 			}
 			if tool.DryRun != "" {
 				rawTool["dry_run"] = json.RawMessage(tool.DryRun)
+			}
+			if tool.RetryPolicy != "" {
+				rawTool["retry_policy"] = json.RawMessage(tool.RetryPolicy)
 			}
 			tools = append(tools, rawTool)
 		}

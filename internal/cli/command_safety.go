@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +31,18 @@ type CommandSafety struct {
 	Effect       string // read / write / destructive
 	Risk         string // low / medium / high
 	Confirmation string // not_required / user_required
-	Idempotency  string // idempotent / non_idempotent
+	Idempotency  string // idempotent / non_idempotent / unknown / conditional
+	RetryPolicy  *contract.RetryPolicySpec
+}
+
+// Resolve derives invocation-scoped retry safety from reviewed metadata and
+// actual CLI arguments. It never changes the static Schema contract.
+func (s CommandSafety) Resolve(arguments map[string]any) contract.RetryDecision {
+	key := ""
+	if s.RetryPolicy != nil {
+		key = s.RetryPolicy.KeyParameter
+	}
+	return contract.ResolveRetryDecision(s.Idempotency, s.RetryPolicy, arguments, key)
 }
 
 // ShouldRender returns true when the safety metadata warrants a visible
