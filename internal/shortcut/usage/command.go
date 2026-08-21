@@ -56,7 +56,7 @@ func newListCommand() *cobra.Command {
 				if svc != "" && s.Service != svc {
 					continue
 				}
-				if s.Hidden && !includeHidden {
+				if (s.Hidden || s.CompatibilityVisible) && !includeHidden {
 					continue
 				}
 				rows = append(rows, newShortcutListRow(s))
@@ -75,23 +75,24 @@ func newListCommand() *cobra.Command {
 }
 
 type shortcutListRow struct {
-	Service       string                `json:"service"`
-	Command       string                `json:"command"`
-	CLIPath       string                `json:"cli_path"`
-	Product       string                `json:"product"`
-	Risk          string                `json:"risk"`
-	Confirmation  string                `json:"confirmation"`
-	Description   string                `json:"description"`
-	Intent        string                `json:"intent,omitempty"`
-	Flags         []shortcut.Flag       `json:"flags"`
-	Constraints   []shortcut.Constraint `json:"constraints"`
-	Examples      []string              `json:"examples"`
-	Public        bool                  `json:"public"`
-	Disposition   string                `json:"disposition,omitempty"`
-	SemanticDelta string                `json:"semantic_delta,omitempty"`
-	Availability  string                `json:"availability,omitempty"`
-	Primary       string                `json:"primary,omitempty"`
-	Reviewed      bool                  `json:"reviewed"`
+	Service              string                `json:"service"`
+	Command              string                `json:"command"`
+	CLIPath              string                `json:"cli_path"`
+	Product              string                `json:"product"`
+	Risk                 string                `json:"risk"`
+	Confirmation         string                `json:"confirmation"`
+	Description          string                `json:"description"`
+	Intent               string                `json:"intent,omitempty"`
+	Flags                []shortcut.Flag       `json:"flags"`
+	Constraints          []shortcut.Constraint `json:"constraints"`
+	Examples             []string              `json:"examples"`
+	Public               bool                  `json:"public"`
+	Disposition          string                `json:"disposition,omitempty"`
+	SemanticDelta        string                `json:"semantic_delta,omitempty"`
+	Availability         string                `json:"availability,omitempty"`
+	Primary              string                `json:"primary,omitempty"`
+	Reviewed             bool                  `json:"reviewed"`
+	CompatibilityVisible bool                  `json:"compatibility_visible,omitempty"`
 }
 
 func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {
@@ -120,23 +121,24 @@ func newShortcutListRow(s shortcut.Shortcut) shortcutListRow {
 	constraints := append([]shortcut.Constraint{}, s.Constraints...)
 	examples := append([]string{}, s.Tips...)
 	return shortcutListRow{
-		Service:       s.Service,
-		Command:       s.Command,
-		CLIPath:       s.Service + " " + s.Command,
-		Product:       product,
-		Risk:          risk,
-		Confirmation:  confirmation,
-		Description:   s.Description,
-		Intent:        s.Intent,
-		Flags:         flags,
-		Constraints:   constraints,
-		Examples:      examples,
-		Public:        !s.Hidden,
-		Disposition:   string(s.Disposition),
-		SemanticDelta: s.SemanticDelta,
-		Availability:  string(s.Availability),
-		Primary:       s.PrimaryCommand,
-		Reviewed:      s.SemanticReviewed,
+		Service:              s.Service,
+		Command:              s.Command,
+		CLIPath:              s.Service + " " + s.Command,
+		Product:              product,
+		Risk:                 risk,
+		Confirmation:         confirmation,
+		Description:          s.Description,
+		Intent:               s.Intent,
+		Flags:                flags,
+		Constraints:          constraints,
+		Examples:             examples,
+		Public:               !s.Hidden && !s.CompatibilityVisible,
+		Disposition:          string(s.Disposition),
+		SemanticDelta:        s.SemanticDelta,
+		Availability:         string(s.Availability),
+		Primary:              s.PrimaryCommand,
+		Reviewed:             s.SemanticReviewed,
+		CompatibilityVisible: s.CompatibilityVisible,
 	}
 }
 

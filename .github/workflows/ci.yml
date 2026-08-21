@@ -512,6 +512,12 @@ jobs:
         if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         run: node .github/reviewer-routing.test.js
 
+      - name: Test npm installer smoke (prune, backup, publish)
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        env:
+          XDG_CONFIG_HOME: ""
+        run: node test/scripts/install_js_smoke.mjs
+
   test-focused:
     name: "Test (focused: ${{ matrix.shard }})"
     needs: lint
@@ -528,7 +534,8 @@ jobs:
     # where the Schema partition alone owned most of the wall clock. The
     # app-<partition> names are pinned to the helper's partition set by
     # TestCIAppRacePartitionMatrixMatchesHelper, so a partition can never lose
-    # its job silently.
+    # its job silently. The CrossPlatformCoverage-heavy C range is split again
+    # to retain headroom on runners reclaimed near the five-minute mark.
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -536,7 +543,10 @@ jobs:
         shard:
           - app-schema
           - app-a-b
-          - app-c
+          - app-c-a-l
+          - app-c-m-r
+          - app-c-s-z
+          - app-c-other
           - app-d-r
           - app-s-z-example-fuzz
           - generators
@@ -611,7 +621,13 @@ jobs:
 
       - name: Install archive tooling
         if: ${{ matrix.shard == 'release-scripts' && steps.select.outputs.affected == 'true' }}
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Test shard with Race Detection
         if: ${{ steps.select.outputs.affected == 'true' }}
@@ -666,7 +682,8 @@ jobs:
     # partitions run concurrently and each releases its framework registries
     # when the process exits; cli/smoke need headroom beyond go test -timeout for
     # setup + assembly. The app-<partition> names are pinned to the helper's
-    # partition set by TestCIAppRacePartitionMatrixMatchesHelper.
+    # partition set by TestCIAppRacePartitionMatrixMatchesHelper. The
+    # CrossPlatformCoverage-heavy C range is split again for runner headroom.
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -674,7 +691,10 @@ jobs:
         shard:
           - app-schema
           - app-a-b
-          - app-c
+          - app-c-a-l
+          - app-c-m-r
+          - app-c-s-z
+          - app-c-other
           - app-d-r
           - app-s-z-example-fuzz
           - generators
@@ -751,7 +771,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Test release scripts
         shell: bash
@@ -1129,7 +1155,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Build
         run: make build
@@ -1180,7 +1212,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Run policy and shortcut coverage
         run: |
@@ -1261,7 +1299,13 @@ jobs:
 
       - name: Install archive tooling
         if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit != 'true'
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Run baseline unit tests with coverage
         if: steps.baseline-cache.outputs.cache-hit != 'true'

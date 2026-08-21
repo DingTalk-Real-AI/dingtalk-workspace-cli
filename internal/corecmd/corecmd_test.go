@@ -26,6 +26,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
@@ -1415,17 +1416,23 @@ func TestCrossPlatformCoverageBuildArgsIntArgDefaultFloor(t *testing.T) {
 	}
 }
 
-func TestNewCommandMergesConstParams(t *testing.T) {
+func TestCrossPlatformCoverageNewCommandFreezesAndMergesConstParams(t *testing.T) {
 	var got map[string]any
+	declared := map[string]any{
+		"precheckOnly":      false,
+		"convThreadEnabled": true,
+	}
 	cmd := New(Spec{
 		Use:         "pub",
 		Flags:       []FlagSpec{{Name: "id", Usage: "ID", Bind: "versionId", Trim: true}},
-		ConstParams: map[string]any{"precheckOnly": false},
+		ConstParams: declared,
 		Invoke: func(_ *Ctx, toolArgs map[string]any) error {
 			got = toolArgs
 			return nil
 		},
 	})
+	declared["precheckOnly"] = true
+	declared["forgedAfterNew"] = true
 	_ = cmd.Flags().Set("id", "V1")
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatal(err)
@@ -1435,6 +1442,95 @@ func TestNewCommandMergesConstParams(t *testing.T) {
 	}
 	if got["precheckOnly"] != false {
 		t.Fatalf("precheckOnly = %#v, want false", got["precheckOnly"])
+	}
+	if got["convThreadEnabled"] != true {
+		t.Fatalf("convThreadEnabled = %#v, want true", got["convThreadEnabled"])
+	}
+	if _, exists := got["forgedAfterNew"]; exists {
+		t.Fatalf("caller mutation leaked into dispatch args: %#v", got)
+	}
+	evidence := InterfaceBoolConstParams(cmd)
+	if !reflect.DeepEqual(evidence, map[string]bool{"convThreadEnabled": true, "precheckOnly": false}) {
+		t.Fatalf("bool ConstParams evidence = %#v", evidence)
+	}
+	if got["precheckOnly"] != evidence["precheckOnly"] {
+		t.Fatalf("dispatch/evidence drift: args=%#v evidence=%#v", got, evidence)
+	}
+}
+
+func TestCrossPlatformCoverageNewCommandDoesNotProjectMixedConstParamsEvidence(t *testing.T) {
+	var got map[string]any
+	cmd := New(Spec{
+		Use: "mixed",
+		ConstParams: map[string]any{
+			"convThreadEnabled": true,
+			"retryLimit":        3,
+		},
+		Invoke: func(_ *Ctx, toolArgs map[string]any) error {
+			got = toolArgs
+			return nil
+		},
+	})
+
+	if evidence := InterfaceBoolConstParams(cmd); evidence != nil {
+		t.Fatalf("mixed ConstParams evidence = %#v; want missing evidence", evidence)
+	}
+	if err := cmd.RunE(cmd, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got["convThreadEnabled"] != true || got["retryLimit"] != 3 {
+		t.Fatalf("mixed ConstParams dispatch args = %#v", got)
+	}
+}
+
+func TestCrossPlatformCoverageNewCommandRejectsInvalidConstParamsDispatch(t *testing.T) {
+	mustPanic := func(name string, spec Spec, needle string) {
+		t.Helper()
+		defer func() {
+			r := recover()
+			if r == nil {
+				t.Fatalf("%s: expected panic", name)
+			}
+			if msg, _ := r.(string); !strings.Contains(msg, needle) {
+				t.Fatalf("%s: panic=%v, want %q", name, r, needle)
+			}
+		}()
+		New(spec)
+	}
+
+	mustPanic("RunE", Spec{
+		Use:         "run-e",
+		ConstParams: map[string]any{"fixed": true},
+		RunE:        func(*cobra.Command, []string) error { return nil },
+	}, "ConstParams require Invoke or ResultInvoke")
+	mustPanic("Orchestrate", Spec{
+		Use:         "orchestrate",
+		ConstParams: map[string]any{"fixed": true},
+		Orchestrate: func(*Ctx) error { return nil },
+	}, "ConstParams require Invoke or ResultInvoke")
+	mustPanic("explicit bind conflict", Spec{
+		Use:         "bind-conflict",
+		Flags:       []FlagSpec{{Name: "thread", Usage: "T", Bind: "convThreadEnabled"}},
+		ConstParams: map[string]any{"convThreadEnabled": true},
+		Invoke:      func(*Ctx, map[string]any) error { return nil },
+	}, "conflicts with flag --thread")
+	mustPanic("default bind conflict", Spec{
+		Use:         "default-bind-conflict",
+		Flags:       []FlagSpec{{Name: "fixed-value", Usage: "F"}},
+		ConstParams: map[string]any{"fixedValue": true},
+		Invoke:      func(*Ctx, map[string]any) error { return nil },
+	}, "conflicts with flag --fixed-value")
+
+	result := New(Spec{
+		Use:           "result",
+		OutputRollout: output.RolloutUnifiedActive,
+		ConstParams:   map[string]any{"fixed": true},
+		ResultInvoke: func(*Ctx, map[string]any) (output.CommandResult, error) {
+			return output.Success(nil), nil
+		},
+	})
+	if evidence := InterfaceBoolConstParams(result); !evidence["fixed"] {
+		t.Fatalf("ResultInvoke ConstParams evidence = %#v", evidence)
 	}
 }
 

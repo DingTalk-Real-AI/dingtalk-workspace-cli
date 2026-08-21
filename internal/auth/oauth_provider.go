@@ -811,7 +811,84 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 	if p.logger != nil {
 		p.logger.Debug("refreshing token (dual-locked)")
 	}
-	return oauthRefreshToken(p, ctx, data)
+	refreshed, rErr := oauthRefreshToken(p, ctx, data)
+	if rErr == nil || !isRefreshTokenRejected(rErr) {
+		return refreshed, rErr
+	}
+	// A stale identity slot can survive an older organization-only refresh.
+	// Retry once with the same-corp organization mirror while holding the
+	// existing dual lock; the fallback marks the publication so the rotated
+	// credential is written back into the mirror slot it consumed.
+	logging.AuthDebug(
+		"auth.refresh.fallback.triggered",
+		"corp_id", strings.TrimSpace(data.CorpID),
+		"user_id", strings.TrimSpace(data.UserID),
+		"error", rErr,
+	)
+	fallback, fErr := p.refreshFromOrgSlot(ctx, data)
+	if fErr != nil {
+		logging.AuthDebug("auth.refresh.fallback.unavailable", "error", fErr)
+		return nil, rErr
+	}
+	if p.logger != nil {
+		p.logger.Warn(i18n.T("当前身份的 refresh_token 已失效，已从组织镜像 token 恢复登录态"))
+	}
+	return fallback, nil
+}
+
+// refreshFromOrgSlot retries a rejected refresh with the token mirrored in
+// the organization slot. The mirror must match the current corp, be valid,
+// and differ from the rejected token. When both slots carry user identities,
+// they must agree; legacy mirrors with an empty UserID are backfilled from the
+// current identity before refresh.
+func (p *OAuthProvider) refreshFromOrgSlot(ctx context.Context, current *TokenData) (*TokenData, error) {
+	if current == nil {
+		return nil, fmt.Errorf("no current token data")
+	}
+	corpID := strings.TrimSpace(current.CorpID)
+	if corpID == "" {
+		return nil, fmt.Errorf("current token has no corpId")
+	}
+	orgData, err := tokenLoadKeychainForCorpID(corpID)
+	if err != nil {
+		return nil, err
+	}
+	if orgData == nil {
+		return nil, ErrTokenDataNotFound
+	}
+	if strings.TrimSpace(orgData.CorpID) != corpID {
+		return nil, fmt.Errorf("organization token mirror for corpId %q contains token for corpId %q; refusing refresh fallback", corpID, orgData.CorpID)
+	}
+	if !orgData.IsRefreshTokenValid() {
+		return nil, fmt.Errorf("organization mirror refresh_token 已过期")
+	}
+	if orgData.RefreshToken == current.RefreshToken {
+		return nil, fmt.Errorf("organization mirror holds the same rejected refresh_token")
+	}
+	currentUserID := strings.TrimSpace(current.UserID)
+	orgUserID := strings.TrimSpace(orgData.UserID)
+	if currentUserID != "" && orgUserID != "" && orgUserID != currentUserID {
+		return nil, fmt.Errorf("organization token mirror for corpId %q belongs to userId %q; refusing refresh fallback for userId %q", corpID, orgData.UserID, current.UserID)
+	}
+	if orgUserID == "" {
+		orgData.UserID = current.UserID
+		orgData.UserName = current.UserName
+	}
+	// The refresh below consumes the mirror's refresh_token. Mark the
+	// publication so persistence writes the rotated credential back into the
+	// organization slot even under an explicit runtime selector whose plan
+	// would otherwise skip it (for example a preserved unresolved sibling).
+	orgData.RepairOrganizationMirror = true
+	refreshed, err := oauthRefreshToken(p, ctx, orgData)
+	if err != nil {
+		return nil, err
+	}
+	logging.AuthDebug(
+		"auth.refresh.fallback.success",
+		"corp_id", corpID,
+		"new_at_expires_at", refreshed.ExpiresAt.Format(time.RFC3339),
+	)
+	return refreshed, nil
 }
 
 // ExchangeAuthCode takes an AuthCode and an optional UserID provided by an

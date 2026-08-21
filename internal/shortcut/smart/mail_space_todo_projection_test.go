@@ -31,34 +31,6 @@ import (
 
 var errStubTool = errors.New("stub tool error")
 
-// TestSearchMailPickMailbox covers every list_user_mailboxes shape: objects with
-// an email field and bare string arrays, each at the top level or one level
-// under a result/data wrapper. The nested bare-string case regressed silently
-// (searchMailToMaps drops strings), making all smart mail shortcuts wrongly
-// demand an explicit --email.
-func TestSearchMailPickMailbox(t *testing.T) {
-	cases := []struct {
-		name, raw, want string
-	}{
-		{"object top-level", `{"emailAccounts":[{"email":"a@x.com"}]}`, "a@x.com"},
-		{"object under result", `{"result":{"emailAccounts":[{"email":"b@x.com"}]}}`, "b@x.com"},
-		{"bare string top-level", `{"emailAccounts":["c@x.com"]}`, "c@x.com"},
-		{"bare string under result", `{"result":{"emailAccounts":["d@x.com"]}}`, "d@x.com"},
-		{"empty", `{"result":{"emailAccounts":[]}}`, ""},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			var data map[string]any
-			if err := json.Unmarshal([]byte(tc.raw), &data); err != nil {
-				t.Fatal(err)
-			}
-			if got := searchMailPickMailbox(data); got != tc.want {
-				t.Fatalf("searchMailPickMailbox(%s) = %q, want %q", tc.raw, got, tc.want)
-			}
-		})
-	}
-}
-
 // TestResolveSpaceItemsWikiSpaces guards that search_wikiSpaces' result.wikiSpaces
 // container is probed — otherwise +resolve-space silently finds no candidates.
 func TestResolveSpaceItemsWikiSpaces(t *testing.T) {
@@ -142,7 +114,7 @@ func runShortcutErr(t *testing.T, fake *stubMailboxCaller, argv ...string) error
 // "provide --email" validation error rather than silently proceeding.
 func TestSmartSearchMailNoMailbox(t *testing.T) {
 	fake := &stubMailboxCaller{byTool: map[string]string{
-		"list_user_mailboxes": `{"result":{"emailAccounts":[]}}`,
+		"list_user_mailboxes": `{"success":"true","emailAccounts":[]}`,
 	}}
 	err := runShortcutErr(t, fake, "mail", "+search-mail", "--query", "x", "--format", "json")
 	if err == nil || !strings.Contains(err.Error(), "未找到可用邮箱") {
@@ -200,8 +172,8 @@ func TestCreatedTodosProjectsCards(t *testing.T) {
 // the no-mailbox validation error because emailAccounts was not probed.
 func TestSmartSearchMailAutoResolvesMailbox(t *testing.T) {
 	fake := &stubMailboxCaller{byTool: map[string]string{
-		"list_user_mailboxes": `{"emailAccounts":[{"email":"me@example.com"}]}`,
-		"search_emails":       `{"result":{"messages":[{"subject":"weekly report","from":"a@x.com"}]}}`,
+		"list_user_mailboxes": `{"success":"true","emailAccounts":[{"email":"me@example.com"}]}`,
+		"search_emails":       `{"success":"true","messages":[{"id":"message-1","subject":"weekly report","from":"a@x.com"}],"nextCursor":""}`,
 	}}
 	out := runShortcut(t, fake, "mail", "+search-mail", "--query", "subject:weekly report", "--format", "json")
 	if strings.Contains(out, "未找到可用邮箱") || out == "" {

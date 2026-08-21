@@ -228,8 +228,8 @@ dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range B2:B2 --fil
 ## 注意事项
 
 - ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
-- `media-upload` 是两步自动完成的流程 (获取附件上传凭证 → OSS 上传)，无需手动分步操作
-- `write-image` 是三步自动完成的流程 (获取附件上传凭证 → OSS 上传 → 写入图片到单元格)，无需手动分步操作
+- `media-upload` 会自动完成图片上传并返回后续命令需要的资源信息，无需手动拆分步骤
+- `write-image` 会自动完成图片上传并写入目标单元格，无需手动拆分步骤
 - ★ 向表格单元格中写入图片必须使用 `write-image`，禁止使用 `range update`。`range update` 不支持图片对象
 - `write-image` 与 `media-upload` 的区别：`media-upload` 仅上传附件到表格获取 resourceId；`write-image` 在上传后还会将图片写入指定单元格
 - `create-float-image` 创建浮动图片前必须先通过 `media-upload` 上传图片获取 `resourceUrl`，再将其作为 `--src` 传入。`--src` 的格式为 `/core/api/resources/img/...`，不能直接传外部 URL

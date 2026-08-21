@@ -274,6 +274,7 @@ type agentExampleFiles struct {
 	markdown string
 	json     string
 	batch    string
+	job      string
 	binary   string
 	image    string
 }
@@ -283,12 +284,14 @@ func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
 	markdown := filepath.Join(root, "content.md")
 	jsonFile := filepath.Join(root, "report.json")
 	batch := filepath.Join(root, "styles.json")
+	job := filepath.Join(root, "job.json")
 	binary := filepath.Join(root, "report.pdf")
 	image := filepath.Join(root, "chart.png")
 	for path, content := range map[string][]byte{
 		markdown: []byte("# Agent dry-run fixture\n\nNo business call is allowed.\n"),
 		jsonFile: []byte(`[{"content":"Agent dry-run fixture","sort":"0","key":"fixture","contentType":"markdown","type":"1"}]`),
 		batch:    []byte(`[{"sheetId":"Sheet1","range":"A1:B2","fontWeight":"bold"}]`),
+		job:      []byte(`{"name":"Java 工程师","description":"服务端开发","jobNature":"FULL-TIME","requiredEdu":6,"minSalary":20000,"maxSalary":35000,"extData":{"headCount":1,"fullTimeExtData":{"salaryMonth":12}},"creatorUserId":"creator-user-id","ownerUserIds":["owner-user-id"]}`),
 		binary:   []byte("%PDF-1.4\n%%EOF\n"),
 		image:    {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'},
 	} {
@@ -301,6 +304,7 @@ func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
 		markdown: "./" + filepath.Base(markdown),
 		json:     "./" + filepath.Base(jsonFile),
 		batch:    "./" + filepath.Base(batch),
+		job:      "./" + filepath.Base(job),
 		binary:   "./" + filepath.Base(binary),
 		image:    "./" + filepath.Base(image),
 	}
@@ -351,6 +355,10 @@ func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []strin
 			replacement = files.markdown
 		case "contents-file":
 			replacement = files.json
+		case "from":
+			if strings.HasSuffix(strings.ToLower(value), "job.json") {
+				replacement = files.job
+			}
 		case "batch":
 			if strings.HasSuffix(strings.ToLower(value), "styles.json") {
 				replacement = files.batch

@@ -12,7 +12,7 @@
 - 仅支持钉钉在线电子表格（`extension=axls`）。`xlsx` / `xls` / `csv` 等本地表格不支持评论。
 - 评论锚定在**单元格位置**：`create` / `list` 通过 `--sheet-id`（工作表 ID 或名称）+ `--range`（单元格坐标）定位；`reply` / `update` / `delete` 通过 `--comment-key` 操作，不依赖单元格位置。
 - `create` / `list` 通过单元格位置定位；`reply` / `update` / `delete` 通过前一步返回的 `commentKey` 定位评论线程，不需要重新传单元格位置。
-- 评论正文与单元格位置由服务端关联。Agent 只使用命令返回的 `commentKey` 继续回复、更新或删除，不解析或拼接内部关联字段。
+- Agent 只使用命令返回的 `commentKey` 继续回复、更新或删除，不自行构造评论标识。
 
 ---
 

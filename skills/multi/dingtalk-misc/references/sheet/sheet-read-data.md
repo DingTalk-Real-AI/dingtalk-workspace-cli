@@ -54,7 +54,7 @@ Flags:
 - `rowIndices` — 行号映射数组（如 `[1,2,3]`）
 - `hasMore` — 完整目标范围是否还有未返回数据。`true` 是部分成功，不能宣称已读完
 - `truncationReasons` — 部分返回原因。`max_cells` 表示命中单次 30,000 单元格上限；`max_chars` 表示命中 CSV 字符上限，两者可同时出现
-- `resolvedRange` — 仅在未传 `--range` 时返回，表示底层解析出的完整目标范围
+- `resolvedRange` — 仅在未传 `--range` 时返回，表示本次读取所对应的完整目标范围
 - `returnedRange` — 本次实际完整返回的精确范围；它不是服务端续读游标
 
 `csv-get` 不返回合并单元格结构。若 CSV 中出现合并区域的非左上角单元格为空，不能据此判断该区域"无内容"；需要先用 `dws sheet info --node <NODE_ID> --sheet-id <SHEET_ID> --format json` 读取 `mergedRanges`，再结合左上角单元格理解合并区域语义。
@@ -161,7 +161,7 @@ Flags:
 | `dropdown` Inline | `enableMultiSelect: boolean` | 是否允许多选 |
 | `dropdown` SourceRange | `sourceType: "sourceRange"` | 区域来源模式 |
 | `dropdown` SourceRange | `sourceRange: {sheetId, a1Notation}` | 仅 `sourceRangeStatus:"valid"` 时返回的来源工作表和规范化 A1 区域；`invalid` 时省略 |
-| `dropdown` SourceRange | `sourceRangeStatus: "valid" / "invalid"` | 底层引用是否可解析；无效引用仍返回配置，但不返回 `sourceRange` |
+| `dropdown` SourceRange | `sourceRangeStatus: "valid" / "invalid"` | 来源引用是否有效；无效引用仍返回配置，但不返回 `sourceRange` |
 | `checkbox` | `checked: boolean` | 当前勾选状态 |
 
 SourceRange 模式不动态拉取或展开来源区域的候选值，因此不返回 `options` 或颜色。`invalid` 时只能依赖 `sourceRangeStatus` 判定需要重新选源，不得假定仍能从 `sourceRange` 取回旧坐标。
@@ -270,6 +270,7 @@ dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:D10" --f
 - ★ `csv-get` 和 `range read` 都必须检查 `hasMore`；`true` 时结合目标范围与 `returnedRange` 显式分批，CLI 不会自动续读
 - ★ `forbidden.document.sizeOverLimit` 是工作簿装载失败，不是 30,000 单元格部分成功；缩小 `--range` 不能修复
 - ★ `csv-get` / `range read` / `range get` 不返回合并单元格结构；查看合并范围必须用 `sheet info` 的 `mergedRanges`
+- ★ 保护区域权限：`csv-get`、`table-get`、`range read`、`formula-verify` 等命令会检查本次实际读取范围。若返回权限错误，说明当前身份无法确认具有该范围的完整读取权限；不要解释为空数据或反复重试，应申请对目标内容的直接访问权限或请管理员执行。仅当任务本来就不需要受保护区域时，才可缩小 `--range` 避开无关区域，禁止拆分范围绕过权限。
 - `table-get` 返回 table/dataframe 结构，适合需要 `columns` / `data` / `dtypes` / `formats` 的场景；它不返回 per-cell 元数据，也不替代 `range read`
 - ★ 大整数和长数字标识符回读校验：精确 ID 应是字符串 / `object`；若看到 `float64`，说明它已经按数值路径处理，超过 `9007199254740991` 时可能已丢精度
 - `range read` 遇到超时或响应过慢时，应缩小 `--range` 查询范围，**单次读取的单元格数量建议控制在 5000 个以内**；数据量较大时通过 `info` 的 `nonEmptyRange.range` 获取 A1 边界后分批读取，避免不传 `--range` 直接读取整个大工作表

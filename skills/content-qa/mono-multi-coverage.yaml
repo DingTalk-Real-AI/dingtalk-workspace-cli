@@ -108,6 +108,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/whiteboard.md
+  - mono: recruit
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/recruit.md
 
 omit_coverage:
   - mono: simple

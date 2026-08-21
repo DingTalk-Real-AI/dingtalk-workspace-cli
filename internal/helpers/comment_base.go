@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/commentreaction"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
@@ -229,6 +230,9 @@ Unicode Emoji。例如用户要求 😄 时传“憨笑”，要求 👏 时传�
 				return err
 			}
 			if err := validateRequiredFlags(cmd, "comment-key", "reaction"); err != nil {
+				return err
+			}
+			if err := commentreaction.Validate(mustGetFlag(cmd, "reaction")); err != nil {
 				return err
 			}
 			return callMCPToolOnServer(commentServer, "reply_comment", map[string]any{

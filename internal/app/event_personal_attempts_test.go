@@ -152,8 +152,8 @@ func TestCrossPlatformCoveragePersonalSubscriptionProtectionCoversAllPublicEvent
 		}
 	}
 
-	if publicCount != 22 {
-		t.Fatalf("public personal events = %d, want 22 (16 IM + 6 OA)", publicCount)
+	if publicCount != 23 {
+		t.Fatalf("public personal events = %d, want 23 (16 IM + 7 OA)", publicCount)
 	}
 	for _, ruleType := range []string{"at", "all", "singleChat", "sender", "group"} {
 		if !ruleTypes[ruleType] {

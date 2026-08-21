@@ -27,6 +27,11 @@ type scriptedToolCaller struct {
 	server string
 	tool   string
 	args   map[string]any
+	// Per-call logs so multi-step flows (e.g. OA attachment upload's init+commit)
+	// can assert each invocation instead of only the last one captured above.
+	serverLog []string
+	toolLog   []string
+	argsLog   []map[string]any
 }
 
 func (c *scriptedToolCaller) CallTool(_ context.Context, serverID, toolName string, args map[string]any) (*edition.ToolResult, error) {
@@ -34,6 +39,9 @@ func (c *scriptedToolCaller) CallTool(_ context.Context, serverID, toolName stri
 	c.server = serverID
 	c.tool = toolName
 	c.args = args
+	c.serverLog = append(c.serverLog, serverID)
+	c.toolLog = append(c.toolLog, toolName)
+	c.argsLog = append(c.argsLog, args)
 	if len(c.steps) == 0 {
 		return &edition.ToolResult{}, nil
 	}

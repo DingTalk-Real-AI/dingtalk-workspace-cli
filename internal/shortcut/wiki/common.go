@@ -154,6 +154,30 @@ func projectWikiRows(items []any, aliases map[string][]string) []map[string]any 
 	return rows
 }
 
+func projectWikiRowsPreservingSource(items []any, aliases map[string][]string) []map[string]any {
+	rows := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		source := item.(map[string]any)
+		row := make(map[string]any, len(source)+len(aliases))
+		for key, value := range source {
+			row[key] = value
+		}
+		for canonical, candidates := range aliases {
+			if value, ok := row[canonical]; ok && value != nil {
+				continue
+			}
+			for _, candidate := range candidates {
+				if value, ok := source[candidate]; ok && value != nil {
+					row[canonical] = value
+					break
+				}
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
 func addWikiPagination(out, page map[string]any) {
 	for _, pair := range [][2]string{{"nextCursor", "nextCursor"}, {"nextToken", "nextCursor"}, {"nextPageToken", "nextCursor"}, {"pageToken", "nextCursor"}, {"hasMore", "hasMore"}, {"truncated", "truncated"}, {"totalCount", "totalCount"}, {"autoPageComplete", "autoPageComplete"}, {"autoPageStopReason", "autoPageStopReason"}, {"pagesFetched", "pagesFetched"}} {
 		if value, ok := page[pair[0]]; ok && value != nil {

@@ -6,6 +6,7 @@ package todo
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -159,11 +160,53 @@ func updateTodo(rt *shortcut.RuntimeContext) error {
 		if key == "taskId" {
 			continue
 		}
-		if fmt.Sprint(detail[key]) != fmt.Sprint(expected) {
+		if !todoUpdateFieldMatches(key, detail[key], expected) {
 			return todoResponseError("todo/update_todo_task", "verification_mismatch", "更新后读回字段 "+key+" 不一致")
 		}
 	}
 	return rt.Output(map[string]any{"taskId": taskID, "verified": true, "todo": detail})
+}
+
+func todoUpdateFieldMatches(key string, actual, expected any) bool {
+	switch key {
+	case "dueTime", "priority":
+		actualNumber, actualOK := todoExactInteger(actual)
+		expectedNumber, expectedOK := todoExactInteger(expected)
+		return actualOK && expectedOK && actualNumber == expectedNumber
+	case "subject":
+		actualText, actualOK := actual.(string)
+		expectedText, expectedOK := expected.(string)
+		return actualOK && expectedOK && actualText == expectedText
+	default:
+		return false
+	}
+}
+
+func todoExactInteger(value any) (int64, bool) {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed), true
+	case int64:
+		return typed, true
+	case float64:
+		return todoExactFloat(typed)
+	case json.Number:
+		parsed, err := typed.Int64()
+		return parsed, err == nil
+	case string:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func todoExactFloat(value float64) (int64, bool) {
+	if math.IsNaN(value) || math.IsInf(value, 0) || math.Trunc(value) != value ||
+		value < float64(math.MinInt64) || value >= float64(math.MaxInt64) {
+		return 0, false
+	}
+	return int64(value), true
 }
 
 var Update = shortcut.Shortcut{

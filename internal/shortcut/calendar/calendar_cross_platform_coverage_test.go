@@ -72,14 +72,24 @@ func TestCrossPlatformCoverageCalendarListRequiresExplicitCollectionAndPaginatio
 	if err != nil || len(events) != 0 || !page.Known || page.HasMore {
 		t.Fatalf("explicit empty: events=%v page=%+v err=%v", events, page, err)
 	}
+	var serviceEmptySentinel map[string]any
+	if err := json.Unmarshal([]byte(`{"success":true,"result":{"events":[{"attendees":null,"categories":null,"meetingRooms":null,"reminders":null}],"hasMore":false}}`), &serviceEmptySentinel); err != nil {
+		t.Fatal(err)
+	}
+	events, page, err = eventListProject(serviceEmptySentinel)
+	if err != nil || events == nil || len(events) != 0 || !page.Known || page.HasMore {
+		t.Fatalf("service empty sentinel: events=%#v page=%+v err=%v", events, page, err)
+	}
 
 	for name, payload := range map[string]string{
-		"missing collection":  `{"success":true,"result":{"hasMore":false}}`,
-		"bad collection":      `{"success":true,"result":{"events":{}}}`,
-		"bad item":            `{"success":true,"result":{"events":["bad"],"hasMore":false}}`,
-		"empty item":          `{"success":true,"result":{"events":[{}],"hasMore":false}}`,
-		"missing pagination":  `{"success":true,"result":{"events":[]}}`,
-		"missing next cursor": `{"success":true,"result":{"events":[],"hasMore":true}}`,
+		"missing collection":   `{"success":true,"result":{"hasMore":false}}`,
+		"bad collection":       `{"success":true,"result":{"events":{}}}`,
+		"bad item":             `{"success":true,"result":{"events":["bad"],"hasMore":false}}`,
+		"empty item":           `{"success":true,"result":{"events":[{}],"hasMore":false}}`,
+		"unknown null item":    `{"success":true,"result":{"events":[{"summary":null}],"hasMore":false}}`,
+		"sentinel with cursor": `{"success":true,"result":{"events":[{"attendees":null}],"hasMore":false,"nextCursor":"unexpected"}}`,
+		"missing pagination":   `{"success":true,"result":{"events":[]}}`,
+		"missing next cursor":  `{"success":true,"result":{"events":[],"hasMore":true}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			var data map[string]any

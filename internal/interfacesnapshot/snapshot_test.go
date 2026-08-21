@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
@@ -98,13 +99,102 @@ func TestCrossPlatformCoverageCaptureUsesStableNoiseRulesAndFlagScopes(t *testin
 
 func TestCrossPlatformCoverageReadRejectsUnknownSnapshotFields(t *testing.T) {
 	input := bytes.NewBufferString(`{
-  "schema_version": 2,
-  "rules": {"excluded_command_subtrees": [], "excluded_flags": []},
-  "commands": [],
-  "future_field": true
+	  "schema_version": 3,
+	  "rules": {"excluded_command_subtrees": [], "excluded_flags": []},
+	  "commands": [],
+	  "future_field": true
 }`)
 	if _, err := Read(input); err == nil {
 		t.Fatal("Read accepted an unknown field")
+	}
+}
+
+func TestCrossPlatformCoverageCaptureRoundTripsFrameworkBoolConstParams(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	leaf := corecmd.New(corecmd.Spec{
+		Use:         "send",
+		ConstParams: map[string]any{"convThreadEnabled": true, "precheckOnly": false},
+		Invoke:      func(*corecmd.Ctx, map[string]any) error { return nil },
+	})
+	root.AddCommand(leaf)
+
+	snapshot := Capture(root)
+	got := commandIndex(snapshot)["dws send"].BoolConstParams
+	want := map[string]bool{"convThreadEnabled": true, "precheckOnly": false}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("captured bool ConstParams = %#v, want %#v", got, want)
+	}
+
+	var encoded bytes.Buffer
+	if err := Write(&encoded, snapshot); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	decoded, err := Read(bytes.NewReader(encoded.Bytes()))
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got := commandIndex(decoded)["dws send"].BoolConstParams; !reflect.DeepEqual(got, want) {
+		t.Fatalf("round-tripped bool ConstParams = %#v, want %#v", got, want)
+	}
+}
+
+func TestCrossPlatformCoverageCaptureIgnoresHandwrittenLegacyConstParamsAnnotations(t *testing.T) {
+	root := &cobra.Command{Use: "dws"}
+	direct := &cobra.Command{
+		Use: "direct",
+		Run: func(*cobra.Command, []string) {},
+		Annotations: map[string]string{
+			"dws.compat.bool_const_params":   `{"forged":true}`,
+			"dws.compat.const_params_origin": "corecmd.const_params.v1",
+		},
+	}
+	businessConstructor := func() *cobra.Command {
+		payloadKey := strings.Join([]string{"dws.compat.bool_", "const_params"}, "")
+		originKey := strings.Join([]string{"dws.compat.const_", "params_origin"}, "")
+		origin := strings.Join([]string{"corecmd.const_", "params.v1"}, "")
+		return &cobra.Command{
+			Use: "business",
+			Run: func(*cobra.Command, []string) {},
+			Annotations: map[string]string{
+				payloadKey: `{"forged":true}`,
+				originKey:  origin,
+			},
+		}
+	}
+	root.AddCommand(direct, businessConstructor())
+
+	snapshot := Capture(root)
+	if err := snapshot.Validate(); err != nil {
+		t.Fatalf("handwritten legacy annotations affected snapshot validity: %v", err)
+	}
+	for _, path := range []string{"dws direct", "dws business"} {
+		if got := commandIndex(snapshot)[path].BoolConstParams; got != nil {
+			t.Fatalf("%s forged bool ConstParams evidence = %#v", path, got)
+		}
+	}
+	var encoded bytes.Buffer
+	if err := Write(&encoded, snapshot); err != nil {
+		t.Fatalf("Write snapshot without forged evidence: %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageReadRejectsMalformedBoolConstParams(t *testing.T) {
+	for _, payload := range []string{`{"fixed":"true"}`, `{}`} {
+		input := bytes.NewBufferString(`{
+		  "schema_version": 3,
+		  "rules": {"excluded_command_subtrees": [], "excluded_flags": []},
+		  "commands": [{
+		    "path": "dws send",
+		    "runnable": true,
+		    "aliases": [],
+		    "local_flags": [],
+		    "inherited_flags": [],
+		    "bool_const_params": ` + payload + `
+		  }]
+		}`)
+		if _, err := Read(input); err == nil {
+			t.Fatalf("Read accepted malformed bool_const_params %s", payload)
+		}
 	}
 }
 

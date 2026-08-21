@@ -372,7 +372,7 @@ func TestCrossPlatformCoverageReviewedAmbiguousCommandFallbackNeverDispatches(t 
 		{path: "chat +conversation-category-list", candidates: []string{"chat +category-list", "chat +category-list-conversations"}},
 		{path: "chat +conversation-group-list", candidates: []string{"chat +category-list-conversations", "chat +conversation-list"}},
 		{path: "chat +list-my-groups", candidates: []string{"chat +my-groups", "chat +chat-list-mine", "chat +chat-list"}},
-		{path: "oa +list-processes", candidates: []string{"oa +list-forms", "oa +my-initiated", "oa approval list-initiated"}},
+		{path: "oa +list-processes", candidates: []string{"oa +search-forms", "oa approval list-submitted", "oa approval list-initiated"}},
 	}
 	for _, test := range tests {
 		t.Run(test.path, func(t *testing.T) {

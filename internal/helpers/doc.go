@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/commentreaction"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
@@ -3220,6 +3221,9 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 				"replyCommentKey": mustGetFlag(cmd, "comment-key"),
 			}
 			if v, _ := cmd.Flags().GetBool("emoji"); v {
+				if err := commentreaction.Validate(mustGetFlag(cmd, "content")); err != nil {
+					return err
+				}
 				groupMentions, err := commentGroupMentionIDs(cmd)
 				if err != nil {
 					return err

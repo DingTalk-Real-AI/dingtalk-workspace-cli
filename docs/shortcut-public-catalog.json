@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-18T17:38:50.904696",
-  "count": 436,
+  "generated_at": "2026-08-20T11:51:44.156046",
+  "count": 416,
   "results": [
     {
       "suite": "semantic",
@@ -933,137 +933,84 @@
       "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "attendance",
       "command": "+check-record",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "查询原始打卡流水；只有显式成功数组可表示空结果，每条必须有唯一正整数 ID 并绑定请求用户和日期。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "attendance",
       "command": "+check-result",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "对齐 Lark attendance user_tasks query；严格校验正整数 ID 及请求用户/日期绑定，以 cursor_parameter=offset 将保守续页证据发布到 meta.pagination。",
+      "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+get-adjustment-rule",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "attendance",
       "command": "+get-approve-template",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把补卡、请假、加班、外出、出差映射为审批模板类型；每项以非空唯一 processCode 作为稳定身份，approveType 精确绑定请求且 submitUrl 必须非空，允许同类型返回多个模板。",
+      "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+get-checkin-record",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+get-leave-records",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "attendance",
       "command": "+get-overtime-rule",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "使用搜索得到的加班规则 ID 读取详情，严格拒绝空 result，且响应 id 必须与请求 overtimeId 精确一致。",
+      "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+get-schedule",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+get-self-setting",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+get-summary",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "attendance",
       "command": "+list-approve",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "把审批类型语义映射为业务枚举；每条审批必须有唯一正整数 ID，并精确绑定请求用户、类型与时间范围。",
+      "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+list-leave-types",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+my-attendance",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+query-report-data",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "attendance",
       "command": "+search-adjustment-rule",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格读取 result.adjustmentList、展开 entityVO、要求稳定规则 ID，并公开分页完整性证据。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "attendance",
       "command": "+search-class",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格读取 result.items、展开 shiftVO、要求唯一正整数 classId，并将无矛盾的 totalCount/totalPage 续页证据发布到 meta.pagination。",
+      "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+search-group",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "attendance",
       "command": "+search-overtime-rule",
       "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "attendance",
-      "command": "+this-month",
-      "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格读取 result.atRuleList、展开 entityVO、要求稳定规则 ID，并公开分页完整性证据。",
+      "availability": "available"
     },
     {
       "suite": "semantic",
@@ -2547,32 +2494,14 @@
       "status": "real-ok"
     },
     {
-      "suite": "read",
-      "service": "ding",
-      "command": "+list",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "write",
-      "service": "ding",
-      "command": "+recall-personal",
-      "risk": "high-risk-write",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "ding",
       "command": "+receiver-status",
       "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "write",
-      "service": "ding",
-      "command": "+send-personal",
-      "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按稳定 openDingId 精确查询，严格拒绝缺集合、错型、空集合、坏元素与身份不匹配；current HEAD exact Shortcut 与 owning atomic/raw 的请求身份、1 项结果和完整接收行集合一致。",
+      "availability": "available"
     },
     {
       "suite": "semantic",
@@ -3305,74 +3234,84 @@
       "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "mail",
-      "command": "+contact-list",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "mail",
       "command": "+find-mail-user",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "面向联系人解析的精简用户搜索；修复零命中被误报为调用失败，并严格验证用户数组、身份和分页。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "mail",
       "command": "+folder-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "只接受显式 folders 数组及稳定 folder ID；缺字段、错型和坏元素不再退化为空列表。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "mail",
-      "command": "+recent-mail",
+      "command": "+message",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "对齐 Lark 单封完整读入口；自动解析邮箱，要求顶层 message 非空且返回 ID 与请求 messageId 精确一致。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "mail",
+      "command": "+messages",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "对齐 Lark 多封完整读入口；最多 100 个 ID，保持请求顺序，任何单封缺失、错型或身份不一致都会使整次调用失败。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "mail",
       "command": "+search-mail",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "用 KQL 搜索邮件摘要；只接受已观测 messages 数组、稳定 messageId 和完整分页证据，窄化支持 Mail 专属 total=0 占位哨兵。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "mail",
-      "command": "+tag-list",
+      "command": "+thread",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "对齐 Lark 完整会话读取；自动解析邮箱并要求 conversation.id 与请求精确一致。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "mail",
-      "command": "+template-list",
+      "command": "+triage",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "对齐 Lark triage 任务入口，并超过其显式邮箱要求：可自动解析当前邮箱与收件箱，严格处理邮件搜索的终止游标和零命中哨兵。",
+      "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "mail",
-      "command": "+thread-list",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "mail",
-      "command": "+unread-mail",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "mail",
       "command": "+user-search",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "搜索企业邮箱用户并保留 hasMore/nextCursor；显式空数组合法，坏用户或缺稳定 ID 失败。",
+      "availability": "available"
     },
     {
       "suite": "semantic",
@@ -3645,67 +3584,54 @@
       "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-cc",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-executed",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-forms",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-pending",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+list-submitted",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
-      "service": "oa",
-      "command": "+my-initiated",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "oa",
       "command": "+search-forms",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按关键字搜索可发起审批定义，严格要求显式 result 数组和稳定 processCode；已完成已知非空与保证零命中证明。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "report",
       "command": "+inbox-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、result.report_list、稳定 reportId 与 hasMore/cursor；current HEAD exact 与 owning atomic 同场景已知页均为 20 项、稳定身份集合和 next cursor 一致，独立未来范围均为 0 且明确终止。终止页回显 cursor 只作已验证收据且不发布 next_token。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "report",
       "command": "+outbox-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证发件箱集合、稳定 reportId 和分页终止证据；current HEAD exact 与 owning atomic 同场景已知页均为 1 项且身份一致，独立未来范围均为 0 并明确终止。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "report",
+      "command": "+report-latest",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "完整验证默认最近 20 天或显式不超过 20 天的发件箱；current HEAD exact 所选稳定 reportId 与 owning atomic 候选和精确详情身份一致，严格详情字段计数双层均为 3。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "report",
+      "command": "+template-search",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "在严格验证完整可用模板集合、稳定 templateId 与名称后执行本地不区分大小写搜索；current HEAD exact 与 owning atomic 完整集合过滤的已知结果均为 1 且身份一致，随机 UUID 查询均为 0。",
+      "availability": "available"
     },
     {
       "suite": "read",

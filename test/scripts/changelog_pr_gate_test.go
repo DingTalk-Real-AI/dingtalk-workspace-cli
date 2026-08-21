@@ -305,6 +305,52 @@ func TestChangelogPRContentOnlyAcceptsReleaseFragmentArchival(t *testing.T) {
 	}
 }
 
+func TestReleaseFragmentPolicyAcceptsStablePostBetaArchival(t *testing.T) {
+	repo := newChangelogGateRepo(t)
+	changelogGateWrite(t, repo.root, ".changes/1236-stable-followup.md", "---\ncategory: Fixed\n---\n\n- Stable follow-up.\n", 0o644)
+	repo.commit(t, "add post-beta release fragment")
+	sealBase := strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+	changelogGateWrite(t, repo.root, "CHANGELOG.md", `# Changelog
+
+## [Unreleased]
+
+## [1.0.1] - 2026-07-17
+
+This release promotes the sealed `+"`v1.0.1-beta.1`"+` contents to stable.
+
+### Changed
+
+- Promote the complete beta release to stable.
+
+### Changes since `+"`v1.0.1-beta.1`"+`
+
+### Fixed
+
+- Stable follow-up.
+
+## [1.0.0] - 2026-07-01
+
+### Added
+
+- Initial release.
+`, 0o644)
+	archiveDir := filepath.Join(repo.root, ".changes", "released", "1.0.1")
+	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll stable archive: %v", err)
+	}
+	if err := os.Rename(
+		filepath.Join(repo.root, ".changes", "1236-stable-followup.md"),
+		filepath.Join(archiveDir, "1236-stable-followup.md"),
+	); err != nil {
+		t.Fatalf("Rename stable release fragment: %v", err)
+	}
+	repo.commit(t, "seal stable release notes")
+
+	if output, err := repo.runFragmentPolicy(t, sealBase, "HEAD"); err != nil {
+		t.Fatalf("release fragment policy rejected stable seal: %v\noutput:\n%s", err, output)
+	}
+}
+
 func TestReleaseFragmentPolicyRejectsInvalidActiveFragmentAndWrongArchiveVersion(t *testing.T) {
 	t.Run("invalid active fragment", func(t *testing.T) {
 		repo := newChangelogGateRepo(t)

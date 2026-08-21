@@ -80,6 +80,7 @@
   "工具调用失败；请检查参数和上游服务状态。": "Tool invocation failed; check parameters and upstream service status.",
   "已取消操作": "Operation cancelled",
   "当前平台 %s 没有可用的预编译二进制": "No pre-built binary available for platform %s",
+  "当前身份的 refresh_token 已失效，已从组织镜像 token 恢复登录态": "The current identity's refresh_token is invalid; login state was recovered from the organization mirror token.",
   "待办": "todo",
   "待办任务 ID (必填)": "Todo task ID (required)",
   "待办任务管理": "Todo task management",

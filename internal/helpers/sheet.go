@@ -26,10 +26,11 @@ func newSheetCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "sheet",
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "导入本地 Excel，或创建、读取、编辑和导出钉钉在线电子表格（axls），并管理工作表、区域、筛选、图表、图片与格式。",
+			AgentSummary: "导入本地 Excel，或创建、读取、编辑、导出和审计钉钉在线电子表格（axls），并管理工作表、区域、历史 revision、筛选、图表、图片与格式。",
 			UseWhen: []string{
 				"用户要处理钉钉在线电子表格中的工作表、单元格、范围、筛选、图表、图片或格式时",
 				"用户要把本地 xlsx/xls 转换为新的钉钉在线电子表格时",
+				"用户要查询工作簿当前 revision 或复核两个 revision 之间的 changeset 时",
 			},
 			AvoidWhen: []string{
 				"目标是 AI 表格 Base 的结构化记录或钉钉文档正文时不要使用 sheet",
@@ -110,6 +111,8 @@ func newSheetCommand() *cobra.Command {
   dws sheet chart create                         创建浮动图表
   dws sheet chart update                         更新浮动图表
   dws sheet chart delete                         删除浮动图表
+  dws sheet revision-get                         获取工作簿当前 revision
+  dws sheet changeset-get                        获取工作簿 revision 区间内的 changeset
   dws sheet export                              导出表格为 xlsx（异步任务一站式：提交→轮询→可选下载）
   dws sheet export-csv                          导出单个工作表为纯 CSV（同步，可落盘）
   dws sheet import                              导入 xlsx/xls 为在线电子表格
@@ -169,6 +172,7 @@ func newSheetCommand() *cobra.Command {
 	templateCmd := newSheetTemplateCmd()
 	tableCmds := newTableCmds()
 	pivotTableCmd := newPivotTableCmd()
+	revisionCmds := newSheetRevisionCmds()
 
 	batchUpdateCmd := newBatchUpdateCmd()
 	DeclareLeafMetadata(batchUpdateCmd, LeafSpec{
@@ -244,6 +248,7 @@ func newSheetCommand() *cobra.Command {
 	standaloneCmds = append(standaloneCmds, mediaCmds...)
 	standaloneCmds = append(standaloneCmds, floatImageCmds...)
 	standaloneCmds = append(standaloneCmds, tableCmds...)
+	standaloneCmds = append(standaloneCmds, revisionCmds...)
 	standaloneCmds = append(standaloneCmds, exportCmd, exportCsvCmd, importCmd, batchUpdateCmd, createWithDataCmd)
 
 	// Register cross-product aliases
