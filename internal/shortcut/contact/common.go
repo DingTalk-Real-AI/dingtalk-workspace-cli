@@ -17,14 +17,26 @@ import (
 )
 
 const (
-	contactCompositeReason   = "Reviewed Contact Shortcut adapter: the executable CLI owns strict success, collection, item, stable-identity, and unified-output validation."
-	contactUnavailableReason = "Exact live-leaf probes across multiple authorized profiles could not safely produce a guaranteed zero-result fixture, so empty-result truth cannot be proved without guessing."
-	contactRolesGapReason    = "Exact raw role enumeration returned a malformed role element without a stable labelId or name; strict collection validation must reject the whole response."
-	contactRosterGapReason   = "Exact raw roster probes are blocked by the current authorization or platform capability before a typed business response is available."
+	contactCompositeReason              = "Reviewed Contact Shortcut adapter: the executable CLI owns strict success, collection, item, stable-identity, and unified-output validation."
+	contactCompatibilityInterfaceReason = "Historical CLI and full-Schema compatibility: this executable shortcut remains callable with its published interface shape, but semantic catalog policy keeps it unavailable to Agents until strict live evidence is complete."
+	contactUnavailableReason            = "Exact live-leaf probes across multiple authorized profiles could not safely produce a guaranteed zero-result fixture, so empty-result truth cannot be proved without guessing."
+	contactRolesGapReason               = "Exact raw role enumeration returned a malformed role element without a stable labelId or name; strict collection validation must reject the whole response."
+	contactRosterGapReason              = "Exact raw roster probes are blocked by the current authorization or platform capability before a typed business response is available."
 )
 
 var contactReadSafety = contract.SafetySpec{
 	Effect: "read", Risk: "low", Confirmation: "not_required", Idempotency: "idempotent",
+}
+
+func markContactCompatibilityOnly(declaration *shortcut.Shortcut) {
+	declaration.OutputRollout = output.RolloutLegacyOnly
+	declaration.Contract.Result = nil
+	declaration.Contract.Pagination = nil
+	declaration.Contract.Interface = &contract.InterfaceSpec{
+		Mode:         contract.InterfaceModeComposite,
+		Availability: contract.InterfaceAvailable,
+		Reason:       contactCompatibilityInterfaceReason,
+	}
 }
 
 func contactCollectionResult(collection, description string) *contract.ResultSpec {

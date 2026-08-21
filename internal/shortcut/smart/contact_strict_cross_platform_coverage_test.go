@@ -117,6 +117,26 @@ func TestCrossPlatformCoverageContactSmartContracts(t *testing.T) {
 			t.Errorf("%s invalid Result schema: schema=%v err=%v", item.Command, schema, err)
 		}
 	}
+	for item, want := range map[*shortcut.Shortcut]map[string]string{
+		&ByMobile:    {"mobile": "mobile"},
+		&DeptMembers: {"dept": "dept"},
+		&Lookup:      {"name": "name"},
+		&Org:         {"name": "name"},
+		&ResolveDept: {"name": "name"},
+		&Team:        {"name": "name"},
+	} {
+		for _, parameter := range item.Contract.Parameters {
+			if property, ok := want[parameter.Name]; ok {
+				if parameter.Property != property {
+					t.Errorf("%s parameter %s property=%q want=%q", item.Command, parameter.Name, parameter.Property, property)
+				}
+				delete(want, parameter.Name)
+			}
+		}
+		if len(want) != 0 {
+			t.Errorf("%s missing compatibility parameters: %#v", item.Command, want)
+		}
+	}
 	if Whoami.Validate != nil {
 		t.Fatal("parameterless +me must not publish an empty runtime validator")
 	}

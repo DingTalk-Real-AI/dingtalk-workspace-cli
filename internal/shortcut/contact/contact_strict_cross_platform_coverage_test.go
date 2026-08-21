@@ -436,7 +436,28 @@ func TestCrossPlatformCoverageContactDirectContracts(t *testing.T) {
 			t.Errorf("%s invalid Result schema: schema=%v err=%v", item.Command, schema, err)
 		}
 	}
-	for _, item := range []*shortcut.Shortcut{&ListRoles, &ListRosterFields, &GetRoster} {
+	for item, want := range map[*shortcut.Shortcut]map[string]string{
+		&SearchMobile:    {"mobile": "mobile"},
+		&ListRoleMembers: {"id": "id"},
+		&ListSubDepts:    {"dept": "dept"},
+		&ListDeptMembers: {"depts": "depts"},
+	} {
+		for _, parameter := range item.Contract.Parameters {
+			if property, ok := want[parameter.Name]; ok {
+				if parameter.Property != property {
+					t.Errorf("%s parameter %s property=%q want=%q", item.Command, parameter.Name, parameter.Property, property)
+				}
+				delete(want, parameter.Name)
+			}
+		}
+		if len(want) != 0 {
+			t.Errorf("%s missing compatibility parameters: %#v", item.Command, want)
+		}
+	}
+	if ListRoles.OutputRollout != output.RolloutLegacyOnly || ListRoles.Contract.Result != nil || ListRoles.Contract.Interface == nil || ListRoles.Contract.Interface.Availability != "available" || ListRoles.Contract.Interface.Reason != contactCompatibilityInterfaceReason {
+		t.Errorf("+list-roles compatibility delivery drift: rollout=%q result=%v interface=%#v", ListRoles.OutputRollout, ListRoles.Contract.Result, ListRoles.Contract.Interface)
+	}
+	for _, item := range []*shortcut.Shortcut{&ListRosterFields, &GetRoster} {
 		if item.OutputRollout != output.RolloutLegacyOnly || item.Contract.Result != nil || item.Contract.Interface == nil || item.Contract.Interface.Availability != "unavailable" {
 			t.Errorf("%s unavailable delivery drift: rollout=%q result=%v interface=%#v", item.Command, item.OutputRollout, item.Contract.Result, item.Contract.Interface)
 		}

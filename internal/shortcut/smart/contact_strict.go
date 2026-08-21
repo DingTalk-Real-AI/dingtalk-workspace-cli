@@ -68,13 +68,13 @@ func finalizeContactSmart(item *shortcut.Shortcut) {
 	}
 	switch item.Command {
 	case "+by-mobile":
-		item.Contract.Parameters = []contract.ParamDecl{{Name: "mobile", Property: "keyword"}}
+		item.Contract.Parameters = []contract.ParamDecl{{Name: "mobile", Property: "mobile"}}
 	case "+dept-members":
-		item.Contract.Parameters = []contract.ParamDecl{{Name: "dept", Property: "query"}}
+		item.Contract.Parameters = []contract.ParamDecl{{Name: "dept", Property: "dept"}}
 	case "+lookup", "+org", "+team":
-		item.Contract.Parameters = []contract.ParamDecl{{Name: "name", Property: "keyword"}}
+		item.Contract.Parameters = []contract.ParamDecl{{Name: "name", Property: "name"}}
 	case "+resolve-dept":
-		item.Contract.Parameters = []contract.ParamDecl{{Name: "name", Property: "query"}}
+		item.Contract.Parameters = []contract.ParamDecl{{Name: "name", Property: "name"}}
 	}
 }
 

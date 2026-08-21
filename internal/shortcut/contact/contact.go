@@ -242,7 +242,9 @@ var SearchMobile = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +search-mobile --mobile 13800138000"},
 		},
-		Parameters: []contract.ParamDecl{{Name: "mobile", Property: "keyword"}},
+		// Keep the merge-base Schema property. Execute is a reviewed composite
+		// adapter from --mobile to keyword plus an exact detail readback.
+		Parameters: []contract.ParamDecl{{Name: "mobile", Property: "mobile"}},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "mobile", Type: shortcut.FlagString, Desc: "手机号；--mobile 必须是至少 6 位数字的手机号，可包含国家码、空格、连字符或括号", Required: true},
@@ -460,7 +462,7 @@ var ListRoleMembers = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +list-role-members --id 12345"},
 		},
-		Parameters: []contract.ParamDecl{{Name: "id", Property: "labelId"}},
+		Parameters: []contract.ParamDecl{{Name: "id", Property: "id"}},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "id", Type: shortcut.FlagString, Desc: "角色 ID；--id 必须为正整数", Required: true},
@@ -592,7 +594,7 @@ var ListSubDepts = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +list-sub-depts --dept 1"},
 		},
-		Parameters: []contract.ParamDecl{{Name: "dept", Property: "deptId"}},
+		Parameters: []contract.ParamDecl{{Name: "dept", Property: "dept"}},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "dept", Type: shortcut.FlagInt, Desc: "部门 ID（钉钉根部门为 1）；--dept 必须大于 0", Required: true},
@@ -715,7 +717,7 @@ var ListDeptMembers = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws contact +list-dept-members --depts 12345,67890"},
 		},
-		Parameters: []contract.ParamDecl{{Name: "depts", Property: "deptIds"}},
+		Parameters: []contract.ParamDecl{{Name: "depts", Property: "depts"}},
 	},
 	Flags: []shortcut.Flag{
 		{Name: "depts", Type: shortcut.FlagStringSlice, Desc: "部门 ID 列表，逗号分隔；--depts 每项都必须为正整数且不能重复", Required: true},
@@ -784,12 +786,12 @@ func init() {
 	finalizeContactShortcut(&SearchUser, contactCollectionResult("users", SearchUser.Description), true)
 	finalizeContactShortcut(&SearchMobile, contactCollectionResult("users", SearchMobile.Description), true)
 	finalizeContactShortcut(&ListRoles, contactCollectionResult("roles", ListRoles.Description), false)
+	markContactCompatibilityOnly(&ListRoles)
 	finalizeContactShortcut(&ListRoleMembers, contactCollectionResult("members", ListRoleMembers.Description), true)
 	finalizeContactShortcut(&ListSubDepts, contactCollectionResult("depts", ListSubDepts.Description), true)
 	finalizeContactShortcut(&ListDeptMembers, contactCollectionResult("members", ListDeptMembers.Description), true)
 	finalizeContactShortcut(&ListRosterFields, contactCollectionResult("fields", ListRosterFields.Description), false)
 	finalizeContactShortcut(&GetRoster, contactObjectResult(GetRoster.Description), false)
-	ListRoles.Contract.Interface.Reason = contactRolesGapReason
 	ListRosterFields.Contract.Interface.Reason = contactRosterGapReason
 	GetRoster.Contract.Interface.Reason = contactRosterGapReason
 	shortcut.Register(
