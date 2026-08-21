@@ -287,6 +287,7 @@ func TestCrossPlatformCoverageWorkflowDeployValidationAndFailureStagesE2E(t *tes
 		{name: "wrong DSL version", dsl: `{"version":"v0"}`},
 		{name: "update preflight error", dsl: workflowDSLFixture, extra: []string{"--workflow-id", "w"}, steps: []upsertByKeyStep{{err: errors.New("preflight failed")}}},
 		{name: "update target not found", dsl: workflowDSLFixture, extra: []string{"--workflow-id", "w"}, steps: []upsertByKeyStep{{text: `{"flowId":"other"}`}}},
+		{name: "update write error", dsl: workflowDSLFixture, extra: []string{"--workflow-id", "w"}, steps: []upsertByKeyStep{{text: `{"flowId":"w"}`}, {err: errors.New("update failed")}}},
 		{name: "publish missing ID", dsl: workflowDSLFixture, steps: []upsertByKeyStep{{text: `{"valid":true}`}}},
 		{name: "publish ID wrong type", dsl: workflowDSLFixture, steps: []upsertByKeyStep{{text: `{"valid":true,"flowId":1}`}}},
 		{name: "read-back error", dsl: workflowDSLFixture, steps: []upsertByKeyStep{{text: `{"valid":true,"flowId":"w"}`}, {err: errors.New("read failed")}}},

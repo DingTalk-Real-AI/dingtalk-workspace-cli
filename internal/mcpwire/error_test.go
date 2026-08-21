@@ -30,4 +30,12 @@ func TestCrossPlatformCoverageMCPWireRetryability(t *testing.T) {
 	if !ok || details.Code != "DASHBOARD_NOT_FOUND" || details.Retryable == nil || *details.Retryable != retryable {
 		t.Fatalf("details = %#v, %v", details, ok)
 	}
+	for _, err := range []error{
+		errors.New(`[MCP_TOOL_ERROR] {broken}`),
+		errors.New(`[MCP_TOOL_ERROR] {"error":{}}`),
+	} {
+		if details, ok := ParseError(err); ok {
+			t.Fatalf("malformed or empty envelope parsed as %#v", details)
+		}
+	}
 }

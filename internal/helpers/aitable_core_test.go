@@ -216,7 +216,7 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
 		want bool
-	}{{nil, false}, {errors.New("timeout"), true}, {errors.New("SYSTEM_ERROR"), true}, {errors.New("retryable: true"), true}, {errors.New(`{"error":{"code":"DASHBOARD_NOT_FOUND","retryable":false}}`), false}, {errors.New("bad request"), false}} {
+	}{{nil, false}, {errors.New("timeout"), true}, {errors.New("SYSTEM_ERROR"), true}, {errors.New("retryable: true"), true}, {errors.New(`{"error":{"code":"DASHBOARD_NOT_FOUND","retryable":false}}`), false}, {errors.New(`[MCP_TOOL_ERROR] {"error":{"code":"-1","message":"no record","retryable":true,"type":"SYSTEM_ERROR"}}`), false}, {errors.New(`SYSTEM_ERROR {"retryable": false}`), false}, {errors.New("bad request"), false}} {
 		if got := isAitableRetryableError(tc.err); got != tc.want {
 			t.Errorf("isAitableRetryableError(%v) = %v", tc.err, got)
 		}

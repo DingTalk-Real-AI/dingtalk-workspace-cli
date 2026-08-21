@@ -6,6 +6,7 @@ package aitable
 import (
 	"encoding/json"
 	"errors"
+	"math/big"
 	"strings"
 	"testing"
 )
@@ -30,13 +31,27 @@ func TestCrossPlatformCoverageRecordFiltersCanonicalValidation(t *testing.T) {
 		t.Fatalf("normalized = %#v", normalized)
 	}
 	for _, invalid := range []string{
+		`{`,
+		`[]`,
 		`{"or":[{"fieldId":"status","operator":"is","value":"待联系"}]}`,
+		`{"operator":"and","operands":"bad"}`,
+		`{"operator":"and","operands":[{"operator":"eq","operands":"bad"}]}`,
 		`{"operator":"or","operands":[{"fieldId":"status","operator":"is","value":"待联系"}]}`,
+		`{"operator":"or","operands":[{"operator":"is","operands":["status","待联系"]}]}`,
+		`{"operator":"or","operands":[{"operator":"eq","operands":[]}]}`,
+		`{"operator":"or","operands":[{"operator":"exist","operands":["status","extra"]}]}`,
+		`{"operator":"or","operands":[{"operator":"eq","operands":["status"]}]}`,
+		`{"operator":"or","operands":[{"fieldId":"","operator":"eq","value":"待联系"}]}`,
+		`{"operator":"or","operands":[{"fieldId":"status","operator":"eq"}]}`,
 		`{"operator":"eq","operands":["status","待联系"]}`,
 	} {
 		if _, err := parseRecordFilters(invalid); err == nil {
 			t.Fatalf("invalid filter succeeded: %s", invalid)
 		}
+	}
+	caller := &upsertByKeyCaller{}
+	if out, err := runAITableCompositeCLI(t, caller, "+record-query", "--base-id", "base", "--table-id", "table", "--filters", `{`); err == nil || out != "" || len(caller.calls) != 0 {
+		t.Fatalf("invalid record-query filters = output:%q err:%v calls:%#v", out, err, caller.calls)
 	}
 }
 
@@ -77,6 +92,23 @@ func TestCrossPlatformCoverageRecordReadBackUsesSelectSemantics(t *testing.T) {
 			}
 		})
 	}
+	for _, value := range []any{float64(1), float32(1), int64(1), int32(1), uint(1), uint64(1), uint32(1)} {
+		if number, ok := recordNumber(value); !ok || number.Cmp(recordMustNumber(t, "1")) != 0 {
+			t.Fatalf("recordNumber(%T) = %v, %v", value, number, ok)
+		}
+	}
+	if _, _, ok := normalizeRecordSelection([]any{"valid", map[string]any{"unexpected": true}}); ok {
+		t.Fatal("selection array with invalid item must fail closed")
+	}
+}
+
+func recordMustNumber(t *testing.T, value string) *big.Rat {
+	t.Helper()
+	number, ok := new(big.Rat).SetString(value)
+	if !ok {
+		t.Fatalf("invalid test number %q", value)
+	}
+	return number
 }
 
 func TestCrossPlatformCoverageRecordUpdateAcceptsSemanticReadBack(t *testing.T) {
@@ -108,6 +140,20 @@ func TestCrossPlatformCoverageChartWidgetsExampleReturnsOneStandardJSONConfig(t 
 	}
 	if strings.Contains(out, `"PIE"`) || len(caller.calls) != 1 || caller.calls[0].tool != "get_dashboard_widgets_example" {
 		t.Fatalf("chart output/calls were not projected: out=%s calls=%#v", out, caller.calls)
+	}
+}
+
+func TestCrossPlatformCoverageChartWidgetsExampleFailureBranches(t *testing.T) {
+	for name, step := range map[string]upsertByKeyStep{
+		"transport":  {err: errors.New("chart transport failed")},
+		"projection": {text: `{"data":"same"}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out, err := runAITableCompositeCLI(t, &upsertByKeyCaller{steps: []upsertByKeyStep{step}}, "+chart-widgets-example", "--chart-type", "HISTOGRAM")
+			if err == nil || out != "" {
+				t.Fatalf("chart failure = output:%q err:%v", out, err)
+			}
+		})
 	}
 }
 

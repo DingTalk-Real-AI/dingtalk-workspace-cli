@@ -1422,6 +1422,8 @@ func decodeAitableChartExamples(payload any) (map[string]any, error) {
 	return decodeAitableChartExamplesDepth(payload, 0)
 }
 
+var repairAitableChartJSON = jsonrepair.RepairJSON
+
 func decodeAitableChartExamplesDepth(payload any, depth int) (map[string]any, error) {
 	if depth > 4 {
 		return nil, fmt.Errorf("chart examples response exceeded the supported envelope depth")
@@ -1433,7 +1435,7 @@ func decodeAitableChartExamplesDepth(payload any, depth int) (map[string]any, er
 		}
 		var decoded any
 		if err := json.Unmarshal([]byte(value), &decoded); err != nil {
-			repaired, repairErr := jsonrepair.RepairJSON(value)
+			repaired, repairErr := repairAitableChartJSON(value)
 			if repairErr != nil {
 				return nil, fmt.Errorf("chart examples are not valid JSON/JSONC: %w", repairErr)
 			}
