@@ -47,6 +47,7 @@ var skillSetupAgentHomes = []string{
 	".snowflake/cortex/skills",
 	".config/crush/skills",
 	".config/devin/skills",
+	".dsh/skills",
 	".factory/skills",
 	".forge/skills",
 	".config/goose/skills",
@@ -1056,6 +1057,10 @@ func resolveSkillSetupBase(home, target string) string {
 		}
 	case "mistral-vibe":
 		if custom := strings.TrimSpace(skillSetupGetenv("VIBE_HOME")); custom != "" {
+			return filepath.Join(custom, "skills")
+		}
+	case "dsh":
+		if custom := strings.TrimSpace(skillSetupGetenv("DSH_HOME")); custom != "" {
 			return filepath.Join(custom, "skills")
 		}
 	case "openclaw":

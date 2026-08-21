@@ -286,7 +286,7 @@ func TestCrossPlatformCoverageUpstreamAgentEnumerationAndEffectiveRoots(t *testi
 		"codex": ".codex/skills", "command-code": ".commandcode/skills", "continue": ".continue/skills",
 		"cortex": ".snowflake/cortex/skills", "crush": ".config/crush/skills", "cursor": ".cursor/skills",
 		"deepagents": ".deepagents/agent/skills", "devin": ".config/devin/skills", "dexto": ".agents/skills",
-		"droid": ".factory/skills", "firebender": ".firebender/skills", "forgecode": ".forge/skills",
+		"dsh": ".dsh/skills", "droid": ".factory/skills", "firebender": ".firebender/skills", "forgecode": ".forge/skills",
 		"gemini-cli": ".gemini/skills", "github-copilot": ".copilot/skills", "goose": ".config/goose/skills",
 		"grok": ".grok/skills", "hermes-agent": ".hermes/skills", "inference-sh": ".inferencesh/skills",
 		"jazz": ".jazz/skills", "junie": ".junie/skills", "iflow-cli": ".iflow/skills",
@@ -303,8 +303,8 @@ func TestCrossPlatformCoverageUpstreamAgentEnumerationAndEffectiveRoots(t *testi
 		"zed": ".agents/skills", "zcode": ".zcode/skills", "zencoder": ".zencoder/skills",
 		"zenflow": ".zencoder/skills", "neovate": ".neovate/skills", "pochi": ".pochi/skills", "adal": ".adal/skills",
 	}
-	if got := len(expected) + len(unsupportedGlobalAgentTargets); got != 76 {
-		t.Fatalf("upstream agent enumeration = %d, want 76", got)
+	if got := len(expected) + len(unsupportedGlobalAgentTargets); got != 77 {
+		t.Fatalf("upstream agent enumeration = %d, want 77", got)
 	}
 	for target, rel := range expected {
 		mapped, ok := agentSkillPaths[target]
@@ -330,7 +330,7 @@ func TestCrossPlatformCoverageUpstreamAgentEnumerationAndEffectiveRoots(t *testi
 	custom := map[string]string{
 		"AUTOHAND_HOME": filepath.Join(home, "autohand-home"), "CLAUDE_CONFIG_DIR": filepath.Join(home, "claude-home"),
 		"CODEX_HOME": filepath.Join(home, "codex-home"), "GROK_HOME": filepath.Join(home, "grok-home"),
-		"HERMES_HOME": filepath.Join(home, "hermes-home"), "VIBE_HOME": filepath.Join(home, "vibe-home"),
+		"DSH_HOME": filepath.Join(home, "dsh-home"), "HERMES_HOME": filepath.Join(home, "hermes-home"), "VIBE_HOME": filepath.Join(home, "vibe-home"),
 		"XDG_CONFIG_HOME": filepath.Join(home, "xdg"),
 	}
 	testseam.Swap(t, &skillSetupGetenv, func(name string) string { return custom[name] })
@@ -338,6 +338,7 @@ func TestCrossPlatformCoverageUpstreamAgentEnumerationAndEffectiveRoots(t *testi
 		"autohand-code": filepath.Join(custom["AUTOHAND_HOME"], "skills"),
 		"claude-code":   filepath.Join(custom["CLAUDE_CONFIG_DIR"], "skills"),
 		"codex":         filepath.Join(custom["CODEX_HOME"], "skills"),
+		"dsh":           filepath.Join(custom["DSH_HOME"], "skills"),
 		"grok":          filepath.Join(custom["GROK_HOME"], "skills"),
 		"hermes-agent":  filepath.Join(custom["HERMES_HOME"], "skills"),
 		"mistral-vibe":  filepath.Join(custom["VIBE_HOME"], "skills"),
