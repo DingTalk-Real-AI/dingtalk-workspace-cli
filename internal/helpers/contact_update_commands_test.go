@@ -50,6 +50,7 @@ func TestCrossPlatformCoverageContactUpdateCommandsExposeExpectedFlags(t *testin
 		{[]string{"user", "update-self"}, []string{"nick", "avatar-file-id"}},
 		{[]string{"user", "update-ownness"}, []string{"user-id", "ownness-text"}},
 		{[]string{"account", "update"}, []string{"user-id", "org-user-name", "depts", "master-user-id", "nick", "avatar-file-id"}},
+		{[]string{"label", "create"}, []string{"name", "parent-id"}},
 	}
 	for _, tc := range cases {
 		cmd := requireWukongSyncCommand(t, root, tc.path...)
@@ -124,6 +125,18 @@ func TestCrossPlatformCoverageContactUpdateCommandsMapMCPArguments(t *testing.T)
 				"avatarFileId": "file-2",
 			},
 		},
+		{
+			name:     "create label at root",
+			args:     []string{"label", "create", "--name", "管理员", "--parent-id", "0", "--yes"},
+			toolName: "add_label",
+			wantArgs: map[string]any{"parentId": int64(0), "labelModel": map[string]any{"name": "管理员"}},
+		},
+		{
+			name:     "create label with camel aliases",
+			args:     []string{"label", "create", "--labelName", "财务", "--parentId", "42", "--yes"},
+			toolName: "add_label",
+			wantArgs: map[string]any{"parentId": int64(42), "labelModel": map[string]any{"name": "财务"}},
+		},
 	}
 
 	for _, tt := range tests {
@@ -154,6 +167,7 @@ func TestCrossPlatformCoverageContactUpdateCommandsRequireConfirmation(t *testin
 		{"user", "update-self", "--nick", "新昵称"},
 		{"user", "update-ownness", "--user-id", "user-1", "--ownness-text", "居家办公中"},
 		{"account", "update", "--user-id", "user-2", "--nick", "小李"},
+		{"label", "create", "--name", "管理员", "--parent-id", "0"},
 	}
 	for _, args := range tests {
 		t.Run(strings.Join(args[:2], "-"), func(t *testing.T) {
@@ -196,6 +210,10 @@ func TestCrossPlatformCoverageContactUpdateCommandsValidateInput(t *testing.T) {
 		{"account blank id", []string{"account", "update", "--user-id", " ", "--nick", "小李", "--yes"}, "不能为空"},
 		{"account no changes", []string{"account", "update", "--user-id", "user-2", "--nick", " ", "--yes"}, "至少需要一个修改项"},
 		{"account invalid departments", []string{"account", "update", "--user-id", "user-2", "--depts", "bad", "--yes"}, "--depts JSON 解析失败"},
+		{"label create missing name", []string{"label", "create", "--parent-id", "0", "--yes"}, "required"},
+		{"label create blank name", []string{"label", "create", "--name", " ", "--parent-id", "0", "--yes"}, "不能为空"},
+		{"label create missing parent", []string{"label", "create", "--name", "管理员", "--yes"}, "required"},
+		{"label create invalid parent", []string{"label", "create", "--name", "管理员", "--parent-id", "bad", "--yes"}, "must be an integer"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
