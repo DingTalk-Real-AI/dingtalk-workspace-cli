@@ -131,16 +131,22 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 	prepareData, err := rt.CallMCPWriteDataStrict(serverMain, "prepare_attachment_upload", map[string]any{"baseId": baseID, "fileName": info.Name(), "size": info.Size(), "mimeType": mimeType})
 	if err != nil {
 		result.Status = "unknown"
+		result.Checkpoint = map[string]any{"nextStep": "read the target record; do not retry upload preparation blindly", "recordId": recordIDValue, "fieldId": fieldID}
+		result.NextCommand = recordQueryRecoveryCommand(baseID, tableID, []string{recordIDValue})
 		return compositeError(result, err, false)
 	}
 	uploadURL := findStringByKeys(prepareData, "uploadUrl")
 	fileToken := findStringByKeys(prepareData, "fileToken")
 	if uploadURL == "" || fileToken == "" {
 		result.Status = "unknown"
+		result.Checkpoint = map[string]any{"nextStep": "read the target record; upload credentials were incomplete", "recordId": recordIDValue, "fieldId": fieldID}
+		result.NextCommand = recordQueryRecoveryCommand(baseID, tableID, []string{recordIDValue})
 		return compositeError(result, fmt.Errorf("prepare_attachment_upload response is missing uploadUrl or fileToken"), false)
 	}
 	if err := validateAttachmentUploadURL(uploadURL); err != nil {
 		result.Status = "unknown"
+		result.Checkpoint = map[string]any{"nextStep": "stop; the returned upload URL is unsafe", "recordId": recordIDValue, "fieldId": fieldID}
+		result.NextCommand = recordQueryRecoveryCommand(baseID, tableID, []string{recordIDValue})
 		return compositeError(result, err, false)
 	}
 	// validateAttachmentUploadURL has already rejected every URL shape for
@@ -152,6 +158,8 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 	if err != nil {
 		result.Status = "partial_success"
 		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "prepare_attachment_upload", "fileToken": fileToken})
+		result.Checkpoint = map[string]any{"nextStep": "read the record before deciding whether any cell write is needed", "fileToken": fileToken, "recordId": recordIDValue, "fieldId": fieldID}
+		result.NextCommand = recordQueryRecoveryCommand(baseID, tableID, []string{recordIDValue})
 		return compositeError(result, fmt.Errorf("attachment HTTP PUT failed: %w", err), false)
 	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
@@ -159,6 +167,8 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 	if response.StatusCode < 200 || response.StatusCode >= 300 || closeErr != nil {
 		result.Status = "partial_success"
 		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "prepare_attachment_upload", "fileToken": fileToken, "httpStatus": response.StatusCode})
+		result.Checkpoint = map[string]any{"nextStep": "read the record before deciding whether any cell write is needed", "fileToken": fileToken, "recordId": recordIDValue, "fieldId": fieldID}
+		result.NextCommand = recordQueryRecoveryCommand(baseID, tableID, []string{recordIDValue})
 		return compositeError(result, fmt.Errorf("attachment HTTP PUT returned status %d (close error: %v)", response.StatusCode, closeErr), false)
 	}
 	desired = append(desired, map[string]any{"fileToken": fileToken})
@@ -173,7 +183,8 @@ func executeAttachmentPut(rt *shortcut.RuntimeContext) error {
 	}
 	if verifyErr != nil {
 		result.Status = "partial_success"
-		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "update_records", "recordId": recordIDValue, "fieldId": fieldID})
+		result.Checkpoint = map[string]any{"nextStep": "read the attachment field by recordId before retrying", "recordId": recordIDValue, "fieldId": fieldID, "fileToken": fileToken}
+		result.NextCommand = recordQueryRecoveryCommand(baseID, tableID, []string{recordIDValue})
 		if writeErr != nil {
 			result.Warnings = append(result.Warnings, "record write response error: "+writeErr.Error())
 		}
@@ -251,6 +262,8 @@ func executeAttachmentRemove(rt *shortcut.RuntimeContext) error {
 	}
 	if verifyErr != nil {
 		result.Status = "unknown"
+		result.Checkpoint = map[string]any{"nextStep": "read the attachment field by recordId before retrying", "recordId": recordIDValue, "fieldId": fieldID}
+		result.NextCommand = recordQueryRecoveryCommand(baseID, tableID, []string{recordIDValue})
 		if writeErr != nil {
 			result.Warnings = append(result.Warnings, "record write response error: "+writeErr.Error())
 		}

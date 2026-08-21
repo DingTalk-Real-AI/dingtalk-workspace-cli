@@ -257,6 +257,7 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 			result.CompletedCount = index
 			result.FailedCount = len(tables) - index
 			result.Checkpoint = map[string]any{"nextTableIndex": index, "baseId": baseID}
+			result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+list-tables", "--base", baseID, "--format", "json")
 			return compositeError(result, createErr, false)
 		}
 		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "create_table", "baseId": baseID, "tableId": tableID, "name": spec.Name})
@@ -289,6 +290,10 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 		if verifyErr == nil {
 			verifyErr = verifyDeclaredFieldStructures(fields, spec.Fields)
 		}
+		fieldRefs := []map[string]any{}
+		if verifyErr == nil {
+			fieldRefs, verifyErr = projectStableFieldRefs(fields)
+		}
 		if verifyErr != nil {
 			result.Status = "partial_success"
 			result.CompletedCount = index
@@ -298,12 +303,30 @@ func executeBaseBootstrap(rt *shortcut.RuntimeContext) error {
 		}
 		result.CompletedCount = index + 1
 		result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: index + 2, Name: "create and verify table", Tool: "create_table", Status: "completed", Count: len(spec.Fields), Result: map[string]any{"tableId": tableID, "fieldCount": len(fields)}})
-		createdTables = append(createdTables, map[string]any{"tableId": tableID, "name": spec.Name, "fieldCount": len(fields)})
+		createdTables = append(createdTables, map[string]any{"tableId": tableID, "name": spec.Name, "fieldCount": len(fields), "fields": fieldRefs})
 	}
 	result.Verification = map[string]any{"status": "verified", "baseId": baseID, "tableCount": len(createdTables)}
 	result.Result = map[string]any{"baseId": baseID, "tables": createdTables}
 	result.NextCommand = ""
 	return rt.Output(result)
+}
+
+func projectStableFieldRefs(fields []map[string]any) ([]map[string]any, error) {
+	refs := make([]map[string]any, 0, len(fields))
+	for index, field := range fields {
+		fieldID := strings.TrimSpace(stringValue(field, "fieldId", "id"))
+		fieldName := strings.TrimSpace(stringValue(field, "fieldName", "name"))
+		fieldType := strings.TrimSpace(stringValue(field, "type", "fieldType"))
+		if fieldID == "" || fieldName == "" || fieldType == "" {
+			return nil, fmt.Errorf("field read-back item %d is missing fieldId, fieldName, or type", index)
+		}
+		refs = append(refs, map[string]any{
+			"fieldId":   fieldID,
+			"fieldName": fieldName,
+			"type":      fieldType,
+		})
+	}
+	return refs, nil
 }
 
 func findNamedObjectList(value any, names ...string) ([]map[string]any, bool) {

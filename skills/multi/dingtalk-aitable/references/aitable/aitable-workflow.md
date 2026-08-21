@@ -13,7 +13,7 @@
 | `workflow list` | 列出 Base 下所有工作流（含状态/创建人/最后修改时间），支持分页 |
 | `workflow get` | 获取单个工作流详情（含 flowSchema 完整节点定义） |
 | `workflow enable` | 启用指定工作流（按配置的触发条件自动执行） |
-| `workflow disable` | 禁用指定工作流（高危，建议 `--yes` 二次确认） |
+| `workflow disable` | 禁用指定工作流（高危，由 Runtime 请求二次确认） |
 | `workflow run` | 立即执行指定工作流（会产生真实副作用，需确认） |
 | `workflow history` | 按状态、时间和分页条件查询工作流执行历史 |
 
@@ -286,14 +286,14 @@ dws aitable workflow enable --base-id BASE_ID --workflow-id WORKFLOW_ID --format
 ### workflow disable — 禁用工作流（高危）
 
 ```bash
-dws aitable workflow disable --base-id BASE_ID --workflow-id WORKFLOW_ID --yes --format json
+dws aitable workflow disable --base-id BASE_ID --workflow-id WORKFLOW_ID --format json
 ```
 
 返回 `{workflowId, disabled: true}` —— 同样是动作确认。禁用后该工作流不再自动触发。
 
 **风险**：直接影响业务自动化（如停掉「记录创建后自动发通知」会让通知断流）。建议：
 - 操作前先 `workflow get` 留底当前配置
-- 脚本场景显式传 `--yes`；交互场景让用户在 prompt 中再次确认
+- 由 Runtime/宿主取得独立确认并传递确认状态；文档示例不携带确认绕过参数
 
 ## 能力边界
 
@@ -354,7 +354,7 @@ dws aitable workflow list --base-id BASE_ID --format json | jq '.data | {total: 
 dws aitable workflow get --base-id BASE_ID --workflow-id WORKFLOW_ID --format json > /tmp/wf-backup.json
 
 # 2. 禁用
-dws aitable workflow disable --base-id BASE_ID --workflow-id WORKFLOW_ID --yes --format json
+dws aitable workflow disable --base-id BASE_ID --workflow-id WORKFLOW_ID --format json
 
 # 3. 调试做完后重启
 dws aitable workflow enable --base-id BASE_ID --workflow-id WORKFLOW_ID --format json
@@ -367,7 +367,7 @@ dws aitable workflow list --base-id BASE_ID --format json | jq '.data.list[] | s
 
 ```bash
 for WF in $(dws aitable workflow list --base-id BASE_ID --limit 100 --format json | jq -r '.data.list[] | select(.status == "RUNNING") | .flowId'); do
-  dws aitable workflow disable --base-id BASE_ID --workflow-id "$WF" --yes --format json | jq .status
+  dws aitable workflow disable --base-id BASE_ID --workflow-id "$WF" --format json | jq .status
 done
 ```
 

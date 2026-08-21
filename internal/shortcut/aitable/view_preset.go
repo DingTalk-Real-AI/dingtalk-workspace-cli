@@ -94,7 +94,7 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 		}
 	}
 	result := newCompositeResult("view_preset_apply")
-	result.Resolved = map[string]any{"action": action, "name": name, "viewId": viewID}
+	result.Resolved = map[string]any{"action": action, "baseId": baseID, "tableId": tableID, "name": name, "viewId": viewID}
 	result.Plan = []compositeStep{{Index: 1, Name: action + " view preset", Tool: tool, Status: "planned", Arguments: params}}
 	if rt.DryRun() {
 		result.Status = "planned"
@@ -142,7 +142,8 @@ func executeViewPresetApply(rt *shortcut.RuntimeContext) error {
 	}
 	if verifyErr != nil {
 		result.Status = "unknown"
-		result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": tool, "viewId": viewID, "name": name})
+		result.Checkpoint = map[string]any{"nextStep": "read views and reconcile the exact name before retrying", "baseId": baseID, "tableId": tableID, "viewId": viewID, "name": name}
+		result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+view-get", "--base-id", baseID, "--table-id", tableID, "--format", "json")
 		if writeErr != nil {
 			result.Warnings = append(result.Warnings, "write response error: "+writeErr.Error())
 		}

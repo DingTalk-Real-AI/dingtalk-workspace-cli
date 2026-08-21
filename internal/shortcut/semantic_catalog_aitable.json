@@ -77,7 +77,7 @@
     "+dashboard-share-get": {"disposition":"schema_leaf","semantic_delta":"读取仪表盘分享配置的一对一入口。","risk":"read","public":true,"reviewed":true},
     "+dashboard-share-update": {"disposition":"semantic_adapter","semantic_delta":"统一开启、关闭和设置仪表盘分享类型。","risk":"write","public":true,"reviewed":true},
 
-    "+chart-widgets-example": {"disposition":"schema_leaf","semantic_delta":"返回所有图表类型的 widget config 示例，供构造合法图表配置。","risk":"read","public":true,"reviewed":true},
+    "+chart-widgets-example": {"disposition":"schema_leaf","semantic_delta":"按图表类型返回标准 JSON widget config 与 x/y/w/h layout；不传类型时只列可用类型。","risk":"read","public":true,"reviewed":true},
     "+chart-get": {"disposition":"schema_leaf","semantic_delta":"读取指定图表完整配置的一对一入口。","risk":"read","public":true,"reviewed":true},
     "+chart-update": {"disposition":"semantic_adapter","semantic_delta":"统一更新图表配置或布局，并要求显式 config 输入。","risk":"write","public":true,"reviewed":true},
     "+chart-delete": {"disposition":"schema_leaf","semantic_delta":"删除图表及布局项，显式发布不可逆高风险事实。","risk":"high-risk-write","public":true,"reviewed":true},

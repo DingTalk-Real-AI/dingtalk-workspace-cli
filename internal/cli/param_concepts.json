@@ -309,6 +309,11 @@
     "drive +star-list": {"ambiguous": ["type", "types"], "scope_strict": true, "note": "The shortcut exposes only the API contentTypes filter. Generic type spellings may denote file extensions or node/resource types, so the current name-only layer must not guess the value domain."},
     "drive +upload": {"ambiguous": ["destination-id", "space", "target-id"], "scoped_aliases": {"dentry-uuid": "node", "file-id": "node", "node-id": "node", "overwrite-node-id": "node", "directory-id": "folder", "parent-directory-id": "folder", "parent-folder-id": "folder", "target-folder-id": "folder", "source-file": "file", "local-file": "file", "file-path": "file", "content-type": "mime-type", "filename": "file-name", "name": "file-name", "display-name": "file-name", "upload-name": "file-name"}, "block": ["dentry-id", "document-url", "knowledge-base-id", "wiki-workspace-id", "workspace", "workspace-id", "output-path"], "scope_strict": true, "note": "Local source path, remote display name, MIME type, parent folder, numeric storage space and optional overwrite node are distinct roles. ID-suffixed file/node spellings denote the overwrite target; the shortcut does not expose a knowledge-base workspace route."},
 "aitable +export-data": {"scoped_aliases":{"export-format":"format"},"scope_strict":true,"note":"The shortcut's local --format is the export file format, unlike the root output-format flag; only the explicit --export-format spelling is mapped here."},
+    "aitable field update": {"scoped_aliases":{"field-name":"name"},"scope_strict":true,"note":"On this exact field-update command, --field-name and --name both carry the replacement field display name; field-id remains a separate identity."},
+    "aitable +field-update": {"scoped_aliases":{"field-name":"name"},"scope_strict":true,"note":"On this exact field-update shortcut, --field-name and --name both carry the replacement field display name; field-id remains a separate identity."},
+    "aitable view create": {"scoped_aliases":{"type":"view-type"},"scope_strict":true,"note":"On this exact view-create command, --type and --view-type carry the same view enum; field types and other resource types are not affected."},
+    "aitable view duplicate": {"scoped_aliases":{"name":"new-name"},"scope_strict":true,"note":"On this exact view-duplicate command, --name and --new-name both carry the new copied-view display name; the source view-id remains separate."},
+    "aitable +view-duplicate": {"scoped_aliases":{"name":"new-name"},"scope_strict":true,"note":"On this exact view-duplicate shortcut, --name and --new-name both carry the new copied-view display name; the source view-id remains separate."},
     "aitable attachment upload": {"scoped_aliases":{"file-size":"size"},"scope_strict":true,"note":"On this upload command --size is the local file size in bytes; the mapping is command-local because size is a pagination synonym elsewhere."},
     "aitable +attachment-upload": {"scoped_aliases":{"file-size":"size"},"scope_strict":true,"note":"On this upload command --size is the local file size in bytes; the mapping is command-local because size is a pagination synonym elsewhere."},
     "aitable import upload": {"scoped_aliases":{"size":"file-size"},"scope_strict":true,"note":"On this import-upload command --file-size is the local file size in bytes; the mapping is command-local because size is a pagination synonym elsewhere."},
@@ -428,6 +433,11 @@
 
   "validation_fixture": {
     "cases": [
+      {"command": "aitable field update", "emitted": "field-name", "expect": "name", "via": "override:scoped_strict", "occ": 1},
+      {"command": "aitable +field-update", "emitted": "field-name", "expect": "name", "via": "override:scoped_strict", "occ": 1},
+      {"command": "aitable view create", "emitted": "type", "expect": "view-type", "via": "override:scoped_strict", "occ": 1},
+      {"command": "aitable view duplicate", "emitted": "name", "expect": "new-name", "via": "override:scoped_strict", "occ": 1},
+      {"command": "aitable +view-duplicate", "emitted": "name", "expect": "new-name", "via": "override:scoped_strict", "occ": 1},
       {"command": "oa +search-forms", "emitted": "keyword", "expect": "query", "via": "concept:search_query", "occ": 28},
       {"command": "aitable +list-tables", "emitted": "base-id", "expect": "base", "via": "concept:base_id+morph", "occ": 26},
       {"command": "mail +find-mail-user", "emitted": "keyword", "expect": "query", "via": "concept:search_query", "occ": 18},

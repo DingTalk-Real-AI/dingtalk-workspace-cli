@@ -71,7 +71,7 @@
 | `record create` / `+record-query` | 当前 Table 下的 `recordId` |
 | `view create` / `+view-get` | 当前 Table 下的 `viewId` |
 | Dashboard 或 Chart 创建结果 | 当前 Base 下的 `dashboardId` / `chartId` |
-| `dws doc info` | `folderId` 供 Base 复制目标使用；`nodeId` / `rootFolderId` 改传 `--target-folder-node` |
+| 已验证的文件夹元信息 | 只有真实文件夹 dentryUuid 可传给 Base 复制的 `--target-folder-id`；URL、路径及其他 ID 类型不能替代 |
 
 `baseId` / `tableId` / `fieldId` / `recordId` / `viewId` / `folderId` / `nodeId` / `spaceId` / `dentryId` 是不同类型，不得轮流代入试错。
 

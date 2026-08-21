@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -125,6 +126,11 @@ func TestCrossPlatformCoverageRecordUpsertByKeyUpdateE2E(t *testing.T) {
 	}
 	if caller.calls[1].tool != "update_records" {
 		t.Fatalf("update tool = %s", caller.calls[1].tool)
+	}
+	records := caller.calls[1].args["records"].([]any)
+	writtenCells := records[0].(map[string]any)["cells"].(map[string]any)
+	if _, exists := writtenCells["fldKey"]; exists || !reflect.DeepEqual(writtenCells, map[string]any{"fldStatus": "进行中"}) {
+		t.Fatalf("update cells = %#v, want only explicitly modified fields", writtenCells)
 	}
 }
 
@@ -806,7 +812,7 @@ func TestCrossPlatformCoverageRecordUpdatePartialStopsWithCheckpointE2E(t *testi
 		t.Fatalf("partial error = %#v", err)
 	}
 	result := typed.Details["result"].(compositeResult)
-	if result.CompletedCount != 100 || result.Checkpoint["nextOffset"] != 100 {
+	if result.CompletedCount != 100 || result.Checkpoint["nextOffset"] != 100 || !strings.Contains(result.NextCommand, "+record-query") || !strings.Contains(result.NextCommand, "r100") {
 		t.Fatalf("partial result = %#v", result)
 	}
 }
@@ -1023,7 +1029,7 @@ func TestCrossPlatformCoverageRecordDeletePartialCheckpointE2E(t *testing.T) {
 		t.Fatalf("partial delete error = %#v", err)
 	}
 	result := typed.Details["result"].(compositeResult)
-	if result.Checkpoint["nextOffset"] != 100 || result.CompletedCount != 100 {
+	if result.Checkpoint["nextOffset"] != 100 || result.CompletedCount != 100 || !strings.Contains(result.NextCommand, "+record-query") || !strings.Contains(result.NextCommand, "r100") {
 		t.Fatalf("partial delete result = %#v", result)
 	}
 }

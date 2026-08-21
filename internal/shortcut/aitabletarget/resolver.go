@@ -219,6 +219,11 @@ func ResolveBaseName(reader Reader, name string, allowFuzzy bool) (Resolution, e
 			all = append(all, Candidate{ID: id, Name: candidateName})
 		}
 		next, hasMore, hasMoreKnown := pagination(data)
+		// Some reviewed service responses retain the request/continuation cursor
+		// even after explicitly declaring hasMore=false.  The explicit terminal
+		// bit is authoritative; treating the residual cursor as another page
+		// creates a false stall/cycle and makes a complete candidate set look
+		// incomplete.
 		if hasMoreKnown && !hasMore {
 			return selectCandidate("base", query, dedupe(all), allowFuzzy)
 		}

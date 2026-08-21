@@ -111,7 +111,7 @@ func TestCrossPlatformCoverageBaseCopyRequiresNewIDAndExactReadBackE2E(t *testin
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
 		var typed *apperrors.Error
-		if err == nil || out != "" || len(caller.calls) != 2 || !errors.As(err, &typed) || typed.Reason != "target_not_supported" || typed.Retryable {
+		if err == nil || out != "" || len(caller.calls) != 2 || !errors.As(err, &typed) || typed.Reason != "target_not_supported" || typed.Retryable || len(typed.Actions) != 1 || !strings.Contains(typed.Actions[0], "停止重试 +base-copy") {
 			t.Fatalf("rejected target = output:%q err:%#v calls:%#v", out, err, caller.calls)
 		}
 	})
@@ -256,6 +256,20 @@ func fieldReadBackJSON(t *testing.T, fields []any) string {
 	return string(raw)
 }
 
+func fieldReadBackWithIDs(fields []any) []any {
+	out := make([]any, 0, len(fields))
+	for index, raw := range fields {
+		field := raw.(map[string]any)
+		out = append(out, map[string]any{
+			"fieldId":   fmt.Sprintf("field-%02d", index),
+			"fieldName": field["fieldName"],
+			"fieldType": field["type"],
+			"config":    map[string]any{"large": "omitted from bootstrap result"},
+		})
+	}
+	return out
+}
+
 func TestCrossPlatformCoverageBaseBootstrapCreatesChunksAndVerifiesE2E(t *testing.T) {
 	fields := bootstrapFields(16)
 	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
@@ -264,16 +278,19 @@ func TestCrossPlatformCoverageBaseBootstrapCreatesChunksAndVerifiesE2E(t *testin
 		{text: `{"data":{"tableId":"t-new"}}`},
 		{text: `{"createdFields":[{"fieldId":"f16"}]}`},
 		{text: `{"tables":[{"tableId":"t-new","name":"任务"}]}`},
-		{text: fieldReadBackJSON(t, fields)},
+		{text: fieldReadBackJSON(t, fieldReadBackWithIDs(fields))},
 	}}
 	out, err := runAITableCompositeCLI(t, caller, "+base-bootstrap", "--name", "项目", "--tables", marshalBootstrapTables(t, fields), "--yes")
 	if err != nil {
 		t.Fatalf("bootstrap error = %v", err)
 	}
-	for _, want := range []string{`"baseId": "b-new"`, `"tableId": "t-new"`, `"status": "verified"`} {
+	for _, want := range []string{`"baseId": "b-new"`, `"tableId": "t-new"`, `"status": "verified"`, `"fieldId": "field-00"`, `"fieldName": "F00"`, `"type": "text"`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("bootstrap output missing %s: %s", want, out)
 		}
+	}
+	if strings.Contains(out, `"large": "omitted from bootstrap result"`) {
+		t.Fatalf("bootstrap output leaked full field config instead of stable refs: %s", out)
 	}
 	if len(caller.calls) != 6 || caller.calls[0].tool != "create_base" || caller.calls[2].tool != "create_table" || caller.calls[3].tool != "create_fields" {
 		t.Fatalf("bootstrap calls = %#v", caller.calls)
@@ -581,7 +598,7 @@ func TestCrossPlatformCoverageBaseBootstrapRecoversFieldCallErrorE2E(t *testing.
 		{text: `{"tableId":"t"}`},
 		{err: errors.New("create fields reply failed")},
 		{text: `{"tables":[{"tableId":"t"}]}`},
-		{text: fieldReadBackJSON(t, fields)},
+		{text: fieldReadBackJSON(t, fieldReadBackWithIDs(fields))},
 	}}
 	out, err := runAITableCompositeCLI(t, caller, "+base-bootstrap",
 		"--name", "Project", "--tables", marshalBootstrapTables(t, fields), "--folder-id", "folder", "--template-id", "template", "--yes")
@@ -594,6 +611,13 @@ func TestCrossPlatformCoverageBaseBootstrapRecoversFieldCallErrorE2E(t *testing.
 }
 
 func TestCrossPlatformCoverageBaseCompositeShapeHelpers(t *testing.T) {
+	refs, err := projectStableFieldRefs([]map[string]any{{"id": "f1", "name": "标题", "fieldType": "text"}})
+	if err != nil || len(refs) != 1 || refs[0]["fieldId"] != "f1" || refs[0]["fieldName"] != "标题" || refs[0]["type"] != "text" {
+		t.Fatalf("stable field refs = %#v, err:%v", refs, err)
+	}
+	if _, err := projectStableFieldRefs([]map[string]any{{"fieldName": "标题", "type": "text"}}); err == nil {
+		t.Fatal("stable field refs without fieldId must fail")
+	}
 	if _, ok := findNamedObjectList(map[string]any{"tables": "bad"}, "tables"); ok {
 		t.Fatal("non-array named child must fail")
 	}

@@ -68,7 +68,8 @@ func executeBaseCopy(rt *shortcut.RuntimeContext) error {
 			apperrors.WithOperation("aitable/copy_base"), apperrors.WithOrigin("mcp"),
 			apperrors.WithReason("target_not_supported"), apperrors.WithFailureStage("copy_base"),
 			apperrors.WithExecutionStarted(true), apperrors.WithRetryable(false), apperrors.WithCause(writeErr),
-			apperrors.WithHint("the current copy_base service does not accept this Drive folder contract; retrying or substituting spaceId/nodeId/dentryId is unsafe"))
+			apperrors.WithHint("the current copy_base service does not accept this Drive folder contract; retrying or substituting spaceId/nodeId/dentryId is unsafe"),
+			apperrors.WithActions("停止重试 +base-copy；不要把 spaceId、nodeId、dentryId、rootFolderId 或 workspaceId 轮流代入"))
 	}
 	if newBaseID == "" || !validCompositeOpaqueID(newBaseID) {
 		cause := fmt.Errorf("copy_base response is missing a valid newBaseId")
@@ -76,9 +77,11 @@ func executeBaseCopy(rt *shortcut.RuntimeContext) error {
 			cause = fmt.Errorf("copy_base response error: %w; newBaseId is unavailable", writeErr)
 		}
 		result.Status = "unknown"
+		result.Checkpoint = map[string]any{"nextStep": "stop; copy may have completed but newBaseId is unavailable", "sourceBaseId": baseID, "targetFolderId": targetFolderID}
 		return compositeError(result, cause, false)
 	}
 	result.KnownEffects = append(result.KnownEffects, map[string]any{"tool": "copy_base", "newBaseId": newBaseID})
+	result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+base-get", "--base-id", newBaseID, "--format", "json")
 
 	readBack, verifyErr := rt.CallMCPData(serverMain, "get_base", map[string]any{"baseId": newBaseID})
 	if verifyErr == nil {
@@ -92,6 +95,7 @@ func executeBaseCopy(rt *shortcut.RuntimeContext) error {
 	if verifyErr != nil {
 		result.Status = "partial_success"
 		result.Verification = map[string]any{"status": "failed", "newBaseId": newBaseID, "error": verifyErr.Error()}
+		result.Checkpoint = map[string]any{"nextStep": "verify copied Base by returned ID", "newBaseId": newBaseID}
 		return compositeError(result, verifyErr, false)
 	}
 
@@ -99,6 +103,7 @@ func executeBaseCopy(rt *shortcut.RuntimeContext) error {
 	result.CompletedSteps = append(result.CompletedSteps, compositeStep{Index: 2, Name: "copy base", Tool: "copy_base", Status: "completed", Result: map[string]any{"newBaseId": newBaseID}})
 	result.Verification = map[string]any{"status": "verified", "newBaseId": newBaseID}
 	result.Result = map[string]any{"newBaseId": newBaseID, "base": readBack}
+	result.NextCommand = ""
 	return rt.Output(result)
 }
 

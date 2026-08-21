@@ -586,3 +586,51 @@ func TestCrossPlatformCoverageAitableViewFilterFailureAndShapeEdges(t *testing.T
 		t.Fatal("invalid persisted wrapper must not match")
 	}
 }
+
+func TestCrossPlatformCoverageAitableChartExampleProjectionAndSemanticFilterReadBack(t *testing.T) {
+	payload := map[string]any{
+		"status": "success",
+		"data": `{
+			// legacy JSONC comment
+			"HISTOGRAM":{"chartType":"HISTOGRAM","sheet":"sheet_001","filter":[]},
+			"PIE":{"chartType":"PIE","sheet":"sheet_001","filter":[]},
+		}`,
+	}
+	projected, err := ProjectAitableChartExamples(payload, "histogram")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projected["chartType"] != "HISTOGRAM" || projected["config"].(map[string]any)["chartType"] != "HISTOGRAM" {
+		t.Fatalf("chart projection = %#v", projected)
+	}
+	layout := projected["layout"].(map[string]any)
+	if layout["x"] != 0 || layout["y"] != 0 || layout["w"] != 12 || layout["h"] != 6 {
+		t.Fatalf("chart layout = %#v", layout)
+	}
+	catalog, err := ProjectAitableChartExamples(payload, "")
+	if err != nil || catalog["config"] != nil || len(catalog["chartTypes"].([]string)) != 2 {
+		t.Fatalf("chart catalog = %#v, %v", catalog, err)
+	}
+	if _, err := ProjectAitableChartExamples(payload, "unknown"); err == nil {
+		t.Fatal("unknown chart type must fail")
+	}
+
+	aliases := map[string]map[string]string{"fldStatus": {"opt-1": "跟进中", "跟进中": "跟进中"}}
+	expected := []any{map[string]any{"operator": "eq", "operands": []any{"fldStatus", "跟进中"}}}
+	actual := map[string]any{"operator": "and", "operands": []any{map[string]any{"operator": "eq", "operands": []any{"fldStatus", "opt-1"}}}}
+	if !persistedViewFilterMatchesWithOptions(actual, expected, aliases) {
+		t.Fatalf("option ID/name filter should be equivalent: actual=%#v expected=%#v", actual, expected)
+	}
+	if persistedViewFilterMatchesWithOptions(actual, expected, map[string]map[string]string{}) {
+		t.Fatal("unproven option ID/name equivalence must fail closed")
+	}
+	extracted := aitableFieldOptionAliases(map[string]any{
+		"config": map[string]any{
+			"id": "not-an-option", "name": "config-name",
+			"options": []any{map[string]any{"id": "opt-1", "name": "跟进中"}},
+		},
+	})
+	if extracted["opt-1"] != "跟进中" || extracted["跟进中"] != "跟进中" || extracted["not-an-option"] != "" {
+		t.Fatalf("field option aliases = %#v", extracted)
+	}
+}

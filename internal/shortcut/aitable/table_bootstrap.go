@@ -118,6 +118,7 @@ func executeTableBootstrap(rt *shortcut.RuntimeContext) error {
 		if created.TableID == "" {
 			result.Status = "unknown"
 			result.Checkpoint = map[string]any{"step": "resolve table by exact name before retrying", "baseId": baseID, "tableName": tableName}
+			result.NextCommand = aitableRecoveryCommand("dws", "aitable", "+list-tables", "--base", baseID, "--format", "json")
 		} else {
 			result.Status = "partial_success"
 			result.Checkpoint = map[string]any{"step": "verify or repair table fields", "baseId": baseID, "tableId": created.TableID}

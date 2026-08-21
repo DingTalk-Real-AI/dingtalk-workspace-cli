@@ -22,14 +22,28 @@ dws aitable export data --base-id <BASE_ID> --task-id <TASK_ID> --timeout-ms 300
 | `table` | 必须 `--table-id` |
 | `view` | 必须 `--table-id` + `--view-id` |
 
-## 导入文件（三步流程）
+## 导入文件（首选一条命令）
 
 当用户要求将 Excel（`.xlsx`）或 CSV 文件完整导入 AI 表格时，**不需要自己解析文件内容**，直接使用文件级导入。
 
-> **无需手动解析 CSV/Excel 再逐条 record create**，效率极低且容易出错。
+> **无需手动解析 CSV/Excel 再逐条 record create**，效率极低且容易出错。新建表导入首选本 Skill 自带脚本；它会完成申请凭证、OSS PUT 和触发导入，并固定使用 OSS 签名要求的空 `Content-Type`。
 
 ```bash
-# 第 1 步：申请上传凭证
+python3 scripts/aitable_import_via_task.py <BASE_ID> <FILE_PATH>
+```
+
+脚本成功结果的 `data.tableIds[]` 是服务端真实新表 ID；后续改名直接执行：
+
+```bash
+dws aitable +table-update --base-id <BASE_ID> --table-id <TABLE_ID> --name "新表名"
+```
+
+只有需要追加到已有表、指定 Sheet/表头或字段映射时，才展开下面的底层三步流程。不存在 `+import-csv`；`import upload` 也不接受 `--file`。
+
+## 底层三步流程（追加或自定义映射）
+
+```bash
+# 第 1 步：申请上传凭证；没有 --file
 dws aitable import upload --base-id <BASE_ID> \
   --file-name data.xlsx --file-size <字节数> --format json
 # → 返回 uploadUrl 和 importId

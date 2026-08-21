@@ -237,6 +237,7 @@ var generatedParamAliases = []ParamAliasEntry{
 		Aliases: map[string]string{
 			"base":       "base-id",
 			"base-token": "base-id",
+			"field-name": "name",
 			"table":      "table-id",
 		},
 		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
@@ -653,9 +654,10 @@ var generatedParamAliases = []ParamAliasEntry{
 		Aliases: map[string]string{
 			"base":       "base-id",
 			"base-token": "base-id",
+			"name":       "new-name",
 			"table":      "table-id",
 		},
-		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
 	},
 	{
 		CLIPath: "aitable +view-get",
@@ -1052,6 +1054,7 @@ var generatedParamAliases = []ParamAliasEntry{
 		CLIPath: "aitable field update",
 		Aliases: map[string]string{
 			"base-token": "base-id",
+			"field-name": "name",
 			"table":      "table-id",
 		},
 		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
@@ -1453,6 +1456,7 @@ var generatedParamAliases = []ParamAliasEntry{
 		Aliases: map[string]string{
 			"base-token": "base-id",
 			"table":      "table-id",
+			"type":       "view-type",
 		},
 		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
 	},
@@ -1468,9 +1472,10 @@ var generatedParamAliases = []ParamAliasEntry{
 		CLIPath: "aitable view duplicate",
 		Aliases: map[string]string{
 			"base-token": "base-id",
+			"name":       "new-name",
 			"table":      "table-id",
 		},
-		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+		Blocked: []string{"source-table-id", "table-ids", "target-table-id"},
 	},
 	{
 		CLIPath: "aitable view get aggregate",

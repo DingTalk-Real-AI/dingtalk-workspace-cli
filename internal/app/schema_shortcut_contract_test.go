@@ -24,6 +24,26 @@ const (
 	publiclyDeliveredShortcutCount = 422
 )
 
+func TestCrossPlatformCoverageAITableDoesNotPublishInventedFallbackSurface(t *testing.T) {
+	root := NewRootCommand()
+	baseCopy, _, err := root.Find([]string{"aitable", "+base-copy"})
+	if err != nil {
+		t.Fatalf("find aitable +base-copy: %v", err)
+	}
+	if flag := baseCopy.Flags().Lookup("target-folder-node"); flag != nil {
+		t.Fatalf("aitable +base-copy unexpectedly publishes --target-folder-node: %#v", flag)
+	}
+	aitable, _, err := root.Find([]string{"aitable"})
+	if err != nil {
+		t.Fatalf("find aitable command: %v", err)
+	}
+	for _, child := range aitable.Commands() {
+		if child.Name() == "+dashboard-bootstrap" {
+			t.Fatal("aitable unexpectedly publishes the unimplemented +dashboard-bootstrap shortcut")
+		}
+	}
+}
+
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
 	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
 	public := make([]shortcut.Shortcut, 0, publicShortcutCount)

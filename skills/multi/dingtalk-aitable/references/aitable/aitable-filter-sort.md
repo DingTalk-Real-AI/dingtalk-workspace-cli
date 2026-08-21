@@ -1,6 +1,6 @@
 # filters & sort — 筛选排序语法参考
 
-> 视图（view）配置的 filter/sort/group **整体写入**请优先用 `view update filter` / `view update sort` / `view update group` 子命令，详见 [aitable-view-config.md](./aitable-view-config.md)。本文件聚焦于 `record query --filters` 与 view config filter 的语法和差异。
+> 本文件是 `record query --filters/--sort` 的唯一可执行 payload 入口。View 的 `filter/sort/group` 属于另一条任务路由，应从根 Skill 直接选择 view-config Reference；读到本文件后不再跳转或复制 View 命令。
 
 ## filters 结构规范
 
@@ -132,38 +132,6 @@ dws aitable record query --base-id X --table-id Y \
 
 ---
 
-## view update --config 中的 filter / sort 格式
+## 与 View payload 的边界
 
-> **重要区分**：`record query --filters` 和 `view update --config` 中的 filter **格式不同**！
-
-| 场景 | filter 格式 | 说明 |
-|------|-------------|------|
-| `record query --filters` | **对象**：`{"operator":"and","operands":[...]}` | 直接传最外层逻辑对象 |
-| `view update --config` 的 filter | **数组**：`[{"operator":"and","operands":[...]}]` | 外面多一层数组包裹 |
-| `view update --config` 的 sort | **数组**：`[{"fieldId":"X","direction":"asc"}]` | 与 record query --sort 一致 |
-
-### 正确示例
-
-```bash
-# view update 设置筛选（filter 是数组）
-dws aitable view update --base-id X --table-id Y --view-id Z \
-  --config '{"filter":[{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","待处理"]}]}]}'
-
-# view update 设置排序（sort 是数组）
-dws aitable view update --base-id X --table-id Y --view-id Z \
-  --config '{"sort":[{"fieldId":"fldPriority","direction":"desc"}]}'
-
-# 同时设置 filter + sort + visibleFieldIds
-dws aitable view update --base-id X --table-id Y --view-id Z \
-  --config '{"filter":[{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","进行中"]}]}],"sort":[{"fieldId":"fldDate","direction":"asc"}],"visibleFieldIds":["fld1","fld2","fld3"]}'
-```
-
-### CLI 自动容错
-
-CLI 会自动修正以下常见错误格式（不会报错，但建议直接使用正确格式）：
-
-| 错误写法 | CLI 自动修正为 |
-|----------|---------------|
-| `"filter":{"operator":"and",...}` （对象） | `"filter":[{"operator":"and",...}]` （数组） |
-| `"sort":{"fieldId":"X","direction":"asc"}` （对象） | `"sort":[{"fieldId":"X","direction":"asc"}]` （数组） |
-| 子条件用 MCP 简写 `{"fieldId":"X","operator":"eq","value":"Y"}` | 自动转为 `{"operator":"eq","operands":["X","Y"]}` |
+`record query --filters` 使用最外层逻辑对象；View filter 使用数组并由 view-config Reference 独占示例。当前任务若是修改 View，不执行本文件中的 record query，也不继续加载第二个 Reference。
