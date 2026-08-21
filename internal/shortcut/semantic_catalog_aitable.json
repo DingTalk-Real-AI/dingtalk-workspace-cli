@@ -108,6 +108,14 @@
     "+list-tables": {"disposition":"semantic_adapter","semantic_delta":"把 Base 目录稳定投影为 tableId/tableName 列表，隐藏非表节点。","risk":"read","public":true,"reviewed":true},
     "+record-share-links": {"disposition":"primary_smart","semantic_delta":"对超过 20 条 recordId 去重分片调用并合并分享链接及逐批结果。","risk":"read","public":true,"reviewed":true},
     "+resolve-base": {"disposition":"primary_smart","semantic_delta":"按名称搜索并要求唯一匹配，0 或多结果时显式失败而不猜 baseId。","risk":"read","public":true,"reviewed":true},
-    "+resolve-table": {"disposition":"primary_smart","semantic_delta":"在 Base 内按名称要求唯一匹配，0 或多结果时显式失败而不猜 tableId。","risk":"read","public":true,"reviewed":true}
+    "+resolve-table": {"disposition":"primary_smart","semantic_delta":"在 Base 内按名称要求唯一匹配，0 或多结果时显式失败而不猜 tableId。","risk":"read","public":true,"reviewed":true},
+
+    "+datasource-create": {"disposition":"schema_leaf","semantic_delta":"为指定 Base 创建数据源表并触发首次全量同步，返回新建表 ID 和同步任务 ID。","risk":"write","public":true,"reviewed":true},
+    "+datasource-update": {"disposition":"schema_leaf","semantic_delta":"更新已有数据源表的同步配置并触发一次同步；不改配置可只切换 auto 开关或 field-ids。","risk":"write","public":true,"reviewed":true},
+    "+datasource-sync": {"disposition":"schema_leaf","semantic_delta":"对已有数据源表触发手动同步（单次最多 5 张），仅触发即返回同步任务 ID。","risk":"write","public":true,"reviewed":true},
+    "+datasource-sync-status": {"disposition":"schema_leaf","semantic_delta":"批量查询数据源同步任务状态（RUNNING/FINISHED/FAILED），与 sync/create/update 触发后配对使用。","risk":"read","public":true,"reviewed":true},
+    "+datasource-get-config": {"disposition":"schema_leaf","semantic_delta":"读取已有数据源表的同步配置详情（源配置、字段选择、自动同步状态）的一对一入口。","risk":"read","public":true,"reviewed":true},
+    "+datasource-list-sources": {"disposition":"schema_leaf","semantic_delta":"列出指定 Base 下可用的数据源条目（OA 审批模板等），提取 processCode/name/iconUrl/url 用于 sourceConfig。","risk":"read","public":true,"reviewed":true},
+    "+datasource-get-fields": {"disposition":"schema_leaf","semantic_delta":"获取指定数据源来源的可同步字段列表（字段 ID/名称/类型/是否主键），用于决定 field-ids。","risk":"read","public":true,"reviewed":true}
   }
 }

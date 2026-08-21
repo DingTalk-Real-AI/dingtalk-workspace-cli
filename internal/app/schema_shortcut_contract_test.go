@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	publicShortcutCount = 415
+	publicShortcutCount = 422
 	// schemaPublishedShortcutCount counts every delivered *.shortcut_* tool,
 	// including reviewed hidden compatibility and unavailable contracts.
-	schemaPublishedShortcutCount = 453
+	schemaPublishedShortcutCount = 460
 	// publiclyDeliveredShortcutCount is the public-catalog subset of that surface.
-	publiclyDeliveredShortcutCount = 415
+	publiclyDeliveredShortcutCount = 422
 )
 
 func TestDeliverySchemaCoversOrExactlyExcludesEveryPublicShortcutContract(t *testing.T) {
@@ -271,6 +271,60 @@ func TestAllShortcutsWikiSchemaExamplesIncludeRequiredParameters(t *testing.T) {
 	}
 }
 
+func TestAllShortcutsAITableDatasourceExamplesSourceConfigHasRequiredMembers(t *testing.T) {
+	tools := deliverySchemaAllToolsForHelpFlagTest(t, NewRootCommand())
+	requiredSourceConfigMembers := []string{"processCode", "name", "iconUrl", "url"}
+	checked := 0
+	for _, declared := range shortcut.All() {
+		if declared.Service != "aitable" || declared.UserDefined || !shortcut.InPublicCatalog(declared.Service, declared.Command) {
+			continue
+		}
+		if !strings.HasPrefix(declared.Command, "+datasource-") {
+			continue
+		}
+		if declared.Command != "+datasource-create" && declared.Command != "+datasource-update" && declared.Command != "+datasource-get-fields" {
+			continue
+		}
+		checked++
+		canonical := shortcutSchemaCanonical(declared)
+		tool := tools[canonical]
+		if tool == nil {
+			t.Fatalf("delivery schema --all is missing %s", canonical)
+		}
+		examples := schemaContractStringSlice(tool["examples"])
+		if len(examples) == 0 {
+			t.Fatalf("%s has no delivered examples", canonical)
+		}
+		for _, example := range examples {
+			if !strings.Contains(example, "--source-config") {
+				continue
+			}
+			argv, err := cli.ParseAgentExampleArgv(example)
+			if err != nil {
+				t.Fatalf("%s example %q is not valid argv: %v", canonical, example, err)
+			}
+			sourceConfig := schemaExampleFlagValue(argv, "source-config")
+			if sourceConfig == "" {
+				t.Errorf("%s example %q contains --source-config but has no value", canonical, example)
+				continue
+			}
+			var cfg map[string]any
+			if err := json.Unmarshal([]byte(sourceConfig), &cfg); err != nil {
+				t.Errorf("%s example %q has invalid source-config JSON: %v", canonical, example, err)
+				continue
+			}
+			for _, member := range requiredSourceConfigMembers {
+				if _, ok := cfg[member]; !ok {
+					t.Errorf("%s example %q source-config is missing required member %q", canonical, example, member)
+				}
+			}
+		}
+	}
+	if checked != 3 {
+		t.Fatalf("checked aitable datasource source-config examples = %d, want 3", checked)
+	}
+}
+
 func schemaExampleHasLongFlag(argv []string, names ...string) bool {
 	for _, argument := range argv {
 		for _, name := range names {
@@ -280,6 +334,25 @@ func schemaExampleHasLongFlag(argv []string, names ...string) bool {
 		}
 	}
 	return false
+}
+
+func schemaExampleFlagValue(argv []string, name string) string {
+	prefix := "--" + name + "="
+	for _, argument := range argv {
+		if argument == "--"+name {
+			continue
+		}
+		if strings.HasPrefix(argument, prefix) {
+			return strings.TrimPrefix(argument, prefix)
+		}
+	}
+	// Value may be in the next argv entry: `--flag value` form.
+	for i := 0; i < len(argv)-1; i++ {
+		if argv[i] == "--"+name {
+			return argv[i+1]
+		}
+	}
+	return ""
 }
 
 func assertSchemaSummarySafety(
