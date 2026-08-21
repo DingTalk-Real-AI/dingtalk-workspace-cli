@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
@@ -156,16 +157,28 @@ func TestCrossPlatformCoverageDocFinalCommonAndCanonicalBranches(t *testing.T) {
 	if got := documentContentCandidates([]any{map[string]any{"content": "nested"}}, "markdown"); len(got) != 1 || got[0] != "nested" {
 		t.Fatalf("nested content candidates = %#v", got)
 	}
-	if got := splitDocMarkdown("a\nb", 0); len(got) != 1 {
-		t.Fatalf("disabled split = %#v", got)
+	// splitDocMarkdown was replaced by the shared splitter. Its two load-bearing
+	// contracts are kept: a non-positive limit disables splitting entirely...
+	if got := helpers.SplitMarkdownForAppend("a\nb", 0); len(got.Chunks) != 1 {
+		t.Fatalf("disabled split = %#v", got.Chunks)
 	}
-	if got := splitDocMarkdown("ab\ncd", 4); len(got) != 2 || got[0] != "ab\n" {
-		t.Fatalf("newline split = %#v", got)
+	// ...and a long single paragraph still splits at the line boundary. What
+	// changed deliberately: the boundary newline no longer trails the preceding
+	// chunk (it used to be "ab\n"), because a chunk is now a self-contained block
+	// sequence rather than a raw byte range, and the paragraph break is reported.
+	plan := helpers.SplitMarkdownForAppend("ab\ncd", 4)
+	if len(plan.Chunks) != 2 || plan.Chunks[0] != "ab" || plan.Chunks[1] != "cd" {
+		t.Fatalf("newline split = %#v", plan.Chunks)
+	}
+	if len(plan.Degradations) != 1 || plan.Degradations[0].Kind != "paragraph_split" {
+		t.Fatalf("newline split degradations = %#v", plan.Degradations)
 	}
 }
 
 func TestCrossPlatformCoverageDocFinalExecutionFailureBranches(t *testing.T) {
-	longContent := strings.Repeat("x", 10001)
+	// Must exceed the production chunk limit to reach the chunk-append branch;
+	// tie it to the constant so a limit bump cannot silently drop that coverage.
+	longContent := strings.Repeat("x", helpers.DefaultMarkdownChunkRunes+1)
 	if err := runDocCoverage(t, Create, &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{}}, "--name", "n", "--content", longContent); err == nil {
 		t.Fatal("partial chunk create succeeded")
 	}

@@ -756,14 +756,22 @@ func TestCrossPlatformCoverageDocWriteErrorStateMachine(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageDocLongWritesChunkOnceAndVerify(t *testing.T) {
-	long := strings.Repeat("段落😀", 4000)
-	chunks := splitDocMarkdown(long, 10000)
+	// Derive the fixture from the production limit: a hardcoded size silently
+	// becomes a single-chunk write when the limit grows, which stops covering
+	// the chunked-append branch without failing anything.
+	long := strings.Repeat("段落😀", helpers.DefaultMarkdownChunkRunes/3+100)
+	plan := helpers.SplitMarkdownForAppend(long, helpers.DefaultMarkdownChunkRunes)
+	chunks := plan.Chunks
 	if len(chunks) < 2 || strings.Join(chunks, "") != long {
 		t.Fatalf("split chunks=%d roundtrip=%v", len(chunks), strings.Join(chunks, "") == long)
 	}
 
+	// The fake readback must return what the server would actually hold after
+	// appending every chunk, not an echo of the input. Echoing the input hid the
+	// fact that verification compared against content the server never receives
+	// once a boundary needs repair.
 	update := &docCoverageCaller{responses: map[string][]map[string]any{
-		"get_document_content": {{"markdown": long}},
+		"get_document_content": {{"markdown": plan.ExpectedDocument()}},
 	}}
 	if err := runDocCoverage(t, Update, update, "--node", "n", "--command", "overwrite", "--content", long, "--yes"); err != nil {
 		t.Fatal(err)
@@ -780,13 +788,119 @@ func TestCrossPlatformCoverageDocLongWritesChunkOnceAndVerify(t *testing.T) {
 	}
 
 	create := &docCoverageCaller{responses: map[string][]map[string]any{
-		"get_document_content": {{"markdown": long}},
+		"get_document_content": {{"markdown": plan.ExpectedDocument()}},
 	}}
 	if err := runDocCoverage(t, Create, create, "--name", "long", "--content", long); err != nil {
 		t.Fatal(err)
 	}
 	if len(create.history) != len(chunks)+1 || create.history[0].tool != "create_document" || create.history[1].tool != "update_document" || create.history[len(create.history)-1].tool != "get_document_content" {
 		t.Fatalf("long create calls = %#v", create.history)
+	}
+
+	// Guard against the expectation change weakening verification into a
+	// tautology: a truncated readback must still fail.
+	truncated := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": chunks[0]}},
+	}}
+	if err := runDocCoverage(t, Update, truncated, "--node", "n", "--command", "overwrite", "--content", long, "--yes"); err == nil {
+		t.Fatal("a readback missing the later chunks must fail verification")
+	}
+}
+
+func TestCrossPlatformCoverageDocChunkedTableRepeatsHeaderAndReportsIt(t *testing.T) {
+	// A table longer than the limit cannot be written as one table: mode=append
+	// always inserts a new structure, so each chunk must carry the header itself.
+	header := "| 姓名 | 部门 | 工号 |\n|---|---|---|\n"
+	content := header + strings.Repeat("| 张三 | 技术部 | 10086 |\n", 4000)
+	plan := helpers.SplitMarkdownForAppend(content, helpers.DefaultMarkdownChunkRunes)
+	if len(plan.Chunks) < 2 {
+		t.Fatalf("fixture must exceed the limit, got %d chunk(s)", len(plan.Chunks))
+	}
+	if len(plan.Degradations) == 0 || plan.Degradations[0].Kind != "table_split" {
+		t.Fatalf("degradations = %#v", plan.Degradations)
+	}
+
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": plan.ExpectedDocument()}},
+	}}
+	if err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "overwrite", "--content", content, "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	// Every appended chunk must open with the re-emitted header and delimiter,
+	// otherwise the server sees orphaned rows.
+	appended := 0
+	for _, call := range caller.history {
+		if call.tool != "update_document" || call.params["mode"] != "append" {
+			continue
+		}
+		appended++
+		markdown, _ := call.params["markdown"].(string)
+		if !strings.HasPrefix(markdown, header) {
+			t.Errorf("appended chunk lost the header: %.60q", markdown)
+		}
+	}
+	if appended == 0 {
+		t.Fatalf("no append call was made: %#v", caller.history)
+	}
+
+	// --dry-run must report the plan without writing anything, so a caller can
+	// see the table will be split before committing to it.
+	dry := &docCoverageCaller{}
+	if err := runDocCoverage(t, Create, dry, "--name", "n", "--content", content, "--dry-run"); err != nil {
+		t.Fatal(err)
+	}
+	if len(dry.history) != 0 {
+		t.Fatalf("dry run wrote something: %#v", dry.history)
+	}
+}
+
+func TestCrossPlatformCoverageDocCheckpointUpdateChunksOversizedContent(t *testing.T) {
+	// +checkpoint-update takes the same @file / stdin content as +update, so
+	// oversized input is reachable. Before this it sent one oversized call while
+	// +update chunked — same operation, different behaviour.
+	content := strings.Repeat("段落文字\n\n", helpers.DefaultMarkdownChunkRunes/6+200)
+	plan := helpers.SplitMarkdownForAppend(content, helpers.DefaultMarkdownChunkRunes)
+	if len(plan.Chunks) < 2 {
+		t.Fatalf("fixture must exceed the limit, got %d chunk(s)", len(plan.Chunks))
+	}
+
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{
+		"get_document_content": {{"markdown": plan.ExpectedDocument()}},
+	}}
+	if err := runDocCoverage(t, CheckpointUpdate, caller, "--node", "n", "--mode", "overwrite", "--content", content, "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	var modes []string
+	for _, call := range caller.history {
+		if call.tool == "update_document" {
+			mode, _ := call.params["mode"].(string)
+			modes = append(modes, mode)
+		}
+	}
+	if len(modes) != len(plan.Chunks) {
+		t.Fatalf("update calls = %v, want %d", modes, len(plan.Chunks))
+	}
+	// Only the first chunk may overwrite; a later overwrite would discard
+	// everything already written.
+	if modes[0] != "overwrite" {
+		t.Errorf("first chunk mode = %q", modes[0])
+	}
+	for i, mode := range modes[1:] {
+		if mode != "append" {
+			t.Errorf("chunk %d mode = %q, want append", i+2, mode)
+		}
+	}
+
+	// A failure on a later chunk must report the checkpoint so the caller can
+	// roll back rather than blindly retry.
+	partial := &docCoverageCaller{failAt: 3, responses: map[string][]map[string]any{}}
+	err := runDocCoverage(t, CheckpointUpdate, partial, "--node", "n", "--mode", "overwrite", "--content", content, "--yes")
+	if err == nil {
+		t.Fatal("a failed later chunk must surface an error")
+	}
+	var typed *apperrors.Error
+	if !errors.As(err, &typed) || typed.Reason != "doc_checkpoint_update_failed" {
+		t.Fatalf("error = %#v", err)
 	}
 }
 

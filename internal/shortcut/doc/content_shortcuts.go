@@ -97,12 +97,26 @@ var Create = shortcut.Shortcut{
 			params["workspaceId"] = rt.Str("workspace")
 		}
 		contentChunks := []string{content}
+		// expected is what the server should hold once every chunk is appended.
+		// It differs from content whenever a boundary needed repair (a repeated
+		// table header, a reopened fence), so verification must compare against
+		// this rather than the raw input.
+		expected := content
+		var chunkPlan helpers.MarkdownChunkPlan
 		if format == "markdown" && content != "" {
-			contentChunks = splitDocMarkdown(content, 10000)
+			chunkPlan = helpers.SplitMarkdownForAppend(content, helpers.DefaultMarkdownChunkRunes)
+			contentChunks = chunkPlan.Chunks
+			expected = chunkPlan.ExpectedDocument()
 			params["markdown"] = contentChunks[0]
 		}
 		if rt.DryRun() {
-			return rt.Output(docEnvelope("doc.create", map[string]any{"executed": false, "previewKind": "plan", "create": params, "docFormat": format, "contentBytes": len(content)}))
+			preview := map[string]any{"executed": false, "previewKind": "plan", "create": params, "docFormat": format, "contentBytes": len(content)}
+			if len(contentChunks) > 1 {
+				// Surfacing the plan in --dry-run lets a caller see "your table
+				// will become three tables" before anything is written.
+				preview["chunkPlan"] = chunkPlan.Summary()
+			}
+			return rt.Output(withDocWarnings(docEnvelope("doc.create", preview), chunkPlan.Warnings()))
 		}
 		created, err := rt.CallMCPWriteData(productDoc, "create_document", params)
 		if err != nil {
@@ -141,7 +155,8 @@ var Create = shortcut.Shortcut{
 						"doc.create", "doc_create_chunk_commit_unknown", stepName,
 						fmt.Sprintf("文档已创建，但第 %d/%d 个内容分片失败或提交状态未知；请先回读，不要重试整个创建", index+2, len(contentChunks)),
 						err,
-						map[string]any{"nodeId": nodeID, "chunksWritten": index + 1, "chunksTotal": len(contentChunks), "verified": false},
+						map[string]any{"nodeId": nodeID, "chunksWritten": index + 1, "chunksTotal": len(contentChunks),
+							"verified": false, "degradations": chunkPlan.Degradations},
 						append(steps, map[string]any{"name": stepName, "status": "unknown"}),
 						map[string]any{"available": false, "reason": "inspect the current document and resume only confirmed missing content"},
 					)
@@ -156,16 +171,20 @@ var Create = shortcut.Shortcut{
 			verifyParams["format"] = format
 		}
 		verification, err := readDocVerification(rt, verifyTool, verifyParams, func(data map[string]any) bool {
-			return content == "" || verifyUpdatedDocumentContent(data, content, "overwrite", format)
+			return content == "" || verifyUpdatedDocumentContent(data, expected, "overwrite", format)
 		})
 		if err != nil {
 			return docVerificationError("doc.create", "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
-		if content != "" && !verifyUpdatedDocumentContent(verification, content, "overwrite", format) {
+		if content != "" && !verifyUpdatedDocumentContent(verification, expected, "overwrite", format) {
 			return docVerificationError("doc.create", "verify", nodeID, fmt.Errorf("回读结果与完整初始内容不一致"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
 		steps = append(steps, map[string]any{"name": "verify", "status": "success"})
-		return rt.Output(docEnvelope("doc.create", map[string]any{"nodeId": nodeID, "result": created, "verified": true, "verification": verification}, steps...))
+		data := map[string]any{"nodeId": nodeID, "result": created, "verified": true, "verification": verification}
+		if len(contentChunks) > 1 {
+			data["chunkPlan"] = chunkPlan.Summary()
+		}
+		return rt.Output(withDocWarnings(docEnvelope("doc.create", data, steps...), chunkPlan.Warnings()))
 	},
 }
 
@@ -430,10 +449,19 @@ var CheckpointUpdate = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
+		// --content accepts @file and stdin, so oversized content is reachable
+		// here exactly as it is on +update. Chunk it the same way rather than
+		// sending one oversized call.
+		chunkPlan := helpers.SplitMarkdownForAppend(content, helpers.DefaultMarkdownChunkRunes)
+		chunks := chunkPlan.Chunks
+		expected := chunkPlan.ExpectedDocument()
 		plan := map[string]any{"nodeId": rt.Str("node"), "mode": rt.Str("mode"), "contentBytes": len(content), "steps": []string{"save_doc_version", "update_document", "get_document_content"}}
+		if len(chunks) > 1 {
+			plan["chunkPlan"] = chunkPlan.Summary()
+		}
 		if rt.DryRun() {
 			plan["executed"] = false
-			return rt.Output(docEnvelope("doc.checkpoint_update", plan))
+			return rt.Output(withDocWarnings(docEnvelope("doc.checkpoint_update", plan), chunkPlan.Warnings()))
 		}
 		steps := []map[string]any{}
 		checkpoint, err := rt.CallMCPWriteData(productDoc, "save_doc_version", map[string]any{"nodeId": rt.Str("node")})
@@ -441,24 +469,41 @@ var CheckpointUpdate = shortcut.Shortcut{
 			return err
 		}
 		steps = append(steps, map[string]any{"name": "checkpoint", "status": "success"})
-		if _, err := rt.CallMCPWriteData(productDoc, "update_document", map[string]any{"nodeId": rt.Str("node"), "markdown": content, "mode": rt.Str("mode")}); err != nil {
-			return checkpointPartialWriteError(rt.Str("node"), checkpoint, "update", "doc_checkpoint_update_failed", err,
-				append(steps, map[string]any{"name": "update", "status": "failed"}, map[string]any{"name": "verify", "status": "not_started"}))
+		for index, chunk := range chunks {
+			// Only the first chunk honours --mode; the rest must append, or an
+			// overwrite would discard everything written before it.
+			mode := "append"
+			if index == 0 {
+				mode = rt.Str("mode")
+			}
+			stepName := "update"
+			if len(chunks) > 1 {
+				stepName = fmt.Sprintf("update_chunk_%d", index+1)
+			}
+			if _, err := rt.CallMCPWriteData(productDoc, "update_document", map[string]any{"nodeId": rt.Str("node"), "markdown": chunk, "mode": mode}); err != nil {
+				return checkpointPartialWriteError(rt.Str("node"), checkpoint, stepName, "doc_checkpoint_update_failed", err,
+					append(steps, map[string]any{"name": stepName, "status": "failed"}, map[string]any{"name": "verify", "status": "not_started"}))
+			}
+			steps = append(steps, map[string]any{"name": stepName, "status": "success"})
 		}
-		steps = append(steps, map[string]any{"name": "update", "status": "success"})
 		verification, err := readDocVerification(rt, "get_document_content", map[string]any{"nodeId": rt.Str("node"), "format": "markdown"}, func(data map[string]any) bool {
-			return verifyUpdatedDocumentContent(data, content, rt.Str("mode"), "markdown")
+			return verifyUpdatedDocumentContent(data, expected, rt.Str("mode"), "markdown")
 		})
 		if err != nil {
 			return checkpointPartialWriteError(rt.Str("node"), checkpoint, "verify", "doc_checkpoint_verification_failed", err,
 				append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
-		if !verifyUpdatedDocumentContent(verification, content, rt.Str("mode"), "markdown") {
+		if !verifyUpdatedDocumentContent(verification, expected, rt.Str("mode"), "markdown") {
 			return checkpointPartialWriteError(rt.Str("node"), checkpoint, "verify", "doc_checkpoint_verification_failed", fmt.Errorf("回读结果未匹配预期变更"),
 				append(steps, map[string]any{"name": "verify", "status": "failed"}))
 		}
 		steps = append(steps, map[string]any{"name": "verify", "status": "success"})
-		return rt.Output(docEnvelope("doc.checkpoint_update", map[string]any{"nodeId": rt.Str("node"), "verified": true, "verification": verification}, steps...))
+		data := map[string]any{"nodeId": rt.Str("node"), "verified": true, "verification": verification}
+		if len(chunks) > 1 {
+			data["chunksWritten"] = len(chunks)
+			data["chunkPlan"] = chunkPlan.Summary()
+		}
+		return rt.Output(withDocWarnings(docEnvelope("doc.checkpoint_update", data, steps...), chunkPlan.Warnings()))
 	},
 }
 
@@ -730,8 +775,15 @@ func executeVerifiedDocMutation(
 
 func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams map[string]any, nodeID, content, mode, format string) error {
 	chunks := []string{content}
+	// See the doc.create path: once a boundary needs repair the server legitimately
+	// ends up holding something other than the raw input, so verification has to
+	// compare against what we actually sent.
+	expected := content
+	var chunkPlan helpers.MarkdownChunkPlan
 	if format == "markdown" {
-		chunks = splitDocMarkdown(content, 10000)
+		chunkPlan = helpers.SplitMarkdownForAppend(content, helpers.DefaultMarkdownChunkRunes)
+		chunks = chunkPlan.Chunks
+		expected = chunkPlan.ExpectedDocument()
 		firstParams["markdown"] = chunks[0]
 	}
 	steps := make([]map[string]any, 0, len(chunks)+1)
@@ -753,7 +805,8 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 				"doc.update", "doc_update_chunk_commit_unknown", stepName,
 				fmt.Sprintf("文档已写入 %d/%d 个分片，但当前分片失败或提交状态未知；请先回读，不要重放已完成分片", index, len(chunks)),
 				err,
-				map[string]any{"nodeId": nodeID, "mode": mode, "chunksWritten": index, "chunksTotal": len(chunks), "lastResult": result, "verified": false},
+				map[string]any{"nodeId": nodeID, "mode": mode, "chunksWritten": index, "chunksTotal": len(chunks),
+					"lastResult": result, "verified": false, "degradations": chunkPlan.Degradations},
 				append(steps, map[string]any{"name": stepName, "status": "unknown"}),
 				map[string]any{"available": false, "reason": "inspect current content before resuming from a confirmed missing boundary"},
 			)
@@ -761,18 +814,22 @@ func executeVerifiedDocContentMutation(rt *shortcut.RuntimeContext, firstParams 
 		steps = append(steps, map[string]any{"name": stepName, "status": "success"})
 	}
 	verification, err := readDocVerification(rt, "get_document_content", map[string]any{"nodeId": nodeID, "format": format}, func(data map[string]any) bool {
-		return verifyUpdatedDocumentContent(data, content, mode, format)
+		return verifyUpdatedDocumentContent(data, expected, mode, format)
 	})
 	if err != nil {
 		return docVerificationError("doc.update", "verify", nodeID, err, append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
-	if !verifyUpdatedDocumentContent(verification, content, mode, format) {
+	if !verifyUpdatedDocumentContent(verification, expected, mode, format) {
 		return docVerificationError("doc.update", "verify", nodeID, fmt.Errorf("回读结果未包含预期内容"), append(steps, map[string]any{"name": "verify", "status": "failed"}))
 	}
 	steps = append(steps, map[string]any{"name": "verify", "status": "success"})
-	return rt.Output(docEnvelope("doc.update", map[string]any{
+	data := map[string]any{
 		"nodeId": nodeID, "mode": mode, "chunksWritten": len(chunks), "verified": true, "verification": verification,
-	}, steps...))
+	}
+	if len(chunks) > 1 {
+		data["chunkPlan"] = chunkPlan.Summary()
+	}
+	return rt.Output(withDocWarnings(docEnvelope("doc.update", data, steps...), chunkPlan.Warnings()))
 }
 
 func readDocVerification(rt *shortcut.RuntimeContext, tool string, rawParams map[string]any, verify func(map[string]any) bool) (map[string]any, error) {
@@ -947,33 +1004,6 @@ func nestedNonNegativeInt(value any, keys ...string) (int, bool) {
 		}
 	}
 	return 0, false
-}
-
-func splitDocMarkdown(content string, maxRunes int) []string {
-	if maxRunes <= 0 {
-		return []string{content}
-	}
-	runes := []rune(content)
-	if len(runes) <= maxRunes {
-		return []string{content}
-	}
-	chunks := make([]string, 0, (len(runes)+maxRunes-1)/maxRunes)
-	for start := 0; start < len(runes); {
-		end := start + maxRunes
-		if end >= len(runes) {
-			end = len(runes)
-		} else {
-			for split := end; split > start; split-- {
-				if runes[split-1] == '\n' {
-					end = split
-					break
-				}
-			}
-		}
-		chunks = append(chunks, string(runes[start:end]))
-		start = end
-	}
-	return chunks
 }
 
 func containsText(value any, needle string) bool {

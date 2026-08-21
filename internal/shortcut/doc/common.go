@@ -156,6 +156,16 @@ func docEnvelope(operation string, data any, steps ...map[string]any) map[string
 	}
 }
 
+// withDocWarnings fills the envelope's warnings slot, which docEnvelope has
+// always emitted empty. Written as a wrapper rather than another docEnvelope
+// parameter so its ~20 existing call sites stay untouched.
+func withDocWarnings(envelope map[string]any, warnings []string) map[string]any {
+	if len(warnings) > 0 {
+		envelope["warnings"] = warnings
+	}
+	return envelope
+}
+
 type docFailureState string
 
 const (
