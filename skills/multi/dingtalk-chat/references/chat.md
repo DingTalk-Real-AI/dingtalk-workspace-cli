@@ -27,6 +27,7 @@
 | 跨步骤消息/群组合流程 | [消息任务级流程](01-messaging.md) |
 | Bot 搜索、进群和撤回 | [chat-bot](chat/chat-bot.md) |
 | 会话置顶、状态和分组 | [chat-conversation](chat/chat-conversation.md) |
+| 话题圈创建、发布、浏览、回复、查回复和整条转发 | [topic](chat/topic.md) |
 | 相邻低频意图仍需消歧 | [intent-guide](intent-guide.md) |
 
 ## 消息底层能力
@@ -43,8 +44,7 @@
 | `chat message recall` / `edit` | 撤回或编辑已知消息 |
 | `chat message read-status` | 查询已知消息的已读/未读状态 |
 | `chat message reply` | `+messages-reply` 未发布的底层引用字段，且安全门禁已对齐 |
-| `chat message forward` / `combine-forward` / `forward-topic` | Shortcut 未覆盖的精确转发字段 |
-| `chat message list-topic-replies` | 已知 `openConvThreadId` 的原始话题回复列表 |
+| `chat message forward` / `combine-forward` | Shortcut 未覆盖的精确转发字段 |
 | `chat message download-media` | Shortcut 无法消费的已知底层 mediaId/fileId 引用 |
 
 消息对象管理：
@@ -68,7 +68,7 @@ Favorite、消息 Pin、消息 Top 与会话 Top 是四种对象，不能互换�
 |---|---|
 | `chat search` / `search-common` | 群管理前解析唯一群、查询共同群 |
 | `chat group get-by-group-id` | 数字群号转 `openConversationId` |
-| `chat group create` | `+chat-create` 尚未发布的真实底层创建字段；`--thread` 和显式群主已由 Shortcut 覆盖 |
+| `chat group create` | `+chat-create` 尚未发布的真实底层创建字段；显式群主已由 Shortcut 覆盖 |
 | `chat group members` / `members list-by-ids` | 群成员分页和精确详情 |
 | `chat group members add` / `remove` | 添加/移除已知成员 ID |
 | `chat group members add-bot` / `remove-bot` / `group bots` | 机器人进群、移除和列表 |

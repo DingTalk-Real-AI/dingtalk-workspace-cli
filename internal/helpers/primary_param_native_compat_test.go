@@ -37,6 +37,10 @@ func (c *nativePrimaryParamCaller) CallTool(_ context.Context, server, tool stri
 	c.calls = append(c.calls, nativePrimaryParamCall{server: server, tool: tool, args: copied})
 
 	switch tool {
+	case "list_messages_by_ids":
+		return textToolResult(`{"result":{"messages":[{"openMessageId":"mid"}]}}`), nil
+	case "get_conversation_info":
+		return textToolResult(`{"result":{"convThreadEnabled":false}}`), nil
 	case "init_conversation_file_upload", "init_todo_file_upload":
 		return textToolResult(`{"resourceUrl":"https://upload.invalid/file","uploadKey":"upload-key"}`), nil
 	case "commit_conversation_file_upload":

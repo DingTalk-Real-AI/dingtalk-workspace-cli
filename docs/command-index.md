@@ -3,7 +3,7 @@
 Every runtime command the `dws` CLI exposes when loaded with the **pre** environment configuration.
 
 - **Products**: 13
-- **Total commands**: 163
+- **Total commands**: 168
 - **Generated from**: `internal/plugin` command descriptors — the same code path the CLI uses at runtime.
 
 > Auto-generated. Update plugin descriptors in `internal/plugin/`, not this file.
@@ -33,7 +33,7 @@ Every command inherits these flags (documented here once, not repeated per comma
 - [`dws aitable` — AI Tables](#dws-aitable) · 41 commands
 - [`dws attendance` — Attendance](#dws-attendance) · 4 commands
 - [`dws calendar` — Calendar](#dws-calendar) · 14 commands
-- [`dws chat` — Group Chat / IM](#dws-chat) · 26 commands
+- [`dws chat` — Group Chat / IM](#dws-chat) · 31 commands
 - [`dws contact` — Contact Directory](#dws-contact) · 6 commands
 - [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 2 commands
 - [`dws ding` — DING Messages](#dws-ding) · 2 commands
@@ -134,7 +134,7 @@ _Calendar events, participants, meeting rooms, and busy-status queries._
 
 _Group chats, conversations, messages, and robot/webhook integrations._
 
-**26 commands**
+**31 commands**
 
 | Command | Description | When to use |
 |---|---|---|
@@ -155,7 +155,6 @@ _Group chats, conversations, messages, and robot/webhook integrations._
 | `dws chat message list-by-sender` | Fetch messages authored by a specific sender across both single and group chats. | When the agent needs to pull everything a particular colleague said recently. |
 | `dws chat message list-focused` | Fetch messages from users the current user has marked as "special focus" (starred contacts). | When the agent builds a priority-inbox view highlighting messages from important people. |
 | `dws chat message list-mentions` | Fetch messages where the current user was @-mentioned. | When the agent wants to surface items that explicitly require the user's attention. |
-| `dws chat message list-topic-replies` | Pull replies under a specific group topic thread. | When the agent needs the conversation tree of a threaded discussion rather than the flat message list. |
 | `dws chat message list-unread-conversations` | Fetch the list of conversations that currently have unread messages for the user. | When the agent builds a "catch me up" triage view of what still needs reading. |
 | `dws chat message recall-by-bot` | Recall (retract) a message previously sent by a robot in a group chat. | When the agent sent a bot message in error or with incorrect content and needs to withdraw it. |
 | `dws chat message search` | Search messages by keyword across the user's conversations. | When the agent needs to locate a specific statement or link the user remembers from chat history. |
@@ -164,6 +163,12 @@ _Group chats, conversations, messages, and robot/webhook integrations._
 | `dws chat message send-by-webhook` | Send a group message via a custom-robot incoming webhook URL. | When the agent needs to post to a group using a webhook without requiring full bot-permission setup. |
 | `dws chat search` | Search group conversations the user belongs to by group name keyword. | When the agent needs to resolve a group name to a conversation ID. |
 | `dws chat search-common` | Find group chats the current user and a specified other user both belong to. | When the agent needs an existing shared channel to contact another user without creating a new group. |
+| `dws chat topic create` | Create a topic-enabled group and return its `openTopicId`. | When the agent needs a new topic container rather than an ordinary group chat. |
+| `dws chat topic send` | Publish a topic under an `openTopicId`. | When the agent needs to create a new top-level topic. |
+| `dws chat topic list` | List top-level topics and their `openConvThreadId` values. | When the agent needs to browse a topic container without mixing in ordinary message routing. |
+| `dws chat topic reply` | Append a direct reply to an `openConvThreadId`. | When the agent needs to reply inside an existing topic without quoting a message. |
+| `dws chat topic list-replies` | List replies under an `openConvThreadId`. | When the agent needs the reply stream for one topic. |
+| `dws chat topic forward` | Forward a topic with its topic context. | When the agent needs to copy a topic into another conversation. |
 
 ## `dws contact` — Contact Directory
 

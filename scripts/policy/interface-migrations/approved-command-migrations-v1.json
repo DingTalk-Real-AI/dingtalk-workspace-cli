@@ -35,7 +35,7 @@
           }
         ]
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Move topic-conversation creation to the dedicated chat topic command while retaining the legacy --thread execution path."
     },
     {
@@ -59,7 +59,7 @@
           {"from": "topic-id", "to": "open-conv-thread-id"}
         ]
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Move topic reply listing from chat message to the dedicated chat topic command while preserving the legacy executable command."
     },
     {
@@ -84,7 +84,7 @@
           {"from": "dest-conversation-id", "to": "dest-open-conversation-id"}
         ]
       },
-      "state": "pending",
+      "state": "consumed",
       "reason": "Move topic forwarding from chat message to the dedicated chat topic command while preserving the legacy executable command."
     }
   ]

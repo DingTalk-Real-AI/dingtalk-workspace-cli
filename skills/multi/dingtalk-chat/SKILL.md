@@ -93,6 +93,8 @@ metadata:
 
 只在任务命中时读取一个精确 reference：
 
+[话题](references/chat/topic.md)
+
 | 场景 | Reference |
 |---|---|
 | 需要跨步骤传递真实结果的消息/群组合流程 | [01-messaging.md](references/01-messaging.md) |

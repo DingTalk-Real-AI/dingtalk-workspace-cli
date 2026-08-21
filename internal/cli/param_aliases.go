@@ -137,9 +137,9 @@ func walkRunnableParamCommands(root *cobra.Command, fn func(*cobra.Command)) {
 			if sub.Name() == "help" {
 				continue
 			}
-			if !sub.IsAvailableCommand() && !hasRuntimeSchemaCommand(sub) {
-				continue
-			}
+			// Walk the executable tree rather than the discoverable tree. Hidden
+			// compatibility leaves still need runtime parameter aliases when their
+			// exact path is invoked; this traversal does not publish Help or Schema.
 			walk(sub)
 		}
 	}
