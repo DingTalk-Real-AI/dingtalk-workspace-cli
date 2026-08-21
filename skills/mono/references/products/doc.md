@@ -1077,6 +1077,8 @@ dws doc media upload --node <DOC_ID> --file ./icon.svg \
 media upload 返回的 `resourceId` / `resourceUrl` 只能用于同一 nodeId 下的白板
 Vector/SVG。完整协议见 [whiteboard.md](./whiteboard.md)。
 
+白板卡片插入、删除、回查流程详见 [doc/doc-whiteboard.md](./doc/doc-whiteboard.md)。
+
 ## 相关产品
 
 - [aitable](./aitable.md) — 结构化数据表格（行列/字段/记录），不是富文本文档
