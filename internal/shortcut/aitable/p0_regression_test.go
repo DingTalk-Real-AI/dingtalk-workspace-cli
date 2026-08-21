@@ -10,6 +10,14 @@ import (
 	"testing"
 )
 
+func TestCrossPlatformCoverageBaseSearchSelectionKeepsAITableObjectContext(t *testing.T) {
+	selection := BaseSearch.Contract.Selection
+	useWhen := strings.Join(selection.UseWhen, " ")
+	if !strings.Contains(useWhen, "当前或上一阶段对象是 Base") || !strings.Contains(useWhen, "关键词像姓名") {
+		t.Fatalf("base search UseWhen does not preserve typed Base context: %#v", selection.UseWhen)
+	}
+}
+
 func TestCrossPlatformCoverageRecordFiltersCanonicalValidation(t *testing.T) {
 	valid := `{"operator":"or","operands":[{"fieldId":"status","operator":"eq","value":"待联系"},{"operator":"contain","operands":["name","科技"]}]}`
 	normalized, err := parseRecordFilters(valid)

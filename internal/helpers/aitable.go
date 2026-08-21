@@ -1986,9 +1986,12 @@ AI 表格访问地址可按 baseId 拼接为：https://alidocs.dingtalk.com/i/no
 			Interface:   aitableMCPInterface("search_bases"),
 			Selection: contract.SelectionSpec{
 				AgentSummary: "按名称搜索 AI 表格 Base（优先于仅最近访问的 list）。",
-				UseWhen:      []string{"用户要找某个 AI 表格/多维表，按名称检索时优先使用"},
-				AvoidWhen:    []string{"只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"},
-				Examples:     []string{"dws aitable base search --query \"项目\""},
+				UseWhen: []string{
+					"用户要找某个 AI 表格/多维表，按名称检索时优先使用",
+					"当前或上一阶段对象是 Base 时，即使查询关键词像姓名，也搜索 Base，不切到 aisearch person",
+				},
+				AvoidWhen: []string{"只要最近访问列表用 base list；已知 baseId 取详情用 base get；电子表格 axls 用 sheet"},
+				Examples:  []string{"dws aitable base search --query \"项目\""},
 			},
 		},
 	})

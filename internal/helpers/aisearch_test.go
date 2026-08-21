@@ -8,8 +8,31 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/runtimeannotate"
 )
+
+func TestCrossPlatformCoverageAisearchPersonSelectionRejectsAITableObjectContext(t *testing.T) {
+	root := newAisearchCommand()
+	person, _, err := root.Find([]string{"person"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	final, ok := contractfinal.RuntimeContractFinal(person)
+	if !ok || final.Selection == nil {
+		t.Fatal("aisearch person has no runtime Selection contract")
+	}
+	useWhen := strings.Join(final.Selection.UseWhen, " ")
+	avoidWhen := strings.Join(final.Selection.AvoidWhen, " ")
+	if !strings.Contains(useWhen, "明确要找人") {
+		t.Fatalf("aisearch person UseWhen lacks explicit personnel intent: %#v", final.Selection.UseWhen)
+	}
+	for _, want := range []string{"Base、Table 或记录", "关键词像姓名", "aitable +base-search"} {
+		if !strings.Contains(avoidWhen, want) {
+			t.Fatalf("aisearch person AvoidWhen lacks %q boundary: %#v", want, final.Selection.AvoidWhen)
+		}
+	}
+}
 
 func TestAisearchPersonFlagsDoNotLeakIntoContentCommands(t *testing.T) {
 	root := newAisearchCommand()

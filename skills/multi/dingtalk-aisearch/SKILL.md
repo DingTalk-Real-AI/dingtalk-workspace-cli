@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aisearch
-description: AI搜问：人员语义搜索与跨源定位。Use when 按姓名/工号/部门/职责/上下级或手机号线索找人，跨文档/消息/邮件/听记检索，或回溯“我发过/收到过”。完整手机号反查走 dingtalk-contact；找到 userId 后由 contact 补详情。命令前缀：dws aisearch。
+description: AI搜问：人员语义搜索与跨源定位。Use when 用户明确要找人、同事、负责人、上下级、工号等人员实体，跨文档/消息/邮件/听记检索，或回溯“我发过/收到过”。当前对象是 Base、Table 或记录时，不因关键词像姓名而触发人员搜索；完整手机号反查走 dingtalk-contact；找到 userId 后由 contact 补详情。命令前缀：dws aisearch。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -37,7 +37,7 @@ metadata:
 
 ### SOP-1 搜人 → 拿 userId（search-person）
 
-**触发**：姓名模糊找人/谁负责/查上下级/部门成员/工号反查/手机号线索语义搜人。
+**触发**：用户明确要找人员实体：姓名模糊找人/找同事/谁负责/查上下级/部门成员/工号反查/手机号线索语义搜人。仅出现一个像姓名的关键词不构成人员意图；当前或上一阶段对象是 Base、Table 或记录时禁止进入本 SOP。
 
 1. **定维度（必须）**：姓名→`name`、"谁负责 XX"→`duty`、部门成员→`department`、上级/下级→`supervisor`/`subordinate`、工号→`jobNumber`、手机号语义线索→`phone`；完整手机号精确反查切到 `dingtalk-contact` 的 `user search-mobile`；不确定→`all`。`--query` 必须按用户原文**完整保真**，切勿截断、改昵称、扩同音字。
 2. **执行（必须）**：`dws aisearch person --query "<完整值>" --dimension <维度> --format json`。
@@ -67,6 +67,7 @@ metadata:
 
 ## 高频硬约束
 
+- `aisearch person` 只在用户明确要找人、同事、负责人、上下级、工号等人员实体时使用；当前或上一阶段对象是 Base、Table 或记录时禁止使用。资源上下文优先于关键词外形，例如在 Base 搜索任务中查询“南润”仍应走 `dws aitable +base-search`。
 - 搜索目标必须完整保真：姓名、工号、手机号、部门名按用户原文完整传入 `--query`，严禁自行截断、拆字、改昵称或扩展同音字。
 - 首次未命中时最多换维度重试一次（如 name → department/jobNumber/phone），仍必须保留完整目标值；不要用半截姓名扩大搜索。
 - 找到候选后，如用户要邮箱、部门、职位、主管等详情，必须切到 `dingtalk-contact` 执行 `contact user get --ids <userId> --format json` 补全。

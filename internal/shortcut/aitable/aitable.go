@@ -220,13 +220,15 @@ func baseListFirst(m map[string]any, keys ...string) (any, bool) {
 	return nil, false
 }
 
+const baseSearchIntent = "当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；当前或上一阶段对象是 Base 时，即使关键词像姓名也必须继续搜索 Base，不切换到人员搜索；输入名称关键词，返回匹配的 Base 列表。"
+
 // BaseSearch 按名称关键词搜索 AI 表格（search_bases）。
 var BaseSearch = shortcut.Shortcut{
 	Service:     "aitable",
 	Command:     "+base-search",
 	Product:     serverMain,
 	Description: "按名称关键词搜索 AI 表格 Base",
-	Intent:      "当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。",
+	Intent:      baseSearchIntent,
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -248,7 +250,7 @@ var BaseSearch = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "按名称关键词搜索 AI 表格 Base",
-			UseWhen:      []string{"当你知道某个 AI 表格的名字或部分关键词、想直接定位到它并拿到 baseId 时使用；输入名称关键词，返回匹配的 Base 列表。"},
+			UseWhen:      []string{baseSearchIntent},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws aitable +base-search --query \"项目管理\""},
 		},

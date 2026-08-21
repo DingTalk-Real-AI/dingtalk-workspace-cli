@@ -36,9 +36,13 @@
 
 Base bootstrap 的表对象使用 `name`；字段使用 `fieldName/type/config`。已有 Base 的 table bootstrap 只传上述 `fields` 数组。
 
+## 复制目标
+
+`dws aitable +base-copy --base-id <B> --target-folder-id <FOLDER_DENTRY_UUID> [--only-struct]` 只接受 Drive 可精确读回且类型为 folder 的 dentryUuid。“我的文件根目录”的 rootFolderId/nodeId 不能证明该契约，当前不支持；收到 `retryable=false` 立即停止，禁止轮换 ID。
+
 ## 查看与恢复
 
 - 已知 baseId：`+base-get --base-id <B>`；只列 Table：`+list-tables --base <B>`。
-- 已知 tableId：`+table-get --base-id <B> --table-id <T>`。
+- 已知 tableId：`+table-get --base-id <B> --table-ids <T>`。
 - 名称查候选：`+base-search --query <关键词>`；需要唯一名称解析才用 `+resolve-base` / `+resolve-table`，两条路径不串行试探。
 - `partial_success` 只从 checkpoint 继续；`retryable=false`、目标类型错误或返回 ID 不一致时停止，不换相似命令或其他 ID 类型。
