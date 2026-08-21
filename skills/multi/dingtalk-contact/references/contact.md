@@ -297,14 +297,13 @@ Usage:
   dws contact label create [flags]
 Example:
   dws contact label create --name "管理员" --parent-id 0
-  dws contact label create --name "财务" --parent-id 12345 --yes
 Flags:
       --name string        角色名称 (必填)
       --parent-id string   父标签组 ID (必填，0 表示根标签组)
       --yes                跳过确认提示
 Notes:
   - 在指定父标签组下创建新角色（标签），0 表示根标签组
-  - 该写操作执行前需要确认，自动化场景传 --yes 跳过
+  - 该写操作执行前需要用户确认；仅在已取得本次创建操作的明确同意后，才可追加 --yes 跳过确认提示
   - 认证信息（corpId、optUserId）由系统自动注入，无需手动传入
 ```
 
