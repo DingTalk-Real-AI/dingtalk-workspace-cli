@@ -1,19 +1,19 @@
 # Todo 组合生命周期
 
-当一个请求包含两个以上资源动作，特别是“创建 → 操作 → 查看 → 清理”时，使用本文件。组合链路统一走原子命令，不把 shortcut 与原子返回结构混在一起。
+当一个请求包含多个资源动作并需要传递 `taskId`、`commentId`、`attachmentId` 或 `tagCode` 时使用本文件。组合链路可以逐步混用 shortcut 与原子命令，但只能传递已经规范化的稳定 ID，不能把一种入口的完整返回结构当成另一种入口的结构。
 
 ## 通用骨架
 
 1. 先列出完整动作序列和需要传递的 ID，不要边执行边发现路线。
 2. 未指定执行人时运行 `dws contact me --format json`；指定姓名时运行 `dws aisearch person --query "<姓名>" --dimension name --format json`，唯一匹配后取 `userId`。
-3. 创建父待办：
+3. 选择创建入口：后续只有搜索、详情回读和清理时可用 `+remind` / `+create`；若要列表筛选、资源写入、创建子资源或一次创建多个对象，使用原子创建：
 
    ```bash
    dws todo task create --title "<标题>" --executors <USER_ID> [--priority 10|20|30|40] [--due "<截止ISO>"] [--recurrence "<规则>"] --format json
    ```
 
-4. 只从成功响应的 `result.taskId` 取 ID，立即 `dws todo task get --task-id <TASK_ID> --format json` 核验。
-5. 按下表执行后续动作；每一步都复用真实 ID，并用对应读取命令核验。
+4. 原子创建从成功响应的 `result.taskId` 取 ID；创建 shortcut 从其成功结果的 `taskId` 取 ID。需要详情时优先 `dws todo +get --task-id <TASK_ID> --format json`。
+5. 按下表执行后续动作；每一步都复用真实 ID。表中原子命令是保底路径；若对应 `+get`、`+search`、`+complete`、`+reopen`、`+update`、`+comment`、`+reminder` 或 `+list-*` 完整覆盖当前步骤，则优先使用 shortcut 自带的校验。
 6. 只清理本次创建且已记录 ID 的对象；删除类操作先走 Runtime 确认门。删除后 `task get` 不存在或列表移除才算清理完成。
 
 ## 原子路线表
@@ -45,8 +45,8 @@
 
 | ID | 只允许来自 | 禁止来源 |
 |---|---|---|
-| `taskId` | `task create/create-sub/get/list` 的业务返回 | 标题、URL、展示序号、其他 case |
-| `commentId` | 同一 `taskId` 的 `comment list` 返回 `result.comments[].id` | 评论文本或猜测 |
+| `taskId` | 原子 `task create/create-sub/get/list` 或 Todo shortcut 的成功业务返回 | 标题、URL、展示序号、其他 case |
+| `commentId` | 同一 `taskId` 的 `+comment` 成功结果或 `comment list` 的 `result.comments[].id` | 评论文本或猜测 |
 | `attachmentId` | 同一 `taskId` 的 `task list-attachment` 返回 `attachments[].attachmentId` | 文件名或本地路径 |
 | `tagCode` | `todo tag create/list` 返回 `result.userTags[].code` | 标签名或 Git tag |
 | `userId` | `contact me` 或 `aisearch person` 的唯一匹配 | 姓名、手机号片段、其他 profile |

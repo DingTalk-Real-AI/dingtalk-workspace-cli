@@ -15,7 +15,7 @@ metadata:
 
 - 只用 `dws` 操作钉钉待办，命令统一加 `--format json`，并按结构化业务返回判断结果。
 - 已知路线直接执行；仅在 leaf 参数或安全语义不确定时查精确 Schema，在 flag 不确定时查精确 Help。不要先枚举整个 Catalog，也不要连续猜命令。
-- 后续 ID 必须来自本次真实返回；零匹配、多匹配或类型不明时停止并消歧。
+- 后续 ID 必须来自本次真实返回；跨步骤可混用 shortcut 与原子命令，但只传递规范化后的稳定 ID，不能假设两类命令的完整返回结构相同。零匹配、多匹配或类型不明时停止并消歧。
 - 写操作遵循最终 Runtime gate。需要确认时先说明对象、动作和影响，用户确认后才追加 `--yes`；不要把 `--yes` 写进存储示例。
 - 写后必须核验。非幂等写超时、缺少稳定 ID 或读回失败时先对账，禁止盲目重放。
 
@@ -48,33 +48,35 @@ metadata:
 
 ## 路由优先级
 
-上面的通用 shortcut 优先规则只适用于单一、完整命中的请求。本 Skill 的实际优先级是：
+不要按整段请求强制选择同一类命令；先拆成有序步骤，再逐步选择最窄且完整覆盖该步骤的入口：
 
-1. **组合生命周期 → 原子命令闭环**：同一请求含创建后再列表、更新、完成、提醒、评论、附件、成员、子待办、标签或清理时，先读 [组合流程](references/02-task.md)，全程使用 `todo task/comment/tag ...` 原子命令。不要用 `+remind` / `+create` 代替组合流程的第一步，也不要混用两套返回结构。
-2. **确定性批量/汇总 → 脚本**：批量创建、今天/明天/本周汇总、逾期扫描分别用 bundled scripts。
-3. **单一意图 → Shortcut**：只在一个 shortcut 已经覆盖完整目标、校验和结果形态时直接使用。
-4. **未知低频能力 → 精确 Reference/Help**：只读当前操作的小节，不要枚举后试错。
+1. **确定创建入口**：按姓名指派用 `+assign` / `+assign-multi`。给自己创建且后续只有定位、回读和清理时用 `+remind`；已有 `userId` 的同类短流程用 `+create`。后续若有筛选、资源写入或多个对象，则用原子 `task create`。
+2. **后续逐步路由**：详情、完成、重开、更新、搜索、评论、提醒及评论/附件/子待办列表，优先用完整覆盖该步的 `+get` / `+complete` / `+reopen` / `+update` / `+search` / `+comment` / `+reminder` / `+list-*`。无完整 shortcut 时使用原子命令。
+3. **跨步骤只传稳定 ID**：shortcut 与原子命令可以共存；创建后先提取真实 `taskId`，评论、附件和标签再从各自真实返回取 ID。不要把某个入口的包装字段路径套到另一个入口。
+4. **确定性批量/汇总 → 脚本**：批量创建、今天/明天/本周汇总、逾期扫描分别用 bundled scripts。
+5. **未知低频能力 → 精确 Reference/Help**：只读当前操作的小节，不要枚举后试错。
 
 ## 高频路线
 
 | 用户意图 | 首选入口 | 边界 |
 |---|---|---|
-| 给自己创建一条普通待办 | `dws todo +remind --task "<标题>" [--at "<截止ISO>"] --format json` | `--at` 是截止时间，不是独立提醒 |
+| 给自己创建，随后只定位、看详情或清理 | `dws todo +remind --task "<标题>" [--at "<截止ISO>"] --format json` | `--at` 是截止时间，不是独立提醒；若后续有列表筛选或资源写入则改用原子创建 |
 | 按姓名给一人/多人指派一条待办 | `+assign` / `+assign-multi` | 任一姓名不唯一就停止，不能猜 `userId` |
-| 已有 `userId`，只创建并回读一条待办 | `dws todo +create --title "<标题>" --executors <USER_ID> ... --format json` | 结果必须含稳定 `taskId` 且读回一致 |
-| 创建后还要做其他操作 | `dws todo task create ... --format json` | 从 `result.taskId` 进入同一原子命令闭环 |
+| 已有 `userId`，只创建、回读和清理一条待办 | `dws todo +create --title "<标题>" --executors <USER_ID> ... --format json` | 结果必须含稳定 `taskId` 且读回一致 |
+| 创建后还要筛选或修改资源 | `dws todo task create ... --format json` | 从 `result.taskId` 进入后续步骤；后续读取仍可选 `+get` 等 shortcut |
 | 按状态、优先级、角色、日期或页码枚举 | `dws todo task list ... --format json` | `--status false/true`；`hasMore=true` 继续翻页 |
 | 当前组织我的待办 / 与我相关的全部待办 | `+get-my-tasks` / `+get-related-tasks` | 后者是创建人、执行人、参与人并集 |
 | 按标题关键词定位 / 已知 ID 查详情 | `+search --query ...` / `+get --task-id ...` | 零个或多个候选时停止消歧 |
 | 已知 ID 完成、重开、更新 | `+complete` / `+reopen` / `+update` | shortcut 会做状态检查或读回核验 |
 | 今天到期 / 逾期 | `+due-today` / `+overdue` | 空集合也是成功结果 |
 | 设置或清除独立提醒 | `+reminder` | 上游无提醒查询接口，只能报告写回执，不能声称读回 |
+| 创建、改名、列出或删除待办标签 | `tag create` / `tag update` / `tag list` / `tag delete` | “待办标签”属于 Todo，不是通讯录标签、Git tag 或其他产品标签 |
 
 ## 组合任务闭环
 
-1. 执行前列出用户要求的全部资源动作及顺序；同一链路使用同一个 profile。
+1. 执行前列出用户要求的全部资源动作及顺序，并为每一步单独选 shortcut 或原子命令；同一链路使用同一个 profile。
 2. 原子创建必须先取得执行人：未指定执行人用 `dws contact me --format json`；指定姓名用 `dws aisearch person --query "<姓名>" --dimension name --format json` 并唯一匹配。
-3. 创建后只从 `result.taskId` 提取稳定 ID。后续评论、附件和标签编号分别来自 `comment list`、`task list-attachment`、`tag create/list` 的真实返回。
+3. 原子创建从 `result.taskId` 取 ID；创建 shortcut 从其成功结果的 `taskId` 取 ID。后续评论、附件和标签编号分别来自 `+comment`/`comment list`、`task list-attachment`、`tag create/list` 的真实返回；不要跨入口猜字段层级。
 4. 每次写后使用对应 read/list 核验；提醒例外，只保留终端写回执。最后仅清理本次创建且已经记录 ID 的对象。
 
 ## 关键约束

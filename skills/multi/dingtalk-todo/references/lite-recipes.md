@@ -1,6 +1,6 @@
 # Todo 单步与短流程
 
-只在请求是单一 Todo 意图时使用本文件；创建后还要继续操作资源时，改读 [02-task.md](02-task.md)。
+用于单步 Todo 意图，也用于组合请求中被 shortcut 完整覆盖的独立步骤。涉及动态子资源 ID 或原子特有操作时，同时读 [02-task.md](02-task.md)。
 
 ## 创建一条待办
 
@@ -23,7 +23,7 @@ dws todo +assign-multi --to "<姓名1>,<姓名2>" --task "<标题>" --format jso
 dws todo +create --title "<标题>" --executors <USER_ID> [--priority 10|20|30|40] [--due "<截止ISO>"] --format json
 ```
 
-成功结果必须含稳定 `taskId` 并完成读回。超时、缺少 ID 或 `verified!=true` 时先用搜索/列表对账，禁止重放非幂等创建。
+后续只有搜索、详情回读和清理时可保留上述创建 shortcut；若还要列表筛选、更新状态/字段、提醒、评论、附件、成员、子待办、标签或创建多个对象，创建步骤改用原子 `task create`。成功结果必须含稳定 `taskId` 并完成读回。超时、缺少 ID 或 `verified!=true` 时先用搜索/列表对账，禁止重放非幂等创建。
 
 ## 查询与定位
 
