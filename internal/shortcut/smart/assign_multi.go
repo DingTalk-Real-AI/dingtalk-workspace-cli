@@ -67,6 +67,7 @@ var AssignMulti = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +assign-multi",
 		},
 		Description: "把一条待办按姓名一次性指派给多个人（自动把每个姓名解析成 userId）",
+		DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan, RemoteReads: false},
 		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"已验证的多人指派待办","properties":{"taskId":{"type":"string","description":"新待办稳定 taskId"},"subject":{"type":"string","description":"待办标题"},"executors":{"type":"array","description":"已解析执行人摘要","items":{"type":"string"}},"count":{"type":"integer","description":"执行人数"},"verified":{"type":"boolean","description":"是否完成详情读回核验"}},"required":["taskId","subject","executors","count","verified"],"additionalProperties":false}`)},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
@@ -103,6 +104,12 @@ var AssignMulti = shortcut.Shortcut{
 		if len(names) == 0 {
 			return apperrors.NewValidation("--to 不能为空，请至少提供一个执行人姓名")
 		}
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"dryRun": true, "executed": false, "preview_kind": "plan", "subject": task,
+				"assigneeQueries": names, "count": len(names),
+			})
+		}
 
 		// Resolve every name up front. Collect all failures and abort before any
 		// write, so we never create a todo assigned to only some of the people.
@@ -136,9 +143,6 @@ var AssignMulti = shortcut.Shortcut{
 				"subject":     task,
 				"executorIds": executorIDs,
 			},
-		}
-		if rt.DryRun() {
-			return rt.Output(map[string]any{"dryRun": true, "executed": false, "subject": task, "count": len(executorIDs)})
 		}
 		data, err := rt.CallMCPWriteDataStrict("todo", "create_personal_todo", params)
 		if err != nil {

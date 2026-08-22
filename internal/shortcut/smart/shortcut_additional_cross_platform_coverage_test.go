@@ -177,9 +177,24 @@ func TestCrossPlatformCoverageCalendarSmartReadCommands(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageTodoSmartWriteBranches(t *testing.T) {
+	for name, args := range map[string][]string{
+		"assign-empty-task": {"todo", "+assign", "--task", "   ", "--to", "fixture person", "--yes"},
+		"assign-bad-due":    {"todo", "+assign", "--task", "task", "--to", "fixture person", "--due", "tomorrow", "--yes"},
+		"remind-empty-task": {"todo", "+remind", "--task", "   ", "--yes"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, _, err := runCalendarSmartCLI(t, &calendarSmartTestCaller{}, args...); err == nil {
+				t.Fatal("invalid todo shortcut arguments accepted")
+			}
+		})
+	}
+
 	assignDry := &calendarSmartTestCaller{steps: map[string][]calendarSmartTestStep{"contact/search_contact_by_key_word": {{text: smartContact().text}}}}
 	if _, _, err := runCalendarSmartCLI(t, assignDry, "todo", "+assign", "--task", "task", "--to", "fixture person", "--due", smartCoverageEnd, "--dry-run", "--yes"); err != nil {
 		t.Fatal(err)
+	}
+	if _, _, err := runCalendarSmartCLI(t, &calendarSmartTestCaller{}, "todo", "+assign", "--task", "task", "--to", "fixture person", "--yes"); err == nil {
+		t.Fatal("assign contact resolution failure accepted")
 	}
 	for name, responses := range map[string]map[string][]calendarSmartTestStep{
 		"call":    {"contact/search_contact_by_key_word": {{text: smartContact().text}}, "todo/create_personal_todo": {{err: errors.New("write")}}},
@@ -187,7 +202,7 @@ func TestCrossPlatformCoverageTodoSmartWriteBranches(t *testing.T) {
 		"success": {"contact/search_contact_by_key_word": {{text: smartContact().text}}, "todo/create_personal_todo": {{text: `{"success":true,"result":{"taskId":"task-placeholder"}}`}}, "todo/get_todo_detail": {{text: `{"success":true,"result":{"todoDetailModel":{"taskId":"task-placeholder","subject":"task"}}}`}}},
 	} {
 		t.Run("assign-"+name, func(t *testing.T) {
-			_, _, err := runCalendarSmartCLI(t, &calendarSmartTestCaller{steps: responses}, "todo", "+assign", "--task", "task", "--to", "fixture person", "--yes")
+			_, _, err := runCalendarSmartCLI(t, &calendarSmartTestCaller{steps: responses}, "todo", "+assign", "--task", "task", "--to", "fixture person", "--due", smartCoverageEnd, "--yes")
 			if name == "success" {
 				if err != nil {
 					t.Fatal(err)
@@ -231,6 +246,10 @@ func TestCrossPlatformCoverageTodoSmartWriteBranches(t *testing.T) {
 	remindDry := &calendarSmartTestCaller{steps: map[string][]calendarSmartTestStep{"contact/get_current_user_profile": {{text: `{"result":{"userId":"user-placeholder"}}`}}}}
 	if _, _, err := runCalendarSmartCLI(t, remindDry, "todo", "+remind", "--task", "task", "--at", smartCoverageEnd, "--dry-run", "--yes"); err != nil {
 		t.Fatal(err)
+	}
+	remindProfileFailure := &calendarSmartTestCaller{steps: map[string][]calendarSmartTestStep{"contact/get_current_user_profile": {{err: errors.New("profile")}}}}
+	if _, _, err := runCalendarSmartCLI(t, remindProfileFailure, "todo", "+remind", "--task", "task", "--yes"); err == nil {
+		t.Fatal("remind profile failure accepted")
 	}
 	remindSuccess := &calendarSmartTestCaller{steps: map[string][]calendarSmartTestStep{"contact/get_current_user_profile": {{text: `{"result":{"userId":"user-placeholder"}}`}}, "todo/create_personal_todo": {{text: `{"success":true,"result":{"taskId":"task-placeholder"}}`}}, "todo/get_todo_detail": {{text: `{"success":true,"result":{"todoDetailModel":{"taskId":"task-placeholder","subject":"task"}}}`}}}}
 	if _, _, err := runCalendarSmartCLI(t, remindSuccess, "todo", "+remind", "--task", "task", "--yes"); err != nil {

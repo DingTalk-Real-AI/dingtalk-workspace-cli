@@ -65,6 +65,7 @@ var TodoDone = shortcut.Shortcut{
 			PrimaryCLIPath: "todo +todo-done",
 		},
 		Description: "按标题关键词把我的某条待办标记完成（自动定位 taskId）",
+		DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewPlan, RemoteReads: false},
 		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"已验证的完成结果","properties":{"taskId":{"type":"string","description":"已完成待办 taskId"},"subject":{"type":"string","description":"已完成待办标题"},"verified":{"type":"boolean","description":"是否完成详情读回核验"}},"required":["taskId","subject","verified"],"additionalProperties":false}`)},
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
@@ -86,6 +87,12 @@ var TodoDone = shortcut.Shortcut{
 		keyword := strings.TrimSpace(rt.Str("task"))
 		if keyword == "" {
 			return apperrors.NewValidation("请用 --task 提供待办标题关键词")
+		}
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"dryRun": true, "executed": false, "preview_kind": "plan", "taskQuery": keyword,
+				"operation": "resolve_unique_and_complete",
+			})
 		}
 
 		// Step 1 — list ALL my todos across pages (roleTypes defaults to executor,
@@ -111,9 +118,6 @@ var TodoDone = shortcut.Shortcut{
 
 		// Step 3 — mark it done. taskId + isDone mirror helpers `todo task done`
 		// (update_todo_done_status, isDone passed as a string).
-		if rt.DryRun() {
-			return rt.Output(map[string]any{"dryRun": true, "executed": false, "taskId": matches[0].taskID})
-		}
 		data, err := rt.CallMCPWriteDataStrict("todo", "update_todo_done_status", map[string]any{
 			"taskId": matches[0].taskID,
 			"isDone": "true",

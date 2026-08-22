@@ -1,159 +1,254 @@
 #!/usr/bin/env python3
-"""
-从 JSON 文件批量创建待办（含优先级、截止时间、执行者）
+"""Create up to 30 Todo tasks, preserve every task ID, and verify each task."""
 
-用法:
-    python todo_batch_create.py todos.json
-    python todo_batch_create.py todos.json --dry-run
-
-todos.json 格式:
-    [
-        {"title": "修复线上Bug", "executors": "userId1,userId2", "priority": 40},
-        {"title": "写周报", "executors": "userId1", "due": "2026-03-15"},
-        {"title": "代码评审", "executors": "userId1"},
-        {"title": "每日站会", "executors": "userId1", "due": "2026-03-20",
-         "recurrence": "DTSTART:20260320T020000Z\\nRRULE:FREQ=DAILY;INTERVAL=1"}
-    ]
-
-字段说明:
-- title:     待办标题 (必填)
-- executors: 执行者 userId，多人逗号分隔 (必填)
-- priority:  优先级 10=低/20=普通/30=较高/40=紧急 (可选)
-- due:       截止日期 YYYY-MM-DD 或毫秒时间戳 (可选)
-- recurrence: 循环待办规则 (可选，需同时有 due)；字符串内需含换行，与 dws --recurrence 一致
-"""
-
-import sys
+import argparse
 import json
 import subprocess
-import re
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, Iterable, List, Optional
+from zoneinfo import ZoneInfo
 
-ALLOWED_PRIORITIES = {10, 20, 30, 40}
-DATE_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+TIMEZONE = ZoneInfo("Asia/Shanghai")
+MAX_ITEMS = 30
 MAX_FILE_SIZE = 10 * 1024 * 1024
+ALLOWED_PRIORITIES = {10, 20, 30, 40}
 
 
-def run_dws(
-    args: List[str], dry_run: bool = False,
-) -> Optional[Dict[str, Any]]:
-    cmd = ['dws'] + args
-    if dry_run:
-        print(f"[dry-run] {' '.join(cmd)}")
-        return {'dry_run': True}
+class ScriptError(RuntimeError):
+    def __init__(self, message: str, *, commit_unknown: bool = False):
+        super().__init__(message)
+        self.commit_unknown = commit_unknown
+
+
+def run_dws_json(
+    args: List[str], dws: str = "dws", *, write_started: bool = False
+) -> Dict[str, Any]:
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=60
+            [dws, *args], capture_output=True, text=True, timeout=120
         )
-        if result.returncode != 0:
-            print(f"  ✗ 错误：{result.stderr.strip()}")
-            return None
-        return json.loads(result.stdout)
-    except subprocess.TimeoutExpired:
-        print('  ✗ 命令执行超时', file=sys.stderr)
+    except subprocess.TimeoutExpired as exc:
+        raise ScriptError("dws timed out", commit_unknown=write_started) from exc
+    except FileNotFoundError as exc:
+        raise ScriptError(str(exc), commit_unknown=False) from exc
+
+    payload: Optional[Dict[str, Any]] = None
+    if result.stdout.strip():
+        try:
+            decoded = json.loads(result.stdout)
+            if isinstance(decoded, dict):
+                payload = decoded
+        except json.JSONDecodeError:
+            payload = None
+
+    if result.returncode != 0:
+        error = payload.get("error", {}) if payload else {}
+        started = error.get("execution_started") if isinstance(error, dict) else None
+        message = ""
+        if isinstance(error, dict):
+            message = str(error.get("message") or error.get("hint") or "")
+        message = message or result.stderr.strip() or f"dws exited {result.returncode}"
+        raise ScriptError(
+            message,
+            commit_unknown=write_started and started is not False,
+        )
+    if payload is None:
+        raise ScriptError("dws returned non-object or invalid JSON", commit_unknown=write_started)
+    if payload.get("ok") is False or payload.get("success") is False:
+        error = payload.get("error", {})
+        started = error.get("execution_started") if isinstance(error, dict) else None
+        message = str(error.get("message") if isinstance(error, dict) else payload)
+        raise ScriptError(message, commit_unknown=write_started and started is not False)
+    if payload.get("outcome") == "pending":
+        raise ScriptError("create outcome is pending", commit_unknown=write_started)
+    return payload
+
+
+def walk_objects(value: Any) -> Iterable[Dict[str, Any]]:
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from walk_objects(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from walk_objects(child)
+
+
+def first_string(payload: Dict[str, Any], keys: Iterable[str]) -> str:
+    for obj in walk_objects(payload):
+        for key in keys:
+            value = obj.get(key)
+            if value not in (None, ""):
+                return str(value)
+    return ""
+
+
+def normalize_due(value: Any) -> Optional[str]:
+    if value in (None, ""):
         return None
-    except (json.JSONDecodeError, FileNotFoundError) as e:
-        print(f"  ✗ 错误：{e}", file=sys.stderr)
-        return None
+    raw = str(value).strip()
+    if raw.isdigit():
+        try:
+            return datetime.fromtimestamp(int(raw) / 1000, TIMEZONE).isoformat()
+        except (OSError, OverflowError, ValueError) as exc:
+            raise ScriptError(f"invalid epoch-millisecond due time: {raw}") from exc
+    if len(raw) == 10:
+        try:
+            day = datetime.strptime(raw, "%Y-%m-%d").replace(
+                hour=23, minute=59, second=59, tzinfo=TIMEZONE
+            )
+            return day.isoformat()
+        except ValueError as exc:
+            raise ScriptError(f"invalid due date: {raw}") from exc
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ScriptError(
+            f"due must be YYYY-MM-DD, epoch milliseconds, or ISO-8601: {raw}"
+        ) from exc
+    if parsed.tzinfo is None:
+        raise ScriptError(f"ISO due time must include a timezone: {raw}")
+    return parsed.isoformat()
 
 
-def parse_due(due_value) -> Optional[str]:
-    if not due_value:
-        return None
-    due_str = str(due_value)
-    if due_str.isdigit() and len(due_str) >= 10:
-        return due_str
-    if DATE_PATTERN.match(due_str):
-        dt = datetime.strptime(due_str, '%Y-%m-%d')
-        dt = dt.replace(hour=23, minute=59, second=59)
-        return str(int(dt.timestamp() * 1000))
-    print(f"  ⚠ 无法解析截止时间：{due_value}，跳过")
-    return None
-
-
-def validate_todo(item: Dict[str, Any], idx: int) -> bool:
-    if not isinstance(item, dict):
-        print(f"  ✗ #{idx+1} 不是有效对象")
-        return False
-    if not item.get('title', '').strip():
-        print(f"  ✗ #{idx+1} 缺少 title")
-        return False
-    if not item.get('executors', '').strip():
-        print(f"  ✗ #{idx+1} 缺少 executors")
-        return False
-    priority = item.get('priority')
-    if priority is not None and int(priority) not in ALLOWED_PRIORITIES:
-        print(f"  ✗ #{idx+1} 无效优先级：{priority}")
-        return False
-    recurrence = item.get('recurrence')
-    if recurrence and not str(recurrence).strip():
-        print(f"  ✗ #{idx+1} recurrence 不能为空字符串")
-        return False
-    if recurrence and not item.get('due'):
-        print(f"  ✗ #{idx+1} 设置 recurrence 时必须提供 due")
-        return False
-    return True
-
-
-def main():
-    dry_run = '--dry-run' in sys.argv
-    args = [a for a in sys.argv[1:] if a != '--dry-run']
-    if not args:
-        print(__doc__)
-        sys.exit(1)
-
-    file_path = Path(args[0])
-    if not file_path.exists():
-        print(f"错误：文件不存在：{file_path}")
-        sys.exit(1)
-    if file_path.stat().st_size > MAX_FILE_SIZE:
-        print(f"错误：文件过大 (限制 {MAX_FILE_SIZE // 1024}KB)")
-        sys.exit(1)
-
-    with open(file_path, 'r', encoding='utf-8') as f:
-        todos = json.load(f)
-    if not isinstance(todos, list) or not todos:
-        print('错误：JSON 文件必须是非空数组')
-        sys.exit(1)
-
-    for i, item in enumerate(todos):
-        if not validate_todo(item, i):
-            sys.exit(1)
-
-    print(f"📋 准备创建 {len(todos)} 条待办\n")
-    success, fail = 0, 0
-    for i, item in enumerate(todos):
-        title = item['title'].strip()
-        cmd_args = [
-            'todo', 'task', 'create',
-            '--title', title,
-            '--executors', item['executors'].strip(),
-            '--format', 'json',
-        ]
-        priority = item.get('priority')
+def validate(items: Any) -> List[Dict[str, Any]]:
+    if not isinstance(items, list) or not items:
+        raise ScriptError("input must be a non-empty JSON array")
+    if len(items) > MAX_ITEMS:
+        raise ScriptError(f"a batch may contain at most {MAX_ITEMS} tasks")
+    validated: List[Dict[str, Any]] = []
+    for index, item in enumerate(items, 1):
+        if not isinstance(item, dict):
+            raise ScriptError(f"item {index} must be an object")
+        title = str(item.get("title") or "").strip()
+        executors = str(item.get("executors") or "").strip()
+        if not title or not executors:
+            raise ScriptError(f"item {index} requires non-empty title and executors")
+        priority = item.get("priority")
         if priority is not None:
-            cmd_args.extend(['--priority', str(int(priority))])
-        due = parse_due(item.get('due'))
-        if due:
-            cmd_args.extend(['--due', due])
-        recurrence = item.get('recurrence')
-        if recurrence:
-            rr = str(recurrence).replace('\\n', '\n')
-            cmd_args.extend(['--recurrence', rr])
+            try:
+                priority = int(priority)
+            except (TypeError, ValueError) as exc:
+                raise ScriptError(f"item {index} has invalid priority") from exc
+            if priority not in ALLOWED_PRIORITIES:
+                raise ScriptError(
+                    f"item {index} priority must be one of {sorted(ALLOWED_PRIORITIES)}"
+                )
+        due = normalize_due(item.get("due"))
+        recurrence = item.get("recurrence")
+        if recurrence and not due:
+            raise ScriptError(f"item {index} recurrence requires due")
+        validated.append(
+            {
+                "title": title,
+                "executors": executors,
+                "priority": priority,
+                "due": due,
+                "recurrence": (
+                    str(recurrence).replace("\\n", "\n") if recurrence else None
+                ),
+            }
+        )
+    return validated
 
-        result = run_dws(cmd_args, dry_run=dry_run)
-        if result:
-            print(f"  ✓ [{i+1}/{len(todos)}] {title}")
-            success += 1
-        else:
-            print(f"  ✗ [{i+1}/{len(todos)}] {title}")
-            fail += 1
 
-    print(f"\n完成: 成功 {success}, 失败 {fail}")
-    sys.exit(0 if fail == 0 else 1)
+def run(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input", type=Path)
+    parser.add_argument("--dws", default="dws")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+
+    try:
+        if not args.input.is_file():
+            raise ScriptError(f"input file not found: {args.input}")
+        if args.input.stat().st_size > MAX_FILE_SIZE:
+            raise ScriptError(f"input exceeds {MAX_FILE_SIZE} bytes")
+        items = validate(json.loads(args.input.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, ScriptError) as exc:
+        print(json.dumps({"complete": False, "error": str(exc)}, ensure_ascii=False))
+        return 2
+
+    ledger: List[Dict[str, Any]] = []
+    for item in items:
+        create = [
+            "todo",
+            "task",
+            "create",
+            "--title",
+            item["title"],
+            "--executors",
+            item["executors"],
+        ]
+        if item["priority"] is not None:
+            create.extend(["--priority", str(item["priority"])])
+        if item["due"]:
+            create.extend(["--due", item["due"]])
+        if item["recurrence"]:
+            create.extend(["--recurrence", item["recurrence"]])
+        create.extend(["--format", "json"])
+        if args.dry_run:
+            ledger.append({"title": item["title"], "command": [args.dws, *create]})
+            continue
+
+        entry: Dict[str, Any] = {"title": item["title"], "status": "unknown"}
+        try:
+            created = run_dws_json(create, args.dws, write_started=True)
+            identifier = first_string(created, ("taskId", "todoTaskId"))
+            if not identifier:
+                raise ScriptError(
+                    "create response did not contain a stable taskId",
+                    commit_unknown=True,
+                )
+            entry["taskId"] = identifier
+            try:
+                detail = run_dws_json(
+                    [
+                        "todo",
+                        "task",
+                        "get",
+                        "--task-id",
+                        identifier,
+                        "--format",
+                        "json",
+                    ],
+                    args.dws,
+                )
+                actual_title = first_string(detail, ("subject", "title"))
+                if actual_title != item["title"]:
+                    raise ScriptError(
+                        f"readback title mismatch: expected {item['title']!r}, "
+                        f"got {actual_title!r}"
+                    )
+                entry["status"] = "verified"
+            except ScriptError as exc:
+                entry.update({"status": "unverified", "error": str(exc)})
+        except ScriptError as exc:
+            entry.update(
+                {
+                    "status": "unknown" if exc.commit_unknown else "failed",
+                    "error": str(exc),
+                }
+            )
+        ledger.append(entry)
+
+    complete = args.dry_run or all(item.get("status") == "verified" for item in ledger)
+    output = {
+        "complete": complete,
+        "dryRun": args.dry_run,
+        "requestedCount": len(items),
+        "verifiedCount": sum(item.get("status") == "verified" for item in ledger),
+        "failedCount": sum(item.get("status") == "failed" for item in ledger),
+        "unverifiedCount": sum(item.get("status") == "unverified" for item in ledger),
+        "unknownCount": sum(item.get("status") == "unknown" for item in ledger),
+        "ledger": ledger,
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+    return 0 if complete else 2
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    sys.exit(run())

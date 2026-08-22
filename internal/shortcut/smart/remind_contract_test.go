@@ -65,7 +65,7 @@ func TestRemindShortcutRejectsInvalidAtBeforeTodoCreate(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "--at 时间格式无效") {
 		t.Fatalf("error = %v, want invalid --at validation", err)
 	}
-	if len(fake.calls) != 1 || fake.calls[0].tool != "get_current_user_profile" {
-		t.Fatalf("tool calls = %#v, want profile read only", fake.calls)
+	if len(fake.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want local validation before any remote read", fake.calls)
 	}
 }
