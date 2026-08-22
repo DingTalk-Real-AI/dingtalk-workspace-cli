@@ -521,17 +521,32 @@ Example:
   dws doc permission add --node <DOC_ID> --users uid1 --role READER
   dws doc permission add --node <DOC_ID> --users uid1,uid2 --role EDITOR
   dws doc permission add --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" --users uid1 --role MANAGER
+  dws doc permission add --node <DOC_ID> --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"},{"type":"DEPT","id":"deptId1","roleId":"EDITOR","corpId":"xxx"}]' --notify
+  dws doc permission add --node <DOC_ID> --members '[{"type":"CONVERSATION","id":"cidXXX","roleId":"READER"},{"type":"TAG","id":"tagId1","roleId":"EDITOR","corpId":"xxx"}]'
 Flags:
       --node string        目标文档/文件夹的 ID 或 URL (必填)
-      --users strings      被授权的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
-      --role string        授予的角色 (必填，大小写敏感，必须全大写): MANAGER (管理者) / EDITOR (可编辑) / DOWNLOADER (可下载) / READER (可阅读)
+      --users string       被授权的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)
+      --role string        授予的角色 (旧格式必填，大小写不敏感): MANAGER (管理者) / EDITOR (可编辑) / DOWNLOADER (可下载) / READER (可阅读)
+      --members string     成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥
+      --notify bool        是否通知被添加的成员 (仅 --members 新格式时生效，默认 false)
       --workspace string   所属知识库 ID (选填，仅用于辅助构造返回的 docUrl，业务实际依赖 nodeId)
 ```
 
+> **两种传参方式（互斥）**：
+> - 旧格式：`--users` 传入逗号分隔的 userId 列表 + `--role` 指定统一角色（仅 USER 类型）
+> - 新格式：`--members` 传入 JSON 数组，支持 USER/DEPT/CONVERSATION/TAG 四种成员类型，每个成员携带独立 `roleId`
+>
+> **成员类型说明**：
+> - `USER` — 用户，id 为用户 userId，需携带 `corpId`（标识用户所属组织）
+> - `DEPT` — 部门，id 为部门 ID，需携带 `corpId`（标识部门所属组织）
+> - `CONVERSATION` — 群聊，id 为群聊 conversationId（cid 开头），无需 `corpId`
+> - `TAG` — 角色标签（也称角色组），id 为角色标签 ID，需携带 `corpId`。当用户要求"添加角色组"或"添加角色标签"时使用此类型
+>
 > **重要约束**：
-> - 仅支持 USER 类型授权。
-> - 角色枚举严格大写：MANAGER / EDITOR / DOWNLOADER / READER（OWNER 不可通过此接口添加）。
-> - 操作者需在该节点具备「可编辑（EDITOR）」及以上角色（OWNER / MANAGER / EDITOR）。
+> - 角色枚举（大小写不敏感）：MANAGER / EDITOR / DOWNLOADER / READER（OWNER 不可通过此接口添加）。
+> - 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 `forbidden.accessDenied`。
+> - 单次请求最多 30 个成员，超出请分批调用。
+> - `--notify` 仅在新格式（`--members`）时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 false；省略时不会向服务端发送该字段，需要通知请显式传 `--notify`。
 > - 授权对象是文档节点本身，不需要也不应该用 `wiki member add`（那个是知识库容器级授权）。
 
 ### 修改文档权限（节点级）
@@ -541,12 +556,35 @@ Usage:
 Example:
   dws doc permission update --node <DOC_ID> --users uid1 --role EDITOR
   dws doc permission update --node <DOC_ID> --users uid1,uid2 --role READER
+  dws doc permission update --node <DOC_ID> --members '[{"type":"USER","id":"uid1","roleId":"EDITOR","corpId":"xxx"}]' --notify=false
+  dws doc permission update --node <DOC_ID> --members '[{"type":"TAG","id":"tagId1","roleId":"READER","corpId":"xxx"}]'
 Flags:
       --node string        目标文档/文件夹的 ID 或 URL (必填)
-      --users strings      目标用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
-      --role string        新角色 (必填，大小写敏感，必须全大写): MANAGER / EDITOR / DOWNLOADER / READER
+      --users string       被更新的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)
+      --role string        新角色 (旧格式必填，大小写不敏感): MANAGER / EDITOR / DOWNLOADER / READER
+      --members string     成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥
+      --notify bool        是否通知被变更的成员 (仅 --members 新格式时生效，默认 false)
       --workspace string   所属知识库 ID (选填)
 ```
+
+> **两种传参方式（互斥）**：
+> - 旧格式：`--users` 传入逗号分隔的 userId 列表 + `--role` 指定统一角色（仅 USER 类型）
+> - 新格式：`--members` 传入 JSON 数组，支持 USER/DEPT/CONVERSATION/TAG 四种成员类型，每个成员携带独立 `roleId`
+>
+> **成员类型说明**：
+> - `USER` — 用户，id 为用户 userId，需携带 `corpId`
+> - `DEPT` — 部门，id 为部门 ID，需携带 `corpId`
+> - `CONVERSATION` — 群聊，id 为群聊 conversationId（cid 开头），无需 `corpId`
+> - `TAG` — 角色标签（也称角色组），id 为角色标签 ID，需携带 `corpId`
+>
+> **重要约束**：
+> - OWNER 角色不可通过此接口变更。
+> - 同一成员在同一节点只能拥有一个角色，变更后旧角色自动替换。
+> - 若成员的角色来自父节点的权限继承（PASS_ON），且继承角色高于目标角色，接口会拒绝操作。
+> - 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 `forbidden.accessDenied`。
+> - 单次请求最多 30 个成员，超出请分批调用。
+> - `--notify` 仅在新格式（`--members`）时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 false。
+> - 仅可更新已存在协作关系的成员，新增协作者请使用 `dws doc permission add`。
 
 ### 列出文档权限（节点级）
 ```
@@ -556,14 +594,16 @@ Example:
   dws doc permission list --node <DOC_ID>
   dws doc permission list --node <DOC_ID> --limit 50
   dws doc permission list --node <DOC_ID> --filter-role EDITOR
+  dws doc permission list --node <DOC_ID> --next-token <上次返回的 nextToken>
 Flags:
       --node string          目标文档/文件夹的 ID 或 URL (必填)
       --workspace string     所属知识库 ID (选填)
-      --limit int             返回数量上限，最大 200 (默认 50)
+      --limit int             返回数量上限，最大 50 (默认 30)
       --filter-role string   按角色过滤: MANAGER / EDITOR / DOWNLOADER / READER (选填)
+      --next-token string    分页游标，首次不传，后续传入上一次返回的 nextToken (选填)
 ```
 
-> 接口不支持游标分页，使用 `--limit` 一次性拉取。
+> 底层一次性返回全量成员后在内存中按 pageSize 分页；当 `hasMore` 为 true 时，传入 `--next-token` 即可获取下一页。
 
 ### 导出在线文档为 docx（一体化命令）
 ```
@@ -716,9 +756,17 @@ Flags:
 - 删除 → `block delete`
 
 用户说"给某人开权限/分享给某人/授权某文档/把这篇文档给 xxx 看":
-- 新增权限 → `permission add`（需 `--node` + `--user` + `--role`）
+- 新增权限 → `permission add`（需 `--node` + `--user` + `--role`，或 `--node` + `--members`）
 - 修改权限 → `permission update`
 - 查看谁有权限 → `permission list`
+- 授权后要告知对方（"并通知他/告知一下/提醒对方/让他知道"）→ 走 `--members` 并追加 `--notify`
+
+> **通知意图 → `--notify`**（默认不通知，省略时 CLI 不向服务端发送该字段）：
+> - 用户明确要求“通知 / 告知 / 提醒对方 / 让他知道” → 追加 `--notify`
+> - 用户明确要求“不要通知 / 别提醒 / 悄悄加 / 不要打扰” → 追加 `--notify=false`
+> - 用户没提通知需求 → **不传该 flag**，保持不通知；不要自行补上 `--notify`
+> - `--notify` 仅在 `--members` 新格式下生效；旧格式 `--users` 下传了也不会生效，有通知需求必须改用 `--members`
+> - 仅 USER 和 CONVERSATION 类型成员会收到通知；被授权对象是 DEPT / TAG 时通知不会送达，**需主动向用户说明这一点**，不要默不作声
 
 > **关键区分**：
 > - "把**某篇文档**授权给某人" → `doc permission add`（节点级，包括「我的文档」下的文档都支持）

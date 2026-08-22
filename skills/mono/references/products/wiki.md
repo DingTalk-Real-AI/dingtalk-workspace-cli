@@ -120,16 +120,31 @@ Example:
   dws wiki member add --workspace <WS_ID> --users uid1 --role READER
   dws wiki member add --workspace <WS_ID> --users uid1,uid2 --role EDITOR
   dws wiki member add --workspace "https://alidocs.dingtalk.com/i/spaces/<WS_ID>/overview" --users uid1 --role MANAGER
+  dws wiki member add --workspace <WS_ID> --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"},{"type":"DEPT","id":"deptId1","roleId":"EDITOR","corpId":"xxx"}]' --notify
+  dws wiki member add --workspace <WS_ID> --members '[{"type":"CONVERSATION","id":"cidXXX","roleId":"READER"},{"type":"TAG","id":"tagId1","roleId":"EDITOR","corpId":"xxx"}]'
 Flags:
       --workspace string   目标知识库 ID 或 URL (必填)
-      --users string       被加入的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
-      --role string        授予的角色 (必填，大小写不敏感): MANAGER (管理者) / EDITOR (可编辑) / DOWNLOADER (可下载) / READER (可阅读)
+      --users string       被加入的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)
+      --role string        授予的角色 (旧格式必填，大小写不敏感): MANAGER (管理者) / EDITOR (可编辑) / DOWNLOADER (可下载) / READER (可阅读)
+      --members string     成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥
+      --notify bool        是否通知被添加的成员 (仅 --members 新格式时生效，默认 false)
 ```
 
+> **两种传参方式（互斥）**：
+> - 旧格式：`--users` 传入逗号分隔的 userId 列表 + `--role` 指定统一角色（仅 USER 类型）
+> - 新格式：`--members` 传入 JSON 数组，每个成员包含 `type`（USER/DEPT/CONVERSATION/TAG）、`id`、`roleId`（建议全大写），支持混合类型
+>
+> **成员类型说明**：
+> - `USER` — 用户，id 为用户 userId，需携带 `corpId`（标识用户所属组织）
+> - `DEPT` — 部门，id 为部门 ID，需携带 `corpId`（标识部门所属组织）
+> - `CONVERSATION` — 群聊，id 为群聊 conversationId（cid 开头），无需 `corpId`
+> - `TAG` — 角色标签（也称角色组），id 为角色标签 ID，需携带 `corpId`。当用户要求"添加角色组"或"添加角色标签"时使用此类型
+>
 > **❗ 重要约束**：
-> - 仅支持 USER 类型。
 > - 角色枚举：MANAGER / EDITOR / DOWNLOADER / READER（OWNER 不可通过此接口添加，知识库创建者默认为所有者）。
-> - 操作者需具备知识库的 OWNER 或 MANAGER 权限。
+> - 操作者须满足该知识库配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 `forbidden.accessDenied`。
+> - 单次请求最多 30 个成员，超出请分批调用。
+> - `--notify` 仅在新格式（`--members`）时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 false；省略时不会向服务端发送该字段，需要通知请显式传 `--notify`。旧格式始终通知。
 > - 「我的文档」(myWikiSpace) 是个人空间，**不支持容器级成员管理**；后端会直接拒绝。如果你的目标只是把某篇文档分享给别人，请改用 `dws drive permission add` 在节点级别授权。
 
 ### 移除知识库成员
@@ -139,15 +154,28 @@ Usage:
 Example:
   dws wiki member remove --workspace <WS_ID> --users uid1
   dws wiki member remove --workspace <WS_ID> --users uid1,uid2
+  dws wiki member remove --workspace <WS_ID> --members '[{"type":"USER","id":"uid1","corpId":"xxx"},{"type":"DEPT","id":"deptId1","corpId":"xxx"}]'
 Flags:
       --workspace string   目标知识库 ID 或 URL (必填)
-      --users string       被移除的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
+      --users string       被移除的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)
+      --members string     成员列表 JSON 数组（新格式），只需 type 和 id（USER/DEPT/TAG 还需 corpId），与 --users 互斥
 ```
 
+> **两种传参方式（互斥）**：
+> - 旧格式：`--users` 传入逗号分隔的 userId 列表（仅 USER 类型）
+> - 新格式：`--members` 传入 JSON 数组，只需 `type` 和 `id`（USER/DEPT/TAG 还需 `corpId`），支持 USER/DEPT/CONVERSATION/TAG
+>
+> **成员类型说明**：
+> - `USER` — 用户，id 为用户 userId，需携带 `corpId`
+> - `DEPT` — 部门，id 为部门 ID，需携带 `corpId`
+> - `CONVERSATION` — 群聊，id 为群聊 conversationId（cid 开头），无需 `corpId`
+> - `TAG` — 角色标签（也称角色组），id 为角色标签 ID，需携带 `corpId`
+>
 > **重要约束**：
 > - OWNER 角色不可通过此接口移除。
-> - 操作者需具备知识库的 OWNER 或 MANAGER 权限。
-> - 移除后相关用户将无法访问该知识库下的内容（除非通过节点级权限另行授权）。
+> - 操作者须满足该知识库配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 `forbidden.accessDenied`。
+> - 单次请求最多 30 个成员，超出请分批调用。
+> - 移除后相关成员将无法访问该知识库下的内容（除非通过节点级权限另行授权）。
 > - 「我的文档」(myWikiSpace) 是个人空间，**不支持容器级成员管理**。
 
 ### 修改知识库成员角色
@@ -157,11 +185,31 @@ Usage:
 Example:
   dws wiki member update --workspace <WS_ID> --users uid1 --role EDITOR
   dws wiki member update --workspace <WS_ID> --users uid1,uid2 --role READER
+  dws wiki member update --workspace <WS_ID> --members '[{"type":"USER","id":"uid1","roleId":"EDITOR","corpId":"xxx"}]' --notify=false
+  dws wiki member update --workspace <WS_ID> --members '[{"type":"TAG","id":"tagId1","roleId":"READER","corpId":"xxx"}]'
 Flags:
       --workspace string   目标知识库 ID 或 URL (必填)
-      --users string       目标用户 userId 列表，逗号分隔 (必填，单次最多 30 个)
-      --role string        新角色 (必填，大小写不敏感): MANAGER / EDITOR / DOWNLOADER / READER
+      --users string       目标用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)
+      --role string        新角色 (旧格式必填，大小写不敏感): MANAGER / EDITOR / DOWNLOADER / READER
+      --members string     成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥
+      --notify bool        是否通知被变更的成员 (仅 --members 新格式时生效，默认 false)
 ```
+
+> **两种传参方式（互斥）**：
+> - 旧格式：`--users` 传入逗号分隔的 userId 列表 + `--role` 指定统一角色（仅 USER 类型）
+> - 新格式：`--members` 传入 JSON 数组，每个成员携带独立 `roleId`
+>
+> **成员类型说明**：
+> - `USER` — 用户，id 为用户 userId，需携带 `corpId`
+> - `DEPT` — 部门，id 为部门 ID，需携带 `corpId`
+> - `CONVERSATION` — 群聊，id 为群聊 conversationId（cid 开头），无需 `corpId`
+> - `TAG` — 角色标签（也称角色组），id 为角色标签 ID，需携带 `corpId`
+>
+> **重要约束**：
+> - OWNER 角色不可通过此接口变更。
+> - 操作者须满足该知识库配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 `forbidden.accessDenied`。
+> - 单次请求最多 30 个成员，超出请分批调用。
+> - `--notify` 仅在新格式（`--members`）时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 false。
 
 ### 列出知识库成员
 ```
@@ -169,15 +217,18 @@ Usage:
   dws wiki member list [flags]
 Example:
   dws wiki member list --workspace <WS_ID>
-  dws wiki member list --workspace <WS_ID> --limit 100
+  dws wiki member list --workspace <WS_ID> --limit 50
   dws wiki member list --workspace <WS_ID> --filter-role EDITOR
+  dws wiki member list --workspace <WS_ID> --next-token <上次返回的 nextToken>
 Flags:
       --workspace string     目标知识库 ID 或 URL (必填)
-      --limit int            返回成员数上限，默认 30，最大 200
+      --limit int            返回成员数上限，默认 30，最大 50
       --filter-role string   按角色过滤，逗号分隔: OWNER / MANAGER / EDITOR / DOWNLOADER / READER (选填)
+      --next-token string    分页游标，首次不传，后续传入上一次返回的 nextToken (选填)
 ```
 
-> 接口不支持游标分页，使用 `--limit` 一次性拉取。
+> 底层一次性返回全量成员后在内存中按 pageSize 分页；当 `hasMore` 为 true 时，传入 `--next-token` 即可获取下一页。
+> 操作者须满足该知识库配置的权限管理最低角色要求，权限不足返回 `forbidden.accessDenied`。
 
 > ⚠️ **返回字段限制**：`member list` 每条只返回 `name` / `role` / `type` 三个字段，**不含 userId**（服务端不返回）。因此**无法**从 `member list` 拿到 userId 再去串联 `member update` / `member remove`。要对某人改角色 / 移除，需另行拿到其 userId（例如用 `dws contact user search --query "<姓名>"` 按姓名反查）。
 
@@ -338,7 +389,8 @@ Flags:
 - 用户说"复制知识库里的文档" → `node copy`（需 `--workspace` + `--node`）
 - 用户说"移动知识库里的文档" → `node move`（需 `--workspace` + `--node`）
 - 用户说"删除知识库里的文档/节点" → `node delete`（需 `--workspace` + `--node`）
-- 用户说"把知识库分享给某人/给某人加入知识库/邀请进知识库" → `member add`（需 `--workspace` + `--users` + `--role`）
+- 用户说"把知识库分享给某人/给某人加入知识库/邀请进知识库" → `member add`（需 `--workspace` + `--users` + `--role`，或 `--workspace` + `--members`）
+- 用户说"加成员并通知他/邀请后告知对方" → `member add --members ... --notify`；用户说"加进去但不要通知/悄悄加" → `member add --members ... --notify=false`
 - 用户说"修改某人在知识库的权限/调整成员角色" → `member update`
 - 用户说"移除知识库成员/把某人从知识库移除/删除知识库成员" → `member remove`（需 `--workspace` + `--users`）
 - 用户说"知识库有哪些成员/查看知识库成员" → `member list`
@@ -349,6 +401,12 @@ Flags:
 
 > **重要 — `--exclude-file` 使用规则**：
 > 当用户意图排除文件类动态（上传文件、更新 office 文件等）或只看文档操作时，**必须在命令中带上 `--exclude-file`**，由后端完成过滤。禁止先拉全量数据再用 Python/jq 等工具在客户端过滤，那样既浪费带宽又可能因分页遗漏数据。
+
+> **通知意图 → `--notify`**（`--members` 新格式默认不通知，省略时 CLI 不向服务端发送该字段）：
+> - 用户明确要求“通知 / 告知 / 提醒对方 / 让他知道” → 追加 `--notify`
+> - 用户明确要求“不要通知 / 别提醒 / 悄悄加 / 不要打扰” → **必须改用 `--members` 并传 `--notify=false`**；旧格式 `--users` 始终通知且无法关闭，此时继续用旧格式会违背用户意图
+> - 用户没提通知需求 → 走 `--members` 时**不传该 flag**，保持不通知；不要自行补上 `--notify`
+> - 仅 USER 和 CONVERSATION 类型成员会收到通知；被授权对象是 DEPT / TAG 时通知不会送达，**需主动向用户说明这一点**，不要默不作声
 
 > **跨产品路由说明**：知识库节点的**内容操作**（读取/编辑/块级操作）仍由 `dws doc` 承担：
 >- 用户说"读某个知识库里的某篇文档" → 先 `node list` 拿到 nodeId，再走 **`dws doc read --node <nodeId>`**

@@ -3556,11 +3556,20 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	permissionAddCmd := &cobra.Command{
 		Use:   "add",
 		Short: "添加文档协作者",
+		Args:  cobra.NoArgs,
 		Long: `为指定文档（或文件夹/文件）添加一个或多个协作成员，并授予指定角色。
 
-通过 --user 传入逗号分隔的 userId 列表，多个用户将被授予同一角色。
+两种传参方式（互斥）：
+  旧格式：--users 传入逗号分隔的 userId 列表 + --role 指定统一角色（仅 USER 类型）
+  新格式：--members 传入 JSON 数组，支持四种成员类型，每个 member 携带独立 roleId
 
-支持的角色 (--role)（必须大写）：
+成员类型说明：
+  USER          用户，id 为用户 userId，需携带 corpId（标识用户所属组织）
+  DEPT          部门，id 为部门 ID，需携带 corpId（标识部门所属组织）
+  CONVERSATION  群聊，id 为群聊 conversationId（cid 开头），无需 corpId
+  TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId。当用户要求"添加角色组"或"添加角色标签"时使用此类型
+
+支持的角色（大小写不敏感）：
   MANAGER     管理员，可读写、管理成员
   EDITOR      编辑者，可查看、编辑、上传内容
   DOWNLOADER  查看下载者，可查看并下载内容
@@ -3568,29 +3577,46 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 
 注意：
 - OWNER 角色不可通过此接口添加。
+- 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 forbidden.accessDenied。
 - 单次请求最多 30 个成员，超出请分批调用。
+- --notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 false；省略时 CLI 不向服务端发送该字段，服务端按不通知处理，需要通知请显式传 --notify。
 
 用户 uid 可通过「钉钉通讯录」相关命令检索，如:
   dws contact user search --keyword "姓名"`,
 		Example: `  dws doc permission add --node DOC_ID --users uid1 --role READER
   dws doc permission add --node DOC_ID --users uid1,uid2,uid3 --role EDITOR
-  dws doc permission add --node "https://alidocs.dingtalk.com/i/nodes/xxx" --users uid1 --role MANAGER --workspace WS_ID`,
+  dws doc permission add --node "https://alidocs.dingtalk.com/i/nodes/xxx" --users uid1 --role MANAGER --workspace WS_ID
+  dws doc permission add --node DOC_ID --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"},{"type":"DEPT","id":"deptId1","roleId":"EDITOR","corpId":"xxx"}]' --notify
+  dws doc permission add --node DOC_ID --members '[{"type":"CONVERSATION","id":"cidXXX","roleId":"READER"},{"type":"TAG","id":"tagId1","roleId":"EDITOR","corpId":"xxx"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "role"); err != nil {
+			if err := validateMembersExclusivity(cmd); err != nil {
 				return err
 			}
-			userIds, err := collectUserIDs(cmd)
-			if err != nil {
-				return err
+			toolArgs := map[string]any{"nodeId": nodeID}
+			members, mErr := collectMembers(cmd, false)
+			if mErr != nil {
+				return mErr
 			}
-			toolArgs := map[string]any{
-				"nodeId":  nodeID,
-				"roleId":  normalizePermissionRole(mustGetFlag(cmd, "role")),
-				"userIds": userIds,
+			if len(members) > 0 {
+				toolArgs["members"] = members
+				if cmd.Flags().Changed("notify") {
+					notify, _ := cmd.Flags().GetBool("notify")
+					toolArgs["notify"] = notify
+				}
+			} else {
+				if err := validateRequiredFlags(cmd, "role"); err != nil {
+					return err
+				}
+				userIds, err := collectUserIDs(cmd)
+				if err != nil {
+					return err
+				}
+				toolArgs["roleId"] = normalizePermissionRole(mustGetFlag(cmd, "role"))
+				toolArgs["userIds"] = userIds
 			}
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
@@ -3627,7 +3653,9 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 				Examples: []string{"dws doc permission add --node <DOC_ID> --users uid1 --role READER --format json"},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "members", Property: "members"},
 				{Name: "node", Property: "nodeId"},
+				{Name: "notify", Property: "notify"},
 				{Name: "role", Property: "roleId"},
 				{Name: "users", Property: "userIds"},
 				{Name: "workspace", Property: "workspaceId"},
@@ -3636,18 +3664,31 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	})
 
 	permissionAddCmd.Flags().String("node", "", "目标节点的标识（文档/文件夹/文件），支持传入 URL 或 ID (必填)")
-	permissionAddCmd.Flags().String("users", "", "被授权的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)")
+	permissionAddCmd.Flags().String("users", "", "被授权的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)")
 	permissionAddCmd.Flags().String("user", "", "")
 	_ = permissionAddCmd.Flags().MarkHidden("user")
-	permissionAddCmd.Flags().String("role", "", "权限角色: MANAGER / EDITOR / DOWNLOADER / READER (必填，大小写不敏感)")
+	permissionAddCmd.Flags().String("role", "", "权限角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填，大小写不敏感)")
 	permissionAddCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL（选填，仅用于辅助构造返回的 docUrl）")
+	permissionAddCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥")
+	permissionAddCmd.Flags().Bool("notify", false, "是否通知被添加的成员（仅 --members 新格式时生效，需显式传入才通知）")
 
 	permissionUpdateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "更新文档协作者权限",
-		Long: `更新指定节点已有协作者的权限角色（仅支持 USER 类型成员）。
+		Args:  cobra.NoArgs,
+		Long: `更新指定节点已有协作者的权限角色。
 
-支持的角色 (--role)（必须大写）：
+两种传参方式（互斥）：
+  旧格式：--users 传入逗号分隔的 userId 列表 + --role 指定统一角色（仅 USER 类型）
+  新格式：--members 传入 JSON 数组，支持四种成员类型，每个 member 携带独立 roleId
+
+成员类型说明：
+  USER          用户，id 为用户 userId，需携带 corpId
+  DEPT          部门，id 为部门 ID，需携带 corpId
+  CONVERSATION  群聊，id 为群聊 conversationId（cid 开头），无需 corpId
+  TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId
+
+支持的角色 (--role)（大小写不敏感）：
   MANAGER     管理员
   EDITOR      编辑者
   DOWNLOADER  查看下载者
@@ -3657,26 +3698,43 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 - OWNER 角色不可通过此接口变更。
 - 同一成员在同一节点只能拥有一个角色，变更后旧角色自动替换。
 - 若成员的角色来自父节点的权限继承（PASS_ON），且继承角色高于目标角色，接口会拒绝操作。
+- 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 forbidden.accessDenied。
+- --notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知，默认 false。
 
 仅可更新已存在协作关系的用户，新增协作者请使用 dws doc permission add。`,
 		Example: `  dws doc permission update --node DOC_ID --users uid1 --role EDITOR
-  dws doc permission update --node DOC_ID --users uid1,uid2 --role READER`,
+  dws doc permission update --node DOC_ID --users uid1,uid2 --role READER
+  dws doc permission update --node DOC_ID --members '[{"type":"USER","id":"uid1","roleId":"EDITOR","corpId":"xxx"}]' --notify=false
+  dws doc permission update --node DOC_ID --members '[{"type":"TAG","id":"tagId1","roleId":"READER","corpId":"xxx"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
-			if err := validateRequiredFlags(cmd, "role"); err != nil {
+			if err := validateMembersExclusivity(cmd); err != nil {
 				return err
 			}
-			userIds, err := collectUserIDs(cmd)
-			if err != nil {
-				return err
+			toolArgs := map[string]any{"nodeId": nodeID}
+			members, mErr := collectMembers(cmd, false)
+			if mErr != nil {
+				return mErr
 			}
-			toolArgs := map[string]any{
-				"nodeId":  nodeID,
-				"roleId":  normalizePermissionRole(mustGetFlag(cmd, "role")),
-				"userIds": userIds,
+			if len(members) > 0 {
+				toolArgs["members"] = members
+				if cmd.Flags().Changed("notify") {
+					notify, _ := cmd.Flags().GetBool("notify")
+					toolArgs["notify"] = notify
+				}
+			} else {
+				if err := validateRequiredFlags(cmd, "role"); err != nil {
+					return err
+				}
+				userIds, err := collectUserIDs(cmd)
+				if err != nil {
+					return err
+				}
+				toolArgs["roleId"] = normalizePermissionRole(mustGetFlag(cmd, "role"))
+				toolArgs["userIds"] = userIds
 			}
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
@@ -3710,7 +3768,9 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 				Examples:     []string{"dws doc permission update --node <DOC_ID> --users uid1 --role EDITOR --format json"},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "members", Property: "members"},
 				{Name: "node", Property: "nodeId"},
+				{Name: "notify", Property: "notify"},
 				{Name: "role", Property: "roleId"},
 				{Name: "users", Property: "userIds"},
 				{Name: "workspace", Property: "workspaceId"},
@@ -3719,11 +3779,13 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	})
 
 	permissionUpdateCmd.Flags().String("node", "", "目标节点的标识（文档/文件夹/文件），支持传入 URL 或 ID (必填)")
-	permissionUpdateCmd.Flags().String("users", "", "被更新的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)")
+	permissionUpdateCmd.Flags().String("users", "", "被更新的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)")
 	permissionUpdateCmd.Flags().String("user", "", "")
 	_ = permissionUpdateCmd.Flags().MarkHidden("user")
-	permissionUpdateCmd.Flags().String("role", "", "新权限角色: MANAGER / EDITOR / DOWNLOADER / READER (必填，大小写不敏感)")
+	permissionUpdateCmd.Flags().String("role", "", "新权限角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填，大小写不敏感)")
 	permissionUpdateCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL（选填，仅用于辅助构造返回的 docUrl）")
+	permissionUpdateCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥")
+	permissionUpdateCmd.Flags().Bool("notify", false, "是否通知被变更的成员（仅 --members 新格式时生效）")
 
 	permissionListCmd := &cobra.Command{
 		Use:     "list",
@@ -3731,11 +3793,14 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		Short:   "查询文档协作者列表",
 		Long: `查询指定节点的协作者列表，返回每位成员的 userId、姓名、角色等信息。
 
-注意：底层不支持游标分页，--limit 仅控制单次返回的最大条数（最大 200）。
-若结果被截断（出参 truncated=true），可通过 --filter-role 收窄查询范围。`,
+底层一次性返回全量成员后在内存中按 pageSize 分页，支持通过 nextToken 翻页。
+出参包含 totalCount（全量成员总数）、hasMore（是否还有下一页）和 nextToken（下一页游标）。
+当 hasMore 为 true 时，传入下一次请求的 --next-token 即可获取下一页。
+操作者需满足该节点配置的权限管理最低角色要求，权限不足返回 forbidden.accessDenied。`,
 		Example: `  dws doc permission list --node DOC_ID
-  dws doc permission list --node DOC_ID --limit 100
-  dws doc permission list --node DOC_ID --filter-role MANAGER,EDITOR`,
+  dws doc permission list --node DOC_ID --limit 50
+  dws doc permission list --node DOC_ID --filter-role MANAGER,EDITOR
+  dws doc permission list --node DOC_ID --next-token <上次返回的 nextToken>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
@@ -3744,14 +3809,13 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 			toolArgs := map[string]any{
 				"nodeId": nodeID,
 			}
-			limit := 0
-			if cmd.Flags().Changed("limit") {
-				limit, _ = cmd.Flags().GetInt("limit")
-			} else if cmd.Flags().Changed("max-results") {
-				limit, _ = cmd.Flags().GetInt("max-results")
+			if size, ok, err := permissionPageSizeFromFlags(cmd); err != nil {
+				return err
+			} else if ok {
+				toolArgs["pageSize"] = size
 			}
-			if limit > 0 {
-				toolArgs["maxResults"] = limit
+			if v := flagOrFallback(cmd, "next-token", "cursor", "page-token"); v != "" {
+				toolArgs["nextToken"] = v
 			}
 			if v := mustGetFlag(cmd, "filter-role"); v != "" {
 				toolArgs["filterRoleIds"] = parseRoleList(v)
@@ -3789,50 +3853,73 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "filter-role", Property: "filterRoleIds"},
-				{Name: "limit", Property: "maxResults"},
+				{Name: "limit", Property: "pageSize"},
+				{Name: "next-token", Property: "nextToken"},
 				{Name: "node", Property: "nodeId"},
 				{Name: "workspace", Property: "workspaceId"},
 			},
+			Pagination: &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "next-token"},
 		},
 	})
 
 	permissionListCmd.Flags().String("node", "", "目标节点的标识（文档/文件夹/文件），支持传入 URL 或 ID (必填)")
-	permissionListCmd.Flags().Int("limit", 30, "返回成员数上限，默认 30，最大 200")
+	permissionListCmd.Flags().Int("limit", 30, "返回成员数上限，默认 30，最大 50")
 	permissionListCmd.Flags().Int("max-results", 0, "")
 	_ = permissionListCmd.Flags().MarkHidden("max-results")
 	permissionListCmd.Flags().String("filter-role", "", "按角色过滤（逗号分隔）：OWNER / MANAGER / EDITOR / DOWNLOADER / READER")
+	permissionListCmd.Flags().String("next-token", "", "分页游标，首次不传，后续传入上一次返回的 nextToken")
 	permissionListCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL（选填，仅用于辅助构造返回的 docUrl）")
 
 	permissionRemoveCmd := &cobra.Command{
 		Use:     "remove",
 		Aliases: []string{"rm"},
 		Short:   "移除文档协作者权限",
-		Long: `从指定节点移除一个或多个协作成员的权限（仅支持 USER 类型）。
+		Long: `从指定节点移除一个或多个协作成员的权限。
+
+两种传参方式（互斥）：
+  旧格式：--users 传入逗号分隔的 userId 列表（仅 USER 类型）
+  新格式：--members 传入 JSON 数组，支持四种成员类型，只需 type 和 id（USER/DEPT/TAG 还需 corpId）
+
+成员类型说明：
+  USER          用户，id 为用户 userId，需携带 corpId
+  DEPT          部门，id 为部门 ID，需携带 corpId
+  CONVERSATION  群聊，id 为群聊 conversationId（cid 开头），无需 corpId
+  TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId
 
 移除后相关用户将无法通过该节点的直接授权访问内容（若有父节点继承权限则仍可通过继承权限访问）。
 
 注意：
 - OWNER 角色不可通过此接口移除。
-- 操作者需在该节点具备 EDITOR 及以上角色（OWNER / MANAGER / EDITOR）。
+- 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 forbidden.accessDenied。
 - 单次请求最多 30 个成员，超出请分批调用。
 
 用户 uid 可通过「钉钉通讯录」相关命令检索，如:
   dws contact user search --keyword "姓名"`,
 		Example: `  dws doc permission remove --node DOC_ID --users uid1
   dws doc permission remove --node DOC_ID --users uid1,uid2,uid3
-  dws doc permission remove --node "https://alidocs.dingtalk.com/i/nodes/xxx" --users uid1`,
+  dws doc permission remove --node "https://alidocs.dingtalk.com/i/nodes/xxx" --users uid1
+  dws doc permission remove --node DOC_ID --members '[{"type":"USER","id":"uid1","corpId":"xxx"},{"type":"DEPT","id":"deptId1","corpId":"xxx"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
 				return err
 			}
-			userIds, err := collectUserIDs(cmd)
-			if err != nil {
+			if err := validateMembersExclusivity(cmd); err != nil {
 				return err
 			}
-			toolArgs := map[string]any{
-				"nodeId":  nodeID,
-				"userIds": userIds,
+			toolArgs := map[string]any{"nodeId": nodeID}
+			members, mErr := collectMembers(cmd, true)
+			if mErr != nil {
+				return mErr
+			}
+			if len(members) > 0 {
+				toolArgs["members"] = members
+			} else {
+				userIds, err := collectUserIDs(cmd)
+				if err != nil {
+					return err
+				}
+				toolArgs["userIds"] = userIds
 			}
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
@@ -3866,6 +3953,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 				Examples:     []string{"dws doc permission remove --node <DOC_ID> --users uid1 --format json"},
 			},
 			Parameters: []contract.ParamDecl{
+				{Name: "members", Property: "members"},
 				{Name: "node", Property: "nodeId"},
 				{Name: "users", Property: "userIds"},
 				{Name: "workspace", Property: "workspaceId"},
@@ -3873,9 +3961,10 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 		},
 	})
 	permissionRemoveCmd.Flags().String("node", "", "目标节点的标识（文档/文件夹/文件），支持传入 URL 或 ID (必填)")
-	permissionRemoveCmd.Flags().String("users", "", "被移除权限的用户 userId 列表，逗号分隔 (必填，单次最多 30 个)")
+	permissionRemoveCmd.Flags().String("users", "", "被移除权限的用户 userId 列表，逗号分隔 (旧格式，单次最多 30 个)")
 	permissionRemoveCmd.Flags().String("user", "", "")
 	_ = permissionRemoveCmd.Flags().MarkHidden("user")
+	permissionRemoveCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），只需 type 和 id（USER/DEPT/TAG 还需 corpId），与 --users 互斥")
 	permissionRemoveCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL（选填，仅用于辅助构造返回的 docUrl）")
 
 	// permission 子命令的 --node 隐藏别名
@@ -5198,4 +5287,86 @@ func collectUserIDs(cmd *cobra.Command) ([]string, error) {
 		return nil, fmt.Errorf("--users is required (at least one userId)")
 	}
 	return userIds, nil
+}
+
+// collectMembers parses the --members JSON array flag (new format), returning
+// a members list ready to embed in MCP tool args. Supports USER/DEPT/CONVERSATION/TAG
+// member types, each carrying an independent roleId.
+//
+// When onlyTypeID is true (remove operations), roleId is not required —
+// only type and id are needed.
+func collectMembers(cmd *cobra.Command, onlyTypeID bool) ([]map[string]any, error) {
+	raw := mustGetFlag(cmd, "members")
+	if raw == "" {
+		return nil, nil
+	}
+	var members []map[string]any
+	if err := json.Unmarshal([]byte(raw), &members); err != nil {
+		return nil, fmt.Errorf("--members JSON 解析失败: %w", err)
+	}
+	if len(members) == 0 {
+		return nil, fmt.Errorf("--members 不能为空数组")
+	}
+	if len(members) > 30 {
+		return nil, fmt.Errorf("--members 单次最多 30 个成员，超出请分批调用")
+	}
+	for i, m := range members {
+		mt, ok := m["type"].(string)
+		if !ok {
+			return nil, fmt.Errorf("--members[%d] 缺少必填字段 type", i)
+		}
+		if _, ok := m["id"].(string); !ok {
+			return nil, fmt.Errorf("--members[%d] 缺少必填字段 id", i)
+		}
+		// USER/DEPT/TAG 类型需携带 corpId 用于确定成员所属组织，CONVERSATION 类型选填
+		if (mt == "USER" || mt == "DEPT" || mt == "TAG") && m["corpId"] == nil {
+			return nil, fmt.Errorf("--members[%d] 类型 %s 需携带 corpId 以确定所属组织", i, mt)
+		}
+		if !onlyTypeID {
+			if _, ok := m["roleId"].(string); !ok {
+				return nil, fmt.Errorf("--members[%d] 缺少必填字段 roleId", i)
+			}
+			if r, ok := m["roleId"].(string); ok {
+				m["roleId"] = normalizePermissionRole(r)
+			}
+		}
+	}
+	return members, nil
+}
+
+// validateMembersExclusivity ensures --members (new format) and --users (legacy
+// format) are not used simultaneously. Exactly one must be provided.
+func validateMembersExclusivity(cmd *cobra.Command) error {
+	hasMembers := mustGetFlag(cmd, "members") != ""
+	hasUsers := flagOrFallback(cmd, "users", "user") != ""
+	if hasMembers && hasUsers {
+		return fmt.Errorf("--members 与 --users 互斥，不可同时传递")
+	}
+	if !hasMembers && !hasUsers {
+		return fmt.Errorf("必须指定 --members（新格式）或 --users（旧格式）之一")
+	}
+	if hasMembers && mustGetFlag(cmd, "role") != "" {
+		return fmt.Errorf("--members 新格式下不需要 --role，每个 member 携带独立 roleId")
+	}
+	return nil
+}
+
+// permissionPageSizeFromFlags resolves and validates the page size for the
+// permission / member list commands. Both --limit and the hidden
+// --max-results alias map to the server pageSize, whose accepted range is
+// 1..50 (the backend rejects pageSize > 50 with
+// invalidRequest.inputArgs.invalid, and non-positive values are invalid).
+// It returns (size, true, nil) when a page size was explicitly provided.
+func permissionPageSizeFromFlags(cmd *cobra.Command) (int, bool, error) {
+	for _, name := range []string{"limit", "max-results"} {
+		if !cmd.Flags().Changed(name) {
+			continue
+		}
+		size, _ := cmd.Flags().GetInt(name)
+		if size < 1 || size > 50 {
+			return 0, false, fmt.Errorf("--%s 取值范围为 1..50（服务端 pageSize 上限 50），当前值 %d", name, size)
+		}
+		return size, true, nil
+	}
+	return 0, false, nil
 }
