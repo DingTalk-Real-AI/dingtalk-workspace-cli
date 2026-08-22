@@ -1156,14 +1156,20 @@ func TestCrossPlatformCoverageDocContentValidationAndPureHelpers(t *testing.T) {
 	} {
 		_, _ = nestedRevision(value)
 	}
-	if _, err := validateJSONML(`[`); err == nil {
+	if _, err := validateJSONMLBody(&cobra.Command{}, `[`); err == nil {
 		t.Fatal("invalid jsonml succeeded")
 	}
-	if _, err := validateJSONML(`{}`); err == nil {
+	if _, err := validateJSONMLBody(&cobra.Command{}, `{}`); err == nil {
 		t.Fatal("object jsonml succeeded")
 	}
-	if _, err := validateJSONML(`[["p",{},"x"]]`); err == nil {
+	if _, err := validateJSONMLNode(&cobra.Command{}, `[["p",{},"x"]]`); err == nil {
 		t.Fatal("nested element-array jsonml succeeded")
+	}
+	if _, err := validateJSONMLBody(&cobra.Command{}, `["p",{}]`); err == nil || !strings.Contains(err.Error(), `"root"`) {
+		t.Fatalf("non-root document jsonml error = %v", err)
+	}
+	if _, err := validateJSONMLNode(&cobra.Command{}, `["p",{}]`); err != nil {
+		t.Fatalf("single block jsonml failed: %v", err)
 	}
 	if nestedMap(map[string]any{"result": map[string]any{"data": map[string]any{"x": 1}}})["x"] != 1 {
 		t.Fatal("nestedMap did not unwrap")
