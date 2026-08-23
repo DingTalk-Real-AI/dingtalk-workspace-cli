@@ -81,6 +81,7 @@ var schemaCatalogToolOptionalKeys = []string{
 	"pagination",
 	"positionals",
 	"result",
+	"retry_policy",
 }
 
 var schemaCatalogToolEnums = map[string][]string{
@@ -89,6 +90,7 @@ var schemaCatalogToolEnums = map[string][]string{
 	"confirmation":   {"not_required", "user_required"},
 	"interface_mode": {contract.InterfaceModeMCP, contract.InterfaceModeComposite, contract.InterfaceModeLocal},
 	"availability":   {contract.InterfaceAvailable, contract.InterfaceUnavailable},
+	"idempotency":    {"idempotent", "non_idempotent", "unknown", "conditional"},
 }
 
 // schemaCatalogParamRequiredKeys is the required core of every parameter.
@@ -239,6 +241,7 @@ func validateCatalogToolEntry(toolID string, entry map[string]any, violations *[
 	}
 
 	validateCatalogInterface(toolID, entry, violations)
+	validateCatalogRetryPolicy(toolID, entry, parameters, paramsOK, violations)
 	if result, exists := entry["result"]; exists {
 		if _, ok := result.(map[string]any); !ok {
 			report("field %q must be an object", "result")
@@ -277,6 +280,66 @@ func validateCatalogToolEntry(toolID string, entry map[string]any, violations *[
 			continue
 		}
 		validateCatalogParam(toolID, paramName, param, violations)
+	}
+}
+
+func validateCatalogRetryPolicy(toolID string, entry, parameters map[string]any, paramsOK bool, violations *[]schemaCatalogStructureViolation) {
+	report := func(format string, args ...any) {
+		*violations = append(*violations, schemaCatalogStructureViolation{tool: toolID, message: fmt.Sprintf(format, args...)})
+	}
+	idempotency, _ := entry["idempotency"].(string)
+	raw, hasPolicy := entry["retry_policy"]
+	if idempotency == "conditional" && !hasPolicy {
+		report("idempotency=conditional requires retry_policy")
+		return
+	}
+	if idempotency != "conditional" && hasPolicy {
+		report("retry_policy requires idempotency=conditional")
+	}
+	if !hasPolicy {
+		return
+	}
+	policy, ok := raw.(map[string]any)
+	if !ok {
+		report("retry_policy must be an object")
+		return
+	}
+	for key := range policy {
+		if key != "mode" && key != "key_parameter" && key != "same_payload_required" {
+			report("retry_policy has unknown field %q", key)
+		}
+	}
+	if mode, _ := policy["mode"].(string); mode != contract.RetryModeDeduplicationKey {
+		report("retry_policy.mode = %q, want %q", mode, contract.RetryModeDeduplicationKey)
+	}
+	keyParameter, _ := policy["key_parameter"].(string)
+	if strings.TrimSpace(keyParameter) == "" {
+		report("retry_policy.key_parameter must be a non-empty string")
+	} else if paramsOK {
+		rawParameter, exists := parameters[keyParameter]
+		parameter, parameterOK := rawParameter.(map[string]any)
+		if !exists || !parameterOK {
+			report("retry_policy.key_parameter references missing parameter %q", keyParameter)
+		} else {
+			if property, _ := parameter["property"].(string); strings.TrimSpace(property) == "" {
+				report("retry_policy key parameter %q must have a non-empty property", keyParameter)
+			}
+			if parameterType, _ := parameter["type"].(string); parameterType != "string" {
+				report("retry_policy key parameter %q must have type string", keyParameter)
+			}
+			fieldProvenance, _ := parameter["field_provenance"].(map[string]any)
+			propertyProvenance, _ := fieldProvenance["property"].(map[string]any)
+			if source, _ := propertyProvenance["source"].(string); source != "native_annotation" {
+				report("retry_policy key parameter %q property must come from an explicit ParamDecl", keyParameter)
+			}
+		}
+	}
+	if required, ok := policy["same_payload_required"].(bool); !ok || !required {
+		report("retry_policy.same_payload_required must be true")
+	}
+	mode, _ := entry["interface_mode"].(string)
+	if mode != contract.InterfaceModeMCP || entry["interface_ref"] == nil {
+		report("retry_policy requires interface_mode=mcp with interface_ref")
 	}
 }
 

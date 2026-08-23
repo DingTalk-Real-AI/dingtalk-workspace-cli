@@ -47,7 +47,7 @@ Schema contract) keep separate authorities — do not merge them with
 - Today: `helpers.LeafSpec` / `shortcut.Shortcut` → `corecmd.Spec` (+ optional `Contract`) → `corecmd.New`
 - **Declare = final Schema source**: `Flags` / `Constraints` / `Safety` / `ConstParams` / `Contract` (`corecmd.ContractDecl`; nested fields are `contract.*`)
 - Naming: `ContractDecl` is the authoring leaf declaration. "Schema" means Catalog / `ToolSpec` delivery — do not reintroduce `SchemaDecl`.
-- `Safety` uses `contract.SafetySpec` (`internal/corecmd/contract` only — no `cli.*` type alias). Its `confirmation` drives the runtime gate; `effect` / `risk` / `idempotency` are published unchanged. When `Contract` is set, convert once via `contractfinal.RegisterRuntimeContractFinal` (all callers — `corecmd.New` registers internally); assembly **pass-throughs** Final.
+- `Safety` uses `contract.SafetySpec` (`internal/corecmd/contract` only — no `cli.*` type alias). Its `confirmation` drives the runtime gate; `effect` / `risk` / `idempotency` are published unchanged. `idempotency=conditional` additionally requires `Contract.RetryPolicy`: reference a declared string parameter with an explicit interface property and require the same payload; never infer retry safety from a flag/property name. When `Contract` is set, convert once via `contractfinal.RegisterRuntimeContractFinal` (all callers — `corecmd.New` registers internally); assembly **pass-throughs** Final.
 - Package seam:
   - types / ProductDecl → `corecmd/contract` (DTO only; **no** Cobra-keyed ContractFinal store)
   - AnnotateRuntime* writers → `internal/corecmd/runtimeannotate` (framework-owned)
@@ -422,6 +422,13 @@ higher-priority reviewed metadata/explicit source may intentionally raise or
 lower description, mapping, `effect`, `risk`, `confirmation`, or `idempotency`.
 Preserve all candidates and the selected source in provenance, and fail
 same-precedence conflicts rather than silently merging them.
+
+`conditional` is a static command classification, not an unconditional retry
+grant. It must carry a typed `retry_policy`; runtime computes effective
+idempotency from the actual invocation. A missing/empty/non-string
+deduplication key is `non_idempotent` for that invocation. Only the same key
+and same business payload may be replayed, and the transport/error
+`retryable` signal must fail closed when the invocation is not safe to replay.
 
 `required` is the exception. Cobra `MarkFlagRequired` is a hard floor: the
 final Agent projection must keep `required=true` and cannot be lowered by a

@@ -35,7 +35,13 @@ func TestCrossPlatformCoverageRuntimeToolSpecFromContractFinalPassThrough(t *tes
 	contractfinal.RegisterRuntimeContractFinal(cmd, contract.ContractFinalPayload{
 		Title: "Final Title",
 		Safety: &contract.SafetySpec{
-			Effect: "write", Confirmation: "user_required", Idempotency: "none",
+			Effect: "write", Confirmation: "user_required", Idempotency: "conditional",
+		},
+		RetryPolicy: &contract.RetryPolicySpec{Mode: contract.RetryModeDeduplicationKey, KeyParameter: "mode", SamePayloadRequired: true},
+		Parameters:  []contract.ParamDecl{{Name: "mode", Property: "mode"}},
+		Interface: &contract.InterfaceSpec{
+			Mode: contract.InterfaceModeMCP, Availability: contract.InterfaceAvailable,
+			Ref: &contract.InterfaceRefSpec{ProductID: "dev", RPCName: "create_thing"},
 		},
 		DryRun: &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewInvocation},
 		Result: &contract.ResultSpec{
@@ -69,8 +75,11 @@ func TestCrossPlatformCoverageRuntimeToolSpecFromContractFinalPassThrough(t *tes
 	if spec.Title != "Final Title" {
 		t.Fatalf("title = %q", spec.Title)
 	}
-	if spec.Safety.Confirmation != "user_required" || spec.Safety.Idempotency != "none" {
+	if spec.Safety.Confirmation != "user_required" || spec.Safety.Idempotency != "conditional" {
 		t.Fatalf("safety = %#v", spec.Safety)
+	}
+	if spec.RetryPolicy == nil || spec.RetryPolicy.KeyParameter != "mode" {
+		t.Fatalf("retry_policy = %#v", spec.RetryPolicy)
 	}
 	if spec.DryRun == nil || spec.DryRun.PreviewKind != contract.DryRunPreviewInvocation {
 		t.Fatalf("dry_run = %#v", spec.DryRun)
@@ -86,6 +95,21 @@ func TestCrossPlatformCoverageRuntimeToolSpecFromContractFinalPassThrough(t *tes
 	}
 	if len(spec.Parameters) != 1 || spec.Parameters[0].Name != "mode" {
 		t.Fatalf("parameters = %#v", spec.Parameters)
+	}
+}
+
+func TestCrossPlatformCoverageRuntimeToolSpecRejectsInvalidRetryPolicy(t *testing.T) {
+	cmd := &cobra.Command{Use: "send"}
+	entry := runtimeSchemaEntry{
+		ProductID: "chat", ToolName: "send", CLIName: "send",
+		CLIPath: "chat send", PrimaryCLIPath: "chat send", ProductName: "Chat", Command: cmd,
+	}
+	_, err := runtimeToolSpecFromContractFinal(entry, contract.ContractFinalPayload{
+		Safety:      &contract.SafetySpec{Idempotency: "conditional"},
+		RetryPolicy: &contract.RetryPolicySpec{Mode: "inferred", KeyParameter: "uuid", SamePayloadRequired: true},
+	}, runtimeSchemaMetadataSources{})
+	if err == nil || !strings.Contains(err.Error(), "unsupported mode") {
+		t.Fatalf("invalid retry policy error = %v", err)
 	}
 }
 

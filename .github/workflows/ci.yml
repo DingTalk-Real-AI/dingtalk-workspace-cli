@@ -1806,10 +1806,17 @@ jobs:
       - name: Check complete Schema compatibility
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: |
-          make schema-compatibility \
-            BASE_REF="$COMPATIBILITY_BASE_REF" \
-            STABLE_REF="$COMPATIBILITY_STABLE_REF" \
-            CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"
+          set -eu
+          authority_worktree="$RUNNER_TEMP/dws-schema-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          cleanup_schema_authority() {
+            git worktree remove --force "$authority_worktree" >/dev/null 2>&1 || true
+          }
+          trap cleanup_schema_authority EXIT HUP INT TERM
+          git worktree add --detach "$authority_worktree" "$COMPATIBILITY_BASE_REF"
+          "$authority_worktree/scripts/policy/check-authoritative-schema-compatibility.sh" \
+            --base-ref "$COMPATIBILITY_BASE_REF" \
+            --stable-ref "$COMPATIBILITY_STABLE_REF" \
+            --candidate-ref "$COMPATIBILITY_CANDIDATE_REF"
 
       - name: Check skill command references
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}

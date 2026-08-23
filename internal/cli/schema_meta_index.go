@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // SchemaMetaIndexVersion is the CommandMeta summary index format used by CI
@@ -42,19 +44,20 @@ type SchemaMetaIndexSnapshot struct {
 // SchemaMetaIndexEntry is one primary-path CommandMeta record. Aliases are
 // expanded into the ResolveMeta lookup at decode time.
 type SchemaMetaIndexEntry struct {
-	CLIPath      string   `json:"cli_path"`
-	Canonical    string   `json:"canonical_path"`
-	Aliases      []string `json:"aliases,omitempty"`
-	ProductID    string   `json:"product_id,omitempty"`
-	Title        string   `json:"title,omitempty"`
-	Effect       string   `json:"effect,omitempty"`
-	Risk         string   `json:"risk,omitempty"`
-	Confirmation string   `json:"confirmation,omitempty"`
-	Idempotency  string   `json:"idempotency,omitempty"`
-	AgentSummary string   `json:"agent_summary,omitempty"`
-	UseWhen      []string `json:"use_when,omitempty"`
-	AvoidWhen    []string `json:"avoid_when,omitempty"`
-	Examples     []string `json:"examples,omitempty"`
+	CLIPath      string                    `json:"cli_path"`
+	Canonical    string                    `json:"canonical_path"`
+	Aliases      []string                  `json:"aliases,omitempty"`
+	ProductID    string                    `json:"product_id,omitempty"`
+	Title        string                    `json:"title,omitempty"`
+	Effect       string                    `json:"effect,omitempty"`
+	Risk         string                    `json:"risk,omitempty"`
+	Confirmation string                    `json:"confirmation,omitempty"`
+	Idempotency  string                    `json:"idempotency,omitempty"`
+	RetryPolicy  *contract.RetryPolicySpec `json:"retry_policy,omitempty"`
+	AgentSummary string                    `json:"agent_summary,omitempty"`
+	UseWhen      []string                  `json:"use_when,omitempty"`
+	AvoidWhen    []string                  `json:"avoid_when,omitempty"`
+	Examples     []string                  `json:"examples,omitempty"`
 }
 
 // BuildSchemaMetaIndex extracts the ResolveMeta summary from a full Catalog
@@ -91,6 +94,7 @@ func BuildSchemaMetaIndex(snapshot SchemaCatalogSnapshot) (SchemaMetaIndexSnapsh
 			Risk:         schemaString(tool["risk"]),
 			Confirmation: schemaString(tool["confirmation"]),
 			Idempotency:  schemaString(tool["idempotency"]),
+			RetryPolicy:  retryPolicyFromSchemaValue(tool["retry_policy"]),
 			AgentSummary: schemaString(tool["agent_summary"]),
 			UseWhen:      schemaStringSlice(tool["use_when"]),
 			AvoidWhen:    schemaStringSlice(tool["avoid_when"]),
@@ -203,6 +207,7 @@ func commandMetaLookupFromIndex(index SchemaMetaIndexSnapshot) (map[string]Comma
 				Risk:         entry.Risk,
 				Confirmation: entry.Confirmation,
 				Idempotency:  entry.Idempotency,
+				RetryPolicy:  cloneRetryPolicy(entry.RetryPolicy),
 			},
 			Selection: CommandSelection{
 				AgentSummary: entry.AgentSummary,
@@ -294,7 +299,7 @@ func commandMetaEqual(got, want CommandMeta) error {
 		!metaStringSlicesEqual(got.Identity.Aliases, want.Identity.Aliases) {
 		return fmt.Errorf("identity mismatch: got %+v want %+v", got.Identity, want.Identity)
 	}
-	if got.Safety != want.Safety {
+	if !reflect.DeepEqual(got.Safety, want.Safety) {
 		return fmt.Errorf("safety mismatch: got %+v want %+v", got.Safety, want.Safety)
 	}
 	if got.Selection.AgentSummary != want.Selection.AgentSummary ||

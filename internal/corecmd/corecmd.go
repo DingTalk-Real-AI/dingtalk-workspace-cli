@@ -1423,7 +1423,7 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 	_, _ = short, long
 	// Reuse NewCommand's completeness rules so bind-time attaches cannot ship
 	// a partial declaration that would only fail in generated artifacts.
-	validateContractDecl(Spec{Use: cmd.Name(), Safety: safety, Contract: decl})
+	retryPolicy := validateContractDecl(Spec{Use: cmd.Name(), Safety: safety, Contract: decl})
 	validateSafetySpec(Spec{Use: cmd.Name(), Safety: safety})
 
 	payload := contract.ContractFinalPayload{
@@ -1452,6 +1452,9 @@ func AttachContract(cmd *cobra.Command, safety contract.SafetySpec, decl Contrac
 			panic(fmt.Sprintf("command %q has invalid Contract.Pagination: %v", cmd.Name(), err))
 		}
 		payload.Pagination = pagination
+	}
+	if retryPolicy != nil {
+		payload.RetryPolicy = retryPolicy
 	}
 	if decl.Interface != nil {
 		iface := &contract.InterfaceSpec{

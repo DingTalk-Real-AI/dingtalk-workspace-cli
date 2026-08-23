@@ -904,13 +904,25 @@ func TestInterfaceIntegrityWorkflowContract(t *testing.T) {
 	}
 	schemaStep := schemaRemainder[:schemaEnd]
 	for _, want := range []string{
-		"make schema-compatibility",
-		`BASE_REF="$COMPATIBILITY_BASE_REF"`,
-		`STABLE_REF="$COMPATIBILITY_STABLE_REF"`,
-		`CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"`,
+		`authority_worktree="$RUNNER_TEMP/dws-schema-authority-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"`,
+		`git worktree add --detach "$authority_worktree" "$COMPATIBILITY_BASE_REF"`,
+		`"$authority_worktree/scripts/policy/check-authoritative-schema-compatibility.sh"`,
+		`--base-ref "$COMPATIBILITY_BASE_REF"`,
+		`--stable-ref "$COMPATIBILITY_STABLE_REF"`,
+		`--candidate-ref "$COMPATIBILITY_CANDIDATE_REF"`,
+		`trap cleanup_schema_authority EXIT HUP INT TERM`,
 	} {
 		if !strings.Contains(schemaStep, want) {
 			t.Errorf("Schema compatibility step missing authoritative contract %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"make schema-compatibility",
+		"./scripts/policy/check-authoritative-schema-compatibility.sh",
+		"./scripts/policy/schema-compat",
+	} {
+		if strings.Contains(schemaStep, forbidden) {
+			t.Errorf("Schema compatibility step must not execute candidate checkout authority %q", forbidden)
 		}
 	}
 }

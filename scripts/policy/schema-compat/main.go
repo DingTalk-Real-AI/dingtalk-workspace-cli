@@ -55,6 +55,7 @@ type toolSchema struct {
 	Risk           string                     `json:"risk"`
 	Confirmation   string                     `json:"confirmation"`
 	Idempotency    string                     `json:"idempotency"`
+	RetryPolicy    string                     `json:"retry_policy,omitempty"`
 }
 
 type positionalSchema struct {
@@ -459,6 +460,7 @@ func normalizeTool(raw json.RawMessage) (string, toolSchema, error) {
 		Risk           string                     `json:"risk"`
 		Confirmation   string                     `json:"confirmation"`
 		Idempotency    string                     `json:"idempotency"`
+		RetryPolicy    json.RawMessage            `json:"retry_policy"`
 	}
 	if err := json.Unmarshal(raw, &tool); err != nil {
 		return "", toolSchema{}, err
@@ -507,6 +509,9 @@ func normalizeTool(raw json.RawMessage) (string, toolSchema, error) {
 	if err != nil {
 		return "", toolSchema{}, fmt.Errorf("dry_run: %w", err)
 	}
+	// The outer json.Unmarshal above has already validated this RawMessage;
+	// canonicalization cannot fail for a decoded JSON value.
+	retryPolicy, _ := canonicalRawJSON(tool.RetryPolicy)
 
 	return id, toolSchema{
 		PrimaryCLIPath: strings.TrimSpace(tool.PrimaryCLIPath),
@@ -521,6 +526,7 @@ func normalizeTool(raw json.RawMessage) (string, toolSchema, error) {
 		Risk:           strings.TrimSpace(tool.Risk),
 		Confirmation:   strings.TrimSpace(tool.Confirmation),
 		Idempotency:    strings.TrimSpace(tool.Idempotency),
+		RetryPolicy:    retryPolicy,
 	}, nil
 }
 
@@ -672,6 +678,9 @@ func readContract(path string) (schemaContract, error) {
 }
 
 func checkCompatibility(baseline, current schemaContract) []string {
+	if err := validateReviewedIdempotencyTransitions(); err != nil {
+		return []string{fmt.Sprintf("invalid reviewed idempotency transition table: %v", err)}
+	}
 	var failures []string
 	for productID, oldProduct := range baseline.Products {
 		newProduct, ok := current.Products[productID]
@@ -695,6 +704,7 @@ func checkCompatibility(baseline, current schemaContract) []string {
 
 func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []string {
 	var failures []string
+	reviewedIdempotencyChange := compatibleReviewedIdempotencyTransition(toolPath, oldTool, newTool)
 	for _, field := range []struct {
 		name string
 		old  string
@@ -706,11 +716,16 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		{name: "effect", old: oldTool.Effect, new: newTool.Effect},
 		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
 		{name: "confirmation", old: oldTool.Confirmation, new: newTool.Confirmation},
-		{name: "idempotency", old: oldTool.Idempotency, new: newTool.Idempotency},
 	} {
 		if field.old != field.new {
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
+	}
+	if oldTool.Idempotency != newTool.Idempotency && !reviewedIdempotencyChange {
+		failures = append(failures, fmt.Sprintf("schema tool %q changed idempotency", toolPath))
+	}
+	if oldTool.RetryPolicy != newTool.RetryPolicy && !reviewedIdempotencyChange {
+		failures = append(failures, fmt.Sprintf("schema tool %q changed retry_policy", toolPath))
 	}
 	if oldTool.Constraints != newTool.Constraints &&
 		!compatibleHiddenSiblingConstraintExpansion(oldTool, newTool) &&
@@ -742,6 +757,147 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	}
 	sort.Strings(failures)
 	return failures
+}
+
+const reviewedUUIDRetryPolicy = `{"key_parameter":"uuid","mode":"deduplication_key","same_payload_required":true}`
+
+type idempotencyTransitionKey struct {
+	ToolPath string
+	From     string
+	To       string
+}
+
+type reviewedIdempotencyTransitionSpec struct {
+	RetryPolicy string
+	Reason      string
+}
+
+// reviewedIdempotencyTransitions enumerates exact, independently reviewed
+// safety migrations. Idempotency is an execution contract: a candidate cannot
+// authorize its own change by merely adding a flag or editing a fixture. The
+// authoritative compatibility wrapper builds this checker from the PR
+// merge-base, so additions to this table take effect only after the governance
+// PR that owns them has landed on main.
+//
+// A conditional migration also pins the complete canonical retry_policy. The
+// policy deliberately does not claim a retry window: the current backend
+// evidence only establishes that a supplied uuid is a deduplication key and
+// that retries must reuse the same payload. Every unlisted tool, direction, or
+// policy value remains incompatible.
+var reviewedIdempotencyTransitions = map[idempotencyTransitionKey]reviewedIdempotencyTransitionSpec{
+	{ToolPath: "chat/chat.combine_forward_messages", From: "unknown", To: "conditional"}: {
+		RetryPolicy: reviewedUUIDRetryPolicy,
+		Reason:      "A supplied uuid is the reviewed deduplication key; retry safety is conditional on reusing the same payload.",
+	},
+	{ToolPath: "chat/chat.forward_message", From: "unknown", To: "conditional"}: {
+		RetryPolicy: reviewedUUIDRetryPolicy,
+		Reason:      "A supplied uuid is the reviewed deduplication key; retry safety is conditional on reusing the same payload.",
+	},
+	{ToolPath: "chat/chat.reply_personal_message", From: "unknown", To: "conditional"}: {
+		RetryPolicy: reviewedUUIDRetryPolicy,
+		Reason:      "A supplied uuid is the reviewed deduplication key; retry safety is conditional on reusing the same payload.",
+	},
+	{ToolPath: "chat/chat.send_personal_message", From: "unknown", To: "conditional"}: {
+		RetryPolicy: reviewedUUIDRetryPolicy,
+		Reason:      "A supplied uuid is the reviewed deduplication key; retry safety is conditional on reusing the same payload.",
+	},
+	{ToolPath: "chat/chat.share_group_invite_url", From: "unknown", To: "conditional"}: {
+		RetryPolicy: reviewedUUIDRetryPolicy,
+		Reason:      "A supplied uuid is the reviewed deduplication key; retry safety is conditional on reusing the same payload.",
+	},
+
+	{ToolPath: "chat/chat.add_custom_group_role", From: "unknown", To: "non_idempotent"}:                {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.add_emoji_reaction", From: "unknown", To: "non_idempotent"}:                   {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.add_group_member", From: "unknown", To: "non_idempotent"}:                     {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.add_message_favorite", From: "unknown", To: "non_idempotent"}:                 {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.add_robot_to_group", From: "unknown", To: "non_idempotent"}:                   {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.add_text_emotion", From: "unknown", To: "non_idempotent"}:                     {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.audit_join_group", From: "unknown", To: "non_idempotent"}:                     {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.chat_permission_grant", From: "unknown", To: "non_idempotent"}:                {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.chat_permission_grant_cross_org_data", From: "unknown", To: "non_idempotent"}: {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.clear_conversation_messages", From: "unknown", To: "non_idempotent"}:          {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.create_and_send_card", From: "unknown", To: "non_idempotent"}:                 {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.create_conv_category", From: "unknown", To: "non_idempotent"}:                 {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.create_group_conversation", From: "unknown", To: "non_idempotent"}:            {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.create_group_notice", From: "unknown", To: "non_idempotent"}:                  {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.create_smart_conv_category", From: "unknown", To: "non_idempotent"}:           {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.create_text_emotion", From: "unknown", To: "non_idempotent"}:                  {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.delete_conv_category", From: "unknown", To: "non_idempotent"}:                 {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.dismiss_group", From: "unknown", To: "non_idempotent"}:                        {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.edit_message", From: "unknown", To: "non_idempotent"}:                         {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.forward_topic", From: "unknown", To: "non_idempotent"}:                        {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.hide_conversation", From: "unknown", To: "non_idempotent"}:                    {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.quit_group", From: "unknown", To: "non_idempotent"}:                           {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.recall_message", From: "unknown", To: "non_idempotent"}:                       {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.recall_robot_message", From: "unknown", To: "non_idempotent"}:                 {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.remove_custom_group_role", From: "unknown", To: "non_idempotent"}:             {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.remove_custom_user_roles", From: "unknown", To: "non_idempotent"}:             {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.remove_emoji_reaction", From: "unknown", To: "non_idempotent"}:                {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.remove_group_member", From: "unknown", To: "non_idempotent"}:                  {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.remove_message_favorite", From: "unknown", To: "non_idempotent"}:              {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.remove_robot_in_group", From: "unknown", To: "non_idempotent"}:                {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.remove_text_emotion", From: "unknown", To: "non_idempotent"}:                  {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.send_message_by_custom_robot", From: "unknown", To: "non_idempotent"}:         {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.send_robot_message", From: "unknown", To: "non_idempotent"}:                   {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.set_custom_user_roles", From: "unknown", To: "non_idempotent"}:                {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.set_group_member_mute_list", From: "unknown", To: "non_idempotent"}:           {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.set_group_mute", From: "unknown", To: "non_idempotent"}:                       {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.set_pin_message", From: "unknown", To: "non_idempotent"}:                      {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.set_top_conversation", From: "unknown", To: "non_idempotent"}:                 {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.transfer_group_owner", From: "unknown", To: "non_idempotent"}:                 {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.unset_pin_message", From: "unknown", To: "non_idempotent"}:                    {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_at_all_notification_off", From: "unknown", To: "non_idempotent"}:       {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_conv_member_roles", From: "unknown", To: "non_idempotent"}:             {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_custom_group_role", From: "unknown", To: "non_idempotent"}:             {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_group_icon", From: "unknown", To: "non_idempotent"}:                    {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_group_name", From: "unknown", To: "non_idempotent"}:                    {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_group_settings", From: "unknown", To: "non_idempotent"}:                {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_notification_off", From: "unknown", To: "non_idempotent"}:              {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_red_env_notification_off", From: "unknown", To: "non_idempotent"}:      {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_show_history_msg_option", From: "unknown", To: "non_idempotent"}:       {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_streaming_card", From: "unknown", To: "non_idempotent"}:                {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.update_user_group_alias", From: "unknown", To: "non_idempotent"}:              {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+	{ToolPath: "chat/chat.upgrade_group_to_external", From: "unknown", To: "non_idempotent"}:            {Reason: "No reviewed deduplication key is available; automatic retry must stay disabled."},
+}
+
+func validateReviewedIdempotencyTransitions() error {
+	for key, transition := range reviewedIdempotencyTransitions {
+		if strings.TrimSpace(key.ToolPath) == "" || !strings.Contains(key.ToolPath, "/") {
+			return fmt.Errorf("invalid tool path %q", key.ToolPath)
+		}
+		if key.From != "unknown" {
+			return fmt.Errorf("%s has unsupported from value %q", key.ToolPath, key.From)
+		}
+		if strings.TrimSpace(transition.Reason) == "" {
+			return fmt.Errorf("%s %s->%s has no review reason", key.ToolPath, key.From, key.To)
+		}
+		switch key.To {
+		case "conditional":
+			canonical, err := canonicalRawJSON(json.RawMessage(transition.RetryPolicy))
+			if err != nil || canonical == "" || canonical != transition.RetryPolicy {
+				return fmt.Errorf("%s has a non-canonical retry policy", key.ToolPath)
+			}
+		case "non_idempotent":
+			if transition.RetryPolicy != "" {
+				return fmt.Errorf("%s non_idempotent transition has retry policy", key.ToolPath)
+			}
+		default:
+			return fmt.Errorf("%s has unsupported to value %q", key.ToolPath, key.To)
+		}
+	}
+	return nil
+}
+
+func compatibleReviewedIdempotencyTransition(toolPath string, oldTool, newTool toolSchema) bool {
+	transition, ok := reviewedIdempotencyTransitions[idempotencyTransitionKey{
+		ToolPath: toolPath,
+		From:     oldTool.Idempotency,
+		To:       newTool.Idempotency,
+	}]
+	if !ok {
+		return false
+	}
+	return oldTool.RetryPolicy == "" && newTool.RetryPolicy == transition.RetryPolicy
 }
 
 // reviewedInterfaceRefRedirect enumerates the exact, individually reviewed

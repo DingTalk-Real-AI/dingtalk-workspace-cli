@@ -44,12 +44,14 @@ type ContractDecl struct {
 	DryRun      *contract.DryRunSpec
 	Result      *contract.ResultSpec
 	Pagination  *contract.PaginationSpec
+	RetryPolicy *contract.RetryPolicySpec
 	Interface   *contract.InterfaceSpec
 	Selection   contract.SelectionSpec
 	Identity    contract.ToolIdentitySpec
 }
 
-// validateContractDecl enforces authoring-time homology for declared commands.
+// validateContractDecl enforces authoring-time homology for declared commands
+// and returns the normalized retry policy for the ContractFinal projection.
 // A declared Contract is the sole final source for its fields: downstream
 // catalog/Agent gates hard-require description and the selection prose for
 // every effective tool — so a declaration missing any of these fields could
@@ -61,9 +63,34 @@ type ContractDecl struct {
 // self-description: identity is collected from ContractFinal on the live
 // leaves, so an incomplete or inconsistent declared Identity fails collection,
 // binding, and policy downstream.
-func validateContractDecl(spec Spec) {
+func validateContractDecl(spec Spec) *contract.RetryPolicySpec {
+	idempotency := strings.TrimSpace(spec.Safety.Idempotency)
+	if idempotency == "conditional" && spec.Contract.RetryPolicy == nil {
+		panic(fmt.Sprintf("command %q Safety.Idempotency=conditional requires Contract.RetryPolicy", spec.Use))
+	}
+	if spec.Contract.RetryPolicy != nil && idempotency != "conditional" {
+		panic(fmt.Sprintf("command %q Contract.RetryPolicy requires Safety.Idempotency=conditional", spec.Use))
+	}
+	retryPolicy, err := contract.NormalizeRetryPolicySpec(spec.Contract.RetryPolicy, spec.Contract.Identity.CanonicalPath)
+	if err != nil {
+		panic(fmt.Sprintf("command %q has invalid Contract.RetryPolicy: %v", spec.Use, err))
+	}
+	if retryPolicy != nil {
+		declared := false
+		for _, parameter := range spec.Contract.Parameters {
+			if strings.TrimSpace(parameter.Name) == retryPolicy.KeyParameter && strings.TrimSpace(parameter.Property) != "" {
+				declared = true
+				break
+			}
+		}
+		if !declared {
+			panic(fmt.Sprintf(
+				"command %q Contract.RetryPolicy key_parameter %q requires Contract.Parameters with an explicit ParamDecl.Property",
+				spec.Use, retryPolicy.KeyParameter))
+		}
+	}
 	if spec.Contract.empty() {
-		return
+		return retryPolicy
 	}
 	missing := make([]string, 0, 8)
 	if strings.TrimSpace(spec.Contract.Description) == "" {
@@ -125,6 +152,7 @@ func validateContractDecl(spec Spec) {
 			"command %q Contract.Identity.CLIPath %q and PrimaryCLIPath %q must agree on the primary leaf path",
 			spec.Use, cliPath, primary))
 	}
+	return retryPolicy
 }
 
 // Empty reports whether no ContractDecl field was authored.
@@ -150,6 +178,9 @@ func (s ContractDecl) empty() bool {
 		return false
 	}
 	if s.Pagination != nil {
+		return false
+	}
+	if s.RetryPolicy != nil {
 		return false
 	}
 	if s.Interface != nil {
