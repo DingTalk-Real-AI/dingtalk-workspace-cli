@@ -448,6 +448,56 @@ func TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening(t *testin
 	}
 }
 
+func TestSchemaCompatibilityAcceptsMultiFieldConfirmationHardening(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	oldTool.Confirmation = "not_required"
+	oldTool.Risk = "medium"
+	oldTool.Effect = "write"
+
+	// Multi-field tightening: confirmation + risk together.
+	newTool := oldTool
+	newTool.Confirmation = "user_required"
+	newTool.Risk = "high"
+	for _, toolPath := range []string{
+		"calendar/calendar.remove_calendar_participant",
+		"calendar/calendar.delete_meeting_room",
+		"chat/chat.remove_group_member",
+		"doc/doc.update_permission",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, newTool); len(failures) != 0 {
+			t.Fatalf("reviewed multi-field hardening for %s failures = %v", toolPath, failures)
+		}
+	}
+
+	// Multi-field tightening: confirmation + risk + effect together.
+	destructiveTool := oldTool
+	destructiveTool.Confirmation = "user_required"
+	destructiveTool.Risk = "high"
+	destructiveTool.Effect = "destructive"
+	for _, toolPath := range []string{
+		"calendar/calendar.delete_calendar_event",
+		"minutes/minutes.replace_minutes_text",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, destructiveTool); len(failures) != 0 {
+			t.Fatalf("reviewed destructive hardening for %s failures = %v", toolPath, failures)
+		}
+	}
+
+	// An unreviewed tool with the same transitions must still fail.
+	if failures := checkToolCompatibility("calendar/calendar.other_delete", oldTool, destructiveTool); len(failures) == 0 {
+		t.Fatal("unreviewed multi-field hardening unexpectedly passed")
+	}
+
+	// A reviewed tool with an extra unreviewed field drift must still fail.
+	idempotencyTool := oldTool
+	idempotencyTool.Confirmation = "user_required"
+	idempotencyTool.Risk = "high"
+	idempotencyTool.Idempotency = "idempotent"
+	if failures := checkToolCompatibility("chat/chat.remove_group_member", oldTool, idempotencyTool); len(failures) == 0 {
+		t.Fatal("reviewed tool with unreviewed idempotency drift unexpectedly passed")
+	}
+}
+
 func TestMergeContracts(t *testing.T) {
 	historical := baselineContract()
 	current := cloneContract(historical)
