@@ -87,27 +87,52 @@ type reviewedCompatibilityException struct {
 
 // reviewedCompatibilityExceptions is intentionally exact: safety fixes may
 // need to tighten a historical contract, but that must not turn arbitrary
-// confirmation drift into a compatible change.
-var reviewedCompatibilityExceptions = map[string]reviewedCompatibilityException{
+// confirmation drift into a compatible change. Each tool may have multiple
+// field transitions (e.g. confirmation + risk + effect tightened together).
+var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityException{
 	// PR #1085: batch permission/member remove is destructive at container
 	// scope — one call can revoke access for up to 30 USER / DEPT /
 	// CONVERSATION / TAG members, and departments, chats, and role groups
 	// can indirectly affect many more users. The review therefore asked for
 	// the same user confirmation gate as other destructive removes.
 	"doc/doc.remove_permission": {
-		Field: "confirmation",
-		Old:   "not_required",
-		New:   "user_required",
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
 	},
 	"drive/drive.permission_remove": {
-		Field: "confirmation",
-		Old:   "not_required",
-		New:   "user_required",
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
 	},
 	"wiki/wiki.remove_member": {
-		Field: "confirmation",
-		Old:   "not_required",
-		New:   "user_required",
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	// PR #1097 (issue #1096): 6 commands that affect other users and are
+	// irreversible were incorrectly marked not_required / medium. Tightened
+	// to user_required / high; calendar event delete and minutes replace-text
+	// additionally escalated to destructive effect.
+	"calendar/calendar.delete_calendar_event": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+		{Field: "effect", Old: "write", New: "destructive"},
+	},
+	"calendar/calendar.remove_calendar_participant": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"calendar/calendar.delete_meeting_room": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"chat/chat.remove_group_member": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"minutes/minutes.replace_minutes_text": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+		{Field: "effect", Old: "write", New: "destructive"},
+	},
+	"doc/doc.update_permission": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
 	},
 }
 
@@ -777,8 +802,12 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 }
 
 func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string) bool {
-	exception, ok := reviewedCompatibilityExceptions[toolPath]
-	return ok && exception.Field == field && exception.Old == oldValue && exception.New == newValue
+	for _, exception := range reviewedCompatibilityExceptions[toolPath] {
+		if exception.Field == field && exception.Old == oldValue && exception.New == newValue {
+			return true
+		}
+	}
+	return false
 }
 
 // reviewedInterfaceRefRedirect enumerates the exact, individually reviewed
