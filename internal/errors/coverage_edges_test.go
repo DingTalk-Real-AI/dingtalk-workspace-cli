@@ -41,7 +41,7 @@ func TestCrossPlatformCoverageDiagnosticsAndErrorRenderingEdges(t *testing.T) {
 		t.Fatalf("PrintJSON friendly diagnostics = %q, %v", out.String(), err)
 	}
 	out.Reset()
-	if err := PrintHumanAt(&out, err, VerbosityVerbose); err != nil || !strings.Contains(out.String(), "开启地址") {
+	if err := PrintHumanAt(&out, err, VerbosityVerbose); err != nil || !strings.Contains(out.String(), "处理入口") {
 		t.Fatalf("PrintHuman friendly diagnostics = %q, %v", out.String(), err)
 	}
 	out.Reset()
@@ -54,7 +54,11 @@ func TestCrossPlatformCoverageDiagnosticsAndErrorRenderingEdges(t *testing.T) {
 	t.Cleanup(func() { marshalErrorJSON = oldMarshal })
 	marshalErrorJSON = func(any, string, string) ([]byte, error) { return nil, stderrors.New("encode") }
 	out.Reset()
-	if err := PrintJSON(&out, err); err != nil || !strings.Contains(out.String(), "failed to encode") {
+	if err := PrintJSON(&out, err); err != nil ||
+		!strings.Contains(out.String(), `"code":5`) ||
+		!strings.Contains(out.String(), `"category":"internal"`) ||
+		strings.Contains(out.String(), `"outcome"`) ||
+		strings.Contains(out.String(), `"type"`) {
 		t.Fatalf("PrintJSON fallback = %q, %v", out.String(), err)
 	}
 

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -1211,7 +1212,13 @@ func TestCrossPlatformCoveragePortableAuthBundleCoverageEdges(t *testing.T) {
 		if err := os.Symlink(filepath.Join(keyDir, "dek"), filepath.Join(keyDir, "link")); err != nil {
 			t.Fatal(err)
 		}
-		for name, value := range map[string]string{"app.json": "{}", profilesJSONFile: "{}", "mcp_url": "https://mcp.test", "terminal_url": "https://terminal.test"} {
+		for name, value := range map[string]string{
+			"app.json":                         "{}",
+			profilesJSONFile:                   "{}",
+			"mcp_url":                          "https://mcp.test",
+			config.ManagedMCPURLRegionFileName: "https://mcp.test",
+			"terminal_url":                     "https://terminal.test",
+		} {
 			if err := os.WriteFile(filepath.Join(configDir, name), []byte(value), 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -1233,6 +1240,9 @@ func TestCrossPlatformCoveragePortableAuthBundleCoverageEdges(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(importDir, "app.json")); err != nil {
 			t.Fatal("config file was not imported")
+		}
+		if _, err := os.Stat(filepath.Join(importDir, config.ManagedMCPURLRegionFileName)); err != nil {
+			t.Fatal("managed MCP region marker was not imported")
 		}
 		if _, err := os.Stat(filepath.Join(keychain.StorageDir(keychain.Service), keychain.AccountToken+".enc")); err != nil {
 			t.Fatal("encrypted token was not imported")

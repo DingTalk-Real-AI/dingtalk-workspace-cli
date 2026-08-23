@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
@@ -37,23 +38,25 @@ func (b *synchronizedBuffer) String() string {
 }
 
 type manyFakeBus struct {
-	client  net.Conn
-	server  net.Conn
-	hello   chan transport.Hello
-	acked   chan struct{}
-	ackGate <-chan struct{}
-	ack     transport.HelloAck
-	send    chan any
+	client           net.Conn
+	server           net.Conn
+	hello            chan transport.Hello
+	credentialUpdate chan transport.CredentialUpdate
+	acked            chan struct{}
+	ackGate          <-chan struct{}
+	ack              transport.HelloAck
+	send             chan any
 }
 
 func newManyFakeBus(busPID int, ackGate <-chan struct{}) *manyFakeBus {
 	client, server := net.Pipe()
 	f := &manyFakeBus{
-		client:  client,
-		server:  server,
-		hello:   make(chan transport.Hello, 1),
-		acked:   make(chan struct{}),
-		ackGate: ackGate,
+		client:           client,
+		server:           server,
+		hello:            make(chan transport.Hello, 1),
+		credentialUpdate: make(chan transport.CredentialUpdate, 1),
+		acked:            make(chan struct{}),
+		ackGate:          ackGate,
 		ack: transport.HelloAck{
 			Type:            transport.FrameTypeHelloAck,
 			BusPID:          busPID,
@@ -84,6 +87,23 @@ func (f *manyFakeBus) serve() {
 	}
 	if err := w.WriteJSON(f.ack); err != nil {
 		return
+	}
+	if hello.CredentialMode == transport.CredentialModeRuntimeToken {
+		if !hasCapability(f.ack.Capabilities, transport.CapabilityRuntimeTokenV1) {
+			return
+		}
+		var update transport.CredentialUpdate
+		if err := r.ReadJSON(&update); err != nil {
+			return
+		}
+		f.credentialUpdate <- update
+		if err := w.WriteJSON(transport.CredentialUpdateAck{
+			Type:                 transport.FrameTypeCredentialUpdateAck,
+			Accepted:             true,
+			CredentialGeneration: f.ack.CredentialGeneration + 1,
+		}); err != nil {
+			return
+		}
 	}
 	close(f.acked)
 	go func() {
@@ -218,6 +238,91 @@ func TestRunManyWaitsForAllConsumersAndStopsOneAtATime(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
 			t.Fatalf("line %d: %v", i, err)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageRunManyRuntimeTokenUsesEachConnectionGeneration(t *testing.T) {
+	const canary = "many-runtime-canary"
+	busA := newManyFakeBus(111, nil)
+	busB := newManyFakeBus(111, nil)
+	busA.ack.Capabilities = []string{transport.CapabilityRuntimeTokenV1}
+	busB.ack.Capabilities = []string{transport.CapabilityRuntimeTokenV1}
+	busA.ack.CredentialGeneration = 2
+	busB.ack.CredentialGeneration = 8
+	installManyDiscover(t, busA, busB)
+
+	cfg := manyTestConfig(io.Discard, io.Discard)
+	cfg.RuntimeToken = canary
+	done := make(chan error, 1)
+	go func() { done <- RunMany(context.Background(), cfg, manyTestSpecs()) }()
+
+	updateA := <-busA.credentialUpdate
+	updateB := <-busB.credentialUpdate
+	if updateA.Token != canary || updateA.ExpectedGeneration != 2 {
+		t.Fatal("first connection used the wrong credential or generation")
+	}
+	if updateB.Token != canary || updateB.ExpectedGeneration != 8 {
+		t.Fatal("second connection used the wrong credential or generation")
+	}
+	busA.send <- transport.Bye{Type: transport.FrameTypeBye, Reason: "shutdown"}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("RunMany did not stop")
+	}
+}
+
+func TestCrossPlatformCoverageRunManyRuntimeTokenRejectsDifferentBusBeforeSecondCredential(t *testing.T) {
+	const canary = "many-mismatched-bus-canary"
+	busA := newManyFakeBus(111, nil)
+	busB := newManyFakeBus(222, nil)
+	busA.ack.Capabilities = []string{transport.CapabilityRuntimeTokenV1}
+	busB.ack.Capabilities = []string{transport.CapabilityRuntimeTokenV1}
+	installManyDiscover(t, busA, busB)
+
+	cfg := manyTestConfig(io.Discard, io.Discard)
+	cfg.RuntimeToken = canary
+	err := RunMany(context.Background(), cfg, manyTestSpecs())
+	if err == nil || !strings.Contains(err.Error(), "different bus processes") {
+		t.Fatalf("RunMany() error = %v", err)
+	}
+	if update := <-busA.credentialUpdate; update.Token != canary {
+		t.Fatal("first bus did not receive the negotiated credential")
+	}
+	select {
+	case update := <-busB.credentialUpdate:
+		t.Fatalf("mismatched second bus received credential: generation=%d", update.ExpectedGeneration)
+	default:
+	}
+}
+
+func TestCrossPlatformCoverageRunManyRuntimeTokenRejectedByeReturnsTypedError(t *testing.T) {
+	busA := newManyFakeBus(333, nil)
+	busB := newManyFakeBus(333, nil)
+	busA.ack.Capabilities = []string{transport.CapabilityRuntimeTokenV1}
+	busB.ack.Capabilities = []string{transport.CapabilityRuntimeTokenV1}
+	installManyDiscover(t, busA, busB)
+
+	cfg := manyTestConfig(io.Discard, io.Discard)
+	cfg.RuntimeToken = "many-runtime-rejected-canary"
+	done := make(chan error, 1)
+	go func() { done <- RunMany(context.Background(), cfg, manyTestSpecs()) }()
+	<-busA.credentialUpdate
+	<-busB.credentialUpdate
+	busA.send <- transport.Bye{
+		Type:   transport.FrameTypeBye,
+		Reason: transport.ByeReasonRuntimeTokenRejected,
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, runtimecred.ErrRuntimeTokenRejected) {
+			t.Fatalf("RunMany() error = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("RunMany did not return runtime credential rejection")
 	}
 }
 

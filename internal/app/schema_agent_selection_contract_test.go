@@ -14,13 +14,12 @@
 package app
 
 import (
-	"os"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 )
 
-func TestManualAgentSelectionScenariosCoverEveryExecutableSchemaTool(t *testing.T) {
+func TestAgentSelectionScenariosCoverEveryExecutableSchemaTool(t *testing.T) {
 	root := NewRootCommand()
 	effective, err := cli.BuildEffectiveCommandRegistry(root)
 	if err != nil {
@@ -30,14 +29,9 @@ func TestManualAgentSelectionScenariosCoverEveryExecutableSchemaTool(t *testing.
 	if err != nil {
 		t.Fatalf("BindEffectiveCommandRegistry() error = %v", err)
 	}
-	hints, err := cli.LoadAgentHintsFromSelectionForValidation(os.DirFS("../cli/schema_hints/selection"))
+	fixture, report, err := cli.BuildAgentSelectionEvalFixture(bound)
 	if err != nil {
-		t.Fatalf("LoadAgentHintsFromSelectionForValidation() error = %v", err)
-	}
-
-	fixture, report, err := cli.BuildManualAgentSelectionEvalFixture(bound, hints)
-	if err != nil {
-		t.Fatalf("BuildManualAgentSelectionEvalFixture() error = %v", err)
+		t.Fatalf("BuildAgentSelectionEvalFixture() error = %v", err)
 	}
 	if report.Tools != len(bound.Commands) {
 		t.Fatalf("selection tools = %d, bound commands = %d", report.Tools, len(bound.Commands))

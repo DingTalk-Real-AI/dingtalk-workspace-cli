@@ -82,6 +82,46 @@ func TestFlagErrorWithSuggestions_unknownFlagHintAndFlags(t *testing.T) {
 	}
 }
 
+func TestFlagErrorWithSuggestionsChatFromExplainsBothMeanings(t *testing.T) {
+	t.Parallel()
+	root := &cobra.Command{Use: "dws"}
+	chat := &cobra.Command{Use: "chat"}
+	search := &cobra.Command{Use: "+search-msg", Run: func(*cobra.Command, []string) {}}
+	search.Flags().String("sender", "", "sender target")
+	search.Flags().String("start", "", "start time")
+	root.AddCommand(chat)
+	chat.AddCommand(search)
+
+	orig := fmt.Errorf("unknown flag: --from")
+	err := flagErrorWithSuggestions(search, orig)
+	var ae *apperrors.Error
+	if !stderrors.As(err, &ae) {
+		t.Fatalf("want *apperrors.Error, got %T", err)
+	}
+	if ae.Reason != "ambiguous_flag" || !strings.Contains(ae.Hint, "--sender") || !strings.Contains(ae.Hint, "--start") {
+		t.Fatalf("structured error = reason %q hint %q", ae.Reason, ae.Hint)
+	}
+	if !strings.HasSuffix(ae.Message, "See 'dws chat +search-msg --help' for usage.") {
+		t.Fatalf("Message = %q", ae.Message)
+	}
+
+	for _, flag := range []string{"from-file", "from-user"} {
+		t.Run(flag, func(t *testing.T) {
+			err := flagErrorWithSuggestions(search, fmt.Errorf("unknown flag: --%s", flag))
+			var structured *apperrors.Error
+			if stderrors.As(err, &structured) && structured.Reason == "ambiguous_flag" {
+				t.Fatalf("--%s incorrectly used --from ambiguity handling: %#v", flag, structured)
+			}
+			if strings.Contains(err.Error(), "--from 在消息查询中含义不明确") {
+				t.Fatalf("--%s incorrectly received --from ambiguity hint: %v", flag, err)
+			}
+			if !strings.Contains(err.Error(), "unknown flag: --"+flag) {
+				t.Fatalf("error = %q, want original flag --%s", err, flag)
+			}
+		})
+	}
+}
+
 // TestFlagErrorWithSuggestions_fallbackTailHint 验证 fallback 路径（非 unknown flag 类错误，
 // 如 missing required flag / ambiguous shorthand）也带尾部 See '<cmd> --help' for usage.
 // 这是 wukong / docker / kubectl 的通用 UX——任何 flag 解析错误都给用户一条 help 入口。

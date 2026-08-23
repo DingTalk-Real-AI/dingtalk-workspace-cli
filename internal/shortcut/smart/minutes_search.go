@@ -14,8 +14,10 @@
 package smart
 
 import (
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/minutesdata"
 )
 
 // MinutesSearch: search MY minutes (听记) by keyword and print a projected list.
@@ -41,6 +43,31 @@ var MinutesSearch = shortcut.Shortcut{
 		"内部按 --query 关键词列出你创建的听记（最多 20 条），再在本地投影出每条的标题、创建时间和 taskUuid。" +
 		"这是纯只读操作，只做搜索与本地投影，不会修改任何听记；若没有匹配的听记则提示「没搜到妙记」。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "minutes",
+			Name:           "shortcut_minutes_search",
+			CanonicalPath:  "minutes.shortcut_minutes_search",
+			CLIPath:        "minutes +minutes-search",
+			PrimaryCLIPath: "minutes +minutes-search",
+		},
+		Description: "按关键词搜索我的妙记并投影列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按关键词搜索我的妙记并投影列表",
+			UseWhen:      []string{"当你想按关键词快速找回自己创建的会议听记（妙记），只需要看到匹配到的标题、创建时间和 taskUuid 列表、而不想拿到一大坨原始字段时使用；内部按 --query 关键词列出你创建的听记（最多 20 条），再在本地投影出每条的标题、创建时间和 taskUuid。这是纯只读操作，只做搜索与本地投影，不会修改任何听记；若没有匹配的听记则提示「没搜到妙记」。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws minutes +minutes-search --query 周会"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "按关键词搜索听记（必填）", Required: true},
 	},
@@ -59,50 +86,25 @@ var MinutesSearch = shortcut.Shortcut{
 			return err
 		}
 
-		// Step 2 — project matched entries. latestMinutesItems (from
-		// latest_minutes.go) defensively unwraps the list container.
-		items := latestMinutesItems(data)
-		results := make([]map[string]any, 0, len(items))
-		for _, m := range items {
-			results = append(results, map[string]any{
-				"title":      minutesSearchTitle(m),
-				"createTime": minutesSearchCreateTime(m),
-				// latestMinutesUUID probes taskUuid/taskUUID/uuid/id in order.
-				"taskUuid": latestMinutesUUID(m),
-			})
+		// Step 2 — validate and project matched entries. An explicit [] is a
+		// successful empty search; an unknown/malformed shape is a contract error.
+		page, err := minutesdata.ParseListPage(data)
+		if err != nil {
+			return err
+		}
+		results, err := minutesdata.ProjectList(page)
+		if err != nil {
+			return err
 		}
 
 		// Step 3 — empty result guard.
-		if len(results) == 0 {
-			return apperrors.NewValidation("没搜到妙记")
-		}
-
-		return rt.Output(map[string]any{"minutes": results})
+		return rt.Output(map[string]any{"count": len(results), "minutes": results})
 	},
 }
 
-// minutesSearchTitle reads a minute's display title, tolerating the common
-// title keys the gateway may use.
-func minutesSearchTitle(m map[string]any) string {
-	for _, key := range []string{"title", "minutesTitle", "name", "subject"} {
-		if s, ok := m[key].(string); ok && s != "" {
-			return s
-		}
-	}
-	return ""
-}
-
-// minutesSearchCreateTime reads a minute's create time, returning the raw value
-// (usually epoch millis) under whichever candidate key is present.
-func minutesSearchCreateTime(m map[string]any) any {
-	for _, key := range []string{"createTime", "gmtCreate", "startTime", "createTimeStart"} {
-		if v, ok := m[key]; ok && v != nil {
-			return v
-		}
-	}
-	return nil
-}
-
 func init() {
-	shortcut.Register(MinutesSearch)
+	// Keep the historical Schema identity as a hidden compatibility
+	// leaf. +search is the only public discovery route, but removing this
+	// independently shipped ToolSpec would break existing Schema consumers.
+	shortcut.Register(finalizeMinutesSmartShortcut(MinutesSearch))
 }

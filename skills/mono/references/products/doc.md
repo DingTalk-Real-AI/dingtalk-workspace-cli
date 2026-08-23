@@ -1,27 +1,20 @@
 # 文档 (doc) 命令参考
 
-## 查询命令帮助
+## 路由与帮助预算
 
-当你不确定某个命令的具体参数、格式或可选项时，**优先执行 `--help` 查询**，不要猜测参数名或凭记忆编造。
+已知精确命令和参数时直接执行，禁止预调用 Help。参数语义不确定时先查精确 leaf Schema；真实返回 `unknown flag` 后最多读取一次该 leaf Help。`unknown command` 只执行一次 `dws shortcut list --service doc --format json`，禁止试探候选后缀或执行产品级 `dws doc --help | grep/head`。
+
+本页已给出精确命令且参数足够时，禁止读取 reference 子页。只有复杂 JSONML、block/划词评论高级参数、分页或部分成功恢复仍无法由本页和精确 leaf Schema处理时，才最多读取一个对应子 reference；普通创建、全文读取、append/overwrite、导出和导入直接执行。
+
+版本快照、列表和恢复的 Agent 主入口固定为：
 
 ```bash
-# 查看 doc 下所有子命令
-dws doc --help
-
-# 查看具体命令的完整参数说明
-dws doc read --help
-dws doc create --help
-dws doc block insert --help
-
-# 查看子命令组下的所有命令
-dws doc block --help
-dws doc permission --help
+dws doc +version-save --node <DOC_ID>
+dws doc +version-list --node <DOC_ID> --limit 20
+dws doc +version-revert --node <DOC_ID> --version <N>
 ```
 
-规则：
-- 参数名不确定时 → 先 `--help`，再调用
-- 报错 "unknown flag" 时 → `--help` 确认正确的 flag 名称
-- 不确定某个功能是否存在时 → `dws doc --help` 查看命令列表
+`+history-*` 仅兼容已有调用，不用于新的 Agent 选路。
 
 ## 命令总览
 
@@ -62,6 +55,8 @@ Example:
   dws doc read --node "https://alidocs.dingtalk.com/document/edit?dentryKey=<DENTRY_KEY>"
   dws doc read --node "https://alidocs.dingtalk.com/document/preview?dentryKey=<DENTRY_KEY>"
   dws doc read --node <DOC_ID> --content-format jsonml --scope outline
+  dws doc read --node <PUBLIC_URL> --password <ACCESS_PASSWORD>
+  dws doc read --node <DOC_ID> --version 3
 Flags:
       --node string             文档 ID 或 URL (必填)
       --content-format string   输出格式: markdown / jsonml
@@ -70,9 +65,11 @@ Flags:
       --max-depth int           筛选遍历最大深度，0 表示不限
       --start-block-id string   range / section 起始块 UUID
       --end-block-id string     range 结束块 UUID
+      --password string         互联网公开文档密码保护时的访问密码
+      --version int             读取指定历史版本（版本号从 doc version list 获取，0 表示初始版本）；缺省读最新版
 ```
 
-`--scope` 只适用于 `--content-format jsonml`，用于按大纲、块区间、单块子树或自定义 tag 局部读取。筛选结果是虚拟 JSONML fragment，只能剥壳后消费 children，不得把 fragment 容器整体写回。完整规则见 [`doc-read.md`](./doc/doc-read.md)。
+`--scope` 只适用于 `--content-format jsonml`，用于按大纲、块区间、单块子树或自定义 tag 局部读取。筛选结果是虚拟 JSONML fragment，只能剥壳后消费 children，不得把 fragment 容器整体写回。互联网公开文档（含密码保护）用 `--password`；读取历史版本内容用 `--version`（版本号来自 `dws doc version list`，0 表示初始版本，需要编辑权限）。完整规则见 [`doc-read.md`](./doc/doc-read.md)。
 
 ### 创建文档
 ```
@@ -142,7 +139,7 @@ Flags:
 
 ### 导入本地文件为在线文档
 
-详见 [doc/doc-import.md](./doc/doc-import.md)。
+详见 [doc/doc-import.md](./doc/doc-import.md)。白名单外格式（html/pdf/zip/无扩展名等）不报错，自动改走文件上传原样入库，JSON 结果带 `fallback=upload`、`converted=false` 标记。
 
 ```
 Usage:
@@ -239,13 +236,13 @@ Flags:
 Usage:
   dws doc block insert [flags]
 Example:
-  dws doc block insert --node <DOC_ID> --text "这是一段文字"
+  dws doc block insert --node <DOC_ID> --content "这是一段文字"
   dws doc block insert --node <DOC_ID> --heading "二级标题" --level 2
   dws doc block insert --node <DOC_ID> --element '{"blockType":"paragraph","paragraph":{"text":"内容"}}'
-  dws doc block insert --node <DOC_ID> --text "在此处之前插入" --ref-block <BLOCK_ID> --where before
+  dws doc block insert --node <DOC_ID> --content "在此处之前插入" --ref-block <BLOCK_ID> --where before
 Flags:
       --node string        文档 ID 或 URL (必填)
-      --text string        快捷: 段落文本内容
+      --content string     快捷: 段落文本内容
       --heading string     快捷: 标题文本
       --level int          标题级别 1-6 (配合 --heading，默认 1)
       --element string     块元素 JSON (高级)
@@ -259,12 +256,12 @@ Flags:
 Usage:
   dws doc block update [flags]
 Example:
-  dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --text "新内容"
+  dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content "新内容"
   dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --element '{"blockType":"heading","heading":{"text":"新标题","level":1}}'
 Flags:
       --node string        文档 ID 或 URL (必填)
       --block-id string    目标块 ID (必填)
-      --text string        快捷: 段落文本内容
+      --content string     快捷: 段落文本内容
       --heading string     快捷: 标题文本
       --level int          标题级别 1-6 (配合 --heading，默认 1)
       --element string     块元素 JSON (高级)
@@ -671,6 +668,7 @@ Flags:
 用户说"导入文件/导入为在线文档/导入 Word/导入 Excel/导入 xmind/导入 Markdown/把本地文件转在线文档":
 - 导入并转换为在线文档 → `doc import --file <本地路径>`
 - 支持 docx/doc/xlsx/xls/md/txt/xmind/mark，文件大小不超过 20MB
+- 白名单外格式（html/pdf/zip/无扩展名等）不报错：自动改走文件上传链路原样入库（stderr 有改道提示），JSON 结果带 `fallback=upload`、`converted=false` 标记，产出的是文件对象而非在线文档，不得报告为"已转换"；要"可编辑在线文档"时先把内容转为 md 再导入
 - 如果用户指定知识库或文件夹，补充 `--workspace` 或 `--folder`
 - 不要把本地文件内容先读出来再 `doc create/update`；应直接使用 `doc import`
 
@@ -869,13 +867,13 @@ dws doc media insert --node <DOC_ID> --file ./timeline.xlsx --name "项目时间
 dws doc block list --node <DOC_ID> --format json
 
 # 2. 在文档末尾插入段落
-dws doc block insert --node <DOC_ID> --text "新增内容"
+dws doc block insert --node <DOC_ID> --content "新增内容"
 
 # 3. 在指定块之前插入标题
 dws doc block insert --node <DOC_ID> --heading "新章节" --level 2 --ref-block <BLOCK_ID> --where before
 
 # 4. 更新某个块的内容
-dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --text "修改后的内容"
+dws doc block update --node <DOC_ID> --block-id <BLOCK_ID> --content "修改后的内容"
 
 # 5. 删除块
 dws doc block delete --node <DOC_ID> --block-id <BLOCK_ID> --yes
@@ -1004,25 +1002,24 @@ dws doc read --node "https://alidocs.dingtalk.com/document/preview?cid=749936706
 | `--content -` | 从 stdin 读取（可配合 heredoc/pipe） |
 | `--content-file path` | 从文件读取（UTF-8），推荐 |
 
-### 短/中等长度（< 200KB）— 单步创建
+### 创建并写入 — Runtime 自动分片
 
 ```bash
 # 1. 把内容写入 UTF-8 文本文件：
 #    Linux/Mac: /tmp/<name>.md；Windows: %TEMP%\<name>.md
-# 2. 一步创建+写入：
-dws doc create --name "<文档名>" --content-file <tmp> [--folder <ID>] [--workspace <ID>]
+# 2. 一步创建、必要时自动分片并回读验证：
+dws doc +create --name "<文档名>" --content @<工作目录相对文件> [--folder <ID>] [--workspace <ID>]
 ```
 
-### 超长（> 200KB 兜底）— 创建空文档 + 分片追加
+`+create` 会按安全边界拆分长 Markdown，首片创建、后续片追加，每个写调用最多执行一次。若返回 `partial_success` 或 `unknown`，先按返回的 `nodeId/steps` 回读文档，不得重跑整个创建。
+
+### 更新并验证
 
 ```bash
-# 1. 创建空文档拿 nodeId
-dws doc create --name "<文档名>" [--folder/--workspace]  # → nodeId
-
-# 2. 按 markdown 标题或段落边界切成 ≤200KB 的片段（不要切断表格）
-# 3. 逐个追加：
-dws doc update --node <nodeId> --content-file <part> --mode append
+dws doc +update --node <nodeId> --command append --content @<工作目录相对文件>
 ```
+
+Runtime 自动分片并在最后回读验证。重要覆盖使用 `+checkpoint-update`；不要自行编写重试循环，创建和追加在超时后可能已经提交。
 
 ### stdin 变体
 
@@ -1051,7 +1048,7 @@ EOF
 - `create` 不传 `--folder` 和 `--workspace` 时，默认创建在"我的文档"根目录
 - `create` 只能建"文档"（adoc）；要建表格/脑图/白板/多维表/演示，用 `dws wiki node create --workspace <id> --type <type>`（`doc file create` 已弃用）；建普通文件夹用 `dws drive mkdir`
 - `block list/insert/update/delete` 是块级精细编辑，适合结构化修改；简单内容追加建议用 `update --mode append`
-- `block insert` 优先使用 `--text` 或 `--heading` 快捷方式；复杂块类型 (table, callout 等) 使用 `--element` JSON
+- `block insert` 优先使用 `--content` 或 `--heading` 快捷方式；复杂块类型 (table, callout 等) 使用 `--element` JSON
 - `--content` 参数中的换行必须使用**真实换行符**（即实际的换行字符，Unicode `U+000A`），而不是字面量字符串 `\n`（反斜杠加字母 n）。在通过程序或大模型构造此参数时，请确保字符串在发送前已正确反转义。如果传入的是两个字符的字面量 `\n`，所有内容将渲染在同一行，导致标题、段落和表格格式全部错乱。**含多行/表格/长文本时优先用 `--content-file path.md` 或 `--content -`（stdin），不经过 shell escape，换行和表格都保持原样**（详见下方「长 Markdown 写入」）。
 - 块类型包括: paragraph, heading, blockquote, callout, columns, orderedList, unorderedList, table, sheet, attachment, slot
 - 关键区分: doc(文档内容级操作) vs wiki(知识库空间级管理) vs aitable(数据表格操作) vs drive(钉盘文件管理)
@@ -1071,11 +1068,18 @@ EOF
 - `comment create` 是全文评论；`comment create-inline` 是划词评论，必须先 `block list` 拿到 `blockId` 并确定 `--start` / `--end` 偏移（按块内纯文本字符算，从 0 开始）
 - 全文评论 `create` / `reply` / `update` 支持通过 `--mentioned-open-conversation-id` @群；划词评论 `create-inline` 不支持 @群
 
-## 自动化脚本
+## 白板卡片与白板媒体资源
 
-| 脚本 | 场景 | 用法 |
-|------|------|------|
-| [doc_create_and_write.py](../../scripts/doc_create_and_write.py) | 创建文档并写入 Markdown 内容 | `python doc_create_and_write.py --name "周报" --content "# 本周总结"` |
+```bash
+dws doc whiteboard insert --node <DOC_ID> --yes --format json
+dws doc media upload --node <DOC_ID> --file ./icon.svg \
+  --mime-type image/svg+xml --yes --format json
+```
+
+两个命令都是远端写入，必须先获得用户确认。insert 返回的 `whiteboardId` 是
+`dws whiteboard query/update` 使用的 partId；`blockId` 只用于文档块定位/删除。
+media upload 返回的 `resourceId` / `resourceUrl` 只能用于同一 nodeId 下的白板
+Vector/SVG。完整协议见 [whiteboard.md](./whiteboard.md)。
 
 ## 相关产品
 

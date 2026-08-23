@@ -14,9 +14,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const webhook = process.env.DINGTALK_WEBHOOK;
-            if (!webhook) {
-              console.log('⚠️ DINGTALK_WEBHOOK not set, skipping notification');
+            const webhooks = [
+              process.env.DINGTALK_WEBHOOK,
+              process.env.DINGTALK_WEBHOOK_SECONDARY
+            ].filter(Boolean);
+            if (webhooks.length === 0) {
+              console.log('⚠️ No DingTalk webhook configured, skipping notification');
               return;
             }
             
@@ -39,12 +42,15 @@ jobs:
               }
             };
             
-            await fetch(webhook, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(message)
-            });
+            await Promise.all(webhooks.map(webhook =>
+              fetch(webhook, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(message)
+              })
+            ));
             
-            console.log('✅ DingTalk notification sent');
+            console.log(`✅ DingTalk notification sent to ${webhooks.length} webhook(s)`);
         env:
           DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DINGTALK_WEBHOOK_SECONDARY: ${{ secrets.DINGTALK_WEBHOOK_SECONDARY }}

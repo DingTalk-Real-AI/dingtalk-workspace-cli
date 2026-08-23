@@ -21,6 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Check out trusted routing policy
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
       - name: Route review and enable auto-merge
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
@@ -29,12 +34,13 @@ jobs:
             const repo = context.repo.repo;
             const pullNumber = context.payload.pull_request.number;
             const eventHeadSha = context.payload.pull_request.head.sha;
-            const reviewerPool = [
-              'sczheng189',
-              'shangguanxuan633-lab',
-              'audanye-sudo',
-              'wxianfeng',
-            ];
+            const {
+              REVIEWER_POOL,
+              requestReviewersWithFallback,
+              resolveReviewRouting,
+              reviewerCandidates,
+            } = require('./.github/reviewer-routing.js');
+            const reviewerPool = REVIEWER_POOL;
 
             async function getReadyEventPull(phase) {
               const {data: currentPull} = await github.rest.pulls.get({
@@ -67,6 +73,21 @@ jobs:
                 : author;
 
             async function routeReview() {
+              let changedFiles;
+              try {
+                changedFiles = await github.paginate(github.rest.pulls.listFiles, {
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                  per_page: 100,
+                });
+              } catch (error) {
+                core.warning(
+                  `Could not inspect changed files for PR #${pullNumber}; using load-balanced fallback (${error.status || 'unknown status'}).`,
+                );
+                changedFiles = [];
+              }
+
               const eligible = reviewerPool.filter(
                 reviewer =>
                   reviewer.toLowerCase() !== author &&
@@ -77,13 +98,9 @@ jobs:
                 return;
               }
 
-              const alreadyRequested =
-                (pullRequest.requested_reviewers || []).length > 0 ||
-                (pullRequest.requested_teams || []).length > 0;
-              if (alreadyRequested) {
-                core.info(`PR #${pullNumber} already has a requested reviewer; leaving it unchanged.`);
-                return;
-              }
+              const existingRequestedReviewers = new Set(
+                (pullRequest.requested_reviewers || []).map(({login}) => login.toLowerCase()),
+              );
 
               let reviews;
               try {
@@ -116,22 +133,18 @@ jobs:
                   latestDecisionByLogin.set(login, review);
                 }
               }
-              const currentHeadDecision = [...latestDecisionByLogin.values()].find(
-                review =>
-                  review.commit_id === headSha &&
-                  eligible.some(
-                    reviewer =>
-                      reviewer.toLowerCase() ===
-                      review.user.login.toLowerCase(),
-                  ) &&
-                  ['APPROVED', 'CHANGES_REQUESTED'].includes(review.state),
+              const currentHeadReviewers = new Set(
+                [...latestDecisionByLogin.values()]
+                  .filter(
+                    review =>
+                      review.commit_id === headSha &&
+                      eligible.some(
+                        reviewer => reviewer.toLowerCase() === review.user.login.toLowerCase(),
+                      ) &&
+                      ['APPROVED', 'CHANGES_REQUESTED'].includes(review.state),
+                  )
+                  .map(review => review.user.login.toLowerCase()),
               );
-              if (currentHeadDecision) {
-                core.info(
-                  `PR #${pullNumber} already has a ${currentHeadDecision.state} review on its current head; leaving review ownership unchanged.`,
-                );
-                return;
-              }
 
               const loads = new Map(eligible.map(reviewer => [reviewer, 0]));
               try {
@@ -178,20 +191,42 @@ jobs:
                   tieOrder.get(left) - tieOrder.get(right),
               );
 
-              for (const reviewer of ranked) {
-                try {
+              const routing = resolveReviewRouting({
+                files: changedFiles,
+                author,
+                latestPusher,
+                fallbackReviewers: ranked,
+              });
+              const candidates = reviewerCandidates({
+                preferredReviewers: routing.reviewers,
+                fallbackReviewers: ranked,
+                eligibleReviewers: eligible,
+              });
+              const desiredReviewers = candidates.slice(0, routing.requiredReviewers);
+              if (routing.reason === 'unknown_paths' && currentHeadReviewers.size > 0) {
+                core.info(
+                  `PR #${pullNumber} has a current-head review for unknown paths; leaving manual ownership unchanged.`,
+                );
+                return;
+              }
+              core.info(
+                `PR #${pullNumber} routing: ${routing.reason}; modules=${routing.modules.map(module => module.id).join(',') || 'unknown'}; reviewers=${desiredReviewers.join(',') || 'load-balanced fallback'}.`,
+              );
+
+              const satisfiedReviewers = new Set([
+                ...currentHeadReviewers,
+                ...[...existingRequestedReviewers].filter((reviewer) =>
+                  candidates.some((candidate) => candidate.toLowerCase() === reviewer),
+                ),
+              ]);
+              const requestResult = await requestReviewersWithFallback({
+                candidates,
+                requiredReviewers: routing.requiredReviewers,
+                satisfiedReviewers: [...satisfiedReviewers],
+                requestReviewer: async (reviewer) => {
                   const currentPull = await getReadyEventPull('review request');
                   if (!currentPull) {
-                    return;
-                  }
-                  if (
-                    (currentPull.requested_reviewers || []).length > 0 ||
-                    (currentPull.requested_teams || []).length > 0
-                  ) {
-                    core.info(
-                      `PR #${pullNumber} received a reviewer while routing; leaving it unchanged.`,
-                    );
-                    return;
+                    return false;
                   }
                   await github.rest.pulls.requestReviewers({
                     owner,
@@ -202,15 +237,23 @@ jobs:
                   core.info(
                     `Requested @${reviewer} for PR #${pullNumber} (open request load: ${loads.get(reviewer)}).`,
                   );
-                  return;
-                } catch (error) {
+                  return true;
+                },
+                onFailure: (reviewer, error) => {
                   core.warning(
                     `Could not request @${reviewer} for PR #${pullNumber}; trying the next candidate (${error.status || 'unknown status'}).`,
                   );
-                }
+                },
+              });
+              if (requestResult.aborted) {
+                return;
               }
 
-              core.warning(`No reviewer request could be created for PR #${pullNumber}.`);
+              if (requestResult.satisfiedReviewers.length < routing.requiredReviewers) {
+                core.warning(
+                  `Only ${requestResult.satisfiedReviewers.length} of ${routing.requiredReviewers} required reviewers could be satisfied for PR #${pullNumber}.`,
+                );
+              }
             }
 
             async function enableAutoMerge() {

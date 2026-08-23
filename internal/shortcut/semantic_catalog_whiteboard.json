@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "service": "whiteboard",
+  "default_availability": "available",
+  "shortcuts": {
+    "+query": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格投影要求 success=true、OpenNodes V1、显式 pages 数组、每页稳定 id 与显式 nodes 数组，并校验跨页节点身份及服务端完整性摘要。",
+      "risk": "read",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    },
+    "+update": {
+      "disposition": "primary_smart",
+      "semantic_delta": "首次远端调用前完成 OpenNodes V1 校验与用户确认；写后要求 success=true、同一目标、非空终态回执、createdNodeIds/idMap 精确映射，再按真实节点身份独立 query 读回请求关键字段。",
+      "risk": "high-risk-write",
+      "availability": "available",
+      "public": true,
+      "reviewed": true
+    }
+  }
+}

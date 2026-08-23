@@ -49,8 +49,8 @@ func TestCrossPlatformCoverageDrivePermissionApplyDeclined(t *testing.T) {
 	root.SetIn(strings.NewReader("no\n"))
 	err := executeGuardedMutationCommand(t, caller, func() *cobra.Command { return root },
 		"permission", "apply", "--node", "node-1", "--role", "READER", "--users", "u1")
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+		t.Fatalf("declined apply error = %v, want 用户取消了操作", err)
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("declined apply calls = %#v, want none", caller.calls)

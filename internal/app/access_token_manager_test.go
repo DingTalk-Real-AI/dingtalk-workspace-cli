@@ -65,12 +65,16 @@ func TestCrossPlatformCoverageTokenManagerCachesUntilMarkerRevisionChanges(t *te
 	token := "token-a"
 	installTokenManagerFakes(t, func() (*authpkg.TokenData, error) {
 		calls.Add(1)
-		return &authpkg.TokenData{AccessToken: token, ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return &authpkg.TokenData{
+			AccessToken: token,
+			ExpiresAt:   time.Now().Add(time.Hour),
+			LoginRegion: string(authpkg.LoginRegionInternational),
+		}, nil
 	})
 
 	manager := NewTokenManager()
 	first, err := manager.Get(context.Background(), configDir, "")
-	if err != nil || first.AccessToken != "token-a" {
+	if err != nil || first.AccessToken != "token-a" || first.LoginRegion != authpkg.LoginRegionInternational || !first.LoginRegionKnown {
 		t.Fatalf("first token = %#v, %v", first, err)
 	}
 	second, err := manager.Get(context.Background(), configDir, "")

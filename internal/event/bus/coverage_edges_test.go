@@ -17,6 +17,7 @@ import (
 
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	eventlock "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/lock"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
@@ -324,6 +325,21 @@ func TestCrossPlatformCoverageRunStartupAndSourceEdges(t *testing.T) {
 	if err := Run(context.Background(), base); !errors.Is(err, errBusInjected) {
 		t.Fatalf("source error = %v", err)
 	}
+
+	runtimeWorkDir := shortTempDir(t)
+	base.WorkDir = runtimeWorkDir
+	base.IPCEndpoint = dwsevent.IPCEndpoint(
+		runtimeWorkDir,
+		"open",
+		dwsevent.SourceKindPersonalStream,
+		dwsevent.IdentityHash(runtimeWorkDir),
+	)
+	base.Source = edgeSource{start: func(context.Context, dwsevent.EmitFn) error {
+		return runtimecred.ErrRuntimeTokenRejected
+	}}
+	if err := Run(context.Background(), base); !errors.Is(err, runtimecred.ErrRuntimeTokenRejected) {
+		t.Fatalf("runtime source error = %v", err)
+	}
 }
 
 type scriptedListener struct {
@@ -345,13 +361,18 @@ func TestCrossPlatformCoverageDaemonMethodEdges(t *testing.T) {
 		}
 		return nil, net.ErrClosed
 	}}
-	d := &daemon{listener: l, log: logger, hub: NewHub(1), idleStop: make(chan struct{})}
+	d := &daemon{listener: l, log: logger, hub: NewHub(1), idleStop: make(chan struct{}), stopReq: make(chan string, 1)}
 	d.acceptLoop(context.Background())
 	d.shuttingDown.Store(true)
 	d.acceptLoop(context.Background())
 	d.triggerShutdown("test")
-	if !l.closed {
-		t.Fatal("trigger did not close listener")
+	select {
+	case reason := <-d.stopReq:
+		if reason != "test" {
+			t.Fatalf("stop reason = %q", reason)
+		}
+	default:
+		t.Fatal("trigger did not notify lifecycle loop")
 	}
 
 	d = &daemon{listener: &scriptedListener{accept: func() (net.Conn, error) { return nil, net.ErrClosed }}, log: logger, hub: NewHub(1), idleStop: make(chan struct{})}

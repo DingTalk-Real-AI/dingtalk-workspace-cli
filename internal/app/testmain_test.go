@@ -44,6 +44,10 @@ import (
 // test binary never launches a page on the developer's machine; tests that
 // need to assert the URL can still replace openBrowserFunc locally.
 func TestMain(m *testing.M) {
+	if code, ok := runRuntimeTokenDetachedE2EChild(); ok {
+		os.Exit(code)
+	}
+
 	tmpDir, err := os.MkdirTemp("", "dws-app-test-keychain-")
 	if err != nil {
 		panic("create test keychain tempdir: " + err.Error())
@@ -79,6 +83,10 @@ func TestMain(m *testing.M) {
 	// remove a TempDir while the audit lock is still open.
 	setupAuditSink()
 	openBrowserFunc = func(string) error { return nil }
+	// App tests may run in filtered CI processes. Install the same lazy Schema
+	// source factory as NewRootCommand without constructing a root so ResolveMeta
+	// tests never depend on an earlier test having initialized process state.
+	registerSchemaRuntimeDelivery()
 	code := m.Run()
 	StopAllStdioClients()
 	CloseAuditSink()

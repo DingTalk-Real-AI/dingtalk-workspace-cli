@@ -11,31 +11,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// gen.go is the single entry point for reviewed CLI asset generation. It isolates
-// all //go:generate pragmas from business code so that:
-//   - schema_agent_metadata.go / schema_catalog.go contain only types + embed.
-//   - Generation is a standalone process (make generate-schema triggers this).
-//   - The authored-input → generated-output contract is documented in one place.
+// gen.go isolates //go:generate pragmas from business code.
 //
-// Generation inputs (authored, reviewed):
-//   1. schema_command_registry/             identity (canonical/aliases/navigation)
-//   2. schema_hints/metadata/*.json        safety (effect/risk/confirmation)
-//   3. schema_hints/selection/*.json       selection (use_when/avoid_when)
-//   4. schema_mcp_metadata.json            MCP server tool definitions
-//   5. schema_parameter_bindings.json      parameter type/property mappings
-//   6. param_concepts.json + schema       reviewed parameter synonym policy
-//   7. cobra command tree (Go runtime)     flags/usage/required (reflected)
+// Schema Catalog delivery is NOT generated here. Production assembles Catalog
+// at runtime via ResolveSchemaBuild (声明即 Catalog); see schema_source_root.go
+// and internal/app/schema_source_register.go. cmd_schema_catalog remains a
+// CI/determinism tool (make generate-schema / check-generated-drift) and must
+// not be a committed delivery step.
 //
-// Generation outputs (embedded at build):
-//   - schema_agent_metadata/*.json         per-product agent metadata
-//   - schema_catalog/                      per-product catalog shards
+// Inputs consumed by runtime assembly:
+//   1. leaf ContractFinal.Identity         identity (canonical/aliases/navigation),
+//                                          collected from the live Cobra tree
+//   2. contract.ProductDecl + leaf ContractFinal    Agent routing / selection prose
+//                                          (Interface / ParamDecl own interface facts)
+//   3. schema_parameter_mapping_ledger.go  mapping exclusions / removals (Go)
+//                                         (active bindings retired; ParamDecl.Property owns delivery)
+//   4. param_concepts.json + schema       reviewed parameter synonym policy
+//   5. command_path_fallbacks.json + schema
+//                                        reviewed recovery-only invalid paths
+//   6. cobra command tree (Go runtime)     flags/usage/required (reflected)
+//
+// schema_hints/, schema_agent_metadata/, schema_command_registry/,
+// schema_mcp_metadata.json, and schema_mcp_service_review(.json|/ledger) are
+// retired.
+//
+// Remaining generated output from this file:
 //   - param_aliases_generated.go           per-command parameter normalization
+//   - command_path_fallbacks_generated.go  invalid-path recovery normalization
 
 package cli
 
-//go:generate go run ../generator/cmd_schema_agent_metadata -root ../.. -registry internal/cli/schema_command_registry -output-dir schema_agent_metadata -audit-output schema_agent_metadata_audit.json
-// Rebuild all dependencies so the Catalog compiler cannot reuse the cli
-// package cached by the preceding metadata generator with the old embedded
-// JSON files.
-//go:generate go run -a ../generator/cmd_schema_catalog -root ../.. -output schema_catalog
 //go:generate go run ../generator/cmd_param_aliases -root ../.. -output param_aliases_generated.go
+//go:generate go run ../generator/cmd_command_path_fallbacks -root ../.. -output command_path_fallbacks_generated.go

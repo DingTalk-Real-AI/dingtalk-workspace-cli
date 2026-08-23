@@ -18,12 +18,27 @@ package pat
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 // RegisterCommands adds the pat command tree to rootCmd.
 func RegisterCommands(root *cobra.Command, c edition.ToolCaller) {
+	// Product-level Agent routing Decl (migrated from selection/pat.json
+	// products.pat). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "pat",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "管理 Agent 的 PAT 行为授权与本地浏览器策略",
+			UseWhen: []string{
+				"缺少行为授权需要预览/授予 scope，或配置授权是否打开浏览器",
+			},
+			AvoidWhen: []string{
+				"普通登录用 auth；不要与开放平台应用权限或具体业务写操作混用",
+			},
+		},
+	})
 	patCmd := &cobra.Command{
 		Use:   "pat",
 		Short: "行为授权管理",

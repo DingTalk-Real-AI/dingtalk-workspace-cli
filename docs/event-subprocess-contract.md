@@ -4,7 +4,7 @@ Defines the stable `dws event consume` subprocess contract so an
 orchestrator can determine when the consumer is ready, stop it cleanly,
 and machine-read why it exited.
 
-Scope of this branch: the five **contract** items below. Reconnect
+Scope of this branch: the six **contract** items below. Reconnect
 resilience (keeping the stream alive across a transient upstream drop) is
 tracked separately and intentionally out of scope here.
 
@@ -158,6 +158,46 @@ marker; reconnecting an established Stream remains a separate mechanism.
 - T5e: state-store tests cover `0700`/`0600` permissions, 24h reset, 1h
   `terminal_hold`, and identity-scoped cleanup; skill/docs tests pin the
   operational recovery instructions.
+
+### 6. Host runtime-token handoff
+
+When the root command carries an explicit host-supplied `--token`, personal
+event control requests and the foreground Stream use that token with higher
+priority than local OAuth. A detached bus receives it only through the
+owner-only local IPC transport:
+
+1. The child starts in runtime-token mode with non-sensitive identity and
+   ticket metadata only; neither its argv nor environment contains the token.
+2. The consumer sends `Hello` with `credential_mode=runtime_token`.
+3. The bus advertises the additive `runtime_token_v1` capability and its
+   in-memory credential generation in `HelloAck`.
+4. Only after that capability is confirmed does the consumer send a bounded
+   `credential_update` frame. The bus applies it with generation CAS, replies
+   with `credential_update_ack`, and registers the consumer only on success.
+
+The bus blocks ticket acquisition until the first runtime credential arrives.
+A later invocation may rotate Token A to Token B on a compatible existing bus;
+the current WebSocket remains connected and the next ticket request or natural
+reconnect uses B. If a 401 rejects the current runtime token, only an already
+installed newer generation is retried; the runtime path never refreshes or
+falls back to a local OAuth profile and never suggests `dws auth login`.
+
+Clients do not send a token to a bus that lacks the capability, do not stop
+other consumers automatically, and fail before printing the ready marker. With
+no explicit `--token`, the original OAuth, refresh, profile, and old-client to
+new-bus protocol behavior remains unchanged.
+
+**Verification**
+- T6a: a stale local Token A and root Token B produce control and ticket
+  requests authenticated only with B.
+- T6b: compatible bus reuse supports A-to-B rotation and generation conflicts;
+  401 retries only an already-installed newer runtime token.
+- T6c: an old bus receives no credential and remains running; the new consumer
+  exits before its ready marker.
+- T6d: a canary credential is absent from child argv/environment, dry-run,
+  stdout/stderr, `bus.meta`, `bus.log`, run state, and returned errors.
+- T6e: no-token OAuth, refresh, multi-profile, marker/cache, and bus-reuse tests
+  continue to pass.
 
 ## Out of scope (next branch)
 

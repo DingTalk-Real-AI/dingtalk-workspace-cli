@@ -42,6 +42,12 @@ func TestCrossPlatformCoverageSheetFormulaVerifyLimitsAndInlineTargets(t *testin
 	if caller.calls != 1 {
 		t.Fatalf("calls = %d, want 1", caller.calls)
 	}
+	if caller.server != "sheet" {
+		t.Fatalf("server = %q, want sheet", caller.server)
+	}
+	if caller.tool != "verify_formula" {
+		t.Fatalf("tool = %q, want verify_formula", caller.tool)
+	}
 }
 
 func TestCrossPlatformCoverageSheetFormulaVerifyTargetsFromFile(t *testing.T) {

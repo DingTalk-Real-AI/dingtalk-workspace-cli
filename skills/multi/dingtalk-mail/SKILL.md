@@ -13,26 +13,24 @@ metadata:
 
 ## 前置条件 — 执行操作前必读
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dws-shared`](../dws-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
+> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
 
 > 命令参考：[mail.md](references/mail.md)。复杂搜索、附件、批量处理、草稿等多步邮件场景参考：[09-mail.md](references/09-mail.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 leaf Schema（例如 `dws schema --cli-path "mail +<shortcut>" --format json`），在当前 Cobra flags 不确定时读取 `dws mail <shortcut> --help`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service mail --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "mail +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws mail <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service mail --format json` 批量发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws mail +contact-list` | read | 列出指定邮箱的所有邮件联系人 |
 | `dws mail +find-mail-user` | read | 按关键词搜索邮箱联系人并投影列表（姓名/昵称/邮箱/工号等） |
 | `dws mail +folder-list` | read | 列出顶层文件夹或指定父文件夹下的子文件夹 |
-| `dws mail +recent-mail` | read | 列出收件箱近期邮件会话并投影列表（主题/发件人/时间/threadId） |
+| `dws mail +message` | read | 读取一封邮件的完整正文与附件元数据 |
+| `dws mail +messages` | read | 按请求顺序读取多封邮件并逐封验证身份 |
 | `dws mail +search-mail` | read | 按 KQL 关键词搜索邮件并投影列表（主题/发件人/时间/messageId） |
-| `dws mail +tag-list` | read | 列出指定邮箱下的所有邮件标签 |
-| `dws mail +template-list` | read | 列出指定邮箱的所有邮件模板 |
-| `dws mail +thread-list` | read | 列出指定邮箱文件夹下的邮件会话（thread） |
-| `dws mail +unread-mail` | read | 列出未读邮件并投影列表（主题/发件人/时间/messageId） |
+| `dws mail +thread` | read | 读取完整邮件会话并精确验证 conversationId |
+| `dws mail +triage` | read | 列出或筛选邮件摘要，自动解析邮箱与收件箱 |
 | `dws mail +user-search` | read | 按关键词或工号搜索邮箱用户（仅企业邮箱） |
 <!-- VISIBLE_SHORTCUTS_END -->
 

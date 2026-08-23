@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "service": "drive",
+  "default_availability": "available",
+  "shortcuts": {
+    "+list": {"disposition":"semantic_adapter","semantic_delta":"严格区分显式空目录与缺失/畸形响应，稳定投影节点并完整保留分页游标。","risk":"read","public":true,"reviewed":true},
+    "+inspect": {"disposition":"primary_smart","semantic_delta":"以文件元数据为必达结果，按需聚合统计、公开状态和封面；可选读取失败显式报告 partial_success。","risk":"read","public":true,"reviewed":true},
+    "+info": {"disposition":"alias_internal","semantic_delta":"保留历史元数据入口；新的 Agent 场景统一使用可扩展的 +inspect。","risk":"read","primary":"+inspect","public":true,"reviewed":true},
+    "+search": {"disposition":"semantic_adapter","semantic_delta":"统一关键词、文件类型、扩展名、创建者、时间和分页过滤，并拒绝缺失结果数组。","risk":"read","public":true,"reviewed":true},
+    "+find-file": {"disposition":"alias_internal","semantic_delta":"保留历史文件定位入口；新的 Agent 文件搜索统一使用 +search。","risk":"read","primary":"+search","public":true,"reviewed":true},
+    "+search-docs": {"disposition":"alias_internal","semantic_delta":"保留历史跨域文档搜索入口；新的在线文档搜索统一使用 doc +search。","risk":"read","primary":"doc +search","public":true,"reviewed":true},
+    "+recent": {"disposition":"semantic_adapter","semantic_delta":"严格读取最近访问/编辑列表并保留 nextCursor/hasMore，防止嵌套响应被投影为空。","risk":"read","public":true,"reviewed":true},
+
+    "+upload": {"disposition":"primary_smart","semantic_delta":"组合工作目录边界校验、上传凭证、OSS PUT、严格提交响应和远端元数据读回。","risk":"write","public":true,"reviewed":true},
+    "+download": {"disposition":"primary_smart","semantic_delta":"不再只返回临时链接；使用受控相对路径、no-clobber、原子发布并验证非零本地字节。","risk":"read","public":true,"reviewed":true},
+    "+create-folder": {"disposition":"primary_smart","semantic_delta":"创建普通钉盘文件夹后要求 fileId，并读回名称验证。","risk":"write","public":true,"reviewed":true},
+    "+create-shortcut": {"disposition":"primary_smart","semantic_delta":"明确 shortcut 与 copy 语义差异，创建后读取新节点验证。","risk":"write","public":true,"reviewed":true},
+    "+copy": {"disposition":"primary_smart","semantic_delta":"复制前预检在线对象类型；普通钉盘文件因下层只会生成 .dlink 而显式拒绝，避免把快捷方式伪装成独立副本。","risk":"write","public":true,"reviewed":true},
+    "+move": {"disposition":"semantic_adapter","semantic_delta":"移动后原位置不保留，统一 folder/workspace 目标语义并发布静态确认。","risk":"write","public":true,"reviewed":true},
+    "+rename": {"disposition":"primary_smart","semantic_delta":"重命名后读取真实节点元数据验证最终名称。","risk":"write","public":true,"reviewed":true},
+    "+delete": {"disposition":"semantic_adapter","semantic_delta":"将已确认节点移入回收站，要求高风险确认和 success=true 终态证据。","risk":"high-risk-write","public":true,"reviewed":true},
+    "+stats": {"disposition":"schema_leaf","semantic_delta":"读取节点访问、编辑、评论、点赞、预览和下载统计的一对一入口。","risk":"read","public":true,"reviewed":true},
+    "+cover": {"disposition":"schema_leaf","semantic_delta":"读取节点封面或缩略图地址；明确不声称服务端多格式预览转换。","risk":"read","public":true,"reviewed":true},
+
+    "+recycle-list": {"disposition":"semantic_adapter","semantic_delta":"严格分页列出回收项并稳定投影 recycleItemId，显式空数组才是空回收站。","risk":"read","public":true,"reviewed":true},
+    "+recycle-restore": {"disposition":"primary_smart","semantic_delta":"只要求列表可获得的 recycleItemId；恢复响应必须给出节点 ID，随后读回验证。","risk":"write","public":true,"reviewed":true},
+    "+star-list": {"disposition":"semantic_adapter","semantic_delta":"严格分页列出当前用户收藏并保留游标。","risk":"read","public":true,"reviewed":true},
+    "+star-add": {"disposition":"schema_leaf","semantic_delta":"以幂等用户偏好语义收藏指定节点。","risk":"write","public":true,"reviewed":true},
+    "+star-remove": {"disposition":"schema_leaf","semantic_delta":"以幂等用户偏好语义取消收藏指定节点。","risk":"write","public":true,"reviewed":true},
+    "+publish-get": {"disposition":"schema_leaf","semantic_delta":"只读查询互联网公开状态和权限，不沿用原子命令错误的写风险标签。","risk":"read","public":true,"reviewed":true},
+    "+publish-set": {"disposition":"primary_smart","semantic_delta":"实现了高风险确认和读回，但真实普通文件与在线文档夹具均返回 operation.notSupported；在获得可验证的 eligible 节点前不公开。","risk":"high-risk-write","availability":"unavailable","public":false,"reviewed":true},
+    "+publish-unset": {"disposition":"primary_smart","semantic_delta":"高风险确认后关闭互联网公开，并读回状态验证外链已失效。","risk":"high-risk-write","public":true,"reviewed":true},
+
+    "+version-history": {"disposition":"semantic_adapter","semantic_delta":"严格分页列出普通文件版本，区分合法空历史与响应契约错误。","risk":"read","public":true,"reviewed":true},
+    "+version-get": {"disposition":"primary_smart","semantic_delta":"按正整数版本号精确匹配元数据；零命中显式失败。","risk":"read","public":true,"reviewed":true},
+    "+version-download": {"disposition":"primary_smart","semantic_delta":"预检版本存在后安全下载历史字节，受控相对路径原子发布且要求非零产物。","risk":"read","public":true,"reviewed":true},
+    "+version-revert": {"disposition":"primary_smart","semantic_delta":"先验证目标版本存在，再经高风险确认回滚并读取当前节点状态。","risk":"high-risk-write","public":true,"reviewed":true}
+  }
+}

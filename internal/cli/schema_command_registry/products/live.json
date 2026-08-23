@@ -1,9 +1,0 @@
-{
-  "id": "live",
-  "tools": [
-    {
-      "canonical_path": "live.get_my_lives",
-      "cli_path": "live stream list"
-    }
-  ]
-}

@@ -16,6 +16,9 @@ package smart
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -46,6 +49,34 @@ var FindDoc = shortcut.Shortcut{
 		"可选地用 --limit 限制返回条数(pageSize)，再在本地把每条命中结果精简为「标题、URL、类型、token」四个字段后打印。" +
 		"这是纯只读操作，只做搜索与本地投影，不会创建、修改或删除任何文档；未命中时提示「没搜到文档」。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "doc",
+			Name:           "shortcut_find_doc",
+			CanonicalPath:  "doc.shortcut_find_doc",
+			CLIPath:        "doc +find-doc",
+			PrimaryCLIPath: "doc +find-doc",
+		},
+		Description: "按关键词搜索云文档并投影关键字段（只读）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按关键词搜索云文档并投影关键字段（只读）",
+			UseWhen:      []string{"当你只记得云文档标题或内容里的某个关键词，想快速按关键词找到匹配的文档、拿到它的标题、URL、类型和 token 以便后续查看或编辑，却不想拿到一大坨原始字段时使用；内部调用云文档的 search_documents 工具，把 --query 作为搜索关键词(keyword)，可选地用 --limit 限制返回条数(pageSize)，再在本地把每条命中结果精简为「标题、URL、类型、token」四个字段后打印。这是纯只读操作，只做搜索与本地投影，不会创建、修改或删除任何文档；未命中时提示「没搜到文档」。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws doc +find-doc --query 季度汇报",
+				"dws doc +find-doc --query 合同 --limit 10",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "按关键词搜索云文档（必填）", Required: true},
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "限制返回的文档条数（可选）"},
@@ -139,5 +170,7 @@ func shortcutFindDocStr(m map[string]any, keys ...string) string {
 }
 
 func init() {
+	// Keep the historical command and Schema identity alongside the richer
+	// canonical doc +search surface for backwards compatibility.
 	shortcut.Register(FindDoc)
 }

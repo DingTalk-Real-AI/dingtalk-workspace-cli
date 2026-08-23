@@ -39,7 +39,7 @@ func (c *paramAliasCaptureCaller) CallTool(_ context.Context, server, tool strin
 		copyArgs[key] = value
 	}
 	c.calls = append(c.calls, paramAliasToolCall{server: server, tool: tool, args: copyArgs})
-	text := paramAliasResponseForTool(tool)
+	text := c.paramAliasResponseForTool(tool)
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
 
@@ -48,19 +48,177 @@ func (c *paramAliasCaptureCaller) CallTool(_ context.Context, server, tool strin
 // print the transport result and need an empty object; smart shortcuts that
 // inspect a read response receive the smallest shape that lets their full RunE
 // complete without falling back to a validation error.
-func paramAliasResponseForTool(tool string) string {
+func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string {
 	switch tool {
 	case "list_calendar_events":
-		return `{"result":{"events":[]}}`
+		return `{"success":true,"result":{"events":[],"hasMore":false,"nextCursor":""}}`
+	case "get_calendar_detail":
+		return c.paramAliasCalendarDetailResponse()
+	case "get_calendar_participants":
+		return `{"success":true,"result":{"participants":[{"userId":"fixture-user","displayName":"Fixture User"},{"userId":"user-2","displayName":"User Two"}]}}`
+	case "search_calendar":
+		return `{"success":true,"result":{"calendars":[]}}`
+	case "search_rooms":
+		return `{"success":true,"result":{"rooms":[]}}`
+	case "query_available_meeting_room":
+		return `{"success":true,"result":{"rooms":[],"hasMore":false}}`
+	case "list_meeting_room_groups":
+		return `{"success":true,"result":{"groups":[]}}`
+	case "query_busy_status":
+		return `{"success":true,"result":[]}`
+	case "list_suggested_event_times":
+		return `{"success":true,"result":{"recommendEventTimes":[]}}`
+	case "list_by_keyword_and_time_range":
+		return `{"success":true,"result":{"itemList":[{"taskUuid":"u1","startTime":1}]}}`
+	case "get_minutes_basic_info":
+		return `{"success":true,"result":{"taskUuid":"u1","title":"Fixture Minutes"}}`
+	case "get_minutes_transcription":
+		return `{"success":true,"result":{"paragraphList":[],"hasNext":false}}`
+	case "create_personal_todo":
+		return `{"success":true,"result":{"taskId":"task-1"}}`
+	case "get_todo_detail":
+		return `{"success":true,"result":{"todoDetailModel":{"taskId":"task-1","subject":"Fixture Todo","isDone":false}}}`
+	case "get_user_todos_in_current_org":
+		return `{"success":true,"result":{"todoCards":[],"hasMore":false}}`
+	case "add_todo_reminder":
+		return `{"success":true}`
+	case "copy_document":
+		return `{"success":true,"nodeId":"copy-1"}`
+	case "move_document", "add_member", "update_member", "remove_member":
+		return `{"success":true}`
+	case "get_document_info":
+		if len(c.calls) > 1 {
+			switch c.calls[len(c.calls)-2].tool {
+			case "copy_document":
+				return `{"success":true,"nodeId":"copy-1","workspaceId":"workspace-1","folderId":"folder-1"}`
+			case "move_document":
+				return `{"success":true,"nodeId":"node-1","workspaceId":"drive-1","folderId":"folder-1"}`
+			}
+		}
+		return `{"success":true,"nodeId":"node-1","workspaceId":"source-1","folderId":"source-folder"}`
+	case "create_calendar_event":
+		return `{"success":true,"result":{"eventId":"event-1"}}`
+	case "update_calendar_event", "delete_calendar_event", "add_calendar_participant", "remove_calendar_participant":
+		return `{"success":true}`
+	case "respond":
+		status := "accepted"
+		if call := c.lastParamAliasCall(); call != nil {
+			if value, ok := call.args["responseStatus"].(string); ok && value != "" {
+				status = value
+			}
+		}
+		encoded, _ := json.Marshal(map[string]any{"success": true, "result": map[string]any{"responseStatus": status}})
+		return string(encoded)
+	case "get_current_user_profile":
+		return `{"success":true,"result":{"userId":"user-1","name":"Fixture Current User"}}`
+	case "query_records":
+		return `{"success":true,"status":"success","error":{},"data":{}}`
 	case "search_mail_users":
 		return `{"users":[{"name":"Fixture User","email":"fixture@example.com","id":"fixture-user"}]}`
 	case "search_dept_by_keyword":
 		return `{"deptList":[{"deptId":1,"name":"Fixture Dept"}]}`
 	case "search_groups":
 		return `{"result":{"items":[{"openConversationId":"fixture-conversation","title":"Fixture Group"}]}}`
+	case "search_contact_by_key_word":
+		return `{"result":[{"name":"Fixture User","userId":"fixture-user","openDingTalkId":"D-fixture-user"}]}`
+	case "list_doc_versions":
+		return `{"result":{"items":[{"version":3}]}}`
+	case "revert_doc_version":
+		return `{"revertedToVersion":3}`
+	case "search_doc_templates":
+		return `{"result":[{"templateId":"fixture-template-id"}]}`
+	case "list_workflows":
+		return `{"workflows":[]}`
+	case "create_document":
+		return `{"nodeId":"fixture-node"}`
+	case "list_files":
+		return `{"success":true,"result":{"files":[],"hasMore":false}}`
+	case "list_recycle_items":
+		return `{"success":true,"result":{"recycleItems":[{"recycleItemId":"recycle-1","originalName":"Fixture Node"}],"hasMore":false}}`
+	case "get_star_list":
+		return `{"success":true,"result":{"starList":[],"hasMore":false}}`
+	case "list_file_versions":
+		return `{"success":true,"result":{"versions":[{"version":3,"name":"Fixture Version"}],"hasMore":false}}`
+	case "get_file_info":
+		name := "Fixture Node"
+		for index := len(c.calls) - 2; index >= 0; index-- {
+			call := c.calls[index]
+			switch call.tool {
+			case "create_folder":
+				if value, ok := call.args["name"].(string); ok {
+					name = value
+				}
+				index = -1
+			case "rename_document":
+				if value, ok := call.args["newName"].(string); ok {
+					name = value
+				}
+				index = -1
+			}
+		}
+		encoded, _ := json.Marshal(map[string]any{"success": true, "result": map[string]any{"fileId": "node-1", "name": name}})
+		return string(encoded)
+	case "get_cover", "get_node_stats":
+		return `{"success":true,"result":{"nodeId":"node-1"}}`
+	case "get_file_publish_status":
+		return `{"success":true,"result":{"fileId":"node-1","published":false}}`
+	case "create_folder", "create_shortcut":
+		return `{"success":true,"fileId":"node-1"}`
+	case "delete_document", "mark_star", "unmark_star", "restore_recycle_item", "rename_document", "revert_file_version":
+		return `{"success":true,"fileId":"node-1"}`
+	case "set_file_publish":
+		return `{"success":true}`
+	case "download_file", "download_file_version":
+		return `{"success":true,"result":{"downloadUrl":"http://invalid.test/fixture.bin","fileName":"fixture.bin"}}`
+	case "get_document_content":
+		for index := len(c.calls) - 2; index >= 0; index-- {
+			call := c.calls[index]
+			for _, key := range []string{"jsonml", "markdown"} {
+				if content, ok := call.args[key].(string); ok {
+					encoded, _ := json.Marshal(map[string]any{"revision": 1, key: content})
+					return string(encoded)
+				}
+			}
+		}
+		return `{"revision":1}`
 	default:
 		return `{}`
 	}
+}
+
+func (c *paramAliasCaptureCaller) lastParamAliasCall() *paramAliasToolCall {
+	if len(c.calls) == 0 {
+		return nil
+	}
+	return &c.calls[len(c.calls)-1]
+}
+
+func (c *paramAliasCaptureCaller) paramAliasCalendarDetailResponse() string {
+	event := map[string]any{
+		"eventId":       "event-1",
+		"summary":       "Fixture Meeting",
+		"description":   "fixture description",
+		"startDateTime": "2026-03-10T09:00:00+08:00",
+		"endDateTime":   "2026-03-10T10:00:00+08:00",
+	}
+	for _, call := range c.calls {
+		switch call.tool {
+		case "create_calendar_event", "update_calendar_event":
+			for _, key := range []string{"eventId", "summary", "description", "startDateTime", "endDateTime", "timeZone", "location", "freeBusy"} {
+				if value, ok := call.args[key]; ok {
+					event[key] = value
+				}
+			}
+		case "respond":
+			if value, ok := call.args["responseStatus"]; ok {
+				event["responseStatus"] = value
+			}
+		case "delete_calendar_event":
+			event["status"] = "cancelled"
+		}
+	}
+	encoded, _ := json.Marshal(map[string]any{"success": true, "result": event})
+	return string(encoded)
 }
 
 func (*paramAliasCaptureCaller) Format() string { return "json" }
@@ -132,7 +290,7 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	}()
 	rejectRunner := &paramAliasDryRunRejectRunner{}
 	originalRunnerFactory := rootNewCommandRunnerWithFlags
-	rootNewCommandRunnerWithFlags = func(cli.CatalogLoader, *GlobalFlags) executor.Runner {
+	rootNewCommandRunnerWithFlags = func(*GlobalFlags) executor.Runner {
 		return rejectRunner
 	}
 	root := NewRootCommand()
@@ -165,6 +323,24 @@ func executeParamAliasDryRunE2E(t *testing.T, args ...string) (*pipeline.Context
 	return ctx, preview, append([]executor.Invocation(nil), rejectRunner.attempts...), executeErr
 }
 
+func TestCrossPlatformCoverageFlagListDryRunStopsBeforeReadDispatch(t *testing.T) {
+	_, preview, attempts, err := executeParamAliasDryRunE2E(t,
+		"chat", "+flag-list", "--page-size", "20", "--cursor", "0", "--dry-run",
+	)
+	if err != nil {
+		t.Fatalf("flag-list dry-run error = %v", err)
+	}
+	if len(attempts) != 0 {
+		t.Fatalf("flag-list dry-run crossed dispatch boundary: %#v", attempts)
+	}
+	if !preview.DryRun || preview.Executed || preview.Tool != "list_message_favorites" {
+		t.Fatalf("flag-list dry-run preview = %#v", preview)
+	}
+	if preview.Arguments["cursor"] != float64(0) || preview.Arguments["size"] != "20" {
+		t.Fatalf("flag-list dry-run arguments = %#v", preview.Arguments)
+	}
+}
+
 func executeParamAliasE2E(t *testing.T, caller *paramAliasCaptureCaller, args ...string) (*pipeline.Context, error) {
 	t.Helper()
 	originalArgs := os.Args
@@ -172,7 +348,7 @@ func executeParamAliasE2E(t *testing.T, caller *paramAliasCaptureCaller, args ..
 	defer func() { os.Args = originalArgs }()
 
 	originalRunnerFactory := rootNewCommandRunnerWithFlags
-	rootNewCommandRunnerWithFlags = func(cli.CatalogLoader, *GlobalFlags) executor.Runner {
+	rootNewCommandRunnerWithFlags = func(*GlobalFlags) executor.Runner {
 		return &paramAliasCaptureRunner{caller: caller}
 	}
 	root := NewRootCommand()
@@ -191,7 +367,7 @@ func executeParamAliasE2E(t *testing.T, caller *paramAliasCaptureCaller, args ..
 	return ctx, root.Execute()
 }
 
-func TestBooleanStickyCannotBypassDestructiveConfirmation(t *testing.T) {
+func TestCrossPlatformCoverageBooleanStickyCannotBypassDestructiveConfirmation(t *testing.T) {
 	tests := []struct {
 		name           string
 		confirmation   []string
@@ -244,7 +420,7 @@ func TestBooleanStickyCannotBypassDestructiveConfirmation(t *testing.T) {
 	}
 }
 
-func TestParamAliasReadCommandFinalPayload(t *testing.T) {
+func TestCrossPlatformCoverageParamAliasReadCommandFinalPayload(t *testing.T) {
 	caller := &paramAliasCaptureCaller{}
 	start := "2026-03-10T14:00:00+08:00"
 	end := "2026-03-10T18:00:00+08:00"
@@ -279,13 +455,13 @@ func TestParamAliasReadCommandFinalPayload(t *testing.T) {
 	}
 }
 
-func TestParamAliasWriteCommandFinalPayload(t *testing.T) {
+func TestCrossPlatformCoverageParamAliasWriteCommandFinalPayload(t *testing.T) {
 	caller := &paramAliasCaptureCaller{}
 	ctx, err := executeParamAliasE2E(t, caller,
 		"chat", "message", "send",
-		"--to-user", "D-recipient",
+		"--to-user", appFixtureCurrentDOpenID,
 		"--text", "hello alias",
-		"--uuid", "alias-e2e",
+		"--idempotency-key", "alias-e2e",
 	)
 	if err != nil {
 		t.Fatalf("chat write alias E2E error = %v", err)
@@ -297,7 +473,7 @@ func TestParamAliasWriteCommandFinalPayload(t *testing.T) {
 		t.Fatalf("chat calls = %#v", caller.calls)
 	}
 	payload := caller.calls[0].args
-	if payload["receiverOpenDingTalkId"] != "D-recipient" || payload["uuid"] != "alias-e2e" || payload["msgType"] != "markdown" {
+	if payload["receiverOpenDingTalkId"] != appFixtureCurrentDOpenID || payload["uuid"] != "alias-e2e" || payload["msgType"] != "markdown" {
 		t.Fatalf("chat payload identity fields = %#v", payload)
 	}
 	content, _ := payload["content"].(string)
@@ -311,7 +487,30 @@ func TestParamAliasWriteCommandFinalPayload(t *testing.T) {
 	}
 }
 
-func TestChatReactionConversationAliasesReachCanonicalPayload(t *testing.T) {
+func TestCrossPlatformCoverageChatMessageSendLegacyUUIDAliasFinalPayload(t *testing.T) {
+	caller := &paramAliasCaptureCaller{}
+	_, err := executeParamAliasE2E(t, caller,
+		"chat", "message", "send",
+		"--group", "fixture-conversation",
+		"--text", "hello legacy uuid",
+		"--uuid", "legacy-alias-e2e",
+	)
+	if err != nil {
+		t.Fatalf("chat message send legacy uuid error = %v", err)
+	}
+	if len(caller.calls) != 1 || caller.calls[0].tool != "send_personal_message" {
+		t.Fatalf("chat calls = %#v", caller.calls)
+	}
+	payload := caller.calls[0].args
+	if payload["uuid"] != "legacy-alias-e2e" || payload["openConversationId"] != "fixture-conversation" {
+		t.Fatalf("chat legacy uuid payload = %#v", payload)
+	}
+	if _, exists := payload["idempotency-key"]; exists {
+		t.Fatalf("chat payload leaked CLI-only idempotency-key: %#v", payload)
+	}
+}
+
+func TestCrossPlatformCoverageChatReactionConversationAliasesReachCanonicalPayload(t *testing.T) {
 	tests := []struct {
 		name     string
 		command  []string
@@ -378,7 +577,11 @@ func TestChatReactionConversationAliasesReachCanonicalPayload(t *testing.T) {
 					if err != nil {
 						t.Fatalf("alias execution failed: %v", err)
 					}
-					if ctx == nil || len(ctx.Corrections) != 1 || ctx.Corrections[0].Original != "--"+alias || ctx.Corrections[0].Corrected != "--conversation-id" {
+					if alias == "open-conversation-id" {
+						if ctx == nil || len(ctx.Corrections) != 0 {
+							t.Fatalf("alias corrections = %#v", ctx)
+						}
+					} else if ctx == nil || len(ctx.Corrections) != 1 || ctx.Corrections[0].Original != "--"+alias || ctx.Corrections[0].Corrected != "--conversation-id" {
 						t.Fatalf("alias corrections = %#v", ctx)
 					}
 					if !reflect.DeepEqual(aliasCaller.calls, canonicalCaller.calls) {
@@ -390,7 +593,7 @@ func TestChatReactionConversationAliasesReachCanonicalPayload(t *testing.T) {
 	}
 }
 
-func TestAllGeneratedChatParamAliasesReachRuntimeCobraContract(t *testing.T) {
+func TestCrossPlatformCoverageAllGeneratedChatParamAliasesReachRuntimeCobraContract(t *testing.T) {
 	root := NewRootCommand()
 	engine := newPipelineEngine()
 	entries, err := cli.ReduceParamAliases(root)
@@ -478,7 +681,7 @@ func TestAllGeneratedChatParamAliasesReachRuntimeCobraContract(t *testing.T) {
 	t.Logf("verified generated chat parameter routes: entries=%d aliases=%d blocked=%d ambiguous=%d", chatEntries, aliasCases, guardCases[pipeline.FlagProtectionBlocked], guardCases[pipeline.FlagProtectionAmbiguous])
 }
 
-func TestIMUserIDHallucinationRoutes(t *testing.T) {
+func TestCrossPlatformCoverageIMUserIDHallucinationRoutes(t *testing.T) {
 	tests := []struct {
 		command string
 		want    string
@@ -531,7 +734,7 @@ func TestIMUserIDHallucinationRoutes(t *testing.T) {
 	}
 }
 
-func TestHiddenIMListDirectRemainsOutsideCentralAliasTable(t *testing.T) {
+func TestCrossPlatformCoverageHiddenIMListDirectRemainsOutsideCentralAliasTable(t *testing.T) {
 	const command = "chat message list-direct"
 	if _, ok := cli.LookupParamAlias(command); ok {
 		t.Fatalf("hidden command %q unexpectedly entered the public generated alias table", command)
@@ -556,7 +759,7 @@ func TestHiddenIMListDirectRemainsOutsideCentralAliasTable(t *testing.T) {
 	}
 }
 
-func TestSelectedParamAliasesProduceCanonicalEquivalentDryRunPreviews(t *testing.T) {
+func TestCrossPlatformCoverageSelectedParamAliasesProduceCanonicalEquivalentDryRunPreviews(t *testing.T) {
 	tests := []struct {
 		name            string
 		tool            string
@@ -588,11 +791,11 @@ func TestSelectedParamAliasesProduceCanonicalEquivalentDryRunPreviews(t *testing
 			tool: "send_personal_message",
 			canonicalArgs: []string{
 				"--dry-run", "chat", "message", "send",
-				"--user", "D-recipient", "--text", "hello dry-run", "--uuid", "alias-dry-run",
+				"--user", appFixtureCurrentDOpenID, "--text", "hello dry-run", "--uuid", "alias-dry-run",
 			},
 			aliasArgs: []string{
 				"--dry-run", "chat", "message", "send",
-				"--to-user", "D-recipient", "--text", "hello dry-run", "--uuid", "alias-dry-run",
+				"--to-user", appFixtureCurrentDOpenID, "--text", "hello dry-run", "--uuid", "alias-dry-run",
 			},
 			wantCorrections: 1,
 			wantArgKeys:     []string{"clawType", "content", "msgType", "receiverOpenDingTalkId", "uuid"},
@@ -653,7 +856,7 @@ func TestSelectedParamAliasesProduceCanonicalEquivalentDryRunPreviews(t *testing
 	}
 }
 
-func TestParamAliasCanonicalConflictFailsBeforeRunE(t *testing.T) {
+func TestCrossPlatformCoverageParamAliasCanonicalConflictFailsBeforeRunE(t *testing.T) {
 	caller := &paramAliasCaptureCaller{}
 	for _, args := range [][]string{
 		{"calendar", "event", "list", "--date", "2026-03-10", "--start", "2026-03-11"},
@@ -678,7 +881,7 @@ func TestParamAliasCanonicalConflictFailsBeforeRunE(t *testing.T) {
 	}
 }
 
-func TestAllReviewedParamAliasGuardsReachRuntimeContract(t *testing.T) {
+func TestCrossPlatformCoverageAllReviewedParamAliasGuardsReachRuntimeContract(t *testing.T) {
 	concepts, err := cli.LoadParamConcepts()
 	if err != nil {
 		t.Fatalf("LoadParamConcepts() error = %v", err)
@@ -770,7 +973,7 @@ func TestAllReviewedParamAliasGuardsReachRuntimeContract(t *testing.T) {
 	}
 }
 
-func TestRepresentativeParamAliasGuardsReachFinalErrorsWithoutDispatch(t *testing.T) {
+func TestCrossPlatformCoverageRepresentativeParamAliasGuardsReachFinalErrorsWithoutDispatch(t *testing.T) {
 	for _, test := range []struct {
 		path       string
 		emitted    string
@@ -817,7 +1020,7 @@ func TestRepresentativeParamAliasGuardsReachFinalErrorsWithoutDispatch(t *testin
 	}
 }
 
-func TestFlagConflictErrorFormattingIsDeterministic(t *testing.T) {
+func TestCrossPlatformCoverageFlagConflictErrorFormattingIsDeterministic(t *testing.T) {
 	err := (&pipeline.FlagConflictError{Command: "dws demo", Canonical: "start", Spellings: []string{"start", "date"}}).Error()
 	want := `conflicting parameter spellings for --start on "dws demo": --date, --start; pass exactly one spelling`
 	if err != want {

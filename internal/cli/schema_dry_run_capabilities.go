@@ -1,5 +1,15 @@
 // Copyright 2026 Alibaba Group
 // Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package cli
 
@@ -8,6 +18,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 // dryRunCapabilityGroup is a reviewed positive capability declaration. An
@@ -17,49 +29,59 @@ type dryRunCapabilityGroup struct {
 	CanonicalPaths []string
 }
 
-// reviewedDryRunCapabilityGroups contains only command-owned preview paths.
+// reviewedDryRunCapabilityGroups contains only command-owned preview paths
+// for tools WITHOUT a Contract final declaration. Declared tools publish
+// their dry_run capability from corecmd.ContractDecl (reviewed code) and are
+// merged into the reviewed set at assembly time — no manual list entry.
 // Inheriting the root --dry-run flag or reaching the generic EchoRunner is not
 // evidence of a stable capability and must never add a command to this list.
 // CI executes each selected example and compares the observed preview kind to
 // this reviewed declaration.
 var reviewedDryRunCapabilityGroups = []dryRunCapabilityGroup{
-	{PreviewKind: DryRunPreviewRequest, CanonicalPaths: []string{
-		"event.stop",
-	}},
-	{PreviewKind: DryRunPreviewPlan, CanonicalPaths: []string{
-		"chat.download_media",
-		"doc.download_file",
-		"doc.import_get",
-		"doc.media_insert",
-		"doc.query_export_job",
-		"doc.upload",
-		"drive.download_file",
-		"drive.upload",
-		"markdown.create",
-		"markdown.fetch",
-		"markdown.overwrite",
-		"markdown.patch",
-		"sheet.filter_view_get_criteria",
-		"sheet.filter_view_info",
-		"sheet.filter_view_list_criteria",
-		"sheet.media_upload",
-		"sheet.submit_export_job",
-		"sheet.write_image",
-		"todo.add_todo_attachment",
-	}},
+	// Declared tools publish dry_run from LeafSpec / Shortcut ContractDecl.
+	// Manual entries remain only for tools that cannot yet declare ContractFinal.
 }
 
 var reviewedDryRunCapabilitiesLazy struct {
 	once        sync.Once
-	byCanonical map[string]DryRunSpec
+	byCanonical map[string]contract.DryRunSpec
 	err         error
 }
 
-func loadReviewedDryRunCapabilities() (map[string]DryRunSpec, error) {
+// declaredDryRunCapabilities indexes dry_run capabilities sourced from
+// Contract final declarations (canonical → spec). Populated by
+// BindEffectiveCommandRegistry at command-tree bind time — every process
+// that resolves the tree gets the reviewed set, not only processes that run
+// Schema assembly. A declaration in reviewed code is itself the reviewed
+// capability, so no manual allowlist entry is required.
+var declaredDryRunCapabilities sync.Map // string → contract.DryRunSpec
+
+// recordDeclaredDryRunCapability registers one Contract-declared dry_run
+// capability. Conflicting re-declaration of the same canonical is a
+// programming error surfaced at the next delivery gate read.
+func recordDeclaredDryRunCapability(canonical string, spec contract.DryRunSpec) {
+	canonical = strings.TrimSpace(canonical)
+	if canonical == "" {
+		return
+	}
+	declaredDryRunCapabilities.Store(canonical, spec)
+}
+
+// resetReviewedDryRunCapabilitiesLazy clears the lazy manual dry-run index so
+// the next loadManualDryRunCapabilities() rebuilds from the current groups.
+func resetReviewedDryRunCapabilitiesLazy() {
+	reviewedDryRunCapabilitiesLazy = struct {
+		once        sync.Once
+		byCanonical map[string]contract.DryRunSpec
+		err         error
+	}{}
+}
+
+func loadManualDryRunCapabilities() (map[string]contract.DryRunSpec, error) {
 	reviewedDryRunCapabilitiesLazy.once.Do(func() {
-		byCanonical := make(map[string]DryRunSpec)
+		byCanonical := make(map[string]contract.DryRunSpec)
 		for _, group := range reviewedDryRunCapabilityGroups {
-			spec := DryRunSpec{PreviewKind: group.PreviewKind}
+			spec := contract.DryRunSpec{PreviewKind: group.PreviewKind}
 			if err := spec.Validate("<reviewed-dry-run-registry>"); err != nil {
 				reviewedDryRunCapabilitiesLazy.err = err
 				return
@@ -88,29 +110,47 @@ func loadReviewedDryRunCapabilities() (map[string]DryRunSpec, error) {
 	if reviewedDryRunCapabilitiesLazy.err != nil {
 		return nil, reviewedDryRunCapabilitiesLazy.err
 	}
-	out := make(map[string]DryRunSpec, len(reviewedDryRunCapabilitiesLazy.byCanonical))
+	out := make(map[string]contract.DryRunSpec, len(reviewedDryRunCapabilitiesLazy.byCanonical))
 	for canonical, spec := range reviewedDryRunCapabilitiesLazy.byCanonical {
 		out[canonical] = spec
 	}
 	return out, nil
 }
 
-// ReviewedDryRunCapabilities returns a defensive copy of the positive,
-// reviewed capability registry for delivery gates.
-func ReviewedDryRunCapabilities() (map[string]DryRunSpec, error) {
-	return loadReviewedDryRunCapabilities()
-}
-
-func reviewedDryRunCapability(canonical string) (*DryRunSpec, error) {
-	capabilities, err := loadReviewedDryRunCapabilities()
+func loadReviewedDryRunCapabilities() (map[string]contract.DryRunSpec, error) {
+	out, err := loadManualDryRunCapabilities()
 	if err != nil {
 		return nil, err
 	}
-	spec, ok := capabilities[strings.TrimSpace(canonical)]
-	if !ok {
-		return nil, nil
+	var mergeErr error
+	declaredDryRunCapabilities.Range(func(key, value any) bool {
+		canonical, ok := key.(string)
+		if !ok {
+			mergeErr = fmt.Errorf("declared dry-run capability has non-string key %v", key)
+			return false
+		}
+		spec, ok := value.(contract.DryRunSpec)
+		if !ok {
+			mergeErr = fmt.Errorf("declared dry-run capability %s has non-contract.DryRunSpec value", canonical)
+			return false
+		}
+		if manual, exists := out[canonical]; exists && manual != spec {
+			mergeErr = fmt.Errorf("dry-run capability %s declared as %#v conflicts with manual reviewed entry %#v", canonical, spec, manual)
+			return false
+		}
+		out[canonical] = spec
+		return true
+	})
+	if mergeErr != nil {
+		return nil, mergeErr
 	}
-	return &spec, nil
+	return out, nil
+}
+
+// ReviewedDryRunCapabilities returns a defensive copy of the positive,
+// reviewed capability registry for delivery gates.
+func ReviewedDryRunCapabilities() (map[string]contract.DryRunSpec, error) {
+	return loadReviewedDryRunCapabilities()
 }
 
 // ValidateReviewedDryRunCapabilityDelivery proves that every positive source
@@ -121,7 +161,7 @@ func ValidateReviewedDryRunCapabilityDelivery(registry SchemaRegistry) error {
 	if err != nil {
 		return err
 	}
-	actual := make(map[string]DryRunSpec)
+	actual := make(map[string]contract.DryRunSpec)
 	for _, product := range registry.Products {
 		for _, tool := range product.Tools {
 			if tool.DryRun != nil {

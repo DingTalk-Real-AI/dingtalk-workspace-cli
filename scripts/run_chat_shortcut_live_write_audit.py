@@ -474,9 +474,22 @@ def run_live(binary: Path, timeout: int) -> list[dict[str, Any]]:
             )
             role_id = ""
 
+        # The platform only permits the @all and red-envelope sub-switches
+        # while the conversation-wide notification-off switch is enabled.
+        # Keep that prerequisite active across both cases, then restore it.
+        conversation_mute_captures = [
+            run_capture(
+                binary,
+                "+conversation-mute",
+                ["--conversation-id", group_id, "--yes"],
+                timeout,
+            )
+        ]
+        # Red-envelope must be exercised first. Toggling the @all sub-switch
+        # can make the service clear the prerequisite state for the next call.
         shortcut_case(
-            "+conversation-mute",
-            "update_notification_off",
+            "+conversation-mute-red-envelope",
+            "update_red_env_notification_off",
             [
                 ["--conversation-id", group_id],
                 ["--conversation-id", group_id, "--off"],
@@ -490,13 +503,20 @@ def run_live(binary: Path, timeout: int) -> list[dict[str, Any]]:
                 ["--conversation-id", group_id, "--off"],
             ],
         )
-        shortcut_case(
-            "+conversation-mute-red-envelope",
-            "update_red_env_notification_off",
-            [
-                ["--conversation-id", group_id],
-                ["--conversation-id", group_id, "--off"],
-            ],
+        conversation_mute_captures.append(
+            run_capture(
+                binary,
+                "+conversation-mute",
+                ["--conversation-id", group_id, "--off", "--yes"],
+                timeout,
+            )
+        )
+        results.append(
+            summarize_action(
+                "+conversation-mute",
+                "update_notification_off",
+                conversation_mute_captures,
+            )
         )
         shortcut_case(
             "+conversation-set-top",

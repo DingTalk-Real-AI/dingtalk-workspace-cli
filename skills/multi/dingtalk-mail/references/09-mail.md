@@ -1,7 +1,7 @@
 # 邮件
 
 > 邮件的 4 条 **lite** recipe：`mail-list-mailbox`、`mail-search`、`mail-send`、`mail-reply-forward`，见 [lite-recipes.md](./lite-recipes.md)。下列专用规则与消歧请在命中邮件场景且**超出**上述 lite 时阅读本文。
-> 产品命令见 [mail.md](./mail.md)。通用批量/并行见 [_common/conventions.md](_common/conventions.md)。
+> 产品命令见 [mail.md](./mail.md)。通用批量/并行见 [recipes/conventions.md](recipes/conventions.md)。
 
 ## 专用规则（#9 非 lite 步骤必守）
 

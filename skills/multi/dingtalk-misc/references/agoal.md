@@ -70,6 +70,7 @@ Agoal 是钉钉目标管理工具，支持战略解码、经营合约、计分�
 | `scorecard detail` | 获取计分卡详情 | `--selected-time` `--dept-id` | selectedTime 为 ISO-8601 字符串，如 `"2026-01-01T00:00:00+08:00"` |
 | `scorecard entity-detail` | 获取计分卡实体详情 | `--sc-id` `--entity-id` | 根据计分卡 id 和实体 id 查询 |
 | `scorecard update` | 更新计分卡 | `--dept-id` `--selected-time` `--id` `--tracking-period-type` `--content` | trackingPeriodType: MONTHLY/QUARTERLY |
+| `scorecard search-entities` | 搜索计分卡指标与关键事项 | `--keyword` | 可选 `--page`、`--page-size`；keyword 为标题模糊匹配关键词 |
 
 #### selectedTime 时间说明
 
@@ -163,6 +164,7 @@ items 每项包含：
 - 查看详情 → `scorecard detail`
 - 实体详情 → `scorecard entity-detail`
 - 修改/更新 → `scorecard update`
+- 搜索计分卡指标与关键事项 → `scorecard search-entities --keyword "关键词"`
 
 用户说"目标/OKR/我的目标/个人目标":
 - 规则周期 → `user rules`
@@ -217,6 +219,10 @@ dws agoal scorecard entity-detail --sc-id SC_ID --entity-id ENTITY_ID
 
 # 10. 更新计分卡
 dws agoal scorecard update --dept-id DEPT_ID --selected-time "2025-01-01T00:00:00+08:00" --id SC_ID --tracking-period-type MONTHLY --content '[{"id":"dim1","title":"业绩","items":[{"id":"item1","title":"收入","target":"100"}]}]'
+
+# 10.1 搜索计分卡指标与关键事项
+dws agoal scorecard search-entities --keyword "业绩"
+dws agoal scorecard search-entities --keyword "业绩" --page 1 --page-size 20
 
 # 11. 查看用户规则 → 提取 ruleId 和 periodId
 dws agoal user rules --user-id USER_ID
@@ -286,6 +292,7 @@ dws agoal obj-template create-or-update --template-id TPL_ID --title "业绩模�
 | "查经营合约" | `dws agoal contract list` / `contract detail` |
 | "更新经营合约" | 先 `contract detail` 获取完整内容，再 `contract update` 覆盖更新 |
 | "查计分卡" | `dws agoal scorecard detail` / `scorecard entity-detail` |
+| "搜索计分卡指标与关键事项" | `dws agoal scorecard search-entities --keyword <KW>` |
 | "更新计分卡" | 先查详情，再按 [agoal.md](./agoal.md) 覆盖更新 |
 | "查周月报统计/提交情况/跟催" | `dws agoal report list-statistics` / `report submit-detail` |
 

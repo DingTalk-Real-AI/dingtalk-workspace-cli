@@ -50,14 +50,14 @@ func init() {
 		Name:         "DWS_TRUSTED_DOMAINS",
 		Category:     configmeta.CategoryNetwork,
 		Description:  "信任的 HTTPS 域名白名单 (逗号分隔，* 信任所有)",
-		DefaultValue: "*.dingtalk.com",
-		Example:      "*.dingtalk.com,custom.example.com",
+		DefaultValue: "*.dingtalk.com,*.dingtalk.io",
+		Example:      "*.dingtalk.com,*.dingtalk.io,custom.example.com",
 	})
 }
 
 const (
 	trustedDomainsEnv     = "DWS_TRUSTED_DOMAINS"
-	defaultTrustedDomains = "*.dingtalk.com"
+	defaultTrustedDomains = "*.dingtalk.com,*.dingtalk.io"
 
 	// defaultHTTPTimeout is the default timeout for HTTP transport requests.
 	defaultHTTPTimeout = 30 * time.Second
@@ -68,10 +68,12 @@ const (
 	defaultRetryMaxDelay = 5 * time.Second
 
 	// Security headers
-	HeaderSource      = "X-Cli-Source"
-	HeaderVersion     = "X-Cli-Version"
-	HeaderExecutionId = "X-Cli-Execution-Id"
-	SourceValue       = "dws-cli"
+	HeaderSource       = "X-Cli-Source"
+	HeaderVersion      = "X-Cli-Version"
+	HeaderExecutionId  = "X-Cli-Execution-Id"
+	HeaderAgentVersion = "x-dws-agent-ver"
+	HeaderAgentExt     = "x-dws-agent-ext"
+	SourceValue        = "dws-cli"
 )
 
 // Supported MCP protocol versions, ordered from newest to oldest.
@@ -256,18 +258,41 @@ func NewClient(httpClient *http.Client) *Client {
 
 // safeRedirectPolicy prevents credential headers from being forwarded
 // when a response redirects to a different host (e.g. API 302 → CDN).
-// Strips Authorization, x-user-access-token on cross-host redirects;
-// other headers like X-Cli-* pass through.
+// Credentials and Agent extension context are bound to the initial origin:
+// once a redirect chain leaves that origin they remain stripped for every
+// subsequent hop, including a redirect back to the initial origin.
+// Non-sensitive headers like X-Cli-* and x-dws-agent-ver pass through.
 func safeRedirectPolicy(req *http.Request, via []*http.Request) error {
 	if len(via) >= 10 {
 		return fmt.Errorf("too many redirects")
 	}
-	if len(via) > 0 && req.URL.Host != via[0].URL.Host {
-		// Cross-host redirect: strip sensitive headers to prevent credential leakage
+	if redirectChainLeftInitialOrigin(req, via) {
+		req.Header.Del(HeaderAgentExt)
 		req.Header.Del("Authorization")
 		req.Header.Del("x-user-access-token")
 	}
 	return nil
+}
+
+func redirectChainLeftInitialOrigin(req *http.Request, via []*http.Request) bool {
+	if len(via) == 0 {
+		return false
+	}
+	initialURL := via[0].URL
+	if !sameOrigin(req.URL, initialURL) {
+		return true
+	}
+	for _, previous := range via[1:] {
+		if !sameOrigin(previous.URL, initialURL) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameOrigin(left, right *url.URL) bool {
+	return strings.EqualFold(left.Scheme, right.Scheme) &&
+		strings.EqualFold(left.Host, right.Host)
 }
 
 // WithAuth returns a shallow copy of c with the given auth token and extra
@@ -472,7 +497,7 @@ func (c *Client) callJSONRPC(ctx context.Context, endpoint string, request reque
 			fmt.Sprintf("JSON-RPC %s returned an empty result payload", request.Method),
 			apperrors.WithOperation(request.Method),
 			apperrors.WithReason(reasonForMethod(request.Method, "empty_result")),
-			apperrors.WithHint(i18n.T("服务返回了空结果；请稍后重试，必要时查看 recovery snapshot。")),
+			apperrors.WithHint(i18n.T("服务返回了空结果；请稍后重试。")),
 			apperrors.WithActions(discoveryActions(snapshotPath)...),
 			apperrors.WithSnapshot(snapshotPath),
 		)
@@ -629,7 +654,7 @@ func shouldPreserveEndpointQuery(parsed *url.URL) bool {
 		return false
 	}
 	switch strings.ToLower(parsed.Hostname()) {
-	case "mcp-gw.dingtalk.com", "pre-mcp-gw.dingtalk.com":
+	case "mcp-gw.dingtalk.com", "pre-mcp-gw.dingtalk.com", "mcp-gw.dingtalk.io", "pre-mcp-gw.dingtalk.io":
 		return true
 	default:
 		return false
@@ -896,7 +921,7 @@ func httpStatusError(method, endpoint string, statusCode int, snapshotPath, head
 		return apperrors.NewAPI(message, opts...)
 	default:
 		opts = append(opts,
-			apperrors.WithHint(i18n.T("上游服务异常；可稍后重试，若持续失败请查看 recovery snapshot。")),
+			apperrors.WithHint(i18n.T("上游服务异常；可稍后重试。")),
 			apperrors.WithActions(actionsForMethod(method, snapshotPath)...),
 		)
 		if method == "tools/call" {
@@ -1038,20 +1063,18 @@ func actionsForMethod(method, snapshotPath string) []string {
 func authActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查登录状态后重试"),
+		i18n.T("运行 dws auth status 确认凭证有效，必要时重新登录"),
 	}
-	if snapshotPath != "" {
-		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
-	}
+	_ = snapshotPath
 	return actions
 }
 
 func runtimeActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查认证、权限和参数后重试原命令"),
+		i18n.T("运行 dws doctor 检查登录态、网络和本地环境；持续失败时保留 Trace ID 和 Server Code"),
 	}
-	if snapshotPath != "" {
-		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
-	}
+	_ = snapshotPath
 	return actions
 }
 
@@ -1059,10 +1082,9 @@ func networkActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查网络、代理和 DNS 配置后重试原命令"),
 		i18n.T("确认 MCP 服务可访问；若持续失败请稍后重试"),
+		i18n.T("运行 dws doctor 获取可共享的环境诊断结果"),
 	}
-	if snapshotPath != "" {
-		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
-	}
+	_ = snapshotPath
 	return actions
 }
 
@@ -1103,8 +1125,6 @@ func discoveryActions(snapshotPath string) []string {
 		i18n.T("运行 sync-oss 重新生成静态端点与路由后重试"),
 		i18n.T("检查服务连通性和协议版本后重试"),
 	}
-	if snapshotPath != "" {
-		actions = append(actions, fmt.Sprintf("dws recovery plan --snapshot %s", snapshotPath))
-	}
+	_ = snapshotPath
 	return actions
 }

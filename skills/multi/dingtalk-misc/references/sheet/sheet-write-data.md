@@ -7,34 +7,34 @@
 - 写入公式前先读 [sheet-formula](./sheet-formula.md)；写完必须回读公式文本并运行 `formula-verify`，关键业务数值还要抽样对账，不能只看写入返回成功
 - 【强制】`--sheet-id` 必填：即使是单工作表也不能省略，不要参照 `range read` 的默认行为；未知时先执行 `dws sheet list --node <NODE_ID> --format json` 获取 `sheetId`，禁止凭空臆测为 `Sheet1`、`sheet1`、`0`、`default` 等
 - 注意：如果用户的目的是替换文本、移动行列、追加空行空列、清空区域、排序、填充、复制区域或移动区域，请勿使用 `range update`，必须使用对应的专用命令（`replace`/`move-dimension`/`add-dimension`/`range clear`/`range sort`/`range fill`/`range copy-to`/`range move-to`）
-- **批量纯值写入优先用 `csv-put`**：当写入场景同时满足以下条件时，必须优先使用 `csv-put` 而非 `range update`：(1) 写入的是纯值（不含公式、超链接、dataValidation、cellStyles、richText）；(2) 数据量较大（超过 5 行或超过 20 个单元格）；(3) 数据来源为表格/CSV 文本/结构化文本。`csv-put` 无需手动构造二维 JSON 数组，直接传 CSV 文本即可，更简洁高效且支持自动扩容
+- **批量 CSV 值/公式写入优先用 `csv-put`**：当写入场景同时满足以下条件时，必须优先使用 `csv-put` 而非 `range update`：(1) 不需要超链接、dataValidation、cellStyles 或 richText；(2) 数据量较大（超过 5 行或超过 20 个单元格）；(3) 数据来源为表格/CSV 文本/结构化文本。`csv-put` 无需手动构造二维 JSON 数组，字段值以 `=` 开头时按公式解析，并支持自动扩容
 
 用户说"写入结构化 table/dataframe/带列类型和格式的数据/跨 sheet 写入表格":
 - 写入结构化 table → `table-put`
 - `table-put` 的 `--sheets` 是 table spec JSON，支持一次写入一个或多个工作表；适合有明确 `columns` / `data` / `dtypes` / `formats` 的数据
 - table spec 较长或来自文件时，优先用 `--sheets @table.json`，避免 shell 转义长 JSON 出错
-- 如果只是一段 CSV 文本且没有 dtype/format 需求，用 `csv-put` 更简单；如果需要公式、超链接、dataValidation、richText，用 `range update`
+- 如果只是一段 CSV 文本且没有 dtype/format 需求，用 `csv-put` 更简单（可含 `=` 开头的公式）；如果需要超链接、dataValidation、richText 或 cellStyles，用 `range update`
 
 用户说"追加数据/添加行/在末尾加数据/新增记录":
 - 追加数据 → `append`
 
 用户说"批量写入CSV/导入CSV/CSV写入表格/把CSV贴到表格里":
 - 写入 CSV → `csv-put`
-- 与 `range update` 的区别：`csv-put` 接受 CSV 文本直接写入，无需手动构造二维 JSON 数组；适合大批量纯值写入
+- 与 `range update` 的区别：`csv-put` 接受 CSV 文本直接写入，无需手动构造二维 JSON 数组；适合大批量值或公式写入，但不支持富格式对象
 - 与 `append` 的区别：`csv-put` 写入指定位置（--start-cell），`append` 在末尾追加
 
 **与现有写入能力的区别**：
 
-- `range update` 面向精确单元格写入：适合公式、超链接、dataValidation、richText、少量 cellStyles 和 `{}` 跳过；必须自己提供 `--sheet-id`、`--range` 和维度完全匹配的二维 cell 对象
+- `range update` 面向精确单元格对象写入：适合少量公式、超链接、dataValidation、richText、少量 cellStyles 和 `{}` 跳过；必须自己提供 `--sheet-id`、`--range` 和维度完全匹配的二维 cell 对象
 - `append` 面向简单追加行：自动定位到末尾，只写原始值，不支持样式、公式、超链接或数据验证
-- `csv-put` 面向大批量纯值导入：输入 CSV 文本，写入指定起点，适合数据来源本来就是 CSV/表格文本；不保留 dtype/format 协议，也不支持富格式
+- `csv-put` 面向大批量 CSV 值/公式导入：输入 CSV 文本，写入指定起点；字段值以 `=` 开头时按公式解析，前加单引号时写入以 `=` 开头的字面文本；不保留 dtype/format 协议，也不支持富格式
 - `table-put` 面向 dataframe/table 数据交换：输入 `columns` / `data` / `dtypes` / `formats`，可一次写多个 sheet，适合和 `table-get` 往返；不支持 dataValidation、hyperlink、richText、附件或图片
 
 **四种写入命令能力对比**：
 
 | 能力 | `range update` | `append` | `csv-put` | `table-put` |
 |------|---------------|----------|-----------|-------------|
-| 公式（`=` 开头） | 支持 | 不支持 | 不支持（当文本） | 不作为公式协议；公式请用 `range update` |
+| 公式（`=` 开头） | 支持 | 不支持 | 支持；前导单引号写入以 `=` 开头的字面文本 | 不作为公式协议；公式请用 `range update` 或 `csv-put` |
 | 单元格级超链接（`hyperlink`） | 支持 | 不支持 | 不支持 | 不支持 |
 | 富文本（片段链接/附件/图片） | 支持 | 不支持 | 不支持 | 不支持 |
 | richText 片段样式（bold/color） | 支持 | 不支持 | 不支持 | 不支持 |
@@ -92,7 +92,7 @@ Flags:
 
 **单次调用建议**：行数 ≤ 1000，单元格总数（行×列）≤ 5000；超过时请拆分多次调用。
 
-**何时该用 `csv-put` 替代**：如果你准备用 `range update` 写入纯值（不含公式、超链接、富文本对象），且数据量超过 5 行或 20 个单元格，应改用 `csv-put`——它接受 CSV 文本直接写入，无需手动拼装二维 JSON 数组，且支持自动扩容行列。仅在需要写入公式（`=SUM(...)`）、单元格级超链接、富文本对象或修改少量单元格时才使用 `range update`。
+**何时该用 `csv-put` 替代**：如果你准备用 `range update` 写入大批量值或公式，数据可以表达为 CSV，且不需要单元格级超链接、富文本对象、样式或数据验证，应改用 `csv-put`——它无需手动拼装二维 JSON 数组，且支持自动扩容行列。需要富格式对象、`{}` 跳过或仅修改少量单元格时使用 `range update`。
 
 **范围职责**：`range update` 负责写入单元格内容（原始值/公式/富文本对象），并支持通过 `cellStyles` 附带 per-cell 样式。如需批量设置整片区域的样式（不写值），请使用 `dws sheet range set-style`。
 
@@ -123,6 +123,9 @@ Example:
   dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 \
     --csv 'name,score\nAlice,95\nBob,87'
 
+  dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 \
+    --csv "=1+1,'=1+1"
+
   dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell B2 \
     --csv @data.csv --allow-overwrite
 
@@ -141,10 +144,10 @@ Flags:
 
 将 RFC 4180 格式的 CSV 文本写入指定工作表的指定单元格位置。
 - **分隔符必须是英文逗号 `,`**（ASCII 0x2C），禁止使用中文逗号 `，`（U+FF0C）。中文逗号不会被识别为分隔符，会导致整行被写入同一个单元格。生成 CSV 内容时务必检查分隔符
-- 只写纯值，不支持公式/样式/批注。`=` 开头的内容当文本处理，不会被解析为公式
+- 写入值和公式，不支持样式/批注。字段值以 `=` 开头时默认按公式解析；如需写入以 `=` 开头的字面文本，在字段值前加单引号（例如 `'=1+1`）
 - 数字/日期/百分数由表格系统自动识别类型（如 `95` 存为数字，`2025-03-01` 存为日期）
 - 自动扩容行列：CSV 数据超出当前工作表维度时自动追加行/列
-- 与 `range update` 不同，目标区域如含合并单元格，`csv-put` 会打散合并并写入纯值
+- 与 `range update` 不同，目标区域如含合并单元格，`csv-put` 会打散合并并写入 CSV 数据
 - 若需要保留原有合并结构，写入前先用 `sheet info` 记录 `mergedRanges`，写入后用 `merge-cells` 恢复对应区域
 - `--allow-overwrite` 默认 false，目标区域有数据时需显式传 `--allow-overwrite` 才能覆盖
 - `--csv` 支持三种输入：直接传文本、`@filepath` 从本地文件读取、`-` 从 stdin 管道读取
@@ -383,9 +386,14 @@ Flags:
 **dropdown（下拉列表）**：
 ```json
 { "type": "text", "text": "High", "dataValidation": { "type": "dropdown", "options": [{"value":"High","color":"#00ff00"},{"value":"Low","color":"#ff0000"}], "enableMultiSelect": false } }
+{ "dataValidation": { "type": "dropdown", "sourceRange": {"sheetId":"SOURCE_SHEET_ID","a1Notation":"T1:T3"}, "enableMultiSelect": false } }
 ```
-- `options`：必填，`[{value, color?}]` 数组
+- `options` 与 `sourceRange` 必须且只能提供一个
+- Inline：`options` 为非空 `[{value, color?}]` 数组
+- SourceRange：`sourceRange` 为 `{sheetId,a1Notation}`；可引用同一工作簿内其他工作表，支持普通区域、整行和整列。`a1Notation` 不带工作表前缀，不接受公式或多区域；颜色写入暂不支持
 - `enableMultiSelect`：可选，是否多选，默认 false
+- SourceRange 在已验证的工作表重命名、引用前插入行/列、删除引用前行的场景会自动调整；已验证的 `move-dimension` 会使其变为 `invalid`。其他未覆盖删除/移动场景后先回读 `sourceRangeStatus`，仅 `invalid` 时重新选源写入
+- 复合 cell 写入中，如果值或样式已成功落盘但 SourceRange 校验失败，服务端可返回 `success:true` 并通过 `message` 说明下拉未创建；必须检查 `message` 并按需回读
 
 **checkbox（复选框）**：
 ```json
@@ -545,7 +553,7 @@ dws sheet append --node <NODE_ID> --sheet-id <SHEET_ID> \
 - **dataValidation 三语义**：不传字段=保留；`{type:"none"}`=清除；`{type:"dropdown"/"checkbox",...}`=覆盖。无需先 read 再回传，系统会保留原 DV
 - **hyperlink 三语义**：不传字段=保留；`{type:"none"}`=清除；`{type:"path"/"sheet"/"range",...}`=覆盖。Agent 调用不要使用 `hyperlink:null`
 - ★ **单次调用上限（强制）**：`range update` / `set-style` 行数 ≤ 1000，单元格总数建议 ≤ 5000（硬限 30000）
-- ★ **大批量纯值写入用 `csv-put` 不用 `range update`**：当写入纯值（无公式、无超链接、无富文本对象）且数据量较大时（>5 行或 >20 单元格），必须使用 `csv-put`。`csv-put` 接受 CSV 文本直接写入，无需构造二维 JSON 数组，支持自动扩容，更简洁高效。仅在需要写入公式、单元格级超链接、富文本对象，或仅更新少量单元格时才使用 `range update`
+- ★ **大批量 CSV 值/公式写入用 `csv-put` 不用 `range update`**：当数据可表达为 CSV（可含 `=` 开头的公式）、不需要超链接或富文本对象且数据量较大时（>5 行或 >20 单元格），必须使用 `csv-put`。它无需构造二维 JSON 数组并支持自动扩容。需要单元格级超链接、富文本对象、样式、数据验证、`{}` 跳过，或仅更新少量单元格时使用 `range update`
 - ★ **公式写完必须分层校验**：先用 `range read --value-render-option formula` 确认公式文本，再用 `formula-verify` 聚合扫描错误；若返回 `partial` / `hasMore=true` 必须继续校验，关键业务数值还要用 `raw_value` 抽样对账
 - ★ **结构化 table 写入用 `table-put`**：需要列名、dtype、number format、跨 sheet specs 或 `table-get` 回写形态时使用 `table-put`；单次写入单元格数硬限 30000，包含表头
 - ★ **大整数/长数字 ID 必须按文本写（强制）**：超过 `9007199254740991` 的整数、订单号、手机号、SKU 等需要逐位精确的值，不要用 JSON number，也不要声明 `int64` / `uint64`。用字符串值 + `object` dtype + 文本格式 `@`；写后用 `table-get` 或 `range read --value-render-option raw_value` 回读确认
@@ -554,4 +562,4 @@ dws sheet append --node <NODE_ID> --sheet-id <SHEET_ID> \
 - `append` 自动定位到最后一行有数据的位置下方插入，无需手动计算行号
 - `append` 的 `--values` 二维数组中每行的列数必须一致，否则会报错。如果用户提供的数据中各行长度不同，必须先将短行用空字符串 `""` 补齐到与最长行相同的列数后再调用。追加的数据列数也应与工作表已有数据列数保持一致
 - `append` vs `range update`：追加新行用 `append`，修改已有单元格用 `range update`
-- ★ **`append` / `csv-put` / `table-put` 不支持 `{}` skip、dataValidation、富文本、超链接**：这些能力仅限 `range update`。`append` 和 `csv-put` 只接受原始值；`table-put` 接受 table 矩阵、dtypes、formats 和基础 `cellStyles`。需要写入公式、超链接、下拉列表或跳过部分单元格时，必须使用 `range update`
+- ★ **`append` / `csv-put` / `table-put` 不支持 `{}` skip、dataValidation、富文本、超链接**：这些能力仅限 `range update`。`append` 只接受原始值；`csv-put` 接受 CSV 值和公式；`table-put` 接受 table 矩阵、dtypes、formats 和基础 `cellStyles`。需要超链接、下拉列表、富文本或跳过部分单元格时，必须使用 `range update`

@@ -21,10 +21,11 @@ import (
 )
 
 // CommandSafety holds the safety metadata for a CLI command, resolved at
-// runtime from the embedded schema catalog. This is a read-only view over the
-// catalog — NOT a second safety source. The catalog remains the single
-// authoritative reviewed source; this struct merely provides typed access for
-// consumers (help rendering, skill generation).
+// runtime via ResolveMeta. This is a read-only view — NOT a second safety
+// source. Production Meta is projected from the runtime-assembled
+// SchemaRegistry into a cached map[cli_path]CommandMeta during
+// deliverySchemaCatalog's sync.Once; steady-state ResolveMeta / leaf --help
+// are O(1) map lookups (同源 with assembly, not a separate gob authority).
 type CommandSafety struct {
 	Effect       string // read / write / destructive
 	Risk         string // low / medium / high
@@ -41,12 +42,18 @@ func (s CommandSafety) ShouldRender() bool {
 }
 
 // SafetyForCLIPath returns the safety metadata for a command identified by its
-// CLI path (e.g. "dev app delete"). Returns ok=false when the command is not
-// in the embedded catalog (utility commands, hidden commands, shortcuts).
+// CLI path (e.g. "dev app delete"). Returns ok=false when the path is absent
+// from the Schema surface (utility commands, hidden commands, shortcuts), or
+// when no Schema source root is registered (synthetic help trees in unit
+// tests). With a registered factory, assembly failure panics via ResolveMeta
+// (fail-closed).
 //
 // Deprecated: use ResolveMeta(cliPath).Safety for the complete metadata view.
 // Kept for backward compatibility with existing callers.
 func SafetyForCLIPath(cliPath string) (CommandSafety, bool) {
+	if !SchemaSourceRootRegistered() {
+		return CommandSafety{}, false
+	}
 	meta, ok := ResolveMeta(cliPath)
 	if !ok {
 		return CommandSafety{}, false
@@ -59,7 +66,12 @@ func SafetyForCLIPath(cliPath string) (CommandSafety, bool) {
 // the shared entry point for ALL help rendering paths (root HelpFunc, product
 // group custom HelpFuncs like calendar's). It avoids the timing issue where a
 // group captures origHelp before configureRootHelp sets the root's custom func.
+// Without a registered Schema source root it is a no-op (unit-test synthetic
+// roots); production NewRootCommand always registers the factory.
 func RenderSafetyAnnotation(cmd *cobra.Command) {
+	if !SchemaSourceRootRegistered() {
+		return
+	}
 	cliPath := strings.TrimSpace(strings.TrimPrefix(cmd.CommandPath(), cmd.Root().Name()+" "))
 	safety, ok := SafetyForCLIPath(cliPath)
 	if !ok || !safety.ShouldRender() {

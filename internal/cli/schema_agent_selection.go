@@ -20,18 +20,21 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/spf13/cobra"
 )
 
-var marshalManualAgentSelectionFixture = json.Marshal
+var marshalAgentSelectionFixture = json.Marshal
 
-const manualAgentSelectionFixtureVersion = 1
+const agentSelectionFixtureVersion = 1
 
-// ManualAgentSelectionCase is one reproducible model-evaluation assertion
-// derived from reviewed Manual Agent hints. Positive cases require one exact
+// AgentSelectionCase is one reproducible model-evaluation assertion derived
+// from ContractFinal Selection prose. Positive cases require one exact
 // canonical result; negative cases only forbid the command that owns the
 // avoid_when text. CandidateCanonicals contains every bound tool in the same
 // product, in stable order.
-type ManualAgentSelectionCase struct {
+type AgentSelectionCase struct {
 	ID                  string   `json:"id"`
 	ProductID           string   `json:"product_id"`
 	Scenario            string   `json:"scenario"`
@@ -40,49 +43,44 @@ type ManualAgentSelectionCase struct {
 	CandidateCanonicals []string `json:"candidate_canonicals"`
 }
 
-// ManualAgentSelectionFixture is the stable input to an optional live Agent
-// evaluation. It is built from schema_hints/selection and the real bound
-// command tree; it is not a second authored hint source.
-type ManualAgentSelectionFixture struct {
-	Version int                        `json:"version"`
-	Cases   []ManualAgentSelectionCase `json:"cases"`
+// AgentSelectionFixture is the stable input to an optional live Agent
+// evaluation. It is built from contract.ProductDecl/ContractFinal selection prose and
+// the real bound command tree; it is not a second authored hint source.
+type AgentSelectionFixture struct {
+	Version int                  `json:"version"`
+	Cases   []AgentSelectionCase `json:"cases"`
 }
 
-// ManualAgentSelectionReport records deterministic coverage and the exact
-// fixture digest. It proves that all reviewed assertions are well-formed and
+// AgentSelectionReport records deterministic coverage and the exact fixture
+// digest. It proves that all reviewed assertions are well-formed and
 // executable; it deliberately does not claim that a language model understood
 // their natural-language meaning.
-type ManualAgentSelectionReport struct {
+type AgentSelectionReport struct {
 	Tools              int
 	PositiveAssertions int
 	NegativeAssertions int
 	FixtureSHA256      string
 }
 
-// BuildManualAgentSelectionEvalFixture turns every use_when and avoid_when
-// entry into a typed, reproducible evaluation case and validates it against
-// the exact BoundCommandRegistry.
-//
-// Deterministic CI can prove full coverage, real command binding, and absence
-// of literal contradictory expectations. Semantic command choice belongs to
-// an opt-in live-model evaluation that consumes this fixture; this function
-// never substitutes string matching for Agent behavior.
-func BuildManualAgentSelectionEvalFixture(bound BoundCommandRegistry, hints ManualAgentHintSet) (ManualAgentSelectionFixture, ManualAgentSelectionReport, error) {
-	fixture := ManualAgentSelectionFixture{Version: manualAgentSelectionFixtureVersion}
-	report := ManualAgentSelectionReport{}
+// BuildAgentSelectionEvalFixture turns every ContractFinal use_when and
+// avoid_when entry into a typed, reproducible evaluation case and validates it
+// against the exact BoundCommandRegistry.
+func BuildAgentSelectionEvalFixture(bound BoundCommandRegistry) (AgentSelectionFixture, AgentSelectionReport, error) {
+	fixture := AgentSelectionFixture{Version: agentSelectionFixtureVersion}
+	report := AgentSelectionReport{}
 	expectedTools := make(map[string]bool, len(bound.Commands))
 	candidatesByProduct := map[string][]string{}
 	for _, command := range bound.Commands {
 		canonical := strings.TrimSpace(command.CanonicalPath)
 		expectedTools[canonical] = true
+		if !contractfinal.HasRuntimeContractFinal(command.PrimaryCommand) {
+			return fixture, report, fmt.Errorf("agent selection expected canonical %q has no ContractFinal declaration", canonical)
+		}
 		productID, _, ok := strings.Cut(canonical, ".")
 		if !ok || strings.TrimSpace(productID) == "" {
-			return fixture, report, fmt.Errorf("agent_hints selection has invalid bound canonical path %q", canonical)
+			return fixture, report, fmt.Errorf("agent selection has invalid bound canonical path %q", canonical)
 		}
 		candidatesByProduct[productID] = append(candidatesByProduct[productID], canonical)
-	}
-	if err := validateManualAgentHintExactSet("selection tools", expectedTools, mapKeysManualAgentTools(hints.Tools)); err != nil {
-		return fixture, report, err
 	}
 	for productID := range candidatesByProduct {
 		sort.Strings(candidatesByProduct[productID])
@@ -99,32 +97,32 @@ func BuildManualAgentSelectionEvalFixture(bound BoundCommandRegistry, hints Manu
 	for _, canonical := range canonicals {
 		command, ok := bound.ByCanonical[canonical]
 		if !ok {
-			return fixture, report, fmt.Errorf("agent_hints selection expected canonical %q is missing from BoundCommandRegistry.ByCanonical", canonical)
+			return fixture, report, fmt.Errorf("agent selection expected canonical %q is missing from BoundCommandRegistry.ByCanonical", canonical)
 		}
-		if err := validateManualAgentSelectionBinding(bound, canonical, command); err != nil {
+		if err := validateAgentSelectionBinding(bound, canonical, command); err != nil {
 			return fixture, report, err
 		}
 
-		hint := hints.Tools[canonical]
-		if len(hint.UseWhen) == 0 {
-			return fixture, report, fmt.Errorf("agent_hints tool %s requires at least one positive use_when selection assertion", canonical)
+		selection := contractFinalToolSelection(command.PrimaryCommand)
+		if len(selection.UseWhen) == 0 {
+			return fixture, report, fmt.Errorf("ContractFinal tool %s requires at least one positive use_when selection assertion", canonical)
 		}
-		if len(hint.AvoidWhen) == 0 {
-			return fixture, report, fmt.Errorf("agent_hints tool %s requires at least one negative avoid_when selection assertion", canonical)
+		if len(selection.AvoidWhen) == 0 {
+			return fixture, report, fmt.Errorf("ContractFinal tool %s requires at least one negative avoid_when selection assertion", canonical)
 		}
 		productID, _, _ := strings.Cut(canonical, ".")
 		candidates := candidatesByProduct[productID]
-		for index, scenario := range hint.UseWhen {
-			normalized := normalizeManualAgentSelectionScenario(scenario)
+		for index, scenario := range selection.UseWhen {
+			normalized := normalizeAgentSelectionScenario(scenario)
 			if normalized == "" {
-				return fixture, report, fmt.Errorf("agent_hints tool %s has an empty normalized use_when selection assertion", canonical)
+				return fixture, report, fmt.Errorf("ContractFinal tool %s has an empty normalized use_when selection assertion", canonical)
 			}
 			if previous, exists := positiveExpectations[normalized]; exists {
-				return fixture, report, fmt.Errorf("agent_hints use_when scenario %q has conflicting literal expectations %q and %q", positiveDisplays[normalized], previous, canonical)
+				return fixture, report, fmt.Errorf("use_when scenario %q has conflicting literal expectations %q and %q", positiveDisplays[normalized], previous, canonical)
 			}
 			positiveExpectations[normalized] = canonical
 			positiveDisplays[normalized] = strings.TrimSpace(scenario)
-			fixture.Cases = append(fixture.Cases, ManualAgentSelectionCase{
+			fixture.Cases = append(fixture.Cases, AgentSelectionCase{
 				ID:                  fmt.Sprintf("%s/use_when/%d", canonical, index),
 				ProductID:           productID,
 				Scenario:            strings.TrimSpace(scenario),
@@ -133,15 +131,15 @@ func BuildManualAgentSelectionEvalFixture(bound BoundCommandRegistry, hints Manu
 			})
 			report.PositiveAssertions++
 		}
-		for index, scenario := range hint.AvoidWhen {
-			normalized := normalizeManualAgentSelectionScenario(scenario)
+		for index, scenario := range selection.AvoidWhen {
+			normalized := normalizeAgentSelectionScenario(scenario)
 			if normalized == "" {
-				return fixture, report, fmt.Errorf("agent_hints tool %s has an empty normalized avoid_when selection assertion", canonical)
+				return fixture, report, fmt.Errorf("ContractFinal tool %s has an empty normalized avoid_when selection assertion", canonical)
 			}
 			if expected := positiveExpectations[normalized]; expected == canonical {
-				return fixture, report, fmt.Errorf("agent_hints tool %s has the same literal positive and negative selection scenario %q", canonical, strings.TrimSpace(scenario))
+				return fixture, report, fmt.Errorf("ContractFinal tool %s has the same literal positive and negative selection scenario %q", canonical, strings.TrimSpace(scenario))
 			}
-			fixture.Cases = append(fixture.Cases, ManualAgentSelectionCase{
+			fixture.Cases = append(fixture.Cases, AgentSelectionCase{
 				ID:                  fmt.Sprintf("%s/avoid_when/%d", canonical, index),
 				ProductID:           productID,
 				Scenario:            strings.TrimSpace(scenario),
@@ -153,7 +151,7 @@ func BuildManualAgentSelectionEvalFixture(bound BoundCommandRegistry, hints Manu
 	}
 
 	report.Tools = len(canonicals)
-	digest, err := manualAgentSelectionFixtureDigest(fixture)
+	digest, err := agentSelectionFixtureDigest(fixture)
 	if err != nil {
 		return fixture, report, err
 	}
@@ -161,43 +159,58 @@ func BuildManualAgentSelectionEvalFixture(bound BoundCommandRegistry, hints Manu
 	return fixture, report, nil
 }
 
-// ValidateManualAgentSelectionContract is the lightweight generator-facing
-// gate. Callers that run a semantic model evaluation should use
-// BuildManualAgentSelectionEvalFixture and pass the returned cases to it.
-func ValidateManualAgentSelectionContract(bound BoundCommandRegistry, hints ManualAgentHintSet) (ManualAgentSelectionReport, error) {
-	_, report, err := BuildManualAgentSelectionEvalFixture(bound, hints)
+// ValidateAgentSelectionContract is the lightweight generator-facing gate.
+func ValidateAgentSelectionContract(bound BoundCommandRegistry) (AgentSelectionReport, error) {
+	_, report, err := BuildAgentSelectionEvalFixture(bound)
 	return report, err
 }
 
-func validateManualAgentSelectionBinding(bound BoundCommandRegistry, canonical string, command BoundCommandSpec) error {
+// contractFinalToolSelection synthesizes selection assertions of a declared
+// tool from its ContractFinal declaration.
+func contractFinalToolSelection(command *cobra.Command) AgentToolSelection {
+	out := AgentToolSelection{Reviewed: true, Revision: "contract", Reason: "Contract final declaration (corecmd.ContractDecl)"}
+	payload, ok := contractfinal.RuntimeContractFinal(command)
+	if !ok || payload.Selection == nil {
+		return out
+	}
+	selection := payload.Selection
+	out.AgentSummary = selection.AgentSummary
+	out.UseWhen = selection.UseWhen
+	out.AvoidWhen = selection.AvoidWhen
+	out.Examples = selection.Examples
+	out.ExampleDispositions = selection.ExampleDispositions
+	return out
+}
+
+func validateAgentSelectionBinding(bound BoundCommandRegistry, canonical string, command BoundCommandSpec) error {
 	if command.CanonicalPath != canonical {
-		return fmt.Errorf("agent_hints selection canonical %q resolves to mismatched BoundCommandRegistry entry %q", canonical, command.CanonicalPath)
+		return fmt.Errorf("agent selection canonical %q resolves to mismatched BoundCommandRegistry entry %q", canonical, command.CanonicalPath)
 	}
 	if command.PrimaryCommand == nil {
-		return fmt.Errorf("agent_hints selection canonical %q has no bound primary Cobra command", canonical)
+		return fmt.Errorf("agent selection canonical %q has no bound primary Cobra command", canonical)
 	}
 	if !runnableSchemaLeaf(command.PrimaryCommand) {
-		return fmt.Errorf("agent_hints selection canonical %q primary path %q is not a runnable Cobra leaf", canonical, command.PrimaryCLIPath)
+		return fmt.Errorf("agent selection canonical %q primary path %q is not a runnable Cobra leaf", canonical, command.PrimaryCLIPath)
 	}
 	primaryPath := normalizeSchemaCLIPath(command.PrimaryCLIPath)
 	if primaryPath == "" {
-		return fmt.Errorf("agent_hints selection canonical %q has an empty primary CLI path", canonical)
+		return fmt.Errorf("agent selection canonical %q has an empty primary CLI path", canonical)
 	}
 	byPath, ok := bound.ByCLIPath[primaryPath]
 	if !ok || byPath.CanonicalPath != canonical {
-		return fmt.Errorf("agent_hints selection canonical %q primary path %q is not bound back to the same tool", canonical, primaryPath)
+		return fmt.Errorf("agent selection canonical %q primary path %q is not bound back to the same tool", canonical, primaryPath)
 	}
 	return nil
 }
 
-func normalizeManualAgentSelectionScenario(value string) string {
+func normalizeAgentSelectionScenario(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
 }
 
-func manualAgentSelectionFixtureDigest(fixture ManualAgentSelectionFixture) (string, error) {
-	data, err := marshalManualAgentSelectionFixture(fixture)
+func agentSelectionFixtureDigest(fixture AgentSelectionFixture) (string, error) {
+	data, err := marshalAgentSelectionFixture(fixture)
 	if err != nil {
-		return "", fmt.Errorf("marshal Manual Agent selection fixture: %w", err)
+		return "", fmt.Errorf("marshal Agent selection fixture: %w", err)
 	}
 	digest := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(digest[:]), nil

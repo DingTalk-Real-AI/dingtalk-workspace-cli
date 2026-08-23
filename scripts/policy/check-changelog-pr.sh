@@ -119,6 +119,17 @@ content-only)
 		fi
 		exit 1
 	fi
+	if ! awk -F '	' '
+		$1 == "M" && $2 == "CHANGELOG.md" && NF == 2 { next }
+		$1 == "D" && $2 ~ /^\.changes\/[a-z0-9][a-z0-9._-]*\.md$/ && NF == 2 { next }
+		$1 == "A" && $2 ~ /^\.changes\/released\/[0-9]+\.[0-9]+\.[0-9]+(-beta\.[1-9][0-9]*)?\/[a-z0-9][a-z0-9._-]*\.md$/ && NF == 2 { next }
+		$1 ~ /^R[0-9]+$/ && $2 ~ /^\.changes\/[a-z0-9][a-z0-9._-]*\.md$/ && $3 ~ /^\.changes\/released\/[0-9]+\.[0-9]+\.[0-9]+(-beta\.[1-9][0-9]*)?\/[a-z0-9][a-z0-9._-]*\.md$/ && NF == 3 { next }
+		{ invalid = 1 }
+		END { exit invalid }
+	' "$TMP_ROOT/name-status"; then
+		printf '%s\n' 'error: CHANGELOG.md may accompany only release-fragment archival; ordinary PRs must add .changes/<unique-name>.md without editing CHANGELOG.md' >&2
+		exit 1
+	fi
 	;;
 esac
 

@@ -8,12 +8,14 @@ import (
 	"context"
 	stderrors "errors"
 	"io"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -55,6 +57,12 @@ func executeGuardedMutationCommand(t *testing.T, caller *guardedMutationCaller, 
 	}
 	root.SilenceErrors = true
 	root.SilenceUsage = true
+	// Closed stdin makes ConfirmSafety return typed confirmation_required
+	// instead of hanging on an interactive prompt — but do not clobber a
+	// fixture that already SetIn("no\n") / similar decline input.
+	if root.InOrStdin() == os.Stdin {
+		root.SetIn(strings.NewReader(""))
+	}
 	root.SetArgs(args)
 	return root.Execute()
 }
@@ -70,6 +78,148 @@ func requireTypedConfirmationError(t *testing.T, err error) {
 	}
 	if appErr.Reason != "confirmation_required" {
 		t.Fatalf("confirmation reason = %q, want confirmation_required", appErr.Reason)
+	}
+}
+
+func TestChatChmodRequiresConfirmationBeforeRemoteCall(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newChatCommand,
+		"chmod", "chat.message:send",
+		"--agentCode", "wukong",
+		"--grant-type", "timed",
+		"--ttl", "24h",
+		"--conversation-id", "cidX",
+	)
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("expected 0 MCP calls before --yes, got %d: %+v", len(caller.calls), caller.calls)
+	}
+}
+
+func TestChatChmodCallsRemoteWithExactArgsWhenConfirmed(t *testing.T) {
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMutationCommand(t, caller, newChatCommand,
+		"chmod", "chat.message:send",
+		"--agentCode", "wukong",
+		"--grant-type", "timed",
+		"--ttl", "24h",
+		"--conversation-id", "cidX",
+		"--yes",
+	)
+	if err != nil {
+		t.Fatalf("chat chmod with --yes returned error: %v", err)
+	}
+	if len(caller.calls) != 1 {
+		t.Fatalf("expected exactly 1 MCP call, got %d: %+v", len(caller.calls), caller.calls)
+	}
+	call := caller.calls[0]
+	if call.productID != "im" || call.toolName != "chat_permission_grant" {
+		t.Fatalf("tool call = %s/%s, want im/chat_permission_grant", call.productID, call.toolName)
+	}
+	wantArgs := map[string]any{
+		"agentCode":   "wukong",
+		"scope":       "chat.message:send",
+		"grantType":   "timed",
+		"ttl":         "24h",
+		"grantParams": `{"conversationId":"cidX","openCid":"cidX","openConversationId":"cidX"}`,
+	}
+	if !reflect.DeepEqual(call.args, wantArgs) {
+		t.Fatalf("tool args = %#v, want %#v", call.args, wantArgs)
+	}
+}
+
+type guardedStepCaller struct {
+	calls  []guardedMutationCall
+	steps  []string
+	index  int
+	dryRun bool
+}
+
+func (c *guardedStepCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	c.calls = append(c.calls, guardedMutationCall{productID: productID, toolName: toolName, args: args})
+	text := `{}`
+	if c.index < len(c.steps) {
+		text = c.steps[c.index]
+	}
+	c.index++
+	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
+}
+
+func (*guardedStepCaller) Format() string { return "json" }
+func (c *guardedStepCaller) DryRun() bool { return c.dryRun }
+func (*guardedStepCaller) Fields() string { return "" }
+func (*guardedStepCaller) JQ() string     { return "" }
+
+func executeGuardedMailMutationCommand(t *testing.T, caller edition.ToolCaller, args ...string) error {
+	t.Helper()
+	testseam.Protect(t, &os.Args)
+	os.Args = append([]string{"dws", "mail"}, args...)
+	previousDeps := deps
+	t.Cleanup(func() { deps = previousDeps })
+
+	InitDeps(caller)
+	deps.Out.w = io.Discard
+	root := newMailCommand()
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	if root.InOrStdin() == os.Stdin {
+		root.SetIn(strings.NewReader(""))
+	}
+	root.SetArgs(args)
+	return root.Execute()
+}
+
+func TestMailMessageShareToChatRequiresConfirmationBeforeToolCall(t *testing.T) {
+	baseArgs := []string{
+		"message", "share-to-chat",
+		"--email", "user@company.com",
+		"--id", "msg-1",
+		"--users", "uid1",
+	}
+	caller := &guardedMutationCaller{}
+	err := executeGuardedMailMutationCommand(t, caller, baseArgs...)
+	requireTypedConfirmationError(t, err)
+	if len(caller.calls) != 0 {
+		t.Fatalf("tool calls = %#v, want none before confirmation", caller.calls)
+	}
+
+	stepCaller := &guardedStepCaller{steps: []string{
+		`{"result":{"sign":"sig","riskMessage":"careful"}}`,
+		`{"ok":true}`,
+	}}
+	err = executeGuardedMailMutationCommand(t, stepCaller, append(append([]string(nil), baseArgs...), "--yes")...)
+	if err != nil {
+		t.Fatalf("confirmed share with sign returned error: %v", err)
+	}
+	if len(stepCaller.calls) != 2 {
+		t.Fatalf("tool calls = %d, want 2 for sign retry", len(stepCaller.calls))
+	}
+	if stepCaller.calls[0].toolName != "share_message_to_chat" || stepCaller.calls[1].toolName != "share_message_to_chat" {
+		t.Fatalf("tool calls = %#v, want share_message_to_chat twice", stepCaller.calls)
+	}
+	if sign, _ := stepCaller.calls[1].args["sign"].(string); sign != "sig" {
+		t.Fatalf("second call sign = %q, want sig", sign)
+	}
+
+	directCaller := &guardedStepCaller{steps: []string{`{"ok":true}`}}
+	err = executeGuardedMailMutationCommand(t, directCaller, append(append([]string(nil), baseArgs...), "--yes")...)
+	if err != nil {
+		t.Fatalf("confirmed direct success returned error: %v", err)
+	}
+	if len(directCaller.calls) != 1 {
+		t.Fatalf("tool calls = %d, want 1 for direct success", len(directCaller.calls))
+	}
+	if directCaller.calls[0].toolName != "share_message_to_chat" {
+		t.Fatalf("tool call = %#v, want share_message_to_chat", directCaller.calls[0])
+	}
+
+	dryRunCaller := &guardedMutationCaller{dryRun: true}
+	err = executeGuardedMailMutationCommand(t, dryRunCaller, baseArgs...)
+	if err != nil {
+		t.Fatalf("dry-run without --yes returned error: %v", err)
+	}
+	if len(dryRunCaller.calls) != 0 {
+		t.Fatalf("dry-run tool calls = %#v, want none", dryRunCaller.calls)
 	}
 }
 

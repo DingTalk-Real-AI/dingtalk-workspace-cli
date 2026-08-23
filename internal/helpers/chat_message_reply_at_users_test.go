@@ -32,10 +32,10 @@ func TestChatMessageReplyAtUsersFlagAndPayload(t *testing.T) {
 	}{
 		{
 			name:          "open dingtalk ids",
-			atUsers:       "D1, D2",
-			text:          "@D1 <@D2> 收到",
-			wantOpenIDs:   []string{"D1", "D2"},
-			wantText:      "<@D1> <@D2> 收到",
+			atUsers:       "DBAAAAAAAAAAiE, DCAAAAAAAAAAiE",
+			text:          "@DBAAAAAAAAAAiE <@DCAAAAAAAAAAiE> 收到",
+			wantOpenIDs:   []string{"DBAAAAAAAAAAiE", "DCAAAAAAAAAAiE"},
+			wantText:      "<@DBAAAAAAAAAAiE> <@DCAAAAAAAAAAiE> 收到",
 			wantCallCount: 1,
 		},
 		{
@@ -43,11 +43,11 @@ func TestChatMessageReplyAtUsersFlagAndPayload(t *testing.T) {
 			atUsers: "u1, u2",
 			text:    "<@u1> @u2 收到",
 			responses: []string{
-				`{"result":[{"userId":"u1","openDingTalkId":"D1"},{"userId":"u2","openDingTalkId":"D2"}]}`,
+				`{"result":[{"userId":"u1","openDingTalkId":"DBAAAAAAAAAAiE"},{"userId":"u2","openDingTalkId":"DCAAAAAAAAAAiE"}]}`,
 				`{}`,
 			},
-			wantOpenIDs:   []string{"D1", "D2"},
-			wantText:      "<@D1> <@D2> 收到",
+			wantOpenIDs:   []string{"DBAAAAAAAAAAiE", "DCAAAAAAAAAAiE"},
+			wantText:      "<@DBAAAAAAAAAAiE> <@DCAAAAAAAAAAiE> 收到",
 			wantCallCount: 2,
 		},
 	}
@@ -63,7 +63,7 @@ func TestChatMessageReplyAtUsersFlagAndPayload(t *testing.T) {
 				"message", "reply",
 				"--conversation-id", "cid",
 				"--ref-msg-id", "mid",
-				"--ref-sender", "D-sender",
+				"--ref-sender", "DAAAAAAAAAAAiE",
 				"--text", tt.text,
 				"--at-users", tt.atUsers,
 			)
@@ -104,7 +104,7 @@ func TestChatMessageReplyWithoutAtUsersOmitsMentionPayload(t *testing.T) {
 		"message", "reply",
 		"--conversation-id", "cid",
 		"--ref-msg-id", "mid",
-		"--ref-sender", "D-sender",
+		"--ref-sender", "DAAAAAAAAAAAiE",
 		"--text", "收到",
 	)
 	if err != nil {
@@ -130,7 +130,7 @@ func TestChatMessageReplyAtUsersResolutionFailureIsReported(t *testing.T) {
 		"message", "reply",
 		"--conversation-id", "cid",
 		"--ref-msg-id", "mid",
-		"--ref-sender", "D-sender",
+		"--ref-sender", "DAAAAAAAAAAAiE",
 		"--text", "@u1 收到",
 		"--at-users", "u1",
 	)

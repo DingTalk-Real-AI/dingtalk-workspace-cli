@@ -19,11 +19,11 @@ import (
 
 // TestFinalSchemaParametersMatchExecutableHelpFlags is the fast, in-process
 // Help <-> Schema parameter completeness gate. It deliberately starts from the
-// reviewed registry and its exact Cobra bindings, then compares every public
-// primary leaf with the final delivered ToolSpec projection. The binder has
-// already proved that reviewed compatibility leaves have the same executable
-// contract as their primary, so aliases do not create a second parameter
-// source here.
+// collected command identity and its exact Cobra bindings, then compares
+// every public primary leaf with the final delivered ToolSpec projection. The
+// binder has already proved that compatibility aliases of a leaf share the
+// same executable contract as their primary, so aliases do not create a
+// second parameter source here.
 func TestFinalSchemaParametersMatchExecutableHelpFlags(t *testing.T) {
 	root := NewRootCommand()
 	bound := boundSchemaCommandsForHelpFlagTest(t, root)
@@ -31,15 +31,15 @@ func TestFinalSchemaParametersMatchExecutableHelpFlags(t *testing.T) {
 	assertSchemaParametersMatchExecutableHelpFlags(t, bound, snapshot.Tools, "source-built final Schema")
 }
 
-// TestEmbeddedSchemaParametersMatchExecutableHelpFlags runs the same exact-set
+// TestDeliverySchemaParametersMatchExecutableHelpFlags runs the same exact-set
 // gate against the artifact that ships in the binary. Going through the real
 // schema --all command is intentional: a stale generated Catalog must fail
 // even when a fresh source-built snapshot would agree with Cobra Help.
-func TestEmbeddedSchemaParametersMatchExecutableHelpFlags(t *testing.T) {
+func TestDeliverySchemaParametersMatchExecutableHelpFlags(t *testing.T) {
 	root := NewRootCommand()
 	bound := boundSchemaCommandsForHelpFlagTest(t, root)
-	tools := embeddedSchemaAllToolsForHelpFlagTest(t, root)
-	assertSchemaParametersMatchExecutableHelpFlags(t, bound, tools, "embedded schema --all")
+	tools := deliverySchemaAllToolsForHelpFlagTest(t, root)
+	assertSchemaParametersMatchExecutableHelpFlags(t, bound, tools, "delivery schema --all")
 }
 
 func boundSchemaCommandsForHelpFlagTest(t testing.TB, root *cobra.Command) cli.BoundCommandRegistry {
@@ -55,14 +55,14 @@ func boundSchemaCommandsForHelpFlagTest(t testing.TB, root *cobra.Command) cli.B
 	return bound
 }
 
-func embeddedSchemaAllToolsForHelpFlagTest(t testing.TB, root *cobra.Command) map[string]map[string]any {
+func deliverySchemaAllToolsForHelpFlagTest(t testing.TB, root *cobra.Command) map[string]map[string]any {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"schema", "--all", "--format", "json"})
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute embedded schema --all: %v; stderr=%s", err, stderr.String())
+		t.Fatalf("execute delivery schema --all: %v; stderr=%s", err, stderr.String())
 	}
 	var payload struct {
 		Products []struct {
@@ -70,23 +70,23 @@ func embeddedSchemaAllToolsForHelpFlagTest(t testing.TB, root *cobra.Command) ma
 		} `json:"products"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
-		t.Fatalf("decode embedded schema --all: %v", err)
+		t.Fatalf("decode delivery schema --all: %v", err)
 	}
 	tools := make(map[string]map[string]any)
 	for _, product := range payload.Products {
 		for _, tool := range product.Tools {
 			canonical := strings.TrimSpace(schemaContractString(tool["canonical_path"]))
 			if canonical == "" {
-				t.Fatal("embedded schema --all contains an empty canonical path")
+				t.Fatal("delivery schema --all contains an empty canonical path")
 			}
 			if _, exists := tools[canonical]; exists {
-				t.Fatalf("embedded schema --all contains duplicate canonical %q", canonical)
+				t.Fatalf("delivery schema --all contains duplicate canonical %q", canonical)
 			}
 			tools[canonical] = tool
 		}
 	}
 	if len(tools) == 0 {
-		t.Fatal("embedded schema --all contains no tools")
+		t.Fatal("delivery schema --all contains no tools")
 	}
 	return tools
 }

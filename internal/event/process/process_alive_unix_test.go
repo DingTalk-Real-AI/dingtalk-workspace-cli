@@ -6,11 +6,12 @@ import (
 	"errors"
 	"syscall"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageAliveUnixErrorClassification(t *testing.T) {
-	previous := killProcess
-	t.Cleanup(func() { killProcess = previous })
+	testseam.Protect(t, &killProcess)
 	for _, tc := range []struct {
 		err  error
 		want bool

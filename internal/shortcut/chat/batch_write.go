@@ -5,6 +5,9 @@
 package chat
 
 import (
+	"fmt"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -28,14 +31,15 @@ func executeShortcutBatchWrite(rt *shortcut.RuntimeContext, product, tool string
 			})
 		}
 		return rt.Output(map[string]any{
-			"dry_run":        true,
-			"executed":       false,
-			"preview_kind":   "plan",
-			"tool":           tool,
-			"actionCount":    len(actions),
-			"failedCount":    0,
-			"actions":        actions,
-			"requestedCount": len(items),
+			"contractVersion": "im.batch-write.v1",
+			"dry_run":         true,
+			"executed":        false,
+			"preview_kind":    "plan",
+			"tool":            tool,
+			"actionCount":     len(actions),
+			"failedCount":     0,
+			"actions":         actions,
+			"requestedCount":  len(items),
 		})
 	}
 
@@ -56,13 +60,33 @@ func executeShortcutBatchWrite(rt *shortcut.RuntimeContext, product, tool string
 		}
 		succeeded = append(succeeded, entry)
 	}
-	return rt.Output(map[string]any{
-		"ok":             len(failures) == 0,
-		"partial":        len(succeeded) > 0 && len(failures) > 0,
-		"requestedCount": len(items),
-		"succeededCount": len(succeeded),
-		"failedCount":    len(failures),
-		"succeeded":      succeeded,
-		"failures":       failures,
-	})
+	result := map[string]any{
+		"contractVersion": "im.batch-write.v1",
+		"ok":              len(failures) == 0,
+		"partial":         len(succeeded) > 0 && len(failures) > 0,
+		"requestedCount":  len(items),
+		"succeededCount":  len(succeeded),
+		"failedCount":     len(failures),
+		"succeeded":       succeeded,
+		"failures":        failures,
+	}
+	if err := rt.Output(result); err != nil {
+		return err
+	}
+	if len(failures) > 0 {
+		return apperrors.NewAPI(
+			fmt.Sprintf("批量执行 %s 失败：%d/%d 个目标未完成", tool, len(failures), len(items)),
+			apperrors.WithOperation(product+"/"+tool),
+			apperrors.WithReason("batch_write_failed"),
+			apperrors.WithExecutionStarted(true),
+			apperrors.WithRetryable(false),
+			apperrors.WithDetails(map[string]any{
+				"requestedCount": len(items),
+				"succeededCount": len(succeeded),
+				"failedCount":    len(failures),
+				"partial":        len(succeeded) > 0,
+			}),
+		)
+	}
+	return nil
 }

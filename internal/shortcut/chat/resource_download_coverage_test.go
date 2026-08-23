@@ -599,3 +599,221 @@ func TestCrossPlatformCoverageDownloadResourceCopySuccessWithBuffer(t *testing.T
 		t.Fatalf("copied = %q", copied.String())
 	}
 }
+
+func TestCrossPlatformCoverageMessageExportFailureBoundaries(t *testing.T) {
+	for _, output := range []string{"exports/", "exports/messages.txt"} {
+		if err := ValidateMessageExportOutput(output); err == nil {
+			t.Fatalf("ValidateMessageExportOutput(%q) succeeded", output)
+		}
+	}
+	if _, _, err := WriteMessageExportJSON("not-json.txt", false, map[string]any{}); err == nil {
+		t.Fatal("invalid export path reached write pipeline")
+	}
+
+	baseSetup := func(t *testing.T) string {
+		t.Helper()
+		resetResourceDownloadHooks(t)
+		base := t.TempDir()
+		resourceGetwd = func() (string, error) { return base, nil }
+		resourceAbs = filepath.Abs
+		resourceEvalSymlinks = filepath.EvalSymlinks
+		resourceLstat = os.Lstat
+		resourceRel = filepath.Rel
+		resourceCreateTemp = os.CreateTemp
+		resourceTempSync = (*os.File).Sync
+		resourceTempClose = (*os.File).Close
+		resourceRename = os.Rename
+		resourceLink = os.Link
+		return base
+	}
+
+	t.Run("path setup", func(t *testing.T) {
+		baseSetup(t)
+		resourceGetwd = func() (string, error) { return "", errors.New("getwd") }
+		if _, _, err := WriteMessageExportJSON("out.json", false, map[string]any{}); err == nil {
+			t.Fatal("getwd failure ignored")
+		}
+	})
+	t.Run("absolute path", func(t *testing.T) {
+		baseSetup(t)
+		resourceAbs = func(string) (string, error) { return "", errors.New("abs") }
+		if _, _, err := WriteMessageExportJSON("out.json", false, map[string]any{}); err == nil {
+			t.Fatal("abs failure ignored")
+		}
+	})
+	t.Run("base symlink", func(t *testing.T) {
+		baseSetup(t)
+		resourceEvalSymlinks = func(string) (string, error) { return "", errors.New("eval") }
+		if _, _, err := WriteMessageExportJSON("out.json", false, map[string]any{}); err == nil {
+			t.Fatal("base symlink failure ignored")
+		}
+	})
+	t.Run("parent symlink", func(t *testing.T) {
+		base := baseSetup(t)
+		calls := 0
+		resourceEvalSymlinks = func(path string) (string, error) {
+			calls++
+			if calls == 1 {
+				return base, nil
+			}
+			return "", errors.New("parent")
+		}
+		if _, _, err := WriteMessageExportJSON("exports/out.json", false, map[string]any{}); err == nil {
+			t.Fatal("parent symlink failure ignored")
+		}
+	})
+	t.Run("parent creation", func(t *testing.T) {
+		baseSetup(t)
+		resourceLstat = func(string) (os.FileInfo, error) {
+			return os.Stat(filepath.Join(t.TempDir(), "missing-parent"))
+		}
+		resourceMkdir = func(string, os.FileMode) error { return errors.New("mkdir") }
+		if _, _, err := WriteMessageExportJSON("exports/out.json", false, map[string]any{}); err == nil {
+			t.Fatal("parent creation failure ignored")
+		}
+	})
+	t.Run("parent escapes", func(t *testing.T) {
+		base := baseSetup(t)
+		resourceEvalSymlinks = func(path string) (string, error) {
+			if path == base {
+				return base, nil
+			}
+			return filepath.Dir(base), nil
+		}
+		if _, _, err := WriteMessageExportJSON("exports/out.json", false, map[string]any{}); err == nil {
+			t.Fatal("parent escape accepted")
+		}
+	})
+
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T, base string)
+	}{
+		{name: "existing symlink", setup: func(t *testing.T, base string) {
+			target := filepath.Join(base, "out.json")
+			if err := os.Symlink("missing", target); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "existing directory", setup: func(t *testing.T, base string) {
+			if err := os.Mkdir(filepath.Join(base, "out.json"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "existing no clobber", setup: func(t *testing.T, base string) {
+			if err := os.WriteFile(filepath.Join(base, "out.json"), []byte("old"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "lstat error", setup: func(t *testing.T, _ string) {
+			resourceLstat = func(string) (os.FileInfo, error) { return nil, errors.New("lstat") }
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := baseSetup(t)
+			tc.setup(t, base)
+			if _, _, err := WriteMessageExportJSON("out.json", false, map[string]any{}); err == nil {
+				t.Fatal("invalid existing target accepted")
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name      string
+		overwrite bool
+		payload   any
+		setup     func(t *testing.T, base string)
+	}{
+		{name: "marshal", payload: make(chan int)},
+		{name: "create temp", payload: map[string]any{}, setup: func(t *testing.T, _ string) {
+			resourceCreateTemp = func(string, string) (*os.File, error) { return nil, errors.New("create") }
+		}},
+		{name: "write", payload: map[string]any{}, setup: func(t *testing.T, base string) {
+			resourceCreateTemp = func(string, string) (*os.File, error) {
+				file, err := os.CreateTemp(base, "closed-*")
+				if err == nil {
+					_ = file.Close()
+				}
+				return file, err
+			}
+		}},
+		{name: "sync", payload: map[string]any{}, setup: func(t *testing.T, _ string) {
+			resourceTempSync = func(*os.File) error { return errors.New("sync") }
+		}},
+		{name: "close", payload: map[string]any{}, setup: func(t *testing.T, _ string) {
+			resourceTempClose = func(file *os.File) error {
+				_ = file.Close()
+				return errors.New("close")
+			}
+		}},
+		{name: "rename", overwrite: true, payload: map[string]any{}, setup: func(t *testing.T, base string) {
+			if err := os.WriteFile(filepath.Join(base, "out.json"), []byte("old"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			resourceRename = func(string, string) error { return errors.New("rename") }
+		}},
+		{name: "link exists", payload: map[string]any{}, setup: func(t *testing.T, _ string) {
+			resourceLink = func(string, string) error { return os.ErrExist }
+		}},
+		{name: "link", payload: map[string]any{}, setup: func(t *testing.T, _ string) {
+			resourceLink = func(string, string) error { return errors.New("link") }
+		}},
+		{name: "final rel", overwrite: true, payload: map[string]any{}, setup: func(t *testing.T, base string) {
+			if err := os.WriteFile(filepath.Join(base, "out.json"), []byte("old"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			resourceRel = func(from, to string) (string, error) {
+				calls++
+				if calls < 3 {
+					return filepath.Rel(from, to)
+				}
+				return "", errors.New("rel")
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			base := baseSetup(t)
+			if tc.setup != nil {
+				tc.setup(t, base)
+			}
+			if _, _, err := WriteMessageExportJSON("out.json", tc.overwrite, tc.payload); err == nil {
+				t.Fatal("failure hook was ignored")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageMessageExportOverwriteReplacesExistingFile(t *testing.T) {
+	resetResourceDownloadHooks(t)
+	base := t.TempDir()
+	resourceGetwd = func() (string, error) { return base, nil }
+	resourceAbs = filepath.Abs
+	resourceEvalSymlinks = filepath.EvalSymlinks
+	resourceLstat = os.Lstat
+	resourceRel = filepath.Rel
+	resourceCreateTemp = os.CreateTemp
+	resourceTempSync = (*os.File).Sync
+	resourceTempClose = (*os.File).Close
+	resourceRename = replaceFileAtomically
+	resourceLink = os.Link
+
+	target := filepath.Join(base, "out.json")
+	if err := os.WriteFile(target, []byte("old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	relative, size, err := WriteMessageExportJSON(
+		"out.json", true, map[string]any{"value": "new"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "{\n  \"value\": \"new\"\n}\n"
+	if relative != "out.json" || size != len(want) || string(data) != want {
+		t.Fatalf("relative=%q size=%d data=%q", relative, size, data)
+	}
+}

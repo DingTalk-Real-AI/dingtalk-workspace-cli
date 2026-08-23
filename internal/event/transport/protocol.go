@@ -26,16 +26,28 @@ import (
 type FrameType string
 
 const (
-	FrameTypeHello            FrameType = "hello"              // consume → bus
-	FrameTypeHelloAck         FrameType = "hello_ack"          // bus → consume
-	FrameTypeEvent            FrameType = "event"              // bus → consume
-	FrameTypeHeartbeat        FrameType = "heartbeat"          // bidirectional
-	FrameTypeSourceState      FrameType = "source_state"       // bus → consume
-	FrameTypeBye              FrameType = "bye"                // bidirectional
-	FrameTypeStatusReq        FrameType = "status_req"         // consume/ad-hoc → bus
-	FrameTypeStatusResp       FrameType = "status_resp"        // bus → consume/ad-hoc
-	FrameTypeConsumerStopReq  FrameType = "consumer_stop_req"  // ad-hoc → bus
-	FrameTypeConsumerStopResp FrameType = "consumer_stop_resp" // bus → ad-hoc
+	FrameTypeHello               FrameType = "hello"                 // consume → bus
+	FrameTypeHelloAck            FrameType = "hello_ack"             // bus → consume
+	FrameTypeEvent               FrameType = "event"                 // bus → consume
+	FrameTypeHeartbeat           FrameType = "heartbeat"             // bidirectional
+	FrameTypeSourceState         FrameType = "source_state"          // bus → consume
+	FrameTypeBye                 FrameType = "bye"                   // bidirectional
+	FrameTypeStatusReq           FrameType = "status_req"            // consume/ad-hoc → bus
+	FrameTypeStatusResp          FrameType = "status_resp"           // bus → consume/ad-hoc
+	FrameTypeConsumerStopReq     FrameType = "consumer_stop_req"     // ad-hoc → bus
+	FrameTypeConsumerStopResp    FrameType = "consumer_stop_resp"    // bus → ad-hoc
+	FrameTypeCredentialUpdate    FrameType = "credential_update"     // consume → bus
+	FrameTypeCredentialUpdateAck FrameType = "credential_update_ack" // bus → consume
+)
+
+// CredentialMode declares that a consumer needs an additive credential
+// negotiation before it can register for events. The zero value preserves the
+// original protocol.
+type CredentialMode string
+
+const (
+	CredentialModeRuntimeToken CredentialMode = "runtime_token"
+	CapabilityRuntimeTokenV1                  = "runtime_token_v1"
 )
 
 // Hello is the first frame a consumer sends after dialing the bus. The bus
@@ -51,7 +63,8 @@ type Hello struct {
 	// Role distinguishes a real consumer (registered for events) from an
 	// ad-hoc tooling connection (status/list/stop). Ad-hoc connections do
 	// NOT register with the Hub.
-	Role HelloRole `json:"role,omitempty"`
+	Role           HelloRole      `json:"role,omitempty"`
+	CredentialMode CredentialMode `json:"credential_mode,omitempty"`
 }
 
 // HelloRole tags the purpose of a Hello connection.
@@ -76,6 +89,38 @@ type HelloAck struct {
 	ClientIDSource     string    `json:"client_id_source"`            // auth.CredentialSource string
 	ClientSecretSource string    `json:"client_secret_source"`        // auth.CredentialSource string
 	IdleTimeoutSecs    int       `json:"idle_timeout_secs,omitempty"` // bus's IdleTimeout for diagnostics
+	Capabilities       []string  `json:"capabilities,omitempty"`
+	// CredentialGeneration is process-local and contains no secret data.
+	CredentialGeneration uint64 `json:"credential_generation"`
+	// TerminalReason is a fixed, non-sensitive bus terminal state. A runtime
+	// client checks it before sending credential material.
+	TerminalReason string `json:"terminal_reason,omitempty"`
+}
+
+// CredentialUpdate installs a host-supplied runtime token into a compatible
+// bus after the bus has advertised CapabilityRuntimeTokenV1. Token is carried
+// only over the owner-only local IPC connection and must never be logged.
+type CredentialUpdate struct {
+	Type               FrameType `json:"type"`
+	ExpectedGeneration uint64    `json:"expected_generation"`
+	Token              string    `json:"token"`
+}
+
+const (
+	CredentialErrorGenerationConflict = "generation_conflict"
+	CredentialErrorInvalid            = "invalid_credential"
+	CredentialErrorRegistration       = "registration_failed"
+	CredentialErrorRuntimeRejected    = "runtime_token_rejected"
+	CredentialErrorInternal           = "internal_error"
+)
+
+// CredentialUpdateAck reports the CAS result without echoing any credential.
+type CredentialUpdateAck struct {
+	Type                 FrameType `json:"type"`
+	Accepted             bool      `json:"accepted"`
+	CredentialGeneration uint64    `json:"credential_generation"`
+	ErrorCode            string    `json:"error_code,omitempty"`
+	Error                string    `json:"error,omitempty"`
 }
 
 // Event wraps one delivered RawEvent for the wire. We keep the payload as
@@ -126,7 +171,10 @@ type Bye struct {
 	Reason string    `json:"reason"`
 }
 
-const ByeReasonSubscriptionStopped = "subscription_stopped"
+const (
+	ByeReasonSubscriptionStopped  = "subscription_stopped"
+	ByeReasonRuntimeTokenRejected = "runtime_token_rejected"
+)
 
 // ConsumerStopReq asks the bus to close consumers whose exact personal
 // subscription IDs match. It is an additive local IPC control operation;

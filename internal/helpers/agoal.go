@@ -31,6 +31,7 @@ func newAgoalCommand() *cobra.Command {
   dws agoal scorecard detail              获取计分卡详情
   dws agoal scorecard entity-detail       获取计分卡实体详情
   dws agoal scorecard update              更新计分卡
+  dws agoal scorecard search-entities     搜索计分卡指标与关键事项
   dws agoal user rules                    获取用户规则
   dws agoal user objectives               查询用户目标列表
   dws agoal report list-statistics        获取周月报数据跟催列表
@@ -359,7 +360,37 @@ scopeType 支持:
 	scorecardUpdateCmd.Flags().String("content", "", "内容 JSON 数组 (必填)")
 	scorecardUpdateCmd.Flags().String("request-id", "", "requestId (可选)")
 
-	scorecardCmd.AddCommand(scorecardDetailCmd, scorecardEntityDetailCmd, scorecardUpdateCmd)
+	scorecardSearchContentCmd := &cobra.Command{
+		Use:   "search-entities",
+		Short: "搜索计分卡指标与关键事项",
+		Long:  `根据关键词模糊搜索计分卡中的指标和关键事项标题，返回匹配的计分卡实体信息（计分卡ID、实体ID、实体类型、标题、所属团队等）。`,
+		Example: `  dws agoal scorecard search-entities --keyword "业绩"
+  dws agoal scorecard search-entities --keyword "业绩" --page 1 --page-size 20`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "keyword"); err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"keyword": mustGetFlag(cmd, "keyword"),
+			}
+			if v, _ := cmd.Flags().GetString("request-id"); v != "" {
+				toolArgs["requestId"] = v
+			}
+			if v, _ := cmd.Flags().GetInt("page"); v != 0 {
+				toolArgs["page"] = v
+			}
+			if v, _ := cmd.Flags().GetInt("page-size"); v != 0 {
+				toolArgs["pageSize"] = v
+			}
+			return callMCPTool("search_score_card_entities", toolArgs)
+		},
+	}
+	scorecardSearchContentCmd.Flags().String("keyword", "", "搜索关键词，标题模糊匹配 (必填)")
+	scorecardSearchContentCmd.Flags().String("request-id", "", "requestId (可选)")
+	scorecardSearchContentCmd.Flags().Int("page", 0, "页码，默认 1 (可选)")
+	scorecardSearchContentCmd.Flags().Int("page-size", 0, "每页数量，最大 100 (可选)")
+
+	scorecardCmd.AddCommand(scorecardDetailCmd, scorecardEntityDetailCmd, scorecardUpdateCmd, scorecardSearchContentCmd)
 
 	// ── user: 用户目标管理 ──────────────────────────────────────
 

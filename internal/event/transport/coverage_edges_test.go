@@ -73,6 +73,83 @@ func TestCrossPlatformCoverageUnixListenErrorCoverage(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageUnixSocketDirectoryErrorCoverage(t *testing.T) {
+	oldLstat, oldRuntimeStat, oldMkdir := lstatSocketPath, statSocketRuntimeRoot, mkdirSocketDir
+	t.Cleanup(func() {
+		lstatSocketPath, statSocketRuntimeRoot, mkdirSocketDir = oldLstat, oldRuntimeStat, oldMkdir
+	})
+
+	wantErr := errors.New("synthetic socket directory failure")
+	if err := ensureSocketDir("relative/bus.sock", true); err == nil || !strings.Contains(err.Error(), "must be absolute") {
+		t.Fatalf("relative socket path error = %v", err)
+	}
+
+	root := shortSecureTempDir(t)
+	missingRootPath := filepath.Join(root, "missing-root", "dws-event-test", "bus.sock")
+	if err := ensureSocketDir(missingRootPath, false); err == nil || !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing runtime root error = %v", err)
+	}
+
+	rootInfo, err := oldLstat(root)
+	if err != nil {
+		t.Fatalf("lstat secure root: %v", err)
+	}
+	lstatSocketPath = func(path string) (os.FileInfo, error) {
+		if path == "/tmp" {
+			return fileInfoWithMode{FileInfo: rootInfo, mode: os.ModeSymlink | 0o777}, nil
+		}
+		return oldLstat(path)
+	}
+	statSocketRuntimeRoot = func(path string) (os.FileInfo, error) {
+		if path == "/tmp" {
+			return nil, wantErr
+		}
+		return oldRuntimeStat(path)
+	}
+	if err := ensureSocketDir("/tmp/dws-event-coverage/bus.sock", false); !errors.Is(err, wantErr) {
+		t.Fatalf("runtime root resolution error = %v", err)
+	}
+	lstatSocketPath, statSocketRuntimeRoot = oldLstat, oldRuntimeStat
+
+	rootFile := filepath.Join(root, "runtime-root-file")
+	if err := os.WriteFile(rootFile, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("write runtime root file: %v", err)
+	}
+	if err := ensureSocketDir(filepath.Join(rootFile, "dws-event-test", "bus.sock"), false); err == nil || !strings.Contains(err.Error(), "runtime root is not a directory") {
+		t.Fatalf("non-directory runtime root error = %v", err)
+	}
+
+	mkdirSocketDir = func(string, os.FileMode) error { return wantErr }
+	if err := ensureSocketDir(filepath.Join(root, "mkdir-failure", "bus.sock"), true); !errors.Is(err, wantErr) {
+		t.Fatalf("socket directory creation error = %v", err)
+	}
+	mkdirSocketDir = oldMkdir
+
+	if err := ensureSocketDir(filepath.Join(root, "missing-socket-dir", "bus.sock"), false); err == nil || !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing socket directory error = %v", err)
+	}
+
+	withoutOwner := fileInfoWithoutOwner{FileInfo: rootInfo}
+	if err := validateSocketRuntimeRoot(root, withoutOwner, uint32(os.Geteuid())); err == nil || !strings.Contains(err.Error(), "owner") {
+		t.Fatalf("runtime root owner error = %v", err)
+	}
+	if err := validatePrivateSocketDir(root, withoutOwner, uint32(os.Geteuid())); err == nil || !strings.Contains(err.Error(), "owner") {
+		t.Fatalf("socket directory owner error = %v", err)
+	}
+}
+
+type fileInfoWithMode struct {
+	os.FileInfo
+	mode os.FileMode
+}
+
+func (f fileInfoWithMode) Mode() os.FileMode { return f.mode }
+func (f fileInfoWithMode) IsDir() bool       { return f.mode.IsDir() }
+
+type fileInfoWithoutOwner struct{ os.FileInfo }
+
+func (fileInfoWithoutOwner) Sys() any { return struct{}{} }
+
 type stubNetListener struct {
 	close func() error
 }

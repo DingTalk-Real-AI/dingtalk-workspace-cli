@@ -1,6 +1,8 @@
 package helpers
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/commentreaction"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -42,6 +44,33 @@ func newSheetCommentCmd() *cobra.Command {
 			return callMCPToolOnServer("doc-comment", "list_sheet_comments", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(commentListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "list_sheet_comments",
+				CanonicalPath:  "sheet.list_sheet_comments",
+				CLIPath:        "sheet comment list",
+				PrimaryCLIPath: "sheet comment list",
+			},
+			Description: "查询表格单元格评论列表，支持分页与按解决状态过滤",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询表格单元格评论列表，支持分页与按解决状态过滤",
+				UseWhen:      []string{"用户说 看某格的评论/表格里有哪些批注"},
+				AvoidWhen:    []string{"新建评论用 comment create"},
+				Examples:     []string{"dws sheet comment list --node <SHEET_ID> --format json"},
+			},
+		},
+	})
 	commentListCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	commentListCmd.Flags().Int("limit", 50, "每页返回的评论数量，默认 50，最大 50")
 	commentListCmd.Flags().String("cursor", "", "分页游标")
@@ -74,6 +103,33 @@ func newSheetCommentCmd() *cobra.Command {
 			return callMCPToolOnServer("doc-comment", "create_sheet_comment", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(commentCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "low",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "create_sheet_comment",
+				CanonicalPath:  "sheet.create_sheet_comment",
+				CLIPath:        "sheet comment create",
+				PrimaryCLIPath: "sheet comment create",
+			},
+			Description: "在指定单元格上创建评论，可 @ 用户",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "在指定单元格上创建评论，可 @ 用户",
+				UseWhen:      []string{"用户说 给单元格加评论/批注/@某人讨论这个数据"},
+				AvoidWhen:    []string{"回复已有评论用 comment reply；不要把评论写进单元格值"},
+				Examples:     []string{"dws sheet comment create --node <SHEET_ID> --sheet-id Sheet1 --range A2 --content \"这个数字有问题\" --format json"},
+			},
+		},
+	})
 	commentCreateCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	commentCreateCmd.Flags().String("content", "", "评论内容 (必填)")
 	commentCreateCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
@@ -99,6 +155,9 @@ func newSheetCommentCmd() *cobra.Command {
 				"replyCommentKey": mustGetFlag(cmd, "comment-key"),
 			}
 			if v, _ := cmd.Flags().GetBool("emoji"); v {
+				if err := commentreaction.Validate(mustGetFlag(cmd, "content")); err != nil {
+					return err
+				}
 				toolArgs["emoji"] = true
 			}
 			if v, _ := cmd.Flags().GetString("mention"); v != "" {
@@ -107,6 +166,33 @@ func newSheetCommentCmd() *cobra.Command {
 			return callMCPToolOnServer("doc-comment", "reply_comment", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(commentReplyCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "low",
+			Confirmation: "not_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "reply_sheet_comment",
+				CanonicalPath:  "sheet.reply_sheet_comment",
+				CLIPath:        "sheet comment reply",
+				PrimaryCLIPath: "sheet comment reply",
+			},
+			Description: "回复指定单元格评论，支持表情贴图回复",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "回复指定单元格评论，支持表情贴图回复",
+				UseWhen:      []string{"用户说 回复这条评论"},
+				AvoidWhen:    []string{"修改评论内容用 comment update"},
+				Examples:     []string{"dws sheet comment reply --node <SHEET_ID> --comment-key <COMMENT_KEY> --content \"已核实\" --format json"},
+			},
+		},
+	})
 	commentReplyCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	commentReplyCmd.Flags().String("content", "", "回复内容 (必填)")
 	commentReplyCmd.Flags().String("comment-key", "", "被回复评论的 commentKey (必填)")
@@ -132,6 +218,33 @@ func newSheetCommentCmd() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(commentUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "update_sheet_comment",
+				CanonicalPath:  "sheet.update_sheet_comment",
+				CLIPath:        "sheet comment update",
+				PrimaryCLIPath: "sheet comment update",
+			},
+			Description: "更新单元格评论内容",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新单元格评论内容",
+				UseWhen:      []string{"用户说 改一下这条评论"},
+				AvoidWhen:    []string{"回复评论用 comment reply"},
+				Examples:     []string{"dws sheet comment update --node <SHEET_ID> --comment-key <COMMENT_KEY> --content \"已修正\" --format json"},
+			},
+		},
+	})
 	commentUpdateCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	commentUpdateCmd.Flags().String("comment-key", "", "待更新评论的 commentKey (必填)")
 	commentUpdateCmd.Flags().String("content", "", "更新后的评论内容 (必填)")
@@ -155,6 +268,33 @@ func newSheetCommentCmd() *cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(commentDeleteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "non_idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "delete_sheet_comment",
+				CanonicalPath:  "sheet.delete_sheet_comment",
+				CLIPath:        "sheet comment delete",
+				PrimaryCLIPath: "sheet comment delete",
+			},
+			Description: "删除单元格评论（不可恢复）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除单元格评论（不可恢复）",
+				UseWhen:      []string{"用户明确要求删除某条评论"},
+				AvoidWhen:    []string{"标记解决不等于删除"},
+				Examples:     []string{"dws sheet comment delete --node <SHEET_ID> --comment-key <COMMENT_KEY> --format json"},
+			},
+		},
+	})
 	commentDeleteCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	commentDeleteCmd.Flags().String("comment-key", "", "待删除评论的 commentKey (必填)")
 
@@ -168,5 +308,6 @@ func newSheetCommentCmd() *cobra.Command {
 	}
 
 	commentCmd.AddCommand(commentListCmd, commentCreateCmd, commentReplyCmd, commentUpdateCmd, commentDeleteCmd)
+	commentCmd.AddCommand(newCommentBaseCommands("sheet")...)
 	return commentCmd
 }

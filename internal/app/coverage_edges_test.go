@@ -21,7 +21,6 @@ import (
 	"time"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	eventbus "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
@@ -33,10 +32,11 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pat"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/recovery"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/skillstate"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	upgradepkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/upgrade"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
 	tea "github.com/charmbracelet/bubbletea"
@@ -228,117 +228,6 @@ func TestCrossPlatformCoverageDocDownloadPureCoverage(t *testing.T) {
 	}
 }
 
-func TestCrossPlatformCoverageRecoveryPureCoverage(t *testing.T) {
-	if _, err := decodeRecoveryAttempts(nil, nil, "", ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := decodeRecoveryAttempts(json.RawMessage("null"), nil, "", ""); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := decodeRecoveryAttempts(json.RawMessage(`[{"command_summary":"one"}]`), nil, "", ""); err != nil || len(got) != 1 {
-		t.Fatalf("array attempts = %#v %v", got, err)
-	}
-	if _, err := decodeRecoveryAttempts(json.RawMessage("{"), nil, "", ""); err == nil {
-		t.Fatal("malformed attempts succeeded")
-	}
-	if got, err := decodeRecoveryAttempts(json.RawMessage("2"), []string{"a"}, "ok", ""); err != nil || len(got) != 2 {
-		t.Fatalf("legacy attempts = %#v %v", got, err)
-	}
-	if legacyRecoveryAttempts(0, nil, "", "") != nil || len(legacyRecoveryAttempts(1, nil, "", "")) != 1 {
-		t.Fatal("legacy attempts edge mismatch")
-	}
-
-	for _, args := range [][]string{
-		{"dws", "--debug", "doc", "get", "--node", "n"},
-		{"dws", "--format=json", "doc", "--", "ignored"},
-		{"dws", "--unknown", "value", "doc"},
-	} {
-		old := os.Args
-		os.Args = args
-		_ = currentCommandPath()
-		os.Args = old
-	}
-	for _, inv := range []executor.Invocation{
-		{LegacyPath: "legacy path"},
-		{CanonicalProduct: "doc", Tool: "get"},
-		{CanonicalProduct: "doc"},
-		{},
-	} {
-		old := os.Args
-		os.Args = []string{"dws"}
-		_ = runtimeCommandPath(inv)
-		os.Args = old
-	}
-	if cloneRecoveryArgs(nil) != nil {
-		t.Fatal("empty recovery args should clone to nil")
-	}
-	original := map[string]any{"x": 1}
-	clone := cloneRecoveryArgs(original)
-	clone["x"] = 2
-	if original["x"] != 1 {
-		t.Fatal("recovery args were not cloned")
-	}
-
-	if got, _ := (*recoveryRuntime)(nil).Search(context.Background(), "query", recovery.RecoveryContext{}); got.DocSearch.Status != "skipped" {
-		t.Fatalf("nil recovery search = %#v", got)
-	}
-	if got, _ := (&recoveryRuntime{}).Search(context.Background(), " ", recovery.RecoveryContext{}); got.DocSearch.Status != "skipped" {
-		t.Fatalf("blank recovery search = %#v", got)
-	}
-	if _, err := (*recoveryRuntime)(nil).CallToolDirect(context.Background(), "x", "y", nil); err == nil {
-		t.Fatal("nil recovery runtime call succeeded")
-	}
-	if _, err := (&recoveryRuntime{}).resolveEndpoint(context.Background(), "missing", "tool"); err == nil {
-		t.Fatal("missing recovery endpoint succeeded")
-	}
-	loaderErr := errors.New("catalog")
-	runtime := &recoveryRuntime{loader: cli.CatalogLoaderFrom(cli.Catalog{}, loaderErr)}
-	if _, err := runtime.resolveEndpoint(context.Background(), "missing", "tool"); !errors.Is(err, loaderErr) {
-		t.Fatalf("catalog recovery error = %v", err)
-	}
-	runtime.loader = cli.StaticLoader{Catalog: cli.Catalog{Products: []cli.CanonicalProduct{{ID: "empty"}, {ID: "ok", Endpoint: " https://catalog.test "}}}}
-	if _, err := runtime.resolveEndpoint(context.Background(), "empty", "tool"); err == nil {
-		t.Fatal("empty catalog endpoint succeeded")
-	}
-	if got, err := runtime.resolveEndpoint(context.Background(), "ok", "tool"); err != nil || got != "https://catalog.test" {
-		t.Fatalf("catalog endpoint = %q %v", got, err)
-	}
-	if recoveryRuntimeToken(nil) != "" || recoveryRuntimeToken(&GlobalFlags{Token: " token "}) != "token" {
-		t.Fatal("recovery token mismatch")
-	}
-	if toRecoveryToolResponse(nil) != nil {
-		t.Fatal("nil recovery response should stay nil")
-	}
-	response := toRecoveryToolResponse(&transport.ToolCallResult{IsError: true, Blocks: []transport.ContentBlock{{Type: "text", Text: "body"}}})
-	if response == nil || !response.IsError || len(response.Content) != 1 {
-		t.Fatalf("recovery response = %#v", response)
-	}
-
-	items := []any{map[string]any{"title": "A", "url": "u", "desc": "d"}, "skip", map[string]any{}}
-	for _, payload := range []map[string]any{
-		nil,
-		{"items": items},
-		{"data": map[string]any{"items": items}},
-		{"result": map[string]any{"items": items}},
-	} {
-		_ = parseDocSearchItemsFromMap(payload)
-	}
-	if toDocSearchItems("bad") != nil {
-		t.Fatal("non-list doc items accepted")
-	}
-	result := &transport.ToolCallResult{Content: map[string]any{}, Blocks: []transport.ContentBlock{{Text: "{"}, {Text: `{"items":[{"title":"B"}]}`}}}
-	if got := parseDocSearchItems(result); len(got) != 1 {
-		t.Fatalf("block doc items = %#v", got)
-	}
-	if parseDocSearchItems(nil) != nil {
-		t.Fatal("nil doc result should be nil")
-	}
-	searchItems := []recovery.DocSearchItem{{Title: "query", URL: "u"}, {Title: "other"}, {Title: "third"}, {Title: "fourth"}}
-	if len(rerankDocSearchHits("query", recovery.RecoveryContext{ToolName: "tool", CommandPath: []string{"doc"}}, searchItems)) != 3 || rerankDocSearchHits("", recovery.RecoveryContext{}, nil) != nil {
-		t.Fatal("doc search reranking mismatch")
-	}
-}
-
 func TestCrossPlatformCoverageSmallAppRegistryAndRootCoverage(t *testing.T) {
 	RegisterPluginAuth("coverage-registry", &PluginAuth{Token: "token"})
 	t.Cleanup(func() {
@@ -438,6 +327,29 @@ func TestCrossPlatformCoverageSmallAppRegistryAndRootCoverage(t *testing.T) {
 func TestCrossPlatformCoverageDirectRuntimeCoverage(t *testing.T) {
 	oldEdition := edition.Get()
 	t.Cleanup(func() { edition.Override(oldEdition); SetDynamicServers(nil) })
+	for _, tc := range []struct {
+		raw    string
+		region authpkg.LoginRegion
+		want   string
+	}{
+		{raw: "%", want: "%"},
+		{raw: "https://dingtalk.io/path", want: "https://dingtalk.com/path"},
+		{raw: "https://mcp.dingtalk.com:8443/path", region: authpkg.LoginRegionInternational, want: "https://mcp.dingtalk.io:8443/path"},
+	} {
+		if got := mcpBaseURLForLoginRegion(tc.raw, tc.region); got != tc.want {
+			t.Fatalf("mcpBaseURLForLoginRegion(%q, %q) = %q, want %q", tc.raw, tc.region, got, tc.want)
+		}
+	}
+	if hasDirectRuntimeEndpointOverride("") {
+		t.Fatal("blank product unexpectedly has an endpoint override")
+	}
+	t.Setenv("DINGTALK_COVERAGE_PRODUCT_MCP_URL", "https://override.test")
+	if !hasDirectRuntimeEndpointOverride("coverage-product") {
+		t.Fatal("configured product endpoint override was not detected")
+	}
+	if got := activeDingTalkGatewayEndpointWithBase("https://mcp-gw.dingtalk.com/server/contact", "%"); got != "https://mcp-gw.dingtalk.com/server/contact" {
+		t.Fatalf("invalid gateway base rewrote endpoint to %q", got)
+	}
 	server := mcptypes.ServerDescriptor{
 		Endpoint: "https://one.test",
 		CLI: mcptypes.CLIOverlay{
@@ -451,11 +363,14 @@ func TestCrossPlatformCoverageDirectRuntimeCoverage(t *testing.T) {
 		},
 	}
 	SetDynamicServers([]mcptypes.ServerDescriptor{{CLI: mcptypes.CLIOverlay{Skip: true}}, server, {CLI: mcptypes.CLIOverlay{ID: "empty"}}})
-	if got, ok := directRuntimeToolEndpoint("tool"); !ok || got != "https://one.test" {
+	if got, ok := directRuntimeEndpoint("unknown", "tool"); !ok || got != "https://one.test" {
 		t.Fatalf("tool endpoint = %q %v", got, ok)
 	}
-	if _, ok := directRuntimeToolEndpoint(" "); ok {
-		t.Fatal("blank tool endpoint resolved")
+	if got, ok := directRuntimeEndpoint("unknown", "override"); !ok || got != "https://one.test" {
+		t.Fatalf("tool override endpoint = %q %v", got, ok)
+	}
+	if _, ok := directRuntimeEndpoint("unknown", "skip"); ok {
+		t.Fatal("server-override tool endpoint resolved")
 	}
 	for _, id := range []string{"one", "cmd", "alias"} {
 		if got, ok := directRuntimeEndpoint(id, ""); !ok || got != "https://one.test" {
@@ -469,11 +384,6 @@ func TestCrossPlatformCoverageDirectRuntimeCoverage(t *testing.T) {
 		t.Fatalf("direct runtime IDs = %#v", ids)
 	}
 
-	t.Setenv(cli.CatalogFixtureEnv, "fixture")
-	if shouldUseDirectRuntime(executor.Invocation{Kind: "helper_invocation"}) {
-		t.Fatal("fixture should disable direct runtime")
-	}
-	t.Setenv(cli.CatalogFixtureEnv, "")
 	if !shouldUseDirectRuntime(executor.Invocation{Kind: "helper_invocation"}) || !shouldUseDirectRuntime(executor.Invocation{Kind: "compat_invocation"}) || shouldUseDirectRuntime(executor.Invocation{}) {
 		t.Fatal("direct runtime kind mismatch")
 	}
@@ -514,59 +424,6 @@ func TestCrossPlatformCoverageDirectRuntimeCoverage(t *testing.T) {
 	_ = devappMCPEndpoint()
 	_ = defaultPATServerDescriptor()
 	_ = defaultPATMCPEndpoint()
-}
-
-func TestCrossPlatformCoverageRecoveryLoadExecutionCoverage(t *testing.T) {
-	if _, err := loadRecoveryExecution(filepath.Join(t.TempDir(), "missing")); err == nil {
-		t.Fatal("missing recovery execution succeeded")
-	}
-	path := filepath.Join(t.TempDir(), "execution.json")
-	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := loadRecoveryExecution(path); err == nil {
-		t.Fatal("malformed recovery execution succeeded")
-	}
-	for name, body := range map[string]string{
-		"legacy": `{"action":" one ","attempt":2,"result":" ok ","error":" bad "}`,
-		"modern": `{"actions":["one"],"attempts":[{"command_summary":"one"}],"error_summary":"bad"}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			if got, err := loadRecoveryExecution(path); err != nil || len(got.Actions) != 1 || len(got.Attempts) == 0 {
-				t.Fatalf("loaded execution = %#v %v", got, err)
-			}
-		})
-	}
-}
-
-func TestCrossPlatformCoverageRecoveryRuntimeHTTP(t *testing.T) {
-	var result map[string]any = map[string]any{"content": []map[string]any{{"type": "text", "text": `{"items":[{"title":"query result","url":"u"}]}`}}}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			ID int `json:"id"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&req)
-		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": req.ID, "result": result})
-	}))
-	defer server.Close()
-	SetDynamicServers([]mcptypes.ServerDescriptor{{Endpoint: server.URL, CLI: mcptypes.CLIOverlay{ID: "devdoc", Tools: []mcptypes.CLITool{{Name: "search_open_platform_docs_rag"}}}}})
-	t.Cleanup(func() { SetDynamicServers(nil) })
-	runtime := &recoveryRuntime{transport: transport.NewClient(server.Client()), flags: &GlobalFlags{Token: "token"}}
-	got, err := runtime.Search(context.Background(), "query", recovery.RecoveryContext{ToolName: "search"})
-	if err != nil || got.DocSearch.Status != "success" || len(got.KBHits) == 0 {
-		t.Fatalf("recovery search = %#v %v", got, err)
-	}
-	result = map[string]any{"isError": true, "content": []map[string]any{{"type": "text", "text": "failed"}}}
-	if _, err := runtime.CallToolDirect(context.Background(), "devdoc", "search_open_platform_docs_rag", nil); err == nil {
-		t.Fatal("recovery MCP error succeeded")
-	}
-	server.Close()
-	if _, err := runtime.CallToolDirect(context.Background(), "devdoc", "search_open_platform_docs_rag", nil); err == nil {
-		t.Fatal("recovery network error succeeded")
-	}
 }
 
 func TestCrossPlatformCoverageEventCommandPureCoverage(t *testing.T) {
@@ -765,7 +622,7 @@ func TestCrossPlatformCoverageVersionCacheCompletionCoverage(t *testing.T) {
 		child := &cobra.Command{Use: "child"}
 		root.AddCommand(child)
 		child.SetOut(io.Discard)
-		if err := printCacheCompatNotice(child, "status"); err != nil {
+		if err := printCacheCompatNotice(child, "dws cache status"); err != nil {
 			t.Fatalf("cache %s: %v", format, err)
 		}
 		root.RemoveCommand(child)
@@ -798,7 +655,6 @@ func TestCrossPlatformCoverageRuntimeRunnerRoutingCoverage(t *testing.T) {
 	}
 
 	r.transport = transport.NewClient(nil)
-	r.loader = cli.StaticLoader{}
 	r.globalFlags = &GlobalFlags{Mock: true}
 	if got, err := r.runSingle(context.Background(), inv, false); err != nil || got.Response["content"] == nil {
 		t.Fatalf("mock route = %#v %v", got, err)
@@ -809,18 +665,16 @@ func TestCrossPlatformCoverageRuntimeRunnerRoutingCoverage(t *testing.T) {
 	}
 	t.Setenv("DINGTALK_PRODUCT_MCP_URL", "")
 
+	// Dry-run is an execution barrier enforced by Run before endpoint
+	// resolution, so a dry-run invocation returns a local preview and never
+	// reaches handleCatalogMiss or the fallback runner.
 	r.globalFlags = &GlobalFlags{DryRun: true}
-	r.loader = cli.CatalogLoaderFrom(cli.Catalog{}, errors.New("load failure"))
-	if _, err := r.runSingle(context.Background(), inv, false); err == nil || !strings.Contains(err.Error(), "load failure") {
-		t.Fatalf("catalog failure = %v", err)
-	}
-	r.loader = cli.StaticLoader{}
-	if got, err := r.runSingle(context.Background(), inv, false); err != nil || got.Response["fallback"] != true || !fallback.last.DryRun {
-		t.Fatalf("dry catalog miss = %#v %v (invocation %#v)", got, err, fallback.last)
+	if got, err := r.Run(context.Background(), inv); err != nil || got.Response["dry_run"] != true || got.Response["fallback"] != nil {
+		t.Fatalf("dry endpoint miss = %#v %v", got, err)
 	}
 	r.globalFlags = &GlobalFlags{}
-	if _, err := r.runSingle(context.Background(), inv, false); err == nil {
-		t.Fatal("catalog miss succeeded")
+	if _, err := r.runSingle(context.Background(), inv, false); err == nil || !strings.Contains(err.Error(), "no dynamic endpoint registered for product or tool") {
+		t.Fatalf("endpoint miss = %v", err)
 	}
 	devInv := inv
 	devInv.CanonicalProduct = devappProductID
@@ -828,29 +682,20 @@ func TestCrossPlatformCoverageRuntimeRunnerRoutingCoverage(t *testing.T) {
 		t.Fatal("devapp catalog miss succeeded")
 	}
 
-	product := cli.CanonicalProduct{ID: "product", Endpoint: "https://catalog.test", Tools: []cli.ToolDescriptor{{RPCName: "tool"}}}
-	r.loader = cli.StaticLoader{Catalog: cli.Catalog{Products: []cli.CanonicalProduct{product}}}
-	r.globalFlags = &GlobalFlags{DryRun: true}
-	if got, err := r.runSingle(context.Background(), inv, false); err != nil || got.Response["endpoint"] != "https://catalog.test" {
-		t.Fatalf("catalog dry route = %#v %v", got, err)
-	}
-	product.Tools = nil
-	r.loader = cli.StaticLoader{Catalog: cli.Catalog{Products: []cli.CanonicalProduct{product}}}
 	SetDynamicServers([]mcptypes.ServerDescriptor{{Endpoint: "https://direct.test", CLI: mcptypes.CLIOverlay{ID: "product", Tools: []mcptypes.CLITool{{Name: "tool"}}}}})
 	t.Cleanup(func() { SetDynamicServers(nil) })
-	if got, err := r.runSingle(context.Background(), inv, false); err != nil || got.Response["endpoint"] != "https://direct.test" {
-		t.Fatalf("undeclared tool direct route = %#v %v", got, err)
+	directInv := inv
+	directInv.Kind = "helper_invocation"
+	directInv.DryRun = true
+	if got, err := r.runSingle(context.Background(), directInv, false); err != nil || got.Response["dry_run"] != true || got.Response["endpoint"] != "https://direct.test" {
+		t.Fatalf("direct runtime route = %#v %v", got, err)
 	}
 	SetDynamicServers(nil)
-	if got, err := r.runSingle(context.Background(), inv, false); err != nil || got.Response["fallback"] != true || !fallback.last.DryRun {
-		t.Fatalf("undeclared tool dry miss = %#v %v (invocation %#v)", got, err, fallback.last)
-	}
-
-	SetDynamicServers([]mcptypes.ServerDescriptor{{Endpoint: "https://owner.test", CLI: mcptypes.CLIOverlay{ID: "owner", Tools: []mcptypes.CLITool{{Name: "tool"}}}}})
-	product.Tools = []cli.ToolDescriptor{{RPCName: "tool"}}
-	r.loader = cli.StaticLoader{Catalog: cli.Catalog{Products: []cli.CanonicalProduct{product}}}
-	if got, err := r.runSingle(context.Background(), inv, false); err != nil || got.Response["endpoint"] != "https://owner.test" {
-		t.Fatalf("tool owner correction = %#v %v", got, err)
+	// With no dynamic endpoint registered, a dry-run helper invocation is still
+	// stopped by the Run barrier before endpoint resolution.
+	r.globalFlags = &GlobalFlags{DryRun: true}
+	if got, err := r.Run(context.Background(), directInv); err != nil || got.Response["dry_run"] != true || got.Response["fallback"] != nil {
+		t.Fatalf("direct runtime dry miss = %#v %v", got, err)
 	}
 
 	for _, result := range []executor.Result{{}, {Response: map[string]any{"content": "value"}}, {Response: map[string]any{"value": 1}}} {
@@ -961,7 +806,7 @@ func TestCrossPlatformCoverageExecuteInvocationCoverage(t *testing.T) {
 		t.Fatalf("stdio dry-run = %#v %v", got, err)
 	}
 	stdioInv.DryRun = false
-	if _, err := r.executeStdioInvocation(context.Background(), stdioInv); err == nil {
+	if _, err := r.executeStdioInvocationAtEndpoint(context.Background(), "", stdioInv); err == nil {
 		t.Fatal("missing stdio client succeeded")
 	}
 }
@@ -1092,12 +937,21 @@ func TestCrossPlatformCoverageAuthCommandPureCoverage(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageAuthLoginTokenCommandCoverage(t *testing.T) {
+	t.Setenv(keychain.DisableKeychainEnv, "1")
+	t.Setenv(keychain.StorageDirEnv, t.TempDir())
 	oldInteractive := authLoginInteractiveTerminal
 	authLoginInteractiveTerminal = func() bool { return false }
 	t.Cleanup(func() { authLoginInteractiveTerminal = oldInteractive; authpkg.SetRuntimeProfile("") })
-	for _, format := range []string{"table", "json"} {
-		t.Run(format, func(t *testing.T) {
-			t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	for _, tc := range []struct {
+		format        string
+		international bool
+	}{
+		{format: "table"},
+		{format: "json", international: true},
+	} {
+		t.Run(tc.format, func(t *testing.T) {
+			configDir := t.TempDir()
+			t.Setenv("DWS_CONFIG_DIR", configDir)
 			root := &cobra.Command{Use: "dws"}
 			root.PersistentFlags().String("format", "table", "")
 			root.PersistentFlags().Bool("yes", false, "")
@@ -1108,15 +962,89 @@ func TestCrossPlatformCoverageAuthLoginTokenCommandCoverage(t *testing.T) {
 			root.SetOut(&output)
 			root.SetErr(io.Discard)
 			args := []string{"login", "--token", "manual-token", "--yes"}
-			if format == "json" {
+			if tc.international {
+				args = append(args, "--intl")
+			}
+			if tc.format == "json" {
 				args = append(args, "--format", "json")
 			}
 			root.SetArgs(args)
 			if err := root.Execute(); err != nil || output.Len() == 0 {
 				t.Fatalf("token login = %q %v", output.String(), err)
 			}
+			data, err := authpkg.LoadTokenData(configDir)
+			if err != nil {
+				t.Fatalf("LoadTokenData error = %v", err)
+			}
+			wantRegion := ""
+			if tc.international {
+				wantRegion = string(authpkg.LoginRegionInternational)
+			}
+			if data.LoginRegion != wantRegion {
+				t.Fatalf("LoginRegion = %q, want %q", data.LoginRegion, wantRegion)
+			}
+			if tc.international {
+				snapshot, err := resolveAccessTokenSnapshotFromDir(context.Background(), configDir, "")
+				if err != nil {
+					t.Fatalf("resolveAccessTokenSnapshotFromDir error = %v", err)
+				}
+				gotEndpoint := activeDingTalkGatewayEndpointForLoginRegion(
+					"https://mcp-gw.dingtalk.com/server/contact",
+					snapshot.LoginRegion,
+				)
+				if wantEndpoint := "https://mcp-gw.dingtalk.io/server/contact"; gotEndpoint != wantEndpoint {
+					t.Fatalf("international manual-token endpoint = %q, want %q", gotEndpoint, wantEndpoint)
+				}
+			}
 		})
 	}
+
+	t.Run("international then domestic login restores domestic MCP URL", func(t *testing.T) {
+		configDir := t.TempDir()
+		t.Setenv("DWS_CONFIG_DIR", configDir)
+		runLogin := func(international bool) {
+			t.Helper()
+			root := &cobra.Command{Use: "dws"}
+			root.PersistentFlags().String("format", "table", "")
+			root.PersistentFlags().Bool("yes", false, "")
+			root.PersistentFlags().String("profile", "", "")
+			root.AddCommand(newAuthLoginCommand(nil))
+			args := []string{"login", "--token", "manual-token", "--yes"}
+			if international {
+				args = append(args, "--intl")
+			}
+			root.SetArgs(args)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("international=%v login error = %v", international, err)
+			}
+		}
+
+		runLogin(true)
+		if data, err := os.ReadFile(filepath.Join(configDir, "mcp_url")); err != nil || string(data) != authpkg.InternationalMCPBaseURL {
+			t.Fatalf("international mcp_url = %q, %v", string(data), err)
+		}
+		runLogin(false)
+		if data, err := os.ReadFile(filepath.Join(configDir, "mcp_url")); err != nil || string(data) != authpkg.DefaultMCPBaseURL {
+			t.Fatalf("domestic mcp_url = %q, %v", string(data), err)
+		}
+		if _, err := os.Stat(filepath.Join(configDir, config.ManagedMCPURLRegionFileName)); !os.IsNotExist(err) {
+			t.Fatalf("managed MCP region marker remains: %v", err)
+		}
+
+		const customURL = "https://private-mcp.example.com"
+		if err := os.WriteFile(filepath.Join(configDir, "mcp_url"), []byte(customURL), config.FilePerm); err != nil {
+			t.Fatal(err)
+		}
+		runLogin(true)
+		if data, err := os.ReadFile(filepath.Join(configDir, "mcp_url")); err != nil || string(data) != customURL {
+			t.Fatalf("explicit mcp_url after international login = %q, %v; want preserved custom URL", string(data), err)
+		}
+		if _, err := os.Stat(filepath.Join(configDir, config.ManagedMCPURLRegionFileName)); !os.IsNotExist(err) {
+			t.Fatalf("explicit mcp_url acquired a managed marker: %v", err)
+		}
+	})
 
 	for _, hidden := range []bool{false, true} {
 		old := edition.Get()
@@ -1764,9 +1692,6 @@ func TestCrossPlatformCoverageDoctorCommandCoverage(t *testing.T) {
 	}
 
 	for _, jsonOut := range []bool{false, true} {
-		if got := doctorCheckCache(io.Discard, jsonOut); got.Status != statusPass {
-			t.Fatal("cache check failed")
-		}
 		if got := doctorCheckPerf(io.Discard, jsonOut); got.Status != statusPass {
 			t.Fatalf("perf check = %#v", got)
 		}
@@ -2185,7 +2110,7 @@ func TestCrossPlatformCoverageSkillSetupRuntimeCoverage(t *testing.T) {
 	}
 	_ = os.Symlink(filepath.Join(mono, "SKILL.md"), filepath.Join(mono, "linked.md"))
 	multi := filepath.Join(t.TempDir(), "multi")
-	for _, name := range []string{"dws-shared", "dingtalk-a", "dingtalk-b"} {
+	for _, name := range []string{"dingtalk-shared", "dingtalk-a", "dingtalk-b"} {
 		dir := filepath.Join(multi, name)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -2210,11 +2135,15 @@ func TestCrossPlatformCoverageSkillSetupRuntimeCoverage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "dws", "SKILL.md")); err != nil {
 		t.Fatal(err)
 	}
-	if output, warnings, err := run("--mode", "multi", "--source", multi, "--target", "agents", "--yes", "--skill", "a"); err != nil || !strings.Contains(output, "installed=2") || warnings == "" {
-		t.Fatalf("multi setup = %q / %q, %v", output, warnings, err)
+	if output, _, err := run("--mode", "multi", "--source", multi, "--target", "agents", "--yes", "--skill", "a"); err != nil || !strings.Contains(output, "installed=2") {
+		t.Fatalf("multi setup = %q, %v", output, err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "dws-shared", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "dingtalk-shared", "SKILL.md")); err != nil {
 		t.Fatal(err)
+	}
+	state, readable, err := skillstate.Read(home)
+	if err != nil || !readable || len(state.OfficialSkills) != 3 || len(state.UpdatedSkills) != 2 {
+		t.Fatalf("setup state = %#v, readable=%v, err=%v", state, readable, err)
 	}
 	if output, _, err := run("--mode", "multi", "--source", multi, "--target", "agents", "--yes", "--dry-run", "--exclude", "b"); err != nil || !strings.Contains(output, "DRY-RUN") {
 		t.Fatalf("multi dry run = %q, %v", output, err)
@@ -2231,13 +2160,16 @@ func TestCrossPlatformCoverageSkillSetupRuntimeCoverage(t *testing.T) {
 			t.Fatalf("invalid setup %#v succeeded", args)
 		}
 	}
-	if _, _, err := run("--source", mono, "--target", "agents", "--yes", "--dry-run"); err != nil {
-		t.Fatalf("default mono setup: %v", err)
+	if _, _, err := run("--mode", "mono", "--source", mono, "--target", "agents", "--yes", "--dry-run"); err != nil {
+		t.Fatalf("mono setup: %v", err)
+	}
+	if output, _, err := run("--source", multi, "--target", "agents", "--yes", "--dry-run"); err != nil || !strings.Contains(output, "mode=multi") {
+		t.Fatalf("default mode should be multi: %q, %v", output, err)
 	}
 }
 
 func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
-	all := []string{"dingtalk-a", "dingtalk-b", "dws-shared"}
+	all := []string{"dingtalk-a", "dingtalk-b", "dingtalk-shared"}
 	for _, tc := range []struct {
 		include []string
 		exclude []string
@@ -2255,7 +2187,7 @@ func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
 			t.Errorf("filter %#v/%#v = %v", tc.include, tc.exclude, err)
 		}
 	}
-	for _, selected := range [][]string{nil, {"dws-shared"}, {"dingtalk-a"}} {
+	for _, selected := range [][]string{nil, {"dingtalk-shared"}, {"dingtalk-a"}} {
 		_ = ensureMandatorySharedSkill(selected, all)
 	}
 	_ = ensureMandatorySharedSkill([]string{"dingtalk-a"}, []string{"dingtalk-a"})
@@ -2265,7 +2197,7 @@ func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
 	if _, err := listMultiSkillNames(filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Fatal("missing multi source succeeded")
 	}
-	if mode, err := resolveSkillSetupMode("", true, io.Discard); err != nil || mode != skillSetupModeMono {
+	if mode, err := resolveSkillSetupMode("", true, io.Discard); err != nil || mode != skillSetupModeMulti {
 		t.Fatalf("default setup mode = %q, %v", mode, err)
 	}
 	if _, err := resolveSkillSetupMode("bad", true, io.Discard); err == nil {
@@ -2300,7 +2232,7 @@ func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
 	for _, tc := range []struct{ path, mode string }{{"", skillSetupModeMono}, {mono, skillSetupModeMono}, {filepath.Dir(multi), skillSetupModeMulti}, {root, "bad"}} {
 		_ = isSkillSourceRoot(tc.path, tc.mode)
 	}
-	t.Setenv("HOME", t.TempDir())
+	setTestHome(t, t.TempDir())
 	for _, tc := range []struct{ target, mode string }{{"agents", skillSetupModeMono}, {"agents", skillSetupModeMulti}, {"all", skillSetupModeMono}, {"missing", skillSetupModeMono}} {
 		_, _ = resolveSkillSetupTargets(tc.target, tc.mode)
 	}
@@ -2308,8 +2240,8 @@ func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
 	_ = agentHomeForMode("base", skillSetupModeMulti)
 	_ = detectExistingAgentHomes(t.TempDir(), skillSetupModeMono)
 	for _, mode := range []string{skillSetupModeMono, skillSetupModeMulti, "bad"} {
-		_, _ = confirmSkillSetup(io.Discard, mode, root, []string{root}, all)
-		_ = mutualExclusionVictims(root, mode)
+		_, _ = confirmSkillSetup(io.Discard, mode, root, []string{root}, all, false)
+		_, _ = mutualExclusionVictims(root, mode)
 	}
 	if isCharDevice(nil) || isInteractiveTerminal() {
 		t.Fatal("test process unexpectedly interactive")
@@ -2317,17 +2249,17 @@ func TestCrossPlatformCoverageSkillSetupPureCoverage(t *testing.T) {
 
 	monoDest := filepath.Join(t.TempDir(), "agent", "dws")
 	_ = os.MkdirAll(filepath.Join(filepath.Dir(monoDest), "dingtalk-old"), 0o755)
-	_ = mutualExclusionVictims(monoDest, skillSetupModeMono)
+	_, _ = mutualExclusionVictims(monoDest, skillSetupModeMono)
 	multiDest := filepath.Join(t.TempDir(), "agent")
 	_ = os.MkdirAll(filepath.Join(multiDest, "dws"), 0o755)
-	_ = mutualExclusionVictims(multiDest, skillSetupModeMulti)
+	_, _ = mutualExclusionVictims(multiDest, skillSetupModeMulti)
 	cleanupMutualExclusion(monoDest, skillSetupModeMono, io.Discard, io.Discard)
 	cleanupMutualExclusion(multiDest, skillSetupModeMulti, io.Discard, io.Discard)
 
 	badParent := filepath.Join(t.TempDir(), "file")
 	_ = os.WriteFile(badParent, []byte("x"), 0o600)
 	_, _, _ = installSkillToHomes(root, []string{filepath.Join(badParent, "dest")}, io.Discard, io.Discard)
-	_, _, _ = installMultiSkillToHomes(root, []string{"missing"}, []string{filepath.Join(badParent, "dest")}, io.Discard, io.Discard)
+	_, _, _ = installMultiSkillToHomes(root, []string{"missing"}, []string{filepath.Join(badParent, "dest")}, io.Discard, io.Discard, true)
 	if err := copyDir(filepath.Join(root, "missing"), t.TempDir()); err == nil {
 		t.Fatal("copy missing directory succeeded")
 	}

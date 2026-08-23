@@ -31,6 +31,8 @@ dws doc import get --task-id <TASK_ID> --format json
 
 支持格式：docx、doc、xlsx、xls、md、txt、xmind、mark。文件大小上限 20MB。
 
+不支持转换的格式（html/pdf/zip/无扩展名等所有白名单外格式）不报错：CLI 自动改走文件上传链路，以原文件形式存入 `--folder`/`--workspace` 指定的文档空间/知识库位置（同样受 20MB 上限约束），stderr 会输出改道提示，JSON 结果带 `fallback=upload`、`converted=false` 标记——表示产出的是文件对象而非在线文档，Agent 不得将其报告为"已转换"。若用户要的是"可编辑的在线文档"，先把内容转换为 md，再用 md 文件执行 `doc import`；若目标是钉盘，直接用 `dws drive upload`。
+
 ## 工作流
 
 1. 确认本地文件存在且格式受支持。

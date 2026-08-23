@@ -21,9 +21,11 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 )
 
@@ -44,6 +46,11 @@ type Config struct {
 	// reproduced in the child process, including portal ticket mode and
 	// personal_stream.
 	SpawnExtraArgs []string
+
+	// RuntimeToken is a host-supplied credential handed to a compatible bus
+	// only after capability negotiation over owner-only local IPC. It is never
+	// included in dry-run output, child argv, environment, or persisted state.
+	RuntimeToken string `json:"-" yaml:"-"`
 
 	// EventTypes / Filter / Compact are forwarded to the bus via Hello
 	// for server-side pushdown filtering.
@@ -132,6 +139,36 @@ type Config struct {
 
 var discoverBus = busctl.Discover
 
+var (
+	ErrRuntimeTokenUnsupported = errors.New("consume: event bus does not support secure runtime-token handoff")
+	ErrRuntimeTokenUpdate      = errors.New("consume: event bus rejected runtime-token update")
+)
+
+// RuntimeTokenUnsupportedError is returned before the token is sent when the
+// connected bus lacks the runtime_token_v1 capability.
+type RuntimeTokenUnsupportedError struct {
+	BusPID int
+}
+
+func (e *RuntimeTokenUnsupportedError) Error() string {
+	return fmt.Sprintf("consume: running event bus (pid %d) does not support secure runtime-token handoff; let existing consumers exit, inspect with `dws event status --as user --format json`, preview cleanup with `dws event stop --as user --all --dry-run`, then confirm with `dws event stop --as user --all --yes` and retry", e.BusPID)
+}
+
+func (e *RuntimeTokenUnsupportedError) Unwrap() error { return ErrRuntimeTokenUnsupported }
+
+// RuntimeTokenUpdateError reports a rejected credential CAS without carrying
+// either the credential or peer-provided free-form error text.
+type RuntimeTokenUpdateError struct {
+	Code       string
+	Generation uint64
+}
+
+func (e *RuntimeTokenUpdateError) Error() string {
+	return fmt.Sprintf("consume: event bus rejected runtime-token update (code=%s, generation=%d)", e.Code, e.Generation)
+}
+
+func (e *RuntimeTokenUpdateError) Unwrap() error { return ErrRuntimeTokenUpdate }
+
 // Run dials the bus (forking one if necessary), sends Hello, and writes
 // each received Event frame as one NDJSON line to stdout. Blocks until
 // ctx is cancelled, MaxEvents is reached, the bus sends Bye, or the
@@ -144,6 +181,7 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.WorkDir == "" || cfg.IPCEndpoint == "" || cfg.ClientID == "" {
 		return errors.New("consume: WorkDir, IPCEndpoint, and ClientID are required")
 	}
+	cfg.RuntimeToken = strings.TrimSpace(cfg.RuntimeToken)
 	if cfg.Stdout == nil {
 		cfg.Stdout = os.Stdout
 	}
@@ -225,6 +263,9 @@ func Run(ctx context.Context, cfg Config) error {
 		SubscribeID: cfg.SubscribeID,
 		Compact:     cfg.Compact,
 	}
+	if cfg.RuntimeToken != "" {
+		hello.CredentialMode = transport.CredentialModeRuntimeToken
+	}
 	if err := w.WriteJSON(hello); err != nil {
 		return fmt.Errorf("consume: write hello: %w", err)
 	}
@@ -235,6 +276,9 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	if ack.Type != transport.FrameTypeHelloAck {
 		return fmt.Errorf("consume: unexpected first frame type %q", ack.Type)
+	}
+	if err := negotiateRuntimeToken(w, r, ack, cfg.RuntimeToken); err != nil {
+		return err
 	}
 	if !cfg.Quiet {
 		// Contract: a fixed ready line on stderr BEFORE any stdout event.
@@ -331,6 +375,9 @@ func Run(ctx context.Context, cfg Config) error {
 		case transport.FrameTypeBye:
 			var bye transport.Bye
 			_ = json.Unmarshal(raw, &bye)
+			if bye.Reason == transport.ByeReasonRuntimeTokenRejected {
+				return fmt.Errorf("consume: %w", runtimecred.ErrRuntimeTokenRejected)
+			}
 			if !cfg.Quiet {
 				fmt.Fprintf(cfg.Stderr, "[event] bus closing: %s\n", bye.Reason)
 			}
@@ -348,6 +395,62 @@ func Run(ctx context.Context, cfg Config) error {
 			// future frame types: ignored for forward compat
 		}
 	}
+}
+
+func negotiateRuntimeToken(w *transport.Writer, r *transport.Reader, ack transport.HelloAck, token string) error {
+	if token == "" {
+		return nil
+	}
+	if ack.TerminalReason == transport.ByeReasonRuntimeTokenRejected {
+		return fmt.Errorf("consume: %w", runtimecred.ErrRuntimeTokenRejected)
+	}
+	if !hasCapability(ack.Capabilities, transport.CapabilityRuntimeTokenV1) {
+		return &RuntimeTokenUnsupportedError{BusPID: ack.BusPID}
+	}
+	if err := w.WriteJSON(transport.CredentialUpdate{
+		Type:               transport.FrameTypeCredentialUpdate,
+		ExpectedGeneration: ack.CredentialGeneration,
+		Token:              token,
+	}); err != nil {
+		return fmt.Errorf("consume: write runtime credential update: %w", err)
+	}
+	var updateAck transport.CredentialUpdateAck
+	if err := r.ReadJSON(&updateAck); err != nil {
+		return fmt.Errorf("consume: read runtime credential update ack: %w", err)
+	}
+	if updateAck.Type != transport.FrameTypeCredentialUpdateAck {
+		return errors.New("consume: unexpected runtime credential response frame")
+	}
+	if !updateAck.Accepted {
+		code := safeCredentialErrorCode(updateAck.ErrorCode)
+		if code == transport.CredentialErrorRuntimeRejected {
+			return fmt.Errorf("consume: %w", runtimecred.ErrRuntimeTokenRejected)
+		}
+		return &RuntimeTokenUpdateError{Code: code, Generation: updateAck.CredentialGeneration}
+	}
+	return nil
+}
+
+func safeCredentialErrorCode(code string) string {
+	switch code {
+	case transport.CredentialErrorGenerationConflict,
+		transport.CredentialErrorInvalid,
+		transport.CredentialErrorRegistration,
+		transport.CredentialErrorRuntimeRejected,
+		transport.CredentialErrorInternal:
+		return code
+	default:
+		return transport.CredentialErrorInternal
+	}
+}
+
+func hasCapability(capabilities []string, want string) bool {
+	for _, capability := range capabilities {
+		if capability == want {
+			return true
+		}
+	}
+	return false
 }
 
 // closeOnContext spawns a goroutine that closes conn when ctx is done.

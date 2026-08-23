@@ -21,7 +21,8 @@ const paramConceptsSchemaRef = "./param_concepts.schema.json"
 // the sole source of equivalent flag spellings ("concepts") plus per-command
 // overrides. Build-time generators reduce these concepts against each command's
 // real Cobra flags; generated alias tables are downstream views and must never
-// be read back here.
+// be read back here. It is a reviewed input peer of the collected command
+// identity (argv synonyms vs identity) — keep the authorities separate.
 
 //go:embed param_concepts.json
 var embeddedParamConceptsJSON []byte
@@ -144,7 +145,7 @@ var (
 	embeddedParamConceptsOnce sync.Once
 	embeddedParamConceptsData ParamConcepts
 	embeddedParamConceptsErr  error
-	loadReviewedParamConcepts = loadEmbeddedParamConcepts
+	loadReviewedParamConcepts = loadParamConceptsFromEmbed
 )
 
 // LoadParamConcepts decodes and validates the embedded reviewed concept
@@ -153,7 +154,7 @@ func LoadParamConcepts() (ParamConcepts, error) {
 	return loadReviewedParamConcepts()
 }
 
-func loadEmbeddedParamConcepts() (ParamConcepts, error) {
+func loadParamConceptsFromEmbed() (ParamConcepts, error) {
 	embeddedParamConceptsOnce.Do(func() {
 		embeddedParamConceptsData, embeddedParamConceptsErr = decodeParamConcepts(embeddedParamConceptsJSON)
 	})

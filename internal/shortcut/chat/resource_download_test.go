@@ -95,7 +95,7 @@ func TestCrossPlatformCoverageResourceDownloadInfo(t *testing.T) {
 	}
 }
 
-func TestResolveResourceDownloadPath(t *testing.T) {
+func TestCrossPlatformCoverageResolveResourceDownloadPath(t *testing.T) {
 	base := t.TempDir()
 	if err := os.Mkdir(filepath.Join(base, "downloads"), 0o755); err != nil {
 		t.Fatal(err)
@@ -122,14 +122,30 @@ func TestResolveResourceDownloadPath(t *testing.T) {
 	}
 }
 
-func TestValidateResourceDownloadOutputUsesOwningFlagName(t *testing.T) {
+func TestCrossPlatformCoverageValidateResourceDownloadOutputUsesOwningFlagName(t *testing.T) {
 	err := validateResourceDownloadOutputFlag("../escape", "--output-dir")
 	if err == nil || !strings.Contains(err.Error(), "--output-dir") {
 		t.Fatalf("error = %v, want --output-dir", err)
 	}
 }
 
-func TestResolveResourceDownloadPathRejectsSymlinkParentBeforeCreatingOutside(t *testing.T) {
+func TestCrossPlatformCoverageValidateResourceDownloadOutputRejectsPortableAbsolutePaths(t *testing.T) {
+	for _, output := range []string{
+		"/absolute", `\\absolute`, `C:\\absolute`, "C:/absolute",
+		"C:relative", "c:relative",
+	} {
+		if err := validateResourceDownloadOutput(output); err == nil {
+			t.Errorf("portable absolute output %q unexpectedly accepted", output)
+		}
+	}
+	for _, output := range []string{"../escape", `..\\escape`} {
+		if err := validateResourceDownloadOutput(output); err == nil {
+			t.Errorf("portable parent escape %q unexpectedly accepted", output)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageResolveResourceDownloadPathRejectsSymlinkParentBeforeCreatingOutside(t *testing.T) {
 	base := t.TempDir()
 	outside := t.TempDir()
 	link := filepath.Join(base, "linked")

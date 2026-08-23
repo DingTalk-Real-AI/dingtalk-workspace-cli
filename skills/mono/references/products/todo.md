@@ -201,9 +201,9 @@ Flags:
 Usage:
   dws todo task add-attachment [flags]
 Example:
-  dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf
+  dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf
 Flags:
-      --file-path string   本地文件路径 (必填)
+      --file string        本地文件路径 (必填)
       --task-id string     待办任务 ID (必填)
 ```
 
@@ -433,7 +433,7 @@ dws todo task reset-reminder --task-id <taskId> --format json
 dws todo task reset-reminder --task-id <taskId> --reminder-rules '<reminderRules>' --format json
 
 # 18. 上传附件（真实上传，先确认待办存在）— 从返回 result.attachmentIds 取 attachmentId
-dws todo task add-attachment --task-id <taskId> --file-path /path/to/file.pdf --format json
+dws todo task add-attachment --task-id <taskId> --file /path/to/file.pdf --format json
 # 19. 查询附件列表 — 从返回 attachments[].attachmentId 取 ID
 dws todo task list-attachment --task-id <taskId> --format json
 # 20. 删除附件（用户确认后加 --yes；删完可 list-attachment 复查为空）

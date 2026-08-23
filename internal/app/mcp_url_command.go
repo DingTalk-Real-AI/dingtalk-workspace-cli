@@ -18,7 +18,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -74,12 +77,42 @@ func newMCPURLGetCommand(caller edition.ToolCaller) *cobra.Command {
 			return writeMCPURLResult(cmd, result)
 		},
 	}
-	cli.AnnotateRuntimePositionals(cmd, cli.RuntimeSchemaPositional{
+	cli.AnnotateRuntimePositionals(cmd, contract.RuntimeSchemaPositional{
 		Name:        "mcp_id",
 		Type:        "string",
 		Description: "钉钉 MCP 市场中的 mcpId",
 		Required:    true,
 		Index:       0,
+	})
+	helpers.DeclareLeafMetadata(cmd, helpers.LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: helpers.LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "mcp",
+				Name:           "url_get",
+				CanonicalPath:  "mcp.url_get",
+				CLIPath:        "mcp url get",
+				PrimaryCLIPath: "mcp url get",
+			},
+			Description: "按 MCP 市场 mcpId 获取当前用户和组织可用的 Streamable HTTP 地址",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the public CLI wrapper calls the helper-only mcp-meta/get_mcp_server_url endpoint, which is intentionally absent from the public product catalog and pinned MCP metadata.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按 MCP 市场 mcpId 获取当前用户和组织可用的 Streamable HTTP 地址",
+				UseWhen:      []string{"已知钉钉 MCP 市场 mcpId，需要获得当前身份可用的 Streamable HTTP 连接地址"},
+				AvoidWhen: []string{
+					"只是查询 DWS 已公开命令或参数时使用 dws schema",
+					"用户要求把返回的凭据 URL 发送到群聊、文档、邮件、日志或代码仓库时不要执行或传播",
+				},
+				Examples: []string{"dws mcp url get 10043 --format json"},
+			},
+		},
 	})
 	return cmd
 }

@@ -48,8 +48,12 @@ It then runs:
   --fast-path "$PR_BASE_SHA" HEAD
 ```
 
-Because the verified PR diff contains only `CHANGELOG.md`, the validator and
-its policy dependencies in that merge tree are byte-for-byte the current base
+The exact fast path remains limited to historic one-file maintenance. A
+release-seal PR uses `--content-only`, which permits the generated
+`CHANGELOG.md` change together with archival moves from `.changes/` to
+`.changes/released/`; it receives the normal scoped admission instead of this
+fast path. Ordinary PRs must not modify `CHANGELOG.md`; they add a standalone
+release fragment instead. The validator and its policy dependencies in that merge tree are byte-for-byte the current base
 versions. Validation targets the synthetic merge tree, not the feature-branch
 tree, so a stale branch cannot supply an older validator or combine with newer
 base notes into an invalid final CHANGELOG.
@@ -79,10 +83,12 @@ to the complete main admission suite. A source change can therefore never
 inherit the CHANGELOG-only result.
 
 Any PR that touches `CHANGELOG.md` but also changes another file runs the same
-content contract in `Policy` with `--content-only`. That mode permits the
-second file but still rejects invalid dates or versions, missing bullets,
-placeholder `TODO`/`TBD`, unmanaged-section changes, and unsafe tree modes.
-Adding a second file therefore cannot bypass CHANGELOG validation.
+content contract in `Policy` with `--content-only`. That mode accepts only
+fragment archival moves (`.changes/<name>.md` to
+`.changes/released/<version>/<name>.md`) alongside the changelog; source and
+documentation changes are rejected. It still rejects invalid dates or
+versions, missing bullets, placeholder `TODO`/`TBD`, unmanaged-section
+changes, and unsafe tree modes.
 
 ## Risk tiers and downstream boundaries
 
@@ -157,28 +163,59 @@ expected to repeat every CI job locally:
 ```sh
 make build
 make policy
-make interface-integrity
-make authoritative-interface-integrity BASE_REF=<merge-base>
-make schema-compatibility BASE_REF=<merge-base>
+make interface-integrity BASE_REF=<merge-base> STABLE_REF=<stable-tag> CANDIDATE_REF=<candidate-sha>
+make schema-compatibility BASE_REF=<merge-base> STABLE_REF=<stable-tag> CANDIDATE_REF=<candidate-sha>
 make skill-command-integrity
 make cli-smoke
 make mock-mcp-smoke
 go test -v -count=1 ./pkg/editiontest/...
 ```
 
-For an exact CHANGELOG-only branch:
+CI 先解析并核对精确的 merge-base、最近可达且未撤回的 stable GA tag 和已提交的 candidate
+SHA，再调用 `make authoritative-interface-integrity`。本地 `make interface-integrity`
+与该 CI target 都只委托给同一个 modern authoritative wrapper，不存在第二个比较
+入口。省略 `BASE_REF` 时本地 target 默认比较 `origin/main`，省略 `STABLE_REF` 时自动
+选择该 base 可达且未撤回的最近 stable GA tag，省略 `CANDIDATE_REF` 时比较已提交的 `HEAD`。
+需要逐字复现某次 CI 时，应显式传入该次运行记录的 merge-base、stable tag 和
+candidate SHA。
+
+`make update-interface-baseline` / `make reset-interface-baseline` 只维护
+`test/fixtures/cli-interface-baseline.txt` 这一份非权威 CLI Smoke fixture。底层旧
+`check-interface-baseline.sh` 不再作为本地或 CI 的兼容性审批入口，也不能用于批准
+flag 迁移。
+
+Schema compatibility 使用同一组 base、stable、candidate refs，以及 base-owned flag
+与 command migration ledgers。merge-base-owned checker 分别规范化 merge-base 与
+stable 的完整 Schema，并让 candidate 对两份历史 contract 独立执行检查；它只把已通过
+Interface lifecycle 的 exact rename、command move 或 flag extraction 规范化到当前历史
+副本，不会维护第二份 allowlist，也不会放宽其他 Schema 历史字段。
+
+For a release-seal branch that archives rendered fragments:
 
 ```sh
 base_ref=$(git merge-base HEAD origin/main)
-./scripts/policy/check-changelog-pr.sh --fast-path "$base_ref" HEAD
+./scripts/policy/check-changelog-pr.sh --content-only "$base_ref" HEAD
 ```
 
 `make coverage-gate` is an enforcement step, not a profile generator. For a
 standard PR, CI derives changed packages and their reverse-dependency test
 closure, then generates candidate and merge-base profiles with the same test
 scope and `coverpkg`. High-risk and protected-main runs use the complete
-profiles. Supporting and (when platform-selected) native profiles are
-generated before the aggregate `Coverage` context evaluates them. The
+profiles. The complete candidate profile is produced by disjoint per-shard
+helper jobs (`scripts/ci/test-packages.sh list-coverage`, kept serial with
+`-p 1` inside each shard; `verify` proves the shard union equals the
+full-suite scope exactly once) and concatenated in the aggregate job before
+enforcement. The complete merge-base profile is restored from an exact-key
+cache written by the last green `main` push of that same commit (key:
+merge-base SHA plus resolved Go version); any miss falls back to recomputing
+it in a merge-base worktree. The trusted `main` producer and PR consumer use
+the same dedicated cache profile path because GitHub includes that path in the
+cache version; the runtime-facing candidate and baseline filenames remain
+separate. Near-miss reuse is forbidden — the caches carry no prefix restore
+keys, because a neighbouring commit's profile would compare the candidate
+against the wrong baseline. Supporting and (when
+platform-selected) native profiles are generated before the aggregate
+`Coverage` context evaluates them. The
 aggregate and native gates require 100% coverage for changed executable Go
 statements. Overall coverage remains an unrounded, zero-tolerance,
 scope-matched merge-base non-regression check. Candidate and baseline profiles
@@ -186,11 +223,24 @@ are evaluated by the same block-deduplicating checker; supporting policy and
 shortcut profiles contribute to changed-code coverage only. The checked-in
 badge is presentation only and is never read as a gate input.
 
-Compatibility checks derive authoritative Interface snapshots from the PR
-merge-base and the latest reachable stable release. The candidate cannot bless
-a breaking change by editing a fixture. Schema additions are allowed;
-historical products, tools, parameters, mappings, positional execution fields,
-constraints, and safety semantics remain protected.
+CLI 兼容检查只使用 modern Interface Snapshot 这一处权威比较 seam，并从 PR
+merge-base 和最近的可达 stable release 生成权威快照。本治理机制合入后，
+merge-base 拥有生成器、比较器和已审批迁移清单，因此 candidate 不能通过修改
+helper、fixture 或在同一 PR 新增 self-approval 记录来放行 breaking change。首次
+bootstrap 仍由 merge-base 已有的 modern helper 做无豁免比较，并只接受 candidate
+提交中的规范空清单；完整边界见下方治理文档。
+
+精确的两阶段 flag 迁移生命周期见
+[CLI flag 兼容迁移治理](cli-interface-flag-migrations.md)。治理 PR 只能在
+surface 未变化时新增 `pending`；后续产品 PR 达到审批的精确 surface 后，才能
+消费 base-owned 记录并改为 `consumed`。在 main 与 stable 都达到 after 状态前
+必须保留该回执，之后再由单独 PR 清理。机制只放行记录中的 legacy
+visible-to-hidden，以及 canonical required 新增或提升；删除、type、scope、
+shorthand、no-opt 和任何无关漂移仍然阻塞。Schema 可以新增；历史 product、
+tool、parameter、mapping、positional execution、constraint 与 safety 语义继续
+受保护。`alias_of` 只是一项由 `FlagSpec.Aliases` 产生的框架关系证据，不是 payload
+等价证明；产品 PR 仍须证明 canonical 与 legacy 的最终运行 payload 等价并在 transport
+前拒绝冲突输入。当前迁移清单为空，不授权 PR #904。
 
 ## Required GitHub repository settings
 

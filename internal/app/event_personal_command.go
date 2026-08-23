@@ -14,6 +14,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -26,16 +27,21 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	dwsevent "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/bus"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/busctl"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/consume"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/personal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/runtimecred"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/source"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/event/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/config"
@@ -78,6 +84,8 @@ type personalConsumeOptions struct {
 	StreamTicketMode string
 	StreamTicketURL  string
 	StreamSourceID   string
+	ExplicitToken    string
+	ClientIDOverride string
 }
 
 type personalListOptions struct {
@@ -88,19 +96,23 @@ type personalListOptions struct {
 }
 
 type personalStatusOptions struct {
-	EventKey       string
-	Status         string
-	SubscribeID    string
-	Format         string
-	ControlBaseURL string
-	StreamSourceID string
+	EventKey         string
+	Status           string
+	SubscribeID      string
+	Format           string
+	ControlBaseURL   string
+	StreamSourceID   string
+	ExplicitToken    string
+	ClientIDOverride string
 }
 
 type personalStopOptions struct {
-	SubscribeID    string
-	All            bool
-	ControlBaseURL string
-	StreamSourceID string
+	SubscribeID      string
+	All              bool
+	ControlBaseURL   string
+	StreamSourceID   string
+	ExplicitToken    string
+	ClientIDOverride string
 }
 
 type personalStreamSourceOptions struct {
@@ -109,6 +121,8 @@ type personalStreamSourceOptions struct {
 	TicketMode       string
 	TicketURL        string
 	ClientIDOverride string
+	CredentialBroker *runtimecred.Broker
+	RuntimeTokenMode bool
 }
 
 var (
@@ -138,9 +152,18 @@ var (
 	personalResolveAuxiliaryAccessToken = ResolveAuxiliaryAccessToken
 	personalForceRefreshRejectedToken   = forceRefreshRejectedAccessToken
 	personalLoadTokenData               = authpkg.LoadTokenData
+	personalLoadProfiles                = authpkg.LoadProfiles
 	personalClientID                    = authpkg.ClientID
+	personalRuntimeEventClientID        = runtimePersonalEventClientID
 	personalResolveAppCredentialsStrict = authpkg.ResolveAppCredentialsStrict
 )
+
+func runtimePersonalEventClientID() string {
+	if clientID := strings.TrimSpace(edition.Get().AuthClientID); clientID != "" {
+		return clientID
+	}
+	return strings.TrimSpace(os.Getenv("DWS_CLIENT_ID"))
+}
 
 func newEventSchemaCommand() *cobra.Command {
 	var asIdentity string
@@ -170,12 +193,45 @@ func newEventSchemaCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&formatRaw, "format", "f", "json", "输出格式: json")
 	cmd.Flags().BoolVar(&flatten, "flatten", false, "显示 --flatten 消费模式对应的顶层业务字段 schema")
 	hideEventInternalFlags(cmd, "as")
-	cli.AnnotateRuntimePositionals(cmd, cli.RuntimeSchemaPositional{
+	cli.AnnotateRuntimePositionals(cmd, contract.RuntimeSchemaPositional{
 		Name:        "event_key",
 		Type:        "string",
 		Description: "要查询 payload 字段定义的个人事件码",
 		Required:    true,
 		Index:       0,
+	})
+	helpers.DeclareLeafMetadata(cmd, helpers.LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: helpers.LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "event",
+				Name:           "schema",
+				CanonicalPath:  "event.schema",
+				CLIPath:        "event schema",
+				PrimaryCLIPath: "event schema",
+			},
+			Description: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "local",
+				Availability: "available",
+				Reason:       "命令读取 CLI 内置的个人事件 payload 定义，不绑定 pinned MCP RPC",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询指定个人事件码的输出字段结构；Agent 应查询 --flatten 模式",
+				UseWhen:      []string{"已知任一公开个人 IM 或 OA event_key，消费前需要理解 --flatten 输出字段或 payload 契约"},
+				AvoidWhen: []string{
+					"查询 CLI 命令参数契约时用顶层 dws schema",
+					"要实际收事件时用 event consume",
+				},
+				Examples: []string{
+					"dws event schema user_im_message_receive_at --flatten --format json",
+					"dws event schema user_oa_approval_task_created --flatten --format json",
+				},
+			},
+		},
 	})
 	return cmd
 }
@@ -229,6 +285,9 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
 		return personalSubscriptionValidationError(err)
 	}
+	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
+	}
 	rawFormat := ""
 	if f := c.Flags().Lookup("format"); f != nil && f.Changed {
 		rawFormat = opts.Common.FormatRaw
@@ -243,7 +302,7 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	projector := personalEventProjector(opts.DebugRawEvents, opts.Flatten)
 
 	configDir := defaultConfigDir()
-	identity, err := personalResolveEventIdentity(ctx, configDir, opts.StreamSourceID)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
@@ -251,23 +310,41 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	editionName := editionNameOrDefault()
 	workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
 	ipcEndpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
-	spawnProfileSelector := personalBusProfileSelector(configDir, identity)
+	spawnProfileSelector := ""
+	if strings.TrimSpace(opts.ExplicitToken) == "" {
+		spawnProfileSelector = personalBusProfileSelector(configDir, identity)
+	}
+	spawnArgs := personalBusSpawnArgsForToken(
+		identity,
+		identityHash,
+		opts.StreamTicketMode,
+		opts.StreamTicketURL,
+		spawnProfileSelector,
+		opts.ExplicitToken,
+	)
 
 	routes, err := consume.ParseRoutes(opts.Common.RoutesRaw)
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 	}
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity, opts.ExplicitToken)
 	if opts.Common.DryRun {
 		if strings.TrimSpace(opts.SubscribeID) == "" {
 			if err := validatePersonalSubscriptionOptions(opts); err != nil {
 				return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
 			}
+		} else {
+			_, eventKey, _, err := personalEnsureSubscription(ctx, client, identity, opts)
+			if err != nil {
+				return fmt.Errorf("event consume --as user: %w", err)
+			}
+			opts.EventKey = eventKey
 		}
 		cfg := consume.Config{
 			WorkDir:        workDir,
 			IPCEndpoint:    ipcEndpoint,
 			ClientID:       identity.ClientID,
-			SpawnExtraArgs: personalBusSpawnArgs(identity, opts.StreamTicketMode, personalEventStreamTicketURL(opts.StreamTicketURL, configDir), spawnProfileSelector),
+			SpawnExtraArgs: personalBusSpawnArgsForToken(identity, identityHash, opts.StreamTicketMode, personalEventStreamTicketURL(opts.StreamTicketURL, configDir), spawnProfileSelector, opts.ExplicitToken),
 			Compact:        opts.Common.Compact,
 			MaxEvents:      opts.Common.MaxEvents,
 			Duration:       opts.Common.Duration,
@@ -294,7 +371,8 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		WorkDir:        workDir,
 		IPCEndpoint:    ipcEndpoint,
 		ClientID:       identity.ClientID,
-		SpawnExtraArgs: personalBusSpawnArgs(identity, opts.StreamTicketMode, opts.StreamTicketURL, spawnProfileSelector),
+		SpawnExtraArgs: spawnArgs,
+		RuntimeToken:   strings.TrimSpace(opts.ExplicitToken),
 		Compact:        opts.Common.Compact,
 		MaxEvents:      opts.Common.MaxEvents,
 		Duration:       opts.Common.Duration,
@@ -323,20 +401,31 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		}
 	}
 
-	var foregroundSource *source.PersonalSource
+	var (
+		foregroundSource *source.PersonalSource
+		foregroundBroker *runtimecred.Broker
+	)
 	if opts.Common.Foreground {
+		explicitToken := strings.TrimSpace(opts.ExplicitToken)
+		foregroundBroker = newPersonalCredentialBroker(configDir, explicitToken != "", false)
+		if explicitToken != "" {
+			if _, err := foregroundBroker.Update(0, explicitToken); err != nil {
+				return personalSubscriptionValidationError(err)
+			}
+		}
 		foregroundSource, err = personalNewStreamSource(ctx, personalStreamSourceOptions{
-			ConfigDir:  configDir,
-			Identity:   identity,
-			TicketMode: opts.StreamTicketMode,
-			TicketURL:  opts.StreamTicketURL,
+			ConfigDir:        configDir,
+			Identity:         identity,
+			TicketMode:       opts.StreamTicketMode,
+			TicketURL:        opts.StreamTicketURL,
+			CredentialBroker: foregroundBroker,
+			RuntimeTokenMode: explicitToken != "",
 		})
 		if err != nil {
 			return personalSubscriptionValidationError(err)
 		}
 	}
 
-	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
 	var attempt *personalSubscriptionAttemptReservation
 	if strings.TrimSpace(opts.SubscribeID) == "" {
 		attempt, err = reservePersonalSubscriptionAttempts(
@@ -352,6 +441,10 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	}
 	sub, eventKey, ruleType, err := personalEnsureSubscription(ctx, client, identity, opts)
 	if err != nil {
+		if strings.TrimSpace(opts.ExplicitToken) != "" && personalRuntimeTokenControlRejection(err) {
+			err = attempt.releaseRuntimeTokenFailure()
+			return fmt.Errorf("event consume --as user: %w", err)
+		}
 		err = attempt.completeFailure(ctx, 0, 0, err, nil)
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
@@ -375,9 +468,17 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		)
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
-	cleanup := func(cleanupCtx context.Context) {
-		_ = personalDeleteSubscription(client, cleanupCtx, sub.SubscribeID)
-		_ = personalRemoveRunStates(workDir, []string{sub.SubscribeID})
+	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
+	ownsSubscription := selfCreated || opts.Ephemeral
+	var cleanupOnce sync.Once
+	cleanupOwnedSubscription := func(cleanupCtx context.Context) {
+		if !ownsSubscription {
+			return
+		}
+		cleanupOnce.Do(func() {
+			_ = personalDeleteSubscription(client, cleanupCtx, sub.SubscribeID)
+			_ = personalRemoveRunStates(workDir, []string{sub.SubscribeID})
+		})
 	}
 	if err := personalUpsertRunState(workDir, personal.RunState{
 		SubscribeID:  sub.SubscribeID,
@@ -388,19 +489,19 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 		IdentityHash: identityHash,
 	}); err != nil {
 		wrapped := fmt.Errorf("save run state: %w", err)
+		cleanupCtx := context.Background()
+		if personalSubscriptionCanceled(ctx, wrapped) {
+			cleanupCtx = ctx
+		}
 		if attempt != nil {
-			cleanupCtx := context.Background()
-			if personalSubscriptionCanceled(ctx, wrapped) {
-				cleanupCtx = ctx
-			}
 			classification := personalSubscriptionLocalFailure()
 			wrapped = attempt.completeFailure(ctx, 0, 0, wrapped, &classification)
-			cleanup(cleanupCtx)
 		}
+		cleanupOwnedSubscription(cleanupCtx)
 		return fmt.Errorf("event consume --as user: %w", wrapped)
 	}
 	if err := attempt.completeSuccess(); err != nil {
-		cleanup(context.Background())
+		cleanupOwnedSubscription(context.Background())
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
 	// Ownership-based cleanup: a subscription this run CREATED is
@@ -409,9 +510,8 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	// leaks server-side. A subscription REUSED via --subscribe-id is left
 	// intact — the caller owns its lifecycle. --ephemeral forces cleanup
 	// either way.
-	selfCreated := strings.TrimSpace(opts.SubscribeID) == ""
-	if opts.Ephemeral || selfCreated {
-		defer cleanup(context.Background())
+	if ownsSubscription {
+		defer cleanupOwnedSubscription(context.Background())
 	}
 
 	cfg.EventKey = eventKey
@@ -423,27 +523,20 @@ func runPersonalEventConsumeSingle(c *cobra.Command, opts personalConsumeOptions
 	}
 	if opts.Common.Foreground {
 		busCfg := bus.Config{
-			WorkDir:      workDir,
-			IPCEndpoint:  ipcEndpoint,
-			ClientID:     identity.ClientID,
-			Edition:      editionName,
-			SourceKind:   dwsevent.SourceKindPersonalStream,
-			IdentityHash: identityHash,
-			SourceID:     identity.SourceID,
-			Source:       foregroundSource,
+			WorkDir:          workDir,
+			IPCEndpoint:      ipcEndpoint,
+			ClientID:         identity.ClientID,
+			Edition:          editionName,
+			SourceKind:       dwsevent.SourceKindPersonalStream,
+			IdentityHash:     identityHash,
+			SourceID:         identity.SourceID,
+			Source:           foregroundSource,
+			CredentialBroker: foregroundBroker,
 		}
 		bus.ApplyEnvTuning(&busCfg)
-		err = personalBusRun(ctx, busCfg)
-		if err != nil && !opts.Ephemeral {
-			cleanup(context.Background())
-		}
-		return err
+		return personalBusRun(ctx, busCfg)
 	}
-	err = personalConsumeRun(ctx, cfg)
-	if err != nil && !opts.Ephemeral {
-		cleanup(context.Background())
-	}
-	return err
+	return personalConsumeRun(ctx, cfg)
 }
 
 type personalMultiSubscription struct {
@@ -472,7 +565,7 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 
 	ctx := c.Context()
 	configDir := defaultConfigDir()
-	identity, err := personalResolveEventIdentity(ctx, configDir, opts.StreamSourceID)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", err)
 	}
@@ -480,7 +573,10 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 	editionName := editionNameOrDefault()
 	workDir := eventWorkDir(configDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
 	ipcEndpoint := defaultIPCEndpoint(workDir, editionName, dwsevent.SourceKindPersonalStream, identityHash)
-	spawnProfileSelector := personalBusProfileSelector(configDir, identity)
+	spawnProfileSelector := ""
+	if strings.TrimSpace(opts.ExplicitToken) == "" {
+		spawnProfileSelector = personalBusProfileSelector(configDir, identity)
+	}
 	routes, err := consume.ParseRoutes(opts.Common.RoutesRaw)
 	if err != nil {
 		return fmt.Errorf("event consume --as user: %w", personalSubscriptionValidationError(err))
@@ -489,7 +585,7 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 		WorkDir:        workDir,
 		IPCEndpoint:    ipcEndpoint,
 		ClientID:       identity.ClientID,
-		SpawnExtraArgs: personalBusSpawnArgs(identity, opts.StreamTicketMode, personalEventStreamTicketURL(opts.StreamTicketURL, configDir), spawnProfileSelector),
+		SpawnExtraArgs: personalBusSpawnArgsForToken(identity, identityHash, opts.StreamTicketMode, personalEventStreamTicketURL(opts.StreamTicketURL, configDir), spawnProfileSelector, opts.ExplicitToken),
 		Compact:        opts.Common.Compact,
 		MaxEvents:      opts.Common.MaxEvents,
 		Duration:       opts.Common.Duration,
@@ -515,8 +611,9 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 		printPersonalMultiDryRun(c.ErrOrStderr(), baseCfg, plans)
 		return nil
 	}
+	baseCfg.RuntimeToken = strings.TrimSpace(opts.ExplicitToken)
 
-	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity, opts.ExplicitToken)
 	attempt, err := reservePersonalSubscriptionAttempts(
 		workDir,
 		client,
@@ -552,6 +649,10 @@ func runPersonalEventConsumeMany(c *cobra.Command, opts personalConsumeOptions) 
 		cleanupCtx := context.Background()
 		if personalSubscriptionCanceled(ctx, cause) {
 			cleanupCtx = ctx
+		}
+		if strings.TrimSpace(opts.ExplicitToken) != "" && personalRuntimeTokenControlRejection(cause) {
+			cleanup(cleanupCtx)
+			return attempt.releaseRuntimeTokenFailure()
 		}
 		completed := attempt.completeFailure(ctx, failedIndex, succeededCount, cause, override)
 		// Persist the hold (or release a canceled claim) before any potentially
@@ -654,6 +755,9 @@ func preparePersonalMultiOptions(opts personalConsumeOptions) ([]personalConsume
 		}
 		if !def.Public {
 			return nil, personal.PublicAvailabilityError(eventKey)
+		}
+		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
+			return nil, err
 		}
 		switch def.RuleType {
 		case "singleChat", "sender":
@@ -781,6 +885,9 @@ func applyPersonalConsumeFilters(cfg *consume.Config, opts personalConsumeOption
 }
 
 func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
+	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
+		return err
+	}
 	if _, _, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
 		RuleType:       opts.Rule,
 		UserID:         opts.UserID,
@@ -791,6 +898,37 @@ func validatePersonalSubscriptionOptions(opts personalConsumeOptions) error {
 	}
 	_, _, err := personal.BuildFilter(opts.FilterJSON, opts.QueryCSV)
 	return err
+}
+
+func validatePersonalOAOptions(eventKey string, opts personalConsumeOptions) error {
+	changed := personalOAOptionNames(opts)
+	if len(changed) == 0 {
+		return nil
+	}
+	def, ok := personalLookupDefinition(strings.TrimSpace(eventKey))
+	if !ok || def.Category != "oa" {
+		return nil
+	}
+	return fmt.Errorf("%s not supported for OA event %s", strings.Join(changed, ", "), eventKey)
+}
+
+func personalOAOptionNames(opts personalConsumeOptions) []string {
+	var changed []string
+	for _, item := range []struct {
+		name  string
+		value string
+	}{
+		{name: "--user", value: opts.UserID},
+		{name: "--open-dingtalk-id", value: opts.OpenDingTalkID},
+		{name: "--group", value: opts.GroupID},
+		{name: "--query", value: opts.QueryCSV},
+		{name: "--filter-json", value: opts.FilterJSON},
+	} {
+		if strings.TrimSpace(item.value) != "" {
+			changed = append(changed, item.name)
+		}
+	}
+	return changed
 }
 
 type personalPreparedSubscription struct {
@@ -804,6 +942,9 @@ func preparePersonalSubscription(identity personal.Identity, opts personalConsum
 		return personalPreparedSubscription{}, fmt.Errorf("event_key is required unless --subscribe-id is provided")
 	}
 	if err := ensurePublicPersonalEvent(opts.EventKey); err != nil {
+		return personalPreparedSubscription{}, err
+	}
+	if err := validatePersonalOAOptions(opts.EventKey, opts); err != nil {
 		return personalPreparedSubscription{}, err
 	}
 	ruleType, ruleParam, err := personal.BuildRuleParam(opts.EventKey, personal.RuleOptions{
@@ -852,11 +993,30 @@ func ensurePersonalSubscription(ctx context.Context, client *personal.Client, id
 		if err != nil {
 			return nil, "", "", err
 		}
-		eventKey := firstNonEmptyPersonalString(opts.EventKey, sub.EventKey)
+		if sub == nil {
+			return nil, "", "", errors.New("personal event: server returned an empty subscription")
+		}
+		requestedEventKey := strings.TrimSpace(opts.EventKey)
+		actualEventKey := strings.TrimSpace(sub.EventKey)
+		if requestedEventKey != "" && actualEventKey != "" && requestedEventKey != actualEventKey {
+			return nil, "", "", fmt.Errorf(
+				"event_key %q does not match reused subscription %q event_key %q",
+				requestedEventKey,
+				strings.TrimSpace(opts.SubscribeID),
+				actualEventKey,
+			)
+		}
+		eventKey := actualEventKey
+		if eventKey == "" {
+			eventKey = requestedEventKey
+		}
 		if eventKey == "" {
 			return nil, "", "", fmt.Errorf("event_key is required when --subscribe-id lookup returns no event_key")
 		}
 		if err := ensurePublicPersonalEvent(eventKey); err != nil {
+			return nil, "", "", err
+		}
+		if err := validatePersonalOAOptions(eventKey, opts); err != nil {
 			return nil, "", "", err
 		}
 		ruleType := firstNonEmptyPersonalString(sub.RuleType, opts.Rule)
@@ -881,7 +1041,7 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 		return err
 	}
 	configDir := defaultConfigDir()
-	identity, err := personalResolveEventIdentity(ctx, configDir, opts.StreamSourceID)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
 	if err != nil {
 		return fmt.Errorf("event status --as user: %w", err)
 	}
@@ -913,7 +1073,7 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 	if status == "" || status == "all" {
 		status = ""
 	}
-	subs, err := personalListSubscriptions(newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity), ctx, personal.ListOptions{
+	subs, err := personalListSubscriptions(newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity, opts.ExplicitToken), ctx, personal.ListOptions{
 		Status:      status,
 		EventKey:    opts.EventKey,
 		SubscribeID: opts.SubscribeID,
@@ -932,6 +1092,15 @@ func runPersonalEventStatus(c *cobra.Command, opts personalStatusOptions) error 
 	}
 	renderPersonalStatusText(c.OutOrStdout(), identity, identityHash, subs, qs)
 	return nil
+}
+
+func personalRuntimeTokenControlRejection(err error) bool {
+	var apiErr *personal.APIError
+	if !errors.As(err, &apiErr) || apiErr == nil {
+		return false
+	}
+	return apiErr.HTTPStatus == http.StatusUnauthorized ||
+		strings.EqualFold(strings.TrimSpace(apiErr.Code), "RUNTIME_TOKEN_REJECTED")
 }
 
 func ensurePublicPersonalEvent(eventKey string) error {
@@ -1016,7 +1185,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	}
 
 	configDir := defaultConfigDir()
-	identity, err := personalResolveEventIdentity(ctx, configDir, opts.StreamSourceID)
+	identity, err := resolvePersonalEventIdentityForToken(ctx, configDir, opts.StreamSourceID, opts.ExplicitToken, opts.ClientIDOverride)
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
@@ -1028,7 +1197,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	if err != nil {
 		return fmt.Errorf("event stop --as user: %w", err)
 	}
-	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity)
+	client := newPersonalEventControlClient(configDir, personalEventControlBaseURL(opts.ControlBaseURL, configDir), identity, opts.ExplicitToken)
 	for _, id := range subscribeIDs {
 		if err := personalDeleteSubscription(client, ctx, id); err != nil {
 			return fmt.Errorf("event stop --as user: cancel subscription %s: %w", id, err)
@@ -1051,7 +1220,7 @@ func runPersonalEventStop(c *cobra.Command, opts personalStopOptions) error {
 	}
 
 	busState := "personal bus stopped"
-	if err := personalStopBus(busctl.StopConfig{WorkDir: workDir}); err != nil {
+	if err := personalStopBus(busctl.StopConfig{WorkDir: workDir, IPCEndpoint: ipcEndpoint}); err != nil {
 		if errors.Is(err, busctl.ErrNotRunning) {
 			busState = "personal bus is not running"
 		} else {
@@ -1126,6 +1295,17 @@ func interruptPersonalConsumers(ipcEndpoint string, subscribeIDs []string) error
 }
 
 func stopPersonalConsumers(w io.Writer, ipcEndpoint string, subscribeIDs []string) error {
+	hasTarget := false
+	for _, id := range subscribeIDs {
+		if strings.TrimSpace(id) != "" {
+			hasTarget = true
+			break
+		}
+	}
+	if !hasTarget {
+		return nil
+	}
+
 	if _, err := personalStopConsumers(ipcEndpoint, subscribeIDs); err == nil {
 		return nil
 	} else if !errors.Is(err, busctl.ErrConsumerStopUnsupported) {
@@ -1142,6 +1322,138 @@ func printPersonalStopResult(w io.Writer, subscribeIDs []string, single bool, bu
 		return
 	}
 	fmt.Fprintf(w, "cancelled %d personal subscription(s); %s\n", len(subscribeIDs), busState)
+}
+
+func resolvePersonalEventIdentityForToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, clientIDOverrides ...string) (personal.Identity, error) {
+	explicitToken = strings.TrimSpace(explicitToken)
+	if explicitToken == "" {
+		return personalResolveEventIdentity(ctx, configDir, sourceIDOverride)
+	}
+	clientIDOverride := ""
+	if len(clientIDOverrides) > 0 {
+		clientIDOverride = strings.TrimSpace(clientIDOverrides[0])
+	}
+	return resolvePersonalEventIdentityWithToken(ctx, configDir, sourceIDOverride, explicitToken, clientIDOverride)
+}
+
+// resolvePersonalEventIdentityWithToken resolves only non-sensitive identity
+// metadata around a caller-supplied bearer token. It intentionally does not
+// call LoadTokenData or any refresh-capable token resolver: an explicit root
+// --token must never be replaced with, persisted into, or used to refresh a
+// local OAuth profile.
+func resolvePersonalEventIdentityWithToken(ctx context.Context, configDir, sourceIDOverride, explicitToken string, clientIDOverrides ...string) (personal.Identity, error) {
+	explicitToken = strings.TrimSpace(explicitToken)
+	if explicitToken == "" {
+		return resolvePersonalEventIdentity(ctx, configDir, sourceIDOverride)
+	}
+	if strings.Contains(strings.TrimSpace(authpkg.RuntimeProfile()), ",") {
+		return personal.Identity{}, fmt.Errorf("personal events require exactly one --profile")
+	}
+
+	corpID := resolveRuntimeDefault(ctx, "$corpId")
+	userID := resolveRuntimeDefault(ctx, "$currentUserId")
+	clientID := ""
+	if len(clientIDOverrides) > 0 {
+		clientID = strings.TrimSpace(clientIDOverrides[0])
+	}
+	if clientID == "" {
+		// An edition hook or explicit environment value is runtime identity,
+		// not persisted app state. Resolve it before profiles.json so a complete
+		// host context never depends on local OAuth metadata health.
+		clientID = strings.TrimSpace(personalRuntimeEventClientID())
+	}
+	explicitProfile := strings.TrimSpace(authpkg.RuntimeProfile()) != ""
+	if explicitProfile || corpID == "" || userID == "" || clientID == "" {
+		profile, err := personalEventProfileMetadata(configDir)
+		if err != nil {
+			// A user-selected --profile remains a strict contract. Without an
+			// explicit selector, profiles.json is optional metadata for a
+			// host-managed bearer: malformed or stale persisted state must not
+			// override complete runtime defaults or prevent the later global
+			// client-id fallback.
+			if explicitProfile {
+				return personal.Identity{}, fmt.Errorf("load OAuth identity metadata: %w", err)
+			}
+			profile = nil
+		}
+		if profile != nil {
+			if corpID == "" {
+				corpID = strings.TrimSpace(profile.CorpID)
+			}
+			if userID == "" {
+				userID = strings.TrimSpace(profile.UserID)
+			}
+			if clientID == "" {
+				clientID = strings.TrimSpace(profile.ClientID)
+			}
+		}
+	}
+	if clientID == "" {
+		// Persisted/global app credentials are only a fallback after the
+		// selected profile, so an old app config cannot override profile.ClientID.
+		clientID = strings.TrimSpace(personalClientID())
+	}
+	if clientID == "" {
+		if id, _, _, _, resolveErr := personalResolveAppCredentialsStrict(configDir); resolveErr == nil {
+			clientID = strings.TrimSpace(id)
+		}
+	}
+	if clientID == "" {
+		return personal.Identity{}, fmt.Errorf("cannot resolve OAuth client_id for personal events")
+	}
+
+	sourceID := strings.TrimSpace(sourceIDOverride)
+	if sourceID == "" {
+		sourceID = personalEventStreamSourceID("")
+	}
+	localSubject := ""
+	if corpID == "" || userID == "" {
+		localSubject = personalTokenSubject("access", explicitToken)
+	}
+	return personal.Identity{
+		LocalSubject: localSubject,
+		CorpID:       corpID,
+		UserID:       userID,
+		ClientID:     clientID,
+		SourceID:     sourceID,
+	}, nil
+}
+
+func personalEventProfileMetadata(configDir string) (*authpkg.Profile, error) {
+	cfg, err := personalLoadProfiles(configDir)
+	if err != nil {
+		return nil, err
+	}
+	selector := strings.TrimSpace(authpkg.RuntimeProfile())
+	explicitSelector := selector != ""
+	if strings.Contains(selector, ",") {
+		return nil, fmt.Errorf("personal events require exactly one --profile")
+	}
+	if cfg == nil || len(cfg.Profiles) == 0 {
+		if explicitSelector {
+			return nil, fmt.Errorf("profile %q not found", selector)
+		}
+		return nil, nil
+	}
+	if selector == "" {
+		selector = strings.TrimSpace(cfg.CurrentProfile)
+	}
+	if selector == "" {
+		return nil, nil
+	}
+	profile, err := selectPersonalEventProfileMetadata(cfg, selector, make(map[string]struct{}))
+	if err != nil && !explicitSelector {
+		// A stale persisted CurrentProfile must not make a host-provided bearer
+		// unusable. Runtime defaults and the one-way local subject are sufficient
+		// to isolate the event bus without consulting local OAuth credentials.
+		return nil, nil
+	}
+	return profile, err
+}
+
+func selectPersonalEventProfileMetadata(cfg *authpkg.ProfilesConfig, selector string, visited map[string]struct{}) (*authpkg.Profile, error) {
+	_ = visited // retained for the focused compatibility seam used by app tests.
+	return authpkg.ResolveProfileMetadata(cfg, strings.TrimSpace(selector))
 }
 
 func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceIDOverride string) (personal.Identity, error) {
@@ -1198,7 +1510,11 @@ func resolvePersonalEventIdentity(ctx context.Context, configDir string, sourceI
 	}, nil
 }
 
-func newPersonalEventControlClient(configDir, baseURL string, identity personal.Identity) *personal.Client {
+func newPersonalEventControlClient(configDir, baseURL string, identity personal.Identity, explicitTokens ...string) *personal.Client {
+	explicitToken := ""
+	if len(explicitTokens) > 0 {
+		explicitToken = strings.TrimSpace(explicitTokens[0])
+	}
 	identity.AccessToken = ""
 	client := personal.NewClient(baseURL, identity)
 	version := strings.TrimSpace(RawVersion())
@@ -1207,10 +1523,144 @@ func newPersonalEventControlClient(configDir, baseURL string, identity personal.
 	}
 	client.ClientVersion = version
 	client.UserAgent = "dws-cli/" + version
-	client.AccessTokenProvider = func(ctx context.Context) (string, error) {
-		return personalResolveAuxiliaryAccessToken(ctx, configDir, "")
+	if explicitToken != "" {
+		client.AccessTokenProvider = func(context.Context) (string, error) { return explicitToken, nil }
+		client.HTTPClient.Transport = runtimeTokenControlTransport{base: http.DefaultTransport, token: explicitToken}
+		client.HTTPClient.CheckRedirect = runtimeTokenRedirectPolicy
+	} else {
+		client.AccessTokenProvider = func(ctx context.Context) (string, error) {
+			return personalResolveAuxiliaryAccessToken(ctx, configDir, "")
+		}
 	}
 	return client
+}
+
+// runtimeTokenRedirectPolicy prevents Go's redirect machinery from copying
+// DWS's custom x-user-access-token header to another authority. Returning
+// ErrUseLastResponse keeps the 3xx response available to the caller without a
+// url.Error that could echo an attacker-controlled Location value.
+func runtimeTokenRedirectPolicy(req *http.Request, via []*http.Request) error {
+	if len(via) == 0 || req == nil || req.URL == nil || via[0] == nil || via[0].URL == nil {
+		return http.ErrUseLastResponse
+	}
+	origin := via[0].URL
+	if !strings.EqualFold(strings.TrimSpace(req.URL.Host), strings.TrimSpace(origin.Host)) {
+		return http.ErrUseLastResponse
+	}
+	if strings.EqualFold(origin.Scheme, "https") && !strings.EqualFold(req.URL.Scheme, "https") {
+		return http.ErrUseLastResponse
+	}
+	return nil
+}
+
+const runtimeTokenControlErrorBody = `{"code":"RUNTIME_TOKEN_REJECTED","message":"event runtime token was rejected; retry with a fresh host credential"}`
+
+// runtimeTokenControlTransport scrubs an explicit bearer from every response
+// body and diagnostic header before the control client decodes or logs it. A
+// 401 is replaced with a fixed rejection envelope so untrusted response text
+// can never escape through stderr or debug logs.
+type runtimeTokenControlTransport struct {
+	base  http.RoundTripper
+	token string
+}
+
+func (t runtimeTokenControlTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	resp, err := base.RoundTrip(req)
+	if err != nil {
+		if token := strings.TrimSpace(t.token); token != "" && strings.Contains(err.Error(), token) {
+			return nil, errors.New("personal event: runtime-token control request failed")
+		}
+		return nil, err
+	}
+	if resp == nil {
+		return resp, err
+	}
+	token := strings.TrimSpace(t.token)
+	for key, values := range resp.Header {
+		for i := range values {
+			if token != "" {
+				values[i] = strings.ReplaceAll(values[i], token, "<redacted-runtime-token>")
+			}
+		}
+		resp.Header[key] = values
+	}
+	var responseBody []byte
+	if resp.Body != nil {
+		responseBody, err = io.ReadAll(io.LimitReader(resp.Body, config.MaxResponseBodySize))
+		_ = resp.Body.Close()
+		if err != nil {
+			return nil, errors.New("personal event: read runtime-token control response")
+		}
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		responseBody = []byte(runtimeTokenControlErrorBody)
+	} else if token != "" {
+		responseBody = redactRuntimeTokenResponseBody(responseBody, token)
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(responseBody))
+	resp.ContentLength = int64(len(responseBody))
+	if resp.Header == nil {
+		resp.Header = make(http.Header)
+	}
+	resp.Header.Set("Content-Type", "application/json")
+	resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(responseBody)))
+	return resp, nil
+}
+
+func redactRuntimeTokenResponseBody(data []byte, token string) []byte {
+	token = strings.TrimSpace(token)
+	if len(data) == 0 || token == "" {
+		return data
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var decoded any
+	if err := decoder.Decode(&decoded); err == nil {
+		var trailing any
+		if trailingErr := decoder.Decode(&trailing); errors.Is(trailingErr, io.EOF) {
+			if redacted, changed := redactRuntimeTokenJSONValue(decoded, token); changed {
+				if encoded, marshalErr := json.Marshal(redacted); marshalErr == nil {
+					return encoded
+				}
+			}
+		}
+	}
+	return bytes.ReplaceAll(data, []byte(token), []byte("<redacted-runtime-token>"))
+}
+
+func redactRuntimeTokenJSONValue(value any, token string) (any, bool) {
+	switch typed := value.(type) {
+	case string:
+		redacted := strings.ReplaceAll(typed, token, "<redacted-runtime-token>")
+		return redacted, redacted != typed
+	case []any:
+		changed := false
+		for i := range typed {
+			var itemChanged bool
+			typed[i], itemChanged = redactRuntimeTokenJSONValue(typed[i], token)
+			changed = changed || itemChanged
+		}
+		return typed, changed
+	case map[string]any:
+		changed := false
+		redactedMap := make(map[string]any, len(typed))
+		for key, item := range typed {
+			redactedKey := strings.ReplaceAll(key, token, "<redacted-runtime-token>")
+			redacted, itemChanged := redactRuntimeTokenJSONValue(item, token)
+			redactedMap[redactedKey] = redacted
+			changed = changed || itemChanged || redactedKey != key
+		}
+		if !changed {
+			return typed, false
+		}
+		return redactedMap, true
+	default:
+		return value, false
+	}
 }
 
 func personalTokenSubject(kind, token string) string {
@@ -1220,6 +1670,15 @@ func personalTokenSubject(kind, token string) string {
 	}
 	sum := sha256.Sum256([]byte(token))
 	return strings.TrimSpace(kind) + ":" + hex.EncodeToString(sum[:])
+}
+
+func validPersonalIdentityHash(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 16 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 func resolveRuntimeDefault(ctx context.Context, key string) string {
@@ -1259,20 +1718,42 @@ func newPersonalStreamSource(ctx context.Context, opts personalStreamSourceOptio
 		}
 		clientSecret = secret
 	}
+	credentialBroker := opts.CredentialBroker
+	if credentialBroker == nil {
+		credentialBroker = newPersonalCredentialBroker(opts.ConfigDir, false, false)
+	}
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	if opts.RuntimeTokenMode {
+		httpClient.CheckRedirect = runtimeTokenRedirectPolicy
+	}
 	_ = ctx
 	return source.NewPersonal(source.PersonalConfig{
 		AccessTokenProvider: func(ctx context.Context) (string, error) {
-			return personalResolveAuxiliaryAccessToken(ctx, opts.ConfigDir, "")
+			return credentialBroker.Resolve(ctx)
 		},
 		ForceRefreshToken: func(ctx context.Context, rejectedToken string) (string, error) {
-			return personalForceRefreshRejectedToken(ctx, opts.ConfigDir, rejectedToken)
+			return credentialBroker.RefreshRejected(ctx, rejectedToken)
 		},
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		SourceID:     opts.Identity.SourceID,
-		TicketURL:    ticketURL,
-		TicketMode:   mode,
-		HTTPClient:   &http.Client{Timeout: 30 * time.Second},
+		ClassifyRetryReject: credentialBroker.ClassifyRejectedAfterRetry,
+		ClientID:            clientID,
+		ClientSecret:        clientSecret,
+		SourceID:            opts.Identity.SourceID,
+		TicketURL:           ticketURL,
+		TicketMode:          mode,
+		HTTPClient:          httpClient,
+	})
+}
+
+func newPersonalCredentialBroker(configDir string, requireSeed, requireActivation bool) *runtimecred.Broker {
+	return runtimecred.New(runtimecred.Config{
+		RequireSeed:       requireSeed,
+		RequireActivation: requireActivation,
+		LocalResolve: func(ctx context.Context) (string, error) {
+			return personalResolveAuxiliaryAccessToken(ctx, configDir, "")
+		},
+		LocalRefresh: func(ctx context.Context, rejectedToken string) (string, error) {
+			return personalForceRefreshRejectedToken(ctx, configDir, rejectedToken)
+		},
 	})
 }
 
@@ -1333,6 +1814,25 @@ func personalBusSpawnArgs(identity personal.Identity, ticketMode, ticketURL stri
 	}
 	if strings.TrimSpace(ticketURL) != "" {
 		args = append(args, "--stream-ticket-url", ticketURL)
+	}
+	return args
+}
+
+func personalBusSpawnArgsForToken(identity personal.Identity, identityHash, ticketMode, ticketURL, profileSelector, explicitToken string) []string {
+	if strings.TrimSpace(explicitToken) == "" {
+		return personalBusSpawnArgs(identity, ticketMode, ticketURL, profileSelector)
+	}
+	args := []string{
+		"--source-kind", string(dwsevent.SourceKindPersonalStream),
+		"--runtime-token-mode",
+		"--identity-hash", strings.TrimSpace(identityHash),
+		"--stream-source-id", strings.TrimSpace(identity.SourceID),
+	}
+	if strings.TrimSpace(ticketMode) != "" {
+		args = append(args, "--stream-ticket-mode", strings.TrimSpace(ticketMode))
+	}
+	if strings.TrimSpace(ticketURL) != "" {
+		args = append(args, "--stream-ticket-url", strings.TrimSpace(ticketURL))
 	}
 	return args
 }

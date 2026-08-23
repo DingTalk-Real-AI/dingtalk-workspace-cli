@@ -26,11 +26,16 @@ package attendance
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/responsecheck"
 )
 
 const (
@@ -83,7 +88,7 @@ func flexDateTime(s string) (string, error) {
 }
 
 // dateToMillis parses YYYY-MM-DD / datetime; when endOfDay is set a bare date
-// resolves to 23:59:59 (mirrors helper parseDateToTimestamp "end" behaviour).
+// resolves to the final millisecond before the next local calendar day.
 func dateToMillis(s string, endOfDay bool) (int64, error) {
 	s = strings.TrimSpace(s)
 	if t, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local); err == nil {
@@ -91,7 +96,7 @@ func dateToMillis(s string, endOfDay bool) (int64, error) {
 	}
 	if t, err := time.ParseInLocation("2006-01-02", s, time.Local); err == nil {
 		if endOfDay {
-			return t.Add(23*time.Hour + 59*time.Minute + 59*time.Second).UnixMilli(), nil
+			return t.AddDate(0, 0, 1).Add(-time.Millisecond).UnixMilli(), nil
 		}
 		return t.UnixMilli(), nil
 	}
@@ -168,15 +173,69 @@ var CheckResult = shortcut.Shortcut{
 	Description: "查询用户打卡结果（迟到/早退/缺卡等）",
 	Intent:      "当你需要批量统计一批员工在某段时间的打卡结果（正常/迟到/早退/缺卡等判定结论）时使用，例如做月度考勤汇总或异常人员排查；输入多个 userId（最多 100 人）和不超过 1 个月的日期区间，返回每人每天的打卡结果状态，支持分页。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_check_result",
+			CanonicalPath:  "attendance.shortcut_check_result",
+			CLIPath:        "attendance +check-result",
+			PrimaryCLIPath: "attendance +check-result",
+		},
+		Description: "查询用户打卡结果（迟到/早退/缺卡等）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询用户打卡结果（迟到/早退/缺卡等）",
+			UseWhen:      []string{"当你需要批量统计一批员工在某段时间的打卡结果（正常/迟到/早退/缺卡等判定结论）时使用，例如做月度考勤汇总或异常人员排查；输入多个 userId（最多 100 人）和不超过 1 个月的日期区间，返回每人每天的打卡结果状态，支持分页。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +check-result --users userId1,userId2 --start 2026-04-01 --end 2026-04-30 --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "用户 userId 列表，逗号分隔，最多 100 人", Required: true},
-		{Name: "start", Type: shortcut.FlagString, Desc: "起始日期 YYYY-MM-DD", Required: true},
-		{Name: "end", Type: shortcut.FlagString, Desc: "结束日期 YYYY-MM-DD，跨度不超过 1 个月", Required: true},
-		{Name: "offset", Type: shortcut.FlagInt, Default: "0", Desc: "分页偏移量，默认 0"},
-		{Name: "limit", Type: shortcut.FlagInt, Default: "100", Desc: "分页大小，1-1000，默认 100"},
+		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "--users 不能为空，用户 ID 不能重复，最多 100 个，逗号分隔", Required: true},
+		{Name: "start", Type: shortcut.FlagString, Desc: "--start 必须是 YYYY-MM-DD", Required: true},
+		{Name: "end", Type: shortcut.FlagString, Desc: "--end 必须是 YYYY-MM-DD，不能早于 --start，且与 --start 跨度不超过 1 个月", Required: true},
+		{Name: "offset", Type: shortcut.FlagInt, Default: "0", Desc: "--offset 不能小于 0，默认 0"},
+		{Name: "limit", Type: shortcut.FlagInt, Default: "100", Desc: "--limit 必须大于 0 且不超过 1000，默认 100"},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"users"}, Description: "--users 不能为空，用户 ID 不能重复，最多 100 个"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start"}, Description: "--start 必须是 YYYY-MM-DD"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"end"}, Description: "--end 必须是 YYYY-MM-DD，不能早于 --start，且与 --start 跨度不超过 1 个月"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须大于 0 且不超过 1000"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"offset"}, Description: "--offset 不能小于 0"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := attendanceValidateUserIDs(rt.StrSlice("users"), 100); err != nil {
+			return err
+		}
+		if err := attendanceValidateMonthRange(rt.Str("start"), rt.Str("end")); err != nil {
+			return err
+		}
+		if limit := rt.Int("limit"); limit < 1 || limit > 1000 {
+			return fmt.Errorf("--limit 必须在 1 到 1000 之间")
+		}
+		if rt.Int("offset") < 0 {
+			return fmt.Errorf("--offset 不能小于 0")
+		}
+		return nil
 	},
 	Tips: []string{`dws attendance +check-result --users userId1,userId2 --start 2026-04-01 --end 2026-04-30 --limit 50`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		limit, offset := rt.Int("limit"), rt.Int("offset")
+		if limit < 1 || limit > 1000 {
+			return fmt.Errorf("--limit 必须在 1 到 1000 之间")
+		}
+		if offset < 0 {
+			return fmt.Errorf("--offset 不能小于 0")
+		}
 		from, err := dayDateTime(rt.Str("start"))
 		if err != nil {
 			return err
@@ -185,15 +244,40 @@ var CheckResult = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.CallMCP("query_check_result", map[string]any{
+		params := map[string]any{
 			"QueryCheckResultRequest": map[string]any{
 				"userIds":      rt.StrSlice("users"),
 				"workDateFrom": from,
 				"workDateTo":   to,
-				"offset":       rt.Int("offset"),
-				"limit":        rt.Int("limit"),
+				"offset":       offset,
+				"limit":        limit,
 			},
-		})
+		}
+		data, err := rt.CallMCPData(serverWukong, "query_check_result", params)
+		if err != nil {
+			return err
+		}
+		records, err := responsecheck.RequireObjectCollection(data, serverWukong+"/query_check_result", "result")
+		if err != nil {
+			return err
+		}
+		if err := attendanceValidatePositiveIntegerIDs(records, serverWukong+"/query_check_result", "id"); err != nil {
+			return err
+		}
+		startMillis, _ := dayMillis(rt.Str("start"))
+		endMillis, _ := dateToMillis(rt.Str("end"), true)
+		if err := attendanceValidateUserAndTimeBinding(records, serverWukong+"/query_check_result", rt.StrSlice("users"), "userId", "workDate", startMillis, endMillis); err != nil {
+			return err
+		}
+		complete := len(records) < limit
+		extra := map[string]any{"limit": limit}
+		nextToken := ""
+		if !complete {
+			nextOffset := offset + len(records)
+			extra["nextOffset"] = nextOffset
+			nextToken = strconv.Itoa(nextOffset)
+		}
+		return attendanceOutputCollection(rt, "records", records, complete, extra, true, nextToken)
 	},
 }
 
@@ -205,10 +289,46 @@ var CheckRecord = shortcut.Shortcut{
 	Description: "查询用户打卡流水（打卡时间/地点/定位方式）",
 	Intent:      "当你要查看员工每一次实际打卡的原始记录（具体打卡时刻、打卡地点、定位/Wifi/蓝牙等方式）而不是判定结论时使用，例如核实某人是否在指定地点打卡；输入 userId 列表和不超过 1 个月的日期区间，返回逐条打卡流水。与 +check-result 的区别是这里返回明细流水而非迟到早退结论。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_check_record",
+			CanonicalPath:  "attendance.shortcut_check_record",
+			CLIPath:        "attendance +check-record",
+			PrimaryCLIPath: "attendance +check-record",
+		},
+		Description: "查询用户打卡流水（打卡时间/地点/定位方式）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询用户打卡流水（打卡时间/地点/定位方式）",
+			UseWhen:      []string{"当你要查看员工每一次实际打卡的原始记录（具体打卡时刻、打卡地点、定位/Wifi/蓝牙等方式）而不是判定结论时使用，例如核实某人是否在指定地点打卡；输入 userId 列表和不超过 1 个月的日期区间，返回逐条打卡流水。与 +check-result 的区别是这里返回明细流水而非迟到早退结论。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +check-record --users userId1 --start 2026-04-01 --end 2026-04-30"},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "用户 userId 列表，逗号分隔", Required: true},
-		{Name: "start", Type: shortcut.FlagString, Desc: "起始日期 YYYY-MM-DD", Required: true},
-		{Name: "end", Type: shortcut.FlagString, Desc: "结束日期 YYYY-MM-DD，跨度不超过 1 个月", Required: true},
+		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "--users 不能为空，用户 ID 不能重复，逗号分隔", Required: true},
+		{Name: "start", Type: shortcut.FlagString, Desc: "--start 必须是 YYYY-MM-DD", Required: true},
+		{Name: "end", Type: shortcut.FlagString, Desc: "--end 必须是 YYYY-MM-DD，不能早于 --start，且与 --start 跨度不超过 1 个月", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"users"}, Description: "--users 不能为空，用户 ID 不能重复"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start"}, Description: "--start 必须是 YYYY-MM-DD"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"end"}, Description: "--end 必须是 YYYY-MM-DD，不能早于 --start，且与 --start 跨度不超过 1 个月"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := attendanceValidateUserIDs(rt.StrSlice("users"), 0); err != nil {
+			return err
+		}
+		return attendanceValidateMonthRange(rt.Str("start"), rt.Str("end"))
 	},
 	Tips: []string{`dws attendance +check-record --users userId1 --start 2026-04-01 --end 2026-04-30`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -220,13 +340,30 @@ var CheckRecord = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.CallMCP("query_check_record", map[string]any{
+		data, err := rt.CallMCPData(serverWukong, "query_check_record", map[string]any{
 			"QueryCheckRecordRequest": map[string]any{
 				"userIds":       rt.StrSlice("users"),
 				"checkDateFrom": from,
 				"checkDateTo":   to,
 			},
 		})
+		if err != nil {
+			return err
+		}
+		operation := serverWukong + "/query_check_record"
+		items, err := responsecheck.RequireObjectCollection(data, operation, "result")
+		if err != nil {
+			return err
+		}
+		if err := attendanceValidatePositiveIntegerIDs(items, operation, "id"); err != nil {
+			return err
+		}
+		startMillis, _ := dayMillis(rt.Str("start"))
+		endMillis, _ := dateToMillis(rt.Str("end"), true)
+		if err := attendanceValidateUserAndTimeBinding(items, operation, rt.StrSlice("users"), "userId", "userCheckTime", startMillis, endMillis); err != nil {
+			return err
+		}
+		return attendanceOutputCollection(rt, "records", items, true, nil, false, "")
 	},
 }
 
@@ -240,11 +377,73 @@ var ListApprove = shortcut.Shortcut{
 	Description: "查询用户考勤审批单（补卡/加班/请假/出差外出）",
 	Intent:      "当你想查看某些员工已提交的考勤类审批单（加班、请假、出差外出、补卡）时使用，例如核对某人这段时间请了几次假或有没有补卡审批；输入 userId 列表、审批类型（overtime/加班、leave/请假、trip/出差外出、patch/补卡）和日期区间，返回匹配的审批单记录。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_list_approve",
+			CanonicalPath:  "attendance.shortcut_list_approve",
+			CLIPath:        "attendance +list-approve",
+			PrimaryCLIPath: "attendance +list-approve",
+		},
+		Description: "查询用户考勤审批单（补卡/加班/请假/出差外出）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询用户考勤审批单（补卡/加班/请假/出差外出）",
+			UseWhen:      []string{"当你想查看某些员工已提交的考勤类审批单（加班、请假、出差外出、补卡）时使用，例如核对某人这段时间请了几次假或有没有补卡审批；输入 userId 列表、审批类型（overtime/加班、leave/请假、trip/出差外出、patch/补卡）和日期区间，返回匹配的审批单记录。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +list-approve --users userId1 --types overtime,leave --start 2026-04-01 --end 2026-04-30"},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "用户 userId 列表，逗号分隔", Required: true},
-		{Name: "types", Type: shortcut.FlagStringSlice, Desc: "审批类型，逗号分隔：overtime/加班、trip/travel/出差/外出、leave/请假、patch/补卡", Required: true},
-		{Name: "start", Type: shortcut.FlagString, Desc: "起始日期 YYYY-MM-DD", Required: true},
-		{Name: "end", Type: shortcut.FlagString, Desc: "结束日期 YYYY-MM-DD", Required: true},
+		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "--users 不能为空，用户 ID 不能重复，逗号分隔", Required: true},
+		{Name: "types", Type: shortcut.FlagStringSlice, Desc: "--types 不能为空，映射后的审批类型不能重复；overtime/加班、trip/travel/出差/外出、leave/请假、patch/补卡", Required: true},
+		{Name: "start", Type: shortcut.FlagString, Desc: "--start 必须是 YYYY-MM-DD", Required: true},
+		{Name: "end", Type: shortcut.FlagString, Desc: "--end 必须是 YYYY-MM-DD，且不能早于 --start", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"users"}, Description: "--users 不能为空，用户 ID 不能重复"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"types"}, Description: "--types 不能为空，映射后的审批类型不能重复"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start"}, Description: "--start 必须是 YYYY-MM-DD"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"end"}, Description: "--end 必须是 YYYY-MM-DD，且不能早于 --start"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := attendanceValidateUserIDs(rt.StrSlice("users"), 0); err != nil {
+			return err
+		}
+		start, err := dayMillis(rt.Str("start"))
+		if err != nil {
+			return err
+		}
+		end, err := dayMillis(rt.Str("end"))
+		if err != nil {
+			return err
+		}
+		if end < start {
+			return fmt.Errorf("--end 不能早于 --start")
+		}
+		seen := map[int]struct{}{}
+		for _, value := range rt.StrSlice("types") {
+			mapped, ok := approveTypeMapping[strings.ToLower(strings.TrimSpace(value))]
+			if !ok {
+				return fmt.Errorf("无效的审批类型: %s", value)
+			}
+			if _, duplicate := seen[mapped]; duplicate {
+				return fmt.Errorf("审批类型不能重复")
+			}
+			seen[mapped] = struct{}{}
+		}
+		if len(seen) == 0 {
+			return fmt.Errorf("--types 不能为空")
+		}
+		return nil
 	},
 	Tips: []string{`dws attendance +list-approve --users userId1 --types overtime,leave --start 2026-04-01 --end 2026-04-30`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -268,14 +467,25 @@ var ListApprove = shortcut.Shortcut{
 			}
 			bizTypes = append(bizTypes, bizType)
 		}
-		return rt.CallMCP("query_user_approve", map[string]any{
+		return attendanceCallCollection(rt, serverWukong, "query_user_approve", map[string]any{
 			"QueryUserApproveRequest": map[string]any{
 				"userIds":  rt.StrSlice("users"),
 				"bizTypes": bizTypes,
 				"fromDate": from,
 				"toDate":   to,
 			},
-		})
+		}, "approvals", true, nil, func(items []map[string]any) error {
+			if err := attendanceValidatePositiveIntegerIDs(items, serverWukong+"/query_user_approve", "id"); err != nil {
+				return err
+			}
+			requestedTypes := make(map[int]struct{}, len(bizTypes))
+			for _, value := range bizTypes {
+				requestedTypes[value] = struct{}{}
+			}
+			startMillis, _ := dayMillis(rt.Str("start"))
+			endMillis, _ := dateToMillis(rt.Str("end"), true)
+			return attendanceValidateApprovalBinding(items, serverWukong+"/query_user_approve", rt.StrSlice("users"), requestedTypes, startMillis, endMillis)
+		}, "result")
 	},
 }
 
@@ -287,6 +497,31 @@ var GetApproveTemplate = shortcut.Shortcut{
 	Description: "查询补卡/请假/加班/外出/出差审批提交链接",
 	Intent:      "当用户想自己发起一条考勤审批（补卡、请假、加班、外出、出差）、需要拿到对应审批表单的提交入口链接时使用；输入审批类型（如 leave/请假），返回可直接打开填写并提交的审批链接。本命令只返回链接、不代替用户提交审批。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_approve_template",
+			CanonicalPath:  "attendance.shortcut_get_approve_template",
+			CLIPath:        "attendance +get-approve-template",
+			PrimaryCLIPath: "attendance +get-approve-template",
+		},
+		Description: "查询补卡/请假/加班/外出/出差审批提交链接",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询补卡/请假/加班/外出/出差审批提交链接",
+			UseWhen:      []string{"当用户想自己发起一条考勤审批（补卡、请假、加班、外出、出差）、需要拿到对应审批表单的提交入口链接时使用；输入审批类型（如 leave/请假），返回可直接打开填写并提交的审批链接。本命令只返回链接、不代替用户提交审批。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-approve-template --type leave"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "type", Type: shortcut.FlagString, Desc: "审批类型：repair-check/补卡、leave/请假、overtime/加班、travel/外出、out/出差（或 REPAIR_CHECK/LEAVE/OVERTIME/TRAVEL/OUT）", Required: true},
 	},
@@ -302,9 +537,11 @@ var GetApproveTemplate = shortcut.Shortcut{
 		default:
 			return fmt.Errorf("无效的审批类型: %s，支持: repair-check/补卡、leave/请假、overtime/加班、travel/外出、out/出差，或 REPAIR_CHECK/LEAVE/OVERTIME/TRAVEL/OUT", input)
 		}
-		return rt.CallMCP("query_at_approve_template", map[string]any{
+		return attendanceCallCollection(rt, serverWukong, "query_at_approve_template", map[string]any{
 			"approveType": approveType,
-		})
+		}, "templates", true, nil, func(items []map[string]any) error {
+			return attendanceValidateApproveTemplates(items, serverWukong+"/query_at_approve_template", approveType)
+		}, "result")
 	},
 }
 
@@ -321,10 +558,57 @@ var GetSchedule = shortcut.Shortcut{
 	Description: "获取指定用户一段时间内的排班记录",
 	Intent:      "当你要查看排班制考勤组下员工在某段时间的排班记录（含排班 id、班次、是否休息）时使用，尤其是需要拿到排班 id 用于后续 BOSS 改签打卡（+boss-check）的场景；输入 userId 列表和起止时间，返回逐日排班明细。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_schedule",
+			CanonicalPath:  "attendance.shortcut_get_schedule",
+			CLIPath:        "attendance +get-schedule",
+			PrimaryCLIPath: "attendance +get-schedule",
+		},
+		Description: "获取指定用户一段时间内的排班记录",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "获取指定用户一段时间内的排班记录",
+			UseWhen:      []string{"当你要查看排班制考勤组下员工在某段时间的排班记录（含排班 id、班次、是否休息）时使用，尤其是需要拿到排班 id 用于后续 BOSS 改签打卡（+boss-check）的场景；输入 userId 列表和起止时间，返回逐日排班明细。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-schedule --users user001,user002 --start 2026-04-01 --end 2026-04-30"},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "用户 userId 列表，逗号分隔", Required: true},
-		{Name: "start", Type: shortcut.FlagString, Desc: "开始日期 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss", Required: true},
-		{Name: "end", Type: shortcut.FlagString, Desc: "结束日期 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss", Required: true},
+		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "--users 不能为空，用户 ID 不能重复，逗号分隔", Required: true},
+		{Name: "start", Type: shortcut.FlagString, Desc: "--start 必须是 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss", Required: true},
+		{Name: "end", Type: shortcut.FlagString, Desc: "--end 必须是 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss，且不能早于 --start", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"users"}, Description: "--users 不能为空，用户 ID 不能重复"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start"}, Description: "--start 必须是 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"end"}, Description: "--end 必须是 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss，且不能早于 --start"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := attendanceValidateUserIDs(rt.StrSlice("users"), 0); err != nil {
+			return err
+		}
+		start, err := dateToMillis(rt.Str("start"), false)
+		if err != nil {
+			return err
+		}
+		end, err := dateToMillis(rt.Str("end"), true)
+		if err != nil {
+			return err
+		}
+		if end < start {
+			return fmt.Errorf("--end 不能早于 --start")
+		}
+		return nil
 	},
 	Tips: []string{`dws attendance +get-schedule --users user001,user002 --start 2026-04-01 --end 2026-04-30`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -336,13 +620,18 @@ var GetSchedule = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.CallMCP("getScheduleByRange", map[string]any{
+		return attendanceCallCollection(rt, serverWukong, "getScheduleByRange", map[string]any{
 			"GetScheduleByRangeRequest": map[string]any{
 				"userIdList":    rt.StrSlice("users"),
 				"workDateBegin": begin,
 				"workDateEnd":   end,
 			},
-		})
+		}, "schedules", true, nil, func(items []map[string]any) error {
+			if err := attendanceValidatePositiveIntegerIDs(items, serverWukong+"/getScheduleByRange", "id"); err != nil {
+				return err
+			}
+			return attendanceValidateUserAndTimeBinding(items, serverWukong+"/getScheduleByRange", rt.StrSlice("users"), "userId", "workDate", begin, end)
+		}, "result")
 	},
 }
 
@@ -404,21 +693,49 @@ var SearchClass = shortcut.Shortcut{
 	Description: "查询当前用户可管理的班次详情列表",
 	Intent:      "当你要浏览或按名称查找当前用户能管理的班次、以便拿到班次 ID 用于建组、排班或改班次时使用；可选按班次名关键字模糊搜索、按 ALL/我负责的过滤并分页，返回班次列表及详情。要看某个具体班次的完整配置用 +get-class。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_search_class",
+			CanonicalPath:  "attendance.shortcut_search_class",
+			CLIPath:        "attendance +search-class",
+			PrimaryCLIPath: "attendance +search-class",
+		},
+		Description: "查询当前用户可管理的班次详情列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可管理的班次详情列表",
+			UseWhen:      []string{"当你要浏览或按名称查找当前用户能管理的班次、以便拿到班次 ID 用于建组、排班或改班次时使用；可选按班次名关键字模糊搜索、按 ALL/我负责的过滤并分页，返回班次列表及详情。要看某个具体班次的完整配置用 +get-class。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +search-class --query \"早班\" --filter-type MINE_OWN"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "班次名称关键字，模糊搜索"},
 		{Name: "filter-type", Type: shortcut.FlagString, Enum: []string{"ALL", "MINE_OWN"}, Desc: "班次类型：ALL 全部 / MINE_OWN 我负责的"},
-		{Name: "page", Type: shortcut.FlagInt, Default: "1", Desc: "页码，从 1 开始"},
-		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页条数，最大 200"},
+		{Name: "page", Type: shortcut.FlagInt, Default: "1", Desc: "--page 必须大于 0，从 1 开始"},
+		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "--limit 必须大于 0 且不超过 200"},
 	},
-	Tips: []string{`dws attendance +search-class --query "早班" --filter-type MINE_OWN`},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page"}, Description: "--page 必须大于 0"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须大于 0 且不超过 200"},
+	},
+	Validate: attendanceValidatePageRequest,
+	Tips:     []string{`dws attendance +search-class --query "早班" --filter-type MINE_OWN`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		pageQuery := map[string]any{}
-		if v := rt.Int("page"); v > 0 {
-			pageQuery["pageIndex"] = v
+		page, limit, err := attendancePageInput(rt)
+		if err != nil {
+			return err
 		}
-		if v := rt.Int("limit"); v > 0 {
-			pageQuery["pageSize"] = v
-		}
+		pageQuery := map[string]any{"pageIndex": page, "pageSize": limit}
 		shiftParam := map[string]any{}
 		if v := rt.Str("query"); v != "" {
 			shiftParam["searchName"] = v
@@ -437,69 +754,64 @@ var SearchClass = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		classes := searchClassProject(data)
-		return rt.Output(map[string]any{"count": len(classes), "classes": classes})
+		classes, err := searchClassProject(data)
+		if err != nil {
+			return err
+		}
+		complete, extra, err := attendancePageEvidence(data, serverWukong+"/get_class_list", page, limit, len(classes))
+		if err != nil {
+			return err
+		}
+		nextToken := ""
+		if !complete {
+			nextToken = strconv.Itoa(page + 1)
+		}
+		return attendanceOutputCollection(rt, "classes", classes, complete, extra, true, nextToken)
 	},
 }
 
 // searchClassProject reshapes the raw get_class_list response into a clean class
 // list ({classId, name, ownerName}) — clean output projection. Both
 // the list container and per-item field names are probed defensively across
-// candidate keys, so an unknown/empty shape yields an empty list rather than a
-// crash or fabricated data.
-func searchClassProject(data map[string]any) []map[string]any {
-	raw := attendanceResolveList(data, "classList", "shiftList", "list", "items")
+// result.items is the reviewed wire path. Missing/wrong collections and bad
+// rows fail closed instead of becoming an empty list.
+func searchClassProject(data map[string]any) ([]map[string]any, error) {
+	raw, err := responsecheck.RequireObjectCollection(data, serverWukong+"/get_class_list", "result.items")
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+	for index, item := range raw {
+		m := item
 		// get_class_list wraps each shift's identity/label under shiftVO
 		// (item = {"shiftVO": {id, name, ...}}); unwrap it first, otherwise every
 		// row projects empty and the whole command silently returns nothing.
-		if vo, ok := m["shiftVO"].(map[string]any); ok {
+		if value, present := m["shiftVO"]; present {
+			vo, ok := value.(map[string]any)
+			if !ok || len(vo) == 0 {
+				return nil, responsecheck.Error(serverWukong+"/get_class_list", "malformed_item", fmt.Sprintf("result.items[%d].shiftVO 不是非空对象", index))
+			}
 			m = vo
 		}
 		row := map[string]any{}
-		if v, ok := attendanceFirst(m, "id", "classId", "class_id"); ok {
-			row["classId"] = v
+		v, ok := attendanceFirst(m, "id", "classId", "class_id")
+		identity, validIdentity := attendancePositiveInteger(v)
+		if !ok || !validIdentity {
+			return nil, responsecheck.Error(serverWukong+"/get_class_list", "missing_item_identity", fmt.Sprintf("result.items[%d] 缺少班次 ID", index))
 		}
+		row["classId"] = identity
 		if v, ok := attendanceFirst(m, "name", "className", "class_name"); ok {
 			row["name"] = v
 		}
 		if v, ok := attendanceFirst(m, "ownerName", "owner_name", "owner"); ok {
 			row["ownerName"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
+		out = append(out, row)
 	}
-	return out
-}
-
-// attendanceResolveList locates the list payload inside a response, tolerating a
-// bare top-level array under a common container key or nesting one level deeper
-// under result/data. extraKeys are probed ahead of the generic containers.
-func attendanceResolveList(data map[string]any, extraKeys ...string) []any {
-	keys := append(append([]string{}, extraKeys...), "result", "data", "list", "items")
-	for _, key := range keys {
-		v, ok := data[key]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range append(append([]string{}, extraKeys...), "list", "items", "result", "data") {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
+	if err := attendanceValidatePositiveIntegerIDs(out, serverWukong+"/get_class_list", "classId"); err != nil {
+		return nil, err
 	}
-	return []any{}
+	return out, nil
 }
 
 // attendanceFirst returns the first present candidate key's value.
@@ -520,14 +832,58 @@ var GetClass = shortcut.Shortcut{
 	Description: "根据班次 ID 查询班次详情",
 	Intent:      "当你已知某个班次的 ID、想查看它的完整配置（上下班时间段、休息时段、负责人等）时使用，例如更新班次前先读取现状；输入班次 ID，返回该班次的详细设置。若不知道班次 ID，先用 +search-class 搜索。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_class",
+			CanonicalPath:  "attendance.shortcut_get_class",
+			CLIPath:        "attendance +get-class",
+			PrimaryCLIPath: "attendance +get-class",
+		},
+		Description: "根据班次 ID 查询班次详情",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns strict response validation and output projection for this attendance detail operation.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "根据班次 ID 查询班次详情",
+			UseWhen:      []string{"当你已知某个班次的 ID、想查看它的完整配置（上下班时间段、休息时段、负责人等）时使用，例如更新班次前先读取现状；输入班次 ID，返回该班次的详细设置。若不知道班次 ID，先用 +search-class 搜索。"},
+			AvoidWhen:    []string{"不知道班次 ID 时先用 +search-class；不要用本读取命令代替创建或更新班次。"},
+			Examples:     []string{"dws attendance +get-class --class-id 12345"},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "class-id", Type: shortcut.FlagInt, Desc: "班次 ID", Required: true},
+		{Name: "class-id", Type: shortcut.FlagInt, Desc: "--class-id 必须大于 0，表示班次 ID", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"class-id"}, Description: "--class-id 必须大于 0"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Int("class-id") <= 0 {
+			return fmt.Errorf("--class-id 必须大于 0")
+		}
+		return nil
 	},
 	Tips: []string{`dws attendance +get-class --class-id 1170996821`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_class_detail", map[string]any{
-			"classId": int64(rt.Int("class-id")),
-		})
+		requested := int64(rt.Int("class-id"))
+		data, err := rt.CallMCPData(serverWukong, "get_class_detail", map[string]any{"classId": requested})
+		if err != nil {
+			return err
+		}
+		value, err := responsecheck.RequireSingleObjectResult(data, serverWukong+"/get_class_detail")
+		if err != nil {
+			return err
+		}
+		identityValue, ok := attendanceNestedValue(value, "shiftVO", "id")
+		identity, valid := attendancePositiveInteger(identityValue)
+		if !ok || !valid || identity != requested {
+			return responsecheck.Error(serverWukong+"/get_class_detail", "object_identity_mismatch", "响应 shiftVO.id 与请求 classId 不一致")
+		}
+		return rt.Output(map[string]any{"value": value})
 	},
 }
 
@@ -617,12 +973,37 @@ var GetAdjustmentRule = shortcut.Shortcut{
 	Description: "根据补卡规则主键 ID 查询补卡规则详情",
 	Intent:      "当你已知某条补卡规则的主键 ID、想查看它的具体规则内容（每月可补卡次数、时限、适用范围等）时使用；输入 adjustmentId，返回该补卡规则的完整详情。不知道 ID 时先用 +search-adjustment-rule 列出。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_adjustment_rule",
+			CanonicalPath:  "attendance.shortcut_get_adjustment_rule",
+			CLIPath:        "attendance +get-adjustment-rule",
+			PrimaryCLIPath: "attendance +get-adjustment-rule",
+		},
+		Description: "根据补卡规则主键 ID 查询补卡规则详情",
+		Interface: &contract.InterfaceSpec{
+			Mode:         contract.InterfaceModeComposite,
+			Availability: contract.InterfaceAvailable,
+			Reason:       attendanceCompatibilityInterfaceReason,
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "根据补卡规则主键 ID 查询补卡规则详情",
+			UseWhen:      []string{"当你已知某条补卡规则的主键 ID、想查看它的具体规则内容（每月可补卡次数、时限、适用范围等）时使用；输入 adjustmentId，返回该补卡规则的完整详情。不知道 ID 时先用 +search-adjustment-rule 列出。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-adjustment-rule --adjustment-id 12345"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "adjustment-id", Type: shortcut.FlagInt, Desc: "补卡规则主键 ID", Required: true},
 	},
 	Tips: []string{`dws attendance +get-adjustment-rule --adjustment-id 12345`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_adjustment_rule_detail", map[string]any{
+		return attendanceCallObject(rt, serverWukong, "get_adjustment_rule_detail", map[string]any{
 			"adjustmentId": int64(rt.Int("adjustment-id")),
 		})
 	},
@@ -634,26 +1015,52 @@ var SearchAdjustmentRule = shortcut.Shortcut{
 	Command:     "+search-adjustment-rule",
 	Product:     serverWukong,
 	Description: "查询当前用户可管理的补卡规则列表",
-	Intent:      "当你要浏览或按名称查找当前用户可管理的补卡规则、以便拿到规则 ID 做进一步查看时使用；可选按规则名关键字模糊搜索并分页，返回补卡规则列表。要看某条规则的完整内容用 +get-adjustment-rule。",
+	Intent:      "当你要浏览或按名称查找当前用户可管理的补卡规则时使用；可选按规则名关键字模糊搜索并分页，返回带稳定候选 ID 的补卡规则列表。当前下游详情接口对搜索得到的 ID 返回空 result，因此本命令不承诺可继续读取详情。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_search_adjustment_rule",
+			CanonicalPath:  "attendance.shortcut_search_adjustment_rule",
+			CLIPath:        "attendance +search-adjustment-rule",
+			PrimaryCLIPath: "attendance +search-adjustment-rule",
+		},
+		Description: "查询当前用户可管理的补卡规则列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可管理的补卡规则列表",
+			UseWhen:      []string{"当你要浏览或按名称查找当前用户可管理的补卡规则时使用；可选按规则名关键字模糊搜索并分页，返回带稳定候选 ID 的补卡规则列表。当前下游详情接口对搜索得到的 ID 返回空 result，因此本命令不承诺可继续读取详情。"},
+			AvoidWhen:    []string{"需要完整补卡规则详情时应报告当前下游详情能力 unavailable，不要把搜索摘要或空 result 当作详情成功"},
+			Examples:     []string{"dws attendance +search-adjustment-rule --query \"标准\" --page 1 --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "补卡规则名称关键字，模糊搜索"},
-		{Name: "page", Type: shortcut.FlagInt, Default: "1", Desc: "页码，从 1 开始"},
-		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页条数，200 以内"},
+		{Name: "page", Type: shortcut.FlagInt, Default: "1", Desc: "--page 必须大于 0，从 1 开始"},
+		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "--limit 必须大于 0 且不超过 200"},
 	},
-	Tips: []string{`dws attendance +search-adjustment-rule --query "标准" --page 1 --limit 50`},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page"}, Description: "--page 必须大于 0"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须大于 0 且不超过 200"},
+	},
+	Validate: attendanceValidatePageRequest,
+	Tips:     []string{`dws attendance +search-adjustment-rule --query "标准" --page 1 --limit 50`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		param := map[string]any{}
 		if v := rt.Str("query"); v != "" {
 			param["name"] = v
 		}
-		page := rt.Int("page")
-		if page <= 0 {
-			page = 1
-		}
-		limit := rt.Int("limit")
-		if limit <= 0 {
-			limit = 20
+		page, limit, err := attendancePageInput(rt)
+		if err != nil {
+			return err
 		}
 		param["currentPage"] = page
 		param["pageSize"] = limit
@@ -663,44 +1070,62 @@ var SearchAdjustmentRule = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		rules := searchRuleProject(data)
-		return rt.Output(map[string]any{"count": len(rules), "rules": rules})
+		rules, err := searchRuleProject(data, serverWukong+"/get_adjustment_rule", "result.adjustmentList")
+		if err != nil {
+			return err
+		}
+		complete, extra, err := attendancePageEvidence(data, serverWukong+"/get_adjustment_rule", page, limit, len(rules))
+		if err != nil {
+			return err
+		}
+		nextToken := ""
+		if !complete {
+			nextToken = strconv.Itoa(page + 1)
+		}
+		return attendanceOutputCollection(rt, "rules", rules, complete, extra, true, nextToken)
 	},
 }
 
 // searchRuleProject reshapes the raw get_adjustment_rule / get_overtime_rule
-// response into a clean rule list ({ruleId, name}) — output-projection fidelity
-// for clean output. The list container and per-item field names are probed defensively
-// across candidate keys, so an unknown/empty shape yields an empty list rather
-// than a crash or fabricated data.
-func searchRuleProject(data map[string]any) []map[string]any {
+// response into a clean rule list ({ruleId, name}). Each caller supplies the
+// single reviewed collection path; missing/wrong collections and malformed
+// rows fail closed instead of becoming an empty list.
+func searchRuleProject(data map[string]any, operation string, paths ...string) ([]map[string]any, error) {
 	// get_overtime_rule nests the list under result.atRuleList and
 	// get_adjustment_rule under result.adjustmentList; both wrap each rule's
 	// identity/label under entityVO. Probe those container keys AND unwrap
 	// entityVO, otherwise +search-overtime-rule / +search-adjustment-rule
 	// silently return empty despite the backend returning rules.
-	raw := attendanceResolveList(data, "atRuleList", "adjustmentList", "ruleList", "rules", "list", "items")
+	raw, err := responsecheck.RequireObjectCollection(data, operation, paths...)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if vo, ok := m["entityVO"].(map[string]any); ok {
+	for index, item := range raw {
+		m := item
+		if value, present := m["entityVO"]; present {
+			vo, ok := value.(map[string]any)
+			if !ok || len(vo) == 0 {
+				return nil, responsecheck.Error(operation, "malformed_item", fmt.Sprintf("规则结果第 %d 项 entityVO 不是非空对象", index))
+			}
 			m = vo
 		}
 		row := map[string]any{}
-		if v, ok := attendanceFirst(m, "id", "ruleId", "rule_id", "adjustmentId", "overtimeId"); ok {
-			row["ruleId"] = v
+		v, ok := attendanceFirst(m, "id", "ruleId", "rule_id", "adjustmentId", "overtimeId")
+		identity, validIdentity := attendancePositiveInteger(v)
+		if !ok || !validIdentity {
+			return nil, responsecheck.Error(operation, "missing_item_identity", fmt.Sprintf("规则结果第 %d 项缺少规则 ID", index))
 		}
+		row["ruleId"] = identity
 		if v, ok := attendanceFirst(m, "name", "ruleName", "rule_name"); ok {
 			row["name"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
+		out = append(out, row)
 	}
-	return out
+	if err := attendanceValidatePositiveIntegerIDs(out, operation, "ruleId"); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ── overtime rule ───────────────────────────────────────────
@@ -713,14 +1138,57 @@ var GetOvertimeRule = shortcut.Shortcut{
 	Description: "根据加班规则主键 ID 查询加班规则详情",
 	Intent:      "当你已知某条加班规则的主键 ID、想查看它的具体内容（工作日/休息日/节假日加班计算方式、适用范围等）时使用；输入 overtimeId，返回该加班规则的完整详情。不知道 ID 时先用 +search-overtime-rule 列出。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_overtime_rule",
+			CanonicalPath:  "attendance.shortcut_get_overtime_rule",
+			CLIPath:        "attendance +get-overtime-rule",
+			PrimaryCLIPath: "attendance +get-overtime-rule",
+		},
+		Description: "根据加班规则主键 ID 查询加班规则详情",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "根据加班规则主键 ID 查询加班规则详情",
+			UseWhen:      []string{"当你已知某条加班规则的主键 ID、想查看它的具体内容（工作日/休息日/节假日加班计算方式、适用范围等）时使用；输入 overtimeId，返回该加班规则的完整详情。不知道 ID 时先用 +search-overtime-rule 列出。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-overtime-rule --overtime-id 12345"},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "overtime-id", Type: shortcut.FlagInt, Desc: "加班规则主键 ID", Required: true},
+		{Name: "overtime-id", Type: shortcut.FlagInt, Desc: "--overtime-id 必须大于 0，表示加班规则主键 ID", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"overtime-id"}, Description: "--overtime-id 必须大于 0"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Int("overtime-id") <= 0 {
+			return fmt.Errorf("--overtime-id 必须大于 0")
+		}
+		return nil
 	},
 	Tips: []string{`dws attendance +get-overtime-rule --overtime-id 12345`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_overtime_rule_detail", map[string]any{
-			"overtimeId": int64(rt.Int("overtime-id")),
-		})
+		requested := int64(rt.Int("overtime-id"))
+		data, err := rt.CallMCPData(serverWukong, "get_overtime_rule_detail", map[string]any{"overtimeId": requested})
+		if err != nil {
+			return err
+		}
+		value, err := responsecheck.RequireSingleObjectResult(data, serverWukong+"/get_overtime_rule_detail")
+		if err != nil {
+			return err
+		}
+		identity, valid := attendancePositiveInteger(value["id"])
+		if !valid || identity != requested {
+			return responsecheck.Error(serverWukong+"/get_overtime_rule_detail", "object_identity_mismatch", "响应 id 与请求 overtimeId 不一致")
+		}
+		return rt.Output(map[string]any{"value": value})
 	},
 }
 
@@ -732,24 +1200,50 @@ var SearchOvertimeRule = shortcut.Shortcut{
 	Description: "查询当前用户可管理的加班规则列表",
 	Intent:      "当你要浏览或按名称查找当前用户可管理的加班规则、以便拿到规则 ID 做进一步查看时使用；可选按规则名关键字模糊搜索并分页，返回加班规则列表。要看某条规则的完整内容用 +get-overtime-rule。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_search_overtime_rule",
+			CanonicalPath:  "attendance.shortcut_search_overtime_rule",
+			CLIPath:        "attendance +search-overtime-rule",
+			PrimaryCLIPath: "attendance +search-overtime-rule",
+		},
+		Description: "查询当前用户可管理的加班规则列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可管理的加班规则列表",
+			UseWhen:      []string{"当你要浏览或按名称查找当前用户可管理的加班规则、以便拿到规则 ID 做进一步查看时使用；可选按规则名关键字模糊搜索并分页，返回加班规则列表。要看某条规则的完整内容用 +get-overtime-rule。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +search-overtime-rule --query \"节假日\" --page 1 --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "加班规则名称关键字，模糊搜索"},
-		{Name: "page", Type: shortcut.FlagInt, Default: "1", Desc: "页码，从 1 开始"},
-		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "每页条数，200 以内"},
+		{Name: "page", Type: shortcut.FlagInt, Default: "1", Desc: "--page 必须大于 0，从 1 开始"},
+		{Name: "limit", Type: shortcut.FlagInt, Default: "20", Desc: "--limit 必须大于 0 且不超过 200"},
 	},
-	Tips: []string{`dws attendance +search-overtime-rule --query "节假日" --page 1 --limit 50`},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"page"}, Description: "--page 必须大于 0"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "--limit 必须大于 0 且不超过 200"},
+	},
+	Validate: attendanceValidatePageRequest,
+	Tips:     []string{`dws attendance +search-overtime-rule --query "节假日" --page 1 --limit 50`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		param := map[string]any{}
 		if v := rt.Str("query"); v != "" {
 			param["name"] = v
 		}
-		page := rt.Int("page")
-		if page <= 0 {
-			page = 1
-		}
-		limit := rt.Int("limit")
-		if limit <= 0 {
-			limit = 20
+		page, limit, err := attendancePageInput(rt)
+		if err != nil {
+			return err
 		}
 		param["currentPage"] = page
 		param["pageSize"] = limit
@@ -759,8 +1253,19 @@ var SearchOvertimeRule = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		rules := searchRuleProject(data)
-		return rt.Output(map[string]any{"count": len(rules), "rules": rules})
+		rules, err := searchRuleProject(data, serverWukong+"/get_overtime_rule", "result.atRuleList")
+		if err != nil {
+			return err
+		}
+		complete, extra, err := attendancePageEvidence(data, serverWukong+"/get_overtime_rule", page, limit, len(rules))
+		if err != nil {
+			return err
+		}
+		nextToken := ""
+		if !complete {
+			nextToken = strconv.Itoa(page + 1)
+		}
+		return attendanceOutputCollection(rt, "rules", rules, complete, extra, true, nextToken)
 	},
 }
 
@@ -774,6 +1279,31 @@ var SearchGroup = shortcut.Shortcut{
 	Description: "查询当前用户可管理的考勤组列表",
 	Intent:      "当你要浏览或按名称查找当前用户可管理的考勤组、以便拿到考勤组 ID 用于查看详情、改成员或改配置时使用；可选按名称关键字、考勤组类型（固定班制/排班制/自由工时）过滤，并可选带出定位/Wifi/蓝牙信息，分页返回考勤组简要列表。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_search_group",
+			CanonicalPath:  "attendance.shortcut_search_group",
+			CLIPath:        "attendance +search-group",
+			PrimaryCLIPath: "attendance +search-group",
+		},
+		Description: "查询当前用户可管理的考勤组列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         contract.InterfaceModeComposite,
+			Availability: contract.InterfaceAvailable,
+			Reason:       attendanceCompatibilityInterfaceReason,
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可管理的考勤组列表",
+			UseWhen:      []string{"当你要浏览或按名称查找当前用户可管理的考勤组、以便拿到考勤组 ID 用于查看详情、改成员或改配置时使用；可选按名称关键字、考勤组类型（固定班制/排班制/自由工时）过滤，并可选带出定位/Wifi/蓝牙信息，分页返回考勤组简要列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +search-group --query \"研发\" --type FIXED --limit 50"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "query", Type: shortcut.FlagString, Desc: "考勤组名称关键字，模糊搜索"},
 		{Name: "type", Type: shortcut.FlagString, Enum: []string{"FIXED", "TURN", "NONE"}, Desc: "考勤组类型：FIXED 固定班制 / TURN 排班制 / NONE 自由工时"},
@@ -801,13 +1331,9 @@ var SearchGroup = shortcut.Shortcut{
 			searchParam["queryPositionAndWifiNames"] = false
 			searchParam["queryBleDeviceList"] = false
 		}
-		page := rt.Int("page")
-		if page <= 0 {
-			page = 1
-		}
-		limit := rt.Int("limit")
-		if limit <= 0 {
-			limit = 20
+		page, limit, err := attendancePageInput(rt)
+		if err != nil {
+			return err
 		}
 		data, err := rt.CallMCPData(serverWukong, "get_simple_groups", map[string]any{
 			"param": searchParam,
@@ -819,39 +1345,44 @@ var SearchGroup = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		groups := searchGroupProject(data)
-		return rt.Output(map[string]any{"count": len(groups), "groups": groups})
+		groups, err := searchGroupProject(data)
+		if err != nil {
+			return err
+		}
+		complete, extra, err := attendancePageEvidence(data, serverWukong+"/get_simple_groups", page, limit, len(groups))
+		if err != nil {
+			return err
+		}
+		return rt.Output(attendanceCollectionPayload("groups", groups, complete, extra))
 	},
 }
 
 // searchGroupProject reshapes the raw get_simple_groups response into a clean
 // attendance-group list ({groupId, name, type}) — clean output projection.
-// The list container and per-item field names are probed defensively
-// across candidate keys, so an unknown/empty shape yields an empty list rather
-// than a crash or fabricated data.
-func searchGroupProject(data map[string]any) []map[string]any {
-	raw := attendanceResolveList(data, "groupList", "groups", "list", "items")
+// The exact result.items collection and each row identity are required, so an
+// unknown shape cannot masquerade as a legitimate empty search result.
+func searchGroupProject(data map[string]any) ([]map[string]any, error) {
+	raw, err := responsecheck.RequireObjectCollection(data, serverWukong+"/get_simple_groups", "result.items")
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+	for index, m := range raw {
 		row := map[string]any{}
-		if v, ok := attendanceFirst(m, "id", "groupId", "group_id"); ok {
-			row["groupId"] = v
+		v, ok := attendanceFirst(m, "id", "groupId", "group_id")
+		if !ok || v == nil {
+			return nil, responsecheck.Error(serverWukong+"/get_simple_groups", "missing_item_identity", fmt.Sprintf("result.items[%d] 缺少考勤组 ID", index))
 		}
+		row["groupId"] = v
 		if v, ok := attendanceFirst(m, "name", "groupName", "group_name"); ok {
 			row["name"] = v
 		}
 		if v, ok := attendanceFirst(m, "type", "groupType", "group_type"); ok {
 			row["type"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
+		out = append(out, row)
 	}
-	return out
+	return out, nil
 }
 
 // GetGroup 根据考勤组 ID 查询考勤组全量信息（get_group_detail）。
@@ -1065,6 +1596,31 @@ var GetSummary = shortcut.Shortcut{
 	Description: "查询某个人的考勤统计摘要（周/月）",
 	Intent:      "当你想快速了解某个人一周或一月的考勤汇总（出勤天数、迟到早退次数、加班、请假时长等统计口径）而不是逐天明细时使用；输入 userId、所在周期内的任意日期和统计类型（week/month），返回该周期的考勤统计摘要。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_summary",
+			CanonicalPath:  "attendance.shortcut_get_summary",
+			CLIPath:        "attendance +get-summary",
+			PrimaryCLIPath: "attendance +get-summary",
+		},
+		Description: "查询某个人的考勤统计摘要（周/月）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询某个人的考勤统计摘要（周/月）",
+			UseWhen:      []string{"当你想快速了解某个人一周或一月的考勤汇总（出勤天数、迟到早退次数、加班、请假时长等统计口径）而不是逐天明细时使用；输入 userId、所在周期内的任意日期和统计类型（week/month），返回该周期的考勤统计摘要。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-summary --user USER_ID --date 2026-03-12 --stats-type week"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "user", Type: shortcut.FlagString, Desc: "钉钉用户 userId", Required: true},
 		{Name: "date", Type: shortcut.FlagString, Desc: "查询日期 YYYY-MM-DD 或 yyyy-MM-dd HH:mm:ss", Required: true},
@@ -1076,7 +1632,7 @@ var GetSummary = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		return rt.CallMCP("get_user_attendance_summary", map[string]any{
+		return attendanceCallObject(rt, serverWukong, "get_user_attendance_summary", map[string]any{
 			"userId":    rt.Str("user"),
 			"queryDate": queryDate,
 			"statsType": rt.Str("stats-type"),
@@ -1097,19 +1653,105 @@ var GetSelfSetting = shortcut.Shortcut{
 	Description: "查询个人规则设置（打卡提醒/极速打卡/缺卡提醒等）",
 	Intent:      "当你想查看某个用户在指定场景下的个人考勤规则开关配置（如打卡提醒、极速打卡、缺卡提醒、考勤结果通知等是否开启）时使用；输入设置场景 settingScene 和用户 userId，返回该用户对应场景的个人设置。查企业全局设置用 +get-global-setting。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_self_setting",
+			CanonicalPath:  "attendance.shortcut_get_self_setting",
+			CLIPath:        "attendance +get-self-setting",
+			PrimaryCLIPath: "attendance +get-self-setting",
+		},
+		Description: "查询个人规则设置（打卡提醒/极速打卡/缺卡提醒等）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询个人规则设置（打卡提醒/极速打卡/缺卡提醒等）",
+			UseWhen:      []string{"当你想查看某个用户在指定场景下的个人考勤规则开关配置（如打卡提醒、极速打卡、缺卡提醒、考勤结果通知等是否开启）时使用；输入设置场景 settingScene 和用户 userId，返回该用户对应场景的个人设置。查企业全局设置用 +get-global-setting。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-self-setting --setting-scene checkRemind --user USER_ID"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "setting-scene", Type: shortcut.FlagString, Enum: []string{"checkRemind", "fastCheck", "checkResultNotify", "lackRemind", "personalAttendStatNotify", "bossAttendStatNotify"}, Desc: "查询设置项场景", Required: true},
-		{Name: "user", Type: shortcut.FlagString, Desc: "查询用户 userId", Required: true},
+		{Name: "user", Type: shortcut.FlagString, Desc: "--user 不能为空，表示查询用户 userId", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"user"}, Description: "--user 不能为空"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Str("user") == "" {
+			return fmt.Errorf("--user 不能为空")
+		}
+		return nil
 	},
 	Tips: []string{`dws attendance +get-self-setting --setting-scene checkRemind --user USER_ID`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("query_self_setting", map[string]any{
+		userID := rt.Str("user")
+		scene := rt.Str("setting-scene")
+		data, err := rt.CallMCPData(serverWukong, "query_self_setting", map[string]any{
 			"RuleMcpQuerySelfSettingRequest": map[string]any{
-				"settingScene": rt.Str("setting-scene"),
-				"userId":       rt.Str("user"),
+				"settingScene": scene,
+				"userId":       userID,
 			},
 		})
+		if err != nil {
+			return err
+		}
+		value, err := responsecheck.RequireSingleObjectResult(data, serverWukong+"/query_self_setting")
+		if err != nil {
+			return err
+		}
+		if err := attendanceValidateSelfSetting(value, userID, scene); err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{"value": value})
 	},
+}
+
+func attendanceValidateSelfSetting(value map[string]any, requestedUser, scene string) error {
+	operation := serverWukong + "/query_self_setting"
+	requestedUser = strings.TrimSpace(requestedUser)
+	if requestedUser == "" {
+		return responsecheck.Error(operation, "object_identity_mismatch", "请求 userId 不能为空")
+	}
+	returnedUser, ok := value["userId"].(string)
+	if !ok || returnedUser == "" || returnedUser != requestedUser {
+		return responsecheck.Error(operation, "object_identity_mismatch", "响应 userId 与请求用户不一致")
+	}
+	type sceneContract struct {
+		field string
+		valid func(any) bool
+	}
+	contracts := map[string]sceneContract{
+		"checkRemind":              {field: "checkRemindSetting", valid: func(v any) bool { _, ok := v.(map[string]any); return ok }},
+		"fastCheck":                {field: "fastCheckLateNeedConfirm", valid: func(v any) bool { _, ok := v.(bool); return ok }},
+		"checkResultNotify":        {field: "checkResultMsg", valid: attendanceSettingInteger},
+		"lackRemind":               {field: "lackRemindUser", valid: attendanceSettingInteger},
+		"personalAttendStatNotify": {field: "personDailyReportSwitch", valid: attendanceSettingInteger},
+		"bossAttendStatNotify":     {field: "bossMonthReportType", valid: attendanceSettingInteger},
+	}
+	expected, ok := contracts[scene]
+	if !ok {
+		return fmt.Errorf("无效的 --setting-scene: %s", scene)
+	}
+	setting, present := value[expected.field]
+	if !present || setting == nil {
+		return responsecheck.Error(operation, "setting_scene_mismatch", "响应缺少请求场景对应的非空设置字段")
+	}
+	if !expected.valid(setting) {
+		return responsecheck.Error(operation, "malformed_setting", "响应中请求场景的设置字段类型不正确")
+	}
+	return nil
+}
+
+func attendanceSettingInteger(value any) bool {
+	number, ok := value.(float64)
+	return ok && !math.IsNaN(number) && !math.IsInf(number, 0) && math.Trunc(number) == number
 }
 
 // ── global setting ──────────────────────────────────────────
@@ -1160,6 +1802,31 @@ var QueryReportData = shortcut.Shortcut{
 	Description: "根据字段查询考勤报表数据（仅管理员）",
 	Intent:      "当你要按指定考勤字段导出/查询一批员工在某时间段的报表数值（如各人的出勤天数、迟到次数、加班时长）时使用，常用于做考勤汇总或核算；输入 userId 列表（最多 20 人）、字段 ID 列表（来自 +list-report-columns）和不超过 32 天的时间区间，返回对应字段的数据。仅管理员可用。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_query_report_data",
+			CanonicalPath:  "attendance.shortcut_query_report_data",
+			CLIPath:        "attendance +query-report-data",
+			PrimaryCLIPath: "attendance +query-report-data",
+		},
+		Description: "根据字段查询考勤报表数据（仅管理员）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         contract.InterfaceModeComposite,
+			Availability: contract.InterfaceAvailable,
+			Reason:       attendanceCompatibilityInterfaceReason,
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "根据字段查询考勤报表数据（仅管理员）",
+			UseWhen:      []string{"当你要按指定考勤字段导出/查询一批员工在某时间段的报表数值（如各人的出勤天数、迟到次数、加班时长）时使用，常用于做考勤汇总或核算；输入 userId 列表（最多 20 人）、字段 ID 列表（来自 +list-report-columns）和不超过 32 天的时间区间，返回对应字段的数据。仅管理员可用。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +query-report-data --users userId1,userId2 --columns 1001,1002 --start \"2026-03-01 00:00:00\" --end \"2026-03-31 23:59:59\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "目标用户 userId 列表，逗号分隔，最多 20 人", Required: true},
 		{Name: "columns", Type: shortcut.FlagStringSlice, Desc: "字段 ID 列表，逗号分隔（可用 +list-report-columns 获取）", Required: true},
@@ -1188,7 +1855,7 @@ var QueryReportData = shortcut.Shortcut{
 			}
 			columnIds = append(columnIds, id)
 		}
-		return rt.CallMCP("get_report_columns_value", map[string]any{
+		return attendanceCallValue(rt, serverWukong, "get_report_columns_value", map[string]any{
 			"McpQueryParam": map[string]any{
 				"targetUserIds": rt.StrSlice("users"),
 				"columnIds":     columnIds,
@@ -1244,11 +1911,38 @@ var ListLeaveTypes = shortcut.Shortcut{
 	Description: "查询当前用户可用的假期规则列表",
 	Intent:      "当你想知道企业有哪些假期类型（年假、事假、病假等）及其对应的假期编码 code、单位、是否带薪时使用，通常是查余额或改假期规则前先拿到 leaveCode；无需参数，返回当前用户可用的假期规则列表。",
 	Risk:        shortcut.RiskRead,
-	Tips:        []string{`dws attendance +list-leave-types`},
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_list_leave_types",
+			CanonicalPath:  "attendance.shortcut_list_leave_types",
+			CLIPath:        "attendance +list-leave-types",
+			PrimaryCLIPath: "attendance +list-leave-types",
+		},
+		Description: "查询当前用户可用的假期规则列表",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询当前用户可用的假期规则列表",
+			UseWhen:      []string{"当你想知道企业有哪些假期类型（年假、事假、病假等）及其对应的假期编码 code、单位、是否带薪时使用，通常是查余额或改假期规则前先拿到 leaveCode；无需参数，返回当前用户可用的假期规则列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +list-leave-types"},
+		},
+	},
+	Tips: []string{`dws attendance +list-leave-types`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_leave_types", map[string]any{
+		return attendanceCallCollection(rt, serverWukong, "get_leave_types", map[string]any{
 			"McpLeaveTypeRequest": map[string]any{},
-		})
+		}, "leaveTypes", true, nil, func(items []map[string]any) error {
+			return attendanceValidateExpectedStrings(items, serverWukong+"/get_leave_types", "leaveCode", "")
+		}, "result")
 	},
 }
 
@@ -1286,11 +1980,57 @@ var GetLeaveRecords = shortcut.Shortcut{
 	Description: "查询指定员工的假期余额变更记录",
 	Intent:      "当你想追溯某个员工假期额度的变动流水（何时发放、扣减、因请假消耗多少）以核对余额来龙去脉时使用；输入单个 userId、日期区间，可选假期 code（不传查所有假期），返回该员工在该时间段的余额变更记录。只想看当前余额用 +get-leave-balance。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_leave_records",
+			CanonicalPath:  "attendance.shortcut_get_leave_records",
+			CLIPath:        "attendance +get-leave-records",
+			PrimaryCLIPath: "attendance +get-leave-records",
+		},
+		Description: "查询指定员工的假期余额变更记录",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询指定员工的假期余额变更记录",
+			UseWhen:      []string{"当你想追溯某个员工假期额度的变动流水（何时发放、扣减、因请假消耗多少）以核对余额来龙去脉时使用；输入单个 userId、日期区间，可选假期 code（不传查所有假期），返回该员工在该时间段的余额变更记录。只想看当前余额用 +get-leave-balance。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-leave-records --user USER_ID --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --start 2026-04-01 --end 2026-04-22"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "user", Type: shortcut.FlagString, Desc: "目标员工 userId", Required: true},
 		{Name: "leave-code", Type: shortcut.FlagString, Desc: "假期规则 code（不传则查询所有假期）"},
 		{Name: "start", Type: shortcut.FlagString, Desc: "查询开始日期 YYYY-MM-DD", Required: true},
 		{Name: "end", Type: shortcut.FlagString, Desc: "查询结束日期 YYYY-MM-DD", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"user"}, Description: "--user 去空白后必须非空"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "--start/--end 必须是 YYYY-MM-DD 且 end 不早于 start"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if rt.Str("user") == "" {
+			return fmt.Errorf("--user 不能为空")
+		}
+		start, err := dayMillis(rt.Str("start"))
+		if err != nil {
+			return err
+		}
+		end, err := dayMillis(rt.Str("end"))
+		if err != nil {
+			return err
+		}
+		if end < start {
+			return fmt.Errorf("--end 不能早于 --start")
+		}
+		return nil
 	},
 	Tips: []string{`dws attendance +get-leave-records --user USER_ID --leave-code a1b2c3d4-e5f6-7890-abcd-ef1234567890 --start 2026-04-01 --end 2026-04-22`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -1310,9 +2050,9 @@ var GetLeaveRecords = shortcut.Shortcut{
 		if v := rt.Str("leave-code"); v != "" {
 			req["leaveCode"] = v
 		}
-		return rt.CallMCP("get_leave_balance_records_v2", map[string]any{
+		return attendanceCallCollection(rt, serverWukong, "get_leave_balance_records_v2", map[string]any{
 			"McpLeaveRecordRequest": req,
-		})
+		}, "records", true, nil, nil, "result")
 	},
 }
 
@@ -1444,12 +2184,64 @@ var GetCheckinRecord = shortcut.Shortcut{
 	Description: "查询指定员工一段时间内的签到记录",
 	Intent:      "当你要查看员工的外勤/移动办公签到记录（signin/checkin，区别于考勤打卡）时使用，例如核实业务员的拜访签到轨迹；需提供操作者企业 ID 与员工 ID、目标员工 ID 列表（最多 100 人）以及不超过 7 天的时间区间，返回这些人的签到明细。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "attendance",
+			Name:           "shortcut_get_checkin_record",
+			CanonicalPath:  "attendance.shortcut_get_checkin_record",
+			CLIPath:        "attendance +get-checkin-record",
+			PrimaryCLIPath: "attendance +get-checkin-record",
+		},
+		Description: "查询指定员工一段时间内的签到记录",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查询指定员工一段时间内的签到记录",
+			UseWhen:      []string{"当你要查看员工的外勤/移动办公签到记录（signin/checkin，区别于考勤打卡）时使用，例如核实业务员的拜访签到轨迹；需提供操作者企业 ID 与员工 ID、目标员工 ID 列表（最多 100 人）以及不超过 7 天的时间区间，返回这些人的签到明细。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws attendance +get-checkin-record --operator-corp-id dingXXX --operator-staff-id op001 --staff-ids user001,user002 --start \"2026-04-01 00:00:00\" --end \"2026-04-07 00:00:00\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "operator-corp-id", Type: shortcut.FlagString, Desc: "操作者企业 ID", Required: true},
 		{Name: "operator-staff-id", Type: shortcut.FlagString, Desc: "操作者员工 ID", Required: true},
 		{Name: "staff-ids", Type: shortcut.FlagStringSlice, Desc: "目标员工 ID 列表，逗号分隔，最多 100 人", Required: true},
 		{Name: "start", Type: shortcut.FlagString, Desc: "开始时间 yyyy-MM-dd HH:mm:ss", Required: true},
 		{Name: "end", Type: shortcut.FlagString, Desc: "结束时间 yyyy-MM-dd HH:mm:ss，跨度最多 7 天", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"staff-ids"}, Description: "--staff-ids 去空白后必须为 1..100 个且不能重复"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"start", "end"}, Description: "--start/--end 必须是 yyyy-MM-dd HH:mm:ss，end 不早于 start，且跨度不超过 7 天"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := attendanceValidateUserIDs(rt.StrSlice("staff-ids"), 100); err != nil {
+			return err
+		}
+		if rt.Str("operator-corp-id") == "" || rt.Str("operator-staff-id") == "" {
+			return fmt.Errorf("--operator-corp-id 与 --operator-staff-id 不能为空")
+		}
+		start, err := time.ParseInLocation("2006-01-02 15:04:05", rt.Str("start"), time.Local)
+		if err != nil {
+			return fmt.Errorf("--start 格式错误，应为 yyyy-MM-dd HH:mm:ss: %w", err)
+		}
+		end, err := time.ParseInLocation("2006-01-02 15:04:05", rt.Str("end"), time.Local)
+		if err != nil {
+			return fmt.Errorf("--end 格式错误，应为 yyyy-MM-dd HH:mm:ss: %w", err)
+		}
+		if end.Before(start) {
+			return fmt.Errorf("--end 不能早于 --start")
+		}
+		if end.Sub(start) > 7*24*time.Hour {
+			return fmt.Errorf("--start 到 --end 的跨度不能超过 7 天")
+		}
+		return nil
 	},
 	Tips: []string{`dws attendance +get-checkin-record --operator-corp-id dingXXX --operator-staff-id op001 --staff-ids user001,user002 --start "2026-04-01 00:00:00" --end "2026-04-07 00:00:00"`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -1466,7 +2258,7 @@ var GetCheckinRecord = shortcut.Shortcut{
 		if endT.Before(startT) {
 			return fmt.Errorf("--end 不能早于 --start")
 		}
-		return rt.CallMCP("get_checkin_record", map[string]any{
+		return attendanceCallCollection(rt, serverWukong, "get_checkin_record", map[string]any{
 			"QueryMcpUserRecordRequest": map[string]any{
 				"operatorCorpId":  rt.Str("operator-corp-id"),
 				"operatorStaffId": rt.Str("operator-staff-id"),
@@ -1474,7 +2266,7 @@ var GetCheckinRecord = shortcut.Shortcut{
 				"startTime":       startStr,
 				"endTime":         endStr,
 			},
-		})
+		}, "records", true, nil, nil, "result.list")
 	},
 }
 
@@ -1526,6 +2318,7 @@ var BossCheck = shortcut.Shortcut{
 }
 
 func init() {
+	hardenPublicAttendanceContracts()
 	shortcut.Register(
 		CheckResult,
 		CheckRecord,

@@ -17,6 +17,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 func TestBuildInterfaceRegistryIndexesCanonicalAndSharedRef(t *testing.T) {
@@ -48,9 +50,37 @@ func TestBuildInterfaceRegistryRejectsCanonicalConflict(t *testing.T) {
 	}
 }
 
-func TestRuntimeEmbeddedMCPMetadataBuildsInterfaceRegistry(t *testing.T) {
-	if _, err := buildInterfaceRegistry(runtimeMCPMetadata().Tools); err != nil {
-		t.Fatalf("buildInterfaceRegistry(runtimeMCPMetadata().Tools) error = %v", err)
+func TestCrossPlatformCoverageRuntimeEmbeddedMCPMetadataBuildsInterfaceRegistry(t *testing.T) {
+	// Production pin is empty; empty Tools must build a valid empty registry.
+	if _, err := buildInterfaceRegistry(emptyPinnedMCPMetadata().Tools); err != nil {
+		t.Fatalf("buildInterfaceRegistry(empty production MCP) error = %v", err)
+	}
+	if err := validateSchemaRegistryInterfaces(SchemaRegistry{Products: []ProductSpec{{
+		Tools: []ToolSpec{{
+			Identity:  contract.ToolIdentitySpec{CanonicalPath: "doc.create", ProductID: "doc", Name: "create"},
+			Interface: contract.InterfaceSpec{Mode: contract.InterfaceModeLocal, Availability: contract.InterfaceAvailable},
+		}},
+	}}}); err != nil {
+		t.Fatalf("validateSchemaRegistryInterfaces(empty pin) error = %v", err)
+	}
+	if err := validateSchemaRegistryInterfacesWithMetadata(SchemaRegistry{Products: []ProductSpec{{
+		Tools: []ToolSpec{{
+			Identity: contract.ToolIdentitySpec{CanonicalPath: "doc.copy", ProductID: "doc", Name: "copy"},
+			Interface: contract.InterfaceSpec{
+				Mode:         contract.InterfaceModeMCP,
+				Availability: contract.InterfaceAvailable,
+				Ref:          &contract.InterfaceRefSpec{ProductID: "doc", RPCName: "copy_document"},
+			},
+		}},
+	}}}, embeddedMCPMetadata{Tools: map[string]embeddedMCPToolMetadata{
+		"doc.copy_document": {InterfaceRef: &embeddedMCPInterfaceRef{ProductID: "doc", RPCName: "copy_document"}},
+	}}); err != nil {
+		t.Fatalf("validateSchemaRegistryInterfacesWithMetadata(fixture) error = %v", err)
+	}
+	if err := validateSchemaRegistryInterfacesWithMetadata(SchemaRegistry{}, embeddedMCPMetadata{
+		Tools: map[string]embeddedMCPToolMetadata{"": {}},
+	}); err == nil {
+		t.Fatal("malformed fixture registry must fail closed")
 	}
 }
 
@@ -63,10 +93,10 @@ func TestValidateSchemaRegistryInterfacesUsesExplicitRefNotCanonical(t *testing.
 
 	err := validateSchemaRegistryInterfacesWithMetadata(schemaWithInterfaceTool(
 		"calendar.command_name_differs",
-		InterfaceSpec{
+		contract.InterfaceSpec{
 			Mode:         "mcp",
 			Availability: "available",
-			Ref:          &InterfaceRefSpec{ProductID: "calendar-rpc", RPCName: "get_event"},
+			Ref:          &contract.InterfaceRefSpec{ProductID: "calendar-rpc", RPCName: "get_event"},
 		},
 	), metadata)
 	if err != nil {
@@ -77,7 +107,7 @@ func TestValidateSchemaRegistryInterfacesUsesExplicitRefNotCanonical(t *testing.
 func TestValidateSchemaRegistryInterfacesRejectsMissingMCPRef(t *testing.T) {
 	err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool(
 		"calendar.event_get",
-		InterfaceSpec{Mode: "mcp", Availability: "available"},
+		contract.InterfaceSpec{Mode: "mcp", Availability: "available"},
 	))
 	if err == nil || !strings.Contains(err.Error(), "has no interface_ref") {
 		t.Fatalf("validateSchemaRegistryInterfaces() error = %v, want missing ref", err)
@@ -87,10 +117,10 @@ func TestValidateSchemaRegistryInterfacesRejectsMissingMCPRef(t *testing.T) {
 func TestValidateSchemaRegistryInterfacesRejectsIncompleteMCPRef(t *testing.T) {
 	err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool(
 		"calendar.event_get",
-		InterfaceSpec{
+		contract.InterfaceSpec{
 			Mode:         "mcp",
 			Availability: "available",
-			Ref:          &InterfaceRefSpec{ProductID: "calendar"},
+			Ref:          &contract.InterfaceRefSpec{ProductID: "calendar"},
 		},
 	))
 	if err == nil || !strings.Contains(err.Error(), "has incomplete interface_ref") {
@@ -101,10 +131,10 @@ func TestValidateSchemaRegistryInterfacesRejectsIncompleteMCPRef(t *testing.T) {
 func TestValidateSchemaRegistryInterfacesRejectsPhantomRef(t *testing.T) {
 	err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool(
 		"calendar.event_get",
-		InterfaceSpec{
+		contract.InterfaceSpec{
 			Mode:         "mcp",
 			Availability: "available",
-			Ref:          &InterfaceRefSpec{ProductID: "calendar", RPCName: "phantom"},
+			Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "phantom"},
 		},
 	))
 	if err == nil || !strings.Contains(err.Error(), "unknown MCP interface calendar.phantom") {
@@ -115,7 +145,7 @@ func TestValidateSchemaRegistryInterfacesRejectsPhantomRef(t *testing.T) {
 func TestValidateSchemaRegistryInterfacesAllowsLocalWithoutRef(t *testing.T) {
 	err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool(
 		"calendar.local_cache",
-		InterfaceSpec{Mode: "local", Availability: "available", Reason: "implemented by the local CLI"},
+		contract.InterfaceSpec{Mode: "local", Availability: "available", Reason: "implemented by the local CLI"},
 	))
 	if err != nil {
 		t.Fatalf("validateSchemaRegistryInterfaces() error = %v", err)
@@ -125,7 +155,7 @@ func TestValidateSchemaRegistryInterfacesAllowsLocalWithoutRef(t *testing.T) {
 func TestValidateSchemaRegistryInterfacesAllowsCompositeWithoutRef(t *testing.T) {
 	err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool(
 		"calendar.composite_sync",
-		InterfaceSpec{Mode: "composite", Availability: "available", Reason: "orchestrates multiple operations"},
+		contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "orchestrates multiple operations"},
 	))
 	if err != nil {
 		t.Fatalf("validateSchemaRegistryInterfaces() error = %v", err)
@@ -135,11 +165,11 @@ func TestValidateSchemaRegistryInterfacesAllowsCompositeWithoutRef(t *testing.T)
 func TestValidateSchemaRegistryInterfacesRejectsAnyLocalRef(t *testing.T) {
 	err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool(
 		"calendar.local_cache",
-		InterfaceSpec{
+		contract.InterfaceSpec{
 			Mode:         "local",
 			Availability: "available",
 			Reason:       "implemented by the local CLI",
-			Ref:          &InterfaceRefSpec{ProductID: "calendar", RPCName: "get_event"},
+			Ref:          &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "get_event"},
 		},
 	))
 	if err == nil || !strings.Contains(err.Error(), "must not declare interface_ref") {
@@ -150,7 +180,7 @@ func TestValidateSchemaRegistryInterfacesRejectsAnyLocalRef(t *testing.T) {
 func TestValidateSchemaRegistryInterfacesAcceptsReviewedUnavailable(t *testing.T) {
 	err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool(
 		"calendar.retired",
-		InterfaceSpec{Mode: "local", Availability: "unavailable", Reason: "the upstream operation was retired"},
+		contract.InterfaceSpec{Mode: "local", Availability: "unavailable", Reason: "the upstream operation was retired"},
 	))
 	if err != nil {
 		t.Fatalf("validateSchemaRegistryInterfaces() error = %v", err)
@@ -158,29 +188,29 @@ func TestValidateSchemaRegistryInterfacesAcceptsReviewedUnavailable(t *testing.T
 }
 
 func TestInterfaceSpecDispositionMatrix(t *testing.T) {
-	validRef := &InterfaceRefSpec{ProductID: "calendar", RPCName: "get_event"}
+	validRef := &contract.InterfaceRefSpec{ProductID: "calendar", RPCName: "get_event"}
 	for _, test := range []struct {
 		name       string
-		spec       InterfaceSpec
+		spec       contract.InterfaceSpec
 		wantError  string
 		executable bool
 	}{
-		{name: "mcp available", spec: InterfaceSpec{Mode: "mcp", Availability: "available", Ref: validRef}, executable: true},
-		{name: "local available", spec: InterfaceSpec{Mode: "local", Availability: "available"}, executable: true},
-		{name: "composite available", spec: InterfaceSpec{Mode: "composite", Availability: "available", Reason: "orchestrates operations"}, executable: true},
-		{name: "mcp unavailable", spec: InterfaceSpec{Mode: "mcp", Availability: "unavailable", Reason: "RPC retired"}},
-		{name: "local unavailable", spec: InterfaceSpec{Mode: "local", Availability: "unavailable", Reason: "compatibility command frozen"}},
-		{name: "composite unavailable", spec: InterfaceSpec{Mode: "composite", Availability: "unavailable", Reason: "workflow retired"}},
-		{name: "unavailable is not a mode", spec: InterfaceSpec{Mode: "unavailable", Availability: "unavailable", Reason: "retired"}, wantError: "legacy interface_mode=unavailable; migrate"},
-		{name: "missing mode", spec: InterfaceSpec{Availability: "available"}, wantError: "has no interface mode"},
-		{name: "missing availability", spec: InterfaceSpec{Mode: "local"}, wantError: "has no interface availability"},
-		{name: "unknown availability", spec: InterfaceSpec{Mode: "local", Availability: "disabled"}, wantError: `unknown interface availability "disabled"`},
-		{name: "unavailable with ref", spec: InterfaceSpec{Mode: "mcp", Availability: "unavailable", Reason: "retired", Ref: validRef}, wantError: "unavailable interface must not declare interface_ref"},
-		{name: "unavailable without reason", spec: InterfaceSpec{Mode: "local", Availability: "unavailable"}, wantError: "must declare interface_reason"},
-		{name: "available mcp without ref", spec: InterfaceSpec{Mode: "mcp", Availability: "available"}, wantError: "has no interface_ref"},
-		{name: "available local with ref", spec: InterfaceSpec{Mode: "local", Availability: "available", Ref: validRef}, wantError: "must not declare interface_ref"},
-		{name: "available composite with ref", spec: InterfaceSpec{Mode: "composite", Availability: "available", Reason: "orchestrates operations", Ref: validRef}, wantError: "must not declare a single interface_ref"},
-		{name: "available composite without reason", spec: InterfaceSpec{Mode: "composite", Availability: "available"}, wantError: "must declare interface_reason"},
+		{name: "mcp available", spec: contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: validRef}, executable: true},
+		{name: "local available", spec: contract.InterfaceSpec{Mode: "local", Availability: "available"}, executable: true},
+		{name: "composite available", spec: contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "orchestrates operations"}, executable: true},
+		{name: "mcp unavailable", spec: contract.InterfaceSpec{Mode: "mcp", Availability: "unavailable", Reason: "RPC retired"}},
+		{name: "local unavailable", spec: contract.InterfaceSpec{Mode: "local", Availability: "unavailable", Reason: "compatibility command frozen"}},
+		{name: "composite unavailable", spec: contract.InterfaceSpec{Mode: "composite", Availability: "unavailable", Reason: "workflow retired"}},
+		{name: "unavailable is not a mode", spec: contract.InterfaceSpec{Mode: "unavailable", Availability: "unavailable", Reason: "retired"}, wantError: "legacy interface_mode=unavailable; migrate"},
+		{name: "missing mode", spec: contract.InterfaceSpec{Availability: "available"}, wantError: "has no interface mode"},
+		{name: "missing availability", spec: contract.InterfaceSpec{Mode: "local"}, wantError: "has no interface availability"},
+		{name: "unknown availability", spec: contract.InterfaceSpec{Mode: "local", Availability: "disabled"}, wantError: `unknown interface availability "disabled"`},
+		{name: "unavailable with ref", spec: contract.InterfaceSpec{Mode: "mcp", Availability: "unavailable", Reason: "retired", Ref: validRef}, wantError: "unavailable interface must not declare interface_ref"},
+		{name: "unavailable without reason", spec: contract.InterfaceSpec{Mode: "local", Availability: "unavailable"}, wantError: "must declare interface_reason"},
+		{name: "available mcp without ref", spec: contract.InterfaceSpec{Mode: "mcp", Availability: "available"}, wantError: "has no interface_ref"},
+		{name: "available local with ref", spec: contract.InterfaceSpec{Mode: "local", Availability: "available", Ref: validRef}, wantError: "must not declare interface_ref"},
+		{name: "available composite with ref", spec: contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "orchestrates operations", Ref: validRef}, wantError: "must not declare a single interface_ref"},
+		{name: "available composite without reason", spec: contract.InterfaceSpec{Mode: "composite", Availability: "available"}, wantError: "must declare interface_reason"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool("calendar.event_get", test.spec))
@@ -202,7 +232,7 @@ func TestValidateSchemaRegistryInterfacesRejectsUnknownAndMissingMode(t *testing
 	t.Run("missing", func(t *testing.T) {
 		err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool(
 			"calendar.event_get",
-			InterfaceSpec{Availability: "available"},
+			contract.InterfaceSpec{Availability: "available"},
 		))
 		if err == nil || !strings.Contains(err.Error(), "has no interface mode") {
 			t.Fatalf("validateSchemaRegistryInterfaces() error = %v, want missing mode", err)
@@ -212,7 +242,7 @@ func TestValidateSchemaRegistryInterfacesRejectsUnknownAndMissingMode(t *testing
 	t.Run("unknown", func(t *testing.T) {
 		err := validateSchemaRegistryInterfacesForTest(schemaWithInterfaceTool(
 			"calendar.event_get",
-			InterfaceSpec{Mode: "remote", Availability: "available"},
+			contract.InterfaceSpec{Mode: "remote", Availability: "available"},
 		))
 		if err == nil || !strings.Contains(err.Error(), `unknown interface mode "remote"`) {
 			t.Fatalf("validateSchemaRegistryInterfaces() error = %v, want unknown mode", err)
@@ -220,9 +250,9 @@ func TestValidateSchemaRegistryInterfacesRejectsUnknownAndMissingMode(t *testing
 	})
 }
 
-func schemaWithInterfaceTool(canonical string, interfaceSpec InterfaceSpec) SchemaRegistry {
+func schemaWithInterfaceTool(canonical string, interfaceSpec contract.InterfaceSpec) SchemaRegistry {
 	parts := strings.SplitN(canonical, ".", 2)
-	identity := ToolIdentitySpec{CanonicalPath: canonical}
+	identity := contract.ToolIdentitySpec{CanonicalPath: canonical}
 	if len(parts) == 2 {
 		identity.ProductID = parts[0]
 		identity.Name = parts[1]

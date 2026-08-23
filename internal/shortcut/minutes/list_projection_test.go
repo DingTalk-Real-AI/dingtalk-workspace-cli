@@ -32,11 +32,31 @@ func TestCallListProjectItemListShape(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
-	got := callListProject(data)
+	got, err := callListProject(data)
+	if err != nil {
+		t.Fatalf("project itemList: %v", err)
+	}
 	if len(got) != 2 {
 		t.Fatalf("lower/upper mismatch: itemList has 2 entries, projection returned %d", len(got))
 	}
 	if got[0]["taskUuid"] != "uuid-1" || got[1]["taskUuid"] != "uuid-2" {
 		t.Fatalf("taskUuid not projected from taskUuid/task_uuid keys: %v", got)
+	}
+}
+
+func TestCrossPlatformCoverageMinutesUnknownListIsNotEmptySuccessE2E(t *testing.T) {
+	for _, raw := range []string{
+		`{}`,
+		`{"success":true}`,
+		`{"success":true,"result":{"itemList":null}}`,
+		`{"success":false,"errorMsg":"denied"}`,
+	} {
+		var data map[string]any
+		if err := json.Unmarshal([]byte(raw), &data); err != nil {
+			t.Fatalf("unmarshal fixture: %v", err)
+		}
+		if got, err := callListProject(data); err == nil || got != nil {
+			t.Fatalf("unknown list response accepted: got=%#v err=%v raw=%s", got, err, raw)
+		}
 	}
 }

@@ -21,8 +21,22 @@ import "fmt"
 // for reads after all handlers have been registered; registration
 // itself is not concurrent-safe and should be done at startup.
 type Engine struct {
-	handlers map[Phase][]Handler
+	handlers                  map[Phase][]Handler
+	commandPathFallbackLookup CommandPathFallbackLookup
 }
+
+// CommandPathFallback is the pipeline-local projection of one generated
+// recovery record. The app injects the cli lookup so pipeline stays independent
+// from the authored/generator package and can be tested with small fixtures.
+type CommandPathFallback struct {
+	From       string
+	Mode       string
+	To         string
+	Candidates []string
+}
+
+// CommandPathFallbackLookup resolves an exact normalized path.
+type CommandPathFallbackLookup func(path string) (CommandPathFallback, bool)
 
 // HandlerError preserves the pipeline location of a handler failure for logs
 // and diagnostics while keeping the underlying domain error available to
@@ -60,6 +74,24 @@ func (e *Engine) RegisterAll(handlers ...Handler) {
 	for _, h := range handlers {
 		e.Register(h)
 	}
+}
+
+// SetCommandPathFallbackLookup installs the build-time generated command-path
+// recovery lookup. It must be configured before the engine is used.
+func (e *Engine) SetCommandPathFallbackLookup(lookup CommandPathFallbackLookup) {
+	if e == nil {
+		return
+	}
+	e.commandPathFallbackLookup = lookup
+}
+
+func (e *Engine) lookupCommandPathFallback(path string) (CommandPathFallback, bool) {
+	if e == nil || e.commandPathFallbackLookup == nil {
+		return CommandPathFallback{}, false
+	}
+	entry, ok := e.commandPathFallbackLookup(path)
+	entry.Candidates = append([]string(nil), entry.Candidates...)
+	return entry, ok
 }
 
 // Handlers returns the registered handlers for a given phase, in

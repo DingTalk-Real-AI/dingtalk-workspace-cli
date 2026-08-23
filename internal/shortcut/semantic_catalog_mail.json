@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "service": "mail",
+  "default_availability": "unavailable",
+  "shortcuts": {
+    "+triage": {"disposition":"primary_smart","semantic_delta":"对齐 Lark triage 任务入口，并超过其显式邮箱要求：可自动解析当前邮箱与收件箱，严格处理邮件搜索的终止游标和零命中哨兵。","risk":"read","availability":"available","public":true,"reviewed":true},
+    "+search-mail": {"disposition":"semantic_adapter","semantic_delta":"用 KQL 搜索邮件摘要；只接受已观测 messages 数组、稳定 messageId 和完整分页证据，窄化支持 Mail 专属 total=0 占位哨兵。","risk":"read","availability":"available","public":true,"reviewed":true},
+    "+unread-mail": {"disposition":"primary_smart","semantic_delta":"固定 isRead:false 查询缺少可控 guaranteed-zero 条件；当前没有专用空邮箱 fixture，且不得修改真实邮件已读状态制造空结果，因此保持 unavailable。","risk":"read","availability":"unavailable","public":false,"compatibility_visible":true,"reviewed":true},
+    "+recent-mail": {"disposition":"primary_smart","semantic_delta":"严格读取 result.conversations、稳定会话 ID 与分页证据；但当前全部可见文件夹都有会话，缺少已验证空文件夹 fixture，无法完成双态发布审计。","risk":"read","availability":"unavailable","public":false,"compatibility_visible":true,"reviewed":true},
+    "+message": {"disposition":"primary_smart","semantic_delta":"对齐 Lark 单封完整读入口；自动解析邮箱，要求顶层 message 非空且返回 ID 与请求 messageId 精确一致。","risk":"read","availability":"available","public":true,"reviewed":true},
+    "+messages": {"disposition":"primary_smart","semantic_delta":"对齐 Lark 多封完整读入口；最多 100 个 ID，保持请求顺序，任何单封缺失、错型或身份不一致都会使整次调用失败。","risk":"read","availability":"available","public":true,"reviewed":true},
+    "+thread": {"disposition":"primary_smart","semantic_delta":"对齐 Lark 完整会话读取；自动解析邮箱并要求 conversation.id 与请求精确一致。","risk":"read","availability":"available","public":true,"reviewed":true},
+    "+thread-list": {"disposition":"semantic_adapter","semantic_delta":"严格读取 result.conversations、稳定 ID 和分页；但当前全部可见文件夹都有会话，且时间过滤未提供可靠零命中，缺少已验证空文件夹 fixture。","risk":"read","availability":"unavailable","public":false,"compatibility_visible":true,"reviewed":true},
+    "+folder-list": {"disposition":"semantic_adapter","semantic_delta":"只接受显式 folders 数组及稳定 folder ID；缺字段、错型和坏元素不再退化为空列表。","risk":"read","availability":"available","public":true,"reviewed":true},
+    "+tag-list": {"disposition":"semantic_adapter","semantic_delta":"只接受显式 tags 数组及稳定 tag ID；但入口没有 query/parent 过滤且没有专用空邮箱 fixture，无法证明 guaranteed-zero。","risk":"read","availability":"unavailable","public":false,"compatibility_visible":true,"reviewed":true},
+    "+user-search": {"disposition":"semantic_adapter","semantic_delta":"搜索企业邮箱用户并保留 hasMore/nextCursor；显式空数组合法，坏用户或缺稳定 ID 失败。","risk":"read","availability":"available","public":true,"reviewed":true},
+    "+find-mail-user": {"disposition":"primary_smart","semantic_delta":"面向联系人解析的精简用户搜索；修复零命中被误报为调用失败，并严格验证用户数组、身份和分页。","risk":"read","availability":"available","public":true,"reviewed":true},
+    "+template-list": {"disposition":"semantic_adapter","semantic_delta":"严格读取 templates 数组、稳定模板 ID 和 nextCursor；但入口没有 query，模板删除后也没有 typed nonfound，不能把列表消失当 guaranteed-zero。","risk":"read","availability":"unavailable","public":false,"compatibility_visible":true,"reviewed":true},
+    "+contact-list": {"disposition":"semantic_adapter","semantic_delta":"严格读取 contacts 数组、稳定联系人 ID 和分页；但入口没有 query，且 create/delete 缺稳定身份闭环，无法安全构造 guaranteed-zero。","risk":"read","availability":"unavailable","public":false,"compatibility_visible":true,"reviewed":true},
+    "+draft-create": {"disposition":"primary_smart","semantic_delta":"已实现确认、稳定 messageId 回执和精确读回；但真实 fixture 连续两次 batch-delete 后仍能按同 ID 读取，无法证明安全清理终态。","risk":"write","availability":"unavailable","public":false,"reviewed":true},
+    "+draft-edit": {"disposition":"primary_smart","semantic_delta":"已实现至少一项变更、严格回执和按原 messageId 读回；但草稿删除后仍可读，缺少可隔离且可证明零残留的真实 fixture。","risk":"write","availability":"unavailable","public":false,"reviewed":true},
+    "+template-create": {"disposition":"primary_smart","semantic_delta":"核心字段可按稳定模板 ID 读回，已移除无法验证的 from/isDraft 新入口；但 delete 后 get 仅返回未分类失败，没有 typed nonfound 证据可证明清理终态。","risk":"write","availability":"unavailable","public":false,"reviewed":true},
+    "+template-update": {"disposition":"primary_smart","semantic_delta":"真实更新回执仅含明确 success，上层使用请求稳定 ID 精确读回核对变更；但模板删除后缺少 typed nonfound，无法证明安全 fixture 零残留。","risk":"write","availability":"unavailable","public":false,"reviewed":true}
+  }
+}

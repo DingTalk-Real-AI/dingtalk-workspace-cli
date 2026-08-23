@@ -13,14 +13,14 @@ metadata:
 
 ## 前置条件 — 执行操作前必读
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dws-shared`](../dws-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
+> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
 
 > 命令参考：[calendar.md](references/calendar.md)；剧本：[03-meeting.md](references/03-meeting.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 leaf Schema（例如 `dws schema --cli-path "calendar +<shortcut>" --format json`），在当前 Cobra flags 不确定时读取 `dws calendar <shortcut> --help`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service calendar --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "calendar +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws calendar <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service calendar --format json` 批量发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
@@ -38,6 +38,7 @@ metadata:
 | `dws calendar +my-free` | read | 查我自己在某时间段的忙闲（默认今天，无需输入姓名） |
 | `dws calendar +next-event` | read | 查看接下来最近的一个日程（默认扫描未来 7 天） |
 | `dws calendar +reschedule` | write | 改一个已有日程的时间（只动开始/结束时间，其他字段不变） |
+| `dws calendar +room-find` | read | 按时间段搜索可用会议室（不传时间默认当前起 1 小时） |
 | `dws calendar +room-groups` | read | 会议室分组列表 |
 | `dws calendar +room-search` | read | 按名称模糊搜索会议室（不检查可用性） |
 | `dws calendar +suggest-time` | read | 按姓名解析多位参与者，推荐大家都有空的可开会时间段（自动解析 userId） |
@@ -74,7 +75,7 @@ metadata:
 
 **触发**：建日程/约会议/加日程。
 
-1. **解析与会人（必须）**：对每个姓名 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId`，多人逗号拼接。
+1. **解析与会人（必须）**：对每个姓名 `dws aisearch person --query "<姓名>" --dimension name --format json` 取 `userId`，多人逗号拼接。
 2. **执行（必须）**：`dws calendar event create --title "<主题>" --start "<ISO>" --end "<ISO>" --attendees <userId1,userId2> --format json`（按需加 `--location`/`--desc`/`--rooms`）。
 3. **验证（必须）**：从返回 `result.id` 取日程 ID（下游参数语义称 `eventId`），再执行 `dws calendar event list --start "<ISO>" --end "<ISO>" --format json` 复核标题、描述和时段。
 
@@ -84,7 +85,7 @@ metadata:
 
 **触发**：某人/会议室是否有空/找空闲时段/避免冲突。
 
-1. **解析对象（必须）**：姓名 → `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId`；会议室用 `roomId`。
+1. **解析对象（必须）**：姓名 → `dws aisearch person --query "<姓名>" --dimension name --format json` 取 `userId`；会议室用 `roomId`。
 2. **收敛时段（必须）**：`--start`/`--end` **必须**由用户给出或明确收敛；时段不明确**必须先追问**，**禁止**默认全天窗口。
 3. **执行（必须）**：`dws calendar busy search --users <userId1,userId2> --start "<ISO>" --end "<ISO>" --format json`（查会议室换 `--rooms <roomId...>`，可同时传）。**禁止**用 `event list` 扫日程替代闲忙查询。
 4. **空闲时段（必须）**：找共同空闲用 `python scripts/calendar_free_slot_finder.py`。
@@ -103,7 +104,7 @@ metadata:
 
 ## 跨产品协作
 
-- 视频会议发起 / 入会链接 / 邀请入会 / 会中控制 → 切到 `dingtalk-misc`（`references/conference.md`）
+- 视频会议发起 / 入会链接 / 邀请入会 / 会中控制 → 当前 CLI **不支持**；请在钉钉客户端完成
 - 会后摘要 / 待办 → 切到 `dingtalk-minutes`
 - 参会人按人名 → 先用 `dingtalk-aisearch` 解析
 

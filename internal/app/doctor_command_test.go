@@ -109,31 +109,6 @@ func TestPrintCheckResultNoHint(t *testing.T) {
 	}
 }
 
-func TestDoctorCheckCacheEmpty(t *testing.T) {
-	t.Setenv("DWS_CACHE_DIR", t.TempDir())
-
-	var buf bytes.Buffer
-	r := doctorCheckCache(&buf, false)
-
-	if r.Status != statusPass {
-		t.Errorf("expected pass for static endpoint mode, got %s", r.Status)
-	}
-}
-
-func TestDoctorCheckCacheEmptyJSON(t *testing.T) {
-	t.Setenv("DWS_CACHE_DIR", t.TempDir())
-
-	var buf bytes.Buffer
-	r := doctorCheckCache(&buf, true)
-
-	if r.Status != statusPass {
-		t.Errorf("expected pass for static endpoint mode, got %s", r.Status)
-	}
-	if buf.Len() != 0 {
-		t.Error("expected no output in JSON mode")
-	}
-}
-
 func TestDoctorCheckAuthReportsKeychainUnavailable(t *testing.T) {
 	t.Setenv("DWS_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
 

@@ -7,13 +7,14 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/agentmetadata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/outputguard"
 	"github.com/spf13/cobra"
@@ -23,7 +24,6 @@ func TestCrossPlatformCoverageMetadataMainReportsEveryStageFailure(t *testing.T)
 	originalArgs, originalFlags := os.Args, flag.CommandLine
 	originalIsolation := validateMetadataIsolation
 	originalAllowlist := validateMetadataAllowlist
-	originalRegistryFile := validateMetadataRegistryFile
 	originalLoad := loadMetadataRegistryProjection
 	originalSelection := validateMetadataSelection
 	originalGenerate := generateAgentMetadata
@@ -35,7 +35,6 @@ func TestCrossPlatformCoverageMetadataMainReportsEveryStageFailure(t *testing.T)
 		os.Args, flag.CommandLine = originalArgs, originalFlags
 		validateMetadataIsolation = originalIsolation
 		validateMetadataAllowlist = originalAllowlist
-		validateMetadataRegistryFile = originalRegistryFile
 		loadMetadataRegistryProjection = originalLoad
 		validateMetadataSelection = originalSelection
 		generateAgentMetadata = originalGenerate
@@ -49,8 +48,7 @@ func TestCrossPlatformCoverageMetadataMainReportsEveryStageFailure(t *testing.T)
 	reset := func() {
 		validateMetadataIsolation = func(string, []outputguard.Input, string, string, string) error { return nil }
 		validateMetadataAllowlist = func(string, string, string, string) error { return nil }
-		validateMetadataRegistryFile = func(string, string) error { return nil }
-		loadMetadataRegistryProjection = func(string, string, bool) (commandRegistryProjection, error) {
+		loadMetadataRegistryProjection = func(bool) (commandRegistryProjection, error) {
 			return commandRegistryProjection{}, nil
 		}
 		validateMetadataSelection = func(string, string, commandRegistryProjection) error { return nil }
@@ -82,16 +80,22 @@ func TestCrossPlatformCoverageMetadataMainReportsEveryStageFailure(t *testing.T)
 	invoke([]string{"-output", temporaryOutput}, func() {
 		validateMetadataAllowlist = func(string, string, string, string) error { return errors.New("allowlist") }
 	})
-	invoke([]string{"-output", temporaryOutput, "-surface", "legacy.json"}, func() {
-		validateMetadataRegistryFile = func(string, string) error { return errors.New("legacy") }
+	// The retired -surface / -registry valves reject before isolation runs.
+	invoke([]string{"-output", temporaryOutput, "-surface", "legacy.json"}, func() {})
+	invoke([]string{"-output", temporaryOutput, "-registry", "legacy-registry.json"}, func() {})
+	invoke([]string{"-interface-metadata", "internal/cli/schema_mcp_metadata.json"}, func() {})
+	invoke([]string{"-interface-metadata", filepath.Join(t.TempDir(), "diagnostic.json"), "-output", temporaryOutput}, func() {
+		validateMetadataIsolation = func(string, []outputguard.Input, string, string, string) error {
+			return errors.New("isolation after diagnostic metadata")
+		}
 	})
 	invoke([]string{"-output", temporaryOutput, "-validate-surface=false"}, func() {
-		loadMetadataRegistryProjection = func(string, string, bool) (commandRegistryProjection, error) {
+		loadMetadataRegistryProjection = func(bool) (commandRegistryProjection, error) {
 			return commandRegistryProjection{}, errors.New("registry disabled")
 		}
 	})
 	invoke([]string{"-output", temporaryOutput}, func() {
-		loadMetadataRegistryProjection = func(string, string, bool) (commandRegistryProjection, error) {
+		loadMetadataRegistryProjection = func(bool) (commandRegistryProjection, error) {
 			return commandRegistryProjection{}, errors.New("registry")
 		}
 	})
@@ -230,31 +234,21 @@ func TestCrossPlatformCoverageMetadataRegistryAndSelectionFailureEdges(t *testin
 	originalRoot := newMetadataRoot
 	originalBuild := buildEffectiveMetadata
 	originalBind := bindEffectiveMetadata
-	originalLoadHints := loadSelectionMetadataHints
-	originalValidateSet := validateSelectionMetadataSet
-	originalExamples := validateSelectionExamples
-	originalContract := validateSelectionContract
 	t.Cleanup(func() {
 		newMetadataRoot = originalRoot
 		buildEffectiveMetadata = originalBuild
 		bindEffectiveMetadata = originalBind
-		loadSelectionMetadataHints = originalLoadHints
-		validateSelectionMetadataSet = originalValidateSet
-		validateSelectionExamples = originalExamples
-		validateSelectionContract = originalContract
 	})
 
-	if err := validateCommandRegistryFile(".", " "); err != nil {
-		t.Fatalf("empty registry path error = %v", err)
+	if _, err := loadEffectiveCommandRegistryProjection(false); err == nil || !strings.Contains(err.Error(), "validation cannot be disabled") {
+		t.Fatalf("disabled validation error = %v", err)
 	}
-	if err := validateCommandRegistryFile(t.TempDir(), "missing.json"); err == nil {
-		t.Fatal("missing registry file should fail")
-	}
+
 	newMetadataRoot = func(...context.Context) *cobra.Command { return &cobra.Command{Use: "dws"} }
 	buildEffectiveMetadata = func(*cobra.Command) (cli.EffectiveCommandRegistry, error) {
 		return cli.EffectiveCommandRegistry{}, errors.New("build")
 	}
-	if _, err := loadEffectiveCommandRegistryProjection(".", "", true); err == nil || !strings.Contains(err.Error(), "build effective") {
+	if _, err := loadEffectiveCommandRegistryProjection(true); err == nil || !strings.Contains(err.Error(), "build effective") {
 		t.Fatalf("build projection error = %v", err)
 	}
 	buildEffectiveMetadata = func(*cobra.Command) (cli.EffectiveCommandRegistry, error) {
@@ -263,7 +257,7 @@ func TestCrossPlatformCoverageMetadataRegistryAndSelectionFailureEdges(t *testin
 	bindEffectiveMetadata = func(*cobra.Command, cli.EffectiveCommandRegistry) (cli.BoundCommandRegistry, error) {
 		return cli.BoundCommandRegistry{}, errors.New("bind")
 	}
-	if _, err := loadEffectiveCommandRegistryProjection(".", "", true); err == nil || !strings.Contains(err.Error(), "bind effective") {
+	if _, err := loadEffectiveCommandRegistryProjection(true); err == nil || !strings.Contains(err.Error(), "bind effective") {
 		t.Fatalf("bind projection error = %v", err)
 	}
 
@@ -277,41 +271,46 @@ func TestCrossPlatformCoverageMetadataRegistryAndSelectionFailureEdges(t *testin
 	}
 
 	root := t.TempDir()
-	selection := filepath.Join(root, "hints", "selection")
-	metadata := filepath.Join(root, "hints", "metadata")
-	if err := os.MkdirAll(selection, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(metadata, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	registry := commandRegistryProjection{CanonicalToolPaths: map[string]string{"sample.run": "sample run"}}
-	loadSelectionMetadataHints = func(fs.FS) (cli.ManualAgentHintSet, error) {
-		return cli.ManualAgentHintSet{}, errors.New("load")
+	if err := validateSelectionCoverage(root, "", registry); err == nil || !strings.Contains(err.Error(), "ProductDecl/ContractFinal selection coverage incomplete") {
+		t.Fatalf("missing ContractFinal coverage error = %v", err)
 	}
-	if err := validateSelectionHintInput(root, "hints", registry); err == nil || !strings.Contains(err.Error(), "load selection") {
-		t.Fatalf("selection load error = %v", err)
-	}
-	loadSelectionMetadataHints = func(fs.FS) (cli.ManualAgentHintSet, error) { return cli.ManualAgentHintSet{}, nil }
-	validateSelectionMetadataSet = func(cli.ManualAgentHintSet, map[string]bool, map[string]bool) error { return errors.New("set") }
-	if err := validateSelectionHintInput(root, "hints", registry); err == nil || !strings.Contains(err.Error(), "validate selection Agent hints") {
-		t.Fatalf("selection set error = %v", err)
-	}
-	validateSelectionMetadataSet = func(cli.ManualAgentHintSet, map[string]bool, map[string]bool) error { return nil }
-	validateSelectionExamples = func(cli.BoundCommandRegistry, cli.ManualAgentHintSet) error { return errors.New("examples") }
-	if err := validateSelectionHintInput(root, "hints", registry); err == nil || !strings.Contains(err.Error(), "examples") {
-		t.Fatalf("selection examples error = %v", err)
-	}
-	validateSelectionExamples = func(cli.BoundCommandRegistry, cli.ManualAgentHintSet) error { return nil }
-	validateSelectionContract = func(cli.BoundCommandRegistry, cli.ManualAgentHintSet) (cli.ManualAgentSelectionReport, error) {
-		return cli.ManualAgentSelectionReport{}, errors.New("contract")
-	}
-	if err := validateSelectionHintInput(root, "hints", registry); err == nil || !strings.Contains(err.Error(), "selection contract") {
-		t.Fatalf("selection contract error = %v", err)
-	}
+}
 
-	abs := filepath.Join(t.TempDir(), "absolute")
-	if resolveRootPath("ignored", abs) != abs {
-		t.Fatal("absolute root path should be preserved")
+func TestCrossPlatformCoverageSelectionInputExemptsDeclaredTools(t *testing.T) {
+	declared := &cobra.Command{Use: "run"}
+	contractfinal.RegisterRuntimeContractFinal(declared, contract.ContractFinalPayload{})
+	t.Cleanup(func() { contractfinal.ClearRuntimeContractFinalForTest(declared) })
+
+	registry := commandRegistryProjection{
+		CanonicalToolPaths: map[string]string{
+			"sample.run": "sample run",
+			"sample.get": "sample get",
+		},
+		Bound: cli.BoundCommandRegistry{ByCanonical: map[string]cli.BoundCommandSpec{
+			"sample.run": {PrimaryCommand: declared},
+		}},
+	}
+	expected := agentmetadata.SelectionCoverageTools(registry)
+	if expected["sample.run"] || !expected["sample.get"] {
+		t.Fatalf("declared tool must be exempt from selection coverage, expected = %#v", expected)
+	}
+}
+
+func TestCrossPlatformCoverageSelectionInputExemptsDeclaredProducts(t *testing.T) {
+	t.Cleanup(func() { contract.ClearProductDeclForTest("declared") })
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "declared",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "Declared product",
+			UseWhen:      []string{"use declared"},
+			AvoidWhen:    []string{"avoid declared"},
+		},
+	})
+	expected := agentmetadata.SelectionCoverageProducts(commandRegistryProjection{
+		ProductIDs: map[string]bool{"declared": true, "hinted": true},
+	})
+	if expected["declared"] || !expected["hinted"] {
+		t.Fatalf("ProductDecl product must be exempt from selection coverage, expected = %#v", expected)
 	}
 }

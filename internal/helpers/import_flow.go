@@ -58,6 +58,11 @@ type importFlowConfig struct {
 	timeoutAsResult      bool
 	nextCommand          string
 	poll                 importPollPolicy
+	// uploadFallback 开启后，所有不在 supportedFormats 白名单内的文件
+	// （html/pdf/zip/无扩展名等）不再报错断链，统一移交文档空间文件上传
+	// 链路原样入库；白名单即后端转换能力的封闭集合，无需第二份格式枚举。
+	// 回退共享 prepareImportFile 的存在性 / 20MB / 空文件校验。
+	uploadFallback bool
 }
 
 type preparedImportFile struct {
@@ -98,6 +103,10 @@ func docImportFlowConfig() importFlowConfig {
 		workspaceFlags:       []string{"workspace", "workspace-id"},
 		nextCommand:          "dws doc import get --task-id %s",
 		poll:                 defaultImportPollPolicy(),
+		// 白名单外的格式改走文档空间的文件上传链路
+		// （与 drive upload --workspace 同一条 doc-space 上传原语），
+		// 目标 flags（--folder/--workspace）与 import 同构，链路不中断。
+		uploadFallback: true,
 	}
 }
 
@@ -165,7 +174,11 @@ func prepareImportFile(cmd *cobra.Command, args []string, cfg importFlowConfig) 
 	}
 
 	extension := strings.TrimPrefix(strings.ToLower(filepath.Ext(filePath)), ".")
-	if !cfg.supportedFormats[extension] {
+	// 非回退配置保持基线校验顺序：扩展名门禁先于导入目标校验
+	// （sheet import 对无目标的非 Excel 文件必须先报 unsupported）。
+	// uploadFallback 配置的白名单外文件继续走完共享校验，由
+	// runImportCommand 分派到上传回退。
+	if !cfg.supportedFormats[extension] && !cfg.uploadFallback {
 		return preparedImportFile{}, fmt.Errorf("unsupported file format %q, supported: %s", extension, cfg.supportedFormatsText)
 	}
 
@@ -197,10 +210,121 @@ func (cfg importFlowConfig) callTool(ctx context.Context, toolName string, args 
 	return callMCPToolReturnText(ctx, toolName, args)
 }
 
+// runImportUploadFallback 承接白名单外格式：不再报错断链，改走文档空间
+// 文件上传链路原样入库。回退在 prepareImportFile 之后执行，共享存在性 /
+// 20MB / 空文件校验；不复用 runDocUpload，避免携带 doc upload 的
+// --workspace 兼容告警。移交事实通过 stderr 显式告知，机器可读结果统一
+// 携带 fallback=upload / converted=false 标记，防止 Agent 误判已完成
+// 在线文档转换。
+func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file preparedImportFile) error {
+	label := file.extension
+	if label == "" {
+		label = "无扩展名"
+	}
+	deps.Out.PrintWarning(fmt.Sprintf(
+		"%s 文件不支持转换为在线文档（支持: %s），已自动改走文件上传链路，以原文件形式存入 --folder/--workspace 指定的目标位置；如需在线文档，请先将内容转换为 md 后重新执行 doc import；上传到钉盘请用 dws drive upload",
+		label, cfg.supportedFormatsText))
+
+	// prepareImportFile 的 name 去掉了扩展名；上传保留原始文件名形态
+	uploadName := file.name
+	if filepath.Ext(uploadName) == "" && file.extension != "" {
+		uploadName += "." + file.extension
+	}
+	jsonMode := deps.Caller.Format() == "json"
+
+	if deps.Caller.DryRun() {
+		if jsonMode {
+			return deps.Out.PrintJSON(map[string]any{
+				"dry_run":             true,
+				"executed":            false,
+				"preview_kind":        "plan",
+				"operation":           "上传文件到钉钉文档",
+				"requested_operation": cfg.operation,
+				"fallback":            "upload",
+				"converted":           false,
+				"file":                file.path,
+				"name":                uploadName,
+				"format":              file.extension,
+				"size":                file.size,
+			})
+		}
+		deps.Out.PrintKeyValue("操作", "上传文件到钉钉文档（doc import 回退）")
+		deps.Out.PrintKeyValue("文件", file.path)
+		deps.Out.PrintKeyValue("名称", uploadName)
+		deps.Out.PrintKeyValue("格式", file.extension)
+		deps.Out.PrintKeyValue("大小", fmt.Sprintf("%d bytes", file.size))
+		return nil
+	}
+
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	if !jsonMode {
+		deps.Out.PrintInfo("按原文件上传中（未转换为在线文档）...")
+	}
+	text, err := docSpaceUploadCommitText(ctx, file.path, uploadName, file.size, file.folder, file.workspace)
+	if err != nil {
+		return err
+	}
+	// fail-closed：commit 响应必须可解析且带文件标识才算成功；
+	// 空响应（legacy ack）、非 JSON 或缺少标识都不得包装为 success
+	commit, dentryID, err := parseUploadCommitResult(text)
+	if err != nil {
+		return err
+	}
+	return deps.Out.PrintJSON(map[string]any{
+		"success":             true,
+		"operation":           "上传文件到钉钉文档",
+		"requested_operation": cfg.operation,
+		"fallback":            "upload",
+		"converted":           false,
+		"name":                uploadName,
+		"format":              file.extension,
+		"dentry_id":           dentryID,
+		"result":              commit,
+	})
+}
+
+// uploadCommitIDKeys 是 commit_uploaded_file 响应中可作为文件标识的字段，
+// 按优先级排列；服务端可能返回平铺对象或包一层 result envelope。
+var uploadCommitIDKeys = []string{"dentryUuid", "dentryId", "nodeId", "fileId", "id"}
+
+// parseUploadCommitResult 校验入库响应：拒绝空响应，要求 JSON 对象且
+// 含文件标识，返回解析后的对象与标识值。任何不满足都返回错误，
+// 由调用方向用户提示核对入库结果，而不是伪装成功。
+func parseUploadCommitResult(text string) (map[string]any, string, error) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return nil, "", fmt.Errorf("上传入库未返回结果（commit_uploaded_file 响应为空），无法确认文件已入库；请用 dws doc list 核对目标位置")
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return nil, "", fmt.Errorf("上传入库响应无法解析为 JSON，无法确认文件已入库；原始响应: %s", trimmed)
+	}
+	payload := parsed
+	if inner, ok := parsed["result"].(map[string]any); ok {
+		payload = inner
+	}
+	for _, key := range uploadCommitIDKeys {
+		if v, ok := payload[key].(string); ok && strings.TrimSpace(v) != "" {
+			return parsed, v, nil
+		}
+	}
+	return nil, "", fmt.Errorf("上传入库响应缺少文件标识（%s 均为空），无法确认文件已入库；原始响应: %s", strings.Join(uploadCommitIDKeys, "/"), trimmed)
+}
+
 func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) error {
 	file, err := prepareImportFile(cmd, args, cfg)
 	if err != nil {
 		return err
+	}
+	// 非回退配置的白名单外文件已在 prepareImportFile 中按基线顺序拒绝
+	if cfg.uploadFallback && !cfg.supportedFormats[file.extension] {
+		return runImportUploadFallback(cmd, cfg, file)
 	}
 	jsonMode := deps.Caller.Format() == "json"
 

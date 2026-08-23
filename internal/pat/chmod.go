@@ -29,9 +29,13 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
+
+func boolPtr(v bool) *bool { return &v }
 
 type LoginRecommendOptions struct {
 	// ProductCodes limits the recommend plan to service-owned product domains.
@@ -294,14 +298,6 @@ agentCode 配置:
 				sessionID = resolveSessionIDFromEnv()
 			}
 
-			if !validGrantTypes[grantType] {
-				return fmt.Errorf("invalid --grant-type %q, must be one of: once, session, permanent", grantType)
-			}
-
-			if grantType == "session" && sessionID == "" {
-				return fmt.Errorf("--session-id is required when --grant-type is session\n  hint: dws pat chmod <scope> --grant-type session --session-id <id>")
-			}
-
 			if c != nil && c.DryRun() {
 				if usesPlan {
 					planArgs := buildBatchPlanArgs(scopes, productCodes, recommend, grantType, agentCode, sessionID, true)
@@ -417,7 +413,7 @@ agentCode 配置:
 	cli.AnnotateRuntimeConstraints(chmodCmd, cli.RuntimeSchemaConstraints{
 		RequireOneOf: [][]string{{"scope", "product", "products", "domain", "domains", "recommend"}},
 	})
-	cli.AnnotateRuntimePositionals(chmodCmd, cli.RuntimeSchemaPositional{
+	cli.AnnotateRuntimePositionals(chmodCmd, contract.RuntimeSchemaPositional{
 		Name:        "scope",
 		Type:        "array",
 		Description: "权限 scope，格式为 <product>.<entity>:<permission>；可重复",
@@ -426,6 +422,66 @@ agentCode 配置:
 		Index:       0,
 	})
 
+	helpers.DeclareLeafMetadata(chmodCmd, helpers.LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Validate: func(cmd *cobra.Command, args []string) error {
+			productCodes := collectChmodProductCodes(productFlags, productsFlag, domainFlags, domainsFlag)
+			if len(args) == 0 && !recommend && len(productCodes) == 0 {
+				return fmt.Errorf("accepts 1 arg(s), received 0")
+			}
+			grantType, _ := cmd.Flags().GetString("grant-type")
+			if !validGrantTypes[grantType] {
+				return fmt.Errorf("invalid --grant-type %q, must be one of: once, session, permanent", grantType)
+			}
+			sessionID, _ := cmd.Flags().GetString("session-id")
+			if sessionID == "" {
+				sessionID = resolveSessionIDFromEnv()
+			}
+			if grantType == "session" && sessionID == "" {
+				return fmt.Errorf("--session-id is required when --grant-type is session\n  hint: dws pat chmod <scope> --grant-type session --session-id <id>")
+			}
+			return nil
+		},
+		Contract: helpers.LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "pat",
+				Name:           "batch_grant",
+				CanonicalPath:  "pat.batch_grant",
+				CLIPath:        "pat chmod",
+				PrimaryCLIPath: "pat chmod",
+			},
+			Description: "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "pat", RPCName: "pat.batch_grant"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "预览或执行 PAT 批量行为授权（支持 dryRun / pending flow）",
+				UseWhen: []string{
+					"命令提示缺少行为授权，需要按产品或 scope 批量授权",
+					"先 --dry-run 查看 selected/skipped/pending，用户确认后再执行",
+				},
+				AvoidWhen: []string{
+					"普通 OAuth 登录用 auth，不要用 pat",
+					"授权产品、grant-type 或 session-id 未明确时不要执行写入",
+					"只要改本地浏览器打开策略时用 pat browser-policy",
+				},
+				Examples: []string{"dws pat chmod --products calendar,aitable --grant-type session --session-id <SESSION_ID> --dry-run --format json"},
+			},
+			// session-id is conditionally required in Validate; publish via
+			Parameters: []contract.ParamDecl{
+				{
+					Name:         "session-id",
+					Required:     boolPtr(false),
+					RequiredWhen: "grant-type is session",
+				},
+			},
+		},
+	})
 	return chmodCmd
 }
 

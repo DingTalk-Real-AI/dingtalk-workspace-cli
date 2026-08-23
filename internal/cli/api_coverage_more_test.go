@@ -4,31 +4,31 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageRuntimeAnnotationAPIsCoverage(t *testing.T) {
 	AttachRuntimeSchema(nil, "p", "t", "s")
 	AttachRuntimeSchema(&cobra.Command{}, "", "", "")
-	AnnotateRuntimeToolMetadata(nil, "", "", "")
-	AnnotateRuntimeFlag(nil, "x", "x", "string", false, "")
+	AnnotateRuntimeFlag(nil, "x", "x", "string", false)
 	AnnotateRuntimeFlagProperty(nil, "x", "x")
 	AnnotateRuntimeRequiredFlags(nil, "x")
+	AnnotateRuntimeFlagRequiredValue(nil, "x", false)
+	AnnotateRuntimeFlagInterfaceType(nil, "x", "string")
 	AnnotateRuntimeFlagRequiredWhen(nil, "x", "when")
 	AnnotateRuntimeFlagFormat(nil, "x", "uri")
 	AnnotateRuntimeFlagEnum(nil, "x", "a")
 	AnnotateRuntimeFlagExample(nil, "x", "a")
 	AnnotateRuntimeConstraints(nil, RuntimeSchemaConstraints{})
 	AnnotateRuntimePositionals(nil)
-	ExcludeFromRuntimeSchema(nil)
 
 	cmd := &cobra.Command{Use: "run", Run: func(*cobra.Command, []string) {}}
 	cmd.Flags().StringP("value", "v", "", "value")
 	AttachRuntimeSchema(cmd, " product ", " tool ", " source ")
-	AnnotateRuntimeToolMetadata(cmd, " Title ", " Description ", " source ")
-	AnnotateRuntimeFlag(cmd, "", "property", "string", true, "")
-	AnnotateRuntimeFlag(cmd, "missing", "property", "string", true, "")
-	AnnotateRuntimeFlag(cmd, "value", " property ", " string ", true, "")
+	AnnotateRuntimeFlag(cmd, "", "property", "string", true)
+	AnnotateRuntimeFlag(cmd, "missing", "property", "string", true)
+	AnnotateRuntimeFlag(cmd, "value", " property ", " string ", true)
 	AnnotateRuntimeFlagProperty(cmd, "missing", "property")
 	AnnotateRuntimeFlagProperty(cmd, "value", "property2")
 	AnnotateRuntimeRequiredFlags(cmd, "missing", "value")
@@ -44,23 +44,22 @@ func TestCrossPlatformCoverageRuntimeAnnotationAPIsCoverage(t *testing.T) {
 	AnnotateRuntimeConstraints(cmd, RuntimeSchemaConstraints{RequireOneOf: [][]string{{"value", "other"}}})
 	AnnotateRuntimeConstraints(cmd, RuntimeSchemaConstraints{RequireTogether: [][]string{{"value", "other"}}})
 	AnnotateRuntimePositionals(cmd,
-		RuntimeSchemaPositional{Name: "", Index: 0},
-		RuntimeSchemaPositional{Name: "bad", Index: -1},
-		RuntimeSchemaPositional{Name: " second ", Index: 1, Description: " desc "},
-		RuntimeSchemaPositional{Name: "first", Index: 0, Type: " number "},
+		contract.RuntimeSchemaPositional{Name: "", Index: 0},
+		contract.RuntimeSchemaPositional{Name: "bad", Index: -1},
+		contract.RuntimeSchemaPositional{Name: " second ", Index: 1, Description: " desc "},
+		contract.RuntimeSchemaPositional{Name: "first", Index: 0, Type: " number "},
 	)
-	ExcludeFromRuntimeSchema(cmd)
 	setRuntimeCommandAnnotation(cmd, "empty", " ")
 	setFlagAnnotation(nil, "x", "y")
 	setFlagAnnotation(cmd.Flags().Lookup("value"), "empty", " ")
 	setFlagAnnotationValues(nil, "x", "y")
 	setFlagAnnotationValues(cmd.Flags().Lookup("value"), "empty", " ")
-	if cmd.Annotations[runtimeSchemaProductAnnotation] != "product" || cmd.Annotations[runtimeSchemaExcludeAnnotation] != "true" {
+	if cmd.Annotations[runtimeSchemaProductAnnotation] != "product" {
 		t.Fatalf("command annotations = %#v", cmd.Annotations)
 	}
 }
 
-func TestCrossPlatformCoverageRuntimeRegistriesAndSchemaHintsCoverage(t *testing.T) {
+func TestCrossPlatformCoverageRuntimeRegistriesCoverage(t *testing.T) {
 	originalConstraints := runtimeSchemaConstraintsByCanonical
 	originalParameters := runtimeSchemaParameterMetadataByCanonical
 	t.Cleanup(func() {
@@ -94,21 +93,6 @@ func TestCrossPlatformCoverageRuntimeRegistriesAndSchemaHintsCoverage(t *testing
 		t.Fatal("cloneRuntimeSchemaStringMap(nil) != nil")
 	}
 	assertPanics(t, func() { RegisterRuntimeSchemaParameterMetadata("sample.run", metadata) })
-
-	registry := newSchemaHintRegistry()
-	assertPanics(t, func() { registry.RegisterProduct("", nil) })
-	assertPanics(t, func() { registry.RegisterProduct("sample", map[string]ToolSchemaHint{"": {}}) })
-	registry.RegisterProduct(" sample ", map[string]ToolSchemaHint{"run": {Title: "Run"}, "other.path": {Title: "Other"}})
-	assertPanics(t, func() { registry.RegisterProduct("sample", map[string]ToolSchemaHint{"run": {}}) })
-	if _, ok := registry.Lookup(" "); ok {
-		t.Fatal("Lookup(empty) succeeded")
-	}
-	if hint, ok := registry.Lookup(" sample.run "); !ok || hint.Title != "Run" {
-		t.Fatalf("Lookup(sample.run) = %#v, %v", hint, ok)
-	}
-	if canonicalHintPath("sample", "") != "" || canonicalHintPath("sample", "other.path") != "other.path" || canonicalHintPath("sample", "run") != "sample.run" {
-		t.Fatal("canonicalHintPath mismatch")
-	}
 }
 
 func assertPanics(t *testing.T, fn func()) {

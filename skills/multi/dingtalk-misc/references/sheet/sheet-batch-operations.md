@@ -5,7 +5,7 @@
 `batch-update` 把多次写入打包成单次请求，但每个子操作仍受编辑类任务硬性默认规则约束：
 
 1. **目标 range 必须落在用户授权范围内**：除用户明示要修改的区域外，子操作禁止扩张到无关单元格 / 列 / 工作表。规划 range 时先确认每个子操作的边界。
-2. **批次完成后必须回读校验**：整个 `batch-update` 执行成功后，单元格值用 `range read` 或 `csv-get` 抽样回读受影响区域；合并、行列分组等结构元数据用 `sheet info` 回读校验。
+2. **批次完成后必须回读校验**：整个 `batch-update` 执行成功后，单元格值用 `range read` 或 `csv-get` 抽样回读受影响区域；合并用裸 `sheet info`，行列分组用 `sheet info --include groups` 回读校验。
 3. **预期条数前置断言**：涉及"批量填充 N 行"或"对 M 个区域分别写入"时，先把 N、M 硬编码进代码，回读后断言实际等于预期；不一致就再发一轮 `batch-update` 补齐，禁止交付半成品。
 
 ## 使用场景
@@ -29,7 +29,7 @@
 用户说"批量创建行列分组/批量取消行列分组/同时调整尺寸并分组":
 - 连续行/列分组 → `group-dimension`
 - 取消连续行/列分组 → `ungroup-dimension`
-- 分组回读用 `sheet info`
+- 分组回读用 `sheet info --include groups`
 - `group-dimension` 在 batch 中只适合默认展开分组；需要创建后立即折叠时，用独立 `dws sheet group-dimension --group-state fold`
 
 **何时推荐使用 `batch-update`**：
@@ -83,7 +83,8 @@ Example:
     {"toolName":"range update","input":{"sheet-id":"Sheet1","range":"A1","values":[[{"type":"text","text":"hello"}]]}},
     {"toolName":"merge-cells","input":{"sheet-id":"Sheet1","range":"A1:B1","merge-type":"mergeAll"}},
     {"toolName":"update-dimension","input":{"sheet-id":"Sheet1","dimension":"ROWS","start-index":"1","length":1,"pixel-size":40}},
-    {"toolName":"group-dimension","input":{"sheet-id":"Sheet1","range":"3:7","group-state":"expand"}}
+    {"toolName":"group-dimension","input":{"sheet-id":"Sheet1","range":"3:7","group-state":"expand"}},
+    {"toolName":"set-dropdown","input":{"sheet-id":"Sheet1","range":"C2:C100","source-sheet-id":"SourceSheet","source-range":"T1:T3"}}
   ]'
   dws sheet batch-update --node <NODE_ID> --continue-on-error --operations '[...]'
 Flags:
@@ -100,6 +101,10 @@ Notes:
   - --continue-on-error: 宽松模式，遇失败继续执行后续操作（已执行的子操作不回滚）
   - operations 最多 20 条
   - 当需要对多个区域执行相同清除时，优先使用 `range batch-clear`（更简洁）
+  - `csv-put` 子操作与独立命令语义一致：CSV 字段值以 `=` 开头时按公式解析；前加单引号时写入以 `=` 开头的字面文本
+  - `set-dropdown` 的 `input` 中，Inline 使用 `options`；SourceRange 使用 `source-sheet-id` + `source-range`，两种模式必须且只能选一个。顶层 `colors` / `source-colors` 会被拒绝；Inline 颜色写在 `options[].color`，SourceRange 颜色写入暂不支持
+  - `set-dropdown` SourceRange 在已验证的重命名、引用前插入行/列、删除引用前行的场景会自动调整；已验证的 `move-dimension` 会使其变为 `invalid`。其他未覆盖删除/移动场景后先回读，仅 `invalid` 时重新选源写入
+  - `source-range` 按 `toolName` 解释：`set-dropdown` 中是下拉候选项来源；`range fill` / `range copy-to` / `range move-to` 中是待填充、复制或移动的数据源区域
   - 典型场景：先插入行列再写入数据、先清除再写入、批量合并+调整行高列宽
   - `group-dimension` 在 batch 中只适合默认展开分组；需要 `--group-state fold` 时请使用独立 `dws sheet group-dimension`
   - `table-put` 不支持放进 batch-update；结构化 table 请用独立 `dws sheet table-put`
@@ -235,7 +240,7 @@ Cause: The requested resource was not found by the identifier 'NonExistentSheet'
 
 ### 批量创建/取消行列分组
 
-分组属于工作表结构元数据，批次完成后用 `sheet info` 回读 `rowGroups` / `columnGroups`，不要用 `range read` 校验。回读项中的 `level` 是 1-based，`collapsed` 表示当前折叠状态。
+分组属于工作表结构元数据，批次完成后用 `sheet info --include groups` 回读 `rowGroups` / `columnGroups`，不要用裸 `sheet info` 或 `range read` 校验。回读项中的 `level` 是 1-based，`collapsed` 表示当前折叠状态。
 
 ```jsonc
 [
@@ -262,7 +267,7 @@ Cause: The requested resource was not found by the identifier 'NonExistentSheet'
 | 操作 | 从返回中提取 | 用于 |
 |------|-------------|------|
 | `list` | 工作表的 `sheetId` | batch-clear 的 --ranges sheet 前缀 / batch-update 子操作 input 的 sheet-id |
-| `batch-update` | 各子操作的执行结果 | 回读校验（值用 range read / csv-get；合并、分组等结构用 sheet info） |
+| `batch-update` | 各子操作的执行结果 | 回读校验（值用 range read / csv-get；合并用 sheet info；分组用 sheet info --include groups） |
 
 ## 注意事项
 
@@ -272,5 +277,5 @@ Cause: The requested resource was not found by the identifier 'NonExistentSheet'
 - ★ **table 写入不进 batch-update**：当前 `batch-update` 不支持结构化 table 写入；结构化 table 请直接调用 `dws sheet table-put`
 - ★ **批次完成后必须回读校验**：值写入用 `range read` 或 `csv-get` 抽样回读受影响区域；结构变更用 `sheet info` 回读
 - ★ **`batch-update` 不支持嵌套**：`--operations` 中的 `toolName` 必须是原子操作，不可再嵌套 `batch-update`
-- `batch-update` 支持 `group-dimension` / `ungroup-dimension`；分组结果用 `sheet info` 回读
+- `batch-update` 支持 `group-dimension` / `ungroup-dimension`；分组结果用 `sheet info --include groups` 回读
 - `batch-update` 中 `group-dimension` 只适合默认展开分组；需要 `fold` 初始状态时使用独立 `group-dimension`

@@ -33,43 +33,43 @@ func contains(ss []string, want string) bool {
 	return false
 }
 
-// dws-shared must ship even when --skill narrows the set to a single product.
+// dingtalk-shared must ship even when --skill narrows the set to a single product.
 func TestP1SharedAlwaysIncludedWithSkillFilter(t *testing.T) {
-	src := writeMultiSkillSrc(t, "dws-shared", "dingtalk-aitable", "dingtalk-calendar")
+	src := writeMultiSkillSrc(t, "dingtalk-shared", "dingtalk-aitable", "dingtalk-calendar")
 	all, err := listMultiSkillNames(src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !contains(all, "dws-shared") {
-		t.Fatalf("listMultiSkillNames did not enumerate dws-shared: %v", all)
+	if !contains(all, "dingtalk-shared") {
+		t.Fatalf("listMultiSkillNames did not enumerate dingtalk-shared: %v", all)
 	}
 	filtered, err := filterMultiSkillNames(all, []string{"aitable"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if contains(filtered, "dws-shared") {
-		t.Fatalf("precondition: filter should drop dws-shared for -s aitable: %v", filtered)
+	if contains(filtered, "dingtalk-shared") {
+		t.Fatalf("precondition: filter should drop dingtalk-shared for -s aitable: %v", filtered)
 	}
 	final := ensureMandatorySharedSkill(filtered, all)
-	if !contains(final, "dws-shared") {
-		t.Fatalf("ensureMandatorySharedSkill must re-add dws-shared: %v", final)
+	if !contains(final, "dingtalk-shared") {
+		t.Fatalf("ensureMandatorySharedSkill must re-add dingtalk-shared: %v", final)
 	}
 
-	// Actually install with the filtered+mandatory set and assert dws-shared landed.
+	// Actually install with the filtered+mandatory set and assert dingtalk-shared landed.
 	dest := t.TempDir()
 	var out, errOut bytes.Buffer
-	if _, _, err := installMultiSkillToHomes(src, final, []string{dest}, &out, &errOut); err != nil {
+	if _, _, err := installMultiSkillToHomes(src, final, []string{dest}, &out, &errOut, true); err != nil {
 		t.Fatalf("install: %v (%s)", err, errOut.String())
 	}
-	if _, err := os.Stat(filepath.Join(dest, "dws-shared", "SKILL.md")); err != nil {
-		t.Fatalf("dws-shared not installed with -s aitable: %v", err)
+	if _, err := os.Stat(filepath.Join(dest, "dingtalk-shared", "SKILL.md")); err != nil {
+		t.Fatalf("dingtalk-shared not installed with -s aitable: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dest, "dingtalk-aitable", "SKILL.md")); err != nil {
 		t.Fatalf("dingtalk-aitable not installed: %v", err)
 	}
 }
 
-// When the source has no dws-shared (older layout), nothing is forced.
+// When the source has no dingtalk-shared (older layout), nothing is forced.
 func TestP1SharedNoopWhenAbsent(t *testing.T) {
 	src := writeMultiSkillSrc(t, "dingtalk-aitable")
 	all, err := listMultiSkillNames(src)
@@ -77,7 +77,7 @@ func TestP1SharedNoopWhenAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	final := ensureMandatorySharedSkill([]string{"dingtalk-aitable"}, all)
-	if contains(final, "dws-shared") {
-		t.Fatalf("must not invent dws-shared when source lacks it: %v", final)
+	if contains(final, "dingtalk-shared") {
+		t.Fatalf("must not invent dingtalk-shared when source lacks it: %v", final)
 	}
 }

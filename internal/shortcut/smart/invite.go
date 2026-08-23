@@ -16,6 +16,9 @@ package smart
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -36,6 +39,34 @@ var Invite = shortcut.Shortcut{
 		"内部先把 --with 里每个姓名解析成唯一 userId，再一次性把他们全部加到 --event 指定的日程里。" +
 		"会真实修改日程并发出参会邀请。",
 	Risk: shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_invite",
+			CanonicalPath:  "calendar.shortcut_invite",
+			CLIPath:        "calendar +invite",
+			PrimaryCLIPath: "calendar +invite",
+		},
+		Description: "按姓名把参会人加入已有日程（自动解析 userId 后批量添加）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按姓名把参会人加入已有日程（自动解析 userId 后批量添加）",
+			UseWhen:      []string{"当你已经有一个日程（知道 eventId），想按姓名把几位同事拉进来当参会人时使用；内部先把 --with 里每个姓名解析成唯一 userId，再一次性把他们全部加到 --event 指定的日程里。会真实修改日程并发出参会邀请。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws calendar +invite --event EVENT_ID --with 张三",
+				"dws calendar +invite --event EVENT_ID --with 张三,李四",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "event", Type: shortcut.FlagString, Desc: "已有日程的 eventId", Required: true},
 		{Name: "with", Type: shortcut.FlagString, Desc: "参会人姓名，逗号分隔", Required: true},
@@ -53,6 +84,7 @@ var Invite = shortcut.Shortcut{
 		// Resolve every participant name to a unique userId first, so an
 		// unknown/ambiguous name fails before we touch the event.
 		var userIDs []string
+		var userNames []string
 		for _, name := range strings.Split(rt.Str("with"), ",") {
 			name = strings.TrimSpace(name)
 			if name == "" {
@@ -63,20 +95,65 @@ var Invite = shortcut.Shortcut{
 				return err
 			}
 			userIDs = append(userIDs, user.userID)
+			userNames = append(userNames, user.name)
 		}
 		if len(userIDs) == 0 {
 			return apperrors.NewValidation("--with 需要至少一个有效的参会人姓名")
 		}
 
-		// Batch-add all participants. eventId + attendeesToAdd copied verbatim
-		// from the helper's `attendee add` call site (add_calendar_participant).
-		return rt.CallMCP("add_calendar_participant", map[string]any{
+		preflight, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{"eventId": eventID})
+		if err != nil {
+			return err
+		}
+		if _, err := calendarSmartRequireEvent(preflight, "calendar/get_calendar_detail", eventID); err != nil {
+			return err
+		}
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"success":      true,
+				"dryRun":       true,
+				"executed":     false,
+				"eventId":      eventID,
+				"inviteeCount": len(userIDs),
+			})
+		}
+
+		// Batch-add all participants and require explicit success.
+		written, err := rt.CallMCPWriteDataStrict("calendar", "add_calendar_participant", map[string]any{
 			"eventId":        eventID,
 			"attendeesToAdd": userIDs,
+		})
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartWriteReceipt(written, "calendar/add_calendar_participant"); err != nil {
+			return err
+		}
+		participants, err := rt.CallMCPData("calendar", "get_calendar_participants", map[string]any{"eventId": eventID})
+		if err != nil {
+			return err
+		}
+		present, err := calendarSmartAttendees(participants)
+		if err != nil {
+			return err
+		}
+		currentUserID, err := calendarSmartCurrentUserID(rt, present)
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartVerifyAttendees(present, userIDs, userNames, currentUserID); err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{
+			"success":      true,
+			"eventId":      eventID,
+			"invitedCount": len(userIDs),
+			"verified":     true,
 		})
 	},
 }
 
 func init() {
+	finalizeCalendarSmart(&Invite, "已添加并通过参会人读回验证的邀请")
 	shortcut.Register(Invite)
 }

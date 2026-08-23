@@ -1,0 +1,165 @@
+{
+  "version": 3,
+  "marker_roots": [
+    "skills/multi/dingtalk-chat",
+    "skills/multi/dingtalk-event"
+  ],
+  "retired_scripts": [
+    "skills/multi/dingtalk-chat/scripts/_chat_message_export_common.py",
+    "skills/multi/dingtalk-chat/scripts/chat_export_messages.py",
+    "skills/multi/dingtalk-chat/scripts/chat_history_with_user.py",
+    "skills/multi/dingtalk-chat/scripts/bot_broadcast.py",
+    "skills/mono/scripts/_chat_message_export_common.py",
+    "skills/mono/scripts/chat_export_messages.py",
+    "skills/mono/scripts/chat_history_with_user.py",
+    "skills/mono/scripts/bot_broadcast.py"
+  ],
+  "contract_reference": "skills/multi/dingtalk-chat/references/contracts.md",
+  "handoff_reference": "skills/multi/dingtalk-event/references/event-im-output.md",
+  "intents": [
+    {
+      "id": "chat.send.dm",
+      "preferred_tool": "chat.shortcut_dm",
+      "forbidden_default_tools": [
+        "chat.send_personal_message"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/01-messaging.md"
+      ]
+    },
+    {
+      "id": "chat.send.group",
+      "preferred_tool": "chat.shortcut_send_to_group",
+      "forbidden_default_tools": [
+        "chat.send_personal_message"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/01-messaging.md"
+      ]
+    },
+    {
+      "id": "chat.send.advanced",
+      "preferred_tool": "chat.shortcut_messages_send",
+      "forbidden_default_tools": [
+        "chat.send_personal_message",
+        "chat.send_robot_message",
+        "chat.send_message_by_custom_robot",
+        "chat.shortcut_messages_send_by_webhook"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/01-messaging.md",
+        "skills/multi/dingtalk-chat/references/chat/message-media.md",
+        "skills/multi/dingtalk-chat/references/chat/chat-bot.md"
+      ]
+    },
+    {
+      "id": "chat.read.conversation",
+      "preferred_tool": "chat.shortcut_chat_messages",
+      "allowed_fallbacks": [
+        {
+          "tool": "chat.list_conversation_message_v2",
+          "reason_code": "raw_page_control"
+        }
+      ],
+      "forbidden_default_tools": [
+        "chat.list_conversation_message_v2"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/01-messaging.md",
+        "skills/multi/dingtalk-chat/references/chat/message-query.md",
+        "skills/multi/dingtalk-chat/references/chat/chat-conversation.md"
+      ]
+    },
+    {
+      "id": "chat.search.filtered",
+      "preferred_tool": "chat.shortcut_search_msg",
+      "allowed_fallbacks": [
+        {
+          "tool": "chat.search_messages",
+          "reason_code": "raw_filter_control"
+        }
+      ],
+      "forbidden_default_tools": [
+        "chat.search_messages",
+        "chat.search_messages_by_keyword"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/chat/message-query.md"
+      ]
+    },
+    {
+      "id": "chat.create.group",
+      "preferred_tool": "chat.shortcut_chat_create",
+      "forbidden_default_tools": [
+        "chat.create_group_conversation"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/01-messaging.md",
+        "skills/multi/dingtalk-chat/references/chat/group-admin.md"
+      ]
+    },
+    {
+      "id": "chat.reply.quote",
+      "preferred_tool": "chat.shortcut_messages_reply",
+      "forbidden_default_tools": [
+        "chat.reply_personal_message"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/01-messaging.md",
+        "skills/multi/dingtalk-chat/references/chat/message-actions.md"
+      ]
+    },
+    {
+      "id": "chat.conversation.list-top",
+      "preferred_tool": "chat.shortcut_conversation_list_top",
+      "allowed_fallbacks": [
+        {
+          "tool": "chat.list_top_conversations",
+          "reason_code": "raw_response_required"
+        }
+      ],
+      "forbidden_default_tools": [
+        "chat.list_top_conversations"
+      ],
+      "references": [
+        "skills/multi/dingtalk-chat/SKILL.md",
+        "skills/multi/dingtalk-chat/references/chat/chat-conversation.md"
+      ]
+    },
+    {
+      "id": "event.listen.im",
+      "preferred_tool": "event.listen_im",
+      "allowed_fallbacks": [
+        {
+          "tool": "event.consume",
+          "reason_code": "advanced_event_control"
+        }
+      ],
+      "forbidden_default_tools": [
+        "event.consume"
+      ],
+      "references": [
+        "skills/multi/dingtalk-event/SKILL.md",
+        "skills/multi/dingtalk-event/references/event-im.md"
+      ]
+    },
+    {
+      "id": "event.listen.oa",
+      "preferred_tool": "event.consume",
+      "forbidden_default_tools": [
+        "event.listen_im"
+      ],
+      "references": [
+        "skills/multi/dingtalk-event/SKILL.md",
+        "skills/multi/dingtalk-event/references/event-oa.md"
+      ]
+    }
+  ]
+}

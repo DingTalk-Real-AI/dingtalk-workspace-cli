@@ -14,10 +14,12 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -204,6 +206,105 @@ func TestCheckCLIAuthEnabled_Enabled(t *testing.T) {
 		t.Fatal("expected CLIAuthEnabled=true")
 	}
 	t.Logf("✅ Normal enabled response: success=%v, enabled=%v", status.Success, status.Result.CLIAuthEnabled)
+}
+
+func TestCrossPlatformCoverageCheckCLIAuthEnabledTraceHeadersAndDebugLog(t *testing.T) {
+	t.Setenv("DINGTALK_TRACE_ID", "trace-for-cli-auth-test")
+	applyCLIAuthTraceHeaders(nil, "trace-for-cli-auth-test")
+	applyCLIAuthTraceHeaders(httptest.NewRequest(http.MethodGet, "https://example.com", nil), "")
+
+	var logBuf bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(previousLogger)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("EagleEye-TraceId"); got != "trace-for-cli-auth-test" {
+			t.Errorf("EagleEye-TraceId = %q, want trace-for-cli-auth-test", got)
+		}
+		if got := r.Header.Get("X-Dingtalk-Trace-Id"); got != "trace-for-cli-auth-test" {
+			t.Errorf("X-Dingtalk-Trace-Id = %q, want trace-for-cli-auth-test", got)
+		}
+		w.Header().Set("EagleEye-TraceId", "server-trace-001")
+		w.Header().Set("EagleEye-RpcId", "rpc-001")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(CLIAuthStatus{
+			Success: true,
+			Result:  &CLIAuthResult{CLIAuthEnabled: true},
+		})
+	}))
+	defer srv.Close()
+
+	configDir := setupMCPConfigDir(t, srv.URL)
+	p := &OAuthProvider{configDir: configDir, httpClient: srv.Client()}
+
+	status, err := p.CheckCLIAuthEnabled(context.Background(), "sensitive-token")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status.Result == nil || !status.Result.CLIAuthEnabled {
+		t.Fatal("expected CLIAuthEnabled=true")
+	}
+
+	logs := logBuf.String()
+	for _, want := range []string{
+		"auth.cli_auth_enabled.request",
+		"auth.cli_auth_enabled.response",
+		"trace-for-cli-auth-test",
+		"server-trace-001",
+		"rpc-001",
+	} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("debug logs missing %q, got: %s", want, logs)
+		}
+	}
+	if strings.Contains(logs, "sensitive-token") {
+		t.Fatalf("debug logs leaked access token: %s", logs)
+	}
+}
+
+func TestCrossPlatformCoverageInternationalLoginRegionRequestWrappers(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case ClientIDPath:
+			_ = json.NewEncoder(w).Encode(ClientIDResponse{Success: true, Result: "international-client"})
+		case SuperAdminPath:
+			_ = json.NewEncoder(w).Encode(SuperAdminResponse{Success: true, Result: []SuperAdmin{{StaffID: "admin"}}})
+		case SendCliAuthApplyPath:
+			_ = json.NewEncoder(w).Encode(SendApplyResponse{Success: true, Result: true})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	oldClient := oauthHTTPClient
+	oauthHTTPClient = server.Client()
+	restoreBaseURL := PushMCPBaseURLOverride(server.URL)
+	t.Cleanup(func() {
+		restoreBaseURL()
+		oauthHTTPClient = oldClient
+	})
+
+	ctx := context.Background()
+	for name, fetch := range map[string]func() (string, error){
+		"device": func() (string, error) { return deviceFetchClientIDForLoginRegion(ctx, LoginRegionInternational) },
+		"oauth":  func() (string, error) { return oauthFetchClientIDForLoginRegion(ctx, LoginRegionInternational) },
+	} {
+		if got, err := fetch(); err != nil || got != "international-client" {
+			t.Fatalf("%s client ID = %q, %v", name, got, err)
+		}
+	}
+	if got, err := deviceGetAdminsForLoginRegion(ctx, "token", LoginRegionInternational); err != nil || !got.Success {
+		t.Fatalf("device admins = %#v, %v", got, err)
+	}
+	if got, err := oauthGetAdminsForLoginRegion(ctx, "token", LoginRegionInternational); err != nil || !got.Success {
+		t.Fatalf("OAuth admins = %#v, %v", got, err)
+	}
+	if got, err := oauthSendApplyForLoginRegion(ctx, "token", "admin", LoginRegionInternational); err != nil || !got.Success {
+		t.Fatalf("OAuth apply = %#v, %v", got, err)
+	}
 }
 
 func TestCheckCLIAuthEnabled_Disabled(t *testing.T) {

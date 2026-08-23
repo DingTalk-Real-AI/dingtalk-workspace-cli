@@ -16,6 +16,9 @@ package smart
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -41,6 +44,34 @@ var FindRecord = shortcut.Shortcut{
 		"却不想手写结构化过滤条件时使用；内部直接调用 query_records，把 --query 作为全文关键词(keyword)在该表里检索并打印匹配记录。" +
 		"不传 --query 时则返回该表的前若干条记录。这是只读操作，不会修改任何数据。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "aitable",
+			Name:           "shortcut_find_record",
+			CanonicalPath:  "aitable.shortcut_find_record",
+			CLIPath:        "aitable +find-record",
+			PrimaryCLIPath: "aitable +find-record",
+		},
+		Description: "在指定多维表里按关键词查记录（只读）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "在指定多维表里按关键词查记录（只读）",
+			UseWhen:      []string{"当你已经知道某个多维表的 baseId 和 tableId、想按一个关键词快速找出匹配的行记录，却不想手写结构化过滤条件时使用；内部直接调用 query_records，把 --query 作为全文关键词(keyword)在该表里检索并打印匹配记录。不传 --query 时则返回该表的前若干条记录。这是只读操作，不会修改任何数据。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws aitable +find-record --base B --table T",
+				"dws aitable +find-record --base B --table T --query 张三",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "base", Type: shortcut.FlagString, Desc: "Base ID（多维表所属 base）", Required: true},
 		{Name: "table", Type: shortcut.FlagString, Desc: "Table ID（要检索的数据表）", Required: true},

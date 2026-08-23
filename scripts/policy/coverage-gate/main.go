@@ -132,7 +132,10 @@ func run(
 				fmt.Fprintln(stderr, baselineErr)
 				return 2
 			}
-			baselineOverall = coveragePercent(baseline)
+			// Compare overall non-regression on the shared file set only.
+			// Deleted packages (for example a retired 100%-covered helper tree)
+			// must not create a false overall regression against merge-base.
+			baselineOverall = coveragePercent(filterBlocksByFiles(baseline, profileFiles(overall)))
 		}
 	}
 	diff, err := readProfiles(diffPaths, modulePath)
@@ -358,13 +361,25 @@ func gitChangedLines(baseRef string) (map[string][]lineRange, error) {
 	return parseChangedLines(output)
 }
 
+// physicalPath resolves symlinks so git-reported and go-reported paths agree.
+// git rev-parse --show-toplevel prints the physical path while go list reports
+// Dirs derived from the logical CWD; on macOS /tmp is a symlink to /private/tmp
+// and the mismatch makes every buildable file relativize outside the root,
+// silently emptying the changed-code gate.
+func physicalPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
+}
+
 func goListBuildableFiles() (map[string]bool, error) {
 	rootCommand := exec.Command("git", "rev-parse", "--show-toplevel")
 	rootOutput, err := rootCommand.Output()
 	if err != nil {
 		return nil, fmt.Errorf("resolve repository root: %w", err)
 	}
-	root := strings.TrimSpace(string(rootOutput))
+	root := physicalPath(strings.TrimSpace(string(rootOutput)))
 
 	command := exec.Command("go", "list", "-json", "./...")
 	output, err := command.Output()
@@ -391,7 +406,7 @@ func goListBuildableFiles() (map[string]bool, error) {
 			return nil, fmt.Errorf("decode go list output: %w", err)
 		}
 		for _, name := range append(packageInfo.GoFiles, packageInfo.CgoFiles...) {
-			relative, err := filepath.Rel(root, filepath.Join(packageInfo.Dir, name))
+			relative, err := filepath.Rel(root, filepath.Join(physicalPath(packageInfo.Dir), name))
 			if err != nil {
 				return nil, fmt.Errorf("normalize buildable file %s: %w", name, err)
 			}
@@ -469,6 +484,29 @@ func coveragePercent(blocks []coverageBlock) float64 {
 		return 0
 	}
 	return float64(covered) * 100 / float64(total)
+}
+
+func profileFiles(blocks []coverageBlock) map[string]bool {
+	files := map[string]bool{}
+	for _, block := range blocks {
+		if block.File != "" {
+			files[block.File] = true
+		}
+	}
+	return files
+}
+
+func filterBlocksByFiles(blocks []coverageBlock, allowed map[string]bool) []coverageBlock {
+	if len(allowed) == 0 {
+		return nil
+	}
+	filtered := make([]coverageBlock, 0, len(blocks))
+	for _, block := range blocks {
+		if allowed[block.File] {
+			filtered = append(filtered, block)
+		}
+	}
+	return filtered
 }
 
 // mergeCoverageBlocks unions duplicate blocks emitted by cross-package

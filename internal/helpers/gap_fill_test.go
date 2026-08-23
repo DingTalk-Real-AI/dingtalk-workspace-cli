@@ -64,6 +64,7 @@ func TestCrossPlatformCoverageReadToolNameContractAndHelperBoundary(t *testing.T
 		"LIST_MESSAGES":                    true,
 		"query_send_status":                true,
 		"search_messages":                  true,
+		"enterprise_person_search":         true,
 		"unread_message_conversation_list": true,
 		"send_personal_message":            false,
 		"":                                 false,

@@ -19,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageTryAcquireErrorBranchesAndEmptyPath(t *testing.T) {
@@ -30,9 +32,7 @@ func TestCrossPlatformCoverageTryAcquireErrorBranchesAndEmptyPath(t *testing.T) 
 		t.Fatal("empty lock path should be empty")
 	}
 
-	previous := acquireFileLock
-	t.Cleanup(func() { acquireFileLock = previous })
-	acquireFileLock = func(*os.File) error { return errors.New("unexpected lock failure") }
+	testseam.Swap(t, &acquireFileLock, func(*os.File) error { return errors.New("unexpected lock failure") })
 	if lock, err := TryAcquire(filepath.Join(t.TempDir(), "lock")); err == nil || lock != nil || errors.Is(err, ErrBusy) {
 		t.Fatalf("TryAcquire injected failure = %#v, %v", lock, err)
 	}

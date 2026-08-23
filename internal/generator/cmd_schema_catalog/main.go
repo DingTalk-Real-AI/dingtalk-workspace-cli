@@ -28,8 +28,9 @@ import (
 )
 
 var (
-	validateCatalogParameterBindings = cli.ValidateEmbeddedSchemaParameterBindings
+	validateCatalogParameterBindings = cli.ValidateSchemaParameterBindings
 	buildCatalogSnapshot             = cli.BuildSchemaCatalogSnapshot
+	installCatalogAgentMetadata      = installBuildTimeAgentMetadata
 	makeCatalogDirectory             = os.MkdirAll
 	writeCatalogFile                 = os.WriteFile
 	exitCatalogProcess               = os.Exit
@@ -39,17 +40,22 @@ func main() {
 	var rootPath string
 	var surfacePath string
 	var outputPath string
+	var metaIndexPath string
 	flag.StringVar(&rootPath, "root", ".", "Repository root used to protect Schema generator inputs")
-	flag.StringVar(&surfacePath, "surface", "", "Deprecated compatibility input relative to --root; when set it must equal the embedded reviewed CommandRegistry")
-	flag.StringVar(&outputPath, "output", "internal/cli/schema_catalog", "Output directory for the split embedded schema catalog (catalog.json + tools/<product>.json)")
+	flag.StringVar(&surfacePath, "surface", "", "Retired; rejected when set. Command identity is collected from ContractFinal declarations")
+	flag.StringVar(&outputPath, "output", "artifacts/schema_catalog", "Output directory for a CI/local Catalog dump (catalog.json + tools/<product>.json); not a go:generate or production delivery step")
+	flag.StringVar(&metaIndexPath, "meta-index", "", "Output path for CommandMeta summary index gob (default: sibling schema_meta_index.gob next to --output)")
 	flag.Parse()
+	// cmd_schema_catalog is a CI/determinism and policy dump tool. Production
+	// Catalog delivery assembles via cli.ResolveSchemaBuild at runtime.
 	resolvedSurfacePath := resolveCatalogRootPath(rootPath, surfacePath)
-	if err := validateCatalogOutputIsolation(rootPath, outputPath, resolvedSurfacePath); err != nil {
+	resolvedMetaIndexPath := resolveSchemaMetaIndexPath(outputPath, metaIndexPath)
+	if err := validateCatalogOutputIsolation(rootPath, outputPath, resolvedMetaIndexPath); err != nil {
 		fail(err)
 	}
 
 	root := app.NewSchemaSourceRootCommand()
-	if err := generateSchemaCatalog(root, resolvedSurfacePath, outputPath); err != nil {
+	if err := generateSchemaCatalog(rootPath, root, resolvedSurfacePath, outputPath, resolvedMetaIndexPath); err != nil {
 		fail(err)
 	}
 }
@@ -62,37 +68,50 @@ func resolveCatalogRootPath(rootPath, path string) string {
 	return filepath.Join(rootPath, path)
 }
 
-func validateCatalogOutputIsolation(rootPath, outputPath, surfacePath string) error {
+func resolveSchemaMetaIndexPath(outputPath, metaIndexPath string) string {
+	metaIndexPath = strings.TrimSpace(metaIndexPath)
+	if metaIndexPath != "" {
+		return metaIndexPath
+	}
+	return filepath.Join(filepath.Dir(outputPath), "schema_meta_index.gob")
+}
+
+func validateCatalogOutputIsolation(rootPath, outputPath, metaIndexPath string) error {
 	inputs := []outputguard.Input{
 		{Name: "main Skill metadata source", Path: "skills/mono/SKILL.md"},
 		{Name: "product Skill metadata source directory", Path: "skills/mono/references/products"},
 		{Name: "intent guide metadata source", Path: "skills/mono/references/intent-guide.md"},
-		{Name: "structured metadata source directory", Path: "internal/cli/schema_hints"},
-		{Name: "reviewed CommandRegistry input", Path: "internal/cli/schema_command_registry"},
-		{Name: "generated Agent metadata input", Path: "internal/cli/schema_agent_metadata"},
-		{Name: "pinned MCP metadata input", Path: "internal/cli/schema_mcp_metadata.json"},
-		{Name: "reviewed MCP service disposition input", Path: "internal/cli/schema_mcp_service_review.json"},
-		{Name: "reviewed parameter binding input", Path: "internal/cli/schema_parameter_bindings.json"},
-		{Name: "reviewed command exclusion input", Path: "internal/cli/schema_command_exclusions.json"},
+		{Name: "reviewed parameter mapping ledger input", Path: "internal/cli/schema_parameter_mapping_ledger.go"},
+		{Name: "reviewed command exclusion input", Path: "internal/cli/schema_command_exclusions.go"},
+		{Name: "reviewed param concepts input", Path: "internal/cli/param_concepts.json"},
 	}
-	if strings.TrimSpace(surfacePath) != "" {
-		inputs = append(inputs, outputguard.Input{Name: "deprecated Registry compatibility input", Path: surfacePath})
+	targets := []outputguard.Target{
+		{Name: "--output", Path: outputPath, Directory: true},
+		{Name: "--meta-index", Path: metaIndexPath},
 	}
-	if err := outputguard.Validate(rootPath, inputs, []outputguard.Target{{Name: "--output", Path: outputPath, Directory: true}}); err != nil {
+	if err := outputguard.Validate(rootPath, inputs, targets); err != nil {
+		return err
+	}
+	if err := outputguard.ValidateRepoTargetAllowlist(rootPath,
+		outputguard.Target{Name: "--output", Path: outputPath, Directory: true},
+		"artifacts/schema_catalog",
+	); err != nil {
 		return err
 	}
 	return outputguard.ValidateRepoTargetAllowlist(rootPath,
-		outputguard.Target{Name: "--output", Path: outputPath, Directory: true},
-		"internal/cli/schema_catalog",
+		outputguard.Target{Name: "--meta-index", Path: metaIndexPath},
+		"artifacts/schema_meta_index.gob",
 	)
 }
 
-// generateSchemaCatalog consumes the cli package's reviewed registry API. It
-// deliberately does not decode command identity itself: the compatibility
-// --surface flag is validated against the embedded registry and can never
-// replace it as an input source.
-func generateSchemaCatalog(root *cobra.Command, surfacePath, outputPath string) error {
-	return generateSchemaCatalogWithResolver(root, surfacePath, outputPath, cli.ResolveSchemaBuild)
+// generateSchemaCatalog consumes the cli package's identity collection API.
+// It deliberately does not decode command identity itself: the retired
+// --surface flag is rejected, so an external identity file can never enter
+// assembly. Agent metadata may be generated in-memory and injected for this
+// CI/local dump only; production Agent authority remains ContractFinal /
+// ProductDecl. schema_agent_metadata/ is not a delivery artifact.
+func generateSchemaCatalog(rootPath string, root *cobra.Command, surfacePath, outputPath, metaIndexPath string) error {
+	return generateSchemaCatalogWithResolver(rootPath, root, surfacePath, outputPath, metaIndexPath, cli.ResolveSchemaBuild)
 }
 
 type schemaBuildResolver func(*cobra.Command) (cli.ResolvedSchemaBuild, error)
@@ -101,19 +120,24 @@ type schemaBuildResolver func(*cobra.Command) (cli.ResolvedSchemaBuild, error)
 // contract observable in tests. Production passes cli.ResolveSchemaBuild; the
 // returned Effective/Bound/SchemaRegistry views then travel together through
 // every gate and the final serializer.
-func generateSchemaCatalogWithResolver(root *cobra.Command, surfacePath, outputPath string, resolve schemaBuildResolver) error {
+func generateSchemaCatalogWithResolver(rootPath string, root *cobra.Command, surfacePath, outputPath, metaIndexPath string, resolve schemaBuildResolver) error {
 	if root == nil {
 		return fmt.Errorf("schema source root is nil")
 	}
 	if resolve == nil {
 		return fmt.Errorf("schema build resolver is nil")
 	}
+	metaIndexPath = resolveSchemaMetaIndexPath(outputPath, metaIndexPath)
 	if err := validateDeprecatedSurface(surfacePath); err != nil {
 		return err
 	}
 	if err := validateCatalogParameterBindings(); err != nil {
 		return fmt.Errorf("validate reviewed parameter binding input: %w", err)
 	}
+	if err := installCatalogAgentMetadata(rootPath, root); err != nil {
+		return err
+	}
+	defer cli.ClearBuildTimeAgentMetadata()
 
 	resolved, err := resolve(root)
 	if err != nil {
@@ -128,8 +152,39 @@ func generateSchemaCatalogWithResolver(root *cobra.Command, surfacePath, outputP
 	if err := writeSchemaCatalogShards(snapshot, outputPath); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "generated schema catalog: output=%s registry_commands=%d tools=%d products=%d registry_hash=%s source_hash=%s\n",
-		outputPath, resolved.CommandCount(), len(snapshot.Tools), countSchemaCatalogProducts(snapshot), snapshot.SurfaceHash, snapshot.SourceHash)
+	if err := writeCatalogMetaIndex(snapshot, metaIndexPath); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "generated schema catalog: output=%s meta_index=%s registry_commands=%d tools=%d products=%d registry_hash=%s source_hash=%s\n",
+		outputPath, metaIndexPath, resolved.CommandCount(), len(snapshot.Tools), countSchemaCatalogProducts(snapshot), snapshot.SurfaceHash, snapshot.SourceHash)
+	return nil
+}
+
+var (
+	buildCatalogMetaIndex    = cli.BuildSchemaMetaIndex
+	validateCatalogMetaIndex = cli.ValidateSchemaMetaIndexAgainstSnapshot
+	encodeCatalogMetaIndex   = cli.EncodeSchemaMetaIndex
+	writeCatalogMetaIndex    = writeSchemaMetaIndex
+)
+
+func writeSchemaMetaIndex(snapshot cli.SchemaCatalogSnapshot, outputPath string) error {
+	index, err := buildCatalogMetaIndex(snapshot)
+	if err != nil {
+		return fmt.Errorf("build schema meta index: %w", err)
+	}
+	if err := validateCatalogMetaIndex(index, snapshot); err != nil {
+		return fmt.Errorf("validate schema meta index against catalog: %w", err)
+	}
+	encoded, err := encodeCatalogMetaIndex(index)
+	if err != nil {
+		return err
+	}
+	if err := makeCatalogDirectory(filepath.Dir(outputPath), 0o755); err != nil {
+		return fmt.Errorf("create schema meta index directory: %w", err)
+	}
+	if err := writeCatalogFile(outputPath, encoded, 0o644); err != nil {
+		return fmt.Errorf("write schema meta index: %w", err)
+	}
 	return nil
 }
 
@@ -218,18 +273,15 @@ func writeSchemaCatalogJSON(path string, value any) error {
 	return writeCatalogFile(path, append(encoded, '\n'), 0o644)
 }
 
+// validateDeprecatedSurface rejects the retired -surface compatibility input.
+// The reviewed CommandRegistry it had to equal was retired when identity
+// collection became the single source; an external identity file can never
+// re-enter assembly.
 func validateDeprecatedSurface(path string) error {
-	if path == "" {
+	if strings.TrimSpace(path) == "" {
 		return nil
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("read deprecated -surface compatibility input: %w", err)
-	}
-	if _, err := cli.ValidateCommandRegistrySource(data); err != nil {
-		return fmt.Errorf("validate deprecated -surface compatibility input: %w", err)
-	}
-	return nil
+	return fmt.Errorf("deprecated -surface input %q is retired: command identity is collected from ContractFinal declarations", path)
 }
 
 func fail(err error) {

@@ -30,9 +30,9 @@ import (
 type SpawnFunc func(SpawnConfig) (pid int, err error)
 
 // DiscoverConfig describes one discover attempt. WorkDir holds bus.lock and
-// usually (on Unix) bus.sock — see dwsevent.IPCEndpoint for the short-path
-// fallback when WorkDir is too deep; the caller must mkdir it with
-// pkg/config.DirPerm beforehand.
+// persistent bus metadata; Unix sockets live in a private per-user runtime
+// directory so WorkDir may reside on a shared filesystem without socket
+// support. The caller must mkdir WorkDir with pkg/config.DirPerm beforehand.
 type DiscoverConfig struct {
 	WorkDir     string
 	IPCEndpoint string
@@ -112,8 +112,9 @@ func Discover(cfg DiscoverConfig) (net.Conn, error) {
 		return nil, fmt.Errorf("busctl: mkdir workdir: %w", err)
 	}
 	_, spawnErr := cfg.Spawn(SpawnConfig{
-		ClientID:  cfg.ClientID,
-		ExtraArgs: cfg.SpawnExtraArgs,
+		ClientID:    cfg.ClientID,
+		IPCEndpoint: cfg.IPCEndpoint,
+		ExtraArgs:   cfg.SpawnExtraArgs,
 	})
 	if spawnErr != nil && !errors.Is(spawnErr, ErrSpawnFailed) {
 		// Hard error (couldn't even exec the child). Stop here — no bus

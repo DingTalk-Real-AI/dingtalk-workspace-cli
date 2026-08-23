@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -133,8 +134,7 @@ func TestCrossPlatformCoverageDocVersionsCoverage(t *testing.T) {
 func jsonNumber(value string) json.Number { return json.Number(value) }
 
 func TestCrossPlatformCoverageRunDocReadJsonMLCoverage(t *testing.T) {
-	previous := deps
-	t.Cleanup(func() { deps = previous })
+	testseam.Protect(t, &deps)
 	caller := &helpersCoreCaller{format: "json"}
 	InitDeps(caller)
 	deps.Out.w = io.Discard
@@ -147,9 +147,9 @@ func TestCrossPlatformCoverageRunDocReadJsonMLCoverage(t *testing.T) {
 		`{"jsonml":"{\"type\":\"doc\"}","revision":"bad"}`,
 	} {
 		caller.result = &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}
-		_ = runDocReadJsonML(nil, "node", "")
+		_ = runDocReadJsonML("node", "", "", 0, false)
 	}
 	caller.result = &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: `{"jsonml":"{\"type\":\"doc\"}"}`}}}
-	_ = runDocReadJsonML(nil, "node", filepath.Join(t.TempDir(), "out.json"))
-	_ = runDocReadJsonML(nil, "node", filepath.Join(t.TempDir(), "missing", "out.json"))
+	_ = runDocReadJsonML("node", filepath.Join(t.TempDir(), "out.json"), "", 0, false)
+	_ = runDocReadJsonML("node", filepath.Join(t.TempDir(), "missing", "out.json"), "pw", 3, true)
 }

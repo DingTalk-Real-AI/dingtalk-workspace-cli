@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -44,7 +45,7 @@ var (
 	resourceCopy         = io.Copy
 	resourceTempSync     = (*os.File).Sync
 	resourceTempClose    = (*os.File).Close
-	resourceRename       = os.Rename
+	resourceRename       = replaceFileAtomically
 	resourceLink         = os.Link
 	resourceDownload     = downloadResourceAtomically
 )
@@ -58,15 +59,15 @@ var MessagesResourceDownload = shortcut.Shortcut{
 	Description: "安全下载消息资源（图片/视频/语音/文件）到本地",
 	Intent: "当你需要拿到消息里的实际图片、视频、语音或钉盘文件，而不只是资源 ID 时使用；" +
 		"mediaId 用消息和会话身份换取下载地址，fileId 复用钉盘下载能力，再安全写入工作目录内的相对路径。" +
-		"默认不覆盖已有文件，只有显式传 --overwrite 才覆盖；按既有安全本地下载约定无需交互确认。",
+		"默认不覆盖已有文件，只有显式传 --overwrite 才覆盖；下载采用整文件临时落盘后原子发布，不支持 Range 断点续传。按既有安全本地下载约定无需交互确认。",
 	Risk: shortcut.RiskRead,
 	Flags: []shortcut.Flag{
-		{Name: "type", Type: shortcut.FlagString, Default: "mediaId", Desc: "资源类型", Enum: []string{"mediaId", "fileId"}},
+		{Name: "type", Type: shortcut.FlagString, Default: "mediaId", Desc: "资源类型；--type mediaId 时必须同时提供 --message-id 和 --open-conversation-id；fileId 不需要消息上下文", Enum: []string{"mediaId", "fileId"}},
 		{Name: "resource-id", Type: shortcut.FlagString, Desc: "消息中的 mediaId 或 fileId", Required: true},
-		{Name: "message-id", Type: shortcut.FlagString, Desc: "mediaId 所属消息的 openMessageId"},
-		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "mediaId 所属会话的 openConversationId"},
-		{Name: "output", Type: shortcut.FlagString, Default: ".", Desc: "工作目录内的相对文件或目录路径"},
-		{Name: "overwrite", Type: shortcut.FlagBool, Desc: "允许覆盖已存在的目标文件（默认拒绝）"},
+		{Name: "message-id", Type: shortcut.FlagString, Desc: "mediaId 所属消息的 openMessageId；--type mediaId 时必须同时提供 --message-id 和 --open-conversation-id；fileId 不需要消息上下文"},
+		{Name: "open-conversation-id", Type: shortcut.FlagString, Desc: "mediaId 所属会话的 openConversationId；--type mediaId 时必须同时提供 --message-id 和 --open-conversation-id；fileId 不需要消息上下文"},
+		{Name: "output", Type: shortcut.FlagString, Default: ".", Desc: "工作目录内的相对路径；不允许绝对路径或 .. 逃逸"},
+		{Name: "overwrite", Type: shortcut.FlagBool, Desc: "允许覆盖工作目录内已存在的目标文件（默认拒绝）"},
 	},
 	Constraints: []shortcut.Constraint{
 		{
@@ -204,14 +205,35 @@ func validateResourceDownloadOutputFlag(output, flagName string) error {
 	if output == "" {
 		return apperrors.NewValidation(flagName + " 不能为空")
 	}
-	if filepath.IsAbs(output) {
+	if resourcePathIsAbsolute(output) {
 		return apperrors.NewValidation(flagName + " 只接受工作目录内的相对路径")
 	}
-	clean := filepath.Clean(output)
-	if clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
+	if resourcePathEscapesBase(output) {
 		return apperrors.NewValidation(flagName + " 不允许使用 .. 逃逸工作目录")
 	}
 	return nil
+}
+
+func resourcePathIsAbsolute(value string) bool {
+	if filepath.IsAbs(value) {
+		return true
+	}
+	portable := strings.ReplaceAll(strings.TrimSpace(value), "\\", "/")
+	if pathpkg.IsAbs(portable) {
+		return true
+	}
+	return len(portable) >= 2 &&
+		((portable[0] >= 'a' && portable[0] <= 'z') ||
+			(portable[0] >= 'A' && portable[0] <= 'Z')) &&
+		portable[1] == ':'
+}
+
+// resourcePathEscapesBase reports whether a relative path escapes its base.
+// Normalize both separators so the check remains portable on every host OS.
+func resourcePathEscapesBase(value string) bool {
+	portable := strings.ReplaceAll(strings.TrimSpace(value), "\\", "/")
+	clean := pathpkg.Clean(portable)
+	return clean == ".." || strings.HasPrefix(clean, "../")
 }
 
 func resourceDownloadInfo(data map[string]any) (string, map[string]string, error) {
@@ -364,8 +386,7 @@ func resolveResourceDownloadPath(
 		return "", "", apperrors.NewInternal(fmt.Sprintf("解析输出目录失败: %v", err))
 	}
 	parentRel, err := resourceRel(realBase, realParent)
-	if err != nil || parentRel == ".." ||
-		strings.HasPrefix(parentRel, ".."+string(os.PathSeparator)) {
+	if err != nil || resourcePathEscapesBase(parentRel) {
 		return "", "", apperrors.NewValidation("--output 解析后逃逸工作目录")
 	}
 
@@ -393,8 +414,7 @@ func resolveResourceDownloadPath(
 
 func ensureResourceDownloadParent(baseDir, parent string) error {
 	relative, err := resourceRel(baseDir, parent)
-	if err != nil || relative == ".." ||
-		strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+	if err != nil || resourcePathEscapesBase(relative) {
 		return apperrors.NewValidation("--output 解析后逃逸工作目录")
 	}
 	if relative == "." {
@@ -592,5 +612,5 @@ func downloadResourceAtomically(
 }
 
 func init() {
-	shortcut.Register(MessagesResourceDownload)
+	shortcut.Register(withReviewedChatShortcutContracts(MessagesResourceDownload)...)
 }

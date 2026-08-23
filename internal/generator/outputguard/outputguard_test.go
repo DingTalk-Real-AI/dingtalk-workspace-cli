@@ -188,4 +188,8 @@ func TestCrossPlatformCoverageValidateRepoTargetAllowlist(t *testing.T) {
 	if err := ValidateRepoTargetAllowlist(root, Target{Name: "--output", Path: outside}, "internal/cli/schema_catalog"); err != nil {
 		t.Fatalf("external temporary output rejected: %v", err)
 	}
+	worktreesOut := filepath.Join(root, ".worktrees", "policy-tmp", "catalog.json")
+	if err := ValidateRepoTargetAllowlist(root, Target{Name: "--output", Path: worktreesOut}, "internal/cli/schema_catalog"); err != nil {
+		t.Fatalf("gitignored .worktrees scratch output rejected: %v", err)
+	}
 }

@@ -8,16 +8,31 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/jsonutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
 const messagesSendFileUploadTimeout = 10 * time.Minute
+
+const (
+	messagesSendMaxBotGroups     = 100
+	messagesSendMaxGroupFileSize = 1 << 20
+)
+
+var messagesSendReadGroupFile = os.ReadFile
 
 // MessagesSend is the identity-aware common sending entry point. The current
 // user branch reuses the native message leaf's reviewed file-upload flow and
@@ -27,18 +42,53 @@ var MessagesSend = shortcut.Shortcut{
 	Service:     "chat",
 	Command:     "+messages-send",
 	Product:     "chat",
-	Description: "统一发送文本、Markdown、当前用户文件或已有 mediaId 图片",
-	Intent:      "当你希望用同一个入口选择 current-user、bot 或 webhook 身份发送消息时使用；命令会按身份校验目标、内容和凭据并路由到真实下层。current-user 支持文本/Markdown、已有 mediaId 图片、安全相对路径文件上传和幂等键；--user 传 userId 时包括在 --dry-run 中也会先通过通讯录关键词搜索并按 userId 精确匹配 openDingTalkId。bot 支持群聊或批量单聊文本/Markdown；webhook 的目标由 token 所在群决定。不会把 user 文件能力伪装成 bot/webhook 等价能力。",
+	Description: "按身份和目标统一发送消息，Bot 多群返回逐目标 ledger",
+	Intent:      "当你需要文件、复杂 @、幂等，或选择 current-user、bot、webhook 身份发送消息时使用；current-user 可直接传稳定 ID，也可用 --user-query/--chat-query 在 CLI 内唯一解析自然目标，dry-run 与真实执行使用同一解析链。Bot 可用 --groups/--groups-file 向最多 100 个稳定群 ID 发送文本或 Markdown，去重后返回 im.batch-write.v1 逐目标 ledger；webhook 目标由 token 所在群决定。文件上传和已有 mediaId 图片仅 current-user 支持，bot/webhook 不支持富媒体。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "chat",
+			Name:           "shortcut_messages_send",
+			CanonicalPath:  "chat.shortcut_messages_send",
+			CLIPath:        "chat +messages-send",
+			PrimaryCLIPath: "chat +messages-send",
+		},
+		Description: "按身份和目标统一发送消息，Bot 多群返回逐目标 ledger",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed composite send adapter: it selects current-user, bot, or webhook transport; current-user additionally supports live-compatible contact search with exact userId matching, mediaId images, and the native init/upload/commit local-file flow.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按身份和目标统一发送消息，Bot 多群返回逐目标 ledger",
+			UseWhen:      []string{"当你需要文件、复杂 @、幂等，或选择 current-user、bot、webhook 身份发送消息时使用；current-user 可直接传稳定 ID，也可用 --user-query/--chat-query 在 CLI 内唯一解析自然目标，dry-run 与真实执行使用同一解析链。Bot 可用 --groups/--groups-file 向最多 100 个稳定群 ID 发送文本或 Markdown，去重后返回 im.batch-write.v1 逐目标 ledger；webhook 目标由 token 所在群决定。文件上传和已有 mediaId 图片仅 current-user 支持，bot/webhook 不支持富媒体。"},
+			AvoidWhen:    []string{"需要 bot/webhook 发送媒体、卡片或 thread 回复时不要假设等价支持；改用真实存在的专用下层命令，缺少下层能力时停止"},
+			Examples: []string{
+				"dws chat +messages-send --as user --chat-id <openConversationId> --markdown \"## 周报\" --idempotency-key <key>",
+				"dws chat +messages-send --as user --user <userId> --msg-type file --file ./report.pdf",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "identity", Type: shortcut.FlagString, Default: "user", Enum: []string{"user", "bot", "webhook"}, Desc: "发送身份；目标、凭据和幂等参数受发送身份能力矩阵约束"},
 		{Name: "as", Type: shortcut.FlagString, Enum: []string{"user", "bot", "webhook"}, Desc: "--identity 的 lark-cli 对齐别名；受发送身份能力矩阵约束"},
 		{Name: "group", Type: shortcut.FlagString, Desc: "群 openConversationId（user/bot 群聊）；受发送身份能力矩阵约束"},
 		{Name: "chat-id", Type: shortcut.FlagString, Desc: "--group 的 lark-cli 对齐别名；受发送身份能力矩阵约束"},
+		{Name: "groups", Type: shortcut.FlagStringSlice, Desc: "多个群 openConversationId（仅 bot；受发送身份能力矩阵约束，逐群返回 typed ledger，最多 100 个）"},
+		{Name: "groups-file", Type: shortcut.FlagString, Desc: "工作目录内相对文本文件（仅 bot；受发送身份能力矩阵约束），每行或逗号分隔一个群 openConversationId"},
+		{Name: "chat-query", Type: shortcut.FlagString, Desc: "按群名解析唯一群聊（仅 user 的高级发送场景）；受发送身份能力矩阵约束"},
 		{Name: "user", Type: shortcut.FlagString, Desc: "单聊接收者 userId（user；包括 --dry-run 也会先通过通讯录搜索精确匹配 openDingTalkId）；受发送身份能力矩阵约束"},
+		{Name: "user-query", Type: shortcut.FlagString, Desc: "按姓名解析唯一 openDingTalkId（仅 user 的高级发送场景）；受发送身份能力矩阵约束"},
 		{Name: "open-dingtalk-id", Type: shortcut.FlagString, Desc: "单聊接收者 openDingTalkId（user）；受发送身份能力矩阵约束"},
 		{Name: "users", Type: shortcut.FlagStringSlice, Desc: "批量单聊接收者 userId（bot）；受发送身份能力矩阵约束"},
 		{Name: "open-dingtalk-ids", Type: shortcut.FlagStringSlice, Desc: "批量单聊接收者 openDingTalkId（bot）；受发送身份能力矩阵约束"},
+		// Keep required_when out of Schema: validateMessagesSend already enforces
+		// bot/webhook credentials, and publishing RequiredWhen breaks merge-base
+		// schema-compatibility (null → expression).
 		{Name: "robot-code", Type: shortcut.FlagString, Desc: "机器人 Code（identity=bot 时使用）；受发送身份能力矩阵约束"},
 		{Name: "webhook-token", Type: shortcut.FlagString, Desc: "自定义机器人 Webhook token（identity=webhook 时使用）；受发送身份能力矩阵约束"},
 		{Name: "title", Type: shortcut.FlagString, Desc: "消息标题（不传则从正文生成）"},
@@ -65,14 +115,14 @@ var MessagesSend = shortcut.Shortcut{
 		{Kind: shortcut.ConstraintMutuallyExclusive, Flags: []string{"uuid", "idempotency-key"}},
 		{
 			Kind:        shortcut.ConstraintCustom,
-			Flags:       []string{"identity", "as", "group", "chat-id", "user", "open-dingtalk-id", "users", "open-dingtalk-ids", "robot-code", "webhook-token", "uuid", "idempotency-key"},
-			Description: "目标、凭据和幂等参数受发送身份能力矩阵约束：user 必须指定一个群聊或单聊目标；bot 必须指定 robot-code 和一类目标；webhook 必须指定 webhook-token；幂等键仅 user 支持",
+			Flags:       []string{"identity", "as", "group", "chat-id", "groups", "groups-file", "chat-query", "user", "user-query", "open-dingtalk-id", "users", "open-dingtalk-ids", "robot-code", "webhook-token", "uuid", "idempotency-key"},
+			Description: "目标、凭据和幂等参数受发送身份能力矩阵约束：user 必须指定一个群聊或单聊目标；bot 必须指定 robot-code 和一类目标，多群最多 100 个并逐项返回 ledger；webhook 必须指定 webhook-token；幂等键仅 user 支持",
 		},
 	},
 	Tips: []string{
 		`dws chat +messages-send --as user --chat-id <openConversationId> --markdown "## 周报" --idempotency-key <key>`,
 		`dws chat +messages-send --as user --user <userId> --msg-type file --file ./report.pdf --idempotency-key <key>`,
-		`dws chat +messages-send --as bot --robot-code <robotCode> --users userId1,userId2 --text "请提交周报"`,
+		`dws chat +messages-send --as bot --robot-code <robotCode> --groups <openConversationId1>,<openConversationId2> --text "请提交周报"`,
 	},
 	Validate: validateMessagesSend,
 	Execute:  executeMessagesSend,
@@ -81,13 +131,30 @@ var MessagesSend = shortcut.Shortcut{
 func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 	identity := messagesSendIdentity(rt)
 	group := rt.StrFirst("chat-id", "group")
+	botGroups, botGroupsErr := messagesSendBotGroups(rt)
+	if botGroupsErr != nil {
+		return botGroupsErr
+	}
+	chatQuery := rt.Str("chat-query")
 	userID := rt.Str("user")
+	userQuery := rt.Str("user-query")
 	openID := rt.Str("open-dingtalk-id")
 	users := uniqueShortcutStrings(rt.StrSlice("users"))
 	openIDs := uniqueShortcutStrings(rt.StrSlice("open-dingtalk-ids"))
 	atOpenIDs := uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids"))
 	atUserIDs := uniqueShortcutStrings(rt.StrSlice("at-user-ids"))
 	atMobiles := uniqueShortcutStrings(rt.StrSlice("at-mobiles"))
+	if openID != "" {
+		if err := targetresolver.ValidateExplicitOpenDingTalkID("--open-dingtalk-id", openID); err != nil {
+			return err
+		}
+	}
+	if err := validateExplicitOpenIDs("--open-dingtalk-ids", openIDs); err != nil {
+		return err
+	}
+	if err := validateExplicitOpenIDs("--at-open-dingtalk-ids", atOpenIDs); err != nil {
+		return err
+	}
 	contentType, err := messagesSendContentType(rt)
 	if err != nil {
 		return err
@@ -100,29 +167,42 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 	}
 	switch identity {
 	case "user":
-		targetCount := nonEmptyStringCount(group, userID, openID)
+		targetCount := nonEmptyStringCount(group, chatQuery, userID, userQuery, openID)
 		if targetCount != 1 {
-			return apperrors.NewValidation("--identity user 时 --group、--user、--open-dingtalk-id 必须且只能指定一个")
+			return apperrors.NewValidation("--identity user 时 --group/--chat-id、--chat-query、--user、--user-query、--open-dingtalk-id 必须且只能指定一个")
 		}
-		if len(users) > 0 || len(openIDs) > 0 || rt.Str("robot-code") != "" || rt.Str("webhook-token") != "" {
+		if len(users) > 0 || len(openIDs) > 0 || len(botGroups) > 0 || rt.Str("robot-code") != "" || rt.Str("webhook-token") != "" {
 			return apperrors.NewValidation("--identity user 不接受 bot/webhook 凭据或批量目标")
 		}
 		if len(atUserIDs) > 0 || len(atMobiles) > 0 {
 			return apperrors.NewValidation("--identity user 只接受 --at-open-dingtalk-ids")
 		}
-		if (userID != "" || openID != "") && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
+		if (userID != "" || userQuery != "" || openID != "") && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
 			return apperrors.NewValidation("user 单聊不接受 @ 参数；@ 只适用于群聊")
 		}
 		if contentType != "text" && contentType != "markdown" && (len(atOpenIDs) > 0 || rt.Bool("at-all")) {
 			return apperrors.NewValidation("user image/file/audio/video 当前不接受 @ 参数")
 		}
+		if (group != "" || chatQuery != "") && (contentType == "text" || contentType == "markdown") {
+			if err := validateCurrentUserMentionConsistency(
+				messagesSendBody(rt), atOpenIDs, rt.Bool("at-all")); err != nil {
+				return err
+			}
+		}
 	case "bot":
+		if chatQuery != "" || userQuery != "" {
+			return apperrors.NewValidation("--identity bot 当前不接受 --chat-query 或 --user-query；请传真实群 ID 或批量用户 ID")
+		}
 		if rt.Str("robot-code") == "" {
 			return apperrors.NewValidation("--identity bot 必须指定 --robot-code")
 		}
 		hasDirect := len(users)+len(openIDs) > 0
-		if (group != "") == hasDirect {
-			return apperrors.NewValidation("--identity bot 时 --group 与批量单聊目标必须且只能指定一类")
+		hasGroup := group != "" || len(botGroups) > 0
+		if hasGroup == hasDirect {
+			return apperrors.NewValidation("--identity bot 时单群/多群与批量单聊目标必须且只能指定一类")
+		}
+		if group != "" && len(botGroups) > 0 {
+			return apperrors.NewValidation("--identity bot 时 --group/--chat-id 与 --groups/--groups-file 不能同时使用")
 		}
 		if userID != "" || openID != "" || rt.Str("webhook-token") != "" {
 			return apperrors.NewValidation("--identity bot 不接受 --user、--open-dingtalk-id 或 --webhook-token")
@@ -136,14 +216,17 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 		if messagesSendIdempotencyKey(rt) != "" {
 			return apperrors.NewValidation("--uuid 当前仅 user 身份的下层支持")
 		}
-		if contentType != "text" && contentType != "markdown" {
+		if !messageIdentitySupportsContent(identity, contentType) {
 			return apperrors.NewValidation("--identity bot 当前下层只支持 text/markdown")
 		}
 	case "webhook":
+		if chatQuery != "" || userQuery != "" {
+			return apperrors.NewValidation("--identity webhook 的目标由 token 所在群决定，不接受 --chat-query 或 --user-query")
+		}
 		if rt.Str("webhook-token") == "" {
 			return apperrors.NewValidation("--identity webhook 必须指定 --webhook-token")
 		}
-		if group != "" || userID != "" || openID != "" || len(users) > 0 || len(openIDs) > 0 || rt.Str("robot-code") != "" {
+		if group != "" || len(botGroups) > 0 || userID != "" || openID != "" || len(users) > 0 || len(openIDs) > 0 || rt.Str("robot-code") != "" {
 			return apperrors.NewValidation("--identity webhook 的目标由 token 所在群决定，不接受其他目标或 bot Code")
 		}
 		if len(atOpenIDs) > 0 {
@@ -152,11 +235,94 @@ func validateMessagesSend(rt *shortcut.RuntimeContext) error {
 		if messagesSendIdempotencyKey(rt) != "" {
 			return apperrors.NewValidation("--uuid 当前仅 user 身份的下层支持")
 		}
-		if contentType != "text" && contentType != "markdown" {
+		if !messageIdentitySupportsContent(identity, contentType) {
 			return apperrors.NewValidation("--identity webhook 当前下层只支持 text/markdown")
 		}
 	}
 	return nil
+}
+
+func validateCurrentUserMentionConsistency(body string, atOpenIDs []string, atAll bool) error {
+	declared := make(map[string]struct{}, len(atOpenIDs))
+	for _, id := range atOpenIDs {
+		declared[id] = struct{}{}
+	}
+
+	missingPlaceholders := make([]string, 0)
+	for _, id := range atOpenIDs {
+		if !containsCurrentUserMentionToken(body, id) {
+			missingPlaceholders = append(missingPlaceholders, id)
+		}
+	}
+	if len(missingPlaceholders) > 0 {
+		return apperrors.NewValidation(fmt.Sprintf(
+			"--at-open-dingtalk-ids 中的成员必须在正文中使用对应 <@openDingTalkId> 占位符；缺少: %s",
+			strings.Join(missingPlaceholders, ","),
+		))
+	}
+
+	undeclared := make([]string, 0)
+	for _, id := range currentUserMentionBodyIDs(body) {
+		if _, ok := declared[id]; !ok {
+			undeclared = append(undeclared, id)
+		}
+	}
+	if len(undeclared) > 0 {
+		return apperrors.NewValidation(fmt.Sprintf(
+			"正文中的成员 <@openDingTalkId> 占位符必须同时通过 --at-open-dingtalk-ids 声明；未声明: %s",
+			strings.Join(undeclared, ","),
+		))
+	}
+	if !atAll && containsCurrentUserMentionToken(body, "all") {
+		return apperrors.NewValidation("正文中的 <@all> 占位符必须同时指定 --at-all")
+	}
+	return nil
+}
+
+func containsCurrentUserMentionToken(body, id string) bool {
+	placeholder := "@" + id
+	for searchFrom := 0; ; {
+		offset := strings.Index(body[searchFrom:], placeholder)
+		if offset < 0 {
+			return false
+		}
+		end := searchFrom + offset + len(placeholder)
+		if end == len(body) {
+			return true
+		}
+		next, _ := utf8.DecodeRuneInString(body[end:])
+		if !unicode.IsLetter(next) && !unicode.IsDigit(next) && next != '_' && next != '-' {
+			return true
+		}
+		searchFrom = end
+	}
+}
+
+func currentUserMentionBodyIDs(body string) []string {
+	ids := make([]string, 0)
+	for searchFrom := 0; ; {
+		offset := strings.IndexByte(body[searchFrom:], '@')
+		if offset < 0 {
+			break
+		}
+		start := searchFrom + offset + 1
+		end := start
+		for end < len(body) {
+			current := body[end]
+			if (current < 'a' || current > 'z') &&
+				(current < 'A' || current > 'Z') &&
+				(current < '0' || current > '9') {
+				break
+			}
+			end++
+		}
+		id := body[start:end]
+		if targetresolver.LooksLikeCurrentDOpenDingTalkID(id) {
+			ids = appendUniqueShortcutString(ids, id)
+		}
+		searchFrom = end
+	}
+	return ids
 }
 
 func executeMessagesSend(rt *shortcut.RuntimeContext) error {
@@ -191,33 +357,10 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 		if contentType == "file" || contentType == "audio" || contentType == "video" {
 			return executeMessagesSendUserFile(rt, group, openID, contentType)
 		}
-		if group != "" {
-			body = helpers.NormalizeMessageMentions(
-				body,
-				uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")),
-				rt.Bool("at-all"),
-				true,
-			)
-		}
-		content, _ := json.Marshal(map[string]string{"title": title, "text": body})
-		params := rt.AddAIMessageTag(map[string]any{
-			"msgType": "markdown",
-			"content": string(content),
-		})
-		if group != "" {
-			params["openConversationId"] = group
-			if values := uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")); len(values) > 0 {
-				params["atOpenDingTalkIds"] = values
-			}
-			if rt.Bool("at-all") {
-				params["atAll"] = true
-			}
-		} else {
-			params["receiverOpenDingTalkId"] = openID
-		}
-		if value := messagesSendIdempotencyKey(rt); value != "" {
-			params["uuid"] = value
-		}
+		params := resolvedUserMarkdownParams(rt, ResolvedUserMessageTarget{
+			GroupID:        group,
+			OpenDingTalkID: openID,
+		}, title, body, uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")), rt.Bool("at-all"), messagesSendIdempotencyKey(rt))
 		return executeUnifiedMessageWrite(rt, "chat", "send_personal_message", params)
 	case "bot":
 		body = helpers.NormalizeMessageMentions(
@@ -246,6 +389,31 @@ func executeMessagesSend(rt *shortcut.RuntimeContext) error {
 				params["isAtAll"] = "true"
 			}
 			return executeUnifiedMessageWrite(rt, "bot", "send_robot_group_message", params)
+		}
+		groups, err := messagesSendBotGroups(rt)
+		if err != nil {
+			return err
+		}
+		if len(groups) > 0 {
+			items := make([]shortcutBatchWrite, 0, len(groups))
+			for _, group := range groups {
+				arguments := make(map[string]any, len(params)+1)
+				for key, value := range params {
+					arguments[key] = value
+				}
+				arguments["openConversationId"] = group
+				if values := uniqueShortcutStrings(rt.StrSlice("at-user-ids")); len(values) > 0 {
+					arguments["atUserIds"] = values
+				}
+				if values := uniqueShortcutStrings(rt.StrSlice("at-open-dingtalk-ids")); len(values) > 0 {
+					arguments["atOpendingtalkIds"] = values
+				}
+				if rt.Bool("at-all") {
+					arguments["isAtAll"] = "true"
+				}
+				items = append(items, shortcutBatchWrite{target: group, arguments: arguments})
+			}
+			return executeShortcutBatchWrite(rt, "bot", "send_robot_group_message", items)
 		}
 		if values := uniqueShortcutStrings(rt.StrSlice("users")); len(values) > 0 {
 			params["userIds"] = values
@@ -307,12 +475,16 @@ func executeUnifiedMessageWrite(rt *shortcut.RuntimeContext, product, tool strin
 	if err != nil {
 		return err
 	}
-	return rt.Output(map[string]any{
+	payload := map[string]any{
 		"ok":       true,
 		"identity": messagesSendIdentity(rt),
 		"tool":     tool,
 		"result":   data,
-	})
+	}
+	if messagesSendIdentity(rt) == "user" && tool == "send_personal_message" {
+		payload["sendReceipt"] = chatmsg.ProjectMessageSendReceipt(data)
+	}
+	return rt.Output(payload)
 }
 
 func messagesSendIdentity(rt *shortcut.RuntimeContext) string {
@@ -359,11 +531,83 @@ func messagesSendUserTarget(rt *shortcut.RuntimeContext) (group, openID string, 
 	if openID != "" || group != "" {
 		return group, openID, nil
 	}
+	if query := rt.Str("chat-query"); query != "" {
+		resolved, resolveErr := targetresolver.ResolveChat(rt, query)
+		if resolveErr != nil {
+			return "", "", resolveErr
+		}
+		return resolved.Selected.OpenConversationID, "", nil
+	}
+	if query := rt.Str("user-query"); query != "" {
+		resolved, resolveErr := targetresolver.ResolveUser(rt, query, targetresolver.IdentityOpenDingTalkID)
+		if resolveErr != nil {
+			return "", "", resolveErr
+		}
+		return "", resolved.Selected.OpenDingTalkID, nil
+	}
 	openID, err = resolveUserOpenDingTalkID(rt, rt.Str("user"))
 	if err != nil {
 		return "", "", err
 	}
 	return "", openID, nil
+}
+
+// ResolvedUserMessageTarget is the stable target accepted by the shared user
+// send engine after natural-name resolution has completed.
+type ResolvedUserMessageTarget struct {
+	GroupID        string
+	OpenDingTalkID string
+}
+
+// ExecuteResolvedUserMarkdown lets narrow semantic shortcuts such as +dm and
+// +send-to-group reuse the same target/content/AI-tag parameter builder while
+// preserving their existing raw lower-response output contract.
+func ExecuteResolvedUserMarkdown(
+	rt *shortcut.RuntimeContext,
+	target ResolvedUserMessageTarget,
+	text string,
+) error {
+	params := resolvedUserMarkdownParams(
+		rt,
+		target,
+		text,
+		text,
+		nil,
+		false,
+		"",
+	)
+	return rt.CallMCP("send_personal_message", params)
+}
+
+func resolvedUserMarkdownParams(
+	rt *shortcut.RuntimeContext,
+	target ResolvedUserMessageTarget,
+	title, body string,
+	atOpenIDs []string,
+	atAll bool,
+	idempotencyKey string,
+) map[string]any {
+	if target.GroupID != "" {
+		body = helpers.NormalizeMessageMentions(body, atOpenIDs, atAll, true)
+	}
+	content, _ := jsonutil.Marshal(map[string]string{"title": title, "text": body})
+	params := rt.AddAIMessageTag(map[string]any{
+		"msgType": "markdown",
+		"content": string(content),
+	})
+	addMessagesSendUserTarget(params, target.GroupID, target.OpenDingTalkID)
+	if target.GroupID != "" {
+		if len(atOpenIDs) > 0 {
+			params["atOpenDingTalkIds"] = atOpenIDs
+		}
+		if atAll {
+			params["atAll"] = true
+		}
+	}
+	if idempotencyKey != "" {
+		params["uuid"] = idempotencyKey
+	}
+	return params
 }
 
 func resolveUserOpenDingTalkID(rt *shortcut.RuntimeContext, userID string) (string, error) {
@@ -420,8 +664,10 @@ func executeMessagesSendUserFile(
 	if err != nil {
 		return err
 	}
-	targetArgs := map[string]any{}
-	addMessagesSendUserTarget(targetArgs, group, openID)
+	uploadTargetArgs := map[string]any{}
+	addMessagesSendUserUploadTarget(uploadTargetArgs, group, openID)
+	sendTargetArgs := map[string]any{}
+	addMessagesSendUserTarget(sendTargetArgs, group, openID)
 	idempotencyKey := messagesSendIdempotencyKey(rt)
 	if rt.DryRun() {
 		return rt.Output(map[string]any{
@@ -434,6 +680,7 @@ func executeMessagesSendUserFile(
 				{
 					"identity": "user",
 					"tool":     "init/commit_conversation_file_upload",
+					"target":   uploadTargetArgs,
 					"file": map[string]any{
 						"path":      rawPath,
 						"name":      meta.FileName,
@@ -445,7 +692,7 @@ func executeMessagesSendUserFile(
 					"tool":                 "send_personal_message",
 					"requestedMessageType": requestedType,
 					"effectiveMessageType": "file",
-					"target":               targetArgs,
+					"target":               sendTargetArgs,
 				},
 			},
 		})
@@ -454,7 +701,7 @@ func executeMessagesSendUserFile(
 		rt.Command().Context(), messagesSendFileUploadTimeout)
 	defer cancelUpload()
 	commitText, err := helpers.UploadConversationLocalFile(
-		uploadContext, targetArgs, meta, idempotencyKey)
+		uploadContext, uploadTargetArgs, meta, idempotencyKey)
 	if err != nil {
 		return err
 	}
@@ -475,7 +722,7 @@ func executeMessagesSendUserFile(
 	if err != nil {
 		return err
 	}
-	return rt.Output(map[string]any{
+	payload := map[string]any{
 		"ok":                   true,
 		"identity":             "user",
 		"tool":                 "send_personal_message",
@@ -487,7 +734,9 @@ func executeMessagesSendUserFile(
 			"sizeBytes": meta.FileSize,
 		},
 		"result": data,
-	})
+	}
+	payload["sendReceipt"] = chatmsg.ProjectMessageSendReceipt(data)
+	return rt.Output(payload)
 }
 
 func addMessagesSendUserTarget(params map[string]any, group, openID string) {
@@ -496,6 +745,14 @@ func addMessagesSendUserTarget(params map[string]any, group, openID string) {
 		return
 	}
 	params["receiverOpenDingTalkId"] = openID
+}
+
+func addMessagesSendUserUploadTarget(params map[string]any, group, openID string) {
+	if group != "" {
+		params["openConversationId"] = group
+		return
+	}
+	params["openDingTalkId"] = openID
 }
 
 func nonEmptyStringCount(values ...string) int {
@@ -512,6 +769,52 @@ func messagesSendIdempotencyKey(rt *shortcut.RuntimeContext) string {
 	return rt.StrFirst("idempotency-key", "uuid")
 }
 
+func messagesSendBotGroups(rt *shortcut.RuntimeContext) ([]string, error) {
+	if rt.Changed("groups") && rt.Changed("groups-file") {
+		return nil, apperrors.NewValidation("--groups 与 --groups-file 不能同时指定")
+	}
+	groups := uniqueShortcutStrings(rt.StrSlice("groups"))
+	if path := rt.Str("groups-file"); path != "" {
+		safePath, err := apperrors.SafeInputPath(path)
+		if err != nil {
+			return nil, fmt.Errorf("校验 --groups-file 失败: %w", err)
+		}
+		info, err := os.Stat(safePath)
+		if err != nil {
+			return nil, fmt.Errorf("读取 --groups-file 失败: %w", err)
+		}
+		if !info.Mode().IsRegular() {
+			return nil, apperrors.NewValidation("--groups-file 必须是普通文本文件")
+		}
+		if info.Size() > messagesSendMaxGroupFileSize {
+			return nil, apperrors.NewValidation("--groups-file 不能超过 1 MiB")
+		}
+		raw, err := messagesSendReadGroupFile(safePath)
+		if err != nil {
+			return nil, fmt.Errorf("读取 --groups-file 失败: %w", err)
+		}
+		values := make([]string, 0)
+		for _, line := range strings.Split(string(raw), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			values = append(values, strings.Split(line, ",")...)
+		}
+		groups = uniqueShortcutStrings(values)
+	}
+	if len(groups) > messagesSendMaxBotGroups {
+		return nil, apperrors.NewValidation(fmt.Sprintf(
+			"bot 多群发送最多支持 %d 个群，当前 %d 个",
+			messagesSendMaxBotGroups, len(groups),
+		))
+	}
+	if (rt.Changed("groups") || rt.Changed("groups-file")) && len(groups) == 0 {
+		return nil, apperrors.NewValidation("bot 多群发送至少需要一个 openConversationId")
+	}
+	return groups, nil
+}
+
 func shortcutMessageTitle(text string) string {
 	text = strings.TrimSpace(strings.SplitN(text, "\n", 2)[0])
 	if utf8.RuneCountInString(text) <= 40 {
@@ -522,5 +825,5 @@ func shortcutMessageTitle(text string) string {
 }
 
 func init() {
-	shortcut.Register(MessagesSend)
+	shortcut.Register(withReviewedChatShortcutContracts(MessagesSend)...)
 }

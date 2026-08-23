@@ -8,8 +8,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
+
+const sheetFormulaVerifyRemoteTool = "verify_formula"
 
 func newSheetFormulaVerifyCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -60,6 +63,33 @@ func newSheetFormulaVerifyCmd() *cobra.Command {
 	cmd.Flags().Int("max-locations-per-error", 0, "每种错误类型最多返回的位置数")
 	cmd.Flags().Int("max-cells", 0, "最多扫描的单元格数")
 	cmd.Flags().Bool("exit-on-error", false, "发现公式错误时返回非 0 退出码，便于 CI/自动化使用")
+	DeclareLeafMetadata(cmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "formula_verify",
+				CanonicalPath:  "sheet.formula_verify",
+				CLIPath:        "sheet formula-verify",
+				PrimaryCLIPath: "sheet formula-verify",
+			},
+			Description: "扫描表格公式单元格并按错误类型聚合返回错误数量与位置",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "扫描表格公式单元格并按错误类型聚合返回错误数量与位置",
+				UseWhen:      []string{"用户说 校验公式/检查公式错误/公式错误扫描"},
+				AvoidWhen:    []string{"读取公式文本用 range read --value-render-option formula"},
+				Examples:     []string{"dws sheet formula-verify --node <NODE_ID> --format json"},
+			},
+		},
+	})
 	return cmd
 }
 
@@ -67,9 +97,9 @@ func newSheetFormulaVerifyCmd() *cobra.Command {
 // 返回 payload 判定是否存在公式错误，故走 ReturnText 再自行 PrintJSON。
 func callMCPToolFormulaVerify(toolArgs map[string]any, exitOnError bool) error {
 	if deps.Caller.DryRun() {
-		return callMCPToolOnServer("sheet", "formula_verify", toolArgs)
+		return callMCPToolOnServer("sheet", sheetFormulaVerifyRemoteTool, toolArgs)
 	}
-	text, err := callMCPToolReturnTextOnServer(context.Background(), "sheet", "formula_verify", toolArgs)
+	text, err := callMCPToolReturnTextOnServer(context.Background(), "sheet", sheetFormulaVerifyRemoteTool, toolArgs)
 	if err != nil {
 		return err
 	}
@@ -82,7 +112,7 @@ func callMCPToolFormulaVerify(toolArgs map[string]any, exitOnError bool) error {
 		return nil
 	}
 	if parsed == nil {
-		return fmt.Errorf("formula_verify returned empty result")
+		return fmt.Errorf("%s returned empty result", sheetFormulaVerifyRemoteTool)
 	}
 	if err := deps.Out.PrintJSON(parsed); err != nil {
 		return err

@@ -10,6 +10,7 @@ VERSION="${2:-}"
 FROM_BETA=""
 FROM_REF=""
 CHANGELOG="$ROOT/CHANGELOG.md"
+CHANGES_DIR="$ROOT/.changes"
 
 usage() {
   cat >&2 <<'EOF'
@@ -19,6 +20,7 @@ Options:
   --from-beta <tag>    Required for stable release notes
   --from-ref <ref>     Commit-list baseline for prerelease notes
   --changelog <path>   Override CHANGELOG.md path
+  --changes-dir <path> Override release fragment directory
 EOF
 }
 
@@ -29,6 +31,7 @@ while [ "$#" -gt 0 ]; do
     --from-beta) [ "$#" -ge 2 ] || { usage; exit 2; }; FROM_BETA="$2"; shift 2 ;;
     --from-ref) [ "$#" -ge 2 ] || { usage; exit 2; }; FROM_REF="$2"; shift 2 ;;
     --changelog) [ "$#" -ge 2 ] || { usage; exit 2; }; CHANGELOG="$2"; shift 2 ;;
+    --changes-dir) [ "$#" -ge 2 ] || { usage; exit 2; }; CHANGES_DIR="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'unknown argument: %s\n' "$1" >&2; usage; exit 2 ;;
   esac
@@ -60,21 +63,51 @@ fi
 release_date="${DWS_RELEASE_DATE:-$(TZ=Asia/Shanghai date +%F)}"
 section="$(mktemp "${TMPDIR:-/tmp}/dws-changelog-section.XXXXXX")"
 output="$(mktemp "${TMPDIR:-/tmp}/dws-changelog-output.XXXXXX")"
-cleanup() { rm -f "$section" "$output"; }
+fragments="$(mktemp "${TMPDIR:-/tmp}/dws-changelog-fragments.XXXXXX")"
+fragment_entries="$(mktemp "${TMPDIR:-/tmp}/dws-changelog-fragment-entries.XXXXXX")"
+cleanup() { rm -f "$section" "$output" "$fragments" "$fragment_entries"; }
 trap cleanup EXIT HUP INT TERM
+
+render_fragments=false
+if [ "$CHANNEL" = "prerelease" ]; then
+  render_fragments=true
+else
+  if [ -e "$CHANGES_DIR" ] && [ ! -d "$CHANGES_DIR" ]; then
+    printf 'release fragments path is not a directory: %s\n' "$CHANGES_DIR" >&2
+    exit 1
+  fi
+  if [ -d "$CHANGES_DIR" ]; then
+    find "$CHANGES_DIR" -mindepth 1 -maxdepth 1 -print | sort >"$fragment_entries"
+    while IFS= read -r entry; do
+      base="${entry##*/}"
+      if [ "$base" = 'README.md' ] && [ -f "$entry" ] && [ ! -L "$entry" ]; then
+        continue
+      fi
+      if [ "$base" = 'released' ] && [ -d "$entry" ] && [ ! -L "$entry" ]; then
+        continue
+      fi
+      render_fragments=true
+      break
+    done <"$fragment_entries"
+  fi
+fi
+
+if [ "$render_fragments" = true ]; then
+  "$SCRIPT_DIR/render-release-fragments.sh" "$CHANGES_DIR" >"$fragments"
+fi
 
 {
   printf '## [%s] - %s\n\n' "$semver" "$release_date"
   if [ "$CHANNEL" = "stable" ]; then
     printf 'This release promotes the sealed `%s` contents to stable.\n\n' "$FROM_BETA"
-  else
-    printf '<!-- Summarize what this beta validates. Remove every TODO before publishing. -->\n\n'
-  fi
-  printf '### Changed\n\n'
-  if [ "$CHANNEL" = "stable" ]; then
+    printf '### Changed\n\n'
     printf -- '- TODO: summarize the complete user-visible release promoted from `%s`.\n' "$FROM_BETA"
+    if [ -s "$fragments" ]; then
+      printf '\n### Changes since `%s`\n\n' "$FROM_BETA"
+      cat "$fragments"
+    fi
   else
-    printf -- '- TODO: summarize this beta candidate and its validation scope.\n'
+    cat "$fragments"
   fi
 } > "$section"
 
@@ -105,7 +138,21 @@ fi
 [ "$inserted" -eq 1 ] || { printf 'CHANGELOG is missing ## [Unreleased]\n' >&2; exit 1; }
 cp "$output" "$CHANGELOG"
 
-printf 'Prepared CHANGELOG template for %s. Replace TODO, review, commit, and merge it before release.\n' "$VERSION"
+if [ -s "$fragments" ]; then
+  archive_dir="$CHANGES_DIR/released/$semver"
+  mkdir -p "$archive_dir"
+  find "$CHANGES_DIR" -mindepth 1 -maxdepth 1 -type f -name '*.md' ! -name 'README.md' -exec mv {} "$archive_dir"/ \;
+fi
+
+if [ "$CHANNEL" = "stable" ]; then
+  if [ -s "$fragments" ]; then
+    printf 'Prepared CHANGELOG template and archived post-beta release fragments for %s. Replace TODO, review, commit, and merge the release-seal PR before release.\n' "$VERSION"
+  else
+    printf 'Prepared CHANGELOG template for %s. Replace TODO, review, commit, and merge it before release.\n' "$VERSION"
+  fi
+else
+  printf 'Prepared CHANGELOG and archived release fragments for %s. Review, commit, and merge the release-seal PR before release.\n' "$VERSION"
+fi
 if [ -n "$FROM_REF" ] && git rev-parse --verify --quiet "$FROM_REF^{commit}" >/dev/null; then
   printf '\nCommits since %s:\n' "$FROM_REF"
   git log --oneline "$FROM_REF..HEAD"

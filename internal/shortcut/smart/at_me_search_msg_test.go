@@ -20,7 +20,7 @@ import (
 
 const testCipher = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
 
-func TestAtMeProject(t *testing.T) {
+func TestCrossPlatformCoverageAtMeProject(t *testing.T) {
 	// nested sender object + plain text
 	row := atMeProject(map[string]any{
 		"sender":             map[string]any{"name": "念晨"},
@@ -87,7 +87,7 @@ func TestAtMeProject(t *testing.T) {
 	}
 }
 
-func TestSearchMsgProject(t *testing.T) {
+func TestCrossPlatformCoverageSearchMsgProject(t *testing.T) {
 	// nested sender + plain text + messageId
 	row := searchMsgProject(map[string]any{
 		"sender":     map[string]any{"nick": "千启"},
@@ -97,6 +97,16 @@ func TestSearchMsgProject(t *testing.T) {
 	})
 	if row["sender"] != "千启" || row["text"] != "命中关键词的消息" {
 		t.Fatalf("searchMsgProject = %#v", row)
+	}
+
+	// Canonical ID precedence and rich-text extraction must match typed search.
+	row = searchMsgProject(map[string]any{
+		"openMessageId": "open-id",
+		"messageId":     "legacy-conflict",
+		"content":       map[string]any{"richText": "富文本消息"},
+	})
+	if row["messageId"] != "open-id" || row["text"] != "富文本消息" {
+		t.Fatalf("searchMsgProject canonical fields = %#v", row)
 	}
 
 	// encrypted → marker; id-only sender; forwarded "null" sender nulled.
@@ -115,7 +125,7 @@ func TestSearchMsgProject(t *testing.T) {
 		t.Errorf("searchMsgProject encrypted text = %v, want marker", row["text"])
 	}
 	fwd, ok := row["forwarded"].([]map[string]any)
-	if !ok || len(fwd) != 1 || fwd[0]["sender"] != nil {
+	if !ok || len(fwd) != 1 || fwd[0]["sender"] != nil || fwd[0]["time"] != "t" {
 		t.Errorf("searchMsgProject forwarded = %#v", row["forwarded"])
 	}
 
@@ -129,7 +139,7 @@ func TestSearchMsgProject(t *testing.T) {
 // TestSenderHelpers exercises the atMe/searchMsg sender key families directly:
 // a senderName-family key (first probe loop), a flat string under "sender"
 // (second loop), and the "null" sentinel normalisation.
-func TestSenderHelpers(t *testing.T) {
+func TestCrossPlatformCoverageSenderHelpers(t *testing.T) {
 	cases := []struct {
 		fn   func(map[string]any) any
 		name string

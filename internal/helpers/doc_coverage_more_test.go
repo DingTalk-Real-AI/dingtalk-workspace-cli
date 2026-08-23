@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
 
@@ -81,11 +83,10 @@ func TestCrossPlatformCoverageDocUploadDownloadParsingCoverage(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageResolveDocContentCoverage(t *testing.T) {
-	previous := deps
+	testseam.Protect(t, &deps)
 	InitDeps(&productExampleCaller{})
 	deps.Out.w = io.Discard
 	deps.Out.errW = io.Discard
-	t.Cleanup(func() { deps = previous })
 	newCommand := func() *cobra.Command {
 		cmd := &cobra.Command{Use: "doc"}
 		cmd.Flags().String("content-file", "", "")
@@ -143,7 +144,7 @@ func TestCrossPlatformCoverageRunDocReadJSONMLCoverage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			caller := &scriptedToolCaller{steps: []scriptedToolStep{tc.step}}
 			installScriptedCaller(t, caller)
-			err := runDocReadJsonML(&cobra.Command{}, "node", tc.output)
+			err := runDocReadJsonML("node", tc.output, "", 0, false)
 			if tc.wantFail && err == nil {
 				t.Fatal("expected failure")
 			}
@@ -152,11 +153,10 @@ func TestCrossPlatformCoverageRunDocReadJSONMLCoverage(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageDocDeprecationWrappersCoverage(t *testing.T) {
-	previous := deps
+	testseam.Protect(t, &deps)
 	InitDeps(&productExampleCaller{})
 	deps.Out.w = io.Discard
 	deps.Out.errW = io.Discard
-	t.Cleanup(func() { deps = previous })
 	for _, wrap := range []func(*cobra.Command){
 		func(cmd *cobra.Command) { wrapDocDeprecated(cmd, "drive target") },
 		func(cmd *cobra.Command) { wrapDocDeprecatedToWiki(cmd, "wiki target") },
@@ -174,9 +174,28 @@ func TestCrossPlatformCoverageDocDeprecationWrappersCoverage(t *testing.T) {
 			_ = cmd.RunE(cmd, nil)
 		}
 	}
+
+	// Declaration-only Schema roots leave deps nil; wrappers must not panic.
+	deps = nil
+	for _, wrap := range []func(*cobra.Command){
+		func(cmd *cobra.Command) { wrapDocDeprecated(cmd, "drive target") },
+		func(cmd *cobra.Command) { wrapDocDeprecatedToWiki(cmd, "wiki target") },
+		func(cmd *cobra.Command) { wrapDocDeprecatedToTarget(cmd, "target") },
+	} {
+		cmd := &cobra.Command{Use: "leaf", RunE: func(*cobra.Command, []string) error { return nil }}
+		wrap(cmd)
+		root := &cobra.Command{Use: "dws"}
+		doc := &cobra.Command{Use: "doc"}
+		root.AddCommand(doc)
+		doc.AddCommand(cmd)
+		if err := cmd.RunE(cmd, nil); err != nil {
+			t.Fatalf("nil-deps deprecation wrapper: %v", err)
+		}
+	}
 }
 
 func TestCrossPlatformCoverageRunDocUploadDownloadAndMediaCoverage(t *testing.T) {
+	testseam.Swap(t, &docMediaVerifyWait, func(context.Context, time.Duration) error { return nil })
 	oldArgs := os.Args
 	os.Args = []string{"dws", "doc"}
 	t.Cleanup(func() { os.Args = oldArgs })

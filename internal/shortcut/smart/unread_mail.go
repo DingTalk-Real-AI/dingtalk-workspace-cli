@@ -14,6 +14,8 @@
 package smart
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -48,9 +50,42 @@ var UnreadMail = shortcut.Shortcut{
 		"最后在本地把每封邮件投影成 {subject, from, date, messageId} 打印出来，可配合 --format/--jq/--fields。" +
 		"这是纯只读操作，只做搜索与本地投影，不会把邮件标记为已读，也不会修改、发送或删除任何邮件；若没有未读邮件则返回空列表。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_unread_mail",
+			CanonicalPath:  "mail.shortcut_unread_mail",
+			CLIPath:        "mail +unread-mail",
+			PrimaryCLIPath: "mail +unread-mail",
+		},
+		Description: "列出未读邮件并投影列表（主题/发件人/时间/messageId）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出未读邮件并投影列表（主题/发件人/时间/messageId）",
+			UseWhen:      []string{"当你想快速看自己邮箱里有哪些未读邮件、并只看一份精简清单（主题、发件人、时间、邮件 messageId）而不想翻完整正文时使用；内部先确定要查的邮箱地址——你可以用 --email 指定，不指定时自动取你绑定的第一个邮箱——再用 KQL 过滤条件 isRead:false 搜索未读邮件，最后在本地把每封邮件投影成 {subject, from, date, messageId} 打印出来，可配合 --format/--jq/--fields。这是纯只读操作，只做搜索与本地投影，不会把邮件标记为已读，也不会修改、发送或删除任何邮件；若没有未读邮件则返回空列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws mail +unread-mail",
+				"dws mail +unread-mail --email user@company.com",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "email", Type: shortcut.FlagString, Desc: "要查询的邮箱地址（可选，默认取你绑定的第一个邮箱）", Required: false},
-		{Name: "size", Type: shortcut.FlagString, Desc: "返回条数上限（可选，默认 20）", Required: false},
+		{Name: "size", Type: shortcut.FlagString, Desc: "返回条数上限（可选，默认 20；显式提供时必须是 1-100 之间的整数）", Required: false},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，取自上一页 nextCursor", Required: false},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"size"}, Description: "显式 --size 必须在 1-100 之间"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return smartMailValidateStringPageSize(rt, "size")
 	},
 	Tips: []string{
 		`dws mail +unread-mail`,
@@ -58,6 +93,10 @@ var UnreadMail = shortcut.Shortcut{
 		`dws mail +unread-mail --size 50`,
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		size, err := smartMailStringPageSize(rt, "size", "20")
+		if err != nil {
+			return err
+		}
 		// Step 1 — resolve the mailbox address.
 		email := rt.Str("email")
 		if email == "" {
@@ -71,34 +110,47 @@ var UnreadMail = shortcut.Shortcut{
 		// Step 2 — search unread mail. email/query/size mirror the search_emails
 		// call in helpers.messageSearch; the isRead:false KQL filter matches the
 		// isRead field documented there; size is passed as a string.
-		size := rt.Str("size")
-		if size == "" {
-			size = "20"
-		}
-		data, err := rt.CallMCPData("mail", "search_emails", map[string]any{
+		args := map[string]any{
 			"email": email,
 			"query": "isRead:false",
 			"size":  size,
-		})
+		}
+		if rt.Changed("cursor") {
+			args["cursor"] = rt.Str("cursor")
+		}
+		data, err := rt.CallMCPData("mail", "search_emails", args)
 		if err != nil {
 			return err
 		}
 
 		// Step 3 — project each message to a compact record (shared helpers).
-		messages := searchMailMessages(data)
+		messages, err := smartMailSearchRows(data, "mail/search_emails")
+		if err != nil {
+			return err
+		}
 		out := make([]map[string]any, 0, len(messages))
 		for _, m := range messages {
+			from, err := searchMailFrom(m)
+			if err != nil {
+				return err
+			}
 			out = append(out, map[string]any{
 				"subject":   searchMailFirstString(m, "subject", "title", "topic"),
-				"from":      searchMailFrom(m),
+				"from":      from,
 				"date":      searchMailFirstAny(m, "date", "sentDate", "receivedDate", "sentTime", "internalDate", "createTime"),
 				"messageId": searchMailFirstString(m, "messageId", "id", "mailId", "emailId", "internetMessageId"),
 			})
 		}
-		return rt.Output(map[string]any{"messages": out, "email": email})
+		complete, next, err := smartMailPage(data, "mail/search_emails", "", rt.Str("cursor"))
+		if err != nil {
+			return err
+		}
+		return smartMailOutputPage(rt, "messages", out, complete, next)
 	},
 }
 
 func init() {
+	hardenSmartMail(&UnreadMail, "messages", "严格校验的未读邮件摘要")
+	markSmartMailCompatibilityOnly(&UnreadMail)
 	shortcut.Register(UnreadMail)
 }

@@ -6,7 +6,7 @@
 
 ## 一键安装
 
-`dws dev` 能力已经合入主干并随正式版发布。专用安装脚本会下载预编译二进制 + `dingtalk-dev` skill，**只需要 curl + tar，不需要 git / go / make**。
+`dws dev` 能力已经合入主干并随正式版发布。专用安装脚本会下载预编译二进制 + `dingtalk-misc` skill（开放平台应用文档落在 misc），**只需要 curl + tar，不需要 git / go / make**。
 
 ### macOS / Linux
 
@@ -24,7 +24,7 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 
 1. 从 `DingTalk-Real-AI/dingtalk-workspace-cli` 的最新 Release 下载对应平台的预编译二进制。
 2. 安装 `dws` 到默认目录 `~/.local/bin`。
-3. 从 Release 的 skills 包里安装 `dingtalk-dev` skill 到本机已检测到的 Agent 目录。
+3. 从 Release 的 skills 包里安装 `dingtalk-misc` skill 到本机已检测到的 Agent 目录。
 
 支持这些环境变量（全部可选）：
 
@@ -33,7 +33,7 @@ irm https://raw.githubusercontent.com/DingTalk-Real-AI/dingtalk-workspace-cli/ma
 | `DEVAPP_REPO` | 覆盖发布仓库，默认 `DingTalk-Real-AI/dingtalk-workspace-cli` |
 | `DEVAPP_VERSION` | 钉某个 release tag，默认取最新 release |
 | `DWS_INSTALL_DIR` | 二进制安装目录，默认 `~/.local/bin` |
-| `DWS_NO_SKILLS` | 设为 `1` 跳过 `dingtalk-dev` skill 安装 |
+| `DWS_NO_SKILLS` | 设为 `1` 跳过 `dingtalk-misc` skill 安装 |
 
 > `dws dev` 已在正式版里，所以你也可以直接用标准安装脚本 `install.sh`，二者都会带上 `dws dev`。
 

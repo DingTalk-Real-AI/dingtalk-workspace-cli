@@ -17,6 +17,9 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -43,6 +46,31 @@ var Team = shortcut.Shortcut{
 		"内部先按姓名解析出唯一 userId，再取 TA 的组织信息拿到主部门 deptId，" +
 		"最后打印该部门的直接成员列表（仅本部门，不递归下级部门）。只读，不做任何修改。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "contact",
+			Name:           "shortcut_team",
+			CanonicalPath:  "contact.shortcut_team",
+			CLIPath:        "contact +team",
+			PrimaryCLIPath: "contact +team",
+		},
+		Description: "按姓名列出某人所在部门的成员（自动解析 userId 与 deptId）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按姓名列出某人所在部门的成员（自动解析 userId 与 deptId）",
+			UseWhen:      []string{"当你只知道某位同事的姓名、想知道 TA 所在部门里都有哪些成员时使用；内部先按姓名解析出唯一 userId，再取 TA 的组织信息拿到主部门 deptId，最后打印该部门的直接成员列表（仅本部门，不递归下级部门）。只读，不做任何修改。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws contact +team --name 张三"},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "name", Type: shortcut.FlagString, Desc: "同事姓名/花名", Required: true},
 	},

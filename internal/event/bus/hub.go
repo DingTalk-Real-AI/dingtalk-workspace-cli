@@ -246,6 +246,31 @@ func (h *Hub) StopConsumers(subscribeIDs []string, reason string) []string {
 	return out
 }
 
+// StopAll requests a high-priority graceful close for every live consumer.
+// Unlike Broadcast(Bye), this uses the writer's priority StopCh and therefore
+// cannot sit behind a full event buffer during a terminal source failure.
+func (h *Hub) StopAll(reason string) int {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "shutdown"
+	}
+	h.mu.RLock()
+	consumers := make([]*Consumer, 0, len(h.consumers))
+	for _, consumer := range h.consumers {
+		consumers = append(consumers, consumer)
+	}
+	h.mu.RUnlock()
+	stopped := 0
+	for _, consumer := range consumers {
+		select {
+		case consumer.StopCh <- reason:
+			stopped++
+		default:
+		}
+	}
+	return stopped
+}
+
 // Unregister removes a consumer by ID and closes its sendCh. Idempotent —
 // calling twice or on an unknown ID is a no-op. closeSend shares the same
 // per-consumer lock as Deliver/Broadcast, so a stale Hub snapshot cannot send

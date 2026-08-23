@@ -96,7 +96,14 @@ else
 	printf ' %s' "$@"
 	printf '\n'
 	for package in "$@"; do
-		tests="$(go test -list '^(TestAllShortcuts|TestCrossPlatformCoverage)' "$package")"
+		list_err="$TMP_ROOT/list.err"
+		if ! tests="$(go test -list '^(TestAllShortcuts|TestCrossPlatformCoverage)' "$package" 2>"$list_err")"; then
+			printf 'error: go test -list failed for %s\n' "$package" >&2
+			if [ -s "$list_err" ]; then
+				cat "$list_err" >&2
+			fi
+			exit 1
+		fi
 		if printf '%s\n' "$tests" | grep -Eq '^(TestAllShortcuts|TestCrossPlatformCoverage)'; then
 			printf '%s\n' "$package" >>"$TEST_PACKAGES"
 		fi

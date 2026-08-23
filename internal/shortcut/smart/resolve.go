@@ -1,131 +1,87 @@
 // Copyright 2026 Alibaba Group
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 package smart
 
 import (
-	"fmt"
-	"strings"
-
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 )
 
-// contactUser is the minimal identity a smart shortcut needs after resolving a
-// name.
+// contactUser preserves the smart package's internal shape while resolution
+// semantics live in targetresolver for reuse by chat and future facades.
 type contactUser struct {
 	userID         string
 	openDingTalkID string
 	name           string
 }
 
-// resolveUser turns a human name into a single unique contact, the "name → ID"
-// intelligence that distinguishes a smart shortcut from a raw tool call
-// (mirrors the shared name→ID resolver). It searches the directory and:
-//   - errors with a clear message if nobody matches;
-//   - errors listing the candidates if the name is ambiguous (never guesses).
 func resolveUser(rt *shortcut.RuntimeContext, name string) (contactUser, error) {
 	return resolveUserByName(rt, name, false)
 }
 
-// resolveOpenDingTalkUser also accepts external / cross-org contacts that have
-// an openDingTalkId but no organization-scoped userId. Use it only for flows
-// whose downstream interface consumes openDingTalkId.
 func resolveOpenDingTalkUser(rt *shortcut.RuntimeContext, name string) (contactUser, error) {
 	return resolveUserByName(rt, name, true)
 }
 
 func resolveUserByName(rt *shortcut.RuntimeContext, name string, includeOpenIDOnly bool) (contactUser, error) {
-	data, err := rt.CallMCPData("contact", "search_contact_by_key_word", map[string]any{
-		"keyword": name,
-	})
+	requirement := targetresolver.IdentityUserID
+	if includeOpenIDOnly {
+		requirement = targetresolver.IdentityOpenDingTalkID
+	}
+	resolved, err := targetresolver.ResolveUser(rt, name, requirement)
 	if err != nil {
 		return contactUser{}, err
 	}
-	users := extractUsers(data)
-	if !includeOpenIDOnly {
-		users = usersWithUserID(users)
-	}
-	switch {
-	case len(users) == 0:
-		return contactUser{}, apperrors.NewValidation(
-			fmt.Sprintf("通讯录里没找到叫 %q 的人；换个更完整的姓名再试。", name))
-	case len(users) > 1:
-		return contactUser{}, apperrors.NewValidation(fmt.Sprintf(
-			"%q 匹配到 %d 个人：%s。请用更精确的姓名，或改用对应命令直接传用户 ID。",
-			name, len(users), strings.Join(userLabels(users), "、")))
-	}
-	return users[0], nil
+	return fromResolvedUser(resolved.Selected), nil
 }
 
 func usersWithUserID(users []contactUser) []contactUser {
-	out := make([]contactUser, 0, len(users))
+	resolved := make([]targetresolver.User, 0, len(users))
 	for _, user := range users {
-		if user.userID != "" {
-			out = append(out, user)
-		}
+		resolved = append(resolved, toResolvedUser(user))
+	}
+	filtered := targetresolver.UsersWithUserID(resolved)
+	out := make([]contactUser, 0, len(filtered))
+	for _, user := range filtered {
+		out = append(out, fromResolvedUser(user))
 	}
 	return out
 }
 
-// extractUsers pulls {userId, openDingTalkId, name} out of a
-// search_contact_by_key_word response ({"result": [ {userId, name, ...} ]}).
 func extractUsers(data map[string]any) []contactUser {
-	raw, ok := data["result"].([]any)
-	if !ok {
+	resolved := targetresolver.ExtractUsers(data)
+	if len(resolved) == 0 {
 		return nil
 	}
-	var out []contactUser
-	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		id, _ := m["userId"].(string)
-		openID, _ := m["openDingTalkId"].(string)
-		if openID == "" {
-			openID, _ = m["openDingtalkId"].(string)
-		}
-		// External / cross-org contacts come back with an empty userId and only
-		// an openDingTalkId (verified live). Dropping them here made name→ID
-		// resolution miss those people, or collapse to the wrong single match
-		// when an in-org namesake also existed. Keep any row with at least one
-		// usable identity; downstream (e.g. +dm) can act on the openDingTalkId.
-		if id == "" && openID == "" {
-			continue
-		}
-		nm, _ := m["name"].(string)
-		if nm == "" {
-			for _, k := range []string{"nick", "showName", "flowerName", "staffName", "userName"} {
-				if v, _ := m[k].(string); v != "" {
-					nm = v
-					break
-				}
-			}
-		}
-		out = append(out, contactUser{userID: id, openDingTalkID: openID, name: nm})
+	out := make([]contactUser, 0, len(resolved))
+	for _, user := range resolved {
+		out = append(out, fromResolvedUser(user))
 	}
 	return out
 }
 
 func userLabels(users []contactUser) []string {
-	out := make([]string, 0, len(users))
-	for _, u := range users {
-		id := u.userID
-		if id == "" {
-			id = u.openDingTalkID
-		}
-		out = append(out, fmt.Sprintf("%s(%s)", u.name, id))
+	resolved := make([]targetresolver.User, 0, len(users))
+	for _, user := range users {
+		resolved = append(resolved, toResolvedUser(user))
 	}
-	return out
+	return targetresolver.UserLabels(resolved)
+}
+
+func fromResolvedUser(user targetresolver.User) contactUser {
+	return contactUser{
+		userID:         user.UserID,
+		openDingTalkID: user.OpenDingTalkID,
+		name:           user.Name,
+	}
+}
+
+func toResolvedUser(user contactUser) targetresolver.User {
+	return targetresolver.User{
+		UserID:         user.userID,
+		OpenDingTalkID: user.openDingTalkID,
+		Name:           user.name,
+	}
 }

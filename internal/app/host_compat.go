@@ -11,6 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// This file holds deliberate no-op stubs that act as edition-sync anchors for
+// the private wukong edition overlay. The overlay replaces these function
+// bodies with real host-compatibility configuration while the open-source
+// build keeps them empty; both editions therefore share identical call sites
+// (access_token_resolve.go, auth_command.go, doctor_command.go,
+// force_refresh.go). These stubs are sync seams for the edition overlay, not
+// dead code: do not delete them or their call sites during cleanup.
 package app
 
 import (

@@ -400,6 +400,18 @@ func TestCrossPlatformCoverageHTTPStatusAndDiagnosticsEdges(t *testing.T) {
 	if got := networkActions("snap"); len(got) != 3 {
 		t.Fatalf("network actions = %#v", got)
 	}
+	if got := authActions("snap"); len(got) != 2 {
+		t.Fatalf("auth actions = %#v", got)
+	}
+	if got := runtimeActions("snap"); len(got) != 2 {
+		t.Fatalf("runtime actions = %#v", got)
+	}
+	if got := actionsForMethod("tools/call", "snap"); len(got) == 0 {
+		t.Fatal("tools/call actions empty")
+	}
+	if got := actionsForMethod("tools/list", "snap"); len(got) == 0 {
+		t.Fatal("tools/list actions empty")
+	}
 	if err := jsonrpcEnvelopeError("tools/list", &RPCError{Code: -1, Message: "failed"}, "", "header-trace"); err == nil {
 		t.Fatal("JSON-RPC trace fallback returned nil")
 	}

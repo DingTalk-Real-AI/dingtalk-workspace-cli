@@ -14,9 +14,14 @@
 package smart
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -38,15 +43,42 @@ import (
 //
 //	dws todo +overdue
 var Overdue = shortcut.Shortcut{
-	Service:     "todo",
-	Command:     "+overdue",
-	Product:     "todo",
-	Description: "列出我已过期未完成的待办",
+	OutputRollout: output.RolloutUnifiedActive,
+	Service:       "todo",
+	Command:       "+overdue",
+	Product:       "todo",
+	Description:   "列出我已过期未完成的待办",
 	Intent: "当你想快速看清自己有哪些待办已经过了截止时间却还没做完、方便优先处理时使用；" +
 		"内部先拉取你当前组织下作为执行人(executor)的待办列表，再在本地按「有截止时间(dueTime) 且早于当前时刻 且尚未完成」的条件筛选，" +
 		"最后只打印这些逾期待办的标题(subject)、截止时间(dueTime) 和任务 ID(taskId)。" +
 		"这是纯只读操作，只做列表与本地过滤，不会修改或完成任何待办；若没有逾期待办则返回空列表。",
-	Risk:  shortcut.RiskRead,
+	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "todo",
+			Name:           "shortcut_overdue",
+			CanonicalPath:  "todo.shortcut_overdue",
+			CLIPath:        "todo +overdue",
+			PrimaryCLIPath: "todo +overdue",
+		},
+		Description: "列出我已过期未完成的待办",
+		Result:      &contract.ResultSpec{Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess}, DataSchema: json.RawMessage(`{"type":"object","description":"逾期未完成待办","properties":{"overdue":{"type":"array","description":"逾期未完成任务","items":{"type":"object","description":"待办条目","additionalProperties":true}}},"required":["overdue"],"additionalProperties":false}`)},
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出我已过期未完成的待办",
+			UseWhen:      []string{"当你想快速看清自己有哪些待办已经过了截止时间却还没做完、方便优先处理时使用；内部先拉取你当前组织下作为执行人(executor)的待办列表，再在本地按「有截止时间(dueTime) 且早于当前时刻 且尚未完成」的条件筛选，最后只打印这些逾期待办的标题(subject)、截止时间(dueTime) 和任务 ID(taskId)。这是纯只读操作，只做列表与本地过滤，不会修改或完成任何待办；若没有逾期待办则返回空列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws todo +overdue"},
+		},
+	},
 	Flags: []shortcut.Flag{},
 	Tips: []string{
 		`dws todo +overdue`,

@@ -15,7 +15,6 @@ package shortcut
 
 import (
 	"sort"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -85,26 +84,4 @@ func build(shortcuts []Shortcut) []*cobra.Command {
 		out = append(out, byService[svc])
 	}
 	return out
-}
-
-// atoiDefault parses s as an int, returning 0 when empty or malformed.
-func atoiDefault(s string) int {
-	if s == "" {
-		return 0
-	}
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		return 0
-	}
-	return n
-}
-
-// contains reports whether v is present in list.
-func contains(list []string, v string) bool {
-	for _, item := range list {
-		if item == v {
-			return true
-		}
-	}
-	return false
 }

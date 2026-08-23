@@ -44,7 +44,7 @@ import (
 //   - expect=<realFlag>            : emitted must reduce to that canonical flag.
 //   - expect=did-you-mean:blocked  : block guard hit; never auto-rewritten.
 //   - expect=did-you-mean:ambiguous: co-occurrence guard hit; never rewritten.
-func TestParamAliasFixtureThroughEmbeddedDeliveryPath(t *testing.T) {
+func TestCrossPlatformCoverageParamAliasFixtureThroughEmbeddedDeliveryPath(t *testing.T) {
 	concepts, err := cli.LoadParamConcepts()
 	if err != nil {
 		t.Fatalf("LoadParamConcepts() error = %v", err)
@@ -113,13 +113,19 @@ func TestParamAliasFixtureThroughEmbeddedDeliveryPath(t *testing.T) {
 					t.Fatalf("reviewed canonical --%s on %q is not a real Cobra flag", c.Expect, c.Command)
 				}
 				flagArgs := ctx.Args[len(strings.Fields(c.Command)):]
-				if len(flagArgs) < 2 || flagArgs[1] != fixtureValue {
-					t.Fatalf("%q on %q lost its value: args=%v", c.Emitted, c.Command, ctx.Args)
+				if len(flagArgs) == 0 {
+					t.Fatalf("%q on %q lost its flag and value: args=%v", c.Emitted, c.Command, ctx.Args)
 				}
 				got := flagArgs[0]
-				gotBare := strings.SplitN(strings.TrimPrefix(got, "--"), "=", 2)[0]
+				gotBare, inlineValue, hasInlineValue := strings.Cut(strings.TrimPrefix(got, "--"), "=")
 				switch {
-				case got == "--"+c.Expect:
+				case hasInlineValue && inlineValue != fixtureValue:
+					t.Fatalf("%q on %q changed its inline value: got %q, want %q (args=%v)", c.Emitted, c.Command, inlineValue, fixtureValue, ctx.Args)
+				case !hasInlineValue && (len(flagArgs) < 2 || flagArgs[1] != fixtureValue):
+					t.Fatalf("%q on %q lost its value: args=%v", c.Emitted, c.Command, ctx.Args)
+				}
+				switch {
+				case gotBare == c.Expect:
 					// (1) rewritten; the embedded table must agree.
 					if !hasEntry {
 						t.Fatalf("%q on %q was rewritten without an embedded alias entry", c.Emitted, c.Command)

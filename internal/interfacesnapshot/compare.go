@@ -71,7 +71,14 @@ func CompareAll(current Snapshot, references map[string]Snapshot) Report {
 //     alias),
 //   - flags accepted at each command path may not disappear, change type, or
 //     become required; an existing path may not gain a new required flag,
+//   - once bool ConstParams evidence exists, its exact property/value map is a
+//     durable contract; adding the first evidence to an older snapshot remains
+//     a silent bootstrap,
 //   - new commands and flags are allowed.
+//
+// The single exception to the type rule is an individually reviewed migration
+// listed in reviewedFlagTypeChanges, and only when nothing else about the flag
+// changed. See reviewed.go.
 //
 // Comparing the effective local + inherited set is intentional. It catches a
 // persistent flag whose scope is accidentally narrowed to its declaring
@@ -149,6 +156,14 @@ func Compare(current, baseline Snapshot, reference string) Comparison {
 }
 
 func compareCommandContract(result *Comparison, acceptedPath string, oldCommand, newCommand Command) {
+	if len(oldCommand.BoolConstParams) > 0 && !reflect.DeepEqual(oldCommand.BoolConstParams, newCommand.BoolConstParams) {
+		result.Blocking = append(result.Blocking, Change{
+			Kind:   "bool_const_params_changed",
+			Path:   acceptedPath,
+			Before: fmt.Sprintf("%v", oldCommand.BoolConstParams),
+			After:  fmt.Sprintf("%v", newCommand.BoolConstParams),
+		})
+	}
 	if oldCommand.Runnable && !newCommand.Runnable {
 		result.Blocking = append(result.Blocking, Change{
 			Kind:   "command_became_non_runnable",
@@ -183,13 +198,20 @@ func compareEffectiveFlags(result *Comparison, acceptedPath string, oldCommand, 
 			continue
 		}
 		if oldFlag.Type != newFlag.Type {
-			result.Blocking = append(result.Blocking, Change{
-				Kind:   "flag_type_changed",
-				Path:   acceptedPath,
-				Flag:   name,
-				Before: oldFlag.Type,
-				After:  newFlag.Type,
-			})
+			// Resolve the exemption against the canonical path, not acceptedPath.
+			// An aliased command reaches this function once per accepted spelling,
+			// so keying on acceptedPath would let every alias spelling re-report a
+			// reviewed migration.
+			if !reviewedFlagTypeChange(newCommand.Path, name, oldFlag.Type, newFlag.Type) ||
+				flagContractOtherwiseChanged(oldFlag, newFlag) {
+				result.Blocking = append(result.Blocking, Change{
+					Kind:   "flag_type_changed",
+					Path:   acceptedPath,
+					Flag:   name,
+					Before: oldFlag.Type,
+					After:  newFlag.Type,
+				})
+			}
 		}
 		if !oldFlag.Required && newFlag.Required {
 			result.Blocking = append(result.Blocking, Change{
@@ -216,6 +238,15 @@ func compareEffectiveFlags(result *Comparison, acceptedPath string, oldCommand, 
 				Flag:   name,
 				Before: oldFlag.NoOpt,
 				After:  newFlag.NoOpt,
+			})
+		}
+		if oldFlag.AliasOf != "" && newFlag.AliasOf != oldFlag.AliasOf {
+			result.Blocking = append(result.Blocking, Change{
+				Kind:   "flag_alias_target_changed",
+				Path:   acceptedPath,
+				Flag:   name,
+				Before: oldFlag.AliasOf,
+				After:  newFlag.AliasOf,
 			})
 		}
 		if !oldFlag.Hidden && newFlag.Hidden {

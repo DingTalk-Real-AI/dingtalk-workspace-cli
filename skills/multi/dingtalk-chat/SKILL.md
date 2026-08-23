@@ -11,126 +11,114 @@ metadata:
 
 # 钉钉群聊 / 消息 Skill
 
-## 前置条件 — 执行操作前必读
+<!-- DWS_RUNTIME_CONTRACT_START -->
+## 最小 DWS 执行契约
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dws-shared`](../dws-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
-
-> 命令参考：[chat.md](references/chat.md)；表情：[chat-emoji-list.md](references/chat-emoji-list.md)；剧本：[01-messaging.md](references/01-messaging.md)。
+- 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
+- 已知命令直接执行。只有 leaf 参数或安全语义不确定时读取精确 Schema，只有 Cobra flag 不确定时读取精确 leaf Help；不要加载产品级 Catalog 代替选路。
+- 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
+- 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
+- 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
+- 写操作必须符合用户明确意图。是否需要确认以最终 Runtime gate 和 Schema 为准；需要确认时先说明对象、动作与影响，再追加 `--yes`。
+- 写后按任务结果契约验证；不能仅凭退出码宣称成功。部分结果、未知投递状态和失败项必须如实保留。
+- 时间戳面向用户展示时转换为带时区的可读时间；默认使用当前会话时区，必要时同时保留原值。
+- 遇到认证、权限、profile、confirmation 或未知错误时，只加载 `dingtalk-shared` 中对应 reference；不要连续猜测替代命令。
+<!-- DWS_RUNTIME_CONTRACT_END -->
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
 
-`chat` 当前有 97 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+`chat` 当前有 98 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
 
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service chat --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
 
-## IM Shortcut 优先路由
+## Golden Route
 
-- 统一发送优先用 `chat +messages-send`：通过 `--as user|bot|webhook` 选择身份，并只传该身份真实支持的目标、内容和凭据。仅在需要原子命令的特定返回结构或兼容参数时，才降级到 `chat message send` / `send-by-bot` / `send-by-webhook`。
-- 消息查询按意图选择：指定会话用 `+chat-messages`，跨维度过滤/全量翻页用 `+search-msg`，@我用 `+at-me`，已知消息 ID 批量富化用 `+messages-mget`，已知 thread/topic ID 读取回复用 `+thread-replies`。
-- 查询结果中的 `resourceRefs` 是可继续执行的资源上下文。引用、回复或合并转发中的子消息必须使用该子消息返回的 `messageId`；子消息缺会话 ID 时才继承父消息的 `openConversationId`。
-- 上述五个查询 Shortcut 与 `+messages-resource-download` 都沿用安全本地下载的 `read/not_required` 契约，不应添加 `--yes` 或触发交互确认。下载只允许工作目录内相对路径、默认不覆盖并原子落盘；需要覆盖时必须由用户显式传 `--overwrite`。
-- `+messages-send` 会按身份规范化 @ 占位符：user 使用 `<@id>` / `<@all>`，bot/webhook 使用 `@id` / `@手机号` / `@all`；只需声明 `--at-*` / `--at-all`，缺失占位符会自动补齐。
-- `+messages-send --as user --user <userId>` 会通过通讯录关键词搜索并按 userId 精确匹配 openDingTalkId，所有内容类型与 `--dry-run` 都使用同一只读解析链路；已有 openDingTalkId 时直接传 `--open-dingtalk-id`。
-- 流式卡片优先用 `+messages-send-card`：群聊传 `--group`，单聊 userId 传 `--receiver` 并由 CLI 通过通讯录关键词搜索做 userId 精确匹配，已有 openDingTalkId 则必须显式传 `--receiver-open-dingtalk-id`；三者严格三选一，禁止根据首字母猜身份类型。
+按用户任务选择最小充分入口。公开层按意图分流；Resolver、发送执行、消息投影和错误契约在 Runtime 内复用，不把所有能力塞进一个万能命令。
 
-## 意图表
+| 用户意图 | 唯一推荐入口 | 关键边界 |
+|---|---|---|
+| <!-- dws-intent: chat.send.dm -->按姓名发简单文本或 Markdown | `dws chat +dm --to <姓名> --content <内容>` | CLI 解析唯一用户；多候选时停止，不先手工查 ID |
+| <!-- dws-intent: chat.send.group -->按群名或 ID 发简单文本或 Markdown | `dws chat +send-to-group --group <群名或ID> --content <内容>` | 稳定 ID 直接使用；群名多候选时停止 |
+| <!-- dws-intent: chat.send.advanced -->文件、Bot、Webhook、复杂 @ 或高级发送 | `dws chat +messages-send` | Bot 多群用 `--groups/--groups-file` 并检查逐项 ledger |
+| <!-- dws-intent: chat.read.conversation -->读取指定会话、返回较多消息 | `dws chat +chat-messages` | 粗粒度读取；目标条件明确时优先 `+search-msg` |
+| <!-- dws-intent: chat.search.filtered -->多维度条件搜索（发送者/关键词/@/类型，单/跨会话） | `dws chat +search-msg` | 目标条件明确时使用 |
+| 查看指定群成员（用户/机器人） | `dws chat +chat-members-list --group <群名或ID>` | 唯一解析并全量读取 |
+| 获取群邀请链接 | `dws chat +chat-invite-url --group <群名或ID>` | 多候选时停止 |
+| 查看群机器人 | `dws chat +chat-bots --group <群名或ID>` | 返回稳定 `bots[]` |
+| 个人收藏表情列表/发送/收藏 | `dws chat emotion list/send/favorite` | 约束见 leaf Schema |
+| 修改群名称 | `dws chat group rename --id <openConversationId> --name <新名称>` | 只知群名时先用 `+chat-search --query <群名>` 唯一解析 ID；不猜 `+chat-rename` |
+| 查看指定群内 @我的消息 | `dws chat +at-me --group <群名> --page-all` | 检查 `complete`；空结果仍返回数组 |
+| 查看全部会话 | `dws chat +conversation-list --page-all` | 检查 `complete` / `failures` |
+| 读取并下载消息资源 | 查询命令加 `--download-resources` | 不另起手工下载循环；下载失败项保留在结果中 |
+| <!-- dws-intent: chat.conversation.list-top -->查看置顶会话 | `dws chat +conversation-list-top` | 会话 Top 与消息 Pin、消息 Top、Favorite 不同 |
+| 监听未来 IM 事件 | [`dingtalk-event`](../dingtalk-event/SKILL.md) | 常规监听走 `+listen-im`；生命周期/高级控制走 `consume` |
 
-| 用户说 | 命令 |
-|--------|------|
-| "发消息给张三" | `dws chat +messages-send --as user --open-dingtalk-id <id> --text "<内容>"` |
-| "发到XX群" | `dws chat +chat-search --query "<群名>"` → `dws chat +messages-send --as user --chat-id <openConversationId> --text "<内容>"` |
-| "建群" / "拉人进群" | `dws chat group create` / `dws chat group members add` |
-| "改群名" / "踢人" | `dws chat group rename` / `dws chat group members remove --yes`（踢人不可逆，先确认目标） |
-| "@我消息" | `dws chat +at-me` |
-| "查群聊记录" | `dws chat +chat-messages --group <openConversationId>` |
-| "收藏/取消收藏这条消息" | `dws chat +flag-create` / `dws chat +flag-cancel` |
-| "查看我收藏的消息" | `dws chat +flag-list` |
-| "用机器人发消息" | `dws chat +messages-send --as bot --robot-code <code> --chat-id <id> --text "<内容>"` |
-| "Webhook 推一条" | `dws chat +messages-send --as webhook --webhook-token <token> --text "<内容>"` |
-| "发送流式卡片" | `dws chat +messages-send-card --group <openConversationId> --content "<内容>"`；单聊 userId 改用 `--receiver`，openDingTalkId 改用 `--receiver-open-dingtalk-id` |
-| "撤回消息" | `dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId>` |
-| "标记未读 / 清除红点 / 全部已读" | `dws chat mark-unread` / `dws chat clear-red-point` / `dws chat clear-all-red-point` |
-| "置顶某条消息 / 取消消息置顶" | `dws chat message set-top-msg` / `dws chat message unset-top-msg` |
-| "我加入的所有群 / 全部群列表" | `dws chat group list-all` |
+以下次级入口在意图明确时直接使用，不需要先加载完整 Catalog：
 
-## 标准 SOP（必遵流程）
+| 用户意图 | 入口 |
+|---|---|
+| 已知消息 ID 批量读取详情 | `dws chat +messages-mget` |
+| 已知资源引用单独下载 | `dws chat +messages-resource-download` |
+| 按关键词搜索群 | `dws chat +chat-search` |
+| 查看消息收藏 | `dws chat +flag-list` |
+| <!-- dws-intent: chat.reply.quote -->引用回复 | 人：`dws chat +messages-reply`；成功结果保留新消息/会话/投递与原消息来源上下文。Bot 群：`dws chat message send-by-bot --conversation-id <cid> --reply <mid> --ref-sender <sid>` |
+| 撤回当前用户消息 | `dws chat +messages-recall --msg-id <openMessageId>`；可省略会话 ID，由 CLI 只读补齐；兼容单值 `--message-ids` |
+| 已知话题主消息 ID 或 thread/topic ID 读取回复 | `dws chat +thread-replies` |
+| <!-- dws-intent: chat.create.group -->按成员 ID 或姓名创建群聊 | `dws chat +chat-create`；成员/群主均可自然解析，任一歧义都会在创建前整体停止 |
+| 跨全部会话查看 @我的消息 | `dws chat +at-me --page-all` |
 
-> 命中以下意图**必须**按对应 SOP 顺序执行；**禁止**跳步、替换命令、编造 ID。每条命令必须带 `--format json`，执行后必须按"解析"步取真实字段（`openDingTalkId` / `openConversationId` / `openMessageId`）。
+### 发送入口边界
 
-### SOP-1 发消息（send-message）
+- `+dm`：姓名目标的简单文本/Markdown，参数空间最小。
+- `+send-to-group`：群名或稳定 ID 目标的简单文本/Markdown，避免暴露无关身份矩阵。
+- Markdown 中的公网图片必须写成 `![图片标题](https://example.com/image.png)` 才会内联展示；
+  省略开头的 `!` 时只会显示为链接。
+- `+messages-send`：文件、Bot、Webhook、复杂 @ 或幂等控制。user 已知 ID 可直接传，也可用 `--user-query` / `--chat-query` 运行同一只读解析链；Bot 多群使用 `--groups/--groups-file`，返回 `im.batch-write.v1`；bot/webhook 只使用下层真实支持的文本/Markdown 能力。
+- 文件直接传 `+messages-send --file <相对路径>`；不要先独立上传并提取 mediaId。
+- Webhook 使用 `+messages-send --as webhook --webhook-token <token>`；不要退回原子 Webhook 命令。
+- 流式卡片用 `+messages-send-card`；群聊@传 ID/`--at-all`，Runtime 把 create 返回前缀加到 `--content`；禁写占位符；仅 text。
 
-**触发**：发消息/单聊/通知某人/发到群里。
+## 关键结果语义
 
-1. **解析收件人（必须）**：人名 → 先 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `openDingTalkId`（优先）或 `userId`；群名 → 先 `dws chat search --query "<群名>" --format json` 取 `openConversationId`。
-2. **执行（必须）**：单聊 `dws chat message send --open-dingtalk-id <openDingTalkId> --text "<内容>" --format json`（只有拿不到 `openDingTalkId` 时才用 `--user <userId>`）；群聊 `dws chat message send --group <openConversationId> --text "<内容>" --format json`。
-3. **验证（必须）**：发送接口成功时可能只返回 `result.openTaskId`，它可用于确认提交成功，但**不是撤回所需消息 ID**。需要撤回时必须按 SOP-7 用带 `--time` 的 `message list` 回查，取得真实 `openMessageId`；返回非 `success` 必须如实报错，不要谎报已发。
+- `openTaskId` 是发送任务 ID，不是回复或撤回所需的消息 ID；消息 ID 必须来自真实查询结果。
+- 消息查询默认保留稳定 ID、会话/thread、发送者、文本、时间、reaction、引用、转发和 `resourceRefs`；`--no-reactions` 可关闭 reaction。
+- 查询结果必须检查 `complete`、`hasMore`、`failures` 和资源下载 ledger；partial result 不得表述为完整成功。
+- 子消息使用自己的 `messageId`；仅缺会话 ID 时继承父消息的 `conversationId`。
+- 下载只允许工作目录内安全相对路径，默认不覆盖并原子落盘；覆盖必须由用户显式传 `--overwrite`。读取和下载不需要 `--yes`。
+- Favorite、消息 Pin、消息 Top、会话 Top 是不同对象层级，不能互换。
 
-**禁止**：把人名/群名直接当 ID 传入、跳过 `aisearch person`/`chat search` 解析、跳过 `--format json`、未发送成功就答复"已发送"。
+## 按需加载
 
-### SOP-2 建群（create-group）
+只在任务命中时读取一个精确 reference：
 
-**触发**：建群/拉人进群/新建讨论组。
+| 场景 | Reference |
+|---|---|
+| 需要跨步骤传递真实结果的消息/群组合流程 | [01-messaging.md](references/01-messaging.md) |
+| 消息读取与查询 | [message-query](references/chat/message-query.md) |
+| 编辑、撤回、回复、转发、Pin、Top、Favorite 或 reaction 写入 | [message-actions](references/chat/message-actions.md) |
+| 位置、联系人名片、底层媒体与资源下载 | [message-media](references/chat/message-media.md) |
+| 群列表、群搜索、共同群、成员与群内机器人读取 | [group-discovery](references/chat/group-discovery.md) |
+| 建群、成员或已知机器人增删、管理员、公告与群设置 | [group-admin](references/chat/group-admin.md) |
+| 搜索未知机器人、机器人消息发送/撤回与 Webhook | [chat-bot.md](references/chat/chat-bot.md) |
+| 会话置顶、分类、红点、免打扰和隐藏 | [chat-conversation.md](references/chat/chat-conversation.md) |
+| 低频意图之间仍需消歧 | [intent-guide.md](references/intent-guide.md) |
+| 表情名称与 ID | [chat-emoji-list.md](references/chat-emoji-list.md) |
+| 稳定结果、身份矩阵与能力边界 | [contracts.md](references/contracts.md) |
+| 流式卡片创建 | [card/create.md](references/card/create.md) |
+| 流式卡片更新 | [card/update.md](references/card/update.md) |
+| 卡片 callback 是否可用 | [card/callback.md](references/card/callback.md) |
+| 卡片公开 Schema 边界 | [card/schema.md](references/card/schema.md) |
+| 只有上述 reference 仍无法定位的原子能力 | [chat.md](references/chat.md) 的对应章节 |
 
-1. **解析成员（必须）**：对每个成员 `dws aisearch person --keyword "<姓名>" --dimension name --format json` 取 `userId`，多人英文逗号拼接。
-2. **执行（必须）**：`dws chat group create --name "<群名>" --users <userId1,userId2,...> --format json`；外部群加 `--type EXTERNAL`，话题圈加 `--thread`。
-3. **验证（必须）**：从返回取 `openConversationId`，可用 `dws chat search --query "<群名>" --format json` 复核。
+不要预加载这些 reference。完整 Shortcut Catalog 只在根路由和精确 reference 都无法定位低频能力时使用。
 
-**禁止**：跳过成员 userId 解析直接传姓名、编造 `openConversationId`。
+## 错误最短路径
 
-### SOP-3 Webhook 推送（send-by-webhook）
-
-**触发**：用机器人群 webhook 推一条消息。
-
-1. **执行（必须）**：`dws chat message send-by-webhook --token <webhookToken> --title "<标题>" --text "<内容>" --format json`。
-2. **@ 人（必须）**：需要 @ 时，`--text` 中**必须**先包含对应 `@userId` / `@手机号` / `@10`，再配合 `--at-users` / `--at-mobiles` / `--at-all`；否则 @ 不生效。
-
-**禁止**：只传 `--at-users` 而 `--text` 里不含 `@<标识>`。
-
-### SOP-4 共同群查询（search-common-group）
-
-**触发**："我和 XX 的共同群"。
-
-1. **取昵称（必须）**：先 `dws contact user get-self --format json` 取自己昵称；对方昵称从历史/上下文取，拿不到必须先问用户。
-2. **执行（必须）**：`dws chat search-common --nicks "<昵称1>,<昵称2>" --limit 20 --cursor 0 --format json`；`hasMore=true` 时**必须**用 `nextCursor` 翻页，不要停在第一页。
-
-**禁止**：跳过昵称解析、忽略 `hasMore` 不翻页。
-
-### SOP-5 红点 / 未读管理（manage-red-point）
-
-**触发**：标记未读/清除红点/全部已读。
-
-1. **执行（必须）**：标记某会话未读 `dws chat mark-unread --conversation-id <openConversationId> --format json`；清除某会话红点 `dws chat clear-red-point --conversation-id <openConversationId> --format json`；全部已读 `dws chat clear-all-red-point --format json`。
-2. **取会话 ID（必须）**：`openConversationId` 拿不准时先 `dws chat group list-all --format json` 或 `dws chat search --query "<群名>" --format json`，**禁止**编造。
-
-**禁止**：未确认会话就批量"全部已读"（破坏性，必须先与用户确认）。
-
-### SOP-6 特别关注消息（focus-messages）
-
-**触发**："特别关注的人最近发了什么/聊了什么"。
-
-1. **执行（必须）**：`dws chat message list-focused --limit 50 --format json`，直接基于返回答复。
-2. **边界（必须）**：只有用户终点是"我关注了谁"这种**人员列表**时，才切 `dingtalk-contact` 关系查询。
-
-**禁止**：用普通 `message list` 冒充 focused、把人员列表需求硬塞进 chat。
-
-### SOP-7 拉取 / 撤回消息（list-or-recall-message）
-
-**触发**：查某个群或单聊的聊天记录、撤回某条消息。
-
-1. **定位会话（必须）**：群名先 `dws chat search --query "<群名>" --format json` 取 `openConversationId`；单聊对象先解析真实 `userId` 或 `openDingTalkId`。
-2. **拉取消息（必须）**：`dws chat message list --group <openConversationId> --time "<yyyy-MM-dd HH:mm:ss>" --direction older --format json`；单聊将 `--group` 换成 `--user` 或 `--open-dingtalk-id`。`--time` 是必填参数，必须来自用户时间范围或明确收敛后的边界。
-3. **撤回（必须）**：仅在用户明确要求撤回时，从消息列表 `result.messages[].openMessageId` 取真实 ID，执行 `dws chat message recall --conversation-id <openConversationId> --msg-id <openMessageId> --format json`。
-
-**禁止**：省略 `--time`、用发送返回的 `clientMsgId` 代替 `openMessageId`、只传 `--client-msg-id`、编造会话或消息 ID。
-
-## 跨产品协作
-
-- 收件人是人名 → 先用 `dingtalk-contact` 或 `dingtalk-aisearch` 拿 `openDingTalkId` / `userId`
-- 要发图片/文件 → 先 `dt_media_upload` 上传 → `python scripts/extract_media_id.py "<URL>"` 提取 mediaId → 再用 `--media-id`
-- 紧急升级（应用内/短信/电话）→ 切到 `dingtalk-misc`（`references/ding.md`）
-- 发邮件 → 切到 `dingtalk-mail`
-## 局部意图与短流程
-
-- [局部意图消歧](references/intent-guide.md)；[短流程](references/lite-recipes.md)。
+1. resolution 返回零命中或多候选：停止写操作，展示候选并让用户消歧；禁止默认第一项。
+2. `unknown command` / `unknown flag`：读取精确 leaf Help，修正后最多重试一次。
+3. 参数约束或 confirmation 不清楚：读取精确 leaf Schema，以 Runtime gate 为准。
+4. 认证、权限、profile 或 confirmation 错误：读取 `dingtalk-shared` 的对应 reference；正常 IM 不读取完整 shared Skill。
+5. `backend_dependency_unavailable`：保持原参数，对只读命令最多重试一次；不要改 flag、猜认证命令或切换同义原子命令，持续失败时保留 Trace ID。
+6. 其他错误：保留真实错误和已完成/失败项；不要连续尝试同义原子命令。

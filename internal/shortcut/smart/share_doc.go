@@ -17,6 +17,9 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -39,6 +42,31 @@ var ShareDoc = shortcut.Shortcut{
 		"内部先按姓名搜通讯录解析出唯一用户，再用 openDingTalkId 把链接拼成一条 Markdown 消息发出去，" +
 		"姓名匹配到多人时会列出候选让你区分。只发链接、不读取或改动文档本身，会真实发出消息。",
 	Risk: shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "doc",
+			Name:           "shortcut_share_doc",
+			CanonicalPath:  "doc.shortcut_share_doc",
+			CLIPath:        "doc +share-doc",
+			PrimaryCLIPath: "doc +share-doc",
+		},
+		Description: "按姓名把文档链接私信发给某人（自动解析 userId）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按姓名把文档链接私信发给某人（自动解析 userId）",
+			UseWhen:      []string{"当你手上已经有一个文档链接、想直接私信发给某个人而不必先查 userId 时使用；内部先按姓名搜通讯录解析出唯一用户，再用 openDingTalkId 把链接拼成一条 Markdown 消息发出去，姓名匹配到多人时会列出候选让你区分。只发链接、不读取或改动文档本身，会真实发出消息。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws doc +share-doc --to 张三 --url https://docs.dingtalk.com/xxx --note \"帮忙过一下\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "to", Type: shortcut.FlagString, Desc: "收件人姓名/花名", Required: true},
 		{Name: "url", Type: shortcut.FlagString, Desc: "文档链接", Required: true},
@@ -88,5 +116,6 @@ func shareDocBuildText(url, note string) string {
 }
 
 func init() {
-	shortcut.Register(ShareDoc)
+	canonicalizeShareDoc()
+	shortcut.Register(legacyShareDoc, ShareDoc)
 }

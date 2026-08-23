@@ -181,8 +181,8 @@ func TestCrossPlatformCoverageDriveTransferOwnerDeclined(t *testing.T) {
 	root.SetIn(strings.NewReader("no\n"))
 	err := executeGuardedMutationCommand(t, caller, func() *cobra.Command { return root },
 		"permission", "transfer-owner", "--node", "node-1", "--new-owner", "user-1")
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+		t.Fatalf("declined transfer error = %v, want 用户取消了操作", err)
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("declined calls = %#v", caller.calls)
@@ -206,8 +206,8 @@ func TestCrossPlatformCoverageDriveRevertDeclined(t *testing.T) {
 	root.SetIn(strings.NewReader("no\n"))
 	err := executeGuardedMutationCommand(t, caller, func() *cobra.Command { return root },
 		"revert", "--node", "node-1", "--version", "3")
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+		t.Fatalf("declined revert error = %v, want 用户取消了操作", err)
 	}
 	if len(caller.calls) != 0 {
 		t.Fatalf("declined revert calls = %#v", caller.calls)
@@ -217,7 +217,7 @@ func TestCrossPlatformCoverageDriveRevertDeclined(t *testing.T) {
 func TestCrossPlatformCoverageDriveTransferOwnerRejectsBothTargets(t *testing.T) {
 	caller := &guardedMutationCaller{}
 	err := executeGuardedMutationCommand(t, caller, newDriveCommand,
-		"permission", "transfer-owner", "--node", "node-1", "--workspace", "ws-1", "--new-owner", "user-1")
+		"permission", "transfer-owner", "--node", "node-1", "--workspace", "ws-1", "--new-owner", "user-1", "--yes")
 	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
 		t.Fatalf("err = %v, want mutual exclusion", err)
 	}

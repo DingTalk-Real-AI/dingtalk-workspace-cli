@@ -21,6 +21,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 func newTableCmds() []*cobra.Command {
@@ -55,6 +57,37 @@ func newTableCmds() []*cobra.Command {
 			return callMCPTool("table_get", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(tableGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "table_get",
+				CanonicalPath:  "sheet.table_get",
+				CLIPath:        "sheet table-get",
+				PrimaryCLIPath: "sheet table-get",
+				Aliases:        []string{"sheet table-read"},
+			},
+			Description: "读取结构化 table 区域数据。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "读取结构化 table 区域数据。",
+				UseWhen:      []string{"工作表内存在结构化 table，需要按 table 语义读取时"},
+				AvoidWhen:    []string{"普通单元格区域用 range read；AI 表格记录用 aitable record query"},
+				Examples:     []string{"dws sheet table-get --node <NODE_ID> --sheet-id <SHEET_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	tableGetCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	tableGetCmd.Flags().String("sheet-id", "", "工作表 ID 或名称")
 	tableGetCmd.Flags().String("range", "", "读取范围，A1 表示法；可带 sheet 前缀，如 Sheet1!A1:D10")
@@ -101,6 +134,38 @@ func newTableCmds() []*cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(tablePutCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "table_put",
+				CanonicalPath:  "sheet.table_put",
+				CLIPath:        "sheet table-put",
+				PrimaryCLIPath: "sheet table-put",
+				Aliases:        []string{"sheet table-write"},
+			},
+			Description: "写入一个或多个结构化 table。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "写入一个或多个结构化 table。",
+				UseWhen:      []string{"需要按结构化 table 协议写入表数据时"},
+				AvoidWhen:    []string{"普通区域写入用 range update/csv-put；AI 表格记录写入用 aitable record create"},
+				Examples:     []string{"dws sheet table-put --node NODE_ID --sheets '[{\"name\":\"Sheet1\",\"columns\":[\"name\"],\"data\":[[\"Alice\"]]}]'"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "sheets", InterfaceType: "array"},
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	tablePutCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	tablePutCmd.Flags().String("sheets", "", "sheet table JSON、@文件路径 或 - 表示 stdin (必填)")
 

@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -41,7 +43,7 @@ type RuntimeCompatibilityEquivalence struct {
 }
 
 var (
-	bindValidateParameterBindings  = ValidateEmbeddedSchemaParameterBindings
+	bindValidateParameterBindings  = ValidateSchemaParameterBindings
 	loadCompatibilityFlagContracts = effectiveCompatibilityFlagContracts
 	compatibilityParameterBindings = runtimeSchemaParameterBindingData
 )
@@ -158,6 +160,12 @@ func BindEffectiveCommandRegistry(root *cobra.Command, effective EffectiveComman
 		bound.ByCLIPath[item.PrimaryCLIPath] = item
 		for _, alias := range item.Aliases {
 			bound.ByCLIPath[alias] = item
+		}
+		// Index Contract-declared dry_run capabilities at bind time: every
+		// process that resolves the command tree gets the reviewed set, not
+		// only processes that also run Schema assembly.
+		if payload, ok := contractfinal.RuntimeContractFinal(item.PrimaryCommand); ok && payload.DryRun != nil {
+			recordDeclaredDryRunCapability(item.CanonicalPath, *payload.DryRun)
 		}
 	}
 	return bound, nil
@@ -284,6 +292,45 @@ func validateCompatibilityLeafContract(spec CommandSpec, primary, alias *cobra.C
 		spec.PrimaryCLIPath,
 		strings.Join(problems, "\n - "),
 	)
+}
+
+// filterSchemaAnnotations returns a copy of annotations without dws.schema.*
+// keys. Those are Schema-level metadata (contract.ParamDecl / AttachContract) that do not
+// affect command execution and are resolved through the shared assembly path.
+func filterSchemaAnnotations(annotations map[string][]string) map[string][]string {
+	if len(annotations) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(annotations))
+	for k, v := range annotations {
+		if !strings.HasPrefix(k, "dws.schema.") {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// requiredContractEquivalent compares two Required contracts, tolerating
+// NativeRequired / NativeRequiredWhen being present on one side but empty on
+// the other. This happens when a contract.ParamDecl annotation exists on the primary
+// command but not on its compatibility alias. Genuine drift (both non-empty
+// but different) is still caught.
+func requiredContractEquivalent(a, b compatibilityFlagRequiredContract) bool {
+	// Compare all fields except NativeRequired / NativeRequiredWhen strictly.
+	if a.CobraRequired != b.CobraRequired || a.UsageRequired != b.UsageRequired ||
+		a.UsageDefault != b.UsageDefault || a.MetadataRequired != b.MetadataRequired ||
+		a.MetadataRequiredWhen != b.MetadataRequiredWhen {
+		return false
+	}
+	// NativeRequired / NativeRequiredWhen: tolerate one-sided presence.
+	nativeEquiv := func(x, y string) bool {
+		return x == y || x == "" || y == ""
+	}
+	return nativeEquiv(a.NativeRequired, b.NativeRequired) &&
+		nativeEquiv(a.NativeRequiredWhen, b.NativeRequiredWhen)
 }
 
 func compatibilityHandlerContractProblems(primary, alias *cobra.Command) []string {
@@ -436,13 +483,19 @@ func compatibilityFlagContractProblems(canonicalPath string, primary, alias *cob
 		if primaryFlag.Origin != aliasFlag.Origin {
 			problems = append(problems, fmt.Sprintf("flag --%s local/persistent/inherited behavior differs: primary=%s compatibility=%s", name, primaryFlag.Origin, aliasFlag.Origin))
 		}
-		if !reflect.DeepEqual(primaryFlag.Required, aliasFlag.Required) {
+		if !requiredContractEquivalent(primaryFlag.Required, aliasFlag.Required) {
 			problems = append(problems, fmt.Sprintf("flag --%s required/required_when facts differ: primary=%s compatibility=%s",
 				name, compatibilityJSON(primaryFlag.Required), compatibilityJSON(aliasFlag.Required)))
 		}
-		if !reflect.DeepEqual(primaryFlag.Annotations, aliasFlag.Annotations) {
+		// Compare annotations excluding dws.schema.* keys: those are Schema-level
+		// metadata declarations (contract.ParamDecl / AttachContract) that do not affect
+		// command execution. The compatibility check verifies executable equivalence;
+		// Schema facts are resolved through the shared assembly path.
+		primaryExecAnnotations := filterSchemaAnnotations(primaryFlag.Annotations)
+		aliasExecAnnotations := filterSchemaAnnotations(aliasFlag.Annotations)
+		if !reflect.DeepEqual(primaryExecAnnotations, aliasExecAnnotations) {
 			problems = append(problems, fmt.Sprintf("flag --%s annotations differ: primary=%s compatibility=%s",
-				name, compatibilityJSON(primaryFlag.Annotations), compatibilityJSON(aliasFlag.Annotations)))
+				name, compatibilityJSON(primaryExecAnnotations), compatibilityJSON(aliasExecAnnotations)))
 		}
 	}
 	return problems, nil
@@ -510,14 +563,6 @@ func effectiveCompatibilityFlagContracts(command *cobra.Command, canonicalPath s
 // binding order-independent while still exposing path-specific drift.
 func effectiveCompatibilityFlagAnnotations(flag *pflag.Flag, bindings map[string]string, metadata RuntimeSchemaParameterMetadata) map[string][]string {
 	annotations := cloneCompatibilityFlagAnnotations(flag.Annotations)
-	// Reviewed Manual Schema hints are canonical ToolSpec projection inputs,
-	// not executable facts owned by each Cobra path. They are intentionally
-	// attached to and resolved from the primary command once; a compatibility
-	// leaf remains a navigation view of that same ToolSpec. Keep every other
-	// native/typed annotation in the equivalence check so real command drift
-	// still fails closed.
-	delete(annotations, runtimeSchemaManualParameterAnnotation)
-	delete(annotations, runtimeSchemaManualReasonAnnotation)
 	if len(annotations) == 0 {
 		annotations = nil
 	}
@@ -710,7 +755,7 @@ func canonicalCompatibilityGroups(groups [][]string) [][]string {
 	return canonical
 }
 
-func strictCompatibilityPositionals(command *cobra.Command) ([]RuntimeSchemaPositional, error) {
+func strictCompatibilityPositionals(command *cobra.Command) ([]contract.RuntimeSchemaPositional, error) {
 	if command == nil || command.Annotations == nil {
 		return nil, nil
 	}
@@ -718,7 +763,7 @@ func strictCompatibilityPositionals(command *cobra.Command) ([]RuntimeSchemaPosi
 	if raw == "" {
 		return nil, nil
 	}
-	var positionals []RuntimeSchemaPositional
+	var positionals []contract.RuntimeSchemaPositional
 	if err := decodeStrictSchemaJSON([]byte(raw), &positionals); err != nil {
 		return nil, err
 	}
@@ -839,11 +884,94 @@ func validateCommandRegistryAnnotation(command *cobra.Command, path string, spec
 			return fmt.Errorf("schema command registry %s path %q conflicts with native annotation %s", spec.CanonicalPath, path, nativeCanonical)
 		}
 	}
-	if manualProduct, manualTool, _, ok := runtimeManualSchemaIdentity(command); ok {
-		manualCanonical := strings.TrimSpace(manualProduct + "." + manualTool)
-		if manualCanonical != spec.CanonicalPath {
-			return fmt.Errorf("schema command registry %s path %q conflicts with reviewed manual identity %s", spec.CanonicalPath, path, manualCanonical)
+	// ContractFinal.Identity is the collected CommandSpec's own source: the
+	// reviewed registry is retired and the collector synthesises spec from
+	// this declaration, so the check below is a defensive self-consistency
+	// assertion (it catches stale specs and assembly bugs, not a second
+	// authority). The real cross-source drift anchors are the native
+	// annotation assertion above, the collector uniqueness/alias-conflict
+	// self-validation, the non-empty homology coverage check, and the
+	// surface/catalog hash baselines. Disagreement still fails closed.
+	if final, ok := contractfinal.RuntimeContractFinal(command); ok {
+		if final.Identity == nil {
+			return fmt.Errorf("schema command registry %s path %q has ContractFinal without Identity", spec.CanonicalPath, path)
+		}
+		if err := validateContractIdentityAgainstCommandSpec(*final.Identity, spec, path); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// validateContractIdentityAgainstCommandSpec requires declared Identity fields
+// to match the collected CommandSpec exactly. Since the spec is collected from
+// the same declaration, this is a self-consistency assertion, not a
+// cross-source pin. Empty optional fields (cli_name/group/source) are allowed
+// and filled from the bound entry at assembly; authored identity keys may not
+// drift.
+func validateContractIdentityAgainstCommandSpec(id contract.ToolIdentitySpec, spec CommandSpec, path string) error {
+	productID, toolName, ok := splitManualSchemaCanonicalPath(spec.CanonicalPath)
+	if !ok {
+		return fmt.Errorf("schema command registry %s path %q has invalid canonical path", spec.CanonicalPath, path)
+	}
+	mismatches := make([]string, 0, 8)
+	check := func(field, declared, bound string) {
+		declared = strings.TrimSpace(declared)
+		bound = strings.TrimSpace(bound)
+		if declared != bound {
+			mismatches = append(mismatches, fmt.Sprintf("%s: declared %q, collected %q", field, declared, bound))
+		}
+	}
+	check("product_id", id.ProductID, productID)
+	check("name", id.Name, toolName)
+	check("canonical_path", id.CanonicalPath, spec.CanonicalPath)
+	primary := strings.TrimSpace(spec.PrimaryCLIPath)
+	cliPath := strings.TrimSpace(id.CLIPath)
+	primaryDecl := strings.TrimSpace(id.PrimaryCLIPath)
+	if cliPath == "" {
+		cliPath = primaryDecl
+	}
+	if primaryDecl == "" {
+		primaryDecl = cliPath
+	}
+	check("cli_path", cliPath, primary)
+	check("primary_cli_path", primaryDecl, primary)
+	// Registry decode defaults empty source_product_id to product_id; Identity
+	// may omit it. Normalize both to "" when equal to product_id.
+	check("source_product_id", normalizeIdentitySourceProduct(id.SourceProductID, productID), normalizeIdentitySourceProduct(spec.SourceProductID, productID))
+	if !stringSlicesEqualAsSet(id.Aliases, spec.Aliases) {
+		mismatches = append(mismatches, fmt.Sprintf("aliases: declared %v, registry %v", id.Aliases, spec.Aliases))
+	}
+	if len(mismatches) > 0 {
+		sort.Strings(mismatches)
+		return fmt.Errorf("schema command registry %s path %q Contract.Identity mismatch: %s", spec.CanonicalPath, path, strings.Join(mismatches, "; "))
+	}
+	return nil
+}
+
+func stringSlicesEqualAsSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[string]int, len(a))
+	for _, v := range a {
+		counts[strings.TrimSpace(v)]++
+	}
+	for _, v := range b {
+		k := strings.TrimSpace(v)
+		counts[k]--
+		if counts[k] < 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeIdentitySourceProduct(sourceProductID, productID string) string {
+	sourceProductID = strings.TrimSpace(sourceProductID)
+	productID = strings.TrimSpace(productID)
+	if sourceProductID == "" || sourceProductID == productID {
+		return ""
+	}
+	return sourceProductID
 }

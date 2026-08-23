@@ -83,9 +83,9 @@ var (
 	// Layer A still validates their Cobra registration. Executing them here can
 	// trigger local setup, authentication, upgrades, or long-running consumers.
 	mockUnsupportedRoots = map[string]bool{
-		"api": true, "auth": true, "cache": true, "catalog": true,
+		"api": true, "auth": true, "catalog": true,
 		"completion": true, "config": true, "doctor": true, "event": true,
-		"mcp": true, "plugin": true, "profile": true, "recovery": true,
+		"mcp": true, "plugin": true, "profile": true,
 		"schema": true, "skill": true, "upgrade": true, "version": true,
 	}
 )

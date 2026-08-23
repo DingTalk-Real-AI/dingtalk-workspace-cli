@@ -13,23 +13,44 @@ metadata:
 
 ## 前置条件 — 执行操作前必读
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dws-shared`](../dws-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
+> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
 
 > 命令参考：[minutes.md](references/minutes.md)；剧本：[07-minutes.md](references/07-minutes.md)。
 
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcuts（无专用脚本/recipe 时优先）
 
-以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 leaf Schema（例如 `dws schema --cli-path "minutes +<shortcut>" --format json`），在当前 Cobra flags 不确定时读取 `dws minutes <shortcut> --help`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service minutes --format json` 批量发现。
+以下 shortcut 同时进入公开 catalog 与 Runtime Schema。先按本 skill 的意图表、脚本和 recipe 路由：存在精确覆盖该场景的专用脚本/recipe 时按其执行；否则用户意图命中时，shortcut 优先于手写原子命令。命令已选中时直接执行；只在参数或安全语义不确定时读取 Agent leaf Schema（例如 `dws schema --cli-path "minutes +<shortcut>" --compact --format json`），在当前 Cobra flags 不确定时读取 `dws minutes <shortcut> --help`。只有参数映射、接口绑定或 provenance 审计才省略 `--compact`。仅当现有路由和 reference 都无法定位低频能力时，才用 `dws shortcut list --service minutes --format json` 批量发现。
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws minutes +detail` | read | 一条命令聚合取一条妙记（听记）的多项产物（基础信息/摘要/关键词/逐字稿/待办） |
+| `dws minutes +action-items` | read | 读取指定或我最新一条听记中已抽取的行动项 |
+| `dws minutes +apply-permission` | write | 为当前用户申请语义化的听记访问权限 |
+| `dws minutes +detail` | read | 批量聚合听记基础信息、摘要、关键词、完整逐字稿和行动项，支持安全文件输出 |
+| `dws minutes +download` | read | 批量取得听记音视频地址并安全下载到本地 |
+| `dws minutes +export-pack` | read | 把完整听记产物写入受控目录并生成不含签名 URL 的 manifest |
+| `dws minutes +latest` | read | 取我最新的一条妙记（听记）详情 |
 | `dws minutes +list-all` | read | 查询我有权限访问的所有听记列表 |
 | `dws minutes +list-mine` | read | 查询我创建的听记列表 |
 | `dws minutes +list-shared` | read | 查询他人共享给我的听记列表 |
+| `dws minutes +mindmap` | write | 创建听记思维导图并轮询到明确成功、失败或超时 |
+| `dws minutes +prepare-asr` | write | 读取个人热词、计算差异、按需新增并可显式同步删除后读回验证 |
+| `dws minutes +record-pause` | write | 暂停听记录音 |
+| `dws minutes +record-resume` | write | 恢复听记录音 |
 | `dws minutes +record-start` | write | 发起听记（开始录音） |
-| `dws minutes +replace-batch` | write | 对一条妙记（听记）批量执行多组文字替换（原文=>替换） |
+| `dws minutes +record-stop` | write | 结束听记录音 |
+| `dws minutes +record-wrap-up` | write | 停止实时录音并有界等待听记产物，失败时保留恢复句柄 |
+| `dws minutes +replace-batch` | write | 预检并批量执行多组听记文字替换，逐项验证且失败必定非零 |
+| `dws minutes +search` | read | 按范围、标题关键词和时间搜索听记，支持安全全量翻页 |
+| `dws minutes +share` | write | 按成员逐项授予一个或多个听记权限，输出可审计的部分写入 ledger |
+| `dws minutes +speaker-insights` | write | 创建发言人段落总结并轮询结果，保留异步任务恢复句柄 |
+| `dws minutes +speaker-replace` | write | 预检逐字稿中的发言人昵称，替换后重新读回验证 |
+| `dws minutes +summary` | write | 读取当前纪要、校验图片引用、全量覆盖并读回验证 |
+| `dws minutes +transcript` | read | 读取指定或我最新一条听记的完整逐字稿，并交付分页完整性证据 |
+| `dws minutes +unshare` | write | 按成员逐项移除一个或多个听记权限，输出可审计的部分写入 ledger |
+| `dws minutes +update` | write | 读取现状、预览差异、更新听记标题并读回验证 |
+| `dws minutes +upload` | write | 把本地音视频完整上传并创建听记，失败时取消会话 |
+| `dws minutes +upload-and-analyze` | write | 本地音视频直传听记并等待分析产物，可选思维导图和发言人洞察 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## 意图表

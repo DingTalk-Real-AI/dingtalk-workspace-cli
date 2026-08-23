@@ -14,7 +14,9 @@
 package helpers
 
 import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/spf13/cobra"
 )
 
@@ -44,6 +46,20 @@ func (devHandler) Name() string {
 }
 
 func (devHandler) Command(runner executor.Runner) *cobra.Command {
+	// Product-level Agent routing Decl (migrated from selection/dev.json
+	// products.dev). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "dev",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "管理开放平台应用、权限、机器人、版本发布与本地连接器",
+			UseWhen: []string{
+				"创建/配置开放平台应用、机器人、权限、事件订阅或发布版本",
+			},
+			AvoidWhen: []string{
+				"只查开放平台文档用 devdoc；业务聊天/邮信用 chat/mail",
+			},
+		},
+	})
 	root := &cobra.Command{
 		Use:               "dev",
 		Short:             "开放平台开发者能力",
@@ -55,6 +71,7 @@ func (devHandler) Command(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
+	cmdutil.MarkGroup(root)
 
 	doc := &cobra.Command{
 		Use:               "doc",
@@ -66,7 +83,8 @@ func (devHandler) Command(runner executor.Runner) *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	doc.AddCommand(newDevdocArticleSearchCommand())
+	cmdutil.MarkGroup(doc)
+	doc.AddCommand(newDevDocSearchCommand(runner))
 
 	root.AddCommand(
 		newDevAppCommand(runner),

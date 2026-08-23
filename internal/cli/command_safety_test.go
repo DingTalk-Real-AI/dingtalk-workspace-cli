@@ -14,6 +14,8 @@
 package cli
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -34,6 +36,19 @@ func TestSafetyForCLIPathKnownCommand(t *testing.T) {
 	}
 	if !s.ShouldRender() {
 		t.Error("ShouldRender() = false for destructive/high/user_required; want true")
+	}
+}
+
+func TestCrossPlatformCoverageSafetyForCLIPathRegisteredFactory(t *testing.T) {
+	if !SchemaSourceRootRegistered() {
+		t.Fatal("package-cli TestMain must register a Schema source root")
+	}
+	s, ok := SafetyForCLIPath("dev app delete")
+	if !ok || s.Effect != "destructive" {
+		t.Fatalf("SafetyForCLIPath = %#v ok=%v", s, ok)
+	}
+	if _, ok := SafetyForCLIPath("nonexistent fake command"); ok {
+		t.Fatal("unknown path must return ok=false")
 	}
 }
 
@@ -67,6 +82,26 @@ func TestSafetyForCLIPathTrimsWhitespace(t *testing.T) {
 	if s1 != s2 {
 		t.Errorf("whitespace-trimmed result differs: %+v vs %+v", s1, s2)
 	}
+}
+
+func TestResolveMetaFailsClosedOnUnusableMetaIndex(t *testing.T) {
+	// Guard is unit-tested without poisoning the process-wide sync.Once used
+	// by the real embedded index. Decode failure must panic, not look like a
+	// missing CLI path (which would silently drop help Safety).
+	if _, err := decodeSchemaMetaIndexLookup([]byte(`{not-json`)); err == nil {
+		t.Fatal("decodeSchemaMetaIndexLookup(corrupt) error = nil, want fail-closed decode error")
+	}
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("panicIfMetaIndexUnusable(err) did not panic")
+		}
+		msg, _ := r.(string)
+		if msg == "" || !strings.Contains(msg, "schema CommandMeta index is unusable") {
+			t.Fatalf("panic = %#v, want unusable CommandMeta index message", r)
+		}
+	}()
+	panicIfMetaIndexUnusable(fmt.Errorf("decode schema meta index: unexpected EOF"))
 }
 
 func TestResolveMetaComplete(t *testing.T) {

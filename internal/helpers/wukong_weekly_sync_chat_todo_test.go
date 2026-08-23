@@ -69,12 +69,17 @@ func executeWukongWeeklySyncCommand(
 	deps.Out.errW = &stderr
 
 	root := build()
-	root.PersistentFlags().Bool("dry-run", false, "preview without executing")
-	root.PersistentFlags().Bool("yes", false, "confirm execution")
+	if root.PersistentFlags().Lookup("dry-run") == nil {
+		root.PersistentFlags().Bool("dry-run", false, "preview without executing")
+	}
+	if root.PersistentFlags().Lookup("yes") == nil {
+		root.PersistentFlags().Bool("yes", false, "confirm execution")
+	}
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
+	root.SetIn(strings.NewReader(""))
 	root.SetArgs(args)
 	err := root.Execute()
 	return stdout.String(), stderr.String(), err
@@ -111,8 +116,8 @@ func requireWukongWeeklySyncConfirmation(t *testing.T, err error) {
 func TestCrossPlatformCoverageWukongWeeklyChatCategoryQueries(t *testing.T) {
 	caller := &wukongWeeklySyncCaller{}
 	_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand, "category", "list-by-conv")
-	if err == nil || !strings.Contains(err.Error(), "flag --group is required") {
-		t.Fatalf("missing group error = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "missing required flag: --conversation-id") {
+		t.Fatalf("missing conversation ID error = %v", err)
 	}
 	requireWukongWeeklySyncNoCalls(t, caller)
 
@@ -161,6 +166,77 @@ func TestCrossPlatformCoverageWukongWeeklyChatCategoryQueries(t *testing.T) {
 		tool:   "get_conv_categories_info",
 		args:   map[string]any{"categoryIds": []int64{123, 456}},
 	})
+}
+
+func TestCrossPlatformCoverageChatDataAuthCrossOrgRequiresConfirmation(t *testing.T) {
+	caller := &wukongWeeklySyncCaller{}
+	_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
+		"data-auth", "cross-org", "--target-org-id", "439446171")
+	requireWukongWeeklySyncConfirmation(t, err)
+	requireWukongWeeklySyncNoCalls(t, caller)
+
+	caller = &wukongWeeklySyncCaller{}
+	_, _, err = executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
+		"data-auth", "cross-org", "--target-org-id", "439446171", "--yes")
+	if err != nil {
+		t.Fatalf("confirmed cross-org data auth returned error: %v", err)
+	}
+	requireWukongWeeklySyncCall(t, caller, wukongWeeklySyncCall{
+		server: "im",
+		tool:   "chat_permission_grant",
+		args: map[string]any{
+			"agentCode":     "wukong",
+			"grantCategory": "data",
+			"grantParams":   `{"targetOrgId":"439446171"}`,
+			"grantType":     "timed",
+			"scope":         "chat.data:cross-org",
+			"ttl":           "24h",
+		},
+	})
+	if _, ok := caller.calls[0].args["yes"]; ok {
+		t.Fatalf("confirmed payload leaked yes flag: %#v", caller.calls[0].args)
+	}
+}
+
+func TestCrossPlatformCoverageChatGroupShareInviteRequiresConfirmation(t *testing.T) {
+	caller := &wukongWeeklySyncCaller{}
+	_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
+		"group", "share-invite", "--target", "cid-target")
+	if err == nil || !strings.Contains(err.Error(), "source") {
+		t.Fatalf("missing source error = %v, want source", err)
+	}
+	requireWukongWeeklySyncNoCalls(t, caller)
+
+	caller = &wukongWeeklySyncCaller{}
+	_, _, err = executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
+		"group", "share-invite", "--source", "cid-source", "--target", "cid-target")
+	requireWukongWeeklySyncConfirmation(t, err)
+	requireWukongWeeklySyncNoCalls(t, caller)
+
+	caller = &wukongWeeklySyncCaller{}
+	_, _, err = executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
+		"group", "share-invite",
+		"--source", "cid-source",
+		"--target", "cid-target",
+		"--expires-seconds", "86400",
+		"--uuid", "invite-uuid",
+		"--yes")
+	if err != nil {
+		t.Fatalf("confirmed share-invite returned error: %v", err)
+	}
+	requireWukongWeeklySyncCall(t, caller, wukongWeeklySyncCall{
+		server: "im",
+		tool:   "share_group_invite_url",
+		args: map[string]any{
+			"expiresSeconds":           int64(86400),
+			"sourceOpenConversationId": "cid-source",
+			"targetOpenConversationId": "cid-target",
+			"uuid":                     "invite-uuid",
+		},
+	})
+	if _, ok := caller.calls[0].args["yes"]; ok {
+		t.Fatalf("confirmed payload leaked yes flag: %#v", caller.calls[0].args)
+	}
 }
 
 func TestCrossPlatformCoverageWukongWeeklyChatMessageEditValidation(t *testing.T) {
@@ -302,15 +378,15 @@ func TestCrossPlatformCoverageWukongWeeklyChatUpdateNickClearSemantics(t *testin
 	if findErr != nil {
 		t.Fatal(findErr)
 	}
-	if err := updateNick.RunE(updateNick, nil); err == nil || !strings.Contains(err.Error(), "--group") {
-		t.Fatalf("direct missing group error = %v", err)
+	if err := updateNick.RunE(updateNick, nil); err == nil || !strings.Contains(err.Error(), "--conversation-id") {
+		t.Fatalf("direct missing conversation-id error = %v", err)
 	}
 
 	caller := &wukongWeeklySyncCaller{}
 	_, _, err := executeWukongWeeklySyncCommand(t, "chat", caller, newChatCommand,
 		"group", "update-nick")
-	if err == nil || !strings.Contains(err.Error(), "group") {
-		t.Fatalf("missing group error = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "conversation-id") {
+		t.Fatalf("missing conversation-id error = %v", err)
 	}
 	requireWukongWeeklySyncNoCalls(t, caller)
 
@@ -347,8 +423,13 @@ func TestCrossPlatformCoverageWukongWeeklyChatUpgradeValidationAndSafety(t *test
 	if findErr != nil {
 		t.Fatal(findErr)
 	}
-	if err := upgrade.RunE(upgrade, nil); err == nil || !strings.Contains(err.Error(), "--group") {
-		t.Fatalf("direct missing group error = %v", err)
+	// Contract ConfirmSafety wraps RunE; skip it with --yes to exercise flag validation.
+	if upgrade.Flags().Lookup("yes") == nil {
+		upgrade.Flags().Bool("yes", false, "")
+	}
+	_ = upgrade.Flags().Set("yes", "true")
+	if err := upgrade.RunE(upgrade, nil); err == nil || !strings.Contains(err.Error(), "--conversation-id") {
+		t.Fatalf("direct missing conversation-id error = %v", err)
 	}
 
 	tests := []struct {
@@ -553,12 +634,12 @@ func TestCrossPlatformCoverageWukongWeeklyTodoTagValidation(t *testing.T) {
 		},
 		{
 			name:    "delete missing codes",
-			args:    []string{"tag", "delete"},
+			args:    []string{"tag", "delete", "--yes"},
 			wantErr: "--tag-codes",
 		},
 		{
 			name:    "delete blank codes",
-			args:    []string{"tag", "delete", "--tag-codes", ", ,"},
+			args:    []string{"tag", "delete", "--tag-codes", ", ,", "--yes"},
 			wantErr: "non-empty code",
 		},
 		{

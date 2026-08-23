@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +26,16 @@ func newRangeCmd() *cobra.Command {
   value           单元格值（内容由 --value-render-option 决定）
   dataValidation  数据验证配置（下拉列表/复选框），无则为 null
   hyperlink       单元格级超链接（path/sheet/range），无则省略
+顶层还会返回 rowIndices / colIndices 与完成度字段：
+  hasMore           目标范围是否还有未返回数据
+  truncationReasons 部分返回原因（max_cells）
+  resolvedRange     未传 --range 时底层解析出的完整目标范围
+  returnedRange     本次实际完整返回的范围
+
+单次最多返回 30,000 个单元格。hasMore=true 是部分成功，本命令
+不会自动续读；请结合目标范围和 returnedRange 从下一行显式传
+--range。收到 forbidden.document.sizeOverLimit 则表示工作簿整体无法装载，
+应创建更小副本或拆分工作簿，缩小 --range 不能解决。
 
 注意：range read/get 不返回合并单元格结构。查看合并范围请使用
 dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 mergedRanges。
@@ -69,6 +80,37 @@ dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 merg
 			return callMCPToolCellInfos(toolArgs)
 		},
 	}
+	DeclareLeafMetadata(rangeReadCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "range_read",
+				CanonicalPath:  "sheet.range_read",
+				CLIPath:        "sheet range read",
+				PrimaryCLIPath: "sheet range read",
+			},
+			Description: "读取工作表指定范围的单元格数据（可取格式化值/原始值/公式）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: the CLI calls sheet/get_cell_infos, which is absent from the pinned MCP metadata snapshot; the incompatible sheet/get_range contract must not be advertised.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "读取工作表指定范围的单元格数据（可取格式化值/原始值/公式）。",
+				UseWhen:      []string{"需要查看 axls 工作表内容或指定 A1 范围时；大表应限制 range"},
+				AvoidWhen:    []string{"搜索关键字用 sheet find；纯 CSV 文本导出区域用 sheet csv-get；本地 xlsx 用 doc download；AI 表格记录用 aitable record query"},
+				Examples:     []string{"dws sheet range read --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D10\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+				{Name: "value-render-option", Property: "valueRenderOption"},
+			},
+		},
+	})
 	rangeReadCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	rangeReadCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (不传则默认第一个工作表)")
 	rangeReadCmd.Flags().String("range", "", "读取范围，A1 表示法 (如 A1:D10，不传则读取全部数据)")
@@ -125,7 +167,12 @@ dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 merg
   2) {"dataValidation":{"type":"none"}}             → 显式清除该单元格 DV
   3) {"dataValidation":{"type":"dropdown",...}}     → 写新 dropdown（覆盖）
      {"dataValidation":{"type":"checkbox",...}}    → 写新 checkbox（覆盖）
-  dropdown: {"dataValidation":{"type":"dropdown","options":[{"value":"选项1"}],"enableMultiSelect":false}}
+  Inline dropdown:
+    {"dataValidation":{"type":"dropdown","options":[{"value":"选项1"}],"enableMultiSelect":false}}
+  SourceRange dropdown（同一工作簿内可跨工作表；不展开来源 values，不支持 colors）：
+    {"dataValidation":{"type":"dropdown","sourceRange":{"sheetId":"SOURCE_SHEET_ID","a1Notation":"T1:T3"},"enableMultiSelect":false}}
+  dropdown 的 options 与 sourceRange 必须且只能传一个。SourceRange 支持普通区域、整行和整列；
+  a1Notation 不带工作表前缀，来源工作表单独写在 sheetId。
   checkbox: {"dataValidation":{"type":"checkbox","checked":true}}
   可与 text/richText 共存，也可单独使用（如 {dataValidation:{type:"none"}} 仅清除 DV 不写值）
 
@@ -136,7 +183,9 @@ dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 merg
   - 写图片到单元格建议直接用 dws sheet write-image（更简洁）
   - 只设样式或批量刷整片区域样式请用 dws sheet range set-style；写值同时设置少量 cell 样式可用 cellStyles
   - 目标范围与已有合并区域冲突时，range update 会返回 MERGED_CELLS_CONFLICT；先用 sheet info 查看 mergedRanges，取消合并后写入，必要时再重新合并
-  - csv-put 的合并处理不同：目标区域含合并单元格时会打散合并并写入纯值
+  - csv-put 的合并处理不同：目标区域含合并单元格时会打散合并并写入 CSV 值或公式
+  - SourceRange 在已验证的重命名、引用前插入行/列、删除引用前行的场景会自动调整；move-dimension 及其他未覆盖的删除/移动场景后先回读 sourceRangeStatus，仅 invalid 时重新选源写入
+  - 同一 cell 的 value/style 已写入但 SourceRange 校验失败时，服务端可返回 success=true，并通过 message 明确下拉未创建；必须检查 message，必要时重新读取确认
   - 清空整片区域请用 dws sheet range clear`,
 		Example: `  # 写入文本
   dws sheet range update --node NODE_ID --sheet-id SHEET_ID --range "A1:B2" \
@@ -207,6 +256,37 @@ dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 merg
 			})
 		},
 	}
+	DeclareLeafMetadata(rangeUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "range_update",
+				CanonicalPath:  "sheet.range_update",
+				CLIPath:        "sheet range update",
+				PrimaryCLIPath: "sheet range update",
+			},
+			Description: "更新指定区域单元格（值/公式/超链接等 object 协议）；少量或需富格式时使用。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "update_range"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新指定区域单元格（值/公式/超链接等 object 协议）；少量或需富格式时使用。",
+				UseWhen:      []string{"需要写入少量单元格、公式对象、超链接或富格式，且能提供 sheetId 与精确 range 时"},
+				AvoidWhen:    []string{"CSV 形式的大批量值或公式写入优先 sheet csv-put；末尾追加行用 append；全局替换文本用 replace；只改样式用 range set-style；清整片区域用 range clear"},
+				Examples:     []string{"dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1\" --values '[[{\"type\":\"text\",\"text\":\"张三\"}]]'"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+				{Name: "range", Property: "rangeAddress"},
+			},
+		},
+	})
 	rangeUpdateCmd.Flags().String("node", "", "表格文档 ID (必填)")
 	rangeUpdateCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	rangeUpdateCmd.Flags().String("range", "", "目标单元格区域地址，如 A1:B3 (必填)")
@@ -246,6 +326,36 @@ dws sheet info --node NODE_ID --sheet-id SHEET_ID --format json，并读取 merg
 			return callMCPTool("clear_range", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(rangeClearCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "clear_range",
+				CanonicalPath:  "sheet.clear_range",
+				CLIPath:        "sheet range clear",
+				PrimaryCLIPath: "sheet range clear",
+			},
+			Description: "清除指定范围的内容、格式或全部（需确认后加 --yes）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "clear_range"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "清除指定范围的内容、格式或全部（需确认后加 --yes）。",
+				UseWhen:      []string{"需要清空一片区域且保留行列占位时"},
+				AvoidWhen:    []string{"要物理删除行列用 delete-dimension；删整张工作表用 delete-sheet；单格写空可用 range update 但整片清除应优先本命令"},
+				Examples:     []string{"dws sheet range clear --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B3\" --type content"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	rangeClearCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	rangeClearCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	rangeClearCmd.Flags().String("range", "", "清除范围，A1 表示法 (必填，如 A1:B3)")
@@ -289,6 +399,36 @@ column 使用字母列名（如 "A"、"B"、"AA"），表示排序的目标列�
 			return callMCPTool("sort_range", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(rangeSortCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "sort_range",
+				CanonicalPath:  "sheet.sort_range",
+				CLIPath:        "sheet range sort",
+				PrimaryCLIPath: "sheet range sort",
+			},
+			Description: "对指定区域排序（改变物理行序）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "sort_range"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "对指定区域排序（改变物理行序）。",
+				UseWhen:      []string{"需要按某列对一块矩形区域排序，且不依赖全局筛选时"},
+				AvoidWhen:    []string{"已有全局筛选时按筛选范围排序用 filter sort；不要用读出再写回模拟排序"},
+				Examples:     []string{"dws sheet range sort --node NODE_ID --sheet-id SHEET_ID --range A1:D10 --sort-keys '[{\"column\":\"A\",\"ascending\":true}]'"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	rangeSortCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	rangeSortCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	rangeSortCmd.Flags().String("range", "", "排序范围，A1 表示法 (必填，如 A1:D10)")
@@ -327,6 +467,37 @@ column 使用字母列名（如 "A"、"B"、"AA"），表示排序的目标列�
 			return callMCPTool("fill_range", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(rangeFillCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "fill_range",
+				CanonicalPath:  "sheet.fill_range",
+				CLIPath:        "sheet range fill",
+				PrimaryCLIPath: "sheet range fill",
+			},
+			Description: "按源区域对目标区域做自动填充（复制或序列）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "fill_range"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按源区域对目标区域做自动填充（复制或序列）。",
+				UseWhen:      []string{"需要像拖拽填充一样把源范围扩展到目标范围时"},
+				AvoidWhen:    []string{"直接写死值用 range update/csv-put；区域复制到另一位置用 range copy-to"},
+				Examples:     []string{"dws sheet range fill --node <NODE_ID> --sheet-id <SHEET_ID> --source-range \"A1:A5\" --target-range \"A6:A20\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+				{Name: "target-range", Property: "destinationRange"},
+			},
+		},
+	})
 	rangeFillCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	rangeFillCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	rangeFillCmd.Flags().String("source-range", "", "源数据范围，A1 表示法 (必填，如 A1:A5)")
@@ -369,6 +540,37 @@ column 使用字母列名（如 "A"、"B"、"AA"），表示排序的目标列�
 			return callMCPTool("copy_range", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(rangeCopyCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "range_copy_to",
+				CanonicalPath:  "sheet.range_copy_to",
+				CLIPath:        "sheet range copy-to",
+				PrimaryCLIPath: "sheet range copy-to",
+			},
+			Description: "将源范围复制到目标位置。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "copy_range"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "将源范围复制到目标位置。",
+				UseWhen:      []string{"需要把一块区域原样复制到另一位置（可跨工作表）时"},
+				AvoidWhen:    []string{"移动而不是复制用 range move-to；自动填充序列用 range fill"},
+				Examples:     []string{"dws sheet range copy-to --node NODE_ID --sheet-id SHEET_ID --source-range \"A1:C5\" --target-range \"E1\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+				{Name: "target-range", Property: "destinationRange"},
+			},
+		},
+	})
 	rangeCopyCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	rangeCopyCmd.Flags().String("sheet-id", "", "源工作表 ID 或名称 (必填)")
 	rangeCopyCmd.Flags().String("source-range", "", "源范围，A1 表示法 (必填，如 A1:C5)")
@@ -409,6 +611,37 @@ column 使用字母列名（如 "A"、"B"、"AA"），表示排序的目标列�
 			return callMCPTool("move_range", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(rangeMoveCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "range_move_to",
+				CanonicalPath:  "sheet.range_move_to",
+				CLIPath:        "sheet range move-to",
+				PrimaryCLIPath: "sheet range move-to",
+			},
+			Description: "将源范围移动到目标位置（需确认后加 --yes）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "move_range"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "将源范围移动到目标位置（需确认后加 --yes）。",
+				UseWhen:      []string{"需要把区域从源位置挪到目标位置且源处应腾空时"},
+				AvoidWhen:    []string{"只需复制保留源用 range copy-to；移动整行/整列用 move-dimension"},
+				Examples:     []string{"dws sheet range move-to --node NODE_ID --sheet-id SHEET_ID --source-range \"A1:C5\" --target-range \"E1\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+				{Name: "target-range", Property: "destinationRange"},
+			},
+		},
+	})
 	rangeMoveCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	rangeMoveCmd.Flags().String("sheet-id", "", "源工作表 ID 或名称 (必填)")
 	rangeMoveCmd.Flags().String("source-range", "", "源范围，A1 表示法 (必填，如 A1:C5)")

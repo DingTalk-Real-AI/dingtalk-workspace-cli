@@ -16,6 +16,9 @@ package smart
 import (
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -41,6 +44,31 @@ var Reschedule = shortcut.Shortcut{
 		"如果 eventId 查不到会直接报错，不会误改别的日程。" +
 		"会真实修改该日程的时间。",
 	Risk: shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_reschedule",
+			CanonicalPath:  "calendar.shortcut_reschedule",
+			CLIPath:        "calendar +reschedule",
+			PrimaryCLIPath: "calendar +reschedule",
+		},
+		Description: "改一个已有日程的时间（只动开始/结束时间，其他字段不变）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "改一个已有日程的时间（只动开始/结束时间，其他字段不变）",
+			UseWhen:      []string{"当你想把一个已经存在的日程改到新的时间段、又不想动标题/描述/参会人等其他内容时使用；内部先用 eventId 拉一次日程详情确认它真实存在，再只更新开始和结束时间。如果 eventId 查不到会直接报错，不会误改别的日程。会真实修改该日程的时间。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +reschedule --event EVENT_ID --start \"2026-03-10T15:00:00+08:00\" --end \"2026-03-10T16:00:00+08:00\""},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "event", Type: shortcut.FlagString, Desc: "要改期的日程 eventId（可用 dws calendar event list 查询）", Required: true},
 		{Name: "start", Type: shortcut.FlagString, Desc: "新的开始时间（ISO8601，如 2026-03-10T15:00:00+08:00）", Required: true},
@@ -59,27 +87,68 @@ var Reschedule = shortcut.Shortcut{
 		if start == "" || end == "" {
 			return apperrors.NewValidation("--start 与 --end 都必须提供（ISO8601 时间字符串）")
 		}
+		if err := calendarSmartValidateRange(start, end); err != nil {
+			return err
+		}
 
 		// Step 1 — confirm the event exists. eventId param copied verbatim from the
 		// helper's `event get` call site (get_calendar_detail).
-		if _, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{
+		preflight, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{
 			"eventId": eventID,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
+		}
+		if _, err := calendarSmartRequireEvent(preflight, "calendar/get_calendar_detail", eventID); err != nil {
+			return err
+		}
+		if rt.DryRun() {
+			return rt.Output(map[string]any{
+				"success":  true,
+				"dryRun":   true,
+				"executed": false,
+				"eventId":  eventID,
+				"start":    start,
+				"end":      end,
+			})
 		}
 
 		// Step 2 — update ONLY the time. eventId + startDateTime/endDateTime (ISO
 		// strings, not millis) copied verbatim from the helper's `event update`
 		// call site (update_calendar_event). No other field is passed, so nothing
 		// else on the event is changed.
-		return rt.CallMCP("update_calendar_event", map[string]any{
+		written, err := rt.CallMCPWriteDataStrict("calendar", "update_calendar_event", map[string]any{
 			"eventId":       eventID,
 			"startDateTime": start,
 			"endDateTime":   end,
+		})
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartWriteReceipt(written, "calendar/update_calendar_event"); err != nil {
+			return err
+		}
+		readback, err := rt.CallMCPData("calendar", "get_calendar_detail", map[string]any{"eventId": eventID})
+		if err != nil {
+			return err
+		}
+		event, err := calendarSmartRequireEvent(readback, "calendar/get_calendar_detail", eventID)
+		if err != nil {
+			return err
+		}
+		if err := calendarSmartVerifyEventTimes(event, start, end); err != nil {
+			return err
+		}
+		return rt.Output(map[string]any{
+			"success":  true,
+			"eventId":  eventID,
+			"verified": true,
+			"event":    event,
 		})
 	},
 }
 
 func init() {
+	finalizeCalendarSmart(&Reschedule, "已改期并通过精确时间读回验证的日程")
 	shortcut.Register(Reschedule)
 }

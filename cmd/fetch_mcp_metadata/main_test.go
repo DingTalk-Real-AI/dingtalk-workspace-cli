@@ -16,23 +16,65 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
+	"github.com/spf13/cobra"
 )
 
-func TestLoadRegistryInterfaceRefsUsesSplitRegistry(t *testing.T) {
+func TestCrossPlatformCoverageLoadRegistryInterfaceRefsCollectsIdentity(t *testing.T) {
 	var stderr bytes.Buffer
 	refs := loadRegistryInterfaceRefs(&stderr)
 	if len(refs) == 0 {
-		t.Fatal("loadRegistryInterfaceRefs() returned no reviewed commands")
+		t.Fatal("loadRegistryInterfaceRefs() returned no collected commands")
 	}
 
 	got, ok := refs["calendar.list_calendars"]
 	if !ok {
-		t.Fatal("calendar.list_calendars missing from reassembled split registry")
+		t.Fatal("calendar.list_calendars missing from collected command identity")
 	}
 	if got["product_id"] != "calendar" || got["rpc_name"] != "list_calendars" {
 		t.Fatalf("calendar.list_calendars ref = %#v", got)
+	}
+
+	direct, err := collectedIdentityInterfaceRefs()
+	if err != nil {
+		t.Fatalf("collectedIdentityInterfaceRefs() error = %v", err)
+	}
+	if len(direct) == 0 || direct["calendar.list_calendars"]["rpc_name"] != "list_calendars" {
+		t.Fatalf("collectedIdentityInterfaceRefs() = %#v", direct["calendar.list_calendars"])
+	}
+
+	prevRegistry := registrySource
+	prevCollect := collectIdentitySpecs
+	t.Cleanup(func() {
+		registrySource = prevRegistry
+		collectIdentitySpecs = prevCollect
+	})
+	registrySource = func() (map[string]map[string]string, error) {
+		return nil, errors.New("collect boom")
+	}
+	stderr.Reset()
+	if got := loadRegistryInterfaceRefs(&stderr); len(got) != 0 || !strings.Contains(stderr.String(), "cannot collect command identity") {
+		t.Fatalf("loadRegistryInterfaceRefs error path = %#v stderr=%q", got, stderr.String())
+	}
+
+	collectIdentitySpecs = func(*cobra.Command) ([]cli.CommandSpec, cli.IdentityCollectionReport, error) {
+		return nil, cli.IdentityCollectionReport{}, errors.New("walk boom")
+	}
+	if _, err := collectedIdentityInterfaceRefs(); err == nil || !strings.Contains(err.Error(), "collect command identity") {
+		t.Fatalf("collectedIdentityInterfaceRefs wrap error = %v", err)
+	}
+	collectIdentitySpecs = func(*cobra.Command) ([]cli.CommandSpec, cli.IdentityCollectionReport, error) {
+		return []cli.CommandSpec{
+			{CanonicalPath: ""},
+			{CanonicalPath: "nodot"},
+			{CanonicalPath: "doc.create"},
+		}, cli.IdentityCollectionReport{}, nil
+	}
+	gotRefs, err := collectedIdentityInterfaceRefs()
+	if err != nil || len(gotRefs) != 1 || gotRefs["doc.create"]["rpc_name"] != "create" {
+		t.Fatalf("collectedIdentityInterfaceRefs skip = %#v err=%v", gotRefs, err)
 	}
 }
 
@@ -91,8 +133,11 @@ func TestBuildCrossServerRefsSkipsMalformedRefs(t *testing.T) {
 }
 
 func TestRunRefreshesCrossServerTools(t *testing.T) {
-	registry := func() ([]byte, error) {
-		return []byte(`{"version":1,"products":[{"id":"aitable","tools":[{"canonical_path":"aitable.advperm_enable"},{"canonical_path":"aitable.advperm_disable"}]}]}`), nil
+	registry := func() (map[string]map[string]string, error) {
+		return map[string]map[string]string{
+			"aitable.advperm_enable":  {"product_id": "aitable", "rpc_name": "advperm_enable"},
+			"aitable.advperm_disable": {"product_id": "aitable", "rpc_name": "advperm_disable"},
+		}, nil
 	}
 	servers := []syncdata.ServerInfo{{ID: "aitable-helper", Endpoint: "https://helper.example"}}
 	lister := &fakeLister{
@@ -147,8 +192,10 @@ func TestRunRefreshesCrossServerTools(t *testing.T) {
 // 跨 server 身份时，另一 server 上恰好同名的工具不得直连覆盖其元数据——
 // 数据源只能是评审身份指向的 live 工具。
 func TestRunCrossOwnedCanonicalIgnoresNameCoincidence(t *testing.T) {
-	registry := func() ([]byte, error) {
-		return []byte(`{"version":1,"products":[{"id":"aitable","tools":[{"canonical_path":"aitable.advperm_enable"}]}]}`), nil
+	registry := func() (map[string]map[string]string, error) {
+		return map[string]map[string]string{
+			"aitable.advperm_enable": {"product_id": "aitable", "rpc_name": "advperm_enable"},
+		}, nil
 	}
 	servers := []syncdata.ServerInfo{
 		{ID: "aitable", Endpoint: "https://aitable.example"},
@@ -298,7 +345,7 @@ func (f *fakeLister) ListTools(_ context.Context, endpoint string) (transport.To
 }
 
 // stubDeps swaps every injection point for the duration of one test.
-func stubDeps(t *testing.T, token string, keychain func() (*auth.TokenData, error), servers []syncdata.ServerInfo, lister toolLister, registry func() ([]byte, error)) {
+func stubDeps(t *testing.T, token string, keychain func() (*auth.TokenData, error), servers []syncdata.ServerInfo, lister toolLister, registry func() (map[string]map[string]string, error)) {
 	t.Helper()
 	origGetenv, origLoad, origServers, origNew, origRegistry := getenv, loadTokenData, staticServers, newToolLister, registrySource
 	t.Cleanup(func() {
@@ -316,12 +363,32 @@ func stubDeps(t *testing.T, token string, keychain func() (*auth.TokenData, erro
 	registrySource = registry
 }
 
-func testRegistryJSON() ([]byte, error) {
-	return []byte(`{"version":1,"products":[{"id":"doc","tools":[{"canonical_path":"doc.copy_document"},{"canonical_path":"doc.get_document"},{"canonical_path":"bad-entry"}]}]}`), nil
+func testRegistryRefs() (map[string]map[string]string, error) {
+	return map[string]map[string]string{
+		"doc.copy_document": {"product_id": "doc", "rpc_name": "copy_document"},
+		"doc.get_document":  {"product_id": "doc", "rpc_name": "get_document"},
+	}, nil
+}
+
+func TestCrossPlatformCoverageRunRefusesRetiredPinnedMCPMetadataPath(t *testing.T) {
+	stubDeps(t, "env-token", nil, nil, &fakeLister{}, testRegistryRefs)
+	var stderr bytes.Buffer
+	code := run([]string{"--output", "internal/cli/schema_mcp_metadata.json"}, &stderr)
+	if code != 2 {
+		t.Fatalf("run(retired pin) = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "refusing to write retired Schema pin") {
+		t.Fatalf("stderr = %q, want retired-pin refusal", stderr.String())
+	}
+	if !retiredPinnedMCPMetadataPath("internal/cli/schema_mcp_metadata.json") ||
+		!retiredPinnedMCPMetadataPath("/tmp/repo/internal/cli/schema_mcp_metadata.json") ||
+		retiredPinnedMCPMetadataPath("artifacts/mcp_metadata_diagnostic.json") {
+		t.Fatal("retiredPinnedMCPMetadataPath classification is incorrect")
+	}
 }
 
 func TestRunNoTokenFails(t *testing.T) {
-	stubDeps(t, "", func() (*auth.TokenData, error) { return nil, errors.New("no keychain") }, nil, &fakeLister{}, testRegistryJSON)
+	stubDeps(t, "", func() (*auth.TokenData, error) { return nil, errors.New("no keychain") }, nil, &fakeLister{}, testRegistryRefs)
 	var stderr bytes.Buffer
 	if code := run(nil, &stderr); code != 1 {
 		t.Fatalf("run() = %d, want 1", code)
@@ -332,7 +399,7 @@ func TestRunNoTokenFails(t *testing.T) {
 }
 
 func TestRunInvalidFlagFails(t *testing.T) {
-	stubDeps(t, "tok", nil, nil, &fakeLister{}, testRegistryJSON)
+	stubDeps(t, "tok", nil, nil, &fakeLister{}, testRegistryRefs)
 	var stderr bytes.Buffer
 	if code := run([]string{"--nonexistent"}, &stderr); code != 2 {
 		t.Fatalf("run() = %d, want 2", code)
@@ -342,7 +409,7 @@ func TestRunInvalidFlagFails(t *testing.T) {
 func TestResolveTokenKeychainFallback(t *testing.T) {
 	stubDeps(t, "", func() (*auth.TokenData, error) {
 		return &auth.TokenData{AccessToken: "kc-token"}, nil
-	}, nil, &fakeLister{}, testRegistryJSON)
+	}, nil, &fakeLister{}, testRegistryRefs)
 	var stderr bytes.Buffer
 	if got := resolveToken(&stderr); got != "kc-token" {
 		t.Fatalf("resolveToken() = %q, want kc-token", got)
@@ -353,14 +420,14 @@ func TestResolveTokenKeychainFallback(t *testing.T) {
 }
 
 func TestResolveTokenEmptyKeychainToken(t *testing.T) {
-	stubDeps(t, "", func() (*auth.TokenData, error) { return &auth.TokenData{}, nil }, nil, &fakeLister{}, testRegistryJSON)
+	stubDeps(t, "", func() (*auth.TokenData, error) { return &auth.TokenData{}, nil }, nil, &fakeLister{}, testRegistryRefs)
 	var stderr bytes.Buffer
 	if got := resolveToken(&stderr); got != "" {
 		t.Fatalf("resolveToken() = %q, want empty", got)
 	}
 }
 
-func TestRunWritesSnapshotWithHonestCoverage(t *testing.T) {
+func TestCrossPlatformCoverageRunWritesSnapshotWithHonestCoverage(t *testing.T) {
 	servers := []syncdata.ServerInfo{
 		{ID: "doc", Endpoint: "https://doc.example"},
 		{ID: "sheet", Endpoint: "https://sheet.example"},
@@ -383,7 +450,7 @@ func TestRunWritesSnapshotWithHonestCoverage(t *testing.T) {
 		},
 		errs: map[string]error{"https://sheet.example": errors.New("boom")},
 	}
-	stubDeps(t, "env-token", nil, servers, lister, testRegistryJSON)
+	stubDeps(t, "env-token", nil, servers, lister, testRegistryRefs)
 
 	dir := t.TempDir()
 	output := filepath.Join(dir, "snapshot.json")
@@ -446,7 +513,7 @@ func TestRunWritesSnapshotWithHonestCoverage(t *testing.T) {
 }
 
 func TestRunIgnoresCorruptPreviousSnapshot(t *testing.T) {
-	stubDeps(t, "env-token", nil, nil, &fakeLister{}, testRegistryJSON)
+	stubDeps(t, "env-token", nil, nil, &fakeLister{}, testRegistryRefs)
 	output := filepath.Join(t.TempDir(), "snapshot.json")
 	if err := os.WriteFile(output, []byte("{corrupt"), 0o600); err != nil {
 		t.Fatal(err)
@@ -457,32 +524,20 @@ func TestRunIgnoresCorruptPreviousSnapshot(t *testing.T) {
 	}
 }
 
-func TestRunRegistryLoadFailureStillWritesStublessSnapshot(t *testing.T) {
-	stubDeps(t, "env-token", nil, nil, &fakeLister{}, func() ([]byte, error) { return nil, errors.New("no registry") })
+func TestCrossPlatformCoverageRunRegistryLoadFailureStillWritesStublessSnapshot(t *testing.T) {
+	stubDeps(t, "env-token", nil, nil, &fakeLister{}, func() (map[string]map[string]string, error) { return nil, errors.New("no identity") })
 	output := filepath.Join(t.TempDir(), "snapshot.json")
 	var stderr bytes.Buffer
 	if code := run([]string{"--output", output}, &stderr); code != 0 {
 		t.Fatalf("run() = %d, stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "cannot load registry") {
-		t.Fatalf("stderr = %q, want registry warning", stderr.String())
-	}
-}
-
-func TestRunUnparsableRegistryYieldsNoRefs(t *testing.T) {
-	var stderr bytes.Buffer
-	stubDeps(t, "env-token", nil, nil, &fakeLister{}, func() ([]byte, error) { return []byte("{bad"), nil })
-	if refs := loadRegistryInterfaceRefs(&stderr); len(refs) != 0 {
-		t.Fatalf("refs = %v, want empty for unparsable registry", refs)
-	}
-	// 解析失败必须有告警，不得静默产出空映射。
-	if !strings.Contains(stderr.String(), "cannot parse registry") {
-		t.Fatalf("stderr = %q, want parse warning", stderr.String())
+	if !strings.Contains(stderr.String(), "cannot collect command identity") {
+		t.Fatalf("stderr = %q, want identity collection warning", stderr.String())
 	}
 }
 
 func TestRunWriteFailure(t *testing.T) {
-	stubDeps(t, "env-token", nil, nil, &fakeLister{}, testRegistryJSON)
+	stubDeps(t, "env-token", nil, nil, &fakeLister{}, testRegistryRefs)
 	var stderr bytes.Buffer
 	badPath := filepath.Join(t.TempDir(), "missing-dir", "snapshot.json")
 	if code := run([]string{"--output", badPath}, &stderr); code != 1 {
@@ -498,7 +553,7 @@ func TestWriteMetadataMarshalFailure(t *testing.T) {
 }
 
 func TestMainDelegatesToRun(t *testing.T) {
-	stubDeps(t, "env-token", nil, nil, &fakeLister{}, testRegistryJSON)
+	stubDeps(t, "env-token", nil, nil, &fakeLister{}, testRegistryRefs)
 	origExit, origArgs := osExit, os.Args
 	t.Cleanup(func() { osExit, os.Args = origExit, origArgs })
 	exitCode := -1
@@ -519,14 +574,14 @@ func TestExtractParamsNilAndNonObjectSchemas(t *testing.T) {
 	}
 }
 
-func TestNewToolListerBuildsAuthedClient(t *testing.T) {
+func TestCrossPlatformCoverageNewToolListerBuildsAuthedClient(t *testing.T) {
 	if lister := newToolLister("tok"); lister == nil {
 		t.Fatal("newToolLister returned nil")
 	}
 }
 
 func TestRunRecordsSourceRevision(t *testing.T) {
-	stubDeps(t, "env-token", nil, nil, &fakeLister{}, testRegistryJSON)
+	stubDeps(t, "env-token", nil, nil, &fakeLister{}, testRegistryRefs)
 	dir := t.TempDir()
 	head := filepath.Join(dir, "HEAD")
 	if err := os.WriteFile(head, []byte("ref: refs/heads/feature\n"), 0o600); err != nil {

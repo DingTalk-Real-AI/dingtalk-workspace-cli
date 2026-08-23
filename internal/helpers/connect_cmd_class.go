@@ -144,7 +144,6 @@ var (
 		"clear":      {},
 		"refresh":    {},
 		"recover":    {},
-		"recovery":   {},
 		"login":      {},
 		"logout":     {},
 		"register":   {},

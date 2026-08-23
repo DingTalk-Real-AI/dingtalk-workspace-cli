@@ -331,10 +331,8 @@ func schemaOverviewPayloadFromCatalog(catalog map[string]any) map[string]any {
 	if source := schemaString(catalog["source"]); source != "" {
 		payload["source"] = source
 	}
-	for _, key := range []string{"interface_metadata", "agent_metadata"} {
-		if value, exists := catalog[key]; exists {
-			payload[key] = value
-		}
+	if value, exists := catalog["agent_metadata"]; exists {
+		payload["agent_metadata"] = value
 	}
 	return payload
 }

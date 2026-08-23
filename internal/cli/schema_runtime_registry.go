@@ -9,34 +9,30 @@ import (
 	"sort"
 	"strings"
 
-	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contractfinal"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
 type runtimeSchemaMetadataSources struct {
-	Agent embeddedAgentMetadata
-	MCP   embeddedMCPMetadata
+	// Agent remains only for historical test seams that still construct this
+	// struct; production assembly does not overlay Agent or MCP pin onto
+	// parameters or tool text.
+	Agent agentMetadata
 }
 
 var (
-	resolveApplyManualSchemaHints    = ApplyEmbeddedManualSchemaHints
 	resolveEffectiveCommandRegistry  = BuildEffectiveCommandRegistry
 	resolveBoundCommandRegistry      = BindEffectiveCommandRegistry
 	resolveAssembleSchemaRegistry    = AssembleSchemaRegistryFromBound
 	resolveValidateParameterDelivery = ValidateSchemaParameterBindingDelivery
-	assembleValidateBindings         = ValidateEmbeddedSchemaParameterBindings
+	assembleValidateBindings         = ValidateSchemaParameterBindings
 	assembleCollectEntries           = collectRuntimeSchemaEntriesFromBound
 	assembleRuntimeToolSpec          = runtimeToolSpecFromMetadata
 	assembleTypedRegistry            = SchemaRegistryFromRuntime
 	assembleMarshalRaw               = marshalSchemaRaw
-	resolveReviewedDryRun            = reviewedDryRunCapability
-	resolveRuntimeToolText           = runtimeToolTextMetadataFromMetadata
 	resolveRuntimeParameters         = runtimeCommandParameterSpecs
-	renderRegistrySnapshot           = SchemaRegistry.ToSnapshotPayload
-	renderRegistryPayload            = SchemaRegistry.ToPayload
-	renderRegistryProductSummary     = ProductSpec.ToSummaryPayload
-	renderRegistryToolPayload        = ToolSpec.ToPayload
-	renderRegistryToolSummary        = ToolSpec.ToSummaryPayload
 	finalSchemaAgentMetadata         = runtimeAgentMetadata
 )
 
@@ -68,24 +64,20 @@ func (resolved ResolvedSchemaBuild) CommandCount() int {
 	return len(resolved.effective.Commands)
 }
 
-func embeddedRuntimeSchemaMetadataSources() runtimeSchemaMetadataSources {
-	return runtimeSchemaMetadataSources{
-		Agent: runtimeAgentMetadata(),
-		MCP:   runtimeMCPMetadata(),
-	}
+func pinnedRuntimeSchemaMetadataSources() runtimeSchemaMetadataSources {
+	// Production pin and Agent inject are both retired; assembly is Contract /
+	// ParamDecl / Cobra only.
+	return runtimeSchemaMetadataSources{}
 }
 
 // ResolveSchemaBuild is the only assembly path from executable Cobra commands
-// and reviewed metadata into the typed Agent contract. It applies reviewed
-// manual annotations once, resolves identity once, binds Cobra once, and
-// assembles one SchemaRegistry. Catalog gates and serialization consume the
-// returned value directly; they never re-read annotations or merge sources.
+// and reviewed metadata into the typed Agent contract. It resolves identity
+// once, binds Cobra once, and assembles one SchemaRegistry from ContractFinal /
+// contract.ProductDecl leaf declarations. Catalog gates and serialization consume the
+// returned value directly; they never re-read overlays or merge sources.
 func ResolveSchemaBuild(root *cobra.Command) (ResolvedSchemaBuild, error) {
 	if root == nil {
 		return ResolvedSchemaBuild{}, fmt.Errorf("resolve Schema build: root is nil")
-	}
-	if _, err := resolveApplyManualSchemaHints(root); err != nil {
-		return ResolvedSchemaBuild{}, fmt.Errorf("apply reviewed manual Schema hints: %w", err)
 	}
 	effective, err := resolveEffectiveCommandRegistry(root)
 	if err != nil {
@@ -107,8 +99,8 @@ func ResolveSchemaBuild(root *cobra.Command) (ResolvedSchemaBuild, error) {
 	}, nil
 }
 
-// AssembleSchemaRegistry is retained for non-Catalog callers that only need
-// the typed registry. Catalog production must use ResolveSchemaBuild so the
+// AssembleSchemaRegistry is a test/homology gate entry that only needs the
+// typed registry. Catalog production must use ResolveSchemaBuild so the
 // bound/effective views remain attached to the exact same resolution pass.
 func AssembleSchemaRegistry(root *cobra.Command) (SchemaRegistry, error) {
 	resolved, err := ResolveSchemaBuild(root)
@@ -128,9 +120,12 @@ func AssembleSchemaRegistryFromBound(bound BoundCommandRegistry) (SchemaRegistry
 	if err := assembleValidateBindings(); err != nil {
 		return SchemaRegistry{}, fmt.Errorf("validate reviewed Schema parameter bindings: %w", err)
 	}
-	return assembleSchemaRegistryFromBound(bound, embeddedRuntimeSchemaMetadataSources())
+	return assembleSchemaRegistryFromBound(bound, pinnedRuntimeSchemaMetadataSources())
 }
 
+// assembleSchemaRegistryFromBound resolves every entry through the
+// ContractFinal / ProductDecl production path. Missing declarations fail
+// closed; retired skill/MCP-pin/agent-inject overlays are never reopened.
 func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtimeSchemaMetadataSources) (SchemaRegistry, error) {
 	entries, err := assembleCollectEntries(bound)
 	if err != nil {
@@ -144,7 +139,10 @@ func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtim
 		}
 		product := byProduct[entry.ProductID]
 		if product == nil {
-			selection, provenance, _ := agentProductContractForIDsFromMetadata(metadata.Agent, entry.ProductID, entry.SourceProductID)
+			selection, provenance, err := assembleProductSelection(entry)
+			if err != nil {
+				return SchemaRegistry{}, err
+			}
 			product = &ProductSpec{
 				ID:              entry.ProductID,
 				Name:            entry.ProductName,
@@ -171,11 +169,10 @@ func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtim
 	if err != nil {
 		return SchemaRegistry{}, fmt.Errorf("build typed Schema registry: %w", err)
 	}
-	registry.InterfaceMetadata, err = assembleMarshalRaw(interfaceMetadataSummaryFrom(metadata.MCP))
-	if err != nil {
-		return SchemaRegistry{}, fmt.Errorf("encode interface metadata summary: %w", err)
-	}
-	registry.AgentMetadata, err = assembleMarshalRaw(agentMetadataSummaryFrom(metadata.Agent))
+	// Derive Agent metadata summary from the assembled ContractFinal /
+	// ProductDecl surface so runtime delivery and cmd_schema_catalog dumps
+	// share one Catalog blob (inject remains validation-only for the dump).
+	registry.AgentMetadata, err = assembleMarshalRaw(agentMetadataSummaryFromProducts(products))
 	if err != nil {
 		return SchemaRegistry{}, fmt.Errorf("encode Agent metadata summary: %w", err)
 	}
@@ -183,82 +180,335 @@ func assembleSchemaRegistryFromBound(bound BoundCommandRegistry, metadata runtim
 }
 
 func runtimeToolSpecFromMetadata(entry runtimeSchemaEntry, metadata runtimeSchemaMetadataSources) (ToolSpec, error) {
+	if final, ok := contractfinal.RuntimeContractFinal(entry.Command); ok {
+		return runtimeToolSpecFromContractFinal(entry, final, metadata)
+	}
 	canonicalPath := entry.ProductID + "." + entry.ToolName
-	dryRun, err := resolveReviewedDryRun(canonicalPath)
-	if err != nil {
-		return ToolSpec{}, fmt.Errorf("resolve reviewed dry-run capability for %s: %w", canonicalPath, err)
+	return ToolSpec{}, fmt.Errorf("assemble Schema tool %s: missing RuntimeContractFinal (legacy skill/MCP/agent-metadata assembly is retired)", canonicalPath)
+}
+
+// assembleProductSelection requires ProductDecl: the legacy agent-product
+// JSON overlay is retired, so a missing declaration fails closed.
+func assembleProductSelection(entry runtimeSchemaEntry) (contract.SelectionSpec, map[string]contract.FieldProvenance, error) {
+	if decl, ok := contract.LookupProductDecl(entry.ProductID); ok {
+		selection, provenance := contract.ProductSelectionFromDecl(decl)
+		return selection, provenance, nil
 	}
-	hint := runtimeSchemaHintForEntry(entry)
-	embeddedMeta, hasEmbeddedMeta := embeddedMCPMetadataForEntryFrom(entry, metadata.Agent, metadata.MCP)
-	title, description, metadataSource, textProvenance, err := resolveRuntimeToolText(entry, metadata)
-	if err != nil {
-		return ToolSpec{}, fmt.Errorf("resolve Schema text metadata for %s: %w", canonicalPath, err)
-	}
+	return contract.SelectionSpec{}, nil, fmt.Errorf("assemble Schema product %q: missing ProductDecl (legacy agent-metadata product selection is retired)", entry.ProductID)
+}
+
+// runtimeToolSpecFromContractFinal pass-throughs Contract-authored Schema fields.
+// Declared values are the final data source; hints/registry text does not merge.
+// MCP pin is retired: interface_type / interface_* facts come from ParamDecl /
+// native annotations only.
+func runtimeToolSpecFromContractFinal(entry runtimeSchemaEntry, final contract.ContractFinalPayload, metadata runtimeSchemaMetadataSources) (ToolSpec, error) {
+	_ = metadata // reserved for historical assemble seams; no overlay sources remain
+	canonicalPath := entry.ProductID + "." + entry.ToolName
 	constraints := runtimeCommandConstraints(entry.Command)
-	parameters, err := resolveRuntimeParameters(entry.Command, canonicalPath, hint.Parameters, embeddedMeta.Parameters, constraints)
+	// Apply parameter declarations from the contract.ContractFinalPayload before the
+	// resolver reads them. The decls were put there by AttachContract at
+	// DeclareLeafMetadata time; now that all flags exist on the fully-built
+	// command tree, they can be emitted as dws.schema.* annotations.
+	if err := ApplyParamDecls(entry.Command, final.Parameters); err != nil {
+		return ToolSpec{}, fmt.Errorf("apply Contract Schema ParamDecls for %s: %w", canonicalPath, err)
+	}
+	parameters, err := resolveRuntimeParameters(entry.Command, canonicalPath, constraints)
 	if err != nil {
-		return ToolSpec{}, fmt.Errorf("resolve Schema parameters for %s: %w", canonicalPath, err)
+		return ToolSpec{}, fmt.Errorf("resolve Contract Schema parameters for %s: %w", canonicalPath, err)
 	}
 
-	paths := []string{entry.PrimaryCLIPath, entry.CLIPath, canonicalPath}
-	paths = append(paths, entry.Aliases...)
-	safety, interfaceSpec, selection, provenance, _ := agentToolContractForPathsFromMetadata(metadata.Agent, paths...)
-	if metadataSource == "" && hasEmbeddedMeta {
-		metadataSource = "embedded-mcp-metadata"
-		textProvenance["metadata_source"] = runtimeSchemaFieldProvenance(
-			runtimeSchemaStringCandidate(metadataSource, "metadata_source_resolution"),
-		)
+	identity := contract.ToolIdentitySpec{
+		ProductID:       entry.ProductID,
+		SourceProductID: strings.TrimSpace(entry.SourceProductID),
+		Name:            entry.ToolName,
+		CLIName:         entry.CLIName,
+		CanonicalPath:   canonicalPath,
+		Path:            canonicalPath,
+		CLIPath:         entry.CLIPath,
+		PrimaryCLIPath:  entry.PrimaryCLIPath,
+		Group:           entry.Group,
+		Aliases:         append([]string(nil), entry.Aliases...),
+		IsAlias:         false,
+		Source:          entry.Source,
 	}
-	if provenance == nil {
-		provenance = map[string]FieldProvenance{}
+	if final.Identity != nil {
+		if err := validateContractFinalIdentity(entry, *final.Identity, canonicalPath); err != nil {
+			return ToolSpec{}, err
+		}
+		id := *final.Identity
+		if id.ProductID != "" {
+			identity.ProductID = id.ProductID
+		}
+		if id.SourceProductID != "" {
+			identity.SourceProductID = id.SourceProductID
+		}
+		if id.Name != "" {
+			identity.Name = id.Name
+		}
+		if id.CLIName != "" {
+			identity.CLIName = id.CLIName
+		}
+		if id.CanonicalPath != "" {
+			identity.CanonicalPath = id.CanonicalPath
+			identity.Path = id.CanonicalPath
+		}
+		if id.CLIPath != "" {
+			identity.CLIPath = id.CLIPath
+		}
+		if id.PrimaryCLIPath != "" {
+			identity.PrimaryCLIPath = id.PrimaryCLIPath
+		}
+		if id.Group != "" {
+			identity.Group = id.Group
+		}
+		if len(id.Aliases) > 0 {
+			identity.Aliases = append([]string(nil), id.Aliases...)
+		}
+		if id.Source != "" {
+			identity.Source = id.Source
+		}
 	}
-	for field, fieldProvenance := range textProvenance {
-		provenance[field] = fieldProvenance
-	}
-	provenance["canonical_path"] = entry.IdentityField
-	if dryRun != nil {
-		provenance["dry_run"] = resolvedFieldProvenance(
-			*dryRun,
-			"reviewed_dry_run_registry",
-			"internal/cli/schema_dry_run_capabilities.go",
-			"reviewed_explicit",
-			"exact_canonical_lookup",
-			"reviewed positive dry-run capability",
-		)
+	if identity.SourceProductID == identity.ProductID {
+		identity.SourceProductID = ""
 	}
 
-	sourceProductID := strings.TrimSpace(entry.SourceProductID)
-	if sourceProductID == entry.ProductID {
-		sourceProductID = ""
+	// Text delivery: Cobra Long wins over declared Contract.Description when
+	// present (declared Description is mandatory and often a one-line restatement).
+	// Declared Title wins over Short. Provenance must name the real winner.
+	title, titleProv := contractFinalTextProvenance(
+		strings.TrimSpace(final.Title),
+		strings.TrimSpace(entry.Command.Short),
+		false, // prefer declared
+	)
+	description, descriptionProv := contractFinalTextProvenance(
+		strings.TrimSpace(final.Description),
+		strings.TrimSpace(entry.Command.Long),
+		true, // prefer cobra help
+	)
+
+	safety := contract.SafetySpec{}
+	if final.Safety != nil {
+		safety = *final.Safety
+	} else if risk, ok := RuntimeContractRisk(entry.Command); ok {
+		safety = applyContractRiskToSafety(safety, risk)
+	} else if gate, ok := RuntimeContractGate(entry.Command); ok {
+		safety = applyContractGateToSafety(safety, gate)
 	}
+
+	positionals := final.Positionals
+	if len(positionals) == 0 {
+		positionals = runtimeCommandPositionals(entry.Command)
+	}
+
+	var interfaceSpec contract.InterfaceSpec
+	if final.Interface != nil {
+		interfaceSpec = *final.Interface
+	}
+	var selection contract.SelectionSpec
+	if final.Selection != nil {
+		if final.Selection.Reviewed != nil {
+			return ToolSpec{}, fmt.Errorf("contract final selection for %s must not carry reviewed field: declaration is the final source", canonicalPath)
+		}
+		selection = *final.Selection
+	}
+	// Declared selection provenance metadata: the declaration lives in reviewed
+	// source code, so the catalog keeps the same uniform agent_* shape across
+	// all tools. Reviewed is assembly-derived (declarations are code-reviewed
+	// by construction), never author-provided.
+	if strings.TrimSpace(selection.AgentSummarySource) == "" && strings.TrimSpace(selection.AgentSummary) != "" {
+		selection.AgentSummarySource = "corecmd.ContractDecl"
+	}
+	if selection.SourceRefs == nil {
+		selection.SourceRefs = []string{"corecmd.ContractDecl"}
+	}
+	if strings.TrimSpace(selection.MetadataSource) == "" {
+		selection.MetadataSource = "corecmd.contract"
+	}
+	if selection.Reviewed == nil {
+		reviewed := true
+		selection.Reviewed = &reviewed
+	}
+	// Example dispositions control only the policy gate's execution eligibility.
+	// They remain on ContractFinal for BuildAgentExampleExecutionPlan and are not
+	// part of the public ToolSpec / Schema wire contract.
+	selection.ExampleDispositions = nil
+
+	provenance := contractFinalProvenance(identity, title, description, titleProv, descriptionProv, safety, interfaceSpec, selection, final.DryRun)
+
+	result, pagination := final.Result, final.Pagination
+	if !output.UsesUnifiedResult(entry.Command) {
+		// ResultSpec describes the unified envelope data value and PaginationSpec
+		// describes meta.pagination. Keep both declarations internal while a
+		// command still emits legacy bytes or only shadow-validates the new
+		// contract; publishing them early makes Schema disagree with runtime.
+		result, pagination = nil, nil
+	}
+
 	return ToolSpecFromRuntime(RuntimeToolSpecInput{
-		Identity: ToolIdentitySpec{
-			ProductID:       entry.ProductID,
-			SourceProductID: sourceProductID,
-			Name:            entry.ToolName,
-			CLIName:         entry.CLIName,
-			CanonicalPath:   canonicalPath,
-			Path:            canonicalPath,
-			CLIPath:         entry.CLIPath,
-			PrimaryCLIPath:  entry.PrimaryCLIPath,
-			Group:           entry.Group,
-			Aliases:         append([]string(nil), entry.Aliases...),
-			IsAlias:         false,
-			Source:          entry.Source,
-		},
+		Identity:        identity,
 		Display:         entry.ProductName,
 		Title:           title,
 		Description:     description,
-		MetadataSource:  metadataSource,
+		MetadataSource:  "corecmd.contract",
 		Parameters:      parameters,
 		Constraints:     constraints,
-		Positionals:     runtimeCommandPositionals(entry.Command),
-		DryRun:          dryRun,
+		Positionals:     positionals,
+		DryRun:          final.DryRun,
+		Result:          result,
+		Pagination:      pagination,
 		Safety:          safety,
 		Interface:       interfaceSpec,
 		Selection:       selection,
 		FieldProvenance: provenance,
 	})
+}
+
+// contractFinalTextProvenance picks delivered title/description text and the
+// provenance that matches the real winner. preferCobra=true implements the
+// Long-over-declared-Description rule; preferCobra=false keeps declared Title
+// over Short.
+func contractFinalTextProvenance(declared, cobra string, preferCobra bool) (string, contract.FieldProvenance) {
+	decl := strings.TrimSpace(declared)
+	help := strings.TrimSpace(cobra)
+	switch {
+	case preferCobra && help != "":
+		return help, resolvedFieldProvenance(
+			help, "cobra_help", "cobra_help", "cobra_help",
+			"cobra_help_preferred", "Cobra Long preferred over ContractDecl text",
+		)
+	case decl != "":
+		return decl, resolvedFieldProvenance(
+			decl, "corecmd.contract", "corecmd.ContractDecl", "contract_final",
+			"contract_pass_through", "Contract final Schema pass-through",
+		)
+	case help != "":
+		return help, resolvedFieldProvenance(
+			help, "cobra_help", "cobra_help", "cobra_help",
+			"cobra_help_fallback", "Cobra Long fallback when ContractDecl text is empty",
+		)
+	default:
+		// Keep a winner even when both sides are empty so the final-delivery
+		// provenance gate (winner value == delivered value) still holds.
+		return "", resolvedFieldProvenance(
+			"", "corecmd.contract", "corecmd.ContractDecl", "contract_final",
+			"contract_pass_through", "Contract final Schema pass-through",
+		)
+	}
+}
+
+// contractFinalProvenance records one pass-through winner per delivered field.
+// The final Schema provenance gate requires a winner for every required tool
+// field (safety/interface/agent_summary unconditionally, selection slices and
+// dry_run when present), so declared leaves must emit the full set, not only
+// the fields they happened to author. Title/description provenance must match
+// the real text winner (cobra_help vs contract_final).
+func contractFinalProvenance(identity contract.ToolIdentitySpec, title, description string, titleProv, descriptionProv contract.FieldProvenance, safety contract.SafetySpec, iface contract.InterfaceSpec, selection contract.SelectionSpec, dryRun *contract.DryRunSpec) map[string]contract.FieldProvenance {
+	prov := func(value any, sourceRef string) contract.FieldProvenance {
+		return resolvedFieldProvenance(
+			value,
+			"corecmd.contract",
+			sourceRef,
+			"contract_final",
+			"contract_pass_through",
+			"Contract final Schema pass-through",
+		)
+	}
+	out := map[string]contract.FieldProvenance{
+		"canonical_path":  prov(identity.CanonicalPath, "corecmd.ContractDecl"),
+		"title":           titleProv,
+		"description":     descriptionProv,
+		"metadata_source": prov("corecmd.contract", "corecmd.ContractDecl"),
+		"effect":          prov(safety.Effect, "corecmd.ContractDecl"),
+		"risk":            prov(safety.Risk, "corecmd.ContractDecl"),
+		"confirmation":    prov(safety.Confirmation, "corecmd.ContractDecl"),
+		"idempotency":     prov(safety.Idempotency, "corecmd.ContractDecl"),
+		"interface_mode":  prov(iface.Mode, "corecmd.ContractDecl"),
+		"availability":    prov(iface.Availability, "corecmd.ContractDecl"),
+		"agent_summary":   prov(selection.AgentSummary, "corecmd.ContractDecl"),
+	}
+	var ref any
+	if iface.Ref != nil {
+		ref = *iface.Ref
+	}
+	out["interface_ref"] = prov(ref, "corecmd.ContractDecl")
+	if strings.TrimSpace(iface.Reason) != "" ||
+		strings.TrimSpace(iface.Mode) == contract.InterfaceModeComposite ||
+		strings.TrimSpace(iface.Availability) == contract.InterfaceUnavailable {
+		out["interface_reason"] = prov(iface.Reason, "corecmd.ContractDecl")
+	}
+	for field, values := range map[string][]string{
+		"use_when":      selection.UseWhen,
+		"avoid_when":    selection.AvoidWhen,
+		"prerequisites": selection.Prerequisites,
+		"tips":          selection.Tips,
+		"workflow_refs": selection.WorkflowRefs,
+		"examples":      selection.Examples,
+	} {
+		if values != nil {
+			out[field] = prov(values, "corecmd.ContractDecl")
+		}
+	}
+	if selection.Reviewed != nil {
+		out["reviewed"] = prov(*selection.Reviewed, "corecmd.ContractDecl")
+	}
+	if dryRun != nil {
+		out["dry_run"] = prov(*dryRun, "corecmd.ContractDecl")
+	}
+	return out
+}
+
+// validateContractFinalIdentity guards the pass-through contract: on a bound
+// (managed) leaf, a declared identity must agree with the bound tree entry.
+// Otherwise the Schema catalog would publish an identity the registry never
+// indexed. Registry-owned keys are compared exactly (including empty aliases);
+// optional derived fields (cli_name/group/source) still fail only when
+// non-empty and disagreeing.
+func validateContractFinalIdentity(entry runtimeSchemaEntry, id contract.ToolIdentitySpec, canonicalPath string) error {
+	mismatches := make([]string, 0, 10)
+	checkExact := func(field, declared, bound string) {
+		declared = strings.TrimSpace(declared)
+		bound = strings.TrimSpace(bound)
+		if declared != bound {
+			mismatches = append(mismatches, fmt.Sprintf("%s: declared %q, bound %q", field, declared, bound))
+		}
+	}
+	checkOptional := func(field, declared, bound string) {
+		declared = strings.TrimSpace(declared)
+		if declared != "" && declared != strings.TrimSpace(bound) {
+			mismatches = append(mismatches, fmt.Sprintf("%s: declared %q, bound %q", field, declared, bound))
+		}
+	}
+	checkExact("product_id", id.ProductID, entry.ProductID)
+	checkExact("name", id.Name, entry.ToolName)
+	checkExact("canonical_path", id.CanonicalPath, canonicalPath)
+	cliPath := strings.TrimSpace(id.CLIPath)
+	primary := strings.TrimSpace(id.PrimaryCLIPath)
+	if cliPath == "" {
+		cliPath = primary
+	}
+	if primary == "" {
+		primary = cliPath
+	}
+	checkExact("cli_path", cliPath, entry.CLIPath)
+	checkExact("primary_cli_path", primary, entry.PrimaryCLIPath)
+	// Empty / product-equal source_product_id are equivalent (registry decode
+	// defaults omitted source to product_id; Contract may omit it).
+	checkExact(
+		"source_product_id",
+		normalizeIdentitySourceProduct(id.SourceProductID, entry.ProductID),
+		normalizeIdentitySourceProduct(entry.SourceProductID, entry.ProductID),
+	)
+	checkOptional("cli_name", id.CLIName, entry.CLIName)
+	checkOptional("group", id.Group, entry.Group)
+	checkOptional("source", id.Source, entry.Source)
+	if !stringSlicesEqualAsSet(id.Aliases, entry.Aliases) {
+		mismatches = append(mismatches, fmt.Sprintf("aliases: declared %v, bound %v", id.Aliases, entry.Aliases))
+	}
+	if len(mismatches) > 0 {
+		sort.Strings(mismatches)
+		return fmt.Errorf("contract final identity mismatch for %s: %s", canonicalPath, strings.Join(mismatches, "; "))
+	}
+	return nil
 }
 
 func marshalSchemaRaw(value any) (json.RawMessage, error) {
@@ -267,74 +517,6 @@ func marshalSchemaRaw(value any) (json.RawMessage, error) {
 		return nil, err
 	}
 	return json.RawMessage(data), nil
-}
-
-func runtimeSchemaPayloadFromRegistry(registry SchemaRegistry, args []string) (map[string]any, error) {
-	index, err := registry.Index()
-	if err != nil {
-		return nil, err
-	}
-	registry = index.Registry()
-	if len(args) == 0 {
-		snapshot, err := renderRegistrySnapshot(registry)
-		if err != nil {
-			return nil, err
-		}
-		return snapshot.Catalog, nil
-	}
-
-	raw := strings.TrimSpace(args[0])
-	if tool, ok := index.ResolveQuery(raw); ok {
-		tool = schemaToolForResolvedPath(tool, raw)
-		return renderRegistryToolPayload(tool)
-	}
-	tokens := splitSchemaPathTokens(raw)
-	if len(tokens) == 1 {
-		if product, ok := index.Product(tokens[0]); ok {
-			payload, err := renderRegistryProductSummary(product)
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{
-				"kind":    "schema",
-				"level":   "product",
-				"count":   len(product.Tools),
-				"product": payload,
-				"source":  registry.Source,
-			}, nil
-		}
-	}
-	if len(tokens) > 1 {
-		path := strings.Join(tokens, " ")
-		if product, ok := index.Product(tokens[0]); ok {
-			tools := make([]map[string]any, 0)
-			for _, tool := range product.Tools {
-				if !schemaToolUnderGroup(tool, path) {
-					continue
-				}
-				summary, summaryErr := renderRegistryToolSummary(tool)
-				if summaryErr != nil {
-					return nil, summaryErr
-				}
-				tools = append(tools, summary)
-			}
-			if len(tools) > 0 {
-				return map[string]any{
-					"kind":   "schema",
-					"level":  "group",
-					"path":   path,
-					"count":  len(tools),
-					"tools":  tools,
-					"source": registry.Source,
-				}, nil
-			}
-		}
-	}
-	return nil, apperrors.NewValidation("unknown runtime schema path " + strconvQuote(raw))
-}
-
-func runtimeSchemaAllPayloadFromRegistry(registry SchemaRegistry) (map[string]any, error) {
-	return renderRegistryPayload(registry)
 }
 
 func schemaToolForResolvedPath(tool ToolSpec, raw string) ToolSpec {
@@ -380,7 +562,13 @@ func validateSchemaRegistryAgainstCommandRegistry(registry SchemaRegistry, comma
 	if got, want := len(index.CanonicalPaths()), len(publicCommands); got != want {
 		return fmt.Errorf("typed Schema registry contains %d canonical tools, reviewed CommandRegistry contains %d", got, want)
 	}
-	for canonical, expected := range publicCommands {
+	canonicals := make([]string, 0, len(publicCommands))
+	for canonical := range publicCommands {
+		canonicals = append(canonicals, canonical)
+	}
+	sort.Strings(canonicals)
+	for _, canonical := range canonicals {
+		expected := publicCommands[canonical]
 		tool, ok := index.Resolve(canonical)
 		if !ok {
 			return fmt.Errorf("reviewed CommandRegistry canonical %s is missing from typed Schema registry", canonical)
@@ -414,12 +602,33 @@ func validateSchemaRegistryAgainstCommandRegistry(registry SchemaRegistry, comma
 // validateSchemaRegistryAgentMetadata compares exact canonical sets after
 // resolving generated metadata keys through the same SchemaIndex. Counts alone
 // cannot detect one missing tool being masked by one duplicate alias.
+//
+// When Agent metadata is not injected (shipped runtime / live assembly without
+// the Catalog generator), the retired embed is empty. In that mode validate that
+// every assembled tool already carries selection prose from ContractFinal
+// instead of reopening schema_agent_metadata/.
 func validateSchemaRegistryAgentMetadata(registry SchemaRegistry) error {
 	index, err := registry.Index()
 	if err != nil {
 		return err
 	}
 	metadata := finalSchemaAgentMetadata()
+	if len(metadata.Tools) == 0 {
+		var problems []string
+		for _, canonical := range index.CanonicalPaths() {
+			// CanonicalPaths is derived from the same index Resolve reads, so a
+			// miss is impossible for a consistent SchemaIndex.
+			tool, _ := index.Resolve(canonical)
+			if strings.TrimSpace(tool.Selection.AgentSummary) == "" {
+				problems = append(problems, fmt.Sprintf("final Schema tool %s has no agent_summary without injected Agent metadata", canonical))
+			}
+		}
+		if len(problems) > 0 {
+			sort.Strings(problems)
+			return fmt.Errorf("%s", strings.Join(problems, "; "))
+		}
+		return nil
+	}
 	resolved := make(map[string]string, len(metadata.Tools))
 	var problems []string
 	keys := make([]string, 0, len(metadata.Tools))
@@ -457,7 +666,7 @@ func validateSchemaRegistryAgentMetadata(registry SchemaRegistry) error {
 // per-field equality invariant itself is enforced by ToolSpec.Validate.
 func validateFinalSchemaProvenanceCoverage(registry SchemaRegistry) error {
 	var problems []string
-	require := func(owner, field string, provenance map[string]FieldProvenance) {
+	require := func(owner, field string, provenance map[string]contract.FieldProvenance) {
 		if _, ok := provenance[field]; !ok {
 			problems = append(problems, fmt.Sprintf("Schema %s has no provenance for %s", owner, field))
 		}
@@ -489,8 +698,8 @@ func validateFinalSchemaProvenanceCoverage(registry SchemaRegistry) error {
 			// local available command with no reason has no resolver winner to
 			// invent; unavailable/composite commands fail closed without one.
 			if strings.TrimSpace(tool.Interface.Reason) != "" ||
-				strings.TrimSpace(tool.Interface.Mode) == InterfaceModeComposite ||
-				strings.TrimSpace(tool.Interface.Availability) == InterfaceUnavailable {
+				strings.TrimSpace(tool.Interface.Mode) == contract.InterfaceModeComposite ||
+				strings.TrimSpace(tool.Interface.Availability) == contract.InterfaceUnavailable {
 				require("tool "+canonical, "interface_reason", tool.FieldProvenance)
 			}
 			selectionValues := map[string][]string{

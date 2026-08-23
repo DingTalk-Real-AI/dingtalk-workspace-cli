@@ -21,6 +21,28 @@ func TestCrossPlatformCoverageSafeResourceQueryDownloadsStayReadOnly(t *testing.
 	}
 }
 
+func TestCrossPlatformCoverageAtMeEmptyResultKeepsMessagesAndItemsIterable(t *testing.T) {
+	caller := &platformCoverageCaller{}
+	helpers.InitDeps(caller)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{"chat", "+at-me", "--format", "json"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, output.String())
+	}
+	for _, key := range []string{"messages", "items"} {
+		rows, ok := payload[key].([]any)
+		if !ok || len(rows) != 0 {
+			t.Fatalf("%s = %#v, want empty array", key, payload[key])
+		}
+	}
+}
+
 func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t *testing.T) {
 	message := `{"openMessageId":"msg","openConversationId":"cid","content":"{\"mediaId\":\"@image\"}","quotedMessage":{"openMessageId":"quoted","content":"{\"fileId\":\"@quoted-file\"}"}}`
 	tests := []struct {
@@ -34,7 +56,7 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 			name:      "chat messages",
 			tool:      "chat/list_conversation_message_v2",
 			response:  `{"result":{"messages":[` + message + `]}}`,
-			args:      []string{"chat", "+chat-messages", "--group", "cid"},
+			args:      []string{"chat", "+chat-messages", "--conversation-id", "cid"},
 			resultKey: "messages",
 		},
 		{
@@ -102,7 +124,7 @@ func TestCrossPlatformCoverageMessageReadShortcutsPublishResourceDownloadPlans(t
 
 func TestCrossPlatformCoverageMessageReadShortcutResourceOutputValidation(t *testing.T) {
 	for _, args := range [][]string{
-		{"chat", "+chat-messages", "--group", "cid"},
+		{"chat", "+chat-messages", "--conversation-id", "cid"},
 		{"chat", "+search-msg", "--query", "x", "--no-enrich"},
 		{"chat", "+at-me"},
 		{"chat", "+thread-replies", "--group", "cid", "--thread-id", "thread"},
@@ -121,7 +143,7 @@ func TestCrossPlatformCoverageChatMessagesDefaultsToRecentHistory(t *testing.T) 
 	helpers.InitDeps(caller)
 	root := newPlatformCoverageRoot()
 	before := time.Now().Add(-2 * time.Second)
-	root.SetArgs([]string{"chat", "+chat-messages", "--group", "cid", "--limit", "5"})
+	root.SetArgs([]string{"chat", "+chat-messages", "--conversation-id", "cid", "--limit", "5"})
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +168,7 @@ func TestCrossPlatformCoverageChatMessagesDefaultsToRecentHistory(t *testing.T) 
 	}
 }
 
-func TestFormatDingTalkMessageBoundaryDoesNotDependOnProcessTimezone(t *testing.T) {
+func TestCrossPlatformCoverageFormatDingTalkMessageBoundaryDoesNotDependOnProcessTimezone(t *testing.T) {
 	now := time.Date(2026, time.July, 29, 1, 2, 3, 0, time.UTC)
 	if got := formatDingTalkMessageBoundary(now); got != "2026-07-29 09:02:03" {
 		t.Fatalf("UTC process boundary = %q, want DingTalk UTC+8 wall time", got)
@@ -159,7 +181,7 @@ func TestCrossPlatformCoverageChatMessagesPreservesExplicitTime(t *testing.T) {
 	root := newPlatformCoverageRoot()
 	root.SetArgs([]string{
 		"chat", "+chat-messages",
-		"--group", "cid",
+		"--conversation-id", "cid",
 		"--time", "2026-07-01 12:34:56",
 		"--yes",
 	})
@@ -211,7 +233,7 @@ func TestCrossPlatformCoverageSearchMsgFlattensRealGroupedResponse(t *testing.T)
 	if _, mutated := original["openConversationId"]; mutated {
 		t.Fatalf("source message mutated: %#v", original)
 	}
-	if searchMsgChildMap(map[string]any{"result": "invalid"}, "result") != nil {
+	if searchMsgItems(map[string]any{"result": "invalid"}) != nil {
 		t.Fatal("non-map child was accepted")
 	}
 }

@@ -9,6 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 )
 
 func TestCrossPlatformCoverageFlagInfoFromCommandIncludesLocalInheritedAndAnnotations(t *testing.T) {
@@ -49,8 +51,7 @@ func TestCrossPlatformCoverageFlagInfoFromCommandIncludesLocalInheritedAndAnnota
 }
 
 func TestCrossPlatformCoverageRunPreParseGuardAndTraversalBranches(t *testing.T) {
-	previousArgs := os.Args
-	t.Cleanup(func() { os.Args = previousArgs })
+	testseam.Protect(t, &os.Args)
 	root := &cobra.Command{Use: "root"}
 	root.AddCommand(&cobra.Command{Use: "flagless"})
 
@@ -70,8 +71,7 @@ func TestCrossPlatformCoverageRunPreParseGuardAndTraversalBranches(t *testing.T)
 }
 
 func TestCrossPlatformCoverageRunPreParseAppliesCorrectionsOnlyOnSuccess(t *testing.T) {
-	previousArgs := os.Args
-	t.Cleanup(func() { os.Args = previousArgs })
+	testseam.Protect(t, &os.Args)
 
 	buildRoot := func() (*cobra.Command, *string) {
 		root := &cobra.Command{Use: "root", SilenceErrors: true, SilenceUsage: true}

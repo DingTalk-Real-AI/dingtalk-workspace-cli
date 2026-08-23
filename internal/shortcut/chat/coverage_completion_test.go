@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -91,6 +93,62 @@ func TestCrossPlatformCoverageConversationAndGroupListExecution(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageConversationListFailureBoundaries(t *testing.T) {
+	for _, tail := range [][]string{
+		{"--limit", "0"},
+		{"--limit", "101"},
+		{"--page-limit", "2"},
+		{"--page-all", "--page-limit", "0"},
+		{"--page-all", "--page-limit", "501"},
+	} {
+		root := newPlatformCoverageRoot()
+		root.SetArgs(append([]string{"chat", "+conversation-list"}, tail...))
+		if err := root.Execute(); err == nil {
+			t.Errorf("invalid conversation args succeeded: %v", tail)
+		}
+	}
+
+	for _, tc := range []struct {
+		name      string
+		caller    *larkAlignmentCaller
+		args      []string
+		wantError bool
+	}{
+		{name: "first read failure", caller: &larkAlignmentCaller{failProductTool: "im/list_all_conversations"}, wantError: true},
+		{name: "later read failure", caller: &larkAlignmentCaller{
+			sequenceResponses: map[string][]string{"im/list_all_conversations": {`{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}},
+			failProductToolAt: map[string]int{"im/list_all_conversations": 2},
+		}, args: []string{"--page-all"}},
+		{name: "missing pagination", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[]}}`}}},
+		{name: "invalid cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":"bad"}}`}}},
+		{name: "stalled cursor", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}}, args: []string{"--page-all", "--cursor", "2"}},
+		{name: "page limit", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_all_conversations": `{"result":{"conversationList":[],"hasMore":true,"nextCursor":2}}`}}, args: []string{"--page-all", "--page-limit", "1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			helpers.InitDeps(tc.caller)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(append([]string{"chat", "+conversation-list"}, tc.args...))
+			err := root.Execute()
+			if (err != nil) != tc.wantError {
+				t.Fatalf("error = %v, wantError=%v", err, tc.wantError)
+			}
+		})
+	}
+
+	for value, want := range map[any]int64{int(1): 1, int64(2): 2, float64(3): 3, "4": 4} {
+		got, err := conversationPaginationCursor(value)
+		if err != nil || got != want {
+			t.Fatalf("cursor %#v = %d, %v; want %d", value, got, err, want)
+		}
+	}
+	if _, err := conversationPaginationCursor(struct{}{}); err == nil {
+		t.Fatal("unsupported cursor unexpectedly accepted")
+	}
+	if got := unwrapConversationTuple(nil); got != nil {
+		t.Fatalf("empty tuple = %#v", got)
+	}
+}
+
 func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -98,6 +156,12 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 		args      []string
 		wantError string
 	}{
+		{
+			name:      "owner query resolution",
+			caller:    &larkAlignmentCaller{failProductTool: "contact/search_contact_by_key_word"},
+			args:      []string{"chat", "+chat-create", "--name", "群", "--users", "u1", "--owner-query", "群主", "--yes"},
+			wantError: "fixture lower call failed",
+		},
 		{
 			name:      "current profile call",
 			caller:    &larkAlignmentCaller{failProductTool: "contact/get_current_user_profile"},
@@ -152,6 +216,18 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 			args:      []string{"chat", "+feed-group-query-item", "--category-id", "1", "--conversation-ids", "cid"},
 			wantError: "fixture lower call failed",
 		},
+		{
+			name:      "chat update resolution",
+			caller:    &larkAlignmentCaller{responses: map[string]string{"im/search_groups": `{"result":[]}`}},
+			args:      []string{"chat", "+chat-update", "--group", "missing", "--name", "新群", "--yes"},
+			wantError: "没有找到",
+		},
+		{
+			name:      "reply write",
+			caller:    &larkAlignmentCaller{failProductTool: "chat/send_personal_message"},
+			args:      []string{"chat", "+messages-reply", "--conversation-id", "cid", "--message-id", "msg", "--ref-sender", fixtureCurrentDOpenID, "--text", "收到", "--yes"},
+			wantError: "fixture lower call failed",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -176,6 +252,27 @@ func TestCrossPlatformCoverageChatCreateAndReplyFailures(t *testing.T) {
 		dry.calls[0].tool != "get_current_user_profile" ||
 		dry.calls[1].tool != "create_group_conversation" {
 		t.Fatalf("chat-create dry-run calls = %#v", dry.calls)
+	}
+
+	external := &larkAlignmentCaller{responses: map[string]string{
+		"contact/search_contact_by_key_word": `{"result":[{"name":"外部联系人","openDingTalkId":"D-external"}]}`,
+	}}
+	helpers.InitDeps(external)
+	root = newPlatformCoverageRoot()
+	root.SetArgs([]string{"chat", "+chat-create", "--name", "群", "--owner-open-dingtalk-id", fixtureCurrentDOpenID, "--member-query", "外部联系人", "--yes"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCrossPlatformCoverageNaturalGroupReadFailures(t *testing.T) {
+	for _, command := range []string{"+chat-invite-url", "+chat-bots"} {
+		helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{"im/search_groups": `{"result":[]}`}})
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", command, "--group", "missing"})
+		if err := root.Execute(); err == nil {
+			t.Errorf("%s missing natural group unexpectedly resolved", command)
+		}
 	}
 }
 
@@ -219,7 +316,7 @@ func TestCrossPlatformCoverageFlagAndMgetValidation(t *testing.T) {
 	cases := [][]string{
 		{"chat", "+flag-create", "--message-ids", strings.Join(tooMany, ","), "--conversation-id", "cid", "--yes"},
 		{"chat", "+flag-list", "--cursor", "-1"},
-		{"chat", "+flag-list", "--size", "101"},
+		{"chat", "+flag-list", "--size", "31"},
 		{"chat", "+messages-mget", "--msg-ids", strings.Join(makeIDs(51), ",")},
 		{"chat", "+messages-mget", "--msg-ids", "msg", "--download-resources", "--output-dir", "../escape"},
 	}
@@ -237,6 +334,47 @@ func TestCrossPlatformCoverageFlagAndMgetValidation(t *testing.T) {
 	root.SetArgs([]string{"chat", "+messages-mget", "--msg-ids", "msg", "--yes"})
 	if err := root.Execute(); err == nil {
 		t.Fatal("mget lower error was swallowed")
+	}
+}
+
+func TestCrossPlatformCoverageRecallCardAndLedgerBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		caller *larkAlignmentCaller
+		args   []string
+	}{
+		{name: "multiple recall ids", caller: &larkAlignmentCaller{}, args: []string{"chat", "+messages-recall", "--message-ids", "m1,m2", "--yes"}},
+		{name: "recall lookup failure", caller: &larkAlignmentCaller{failProductTool: "im/list_messages_by_ids"}, args: []string{"chat", "+messages-recall", "--msg-id", "m1", "--yes"}},
+		{name: "recall lookup empty", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_messages_by_ids": `{"result":[]}`}}, args: []string{"chat", "+messages-recall", "--msg-id", "m1", "--yes"}},
+		{name: "recall lookup missing conversation", caller: &larkAlignmentCaller{responses: map[string]string{"im/list_messages_by_ids": `{"result":[{"openMessageId":"m1"}]}`}}, args: []string{"chat", "+messages-recall", "--msg-id", "m1", "--yes"}},
+		{name: "card status low", caller: &larkAlignmentCaller{}, args: []string{"chat", "+messages-update-card", "--biz-id", "b", "--content", "x", "--flow-status", "0", "--yes"}},
+		{name: "card status high", caller: &larkAlignmentCaller{}, args: []string{"chat", "+messages-update-card", "--biz-id", "b", "--content", "x", "--flow-status", "6", "--yes"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			helpers.InitDeps(tc.caller)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tc.args)
+			if err := root.Execute(); err == nil {
+				t.Fatal("failure boundary unexpectedly succeeded")
+			}
+		})
+	}
+
+	helpers.InitDeps(&larkAlignmentCaller{responses: map[string]string{
+		"im/update_streaming_card": `{"result":{"updated":true}}`,
+	}})
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{"chat", "+messages-update-card", "--biz-id", "b", "--content", "x", "--flow-status", "3", "--yes"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+
+	for value, want := range map[any]int{
+		int(1): 1, int32(2): 2, int64(3): 3, float32(4): 4, float64(5): 5, "bad": 0,
+	} {
+		if got := messageLedgerInt(value); got != want {
+			t.Fatalf("messageLedgerInt(%#v) = %d, want %d", value, got, want)
+		}
 	}
 }
 
@@ -262,17 +400,17 @@ func TestCrossPlatformCoverageUnifiedSendValidationMatrix(t *testing.T) {
 	cases := [][]string{
 		{"--identity", "user", "--group", "cid", "--users", "u1", "--text", "x"},
 		{"--identity", "user", "--text", "x"},
-		{"--identity", "user", "--group", "cid", "--open-dingtalk-id", "D1", "--text", "x"},
+		{"--identity", "user", "--group", "cid", "--open-dingtalk-id", fixtureCurrentDOpenID, "--text", "x"},
 		{"--identity", "user", "--group", "cid", "--at-user-ids", "u1", "--text", "x"},
-		{"--identity", "user", "--open-dingtalk-id", "D1", "--at-all", "--text", "x"},
+		{"--identity", "user", "--open-dingtalk-id", fixtureCurrentDOpenID, "--at-all", "--text", "x"},
 		{"--identity", "bot", "--group", "cid", "--text", "x"},
 		{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--users", "u1", "--text", "x"},
-		{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--open-dingtalk-id", "D1", "--text", "x"},
+		{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--open-dingtalk-id", fixtureCurrentDOpenID, "--text", "x"},
 		{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--at-mobiles", "13800000000", "--text", "x"},
 		{"--identity", "bot", "--robot-code", "r", "--users", "u1", "--at-user-ids", "u2", "--text", "x"},
 		{"--identity", "webhook", "--text", "x"},
 		{"--identity", "webhook", "--webhook-token", "token", "--group", "cid", "--text", "x"},
-		{"--identity", "webhook", "--webhook-token", "token", "--at-open-dingtalk-ids", "D1", "--text", "x"},
+		{"--identity", "webhook", "--webhook-token", "token", "--at-open-dingtalk-ids", fixtureCurrentDOpenID, "--text", "x"},
 		{"--identity", "webhook", "--webhook-token", "token", "--uuid", "key", "--text", "x"},
 	}
 	for _, tail := range cases {
@@ -299,23 +437,23 @@ func TestCrossPlatformCoverageUnifiedSendOptionalArgumentsAndErrors(t *testing.T
 	}{
 		{
 			name: "user group mentions",
-			args: []string{"--identity", "user", "--group", "cid", "--text", "x", "--at-open-dingtalk-ids", "D1,D2", "--at-all"},
-			want: map[string]any{"atOpenDingTalkIds": []string{"D1", "D2"}, "atAll": true},
+			args: []string{"--identity", "user", "--group", "cid", "--text", "@" + fixtureCurrentDOpenID + " <@" + fixtureCurrentDOpenID2 + "> x", "--at-open-dingtalk-ids", fixtureCurrentDOpenID + "," + fixtureCurrentDOpenID2, "--at-all"},
+			want: map[string]any{"atOpenDingTalkIds": []string{fixtureCurrentDOpenID, fixtureCurrentDOpenID2}, "atAll": true},
 		},
 		{
 			name: "user direct",
-			args: []string{"--identity", "user", "--open-dingtalk-id", "D1", "--text", "x"},
-			want: map[string]any{"receiverOpenDingTalkId": "D1"},
+			args: []string{"--identity", "user", "--open-dingtalk-id", fixtureCurrentDOpenID, "--text", "x"},
+			want: map[string]any{"receiverOpenDingTalkId": fixtureCurrentDOpenID},
 		},
 		{
 			name: "bot group mentions",
-			args: []string{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--text", "x", "--at-user-ids", "u1", "--at-open-dingtalk-ids", "D1"},
-			want: map[string]any{"atUserIds": []string{"u1"}, "atOpendingtalkIds": []string{"D1"}},
+			args: []string{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--text", "x", "--at-user-ids", "u1", "--at-open-dingtalk-ids", fixtureCurrentDOpenID},
+			want: map[string]any{"atUserIds": []string{"u1"}, "atOpendingtalkIds": []string{fixtureCurrentDOpenID}},
 		},
 		{
 			name: "bot direct targets",
-			args: []string{"--identity", "bot", "--robot-code", "r", "--users", "u1", "--open-dingtalk-ids", "D1", "--text", "x", "--at-all"},
-			want: map[string]any{"userIds": []string{"u1"}, "openDingtalkIds": []string{"D1"}, "isAtAll": "true"},
+			args: []string{"--identity", "bot", "--robot-code", "r", "--users", "u1", "--open-dingtalk-ids", fixtureCurrentDOpenID, "--text", "x", "--at-all"},
+			want: map[string]any{"userIds": []string{"u1"}, "openDingtalkIds": []string{fixtureCurrentDOpenID}, "isAtAll": "true"},
 		},
 		{
 			name: "webhook mentions",
@@ -367,6 +505,69 @@ func TestCrossPlatformCoverageUnifiedSendOptionalArgumentsAndErrors(t *testing.T
 	}
 }
 
+func TestCrossPlatformCoverageMessagesSendRejectsMismatchedCurrentUserMentions(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		atIDs   string
+		atAll   bool
+		wantErr string
+	}{
+		{
+			name:    "declared member missing from body",
+			body:    "请查收",
+			atIDs:   fixtureCurrentDOpenID,
+			wantErr: "必须在正文中使用对应",
+		},
+		{
+			name:    "declared member only appears as a longer token prefix",
+			body:    "@" + fixtureCurrentDOpenID + "_suffix 请查收",
+			atIDs:   fixtureCurrentDOpenID,
+			wantErr: "必须在正文中使用对应",
+		},
+		{
+			name:    "body member missing from declaration",
+			body:    "<@" + fixtureCurrentDOpenID + "> 请查收",
+			wantErr: "必须同时通过 --at-open-dingtalk-ids 声明",
+		},
+		{
+			name:    "body at-all missing from declaration",
+			body:    "<@all> 请查收",
+			wantErr: "必须同时指定 --at-all",
+		},
+		{
+			name:    "bare body member missing from declaration",
+			body:    "@" + fixtureCurrentDOpenID + " 请查收",
+			wantErr: "必须同时通过 --at-open-dingtalk-ids 声明",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &larkAlignmentCaller{}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			args := []string{
+				"chat", "+messages-send", "--identity", "user",
+				"--group", "cid", "--markdown", tt.body, "--yes",
+			}
+			if tt.atIDs != "" {
+				args = append(args, "--at-open-dingtalk-ids", tt.atIDs)
+			}
+			if tt.atAll {
+				args = append(args, "--at-all")
+			}
+			root.SetArgs(args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %v, want %q", err, tt.wantErr)
+			}
+			if len(fake.calls) != 0 {
+				t.Fatalf("invalid mention contract reached lower service: %#v", fake.calls)
+			}
+		})
+	}
+}
+
 func TestCrossPlatformCoverageUnifiedSendUnsupportedIdentityGuard(t *testing.T) {
 	flags := append([]shortcut.Flag(nil), MessagesSend.Flags...)
 	for i := range flags {
@@ -385,6 +586,90 @@ func TestCrossPlatformCoverageUnifiedSendUnsupportedIdentityGuard(t *testing.T) 
 	err := root.Execute()
 	if err == nil || !strings.Contains(err.Error(), "unsupported identity") {
 		t.Fatalf("unsupported identity error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageUnifiedSendGroupFileAndBatchBoundaries(t *testing.T) {
+	readGroupFile := messagesSendReadGroupFile
+	t.Cleanup(func() { messagesSendReadGroupFile = readGroupFile })
+
+	for _, tail := range [][]string{
+		{"--identity", "bot", "--robot-code", "r", "--group", "cid", "--groups", "c1", "--text", "x"},
+		{"--identity", "bot", "--robot-code", "r", "--groups", "c1", "--groups-file", "groups.txt", "--text", "x"},
+		{"--identity", "webhook", "--webhook-token", "token", "--chat-query", "群", "--text", "x"},
+		{"--identity", "bot", "--robot-code", "r", "--groups", "", "--text", "x"},
+		{"--identity", "bot", "--robot-code", "r", "--groups", strings.Join(makeIDs(101), ","), "--text", "x"},
+		{"--identity", "bot", "--robot-code", "r", "--groups-file", "/absolute.txt", "--text", "x"},
+		{"--identity", "bot", "--robot-code", "r", "--groups-file", "../escape.txt", "--text", "x"},
+		{"--identity", "bot", "--robot-code", "r", "--groups-file", "missing.txt", "--text", "x"},
+	} {
+		helpers.InitDeps(&larkAlignmentCaller{})
+		root := newPlatformCoverageRoot()
+		root.SetArgs(append([]string{"chat", "+messages-send"}, append(tail, "--yes")...))
+		if err := root.Execute(); err == nil {
+			t.Errorf("invalid unified send args succeeded: %v", tail)
+		}
+	}
+
+	temp := t.TempDir()
+	if err := os.Mkdir(filepath.Join(temp, "groups-dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(temp, "large.txt"), make([]byte, messagesSendMaxGroupFileSize+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(temp, "unreadable.txt"), []byte("cid"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	messagesSendReadGroupFile = func(path string) ([]byte, error) {
+		if filepath.Base(path) == "unreadable.txt" {
+			return nil, os.ErrPermission
+		}
+		return readGroupFile(path)
+	}
+	t.Chdir(temp)
+	for _, path := range []string{"groups-dir", "large.txt", "unreadable.txt"} {
+		helpers.InitDeps(&larkAlignmentCaller{})
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{"chat", "+messages-send", "--identity", "bot", "--robot-code", "r", "--groups-file", path, "--text", "x", "--yes"})
+		if err := root.Execute(); err == nil {
+			t.Errorf("invalid group file %q succeeded", path)
+		}
+	}
+
+	fake := &larkAlignmentCaller{}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"chat", "+messages-send", "--identity", "bot", "--robot-code", "r",
+		"--groups", "c1,c2", "--text", "x", "--at-user-ids", "u1",
+		"--at-open-dingtalk-ids", fixtureCurrentDOpenID, "--at-all", "--yes",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 2 {
+		t.Fatalf("batch calls = %#v", fake.calls)
+	}
+	for _, call := range fake.calls {
+		if !reflect.DeepEqual(call.args["atUserIds"], []string{"u1"}) ||
+			!reflect.DeepEqual(call.args["atOpendingtalkIds"], []string{fixtureCurrentDOpenID}) ||
+			call.args["isAtAll"] != "true" {
+			t.Fatalf("batch mention args = %#v", call.args)
+		}
+	}
+
+	shortcut.Register(shortcut.Shortcut{
+		Service: "chat", Command: "+coverage-unified-execute-error",
+		Flags: MessagesSend.Flags, Execute: executeMessagesSend,
+	})
+	root = newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"chat", "+coverage-unified-execute-error", "--identity", "bot", "--robot-code", "r",
+		"--groups-file", "missing-again.txt", "--text", "x",
+	})
+	if err := root.Execute(); err == nil {
+		t.Fatal("execute-time group file error was swallowed")
 	}
 }
 

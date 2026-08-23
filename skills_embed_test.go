@@ -22,7 +22,7 @@ import (
 func TestEmbeddedSkillsContainsOnlyInstallableTrees(t *testing.T) {
 	for _, path := range []string{
 		"skills/mono/SKILL.md",
-		"skills/multi/dws-shared/SKILL.md",
+		"skills/multi/dingtalk-shared/SKILL.md",
 	} {
 		if _, err := fs.Stat(EmbeddedSkills, path); err != nil {
 			t.Fatalf("expected installable skill path %q in embedded FS: %v", path, err)

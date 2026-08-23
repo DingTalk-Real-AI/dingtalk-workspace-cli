@@ -45,6 +45,7 @@ type PersonalConfig struct {
 	AccessToken         string
 	AccessTokenProvider AccessTokenProvider
 	ForceRefreshToken   ForceRefreshTokenFn
+	ClassifyRetryReject RetryRejectClassifier
 	ClientID            string
 	ClientSecret        string
 	SourceID            string
@@ -65,6 +66,12 @@ type AccessTokenProvider func(context.Context) (string, error)
 // already rotated it, and returns the fresh token to retry with. Optional:
 // when nil a 401 stays fatal, matching the previous behavior.
 type ForceRefreshTokenFn func(ctx context.Context, rejectedToken string) (string, error)
+
+// RetryRejectClassifier classifies a 401 from the one refreshed-token retry.
+// superseded means a newer credential is already available and the outer
+// reconnect loop should start a fresh attempt; err is a terminal typed
+// rejection. A nil callback preserves the historical local OAuth behavior.
+type RetryRejectClassifier func(rejectedToken string) (superseded bool, err error)
 
 type PersonalSource struct {
 	cfg     PersonalConfig
@@ -223,7 +230,19 @@ func (s *PersonalSource) fetchTicket(ctx context.Context) (*ticketResponse, erro
 			return nil, refreshErr
 		}
 		// Retry once with the freshly rotated token; a second 401 stays fatal.
-		ticket, _, err = s.fetchTicketAttempt(ctx, refreshed)
+		var retryStatus int
+		var retryErr error
+		ticket, retryStatus, retryErr = s.fetchTicketAttempt(ctx, refreshed)
+		if retryStatus == http.StatusUnauthorized && s.cfg.ClassifyRetryReject != nil {
+			superseded, classifyErr := s.cfg.ClassifyRetryReject(refreshed)
+			if classifyErr != nil {
+				return nil, classifyErr
+			}
+			if superseded {
+				return nil, retryPersonal(retryErr)
+			}
+		}
+		err = retryErr
 	}
 	return ticket, err
 }

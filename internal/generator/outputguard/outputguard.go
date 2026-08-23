@@ -116,9 +116,10 @@ func directoryContainsSameFile(root string, target os.FileInfo) (bool, error) {
 }
 
 // ValidateRepoTargetAllowlist permits arbitrary temporary outputs outside the
-// repository, but restricts in-repository writes to explicit canonical
-// delivery targets. This closes transitive source-graph gaps without requiring
-// every future input file to be rediscovered by each generator guard.
+// repository (and under the gitignored `.worktrees/` policy scratch tree), but
+// restricts other in-repository writes to explicit canonical delivery targets.
+// This closes transitive source-graph gaps without requiring every future
+// input file to be rediscovered by each generator guard.
 func ValidateRepoTargetAllowlist(root string, target Target, allowedRelativePaths ...string) error {
 	if strings.TrimSpace(target.Path) == "" {
 		return nil
@@ -132,6 +133,13 @@ func ValidateRepoTargetAllowlist(root string, target Target, allowedRelativePath
 		return fmt.Errorf("resolve %s %q: %w", firstNonEmpty(target.Name, "output"), target.Path, err)
 	}
 	if !samePath(rootPath, targetPath) && !pathContains(rootPath, targetPath) {
+		return nil
+	}
+	// Policy runners pin GOTMPDIR under $ROOT/.worktrees/ (gitignored). Treat
+	// that scratch tree like an external temp so coverage/isolation tests that
+	// use t.TempDir() are not forced onto reviewed delivery paths.
+	worktreesPath := filepath.Join(rootPath, ".worktrees")
+	if samePath(targetPath, worktreesPath) || pathContains(worktreesPath, targetPath) {
 		return nil
 	}
 	for _, allowed := range allowedRelativePaths {

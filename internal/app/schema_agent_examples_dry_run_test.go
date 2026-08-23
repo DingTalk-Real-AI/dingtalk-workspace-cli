@@ -27,35 +27,42 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/fatih/color"
 )
 
 var (
-	manualAgentExamplePlaceholderPattern = regexp.MustCompile(`<([^>]+)>`)
-	manualAgentExampleDryRunJSONPattern  = regexp.MustCompile(`(?i)"dry_run"\s*:\s*true`)
-	manualAgentExampleDryRunPlanPattern  = regexp.MustCompile(`(?i)"preview_kind"\s*:\s*"plan"`)
+	agentExamplePlaceholderPattern = regexp.MustCompile(`<([^>]+)>`)
+	agentExampleDryRunJSONPattern  = regexp.MustCompile(`(?i)"dry_run"\s*:\s*true`)
+	agentExampleDryRunPlanPattern  = regexp.MustCompile(`(?i)"preview_kind"\s*:\s*"plan"`)
+	// agentExampleDryRunInvocationPattern recognizes the executor
+	// envelope (and the dev connect preview, which mirrors its shape): the
+	// top-level contract is an invocation that merely embeds the would-be
+	// request inside response, so it must classify as invocation, not request.
+	agentExampleDryRunInvocationPattern = regexp.MustCompile(
+		`"kind"\s*:\s*"(?:(?:helper|compat|workflow)_invocation|connect_preview)"`)
 )
 
-// TestManualAgentExamplesContract is the always-on gate. It validates every
+// TestAgentExamplesContract is the always-on gate. It validates every
 // example, including contract_only entries, against the live bound Cobra path,
 // flags, required arguments, constraints, and final typed safety.
-func TestManualAgentExamplesContract(t *testing.T) {
-	plan := manualAgentExampleExecutionPlan(t)
+func TestAgentExamplesContract(t *testing.T) {
+	plan := agentExampleExecutionPlan(t)
 	if plan.Total == 0 {
 		t.Fatal("no reviewed Agent examples were contract validated")
 	}
 	t.Logf("Agent example contract: total=%d contract=%d dry_run=%d contract_only=%d", plan.Total, plan.Contract, plan.DryRun, plan.ContractOnly)
 }
 
-// TestManualAgentExamplesDryRun first validates every reviewed example against
+// TestAgentExamplesDryRun first validates every reviewed example against
 // its real BoundCommand, Cobra required arguments, and final typed constraints.
 // It then executes only the deterministic, explicitly declared dry_run subset
 // without injecting --yes. Global flag inheritance is not treated as capability
 // evidence. Runtime failures never create implicit skips. No shell is involved
 // and HOME is isolated.
-func TestManualAgentExamplesDryRun(t *testing.T) {
+func TestAgentExamplesDryRun(t *testing.T) {
 	if os.Getenv("DWS_AGENT_EXAMPLES_DRY_RUN") != "1" {
 		t.Skip("set DWS_AGENT_EXAMPLES_DRY_RUN=1 to execute the explicitly reviewed Agent dry-run subset")
 	}
@@ -74,45 +81,45 @@ func TestManualAgentExamplesDryRun(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
 	t.Setenv("NO_PROXY", "")
 
-	plan := manualAgentExampleExecutionPlan(t)
+	plan := agentExampleExecutionPlan(t)
 	if plan.Total == 0 {
 		t.Fatal("no reviewed Agent examples were contract validated")
 	}
 	t.Chdir(sandboxRoot)
-	files := newManualAgentExampleFiles(t, sandboxRoot)
+	files := newAgentExampleFiles(t, sandboxRoot)
 
 	selected := 0
 	executed := 0
 	for _, execution := range plan.Examples {
-		if !manualAgentExampleShouldExerciseDryRun(execution) {
+		if !agentExampleShouldExerciseDryRun(execution) {
 			continue
 		}
 		selected++
 		execution := execution
 		t.Run(fmt.Sprintf("%s/%d", strings.ReplaceAll(execution.CanonicalPath, ".", "/"), execution.Index), func(t *testing.T) {
-			argv, err := cli.ParseManualAgentExampleArgv(execution.Example)
+			argv, err := cli.ParseAgentExampleArgv(execution.Example)
 			if err != nil {
 				t.Fatalf("parse example %q: %v", execution.Example, err)
 			}
-			args := materializeManualAgentExampleArgv(argv[1:], files)
-			if manualAgentExampleHasFlag(args, "yes") {
+			args := materializeAgentExampleArgv(argv[1:], files)
+			if agentExampleHasFlag(args, "yes") {
 				t.Fatalf("dry-run gate must not inject or accept --yes\nsource: %s\nargv: %q", execution.Example, args)
 			}
-			if !manualAgentExampleHasFlag(args, "dry-run") {
+			if !agentExampleHasFlag(args, "dry-run") {
 				args = append([]string{"--dry-run"}, args...)
 			}
 
-			capture, err := executeManualAgentExampleCapture(t, args)
+			capture, err := executeAgentExampleCapture(t, args)
 			if capture.ToolCallAttempts != 0 {
 				t.Fatalf("eligible dry-run attempted %d ToolCaller invocation(s)\nsource: %s\nargv: %q\noutput:\n%s", capture.ToolCallAttempts, execution.Example, args, capture.Output)
 			}
-			if capture.StdinBytesRead != 0 || manualAgentExamplePromptObserved(capture.Output) {
+			if capture.StdinBytesRead != 0 || agentExamplePromptObserved(capture.Output) {
 				t.Fatalf("eligible dry-run entered an interactive confirmation path (stdin bytes read: %d)\nsource: %s\nargv: %q\noutput:\n%s", capture.StdinBytesRead, execution.Example, args, capture.Output)
 			}
 			if err != nil {
 				t.Fatalf("dry-run example failed: %v\nsource: %s\nargv: %q\noutput:\n%s", err, execution.Example, args, capture.Output)
 			}
-			previewKind, observed := manualAgentExampleDryRunEvidence(capture)
+			previewKind, observed := agentExampleDryRunEvidence(capture)
 			if !observed {
 				t.Fatalf("example returned without audited dry-run evidence (caller dry-run checks: %d)\nsource: %s\nargv: %q\noutput:\n%s", capture.DryRunChecks, execution.Example, args, capture.Output)
 			}
@@ -133,27 +140,20 @@ func TestManualAgentExamplesDryRun(t *testing.T) {
 	}
 	sort.Strings(reasonCodes)
 	for _, reasonCode := range reasonCodes {
-		t.Logf("Agent examples contract_only[%s]=%d", reasonCode, plan.ContractOnlyByReason[cli.ManualAgentExampleReasonCode(reasonCode)])
+		t.Logf("Agent examples contract_only[%s]=%d", reasonCode, plan.ContractOnlyByReason[cli.AgentExampleReasonCode(reasonCode)])
 	}
 }
 
-// manualAgentExampleShouldExerciseDryRun is the single selection boundary for
+// agentExampleShouldExerciseDryRun is the single selection boundary for
 // the runtime gate. Capability comes only from the final typed ToolSpec; the
 // example disposition may narrow that set but can never invent support.
-func manualAgentExampleShouldExerciseDryRun(execution cli.ManualAgentExampleExecution) bool {
-	return execution.DryRun != nil && execution.Mode == cli.ManualAgentExampleModeDryRun
+func agentExampleShouldExerciseDryRun(execution cli.AgentExampleExecution) bool {
+	return execution.DryRun != nil && execution.Mode == cli.AgentExampleModeDryRun
 }
 
-func manualAgentExampleExecutionPlan(t testing.TB) cli.ManualAgentExampleExecutionPlan {
+func agentExampleExecutionPlan(t testing.TB) cli.AgentExampleExecutionPlan {
 	t.Helper()
-	hints, err := cli.LoadAgentHintsFromSelectionForValidation(os.DirFS("../cli/schema_hints/selection"))
-	if err != nil {
-		t.Fatalf("LoadAgentHintsFromSelectionForValidation() error = %v", err)
-	}
 	contractRoot := NewRootCommand()
-	if _, err := cli.ApplyEmbeddedManualSchemaHints(contractRoot); err != nil {
-		t.Fatalf("ApplyEmbeddedManualSchemaHints() error = %v", err)
-	}
 	effective, err := cli.BuildEffectiveCommandRegistry(contractRoot)
 	if err != nil {
 		t.Fatalf("BuildEffectiveCommandRegistry() error = %v", err)
@@ -169,41 +169,41 @@ func manualAgentExampleExecutionPlan(t testing.TB) cli.ManualAgentExampleExecuti
 	if err := cli.ValidateReviewedDryRunCapabilityDelivery(registry); err != nil {
 		t.Fatalf("ValidateReviewedDryRunCapabilityDelivery() error = %v", err)
 	}
-	plan, err := cli.BuildManualAgentExampleExecutionPlan(bound, registry, hints)
+	plan, err := cli.BuildAgentExampleExecutionPlan(bound, registry)
 	if err != nil {
-		t.Fatalf("BuildManualAgentExampleExecutionPlan() error = %v", err)
+		t.Fatalf("BuildAgentExampleExecutionPlan() error = %v", err)
 	}
 	return plan
 }
 
-type manualAgentExampleCapture struct {
+type agentExampleCapture struct {
 	Output           string
 	DryRunChecks     int64
 	ToolCallAttempts int64
 	StdinBytesRead   int64
 }
 
-type manualAgentExampleFailClosedCaller struct {
+type agentExampleFailClosedCaller struct {
 	dryRunChecks     atomic.Int64
 	toolCallAttempts atomic.Int64
 }
 
-func (c *manualAgentExampleFailClosedCaller) CallTool(_ context.Context, productID, toolName string, _ map[string]any) (*edition.ToolResult, error) {
+func (c *agentExampleFailClosedCaller) CallTool(_ context.Context, productID, toolName string, _ map[string]any) (*edition.ToolResult, error) {
 	c.toolCallAttempts.Add(1)
 	return nil, fmt.Errorf("real ToolCaller invocation blocked during Agent example dry-run: %s/%s", productID, toolName)
 }
 
-func (c *manualAgentExampleFailClosedCaller) Format() string { return "json" }
+func (c *agentExampleFailClosedCaller) Format() string { return "json" }
 
-func (c *manualAgentExampleFailClosedCaller) DryRun() bool {
+func (c *agentExampleFailClosedCaller) DryRun() bool {
 	c.dryRunChecks.Add(1)
 	return true
 }
 
-func (c *manualAgentExampleFailClosedCaller) Fields() string { return "" }
-func (c *manualAgentExampleFailClosedCaller) JQ() string     { return "" }
+func (c *agentExampleFailClosedCaller) Fields() string { return "" }
+func (c *agentExampleFailClosedCaller) JQ() string     { return "" }
 
-func executeManualAgentExampleCapture(t testing.TB, args []string) (manualAgentExampleCapture, error) {
+func executeAgentExampleCapture(t testing.TB, args []string) (agentExampleCapture, error) {
 	t.Helper()
 	oldArgs := os.Args
 	os.Args = append([]string{"dws"}, args...)
@@ -239,7 +239,7 @@ func executeManualAgentExampleCapture(t testing.TB, args []string) (manualAgentE
 
 	root := NewRootCommand()
 	originalCaller := helpers.GetCaller()
-	auditCaller := &manualAgentExampleFailClosedCaller{}
+	auditCaller := &agentExampleFailClosedCaller{}
 	helpers.InitDeps(auditCaller)
 	defer helpers.InitDeps(originalCaller)
 	var output bytes.Buffer
@@ -261,7 +261,7 @@ func executeManualAgentExampleCapture(t testing.TB, args []string) (manualAgentE
 	if err != nil {
 		t.Fatalf("inspect guarded stdin: %v", err)
 	}
-	return manualAgentExampleCapture{
+	return agentExampleCapture{
 		Output:           output.String() + string(captured),
 		DryRunChecks:     auditCaller.dryRunChecks.Load(),
 		ToolCallAttempts: auditCaller.toolCallAttempts.Load(),
@@ -269,26 +269,29 @@ func executeManualAgentExampleCapture(t testing.TB, args []string) (manualAgentE
 	}, execErr
 }
 
-type manualAgentExampleFiles struct {
+type agentExampleFiles struct {
 	root     string
 	markdown string
 	json     string
 	batch    string
+	job      string
 	binary   string
 	image    string
 }
 
-func newManualAgentExampleFiles(t testing.TB, root string) manualAgentExampleFiles {
+func newAgentExampleFiles(t testing.TB, root string) agentExampleFiles {
 	t.Helper()
 	markdown := filepath.Join(root, "content.md")
 	jsonFile := filepath.Join(root, "report.json")
 	batch := filepath.Join(root, "styles.json")
+	job := filepath.Join(root, "job.json")
 	binary := filepath.Join(root, "report.pdf")
 	image := filepath.Join(root, "chart.png")
 	for path, content := range map[string][]byte{
 		markdown: []byte("# Agent dry-run fixture\n\nNo business call is allowed.\n"),
 		jsonFile: []byte(`[{"content":"Agent dry-run fixture","sort":"0","key":"fixture","contentType":"markdown","type":"1"}]`),
 		batch:    []byte(`[{"sheetId":"Sheet1","range":"A1:B2","fontWeight":"bold"}]`),
+		job:      []byte(`{"name":"Java 工程师","description":"服务端开发","jobNature":"FULL-TIME","requiredEdu":6,"minSalary":20000,"maxSalary":35000,"extData":{"headCount":1,"fullTimeExtData":{"salaryMonth":12}},"creatorUserId":"creator-user-id","ownerUserIds":["owner-user-id"]}`),
 		binary:   []byte("%PDF-1.4\n%%EOF\n"),
 		image:    {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'},
 	} {
@@ -296,13 +299,21 @@ func newManualAgentExampleFiles(t testing.TB, root string) manualAgentExampleFil
 			t.Fatalf("write dry-run fixture %s: %v", path, err)
 		}
 	}
-	return manualAgentExampleFiles{root: root, markdown: markdown, json: jsonFile, batch: batch, binary: binary, image: image}
+	return agentExampleFiles{
+		root:     root,
+		markdown: "./" + filepath.Base(markdown),
+		json:     "./" + filepath.Base(jsonFile),
+		batch:    "./" + filepath.Base(batch),
+		job:      "./" + filepath.Base(job),
+		binary:   "./" + filepath.Base(binary),
+		image:    "./" + filepath.Base(image),
+	}
 }
 
-func materializeManualAgentExampleArgv(argv []string, files manualAgentExampleFiles) []string {
+func materializeAgentExampleArgv(argv []string, files agentExampleFiles) []string {
 	result := append([]string(nil), argv...)
 	for index := range result {
-		result[index] = manualAgentExamplePlaceholderPattern.ReplaceAllStringFunc(result[index], func(match string) string {
+		result[index] = agentExamplePlaceholderPattern.ReplaceAllStringFunc(result[index], func(match string) string {
 			name := strings.TrimSuffix(strings.TrimPrefix(match, "<"), ">")
 			switch strings.ToLower(name) {
 			case "basetime", "remindertimestamp", "reminder-time-stamp":
@@ -323,7 +334,7 @@ func materializeManualAgentExampleArgv(argv []string, files manualAgentExampleFi
 	}
 
 	for index := 0; index < len(result); index++ {
-		name, inline, ok := manualAgentExampleLongFlag(result[index])
+		name, inline, ok := agentExampleLongFlag(result[index])
 		if !ok {
 			continue
 		}
@@ -344,6 +355,10 @@ func materializeManualAgentExampleArgv(argv []string, files manualAgentExampleFi
 			replacement = files.markdown
 		case "contents-file":
 			replacement = files.json
+		case "from":
+			if strings.HasSuffix(strings.ToLower(value), "job.json") {
+				replacement = files.job
+			}
 		case "batch":
 			if strings.HasSuffix(strings.ToLower(value), "styles.json") {
 				replacement = files.batch
@@ -368,7 +383,7 @@ func materializeManualAgentExampleArgv(argv []string, files manualAgentExampleFi
 	return result
 }
 
-func manualAgentExampleLongFlag(argument string) (name, inline string, ok bool) {
+func agentExampleLongFlag(argument string) (name, inline string, ok bool) {
 	if !strings.HasPrefix(argument, "--") {
 		return "", "", false
 	}
@@ -376,7 +391,7 @@ func manualAgentExampleLongFlag(argument string) (name, inline string, ok bool) 
 	return name, inline, name != ""
 }
 
-func manualAgentExampleHasFlag(argv []string, target string) bool {
+func agentExampleHasFlag(argv []string, target string) bool {
 	for _, argument := range argv {
 		if argument == "--"+target || strings.HasPrefix(argument, "--"+target+"=") {
 			return true
@@ -385,33 +400,36 @@ func manualAgentExampleHasFlag(argv []string, target string) bool {
 	return false
 }
 
-func manualAgentExampleDryRunObserved(capture manualAgentExampleCapture) bool {
-	_, ok := manualAgentExampleDryRunEvidence(capture)
+func agentExampleDryRunObserved(capture agentExampleCapture) bool {
+	_, ok := agentExampleDryRunEvidence(capture)
 	return ok
 }
 
-func manualAgentExampleDryRunEvidence(capture manualAgentExampleCapture) (string, bool) {
+func agentExampleDryRunEvidence(capture agentExampleCapture) (string, bool) {
 	normalized := strings.ToLower(capture.Output)
-	if manualAgentExampleDryRunJSONPattern.MatchString(capture.Output) && manualAgentExampleDryRunPlanPattern.MatchString(capture.Output) {
-		return cli.DryRunPreviewPlan, true
+	if agentExampleDryRunJSONPattern.MatchString(capture.Output) && agentExampleDryRunPlanPattern.MatchString(capture.Output) {
+		return contract.DryRunPreviewPlan, true
 	}
-	if manualAgentExampleDryRunJSONPattern.MatchString(capture.Output) {
-		return cli.DryRunPreviewRequest, true
+	if agentExampleDryRunJSONPattern.MatchString(capture.Output) && agentExampleDryRunInvocationPattern.MatchString(capture.Output) {
+		return contract.DryRunPreviewInvocation, true
+	}
+	if agentExampleDryRunJSONPattern.MatchString(capture.Output) {
+		return contract.DryRunPreviewRequest, true
 	}
 	if strings.Contains(normalized, "[dry-run]") {
-		return cli.DryRunPreviewInvocation, true
+		return contract.DryRunPreviewInvocation, true
 	}
 	if capture.DryRunChecks > 0 && strings.Contains(capture.Output, "操作:") {
-		return cli.DryRunPreviewPlan, true
+		return contract.DryRunPreviewPlan, true
 	}
 	return "", false
 }
 
-func TestManualAgentExampleDryRunEvidenceAcceptsSharedAndCommandPlans(t *testing.T) {
-	if !manualAgentExampleDryRunObserved(manualAgentExampleCapture{Output: "[DRY-RUN] Preview only, not executed:\nTool: calendar_list"}) {
+func TestAgentExampleDryRunEvidenceAcceptsSharedAndCommandPlans(t *testing.T) {
+	if !agentExampleDryRunObserved(agentExampleCapture{Output: "[DRY-RUN] Preview only, not executed:\nTool: calendar_list"}) {
 		t.Fatal("dry-run output with a Tool and nil Arguments was not recognized")
 	}
-	if manualAgentExampleDryRunObserved(manualAgentExampleCapture{Output: "Tool: calendar_list"}) {
+	if agentExampleDryRunObserved(agentExampleCapture{Output: "Tool: calendar_list"}) {
 		t.Fatal("a Tool line without dry-run evidence must not be accepted")
 	}
 	for _, falseEvidence := range []string{
@@ -419,28 +437,28 @@ func TestManualAgentExampleDryRunEvidenceAcceptsSharedAndCommandPlans(t *testing
 		"Run again with --dry-run to preview the operation",
 		`{"dry_run":false,"executed":true}`,
 	} {
-		if manualAgentExampleDryRunObserved(manualAgentExampleCapture{Output: falseEvidence}) {
+		if agentExampleDryRunObserved(agentExampleCapture{Output: falseEvidence}) {
 			t.Errorf("non-evidence text was mistaken for a successful dry-run: %q", falseEvidence)
 		}
 	}
 	operationSummary := "操作:             下载钉盘文件\n文件ID: test"
-	if manualAgentExampleDryRunObserved(manualAgentExampleCapture{Output: operationSummary}) {
+	if agentExampleDryRunObserved(agentExampleCapture{Output: operationSummary}) {
 		t.Fatal("a human-only operation summary without an audited dry-run check must not be accepted")
 	}
-	if !manualAgentExampleDryRunObserved(manualAgentExampleCapture{Output: operationSummary, DryRunChecks: 1}) {
+	if !agentExampleDryRunObserved(agentExampleCapture{Output: operationSummary, DryRunChecks: 1}) {
 		t.Fatal("a command plan guarded by the injected caller's dry-run check was not recognized")
 	}
 }
 
-func TestCrossPlatformCoverageManualAgentExampleDryRunEvidenceClassifiesStructuredPlan(t *testing.T) {
-	kind, observed := manualAgentExampleDryRunEvidence(manualAgentExampleCapture{
+func TestCrossPlatformCoverageAgentExampleDryRunEvidenceClassifiesStructuredPlan(t *testing.T) {
+	kind, observed := agentExampleDryRunEvidence(agentExampleCapture{
 		Output:       `{"dry_run":true,"executed":false,"preview_kind":"plan"}`,
 		DryRunChecks: 1,
 	})
-	if !observed || kind != cli.DryRunPreviewPlan {
+	if !observed || kind != contract.DryRunPreviewPlan {
 		t.Fatalf("structured plan classified as kind=%q observed=%v", kind, observed)
 	}
-	if manualAgentExampleDryRunObserved(manualAgentExampleCapture{
+	if agentExampleDryRunObserved(agentExampleCapture{
 		Output:       `{"dry_run":false,"executed":false,"preview_kind":"plan"}`,
 		DryRunChecks: 1,
 	}) {
@@ -448,7 +466,38 @@ func TestCrossPlatformCoverageManualAgentExampleDryRunEvidenceClassifiesStructur
 	}
 }
 
-func manualAgentExamplePromptObserved(output string) bool {
+func TestAgentExampleDryRunEvidenceClassifiesExecutorEnvelopeAsInvocation(t *testing.T) {
+	// Executor dry-run envelope: invocation at top level, the would-be request
+	// nested inside response — must classify as invocation, never request.
+	envelope := `{
+  "invocation": {"kind": "helper_invocation", "stage": "helper_override", "implemented": false,
+    "dry_run": true, "canonical_product": "devapp", "tool": "create_dev_app"},
+  "response": {"dry_run": true, "request": {"jsonrpc": "2.0", "method": "tools/call"},
+    "note": "execution skipped by --dry-run"}
+}`
+	kind, observed := agentExampleDryRunEvidence(agentExampleCapture{Output: envelope})
+	if !observed || kind != contract.DryRunPreviewInvocation {
+		t.Fatalf("executor envelope classified as kind=%q observed=%v, want invocation", kind, observed)
+	}
+	for _, invKind := range []string{"compat_invocation", "workflow_invocation", "connect_preview"} {
+		out := strings.Replace(envelope, "helper_invocation", invKind, 1)
+		if kind, ok := agentExampleDryRunEvidence(agentExampleCapture{Output: out}); !ok || kind != contract.DryRunPreviewInvocation {
+			t.Fatalf("kind %q envelope classified as %q/%v, want invocation", invKind, kind, ok)
+		}
+	}
+	// A bare MCP dry-run document has no invocation kind and stays request.
+	mcpDoc := `{"dry_run": true, "executed": false, "tool": "get_dev_app", "arguments": {}}`
+	if kind, ok := agentExampleDryRunEvidence(agentExampleCapture{Output: mcpDoc}); !ok || kind != contract.DryRunPreviewRequest {
+		t.Fatalf("bare MCP dry-run classified as %q/%v, want request", kind, ok)
+	}
+	// Plan still wins over an invocation-shaped payload.
+	planDoc := `{"dry_run": true, "preview_kind": "plan", "kind": "helper_invocation"}`
+	if kind, ok := agentExampleDryRunEvidence(agentExampleCapture{Output: planDoc}); !ok || kind != contract.DryRunPreviewPlan {
+		t.Fatalf("plan precedence broken: %q/%v", kind, ok)
+	}
+}
+
+func agentExamplePromptObserved(output string) bool {
 	normalized := strings.ToLower(output)
 	for _, marker := range []string{
 		"confirm ",
@@ -469,7 +518,7 @@ func manualAgentExamplePromptObserved(output string) bool {
 	return false
 }
 
-func TestManualAgentExamplePromptObservedRejectsInteractiveConfirmation(t *testing.T) {
+func TestAgentExamplePromptObservedRejectsInteractiveConfirmation(t *testing.T) {
 	for _, prompt := range []string{
 		"Confirm deletion? (yes/no):",
 		"Confirm action? (yes/no):",
@@ -480,11 +529,11 @@ func TestManualAgentExamplePromptObservedRejectsInteractiveConfirmation(t *testi
 		"Are you sure you want to continue?",
 		"Operation cancelled",
 	} {
-		if !manualAgentExamplePromptObserved(prompt) {
+		if !agentExamplePromptObserved(prompt) {
 			t.Errorf("interactive confirmation output was not detected: %q", prompt)
 		}
 	}
-	if manualAgentExamplePromptObserved(`{"dry_run":true,"confirmation":"user_required"}`) {
+	if agentExamplePromptObserved(`{"dry_run":true,"confirmation":"user_required"}`) {
 		t.Fatal("typed safety metadata was mistaken for an interactive prompt")
 	}
 }
@@ -498,26 +547,26 @@ func TestAitableAdvpermDisableDryRunSkipsConfirmationAndToolCall(t *testing.T) {
 		"aitable", "advperm", "disable",
 		"--base-id", "BASE_ID",
 	}
-	if manualAgentExampleHasFlag(args, "yes") {
+	if agentExampleHasFlag(args, "yes") {
 		t.Fatal("regression test must not bypass confirmation with --yes")
 	}
-	capture, err := executeManualAgentExampleCapture(t, args)
+	capture, err := executeAgentExampleCapture(t, args)
 	if err != nil {
 		t.Fatalf("advperm disable fail-closed dry-run failed: %v\noutput:\n%s", err, capture.Output)
 	}
-	if capture.StdinBytesRead != 0 || manualAgentExamplePromptObserved(capture.Output) {
+	if capture.StdinBytesRead != 0 || agentExamplePromptObserved(capture.Output) {
 		t.Fatalf("advperm disable dry-run entered confirmation (stdin bytes read: %d)\noutput:\n%s", capture.StdinBytesRead, capture.Output)
 	}
 	if capture.ToolCallAttempts != 0 {
 		t.Fatalf("advperm disable dry-run attempted %d real ToolCaller invocation(s)\noutput:\n%s", capture.ToolCallAttempts, capture.Output)
 	}
-	if !manualAgentExampleDryRunObserved(capture) {
+	if !agentExampleDryRunObserved(capture) {
 		t.Fatalf("advperm disable returned no audited dry-run evidence (caller dry-run checks: %d)\noutput:\n%s", capture.DryRunChecks, capture.Output)
 	}
 }
 
-func TestManualAgentExampleFailClosedCallerRecordsToolCalls(t *testing.T) {
-	caller := &manualAgentExampleFailClosedCaller{}
+func TestAgentExampleFailClosedCallerRecordsToolCalls(t *testing.T) {
+	caller := &agentExampleFailClosedCaller{}
 	if !caller.DryRun() {
 		t.Fatal("fail-closed caller must advertise dry-run mode")
 	}
@@ -532,7 +581,7 @@ func TestManualAgentExampleFailClosedCallerRecordsToolCalls(t *testing.T) {
 	}
 }
 
-func TestManualAgentExampleChatGroupMuteMemberUsesCommandDryRunPreview(t *testing.T) {
+func TestAgentExampleChatGroupMuteMemberUsesCommandDryRunPreview(t *testing.T) {
 	sandboxRoot := t.TempDir()
 	configDir := filepath.Join(sandboxRoot, "config")
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
@@ -541,7 +590,7 @@ func TestManualAgentExampleChatGroupMuteMemberUsesCommandDryRunPreview(t *testin
 	setTestHome(t, sandboxRoot)
 	t.Setenv("DWS_CONFIG_DIR", configDir)
 
-	capture, err := executeManualAgentExampleCapture(t, []string{
+	capture, err := executeAgentExampleCapture(t, []string{
 		"--dry-run",
 		"chat", "group-mute-member",
 		"--group", "test_openConversationId",
@@ -557,10 +606,10 @@ func TestManualAgentExampleChatGroupMuteMemberUsesCommandDryRunPreview(t *testin
 	if capture.DryRunChecks == 0 {
 		t.Fatalf("group-mute-member did not enter its audited command dry-run path\noutput:\n%s", capture.Output)
 	}
-	if capture.StdinBytesRead != 0 || manualAgentExamplePromptObserved(capture.Output) {
+	if capture.StdinBytesRead != 0 || agentExamplePromptObserved(capture.Output) {
 		t.Fatalf("group-mute-member dry-run entered an interactive prompt (stdin bytes read: %d)\noutput:\n%s", capture.StdinBytesRead, capture.Output)
 	}
-	if !manualAgentExampleDryRunObserved(capture) {
+	if !agentExampleDryRunObserved(capture) {
 		t.Fatalf("group-mute-member returned no audited dry-run evidence\noutput:\n%s", capture.Output)
 	}
 	for _, expected := range []string{`"uids"`, `"userId1"`, `"userId2"`} {

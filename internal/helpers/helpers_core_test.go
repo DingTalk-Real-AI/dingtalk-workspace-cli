@@ -39,6 +39,20 @@ type helpersReadCaller struct {
 	readCalls  int
 }
 
+type helpersContextCaller struct {
+	*helpersCoreCaller
+	seenErr error
+}
+
+func (c *helpersContextCaller) CallTool(ctx context.Context, _ string, _ string, _ map[string]any) (*edition.ToolResult, error) {
+	c.calls++
+	c.seenErr = ctx.Err()
+	if c.seenErr != nil {
+		return nil, c.seenErr
+	}
+	return nil, errors.New("stop after context capture")
+}
+
 func (c *helpersReadCaller) CallReadTool(context.Context, string, string, map[string]any) (*edition.ToolResult, error) {
 	c.readCalls++
 	return c.readResult, c.readErr
@@ -128,6 +142,48 @@ func TestCrossPlatformCoverageReadLookupInitializationAndRegularExecution(t *tes
 	}
 }
 
+func TestCrossPlatformCoverageMCPContextWrappersPreserveCancellation(t *testing.T) {
+	caller := &helpersContextCaller{helpersCoreCaller: &helpersCoreCaller{format: "json"}}
+	installHelpersCoreDeps(t, caller)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := CallMCPToolTextOnServerContext(ctx, "aitable", "get_fields", nil); err == nil {
+		t.Fatal("cancelled text call unexpectedly succeeded")
+	}
+	if !errors.Is(caller.seenErr, context.Canceled) || caller.calls != 1 {
+		t.Fatalf("text call context/calls = %v, %d", caller.seenErr, caller.calls)
+	}
+
+	if err := CallMCPToolOnServerContext(ctx, "aitable", "get_fields", nil); err == nil {
+		t.Fatal("cancelled print call unexpectedly succeeded")
+	}
+	if !errors.Is(caller.seenErr, context.Canceled) || caller.calls != 2 {
+		t.Fatalf("print call context/calls = %v, %d", caller.seenErr, caller.calls)
+	}
+
+	// Public context-aware wrappers intentionally accept nil for compatibility,
+	// but must normalize it before crossing the transport boundary.
+	if _, err := CallMCPToolTextOnServerContext(nil, "aitable", "get_fields", nil); err == nil {
+		t.Fatal("nil-context text call unexpectedly succeeded with a nil result")
+	}
+	if caller.seenErr != nil || caller.calls != 3 {
+		t.Fatalf("nil-context text call context/calls = %v, %d", caller.seenErr, caller.calls)
+	}
+	if _, err := CallMCPReadToolTextOnServerContext(nil, "aitable", "get_fields", nil); err == nil {
+		t.Fatal("nil-context read call unexpectedly succeeded with a nil result")
+	}
+	if caller.seenErr != nil || caller.calls != 4 {
+		t.Fatalf("nil-context read call context/calls = %v, %d", caller.seenErr, caller.calls)
+	}
+	if err := CallMCPToolOnServerContext(nil, "aitable", "get_fields", nil); err == nil {
+		t.Fatal("nil-context print call unexpectedly succeeded with a nil result")
+	}
+	if caller.seenErr != nil || caller.calls != 5 {
+		t.Fatalf("nil-context print call context/calls = %v, %d", caller.seenErr, caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageSharedDependenciesRoutingAndWrappers(t *testing.T) {
 	oldDeps := deps
 	deps = nil
@@ -196,7 +252,11 @@ func TestCrossPlatformCoverageMCPReturnTextClassification(t *testing.T) {
 	}
 	caller.result = &edition.ToolResult{Content: []edition.ContentBlock{{Type: "image", Text: "ignored"}, {Type: "text"}}}
 	if got, err := callMCPToolReturnTextOnServer(context.Background(), "server", "tool", nil); err != nil || got != "" {
-		t.Fatalf("empty text result = %q, %v", got, err)
+		t.Fatalf("low-level empty text representation = %q, %v", got, err)
+	}
+	caller.result = nil
+	if _, err := callMCPToolReturnTextOnServer(context.Background(), "server", "tool", nil); err == nil {
+		t.Fatal("nil result must fail")
 	}
 	caller.result = textToolResult("shortcut result")
 	if got, err := CallMCPToolTextOnServer("server", "tool", nil); err != nil || got != "shortcut result" {

@@ -1,16 +1,26 @@
 #!/bin/sh
-# Reassemble the split release Catalog shards back into the single JSON
-# document shape (version + surface_hash + source_hash + catalog + tools) that
-# the policy jq queries consume.
+# Assemble a fresh Schema Catalog via ResolveSchemaBuild (cmd_schema_catalog)
+# into a temp directory, then emit the single-document JSON shape
+# (version + surface_hash + source_hash + catalog + tools) that policy jq
+# queries consume.
 #
-# The Catalog is a committed global file (schema_catalog/catalog.json); each
-# product's leaf ToolSpecs live in their own shard (schema_catalog/tools/*.json)
-# so concurrent feature PRs only rewrite one shard. This helper merges the
-# shards back into one document so existing jq queries keep working unchanged.
+# Production reads runtime assembly only; this helper creates an ephemeral
+# Catalog dump exclusively for CI/policy queries.
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-dir="$ROOT/internal/cli/schema_catalog"
+cd "$ROOT"
+. "$ROOT/scripts/policy/policy-runtime.sh"
+policy_prepare_runtime "$ROOT"
+
+tmp="$(mktemp -d)"
+exec_tmp="$(policy_runtime_mktemp_dir dws-with-catalog)"
+catalog_generator="$exec_tmp/schema-catalog"
+trap 'rm -rf "$tmp" "$exec_tmp"' EXIT HUP INT TERM
+
+go build -a -o "$catalog_generator" ./internal/generator/cmd_schema_catalog
+dir="$tmp/schema_catalog"
+"$catalog_generator" -root . -output "$dir" -meta-index "$tmp/schema_meta_index.gob" >/dev/null
 
 jq -s '
   .[0] as $envelope |

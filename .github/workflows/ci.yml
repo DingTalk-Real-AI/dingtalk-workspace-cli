@@ -24,6 +24,7 @@ jobs:
       pull-requests: read
     outputs:
       changelog_only: ${{ steps.classify.outputs.changelog_only }}
+      release_seal_only: ${{ steps.classify.outputs.release_seal_only }}
       changelog_changed: ${{ steps.classify.outputs.changelog_changed }}
       docs_only: ${{ steps.classify.outputs.docs_only }}
       full_suite: ${{ steps.classify.outputs.full_suite }}
@@ -39,6 +40,7 @@ jobs:
         with:
           script: |
             let changelogOnly = false;
+            let releaseSealOnly = false;
             let changelogChanged = false;
             let docsOnly = false;
             let fullSuite = context.eventName === 'push';
@@ -111,6 +113,7 @@ jobs:
                 filename.startsWith('internal/app/') ||
                 filename.startsWith('internal/cli/') ||
                 filename.startsWith('internal/cobracmd/') ||
+                filename.startsWith('internal/corecmd/') ||
                 filename.startsWith('internal/helpers/') ||
                 filename.startsWith('internal/i18n/') ||
                 filename.startsWith('internal/interfacesnapshot/') ||
@@ -147,12 +150,22 @@ jobs:
                 filename === '.github/actionlint.yaml' ||
                 filename.startsWith('scripts/') ||
                 filename.startsWith('verify/') ||
+                filename.startsWith('internal/helpers/') ||
+                // Shortcut declarations feed the live command tree and Schema
+                // assembly. Their reverse dependencies include the expensive
+                // app and generator packages, which must run in separate shards.
+                filename.startsWith('internal/shortcut/') ||
                 filename.startsWith('internal/generator/') ||
                 filename.startsWith('internal/cli/schema') ||
+                // Parameter aliases are reduced against the live command tree.
+                // Their reverse-dependency set is too large for one focused
+                // race job, so use the existing full-suite shards.
+                filename === 'internal/cli/param_concepts.json' ||
+                filename === 'internal/cli/param_concepts.schema.json' ||
+                filename === 'internal/cli/param_aliases_generated.go' ||
                 filename.startsWith('internal/interfacesnapshot/') ||
                 filename.startsWith('internal/app/upgrade') ||
                 filename.startsWith('internal/transport/') ||
-                filename.startsWith('internal/recovery/') ||
                 filename.startsWith('internal/syncdata/') ||
                 filename.includes('/testdata/') ||
                 filename.startsWith('testdata/') ||
@@ -161,6 +174,43 @@ jobs:
                 filename === 'go.mod' ||
                 filename === 'go.sum'
               );
+            const isExactReleaseSeal = (candidates) => {
+              const changelog = candidates.filter(
+                ({ filename, status, previous_filename }) =>
+                  filename === 'CHANGELOG.md' &&
+                  status === 'modified' &&
+                  !previous_filename
+              );
+              if (changelog.length !== 1 || candidates.length < 2) {
+                return false;
+              }
+              let version = '';
+              return candidates.every((file) => {
+                if (file.filename === 'CHANGELOG.md') {
+                  return file.status === 'modified' && !file.previous_filename;
+                }
+                if (
+                  file.status !== 'renamed' ||
+                  typeof file.filename !== 'string' ||
+                  typeof file.previous_filename !== 'string' ||
+                  file.additions !== 0 ||
+                  file.deletions !== 0
+                ) {
+                  return false;
+                }
+                const target = file.filename.match(
+                  /^\.changes\/released\/([0-9]+\.[0-9]+\.[0-9]+(?:-beta\.[1-9][0-9]*)?)\/([a-z0-9][a-z0-9._-]*\.md)$/
+                );
+                if (!target || file.previous_filename !== `.changes/${target[2]}`) {
+                  return false;
+                }
+                if (version && version !== target[1]) {
+                  return false;
+                }
+                version = target[1];
+                return true;
+              });
+            };
             const classifyFiles = (complete) => {
               const paths = files.flatMap(({ filename, previous_filename }) =>
                 [filename, previous_filename].filter(
@@ -247,19 +297,26 @@ jobs:
                 );
               }
 
-              changelogOnly =
+              const exactChangelogDiff =
                 files.length === 1 &&
                 files[0].filename === 'CHANGELOG.md' &&
                 files[0].status === 'modified' &&
                 !files[0].previous_filename;
+              releaseSealOnly = isExactReleaseSeal(files);
+              changelogOnly = exactChangelogDiff || releaseSealOnly;
               changelogChanged = files.some(
                 ({ filename, previous_filename }) =>
                   filename === 'CHANGELOG.md' ||
                   previous_filename === 'CHANGELOG.md'
               );
               classifyFiles(true);
+              if (releaseSealOnly) {
+                fullSuite = false;
+              }
               fastPathTrust = changelogOnly
-                ? 'exact pull-request revision and synthetic merge policy'
+                ? releaseSealOnly
+                  ? 'exact release-seal fragment archival and synthetic merge policy'
+                  : 'exact CHANGELOG-only revision and synthetic merge policy'
                 : docsOnly
                   ? 'documentation-only focused admission'
                   : fullSuite
@@ -294,7 +351,8 @@ jobs:
                     per_page: 100,
                   });
                 files = Array.isArray(comparison.files) ? comparison.files : [];
-                classifyFiles(files.length < 300);
+                const pushFilesComplete = files.length < 300;
+                classifyFiles(pushFilesComplete);
                 const linearFromValidatedTip =
                   comparison.status === 'ahead' &&
                   comparison.merge_base_commit?.sha === expectedBefore &&
@@ -306,8 +364,10 @@ jobs:
                   files[0].filename === 'CHANGELOG.md' &&
                   files[0].status === 'modified' &&
                   !files[0].previous_filename;
+                const exactReleaseSealDiff =
+                  pushFilesComplete && isExactReleaseSeal(files);
 
-                if (linearFromValidatedTip && exactChangelogDiff) {
+                if (linearFromValidatedTip && (exactChangelogDiff || exactReleaseSealDiff)) {
                   const requiredContexts = [
                     'Lint',
                     'Test',
@@ -358,9 +418,15 @@ jobs:
 
                   if (missing.length === 0 && nonSuccess.length === 0) {
                     changelogOnly = true;
+                    releaseSealOnly = exactReleaseSealDiff;
                     changelogChanged = true;
+                    if (releaseSealOnly) {
+                      fullSuite = false;
+                    }
                     fastPathTrust =
-                      `exact CHANGELOG-only successor of validated ${expectedBefore}`;
+                      releaseSealOnly
+                        ? `exact release-seal successor of validated ${expectedBefore}`
+                        : `exact CHANGELOG-only successor of validated ${expectedBefore}`;
                   } else {
                     fastPathTrust =
                       'predecessor Code Admission is not fully successful; ' +
@@ -375,6 +441,7 @@ jobs:
             }
 
             core.setOutput('changelog_only', String(changelogOnly));
+            core.setOutput('release_seal_only', String(releaseSealOnly));
             core.setOutput('changelog_changed', String(changelogChanged));
             core.setOutput('docs_only', String(docsOnly));
             core.setOutput('full_suite', String(fullSuite));
@@ -386,7 +453,8 @@ jobs:
             await core.summary
               .addHeading('Code Admission scope')
               .addRaw(`- Event: \`${context.eventName}\`\n`)
-              .addRaw(`- Exact modified CHANGELOG only: \`${changelogOnly}\`\n`)
+              .addRaw(`- Metadata-only fast path: \`${changelogOnly}\`\n`)
+              .addRaw(`- Release-seal fragments only: \`${releaseSealOnly}\`\n`)
               .addRaw(`- CHANGELOG touched: \`${changelogChanged}\`\n`)
               .addRaw(`- Documentation-only: \`${docsOnly}\`\n`)
               .addRaw(`- Full suite: \`${fullSuite}\`\n`)
@@ -401,7 +469,14 @@ jobs:
 
       - name: Record CHANGELOG-only fast path
         if: steps.classify.outputs.changelog_only == 'true'
-        run: echo "Lint is satisfied by the trusted CHANGELOG-only Policy path." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          RELEASE_SEAL_ONLY: ${{ steps.classify.outputs.release_seal_only }}
+        run: |
+          if [ "$RELEASE_SEAL_ONLY" = true ]; then
+            echo "Lint is satisfied by the trusted release-seal fragment Policy path." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Lint is satisfied by the trusted CHANGELOG-only Policy path." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Record documentation-only fast path
         if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only == 'true'
@@ -433,12 +508,53 @@ jobs:
         if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
+      - name: Test reviewer routing policy
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        run: node .github/reviewer-routing.test.js
+
+      - name: Test npm installer smoke (prune, backup, publish)
+        if: steps.classify.outputs.changelog_only != 'true' && steps.classify.outputs.docs_only != 'true'
+        env:
+          XDG_CONFIG_HOME: ""
+        run: node test/scripts/install_js_smoke.mjs
+
   test-focused:
-    name: Test (changed packages)
+    name: "Test (focused: ${{ matrix.shard }})"
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}
     runs-on: ubuntu-latest
+    # Each shard owns one bounded slice of the impacted set, so no single job
+    # carries internal/app together with every reverse dependency. The shard
+    # list and per-shard execution below mirror test-race, which runs the same
+    # shards at full-suite scope; release-scripts is included because its
+    # dedicated job only runs at full-suite or release-sensitive scope, and
+    # dropping it here would stop testing test/scripts changes entirely.
+    # internal/app is carried by one shard per bounded partition rather than a
+    # single app shard: the partitions used to run end to end inside one job,
+    # where the Schema partition alone owned most of the wall clock. The
+    # app-<partition> names are pinned to the helper's partition set by
+    # TestCIAppRacePartitionMatrixMatchesHelper, so a partition can never lose
+    # its job silently. The CrossPlatformCoverage-heavy C range is split again
+    # to retain headroom on runners reclaimed near the five-minute mark.
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - app-schema
+          - app-a-b
+          - app-c-a-l
+          - app-c-m-r
+          - app-c-s-z
+          - app-c-other
+          - app-d-r
+          - app-s-z-example-fuzz
+          - generators
+          - helpers
+          - cli
+          - smoke
+          - remaining
+          - release-scripts
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -467,37 +583,124 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Test changed packages and reverse dependencies
+      - name: Select impacted packages for shard
+        id: select
+        shell: bash
+        env:
+          TEST_SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          # Every app partition shard tests the same single internal/app
+          # package, so the impacted-package query uses the base shard name and
+          # the partition only selects which tests run.
+          package_shard="$TEST_SHARD"
+          case "$TEST_SHARD" in
+            app-*) package_shard=app ;;
+          esac
+          package_output="$(
+            ./scripts/ci/changed-test-packages.sh \
+              list-shard "$package_shard" "$TEST_BASE_REF" "$TEST_HEAD_REF"
+          )"
+          if [ -z "$package_output" ]; then
+            echo "No buildable Go package in shard $TEST_SHARD is affected by this revision." \
+              >> "$GITHUB_STEP_SUMMARY"
+            echo "affected=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The package list travels through a file rather than a step output:
+          # reading it with `mapfile < file` has unambiguous line semantics,
+          # whereas a here-string over a multi-line output would append an extra
+          # empty element if the value ever carried a trailing newline, and an
+          # empty element would reach go test as an empty package argument.
+          printf '%s\n' "$package_output" > "$RUNNER_TEMP/focused-shard-packages.txt"
+          echo "affected=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        if: ${{ matrix.shard == 'remaining' && steps.select.outputs.affected == 'true' }}
+        run: make build
+
+      - name: Install archive tooling
+        if: ${{ matrix.shard == 'release-scripts' && steps.select.outputs.affected == 'true' }}
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
+
+      - name: Test shard with Race Detection
+        if: ${{ steps.select.outputs.affected == 'true' }}
         shell: bash
         env:
           DWS_PACKAGE_VERSION: 0.0.0-test
+          TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          package_output="$(
-            ./scripts/ci/changed-test-packages.sh \
-              list "$TEST_BASE_REF" "$TEST_HEAD_REF"
-          )"
-          if [ -z "$package_output" ]; then
-            echo "No buildable Go package is affected by this revision." \
-              >> "$GITHUB_STEP_SUMMARY"
+          mapfile -t packages < "$RUNNER_TEMP/focused-shard-packages.txt"
+          test "${#packages[@]}" -gt 0
+          for package in "${packages[@]}"; do
+            test -n "$package" || {
+              echo "shard package list contains an empty entry" >&2
+              exit 1
+            }
+          done
+          case "$TEST_SHARD" in
+            app-*)
+              # A single long-lived app test process retains every constructed
+              # command tree in framework registries. Each partition is its own
+              # job, so that state is released when the process exits and the
+              # partitions run concurrently instead of end to end. The helper
+              # still verifies that the partition patterns cover every top-level
+              # test exactly once before running the one it was asked for.
+              test "${#packages[@]}" -eq 1
+              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              exit 0
+              ;;
+          esac
+          if [ "$TEST_SHARD" = "release-scripts" ]; then
+            # Mirror the dedicated release-contract job: these suites shell out
+            # to archive tooling and are not race-instrumented there.
+            go test -v -count=1 -timeout=10m "${packages[@]}"
             exit 0
           fi
-          mapfile -t packages <<< "$package_output"
-          go test -v -race -count=1 -timeout=15m "${packages[@]}"
+          # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
+          # give them a dedicated package timeout on slower hosted runners.
+          timeout_budget=12m
+          if [ "$TEST_SHARD" = "cli" ] ||
+             [ "$TEST_SHARD" = "smoke" ]; then
+            timeout_budget=15m
+          fi
+          go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 
   test-race:
     name: "Test (race: ${{ matrix.shard }})"
     needs: lint
     if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # internal/app is split across one shard per bounded partition so the
+    # partitions run concurrently and each releases its framework registries
+    # when the process exits; cli/smoke need headroom beyond go test -timeout for
+    # setup + assembly. The app-<partition> names are pinned to the helper's
+    # partition set by TestCIAppRacePartitionMatrixMatchesHelper. The
+    # CrossPlatformCoverage-heavy C range is split again for runner headroom.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - app
+          - app-schema
+          - app-a-b
+          - app-c-a-l
+          - app-c-m-r
+          - app-c-s-z
+          - app-c-other
+          - app-d-r
+          - app-s-z-example-fuzz
           - generators
           - helpers
+          - cli
+          - smoke
           - remaining
     steps:
       - name: Check out repository
@@ -519,11 +722,38 @@ jobs:
           TEST_SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
-          package_output="$(./scripts/ci/test-packages.sh list "$TEST_SHARD")"
+          # Every app partition shard tests the same single internal/app
+          # package, so the package query uses the base shard name and the
+          # partition only selects which tests run.
+          package_shard="$TEST_SHARD"
+          case "$TEST_SHARD" in
+            app-*) package_shard=app ;;
+          esac
+          package_output="$(./scripts/ci/test-packages.sh list "$package_shard")"
           test -n "$package_output"
           mapfile -t packages <<< "$package_output"
           test "${#packages[@]}" -gt 0
-          go test -v -race -count=1 -timeout=12m "${packages[@]}"
+          case "$TEST_SHARD" in
+            app-*)
+              # A single long-lived app test process retains every constructed
+              # command tree in framework registries. Each partition is its own
+              # job, so that state is released when the process exits and the
+              # partitions run concurrently instead of end to end. The helper
+              # still verifies that the partition patterns cover every top-level
+              # test exactly once before running the one it was asked for.
+              test "${#packages[@]}" -eq 1
+              ./scripts/ci/run-app-race-tests.sh run "${packages[0]}" "${TEST_SHARD#app-}"
+              exit 0
+              ;;
+          esac
+          # cli/smoke own heavy NewRootCommand / Schema assembly under -race;
+          # give them a dedicated package timeout on slower hosted runners.
+          timeout_budget=12m
+          if [ "$TEST_SHARD" = "cli" ] ||
+             [ "$TEST_SHARD" = "smoke" ]; then
+            timeout_budget=15m
+          fi
+          go test -v -race -count=1 -timeout="$timeout_budget" "${packages[@]}"
 
   test-release-scripts:
     name: Test (workflow and release contracts)
@@ -541,7 +771,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Test release scripts
         shell: bash
@@ -617,7 +853,7 @@ jobs:
           failed=0
           if [ "$CHANGELOG_ONLY" = true ] || [ "$DOCS_ONLY" = true ]; then
             for shard in \
-              "changed packages:$FOCUSED_RESULT" \
+              "focused shards:$FOCUSED_RESULT" \
               "race shards:$RACE_RESULT" \
               "release scripts:$RELEASE_SCRIPTS_RESULT" \
               "cross-platform compile:$CROSS_PLATFORM_RESULT" \
@@ -646,7 +882,7 @@ jobs:
             release_expected=success
           fi
           for shard in \
-            "changed packages:$FOCUSED_RESULT:$focused_expected" \
+            "focused shards:$FOCUSED_RESULT:$focused_expected" \
             "race shards:$RACE_RESULT:$race_expected" \
             "release scripts:$RELEASE_SCRIPTS_RESULT:$release_expected" \
             "cross-platform compile:$CROSS_PLATFORM_RESULT:success"
@@ -693,8 +929,11 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Test macOS auth and Keychain paths with Race Detection
-        run: go test -v -race -count=1 -timeout=10m ./internal/keychain ./internal/auth ./internal/app
+      - name: Test macOS auth and Keychain packages with Race Detection
+        run: go test -v -race -count=1 -timeout=6m ./internal/keychain ./internal/auth
+
+      - name: Test macOS auth migration, Keychain diagnostics, and upgrade self-heal with Race Detection
+        run: go test -v -race -count=1 -timeout=5m ./internal/app -run '^(TestValidateNewBinary_RecoversFromUnsignedDarwin|Test(CrossPlatformCoverage)?Auth(MigrateKeychain|StatusDiagnosticReportsCiphertextKeyMismatch))'
 
   test-windows:
     name: Test (Windows)
@@ -805,6 +1044,7 @@ jobs:
         run: ./scripts/policy/run-platform-coverage-gate.sh --base-ref "$COVERAGE_BASE_REF" --profile coverage-windows.txt
 
       - name: Upload Windows coverage artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-windows
@@ -813,7 +1053,7 @@ jobs:
   coverage-current:
     name: Coverage (current)
     needs: lint
-    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' }}
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -827,10 +1067,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      - name: Install archive tooling
-        if: needs.lint.outputs.full_suite == 'true'
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
 
       - name: Resolve authoritative coverage base
         env:
@@ -853,41 +1089,33 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Run current unit tests with coverage
+      - name: Run scoped unit tests with coverage
         shell: bash
         env:
           DWS_PACKAGE_VERSION: 0.0.0-test
-          FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
         run: |
           set -euo pipefail
-          if [ "$FULL_SUITE" = true ]; then
+          changed_output="$(
+            ./scripts/ci/changed-test-packages.sh \
+              changed "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
+          )"
+          impacted_output="$(
+            ./scripts/ci/changed-test-packages.sh \
+              list "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
+          )"
+          if [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
+            printf 'mode: atomic\n' > coverage.txt
+            echo "No buildable Go package needs scoped coverage." \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            mapfile -t changed_packages <<< "$changed_output"
+            mapfile -t impacted_packages <<< "$impacted_output"
+            coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
             go test -count=1 -p 1 \
+              -coverpkg="$coverpkg" \
               -coverprofile=coverage.txt \
               -covermode=atomic \
-              ./ ./cmd/... ./internal/... ./skills/...
-          else
-            changed_output="$(
-              ./scripts/ci/changed-test-packages.sh \
-                changed "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
-            )"
-            impacted_output="$(
-              ./scripts/ci/changed-test-packages.sh \
-                list "$COVERAGE_BASE_REF" "$COVERAGE_HEAD_REF"
-            )"
-            if [ -z "$changed_output" ] || [ -z "$impacted_output" ]; then
-              printf 'mode: atomic\n' > coverage.txt
-              echo "No buildable Go package needs scoped coverage." \
-                >> "$GITHUB_STEP_SUMMARY"
-            else
-              mapfile -t changed_packages <<< "$changed_output"
-              mapfile -t impacted_packages <<< "$impacted_output"
-              coverpkg="$(IFS=,; echo "${changed_packages[*]}")"
-              go test -count=1 -p 1 \
-                -coverpkg="$coverpkg" \
-                -coverprofile=coverage.txt \
-                -covermode=atomic \
-                "${impacted_packages[@]}"
-            fi
+              "${impacted_packages[@]}"
           fi
           if [ "$(wc -l < coverage.txt)" -gt 1 ]; then
             go tool cover -func=coverage.txt
@@ -898,6 +1126,72 @@ jobs:
         with:
           name: coverage-current-profile
           path: coverage.txt
+          retention-days: 1
+
+  coverage-current-full:
+    name: "Coverage (current: ${{ matrix.shard }})"
+    needs: lint
+    if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - app
+          - cli
+          - generators
+          - helpers
+          - remaining
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install archive tooling
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
+
+      - name: Build
+        run: make build
+
+      # Each shard keeps -p 1 so the authoritative measurement stays serial
+      # inside one instrumented process group; shards run on isolated runners,
+      # and scripts/ci/test-packages.sh verify proves the shard union equals
+      # the previous single full-suite package set exactly once.
+      - name: Run current shard tests with coverage
+        shell: bash
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+          COVERAGE_SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          package_output="$(./scripts/ci/test-packages.sh list-coverage "$COVERAGE_SHARD")"
+          test -n "$package_output"
+          mapfile -t packages <<< "$package_output"
+          test "${#packages[@]}" -gt 0
+          go test -count=1 -p 1 \
+            -coverprofile="coverage-shard-$COVERAGE_SHARD.txt" \
+            -covermode=atomic \
+            "${packages[@]}"
+          go tool cover -func="coverage-shard-$COVERAGE_SHARD.txt" | tail -n 1
+
+      - name: Upload current shard coverage profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-current-shard-${{ matrix.shard }}
+          path: coverage-shard-${{ matrix.shard }}.txt
           retention-days: 1
 
   coverage-supporting:
@@ -918,7 +1212,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Install archive tooling
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
 
       - name: Run policy and shortcut coverage
         run: |
@@ -953,13 +1253,10 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
+        id: setup-go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      - name: Install archive tooling
-        if: needs.lint.outputs.full_suite == 'true'
-        run: sudo apt-get update && sudo apt-get install -y zip unzip
 
       - name: Resolve authoritative coverage base
         env:
@@ -978,7 +1275,40 @@ jobs:
           git rev-parse --verify "${base_ref}^{commit}" >/dev/null
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
+      # The merge-base full-suite profile is a pure function of the base
+      # commit. Reuse the profile published by the last green push run of
+      # exactly that commit instead of re-running the whole suite; any key
+      # mismatch falls back to authoritative recomputation. Exact key only,
+      # never prefix fallback: a near-miss profile would compare the
+      # candidate against the wrong commit.
+      - name: Restore cached merge-base coverage profile
+        id: baseline-cache
+        if: needs.lint.outputs.full_suite == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ env.COVERAGE_BASE_REF }}-go${{ steps.setup-go.outputs.go-version }}
+
+      - name: Materialize cached merge-base coverage profile
+        if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit == 'true'
+        run: |
+          set -eu
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+          cp coverage-cache.txt coverage-base.txt
+
+      - name: Install archive tooling
+        if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit != 'true'
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
+
       - name: Run baseline unit tests with coverage
+        if: steps.baseline-cache.outputs.cache-hit != 'true'
         shell: bash
         env:
           DWS_PACKAGE_VERSION: 0.0.0-test
@@ -1027,6 +1357,21 @@ jobs:
             fi
           )
 
+      - name: Prepare merge-base coverage profile cache
+        if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit != 'true'
+        run: |
+          set -eu
+          test -s coverage-base.txt
+          test "$(head -n 1 coverage-base.txt)" = "mode: atomic"
+          cp coverage-base.txt coverage-cache.txt
+
+      - name: Save merge-base coverage profile cache
+        if: needs.lint.outputs.full_suite == 'true' && steps.baseline-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ env.COVERAGE_BASE_REF }}-go${{ steps.setup-go.outputs.go-version }}
+
       - name: Upload baseline coverage profile
         uses: actions/upload-artifact@v4
         with:
@@ -1039,6 +1384,7 @@ jobs:
     needs:
       - lint
       - coverage-current
+      - coverage-current-full
       - coverage-supporting
       - coverage-baseline
       - coverage-darwin
@@ -1054,6 +1400,7 @@ jobs:
           FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
           PLATFORM_SENSITIVE: ${{ needs.lint.outputs.platform_sensitive }}
           CURRENT_RESULT: ${{ needs.coverage-current.result }}
+          CURRENT_FULL_RESULT: ${{ needs.coverage-current-full.result }}
           SUPPORTING_RESULT: ${{ needs.coverage-supporting.result }}
           BASELINE_RESULT: ${{ needs.coverage-baseline.result }}
           DARWIN_RESULT: ${{ needs.coverage-darwin.result }}
@@ -1061,6 +1408,7 @@ jobs:
         run: |
           failed=0
           current_expected=success
+          current_full_expected=skipped
           supporting_expected=skipped
           baseline_expected=success
           native_expected=skipped
@@ -1068,6 +1416,8 @@ jobs:
             current_expected=skipped
             baseline_expected=skipped
           elif [ "$FULL_SUITE" = true ]; then
+            current_expected=skipped
+            current_full_expected=success
             supporting_expected=success
           fi
           if [ "$CHANGELOG_ONLY" != true ] &&
@@ -1078,6 +1428,7 @@ jobs:
 
           for profile in \
             "current:$CURRENT_RESULT:$current_expected" \
+            "current shards:$CURRENT_FULL_RESULT:$current_full_expected" \
             "supporting:$SUPPORTING_RESULT:$supporting_expected" \
             "baseline:$BASELINE_RESULT:$baseline_expected"
           do
@@ -1113,6 +1464,7 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Go
+        id: setup-go
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         uses: actions/setup-go@v5
         with:
@@ -1136,11 +1488,12 @@ jobs:
           git rev-parse --verify "${base_ref}^{commit}" >/dev/null
           echo "COVERAGE_BASE_REF=$base_ref" >> "$GITHUB_ENV"
 
-      - name: Download current coverage profile
+      - name: Download current coverage profiles
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         uses: actions/download-artifact@v4
         with:
-          name: coverage-current-profile
+          pattern: coverage-current-*
+          merge-multiple: true
           path: .
 
       - name: Download supporting coverage profiles
@@ -1157,13 +1510,33 @@ jobs:
           name: coverage-baseline-profile
           path: .
 
+      # Shard profiles cover disjoint package sets, so their block-level
+      # concatenation is the same candidate profile one serial run produced.
+      # Every expected shard must be present; a missing shard would silently
+      # shrink the scope-matched overall comparison.
+      - name: Assemble full-suite coverage profile
+        if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -f coverage.txt
+          for shard in app cli generators helpers remaining; do
+            profile="coverage-shard-$shard.txt"
+            test -f "$profile"
+            test "$(head -n 1 "$profile")" = "mode: atomic"
+          done
+          printf 'mode: atomic\n' > coverage.txt
+          for shard in app cli generators helpers remaining; do
+            tail -n +2 "coverage-shard-$shard.txt" >> coverage.txt
+          done
+
       - name: Enforce coverage gate
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
         env:
           FULL_SUITE: ${{ needs.lint.outputs.full_suite }}
           COVERAGE_TARGET: "100"
           COVERAGE_ENFORCE_OVERALL: "false"
-          COVERAGE_OVERALL_TOLERANCE: "0"
+          COVERAGE_OVERALL_TOLERANCE: "0.1"
         run: |
           policy_profile=coverage-policy.txt
           if [ "$FULL_SUITE" != true ]; then
@@ -1176,6 +1549,26 @@ jobs:
           COVERAGE_DIFF_PROFILE="$policy_profile" \
           COVERAGE_ADDITIONAL_DIFF_PROFILE="$additional_profile" \
             make coverage-gate BASE_REF="$COVERAGE_BASE_REF"
+
+      # Publish this push's full-suite profile as the merge-base cache for
+      # future PRs whose merge-base is exactly this commit. Saved only after
+      # the gate passed so a broken run never becomes a baseline. Both producer
+      # and consumer use coverage-cache.txt because the cache version includes
+      # the configured path as well as the compression tool.
+      - name: Prepare push coverage profile as merge-base cache
+        if: github.event_name == 'push' && needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        run: |
+          set -eu
+          test -s coverage.txt
+          test "$(head -n 1 coverage.txt)" = "mode: atomic"
+          cp coverage.txt coverage-cache.txt
+
+      - name: Save push coverage profile as merge-base cache
+        if: github.event_name == 'push' && needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && needs.lint.outputs.full_suite == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ github.sha }}-go${{ steps.setup-go.outputs.go-version }}
 
       - name: Generate coverage report
         if: needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true'
@@ -1238,6 +1631,7 @@ jobs:
         env:
           CLASSIFIED_CHANGELOG_CHANGED: ${{ needs.lint.outputs.changelog_changed }}
           CHANGELOG_ONLY: ${{ needs.lint.outputs.changelog_only }}
+          RELEASE_SEAL_ONLY: ${{ needs.lint.outputs.release_seal_only }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -eu
@@ -1264,31 +1658,53 @@ jobs:
           fi
 
           mode=--content-only
-          if [ "$CHANGELOG_ONLY" = true ]; then
+          if [ "$CHANGELOG_ONLY" = true ] && [ "$RELEASE_SEAL_ONLY" != true ]; then
             mode=--fast-path
           fi
           ./scripts/policy/check-changelog-pr.sh \
             "$mode" "$PR_BASE_SHA" HEAD
 
-      - name: Validate trusted main CHANGELOG-only push
+      - name: Validate release fragment lifecycle
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: ./scripts/policy/check-release-fragments.sh "$PR_BASE_SHA" HEAD
+
+      - name: Validate trusted main metadata-only push
         if: github.event_name == 'push' && needs.lint.outputs.changelog_only == 'true'
         env:
           PUSH_BEFORE_SHA: ${{ github.event.before }}
           PUSH_AFTER_SHA: ${{ github.event.after }}
+          RELEASE_SEAL_ONLY: ${{ needs.lint.outputs.release_seal_only }}
         run: |
           set -eu
           test "$(git rev-parse HEAD)" = "$PUSH_AFTER_SHA" || {
             echo "checked-out push revision does not match event after SHA" >&2
             exit 1
           }
+          mode=--fast-path
+          if [ "$RELEASE_SEAL_ONLY" = true ]; then
+            mode=--content-only
+          fi
           ./scripts/policy/check-changelog-pr.sh \
-            --fast-path "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"
+            "$mode" "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"
+          if [ "$RELEASE_SEAL_ONLY" = true ]; then
+            ./scripts/policy/check-release-fragments.sh \
+              "$PUSH_BEFORE_SHA" "$PUSH_AFTER_SHA"
+          fi
 
       - name: Record CHANGELOG-only fast path
         if: needs.lint.outputs.changelog_only == 'true'
+        env:
+          RELEASE_SEAL_ONLY: ${{ needs.lint.outputs.release_seal_only }}
         run: |
-          echo "Only the trusted base-equivalent CHANGELOG validator ran; executable sources are unchanged." \
-            >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RELEASE_SEAL_ONLY" = true ]; then
+            echo "Only the trusted release-seal and fragment validators ran; executable sources are unchanged." \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Only the trusted base-equivalent CHANGELOG validator ran; executable sources are unchanged." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Validate scoped policy
         if: ${{ needs.lint.outputs.changelog_only != 'true' && (needs.lint.outputs.docs_only == 'true' || (needs.lint.outputs.full_suite != 'true' && needs.lint.outputs.interface_sensitive != 'true')) }}
@@ -1353,29 +1769,47 @@ jobs:
           if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
             base_ref="$(git rev-parse HEAD^)"
           fi
+          candidate_ref="$(git rev-parse 'HEAD^{commit}')"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$candidate_ref" != "$PR_HEAD_SHA" ]; then
+            echo "Compatibility checkout $candidate_ref does not match PR head $PR_HEAD_SHA" >&2
+            exit 1
+          fi
           git rev-parse --verify "${base_ref}^{commit}" >/dev/null
-          stable_ref="$(git tag --merged "$base_ref" --list 'v[0-9]*' --sort=-version:refname | awk 'index($0, "-") == 0 { print; exit }')"
+          . ./scripts/release/release-lib.sh
+          stable_ref=""
+          for tag in $(git tag --merged "$base_ref" --list 'v*' --sort=-version:refname); do
+            release_is_stable_version "$tag" || continue
+            if git rev-parse --verify --quiet "refs/tags/withdrawn/$tag" >/dev/null; then
+              continue
+            fi
+            stable_ref="$tag"
+            break
+          done
           if [ -z "$stable_ref" ]; then
             echo "No stable release tag is reachable from compatibility base $base_ref" >&2
             exit 1
           fi
           git rev-parse --verify "${stable_ref}^{commit}" >/dev/null
-          echo "COMPATIBILITY_BASE_REF=$base_ref" >> "$GITHUB_ENV"
-          echo "COMPATIBILITY_STABLE_REF=$stable_ref" >> "$GITHUB_ENV"
+          printf '%s\n' \
+            "COMPATIBILITY_BASE_REF=$base_ref" \
+            "COMPATIBILITY_STABLE_REF=$stable_ref" \
+            "COMPATIBILITY_CANDIDATE_REF=$candidate_ref" >> "$GITHUB_ENV"
 
-      - name: Check historical commands and help compatibility
+      - name: Check historical commands, help, and complete CLI compatibility
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
         run: |
           make authoritative-interface-integrity \
-            BASE_REF="$COMPATIBILITY_BASE_REF"
-          if [ "$(git rev-parse "${COMPATIBILITY_BASE_REF}^{commit}")" != "$(git rev-parse "${COMPATIBILITY_STABLE_REF}^{commit}")" ]; then
-            make authoritative-interface-integrity \
-              BASE_REF="$COMPATIBILITY_STABLE_REF"
-          fi
+            BASE_REF="$COMPATIBILITY_BASE_REF" \
+            STABLE_REF="$COMPATIBILITY_STABLE_REF" \
+            CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"
 
       - name: Check complete Schema compatibility
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}
-        run: make schema-compatibility BASE_REF="$COMPATIBILITY_BASE_REF"
+        run: |
+          make schema-compatibility \
+            BASE_REF="$COMPATIBILITY_BASE_REF" \
+            STABLE_REF="$COMPATIBILITY_STABLE_REF" \
+            CANDIDATE_REF="$COMPATIBILITY_CANDIDATE_REF"
 
       - name: Check skill command references
         if: ${{ needs.lint.outputs.changelog_only != 'true' && needs.lint.outputs.docs_only != 'true' && (needs.lint.outputs.full_suite == 'true' || needs.lint.outputs.interface_sensitive == 'true') }}

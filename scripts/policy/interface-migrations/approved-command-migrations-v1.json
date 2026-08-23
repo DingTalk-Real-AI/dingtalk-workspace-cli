@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "migrations": [
+    {
+      "kind": "flag_extraction",
+      "legacy": {
+        "command": "dws chat group create",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true}
+      },
+      "replacement": {
+        "command": "dws chat topic create",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "legacy_flag": {
+        "name": "thread",
+        "before": {"present": true, "type": "bool", "no_opt": "true", "scope": "local"},
+        "after": {"present": true, "type": "bool", "hidden": true, "no_opt": "true", "scope": "local"}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.create_group_conversation",
+        "replacement_tool_id": "chat.create_topic_conversation",
+        "parameters": [
+          {"from": "name", "to": "name"},
+          {"from": "type", "to": "type"},
+          {"from": "users", "to": "users"},
+          {
+            "from": "thread",
+            "replacement_constant": {
+              "property": "convThreadEnabled",
+              "value": true
+            }
+          }
+        ]
+      },
+      "state": "pending",
+      "reason": "Move topic-conversation creation to the dedicated chat topic command while retaining the legacy --thread execution path."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws chat message list-topic-replies",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws chat topic list-replies",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.list_topic_replies",
+        "replacement_tool_id": "chat.list_topic_replies",
+        "parameters": [
+          {"from": "conversation-id", "to": "open-topic-id"},
+          {"from": "topic-id", "to": "open-conv-thread-id"}
+        ]
+      },
+      "state": "pending",
+      "reason": "Move topic reply listing from chat message to the dedicated chat topic command while preserving the legacy executable command."
+    },
+    {
+      "kind": "command_move",
+      "legacy": {
+        "command": "dws chat message forward-topic",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "replacement": {
+        "command": "dws chat topic forward",
+        "before": {"present": false},
+        "after": {"present": true, "runnable": true}
+      },
+      "schema": {
+        "product_id": "chat",
+        "source_tool_id": "chat.forward_topic",
+        "replacement_tool_id": "chat.forward_topic",
+        "parameters": [
+          {"from": "src-conversation-id", "to": "src-open-topic-id"},
+          {"from": "src-thread-id", "to": "src-open-conv-thread-id"},
+          {"from": "dest-conversation-id", "to": "dest-open-conversation-id"}
+        ]
+      },
+      "state": "pending",
+      "reason": "Move topic forwarding from chat message to the dedicated chat topic command while preserving the legacy executable command."
+    }
+  ]
+}

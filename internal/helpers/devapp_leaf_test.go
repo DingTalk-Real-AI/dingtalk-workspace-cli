@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -27,6 +28,12 @@ import (
 // 装配出的 toolArgs 与手写版逐字等价。这是 catalog drift 不覆盖的运行时维度。
 type fakeDevAppRunner struct {
 	got executor.Invocation
+}
+
+func prepareDevAppLeafTestCommand(cmd *cobra.Command) *cobra.Command {
+	ctx, _ := output.WithResultStore(context.Background())
+	cmd.SetContext(ctx)
+	return cmd
 }
 
 func (f *fakeDevAppRunner) Run(_ context.Context, inv executor.Invocation) (executor.Result, error) {
@@ -39,7 +46,7 @@ func (f *fakeDevAppRunner) Run(_ context.Context, inv executor.Invocation) (exec
 // toolArgs 键/值/trim 与手写版等价，且 PostMount 设上了 schema 注解与 NoArgs。
 func TestDevAppCredentialsGetLeafDispatchesTrimmedArgs(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppCredentialsGetCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppCredentialsGetCommand(r))
 	// 含首尾空白：验证 LeafFlag.Trim 等价手写 devAppStringFlag 的 TrimSpace。
 	if err := cmd.Flags().Set("unified-app-id", "  APP-123  "); err != nil {
 		t.Fatal(err)
@@ -61,14 +68,14 @@ func TestDevAppCredentialsGetLeafDispatchesTrimmedArgs(t *testing.T) {
 	}
 }
 
-// TestDevAppLifecycleLeafWriteGuardAndArgs 验证写守卫拦截/放行 + toolArgs 装配。
+// TestDevAppLifecycleLeafWriteGuardAndArgs 验证框架确认门拦截/放行 + toolArgs 装配。
 func TestDevAppLifecycleLeafWriteGuardAndArgs(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppLifecycleCommand(r, "enable", "启用应用", devAppEnableTool)
+	cmd := prepareDevAppLeafTestCommand(newDevAppEnableCommand(r))
 	if err := cmd.Flags().Set("unified-app-id", "APP-9"); err != nil {
 		t.Fatal(err)
 	}
-	// 无 --yes / --dry-run：写守卫必须拦下（devAppRequireWriteGuard）。
+	// 无 --yes / --dry-run：SafetySpec 的 user_required 确认必须拦下。
 	if err := cmd.RunE(cmd, nil); err == nil {
 		t.Fatal("RunE() without --yes: want write-guard error, got nil")
 	}
@@ -117,7 +124,7 @@ func TestDevAppVersionLeafs(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := &fakeDevAppRunner{}
-			cmd := c.build(r)
+			cmd := prepareDevAppLeafTestCommand(c.build(r))
 			if err := cmd.Flags().Set("unified-app-id", "  APP-1  "); err != nil {
 				t.Fatal(err)
 			}
@@ -150,7 +157,7 @@ func TestDevAppVersionLeafs(t *testing.T) {
 // TestDevAppMemberListLeaf 验证 member list 的 unified-id 装配。
 func TestDevAppMemberListLeaf(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppMemberListCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppMemberListCommand(r))
 	if err := cmd.Flags().Set("unified-app-id", "APP-7"); err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +175,7 @@ func TestDevAppMemberListLeaf(t *testing.T) {
 // TestDevAppPermissionListLeaf 验证 ToUpper transform + auth-status 默认 + 命令别名。
 func TestDevAppPermissionListLeaf(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppPermissionListCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppPermissionListCommand(r))
 	// 命令别名 "search" 经 PostMount 设回。
 	if !containsString(cmd.Aliases, "search") {
 		t.Fatalf("cmd.Aliases = %v, want contain search", cmd.Aliases)
@@ -194,7 +201,7 @@ func TestDevAppPermissionListLeaf(t *testing.T) {
 // TestDevAppVersionPublishLeaf 验证 precheckOnly=false 常量 + confirmed-sensitive Changed() 语义。
 func TestDevAppVersionPublishLeaf(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppVersionPublishCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppVersionPublishCommand(r))
 	cmd.Flags().Bool("yes", false, "")
 	_ = cmd.Flags().Set("yes", "true")
 	_ = cmd.Flags().Set("unified-app-id", "APP-V")
@@ -211,7 +218,7 @@ func TestDevAppVersionPublishLeaf(t *testing.T) {
 	}
 	// 显式设 confirmed-sensitive=true：入参。
 	r2 := &fakeDevAppRunner{}
-	cmd2 := newDevAppVersionPublishCommand(r2)
+	cmd2 := prepareDevAppLeafTestCommand(newDevAppVersionPublishCommand(r2))
 	cmd2.Flags().Bool("yes", false, "")
 	_ = cmd2.Flags().Set("yes", "true")
 	_ = cmd2.Flags().Set("unified-app-id", "APP-V")
@@ -225,9 +232,9 @@ func TestDevAppVersionPublishLeaf(t *testing.T) {
 
 // TestDevAppGetLeafDualKey 验证二选一定位键。
 func TestDevAppGetLeafDualKey(t *testing.T) {
-	// 都不传：报错。
+	// 都不传：报错（框架统一约束措辞）。
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppGetCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppGetCommand(r))
 	if err := cmd.RunE(cmd, nil); err == nil ||
 		!strings.Contains(err.Error(), "请传入 --unified-app-id 或 --app-key") {
 		t.Fatalf("err = %v, want 二选一报错", err)
@@ -250,7 +257,7 @@ func TestDevAppGetLeafDualKey(t *testing.T) {
 func TestDevAppListLeaf(t *testing.T) {
 	// keyword 别名回退：只设 keyword，name 应取 keyword 值。
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppListCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppListCommand(r))
 	_ = cmd.Flags().Set("keyword", "DemoApp")
 	_ = cmd.Flags().Set("app-group-id", "5")
 	_ = cmd.Flags().Set("develop-type", "0") // 0：LeafInt 不入参
@@ -274,7 +281,7 @@ func TestDevAppListLeaf(t *testing.T) {
 	}
 	// name 优先于 keyword。
 	r2 := &fakeDevAppRunner{}
-	cmd2 := newDevAppListCommand(r2)
+	cmd2 := prepareDevAppLeafTestCommand(newDevAppListCommand(r2))
 	_ = cmd2.Flags().Set("name", "Primary")
 	_ = cmd2.Flags().Set("keyword", "Fallback")
 	_ = cmd2.RunE(cmd2, nil)
@@ -283,10 +290,10 @@ func TestDevAppListLeaf(t *testing.T) {
 	}
 }
 
-// TestDevAppEventListLeaf 验证 cursor/pageSize 经 devAppApplyCursorParams 注入。
+// TestDevAppEventListLeaf 验证 cursor/pageSize 经 devAppCallCursor 工具注入。
 func TestDevAppEventListLeaf(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppEventListCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppEventListCommand(r))
 	_ = cmd.Flags().Set("unified-app-id", "APP-E")
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("RunE() error = %v", err)
@@ -294,9 +301,9 @@ func TestDevAppEventListLeaf(t *testing.T) {
 	if v, _ := r.got.Params["unifiedAppId"].(string); v != "APP-E" {
 		t.Fatalf("unifiedAppId = %q, want APP-E", v)
 	}
-	// page-size 默认 20，经 devAppApplyCursorParams 注入为 float64(20)。
-	if _, present := r.got.Params["pageSize"]; !present {
-		t.Fatal("pageSize missing, want injected by devAppApplyCursorParams")
+	// page-size 默认 20，由 registerDevAppCursorFlags + CallCursor 注入。
+	if v, present := r.got.Params["pageSize"]; !present || v != 20 {
+		t.Fatalf("pageSize = %v, want 20 from cursor tool", v)
 	}
 	// cursor 默认空：不入参。
 	if _, present := r.got.Params["cursor"]; present {
@@ -311,14 +318,14 @@ func TestDevAppEventListLeaf(t *testing.T) {
 // TestDevAppUpdateLeaf 验证「至少一项」校验 + OmitEmpty 装配。
 func TestDevAppUpdateLeaf(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppUpdateCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppUpdateCommand(r))
 	cmd.Flags().Bool("yes", false, "")
 	_ = cmd.Flags().Set("yes", "true")
 	_ = cmd.Flags().Set("unified-app-id", "APP-U")
-	// 全空：至少一项拦。
+	// 全空：至少一项拦（框架统一约束措辞）。
 	if err := cmd.RunE(cmd, nil); err == nil ||
-		!strings.Contains(err.Error(), "至少提供一项待更新字段") {
-		t.Fatalf("err = %v, want 至少提供一项待更新字段", err)
+		!strings.Contains(err.Error(), "至少提供一项待更新字段：--name、--desc 或 --icon-media-id") {
+		t.Fatalf("err = %v, want 至少提供一项待更新字段：--name、--desc 或 --icon-media-id", err)
 	}
 	_ = cmd.Flags().Set("desc", " 新描述 ")
 	if err := cmd.RunE(cmd, nil); err != nil {
@@ -335,7 +342,7 @@ func TestDevAppUpdateLeaf(t *testing.T) {
 // TestDevAppMemberAddLeaf 验证 userIds []string 注入 + memberType 装配 + 写守卫/必填顺序。
 func TestDevAppMemberAddLeaf(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppMemberAddCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppMemberAddCommand(r))
 	_ = cmd.Flags().Set("unified-app-id", "APP-M")
 	// 无 --yes：写守卫拦。
 	if err := cmd.RunE(cmd, nil); err == nil {
@@ -370,14 +377,14 @@ func TestDevAppMemberAddLeaf(t *testing.T) {
 // TestDevAppSecurityConfigLeaf 验证 3 个列表 flag 的 Call 注入 + 「至少一项」校验。
 func TestDevAppSecurityConfigLeaf(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppSecurityConfigCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppSecurityConfigCommand(r))
 	cmd.Flags().Bool("yes", false, "")
 	_ = cmd.Flags().Set("yes", "true")
 	_ = cmd.Flags().Set("unified-app-id", "APP-S")
 	// 全空：至少一项拦。
 	if err := cmd.RunE(cmd, nil); err == nil ||
-		!strings.Contains(err.Error(), "至少提供一项安全配置") {
-		t.Fatalf("err = %v, want 至少提供一项安全配置", err)
+		!strings.Contains(err.Error(), "至少提供一项安全配置：--ip-whitelist、--redirect-urls 或 --sso-urls") {
+		t.Fatalf("err = %v, want 至少提供一项安全配置：--ip-whitelist、--redirect-urls 或 --sso-urls", err)
 	}
 	// 设 ip-whitelist：注入 []string，其余省略。
 	_ = cmd.Flags().Set("ip-whitelist", "10.0.0.1; 10.0.0.2")
@@ -396,7 +403,7 @@ func TestDevAppSecurityConfigLeaf(t *testing.T) {
 // TestDevAppPermissionAddLeaf 验证 scope-values 经 Call 注入为 []string + 写守卫/必填。
 func TestDevAppPermissionAddLeaf(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppPermissionAddCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppPermissionAddCommand(r))
 	// scope-values 在 PostMount 注册。
 	if err := cmd.Flags().Set("unified-app-id", "APP-3"); err != nil {
 		t.Fatal(err)
@@ -429,7 +436,7 @@ func TestDevAppPermissionAddLeaf(t *testing.T) {
 // TestDevAppWebappConfigLeaf 验证 OmitEmpty 装配 + 「至少一项」跨 flag 校验。
 func TestDevAppWebappConfigLeaf(t *testing.T) {
 	r := &fakeDevAppRunner{}
-	cmd := newDevAppWebappConfigCommand(r)
+	cmd := prepareDevAppLeafTestCommand(newDevAppWebappConfigCommand(r))
 	cmd.Flags().Bool("yes", false, "")
 	_ = cmd.Flags().Set("yes", "true")
 
@@ -438,8 +445,8 @@ func TestDevAppWebappConfigLeaf(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := cmd.RunE(cmd, nil)
-	if err == nil || !strings.Contains(err.Error(), "至少提供一项网页应用配置") {
-		t.Fatalf("err = %v, want 至少提供一项网页应用配置", err)
+	if err == nil || !strings.Contains(err.Error(), "至少提供一项网页应用配置：--h5-page-type、--homepage-url、--pc-homepage-url 或 --omp-url") {
+		t.Fatalf("err = %v, want 至少提供一项网页应用配置：--h5-page-type、--homepage-url、--pc-homepage-url 或 --omp-url", err)
 	}
 
 	// 只设一项：该项入参，其余 OmitEmpty 省略。
@@ -447,7 +454,7 @@ func TestDevAppWebappConfigLeaf(t *testing.T) {
 		t.Fatal(err)
 	}
 	r = &fakeDevAppRunner{}
-	cmd2 := newDevAppWebappConfigCommand(r)
+	cmd2 := prepareDevAppLeafTestCommand(newDevAppWebappConfigCommand(r))
 	cmd2.Flags().Bool("yes", false, "")
 	_ = cmd2.Flags().Set("yes", "true")
 	_ = cmd2.Flags().Set("unified-app-id", "APP-1")
@@ -488,14 +495,12 @@ func TestDevAppLeafToolArgsTable(t *testing.T) {
 		{"version create", newDevAppVersionCreateCommand, map[string]string{"unified-app-id": "APP-V", "desc": "新增机器人"}, true, devAppVersionCreateTool, map[string]any{"unifiedAppId": "APP-V", "desc": "新增机器人"}, []string{"version"}},
 		{"app create", newDevAppCreateCommand, map[string]string{"name": "DemoApp"}, true, devAppCreateTool, map[string]any{"name": "DemoApp"}, []string{"desc", "iconMediaId"}},
 		{"robot config get", newDevAppRobotConfigGetCommand, map[string]string{"unified-app-id": "APP-C"}, false, devAppRobotConfigGetTool, map[string]any{"unifiedAppId": "APP-C"}, nil},
-		{"lifecycle disable", func(r executor.Runner) *cobra.Command {
-			return newDevAppLifecycleCommand(r, "disable", "停用应用", devAppDisableTool)
-		}, map[string]string{"unified-app-id": "APP-D"}, true, devAppDisableTool, map[string]any{"unifiedAppId": "APP-D"}, nil},
+		{"lifecycle disable", newDevAppDisableCommand, map[string]string{"unified-app-id": "APP-D"}, true, devAppDisableTool, map[string]any{"unifiedAppId": "APP-D"}, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := &fakeDevAppRunner{}
-			cmd := c.build(r)
+			cmd := prepareDevAppLeafTestCommand(c.build(r))
 			if c.needsYes {
 				cmd.Flags().Bool("yes", false, "")
 				_ = cmd.Flags().Set("yes", "true")

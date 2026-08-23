@@ -1,11 +1,13 @@
 package helpers
 
 import (
+	stderrors "errors"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -107,9 +109,16 @@ func TestCrossPlatformCoverageProxySubCommandCoverage(t *testing.T) {
 
 func executeWikiEdge(t *testing.T, args ...string) error {
 	t.Helper()
+	_, err := executeWikiEdgeWithCaller(t, args...)
+	return err
+}
+
+func executeWikiEdgeWithCaller(t *testing.T, args ...string) (*scriptedToolCaller, error) {
+	t.Helper()
 	oldDeps := deps
 	oldArgs := os.Args
-	InitDeps(&scriptedToolCaller{})
+	caller := &scriptedToolCaller{}
+	InitDeps(caller)
 	deps.Out.w = io.Discard
 	deps.Out.errW = io.Discard
 	t.Cleanup(func() {
@@ -122,9 +131,10 @@ func executeWikiEdge(t *testing.T, args ...string) error {
 	root.SilenceUsage = true
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
+	root.SetIn(os.Stdin)
 	root.SetArgs(args)
 	os.Args = append([]string{"dws", "wiki"}, args...)
-	return root.Execute()
+	return caller, root.Execute()
 }
 
 func TestCrossPlatformCoverageWikiRoutingAndValidationEdges(t *testing.T) {
@@ -132,6 +142,9 @@ func TestCrossPlatformCoverageWikiRoutingAndValidationEdges(t *testing.T) {
 		{"space", "list", "--type", "orgSpace", "--limit", "3", "--cursor", "next"},
 		{"space", "list", "--type", "mySpace", "--limit", "not-a-number"},
 		{"space", "search", "--type", "myWikiSpace"},
+		{"feed", "list", "--workspace", "space"},
+		{"feed", "list", "--workspace", "space", "--limit", "3", "--cursor", "next", "--exclude-file"},
+		{"feed", "list", "--workspace-id", "space", "--page-token", "next"},
 	} {
 		if err := executeWikiEdge(t, args...); err != nil {
 			t.Fatalf("Execute(%v): %v", args, err)
@@ -142,10 +155,25 @@ func TestCrossPlatformCoverageWikiRoutingAndValidationEdges(t *testing.T) {
 		{"node", "create", "--workspace", "space", "--name", "name", "--folder", "123"},
 		{"node", "copy", "--workspace", "space", "--node", "node", "--folder", "123"},
 		{"node", "move", "--workspace", "space", "--node", "node", "--folder", "123"},
+		{"feed", "list"},
 	} {
 		if err := executeWikiEdge(t, args...); err == nil {
 			t.Fatalf("Execute(%v) returned nil", args)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageWikiMemberAddRejectsOwner(t *testing.T) {
+	caller, err := executeWikiEdgeWithCaller(t, "member", "add", "--workspace", "space", "--users", "u1", "--role", "OWNER")
+	if err == nil || !strings.Contains(strings.ToUpper(err.Error()), "OWNER") {
+		t.Fatalf("member add OWNER error = %v, want local OWNER rejection", err)
+	}
+	var appErr *apperrors.Error
+	if !stderrors.As(err, &appErr) || appErr.Category != apperrors.CategoryValidation {
+		t.Fatalf("member add OWNER error = %#v, want validation category", err)
+	}
+	if caller.calls != 0 {
+		t.Fatalf("member add OWNER made %d remote calls, want 0", caller.calls)
 	}
 }
 
@@ -163,8 +191,10 @@ func TestCrossPlatformCoverageWikiDeleteCancellationEdges(t *testing.T) {
 		_, _ = stdin.WriteString("no\n")
 		_, _ = stdin.Seek(0, 0)
 		os.Stdin = stdin
-		if err := executeWikiEdge(t, args...); err != nil {
-			t.Fatalf("cancel %v: %v", args, err)
+		err = executeWikiEdge(t, args...)
+		// Contract ConfirmSafety returns a typed cancel error (not silent nil).
+		if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+			t.Fatalf("cancel %v: error = %v, want 用户取消了操作", args, err)
 		}
 		_ = stdin.Close()
 	}

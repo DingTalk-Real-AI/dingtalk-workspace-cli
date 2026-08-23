@@ -1,15 +1,16 @@
 // Command fetch_mcp_metadata pulls tools/list from ALL live MCP server endpoints
-// and writes a refreshed schema_mcp_metadata.json. This is DWS's equivalent of
-// lark-cli's scripts/fetch_meta.py.
+// and writes a local diagnostic dump. It is NOT a Schema delivery refresh:
+// schema_mcp_metadata.json is retired; production Catalog assembles from
+// Contract/ParamDecl/Interface + Cobra only.
 //
 // Usage:
 //
 //	dws auth login                     # ensure valid auth
-//	make fetch-mcp-metadata             # runs this tool
+//	make fetch-mcp-metadata             # writes artifacts/mcp_metadata_diagnostic.json
 //
-// The tool loads auth from the DWS keychain, iterates all 26 static server
-// endpoints (internal/syncdata.StaticServers), calls tools/list on each,
-// merges results, and writes schema_mcp_metadata.json.
+// The tool loads auth from the DWS keychain, iterates static server endpoints
+// (internal/syncdata.StaticServers), calls tools/list on each, merges results,
+// and writes the requested -output path (refuses the retired pin path).
 package main
 
 import (
@@ -24,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/syncdata"
@@ -38,14 +40,15 @@ type toolLister interface {
 
 // Injection points so run() is fully testable without network/keychain/exit.
 var (
-	osExit           = os.Exit
-	getenv           = os.Getenv
-	loadTokenData    = auth.LoadTokenDataKeychain
-	staticServers    = syncdata.StaticServers
-	registrySource   = cli.EmbeddedCommandRegistryMergedJSON
-	listToolsTimeout = 30 * time.Second
-	gitHeadPath      = ".git/HEAD"
-	newToolLister    = func(token string) toolLister {
+	osExit               = os.Exit
+	getenv               = os.Getenv
+	loadTokenData        = auth.LoadTokenDataKeychain
+	staticServers        = syncdata.StaticServers
+	registrySource       = collectedIdentityInterfaceRefs
+	collectIdentitySpecs = cli.CollectIdentitySpecs
+	listToolsTimeout     = 30 * time.Second
+	gitHeadPath          = ".git/HEAD"
+	newToolLister        = func(token string) toolLister {
 		return transport.NewClient(&http.Client{Timeout: 60 * time.Second}).WithAuth(token, nil)
 	}
 )
@@ -57,8 +60,12 @@ func main() {
 func run(args []string, stderr io.Writer) int {
 	flags := flag.NewFlagSet("fetch_mcp_metadata", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	output := flags.String("output", "internal/cli/schema_mcp_metadata.json", "output file path")
+	output := flags.String("output", "artifacts/mcp_metadata_diagnostic.json", "diagnostic dump path (not a Schema pin)")
 	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if retiredPinnedMCPMetadataPath(*output) {
+		fmt.Fprintln(stderr, "fetch_mcp_metadata: refusing to write retired Schema pin internal/cli/schema_mcp_metadata.json")
 		return 2
 	}
 
@@ -74,11 +81,11 @@ func run(args []string, stderr io.Writer) int {
 	servers := staticServers()
 	fmt.Fprintf(stderr, "fetch_mcp_metadata: querying %d server endpoints\n", len(servers))
 
-	// Load CLI registry to build tool_name → interface_ref mapping.
+	// Collect command identity to build tool_name → interface_ref mapping.
 	registryMap := loadRegistryInterfaceRefs(stderr)
 	fmt.Fprintf(stderr, "fetch_mcp_metadata: registry mapping: %d entries\n", len(registryMap))
 
-	// Load the previous schema_mcp_metadata.json to preserve hand-curated
+	// Load a previous diagnostic dump (if any) to preserve hand-curated
 	// cross-server interface_ref mappings that automated matching can't derive.
 	prevData, prevErr := os.ReadFile(*output)
 	prevTools := map[string]map[string]any{}
@@ -310,48 +317,51 @@ func buildCrossServerRefs(prevTools map[string]map[string]any, registryMap map[s
 	return index
 }
 
-// loadRegistryInterfaceRefs loads the reviewed split CommandRegistry through
-// the cli package's reassembly API and builds a canonical_path →
-// {product_id, rpc_name} mapping for interface_ref injection.
-func loadRegistryInterfaceRefs(stderr io.Writer) map[string]map[string]string {
-	data, err := registrySource()
+// collectedIdentityInterfaceRefs collects command identity from the live
+// command tree — the replacement for the retired reviewed CommandRegistry —
+// and derives the canonical_path → {product_id, rpc_name} mapping used for
+// interface_ref injection.
+func collectedIdentityInterfaceRefs() (map[string]map[string]string, error) {
+	root := app.NewSchemaSourceRootCommand()
+	specs, _, err := collectIdentitySpecs(root)
 	if err != nil {
-		fmt.Fprintf(stderr, "fetch_mcp_metadata: warning: cannot load registry: %v\n", err)
-		return map[string]map[string]string{}
+		return nil, fmt.Errorf("collect command identity: %w", err)
 	}
-	var reg struct {
-		Products []struct {
-			ID    string `json:"id"`
-			Tools []struct {
-				CanonicalPath string `json:"canonical_path"`
-			} `json:"tools"`
-		} `json:"products"`
-	}
-	if err := json.Unmarshal(data, &reg); err != nil {
-		// 与读文件失败同等告警：静默返回空映射会让所有 live tool 被丢弃、
-		// 产出 stub-only 快照且零提示（P1#1 的故障模式）。
-		fmt.Fprintf(stderr, "fetch_mcp_metadata: warning: cannot parse registry: %v\n", err)
-		return map[string]map[string]string{}
-	}
-	out := make(map[string]map[string]string)
-	for _, prod := range reg.Products {
-		for _, tool := range prod.Tools {
-			cp := strings.TrimSpace(tool.CanonicalPath)
-			if cp == "" || !strings.Contains(cp, ".") {
-				continue
-			}
-			parts := strings.SplitN(cp, ".", 2)
-			out[cp] = map[string]string{
-				"product_id": parts[0],
-				"rpc_name":   parts[1],
-			}
+	out := make(map[string]map[string]string, len(specs))
+	for _, spec := range specs {
+		cp := strings.TrimSpace(spec.CanonicalPath)
+		if cp == "" || !strings.Contains(cp, ".") {
+			continue
+		}
+		parts := strings.SplitN(cp, ".", 2)
+		out[cp] = map[string]string{
+			"product_id": parts[0],
+			"rpc_name":   parts[1],
 		}
 	}
-	return out
+	return out, nil
+}
+
+// loadRegistryInterfaceRefs builds the canonical_path → interface_ref mapping
+// from the collected command identity. 与旧实现同等告警：静默返回空映射会让
+// 所有 live tool 被丢弃、产出 stub-only 快照且零提示（P1#1 的故障模式）。
+func loadRegistryInterfaceRefs(stderr io.Writer) map[string]map[string]string {
+	refs, err := registrySource()
+	if err != nil {
+		fmt.Fprintf(stderr, "fetch_mcp_metadata: warning: cannot collect command identity: %v\n", err)
+		return map[string]map[string]string{}
+	}
+	return refs
+}
+
+func retiredPinnedMCPMetadataPath(path string) bool {
+	cleaned := strings.ReplaceAll(strings.TrimSpace(path), "\\", "/")
+	return cleaned == "internal/cli/schema_mcp_metadata.json" ||
+		strings.HasSuffix(cleaned, "/internal/cli/schema_mcp_metadata.json")
 }
 
 // extractParams converts a JSON Schema inputSchema (from MCP tools/list) into
-// the flat param-name → metadata map used by schema_mcp_metadata.json.
+// the flat param-name → metadata map used by diagnostic dumps.
 func extractParams(inputSchema map[string]any) map[string]map[string]any {
 	if inputSchema == nil {
 		return nil

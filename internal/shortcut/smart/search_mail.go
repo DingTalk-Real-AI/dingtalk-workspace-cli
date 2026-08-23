@@ -14,6 +14,11 @@
 package smart
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -48,10 +53,49 @@ var SearchMail = shortcut.Shortcut{
 		"最后在本地把每封邮件投影成 {subject, from, date, messageId} 打印出来，可配合 --format/--jq/--fields。" +
 		"这是纯只读操作，只做搜索与本地投影，不会修改、发送或删除任何邮件；若没有命中则返回空列表。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_search_mail",
+			CanonicalPath:  "mail.shortcut_search_mail",
+			CLIPath:        "mail +search-mail",
+			PrimaryCLIPath: "mail +search-mail",
+		},
+		Description: "按 KQL 关键词搜索邮件并投影列表（主题/发件人/时间/messageId）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "按 KQL 关键词搜索邮件并投影列表（主题/发件人/时间/messageId）",
+			UseWhen:      []string{"当你想按关键词（KQL 表达式，如 subject:周报、from:alice、hasAttachments:true、folderId:2 等）快速搜自己的邮件、并只看一份精简清单（主题、发件人、时间、邮件 messageId）而不想翻完整正文时使用；内部先确定要搜的邮箱地址——你可以用 --email 指定，不指定时自动取你绑定的第一个邮箱——再执行邮件搜索，最后在本地把每封邮件投影成 {subject, from, date, messageId} 打印出来，可配合 --format/--jq/--fields。这是纯只读操作，只做搜索与本地投影，不会修改、发送或删除任何邮件；若没有命中则返回空列表。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws mail +search-mail --query \"subject:周报\"",
+				"dws mail +search-mail --query \"from:alice AND date>2025-06-01T00:00:00Z\"",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
-		{Name: "query", Type: shortcut.FlagString, Desc: "KQL 搜索表达式（如 subject:周报、from:alice、folderId:2）", Required: true},
+		{Name: "query", Type: shortcut.FlagString, Desc: "KQL 搜索表达式（如 subject:周报、from:alice、folderId:2），不能为空", Required: true},
 		{Name: "email", Type: shortcut.FlagString, Desc: "要搜索的邮箱地址（可选，默认取你绑定的第一个邮箱）", Required: false},
-		{Name: "size", Type: shortcut.FlagString, Desc: "返回条数上限（可选，默认 20）", Required: false},
+		{Name: "size", Type: shortcut.FlagString, Desc: "返回条数上限（可选，默认 20；显式提供时必须是 1-100 之间的整数）", Required: false},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，取自上一页 nextCursor", Required: false},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"query"}, Description: "不能为空"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"size"}, Description: "1-100"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		if err := smartMailValidateRequiredText(rt, "query"); err != nil {
+			return err
+		}
+		return smartMailValidateStringPageSize(rt, "size")
 	},
 	Tips: []string{
 		`dws mail +search-mail --query "subject:周报"`,
@@ -60,6 +104,10 @@ var SearchMail = shortcut.Shortcut{
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
 		if err := rt.RequireAll("query"); err != nil {
+			return err
+		}
+		size, err := smartMailStringPageSize(rt, "size", "20")
+		if err != nil {
 			return err
 		}
 
@@ -75,31 +123,42 @@ var SearchMail = shortcut.Shortcut{
 
 		// Step 2 — search that mailbox. email/query/size mirror the search_emails
 		// call in helpers.messageSearch; size is passed as a string.
-		size := rt.Str("size")
-		if size == "" {
-			size = "20"
-		}
-		data, err := rt.CallMCPData("mail", "search_emails", map[string]any{
+		args := map[string]any{
 			"email": email,
 			"query": rt.Str("query"),
 			"size":  size,
-		})
+		}
+		if rt.Changed("cursor") {
+			args["cursor"] = rt.Str("cursor")
+		}
+		data, err := rt.CallMCPData("mail", "search_emails", args)
 		if err != nil {
 			return err
 		}
 
 		// Step 3 — project each message to a compact record.
-		messages := searchMailMessages(data)
+		messages, err := smartMailSearchRows(data, "mail/search_emails")
+		if err != nil {
+			return err
+		}
 		out := make([]map[string]any, 0, len(messages))
 		for _, m := range messages {
+			from, err := searchMailFrom(m)
+			if err != nil {
+				return err
+			}
 			out = append(out, map[string]any{
 				"subject":   searchMailFirstString(m, "subject", "title", "topic"),
-				"from":      searchMailFrom(m),
+				"from":      from,
 				"date":      searchMailFirstAny(m, "date", "sentDate", "receivedDate", "sentTime", "internalDate", "createTime"),
 				"messageId": searchMailFirstString(m, "messageId", "id", "mailId", "emailId", "internetMessageId"),
 			})
 		}
-		return rt.Output(map[string]any{"messages": out, "email": email})
+		complete, next, err := smartMailPage(data, "mail/search_emails", "", rt.Str("cursor"))
+		if err != nil {
+			return err
+		}
+		return smartMailOutputPage(rt, "messages", out, complete, next)
 	},
 }
 
@@ -112,115 +171,106 @@ func searchMailFirstMailbox(rt *shortcut.RuntimeContext) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if addr := searchMailPickMailbox(data); addr != "" {
-		return addr, nil
+	mailboxes, err := searchMailMailboxAddresses(data)
+	if err != nil {
+		return "", err
+	}
+	if len(mailboxes) > 0 {
+		return mailboxes[0], nil
 	}
 	return "", apperrors.NewValidation("未找到可用邮箱，请用 --email 指定要搜索的邮箱地址")
 }
 
-// searchMailPickMailbox resolves the first usable mailbox address from a
-// list_user_mailboxes response. It tolerates every observed shape: objects with
-// an email field (result.emailAccounts[].email) and bare string arrays
-// (result.emailAccounts[]), each at the top level or one level under a
-// result/data wrapper. searchMailToMaps drops plain strings, so the bare-string
-// case is scanned separately — otherwise all three smart mail shortcuts wrongly
-// report that no mailbox exists.
-func searchMailPickMailbox(data map[string]any) string {
-	containers := []string{"emailAccounts", "mailboxes", "list", "items", "data", "result", "records"}
-	for _, m := range searchMailUnwrapList(data, containers...) {
-		if addr := searchMailFirstString(m, "email", "emailAddress", "mailbox", "address", "account"); addr != "" {
-			return addr
-		}
+// searchMailMailboxAddresses accepts the two reviewed mailbox wire shapes:
+// non-empty address strings and non-empty objects carrying an email field.
+// The collection itself and every item remain fail-closed, so malformed rows
+// cannot be skipped and misreported as an empty mailbox list.
+func searchMailMailboxAddresses(data map[string]any) ([]string, error) {
+	const operation = "mail/list_user_mailboxes"
+	if err := smartMailSuccess(data, operation); err != nil {
+		return nil, err
 	}
-	scanStrings := func(m map[string]any) string {
-		for _, key := range containers {
-			if arr, ok := m[key].([]any); ok {
-				for _, it := range arr {
-					if s, ok := it.(string); ok && s != "" {
-						return s
-					}
-				}
-			}
+	paths := []string{"emailAccounts", "result.emailAccounts", "data.emailAccounts"}
+	var value any
+	selectedPath := ""
+	for _, path := range paths {
+		candidate, present := smartMailLookup(data, path)
+		if !present {
+			continue
 		}
-		return ""
-	}
-	if s := scanStrings(data); s != "" {
-		return s
-	}
-	for _, wrap := range []string{"result", "data"} {
-		if inner, ok := data[wrap].(map[string]any); ok {
-			if s := scanStrings(inner); s != "" {
-				return s
-			}
+		if selectedPath != "" {
+			return nil, smartMailError(operation, "conflicting_collection", fmt.Sprintf("响应同时包含 %s 与 %s，无法选择唯一邮箱集合", selectedPath, path))
 		}
+		value = candidate
+		selectedPath = path
 	}
-	return ""
-}
-
-// searchMailMessages extracts the message list from a search_emails response.
-// The helper documents the list under "messages".
-func searchMailMessages(data map[string]any) []map[string]any {
-	return searchMailUnwrapList(data, "messages", "emails", "list", "items", "data", "result", "records")
-}
-
-// searchMailUnwrapList probes the given container keys at the top level, and one
-// level deep, returning the first list found as []map[string]any.
-func searchMailUnwrapList(data map[string]any, keys ...string) []map[string]any {
-	for _, key := range keys {
-		if arr, ok := data[key].([]any); ok {
-			return searchMailToMaps(arr)
-		}
-		if inner, ok := data[key].(map[string]any); ok {
-			for _, k2 := range keys {
-				if arr, ok := inner[k2].([]any); ok {
-					return searchMailToMaps(arr)
-				}
-			}
-		}
+	if selectedPath == "" {
+		return nil, smartMailError(operation, "missing_collection", "成功响应缺少 emailAccounts 数组；不能把未知响应结构当作空结果")
 	}
-	return nil
-}
-
-func searchMailToMaps(arr []any) []map[string]any {
-	out := make([]map[string]any, 0, len(arr))
-	for _, it := range arr {
-		if m, ok := it.(map[string]any); ok {
-			out = append(out, m)
-		}
+	raw, ok := value.([]any)
+	if !ok {
+		return nil, smartMailError(operation, "malformed_collection", fmt.Sprintf("响应 %s 应为数组，实际为 %T", selectedPath, value))
 	}
-	return out
+	addresses := make([]string, 0, len(raw))
+	for index, item := range raw {
+		var address string
+		switch typed := item.(type) {
+		case string:
+			address = strings.TrimSpace(typed)
+		case map[string]any:
+			address = searchMailFirstString(typed, "email")
+		default:
+			return nil, smartMailError(operation, "malformed_item", fmt.Sprintf("响应 %s[%d] 必须是邮箱字符串或含 email 的对象", selectedPath, index))
+		}
+		if address == "" {
+			return nil, smartMailError(operation, "missing_item_identity", fmt.Sprintf("响应 %s[%d] 缺少非空邮箱地址", selectedPath, index))
+		}
+		addresses = append(addresses, address)
+	}
+	return addresses, nil
 }
 
 // searchMailFrom reads a message's sender, tolerating both a plain string and a
 // nested object ({name, email/address}).
-func searchMailFrom(m map[string]any) any {
-	switch v := m["from"].(type) {
+func searchMailFrom(m map[string]any) (any, error) {
+	raw, present := m["from"]
+	switch v := raw.(type) {
 	case string:
-		if v != "" {
-			return v
+		if normalized := strings.TrimSpace(v); normalized != "" {
+			return normalized, nil
 		}
 	case map[string]any:
 		name := searchMailFirstString(v, "name", "displayName")
 		addr := searchMailFirstString(v, "email", "emailAddress", "address")
 		switch {
 		case name != "" && addr != "":
-			return name + " <" + addr + ">"
+			return name + " <" + addr + ">", nil
 		case addr != "":
-			return addr
+			return addr, nil
 		case name != "":
-			return name
+			return name, nil
 		}
+		return nil, smartMailError("mail/search_emails", "malformed_sender", "from 对象缺少姓名或邮箱")
+	case nil:
+		if present {
+			return nil, smartMailError("mail/search_emails", "malformed_sender", "from 不能为 null")
+		}
+	default:
+		return nil, smartMailError("mail/search_emails", "malformed_sender", fmt.Sprintf("from 字段类型错误：%T", raw))
 	}
 	if s := searchMailFirstString(m, "sender", "fromAddress", "fromName", "fromEmail"); s != "" {
-		return s
+		return s, nil
 	}
-	return ""
+	if present {
+		return nil, smartMailError("mail/search_emails", "malformed_sender", "from 不能为空")
+	}
+	return nil, smartMailError("mail/search_emails", "missing_sender", "消息缺少可验证的发件人字段")
 }
 
 func searchMailFirstString(m map[string]any, keys ...string) string {
 	for _, key := range keys {
-		if s, ok := m[key].(string); ok && s != "" {
-			return s
+		if s, ok := m[key].(string); ok && strings.TrimSpace(s) != "" {
+			return strings.TrimSpace(s)
 		}
 	}
 	return ""
@@ -229,8 +279,11 @@ func searchMailFirstString(m map[string]any, keys ...string) string {
 func searchMailFirstAny(m map[string]any, keys ...string) any {
 	for _, key := range keys {
 		if v, ok := m[key]; ok && v != nil {
-			if s, isStr := v.(string); isStr && s == "" {
-				continue
+			if s, isStr := v.(string); isStr {
+				if strings.TrimSpace(s) == "" {
+					continue
+				}
+				return strings.TrimSpace(s)
 			}
 			return v
 		}
@@ -239,5 +292,6 @@ func searchMailFirstAny(m map[string]any, keys ...string) any {
 }
 
 func init() {
+	hardenSmartMail(&SearchMail, "messages", "严格校验的邮件搜索摘要")
 	shortcut.Register(SearchMail)
 }

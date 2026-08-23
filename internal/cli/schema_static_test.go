@@ -6,22 +6,15 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
 
-type panicCatalogLoader struct{}
-
-func (panicCatalogLoader) Load(context.Context) (Catalog, error) {
-	panic("schema must not load a runtime catalog")
-}
-
-func TestSchemaUsesEmbeddedCatalogWithoutRuntimeLoad(t *testing.T) {
+func TestSchemaUsesDeliveryCatalogWithoutRuntimeLoad(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
-	root.AddCommand(NewSchemaCommand(panicCatalogLoader{}))
+	root.AddCommand(NewSchemaCommand())
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetArgs([]string{"schema"})
@@ -35,15 +28,15 @@ func TestSchemaUsesEmbeddedCatalogWithoutRuntimeLoad(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 		t.Fatalf("decode schema: %v\n%s", err, stdout.String())
 	}
-	loaded := embeddedSchemaCatalog()
+	loaded := deliverySchemaCatalog()
 	if payload.Count != len(loaded.Registry.Products) || payload.ToolCount != len(loaded.Index.CanonicalPaths()) {
 		t.Fatalf("schema counts = %d/%d, want %d/%d", payload.Count, payload.ToolCount, len(loaded.Registry.Products), len(loaded.Index.CanonicalPaths()))
 	}
 }
 
-func TestSchemaAllReturnsCompleteEmbeddedLeafSchemas(t *testing.T) {
+func TestSchemaAllReturnsCompleteDeliveryLeafSchemas(t *testing.T) {
 	root := &cobra.Command{Use: "dws"}
-	root.AddCommand(NewSchemaCommand(panicCatalogLoader{}))
+	root.AddCommand(NewSchemaCommand())
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetArgs([]string{"schema", "--all"})
@@ -63,7 +56,7 @@ func TestSchemaAllReturnsCompleteEmbeddedLeafSchemas(t *testing.T) {
 			expanded++
 		}
 	}
-	want := len(embeddedSchemaCatalog().Index.CanonicalPaths())
+	want := len(deliverySchemaCatalog().Index.CanonicalPaths())
 	if expanded != want {
 		t.Fatalf("schema --all tools = %d, want %d", expanded, want)
 	}

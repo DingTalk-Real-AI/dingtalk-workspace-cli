@@ -26,6 +26,23 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/generator/outputguard"
 )
 
+func TestMainValidatesInMemoryWithoutDiskOutput(t *testing.T) {
+	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldArgs, oldFlags := os.Args, flag.CommandLine
+	t.Cleanup(func() {
+		os.Args, flag.CommandLine = oldArgs, oldFlags
+	})
+	flag.CommandLine = flag.NewFlagSet("schema-agent-metadata-memory", flag.ContinueOnError)
+	os.Args = []string{"cmd_schema_agent_metadata", "-root", repositoryRoot}
+	main()
+	if _, err := os.Stat(filepath.Join(repositoryRoot, "internal/cli/schema_agent_metadata")); !os.IsNotExist(err) {
+		t.Fatalf("in-memory run must not write retired schema_agent_metadata/: %v", err)
+	}
+}
+
 func TestMainGeneratesMetadataToTemporaryDirectory(t *testing.T) {
 	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
 	if err != nil {
@@ -41,8 +58,7 @@ func TestMainGeneratesMetadataToTemporaryDirectory(t *testing.T) {
 }
 
 func TestLoadEffectiveCommandRegistryProjectionReconcilesAliases(t *testing.T) {
-	root := filepath.Join("..", "..", "..")
-	registry, err := loadEffectiveCommandRegistryProjection(root, "internal/cli/schema_command_registry", true)
+	registry, err := loadEffectiveCommandRegistryProjection(true)
 	if err != nil {
 		t.Fatalf("loadEffectiveCommandRegistryProjection() error = %v", err)
 	}
@@ -60,17 +76,9 @@ func TestLoadEffectiveCommandRegistryProjectionReconcilesAliases(t *testing.T) {
 	}
 }
 
-func TestLoadEffectiveCommandRegistryProjectionRejectsCompatibilityDrift(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "schema_command_registry")
-	if err := os.WriteFile(path, []byte(`{"$schema":"./schema_command_registry.schema.json","version":1,"products":[{"id":"sample","tools":[{"canonical_path":"sample.run","cli_path":"sample run"}]}]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err := loadEffectiveCommandRegistryProjection(".", path, true)
-	if err == nil || !strings.Contains(err.Error(), "disagrees with the embedded") {
-		t.Fatalf("compatibility drift error = %v", err)
-	}
-	if _, err := loadEffectiveCommandRegistryProjection(".", "", false); err == nil || !strings.Contains(err.Error(), "cannot be disabled") {
-		t.Fatalf("disabled registry validation error = %v", err)
+func TestLoadEffectiveCommandRegistryProjectionRejectsDisabledValidation(t *testing.T) {
+	if _, err := loadEffectiveCommandRegistryProjection(false); err == nil || !strings.Contains(err.Error(), "cannot be disabled") {
+		t.Fatalf("disabled validation error = %v", err)
 	}
 }
 
@@ -80,7 +88,7 @@ func TestProjectEffectiveCommandRegistryKeepsManualOnlyCommand(t *testing.T) {
 			CanonicalPath:  "base.get_item",
 			PrimaryCLIPath: "base item get",
 			Visibility:     cli.SchemaVisibilityPublic,
-			Source:         "reviewed_command_registry",
+			Source:         "contract_identity",
 		},
 		{
 			CanonicalPath:  "helper.add_item",
@@ -151,7 +159,7 @@ func TestWriteMetadataDirectorySplitsDomains(t *testing.T) {
 	}
 }
 
-func TestValidateManualHintsOutputIsolationRejectsOverlaps(t *testing.T) {
+func TestValidateAgentMetadataOutputIsolationRejectsHintOverlaps(t *testing.T) {
 	root := t.TempDir()
 	hintsRelative := filepath.Join("internal", "cli", "schema_hints")
 	hintsPath := filepath.Join(root, hintsRelative)
@@ -163,32 +171,33 @@ func TestValidateManualHintsOutputIsolationRejectsOverlaps(t *testing.T) {
 	if err := os.WriteFile(marker, []byte(markerContents), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := validateManualHintsOutputIsolation(root, hintsRelative, marker, "", "")
+	inputs := []outputguard.Input{{Name: "structured hint input directory", Path: hintsRelative}}
+	err := validateAgentMetadataOutputIsolation(root, inputs, marker, "", "")
 	if err == nil || !strings.Contains(err.Error(), "-output") {
-		t.Fatalf("validateManualHintsOutputIsolation() error = %v", err)
+		t.Fatalf("validateAgentMetadataOutputIsolation() error = %v", err)
 	}
-	err = validateManualHintsOutputIsolation(root, hintsRelative, "", hintsPath, "")
+	err = validateAgentMetadataOutputIsolation(root, inputs, "", hintsPath, "")
 	if err == nil || !strings.Contains(err.Error(), "structured hint") {
-		t.Fatalf("validateManualHintsOutputIsolation(dir) error = %v", err)
+		t.Fatalf("validateAgentMetadataOutputIsolation(dir) error = %v", err)
 	}
 }
 
-func TestValidateManualHintsOutputIsolationAllowsSeparateTargets(t *testing.T) {
+func TestValidateAgentMetadataOutputIsolationAllowsSeparateHintTargets(t *testing.T) {
 	root := t.TempDir()
 	hintsRelative := filepath.Join("internal", "cli", "schema_hints")
 	hintsPath := filepath.Join(root, hintsRelative)
 	if err := os.MkdirAll(filepath.Join(hintsPath, "selection"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	err := validateManualHintsOutputIsolation(
+	err := validateAgentMetadataOutputIsolation(
 		root,
-		hintsRelative,
+		[]outputguard.Input{{Name: "structured hint input directory", Path: hintsRelative}},
 		filepath.Join(root, "metadata.json"),
 		filepath.Join(root, "split"),
 		filepath.Join(root, "audit", "metadata-audit.json"),
 	)
 	if err != nil {
-		t.Fatalf("validateManualHintsOutputIsolation() error = %v", err)
+		t.Fatalf("validateAgentMetadataOutputIsolation() error = %v", err)
 	}
 }
 
@@ -231,11 +240,32 @@ func TestValidateAgentMetadataOutputIsolationProtectsAllSourceKinds(t *testing.T
 	}
 }
 
-func TestValidateSelectionHintInputRequiresHintDirs(t *testing.T) {
+func TestValidateSelectionCoverageAllowsEmptyProjection(t *testing.T) {
 	root := t.TempDir()
-	err := validateSelectionHintInput(root, "internal/cli/schema_hints", commandRegistryProjection{})
-	if err == nil || !strings.Contains(err.Error(), "required Agent hint directory missing") {
-		t.Fatalf("validateSelectionHintInput() error = %v", err)
+	if err := validateSelectionCoverage(root, "internal/cli/schema_hints", commandRegistryProjection{}); err != nil {
+		t.Fatalf("empty coverage projection must pass: %v", err)
+	}
+}
+
+func TestValidateSelectionCoverageRequiresContractFinalWhenCoverageRemains(t *testing.T) {
+	root := t.TempDir()
+	registry := commandRegistryProjection{
+		CanonicalToolPaths: map[string]string{"sample.run": "sample run"},
+		ProductIDs:         map[string]bool{"sample": true},
+	}
+	err := validateSelectionCoverage(root, "", registry)
+	if err == nil || !strings.Contains(err.Error(), "ProductDecl/ContractFinal selection coverage incomplete") {
+		t.Fatalf("validateSelectionCoverage() error = %v", err)
+	}
+}
+
+func TestValidateSelectionCoverageIgnoresHintsDirArg(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "hints", "selection"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateSelectionCoverage(root, "hints", commandRegistryProjection{}); err != nil {
+		t.Fatalf("hintsDir arg is ignored for coverage: %v", err)
 	}
 }
 

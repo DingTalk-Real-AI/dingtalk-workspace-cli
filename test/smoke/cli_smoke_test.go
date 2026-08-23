@@ -63,12 +63,13 @@ func TestCLISmoke_AllPublicCommandsSupportHelp(t *testing.T) {
 			// Help never executes a product handler, so SetArgs is sufficient here.
 			// Real product dispatch is covered below through app.Execute in a
 			// subprocess because that path intentionally inspects os.Args.
-			cmd := app.NewRootCommand()
+			// Reuse one root: --help does not mutate command state, and rebuilding
+			// the tree per path balloons memory ~845x under the race detector.
 			var output bytes.Buffer
-			cmd.SetOut(&output)
-			cmd.SetErr(&output)
-			cmd.SetArgs(args)
-			err := cmd.Execute()
+			root.SetOut(&output)
+			root.SetErr(&output)
+			root.SetArgs(args)
+			err := root.Execute()
 			if err != nil {
 				t.Fatalf("dws %s failed: %v\noutput:\n%s", strings.Join(args, " "), err, output.String())
 			}

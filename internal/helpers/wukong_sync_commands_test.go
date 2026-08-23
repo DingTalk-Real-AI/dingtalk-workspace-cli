@@ -179,6 +179,7 @@ func TestWukongSyncAgoalCommands(t *testing.T) {
 		{[]string{"scorecard", "detail"}, []string{"selected-time", "dept-id", "request-id"}},
 		{[]string{"scorecard", "entity-detail"}, []string{"sc-id", "entity-id", "request-id"}},
 		{[]string{"scorecard", "update"}, []string{"dept-id", "selected-time", "id", "tracking-period-type", "content", "request-id"}},
+		{[]string{"scorecard", "search-entities"}, []string{"keyword", "page", "page-size", "request-id"}},
 		{[]string{"user", "rules"}, []string{"user-id", "request-id"}},
 		{[]string{"user", "objectives"}, []string{"user-id", "rule-id", "period-ids", "request-id"}},
 		{[]string{"report", "list-statistics"}, []string{"keyword", "request-id"}},

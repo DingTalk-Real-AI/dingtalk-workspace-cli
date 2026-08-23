@@ -17,6 +17,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -40,7 +43,32 @@ var NextEvent = shortcut.Shortcut{
 		"内部以当前时间为起点、往后 7 天为范围，拉取主日历下的日程，" +
 		"按开始时间升序挑出最近的那一个并打印摘要（标题、开始/结束时间、地点）。" +
 		"若这 7 天内没有任何日程，会明确提示『近 7 天无日程』。只读，不做任何修改。",
-	Risk:  shortcut.RiskRead,
+	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "calendar",
+			Name:           "shortcut_next_event",
+			CanonicalPath:  "calendar.shortcut_next_event",
+			CLIPath:        "calendar +next-event",
+			PrimaryCLIPath: "calendar +next-event",
+		},
+		Description: "查看接下来最近的一个日程（默认扫描未来 7 天）",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "查看接下来最近的一个日程（默认扫描未来 7 天）",
+			UseWhen:      []string{"当你只想知道『我下一个日程是什么、什么时候开始』、而不想翻一整份日程列表时使用；内部以当前时间为起点、往后 7 天为范围，拉取主日历下的日程，按开始时间升序挑出最近的那一个并打印摘要（标题、开始/结束时间、地点）。若这 7 天内没有任何日程，会明确提示『近 7 天无日程』。只读，不做任何修改。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples:     []string{"dws calendar +next-event"},
+		},
+	},
 	Flags: []shortcut.Flag{},
 	Tips:  []string{`dws calendar +next-event`},
 	Execute: func(rt *shortcut.RuntimeContext) error {
@@ -54,20 +82,20 @@ var NextEvent = shortcut.Shortcut{
 			"endTime":    now.Add(7 * 24 * time.Hour).UnixMilli(),
 		}
 
-		data, err := rt.CallMCPData("calendar", "list_calendar_events", params)
+		events, err := calendarSmartListAll(rt, params)
 		if err != nil {
 			return err
 		}
 
-		event := shortcutNextEventPick(data, now)
+		event := shortcutNextEventPick(events, now)
 		if event == nil {
-			return rt.Output(map[string]any{"event": nil, "message": "近 7 天无日程"})
+			return rt.Output(map[string]any{"event": nil, "message": "近 7 天无日程", "complete": true})
 		}
 
 		// Emit a structured event via rt.Output so it honours
 		// --format/--jq/--fields (previously it printed a fixed text line and
 		// ignored the output flags, unlike +today/+week).
-		return rt.Output(map[string]any{"event": shortcutNextEventProject(event)})
+		return rt.Output(map[string]any{"event": shortcutNextEventProject(event), "complete": true})
 	},
 }
 
@@ -75,10 +103,10 @@ var NextEvent = shortcut.Shortcut{
 // events (must carry an id) whose start time is at or after `now`, and returns
 // the one that starts soonest. Field access is fully defensive because the
 // response envelope and per-event shape are not guaranteed.
-func shortcutNextEventPick(data map[string]any, now time.Time) map[string]any {
+func shortcutNextEventPick(events []map[string]any, now time.Time) map[string]any {
 	var best map[string]any
 	var bestStart time.Time
-	for _, e := range shortcutNextEventList(data) {
+	for _, e := range events {
 		id, _ := e["id"].(string)
 		if strings.TrimSpace(id) == "" {
 			continue
@@ -98,39 +126,16 @@ func shortcutNextEventPick(data map[string]any, now time.Time) map[string]any {
 	return best
 }
 
-// shortcutNextEventList flattens the events slice out of the common response
-// shapes ({result:{events:[...]}}, {events:[...]}, or a bare [...] under
-// result/data).
-func shortcutNextEventList(data map[string]any) []map[string]any {
-	if data == nil {
-		return nil
-	}
-	var raw []any
-	if result, ok := data["result"].(map[string]any); ok {
-		if ev, ok := result["events"].([]any); ok {
-			raw = ev
-		}
-	}
-	if raw == nil {
-		if ev, ok := data["events"].([]any); ok {
-			raw = ev
-		}
-	}
-	out := make([]map[string]any, 0, len(raw))
-	for _, item := range raw {
-		if m, ok := item.(map[string]any); ok {
-			out = append(out, m)
-		}
-	}
-	return out
-}
-
-// shortcutNextEventStart pulls an event's start time as a time.Time, tolerating
-// either the nested {start:{dateTime: RFC3339}} shape or a flat string field.
+// shortcutNextEventStart parses a timed event or a legitimate all-day event.
 func shortcutNextEventStart(event map[string]any) (time.Time, bool) {
 	if start, ok := event["start"].(map[string]any); ok {
 		if dt, ok := start["dateTime"].(string); ok && dt != "" {
 			if t, err := time.Parse(time.RFC3339, dt); err == nil {
+				return t, true
+			}
+		}
+		if date, ok := start["date"].(string); ok && date != "" {
+			if t, err := time.ParseInLocation("2006-01-02", date, time.Local); err == nil {
 				return t, true
 			}
 		}
@@ -160,12 +165,8 @@ func shortcutNextEventProject(event map[string]any) map[string]any {
 	if start, ok := shortcutNextEventStart(event); ok {
 		item["start"] = start.Format("2006-01-02 15:04")
 	}
-	if end, ok := event["end"].(map[string]any); ok {
-		if dt, ok := end["dateTime"].(string); ok && dt != "" {
-			if t, err := time.Parse(time.RFC3339, dt); err == nil {
-				item["end"] = t.Format("2006-01-02 15:04")
-			}
-		}
+	if end, ok := conflictsEndTime(event); ok {
+		item["end"] = end.Format("2006-01-02 15:04")
 	}
 	if loc, ok := event["location"].(string); ok && strings.TrimSpace(loc) != "" {
 		item["location"] = loc
@@ -174,5 +175,6 @@ func shortcutNextEventProject(event map[string]any) map[string]any {
 }
 
 func init() {
+	finalizeCalendarSmart(&NextEvent, "完整翻页后选出的最近日程或明确空结果")
 	shortcut.Register(NextEvent)
 }

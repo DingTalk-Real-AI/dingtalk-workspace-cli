@@ -43,7 +43,7 @@ repository root while preserving repo-local guidance for automation.
 - Error message or category issues: inspect `internal/errors`
 - Audit log issues: inspect `internal/audit`
 - Plugin loading or command surface: inspect `internal/plugin`
-- Failure or degraded mode: inspect `internal/errors`, `internal/recovery`
+- Failure or degraded mode: inspect `internal/errors`
 
 ## Policy Checks
 

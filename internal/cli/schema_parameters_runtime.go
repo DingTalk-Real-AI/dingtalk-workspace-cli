@@ -6,8 +6,6 @@ package cli
 
 import (
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
 const (
@@ -45,38 +43,6 @@ func RegisterRuntimeSchemaParameterMetadata(canonicalPath string, metadata Runti
 	runtimeSchemaParameterMetadataByCanonical[canonicalPath] = metadata
 }
 
-func applyRuntimeSchemaParameterMetadata(cmd *cobra.Command, canonicalPath string) {
-	metadata, ok := runtimeSchemaParameterMetadataByCanonical[strings.TrimSpace(canonicalPath)]
-	if !ok {
-		return
-	}
-	for _, flagName := range metadata.Required {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotation(flag, runtimeSchemaFlagMetadataRequiredAnnotation, "true")
-		}
-	}
-	for flagName, expression := range metadata.RequiredWhen {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotation(flag, runtimeSchemaFlagMetadataRequiredWhenAnnotation, strings.TrimSpace(expression))
-		}
-	}
-	for flagName, format := range metadata.Formats {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotation(flag, runtimeSchemaFlagMetadataFormatAnnotation, strings.TrimSpace(format))
-		}
-	}
-	for flagName, values := range metadata.Enums {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotationValues(flag, runtimeSchemaFlagMetadataEnumAnnotation, values...)
-		}
-	}
-	for flagName, example := range metadata.Examples {
-		if flag := runtimeCommandFlag(cmd, flagName); flag != nil {
-			setFlagAnnotation(flag, runtimeSchemaFlagMetadataExampleAnnotation, strings.TrimSpace(example))
-		}
-	}
-}
-
 // RuntimeSchemaParameterMetadataDefinitions returns a defensive copy for
 // build-time contract validation.
 func RuntimeSchemaParameterMetadataDefinitions() map[string]RuntimeSchemaParameterMetadata {
@@ -111,7 +77,7 @@ func cloneRuntimeSchemaStringMap(source map[string]string) map[string]string {
 
 func init() {
 	RegisterRuntimeSchemaParameterMetadata("aisearch.enterprise_person_search", RuntimeSchemaParameterMetadata{
-		Required: []string{"keyword"},
+		Required: []string{"query"},
 	})
 	RegisterRuntimeSchemaParameterMetadata("aitable.export_data", RuntimeSchemaParameterMetadata{
 		RequiredWhen: map[string]string{
@@ -180,8 +146,8 @@ func init() {
 	})
 	RegisterRuntimeSchemaParameterMetadata("chat.send_personal_message", RuntimeSchemaParameterMetadata{
 		RequiredWhen: map[string]string{
-			"media-id":  "msg-type is image",
-			"file-path": "msg-type is file or audio or video",
+			"media-id": "msg-type is image",
+			"file":     "msg-type is file or audio or video",
 		},
 		Examples: map[string]string{"media-id": "@lADP_schema_smoke"},
 	})

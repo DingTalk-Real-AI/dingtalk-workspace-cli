@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
 
@@ -37,6 +38,36 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			return callMCPTool("get_cond_format", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(condFormatListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "get_cond_format",
+				CanonicalPath:  "sheet.get_cond_format",
+				CLIPath:        "sheet cond-format list",
+				PrimaryCLIPath: "sheet cond-format list",
+			},
+			Description: "列出工作表条件格式规则。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "get_cond_format"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "列出工作表条件格式规则。",
+				UseWhen:      []string{"查看或修改前需要枚举条件格式规则 ID 时"},
+				AvoidWhen:    []string{"创建/更新/删除分别用 cond-format create/update/delete"},
+				Examples:     []string{"dws sheet cond-format list --node <NODE_ID> --sheet-id <SHEET_ID>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	condFormatListCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	condFormatListCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	condFormatListCmd.Flags().String("rule-id", "", "条件格式规则 ID (可选，不传则返回全部)")
@@ -159,6 +190,36 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			return callMCPTool("create_cond_format", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(condFormatCreateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "create_cond_format",
+				CanonicalPath:  "sheet.create_cond_format",
+				CLIPath:        "sheet cond-format create",
+				PrimaryCLIPath: "sheet cond-format create",
+			},
+			Description: "创建条件格式规则。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "create_cond_format"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "创建条件格式规则。",
+				UseWhen:      []string{"需要按条件自动着色/标注单元格时"},
+				AvoidWhen:    []string{"改已有规则用 update；删规则用 delete；普通样式刷用 set-style"},
+				Examples:     []string{"dws sheet cond-format create --node NODE_ID --sheet-id SHEET_ID --ranges '[\"A1:E10\"]' --condition '{\"numberCondition\":{\"operator\":\"greater\",\"value1\":\"80\"}}' --cell-style '{\"backgroundColor\":\"#FFEB3B\"}'"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	condFormatCreateCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	condFormatCreateCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	condFormatCreateCmd.Flags().String("ranges", "", `应用范围 JSON 数组 (必填)，如 '["A1:E10"]'`)
@@ -245,6 +306,36 @@ ruleId 可通过 cond-format list 获取。`,
 			return callMCPTool("update_cond_format", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(condFormatUpdateCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "update_cond_format",
+				CanonicalPath:  "sheet.update_cond_format",
+				CLIPath:        "sheet cond-format update",
+				PrimaryCLIPath: "sheet cond-format update",
+			},
+			Description: "更新已有条件格式规则。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "update_cond_format"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新已有条件格式规则。",
+				UseWhen:      []string{"已知规则 ID，需要调整条件或样式时"},
+				AvoidWhen:    []string{"新建用 create；删除用 delete"},
+				Examples:     []string{"dws sheet cond-format update --node NODE_ID --sheet-id SHEET_ID --rule-id RULE_ID --condition '{\"numberCondition\":{\"operator\":\"greater\",\"value1\":\"90\"}}'"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	condFormatUpdateCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	condFormatUpdateCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	condFormatUpdateCmd.Flags().String("rule-id", "", "条件格式规则 ID (必填)")
@@ -277,6 +368,36 @@ ruleId 可通过 cond-format list 获取。`,
 			})
 		},
 	}
+	DeclareLeafMetadata(condFormatDeleteCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "destructive", Risk: "high",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "delete_cond_format",
+				CanonicalPath:  "sheet.delete_cond_format",
+				CLIPath:        "sheet cond-format delete",
+				PrimaryCLIPath: "sheet cond-format delete",
+			},
+			Description: "删除条件格式规则（需确认后加 --yes）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "delete_cond_format"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除条件格式规则（需确认后加 --yes）。",
+				UseWhen:      []string{"用户明确要求删除某条条件格式规则时"},
+				AvoidWhen:    []string{"只想改规则用 update；列目录用 list"},
+				Examples:     []string{"dws sheet cond-format delete --node NODE_ID --sheet-id SHEET_ID --rule-id RULE_ID"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	condFormatDeleteCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	condFormatDeleteCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	condFormatDeleteCmd.Flags().String("rule-id", "", "条件格式规则 ID (必填)")

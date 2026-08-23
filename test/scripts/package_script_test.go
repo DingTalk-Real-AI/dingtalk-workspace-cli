@@ -3,36 +3,46 @@ package scripts_test
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 var expectedPackagedSkillTargets = []string{
-	".agents/skills/dws",
-	".claude/skills/dws",
-	".cursor/skills/dws",
-	".qoder/skills/dws",
-	".qoderwork/skills/dws",
-	".gemini/skills/dws",
-	".codex/skills/dws",
-	".github/skills/dws",
-	".windsurf/skills/dws",
-	".augment/skills/dws",
-	".cline/skills/dws",
-	".amp/skills/dws",
-	".kiro/skills/dws",
-	".trae/skills/dws",
-	".openclaw/skills/dws",
-	".hermes/skills/dws",
+	".agents/skills/dingtalk-shared",
+	".claude/skills/dingtalk-shared",
+	".cursor/skills/dingtalk-shared",
+	".qoder/skills/dingtalk-shared",
+	".qoderwork/skills/dingtalk-shared",
+	".gemini/skills/dingtalk-shared",
+	".codex/skills/dingtalk-shared",
+	".zcode/skills/dingtalk-shared",
+	".github/skills/dingtalk-shared",
+	".windsurf/skills/dingtalk-shared",
+	".augment/skills/dingtalk-shared",
+	".cline/skills/dingtalk-shared",
+	".amp/skills/dingtalk-shared",
+	".copilot/skills/dingtalk-shared",
+	".config/opencode/skills/dingtalk-shared",
+	".config/agents/skills/dingtalk-shared",
+	".codeium/windsurf/skills/dingtalk-shared",
+	".kiro/skills/dingtalk-shared",
+	".trae/skills/dingtalk-shared",
+	".openclaw/skills/dingtalk-shared",
+	".hermes/skills/dingtalk-shared",
 }
 
 var expectedReleaseAdmissionContexts = []string{
@@ -67,6 +77,525 @@ func TestPackageManagerVersionVerificationReadsRawBinary(t *testing.T) {
 	}
 	if strings.Contains(script, `strings "$vendor_bin"`) || strings.Contains(script, `strings "$prefix/bin/dws"`) {
 		t.Fatal("package-manager verifier still requires the version marker to occupy a strings(1) line")
+	}
+	for _, want := range []string{
+		"UPSTREAM_AGENT_REGISTRY=",
+		"verify_compatible_skill_base",
+		`diff -qr "$canonical/$name" "$target"`,
+		"broken canonical Skill link",
+		"Skill link does not resolve to canonical source",
+		"Skill copy fallback differs from canonical source",
+		"unexpected mono Skill layout",
+		`verify_npm_install "$tarball_path" "specific-agent-roots"`,
+		`verify_npm_install "$tarball_path" "generic-fallback"`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("package-manager verifier is missing multi-layout contract %q", want)
+		}
+	}
+	if strings.Contains(script, "HOME_SKILL_TARGETS=") {
+		t.Fatal("package-manager verifier still declares the legacy mono target contract")
+	}
+}
+
+func TestNPMWrapperForwardsSIGTERMToVendor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX signal forwarding contract")
+	}
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is required to exercise the npm wrapper")
+	}
+
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	vendorDir := filepath.Join(root, "vendor")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(vendorDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	wrapperSource := filepath.Join("..", "..", "build", "npm", "bin", "dws.js")
+	wrapperData, err := os.ReadFile(wrapperSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapperPath := filepath.Join(binDir, "dws.js")
+	if err := os.WriteFile(wrapperPath, wrapperData, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	pidPath := filepath.Join(root, "child.pid")
+	signalPath := filepath.Join(root, "child.signal")
+	vendorPath := filepath.Join(vendorDir, "dws")
+	vendorScript := "#!/bin/sh\n" +
+		"printf '%s' \"$$\" > \"$DWS_TEST_CHILD_PID_FILE\"\n" +
+		"trap 'printf TERM > \"$DWS_TEST_SIGNAL_FILE\"; exit 0' TERM\n" +
+		"while :; do sleep 0.1; done\n"
+	if err := os.WriteFile(vendorPath, []byte(vendorScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(nodePath, wrapperPath)
+	cmd.Env = append(os.Environ(),
+		"DWS_TEST_CHILD_PID_FILE="+pidPath,
+		"DWS_TEST_SIGNAL_FILE="+signalPath,
+	)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	childPID := waitForPIDFile(t, pidPath)
+	t.Cleanup(func() {
+		_ = exec.Command("kill", "-TERM", strconv.Itoa(childPID)).Run()
+	})
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("signal npm wrapper: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("signal-terminated npm wrapper returned success")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("npm wrapper did not exit after SIGTERM")
+	}
+
+	signalData, err := os.ReadFile(signalPath)
+	if err != nil {
+		t.Fatalf("vendor did not record SIGTERM: %v", err)
+	}
+	if got := strings.TrimSpace(string(signalData)); got != "TERM" {
+		t.Fatalf("vendor signal = %q, want TERM", got)
+	}
+	if err := exec.Command("kill", "-0", strconv.Itoa(childPID)).Run(); err == nil {
+		t.Fatalf("vendor process %d is still running after npm wrapper exited", childPID)
+	}
+}
+
+func TestNPMWrapperForwardsForegroundGroupSIGINTToVendorGroupOnce(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX foreground process-group signal contract")
+	}
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is required to exercise the npm wrapper")
+	}
+
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	vendorDir := filepath.Join(root, "vendor")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(vendorDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	wrapperData, err := os.ReadFile(filepath.Join("..", "..", "build", "npm", "bin", "dws.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapperPath := filepath.Join(binDir, "dws.js")
+	if err := os.WriteFile(wrapperPath, wrapperData, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	pidPath := filepath.Join(root, "child.pid")
+	signalPath := filepath.Join(root, "child.signal")
+	descendantPIDPath := filepath.Join(root, "descendant.pid")
+	descendantSignalPath := filepath.Join(root, "descendant.signal")
+	vendorPath := filepath.Join(vendorDir, "dws")
+	vendorScript := `#!/usr/bin/env node
+"use strict";
+const fs = require("fs");
+const childProcess = require("child_process");
+const descendantSource = String.raw` + "`" + `
+"use strict";
+const fs = require("fs");
+let exiting = false;
+process.on("SIGINT", () => {
+  fs.appendFileSync(process.env.DWS_TEST_DESCENDANT_SIGNAL_FILE, "INT\n");
+  if (!exiting) {
+    exiting = true;
+    setTimeout(() => process.exit(0), 250);
+  }
+});
+fs.writeFileSync(process.env.DWS_TEST_DESCENDANT_PID_FILE, String(process.pid));
+setInterval(() => {}, 1000);
+` + "`" + `;
+childProcess.spawn(process.execPath, ["-e", descendantSource], {
+  stdio: "inherit",
+  env: process.env,
+});
+let exiting = false;
+process.on("SIGINT", () => {
+  fs.appendFileSync(process.env.DWS_TEST_SIGNAL_FILE, "INT\n");
+  if (!exiting) {
+    exiting = true;
+    setTimeout(() => process.exit(0), 250);
+  }
+});
+fs.writeFileSync(process.env.DWS_TEST_CHILD_PID_FILE, String(process.pid));
+setInterval(() => {}, 1000);
+`
+	if err := os.WriteFile(vendorPath, []byte(vendorScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(nodePath, wrapperPath)
+	cmd.Env = append(os.Environ(),
+		"DWS_TEST_CHILD_PID_FILE="+pidPath,
+		"DWS_TEST_SIGNAL_FILE="+signalPath,
+		"DWS_TEST_DESCENDANT_PID_FILE="+descendantPIDPath,
+		"DWS_TEST_DESCENDANT_SIGNAL_FILE="+descendantSignalPath,
+	)
+	configureIsolatedProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	childPID := waitForPIDFile(t, pidPath)
+	descendantPID := waitForPIDFile(t, descendantPIDPath)
+	t.Cleanup(func() {
+		_ = exec.Command("kill", "-TERM", strconv.Itoa(childPID)).Run()
+		_ = exec.Command("kill", "-TERM", strconv.Itoa(descendantPID)).Run()
+	})
+	wrapperGroup, err := processGroupID(cmd.Process.Pid)
+	if err != nil {
+		t.Fatalf("wrapper process group: %v", err)
+	}
+	childGroup, err := processGroupID(childPID)
+	if err != nil {
+		t.Fatalf("vendor process group: %v", err)
+	}
+	if childGroup == wrapperGroup {
+		t.Fatalf("vendor process group = wrapper process group %d; foreground signal would be duplicated", childGroup)
+	}
+	descendantGroup, err := processGroupID(descendantPID)
+	if err != nil {
+		t.Fatalf("descendant process group: %v", err)
+	}
+	if descendantGroup != childGroup {
+		t.Fatalf("descendant process group = %d, want vendor process group %d", descendantGroup, childGroup)
+	}
+
+	if err := signalProcessGroup(wrapperGroup, syscall.SIGINT); err != nil {
+		t.Fatalf("signal foreground process group: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("signal-terminated npm wrapper returned success")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("npm wrapper did not exit after foreground SIGINT")
+	}
+
+	signalData, err := os.ReadFile(signalPath)
+	if err != nil {
+		t.Fatalf("vendor did not record SIGINT: %v", err)
+	}
+	if got := strings.Fields(string(signalData)); len(got) != 1 || got[0] != "INT" {
+		t.Fatalf("vendor signals = %q, want exactly one INT", got)
+	}
+	descendantSignalData, err := os.ReadFile(descendantSignalPath)
+	if err != nil {
+		t.Fatalf("vendor descendant did not record SIGINT: %v", err)
+	}
+	if got := strings.Fields(string(descendantSignalData)); len(got) != 1 || got[0] != "INT" {
+		t.Fatalf("vendor descendant signals = %q, want exactly one INT", got)
+	}
+	waitForProcessExit(t, childPID, "vendor")
+	waitForProcessExit(t, descendantPID, "vendor descendant")
+}
+
+func TestNPMWrapperPreservesInteractiveTTY(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX controlling-terminal contract")
+	}
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is required to exercise the npm wrapper")
+	}
+
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	vendorDir := filepath.Join(root, "vendor")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(vendorDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	wrapperData, err := os.ReadFile(filepath.Join("..", "..", "build", "npm", "bin", "dws.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapperPath := filepath.Join(binDir, "dws.js")
+	if err := os.WriteFile(wrapperPath, wrapperData, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	resultPath := filepath.Join(root, "interactive.result")
+	readyPath := filepath.Join(root, "interactive.ready")
+	vendorPath := filepath.Join(vendorDir, "dws")
+	vendorScript := "#!/bin/sh\n" +
+		"printf 'DWS prompt: ' > /dev/tty\n" +
+		"printf ready > \"$DWS_TEST_INTERACTIVE_READY\"\n" +
+		"IFS= read -r answer < /dev/tty\n" +
+		"printf '%s' \"$answer\" > \"$DWS_TEST_INTERACTIVE_RESULT\"\n"
+	if err := os.WriteFile(vendorPath, []byte(vendorScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(nodePath, wrapperPath)
+	cmd.Env = append(os.Environ(),
+		"DWS_TEST_INTERACTIVE_RESULT="+resultPath,
+		"DWS_TEST_INTERACTIVE_READY="+readyPath,
+	)
+	terminal, err := startWithPTY(cmd)
+	if err != nil {
+		t.Fatalf("start npm wrapper with PTY: %v", err)
+	}
+	defer terminal.Close()
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	var output bytes.Buffer
+	outputDone := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&output, terminal)
+		close(outputDone)
+	}()
+	waitForFile(t, readyPath)
+	if _, err := fmt.Fprintln(terminal, "confirmed"); err != nil {
+		t.Fatalf("write interactive input: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	var waitErr error
+	select {
+	case waitErr = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("interactive npm wrapper did not exit after terminal input")
+	}
+	_ = terminal.Close()
+	<-outputDone
+	if waitErr != nil {
+		t.Fatalf("interactive npm wrapper: %v\noutput:\n%s", waitErr, output.String())
+	}
+	result, err := os.ReadFile(resultPath)
+	if err != nil {
+		t.Fatalf("interactive vendor did not record terminal input: %v\noutput:\n%s", err, output.String())
+	}
+	if got := strings.TrimSpace(string(result)); got != "confirmed" {
+		t.Fatalf("interactive input = %q, want confirmed\noutput:\n%s", got, output.String())
+	}
+}
+
+func waitForPIDFile(t *testing.T, path string) int {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(data)))
+			if parseErr == nil && pid > 0 {
+				return pid
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for vendor pid file %s", path)
+	return 0
+}
+
+func waitForFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for file %s", path)
+}
+
+func waitForProcessExit(t *testing.T, pid int, label string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := exec.Command("kill", "-0", strconv.Itoa(pid)).Run(); err != nil {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("%s process %d is still running after npm wrapper exited", label, pid)
+}
+
+func TestPackageManagerVerifierCoversSpecificAndFallbackSkillRoots(t *testing.T) {
+	t.Parallel()
+
+	postGoreleaserPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "post-goreleaser.sh"))
+	if err != nil {
+		t.Fatalf("Abs(post-goreleaser.sh) error = %v", err)
+	}
+	verifierPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "verify-package-managers.sh"))
+	if err != nil {
+		t.Fatalf("Abs(verify-package-managers.sh) error = %v", err)
+	}
+
+	distDir := filepath.Join(t.TempDir(), "dist")
+	targets := []string{
+		"dws-darwin-amd64.tar.gz",
+		"dws-darwin-arm64.tar.gz",
+		"dws-linux-amd64.tar.gz",
+		"dws-linux-arm64.tar.gz",
+	}
+	hostArchive := "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".tar.gz"
+	if runtime.GOOS == "windows" {
+		hostArchive = "dws-" + runtime.GOOS + "-" + runtime.GOARCH + ".zip"
+	}
+	foundHost := false
+	for _, target := range targets {
+		if target == hostArchive {
+			foundHost = true
+			break
+		}
+	}
+	if !foundHost {
+		targets = append(targets, hostArchive)
+	}
+	seedDistArtifacts(t, distDir, targets)
+
+	packageCmd := exec.Command("sh", postGoreleaserPath)
+	packageCmd.Env = postGoreleaserEnv(t, distDir, "v0.0.0-test", "https://downloads.example.com/dws/releases/v0.0.0-test")
+	if output, err := packageCmd.CombinedOutput(); err != nil {
+		t.Fatalf("post-goreleaser.sh error = %v\noutput:\n%s", err, output)
+	}
+
+	verifyCmd := exec.Command("sh", verifierPath, "--npm-only")
+	hostXDG := filepath.Join(t.TempDir(), "host-xdg")
+	verifyCmd.Env = replaceTestEnv(os.Environ(),
+		"DWS_PACKAGE_DIST_DIR", distDir,
+		"XDG_CONFIG_HOME", hostXDG,
+	)
+	output, err := verifyCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("verify-package-managers.sh error = %v\noutput:\n%s", err, output)
+	}
+	if _, err := os.Stat(hostXDG); !os.IsNotExist(err) {
+		t.Fatalf("package verifier touched inherited XDG_CONFIG_HOME %s: %v", hostXDG, err)
+	}
+	for _, scenario := range []string{"specific-agent-roots", "generic-fallback"} {
+		if !strings.Contains(string(output), "verifying npm package install ("+scenario+")") {
+			t.Errorf("verifier output is missing %s scenario:\n%s", scenario, output)
+		}
+	}
+}
+
+func TestPackageManagerVerifierAcceptsOnlyCorrectLinksOrCopies(t *testing.T) {
+	t.Parallel()
+
+	scriptPath, err := filepath.Abs(filepath.Join("..", "..", "scripts", "release", "verify-package-managers.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	cut := strings.Index(text, "\nverify_npm_install()")
+	if cut < 0 {
+		t.Fatal("verify-package-managers.sh helper boundary missing")
+	}
+	library := filepath.Join(t.TempDir(), "verifier-lib.sh")
+	mustWriteFile(t, library, data[:cut], 0o755)
+
+	for _, tc := range []struct {
+		name    string
+		prepare func(t *testing.T, home, base string)
+		wantOK  bool
+	}{
+		{
+			name: "correct-link",
+			prepare: func(t *testing.T, _, base string) {
+				t.Helper()
+				// The canonical layout publishes RELATIVE links; the verifier now
+				// rejects absolute targets, so the fixture must match production.
+				if err := os.Symlink(filepath.Join("..", "..", ".agents", "skills", "dingtalk-shared"), filepath.Join(base, "dingtalk-shared")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantOK: true,
+		},
+		{
+			name: "complete-copy",
+			prepare: func(t *testing.T, _, base string) {
+				t.Helper()
+				mustWriteFile(t, filepath.Join(base, "dingtalk-shared", "SKILL.md"), []byte("canonical\n"), 0o644)
+			},
+			wantOK: true,
+		},
+		{
+			name: "wrong-link",
+			prepare: func(t *testing.T, home, base string) {
+				t.Helper()
+				wrong := filepath.Join(home, "wrong", "dingtalk-shared")
+				mustWriteFile(t, filepath.Join(wrong, "SKILL.md"), []byte("canonical\n"), 0o644)
+				if err := os.Symlink(wrong, filepath.Join(base, "dingtalk-shared")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantOK: false,
+		},
+		{
+			name: "broken-link",
+			prepare: func(t *testing.T, home, base string) {
+				t.Helper()
+				if err := os.Symlink(filepath.Join(home, "missing"), filepath.Join(base, "dingtalk-shared")); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantOK: false,
+		},
+		{
+			name: "different-copy",
+			prepare: func(t *testing.T, _, base string) {
+				t.Helper()
+				mustWriteFile(t, filepath.Join(base, "dingtalk-shared", "SKILL.md"), []byte("different\n"), 0o644)
+			},
+			wantOK: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			base := filepath.Join(home, ".claude", "skills")
+			mustWriteFile(t, filepath.Join(home, ".agents", "skills", "dingtalk-shared", "SKILL.md"), []byte("canonical\n"), 0o644)
+			if err := os.MkdirAll(base, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			tc.prepare(t, home, base)
+			cmd := exec.Command("sh", "-c", `. "$DWS_TEST_LIBRARY"; verify_compatible_skill_base "$DWS_TEST_HOME" "$DWS_TEST_BASE"`)
+			cmd.Env = append(os.Environ(), "DWS_TEST_LIBRARY="+library, "DWS_TEST_HOME="+home, "DWS_TEST_BASE="+base)
+			output, err := cmd.CombinedOutput()
+			if tc.wantOK && err != nil {
+				t.Fatalf("verifier rejected valid target: %v\n%s", err, output)
+			}
+			if !tc.wantOK && err == nil {
+				t.Fatalf("verifier accepted invalid target\n%s", output)
+			}
+		})
 	}
 }
 
@@ -277,7 +806,7 @@ func TestPostGoreleaserBuildsExpectedArtifacts(t *testing.T) {
 	}
 	npmInstallText := string(npmInstallData)
 	for _, target := range expectedPackagedSkillTargets {
-		agentDir := strings.TrimSuffix(target, "/dws")
+		agentDir := strings.TrimSuffix(target, "/dingtalk-shared")
 		if !strings.Contains(npmInstallText, agentDir) {
 			t.Fatalf("npm install.js missing %q:\n%s", agentDir, npmInstallText)
 		}
@@ -632,6 +1161,33 @@ func TestPostGoreleaserSkillsZipLayout(t *testing.T) {
 	}
 	if !foundDingtalk {
 		t.Fatalf("multi/ does not contain any dingtalk-* skill: %v", multiEntries)
+	}
+
+	// Personal IM/OA events are owned by the standalone dingtalk-event Skill.
+	// Keep the release archive layout explicit so a future refactor cannot
+	// silently fold the Event entry point back into dingtalk-misc.
+	for _, rel := range []string{
+		filepath.Join("multi", "dingtalk-event", "SKILL.md"),
+		filepath.Join("multi", "dingtalk-event", "references", "event-oa.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(extractDir, rel)); err != nil {
+			t.Fatalf("zip missing %s: %v", rel, err)
+		}
+	}
+	for _, rel := range []string{
+		filepath.Join("multi", "dingtalk-misc", "references", "event.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-keys.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-lifecycle.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-operations.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-im-output.md"),
+		filepath.Join("multi", "dingtalk-misc", "references", "event-oa.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(extractDir, rel)); err == nil {
+			t.Fatalf("zip unexpectedly contains retired misc Event reference %s", rel)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("Stat(%s) error = %v", rel, err)
+		}
 	}
 }
 
@@ -1096,11 +1652,23 @@ func TestReleaseWorkflowParallelizesSealedValidationWithoutWeakeningPublication(
 		"- e2e",
 		"verify-github-tag-authority.sh",
 		"go test -v -count=1 -timeout=5m ./test/scripts/... -run '^TestRelease'",
-		"check-command-compatibility.sh",
+		`tmp/trusted-release-tooling/scripts/release/check-release-compatibility.sh`,
+		`--repo-root "$GITHUB_WORKSPACE"`,
+		`--base-ref HEAD`,
+		`--stable-ref "$PREVIOUS_STABLE"`,
+		`--candidate-ref HEAD`,
 		"test-multi-profile-e2e.sh",
 	} {
 		if !strings.Contains(validation, required) {
 			t.Errorf("parallel release validation is missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		"./scripts/policy/check-command-compatibility.sh",
+		"./scripts/policy/check-authoritative-schema-compatibility.sh",
+	} {
+		if strings.Contains(validation, forbidden) {
+			t.Errorf("parallel release validation bypasses the shared compatibility runner with %q", forbidden)
 		}
 	}
 
@@ -1122,6 +1690,136 @@ func TestReleaseWorkflowParallelizesSealedValidationWithoutWeakeningPublication(
 		if !strings.Contains(publish, required) {
 			t.Errorf("immutable publication is not blocked by parallel validation %q", required)
 		}
+	}
+}
+
+func TestReleaseWorkflowHidesOnlyVerifiedSealedTagFromCompatibilityBaseline(t *testing.T) {
+	t.Parallel()
+	workflow := readReleaseWorkflow(t)
+	validation := releaseWorkflowSection(t, workflow, "  release-validation:\n", "\n  release-plan:\n")
+	preparedView := releaseWorkflowSection(
+		t,
+		validation,
+		"      - name: Prepare delivered-stable compatibility ref view\n",
+		"\n      - name: Set up Go\n",
+	)
+	script := releaseWorkflowRunScript(
+		t,
+		validation,
+		"Prepare delivered-stable compatibility ref view",
+		"Set up Go",
+	)
+
+	if !strings.Contains(preparedView, "if: ${{ matrix.check == 'compatibility' }}") {
+		t.Fatal("delivered-stable ref view must run only for the compatibility matrix leg")
+	}
+	for _, required := range []string{
+		"RELEASE_VERSION: ${{ needs.release-contract.outputs.release_version }}",
+		"RELEASE_COMMIT: ${{ needs.release-contract.outputs.release_commit }}",
+		"RELEASE_TAG_OBJECT: ${{ needs.release-contract.outputs.release_tag_object }}",
+		"PREVIOUS_STABLE: ${{ needs.release-contract.outputs.previous_stable }}",
+		"PREVIOUS_STABLE_COMMIT: ${{ needs.release-contract.outputs.previous_stable_commit }}",
+	} {
+		if !strings.Contains(preparedView, required) {
+			t.Errorf("delivered-stable compatibility view is missing %q", required)
+		}
+	}
+	for _, required := range []string{
+		`test "$RELEASE_VERSION" != "$PREVIOUS_STABLE"`,
+		`test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"`,
+		`test "$(git rev-parse --verify "refs/tags/${RELEASE_VERSION}")" = "$RELEASE_TAG_OBJECT"`,
+		`test "$(git rev-parse --verify "refs/tags/${RELEASE_VERSION}^{commit}")" = "$RELEASE_COMMIT"`,
+		`test "$(git rev-parse --verify "${PREVIOUS_STABLE}^{commit}")" = "$PREVIOUS_STABLE_COMMIT"`,
+		`git update-ref -d "refs/tags/${RELEASE_VERSION}" "$RELEASE_TAG_OBJECT"`,
+		`git show-ref --verify --quiet "refs/tags/${RELEASE_VERSION}"`,
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("delivered-stable compatibility view is missing %q", required)
+		}
+	}
+
+	verifiedTag := strings.Index(validation, "verify-github-tag-authority.sh")
+	deleteLocalTag := strings.Index(validation, "git update-ref -d")
+	compatibility := strings.Index(validation, "tmp/trusted-release-tooling/scripts/release/check-release-compatibility.sh")
+	if verifiedTag == -1 || deleteLocalTag == -1 || compatibility == -1 ||
+		verifiedTag > deleteLocalTag || deleteLocalTag > compatibility {
+		t.Fatal("release tag authority verification, local candidate removal, and compatibility checking must stay ordered")
+	}
+	for _, forbidden := range []string{"git push --delete", "github.rest.git.deleteRef"} {
+		if strings.Contains(workflow, forbidden) {
+			t.Errorf("release workflow must not delete a remote ref: found %q", forbidden)
+		}
+	}
+
+	repo, err := os.MkdirTemp(".", ".release-compatibility-test-")
+	if err != nil {
+		t.Fatalf("MkdirTemp(release compatibility test repository) error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(repo); err != nil {
+			t.Errorf("RemoveAll(%s) error = %v", repo, err)
+		}
+	})
+	mustRun(t, repo, "git", "init", "-b", "main")
+	mustRun(t, repo, "git", "config", "user.name", "Release Compatibility Test")
+	mustRun(t, repo, "git", "config", "user.email", "release-compatibility@example.com")
+	mustWriteFile(t, filepath.Join(repo, "tracked"), []byte("stable\n"), 0o644)
+	mustRun(t, repo, "git", "add", "tracked")
+	mustRun(t, repo, "git", "commit", "-m", "stable release")
+	previousStableCommit := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD"))
+	mustRun(t, repo, "git", "tag", "-a", "v1.0.57", "-m", "v1.0.57")
+	mustWriteFile(t, filepath.Join(repo, "tracked"), []byte("sealed\n"), 0o644)
+	mustRun(t, repo, "git", "commit", "-am", "sealed release")
+	releaseCommit := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD"))
+	mustRun(t, repo, "git", "tag", "-a", "v1.0.58", "-m", "v1.0.58")
+	releaseTagObject := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "refs/tags/v1.0.58"))
+
+	run := func(tagObject string) ([]byte, error) {
+		cmd := exec.Command("sh", "-c", script)
+		cmd.Dir = repo
+		cmd.Env = make([]string, 0, len(os.Environ())+5)
+		for _, entry := range os.Environ() {
+			if strings.HasPrefix(entry, "RELEASE_VERSION=") ||
+				strings.HasPrefix(entry, "RELEASE_COMMIT=") ||
+				strings.HasPrefix(entry, "RELEASE_TAG_OBJECT=") ||
+				strings.HasPrefix(entry, "PREVIOUS_STABLE=") ||
+				strings.HasPrefix(entry, "PREVIOUS_STABLE_COMMIT=") {
+				continue
+			}
+			cmd.Env = append(cmd.Env, entry)
+		}
+		cmd.Env = append(cmd.Env,
+			"RELEASE_VERSION=v1.0.58",
+			"RELEASE_COMMIT="+releaseCommit,
+			"RELEASE_TAG_OBJECT="+tagObject,
+			"PREVIOUS_STABLE=v1.0.57",
+			"PREVIOUS_STABLE_COMMIT="+previousStableCommit,
+		)
+		return cmd.CombinedOutput()
+	}
+
+	if output, err := run(releaseTagObject); err != nil {
+		t.Fatalf("prepared compatibility ref view failed: %v\noutput:\n%s", err, output)
+	}
+	candidateTag := exec.Command("git", "rev-parse", "--verify", "refs/tags/v1.0.58")
+	candidateTag.Dir = repo
+	if _, err := candidateTag.CombinedOutput(); err == nil {
+		t.Fatal("prepared compatibility ref view left the sealed candidate tag visible")
+	}
+	mustRun(t, repo, "git", "cat-file", "-e", releaseTagObject+"^{tag}")
+	if got := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "refs/tags/v1.0.57^{commit}")); got != previousStableCommit {
+		t.Fatalf("previous stable tag commit = %s, want %s", got, previousStableCommit)
+	}
+	if got := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "HEAD")); got != releaseCommit {
+		t.Fatalf("HEAD after prepared compatibility ref view = %s, want %s", got, releaseCommit)
+	}
+
+	mustRun(t, repo, "git", "update-ref", "refs/tags/v1.0.58", releaseTagObject)
+	if output, err := run(strings.Repeat("0", 40)); err == nil {
+		t.Fatalf("prepared compatibility ref view unexpectedly accepted a mismatched tag object\noutput:\n%s", output)
+	}
+	if got := strings.TrimSpace(mustOutput(t, repo, "git", "rev-parse", "refs/tags/v1.0.58")); got != releaseTagObject {
+		t.Fatalf("mismatched tag object removed or changed the local sealed tag: got %s, want %s", got, releaseTagObject)
 	}
 }
 

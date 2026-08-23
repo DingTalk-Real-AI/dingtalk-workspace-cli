@@ -3,10 +3,38 @@ package helpers
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
+
+// sizeTypeEnumHint 返回该维度支持的尺寸模式列表（行高含 auto，列宽不含，与飞书一致）。
+func sizeTypeEnumHint(dimension string) string {
+	if dimension == "ROWS" {
+		return "pixel / standard / auto"
+	}
+	return "pixel / standard"
+}
+
+func validateDropdownSourceRangeInput(sourceSheetID, sourceRange string) error {
+	if strings.TrimSpace(sourceSheetID) == "" {
+		return fmt.Errorf("--source-sheet-id 不能为空")
+	}
+	sourceRange = strings.TrimSpace(sourceRange)
+	if sourceRange == "" {
+		return fmt.Errorf("--source-range 不能为空")
+	}
+	if strings.Contains(sourceRange, "!") {
+		return fmt.Errorf("--source-range 不能包含工作表前缀；请通过 --source-sheet-id 指定来源工作表")
+	}
+	if strings.HasPrefix(sourceRange, "=") || strings.Contains(sourceRange, ",") {
+		return fmt.Errorf("--source-range 必须是单一连续区域，不能是公式、表达式或多区域引用")
+	}
+	return nil
+}
 
 // newDimensionCmds creates dimension-related commands: insert/delete/update/move/add-dimension,
 // merge-cells, unmerge-cells, and dropdown commands (set/get/delete-dropdown).
@@ -42,8 +70,11 @@ func newDimensionCmds() []*cobra.Command {
 				return fmt.Errorf("--dimension 必须为 ROWS 或 COLUMNS，当前值: %s", dimension)
 			}
 			lengthStr := mustGetFlag(cmd, "length")
-			var length int
-			if _, err := fmt.Sscanf(lengthStr, "%d", &length); err != nil || length < 1 {
+			// strconv.Atoi 要求整个字符串都是合法整数。fmt.Sscanf("%d") 只消费前缀
+			// 数字，会把 "3x" / "3foo" 静默当成 3，从而对错误的行列数执行插入/删除/
+			// 调整——删除方向不可回滚。
+			length, lengthErr := strconv.Atoi(lengthStr)
+			if lengthErr != nil || length < 1 {
 				return fmt.Errorf("--length 必须为正整数（>= 1），当前值: %s", lengthStr)
 			}
 			if length > 5000 {
@@ -58,6 +89,36 @@ func newDimensionCmds() []*cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(insertDimensionCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "insert_dimension",
+				CanonicalPath:  "sheet.insert_dimension",
+				CLIPath:        "sheet insert-dimension",
+				PrimaryCLIPath: "sheet insert-dimension",
+			},
+			Description: "在指定位置之前插入空行或空列。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "insert_dimension"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "在指定位置之前插入空行或空列。",
+				UseWhen:      []string{"要在某行号/列字母之前插入若干空行或空列时"},
+				AvoidWhen:    []string{"末尾追加空行空列用 add-dimension；末尾追加数据用 append；删除行列用 delete-dimension"},
+				Examples:     []string{"dws sheet insert-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --position \"3\" --length 2"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	insertDimensionCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	insertDimensionCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	insertDimensionCmd.Flags().String("dimension", "", "插入维度: ROWS 或 COLUMNS (必填)")
@@ -123,6 +184,36 @@ func newDimensionCmds() []*cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(moveDimensionCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "move_dimension",
+				CanonicalPath:  "sheet.move_dimension",
+				CLIPath:        "sheet move-dimension",
+				PrimaryCLIPath: "sheet move-dimension",
+			},
+			Description: "移动连续行或列到目标索引（保留格式）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "move_dimension"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "移动连续行或列到目标索引（保留格式）。",
+				UseWhen:      []string{"要调整行/列物理顺序时，使用原子 move-dimension"},
+				AvoidWhen:    []string{"不要用读出再写回模拟移动；移动矩形单元格区域用 range move-to"},
+				Examples:     []string{"dws sheet move-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index 1 --end-index 1 --destination-index 4"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	moveDimensionCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	moveDimensionCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	moveDimensionCmd.Flags().String("dimension", "", "维度类型: ROWS 或 COLUMNS (必填)")
@@ -166,6 +257,36 @@ func newDimensionCmds() []*cobra.Command {
 			})
 		},
 	}
+	DeclareLeafMetadata(addDimensionCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "add_dimension",
+				CanonicalPath:  "sheet.add_dimension",
+				CLIPath:        "sheet add-dimension",
+				PrimaryCLIPath: "sheet add-dimension",
+			},
+			Description: "在工作表末尾追加空行或空列。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "add_dimension"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "在工作表末尾追加空行或空列。",
+				UseWhen:      []string{"需要扩展表格维度（末尾加空行/空列）时"},
+				AvoidWhen:    []string{"追加带数据的行用 append；在中间插入用 insert-dimension"},
+				Examples:     []string{"dws sheet add-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --length 5"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	addDimensionCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	addDimensionCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	addDimensionCmd.Flags().String("dimension", "", "维度类型: ROWS 或 COLUMNS (必填)")
@@ -212,6 +333,37 @@ rangeAddress 也支持带工作表前缀的写法，如 Sheet1!A1:B3，此时将
 			return callMCPTool("merge_cells", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(mergeCellsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "merge_cells",
+				CanonicalPath:  "sheet.merge_cells",
+				CLIPath:        "sheet merge-cells",
+				PrimaryCLIPath: "sheet merge-cells",
+			},
+			Description: "合并指定区域单元格（默认 mergeAll，可按行/列合并）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "merge_cells"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "合并指定区域单元格（默认 mergeAll，可按行/列合并）。",
+				UseWhen:      []string{"需要把一片区域合并为一个或多个合并单元格时"},
+				AvoidWhen:    []string{"取消合并用 unmerge-cells；合并会丢弃非左上角值"},
+				Examples:     []string{"dws sheet merge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:B3\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+				{Name: "range", Property: "rangeAddress"},
+			},
+		},
+	})
 	mergeCellsCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	mergeCellsCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	mergeCellsCmd.Flags().String("range", "", "目标单元格区域地址，如 A1:B3 (必填)")
@@ -240,6 +392,37 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			})
 		},
 	}
+	DeclareLeafMetadata(unmergeRangeCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "unmerge_range",
+				CanonicalPath:  "sheet.unmerge_range",
+				CLIPath:        "sheet unmerge-cells",
+				PrimaryCLIPath: "sheet unmerge-cells",
+			},
+			Description: "取消指定范围内的合并单元格。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "unmerge_range"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "取消指定范围内的合并单元格。",
+				UseWhen:      []string{"需要拆分已合并区域时"},
+				AvoidWhen:    []string{"创建合并用 merge-cells"},
+				Examples:     []string{"dws sheet unmerge-cells --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A1:D5\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+				{Name: "range", Property: "rangeAddress"},
+			},
+		},
+	})
 	unmergeRangeCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	unmergeRangeCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	unmergeRangeCmd.Flags().String("range", "", "取消合并的范围，A1 表示法，如 A1:D5 (必填)")
@@ -275,8 +458,11 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 				return fmt.Errorf("--dimension 必须为 ROWS 或 COLUMNS，当前值: %s", dimension)
 			}
 			lengthStr := mustGetFlag(cmd, "length")
-			var length int
-			if _, err := fmt.Sscanf(lengthStr, "%d", &length); err != nil || length < 1 {
+			// strconv.Atoi 要求整个字符串都是合法整数。fmt.Sscanf("%d") 只消费前缀
+			// 数字，会把 "3x" / "3foo" 静默当成 3，从而对错误的行列数执行插入/删除/
+			// 调整——删除方向不可回滚。
+			length, lengthErr := strconv.Atoi(lengthStr)
+			if lengthErr != nil || length < 1 {
 				return fmt.Errorf("--length 必须为正整数（>= 1），当前值: %s", lengthStr)
 			}
 			if length > 5000 {
@@ -291,6 +477,36 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			})
 		},
 	}
+	DeclareLeafMetadata(deleteDimensionCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "delete_dimension",
+				CanonicalPath:  "sheet.delete_dimension",
+				CLIPath:        "sheet delete-dimension",
+				PrimaryCLIPath: "sheet delete-dimension",
+			},
+			Description: "删除指定位置起的连续行或列（需确认后加 --yes）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "delete_dimension"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除指定位置起的连续行或列（需确认后加 --yes）。",
+				UseWhen:      []string{"用户明确要物理删除若干行/列时"},
+				AvoidWhen:    []string{"只清空内容保留占位用 range clear；移动行列用 move-dimension"},
+				Examples:     []string{"dws sheet delete-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --position \"3\" --length 2"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	deleteDimensionCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	deleteDimensionCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	deleteDimensionCmd.Flags().String("dimension", "", "删除维度: ROWS 或 COLUMNS (必填)")
@@ -307,8 +523,14 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
   --dimension COLUMNS 时，--start-index 为列字母，如 "A" 表示从 A 列开始、"AB" 表示从 AB 列开始
 
 支持在 --start-index 中携带工作表前缀（如 "Sheet1!3" / "Sheet1!A"），此时将忽略 --sheet-id。
---hidden 与 --pixel-size 至少必须提供一个。当同时提供时，将先应用尺寸再应用显隐，任一失败整体失败。
+--hidden 与 --pixel-size 至少必须提供一个（或用 --size-type standard/auto 让服务端决定尺寸）。
+当同时提供时，将先应用尺寸再应用显隐，任一失败整体失败。
 --pixel-size 单位为像素，dimension=ROWS 时表示行高、dimension=COLUMNS 时表示列宽。
+
+尺寸模式（--size-type，对齐飞书）:
+  pixel     默认，按 --pixel-size 指定的像素值设置
+  standard  恢复默认行高/列宽，无需 --pixel-size
+  auto      按内容自适应行高，仅 ROWS 支持（列宽不提供自适应），无需 --pixel-size
 
 常见场景：隐藏/显示指定连续行或列、批量调整行高/列宽、在同一次调用中同时修改尺寸与显隐。`,
 		Example: `  # 隐藏第 3~4 行
@@ -334,8 +556,11 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 				return fmt.Errorf("--dimension 必须为 ROWS 或 COLUMNS，当前值: %s", dimension)
 			}
 			lengthStr := mustGetFlag(cmd, "length")
-			var length int
-			if _, err := fmt.Sscanf(lengthStr, "%d", &length); err != nil || length < 1 {
+			// strconv.Atoi 要求整个字符串都是合法整数。fmt.Sscanf("%d") 只消费前缀
+			// 数字，会把 "3x" / "3foo" 静默当成 3，从而对错误的行列数执行插入/删除/
+			// 调整——删除方向不可回滚。
+			length, lengthErr := strconv.Atoi(lengthStr)
+			if lengthErr != nil || length < 1 {
 				return fmt.Errorf("--length 必须为正整数（>= 1），当前值: %s", lengthStr)
 			}
 			if length > 5000 {
@@ -343,8 +568,30 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			}
 			hiddenChanged := cmd.Flags().Changed("hidden")
 			pixelSizeChanged := cmd.Flags().Changed("pixel-size")
-			if !hiddenChanged && !pixelSizeChanged {
-				return fmt.Errorf("--hidden 与 --pixel-size 至少必须提供一个")
+			sizeType, _ := cmd.Flags().GetString("size-type")
+			sizeType = strings.ToLower(strings.TrimSpace(sizeType))
+			// 尺寸模式枚举按维度区分（与飞书一致）：行高有 auto，列宽只有 pixel / standard
+			switch {
+			case sizeType == "" || sizeType == "pixel" || sizeType == "standard":
+			case sizeType == "auto" && dimension == "ROWS":
+			case sizeType == "auto":
+				return fmt.Errorf("--size-type 对 COLUMNS 仅支持 pixel / standard（列宽不提供自适应）")
+			default:
+				return fmt.Errorf("--size-type 必须为 %s，当前值: %s", sizeTypeEnumHint(dimension), sizeType)
+			}
+			// standard/auto 由服务端决定尺寸，无需 --pixel-size
+			sizeTypeDrivesSize := sizeType == "standard" || sizeType == "auto"
+			if !hiddenChanged && !pixelSizeChanged && !sizeTypeDrivesSize {
+				return fmt.Errorf("--hidden 与 --pixel-size 至少必须提供一个（或用 --size-type standard/auto 让服务端决定尺寸）")
+			}
+			// standard/auto 说"尺寸交给服务端"，--pixel-size 又指定固定像素，
+			// 两者语义直接冲突；同时下发会得到依赖服务端实现的结果，故先拒。
+			if sizeTypeDrivesSize && pixelSizeChanged {
+				return fmt.Errorf("--size-type %s 表示尺寸由服务端决定，不能同时指定 --pixel-size；要指定固定像素请用 --size-type pixel（或省略 --size-type）", sizeType)
+			}
+			// 反向：显式声明 pixel 模式却不给像素值，同样是不完整的请求。
+			if sizeType == "pixel" && !pixelSizeChanged {
+				return fmt.Errorf("--size-type pixel 必须配合 --pixel-size 指定像素值；若本次只改显隐，请省略 --size-type")
 			}
 			toolArgs := map[string]any{
 				"nodeId":     mustGetFlag(cmd, "node"),
@@ -364,9 +611,42 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 				}
 				toolArgs["pixelSize"] = pixelSize
 			}
+			if sizeType != "" {
+				toolArgs["sizeType"] = sizeType
+			}
 			return callMCPTool("update_dimension", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(updateDimensionCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "update_dimension",
+				CanonicalPath:  "sheet.update_dimension",
+				CLIPath:        "sheet update-dimension",
+				PrimaryCLIPath: "sheet update-dimension",
+			},
+			Description: "更新连续行/列的显隐或行高/列宽。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "update_dimension"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新连续行/列的显隐或行高/列宽。",
+				UseWhen:      []string{"要隐藏/显示行或列，或设置行高/列宽时"},
+				AvoidWhen:    []string{"插入/删除行列用 insert/delete-dimension；移动行列用 move-dimension"},
+				Examples:     []string{"dws sheet update-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --dimension ROWS --start-index \"1\" --length 5 --pixel-size 40"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	updateDimensionCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	updateDimensionCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	updateDimensionCmd.Flags().String("dimension", "", "更新维度: ROWS 或 COLUMNS (必填)")
@@ -374,6 +654,7 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 	updateDimensionCmd.Flags().String("length", "", "更新数量，正整数 (必填)，最大 5000")
 	updateDimensionCmd.Flags().Bool("hidden", false, "是否隐藏 (true=隐藏, false=显示)")
 	updateDimensionCmd.Flags().Int("pixel-size", 0, "行高或列宽（像素），ROWS 时为行高，COLUMNS 时为列宽")
+	updateDimensionCmd.Flags().String("size-type", "", "尺寸模式（对齐飞书）: pixel(默认,用 --pixel-size) / standard(恢复默认行高列宽) / auto(按内容自适应行高，仅 ROWS；列宽无此选项)")
 
 	groupDimensionCmd := &cobra.Command{
 		Use:   "group-dimension",
@@ -416,6 +697,33 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			})
 		},
 	}
+	DeclareLeafMetadata(groupDimensionCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "group_dimension",
+				CanonicalPath:  "sheet.group_dimension",
+				CLIPath:        "sheet group-dimension",
+				PrimaryCLIPath: "sheet group-dimension",
+			},
+			Description: "为连续整行或整列创建分组（可展开/折叠）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "为连续整行或整列创建分组（可展开/折叠）。",
+				UseWhen:      []string{"需要按整行范围如 3:7 或整列如 C:F 创建分组时"},
+				AvoidWhen:    []string{"取消分组用 ungroup-dimension；隐藏行列用 update-dimension --hidden；range 不能是 A1:C5 矩形"},
+				Examples:     []string{"dws sheet group-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\""},
+			},
+		},
+	})
 	groupDimensionCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	groupDimensionCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	groupDimensionCmd.Flags().String("range", "", `整行/整列范围 (必填)，如 "3:7" 或 "C:F"`)
@@ -448,6 +756,33 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			})
 		},
 	}
+	DeclareLeafMetadata(ungroupDimensionCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "ungroup_dimension",
+				CanonicalPath:  "sheet.ungroup_dimension",
+				CLIPath:        "sheet ungroup-dimension",
+				PrimaryCLIPath: "sheet ungroup-dimension",
+			},
+			Description: "取消指定连续行/列分组。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "composite",
+				Availability: "available",
+				Reason:       "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command.",
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "取消指定连续行/列分组。",
+				UseWhen:      []string{"需要解除已有行/列分组时"},
+				AvoidWhen:    []string{"创建分组用 group-dimension"},
+				Examples:     []string{"dws sheet ungroup-dimension --node <NODE_ID> --sheet-id <SHEET_ID> --range \"3:7\""},
+			},
+		},
+	})
 	ungroupDimensionCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	ungroupDimensionCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	ungroupDimensionCmd.Flags().String("range", "", `整行/整列范围 (必填)，如 "3:7" 或 "C:F"`)
@@ -458,15 +793,24 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 		Short: "设置下拉列表",
 		Long: `在钉钉表格的指定单元格范围内设置下拉列表。
 
-设置后，用户可以在这些单元格中从预定义的选项列表中选择值。
-支持自定义每个选项的颜色和是否允许多选。
+Inline 模式通过 --options 提供静态选项，支持选项颜色。
+SourceRange 模式通过 --source-sheet-id + --source-range 引用同一工作簿内的来源区域，
+支持跨工作表、整行和整列引用；读取配置时不会展开来源区域的当前值或颜色。
+两种模式都支持 --multi-select，并且 --options 与 --source-range 必须且只能指定一个。
 如果目标范围已存在下拉列表，会被新的配置覆盖。
 
 nodeId 支持传入文档链接 URL 或文档 ID（dentryUuid），系统自动识别。
 sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获取。
 
 --options 为 JSON 数组，每个元素包含 value（必填）和 color（可选）。
-选项值不能包含英文逗号。`,
+选项值不能包含英文逗号。
+
+--source-range 只接受不含工作表前缀的 A1 区域，例如 T1:T3、T:T 或 1:3；
+来源工作表由 --source-sheet-id 单独指定。SourceRange 颜色写入暂不支持。
+
+已验证行为：工作表重命名、在引用前插入行/列、删除引用前的行会自动调整引用并保持 valid；
+已验证的 move-dimension 场景会使引用变为 invalid。列删除、删除整个来源区域或来源工作表等未覆盖场景不能预设结果；
+结构操作后应先回读 sourceRangeStatus，只有 invalid 时才重新选择来源并写入。`,
 		Example: `  # 设置单选下拉列表
   dws sheet set-dropdown --node NODE_ID --sheet-id SHEET_ID --range "A2:A100" \
     --options '[{"value":"选项1"},{"value":"选项2"},{"value":"选项3"}]'
@@ -476,32 +820,63 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
     --options '[{"value":"高","color":"#ff0000"},{"value":"中","color":"#ffaa00"},{"value":"低","color":"#00ff00"}]' \
     --multi-select
 
+  # 引用同一工作簿内另一工作表的区域作为候选项来源
+  dws sheet set-dropdown --node NODE_ID --sheet-id TARGET_SHEET_ID --range "C2:C100" \
+    --source-sheet-id SOURCE_SHEET_ID --source-range "T1:T3"
+
   # 使用文档链接 URL
   dws sheet set-dropdown --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>" \
     --sheet-id SHEET_ID --range "C1:C10" --options '[{"value":"是"},{"value":"否"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "node", "sheet-id", "range"); err != nil {
+				return err
+			}
 			optionsStr := mustGetFlag(cmd, "options")
-			var options []map[string]any
-			if err := json.Unmarshal([]byte(optionsStr), &options); err != nil {
-				return fmt.Errorf("--options JSON 解析失败: %w", err)
+			sourceSheetID := mustGetFlag(cmd, "source-sheet-id")
+			sourceRange := mustGetFlag(cmd, "source-range")
+			hasOptions := optionsStr != ""
+			hasSourceRange := sourceRange != ""
+			if hasOptions == hasSourceRange {
+				return fmt.Errorf("--options 与 --source-range 必须且只能指定一个")
 			}
-			if len(options) == 0 {
-				return fmt.Errorf("--options 至少包含 1 个选项")
+			if hasSourceRange && sourceSheetID == "" {
+				return fmt.Errorf("使用 --source-range 时必须同时指定 --source-sheet-id")
 			}
-			for i, opt := range options {
-				val, ok := opt["value"].(string)
-				if !ok || val == "" {
-					return fmt.Errorf("--options[%d] 缺少必填的 value 字段或 value 为空", i)
-				}
-				if strings.Contains(val, ",") {
-					return fmt.Errorf("--options[%d].value 不能包含英文逗号: %q", i, val)
-				}
+			if !hasSourceRange && sourceSheetID != "" {
+				return fmt.Errorf("使用 --source-sheet-id 时必须同时指定 --source-range")
 			}
+
 			toolArgs := map[string]any{
 				"nodeId":  mustGetFlag(cmd, "node"),
 				"sheetId": mustGetFlag(cmd, "sheet-id"),
 				"range":   mustGetFlag(cmd, "range"),
-				"options": options,
+			}
+			if hasOptions {
+				var options []map[string]any
+				if err := json.Unmarshal([]byte(optionsStr), &options); err != nil {
+					return fmt.Errorf("--options JSON 解析失败: %w", err)
+				}
+				if len(options) == 0 {
+					return fmt.Errorf("--options 至少包含 1 个选项")
+				}
+				for i, opt := range options {
+					val, ok := opt["value"].(string)
+					if !ok || val == "" {
+						return fmt.Errorf("--options[%d] 缺少必填的 value 字段或 value 为空", i)
+					}
+					if strings.Contains(val, ",") {
+						return fmt.Errorf("--options[%d].value 不能包含英文逗号: %q", i, val)
+					}
+				}
+				toolArgs["options"] = options
+			} else {
+				if err := validateDropdownSourceRangeInput(sourceSheetID, sourceRange); err != nil {
+					return err
+				}
+				toolArgs["sourceRange"] = map[string]any{
+					"sheetId":    sourceSheetID,
+					"a1Notation": sourceRange,
+				}
 			}
 			if multiSelect, _ := cmd.Flags().GetBool("multi-select"); multiSelect {
 				toolArgs["enableMultiSelect"] = true
@@ -509,18 +884,62 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			return callMCPTool("set_dropdown_lists", toolArgs)
 		},
 	}
+	DeclareLeafMetadata(setDropdownCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "set_dropdown_lists",
+				CanonicalPath:  "sheet.set_dropdown_lists",
+				CLIPath:        "sheet set-dropdown",
+				PrimaryCLIPath: "sheet set-dropdown",
+			},
+			Description: "为指定范围设置 Inline 或 SourceRange 下拉列表（可多选；颜色仅 Inline 支持）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "set_dropdown_lists"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "为指定范围设置 Inline 或 SourceRange 下拉列表；SourceRange 可跨同一工作簿内的工作表。",
+				UseWhen:      []string{"需要给单元格配置可选值下拉约束时"},
+				AvoidWhen:    []string{"查看已有下拉用 get-dropdown；移除下拉用 delete-dropdown"},
+				Examples: []string{
+					"dws sheet set-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\" --options '[{\"value\":\"选项1\"},{\"value\":\"选项2\"}]'",
+					"dws sheet set-dropdown --node <NODE_ID> --sheet-id <TARGET_SHEET_ID> --range \"B2:B100\" --source-sheet-id <SOURCE_SHEET_ID> --source-range \"T1:T3\"",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "multi-select", Property: "enableMultiSelect"},
+				{Name: "node", Property: "nodeId"},
+				{Name: "source-sheet-id", Property: "sourceRange.sheetId", Required: boolPtr(false), RequiredWhen: "--source-range is provided"},
+				{Name: "source-range", Property: "sourceRange.a1Notation", Required: boolPtr(false), RequiredWhen: "exactly one of --options or --source-range must be provided"},
+			},
+		},
+	})
 	setDropdownCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	setDropdownCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	setDropdownCmd.Flags().String("range", "", "目标单元格范围，A1 表示法，如 A2:A100 (必填)")
-	setDropdownCmd.Flags().String("options", "", `下拉选项 JSON 数组 (必填)，如 '[{"value":"选项1","color":"#ff0000"}]'`)
+	setDropdownCmd.Flags().String("options", "", `Inline 下拉选项 JSON 数组，与 --source-range 二选一，如 '[{"value":"选项1","color":"#ff0000"}]'`)
+	setDropdownCmd.Flags().String("source-sheet-id", "", "SourceRange 来源工作表 ID；使用 --source-range 时必填")
+	setDropdownCmd.Flags().String("source-range", "", "SourceRange 来源区域，与 --options 二选一；不含工作表前缀，如 T1:T3、T:T 或 1:3")
 	setDropdownCmd.Flags().Bool("multi-select", false, "是否允许多选（默认单选）")
+	cli.AnnotateRuntimeFlagFormat(setDropdownCmd, "source-range", "a1-range")
+	setDropdownCmd.MarkFlagsOneRequired("options", "source-range")
+	setDropdownCmd.MarkFlagsMutuallyExclusive("options", "source-range")
+	setDropdownCmd.MarkFlagsRequiredTogether("source-sheet-id", "source-range")
 
 	getDropdownCmd := &cobra.Command{
 		Use:   "get-dropdown",
 		Short: "获取下拉列表配置",
 		Long: `查询钉钉表格指定范围内的下拉列表配置。
 
-返回范围内所有单元格的下拉列表配置信息，包括选项值和颜色。
+Inline 配置返回 conditionValues 和 options；SourceRange 配置返回
+sourceType/sourceRangeStatus/enableMultiSelect，且仅在 sourceRangeStatus="valid" 时返回
+sourceRange。invalid 结果仍保留配置组，但省略 sourceRange；两种状态都不展开来源区域的候选值或颜色。
 如果范围内存在多个不同的下拉列表配置，会分别返回每组配置及其覆盖的单元格列表。
 如果范围内没有设置下拉列表，返回空。
 
@@ -542,6 +961,36 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			})
 		},
 	}
+	DeclareLeafMetadata(getDropdownCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "get_dropdown_lists",
+				CanonicalPath:  "sheet.get_dropdown_lists",
+				CLIPath:        "sheet get-dropdown",
+				PrimaryCLIPath: "sheet get-dropdown",
+			},
+			Description: "查询指定范围的下拉列表配置。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "get_dropdown_lists"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询指定范围的下拉列表配置。",
+				UseWhen:      []string{"修改或核对下拉选项前，先读取现有 dataValidations 时"},
+				AvoidWhen:    []string{"设置下拉用 set-dropdown；删除下拉用 delete-dropdown；判空看 hasDropdown"},
+				Examples:     []string{"dws sheet get-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	getDropdownCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	getDropdownCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	getDropdownCmd.Flags().String("range", "", "查询范围，A1 表示法，如 A1:A100 (必填)")
@@ -569,6 +1018,36 @@ sheetId 支持传入工作表 ID 或工作表名称，可通过 sheet list 获�
 			})
 		},
 	}
+	DeclareLeafMetadata(deleteDropdownCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "user_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "sheet",
+				Name:           "delete_dropdown_lists",
+				CanonicalPath:  "sheet.delete_dropdown_lists",
+				CLIPath:        "sheet delete-dropdown",
+				PrimaryCLIPath: "sheet delete-dropdown",
+			},
+			Description: "删除指定范围的下拉列表（需确认后加 --yes；不清除已填值）。",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "delete_dropdown_lists"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "删除指定范围的下拉列表（需确认后加 --yes；不清除已填值）。",
+				UseWhen:      []string{"需要移除下拉约束但保留单元格已有值时"},
+				AvoidWhen:    []string{"只改选项用 set-dropdown 覆盖；清单元格内容用 range clear"},
+				Examples:     []string{"dws sheet delete-dropdown --node <NODE_ID> --sheet-id <SHEET_ID> --range \"A2:A100\""},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
 	deleteDropdownCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	deleteDropdownCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	deleteDropdownCmd.Flags().String("range", "", "要删除下拉列表的范围，A1 表示法，如 A2:A100 (必填)")

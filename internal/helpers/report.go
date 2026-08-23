@@ -14,6 +14,8 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 )
 
 const (
@@ -48,6 +50,20 @@ var (
 // ──────────────────────────────────────────────────────────
 
 func newReportCommand() *cobra.Command {
+	// Product-level Agent routing Decl (migrated from selection/report.json
+	// products.report). Catalog assembly stamps provenance contract_final.
+	contract.RegisterProductDecl(contract.ProductDecl{
+		ID: "report",
+		Selection: contract.ProductSelectionDecl{
+			AgentSummary: "查询日志模板、收发日志、日志正文与统计，并按模板提交日志",
+			UseWhen: []string{
+				"查看或提交日报、周报等钉钉日志时",
+			},
+			AvoidWhen: []string{
+				"不要用于待办任务、OA 审批或在线文档正文编辑",
+			},
+		},
+	})
 	root := &cobra.Command{
 		Use:     "report",
 		Aliases: []string{"log"},
@@ -79,6 +95,36 @@ func newReportCommand() *cobra.Command {
 		Example: `  dws report template list`,
 		RunE:    runReportTemplateList,
 	}
+	DeclareLeafMetadata(templateListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "report",
+				Name:           "get_available_report_templates",
+				CanonicalPath:  "report.get_available_report_templates",
+				CLIPath:        "report template list",
+				PrimaryCLIPath: "report template list",
+			},
+			Description: "获取当前员工可使用的日志模版列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "report", RPCName: "get_available_report_templates"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取当前员工可使用的日志模版列表",
+				UseWhen:      []string{"提交日志前需要列出可用模版名称与 templateId 时"},
+				AvoidWhen:    []string{"已知模版名称需要字段定义时改用 dws report template get"},
+				Examples: []string{
+					"dws report template list",
+					"dws report template list --format json",
+				},
+			},
+		},
+	})
 
 	templateGetCmd := &cobra.Command{
 		Use:     "get",
@@ -86,6 +132,40 @@ func newReportCommand() *cobra.Command {
 		Example: `  dws report template get --name <templateName>`,
 		RunE:    runReportTemplateDetail,
 	}
+	DeclareLeafMetadata(templateGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "report",
+				Name:           "get_template_details_by_name",
+				CanonicalPath:  "report.get_template_details_by_name",
+				CLIPath:        "report template get",
+				PrimaryCLIPath: "report template get",
+				Aliases:        []string{"report template detail"},
+			},
+			Description: "按名称获取日志模版字段定义",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "report", RPCName: "get_template_details_by_name"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按名称获取日志模版字段定义",
+				UseWhen:      []string{"已知模版名称，提交前需要读取字段名称、类型与排序时"},
+				AvoidWhen:    []string{"不知道有哪些模版时先用 dws report template list"},
+				Examples: []string{
+					"dws report template get --name <templateName>",
+					"dws report template get --name \"日报\" --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "name", Property: "report_template_name"},
+			},
+		},
+	})
 	addReportTemplateDetailFlags(templateGetCmd)
 
 	templateDetailCmd := &cobra.Command{
@@ -108,6 +188,43 @@ func newReportCommand() *cobra.Command {
   dws report entry get --report-id <reportId>`,
 		RunE: runReportDetail,
 	}
+	DeclareLeafMetadata(entryGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "report",
+				Name:           "get_report_entry_details",
+				CanonicalPath:  "report.get_report_entry_details",
+				CLIPath:        "report entry get",
+				PrimaryCLIPath: "report entry get",
+				Aliases:        []string{"report detail"},
+			},
+			Description: "获取指定一篇日志的详情信息",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "report", RPCName: "get_report_entry_details"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取指定一篇日志的详情信息",
+				UseWhen:      []string{"已知 reportId，需要读取日志正文、字段明细或钉钉跳转链接时"},
+				AvoidWhen: []string{
+					"要提交新日志时改用 dws report entry submit",
+					"要看已读/评论统计时改用 dws report entry stats",
+				},
+				Examples: []string{
+					"dws report entry get --report-id <reportId> --format json",
+					"dws report entry get --report-id <reportId>",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "report-id", Property: "report_id"},
+			},
+		},
+	})
 	addReportDetailFlags(entryGetCmd)
 
 	entryStatsCmd := &cobra.Command{
@@ -117,6 +234,43 @@ func newReportCommand() *cobra.Command {
   dws report entry stats --report-id <reportId>`,
 		RunE: runReportStats,
 	}
+	DeclareLeafMetadata(entryStatsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "report",
+				Name:           "get_report_statistics_by_id",
+				CanonicalPath:  "report.get_report_statistics_by_id",
+				CLIPath:        "report entry stats",
+				PrimaryCLIPath: "report entry stats",
+				Aliases:        []string{"report stats"},
+			},
+			Description: "获取指定日志的统计数据",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "report", RPCName: "get_report_statistics_by_id"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取指定日志的统计数据",
+				UseWhen:      []string{"已知 reportId，需要查看评论数、点赞数、已读数等统计时"},
+				AvoidWhen: []string{
+					"要读正文时改用 dws report entry get",
+					"要提交新日志时改用 dws report entry submit",
+				},
+				Examples: []string{
+					"dws report entry stats --report-id <reportId>",
+					"dws report entry stats --report-id <reportId> --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "report-id", Property: "report_id"},
+			},
+		},
+	})
 	addReportStatsFlags(entryStatsCmd)
 
 	entrySubmitCmd := &cobra.Command{
@@ -136,6 +290,43 @@ func newReportCommand() *cobra.Command {
   dws report entry submit --template-id TPL_ID --contents '[...]' --to-chat --to-user-ids userId1,userId2`,
 		RunE: runReportCreate,
 	}
+	DeclareLeafMetadata(entrySubmitCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "write", Risk: "medium",
+			Confirmation: "not_required", Idempotency: "unknown",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "report",
+				Name:           "create_report",
+				CanonicalPath:  "report.create_report",
+				CLIPath:        "report entry submit",
+				PrimaryCLIPath: "report entry submit",
+				Aliases:        []string{"report create"},
+			},
+			Description: "按模版提交一份新日报",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "report", RPCName: "create_report"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按模版提交一份新日报",
+				UseWhen:      []string{"已取得 templateId 与字段定义，需要按模版提交日报/周报（contents[].key 必须等于模板 field_name）时"},
+				AvoidWhen: []string{
+					"尚未读取模板字段时先用 dws report template list / template get",
+					"只需查看已有日志正文时改用 dws report entry get",
+				},
+				Examples: []string{
+					"dws report entry submit --template-id <templateId> --contents-file ./report.json --format json",
+					"dws report entry submit --template-id <templateId> --contents '[{\"key\":\"今日完成\",\"sort\":\"0\",\"content\":\"完成了需求评审\",\"contentType\":\"markdown\",\"type\":\"1\"}]' --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "to-chat", Required: boolPtr(false)},
+			},
+		},
+	})
 	addReportCreateFlags(entrySubmitCmd)
 
 	entryCmd.AddCommand(entryGetCmd, entryStatsCmd, entrySubmitCmd)
@@ -157,6 +348,41 @@ func newReportCommand() *cobra.Command {
   # CLI 只返回 JSON，Agent 从 result[] 拼 Markdown 表展示给用户，reportId 仅用于 entry get/stats`,
 		RunE: runReportList,
 	}
+	DeclareLeafMetadata(inboxListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "report",
+				Name:           "get_received_report_list",
+				CanonicalPath:  "report.get_received_report_list",
+				CLIPath:        "report inbox list",
+				PrimaryCLIPath: "report inbox list",
+				Aliases:        []string{"report list"},
+			},
+			Description: "查询当前人收到的日志列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "report", RPCName: "get_received_report_list"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询当前人收到的日志列表",
+				UseWhen:      []string{"需要按时间范围查看别人发给我的日志列表并提取 reportId 时"},
+				AvoidWhen: []string{
+					"要看自己发出的日志时改用 dws report outbox list",
+					"已知 reportId 要看正文时改用 dws report entry get",
+				},
+				Examples: []string{"dws report inbox list --start \"2026-03-10T00:00:00+08:00\" --end \"2026-03-10T23:59:59+08:00\" --cursor 0 --size 20 --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "start", Property: "startTime"},
+				{Name: "end", Property: "endTime"},
+			},
+		},
+	})
 	addReportListFlags(inboxListCmd)
 
 	inboxCmd.AddCommand(inboxListCmd)
@@ -172,6 +398,47 @@ func newReportCommand() *cobra.Command {
   dws report outbox list --cursor 0 --size 20 --template-name "日报"`,
 		RunE: runReportSent,
 	}
+	DeclareLeafMetadata(outboxListCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "report",
+				Name:           "get_send_report_list",
+				CanonicalPath:  "report.get_send_report_list",
+				CLIPath:        "report outbox list",
+				PrimaryCLIPath: "report outbox list",
+				Aliases:        []string{"report created", "report sent"},
+			},
+			Description: "查询当前人创建的日志详情列表",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "report", RPCName: "get_send_report_list"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询当前人创建的日志详情列表",
+				UseWhen:      []string{"需要查看我发出/创建的日志列表（含内容摘要、创建时间、访问地址）时"},
+				AvoidWhen: []string{
+					"要看收到的日志时改用 dws report inbox list",
+					"已知 reportId 要完整正文时改用 dws report entry get",
+				},
+				Examples: []string{
+					"dws report outbox list --cursor 0 --size 20 --format json",
+					"dws report outbox list --cursor 0 --size 20",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "start", Property: "startTime"},
+				{Name: "end", Property: "endTime"},
+				{Name: "modified-start", Property: "modifiedStartTime"},
+				{Name: "modified-end", Property: "modifiedEndTime"},
+				{Name: "template-name", Property: "report_template_name"},
+			},
+		},
+	})
 	addReportSentFlags(outboxListCmd)
 
 	outboxCmd.AddCommand(outboxListCmd)
@@ -184,6 +451,15 @@ func newReportCommand() *cobra.Command {
 		RunE:    withReportDeprecationWarning("create", "entry submit", runReportCreate),
 	}
 	addReportCreateFlags(createCmd)
+	// Mirror entry submit's reviewed --to-chat ParamDecl onto the deprecated
+	// create alias. Schema assembly still reads ContractFinal from the primary
+	// leaf; this keeps compatibility-equivalence NativeRequired annotations
+	// symmetric instead of relying only on one-sided tolerance.
+	// addReportCreateFlags always registers --to-chat; ApplyParamDecls cannot
+	// fail for this reviewed alias mirror.
+	_ = cli.ApplyParamDecls(createCmd, []contract.ParamDecl{
+		{Name: "to-chat", Required: boolPtr(false)},
+	})
 
 	detailCmd := &cobra.Command{
 		Use:     "detail",

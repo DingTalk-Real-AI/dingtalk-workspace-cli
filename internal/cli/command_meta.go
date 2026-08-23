@@ -14,18 +14,20 @@
 // command_meta.go provides the unified metadata consumption API. All runtime
 // consumers (help, schema, agent selection, skill generation) call ResolveMeta
 // to get a CommandMeta struct — one function, one struct, no need to know which
-// of the 6 generation layers a field comes from.
+// declaration layer a field comes from.
 //
-// This is the "simple consumption" half of the generation/consumption split:
-//   - Generation (gen.go + internal/generator/): 6 inputs → catalog snapshot.
-//   - Consumption (this file): catalog snapshot → ResolveMeta → CommandMeta.
+// ResolveMeta projects CommandMeta from the lazily assembled SchemaRegistry
+// (RegisterSchemaSourceRoot → ResolveSchemaBuild). Without a registered
+// factory it fails closed — there is no schema_meta_index.gob fallback.
 
 package cli
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // CommandMeta is the complete runtime metadata view for a single command.
@@ -58,21 +60,92 @@ var (
 	metaByCLIPath     map[string]CommandMeta
 )
 
-// initMetaByCLIPath builds the cli_path → CommandMeta lookup from the embedded
-// catalog. Runs once (sync.Once); the catalog is already decoded at package init.
-func initMetaByCLIPath() {
-	metaByCLIPath = buildMetaByCLIPath(embeddedSchemaCatalog())
+// Counter names retain "MetaIndex" for RuntimeSchemaMetadataLoadCounts
+// compatibility; they now count ResolveMeta lookup init from assembled Catalog.
+var (
+	runtimeDeliverySchemaMetaIndexErr       error
+	runtimeDeliverySchemaMetaIndexLazyCount atomic.Uint64
+)
+
+// installDeliveryCommandMeta materializes the ResolveMeta lookup from an
+// assembled Catalog. Called from deliverySchemaCatalog's sync.Once so Meta
+// shares assembly and subsequent ResolveMeta is a plain map read.
+func installDeliveryCommandMeta(loaded loadedSchemaCatalog, err error) {
+	runtimeDeliverySchemaMetaIndexLazyCount.Add(1)
+	if err != nil {
+		runtimeDeliverySchemaMetaIndexErr = err
+		metaByCLIPath = nil
+		metaByCLIPathOnce.Do(func() {})
+		return
+	}
+	metaByCLIPath = buildMetaByCLIPath(loaded)
+	runtimeDeliverySchemaMetaIndexErr = nil
+	metaByCLIPathOnce.Do(func() {})
 }
 
-// buildMetaByCLIPath constructs the lookup from a loaded catalog snapshot.
-// Split from initMetaByCLIPath so malformed-snapshot guards stay testable.
+// panicIfMetaIndexUnusable fails closed when CommandMeta lookup could not be
+// built. Callers must not treat this as "command missing".
+func panicIfMetaIndexUnusable(err error) {
+	if err == nil {
+		return
+	}
+	panic(fmt.Sprintf("schema CommandMeta index is unusable: %v", err))
+}
+
+// buildMetaByCLIPath constructs the lookup from a loaded catalog.
+// Prefer the typed Registry (production cold-start path). Fall back to
+// Snapshot.Tools maps for unit tests that synthesize untyped fixtures.
 func buildMetaByCLIPath(loaded loadedSchemaCatalog) map[string]CommandMeta {
+	if len(loaded.Registry.Products) > 0 {
+		return buildMetaByCLIPathFromRegistry(loaded.Registry)
+	}
+	return buildMetaByCLIPathFromSnapshotTools(loaded.Snapshot.Tools)
+}
+
+func buildMetaByCLIPathFromRegistry(registry SchemaRegistry) map[string]CommandMeta {
 	lookup := make(map[string]CommandMeta)
-	if loaded.Snapshot.Tools == nil {
+	metas := make([]CommandMeta, 0, 64)
+	for _, product := range registry.Products {
+		for _, tool := range product.Tools {
+			cliPath := strings.TrimSpace(tool.Identity.CLIPath)
+			if cliPath == "" {
+				continue
+			}
+			meta := CommandMeta{
+				Identity: CommandIdentity{
+					CLIPath:   cliPath,
+					Canonical: tool.Identity.CanonicalPath,
+					Aliases:   append([]string(nil), tool.Identity.Aliases...),
+					ProductID: tool.Identity.ProductID,
+					Title:     tool.Title,
+				},
+				Safety: CommandSafety{
+					Effect:       tool.Safety.Effect,
+					Risk:         tool.Safety.Risk,
+					Confirmation: tool.Safety.Confirmation,
+					Idempotency:  tool.Safety.Idempotency,
+				},
+				Selection: CommandSelection{
+					AgentSummary: tool.Selection.AgentSummary,
+					UseWhen:      append([]string(nil), tool.Selection.UseWhen...),
+					AvoidWhen:    append([]string(nil), tool.Selection.AvoidWhen...),
+					Examples:     append([]string(nil), tool.Selection.Examples...),
+				},
+			}
+			lookup[cliPath] = meta
+			metas = append(metas, meta)
+		}
+	}
+	return registerCommandMetaAliases(lookup, metas)
+}
+
+func buildMetaByCLIPathFromSnapshotTools(tools map[string]map[string]any) map[string]CommandMeta {
+	lookup := make(map[string]CommandMeta)
+	if tools == nil {
 		return lookup
 	}
-	metas := make([]CommandMeta, 0, len(loaded.Snapshot.Tools))
-	for _, tool := range loaded.Snapshot.Tools {
+	metas := make([]CommandMeta, 0, len(tools))
+	for _, tool := range tools {
 		cliPath := schemaString(tool["cli_path"])
 		if cliPath == "" {
 			continue
@@ -101,12 +174,13 @@ func buildMetaByCLIPath(loaded loadedSchemaCatalog) map[string]CommandMeta {
 		lookup[cliPath] = meta
 		metas = append(metas, meta)
 	}
-	// Register compat alias paths (e.g. "report list") against the same
-	// metadata in a second pass, sorted by primary cli_path: primary paths
-	// always win (registered above, aliases only fill vacancies), and an
-	// alias-vs-alias collision resolves deterministically to the owner with
-	// the lexicographically smallest primary path — Snapshot.Tools is a map,
-	// so relying on iteration order would make the winner vary per process.
+	return registerCommandMetaAliases(lookup, metas)
+}
+
+// registerCommandMetaAliases fills compat alias paths. Primary paths always
+// win; alias-vs-alias collisions resolve to the owner with the
+// lexicographically smallest primary cli_path (map iteration is unstable).
+func registerCommandMetaAliases(lookup map[string]CommandMeta, metas []CommandMeta) map[string]CommandMeta {
 	sort.Slice(metas, func(i, j int) bool {
 		return metas[i].Identity.CLIPath < metas[j].Identity.CLIPath
 	})
@@ -126,10 +200,15 @@ func buildMetaByCLIPath(loaded loadedSchemaCatalog) map[string]CommandMeta {
 
 // ResolveMeta returns the complete metadata for a command identified by its CLI
 // path (e.g. "dev app delete") or one of its compat aliases (e.g. "report list"
-// for "report inbox list"). Returns ok=false for commands not in the embedded
-// catalog (utility commands, hidden commands, shortcuts).
+// for "report inbox list"). Returns ok=false for commands not in the Schema
+// surface (utility commands, hidden commands, shortcuts).
+//
+// Ensures deliverySchemaCatalog Once (assembles + caches Meta), then O(1) map
+// lookup. Without a registered source root, fails closed (panic).
 func ResolveMeta(cliPath string) (CommandMeta, bool) {
-	metaByCLIPathOnce.Do(initMetaByCLIPath)
-	m, ok := metaByCLIPath[strings.TrimSpace(cliPath)]
+	cliPath = strings.TrimSpace(cliPath)
+	_ = deliverySchemaCatalog()
+	panicIfMetaIndexUnusable(runtimeDeliverySchemaMetaIndexErr)
+	m, ok := metaByCLIPath[cliPath]
 	return m, ok
 }

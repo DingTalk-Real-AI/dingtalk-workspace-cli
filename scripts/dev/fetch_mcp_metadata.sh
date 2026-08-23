@@ -1,8 +1,9 @@
 #!/bin/bash
 # scripts/dev/fetch_mcp_metadata.sh
 #
-# Refreshes internal/cli/schema_mcp_metadata.json from the live MCP server.
-# DWS's equivalent of lark-cli's scripts/fetch_meta.py.
+# Optional diagnostic: pulls live MCP tools/list and writes a local dump.
+# This is NOT a Schema delivery input. schema_mcp_metadata.json is retired;
+# production Schema assembles from Contract/ParamDecl/Interface + Cobra only.
 #
 # Prerequisites:
 #   dws auth login   (valid access token required)
@@ -11,6 +12,7 @@
 #   make fetch-mcp-metadata
 #   # or directly:
 #   scripts/dev/fetch_mcp_metadata.sh
+#   scripts/dev/fetch_mcp_metadata.sh /tmp/mcp-tools-dump.json
 #
 # The script tries to extract the access token from the DWS auth store.
 # If that fails (e.g. keychain-based storage), set DWS_ACCESS_TOKEN manually:
@@ -21,6 +23,15 @@ set -eu
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+
+OUTPUT="${1:-artifacts/mcp_metadata_diagnostic.json}"
+case "$OUTPUT" in
+	internal/cli/schema_mcp_metadata.json|*/internal/cli/schema_mcp_metadata.json)
+		echo "Error: refusing to write retired Schema pin $OUTPUT" >&2
+		echo "  Use a diagnostic path under artifacts/ instead." >&2
+		exit 1
+		;;
+esac
 
 # --- 1. Check auth ---
 AUTH_JSON=$(dws auth status --format json 2>/dev/null || echo '{}')
@@ -59,11 +70,12 @@ fi
 
 export DWS_ACCESS_TOKEN
 
-# --- 3. Run the Go tool ---
+mkdir -p "$(dirname "$OUTPUT")"
+
+# --- 3. Run the Go tool (diagnostic dump only) ---
 go run ./cmd/fetch_mcp_metadata \
-    -output internal/cli/schema_mcp_metadata.json \
+    -output "$OUTPUT" \
     2>&1
 
 echo "" >&2
-echo "Done. Review changes with: git diff internal/cli/schema_mcp_metadata.json" >&2
-echo "Then commit if the refreshed metadata looks correct." >&2
+echo "Diagnostic dump written to $OUTPUT (not a Schema delivery input)." >&2

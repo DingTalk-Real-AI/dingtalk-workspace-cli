@@ -14,6 +14,11 @@
 package smart
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
@@ -56,10 +61,49 @@ var RecentMail = shortcut.Shortcut{
 		"最后在本地把每条会话投影成 {subject, from, date, threadId} 打印出来，可配合 --format/--jq/--fields。" +
 		"这是纯只读操作，只做列举与本地投影，不会修改、发送或删除任何邮件；若最近没有邮件则提示「最近没有邮件」。",
 	Risk: shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "low",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "mail",
+			Name:           "shortcut_recent_mail",
+			CanonicalPath:  "mail.shortcut_recent_mail",
+			CLIPath:        "mail +recent-mail",
+			PrimaryCLIPath: "mail +recent-mail",
+		},
+		Description: "列出收件箱近期邮件会话并投影列表（主题/发件人/时间/threadId）",
+		Parameters: []contract.ParamDecl{
+			{Name: "limit", Property: "limit"},
+			{Name: "email", Property: "email"},
+			{Name: "folder", Property: "folder"},
+			{Name: "cursor", Property: "cursor"},
+		},
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "列出收件箱近期邮件会话并投影列表（主题/发件人/时间/threadId）",
+			UseWhen:      []string{"当你想快速看一眼自己邮箱里近期的邮件会话（收件箱线程/conversation），只需要一份精简清单（主题、发件人、最后修改时间、会话 threadId）、而不想翻完整正文或原始字段时使用；内部先确定要看的邮箱地址——你可以用 --email 指定，不指定时自动取你绑定的第一个邮箱——再解析要看的文件夹——你可以用 --folder 指定文件夹 ID，不指定时自动定位收件箱——然后列出该文件夹下的近期会话，最后在本地把每条会话投影成 {subject, from, date, threadId} 打印出来，可配合 --format/--jq/--fields。这是纯只读操作，只做列举与本地投影，不会修改、发送或删除任何邮件；若最近没有邮件则提示「最近没有邮件」。"},
+			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
+			Examples: []string{
+				"dws mail +recent-mail",
+				"dws mail +recent-mail --limit 30",
+			},
+		},
+	},
 	Flags: []shortcut.Flag{
 		{Name: "limit", Type: shortcut.FlagInt, Desc: "返回会话条数上限（可选，默认 20，最大 100）", Required: false},
 		{Name: "email", Type: shortcut.FlagString, Desc: "要查看的邮箱地址（可选，默认取你绑定的第一个邮箱）", Required: false},
 		{Name: "folder", Type: shortcut.FlagString, Desc: "文件夹 ID（可选，默认定位收件箱）", Required: false},
+		{Name: "cursor", Type: shortcut.FlagString, Desc: "分页游标，取自上一页 nextCursor", Required: false},
+	},
+	Constraints: []shortcut.Constraint{{Kind: shortcut.ConstraintCustom, Flags: []string{"limit"}, Description: "显式 --limit 必须在 1-100 之间"}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		return smartMailValidatePageSize(rt, "limit", false)
 	},
 	Tips: []string{
 		`dws mail +recent-mail`,
@@ -89,40 +133,47 @@ var RecentMail = shortcut.Shortcut{
 
 		// Step 3 — list threads. email/folderId/size mirror the helpers.mail
 		// thread-list call; size is an int in 1..100.
-		size := rt.Int("limit")
-		if size <= 0 {
-			size = 20
+		limit := 20
+		if rt.Changed("limit") {
+			limit = rt.Int("limit")
 		}
-		if size > 100 {
-			size = 100
-		}
-		data, err := rt.CallMCPData("mail", "list_mailbox_threads", map[string]any{
+		args := map[string]any{
 			"email":    email,
 			"folderId": folderID,
-			"size":     size,
-		})
+			"size":     limit,
+		}
+		if rt.Changed("cursor") {
+			args["cursor"] = rt.Str("cursor")
+		}
+		data, err := rt.CallMCPData("mail", "list_mailbox_threads", args)
 		if err != nil {
 			return err
 		}
 
 		// Step 4 — project each conversation to a compact record.
-		threads := searchMailUnwrapList(data, "conversations", "threads", "result", "data", "list", "items", "records")
+		threads, err := smartMailRows(data, "mail/list_mailbox_threads", "result.conversations", "id")
+		if err != nil {
+			return err
+		}
 		results := make([]map[string]any, 0, len(threads))
 		for _, t := range threads {
+			from, err := recentMailSenders(t)
+			if err != nil {
+				return err
+			}
 			results = append(results, map[string]any{
 				"subject":  searchMailFirstString(t, "subject", "title", "topic"),
-				"from":     recentMailSenders(t),
+				"from":     from,
 				"date":     searchMailFirstAny(t, "lastModifiedDateTime", "date", "sentTime", "sentDate", "receivedDate", "createTime"),
 				"threadId": searchMailFirstString(t, "threadId", "id", "conversationId"),
 			})
 		}
 
-		// Empty result guard.
-		if len(results) == 0 {
-			return apperrors.NewValidation("最近没有邮件")
+		complete, next, err := smartMailPage(data, "mail/list_mailbox_threads", "result", rt.Str("cursor"))
+		if err != nil {
+			return err
 		}
-
-		return rt.Output(map[string]any{"count": len(results), "mails": results})
+		return smartMailOutputPage(rt, "mails", results, complete, next)
 	},
 }
 
@@ -136,12 +187,15 @@ func recentMailInboxFolder(rt *shortcut.RuntimeContext, email string) (string, e
 	if err != nil {
 		return "", err
 	}
-	folders := searchMailUnwrapList(data, "folders", "list", "items", "data", "result", "records")
+	folders, err := smartMailRows(data, "mail/list_folders", "folders", "id")
+	if err != nil {
+		return "", err
+	}
 	inboxNames := map[string]bool{
 		"收件箱": true, "inbox": true,
 	}
 	for _, f := range folders {
-		name := searchMailFirstString(f, "displayName", "name", "folderName")
+		name := strings.ToLower(strings.TrimSpace(searchMailFirstString(f, "displayName", "name", "folderName")))
 		if inboxNames[name] {
 			if id := searchMailFirstString(f, "id", "folderId"); id != "" {
 				return id, nil
@@ -154,16 +208,14 @@ func recentMailInboxFolder(rt *shortcut.RuntimeContext, email string) (string, e
 // recentMailSenders reads a conversation's sender list. The helper documents a
 // "senders" array of {email, name}; we tolerate a plain string, a single object,
 // and fall back to the shared searchMailFrom logic.
-func recentMailSenders(t map[string]any) any {
-	if arr, ok := t["senders"].([]any); ok && len(arr) > 0 {
+func recentMailSenders(t map[string]any) (any, error) {
+	raw, present := t["senders"]
+	if arr, ok := raw.([]any); ok && len(arr) > 0 {
 		names := make([]string, 0, len(arr))
-		for _, it := range arr {
+		for index, it := range arr {
 			m, ok := it.(map[string]any)
-			if !ok {
-				if s, ok := it.(string); ok && s != "" {
-					names = append(names, s)
-				}
-				continue
+			if !ok || len(m) == 0 {
+				return nil, smartMailError("mail/list_mailbox_threads", "malformed_sender", fmt.Sprintf("senders[%d] 不是非空对象", index))
 			}
 			name := searchMailFirstString(m, "name", "displayName")
 			addr := searchMailFirstString(m, "email", "emailAddress", "address")
@@ -174,15 +226,23 @@ func recentMailSenders(t map[string]any) any {
 				names = append(names, addr)
 			case name != "":
 				names = append(names, name)
+			default:
+				return nil, smartMailError("mail/list_mailbox_threads", "malformed_sender", fmt.Sprintf("senders[%d] 缺少姓名或邮箱", index))
 			}
 		}
 		if len(names) > 0 {
-			return names
+			return names, nil
+		}
+	} else if present {
+		if _, ok := raw.([]any); !ok {
+			return nil, smartMailError("mail/list_mailbox_threads", "malformed_sender", "senders 应为数组")
 		}
 	}
 	return searchMailFrom(t)
 }
 
 func init() {
+	hardenSmartMail(&RecentMail, "mails", "严格校验的近期邮件会话摘要")
+	markSmartMailCompatibilityOnly(&RecentMail)
 	shortcut.Register(RecentMail)
 }

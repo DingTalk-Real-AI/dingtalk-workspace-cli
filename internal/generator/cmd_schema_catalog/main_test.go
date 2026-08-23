@@ -56,7 +56,7 @@ func TestCrossPlatformCoverageCatalogMainReportsIsolationAndGenerationFailures(t
 		}()
 		main()
 	}
-	invoke("-root", repositoryRoot, "-output", filepath.Join(repositoryRoot, "internal/cli/schema_command_registry.json"))
+	invoke("-root", repositoryRoot, "-output", filepath.Join(repositoryRoot, "internal/cli/param_concepts.json"))
 	validateCatalogParameterBindings = func() error { return errors.New("bindings") }
 	invoke("-root", repositoryRoot, "-output", filepath.Join(t.TempDir(), "catalog.json"))
 }
@@ -64,33 +64,37 @@ func TestCrossPlatformCoverageCatalogMainReportsIsolationAndGenerationFailures(t
 func TestCrossPlatformCoverageGenerateSchemaCatalogFailureEdges(t *testing.T) {
 	originalValidate := validateCatalogParameterBindings
 	originalSnapshot := buildCatalogSnapshot
+	originalInstall := installCatalogAgentMetadata
 	originalMkdir := makeCatalogDirectory
 	originalWrite := writeCatalogFile
 	t.Cleanup(func() {
 		validateCatalogParameterBindings = originalValidate
 		buildCatalogSnapshot = originalSnapshot
+		installCatalogAgentMetadata = originalInstall
 		makeCatalogDirectory = originalMkdir
 		writeCatalogFile = originalWrite
+		cli.ClearBuildTimeAgentMetadata()
 	})
+	installCatalogAgentMetadata = func(string, *cobra.Command) error { return nil }
 	root := &cobra.Command{Use: "dws"}
 	resolver := func(*cobra.Command) (cli.ResolvedSchemaBuild, error) { return cli.ResolvedSchemaBuild{}, nil }
 	output := filepath.Join(t.TempDir(), "catalog.json")
 
-	if err := generateSchemaCatalogWithResolver(nil, "", output, resolver); err == nil || !strings.Contains(err.Error(), "root is nil") {
+	if err := generateSchemaCatalogWithResolver(".", nil, "", output, "", resolver); err == nil || !strings.Contains(err.Error(), "root is nil") {
 		t.Fatalf("nil root error = %v", err)
 	}
-	if err := generateSchemaCatalogWithResolver(root, "", output, nil); err == nil || !strings.Contains(err.Error(), "resolver is nil") {
+	if err := generateSchemaCatalogWithResolver(".", root, "", output, "", nil); err == nil || !strings.Contains(err.Error(), "resolver is nil") {
 		t.Fatalf("nil resolver error = %v", err)
 	}
-	if err := generateSchemaCatalogWithResolver(root, filepath.Join(t.TempDir(), "missing.json"), output, resolver); err == nil || !strings.Contains(err.Error(), "read deprecated") {
-		t.Fatalf("surface read error = %v", err)
+	if err := generateSchemaCatalogWithResolver(".", root, filepath.Join(t.TempDir(), "missing.json"), output, "", resolver); err == nil || !strings.Contains(err.Error(), "retired") {
+		t.Fatalf("retired surface error = %v", err)
 	}
 	validateCatalogParameterBindings = func() error { return errors.New("bindings") }
-	if err := generateSchemaCatalogWithResolver(root, "", output, resolver); err == nil || !strings.Contains(err.Error(), "parameter binding") {
+	if err := generateSchemaCatalogWithResolver(".", root, "", output, "", resolver); err == nil || !strings.Contains(err.Error(), "parameter binding") {
 		t.Fatalf("binding error = %v", err)
 	}
 	validateCatalogParameterBindings = func() error { return nil }
-	if err := generateSchemaCatalogWithResolver(root, "", output, func(*cobra.Command) (cli.ResolvedSchemaBuild, error) {
+	if err := generateSchemaCatalogWithResolver(".", root, "", output, "", func(*cobra.Command) (cli.ResolvedSchemaBuild, error) {
 		return cli.ResolvedSchemaBuild{}, errors.New("resolve")
 	}); err == nil || !strings.Contains(err.Error(), "resolve final") {
 		t.Fatalf("resolver error = %v", err)
@@ -98,20 +102,29 @@ func TestCrossPlatformCoverageGenerateSchemaCatalogFailureEdges(t *testing.T) {
 	buildCatalogSnapshot = func(cli.ResolvedSchemaBuild, cli.SchemaCatalogBuildOptions) (cli.SchemaCatalogSnapshot, error) {
 		return cli.SchemaCatalogSnapshot{}, errors.New("snapshot")
 	}
-	if err := generateSchemaCatalogWithResolver(root, "", output, resolver); err == nil || !strings.Contains(err.Error(), "snapshot") {
+	if err := generateSchemaCatalogWithResolver(".", root, "", output, "", resolver); err == nil || !strings.Contains(err.Error(), "snapshot") {
 		t.Fatalf("snapshot error = %v", err)
 	}
 	buildCatalogSnapshot = func(cli.ResolvedSchemaBuild, cli.SchemaCatalogBuildOptions) (cli.SchemaCatalogSnapshot, error) {
 		return cli.SchemaCatalogSnapshot{}, nil
 	}
 	makeCatalogDirectory = func(string, os.FileMode) error { return errors.New("mkdir") }
-	if err := generateSchemaCatalogWithResolver(root, "", output, resolver); err == nil || !strings.Contains(err.Error(), "create schema catalog") {
+	if err := generateSchemaCatalogWithResolver(".", root, "", output, "", resolver); err == nil || !strings.Contains(err.Error(), "create schema catalog") {
 		t.Fatalf("mkdir error = %v", err)
 	}
 	makeCatalogDirectory = func(string, os.FileMode) error { return nil }
 	writeCatalogFile = func(string, []byte, os.FileMode) error { return errors.New("write") }
-	if err := generateSchemaCatalogWithResolver(root, "", output, resolver); err == nil || !strings.Contains(err.Error(), "write schema catalog") {
+	if err := generateSchemaCatalogWithResolver(".", root, "", output, "", resolver); err == nil || !strings.Contains(err.Error(), "write schema catalog") {
 		t.Fatalf("write error = %v", err)
+	}
+	writeCatalogFile = func(string, []byte, os.FileMode) error { return nil }
+	originalMetaIndex := writeCatalogMetaIndex
+	t.Cleanup(func() { writeCatalogMetaIndex = originalMetaIndex })
+	writeCatalogMetaIndex = func(cli.SchemaCatalogSnapshot, string) error {
+		return errors.New("meta-index")
+	}
+	if err := generateSchemaCatalogWithResolver(".", root, "", output, "", resolver); err == nil || !strings.Contains(err.Error(), "meta-index") {
+		t.Fatalf("meta-index write error = %v", err)
 	}
 
 	if got := resolveCatalogRootPath("root", "relative.json"); got != filepath.Join("root", "relative.json") {
@@ -121,16 +134,35 @@ func TestCrossPlatformCoverageGenerateSchemaCatalogFailureEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	surface := filepath.Join(t.TempDir(), "registry.json")
-	if err := os.WriteFile(surface, []byte("{}"), 0o644); err != nil {
+	if err := validateCatalogOutputIsolation(repositoryRoot, filepath.Join(t.TempDir(), "catalog.json"), filepath.Join(t.TempDir(), "schema_meta_index.gob")); err != nil {
+		t.Fatalf("safe output rejected: %v", err)
+	}
+}
+
+func TestInstallBuildTimeAgentMetadataDoesNotWriteRetiredDirectory(t *testing.T) {
+	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := validateCatalogOutputIsolation(repositoryRoot, filepath.Join(t.TempDir(), "catalog.json"), surface); err != nil {
-		t.Fatalf("surface isolation input rejected safe output: %v", err)
+	retired := filepath.Join(repositoryRoot, "internal/cli/schema_agent_metadata")
+	if _, err := os.Stat(retired); !os.IsNotExist(err) {
+		t.Fatalf("retired schema_agent_metadata/ should stay absent before inject: %v", err)
+	}
+	t.Cleanup(cli.ClearBuildTimeAgentMetadata)
+	root := app.NewSchemaSourceRootCommand()
+	if err := installBuildTimeAgentMetadata(repositoryRoot, root); err != nil {
+		t.Fatalf("installBuildTimeAgentMetadata() error = %v", err)
+	}
+	if _, err := os.Stat(retired); !os.IsNotExist(err) {
+		t.Fatalf("inject must not recreate schema_agent_metadata/: %v", err)
 	}
 }
 
 func TestCrossPlatformCoverageGenerateSchemaCatalogResolvesBuildExactlyOnce(t *testing.T) {
+	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
 	root := app.NewSchemaSourceRootCommand()
 	resolveCalls := 0
 	resolvedRegistryHash := ""
@@ -146,7 +178,8 @@ func TestCrossPlatformCoverageGenerateSchemaCatalogResolvesBuildExactlyOnce(t *t
 		return resolved, err
 	}
 	outputPath := filepath.Join(t.TempDir(), "schema_catalog")
-	if err := generateSchemaCatalogWithResolver(root, "", outputPath, resolver); err != nil {
+	t.Cleanup(cli.ClearBuildTimeAgentMetadata)
+	if err := generateSchemaCatalogWithResolver(repositoryRoot, root, "", outputPath, "", resolver); err != nil {
 		t.Fatalf("generateSchemaCatalogWithResolver() error = %v", err)
 	}
 	if resolveCalls != 1 {
@@ -205,33 +238,14 @@ func loadSplitSchemaCatalogSnapshot(t *testing.T, dir string) cli.SchemaCatalogS
 	return snapshot
 }
 
-func TestValidateDeprecatedSurfaceAcceptsEmbeddedRegistrySource(t *testing.T) {
-	// Registry is now per-product shards; merge into a temp file for the
-	// deprecated -surface compatibility check (which reads a single JSON).
-	merged := mergeRegistryShardsForTest(t, filepath.Join("..", "..", "cli", "schema_command_registry"))
+func TestValidateDeprecatedSurfaceRejectsRetiredIdentitySource(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "registry.json")
-	if err := os.WriteFile(path, merged, 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateDeprecatedSurface(path); err != nil {
-		t.Fatalf("validateDeprecatedSurface() error = %v", err)
-	}
-}
-
-func TestValidateDeprecatedSurfaceRejectsDifferentIdentitySource(t *testing.T) {
-	merged := mergeRegistryShardsForTest(t, filepath.Join("..", "..", "cli", "schema_command_registry"))
-	altered := strings.Replace(string(merged), `"aisearch.search_enterprise_behavior"`, `"aisearch.not_reviewed"`, 1)
-	if altered == string(merged) {
-		t.Fatal("test fixture did not contain expected canonical path")
-	}
-	path := filepath.Join(t.TempDir(), "different-registry.json")
-	if err := os.WriteFile(path, []byte(altered), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
 	err := validateDeprecatedSurface(path)
-	if err == nil || !strings.Contains(err.Error(), "disagrees with the embedded reviewed registry") {
-		t.Fatalf("validateDeprecatedSurface() error = %v, want registry disagreement", err)
+	if err == nil || !strings.Contains(err.Error(), "retired") {
+		t.Fatalf("validateDeprecatedSurface() error = %v, want retired-input rejection", err)
 	}
 }
 
@@ -241,16 +255,14 @@ func TestValidateDeprecatedSurfaceAllowsOmittedCompatibilityFlag(t *testing.T) {
 	}
 }
 
-func TestValidateCatalogOutputIsolationProtectsEveryInputLayer(t *testing.T) {
+func TestCrossPlatformCoverageValidateCatalogOutputIsolationProtectsEveryInputLayer(t *testing.T) {
 	root := t.TempDir()
 	files := []string{
 		"skills/mono/SKILL.md",
 		"skills/mono/references/intent-guide.md",
-		"internal/cli/schema_command_registry",
-		"internal/cli/schema_mcp_metadata.json",
-		"internal/cli/schema_mcp_service_review.json",
-		"internal/cli/schema_parameter_bindings.json",
-		"internal/cli/schema_command_exclusions.json",
+		"internal/cli/param_concepts.json",
+		"internal/cli/schema_parameter_mapping_ledger.go",
+		"internal/cli/schema_command_exclusions.go",
 	}
 	for _, relative := range files {
 		path := filepath.Join(root, relative)
@@ -261,14 +273,8 @@ func TestValidateCatalogOutputIsolationProtectsEveryInputLayer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	metadataDir := filepath.Join(root, "internal/cli/schema_agent_metadata")
-	if err := os.MkdirAll(metadataDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(metadataDir, "index.json"), []byte(`{}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for _, relative := range []string{"skills/mono/references/products", "internal/cli/schema_hints"} {
+	conceptsPath := filepath.Join(root, "internal/cli/param_concepts.json")
+	for _, relative := range []string{"skills/mono/references/products"} {
 		if err := os.MkdirAll(filepath.Join(root, relative), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -279,75 +285,22 @@ func TestValidateCatalogOutputIsolationProtectsEveryInputLayer(t *testing.T) {
 		output string
 		want   string
 	}{
-		{name: "registry", output: filepath.Join(root, "internal/cli/schema_command_registry"), want: "CommandRegistry"},
-		{name: "hints", output: filepath.Join(root, "internal/cli/schema_hints"), want: "structured metadata source directory"},
-		{name: "metadata member", output: filepath.Join(metadataDir, "replacement.json"), want: "Agent metadata"},
-		{name: "metadata directory", output: metadataDir, want: "Agent metadata"},
+		{name: "param concepts", output: conceptsPath, want: "reviewed param concepts"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			err := validateCatalogOutputIsolation(root, test.output, "")
+			err := validateCatalogOutputIsolation(root, test.output, filepath.Join(t.TempDir(), "schema_meta_index.gob"))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("validateCatalogOutputIsolation() error = %v, want %q", err, test.want)
 			}
 		})
 	}
-	if err := validateCatalogOutputIsolation(root, filepath.Join(root, "internal/cli/schema_catalog"), ""); err != nil {
-		t.Fatalf("safe output rejected: %v", err)
+	if err := validateCatalogOutputIsolation(root, filepath.Join(root, "artifacts/schema_catalog"), filepath.Join(root, "artifacts/schema_meta_index.gob")); err != nil {
+		t.Fatalf("safe artifact output rejected: %v", err)
 	}
-	if err := validateCatalogOutputIsolation(root, filepath.Join(t.TempDir(), "schema_catalog"), ""); err != nil {
+	if err := validateCatalogOutputIsolation(root, filepath.Join(t.TempDir(), "schema_catalog"), filepath.Join(t.TempDir(), "schema_meta_index.gob")); err != nil {
 		t.Fatalf("external temporary output rejected: %v", err)
 	}
-	if err := validateCatalogOutputIsolation(root, filepath.Join(root, "skills/mono/overwrite.json"), ""); err == nil || !strings.Contains(err.Error(), "not a canonical generated delivery target") {
+	if err := validateCatalogOutputIsolation(root, filepath.Join(root, "skills/mono/overwrite.json"), filepath.Join(t.TempDir(), "schema_meta_index.gob")); err == nil || !strings.Contains(err.Error(), "not a canonical generated delivery target") {
 		t.Fatalf("non-canonical repository output error = %v", err)
 	}
-}
-
-// mergeRegistryShardsForTest reads per-product registry shards from dir and
-// returns a single merged JSON document matching the pre-split layout.
-func mergeRegistryShardsForTest(t *testing.T, dir string) []byte {
-	t.Helper()
-	envelopeData, err := os.ReadFile(filepath.Join(dir, "registry.json"))
-	if err != nil {
-		t.Fatalf("read registry envelope: %v", err)
-	}
-	var envelope struct {
-		Schema  string `json:"$schema,omitempty"`
-		Version int    `json:"version"`
-	}
-	if err := json.Unmarshal(envelopeData, &envelope); err != nil {
-		t.Fatalf("decode envelope: %v", err)
-	}
-	entries, err := os.ReadDir(filepath.Join(dir, "products"))
-	if err != nil {
-		t.Fatalf("read products dir: %v", err)
-	}
-	products := make([]json.RawMessage, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		shardData, err := os.ReadFile(filepath.Join(dir, "products", entry.Name()))
-		if err != nil {
-			t.Fatalf("read shard %s: %v", entry.Name(), err)
-		}
-		products = append(products, json.RawMessage(shardData))
-	}
-	productsJSON, err := json.Marshal(products)
-	if err != nil {
-		t.Fatalf("marshal products: %v", err)
-	}
-	result := struct {
-		Schema   string          `json:"$schema,omitempty"`
-		Version  int             `json:"version"`
-		Products json.RawMessage `json:"products"`
-	}{
-		Schema:  envelope.Schema,
-		Version: envelope.Version,
-	}
-	result.Products = productsJSON
-	merged, err := json.Marshal(result)
-	if err != nil {
-		t.Fatalf("marshal merged: %v", err)
-	}
-	return merged
 }

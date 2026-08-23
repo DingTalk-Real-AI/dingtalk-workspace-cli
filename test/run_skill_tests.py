@@ -323,7 +323,7 @@ def get_reference_file(product: str) -> str:
         'calendar': 'calendar.md',
         'chat': 'chat.md',
         'contact': 'contact.md',
-        'dev': 'skills/multi/dingtalk-dev/SKILL.md',
+        'dev': 'skills/multi/dingtalk-misc/references/devapp.md',
         'ding': 'ding.md',
         'doc': 'doc.md',
         'drive': 'drive.md',
@@ -341,6 +341,8 @@ def get_reference_path(product: str) -> str:
     """Get the display path for the skill reference used by a product test."""
     if product == 'routing':
         return 'references/intent-guide.md'
+    if product == 'event':
+        return 'skills/multi/dingtalk-event/SKILL.md'
     return f'references/products/{get_reference_file(product)}'
 
 def generate_report(results: list[dict]) -> str:

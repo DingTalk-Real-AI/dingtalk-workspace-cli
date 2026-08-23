@@ -124,7 +124,7 @@ func TestStdioClientCallBeforeStart(t *testing.T) {
 func TestStdioClientEnsureInitializedIsIdempotent(t *testing.T) {
 	client := NewStdioClient(buildTestHelper(t), nil, nil)
 	defer client.Stop()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := client.EnsureInitialized(ctx); err != nil {

@@ -5,15 +5,15 @@ import (
 	"io"
 	"testing"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/spf13/cobra"
 )
 
 func TestCrossPlatformCoverageAttendanceResponseAndDateCoverage(t *testing.T) {
-	previous := deps
+	testseam.Protect(t, &deps)
 	InitDeps(&productExampleCaller{})
 	deps.Out.w = io.Discard
 	deps.Out.errW = io.Discard
-	t.Cleanup(func() { deps = previous })
 
 	printGroupModifyDeeplink(nil)
 	for _, value := range []map[string]any{

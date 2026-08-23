@@ -12,17 +12,16 @@ func TestCrossPlatformCoverageSheetStyleRangeAndFontCoverage(t *testing.T) {
 	for _, raw := range []string{"", "Sheet1!A1:B2", "B2:A1", "A1", "A", "1", "A0", "A-1", "A1:bad"} {
 		_, _, _ = parseA1Range(raw)
 	}
-	_ = fillStringMatrix(2, 2, "x")
-	_ = fillIntMatrix(2, 2, 1)
-	for _, spec := range []*styleSpec{
-		{FontSize: 1, FontSizesJSON: `[[1]]`},
-		{FontSize: -1},
-		{FontSize: 12},
-		{FontSizesJSON: `{`},
-		{FontSizesJSON: `[[1,2]]`},
-		{FontSizesJSON: `[[1]]`},
+	for _, tc := range []struct {
+		scalar  int
+		jsonStr string
+	}{
+		{1, `[[1]]`}, {-1, ""}, {12, ""}, {0, `{`}, {0, `[[1,2]]`}, {0, `[[1]]`}, {0, ""},
 	} {
-		_ = applyFontSize(spec, 1, 1, map[string]any{})
+		if get, err := intGrid(tc.scalar, tc.jsonStr, "font-size", 1, 1); err == nil && get != nil {
+			_, _ = get(0, 0)
+			_, _ = get(9, 9)
+		}
 	}
 	for _, tc := range []struct {
 		scalar, raw string
@@ -32,7 +31,17 @@ func TestCrossPlatformCoverageSheetStyleRangeAndFontCoverage(t *testing.T) {
 		{"", "", nil}, {"", `{`, nil}, {"", `[["x","y"]]`, nil},
 		{"", `[[""]]`, hAlignEnum}, {"", `[["bad"]]`, hAlignEnum}, {"", `[["left"]]`, hAlignEnum},
 	} {
-		_ = apply2DString(tc.scalar, tc.raw, 1, 1, "align", "alignments", tc.enum, map[string]any{})
+		if get, err := strGrid(tc.scalar, tc.raw, "align", tc.enum, 1, 1); err == nil && get != nil {
+			_, _ = get(0, 0)
+			_, _ = get(9, 9)
+		}
+	}
+	for _, raw := range []string{"", `{`, `{}`, `{"nope":{"style":"solid"}}`, `{"top":{}}`,
+		`{"top":{"style":"bogus"}}`, `{"top":{"style":"solid"}}`, `{"top":{"style":"solid","color":"#000"}}`} {
+		_, _ = parseBorderStyles(raw)
+	}
+	for _, raw := range []string{"Sheet1!A1:B2", "A1:B2", "Sheet1!", "!A1"} {
+		_, _, _ = splitSheetPrefixedRange(raw, 0)
 	}
 	_ = maxColLenStr([][]string{{}, {"a", "b"}})
 	_ = maxColLen2D([][]int{{}, {1, 2}})
@@ -46,8 +55,16 @@ func TestCrossPlatformCoverageSheetStyleRangeAndFontCoverage(t *testing.T) {
 		{styleSpec{}, 0, 1}, {styleSpec{}, 1001, 1}, {styleSpec{}, 1000, 31},
 		{styleSpec{WordWrap: "invalid"}, 1, 1}, {styleSpec{WordWrap: "clip"}, 1, 1},
 		{styleSpec{NumberFormat: "General"}, 1, 1}, {styleSpec{}, 1, 1},
+		{styleSpec{FontStyle: "bogus"}, 1, 1}, {styleSpec{FontStyle: "italic"}, 1, 1},
+		{styleSpec{FontLine: "bogus"}, 1, 1}, {styleSpec{FontLine: "underline"}, 1, 1},
+		{styleSpec{FontLine: "line-through"}, 1, 1}, {styleSpec{FontLine: "none"}, 1, 1},
+		{styleSpec{FontFamily: "Arial"}, 1, 1},
+		{styleSpec{BorderStylesJSON: `{"top":{"style":"solid"}}`}, 1, 1},
+		{styleSpec{BorderStylesJSON: `{`}, 1, 1},
+		{styleSpec{BgColor: "#FFF", FontSize: 12, HAlign: "center", VAlign: "top",
+			FontColor: "#000", FontWeight: "bold"}, 2, 2},
 	} {
-		_ = applyStyleSpec(&tc.spec, tc.rows, tc.cols, map[string]any{})
+		_, _ = buildStyleCells(&tc.spec, tc.rows, tc.cols)
 	}
 }
 

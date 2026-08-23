@@ -14,318 +14,426 @@
 package helpers
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
-// leaf.go 是叶子命令的统一构建框架。
-//
-// 现状问题：每个叶子命令手写 cobra.Command，required 校验、别名回退、环境
-// 变量回退、值转换、参数装配、派发调用在各个产品文件里各写一份，行为难以
-// 保持一致。LeafSpec 把这些共性收敛为声明式结构：命令只声明「flag 集合 +
-// 绑定关系」，框架统一执行。默认派发走 MCP 直连（callMCPTool）；非 MCP
-// 命令（如 devapp 走 executor.Runner）通过 LeafSpec.Call 注入自己的派发器，
-// 复用同一套 flag/校验/装配逻辑。复杂命令可通过 LeafSpec.RunE 完全自定义
-// （逃生舱），不在框架适用范围内强行套用。
-//
-// 迁移纪律：从手写命令迁移到 LeafSpec 时，flag 名、默认值、usage 文案、
-// MarkFlagRequired、required 错误格式、toolArgs 键与值必须逐字保持一致，
-// 由 check-generated-drift（catalog 零漂移）与命令兼容性检查兜底证明等价。
+// contractConfirmSafetyAnnotation marks leaves whose RunE was wrapped by
+// DeclareLeafMetadata with the same SafetySpec published to ContractFinal.
+const contractConfirmSafetyAnnotation = "dws.contract.confirm_safety"
 
-// LeafFlagKind 是 flag 的值类型。
-type LeafFlagKind int
+// contractValidateAnnotation marks leaves that installed DeclareLeafMetadata
+// Validate. Validate runs inside the same RunE wrapper as ConfirmSafety (not
+// PreRunE), so direct RunE / proxySubCmd call sites cannot skip it.
+const contractValidateAnnotation = "dws.contract.validate"
+
+// contractConfirmDeferredAnnotation marks user_required leaves that defer
+// ConfirmSafety to the first deps.Caller.CallTool (no Validate). Local-checkable
+// commands without an MCP caller must use Validate instead.
+const contractConfirmDeferredAnnotation = "dws.contract.confirm_deferred"
+
+// leaf.go 是叶子命令的统一构建框架（命令框架的 Leaf 门面）。
+//
+// 两种正式模式（共用 LeafSpec 词汇，产出同一 ContractFinal）：
+//
+//   - 完全托管模式 NewLeafCommand：声明 + 执行都归 corecmd（flag 注册、
+//     参数投影、ConfirmSafety、派发）。新命令默认走此模式。
+//   - 声明元数据模式 DeclareLeafMetadata：声明 Safety + Contract（AttachContract），
+//     不注册 flag、不接管参数投影；可选 Validate 与 ConfirmSafety 同挂在
+//     RunE 包装器内（Validate 在前，不是 PreRunE——直接调 RunE /
+//     proxySubCmd 会跳过 PreRunE）。当 Safety.Confirmation=user_required 时
+//     用**同一份** SafetySpec 包一层 ConfirmSafety，保证执行门禁与 Catalog
+//     同源。用于执行体必须冻结的既有命令补声明，是迁移态。
+//
+// 每个 API 各自声明：
+//
+//   - 禁止参数化命令工厂用 use/short/tool 拼出多个真 API 的
+//     *cobra.Command（含共享 Use/Short/Long/Example/RunE/DeclareLeafMetadata）。
+//   - 允许私有 RunE 执行 helper（不返回 *cobra.Command），以及 Safety /
+//     Interface 字面量缩写（声明调用点仍须写在每个命令旁）。
+//   - hint/proxy 重定向不是业务叶子，不要求 ContractFinal。
+//
+// 声明 vs 执行（框架规则，详见 RFC §5.0 / 同源文档 §1.2）：
+//
+//   - 声明 = LeafSpec 数据字段：Flags、Constraints、Safety、ConstParams、
+//     Use/Short/Long/Example。经 FromLeafSpec → corecmd.New 注册并
+//     嵌入 dws.schema.*。
+//   - 执行 = Validate / Call / RunE / PostMount。钩子消费已装配参数，不得
+//     发明 CLI 表面（业务 flag/params）。
+//   - 标注 = 声明字段装不下时的显式注解（如 write-guard 的 runtime_gate）。
+//
+// LeafSpec 把共性收敛为声明式结构：命令声明 flag 集合与绑定，框架统一校验、
+// 装配与投影。默认派发走 MCP 直连；非 MCP 命令通过 Call 注入派发器。复杂
+// 命令可用 RunE 逃生舱。
+//
+// 收敛纪律（Phase 2）：flag 注册、有效值回退链、required/约束、Safety 确认、
+// toolArgs 装配、Schema 投影与帮助渲染均在 internal/corecmd；本文件只做
+// LeafSpec→CommandSpec 映射与 dispatch 闭包。等价性由 catalog 漂移门禁与
+// leaf/risk/约束单测共同兜底。
+//
+// 迁移纪律：迁入 LeafSpec 时 flag 名、默认值、usage、MarkFlagRequired、
+// required 错误格式、toolArgs 键与值必须逐字保持一致。
+
+// LeafFlagKind 是 flag 的值类型（corecmd.FlagKind 的别名）。
+type LeafFlagKind = corecmd.FlagKind
 
 const (
 	// LeafString 字符串 flag（默认）。
-	LeafString LeafFlagKind = iota
-	// LeafInt 整型 flag（注册为 cobra Int）；仅在值 != 0 时进入 toolArgs，
-	// 对应手写「putInt 仅在非零才入参」语义（如 devapp app-group-id）。
-	LeafInt
+	LeafString = corecmd.KindString
+	// LeafInt 整型 flag；仅在值 != 0 时进入 toolArgs（putInt 语义）。
+	LeafInt = corecmd.KindInt
+	// LeafBool 布尔 flag；仅在用户显式提供（Changed）时进入 toolArgs，显式
+	// false 也下发；不参与别名/env 回退链。
+	LeafBool = corecmd.KindBool
+	// LeafStringSlice 字符串列表 flag；仅在存在非空元素时进入 toolArgs，元素
+	// 恒 TrimSpace 后过滤空串。
+	LeafStringSlice = corecmd.KindStringSlice
 )
 
-// LeafFlag 声明一个 flag 的注册方式与到 MCP toolArgs 的绑定。
-type LeafFlag struct {
-	Name    string       // flag 名（kebab-case）
-	Usage   string       // 注册 usage 文案
-	Kind    LeafFlagKind // 值类型，默认 LeafString
-	Default string       // 注册默认值（cobra 注册仅 LeafString 使用；回退链链尾对所有 Kind 生效，不遮蔽别名/env）
+// LeafFlag 声明一个 flag 的注册方式与到 MCP toolArgs 的绑定
+// （corecmd.FlagSpec 的别名，字段含义见 command 定义）。
+type LeafFlag = corecmd.FlagSpec
 
-	// Required 为 true 时在 RunE 期校验有效值非空。普通 Required 汇聚为
-	// cmdutil.ValidateRequiredFlags 兼容的统一报错；配置 EnvVar 时回退读
-	// 环境变量，仍为空则报 RequiredHint（或默认文案）。
-	Required     bool
-	RequiredHint string
-	// MarkRequired 为 true 时调用 cobra MarkFlagRequired（catalog required
-	// 投影的硬下限），cobra 会在 RunE 之前先行报错。
-	MarkRequired bool
+// LeafConstraintKind 是跨 flag 关系约束的类型（corecmd.ConstraintKind 的
+// 别名）。取值与 shortcut 框架的 ConstraintKind 逐字一致。
+type LeafConstraintKind = corecmd.ConstraintKind
 
-	Aliases []string // 隐藏别名，按主 flag 的 Kind 注册；主 flag 未显式提供时按序回退
-	EnvVar  string   // 有效值为空时回退读取的环境变量（整型 flag 的 env 值必须可解析）
-	// ArgDefault：注册默认值为空、但 toolArgs 需要兜底的场景（如 list type
-	// 注册默认 "ALL" 之外的旧命令）；有效值为空时以 ArgDefault 入参。
-	ArgDefault string
-	// Bind 是 toolArgs 的键；为空时使用 Name。
-	Bind string
-	// Transform 把字符串有效值转为入参值；nil 时原样入参。返回
-	// (nil, nil) 表示跳过该键（用于「可空数值：为空或解析失败都不入参」
-	// 的手写语义）。
-	Transform func(raw string) (any, error)
-	// OmitEmpty 为 true 时有效值为空则不进入 toolArgs（LeafInt 恒为
-	// 「非零才入参」，忽略此字段）。
-	OmitEmpty bool
-	// Trim 为 true 时对有效值做 strings.TrimSpace（主 flag/别名/env 统一），
-	// 对应手写 devAppStringFlag 恒 trim 的语义；亦使「纯空白」值在 required
-	// 校验中视为空。
-	Trim bool
-}
+const (
+	// LeafAtLeastOne 要求 Flags 至少提供一个。
+	LeafAtLeastOne = corecmd.AtLeastOne
+	// LeafExactlyOne 要求 Flags 必须且只能提供一个。
+	LeafExactlyOne = corecmd.ExactlyOne
+	// LeafMutuallyExclusive 允许 Flags 中最多提供一个。
+	LeafMutuallyExclusive = corecmd.MutuallyExclusive
+)
 
-// LeafSpec 声明一个 MCP 直连叶子命令。
+// LeafConstraint 声明一组 flag 的关系约束（corecmd.Constraint 的别名）。框架
+// 在 required 校验之后、Validate 钩子之前统一执行；「是否提供」的判定复用有效
+// 值回退链（显式主 flag → 别名 → env），即只传兼容别名同样视为已提供。约束
+// 同时投影到 Agent Runtime Schema 并渲染进 --help 的「参数约束」段。
+type LeafConstraint = corecmd.Constraint
+
+// LeafContract 是叶子 Contract 声明（corecmd.ContractDecl 别名）。
+// 嵌套字段直接使用 contract.*（InterfaceSpec / ParamDecl / SelectionSpec 等），
+// 不再保留平行 Decl 类型。
+type LeafContract = corecmd.ContractDecl
+
+// LeafSpec 是命令框架的 Leaf 声明门面（映射为 corecmd.Spec）。
+//
+// 声明面 = Contract 最终数据源：Flags（含 parameter 字段）、Constraints、
+// Safety、ConstParams、Use/Short/Long/Example、Contract（Selection/Interface/…）。
+// Catalog 组装透传 ContractFinal；声明路径不再引入评审并行字段。
+//
+// 执行面（不算声明）：Validate、Call、RunE、PostMount；Server/Tool 仅路由。
 type LeafSpec struct {
-	Use     string
-	Short   string
-	Long    string
-	Example string
+	Use           string
+	Short         string
+	Long          string
+	Example       string
+	OutputRollout output.RolloutState
 
 	// Server 非空时走 callMCPToolOnServer（显式 server 路由），否则走
-	// callMCPTool（按 product 路由）。Call 非空时两者都被忽略。
+	// callMCPTool（按 product 路由）。Call 非空时两者都被忽略。不是 CLI 声明。
 	Server string
 	Tool   string
 	Flags  []LeafFlag
+	// Constraints 是跨 flag 的关系约束（至少一个 / 恰好一个 / 互斥），由
+	// command 统一校验并投影到 Runtime Schema 与 --help。复杂的条件式校验
+	// 仍放 Validate 钩子（钩子本身不是约束声明）。
+	Constraints []LeafConstraint
 
-	// Call 是可插拔派发函数，非空时替代默认的 callMCPTool/callMCPToolOnServer。
-	// 供非 MCP 直连命令（如 devapp 走 executor.Runner）复用本框架：调用方用
-	// 闭包捕获自己的 runner/派发器即可。签名与默认路径一致——收到框架装配好
-	// 的 toolArgs，自行派发。
-	Call func(cmd *cobra.Command, tool string, args map[string]any) error
+	// Safety 直接使用 Agent Runtime Schema 的安全模型。Confirmation 驱动
+	// 运行时确认，其余字段原样进入 Schema；字段之间不做机械推导。
+	Safety contract.SafetySpec
 
-	// Validate 是跨 flag 校验钩子（如时间区间、互斥关系），在 required
-	// 校验之后、toolArgs 装配之前执行；nil 时跳过。单 flag 的格式转换
-	// 应放在 LeafFlag.Transform，不要放进 Validate。
+	// ConfirmFirst 为 true 时确认门先于 required/约束/Validate 校验执行
+	//（devapp 旧版写守卫语义：写命令未带 --yes 时快速失败
+	// confirmation_required，与参数完整性无关）。默认 false 保持 shortcut
+	// 顺序（先校验，后端调用前再确认）。
+	ConfirmFirst bool
+
+	// ConstParams 是与 flag 无关的固定载荷（如 precheckOnly），在 flag 装配
+	// 之后并入 toolArgs。载荷声明，不上用户 flag 表；从不满足 Required。
+	ConstParams map[string]any
+
+	// Contract 是叶子 ContractFinal 声明（identity/selection/interface/dry_run/…）。
+	Contract LeafContract
+
+	// Call 是执行体：非空时替代默认 MCP 派发。toolArgs 已由 Flags/ConstParams
+	// 装配完成；Call 不应再写业务参数。分页等横切由领域工具处理，不进声明。
+	Call       func(cmd *cobra.Command, tool string, args map[string]any) error
+	ResultCall func(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error)
+
+	// Validate 是编排钩子（条件式校验），不是声明面。单 flag 转换用
+	// LeafFlag.Transform；可声明的互斥/至少一个应写 Constraints。
 	Validate func(cmd *cobra.Command, args []string) error
 
-	// RunE 非空时完全自定义执行体（逃生舱），框架只负责注册 flag。
+	// RunE 非空时完全自定义执行体（逃生舱）；表面事实仍须 Flags/Contract 声明。
 	RunE func(cmd *cobra.Command, args []string) error
 
-	// PostMount 在 flag 注册完成之后、RunE 设定之前对构建好的 cmd 做最终
-	// 调整（设置 Args/DisableAutoGenTag、调用 annotate/preferLegacy 等）。
-	// 无论是否使用 RunE 逃生舱都会执行。对标 lark shortcut 的 PostMount。
+	// PostMount 是挂载收尾钩子（领域工具等），不是声明面。
+	// 业务 flag 必须写在 Flags；分页由领域工具注入。
 	PostMount func(cmd *cobra.Command)
 }
 
-// NewLeafCommand 按 LeafSpec 构建叶子命令。
+// NewLeafCommand 是命令框架的「完全托管模式」：经 FromLeafSpec 归一为
+// corecmd.Spec 后交由统一构建器 corecmd.New 编排（flag 注册、
+// 约束声明检查、Schema 投影、帮助渲染、required/约束校验、Safety 确认、
+// toolArgs 装配）。本函数只保留 LeafSpec→CommandSpec 的映射与 MCP dispatch
+// 闭包（callMCPTool/OnServer/Call）。所有 LeafSpec 命令（含 devapp 全部叶子）
+// 由此统一流经 command 单一 spec 路径。
 func NewLeafCommand(spec LeafSpec) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     spec.Use,
-		Short:   spec.Short,
-		Long:    spec.Long,
-		Example: spec.Example,
+	return corecmd.New(FromLeafSpec(spec))
+}
+
+// DeclareLeafMetadata 是命令框架的「声明元数据模式」：把 LeafSpec 的声明面
+// （Safety + Contract）挂到既有命令上——不注册 flag、不接管参数投影。可选的
+// Validate 与 ConfirmSafety 同挂在 RunE 包装器内（Validate 在前），保证
+// 本地可判定校验发生在确认之前（RFC §5.1 / §5.6），且直接调 RunE /
+// proxySubCmd 委派不会跳过校验。
+//
+// user_required 确认时机：
+//   - 提供 Validate：Validate → ConfirmSafety → 原 RunE（本地副作用命令）
+//   - 未提供 Validate：原 RunE 先跑（含缺参校验），ConfirmSafety 推迟到
+//     首次 deps.Caller.CallTool。无 Caller 时回退 ConfirmSafety → 原 RunE。
+//     有 Caller 但 RunE 成功返回且从未 CallTool：fail-closed（禁止「成功
+//     返回却未确认」——此时副作用可能已发生，事后 Confirm 太晚）。本地
+//     副作用叶必须补 Validate，或把副作用放进 gated CallTool。
+//
+// 该模式是迁移态而非终态：命令具备条件时应升级为 NewLeafCommand。传入
+// Flags/Constraints/ConstParams/Call/RunE/PostMount 或空 Contract 会 panic，
+// 防止误用成半接管（Validate 是唯一允许的执行钩子）。
+func DeclareLeafMetadata(cmd *cobra.Command, spec LeafSpec) *cobra.Command {
+	if cmd == nil {
+		panic("DeclareLeafMetadata: cmd is nil")
 	}
-	for _, flag := range spec.Flags {
-		switch flag.Kind {
-		case LeafInt:
-			cmd.Flags().Int(flag.Name, 0, flag.Usage)
-		default:
-			cmd.Flags().String(flag.Name, flag.Default, flag.Usage)
-		}
-		// 别名按主 flag 的 Kind 注册，否则整型别名的值永远读不到（静默丢弃）。
-		for _, alias := range flag.Aliases {
-			switch flag.Kind {
-			case LeafInt:
-				cmd.Flags().Int(alias, 0, flag.Usage+" (alias)")
-			default:
-				cmd.Flags().String(alias, "", flag.Usage+" (alias)")
-			}
-			_ = cmd.Flags().MarkHidden(alias)
-		}
-		if flag.MarkRequired {
-			_ = cmd.MarkFlagRequired(flag.Name)
-		}
+	name := cmd.Name()
+	if len(spec.Flags) > 0 {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Flags must be empty (metadata-only mode)", name))
 	}
-	if spec.PostMount != nil {
-		spec.PostMount(cmd)
+	if len(spec.Constraints) > 0 {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Constraints must be empty (metadata-only mode)", name))
+	}
+	if len(spec.ConstParams) > 0 {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): ConstParams must be empty (metadata-only mode)", name))
+	}
+	if spec.Call != nil {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Call must be nil (metadata-only mode)", name))
+	}
+	if spec.ResultCall != nil {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): ResultCall must be nil (metadata-only mode)", name))
 	}
 	if spec.RunE != nil {
-		cmd.RunE = spec.RunE
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): RunE must be nil (metadata-only mode)", name))
+	}
+	if spec.PostMount != nil {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): PostMount must be nil (metadata-only mode)", name))
+	}
+	if spec.ConfirmFirst {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): ConfirmFirst must be false (metadata-only mode)", name))
+	}
+	if spec.Server != "" || spec.Tool != "" {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Server/Tool must be empty (metadata-only mode)", name))
+	}
+	if spec.Contract.Empty() {
+		panic(fmt.Sprintf("DeclareLeafMetadata(%q): Contract is required", name))
+	}
+	corecmd.AttachContract(cmd, spec.Safety, spec.Contract, cmd.Short, cmd.Long)
+	if spec.OutputRollout != "" {
+		output.SetCommandRollout(cmd, spec.OutputRollout)
+	}
+
+	confirm := strings.TrimSpace(spec.Safety.Confirmation) == "user_required"
+	if spec.Validate == nil && !confirm {
 		return cmd
 	}
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := leafValidateRequired(cmd, spec); err != nil {
-			return err
+	// cmd.Annotations is always non-nil here: AttachContract above registers the
+	// runtime-contract annotation on every declared leaf via the cli seam.
+	rt := &contractRuntime{validate: spec.Validate, confirm: confirm}
+	if confirm {
+		rt.safety = spec.Safety
+		cmd.Annotations[contractConfirmSafetyAnnotation] = "true"
+		if spec.Validate == nil {
+			cmd.Annotations[contractConfirmDeferredAnnotation] = "true"
 		}
-		if spec.Validate != nil {
-			if err := spec.Validate(cmd, args); err != nil {
-				return err
-			}
-		}
-		toolArgs, err := leafArgs(cmd, spec)
-		if err != nil {
-			return err
-		}
-		if spec.Call != nil {
-			return spec.Call(cmd, spec.Tool, toolArgs)
-		}
-		if spec.Server != "" {
-			return callMCPToolOnServer(spec.Server, spec.Tool, toolArgs)
-		}
-		return callMCPTool(spec.Tool, toolArgs)
 	}
+	if spec.Validate != nil {
+		cmd.Annotations[contractValidateAnnotation] = "true"
+	}
+	storeContractRuntime(cmd, rt)
+	installContractRunEPipeline(cmd, rt)
 	return cmd
 }
 
-// leafValidateRequired 复现手写命令的 required 语义：普通 Required 统一报
-// 「missing required flag(s)」；带 EnvVar 的 Required 单独报 RequiredHint。
-// 普通组先于环境变量组校验，保持与手写顺序一致。两组都按声明的
-// 「主 flag → 别名 → env」回退取有效值：只传兼容别名同样视为已提供。
-func leafValidateRequired(cmd *cobra.Command, spec LeafSpec) error {
-	var plain []string
-	for _, flag := range spec.Flags {
-		if flag.Required && flag.EnvVar == "" && flag.RequiredHint == "" && !leafHasEffectiveValue(cmd, flag) {
-			plain = append(plain, flag.Name)
-		}
+// installContractRunEPipeline wraps RunE so Validate and ConfirmSafety share
+// one layer (Validate first). Idempotent for the confirm annotation.
+func installContractRunEPipeline(cmd *cobra.Command, rt *contractRuntime) {
+	if cmd == nil || rt == nil {
+		panic("installContractRunEPipeline: nil cmd/runtime")
 	}
-	if err := missingRequiredFlagsError(cmd, plain...); err != nil {
-		return err
+	inner := cmd.RunE
+	if inner == nil {
+		panic(fmt.Sprintf("installContractRunEPipeline(%q): RunE is nil", cmd.Name()))
 	}
-	for _, flag := range spec.Flags {
-		if !flag.Required || (flag.EnvVar == "" && flag.RequiredHint == "") {
-			continue
-		}
-		if !leafHasEffectiveValue(cmd, flag) {
-			hint := flag.RequiredHint
-			if hint == "" {
-				hint = fmt.Sprintf("flag --%s is required", flag.Name)
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		if rt.validate != nil {
+			if err := rt.validate(c, args); err != nil {
+				return err
 			}
-			return fmt.Errorf("%s", hint)
 		}
-	}
-	return nil
-}
-
-// leafHasEffectiveValue 判定 Required 是否满足，标准与 leafArgs 的入参判定
-// 一致（LeafInt 需非零、字符串需非空）：否则会出现校验声称有效、toolArgs
-// 却缺参的分裂。整型解析失败视为已提供，让 leafArgs 报出更精确的
-// invalid integer 错误。
-func leafHasEffectiveValue(cmd *cobra.Command, flag LeafFlag) bool {
-	if flag.Kind == LeafInt {
-		v, err := leafIntegerValue(cmd, flag)
-		if err != nil {
-			return true
+		if !rt.confirm {
+			return inner(c, args)
 		}
-		return v != 0
-	}
-	return leafEffectiveValue(cmd, flag) != ""
-}
-
-// leafArgs 按绑定关系装配 toolArgs。
-func leafArgs(cmd *cobra.Command, spec LeafSpec) (map[string]any, error) {
-	toolArgs := map[string]any{}
-	for _, flag := range spec.Flags {
-		bind := flag.Bind
-		if bind == "" {
-			bind = flag.Name
+		// OR across flagsets (root persistent --dry-run must not be shadowed by
+		// a leaf-local --dry-run defaulting to false).
+		if corecmd.BoolFlag(c, "dry-run") || (deps != nil && deps.Caller != nil && deps.Caller.DryRun()) {
+			return inner(c, args)
 		}
-		if flag.Kind == LeafInt {
-			v, err := leafIntegerValue(cmd, flag)
-			if err != nil {
-				return nil, err
+		if rt.validate != nil {
+			// Local-checkable validation already passed; confirm then execute.
+			if err := corecmd.ConfirmSafety(c, rt.safety); err != nil {
+				return err
 			}
-			// 保持「非零才入参」（putInt 语义）。
-			if v != 0 {
-				toolArgs[bind] = int(v)
+			return inner(c, args)
+		}
+		// No Validate: defer confirm to first deps.Caller.CallTool so RunE-local
+		// mustFlag checks can fail first. Without a caller, fall back to
+		// confirm-then-run (commands on this path should add Validate).
+		if deps == nil || deps.Caller == nil {
+			if err := corecmd.ConfirmSafety(c, rt.safety); err != nil {
+				return err
 			}
-			continue
+			return inner(c, args)
 		}
-		effective := leafEffectiveValue(cmd, flag)
-		if effective == "" && flag.ArgDefault != "" {
-			effective = flag.ArgDefault
+		prev := deps.Caller
+		gate := &contractConfirmCaller{inner: prev, cmd: c, safety: rt.safety}
+		deps.Caller = wrapContractConfirmCaller(gate, prev)
+		defer func() { deps.Caller = prev }()
+		if err := inner(c, args); err != nil {
+			return err
 		}
-		if effective == "" && flag.OmitEmpty {
-			continue
+		if !gate.confirmed {
+			// Fail closed: RunE already returned successfully. A post-RunE
+			// ConfirmSafety cannot undo local side effects, and --yes would
+			// falsely green-light them after the fact. Side-effect leaves must
+			// declare Validate (confirm-before-RunE) or dispatch through the
+			// gated CallTool path. Dry-run already short-circuits above (before
+			// the deferred confirm wrapper is installed), so it cannot reach
+			// this fail-closed branch.
+			return fmt.Errorf("contract: user_required confirmation was never obtained via CallTool for %q; add Validate for local side effects or dispatch through deps.Caller.CallTool", c.Name())
 		}
-		if flag.Transform != nil {
-			value, err := flag.Transform(effective)
-			if err != nil {
-				return nil, err
+		return nil
+	}
+}
+
+// contractConfirmCaller defers ConfirmSafety until the first CallTool, so
+// DeclareLeafMetadata RunE can validate flags first.
+type contractConfirmCaller struct {
+	inner     edition.ToolCaller
+	cmd       *cobra.Command
+	safety    contract.SafetySpec
+	confirmed bool
+}
+
+func wrapContractConfirmCaller(gate *contractConfirmCaller, inner edition.ToolCaller) edition.ToolCaller {
+	if read, ok := inner.(edition.ReadToolCaller); ok {
+		return &contractConfirmReadCaller{contractConfirmCaller: gate, read: read}
+	}
+	return gate
+}
+
+func (c *contractConfirmCaller) CallTool(ctx context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	if !c.confirmed {
+		if err := corecmd.ConfirmSafety(c.cmd, c.safety); err != nil {
+			return nil, err
+		}
+		c.confirmed = true
+	}
+	return c.inner.CallTool(ctx, productID, toolName, args)
+}
+
+func (c *contractConfirmCaller) Format() string { return c.inner.Format() }
+func (c *contractConfirmCaller) DryRun() bool   { return c.inner.DryRun() }
+func (c *contractConfirmCaller) Fields() string { return c.inner.Fields() }
+func (c *contractConfirmCaller) JQ() string     { return c.inner.JQ() }
+
+// contractConfirmReadCaller preserves optional ReadToolCaller without gating
+// reads behind ConfirmSafety (RFC allows pre-confirm reads when needed).
+type contractConfirmReadCaller struct {
+	*contractConfirmCaller
+	read edition.ReadToolCaller
+}
+
+func (c *contractConfirmReadCaller) CallReadTool(ctx context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
+	return c.read.CallReadTool(ctx, productID, toolName, args)
+}
+
+// HasContractConfirmSafety reports whether DeclareLeafMetadata installed the
+// ConfirmSafety wrapper for a user_required SafetySpec.
+func HasContractConfirmSafety(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Annotations != nil && cmd.Annotations[contractConfirmSafetyAnnotation] == "true"
+}
+
+// HasContractValidate reports whether DeclareLeafMetadata installed a Validate
+// hook (confirm-after-Validate mode on the RunE wrapper).
+func HasContractValidate(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Annotations != nil && cmd.Annotations[contractValidateAnnotation] == "true"
+}
+
+// HasContractConfirmDeferred reports whether ConfirmSafety is deferred to the
+// first deps.Caller.CallTool (no Validate on the leaf).
+func HasContractConfirmDeferred(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Annotations != nil && cmd.Annotations[contractConfirmDeferredAnnotation] == "true"
+}
+
+// FromLeafSpec 把 LeafSpec 归一为统一的 corecmd.Spec。契约字段
+// （Flags/Constraints/Safety）与编排钩子（Validate/PostMount/RunE）直接透传；
+// dispatch 收敛为一个闭包：Call 优先，其次显式 Server 路由，最后按 product
+// 自动路由。RunE 逃生舱存在时不设 Dispatch（与旧行为一致）。
+func FromLeafSpec(spec LeafSpec) corecmd.Spec {
+	if spec.Call != nil && spec.ResultCall != nil {
+		panic(fmt.Sprintf("command %q must not declare both Call and ResultCall", spec.Use))
+	}
+	cs := corecmd.Spec{
+		Use:           spec.Use,
+		Short:         spec.Short,
+		Long:          spec.Long,
+		Example:       spec.Example,
+		OutputRollout: spec.OutputRollout,
+		Flags:         spec.Flags,
+		Constraints:   spec.Constraints,
+		Safety:        spec.Safety,
+		ConfirmFirst:  spec.ConfirmFirst,
+		ConstParams:   spec.ConstParams,
+		Contract:      spec.Contract,
+		Validate:      spec.Validate,
+		PostMount:     spec.PostMount,
+		RunE:          spec.RunE,
+	}
+	if spec.RunE == nil {
+		if spec.ResultCall != nil {
+			cs.ResultInvoke = func(c *corecmd.Ctx, toolArgs map[string]any) (output.CommandResult, error) {
+				return spec.ResultCall(c.Command(), spec.Tool, toolArgs)
 			}
-			if value == nil {
-				continue
+		} else {
+			cs.Invoke = func(c *corecmd.Ctx, toolArgs map[string]any) error {
+				if spec.Call != nil {
+					return spec.Call(c.Command(), spec.Tool, toolArgs)
+				}
+				if spec.Server != "" {
+					return callMCPToolOnServer(spec.Server, spec.Tool, toolArgs)
+				}
+				return callMCPTool(spec.Tool, toolArgs)
 			}
-			toolArgs[bind] = value
-			continue
-		}
-		toolArgs[bind] = effective
-	}
-	return toolArgs, nil
-}
-
-// leafEffectiveValue 按「显式主 flag → 别名 → 环境变量 → 注册默认值」顺序取
-// 有效值（字符串形态，整型 flag 统一格式化）；Trim 为 true 时对结果统一
-// TrimSpace。
-func leafEffectiveValue(cmd *cobra.Command, flag LeafFlag) string {
-	v := leafRawValue(cmd, flag)
-	if flag.Trim {
-		v = strings.TrimSpace(v)
-	}
-	return v
-}
-
-// leafRawValue 取未 trim 的原始有效值。主 flag 仅在用户显式提供（Changed）
-// 且非空时命中；注册默认值降级为链尾兜底，不再遮蔽别名与环境变量。Trim 为
-// true 时候选值按 trim 后判空，纯空白与空串同样落入下一级回退。
-func leafRawValue(cmd *cobra.Command, flag LeafFlag) string {
-	usable := func(v string) bool {
-		if flag.Trim {
-			v = strings.TrimSpace(v)
-		}
-		return v != ""
-	}
-	if cmd.Flags().Changed(flag.Name) {
-		if v := leafFlagString(cmd, flag.Kind, flag.Name); usable(v) {
-			return v
 		}
 	}
-	for _, alias := range flag.Aliases {
-		if !cmd.Flags().Changed(alias) {
-			continue
-		}
-		if v := leafFlagString(cmd, flag.Kind, alias); usable(v) {
-			return v
-		}
-	}
-	if flag.EnvVar != "" {
-		if v := os.Getenv(flag.EnvVar); usable(v) {
-			return v
-		}
-	}
-	return flag.Default
-}
-
-// leafFlagString 按注册类型读取 flag 并统一为字符串形态，使整型 flag 能复用
-// 同一条回退链（required 校验、别名、env）。
-func leafFlagString(cmd *cobra.Command, kind LeafFlagKind, name string) string {
-	switch kind {
-	case LeafInt:
-		v, _ := cmd.Flags().GetInt(name)
-		return strconv.Itoa(v)
-	default:
-		return mustGetFlag(cmd, name)
-	}
-}
-
-// leafIntegerValue 按回退链取整型 flag 的有效值；环境变量提供的字符串必须
-// 可解析，否则报错而非静默丢弃。
-func leafIntegerValue(cmd *cobra.Command, flag LeafFlag) (int64, error) {
-	raw := leafEffectiveValue(cmd, flag)
-	if raw == "" {
-		return 0, nil
-	}
-	v, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("flag --%s: invalid integer value %q", flag.Name, raw)
-	}
-	return v, nil
+	return cs
 }

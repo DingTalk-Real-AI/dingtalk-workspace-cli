@@ -18,6 +18,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestCrossPlatformCoverageUpgradeHelpDoesNotMakeFullSkillRefreshForceOnly(t *testing.T) {
+	cmd := newUpgradeCommand()
+	force := cmd.Flags().Lookup("force")
+	if force == nil {
+		t.Fatal("upgrade --force flag is missing")
+	}
+	for _, text := range []string{cmd.Example, force.Usage} {
+		if strings.Contains(text, "恢复全部官方 Skill") {
+			t.Fatalf("upgrade help still implies that only --force performs the full Skill refresh: %q", text)
+		}
+	}
+	if !strings.Contains(force.Usage, "已是最新版本") {
+		t.Fatalf("upgrade --force help must explain its remaining purpose, got %q", force.Usage)
+	}
+	for _, want := range []string{"每次升级", "全量覆盖预制 Skill", "--force 仅额外允许重装当前版本"} {
+		if !strings.Contains(cmd.Long, want) {
+			t.Fatalf("upgrade help missing full-refresh contract %q: %s", want, cmd.Long)
+		}
+	}
+}
+
 // --- ensureV ---
 
 func TestEnsureV(t *testing.T) {
@@ -543,6 +564,13 @@ func TestIsLikelyAMFIKill(t *testing.T) {
 // validateNewBinary recovers via repairDarwinBinary (ad-hoc codesign) and
 // successfully re-executes the binary. We use go itself as a stand-in for the
 // new dws binary — it's a real signed Mach-O we can strip and re-sign.
+//
+// GitHub's hosted macOS runners do not reproduce the amfid kill, so in CI this
+// test reports a skip that names the unverified path rather than implying the
+// self-heal was exercised. Set DWS_REQUIRE_AMFI_SELF_HEAL=1 on a host that does
+// enforce amfid to turn such a vacuous run into a hard failure.
+
+const requireAMFISelfHealEnv = "DWS_REQUIRE_AMFI_SELF_HEAL"
 
 func TestValidateNewBinary_RecoversFromUnsignedDarwin(t *testing.T) {
 	if runtime.GOOS != "darwin" {
@@ -573,15 +601,24 @@ func TestValidateNewBinary_RecoversFromUnsignedDarwin(t *testing.T) {
 		t.Fatalf("strip signature: %v\n%s", err, out)
 	}
 
-	// Sanity: confirm direct exec is killed.
+	// Sanity: confirm direct exec is killed. When it is not, repairDarwinBinary
+	// never runs and the rest of this test proves nothing — say so.
 	if _, err := tryExecVersion(bin); err == nil {
-		t.Skip("unsigned binary executed without amfid kill — likely Intel Mac or SIP disabled")
+		const unverified = "amfid did not kill the unsigned binary, so repairDarwinBinary was NOT exercised"
+		if os.Getenv(requireAMFISelfHealEnv) == "1" {
+			t.Fatalf("%s (%s=1)", unverified, requireAMFISelfHealEnv)
+		}
+		t.Skipf("%s — host does not enforce amfid (Intel Mac, SIP disabled, or hosted runner)", unverified)
 	}
 
 	// validateNewBinary should self-heal and succeed.
 	if err := validateNewBinary(bin, "dev"); err != nil {
 		if strings.Contains(err.Error(), "signal: killed") {
-			t.Skipf("host security policy still rejects the ad-hoc signed test binary: %v", err)
+			const unverified = "host security policy still rejects the ad-hoc signed binary, so the self-heal outcome was NOT verified"
+			if os.Getenv(requireAMFISelfHealEnv) == "1" {
+				t.Fatalf("%s (%s=1): %v", unverified, requireAMFISelfHealEnv, err)
+			}
+			t.Skipf("%s: %v", unverified, err)
 		}
 		t.Fatalf("validateNewBinary did not recover: %v", err)
 	}

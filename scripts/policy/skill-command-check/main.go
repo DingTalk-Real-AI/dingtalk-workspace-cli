@@ -77,6 +77,10 @@ func run(rootPath string, root *cobra.Command, stdout, stderr io.Writer) int {
 		if skip || path == "" || antiCommands[path] {
 			continue
 		}
+		if issue := schemaProjectionIssue(ref.Text); issue != "" {
+			failures = append(failures, formatFailure(rootPath, ref, issue))
+			continue
+		}
 		if checked[path] {
 			continue
 		}
@@ -102,6 +106,57 @@ func run(rootPath string, root *cobra.Command, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "skill command integrity check: ok (%d executable command paths)\n", len(checked))
 	return 0
+}
+
+// schemaProjectionIssue keeps published Agent instructions on the bounded
+// Schema projection. A targeted full leaf is intentionally reserved for
+// mapping/provenance audits; those callers must select the exact fields they
+// need with --jq/--fields instead of loading the full payload into context.
+func schemaProjectionIssue(raw string) string {
+	tokens := shellFields(raw)
+	if len(tokens) < 2 || tokens[0] != "dws" || tokens[1] != "schema" {
+		return ""
+	}
+	var targeted, compact, selected, all bool
+	for i := 2; i < len(tokens); i++ {
+		token := tokens[i]
+		switch {
+		case token == "--compact":
+			compact = true
+		case token == "--all":
+			all = true
+		case token == "--cli-path":
+			targeted = true
+			if i+1 < len(tokens) {
+				i++
+			}
+		case strings.HasPrefix(token, "--cli-path="):
+			targeted = true
+		case token == "--jq" || token == "--fields":
+			selected = true
+			if i+1 < len(tokens) {
+				i++
+			}
+		case strings.HasPrefix(token, "--jq="):
+			selected = true
+		case strings.HasPrefix(token, "--fields="):
+			selected = true
+		case token == "--format" || token == "-f":
+			if i+1 < len(tokens) {
+				i++
+			}
+		case strings.HasPrefix(token, "--format="):
+			// Output encoding does not bound the Schema fields.
+		case strings.HasPrefix(token, "-"):
+			// Other global flags do not affect projection size.
+		default:
+			targeted = true
+		}
+	}
+	if targeted && !all && !compact && !selected {
+		return "targeted Schema queries in Agent instructions must use --compact (or an explicit --jq/--fields projection)"
+	}
+	return ""
 }
 
 func extractReferences(root string) ([]commandRef, error) {

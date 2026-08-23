@@ -17,12 +17,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/agentproduct"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
@@ -36,13 +38,20 @@ type platformCoverageCall struct {
 }
 
 type platformCoverageCaller struct {
-	calls               []platformCoverageCall
-	dry                 bool
-	contactSearchResult string
+	calls                []platformCoverageCall
+	dry                  bool
+	contactSearchResult  string
+	aisearchResult       string
+	chatMessagesResult   string
+	searchMessagesResult string
+	failTool             string
 }
 
 func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool string, args map[string]any) (*edition.ToolResult, error) {
 	f.calls = append(f.calls, platformCoverageCall{product: product, tool: tool, args: args})
+	if product+"/"+tool == f.failTool {
+		return nil, errors.New("fixture failure")
+	}
 	text := `{"result":[]}`
 	switch product + "/" + tool {
 	case "contact/search_contact_by_key_word":
@@ -50,10 +59,28 @@ func (f *platformCoverageCaller) CallTool(_ context.Context, product, tool strin
 		if text == "" {
 			text = `{"result":[{"userId":"u1","name":"张三","openDingTalkId":"open1"}]}`
 		}
+	case "aisearch/enterprise_person_search":
+		text = f.aisearchResult
+		if text == "" {
+			text = `{"result":[{"userId":"u1","openDingTalkId":"open1","meta":{"name":"张三","nick":"张三"}}]}`
+		}
 	case "contact/get_current_user_profile":
 		text = `{"result":{"userId":"u1"}}`
+	case "todo/create_personal_todo":
+		text = `{"success":true,"result":{"taskId":"todo-created"}}`
+	case "todo/get_todo_detail":
+		text = `{"success":true,"result":{"todoDetailModel":{"taskId":"todo-created","subject":"交周报","isDone":false}}}`
 	case "im/search_groups":
 		text = `{"result":[{"openConversationId":"cid-1","title":"项目冲刺"}]}`
+	case "chat/list_conversation_message_v2":
+		if f.chatMessagesResult != "" {
+			text = f.chatMessagesResult
+		}
+	case "im/search_messages":
+		text = f.searchMessagesResult
+		if text == "" {
+			text = `{"result":{"messages":[],"hasMore":false}}`
+		}
 	}
 	return &edition.ToolResult{Content: []edition.ContentBlock{{Type: "text", Text: text}}}, nil
 }
@@ -90,6 +117,8 @@ func (f *platformCoverageCaller) JQ() string     { return "" }
 
 func newPlatformCoverageRoot() *cobra.Command {
 	root := &cobra.Command{Use: "dws", SilenceUsage: true, SilenceErrors: true}
+	ctx, _ := output.WithResultStore(context.Background())
+	root.SetContext(ctx)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.PersistentFlags().Bool("yes", false, "")
@@ -97,6 +126,94 @@ func newPlatformCoverageRoot() *cobra.Command {
 	root.PersistentFlags().String("format", "json", "")
 	root.AddCommand(shortcut.Commands()...)
 	return root
+}
+
+func TestCrossPlatformCoverageIMObservedCompatibilityAliasesReachCanonicalInvocation(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		wantTool  string
+		wantKey   string
+		wantValue any
+	}{
+		{
+			name:      "chat messages open conversation id",
+			args:      []string{"chat", "+chat-messages", "--open-conversation-id", "cid-placeholder", "--page-size", "5"},
+			wantTool:  "list_conversation_message_v2",
+			wantKey:   "limit",
+			wantValue: 5,
+		},
+		{
+			name:      "search text query",
+			args:      []string{"chat", "+search-msg", "--text-query", "评测", "--no-enrich"},
+			wantTool:  "search_messages",
+			wantKey:   "keyword",
+			wantValue: "评测",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &platformCoverageCaller{}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tt.args)
+			if err := root.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if len(fake.calls) != 1 || fake.calls[0].tool != tt.wantTool || !reflect.DeepEqual(fake.calls[0].args[tt.wantKey], tt.wantValue) {
+				t.Fatalf("calls = %#v", fake.calls)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageIMObservedCompatibilityAliasesConflictWithCanonicalFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"chat", "+chat-messages", "--limit", "5", "--page-size", "5", "--conversation-id", "cid"},
+		{"chat", "+search-msg", "--query", "评测", "--text", "评测", "--no-enrich"},
+		{"chat", "+search-msg", "--query", "评测", "--start", "2026-01-01T00:00:00+08:00", "--start-time", "2026-01-01T00:00:00+08:00", "--end", "2026-01-02T00:00:00+08:00", "--no-enrich"},
+		{"chat", "+search-msg", "--query", "评测", "--order", "asc", "--sort", "asc", "--no-enrich"},
+	} {
+		fake := &platformCoverageCaller{}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs(args)
+		if err := root.Execute(); err == nil {
+			t.Fatalf("conflicting aliases unexpectedly succeeded: %#v", args)
+		}
+		if len(fake.calls) != 0 {
+			t.Fatalf("conflicting aliases reached transport: %#v", fake.calls)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageChatShortcutsRejectInvalidLocalOptions(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		argv []string
+	}{
+		{name: "at me non-positive days", argv: []string{"chat", "+at-me", "--days", "0"}},
+		{name: "at me excessive days", argv: []string{"chat", "+at-me", "--days", "3651"}},
+		{name: "at me non-positive limit", argv: []string{"chat", "+at-me", "--limit", "0"}},
+		{name: "chat messages invalid time", argv: []string{"chat", "+chat-messages", "--group", "cid-1", "--time", "not-a-time"}},
+		{name: "chat messages non-positive limit", argv: []string{"chat", "+chat-messages", "--group", "cid-1", "--limit", "0"}},
+		{name: "thread replies invalid time", argv: []string{"chat", "+thread-replies", "--group", "cid-1", "--thread-id", "thread-1", "--time", "not-a-time"}},
+		{name: "thread replies non-positive limit", argv: []string{"chat", "+thread-replies", "--group", "cid-1", "--thread-id", "thread-1", "--limit", "0"}},
+		{name: "unread chats non-positive count", argv: []string{"chat", "+unread-chats", "--count", "0"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &platformCoverageCaller{}
+			helpers.InitDeps(fake)
+			root := newPlatformCoverageRoot()
+			root.SetArgs(tc.argv)
+			if err := root.Execute(); err == nil {
+				t.Fatalf("invalid options unexpectedly succeeded: %v", tc.argv)
+			}
+			if len(fake.calls) != 0 {
+				t.Fatalf("invalid options reached transport: %#v", fake.calls)
+			}
+		})
+	}
 }
 
 func TestCrossPlatformCoverageAIMessageTag(t *testing.T) {
@@ -163,12 +280,12 @@ func TestCrossPlatformCoverageBroadcastDryRunPublishesExecutablePlan(t *testing.
 		"--yes",
 	})
 	if err := root.Execute(); err != nil {
-		t.Fatal(err)
+		t.Fatalf("execute: %v; calls = %#v", err, fake.calls)
 	}
 	if len(fake.calls) != 1 ||
-		fake.calls[0].product != "contact" ||
-		fake.calls[0].tool != "search_contact_by_key_word" {
-		t.Fatalf("dry-run calls = %#v, want one read-only contact lookup", fake.calls)
+		fake.calls[0].product != "aisearch" ||
+		fake.calls[0].tool != "enterprise_person_search" {
+		t.Fatalf("dry-run calls = %#v, want one read-only enterprise-person lookup", fake.calls)
 	}
 
 	var payload map[string]any
@@ -194,6 +311,86 @@ func TestCrossPlatformCoverageBroadcastDryRunPublishesExecutablePlan(t *testing.
 	}
 }
 
+func TestCrossPlatformCoverageBroadcastUsesEnterpriseAliasAndUserIDFallback(t *testing.T) {
+	fake := &platformCoverageCaller{
+		dry: true,
+		aisearchResult: `{"result":[{
+			"userId":"user-alias",
+			"meta":{"name":"测试用户甲","nick":"测试花名甲"}
+		}]}`,
+	}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+broadcast",
+		"--to", "大柚",
+		"--text", "你好",
+		"--dry-run",
+		"--yes",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute: %v; calls = %#v", err, fake.calls)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	actions, _ := payload["actions"].([]any)
+	action, _ := actions[0].(map[string]any)
+	arguments, _ := action["arguments"].(map[string]any)
+	if arguments["receiverUserId"] != "user-alias" {
+		t.Fatalf("arguments = %#v", arguments)
+	}
+	if _, ok := arguments["receiverOpenDingTalkId"]; ok {
+		t.Fatalf("unexpected open id fallback = %#v", arguments)
+	}
+}
+
+func TestCrossPlatformCoverageBroadcastRecipientFallbackAndSendFailure(t *testing.T) {
+	t.Run("missing display name falls back to query", func(t *testing.T) {
+		fake := &platformCoverageCaller{
+			dry:            true,
+			aisearchResult: `{"result":[{"userId":"user-no-name"}]}`,
+		}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		var output bytes.Buffer
+		root.SetOut(&output)
+		root.SetArgs([]string{
+			"chat", "+broadcast", "--to", "无名用户", "--text", "你好", "--dry-run", "--yes",
+		})
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		actions, _ := payload["actions"].([]any)
+		action, _ := actions[0].(map[string]any)
+		if action["recipient"] != "无名用户" {
+			t.Fatalf("action = %#v", action)
+		}
+	})
+
+	t.Run("send failure remains non-zero", func(t *testing.T) {
+		fake := &platformCoverageCaller{failTool: "chat/send_personal_message"}
+		helpers.InitDeps(fake)
+		root := newPlatformCoverageRoot()
+		root.SetArgs([]string{
+			"chat", "+broadcast", "--to", "张三", "--text", "你好", "--yes",
+		})
+		if err := root.Execute(); err == nil {
+			t.Fatal("send failure unexpectedly succeeded")
+		}
+		if len(fake.calls) != 2 || fake.calls[1].tool != "send_personal_message" {
+			t.Fatalf("calls = %#v", fake.calls)
+		}
+	})
+}
+
 func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -216,7 +413,8 @@ func TestCrossPlatformCoverageCompatibilityAliases(t *testing.T) {
 			argv:        []string{"chat", "+search-msg", "--id", "cid-1", "--keyword", "树莓派", "--no-enrich", "--yes"},
 			wantProduct: "im",
 			wantTool:    "search_messages",
-			wantArgs:    map[string]any{"openConversationIds": []string{"cid-1"}, "keyword": "树莓派"},
+			wantArgs:    map[string]any{"keyword": "树莓派"},
+			wantAbsent:  []string{"openConversationIds"},
 		},
 	}
 

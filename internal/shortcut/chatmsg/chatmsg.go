@@ -32,11 +32,161 @@ package chatmsg
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
+
+// MessageListContractVersion identifies the additive, compatibility-preserving
+// public envelope shared by message list/search/mget/thread projections.
+const MessageListContractVersion = "im.message-list.v1"
+
+// MessageResultContract is the reviewed additive contract shared by message
+// list, search, mget, @me and thread projections. Keep this descriptor small:
+// Runtime owns the values, while Skill references and policy checks consume a
+// copy of these field names so prose cannot silently invent another result
+// shape.
+type MessageResultContract struct {
+	Version        string
+	MessageFields  []string
+	EnvelopeFields []string
+}
+
+var messageResultContractV1 = MessageResultContract{
+	Version: MessageListContractVersion,
+	MessageFields: []string{
+		"messageId",
+		"conversationId",
+		"threadId",
+		"sender",
+		"senderId",
+		"senderType",
+		"messageType",
+		"text",
+		"createTime",
+		"updateTime",
+		"reactions",
+		"quotedMessage",
+		"forwarded",
+		"resourceRefs",
+	},
+	EnvelopeFields: []string{
+		"contractVersion",
+		"messages",
+		"count",
+		"resolvedFilters",
+		"queryRange",
+		"pagesFetched",
+		"paginationKnown",
+		"complete",
+		"hasMore",
+		"nextPage",
+		"stopReason",
+		"truncated",
+		"truncatedByPageLimit",
+		"truncatedByResultLimit",
+		"failedCount",
+		"failures",
+		"partial",
+		"scope",
+		"resourceDownloads",
+	},
+}
+
+// CurrentMessageResultContract returns defensive copies so callers cannot
+// mutate the process-wide reviewed descriptor.
+func CurrentMessageResultContract() MessageResultContract {
+	contract := messageResultContractV1
+	contract.MessageFields = append([]string(nil), contract.MessageFields...)
+	contract.EnvelopeFields = append([]string(nil), contract.EnvelopeFields...)
+	return contract
+}
+
+// NewMessageListPayload initializes the common result ledger before a caller
+// adds pagination or resource-download facts.
+func NewMessageListPayload(messages []map[string]any) map[string]any {
+	if messages == nil {
+		messages = []map[string]any{}
+	}
+	return map[string]any{
+		"contractVersion": MessageListContractVersion,
+		"messages":        messages,
+		"count":           len(messages),
+		"pagesFetched":    0,
+		"paginationKnown": false,
+		"complete":        false,
+		"hasMore":         false,
+		"failedCount":     0,
+		"failures":        []map[string]any{},
+		"partial":         false,
+		"truncated":       false,
+	}
+}
+
+// ApplyTruncation publishes the stable aggregate bit while preserving the
+// established reason-specific fields for compatibility and diagnosis.
+func ApplyTruncation(payload map[string]any) {
+	if payload == nil {
+		return
+	}
+	byPage, _ := payload["truncatedByPageLimit"].(bool)
+	byItems, _ := payload["truncatedByResultLimit"].(bool)
+	payload["truncated"] = byPage || byItems
+}
+
+// ListMessageItems returns message rows from the common list response envelopes.
+func ListMessageItems(data map[string]any) []map[string]any {
+	if data == nil {
+		return nil
+	}
+	scopes := []map[string]any{data}
+	for _, wrapper := range []string{"result", "data"} {
+		if inner, ok := data[wrapper].(map[string]any); ok {
+			scopes = append(scopes, inner)
+		}
+	}
+	for _, scope := range scopes {
+		for _, key := range []string{"messages", "list", "items", "records", "data", "result"} {
+			if rows, ok := scope[key].([]any); ok {
+				items := messageMaps(rows)
+				if len(items) > 0 {
+					return items
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// SearchMessageItems flattens grouped search results into stable message rows.
+func SearchMessageItems(data map[string]any) []map[string]any {
+	return SearchItems(data)
+}
+
+func messageMaps(rows []any) []map[string]any {
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		if item, ok := row.(map[string]any); ok {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+// StableMessageID returns the normalized message identity used for
+// cross-page deduplication. An empty value means the lower response did not
+// publish a stable identity; callers must keep that row rather than guessing.
+func StableMessageID(message map[string]any) string {
+	value := MessageID(message)
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
 
 // Sender reads a message's speaker display name, tolerating common sender-name
 // keys. The message-list responses carry the display name under the bare
@@ -87,7 +237,7 @@ func senderDisplayName(m map[string]any) string {
 // Text reads a message's textual content (tolerating common text keys and one
 // level of nesting) and runs it through CleanText.
 func Text(m map[string]any) any {
-	for _, key := range []string{"text", "content", "msgContent", "message", "body", "plainText"} {
+	for _, key := range []string{"text", "content", "msgContent", "message", "msg", "body", "plainText"} {
 		v, ok := m[key]
 		if !ok || v == nil {
 			continue
@@ -98,7 +248,7 @@ func Text(m map[string]any) any {
 				return CleanText(t)
 			}
 		case map[string]any:
-			for _, inner := range []string{"text", "content", "value"} {
+			for _, inner := range []string{"text", "content", "richText", "title", "value"} {
 				if s, ok := t[inner].(string); ok && s != "" {
 					return CleanText(s)
 				}
@@ -150,6 +300,89 @@ func MessageType(m map[string]any) any {
 	return firstMessageValue(m, "msgType", "messageType", "message_type", "type")
 }
 
+// SenderID preserves the stable sender identity without replacing the legacy
+// scalar sender display field. Nested sender records and both userId families
+// are accepted because list/search/mget currently expose different shapes.
+func SenderID(m map[string]any) any {
+	for _, key := range []string{"sender", "from", "senderUser"} {
+		if nested, ok := m[key].(map[string]any); ok {
+			if value := firstMessageValue(nested,
+				"openDingTalkId", "openDingtalkId", "userId", "senderId", "id"); value != nil {
+				return value
+			}
+		}
+	}
+	return firstMessageValue(m,
+		"senderOpenDingTalkId", "senderOpenDingtalkId", "senderUserId",
+		"senderId", "sender_id", "senderStaffId", "openDingTalkId", "userId")
+}
+
+// SenderType returns only an explicitly published lower sender type. It does
+// not guess that every sender identity is a user because bot/system messages
+// can share the same generic senderId key.
+func SenderType(m map[string]any) any {
+	for _, key := range []string{"sender", "from", "senderUser"} {
+		if nested, ok := m[key].(map[string]any); ok {
+			if value := firstMessageValue(nested, "senderType", "type", "entityType"); value != nil {
+				return value
+			}
+		}
+	}
+	return firstMessageValue(m, "senderType", "sender_type", "fromType", "from_type")
+}
+
+// ProjectMessageV1 is the single compatibility-preserving core projection for
+// list, search, mget, @me, and thread readers. Public wrappers may retain
+// legacy aliases such as time or msgType, but the underlying identity,
+// context, reaction, quote, forward, and resource semantics come from here.
+func ProjectMessageV1(m map[string]any, includeReactions bool) map[string]any {
+	ownedResources := Resources(m)
+	row := map[string]any{
+		"sender":     Sender(m),
+		"text":       projectedResourceText(m, ownedResources),
+		"createTime": CreateTime(m),
+	}
+	if value := MessageID(m); value != nil {
+		row["messageId"] = value
+	}
+	if value := ConversationID(m); value != nil {
+		row["conversationId"] = value
+	}
+	if value := ThreadID(m); value != nil {
+		row["threadId"] = value
+	}
+	if value := SenderID(m); value != nil {
+		row["senderId"] = value
+	}
+	if value := SenderType(m); value != nil {
+		row["senderType"] = value
+	}
+	if value := MessageType(m); value != nil {
+		row["messageType"] = value
+	}
+	if value := UpdateTime(m); value != nil {
+		row["updateTime"] = value
+	}
+	if includeReactions {
+		if reactions := Reactions(m); len(reactions) > 0 {
+			row["reactions"] = reactions
+		}
+	}
+	if quoted := QuotedMessage(m); len(quoted) > 0 {
+		row["quotedMessage"] = quoted
+	}
+	if resources := ResourcesDeep(m); len(resources) > 0 {
+		row["resourceRefs"] = resources
+	}
+	projectForwarded := func(item map[string]any) map[string]any {
+		return ProjectMessageV1(item, includeReactions)
+	}
+	if forwarded := Forwarded(m, projectForwarded); len(forwarded) > 0 {
+		row["forwarded"] = forwarded
+	}
+	return row
+}
+
 // QuotedMessage projects one level of quoted/replied-to context. It is
 // deliberately non-recursive: a reply chain may be arbitrarily deep or even
 // cyclic after gateway reshaping, while an Agent primarily needs the quoted
@@ -178,7 +411,8 @@ func QuotedMessage(m map[string]any) map[string]any {
 	if value := Sender(quoted); value != nil {
 		out["sender"] = value
 	}
-	if value := Text(quoted); value != nil {
+	resources := Resources(quoted)
+	if value := projectedResourceText(quoted, resources); value != nil {
 		out["text"] = value
 	}
 	if value := CreateTime(quoted); value != nil {
@@ -187,7 +421,7 @@ func QuotedMessage(m map[string]any) map[string]any {
 	if value := MessageType(quoted); value != nil {
 		out["messageType"] = value
 	}
-	if resources := Resources(quoted); len(resources) > 0 {
+	if len(resources) > 0 {
 		out["resourceRefs"] = resources
 	}
 	return out
@@ -221,10 +455,14 @@ func Resources(m map[string]any) []map[string]any {
 	collectResourceIDs(m, "mediaid", mediaIDTextRE, &mediaIDs)
 	mediaIDs = uniqueResourceIDs(mediaIDs)
 	sort.Strings(mediaIDs)
+	mediaNames := make(map[string]resourceNameCandidate)
+	collectResourceNames(m, "mediaid", mediaNames)
 	fileIDs := make([]string, 0)
 	collectResourceIDs(m, "fileid", fileIDTextRE, &fileIDs)
 	fileIDs = uniqueResourceIDs(fileIDs)
 	sort.Strings(fileIDs)
+	fileNames := make(map[string]resourceNameCandidate)
+	collectResourceNames(m, "fileid", fileNames)
 	if len(mediaIDs) == 0 && len(fileIDs) == 0 {
 		return nil
 	}
@@ -255,7 +493,7 @@ func Resources(m map[string]any) []map[string]any {
 		} else {
 			missing = append(missing, "open-conversation-id")
 		}
-		out = append(out, map[string]any{
+		resource := map[string]any{
 			"type":       "mediaId",
 			"resourceId": id,
 			"download": map[string]any{
@@ -264,10 +502,14 @@ func Resources(m map[string]any) []map[string]any {
 				"ready":     len(missing) == 0,
 				"missing":   missing,
 			},
-		})
+		}
+		if candidate, ok := mediaNames[id]; ok {
+			resource["name"] = candidate.name
+		}
+		out = append(out, resource)
 	}
 	for _, id := range fileIDs {
-		out = append(out, map[string]any{
+		resource := map[string]any{
 			"type":       "fileId",
 			"resourceId": id,
 			"download": map[string]any{
@@ -279,7 +521,11 @@ func Resources(m map[string]any) []map[string]any {
 				"ready":   true,
 				"missing": []string{},
 			},
-		})
+		}
+		if candidate, ok := fileNames[id]; ok {
+			resource["name"] = candidate.name
+		}
+		out = append(out, resource)
 	}
 	return out
 }
@@ -324,6 +570,158 @@ func resourcesDeep(m map[string]any, inheritedConversationID string, depth int) 
 
 var mediaIDTextRE = regexp.MustCompile(`(?i)\bmedia[_-]?id\s*[:=]\s*["']?([^"'\s)\]}>,]+)`)
 var fileIDTextRE = regexp.MustCompile(`(?i)\bfile[_-]?id\s*[:=]\s*["']?([^"'\s)\]}>,]+)`)
+var fileNameAndIDTextRE = regexp.MustCompile(`(?i)\[文件\]\s*([^\r\n]*?)\s+file[_-]?id\s*[:=]\s*["']?([^"'\s)\]}>,]+)`)
+var legacyResourceDownloadHintRE = regexp.MustCompile(`\s*注意：如需下载使用dws\s+(?:chat message download-media|drive download)命令下载\s*`)
+
+// projectedResourceText removes only the exact, machine-generated download
+// hint emitted by older IM APIs. The readable resource marker and ID remain in
+// text, while resourceRefs publishes the current executable download command.
+// Text without an owned mediaId/fileId is left byte-for-byte unchanged so an
+// ordinary user sentence mentioning a command can never be rewritten.
+func projectedResourceText(m map[string]any, resources []map[string]any) any {
+	value := Text(m)
+	text, ok := value.(string)
+	if !ok || len(resources) == 0 ||
+		(!mediaIDTextRE.MatchString(text) && !fileIDTextRE.MatchString(text)) {
+		return value
+	}
+	return strings.TrimSpace(legacyResourceDownloadHintRE.ReplaceAllString(text, ""))
+}
+
+type resourceNameCandidate struct {
+	name     string
+	priority int
+}
+
+const (
+	resourceNamePriorityText       = 1
+	resourceNamePriorityStructured = 2
+)
+
+// collectResourceNames keeps a resource ID paired with a name only when both
+// are present in the same structured object or in the legacy, machine-shaped
+// "[文件] name fileId: id" text. This deliberately does not borrow a generic
+// message title or sender name: an unknown resource name is safer than a
+// plausible but incorrect one.
+func collectResourceNames(value any, targetKey string, out map[string]resourceNameCandidate) {
+	switch typed := value.(type) {
+	case map[string]any:
+		directIDs := directResourceIDs(typed, targetKey)
+		if len(directIDs) == 1 {
+			if name := directResourceName(typed, targetKey); name != "" {
+				recordResourceName(out, directIDs[0], name, resourceNamePriorityStructured)
+			}
+		}
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			if isNestedMessageBoundaryKey(normalizeMessageKey(key)) {
+				continue
+			}
+			collectResourceNames(typed[key], targetKey, out)
+		}
+	case []any:
+		for _, child := range typed {
+			collectResourceNames(child, targetKey, out)
+		}
+	case []map[string]any:
+		for _, child := range typed {
+			collectResourceNames(child, targetKey, out)
+		}
+	case string:
+		if targetKey == "fileid" {
+			for _, match := range fileNameAndIDTextRE.FindAllStringSubmatch(typed, -1) {
+				name := strings.TrimSpace(match[1])
+				id := resourceIDScalar(match[2])
+				if name != "" && id != "" {
+					recordResourceName(out, id, name, resourceNamePriorityText)
+				}
+			}
+		}
+		trimmed := strings.TrimSpace(typed)
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+			var decoded any
+			if json.Unmarshal([]byte(trimmed), &decoded) == nil {
+				collectResourceNames(decoded, targetKey, out)
+			}
+		}
+	}
+}
+
+func directResourceIDs(value map[string]any, targetKey string) []string {
+	resourceType := normalizeMessageKey(strings.TrimSpace(fmt.Sprint(
+		firstMessageValue(value, "resourceType", "resource_type"))))
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	ids := make([]string, 0, 1)
+	for _, key := range keys {
+		normalizedKey := normalizeMessageKey(key)
+		if normalizedKey != targetKey &&
+			!(normalizedKey == "resourceid" && resourceType == targetKey) {
+			continue
+		}
+		if id := resourceIDScalar(value[key]); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return uniqueResourceIDs(ids)
+}
+
+func directResourceName(value map[string]any, targetKey string) string {
+	for _, wanted := range []string{"filename", "resourcename", "originalfilename"} {
+		if name := directResourceString(value, wanted); name != "" {
+			return name
+		}
+	}
+	// A bare "name" is accepted only inside an explicit resource envelope.
+	// Message rows also commonly contain a sender/group name, which must never
+	// become the attachment filename merely because the row has a resource ID.
+	resourceType := normalizeMessageKey(strings.TrimSpace(fmt.Sprint(
+		firstMessageValue(value, "resourceType", "resource_type"))))
+	if resourceType == targetKey && directResourceString(value, "resourceid") != "" {
+		return directResourceString(value, "name")
+	}
+	return ""
+}
+
+func directResourceString(value map[string]any, wanted string) string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if normalizeMessageKey(key) != wanted {
+			continue
+		}
+		if text, ok := value[key].(string); ok {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
+}
+
+func recordResourceName(
+	out map[string]resourceNameCandidate,
+	id, name string,
+	priority int,
+) {
+	id = resourceIDScalar(id)
+	name = strings.TrimSpace(name)
+	if id == "" || name == "" {
+		return
+	}
+	if current, ok := out[id]; ok && current.priority >= priority {
+		return
+	}
+	out[id] = resourceNameCandidate{name: name, priority: priority}
+}
 
 func collectResourceIDs(value any, targetKey string, textPattern *regexp.Regexp, out *[]string) {
 	switch typed := value.(type) {
@@ -600,34 +998,106 @@ func ApplyPagination(payload, data map[string]any) {
 	}
 }
 
-// ApplyMessagePagination publishes message-list completeness without claiming
-// the lower response's nextCursor is a valid CLI input. DingTalk's executable
-// message-list contract paginates with the boundary message createTime, so the
-// resume object uses exactly that accepted parameter.
+// ApplyMessagePagination publishes message-list completeness and converts the
+// authoritative millisecond nextCursor into the RFC3339Nano time boundary
+// accepted by the executable message-list command. Projected createTime is
+// deliberately not used because it is only second precision.
 func ApplyMessagePagination(payload, data map[string]any, messages []map[string]any, direction string) {
+	payload["contractVersion"] = MessageListContractVersion
+	payload["pagesFetched"] = 1
+	payload["enrichedCount"] = 0
+	payload["failedCount"] = 0
+	payload["failures"] = []map[string]any{}
+	payload["hasMore"] = false
+	payload["complete"] = false
 	page := Pagination(data)
 	if len(page) == 0 {
+		payload["paginationKnown"] = false
+		payload["failedCount"] = 1
+		payload["failures"] = []map[string]any{{
+			"stage": "pagination",
+			"error": "下层未返回可靠的 hasMore/nextCursor，无法证明结果完整",
+		}}
 		return
 	}
-	if value, ok := page["hasMore"]; ok {
-		payload["hasMore"] = value
+	value, hasMoreKnown := page["hasMore"]
+	if !hasMoreKnown {
+		payload["paginationKnown"] = false
+		payload["failedCount"] = 1
+		payload["failures"] = []map[string]any{{
+			"stage": "pagination",
+			"error": "下层仅返回 cursor、未返回 hasMore，无法证明结果完整",
+		}}
+		return
 	}
+	payload["paginationKnown"] = true
+	payload["hasMore"] = value
 	if value, ok := page["complete"]; ok {
 		payload["complete"] = value
 	}
 	hasMore, _ := page["hasMore"].(bool)
-	if !hasMore || len(messages) == 0 {
+	if !hasMore {
 		return
 	}
-	boundary := CreateTime(messages[len(messages)-1])
-	if boundary == nil {
+	if len(messages) == 0 {
+		payload["failedCount"] = 1
+		payload["failures"] = []map[string]any{{
+			"stage": "pagination",
+			"error": "下层返回 hasMore=true 但当前页没有消息",
+		}}
 		return
 	}
-	next := map[string]any{"time": boundary}
+	_, boundary, err := messagePaginationCursorBoundary(page["nextCursor"])
+	if err != nil {
+		payload["failedCount"] = 1
+		payload["failures"] = []map[string]any{{
+			"stage": "pagination",
+			"error": "下层返回 hasMore=true，但 nextCursor 无效: " + err.Error(),
+		}}
+		return
+	}
+	next := map[string]any{"time": boundary, "nextCursor": page["nextCursor"]}
 	if strings.TrimSpace(direction) != "" {
 		next["direction"] = direction
 	}
 	payload["nextPage"] = next
+}
+
+func messagePaginationCursorBoundary(value any) (string, string, error) {
+	var millis int64
+	switch typed := value.(type) {
+	case int:
+		millis = int64(typed)
+	case int32:
+		millis = int64(typed)
+	case int64:
+		millis = typed
+	case float32:
+		asFloat := float64(typed)
+		if math.IsNaN(asFloat) || math.IsInf(asFloat, 0) || asFloat <= 0 || math.Trunc(asFloat) != asFloat || asFloat > math.MaxInt64 {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = int64(asFloat)
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed <= 0 || math.Trunc(typed) != typed || typed > math.MaxInt64 {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = int64(typed)
+	case string:
+		parsed, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64)
+		if err != nil {
+			return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+		}
+		millis = parsed
+	default:
+		return "", "", fmt.Errorf("缺少毫秒级分页游标")
+	}
+	if millis <= 0 {
+		return "", "", fmt.Errorf("必须是正整数毫秒时间戳")
+	}
+	key := strconv.FormatInt(millis, 10)
+	boundary := time.UnixMilli(millis).UTC().Format(time.RFC3339Nano)
+	return key, boundary, nil
 }
 
 // Pagination extracts hasMore/nextCursor from the response root or a common
@@ -669,6 +1139,9 @@ func paginationValuePresent(value any) bool {
 	switch typed := value.(type) {
 	case nil:
 		return false
+	case json.Number:
+		number, err := typed.Float64()
+		return err != nil || number != 0
 	case string:
 		return strings.TrimSpace(typed) != "" && strings.TrimSpace(typed) != "0"
 	case int:

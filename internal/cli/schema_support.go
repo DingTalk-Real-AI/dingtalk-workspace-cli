@@ -15,23 +15,6 @@ package cli
 
 import "github.com/spf13/cobra"
 
-// walkLeafCommands invokes fn for every runnable leaf command in the tree.
-func walkLeafCommands(cmd *cobra.Command, fn func(*cobra.Command)) {
-	if cmd.Runnable() && !cmd.HasSubCommands() {
-		fn(cmd)
-		return
-	}
-	for _, sub := range cmd.Commands() {
-		if sub.Name() == "help" {
-			continue
-		}
-		if !sub.IsAvailableCommand() && !hasRuntimeSchemaCommand(sub) {
-			continue
-		}
-		walkLeafCommands(sub, fn)
-	}
-}
-
 func hasRuntimeSchemaCommand(cmd *cobra.Command) bool {
 	if cmd == nil {
 		return false

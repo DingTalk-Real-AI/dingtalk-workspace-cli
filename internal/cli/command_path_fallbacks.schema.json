@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli/blob/main/internal/cli/command_path_fallbacks.schema.json",
+  "title": "DWS Reviewed Command Path Fallbacks",
+  "description": "Human-reviewed recovery-only normalization for invalid model-emitted command paths. These entries are not stable command identity, navigation, Help, Skill, or Schema aliases.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "entries"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./command_path_fallbacks.schema.json"
+    },
+    "version": {
+      "const": 1
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "commandPath": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+][A-Za-z0-9._:+-]*(?: [A-Za-z0-9+][A-Za-z0-9._:+-]*)*$",
+      "description": "Exact CLI path without a leading dws or flags."
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "mode",
+        "reviewed",
+        "review_reason"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/commandPath"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "rewrite",
+            "ambiguous"
+          ]
+        },
+        "to": {
+          "$ref": "#/$defs/commandPath"
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "description": "Canonical public runnable paths offered for an ambiguous source. Because ambiguous recovery never dispatches, candidates may mix reviewed shortcuts and native leaves within the same service.",
+          "items": {
+            "$ref": "#/$defs/commandPath"
+          }
+        },
+        "reviewed": {
+          "const": true
+        },
+        "review_reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "rewrite"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "to"
+            ],
+            "not": {
+              "required": [
+                "candidates"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "ambiguous"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "candidates"
+            ],
+            "not": {
+              "required": [
+                "to"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

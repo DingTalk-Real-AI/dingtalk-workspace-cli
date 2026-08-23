@@ -17,6 +17,7 @@
 package config
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -165,9 +166,18 @@ const (
 	// Override at runtime via ~/.dws/mcp_url file.
 	DefaultMCPBaseURL = "https://mcp.dingtalk.com"
 
+	// ManagedMCPURLRegionFileName records an MCP URL written automatically by
+	// login region selection, so a later region change does not delete a user's
+	// explicit MCP override.
+	ManagedMCPURLRegionFileName = "mcp_url.login_region"
+
 	// DefaultTerminalBaseURL is the DingTalk developer platform base URL.
 	// Override at runtime via ~/.dws/terminal_url file.
 	DefaultTerminalBaseURL = "https://open-dev.dingtalk.com"
+
+	// InternationalTerminalBaseURL is the DingTalk international developer
+	// platform base URL.
+	InternationalTerminalBaseURL = "https://open-dev.dingtalk.io"
 
 	// DeveloperSettingsPath is the path to the organization developer
 	// settings page (CLI access management).
@@ -201,13 +211,20 @@ func GetMCPBaseURL() string {
 }
 
 // GetTerminalBaseURL returns the terminal base URL with priority:
-//  1. ~/.dws/terminal_url file content (for pre-release environment)
-//  2. Default value (https://open-dev.dingtalk.com)
+//  1. ~/.dws/terminal_url file content (for custom environments)
+//  2. International terminal when the configured MCP endpoint uses .io
+//  3. Default value (https://open-dev.dingtalk.com)
 func GetTerminalBaseURL() string {
 	terminalURLPath := filepath.Join(DefaultConfigDir(), "terminal_url")
 	if data, err := os.ReadFile(terminalURLPath); err == nil {
 		if u := strings.TrimSpace(string(data)); u != "" {
 			return u
+		}
+	}
+	if parsed, err := url.Parse(GetMCPBaseURL()); err == nil {
+		host := strings.ToLower(parsed.Hostname())
+		if host == "dingtalk.io" || strings.HasSuffix(host, ".dingtalk.io") {
+			return InternationalTerminalBaseURL
 		}
 	}
 	return DefaultTerminalBaseURL

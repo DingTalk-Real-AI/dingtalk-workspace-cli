@@ -3,7 +3,7 @@
 Every runtime command the `dws` CLI exposes when loaded with the **pre** environment configuration.
 
 - **Products**: 13
-- **Total commands**: 160
+- **Total commands**: 163
 - **Generated from**: `internal/plugin` command descriptors — the same code path the CLI uses at runtime.
 
 > Auto-generated. Update plugin descriptors in `internal/plugin/`, not this file.
@@ -33,14 +33,14 @@ Every command inherits these flags (documented here once, not repeated per comma
 - [`dws aitable` — AI Tables](#dws-aitable) · 41 commands
 - [`dws attendance` — Attendance](#dws-attendance) · 4 commands
 - [`dws calendar` — Calendar](#dws-calendar) · 14 commands
-- [`dws chat` — Group Chat / IM](#dws-chat) · 23 commands
+- [`dws chat` — Group Chat / IM](#dws-chat) · 26 commands
 - [`dws contact` — Contact Directory](#dws-contact) · 6 commands
 - [`dws devdoc` — Open Platform Docs](#dws-devdoc) · 2 commands
 - [`dws ding` — DING Messages](#dws-ding) · 2 commands
 - [`dws doc` — DingTalk Doc](#dws-doc) · 21 commands
 - [`dws drive` — DingTalk Drive](#dws-drive) · 6 commands
 - [`dws minutes` — AI Minutes](#dws-minutes) · 19 commands
-- [`dws oa` — OA Approval](#dws-oa) · 9 commands
+- [`dws oa` — OA Approval](#dws-oa) · 12 commands
 - [`dws report` — Reports](#dws-report) · 7 commands
 - [`dws todo` — Todo Tasks](#dws-todo) · 6 commands
 
@@ -134,12 +134,15 @@ _Calendar events, participants, meeting rooms, and busy-status queries._
 
 _Group chats, conversations, messages, and robot/webhook integrations._
 
-**23 commands**
+**26 commands**
 
 | Command | Description | When to use |
 |---|---|---|
 | `dws chat bot search` | Search robots (bots) created by the current user by keyword. | When the agent needs to resolve one of its own bots by name to a robot code before sending bot messages. |
 | `dws chat conversation-info` | Retrieve basic metadata for a conversation (single chat or group chat) by conversation ID. | When the agent needs context about a conversation (name, type, member count) before operating on it. |
+| `dws chat emotion favorite` | Add a media ID to the current user's personal favorite emotions. | When the agent needs to save an available mediaId as a reusable personal emotion, optionally preserving source message context. |
+| `dws chat emotion list` | List the current user's personal favorite emotions. | When the agent needs to inspect available personal emotions or resolve an emotionId/mediaId before sending. |
+| `dws chat emotion send` | Send a personal favorite emotion to a group or direct chat as the authenticated user. | When the agent needs to send a known personal emotion mediaId to exactly one group, userId, or openDingTalkId target. |
 | `dws chat group create` | Create a new internal group chat with a set of initial members. | When the agent needs to spin up a dedicated group for a new project, incident, or discussion thread. |
 | `dws chat group members` | List members of a group chat; can also be used against the current user to enumerate their groups' members. | When the agent needs the roster of a group before mentioning, removing, or auditing members. |
 | `dws chat group members add` | Add one or more users to an existing group chat. | When the agent expands a group to include additional participants. |
@@ -277,14 +280,17 @@ _AI meeting notes: listing, summary, todos, transcription, recording control, mi
 
 ## `dws oa` — OA Approval
 
-_OA approval workflows: list, approve, reject, revoke, records._
+_OA approval workflows: inspect forms, forecast routes, create instances, approve, reject, revoke, and audit records._
 
-**9 commands**
+**12 commands**
 
 | Command | Description | When to use |
 |---|---|---|
 | `dws oa approval approve` | Approve a pending approval process instance (task) as the current user. | When the agent acts on a pending approval the user has delegated it to handle. |
+| `dws oa approval create-instance` | Create a real approval process instance from validated form values or a complete request payload. | After the agent has inspected the form Schema, forecast the route, resolved any selectable approvers, and obtained explicit user confirmation. |
 | `dws oa approval detail` | Retrieve full details of an approval process instance, including form fields, attachments, and state. | When the agent needs to read the content of an approval ticket before deciding on it or summarizing it. |
+| `dws oa approval form-schema` | Retrieve the form Schema for an approval template by processCode. | Before collecting or validating values for a new approval instance. |
+| `dws oa approval forecast-process` | Forecast the approval route for a template and its proposed form values. | Before creating an instance, especially when the route contains user-selectable approver or notifier nodes. |
 | `dws oa approval list-forms` | List approval process templates (forms) the current user is allowed to initiate. | When the agent needs to pick the right approval form before submitting a new request. |
 | `dws oa approval list-initiated` | List approval process instances the current user has initiated. | When the agent reviews the status of approvals the user submitted. |
 | `dws oa approval list-pending` | List approval process instances currently awaiting action from the current user. | When the agent surfaces "needs your approval" items in the user's inbox. |

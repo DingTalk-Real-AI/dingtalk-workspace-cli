@@ -18,6 +18,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/pipeline"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/plugin"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/userdef"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/testseam"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/transport"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
@@ -27,14 +28,11 @@ import (
 type schemaSourceContextKey struct{}
 
 func TestSchemaSourceRootPropagatesContextWithoutLoadingPlugins(t *testing.T) {
-	previous := rootLoadPlugins
-	t.Cleanup(func() { rootLoadPlugins = previous })
-
 	pluginLoads := 0
-	rootLoadPlugins = func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
+	testseam.Swap(t, &rootLoadPlugins, func(*cobra.Command, *pipeline.Engine, executor.Runner) []*cobra.Command {
 		pluginLoads++
 		return nil
-	}
+	})
 	wantContext := context.WithValue(context.Background(), schemaSourceContextKey{}, "schema")
 	root := NewSchemaSourceRootCommand(wantContext)
 	if root.Context() != wantContext {

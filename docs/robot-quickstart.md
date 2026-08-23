@@ -6,7 +6,7 @@
 
 ## 第一步：安装 dws
 
-一键脚本会自动下载最新版二进制 + `dingtalk-dev` skill，只需要 curl（无需 go / git）。
+一键脚本会自动下载最新版二进制 + `dingtalk-misc` skill（开放平台应用文档落在 misc），只需要 curl（无需 go / git）。
 
 ### macOS / Linux
 

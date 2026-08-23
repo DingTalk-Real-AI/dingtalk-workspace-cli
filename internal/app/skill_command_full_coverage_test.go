@@ -110,7 +110,7 @@ func TestCrossPlatformCoverageSkillCommandHighLevelRemainingCoverage(t *testing.
 	if err := runSkillAdd(cmd, []string{"id", "target"}); err == nil {
 		t.Fatal("invalid skill target should fail")
 	}
-	skillResolveTargetPath = func(string) (string, error) { return "dest", nil }
+	skillResolveTargetPath = func(string) (string, error) { return filepath.Join(t.TempDir(), "dest"), nil }
 	skillLoadAccessToken = func(context.Context) (string, error) { return "", fail }
 	if err := runSkillAdd(cmd, []string{"id", "target"}); !errors.Is(err, fail) {
 		t.Fatalf("skill add auth error = %v", err)
@@ -280,7 +280,7 @@ func TestCrossPlatformCoverageSkillCommandLowLevelRemainingCoverage(t *testing.T
 	}
 
 	skillMkdirAll = func(string, os.FileMode) error { return fail }
-	if err := extractSkillZip("missing", "dest"); err == nil {
+	if err := extractSkillZip("missing", filepath.Join(t.TempDir(), "dest")); err == nil {
 		t.Fatal("zip destination mkdir failure should propagate")
 	}
 	zipPath := filepath.Join(t.TempDir(), "files.zip")

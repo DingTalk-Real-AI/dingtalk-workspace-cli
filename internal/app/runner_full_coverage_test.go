@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/safety"
@@ -35,7 +34,7 @@ func TestCrossPlatformCoverageRunnerRemainingRoutingCoverage(t *testing.T) {
 		runnerGetCachedRuntimeToken = oldCachedToken
 	})
 
-	created := newCommandRunnerWithFlags(cli.StaticLoader{}, &GlobalFlags{Timeout: 2})
+	created := newCommandRunnerWithFlags(&GlobalFlags{Timeout: 2})
 	if created.(*runtimeRunner).transport == nil {
 		t.Fatal("runner transport was not created")
 	}
@@ -55,21 +54,20 @@ func TestCrossPlatformCoverageRunnerRemainingRoutingCoverage(t *testing.T) {
 		return "", nil
 	}
 	r := &runtimeRunner{
-		loader:    cli.CatalogLoaderFrom(cli.Catalog{}, wantErr),
 		transport: transport.NewClient(nil),
 		fallback:  runnerCoverageFallback{},
 	}
 	directMiss := inv
 	directMiss.Kind = "helper_invocation"
-	if _, err := r.runSingle(context.Background(), directMiss, false); !errors.Is(err, wantErr) {
-		t.Fatalf("direct runtime miss load error = %v", err)
+	if _, err := r.runSingle(context.Background(), directMiss, false); err == nil || !strings.Contains(err.Error(), "no dynamic endpoint registered for product or tool") {
+		t.Fatalf("direct runtime miss = %v", err)
 	}
 	directHit := executor.Invocation{Kind: "helper_invocation", CanonicalProduct: defaultPATProductID, Tool: "pat", DryRun: true}
 	if got, err := r.runSingle(context.Background(), directHit, false); err != nil || got.Response["dry_run"] != true {
 		t.Fatalf("direct runtime hit = %#v, %v", got, err)
 	}
-	if _, err := r.runSingle(context.Background(), inv, true); !errors.Is(err, wantErr) {
-		t.Fatalf("runSingle error = %v", err)
+	if _, err := r.runSingle(context.Background(), inv, true); err == nil {
+		t.Fatal("endpoint miss succeeded")
 	}
 	<-prefetched
 
@@ -113,27 +111,30 @@ func TestCrossPlatformCoverageRunnerRemainingRoutingCoverage(t *testing.T) {
 		t.Fatalf("multi success aggregation = %#v, %v", result, err)
 	}
 
-	product := cli.CanonicalProduct{ID: "product", Endpoint: "https://catalog.test", Tools: []cli.ToolDescriptor{{RPCName: "tool"}}}
 	r = &runtimeRunner{
-		loader:      cli.StaticLoader{Catalog: cli.Catalog{Products: []cli.CanonicalProduct{product}}},
 		transport:   transport.NewClient(nil),
 		globalFlags: &GlobalFlags{DryRun: true},
 		fallback:    runnerCoverageFallback{},
 	}
+	overrideInv := inv
+	overrideInv.Kind = "helper_invocation"
+	overrideInv.DryRun = true
 	t.Setenv("DINGTALK_PRODUCT_MCP_URL", "https://override.test")
-	got, err := r.runSingle(context.Background(), inv, false)
+	got, err := r.runSingle(context.Background(), overrideInv, false)
 	if err != nil || got.Response["endpoint"] != "https://override.test" {
-		t.Fatalf("catalog override = %#v, %v", got, err)
+		t.Fatalf("direct runtime override = %#v, %v", got, err)
 	}
 }
 
 func TestCrossPlatformCoverageRunnerRemainingExecutionCoverage(t *testing.T) {
+	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
 	oldEdition := edition.Get()
 	oldPreflight := runnerPreflightDocDownload
 	oldCall := runnerCallTool
 	oldHandle := runnerHandlePatAuthCheck
 	oldRetry := runnerRetryWithPatAuthRetry
 	oldCapture := runnerCaptureRuntimeFailure
+	oldResolveSnapshot := runnerResolveAuthSnapshot
 	t.Cleanup(func() {
 		edition.Override(oldEdition)
 		runnerPreflightDocDownload = oldPreflight
@@ -141,6 +142,7 @@ func TestCrossPlatformCoverageRunnerRemainingExecutionCoverage(t *testing.T) {
 		runnerHandlePatAuthCheck = oldHandle
 		runnerRetryWithPatAuthRetry = oldRetry
 		runnerCaptureRuntimeFailure = oldCapture
+		runnerResolveAuthSnapshot = oldResolveSnapshot
 	})
 
 	pluginAuthMu.Lock()
@@ -169,6 +171,27 @@ func TestCrossPlatformCoverageRunnerRemainingExecutionCoverage(t *testing.T) {
 	if got, err := r.executeInvocation(context.Background(), "https://example.test", inv); err != nil || !got.Invocation.Implemented {
 		t.Fatalf("default auth execution = %#v, %v", got, err)
 	}
+	runnerResolveAuthSnapshot = func(*runtimeRunner, context.Context) (AccessTokenSnapshot, error) {
+		return AccessTokenSnapshot{
+			AccessToken:      "international-token",
+			LoginRegion:      authpkg.LoginRegionInternational,
+			LoginRegionKnown: true,
+		}, nil
+	}
+	successfulCall := runnerCallTool
+	routedEndpoint := ""
+	runnerCallTool = func(_ *transport.Client, _ context.Context, endpoint, _ string, _ map[string]any) (transport.ToolCallResult, error) {
+		routedEndpoint = endpoint
+		return transport.ToolCallResult{Content: map[string]any{"value": 1}}, nil
+	}
+	if _, err := r.executeInvocation(context.Background(), "https://mcp-gw.dingtalk.com/server/contact", inv); err != nil {
+		t.Fatalf("international auth execution = %v", err)
+	}
+	if routedEndpoint != "https://mcp-gw.dingtalk.io/server/contact" {
+		t.Fatalf("international routed endpoint = %q", routedEndpoint)
+	}
+	runnerResolveAuthSnapshot = oldResolveSnapshot
+	runnerCallTool = successfulCall
 
 	wantErr := errors.New("preflight")
 	runnerPreflightDocDownload = func(*runtimeRunner, context.Context, *transport.Client, string, executor.Invocation) error {
@@ -307,7 +330,7 @@ func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *test
 	inv := executor.Invocation{CanonicalProduct: "stdio-product", Tool: "tool"}
 	wantErr := errors.New("stdio failed")
 	runnerStdioEnsureInitialized = func(*transport.StdioClient, context.Context) error { return wantErr }
-	if _, err := r.executeStdioInvocation(context.Background(), inv); err == nil || !strings.Contains(err.Error(), "stdio initialize failed") {
+	if _, err := r.executeStdioInvocationAtEndpoint(context.Background(), "", inv); err == nil || !strings.Contains(err.Error(), "stdio initialize failed") {
 		t.Fatalf("stdio initialize error = %v", err)
 	}
 	runnerStdioEnsureInitialized = func(*transport.StdioClient, context.Context) error { return nil }
@@ -322,19 +345,19 @@ func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *test
 	runnerStdioCallTool = func(*transport.StdioClient, context.Context, string, map[string]any) (transport.ToolCallResult, error) {
 		return transport.ToolCallResult{}, wantErr
 	}
-	if _, err := r.executeStdioInvocation(context.Background(), inv); err == nil || !strings.Contains(err.Error(), "stdio failed") {
+	if _, err := r.executeStdioInvocationAtEndpoint(context.Background(), "", inv); err == nil || !strings.Contains(err.Error(), "stdio failed") {
 		t.Fatalf("stdio call error = %v", err)
 	}
 	runnerStdioCallTool = func(*transport.StdioClient, context.Context, string, map[string]any) (transport.ToolCallResult, error) {
 		return transport.ToolCallResult{IsError: true, Content: map[string]any{"message": "tool failed"}}, nil
 	}
-	if _, err := r.executeStdioInvocation(context.Background(), inv); err == nil || !strings.Contains(err.Error(), "tool failed") {
+	if _, err := r.executeStdioInvocationAtEndpoint(context.Background(), "", inv); err == nil || !strings.Contains(err.Error(), "tool failed") {
 		t.Fatalf("stdio tool error = %v", err)
 	}
 	runnerStdioCallTool = func(*transport.StdioClient, context.Context, string, map[string]any) (transport.ToolCallResult, error) {
 		return transport.ToolCallResult{Content: map[string]any{"ok": true}}, nil
 	}
-	if got, err := r.executeStdioInvocation(context.Background(), inv); err != nil || !got.Invocation.Implemented {
+	if got, err := r.executeStdioInvocationAtEndpoint(context.Background(), "", inv); err != nil || !got.Invocation.Implemented {
 		t.Fatalf("stdio success = %#v, %v", got, err)
 	}
 	RegisterStdioClient("plugin/server-key", client)
@@ -362,6 +385,12 @@ func TestCrossPlatformCoverageRunnerRemainingStdioAuthAndHeadersCoverage(t *test
 	}
 	if got, err := resolveRuntimeAuthToken(context.Background(), " runtime "); err != nil || got != "runtime" {
 		t.Fatalf("runtime explicit token = %q, %v", got, err)
+	}
+	edition.Override(&edition.Hooks{TokenProvider: func(context.Context, func() (string, error)) (string, error) {
+		return "", errors.New("snapshot failed")
+	}})
+	if _, err := r.resolveAuthToken(context.Background()); err == nil || !strings.Contains(err.Error(), "snapshot failed") {
+		t.Fatalf("resolveAuthToken error = %v", err)
 	}
 
 	t.Setenv(envDWSChannel, "channel")

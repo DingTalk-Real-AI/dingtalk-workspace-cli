@@ -17,13 +17,14 @@ type chatSemanticCatalogFixture struct {
 	Service      string                `json:"service"`
 	Availability shortcut.Availability `json:"default_availability"`
 	Shortcuts    map[string]struct {
-		Disposition   shortcut.SemanticDisposition `json:"disposition"`
-		SemanticDelta string                       `json:"semantic_delta"`
-		Risk          shortcut.Risk                `json:"risk"`
-		Availability  shortcut.Availability        `json:"availability"`
-		Primary       string                       `json:"primary"`
-		Public        bool                         `json:"public"`
-		Reviewed      bool                         `json:"reviewed"`
+		Disposition          shortcut.SemanticDisposition `json:"disposition"`
+		SemanticDelta        string                       `json:"semantic_delta"`
+		Risk                 shortcut.Risk                `json:"risk"`
+		Availability         shortcut.Availability        `json:"availability"`
+		Primary              string                       `json:"primary"`
+		Public               bool                         `json:"public"`
+		CompatibilityVisible bool                         `json:"compatibility_visible"`
+		Reviewed             bool                         `json:"reviewed"`
 	} `json:"shortcuts"`
 }
 
@@ -50,10 +51,10 @@ func TestChatSemanticCatalogExactlyCoversRegisteredShortcuts(t *testing.T) {
 		}
 		registered[item.Command] = item
 	}
-	if got, want := len(registered), 99; got != want {
+	if got, want := len(registered), 100; got != want {
 		t.Fatalf("registered Chat Shortcuts = %d, want %d", got, want)
 	}
-	if got, want := len(source.Shortcuts), 99; got != want {
+	if got, want := len(source.Shortcuts), 100; got != want {
 		t.Fatalf("reviewed Chat Shortcut records = %d, want %d", got, want)
 	}
 

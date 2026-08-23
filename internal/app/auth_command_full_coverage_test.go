@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -214,7 +215,8 @@ func TestCrossPlatformCoverageAuthCoverageFormsParentAndTargets(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
-	t.Setenv("DWS_CONFIG_DIR", t.TempDir())
+	configDir := t.TempDir()
+	t.Setenv("DWS_CONFIG_DIR", configDir)
 	oldSave := authSaveTokenData
 	oldDevice := authDeviceLogin
 	oldOAuth := authOAuthLogin
@@ -255,6 +257,15 @@ func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
 	if out, _, err := authCoverageRunLogin(t, nil, "json", true, map[string]string{"token": "token"}); err != nil || !strings.Contains(out, `"token_valid": true`) {
 		t.Fatalf("json token login = %q, %v", out, err)
 	}
+	if _, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"token": "token", "pre-url": "https://example.com"}); err == nil {
+		t.Fatal("invalid pre-release host should fail")
+	}
+	if _, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"token": "token", "mcp-url": "http://remote.example.com"}); err == nil {
+		t.Fatal("remote plaintext MCP URL should fail")
+	}
+	if _, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"token": "token", "pre-url": "https://pre-login.dingtalk.io"}); err != nil {
+		t.Fatalf("pre-release token login = %v", err)
+	}
 
 	authDeviceLogin = func(*authpkg.DeviceFlowProvider, context.Context) (*authpkg.TokenData, error) {
 		return nil, errors.New("device")
@@ -270,6 +281,15 @@ func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
 	}
 	if _, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"device": "true", "no-browser": "true"}); err != nil {
 		t.Fatal(err)
+	}
+	authDeviceLogin = func(provider *authpkg.DeviceFlowProvider, _ context.Context) (*authpkg.TokenData, error) {
+		if provider.LoginRegion != authpkg.LoginRegionInternational {
+			t.Errorf("device login region = %q, want international", provider.LoginRegion)
+		}
+		return &authpkg.TokenData{AccessToken: "a", ExpiresAt: time.Now().Add(time.Hour)}, nil
+	}
+	if _, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"device": "true", "intl": "true"}); err != nil {
+		t.Fatalf("international device login = %v", err)
 	}
 
 	authOAuthLogin = func(*authpkg.OAuthProvider, context.Context, bool) (*authpkg.TokenData, error) {
@@ -291,6 +311,25 @@ func TestCrossPlatformCoverageAuthCoverageLoginFlows(t *testing.T) {
 	if out, _, err := authCoverageRunLogin(t, caller, "table", true, map[string]string{"no-browser": "true"}); err != nil || !strings.Contains(out, "Corp") {
 		t.Fatalf("oauth success = %q, %v", out, err)
 	}
+	authOAuthLogin = func(provider *authpkg.OAuthProvider, _ context.Context, _ bool) (*authpkg.TokenData, error) {
+		if provider.LoginRegion != authpkg.LoginRegionInternational {
+			t.Errorf("OAuth login region = %q, want international", provider.LoginRegion)
+		}
+		return &authpkg.TokenData{AccessToken: "a", ExpiresAt: time.Now().Add(time.Hour)}, nil
+	}
+	if _, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"intl": "true"}); err != nil {
+		t.Fatalf("international OAuth login = %v", err)
+	}
+
+	blockedConfigDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(blockedConfigDir, "mcp_url"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DWS_CONFIG_DIR", blockedConfigDir)
+	if _, _, err := authCoverageRunLogin(t, nil, "table", true, map[string]string{"token": "token", "intl": "true"}); err == nil || !strings.Contains(err.Error(), "failed to persist MCP URL") {
+		t.Fatalf("MCP URL persist failure = %v", err)
+	}
+	t.Setenv("DWS_CONFIG_DIR", configDir)
 
 	authRunLoginRecommend = func(context.Context, edition.ToolCaller, io.Writer, pat.LoginRecommendOptions) error {
 		return errors.New("recommend")
@@ -1418,7 +1457,7 @@ func TestCrossPlatformCoverageAuthCoveragePortableExchangeAndReset(t *testing.T)
 	authRemove = func(string) error { removed++; return errors.New("ignored") }
 	authDeleteAppConfig = func(string) error { removed++; return errors.New("ignored") }
 	edition.Override(&edition.Hooks{})
-	if err := reset.RunE(reset, nil); err != nil || removed != 3 || !strings.Contains(out.String(), "重新登录") {
+	if err := reset.RunE(reset, nil); err != nil || removed != 4 || !strings.Contains(out.String(), "重新登录") {
 		t.Fatalf("reset = %q, %v, removed=%d", out.String(), err, removed)
 	}
 	edition.Override(&edition.Hooks{IsEmbedded: true})

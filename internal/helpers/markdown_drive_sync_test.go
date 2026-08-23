@@ -706,15 +706,13 @@ func TestMarkdownPatchCancellationStopsBeforeUploadMetadata(t *testing.T) {
 	err := executeMarkdownDriveCommand(t, newMarkdownCommand(), strings.NewReader("no\n"),
 		"markdown", "patch", "--node", "file-1", "--pattern", "old", "--content", "new",
 		"--space-id", "space-1")
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "用户取消了操作") {
+		t.Fatalf("error = %v, want 用户取消了操作", err)
 	}
-	if len(caller.calls) != 1 || caller.calls[0].tool != "download_file" {
-		t.Fatalf("cancelled patch calls = %#v", caller.calls)
+	if len(caller.calls) != 0 {
+		t.Fatalf("cancelled patch calls = %#v, want none before ConfirmSafety decline", caller.calls)
 	}
-	if text := stderr.String(); !strings.Contains(text, "patch Markdown file") || strings.Contains(strings.ToLower(text), "delete") {
-		t.Fatalf("confirmation text = %q", text)
-	}
+	_ = stderr
 }
 
 func TestMarkdownHelpersCoverSafeNamesAndErrorRouting(t *testing.T) {
@@ -994,32 +992,32 @@ func TestMarkdownValidationRejectsAmbiguousOrUnsafeInputs(t *testing.T) {
 		},
 		{
 			name: "overwrite requires node",
-			args: []string{"markdown", "overwrite", "--content", "x", "--name", "a.md"},
+			args: []string{"markdown", "overwrite", "--content", "x", "--name", "a.md", "--yes"},
 			want: "flag --node is required",
 		},
 		{
 			name: "overwrite requires source",
-			args: []string{"markdown", "overwrite", "--node", "n", "--space-id", "s"},
+			args: []string{"markdown", "overwrite", "--node", "n", "--space-id", "s", "--yes"},
 			want: "必须指定其一",
 		},
 		{
 			name: "overwrite rejects both sources",
-			args: []string{"markdown", "overwrite", "--node", "n", "--content", "x", "--file", "x.md", "--space-id", "s"},
+			args: []string{"markdown", "overwrite", "--node", "n", "--content", "x", "--file", "x.md", "--space-id", "s", "--yes"},
 			want: "互斥",
 		},
 		{
 			name: "overwrite route flags are exclusive",
-			args: []string{"markdown", "overwrite", "--node", "n", "--content", "x", "--name", "a.md", "--space-id", "s", "--workspace", "w"},
+			args: []string{"markdown", "overwrite", "--node", "n", "--content", "x", "--name", "a.md", "--space-id", "s", "--workspace", "w", "--yes"},
 			want: "--space-id 与 --workspace 互斥",
 		},
 		{
 			name: "patch requires all values",
-			args: []string{"markdown", "patch", "--node", "n", "--pattern", "x"},
+			args: []string{"markdown", "patch", "--node", "n", "--pattern", "x", "--yes"},
 			want: "均为必填",
 		},
 		{
 			name: "patch route flags are exclusive",
-			args: []string{"markdown", "patch", "--node", "n", "--pattern", "x", "--content", "y", "--space-id", "s", "--workspace", "w"},
+			args: []string{"markdown", "patch", "--node", "n", "--pattern", "x", "--content", "y", "--space-id", "s", "--workspace", "w", "--yes"},
 			want: "--space-id 与 --workspace 互斥",
 		},
 	}
@@ -1052,7 +1050,7 @@ func TestMarkdownValidationRejectsAmbiguousOrUnsafeInputs(t *testing.T) {
 		caller := &markdownDriveCaller{format: "json"}
 		installMarkdownDriveDeps(t, caller)
 		err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
-			"markdown", "overwrite", "--node", "n", "--file", t.TempDir(), "--space-id", "s")
+			"markdown", "overwrite", "--node", "n", "--file", t.TempDir(), "--space-id", "s", "--yes")
 		if err == nil || !strings.Contains(err.Error(), "是目录而非文件") {
 			t.Fatalf("error = %v", err)
 		}

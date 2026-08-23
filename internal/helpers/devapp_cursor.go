@@ -13,26 +13,30 @@
 
 package helpers
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
 
-// devapp_cursor wires cursor pagination as a PASS-THROUGH: the CLI forwards
-// --cursor and --page-size straight into the upstream params, and the upstream
-// returns nextCursor/hasMore in its response. No synthesis, no offset/page
-// translation, no encode/decode in the CLI — the upstream tools own the cursor
-// contract (see docs/cursor-pagination-design.md and docs/upstream-todo.md).
-// Until the upstream tools accept `cursor`/`pageSize` and return `nextCursor`,
-// paging is in the "pending integration" state, same as the precheckOnly
-// rename — no anti-corruption layer bridges the gap.
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
+)
+
+// Cursor pagination is a devapp list tool, not a LeafSpec declaration.
+// List factories compose registerDevAppCursorFlags (PostMount) with
+// devAppCallCursor (Call). LeafSpec itself has no Cursor field and does not
+// list --cursor/--page-size in Flags.
+//
+// Semantics stay PASS-THROUGH: the CLI forwards cursor/pageSize into upstream
+// params and the upstream returns nextCursor/hasMore. No synthesis, no
+// offset/page translation — see docs/cursor-pagination-design.md.
 
 // registerDevAppCursorFlags adds the two cursor flags every list/search command
 // exposes. pageSize defaults to 20.
 func registerDevAppCursorFlags(cmd *cobra.Command) {
-	cmd.Flags().String("cursor", "", "游标令牌：首次查询留空，续翻传上次出参的 nextCursor")
+	cmd.Flags().String("cursor", "", "游标令牌：首次查询留空，续翻传上次 meta.pagination.next_token")
 	cmd.Flags().Int("page-size", 20, "单页条数，默认 20")
 }
 
 // devAppApplyCursorParams forwards cursor/pageSize into params as-is. cursor is
-// only set when non-empty (first page omits it).
+// only set when non-empty (first page omits it). size < 1 floors to 20.
 func devAppApplyCursorParams(cmd *cobra.Command, params map[string]any) {
 	if cur := devAppStringFlag(cmd, "cursor"); cur != "" {
 		params["cursor"] = cur
@@ -42,4 +46,20 @@ func devAppApplyCursorParams(cmd *cobra.Command, params map[string]any) {
 		size = 20
 	}
 	params["pageSize"] = size
+}
+
+// devAppCallCursor is the list execution body: apply cursor params, then run.
+func devAppCallCursor(runner executor.Runner) func(*cobra.Command, string, map[string]any) error {
+	return func(cmd *cobra.Command, tool string, params map[string]any) error {
+		devAppApplyCursorParams(cmd, params)
+		return runDevAppTool(runner, cmd, tool, params)
+	}
+}
+
+// devAppMetaCursor is PostMount for list leaves: surface meta + cursor flags.
+func devAppMetaCursor(tool string) func(*cobra.Command) {
+	return func(cmd *cobra.Command) {
+		devAppLeafMeta(cmd, tool)
+		registerDevAppCursorFlags(cmd)
+	}
 }

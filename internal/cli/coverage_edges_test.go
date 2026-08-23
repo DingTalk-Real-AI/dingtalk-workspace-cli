@@ -5,129 +5,26 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
-
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
 func TestCrossPlatformCoverageCanonicalCommandsAndFlags(t *testing.T) {
-	mcp := NewMCPCommand(t.Context(), nil, nil, nil)
+	mcp := NewMCPCommand()
 	mcp.SetOut(&bytes.Buffer{})
 	if err := mcp.Execute(); err != nil {
 		t.Fatal(err)
 	}
-
-	schema := map[string]any{"properties": map[string]any{
-		"str":     map[string]any{"type": "string", "description": " text "},
-		"enum":    map[string]any{"enum": []any{"a"}},
-		"int":     map[string]any{"type": "integer"},
-		"num":     map[string]any{"type": "number"},
-		"bool":    map[string]any{"type": "boolean"},
-		"object":  map[string]any{"type": "object"},
-		"strings": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-		"enums":   map[string]any{"type": "array", "items": map[string]any{"enum": []any{"x"}}},
-		"ints":    map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
-		"nums":    map[string]any{"type": "array", "items": map[string]any{"type": "number"}},
-		"bools":   map[string]any{"type": "array", "items": map[string]any{"type": "boolean"}},
-		"objects": map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-		"unknown": map[string]any{"type": "future"},
-		"array":   map[string]any{"type": "array"},
-		"invalid": "not schema",
-	}}
-	specs := BuildFlagSpecs(schema, map[string]CLIFlagHint{
-		"str":  {Alias: "string-alias", Shorthand: "s"},
-		"int":  {Alias: "int-alias", Shorthand: "i"},
-		"num":  {Alias: "num-alias", Shorthand: "n"},
-		"bool": {Alias: "bool-alias", Shorthand: "b"},
-	})
-	if len(specs) != 13 {
-		t.Fatalf("flag specs = %d, want 13", len(specs))
-	}
-	if BuildFlagSpecs(nil, nil) != nil || BuildFlagSpecs(map[string]any{}, nil) != nil {
-		t.Fatal("missing properties produced flag specs")
-	}
-	cmd := &cobra.Command{Use: "flags"}
-	cmd.Flags().String("occupied", "", "")
-	cmd.Flags().StringP("short", "s", "", "")
-	specs = append(specs,
-		FlagSpec{PropertyName: "skip", FlagName: "json", Kind: flagString},
-		FlagSpec{PropertyName: "same", FlagName: "same", Alias: "same", Kind: flagString},
-		FlagSpec{PropertyName: "occupied", FlagName: "occupied", Kind: flagString},
-		FlagSpec{PropertyName: "default", FlagName: "default", Kind: flagString},
-	)
-	applyFlagSpecs(cmd, specs)
-	applyFlagSpecs(cmd, []FlagSpec{{PropertyName: "array-alias", FlagName: "array-alias", Alias: "array-hidden", Kind: flagStringArray}})
-	for _, name := range []string{"str", "string-alias", "int", "int-alias", "num", "num-alias", "bool", "bool-alias", "strings", "ints", "nums", "bools", "objects", "array", "default"} {
-		if cmd.Flags().Lookup(name) == nil {
-			t.Fatalf("flag %q not registered", name)
-		}
-	}
-	if nested, ok := nestedMap(map[string]any{"x": map[string]any{"y": true}}, "x"); !ok || !nested["y"].(bool) {
-		t.Fatal("nested map lookup failed")
-	}
-	if _, ok := nestedMap(nil, "x"); ok {
-		t.Fatal("nil nested map matched")
-	}
-	if _, ok := nestedMap(map[string]any{}, "x"); ok {
-		t.Fatal("missing nested map matched")
-	}
-	if _, ok := nestedMap(map[string]any{"x": 1}, "x"); ok {
-		t.Fatal("non-map nested value matched")
-	}
-	if schemaDescription(map[string]any{"description": 1}) != "" {
-		t.Fatal("non-string description rendered")
-	}
 }
 
-func TestCrossPlatformCoverageLoaderAndPriorityEdges(t *testing.T) {
-	for _, reason := range []CatalogDegradedReason{DegradedUnauthenticated, DegradedMarketUnreachable, DegradedRuntimeAllFailed, "other"} {
-		degraded := newCatalogDegraded(reason, 2)
-		if degraded.Error() == "" || degradedHint(reason, 2) == "" || degraded.Hint == "" {
-			t.Fatalf("degraded %q = %#v", reason, degraded)
-		}
-	}
-	catalog := Catalog{Products: []CanonicalProduct{{ID: "product", Tools: []ToolDescriptor{{RPCName: "tool"}}}}}
-	product, ok := catalog.FindProduct("product")
-	if !ok {
-		t.Fatal("product not found")
-	}
-	if _, ok := catalog.FindProduct("missing"); ok {
-		t.Fatal("missing product found")
-	}
-	if _, ok := product.FindTool("tool"); !ok {
-		t.Fatal("tool not found")
-	}
-	if _, ok := product.FindTool("missing"); ok {
-		t.Fatal("missing tool found")
-	}
-	if got, err := (StaticLoader{Catalog: catalog}).Load(t.Context()); err != nil || len(got.Products) != 1 {
-		t.Fatalf("static load = %#v, %v", got, err)
-	}
-	failure := errors.New("load failed")
-	if got, err := CatalogLoaderFrom(catalog, failure).Load(t.Context()); !errors.Is(err, failure) || len(got.Products) != 1 {
-		t.Fatalf("preloaded load = %#v, %v", got, err)
-	}
-	loader := NewEnvironmentLoader()
-	if got, err := loader.Load(t.Context()); err != nil || len(got.Products) != 0 {
-		t.Fatalf("environment load = %#v, %v", got, err)
-	}
+func TestCrossPlatformCoveragePriorityEdges(t *testing.T) {
 	cmd := &cobra.Command{Use: "priority"}
 	SetOverridePriority(cmd, 42)
 	if got := OverridePriority(cmd); got != 42 {
 		t.Fatalf("priority = %d", got)
-	}
-	original := edition.Get()
-	edition.Override(&edition.Hooks{IsEmbedded: true})
-	t.Cleanup(func() { edition.Override(original) })
-	for _, reason := range []CatalogDegradedReason{DegradedUnauthenticated, DegradedMarketUnreachable, DegradedRuntimeAllFailed} {
-		if degradedHint(reason, 2) == "" {
-			t.Fatalf("embedded degraded hint %q is empty", reason)
-		}
 	}
 }
 
@@ -214,13 +111,29 @@ func TestCrossPlatformCoverageSchemaValidationCompleteMatrix(t *testing.T) {
 
 func TestCrossPlatformCoverageStdinCompleteMatrix(t *testing.T) {
 	original := os.Stdin
-	t.Cleanup(func() { os.Stdin = original })
+	// Restore/close before t.TempDir cleanup. defer runs on return and on
+	// t.Fatal (Goexit); open Windows handles otherwise block RemoveAll.
+	defer func() {
+		if current := os.Stdin; current != nil && current != original {
+			os.Stdin = original
+			_ = current.Close()
+			return
+		}
+		os.Stdin = original
+	}()
+	setStdin := func(f *os.File) {
+		if prev := os.Stdin; prev != nil && prev != original {
+			_ = prev.Close()
+		}
+		os.Stdin = f
+	}
+
 	closed, err := os.CreateTemp(t.TempDir(), "closed")
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = closed.Close()
-	os.Stdin = closed
+	setStdin(closed)
 	if StdinIsPipe() {
 		t.Fatal("closed stdin reported as pipe")
 	}
@@ -236,7 +149,7 @@ func TestCrossPlatformCoverageStdinCompleteMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _ = stdin.Seek(0, 0)
-	os.Stdin = stdin
+	setStdin(stdin)
 	if !StdinIsPipe() {
 		t.Fatal("regular file stdin did not report pipe")
 	}
@@ -270,8 +183,7 @@ func TestCrossPlatformCoverageStdinCompleteMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer largeStdin.Close()
-	os.Stdin = largeStdin
+	setStdin(largeStdin)
 	if _, err := readStdinBounded(); err == nil {
 		t.Fatal("oversized stdin accepted")
 	}
