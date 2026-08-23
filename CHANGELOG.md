@@ -823,7 +823,6 @@ automation, and deterministic Markdown test coverage on top of the
 ### Added
 
 - **HR Brain (`dws hrbrain`) command surface** — adds 11 commands across three groups: `talent-pool list/detail/employees` for talent pool browsing, `profile metadata/query/labels/career/performance` for employee profile data, and `search employees/employees-structured/fields` for basic and advanced (rule-based) people search. Ships with bundled mono/multi Skill guidance (`dingtalk-hrbrain`, `cli_version: ">=1.0.54"`); `search employees-structured` validates `--origin-json` as a JSON object and `--fields` as a JSON array before dispatch.
-- **`dws chat message reply --at-users`** (#359) — quote replies can now @ comma-separated userId or openDingTalkId values. User IDs are resolved through the existing contact lookup, matching reply-text placeholders are normalized to `<@openDingTalkId>`, and the current `send_personal_message` handler forwards the resolved list as `atOpenDingTalkIds`.
 
 ### Changed
 
