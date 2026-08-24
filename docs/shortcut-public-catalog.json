@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-21T10:07:48.251313",
-  "count": 418,
+  "generated_at": "2026-08-24T12:22:05.108140",
+  "count": 426,
   "results": [
     {
       "suite": "semantic",
@@ -280,6 +280,76 @@
       "status": "reviewed_available",
       "disposition": "schema_leaf",
       "semantic_delta": "更新仪表盘配置的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "为指定 Base 创建数据源表并触发首次全量同步，返回新建表 ID 和同步任务 ID。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-get-config",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取已有数据源表的同步配置详情（源配置、字段选择、自动同步状态）的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-get-fields",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "获取指定数据源来源的可同步字段列表（字段 ID/名称/类型/是否主键），用于决定 field-ids。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-list-sources",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "列出指定 Base 下可用的数据源条目（OA 审批模板等），提取 processCode/name/iconUrl/url 用于 sourceConfig。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-sync",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "对已有数据源表触发手动同步（单次最多 5 张），仅触发即返回同步任务 ID。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-sync-status",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "批量查询数据源同步任务状态（RUNNING/FINISHED/FAILED），与 sync/create/update 触发后配对使用。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新已有数据源表的同步配置并触发一次同步；不改配置可只切换 auto 开关或 field-ids。",
       "availability": "available"
     },
     {
@@ -3633,6 +3703,16 @@
       "status": "reviewed_available",
       "disposition": "semantic_adapter",
       "semantic_delta": "按关键字搜索可发起审批定义，严格要求显式 result 数组和稳定 processCode；已完成已知非空与保证零命中证明。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "pat",
+      "command": "+browser-policy",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "在隔离本地策略文件上提供显式确认、无写入请求预览、同目标磁盘读回和不暴露 agent identity 的统一结果；exact 写入与清理已通过。",
       "availability": "available"
     },
     {

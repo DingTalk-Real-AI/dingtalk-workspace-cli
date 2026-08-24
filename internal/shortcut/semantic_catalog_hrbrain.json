@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "service": "hrbrain",
+  "default_availability": "unavailable",
+  "shortcuts": {
+    "+list-pools": {"disposition":"semantic_adapter","semantic_delta":"classified=adapter_business_service；raw 明确 success=true/result=null，exact fail-closed，无法证明列表成功或合法空。","risk":"read","public":false,"reviewed":true},
+    "+get-pool": {"disposition":"schema_leaf","semantic_delta":"classified=tenant_fixture；exact/raw 到达同一远端操作与错误，但缺少安全非空 pool fixture，不能验证同 ID 详情。","risk":"read","public":false,"reviewed":true},
+    "+list-pool-employees": {"disposition":"semantic_adapter","semantic_delta":"classified=tenant_fixture；exact/raw 到达同一远端操作与错误，但缺少安全非空人才池与员工 fixture，分页合同未获 live 证明。","risk":"read","public":false,"reviewed":true},
+    "+profile-metadata": {"disposition":"semantic_adapter","semantic_delta":"classified=adapter_business_service；exact/raw 的远端 server、operation、upstream code 一致，档案元数据能力仍未解锁。","risk":"read","public":false,"reviewed":true},
+    "+query-profile": {"disposition":"semantic_adapter","semantic_delta":"classified=adapter_business_service；exact/raw 的远端 server、operation、upstream code 一致，档案查询业务链仍未解锁。","risk":"read","public":false,"reviewed":true},
+    "+profile-labels": {"disposition":"semantic_adapter","semantic_delta":"classified=adapter_business_service；raw 明确 success=true/result=null，exact fail-closed，不能把未知结果投成空标签。","risk":"read","public":false,"reviewed":true},
+    "+profile-career": {"disposition":"schema_leaf","semantic_delta":"classified=adapter_business_service；exact/raw 的远端 server、operation、upstream code 一致，职业历程读取仍未解锁。","risk":"read","public":false,"reviewed":true},
+    "+profile-performance": {"disposition":"schema_leaf","semantic_delta":"classified=adapter_business_service；exact/raw 的远端 server、operation、upstream code 一致，且敏感绩效数据缺少受控 live 证明。","risk":"read","public":false,"reviewed":true},
+    "+search-employees": {"disposition":"semantic_adapter","semantic_delta":"classified=adapter_business_service；exact/raw 的远端 server、operation、upstream code 一致，无法完成已知非空与保证零命中证明。","risk":"read","public":false,"reviewed":true},
+    "+search-employees-structured": {"disposition":"semantic_adapter","semantic_delta":"classified=adapter_business_service；exact/raw 的远端 server、operation、upstream code 一致，字段发现与结构化搜索链仍未解锁。","risk":"read","public":false,"reviewed":true},
+    "+search-fields": {"disposition":"semantic_adapter","semantic_delta":"classified=adapter_business_service；无资源输入的 exact/raw 仍返回同一远端错误，字段发现能力未解锁。","risk":"read","public":false,"reviewed":true}
+  }
+}

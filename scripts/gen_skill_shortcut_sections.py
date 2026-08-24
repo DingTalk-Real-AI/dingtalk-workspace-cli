@@ -41,6 +41,7 @@ SERVICE_TO_SKILL = {
     "mail": ROOT / "skills" / "multi" / "dingtalk-mail" / "SKILL.md",
     "minutes": ROOT / "skills" / "multi" / "dingtalk-minutes" / "SKILL.md",
     "oa": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "oa.md",
+    "pat": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "pat.md",
     "report": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "report.md",
     "sheet": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "sheet.md",
     "todo": ROOT / "skills" / "multi" / "dingtalk-todo" / "SKILL.md",
