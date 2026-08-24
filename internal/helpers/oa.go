@@ -1937,7 +1937,11 @@ func newOaCommand() *cobra.Command {
 			if !commandDryRun(cmd) {
 				yes, _ := cmd.Flags().GetBool("yes")
 				if !yes {
-					return fmt.Errorf("发起审批实例会创建真实业务数据；请先核对参数，然后添加 --yes 确认执行")
+					return apperrors.NewValidation(
+						"发起审批实例会创建真实业务数据；请先核对参数，然后添加 --yes 确认执行",
+						apperrors.WithReason("confirmation_required"),
+						apperrors.WithHint("确认审批模板、发起人、表单值、审批人与抄送人后，以相同参数追加 --yes"),
+					)
 				}
 			}
 			var request map[string]any

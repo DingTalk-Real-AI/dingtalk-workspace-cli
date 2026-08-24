@@ -1229,7 +1229,11 @@ func newMailCommand() *cobra.Command {
 			}
 			yes, _ := cmd.Flags().GetBool("yes")
 			if !yes && !commandDryRun(cmd) {
-				return fmt.Errorf("此操作将删除会话且不可撤销，请添加 --yes 确认执行")
+				return apperrors.NewValidation(
+					"此操作将删除会话且不可撤销，请添加 --yes 确认执行",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("确认邮箱和会话 ID 后，以相同参数追加 --yes"),
+				)
 			}
 			return callMCPTool("trash_mailbox_thread", map[string]any{
 				"email": mustGetFlag(cmd, "email"),
@@ -1260,7 +1264,11 @@ func newMailCommand() *cobra.Command {
 			}
 			yes, _ := cmd.Flags().GetBool("yes")
 			if !yes && !commandDryRun(cmd) {
-				return fmt.Errorf("此操作将批量删除会话且不可撤销，请添加 --yes 确认执行")
+				return apperrors.NewValidation(
+					"此操作将批量删除会话且不可撤销，请添加 --yes 确认执行",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("确认邮箱和全部会话 ID 后，以相同参数追加 --yes"),
+				)
 			}
 			ids := parseRecipients(mustGetFlag(cmd, "ids"))
 			if len(ids) > 100 {
@@ -2465,7 +2473,11 @@ internetMessageId 来源：message send / draft send / message reply / message r
 			}
 			yes, _ := cmd.Flags().GetBool("yes")
 			if !yes && !deps.Caller.DryRun() {
-				return fmt.Errorf("此操作为危险操作，需要传入 --yes 确认执行")
+				return apperrors.NewValidation(
+					"此操作为危险操作，需要传入 --yes 确认执行",
+					apperrors.WithReason("confirmation_required"),
+					apperrors.WithHint("确认发件邮箱、邮件 ID 和主题后，以相同参数追加 --yes"),
+				)
 			}
 			return callMCPTool("recall_sent_message", map[string]any{
 				"email":   mustGetFlag(cmd, "email"),

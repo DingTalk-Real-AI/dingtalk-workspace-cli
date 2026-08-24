@@ -1,0 +1,13 @@
+{
+  "overwrite": false,
+  "source": {
+    "schemaVersion": "1.0",
+    "catalogVersion": "dml-v1",
+    "nodes": [
+      {
+        "id": "fixture-node",
+        "type": "text"
+      }
+    ]
+  }
+}

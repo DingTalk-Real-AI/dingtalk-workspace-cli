@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -1100,6 +1101,29 @@ func TestMarkdownPatchPreviewAndRegexErrors(t *testing.T) {
 			t.Fatalf("invalid regex made extra calls: %#v", caller.calls)
 		}
 	})
+}
+
+func TestCrossPlatformCoverageMarkdownPatchWithoutYesReadsButNeverUploads(t *testing.T) {
+	caller := &markdownDriveCaller{
+		format: "json",
+		steps:  []markdownDriveStep{{text: `{"downloadUrl":"https://download.test/current.md","fileName":"current.md"}`}},
+	}
+	installMarkdownDriveDeps(t, caller)
+	installMarkdownHTTPGet(t, "old value")
+	httpPutFile = func(context.Context, string, map[string]string, string, int64) error {
+		t.Fatal("unconfirmed Markdown patch attempted upload")
+		return nil
+	}
+
+	err := executeMarkdownDriveCommand(t, newMarkdownCommand(), nil,
+		"markdown", "patch", "--node", "node-1", "--pattern", "old", "--content", "new", "--space-id", "space-1")
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Reason != "confirmation_required" {
+		t.Fatalf("unconfirmed Markdown patch error = %#v, want confirmation_required", err)
+	}
+	if len(caller.calls) != 0 {
+		t.Fatalf("unconfirmed Markdown patch crossed the transport boundary: %#v", caller.calls)
+	}
 }
 
 func TestMarkdownOverwritePreservesRemoteName(t *testing.T) {
