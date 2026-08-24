@@ -10,6 +10,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ### Added
 
+- **Sheet floating images** — supports creating or replacing a floating image directly from a local file with `create-float-image --file` and `update-float-image --file`, while retaining the existing `--src` workflow.
+
 - **Drive permission get-setting** (#1056) — adds `dws drive permission get-setting --node <ID>` to inspect a document-space node's permission settings (permission mode, share scope, and permission policies) in one call.
 
 - **Whiteboard shortcuts** (#1082) — adds strict query and confirmed update workflows with stable-target receipts and exact readback verification.
