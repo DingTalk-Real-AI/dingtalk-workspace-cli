@@ -156,6 +156,11 @@ func TestCrossPlatformCoverageProductCommandExamplesAreExecutableContracts(t *te
 	InitDeps(caller)
 	deps.Out.w = io.Discard
 	deps.Out.errW = io.Discard
+	// ExecuteContext invokes Cobra's Windows mousetrap hook on every example and
+	// malformed variant. The hook enumerates processes to detect Explorer
+	// launches, which is unrelated to this contract harness and becomes
+	// prohibitively expensive under Windows coverage instrumentation.
+	testseam.Swap(t, &cobra.MousetrapHelpText, "")
 	// Product examples execute real RunE paths; whiteboard insert retries must
 	// not burn the suite timeout on real sleep (race CI uses a 12m package cap).
 	// Sheet export uses helperAfter for progressive polling, so keep that clock
