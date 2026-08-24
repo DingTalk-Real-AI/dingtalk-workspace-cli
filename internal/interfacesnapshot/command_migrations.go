@@ -170,8 +170,9 @@ func (m CommandMigration) validate() error {
 			return err
 		}
 	}
-	if !m.Legacy.Before.Present || !m.Legacy.Before.Runnable || m.Legacy.Before.Hidden ||
-		!m.Legacy.After.Present || !m.Legacy.After.Runnable {
+	if m.Kind != CommandMigrationAvailability &&
+		(!m.Legacy.Before.Present || !m.Legacy.Before.Runnable || m.Legacy.Before.Hidden ||
+			!m.Legacy.After.Present || !m.Legacy.After.Runnable) {
 		return fmt.Errorf("legacy command must remain runnable and start visible")
 	}
 	if m.Kind != CommandMigrationAvailability &&
@@ -235,8 +236,8 @@ func (m CommandMigration) validate() error {
 			return fmt.Errorf("flag_extraction legacy_flag no_opt must equal replacement constant %q", wantNoOpt)
 		}
 	case CommandMigrationAvailability:
-		if !m.Legacy.After.Hidden {
-			return fmt.Errorf("schema_availability_hardening legacy command must migrate exactly from visible to hidden")
+		if !isVisibleToHiddenAvailabilityMigration(m) && !isCompatibilityVisibleAvailabilityMigration(m) {
+			return fmt.Errorf("schema_availability_hardening legacy command must migrate exactly from visible to hidden or remain compatibility-visible")
 		}
 		if m.LegacyFlag != (CommandMigrationFlag{}) {
 			return fmt.Errorf("schema_availability_hardening must not declare legacy_flag")
@@ -482,17 +483,42 @@ func evaluateCommandMigrationLifecycle(
 	for _, approved := range authority.Migrations {
 		basePhase := matchCommandMigrationPhase(mergeBase, approved)
 		wantBase := commandMigrationBefore
-		if approved.State == CommandMigrationConsumed {
+		if approved.State == CommandMigrationConsumed && !isCompatibilityVisibleAvailabilityMigration(approved) {
 			wantBase = commandMigrationAfter
 		}
 		if basePhase != wantBase {
 			return nil, fmt.Errorf("approved command migration %s is %s in %s, want exact %s state for %s", approved.displayKey(), basePhase, label, wantBase, approved.State)
 		}
 		proposed, exists := candidateByKey[approved.key()]
-		if exists && !sameCommandMigrationApproval(approved, proposed) {
+		if exists && !sameCommandMigrationApproval(approved, proposed) &&
+			!isPendingAvailabilityCompatibilityRefinement(approved, proposed) {
 			return nil, fmt.Errorf("candidate modified base-owned command migration %s", approved.displayKey())
 		}
 		currentPhase := matchCommandMigrationPhase(current, approved)
+		if isCompatibilityVisibleAvailabilityMigration(approved) {
+			if currentPhase != commandMigrationBefore {
+				return nil, fmt.Errorf("candidate drifted from compatibility-visible command migration %s", approved.displayKey())
+			}
+			if !exists {
+				return nil, fmt.Errorf("candidate must retain compatibility-visible command migration %s", approved.displayKey())
+			}
+			switch approved.State {
+			case CommandMigrationPending:
+				switch proposed.State {
+				case CommandMigrationPending:
+					continue
+				case CommandMigrationConsumed:
+					authorizations = append(authorizations, approved)
+					continue
+				}
+			case CommandMigrationConsumed:
+				if proposed.State != CommandMigrationConsumed {
+					return nil, fmt.Errorf("candidate changed consumed compatibility-visible command migration %s back to pending", approved.displayKey())
+				}
+				authorizations = append(authorizations, approved)
+				continue
+			}
+		}
 		switch approved.State {
 		case CommandMigrationPending:
 			if !exists {
@@ -563,6 +589,28 @@ func sameCommandMigrationApproval(left, right CommandMigration) bool {
 	left.State = ""
 	right.State = ""
 	return reflect.DeepEqual(left, right)
+}
+
+func isVisibleToHiddenAvailabilityMigration(migration CommandMigration) bool {
+	return migration.Kind == CommandMigrationAvailability &&
+		migration.Legacy.Before == (CommandMigrationState{Present: true, Runnable: true}) &&
+		migration.Legacy.After == (CommandMigrationState{Present: true, Runnable: true, Hidden: true})
+}
+
+func isCompatibilityVisibleAvailabilityMigration(migration CommandMigration) bool {
+	visible := CommandMigrationState{Present: true, Runnable: true}
+	return migration.Kind == CommandMigrationAvailability &&
+		migration.Legacy.Before == visible && migration.Legacy.After == visible
+}
+
+func isPendingAvailabilityCompatibilityRefinement(approved, proposed CommandMigration) bool {
+	if approved.State != CommandMigrationPending || proposed.State != CommandMigrationPending ||
+		!isVisibleToHiddenAvailabilityMigration(approved) ||
+		!isCompatibilityVisibleAvailabilityMigration(proposed) {
+		return false
+	}
+	proposed.Legacy.After = approved.Legacy.After
+	return reflect.DeepEqual(approved, proposed)
 }
 
 func matchCommandMigrationPhase(snapshot Snapshot, migration CommandMigration) commandMigrationPhase {

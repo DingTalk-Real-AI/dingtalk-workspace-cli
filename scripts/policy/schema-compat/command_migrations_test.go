@@ -74,6 +74,16 @@ func TestCrossPlatformCoverageSchemaAvailabilityMigrationNormalizesOnlyAvailabil
 		!strings.Contains(err.Error(), "does not match Schema availability") {
 		t.Fatalf("wrong availability error = %v", err)
 	}
+
+	compatibilityVisible := migration
+	compatibilityVisible.Legacy.After = compatibilityVisible.Legacy.Before
+	if _, err := normalizeSchemaCommandMigrations(baseline, current, []interfacesnapshot.CommandMigration{compatibilityVisible}); err != nil {
+		t.Fatalf("compatibility-visible availability hardening must authorize the exact Schema transition: %v", err)
+	}
+	if _, err := normalizeSchemaCommandMigrations(baseline, baseline, []interfacesnapshot.CommandMigration{compatibilityVisible}); err == nil ||
+		!strings.Contains(err.Error(), "does not match Schema availability") {
+		t.Fatalf("compatibility-visible receipt must not authorize unchanged Schema availability: %v", err)
+	}
 }
 
 func TestCrossPlatformCoverageSchemaCommandMigrationsAuthorizeOnlyExactProjection(t *testing.T) {

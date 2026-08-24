@@ -287,6 +287,11 @@ func TestCrossPlatformCoverageSchemaAvailabilityMigrationLifecycle(t *testing.T)
 	}
 
 	valid := pending.Migrations[0]
+	compatibilityVisible := cloneCommandMigration(valid)
+	compatibilityVisible.Legacy.After = compatibilityVisible.Legacy.Before
+	if err := compatibilityVisible.validate(); err != nil {
+		t.Fatalf("compatibility-visible availability migration must validate: %v", err)
+	}
 	for _, test := range []struct {
 		name   string
 		mutate func(*CommandMigration)
@@ -294,7 +299,7 @@ func TestCrossPlatformCoverageSchemaAvailabilityMigrationLifecycle(t *testing.T)
 	}{
 		{"legacy path", func(m *CommandMigration) { m.Legacy.Command = "dws devapp *" }, "legacy must be an exact"},
 		{"replacement", func(m *CommandMigration) { m.Replacement.Command = "dws devapp other" }, "must not declare replacement"},
-		{"visible after", func(m *CommandMigration) { m.Legacy.After.Hidden = false }, "visible to hidden"},
+		{"absent after", func(m *CommandMigration) { m.Legacy.After = CommandMigrationState{} }, "visible to hidden or remain compatibility-visible"},
 		{"legacy flag", func(m *CommandMigration) { m.LegacyFlag.Name = "legacy" }, "must not declare legacy_flag"},
 		{"missing availability", func(m *CommandMigration) { m.Schema.Availability = nil }, "requires availability"},
 		{"wrong availability", func(m *CommandMigration) { m.Schema.Availability.After = "available" }, "requires availability"},
@@ -329,6 +334,58 @@ func TestCrossPlatformCoverageSchemaAvailabilityMigrationLifecycle(t *testing.T)
 	moveSchema.Availability = &CommandAvailabilityChange{Before: "available", After: "unavailable"}
 	if err := moveSchema.validate(CommandMigrationMove); err == nil || !strings.Contains(err.Error(), "must not declare schema availability") {
 		t.Fatalf("ordinary move availability error = %v", err)
+	}
+}
+
+func TestCrossPlatformCoverageCompatibilityVisibleAvailabilityMigrationLifecycle(t *testing.T) {
+	classicPending := availabilityCommandMigrationManifest(CommandMigrationPending)
+	steadyPending := compatibilityVisibleAvailabilityCommandMigrationManifest(CommandMigrationPending)
+	steadyConsumed := compatibilityVisibleAvailabilityCommandMigrationManifest(CommandMigrationConsumed)
+	empty := CommandMigrationManifest{Version: CommandMigrationManifestVersion, Migrations: []CommandMigration{}}
+	visible := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws devapp"),
+		testCommand("dws devapp +event-list"),
+	)
+	hidden := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws devapp"),
+		Command{Path: "dws devapp +event-list", Runnable: true, Hidden: true},
+	)
+	references := map[string]Snapshot{"merge-base": visible, "stable": visible}
+
+	if got, err := AuthorizeCommandMigrations(visible, references, classicPending, steadyPending); err != nil || len(got) != 0 {
+		t.Fatalf("pending compatibility refinement authorizations=%#v error=%v", got, err)
+	}
+	if got, err := AuthorizeCommandMigrations(visible, references, steadyPending, steadyPending); err != nil || len(got) != 0 {
+		t.Fatalf("pending compatibility receipt authorizations=%#v error=%v", got, err)
+	}
+	if got, err := AuthorizeCommandMigrations(visible, references, steadyPending, steadyConsumed); err != nil || len(got) != 1 {
+		t.Fatalf("consumed compatibility receipt authorizations=%#v error=%v", got, err)
+	}
+	if got, err := AuthorizeCommandMigrations(visible, references, steadyConsumed, steadyConsumed); err != nil || len(got) != 1 {
+		t.Fatalf("retained consumed compatibility receipt authorizations=%#v error=%v", got, err)
+	}
+	if got, err := AuthorizeCommandMigrations(visible, references, empty, steadyPending); err != nil || len(got) != 0 {
+		t.Fatalf("candidate-added compatibility receipt authorizations=%#v error=%v", got, err)
+	}
+
+	modified := compatibilityVisibleAvailabilityCommandMigrationManifest(CommandMigrationPending)
+	modified.Migrations[0].Reason = "Changed reason."
+	if _, err := AuthorizeCommandMigrations(visible, references, classicPending, modified); err == nil || !strings.Contains(err.Error(), "modified base-owned") {
+		t.Fatalf("modified compatibility refinement error=%v", err)
+	}
+	if _, err := AuthorizeCommandMigrations(visible, references, classicPending, steadyConsumed); err == nil || !strings.Contains(err.Error(), "modified base-owned") {
+		t.Fatalf("refinement and consumption in one change error=%v", err)
+	}
+	if _, err := AuthorizeCommandMigrations(hidden, references, steadyPending, steadyPending); err == nil || !strings.Contains(err.Error(), "drifted from compatibility-visible") {
+		t.Fatalf("hidden compatibility command error=%v", err)
+	}
+	if _, err := AuthorizeCommandMigrations(visible, references, steadyConsumed, empty); err == nil || !strings.Contains(err.Error(), "must retain compatibility-visible") {
+		t.Fatalf("removed consumed compatibility receipt error=%v", err)
+	}
+	if _, err := AuthorizeCommandMigrations(visible, references, steadyConsumed, steadyPending); err == nil || !strings.Contains(err.Error(), "back to pending") {
+		t.Fatalf("consumed compatibility receipt reverted error=%v", err)
 	}
 }
 
@@ -817,6 +874,12 @@ func availabilityCommandMigrationManifest(state string) CommandMigrationManifest
 			Reason: "Fail closed until terminal pagination evidence is available.",
 		}},
 	}
+}
+
+func compatibilityVisibleAvailabilityCommandMigrationManifest(state string) CommandMigrationManifest {
+	manifest := availabilityCommandMigrationManifest(state)
+	manifest.Migrations[0].Legacy.After = manifest.Migrations[0].Legacy.Before
+	return manifest
 }
 
 func modifiedCommandManifest(source CommandMigrationManifest) CommandMigrationManifest {
