@@ -544,7 +544,8 @@ jobs:
           - app-schema
           - app-a-b
           - app-c-a-l
-          - app-c-m-r
+          - app-c-m-o
+          - app-c-p-r
           - app-c-s-z
           - app-c-other
           - app-d-r
@@ -692,7 +693,8 @@ jobs:
           - app-schema
           - app-a-b
           - app-c-a-l
-          - app-c-m-r
+          - app-c-m-o
+          - app-c-p-r
           - app-c-s-z
           - app-c-other
           - app-d-r
