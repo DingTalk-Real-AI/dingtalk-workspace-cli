@@ -2058,8 +2058,10 @@ var WorkflowList = shortcut.Shortcut{
 }
 
 // workflowListProject reshapes the raw list_workflows response into a clean
-// workflow list ({workflowId, name, status/enabled}) — output-projection
-// clean output projection. Only an explicit array can establish success.
+// workflow list ({flowId, name, status/enabled}) — output-projection
+// clean output projection. The identifier is emitted as flowId to align with
+// the server-side searchFlows payload; legacy workflowId-style keys are still
+// accepted as input. Only an explicit array can establish success.
 func workflowListProject(data map[string]any) ([]map[string]any, error) {
 	raw, err := workflowListResolveList(data)
 	if err != nil {
@@ -2072,8 +2074,8 @@ func workflowListProject(data map[string]any) ([]map[string]any, error) {
 			return nil, fmt.Errorf("list_workflows response item %d must be an object, got %T", index, item)
 		}
 		row := map[string]any{}
-		if v, ok := workflowListFirst(m, "workflowId", "workflow_id", "id"); ok {
-			row["workflowId"] = v
+		if v, ok := workflowListFirst(m, "flowId", "workflowId", "workflow_id", "id"); ok {
+			row["flowId"] = v
 		}
 		if v, ok := workflowListFirst(m, "name", "workflowName", "title"); ok {
 			row["name"] = v
@@ -2081,8 +2083,8 @@ func workflowListProject(data map[string]any) ([]map[string]any, error) {
 		if v, ok := workflowListFirst(m, "status", "enabled", "isEnabled", "state"); ok {
 			row["status"] = v
 		}
-		if _, ok := row["workflowId"]; !ok {
-			return nil, fmt.Errorf("list_workflows response item %d is missing workflowId", index)
+		if _, ok := row["flowId"]; !ok {
+			return nil, fmt.Errorf("list_workflows response item %d is missing flowId", index)
 		}
 		out = append(out, row)
 	}

@@ -73,9 +73,13 @@ func TestCrossPlatformCoverageAITableProjectionValidAndMissingIdentityShapes(t *
 	if err != nil || len(forms) != 1 {
 		t.Fatalf("form projection = %#v, %v", forms, err)
 	}
-	workflows, err := workflowListProject(map[string]any{"workflows": []any{map[string]any{"workflowId": "w"}}})
-	if err != nil || len(workflows) != 1 {
+	workflows, err := workflowListProject(map[string]any{"workflows": []any{map[string]any{"flowId": "w"}}})
+	if err != nil || len(workflows) != 1 || workflows[0]["flowId"] != "w" {
 		t.Fatalf("workflow projection = %#v, %v", workflows, err)
+	}
+	legacy, err := workflowListProject(map[string]any{"workflows": []any{map[string]any{"workflowId": "legacy"}}})
+	if err != nil || len(legacy) != 1 || legacy[0]["flowId"] != "legacy" {
+		t.Fatalf("workflow legacy workflowId projection = %#v, %v", legacy, err)
 	}
 }
 
