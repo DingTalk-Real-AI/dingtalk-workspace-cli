@@ -347,6 +347,9 @@ func parseRecordQueryPage(text string) (paging.Page, error) {
 	if response == nil {
 		return paging.Page{}, fmt.Errorf("query_records returned null instead of an object")
 	}
+	if explicitEmptyRecordQueryPage(response) {
+		return paging.Page{Records: []any{}}, nil
+	}
 
 	payload := response
 	if rawData, exists := response["data"]; exists {
@@ -380,6 +383,26 @@ func parseRecordQueryPage(text string) (paging.Page, error) {
 		return paging.Page{}, fmt.Errorf("query_records totalCount: %w", err)
 	}
 	return paging.Page{Records: records, NextCursor: nextCursor, TotalCount: totalCount}, nil
+}
+
+// explicitEmptyRecordQueryPage recognizes the service's reviewed zero-match
+// wire shape. Missing records alone is not enough: only a successful envelope
+// with an empty data object and no error is a terminal empty page.
+func explicitEmptyRecordQueryPage(response map[string]any) bool {
+	if response == nil || response["success"] != true || response["status"] != "success" {
+		return false
+	}
+	payload, ok := response["data"].(map[string]any)
+	if !ok || len(payload) != 0 {
+		return false
+	}
+	if rawError, exists := response["error"]; exists && rawError != nil {
+		errorObject, ok := rawError.(map[string]any)
+		if !ok || len(errorObject) != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func firstNonEmptyString(values map[string]any, keys ...string) string {
@@ -439,8 +462,12 @@ func recordQueryIncompleteError(result paging.Result, pageLimit int) error {
 		incomplete["totalCount"] = *result.TotalCount
 	}
 
+	retryable := true
 	hint := "retry the command; the structured error details preserve fetched records and the retry cursor"
-	if result.StopReason == paging.StopPageLimit {
+	if result.StopReason == paging.StopCursorCycle {
+		retryable = false
+		hint = "do not retry the same query; preserve the incomplete records and report the upstream cursor cycle"
+	} else if result.StopReason == paging.StopPageLimit {
 		hint = "rerun with --page-limit 0 to require a complete result, or resume from details.cursor"
 	}
 	message := fmt.Sprintf("record pagination incomplete after %d successful page(s) and %d fetched record(s)", result.Pages, len(result.Records))
@@ -450,7 +477,7 @@ func recordQueryIncompleteError(result paging.Result, pageLimit int) error {
 		apperrors.WithOrigin("mcp"),
 		apperrors.WithFailureStage("pagination"),
 		apperrors.WithExecutionStarted(true),
-		apperrors.WithRetryable(true),
+		apperrors.WithRetryable(retryable),
 		apperrors.WithReason("pagination_"+string(result.StopReason)),
 		apperrors.WithHint(hint),
 		apperrors.WithDetails(map[string]any{
@@ -697,9 +724,10 @@ func validateAitableArrayDSL(name, raw string) error {
 
 // normalizeViewConfigFilter 将 view config 中的 filter 字段规范化为服务端要求的数组格式。
 // 服务端 POJO 要求 config.filter 为 []FilterRule（JSON array）。
-// 常见错误格式：
-//   - 传了对象 {"operator":"and","operands":[...]} → 自动 wrap 为 [对象]
-//   - 子条件使用 MCP 简写格式 {fieldId,operator,value} → 自动 normalize 为 operands 格式
+// 兼容输入格式：
+//   - 传入单个叶子对象 {"operator":"eq","operands":[...]} → 自动 wrap 为 [对象]
+//   - 叶子条件使用 MCP 简写格式 {fieldId,operator,value} → 自动 normalize 为 operands 格式
+//   - and/or 逻辑组不属于 view filter 契约，由 validateViewConfigFilter 明确拒绝
 func normalizeViewConfigFilter(filterVal any) any {
 	switch v := filterVal.(type) {
 	case []any:
@@ -747,11 +775,11 @@ var knownViewConfigKeys = map[string]bool{
 // 映射到正确的 dws CLI 子命令路径，便于在 normalizeViewConfigBlock 给精准引导。
 // 当用户错把这类 key 塞进 --config 时，CLI 立即提示替代命令而非让 server 静默忽略。
 var viewConfigKeyToAttrSubcmd = map[string]string{
-	"flags":              "dws aitable view lock [--off]（设置/解除锁定）",
-	"frozenColCount":     "dws aitable view update frozen-cols --count N",
-	"cellHeight":         "dws aitable view update row-height --cell-height N",
-	"rowHeightLevel":     "dws aitable view update row-height --cell-height N（请用像素值，不是 level）",
-	"conditionalFormats": "dws aitable view update fill-color-rule --json '[...]'",
+	"flags":              "dws aitable view lock --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID [--off]（设置/解除锁定）",
+	"frozenColCount":     "dws aitable view update frozen-cols --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --count N",
+	"cellHeight":         "dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height N",
+	"rowHeightLevel":     "dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height N（请用像素值，不是 level）",
+	"conditionalFormats": "dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[...]'",
 }
 
 // normalizeViewConfigBlock 校验 config map 中的 key 合法性并对 filter/sort/group
@@ -788,11 +816,16 @@ func normalizeViewConfigBlock(cfgMap map[string]any) error {
 	if filterVal, hasFilter := cfgMap["filter"]; hasFilter && filterVal != nil {
 		switch filterVal.(type) {
 		case []any, map[string]any:
-			cfgMap["filter"] = normalizeViewConfigFilter(filterVal)
+			normalized := normalizeViewConfigFilter(filterVal)
+			if err := validateViewConfigFilter(normalized); err != nil {
+				return err
+			}
+			cfgMap["filter"] = normalized
 		default:
-			return fmt.Errorf("invalid config.filter: must be a JSON array or object, got %T\n"+
-				"  hint: view config filter 格式为数组: [{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fieldId\",\"value\"]}]}]\n"+
-				"  注意: 与 record query --filters（对象格式）不同，view config filter 外层必须是数组", filterVal)
+			return apperrors.NewValidation(fmt.Sprintf("invalid config.filter: must be a JSON array or object, got %T\n"+
+				"  hint: view config filter 格式为叶子条件数组: [{\"operator\":\"eq\",\"operands\":[\"fieldId\",\"value\"]}]\n"+
+				"  注意: 与 record query --filters（对象格式）不同，view config filter 外层必须是数组", filterVal),
+				apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
 		}
 	}
 	if sortVal, hasSort := cfgMap["sort"]; hasSort && sortVal != nil {
@@ -811,6 +844,61 @@ func normalizeViewConfigBlock(cfgMap map[string]any) error {
 		default:
 			return fmt.Errorf("invalid config.group: must be a JSON array, got %T\n"+
 				"  hint: group 格式: [{\"fieldId\":\"fldXXX\",\"direction\":\"asc|desc\"}]", groupVal)
+		}
+	}
+	return nil
+}
+
+var validViewFilterOperators = map[string]bool{
+	"eq": true, "ne": true, "gt": true, "lt": true, "gte": true, "lte": true,
+	"contain": true, "exclusive": true, "exist": true, "un_exist": true,
+	"any_of": true, "all_of": true, "none_of": true,
+	"date_eq": true, "before": true, "after": true, "not_before": true, "not_after": true,
+}
+
+// validateViewConfigFilter 校验 update_view.config.filter 的专用结构。
+// 它与 record query --filters 不同：外层数组本身表示 AND，每一项必须是叶子条件，
+// 不能再使用 record filter DSL 的 and/or 逻辑组。
+func validateViewConfigFilter(filterVal any) error {
+	filters, ok := filterVal.([]any)
+	if !ok {
+		return apperrors.NewValidation("invalid config.filter: view filter 必须是 JSON 数组",
+			apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+	}
+	invalid := func(format string, args ...any) error {
+		return apperrors.NewValidation(fmt.Sprintf(format, args...),
+			apperrors.WithReason("invalid_view_filter"), apperrors.WithRetryable(false))
+	}
+	for i, item := range filters {
+		filter, ok := item.(map[string]any)
+		if !ok {
+			return invalid("invalid config.filter[%d]: 每项必须是 {operator,operands} 对象", i)
+		}
+		op, ok := filter["operator"].(string)
+		op = strings.TrimSpace(op)
+		if !ok || op == "" {
+			return invalid("invalid config.filter[%d].operator: 必须使用非空字符串", i)
+		}
+		if op == "and" || op == "or" {
+			return invalid("invalid config.filter[%d].operator %q: view filter 不接受 and/or 包装；外层数组已表示 AND，请直接传叶子条件，例如 [{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]", i, op)
+		}
+		if !validViewFilterOperators[op] {
+			return invalid("invalid config.filter[%d].operator %q: view filter 不支持该操作符；did you mean %q", i, op, suggestOperator(op))
+		}
+		operands, ok := filter["operands"].([]any)
+		if !ok {
+			return invalid("invalid config.filter[%d].operands: 必须是 [fieldId,value] 数组", i)
+		}
+		expected := 2
+		if op == "exist" || op == "un_exist" {
+			expected = 1
+		}
+		if len(operands) != expected {
+			return invalid("invalid config.filter[%d].operands: operator %q 需要 %d 个值，got %d", i, op, expected, len(operands))
+		}
+		fieldID, ok := operands[0].(string)
+		if !ok || strings.TrimSpace(fieldID) == "" {
+			return invalid("invalid config.filter[%d].operands[0]: 必须是非空 fieldId", i)
 		}
 	}
 	return nil
@@ -841,7 +929,7 @@ var unsupportedFilterOperators = map[string]string{
 // operatorAliases 常见错误拼写到正确操作符的映射
 var operatorAliases = map[string]string{
 	"equal": "eq", "equals": "eq", "is": "eq", "==": "eq",
-	"not_equal": "ne", "not_equals": "ne", "is_not": "ne", "!=": "ne",
+	"neq": "ne", "not_eq": "ne", "not_equal": "ne", "not_equals": "ne", "is_not": "ne", "!=": "ne",
 	"like": "contain", "contains": "contain", "include": "contain",
 	"greater_than": "gt", "less_than": "lt",
 	"greater_than_or_equal": "gte", "less_than_or_equal": "lte",
@@ -1913,13 +2001,12 @@ MCP 层会进一步兼容同字段传入的标准节点 URL，并在创建前解
 
 权限要求：需要对源 Base 有"阅读"权限，且对目标文件夹有"编辑"权限。
 
-注意：--target-folder-id 参数如果传入的是文档/文件夹 URL（如 https://alidocs.dingtalk.com/i/nodes/xxx），
-需要先调用文档的 dws 命令（如 dws doc info --node URL）获取 dentryUuid，再将 dentryUuid 传入本命令。
-MCP 层不会会自动解析 URL，必须直接传入 dentryUuid 以避免报错。`,
-		Example: `  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_ID
-  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_ID --only-struct
+注意：--target-folder-id 不接受文档/文件夹 URL。先执行
+dws doc info --node <URL> --format json，读取返回的 nodeId 后传入本命令。`,
+		Example: `  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_NODE_ID
+  dws aitable base copy --base-id BASE_ID --target-folder-id FOLDER_NODE_ID --only-struct
   # 查询 baseId: dws aitable base list
-  # 查询 folderId: dws doc list --folder PARENT_FOLDER_ID`,
+  # 从文件夹 URL 获取 nodeId: dws doc info --node <URL> --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID := mustGetFlag(cmd, "base-id")
 			targetFolderID := mustGetFlag(cmd, "target-folder-id")
@@ -1948,7 +2035,7 @@ MCP 层不会会自动解析 URL，必须直接传入 dentryUuid 以避免报错
 				AgentSummary: "复制整个 Base 到目标文件夹（可仅结构）。",
 				UseWhen:      []string{"需要复制 AI 表格到另一文件夹，可选 --only-struct 时"},
 				AvoidWhen:    []string{"新建空白 Base 用 base create"},
-				Examples:     []string{"dws aitable base copy --base-id <BASE_ID> --target-folder-id <FOLDER_ID>"},
+				Examples:     []string{"dws aitable base copy --base-id <BASE_ID> --target-folder-id <FOLDER_NODE_ID>"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "only-struct", Property: "onlyCopyMeta"},
@@ -4133,10 +4220,10 @@ fieldWidths 仅支持 Grid 视图。
   - Kanban → kanbanCard {coverFieldId, coverResizeMode, hiddenFieldTitle}
   - Gallery → galleryCard {coverMode, coverFieldId, coverResizeMode, displayFieldName}
 typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cover-field-id 互斥。`,
-		Example: `  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --cover-field-id fldXXX --cover-resize-mode contain
-  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --no-cover
-  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --cover-mode auto       # Gallery
-  dws aitable view update card --table-id TABLE_ID --view-id VIEW_ID --json '{"hiddenFieldTitle":true}'`,
+		Example: `  dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cover-field-id fldXXX --cover-resize-mode contain
+  dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --no-cover
+  dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cover-mode auto       # Gallery
+  dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '{"hiddenFieldTitle":true}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// flag 级互斥先校验，避免无效请求触发 preflight GET
 			noCover, _ := cmd.Flags().GetBool("no-cover")
@@ -4184,8 +4271,8 @@ typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cov
 				UseWhen:      []string{"调整卡片封面/标题字段时"},
 				AvoidWhen:    []string{"只读用 get card"},
 				Examples: []string{
-					"dws aitable view update card --view-id KANBAN_ID --cover-field-id fldAttachment --cover-resize-mode contain",
-					"dws aitable view update card --view-id KANBAN_ID --no-cover",
+					"dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id KANBAN_ID --cover-field-id fldAttachment --cover-resize-mode contain",
+					"dws aitable view update card --base-id BASE_ID --table-id TABLE_ID --view-id KANBAN_ID --no-cover",
 				},
 			},
 			Parameters: []contract.ParamDecl{
@@ -4200,8 +4287,8 @@ typed flag 与 --json 同时存在时，typed flag 优先。--no-cover 与 --cov
 		Long: `按属性局部更新 Gantt 视图的 ganttTimebar 配置。
 子字段：startField / endField (date 字段) / displayFieldId / timelineScale (year|quarter|month|weeks) /
 colorConfigs (JSON 数组) / officialHoliday (bool)。`,
-		Example: `  dws aitable view update timebar --table-id TABLE_ID --view-id VIEW_ID --start-field fldStart --end-field fldEnd --timeline-scale month
-  dws aitable view update timebar --table-id TABLE_ID --view-id VIEW_ID --json '{"colorConfigs":[]}'`,
+		Example: `  dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --start-field fldStart --end-field fldEnd --timeline-scale month
+  dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '{"colorConfigs":[]}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "ganttTimebar", []string{"Gantt"}, false)
 			if err != nil {
@@ -4245,8 +4332,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				UseWhen:      []string{"调整甘特时间条字段时"},
 				AvoidWhen:    []string{"只读用 get timebar"},
 				Examples: []string{
-					"dws aitable view update timebar --view-id GANTT_ID --start-field fldStart --end-field fldEnd --timeline-scale month",
-					"dws aitable view update timebar --view-id GANTT_ID --official-holiday=true",
+					"dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id GANTT_ID --start-field fldStart --end-field fldEnd --timeline-scale month",
+					"dws aitable view update timebar --base-id BASE_ID --table-id TABLE_ID --view-id GANTT_ID --official-holiday=true",
 				},
 			},
 			Parameters: []contract.ParamDecl{
@@ -4266,9 +4353,9 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Short: "更新视图字段聚合统计（仅 Grid）",
 		Long: `更新 Grid 视图的 aggregate 配置。value 为 map[fieldId]→AggregateAction string，
 传 null 清除单个字段聚合。便捷 flag：--field-id / --action 单字段写入；--clear-field-id 单/多清除。`,
-		Example: `  dws aitable view update aggregate --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --action SUM
-  dws aitable view update aggregate --table-id TABLE_ID --view-id VIEW_ID --clear-field-id fldX,fldY
-  dws aitable view update aggregate --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":"AVG","fldB":"MAX"}'`,
+		Example: `  dws aitable view update aggregate --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --action SUM
+  dws aitable view update aggregate --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --clear-field-id fldX,fldY
+  dws aitable view update aggregate --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":"AVG","fldB":"MAX"}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "aggregate", []string{"Grid"}, false)
 			if err != nil {
@@ -4312,7 +4399,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图聚合配置",
 				UseWhen:      []string{"需要改聚合指标时"},
 				AvoidWhen:    []string{"只读用 get aggregate"},
-				Examples:     []string{"dws aitable view update aggregate --view-id GRID_ID --field-id fldX --action SUM"},
+				Examples:     []string{"dws aitable view update aggregate --base-id BASE_ID --table-id TABLE_ID --view-id GRID_ID --field-id fldX --action SUM"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Required: boolPtr(false)},
@@ -4324,8 +4411,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Use:   "field-widths",
 		Short: "更新视图字段列宽（仅 Grid）",
 		Long:  `更新 Grid 视图的字段列宽。value 为 map[fieldId]→width(int)，可单字段或批量。`,
-		Example: `  dws aitable view update field-widths --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --width 200
-  dws aitable view update field-widths --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":120,"fldB":200}'`,
+		Example: `  dws aitable view update field-widths --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-id fldX --width 200
+  dws aitable view update field-widths --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '{"fldA":120,"fldB":200}'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, blockKey, err := viewUpdateCommonPreflight(cmd, "fieldWidths", []string{"Grid"}, false)
 			if err != nil {
@@ -4377,8 +4464,8 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Short: "更新视图可见字段列表",
 		Long: `按属性更新视图的 visibleFieldIds（即列顺序）。传入的字段 ID 列表
 完全替换原有顺序；首列字段不可隐藏。所有视图类型都支持。`,
-		Example: `  dws aitable view update visible-fields --table-id TABLE_ID --view-id VIEW_ID --field-ids fld1,fld2,fld3
-  dws aitable view update visible-fields --table-id TABLE_ID --view-id VIEW_ID --json '["fld1","fld2"]'`,
+		Example: `  dws aitable view update visible-fields --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --field-ids fld1,fld2,fld3
+  dws aitable view update visible-fields --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '["fld1","fld2"]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			baseID, tableID, viewID, _, err := viewUpdateCommonPreflight(cmd, "visibleFieldIds", nil, false)
 			if err != nil {
@@ -4442,10 +4529,10 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 	viewUpdateFilterCmd := &cobra.Command{
 		Use:   "filter",
 		Short: "更新视图 filter 配置",
-		Long: `按属性更新视图的 filter 数组每项为 {operator,operands} 配置（整组替换）。
-[{"operator":"and","operands":[{"operator":"eq","operands":["fldX","value"]}]}]
-若传对象会自动 wrap 为数组；其他非法格式拒绝。`,
-		Example: `  dws aitable view update filter --view-id VIEW_ID --json '[{"operator":"and","operands":[{"operator":"eq","operands":["fldX","value"]}]}]'`,
+		Long: `按属性更新视图的 filter 数组（整组替换）。每项必须是叶子条件 {operator,operands}；外层数组表示 AND，不接受 and/or 逻辑组。
+[{"operator":"eq","operands":["fldX","value"]}]
+若传单个叶子对象会自动 wrap 为数组；neq/not_eq 会明确提示改用 ne；其他非法格式拒绝。`,
+		Example: `  dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"operator":"eq","operands":["fldX","value"]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAitableViewUpdateFilter(cmd)
 		},
@@ -4466,7 +4553,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图筛选",
 				UseWhen:      []string{"固化视图筛选条件时"},
 				AvoidWhen:    []string{"一次性查询过滤用 record query --filters"},
-				Examples:     []string{"dws aitable view update filter --view-id VIEW_ID --json '[{\"operator\":\"and\",\"operands\":[{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]}]'"},
+				Examples:     []string{"dws aitable view update filter --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"operator\":\"eq\",\"operands\":[\"fldX\",\"value\"]}]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "config.filter"},
@@ -4480,7 +4567,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Long: `按属性更新视图的 sort 数组每项为 {fieldId,direction} 配置（整组替换）。
 [{"fieldId":"fldX","direction":"asc"}]
 若传对象会自动 wrap 为数组；其他非法格式拒绝。`,
-		Example: `  dws aitable view update sort --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'`,
+		Example: `  dws aitable view update sort --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAitableViewUpdateArray(cmd, "sort")
 		},
@@ -4501,7 +4588,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图排序",
 				UseWhen:      []string{"固化视图排序时"},
 				AvoidWhen:    []string{"一次性查询排序用 record query --sort"},
-				Examples:     []string{"dws aitable view update sort --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"},
+				Examples:     []string{"dws aitable view update sort --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "config.sort"},
@@ -4515,7 +4602,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Long: `按属性更新视图的 group 数组每项为 {fieldId,direction} 配置（整组替换）。
 [{"fieldId":"fldX","direction":"asc"}]
 若传对象会自动 wrap 为数组；其他非法格式拒绝。`,
-		Example: `  dws aitable view update group --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'`,
+		Example: `  dws aitable view update group --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"fieldId":"fldX","direction":"asc"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAitableViewUpdateArray(cmd, "group")
 		},
@@ -4536,7 +4623,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 				AgentSummary: "更新视图分组",
 				UseWhen:      []string{"设置分组字段时"},
 				AvoidWhen:    []string{"只读用 get group"},
-				Examples:     []string{"dws aitable view update group --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"},
+				Examples:     []string{"dws aitable view update group --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{\"fieldId\":\"fldX\",\"direction\":\"asc\"}]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "config.group"},
@@ -4548,7 +4635,7 @@ colorConfigs (JSON 数组) / officialHoliday (bool)。`,
 		Use:     "name",
 		Short:   "重命名视图（= view update --name 的便捷子命令）",
 		Long:    `重命名指定视图，等价于 dws aitable view update --name X。无 config 参数。`,
-		Example: `  dws aitable view update name --table-id TABLE_ID --view-id VIEW_ID --name "新视图名"`,
+		Example: `  dws aitable view update name --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --name "新视图名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id", "name"); err != nil {
 				return err
@@ -4731,8 +4818,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "更新视图冻结列数",
 		Long: `设置视图冻结列数。--count N 表示从首列起冻结 N 列；--count 0 表示取消冻结。
 返回 {baseId, tableId, viewId, count}。`,
-		Example: `  dws aitable view update frozen-cols --table-id TABLE_ID --view-id VIEW_ID --count 1
-  dws aitable view update frozen-cols --table-id TABLE_ID --view-id VIEW_ID --count 0`,
+		Example: `  dws aitable view update frozen-cols --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --count 1
+  dws aitable view update frozen-cols --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --count 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
 				return err
@@ -4815,8 +4902,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 		Short: "更新视图行高（单元格高度）",
 		Long: `设置视图单元格高度，单位为像素。--cell-height 必填，合法档位 32 / 56 / 88 / 128，默认 32。
 返回 {baseId, tableId, viewId, cellHeight}。`,
-		Example: `  dws aitable view update row-height --table-id TABLE_ID --view-id VIEW_ID --cell-height 32
-  dws aitable view update row-height --table-id TABLE_ID --view-id VIEW_ID --cell-height 56`,
+		Example: `  dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height 32
+  dws aitable view update row-height --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --cell-height 56`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
 				return err
@@ -4901,8 +4988,8 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 - color 必须用 FORMAT_COLORS 代号（如 firstLine1..firstLine11），不支持 hex
 - symbol 取 GT/LT/GTE/LTE/EQ/NE/CONTAIN/EXCLUSIVE/EXIST/UN_EXIST/ALL_OF/ANY_OF/NONE_OF/BEFORE/AFTER/NOT_BEFORE/NOT_AFTER/DATE_EQ/FROM_NOW/DATE_BETWEEN
 - 传 --json '[]' 清空当前视图所有填色规则`,
-		Example: `  dws aitable view update fill-color-rule --view-id VIEW_ID --json '[]'
-  dws aitable view update fill-color-rule --view-id VIEW_ID --json '[{"type":"cell","formatFieldId":"fldX","format":{"color":"firstLine5"},"filters":[{"fieldId":"fldX","symbol":"GT","value":100}]}]'`,
+		Example: `  dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[]'
+  dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id VIEW_ID --json '[{"type":"cell","formatFieldId":"fldX","format":{"color":"firstLine5"},"filters":[{"fieldId":"fldX","symbol":"GT","value":100}]}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "table-id", "view-id"); err != nil {
 				return err
@@ -4945,7 +5032,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 				AgentSummary: "更新填充色规则",
 				UseWhen:      []string{"设置视图条件填色时"},
 				AvoidWhen:    []string{"只读用 get fill-color-rule"},
-				Examples:     []string{"dws aitable view update fill-color-rule --view-id GRID_ID --json '[]'"},
+				Examples:     []string{"dws aitable view update fill-color-rule --base-id BASE_ID --table-id TABLE_ID --view-id GRID_ID --json '[]'"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "json", Property: "conditionalFormats"},
@@ -7754,7 +7841,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 	baseGetPrimaryDocIdCmd.Flags().String("table-id", "", "Table ID，可通过 list_tables 或 get_base 获取 (必填)")
 	baseGetPrimaryDocIdCmd.Flags().String("record-id", "", "记录 ID (必填)")
 	baseCopyCmd.Flags().String("base-id", "", "源 Base ID (必填)")
-	baseCopyCmd.Flags().String("target-folder-id", "", "目标文件夹 ID (必填, 不传会复制失败)")
+	baseCopyCmd.Flags().String("target-folder-id", "", "目标文件夹 nodeId (必填)")
 	baseCopyCmd.Flags().Bool("only-struct", false, "是否仅复制结构（不含数据），默认 false 表示完整复制")
 	baseCmd.AddCommand(
 		baseListCmd, baseSearchCmd, baseGetCmd,

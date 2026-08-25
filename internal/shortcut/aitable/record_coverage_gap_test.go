@@ -69,6 +69,21 @@ func TestCrossPlatformCoverageRecordBatchEntryValidationE2E(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageRecordUpdateAcceptsSelectReadBackProjectionE2E(t *testing.T) {
+	records := []map[string]any{{
+		"recordId": "r1",
+		"cells":    map[string]any{"status": "跟进中"},
+	}}
+	caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+		{text: `{"updatedCount":1}`},
+		{text: `{"records":[{"recordId":"r1","cells":{"status":{"id":"opt-1","name":"跟进中"}}}]}`},
+	}}
+	out, err := runRecordBatchCLI(t, caller, "+record-update", records)
+	if err != nil || !strings.Contains(out, `"status": "verified"`) || len(caller.calls) != 2 {
+		t.Fatalf("select update read-back = output:%q err:%v calls:%#v", out, err, caller.calls)
+	}
+}
+
 func TestCrossPlatformCoverageRecordDeleteDryRunAndDualFailureE2E(t *testing.T) {
 	caller := &upsertByKeyCaller{dryRun: true}
 	out, err := runRecordDeleteCLI(t, caller, []string{"r1"}, "--dry-run")
@@ -494,6 +509,24 @@ func TestCrossPlatformCoverageRecordShapeHelpers(t *testing.T) {
 	}
 	if err := verifyRecordCells(map[string]any{"recordId": "r"}, map[string]any{"f": 1}); err == nil {
 		t.Fatal("missing cells must fail")
+	}
+	selectRecord := map[string]any{"recordId": "r", "cells": map[string]any{
+		"singleByName": map[string]any{"id": "opt-1", "name": "跟进中"},
+		"singleByID":   map[string]any{"id": "opt-2", "name": "已完成"},
+		"multi": []any{
+			map[string]any{"id": "opt-a", "name": "A"},
+			map[string]any{"id": "opt-b", "name": "B"},
+		},
+	}}
+	if err := verifyRecordCells(selectRecord, map[string]any{
+		"singleByName": "跟进中",
+		"singleByID":   "opt-2",
+		"multi":        []any{"B", "A"},
+	}); err != nil {
+		t.Fatalf("select semantic read-back must match: %v", err)
+	}
+	if err := verifyRecordCells(selectRecord, map[string]any{"singleByName": "未开始"}); err == nil {
+		t.Fatal("different select option must fail")
 	}
 	if responseCursor(nil) != "" || responseCursor(map[string]any{"data": map[string]any{"next_cursor": " next "}}) != "next" ||
 		responseCursor(map[string]any{"result": map[string]any{"cursor": " legacy "}}) != "legacy" {

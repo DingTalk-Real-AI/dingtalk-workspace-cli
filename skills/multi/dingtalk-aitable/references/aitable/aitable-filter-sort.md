@@ -1,6 +1,6 @@
-# filters & sort — 筛选排序语法参考
+# 记录筛选与排序语法
 
-> 视图（view）配置的 filter/sort/group **整体写入**请优先用 `view update filter` / `view update sort` / `view update group` 子命令，详见 [aitable-view-config.md](./aitable-view-config.md)。本文件聚焦于 `record query --filters` 与 view config filter 的语法和差异。
+仅在记录查询或按条件批改明确涉及 AND/OR、日期或比较操作符时读取。本文件只负责 `record query --filters` / `--sort` 的记录级语法；视图的 filter/sort/group 由根 Skill 直接路由到视图布局 reference。选中本文后不要再加载视图 reference。
 
 ## filters 结构规范
 
@@ -85,11 +85,11 @@ dws aitable record query --base-id X --table-id Y \
 | 错误写法 | 正确写法 | 说明 |
 |------------|-----------|------|
 | `equal` / `equals` / `is` / `==` | `eq` | 等于 |
-| `not_equal` / `not_equals` / `is_not` / `!=` | `ne` | 不等于 |
+| `neq` / `not_eq` / `not_equal` / `not_equals` / `is_not` / `!=` | `ne` | 不等于；CLI 会提示使用规范操作符 `ne` |
 | `like` / `contains` / `include` | `contain` | 文本包含 |
 | `greater_than` | `gt` | 大于 |
 | `less_than` | `lt` | 小于 |
-| `not_eq` / `not_contain` / `is_empty` | `ne` / `exclusive` / `un_exist` | 其他易混淆 |
+| `not_contain` / `is_empty` | `exclusive` / `un_exist` | 其他易混淆 |
 
 ### 错误示例
 
@@ -117,6 +117,8 @@ dws aitable record query --base-id X --table-id Y \
   --filters '{"operator":"and","operands":[{"operator":"eq","operands":["fldStatusId","进行中"]},{"operator":"gt","operands":["fldStockId","0"]}]}'
 ```
 
+分页时只透传服务端真实 `nextCursor`。出现 `pagination_cursor_cycle`、相同 cursor 或重复页时，保留已取记录并立即停止；不要用相同参数重跑，也不要切换到其他查询命令把不完整结果误报为完整。
+
 ## sort 结构规范
 
 `--sort` 传 JSON 数组，排序方向字段**必须是 `direction`**，不要使用 `order`。
@@ -129,41 +131,3 @@ dws aitable record query --base-id X --table-id Y \
 ```bash
 --sort '[{"fieldId":"fldPriority","direction":"desc"},{"fieldId":"fldCreatedAt","direction":"asc"}]'
 ```
-
----
-
-## view update --config 中的 filter / sort 格式
-
-> **重要区分**：`record query --filters` 和 `view update --config` 中的 filter **格式不同**！
-
-| 场景 | filter 格式 | 说明 |
-|------|-------------|------|
-| `record query --filters` | **对象**：`{"operator":"and","operands":[...]}` | 直接传最外层逻辑对象 |
-| `view update --config` 的 filter | **数组**：`[{"operator":"and","operands":[...]}]` | 外面多一层数组包裹 |
-| `view update --config` 的 sort | **数组**：`[{"fieldId":"X","direction":"asc"}]` | 与 record query --sort 一致 |
-
-### 正确示例
-
-```bash
-# view update 设置筛选（filter 是数组）
-dws aitable view update --base-id X --table-id Y --view-id Z \
-  --config '{"filter":[{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","待处理"]}]}]}'
-
-# view update 设置排序（sort 是数组）
-dws aitable view update --base-id X --table-id Y --view-id Z \
-  --config '{"sort":[{"fieldId":"fldPriority","direction":"desc"}]}'
-
-# 同时设置 filter + sort + visibleFieldIds
-dws aitable view update --base-id X --table-id Y --view-id Z \
-  --config '{"filter":[{"operator":"and","operands":[{"operator":"eq","operands":["fldStatus","进行中"]}]}],"sort":[{"fieldId":"fldDate","direction":"asc"}],"visibleFieldIds":["fld1","fld2","fld3"]}'
-```
-
-### CLI 自动容错
-
-CLI 会自动修正以下常见错误格式（不会报错，但建议直接使用正确格式）：
-
-| 错误写法 | CLI 自动修正为 |
-|----------|---------------|
-| `"filter":{"operator":"and",...}` （对象） | `"filter":[{"operator":"and",...}]` （数组） |
-| `"sort":{"fieldId":"X","direction":"asc"}` （对象） | `"sort":[{"fieldId":"X","direction":"asc"}]` （数组） |
-| 子条件用 MCP 简写 `{"fieldId":"X","operator":"eq","value":"Y"}` | 自动转为 `{"operator":"eq","operands":["X","Y"]}` |

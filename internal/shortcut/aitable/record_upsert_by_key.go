@@ -319,11 +319,83 @@ func verifyRecordCells(record map[string]any, expected map[string]any) error {
 	}
 	for fieldID, want := range expected {
 		got, exists := actual[fieldID]
-		if !exists || !reflect.DeepEqual(got, want) {
+		if !exists || !recordCellValueEqual(got, want) {
 			return fmt.Errorf("read-back mismatch for field %s: got %#v, want %#v", fieldID, got, want)
 		}
 	}
 	return nil
+}
+
+// recordCellValueEqual accepts the service's typed projection for select
+// fields. A write may use an option name/ID string while read-back returns an
+// object such as {id,name}; multiple-select values use the same representation
+// inside an array. The comparison stays exact for all other cell shapes.
+func recordCellValueEqual(got, want any) bool {
+	if reflect.DeepEqual(got, want) {
+		return true
+	}
+	if selectionObjectMatchesScalar(got, want) || selectionObjectMatchesScalar(want, got) {
+		return true
+	}
+	gotList, gotOK := got.([]any)
+	wantList, wantOK := want.([]any)
+	if !gotOK || !wantOK || len(gotList) != len(wantList) || !selectionLikeList(gotList) || !selectionLikeList(wantList) {
+		return false
+	}
+	used := make([]bool, len(gotList))
+	for _, wantItem := range wantList {
+		matched := false
+		for index, gotItem := range gotList {
+			if used[index] || !recordCellValueEqual(gotItem, wantItem) {
+				continue
+			}
+			used[index] = true
+			matched = true
+			break
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+func selectionObjectMatchesScalar(objectValue, scalarValue any) bool {
+	object, ok := objectValue.(map[string]any)
+	if !ok {
+		return false
+	}
+	scalar, ok := scalarValue.(string)
+	if !ok {
+		return false
+	}
+	for _, key := range []string{"id", "name", "optionId", "optionName"} {
+		if value, exists := object[key].(string); exists && value == scalar {
+			return true
+		}
+	}
+	return false
+}
+
+func selectionLikeList(values []any) bool {
+	for _, value := range values {
+		switch typed := value.(type) {
+		case string:
+		case map[string]any:
+			if _, hasID := typed["id"]; !hasID {
+				if _, hasName := typed["name"]; !hasName {
+					if _, hasOptionID := typed["optionId"]; !hasOptionID {
+						if _, hasOptionName := typed["optionName"]; !hasOptionName {
+							return false
+						}
+					}
+				}
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func sortedMapKeys(values map[string]any) []string {

@@ -158,7 +158,7 @@ func TestCrossPlatformCoverageAitableFlagAndJSONNormalizers(t *testing.T) {
 
 func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	config := map[string]any{
-		"filter": map[string]any{"operator": "and", "operands": []any{}},
+		"filter": map[string]any{"operator": "eq", "operands": []any{"f", "v"}},
 		"sort":   map[string]any{"fieldId": "f"}, "group": []any{},
 		"flags": true, "unknown": true,
 	}
@@ -169,6 +169,16 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 		if reflect.TypeOf(config[key]).Kind() != reflect.Slice {
 			t.Errorf("config %s = %#v", key, config[key])
 		}
+	}
+	if err := normalizeViewConfigBlock(map[string]any{
+		"filter": []any{map[string]any{"operator": "and", "operands": []any{}}},
+	}); err == nil || !strings.Contains(err.Error(), "不接受 and/or") {
+		t.Fatalf("logical view filter wrapper was accepted: %v", err)
+	}
+	if err := normalizeViewConfigBlock(map[string]any{
+		"filter": []any{map[string]any{"operator": "neq", "operands": []any{"f", "v"}}},
+	}); err == nil || !strings.Contains(err.Error(), `did you mean "ne"`) {
+		t.Fatalf("neq view filter hint = %v", err)
 	}
 	for _, bad := range []map[string]any{{"filter": 1}, {"sort": 1}, {"group": 1}} {
 		if err := normalizeViewConfigBlock(bad); err == nil {

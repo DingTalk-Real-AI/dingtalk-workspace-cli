@@ -80,15 +80,31 @@ func TestCrossPlatformCoverageBaseSchemaSnapshotE2E(t *testing.T) {
 }
 
 func TestCrossPlatformCoverageBaseCopyRequiresNewIDAndExactReadBackE2E(t *testing.T) {
-	t.Run("verified copy", func(t *testing.T) {
+	t.Run("verified copy from real baseId response and nodeId target", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
-			{text: `{"data":{"fileId":"folder","type":"FOLDER"}}`},
-			{text: `{"data":{"newBaseId":"new-base"}}`},
+			{text: `{"data":{"nodeId":"folder","type":"FOLDER"}}`},
+			{text: `{"data":{"baseId":"new-base"}}`},
 			{text: `{"data":{"baseId":"new-base","tables":[]}}`},
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
 		if err != nil || !strings.Contains(out, `"newBaseId": "new-base"`) || len(caller.calls) != 3 || caller.calls[0].product != "drive" || caller.calls[0].tool != "get_file_info" || caller.calls[2].tool != "get_base" {
 			t.Fatalf("base copy = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("verified copy with one-step rename", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"data":{"nodeId":"folder","type":"FOLDER"}}`},
+			{text: `{"data":{"baseId":"new-base"}}`},
+			{text: `{"success":true}`},
+			{text: `{"data":{"baseId":"new-base","baseName":"副本名称","tables":[]}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--only-struct", "--new-name", "副本名称", "--yes")
+		if err != nil || !strings.Contains(out, `"baseName": "副本名称"`) || len(caller.calls) != 4 || caller.calls[2].tool != "update_base" || caller.calls[3].tool != "get_base" {
+			t.Fatalf("base copy rename = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+		if got := caller.calls[2].args["newBaseName"]; got != "副本名称" {
+			t.Fatalf("rename newBaseName = %#v", got)
 		}
 	})
 
@@ -111,7 +127,7 @@ func TestCrossPlatformCoverageBaseCopyRequiresNewIDAndExactReadBackE2E(t *testin
 		}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
 		var typed *apperrors.Error
-		if err == nil || out != "" || len(caller.calls) != 2 || !errors.As(err, &typed) || typed.Reason != "target_not_supported" || typed.Retryable {
+		if err == nil || out != "" || len(caller.calls) != 2 || !errors.As(err, &typed) || typed.Reason != "target_not_supported" || typed.Retryable || typed.Details["terminal"] != true || typed.Details["nextAction"] != "report_unsupported" {
 			t.Fatalf("rejected target = output:%q err:%#v calls:%#v", out, err, caller.calls)
 		}
 	})
@@ -150,14 +166,6 @@ func TestCrossPlatformCoverageBaseCopyRequiresNewIDAndExactReadBackE2E(t *testin
 		}
 	})
 
-	t.Run("nodeId-only metadata cannot prove dentryUuid", func(t *testing.T) {
-		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{text: `{"data":{"nodeId":"folder","type":"FOLDER"}}`}}}
-		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
-		var typed *apperrors.Error
-		if err == nil || out != "" || len(caller.calls) != 1 || !errors.As(err, &typed) || typed.Reason != "target_not_supported" || typed.Retryable {
-			t.Fatalf("nodeId-only metadata = output:%q err:%#v calls:%#v", out, err, caller.calls)
-		}
-	})
 }
 
 func TestCrossPlatformCoverageBaseCopyFailureAndDryRunEdgesE2E(t *testing.T) {
