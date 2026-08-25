@@ -9,24 +9,31 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 )
 
 const CommandMigrationManifestVersion = 1
 
+// productRetirementMigrationCapability is inspected only in the trusted
+// merge-base source by the authoritative compatibility wrappers. A mechanism
+// PR must land this capability before a later PR may add a pending retirement.
+const productRetirementMigrationCapability = "dws.command-migration.product-retirement.v1"
+
 const (
 	CommandMigrationPending  = "pending"
 	CommandMigrationConsumed = "consumed"
 
-	CommandMigrationMove           = "command_move"
-	CommandMigrationFlagExtraction = "flag_extraction"
-	CommandMigrationAvailability   = "schema_availability_hardening"
+	CommandMigrationMove              = "command_move"
+	CommandMigrationFlagExtraction    = "flag_extraction"
+	CommandMigrationAvailability      = "schema_availability_hardening"
+	CommandMigrationProductRetirement = "product_retirement"
 )
 
-// CommandMigrationManifest governs compatibility-preserving surface moves that
-// cannot be represented as an in-command flag rename. The merge-base owns the
-// authorization; the candidate copy is only a lifecycle receipt.
+// CommandMigrationManifest governs reviewed cross-command transitions and
+// whole-product retirement. The merge-base owns the authorization; the
+// candidate copy is only a lifecycle receipt.
 type CommandMigrationManifest struct {
 	Version    int                `json:"version"`
 	Migrations []CommandMigration `json:"migrations"`
@@ -37,6 +44,7 @@ type CommandMigration struct {
 	Legacy      CommandMigrationSide   `json:"legacy"`
 	Replacement CommandMigrationSide   `json:"replacement"`
 	LegacyFlag  CommandMigrationFlag   `json:"legacy_flag"`
+	Commands    []string               `json:"commands,omitempty"`
 	Schema      CommandMigrationSchema `json:"schema"`
 	State       string                 `json:"state"`
 	Reason      string                 `json:"reason"`
@@ -64,6 +72,7 @@ type CommandMigrationSchema struct {
 	ProductID         string                      `json:"product_id"`
 	SourceToolID      string                      `json:"source_tool_id"`
 	ReplacementToolID string                      `json:"replacement_tool_id"`
+	Tools             []string                    `json:"tools,omitempty"`
 	Parameters        []CommandParameterMigration `json:"parameters"`
 	Availability      *CommandAvailabilityChange  `json:"availability,omitempty"`
 }
@@ -133,8 +142,21 @@ func (m CommandMigrationManifest) Validate() error {
 }
 
 func (m CommandMigration) validate() error {
-	if m.Kind != CommandMigrationMove && m.Kind != CommandMigrationFlagExtraction && m.Kind != CommandMigrationAvailability {
+	if m.Kind != CommandMigrationMove && m.Kind != CommandMigrationFlagExtraction &&
+		m.Kind != CommandMigrationAvailability && m.Kind != CommandMigrationProductRetirement {
 		return fmt.Errorf("invalid kind %q", m.Kind)
+	}
+	if strings.TrimSpace(m.Reason) == "" || m.Reason != strings.TrimSpace(m.Reason) {
+		return fmt.Errorf("migration must include a non-empty trimmed reason")
+	}
+	if m.State != CommandMigrationPending && m.State != CommandMigrationConsumed {
+		return fmt.Errorf("invalid state %q", m.State)
+	}
+	if m.Kind == CommandMigrationProductRetirement {
+		return m.validateProductRetirement()
+	}
+	if m.Commands != nil {
+		return fmt.Errorf("%s must not declare commands", m.Kind)
 	}
 	if m.Kind == CommandMigrationAvailability {
 		if !isExactCommandPath(m.Legacy.Command) {
@@ -150,12 +172,6 @@ func (m CommandMigration) validate() error {
 		if m.Legacy.Command == m.Replacement.Command {
 			return fmt.Errorf("legacy and replacement command paths must differ")
 		}
-	}
-	if strings.TrimSpace(m.Reason) == "" || m.Reason != strings.TrimSpace(m.Reason) {
-		return fmt.Errorf("migration must include a non-empty trimmed reason")
-	}
-	if m.State != CommandMigrationPending && m.State != CommandMigrationConsumed {
-		return fmt.Errorf("invalid state %q", m.State)
 	}
 	states := map[string]CommandMigrationState{
 		"legacy before": m.Legacy.Before,
@@ -246,6 +262,42 @@ func (m CommandMigration) validate() error {
 	return nil
 }
 
+func (m CommandMigration) validateProductRetirement() error {
+	if !isExactCommandPath(m.Legacy.Command) || m.Legacy.Command == "dws" {
+		return fmt.Errorf("product_retirement legacy must be an exact product root below dws")
+	}
+	if m.Replacement != (CommandMigrationSide{}) {
+		return fmt.Errorf("product_retirement must not declare replacement")
+	}
+	if m.LegacyFlag != (CommandMigrationFlag{}) {
+		return fmt.Errorf("product_retirement must not declare legacy_flag")
+	}
+	if !m.Legacy.Before.Present || !m.Legacy.Before.Runnable || m.Legacy.After != (CommandMigrationState{}) {
+		return fmt.Errorf("product_retirement root must migrate exactly from its declared runnable visibility to absent")
+	}
+	if len(strings.Fields(m.Legacy.Command)) != 2 || strings.TrimPrefix(m.Legacy.Command, "dws ") != m.Schema.ProductID {
+		return fmt.Errorf("product_retirement root must exactly match schema product_id")
+	}
+	if len(m.Commands) == 0 {
+		return fmt.Errorf("product_retirement commands must be a non-empty array")
+	}
+	rootFound := false
+	for index, command := range m.Commands {
+		if !isExactCommandPath(command) ||
+			(command != m.Legacy.Command && !strings.HasPrefix(command, m.Legacy.Command+" ")) {
+			return fmt.Errorf("product_retirement command %d must be an exact path in root %q", index, m.Legacy.Command)
+		}
+		if index > 0 && m.Commands[index-1] >= command {
+			return fmt.Errorf("product_retirement commands must be sorted and unique")
+		}
+		rootFound = rootFound || command == m.Legacy.Command
+	}
+	if !rootFound {
+		return fmt.Errorf("product_retirement commands must include root %q", m.Legacy.Command)
+	}
+	return m.Schema.validate(m.Kind)
+}
+
 func (s CommandMigrationState) validate(label string) error {
 	if !s.Present {
 		if s.Runnable || s.Hidden {
@@ -286,6 +338,30 @@ func (f CommandMigrationFlag) validate() error {
 }
 
 func (s CommandMigrationSchema) validate(kind string) error {
+	if kind == CommandMigrationProductRetirement {
+		if !isExactSchemaIdentifier(s.ProductID) {
+			return fmt.Errorf("schema product_id must be an exact identifier")
+		}
+		if s.SourceToolID != "" || s.ReplacementToolID != "" || s.Parameters != nil || s.Availability != nil {
+			return fmt.Errorf("product_retirement schema must declare only product_id and tools")
+		}
+		if len(s.Tools) == 0 {
+			return fmt.Errorf("product_retirement schema tools must be a non-empty array")
+		}
+		prefix := s.ProductID + "."
+		for index, tool := range s.Tools {
+			if !isExactSchemaIdentifier(tool) || !strings.HasPrefix(tool, prefix) || len(tool) == len(prefix) {
+				return fmt.Errorf("product_retirement schema tool %d must be an exact canonical path in product %q", index, s.ProductID)
+			}
+			if index > 0 && s.Tools[index-1] >= tool {
+				return fmt.Errorf("product_retirement schema tools must be sorted and unique")
+			}
+		}
+		return nil
+	}
+	if s.Tools != nil {
+		return fmt.Errorf("%s must not declare schema tools", kind)
+	}
 	for label, value := range map[string]string{
 		"product_id":     s.ProductID,
 		"source_tool_id": s.SourceToolID,
@@ -386,7 +462,7 @@ func (m CommandMigration) key() string {
 }
 
 func (m CommandMigration) displayKey() string {
-	if m.Kind == CommandMigrationAvailability {
+	if m.Kind == CommandMigrationAvailability || m.Kind == CommandMigrationProductRetirement {
 		return fmt.Sprintf("%s %q", m.Kind, m.Legacy.Command)
 	}
 	return fmt.Sprintf("%s %q -> %q", m.Kind, m.Legacy.Command, m.Replacement.Command)
@@ -481,6 +557,11 @@ func evaluateCommandMigrationLifecycle(
 	candidateByKey := commandMigrationIndex(candidate)
 	authorizations := make([]CommandMigration, 0, len(authority.Migrations))
 	for _, approved := range authority.Migrations {
+		if approved.Kind == CommandMigrationProductRetirement && approved.State == CommandMigrationPending {
+			if err := validateProductRetirementCommandScope(references, approved); err != nil {
+				return nil, fmt.Errorf("approved command migration %s: %w", approved.displayKey(), err)
+			}
+		}
 		basePhase := matchCommandMigrationPhase(mergeBase, approved)
 		wantBase := commandMigrationBefore
 		if approved.State == CommandMigrationConsumed && !isCompatibilityVisibleAvailabilityMigration(approved) {
@@ -495,6 +576,10 @@ func evaluateCommandMigrationLifecycle(
 			return nil, fmt.Errorf("candidate modified base-owned command migration %s", approved.displayKey())
 		}
 		currentPhase := matchCommandMigrationPhase(current, approved)
+		if approved.Kind == CommandMigrationProductRetirement && currentPhase == commandMigrationBefore && exists &&
+			!reflect.DeepEqual(productRetirementCommands(current, approved), productRetirementCommands(mergeBase, approved)) {
+			return nil, fmt.Errorf("candidate changed pending product retirement surface %s", approved.displayKey())
+		}
 		if isCompatibilityVisibleAvailabilityMigration(approved) {
 			if currentPhase != commandMigrationBefore {
 				return nil, fmt.Errorf("candidate drifted from compatibility-visible command migration %s", approved.displayKey())
@@ -567,11 +652,20 @@ func evaluateCommandMigrationLifecycle(
 		if proposed.State != CommandMigrationPending {
 			return nil, fmt.Errorf("candidate-added command migration %s must start pending", proposed.displayKey())
 		}
+		if proposed.Kind == CommandMigrationProductRetirement {
+			if err := validateProductRetirementCommandScope(references, proposed); err != nil {
+				return nil, fmt.Errorf("candidate-added command migration %s: %w", proposed.displayKey(), err)
+			}
+		}
 		if matchCommandMigrationPhase(mergeBase, proposed) != commandMigrationBefore {
 			return nil, fmt.Errorf("candidate-added command migration %s does not match the merge-base before state", proposed.displayKey())
 		}
 		if matchCommandMigrationPhase(current, proposed) != commandMigrationBefore {
 			return nil, fmt.Errorf("candidate-added command migration %s cannot authorize its own interface change", proposed.displayKey())
+		}
+		if proposed.Kind == CommandMigrationProductRetirement &&
+			!reflect.DeepEqual(productRetirementCommands(current, proposed), productRetirementCommands(mergeBase, proposed)) {
+			return nil, fmt.Errorf("candidate-added command migration %s changed the product surface in its approval PR", proposed.displayKey())
 		}
 	}
 	return authorizations, nil
@@ -614,6 +708,9 @@ func isPendingAvailabilityCompatibilityRefinement(approved, proposed CommandMigr
 }
 
 func matchCommandMigrationPhase(snapshot Snapshot, migration CommandMigration) commandMigrationPhase {
+	if migration.Kind == CommandMigrationProductRetirement {
+		return matchProductRetirementPhase(snapshot, migration)
+	}
 	commands := commandIndex(snapshot)
 	legacy := commandMigrationStateForCommand(commands, migration.Legacy.Command)
 	if migration.Kind == CommandMigrationAvailability {
@@ -649,6 +746,55 @@ func matchCommandMigrationPhase(snapshot Snapshot, migration CommandMigration) c
 		return commandMigrationAfter
 	}
 	return commandMigrationPartial
+}
+
+func matchProductRetirementPhase(snapshot Snapshot, migration CommandMigration) commandMigrationPhase {
+	commands := productRetirementCommands(snapshot, migration)
+	if len(commands) == 0 {
+		return commandMigrationAfter
+	}
+	root, exists := commandIndex(snapshot)[migration.Legacy.Command]
+	if !exists || commandMigrationStateForCommand(map[string]Command{root.Path: root}, root.Path) != migration.Legacy.Before {
+		return commandMigrationPartial
+	}
+	approved := make(map[string]bool, len(migration.Commands))
+	for _, path := range migration.Commands {
+		approved[path] = true
+	}
+	for _, command := range commands {
+		if !approved[command.Path] {
+			return commandMigrationPartial
+		}
+	}
+	return commandMigrationBefore
+}
+
+func productRetirementCommands(snapshot Snapshot, migration CommandMigration) []Command {
+	commands := make([]Command, 0, len(migration.Commands))
+	for _, command := range snapshot.Commands {
+		if command.Path == migration.Legacy.Command || strings.HasPrefix(command.Path, migration.Legacy.Command+" ") {
+			commands = append(commands, command)
+		}
+	}
+	sort.Slice(commands, func(i, j int) bool { return commands[i].Path < commands[j].Path })
+	return commands
+}
+
+func validateProductRetirementCommandScope(references map[string]Snapshot, migration CommandMigration) error {
+	union := make(map[string]bool, len(migration.Commands))
+	for label, snapshot := range references {
+		phase := matchProductRetirementPhase(snapshot, migration)
+		if phase == commandMigrationPartial {
+			return fmt.Errorf("%s product command surface is outside the reviewed commands", label)
+		}
+		for _, command := range productRetirementCommands(snapshot, migration) {
+			union[command.Path] = true
+		}
+	}
+	if len(union) != len(migration.Commands) {
+		return fmt.Errorf("reviewed commands do not exactly match the historical product command union")
+	}
+	return nil
 }
 
 func commandMigrationReplacementConstantsMatch(command Command, migration CommandMigration) bool {
@@ -736,6 +882,11 @@ func commandMigrationAuthorizesChange(current, reference Snapshot, change Change
 			}
 		case CommandMigrationFlagExtraction:
 			if change.Kind == "flag_became_hidden" && change.Flag == migration.LegacyFlag.Name {
+				return true
+			}
+		case CommandMigrationProductRetirement:
+			if (change.Kind == "command_removed" || change.Kind == "command_alias_removed") &&
+				change.Flag == "" && canonicalPath == migration.Legacy.Command {
 				return true
 			}
 		}

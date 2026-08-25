@@ -7,7 +7,7 @@
 
 两种原语都只放行清单精确登记的变化，不是通用 breaking-change 豁免，也不得在同一 command/flag 上叠加以绕过 rename 的 requiredness 保持规则。
 
-同一套 base-owned lifecycle 也治理两类跨命令迁移：旧命令保留执行能力但从 Help / Schema 导航隐藏，并迁到新的公开命令路径；或把旧命令中的一个可选 flag 拆成新的专用命令。跨命令迁移只允许清单精确声明的 `command_became_hidden` / `flag_became_hidden` 及其 Schema 投影，不是通用 command-path breaking-change 豁免。
+同一套 base-owned lifecycle 也治理跨命令迁移和完整产品退役：旧命令保留执行能力但从 Help / Schema 导航隐藏，并迁到新的公开命令路径；把旧命令中的一个可选 flag 拆成新的专用命令；或在独立审批后整体删除一个 product root 及其全部 CLI / Schema surface。清单只允许每种 `kind` 精确声明的 finding 与 Schema 投影，不是通用 command-path breaking-change 豁免。
 
 同名 flag 的精确类型迁移属于另一类评审机制，只能进入
 `internal/interfacesnapshot/reviewed.go` 与 legacy smoke helper 的镜像表；flag rename
@@ -38,7 +38,7 @@ Smoke fixture，不参与迁移审批。
 同时提供 `--base` 与 `--stable`；核心 lifecycle 也拒绝缺失 stable 的非空清单，避免
 调用方因漏传历史参考而提前清理 consumed receipt。
 
-PR merge-base 同时拥有快照生成器、比较器和已审批清单。门禁用这套 base-owned helper 检查同一个已提交 candidate revision、merge-base 与 stable，candidate 不能通过修改自己的 Go 比较 helper 来放宽规则。candidate 中的清单只参与迁移状态流转，不能批准同一个 PR 引入的接口变化。首次引入 flag 机制时，merge-base 尚无迁移解析器；bootstrap 会用 merge-base 已有的 modern Interface Snapshot 做不带豁免的普通比较，并只接受 candidate 中逐字匹配的空 flag 清单。后续引入 command migration 扩展时，base 已拥有 flag comparator；bootstrap 仍只执行 base-owned 普通比较，不向旧 helper 传入新的 command ledger，因此允许随治理 PR 提交仍处于 before 的 pending 计划，也不会授予任何迁移豁免。bootstrap 无法让旧 helper 证明新治理实现本身正确，因此本治理 PR 的新 parser、lifecycle、launcher 与 hostile tests 仍是必须由真人评审的受保护策略变更；它们合入后才成为后续 PR 的 base-owned authority。
+PR merge-base 同时拥有快照生成器、比较器和已审批清单。门禁用这套 base-owned helper 检查同一个已提交 candidate revision、merge-base 与 stable，candidate 不能通过修改自己的 Go 比较 helper 来放宽规则。candidate 中的清单只参与迁移状态流转，不能批准同一个 PR 引入的接口变化。首次引入 flag 机制时，merge-base 尚无迁移解析器；bootstrap 会用 merge-base 已有的 modern Interface Snapshot 做不带豁免的普通比较，并只接受 candidate 中逐字匹配的空 flag 清单。首次引入整个 command ledger 时，base 已拥有 flag comparator；bootstrap 仍只执行 base-owned 普通比较，不向旧 helper 传入新的 command ledger，也不会授予任何迁移豁免。bootstrap 无法让旧 helper 证明新治理实现本身正确，因此新 parser、lifecycle、launcher 与 hostile tests 必须先由真人评审，合入后才成为后续 PR 的 base-owned authority。
 
 这条边界保护比较规则和审批数据，不是任意代码沙箱。GitHub workflow / launcher 的变更仍由仓库保护规则和真人评审负责；candidate Cobra 构建也会执行 candidate 代码，因此对同一 runner 上的主动恶意代码，需要独立进程或文件系统隔离，不能把本门禁描述成已经解决。
 
@@ -51,16 +51,56 @@ scripts/policy/interface-migrations/approved-command-migrations-v1.json
 
 清单使用严格 JSON 解析：版本、字段名大小写、JSON 值类型、命令路径和 flag 名都必须精确；拒绝重复键、未知键、scalar `null` 与尾随 JSON 值，`reason` 不能为空；禁止 `*`、`?`、前缀规则或其他 wildcard。历史未声明 `kind` 的记录按 `flag_rename` 解释；新增同名 requiredness 迁移必须显式写 `kind: requiredness_change` 和单一 `flag` before/after。清单中的 `pending` 记录只记录已评审计划，并授权其精确列出的后续产品迁移；候选与 merge-base 仍必须精确匹配 `before`，不能授权同一个提交中的接口变化，也不能作为其他命令或参数的通配豁免。
 
-首次引入一个旧 merge-base 不认识的新 `kind` 时，机制 PR 不得同时写入该 kind 的 pending 记录，因为旧的 base-owned 严格解析器会拒绝未知字段。必须先合入 parser、lifecycle、CLI/Schema adapter 与 hostile tests；待这些实现成为新的 merge-base authority 后，再用独立治理审批 PR 新增 pending，最后才由产品 PR 消费。
+首次引入一个旧 merge-base 不认识的新 `kind` 时，必须使用三个独立 PR：机制 PR 只合入 parser、lifecycle、CLI/Schema adapter、wrapper capability 与 hostile tests，清单保持不含该 kind；待实现成为新的 merge-base authority 后，治理审批 PR 只新增 `pending` 且产品 surface 不变；最后产品 PR 才能删除或迁移 surface 并把记录改成 `consumed`。两个 authoritative wrapper 都会在旧 authority 首次收到 `product_retirement` 时提前拒绝并提示三阶段流程；旧严格 parser 的 unknown-kind 拒绝仍是兜底。
 
 ## 跨命令迁移原语
 
-`approved-command-migrations-v1.json` 只接受两种 `kind`：
+`approved-command-migrations-v1.json` 接受以下四种 `kind`：
 
 | kind | CLI after 状态 | Schema 允许的精确投影 |
 |---|---|---|
 | `command_move` | legacy 命令仍 runnable、由 visible 变 hidden；replacement 由 absent 变 visible runnable | 同一 stable tool identity 的 `primary_cli_path` 改到 replacement；只允许清单列出的参数改名，参数类型、property、requiredness、default 等必须等价 |
 | `flag_extraction` | legacy 命令保持 visible runnable；指定 legacy flag 仍可执行但由 visible 变 hidden；replacement 由 absent 变 visible runnable | source tool 只删除指定参数；replacement tool 必须位于精确的新路径，并保持 source 的 interface 与 safety identity；清单必须完整列出每个 source 参数到 replacement 参数或常量 property 的承接关系 |
+| `schema_availability_hardening` | 精确命令保持 runnable，并按记录变 hidden 或保持 compatibility-visible | 同一 tool 只能从记录的 `availability.before` 变为 `availability.after`，其他字段仍由普通兼容检查约束 |
+| `product_retirement` | 一个精确 product root 及其全部后代从已声明的 before surface 整体变为 absent | 删除同名 Schema product；`commands` 与 `schema.tools` 必须分别完整覆盖 merge-base / stable 的历史并集 |
+
+### 完整产品退役
+
+`product_retirement` 的 `legacy.command` 必须是 `dws <product_id>` 这一层的精确 product root；不接受子路径、alias、prefix 或 wildcard。root 的 before 必须是 runnable，并精确声明当时的 `hidden` 值，因此既能治理公开 root，也能治理真实存在的 hidden runnable root；after 只能是 absent。该 kind 不声明 replacement、legacy flag、参数映射或 availability。
+
+记录必须包含两个已排序、无重复的完整集合：
+
+- `commands`：merge-base 与 stable Interface Snapshot 中该 root 本身和全部后代的 canonical path 并集；root 必须包含在内。任一历史快照出现未登记后代，或登记了两份历史都不存在的命令，都会失败。
+- `schema.tools`：merge-base 与 stable normalized Schema 中同名 product 的全部 canonical tool ID 并集；每个 ID 必须以 `<product_id>.` 开头。stable 可以没有该产品或只含较早子集，但两份历史都必须受同一记录约束。
+
+治理审批 PR 中，candidate 的完整命令对象集合和 Schema product 必须与 merge-base 深度相等；只删一个 child、改 flag / alias / safety、改 tool contract，或在同一 PR 删除产品都会被视为 self-approval。产品 PR 消费 base-owned pending 时，只接受 CLI subtree 和 Schema product 同时整体 absent。普通 Interface Compare 会把整棵树的删除折叠为 root `command_removed`，但 lifecycle 会在过滤该 finding 前独立核对每一个历史 command，因此折叠不会扩大授权。
+
+下面只是结构示例，不代表已审批产品；首次落地该 kind 的机制 PR 也不得加入这条记录：
+
+```json
+{
+  "kind": "product_retirement",
+  "legacy": {
+    "command": "dws edu-app",
+    "before": {"present": true, "runnable": true, "hidden": true},
+    "after": {"present": false}
+  },
+  "commands": [
+    "dws edu-app",
+    "dws edu-app task",
+    "dws edu-app task list"
+  ],
+  "schema": {
+    "product_id": "edu-app",
+    "tools": [
+      "edu-app.query_all_task",
+      "edu-app.query_publish_task"
+    ]
+  },
+  "state": "pending",
+  "reason": "Retire the reviewed education application product surface."
+}
+```
 
 `command_move` 只能隐藏没有子命令的 legacy leaf，且 legacy 与 replacement
 不得互为祖先路径；整棵命令树的迁移需要单独设计逐叶治理，不能复用这一原语。
@@ -102,7 +142,7 @@ bool 常量证据属于 bootstrap；一旦任一历史快照已记录该
 replacement 必须保留 source 已发布的 dry-run 能力：历史 `dry_run` 非空时不得删除或改值；
 历史未声明时允许 replacement 新增 dry-run。这与普通 Schema 兼容规则保持同一单调边界。
 
-两种迁移都要求旧 argv 继续可执行。删除旧命令、删除旧 flag、把 legacy 改成 non-runnable、改变未登记的历史参数、改变 interface / safety，或只完成部分 before → after 转换都会 fail closed。命令别名会先规范到 reference 的 canonical path，但清单本身仍只能记录精确 canonical 命令，不能用 alias 或前缀扩大授权。
+`command_move` 与 `flag_extraction` 都要求旧 argv 继续可执行。删除旧命令、删除旧 flag、把 legacy 改成 non-runnable、改变未登记的历史参数、改变 interface / safety，或只完成部分 before → after 转换都会 fail closed。命令别名会先规范到 reference 的 canonical path，但清单本身仍只能记录精确 canonical 命令，不能用 alias 或前缀扩大授权。`product_retirement` 是唯一允许整体删除命令的 kind，并受上一节的完整集合证明约束。
 
 跨命令清单复用下文同一套 `pending → consumed → inert/cleanup` 生命周期。治理 PR 只能新增 `pending` 且产品 surface 必须仍是 before；后续产品 PR 才能一次性切到 after 并改为 `consumed`。candidate 新增的 pending 记录不能批准自己的改动。
 
@@ -114,8 +154,8 @@ rename 以 `(kind, command, legacy flag, canonical flag)` 为唯一精确键；r
 
 | 阶段 | PR 可以做什么 | 必须满足的快照状态 |
 |---|---|---|
-| 1. 治理审批 | 新增 `state: pending` 的精确记录；不得在同一个 PR 修改产品 surface | candidate 和 merge-base 都与记录中的 `before` 完全一致；该记录不改变 stable 的判断 |
-| 2. 产品迁移 | merge-base 已拥有 `pending` 后，按记录一次性切到精确 `after`，并把记录改为 `state: consumed` | rename 的 legacy 仍存在但由 visible 变 hidden，且声明 `alias_of`，canonical requiredness 保持不变；requiredness change 只把同名 flag 从 optional 提升为 required |
+| 1. 治理审批 | 新增 `state: pending` 的精确记录；不得在同一个 PR 修改产品 surface | candidate 和 merge-base 都与记录中的 `before` 完全一致；产品退役还要求 command subtree 与 Schema product 深度相等 |
+| 2. 产品迁移 | merge-base 已拥有 `pending` 后，按记录一次性切到精确 `after`，并把记录改为 `state: consumed` | rename 的 legacy 仍存在但由 visible 变 hidden；requiredness change 只提升同名 flag；产品退役则要求完整 CLI subtree 与 Schema product 同时 absent |
 | 3. 保留回执 | 产品 PR 合入后，如果 stable 仍是 `before`，继续保留 `consumed` | merge-base 或 stable 仍有任一份尚未达到 `after` |
 | 4. 惰性保留或清理 | 当 merge-base 和 stable 都已经是 `after`，该记录不再提供任何授权；后续 PR 可以原样保留或删除 | 两份参考快照均精确匹配 `after`；保留时仍必须是不可改写的 `consumed`，接口偏离 `after` 继续失败 |
 
@@ -211,6 +251,8 @@ rename 以 `(kind, command, legacy flag, canonical flag)` 为唯一精确键；r
 2. required legacy 被新增的 required canonical 替代时产生的 `required_flag_added`；如果 canonical 在 before 阶段只是 hidden 占位符，则允许它在转为公开拼写时继承 legacy 的 requiredness。已有的 visible canonical 不允许借 rename 改变 requiredness。
 3. `requiredness_change` 中同名 flag 从 optional 提升为 required 时产生的 `flag_became_required`。
 
+跨命令记录另有各自的窄授权。`product_retirement` 只有在 lifecycle 已证明 current 整棵 subtree absent、且每个 merge-base / stable 历史命令都被完整登记后，才会移除该 product root 的 `command_removed`（以及同一 root 的 alias removal）finding；它不会按 prefix 过滤任意 child finding，也不会授权其他产品。
+
 以下变化仍按普通兼容规则阻塞，不能被迁移记录掩盖：
 
 - 删除 legacy、canonical、命令或其他 flag；
@@ -250,6 +292,8 @@ canonical-only `after` 状态时不需要再次投影；adapter 保持 baseline 
 不存在、tool/path 不匹配时不制造 Schema surface；type、property、interface type、default、
 format、enum、`required_when`、constraints、positionals 与 safety 等全部字段仍交给原 checker，
 任何不相干漂移继续阻塞。
+
+`product_retirement` 的 Schema adapter 读取同一条 command ledger 记录，不维护第二份 allowlist。checker 必须同时收到 merge-base 与 stable 两份 normalized Schema：pending 的 `schema.tools` 等于两份历史的精确并集，candidate-added pending 还要求 current product 与 merge-base 深度相等；消费时 current 不得再发布该 product。adapter 只从当前被检查的历史副本删除该完整 product，再交给普通兼容检查，其他 product 不变。
 
 ## 本地验证
 

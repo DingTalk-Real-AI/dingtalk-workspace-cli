@@ -242,8 +242,11 @@ flag 迁移。
 Schema compatibility 使用同一组 base、stable、candidate refs，以及 base-owned flag
 与 command migration ledgers。merge-base-owned checker 分别规范化 merge-base 与
 stable 的完整 Schema，并让 candidate 对两份历史 contract 独立执行检查；它只把已通过
-Interface lifecycle 的 exact rename、command move 或 flag extraction 规范化到当前历史
-副本，不会维护第二份 allowlist，也不会放宽其他 Schema 历史字段。
+Interface lifecycle 的 exact rename、command move、flag extraction、availability
+hardening 或完整 product retirement 规范化到当前历史副本，不会维护第二份 allowlist，
+也不会放宽其他 Schema 历史字段。产品退役必须在共享 command ledger 中精确列出
+merge-base / stable 的全部 historical command 与 Schema tool 并集；candidate 不能用同一
+PR 新增记录并删除产品。
 
 For a release-seal branch that archives rendered fragments:
 
@@ -353,6 +356,11 @@ helper、fixture 或在同一 PR 新增 self-approval 记录来放行 breaking c
 bootstrap 仍由 merge-base 已有的 modern helper 做无豁免比较，并只接受 candidate
 提交中的规范空清单；完整边界见下方治理文档。
 
+首次增加旧 merge-base 不认识的 migration `kind` 必须拆成三个 PR：先只落 parser、
+lifecycle、CLI/Schema adapters、wrapper capability 与 hostile tests；再在 surface 不变时
+新增 `pending`；最后才由产品 PR 消费为 `consumed`。CLI 与 Schema wrappers 会在旧
+authority 首次看到 `product_retirement` 时提前拒绝，不能把机制与审批记录塞进同一 PR。
+
 精确的两阶段 flag 迁移生命周期见
 [CLI flag 兼容迁移治理](cli-interface-flag-migrations.md)。治理 PR 只能在
 surface 未变化时新增 `pending`；后续产品 PR 达到审批的精确 surface 后，才能
@@ -363,7 +371,8 @@ shorthand、no-opt 和任何无关漂移仍然阻塞。Schema 可以新增；历
 tool、parameter、mapping、positional execution、constraint 与 safety 语义继续
 受保护。`alias_of` 只是一项由 `FlagSpec.Aliases` 产生的框架关系证据，不是 payload
 等价证明；产品 PR 仍须证明 canonical 与 legacy 的最终运行 payload 等价并在 transport
-前拒绝冲突输入。当前迁移清单为空，不授权 PR #904。
+前拒绝冲突输入。`product_retirement` 机制 PR 不含任何 pending 退役记录，因此自身不授权
+删除产品。
 
 ## Required GitHub repository settings
 

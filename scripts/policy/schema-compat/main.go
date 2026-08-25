@@ -38,6 +38,11 @@ type schemaContract struct {
 	Products map[string]productSchema `json:"products"`
 }
 
+type schemaContractReference struct {
+	label    string
+	contract schemaContract
+}
+
 type productSchema struct {
 	Tools map[string]toolSchema `json:"tools"`
 }
@@ -119,7 +124,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	var normalizePath, checkPath, mergePath, currentPath string
 	var approvedFlagMigrationsPath, candidateFlagMigrationsPath string
 	var approvedCommandMigrationsPath, candidateCommandMigrationsPath string
-	var migrationBaseSchemaPath string
+	var migrationBaseSchemaPath, migrationStableSchemaPath string
 	var migrationCurrentSnapshotPath, migrationBaseSnapshotPath, migrationStableSnapshotPath string
 	flags := flag.NewFlagSet("schema-compat", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -132,6 +137,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.StringVar(&approvedCommandMigrationsPath, "approved-command-migrations", "", "base-owned approved command migration manifest")
 	flags.StringVar(&candidateCommandMigrationsPath, "candidate-command-migrations", "", "detached candidate command migration manifest")
 	flags.StringVar(&migrationBaseSchemaPath, "migration-base-schema", "", "normalized merge-base Schema contract used to verify cross-migration lineage")
+	flags.StringVar(&migrationStableSchemaPath, "migration-stable-schema", "", "normalized stable Schema contract used to verify product-retirement scope")
 	flags.StringVar(&migrationCurrentSnapshotPath, "migration-current-snapshot", "", "current interface snapshot used for migration authorization")
 	flags.StringVar(&migrationBaseSnapshotPath, "migration-base-snapshot", "", "merge-base interface snapshot used for migration authorization")
 	flags.StringVar(&migrationStableSnapshotPath, "migration-stable-snapshot", "", "stable interface snapshot used for migration authorization")
@@ -187,8 +193,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "combined Schema flag and command migration authorization requires --migration-base-schema")
 		return 2
 	}
-	if migrationBaseSchemaPath != "" && (!flagMigrationPair || !commandMigrationPair) {
-		fmt.Fprintln(stderr, "--migration-base-schema requires both flag and command migration manifest pairs")
+	if migrationBaseSchemaPath != "" && !commandMigrationPair {
+		fmt.Fprintln(stderr, "--migration-base-schema requires the command migration manifest pair")
+		return 2
+	}
+	if migrationStableSchemaPath != "" && (!commandMigrationPair || migrationBaseSchemaPath == "") {
+		fmt.Fprintln(stderr, "--migration-stable-schema requires the command migration manifest pair and --migration-base-schema")
 		return 2
 	}
 
@@ -232,9 +242,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 		if commandMigrationPair {
+			approvedCommandManifest, readErr := readCommandMigrationManifestFile(approvedCommandMigrationsPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read approved Schema command migrations: %v\n", readErr)
+				return 2
+			}
+			candidateCommandManifest, readErr := readCommandMigrationManifestFile(candidateCommandMigrationsPath)
+			if readErr != nil {
+				fmt.Fprintf(stderr, "read candidate Schema command migrations: %v\n", readErr)
+				return 2
+			}
 			commandMigrations, err := authorizeSchemaCommandMigrations(
-				approvedCommandMigrationsPath,
-				candidateCommandMigrationsPath,
+				approvedCommandManifest,
+				candidateCommandManifest,
 				migrationCurrentSnapshotPath,
 				migrationBaseSnapshotPath,
 				migrationStableSnapshotPath,
@@ -242,6 +262,32 @@ func run(args []string, stdout, stderr io.Writer) int {
 			if err != nil {
 				fmt.Fprintf(stderr, "authorize Schema command migrations: %v\n", err)
 				return 2
+			}
+			if commandMigrationManifestsContainProductRetirement(approvedCommandManifest, candidateCommandManifest) {
+				if migrationBaseSchemaPath == "" || migrationStableSchemaPath == "" {
+					fmt.Fprintln(stderr, "Schema product retirement authorization requires merge-base and stable Schema contracts")
+					return 2
+				}
+				migrationBase, readErr := readContract(migrationBaseSchemaPath)
+				if readErr != nil {
+					fmt.Fprintf(stderr, "read product retirement merge-base Schema contract: %v\n", readErr)
+					return 2
+				}
+				migrationStable, readErr := readContract(migrationStableSchemaPath)
+				if readErr != nil {
+					fmt.Fprintf(stderr, "read product retirement stable Schema contract: %v\n", readErr)
+					return 2
+				}
+				if err := validateSchemaProductRetirementScopes(
+					migrationBase,
+					migrationStable,
+					current,
+					approvedCommandManifest,
+					candidateCommandManifest,
+				); err != nil {
+					fmt.Fprintf(stderr, "validate Schema product retirement scope: %v\n", err)
+					return 2
+				}
 			}
 			if flagMigrationPair {
 				migrationBase, readErr := readContract(migrationBaseSchemaPath)
@@ -345,20 +391,12 @@ func readFlagMigrationManifestFile(path string) (interfacesnapshot.FlagMigration
 }
 
 func authorizeSchemaCommandMigrations(
-	approvedManifestPath string,
-	candidateManifestPath string,
+	approved interfacesnapshot.CommandMigrationManifest,
+	candidate interfacesnapshot.CommandMigrationManifest,
 	currentSnapshotPath string,
 	baseSnapshotPath string,
 	stableSnapshotPath string,
 ) ([]interfacesnapshot.CommandMigration, error) {
-	approved, err := readCommandMigrationManifestFile(approvedManifestPath)
-	if err != nil {
-		return nil, fmt.Errorf("read approved command migrations: %w", err)
-	}
-	candidate, err := readCommandMigrationManifestFile(candidateManifestPath)
-	if err != nil {
-		return nil, fmt.Errorf("read candidate command migrations: %w", err)
-	}
 	current, err := readInterfaceSnapshotFile(currentSnapshotPath)
 	if err != nil {
 		return nil, fmt.Errorf("read migration current snapshot: %w", err)
@@ -385,6 +423,120 @@ func readCommandMigrationManifestFile(path string) (interfacesnapshot.CommandMig
 		return interfacesnapshot.CommandMigrationManifest{}, err
 	}
 	return interfacesnapshot.ReadCommandMigrationManifest(bytes.NewReader(data))
+}
+
+func commandMigrationManifestsContainProductRetirement(manifests ...interfacesnapshot.CommandMigrationManifest) bool {
+	for _, manifest := range manifests {
+		for _, migration := range manifest.Migrations {
+			if migration.Kind == interfacesnapshot.CommandMigrationProductRetirement {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func validateSchemaProductRetirementScopes(
+	mergeBase schemaContract,
+	stable schemaContract,
+	current schemaContract,
+	authority interfacesnapshot.CommandMigrationManifest,
+	candidate interfacesnapshot.CommandMigrationManifest,
+) error {
+	references := []schemaContractReference{
+		{label: "merge-base", contract: mergeBase},
+		{label: "stable", contract: stable},
+	}
+
+	for _, migration := range authority.Migrations {
+		if migration.Kind != interfacesnapshot.CommandMigrationProductRetirement {
+			continue
+		}
+		if migration.State == interfacesnapshot.CommandMigrationPending {
+			if err := validateExactSchemaProductRetirementToolUnion(references, migration); err != nil {
+				return fmt.Errorf("approved product retirement %q: %w", migration.Schema.ProductID, err)
+			}
+			continue
+		}
+		for _, reference := range references {
+			if err := validateSchemaProductRetirementToolSubset(reference.label, reference.contract, migration); err != nil {
+				return fmt.Errorf("approved product retirement %q: %w", migration.Schema.ProductID, err)
+			}
+		}
+		if _, exists := current.Products[migration.Schema.ProductID]; exists {
+			return fmt.Errorf("consumed product retirement %q current Schema still publishes the product", migration.Schema.ProductID)
+		}
+	}
+
+	for _, migration := range candidate.Migrations {
+		if migration.Kind != interfacesnapshot.CommandMigrationProductRetirement {
+			continue
+		}
+		switch migration.State {
+		case interfacesnapshot.CommandMigrationPending:
+			if err := validateExactSchemaProductRetirementToolUnion(references, migration); err != nil {
+				return fmt.Errorf("pending product retirement %q: %w", migration.Schema.ProductID, err)
+			}
+			baseProduct, baseExists := mergeBase.Products[migration.Schema.ProductID]
+			currentProduct, currentExists := current.Products[migration.Schema.ProductID]
+			if baseExists != currentExists || (baseExists && !reflect.DeepEqual(baseProduct, currentProduct)) {
+				return fmt.Errorf("pending product retirement %q changed the Schema product in its approval PR", migration.Schema.ProductID)
+			}
+		case interfacesnapshot.CommandMigrationConsumed:
+			if _, exists := current.Products[migration.Schema.ProductID]; exists {
+				return fmt.Errorf("consumed product retirement %q current Schema still publishes the product", migration.Schema.ProductID)
+			}
+		}
+	}
+	return nil
+}
+
+func validateExactSchemaProductRetirementToolUnion(
+	references []schemaContractReference,
+	migration interfacesnapshot.CommandMigration,
+) error {
+	declared := make(map[string]bool, len(migration.Schema.Tools))
+	for _, tool := range migration.Schema.Tools {
+		declared[tool] = true
+	}
+	union := make(map[string]bool, len(declared))
+	for _, reference := range references {
+		product, exists := reference.contract.Products[migration.Schema.ProductID]
+		if !exists {
+			continue
+		}
+		for tool := range product.Tools {
+			if !declared[tool] {
+				return fmt.Errorf("%s Schema product contains unreviewed tool %q", reference.label, tool)
+			}
+			union[tool] = true
+		}
+	}
+	if len(union) != len(declared) {
+		return fmt.Errorf("reviewed tools do not exactly match the merge-base and stable Schema tool union")
+	}
+	return nil
+}
+
+func validateSchemaProductRetirementToolSubset(
+	label string,
+	contract schemaContract,
+	migration interfacesnapshot.CommandMigration,
+) error {
+	product, exists := contract.Products[migration.Schema.ProductID]
+	if !exists {
+		return nil
+	}
+	declared := make(map[string]bool, len(migration.Schema.Tools))
+	for _, tool := range migration.Schema.Tools {
+		declared[tool] = true
+	}
+	for tool := range product.Tools {
+		if !declared[tool] {
+			return fmt.Errorf("%s Schema product contains unreviewed tool %q", label, tool)
+		}
+	}
+	return nil
 }
 
 func readInterfaceSnapshotFile(path string) (interfacesnapshot.Snapshot, error) {
@@ -1843,6 +1995,33 @@ func normalizeSchemaCommandMigrations(
 ) (schemaContract, error) {
 	normalized := cloneContract(baseline)
 	for _, migration := range migrations {
+		if migration.Kind == interfacesnapshot.CommandMigrationProductRetirement {
+			oldProduct, productExists := baseline.Products[migration.Schema.ProductID]
+			if !productExists {
+				continue
+			}
+			if _, stillPublished := current.Products[migration.Schema.ProductID]; stillPublished {
+				return schemaContract{}, fmt.Errorf(
+					"approved product retirement %q current Schema still publishes the product",
+					migration.Schema.ProductID,
+				)
+			}
+			declared := make(map[string]bool, len(migration.Schema.Tools))
+			for _, tool := range migration.Schema.Tools {
+				declared[tool] = true
+			}
+			for tool := range oldProduct.Tools {
+				if !declared[tool] {
+					return schemaContract{}, fmt.Errorf(
+						"approved product retirement %q historical Schema contains unreviewed tool %q",
+						migration.Schema.ProductID,
+						tool,
+					)
+				}
+			}
+			delete(normalized.Products, migration.Schema.ProductID)
+			continue
+		}
 		oldProduct, productExists := baseline.Products[migration.Schema.ProductID]
 		oldTool, toolExists := oldProduct.Tools[migration.Schema.SourceToolID]
 		if !productExists || !toolExists {

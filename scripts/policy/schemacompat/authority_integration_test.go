@@ -174,6 +174,7 @@ func main() {
 	baseSnapshot := flag.String("migration-base-snapshot", "", "base interface snapshot")
 	stableSnapshot := flag.String("migration-stable-snapshot", "", "stable interface snapshot")
 	migrationBaseSchema := flag.String("migration-base-schema", "", "merge-base Schema contract")
+	migrationStableSchema := flag.String("migration-stable-schema", "", "stable Schema contract")
 	approvedCommand := flag.String("approved-command-migrations", "", "base command ledger")
 	candidateCommand := flag.String("candidate-command-migrations", "", "candidate command ledger")
 	flag.Parse()
@@ -221,6 +222,15 @@ func main() {
 		os.Exit(2)
 	}
 	if commandPair {
+		candidateCommandData, err := os.ReadFile(*candidateCommand)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if strings.Contains(string(candidateCommandData), "product_retirement") {
+			fmt.Fprintln(os.Stderr, "LEGACY_SCHEMA_PARSER_REACHED_PRODUCT_RETIREMENT")
+			os.Exit(29)
+		}
 		data, err := os.ReadFile(*migrationBaseSchema)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -231,8 +241,18 @@ func main() {
 			os.Exit(2)
 		}
 		fmt.Fprintln(os.Stdout, "BASE_SCHEMA_LINEAGE=BASE_AUTHORITY")
+		stableData, err := os.ReadFile(*migrationStableSchema)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if !strings.Contains(string(stableData), "STABLE_RELEASE") {
+			fmt.Fprintf(os.Stderr, "migration stable Schema is not stable-owned: %s\n", stableData)
+			os.Exit(2)
+		}
+		fmt.Fprintln(os.Stdout, "STABLE_SCHEMA_LINEAGE=STABLE_RELEASE")
 	} else {
-		if *migrationBaseSchema != "" {
+		if *migrationBaseSchema != "" || *migrationStableSchema != "" {
 			fmt.Fprintln(os.Stderr, "flag-only Schema check received command migration lineage")
 			os.Exit(2)
 		}
@@ -424,14 +444,16 @@ func main() {
 }
 
 type authorityScenario struct {
-	name                   string
-	baseGovernance         string
-	commandGovernance      string
-	commandManifestChanged bool
-	candidateMutation      string
-	checkerMode            string
-	want                   string
-	authorityMarker        string
+	name                        string
+	baseGovernance              string
+	commandGovernance           string
+	commandManifestChanged      bool
+	productRetirementCapability bool
+	productRetirementCandidate  bool
+	candidateMutation           string
+	checkerMode                 string
+	want                        string
+	authorityMarker             string
 }
 
 func TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority(t *testing.T) {
@@ -530,6 +552,22 @@ func TestCrossPlatformCoverageSchemaCompatibilityUsesBaseOwnedAuthority(t *testi
 			commandGovernance:      "complete",
 			commandManifestChanged: true,
 			authorityMarker:        "BASE_SCHEMA_CHECKER_ENFORCED",
+		},
+		{
+			name:                        "Schema product retirement mechanism can land with an empty ledger",
+			baseGovernance:              "complete",
+			commandGovernance:           "complete",
+			productRetirementCapability: true,
+			authorityMarker:             "BASE_SCHEMA_CHECKER_ENFORCED",
+		},
+		{
+			name:                        "first Schema product retirement kind requires three separate PRs",
+			baseGovernance:              "complete",
+			commandGovernance:           "complete",
+			checkerMode:                 "stable-schema-guard",
+			productRetirementCapability: true,
+			productRetirementCandidate:  true,
+			want:                        "land capability, pending approval, and consumption in three separate PRs",
 		},
 		{
 			name:              "unchanged command manifest allows independent corecmd change",
@@ -707,13 +745,20 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 	}
 	schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "interface-migrations", "approved-flag-migrations-v1.json"), candidateLedger, 0o644)
 	if test.commandGovernance == "complete" || test.commandGovernance == "bootstrap" {
-		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "command_migrations.go"), "package interfacesnapshot\n", 0o644)
+		commandMigrationsSource := "package interfacesnapshot\n"
+		if test.productRetirementCapability {
+			commandMigrationsSource += "\nconst productRetirementMigrationCapability = \"dws.command-migration.product-retirement.v1\"\n"
+		}
+		schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "command_migrations.go"), commandMigrationsSource, 0o644)
 		if test.commandGovernance == "bootstrap" {
 			schemaWriteFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go"), schemaConstParamsRegistrySource("CANDIDATE"), 0o644)
 		}
 		commandManifest := "{\"version\":1,\"migrations\":[]}\n"
 		if test.commandManifestChanged {
 			commandManifest = "{\"version\":1,\"migrations\":[{\"candidate\":\"PENDING\"}]}\n"
+		}
+		if test.productRetirementCandidate {
+			commandManifest = "{\"version\":1,\"migrations\":[{\"kind\":\"product_retirement\"}]}\n"
 		}
 		schemaWriteFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "interface-migrations", "approved-command-migrations-v1.json"), commandManifest, 0o644)
 	}
@@ -813,7 +858,7 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 	if runErr == nil {
 		t.Fatalf("Schema compatibility script unexpectedly succeeded; output:\n%s", got)
 	}
-	for _, forbidden := range []string{"CANDIDATE_NOOP", "LIVE_WORKTREE_BINARY"} {
+	for _, forbidden := range []string{"CANDIDATE_NOOP", "LIVE_WORKTREE_BINARY", "LEGACY_SCHEMA_PARSER_REACHED_PRODUCT_RETIREMENT"} {
 		if strings.Contains(got, forbidden) {
 			t.Fatalf("candidate-controlled authority %q took effect; output:\n%s", forbidden, got)
 		}
@@ -827,6 +872,9 @@ func runSchemaAuthorityCase(t *testing.T, test authorityScenario) {
 		}
 		if test.checkerMode == "stable-schema-guard" && strings.Count(got, "BASE_SCHEMA_LINEAGE=BASE_AUTHORITY") != 2 {
 			t.Fatalf("governed Schema check did not pass the base-owned Schema lineage to both historical checks; output:\n%s", got)
+		}
+		if test.checkerMode == "stable-schema-guard" && strings.Count(got, "STABLE_SCHEMA_LINEAGE=STABLE_RELEASE") != 2 {
+			t.Fatalf("governed Schema check did not pass the stable Schema lineage to both historical checks; output:\n%s", got)
 		}
 		if test.checkerMode == "flag-only-schema-guard" && strings.Count(got, "FLAG_ONLY_SCHEMA_LINEAGE_OMITTED") != 2 {
 			t.Fatalf("flag-only Schema check received command migration lineage; output:\n%s", got)

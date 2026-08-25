@@ -207,6 +207,17 @@ has_any_schema_command_migration_governance_artifact() {
 	return 1
 }
 
+base_supports_product_retirement() {
+	grep -Fq \
+		'productRetirementMigrationCapability = "dws.command-migration.product-retirement.v1"' \
+		"$BASE_WORKTREE/$COMMAND_MIGRATIONS_REL"
+}
+
+candidate_declares_product_retirement() {
+	grep -Fq '"product_retirement"' \
+		"$CANDIDATE_WORKTREE/$COMMAND_MIGRATION_MANIFEST_REL"
+}
+
 check_candidate_const_params_source_policy() {
 	source_policy_failed=false
 	for token in attachInterfaceBoolConstParams InterfaceBoolConstParams interfaceBoolConstParamsRegistry; do
@@ -363,6 +374,11 @@ if has_complete_schema_command_migration_governance "$BASE_COMMIT"; then
 	APPROVED_COMMAND_MANIFEST="$BASE_WORKTREE/$COMMAND_MIGRATION_MANIFEST_REL"
 	CANDIDATE_COMMAND_MANIFEST="$CANDIDATE_WORKTREE/$COMMAND_MIGRATION_MANIFEST_REL"
 	require_complete_candidate_schema_command_governance
+	if candidate_declares_product_retirement && ! base_supports_product_retirement; then
+		printf '%s\n' \
+			'merge-base command migration authority does not support product_retirement; land capability, pending approval, and consumption in three separate PRs' >&2
+		exit 2
+	fi
 	require_base_identical_command_migration_bridges
 elif has_any_schema_command_migration_governance_artifact "$BASE_COMMIT"; then
 	printf 'error: merge-base contains an incomplete Schema command migration governance artifact set: %s\n' \
@@ -406,6 +422,10 @@ CANDIDATE_RAW="$TMP_ROOT/candidate-schema.json"
 CHECKER_SUPPORTS_MIGRATION_BASE_SCHEMA=false
 if "$CHECKER" --help 2>&1 | grep -Fq -- 'migration-base-schema'; then
 	CHECKER_SUPPORTS_MIGRATION_BASE_SCHEMA=true
+fi
+CHECKER_SUPPORTS_MIGRATION_STABLE_SCHEMA=false
+if "$CHECKER" --help 2>&1 | grep -Fq -- 'migration-stable-schema'; then
+	CHECKER_SUPPORTS_MIGRATION_STABLE_SCHEMA=true
 fi
 
 mkdir -p "$TMP_ROOT/base-home" "$TMP_ROOT/stable-home" "$TMP_ROOT/candidate-home"
@@ -487,6 +507,10 @@ check_with_migrations() {
 	if [ "$USE_COMMAND_MIGRATION_GOVERNANCE" = true ] &&
 		[ "$CHECKER_SUPPORTS_MIGRATION_BASE_SCHEMA" = true ]; then
 		set -- "$@" --migration-base-schema "$BASELINE"
+	fi
+	if [ "$USE_COMMAND_MIGRATION_GOVERNANCE" = true ] &&
+		[ "$CHECKER_SUPPORTS_MIGRATION_STABLE_SCHEMA" = true ]; then
+		set -- "$@" --migration-stable-schema "$STABLE_BASELINE"
 	fi
 	check_schema_contract "$historical_kind" "$historical_ref" "$historical_baseline" "$@"
 }

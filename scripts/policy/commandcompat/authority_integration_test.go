@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"example.com/dws-command-compat-authority-test/internal/interfacesnapshot"
 )
@@ -52,7 +53,7 @@ func main() {
 		stable := flags.String("stable", "", "stable snapshot")
 		_ = flags.String("approved-flag-migrations", "", "approved manifest")
 		_ = flags.String("approved-command-migrations", "", "approved command manifest")
-		_ = flags.String("candidate-command-migrations", "", "candidate command manifest")
+		candidateCommandManifest := flags.String("candidate-command-migrations", "", "candidate command manifest")
 		_ = flags.Parse(os.Args[2:])
 		for _, path := range []string{*current, *base, *stable} {
 			content, err := os.ReadFile(path)
@@ -75,6 +76,17 @@ func main() {
 			if string(content) != "{\"version\":1,\"migrations\":[]}\n" {
 				fmt.Println("UNCOMMITTED_MANIFEST_USED")
 				return
+			}
+		}
+		if *candidateCommandManifest != "" {
+			content, err := os.ReadFile(*candidateCommandManifest)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(2)
+			}
+			if strings.Contains(string(content), "product_retirement") {
+				fmt.Fprintln(os.Stderr, "LEGACY_COMMAND_PARSER_REACHED_PRODUCT_RETIREMENT")
+				os.Exit(29)
 			}
 		}
 		fmt.Fprintln(os.Stderr, "BASE_COMPARATOR_ENFORCED")
@@ -202,13 +214,15 @@ func main() {
 `
 
 type authorityScenario struct {
-	name                   string
-	baseGovernance         string
-	commandGovernance      string
-	commandManifestChanged bool
-	candidateMutation      string
-	want                   string
-	wantAuthorityDecision  bool
+	name                        string
+	baseGovernance              string
+	commandGovernance           string
+	commandManifestChanged      bool
+	productRetirementCapability bool
+	productRetirementCandidate  bool
+	candidateMutation           string
+	want                        string
+	wantAuthorityDecision       bool
 }
 
 func TestCrossPlatformCoverageCommandCompatibilityUsesBaseOwnedAuthority(t *testing.T) {
@@ -294,6 +308,21 @@ func TestCrossPlatformCoverageCommandCompatibilityUsesBaseOwnedAuthority(t *test
 			commandGovernance:      "complete",
 			commandManifestChanged: true,
 			wantAuthorityDecision:  true,
+		},
+		{
+			name:                        "product retirement mechanism can land with an empty ledger",
+			baseGovernance:              "complete",
+			commandGovernance:           "complete",
+			productRetirementCapability: true,
+			wantAuthorityDecision:       true,
+		},
+		{
+			name:                        "first product retirement kind requires three separate PRs",
+			baseGovernance:              "complete",
+			commandGovernance:           "complete",
+			productRetirementCapability: true,
+			productRetirementCandidate:  true,
+			want:                        "land capability, pending approval, and consumption in three separate PRs",
 		},
 		{
 			name:                  "unchanged command manifest allows independent corecmd change",
@@ -468,13 +497,20 @@ func runBaseOwnedAuthorityCase(t *testing.T, test authorityScenario) {
 		)
 	}
 	if test.commandGovernance == "complete" || test.commandGovernance == "bootstrap" {
-		writeFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "command_migrations.go"), "package interfacesnapshot\n", 0o644)
+		commandMigrationsSource := "package interfacesnapshot\n"
+		if test.productRetirementCapability {
+			commandMigrationsSource += "\nconst productRetirementMigrationCapability = \"dws.command-migration.product-retirement.v1\"\n"
+		}
+		writeFile(t, filepath.Join(fixtureRoot, "internal", "interfacesnapshot", "command_migrations.go"), commandMigrationsSource, 0o644)
 		if test.commandGovernance == "bootstrap" {
 			writeFile(t, filepath.Join(fixtureRoot, "internal", "corecmd", "interface_const_params.go"), constParamsRegistrySource("CANDIDATE"), 0o644)
 		}
 		commandManifest := "{\"version\":1,\"migrations\":[]}\n"
 		if test.commandManifestChanged {
 			commandManifest = "{\"version\":1,\"migrations\":[{\"candidate\":\"PENDING\"}]}\n"
+		}
+		if test.productRetirementCandidate {
+			commandManifest = "{\"version\":1,\"migrations\":[{\"kind\":\"product_retirement\"}]}\n"
 		}
 		writeFile(t, filepath.Join(fixtureRoot, "scripts", "policy", "interface-migrations", "approved-command-migrations-v1.json"), commandManifest, 0o644)
 	}
@@ -559,6 +595,9 @@ func runBaseOwnedAuthorityCase(t *testing.T, test authorityScenario) {
 	}
 	if strings.Contains(got, "UNCOMMITTED_MANIFEST_USED") {
 		t.Fatalf("compatibility script mixed the live manifest with the committed candidate surface; output:\n%s", got)
+	}
+	if strings.Contains(got, "LEGACY_COMMAND_PARSER_REACHED_PRODUCT_RETIREMENT") {
+		t.Fatalf("legacy command parser received a first-use product retirement record; output:\n%s", got)
 	}
 	if test.wantAuthorityDecision {
 		if count := strings.Count(got, "BASE_HELPER_GENERATE=BASE"); count != 3 {

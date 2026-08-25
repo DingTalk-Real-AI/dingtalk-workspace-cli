@@ -5,8 +5,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -384,6 +386,262 @@ func TestCrossPlatformCoverageSchemaCommandMigrationNormalizationEdges(t *testin
 	}
 }
 
+func TestCrossPlatformCoverageSchemaProductRetirementExactDualBaselineScope(t *testing.T) {
+	base := schemaProductRetirementContract(
+		"edu-app.query_all_task",
+		"edu-app.query_publish_task",
+	)
+	stable := schemaProductRetirementContract("edu-app.query_all_task")
+	current := cloneContract(base)
+	delete(current.Products, "edu-app")
+	migration := schemaProductRetirementMigration(interfacesnapshot.CommandMigrationPending)
+	authority := interfacesnapshot.CommandMigrationManifest{
+		Version:    interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{migration},
+	}
+	candidate := authority
+	candidate.Migrations = append([]interfacesnapshot.CommandMigration(nil), authority.Migrations...)
+	candidate.Migrations[0].State = interfacesnapshot.CommandMigrationConsumed
+
+	if err := validateSchemaProductRetirementScopes(base, stable, current, authority, candidate); err != nil {
+		t.Fatalf("exact base/stable product retirement scope: %v", err)
+	}
+	normalized, err := normalizeSchemaCommandMigrations(base, current, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatalf("normalize base product retirement: %v", err)
+	}
+	if _, exists := normalized.Products["edu-app"]; exists {
+		t.Fatal("normalized base retained retired product")
+	}
+	if !reflect.DeepEqual(normalized.Products["doc"], base.Products["doc"]) {
+		t.Fatal("product retirement changed an unrelated Schema product")
+	}
+	if failures := checkCompatibility(normalized, current); len(failures) != 0 {
+		t.Fatalf("retired product remained incompatible: %v", failures)
+	}
+
+	stableAbsent := schemaProductRetirementContract()
+	if err := validateSchemaProductRetirementScopes(base, stableAbsent, current, authority, candidate); err != nil {
+		t.Fatalf("stable baseline without product should be allowed: %v", err)
+	}
+
+	unlisted := cloneContract(stable)
+	product := unlisted.Products["edu-app"]
+	product.Tools["edu-app.unreviewed"] = product.Tools["edu-app.query_all_task"]
+	unlisted.Products["edu-app"] = product
+	if err := validateSchemaProductRetirementScopes(base, unlisted, current, authority, candidate); err == nil ||
+		!strings.Contains(err.Error(), "unreviewed tool") {
+		t.Fatalf("unlisted stable tool error=%v", err)
+	}
+
+	tooBroad := migration
+	tooBroad.Schema.Tools = append(append([]string(nil), migration.Schema.Tools...), "edu-app.unpublished")
+	tooBroadAuthority := authority
+	tooBroadAuthority.Migrations = []interfacesnapshot.CommandMigration{tooBroad}
+	if err := validateSchemaProductRetirementScopes(base, stable, current, tooBroadAuthority, candidate); err == nil ||
+		!strings.Contains(err.Error(), "do not exactly match") {
+		t.Fatalf("absent reviewed Schema tool error=%v", err)
+	}
+
+	pendingCurrent := cloneContract(base)
+	product = pendingCurrent.Products["edu-app"]
+	tool := product.Tools["edu-app.query_all_task"]
+	tool.Risk = "high"
+	product.Tools["edu-app.query_all_task"] = tool
+	pendingCurrent.Products["edu-app"] = product
+	emptyAuthority := interfacesnapshot.CommandMigrationManifest{
+		Version:    interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{},
+	}
+	if err := validateSchemaProductRetirementScopes(base, stable, pendingCurrent, emptyAuthority, authority); err == nil ||
+		!strings.Contains(err.Error(), "changed the Schema product in its approval PR") {
+		t.Fatalf("candidate Schema self-approval error=%v", err)
+	}
+
+	if _, err := normalizeSchemaCommandMigrations(base, base, []interfacesnapshot.CommandMigration{migration}); err == nil ||
+		!strings.Contains(err.Error(), "still publishes the product") {
+		t.Fatalf("still-published product normalization error=%v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaProductRetirementScopeEdges(t *testing.T) {
+	base := schemaProductRetirementContract(
+		"edu-app.query_all_task",
+		"edu-app.query_publish_task",
+	)
+	stable := schemaProductRetirementContract("edu-app.query_all_task")
+	absent := schemaProductRetirementContract()
+	pending := schemaProductRetirementMigration(interfacesnapshot.CommandMigrationPending)
+	consumed := schemaProductRetirementMigration(interfacesnapshot.CommandMigrationConsumed)
+	nonRetirement := interfacesnapshot.CommandMigration{Kind: interfacesnapshot.CommandMigrationMove}
+	empty := interfacesnapshot.CommandMigrationManifest{
+		Version:    interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{},
+	}
+
+	if err := validateSchemaProductRetirementScopes(
+		base,
+		stable,
+		absent,
+		interfacesnapshot.CommandMigrationManifest{Version: interfacesnapshot.CommandMigrationManifestVersion, Migrations: []interfacesnapshot.CommandMigration{nonRetirement}},
+		interfacesnapshot.CommandMigrationManifest{Version: interfacesnapshot.CommandMigrationManifestVersion, Migrations: []interfacesnapshot.CommandMigration{nonRetirement}},
+	); err != nil {
+		t.Fatalf("non-retirement migrations must be ignored: %v", err)
+	}
+
+	consumedAuthority := interfacesnapshot.CommandMigrationManifest{
+		Version:    interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{consumed},
+	}
+	if err := validateSchemaProductRetirementScopes(base, stable, absent, consumedAuthority, empty); err != nil {
+		t.Fatalf("consumed retirement with reviewed historical subsets: %v", err)
+	}
+	if err := validateSchemaProductRetirementScopes(base, absent, absent, consumedAuthority, empty); err != nil {
+		t.Fatalf("consumed retirement with absent stable product: %v", err)
+	}
+
+	unreviewed := cloneContract(stable)
+	product := unreviewed.Products["edu-app"]
+	product.Tools["edu-app.unreviewed"] = product.Tools["edu-app.query_all_task"]
+	unreviewed.Products["edu-app"] = product
+	if err := validateSchemaProductRetirementScopes(base, unreviewed, absent, consumedAuthority, empty); err == nil ||
+		!strings.Contains(err.Error(), "contains unreviewed tool") {
+		t.Fatalf("consumed retirement unreviewed historical tool error=%v", err)
+	}
+	if err := validateSchemaProductRetirementScopes(base, stable, base, consumedAuthority, empty); err == nil ||
+		!strings.Contains(err.Error(), "current Schema still publishes the product") {
+		t.Fatalf("consumed authority still-published product error=%v", err)
+	}
+
+	tooBroad := pending
+	tooBroad.Schema.Tools = append(append([]string(nil), pending.Schema.Tools...), "edu-app.unpublished")
+	tooBroadCandidate := interfacesnapshot.CommandMigrationManifest{
+		Version:    interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{tooBroad},
+	}
+	if err := validateSchemaProductRetirementScopes(base, stable, base, empty, tooBroadCandidate); err == nil ||
+		!strings.Contains(err.Error(), "pending product retirement") {
+		t.Fatalf("pending retirement invalid tool union error=%v", err)
+	}
+
+	consumedCandidate := interfacesnapshot.CommandMigrationManifest{
+		Version:    interfacesnapshot.CommandMigrationManifestVersion,
+		Migrations: []interfacesnapshot.CommandMigration{consumed},
+	}
+	if err := validateSchemaProductRetirementScopes(base, stable, base, empty, consumedCandidate); err == nil ||
+		!strings.Contains(err.Error(), "current Schema still publishes the product") {
+		t.Fatalf("consumed candidate still-published product error=%v", err)
+	}
+
+	if normalized, err := normalizeSchemaCommandMigrations(absent, absent, []interfacesnapshot.CommandMigration{consumed}); err != nil ||
+		!reflect.DeepEqual(normalized, absent) {
+		t.Fatalf("retirement absent from historical baseline normalized=%#v error=%v", normalized, err)
+	}
+	narrow := consumed
+	narrow.Schema.Tools = []string{"edu-app.query_all_task"}
+	if _, err := normalizeSchemaCommandMigrations(base, absent, []interfacesnapshot.CommandMigration{narrow}); err == nil ||
+		!strings.Contains(err.Error(), "historical Schema contains unreviewed tool") {
+		t.Fatalf("normalization unreviewed historical tool error=%v", err)
+	}
+}
+
+func TestCrossPlatformCoverageSchemaProductRetirementRunRequiresBothHistoricalContracts(t *testing.T) {
+	directory := t.TempDir()
+	baselinePath := filepath.Join(directory, "stable-schema.json")
+	baseSchemaPath := filepath.Join(directory, "base-schema.json")
+	stableSchemaPath := filepath.Join(directory, "stable-lineage-schema.json")
+	currentPath := filepath.Join(directory, "current-schema.json")
+	approvedPath := filepath.Join(directory, "approved-commands.json")
+	candidatePath := filepath.Join(directory, "candidate-commands.json")
+	currentSnapshotPath := filepath.Join(directory, "current-snapshot.json")
+	baseSnapshotPath := filepath.Join(directory, "base-snapshot.json")
+	stableSnapshotPath := filepath.Join(directory, "stable-snapshot.json")
+
+	base := schemaProductRetirementContract(
+		"edu-app.query_all_task",
+		"edu-app.query_publish_task",
+	)
+	stable := schemaProductRetirementContract("edu-app.query_all_task")
+	current := cloneContract(base)
+	delete(current.Products, "edu-app")
+	writeSchemaContractFile(t, baselinePath, stable)
+	writeSchemaContractFile(t, baseSchemaPath, base)
+	writeSchemaContractFile(t, stableSchemaPath, stable)
+	writeRawSchemaContractFile(t, currentPath, current)
+	writeSchemaProductRetirementManifestFile(t, approvedPath, interfacesnapshot.CommandMigrationPending)
+	writeSchemaProductRetirementManifestFile(t, candidatePath, interfacesnapshot.CommandMigrationConsumed)
+	writeInterfaceSnapshotFile(t, currentSnapshotPath, schemaProductRetirementSnapshot("absent"))
+	writeInterfaceSnapshotFile(t, baseSnapshotPath, schemaProductRetirementSnapshot("full"))
+	writeInterfaceSnapshotFile(t, stableSnapshotPath, schemaProductRetirementSnapshot("stable-subset"))
+
+	args := []string{
+		"--check", baselinePath,
+		"--current", currentPath,
+		"--migration-base-schema", baseSchemaPath,
+		"--migration-stable-schema", stableSchemaPath,
+		"--approved-command-migrations", approvedPath,
+		"--candidate-command-migrations", candidatePath,
+		"--migration-current-snapshot", currentSnapshotPath,
+		"--migration-base-snapshot", baseSnapshotPath,
+		"--migration-stable-snapshot", stableSnapshotPath,
+	}
+	var stdout, stderr strings.Builder
+	if code := run(args, &stdout, &stderr); code != 0 {
+		t.Fatalf("product retirement run code=%d stderr=%s", code, stderr.String())
+	}
+
+	withoutBaseSchema := append([]string(nil), args[:4]...)
+	withoutBaseSchema = append(withoutBaseSchema, args[6:]...)
+	stderr.Reset()
+	if code := run(withoutBaseSchema, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "--migration-stable-schema requires") {
+		t.Fatalf("stable Schema without base code=%d stderr=%q", code, stderr.String())
+	}
+
+	stderr.Reset()
+	if code := run([]string{
+		"--check", baselinePath,
+		"--current", currentPath,
+		"--migration-stable-schema", stableSchemaPath,
+	}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "--migration-stable-schema requires") {
+		t.Fatalf("stable Schema without command manifests code=%d stderr=%q", code, stderr.String())
+	}
+
+	missingBaseArgs := append([]string(nil), args...)
+	missingBaseArgs[5] = filepath.Join(directory, "missing-base-schema.json")
+	stderr.Reset()
+	if code := run(missingBaseArgs, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "read product retirement merge-base Schema contract") {
+		t.Fatalf("missing retirement base Schema code=%d stderr=%q", code, stderr.String())
+	}
+
+	missingStableArgs := append([]string(nil), args...)
+	missingStableArgs[7] = filepath.Join(directory, "missing-stable-schema.json")
+	stderr.Reset()
+	if code := run(missingStableArgs, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "read product retirement stable Schema contract") {
+		t.Fatalf("missing retirement stable Schema code=%d stderr=%q", code, stderr.String())
+	}
+
+	stillPublishedPath := filepath.Join(directory, "still-published-current-schema.json")
+	writeRawSchemaContractFile(t, stillPublishedPath, base)
+	invalidScopeArgs := append([]string(nil), args...)
+	invalidScopeArgs[3] = stillPublishedPath
+	stderr.Reset()
+	if code := run(invalidScopeArgs, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "validate Schema product retirement scope") {
+		t.Fatalf("invalid retirement scope code=%d stderr=%q", code, stderr.String())
+	}
+
+	withoutStableSchema := append([]string(nil), args[:6]...)
+	withoutStableSchema = append(withoutStableSchema, args[8:]...)
+	stderr.Reset()
+	if code := run(withoutStableSchema, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "requires merge-base and stable Schema contracts") {
+		t.Fatalf("missing stable Schema lineage code=%d stderr=%q", code, stderr.String())
+	}
+}
+
 func TestCrossPlatformCoverageSchemaFlagExtractionRequiresCompleteReplacementProjection(t *testing.T) {
 	t.Run("missing historical mapping", func(t *testing.T) {
 		baseline := schemaCommandMigrationContract(false)
@@ -717,13 +975,36 @@ func TestCrossPlatformCoverageSchemaCommandMigrationLifecycleAndRun(t *testing.T
 		t.Fatalf("command migration run code=%d stderr=%s", code, stderr.String())
 	}
 
-	paths := []string{approvedPath, candidatePath, currentSnapshotPath, baseSnapshotPath, stableSnapshotPath}
+	approved, err := readCommandMigrationManifestFile(approvedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := readCommandMigrationManifestFile(candidatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{currentSnapshotPath, baseSnapshotPath, stableSnapshotPath}
 	for index := range paths {
 		invalid := append([]string(nil), paths...)
 		invalid[index] = filepath.Join(directory, "missing.json")
-		if _, err := authorizeSchemaCommandMigrations(invalid[0], invalid[1], invalid[2], invalid[3], invalid[4]); err == nil {
+		if _, err := authorizeSchemaCommandMigrations(approved, candidate, invalid[0], invalid[1], invalid[2]); err == nil {
 			t.Fatalf("missing command migration input %d was accepted", index)
 		}
+	}
+
+	missingApprovedArgs := append([]string(nil), args...)
+	missingApprovedArgs[5] = filepath.Join(directory, "missing-approved.json")
+	stderr.Reset()
+	if code := run(missingApprovedArgs, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "read approved Schema command migrations") {
+		t.Fatalf("missing approved command manifest code=%d stderr=%q", code, stderr.String())
+	}
+	missingCandidateArgs := append([]string(nil), args...)
+	missingCandidateArgs[7] = filepath.Join(directory, "missing-candidate.json")
+	stderr.Reset()
+	if code := run(missingCandidateArgs, &stdout, &stderr); code != 2 ||
+		!strings.Contains(stderr.String(), "read candidate Schema command migrations") {
+		t.Fatalf("missing candidate command manifest code=%d stderr=%q", code, stderr.String())
 	}
 
 	stderr.Reset()
@@ -745,7 +1026,7 @@ func TestCrossPlatformCoverageSchemaCommandMigrationLifecycleAndRun(t *testing.T
 	}
 
 	badArgs := append([]string(nil), args...)
-	badArgs[5] = filepath.Join(directory, "missing-approved.json")
+	badArgs[9] = filepath.Join(directory, "missing-current-snapshot.json")
 	stderr.Reset()
 	if code := run(badArgs, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "authorize Schema command migrations") {
 		t.Fatalf("command authorization error code=%d stderr=%q", code, stderr.String())
@@ -831,7 +1112,7 @@ func TestCrossPlatformCoverageSchemaCommandMigrationComposesHistoricalFlagLineag
 		"--check", baselinePath,
 		"--current", currentPath,
 		"--migration-base-schema", baseSchemaPath,
-	}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "requires both flag and command") {
+	}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "requires the command migration manifest pair") {
 		t.Fatalf("orphan migration base Schema code=%d stderr=%q", code, stderr.String())
 	}
 	missingBaseSchema := append([]string(nil), args...)
@@ -1656,6 +1937,116 @@ func writeCommandMigrationManifestFile(t *testing.T, path string, manifest inter
 		t.Fatal(err)
 	}
 	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func schemaProductRetirementMigration(state string) interfacesnapshot.CommandMigration {
+	return interfacesnapshot.CommandMigration{
+		Kind: interfacesnapshot.CommandMigrationProductRetirement,
+		Legacy: interfacesnapshot.CommandMigrationSide{
+			Command: "dws edu-app",
+			Before:  interfacesnapshot.CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+		},
+		Commands: []string{
+			"dws edu-app",
+			"dws edu-app task",
+			"dws edu-app task list",
+		},
+		Schema: interfacesnapshot.CommandMigrationSchema{
+			ProductID: "edu-app",
+			Tools: []string{
+				"edu-app.query_all_task",
+				"edu-app.query_publish_task",
+			},
+		},
+		State:  state,
+		Reason: "Retire the reviewed education application product surface.",
+	}
+}
+
+func schemaProductRetirementContract(toolIDs ...string) schemaContract {
+	contract := cloneContract(baselineContract())
+	if len(toolIDs) == 0 {
+		return contract
+	}
+	tools := make(map[string]toolSchema, len(toolIDs))
+	for _, toolID := range toolIDs {
+		tools[toolID] = toolSchema{
+			PrimaryCLIPath: "edu-app task list",
+			InterfaceMode:  "mcp",
+			Availability:   "available",
+			Parameters:     map[string]parameterSchema{},
+			Effect:         "read",
+			Risk:           "low",
+			Confirmation:   "not_required",
+			Idempotency:    "idempotent",
+		}
+	}
+	contract.Products["edu-app"] = productSchema{Tools: tools}
+	return contract
+}
+
+func schemaProductRetirementSnapshot(variant string) interfacesnapshot.Snapshot {
+	command := func(path string) interfacesnapshot.Command {
+		return interfacesnapshot.Command{
+			Path:           path,
+			Runnable:       true,
+			Aliases:        []string{},
+			LocalFlags:     []interfacesnapshot.Flag{},
+			InheritedFlags: []interfacesnapshot.Flag{},
+		}
+	}
+	root := command("dws edu-app")
+	root.Hidden = true
+	commands := []interfacesnapshot.Command{
+		command("dws"),
+		root,
+		command("dws edu-app task"),
+		command("dws edu-app task list"),
+		command("dws other"),
+	}
+	switch variant {
+	case "full":
+	case "stable-subset":
+		commands = append(commands[:3], commands[4:]...)
+	case "absent":
+		commands = []interfacesnapshot.Command{commands[0], commands[4]}
+	default:
+		panic("unknown Schema product retirement snapshot variant: " + variant)
+	}
+	return interfacesnapshot.Snapshot{
+		SchemaVersion: interfacesnapshot.SchemaVersion,
+		Rules: interfacesnapshot.Rules{
+			ExcludedCommandSubtrees: []string{"dws __complete", "dws __completeNoDesc", "dws completion", "dws help"},
+			ExcludedFlags:           []string{"help"},
+		},
+		Commands: commands,
+	}
+}
+
+func writeSchemaProductRetirementManifestFile(t *testing.T, path, state string) {
+	t.Helper()
+	body := fmt.Sprintf(`{
+  "version": 1,
+  "migrations": [{
+    "kind": "product_retirement",
+    "legacy": {
+      "command": "dws edu-app",
+      "before": {"present": true, "runnable": true, "hidden": true},
+      "after": {"present": false}
+    },
+    "commands": ["dws edu-app", "dws edu-app task", "dws edu-app task list"],
+    "schema": {
+      "product_id": "edu-app",
+      "tools": ["edu-app.query_all_task", "edu-app.query_publish_task"]
+    },
+    "state": %q,
+    "reason": "Retire the reviewed education application product surface."
+  }]
+}
+`, state)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

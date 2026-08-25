@@ -651,6 +651,239 @@ func TestCrossPlatformCoverageCommandMigrationLifecycleAndExactFiltering(t *test
 	}
 }
 
+func TestCrossPlatformCoverageProductRetirementValidation(t *testing.T) {
+	valid := productRetirementCommandMigration(CommandMigrationPending)
+	if err := valid.validate(); err != nil {
+		t.Fatalf("valid product retirement: %v", err)
+	}
+
+	for _, test := range []struct {
+		name   string
+		mutate func(*CommandMigration)
+		want   string
+	}{
+		{
+			name:   "root must be below dws",
+			mutate: func(m *CommandMigration) { m.Legacy.Command = "dws" },
+			want:   "exact product root below dws",
+		},
+		{
+			name:   "root must be one product segment",
+			mutate: func(m *CommandMigration) { m.Legacy.Command = "dws edu-app task" },
+			want:   "exactly match schema product_id",
+		},
+		{
+			name:   "root must match product id",
+			mutate: func(m *CommandMigration) { m.Schema.ProductID = "college-contact" },
+			want:   "exactly match schema product_id",
+		},
+		{
+			name:   "replacement forbidden",
+			mutate: func(m *CommandMigration) { m.Replacement.Command = "dws replacement" },
+			want:   "must not declare replacement",
+		},
+		{
+			name:   "legacy flag forbidden",
+			mutate: func(m *CommandMigration) { m.LegacyFlag.Name = "legacy" },
+			want:   "must not declare legacy_flag",
+		},
+		{
+			name:   "root must be runnable",
+			mutate: func(m *CommandMigration) { m.Legacy.Before.Runnable = false },
+			want:   "declared runnable visibility to absent",
+		},
+		{
+			name:   "after must be absent",
+			mutate: func(m *CommandMigration) { m.Legacy.After.Present = true },
+			want:   "declared runnable visibility to absent",
+		},
+		{
+			name:   "commands required",
+			mutate: func(m *CommandMigration) { m.Commands = nil },
+			want:   "commands must be a non-empty array",
+		},
+		{
+			name:   "root command required",
+			mutate: func(m *CommandMigration) { m.Commands = m.Commands[1:] },
+			want:   "must include root",
+		},
+		{
+			name:   "command outside product",
+			mutate: func(m *CommandMigration) { m.Commands[1] = "dws edu-group task" },
+			want:   "exact path in root",
+		},
+		{
+			name: "commands sorted",
+			mutate: func(m *CommandMigration) {
+				m.Commands[1], m.Commands[2] = m.Commands[2], m.Commands[1]
+			},
+			want: "sorted and unique",
+		},
+		{
+			name:   "schema tools required",
+			mutate: func(m *CommandMigration) { m.Schema.Tools = nil },
+			want:   "tools must be a non-empty array",
+		},
+		{
+			name:   "schema tool outside product",
+			mutate: func(m *CommandMigration) { m.Schema.Tools[0] = "edu-group.query_task" },
+			want:   "canonical path in product",
+		},
+		{
+			name:   "schema tool requires leaf",
+			mutate: func(m *CommandMigration) { m.Schema.Tools[0] = "edu-app." },
+			want:   "canonical path in product",
+		},
+		{
+			name: "schema tools sorted",
+			mutate: func(m *CommandMigration) {
+				m.Schema.Tools[0], m.Schema.Tools[1] = m.Schema.Tools[1], m.Schema.Tools[0]
+			},
+			want: "sorted and unique",
+		},
+		{
+			name:   "source tool forbidden",
+			mutate: func(m *CommandMigration) { m.Schema.SourceToolID = "edu-app.old" },
+			want:   "only product_id and tools",
+		},
+		{
+			name: "parameter migration forbidden",
+			mutate: func(m *CommandMigration) {
+				m.Schema.Parameters = []CommandParameterMigration{}
+			},
+			want: "only product_id and tools",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			migration := cloneCommandMigration(valid)
+			test.mutate(&migration)
+			if err := migration.validate(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("validate error=%v, want %q", err, test.want)
+			}
+		})
+	}
+
+	move := commandMigrationManifest(CommandMigrationPending).Migrations[0]
+	move.Commands = []string{"dws chat message old"}
+	if err := move.validate(); err == nil || !strings.Contains(err.Error(), "must not declare commands") {
+		t.Fatalf("non-retirement commands error=%v", err)
+	}
+	move = commandMigrationManifest(CommandMigrationPending).Migrations[0]
+	move.Schema.Tools = []string{"chat.old"}
+	if err := move.validate(); err == nil || !strings.Contains(err.Error(), "must not declare schema tools") {
+		t.Fatalf("non-retirement tools error=%v", err)
+	}
+
+	invalidSchema := valid.Schema
+	invalidSchema.ProductID = "bad/id"
+	if err := invalidSchema.validate(CommandMigrationProductRetirement); err == nil ||
+		!strings.Contains(err.Error(), "product_id must be an exact identifier") {
+		t.Fatalf("invalid retirement Schema product error=%v", err)
+	}
+}
+
+func TestCrossPlatformCoverageProductRetirementLifecycleAndExactScope(t *testing.T) {
+	base := productRetirementSnapshot("full")
+	stable := productRetirementSnapshot("stable-subset")
+	after := productRetirementSnapshot("absent")
+	pending := productRetirementManifest(CommandMigrationPending)
+	consumed := productRetirementManifest(CommandMigrationConsumed)
+	empty := CommandMigrationManifest{Version: CommandMigrationManifestVersion, Migrations: []CommandMigration{}}
+	emptyFlags := FlagMigrationManifest{Version: FlagMigrationManifestVersion, Migrations: []FlagMigration{}}
+	references := map[string]Snapshot{"merge-base": base, "stable": stable}
+
+	if got, err := AuthorizeCommandMigrations(base, references, empty, pending); err != nil || len(got) != 0 {
+		t.Fatalf("candidate pending retirement plan=%#v, %v", got, err)
+	}
+	if _, err := AuthorizeCommandMigrations(after, references, empty, pending); err == nil ||
+		!strings.Contains(err.Error(), "cannot authorize its own interface change") {
+		t.Fatalf("candidate retirement self-approval error=%v", err)
+	}
+
+	authorizations, err := AuthorizeCommandMigrations(after, references, pending, consumed)
+	if err != nil || len(authorizations) != 1 {
+		t.Fatalf("approved product retirement authorizations=%#v, %v", authorizations, err)
+	}
+	ordinary := CompareAll(after, references)
+	var sawRootRemoval, sawRootAliasRemoval bool
+	for _, comparison := range ordinary.Comparisons {
+		if comparison.Reference != "merge-base" {
+			continue
+		}
+		for _, change := range comparison.Blocking {
+			switch {
+			case change.Kind == "command_removed" && change.Path == "dws edu-app":
+				sawRootRemoval = true
+			case change.Kind == "command_alias_removed" && change.Path == "dws education-app":
+				sawRootAliasRemoval = true
+			case strings.HasPrefix(change.Path, "dws edu-app ") || strings.HasPrefix(change.Path, "dws education-app "):
+				t.Fatalf("ordinary comparison did not collapse nested product removal to its roots: %#v", comparison.Blocking)
+			}
+		}
+	}
+	if !sawRootRemoval || !sawRootAliasRemoval {
+		t.Fatalf("ordinary comparison findings root=%v root-alias=%v: %#v", sawRootRemoval, sawRootAliasRemoval, ordinary.Comparisons)
+	}
+	report, err := CompareAllWithInterfaceMigrations(
+		after,
+		references,
+		emptyFlags,
+		emptyFlags,
+		pending,
+		consumed,
+	)
+	if err != nil {
+		t.Fatalf("governed product retirement: %v", err)
+	}
+	if !report.Compatible {
+		t.Fatalf("whole product retirement remained blocking: %#v", report.Comparisons)
+	}
+
+	partial := productRetirementSnapshot("partial")
+	if _, err := AuthorizeCommandMigrations(partial, references, pending, consumed); err == nil ||
+		!strings.Contains(err.Error(), "changed pending product retirement surface") {
+		t.Fatalf("partial product retirement error=%v", err)
+	}
+
+	unlisted := productRetirementSnapshot("unlisted-child")
+	if _, err := AuthorizeCommandMigrations(after, map[string]Snapshot{"merge-base": unlisted, "stable": stable}, pending, consumed); err == nil ||
+		!strings.Contains(err.Error(), "outside the reviewed commands") {
+		t.Fatalf("unlisted historical command error=%v", err)
+	}
+
+	tooBroad := productRetirementManifest(CommandMigrationPending)
+	tooBroad.Migrations[0].Commands = append(tooBroad.Migrations[0].Commands, "dws edu-app task missing")
+	if _, err := AuthorizeCommandMigrations(base, references, empty, tooBroad); err == nil ||
+		!strings.Contains(err.Error(), "do not exactly match") {
+		t.Fatalf("absent reviewed command error=%v", err)
+	}
+
+	mutatedCurrent := productRetirementSnapshot("mutated")
+	if _, err := AuthorizeCommandMigrations(mutatedCurrent, references, empty, pending); err == nil ||
+		!strings.Contains(err.Error(), "changed the product surface in its approval PR") {
+		t.Fatalf("candidate pending surface mutation error=%v", err)
+	}
+
+	migration := pending.Migrations[0]
+	missingRoot := testSnapshot(
+		testCommand("dws"),
+		testCommand("dws edu-app task"),
+		testCommand("dws edu-app task list"),
+	)
+	if phase := matchProductRetirementPhase(missingRoot, migration); phase != commandMigrationPartial {
+		t.Fatalf("missing retirement root phase=%s, want %s", phase, commandMigrationPartial)
+	}
+	wrongRootState := productRetirementSnapshot("full")
+	for index := range wrongRootState.Commands {
+		if wrongRootState.Commands[index].Path == migration.Legacy.Command {
+			wrongRootState.Commands[index].Hidden = false
+		}
+	}
+	if phase := matchProductRetirementPhase(wrongRootState, migration); phase != commandMigrationPartial {
+		t.Fatalf("wrong retirement root state phase=%s, want %s", phase, commandMigrationPartial)
+	}
+}
+
 func TestCrossPlatformCoverageFlagExtractionRequiresReplacementConstantEvidence(t *testing.T) {
 	before := commandMigrationSnapshot(false, false)
 	after := commandMigrationSnapshot(true, false)
@@ -834,6 +1067,8 @@ func flagExtractionCommandMigrationManifest(state string) CommandMigrationManife
 
 func cloneCommandMigration(source CommandMigration) CommandMigration {
 	cloned := source
+	cloned.Commands = append([]string(nil), source.Commands...)
+	cloned.Schema.Tools = append([]string(nil), source.Schema.Tools...)
 	if source.Schema.Parameters != nil {
 		cloned.Schema.Parameters = make([]CommandParameterMigration, len(source.Schema.Parameters))
 		copy(cloned.Schema.Parameters, source.Schema.Parameters)
@@ -846,6 +1081,65 @@ func cloneCommandMigration(source CommandMigration) CommandMigration {
 		cloned.Schema.Parameters[index].ReplacementConstant = &constant
 	}
 	return cloned
+}
+
+func productRetirementManifest(state string) CommandMigrationManifest {
+	return CommandMigrationManifest{
+		Version:    CommandMigrationManifestVersion,
+		Migrations: []CommandMigration{productRetirementCommandMigration(state)},
+	}
+}
+
+func productRetirementCommandMigration(state string) CommandMigration {
+	return CommandMigration{
+		Kind: CommandMigrationProductRetirement,
+		Legacy: CommandMigrationSide{
+			Command: "dws edu-app",
+			Before:  CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+		},
+		Commands: []string{
+			"dws edu-app",
+			"dws edu-app task",
+			"dws edu-app task list",
+		},
+		Schema: CommandMigrationSchema{
+			ProductID: "edu-app",
+			Tools: []string{
+				"edu-app.query_all_task",
+				"edu-app.query_publish_task",
+			},
+		},
+		State:  state,
+		Reason: "Retire the reviewed education application product surface.",
+	}
+}
+
+func productRetirementSnapshot(variant string) Snapshot {
+	root := testCommandWithAliases("dws edu-app", []string{"education-app"})
+	root.Hidden = true
+	commands := []Command{
+		testCommand("dws"),
+		root,
+		testCommandWithAliases("dws edu-app task", []string{"job"}),
+		testCommandWithAliases("dws edu-app task list", []string{"ls"}, Flag{Name: "status", Type: "string"}),
+		testCommand("dws other list"),
+	}
+	switch variant {
+	case "full":
+	case "stable-subset":
+		commands = append(commands[:3], commands[4:]...)
+	case "absent":
+		commands = []Command{commands[0], commands[4]}
+	case "partial":
+		commands = []Command{commands[0], root, commands[4]}
+	case "unlisted-child":
+		commands = append(commands, testCommand("dws edu-app task secret"))
+	case "mutated":
+		commands[3].LocalFlags[0].Required = true
+	default:
+		panic("unknown product retirement snapshot variant: " + variant)
+	}
+	return testSnapshot(commands...)
 }
 
 func singleCommandMigrationManifest(state string) CommandMigrationManifest {
