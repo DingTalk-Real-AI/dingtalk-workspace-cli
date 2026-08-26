@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 	"github.com/spf13/cobra"
 )
@@ -34,8 +33,8 @@ import (
 // goProxy 时给出的 url 与 domain 都指向 server.safeding.com。KeyServer 必须
 // 是整条 URL：SDK 在配置非空时用它整体替换 C 库的 url。
 const (
-	defaultSafeChatKeyServer    = "https://server.safeding.com/DDSecureInter/getCorpSecureKey"
-	defaultSafeChatRedirectHost = "server.safeding.com"
+	defaultSafeChatKeyServer    = msgcrypto.DefaultSafeChatKeyServer
+	defaultSafeChatRedirectHost = msgcrypto.DefaultSafeChatRedirectHost
 )
 
 func newSafeChatCommand() *cobra.Command {
@@ -81,38 +80,29 @@ func startSafeChatSession(cmd *cobra.Command) (*safeChatSession, error) {
 	}
 
 	ctx := cmd.Context()
-	snap, err := auth.NewOAuthProvider(defaultConfigDir(), nil).GetTokenSnapshot(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("读取登录态失败（先 dws auth login）: %w", err)
-	}
-
-	cfg := msgcrypto.Config{
-		AuthCode:            msgcrypto.NewPortalAuthCode(defaultConfigDir(), RawVersion()),
+	session, err := msgcrypto.OpenSession(ctx, msgcrypto.SessionOptions{
+		ConfigDir:           defaultConfigDir(),
+		CLIVersion:          RawVersion(),
 		KeyServer:           strings.TrimSpace(keyServer),
 		AllowedRedirectHost: strings.TrimSpace(redirectHost),
+		KeystoreDir:         strings.TrimSpace(keystoreDir),
 		Debug:               debug,
-	}
-	if strings.TrimSpace(keystoreDir) != "" {
-		cfg.KeystoreDir = strings.TrimSpace(keystoreDir)
-	}
-	if debug {
-		cfg.Logf = func(format string, args ...any) {
+		Logf: func(format string, args ...any) {
 			fmt.Fprintf(cmd.ErrOrStderr(), "[safechat] "+format+"\n", args...)
-		}
-	}
-	if cfg.AllowedRedirectHost == "" {
+		},
+	})
+	if strings.TrimSpace(redirectHost) == "" {
 		fmt.Fprintln(cmd.ErrOrStderr(), "[safechat] 提示：未设置 --allowed-redirect-host，跳过 C 库 domain 的本地核对")
 	}
-
-	cipher, err := msgcrypto.Open(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("初始化加解密后端失败: %w", err)
+		return nil, err
 	}
-	staffID := strings.TrimSpace(snap.UserID)
-	if staffID == "" {
-		staffID = "dws-safechat"
-	}
-	return &safeChatSession{cipher: cipher, corpID: snap.CorpID, staffID: staffID, keystoreDir: cfg.KeystoreDir}, nil
+	return &safeChatSession{
+		cipher:      session.Cipher,
+		corpID:      session.CorpID,
+		staffID:     session.StaffID,
+		keystoreDir: session.KeystoreDir,
+	}, nil
 }
 
 func newSafeChatSelfTestCommand() *cobra.Command {

@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/msgcrypto"
 )
 
 func newSafeChatSelfTestForTest() (*bytes.Buffer, func(...string) error) {
@@ -54,11 +56,11 @@ func TestSafeChatSelfTestRequiresKeyServer(t *testing.T) {
 }
 
 func TestSafeChatSelfTestReportsUnavailableBackend(t *testing.T) {
-	out, run := newSafeChatSelfTestForTest()
-	err := run("key-server", "https://key.example.test", "json", "true")
-	if err == nil {
+	if msgcrypto.Available() {
 		t.Skip("safechat backend compiled in; unavailability path not reachable")
 	}
+	out, run := newSafeChatSelfTestForTest()
+	err := run("key-server", "https://key.example.test", "json", "true")
 	if !strings.Contains(err.Error(), "safechat") {
 		t.Fatalf("error should explain the build tag, got: %v", err)
 	}
@@ -110,11 +112,11 @@ func TestSafeChatDecryptRejectsMultipleInputs(t *testing.T) {
 }
 
 func TestSafeChatDecryptReportsUnavailableBackend(t *testing.T) {
-	out, run, _ := newSafeChatDecryptForTest()
-	err := run("text", "somecipher", "json", "true")
-	if err == nil {
+	if msgcrypto.Available() {
 		t.Skip("safechat backend compiled in; unavailability path not reachable")
 	}
+	out, run, _ := newSafeChatDecryptForTest()
+	err := run("text", "somecipher", "json", "true")
 	if !strings.Contains(err.Error(), "safechat") {
 		t.Fatalf("error should explain the build tag, got: %v", err)
 	}

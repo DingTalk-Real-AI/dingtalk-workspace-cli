@@ -28,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/messagecrypto"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -43,6 +44,16 @@ type imReadResultCaller struct {
 	calls     []imReadResultCall
 	args      map[string]any
 	dryRun    bool
+}
+
+type imReadFakeCipher struct{}
+
+func (imReadFakeCipher) EncryptMessage(context.Context, string, string, []byte) ([]byte, error) {
+	return nil, errors.New("not used")
+}
+
+func (imReadFakeCipher) DecryptMessage(_ context.Context, _, _ string, ciphertext []byte) ([]byte, error) {
+	return []byte("ding:" + string(ciphertext)), nil
 }
 
 func (c *imReadResultCaller) CallTool(_ context.Context, productID, toolName string, args map[string]any) (*edition.ToolResult, error) {
@@ -207,6 +218,53 @@ func TestCrossPlatformCoverageChatMessageListProjectsStableFieldsAndPreservesLeg
 	legacyMessages, ok := legacy["messages"].([]any)
 	if !ok || len(legacyMessages) != 2 {
 		t.Fatalf("legacy result.messages = %#v", legacy["messages"])
+	}
+}
+
+func TestCrossPlatformCoverageChatMessageListDecryptsEncryptedMessagesInBatch(t *testing.T) {
+	old := chatCryptoClient
+	SetChatCryptoClient(&messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: imReadFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	t.Cleanup(func() { chatCryptoClient = old })
+
+	const cipher = "SwzNkAraDE6lUHUNlVT3mjFdbxL6dWvmt77XtjACdpJx9VFibzTbW9KtDbkzGOYP||2||1||1"
+	payload := `{"result":{"messages":[{"openMessageId":"msg-1","openConversationId":"cid","content":"` + cipher + `"}]}}`
+	caller := &imReadResultCaller{responses: map[string]string{
+		"list_conversation_message_v2": payload,
+		"get_message_crypto_policy":    `{"result":{"mode":"required","reason":"admin-required"}}`,
+		"batch_ding_decrypt_messages":  `{"result":{"items":[{"messageId":"msg-1","status":"success","plaintextContent":"明文","keyVersion":5}]}}`,
+	}}
+	got, err := executeIMReadCommand(t, caller, []string{"dws", "chat"}, newChatCommand,
+		"message", "list", "--group", "cid", "--time", "2026-07-14 00:00:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(caller.calls, []imReadResultCall{
+		{productID: "chat", toolName: "list_conversation_message_v2"},
+		{productID: "im", toolName: "get_message_crypto_policy"},
+		{productID: "im", toolName: "batch_ding_decrypt_messages"},
+	}) {
+		t.Fatalf("calls = %#v", caller.calls)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(got), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["decryptCandidateCount"] != float64(1) || result["decryptedCount"] != float64(1) {
+		t.Fatalf("decrypt ledger = %#v", result)
+	}
+	messages, _ := result["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != "明文" || first["content"] != "明文" {
+		t.Fatalf("decrypted projection = %#v", first)
 	}
 }
 

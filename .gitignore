@@ -7,6 +7,7 @@ dist/
 var/
 .DS_Store
 .agents/
+.app_assistant/
 /.idea/
 /CLAUDE.md
 /.claude/

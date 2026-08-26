@@ -19,6 +19,7 @@ import (
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/messagecrypto"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 )
@@ -31,11 +32,28 @@ func (w chatOutputErrorWriter) Write([]byte) (int, error) {
 	return 0, w.err
 }
 
+type messagesSendFakeCipher struct{}
+
+func (messagesSendFakeCipher) EncryptMessage(_ context.Context, _, _ string, plaintext []byte) ([]byte, error) {
+	return []byte("safe:" + string(plaintext)), nil
+}
+
+func (messagesSendFakeCipher) DecryptMessage(_ context.Context, _, _ string, ciphertext []byte) ([]byte, error) {
+	return []byte("ding:" + string(ciphertext)), nil
+}
+
+func swapMessagesSendCryptoClient(t *testing.T, client *messagecrypto.Client) {
+	t.Helper()
+	old := messagesSendCryptoClient
+	messagesSendCryptoClient = client
+	t.Cleanup(func() { messagesSendCryptoClient = old })
+}
+
 func TestCrossPlatformCoverageMessagesSendPublishesCompleteIdentityConstraintInputs(t *testing.T) {
 	want := []string{
 		"identity", "as", "group", "chat-id", "groups", "groups-file", "chat-query", "user", "user-query", "open-dingtalk-id",
 		"users", "open-dingtalk-ids", "robot-code", "webhook-token",
-		"uuid", "idempotency-key",
+		"uuid", "idempotency-key", "require-encryption",
 	}
 	var got []string
 	for _, constraint := range MessagesSend.Constraints {
@@ -516,6 +534,118 @@ func TestCrossPlatformCoverageMessagesSendCurrentUserImageAndUserResolution(t *t
 	}
 }
 
+func TestCrossPlatformCoverageMessagesSendCurrentUserEncryptsWhenPolicyRequired(t *testing.T) {
+	swapMessagesSendCryptoClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: messagesSendFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/get_message_crypto_policy": `{"result":{"mode":"required","reason":"admin-required"}}`,
+		"im/ding_encrypt_message":      `{"dingCiphertext":"ding-cipher","algorithm":"AES-CBC","keyVersion":3}`,
+		"chat/send_personal_message":   `{"result":{"openMessageId":"sent-encrypted"}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	root.SetArgs([]string{
+		"chat", "+messages-send",
+		"--group", "cid",
+		"--text", "hello",
+		"--uuid", "encrypt-key",
+		"--yes",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 3 {
+		t.Fatalf("calls = %#v, want policy + ding encrypt + send", fake.calls)
+	}
+	if fake.calls[0].product != "im" || fake.calls[0].tool != "get_message_crypto_policy" {
+		t.Fatalf("policy call = %#v", fake.calls[0])
+	}
+	if fake.calls[1].product != "im" || fake.calls[1].tool != "ding_encrypt_message" {
+		t.Fatalf("ding encrypt call = %#v", fake.calls[1])
+	}
+	if fake.calls[1].args["plaintextContent"] != `{"text":"hello","title":"hello"}` {
+		t.Fatalf("ding encrypt args = %#v", fake.calls[1].args)
+	}
+	send := fake.calls[2]
+	if send.product != "chat" || send.tool != "send_personal_message" {
+		t.Fatalf("send call = %#v", send)
+	}
+	for key, want := range map[string]any{
+		"content":              "safe:ding-cipher",
+		"contentEncrypted":     true,
+		"cryptoProvider":       "safechat",
+		"cryptoLayer":          "ding+safechat",
+		"cryptoVersion":        "third_party_message.v1",
+		"dingKeyVersion":       3,
+		"encryptionPolicyMode": "required",
+	} {
+		if !reflect.DeepEqual(send.args[key], want) {
+			t.Errorf("%s = %#v, want %#v", key, send.args[key], want)
+		}
+	}
+}
+
+func TestCrossPlatformCoverageMessagesMgetDecryptsEncryptedMessagesInBatch(t *testing.T) {
+	swapMessagesSendCryptoClient(t, &messagecrypto.Client{
+		Identity: func(context.Context, string) (messagecrypto.Identity, error) {
+			return messagecrypto.Identity{CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		OpenSession: func(context.Context, messagecrypto.SessionOptions) (*messagecrypto.Session, error) {
+			return &messagecrypto.Session{Cipher: messagesSendFakeCipher{}, CorpID: "corp-1", StaffID: "staff-1"}, nil
+		},
+		BackendReady: func() bool { return true },
+		PolicyCache:  messagecrypto.NewPolicyCache(nil),
+	})
+	fake := &larkAlignmentCaller{responses: map[string]string{
+		"im/list_messages_by_ids":        `{"result":[{"openMessageId":"m1","openConversationId":"cid","content":"` + testCipher + `"},{"openMessageId":"m2","openConversationId":"cid","content":"plain"}]}`,
+		"im/get_message_crypto_policy":   `{"result":{"mode":"required","reason":"admin-required"}}`,
+		"im/batch_ding_decrypt_messages": `{"result":{"items":[{"messageId":"m1","status":"success","plaintextContent":"hello decrypted","keyVersion":8}]}}`,
+	}}
+	helpers.InitDeps(fake)
+	root := newPlatformCoverageRoot()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetArgs([]string{
+		"chat", "+messages-mget",
+		"--msg-ids", "m1,m2",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 3 ||
+		fake.calls[0].tool != "list_messages_by_ids" ||
+		fake.calls[1].tool != "get_message_crypto_policy" ||
+		fake.calls[2].tool != "batch_ding_decrypt_messages" {
+		t.Fatalf("calls = %#v, want list + policy + one batch decrypt", fake.calls)
+	}
+	items, _ := fake.calls[2].args["items"].([]map[string]any)
+	if len(items) != 1 || items[0]["messageId"] != "m1" || items[0]["dingCiphertext"] != "ding:"+testCipher {
+		t.Fatalf("batch decrypt args = %#v", fake.calls[2].args)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["decryptCandidateCount"] != float64(1) ||
+		payload["decryptedCount"] != float64(1) ||
+		payload["decryptFailedCount"] != float64(0) {
+		t.Fatalf("decrypt ledger = %#v", payload)
+	}
+	messages, _ := payload["messages"].([]any)
+	first, _ := messages[0].(map[string]any)
+	if first["text"] != "hello decrypted" {
+		t.Fatalf("decrypted message = %#v", first)
+	}
+}
+
 func TestCrossPlatformCoverageMessagesSendCurrentUserLocalFileFlow(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if err := os.WriteFile("report.txt", []byte("gap-fill"), 0o600); err != nil {
@@ -850,7 +980,7 @@ func TestCrossPlatformCoverageMessagesSendTextModesAndExecuteGuard(t *testing.T)
 		if err := root.Execute(); err != nil {
 			t.Fatal(err)
 		}
-		if len(fake.calls) != 1 || fake.calls[0].tool != "send_personal_message" {
+		if len(fake.calls) != 2 || fake.calls[0].tool != "get_message_crypto_policy" || fake.calls[1].tool != "send_personal_message" {
 			t.Fatalf("text mode calls = %#v", fake.calls)
 		}
 	}
