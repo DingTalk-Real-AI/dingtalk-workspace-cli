@@ -14,6 +14,7 @@ var/
 /.idea/vcs.xml
 /.idea/.gitignore
 dws
+artifacts/screenshots/
 test/cli/testdata/
 tmp/
 test/cli_compat/testdata/
