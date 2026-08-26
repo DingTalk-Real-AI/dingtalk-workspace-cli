@@ -119,6 +119,8 @@ dws aitable record query --base-id X --table-id Y \
 
 分页时只透传服务端真实 `nextCursor`。出现 `pagination_cursor_cycle`、相同 cursor 或重复页时，保留已取记录并立即停止；不要用相同参数重跑，也不要切换到其他查询命令把不完整结果误报为完整。
 
+若写入已返回真实 recordId，但同一 Base/Table 的无筛选查询也无法读到该记录，问题已不属于 filters/sort 语法。保留写入返回和查询证据并停止；不要更换操作符、加载其他 AITable Reference 或 Help、重建表，也不要重放写入。
+
 ## sort 结构规范
 
 `--sort` 传 JSON 数组，排序方向字段**必须是 `direction`**，不要使用 `order`。
