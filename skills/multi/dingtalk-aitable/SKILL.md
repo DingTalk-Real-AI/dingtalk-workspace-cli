@@ -114,7 +114,7 @@ Golden/次级直达覆盖时不读 Reference；否则按最终专有能力读取
 | `+record-query`、upsert、bulk patch 的记录 filters/sort/date/AND/OR/比较操作符 | [filter-sort](references/aitable/aitable-filter-sort.md) |
 | 记录历史、分享、删除恢复、空行或特殊字段值 | [record-ops](references/aitable-record-ops.md) |
 | 记录统计、分组聚合或去重率 | [record-stats](references/aitable/aitable-record-stats.md) |
-| 任务包含创建或关联记录主键文档 | 首次建表前读取 [primary-doc](references/aitable/aitable-primary-doc.md)；首字段直接按 `primaryDoc` 建立，不先以普通字段建表后删除重建 |
+| 查询记录的主键文档，或为记录创建主键文档 | 首次建表前读取 [primary-doc](references/aitable/aitable-primary-doc.md)；普通 Base/Table/字段/记录创建与导入不读取 |
 | AI 字段、关联字段、lookup/filterUp 或其他复杂 config | [field](references/aitable/aitable-field.md) |
 | formula 字段或公式语法 | [formula-guide](references/aitable/aitable-formula-guide.md) |
 | 导入导出任务恢复 | [export-import](references/aitable/aitable-export-import.md) |
