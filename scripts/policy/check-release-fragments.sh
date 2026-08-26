@@ -19,17 +19,172 @@ trap cleanup EXIT HUP INT TERM
 
 git -C "$ROOT" diff --no-ext-diff --find-renames --name-status "$merge_base" "$head" >"$tmp_root/status"
 
+normalize_notes() {
+  awk '
+    /^[[:space:]]*$/ && !started { next }
+    { started = 1; lines[++count] = $0 }
+    END {
+      while (count > 0 && lines[count] ~ /^[[:space:]]*$/) count--
+      for (line_no = 1; line_no <= count; line_no++) print lines[line_no]
+    }
+  ' "$1"
+}
+
+extract_release_notes() {
+  git -C "$ROOT" show "$1:CHANGELOG.md" |
+    awk -v heading="## [$2] - " '
+      index($0, heading) == 1 { found = 1; next }
+      found && /^## / { exit }
+      found { print }
+    '
+}
+
+release_heading() {
+  git -C "$ROOT" show "$1:CHANGELOG.md" |
+    awk -v heading="## [$2] - " 'index($0, heading) == 1 { print }'
+}
+
+changelog_without_release_notes() {
+  git -C "$ROOT" show "$1:CHANGELOG.md" |
+    awk -v heading="## [$2] - " '
+      index($0, heading) == 1 { print; skipped = 1; next }
+      skipped && /^## / { skipped = 0 }
+      !skipped { print }
+    '
+}
+
+# A pre-tag beta amendment must preserve the original seal verbatim except for
+# appending newly archived fragment bodies to their existing categories. These
+# helpers canonicalize the renderer's category format before comparing it.
+canonicalize_fragment_notes() {
+  awk '
+    BEGIN { order[1] = "Added"; order[2] = "Changed"; order[3] = "Deprecated"; order[4] = "Removed"; order[5] = "Fixed"; order[6] = "Security" }
+    function trim(value) {
+      sub(/^[\n]+/, "", value)
+      sub(/[\n]+$/, "", value)
+      return value
+    }
+    function flush() {
+      if (category == "") return
+      value = trim(body)
+      if (value == "" || seen[category]++) invalid = 1
+      blocks[category] = value
+      category = ""
+      body = ""
+    }
+    /^### / {
+      flush()
+      candidate = substr($0, 5)
+      if (candidate !~ /^(Added|Changed|Deprecated|Removed|Fixed|Security)$/) {
+        invalid = 1
+        next
+      }
+      category = candidate
+      next
+    }
+    {
+      if (category == "") {
+        if ($0 !~ /^[[:space:]]*$/) invalid = 1
+        next
+      }
+      body = body $0 "\n"
+    }
+    END {
+      flush()
+      if (invalid) exit 1
+      for (i = 1; i <= 6; i++) {
+        category = order[i]
+        if (category in blocks) printf "### %s\n\n%s\n\n", category, blocks[category]
+      }
+    }
+  ' "$1"
+}
+
+merge_canonical_fragment_notes() {
+  awk '
+    BEGIN { order[1] = "Added"; order[2] = "Changed"; order[3] = "Deprecated"; order[4] = "Removed"; order[5] = "Fixed"; order[6] = "Security" }
+    function trim(value) {
+      sub(/^[\n]+/, "", value)
+      sub(/[\n]+$/, "", value)
+      return value
+    }
+    function flush() {
+      if (category == "") return
+      value = trim(body)
+      if (value == "") invalid = 1
+      if (part == 1) before[category] = value
+      else if (part == 2) addition[category] = value
+      else invalid = 1
+      category = ""
+      body = ""
+    }
+    FNR == 1 {
+      if (started) flush()
+      started = 1
+      part++
+    }
+    /^### / {
+      flush()
+      category = substr($0, 5)
+      if (category !~ /^(Added|Changed|Deprecated|Removed|Fixed|Security)$/) invalid = 1
+      next
+    }
+    { body = body $0 "\n" }
+    END {
+      flush()
+      if (invalid || part != 2) exit 1
+      for (i = 1; i <= 6; i++) {
+        category = order[i]
+        if (!(category in before) && !(category in addition)) continue
+        printf "### %s\n\n", category
+        if (category in before) printf "%s\n\n", before[category]
+        if (category in addition) printf "%s\n\n", addition[category]
+      }
+    }
+  ' "$1" "$2"
+}
+
 archive_changed=false
 if awk -F '\t' '{ for (field = 2; field <= NF; field++) if ($field ~ /^\.changes\/released\//) found = 1 } END { exit !found }' "$tmp_root/status"; then
   archive_changed=true
 fi
 
 if [ "$archive_changed" = true ]; then
-  release_version="$(git -C "$ROOT" diff --no-ext-diff --unified=0 "$merge_base" "$head" -- CHANGELOG.md | sed -n 's/^+## \[\([0-9][0-9.]*\(-beta\.[1-9][0-9]*\)\{0,1\}\)\] - .*/\1/p')"
-  [ "$(printf '%s\n' "$release_version" | sed '/^$/d' | wc -l | tr -d '[:space:]')" -eq 1 ] || {
-    printf '%s\n' 'error: release-fragment archival requires exactly one newly added versioned CHANGELOG section' >&2
-    exit 1
-  }
+  new_release_version="$(git -C "$ROOT" diff --no-ext-diff --unified=0 "$merge_base" "$head" -- CHANGELOG.md | sed -n 's/^+## \[\([0-9][0-9.]*\(-beta\.[1-9][0-9]*\)\{0,1\}\)\] - .*/\1/p')"
+  new_release_version_count="$(printf '%s\n' "$new_release_version" | sed '/^$/d' | wc -l | tr -d '[:space:]')"
+  archival_mode=seal
+  if [ "$new_release_version_count" -eq 1 ]; then
+    release_version="$new_release_version"
+  else
+    # An amendment keeps the existing heading. Derive the one allowed target
+    # from the literal archive directory, then verify every move below.
+    release_version="$(awk -F '\t' '$1 == "R100" && NF == 3 && $3 ~ /^\.changes\/released\// { path = $3; sub(/^\.changes\/released\//, "", path); sub(/\/.*/, "", path); print path }' "$tmp_root/status" | sort -u)"
+    [ "$(printf '%s\n' "$release_version" | sed '/^$/d' | wc -l | tr -d '[:space:]')" -eq 1 ] || {
+      printf '%s\n' 'error: release-fragment archival requires exactly one newly added versioned CHANGELOG section or one untagged beta amendment target' >&2
+      exit 1
+    }
+    printf '%s\n' "$release_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[1-9][0-9]*$' || {
+      printf '%s\n' 'error: only an existing beta CHANGELOG section may receive a pre-tag fragment amendment' >&2
+      exit 1
+    }
+    base_heading="$(release_heading "$merge_base" "$release_version")"
+    head_heading="$(release_heading "$head" "$release_version")"
+    [ "$(printf '%s\n' "$base_heading" | sed '/^$/d' | wc -l | tr -d '[:space:]')" -eq 1 ] && [ "$base_heading" = "$head_heading" ] || {
+      printf '%s\n' 'error: beta fragment amendment requires one unchanged pre-existing CHANGELOG heading' >&2
+      exit 1
+    }
+    changelog_without_release_notes "$merge_base" "$release_version" >"$tmp_root/base-changelog-without-amendment"
+    changelog_without_release_notes "$head" "$release_version" >"$tmp_root/head-changelog-without-amendment"
+    if ! cmp -s "$tmp_root/base-changelog-without-amendment" "$tmp_root/head-changelog-without-amendment"; then
+      printf '%s\n' 'error: beta fragment amendment may change only its existing beta CHANGELOG section' >&2
+      exit 1
+    fi
+    if git -C "$ROOT" rev-parse --verify --quiet "refs/tags/v$release_version^{commit}" >/dev/null; then
+      printf 'error: beta fragment amendment is forbidden after tag v%s exists\n' "$release_version" >&2
+      exit 1
+    fi
+    archival_mode=beta-amendment
+  fi
   # The archive directory is matched as a literal prefix, never as a regex:
   # interpolating the version into one would make `.` match any character, so
   # `1.0.1-beta.1` would also admit `.changes/released/1x0x1-betaX1/` and break
@@ -47,7 +202,7 @@ if [ "$archive_changed" = true ]; then
     { invalid = 1 }
     END { exit !(changelog && moved > 0 && !invalid) }
   ' "$tmp_root/status"; then
-    printf '%s\n' 'error: release fragments must be unchanged R100 moves from .changes/<name>.md to .changes/released/<new-version>/<name>.md in the matching release-seal PR' >&2
+    printf '%s\n' 'error: release fragments must be unchanged R100 moves from .changes/<name>.md to .changes/released/<new-version>/<name>.md in the matching release-seal or untagged beta-amendment PR' >&2
     exit 1
   fi
   source_changes="$tmp_root/source-changes"
@@ -63,17 +218,25 @@ if [ "$archive_changed" = true ]; then
       esac
     done
   "$ROOT/scripts/release/render-release-fragments.sh" "$source_changes" >"$tmp_root/expected-notes"
-  git -C "$ROOT" show "$head:CHANGELOG.md" |
-    awk -v heading="## [$release_version] - " '
-      index($0, heading) == 1 { found = 1; next }
-      found && /^## / { exit }
-      found { print }
-    ' >"$tmp_root/actual-section"
-  case "$release_version" in
-    *-beta.*)
-      cp "$tmp_root/actual-section" "$tmp_root/actual-notes"
-      ;;
-    *)
+  if [ "$archival_mode" = beta-amendment ]; then
+    extract_release_notes "$merge_base" "$release_version" >"$tmp_root/base-notes"
+    extract_release_notes "$head" "$release_version" >"$tmp_root/head-notes"
+    if ! canonicalize_fragment_notes "$tmp_root/base-notes" >"$tmp_root/base-notes.canonical" ||
+      ! canonicalize_fragment_notes "$tmp_root/expected-notes" >"$tmp_root/amendment-notes.canonical" ||
+      ! merge_canonical_fragment_notes "$tmp_root/base-notes.canonical" "$tmp_root/amendment-notes.canonical" >"$tmp_root/expected-notes.merged" ||
+      ! canonicalize_fragment_notes "$tmp_root/head-notes" >"$tmp_root/actual-notes.canonical"; then
+      printf '%s\n' 'error: beta fragment amendment requires canonical rendered fragment categories' >&2
+      exit 1
+    fi
+    normalize_notes "$tmp_root/expected-notes.merged" >"$tmp_root/expected-notes.normalized"
+    normalize_notes "$tmp_root/actual-notes.canonical" >"$tmp_root/actual-notes.normalized"
+  else
+    extract_release_notes "$head" "$release_version" >"$tmp_root/actual-section"
+    case "$release_version" in
+      *-beta.*)
+        cp "$tmp_root/actual-section" "$tmp_root/actual-notes"
+        ;;
+      *)
       stable_beta="$(sed -n 's/^### Changes since `\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta\.[1-9][0-9]*\)`$/\1/p' "$tmp_root/actual-section")"
       [ "$(printf '%s\n' "$stable_beta" | sed '/^$/d' | wc -l | tr -d '[:space:]')" -eq 1 ] || {
         printf '%s\n' 'error: stable release-seal with archived fragments requires exactly one ### Changes since `vX.Y.Z-beta.N` boundary' >&2
@@ -88,22 +251,13 @@ if [ "$archive_changed" = true ]; then
         found { print }
         /^### Changes since `v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*-beta\.[1-9][0-9]*`$/ { found = 1 }
       ' "$tmp_root/actual-section" >"$tmp_root/actual-notes"
-      ;;
-  esac
-  normalize_notes() {
-    awk '
-      /^[[:space:]]*$/ && !started { next }
-      { started = 1; lines[++count] = $0 }
-      END {
-        while (count > 0 && lines[count] ~ /^[[:space:]]*$/) count--
-        for (line_no = 1; line_no <= count; line_no++) print lines[line_no]
-      }
-    ' "$1"
-  }
-  normalize_notes "$tmp_root/expected-notes" >"$tmp_root/expected-notes.normalized"
-  normalize_notes "$tmp_root/actual-notes" >"$tmp_root/actual-notes.normalized"
+        ;;
+    esac
+    normalize_notes "$tmp_root/expected-notes" >"$tmp_root/expected-notes.normalized"
+    normalize_notes "$tmp_root/actual-notes" >"$tmp_root/actual-notes.normalized"
+  fi
   if ! cmp -s "$tmp_root/expected-notes.normalized" "$tmp_root/actual-notes.normalized"; then
-    printf '%s\n' 'error: release-seal CHANGELOG section does not exactly match the rendered active release fragments' >&2
+    printf '%s\n' 'error: release CHANGELOG section does not exactly match the rendered active release fragments' >&2
     diff -u "$tmp_root/expected-notes.normalized" "$tmp_root/actual-notes.normalized" >&2 || true
     exit 1
   fi

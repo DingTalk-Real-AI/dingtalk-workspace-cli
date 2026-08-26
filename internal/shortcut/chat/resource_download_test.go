@@ -81,16 +81,31 @@ func TestCrossPlatformCoverageResourceDownloadInfo(t *testing.T) {
 		t.Fatal("plain HTTP URL unexpectedly accepted")
 	}
 	for _, resourceURL := range []string{
-		"https://evil.example/file",
-		"https://aliyuncs.com.evil.example/file",
-		"https://127.0.0.1/file",
 		"https://user:secret@download.dingtalk.com/file",
-		"https://download.dingtalk.com:8443/file",
+		"http://download.dingtalk.com:8443/file",
 	} {
 		if _, _, err := resourceDownloadInfo(
 			map[string]any{"resourceUrl": resourceURL},
 		); err == nil {
 			t.Fatalf("untrusted URL %q unexpectedly accepted", resourceURL)
+		}
+	}
+	// The static host allowlist and the IP-literal refusal are both retired:
+	// dedicated-deployment download hosts and IP literals pass the same
+	// host-agnostic HTTPS policy as DingTalk/OSS hosts, mirroring the GUI
+	// client which applies no client-side SSRF interception.
+	// Non-default HTTPS ports are accepted too: dedicated storage domains
+	// legitimately serve on them.
+	for _, resourceURL := range []string{
+		"https://download.dingtalk.com/file",
+		"https://ddoss.tenant.example.com/file",
+		"https://ddoss.tenant.example.com:8443/file",
+		"https://127.0.0.1/file",
+	} {
+		if _, _, err := resourceDownloadInfo(
+			map[string]any{"resourceUrl": resourceURL},
+		); err != nil {
+			t.Fatalf("HTTPS domain %q unexpectedly rejected: %v", resourceURL, err)
 		}
 	}
 }

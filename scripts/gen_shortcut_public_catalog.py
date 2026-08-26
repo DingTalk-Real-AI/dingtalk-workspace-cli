@@ -29,9 +29,19 @@ SEMANTIC_PATHS = [
     ROOT / "internal" / "shortcut" / "semantic_catalog_todo.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_attendance.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_mail.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_aisearch.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_contact.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_live.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_oa.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_ding.json",
     ROOT / "internal" / "shortcut" / "semantic_catalog_report.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_sheet.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_whiteboard.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_devdoc.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_hrbrain.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_pat.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_devapp.json",
+    ROOT / "internal" / "shortcut" / "semantic_catalog_agoal.json",
 ]
 
 

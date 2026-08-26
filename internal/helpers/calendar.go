@@ -2,14 +2,11 @@ package helpers
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	"github.com/spf13/cobra"
 )
@@ -18,10 +15,9 @@ import (
 // dws calendar — 日历产品命令组
 // ──────────────────────────────────────────────────────────
 
-// calendarInfoHintSubCmd builds a hidden disambiguation subcommand that prints
-// a warning-level "Did you mean" hint to stderr (instead of returning an Error)
-// and exits 0. Scoped to calendar.go on purpose so the shared cmdutil.HintSubCmd
-// used by other products keeps returning errors as before.
+// calendarInfoHintSubCmd builds a hidden disambiguation subcommand that returns
+// the shared typed validation error while preserving Calendar's reviewed
+// replacement guidance.
 //
 // The `suggestion` argument should be the bare corrected command (no leading
 // "use:" / "hint:" prefix); the helper wraps it with the standard "Did you
@@ -29,184 +25,7 @@ import (
 func calendarInfoHintSubCmd(use, suggestion string) *cobra.Command {
 	c := hintSubCmd(use, suggestion)
 	c.DisableFlagParsing = true
-	c.RunE = func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "warning: command %q does not exist\n  hint: %s\t %s\n more: %s \n",
-			cmd.Parent().CommandPath()+" "+use,
-			suggestion,
-			"[MUST] use --help to see command detail",
-			"'dws calendar --help' to see all available commands")
-		return nil
-	}
 	return c
-}
-
-// installUnknownVerbFallback makes `group` emit a consistent warning-style
-// "Did you mean" hint whenever the caller types an unknown subcommand under
-// that group, regardless of whether extra flags follow. This is a blanket
-// safety net that covers every verb we never thought to pre-register via
-// calendarInfoHintSubCmd (e.g. `dws calendar room query --min-duration 30`).
-//
-// Two Cobra knobs make this work together:
-//   - FParseErrWhitelist.UnknownFlags=true stops pflag from aborting with
-//     "unknown flag: --xxx" before RunE ever runs.
-//   - Args=cobra.ArbitraryArgs lets Cobra pass the bad verb through as the
-//     first positional arg instead of rejecting it.
-//
-// If the user types a *known* subcommand, Cobra still dispatches to that
-// child's RunE as usual; this fallback only fires when resolution stops at
-// `group` with leftover args.
-func installUnknownVerbFallback(group *cobra.Command) {
-	group.FParseErrWhitelist.UnknownFlags = true
-	group.Args = cobra.ArbitraryArgs
-
-	// Override HelpFunc so that `<group> <unknown-verb> --help` also shows
-	// the "unknown subcommand" error instead of silently printing help.
-	// Cobra intercepts --help before RunE, so without this the fallback
-	// would never fire when --help is present.
-	origHelp := group.HelpFunc()
-	group.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		if cmd == group {
-			// HelpFunc receives os.Args[1:] (full arg slice without binary).
-			// Strip tokens matching the resolved command path to get actual
-			// leftover args that should be checked for unknown verbs.
-			depth := len(strings.Fields(cmd.CommandPath())) - 1
-			leftover := stripCommandPrefix(args, depth)
-			if bad := findUnknownVerb(cmd, leftover); bad != "" {
-				printUnknownSubcmdError(cmd, bad)
-				return
-			}
-			origHelp(cmd, args)
-			return
-		}
-		// For non-group commands, render base help then apply the safety
-		// annotation. Recursion safety hinges on NOT calling
-		// cmd.Root().HelpFunc(): in test trees calendar IS the root, so that
-		// would re-enter this wrapper. origHelp was captured before any
-		// wrapping and is the plain cobra renderer.
-		origHelp(cmd, args)
-		cli.RenderSafetyAnnotation(cmd)
-	})
-
-	prev := group.RunE
-	group.RunE = func(cmd *cobra.Command, args []string) error {
-		// Unknown flags whitelisted by pflag may leak into args. Pick the first
-		// non-flag token as the offending verb.
-		if bad := findUnknownVerb(cmd, args); bad != "" {
-			printUnknownSubcmdError(cmd, bad)
-			return nil
-		}
-		// No unknown verb found. Since FParseErrWhitelist.UnknownFlags silently
-		// swallows bad flags, scan the original os.Args for flags unregistered
-		// on this command and report them explicitly.
-		if flag := findUnknownFlag(cmd); flag != "" {
-			fmt.Fprintf(os.Stderr, "Error: unknown flag: %s\n", flag)
-			fmt.Fprintf(os.Stderr, "  hint: Run '%s --help' to see available options\n", cmd.CommandPath())
-			return nil
-		}
-		if prev != nil {
-			return prev(cmd, args)
-		}
-		return cmd.Help()
-	}
-}
-
-// findUnknownVerb returns the first positional arg that is not a registered
-// subcommand (or alias) of cmd. Returns "" if all args are flags or known.
-func findUnknownVerb(cmd *cobra.Command, args []string) string {
-	for _, a := range args {
-		if strings.HasPrefix(a, "-") {
-			continue
-		}
-		isKnown := false
-		for _, c := range cmd.Commands() {
-			if c.Name() == a {
-				isKnown = true
-				break
-			}
-			for _, alias := range c.Aliases {
-				if alias == a {
-					isKnown = true
-					break
-				}
-			}
-			if isKnown {
-				break
-			}
-		}
-		if !isKnown {
-			return a
-		}
-	}
-	return ""
-}
-
-// printUnknownSubcmdError prints the standard "unknown subcommand" error to
-// stderr with available commands and a did-you-mean hint.
-func printUnknownSubcmdError(cmd *cobra.Command, bad string) {
-	var available []string
-	for _, c := range cmd.Commands() {
-		if !c.Hidden && c.Name() != "help" {
-			available = append(available, c.Name())
-		}
-	}
-	fmt.Fprintf(os.Stderr, "Error: unknown subcommand %q for %q\n", bad, cmd.CommandPath())
-	fmt.Fprintf(os.Stderr, "  available: %s\n", strings.Join(available, ", "))
-	if s := cmd.SuggestionsFor(bad); len(s) > 0 {
-		fmt.Fprintf(os.Stderr, "  hint: did you mean %q\n", cmd.CommandPath()+" "+s[0])
-	} else {
-		fmt.Fprintf(os.Stderr, "  hint: %s --help\n", cmd.CommandPath())
-	}
-}
-
-// stripCommandPrefix strips the first `depth` non-flag tokens from args.
-// This is needed because Cobra's HelpFunc receives os.Args[1:] (the full arg
-// slice without the binary name), including the resolved command path tokens.
-// depth should be len(strings.Fields(cmd.CommandPath())) - 1.
-func stripCommandPrefix(args []string, depth int) []string {
-	skipped := 0
-	for i, a := range args {
-		if skipped >= depth {
-			return args[i:]
-		}
-		if !strings.HasPrefix(a, "-") {
-			skipped++
-		}
-	}
-	return nil
-}
-
-// findUnknownFlag scans os.Args for flags that are not registered on cmd.
-// Returns the first offending flag token (e.g. "--today") or "".
-func findUnknownFlag(cmd *cobra.Command) string {
-	depth := len(strings.Fields(cmd.CommandPath())) - 1
-	leftover := stripCommandPrefix(os.Args[1:], depth)
-	for i := 0; i < len(leftover); i++ {
-		a := leftover[i]
-		if a == "--" {
-			break
-		}
-		if strings.HasPrefix(a, "--") {
-			name := a[2:]
-			if eqIdx := strings.Index(name, "="); eqIdx >= 0 {
-				name = name[:eqIdx]
-			}
-			if name == "help" {
-				continue
-			}
-			if cmd.Flags().Lookup(name) == nil {
-				return a
-			}
-		} else if strings.HasPrefix(a, "-") && a != "-" {
-			ch := a[1:2]
-			if ch == "h" {
-				continue
-			}
-			if cmd.Flags().ShorthandLookup(ch) == nil {
-				return a
-			}
-		}
-	}
-	return ""
 }
 
 func newCalendarCommand() *cobra.Command {
@@ -224,7 +43,7 @@ func newCalendarCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "calendar",
 		Short: "日历日程 / 会议室 / 闲忙",
 		Long: `管理钉钉日历：日程、参会人、会议室、闲忙、附件、日历本、访问权限。调用前必须先使用 --help 查看参数结构。
@@ -238,11 +57,11 @@ func newCalendarCommand() *cobra.Command {
   dws calendar book        [list|get|search|update]          日历本管理
   dws calendar acl         [list|add|delete]                 日历访问权限管理`,
 		RunE: groupRunE,
-	}
+	})
 
 	// ── event: 日程 ─────────────────────────────────────────────
 
-	eventCmd := &cobra.Command{Use: "event", Short: "日程管理", RunE: groupRunE}
+	eventCmd := newGroupCommand(&cobra.Command{Use: "event", Short: "日程管理", RunE: groupRunE})
 
 	eventListCmd := &cobra.Command{
 		Use:   "list",
@@ -816,13 +635,13 @@ func newCalendarCommand() *cobra.Command {
 
 	// ── attendee: 参会人 (曾用名: participant) ─────────────────
 
-	participantCmd := &cobra.Command{
+	participantCmd := newGroupCommand(&cobra.Command{
 		Use:     "attendee",
 		Aliases: []string{"participant"},
 		Short:   "日程参会人管理",
 		Long:    "管理日程的参会人。alias：`participant`，仍作为别名保留，历史调用无需改动。",
 		RunE:    groupRunE,
-	}
+	})
 
 	participantListCmd := &cobra.Command{
 		Use:     "list",
@@ -1008,7 +827,7 @@ func newCalendarCommand() *cobra.Command {
 
 	// ── room: 会议室 ────────────────────────────────────────────
 
-	roomCmd := &cobra.Command{Use: "room", Short: "会议室管理", RunE: groupRunE}
+	roomCmd := newGroupCommand(&cobra.Command{Use: "room", Short: "会议室管理", RunE: groupRunE})
 
 	roomSearchCmd := &cobra.Command{
 		Use:   "search",
@@ -1352,7 +1171,7 @@ func newCalendarCommand() *cobra.Command {
 
 	// ── busy: 闲忙 ──────────────────────────────────────────────
 
-	busyCmd := &cobra.Command{Use: "busy", Short: "闲忙查询", RunE: groupRunE}
+	busyCmd := newGroupCommand(&cobra.Command{Use: "busy", Short: "闲忙查询", RunE: groupRunE})
 
 	busySearchCmd := &cobra.Command{
 		Use:   "search",
@@ -1444,7 +1263,7 @@ func newCalendarCommand() *cobra.Command {
 
 	// ── attachment: 附件 ────────────────────────────────────────
 
-	attachmentCmd := &cobra.Command{Use: "attachment", Short: "日程附件管理", RunE: groupRunE}
+	attachmentCmd := newGroupCommand(&cobra.Command{Use: "attachment", Short: "日程附件管理", RunE: groupRunE})
 
 	attachmentAddCmd := &cobra.Command{
 		Use:   "add",
@@ -1529,7 +1348,7 @@ func newCalendarCommand() *cobra.Command {
 
 	// ── acl: 日历访问权限 ─────────────────────────────────────────
 
-	aclCmd := &cobra.Command{Use: "acl", Short: "管理我的日历访问权限（共享给他人）", RunE: groupRunE}
+	aclCmd := newGroupCommand(&cobra.Command{Use: "acl", Short: "管理我的日历访问权限（共享给他人）", RunE: groupRunE})
 
 	aclListCmd := &cobra.Command{
 		Use:     "list",
@@ -1619,7 +1438,7 @@ func newCalendarCommand() *cobra.Command {
 
 	// ── book: 日历本 ────────────────────────────────────────────
 
-	bookCmd := &cobra.Command{Use: "book", Short: "日历本管理（我能看哪些日历）", RunE: groupRunE}
+	bookCmd := newGroupCommand(&cobra.Command{Use: "book", Short: "日历本管理（我能看哪些日历）", RunE: groupRunE})
 
 	bookListCmd := &cobra.Command{
 		Use:   "list",
@@ -2657,12 +2476,6 @@ func newCalendarCommand() *cobra.Command {
 
 	root.AddCommand(eventCmd, participantCmd, roomCmd, busyCmd, attachmentCmd, bookCmd, aclCmd)
 
-	// Install the unknown-verb fallback on every group command. This covers
-	// arbitrary typos like `dws calendar room query --min-duration 30` that
-	// the per-verb calendarInfoHintSubCmd registrations below can't anticipate.
-	for _, g := range []*cobra.Command{root, eventCmd, participantCmd, roomCmd, busyCmd, attachmentCmd, bookCmd, aclCmd} {
-		installUnknownVerbFallback(g)
-	}
 	// Hint subcommands must swallow any extra flags/args the caller passes,
 	// otherwise `dws calendar list` prints the nice "ambiguous command" hint
 	// but `dws calendar list --start ...` fails earlier with cobra's

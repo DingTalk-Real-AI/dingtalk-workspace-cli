@@ -32,12 +32,15 @@ func TestDevAppListProjectionPreservesPaginationEvidence(t *testing.T) {
 		name string
 		data map[string]any
 	}{
-		{name: "top level", data: map[string]any{"hasMore": true, "nextCursor": "next"}},
-		{name: "nested result", data: map[string]any{"result": map[string]any{"hasMore": true, "nextCursor": "next"}}},
-		{name: "exhausted", data: map[string]any{"hasMore": false}},
+		{name: "top level", data: map[string]any{"success": true, "hasMore": true, "nextCursor": "next"}},
+		{name: "nested result", data: map[string]any{"success": true, "result": map[string]any{"hasMore": true, "nextCursor": "next"}}},
+		{name: "exhausted", data: map[string]any{"success": true, "hasMore": false}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := devAppListProjection(tc.data, "items", items)
+			got, err := devAppListProjection(tc.data, "items", items, "devapp/test")
+			if err != nil {
+				t.Fatal(err)
+			}
 			if got["hasMore"] != devAppPaginationCandidates(tc.data)[len(devAppPaginationCandidates(tc.data))-1]["hasMore"] && tc.name == "nested result" {
 				t.Fatalf("hasMore not preserved: %#v", got)
 			}
@@ -52,14 +55,23 @@ func TestDevAppListProjectionPreservesPaginationEvidence(t *testing.T) {
 	if got := devAppPaginationCandidates(nil); got != nil {
 		t.Fatalf("nil candidates=%#v", got)
 	}
-	deep := map[string]any{"content": map[string]any{"result": map[string]any{"hasMore": true, "nextCursor": "deep"}}}
-	if got := devAppListProjection(deep, "items", nil); got["nextCursor"] != "deep" {
+	deep := map[string]any{"content": map[string]any{"success": true, "result": map[string]any{"hasMore": true, "nextCursor": "deep"}}}
+	if got, err := devAppListProjection(deep, "items", nil, "devapp/test"); err != nil || got["nextCursor"] != "deep" {
 		t.Fatalf("deep projection=%#v", got)
+	}
+	deeper := map[string]any{"success": true, "content": map[string]any{"result": map[string]any{"data": map[string]any{"hasMore": true, "nextCursor": "deeper"}}}}
+	if got, err := devAppListProjection(deeper, "items", nil, "devapp/test"); err != nil || got["nextCursor"] != "deeper" {
+		t.Fatalf("deeper projection=%#v", got)
+	}
+	cyclic := map[string]any{"success": true}
+	cyclic["content"] = cyclic
+	if got := devAppPaginationCandidates(cyclic); len(got) != 13 {
+		t.Fatalf("cyclic candidate walk length=%d, want bounded length 13", len(got))
 	}
 }
 
 func TestFrameworkPaginatedShortcutExecutionMovesCursorToMeta(t *testing.T) {
-	caller := &paginationCaller{text: `{"content":{"result":{"hasMore":true,"nextCursor":"next","list":[]}}}`}
+	caller := &paginationCaller{text: `{"content":{"success":true,"result":{"hasMore":true,"nextCursor":"next","list":[]}}}`}
 	helpers.InitDepsForTest(t, caller)
 	helpers.GetFormatter().SetWriters(&bytes.Buffer{}, &bytes.Buffer{})
 	for _, tc := range []struct {

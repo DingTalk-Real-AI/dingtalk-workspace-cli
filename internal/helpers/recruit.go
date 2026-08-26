@@ -61,17 +61,17 @@ func newRecruitCommand() *cobra.Command {
 		},
 	})
 
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "recruit",
 		Short: "钉钉招聘",
 		Long:  "查询和创建钉钉招聘中的职位信息。",
 		RunE:  groupRunE,
-	}
-	job := &cobra.Command{
+	})
+	job := newGroupCommand(&cobra.Command{
 		Use:   "job",
 		Short: "招聘职位管理",
 		RunE:  groupRunE,
-	}
+	})
 	job.AddCommand(
 		newRecruitJobListCommand(),
 		newRecruitJobGetCommand(),

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/mcptypes"
@@ -29,6 +30,42 @@ type pluginWrongFlagValue struct{}
 func (pluginWrongFlagValue) String() string   { return "" }
 func (pluginWrongFlagValue) Set(string) error { return nil }
 func (pluginWrongFlagValue) Type() string     { return "wrong" }
+
+func TestCrossPlatformCoveragePruneEmptyPluginGroupsRejectsMalformedPolicy(t *testing.T) {
+	emptyParent := &cobra.Command{Use: "plugin"}
+	emptyGroup := &cobra.Command{Use: "empty"}
+	corecmd.ApplyGroupPolicy(emptyGroup, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
+	emptyParent.AddCommand(emptyGroup)
+	pruneEmptyPluginGroups(emptyParent)
+	if len(emptyParent.Commands()) != 0 {
+		t.Fatalf("empty plugin group was not pruned: %#v", emptyParent.Commands())
+	}
+
+	parent := &cobra.Command{Use: "plugin"}
+	child := &cobra.Command{Use: "group"}
+	corecmd.ApplyGroupPolicy(child, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
+	for key := range child.Annotations {
+		child.Annotations[key] = "malformed"
+	}
+	parent.AddCommand(child)
+
+	defer func() {
+		got := recover()
+		message, ok := got.(string)
+		if !ok || !strings.Contains(message, "prune plugin group") {
+			t.Fatalf("pruneEmptyPluginGroups panic = %v", got)
+		}
+	}()
+	pruneEmptyPluginGroups(parent)
+}
 
 func TestPluginCompilerRejectsInvalidDuplicateAndEmptyDefinitions(t *testing.T) {
 	invalidRoot := conferencePluginDescriptor()
@@ -507,7 +544,8 @@ func TestPluginConstraintGroupAndRootHelpers(t *testing.T) {
 	mergePluginRoot(nil, root)
 	mergePluginRoot(root, nil)
 	destination := &cobra.Command{Use: "plugin", Aliases: []string{"one"}}
-	source := &cobra.Command{Use: "plugin", Aliases: []string{"one", "two"}}
+	source := cobracmd.NewGroupCommand("plugin", "plugin")
+	source.Aliases = []string{"one", "two"}
 	source.AddCommand(&cobra.Command{Use: "leaf"})
 	mergePluginRoot(destination, source)
 	if !reflect.DeepEqual(destination.Aliases, []string{"one", "two"}) || requireOptionalPluginChild(destination, "leaf") == nil {

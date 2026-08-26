@@ -24,14 +24,14 @@ func newDevdocCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "devdoc",
 		Short: "开放平台文档搜索",
 		Long:  `搜索钉钉开放平台开发文档。默认以表格格式输出（标题、URL），使用 -f json 获取原始 JSON。`,
 		RunE:  groupRunE,
-	}
+	})
 
-	articleCmd := &cobra.Command{Use: "article", Short: "文档文章", RunE: groupRunE}
+	articleCmd := newGroupCommand(&cobra.Command{Use: "article", Short: "文档文章", RunE: groupRunE})
 	articleCmd.AddCommand(newDevdocArticleSearchCommand())
 	root.AddCommand(articleCmd)
 	root.AddCommand(hintSubCmd("search", "use: dws devdoc article search --query <关键词>"))

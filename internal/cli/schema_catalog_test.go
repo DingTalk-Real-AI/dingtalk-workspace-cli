@@ -301,7 +301,7 @@ func TestDeliveryCatalogDocReadParamDeclsMatchMergeBaseContract(t *testing.T) {
 		t.Fatalf("doc read --content-format required = %#v, want false", contentFormat["required"])
 	}
 
-	for _, flagName := range []string{"scope", "tags", "max-depth", "start-block-id", "end-block-id"} {
+	for _, flagName := range []string{"scope", "tags", "max-depth", "start-block-id", "end-block-id", "version", "password"} {
 		if parameters[flagName]["required"] != false {
 			t.Fatalf("doc read --%s required = %#v, want false", flagName, parameters[flagName]["required"])
 		}
@@ -314,6 +314,15 @@ func TestDeliveryCatalogDocReadParamDeclsMatchMergeBaseContract(t *testing.T) {
 	}
 	if parameters["max-depth"]["type"] != "integer" {
 		t.Fatalf("doc read --max-depth type = %#v, want integer", parameters["max-depth"]["type"])
+	}
+	if got := parameters["version"]["property"]; got != "historyVersion" {
+		t.Fatalf("doc read --version property = %#v, want historyVersion", got)
+	}
+	if parameters["version"]["type"] != "integer" {
+		t.Fatalf("doc read --version type = %#v, want integer", parameters["version"]["type"])
+	}
+	if got := parameters["password"]["property"]; got != "password" {
+		t.Fatalf("doc read --password property = %#v, want password", got)
 	}
 }
 

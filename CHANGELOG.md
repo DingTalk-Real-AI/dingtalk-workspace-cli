@@ -6,6 +6,86 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.60-beta.2] - 2026-08-24
+
+### Added
+
+- **Drive permission get-setting** (#1056) — adds `dws drive permission get-setting --node <ID>` to inspect a document-space node's permission settings (permission mode, share scope, and permission policies) in one call.
+
+- **Whiteboard shortcuts** (#1082) — adds strict query and confirmed update workflows with stable-target receipts and exact readback verification.
+- **Sheet shortcut hardening** (#1082) — makes worksheet listing and cell-range reads fail closed on malformed, ambiguous, or truncated responses, publishes a closed reviewed output shape, and preserves non-executing `--dry-run` previews for range reads.
+
+- **Permission and member list pagination** (#1085) — `drive/doc permission
+  list` and `wiki member list` now accept `--next-token` to follow the
+  server-side cursor (output carries `totalCount`/`hasMore`/`nextToken`) and
+  map `--limit` to `pageSize` capped at 50 instead of the rejected `maxResults
+  200` path; `permission add/update/remove` and `wiki member add/update/remove`
+  additionally accept a `--members` JSON array covering USER/DEPT/CONVERSATION/TAG
+  grantee types. The optional `--notify` defaults to `false` and is omitted from
+  the server request unless passed explicitly, so member grants no longer notify
+  recipients by default. These commands also declare cursor pagination
+  (`next-token`) in the Agent schema contract, mirroring the internal CLI parity
+  change. Because a single batch remove can revoke access for up to 30
+  USER/DEPT/CONVERSATION/TAG members — where departments, chats, and role
+  groups can indirectly affect many more users — `drive/doc permission
+  remove` and `wiki member remove` now declare
+  `confirmation=user_required` and gate the actual tool call behind user
+  confirmation (`--yes`, an interactive yes, or `--dry-run` preview); their
+  confirmation-gate failure now also passes through verbatim instead of being
+  reclassified as a permission-denied or unclassified error.
+
+- **Agoal scorecard search-entities** — `dws agoal scorecard search-entities` searches scorecard metrics and key items by keyword, returning matching entity info (scorecard ID, entity ID, entity type, title, owning team) with optional `--page`/`--page-size` pagination.
+
+- **AITable datasource shortcuts** — adds 7 shortcuts for datasource sync management (`+datasource-create`, `+datasource-update`, `+datasource-sync`, `+datasource-sync-status`, `+datasource-get-config`, `+datasource-list-sources`, `+datasource-get-fields`) and updates the `dingtalk-aitable` skill with routing rules and a new `aitable-datasource.md` reference guide.
+
+- **Doc public-link and historical-version reads** — `dws doc read` forwards
+  the reviewed `password` (internet-public documents with password protection)
+  and `historyVersion` (read content as of a listed historical version; `0`
+  denotes the document's initial version) parameters on the markdown, JSONML,
+  and scope read paths via `--password` / `--version`; `dws doc +fetch` gains
+  `--password` and `--version` with the same `historyVersion` forwarding, while
+  `--revision` stays rejected with explicit guidance: revision is the document
+  edit revision returned by JSONML reads for `+update --expected-revision`
+  conditional writes, not a historical version number.
+
+- **Edu & College vendor extensions** — adds five hidden vendor extension commands for education scenarios: `dws edu-contact` (school/class/family/teacher contact management), `dws edu-group` (student/class group lifecycle), `dws edu-app` (homework, notices, report cards, diplomas, class circles), `dws edu-familygroup` (family group management, child binding, app permissions), and `dws college-contact` (university dept/employee/alumni/graduate management). All route to dedicated MCP servers via `callMCPToolOnServer`.
+
+- **OA approval attachment upload** — `dws oa approval attachment upload --file <path>` uploads a local file as an approval attachment in one command: it initializes the upload credential (MCP `oa/init_attachment_upload_info`), HTTP PUTs the file to OSS, then commits it (MCP `oa/commit_attachment_upload_info`). `--file-name` defaults to the file's base name and `--md5` is auto-computed when omitted.
+
+- **Sheet revision changesets** — adds read-only commands for querying the current workbook revision and reviewing Agent-readable changes between revisions, with guidance for distinguishing revisions from saved history versions and safely selecting rollback targets.
+
+- **Sheet floating images** — supports creating or replacing a floating image directly from a local file with `create-float-image --file` and `update-float-image --file`, while retaining the existing `--src` workflow.
+
+### Changed
+
+- **AiSearch and Contact shortcuts** (#1083) — adds strict people search and reviewed unified results; people results must use the live-reviewed `person` source, and exact mobile lookups normalize accepted formatting before calling the dedicated mobile interface. Agent/public discovery keeps `contact +list-roles`, `contact +list-roster-fields`, `contact +get-roster`, and incomplete Live routes unavailable rather than publishing ambiguous results, while the historical Contact CLI commands retain legacy MCP execution and real error propagation. The legacy role-list projection preserves the service's reviewed null placeholder without exposing that ambiguous row through Agent Result contracts.
+
+- **Permission error guidance and error rendering** (#1085) —
+  permission-denied responses now exit with the `AUTH_PERMISSION_DENIED` code
+  instead of a generic business-error rendering; document/wiki-specific errors
+  (the drive-specific codes `forbidden.accessDenied` / `forbidden.no.auth`,
+  or the role-threshold wording like
+  “需要您具备 MANAGER 及以上角色”) carry apply-permission guidance
+  (`dws drive permission apply-info` / `dws drive permission apply`), while
+  permission failures carrying only generic code names (`FORBIDDEN`,
+  `NO_PERMISSION` — also returned by attendance and event-subscription tools)
+  or other products' wording keep their product-specific or
+  product-neutral suggestion instead of a misleading document-permission hint;
+  member-validation failures such as
+  “用户不存在/不属于当前组织” are classified as tool errors with a
+  `--members`-with-`corpId` suggestion instead of a misleading
+  resource-not-found error; business error output now surfaces the backend
+  message with `code`/`logId` appended for traceability; and the
+  `update_permission` / `remove_permission` / `update_member` /
+  `remove_member` tools — whose servers return a literal `null` on successful
+  no-payload writes — now render `{}` so downstream JSON consumers do not fail
+  parsing `null`; other tools keep raw `null` output unchanged.
+
+### Fixed
+
+- **Legacy global slot recovery** — recovers a rejected identity refresh from the legacy global keychain slot when the organization mirror is absent, with strict corp/user matching so blank-user legacy tokens only recover for single-account organizations.
+
+
 ## [1.0.60-beta.1] - 2026-08-21
 
 ### Changed

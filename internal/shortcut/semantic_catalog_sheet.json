@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "service": "sheet",
+  "default_availability": "available",
+  "shortcuts": {
+    "+list-sheets": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格要求 success=true、显式 sheets 数组、非空且唯一的 sheetId 与标题；提供完整标题本地精确筛选，因此可分别证明已知非空和合法零命中，未知结构绝不降级为空数组。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    },
+    "+read": {
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格校验 success、二维 cells、行列坐标与完成证据；服务返回 hasMore=true 时因没有可执行续页游标而失败关闭，保留 Sheet 读取与 AITable/Base 记录查询的产品边界。",
+      "risk": "read",
+      "public": true,
+      "reviewed": true
+    }
+  }
+}

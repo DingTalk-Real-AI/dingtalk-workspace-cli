@@ -42,14 +42,14 @@ func newDingCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "ding",
 		Short: "DING 消息 / 发送 / 撤回",
 		Long:  `发送和撤回 DING 消息（应用内/短信/电话）。预发环境可用。`,
 		RunE:  groupRunE,
-	}
+	})
 
-	dingMessageCmd := &cobra.Command{Use: "message", Short: "DING 消息管理", RunE: groupRunE}
+	dingMessageCmd := newGroupCommand(&cobra.Command{Use: "message", Short: "DING 消息管理", RunE: groupRunE})
 
 	dingMessageSendCmd := &cobra.Command{
 		Use:   "send",

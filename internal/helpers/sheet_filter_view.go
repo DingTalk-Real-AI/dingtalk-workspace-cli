@@ -164,7 +164,7 @@ func runFilterViewGetCriteria(cmd *cobra.Command, _ []string) error {
 // ── filter + filter-view 命令定义 ──────────────────────────────────────────────
 
 func newFilterCmd() *cobra.Command {
-	filterCmd := &cobra.Command{Use: "filter", Short: "全局筛选管理"}
+	filterCmd := newDeepGroupCommand(&cobra.Command{Use: "filter", Short: "全局筛选管理"})
 
 	filterGetCmd := &cobra.Command{
 		Use:   "get",
@@ -523,7 +523,7 @@ func newFilterCmd() *cobra.Command {
 }
 
 func newFilterViewCmd() *cobra.Command {
-	filterViewCmd := &cobra.Command{Use: "filter-view", Short: "筛选视图管理"}
+	filterViewCmd := newDeepGroupCommand(&cobra.Command{Use: "filter-view", Short: "筛选视图管理"})
 
 	filterViewListCmd := &cobra.Command{
 		Use:   "list",

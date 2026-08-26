@@ -28,7 +28,7 @@ func newMinutesCommand() *cobra.Command {
 			},
 		},
 	})
-	minutesListCmd := &cobra.Command{Use: "list", Short: "听记列表", RunE: groupRunE}
+	minutesListCmd := newGroupCommand(&cobra.Command{Use: "list", Short: "听记列表", RunE: groupRunE})
 
 	minutesListMineCmd := &cobra.Command{
 		Use:   "mine",
@@ -173,7 +173,7 @@ func newMinutesCommand() *cobra.Command {
 		},
 	})
 
-	minutesGetCmd := &cobra.Command{Use: "get", Short: "获取听记内容", RunE: groupRunE}
+	minutesGetCmd := newGroupCommand(&cobra.Command{Use: "get", Short: "获取听记内容", RunE: groupRunE})
 
 	minutesGetInfoCmd := &cobra.Command{
 		Use:   "info",
@@ -544,7 +544,7 @@ func newMinutesCommand() *cobra.Command {
 		},
 	})
 
-	minutesUpdateCmd := &cobra.Command{Use: "update", Short: "更新听记信息", RunE: groupRunE}
+	minutesUpdateCmd := newGroupCommand(&cobra.Command{Use: "update", Short: "更新听记信息", RunE: groupRunE})
 
 	minutesUpdateTitleCmd := &cobra.Command{
 		Use:     "title",
@@ -659,7 +659,7 @@ func newMinutesCommand() *cobra.Command {
 	// 单个工具通过 cmd 参数覆盖 create/pause/resume/end 四种指令。
 	const listeningNoteCmdTool = "执行听记指令-发起AI听记录音"
 
-	minutesRecordCmd := &cobra.Command{Use: "record", Short: "控制听记录音", RunE: groupRunE}
+	minutesRecordCmd := newGroupCommand(&cobra.Command{Use: "record", Short: "控制听记录音", RunE: groupRunE})
 
 	minutesRecordStartCmd := &cobra.Command{
 		Use:   "start",
@@ -942,7 +942,7 @@ func newMinutesCommand() *cobra.Command {
 	minutesUpdateCmd.AddCommand(minutesUpdateTitleCmd, minutesUpdateSummaryCmd)
 
 	// ── mind-graph 子组 ─────────────────────────────────────────
-	mindGraphCmd := &cobra.Command{Use: "mind-graph", Short: "思维导图管理", RunE: groupRunE}
+	mindGraphCmd := newGroupCommand(&cobra.Command{Use: "mind-graph", Short: "思维导图管理", RunE: groupRunE})
 
 	mindGraphCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -1059,7 +1059,7 @@ func newMinutesCommand() *cobra.Command {
 	mindGraphCmd.AddCommand(mindGraphCreateCmd, mindGraphStatusCmd)
 
 	// ── speaker 子组 ────────────────────────────────────────────
-	speakerCmd := &cobra.Command{Use: "speaker", Short: "发言人管理", RunE: groupRunE}
+	speakerCmd := newGroupCommand(&cobra.Command{Use: "speaker", Short: "发言人管理", RunE: groupRunE})
 
 	speakerReplaceCmd := &cobra.Command{
 		Use:   "replace",
@@ -1127,7 +1127,7 @@ func newMinutesCommand() *cobra.Command {
 	// 对应 MCP 工具 create_speaker_summary / get_speaker_summary
 	// 批量按听记维度汇总每位发言人的段落总结
 
-	speakerSummaryCmd := &cobra.Command{Use: "summary", Short: "发言人段落总结", RunE: groupRunE}
+	speakerSummaryCmd := newGroupCommand(&cobra.Command{Use: "summary", Short: "发言人段落总结", RunE: groupRunE})
 
 	speakerSummaryCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -1243,7 +1243,7 @@ func newMinutesCommand() *cobra.Command {
 	speakerCmd.AddCommand(speakerReplaceCmd, speakerSummaryCmd)
 
 	// ── hot-word 子组 ───────────────────────────────────────────
-	hotWordCmd := &cobra.Command{Use: "hot-word", Short: "个人热词管理", RunE: groupRunE}
+	hotWordCmd := newGroupCommand(&cobra.Command{Use: "hot-word", Short: "个人热词管理", RunE: groupRunE})
 
 	hotWordAddCmd := &cobra.Command{
 		Use:   "add",
@@ -1462,7 +1462,7 @@ func newMinutesCommand() *cobra.Command {
 	// 完整流程：create → HTTP PUT → complete，或 create → cancel 取消。
 	// 注意：upload 子组的所有命令均使用 callMCPToolUnescaped 输出 JSON，
 	// 避免 presignedUrl 中的 & 被 Go 标准库转义为 \u0026。
-	uploadCmd := &cobra.Command{Use: "upload", Short: "文件上传管理", RunE: groupRunE}
+	uploadCmd := newGroupCommand(&cobra.Command{Use: "upload", Short: "文件上传管理", RunE: groupRunE})
 
 	// upload create — 对应 MCP 工具 create_upload_session
 	// 必填参数：fileName(--file-name), fileSize(--file-size)
@@ -1681,7 +1681,7 @@ func newMinutesCommand() *cobra.Command {
 	// ── permission 子组 ─────────────────────────────────────────
 	// 听记成员权限管理：批量添加/移除成员及其权限、为当前用户申请权限。
 	// 对应 MCP 工具 add_member_permission / remove_member_permission / apply_minutes_permission。
-	permissionCmd := &cobra.Command{Use: "permission", Short: "听记成员权限管理", RunE: groupRunE}
+	permissionCmd := newGroupCommand(&cobra.Command{Use: "permission", Short: "听记成员权限管理", RunE: groupRunE})
 
 	// permission add — 对应 MCP 工具 add_member_permission
 	// 批量给多个听记增加成员，并设置成员的权限。
@@ -1951,7 +1951,7 @@ func newMinutesCommand() *cobra.Command {
 	// 听记标签/分组管理：查询用户标签列表、按标签查询听记。
 	// 对应 MCP 工具 query_user_tag_list / query_minutes_by_tag_id。
 	// 标签/分组由用户在听记页面手动创建，此处仅提供查询能力。
-	tagCmd := &cobra.Command{Use: "tag", Short: "听记标签/分组管理", RunE: groupRunE}
+	tagCmd := newGroupCommand(&cobra.Command{Use: "tag", Short: "听记标签/分组管理", RunE: groupRunE})
 
 	// tag list — 对应 MCP 工具 query_user_tag_list
 	// 无需传入参数，系统自动识别当前用户身份。
@@ -2075,7 +2075,7 @@ func newMinutesCommand() *cobra.Command {
 	// 用户身份由网关按登录态注入 uid，agent/CLI 无需传入。
 	// 返回值 items[].audioUrl 为带签名的音频 URL（含 &），因此使用
 	// callMCPToolUnescaped 输出，避免 & 被转义为 \u0026（与 upload 一致）。
-	audioMemoCmd := &cobra.Command{Use: "audio-memo", Short: "语音备忘查询", RunE: groupRunE}
+	audioMemoCmd := newGroupCommand(&cobra.Command{Use: "audio-memo", Short: "语音备忘查询", RunE: groupRunE})
 
 	audioMemoListCmd := &cobra.Command{
 		Use:   "list",
@@ -2179,12 +2179,12 @@ func newMinutesCommand() *cobra.Command {
 	audioMemoListCmd.Flags().String("end", "", "结束时间 ISO-8601 (可选)")
 	audioMemoCmd.AddCommand(audioMemoListCmd)
 
-	minutesCmd := &cobra.Command{
+	minutesCmd := newGroupCommand(&cobra.Command{
 		Use:   "minutes",
 		Short: "AI 听记 / 会议纪要",
 		Long:  `管理钉钉AI听记：查询列表、获取详情、摘要、转写、待办、关键字、音频地址、思维导图、发言人管理、文件上传、成员权限管理、语音备忘查询，以及修改标题和纪要内容。`,
 		RunE:  groupRunE,
-	}
+	})
 	minutesCmd.AddCommand(minutesListCmd, minutesGetCmd, minutesUpdateCmd, minutesRecordCmd, mindGraphCmd, speakerCmd, hotWordCmd, replaceTextCmd, audioMemoCmd, uploadCmd, permissionCmd, tagCmd)
 	return minutesCmd
 }

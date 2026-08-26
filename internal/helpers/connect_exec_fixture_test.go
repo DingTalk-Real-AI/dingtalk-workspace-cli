@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -39,7 +41,16 @@ func TestMain(m *testing.M) {
 	if os.Getenv(helpersShellStubEnv) == "1" {
 		os.Exit(runHelpersShellStub())
 	}
+	// Cobra's Windows pre-exec hook walks the process table on every Execute*
+	// call to detect Explorer launches. Helpers tests execute command trees
+	// thousands of times, and none of those in-process invocations can be an
+	// Explorer launch, so keep that production-only check out of the test
+	// process. This also prevents every new exhaustive harness from having to
+	// remember a test-local override.
+	originalMousetrapHelpText := cobra.MousetrapHelpText
+	cobra.MousetrapHelpText = ""
 	code := m.Run()
+	cobra.MousetrapHelpText = originalMousetrapHelpText
 	if helpersShellStubBaseDir != "" {
 		_ = os.RemoveAll(helpersShellStubBaseDir)
 	}

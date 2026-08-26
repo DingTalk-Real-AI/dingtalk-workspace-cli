@@ -375,12 +375,12 @@ func newDriveCommand() *cobra.Command {
 			},
 		},
 	})
-	driveCmd := &cobra.Command{
+	driveCmd := newGroupCommand(&cobra.Command{
 		Use:   "drive",
 		Short: "钉盘文件管理",
 		Long:  `钉盘：列出文件/文件夹、获取元数据和统计信息、创建快捷方式、下载、上传及管理文件。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	driveListCmd := &cobra.Command{
 		Use:   "list",
@@ -2030,18 +2030,19 @@ func newDriveCommand() *cobra.Command {
 	driveShortcutCmd.Flags().String("workspace", "", "目标知识库 ID (可选)")
 
 	// ── drive permission (文档节点权限管理) ──
-	drivePermissionCmd := &cobra.Command{
+	drivePermissionCmd := newGroupCommand(&cobra.Command{
 		Use:     "permission",
 		Aliases: []string{"perm"},
 		Short:   "文档节点权限管理",
 		Long: `管理文档空间节点的协作权限：添加、更新、查询、移除协作者。
 注意: 仅适用于文档空间节点，不适用于钉盘文件。`,
 		RunE: groupRunE,
-	}
+	})
 
 	drivePermAddCmd := &cobra.Command{
 		Use:   "add",
 		Short: "添加协作者",
+		Args:  cobra.NoArgs,
 		Long: `为文档空间节点添加协作成员并授予指定角色。
 
 两种传参方式（互斥）：
@@ -2055,7 +2056,8 @@ func newDriveCommand() *cobra.Command {
   TAG           角色标签（也称角色组），id 为角色标签 ID，需携带 corpId。当用户要求"添加角色组"或"添加角色标签"时使用此类型
 
 支持的角色: MANAGER / EDITOR / DOWNLOADER / READER
---notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 true。`,
+--notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 false。
+省略 --notify 时 CLI 不向服务端发送该字段，服务端按不通知处理；需要通知请显式传 --notify。`,
 		Example: `  dws drive permission add --node DOC_ID --users uid1 --role READER
   dws drive permission add --node DOC_ID --users uid1,uid2 --role EDITOR
   dws drive permission add --node DOC_ID --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"}]' --notify
@@ -2145,11 +2147,12 @@ func newDriveCommand() *cobra.Command {
 	drivePermAddCmd.Flags().String("role", "", "角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填)")
 	drivePermAddCmd.Flags().String("workspace", "", "知识库 ID (选填)")
 	drivePermAddCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥")
-	drivePermAddCmd.Flags().Bool("notify", true, "是否通知被添加的成员（仅 --members 新格式时生效）")
+	drivePermAddCmd.Flags().Bool("notify", false, "是否通知被添加的成员（仅 --members 新格式时生效，需显式传入才通知）")
 
 	drivePermUpdateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "更新协作者权限",
+		Args:  cobra.NoArgs,
 		Long: `更新文档空间节点已有协作者的权限角色。
 
 两种传参方式（互斥）：
@@ -2268,12 +2271,10 @@ func newDriveCommand() *cobra.Command {
 				return err
 			}
 			toolArgs := map[string]any{"nodeId": nodeID}
-			if cmd.Flags().Changed("limit") {
-				limit, _ := cmd.Flags().GetInt("limit")
-				toolArgs["pageSize"] = limit
-			} else if cmd.Flags().Changed("max-results") {
-				limit, _ := cmd.Flags().GetInt("max-results")
-				toolArgs["pageSize"] = limit
+			if size, ok, err := permissionPageSizeFromFlags(cmd); err != nil {
+				return err
+			} else if ok {
+				toolArgs["pageSize"] = size
 			}
 			if v := flagOrFallback(cmd, "next-token", "cursor", "page-token"); v != "" {
 				toolArgs["nextToken"] = v
@@ -2317,11 +2318,14 @@ func newDriveCommand() *cobra.Command {
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "filter-role", Property: "filterRoleIds"},
-				{Name: "limit", Property: "pageSize"},
+				// limit 不声明 Property：运行时经 cap 校验（1-50）转换为 pageSize，
+				// 属 CLI 分页输入而非 1:1 RPC property（reviewed mapping exclusion）。
+				{Name: "limit"},
 				{Name: "next-token", Property: "nextToken"},
 				{Name: "node", Property: "nodeId"},
 				{Name: "workspace", Property: "workspaceId"},
 			},
+			Pagination: &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "next-token"},
 		},
 	})
 	drivePermListCmd.Flags().String("node", "", "目标节点 ID 或 URL (必填)")
@@ -2331,6 +2335,127 @@ func newDriveCommand() *cobra.Command {
 	drivePermListCmd.Flags().String("filter-role", "", "按角色过滤: OWNER / MANAGER / EDITOR / DOWNLOADER / READER")
 	drivePermListCmd.Flags().String("next-token", "", "分页游标，首次不传，后续传入上一次返回的 nextToken")
 	drivePermListCmd.Flags().String("workspace", "", "知识库 ID (选填)")
+
+	drivePermGetSettingCmd := &cobra.Command{
+		Use:   "get-setting",
+		Short: "查询节点权限设置",
+		Long: `查询文档空间节点的权限设置，返回三部分配置：
+
+- permissionMode: 权限模式（INHERITED 继承上级 / INDEPENDENT 独立管理）
+- shareScope: 分享范围（可见范围、链接分享设置）
+- policies: 权限策略列表（水印、组织外分享、成员邀请门槛等）
+
+查询协作者列表请改用 permission list。`,
+		Example: `  dws drive permission get-setting --node DOC_ID`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
+			if err != nil {
+				return err
+			}
+			return callMCPToolOnServer("drive", "get_permission_setting", map[string]any{"nodeId": nodeID})
+		},
+	}
+	DeclareLeafMetadata(drivePermGetSettingCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "drive",
+				Name:           "get_permission_setting",
+				CanonicalPath:  "drive.get_permission_setting",
+				CLIPath:        "drive permission get-setting",
+				PrimaryCLIPath: "drive permission get-setting",
+			},
+			Description: "查询文档空间节点的权限设置（权限模式/分享范围/权限策略）",
+			Result: &contract.ResultSpec{
+				Outcomes: []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+				DataSchema: json.RawMessage(`{
+  "type":"object",
+  "description":"节点权限设置（权限模式/分享范围/权限策略）",
+  "properties":{
+    "docUrl":{"type":"string","description":"当前查询节点的文档访问链接，可直接在浏览器中打开"},
+    "nodeId":{"type":"string","description":"当前查询节点的 nodeId（入参解析后的规范形式）"},
+    "permissionMode":{"type":["string","null"],"enum":["INHERITED","INDEPENDENT",null],"description":"权限模式：INHERITED=继承上级权限配置，INDEPENDENT=独立管理权限；未知时为 null"},
+    "shareScope":{
+      "type":"object",
+      "description":"分享范围设置",
+      "properties":{
+        "visibility":{"type":["string","null"],"enum":["PRIVATE","ORGANIZATION","PUBLIC",null],"description":"PRIVATE=仅指定成员可见，ORGANIZATION=组织内公开，PUBLIC=互联网公开；未知时为 null"},
+        "partnerIncluded":{"type":"boolean","description":"仅 visibility=ORGANIZATION 时有意义，true 表示组织内公开范围包含合作伙伴（含生态组织外部协作成员）。其余场景为 false。"},
+        "defaultRole":{"type":["string","null"],"enum":["READER","DOWNLOADER","EDITOR","MANAGER",null],"description":"仅 visibility=ORGANIZATION 时有意义，通过链接获得访问的默认角色；未下发或不在值域内时为 null"},
+        "canSearch":{"type":"boolean","description":"仅 visibility=ORGANIZATION 时有意义。"},
+        "canRecommend":{"type":"boolean","description":"仅 visibility=ORGANIZATION 时有意义。"},
+        "linkShare":{
+          "type":"object",
+          "description":"链接分享设置；仅开启链接分享时返回，未开启时该字段不返回",
+          "properties":{
+            "requirePassword":{"type":"boolean","description":"true 表示通过链接访问需要提供密码。密码明文不会返回。"},
+            "expireAt":{"type":["integer","null"],"description":"秒级 Unix 时间戳，未设置过期时为 null。"},
+            "expireDays":{"type":["integer","null"],"description":"设置的有效天数，未设置时为 null。"},
+            "forCurrentNode":{"type":"boolean","description":"true 表示该分享范围仅作用于当前节点；false 表示作用于当前节点及其子节点。"}
+          },
+          "additionalProperties":true
+        }
+      },
+      "additionalProperties":true
+    },
+    "policies":{
+      "type":"array",
+      "description":"仅包含支持的策略项，未下发或不受支持的策略不会返回；node_spread_scope 仅文件夹类节点返回；allowedValues 为当前可设置的取值，disabledValues 为当前不可设置的取值及原因，两者互斥",
+      "items":{
+        "type":"object",
+        "description":"权限策略项",
+        "properties":{
+          "code":{"type":"string","enum":["external_share","external_share_manager_only","member_invite","member_invite_org_only","comment","permission_apply","external_permission_apply","watermark","node_spread","online_content_copy","node_move_forbidden","node_spread_scope"],"description":"external_share=添加企业外协作者；external_share_manager_only=企业外协作者仅限管理员；member_invite=谁可以添加协作者；member_invite_org_only=仅企业内用户可添加协作者；comment=谁可以评论；permission_apply=权限申请；external_permission_apply=组织外权限申请；watermark=显示水印；node_spread=谁可以下载、创建副本、打印；online_content_copy=谁可以复制文档内容；node_move_forbidden=禁止移动；node_spread_scope=下载与传播生效范围（仅文件夹类节点）。"},
+          "name":{"type":"string","description":"策略的中文名称，文案与产品权限设置页一致；为确定性字段，只要该策略返回就必带"},
+          "description":{"type":"string","description":"策略的含义说明，解释该策略管控的行为及各取值的语义；为确定性字段，只要该策略返回就必带"},
+          "value":{"type":["string","null"],"description":"取值随策略类型不同：开关型（external_share、external_share_manager_only、member_invite_org_only、permission_apply、external_permission_apply、watermark、node_move_forbidden）为 ENABLED/DISABLED；阈值型（member_invite、comment）为 READER_AND_ABOVE/DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE，阈值型（node_spread、online_content_copy）为 DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE/NOBODY，均表示不低于该角色才允许对应操作，NOBODY 表示所有人禁止；二值型（node_spread_scope）：ALL_NODES=下载与传播限制对所有文档生效，PREVIEWABLE_ONLY=仅对可预览的文档（在线文档、图片视频等）生效；未知值时为 null"},
+          "disabledValues":{
+            "type":"array",
+            "description":"该策略当前不可设置的取值及禁用原因（与 allowedValues 互斥）；为确定性字段，恒返回，无被禁取值时为空数组",
+            "items":{
+              "type":"object",
+              "properties":{
+                "value":{"type":"string","description":"被禁档位的取值（与 value 同一值域）"},
+                "reason":{"type":["string","null"],"description":"服务端按请求语言返回的禁用原因文案，仅供展示理解，可为 null"}
+              },
+              "required":["value"],
+              "additionalProperties":true
+            }
+          },
+          "allowedValues":{"type":["array","null"],"items":{"type":"string"},"description":"该策略当前可设置的取值（与 value 同一值域），未下发时为 null"}
+        },
+        "required":["code","name","description","disabledValues"],
+        "additionalProperties":true
+      }
+    }
+  },
+  "required":["docUrl","nodeId","shareScope","policies"],
+  "additionalProperties":true
+}`),
+			},
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "get_permission_setting"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询文档空间节点的权限设置（权限模式/分享范围/权限策略）",
+				UseWhen:      []string{"查看节点权限模式/分享范围/水印等权限策略配置时"},
+				AvoidWhen: []string{
+					"查协作者清单用 permission list",
+					"查可申请角色与审批人用 permission apply-info",
+				},
+				Examples: []string{"dws drive permission get-setting --node <ID> --format json"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "node", Property: "nodeId"},
+			},
+		},
+	})
+	drivePermGetSettingCmd.Flags().String("node", "", "目标节点 ID 或 URL (必填)")
 
 	drivePermRemoveCmd := &cobra.Command{
 		Use:     "remove",
@@ -2380,8 +2505,11 @@ func newDriveCommand() *cobra.Command {
 	}
 	DeclareLeafMetadata(drivePermRemoveCmd, LeafSpec{
 		Safety: contract.SafetySpec{
+			// 批量移除（最多 30 个 USER/DEPT/CONVERSATION/TAG）会一次性撤销多个
+			// 成员的访问，部门/群聊/角色组还可能间接影响大量用户，与删除同级的
+			// destructive 入口，必须经过用户确认（--yes 或交互 yes）。
 			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Confirmation: "user_required", Idempotency: "unknown",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -2422,7 +2550,7 @@ func newDriveCommand() *cobra.Command {
 	drivePermRemoveCmd.Flags().String("workspace", "", "知识库 ID (选填)")
 
 	// permission 子命令 --node 隐藏别名（保持与迁移前 doc 命令一致）
-	for _, c := range []*cobra.Command{drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermRemoveCmd} {
+	for _, c := range []*cobra.Command{drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermGetSettingCmd, drivePermRemoveCmd} {
 		c.Flags().String("url", "", "")
 		c.Flags().String("id", "", "")
 		c.Flags().String("node-id", "", "")
@@ -2654,7 +2782,7 @@ func newDriveCommand() *cobra.Command {
 	drivePermApplyCmd.Flags().String("notify-mode", "", "通知方式: DEFAULT / MSG_ACCOUNT / SINGLE_CHAT")
 	drivePermApplyCmd.Flags().String("reason", "", "申请理由，最长 200 字符")
 
-	drivePermissionCmd.AddCommand(drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermRemoveCmd, drivePermTransferOwnerCmd, drivePermApplyInfoCmd, drivePermApplyCmd)
+	drivePermissionCmd.AddCommand(drivePermAddCmd, drivePermUpdateCmd, drivePermListCmd, drivePermGetSettingCmd, drivePermRemoveCmd, drivePermTransferOwnerCmd, drivePermApplyInfoCmd, drivePermApplyCmd)
 
 	// --node 隐藏别名（保持与迁移前 doc 命令一致）
 	driveNodeAliasCmds := []*cobra.Command{
@@ -2678,12 +2806,12 @@ func newDriveCommand() *cobra.Command {
 	_ = driveRenameCmd.Flags().MarkHidden("title")
 
 	// ── drive recycle 子命令组 ──
-	recycleCmd := &cobra.Command{
+	recycleCmd := newGroupCommand(&cobra.Command{
 		Use:   "recycle",
 		Short: "钉盘回收站管理",
 		Long:  `管理钉盘回收站：查看回收站列表、还原回收项。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	recycleListCmd := &cobra.Command{
 		Use:     "list",
@@ -2793,7 +2921,7 @@ func newDriveCommand() *cobra.Command {
 	// ── deprecated 代理命令（Phase 2：从 doc 迁移，保留兼容，警告引导到新命令）──
 
 	// folder create → dws wiki node create --type folder
-	driveFolderCmd := &cobra.Command{Use: "folder", Short: "文件夹管理（deprecated）", RunE: groupRunE}
+	driveFolderCmd := newGroupCommand(&cobra.Command{Use: "folder", Short: "文件夹管理（deprecated）", RunE: groupRunE})
 	driveFolderCreateCmd := &cobra.Command{
 		Use:   "create",
 		Short: "创建文件夹（deprecated）",
@@ -2823,12 +2951,12 @@ func newDriveCommand() *cobra.Command {
 	driveFolderCmd.AddCommand(driveFolderCreateCmd)
 
 	// ── drive publish (文件互联网公开发布管理) ──
-	drivePublishCmd := &cobra.Command{
+	drivePublishCmd := newGroupCommand(&cobra.Command{
 		Use:   "publish",
 		Short: "文件互联网公开发布管理",
 		Long:  `管理文件的互联网公开发布状态：设置公开、关闭公开、查询公开状态。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	drivePublishSetCmd := &cobra.Command{
 		Use:   "set",
@@ -3123,11 +3251,11 @@ func newDriveCommand() *cobra.Command {
 	_ = driveRecentCmd.Flags().MarkHidden("page-token")
 
 	// ── drive star (文档收藏管理) ──
-	driveStarCmd := &cobra.Command{
+	driveStarCmd := newGroupCommand(&cobra.Command{
 		Use:   "star",
 		Short: "文档收藏管理",
 		RunE:  groupRunE,
-	}
+	})
 	driveStarAddCmd := &cobra.Command{
 		Use:     "add",
 		Short:   "收藏文档",

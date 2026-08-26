@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -17,12 +18,38 @@ const defaultUploadLimit = int64(5 << 30)
 var (
 	newUploadHTTPClient = secureHTTPClient
 	validateUploadURL   = func(raw string) error {
-		_, err := ValidateDownloadURL(raw)
-		return err
+		parsed, err := ValidateDownloadURL(raw)
+		if err != nil {
+			return err
+		}
+		// Uploads publish local file bytes outward, so unlike host-agnostic
+		// downloads the target keeps the pre-existing DingTalk/OSS trust set.
+		if !trustedUploadHost(parsed.Hostname()) {
+			return fmt.Errorf("上传地址域名 %q 不属于受信任的钉钉或 OSS 域名", parsed.Hostname())
+		}
+		// Ditto for the port: DingTalk/OSS upload endpoints always serve HTTPS
+		// on the default port, so a non-default port is anomalous for uploads
+		// even though dedicated-deployment download domains legitimately use
+		// one. Keep the upload boundary identical to the pre-removal policy.
+		if port := parsed.Port(); port != "" && port != "443" {
+			return fmt.Errorf("上传地址只允许 HTTPS 默认端口")
+		}
+		return nil
 	}
 	openUploadFile   = os.Open
 	newUploadRequest = http.NewRequestWithContext
 )
+
+// trustedUploadHost keeps the upload host trust boundary that existed before
+// the download allowlist removal: public DingTalk and Aliyun OSS domains
+// only. Downloads may be host-agnostic because their URL and credential
+// headers are issued together by the authenticated service response, but
+// uploads send local file bytes outward and stay statically bounded.
+func trustedUploadHost(host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	return host == "dingtalk.com" || strings.HasSuffix(host, ".dingtalk.com") ||
+		(strings.HasSuffix(host, ".aliyuncs.com") && strings.Contains(host, "oss") && !strings.Contains(host, "internal"))
+}
 
 // UploadResult records only non-sensitive transfer facts. The signed URL is
 // deliberately never returned.

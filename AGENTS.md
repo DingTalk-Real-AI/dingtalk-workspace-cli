@@ -44,7 +44,8 @@ Schema contract) keep separate authorities — do not merge them with
 ## Command framework declaration
 
 - Framework definition: `docs/rfc-command-framework-convergence.md` **§5.0**
-- Today: `helpers.LeafSpec` / `shortcut.Shortcut` → `corecmd.Spec` (+ optional `Contract`) → `corecmd.New`
+- Today (leaf): `helpers.LeafSpec` / `shortcut.Shortcut` → `corecmd.Spec` (+ optional `Contract`) → `corecmd.New`
+- Today (non-leaf): owning Cobra command → complete `corecmd.GroupPolicy{Mode, Positionals, Recovery}` → `corecmd.ApplyGroupPolicy`; the final assembled-tree gate rejects undeclared groups and stale group declarations on leaves
 - **Declare = final Schema source**: `Flags` / `Constraints` / `Safety` / `ConstParams` / `Contract` (`corecmd.ContractDecl`; nested fields are `contract.*`)
 - Naming: `ContractDecl` is the authoring leaf declaration. "Schema" means Catalog / `ToolSpec` delivery — do not reintroduce `SchemaDecl`.
 - `Safety` uses `contract.SafetySpec` (`internal/corecmd/contract` only — no `cli.*` type alias). Its `confirmation` drives the runtime gate; `effect` / `risk` / `idempotency` are published unchanged. When `Contract` is set, convert once via `contractfinal.RegisterRuntimeContractFinal` (all callers — `corecmd.New` registers internally); assembly **pass-throughs** Final.
@@ -60,6 +61,7 @@ Schema contract) keep separate authorities — do not merge them with
   - **Tier2** — `DeclareLeafMetadata` (helpers migration; **Shortcut may also use this path — acceptable**)
   - **Tier3** — bare Cobra (should shrink over time; reviewed exclusions where needed)
   - Long-term outlook only: broader mcpbind / fewer hand-written `Execute` bodies. **Not** a current hard requirement to delete `Shortcut.Execute` or force mcpbind.
+- Group policy is separate from the leaf tiers: `corecmd.Spec` remains leaf-only. `ApplyGroupPolicy` must not infer or enable `TraverseChildren`; parent local-flag inheritance remains an explicit owning-command surface.
 - Description declare vs delivery: construction requires `ContractDecl.Description` (evidence). Catalog delivery prefers Cobra Long → provenance `cobra_help`; without Long, declared text → `contract_final`. Title: declared first, then Short, then MCP. Do **not** read this as "declare = wire final" or dual authority.
 - **Execute** = hooks (`Validate` / `Call` / `RunE` / `PostMount`) — not a second surface authority
 - Declaration path has **no reviewed parallel fields**; migration-only `runtime_gate` annotate until `Safety` is declared

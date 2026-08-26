@@ -1562,7 +1562,7 @@ func newAitableCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "aitable",
 		Short: "AI 表格操作",
 		Long: `管理钉钉 AI 表格：Base 管理、数据表、字段、记录、视图、表单、仪表盘、图表、导入导出。
@@ -1586,11 +1586,11 @@ func newAitableCommand() *cobra.Command {
   dws aitable section    [create|rename|delete|reorder|list-empty|list-nodes|move-node]  文件夹与节点管理`,
 		RunE:                       groupRunE,
 		SuggestionsMinimumDistance: 2, // Enable "Did you mean ...?" for typos
-	}
+	})
 
 	// ── base: Base 管理 ─────────────────────────────────────────
 
-	baseCmd := &cobra.Command{Use: "base", Short: "Base 管理", RunE: groupRunE}
+	baseCmd := newGroupCommand(&cobra.Command{Use: "base", Short: "Base 管理", RunE: groupRunE})
 
 	baseGetPrimaryDocIdCmd := &cobra.Command{
 		Use:   "get-primary-doc-id",
@@ -1952,7 +1952,7 @@ MCP 层不会会自动解析 URL，必须直接传入 dentryUuid 以避免报错
 
 	// ── table: 数据表管理 ───────────────────────────────────────
 
-	tableCmd := &cobra.Command{Use: "table", Short: "数据表管理", RunE: groupRunE}
+	tableCmd := newGroupCommand(&cobra.Command{Use: "table", Short: "数据表管理", RunE: groupRunE})
 
 	tableGetCmd := &cobra.Command{
 		Use:   "get",
@@ -2223,7 +2223,7 @@ config 结构参考：
 
 	// ── field: 字段管理 ─────────────────────────────────────────
 
-	fieldCmd := &cobra.Command{Use: "field", Short: "字段管理", RunE: groupRunE}
+	fieldCmd := newGroupCommand(&cobra.Command{Use: "field", Short: "字段管理", RunE: groupRunE})
 
 	fieldGetCmd := &cobra.Command{
 		Use:   "get",
@@ -2582,7 +2582,7 @@ newFieldName、config、aiConfig 至少传入一项。
 
 	// ── record: 记录管理 ────────────────────────────────────────
 
-	recordCmd := &cobra.Command{Use: "record", Short: "记录管理", RunE: groupRunE}
+	recordCmd := newGroupCommand(&cobra.Command{Use: "record", Short: "记录管理", RunE: groupRunE})
 
 	recordQueryCmd := &cobra.Command{
 		Use:   "query",
@@ -3564,7 +3564,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 
 	// ── template: 模板搜索 ──────────────────────────────────────
 
-	templateCmd := &cobra.Command{Use: "template", Short: "模板搜索", RunE: groupRunE}
+	templateCmd := newGroupCommand(&cobra.Command{Use: "template", Short: "模板搜索", RunE: groupRunE})
 
 	templateSearchCmd := &cobra.Command{
 		Use:   "search",
@@ -3613,7 +3613,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 
 	// ── attachment: 附件管理 ──────────────────────────────────────
 
-	attachmentCmd := &cobra.Command{Use: "attachment", Short: "附件管理", RunE: groupRunE}
+	attachmentCmd := newGroupCommand(&cobra.Command{Use: "attachment", Short: "附件管理", RunE: groupRunE})
 
 	attachmentUploadCmd := &cobra.Command{
 		Use:   "upload",
@@ -3690,7 +3690,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 
 	// ── view: 视图管理 ───────────────────────────────────────────
 
-	viewCmd := &cobra.Command{Use: "view", Short: "视图管理", RunE: groupRunE}
+	viewCmd := newGroupCommand(&cobra.Command{Use: "view", Short: "视图管理", RunE: groupRunE})
 
 	viewGetCmd := &cobra.Command{
 		Use:   "get",
@@ -3721,6 +3721,7 @@ fieldId 必须是 primaryDoc 类型的字段。`,
 			return callAitableTool("get_views", toolArgs)
 		},
 	}
+	newHybridGroupCommand(viewGetCmd)
 
 	// ─── view get <attr> 子命令：按属性投影 view 响应 ──────────────
 	// card/timebar/aggregate 需要 viewType 校验；filter/sort/group/visible-fields/field-widths 不需要。
@@ -4114,6 +4115,7 @@ fieldWidths 仅支持 Grid 视图。
 			return callAitableTool("update_view", toolArgs)
 		},
 	}
+	newHybridGroupCommand(viewUpdateCmd)
 
 	// ─── view update <attr> 子命令：按属性局部更新 ────────────────────
 
@@ -5058,9 +5060,9 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 
 	// ── form: 表单管理 ──────────────────────────────────────────
 
-	formCmd := &cobra.Command{Use: "form", Short: "表单管理", RunE: groupRunE}
-	formFieldCmd := &cobra.Command{Use: "field", Short: "表单字段管理", RunE: groupRunE}
-	formShareCmd := &cobra.Command{Use: "share", Short: "表单分享管理", RunE: groupRunE}
+	formCmd := newGroupCommand(&cobra.Command{Use: "form", Short: "表单管理", RunE: groupRunE})
+	formFieldCmd := newGroupCommand(&cobra.Command{Use: "field", Short: "表单字段管理", RunE: groupRunE})
+	formShareCmd := newGroupCommand(&cobra.Command{Use: "share", Short: "表单分享管理", RunE: groupRunE})
 
 	formListCmd := &cobra.Command{
 		Use:     "list",
@@ -5312,7 +5314,7 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 
 	// ── form questions: 表单题目（form 视角的字段管理，等价于 field create / field delete） ──
 
-	formQuestionsCmd := &cobra.Command{Use: "questions", Short: "表单题目管理（等价于 field create / delete）", RunE: groupRunE}
+	formQuestionsCmd := newGroupCommand(&cobra.Command{Use: "questions", Short: "表单题目管理（等价于 field create / delete）", RunE: groupRunE})
 
 	formQuestionsCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -5607,11 +5609,11 @@ locked 为 true 表示视图已锁定，false 表示未锁定。`,
 
 	// ── workflow: 自动化工作流管理 ────────────────────────────────
 
-	workflowCmd := &cobra.Command{
+	workflowCmd := newGroupCommand(&cobra.Command{
 		Use:   "workflow",
 		Short: "自动化工作流管理（创建 / 更新 / 启停 / 执行 / 历史 / 查询）",
 		RunE:  groupRunE,
-	}
+	})
 
 	workflowCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -6066,7 +6068,7 @@ valid=false 仍表示 DSL 校验或发布未通过，必须读取 issues 修正�
 
 	// ── dashboard: 仪表盘管理 ────────────────────────────────────
 
-	dashboardCmd := &cobra.Command{Use: "dashboard", Short: "仪表盘管理", RunE: groupRunE}
+	dashboardCmd := newGroupCommand(&cobra.Command{Use: "dashboard", Short: "仪表盘管理", RunE: groupRunE})
 
 	dashboardConfigExampleCmd := &cobra.Command{
 		Use:   "config-example",
@@ -6361,7 +6363,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 
 	// ── dashboard share: 仪表盘分享管理 ────────────────────────────
 
-	dashboardShareCmd := &cobra.Command{Use: "share", Short: "仪表盘分享管理", RunE: groupRunE}
+	dashboardShareCmd := newGroupCommand(&cobra.Command{Use: "share", Short: "仪表盘分享管理", RunE: groupRunE})
 
 	dashboardShareGetCmd := &cobra.Command{
 		Use:   "get",
@@ -6463,7 +6465,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 
 	// ── chart: 图表管理 ──────────────────────────────────────────
 
-	chartCmd := &cobra.Command{Use: "chart", Short: "图表管理", RunE: groupRunE}
+	chartCmd := newGroupCommand(&cobra.Command{Use: "chart", Short: "图表管理", RunE: groupRunE})
 
 	chartWidgetsExampleCmd := &cobra.Command{
 		Use:   "widgets-example",
@@ -6702,7 +6704,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 
 	// ── chart share: 图表分享管理 ────────────────────────────────
 
-	chartShareCmd := &cobra.Command{Use: "share", Short: "图表分享管理", RunE: groupRunE}
+	chartShareCmd := newGroupCommand(&cobra.Command{Use: "share", Short: "图表分享管理", RunE: groupRunE})
 
 	chartShareGetCmd := &cobra.Command{
 		Use:   "get",
@@ -6806,7 +6808,7 @@ layout 数组里每项含图表的新位置（row/col/width/height）。`,
 
 	// ── export / import: 数据导入导出 ────────────────────────────
 
-	exportCmd := &cobra.Command{Use: "export", Short: "数据导出", RunE: groupRunE}
+	exportCmd := newGroupCommand(&cobra.Command{Use: "export", Short: "数据导出", RunE: groupRunE})
 
 	exportDataCmd := &cobra.Command{
 		Use:   "data",
@@ -6911,11 +6913,11 @@ export-format 可选值：excel、attachment、excel_and_attachment、excel_with
 		},
 	})
 
-	importCmd := &cobra.Command{Use: "import", Short: "数据导入", RunE: groupRunE}
+	importCmd := newGroupCommand(&cobra.Command{Use: "import", Short: "数据导入", RunE: groupRunE})
 
 	// ── advperm: 高级权限 / 自定义角色 ────────────────────────────
 
-	advpermCmd := &cobra.Command{Use: "advperm", Short: "高级权限管理（开关 / 角色查看与删除）", RunE: groupRunE}
+	advpermCmd := newGroupCommand(&cobra.Command{Use: "advperm", Short: "高级权限管理（开关 / 角色查看与删除）", RunE: groupRunE})
 
 	advpermEnableCmd := &cobra.Command{
 		Use:   "enable",
@@ -7392,7 +7394,7 @@ role-get 自行 merge）。
 
 	// ── section: 文件夹与节点管理（导航树组织） ──────────────────────────────
 
-	sectionCmd := &cobra.Command{Use: "section", Short: "文件夹与节点管理", RunE: groupRunE}
+	sectionCmd := newGroupCommand(&cobra.Command{Use: "section", Short: "文件夹与节点管理", RunE: groupRunE})
 
 	sectionCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -8422,6 +8424,416 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		sectionMoveNodeCmd,
 	)
 
+	// ── datasource: 数据源同步管理 ──────────────────────────────
+
+	datasourceCmd := newGroupCommand(&cobra.Command{Use: "datasource", Short: "数据源同步管理", RunE: groupRunE})
+
+	datasourceGetConfigCmd := &cobra.Command{
+		Use:     "get-config",
+		Short:   "获取数据源表同步配置",
+		Example: `  dws aitable datasource get-config --base-id BASE_ID --table-id TABLE_ID`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-id"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			return callAitableTool("get_datasource_config", map[string]any{
+				"baseId":  baseID,
+				"tableId": mustGetFlag(cmd, "table-id"),
+			})
+		},
+	}
+	DeclareLeafMetadata(datasourceGetConfigCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_get_config",
+				CanonicalPath:  "aitable.datasource_get_config",
+				CLIPath:        "aitable datasource get-config",
+				PrimaryCLIPath: "aitable datasource get-config",
+			},
+			Description: "获取数据源表的同步配置信息。",
+			Interface:   aitableMCPInterface("get_datasource_config"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取数据源表的同步配置信息。",
+				UseWhen:      []string{"查看已有数据源表的配置详情时"},
+				AvoidWhen:    []string{"更新配置用 datasource update；查询同步状态用 datasource sync-status"},
+				Examples:     []string{"dws aitable datasource get-config --base-id <BASE_ID> --table-id <TABLE_ID>"},
+			},
+		},
+	})
+	datasourceGetConfigCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceGetConfigCmd.Flags().String("table-id", "", "数据源表 ID (必填)")
+
+	datasourceListSourcesCmd := &cobra.Command{
+		Use:     "list-sources",
+		Short:   "列出可用数据源来源",
+		Example: `  dws aitable datasource list-sources --base-id BASE_ID --datasource-type OA`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "datasource-type"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			return callAitableTool("list_datasource_sources", map[string]any{
+				"baseId":         baseID,
+				"datasourceType": mustGetFlag(cmd, "datasource-type"),
+			})
+		},
+	}
+	DeclareLeafMetadata(datasourceListSourcesCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_list_sources",
+				CanonicalPath:  "aitable.datasource_list_sources",
+				CLIPath:        "aitable datasource list-sources",
+				PrimaryCLIPath: "aitable datasource list-sources",
+			},
+			Description: "列出指定 Base 下可用的数据源条目。",
+			Interface:   aitableMCPInterface("list_datasource_sources"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "列出指定 Base 下可用的数据源条目（OA 审批模板等）。",
+				UseWhen:      []string{"创建或更新数据源前需要查看可用来源时"},
+				AvoidWhen:    []string{"获取字段结构用 datasource get-fields"},
+				Examples:     []string{"dws aitable datasource list-sources --base-id <BASE_ID> --datasource-type OA"},
+			},
+		},
+	})
+	datasourceListSourcesCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceListSourcesCmd.Flags().String("datasource-type", "", "数据源类型，目前支持 OA (必填)")
+
+	validateJSONObject := func(flag, raw string) error {
+		var v any
+		if err := json.Unmarshal([]byte(raw), &v); err != nil {
+			return fmt.Errorf("--%s must be a valid JSON object: %w", flag, err)
+		}
+		if _, ok := v.(map[string]any); !ok {
+			return fmt.Errorf("--%s must be a JSON object, got %T", flag, v)
+		}
+		return nil
+	}
+	validateAutoSyncSetting := func(raw string) error {
+		return validateJSONObject("auto-sync-setting", raw)
+	}
+
+	datasourceGetFieldsCmd := &cobra.Command{
+		Use:     "get-fields",
+		Short:   "获取数据源可同步字段列表",
+		Example: `  dws aitable datasource get-fields --base-id BASE_ID --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "datasource-type", "source-config"); err != nil {
+				return err
+			}
+			if err := validateJSONObject("source-config", mustGetFlag(cmd, "source-config")); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			return callAitableTool("get_datasource_fields", map[string]any{
+				"baseId":         baseID,
+				"datasourceType": mustGetFlag(cmd, "datasource-type"),
+				"sourceConfig":   mustGetFlag(cmd, "source-config"),
+			})
+		},
+	}
+	DeclareLeafMetadata(datasourceGetFieldsCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_get_fields",
+				CanonicalPath:  "aitable.datasource_get_fields",
+				CLIPath:        "aitable datasource get-fields",
+				PrimaryCLIPath: "aitable datasource get-fields",
+			},
+			Description: "获取指定数据源来源的可同步字段列表。",
+			Interface:   aitableMCPInterface("get_datasource_fields"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "获取指定数据源来源的可同步字段列表（字段 ID/名称/类型/是否主键）。",
+				UseWhen:      []string{"创建或更新数据源前需要查看可同步字段以决定 field-ids 时"},
+				AvoidWhen:    []string{"列出可用来源用 datasource list-sources"},
+				Examples:     []string{`dws aitable datasource get-fields --base-id <BASE_ID> --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`},
+			},
+		},
+	})
+	datasourceGetFieldsCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceGetFieldsCmd.Flags().String("datasource-type", "", "数据源类型，目前支持 OA (必填)")
+	datasourceGetFieldsCmd.Flags().String("source-config", "", "源配置 JSON 字符串，需含 processCode、name、iconUrl、url、dataType 及对应时间字段 (必填)")
+
+	datasourceCreateCmd := &cobra.Command{
+		Use:     "create",
+		Short:   "创建数据源表并触发首次同步",
+		Example: `  dws aitable datasource create --base-id BASE_ID --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "datasource-type", "source-config"); err != nil {
+				return err
+			}
+			if err := validateJSONObject("source-config", mustGetFlag(cmd, "source-config")); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			auto, _ := cmd.Flags().GetBool("auto")
+			toolArgs := map[string]any{
+				"baseId":         baseID,
+				"datasourceType": mustGetFlag(cmd, "datasource-type"),
+				"sourceConfig":   mustGetFlag(cmd, "source-config"),
+				"auto":           auto,
+			}
+			if v, _ := cmd.Flags().GetString("field-ids"); v != "" {
+				toolArgs["fieldIds"] = parseCSVValues(v)
+			}
+			if v, _ := cmd.Flags().GetString("auto-sync-setting"); v != "" {
+				if err := validateAutoSyncSetting(v); err != nil {
+					return err
+				}
+				toolArgs["autoSyncSetting"] = v
+			}
+			return callAitableTool("create_datasource", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(datasourceCreateCmd, LeafSpec{
+		Safety: aitableSafetyWrite(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_create",
+				CanonicalPath:  "aitable.datasource_create",
+				CLIPath:        "aitable datasource create",
+				PrimaryCLIPath: "aitable datasource create",
+			},
+			Description: "为指定 Base 创建数据源表并触发首次全量同步。",
+			Interface:   aitableMCPInterface("create_datasource"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "为指定 Base 创建数据源表并触发首次全量同步，返回新建表 ID 和同步任务 ID。",
+				UseWhen:      []string{"需要将外部数据源接入 AI 表格、创建新的数据源表时"},
+				AvoidWhen:    []string{"已有数据源表改配置用 datasource update；仅触发同步用 datasource sync"},
+				Examples:     []string{`dws aitable datasource create --base-id <BASE_ID> --datasource-type OA --source-config '{"processCode":"PROC-XXXX","name":"采购申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "datasource-type", Property: "datasourceType", Required: boolPtr(true)},
+				{Name: "source-config", Property: "sourceConfig", Required: boolPtr(true)},
+				{Name: "auto", Property: "auto"},
+				{Name: "field-ids", Property: "fieldIds", InterfaceType: "array"},
+				{Name: "auto-sync-setting", Property: "autoSyncSetting"},
+			},
+		},
+	})
+	datasourceCreateCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceCreateCmd.Flags().String("datasource-type", "", "数据源类型，目前支持 OA (必填)")
+	datasourceCreateCmd.Flags().String("source-config", "", "源配置 JSON 字符串，须从 list-sources 原样透传 processCode/name/iconUrl/url，并设置 dataType 及对应时间字段 (必填)")
+	datasourceCreateCmd.Flags().Bool("auto", false, "是否开启自动同步，默认 false；创建新数据源表时始终下发给下游")
+	datasourceCreateCmd.Flags().String("field-ids", "", "需要同步的字段 ID 列表，逗号分隔；不传时同步全部字段")
+	datasourceCreateCmd.Flags().String("auto-sync-setting", "", "自动同步频率配置 JSON 字符串，仅在 --auto=true 时生效。字段：syncType（必填，hourly/scheduled）、hourlyInterval（syncType=hourly 时必填）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（HH:mm）、selectedMonthDays（scheduleType=monthly 时）、selectedWeekdays（scheduleType=weekly 时）、skipNonWorkingDay")
+
+	datasourceUpdateCmd := &cobra.Command{
+		Use:     "update",
+		Short:   "更新数据源表同步配置并触发同步",
+		Example: `  dws aitable datasource update --base-id BASE_ID --table-id TABLE_ID --auto`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-id"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			toolArgs := map[string]any{
+				"baseId":  baseID,
+				"tableId": mustGetFlag(cmd, "table-id"),
+			}
+			if cmd.Flags().Changed("source-config") {
+				if err := validateJSONObject("source-config", mustGetFlag(cmd, "source-config")); err != nil {
+					return err
+				}
+				toolArgs["sourceConfig"] = mustGetFlag(cmd, "source-config")
+			}
+			if cmd.Flags().Changed("auto") {
+				auto, _ := cmd.Flags().GetBool("auto")
+				toolArgs["auto"] = auto
+			}
+			if cmd.Flags().Changed("field-ids") {
+				v := mustGetFlag(cmd, "field-ids")
+				if v == "" {
+					return fmt.Errorf("--field-ids 显式提供时不能为空，如需保持默认请勿传入")
+				}
+				toolArgs["fieldIds"] = parseCSVValues(v)
+			}
+			if cmd.Flags().Changed("auto-sync-setting") {
+				v := mustGetFlag(cmd, "auto-sync-setting")
+				if v == "" {
+					return fmt.Errorf("--auto-sync-setting 显式提供时不能为空，如需保持默认请勿传入")
+				}
+				if err := validateAutoSyncSetting(v); err != nil {
+					return err
+				}
+				toolArgs["autoSyncSetting"] = v
+			}
+			if !cmd.Flags().Changed("source-config") && !cmd.Flags().Changed("auto") && !cmd.Flags().Changed("field-ids") && !cmd.Flags().Changed("auto-sync-setting") {
+				return fmt.Errorf("至少需要一个配置变更：--source-config、--auto、--field-ids 或 --auto-sync-setting；仅触发同步请使用 datasource sync")
+			}
+			return callAitableTool("update_datasource_config", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(datasourceUpdateCmd, LeafSpec{
+		Safety: aitableSafetyWrite(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_update",
+				CanonicalPath:  "aitable.datasource_update",
+				CLIPath:        "aitable datasource update",
+				PrimaryCLIPath: "aitable datasource update",
+			},
+			Description: "更新已有数据源表的同步配置并触发一次同步。",
+			Interface:   aitableMCPInterface("update_datasource_config"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "更新已有数据源表的同步配置并触发一次同步。",
+				UseWhen:      []string{"需要修改已有数据源表的配置（更换模板、调整字段、开关自动同步）时"},
+				AvoidWhen:    []string{"创建新数据源表用 datasource create；仅触发同步用 datasource sync"},
+				Examples: []string{
+					"dws aitable datasource update --base-id <BASE_ID> --table-id <TABLE_ID> --auto",
+					`dws aitable datasource update --base-id <BASE_ID> --table-id <TABLE_ID> --source-config '{"processCode":"PROC-YYYY","name":"出差申请","dataType":"recent_time","recentDays":"30d","iconUrl":"https://example.com/icon.png","url":"https://example.com/oa"}'`,
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
+				{Name: "source-config", Property: "sourceConfig"},
+				{Name: "auto", Property: "auto"},
+				{Name: "field-ids", Property: "fieldIds", InterfaceType: "array"},
+				{Name: "auto-sync-setting", Property: "autoSyncSetting"},
+			},
+		},
+	})
+	datasourceUpdateCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceUpdateCmd.Flags().String("table-id", "", "数据源表 ID (必填)")
+	datasourceUpdateCmd.Flags().String("source-config", "", "可选。新的源配置 JSON 字符串，不传时保持原配置；传入时整体覆盖，须含 processCode、name、iconUrl、url、dataType 及对应时间字段")
+	datasourceUpdateCmd.Flags().Bool("auto", false, "可选。是否开启自动同步；仅显式设置时下发给下游，省略时保持原设置")
+	datasourceUpdateCmd.Flags().String("field-ids", "", "需要同步的字段 ID 列表，逗号分隔；不传时保持现有配置（创建时默认为全部字段）")
+	datasourceUpdateCmd.Flags().String("auto-sync-setting", "", "可选。自动同步频率配置 JSON 字符串，仅在显式设置 --auto=true 时生效；省略时保持原有自动同步频率配置。字段：syncType（必填，hourly/scheduled）、hourlyInterval（syncType=hourly 时必填）、scheduleType（syncType=scheduled 时必填，daily/weekly/monthly）、timeValue（HH:mm）、selectedMonthDays（scheduleType=monthly 时）、selectedWeekdays（scheduleType=weekly 时）、skipNonWorkingDay")
+
+	datasourceSyncCmd := &cobra.Command{
+		Use:     "sync",
+		Short:   "触发数据源表手动同步",
+		Example: `  dws aitable datasource sync --base-id BASE_ID --table-ids TBL1,TBL2`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-ids"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			tableIDs := parseCSVValues(mustGetFlag(cmd, "table-ids"))
+			if len(tableIDs) < 1 || len(tableIDs) > 5 {
+				return fmt.Errorf("--table-ids requires 1-5 table IDs, got %d", len(tableIDs))
+			}
+			return callAitableTool("run_datasource_sync", map[string]any{
+				"baseId":   baseID,
+				"tableIds": tableIDs,
+			})
+		},
+	}
+	DeclareLeafMetadata(datasourceSyncCmd, LeafSpec{
+		Safety: aitableSafetyWrite(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_sync",
+				CanonicalPath:  "aitable.datasource_sync",
+				CLIPath:        "aitable datasource sync",
+				PrimaryCLIPath: "aitable datasource sync",
+			},
+			Description: "对已有数据源表触发手动同步（单次最多 5 张），仅触发即返回。",
+			Interface:   aitableMCPInterface("run_datasource_sync"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "对已有数据源表触发手动同步（单次最多 5 张），仅触发即返回同步任务 ID。",
+				UseWhen:      []string{"需要手动触发已有数据源表的数据同步时"},
+				AvoidWhen:    []string{"创建新数据源表用 datasource create；更新配置用 datasource update"},
+				Examples:     []string{"dws aitable datasource sync --base-id <BASE_ID> --table-ids TBL1,TBL2"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "table-ids", Property: "tableIds", Required: boolPtr(true)},
+			},
+		},
+	})
+	datasourceSyncCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceSyncCmd.Flags().String("table-ids", "", "待触发同步的数据源表 ID 列表，逗号分隔，1-5 个 (必填)")
+
+	datasourceSyncStatusCmd := &cobra.Command{
+		Use:     "sync-status",
+		Short:   "按任务 ID 查询数据源同步任务状态",
+		Example: `  dws aitable datasource sync-status --base-id BASE_ID --table-id TABLE_ID --task-ids TASK1,TASK2`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateRequiredFlags(cmd, "table-id", "task-ids"); err != nil {
+				return err
+			}
+			baseID, err := mustFlagOrFallback(cmd, "base-id", "base")
+			if err != nil {
+				return err
+			}
+			ids := parseCSVValues(mustGetFlag(cmd, "task-ids"))
+			if len(ids) < 1 || len(ids) > 5 {
+				return fmt.Errorf("--task-ids requires 1-5 task IDs, got %d", len(ids))
+			}
+			toolArgs := map[string]any{
+				"baseId":  baseID,
+				"tableId": mustGetFlag(cmd, "table-id"),
+				"taskIds": ids,
+			}
+			return callAitableTool("get_datasource_sync_status", toolArgs)
+		},
+	}
+	DeclareLeafMetadata(datasourceSyncStatusCmd, LeafSpec{
+		Safety: aitableSafetyRead(),
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "aitable",
+				Name:           "datasource_sync_status",
+				CanonicalPath:  "aitable.datasource_sync_status",
+				CLIPath:        "aitable datasource sync-status",
+				PrimaryCLIPath: "aitable datasource sync-status",
+			},
+			Description: "按任务 ID 查询数据源同步任务状态（RUNNING/FINISHED/FAILED）。",
+			Interface:   aitableMCPInterface("get_datasource_sync_status"),
+			Selection: contract.SelectionSpec{
+				AgentSummary: "按任务 ID 批量查询数据源同步任务状态（RUNNING/FINISHED/FAILED），与 sync/create/update 触发后配对使用。",
+				UseWhen:      []string{"触发同步后需要按任务 ID 查询任务是否完成时"},
+				AvoidWhen:    []string{"触发同步用 datasource sync"},
+				Examples:     []string{"dws aitable datasource sync-status --base-id <BASE_ID> --table-id <TABLE_ID> --task-ids TASK1"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "base-id", Property: "baseId", Required: boolPtr(true)},
+				{Name: "table-id", Property: "tableId", Required: boolPtr(true)},
+				{Name: "task-ids", Property: "taskIds", Required: boolPtr(true)},
+			},
+		},
+	})
+	datasourceSyncStatusCmd.Flags().String("base-id", "", "Base ID (必填)")
+	datasourceSyncStatusCmd.Flags().String("table-id", "", "数据源表 ID (必填)")
+	datasourceSyncStatusCmd.Flags().String("task-ids", "", "待查询的同步任务 ID 列表，逗号分隔，1-5 个 (必填)")
+
+	datasourceCmd.AddCommand(
+		datasourceGetConfigCmd, datasourceListSourcesCmd, datasourceGetFieldsCmd,
+		datasourceCreateCmd, datasourceUpdateCmd,
+		datasourceSyncCmd, datasourceSyncStatusCmd,
+	)
+
 	// 组装 aitable 命令树
 	root.AddCommand(
 		baseCmd, tableCmd, fieldCmd,
@@ -8432,6 +8844,7 @@ parentSectionId 为空串表示该节点在 Base 根目录下。
 		attachmentCmd, templateCmd,
 		advpermCmd,
 		sectionCmd,
+		datasourceCmd,
 	)
 
 	// 批量注册 --base 作为 --base-id 的隐藏别名

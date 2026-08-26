@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,12 +27,14 @@ import (
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/app"
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 )
 
 const (
-	mockMCPSmokeHelperEnv = "DWS_MOCK_MCP_SMOKE_HELPER"
-	mockMCPSmokeCAEnv     = "DWS_MOCK_MCP_SMOKE_CA_FILE"
-	mockCurrentDOpenID    = "DAAAAAAAAAAAiE"
+	mockMCPSmokeHelperEnv       = "DWS_MOCK_MCP_SMOKE_HELPER"
+	mockMCPSmokeCAEnv           = "DWS_MOCK_MCP_SMOKE_CA_FILE"
+	mockMCPSmokeDownloadDialEnv = "DWS_MOCK_MCP_SMOKE_DOWNLOAD_DIAL"
+	mockCurrentDOpenID          = "DAAAAAAAAAAAiE"
 )
 
 type recordedToolCall struct {
@@ -66,6 +67,9 @@ func TestCLIHelperProcess(t *testing.T) {
 		}
 		_ = os.Setenv("GODEBUG", "x509usefallbackroots=1")
 		x509.SetFallbackRoots(pool)
+	}
+	if dialAddr := strings.TrimSpace(os.Getenv(mockMCPSmokeDownloadDialEnv)); dialAddr != "" {
+		localio.SetSecureDownloadDialTargetForTest(dialAddr)
 	}
 
 	marker := -1
@@ -267,15 +271,14 @@ func TestMultiIME2E_NaturalTargetsCompletenessAndWriteBoundaries(t *testing.T) {
 	defer server.Close()
 
 	env := isolatedCLIEnv(t, map[string]string{
-		"DINGTALK_CONTACT_MCP_URL": server.URL + "/mcp/contact",
-		"DINGTALK_CHAT_MCP_URL":    server.URL + "/mcp/chat",
-		"DINGTALK_IM_MCP_URL":      server.URL + "/mcp/im",
-		"HTTPS_PROXY":              download.ProxyURL,
-		"https_proxy":              download.ProxyURL,
-		"SSL_CERT_FILE":            download.CAFile,
-		mockMCPSmokeCAEnv:          download.CAFile,
-		"DWS_CONFIG_DIR":           authConfigDir,
-		"DWS_KEYCHAIN_DIR":         authKeychainDir,
+		"DINGTALK_CONTACT_MCP_URL":  server.URL + "/mcp/contact",
+		"DINGTALK_CHAT_MCP_URL":     server.URL + "/mcp/chat",
+		"DINGTALK_IM_MCP_URL":       server.URL + "/mcp/im",
+		mockMCPSmokeDownloadDialEnv: download.DialAddr,
+		"SSL_CERT_FILE":             download.CAFile,
+		mockMCPSmokeCAEnv:           download.CAFile,
+		"DWS_CONFIG_DIR":            authConfigDir,
+		"DWS_KEYCHAIN_DIR":          authKeychainDir,
 	})
 	reset := func() {
 		requestsMu.Lock()
@@ -584,7 +587,7 @@ func recordedToolNames(calls []recordedToolCall) []string {
 
 type trustedDownloadFixture struct {
 	URL      string
-	ProxyURL string
+	DialAddr string
 	CAFile   string
 }
 
@@ -645,38 +648,6 @@ func newTrustedDownloadFixture(t *testing.T, body []byte) trustedDownloadFixture
 	downloadServer.StartTLS()
 	t.Cleanup(downloadServer.Close)
 
-	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodConnect {
-			http.Error(w, "CONNECT required", http.StatusMethodNotAllowed)
-			return
-		}
-		upstream, err := net.DialTimeout("tcp", downloadServer.Listener.Addr().String(), 2*time.Second)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-		hijacker, ok := w.(http.Hijacker)
-		if !ok {
-			_ = upstream.Close()
-			http.Error(w, "hijacking unsupported", http.StatusInternalServerError)
-			return
-		}
-		client, buffered, err := hijacker.Hijack()
-		if err != nil {
-			_ = upstream.Close()
-			return
-		}
-		_, _ = fmt.Fprint(buffered, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		_ = buffered.Flush()
-		go func() {
-			_, _ = io.Copy(upstream, client)
-			_ = upstream.Close()
-		}()
-		_, _ = io.Copy(client, upstream)
-		_ = client.Close()
-	}))
-	t.Cleanup(proxyServer.Close)
-
 	caFile := filepath.Join(t.TempDir(), "download-ca.pem")
 	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
 	if err := os.WriteFile(caFile, caPEM, 0o600); err != nil {
@@ -684,7 +655,7 @@ func newTrustedDownloadFixture(t *testing.T, body []byte) trustedDownloadFixture
 	}
 	return trustedDownloadFixture{
 		URL:      "https://download.dingtalk.com/artifact.bin",
-		ProxyURL: proxyServer.URL,
+		DialAddr: downloadServer.Listener.Addr().String(),
 		CAFile:   caFile,
 	}
 }

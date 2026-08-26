@@ -369,11 +369,11 @@ func runOAAttachmentUpload(cmd *cobra.Command, _ []string) error {
 }
 
 func newOAAttachmentCommand() *cobra.Command {
-	attachmentCmd := &cobra.Command{
+	attachmentCmd := newGroupCommand(&cobra.Command{
 		Use:   "attachment",
 		Short: "审批附件授权、上传、下载与链接管理",
 		RunE:  groupRunE,
-	}
+	})
 
 	downloadURLCmd := NewLeafCommand(LeafSpec{
 		Use:           "download-url",
@@ -724,14 +724,14 @@ func newOaCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "oa",
 		Short: "OA 审批 / 同意 / 拒绝 / 撤销",
 		Long:  `管理钉钉 OA 审批：待办查询、审批详情、同意、拒绝、撤销、操作记录、已发起列表、表单列表与附件授权。`,
 		RunE:  groupRunE,
-	}
+	})
 
-	approvalCmd := &cobra.Command{Use: "approval", Short: "审批管理", RunE: groupRunE}
+	approvalCmd := newGroupCommand(&cobra.Command{Use: "approval", Short: "审批管理", RunE: groupRunE})
 
 	approvalListPendingCmd := &cobra.Command{
 		Use:     "list-pending",

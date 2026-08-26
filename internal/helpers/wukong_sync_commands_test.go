@@ -93,7 +93,7 @@ func TestWukongSyncDocCommands(t *testing.T) {
 	requireWukongSyncFlags(t, importCmd, "file", "folder", "workspace", "name", "folder-id", "workspace-id")
 
 	importGetCmd := requireWukongSyncCommand(t, root, "import", "get")
-	requireWukongSyncFlags(t, importGetCmd, "task-id")
+	requireWukongSyncFlags(t, importGetCmd, "task-id", "folder", "workspace")
 }
 
 func TestWukongSyncSheetCommands(t *testing.T) {
@@ -179,6 +179,7 @@ func TestWukongSyncAgoalCommands(t *testing.T) {
 		{[]string{"scorecard", "detail"}, []string{"selected-time", "dept-id", "request-id"}},
 		{[]string{"scorecard", "entity-detail"}, []string{"sc-id", "entity-id", "request-id"}},
 		{[]string{"scorecard", "update"}, []string{"dept-id", "selected-time", "id", "tracking-period-type", "content", "request-id"}},
+		{[]string{"scorecard", "search-entities"}, []string{"keyword", "page", "page-size", "request-id"}},
 		{[]string{"user", "rules"}, []string{"user-id", "request-id"}},
 		{[]string{"user", "objectives"}, []string{"user-id", "rule-id", "period-ids", "request-id"}},
 		{[]string{"report", "list-statistics"}, []string{"keyword", "request-id"}},

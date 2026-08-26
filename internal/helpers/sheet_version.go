@@ -8,12 +8,12 @@ import (
 )
 
 func newSheetVersionCmd() *cobra.Command {
-	versionCmd := &cobra.Command{
+	versionCmd := newGroupCommand(&cobra.Command{
 		Use:   "version",
 		Short: "表格历史版本管理",
 		Long:  `管理钉钉在线电子表格的历史版本：手动保存、查看版本列表、回滚到指定版本。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	versionSaveCmd := &cobra.Command{
 		Use:     "save",

@@ -86,6 +86,54 @@
       },
       "state": "pending",
       "reason": "Move topic forwarding from chat message to the dedicated chat topic command while preserving the legacy executable command."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws devapp +event-list",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "devapp",
+        "source_tool_id": "devapp.shortcut_event_list",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Fail closed until event-list proves authoritative terminal pagination for both non-empty and zero-result live fixtures."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws devapp +member-add",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "devapp",
+        "source_tool_id": "devapp.shortcut_member_add",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Fail closed until a safe second-member fixture proves exact role readback and rollback for member addition."
+    },
+    {
+      "kind": "schema_availability_hardening",
+      "legacy": {
+        "command": "dws devapp +member-remove",
+        "before": {"present": true, "runnable": true},
+        "after": {"present": true, "runnable": true, "hidden": true}
+      },
+      "schema": {
+        "product_id": "devapp",
+        "source_tool_id": "devapp.shortcut_member_remove",
+        "parameters": [],
+        "availability": {"before": "available", "after": "unavailable"}
+      },
+      "state": "pending",
+      "reason": "Fail closed until a safe second-member fixture proves exact removal readback and restoration."
     }
   ]
 }

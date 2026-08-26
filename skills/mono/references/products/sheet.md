@@ -51,7 +51,7 @@
 | 清空 / 排序 / 填充 / 复制移动区域 | `range clear` / `range sort` / `range fill` / `range copy-to` / `range move-to` | [sheet-range-operations](sheet/sheet-range-operations.md) | 用读写组合模拟服务端原子操作 |
 | 合并、冻结、分组、行高列宽 | `sheet info` + 结构命令 | [sheet-workbook](sheet/sheet-workbook.md)、[sheet-dimension-operations](sheet/sheet-dimension-operations.md) | 从 `range read` / CSV 空值推断结构 |
 | 多个原子写操作组合 | `batch-update` | [sheet-batch-operations](sheet/sheet-batch-operations.md) | 多次独立调用导致半成品 |
-| 图片写入单元格 / 浮动图片 | `write-image` / `media-upload` + `create-float-image` | [sheet-media-image](sheet/sheet-media-image.md) | 用 `range update` 写图片 |
+| 图片写入单元格 / 浮动图片 | `write-image` / `create-float-image --file` | [sheet-media-image](sheet/sheet-media-image.md) | 用 `range update` 写图片 |
 | 条件高亮 / 标红 / 数据条 / 色阶 | `cond-format` | [sheet-conditional-format](sheet/sheet-conditional-format.md) | 用静态 `set-style` 冒充条件格式 |
 | 单元格评论 / 批注 / @人讨论 | `comment list/create/reply/update/delete` | [sheet-comment](sheet/sheet-comment.md) | 把评论内容写进单元格值 |
 | 查询当前 revision / 复核两个 revision 间的编辑 | `revision-get` / `changeset-get` | [sheet-revision-changeset](sheet/sheet-revision-changeset.md) | 把 revision 当历史快照 version，或把前向 change 当成当前最终值 |
@@ -80,7 +80,7 @@
 | [sheet-dimension-operations](sheet/sheet-dimension-operations.md) | 行列增删移动、属性设置与分组。当用户说"插入行/列"、"删除行/列"、"隐藏/显示行列"、"设行高/列宽"、"移动行/列"、"追加空行/空列"、"创建/取消行列分组"、"新建分组并设为折叠/展开"时使用。命令：`insert-dimension`/`delete-dimension`/`update-dimension`/`move-dimension`/`add-dimension`/`group-dimension`/`ungroup-dimension` |
 | [sheet-style-format](sheet/sheet-style-format.md) | 单元格样式与合并。当用户说"设样式"、"改颜色/字体/对齐"、"数字格式(百分比/货币/日期)"、"合并/取消合并"时使用。纯样式/批量样式走 `set-style`；写值同时设置少量 cell 样式可用 `range update` 的 `cellStyles`。命令：`range set-style`/`range batch-set-style`/`merge-cells`/`unmerge-cells` |
 | [sheet-dropdown](sheet/sheet-dropdown.md) | 下拉列表管理。当用户说"设置下拉"、"下拉选项"、"删除下拉"时使用。命令：`set-dropdown`/`get-dropdown`/`delete-dropdown` |
-| [sheet-media-image](sheet/sheet-media-image.md) | 附件上传与图片。当用户说"上传附件"、"写入图片到单元格"、"浮动图片"时使用。单元格图片用 `write-image`（禁止 `range update`）；浮动图片需先 `media-upload` 再 `create-float-image`。命令：`media-upload`/`write-image`/`create-float-image`/`get-float-image`/`list-float-images`/`update-float-image`/`delete-float-image` |
+| [sheet-media-image](sheet/sheet-media-image.md) | 附件上传与图片。当用户说"上传附件"、"写入图片到单元格"、"浮动图片"时使用。单元格图片用 `write-image`（禁止 `range update`）；浮动图片优先用 `create-float-image --file`，已有 resourceUrl 时用 `--src`。命令：`media-upload`/`write-image`/`create-float-image`/`get-float-image`/`list-float-images`/`update-float-image`/`delete-float-image` |
 | [sheet-filter](sheet/sheet-filter.md) | 全局筛选。当用户说"筛选"、"过滤"、"只看某些行"（未说"筛选视图"）时使用。禁止用"删除不符合条件的行"代替筛选。命令：`filter get`/`create`/`delete`/`update`/`clear-criteria`/`sort` |
 | [sheet-filter-view](sheet/sheet-filter-view.md) | 筛选视图（个人化，不影响协作者）。当用户明确说"筛选视图"时使用，与全局筛选相互独立。命令：`filter-view list`/`create`/`update`/`delete`/`info`/`update-criteria`/`delete-criteria`/`list-criteria`/`get-criteria` |
 | [sheet-conditional-format](sheet/sheet-conditional-format.md) | 条件格式规则。触发词：标红/标黄/高亮/突出/标记/数据条/色阶/颜色随数据变 → **强制**走条件格式，禁止 `range set-style` 静态样式替代。命令：`cond-format list`/`create`/`update`/`delete` |
@@ -218,8 +218,8 @@ Flags:
 
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
-| `dws sheet +list-sheets` | read | 获取表格文档中全部工作表列表 |
-| `dws sheet +read` | read | 读取工作表指定范围的结构化单元格数据 |
+| `dws sheet +list-sheets` | read | 严格列出在线电子表格的工作表，并可按完整标题精确筛选 |
+| `dws sheet +read` | read | 完整读取并严格校验在线电子表格范围；截断结果失败关闭 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## 意图表
@@ -237,7 +237,7 @@ Flags:
 | "搜索公式文本" | `dws sheet find --node <nodeId或URL> --sheet-id <sheetId> --query "<公式片段>" --match-formula` |
 | "正则搜索 / 不区分大小写" | `dws sheet find --node <nodeId或URL> --sheet-id <sheetId> --query "<regexp>" --use-regexp --match-case=false` |
 | "插入图片到单元格" | `dws sheet write-image --node <nodeId或URL> --sheet-id <sheetId> --range A1 --file <图片路径>` |
-| "创建浮动图片" | 先 `dws sheet media-upload --node <nodeId或URL> --file <图片路径>` 获取 `resourceUrl`，再 `dws sheet create-float-image --node <nodeId或URL> --sheet-id <sheetId> --src "<resourceUrl>" --range A1 --width <宽> --height <高>` |
+| "创建浮动图片" | `dws sheet create-float-image --node <nodeId或URL> --sheet-id <sheetId> --file <图片路径> --range A1 --width <宽> --height <高>` |
 
 ## URL 与 ID 前置
 

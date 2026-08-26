@@ -79,6 +79,38 @@ type parameterSchema struct {
 	Enum             []string `json:"enum,omitempty"`
 }
 
+type reviewedCompatibilityException struct {
+	Field string
+	Old   string
+	New   string
+}
+
+// reviewedCompatibilityExceptions is intentionally exact: safety fixes may
+// need to tighten a historical contract, but that must not turn arbitrary
+// confirmation drift into a compatible change.
+var reviewedCompatibilityExceptions = map[string]reviewedCompatibilityException{
+	// PR #1085: batch permission/member remove is destructive at container
+	// scope — one call can revoke access for up to 30 USER / DEPT /
+	// CONVERSATION / TAG members, and departments, chats, and role groups
+	// can indirectly affect many more users. The review therefore asked for
+	// the same user confirmation gate as other destructive removes.
+	"doc/doc.remove_permission": {
+		Field: "confirmation",
+		Old:   "not_required",
+		New:   "user_required",
+	},
+	"drive/drive.permission_remove": {
+		Field: "confirmation",
+		Old:   "not_required",
+		New:   "user_required",
+	},
+	"wiki/wiki.remove_member": {
+		Field: "confirmation",
+		Old:   "not_required",
+		New:   "user_required",
+	},
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -708,7 +740,7 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		{name: "confirmation", old: oldTool.Confirmation, new: newTool.Confirmation},
 		{name: "idempotency", old: oldTool.Idempotency, new: newTool.Idempotency},
 	} {
-		if field.old != field.new {
+		if field.old != field.new && !isReviewedCompatibilityException(toolPath, field.name, field.old, field.new) {
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
 	}
@@ -744,6 +776,11 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	return failures
 }
 
+func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string) bool {
+	exception, ok := reviewedCompatibilityExceptions[toolPath]
+	return ok && exception.Field == field && exception.Old == oldValue && exception.New == newValue
+}
+
 // reviewedInterfaceRefRedirect enumerates the exact, individually reviewed
 // backend RPC migrations this gate accepts. Schema shape alone cannot prove two
 // RPCs share business semantics, permissions, error behaviour, or side effects,
@@ -777,6 +814,12 @@ var reviewedConstraintTransition = map[string]map[string]string{
 	// historical require_one_of made the documented Golden Route unreachable.
 	"doc/doc.shortcut_import": {
 		`{"require_one_of":[["folder","workspace"]]}`: "",
+	},
+	// PR #1105 adds local --file as an alternative to the historically required
+	// --src input. Every historical --src invocation remains valid; publishing
+	// both groups makes the final Schema express the runtime's exact-one rule.
+	"sheet/sheet.create_float_image": {
+		"": `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`,
 	},
 }
 
@@ -1832,6 +1875,24 @@ func normalizeSchemaCommandMigrations(
 		normalizedProduct := normalized.Products[migration.Schema.ProductID]
 		normalizedTool := normalizedProduct.Tools[migration.Schema.SourceToolID]
 		switch migration.Kind {
+		case interfacesnapshot.CommandMigrationAvailability:
+			change := migration.Schema.Availability
+			if change != nil && oldTool.Availability == change.After && newSource.Availability == change.After {
+				continue
+			}
+			if change == nil || oldTool.Availability != change.Before || newSource.Availability != change.After {
+				return schemaContract{}, fmt.Errorf(
+					"approved availability hardening %q does not match Schema availability %q -> %q",
+					migration.Legacy.Command,
+					oldTool.Availability,
+					newSource.Availability,
+				)
+			}
+			if newSource.PrimaryCLIPath != legacyPath {
+				continue
+			}
+			normalizedTool.Availability = newSource.Availability
+
 		case interfacesnapshot.CommandMigrationMove:
 			if newSource.PrimaryCLIPath != replacementPath {
 				continue

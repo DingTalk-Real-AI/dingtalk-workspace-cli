@@ -4,13 +4,14 @@
 
 普通追加、覆盖和 block 编辑统一使用 `+update`：
 
-`--command` 只接受下列枚举值，不接受 JSON、自然语言或拼接子命令；动作参数必须分别传给 `--content/--old/--new/--block-id/--after-block-id`。
+`--command` 只接受下列枚举值，不接受 JSON、自然语言或拼接子命令；动作参数必须分别传给 `--content/--old/--new/--block-id/--before-block-id/--after-block-id`。
 
 ```bash
 dws doc +update --node <DOC_ID> --command append --content "补充说明" --format json
 dws doc +update --node <DOC_ID> --command append --content @append.md --format json
 dws doc +update --node <DOC_ID> --command overwrite --content @full.md --format json
 dws doc +update --node <DOC_ID> --command overwrite --doc-format jsonml --content @full.json --expected-revision <REVISION> --format json
+dws doc +update --node <DOC_ID> --command block_insert_before --before-block-id <BLOCK_ID> --content "发布说明" --heading-level 1 --format json
 dws doc +update --node <DOC_ID> --command block_replace --block-id <BLOCK_ID> --content "新内容" --format json
 ```
 
@@ -28,7 +29,8 @@ dws doc +checkpoint-update --node <DOC_ID> --mode overwrite --content @full.md -
 |---|---|---|
 | `append` | 末尾追加 | `--content` |
 | `overwrite` | 整篇覆盖 | `--content`；JSONML 可加 `--expected-revision` 做服务端原子条件写 |
-| `block_insert_after` | 在指定 block 后插入 | `--after-block-id --content` |
+| `block_insert_before` | 在指定 block 前插入段落或标题 | `--before-block-id --content`；标题加 `--heading-level 1..6` |
+| `block_insert_after` | 在指定 block 后插入段落或标题 | `--after-block-id --content`；标题加 `--heading-level 1..6` |
 | `block_replace` | 替换指定 block | `--block-id --content` |
 | `block_delete` | 删除指定 block | `--block-id` |
 | `str_replace` | 唯一普通文本替换 | `--old --new` |
@@ -47,7 +49,7 @@ block ID 必须来自 `+fetch --detail with-ids` 或真实 block 列表，禁止
 | 用户明确要求在末尾追加 | 直接 `append` | 不为找末尾先拉全文；需要语气衔接时只读末节 |
 | 已知唯一旧文本与新文本 | 直接 `str_replace --old --new` | 省掉 block 解析；旧文本不唯一时 Runtime 必须失败，不放宽匹配 |
 | 指定章节但没有 block ID | `+fetch outline` → `+fetch section --detail with-ids` → block 动作 | 两个小读取换取稳定锚点，避免全文 token 和误改相邻章节 |
-| 已知真实 block ID | 直接 `block_replace/delete/insert_after` | 最小副作用；不改无关 block |
+| 已知真实 block ID | 直接 `block_replace/delete/insert_before/insert_after` | 最小副作用；不改无关 block |
 | 多处富结构保真修改 | `+fetch --detail full` 后定点 JSONML 更新 | 保留图片、附件、引用、表格和样式；不要从 Markdown 有损重建 |
 | 整篇重要覆盖 | `+checkpoint-update --mode overwrite` | 自动保存恢复点、执行并回读；普通 overwrite 只用于明确不需恢复点的场景 |
 
@@ -56,7 +58,7 @@ block ID 必须来自 `+fetch --detail with-ids` 或真实 block 列表，禁止
 ## Block ID 生命周期与保真
 
 - `block_replace` 成功后 Runtime 使用同一 `blockId` 回读验证，该 ID 可继续作为锚点；验证失败时先局部 `+fetch` 核对现状。`block_delete` 成功后旧 ID 失效，不得继续复用。
-- `block_insert_after` / `block_copy_insert_after` 后，原锚点通常仍可识别，但新 block 的 ID 必须来自真实返回或局部回读，禁止按顺序猜测。
+- `block_insert_before` / `block_insert_after` / `block_copy_insert_after` 后，原锚点通常仍可识别，但新 block 的 ID 必须来自真实返回或局部回读，禁止按顺序猜测。
 - `str_replace` 的简单行内替换通常不要求重新取 ID；若后续依赖块结构，仍以局部回读为准。
 - 从 Markdown 读取后覆盖整篇可能丢失图片、附件、@人/@文档、评论锚点、表格样式和嵌套块。只改局部时使用 block 手术；确需整篇保真改写时使用 `full` JSONML，并以 `--expected-revision` 防止覆盖并发修改。
 

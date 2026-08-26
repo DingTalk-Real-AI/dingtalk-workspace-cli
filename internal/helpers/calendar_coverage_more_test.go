@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -175,42 +176,22 @@ func TestCrossPlatformCoverageBuildRecurrenceCoverage(t *testing.T) {
 
 func TestCrossPlatformCoverageCalendarUnknownFallbackCoverage(t *testing.T) {
 	root := &cobra.Command{Use: "calendar"}
-	group := &cobra.Command{Use: "room", RunE: func(*cobra.Command, []string) error { return errors.New("previous") }}
+	group := newGroupCommand(&cobra.Command{Use: "room"})
 	known := &cobra.Command{Use: "search", Aliases: []string{"find"}}
 	hidden := &cobra.Command{Use: "secret", Hidden: true}
 	group.AddCommand(known, hidden)
 	root.AddCommand(group)
-	installUnknownVerbFallback(group)
-	_ = group.RunE(group, []string{"unknown"})
-	_ = group.RunE(group, []string{"--ignored", "search"})
-	_ = group.RunE(group, nil)
-	group.HelpFunc()(group, []string{"calendar", "room", "unknown"})
-	group.HelpFunc()(known, nil)
-	printUnknownSubcmdError(group, "searhc")
-	printUnknownSubcmdError(group, "unrelated")
+	var structured *apperrors.Error
+	if err := group.RunE(group, []string{"searhc"}); !errors.As(err, &structured) || structured.Reason != "unknown_subcommand" {
+		t.Fatalf("typed group recovery = %#v", err)
+	}
+	if err := group.RunE(group, nil); err != nil {
+		t.Fatalf("group help = %v", err)
+	}
 
 	hint := calendarInfoHintSubCmd("query", "use search")
 	group.AddCommand(hint)
-	_ = hint.RunE(hint, nil)
-
-	oldArgs := os.Args
-	t.Cleanup(func() { os.Args = oldArgs })
-	group.Flags().StringP("known", "k", "", "")
-	for _, args := range [][]string{
-		{"dws", "calendar", "room", "--"},
-		{"dws", "calendar", "room", "--help"},
-		{"dws", "calendar", "room", "--known=value"},
-		{"dws", "calendar", "room", "--unknown=value"},
-		{"dws", "calendar", "room", "-h"},
-		{"dws", "calendar", "room", "-k", "value"},
-		{"dws", "calendar", "room", "-x"},
-	} {
-		os.Args = args
-		_ = findUnknownFlag(group)
+	if err := hint.RunE(hint, nil); err == nil {
+		t.Fatal("calendar compatibility hint succeeded")
 	}
-	nilPrev := &cobra.Command{Use: "empty"}
-	root.AddCommand(nilPrev)
-	installUnknownVerbFallback(nilPrev)
-	os.Args = []string{"dws", "calendar", "empty"}
-	_ = nilPrev.RunE(nilPrev, nil)
 }

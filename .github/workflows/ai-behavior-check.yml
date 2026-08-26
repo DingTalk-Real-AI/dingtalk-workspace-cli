@@ -2,7 +2,7 @@ name: Code Admission — AI Behavior
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled]
   push:
     branches:
       - main
@@ -11,6 +11,12 @@ permissions:
   contents: read
   pull-requests: read
   statuses: write
+
+concurrency:
+  # State transitions for one PR supersede older policy evaluations. This
+  # prevents a stale Ready run from overwriting the fail-closed Draft status.
+  group: ai-behavior-${{ github.event_name == 'pull_request_target' && format('pr-{0}', github.event.pull_request.number) || format('push-{0}', github.sha) }}
+  cancel-in-progress: true
 
 jobs:
   ai-behavior-check:
@@ -47,23 +53,37 @@ jobs:
             try {
               const expectedHead = pullRequest.head.sha;
               const expectedBase = pullRequest.base.sha;
+              const expectedDraft = pullRequest.draft;
               const currentPull = async (phase) => {
                 const { data: pull } = await github.rest.pulls.get({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   pull_number: context.issue.number,
                 });
-                if (pull.head.sha !== expectedHead || pull.base.sha !== expectedBase) {
+                if (
+                  pull.head.sha !== expectedHead ||
+                  pull.base.sha !== expectedBase ||
+                  pull.draft !== expectedDraft
+                ) {
                   throw new Error(
-                    `Pull request revision changed during ${phase}: ` +
-                    `expected base/head ${expectedBase}/${expectedHead}, ` +
-                    `got ${pull.base.sha}/${pull.head.sha}`
+                    `Pull request identity changed during ${phase}: ` +
+                    `expected base/head/draft ${expectedBase}/${expectedHead}/${expectedDraft}, ` +
+                    `got ${pull.base.sha}/${pull.head.sha}/${pull.draft}`
                   );
                 }
                 return pull;
               };
 
               const before = await currentPull('pre-policy check');
+              if (before.draft) {
+                await setStatus('failure', 'Draft PR; mark Ready to run Code Admission');
+                core.setFailed(
+                  'Draft pull requests are not eligible for Code Admission. ' +
+                  'Mark the pull request ready to run all nine required contexts.'
+                );
+                return;
+              }
+
               const labels = before.labels.map(({ name }) => name);
               if (!labels.includes('ai-generated')) {
                 await setStatus('success', 'Not labeled ai-generated');

@@ -15,18 +15,21 @@ func newFloatImageCmds() []*cobra.Command {
 
 浮动图片悬浮于单元格之上，不占用单元格内容，可自由定位和调整大小。
 
-使用流程：
-  1. 先通过 media-upload 上传本地图片获取 resourceUrl
-  2. 再通过 create-float-image 将图片以浮动方式放置到工作表上
+直接传 --file 可在一个命令中上传本地图片并创建浮动图片。
+已经通过 media-upload 获得 resourceUrl 时，也可以改传 --src；--file 与 --src 二选一。
 
 --range 指定浮动图片锚定的单元格位置，使用 A1 表示法（如 A1、B3）。
 --width / --height 为必填，单位像素，必须为正整数。
 --offset-x / --offset-y 可选，表示相对锚点单元格左上角的偏移量（像素），默认 0。`,
-		Example: `  # 先上传图片获取 resourceUrl
+		Example: `  # 直接从本地文件创建
+  dws sheet create-float-image --node NODE_ID --sheet-id SHEET_ID \
+    --file ./chart.png --range A1 --width 400 --height 300
+
+  # 高级用法：先上传图片获取 resourceUrl
   dws sheet media-upload --node NODE_ID --file ./chart.png
   # 输出: resourceUrl: /core/api/resources/img/xxxx...
 
-  # 再创建浮动图片（--src 传入 media-upload 返回的 resourceUrl）
+  # 再通过 --src 创建浮动图片
   dws sheet create-float-image --node NODE_ID --sheet-id SHEET_ID \
     --src "/core/api/resources/img/xxxx..." --range A1 --width 400 --height 300
 
@@ -34,7 +37,11 @@ func newFloatImageCmds() []*cobra.Command {
   dws sheet create-float-image --node NODE_ID --sheet-id SHEET_ID \
     --src "/core/api/resources/img/xxxx..." --range B2 --width 200 --height 150 --offset-x 10 --offset-y 20`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateRequiredFlags(cmd, "node", "sheet-id", "src", "range"); err != nil {
+			if err := validateRequiredFlags(cmd, "node", "sheet-id", "range"); err != nil {
+				return err
+			}
+			filePath, src, err := validateFloatImageCreateInput(cmd)
+			if err != nil {
 				return err
 			}
 			width, err := cmd.Flags().GetInt("width")
@@ -54,7 +61,6 @@ func newFloatImageCmds() []*cobra.Command {
 			toolArgs := map[string]any{
 				"nodeId":  mustGetFlag(cmd, "node"),
 				"sheetId": mustGetFlag(cmd, "sheet-id"),
-				"src":     mustGetFlag(cmd, "src"),
 				"range":   mustGetFlag(cmd, "range"),
 				"width":   width,
 				"height":  height,
@@ -73,7 +79,11 @@ func newFloatImageCmds() []*cobra.Command {
 				}
 				toolArgs["offsetY"] = oy
 			}
-			return callMCPTool("create_float_image", toolArgs)
+			if filePath != "" {
+				return runFloatImageFileMode(cmd, "create_float_image", filePath, toolArgs)
+			}
+			toolArgs["src"] = src
+			return callMCPToolContext(cmd.Context(), "create_float_image", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(createFloatImageCmd, LeafSpec{
@@ -89,26 +99,30 @@ func newFloatImageCmds() []*cobra.Command {
 				CLIPath:        "sheet create-float-image",
 				PrimaryCLIPath: "sheet create-float-image",
 			},
-			Description: "创建浮动图片（src 必须来自 media-upload 的 resourceUrl）。",
+			Description: "从本地文件或已上传的 resourceUrl 创建浮动图片。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "request", RemoteReads: false},
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
 				Ref:          &contract.InterfaceRefSpec{ProductID: "sheet", RPCName: "create_float_image"},
 			},
 			Selection: contract.SelectionSpec{
-				AgentSummary: "创建浮动图片（src 必须来自 media-upload 的 resourceUrl）。",
+				AgentSummary: "从本地文件或已上传的 resourceUrl 创建浮动图片。",
 				UseWhen:      []string{"需要在单元格上方悬浮图片、不占用单元格内容时"},
 				AvoidWhen:    []string{"单元格内嵌图片用 write-image；更新/删除浮动图用 update/delete-float-image"},
 				Examples:     []string{"dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --src \"/core/api/resources/img/...\" --range A1 --width 400 --height 300"},
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "node", Property: "nodeId"},
+				{Name: "file", Required: boolPtr(false), RequiredWhen: "exactly one of --file or --src must be provided"},
+				{Name: "src", Property: "src", Required: boolPtr(false)},
 			},
 		},
 	})
 	createFloatImageCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	createFloatImageCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
-	createFloatImageCmd.Flags().String("src", "", "图片资源路径，通过 media-upload 获取的 resourceUrl (必填)")
+	createFloatImageCmd.Flags().String("file", "", "本地图片文件路径，与 --src 二选一")
+	createFloatImageCmd.Flags().String("src", "", "通过 media-upload 获取的 resourceUrl，与 --file 二选一")
 	createFloatImageCmd.Flags().String("range", "", "锚点单元格，A1 表示法，如 A1、B3 (必填)")
 	createFloatImageCmd.Flags().Int("width", 0, "图片宽度，像素 (必填)")
 	createFloatImageCmd.Flags().Int("height", 0, "图片高度，像素 (必填)")
@@ -217,8 +231,8 @@ floatImageId 可通过 list-float-images 获取。`,
 		Short: "更新浮动图片属性",
 		Long: `更新钉钉表格指定工作表中浮动图片的属性。
 
-可更新的属性包括：图片资源路径（src）、锚点位置、尺寸、偏移量。
-至少需要传入一个更新字段（--src / --range / --width / --height / --offset-x / --offset-y）。
+可直接传 --file 上传本地图片并替换浮动图片，也可传已上传图片的 --src。
+至少需要传入一个更新字段（--file / --src / --range / --width / --height / --offset-x / --offset-y），且 --file 与 --src 不能同时使用。
 floatImageId 可通过 list-float-images 获取。`,
 		Example: `  # 移动浮动图片到新位置
   dws sheet update-float-image --node NODE_ID --sheet-id SHEET_ID --float-image-id FI_ID --range C5
@@ -226,10 +240,15 @@ floatImageId 可通过 list-float-images 获取。`,
   # 调整尺寸
   dws sheet update-float-image --node NODE_ID --sheet-id SHEET_ID --float-image-id FI_ID --width 600 --height 400
 
-  # 替换图片（需先 media-upload 新图片获取 resourceUrl）
+  # 直接用本地文件替换图片
+  dws sheet update-float-image --node NODE_ID --sheet-id SHEET_ID --float-image-id FI_ID \
+    --file ./replacement.png
+
+  # 高级用法：用 media-upload 返回的 resourceUrl 替换图片
   dws sheet update-float-image --node NODE_ID --sheet-id SHEET_ID --float-image-id FI_ID \
     --src "/core/api/resources/img/xxxx..."`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fileChanged := cmd.Flags().Changed("file")
 			srcChanged := cmd.Flags().Changed("src")
 			rangeChanged := cmd.Flags().Changed("range")
 			widthChanged := cmd.Flags().Changed("width")
@@ -237,8 +256,17 @@ floatImageId 可通过 list-float-images 获取。`,
 			oxChanged := cmd.Flags().Changed("offset-x")
 			oyChanged := cmd.Flags().Changed("offset-y")
 
-			if !srcChanged && !rangeChanged && !widthChanged && !heightChanged && !oxChanged && !oyChanged {
-				return fmt.Errorf("--src、--range、--width、--height、--offset-x、--offset-y 至少必须提供一个")
+			if !fileChanged && !srcChanged && !rangeChanged && !widthChanged && !heightChanged && !oxChanged && !oyChanged {
+				return fmt.Errorf("%s", floatImageUpdateFieldsError)
+			}
+			filePath, src, err := validateFloatImageUpdateInput(cmd)
+			if err != nil {
+				return err
+			}
+			if fileChanged {
+				if err := validateRequiredFlags(cmd, "node", "sheet-id", "float-image-id"); err != nil {
+					return err
+				}
 			}
 
 			toolArgs := map[string]any{
@@ -247,7 +275,7 @@ floatImageId 可通过 list-float-images 获取。`,
 				"floatImageId": mustGetFlag(cmd, "float-image-id"),
 			}
 			if srcChanged {
-				toolArgs["src"], _ = cmd.Flags().GetString("src")
+				toolArgs["src"] = src
 			}
 			if rangeChanged {
 				toolArgs["range"], _ = cmd.Flags().GetString("range")
@@ -280,7 +308,10 @@ floatImageId 可通过 list-float-images 获取。`,
 				}
 				toolArgs["offsetY"] = oy
 			}
-			return callMCPTool("update_float_image", toolArgs)
+			if fileChanged {
+				return runFloatImageFileMode(cmd, "update_float_image", filePath, toolArgs)
+			}
+			return callMCPToolContext(cmd.Context(), "update_float_image", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(updateFloatImageCmd, LeafSpec{
@@ -297,6 +328,7 @@ floatImageId 可通过 list-float-images 获取。`,
 				PrimaryCLIPath: "sheet update-float-image",
 			},
 			Description: "更新浮动图片锚点、尺寸、偏移或资源路径。",
+			DryRun:      &contract.DryRunSpec{PreviewKind: "request", RemoteReads: false},
 			Interface: &contract.InterfaceSpec{
 				Mode:         "mcp",
 				Availability: "available",
@@ -310,12 +342,15 @@ floatImageId 可通过 list-float-images 获取。`,
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "node", Property: "nodeId"},
+				{Name: "file", Required: boolPtr(false)},
+				{Name: "src", Property: "src", Required: boolPtr(false)},
 			},
 		},
 	})
 	updateFloatImageCmd.Flags().String("node", "", "表格文档 ID 或 URL (必填)")
 	updateFloatImageCmd.Flags().String("sheet-id", "", "工作表 ID 或名称 (必填)")
 	updateFloatImageCmd.Flags().String("float-image-id", "", "浮动图片 ID (必填)")
+	updateFloatImageCmd.Flags().String("file", "", "用于替换浮动图片的本地图片路径，与 --src 不能同时使用")
 	updateFloatImageCmd.Flags().String("src", "", "新的图片资源路径，通过 media-upload 获取的 resourceUrl")
 	updateFloatImageCmd.Flags().String("range", "", "新的锚点单元格，A1 表示法")
 	updateFloatImageCmd.Flags().Int("width", 0, "新的图片宽度，像素")

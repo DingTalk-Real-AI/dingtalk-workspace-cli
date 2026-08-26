@@ -18,20 +18,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	pathpkg "path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/localio"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
-
-const resourceDownloadTimeout = 10 * time.Minute
 
 var (
 	resourceGetwd        = os.Getwd
@@ -48,6 +45,7 @@ var (
 	resourceRename       = replaceFileAtomically
 	resourceLink         = os.Link
 	resourceDownload     = downloadResourceAtomically
+	resourceSecureClient = localio.SecureHTTPClient
 )
 
 // MessagesResourceDownload resolves a temporary IM resource URL and saves the
@@ -318,33 +316,19 @@ func isAliyunOSSHost(host string) bool {
 	return false
 }
 
+// validateResourceDownloadURL enforces the shared localio download URL
+// policy: HTTPS URLs without userinfo, on any host or port, IP literals
+// included. Resource URLs are always resolved from an authenticated MCP
+// response (never user-supplied), and localio.SecureHTTPClient keeps TLS
+// hostname verification plus redirect credential hygiene, mirroring the
+// official GUI client which applies no client-side SSRF interception to
+// downloads.
 func validateResourceDownloadURL(rawURL string) (*url.URL, error) {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil ||
-		parsed.Scheme != "https" ||
-		strings.TrimSpace(parsed.Host) == "" ||
-		parsed.User != nil {
-		return nil, apperrors.NewValidation("资源下载地址必须是受信任域名上的 HTTPS URL")
-	}
-	host := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(parsed.Hostname()), "."))
-	if host == "" || net.ParseIP(host) != nil || !isResourceDownloadAllowedHost(host) {
-		return nil, apperrors.NewValidation(fmt.Sprintf(
-			"资源下载地址域名 %q 不属于受信任的钉钉或 OSS 域名", host))
-	}
-	if port := parsed.Port(); port != "" && port != "443" {
-		return nil, apperrors.NewValidation("资源下载地址只允许使用 HTTPS 默认端口")
+	parsed, err := localio.ValidateDownloadURL(rawURL)
+	if err != nil {
+		return nil, apperrors.NewValidation(err.Error())
 	}
 	return parsed, nil
-}
-
-func isResourceDownloadAllowedHost(host string) bool {
-	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
-	// Lower tools may return signed headers with the URL. Keep those headers
-	// confined to platform-owned public download families; extend this list
-	// only after observing another official production download host.
-	return isAliyunOSSHost(host) ||
-		host == "dingtalk.com" ||
-		strings.HasSuffix(host, ".dingtalk.com")
 }
 
 func resolveResourceDownloadPath(
@@ -515,12 +499,17 @@ func downloadResourceAtomically(
 	overwrite bool,
 ) (size int64, err error) {
 	if client == nil {
-		client = &http.Client{Timeout: resourceDownloadTimeout}
+		client = resourceSecureClient()
 	}
 	parsedResourceURL, err := validateResourceDownloadURL(resourceURL)
 	if err != nil {
 		return 0, err
 	}
+	// The resource URL and any credential headers are issued together by the
+	// same authenticated MCP response, so the initial request forwards them
+	// as-is even for dedicated-deployment storage hosts. The attack surface
+	// is a redirect leaving the original host, which the header-stripping
+	// CheckRedirect below covers.
 	clientCopy := *client
 	client = &clientCopy
 	originalRedirect := client.CheckRedirect

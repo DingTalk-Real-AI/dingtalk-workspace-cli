@@ -15,15 +15,16 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
-// Re-export cmdutil functions as package-level aliases so that existing product
-// files continue to compile with their current (unexported) call sites.
-// This avoids a mass-rename in 22 product files while still consolidating the
-// implementations in pkg/cmdutil.
+// Re-export shared command helpers as package-level aliases so existing product
+// files continue to compile with their current (unexported) call sites. This
+// avoids a mass-rename while keeping reusable command-resolution and flag
+// utilities in cmdutil.
 var (
 	groupRunE                       = cmdutil.GroupRunE
 	hintSubCmd                      = cmdutil.HintSubCmd
@@ -37,6 +38,40 @@ var (
 	helperSleep                     = time.Sleep
 	helperAfter                     = time.After
 )
+
+// newGroupCommand declares the ordinary navigation policy used by helper
+// command containers. The unified framework compiles this declaration into
+// Cobra behavior and command-resolution metadata.
+func newGroupCommand(command *cobra.Command) *cobra.Command {
+	corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
+	return command
+}
+
+// newDeepGroupCommand declares a navigation container whose typo recovery may
+// teach exact descendant paths (for example sheet read -> sheet range read).
+func newDeepGroupCommand(command *cobra.Command) *cobra.Command {
+	corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoveryDeep,
+	})
+	return command
+}
+
+// newHybridGroupCommand declares a business command that also owns children.
+// Its existing RunE remains the command's default action.
+func newHybridGroupCommand(command *cobra.Command) *cobra.Command {
+	corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupHybrid,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
+	return command
+}
 
 // Deps holds shared dependencies injected from the host application.
 type Deps struct {
@@ -255,7 +290,11 @@ func parseMCPToolTextResult(serverID, toolName string, result *edition.ToolResul
 				}
 				if isBusinessError(errBody) {
 					return "", &CLIError{
-						Code:       CodeMCPToolError,
+						Code: CodeMCPToolError,
+						// 注意：这里必须保留原始响应 JSON。此路径是数据编排层
+						// （如 drive list --depth 的限流重试）的输入，下游会从
+						// Message 反解析 errorCode；人话提取（含 code/logId 附加）
+						// 只用于 callMCPToolInternalOptsContext 的终端展示路径。
 						Message:    c.Text,
 						Suggestion: suggestForBusinessError(errBody),
 					}
@@ -440,6 +479,20 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 			// 尝试将返回文本解析为 JSON，进行错误分类
 			var errBody map[string]any
 			if json.Unmarshal([]byte(c.Text), &errBody) == nil {
+				// errBody == nil 表示文本为 "null"，服务端返回了空响应。
+				// 仅对已确认“空响应=写成功”契约的 permission/member update/remove
+				// 工具适配为空对象 {}，避免消费方解析 null 时出错；其它工具的
+				// 合法 null 保持原样输出，不改变未版本化的机器输出契约。
+				if errBody == nil {
+					if nullOnSuccessTools[toolName] {
+						if deps.Caller.Format() == "json" {
+							return printJSON(map[string]any{})
+						}
+						deps.Out.PrintRaw("{}")
+						return nil
+					}
+					return renderLegacyMCPText(toolName, c.Text, unescapeHTML)
+				}
 				// 网关层错误（如 token 过期）
 				if _, ok := getDWSGatewayErrorCode(errBody); ok {
 					return &CLIError{Code: CodeAuthTokenExpired, Message: c.Text, Suggestion: authExpiredSuggestion()}
@@ -454,7 +507,7 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 				}
 				// 业务逻辑错误
 				if isBusinessError(errBody) {
-					return &CLIError{Code: CodeMCPToolError, Message: c.Text, Suggestion: suggestForBusinessError(errBody)}
+					return &CLIError{Code: CodeMCPToolError, Message: businessErrorDisplayMessage(errBody, c.Text), Suggestion: suggestForBusinessError(errBody)}
 				}
 			}
 
@@ -463,6 +516,18 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 	}
 	// 无 text 类型内容时，将整个 result 对象序列化为 JSON 输出
 	return printJSON(result)
+}
+
+// nullOnSuccessTools lists MCP tools whose server contract is confirmed to
+// return a literal JSON null for successful no-payload writes (permission /
+// member update/remove). Only these get the null→{} adaptation; every other
+// tool keeps its raw null output so the shared machine-output contract stays
+// unchanged.
+var nullOnSuccessTools = map[string]bool{
+	"update_permission": true,
+	"remove_permission": true,
+	"update_member":     true,
+	"remove_member":     true,
 }
 
 // RenderLegacyMCPText renders an already-fetched MCP text response through the
@@ -765,15 +830,64 @@ func getDWSGatewayErrorCode(errBody map[string]any) (string, bool) {
 // suggestForBusinessError returns a user-facing suggestion for known business
 // error patterns in a parsed JSON body, or "" if no specific suggestion applies.
 func suggestForBusinessError(body map[string]any) string {
-	msg := ""
-	if v, ok := body["errorMsg"].(string); ok {
-		msg = v
-	} else if v, ok := body["message"].(string); ok {
-		msg = v
-	} else if v, ok := body["error"].(string); ok {
-		msg = v
+	return suggestForBusinessErrorText(businessErrorMessage(body))
+}
+
+// businessErrorMessage extracts the human-readable message from a parsed error
+// body, checking errorMsg > errorMessage > message > error. Returns "" if none present.
+func businessErrorMessage(body map[string]any) string {
+	for _, k := range []string{"errorMsg", "errorMessage", "message", "error"} {
+		if v, ok := body[k].(string); ok && v != "" {
+			return v
+		}
 	}
-	return suggestForBusinessErrorText(msg)
+	return ""
+}
+
+// businessErrorDisplayMessage extracts the human-readable message from a parsed
+// error body, appends the backend error code and logId if present (for
+// traceability), and falls back to rawText if no message field is found.
+func businessErrorDisplayMessage(body map[string]any, rawText string) string {
+	msg := businessErrorMessage(body)
+	if msg == "" {
+		return rawText
+	}
+	var extras []string
+	for _, k := range []string{"errorCode", "error_code", "code"} {
+		if code, ok := body[k].(string); ok && code != "" && !strings.Contains(msg, code) {
+			extras = append(extras, "code: "+code)
+			break
+		}
+	}
+	if logId, ok := body["logId"].(string); ok && logId != "" && !strings.Contains(msg, logId) {
+		extras = append(extras, "logId: "+logId)
+	}
+	if len(extras) > 0 {
+		msg = msg + " (" + strings.Join(extras, ", ") + ")"
+	}
+	return msg
+}
+
+// isNoPermissionError reports whether a parsed error body represents a
+// permission-denied error, by known server codes or message text. Used to
+// surface apply-permission guidance before the framework's generic rendering.
+func isNoPermissionError(body map[string]any) bool {
+	for _, key := range []string{"code", "errorCode", "server_error_code"} {
+		if code, ok := body[key].(string); ok && noPermissionServerCodes[code] {
+			return true
+		}
+	}
+	msg := businessErrorMessage(body)
+	if msg == "" {
+		return false
+	}
+	lower := strings.ToLower(msg)
+	return strings.Contains(msg, "无权限访问") || strings.Contains(msg, "没有访问权限") ||
+		strings.Contains(msg, "没有权限") || strings.Contains(msg, "权限不足") ||
+		strings.Contains(lower, "no permission") || strings.Contains(lower, "permission denied") ||
+		strings.Contains(lower, "forbidden.no.auth") ||
+		strings.Contains(lower, "forbidden.accessdenied") ||
+		strings.Contains(msg, "需要您具备") || strings.Contains(msg, "及以上角色")
 }
 
 // confirmDelete is a convenience wrapper around cmdutil.ConfirmDelete that

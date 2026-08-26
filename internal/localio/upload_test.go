@@ -215,3 +215,33 @@ func TestCrossPlatformCoveragePutFileRejectsRedirectAndInvalidFileE2E(t *testing
 		t.Fatal("missing file accepted")
 	}
 }
+
+func TestCrossPlatformCoverageUploadURLTrustPolicy(t *testing.T) {
+	for _, raw := range []string{
+		"https://upload.dingtalk.com/x",
+		"https://bucket.oss-cn-hangzhou.aliyuncs.com/key",
+		"https://upload.dingtalk.com:443/x",
+	} {
+		if err := validateUploadURL(raw); err != nil {
+			t.Errorf("validateUploadURL(%q): %v", raw, err)
+		}
+	}
+	// 上传将本地文件字节向外发布，保持白名单移除前的静态可信域名与端口边界。
+	// 下载侧为专属部署非标端口放行的端口不适用于上传：钉钉/OSS 上传端点恒为 443。
+	for _, raw := range []string{
+		"http://upload.dingtalk.com/x",
+		"https://evil.example/x",
+		"https://ddoss.ijingbo.chambroad.com/x",
+		"https://ddoss.ijingbo.chambroad.com:8443/x",
+		"https://bucket.oss-cn-hangzhou-internal.aliyuncs.com/key",
+		"https://evildingtalk.com/x",
+		"https://upload.dingtalk.com:8443/x",
+	} {
+		if err := validateUploadURL(raw); err == nil {
+			t.Errorf("validateUploadURL(%q) unexpectedly succeeded", raw)
+		}
+	}
+	if !trustedUploadHost("download.dingtalk.com.") {
+		t.Error("trailing-dot trusted host rejected")
+	}
+}

@@ -26,12 +26,13 @@ package devapp
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
-
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -61,6 +62,29 @@ func devAppObjectResult(outcomes ...contract.ResultOutcome) *contract.ResultSpec
 	return &contract.ResultSpec{
 		Outcomes:   append([]contract.ResultOutcome(nil), outcomes...),
 		DataSchema: json.RawMessage(`{"type":"object","description":"开放平台命令返回的业务对象；具体字段由对应操作定义","additionalProperties":true}`),
+	}
+}
+
+func devAppVerifiedMutationResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema: json.RawMessage(`{"type":"object","description":"经稳定应用 ID 精确读回验证的开放平台应用变更","properties":{"action":{"type":"string","description":"已执行并验证的变更动作"},"unifiedAppId":{"type":"string","description":"发生变更的稳定统一应用 ID"},"verified":{"type":"boolean","description":"是否已通过精确对象读回或删除后全量排除验证"},"resource":{"type":"object","description":"写后按同一稳定 ID 读回的业务对象；删除动作省略","additionalProperties":true}},"required":["action","unifiedAppId","verified"],"additionalProperties":false}`),
+	}
+}
+
+func devAppCredentialResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:       []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema:     json.RawMessage(`{"type":"object","description":"按稳定应用 ID 严格验证的开放平台应用凭证","properties":{"unifiedAppId":{"type":"string","description":"开放平台统一应用 ID"},"appKey":{"type":"string","description":"应用公开客户端标识"},"clientId":{"type":"string","description":"应用公开客户端标识兼容字段"},"appSecret":{"type":"string","description":"应用敏感客户端密钥"},"clientSecret":{"type":"string","description":"应用敏感客户端密钥兼容字段"},"secret":{"type":"string","description":"应用敏感密钥兼容字段"}},"additionalProperties":true}`),
+		SensitivePaths: []string{"appSecret", "clientSecret", "secret"},
+	}
+}
+
+func devAppMemberListResult() *contract.ResultSpec {
+	return &contract.ResultSpec{
+		Outcomes:       []contract.ResultOutcome{contract.ResultOutcomeSuccess, contract.ResultOutcomeFailure},
+		DataSchema:     json.RawMessage(`{"type":"object","description":"严格验证并可按稳定 userId 精确筛选的应用成员列表","properties":{"count":{"type":"integer","description":"匹配的成员数量"},"members":{"type":"array","description":"匹配的应用成员","items":{"type":"object","description":"带稳定 userId 的应用成员","additionalProperties":true}}},"required":["count","members"],"additionalProperties":false}`),
+		SensitivePaths: []string{"members.name"},
 	}
 }
 
@@ -96,6 +120,298 @@ func devAppCursorPagination() *contract.PaginationSpec {
 		Kind:            contract.PaginationKindCursor,
 		CursorParameter: "cursor",
 	}
+}
+
+const devAppMaxReadbackPages = 20
+
+func devAppResponseError(operation, reason, message string) error {
+	return apperrors.NewAPI(message,
+		apperrors.WithOperation(operation),
+		apperrors.WithOrigin("mcp"),
+		apperrors.WithFailureStage("response_validation"),
+		apperrors.WithRetryable(false),
+		apperrors.WithReason(reason),
+	)
+}
+
+func devAppContainers(data map[string]any) []map[string]any {
+	if data == nil {
+		return nil
+	}
+	containers := []map[string]any{data}
+	for index := 0; index < len(containers) && index < 12; index++ {
+		for _, key := range []string{"content", "result", "data"} {
+			if nested, ok := containers[index][key].(map[string]any); ok {
+				containers = append(containers, nested)
+			}
+		}
+	}
+	return containers
+}
+
+func devAppErrorValue(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return false
+	case bool:
+		return typed
+	case float64:
+		return typed != 0 && typed != 200
+	case string:
+		normalized := strings.ToUpper(strings.TrimSpace(typed))
+		return normalized != "" && normalized != "0" && normalized != "200" && normalized != "OK" && normalized != "SUCCESS"
+	case map[string]any:
+		return len(typed) > 0
+	case []any:
+		return len(typed) > 0
+	default:
+		return true
+	}
+}
+
+func devAppFirstString(values map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := values[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func requireDevAppSuccess(data map[string]any, operation string) (map[string]any, error) {
+	if len(data) == 0 {
+		return nil, devAppResponseError(operation, "empty_tool_response", "服务返回空响应，无法证明操作成功或结果确实为空")
+	}
+	foundSuccess := false
+	for _, candidate := range devAppContainers(data) {
+		if value, present := candidate["success"]; present {
+			foundSuccess = true
+			success, ok := value.(bool)
+			if !ok {
+				return nil, devAppResponseError(operation, "malformed_success", "响应 success 字段不是布尔值")
+			}
+			if !success {
+				message := devAppFirstString(candidate, "errorMsg", "errorMessage", "message")
+				if message == "" {
+					message = "服务明确返回 success=false"
+				}
+				return nil, devAppResponseError(operation, "remote_failure", message)
+			}
+		}
+		for _, key := range []string{"error", "errorCode", "error_code"} {
+			if value, present := candidate[key]; present && devAppErrorValue(value) {
+				return nil, devAppResponseError(operation, "conflicting_error", fmt.Sprintf("响应 success 与 %s 错误字段冲突", key))
+			}
+		}
+	}
+	if !foundSuccess {
+		return nil, devAppResponseError(operation, "missing_success", "响应缺少 success 布尔终态，无法证明业务成功")
+	}
+	return data, nil
+}
+
+func devAppOnlyEnvelopeFields(candidate map[string]any) bool {
+	for key := range candidate {
+		switch key {
+		case "success", "result", "data", "content", "message", "error", "errorCode", "error_code", "code":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func requireDevAppObject(data map[string]any, operation string) (map[string]any, error) {
+	data, err := requireDevAppSuccess(data, operation)
+	if err != nil {
+		return nil, err
+	}
+	containers := devAppContainers(data)
+	for index := len(containers) - 1; index >= 0; index-- {
+		candidate := containers[index]
+		if len(candidate) == 0 || devAppOnlyEnvelopeFields(candidate) {
+			continue
+		}
+		return candidate, nil
+	}
+	return nil, devAppResponseError(operation, "missing_business_result", "响应没有可验证的非空业务对象")
+}
+
+func requireDevAppIdentity(object map[string]any, operation string, expected map[string]string) error {
+	for key, want := range expected {
+		if want == "" {
+			continue
+		}
+		if got := devAppFirstString(object, key); got == "" {
+			return devAppResponseError(operation, "readback_id_missing", fmt.Sprintf("读回对象缺少稳定字段 %s", key))
+		} else if got != want {
+			return devAppResponseError(operation, "readback_id_mismatch", fmt.Sprintf("读回对象字段 %s 与请求目标不一致", key))
+		}
+	}
+	return nil
+}
+
+func requireDevAppFields(object map[string]any, operation string, expected map[string]any) error {
+	for key, want := range expected {
+		got, present := object[key]
+		if !present {
+			return devAppResponseError(operation, "readback_field_missing", fmt.Sprintf("读回对象缺少请求字段 %s", key))
+		}
+		if fmt.Sprint(got) != fmt.Sprint(want) {
+			return devAppResponseError(operation, "readback_field_mismatch", fmt.Sprintf("读回对象字段 %s 与请求值不一致", key))
+		}
+	}
+	return nil
+}
+
+func requireDevAppStringField(object map[string]any, operation, want string, keys ...string) error {
+	if got := devAppFirstString(object, keys...); got == "" {
+		return devAppResponseError(operation, "readback_field_missing", fmt.Sprintf("读回对象缺少请求字段 %s", strings.Join(keys, "/")))
+	} else if got != want {
+		return devAppResponseError(operation, "readback_field_mismatch", fmt.Sprintf("读回对象字段 %s 与请求值不一致", strings.Join(keys, "/")))
+	}
+	return nil
+}
+
+func requireDevAppCollection(data map[string]any, operation string, idKeys []string, keys ...string) ([]any, map[string]any, error) {
+	data, err := requireDevAppSuccess(data, operation)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, candidate := range devAppContainers(data) {
+		for _, key := range keys {
+			value, present := candidate[key]
+			if !present {
+				continue
+			}
+			items, ok := value.([]any)
+			if !ok {
+				return nil, nil, devAppResponseError(operation, "malformed_collection", fmt.Sprintf("响应 %s 字段不是数组", key))
+			}
+			for index, raw := range items {
+				item, ok := raw.(map[string]any)
+				if !ok {
+					return nil, nil, devAppResponseError(operation, "malformed_item", fmt.Sprintf("响应 %s[%d] 不是对象", key, index))
+				}
+				if devAppFirstString(item, idKeys...) == "" {
+					return nil, nil, devAppResponseError(operation, "missing_item_id", fmt.Sprintf("响应 %s[%d] 缺少稳定身份字段", key, index))
+				}
+			}
+			return items, candidate, nil
+		}
+	}
+	return nil, nil, devAppResponseError(operation, "missing_collection", "成功响应缺少预期集合字段")
+}
+
+func readDevAppObject(rt *shortcut.RuntimeContext, tool string, params map[string]any, expected map[string]string) (map[string]any, map[string]any, error) {
+	raw, err := rt.CallMCPData(productDevApp, tool, params)
+	if err != nil {
+		return nil, nil, err
+	}
+	object, err := requireDevAppObject(raw, productDevApp+"/"+tool)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := requireDevAppIdentity(object, productDevApp+"/"+tool, expected); err != nil {
+		return nil, nil, err
+	}
+	return raw, object, nil
+}
+
+func outputDevAppObject(rt *shortcut.RuntimeContext, tool string, params map[string]any, expected map[string]string) error {
+	raw, _, err := readDevAppObject(rt, tool, params, expected)
+	if err != nil {
+		return err
+	}
+	return rt.OutputForTool(tool, raw)
+}
+
+func devAppWritePreview(rt *shortcut.RuntimeContext, tool string, params map[string]any) (bool, error) {
+	if !rt.DryRun() {
+		return false, nil
+	}
+	return true, rt.Output(map[string]any{
+		"dry_run": true, "executed": false, "tool": tool, "arguments": params,
+	})
+}
+
+func callDevAppWrite(rt *shortcut.RuntimeContext, tool string, params map[string]any) (map[string]any, error) {
+	raw, err := rt.CallMCPWriteDataStrict(productDevApp, tool, params)
+	if err != nil {
+		return nil, err
+	}
+	return requireDevAppSuccess(raw, productDevApp+"/"+tool)
+}
+
+func verifiedDevAppMutation(action, appID string, resource map[string]any) map[string]any {
+	result := map[string]any{
+		"action": action, "unifiedAppId": appID, "verified": true,
+	}
+	if resource != nil {
+		result["resource"] = resource
+	}
+	return result
+}
+
+func verifyDeletedDevApp(rt *shortcut.RuntimeContext, appID, appKey string) error {
+	if strings.TrimSpace(appKey) == "" {
+		return devAppResponseError("devapp/delete_dev_app", "missing_readback_selector", "删除前读回缺少 appKey，无法在删除后绑定稳定排除查询")
+	}
+	cursor := ""
+	seen := map[string]bool{}
+	for page := 0; page < devAppMaxReadbackPages; page++ {
+		params := map[string]any{"appKey": appKey, "pageSize": 20}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		raw, err := rt.CallMCPData(productDevApp, "list_dev_app", params)
+		if err != nil {
+			return err
+		}
+		apps, err := listAppProject(raw)
+		if err != nil {
+			return err
+		}
+		for _, app := range apps {
+			if devAppFirstString(app, "unifiedAppId") == appID {
+				return devAppResponseError("devapp/list_dev_app", "delete_readback_present", "删除后精确列表读回仍包含目标应用")
+			}
+		}
+		projection, err := devAppListProjection(raw, "apps", apps, "devapp/list_dev_app")
+		if err != nil {
+			return err
+		}
+		more, _ := projection["hasMore"].(bool)
+		if !more {
+			return nil
+		}
+		next := devAppFirstString(projection, "nextCursor")
+		if next == "" || next == cursor || seen[next] {
+			return devAppResponseError("devapp/list_dev_app", "cursor_stall", "删除后排除查询的分页游标未推进")
+		}
+		seen[next] = true
+		cursor = next
+	}
+	return devAppResponseError("devapp/list_dev_app", "page_limit", "删除后排除查询达到页数上限，无法证明目标已不存在")
+}
+
+func changeDevAppStatus(rt *shortcut.RuntimeContext, tool, action, expectedStatus string) error {
+	appID := rt.Str("unified-app-id")
+	params := map[string]any{"unifiedAppId": appID}
+	if previewed, err := devAppWritePreview(rt, tool, params); previewed || err != nil {
+		return err
+	}
+	if _, err := callDevAppWrite(rt, tool, params); err != nil {
+		return err
+	}
+	_, resource, err := readDevAppObject(rt, "get_dev_app", params, map[string]string{"unifiedAppId": appID})
+	if err != nil {
+		return err
+	}
+	if err := requireDevAppStringField(resource, "devapp/get_dev_app", expectedStatus, "appStatus", "status"); err != nil {
+		return err
+	}
+	return rt.Output(verifiedDevAppMutation(action, appID, resource))
 }
 
 // ---------------------------------------------------------------------------
@@ -182,24 +498,31 @@ var ListApp = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		apps := listAppProject(data)
-		return rt.Output(devAppListProjection(data, "apps", apps))
+		apps, err := listAppProject(data)
+		if err != nil {
+			return err
+		}
+		projection, err := devAppListProjection(data, "apps", apps, "devapp/list_dev_app")
+		if err != nil {
+			return err
+		}
+		return rt.Output(projection)
 	},
 }
 
 // listAppProject reshapes list_dev_app into a clean app list
 // ({unifiedAppId, name, appKey, agentId, status, gmtModified}) — output-projection
-// clean output projection. The list container and per-item field names are probed
-// defensively across candidate keys, so an unknown/empty shape yields an empty
-// list rather than a crash or fabricated data.
-func listAppProject(data map[string]any) []map[string]any {
-	raw := listAppFindList(data)
+// clean output projection. The list container and every item are validated
+// before projection so unknown response shapes fail closed.
+func listAppProject(data map[string]any) ([]map[string]any, error) {
+	raw, _, err := requireDevAppCollection(data, "devapp/list_dev_app",
+		[]string{"unifiedAppId", "unified_app_id"}, "list", "items", "apps", "appList")
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+		m := item.(map[string]any)
 		row := map[string]any{}
 		if v, ok := listAppFirst(m, "unifiedAppId", "unified_app_id"); ok {
 			row["unifiedAppId"] = v
@@ -219,36 +542,9 @@ func listAppProject(data map[string]any) []map[string]any {
 		if v, ok := listAppFirst(m, "gmtModified", "gmt_modified", "modifyTime", "modified_time"); ok {
 			row["gmtModified"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
+		out = append(out, row)
 	}
-	return out
-}
-
-// listAppFindList locates the app list payload, tolerating a bare top-level
-// array or nesting one level under a common envelope key.
-func listAppFindList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, k := range []string{"list", "items", "apps", "appList", "result", "data"} {
-		v, ok := data[k]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "apps", "appList", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+	return out, nil
 }
 
 // listAppFirst returns the first present candidate key's value.
@@ -302,7 +598,8 @@ var GetApp = shortcut.Shortcut{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_dev_app", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		appID := rt.Str("unified-app-id")
+		return outputDevAppObject(rt, "get_dev_app", map[string]any{"unifiedAppId": appID}, map[string]string{"unifiedAppId": appID})
 	},
 }
 
@@ -338,6 +635,7 @@ var CreateApp = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +create --name <NAME>"},
 		},
+		Result: devAppVerifiedMutationResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "name", Type: shortcut.FlagString, Desc: "应用名称", Required: true},
@@ -352,7 +650,39 @@ var CreateApp = shortcut.Shortcut{
 		if rt.Changed("icon-media-id") {
 			params["iconMediaId"] = rt.Str("icon-media-id")
 		}
-		return rt.CallMCP("create_dev_app", params)
+		if previewed, err := devAppWritePreview(rt, "create_dev_app", params); previewed || err != nil {
+			return err
+		}
+		receipt, err := callDevAppWrite(rt, "create_dev_app", params)
+		if err != nil {
+			return err
+		}
+		created, err := requireDevAppObject(receipt, "devapp/create_dev_app")
+		if err != nil {
+			return err
+		}
+		appID := devAppFirstString(created, "unifiedAppId", "unified_app_id")
+		if appID == "" {
+			return devAppResponseError("devapp/create_dev_app", "missing_resource_id", "创建回执缺少 unifiedAppId，无法绑定精确读回")
+		}
+		_, resource, err := readDevAppObject(rt, "get_dev_app", map[string]any{"unifiedAppId": appID}, map[string]string{"unifiedAppId": appID})
+		if err != nil {
+			return err
+		}
+		if err := requireDevAppStringField(resource, "devapp/get_dev_app", rt.Str("name"), "name", "appName"); err != nil {
+			return err
+		}
+		if rt.Changed("desc") {
+			if err := requireDevAppStringField(resource, "devapp/get_dev_app", rt.Str("desc"), "desc", "description"); err != nil {
+				return err
+			}
+		}
+		if rt.Changed("icon-media-id") {
+			if err := requireDevAppStringField(resource, "devapp/get_dev_app", rt.Str("icon-media-id"), "iconMediaId", "icon"); err != nil {
+				return err
+			}
+		}
+		return rt.Output(verifiedDevAppMutation("create", appID, resource))
 	},
 }
 
@@ -388,15 +718,30 @@ var UpdateApp = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +update --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result: devAppVerifiedMutationResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
-		{Name: "name", Type: shortcut.FlagString, Desc: "新的应用名称"},
-		{Name: "desc", Type: shortcut.FlagString, Desc: "新的应用描述"},
-		{Name: "icon-media-id", Type: shortcut.FlagString, Desc: "新的应用图标 mediaId"},
+		{Name: "name", Type: shortcut.FlagString, Desc: "新的应用名称；至少提供一项非空的应用基础信息更新"},
+		{Name: "desc", Type: shortcut.FlagString, Desc: "新的应用描述；至少提供一项非空的应用基础信息更新"},
+		{Name: "icon-media-id", Type: shortcut.FlagString, Desc: "新的应用图标 mediaId；至少提供一项非空的应用基础信息更新"},
+	},
+	Constraints: []shortcut.Constraint{{
+		Kind:        shortcut.ConstraintCustom,
+		Flags:       []string{"name", "desc", "icon-media-id"},
+		Description: "至少提供一项非空的应用基础信息更新",
+	}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		for _, name := range []string{"name", "desc", "icon-media-id"} {
+			if rt.Changed(name) && rt.Str(name) != "" {
+				return nil
+			}
+		}
+		return apperrors.NewValidation("至少提供一项待更新字段：--name、--desc 或 --icon-media-id")
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"unifiedAppId": rt.Str("unified-app-id")}
+		appID := rt.Str("unified-app-id")
+		params := map[string]any{"unifiedAppId": appID}
 		if rt.Changed("name") {
 			params["name"] = rt.Str("name")
 		}
@@ -406,7 +751,26 @@ var UpdateApp = shortcut.Shortcut{
 		if rt.Changed("icon-media-id") {
 			params["iconMediaId"] = rt.Str("icon-media-id")
 		}
-		return rt.CallMCP("update_dev_app", params)
+		if previewed, err := devAppWritePreview(rt, "update_dev_app", params); previewed || err != nil {
+			return err
+		}
+		if _, err := callDevAppWrite(rt, "update_dev_app", params); err != nil {
+			return err
+		}
+		_, resource, err := readDevAppObject(rt, "get_dev_app", map[string]any{"unifiedAppId": appID}, map[string]string{"unifiedAppId": appID})
+		if err != nil {
+			return err
+		}
+		for flag, keys := range map[string][]string{
+			"name": {"name", "appName"}, "desc": {"desc", "description"}, "icon-media-id": {"iconMediaId", "icon"},
+		} {
+			if rt.Changed(flag) {
+				if err := requireDevAppStringField(resource, "devapp/get_dev_app", rt.Str(flag), keys...); err != nil {
+					return err
+				}
+			}
+		}
+		return rt.Output(verifiedDevAppMutation("update", appID, resource))
 	},
 }
 
@@ -442,12 +806,32 @@ var DeleteApp = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +delete --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result: devAppVerifiedMutationResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("delete_dev_app", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		appID := rt.Str("unified-app-id")
+		params := map[string]any{"unifiedAppId": appID}
+		if previewed, err := devAppWritePreview(rt, "delete_dev_app", params); previewed || err != nil {
+			return err
+		}
+		_, existing, err := readDevAppObject(rt, "get_dev_app", params, map[string]string{"unifiedAppId": appID})
+		if err != nil {
+			return err
+		}
+		appKey := devAppFirstString(existing, "appKey", "clientId")
+		if appKey == "" {
+			return devAppResponseError("devapp/get_dev_app", "missing_readback_selector", "删除前读回缺少 appKey，拒绝进入不可逆写入")
+		}
+		if _, err := callDevAppWrite(rt, "delete_dev_app", params); err != nil {
+			return err
+		}
+		if err := verifyDeletedDevApp(rt, appID, appKey); err != nil {
+			return err
+		}
+		return rt.Output(verifiedDevAppMutation("delete", appID, nil))
 	},
 }
 
@@ -483,12 +867,13 @@ var EnableApp = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +enable --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result: devAppVerifiedMutationResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("enable_dev_app", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		return changeDevAppStatus(rt, "enable_dev_app", "enable", "normal")
 	},
 }
 
@@ -524,12 +909,13 @@ var DisableApp = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +disable --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result: devAppVerifiedMutationResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("disable_dev_app", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		return changeDevAppStatus(rt, "disable_dev_app", "disable", "disabled")
 	},
 }
 
@@ -541,11 +927,48 @@ var GetCredentials = shortcut.Shortcut{
 	Description: "读取开放平台应用凭证",
 	Intent:      "当你需要拿到某应用的鉴权凭证（如 clientId/AppKey、clientSecret/AppSecret）以便在代码或调试中调用开放平台接口时使用；输入 unifiedAppId，返回该应用的凭证信息。",
 	Risk:        shortcut.RiskRead,
+	Safety: contract.SafetySpec{
+		Effect: "read", Risk: "medium",
+		Confirmation: "not_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID:      "devapp",
+			Name:           "shortcut_credentials_get",
+			CanonicalPath:  "devapp.shortcut_credentials_get",
+			CLIPath:        "devapp +credentials-get",
+			PrimaryCLIPath: "devapp +credentials-get",
+		},
+		Description: "读取开放平台应用凭证",
+		Interface: &contract.InterfaceSpec{
+			Mode:         "composite",
+			Availability: "available",
+			Reason:       "Reviewed adapter requires an explicit success marker, a non-empty credential object, exact unifiedAppId, a public client identifier, and a non-empty secret before unified output; secret fields are declared sensitive.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "读取开放平台应用凭证",
+			UseWhen:      []string{"当你需要拿到某应用的鉴权凭证（如 clientId/AppKey、clientSecret/AppSecret）以便在代码或调试中调用开放平台接口时使用；输入 unifiedAppId，返回该应用的凭证信息。"},
+			AvoidWhen:    []string{"只需应用元数据时使用 +get；不要把返回密钥写入文档、日志、示例或聊天正文"},
+			Examples:     []string{"dws devapp +credentials-get --unified-app-id <UNIFIED_APP_ID>"},
+		},
+		Result: devAppCredentialResult(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_dev_app_credentials", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		appID := rt.Str("unified-app-id")
+		_, credentials, err := readDevAppObject(rt, "get_dev_app_credentials", map[string]any{"unifiedAppId": appID}, map[string]string{"unifiedAppId": appID})
+		if err != nil {
+			return err
+		}
+		if devAppFirstString(credentials, "appKey", "clientId") == "" {
+			return devAppResponseError("devapp/get_dev_app_credentials", "missing_client_id", "凭证响应缺少非空 appKey/clientId")
+		}
+		if devAppFirstString(credentials, "appSecret", "clientSecret", "secret") == "" {
+			return devAppResponseError("devapp/get_dev_app_credentials", "missing_client_secret", "凭证响应缺少非空 appSecret/clientSecret")
+		}
+		return rt.Output(credentials)
 	},
 }
 
@@ -594,7 +1017,8 @@ var WebappGet = shortcut.Shortcut{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_extension_webapp_config", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		appID := rt.Str("unified-app-id")
+		return outputDevAppObject(rt, "get_extension_webapp_config", map[string]any{"unifiedAppId": appID}, map[string]string{"unifiedAppId": appID})
 	},
 }
 
@@ -630,16 +1054,31 @@ var WebappConfig = shortcut.Shortcut{
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +webapp-config --unified-app-id <UNIFIED_APP_ID>"},
 		},
+		Result: devAppVerifiedMutationResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
-		{Name: "h5-page-type", Type: shortcut.FlagString, Desc: "网页应用生效端/页面类型"},
-		{Name: "homepage-url", Type: shortcut.FlagString, Desc: "移动端首页地址"},
-		{Name: "pc-homepage-url", Type: shortcut.FlagString, Desc: "PC 端首页地址"},
-		{Name: "omp-url", Type: shortcut.FlagString, Desc: "管理后台地址"},
+		{Name: "h5-page-type", Type: shortcut.FlagString, Desc: "网页应用生效端/页面类型；至少提供一项非空的网页应用配置"},
+		{Name: "homepage-url", Type: shortcut.FlagString, Desc: "移动端首页地址；至少提供一项非空的网页应用配置"},
+		{Name: "pc-homepage-url", Type: shortcut.FlagString, Desc: "PC 端首页地址；至少提供一项非空的网页应用配置"},
+		{Name: "omp-url", Type: shortcut.FlagString, Desc: "管理后台地址；至少提供一项非空的网页应用配置"},
+	},
+	Constraints: []shortcut.Constraint{{
+		Kind:        shortcut.ConstraintCustom,
+		Flags:       []string{"h5-page-type", "homepage-url", "pc-homepage-url", "omp-url"},
+		Description: "至少提供一项非空的网页应用配置",
+	}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		for _, name := range []string{"h5-page-type", "homepage-url", "pc-homepage-url", "omp-url"} {
+			if rt.Changed(name) && rt.Str(name) != "" {
+				return nil
+			}
+		}
+		return apperrors.NewValidation("至少提供一项网页应用配置：--h5-page-type、--homepage-url、--pc-homepage-url 或 --omp-url")
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"unifiedAppId": rt.Str("unified-app-id")}
+		appID := rt.Str("unified-app-id")
+		params := map[string]any{"unifiedAppId": appID}
 		if rt.Changed("h5-page-type") {
 			params["h5PageType"] = rt.Str("h5-page-type")
 		}
@@ -652,7 +1091,27 @@ var WebappConfig = shortcut.Shortcut{
 		if rt.Changed("omp-url") {
 			params["ompUrl"] = rt.Str("omp-url")
 		}
-		return rt.CallMCP("set_extension_webapp_config", params)
+		if previewed, err := devAppWritePreview(rt, "set_extension_webapp_config", params); previewed || err != nil {
+			return err
+		}
+		if _, err := callDevAppWrite(rt, "set_extension_webapp_config", params); err != nil {
+			return err
+		}
+		_, resource, err := readDevAppObject(rt, "get_extension_webapp_config", map[string]any{"unifiedAppId": appID}, map[string]string{"unifiedAppId": appID})
+		if err != nil {
+			return err
+		}
+		for flag, keys := range map[string][]string{
+			"h5-page-type": {"h5PageType"}, "homepage-url": {"homepageUrl"},
+			"pc-homepage-url": {"pcHomepageUrl"}, "omp-url": {"ompUrl"},
+		} {
+			if rt.Changed(flag) {
+				if err := requireDevAppStringField(resource, "devapp/get_extension_webapp_config", rt.Str(flag), keys...); err != nil {
+					return err
+				}
+			}
+		}
+		return rt.Output(verifiedDevAppMutation("webapp_config", appID, resource))
 	},
 }
 
@@ -725,24 +1184,33 @@ var PermissionList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		permissions := permissionListProject(data)
-		return rt.Output(devAppListProjection(data, "permissions", permissions))
+		permissions, err := permissionListProject(data)
+		if err != nil {
+			return err
+		}
+		projection, err := devAppListProjection(data, "permissions", permissions, "devapp/list_dev_app_permissions")
+		if err != nil {
+			return err
+		}
+		return rt.Output(projection)
 	},
 }
 
 // permissionListProject reshapes list_dev_app_permissions into a clean
 // permission-point list ({scopeValue, scopeName, apiName, authStatus, scopeType})
 // — clean output projection. The list container and per-item field
-// names are probed defensively across candidate keys, so an unknown/empty shape
-// yields an empty list rather than a crash or fabricated data.
-func permissionListProject(data map[string]any) []map[string]any {
-	raw := permissionListFindList(data)
+// names are probed across reviewed candidate keys, while missing, mistyped, or
+// malformed collections fail closed.
+func permissionListProject(data map[string]any) ([]map[string]any, error) {
+	raw, _, err := requireDevAppCollection(data, "devapp/list_dev_app_permissions",
+		[]string{"scopeValue", "scope_value", "permissionCode", "code"},
+		"list", "items", "permissions", "permissionList", "scopes")
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+		m := item.(map[string]any)
 		row := map[string]any{}
 		if v, ok := permissionListFirst(m, "scopeValue", "scope_value", "permissionCode", "code"); ok {
 			row["scopeValue"] = v
@@ -759,36 +1227,9 @@ func permissionListProject(data map[string]any) []map[string]any {
 		if v, ok := permissionListFirst(m, "scopeType", "scope_type"); ok {
 			row["scopeType"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
+		out = append(out, row)
 	}
-	return out
-}
-
-// permissionListFindList locates the permission list payload, tolerating a bare
-// top-level array or nesting one level under a common envelope key.
-func permissionListFindList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, k := range []string{"list", "items", "permissions", "permissionList", "scopes", "result", "data"} {
-		v, ok := data[k]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "permissions", "permissionList", "scopes", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+	return out, nil
 }
 
 // permissionListFirst returns the first present candidate key's value.
@@ -877,15 +1318,103 @@ var MemberList = shortcut.Shortcut{
 			AgentSummary: "查询开放平台应用成员",
 			UseWhen:      []string{"当你要查看某应用有哪些成员及其角色（如谁是开发者/管理员），用于核对协作人员或权限归属时使用；输入 unifiedAppId，返回成员列表。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
-			Examples:     []string{"dws devapp +member-list --unified-app-id <UNIFIED_APP_ID>"},
+			Examples:     []string{"dws devapp +member-list --unified-app-id <UNIFIED_APP_ID> --user-id <USER_ID>"},
 		},
+		Result: devAppMemberListResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
+		{Name: "user-id", Type: shortcut.FlagString, Desc: "可选稳定 userId；由 Shortcut 在严格验证完整成员数组后做精确等值筛选"},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("list_dev_app_members", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		raw, err := rt.CallMCPData(productDevApp, "list_dev_app_members", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		if err != nil {
+			return err
+		}
+		members, _, err := requireDevAppCollection(raw, "devapp/list_dev_app_members", []string{"userId", "user_id"}, "members", "items", "list")
+		if err != nil {
+			return err
+		}
+		wantUser := strings.TrimSpace(rt.Str("user-id"))
+		out := projectDevAppMembers(members, wantUser)
+		return rt.Output(map[string]any{"count": len(out), "members": out})
 	},
+}
+
+func projectDevAppMembers(members []any, wantUser string) []map[string]any {
+	out := make([]map[string]any, 0, len(members))
+	for _, value := range members {
+		member := value.(map[string]any)
+		if wantUser != "" && devAppFirstString(member, "userId", "user_id") != wantUser {
+			continue
+		}
+		out = append(out, member)
+	}
+	return out
+}
+
+func readDevAppMembers(rt *shortcut.RuntimeContext, appID string) ([]any, error) {
+	raw, err := rt.CallMCPData(productDevApp, "list_dev_app_members", map[string]any{"unifiedAppId": appID})
+	if err != nil {
+		return nil, err
+	}
+	members, _, err := requireDevAppCollection(raw, "devapp/list_dev_app_members",
+		[]string{"userId", "user_id"}, "members", "items", "list")
+	return members, err
+}
+
+func verifyDevAppMembers(rt *shortcut.RuntimeContext, appID string, userIDs []string, memberType string, present bool) error {
+	members, err := readDevAppMembers(rt, appID)
+	if err != nil {
+		return err
+	}
+	want := make(map[string]bool, len(userIDs))
+	for _, userID := range userIDs {
+		want[userID] = true
+	}
+	found := make(map[string]int, len(userIDs))
+	for _, value := range members {
+		member := value.(map[string]any)
+		userID := devAppFirstString(member, "userId", "user_id")
+		if !want[userID] {
+			continue
+		}
+		found[userID]++
+		if found[userID] > 1 {
+			return devAppResponseError("devapp/list_dev_app_members", "duplicate_readback_identity", "成员读回包含重复稳定 userId，无法证明唯一终态")
+		}
+		if present {
+			if err := requireDevAppStringField(member, "devapp/list_dev_app_members", memberType, "memberType", "member_type"); err != nil {
+				return err
+			}
+		}
+	}
+	for _, userID := range userIDs {
+		if present && found[userID] != 1 {
+			return devAppResponseError("devapp/list_dev_app_members", "member_readback_missing", "添加后成员列表未精确包含全部目标 userId")
+		}
+		if !present && found[userID] != 0 {
+			return devAppResponseError("devapp/list_dev_app_members", "member_remove_readback_present", "移除后成员列表仍包含目标 userId")
+		}
+	}
+	return nil
+}
+
+func validatedDevAppMemberInputs(rt *shortcut.RuntimeContext) ([]string, string, error) {
+	userIDs, err := validatedDevAppValues(rt.StrSlice("user-ids"), "--user-ids")
+	if err != nil {
+		return nil, "", err
+	}
+	memberType, err := validatedDevAppMemberType(rt.Str("member-type"))
+	return userIDs, memberType, err
+}
+
+func validatedDevAppMemberType(value string) (string, error) {
+	memberType := strings.TrimSpace(value)
+	if memberType == "" {
+		return "", apperrors.NewValidation("--member-type 不能为空")
+	}
+	return memberType, nil
 }
 
 // MemberAdd maps helper `add_dev_app_members`.
@@ -894,7 +1423,7 @@ var MemberAdd = shortcut.Shortcut{
 	Command:     "+member-add",
 	Product:     productDevApp,
 	Description: "添加开放平台应用成员",
-	Intent:      "当你要给某应用增加协作人员（如把某人加为开发者）时使用；传入 unifiedAppId、userId 列表和成员类型（如 DEVELOPER），会实际把这些人加入应用成员并赋予对应角色。",
+	Intent:      "当你要给某应用增加协作人员并要求按稳定 userId 逐项确认成员角色已写回时使用；传入 unifiedAppId、userId 列表和成员类型（如 DEVELOPER）。",
 	Risk:        shortcut.RiskWrite,
 	Safety: contract.SafetySpec{
 		Effect: "write", Risk: "medium",
@@ -916,23 +1445,45 @@ var MemberAdd = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "添加开放平台应用成员",
-			UseWhen:      []string{"当你要给某应用增加协作人员（如把某人加为开发者）时使用；传入 unifiedAppId、userId 列表和成员类型（如 DEVELOPER），会实际把这些人加入应用成员并赋予对应角色。"},
+			UseWhen:      []string{"当你要给某应用增加协作人员并要求按稳定 userId 逐项确认成员角色已写回时使用；传入 unifiedAppId、userId 列表和成员类型（如 DEVELOPER）。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +member-add --unified-app-id <UNIFIED_APP_ID> --user-ids <VALUES> --member-type <MEMBER_TYPE>"},
 		},
+		Result: devAppVerifiedMutationResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
-		{Name: "user-ids", Type: shortcut.FlagStringSlice, Desc: "成员 userId 列表", Required: true},
-		{Name: "member-type", Type: shortcut.FlagString, Desc: "成员类型，如 DEVELOPER", Required: true},
+		{Name: "user-ids", Type: shortcut.FlagStringSlice, Desc: "成员 userId 列表，不能为空且不能重复", Required: true},
+		{Name: "member-type", Type: shortcut.FlagString, Desc: "成员类型，如 DEVELOPER，不能为空", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"user-ids"}, Description: "userId 列表不能为空且不能重复"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"member-type"}, Description: "成员类型不能为空"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		_, _, err := validatedDevAppMemberInputs(rt)
+		return err
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		userIDs, memberType, _ := validatedDevAppMemberInputs(rt)
+		appID := rt.Str("unified-app-id")
 		params := map[string]any{
-			"unifiedAppId": rt.Str("unified-app-id"),
-			"userIds":      rt.StrSlice("user-ids"),
-			"memberType":   rt.Str("member-type"),
+			"unifiedAppId": appID,
+			"userIds":      userIDs,
+			"memberType":   memberType,
 		}
-		return rt.CallMCP("add_dev_app_members", params)
+		if previewed, err := devAppWritePreview(rt, "add_dev_app_members", params); previewed || err != nil {
+			return err
+		}
+		if _, err := callDevAppWrite(rt, "add_dev_app_members", params); err != nil {
+			return err
+		}
+		if err := verifyDevAppMembers(rt, appID, userIDs, memberType, true); err != nil {
+			return err
+		}
+		return rt.Output(verifiedDevAppMutation("member_add", appID, map[string]any{
+			"count": len(userIDs), "memberType": memberType,
+		}))
 	},
 }
 
@@ -942,7 +1493,7 @@ var MemberRemove = shortcut.Shortcut{
 	Command:     "+member-remove",
 	Product:     productDevApp,
 	Description: "移除开放平台应用成员",
-	Intent:      "当某人离职或不再参与、你要取消其对应用的访问/协作权限时使用；传入 unifiedAppId、userId 列表和成员类型，会实际把这些人从应用成员中移除。",
+	Intent:      "当某人不再参与、你要取消其应用成员身份，并要求按稳定 userId 逐项确认目标已不在成员列表中时使用；传入 unifiedAppId、userId 列表和成员类型。",
 	Risk:        shortcut.RiskHighWrite,
 	Safety: contract.SafetySpec{
 		Effect: "destructive", Risk: "high",
@@ -964,23 +1515,45 @@ var MemberRemove = shortcut.Shortcut{
 		},
 		Selection: contract.SelectionSpec{
 			AgentSummary: "移除开放平台应用成员",
-			UseWhen:      []string{"当某人离职或不再参与、你要取消其对应用的访问/协作权限时使用；传入 unifiedAppId、userId 列表和成员类型，会实际把这些人从应用成员中移除。"},
+			UseWhen:      []string{"当某人不再参与、你要取消其应用成员身份，并要求按稳定 userId 逐项确认目标已不在成员列表中时使用；传入 unifiedAppId、userId 列表和成员类型。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +member-remove --unified-app-id <UNIFIED_APP_ID> --user-ids <VALUES> --member-type <MEMBER_TYPE>"},
 		},
+		Result: devAppVerifiedMutationResult(),
 	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
-		{Name: "user-ids", Type: shortcut.FlagStringSlice, Desc: "成员 userId 列表", Required: true},
-		{Name: "member-type", Type: shortcut.FlagString, Desc: "成员类型，如 DEVELOPER", Required: true},
+		{Name: "user-ids", Type: shortcut.FlagStringSlice, Desc: "成员 userId 列表，不能为空且不能重复", Required: true},
+		{Name: "member-type", Type: shortcut.FlagString, Desc: "成员类型，如 DEVELOPER，不能为空", Required: true},
+	},
+	Constraints: []shortcut.Constraint{
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"user-ids"}, Description: "userId 列表不能为空且不能重复"},
+		{Kind: shortcut.ConstraintCustom, Flags: []string{"member-type"}, Description: "成员类型不能为空"},
+	},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		_, _, err := validatedDevAppMemberInputs(rt)
+		return err
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		userIDs, memberType, _ := validatedDevAppMemberInputs(rt)
+		appID := rt.Str("unified-app-id")
 		params := map[string]any{
-			"unifiedAppId": rt.Str("unified-app-id"),
-			"userIds":      rt.StrSlice("user-ids"),
-			"memberType":   rt.Str("member-type"),
+			"unifiedAppId": appID,
+			"userIds":      userIDs,
+			"memberType":   memberType,
 		}
-		return rt.CallMCP("remove_dev_app_members", params)
+		if previewed, err := devAppWritePreview(rt, "remove_dev_app_members", params); previewed || err != nil {
+			return err
+		}
+		if _, err := callDevAppWrite(rt, "remove_dev_app_members", params); err != nil {
+			return err
+		}
+		if err := verifyDevAppMembers(rt, appID, userIDs, memberType, false); err != nil {
+			return err
+		}
+		return rt.Output(verifiedDevAppMutation("member_remove", appID, map[string]any{
+			"count": len(userIDs), "memberType": memberType,
+		}))
 	},
 }
 
@@ -1062,7 +1635,8 @@ var RobotGet = shortcut.Shortcut{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("get_extension_robot_config", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		appID := rt.Str("unified-app-id")
+		return outputDevAppObject(rt, "get_extension_robot_config", map[string]any{"unifiedAppId": appID}, map[string]string{"unifiedAppId": appID})
 	},
 }
 
@@ -1075,21 +1649,63 @@ var RobotConfig = shortcut.Shortcut{
 	Description: "创建或更新现有应用的机器人配置（upsert）",
 	Intent:      "当你要为应用开通机器人或调整其机器人设置（改名称/简介/图标、设消息与事件回调地址、切换 HTTPS/STREAM/AISKILL 模式、配技能、是否自动加权限或关 SSL 校验）时使用；按 unifiedAppId 以 upsert 方式写入机器人配置，会实际生效。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "unknown",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID: "devapp", Name: "shortcut_robot_config",
+			CanonicalPath: "devapp.shortcut_robot_config", CLIPath: "devapp +robot-config", PrimaryCLIPath: "devapp +robot-config",
+		},
+		Description: "创建或更新现有应用的机器人配置并精确读回",
+		Interface: &contract.InterfaceSpec{
+			Mode: "composite", Availability: "available",
+			Reason: "Reviewed adapter rejects an empty update, requires terminal success, then reads the same unifiedAppId and compares every changed scalar field before returning verified output.",
+		},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "创建或更新现有应用的机器人配置（upsert）",
+			UseWhen:      []string{"当你要为应用开通机器人或调整其机器人设置（改名称/简介/图标、设消息与事件回调地址、切换 HTTPS/STREAM/AISKILL 模式、配技能、是否自动加权限或关 SSL 校验）时使用；按 unifiedAppId 以 upsert 方式写入机器人配置，会实际生效。"},
+			AvoidWhen:    []string{"只需查看现状使用 +robot-get；仅切换已配置机器人的在线状态使用 +robot-enable 或 +robot-disable"},
+			Examples:     []string{"dws devapp +robot-config --unified-app-id <UNIFIED_APP_ID> --name <BOT_NAME> --mode STREAM"},
+		},
+		Result: devAppVerifiedMutationResult(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
-		{Name: "name", Type: shortcut.FlagString, Desc: "机器人名称"},
-		{Name: "brief", Type: shortcut.FlagString, Desc: "机器人简介"},
-		{Name: "desc", Type: shortcut.FlagString, Desc: "机器人描述"},
-		{Name: "icon-media-id", Type: shortcut.FlagString, Desc: "机器人图标 mediaId"},
-		{Name: "outgoing-url", Type: shortcut.FlagString, Desc: "消息回调地址"},
-		{Name: "event-callback-url", Type: shortcut.FlagString, Desc: "事件回调地址"},
-		{Name: "mode", Type: shortcut.FlagString, Enum: []string{"HTTPS", "STREAM", "AISKILL"}, Desc: "机器人模式：HTTPS / STREAM / AISKILL"},
-		{Name: "skills", Type: shortcut.FlagStringSlice, Desc: "技能列表"},
-		{Name: "add-scope", Type: shortcut.FlagBool, Desc: "是否自动添加机器人相关权限"},
-		{Name: "disable-ssl-verify", Type: shortcut.FlagBool, Desc: "回调地址是否关闭 SSL 校验"},
+		{Name: "name", Type: shortcut.FlagString, Desc: "机器人名称；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+		{Name: "brief", Type: shortcut.FlagString, Desc: "机器人简介；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+		{Name: "desc", Type: shortcut.FlagString, Desc: "机器人描述；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+		{Name: "icon-media-id", Type: shortcut.FlagString, Desc: "机器人图标 mediaId；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+		{Name: "outgoing-url", Type: shortcut.FlagString, Desc: "消息回调地址；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+		{Name: "event-callback-url", Type: shortcut.FlagString, Desc: "事件回调地址；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+		{Name: "mode", Type: shortcut.FlagString, Enum: []string{"HTTPS", "STREAM", "AISKILL"}, Desc: "机器人模式：HTTPS / STREAM / AISKILL；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+		{Name: "skills", Type: shortcut.FlagStringSlice, Desc: "技能列表；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+		{Name: "add-scope", Type: shortcut.FlagBool, Desc: "是否自动添加机器人相关权限；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+		{Name: "disable-ssl-verify", Type: shortcut.FlagBool, Desc: "回调地址是否关闭 SSL 校验；至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置"},
+	},
+	Constraints: []shortcut.Constraint{{
+		Kind:        shortcut.ConstraintCustom,
+		Flags:       []string{"name", "brief", "desc", "icon-media-id", "outgoing-url", "event-callback-url", "mode", "skills", "add-scope", "disable-ssl-verify"},
+		Description: "至少提供一项非空机器人配置；布尔开关显式传入 false 也算配置",
+	}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		for _, name := range []string{"name", "brief", "desc", "icon-media-id", "outgoing-url", "event-callback-url", "mode"} {
+			if rt.Changed(name) && strings.TrimSpace(rt.Str(name)) != "" {
+				return nil
+			}
+		}
+		if rt.Changed("skills") && len(rt.StrSlice("skills")) > 0 {
+			return nil
+		}
+		if rt.Changed("add-scope") || rt.Changed("disable-ssl-verify") {
+			return nil
+		}
+		return apperrors.NewValidation("至少提供一项非空机器人配置")
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"unifiedAppId": rt.Str("unified-app-id")}
+		appID := rt.Str("unified-app-id")
+		params := map[string]any{"unifiedAppId": appID}
 		if rt.Changed("name") {
 			params["name"] = rt.Str("name")
 		}
@@ -1120,7 +1736,45 @@ var RobotConfig = shortcut.Shortcut{
 		if rt.Changed("disable-ssl-verify") {
 			params["disableSSLVerify"] = rt.Bool("disable-ssl-verify")
 		}
-		return rt.CallMCP("set_extension_robot_config", params)
+		if previewed, err := devAppWritePreview(rt, "set_extension_robot_config", params); previewed || err != nil {
+			return err
+		}
+		if _, err := callDevAppWrite(rt, "set_extension_robot_config", params); err != nil {
+			return err
+		}
+		_, resource, err := readDevAppObject(rt, "get_extension_robot_config", map[string]any{"unifiedAppId": appID}, map[string]string{"unifiedAppId": appID})
+		if err != nil {
+			return err
+		}
+		for flag, keys := range map[string][]string{
+			"name": {"name"}, "brief": {"brief"}, "desc": {"desc", "description"},
+			"icon-media-id": {"iconMediaId"}, "outgoing-url": {"outgoingUrl"},
+			"event-callback-url": {"eventCallbackUrl"}, "mode": {"mode"},
+		} {
+			if !rt.Changed(flag) {
+				continue
+			}
+			want := rt.Str(flag)
+			if flag == "mode" {
+				want = strings.ToUpper(want)
+			}
+			if err := requireDevAppStringField(resource, "devapp/get_extension_robot_config", want, keys...); err != nil {
+				return err
+			}
+		}
+		for flag, key := range map[string]string{"add-scope": "addScope", "disable-ssl-verify": "disableSSLVerify"} {
+			if rt.Changed(flag) {
+				if err := requireDevAppFields(resource, "devapp/get_extension_robot_config", map[string]any{key: rt.Bool(flag)}); err != nil {
+					return err
+				}
+			}
+		}
+		if rt.Changed("skills") {
+			if err := requireDevAppFields(resource, "devapp/get_extension_robot_config", map[string]any{"skills": rt.StrSlice("skills")}); err != nil {
+				return err
+			}
+		}
+		return rt.Output(verifiedDevAppMutation("robot_config", appID, resource))
 	},
 }
 
@@ -1130,13 +1784,32 @@ var RobotEnable = shortcut.Shortcut{
 	Command:     "+robot-enable",
 	Product:     productDevApp,
 	Description: "启用现有应用机器人能力（纯启用，无需配置字段）",
-	Intent:      "当应用的机器人能力已配置但处于关闭状态、你只想把它打开生效时使用；仅传 unifiedAppId 即可，会实际启用该应用的机器人能力，无需再传配置字段。",
+	Intent:      "当应用已经具有可启用的机器人配置、你要把它切换到 ONLINE 时使用；写后会读取同一 unifiedAppId 并只在 robotStatus=ONLINE 时成功。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID: "devapp", Name: "shortcut_robot_enable",
+			CanonicalPath: "devapp.shortcut_robot_enable", CLIPath: "devapp +robot-enable", PrimaryCLIPath: "devapp +robot-enable",
+		},
+		Description: "启用已配置的应用机器人并读回 ONLINE 终态",
+		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "Reviewed adapter requires terminal success and exact get_extension_robot_config readback for the same unifiedAppId with robotStatus=ONLINE."},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "启用现有应用机器人能力（纯启用，无需配置字段）",
+			UseWhen:      []string{"当应用已经具有可启用的机器人配置、你要把它切换到 ONLINE 时使用；写后会读取同一 unifiedAppId 并只在 robotStatus=ONLINE 时成功。"},
+			AvoidWhen:    []string{"需要修改机器人字段时使用 +robot-config；只查看状态使用 +robot-get"},
+			Examples:     []string{"dws devapp +robot-enable --unified-app-id <UNIFIED_APP_ID>"},
+		},
+		Result: devAppVerifiedMutationResult(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("enable_dev_app_robot", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		return changeDevAppRobotStatus(rt, "enable_dev_app_robot", "robot_enable", "ONLINE")
 	},
 }
 
@@ -1146,14 +1819,56 @@ var RobotDisable = shortcut.Shortcut{
 	Command:     "+robot-disable",
 	Product:     productDevApp,
 	Description: "停用现有应用的机器人能力",
-	Intent:      "当你要临时关闭某应用的机器人（不再收发机器人消息）但保留其配置时使用；传入 unifiedAppId 会实际停用机器人能力，可日后再启用恢复。",
+	Intent:      "当你要下线某应用的机器人、不再收发机器人消息时使用；当前平台读回终态为 UNCONFIGURED，因此重新上线前可能需要先用 +robot-config 恢复配置。",
 	Risk:        shortcut.RiskHighWrite,
+	Safety: contract.SafetySpec{
+		Effect: "destructive", Risk: "high",
+		Confirmation: "user_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID: "devapp", Name: "shortcut_robot_disable",
+			CanonicalPath: "devapp.shortcut_robot_disable", CLIPath: "devapp +robot-disable", PrimaryCLIPath: "devapp +robot-disable",
+		},
+		Description: "下线应用机器人并读回 UNCONFIGURED 终态",
+		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "Reviewed adapter requires terminal success and exact get_extension_robot_config readback for the same unifiedAppId with robotStatus=UNCONFIGURED; it does not promise that configuration remains reusable."},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "停用现有应用的机器人能力",
+			UseWhen:      []string{"当你要下线某应用的机器人、不再收发机器人消息时使用；当前平台读回终态为 UNCONFIGURED，因此重新上线前可能需要先用 +robot-config 恢复配置。"},
+			AvoidWhen:    []string{"只需临时停用但必须保证配置可原样恢复时不要使用；当前下游没有该保留语义"},
+			Examples:     []string{"dws devapp +robot-disable --unified-app-id <UNIFIED_APP_ID>"},
+		},
+		Result: devAppVerifiedMutationResult(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		return rt.CallMCP("disable_dev_app_robot", map[string]any{"unifiedAppId": rt.Str("unified-app-id")})
+		return changeDevAppRobotStatus(rt, "disable_dev_app_robot", "robot_disable", "UNCONFIGURED")
 	},
+}
+
+func changeDevAppRobotStatus(rt *shortcut.RuntimeContext, tool, action, wantStatus string) error {
+	appID := rt.Str("unified-app-id")
+	params := map[string]any{"unifiedAppId": appID}
+	if previewed, err := devAppWritePreview(rt, tool, params); previewed || err != nil {
+		return err
+	}
+	if _, err := callDevAppWrite(rt, tool, params); err != nil {
+		return err
+	}
+	_, resource, err := readDevAppObject(rt, "get_extension_robot_config", params, map[string]string{"unifiedAppId": appID})
+	if err != nil {
+		return err
+	}
+	gotStatus := strings.ToUpper(devAppFirstString(resource, "robotStatus", "robot_status", "status"))
+	if gotStatus == "" {
+		return devAppResponseError("devapp/get_extension_robot_config", "readback_status_missing", "机器人状态读回缺少 robotStatus")
+	}
+	if gotStatus != wantStatus {
+		return devAppResponseError("devapp/get_extension_robot_config", "readback_status_mismatch", fmt.Sprintf("机器人状态读回为 %s，预期 %s", gotStatus, wantStatus))
+	}
+	return rt.Output(verifiedDevAppMutation(action, appID, resource))
 }
 
 // ---------------------------------------------------------------------------
@@ -1165,8 +1880,8 @@ var EventList = shortcut.Shortcut{
 	Service:     "devapp",
 	Command:     "+event-list",
 	Product:     productDevApp,
-	Description: "查询应用已订阅的事件列表",
-	Intent:      "当你要确认某应用当前订阅了哪些事件回调（用于排查漏收事件、或退订前先查事件码）时使用；输入 unifiedAppId，可按事件码/名称关键词过滤并分页，返回已订阅事件列表。",
+	Description: "查询应用可用事件目录与订阅状态",
+	Intent:      "当你要查某应用可用的事件码、事件名称及当前订阅状态（用于选择订阅项、排查漏收事件或退订前核对）时使用；输入 unifiedAppId，可按关键词过滤并游标分页。",
 	Risk:        shortcut.RiskRead,
 	Safety: contract.SafetySpec{
 		Effect: "read", Risk: "low",
@@ -1180,15 +1895,15 @@ var EventList = shortcut.Shortcut{
 			CLIPath:        "devapp +event-list",
 			PrimaryCLIPath: "devapp +event-list",
 		},
-		Description: "查询应用已订阅的事件列表",
+		Description: "查询应用可用事件目录与订阅状态",
 		Interface: &contract.InterfaceSpec{
 			Mode:         "composite",
 			Availability: "available",
 			Reason:       "Reviewed built-in shortcut adapter: the executable CLI owns validation, optional multi-step orchestration, output projection, and confirmation; the complete command contract is not represented by one pinned MCP interface_ref.",
 		},
 		Selection: contract.SelectionSpec{
-			AgentSummary: "查询应用已订阅的事件列表",
-			UseWhen:      []string{"当你要确认某应用当前订阅了哪些事件回调（用于排查漏收事件、或退订前先查事件码）时使用；输入 unifiedAppId，可按事件码/名称关键词过滤并分页，返回已订阅事件列表。"},
+			AgentSummary: "查询应用可用事件目录与订阅状态",
+			UseWhen:      []string{"当你要查某应用可用的事件码、事件名称及当前订阅状态（用于选择订阅项、排查漏收事件或退订前核对）时使用；输入 unifiedAppId，可按关键词过滤并游标分页。"},
 			AvoidWhen:    []string{"需要该 Shortcut 未公开的底层参数、原始响应或不同执行语义时，改用对应原子命令"},
 			Examples:     []string{"dws devapp +event-list --unified-app-id <UNIFIED_APP_ID>"},
 		},
@@ -1209,24 +1924,31 @@ var EventList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		events := eventListProject(data)
-		return rt.Output(devAppListProjection(data, "events", events))
+		events, err := eventListProject(data)
+		if err != nil {
+			return err
+		}
+		projection, err := devAppListProjection(data, "events", events, "devapp/list_dev_app_events")
+		if err != nil {
+			return err
+		}
+		return rt.Output(projection)
 	},
 }
 
 // eventListProject reshapes list_dev_app_events into a clean subscribed-event
 // list ({eventCode, eventName, status, gmtModified}) — output-projection
-// clean output projection. The list container and per-item field names are probed
-// defensively across candidate keys, so an unknown/empty shape yields an empty
-// list rather than a crash or fabricated data.
-func eventListProject(data map[string]any) []map[string]any {
-	raw := eventListFindList(data)
+// clean output projection. The list container and every item are validated
+// before projection so unknown response shapes fail closed.
+func eventListProject(data map[string]any) ([]map[string]any, error) {
+	raw, _, err := requireDevAppCollection(data, "devapp/list_dev_app_events",
+		[]string{"eventCode", "event_code", "code"}, "list", "items", "events", "eventList")
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+		m := item.(map[string]any)
 		row := map[string]any{}
 		if v, ok := eventListFirst(m, "eventCode", "event_code", "code"); ok {
 			row["eventCode"] = v
@@ -1240,36 +1962,9 @@ func eventListProject(data map[string]any) []map[string]any {
 		if v, ok := eventListFirst(m, "gmtModified", "gmt_modified", "modifyTime", "modified_time"); ok {
 			row["gmtModified"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
+		out = append(out, row)
 	}
-	return out
-}
-
-// eventListFindList locates the event list payload, tolerating a bare top-level
-// array or nesting one level under a common envelope key.
-func eventListFindList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, k := range []string{"list", "items", "events", "eventList", "result", "data"} {
-		v, ok := data[k]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "events", "eventList", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+	return out, nil
 }
 
 // eventListFirst returns the first present candidate key's value.
@@ -1290,17 +1985,125 @@ var EventSubscribe = shortcut.Shortcut{
 	Description: "订阅应用事件回调",
 	Intent:      "当你要让应用开始接收某些事件的回调推送（如通讯录变更、审批事件等）时使用；传入 unifiedAppId 和事件码列表，会实际为该应用登记这些事件订阅。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID: "devapp", Name: "shortcut_event_subscribe",
+			CanonicalPath: "devapp.shortcut_event_subscribe", CLIPath: "devapp +event-subscribe", PrimaryCLIPath: "devapp +event-subscribe",
+		},
+		Description: "订阅应用事件并逐项精确读回",
+		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "Reviewed adapter rejects empty or duplicate event codes, requires terminal success, then traverses the bounded event cursor and verifies every requested eventCode under the same unifiedAppId."},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "订阅应用事件回调",
+			UseWhen:      []string{"当你要让应用开始接收某些事件的回调推送（如通讯录变更、审批事件等）时使用；传入 unifiedAppId 和事件码列表，会实际为该应用登记这些事件订阅。"},
+			AvoidWhen:    []string{"只需查看现有订阅时暂用 dev app event list 原子命令；+event-list 缺少零结果分页终止事实，退订也无法证明实际移除"},
+			Examples:     []string{"dws devapp +event-subscribe --unified-app-id <UNIFIED_APP_ID> --event-codes <EVENT_CODES>"},
+		},
+		Result: devAppVerifiedMutationResult(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
-		{Name: "event-codes", Type: shortcut.FlagStringSlice, Desc: "事件码列表", Required: true},
+		{Name: "event-codes", Type: shortcut.FlagStringSlice, Desc: "事件码列表至少包含一项非空且互不重复的 eventCode", Required: true},
+	},
+	Constraints: []shortcut.Constraint{{
+		Kind:        shortcut.ConstraintCustom,
+		Flags:       []string{"event-codes"},
+		Description: "事件码列表至少包含一项非空且互不重复的 eventCode",
+	}},
+	Validate: func(rt *shortcut.RuntimeContext) error {
+		_, err := validatedDevAppValues(rt.StrSlice("event-codes"), "--event-codes")
+		return err
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		// Validate already rejects empty and duplicate values before Execute.
+		codes, _ := validatedDevAppValues(rt.StrSlice("event-codes"), "--event-codes")
+		appID := rt.Str("unified-app-id")
 		params := map[string]any{
-			"unifiedAppId": rt.Str("unified-app-id"),
-			"eventCodes":   rt.StrSlice("event-codes"),
+			"unifiedAppId": appID,
+			"eventCodes":   codes,
 		}
-		return rt.CallMCP("subscribe_dev_app_events", params)
+		if previewed, err := devAppWritePreview(rt, "subscribe_dev_app_events", params); previewed || err != nil {
+			return err
+		}
+		if _, err := callDevAppWrite(rt, "subscribe_dev_app_events", params); err != nil {
+			return err
+		}
+		if err := verifyDevAppEventCodes(rt, appID, codes); err != nil {
+			return err
+		}
+		return rt.Output(verifiedDevAppMutation("event_subscribe", appID, map[string]any{"eventCodes": codes}))
 	},
+}
+
+func validatedDevAppValues(values []string, flag string) ([]string, error) {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, raw := range values {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			return nil, apperrors.NewValidation(flag + " 不能包含空值")
+		}
+		if seen[value] {
+			return nil, apperrors.NewValidation(flag + " 不能包含重复值")
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil, apperrors.NewValidation(flag + " 至少需要一个非空值")
+	}
+	return out, nil
+}
+
+func verifyDevAppEventCodes(rt *shortcut.RuntimeContext, appID string, wantCodes []string) error {
+	want := make(map[string]bool, len(wantCodes))
+	for _, code := range wantCodes {
+		want[code] = true
+	}
+	found := map[string]bool{}
+	cursor := ""
+	seenCursors := map[string]bool{}
+	for page := 0; page < devAppMaxReadbackPages; page++ {
+		params := map[string]any{"unifiedAppId": appID, "pageSize": 100}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		raw, err := rt.CallMCPData(productDevApp, "list_dev_app_events", params)
+		if err != nil {
+			return err
+		}
+		events, err := eventListProject(raw)
+		if err != nil {
+			return err
+		}
+		for _, event := range events {
+			code := devAppFirstString(event, "eventCode")
+			if want[code] {
+				found[code] = true
+			}
+		}
+		if len(found) == len(want) {
+			return nil
+		}
+		projection, err := devAppListProjection(raw, "events", events, "devapp/list_dev_app_events")
+		if err != nil {
+			return err
+		}
+		more, _ := projection["hasMore"].(bool)
+		if !more {
+			return devAppResponseError("devapp/list_dev_app_events", "subscription_readback_missing", "事件订阅终态读回缺少请求的 eventCode")
+		}
+		next := devAppFirstString(projection, "nextCursor")
+		if next == "" || next == cursor || seenCursors[next] {
+			return devAppResponseError("devapp/list_dev_app_events", "cursor_stall", "事件订阅读回游标未推进")
+		}
+		seenCursors[next] = true
+		cursor = next
+	}
+	return devAppResponseError("devapp/list_dev_app_events", "readback_page_limit", "事件订阅读回超过有界页数，无法证明全部事件已订阅")
 }
 
 // EventUnsubscribe maps helper `unsubscribe_dev_app_events`.
@@ -1336,20 +2139,72 @@ var VersionCreate = shortcut.Shortcut{
 	Description: "基于当前配置创建应用新版本",
 	Intent:      "当你改完应用配置、准备走发布流程前需要先打一个版本快照时使用；传入 unifiedAppId（可选显式版本号与描述，默认服务端自动递增），会实际创建一个新版本并返回 versionId 供后续预检和发布。",
 	Risk:        shortcut.RiskWrite,
+	Safety: contract.SafetySpec{
+		Effect: "write", Risk: "medium",
+		Confirmation: "user_required", Idempotency: "non_idempotent",
+	},
+	Contract: corecmd.ContractDecl{
+		Identity: contract.ToolIdentitySpec{
+			ProductID: "devapp", Name: "shortcut_version_create",
+			CanonicalPath: "devapp.shortcut_version_create", CLIPath: "devapp +version-create", PrimaryCLIPath: "devapp +version-create",
+		},
+		Description: "创建不可变版本快照并按应用与版本双 ID 精确读回",
+		Interface:   &contract.InterfaceSpec{Mode: "composite", Availability: "available", Reason: "Reviewed adapter requires terminal success and a non-empty versionId, then reads get_dev_app_version_detail with the same unifiedAppId/versionId and compares supplied version metadata before verified output."},
+		Selection: contract.SelectionSpec{
+			AgentSummary: "基于当前配置创建应用新版本",
+			UseWhen:      []string{"当你改完应用配置、准备走发布流程前需要先打一个版本快照时使用；传入 unifiedAppId（可选显式版本号与描述，默认服务端自动递增），会实际创建一个新版本并返回 versionId 供后续预检和发布。"},
+			AvoidWhen:    []string{"只需查看历史版本使用 +version-list；正式发布使用前先运行 +version-check-approval，发布能力当前仍不可用"},
+			Examples:     []string{"dws devapp +version-create --unified-app-id <UNIFIED_APP_ID> --desc <DESCRIPTION>"},
+		},
+		Result: devAppVerifiedMutationResult(),
+	},
 	Flags: []shortcut.Flag{
 		{Name: "unified-app-id", Type: shortcut.FlagString, Desc: "开放平台统一应用 ID", Required: true},
 		{Name: "version", Type: shortcut.FlagString, Desc: "高级可选：显式版本号，如 1.0.1；默认由服务端自动递增"},
 		{Name: "desc", Type: shortcut.FlagString, Desc: "版本描述"},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
-		params := map[string]any{"unifiedAppId": rt.Str("unified-app-id")}
+		appID := rt.Str("unified-app-id")
+		params := map[string]any{"unifiedAppId": appID}
 		if rt.Changed("version") {
 			params["version"] = rt.Str("version")
 		}
 		if rt.Changed("desc") {
 			params["desc"] = rt.Str("desc")
 		}
-		return rt.CallMCP("create_dev_app_version", params)
+		if previewed, err := devAppWritePreview(rt, "create_dev_app_version", params); previewed || err != nil {
+			return err
+		}
+		created, err := callDevAppWrite(rt, "create_dev_app_version", params)
+		if err != nil {
+			return err
+		}
+		createdObject, err := requireDevAppObject(created, "devapp/create_dev_app_version")
+		if err != nil {
+			return err
+		}
+		versionID := devAppFirstString(createdObject, "versionId", "version_id", "id")
+		if versionID == "" {
+			return devAppResponseError("devapp/create_dev_app_version", "missing_version_id", "创建版本回执缺少稳定 versionId")
+		}
+		_, resource, err := readDevAppObject(rt, "get_dev_app_version_detail", map[string]any{
+			"unifiedAppId": appID,
+			"versionId":    versionID,
+		}, map[string]string{"unifiedAppId": appID, "versionId": versionID})
+		if err != nil {
+			return err
+		}
+		if rt.Changed("version") {
+			if err := requireDevAppStringField(resource, "devapp/get_dev_app_version_detail", rt.Str("version"), "version", "versionName"); err != nil {
+				return err
+			}
+		}
+		if rt.Changed("desc") {
+			if err := requireDevAppStringField(resource, "devapp/get_dev_app_version_detail", rt.Str("desc"), "desc", "description", "remark"); err != nil {
+				return err
+			}
+		}
+		return rt.Output(verifiedDevAppMutation("version_create", appID, resource))
 	},
 }
 
@@ -1398,61 +2253,76 @@ var VersionList = shortcut.Shortcut{
 		if err != nil {
 			return err
 		}
-		versions := versionListProject(data)
-		return rt.Output(devAppListProjection(data, "versions", versions))
+		versions, err := versionListProject(data)
+		if err != nil {
+			return err
+		}
+		projection, err := devAppListProjection(data, "versions", versions, "devapp/list_dev_app_versions")
+		if err != nil {
+			return err
+		}
+		return rt.Output(projection)
 	},
 }
 
-func devAppListProjection(data map[string]any, key string, items []map[string]any) map[string]any {
+func devAppListProjection(data map[string]any, key string, items []map[string]any, operation string) (map[string]any, error) {
+	if _, err := requireDevAppSuccess(data, operation); err != nil {
+		return nil, err
+	}
 	out := map[string]any{"count": len(items), key: items}
 	for _, candidate := range devAppPaginationCandidates(data) {
-		_, hasMore := candidate["hasMore"]
-		_, hasCursor := candidate["nextCursor"]
+		rawHasMore, hasMore := candidate["hasMore"]
+		rawCursor, hasCursor := candidate["nextCursor"]
 		if !hasMore && !hasCursor {
 			continue
 		}
-		if hasMore {
-			out["hasMore"] = candidate["hasMore"]
+		if !hasMore {
+			return nil, devAppResponseError(operation, "missing_has_more", "分页响应只有 nextCursor，缺少 hasMore 终止证据")
 		}
+		more, ok := rawHasMore.(bool)
+		if !ok {
+			return nil, devAppResponseError(operation, "malformed_has_more", "分页响应 hasMore 不是布尔值")
+		}
+		out["hasMore"] = more
 		if hasCursor {
-			out["nextCursor"] = candidate["nextCursor"]
+			cursor, ok := rawCursor.(string)
+			if !ok {
+				return nil, devAppResponseError(operation, "malformed_cursor", "分页响应 nextCursor 不是字符串")
+			}
+			if strings.TrimSpace(cursor) != "" {
+				out["nextCursor"] = strings.TrimSpace(cursor)
+			}
 		}
-		break
+		if more && devAppFirstString(out, "nextCursor") == "" {
+			return nil, devAppResponseError(operation, "missing_cursor", "分页响应 hasMore=true 但缺少可推进的 nextCursor")
+		}
+		return out, nil
 	}
-	return out
+	return nil, devAppResponseError(operation, "missing_pagination", "分页响应缺少 hasMore 终止证据")
 }
 
 func devAppPaginationCandidates(data map[string]any) []map[string]any {
-	if data == nil {
-		return nil
-	}
-	candidates := []map[string]any{data}
-	for _, key := range []string{"content", "result", "data"} {
-		if nested, ok := data[key].(map[string]any); ok {
-			candidates = append(candidates, nested)
-			for _, innerKey := range []string{"result", "data"} {
-				if inner, ok := nested[innerKey].(map[string]any); ok {
-					candidates = append(candidates, inner)
-				}
-			}
-		}
-	}
-	return candidates
+	// Pagination evidence can occur at any of the reviewed envelope layers.
+	// Reuse the same bounded breadth-first walk as response validation so a
+	// valid content.result (or deeper content/result/data combination) cannot
+	// be mistaken for a response without a pagination terminus.
+	return devAppContainers(data)
 }
 
 // versionListProject reshapes list_dev_app_versions into a clean version list
 // ({versionId, version, status, desc, gmtCreate}) — output-projection fidelity
 // for clean output. The list container and per-item field names are probed defensively
-// across candidate keys, so an unknown/empty shape yields an empty list rather
-// than a crash or fabricated data.
-func versionListProject(data map[string]any) []map[string]any {
-	raw := versionListFindList(data)
+// across reviewed candidate keys, while missing, mistyped, or malformed
+// collections fail closed.
+func versionListProject(data map[string]any) ([]map[string]any, error) {
+	raw, _, err := requireDevAppCollection(data, "devapp/list_dev_app_versions",
+		[]string{"versionId", "version_id", "id"}, "list", "items", "versions", "versionList")
+	if err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(raw))
 	for _, item := range raw {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
+		m := item.(map[string]any)
 		row := map[string]any{}
 		if v, ok := versionListFirst(m, "versionId", "version_id", "id"); ok {
 			row["versionId"] = v
@@ -1469,36 +2339,9 @@ func versionListProject(data map[string]any) []map[string]any {
 		if v, ok := versionListFirst(m, "gmtCreate", "gmt_create", "createTime", "create_time"); ok {
 			row["gmtCreate"] = v
 		}
-		if len(row) > 0 {
-			out = append(out, row)
-		}
+		out = append(out, row)
 	}
-	return out
-}
-
-// versionListFindList locates the version list payload, tolerating a bare
-// top-level array or nesting one level under a common envelope key.
-func versionListFindList(data map[string]any) []any {
-	if data == nil {
-		return []any{}
-	}
-	for _, k := range []string{"list", "items", "versions", "versionList", "result", "data"} {
-		v, ok := data[k]
-		if !ok {
-			continue
-		}
-		if arr, ok := v.([]any); ok {
-			return arr
-		}
-		if inner, ok := v.(map[string]any); ok {
-			for _, ik := range []string{"list", "items", "versions", "versionList", "result", "data"} {
-				if arr, ok := inner[ik].([]any); ok {
-					return arr
-				}
-			}
-		}
-	}
-	return []any{}
+	return out, nil
 }
 
 // versionListFirst returns the first present candidate key's value.
@@ -1553,11 +2396,15 @@ var VersionGet = shortcut.Shortcut{
 		{Name: "version-id", Type: shortcut.FlagString, Desc: "版本 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		appID := rt.Str("unified-app-id")
+		versionID := rt.Str("version-id")
 		params := map[string]any{
-			"unifiedAppId": rt.Str("unified-app-id"),
-			"versionId":    rt.Str("version-id"),
+			"unifiedAppId": appID,
+			"versionId":    versionID,
 		}
-		return rt.CallMCP("get_dev_app_version_detail", params)
+		return outputDevAppObject(rt, "get_dev_app_version_detail", params, map[string]string{
+			"unifiedAppId": appID, "versionId": versionID,
+		})
 	},
 }
 
@@ -1605,12 +2452,16 @@ var VersionCheckApproval = shortcut.Shortcut{
 		{Name: "version-id", Type: shortcut.FlagString, Desc: "版本 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		appID := rt.Str("unified-app-id")
+		versionID := rt.Str("version-id")
 		params := map[string]any{
-			"unifiedAppId": rt.Str("unified-app-id"),
-			"versionId":    rt.Str("version-id"),
+			"unifiedAppId": appID,
+			"versionId":    versionID,
 			"precheckOnly": true,
 		}
-		return rt.CallMCP("publish_dev_app_version", params)
+		return outputDevAppObject(rt, "publish_dev_app_version", params, map[string]string{
+			"unifiedAppId": appID, "versionId": versionID,
+		})
 	},
 }
 
@@ -1688,50 +2539,87 @@ var VersionStatus = shortcut.Shortcut{
 		{Name: "version-id", Type: shortcut.FlagString, Desc: "版本 ID", Required: true},
 	},
 	Execute: func(rt *shortcut.RuntimeContext) error {
+		appID := rt.Str("unified-app-id")
+		versionID := rt.Str("version-id")
 		params := map[string]any{
-			"unifiedAppId": rt.Str("unified-app-id"),
-			"versionId":    rt.Str("version-id"),
+			"unifiedAppId": appID,
+			"versionId":    versionID,
 		}
-		return rt.CallMCP("get_dev_app_version_status", params)
+		return outputDevAppObject(rt, "get_dev_app_version_status", params, map[string]string{
+			"unifiedAppId": appID, "versionId": versionID,
+		})
 	},
 }
 
+var devAppUnavailableReasons = map[string]string{
+	"+permission-add":    "权限申请缺少逐项终态回执与按 scopeValue 精确读回验证",
+	"+permission-remove": "权限移除缺少逐项终态回执与按 scopeValue 精确读回验证",
+	"+security-config":   "整组覆盖写入缺少读取当前值、精确写回和恢复原配置的安全闭环",
+	"+event-unsubscribe": "事件退订缺少可恢复的稳定订阅 fixture 与逐项读回",
+	"+version-publish":   "版本发布可能进入审批或线上生效，缺少安全测试租户与回滚合同",
+}
+
+func unavailableDevAppShortcut(item shortcut.Shortcut, reason string) shortcut.Shortcut {
+	item.Hidden = true
+	item.Availability = shortcut.AvailabilityUnavailable
+	item.OutputRollout = output.RolloutDualValidate
+	item.Contract = corecmd.ContractDecl{}
+	constraintFlags := make([]string, 0, len(item.Flags))
+	for _, flag := range item.Flags {
+		constraintFlags = append(constraintFlags, flag.Name)
+	}
+	item.Constraints = append(item.Constraints, shortcut.Constraint{
+		Kind:        shortcut.ConstraintCustom,
+		Flags:       constraintFlags,
+		Description: "该命令保持 unavailable，直到文档化的安全验证前置条件满足",
+	})
+	unavailable := func(*shortcut.RuntimeContext) error {
+		return apperrors.NewValidation("该 DevApp Shortcut 当前 unavailable：" + reason)
+	}
+	item.Validate = unavailable
+	item.Execute = unavailable
+	return item
+}
+
 func init() {
-	shortcut.Register(
+	items := []shortcut.Shortcut{
 		frameworkUnified(ListApp),
 		frameworkUnified(GetApp),
-		frameworkDualValidate(CreateApp),
-		frameworkDualValidate(UpdateApp),
-		frameworkDualValidate(DeleteApp),
-		frameworkDualValidate(EnableApp),
-		frameworkDualValidate(DisableApp),
-		// Credentials contain secrets and still lack a reviewed public result
-		// projection. Keep legacy bytes while shadow-validating until Safety,
-		// Schema identity, and sensitive-path redaction are declared together.
-		frameworkDualValidate(GetCredentials),
+		frameworkUnified(CreateApp),
+		frameworkUnified(UpdateApp),
+		frameworkUnified(DeleteApp),
+		frameworkUnified(EnableApp),
+		frameworkUnified(DisableApp),
+		frameworkUnified(GetCredentials),
 		frameworkUnified(WebappGet),
-		frameworkDualValidate(WebappConfig),
+		frameworkUnified(WebappConfig),
 		frameworkUnified(PermissionList),
 		frameworkDualValidate(PermissionAdd),
 		frameworkDualValidate(PermissionRemove),
-		frameworkDualValidate(MemberList),
-		frameworkDualValidate(MemberAdd),
-		frameworkDualValidate(MemberRemove),
+		frameworkUnified(MemberList),
+		frameworkUnified(MemberAdd),
+		frameworkUnified(MemberRemove),
 		frameworkDualValidate(SecurityConfig),
 		frameworkUnified(RobotGet),
-		frameworkDualValidate(RobotConfig),
-		frameworkDualValidate(RobotEnable),
-		frameworkDualValidate(RobotDisable),
+		frameworkUnified(RobotConfig),
+		frameworkUnified(RobotEnable),
+		frameworkUnified(RobotDisable),
 		frameworkUnified(EventList),
-		frameworkDualValidate(EventSubscribe),
+		frameworkUnified(EventSubscribe),
 		frameworkDualValidate(EventUnsubscribe),
-		frameworkDualValidate(VersionCreate),
+		frameworkUnified(VersionCreate),
 		frameworkUnified(VersionList),
 		frameworkUnified(VersionGet),
 		frameworkUnified(VersionCheckApproval),
 		frameworkDualValidate(VersionPublish),
 		frameworkUnified(VersionStatus),
-	)
+	}
+	for index := range items {
+		if reason, unavailable := devAppUnavailableReasons[items[index].Command]; unavailable {
+			items[index] = unavailableDevAppShortcut(items[index], reason)
+		}
+	}
+	shortcut.Register(items...)
 }
 
 func frameworkUnified(item shortcut.Shortcut) shortcut.Shortcut {

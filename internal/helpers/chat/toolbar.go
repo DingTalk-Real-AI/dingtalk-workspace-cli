@@ -13,7 +13,10 @@
 
 package chat
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
+	"github.com/spf13/cobra"
+)
 
 func newChatToolbarCommand() *cobra.Command {
 	toolbarCmd := &cobra.Command{
@@ -22,6 +25,11 @@ func newChatToolbarCommand() *cobra.Command {
 		Long:  "管理会话快捷栏入口：查询、添加、隐藏、排序及自定义入口 CRUD。",
 		RunE:  groupRunE,
 	}
+	corecmd.ApplyGroupPolicy(toolbarCmd, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
 	toolbarCmd.DisableAutoGenTag = true
 
 	toolbarCmd.AddCommand(

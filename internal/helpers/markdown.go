@@ -46,12 +46,12 @@ func newMarkdownCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "markdown",
 		Short: "Markdown 文件处理",
 		Long:  "创建、覆盖、修补、对比和获取钉盘或文档空间中的原生 Markdown 文件。",
 		RunE:  groupRunE,
-	}
+	})
 	root.AddCommand(
 		newMarkdownFetchCmd(),
 		newMarkdownCreateCmd(),

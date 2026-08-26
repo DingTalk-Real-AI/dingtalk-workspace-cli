@@ -24,6 +24,7 @@ package aitable
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
@@ -57,6 +58,19 @@ func parseJSONObject(flag, s string) (map[string]any, error) {
 		return nil, fmt.Errorf("--%s 必须是 JSON 对象，got %T", flag, v)
 	}
 	return m, nil
+}
+
+// trimNonEmpty returns a copy of ss with each element trimmed of surrounding
+// whitespace and all empty entries dropped. Used to sanitize string-slice
+// flags (e.g. --field-ids) before they reach the downstream MCP tool.
+func trimNonEmpty(ss []string) []string {
+	out := ss[:0]
+	for _, s := range ss {
+		if t := strings.TrimSpace(s); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // resolveNamedList finds a list in a response envelope without conflating a

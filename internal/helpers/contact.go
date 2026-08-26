@@ -422,7 +422,7 @@ func newContactCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "contact",
 		Short: "通讯录 / 用户 / 部门 / 角色 / 人员关系",
 		Long: `查询钉钉通讯录：用户搜索、手机号查找、部门搜索、子部门 / 成员列表、人员关系；用户花名册档案信息（学历、家庭、银行卡、合同等）与离职员工信息。
@@ -441,9 +441,9 @@ func newContactCommand() *cobra.Command {
   - contact user profile fields/get: 员工花名册档案查询（学历、家庭、银行卡等）
   - contact user dismission search: 离职员工列表查询`,
 		RunE: groupRunE,
-	}
+	})
 
-	userCmd := &cobra.Command{
+	userCmd := newGroupCommand(&cobra.Command{
 		Use:   "user",
 		Short: "人员管理",
 		Long: `人员管理：通讯录用户查询、修改员工信息、邀请员工加入企业、用户档案（花名册）查询、离职员工查询。
@@ -457,7 +457,7 @@ func newContactCommand() *cobra.Command {
   - 查询用户的学历、家庭、银行卡、合同等档案 → contact user profile get
   - 查询离职员工列表                         → contact user dismission search`,
 		RunE: groupRunE,
-	}
+	})
 
 	contactUserGetSelfCmd := &cobra.Command{
 		Use:     "get-self",
@@ -499,10 +499,10 @@ func newContactCommand() *cobra.Command {
 		},
 	})
 
-	relationCmd := &cobra.Command{Use: "relation",
+	relationCmd := newGroupCommand(&cobra.Command{Use: "relation",
 		Short: "人员关系查询",
 		Long:  `查询钉钉人员关系：特别关注人。`,
-		RunE:  groupRunE}
+		RunE:  groupRunE})
 
 	contactRelationListMyFollowingsCmd := &cobra.Command{
 		Use:     "list-my-followings",
@@ -704,7 +704,7 @@ func newContactCommand() *cobra.Command {
 
 	// ── label 角色 ──────────────────────────────────────────────────
 
-	contactLabelCmd := &cobra.Command{
+	contactLabelCmd := newGroupCommand(&cobra.Command{
 		Use:     "label",
 		Aliases: []string{"role"},
 		Short:   "角色查询",
@@ -720,7 +720,7 @@ func newContactCommand() *cobra.Command {
   2. 从返回结果中匹配目标角色名称及 labelId
   3. contact label list-members --id <labelId>  → 获取该角色下的成员`,
 		RunE: groupRunE,
-	}
+	})
 
 	runContactLabelList := func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
@@ -796,7 +796,7 @@ func newContactCommand() *cobra.Command {
 
 	contactLabelCmd.AddCommand(contactLabelListAllCmd, contactLabelGetCmd, contactLabelListMembersCmd)
 
-	contactDeptCmd := &cobra.Command{Use: "dept", Short: "部门查询", RunE: groupRunE}
+	contactDeptCmd := newGroupCommand(&cobra.Command{Use: "dept", Short: "部门查询", RunE: groupRunE})
 
 	contactDeptSearchCmd := &cobra.Command{
 		Use:     "search",
@@ -988,7 +988,7 @@ func newContactCommand() *cobra.Command {
 	})
 
 	// ── user profile 用户档案（花名册） ────────────────────────────────────
-	contactUserProfileCmd := &cobra.Command{
+	contactUserProfileCmd := newGroupCommand(&cobra.Command{
 		Use:   "profile",
 		Short: "用户档案（花名册）",
 		Long: `用户档案（花名册）：查询花名册字段列表、查询员工花名册字段信息。
@@ -1000,7 +1000,7 @@ func newContactCommand() *cobra.Command {
   - contact user get: 组织管理信息（部门、主管、管理员权限）
   - contact user profile get: 个人档案信息（学历、家庭、银行卡等）`,
 		RunE: groupRunE,
-	}
+	})
 
 	contactUserProfileFieldsCmd := &cobra.Command{
 		Use:   "fields",
@@ -1124,12 +1124,12 @@ contact user profile fields 获取可用字段列表。
 	contactUserProfileCmd.AddCommand(contactUserProfileFieldsCmd, contactUserProfileGetCmd)
 
 	// ── user dismission 离职员工 ───────────────────────────────────────────
-	contactUserDismissionCmd := &cobra.Command{
+	contactUserDismissionCmd := newGroupCommand(&cobra.Command{
 		Use:   "dismission",
 		Short: "离职员工查询",
 		Long:  `离职员工查询：分页获取离职员工列表，支持按员工姓名、离职时间范围、部门进行过滤。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	contactUserDismissionSearchCmd := &cobra.Command{
 		Use:   "search",
@@ -1568,7 +1568,7 @@ contact user profile fields 获取可用字段列表。
 
 	// ── org 企业管理 ──────────────────────────────────────────────────
 
-	contactOrgCmd := &cobra.Command{
+	contactOrgCmd := newGroupCommand(&cobra.Command{
 		Use:   "org",
 		Short: "企业管理",
 		Long: `企业管理：创建企业。
@@ -1578,7 +1578,7 @@ contact user profile fields 获取可用字段列表。
   - 创建企业专属账号                   → contact account create
   - 邀请员工加入企业                   → contact user invite`,
 		RunE: groupRunE,
-	}
+	})
 
 	contactOrgCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -1639,12 +1639,12 @@ contact user profile fields 获取可用字段列表。
 
 	// ── account 企业账号管理 ──────────────────────────────────────────
 
-	contactAccountCmd := &cobra.Command{
+	contactAccountCmd := newGroupCommand(&cobra.Command{
 		Use:   "account",
 		Short: "企业账号管理",
 		Long:  "企业账号管理：创建或更新企业专属账号。",
 		RunE:  groupRunE,
-	}
+	})
 
 	contactAccountCreateCmd := &cobra.Command{
 		Use:   "create",

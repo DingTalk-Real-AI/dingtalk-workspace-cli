@@ -134,11 +134,11 @@ func readPivotProperties(raw string, requireValues bool) (map[string]any, error)
 }
 
 func newPivotTableCmd() *cobra.Command {
-	root := &cobra.Command{
+	root := newDeepGroupCommand(&cobra.Command{
 		Use:   "pivot-table",
 		Short: "透视表管理",
 		RunE:  groupRunE,
-	}
+	})
 
 	listCmd := &cobra.Command{
 		Use:   "list",
@@ -370,6 +370,5 @@ func newPivotTableCmd() *cobra.Command {
 	deleteCmd.Flags().String("pivot-table-id", "", "透视表 ID (必填)")
 
 	root.AddCommand(listCmd, createCmd, updateCmd, deleteCmd)
-	attachUnknownSubcommandGuard(root)
 	return root
 }

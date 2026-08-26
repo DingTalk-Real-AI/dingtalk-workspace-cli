@@ -12,7 +12,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"os"
 	pathpkg "path"
@@ -35,8 +34,7 @@ type downloadTempFile interface {
 
 var (
 	createDownloadTemp = createDownloadTempInRoot
-	lookupDownloadIPs  = net.DefaultResolver.LookupIPAddr
-	dialDownloadIP     = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
+	secureDialContext  = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	localGetwd         = os.Getwd
 	localAbs           = filepath.Abs
 	localEvalSymlinks  = filepath.EvalSymlinks
@@ -292,53 +290,39 @@ func SafeFilename(preferredName, rawURL string) string {
 	return "download"
 }
 
-// ValidateDownloadURL accepts only public DingTalk and Aliyun OSS HTTPS hosts.
+// ValidateDownloadURL accepts HTTPS download URLs on any host and port, IP
+// literals included — mirroring the official GUI client, which applies no
+// client-side SSRF interception to downloads. Only userinfo URLs stay
+// rejected; TLS hostname verification in secureHTTPClient pins the
+// connection to the requested host and redirects are re-validated per hop.
 func ValidateDownloadURL(rawURL string) (*url.URL, error) {
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
-		return nil, fmt.Errorf("下载地址必须是受信任域名上的 HTTPS URL")
-	}
-	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
-	if host == "" || net.ParseIP(host) != nil || !allowedDownloadHost(host) {
-		return nil, fmt.Errorf("下载地址域名 %q 不属于受信任的钉钉或 OSS 域名", host)
-	}
-	if port := parsed.Port(); port != "" && port != "443" {
-		return nil, fmt.Errorf("下载地址只允许 HTTPS 默认端口")
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
+		return nil, fmt.Errorf("下载地址必须是合法的 HTTPS URL")
 	}
 	return parsed, nil
 }
 
+// SecureHTTPClient returns a download client enforcing the same URL policy
+// and redirect hygiene as Download. Product shortcuts that own their
+// local-file workflow (e.g. chat message resources) share it so download URL
+// trust decisions stay in one place.
+func SecureHTTPClient() *http.Client {
+	return secureHTTPClient()
+}
+
 func secureHTTPClient() *http.Client {
 	transport := &http.Transport{
-		// Do not use environment proxies here. DialContext must resolve and dial
-		// the validated download host itself; with a proxy it would receive the
-		// proxy address and could not enforce the target host's public-IP policy.
+		// Dial the service-issued host directly, ignoring environment proxies:
+		// dedicated-deployment storage may live on customer intranets that are
+		// only reachable without a proxy, and TLS hostname verification always
+		// runs against the requested host. Download URLs never come from
+		// user input — every command resolves them through an authenticated
+		// MCP response first, mirroring the official GUI client which applies
+		// no client-side SSRF interception to downloads.
 		Proxy: nil,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(address)
-			if err != nil {
-				return nil, err
-			}
-			ips, err := lookupDownloadIPs(ctx, host)
-			if err != nil {
-				return nil, err
-			}
-			for _, resolved := range ips {
-				if !publicIP(resolved.IP) {
-					return nil, fmt.Errorf("下载域名解析到非公网地址 %s", resolved.IP)
-				}
-			}
-			// Dial the already validated address, not the hostname, to avoid a
-			// second DNS lookup opening a rebinding window.
-			var lastErr error
-			for _, resolved := range ips {
-				conn, dialErr := dialDownloadIP(ctx, network, net.JoinHostPort(resolved.IP.String(), port))
-				if dialErr == nil {
-					return conn, nil
-				}
-				lastErr = dialErr
-			}
-			return nil, lastErr
+			return secureDialContext(ctx, network, address)
 		},
 	}
 	client := &http.Client{Transport: transport, Timeout: downloadTimeout}
@@ -371,39 +355,6 @@ func downloadOrigin(parsed *url.URL) string {
 	}
 	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
 	return strings.ToLower(parsed.Scheme) + "://" + net.JoinHostPort(host, port)
-}
-
-func allowedDownloadHost(host string) bool {
-	return host == "dingtalk.com" || strings.HasSuffix(host, ".dingtalk.com") ||
-		(strings.HasSuffix(host, ".aliyuncs.com") && strings.Contains(host, "oss") && !strings.Contains(host, "internal"))
-}
-
-func publicIP(ip net.IP) bool {
-	addr, ok := netip.AddrFromSlice(ip)
-	if !ok {
-		return false
-	}
-	addr = addr.Unmap()
-	if !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsMulticast() || addr.IsUnspecified() {
-		return false
-	}
-	for _, prefix := range nonPublicPrefixes {
-		if prefix.Contains(addr) {
-			return false
-		}
-	}
-	return true
-}
-
-var nonPublicPrefixes = []netip.Prefix{
-	netip.MustParsePrefix("100.64.0.0/10"),   // carrier-grade NAT
-	netip.MustParsePrefix("192.0.0.0/24"),    // IETF protocol assignments
-	netip.MustParsePrefix("192.0.2.0/24"),    // TEST-NET-1
-	netip.MustParsePrefix("198.18.0.0/15"),   // benchmark networks
-	netip.MustParsePrefix("198.51.100.0/24"), // TEST-NET-2
-	netip.MustParsePrefix("203.0.113.0/24"),  // TEST-NET-3
-	netip.MustParsePrefix("240.0.0.0/4"),     // reserved
-	netip.MustParsePrefix("2001:db8::/32"),   // IPv6 documentation
 }
 
 func ensureSafeParent(root *os.Root, parent string) error {

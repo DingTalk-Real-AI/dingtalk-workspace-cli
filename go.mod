@@ -12,6 +12,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/creack/pty v1.1.24
 	github.com/fatih/color v1.18.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.0

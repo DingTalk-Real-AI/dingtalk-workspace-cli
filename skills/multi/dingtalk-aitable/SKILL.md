@@ -1,6 +1,6 @@
 ---
 name: dingtalk-aitable
-description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/建表/查记录/写数据/字段/记录增删改查/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表。不做电子表格单元格读写（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
+description: 钉钉 AI 表格（多维表）。Use when 用户说 AI表格/多维表/数据表/base/table/建表/查记录/写数据/字段/记录增删改查/筛选/排序/公式/模板搜索/批量导入CSV或JSON/导出/仪表盘/图表/上传附件到表格/按字段类型建表/数据源/创建数据源/更新数据源配置/触发数据源同步/按任务 ID 查询同步状态/获取数据源配置/列出数据源可用来源/获取数据源可同步字段/审批数据同步。不做电子表格单元格读写（走 dingtalk-misc）、文档编辑（走 dingtalk-doc）；听记待办入表先用 dingtalk-minutes 提取，再由本 skill 写入。命令前缀：dws aitable。
 metadata:
   cli_version: ">=0.2.14"
   category: product
@@ -28,7 +28,7 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
 
-`aitable` 当前有 93 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+`aitable` 当前有 100 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
 
 仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service aitable --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
@@ -60,10 +60,11 @@ metadata:
 | 调整视图列顺序 | `dws aitable view update visible-fields --base-id <ID> --table-id <ID> --view-id <ID> --field-ids <完整有序IDs>` | 先读取字段和当前完整列数组，固定主字段在首位，写后回读精确校验 |
 | 创建/修改图表前取配置 | `dws aitable +chart-widgets-example` | 命令返回所有图表类型示例；已有合法 config 时直接 create/update |
 | Base 内 Section/节点移动 | `dws aitable +section-*` | Table/Dashboard/Section 是 Base 内 nsheet 节点，不是独立 Drive 节点 |
+| 接入外部数据源（审批等） | `dws aitable +datasource-list-sources --base-id <ID> --datasource-type OA` → 解析 result 构造 sourceConfig → `dws aitable +datasource-create --base-id <ID> --datasource-type OA --source-config '<JSON>'` | 当前仅支持 OA 审批；sourceConfig 中 processCode/name/iconUrl/url 须从 list-sources 原样透传；创建后用 `+datasource-sync-status` 查同步结果 |
 
 ### 常用 leaf 直达
 
-参数已知时直接执行，不探测 Help/Catalog：Base 查看/改名用 `+base-get` / `+base-update`；模板搜索用 `+template-search`，再把真实 templateId 交给 `base create --template-id`；Table 查看/更新用 `+table-get` / `+table-update`；视图创建/复制用 `view create` / `+view-duplicate`；仪表盘创建/更新/读回用 `dashboard create` / `+dashboard-update` / `+dashboard-get`；表单分享用 `+form-share-update` / `+form-share-get`；查看自动化用 `+workflow-list`。
+参数已知时直接执行，不探测 Help/Catalog：Base 查看/改名用 `+base-get` / `+base-update`；模板搜索用 `+template-search`，再把真实 templateId 交给 `base create --template-id`；Table 查看/更新用 `+table-get` / `+table-update`；视图创建/复制用 `view create` / `+view-duplicate`；仪表盘创建/更新/读回用 `dashboard create` / `+dashboard-update` / `+dashboard-get`；表单分享用 `+form-share-update` / `+form-share-get`；查看自动化用 `+workflow-list`；数据源查看来源用 `+datasource-list-sources`，获取字段用 `+datasource-get-fields`，创建/更新/同步/查状态/查配置用 `+datasource-create` / `+datasource-update` / `+datasource-sync` / `+datasource-sync-status` / `+datasource-get-config`。
 
 ### 低频入口
 
@@ -77,6 +78,7 @@ metadata:
 - 单产品线性任务直接执行，不创建 TodoWrite；只有跨产品或多个独立分支的长任务才建计划，并且只在阶段切换时更新，不在每条 CLI 后刷新状态。
 - 用户要求资源名带当前时间戳时只取一次并在 Base、Table、Dashboard 等名称中复用同一值；不要为每个资源分别取时间。
 - JSON 已返回所需字段时立即复用；不得为寻找同一字段改用 `--verbose`、`raw`、`pretty` 重复请求。
+- 数据源创建前必须先 `+datasource-list-sources` 获取 processCode 等透传字段，不要凭记忆或猜测构造 sourceConfig。
 
 ## 记录输入与结果
 
@@ -91,6 +93,7 @@ metadata:
 ## 安全边界
 
 - 删除不可逆，按 Runtime confirmation 核对真实目标；`base list` 只是最近访问。字段零/多候选、类型不明时停止；多批写保留已完成批次和续跑位置。
+- 数据源 `+datasource-create` / `+datasource-update` 会触发真实数据同步（全量），执行前确认目标 Base 和 sourceConfig 无误。`+datasource-sync` 同理，单次最多 5 张表。
 
 ## 按需加载
 
@@ -107,6 +110,7 @@ metadata:
 | Base 内 Section/节点移动或清理 | [section](references/aitable-section.md) |
 | 图表配置 | [dashboard-chart](references/aitable/aitable-dashboard-chart.md) |
 | 附件、表单、工作流 | 读取 `references/aitable/` 下对应的一个精确文件 |
+| 数据源接入、同步管理、sourceConfig 构造、同步审批数据到 AI 表格 | [datasource](references/aitable/aitable-datasource.md) |
 | 产品边界不明确 | [intent-guide](references/intent-guide.md) |
 
 通用 `references/aitable.md` 仅保留为兼容索引，不是默认入口；正常 Case 不预读。低频能力按意图选择一个最精确的 Reference，禁止连读。
@@ -116,6 +120,7 @@ metadata:
 1. 零/多候选、字段歧义或分页不完整：停止并返回证据；需要后续页时只透传真实 `nextCursor`。
 2. 类型错误只复核目标字段，不删字段或丢输入；`partial_success` 从 checkpoint 续跑，未知写入先回读。
 3. 错误包含 `actions` / `available_flags` 时只执行其中的 `next_command`；同一操作最多做一次有证据的参数修正。`retryable=false` 或目标 ID 类型不符时停止，不把 Drive/Wiki/Space/子节点 ID 轮流代入试错。
+4. 数据源同步 `errorCode=4014` 为幂等冲突（同步运行中重复触发），标记 FAILED 但可稍后重试；非数据源表（sync=false）触发 sync 会返回参数错误，先用 `+base-get` 确认 sync=true。
 
 ## 跨产品边界
 

@@ -472,6 +472,12 @@ func TestCrossPlatformCoverageBuildGroupsByService(t *testing.T) {
 	if got := len(byName["calendar"].Commands()); got != 1 {
 		t.Errorf("calendar has %d leaves, want 1", got)
 	}
+	for name, command := range byName {
+		policy, declared, err := corecmd.GroupPolicyFor(command)
+		if err != nil || !declared || policy.Mode != corecmd.GroupNavigationOnly {
+			t.Errorf("%s shortcut service parent policy = %+v, %v, %v", name, policy, declared, err)
+		}
+	}
 }
 
 func TestBuiltInCommandsExcludeUserDefinedShortcuts(t *testing.T) {

@@ -41,10 +41,15 @@ SERVICE_TO_SKILL = {
     "mail": ROOT / "skills" / "multi" / "dingtalk-mail" / "SKILL.md",
     "minutes": ROOT / "skills" / "multi" / "dingtalk-minutes" / "SKILL.md",
     "oa": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "oa.md",
+    "pat": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "pat.md",
     "report": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "report.md",
     "sheet": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "sheet.md",
     "todo": ROOT / "skills" / "multi" / "dingtalk-todo" / "SKILL.md",
+    "whiteboard": ROOT / "skills" / "multi" / "dingtalk-misc" / "references" / "whiteboard.md",
     "wiki": ROOT / "skills" / "multi" / "dingtalk-wiki" / "SKILL.md",
+}
+SERVICE_TO_SKILL_MIRRORS = {
+    "whiteboard": [ROOT / "skills" / "mono" / "references" / "products" / "whiteboard.md"],
 }
 
 MONO_START = "<!-- VISIBLE_SHORTCUTS_OVERVIEW_START -->"
@@ -226,17 +231,19 @@ def update_product_skills(items: list[dict[str, Any]], check: bool) -> list[Path
     for item in items:
         by_service[item["service"]].append(item)
     changed = []
-    for service, path in SERVICE_TO_SKILL.items():
+    for service, primary_path in SERVICE_TO_SKILL.items():
         if service not in by_service:
             continue
-        if not path.exists():
-            raise RuntimeError(f"skill file not found for {service}: {path}")
-        text = path.read_text(encoding="utf-8")
-        block = product_section(service, by_service[service])
-        anchor = "## 概念地图" if service == "devapp" else "## 意图表"
-        updated = replace_block(text, PRODUCT_START, PRODUCT_END, block, anchor)
-        if apply_update(path, text, updated, check):
-            changed.append(path)
+        paths = [primary_path, *SERVICE_TO_SKILL_MIRRORS.get(service, [])]
+        for path in paths:
+            if not path.exists():
+                raise RuntimeError(f"skill file not found for {service}: {path}")
+            text = path.read_text(encoding="utf-8")
+            block = product_section(service, by_service[service])
+            anchor = "## 概念地图" if service == "devapp" else "## 意图表"
+            updated = replace_block(text, PRODUCT_START, PRODUCT_END, block, anchor)
+            if apply_update(path, text, updated, check):
+                changed.append(path)
     return changed
 
 

@@ -351,6 +351,79 @@ This release promotes the sealed `+"`v1.0.1-beta.1`"+` contents to stable.
 	}
 }
 
+func TestReleaseFragmentPolicyAcceptsOnlyUntaggedCanonicalBetaAmendments(t *testing.T) {
+	newAmendmentRepo := func(t *testing.T) (*changelogGateRepo, string) {
+		t.Helper()
+		repo := newChangelogGateRepo(t)
+		sealBase := repo.sealFragmentInto(t, "1.0.1-beta.1")
+		if output, err := repo.runFragmentPolicy(t, sealBase, "HEAD"); err != nil {
+			t.Fatalf("release fragment policy rejected initial beta seal: %v\noutput:\n%s", err, output)
+		}
+		changelogGateWrite(t, repo.root, ".changes/1235-sheet.md", "---\ncategory: Added\n---\n\n- Sheet accepts local float image files.\n", 0o644)
+		repo.commit(t, "merge post-seal beta fragment")
+		return repo, strings.TrimSpace(changelogGateGit(t, repo.root, "rev-parse", "HEAD"))
+	}
+
+	stageCanonicalAmendment := func(t *testing.T, repo *changelogGateRepo) {
+		t.Helper()
+		changelogGateWrite(t, repo.root, "CHANGELOG.md", `# Changelog
+
+## [Unreleased]
+
+## [1.0.1-beta.1] - 2026-07-17
+
+### Added
+
+- Chat reply mentions.
+
+- Sheet accepts local float image files.
+
+## [1.0.0] - 2026-07-01
+
+### Added
+
+- Initial release.
+`, 0o644)
+		archiveDir := filepath.Join(repo.root, ".changes", "released", "1.0.1-beta.1")
+		if err := os.Rename(filepath.Join(repo.root, ".changes", "1235-sheet.md"), filepath.Join(archiveDir, "1235-sheet.md")); err != nil {
+			t.Fatalf("Rename beta amendment fragment: %v", err)
+		}
+		repo.commit(t, "amend untagged beta release notes")
+	}
+
+	t.Run("accepts exact pre-tag merge", func(t *testing.T) {
+		repo, amendmentBase := newAmendmentRepo(t)
+		stageCanonicalAmendment(t, repo)
+
+		if output, err := repo.runFragmentPolicy(t, amendmentBase, "HEAD"); err != nil {
+			t.Fatalf("release fragment policy rejected canonical beta amendment: %v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("rejects tagged beta", func(t *testing.T) {
+		repo, amendmentBase := newAmendmentRepo(t)
+		stageCanonicalAmendment(t, repo)
+		changelogGateGit(t, repo.root, "tag", "v1.0.1-beta.1")
+
+		output, err := repo.runFragmentPolicy(t, amendmentBase, "HEAD")
+		if err == nil || !strings.Contains(output, "forbidden after tag v1.0.1-beta.1 exists") {
+			t.Fatalf("tagged beta amendment passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+
+	t.Run("rejects rewritten sealed prose", func(t *testing.T) {
+		repo, amendmentBase := newAmendmentRepo(t)
+		stageCanonicalAmendment(t, repo)
+		changelogGateWrite(t, repo.root, "CHANGELOG.md", strings.Replace(changelogGateSealedRelease, "Chat reply mentions.", "Rewritten sealed note.", 1), 0o644)
+		repo.commit(t, "rewrite sealed beta prose")
+
+		output, err := repo.runFragmentPolicy(t, amendmentBase, "HEAD")
+		if err == nil || !strings.Contains(output, "does not exactly match") {
+			t.Fatalf("rewritten beta amendment passed: err=%v\noutput:\n%s", err, output)
+		}
+	})
+}
+
 func TestReleaseFragmentPolicyRejectsInvalidActiveFragmentAndWrongArchiveVersion(t *testing.T) {
 	t.Run("invalid active fragment", func(t *testing.T) {
 		repo := newChangelogGateRepo(t)
@@ -1106,6 +1179,9 @@ func TestChangelogPRFastPathWorkflowContract(t *testing.T) {
 		t.Fatal("Code Admission workflow missing Policy job boundaries")
 	}
 	policyJob := admission[policyStart:policyEnd]
+	if !strings.Contains(policyJob, "timeout-minutes: 15") {
+		t.Error("Policy job must retain enough headroom for full Schema policy validation")
+	}
 	requirePolicyEnv := func(step, nextStep string) {
 		t.Helper()
 		start := strings.Index(policyJob, "      - name: "+step+"\n")

@@ -336,6 +336,23 @@ func (rt *RuntimeContext) Output(payload any) error {
 	return output.WriteCommandPayload(rt.cmd, payload, output.FormatJSON)
 }
 
+// OutputForTool stores a once-fetched MCP payload while retaining the tool name
+// for product-specific outcome normalization. It is intended for composite
+// shortcuts that must validate stable identity or collection shape before the
+// shared renderer sees the response; callers must not use it to issue a second
+// business request.
+func (rt *RuntimeContext) OutputForTool(tool string, payload any) error {
+	if output.UsesUnifiedResult(rt.cmd) {
+		return output.StoreResult(rt.cmd.Context(), rt.resultForPayload(tool, payload))
+	}
+	if output.CommandRollout(rt.cmd) == output.RolloutDualValidate {
+		if err := validateShadowResult(rt.resultForPayload(tool, payload)); err != nil {
+			return err
+		}
+	}
+	return output.WriteCommandPayload(rt.cmd, payload, output.FormatJSON)
+}
+
 func (rt *RuntimeContext) storePayload(tool string, payload any) error {
 	return output.StoreResult(rt.cmd.Context(), rt.resultForPayload(tool, payload))
 }

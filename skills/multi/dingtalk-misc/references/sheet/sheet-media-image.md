@@ -17,7 +17,7 @@
 ### 浮动图片
 
 用户说"浮动图片/悬浮图片/在表格上放一张图/加个浮动的图":
-- 创建浮动图片 → 先 `media-upload` 上传图片获取 `resourceUrl`，再 `create-float-image`
+- 创建浮动图片 → `create-float-image --file <本地图片>`；已有 `resourceUrl` 时可改用 `--src`
 - 浮动图片悬浮于单元格之上，不占用单元格内容，与 `write-image`（写入单元格内部的图片）不同
 
 用户说"查看浮动图片/有哪些浮动图片/浮动图片列表":
@@ -71,7 +71,11 @@ Flags:
 Usage:
   dws sheet create-float-image [flags]
 Example:
-  # 先上传图片获取 resourceUrl
+  # 直接上传本地图片并创建浮动图片
+  dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> \
+    --file ./chart.png --range A1 --width 400 --height 300
+
+  # 高级用法：先上传图片获取 resourceUrl
   dws sheet media-upload --node <NODE_ID> --file ./chart.png
   # 输出: resourceUrl: /core/api/resources/img/xxxx...
 
@@ -85,7 +89,8 @@ Example:
 Flags:
       --node string       表格文档 ID 或 URL (必填)
       --sheet-id string   工作表 ID 或名称 (必填)
-      --src string        图片资源路径，通过 media-upload 获取的 resourceUrl (必填)
+      --file string       本地图片文件路径，与 --src 二选一
+      --src string        图片资源路径，通过 media-upload 获取的 resourceUrl，与 --file 二选一
       --range string      锚点单元格，A1 表示法，如 A1、B3 (必填)
       --width int         图片宽度，像素，正整数 (必填)
       --height int        图片高度，像素，正整数 (必填)
@@ -94,7 +99,8 @@ Flags:
 ```
 
 浮动图片悬浮于单元格之上，不占用单元格内容，可自由定位和调整大小。
-- `--src` 必须是 `media-upload` 返回的 `resourceUrl`（格式为 `/core/api/resources/img/...`），不能直接传外部 URL
+- `--file` 与 `--src` 必须且只能提供一个；`--file` 会在命令内完成凭证获取、文件上传和浮动图片创建
+- `--src` 必须是 `media-upload` 返回的 `resourceUrl`（格式为 `/core/api/resources/img/...`），不能直接传外部 URL；需要自定义上传名称/MIME 时使用这个高级两步流程
 - `--range` 使用 A1 表示法指定锚点单元格（如 `A1`、`B3`），支持带工作表前缀（如 `Sheet1!A1`）
 - `--width` / `--height` 为必填，单位像素，必须为正整数
 - `--offset-x` / `--offset-y` 表示相对锚点单元格左上角的偏移量（像素），默认 0，不能为负数
@@ -138,13 +144,18 @@ Example:
   # 调整尺寸
   dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> --width 600 --height 400
 
-  # 替换图片（需先 media-upload 新图片获取 resourceUrl）
+  # 直接用本地图片替换
+  dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> \
+    --file ./replacement.png
+
+  # 高级用法：通过已上传的 resourceUrl 替换
   dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> --float-image-id <FI_ID> \
     --src "/core/api/resources/img/xxxx..."
 Flags:
       --node string             表格文档 ID 或 URL (必填)
       --sheet-id string         工作表 ID 或名称 (必填)
       --float-image-id string   浮动图片 ID (必填)
+      --file string             用于替换浮动图片的本地图片路径，与 --src 不能同时使用
       --src string              新的图片资源路径，通过 media-upload 获取的 resourceUrl
       --range string            新的锚点单元格，A1 表示法
       --width int               新的图片宽度，像素
@@ -153,7 +164,7 @@ Flags:
       --offset-y int            新的垂直偏移量，像素
 ```
 
-更新浮动图片的属性，`--src` / `--range` / `--width` / `--height` / `--offset-x` / `--offset-y` 至少传入一个。
+更新浮动图片的属性，`--file` / `--src` / `--range` / `--width` / `--height` / `--offset-x` / `--offset-y` 至少传入一个；`--file` 与 `--src` 不能同时使用。
 `--float-image-id` 可通过 `list-float-images` 获取。
 
 ### 删除浮动图片
@@ -210,6 +221,16 @@ dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A1:B1" \
 dws sheet range update --node <NODE_ID> --sheet-id <SHEET_ID> --range "A2:A2" \
   --values '[[{"type":"text","text":"MacBook Pro"}]]' -f json
 dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range B2:B2 --file ./macbook.png --width 150 --height 100 -f json
+
+# ── 工作流 11: 创建或替换浮动图片 ──
+
+# 从本地图片直接创建
+dws sheet create-float-image --node <NODE_ID> --sheet-id <SHEET_ID> \
+  --file ./chart.png --range A1 --width 400 --height 300 -f json
+
+# 从本地图片直接替换已有浮动图
+dws sheet update-float-image --node <NODE_ID> --sheet-id <SHEET_ID> \
+  --float-image-id <FI_ID> --file ./replacement.png -f json
 ```
 
 ## 上下文传递
@@ -232,11 +253,11 @@ dws sheet write-image --node <NODE_ID> --sheet-id <SHEET_ID> --range B2:B2 --fil
 - `write-image` 会自动完成图片上传并写入目标单元格，无需手动拆分步骤
 - ★ 向表格单元格中写入图片必须使用 `write-image`，禁止使用 `range update`。`range update` 不支持图片对象
 - `write-image` 与 `media-upload` 的区别：`media-upload` 仅上传附件到表格获取 resourceId；`write-image` 在上传后还会将图片写入指定单元格
-- `create-float-image` 创建浮动图片前必须先通过 `media-upload` 上传图片获取 `resourceUrl`，再将其作为 `--src` 传入。`--src` 的格式为 `/core/api/resources/img/...`，不能直接传外部 URL
+- `create-float-image --file` 可直接输入本地图片；仅在需要 `--name` / `--mime-type` 覆盖或复用既有资源时，先用 `media-upload` 获取 `resourceUrl` 再传 `--src`
 - `create-float-image` 的 `--range` 使用 A1 表示法指定锚点单元格（如 `A1`、`B3`），支持带工作表前缀（如 `Sheet1!A1`）
 - `create-float-image` 的 `--width` / `--height` 为必填，单位像素，必须为正整数；`--offset-x` / `--offset-y` 可选，默认 0，不能为负数
 - `write-image`（单元格内嵌图片）vs `create-float-image`（浮动图片）：`write-image` 将图片写入单元格内部，占据单元格内容；`create-float-image` 创建悬浮于单元格之上的浮动图片，不占用单元格内容，可自由调整位置和大小
-- ★ **浮动图片用 `create-float-image` 不用 `write-image`**：两者用途不同——`write-image` 写入单元格内部，`create-float-image` 创建悬浮于单元格之上的浮动图片；`--src` 必须来自 `media-upload` 的 `resourceUrl`
-- `update-float-image` 的 `--src` / `--range` / `--width` / `--height` / `--offset-x` / `--offset-y` 至少必须提供一个
+- ★ **浮动图片用 `create-float-image` 不用 `write-image`**：两者用途不同——`write-image` 写入单元格内部，`create-float-image` 创建悬浮于单元格之上的浮动图片；优先直接传 `--file`
+- `update-float-image` 的 `--file` / `--src` / `--range` / `--width` / `--height` / `--offset-x` / `--offset-y` 至少必须提供一个，且 `--file` 与 `--src` 不能同时使用
 - `list-float-images` 返回 `floatImages` 数组和 `totalCount`，每个元素包含 `id`（用于后续 get / update / delete）
 - `delete-float-image` 操作不可恢复，删除后图片将从工作表中移除

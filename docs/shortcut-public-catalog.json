@@ -1,7 +1,67 @@
 {
-  "generated_at": "2026-08-20T11:51:44.156046",
-  "count": 416,
+  "generated_at": "2026-08-24T20:14:49.172788",
+  "count": 437,
   "results": [
+    {
+      "suite": "semantic",
+      "service": "agoal",
+      "command": "+contract-fields",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、字段数组和每项稳定 id；本地 keyword 覆盖字段标识、编码、标题、分类和类型，支持已知非空与保证零命中。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "agoal",
+      "command": "+obj-template-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、result 数组、稳定模板 ID 及 page/pageSize/totalCount；不虚构 cursor。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "agoal",
+      "command": "+report-statistics-list",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、content 数组和每项稳定 templateId；关键词同时支持已知非空与合法零命中。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "agoal",
+      "command": "+report-submit-detail",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、嵌套稳定用户身份及 page/pageSize/totalCount；下游忽略 keyword，因此做有界全量遍历、本地过滤、停滞/重复/总数变化失败与人员字段最小投影。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "agoal",
+      "command": "+user-rules",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、content 对象、rules 数组和稳定 ruleId；本地精确 ruleId 选择器支持已知非空与保证零命中。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aisearch",
+      "command": "+search-person",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "对 enterprise_person_search 增加显式 success/result 数组、坏元素、来源类型和稳定人员身份校验；exact live 已同时证明已知非空与 phone 维度不可存在号码的显式零命中。",
+      "availability": "available"
+    },
     {
       "suite": "semantic",
       "service": "aitable",
@@ -270,6 +330,76 @@
       "status": "reviewed_available",
       "disposition": "schema_leaf",
       "semantic_delta": "更新仪表盘配置的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "为指定 Base 创建数据源表并触发首次全量同步，返回新建表 ID 和同步任务 ID。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-get-config",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "读取已有数据源表的同步配置详情（源配置、字段选择、自动同步状态）的一对一入口。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-get-fields",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "获取指定数据源来源的可同步字段列表（字段 ID/名称/类型/是否主键），用于决定 field-ids。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-list-sources",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "列出指定 Base 下可用的数据源条目（OA 审批模板等），提取 processCode/name/iconUrl/url 用于 sourceConfig。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-sync",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "对已有数据源表触发手动同步（单次最多 5 张），仅触发即返回同步任务 ID。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-sync-status",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "批量查询数据源同步任务状态（RUNNING/FINISHED/FAILED），与 sync/create/update 触发后配对使用。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "aitable",
+      "command": "+datasource-update",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "schema_leaf",
+      "semantic_delta": "更新已有数据源表的同步配置并触发一次同步；不改配置可只切换 auto 开关或 field-ids。",
       "availability": "available"
     },
     {
@@ -2263,235 +2393,384 @@
       "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+by-mobile",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "使用专用手机号精确查询接口解析稳定 userId；专用接口 success=true 且省略 result 是经真实双层验证的精确零命中编码，未命中返回 typed nonzero；命中后读取并精确核对同一用户详情，null、错型、坏身份或详情 ID 不一致均失败。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+dept-members",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按部门名唯一解析 deptId 后列直属成员；搜索候选和成员集合均逐项严格校验，绝不猜测多匹配。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+list-dept-members",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按 deptId 列直属成员，严格要求显式 deptUserList、userInfo 对象及稳定 userId；已验证非空与随机零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+list-followings",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格要求 success、result.models 数组、对象元素、唯一稳定 openDingTalkId；可用 --open-id 做本地精确筛选，exact live 已证明已知非空与保证零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+list-role-members",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按角色列成员，严格要求 success、显式 labelUserList、userInfo 对象及稳定 userId；已验证非空与随机零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
-      "service": "contact",
-      "command": "+list-roles",
-      "risk": "read",
-      "status": "real-ok"
-    },
-    {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+list-sub-depts",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按父部门列直属子部门，严格要求显式 result 数组与有效 deptId；已验证非空与随机零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+lookup",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按姓名唯一解析稳定 userId 后读取并核对唯一用户详情；零命中和多命中均错误关闭。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+me",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "读取当前用户唯一详情并严格要求 orgEmployeeModel 与稳定 userId，再投影最小自身份字段。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+org",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按姓名解析用户、核对用户详情与主 deptId，再读取并核对部门详情的稳定身份。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+resolve-dept",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按名称返回唯一 deptId 或显式候选；严格要求 deptList 数组、有效且不重复的 deptId 与部门名。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+search-mobile",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "使用专用手机号精确查询接口取得稳定 userId，并直接投影该接口返回的受审身份字段，不额外依赖用户详情权限；专用接口 success=true 且省略 result 是经真实双层验证的精确零命中编码，null、空对象、数组或坏身份均失败。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+search-user",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "按姓名搜索并严格要求 success、显式 result 数组、非空对象和稳定 userId/openDingTalkId；已验证非空与随机零命中。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "contact",
       "command": "+team",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "按姓名解析用户和主部门后列直属成员；每一步校验 success、稳定身份及显式成员集合。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+create",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "创建后提取稳定 unifiedAppId，并以同一 ID 读回名称及请求字段；只有精确核验通过才返回成功。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
+      "service": "devapp",
+      "command": "+credentials-get",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格要求 success、稳定 unifiedAppId、非空客户端标识和非空 secret；Result 将密钥路径声明为敏感。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "devapp",
       "command": "+delete",
       "risk": "high-risk-write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "删除前读回稳定 appKey，删除后按该选择器有界遍历全部页并证明同一 unifiedAppId 不再存在。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+disable",
-      "risk": "write",
-      "status": "real-ok"
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "停用后按同一 unifiedAppId 读回并要求 appStatus=disabled。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+enable",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "启用后按同一 unifiedAppId 读回并要求 appStatus=normal。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+event-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、事件数组、每项稳定 eventCode 与游标终止证据；明确返回可用事件目录及订阅状态，并拒绝坏元素与伪空结果。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "devapp",
+      "command": "+event-subscribe",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "拒绝空值与重复 eventCode，写后有界遍历订阅列表并逐项精确读回。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "devapp",
       "command": "+get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "拒绝空响应、缺失 success 和空业务对象，并要求读回 unifiedAppId 与请求精确一致。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、应用数组、稳定 unifiedAppId 与游标终止证据；投影当前页并保留可续翻 meta.pagination。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+member-add",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "拒绝空值和重复 userId，校验写终态后按稳定 userId 逐项精确读回，并要求 memberType 与请求角色一致。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+member-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、成员数组和每项稳定 userId；新增本地精确 userId 选择器以证明已知非空与保证零命中。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+member-remove",
-      "risk": "write",
-      "status": "real-ok"
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "拒绝空值和重复 userId，校验写终态后读取完整成员数组，并逐项证明目标稳定 userId 已不存在。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+permission-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、权限数组、每项稳定 scopeValue 与游标终止证据，拒绝坏元素和伪空结果。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "devapp",
+      "command": "+robot-config",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "拒绝空配置，写后按同一 unifiedAppId 读取机器人对象并精确比较全部请求标量字段。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "devapp",
+      "command": "+robot-disable",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "要求写终态成功并读回 robotStatus=UNCONFIGURED；不虚构保留配置或可直接恢复语义。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "devapp",
+      "command": "+robot-enable",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "要求写终态成功并按同一 unifiedAppId 读回 robotStatus=ONLINE。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "devapp",
       "command": "+robot-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证非空机器人配置对象，并要求读回 unifiedAppId 与请求精确一致。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+update",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "要求至少一个更新字段，写入后按同一 unifiedAppId 精确读回所有请求字段。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+version-check-approval",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "只执行 precheckOnly，严格绑定应用与版本身份，并保留可执行后续动作的 pending 结果。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
+      "service": "devapp",
+      "command": "+version-create",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "创建回执必须含稳定 versionId，随后以 unifiedAppId/versionId 双身份读取详情并核验请求字段；live fixture 通过删除临时父应用清理。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "devapp",
       "command": "+version-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证非空版本对象，并要求 unifiedAppId 和 versionId 同时与请求精确一致。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+version-list",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证 success、版本数组、每项稳定 versionId 与游标终止证据。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+version-status",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证非空发布状态对象，并要求 unifiedAppId 和 versionId 同时与请求精确一致。",
+      "availability": "available"
     },
     {
-      "suite": "write",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+webapp-config",
       "risk": "write",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "拒绝空更新，写入后按同一 unifiedAppId 读取网页配置并精确比较全部请求字段。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "devapp",
       "command": "+webapp-get",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格验证非空网页配置对象，并要求读回 unifiedAppId 与请求精确一致。",
+      "availability": "available"
     },
     {
       "suite": "semantic",
@@ -3595,6 +3874,16 @@
     },
     {
       "suite": "semantic",
+      "service": "pat",
+      "command": "+browser-policy",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "在隔离本地策略文件上提供显式确认、无写入请求预览、同目标磁盘读回和不暴露 agent identity 的统一结果；exact 写入与清理已通过。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
       "service": "report",
       "command": "+inbox-list",
       "risk": "read",
@@ -3634,18 +3923,24 @@
       "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "sheet",
       "command": "+list-sheets",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格要求 success=true、显式 sheets 数组、非空且唯一的 sheetId 与标题；提供完整标题本地精确筛选，因此可分别证明已知非空和合法零命中，未知结构绝不降级为空数组。",
+      "availability": "available"
     },
     {
-      "suite": "read",
+      "suite": "semantic",
       "service": "sheet",
       "command": "+read",
       "risk": "read",
-      "status": "real-ok"
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格校验 success、二维 cells、行列坐标与完成证据；服务返回 hasMore=true 时因没有可执行续页游标而失败关闭，保留 Sheet 读取与 AITable/Base 记录查询的产品边界。",
+      "availability": "available"
     },
     {
       "suite": "semantic",
@@ -3855,6 +4150,26 @@
       "status": "reviewed_available",
       "disposition": "primary_smart",
       "semantic_delta": "更新指定字段后读取详情逐字段核验。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "whiteboard",
+      "command": "+query",
+      "risk": "read",
+      "status": "reviewed_available",
+      "disposition": "semantic_adapter",
+      "semantic_delta": "严格投影要求 success=true、OpenNodes V1、显式 pages 数组、每页稳定 id 与显式 nodes 数组，并校验跨页节点身份及服务端完整性摘要。",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "whiteboard",
+      "command": "+update",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "首次远端调用前完成 OpenNodes V1 校验与用户确认；写后要求 success=true、同一目标、非空终态回执、createdNodeIds/idMap 精确映射，再按真实节点身份独立 query 读回请求关键字段。",
       "availability": "available"
     },
     {

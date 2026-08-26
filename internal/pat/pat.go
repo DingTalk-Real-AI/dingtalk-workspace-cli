@@ -18,8 +18,9 @@ package pat
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cobracmd"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
-	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/cmdutil"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -86,10 +87,26 @@ DINGTALK_AGENT（可选，仅供 x-dingtalk-agent 使用）：
   它不参与 claw-type 派生，也不参与 host-owned PAT 判定。
 
 DWS_CHANNEL 只用于上游 channelCode。`,
-		RunE: cmdutil.GroupRunE,
 	}
+	corecmd.ApplyGroupPolicy(patCmd, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
 
 	patCmd.AddCommand(newChmodCommand(c))
 	patCmd.AddCommand(newBrowserPolicyCommand())
+	// Shortcuts are mounted before this open-source PAT tree in the app. Fold
+	// that pre-existing service group into the native PAT parent so Cobra and
+	// Schema both see exactly one top-level path while preserving PAT's group
+	// behavior and adding every +leaf alongside chmod/browser-policy.
+	for _, existing := range root.Commands() {
+		if existing.Name() != patCmd.Name() {
+			continue
+		}
+		cobracmd.MergeCommandTree(patCmd, existing)
+		root.RemoveCommand(existing)
+		break
+	}
 	root.AddCommand(patCmd)
 }

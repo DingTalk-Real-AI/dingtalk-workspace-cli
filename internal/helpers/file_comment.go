@@ -55,12 +55,12 @@ func fileCommentSpaceIDFlag() LeafFlag {
 // doc comment, sheet comment, and drive comment. The public command belongs to
 // Drive, while the implementation routes to the shared doc-comment MCP server.
 func newDriveFileCommentCmd() *cobra.Command {
-	commentCmd := &cobra.Command{
+	commentCmd := newGroupCommand(&cobra.Command{
 		Use:   "comment",
 		Short: "普通文件评论管理",
 		Long:  "管理钉盘普通预览文件的评论：查询评论列表或创建全文纯文本评论。",
 		RunE:  groupRunE,
-	}
+	})
 
 	listCmd := NewLeafCommand(LeafSpec{
 		Use:   "list",

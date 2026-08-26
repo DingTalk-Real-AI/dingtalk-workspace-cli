@@ -528,7 +528,7 @@ func newAttendanceCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "attendance",
 		Short: "考勤打卡 / 排班 / 统计",
 		Long: `管理钉钉考勤：查询个人考勤详情、班次查询、排班管理、获取考勤统计摘要、查询考勤组与规则。
@@ -546,11 +546,11 @@ func newAttendanceCommand() *cobra.Command {
   globalsetting  全局规则设置项（get 查询，save 更新，仅管理员可调用，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知）
   vacation       查询当前用户假期规则列表、查询员工假期余额、查询假期余额变更记录`,
 		RunE: groupRunE,
-	}
+	})
 
 	// ── record ───────────────────────────────────────────────
 
-	attendanceRecordCmd := &cobra.Command{Use: "record", Short: "考勤记录", RunE: groupRunE}
+	attendanceRecordCmd := newGroupCommand(&cobra.Command{Use: "record", Short: "考勤记录", RunE: groupRunE})
 
 	attendanceRecordGetCmd := &cobra.Command{
 		Use:     "get",
@@ -612,7 +612,7 @@ func newAttendanceCommand() *cobra.Command {
 
 	// ── check ────────────────────────────────────────────────
 
-	attendanceCheckCmd := &cobra.Command{Use: "check", Short: "打卡查询", RunE: groupRunE}
+	attendanceCheckCmd := newGroupCommand(&cobra.Command{Use: "check", Short: "打卡查询", RunE: groupRunE})
 
 	// MCP tool: query_check_result
 	attendanceCheckResultCmd := &cobra.Command{
@@ -783,7 +783,7 @@ func newAttendanceCommand() *cobra.Command {
 
 	// ── approve ────────────────────────────────────────────────
 
-	attendanceApproveCmd := &cobra.Command{Use: "approve", Short: "审批单查询", RunE: groupRunE}
+	attendanceApproveCmd := newGroupCommand(&cobra.Command{Use: "approve", Short: "审批单查询", RunE: groupRunE})
 
 	// 审批类型关键词到 bizType 数字映射
 	// 注意：服务端 bizType=2 同时覆盖 出差 与 外出（合并为同一类），
@@ -992,13 +992,13 @@ func newAttendanceCommand() *cobra.Command {
 
 	// ── shift ────────────────────────────────────────────────
 
-	attendanceShiftCmd := &cobra.Command{
+	attendanceShiftCmd := newGroupCommand(&cobra.Command{
 		Use:   "shift",
 		Short: "班次查询",
 		Long: `查询员工班次信息（班次 = 员工当天的打卡安排）。
 返回每条记录含：用户 ID、工作日期、打卡类型（OnDuty/OffDuty）、计划打卡时间、是否休息日。`,
 		RunE: groupRunE,
-	}
+	})
 
 	// MCP tool: batch_get_employee_shifts
 	attendanceShiftListCmd := &cobra.Command{
@@ -1068,7 +1068,7 @@ func newAttendanceCommand() *cobra.Command {
 
 	// ── class ────────────────────────────────────────────────
 
-	attendanceClassCmd := &cobra.Command{Use: "class", Short: "班次规则", RunE: groupRunE}
+	attendanceClassCmd := newGroupCommand(&cobra.Command{Use: "class", Short: "班次规则", RunE: groupRunE})
 
 	// MCP tool: get_class_list
 	attendanceClassSearchCmd := &cobra.Command{
@@ -1415,7 +1415,7 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 
 	// ── adjustment-rule ────────────────────────────────────
 
-	attendanceAdjustmentCmd := &cobra.Command{Use: "adjustment", Short: "补卡规则", RunE: groupRunE}
+	attendanceAdjustmentCmd := newGroupCommand(&cobra.Command{Use: "adjustment", Short: "补卡规则", RunE: groupRunE})
 
 	// MCP tool: get_adjustment_rule_detail
 	attendanceAdjustmentGetCmd := &cobra.Command{
@@ -1540,7 +1540,7 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 
 	// ── overtime-rule ──────────────────────────────────────
 
-	attendanceOvertimeCmd := &cobra.Command{Use: "overtime", Short: "加班规则", RunE: groupRunE}
+	attendanceOvertimeCmd := newGroupCommand(&cobra.Command{Use: "overtime", Short: "加班规则", RunE: groupRunE})
 
 	// MCP tool: get_overtime_rule_detail
 	attendanceOvertimeGetCmd := &cobra.Command{
@@ -1665,7 +1665,7 @@ checkTime 字段统一使用 "HH:mm" 格式（如 "09:00"），CLI 自动转换�
 
 	// ── group ──────────────────────────────────────────────
 
-	attendanceGroupCmd := &cobra.Command{Use: "group", Short: "考勤组", RunE: groupRunE}
+	attendanceGroupCmd := newGroupCommand(&cobra.Command{Use: "group", Short: "考勤组", RunE: groupRunE})
 
 	// MCP tool: get_simple_groups
 	attendanceGroupSearchCmd := &cobra.Command{
@@ -2574,7 +2574,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 	})
 
 	// ── selfsetting ─────────────────────────────────────────────
-	attendanceSelfSettingCmd := &cobra.Command{
+	attendanceSelfSettingCmd := newGroupCommand(&cobra.Command{
 		Use:   "selfsetting",
 		Short: "个人规则设置",
 		Long: `个人规则设置相关命令。
@@ -2583,7 +2583,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
   get   查询个人规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项。
   save  更新保存个人规则设置；settingScene 必填，且对应场景至少传入一个设置字段。`,
 		RunE: groupRunE,
-	}
+	})
 
 	// MCP tool: query_self_setting
 	attendanceSelfSettingGetCmd := &cobra.Command{
@@ -2827,7 +2827,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 	})
 
 	// ── globalsetting ────────────────────────────────────────
-	attendanceGlobalSettingCmd := &cobra.Command{
+	attendanceGlobalSettingCmd := newGroupCommand(&cobra.Command{
 		Use:   "globalsetting",
 		Short: "全局规则设置（仅管理员）",
 		Long: `全局规则设置相关命令，仅管理员可以调用。
@@ -2836,7 +2836,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
   get   查询全局规则设置，包括打卡提醒、极速打卡、打卡结果通知、缺卡提醒、个人考勤统计通知、团队考勤统计通知等设置项。
   save  更新保存全局规则设置；settingScene 必填，且对应场景至少传入一个设置字段。`,
 		RunE: groupRunE,
-	}
+	})
 
 	// MCP tool: query_global_setting
 	attendanceGlobalSettingGetCmd := &cobra.Command{
@@ -2999,7 +2999,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 
 	// ── report ──────────────────────────────────────────────
 
-	attendanceReportCmd := &cobra.Command{
+	attendanceReportCmd := newGroupCommand(&cobra.Command{
 		Use:   "report",
 		Short: "查询考勤报表和结果",
 		Long: `考勤 MCP 报表接口，仅对管理员开放
@@ -3009,7 +3009,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
   query-data  根据字段查询考勤数据
   query-leave 查询用户假期数据`,
 		RunE: groupRunE,
-	}
+	})
 
 	// MCP tool: get_report_columns
 	reportColumnsCmd := &cobra.Command{
@@ -3218,7 +3218,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 
 	// ── 假期 vacation ───────────────────────────────────────────────
 
-	attendanceVacationCmd := &cobra.Command{
+	attendanceVacationCmd := newGroupCommand(&cobra.Command{
 		Use:   "vacation",
 		Short: "假期管理",
 		Long: `管理钉钉假期：查询假期规则列表、查询员工假期余额、查询假期余额变更记录。
@@ -3230,7 +3230,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
   save-balance 更新员工假期余额
   records      查询指定员工假期余额变更记录`,
 		RunE: groupRunE,
-	}
+	})
 
 	// ── 假期规则 types ─────────────────────────────────────────
 
@@ -3771,7 +3771,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 
 	// ── schedule ──────────────────────────────────────────────
 
-	attendanceScheduleCmd := &cobra.Command{
+	attendanceScheduleCmd := newGroupCommand(&cobra.Command{
 		Use:   "schedule",
 		Short: "排班管理",
 		Long: `排班制考勤组的排班记录导入与查询（排班 = 为员工安排具体工作日期和班次）。
@@ -3779,7 +3779,7 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
   import  导入排班记录到排班制考勤组
   get     获取指定用户的排班记录`,
 		RunE: groupRunE,
-	}
+	})
 
 	// schedule import (generateTurnSchedule)
 	scheduleImportCmd := &cobra.Command{
@@ -4219,14 +4219,14 @@ statsType 统计类型支持：week（周统计）、month（月统计）。`,
 
 	// ── checkin ──────────────────────────────────────────────
 
-	checkinCmd := &cobra.Command{
+	checkinCmd := newGroupCommand(&cobra.Command{
 		Use:   "checkin",
 		Short: "签到管理",
 		Long: `签到记录的查询。
 子命令:
   records  查询指定员工的签到记录`,
 		RunE: groupRunE,
-	}
+	})
 
 	// MCP tool: queryUserRecordByStaffIds
 	checkinRecordsCmd := &cobra.Command{

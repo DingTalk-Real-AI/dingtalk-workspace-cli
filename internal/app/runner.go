@@ -740,6 +740,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			"mcp_tool_error",
 			"MCP tool returned a business error; check tool parameters and refer to skill documentation.",
 			invocation.CanonicalProduct,
+			invocation.Tool,
 			diag,
 		)
 		logBusinessError(r.transport.FileLogger, serverFailureReason(mcpErr, "mcp_tool_error"), invocation, callResult.Content, diag)
@@ -765,6 +766,7 @@ func (r *runtimeRunner) executeInvocation(ctx context.Context, endpoint string, 
 			"business_error",
 			"The API returned a business-level error. Check required parameters and values.",
 			invocation.CanonicalProduct,
+			invocation.Tool,
 			diag,
 		)
 		logBusinessError(r.transport.FileLogger, serverFailureReason(classifiedErr, "business_error"), invocation, callResult.Content, diag)

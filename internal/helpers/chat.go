@@ -2403,13 +2403,13 @@ func newChatCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:     "chat",
 		Aliases: []string{"im"},
 		Short:   "群聊 / 消息 / 机器人",
 		Long:    `管理钉钉会话与群聊：创建群、搜索群、查看群成员、添加机器人到群、修改群名称、拉取/发送/收藏会话消息、机器人消息与 Webhook。`,
 		RunE:    groupRunE,
-	}
+	})
 
 	chatChmodCmd := &cobra.Command{
 		Use:   "chmod <scope>",
@@ -2499,12 +2499,12 @@ func newChatCommand() *cobra.Command {
 		},
 	})
 
-	chatDataAuthCmd := &cobra.Command{
+	chatDataAuthCmd := newGroupCommand(&cobra.Command{
 		Use:   "data-auth",
 		Short: "授予 chat 数据读取权限",
 		Long:  `授予 chat 数据读取权限。该命令用于跨组织消息拉取等数据访问场景，不用于发送、撤回、群管理等命令操作。`,
 		RunE:  groupRunE,
-	}
+	})
 	chatDataAuthCrossOrgCmd := &cobra.Command{
 		Use:   "cross-org",
 		Short: "授予跨组织 chat 数据访问权限",
@@ -2576,7 +2576,7 @@ func newChatCommand() *cobra.Command {
 
 	// ── group 子命令 ──────────────────────────────────────────
 
-	chatGroupCmd := &cobra.Command{Use: "group", Short: "群组管理", RunE: groupRunE}
+	chatGroupCmd := newGroupCommand(&cobra.Command{Use: "group", Short: "群组管理", RunE: groupRunE})
 
 	chatGroupCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -2766,6 +2766,7 @@ func newChatCommand() *cobra.Command {
 			return callMCPTool("get_group_members", toolArgs)
 		},
 	}
+	newHybridGroupCommand(chatGroupMembersCmd)
 
 	chatGroupMembersAddBotCmd := &cobra.Command{
 		Use:   "add-bot",
@@ -2974,12 +2975,12 @@ func newChatCommand() *cobra.Command {
 
 	// ── message 子命令 ────────────────────────────────────────
 
-	chatMessageCmd := &cobra.Command{
+	chatMessageCmd := newGroupCommand(&cobra.Command{
 		Use:   "message",
 		Short: "会话消息管理",
 		Long:  `管理会话消息，包括拉取、发送、搜索、转发、钉住、收藏和撤回消息。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	chatMessageListCmd := &cobra.Command{
 		Use:   "list",
@@ -4674,7 +4675,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 
 	// ── bot 子命令 ────────────────────────────────────────────
 
-	chatBotCmd := &cobra.Command{Use: "bot", Short: "机器人管理", RunE: groupRunE}
+	chatBotCmd := newGroupCommand(&cobra.Command{Use: "bot", Short: "机器人管理", RunE: groupRunE})
 
 	chatBotSearchCmd := &cobra.Command{
 		Use:   "search",
@@ -5210,12 +5211,12 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 
 	// ── file 子命令（会话文件上传，不暴露 spaceId）───────────────
 
-	chatFileCmd := &cobra.Command{
+	chatFileCmd := newGroupCommand(&cobra.Command{
 		Use:    "file",
 		Short:  "会话文件上传（已下线）",
 		Hidden: true,
 		RunE:   groupRunE,
-	}
+	})
 
 	chatFileUploadCmd := &cobra.Command{
 		Use:    "upload",
@@ -5250,7 +5251,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 
 	// ── category 子命令（会话分组，走 IM MCP）───────────────────
 
-	chatCategoryCmd := &cobra.Command{Use: "category", Short: "会话分组管理", RunE: groupRunE}
+	chatCategoryCmd := newGroupCommand(&cobra.Command{Use: "category", Short: "会话分组管理", RunE: groupRunE})
 
 	chatCategoryListCmd := &cobra.Command{
 		Use:   "list",
@@ -7580,7 +7581,7 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 
 	// ── group-role 子命令（群身份管理）────────────────────────
 
-	chatGroupRoleCmd := &cobra.Command{Use: "group-role", Short: "群身份管理", RunE: groupRunE}
+	chatGroupRoleCmd := newGroupCommand(&cobra.Command{Use: "group-role", Short: "群身份管理", RunE: groupRunE})
 
 	chatGroupRoleListCmd := &cobra.Command{
 		Use:   "list",
@@ -9864,7 +9865,7 @@ status 可选值:
 	})
 
 	// ── group notice: 群公告管理 ────────────────────────────────
-	chatGroupNoticeCmd := &cobra.Command{Use: "notice", Short: "群公告管理", RunE: groupRunE}
+	chatGroupNoticeCmd := newGroupCommand(&cobra.Command{Use: "notice", Short: "群公告管理", RunE: groupRunE})
 
 	chatGroupNoticeCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -10385,7 +10386,7 @@ status 可选值:
 		"fi_FI": true, "cs_CZ": true, "ar_SA": true, "tl_PH": true,
 		"he_IL": true, "nl_NL": true, "lo_LA": true, "it_IT": true,
 	}
-	chatTextCmd := &cobra.Command{Use: "text", Short: "文本内容处理", RunE: groupRunE}
+	chatTextCmd := newGroupCommand(&cobra.Command{Use: "text", Short: "文本内容处理", RunE: groupRunE})
 	chatTextTranslateCmd := &cobra.Command{
 		Use:   "translate",
 		Short: "翻译文本内容",
@@ -10450,11 +10451,11 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	chatGroupCmd.AddCommand(chatGroupBotsCmd, chatGroupDismissCmd, chatGroupSetHistoryCmd, chatGroupListMyGroupsCmd, chatGroupUpdateNickCmd, chatGroupUpdateAliasCmd, chatGroupListAllCmd, chatGroupListJoinValidationsCmd, chatGroupAuditJoinValidationCmd, chatGroupNoticeCmd, chatGroupShareInviteCmd, chatGroupUpgradeToExternalCmd)
 
 	// ── chat group user-settings ──
-	chatGroupUserSettingsCmd := &cobra.Command{
+	chatGroupUserSettingsCmd := newGroupCommand(&cobra.Command{
 		Use:   "user-settings",
 		Short: "批量查询或更新当前用户的群会话设置",
 		RunE:  groupRunE,
-	}
+	})
 	chatGroupUserSettingsQueryCmd := &cobra.Command{
 		Use:     "query",
 		Short:   "批量查询当前用户的群会话设置",

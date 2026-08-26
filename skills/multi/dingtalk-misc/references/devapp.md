@@ -25,19 +25,25 @@
 | Shortcut | 风险 | 适用场景 |
 |---|---|---|
 | `dws devapp +create` | write | 创建开放平台企业内部应用 |
+| `dws devapp +credentials-get` | read | 读取开放平台应用凭证 |
 | `dws devapp +delete` | high-risk-write | 删除开放平台企业内部应用（不可逆） |
 | `dws devapp +disable` | high-risk-write | 停用开放平台企业内部应用 |
 | `dws devapp +enable` | write | 启用开放平台企业内部应用 |
-| `dws devapp +event-list` | read | 查询应用已订阅的事件列表 |
+| `dws devapp +event-list` | read | 查询应用可用事件目录与订阅状态 |
+| `dws devapp +event-subscribe` | write | 订阅应用事件回调 |
 | `dws devapp +get` | read | 查询开放平台企业内部应用详情 |
 | `dws devapp +list` | read | 查询开放平台企业内部应用列表 |
 | `dws devapp +member-add` | write | 添加开放平台应用成员 |
 | `dws devapp +member-list` | read | 查询开放平台应用成员 |
 | `dws devapp +member-remove` | high-risk-write | 移除开放平台应用成员 |
 | `dws devapp +permission-list` | read | 查询开放平台应用权限列表 |
+| `dws devapp +robot-config` | write | 创建或更新现有应用的机器人配置（upsert） |
+| `dws devapp +robot-disable` | high-risk-write | 停用现有应用的机器人能力 |
+| `dws devapp +robot-enable` | write | 启用现有应用机器人能力（纯启用，无需配置字段） |
 | `dws devapp +robot-get` | read | 查询现有应用的机器人配置 |
 | `dws devapp +update` | write | 修改开放平台企业内部应用基础信息 |
 | `dws devapp +version-check-approval` | read | 预检版本发布是否需要审批（不实际发布） |
+| `dws devapp +version-create` | write | 基于当前配置创建应用新版本 |
 | `dws devapp +version-get` | read | 查询指定版本详情 |
 | `dws devapp +version-list` | read | 分页查询应用版本列表 |
 | `dws devapp +version-status` | read | 查询版本发布/审批状态 |

@@ -12,7 +12,7 @@ import (
 // (read/update/clear/sort/fill/copy-to/move-to).
 // set-style, batch-set-style, and batch-clear are added by newSheetCommand().
 func newRangeCmd() *cobra.Command {
-	rangeCmd := &cobra.Command{Use: "range", Short: "数据区域操作"}
+	rangeCmd := newDeepGroupCommand(&cobra.Command{Use: "range", Short: "数据区域操作"})
 
 	rangeReadCmd := &cobra.Command{
 		Use:     "read",

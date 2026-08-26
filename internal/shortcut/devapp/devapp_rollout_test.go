@@ -12,10 +12,16 @@ import (
 
 func TestDevAppShortcutsRollOutPerTerminalCommand(t *testing.T) {
 	active := map[string]bool{
-		"+list": true, "+get": true, "+webapp-get": true,
-		"+permission-list": true, "+event-list": true, "+version-list": true,
+		"+list": true, "+get": true, "+create": true, "+update": true,
+		"+delete": true, "+enable": true, "+disable": true, "+webapp-get": true,
+		"+webapp-config":   true,
+		"+permission-list": true, "+version-list": true,
 		"+robot-get": true, "+version-get": true,
 		"+version-check-approval": true, "+version-status": true,
+		"+credentials-get": true, "+member-list": true,
+		"+member-add": true, "+member-remove": true,
+		"+robot-config": true, "+robot-enable": true, "+robot-disable": true,
+		"+event-list": true, "+event-subscribe": true, "+version-create": true,
 	}
 	seen := map[string]bool{}
 	for _, item := range shortcut.All() {
@@ -42,7 +48,7 @@ func TestDevAppShortcutsRollOutPerTerminalCommand(t *testing.T) {
 			t.Errorf("active pilot shortcut %s is not registered", name)
 		}
 	}
-	for _, paginated := range []string{"+list", "+permission-list", "+event-list", "+version-list"} {
+	for _, paginated := range []string{"+list", "+permission-list", "+version-list"} {
 		if !seen[paginated] {
 			t.Errorf("paginated shortcut %s is not registered", paginated)
 		}

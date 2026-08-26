@@ -33,6 +33,7 @@ func newChatMediaGroup() *cobra.Command {
 		},
 	}
 	media.AddCommand(newChatMediaUploadCommand())
+	newHybridGroupCommand(media)
 	return media
 }
 

@@ -13,6 +13,79 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/interfacesnapshot"
 )
 
+func TestCrossPlatformCoverageSchemaAvailabilityMigrationNormalizesOnlyAvailability(t *testing.T) {
+	baseline := baselineContract()
+	current := cloneContract(baseline)
+	mutateTool(&current, func(tool *toolSchema) { tool.Availability = "unavailable" })
+	migration := interfacesnapshot.CommandMigration{
+		Kind: interfacesnapshot.CommandMigrationAvailability,
+		Legacy: interfacesnapshot.CommandMigrationSide{
+			Command: "dws doc create",
+			Before:  interfacesnapshot.CommandMigrationState{Present: true, Runnable: true},
+			After:   interfacesnapshot.CommandMigrationState{Present: true, Runnable: true, Hidden: true},
+		},
+		Schema: interfacesnapshot.CommandMigrationSchema{
+			ProductID:    "doc",
+			SourceToolID: "doc.create",
+			Parameters:   []interfacesnapshot.CommandParameterMigration{},
+			Availability: &interfacesnapshot.CommandAvailabilityChange{Before: "available", After: "unavailable"},
+		},
+		State:  interfacesnapshot.CommandMigrationPending,
+		Reason: "Reviewed fail-closed availability hardening.",
+	}
+
+	normalized, err := normalizeSchemaCommandMigrations(baseline, current, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Products["doc"].Tools["doc.create"].Availability; got != "unavailable" {
+		t.Fatalf("normalized availability = %q", got)
+	}
+	if failures := checkCompatibility(normalized, current); len(failures) != 0 {
+		t.Fatalf("availability hardening failures = %v", failures)
+	}
+
+	unrelated := cloneContract(current)
+	mutateTool(&unrelated, func(tool *toolSchema) { tool.Risk = "high" })
+	normalized, err = normalizeSchemaCommandMigrations(baseline, unrelated, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failures := strings.Join(checkCompatibility(normalized, unrelated), "\n"); !strings.Contains(failures, "changed risk") {
+		t.Fatalf("unrelated risk drift was hidden: %q", failures)
+	}
+
+	alreadyAfter := cloneContract(current)
+	if _, err := normalizeSchemaCommandMigrations(alreadyAfter, current, []interfacesnapshot.CommandMigration{migration}); err != nil {
+		t.Fatalf("consumed merge-base availability should remain inert: %v", err)
+	}
+	wrongPath := cloneContract(current)
+	mutateTool(&wrongPath, func(tool *toolSchema) { tool.PrimaryCLIPath = "doc other" })
+	normalized, err = normalizeSchemaCommandMigrations(baseline, wrongPath, []interfacesnapshot.CommandMigration{migration})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Products["doc"].Tools["doc.create"].Availability; got != "available" {
+		t.Fatalf("wrong-path migration changed availability to %q", got)
+	}
+	wrong := cloneContract(current)
+	mutateTool(&wrong, func(tool *toolSchema) { tool.Availability = "available" })
+	if _, err := normalizeSchemaCommandMigrations(baseline, wrong, []interfacesnapshot.CommandMigration{migration}); err == nil ||
+		!strings.Contains(err.Error(), "does not match Schema availability") {
+		t.Fatalf("wrong availability error = %v", err)
+	}
+
+	compatibilityVisible := migration
+	compatibilityVisible.Legacy.After = compatibilityVisible.Legacy.Before
+	if _, err := normalizeSchemaCommandMigrations(baseline, current, []interfacesnapshot.CommandMigration{compatibilityVisible}); err != nil {
+		t.Fatalf("compatibility-visible availability hardening must authorize the exact Schema transition: %v", err)
+	}
+	if _, err := normalizeSchemaCommandMigrations(baseline, baseline, []interfacesnapshot.CommandMigration{compatibilityVisible}); err == nil ||
+		!strings.Contains(err.Error(), "does not match Schema availability") {
+		t.Fatalf("compatibility-visible receipt must not authorize unchanged Schema availability: %v", err)
+	}
+}
+
 func TestCrossPlatformCoverageSchemaCommandMigrationsAuthorizeOnlyExactProjection(t *testing.T) {
 	baseline := schemaCommandMigrationContract(false)
 	current := schemaCommandMigrationContract(true)

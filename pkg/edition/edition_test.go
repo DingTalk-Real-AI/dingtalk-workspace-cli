@@ -137,3 +137,24 @@ func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 		t.Fatal("openSupplementServers() missing explicitly wired recruit endpoint")
 	}
 }
+
+func TestCrossPlatformCoverageOpenSupplementServersExcludesRetiredEduEndpoints(t *testing.T) {
+	retiredProducts := map[string]bool{
+		"edu-contact":     true,
+		"edu-group":       true,
+		"edu-app":         true,
+		"edu-familygroup": true,
+		"college-contact": true,
+	}
+
+	for _, server := range openSupplementServers() {
+		if retiredProducts[server.ID] {
+			t.Errorf("openSupplementServers() still exposes retired endpoint %q", server.ID)
+		}
+		for _, prefix := range server.Prefixes {
+			if retiredProducts[prefix] {
+				t.Errorf("openSupplementServers() endpoint %q still routes retired prefix %q", server.ID, prefix)
+			}
+		}
+	}
+}

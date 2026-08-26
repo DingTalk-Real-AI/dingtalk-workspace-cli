@@ -15,6 +15,7 @@ package errors
 
 import (
 	stderrors "errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -462,5 +463,36 @@ func TestCrossPlatformCoveragePrintHumanHidesRPCCode_Normal(t *testing.T) {
 	got := b.String()
 	if strings.Contains(got, "RPC Code:") {
 		t.Fatalf("normal mode should not show RPC Code, got %q", got)
+	}
+}
+
+func TestCrossPlatformCoverageIsConfirmationRequired(t *testing.T) {
+	t.Parallel()
+
+	if IsConfirmationRequired(nil) {
+		t.Fatal("nil error must not report confirmation_required")
+	}
+	if IsConfirmationRequired(NewValidation("missing required flag")) {
+		t.Fatal("plain validation error must not report confirmation_required")
+	}
+	plain := stderrors.New("需要用户确认")
+	if IsConfirmationRequired(plain) {
+		t.Fatal("message text alone must not report confirmation_required")
+	}
+	confirmation := NewValidation(
+		"blocked",
+		WithReason("confirmation_required"),
+	)
+	if !IsConfirmationRequired(confirmation) {
+		t.Fatal("typed confirmation error must report confirmation_required")
+	}
+	// 包装链（fmt.Errorf %w）必须能穿透到 typed 原因。
+	wrapped := fmt.Errorf("call tool: %w", confirmation)
+	if !IsConfirmationRequired(wrapped) {
+		t.Fatal("wrapped confirmation error must report confirmation_required")
+	}
+	otherReason := NewValidation("rate limited", WithReason("rate_limit"))
+	if IsConfirmationRequired(otherReason) {
+		t.Fatal("other reasons must not report confirmation_required")
 	}
 }

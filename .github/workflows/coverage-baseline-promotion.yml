@@ -1,0 +1,322 @@
+name: Coverage Baseline Promotion
+
+run-name: Promote coverage baseline for ${{ github.event.client_payload.target_sha }}
+
+on:
+  repository_dispatch:
+    types: [coverage-baseline-promote]
+
+# repository_dispatch loads this workflow from the protected default branch.
+# The requested target is treated as untrusted input until the validation step
+# proves it is an exact Formula-only successor already contained in main.
+permissions:
+  checks: write
+  contents: read
+
+concurrency:
+  group: coverage-baseline-promotion-${{ github.event.client_payload.target_sha }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  promote:
+    if: github.repository == 'DingTalk-Real-AI/dingtalk-workspace-cli'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Validate Formula-only main target
+        id: validate-target
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const targetSha = context.payload.client_payload?.target_sha;
+            const sourceRunId = context.payload.client_payload?.source_run_id;
+            const checkRunId = Number(context.payload.client_payload?.check_run_id);
+            if (!/^[0-9a-f]{40}$/.test(targetSha || '')) {
+              throw new Error('coverage-baseline-promote requires one full target_sha');
+            }
+            if (!/^[1-9][0-9]*$/.test(sourceRunId || '')) {
+              throw new Error('coverage-baseline-promote requires one source_run_id');
+            }
+            if (!Number.isSafeInteger(checkRunId) || checkRunId <= 0) {
+              throw new Error('coverage-baseline-promote requires one safe check_run_id');
+            }
+
+            // Bind the finalizer before any target or cache validation. A
+            // later failure must complete the release-created acknowledgement
+            // instead of leaving Release to poll a permanently queued check.
+            const promotionExternalId = `release-${sourceRunId}-${targetSha}`;
+            const {data: promotionCheck} = await github.rest.checks.get({
+              owner,
+              repo,
+              check_run_id: checkRunId,
+            });
+            if (
+              promotionCheck.id !== checkRunId ||
+              promotionCheck.head_sha !== targetSha ||
+              promotionCheck.name !== 'Coverage Baseline Cache' ||
+              promotionCheck.external_id !== promotionExternalId ||
+              promotionCheck.app?.slug !== 'github-actions' ||
+              promotionCheck.status !== 'queued' ||
+              promotionCheck.conclusion !== null
+            ) {
+              throw new Error('coverage baseline acknowledgement has an invalid identity');
+            }
+            core.setOutput('target_sha', targetSha);
+            core.setOutput('check_run_id', String(checkRunId));
+            core.setOutput('check_external_id', promotionExternalId);
+
+            const {data: targetCommit} = await github.rest.repos.getCommit({
+              owner,
+              repo,
+              ref: targetSha,
+              per_page: 100,
+            });
+            const files = targetCommit.files || [];
+            const message = targetCommit.commit.message;
+            const formulaPath = files[0]?.filename;
+            const stableFormula =
+              formulaPath === 'Formula/dingtalk-workspace-cli.rb' &&
+              /^chore: update formula for v[0-9]+\.[0-9]+\.[0-9]+ \[skip ci\]$/.test(message);
+            const betaFormula =
+              formulaPath === 'Formula/dingtalk-workspace-cli-beta.rb' &&
+              /^chore: update beta formula for v[0-9]+\.[0-9]+\.[0-9]+-beta\.[1-9][0-9]* \[skip ci\]$/.test(message);
+            if (
+              targetCommit.sha !== targetSha ||
+              targetCommit.parents.length !== 1 ||
+              targetCommit.author?.login !== 'github-actions[bot]' ||
+              targetCommit.committer?.login !== 'github-actions[bot]' ||
+              files.length !== 1 ||
+              !['added', 'modified'].includes(files[0].status) ||
+              (!stableFormula && !betaFormula)
+            ) {
+              throw new Error(
+                `${targetSha} is not an exact release-produced Formula-only commit`,
+              );
+            }
+
+            const parentSha = targetCommit.parents[0].sha;
+            const requiredContexts = [
+              'Lint',
+              'Test',
+              'Coverage',
+              'Policy',
+              'Edition',
+              'Interface Integrity',
+              'AI Behavior',
+              'CLI Smoke',
+              'Mock MCP',
+            ];
+            async function requireSuccessfulAdmission(ref, label) {
+              for (let attempt = 1; attempt <= 6; attempt += 1) {
+                const runs = await github.paginate(github.rest.checks.listForRef, {
+                  owner,
+                  repo,
+                  ref,
+                  filter: 'latest',
+                  per_page: 100,
+                });
+                const latestByName = new Map();
+                for (const run of runs) {
+                  if (
+                    run.head_sha !== ref ||
+                    run.app?.slug !== 'github-actions' ||
+                    !requiredContexts.includes(run.name)
+                  ) {
+                    continue;
+                  }
+                  const current = latestByName.get(run.name);
+                  if (!current || run.id > current.id) {
+                    latestByName.set(run.name, run);
+                  }
+                }
+                const invalid = requiredContexts.filter((name) => {
+                  const run = latestByName.get(name);
+                  return !run || run.conclusion !== 'success';
+                });
+                if (invalid.length === 0) {
+                  return;
+                }
+                if (attempt < 6) {
+                  await new Promise(resolve => setTimeout(resolve, 5000));
+                  continue;
+                }
+                throw new Error(
+                  `${label} ${ref} lacks successful Code Admission contexts: ${invalid.join(', ')}`,
+                );
+              }
+            }
+            await requireSuccessfulAdmission(parentSha, 'Formula parent');
+            await requireSuccessfulAdmission(targetSha, 'Formula target');
+
+            const {data: branch} = await github.rest.repos.getBranch({
+              owner,
+              repo,
+              branch: context.payload.repository.default_branch,
+            });
+            const {data: containment} =
+              await github.rest.repos.compareCommitsWithBasehead({
+                owner,
+                repo,
+                basehead: `${targetSha}...${branch.commit.sha}`,
+              });
+            if (!['ahead', 'identical'].includes(containment.status)) {
+              throw new Error(`${targetSha} is not contained in the protected default branch`);
+            }
+
+            core.setOutput('parent_sha', parentSha);
+            core.setOutput('formula_path', formulaPath);
+
+      - name: Mark Formula cache promotion in progress
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            await github.rest.checks.update({
+              ...context.repo,
+              check_run_id: Number('${{ steps.validate-target.outputs.check_run_id }}'),
+              status: 'in_progress',
+              started_at: new Date().toISOString(),
+              output: {
+                title: 'Producing exact-SHA coverage baseline',
+                summary: 'The trusted default-branch workflow is validating or producing the main-scoped cache.',
+              },
+            });
+
+      - name: Check out validated Formula-only target
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ steps.validate-target.outputs.target_sha }}
+
+      - name: Verify checked-out Formula-only identity
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.validate-target.outputs.target_sha }}
+          PARENT_SHA: ${{ steps.validate-target.outputs.parent_sha }}
+          FORMULA_PATH: ${{ steps.validate-target.outputs.formula_path }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(git rev-parse HEAD^)" = "$PARENT_SHA"
+          test "$(git diff --name-only --no-renames "$PARENT_SHA" "$TARGET_SHA")" = "$FORMULA_PATH"
+
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Restore existing target coverage profile
+        id: target-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ steps.validate-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}
+
+      - name: Validate existing target coverage profile
+        if: steps.target-cache.outputs.cache-hit == 'true'
+        run: |
+          set -eu
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+
+      - name: Restore exact Formula parent coverage profile
+        id: parent-cache
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ steps.validate-target.outputs.parent_sha }}-go${{ steps.setup-go.outputs.go-version }}
+
+      - name: Validate promoted Formula parent profile
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.parent-cache.outputs.cache-hit == 'true'
+        run: |
+          set -eu
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+
+      - name: Install archive tooling for cold Formula baseline
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.parent-cache.outputs.cache-hit != 'true'
+        run: |
+          if command -v zip >/dev/null && command -v unzip >/dev/null; then
+            echo "zip and unzip are already available"
+          else
+            sudo apt-get update
+            sudo apt-get install -y zip unzip
+          fi
+
+      - name: Recompute cold Formula baseline
+        if: steps.target-cache.outputs.cache-hit != 'true' && steps.parent-cache.outputs.cache-hit != 'true'
+        env:
+          DWS_PACKAGE_VERSION: 0.0.0-test
+        run: |
+          set -euo pipefail
+          go test -count=1 -p 1 \
+            -coverprofile=coverage-cache.txt \
+            -covermode=atomic \
+            ./ ./cmd/... ./internal/... ./skills/...
+          test -s coverage-cache.txt
+          test "$(head -n 1 coverage-cache.txt)" = "mode: atomic"
+
+      - name: Save Formula main SHA coverage profile
+        if: steps.target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ steps.validate-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}
+
+      - name: Verify Formula main SHA coverage cache exists
+        id: formula-target-cache-verification
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: coverage-cache.txt
+          key: dws-coverage-full-v2-${{ steps.validate-target.outputs.target_sha }}-go${{ steps.setup-go.outputs.go-version }}
+          lookup-only: true
+          fail-on-cache-miss: true
+
+      - name: Require exact Formula main SHA coverage cache
+        env:
+          EXACT_CACHE_HIT: ${{ steps.formula-target-cache-verification.outputs.cache-hit }}
+        run: test "$EXACT_CACHE_HIT" = true
+
+      - name: Complete Formula cache promotion acknowledgement
+        if: ${{ always() && steps.validate-target.outputs.check_run_id != '' }}
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          PROMOTION_JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const checkRunId = Number('${{ steps.validate-target.outputs.check_run_id }}');
+            const targetSha = '${{ steps.validate-target.outputs.target_sha }}';
+            const expectedExternalId = '${{ steps.validate-target.outputs.check_external_id }}';
+            const {data: currentCheck} = await github.rest.checks.get({
+              ...context.repo,
+              check_run_id: checkRunId,
+            });
+            if (
+              currentCheck.head_sha !== targetSha ||
+              currentCheck.name !== 'Coverage Baseline Cache' ||
+              currentCheck.external_id !== expectedExternalId ||
+              currentCheck.app?.slug !== 'github-actions'
+            ) {
+              throw new Error('refusing to update a changed promotion acknowledgement');
+            }
+            const succeeded = process.env.PROMOTION_JOB_STATUS === 'success';
+            await github.rest.checks.update({
+              ...context.repo,
+              check_run_id: checkRunId,
+              status: 'completed',
+              conclusion: succeeded ? 'success' : 'failure',
+              completed_at: new Date().toISOString(),
+              output: {
+                title: succeeded
+                  ? 'Exact-SHA coverage baseline is available'
+                  : 'Exact-SHA coverage baseline promotion failed',
+                summary: succeeded
+                  ? `Verified the main-scoped exact cache for ${targetSha}.`
+                  : `Promotion failed for ${targetSha}; rerun the failed Release job after correcting the producer.`,
+              },
+            });

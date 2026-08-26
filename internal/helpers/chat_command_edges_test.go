@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
@@ -121,8 +122,12 @@ func TestCrossPlatformCoverageChatStableCompatibilityHintsRemainAvailable(t *tes
 		}
 		root.SetArgs(tc.args)
 		err = root.ExecuteContext(context.Background())
-		if err == nil || !strings.Contains(err.Error(), "ambiguous command") || !strings.Contains(err.Error(), tc.hint) {
-			t.Fatalf("chat %s with legacy flags error = %v, want migration hint %q", tc.path, err, tc.hint)
+		var structured *apperrors.Error
+		if !errors.As(err, &structured) {
+			t.Fatalf("chat %s with legacy flags error = %T %v, want structured validation", tc.path, err, err)
+		}
+		if structured.Category != apperrors.CategoryValidation || structured.Reason != "unknown_subcommand" || !strings.Contains(structured.Hint, tc.hint) {
+			t.Fatalf("chat %s with legacy flags error = %#v, want migration hint %q", tc.path, structured, tc.hint)
 		}
 	}
 }

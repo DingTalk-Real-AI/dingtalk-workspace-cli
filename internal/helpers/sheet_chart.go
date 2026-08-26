@@ -120,7 +120,7 @@ func validateChartProperties(props map[string]any) error {
 // ─── Chart subcommands ──────────────────────────────────────────────────────
 
 func newChartCmd() *cobra.Command {
-	chartCmd := &cobra.Command{Use: "chart", Short: "浮动图表管理"}
+	chartCmd := newDeepGroupCommand(&cobra.Command{Use: "chart", Short: "浮动图表管理"})
 
 	// ── chart list ──────────────────────────────────────────────────────
 	chartListCmd := &cobra.Command{

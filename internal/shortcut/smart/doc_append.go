@@ -14,12 +14,15 @@
 package smart
 
 import (
+	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut"
 )
 
@@ -89,6 +92,22 @@ var DocAppend = shortcut.Shortcut{
 		text := rt.StrFirst("text", "content")
 		if strings.TrimSpace(text) == "" {
 			return apperrors.NewValidation("--content 不能为空，请提供要追加的文本")
+		}
+		// --text is a plain argv string with no @file or stdin input, so this
+		// command is for appending a paragraph, not a document. Rather than build
+		// a second chunk loop on top of CallMCP (which returns only an error and
+		// so cannot report partial progress), point oversized input at the
+		// command that already chunks and verifies.
+		if runes := utf8.RuneCountInString(text); runes > helpers.DefaultMarkdownChunkRunes {
+			return apperrors.NewValidation(
+				fmt.Sprintf("--text 长度 %d 字符超过单次写入上限 %d；本命令只用于追加一小段文本，不做自动分片", runes, helpers.DefaultMarkdownChunkRunes),
+				apperrors.WithReason("doc_append_content_too_long"),
+				apperrors.WithRetryable(false),
+				apperrors.WithActions(
+					"改用 dws doc +update --command append --content @文件 —— 它会自动分片、重发表头并回读校验",
+					"或自行把文本拆成多段，分多次 +doc-append",
+				),
+			)
 		}
 
 		// update_document append: params copied verbatim from the helper's

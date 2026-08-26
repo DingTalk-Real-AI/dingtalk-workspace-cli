@@ -7,12 +7,12 @@ import (
 )
 
 func newSheetCommentCmd() *cobra.Command {
-	commentCmd := &cobra.Command{
+	commentCmd := newGroupCommand(&cobra.Command{
 		Use:   "comment",
 		Short: "表格评论 / 单元格评论管理",
 		Long:  `管理钉钉表格的单元格评论：查询评论列表、创建评论、回复评论、更新评论、删除评论。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	commentListCmd := &cobra.Command{
 		Use:   "list",

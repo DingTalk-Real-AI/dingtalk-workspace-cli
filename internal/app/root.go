@@ -30,6 +30,7 @@ import (
 
 	authpkg "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/auth"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/cli"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/executor"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/helpers"
@@ -254,7 +255,7 @@ func ExecuteWithTelemetry() (exitCode int, commandPath string, errorMessage stri
 		}
 		var publicationErr *outputPublicationError
 		if err == nil || !stderrors.As(err, &publicationErr) {
-			err = interrupted
+			err = interrupted.withCancellationDetail(err)
 		}
 	}
 	if err != nil {
@@ -924,6 +925,11 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 			return nil
 		},
 	}
+	corecmd.ApplyGroupPolicy(root, corecmd.GroupPolicy{
+		Mode:        corecmd.GroupNavigationOnly,
+		Positionals: corecmd.PositionalsReject,
+		Recovery:    corecmd.RecoverySibling,
+	})
 
 	bindPersistentFlags(root, flags)
 
@@ -935,25 +941,42 @@ func newRootCommandWithMode(rootCtx context.Context, engine *pipeline.Engine, lo
 	patCaller := newRecordingToolCaller(newToolCallerAdapter(runner, flags))
 	mcpCmd.AddCommand(newMCPURLGroup(patCaller))
 
+	navigationGroup := func(command *cobra.Command) *cobra.Command {
+		corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{
+			Mode:        corecmd.GroupNavigationOnly,
+			Positionals: corecmd.PositionalsReject,
+			Recovery:    corecmd.RecoverySibling,
+		})
+		return command
+	}
+	hybridGroup := func(command *cobra.Command) *cobra.Command {
+		corecmd.ApplyGroupPolicy(command, corecmd.GroupPolicy{
+			Mode:        corecmd.GroupHybrid,
+			Positionals: corecmd.PositionalsReject,
+			Recovery:    corecmd.RecoverySibling,
+		})
+		return command
+	}
+
 	utilityCommands := []*cobra.Command{
-		newAuthCommand(patCaller),
-		newProfileCommand(),
+		navigationGroup(newAuthCommand(patCaller)),
+		navigationGroup(newProfileCommand()),
 		newAPICommand(flags),
-		newSkillCommand(),
-		newCacheCommand(),
+		navigationGroup(newSkillCommand()),
+		hybridGroup(newCacheCommand()),
 		newCatalogCommand(),
-		newConfigCommand(),
+		navigationGroup(newConfigCommand()),
 		newDoctorCommand(),
-		newRecoveryCommand(),
-		newEventCommand(flags),
-		newAuditCommand(),
+		hybridGroup(newRecoveryCommand()),
+		navigationGroup(newEventCommand(flags)),
+		navigationGroup(newAuditCommand()),
 		newCompletionCommand(root),
 		newUpgradeCommand(),
 		newVersionCommand(),
 		newPluginCommand(),
-		usage.NewShortcutCommand(),
+		navigationGroup(usage.NewShortcutCommand()),
 		schemaCmd,
-		mcpCmd,
+		navigationGroup(mcpCmd),
 	}
 	// Add safechat command only when built with safechat tag
 	if safeChatCmd := newSafeChatCommand(); safeChatCmd != nil {

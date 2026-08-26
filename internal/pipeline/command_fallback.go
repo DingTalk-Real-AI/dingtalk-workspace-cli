@@ -24,7 +24,7 @@ func normalizeCommandPathFallback(root *cobra.Command, engine *Engine, rawArgs [
 	if root == nil || engine == nil || engine.commandPathFallbackLookup == nil || len(rawArgs) == 0 {
 		return rawArgs, nil, nil
 	}
-	traversalArgs, positions := argsForCommandTraversalWithPositions(root, rawArgs)
+	traversalArgs, positions := argsForCommandTraversalWithPositionsForEngine(root, engine, rawArgs)
 	entry, tokenCount, ok := longestCommandPathFallback(engine, traversalArgs)
 	if !ok {
 		return rawArgs, nil, nil

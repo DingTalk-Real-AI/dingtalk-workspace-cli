@@ -4,9 +4,10 @@
 package cmdutil
 
 import (
-	"strings"
+	"errors"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +22,10 @@ func TestCrossPlatformCoverageHintSubCmdCarriesHintOnlyIdentity(t *testing.T) {
 	if IsHintOnlyCommand(nil) || IsHintOnlyCommand(&cobra.Command{Use: "real"}) {
 		t.Fatal("ordinary command was classified as hint-only")
 	}
-	if err := hint.RunE(hint, nil); err == nil || !strings.Contains(err.Error(), "use parent find") {
-		t.Fatalf("hint error = %v", err)
+	var structured *apperrors.Error
+	if err := hint.RunE(hint, nil); !errors.As(err, &structured) ||
+		structured.Hint != "use parent find (Run 'parent --help' for the full list)" {
+		t.Fatalf("hint error = %#v", structured)
 	}
+	assertResolutionDetails(t, structured, "search", []string{})
 }

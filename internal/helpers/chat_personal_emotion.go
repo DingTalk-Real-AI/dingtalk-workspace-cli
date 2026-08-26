@@ -13,12 +13,12 @@ import (
 const personalEmotionUnpinnedReason = "Reviewed unpinned remote adapter: this executable CLI wrapper calls a remote helper that is absent from the pinned MCP metadata snapshot; no single pinned semantically equivalent interface_ref can represent the command."
 
 func newChatEmotionCommand() *cobra.Command {
-	cmd := &cobra.Command{
+	cmd := newGroupCommand(&cobra.Command{
 		Use:   "emotion",
 		Short: "个人收藏表情",
 		Long:  "查询、发送和新增当前用户的个人收藏表情。",
 		RunE:  groupRunE,
-	}
+	})
 	cmd.AddCommand(
 		newChatEmotionListCommand(),
 		newChatEmotionSendCommand(),

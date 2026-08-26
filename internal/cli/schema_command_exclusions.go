@@ -76,6 +76,7 @@ var reviewedRuntimeSchemaExclusionGroups = []runtimeSchemaExclusionGroup{
 			"agoal scorecard detail",
 			"agoal scorecard entity-detail",
 			"agoal scorecard update",
+			"agoal scorecard search-entities",
 			"agoal strategy detail",
 			"agoal strategy list",
 			"agoal strategy update",

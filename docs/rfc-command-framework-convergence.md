@@ -274,6 +274,7 @@ Definition（仅声明；不可编译）
 | 层 | 含义 | 今日落点 |
 |---|---|---|
 | **声明（declare）** | `corecmd.Spec` / `LeafSpec` / `ContractDecl` **数据字段**（声明证据；交付见下） | `Flags`/`Constraints`/`Risk`/`ConstParams`/`Contract`；类型真身在 `corecmd/contract`（DTO：`SafetySpec`/`ParamDecl`/`ProductDecl`/`ContractFinalPayload`；**无** Cobra store） |
+| **非叶声明（group declare）** | owning Cobra 命令上的完整 `corecmd.GroupPolicy`；不是 leaf `Spec` 字段 | `Mode` / `Positionals` / `Recovery` 经 `corecmd.ApplyGroupPolicy` 一次编译为 Cobra 行为与私有框架元数据 |
 | **框架转换** | 类型转换并注册（**禁止** JSON 注解桥） | `embedContractDecl` → `corecmd/contractfinal.RegisterRuntimeContractFinal`（annotate + store；全部调用方直调，`corecmd.New` 内部注册） |
 | **注解 seam** | Cobra `dws.schema.*` 写入 | `internal/corecmd/runtimeannotate.AnnotateRuntime*`（框架侧；`cli` 根经 `runtime_schema_seam.go` 包内别名访问；`cli/runtimeannotate` 垫片包已删，一律直引 corecmd） |
 | **Schema 透传** / 交付 | 组装读取注册表，原样投影为 `ToolSpec`；`RegisterSchemaSourceRoot` → `ResolveSchemaBuild`（`ResolveMeta` 自同一组装投影）；go:embed 仅限 reviewed 输入（MCP meta / `param_concepts` 等；reviewed `schema_command_registry/` 已退役，identity 由 collector 收集），映射排除走 Go ledger（`schema_parameter_mapping_ledger.go`），不得 embed Catalog | `internal/cli` 根（交付边界）；ContractFinal store 在 `corecmd/contractfinal`（`cli` 根经 `runtime_schema_seam.go` 包内别名访问；`cli/contractfinal` 垫片包已删） |
@@ -310,7 +311,25 @@ Definition（仅声明；不可编译）
 3. 写副作用：新 Leaf 声明完整 `SafetySpec`（框架 `ConfirmSafety` + Schema Final）；未迁移旧路径显式标注 `runtime_gate`；二者皆无则不合格；
 4. Schema `ToolSpec` 全字段组均落在 §5.0.4 表中某一权威格，禁止无主字段。
 
-#### 5.0.2a 三档声明路径（Tier1 / Tier2 / Tier3）
+#### 5.0.2a 非叶命令契约（`corecmd.GroupPolicy`）
+
+`corecmd.Spec` / `LeafSpec` 继续只定义叶命令。每个拥有子命令的 owning Cobra 命令必须在构造处通过 `corecmd.ApplyGroupPolicy` 声明一份完整 `GroupPolicy`：
+
+| 轴 | 允许值 | 语义 |
+|---|---|---|
+| `Mode` | `navigation_only` / `hybrid` | 仅导航并展示帮助，或同时保留本命令业务执行 |
+| `Positionals` | `reject` / `allow` | 未匹配 token 进入命令恢复，或由本命令业务位置参数消费 |
+| `Recovery` | `sibling` / `deep` / `disabled` | 只建议直接子命令、显式允许后代路径恢复，或完全关闭恢复 |
+
+硬规则：
+
+1. 三个字段必须同时声明；全零值只表示 leaf，不能应用到命令。`navigation_only` 必须 `Positionals=reject`；`Positionals=allow` 必须 `Recovery=disabled`，避免业务 argv 与命令恢复争抢同一 token。
+2. `ApplyGroupPolicy` 是唯一编译入口：navigation 安装统一 help/错误 handler；hybrid 保留 owning `RunE`，仅在声明拒绝 positionals 且开启恢复时包裹 unknown-command 分支。恢复统一投影为有界 `CommandResolution`（最多 3 个建议 + 当前 parent `--help`）；只有 `Recovery=deep` 才可建议完整后代路径。
+3. `GroupPolicy` **不推导** `TraverseChildren`。该 Cobra 字段会改变父级 local flag 是否向子命令传播，必须由原 owning command 显式保留，不能因迁移到 typo guidance 而扩大参数表面。
+4. 最终装配树门禁检查「有 children 必须有 GroupPolicy、leaf 不得残留 GroupPolicy、navigation/hybrid handler 与声明结构一致」。门禁不执行任意 `Args` 函数；`ApplyGroupPolicy` 对 `cobra.NoArgs` / `cobra.ArbitraryArgs` 的编译由 corecmd 单测覆盖。
+5. 命令树合并时，两侧非空 group 都必须先声明 policy；冲突声明、group 与 runnable/parse-bearing leaf 合并、或带 children 的未声明节点均 fail closed。纯 metadata 空壳可采用 typed source policy，不能借此吞掉 flags、hooks 或执行体。
+
+#### 5.0.2b 三档叶声明路径（Tier1 / Tier2 / Tier3）
 
 当前生产允许的三档路径（同一 `ContractFinal` 语义；不是互相否定）：
 

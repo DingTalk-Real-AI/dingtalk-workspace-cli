@@ -828,6 +828,12 @@ func (p *OAuthProvider) lockedRefresh(ctx context.Context) (*TokenData, error) {
 	fallback, fErr := p.refreshFromOrgSlot(ctx, data)
 	if fErr != nil {
 		logging.AuthDebug("auth.refresh.fallback.unavailable", "error", fErr)
+		// The organization mirror may be absent for long-lived local logins
+		// that predate mirror publication. Recover from the legacy global
+		// slot before giving up.
+		if recovered, recoverErr := p.recoverRefreshFromLegacyGlobalSlot(ctx, data, rErr); recoverErr == nil {
+			return recovered, nil
+		}
 		return nil, rErr
 	}
 	if p.logger != nil {
@@ -889,6 +895,123 @@ func (p *OAuthProvider) refreshFromOrgSlot(ctx context.Context, current *TokenDa
 		"new_at_expires_at", refreshed.ExpiresAt.Format(time.RFC3339),
 	)
 	return refreshed, nil
+}
+
+func (p *OAuthProvider) recoverRefreshFromLegacyGlobalSlot(ctx context.Context, selected *TokenData, refreshErr error) (*TokenData, error) {
+	var exchangeErr *MCPTokenExchangeError
+	if !errors.As(refreshErr, &exchangeErr) || !exchangeErr.requiresReauthorization() {
+		return nil, refreshErr
+	}
+	if selected == nil {
+		return nil, refreshErr
+	}
+	logging.AuthDebug("auth.refresh.legacy_recovery.triggered",
+		"corp_id", strings.TrimSpace(selected.CorpID),
+		"user_id", strings.TrimSpace(selected.UserID),
+		"refresh_error_code", exchangeErr.Code,
+	)
+	legacy, loadErr := tokenLoadKeychain()
+	if loadErr != nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "load_legacy", "error", loadErr)
+		return nil, refreshErr
+	}
+	if legacy == nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "load_legacy", "reason", "empty_legacy")
+		return nil, refreshErr
+	}
+	if !legacyGlobalRefreshCandidateMatches(p.configDir, selected, legacy) {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed",
+			"step", "candidate_mismatch",
+			"legacy_corp_id", strings.TrimSpace(legacy.CorpID),
+			"legacy_user_id", strings.TrimSpace(legacy.UserID),
+		)
+		return nil, refreshErr
+	}
+	recovered := *legacy
+	if strings.TrimSpace(recovered.UserID) == "" {
+		recovered.UserID = strings.TrimSpace(selected.UserID)
+	}
+	if strings.TrimSpace(recovered.UserName) == "" {
+		recovered.UserName = strings.TrimSpace(selected.UserName)
+	}
+	if recovered.IsAccessTokenValid() {
+		if err := oauthSaveTokenLocked(p.configDir, &recovered); err != nil {
+			logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "save", "error", err)
+			return nil, refreshErr
+		}
+		logging.AuthDebug("auth.refresh.legacy_recovery.success", "via", "valid_access_token")
+		return &recovered, nil
+	}
+	if !recovered.IsRefreshTokenValid() {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "refresh_expired")
+		return nil, refreshErr
+	}
+	if strings.TrimSpace(recovered.RefreshToken) == strings.TrimSpace(selected.RefreshToken) {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "same_refresh_token")
+		return nil, refreshErr
+	}
+	if err := preflightTokenRefreshPersistence(p.configDir, &recovered); err != nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "preflight", "error", err)
+		return nil, refreshErr
+	}
+	refreshed, recoverErr := oauthRefreshToken(p, ctx, &recovered)
+	if recoverErr != nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.failed", "step", "refresh", "error", recoverErr)
+		return nil, refreshErr
+	}
+	logging.AuthDebug("auth.refresh.legacy_recovery.success", "via", "refresh")
+	return refreshed, nil
+}
+
+func legacyGlobalRefreshCandidateMatches(configDir string, selected, legacy *TokenData) bool {
+	if selected == nil || legacy == nil {
+		return false
+	}
+	selectedCorpID := strings.TrimSpace(selected.CorpID)
+	legacyCorpID := strings.TrimSpace(legacy.CorpID)
+	if selectedCorpID == "" || legacyCorpID != selectedCorpID {
+		return false
+	}
+	selectedUserID := strings.TrimSpace(selected.UserID)
+	legacyUserID := strings.TrimSpace(legacy.UserID)
+	if legacyUserID != "" {
+		return legacyUserID == selectedUserID
+	}
+	return legacyGlobalBlankUserIDMatchesSingleProfile(configDir, selectedCorpID, selectedUserID)
+}
+
+func legacyGlobalBlankUserIDMatchesSingleProfile(configDir, corpID, userID string) bool {
+	if strings.TrimSpace(corpID) == "" {
+		return false
+	}
+	cfg, err := tokenLoadProfiles(configDir)
+	if err != nil || cfg == nil {
+		logging.AuthDebug("auth.refresh.legacy_recovery.blank_user_rejected", "reason", "profiles_error", "error", err)
+		return false
+	}
+	profiles := profilesForCorpID(cfg, corpID)
+	if len(profiles) != 1 {
+		logging.AuthDebug("auth.refresh.legacy_recovery.blank_user_rejected",
+			"reason", "multi_profile",
+			"corp_id", strings.TrimSpace(corpID),
+			"profile_count", len(profiles),
+		)
+		return false
+	}
+	profile := profiles[0]
+	if profile != nil && sameProfileIdentity(profile.CorpID, profile.UserID, corpID, userID) {
+		return true
+	}
+	profileUserID := ""
+	if profile != nil {
+		profileUserID = strings.TrimSpace(profile.UserID)
+	}
+	logging.AuthDebug("auth.refresh.legacy_recovery.blank_user_rejected",
+		"reason", "identity_mismatch",
+		"selected_user_id", strings.TrimSpace(userID),
+		"profile_user_id", profileUserID,
+	)
+	return false
 }
 
 // ExchangeAuthCode takes an AuthCode and an optional UserID provided by an

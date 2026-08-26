@@ -415,6 +415,39 @@ func TestSchemaCompatibilityRejectsContractDrift(t *testing.T) {
 	}
 }
 
+func TestSchemaCompatibilityAcceptsReviewedRemoveConfirmationHardening(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	newTool := oldTool
+	newTool.Confirmation = "user_required"
+
+	for _, toolPath := range []string{
+		"doc/doc.remove_permission",
+		"drive/drive.permission_remove",
+		"wiki/wiki.remove_member",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, newTool); len(failures) != 0 {
+			t.Fatalf("reviewed confirmation hardening for %s failures = %v", toolPath, failures)
+		}
+	}
+	if failures := checkToolCompatibility("doc/doc.other_remove", oldTool, newTool); len(failures) == 0 {
+		t.Fatal("unreviewed confirmation hardening unexpectedly passed")
+	}
+
+	// A reviewed tool is only exempt for the exact reviewed transition: an
+	// unrelated field drift on the same tool must still be reported.
+	riskTool := oldTool
+	riskTool.Risk = "high"
+	if failures := checkToolCompatibility("doc/doc.remove_permission", oldTool, riskTool); len(failures) == 0 {
+		t.Fatal("reviewed tool risk drift unexpectedly passed")
+	}
+
+	oldTool.Confirmation = "user_required"
+	newTool.Confirmation = "not_required"
+	if failures := checkToolCompatibility("doc/doc.remove_permission", oldTool, newTool); len(failures) == 0 {
+		t.Fatal("reviewed tool confirmation weakening unexpectedly passed")
+	}
+}
+
 func TestMergeContracts(t *testing.T) {
 	historical := baselineContract()
 	current := cloneContract(historical)
@@ -956,6 +989,36 @@ func TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition(t *testin
 		t.Run(test.name, func(t *testing.T) {
 			if compatibleReviewedConstraintTransition(test.path, toolSchema{Constraints: test.old}, toolSchema{Constraints: test.new}) {
 				t.Fatal("unreviewed constraint transition unexpectedly passed")
+			}
+		})
+	}
+
+	const sheetToolPath = "sheet/sheet.create_float_image"
+	const sheetTarget = `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`
+	sheetOldTool := toolSchema{}
+	sheetNewTool := sheetOldTool
+	sheetNewTool.Constraints = sheetTarget
+
+	if !compatibleReviewedConstraintTransition(sheetToolPath, sheetOldTool, sheetNewTool) {
+		t.Fatal("reviewed float-image local-file transition must be accepted")
+	}
+	if failures := checkToolCompatibility(sheetToolPath, sheetOldTool, sheetNewTool); len(failures) != 0 {
+		t.Fatalf("reviewed float-image local-file transition failed: %v", failures)
+	}
+
+	for _, test := range []struct {
+		name string
+		path string
+		old  string
+		new  string
+	}{
+		{name: "float image unlisted tool", path: "sheet/sheet.other", new: sheetTarget},
+		{name: "float image unlisted source", path: sheetToolPath, old: `{"require_one_of":[["src"]]}`, new: sheetTarget},
+		{name: "float image unlisted target", path: sheetToolPath, new: `{"require_one_of":[["file","src"]]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if compatibleReviewedConstraintTransition(test.path, toolSchema{Constraints: test.old}, toolSchema{Constraints: test.new}) {
+				t.Fatal("unreviewed float-image constraint transition unexpectedly passed")
 			}
 		})
 	}

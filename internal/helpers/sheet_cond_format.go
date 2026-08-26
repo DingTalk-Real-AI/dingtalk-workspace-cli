@@ -9,7 +9,7 @@ import (
 )
 
 func newCondFormatCmd() *cobra.Command {
-	condFormatCmd := &cobra.Command{Use: "cond-format", Short: "条件格式管理"}
+	condFormatCmd := newDeepGroupCommand(&cobra.Command{Use: "cond-format", Short: "条件格式管理"})
 
 	condFormatListCmd := &cobra.Command{
 		Use:   "list",

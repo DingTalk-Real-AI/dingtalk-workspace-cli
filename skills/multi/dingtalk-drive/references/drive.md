@@ -72,12 +72,15 @@ dws drive +publish-unset --node <dentryUuid>
 | 意图 | managed leaf |
 |---|---|
 | 查看成员权限 | `drive permission list` |
+| 查询节点权限设置（权限模式/分享范围/策略） | `permission get-setting` |
 | 添加、修改、移除成员 | `permission add` / `update` / `remove` |
 | 转移所有者 | `permission transfer-owner` |
 | 查看可申请权限和审批人 | `permission apply-info` |
 | 发起权限申请 | `permission apply` |
 
 只在意图命中时读取一个精确 leaf Schema。成员变更、转移所有者、发起申请和公开状态变更必须明确节点、用户、角色与影响范围。转移所有者时，在构造最终命令前必须让用户分别明确决定 `--reserve-role <MANAGER|EDITOR|DOWNLOADER|READER|NONE>` 和 `--recursive=<true|false>`；Agent 不得根据默认值、对象类型或便捷性自行选择任一项。两项决策与目标、新所有者均明确后，才按 Runtime confirmation 构造首次正式调用。
+
+`permission get-setting` 返回 `permissionMode`（INHERITED/INDEPENDENT，未知时为 null）、`shareScope`（可见范围与链接分享，密码明文不返回；`partnerIncluded`、`defaultRole` 等仅 ORGANIZATION 有意义，`linkShare` 仅开启链接分享时返回）和 `policies[]`（code/name/description/value/disabledValues/allowedValues；name/description 为中文名与值语义说明，随行必带；未下发的策略不返回，`node_spread_scope` 仅文件夹）。`disabledValues` 为不可设置取值列表（恒返回，无被禁档位时为空数组），每项含 `value`（被禁档位取值，与 value 同一值域）与 `reason`（服务端按请求语言返回的禁用原因文案，仅供展示理解，可为 null），与 allowedValues 互斥；示例：`{"value": "READER_AND_ABOVE", "reason": "企业安全策略要求不可低于可下载角色"}`。`value` 按策略分型：开关型为 ENABLED/DISABLED；member_invite、comment 为 READER_AND_ABOVE/DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE；node_spread、online_content_copy 为 DOWNLOADER_AND_ABOVE/EDITOR_AND_ABOVE/MANAGER_AND_ABOVE 或 NOBODY；node_spread_scope 为 ALL_NODES（限制对所有文档生效）/ PREVIEWABLE_ONLY（仅对可预览的文档生效）。NOBODY=该操作对所有人禁止；XXX_AND_ABOVE=不低于该角色才允许。name/description 示例（文案与产品权限设置页一致）：external_share「添加企业外协作者」：是否允许添加企业外的人为协作者（ENABLED=允许，DISABLED=禁止）；node_spread「谁可以下载、创建副本、打印」：允许哪些角色及以上的用户下载、创建副本、打印；NOBODY=所有人禁止下载、创建副本、打印；node_move_forbidden「禁止移动」：是否禁止移动到其他知识库或团队共享文件夹（ENABLED=禁止移动，DISABLED=允许移动）。
 
 发起权限申请先只读执行 `permission apply-info`。正式 `permission apply` 会通知审批人；调用前必须向用户逐项回显并确认资源、申请角色、审批人和理由。Agent 不得默认选择第一位审批人、最高/最低角色或代写申请理由；用户未明确同意完整申请内容时停在确认环节。
 

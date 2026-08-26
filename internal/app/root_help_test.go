@@ -145,8 +145,10 @@ func TestRootKeepsMainBranchChatCompatibilityCommands(t *testing.T) {
 		command.SilenceUsage = true
 		command.SetArgs(tc.args)
 		err := command.Execute()
-		if err == nil || !strings.Contains(err.Error(), "ambiguous command") || !strings.Contains(err.Error(), tc.hint) {
-			t.Fatalf("dws %s error = %v, want migration hint %q", strings.Join(tc.args, " "), err, tc.hint)
+		var structured *apperrors.Error
+		if !stderrors.As(err, &structured) || structured.Category != apperrors.CategoryValidation ||
+			structured.Reason != "unknown_subcommand" || !strings.Contains(structured.Hint, tc.hint) {
+			t.Fatalf("dws %s error = %#v, want migration hint %q", strings.Join(tc.args, " "), structured, tc.hint)
 		}
 	}
 

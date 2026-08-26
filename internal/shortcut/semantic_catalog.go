@@ -40,6 +40,15 @@ var attendanceSemanticCatalogJSON []byte
 //go:embed semantic_catalog_mail.json
 var mailSemanticCatalogJSON []byte
 
+//go:embed semantic_catalog_aisearch.json
+var aisearchSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_contact.json
+var contactSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_live.json
+var liveSemanticCatalogJSON []byte
+
 //go:embed semantic_catalog_oa.json
 var oaSemanticCatalogJSON []byte
 
@@ -48,6 +57,27 @@ var dingSemanticCatalogJSON []byte
 
 //go:embed semantic_catalog_report.json
 var reportSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_sheet.json
+var sheetSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_whiteboard.json
+var whiteboardSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_devdoc.json
+var devdocSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_hrbrain.json
+var hrbrainSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_pat.json
+var patSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_devapp.json
+var devAppSemanticCatalogJSON []byte
+
+//go:embed semantic_catalog_agoal.json
+var agoalSemanticCatalogJSON []byte
 
 type semanticCatalogFile struct {
 	Version      int                              `json:"version"`
@@ -78,9 +108,19 @@ var reviewedSemanticCatalog = mustLoadSemanticCatalogs(
 	todoSemanticCatalogJSON,
 	attendanceSemanticCatalogJSON,
 	mailSemanticCatalogJSON,
+	aisearchSemanticCatalogJSON,
+	contactSemanticCatalogJSON,
+	liveSemanticCatalogJSON,
 	oaSemanticCatalogJSON,
 	dingSemanticCatalogJSON,
 	reportSemanticCatalogJSON,
+	sheetSemanticCatalogJSON,
+	whiteboardSemanticCatalogJSON,
+	devdocSemanticCatalogJSON,
+	hrbrainSemanticCatalogJSON,
+	patSemanticCatalogJSON,
+	devAppSemanticCatalogJSON,
+	agoalSemanticCatalogJSON,
 )
 
 func mustLoadSemanticCatalogs(sources ...[]byte) map[string]semanticCatalogRecord {

@@ -27,36 +27,6 @@ import (
 
 const hintOnlyCommandAnnotation = "dws.command.hint_only"
 
-// GroupRunE is a reusable RunE for parent (group) commands that have no
-// business logic of their own. With args it returns an error listing available
-// subcommands; without args it shows help.
-func GroupRunE(cmd *cobra.Command, args []string) error {
-	if len(args) > 0 {
-		var names []string
-		for _, sub := range cmd.Commands() {
-			if !sub.Hidden {
-				names = append(names, sub.Name())
-			}
-		}
-		return fmt.Errorf("unknown subcommand %q for %q\n  available: %s\n  hint: %s --help",
-			args[0], cmd.CommandPath(), strings.Join(names, ", "), cmd.CommandPath())
-	}
-	return cmd.Help()
-}
-
-// HintSubCmd creates a hidden subcommand that only prints a disambiguation hint.
-func HintSubCmd(use, hint string) *cobra.Command {
-	return &cobra.Command{
-		Use:         use,
-		Hidden:      true,
-		Annotations: map[string]string{hintOnlyCommandAnnotation: "true"},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("ambiguous command %q for %q\n  hint: %s",
-				use, cmd.Parent().CommandPath(), hint)
-		},
-	}
-}
-
 // IsHintOnlyCommand reports whether cmd is a hidden compatibility prompt that
 // has no business execution of its own. Reviewed command-path fallbacks may
 // supersede these nodes, but must still reject collisions with real commands.

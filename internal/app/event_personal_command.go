@@ -1295,6 +1295,17 @@ func interruptPersonalConsumers(ipcEndpoint string, subscribeIDs []string) error
 }
 
 func stopPersonalConsumers(w io.Writer, ipcEndpoint string, subscribeIDs []string) error {
+	hasTarget := false
+	for _, id := range subscribeIDs {
+		if strings.TrimSpace(id) != "" {
+			hasTarget = true
+			break
+		}
+	}
+	if !hasTarget {
+		return nil
+	}
+
 	if _, err := personalStopConsumers(ipcEndpoint, subscribeIDs); err == nil {
 		return nil
 	} else if !errors.Is(err, busctl.ErrConsumerStopUnsupported) {

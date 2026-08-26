@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 const (
@@ -134,6 +136,13 @@ func WrapErrorWithOperation(err error, operation string) error {
 	if _, ok := err.(*PATError); ok {
 		return err
 	}
+	// 框架确认门禁错误（deferred ConfirmSafety 从 CallTool 返回）必须原样透传：
+	// “加 --yes 重试”的语义只能由 reason=confirmation_required 表达，文本分类会
+	// 误路由（commandPath 含 "permission" 的命令会被判成 AUTH_PERMISSION_DENIED，
+	// 其余则丢失 reason 退化为 UNCLASSIFIED）。
+	if apperrors.IsConfirmationRequired(err) {
+		return err
+	}
 	msg := err.Error()
 
 	// File lock timeout (cross-process lock)
@@ -251,6 +260,24 @@ func WrapErrorWithOperation(err error, operation string) error {
 			Message:   msg,
 			Operation: operation,
 			Cause:     err,
+		}
+	}
+
+	// 服务端返回的用户/成员参数校验错误（如“用户不存在”、“不属于当前组织”），
+	// 文本含“不存在”但并非文档资源缺失，需在 RESOURCE_NOT_FOUND 分类之前拦截，
+	// 透传服务端原始错误信息。
+	if errContainsAny(msg, "用户不存在", "不属于当前组织", "成员不存在") {
+		errMsg := msg
+		var body map[string]any
+		if json.Unmarshal([]byte(msg), &body) == nil {
+			errMsg = businessErrorDisplayMessage(body, msg)
+		}
+		return &CLIError{
+			Code:       CodeMCPToolError,
+			Message:    errMsg,
+			Suggestion: "请检查用户 ID 或组织信息是否正确，跨组织用户需通过 --members 格式携带 corpId",
+			Operation:  operation,
+			Cause:      err,
 		}
 	}
 
@@ -379,13 +406,89 @@ func suggestForBusinessErrorText(text string) string {
 		return "请确认邮箱地址正确，查看可用邮箱: dws mail mailbox list"
 	case strings.Contains(text, "频率超限") || strings.Contains(text, "rate limit"):
 		return "API rate limit exceeded, wait a moment and retry"
+	case strings.Contains(text, "用户不存在") || strings.Contains(text, "不属于当前组织") ||
+		strings.Contains(text, "成员不存在"):
+		return "请检查用户 ID 或组织信息是否正确，跨组织用户需通过 --members 格式携带 corpId"
 	case strings.Contains(text, "未找到指定工具") || strings.Contains(text, "MCP不存在"):
 		return "后端工具未注册或已下线；这不是参数格式问题。请升级到包含该工具注册的后端/静态端点版本，或改用当前可用替代命令。"
 	case strings.Contains(text, "参数错误") || strings.Contains(text, "param error"):
 		return "Check input parameters. Use --help for available flags"
+	case strings.Contains(text, "无权限访问") || strings.Contains(text, "没有访问权限") ||
+		strings.Contains(text, "没有权限") || strings.Contains(text, "权限不足") ||
+		strings.Contains(text, "no permission") || strings.Contains(text, "permission denied") ||
+		strings.Contains(text, "FORBIDDEN"):
+		return permissionDeniedSuggestion(text)
 	default:
 		return ""
 	}
+}
+
+// documentPermissionServerCodes are permission-denied codes that are
+// demonstrably drive-specific (their identity carries the forbidden.* domain
+// prefix). Only these (plus the document/wiki role-threshold message wording)
+// justify the dws drive permission apply-* guidance. Generic code names such
+// as NO_PERMISSION and FORBIDDEN are deliberately excluded: attendance
+// (get-self-setting) and event-subscription tools have been observed returning
+// NO_PERMISSION, so keying guidance on it would mislead non-document products
+// exactly the way this classification tries to avoid.
+var documentPermissionServerCodes = map[string]bool{
+	"forbidden.no.auth":      true,
+	"forbidden.accessDenied": true,
+}
+
+// documentPermissionErrorText reports whether a permission-denied message is
+// specific to document/wiki permission (drive/doc/wiki), e.g. the role
+// threshold wording emitted by the member-management APIs or the document
+// permission error codes embedded in the message text.
+func documentPermissionErrorText(text string) bool {
+	if text == "" {
+		return false
+	}
+	lower := strings.ToLower(text)
+	return strings.Contains(lower, "forbidden.no.auth") ||
+		strings.Contains(lower, "forbidden.accessdenied") ||
+		strings.Contains(text, "需要您具备") || strings.Contains(text, "及以上角色")
+}
+
+// isDocumentPermissionError reports whether a permission-denied body is
+// specific to document/wiki access, where applying for access via
+// dws drive permission apply-* is the actionable next step.
+func isDocumentPermissionError(body map[string]any) bool {
+	for _, key := range []string{"code", "errorCode", "server_error_code"} {
+		if code, ok := body[key].(string); ok && documentPermissionServerCodes[code] {
+			return true
+		}
+	}
+	return documentPermissionErrorText(businessErrorMessage(body))
+}
+
+// genericPermissionSuggestion is the product-neutral suggestion for
+// permission-denied errors that are not specific to document/wiki access.
+const genericPermissionSuggestion = "Verify your account has permission for this resource"
+
+// permissionDeniedSuggestion picks between document apply-permission guidance
+// and a product-neutral hint: only document/wiki-specific errors point at
+// dws drive permission apply-*, so other products never get a misleading
+// document-permission suggestion.
+func permissionDeniedSuggestion(text string) string {
+	if documentPermissionErrorText(text) {
+		return permissionApplyGuidance
+	}
+	return genericPermissionSuggestion
+}
+
+// permissionDeniedSuggestionFor resolves the suggestion for a permission-denied
+// body: document/wiki-specific errors get the apply-permission guidance; other
+// products keep their product-specific suggestion (e.g. the mail mailbox hint)
+// or fall back to the product-neutral hint.
+func permissionDeniedSuggestionFor(body map[string]any) string {
+	if isDocumentPermissionError(body) {
+		return permissionApplyGuidance
+	}
+	if suggestion := suggestForBusinessError(body); suggestion != "" {
+		return suggestion
+	}
+	return genericPermissionSuggestion
 }
 
 // ClassifyToolResultContent checks a raw MCP tool result content map for
@@ -393,7 +496,8 @@ func suggestForBusinessErrorText(text string) string {
 // edition.Hooks.ClassifyToolResult callback so the framework's runner returns
 // a typed error before its generic business-error classification.
 //
-// Check order matches ClassifyMCPResponseText: DWS gateway > PAT permission.
+// Check order matches ClassifyMCPResponseText: DWS gateway > PAT permission >
+// no-permission guidance.
 func ClassifyToolResultContent(content map[string]any) error {
 	if _, ok := getDWSGatewayErrorCode(content); ok {
 		raw, _ := json.Marshal(content)
@@ -408,6 +512,20 @@ func ClassifyToolResultContent(content map[string]any) error {
 			return &PATError{RawJSON: cleanPATJSON(content, code)}
 		}
 	}
+
+	// Permission-denied business errors: surface apply-permission guidance before
+	// the framework's generic rendering swallows it. Guidance is limited to
+	// document/wiki-specific signals (forbidden.* codes or role-threshold
+	// wording); other products keep the product-neutral suggestion.
+	if isNoPermissionError(content) {
+		suggestion := permissionDeniedSuggestionFor(content)
+		raw, _ := json.Marshal(content)
+		return &CLIError{
+			Code:       CodeAuthPermission,
+			Message:    businessErrorDisplayMessage(content, string(raw)),
+			Suggestion: suggestion,
+		}
+	}
 	return nil
 }
 
@@ -418,6 +536,23 @@ var patNoPermissionCodes = map[string]bool{
 	"PAT_MEDIUM_RISK_NO_PERMISSION": true,
 	"PAT_HIGH_RISK_NO_PERMISSION":   true,
 }
+
+// noPermissionServerCodes are business-level permission-denied codes (from the
+// MCP server / gateway) that should surface apply-permission guidance instead of
+// being swallowed by the framework's generic business-error rendering.
+var noPermissionServerCodes = map[string]bool{
+	"NO_PERMISSION":          true,
+	"FORBIDDEN":              true,
+	"forbidden.no.auth":      true,
+	"forbidden.accessDenied": true,
+}
+
+// permissionApplySteps lists the two-step commands to apply for document access.
+const permissionApplySteps = "  1) 查可申请角色与审批人: dws drive permission apply-info --node <节点ID或URL>\n" +
+	"  2) 选定角色与审批人后发起申请: dws drive permission apply --node <节点ID或URL> --role <EDITOR|DOWNLOADER|READER> --users <审批人userId>"
+
+// permissionApplyGuidance is the standard suggestion for permission-denied errors.
+const permissionApplyGuidance = "若你对该文档/知识库暂无访问权限，可发起权限申请:\n" + permissionApplySteps
 
 // ClassifyMCPResponseText classifies a text response returned by an MCP tool call.
 // Returns a typed error for known gateway auth failures, PAT interceptions,
@@ -452,10 +587,18 @@ func ClassifyMCPResponseText(text string) error {
 		}
 	}
 
+	if isNoPermissionError(body) {
+		return &CLIError{
+			Code:       CodeAuthPermission,
+			Message:    text,
+			Suggestion: permissionDeniedSuggestionFor(body),
+		}
+	}
+
 	if isBusinessError(body) {
 		return &CLIError{
 			Code:       CodeMCPToolError,
-			Message:    text,
+			Message:    businessErrorDisplayMessage(body, text),
 			Suggestion: suggestForBusinessError(body),
 		}
 	}

@@ -1,9 +1,11 @@
 package helpers
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -37,8 +39,11 @@ func TestCrossPlatformCoverageContactRemainingCompatibilityBranches(t *testing.T
 	if err := hint.RunE(hint, []string{"--help"}); err != nil {
 		t.Fatalf("hint help: %v", err)
 	}
-	if err := hint.RunE(hint, []string{"unexpected"}); err == nil || !strings.Contains(err.Error(), "use: dws contact dept") {
-		t.Fatalf("hint guidance err=%v", err)
+	err := hint.RunE(hint, []string{"unexpected"})
+	var structured *apperrors.Error
+	if !errors.As(err, &structured) || structured.Category != apperrors.CategoryValidation ||
+		structured.Reason != "unknown_subcommand" || !strings.Contains(structured.Hint, "use: dws contact dept") {
+		t.Fatalf("hint guidance err=%#v", structured)
 	}
 
 	if err := executeFilterCoverage(t, newContactCommand(), "user", "get", "--unknown"); err == nil || !strings.Contains(err.Error(), "See '") {

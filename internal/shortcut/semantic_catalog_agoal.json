@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "service": "agoal",
+  "default_availability": "available",
+  "shortcuts": {
+    "+report-statistics-list": {"disposition":"semantic_adapter","semantic_delta":"严格验证 success、content 数组和每项稳定 templateId；关键词同时支持已知非空与合法零命中。","risk":"read","public":true,"reviewed":true},
+    "+obj-template-list": {"disposition":"semantic_adapter","semantic_delta":"严格验证 success、result 数组、稳定模板 ID 及 page/pageSize/totalCount；不虚构 cursor。","risk":"read","public":true,"reviewed":true},
+    "+strategy-list": {"disposition":"schema_leaf","semantic_delta":"exact+raw 在可访问 PERSONAL/DEPT 范围均仅为空，缺少已知非空 fixture。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
+    "+strategy-get": {"disposition":"schema_leaf","semantic_delta":"不存在 ID 的 raw 响应为无 success 的 null，且列表无非空 fixture。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
+    "+strategy-update": {"disposition":"schema_leaf","semantic_delta":"仅通过 raw dry-run；缺少旧值、全字段读回和恢复。","risk":"high-risk-write","availability":"unavailable","public":false,"reviewed":true},
+    "+contract-list": {"disposition":"schema_leaf","semantic_delta":"exact+raw 在可访问 PERSONAL/DEPT 范围均仅为空，缺少已知非空 fixture。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
+    "+contract-fields": {"disposition":"semantic_adapter","semantic_delta":"严格验证 success、字段数组和每项稳定 id；本地 keyword 覆盖字段标识、编码、标题、分类和类型，支持已知非空与保证零命中。","risk":"read","public":true,"reviewed":true},
+    "+contract-get": {"disposition":"schema_leaf","semantic_delta":"不存在 ID 的 raw 响应为无 success 的 null，且列表无非空 fixture。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
+    "+contract-update": {"disposition":"schema_leaf","semantic_delta":"仅通过 raw dry-run；缺少旧值、全字段读回和恢复。","risk":"high-risk-write","availability":"unavailable","public":false,"reviewed":true},
+    "+scorecard-get": {"disposition":"schema_leaf","semantic_delta":"可访问部门与多个周期的 exact+raw 均返回无 success 的 null。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
+    "+scorecard-entity-get": {"disposition":"schema_leaf","semantic_delta":"不存在双 ID 的 raw 响应为无 success 的 null，缺少安全实体 fixture。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
+    "+scorecard-update": {"disposition":"schema_leaf","semantic_delta":"仅通过 raw dry-run；缺少计分卡旧值、全字段读回和恢复。","risk":"high-risk-write","availability":"unavailable","public":false,"reviewed":true},
+    "+user-rules": {"disposition":"semantic_adapter","semantic_delta":"严格验证 success、content 对象、rules 数组和稳定 ruleId；本地精确 ruleId 选择器支持已知非空与保证零命中。","risk":"read","public":true,"reviewed":true},
+    "+user-objectives": {"disposition":"schema_leaf","semantic_delta":"当前用户全部可见规则/周期的 exact+raw 均只为空，缺少非空 fixture。","risk":"read","availability":"unavailable","public":false,"reviewed":true},
+    "+report-submit-detail": {"disposition":"semantic_adapter","semantic_delta":"严格验证 success、嵌套稳定用户身份及 page/pageSize/totalCount；下游忽略 keyword，因此做有界全量遍历、本地过滤、停滞/重复/总数变化失败与人员字段最小投影。","risk":"read","public":true,"reviewed":true},
+    "+obj-template-upsert": {"disposition":"schema_leaf","semantic_delta":"仅通过 raw dry-run；无删除或版本恢复，无法验证 upsert 终态与零残留。","risk":"high-risk-write","availability":"unavailable","public":false,"reviewed":true}
+  }
+}

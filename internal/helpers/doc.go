@@ -1166,7 +1166,7 @@ func newDocCommand() *cobra.Command {
 			},
 		},
 	})
-	root := &cobra.Command{
+	root := newGroupCommand(&cobra.Command{
 		Use:   "doc",
 		Short: "钉钉文档管理",
 		Long: `管理钉钉文档：浏览、读写、块级编辑、导出、导入、模板管理。
@@ -1190,7 +1190,7 @@ func newDocCommand() *cobra.Command {
 
 文件管理（搜索/列表/上传/下载/复制/移动/重命名/删除/权限）已迁移到 dws drive。`,
 		RunE: groupRunE,
-	}
+	})
 
 	searchCmd := &cobra.Command{
 		Use:   "search",
@@ -1429,9 +1429,14 @@ func newDocCommand() *cobra.Command {
 	readCmd := &cobra.Command{
 		Use:   "read",
 		Short: "读取文档内容 (Markdown)",
-		Long:  `获取文档内容，以 Markdown 格式返回。支持传入文档 URL 或 ID。`,
+		Long: `获取文档内容，以 Markdown 格式返回。支持传入文档 URL 或 ID。
+
+互联网公开文档（含开启密码保护的）可传入公开链接；设置了访问密码时通过 --password 提供。
+--version 读取指定历史版本内容（版本号从 dws doc version list 获取，0 表示文档初始版本，需要文档编辑权限）；缺省读最新版。`,
 		Example: `  dws doc read --node DOC_ID
-  dws doc read --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"`,
+  dws doc read --node "https://alidocs.dingtalk.com/i/nodes/<DOC_UUID>"
+  dws doc read --node PUBLIC_URL --password <ACCESS_PASSWORD>
+  dws doc read --node DOC_ID --version 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
@@ -1440,6 +1445,15 @@ func newDocCommand() *cobra.Command {
 			if err := validateDocFormat(cmd, []string{"", "markdown", "jsonml"}, "doc read",
 				"dws doc read --node DOC_ID --content-format jsonml"); err != nil {
 				return err
+			}
+			password, _ := cmd.Flags().GetString("password")
+			historyVersion := 0
+			historyVersionSet := cmd.Flags().Changed("version")
+			if historyVersionSet {
+				historyVersion, _ = cmd.Flags().GetInt("version")
+				if historyVersion < 0 {
+					return fmt.Errorf("--version 必须为非负整数历史版本号（0 表示初始版本，版本号从 dws doc version list 获取），当前值: %d", historyVersion)
+				}
 			}
 			format, _ := cmd.Flags().GetString("content-format")
 			scope, _ := cmd.Flags().GetString("scope")
@@ -1481,15 +1495,18 @@ func newDocCommand() *cobra.Command {
 					startBlockID,
 					endBlockID,
 					outputPath,
+					password,
+					historyVersion,
+					historyVersionSet,
 				)
 			}
 			if format == "jsonml" {
 				outputPath, _ := cmd.Flags().GetString("output")
-				return runDocReadJsonML(cmd, nodeID, outputPath)
+				return runDocReadJsonML(nodeID, outputPath, password, historyVersion, historyVersionSet)
 			}
-			return callMCPTool("get_document_content", map[string]any{
-				"nodeId": nodeID,
-			})
+			toolArgs := map[string]any{"nodeId": nodeID}
+			applyDocReadAccessParams(toolArgs, password, historyVersion, historyVersionSet)
+			return callMCPTool("get_document_content", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(readCmd, LeafSpec{
@@ -1516,6 +1533,8 @@ func newDocCommand() *cobra.Command {
 				UseWhen: []string{
 					"用户要读取钉钉在线文字文档(adoc)正文（Markdown）时",
 					"用户直接粘贴文档 URL 且无其他指令时（默认读内容）",
+					"互联网公开文档（含设置密码保护的公开链接）时配合 --password 提供访问密码",
+					"要读取指定历史版本内容时用 --version（版本号来自 doc version list，0 表示初始版本，需要编辑权限）",
 					"只需标题大纲、指定块区间/单块或特定 JSONML tags 时使用 --content-format jsonml 与 --scope",
 				},
 				AvoidWhen: []string{
@@ -1533,9 +1552,11 @@ func newDocCommand() *cobra.Command {
 				{Name: "content-format", Property: "format", Required: boolPtr(false)},
 				{Name: "end-block-id", Required: boolPtr(false)},
 				{Name: "max-depth", Required: boolPtr(false), InterfaceType: "integer"},
+				{Name: "password", Property: "password", Required: boolPtr(false)},
 				{Name: "scope", Required: boolPtr(false)},
 				{Name: "start-block-id", Required: boolPtr(false), RequiredWhen: "--scope=range or --scope=section"},
 				{Name: "tags", Required: boolPtr(false), RequiredWhen: "--scope=tags"},
+				{Name: "version", Property: "historyVersion", Required: boolPtr(false), InterfaceType: "integer"},
 			},
 		},
 	})
@@ -1805,7 +1826,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		},
 	})
 
-	fileCmd := &cobra.Command{Use: "file", Short: "文件管理", RunE: groupRunE}
+	fileCmd := newGroupCommand(&cobra.Command{Use: "file", Short: "文件管理", RunE: groupRunE})
 
 	fileCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -1883,7 +1904,7 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		},
 	})
 
-	folderCmd := &cobra.Command{Use: "folder", Short: "文件夹管理", RunE: groupRunE}
+	folderCmd := newGroupCommand(&cobra.Command{Use: "folder", Short: "文件夹管理", RunE: groupRunE})
 
 	folderCreateCmd := &cobra.Command{
 		Use:   "create",
@@ -2042,12 +2063,12 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		},
 	})
 
-	blockCmd := &cobra.Command{
+	blockCmd := newGroupCommand(&cobra.Command{
 		Use:   "block",
 		Short: "块级编辑",
 		Long:  `对文档进行块级别的精细编辑：查询、插入、更新、删除块元素。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	blockListCmd := &cobra.Command{
 		Use:   "list",
@@ -2680,6 +2701,8 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	readCmd.Flags().Int("max-depth", 0, "筛选遍历最大深度, 0 表示不限(仅 --scope 时生效)")
 	readCmd.Flags().String("start-block-id", "", "range/section 起始块 ID(节点 uuid); scope=range/section 时必填")
 	readCmd.Flags().String("end-block-id", "", "range 结束块 ID(节点 uuid); \"-1\"或空=到文档末尾(仅 scope=range 生效)")
+	readCmd.Flags().String("password", "", "互联网公开文档开启密码保护时的访问密码；普通文档无需传入")
+	readCmd.Flags().Int("version", 0, "读取指定历史版本内容(版本号从 doc version list 获取, 0 表示初始版本, 需要文档编辑权限)；缺省读最新版")
 	cli.AnnotateRuntimeFlagEnum(readCmd, "scope", "outline", "range", "section", "tags")
 	cli.AnnotateRuntimeFlagRequiredWhen(readCmd, "tags", "--scope=tags")
 	cli.AnnotateRuntimeFlagRequiredWhen(readCmd, "start-block-id", "--scope=range or --scope=section")
@@ -2821,12 +2844,12 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 	_ = renameCmd.Flags().MarkHidden("title")
 
 	// ── media (文档媒体/附件) ────────────────────────────────
-	mediaCmd := &cobra.Command{
+	mediaCmd := newGroupCommand(&cobra.Command{
 		Use:   "media",
 		Short: "文档媒体 / 附件管理",
 		Long:  `管理钉钉文档中的媒体资源和附件：上传附件并插入文档、下载文档内的附件等。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	mediaDownloadCmd := &cobra.Command{
 		Use:   "download",
@@ -3013,12 +3036,12 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 	mediaCmd.AddCommand(mediaDownloadCmd, mediaUploadCmd, mediaInsertCmd)
 
 	// ── comment (文档评论) ──────────────────────────────────
-	commentCmd := &cobra.Command{
+	commentCmd := newGroupCommand(&cobra.Command{
 		Use:   "comment",
 		Short: "文档评论 / 评论管理",
 		Long:  `管理钉钉文档的评论：查询评论列表、创建评论、回复评论。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	commentListCmd := &cobra.Command{
 		Use:   "list",
@@ -3522,17 +3545,18 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	commentCmd.AddCommand(newCommentBaseCommands("doc")...)
 
 	// ── permission (文档协作权限) ────────────────────────────
-	permissionCmd := &cobra.Command{
+	permissionCmd := newGroupCommand(&cobra.Command{
 		Use:     "permission",
 		Aliases: []string{"perm"},
 		Short:   "文档协作权限管理",
 		Long:    `管理钉钉文档的协作者权限：添加协作者、更新协作者权限、查询协作者列表。`,
 		RunE:    groupRunE,
-	}
+	})
 
 	permissionAddCmd := &cobra.Command{
 		Use:   "add",
 		Short: "添加文档协作者",
+		Args:  cobra.NoArgs,
 		Long: `为指定文档（或文件夹/文件）添加一个或多个协作成员，并授予指定角色。
 
 两种传参方式（互斥）：
@@ -3553,15 +3577,17 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 
 注意：
 - OWNER 角色不可通过此接口添加。
+- 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 forbidden.accessDenied。
 - 单次请求最多 30 个成员，超出请分批调用。
-- --notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 true。
+- --notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知（DEPT 和 TAG 不通知），默认 false；省略时 CLI 不向服务端发送该字段，服务端按不通知处理，需要通知请显式传 --notify。
 
 用户 uid 可通过「钉钉通讯录」相关命令检索，如:
   dws contact user search --keyword "姓名"`,
 		Example: `  dws doc permission add --node DOC_ID --users uid1 --role READER
   dws doc permission add --node DOC_ID --users uid1,uid2,uid3 --role EDITOR
   dws doc permission add --node "https://alidocs.dingtalk.com/i/nodes/xxx" --users uid1 --role MANAGER --workspace WS_ID
-  dws doc permission add --node DOC_ID --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"},{"type":"DEPT","id":"deptId1","roleId":"EDITOR","corpId":"xxx"}]' --notify`,
+  dws doc permission add --node DOC_ID --members '[{"type":"USER","id":"uid1","roleId":"READER","corpId":"xxx"},{"type":"DEPT","id":"deptId1","roleId":"EDITOR","corpId":"xxx"}]' --notify
+  dws doc permission add --node DOC_ID --members '[{"type":"CONVERSATION","id":"cidXXX","roleId":"READER"},{"type":"TAG","id":"tagId1","roleId":"EDITOR","corpId":"xxx"}]'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
@@ -3644,11 +3670,12 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	permissionAddCmd.Flags().String("role", "", "权限角色: MANAGER / EDITOR / DOWNLOADER / READER (旧格式必填，大小写不敏感)")
 	permissionAddCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL（选填，仅用于辅助构造返回的 docUrl）")
 	permissionAddCmd.Flags().String("members", "", "成员列表 JSON 数组（新格式），支持 USER/DEPT/CONVERSATION/TAG 类型（TAG=角色组），与 --users 互斥")
-	permissionAddCmd.Flags().Bool("notify", true, "是否通知被添加的成员（仅 --members 新格式时生效）")
+	permissionAddCmd.Flags().Bool("notify", false, "是否通知被添加的成员（仅 --members 新格式时生效，需显式传入才通知）")
 
 	permissionUpdateCmd := &cobra.Command{
 		Use:   "update",
 		Short: "更新文档协作者权限",
+		Args:  cobra.NoArgs,
 		Long: `更新指定节点已有协作者的权限角色。
 
 两种传参方式（互斥）：
@@ -3671,6 +3698,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 - OWNER 角色不可通过此接口变更。
 - 同一成员在同一节点只能拥有一个角色，变更后旧角色自动替换。
 - 若成员的角色来自父节点的权限继承（PASS_ON），且继承角色高于目标角色，接口会拒绝操作。
+- 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 forbidden.accessDenied。
 - --notify 仅在 --members 新格式时生效，仅对 USER 和 CONVERSATION 类型成员发送通知，默认 false。
 
 仅可更新已存在协作关系的用户，新增协作者请使用 dws doc permission add。`,
@@ -3767,7 +3795,8 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 
 底层一次性返回全量成员后在内存中按 pageSize 分页，支持通过 nextToken 翻页。
 出参包含 totalCount（全量成员总数）、hasMore（是否还有下一页）和 nextToken（下一页游标）。
-当 hasMore 为 true 时，传入下一次请求的 --next-token 即可获取下一页。`,
+当 hasMore 为 true 时，传入下一次请求的 --next-token 即可获取下一页。
+操作者需满足该节点配置的权限管理最低角色要求，权限不足返回 forbidden.accessDenied。`,
 		Example: `  dws doc permission list --node DOC_ID
   dws doc permission list --node DOC_ID --limit 50
   dws doc permission list --node DOC_ID --filter-role MANAGER,EDITOR
@@ -3780,12 +3809,10 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 			toolArgs := map[string]any{
 				"nodeId": nodeID,
 			}
-			if cmd.Flags().Changed("limit") {
-				limit, _ := cmd.Flags().GetInt("limit")
-				toolArgs["pageSize"] = limit
-			} else if cmd.Flags().Changed("max-results") {
-				limit, _ := cmd.Flags().GetInt("max-results")
-				toolArgs["pageSize"] = limit
+			if size, ok, err := permissionPageSizeFromFlags(cmd); err != nil {
+				return err
+			} else if ok {
+				toolArgs["pageSize"] = size
 			}
 			if v := flagOrFallback(cmd, "next-token", "cursor", "page-token"); v != "" {
 				toolArgs["nextToken"] = v
@@ -3826,11 +3853,14 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "filter-role", Property: "filterRoleIds"},
-				{Name: "limit", Property: "pageSize"},
+				// limit 不声明 Property：运行时经 cap 校验（1-50）转换为 pageSize，
+				// 属 CLI 分页输入而非 1:1 RPC property（reviewed mapping exclusion）。
+				{Name: "limit"},
 				{Name: "next-token", Property: "nextToken"},
 				{Name: "node", Property: "nodeId"},
 				{Name: "workspace", Property: "workspaceId"},
 			},
+			Pagination: &contract.PaginationSpec{Kind: contract.PaginationKindCursor, CursorParameter: "next-token"},
 		},
 	})
 
@@ -3862,7 +3892,7 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 
 注意：
 - OWNER 角色不可通过此接口移除。
-- 操作者需在该节点具备 EDITOR 及以上角色（OWNER / MANAGER / EDITOR）。
+- 操作者须满足该节点配置的权限管理最低角色要求（默认 MANAGER，可配置为 EDITOR 等），权限不足返回 forbidden.accessDenied。
 - 单次请求最多 30 个成员，超出请分批调用。
 
 用户 uid 可通过「钉钉通讯录」相关命令检索，如:
@@ -3901,8 +3931,11 @@ commentKey可从 dws doc comment create 或 dws doc comment list 返回结果中
 	}
 	DeclareLeafMetadata(permissionRemoveCmd, LeafSpec{
 		Safety: contract.SafetySpec{
+			// 批量移除（最多 30 个 USER/DEPT/CONVERSATION/TAG）会一次性撤销多个
+			// 成员的访问，部门/群聊/角色组还可能间接影响大量用户，与删除同级的
+			// destructive 入口，必须经过用户确认（--yes 或交互 yes）。
 			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
+			Confirmation: "user_required", Idempotency: "unknown",
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -4227,6 +4260,7 @@ CLI 内部自动完成全部流程：
 	_ = exportCmd.Flags().MarkHidden("file-id")
 
 	exportCmd.AddCommand(exportGetCmd)
+	newHybridGroupCommand(exportCmd)
 
 	// ── import: 文件导入为在线文档（一体化：上传→转换→轮询）──────────────
 	importCmd := &cobra.Command{
@@ -4251,8 +4285,8 @@ CLI 内部自动完成全部流程:
   3. 确认导入（触发格式转换）
   4. 渐进式退避轮询等待完成（最多约 5 分钟）
 
-如果轮询超时仍未完成，会输出 taskId 供后续手动查询:
-  dws doc import get --task-id <taskId>`,
+如果轮询超时或中断，会输出包含原目标的完整命令供后续手动查询，例如:
+  dws doc import get --task-id <taskId> --workspace <原目标WORKSPACE_ID>`,
 		Example: `  # 导入 Word 文档
   dws doc import --file ./report.docx
 
@@ -4282,13 +4316,16 @@ CLI 内部自动完成全部流程:
 		Short: "查询导入任务结果（手动兜底）",
 		Long: `根据 taskId 查询文档导入任务的执行结果。
 通常不需要手动调用，dws doc import 会自动完成轮询。
-仅在导入命令超时或中断后，用于手动查询任务状态。
+仅在导入命令超时或中断后，用于手动查询任务状态。建议直接复制导入结果
+中的完整 next_command；其中携带的原目标（--folder 或 --workspace）用于在
+completed 后回读验证真实落点。只传 taskId 仍可查询 processing/failed，
+但 completed 时会返回未验证错误，不会误报成功。
 
 任务状态:
   processing  转换中
   completed   导入成功，返回 documentUrl
   failed      导入失败`,
-		Example: `  dws doc import get --task-id <TASK_ID>`,
+		Example: `  dws doc import get --task-id <TASK_ID> --workspace <WORKSPACE_ID>`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runImportGetCommand(cmd, docImportFlowConfig())
 		},
@@ -4315,22 +4352,25 @@ CLI 内部自动完成全部流程:
 			},
 			Selection: contract.SelectionSpec{
 				AgentSummary: "根据 taskId 查询文档导入任务的执行结果",
-				UseWhen:      []string{"查询文档导入任务结果（已有 taskId，导入超时/中断后兜底）时"},
+				UseWhen:      []string{"已有 doc import 超时或中断结果及其完整 next_command，需要续查同一 taskId 并验证原 folder/workspace 落点时"},
 				AvoidWhen:    []string{"发起导入用 doc import（若入口可用）；不要用本命令代替导入"},
-				Examples:     []string{"dws doc import get --task-id <TASK_ID> --format json"},
+				Examples:     []string{"dws doc import get --task-id <TASK_ID> --workspace <WORKSPACE_ID> --format json"},
 			},
 		},
 	})
 	importGetCmd.Flags().String("task-id", "", "导入任务 ID (必填)")
+	importGetCmd.Flags().String("folder", "", "原导入目标文件夹 ID 或 URL（completed 后落点验证需要）")
+	importGetCmd.Flags().String("workspace", "", "原导入目标知识库 ID 或 URL（completed 后落点验证需要）")
 	importCmd.AddCommand(importGetCmd)
+	newHybridGroupCommand(importCmd)
 
 	// ── doc version 子命令组 ──
-	versionCmd := &cobra.Command{
+	versionCmd := newGroupCommand(&cobra.Command{
 		Use:   "version",
 		Short: "文档历史版本管理",
 		Long:  `管理钉钉在线文档（adoc）的历史版本：手动保存、查看版本列表、回滚到指定版本。`,
 		RunE:  groupRunE,
-	}
+	})
 
 	versionSaveCmd := &cobra.Command{
 		Use:     "save",
@@ -4516,7 +4556,7 @@ CLI 内部自动完成全部流程:
 	versionCmd.AddCommand(versionSaveCmd, versionListCmd, versionRevertCmd)
 
 	// ── template 子命令组 ──────────────────────────────────────────────────────
-	templateCmd := &cobra.Command{Use: "template", Short: "文档模板管理", RunE: groupRunE}
+	templateCmd := newGroupCommand(&cobra.Command{Use: "template", Short: "文档模板管理", RunE: groupRunE})
 
 	templateListCmd := &cobra.Command{
 		Use:   "list",
@@ -4836,16 +4876,30 @@ func wrapDocDeprecatedToTarget(cmd *cobra.Command, targetCmd string) {
 	}
 }
 
+// applyDocReadAccessParams 把 doc read 的访问参数（互联网公开文档密码、历史版本号）
+// 附加到 get_document_content 请求上；空密码或未显式设置版本时不发送对应字段，
+// 显式 --version 0 表示读取文档初始版本。
+func applyDocReadAccessParams(args map[string]any, password string, historyVersion int, historyVersionSet bool) {
+	if password != "" {
+		args["password"] = password
+	}
+	if historyVersionSet && historyVersion >= 0 {
+		args["historyVersion"] = historyVersion
+	}
+}
+
 // resolveContentFromFlags 从 --content-file / --content-path / --content / --markdown 获取文档内容。
 // 优先级：--content-file/--content-path > --content > --markdown（已弃用别名，向后兼容）。
-func runDocReadJsonML(_ *cobra.Command, nodeID string, outputPath string) error {
+func runDocReadJsonML(nodeID, outputPath, password string, historyVersion int, historyVersionSet bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	resultText, err := callMCPToolReturnText(ctx, "get_document_content", map[string]any{
+	toolArgs := map[string]any{
 		"nodeId": nodeID,
 		"format": "jsonml",
-	})
+	}
+	applyDocReadAccessParams(toolArgs, password, historyVersion, historyVersionSet)
+	resultText, err := callMCPToolReturnText(ctx, "get_document_content", toolArgs)
 	if err != nil {
 		return err
 	}
@@ -4897,7 +4951,7 @@ func runDocReadJsonML(_ *cobra.Command, nodeID string, outputPath string) error 
 
 // runDocReadScope calls get_document_content with JSONML filtering parameters
 // and preserves the returned read-only fragment container.
-func runDocReadScope(nodeID, scope, tags string, maxDepth int, maxDepthSet bool, startBlockID, endBlockID, outputPath string) error {
+func runDocReadScope(nodeID, scope, tags string, maxDepth int, maxDepthSet bool, startBlockID, endBlockID, outputPath, password string, historyVersion int, historyVersionSet bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -4917,6 +4971,7 @@ func runDocReadScope(nodeID, scope, tags string, maxDepth int, maxDepthSet bool,
 	if endBlockID != "" && scope == "range" {
 		args["endBlockId"] = endBlockID
 	}
+	applyDocReadAccessParams(args, password, historyVersion, historyVersionSet)
 
 	resultText, err := callMCPToolReturnTextOnServer(ctx, "doc", "get_document_content", args)
 	if err != nil {
@@ -5306,4 +5361,24 @@ func validateMembersExclusivity(cmd *cobra.Command) error {
 		return fmt.Errorf("--members 新格式下不需要 --role，每个 member 携带独立 roleId")
 	}
 	return nil
+}
+
+// permissionPageSizeFromFlags resolves and validates the page size for the
+// permission / member list commands. Both --limit and the hidden
+// --max-results alias map to the server pageSize, whose accepted range is
+// 1..50 (the backend rejects pageSize > 50 with
+// invalidRequest.inputArgs.invalid, and non-positive values are invalid).
+// It returns (size, true, nil) when a page size was explicitly provided.
+func permissionPageSizeFromFlags(cmd *cobra.Command) (int, bool, error) {
+	for _, name := range []string{"limit", "max-results"} {
+		if !cmd.Flags().Changed(name) {
+			continue
+		}
+		size, _ := cmd.Flags().GetInt(name)
+		if size < 1 || size > 50 {
+			return 0, false, fmt.Errorf("--%s 取值范围为 1..50（服务端 pageSize 上限 50），当前值 %d", name, size)
+		}
+		return size, true, nil
+	}
+	return 0, false, nil
 }
