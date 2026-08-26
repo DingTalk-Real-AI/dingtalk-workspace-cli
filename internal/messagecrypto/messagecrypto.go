@@ -165,7 +165,6 @@ func (c *Client) EncryptOutbound(ctx context.Context, rt Runtime, opts Options) 
 		return EncryptResult{Encrypted: true, Policy: policy}, nil
 	}
 	ding, err := rt.CallMCPWriteDataStrict("im", "ding_encrypt_message", map[string]any{
-		"corpId":                 identity.CorpID,
 		"openConversationId":     strings.TrimSpace(opts.OpenConversationID),
 		"receiverOpenDingTalkId": strings.TrimSpace(opts.ReceiverOpenTalkID),
 		"msgType":                strings.TrimSpace(opts.MsgType),
@@ -217,10 +216,6 @@ func (c *Client) DecryptInbound(ctx context.Context, rt Runtime, opts Options) (
 	if layer != "full" && layer != "safechat" && layer != "ding" {
 		return DecryptResult{}, fmt.Errorf("--layer 仅支持 full/safechat/ding")
 	}
-	identity, err := c.currentIdentity(ctx, opts.ConfigDir)
-	if err != nil {
-		return DecryptResult{}, err
-	}
 	dingCiphertext := strings.TrimSpace(opts.Ciphertext)
 	if layer == "full" || layer == "safechat" {
 		session, err := c.openSession(ctx, opts, Policy{KeyServer: opts.KeyServer, AllowedRedirectHost: opts.AllowedRedirectHost})
@@ -238,7 +233,6 @@ func (c *Client) DecryptInbound(ctx context.Context, rt Runtime, opts Options) (
 		}
 	}
 	data, err := rt.CallMCPWriteDataStrict("im", "ding_decrypt_message", map[string]any{
-		"corpId":         identity.CorpID,
 		"dingCiphertext": dingCiphertext,
 	})
 	if err != nil {
@@ -255,10 +249,6 @@ func (c *Client) BatchDecryptInbound(ctx context.Context, rt Runtime, opts Optio
 	items = normalizeBatchDecryptItems(items)
 	if len(items) == 0 {
 		return BatchDecryptResult{}, nil
-	}
-	identity, err := c.currentIdentity(ctx, opts.ConfigDir)
-	if err != nil {
-		return BatchDecryptResult{}, err
 	}
 	session, err := c.openSession(ctx, opts, Policy{KeyServer: opts.KeyServer, AllowedRedirectHost: opts.AllowedRedirectHost})
 	if err != nil {
@@ -288,8 +278,7 @@ func (c *Client) BatchDecryptInbound(ctx context.Context, rt Runtime, opts Optio
 		return result, nil
 	}
 	data, err := rt.CallMCPWriteDataStrict("im", "batch_ding_decrypt_messages", map[string]any{
-		"corpId": identity.CorpID,
-		"items":  dingItems,
+		"items": dingItems,
 	})
 	if err != nil {
 		return BatchDecryptResult{}, err
@@ -334,7 +323,6 @@ func (c *Client) policy(ctx context.Context, rt Runtime, corpID string, opts Opt
 		}
 	}
 	data, err := rt.CallMCPReadData("im", "get_message_crypto_policy", map[string]any{
-		"corpId":                 corpID,
 		"openConversationId":     strings.TrimSpace(opts.OpenConversationID),
 		"receiverOpenDingTalkId": strings.TrimSpace(opts.ReceiverOpenTalkID),
 		"identity":               strings.TrimSpace(opts.Identity),

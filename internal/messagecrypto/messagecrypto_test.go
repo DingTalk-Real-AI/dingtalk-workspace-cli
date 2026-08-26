@@ -116,8 +116,17 @@ func TestEncryptOutboundShouldEncryptDingThenSafeChatWhenPolicyRequired(t *testi
 	if len(rt.writes) != 1 || rt.writes[0].product != "im" || rt.writes[0].tool != "ding_encrypt_message" {
 		t.Fatalf("writes = %#v", rt.writes)
 	}
+	if _, ok := rt.writes[0].params["corpId"]; ok {
+		t.Fatalf("ding encrypt params should not expose corpId: %#v", rt.writes[0].params)
+	}
 	if rt.writes[0].params["plaintextContent"] != "hello" {
 		t.Fatalf("write params = %#v", rt.writes[0].params)
+	}
+	if rt.reads[0].params["openConversationId"] != "cid-1" {
+		t.Fatalf("policy params = %#v", rt.reads[0].params)
+	}
+	if _, ok := rt.reads[0].params["corpId"]; ok {
+		t.Fatalf("policy params should not expose corpId: %#v", rt.reads[0].params)
 	}
 	sum := md5.Sum([]byte("staff-1"))
 	if cipher.encryptStaff != hex.EncodeToString(sum[:]) || string(cipher.encryptPlain) != "ding-cipher" {
@@ -171,7 +180,7 @@ func TestDecryptInboundShouldDecryptSafeChatThenDing(t *testing.T) {
 	if string(cipher.decryptText) != "safe-cipher" || len(rt.writes) != 1 {
 		t.Fatalf("decryptText=%q writes=%#v", cipher.decryptText, rt.writes)
 	}
-	if !reflect.DeepEqual(rt.writes[0].params, map[string]any{"corpId": "corp-1", "dingCiphertext": "ding-cipher"}) {
+	if !reflect.DeepEqual(rt.writes[0].params, map[string]any{"dingCiphertext": "ding-cipher"}) {
 		t.Fatalf("ding decrypt params = %#v", rt.writes[0].params)
 	}
 }
@@ -202,6 +211,9 @@ func TestBatchDecryptInboundShouldDecryptSafeChatAndCallDingBatchOnce(t *testing
 	}
 	if len(rt.writes) != 1 || rt.writes[0].product != "im" || rt.writes[0].tool != "batch_ding_decrypt_messages" {
 		t.Fatalf("writes = %#v", rt.writes)
+	}
+	if _, ok := rt.writes[0].params["corpId"]; ok {
+		t.Fatalf("batch ding decrypt params should not expose corpId: %#v", rt.writes[0].params)
 	}
 	items, _ := rt.writes[0].params["items"].([]map[string]any)
 	if len(items) != 2 || items[0]["dingCiphertext"] != "ding-cipher" || items[1]["messageId"] != "m2" {

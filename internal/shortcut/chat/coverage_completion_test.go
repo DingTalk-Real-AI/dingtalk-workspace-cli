@@ -488,7 +488,7 @@ func TestCrossPlatformCoverageUnifiedSendOptionalArgumentsAndErrors(t *testing.T
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.calls) != 0 {
+	if len(fake.calls) != 1 || fake.calls[0].product != "im" || fake.calls[0].tool != "get_message_crypto_policy" {
 		t.Fatalf("unified send dry-run reached lower service: %#v", fake.calls)
 	}
 
