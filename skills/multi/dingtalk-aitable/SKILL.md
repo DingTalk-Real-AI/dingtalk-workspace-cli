@@ -59,28 +59,20 @@ metadata:
 | 将本地 CSV/XLSX/XLS 导入新表 | `python scripts/aitable_import_via_task.py <BASE_ID> <FILE_PATH>` | 首选本 Skill 自带脚本，一次完成申请凭证、空 Content-Type PUT 和 `import data`；不要猜 `+import-csv` 或给 `import upload` 传 `--file` |
 | 接入外部数据源（审批等） | `dws aitable +datasource-list-sources --base-id <ID> --datasource-type OA` → 解析 result 构造 sourceConfig → `dws aitable +datasource-create --base-id <ID> --datasource-type OA --source-config '<JSON>'` | 当前仅支持 OA 审批；processCode/name/iconUrl/url 从 list-sources 原样透传，创建后用 `+datasource-sync-status` 查同步结果 |
 
-### 次级直达（简单 leaf）
+### 简单 leaf
 
-意图明确且参数齐全时直接使用：
+意图明确时直接使用；参数不确定才读 leaf Schema：
 
-| 用户意图 | 直接入口 |
+| 用户意图 | 入口 |
 |---|---|
-| 查看 Base | `dws aitable +base-get --base-id <B>` |
-| 改名 Base | `dws aitable +base-update --base-id <B> --name <新名称>` |
-| 删除 Base | `dws aitable +base-delete --base-id <B>` |
-| 搜索模板 | `dws aitable +template-search --query <关键词>`；不传 `--query` 时返回热门模板 |
-| 查看 Table | `dws aitable +table-get --base-id <B> [--table-ids <T1,T2>]` |
-| 跨 Base 复制 Table | `dws aitable +table-copy --source-base-id <B1> --source-table-id <T1> --target-base-id <B2> --new-name <新表名> [--include-records]` |
-| 改名或更新 Table | `dws aitable +table-update --base-id <B> --table-id <T> --name <新表名>` |
-| 删除 Table | `dws aitable +table-delete --base-id <B> --table-id <T>` |
-| 新增普通字段 | `dws aitable field create --base-id <B> --table-id <T> --name <名称> --type <TYPE> [--config <JSON>]` |
-| 改名或更新普通字段 | `dws aitable field update --base-id <B> --table-id <T> --field-id <F> [--name <名称>] [--config <JSON>]` |
-| 删除普通字段 | `dws aitable field delete --base-id <B> --table-id <T> --field-id <F>` |
-| 列出或按 ID 定位 View | `dws aitable +view-get --base-id <B> --table-id <T> [--view-ids <V1,V2>]` |
-| 删除 View | `dws aitable +view-delete --base-id <B> --table-id <T> --view-id <V>` |
-| 读取 Dashboard | `dws aitable +dashboard-get --base-id <B> --dashboard-id <D>` |
-| 改名 Dashboard | `dws aitable +dashboard-update --base-id <B> --dashboard-id <D> --name <新名称>` |
-| 删除 Dashboard | `dws aitable +dashboard-delete --base-id <B> --dashboard-id <D>` |
+| 查看 / 改名 / 删除 Base | `+base-get` / `+base-update` / `+base-delete` |
+| 搜索模板 | `+template-search` |
+| 查看 / 跨 Base 复制 / 改名 / 删除 Table | `+table-get` / `+table-copy` / `+table-update` / `+table-delete` |
+| 创建 / 更新 / 删除普通字段 | `field create` / `field update` / `field delete` |
+| 查看 / 删除 View | `+view-get` / `+view-delete` |
+| 查看 / 改名 / 删除 Dashboard | `+dashboard-get` / `+dashboard-update` / `+dashboard-delete` |
+
+命令接在 `dws aitable` 后；资源 ID 使用 `--base-id/--table-id/--field-id/--view-id/--dashboard-id`，改名使用 `--name`。`+table-copy` 参数不规则，执行前只读其 leaf Schema。不读操作 Reference、Help 或产品 Catalog。
 
 数据源查看来源用 `+datasource-list-sources`，获取字段用 `+datasource-get-fields`，创建、更新、同步、查状态和查配置用 `+datasource-create` / `+datasource-update` / `+datasource-sync` / `+datasource-sync-status` / `+datasource-get-config`。
 
