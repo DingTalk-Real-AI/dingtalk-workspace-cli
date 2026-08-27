@@ -687,10 +687,22 @@ func executeUpdate(rt *shortcut.RuntimeContext) error {
 				return blockContentEquals(data, blockID, content, rt.Str("doc-format"))
 			})
 	case "block_delete":
-		blockID := rt.Str("block-id")
-		return executeVerifiedDocMutation(rt, "doc.update", "delete_document_block", map[string]any{"nodeId": node, "blockId": blockID}, node,
+		blockIDs, err := normalizeShortcutBlockIDs(rt.Str("block-id"))
+		if err != nil {
+			return err
+		}
+		return executeVerifiedDocMutation(rt, "doc.update", "delete_document_block", map[string]any{"nodeId": node, "blockId": strings.Join(blockIDs, ",")}, node,
 			"list_document_blocks", map[string]any{"nodeId": node, "format": "element", "__allBlocks": true},
-			func(_, data map[string]any) bool { return findBlock(data, blockID) == nil })
+			func(_, data map[string]any) bool {
+				// 尽力而为语义下未找到的块本就不在文档里，逐个断言不存在即可覆盖
+				// 已删除的那些；只要有任一目标块仍在文档中，就说明删除没生效。
+				for _, id := range blockIDs {
+					if findBlock(data, id) != nil {
+						return false
+					}
+				}
+				return true
+			})
 	case "str_replace":
 		return executePlainTextReplace(rt, node)
 	case "block_copy_insert_after":
@@ -2168,3 +2180,45 @@ func init() {
 	_ = filepath.Separator
 	shortcut.Register(Create, Fetch, Inspect, Update, CheckpointUpdate, Export, Import)
 }
+
+// normalizeShortcutBlockIDs mirrors helpers.normalizeBlockIDs for the shortcut
+// path: split on commas, trim, drop blanks, dedupe preserving first-seen order,
+// and cap at maxShortcutBlockIDsPerDelete matching the CLI limit.
+// Kept local because internal/helpers does not export it; both sides are covered
+// by their own tests and the server validator is the authoritative check.
+func normalizeShortcutBlockIDs(raw string) ([]string, error) {
+	seen := make(map[string]struct{})
+	ids := make([]string, 0)
+	for _, part := range strings.Split(raw, ",") {
+		id := strings.TrimSpace(part)
+		if id == "" {
+			continue
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, apperrors.NewValidation(
+			"block-id 未提供有效的块 ID",
+			apperrors.WithReason("block_id_empty"),
+			apperrors.WithHint("传单个 ID，或用逗号分隔多个 ID，如 a,b,c"),
+		)
+	}
+	if len(ids) > maxShortcutBlockIDsPerDelete {
+		return nil, apperrors.NewValidation(
+			fmt.Sprintf("block-id 传入 %d 个块 ID，超过单次上限 %d", len(ids), maxShortcutBlockIDsPerDelete),
+			apperrors.WithReason("block_id_too_many"),
+			apperrors.WithHint(fmt.Sprintf("拆成多次调用，每次不超过 %d 个", maxShortcutBlockIDsPerDelete)),
+		)
+	}
+	return ids, nil
+}
+
+// maxShortcutBlockIDsPerDelete mirrors helpers.maxBlockIDsPerDelete so that the
+// shortcut path enforces the same 50-id cap the CLI advertises. The server
+// validator remains authoritative; this front check gives an actionable error
+// without a round trip.
+const maxShortcutBlockIDsPerDelete = 50

@@ -32,7 +32,7 @@ dws doc +checkpoint-update --node <DOC_ID> --mode overwrite --content @full.md -
 | `block_insert_before` | 在指定 block 前插入段落或标题 | `--before-block-id --content`；标题加 `--heading-level 1..6` |
 | `block_insert_after` | 在指定 block 后插入段落或标题 | `--after-block-id --content`；标题加 `--heading-level 1..6` |
 | `block_replace` | 替换指定 block | `--block-id --content` |
-| `block_delete` | 删除指定 block | `--block-id` |
+| `block_delete` | 删除指定 block（`--block-id` 可逗号分隔一次删多个） | `--block-id` |
 | `str_replace` | 唯一普通文本替换 | `--old --new` |
 | `block_copy_insert_after` | 复制 block 后插入 | `--block-id --after-block-id` |
 
@@ -59,6 +59,7 @@ block ID 必须来自 `+fetch --detail with-ids` 或真实 block 列表，禁止
 
 - `block_replace` 成功后 Runtime 使用同一 `blockId` 回读验证，该 ID 可继续作为锚点；验证失败时先局部 `+fetch` 核对现状。`block_delete` 成功后旧 ID 失效，不得继续复用。
 - `block_insert_before` / `block_insert_after` / `block_copy_insert_after` 后，原锚点通常仍可识别，但新 block 的 ID 必须来自真实返回或局部回读，禁止按顺序猜测。
+- `block_delete` 的 `--block-id` 支持逗号分隔（`a,b,c`，单次最多 50 个）。
 - `str_replace` 的简单行内替换通常不要求重新取 ID；若后续依赖块结构，仍以局部回读为准。
 - 从 Markdown 读取后覆盖整篇可能丢失图片、附件、@人/@文档、评论锚点、表格样式和嵌套块。只改局部时使用 block 手术；确需整篇保真改写时使用 `full` JSONML，并以 `--expected-revision` 防止覆盖并发修改。
 
