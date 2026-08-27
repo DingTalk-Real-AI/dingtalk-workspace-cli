@@ -498,6 +498,52 @@ func TestSchemaCompatibilityAcceptsMultiFieldConfirmationHardening(t *testing.T)
 	}
 }
 
+func TestSchemaCompatibilityRejectsPartialMultiFieldMigration(t *testing.T) {
+	oldTool := baselineContract().Products["doc"].Tools["doc.create"]
+	oldTool.Confirmation = "not_required"
+	oldTool.Risk = "medium"
+	oldTool.Effect = "write"
+
+	// Only risk tightened, confirmation unchanged: partial migration must fail
+	// for a tool whose reviewed set requires confirmation + risk together.
+	partialRisk := oldTool
+	partialRisk.Risk = "high"
+	for _, toolPath := range []string{
+		"calendar/calendar.remove_calendar_participant",
+		"chat/chat.remove_group_member",
+		"doc/doc.update_permission",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, partialRisk); len(failures) == 0 {
+			t.Fatalf("partial migration (risk only) for %s unexpectedly passed", toolPath)
+		}
+	}
+
+	// Only confirmation tightened, risk unchanged: also partial.
+	partialConfirmation := oldTool
+	partialConfirmation.Confirmation = "user_required"
+	for _, toolPath := range []string{
+		"calendar/calendar.remove_calendar_participant",
+		"chat/chat.remove_group_member",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, partialConfirmation); len(failures) == 0 {
+			t.Fatalf("partial migration (confirmation only) for %s unexpectedly passed", toolPath)
+		}
+	}
+
+	// For a 3-field tool (confirmation + risk + effect), only 2 of 3 must fail.
+	partialDestructive := oldTool
+	partialDestructive.Confirmation = "user_required"
+	partialDestructive.Risk = "high"
+	for _, toolPath := range []string{
+		"calendar/calendar.delete_calendar_event",
+		"minutes/minutes.replace_minutes_text",
+	} {
+		if failures := checkToolCompatibility(toolPath, oldTool, partialDestructive); len(failures) == 0 {
+			t.Fatalf("partial migration (confirmation+risk without effect) for %s unexpectedly passed", toolPath)
+		}
+	}
+}
+
 func TestMergeContracts(t *testing.T) {
 	historical := baselineContract()
 	current := cloneContract(historical)
@@ -1069,6 +1115,40 @@ func TestCrossPlatformCoverageSchemaCompatReviewedConstraintTransition(t *testin
 		t.Run(test.name, func(t *testing.T) {
 			if compatibleReviewedConstraintTransition(test.path, toolSchema{Constraints: test.old}, toolSchema{Constraints: test.new}) {
 				t.Fatal("unreviewed float-image constraint transition unexpectedly passed")
+			}
+		})
+	}
+}
+
+func TestCrossPlatformCoverageSchemaCompatReviewedTodoConstraintTransitions(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{
+			path: "todo/todo.shortcut_update",
+			want: `{"require_one_of":[["title","due","priority"]]}`,
+		},
+		{
+			path: "todo/todo.shortcut_reminder",
+			want: `{"mutually_exclusive":[["clear","base-time"]],"require_one_of":[["clear","base-time"]]}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			oldTool := toolSchema{}
+			newTool := toolSchema{Constraints: test.want}
+			if !compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("reviewed Todo runtime constraint transition must be accepted")
+			}
+			if failures := checkToolCompatibility(test.path, oldTool, newTool); len(failures) != 0 {
+				t.Fatalf("reviewed Todo constraint transition failed: %v", failures)
+			}
+
+			newTool.Constraints = `{}`
+			if compatibleReviewedConstraintTransition(test.path, oldTool, newTool) {
+				t.Fatal("unlisted Todo constraint target unexpectedly passed")
 			}
 		})
 	}

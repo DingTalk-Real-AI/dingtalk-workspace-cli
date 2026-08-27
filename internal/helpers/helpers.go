@@ -432,6 +432,20 @@ func callMCPToolInternalOptsContext(ctx context.Context, explicitServerID, toolN
 
 	// DryRun 模式：仅预览工具名和参数，不实际调用 MCP Server
 	if deps.Caller.DryRun() {
+		// Pre-check: let decoration layers (e.g. delegation auth) validate
+		// before rendering the preview. Only fires when the caller implements
+		// the package-internal dryRunValidator interface (i.e. the delegation
+		// auth decorator is installed); undecorated callers skip this entirely.
+		if v, ok := deps.Caller.(dryRunValidator); ok {
+			preCheckServerID := explicitServerID
+			if preCheckServerID == "" {
+				preCheckServerID = resolveProductID()
+			}
+			if err := v.ensureDelegationAuth(ctx, preCheckServerID, toolName, args); err != nil {
+				return err
+			}
+		}
+
 		if deps.Caller.Format() == "json" {
 			return deps.Out.PrintJSON(map[string]any{
 				"dry_run":   true,

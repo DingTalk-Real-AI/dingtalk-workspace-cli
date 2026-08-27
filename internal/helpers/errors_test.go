@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
 )
 
 func TestCrossPlatformCoverageCLIErrorFormattingExitCodesAndJSON(t *testing.T) {
@@ -114,6 +116,19 @@ func TestCrossPlatformCoverageWrapErrorClassifiesEveryErrorFamily(t *testing.T) 
 
 	if !IsAuthError(&CLIError{Code: CodeAuthTokenExpired}) || IsAuthError(errors.New("AUTH_TOKEN_EXPIRED")) || IsAuthError(&CLIError{Code: CodeAuthPermission}) {
 		t.Fatal("IsAuthError classification changed")
+	}
+}
+
+func TestCrossPlatformCoverageWrapErrorPreservesFrameworkClassification(t *testing.T) {
+	typed := apperrors.NewAuth(
+		"request rejected",
+		apperrors.WithReason("http_401"),
+		apperrors.WithActions("dws auth status"),
+	)
+	want := fmt.Errorf("shortcut call: %w", typed)
+
+	if got := WrapErrorWithOperation(want, "contact/get_current_user_profile"); got != want {
+		t.Fatalf("WrapErrorWithOperation() = %v, want typed framework error passed through unchanged", got)
 	}
 }
 

@@ -166,6 +166,7 @@ func newWikiCommand() *cobra.Command {
 		Long:  `管理钉钉文档知识库：空间管理（创建/查看/列出/搜索/删除）、节点管理（列出/创建/复制/移动/删除）、成员管理（添加/更新/列出/移除）、动态查询（知识库活动动态）。`,
 		RunE:  groupRunE,
 	})
+	installDocDelegationAuth(root)
 
 	spaceCmd := newGroupCommand(&cobra.Command{Use: "space", Short: "知识库管理", RunE: groupRunE})
 

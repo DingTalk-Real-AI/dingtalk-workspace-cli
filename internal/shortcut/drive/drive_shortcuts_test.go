@@ -556,6 +556,25 @@ func TestCrossPlatformCoverageDriveCreateRestoreCopyMoveRename(t *testing.T) {
 	if err := runDriveCoverage(t, Rename, rename, "--node", "n1", "--name", "new.md", "--yes"); err != nil {
 		t.Fatal(err)
 	}
+	folderRename := &driveCoverageCaller{responses: map[string][]string{
+		"get_file_info":   {`{"success":true,"result":{"fileId":"folder-1","type":"FOLDER","name":"old"}}`, `{"success":true,"result":{"fileId":"folder-1","type":"FOLDER","name":"new"}}`},
+		"rename_document": {`{"success":true}`},
+	}}
+	if err := runDriveCoverage(t, Rename, folderRename, "--node", "folder-1", "--name", "new", "--yes"); err != nil {
+		t.Fatal(err)
+	}
+
+	alidocRename := &driveCoverageCaller{responses: map[string][]string{
+		"get_file_info":     {`{"success":true,"result":{"fileId":"doc-1","extension":"adoc","name":"8016737383.adoc"}}`},
+		"rename_document":   {`{"success":true}`},
+		"get_document_info": {`{"success":true,"result":{"nodeId":"doc-1","title":"产品需求说明书"}}`},
+	}}
+	if err := runDriveCoverage(t, Rename, alidocRename, "--node", "doc-1", "--name", "产品需求说明书", "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(alidocRename.history, ",") != "get_file_info,rename_document,get_document_info" {
+		t.Fatalf("alidoc rename history = %v", alidocRename.history)
+	}
 }
 
 func TestCrossPlatformCoverageDriveRestoreReadbackFallbackBranches(t *testing.T) {

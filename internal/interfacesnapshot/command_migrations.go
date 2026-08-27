@@ -120,6 +120,7 @@ func (m CommandMigrationManifest) Validate() error {
 		return fmt.Errorf("command migration manifest migrations must be an array")
 	}
 	seen := make(map[string]bool, len(m.Migrations))
+	lineages := make(map[string]CommandMigration, len(m.Migrations))
 	for index, migration := range m.Migrations {
 		if err := migration.validate(); err != nil {
 			return fmt.Errorf("command migration %d: %w", index, err)
@@ -128,6 +129,14 @@ func (m CommandMigrationManifest) Validate() error {
 			return fmt.Errorf("command migration %d duplicates %s", index, migration.displayKey())
 		}
 		seen[migration.key()] = true
+		if lineage := migration.lineageKey(); lineage != "" {
+			if previous, ok := lineages[lineage]; ok {
+				return fmt.Errorf("command migration %d %s forks pending migration lineage owned by %s", index, migration.displayKey(), previous.displayKey())
+			}
+			if migration.State == CommandMigrationPending {
+				lineages[lineage] = migration
+			}
+		}
 	}
 	return nil
 }
@@ -392,6 +401,20 @@ func (m CommandMigration) displayKey() string {
 	return fmt.Sprintf("%s %q -> %q", m.Kind, m.Legacy.Command, m.Replacement.Command)
 }
 
+func (m CommandMigration) lineageKey() string {
+	if m.State != CommandMigrationPending {
+		return ""
+	}
+	switch m.Kind {
+	case CommandMigrationMove:
+		return strings.Join([]string{m.Kind, m.Schema.ProductID, m.Schema.SourceToolID}, "\x00")
+	case CommandMigrationFlagExtraction:
+		return strings.Join([]string{m.Kind, m.Legacy.Command, m.LegacyFlag.Name, m.Schema.ProductID, m.Schema.SourceToolID}, "\x00")
+	default:
+		return ""
+	}
+}
+
 type commandMigrationPhase string
 
 const (
@@ -479,6 +502,7 @@ func evaluateCommandMigrationLifecycle(
 	}
 	authorityByKey := commandMigrationIndex(authority)
 	candidateByKey := commandMigrationIndex(candidate)
+	matchedRetargets := make(map[string]bool)
 	authorizations := make([]CommandMigration, 0, len(authority.Migrations))
 	for _, approved := range authority.Migrations {
 		basePhase := matchCommandMigrationPhase(mergeBase, approved)
@@ -490,8 +514,22 @@ func evaluateCommandMigrationLifecycle(
 			return nil, fmt.Errorf("approved command migration %s is %s in %s, want exact %s state for %s", approved.displayKey(), basePhase, label, wantBase, approved.State)
 		}
 		proposed, exists := candidateByKey[approved.key()]
+		retargeted := false
+		if !exists && approved.State == CommandMigrationPending {
+			for _, candidateMigration := range candidate.Migrations {
+				if matchedRetargets[candidateMigration.key()] || !isPendingCommandMigrationRetarget(approved, candidateMigration) {
+					continue
+				}
+				proposed, exists, retargeted = candidateMigration, true, true
+				matchedRetargets[proposed.key()] = true
+				if !pendingCommandMigrationRetargetIsUnstarted(current, mergeBase, references, approved, proposed) {
+					return nil, fmt.Errorf("candidate retargeted pending command migration %s to a replacement that is not in the exact before state", approved.displayKey())
+				}
+				break
+			}
+		}
 		if exists && !sameCommandMigrationApproval(approved, proposed) &&
-			!isPendingAvailabilityCompatibilityRefinement(approved, proposed) {
+			!isPendingAvailabilityCompatibilityRefinement(approved, proposed) && !retargeted {
 			return nil, fmt.Errorf("candidate modified base-owned command migration %s", approved.displayKey())
 		}
 		currentPhase := matchCommandMigrationPhase(current, approved)
@@ -564,6 +602,9 @@ func evaluateCommandMigrationLifecycle(
 		if _, exists := authorityByKey[proposed.key()]; exists {
 			continue
 		}
+		if matchedRetargets[proposed.key()] {
+			continue
+		}
 		if proposed.State != CommandMigrationPending {
 			return nil, fmt.Errorf("candidate-added command migration %s must start pending", proposed.displayKey())
 		}
@@ -611,6 +652,41 @@ func isPendingAvailabilityCompatibilityRefinement(approved, proposed CommandMigr
 	}
 	proposed.Legacy.After = approved.Legacy.After
 	return reflect.DeepEqual(approved, proposed)
+}
+
+func isPendingCommandMigrationRetarget(approved, proposed CommandMigration) bool {
+	if approved.State != CommandMigrationPending || proposed.State != CommandMigrationPending ||
+		approved.Kind == CommandMigrationAvailability || approved.Kind != proposed.Kind ||
+		approved.Legacy != proposed.Legacy || approved.LegacyFlag != proposed.LegacyFlag ||
+		approved.Replacement.Before != proposed.Replacement.Before ||
+		approved.Replacement.After != proposed.Replacement.After ||
+		approved.Replacement.Command == proposed.Replacement.Command ||
+		approved.Schema.ProductID != proposed.Schema.ProductID ||
+		approved.Schema.SourceToolID != proposed.Schema.SourceToolID {
+		return false
+	}
+	return true
+}
+
+func pendingCommandMigrationRetargetIsUnstarted(
+	current Snapshot,
+	mergeBase Snapshot,
+	references map[string]Snapshot,
+	approved CommandMigration,
+	proposed CommandMigration,
+) bool {
+	snapshots := make([]Snapshot, 0, len(references)+2)
+	snapshots = append(snapshots, current, mergeBase)
+	for _, snapshot := range references {
+		snapshots = append(snapshots, snapshot)
+	}
+	for _, snapshot := range snapshots {
+		if matchCommandMigrationPhase(snapshot, approved) != commandMigrationBefore ||
+			matchCommandMigrationPhase(snapshot, proposed) != commandMigrationBefore {
+			return false
+		}
+	}
+	return true
 }
 
 func matchCommandMigrationPhase(snapshot Snapshot, migration CommandMigration) commandMigrationPhase {

@@ -15,7 +15,7 @@ metadata:
 ## 最小 DWS 执行契约
 
 - 只通过 `dws` CLI 操作钉钉；结构化读取使用 `--format json`，按真实返回判断结果。
-- 已知命令直接执行。只有 leaf 参数或安全语义不确定时读取精确 Schema，只有 Cobra flag 不确定时读取精确 leaf Help；不要加载产品级 Catalog 代替选路。
+- 已知 leaf 直接执行。只有参数不确定时，最多读取一次 `dws schema --cli-path "aitable <leaf>" --compact --format json`；仅当该 compact leaf Schema 与 Cobra 实际不一致时，才读取同一 leaf 的 `dws aitable <leaf> --help`。禁止通过父级 Help、`dws aitable --help` 或完整 Catalog 探索命令。
 - 不猜命令、flag、字段、ID、账号或时间。后续 ID 必须来自真实返回；零命中、多候选或类型不明时停止并消歧。
 - 解析目标、读取上下文和最终执行必须使用同一 profile；不得跨组织复用 userId、openDingTalkId 或 openConversationId。多账号组织只使用明确的 `isOrgCurrent=true` 默认账号；没有默认账号时要求用户指定，禁止选择第一项、最近登录或最近使用账号。
 - 不输出或记录 token、refresh token、appSecret、webhook token 等凭据；宿主已注入认证时不要索要凭据。
@@ -28,9 +28,9 @@ metadata:
 <!-- VISIBLE_SHORTCUTS_START -->
 ## Shortcut 发现（按需）
 
-`aitable` 当前有 100 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知意图直接使用下方的优先路由、意图表或任务 reference；命令已选中时直接执行，只在参数/安全语义不确定时读取 leaf Schema，在当前 Cobra flags 不确定时读取 leaf Help。
+`aitable` 当前有 100 条公开 shortcut，完整清单保留在 Runtime Catalog 与 Schema，不在高频产品根 Skill 中重复展开。已知 leaf 直接执行。只有参数不确定时，最多读取一次 `dws schema --cli-path "aitable <leaf>" --compact --format json`；仅当该 compact leaf Schema 与 Cobra 实际不一致时，才读取同一 leaf 的 `dws aitable <leaf> --help`。禁止用父级 Help、产品 Help 或完整 Catalog 探索命令；一个 Case 一旦读取 Reference，就不再读取 Help 或第二个 Reference。
 
-仅当现有路由和 reference 都无法定位低频能力时，才执行 `dws shortcut list --service aitable --format json` 做最后回退；不要为已知高频意图加载完整 Shortcut Catalog 或产品级 Schema。
+仅当根路由、精确 task reference 和 `references/aitable.md` 的低频原子索引都无法定位能力时，才执行 `dws shortcut list --service aitable --format json` 做最终回退；不要为已知意图加载完整 Shortcut Catalog 或产品级 Schema。
 <!-- VISIBLE_SHORTCUTS_END -->
 
 ## Golden Route
@@ -112,8 +112,9 @@ metadata:
 | 附件、表单、工作流 | 读取 `references/aitable/` 下对应的一个精确文件 |
 | 数据源接入、同步管理、sourceConfig 构造、同步审批数据到 AI 表格 | [datasource](references/aitable/aitable-datasource.md) |
 | 产品边界不明确 | [intent-guide](references/intent-guide.md) |
+| 无法匹配上述任何精确 reference 的原子能力 | [aitable.md](references/aitable.md) 的对应章节 |
 
-通用 `references/aitable.md` 仅保留为兼容索引，不是默认入口；正常 Case 不预读。低频能力按意图选择一个最精确的 Reference，禁止连读。
+不要预加载这些 reference。`references/aitable.md` 只在根路由和精确 task reference 都无法定位原子能力时读取对应章节；完整 Shortcut Catalog 仅在该索引仍无法定位时使用。每个 Case 最多读取一个 Reference，禁止连读。
 
 ## 错误最短路径
 

@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -33,10 +34,9 @@ import (
 )
 
 var (
-	oauthSaveClientSecret = SaveClientSecret
-	oauthSaveTokenLocked  = saveTokenDataLocked
-	oauthRetryAfter       = time.After
-	oauthNewRequest       = http.NewRequestWithContext
+	oauthSaveTokenLocked = saveTokenDataLocked
+	oauthRetryAfter      = time.After
+	oauthNewRequest      = http.NewRequestWithContext
 )
 
 func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenData, error) {
@@ -45,8 +45,12 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 		return p.exchangeCodeViaMCP(ctx, code)
 	}
 	// Direct mode with client secret
-	clientID := ClientID()
-	clientSecret := ClientSecret()
+	pair, err := p.directCredentialPair()
+	if err != nil {
+		return nil, err
+	}
+	clientID := pair.ClientID
+	clientSecret := pair.ClientSecret
 	body := map[string]string{
 		"clientId":     clientID,
 		"clientSecret": clientSecret,
@@ -63,14 +67,32 @@ func (p *OAuthProvider) exchangeCode(ctx context.Context, code string) (*TokenDa
 	}
 	// Snapshot credentials used for this token (for refresh)
 	data.ClientID = clientID
-	data.Source = resolveCredentialSource()
+	data.Source = pair.Source
 	p.applyLoginRegionToToken(data)
-	// Save clientSecret for future refresh (even if env changes)
-	if err := oauthSaveClientSecret(clientID, clientSecret); err != nil {
-		// Log warning but don't fail login
-		fmt.Fprintf(p.Output, "Warning: failed to save client secret: %v\n", err)
-	}
 	return data, nil
+}
+
+func (p *OAuthProvider) directCredentialPair() (AppCredentialPair, error) {
+	if p != nil && p.credentials != nil {
+		return *p.credentials, nil
+	}
+	configDir := getDefaultConfigDir()
+	if p != nil && strings.TrimSpace(p.configDir) != "" {
+		configDir = p.configDir
+	}
+	pair, err := resolveOAuthCredentialPair(configDir)
+	if err != nil {
+		return AppCredentialPair{}, fmt.Errorf("invalid application credentials: %w", err)
+	}
+	if pair == nil {
+		return AppCredentialPair{}, errors.New("missing complete Client ID/Client Secret pair")
+	}
+	if p != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
+	}
+	return *pair, nil
 }
 
 // ExchangeCodeForToken exchanges an authorization code for token data using
@@ -80,16 +102,13 @@ func ExchangeCodeForToken(ctx context.Context, configDir, code string) (*TokenDa
 	if err := prepareLoginPersistence(configDir); err != nil {
 		return nil, fmt.Errorf("local login state cannot be safely updated before token exchange: %w", err)
 	}
-	p := &OAuthProvider{
-		configDir:  configDir,
-		clientID:   ClientID(),
-		Output:     io.Discard,
-		httpClient: oauthHTTPClient,
-	}
+	p := NewOAuthProvider(configDir, nil)
+	p.Output = io.Discard
 	data, err := p.exchangeCode(ctx, code)
 	if err != nil {
 		return nil, err
 	}
+	p.persistAppConfigIfNeeded()
 	data.FreshAuthorization = true
 	return data, nil
 }
@@ -122,7 +141,7 @@ func (p *OAuthProvider) applyLoginRegionToToken(data *TokenData) {
 // exchangeCodeViaMCP exchanges auth code for token via MCP proxy.
 // This is used when client secret is not available (server-side secret management).
 func (p *OAuthProvider) exchangeCodeViaMCP(ctx context.Context, code string) (*TokenData, error) {
-	clientID := ClientID()
+	clientID := strings.TrimSpace(p.clientID)
 	url := MCPBaseURLForLoginRegion(p.loginRegion()) + MCPOAuthTokenPath
 	body := map[string]string{
 		"clientId":  clientID,
@@ -160,10 +179,25 @@ func (p *OAuthProvider) refreshWithRefreshToken(ctx context.Context, data *Token
 		// Fallback for legacy tokens without stored clientId
 		clientID = ClientID()
 	}
-	clientSecret := LoadClientSecret(clientID)
+	clientSecret, secretErr := LoadClientSecretStrict(clientID)
+	if secretErr != nil {
+		return nil, fmt.Errorf("无法刷新 token: Client Secret 存储冲突或不可读，请重新登录: %w", secretErr)
+	}
 	if clientSecret == "" {
-		// Fallback: try current environment
-		clientSecret = ClientSecret()
+		pair, pairErr := resolveAppCredentialPairWithoutMigration(p.configDir, "", "")
+		if pairErr == nil && (clientID == "" || pair.ClientID == clientID) {
+			clientID = pair.ClientID
+			clientSecret = pair.ClientSecret
+		}
+	}
+	if clientSecret != "" {
+		// Complete an app.json-aware historical-slot migration when this token's
+		// client ID is also the active custom application. Never replace the
+		// credential already selected for this token with stale app.json data.
+		if pair, pairErr := resolveAppConfigCredentialPair(p.configDir, false); pairErr == nil &&
+			pair.ClientID == clientID && pair.ClientSecret == clientSecret {
+			_, _ = ResolveAppConfigCredentialPair(p.configDir)
+		}
 	}
 
 	if clientID == "" || clientSecret == "" || strings.HasPrefix(clientSecret, "<") {

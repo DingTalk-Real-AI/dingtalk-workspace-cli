@@ -563,15 +563,23 @@ See `skills/multi/dingtalk-event/SKILL.md` for the Agent workflow and supported 
 </details>
 
 <details>
-<summary><strong>Raw API Access</strong> — call any DingTalk OpenAPI directly</summary>
+<summary><strong>Raw API Access</strong> — call App Token-capable server-side DingTalk OpenAPIs directly</summary>
 
-`dws api` lets you call any DingTalk OpenAPI without an SDK. Tokens are automatically acquired and refreshed.
+`dws api` lets you call server-side DingTalk OpenAPIs that support an internal-app App Token, without an SDK. Tokens are automatically acquired and refreshed.
 
-> **Prerequisite**: Must login with your own app credentials (see [Custom App mode](#getting-started)). Encrypted tokens from MCP default-credential login are not supported for raw API calls.
+> **Prerequisite**: Provide one complete custom-app Client ID/Client Secret pair through one-shot flags, environment variables, or app config saved by a successful login (see [Custom App mode](#getting-started)). MCP default-credential login alone does not support Raw API calls.
+
+Client ID and Client Secret are resolved only as one complete pair, in this order: complete `--client-id/--client-secret` > complete `DWS_CLIENT_ID/DWS_CLIENT_SECRET` > complete app config. A half-configured source fails explicitly and is never combined with another source. Flags/env used directly by `dws api` are one-shot and do not persist the App Secret; flags/env used by a successful `dws auth login` are persisted as that exact pair for OAuth refresh and later Raw API calls. The acquired App Token is cached under `app-token:<clientID>`; the hidden `--token` accepts a temporary caller-supplied App Token and neither persists nor refreshes it.
+
+Client Secrets use the canonical Keychain slot `appsecret:<clientID>`, distinct from OAuth User Tokens and App Tokens. Existing plaintext app config and historical `client-secret:<clientID>` entries are migrated automatically. If the old and new slots disagree, DWS fails closed and asks for a new login instead of guessing.
 
 ```bash
 # Login (first time only)
 dws auth login --client-id <APP_KEY> --client-secret <APP_SECRET>
+
+# Or use one environment pair; a complete env pair overrides app config atomically
+export DWS_CLIENT_ID=<APP_KEY>
+export DWS_CLIENT_SECRET=<APP_SECRET>
 
 # === api.dingtalk.com ===
 
@@ -594,9 +602,16 @@ dws api POST https://oapi.dingtalk.com/topapi/v2/user/get \
   --data '{"userid":"<USER_ID>"}'
 
 # === General ===
-dws api GET /v1.0/microApp/allApps --page-all   # auto-paginate
-dws api GET /v1.0/microApp/allApps --dry-run     # preview request
-dws api GET /v1.0/microApp/allApps --jq '.agentId'  # jq filtering
+dws api GET /v1.0/microApp/allApps --dry-run             # preview request
+dws api GET /v1.0/microApp/allApps --jq '.appList | length'  # jq filtering
+
+# Read a JSON body from a file (--params also accepts @file; use - for stdin)
+dws api POST https://oapi.dingtalk.com/topapi/v2/department/listsubid \
+  --data @department-request.json --dry-run
+
+# Stream one multipart file; top-level --data fields become text form fields; review a dry-run first
+dws api POST https://oapi.dingtalk.com/media/upload \
+  --data '{"type":"image"}' --file media=./demo.png --dry-run
 ```
 
 | Feature | Details |
@@ -605,6 +620,10 @@ dws api GET /v1.0/microApp/allApps --jq '.agentId'  # jq filtering
 | Automatic token management | App-level accessToken is fetched on first call, cached while valid, auto-refreshed on expiry |
 | Domain allowlist | Only `api.dingtalk.com` and `oapi.dingtalk.com` permitted — prevents token leakage |
 | Auto-pagination | `--page-all` iterates all pages. `--page-limit` caps the maximum (default 10, set to 0 for unlimited, hard cap at 500 to prevent infinite loops) |
+| Secure transport | HTTPS/443 and same-origin HTTPS redirects only; bounded JSON/error reads and streamed atomic binary downloads |
+| Agent discovery | When product commands do not cover an API, the bundled misc/mono Skill follows `https://open.dingtalk.com/llms.txt` to the official endpoint docs; raw `api` remains excluded from Agent Schema |
+
+`dws api` automatically uses only an internal-app App Token. It does not read OAuth User Tokens and does not expose `--as user` / `--user`. Prefer an existing DWS product command; use this escape hatch only for an uncovered internal-app server OpenAPI. Review a dry-run and confirm before create, update, delete, revoke, or send operations.
 
 </details>
 
@@ -728,7 +747,7 @@ See [`docs/robot-quickstart.md`](./docs/robot-quickstart.md) for the full 4-step
 | DevDoc | `devdoc` | Search the Open Platform docs and diagnose API errors |
 | AI Search | `aisearch` | Enterprise people search by name / dept / role / duty / supervisor / phone / job-number |
 | Live | `live` | List my live streams |
-| Raw API | `api` | Call any DingTalk OpenAPI directly, with managed app-level token |
+| Raw API | `api` | Call App Token-capable server-side DingTalk OpenAPIs directly, with managed app-level token |
 
 > Full command listing with usage scenarios: [`docs/command-index.md`](./docs/command-index.md). Run `dws --help` for the top-level tree, or `dws <service> --help` for any service's subcommands.
 

@@ -10,8 +10,10 @@
 |------|------|
 | `markdown fetch` | 下载并读取远程 `.md` 原文 |
 | `markdown create` | 创建原生 `.md` 文件 |
+| `markdown diff` | 对比远程版本或远程与本地 Markdown 差异 |
 | `markdown overwrite` | 全量覆盖已有 `.md` 文件 |
 | `markdown patch` | 按字面量或 RE2 正则局部替换 |
+| `markdown comment list` | 读取 Markdown 文件的新体系全文和划词评论 |
 
 ## 读取 Markdown
 
@@ -112,12 +114,32 @@ Flags:
 - 0 命中时不写入；替换结果为空时中止，防止误清空文件。
 - 命令级 `--dry-run` 显示 before/after 差异；全局 dry-run 不访问网络。
 
+## 读取 Markdown 评论
+
+```text
+Usage:
+  dws markdown comment list [flags]
+Example:
+  dws markdown comment list --node <nodeId> --format json
+  dws markdown comment list --node <nodeId> --type inline --resolve-status unresolved --limit 20 --format json
+Flags:
+      --node string             Markdown 文件 ID 或 URL (必填)
+      --limit int               每页评论数，范围 1-50
+      --cursor string           上一页返回的 opaque nextToken
+      --type string             global / inline；不传返回全部
+      --resolve-status string   resolved / unresolved
+```
+
+读取行为与文字文档一致，支持全文（`global`）和划词（`inline`）评论；Markdown 评论的创建、回复、修改、删除等写操作本期不在 DWS 暴露。
+
 ## 意图判断
 
 用户说“读取/下载 Markdown 原文” → `markdown fetch`
 用户说“创建一个 .md 文件” → `markdown create`
+用户说“对比 Markdown 版本/与本地草稿比较” → `markdown diff`
 用户说“整体替换/覆盖远程 Markdown” → `markdown overwrite`
 用户说“只改 Markdown 中几处文字/正则替换” → `markdown patch`
+用户说“查看 Markdown 评论/.md 评论” → `markdown comment list`
 
 关键区分：
 

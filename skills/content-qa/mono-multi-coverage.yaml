@@ -96,6 +96,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/oa.md
+  - mono: openapi-explorer
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/openapi-explorer.md
   - mono: report
     multi_skill: dingtalk-misc
     multi_refs:
@@ -112,26 +116,6 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/recruit.md
-  - mono: edu-app
-    multi_skill: dingtalk-misc
-    multi_refs:
-      - references/edu-app.md
-  - mono: edu-contact
-    multi_skill: dingtalk-misc
-    multi_refs:
-      - references/edu-contact.md
-  - mono: edu-group
-    multi_skill: dingtalk-misc
-    multi_refs:
-      - references/edu-group.md
-  - mono: college-contact
-    multi_skill: dingtalk-misc
-    multi_refs:
-      - references/college-contact.md
-  - mono: edu-familygroup
-    multi_skill: dingtalk-misc
-    multi_refs:
-      - references/edu-familygroup.md
 
 omit_coverage:
   - mono: simple
@@ -170,6 +154,12 @@ omit_global:
 # Reviewed file pairs. Most are byte-identical; layout-only link differences
 # must be declared as data-driven substitutions.
 paired_files:
+  - mono: scripts/report_received_today.py
+    multi: dingtalk-misc/scripts/report_received_today.py
+    mode: identical
+  - mono: scripts/minutes_recent_summary.py
+    multi: dingtalk-minutes/scripts/minutes_recent_summary.py
+    mode: identical
   - mono: references/products/sheet.md
     multi: dingtalk-misc/references/sheet.md
     mode: link-normalized
@@ -188,18 +178,25 @@ paired_trees:
     multi: dingtalk-misc/references/sheet
     mode: identical
 
-# Scripts under skills/multi/*/scripts not referenced by any .md in that skill tree.
+# Production scripts under skills/multi/*/scripts not referenced by any .md in
+# that skill tree. Python test_*.py and *_test.py files are not Agent content.
 # yida/finance/aiapp are referenced via dingtalk-misc/references/unsupported-scripts.md
 orphan_scripts_allowlist:
   - path: dingtalk-aitable/scripts/aitable_import_via_task.py
     disposition: defer
     reason: "helper referenced indirectly / pending doc"
-  - path: dingtalk-minutes/scripts/minutes_list_parse.py
-    disposition: defer
-    reason: "pending doc reference"
-  - path: dingtalk-misc/scripts/report_received_today.py
-    disposition: defer
-    reason: "pending report.md reference"
+
+# Exact repository-relative paths retired from Skill delivery. Reintroducing
+# any path is a content-contract failure, even if a Markdown page links it.
+retired_scripts:
+  - path: skills/multi/dingtalk-minutes/scripts/minutes_extract_todos.py
+    reason: "action-items and detail shortcuts replace the duplicate workflow"
+  - path: skills/multi/dingtalk-minutes/scripts/minutes_list_parse.py
+    reason: "the retained Markdown summary script owns its small parser"
+  - path: skills/mono/scripts/minutes_extract_todos.py
+    reason: "action-items and detail shortcuts replace the duplicate workflow"
+  - path: skills/mono/scripts/minutes_list_parse.py
+    reason: "the retained Markdown summary script owns its small parser"
 
 # Skills allowed to omit references/ directory.
 skills_without_references_allowlist: []

@@ -434,8 +434,8 @@ func PrintJSON(w io.Writer, err error) error {
 		if typed.Hint != "" {
 			errorPayload["hint"] = typed.Hint
 		}
-		if len(typed.Actions) > 0 {
-			errorPayload["actions"] = typed.Actions
+		if actions := RecoveryActions(err); len(actions) > 0 {
+			errorPayload["actions"] = actions
 		}
 		if len(typed.AvailableFlags) > 0 {
 			errorPayload["available_flags"] = typed.AvailableFlags
@@ -537,8 +537,8 @@ func PrintHumanAt(w io.Writer, err error, v Verbosity) error {
 		}
 	}
 
-	if len(typed.Actions) > 0 {
-		for _, action := range typed.Actions {
+	if actions := HumanRecoveryActions(err); len(actions) > 0 {
+		for _, action := range actions {
 			if strings.TrimSpace(action) == "" {
 				continue
 			}

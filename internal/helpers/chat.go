@@ -21,11 +21,24 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/output"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/chatmsg"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/shortcut/targetresolver"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 	"github.com/spf13/cobra"
 )
+
+func normalizeChatGroupCreateResponse(resp map[string]any) {
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		return
+	}
+	if openConversationID, exists := result["openCid"]; exists {
+		result["openConversationId"] = openConversationID
+		delete(result, "openCid")
+	}
+	delete(result, "cid")
+}
 
 func resolveChatGroupRoleSetUserRoleIDs(cmd *cobra.Command) ([]string, error) {
 	roleIDChanged := cmd.Flags().Changed("role-id")
@@ -145,6 +158,30 @@ func projectChatMessagesPayload(data map[string]any, search bool) map[string]any
 	}
 	payload["messages"] = messages
 	return payload
+}
+
+func sendPersonalMessageForCommand(cmd *cobra.Command, params map[string]any) error {
+	if !output.UsesUnifiedResult(cmd) {
+		return callMCPTool("send_personal_message", params)
+	}
+	if deps.Caller.DryRun() {
+		return storeChatThreadDryRun(cmd, resolveProductID(), "send_personal_message", params)
+	}
+	data, err := CallMCPToolDataOnServer(cmd.Context(), resolveProductID(), "send_personal_message", params)
+	if err != nil {
+		return err
+	}
+	if response, ok := data.(map[string]any); ok {
+		receipt := chatmsg.ProjectMessageSendReceipt(response)
+		if taskID, _ := receipt["openTaskId"].(string); taskID != "" {
+			return output.StoreResult(cmd.Context(), output.Pending(data, &output.OperationInfo{
+				ID:          taskID,
+				State:       "processing",
+				NextCommand: "dws chat message query-send-status --open-task-id " + taskID,
+			}))
+		}
+	}
+	return output.StoreResult(cmd.Context(), output.Success(data))
 }
 
 func resolveMessageForward(cmd *cobra.Command, defaultForward bool) (bool, error) {
@@ -2580,13 +2617,12 @@ func newChatCommand() *cobra.Command {
 
 	chatGroupCreateCmd := &cobra.Command{
 		Use:   "create",
-		Short: "创建群（支持内部群/外部群/普通群/话题圈）",
+		Short: "创建群（支持内部群/外部群/普通群）",
 		Long: `创建一个群聊，支持指定群名称、初始成员列表等参数。
-可选择内部群/外部群/普通群/内部话题圈/外部话题圈/普通话题圈等多种类型群。
+可选择内部群/外部群/普通群等多种类型群。
 默认创建内部群。当选择内部群时如果所选成员非组织内成员会创建失败。`,
 		Example: `  dws chat group create --name "Q1 项目冲刺群" --users userId1,userId2,userId3
   dws chat group create --name "外部合作群" --users userId1,userId2 --type EXTERNAL
-  dws chat group create --name "话题圈" --users userId1,userId2 --thread
   # 查询 userId: dws contact user search --query "姓名"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validateRequiredFlags(cmd, "name", "users"); err != nil {
@@ -2638,13 +2674,7 @@ func newChatCommand() *cobra.Command {
 			}
 			var resp map[string]any
 			if json.Unmarshal([]byte(raw), &resp) == nil {
-				if result, ok := resp["result"].(map[string]any); ok {
-					if v, exists := result["openCid"]; exists {
-						result["openConversationId"] = v
-						delete(result, "openCid")
-					}
-					delete(result, "cid")
-				}
+				normalizeChatGroupCreateResponse(resp)
 				return deps.Out.PrintJSON(resp)
 			}
 			deps.Out.PrintRaw(raw)
@@ -2673,7 +2703,7 @@ func newChatCommand() *cobra.Command {
 			Selection: contract.SelectionSpec{
 				AgentSummary: "创建群聊并可指定群名与初始成员",
 				UseWhen: []string{
-					"需要新建内部/外部群或话题圈，并带上初始成员",
+					"需要新建内部/外部群，并带上初始成员",
 					"用户明确要建群且已给出群名与成员标识",
 				},
 				AvoidWhen: []string{
@@ -2684,7 +2714,6 @@ func newChatCommand() *cobra.Command {
 			},
 			Parameters: []contract.ParamDecl{
 				{Name: "name", Property: "groupName"},
-				{Name: "thread", Property: "convThreadEnabled"},
 				{Name: "type", Property: "groupType"},
 				{Name: "users", Property: "groupMembers"},
 			},
@@ -2985,7 +3014,7 @@ func newChatCommand() *cobra.Command {
 	chatMessageListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "拉取会话消息内容",
-		Long:  `拉取指定群聊或单聊的会话消息内容。输出顶层 messages，稳定字段为 messageId 和 text；兼容保留 openMessageId 和 content。--conversation-id 指定群聊，--user 指定单聊用户（userId），--open-dingtalk-id 指定单聊用户（openDingTalkId），三者互斥。--time 可选，不传时默认上海时间当前时间并向旧消息拉取。推荐使用 --direction newer/older 控制时间方向：newer 表示从给定时间往现在拉，older 表示从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。引用回复消息会返回 quotedMessage 引用上下文；被引用的原消息是合并转发或图片时，对应的类型与内容也会随引用上下文返回。如果返回的会话消息中包含 openConvThreadId 字段，说明是话题消息，可以调用 dws chat message list-topic-replies 拉取话题回复消息列表，openConvThreadId 作为 topic-id 参数。`,
+		Long:  `拉取指定群聊或单聊的会话消息内容。输出顶层 messages，稳定字段为 messageId 和 text；兼容保留 openMessageId 和 content。--conversation-id 指定群聊，--user 指定单聊用户（userId），--open-dingtalk-id 指定单聊用户（openDingTalkId），三者互斥。--time 可选，不传时默认上海时间当前时间并向旧消息拉取。推荐使用 --direction newer/older 控制时间方向：newer 表示从给定时间往现在拉，older 表示从给定时间往以前拉。hasMore=true 时用结果中的边界 createTime 作为下次 --time 翻页。引用回复消息会返回 quotedMessage 引用上下文；被引用的原消息是合并转发或图片时，对应的类型与内容也会随引用上下文返回。如果返回的会话消息中包含 openConvThreadId 字段，说明是话题消息，可以调用 dws chat thread list-replies 拉取话题回复消息列表，openConvThreadId 作为 topic-id 参数。`,
 		Example: `  dws chat message list --conversation-id <openconversation_id> --time "2025-03-01 00:00:00"
   dws chat message list --conversation-id <openconversation_id>
   dws chat message list --user <userId> --time "2025-03-01 00:00:00" --limit 50
@@ -3310,6 +3339,18 @@ func newChatCommand() *cobra.Command {
 						} else if err == nil {
 							targetArgs, _ := buildConversationTargetArgs(cmd)
 							if deps.Caller.DryRun() {
+								if output.UsesUnifiedResult(cmd) {
+									previewArgs := map[string]any{
+										"msgType":  "file",
+										"filePath": meta.LocalPath,
+										"fileName": meta.FileName,
+										"fileSize": meta.FileSize,
+									}
+									for key, value := range targetArgs {
+										previewArgs[key] = value
+									}
+									return storeChatThreadDryRun(cmd, resolveProductID(), "send_personal_message", previewArgs)
+								}
 								deps.Out.PrintKeyValue("操作", "上传本地文件并发送 file 消息")
 								deps.Out.PrintKeyValue("文件", meta.LocalPath)
 								deps.Out.PrintKeyValue("名称", meta.FileName)
@@ -3373,7 +3414,7 @@ func newChatCommand() *cobra.Command {
 				if msgUuid != "" {
 					params["uuid"] = msgUuid
 				}
-				return callMCPTool("send_personal_message", params)
+				return sendPersonalMessageForCommand(cmd, params)
 			}
 
 			// ── 文本/Markdown 消息 ──
@@ -3403,7 +3444,7 @@ func newChatCommand() *cobra.Command {
 				if msgUuid != "" {
 					newParams["uuid"] = msgUuid
 				}
-				return callMCPTool("send_personal_message", newParams)
+				return sendPersonalMessageForCommand(cmd, newParams)
 			}
 			// 单聊：统一走 openDingTalkId
 			directContentJSON, _ := marshalJSONRaw(map[string]string{"title": title, "text": text})
@@ -3416,9 +3457,10 @@ func newChatCommand() *cobra.Command {
 			if msgUuid != "" {
 				newDirectParams["uuid"] = msgUuid
 			}
-			return callMCPTool("send_personal_message", newDirectParams)
+			return sendPersonalMessageForCommand(cmd, newDirectParams)
 		},
 	}
+	chatMessageSendRunE := chatMessageSendCmd.RunE
 	DeclareLeafMetadata(chatMessageSendCmd, LeafSpec{
 		Safety: contract.SafetySpec{
 			Effect: "write", Risk: "medium",
@@ -3545,6 +3587,9 @@ func newChatCommand() *cobra.Command {
 				}
 				if msgType != "markdown" {
 					return fmt.Errorf("--reply and --ref-sender only support Markdown group messages")
+				}
+				if err := guardTopicQuoteReply(cmd, chatID, referenceOpenMessageID); err != nil {
+					return err
 				}
 				if !isOpenDingTalkID(refSender) {
 					resolved, err := resolveOpenDingTalkID(cmd.Context(), refSender)
@@ -3868,9 +3913,9 @@ func newChatCommand() *cobra.Command {
 	})
 
 	chatMessageListTopicRepliesCmd := &cobra.Command{
-		Use:   "list-topic-replies",
-		Short: "拉取群话题回复消息列表",
-		Long:  `查询指定群聊中某条话题消息的全部回复。--conversation-id 指定群会话 ID，--topic-id 指定话题 ID（由 dws chat message list 返回）。`,
+		Use:    "list-topic-replies",
+		Hidden: true,
+		Long:   `查询指定群聊中某条话题消息的全部回复。--conversation-id 指定群会话 ID，--topic-id 指定话题 ID（由 dws chat message list 返回）。`,
 		Example: `  dws chat message list-topic-replies --conversation-id <openconversation_id> --topic-id <topicId>
   dws chat message list-topic-replies --conversation-id <openconversation_id> --topic-id <topicId> --time "2025-03-01 00:00:00" --limit 20
   # 查询群 ID: dws chat search --query "群名"`,
@@ -3899,40 +3944,6 @@ func newChatCommand() *cobra.Command {
 			return callMCPTool("list_topic_replies", toolArgs)
 		},
 	}
-	DeclareLeafMetadata(chatMessageListTopicRepliesCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "read", Risk: "low",
-			Confirmation: "not_required", Idempotency: "idempotent",
-		},
-		Contract: LeafContract{
-			Identity: contract.ToolIdentitySpec{
-				ProductID:      "chat",
-				Name:           "list_topic_replies",
-				CanonicalPath:  "chat.list_topic_replies",
-				CLIPath:        "chat message list-topic-replies",
-				PrimaryCLIPath: "chat message list-topic-replies",
-			},
-			Description: "分页读取指定话题的回复",
-			Interface: &contract.InterfaceSpec{
-				Mode:         "mcp",
-				Availability: "available",
-				Ref:          &contract.InterfaceRefSpec{ProductID: "chat", RPCName: "list_topic_replies"},
-			},
-			Selection: contract.SelectionSpec{
-				AgentSummary: "分页读取指定话题的回复",
-				UseWhen:      []string{"已知话题 ID 并需要查看回复串时"},
-				AvoidWhen:    []string{"读取普通会话消息时使用 chat message list"},
-				Examples:     []string{"dws chat message list-topic-replies --conversation-id <openConversationId> --topic-id <topicId> --limit 50"},
-			},
-			Parameters: []contract.ParamDecl{
-				{Name: "conversation-id", Property: "openconversationId"},
-				{Name: "direction", Property: "forward"},
-				{Name: "limit", Property: "pageSize"},
-				{Name: "time", Property: "startTime"},
-			},
-		},
-	})
-
 	chatMessageListAllCmd := &cobra.Command{
 		Use:   "list-all",
 		Short: "拉取指定时间范围内当前用户的所有会话消息",
@@ -4749,6 +4760,7 @@ chat message edit 或 chat message recall 的 --message-id 和 --conversation-id
 	_ = chatGroupCreateCmd.MarkFlagRequired("users")
 	chatGroupCreateCmd.Flags().String("type", "INTERNAL", "群类型: INTERNAL(内部群,默认)/EXTERNAL(外部群)/NORMAL(普通群)")
 	chatGroupCreateCmd.Flags().Bool("thread", false, "开启话题模式，将创建话题圈")
+	_ = chatGroupCreateCmd.Flags().MarkHidden("thread")
 
 	chatGroupMembersCmd.Flags().String("id", "", "群 ID / openconversation_id (必填)")
 	_ = chatGroupMembersCmd.MarkFlagRequired("id")
@@ -7012,6 +7024,9 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			if err := validateRequiredFlags(cmd, "group", "ref-msg-id", "ref-sender", "content"); err != nil {
 				return err
 			}
+			if err := guardTopicQuoteReply(cmd, mustGetFlag(cmd, "group"), mustGetFlag(cmd, "ref-msg-id")); err != nil {
+				return err
+			}
 			refSender := mustGetFlag(cmd, "ref-sender")
 			if !isOpenDingTalkID(refSender) {
 				resolved, err := resolveOpenDingTalkID(cmd.Context(), refSender)
@@ -8362,8 +8377,8 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 	// ── message forward-topic: 转发话题消息 ─────────────────────
 
 	chatMessageForwardTopicCmd := &cobra.Command{
-		Use:   "forward-topic",
-		Short: "转发话题消息到目标会话",
+		Use:    "forward-topic",
+		Hidden: true,
 		Long: `将一条话题消息从源会话转发到目标会话。需要指定源消息 ID、源会话 ID、话题 ID、目标会话 ID。
 
 如何获取 openConversationId（如果上层已有则直接使用，不必再查）：
@@ -8387,39 +8402,6 @@ flow-status 取值：1=处理中(PROCESSING)，2=输入中(INPUTTING)，3=完成
 			return callMCPToolOnServer("im", "forward_topic", toolArgs)
 		},
 	}
-	DeclareLeafMetadata(chatMessageForwardTopicCmd, LeafSpec{
-		Safety: contract.SafetySpec{
-			Effect: "write", Risk: "medium",
-			Confirmation: "not_required", Idempotency: "unknown",
-		},
-		Contract: LeafContract{
-			Identity: contract.ToolIdentitySpec{
-				ProductID:      "chat",
-				Name:           "forward_topic",
-				CanonicalPath:  "chat.forward_topic",
-				CLIPath:        "chat message forward-topic",
-				PrimaryCLIPath: "chat message forward-topic",
-			},
-			Description: "把一个话题消息转发到目标会话",
-			Interface: &contract.InterfaceSpec{
-				Mode:         "mcp",
-				Availability: "available",
-				Ref:          &contract.InterfaceRefSpec{ProductID: "im", RPCName: "forward_topic"},
-			},
-			Selection: contract.SelectionSpec{
-				AgentSummary: "把一个话题消息转发到目标会话",
-				UseWhen:      []string{"需要转发话题圈中的主题及上下文时"},
-				AvoidWhen:    []string{"普通单条消息转发使用 chat message forward"},
-				Examples:     []string{"dws chat message forward-topic --src-msg-id <openMessageId> --src-conversation-id <srcConversationId> --src-thread-id <threadId> --dest-conversation-id <destConversationId>"},
-			},
-			Parameters: []contract.ParamDecl{
-				{Name: "dest-conversation-id", Property: "destOpenConversationId"},
-				{Name: "src-conversation-id", Property: "srcOpenConversationId"},
-				{Name: "src-msg-id", Property: "srcOpenMessageId"},
-				{Name: "src-thread-id", Property: "srcOpenConvThreadId"},
-			},
-		},
-	})
 	chatMessageForwardTopicCmd.Flags().String("src-msg-id", "", "源消息 openMessageId (必填，要转发的消息)")
 	_ = chatMessageForwardTopicCmd.MarkFlagRequired("src-msg-id")
 	chatMessageForwardTopicCmd.Flags().String("src-conversation-id", "", "源会话 openConversationId (必填，消息所在的会话)")
@@ -10570,7 +10552,7 @@ pl_PL, sv_SE, fi_FI, cs_CZ, ar_SA, tl_PH, he_IL, nl_NL, lo_LA, it_IT`,
 	chatCategoryCmd.AddCommand(chatCategoryCreateSmartCmd)
 	chatMessageCmd.AddCommand(chatMessageListDirectCmd, chatMessageSearchCommonCmd, chatMessageCombineForwardCmd, chatMessageForwardTopicCmd, chatMessageSetPinCmd, chatMessageUnsetPinCmd, chatMessageListPinCmd, chatMessageAddFavoriteCmd, chatMessageRemoveFavoriteCmd, chatMessageListFavoritesCmd, chatMessageSetTopMsgCmd, chatMessageUnsetTopMsgCmd, chatMessageListEmotionRepliesCmd)
 
-	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd, newChatToolbarCommand(), newChatEmotionCommand())
+	root.AddCommand(chatChmodCmd, chatDataAuthCmd, chatGroupCmd, chatSearchCmd, chatSearchCommonCmd, chatMessageCmd, newChatThreadCommand(chatMessageSendRunE), chatFileCmd, newChatMediaGroup(), chatBotCmd, chatMessageListTopConversationsCmd, chatConversationInfoCmd, chatCategoryCmd, chatGroupRoleCmd, chatMuteCmd, chatSetTopCmd, chatGroupMuteCmd, chatGroupMuteMemberCmd, chatHideCmd, chatMuteAtAllCmd, chatMuteRedEnvelopeCmd, chatMarkUnreadCmd, chatClearRedPointCmd, chatClearAllRedPointCmd, chatListAllConversationsCmd, chatClearMessagesCmd, chatMarkReadCmd, chatTextCmd, newChatToolbarCommand(), newChatEmotionCommand())
 
 	// Keep the v1.0.56 command surface recognizable while directing callers to
 	// the supported nested commands. The chat root's "im" alias makes these

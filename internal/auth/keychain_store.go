@@ -15,6 +15,7 @@ package auth
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/keychain"
+	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/logging"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/pkg/edition"
 )
 
@@ -41,6 +43,39 @@ var (
 
 // ErrTokenDataNotFound means the requested keychain slot does not exist.
 var ErrTokenDataNotFound = errors.New("token data not found")
+
+func authDebugHash(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+func authTokenAccountKind(account string) string {
+	switch {
+	case account == keychain.AccountToken:
+		return "legacy"
+	case strings.HasPrefix(account, keychain.AccountToken+":id:"):
+		return "identity"
+	case strings.HasPrefix(account, keychain.AccountToken+":"):
+		return "corp"
+	default:
+		return "other"
+	}
+}
+
+func logAuthTokenCiphertextMismatch(event, account string, err error) {
+	if !keychain.IsCiphertextKeyMismatch(err) {
+		return
+	}
+	logging.AuthDebug(event,
+		"account_kind", authTokenAccountKind(account),
+		"account_hash", authDebugHash(account),
+		"error", err.Error(),
+	)
+}
 
 // SaveTokenDataKeychain saves TokenData to the platform keychain.
 // This is the new secure storage method using random master key.
@@ -93,6 +128,7 @@ func saveTokenDataKeychainAccount(account string, data *TokenData) error {
 	}()
 
 	if err := authKeychainSet(keychain.Service, account, string(jsonData)); err != nil {
+		logAuthTokenCiphertextMismatch("auth.keychain.token.save.ciphertext_mismatch", account, err)
 		return fmt.Errorf("save to keychain: %w", err)
 	}
 	return nil
@@ -125,6 +161,7 @@ func LoadTokenDataKeychainForIdentity(corpID, userID string) (*TokenData, error)
 func loadTokenDataKeychainAccount(account string) (*TokenData, error) {
 	jsonStr, err := authKeychainGet(keychain.Service, account)
 	if err != nil {
+		logAuthTokenCiphertextMismatch("auth.keychain.token.load.ciphertext_mismatch", account, err)
 		return nil, fmt.Errorf("load from keychain: %w", err)
 	}
 	if jsonStr == "" {
@@ -315,6 +352,7 @@ func preflightTokenPersistence(configDir string) error {
 	}
 
 	if _, err := LoadTokenDataKeychain(); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+		logAuthTokenCiphertextMismatch("auth.keychain.preflight.inventory.ciphertext_mismatch", keychain.AccountToken, err)
 		return fmt.Errorf("legacy token slot %q is unreadable: %w", keychain.AccountToken, err)
 	}
 
@@ -329,6 +367,7 @@ func preflightTokenPersistence(configDir string) error {
 		// LoadProfiles normalizes away blank and duplicate corp IDs.
 		corpID := profile.CorpID
 		if _, err := LoadTokenDataKeychainForCorpID(corpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			logAuthTokenCiphertextMismatch("auth.keychain.preflight.inventory.ciphertext_mismatch", TokenAccountForCorpID(corpID), err)
 			return fmt.Errorf(
 				"profile token slot %q is unreadable; on macOS first try `env -u DWS_DISABLE_KEYCHAIN dws auth migrate-keychain --to file-dek --dry-run`; if the ciphertext is damaged, remove only this profile with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
 				TokenAccountForCorpID(corpID), corpID, err,
@@ -342,6 +381,7 @@ func preflightTokenPersistence(configDir string) error {
 			continue
 		}
 		if _, err := LoadTokenDataKeychainForIdentity(corpID, userID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			logAuthTokenCiphertextMismatch("auth.keychain.preflight.inventory.ciphertext_mismatch", TokenAccountForIdentity(corpID, userID), err)
 			return fmt.Errorf(
 				"identity token slot %q is unreadable; remove only this account with `dws auth logout --profile %q`, or use `dws auth reset` only when discarding all local profiles: %w",
 				TokenAccountForIdentity(corpID, userID), ProfileSelector(profile), err,
@@ -379,6 +419,7 @@ func preflightTokenWritePersistence(configDir string, data *TokenData) error {
 	}
 	if plan.WriteGlobal {
 		if _, err := LoadTokenDataKeychain(); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			logAuthTokenCiphertextMismatch("auth.keychain.preflight.write.ciphertext_mismatch", keychain.AccountToken, err)
 			return fmt.Errorf("legacy token slot %q is unreadable: %w", keychain.AccountToken, err)
 		}
 	}
@@ -387,6 +428,7 @@ func preflightTokenWritePersistence(configDir string, data *TokenData) error {
 	}
 	if plan.WriteIdentity {
 		if _, err := LoadTokenDataKeychainForIdentity(plan.CorpID, plan.UserID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			logAuthTokenCiphertextMismatch("auth.keychain.preflight.write.ciphertext_mismatch", TokenAccountForIdentity(plan.CorpID, plan.UserID), err)
 			return fmt.Errorf(
 				"identity token slot %q is unreadable: %w",
 				TokenAccountForIdentity(plan.CorpID, plan.UserID),
@@ -396,6 +438,7 @@ func preflightTokenWritePersistence(configDir string, data *TokenData) error {
 	}
 	if plan.WriteOrganization {
 		if _, err := LoadTokenDataKeychainForCorpID(plan.CorpID); err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+			logAuthTokenCiphertextMismatch("auth.keychain.preflight.write.ciphertext_mismatch", TokenAccountForCorpID(plan.CorpID), err)
 			return fmt.Errorf(
 				"profile token slot %q is unreadable: %w",
 				TokenAccountForCorpID(plan.CorpID),
@@ -411,6 +454,107 @@ func preflightTokenWritePersistence(configDir string, data *TokenData) error {
 // its still-valid credentials.
 func preflightTokenRefreshPersistence(configDir string, data *TokenData) error {
 	return preflightTokenWritePersistence(configDir, data)
+}
+
+// repairLoginCiphertextMismatchTargets is called after a fresh login (OAuth/
+// device/PAT/--token) and before persistence. The incoming token is already
+// in hand — the function exists to clear write-plan target slots whose
+// ciphertext cannot be decrypted with the current DEK, because those slots
+// would otherwise fail preflightTokenWritePersistence and strand a completed
+// authentication. All three slot kinds (global legacy mirror, identity, org)
+// are treated equally: a mismatch slot is removed, and the new token will
+// overwrite the empty slot during persistence.
+//
+// The whole read-classify-remove sequence runs under the profiles lock, so
+// the removal cannot interleave with another writer. Every target slot is
+// read and classified before the first removal: a transient read error on any
+// slot aborts the repair with the login state untouched, and only a failure
+// of the removal operations themselves can leave a partial repair behind.
+// Callers must not hold the profiles lock.
+func repairLoginCiphertextMismatchTargets(configDir string, data *TokenData) error {
+	if h := edition.Get(); h.SaveToken != nil {
+		return nil
+	}
+	if data == nil || !data.FreshAuthorization {
+		return nil
+	}
+	return withProfilesLock(configDir, func() error {
+		cfg, err := profilesLoad(configDir)
+		if err != nil {
+			return err
+		}
+		if err := ensureProfilesWritable(cfg); err != nil {
+			return err
+		}
+		plan := planTokenPersistenceWrites(cfg, data, RuntimeProfile())
+		if err := validateTokenPersistenceWritePlan(cfg, data, plan); err != nil {
+			return err
+		}
+
+		// Check phase: read every target slot before removing any of them.
+		var removeGlobal, removeIdentity, removeOrganization bool
+		var globalErr, identityErr, organizationErr error
+		if plan.WriteGlobal {
+			if _, err := LoadTokenDataKeychain(); keychain.IsCiphertextKeyMismatch(err) {
+				removeGlobal, globalErr = true, err
+			} else if err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+				return err
+			}
+		}
+		if plan.WriteIdentity {
+			if _, err := LoadTokenDataKeychainForIdentity(plan.CorpID, plan.UserID); keychain.IsCiphertextKeyMismatch(err) {
+				removeIdentity, identityErr = true, err
+			} else if err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+				return err
+			}
+		}
+		if plan.WriteOrganization {
+			if _, err := LoadTokenDataKeychainForCorpID(plan.CorpID); keychain.IsCiphertextKeyMismatch(err) {
+				removeOrganization, organizationErr = true, err
+			} else if err != nil && !errors.Is(err, ErrTokenDataNotFound) {
+				return err
+			}
+		}
+
+		// Remove phase: every slot above was readable, missing, or mismatch.
+		if removeGlobal {
+			if err := removeMismatchedLoginSlot("legacy", keychain.AccountToken, globalErr, DeleteTokenDataKeychain); err != nil {
+				return err
+			}
+		}
+		if removeIdentity {
+			account := TokenAccountForIdentity(plan.CorpID, plan.UserID)
+			if err := removeMismatchedLoginSlot("identity", account, identityErr, func() error {
+				return DeleteTokenDataKeychainForIdentity(plan.CorpID, plan.UserID)
+			}); err != nil {
+				return err
+			}
+		}
+		if removeOrganization {
+			account := TokenAccountForCorpID(plan.CorpID)
+			if err := removeMismatchedLoginSlot("profile", account, organizationErr, func() error {
+				return DeleteTokenDataKeychainForCorpID(plan.CorpID)
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// removeMismatchedLoginSlot logs and removes one login target slot after its
+// ciphertext mismatch was confirmed by the check phase.
+func removeMismatchedLoginSlot(kind, account string, mismatchErr error, remove func() error) error {
+	logging.AuthDebug("auth.keychain.login_repair.ciphertext_mismatch",
+		"account_kind", authTokenAccountKind(account),
+		"account_hash", authDebugHash(account),
+		"action", "remove_target_slot",
+		"error", mismatchErr.Error(),
+	)
+	if err := remove(); err != nil {
+		return fmt.Errorf("remove unreadable %s token slot %q before login: %w", kind, account, err)
+	}
+	return nil
 }
 
 // DeleteTokenDataKeychain removes TokenData from the platform keychain.
@@ -499,15 +643,24 @@ func IsMigrationDone() bool {
 
 const clientSecretPrefix = "client-secret:"
 
+func legacyClientSecretAccountKey(clientID string) string {
+	return clientSecretPrefix + clientID
+}
+
 // SaveClientSecret stores the client secret for a specific client ID.
 // This is called during login to snapshot the credentials used.
 func SaveClientSecret(clientID, clientSecret string) error {
+	clientID = strings.TrimSpace(clientID)
+	clientSecret = strings.TrimSpace(clientSecret)
 	if clientID == "" || clientSecret == "" {
 		return nil // Nothing to save
 	}
-	account := clientSecretPrefix + clientID
+	account := secretAccountKey(clientID)
 	if err := authKeychainSet(keychain.Service, account, clientSecret); err != nil {
 		return fmt.Errorf("save client secret: %w", err)
+	}
+	if err := authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(clientID)); err != nil {
+		slog.Warn("auth: failed to remove legacy Client Secret slot after save", "client_id", clientID, "error", err)
 	}
 	return nil
 }
@@ -515,15 +668,40 @@ func SaveClientSecret(clientID, clientSecret string) error {
 // LoadClientSecret retrieves the stored client secret for a specific client ID.
 // Returns empty string if not found.
 func LoadClientSecret(clientID string) string {
-	if clientID == "" {
-		return ""
-	}
-	account := clientSecretPrefix + clientID
-	secret, err := authKeychainGet(keychain.Service, account)
-	if err != nil {
-		return ""
-	}
+	secret, _ := LoadClientSecretStrict(clientID)
 	return secret
+}
+
+// LoadClientSecretStrict retrieves the canonical secret, falls back to the
+// historical slot, and refuses to guess when both slots disagree.
+func LoadClientSecretStrict(clientID string) (string, error) {
+	if clientID == "" {
+		return "", nil
+	}
+	canonical, err := authKeychainGet(keychain.Service, secretAccountKey(clientID))
+	if err != nil {
+		return "", fmt.Errorf("load canonical client secret: %w", err)
+	}
+	legacy, err := authKeychainGet(keychain.Service, legacyClientSecretAccountKey(clientID))
+	if err != nil {
+		return "", fmt.Errorf("load legacy client secret: %w", err)
+	}
+	if canonical != "" && legacy != "" && canonical != legacy {
+		return "", ErrClientSecretConflict
+	}
+	if canonical != "" {
+		return canonical, nil
+	}
+	if legacy == "" {
+		return "", nil
+	}
+	if err := authKeychainSet(keychain.Service, secretAccountKey(clientID), legacy); err != nil {
+		return legacy, nil
+	}
+	if err := authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(clientID)); err != nil {
+		slog.Warn("auth: failed to remove legacy Client Secret slot after load migration", "client_id", clientID, "error", err)
+	}
+	return legacy, nil
 }
 
 // DeleteClientSecret removes the stored client secret for a specific client ID.
@@ -531,6 +709,8 @@ func DeleteClientSecret(clientID string) error {
 	if clientID == "" {
 		return nil
 	}
-	account := clientSecretPrefix + clientID
-	return authKeychainRemove(keychain.Service, account)
+	return errors.Join(
+		authKeychainRemove(keychain.Service, secretAccountKey(clientID)),
+		authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(clientID)),
+	)
 }

@@ -752,7 +752,7 @@ func checkCompatibility(baseline, current schemaContract) []string {
 
 func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []string {
 	var failures []string
-	for _, field := range []struct {
+	fields := []struct {
 		name string
 		old  string
 		new  string
@@ -764,8 +764,15 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
 		{name: "confirmation", old: oldTool.Confirmation, new: newTool.Confirmation},
 		{name: "idempotency", old: oldTool.Idempotency, new: newTool.Idempotency},
-	} {
-		if field.old != field.new && !isReviewedCompatibilityException(toolPath, field.name, field.old, field.new) {
+	}
+	var actual []toolTransition
+	for _, field := range fields {
+		if field.old != field.new {
+			actual = append(actual, toolTransition{field: field.name, old: field.old, new_: field.new})
+		}
+	}
+	for _, field := range fields {
+		if field.old != field.new && !isReviewedCompatibilityException(toolPath, field.name, field.old, field.new, actual) {
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
 	}
@@ -801,7 +808,41 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	return failures
 }
 
-func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string) bool {
+// toolTransition captures a single field's old→new change for atomic matching.
+type toolTransition struct {
+	field string
+	old   string
+	new_  string
+}
+
+// reviewedExceptionSetFullyMatched reports whether every registered exception
+// for toolPath is present in the actual transitions. The set is atomic: a
+// partial migration (e.g. only risk tightened, confirmation unchanged) must
+// not borrow individual exceptions from a reviewed complete hardening.
+func reviewedExceptionSetFullyMatched(toolPath string, actual []toolTransition) bool {
+	exceptions := reviewedCompatibilityExceptions[toolPath]
+	if len(exceptions) == 0 {
+		return true
+	}
+	for _, ex := range exceptions {
+		found := false
+		for _, tr := range actual {
+			if tr.field == ex.Field && tr.old == ex.Old && tr.new_ == ex.New {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string, actual []toolTransition) bool {
+	if !reviewedExceptionSetFullyMatched(toolPath, actual) {
+		return false
+	}
 	for _, exception := range reviewedCompatibilityExceptions[toolPath] {
 		if exception.Field == field && exception.Old == oldValue && exception.New == newValue {
 			return true
@@ -849,6 +890,17 @@ var reviewedConstraintTransition = map[string]map[string]string{
 	// both groups makes the final Schema express the runtime's exact-one rule.
 	"sheet/sheet.create_float_image": {
 		"": `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`,
+	},
+	// PR #1042 publishes the Todo Shortcut constraints already enforced by
+	// runtime validation. The Reminder transition is intentionally limited to
+	// clear/base-time exactly-one; historically accepted extra time arguments
+	// remain compatible and are ignored by the runtime branch that does not use
+	// them.
+	"todo/todo.shortcut_update": {
+		"": `{"require_one_of":[["title","due","priority"]]}`,
+	},
+	"todo/todo.shortcut_reminder": {
+		"": `{"mutually_exclusive":[["clear","base-time"]],"require_one_of":[["clear","base-time"]]}`,
 	},
 }
 
@@ -1887,6 +1939,26 @@ func normalizeSchemaCommandMigrations(
 		}
 		legacyPath := strings.TrimPrefix(migration.Legacy.Command, "dws ")
 		replacementPath := strings.TrimPrefix(migration.Replacement.Command, "dws ")
+		if migration.Kind == interfacesnapshot.CommandMigrationFlagExtraction &&
+			migration.State == interfacesnapshot.CommandMigrationConsumed {
+			_, historicalPublishesLegacy := oldTool.Parameters[migration.LegacyFlag.Name]
+			_, currentPublishesLegacy := newSource.Parameters[migration.LegacyFlag.Name]
+			historicalReplacement, historicalReplacementExists := oldProduct.Tools[migration.Schema.ReplacementToolID]
+			currentReplacement, currentReplacementExists := newProduct.Tools[migration.Schema.ReplacementToolID]
+			if oldTool.PrimaryCLIPath == legacyPath &&
+				newSource.PrimaryCLIPath == legacyPath &&
+				!historicalPublishesLegacy &&
+				!currentPublishesLegacy &&
+				historicalReplacementExists &&
+				historicalReplacement.PrimaryCLIPath == replacementPath &&
+				currentReplacementExists &&
+				currentReplacement.PrimaryCLIPath == replacementPath {
+				// The merge-base has already reached the extraction's after state.
+				// Retain the receipt for older stable baselines without replaying it
+				// against the already-extracted source tool.
+				continue
+			}
+		}
 		if oldTool.PrimaryCLIPath == replacementPath {
 			// A consumed receipt can still be needed for the stable baseline after
 			// main has already reached the after state.

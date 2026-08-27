@@ -12,7 +12,7 @@ cli_version: ">=1.0.15"
 > **命令可用性以当前 dws 二进制为准**。本文档随内置 skill 发布，可能滞后于二进制；如果 `dws <cmd> --help` 不存在，说明当前版本未暴露该命令。`--help` 决定 Cobra 实际接受的 flags；公开基础命令和内建 `+` shortcut 的 leaf Schema（常规用 `--compact`）决定 Agent 选择、参数/约束和安全确认语义。实际调用前可用 `dws <cmd> --help` 或 `--dry-run` 验证。
 
 ## 严格禁止 (NEVER DO)
-- 不要使用 dws 命令以外的方式操作（禁止 curl、HTTP API、浏览器）
+- 不要使用 dws 命令以外的方式操作钉钉业务数据（禁止 curl 或自行拼 HTTP）；唯一例外是按 [openapi-explorer.md](./references/products/openapi-explorer.md) 读取官方 `open.dingtalk.com/llms.txt` 文档并生成受限的 `dws api` 调用
 - 不要编造 UUID、ID 等标识符，必须从命令返回中提取
 - 不要猜测字段名/参数值，操作前必须先查询确认
 
@@ -55,7 +55,7 @@ cli_version: ">=1.0.15"
 | `doc` | 45 | `dingtalk-doc` |
 | `drive` | 28 | `dingtalk-drive` |
 | `mail` | 8 | `dingtalk-mail` |
-| `minutes` | 27 | `dingtalk-minutes` |
+| `minutes` | 29 | `dingtalk-minutes` |
 | `oa` | 1 | `dingtalk-misc` |
 | `pat` | 1 | `dingtalk-misc` |
 | `report` | 4 | `dingtalk-misc` |
@@ -79,6 +79,7 @@ cli_version: ">=1.0.15"
 |-------------------|------------------------------------------------------|----------------------------------------------------------------|
 | `aisearch`        | AI搜问（通用找人首选）：按姓名/部门/职位/职责/上级/下级/手机号/工号维度找人，"谁负责 XX/XX 的负责人/某事项/某项目的人"统一走本产品；不含人才池/绩效/职业历程等专项 HR 场景（那些去 `hrbrain`） | [aisearch.md](./references/products/aisearch.md)               |
 | `aitable`         | AI表格：Base/数据表/字段/记录/视图/附件/图表/仪表盘/导入导出/模板搜索            | [aitable.md](./references/products/aitable.md)                 |
+| `api`             | OpenAPI 逃生舱：官方 llms.txt 分层发现，仅执行企业内部应用 App Token 服务端 API | [openapi-explorer.md](./references/products/openapi-explorer.md) |
 | `attendance`      | 考勤：打卡结果/打卡流水/考勤组查询/考勤规则/汇总统计/假期类型/假期余额（P0 已落地，部分管理类命令仍属 P1） | [attendance.md](./references/products/attendance.md)           |
 | `calendar`        | 日历：日历列表/日程/参与者/附件/响应/会议室/闲忙查询/时间建议                  | [calendar.md](./references/products/calendar.md)               |
 | `chat`            | 群聊与机器人：搜索群/建群/群成员管理/改群名/消息发送(文本/Markdown/图片/文件)/拉取消息/消息收藏/@我/特别关注/机器人群发/单聊/撤回/转发/引用回复/Webhook/机器人搜索 | [chat.md](./references/products/chat.md)                       |
@@ -86,9 +87,9 @@ cli_version: ">=1.0.15"
 | `devdoc`          | 开放平台文档：搜索开发文档                                        | [devdoc.md](./references/products/devdoc.md)                   |
 | `ding`            | DING消息：发送/撤回（应用内/短信/电话）                              | [ding.md](./references/products/ding.md)                       |
 | `doc`             | 钉钉文档：搜索/浏览/读写/块级编辑/评论/文件创建/复制/移动/重命名/**删除/导出 docx/权限管理/媒体上传下载**       | [doc.md](./references/products/doc.md)                         |
-| `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)                        | [drive.md](./references/products/drive.md)                     |
+| `drive`           | 钉钉云盘：文件列表/元数据/文件夹/上传(两步)/下载/本地与钉盘文件夹差异比较(status)/拉取到本地(pull)/推送到钉盘(push)/双向同步(sync)/互联网公开发布(publish)/分享链接密码与有效期 | [drive.md](./references/products/drive.md)                     |
 | `hrbrain`         | 组织大脑：人才池管理/员工档案专项模块查询（元数据/批量数据/标签/职业历程/绩效）/结构化高级人才搜索（原始条件表达式）；区别于 `contact` 的基础通讯录档案与 `aisearch` 的通用语义找人 | [hrbrain.md](./references/products/hrbrain.md)                 |
-| `markdown`        | 原生 Markdown 文件：读取/创建/全量覆盖/字面量或 RE2 局部替换              | [markdown.md](./references/products/markdown.md)               |
+| `markdown`        | 原生 Markdown 文件：读取/创建/对比/全量覆盖/局部替换/评论列表           | [markdown.md](./references/products/markdown.md)               |
 | `minutes`         | AI听记：听记列表/摘要/关键词/转写/待办/思维导图/发言人/发言人段落总结/热词/录音控制/成员权限/上传 | [minutes.md](./references/products/minutes.md)                 |
 | `oa`              | OA审批：待处理/详情/同意/拒绝/撤销/记录/已发起/任务/转交/评论/抄送              | [oa.md](./references/products/oa.md)                           |
 | `pat`             | PAT 行为授权：浏览器策略/scope 预览/一次性、会话或永久授权                    | [pat.md](./references/products/pat.md)                         |
@@ -99,11 +100,6 @@ cli_version: ">=1.0.15"
 | `wiki`            | 知识库：空间创建/详情/列表/搜索 + 成员管理 + 知识库动态查询                | [wiki.md](./references/products/wiki.md)                       |
 | `whiteboard`      | 文档内嵌白板：读取 OpenNodes、追加节点、整页重建                           | [whiteboard.md](./references/products/whiteboard.md)           |
 | `recruit`         | 钉钉招聘：查询职位列表、获取职位详情、创建职位                              | [recruit.md](./references/products/recruit.md)                  |
-| `edu-app`         | 家校应用（教育版）：家校任务、班级消息摘要等教育场景应用能力                       | [edu-app.md](./references/products/edu-app.md)                  |
-| `edu-contact`     | 家校通讯录（教育版）：学校组织架构、班级列表等教育场景通讯录能力                    | [edu-contact.md](./references/products/edu-contact.md)          |
-| `edu-group`       | 家校群（师生群）：班级群/师生群的查询、创建、解散                              | [edu-group.md](./references/products/edu-group.md)             |
-| `edu-familygroup` | 家庭群：家庭群查询/创建、孩子管理、家长邀请、学生应用权限控制                      | [edu-familygroup.md](./references/products/edu-familygroup.md) |
-| `college-contact` | 高校通讯录：高校组织架构/院系部门管理(查询/创建/更新/删除)/师生员工管理(查询/添加/移除/变更类型与部门/激活短信)/通讯录搜索/概览统计/升级 | [college-contact.md](./references/products/college-contact.md) |
 | `event`           | 个人 IM/OA 事件：监听消息、群生命周期、审批任务与审批实例事件，NDJSON 输出（实时驱动 Agent）| [event.md](./references/products/event.md)                     |
 
 ## 意图判断决策树
@@ -117,11 +113,12 @@ cli_version: ">=1.0.15"
 用户提到"群聊/建群/群成员/群管理/发消息/发图片消息/发文件消息/发 Markdown 消息/截图发钉钉/转发消息/引用回复/@我/特别关注消息/机器人发消息/Webhook/机器人群发/机器人单聊/通知" → `chat`
 用户提到"通讯录/同事/部门/组织架构/子部门/部门多少人/离职员工/离职名单/离职花名册/花名册/基础员工档案(学历/家庭/银行卡/紧急联系人/合同)/角色/主管角色/管理员角色/财务/HR/特别关注/星标联系人/创建企业/企业账号/邀请员工/新员工入职" → `contact`（不含职业历程/绩效/人才池；那些去 `hrbrain`）
 用户提到"开发/API/调用错误 文档" → `devdoc`
+用户提到"未封装 OpenAPI/llms.txt/dws api/Raw API/API 逃生舱" → `dws api`（先查现有产品命令，再读官方 llms.txt）
 用户提到"DING/紧急消息/电话提醒" → `ding`
 用户提到"钉钉文档/云文档/知识库/读写文档/块级编辑/文档评论/文档复制移动" → `doc`
-用户提到"云盘/文件存储/文件上传下载/文件夹" → `drive`
+用户提到"云盘/文件存储/文件上传下载/文件夹/互联网公开/分享链接密码/公开有效期" → `drive`
 用户提到"人才池/储备干部池/员工档案元数据或批量模块数据/职业历程/绩效记录/员工标签/组织大脑/结构化人才搜索(高级条件表达式)" → `hrbrain`（区别于 `aisearch` 的通用语义找人与 `contact` 的基础通讯录档案）
-用户提到"原生 Markdown 文件/.md 文件/读取 Markdown 原文/覆盖 Markdown/局部替换 Markdown" → `markdown`
+用户提到"原生 Markdown 文件/.md 文件/读取 Markdown 原文/覆盖 Markdown/局部替换 Markdown/Markdown 评论" → `markdown`
 用户提到"听记/AI听记/会议纪要/转写/摘要/思维导图/发言人/热词" → `minutes`
 用户提到"邮箱/邮件/发邮件/收邮件/搜邮件/查邮件/邮件草稿/转发邮件/回复邮件/邮件附件/抄送" → `mail`
 用户提到"审批/请假/报销/出差/加班/同意/拒绝/撤销审批" → `oa`
@@ -173,8 +170,6 @@ cli_version: ">=1.0.15"
 | `oa` | `approval reject` | 拒绝待审批（需加明确理由） |
 | `todo` | `task delete` | 删除待办 |
 | `minutes` | `replace-text` | 全文批量替换转写与摘要 |
-| `college-contact` | `dept delete` | 删除高校部门，不可恢复 |
-| `college-contact` | `employee remove` | 移除高校员工，不可恢复 |
 
 ### 确认流程
 ```

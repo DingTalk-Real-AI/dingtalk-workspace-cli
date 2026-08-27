@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -381,6 +382,7 @@ func newDriveCommand() *cobra.Command {
 		Long:  `钉盘：列出文件/文件夹、获取元数据和统计信息、创建快捷方式、下载、上传及管理文件。`,
 		RunE:  groupRunE,
 	})
+	installDocDelegationAuth(driveCmd)
 
 	driveListCmd := &cobra.Command{
 		Use:   "list",
@@ -1711,7 +1713,8 @@ func newDriveCommand() *cobra.Command {
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
 			}
-			return callMCPToolOnServer("doc", "copy_document", toolArgs)
+			// 服务端可能返回异步任务（taskId），此时自动轮询 query_task 直至终态。
+			return runNodeTransferWithAsyncPoll(cmd.Context(), "copy_document", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(driveCopyCmd, LeafSpec{
@@ -1788,7 +1791,8 @@ func newDriveCommand() *cobra.Command {
 			if v := flagOrFallback(cmd, "workspace", "workspace-id"); v != "" {
 				toolArgs["workspaceId"] = v
 			}
-			return callMCPToolOnServer("doc", "move_document", toolArgs)
+			// 服务端可能返回异步任务（taskId），此时自动轮询 query_task 直至终态。
+			return runNodeTransferWithAsyncPoll(cmd.Context(), "move_document", toolArgs)
 		},
 	}
 	DeclareLeafMetadata(driveMoveCmd, LeafSpec{
@@ -1958,6 +1962,280 @@ func newDriveCommand() *cobra.Command {
 		},
 	})
 	driveStatsCmd.Flags().String("node", "", "节点 ID 或文档 URL (必填)")
+
+	// ── drive quota (查询企业存储容量) ──
+	driveQuotaCmd := &cobra.Command{
+		Use:   "quota",
+		Short: "查询企业存储容量",
+		Long: `查询企业存储容量，支持三个维度：
+  不传参数               → 企业级总用量
+  --app <appId>         → 应用级用量
+  --space <spaceId>     → 空间级用量
+--app 与 --space 互斥。`,
+		Example: `  dws drive quota
+  dws drive quota --app <appId>
+  dws drive quota --space <spaceId>
+  dws drive quota apps`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			appID, _ := cmd.Flags().GetString("app")
+			spaceID, _ := cmd.Flags().GetString("space")
+			toolArgs := map[string]any{}
+			if appID != "" {
+				toolArgs["appId"] = appID
+			}
+			if spaceID != "" {
+				toolArgs["spaceId"] = spaceID
+			}
+			return callMCPTool("get_storage_quota", toolArgs)
+		},
+	}
+	driveQuotaCmd.Flags().String("app", "", "应用 ID (可选，与 --space 互斥)")
+	driveQuotaCmd.Flags().String("space", "", "空间 ID (可选，与 --app 互斥)")
+	driveQuotaCmd.MarkFlagsMutuallyExclusive("app", "space")
+	DeclareLeafMetadata(driveQuotaCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "drive",
+				Name:           "get_storage_quota",
+				CanonicalPath:  "drive.get_storage_quota",
+				CLIPath:        "drive quota",
+				PrimaryCLIPath: "drive quota",
+			},
+			Description: "查询企业存储容量（企业级/应用级/空间级）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "get_storage_quota"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询企业存储容量（企业级/应用级/空间级）",
+				UseWhen: []string{
+					"用户问钉盘/企业盘存储容量、剩余空间时（企业级：不传参数）",
+					"查询某个应用的存储用量时（--app）",
+					"查询某个空间的存储用量时（--space）",
+				},
+				AvoidWhen: []string{
+					"查应用列表及应用用量时用 dws drive quota apps",
+					"查个人/单文件大小时用 drive info / drive stats",
+				},
+				Examples: []string{
+					"dws drive quota --format json",
+					"dws drive quota --app <APP_ID> --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "app", Property: "appId"},
+				{Name: "space", Property: "spaceId"},
+			},
+		},
+	})
+
+	// ── drive quota apps (查询应用级存储用量列表) ──
+	driveQuotaAppsCmd := &cobra.Command{
+		Use:   "apps",
+		Short: "查询应用级存储用量列表",
+		Long: `查询企业下各应用的存储容量使用情况，返回应用列表及汇总用量。
+支持分页和排序。`,
+		Example: `  dws drive quota apps
+  dws drive quota apps --limit 50
+  dws drive quota apps --cursor <nextToken>
+  dws drive quota apps --order-by used-quota --order desc`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// fail-fast 参数校验：无效值直接报错（帮助文本已声明合法值域），
+			// 绝不静默丢弃或改写。--limit 用 Changed 区分显式传值与默认 20。
+			if cmd.Flags().Changed("limit") {
+				if v, _ := cmd.Flags().GetInt("limit"); v <= 0 || v > 50 {
+					return fmt.Errorf("--limit 值无效：%d，必须为 1-50 之间的整数", v)
+				}
+			}
+			if v, _ := cmd.Flags().GetString("order-by"); v != "" && mapOrderByToCamelCase(v) == "" {
+				return fmt.Errorf("--order-by 值无效：%s，必须为 used-quota、standard-used-quota 或 exclusive-used-quota", v)
+			}
+			if v, _ := cmd.Flags().GetString("order"); v != "" && v != "asc" && v != "desc" {
+				return fmt.Errorf("--order 值无效：%s，必须为 asc 或 desc", v)
+			}
+
+			toolArgs := map[string]any{}
+			if v, _ := cmd.Flags().GetInt("limit"); v > 0 {
+				toolArgs["maxResults"] = float64(v)
+			}
+			if v := flagOrFallback(cmd, "cursor", "next-token"); v != "" {
+				toolArgs["nextToken"] = v
+			}
+			if v, _ := cmd.Flags().GetString("order-by"); v != "" {
+				mapped := mapOrderByToCamelCase(v)
+				if mapped != "" {
+					toolArgs["orderBy"] = mapped
+				}
+			}
+			if v, _ := cmd.Flags().GetString("order"); v != "" {
+				toolArgs["order"] = v
+			}
+			return callMCPTool("list_storage_apps", toolArgs)
+		},
+	}
+	driveQuotaAppsCmd.Flags().Int("limit", 20, "每页返回数量，默认 20，最大 50")
+	driveQuotaAppsCmd.Flags().String("cursor", "", "分页游标，从上次返回的 nextToken 获取 (可选)")
+	driveQuotaAppsCmd.Flags().String("order-by", "", "排序字段：used-quota(总用量)/standard-used-quota(标准存储)/exclusive-used-quota(专属存储) (可选)")
+	driveQuotaAppsCmd.Flags().String("order", "", "排序方向：asc/desc (可选，默认 desc)")
+	DeclareLeafMetadata(driveQuotaAppsCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "drive",
+				Name:           "list_storage_apps",
+				CanonicalPath:  "drive.list_storage_apps",
+				CLIPath:        "drive quota apps",
+				PrimaryCLIPath: "drive quota apps",
+			},
+			Description: "查询企业下各应用的存储用量列表（支持分页/排序）",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "list_storage_apps"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "查询企业下各应用的存储用量列表（支持分页/排序）",
+				UseWhen: []string{
+					"盘点企业内哪些应用占用了钉盘存储、按用量排序找大户时",
+					"翻页拉全应用用量列表时（--cursor 传上次 nextToken）",
+				},
+				AvoidWhen: []string{
+					"只查单个应用的总量时用 dws drive quota --app",
+				},
+				Examples: []string{
+					"dws drive quota apps --limit 50 --format json",
+					"dws drive quota apps --order-by used-quota --order desc --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "cursor", Property: "nextToken"},
+				{Name: "limit", Property: "maxResults"},
+				{Name: "order", Property: "order"},
+				{Name: "order-by", Property: "orderBy"},
+			},
+		},
+	})
+
+	driveQuotaCmd.AddCommand(driveQuotaAppsCmd)
+	newHybridGroupCommand(driveQuotaCmd)
+
+	// ── drive task 子命令组（异步任务统一查询入口）──
+	taskCmd := &cobra.Command{
+		Use:   "task",
+		Short: "异步任务状态查询（统一入口）",
+		Long: `查询异步任务（导出/导入/复制/移动）的执行状态和结果，作为 drive 域异步任务的统一查询入口。
+
+场景：
+  - 导出任务超时或中断后，手动查询导出结果
+  - 导入任务查询文件转换状态
+  - 复制/移动异步任务超时后，手动查询任务状态
+
+区分：
+  dws drive task get   — 统一查询入口，支持 export/import/copy/move 多类型，返回归一化 TaskResult
+  dws doc export get   — 产品级入口，仅支持导出任务，直接透传 MCP 原始响应`,
+		Example: `  dws drive task get --type export --id <taskId>
+  dws drive task get --type import --id <taskId>
+  dws drive task get --type copy --id <taskId>
+  dws drive task get --type move --id <taskId>`,
+		RunE: groupRunE,
+	}
+
+	taskGetCmd := &cobra.Command{
+		Use:   "get",
+		Short: "查询单个异步任务状态",
+		Long: `根据任务类型和 ID 查询单个异步任务的当前状态和结果。
+
+任务状态：
+  PENDING         排队中
+  PROCESSING      处理中
+  SUCCESS         任务成功，导出类型返回 resultUrl（下载链接）
+  PARTIAL_FAILED  部分失败（终态，常见于批量复制/移动），返回部分失败说明
+  FAILED          任务失败，返回错误信息
+  TIMEOUT         任务超时`,
+		Example: `  dws drive task get --type export --id <taskId>
+  dws drive task get --type import --id <taskId>
+  dws drive task get --type copy --id <taskId>
+  dws drive task get --type move --id <taskId>`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := validateRequiredFlags(cmd, "type", "id"); err != nil {
+				return err
+			}
+			taskID := mustGetFlag(cmd, "id")
+			taskType := mustGetFlag(cmd, "type")
+
+			switch taskType {
+			case "export", "import", "copy", "move":
+			default:
+				return fmt.Errorf("不支持的任务类型: %s，当前支持: export|import|copy|move", taskType)
+			}
+
+			if deps.Caller.DryRun() {
+				deps.Out.PrintKeyValue("操作", "查询异步任务")
+				deps.Out.PrintKeyValue("类型", taskType)
+				deps.Out.PrintKeyValue("ID", taskID)
+				return nil
+			}
+
+			// query_task 工具注册在 drive (dingpan) MCP server 上，需显式路由。
+			result, err := QueryTask(cmd.Context(), taskID, taskType)
+			if err != nil {
+				return err
+			}
+			return deps.Out.PrintJSON(result)
+		},
+	}
+	taskGetCmd.Flags().String("type", "", "任务类型: export|import|copy|move (必填)")
+	taskGetCmd.Flags().String("id", "", "任务 ID (必填)")
+	DeclareLeafMetadata(taskGetCmd, LeafSpec{
+		Safety: contract.SafetySpec{
+			Effect: "read", Risk: "low",
+			Confirmation: "not_required", Idempotency: "idempotent",
+		},
+		Contract: LeafContract{
+			Identity: contract.ToolIdentitySpec{
+				ProductID:      "drive",
+				Name:           "query_task",
+				CanonicalPath:  "drive.query_task",
+				CLIPath:        "drive task get",
+				PrimaryCLIPath: "drive task get",
+			},
+			Description: "统一查询异步任务（export/import/copy/move）状态，返回归一化 TaskResult",
+			Interface: &contract.InterfaceSpec{
+				Mode:         "mcp",
+				Availability: "available",
+				Ref:          &contract.InterfaceRefSpec{ProductID: "drive", RPCName: "query_task"},
+			},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "统一查询异步任务（export/import/copy/move）状态，返回归一化 TaskResult",
+				UseWhen: []string{
+					"导出/导入任务超时或中断后手动查询结果时",
+					"复制/移动异步任务超时后手动查询状态时",
+				},
+				AvoidWhen: []string{
+					"仅在 doc 上下文查导出任务且需要 MCP 原始响应时用 dws doc export get",
+					"任务尚未提交（没有 taskId）时先执行对应提交命令",
+				},
+				Examples: []string{
+					"dws drive task get --type export --id <TASK_ID> --format json",
+					"dws drive task get --type copy --id <TASK_ID> --format json",
+				},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "id", Property: "taskId", Required: boolPtr(true)},
+				{Name: "type", Property: "taskType", Required: boolPtr(true)},
+			},
+		},
+	})
+	taskCmd.AddCommand(taskGetCmd)
+	newGroupCommand(taskCmd)
 
 	driveShortcutCmd := &cobra.Command{
 		Use:   "shortcut",
@@ -2964,21 +3242,46 @@ func newDriveCommand() *cobra.Command {
 		Long: `[危险] 将文件设置为互联网公开发布。公开后任何人通过链接即可访问，无需登录钉钉。
 操作者需要是该文件的管理员或拥有者。执行前需要确认，或传入 --yes 跳过确认。
 
-公开权限 (--permission): READER(仅可查看) / DOWNLOADER(可查看和下载，默认) / EDITOR(可编辑)`,
-		Example: `  dws drive publish set --node <fileId> --yes
-  dws drive publish set --node <fileId> --permission READER --yes
-  dws drive publish set --node <fileId>                        # 交互式确认`,
+公开权限 (--permission): READER(仅可查看) / DOWNLOADER(可查看和下载，默认) / EDITOR(可编辑)
+访问密码 (--password): 4位英文字母+数字（如 Ab12）。设置后访问公开链接需输入密码。
+  显式传空（--password ""）可关闭已有密码保护；不传则不改变密码设置。
+有效期 (--expire-days): 正整数=N天后过期，0=永久有效，不传=保持原值不变，负数会报错。
+注意：密码和有效期的支持情况取决于节点类型和组织策略，不支持时服务端会返回友好提示。`,
+		Example: `  dws drive publish set --node <fileId> --format json
+  dws drive publish set --node <fileId> --password Ab12 --expire-days 7 --format json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "file-id")
-			if err != nil {
-				return err
-			}
+			// LeafSpec.Validate 已在本 RunE 之前（先于确认门）完成 node/permission/
+			// password/expire-days 校验，这里直接取值装配参数。
+			nodeID := flagOrFallback(cmd, "node", "url", "id", "node-id", "file-id")
+			permVal := mustGetFlag(cmd, "permission")
+
+			// 密码操作类型（三态：keep / set / clear）
+			pwdChanged := cmd.Flags().Changed("password")
+			pwdVal := mustGetFlag(cmd, "password")
+			expireChanged := cmd.Flags().Changed("expire-days")
+
 			toolArgs := map[string]any{
 				"fileId":    nodeID,
 				"published": true,
 			}
-			if v := mustGetFlag(cmd, "permission"); v != "" {
-				toolArgs["publishPermission"] = v
+			if permVal != "" {
+				toolArgs["publishPermission"] = permVal
+			}
+
+			// 密码三值语义：传非空=设置密码，传空=清除密码，没传=不修改
+			if pwdChanged {
+				if pwdVal == "" {
+					toolArgs["requirePassword"] = false
+				} else {
+					toolArgs["requirePassword"] = true
+					toolArgs["password"] = pwdVal
+				}
+			}
+
+			// expireDays 三值：0=永久, N=N天（负数已在 Validate fail-fast 拦截）
+			if expireChanged {
+				expireDaysVal, _ := cmd.Flags().GetInt("expire-days")
+				toolArgs["expireDays"] = expireDaysVal
 			}
 			return callMCPTool("set_file_publish", toolArgs)
 		},
@@ -2990,7 +3293,37 @@ func newDriveCommand() *cobra.Command {
 		},
 		Validate: func(cmd *cobra.Command, args []string) error {
 			_, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "file-id")
-			return err
+			if err != nil {
+				return err
+			}
+			// 以下三项校验与 node 校验同处 Validate（RunE 包装器内先于
+			// ConfirmSafety 执行）：非法参数在触发确认或远端调用之前 fail-fast。
+
+			// permission 枚举校验（fail-fast）
+			permVal := mustGetFlag(cmd, "permission")
+			if permVal != "" {
+				validPermissions := map[string]bool{"READER": true, "DOWNLOADER": true, "EDITOR": true}
+				if !validPermissions[permVal] {
+					return fmt.Errorf("--permission 值无效：%s，必须为 READER、DOWNLOADER 或 EDITOR", permVal)
+				}
+			}
+
+			// 密码格式校验（三态中的 set：非空才校验；空串=清除密码，合法）
+			if cmd.Flags().Changed("password") {
+				if pwdVal := mustGetFlag(cmd, "password"); pwdVal != "" {
+					if !regexp.MustCompile(`^[A-Za-z0-9]{4}$`).MatchString(pwdVal) {
+						return fmt.Errorf("密码必须为 4 位字母或数字组合（如 ab3D）")
+					}
+				}
+			}
+
+			// 负数有效期会导致 expireDays 字段缺失，服务端 PUT 语义下被设为永久公开。
+			if cmd.Flags().Changed("expire-days") {
+				if expireDaysVal, _ := cmd.Flags().GetInt("expire-days"); expireDaysVal < 0 {
+					return fmt.Errorf("--expire-days 不能为负数，请传入正整数（如 7）或 0（表示永久有效）")
+				}
+			}
+			return nil
 		},
 		Contract: LeafContract{
 			Identity: contract.ToolIdentitySpec{
@@ -3019,10 +3352,16 @@ func newDriveCommand() *cobra.Command {
 					"dws drive publish set --node <fileId> --permission READER --format json",
 				},
 			},
+			Parameters: []contract.ParamDecl{
+				{Name: "password", Property: "password"},
+				{Name: "expire-days", Property: "expireDays"},
+			},
 		},
 	})
 	drivePublishSetCmd.Flags().String("node", "", "目标文件 ID (dentryUuid) 或 URL (必填)")
 	drivePublishSetCmd.Flags().String("permission", "", "公开后的权限: READER / DOWNLOADER(默认) / EDITOR")
+	drivePublishSetCmd.Flags().String("password", "", "访问密码：传非空值设置/修改密码，传空字符串清除密码，不传则不改变")
+	drivePublishSetCmd.Flags().Int("expire-days", 0, "公开有效期天数：0 表示永久有效")
 
 	drivePublishUnsetCmd := &cobra.Command{
 		Use:     "unset",
@@ -3032,10 +3371,8 @@ func newDriveCommand() *cobra.Command {
 		Example: `  dws drive publish unset --node <fileId> --yes
   dws drive publish unset --node <fileId>          # 交互式确认`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "file-id")
-			if err != nil {
-				return err
-			}
+			// LeafSpec.Validate 已在本 RunE 之前确认 node 非空，这里直接取值。
+			nodeID := flagOrFallback(cmd, "node", "url", "id", "node-id", "file-id")
 			return callMCPTool("set_file_publish", map[string]any{
 				"fileId":    nodeID,
 				"published": false,
@@ -3804,6 +4141,9 @@ skipped/failed）、diff 与逐条 items；有失败则以非零退出码退出�
 		driveMoveCmd,
 		driveRenameCmd,
 		driveStatsCmd,
+		driveQuotaCmd,
+		taskCmd,
+		newDriveExportCmd(),
 		driveShortcutCmd,
 		drivePermissionCmd,
 		drivePublishCmd,
@@ -3911,6 +4251,20 @@ func driveInfoWithDocFallback(fileID string, driveArgs map[string]any) error {
 		})
 	}
 	return deps.Out.PrintJSON(docResp)
+}
+
+// mapOrderByToCamelCase 将 CLI kebab-case 排序字段映射为 MCP camelCase。
+func mapOrderByToCamelCase(v string) string {
+	switch v {
+	case "used-quota":
+		return "usedQuota"
+	case "standard-used-quota":
+		return "standardUsedQuota"
+	case "exclusive-used-quota":
+		return "exclusiveUsedQuota"
+	default:
+		return ""
+	}
 }
 
 // sanitizeFileName removes all directory components and NUL bytes so remote
