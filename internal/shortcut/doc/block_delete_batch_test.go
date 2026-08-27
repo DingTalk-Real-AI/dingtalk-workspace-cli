@@ -53,3 +53,20 @@ func TestNormalizeShortcutBlockIDsAcceptsExactlyMax(t *testing.T) {
 		t.Fatalf("got %d ids, want %d", len(got), maxShortcutBlockIDsPerDelete)
 	}
 }
+
+// TestUpdateBlockDeleteRejectsInvalidBlockID drives the Update shortcut through
+// executeUpdate's block_delete branch so the guard after
+// normalizeShortcutBlockIDs is exercised. A comma-only --block-id clears the
+// non-empty preflight check but normalizes to zero ids, so the shortcut must
+// return that validation error rather than attempting the delete.
+func TestUpdateBlockDeleteRejectsInvalidBlockID(t *testing.T) {
+	caller := &docCoverageCaller{responses: map[string][]map[string]any{}}
+	err := runDocCoverage(t, Update, caller, "--node", "n", "--command", "block_delete", "--block-id", ",", "--yes")
+	if err == nil {
+		t.Fatal("comma-only --block-id must be rejected before the delete runs")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Reason != "block_id_empty" {
+		t.Fatalf("must fail with block_id_empty, got %#v", err)
+	}
+}

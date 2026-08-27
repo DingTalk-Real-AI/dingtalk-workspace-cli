@@ -75,3 +75,19 @@ func TestNormalizeBlockIDsAcceptsExactlyMax(t *testing.T) {
 		t.Fatalf("got %d ids, want %d", len(got), maxBlockIDsPerDelete)
 	}
 }
+
+// TestDocBlockDeleteCommandRejectsInvalidBlockID drives the `doc block delete`
+// RunE so the guard after normalizeBlockIDs is exercised end to end. A
+// comma-only value is non-empty, so it clears validateRequiredFlags, but
+// normalizes to zero ids — the command must return that validation error
+// instead of calling delete_document_block.
+func TestDocBlockDeleteCommandRejectsInvalidBlockID(t *testing.T) {
+	err := runDocCoverageCommand(t, &scriptedToolCaller{}, "block", "delete", "--node=node", "--block-id=,", "--yes")
+	if err == nil {
+		t.Fatal("comma-only --block-id must be rejected before calling the MCP tool")
+	}
+	var appErr *apperrors.Error
+	if !errors.As(err, &appErr) || appErr.Reason != "block_id_empty" {
+		t.Fatalf("must fail with block_id_empty, got %#v", err)
+	}
+}
