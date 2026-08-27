@@ -1,281 +1,55 @@
-# 批量操作
+# Sheet 批量原子操作
 
-## 写入边界 + 回读校验
+## 使用边界
 
-`batch-update` 把多次写入打包成单次请求，但每个子操作仍受编辑类任务硬性默认规则约束：
+batch-update 用于多个相互依赖且已确认参数的原子写；range batch-clear 用于跨工作表批量清空。不要把独立命令能完成的一次写拆成 batch，也不要为了减少调用把不相关风险混在一起。
 
-1. **目标 range 必须落在用户授权范围内**：除用户明示要修改的区域外，子操作禁止扩张到无关单元格 / 列 / 工作表。规划 range 时先确认每个子操作的边界。
-2. **批次完成后必须回读校验**：整个 `batch-update` 执行成功后，单元格值用 `range read` 或 `csv-get` 抽样回读受影响区域；合并用裸 `sheet info`，行列分组用 `sheet info --include groups` 回读校验。
-3. **预期条数前置断言**：涉及"批量填充 N 行"或"对 M 个区域分别写入"时，先把 N、M 硬编码进代码，回读后断言实际等于预期；不一致就再发一轮 `batch-update` 补齐，禁止交付半成品。
+当前 batch-update 只支持以下精确 toolName：`range clear`、`range update`、`merge-cells`、`unmerge-cells`、`range fill`、`range copy-to`、`add-dimension`、`delete-dimension`、`move-dimension`、`update-dimension`、`group-dimension`、`ungroup-dimension`、`set-dropdown`、`delete-dropdown`、`csv-put`、`delete-float-image`。
 
-## 使用场景
+以下不进入 batch-update：set-style/batch-set-style、table-put/table-get、range read/csv-get、对象 create/update/list、嵌套 batch、需要立即折叠的 group-dimension。样式批量使用独立 range batch-set-style；结构化 table 独立写并独立回读；折叠分组用独立 group-dimension --group-state fold。不要把相似的 CLI leaf 名称猜成受支持 toolName。
 
-用户说"批量清除/一次清除多个区域/清空多个 sheet 的数据":
-- 批量清除多个区域 → `range batch-clear`
-- 每个区域必须带工作表前缀（如 "Sheet1!A1:B3"）
-- 原子事务：任一区域清除失败则整批回滚
-- 请勿用多次 `range clear` 逐个调用，非原子，中途失败会留下半成品
+## 批量清空
 
-用户说"批量操作/一次执行多个写操作/原子批量/先清除再写入":
-- 多个写操作打包 → `batch-update`
-- 支持混合操作（清除 + 写入 + 合并 + 调行列尺寸等）
-- 原子事务：任一操作失败则整批回滚
-- 传 `--continue-on-error` 可切换为宽松模式（失败继续）
+    dws sheet range batch-clear       --node <NODE_ID>       --ranges '["Sheet1!A1:B3","Sheet2!C1:D5"]'       --type content --format json
 
-用户说"批量写入多个结构化 table/跨 sheet 写入 dataframe/table":
-- 不使用 `batch-update`；直接调用 `dws sheet table-put --node <NODE_ID> --sheets '{"sheets":[...]}'`
-- `table-put` 自身支持一次写入多个 sheet spec，写入后用 `table-get` 回读 dtype / format / 数据行数
+每个范围必须带工作表前缀。type 为 content、format 或 all；all 会同时删除值和格式，属于高风险操作。执行前读最小范围并展示目标，获得明确确认后才执行破坏性清空。默认原子：任一区域失败整批回滚。
 
-用户说"批量创建行列分组/批量取消行列分组/同时调整尺寸并分组":
-- 连续行/列分组 → `group-dimension`
-- 取消连续行/列分组 → `ungroup-dimension`
-- 分组回读用 `sheet info --include groups`
-- `group-dimension` 在 batch 中只适合默认展开分组；需要创建后立即折叠时，用独立 `dws sheet group-dimension --group-state fold`
+## batch-update 结构
 
-**何时推荐使用 `batch-update`**：
-- 需要对**多个**不同区域执行 `merge-cells` / `unmerge-cells` 时（如按分组合并多列相同内容）
-- 需要对**多个**不同区域执行 `update-dimension` 时（如统一调整多列列宽或多行行高，含 hidden + pixelSize）
-- 需要对**多个**连续行/列范围执行 `group-dimension` / `ungroup-dimension` 时（默认展开分组）
-- 需要先插入行列再写入数据时（`add-dimension` + `range update` / `csv-put`）
-- 需要对多个区域执行不同写入操作时（多次 `range update` + `range clear` 等组合）
+    dws sheet batch-update --node <NODE_ID> --operations '[
+      {"toolName":"range clear","input":{"sheet-id":"Sheet1","range":"A1:B3","type":"content"}},
+      {"toolName":"range update","input":{"sheet-id":"Sheet1","range":"A1","values":[[{"type":"text","text":"hello"}]]}},
+      {"toolName":"merge-cells","input":{"sheet-id":"Sheet1","range":"A1:B1","merge-type":"mergeAll"}}
+    ]' --format json
 
-当同一工具需要对多个区域重复调用时，**推荐**改用 `batch-update` 合并为单次请求——`batch-update` 是原子提交（要么全成功要么整批回滚）；逐个调用非原子，中途失败会留下半成品。
+每项形如 {"toolName": "...", "input": {...}}：
 
-**不可放进 `--operations` 的操作**（强行写入会被校验拒或行为未定义）：
-- `range read` / `csv-get` / `table-get`（读取操作，不在 batch dispatch 表中；结构化 table 回读需在 batch 外单独调用）
-- `table-put`（当前 `batch-update` 不支持结构化 table 写入；请直接调用独立 `dws sheet table-put`）
-- `range sort` / `range move-to`（尚未支持，后续版本补充）
-- `write-image` / `media-upload` / `create-float-image` / `update-float-image`（需本地上传或依赖前置上传句柄）
-- `set-style` / `range batch-set-style`（自身已是批量入口，不可再嵌套）
-- `find` / `replace`（尚未支持，后续版本补充）
-- `export`（异步轮询操作）
-- `sheet list` / `sheet info`（只读操作）
+- toolName 必须逐字取上面的支持清单，不接受 MCP RPC 名或缩写。
+- input 键使用 CLI flag 名去掉 --，例如 sheet-id、start-index、merge-type。
+- node 只在批次顶层传，不在子操作中重复。
+- 子操作按数组顺序执行；依赖前项产生的新 ID 的对象不适合放进同一静态批次。
+- 不确定某个 leaf 的字段时只读该 leaf compact Schema，不读取所有 Help。
 
-这些操作需在 `batch-update` 之外单独调用。
+set-dropdown 的 batch input 仍遵循精确互斥：inline 用 options（颜色只能写 options[].color）；SourceRange 用 source-sheet-id 与 source-range 且二者必须同时出现。options 与 source-range 必须且只能选一个；顶层 colors/source-colors 不支持，SourceRange 颜色也不支持。
 
-## 命令详细参考
+默认不加 --continue-on-error，这样任一失败整批回滚。只有用户明确接受部分成功时才加；此时顶层请求可能成功但子项仍有失败，必须按输入索引逐项解析状态、错误和实际结果，失败项不能被成功项掩盖。
 
-### 批量清除区域
-```
-Usage:
-  dws sheet range batch-clear [flags]
-Example:
-  dws sheet range batch-clear --node <NODE_ID> --ranges '["Sheet1!A1:B3","Sheet2!C1:D5"]'
-  dws sheet range batch-clear --node <NODE_ID> --ranges '["Sheet1!A1:Z1000"]' --type all
-  dws sheet range batch-clear --node <NODE_ID> --ranges '["Sheet1!A2:A100","Sheet1!C2:C100"]' --type format
-Flags:
-      --node string            表格文档 ID 或 URL (必填)
-      --ranges string          目标区域 JSON 数组，每项带 sheet 前缀 (必填)
-      --type string            清除类型: content(仅值,默认) / format(仅格式) / all(全部)
-Notes:
-  - 原子事务：任一区域清除失败则整批回滚
-  - 每个 --ranges 项必须包含工作表前缀（格式: "SheetName!A1:B3"）
-  - 不同区域可以属于不同工作表
-```
+## 预检与安全
 
-### 批量更新（原子事务）
-```
-Usage:
-  dws sheet batch-update [flags]
-Example:
-  dws sheet batch-update --node <NODE_ID> --operations '[
-    {"toolName":"range clear","input":{"sheet-id":"Sheet1","range":"A1:B3","type":"content"}},
-    {"toolName":"range update","input":{"sheet-id":"Sheet1","range":"A1","values":[[{"type":"text","text":"hello"}]]}},
-    {"toolName":"merge-cells","input":{"sheet-id":"Sheet1","range":"A1:B1","merge-type":"mergeAll"}},
-    {"toolName":"update-dimension","input":{"sheet-id":"Sheet1","dimension":"ROWS","start-index":"1","length":1,"pixel-size":40}},
-    {"toolName":"group-dimension","input":{"sheet-id":"Sheet1","range":"3:7","group-state":"expand"}},
-    {"toolName":"set-dropdown","input":{"sheet-id":"Sheet1","range":"C2:C100","source-sheet-id":"SourceSheet","source-range":"T1:T3"}}
-  ]'
-  dws sheet batch-update --node <NODE_ID> --continue-on-error --operations '[...]'
-Flags:
-      --node string            表格文档 ID 或 URL (必填)
-      --operations string      操作数组 JSON (必填，每项 {toolName, input})
-      --continue-on-error      遇失败继续执行（默认 false，严格事务）
-toolName 用 CLI 命令名，input 的键用 CLI flag 名去掉 --：
-  range clear / range update / merge-cells / unmerge-cells / update-dimension
-  range fill / range copy-to / add-dimension / delete-dimension / move-dimension
-  group-dimension / ungroup-dimension
-  set-dropdown / delete-dropdown / csv-put / delete-float-image
-Notes:
-  - 默认严格事务模式：任一子操作失败 → 整批回滚到初始状态
-  - --continue-on-error: 宽松模式，遇失败继续执行后续操作（已执行的子操作不回滚）
-  - operations 最多 20 条
-  - 当需要对多个区域执行相同清除时，优先使用 `range batch-clear`（更简洁）
-  - `csv-put` 子操作与独立命令语义一致：CSV 字段值以 `=` 开头时按公式解析；前加单引号时写入以 `=` 开头的字面文本
-  - `set-dropdown` 的 `input` 中，Inline 使用 `options`；SourceRange 使用 `source-sheet-id` + `source-range`，两种模式必须且只能选一个。顶层 `colors` / `source-colors` 会被拒绝；Inline 颜色写在 `options[].color`，SourceRange 颜色写入暂不支持
-  - `set-dropdown` SourceRange 在已验证的重命名、引用前插入行/列、删除引用前行的场景会自动调整；已验证的 `move-dimension` 会使其变为 `invalid`。其他未覆盖删除/移动场景后先回读，仅 `invalid` 时重新选源写入
-  - `source-range` 按 `toolName` 解释：`set-dropdown` 中是下拉候选项来源；`range fill` / `range copy-to` / `range move-to` 中是待填充、复制或移动的数据源区域
-  - 典型场景：先插入行列再写入数据、先清除再写入、批量合并+调整行高列宽
-  - `group-dimension` 在 batch 中只适合默认展开分组；需要 `--group-state fold` 时请使用独立 `dws sheet group-dimension`
-  - `table-put` 不支持放进 batch-update；结构化 table 请用独立 `dws sheet table-put`
-```
+批次发送前检查：所有 sheetId 来自当前任务；范围无意外重叠；操作顺序满足依赖；删除/清空/移动影响已确认；预计操作数与数组长度一致。不要用 validate 成功替代真实执行，也不要在失败后盲目重发整批。
 
-### 子操作定位规则
+超时或响应不确定时先回读目标状态：
 
-> **`--node` 只在顶层传一次**，每个子操作的 `input` 不含 `node` 字段；
-> **子表定位 `sheet-id` 写进各自 `input`**，不同子操作可指向不同工作表。
+- 原子模式：判断整批是否已落地，再决定是否重试。
+- continue-on-error：只为已证明缺失且可安全重试的项目构造新批次。
+- 非幂等操作如 append、insert、move 未确认状态前禁止重放。
 
-```jsonc
-// 正确：node 在顶层，sheet-id 在各自 input
-[
-  {"toolName":"range clear","input":{"sheet-id":"Sheet1","range":"A1:B3"}},
-  {"toolName":"range update","input":{"sheet-id":"Sheet2","range":"A1","values":[[...]]}}  // 不同工作表
-]
-```
+## 写后验证
 
-`table-put` / `table-get` 不支持放进 `batch-update`。结构化 table 写入请直接调用 `dws sheet table-put`，写入完成后在 batch 外单独调用 `table-get` 回读校验。
+批次成功后按结果类型合并验证，避免逐操作全表读取：
 
-## 校验与预览
+- 值：一次读取覆盖所有受影响值的最小范围；
+- 样式/合并/行列：info 或样式读取；
+- dropdown/对象：对应 list/get。
 
-### Validate 阶段
-
-CLI 在发送请求前执行以下本地校验（不消耗网络请求）：
-
-| 校验项 | 失败行为 | 示例 |
-|--------|---------|------|
-| `--node` / `--operations` 必填 | `missing required flag(s)` | 不传 `--node` |
-| `--operations` 必须合法 JSON | `--operations JSON 解析失败` | `--operations 'not json'` |
-| `--operations` 必须非空数组 | `--operations 不能为空数组` | `--operations '[]'` |
-| 每项必须是 object | `operations[N] 不是 object` | `--operations '["string"]'` |
-| `toolName` 必须是支持的 CLI 命令名 | `unsupported toolName "xxx"` | 传 `"batch-update"`（禁止嵌套）或拼写错误 |
-| 禁止嵌套 `batch-update` | 同上（`batch-update` 不在 dispatch 表中，自动拦截） | `toolName: "batch-update"` |
-| 禁止 `table-put` / `table-get` | `unsupported toolName "table-put"` | 结构化 table 应使用独立 `table-put` |
-
-> `input` 内的字段（如 `sheet-id`、`range`、`values` 等）由服务端校验，CLI 不提前拦截——传入空值或缺失必填字段时，请求会到达服务端再返回错误。
-
-### --continue-on-error 行为
-
-| 模式 | flag | 子操作失败时 | 返回格式 |
-|------|------|------------|---------|
-| 严格事务（默认） | 不传 | 整批回滚到初始状态，后续子操作不执行 | 顶层 `error` 对象 |
-| 宽松模式 | `--continue-on-error` | 已执行的子操作不回滚，继续执行后续子操作 | `results` 数组 |
-
-**严格事务失败的错误信息**由服务端生成，包含以下内容：
-- 失败操作索引：`operations[N]`（0-based，即 `--operations` JSON 数组中的下标）
-- 回滚告知："All previously executed operations have been rolled back."
-- 失败原因：原始错误码和错误消息
-
-示例：
-```
-Batch update failed at operations[1] (0-based index).
-All previously executed operations have been rolled back.
-Cause: The requested resource was not found by the identifier 'NonExistentSheet'...
-```
-
-**宽松模式下**，返回 `results` 数组，逐个标注每个子操作的成功/失败状态：
-- 成功的子操作：`success: true` + `message`
-- 失败的子操作：`success: false` + `errorCode` + `errorMsg`
-- 顶层 `success: true`（batch 本身完成执行，只是部分子操作失败）
-
-## CLI 命令名 → 原子命令参考
-
-`toolName` 使用 CLI 命令名，`input` 的键使用 CLI flag 名（去掉 `--`），与原子命令文档完全一致。各命令的参数详情请查阅对应参考文档或执行 `dws sheet <命令> --help`。
-
-| CLI 命令名 | 参考文档 |
-|----------|---------|
-| `range clear` | [sheet-range-operations](./sheet-range-operations.md) |
-| `range update` | [sheet-write-data](./sheet-write-data.md) |
-| `merge-cells` | [sheet-style-format](./sheet-style-format.md) |
-| `unmerge-cells` | [sheet-style-format](./sheet-style-format.md) |
-| `update-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
-| `group-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
-| `ungroup-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
-| `range fill` | [sheet-range-operations](./sheet-range-operations.md) |
-| `range copy-to` | [sheet-range-operations](./sheet-range-operations.md) |
-| `add-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
-| `delete-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
-| `move-dimension` | [sheet-dimension-operations](./sheet-dimension-operations.md) |
-| `set-dropdown` | [sheet-dropdown](./sheet-dropdown.md) |
-| `delete-dropdown` | [sheet-dropdown](./sheet-dropdown.md) |
-| `csv-put` | [sheet-write-data](./sheet-write-data.md) |
-| `delete-float-image` | [sheet-media-image](./sheet-media-image.md) |
-
-## 典型组合场景
-
-### 插列 + 写表头 + 整列回填
-
-一次原子提交，不要拆成多次独立调用。批量回填同一列**只需一次** `range update`（range 写整列范围、values 写 N×1 矩阵），不需要逐行循环。
-
-```jsonc
-// 在 C 列前插入新列 → 写表头 C1 → 回填 C2:C100 共 99 行
-[
-  {"toolName":"add-dimension",
-   "input":{"sheet-id":"...","dimension":"COLUMNS","length":1}},
-  {"toolName":"range update",
-   "input":{"sheet-id":"...","range":"C1:C100",
-            "values":[[{"type":"text","text":"score"}],[{"type":"text","text":"95"}],[{"type":"text","text":"87"}]/* ... 97 more rows ... */]}}
-]
-```
-
-### 先清除再写入
-
-清除目标区域残留数据后写入新数据，保证目标区域干净。
-
-```jsonc
-[
-  {"toolName":"range clear",
-   "input":{"sheet-id":"...","range":"A1:D50","type":"all"}},
-  {"toolName":"range update",
-   "input":{"sheet-id":"...","range":"A1:D50",
-            "values":[[{"type":"text","text":"姓名"},{"type":"text","text":"部门"},{"type":"text","text":"金额"},{"type":"text","text":"日期"}],/* ... */]}}
-]
-```
-
-### 批量合并 + 调整行高列宽
-
-统一多列合并和尺寸调整，原子提交避免中途失败留下不一致格式。
-
-```jsonc
-[
-  {"toolName":"merge-cells",
-   "input":{"sheet-id":"...","range":"A1:B1","merge-type":"mergeAll"}},
-  {"toolName":"merge-cells",
-   "input":{"sheet-id":"...","range":"C1:D1","merge-type":"mergeAll"}},
-  {"toolName":"update-dimension",
-   "input":{"sheet-id":"...","dimension":"ROWS","start-index":"1","length":1,"pixel-size":40}},
-  {"toolName":"update-dimension",
-   "input":{"sheet-id":"...","dimension":"COLUMNS","start-index":"A","length":4,"pixel-size":120}}
-]
-```
-
-### 批量创建/取消行列分组
-
-分组属于工作表结构元数据，批次完成后用 `sheet info --include groups` 回读 `rowGroups` / `columnGroups`，不要用裸 `sheet info` 或 `range read` 校验。回读项中的 `level` 是 1-based，`collapsed` 表示当前折叠状态。
-
-```jsonc
-[
-  {"toolName":"group-dimension",
-   "input":{"sheet-id":"...","range":"3:7","group-state":"expand"}},
-  {"toolName":"group-dimension",
-   "input":{"sheet-id":"...","range":"C:F","group-state":"expand"}}
-]
-```
-
-```jsonc
-[
-  {"toolName":"ungroup-dimension",
-   "input":{"sheet-id":"...","range":"3:7"}},
-  {"toolName":"ungroup-dimension",
-   "input":{"sheet-id":"...","range":"C:F"}}
-]
-```
-
-注意：batch 中不要用 `group-state:"fold"` 来创建折叠分组；需要折叠初始状态时，用独立 `dws sheet group-dimension --group-state fold`。
-
-## 上下文传递
-
-| 操作 | 从返回中提取 | 用于 |
-|------|-------------|------|
-| `list` | 工作表的 `sheetId` | batch-clear 的 --ranges sheet 前缀 / batch-update 子操作 input 的 sheet-id |
-| `batch-update` | 各子操作的执行结果 | 回读校验（值用 range read / csv-get；合并用 sheet info；分组用 sheet info --include groups） |
-
-## 注意事项
-
-- ★ **`--sheet-id` 获取规范（强制）**：`sheetId` 未知时必须先通过 `dws sheet list --node <NODE_ID> --format json` 查询真实的 `sheetId` / 工作表名称后再调用，禁止凭空编造（如臆测为 `Sheet1`、`sheet1`、`0`、`default` 等）
-- ★ **需要对多个区域执行相同清除操作时，用 `range batch-clear`**：一次原子请求清除多个区域（可跨工作表），失败时整批回滚
-- ★ **需要组合多个不同写操作（清除+写入等）时，用 `batch-update`**：原子事务，任一操作失败则整批回滚，避免留下半成品
-- ★ **table 写入不进 batch-update**：当前 `batch-update` 不支持结构化 table 写入；结构化 table 请直接调用 `dws sheet table-put`
-- ★ **批次完成后必须回读校验**：值写入用 `range read` 或 `csv-get` 抽样回读受影响区域；结构变更用 `sheet info` 回读
-- ★ **`batch-update` 不支持嵌套**：`--operations` 中的 `toolName` 必须是原子操作，不可再嵌套 `batch-update`
-- `batch-update` 支持 `group-dimension` / `ungroup-dimension`；分组结果用 `sheet info --include groups` 回读
-- `batch-update` 中 `group-dimension` 只适合默认展开分组；需要 `fold` 初始状态时使用独立 `group-dimension`
+预期条数、结果条数或关键状态不一致即失败。只读校验可做有界退避；不得通过重复写“碰碰运气”。最终说明原子/部分模式、成功项、失败项和已验证范围。

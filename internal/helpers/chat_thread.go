@@ -48,6 +48,7 @@ func runChatThreadCreate(cmd *cobra.Command, toolArgs map[string]any) error {
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		return chatThreadResponseValidationError("im/create_group_conversation", err)
 	}
+	normalizeChatGroupCreateResponse(resp)
 	return output.StoreResult(cmd.Context(), output.Success(resp))
 }
 
@@ -65,7 +66,7 @@ func newChatThreadCommand(sendRunE func(*cobra.Command, []string) error) *cobra.
 	thread := newGroupCommand(&cobra.Command{
 		Use:   "thread",
 		Short: "群聊话题（Thread）管理",
-		Long:  "Thread 表示群聊中的一条话题主消息及其回复。以下命令同时适用于普通群和话题圈中的 Thread；只有 create-group 用于新建话题圈。发布新话题时传父群 openConversationId，直接回复时传该 Thread 的 openConvThreadId。list 浏览话题主消息，list-replies 读取某个话题的逐条回复。",
+		Long:  "Thread 表示群聊中的一条话题主消息及其回复。以下命令同时适用于普通群和话题圈中的 Thread；只有 create-group 用于新建话题圈。promote 将普通群中的已有消息升级为 Thread 根消息；发布新话题时传父群 openConversationId，直接回复时传该 Thread 的 openConvThreadId。list 浏览话题主消息，list-replies 读取某个话题的逐条回复。",
 		RunE:  groupRunE,
 	})
 
@@ -76,7 +77,7 @@ func newChatThreadCommand(sendRunE func(*cobra.Command, []string) error) *cobra.
 	listReplies := newChatThreadListRepliesCommand()
 	forward := newChatThreadForwardCommand()
 	thread.AddCommand(
-		create, send, list, reply, listReplies, forward,
+		create, send, newChatThreadPromoteCommand(), list, reply, listReplies, forward,
 		newChatThreadRecallMessageCommand(),
 		newChatThreadAddEmojiCommand(),
 		newChatThreadRemoveEmojiCommand(),
@@ -86,6 +87,78 @@ func newChatThreadCommand(sendRunE func(*cobra.Command, []string) error) *cobra.
 		newChatThreadUpdateTextEmotionCommand(),
 	)
 	return thread
+}
+
+func newChatThreadPromoteCommand() *cobra.Command {
+	const tool = "convert_message_to_thread"
+	return NewLeafCommand(LeafSpec{
+		Use:           "promote",
+		Short:         "将普通群中的已有消息升级为 Thread",
+		Long:          "将普通群中的一条已有消息升级为 Thread 根消息。--conversation-id 与 --message-id 必须属于同一个普通群；单聊消息不支持。转换成功后返回 openConvThreadId，并在群内产生 Thread 转换事件；重复请求保持幂等。",
+		Example:       `  dws chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>`,
+		OutputRollout: output.RolloutUnifiedActive,
+		Server:        "im",
+		Tool:          tool,
+		Flags: []LeafFlag{
+			{Name: "conversation-id", Usage: "消息所属普通群的 openConversationId (必填)", Required: true, MarkRequired: true, Bind: "openConversationId"},
+			{Name: "message-id", Usage: "待升级消息的 openMessageId (必填)", Required: true, MarkRequired: true, Bind: "openMessageId"},
+		},
+		Safety: contract.SafetySpec{Effect: "write", Risk: "medium", Confirmation: "not_required", Idempotency: "idempotent"},
+		Contract: LeafContract{
+			Identity:    contract.ToolIdentitySpec{ProductID: "chat", Name: "promote_message_to_thread", CanonicalPath: "chat.promote_message_to_thread", CLIPath: "chat thread promote", PrimaryCLIPath: "chat thread promote"},
+			Description: "将普通群中的已有消息升级为 Thread 根消息",
+			DryRun:      &contract.DryRunSpec{PreviewKind: contract.DryRunPreviewRequest, RemoteReads: false},
+			Interface:   &contract.InterfaceSpec{Mode: "mcp", Availability: "available", Ref: &contract.InterfaceRefSpec{ProductID: "im", RPCName: tool}},
+			Selection: contract.SelectionSpec{
+				AgentSummary: "将普通群中的已有消息升级为 Thread 根消息",
+				UseWhen:      []string{"用户明确要求把普通群里一条已存在的消息转成 Thread 或群内话题时"},
+				AvoidWhen:    []string{"发布全新的 Thread 使用 chat thread send；回复已有 Thread 使用 chat thread reply；单聊消息不能升级"},
+				Examples:     []string{"dws chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>"},
+			},
+			Parameters: []contract.ParamDecl{
+				{Name: "conversation-id", Property: "openConversationId", Required: boolPtr(true), InterfaceType: "string"},
+				{Name: "message-id", Property: "openMessageId", Required: boolPtr(true), InterfaceType: "string"},
+			},
+			Result: &contract.ResultSpec{
+				Outcomes:   []contract.ResultOutcome{contract.ResultOutcomeSuccess},
+				DataSchema: json.RawMessage(`{"type":"object","description":"普通群消息升级为 Thread 的结果","properties":{"openConversationId":{"type":"string","description":"Thread 所属普通群的 openConversationId"},"openMessageId":{"type":"string","description":"升级为 Thread 根消息的 openMessageId"},"openConvThreadId":{"type":"string","description":"转换后生成的 openConvThreadId"}},"required":["openConversationId","openMessageId","openConvThreadId"],"additionalProperties":false}`),
+			},
+		},
+		ResultCall: callChatThreadPromoteResult,
+	})
+}
+
+func callChatThreadPromoteResult(cmd *cobra.Command, tool string, args map[string]any) (output.CommandResult, error) {
+	if deps.Caller.DryRun() {
+		return output.Success(map[string]any{
+			"tool": tool, "arguments": args, "executed": false,
+		}, output.WithDryRun()), nil
+	}
+	payload, err := CallMCPToolDataOnServer(cmd.Context(), "im", tool, args)
+	if err != nil {
+		return nil, err
+	}
+	body, ok := payload.(map[string]any)
+	if !ok {
+		return nil, chatThreadResponseValidationError("im/"+tool, fmt.Errorf("响应不是 JSON 对象"))
+	}
+	result, ok := body["result"].(map[string]any)
+	if !ok {
+		return nil, chatThreadResponseValidationError("im/"+tool, fmt.Errorf("响应缺少 result 对象"))
+	}
+	for _, field := range []string{"openConversationId", "openMessageId", "openConvThreadId"} {
+		value, ok := result[field].(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return nil, chatThreadResponseValidationError("im/"+tool, fmt.Errorf("result.%s 不是非空字符串", field))
+		}
+		result[field] = strings.TrimSpace(value)
+	}
+	for _, field := range []string{"openConversationId", "openMessageId"} {
+		if result[field] != strings.TrimSpace(fmt.Sprint(args[field])) {
+			return nil, chatThreadResponseValidationError("im/"+tool, fmt.Errorf("result.%s 与请求不一致", field))
+		}
+	}
+	return output.Success(result), nil
 }
 
 func newChatThreadCreateCommand() *cobra.Command {

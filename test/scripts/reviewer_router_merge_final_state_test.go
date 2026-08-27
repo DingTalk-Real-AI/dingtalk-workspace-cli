@@ -65,6 +65,22 @@ const successfulMergeResponseHelper = `function requireSuccessfulMergeResponse(m
   return mergeResult.sha;
 }`
 
+const mergePreflightHelper = `function classifyMergePreflight(pullRequest) {
+  if (
+    pullRequest.mergeable === true &&
+    pullRequest.mergeable_state === 'behind'
+  ) {
+    return 'behind';
+  }
+  if (
+    pullRequest.mergeable === null &&
+    pullRequest.mergeable_state === 'unknown'
+  ) {
+    return 'unknown';
+  }
+  return 'attempt';
+}`
+
 const mergeAttemptRecoveryHelper = `function classifyMergeAttemptRecovery(
   status,
   errorMessage,
@@ -150,6 +166,9 @@ func TestReviewerRouterValidatesAppMergeFinalState(t *testing.T) {
 			if got := strings.Count(script, successfulMergeResponseHelper); got != 1 {
 				t.Errorf("successful merge-response helper count = %d, want 1", got)
 			}
+			if got := strings.Count(script, mergePreflightHelper); got != 1 {
+				t.Errorf("merge-preflight helper count = %d, want 1", got)
+			}
 			if got := strings.Count(script, mergeAttemptRecoveryHelper); got != 1 {
 				t.Errorf("merge-attempt recovery helper count = %d, want 1", got)
 			}
@@ -167,7 +186,7 @@ func TestReviewerRouterValidatesAppMergeFinalState(t *testing.T) {
 		t.Fatalf("App merge final-state scripts checked = %d, want 1", checked)
 	}
 
-	verification := appMergeFinalStateHelper + "\n" + successfulMergeResponseHelper + "\n" + mergeAttemptRecoveryHelper + `
+	verification := appMergeFinalStateHelper + "\n" + successfulMergeResponseHelper + "\n" + mergePreflightHelper + "\n" + mergeAttemptRecoveryHelper + `
 const app = 'dingtalk-dws-reviewer-router[bot]';
 const valid = {
   state: 'closed',
@@ -239,6 +258,20 @@ for (const response of [
   }
   if (!rejected) {
     throw new Error('invalid successful merge response was accepted: ' + JSON.stringify(response));
+  }
+}
+
+for (const [name, pull, expected] of [
+  ['behind', {mergeable: true, mergeable_state: 'behind'}, 'behind'],
+  ['unknown', {mergeable: null, mergeable_state: 'unknown'}, 'unknown'],
+  ['clean', {mergeable: true, mergeable_state: 'clean'}, 'attempt'],
+  ['dirty', {mergeable: false, mergeable_state: 'dirty'}, 'attempt'],
+  ['null blocked', {mergeable: null, mergeable_state: 'blocked'}, 'attempt'],
+  ['missing mergeable', {mergeable_state: 'unknown'}, 'attempt'],
+]) {
+  const actual = classifyMergePreflight(pull);
+  if (actual !== expected) {
+    throw new Error(name + ' merge preflight = ' + actual + ', want ' + expected);
   }
 }
 

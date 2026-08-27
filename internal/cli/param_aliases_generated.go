@@ -11,6 +11,82 @@ package cli
 // the reviewed concept dictionary. Each entry binds one runnable Cobra leaf.
 var generatedParamAliases = []ParamAliasEntry{
 	{
+		CLIPath: "agoal +contract-fields",
+		Aliases: map[string]string{
+			"keywords":    "keyword",
+			"q":           "keyword",
+			"query":       "keyword",
+			"search-word": "keyword",
+		},
+		Blocked:   []string{"agreement-id", "contract-id", "field-id", "name", "subject", "text", "title"},
+		Ambiguous: []string{"code", "id", "type"},
+	},
+	{
+		CLIPath: "agoal +obj-template-list",
+		Aliases: map[string]string{
+			"current-page": "page",
+			"keywords":     "keyword",
+			"limit":        "page-size",
+			"max-result":   "page-size",
+			"max-results":  "page-size",
+			"page-no":      "page",
+			"page-num":     "page",
+			"per-page":     "page-size",
+			"q":            "keyword",
+			"query":        "keyword",
+			"search-word":  "keyword",
+			"size":         "page-size",
+			"take":         "page-size",
+			"top":          "page-size",
+		},
+		Blocked:   []string{"count", "cursor", "name", "offset", "page-index", "page-token", "subject", "text", "title"},
+		Ambiguous: []string{"id", "template"},
+	},
+	{
+		CLIPath: "agoal +report-statistics-list",
+		Aliases: map[string]string{
+			"keywords":    "keyword",
+			"q":           "keyword",
+			"query":       "keyword",
+			"search-word": "keyword",
+		},
+		Blocked: []string{"name", "subject", "text", "title"},
+	},
+	{
+		CLIPath: "agoal +report-submit-detail",
+		Aliases: map[string]string{
+			"current-page":       "page",
+			"keywords":           "keyword",
+			"limit":              "page-size",
+			"max-result":         "page-size",
+			"max-results":        "page-size",
+			"page-no":            "page",
+			"page-num":           "page",
+			"per-page":           "page-size",
+			"q":                  "keyword",
+			"query":              "keyword",
+			"report-date":        "query-date",
+			"report-template-id": "template-id",
+			"search-word":        "keyword",
+			"size":               "page-size",
+			"take":               "page-size",
+			"top":                "page-size",
+		},
+		Blocked:   []string{"count", "cursor", "end-date", "name", "offset", "page-index", "page-token", "start-date", "subject", "text", "title"},
+		Ambiguous: []string{"date", "id", "state"},
+	},
+	{
+		CLIPath: "agoal +user-rules",
+		Aliases: map[string]string{
+			"staff-id": "user-id",
+			"uid":      "user-id",
+			"user":     "user-id",
+			"userid":   "user-id",
+		},
+		Blocked:   []string{"at-user-ids", "name", "open-id", "staff-no", "to-user", "union-id", "user-ids", "users"},
+		Ambiguous: []string{"id"},
+	},
+	{
 		CLIPath: "agoal contract detail",
 		Aliases: map[string]string{
 			"business-contract-id": "contract-id",
@@ -300,6 +376,18 @@ var generatedParamAliases = []ParamAliasEntry{
 		},
 	},
 	{
+		CLIPath: "aitable +base-bootstrap",
+		Aliases: map[string]string{
+			"base-name":              "name",
+			"base-template-id":       "template-id",
+			"table-definitions-json": "tables",
+			"tables-json":            "tables",
+			"target-folder-id":       "folder-id",
+		},
+		Blocked:   []string{"base-id", "data", "field-id", "field-ids", "json", "payload", "schema", "table-id"},
+		Ambiguous: []string{"folder", "id", "template"},
+	},
+	{
 		CLIPath: "aitable +base-copy",
 		Aliases: map[string]string{
 			"base":       "base-id",
@@ -454,6 +542,90 @@ var generatedParamAliases = []ParamAliasEntry{
 		},
 	},
 	{
+		CLIPath: "aitable +datasource-create",
+		Aliases: map[string]string{
+			"auto-sync-config":       "auto-sync-setting",
+			"auto-sync-setting-json": "auto-sync-setting",
+			"base":                   "base-id",
+			"base-token":             "base-id",
+			"data-source-type":       "datasource-type",
+			"enable-auto-sync":       "auto",
+			"field-id-list":          "field-ids",
+			"source-config-json":     "source-config",
+		},
+		Blocked:   []string{"config", "data", "field-id", "json", "payload", "record-ids", "source", "table-id"},
+		Ambiguous: []string{"data-source-config", "datasource-config", "id", "type"},
+	},
+	{
+		CLIPath: "aitable +datasource-get-config",
+		Aliases: map[string]string{
+			"base":       "base-id",
+			"base-token": "base-id",
+			"table":      "table-id",
+		},
+		Blocked:   []string{"data", "field-ids", "json", "name", "payload", "source-config", "source-table-id", "table-ids", "target-table-id", "task-ids"},
+		Ambiguous: []string{"config", "id"},
+	},
+	{
+		CLIPath: "aitable +datasource-get-fields",
+		Aliases: map[string]string{
+			"base":               "base-id",
+			"base-token":         "base-id",
+			"data-source-type":   "datasource-type",
+			"source-config-json": "source-config",
+		},
+		Blocked:   []string{"auto-sync-setting", "data", "field-id", "field-ids", "json", "payload", "table-id"},
+		Ambiguous: []string{"config", "data-source-config", "datasource-config", "id", "source", "type"},
+	},
+	{
+		CLIPath: "aitable +datasource-list-sources",
+		Aliases: map[string]string{
+			"base":             "base-id",
+			"base-token":       "base-id",
+			"data-source-type": "datasource-type",
+		},
+		Blocked:   []string{"field-ids", "source-config", "table-id"},
+		Ambiguous: []string{"id", "source", "type"},
+	},
+	{
+		CLIPath: "aitable +datasource-sync",
+		Aliases: map[string]string{
+			"base":                  "base-id",
+			"base-token":            "base-id",
+			"data-source-table-ids": "table-ids",
+			"datasource-table-ids":  "table-ids",
+		},
+		Blocked:   []string{"field-ids", "table-id", "task-ids"},
+		Ambiguous: []string{"id", "ids"},
+	},
+	{
+		CLIPath: "aitable +datasource-sync-status",
+		Aliases: map[string]string{
+			"base":                "base-id",
+			"base-token":          "base-id",
+			"datasource-task-ids": "task-ids",
+			"sync-task-ids":       "task-ids",
+			"table":               "table-id",
+		},
+		Blocked:   []string{"field-ids", "name", "source-table-id", "table-ids", "target-table-id", "task-id"},
+		Ambiguous: []string{"id", "ids", "status"},
+	},
+	{
+		CLIPath: "aitable +datasource-update",
+		Aliases: map[string]string{
+			"auto-sync-config":       "auto-sync-setting",
+			"auto-sync-setting-json": "auto-sync-setting",
+			"base":                   "base-id",
+			"base-token":             "base-id",
+			"enable-auto-sync":       "auto",
+			"field-id-list":          "field-ids",
+			"source-config-json":     "source-config",
+			"table":                  "table-id",
+		},
+		Blocked:   []string{"config", "data", "data-source-type", "datasource-type", "field-id", "json", "name", "payload", "record-ids", "source", "source-table-id", "source-type", "table-ids", "target-table-id"},
+		Ambiguous: []string{"data-source-config", "datasource-config", "id", "type"},
+	},
+	{
 		CLIPath: "aitable +export-data",
 		Aliases: map[string]string{
 			"base":          "base-id",
@@ -475,11 +647,12 @@ var generatedParamAliases = []ParamAliasEntry{
 	{
 		CLIPath: "aitable +field-get",
 		Aliases: map[string]string{
-			"base":       "base-id",
-			"base-token": "base-id",
-			"table":      "table-id",
+			"base":          "base-id",
+			"base-token":    "base-id",
+			"field-id-list": "field-ids",
+			"table":         "table-id",
 		},
-		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+		Blocked: []string{"field-id", "name", "record-ids", "source-table-id", "table-ids", "target-table-id"},
 	},
 	{
 		CLIPath: "aitable +field-update",
@@ -659,6 +832,7 @@ var generatedParamAliases = []ParamAliasEntry{
 		Aliases: map[string]string{
 			"base":            "base-id",
 			"base-token":      "base-id",
+			"field-id-list":   "field-ids",
 			"keyword":         "query",
 			"keywords":        "query",
 			"max-result":      "limit",
@@ -676,7 +850,7 @@ var generatedParamAliases = []ParamAliasEntry{
 			"take":            "limit",
 			"top":             "limit",
 		},
-		Blocked: []string{"count", "name", "offset", "page", "source-table-id", "subject", "table-ids", "target-table-id", "text", "title"},
+		Blocked: []string{"count", "field-id", "name", "offset", "page", "source-table-id", "subject", "table-ids", "target-table-id", "text", "title"},
 	},
 	{
 		CLIPath: "aitable +record-query-empty",
@@ -742,6 +916,16 @@ var generatedParamAliases = []ParamAliasEntry{
 			"table":      "table-id",
 		},
 		Blocked: []string{"name", "source-table-id", "table-ids", "target-table-id"},
+	},
+	{
+		CLIPath: "aitable +resolve-base",
+		Aliases: map[string]string{
+			"aitable-name": "name",
+			"base-name":    "name",
+			"fuzzy-match":  "fuzzy",
+		},
+		Blocked:   []string{"base-id", "keyword", "query", "url"},
+		Ambiguous: []string{"base", "id"},
 	},
 	{
 		CLIPath: "aitable +resolve-table",
@@ -835,6 +1019,19 @@ var generatedParamAliases = []ParamAliasEntry{
 		},
 	},
 	{
+		CLIPath: "aitable +table-bootstrap",
+		Aliases: map[string]string{
+			"base":                   "base-id",
+			"base-token":             "base-id",
+			"field-definitions-json": "fields",
+			"fields-json":            "fields",
+			"table-fields-json":      "fields",
+			"table-name":             "name",
+		},
+		Blocked:   []string{"data", "field-id", "field-ids", "json", "payload", "schema", "table-id"},
+		Ambiguous: []string{"field", "id"},
+	},
+	{
 		CLIPath: "aitable +table-copy",
 		Aliases: map[string]string{
 			"table-id": "source-table-id",
@@ -887,6 +1084,17 @@ var generatedParamAliases = []ParamAliasEntry{
 			"top":             "limit",
 		},
 		Blocked: []string{"count", "name", "offset", "page", "subject", "text", "title"},
+	},
+	{
+		CLIPath: "aitable +url-resolve",
+		Aliases: map[string]string{
+			"aitable-url":   "url",
+			"base-url":      "url",
+			"table-url":     "url",
+			"verify-exists": "verify",
+		},
+		Blocked:   []string{"base-id", "node-id", "record-id", "table-id", "view-id"},
+		Ambiguous: []string{"id", "link"},
 	},
 	{
 		CLIPath: "aitable +view-delete",
@@ -2875,6 +3083,28 @@ var generatedParamAliases = []ParamAliasEntry{
 		Blocked: []string{"location", "room", "room-id", "room-ids", "rooms"},
 	},
 	{
+		CLIPath: "chat +at-me",
+		Aliases: map[string]string{
+			"chat-id":              "group",
+			"conversation-id":      "group",
+			"group-name":           "group",
+			"max-result":           "limit",
+			"max-results":          "limit",
+			"next-cursor":          "cursor",
+			"next-page-token":      "cursor",
+			"next-token":           "cursor",
+			"open-conversation-id": "group",
+			"page-size":            "limit",
+			"page-token":           "cursor",
+			"per-page":             "limit",
+			"size":                 "limit",
+			"take":                 "limit",
+			"top":                  "limit",
+		},
+		Blocked:   []string{"count", "offset", "page"},
+		Ambiguous: []string{"open-dingtalk-id", "user", "user-id"},
+	},
+	{
 		CLIPath: "chat +bot-find",
 		Aliases: map[string]string{
 			"name": "query",
@@ -2887,6 +3117,16 @@ var generatedParamAliases = []ParamAliasEntry{
 			"query":        "name",
 		},
 		Blocked: []string{"cursor"},
+	},
+	{
+		CLIPath: "chat +broadcast",
+		Aliases: map[string]string{
+			"body":                "content",
+			"recipient-name-list": "to",
+			"to-names":            "to",
+		},
+		Blocked:   []string{"name", "open-dingtalk-id", "open-dingtalk-ids", "title", "user-id", "user-ids"},
+		Ambiguous: []string{"recipient", "recipients", "to-ids"},
 	},
 	{
 		CLIPath: "chat +category-add-conversation",
@@ -2991,6 +3231,54 @@ var generatedParamAliases = []ParamAliasEntry{
 			"open-conversation-id": "group",
 		},
 		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "id", "name", "open-conversation-ids", "source", "src-conversation-id", "target"},
+	},
+	{
+		CLIPath:   "chat +chat-list",
+		Blocked:   []string{"offset", "page"},
+		Ambiguous: []string{"max-result", "max-results", "next-cursor", "next-token", "per-page", "size", "take", "top", "type"},
+	},
+	{
+		CLIPath: "chat +chat-list-all",
+		Aliases: map[string]string{
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"size":            "limit",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "offset", "page"},
+	},
+	{
+		CLIPath: "chat +chat-list-join-requests",
+		Aliases: map[string]string{
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"size":            "limit",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked: []string{"count", "offset", "page"},
+	},
+	{
+		CLIPath: "chat +chat-list-mine",
+		Aliases: map[string]string{
+			"max-result":  "limit",
+			"max-results": "limit",
+		},
+		Blocked:   []string{"cursor", "offset", "page", "page-size", "page-token", "per-page"},
+		Ambiguous: []string{"size", "take", "top", "type"},
 	},
 	{
 		CLIPath: "chat +chat-members-get",
@@ -3142,6 +3430,16 @@ var generatedParamAliases = []ParamAliasEntry{
 		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "id", "open-conversation-ids", "role-ids", "source", "src-conversation-id", "target"},
 	},
 	{
+		CLIPath: "chat +chat-search",
+		Aliases: map[string]string{
+			"keywords":    "query",
+			"q":           "query",
+			"search-word": "query",
+		},
+		Blocked:   []string{"offset", "page", "subject", "text", "title"},
+		Ambiguous: []string{"max-result", "max-results", "name", "next-cursor", "next-token", "per-page", "take", "top"},
+	},
+	{
 		CLIPath: "chat +chat-set-admin",
 		Aliases: map[string]string{
 			"chat":                 "group",
@@ -3265,6 +3563,35 @@ var generatedParamAliases = []ParamAliasEntry{
 		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "id", "name", "open-conversation-ids", "source", "src-conversation-id", "staff-id", "target", "uid", "user", "user-id", "userid"},
 	},
 	{
+		CLIPath: "chat +conversation-list",
+		Aliases: map[string]string{
+			"max-result":  "limit",
+			"max-results": "limit",
+			"next-cursor": "cursor",
+			"page-size":   "limit",
+			"per-page":    "limit",
+			"size":        "limit",
+			"take":        "limit",
+			"top":         "limit",
+		},
+		Blocked: []string{"count", "next-token", "offset", "page", "page-token"},
+	},
+	{
+		CLIPath: "chat +conversation-list-top",
+		Aliases: map[string]string{
+			"max-result":  "limit",
+			"max-results": "limit",
+			"next-cursor": "cursor",
+			"page-size":   "limit",
+			"per-page":    "limit",
+			"size":        "limit",
+			"take":        "limit",
+			"top":         "limit",
+		},
+		Blocked:   []string{"count", "next-token", "offset", "page", "page-token"},
+		Ambiguous: []string{"conversation-type"},
+	},
+	{
 		CLIPath: "chat +conversation-mark-read",
 		Aliases: map[string]string{
 			"chat":                 "conversation-id",
@@ -3305,6 +3632,16 @@ var generatedParamAliases = []ParamAliasEntry{
 			"open-conversation-ids": "conversation-ids",
 		},
 		Blocked: []string{"group", "group-id", "group-ids", "groups", "set-top", "top"},
+	},
+	{
+		CLIPath: "chat +dm",
+		Aliases: map[string]string{
+			"body":           "content",
+			"recipient-name": "to",
+			"to-name":        "to",
+		},
+		Blocked:   []string{"name", "open-dingtalk-id", "open-dingtalk-ids", "title", "user-id", "user-ids"},
+		Ambiguous: []string{"recipient", "to-id"},
 	},
 	{
 		CLIPath: "chat +feed-group-query-item",
@@ -3412,6 +3749,17 @@ var generatedParamAliases = []ParamAliasEntry{
 		Ambiguous: []string{"chat", "chat-id", "conversation-id", "group", "id", "open-conversation-id"},
 	},
 	{
+		CLIPath: "chat +messages-create-text-emotion",
+		Aliases: map[string]string{
+			"body":         "text",
+			"content":      "text",
+			"display-name": "emotion-name",
+			"name":         "emotion-name",
+		},
+		Blocked:   []string{"emotion-id", "media-id", "message-id", "title"},
+		Ambiguous: []string{"background", "id"},
+	},
+	{
 		CLIPath: "chat +messages-forward",
 		Aliases: map[string]string{
 			"dest-open-cid":               "dest-conversation-id",
@@ -3487,6 +3835,11 @@ var generatedParamAliases = []ParamAliasEntry{
 		Blocked: []string{"message-id", "msg-id", "open-message-id", "ref-msg-id", "src-msg-id"},
 	},
 	{
+		CLIPath:   "chat +messages-query-send-status",
+		Blocked:   []string{"message-id", "msg-id", "open-message-id", "task-id", "thread-id", "topic-id"},
+		Ambiguous: []string{"id", "status"},
+	},
+	{
 		CLIPath: "chat +messages-read-status",
 		Aliases: map[string]string{
 			"chat":                 "conversation-id",
@@ -3496,6 +3849,15 @@ var generatedParamAliases = []ParamAliasEntry{
 			"open-message-id":      "message-id",
 		},
 		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "message-ids", "msg-ids", "name", "open-conversation-ids", "open-dingtalk-id", "open-message-ids", "open-task-id", "ref-msg-id", "resource-id", "source", "src-conversation-id", "src-msg-id", "target", "topic-id", "user-id"},
+	},
+	{
+		CLIPath: "chat +messages-recall",
+		Aliases: map[string]string{
+			"chat-id":              "conversation-id",
+			"open-conversation-id": "conversation-id",
+			"open-message-id":      "msg-id",
+		},
+		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "msg-ids", "name", "open-conversation-ids", "open-message-ids", "open-task-id", "ref-msg-id", "resource-id", "source", "src-conversation-id", "src-msg-id", "target", "thread-id", "topic-id"},
 	},
 	{
 		CLIPath: "chat +messages-recall-by-bot",
@@ -3567,6 +3929,25 @@ var generatedParamAliases = []ParamAliasEntry{
 		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "id", "name", "open-conversation-ids", "source", "src-conversation-id", "target"},
 	},
 	{
+		CLIPath: "chat +messages-send",
+		Aliases: map[string]string{
+			"conversation-id":            "group",
+			"open-conversation-id":       "group",
+			"receiver-user-id":           "user",
+			"recipient-open-dingtalk-id": "open-dingtalk-id",
+			"recipient-user-id":          "user",
+			"robot":                      "robot-code",
+			"staff-id":                   "user",
+			"to-open-dingtalk-id":        "open-dingtalk-id",
+			"uid":                        "user",
+			"user-id":                    "user",
+			"user-ids":                   "users",
+			"userid":                     "user",
+		},
+		Blocked:   []string{"bot-code", "bot-id", "message-id", "name", "open-bot-id", "open-message-id", "open-task-id", "robot-id", "thread-id", "to-user", "topic-id"},
+		Ambiguous: []string{"at-ids", "body", "content", "conversation-ids", "id", "recipient"},
+	},
+	{
 		CLIPath: "chat +messages-send-by-bot",
 		Aliases: map[string]string{
 			"chat":                 "group",
@@ -3582,6 +3963,30 @@ var generatedParamAliases = []ParamAliasEntry{
 		Aliases: map[string]string{
 			"at-user-ids": "at-users",
 		},
+	},
+	{
+		CLIPath: "chat +messages-send-card",
+		Aliases: map[string]string{
+			"body":                       "content",
+			"card-flow-status":           "flow-status",
+			"chat":                       "group",
+			"chat-id":                    "group",
+			"conversation-id":            "group",
+			"mention-open-dingtalk-ids":  "at-open-dingtalk-ids",
+			"open-conversation-id":       "group",
+			"receiver-user-id":           "receiver",
+			"recipient-open-dingtalk-id": "receiver-open-dingtalk-id",
+			"recipient-user-id":          "receiver",
+			"staff-id":                   "receiver",
+			"text":                       "content",
+			"to-open-dingtalk-id":        "receiver-open-dingtalk-id",
+			"uid":                        "receiver",
+			"user":                       "receiver",
+			"user-id":                    "receiver",
+			"userid":                     "receiver",
+		},
+		Blocked:   []string{"at-user-ids", "conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "message-id", "name", "open-conversation-ids", "open-dingtalk-ids", "open-message-id", "open-task-id", "source", "src-conversation-id", "target", "title", "to-user", "user-ids", "users"},
+		Ambiguous: []string{"at-ids", "id", "recipient", "status"},
 	},
 	{
 		CLIPath: "chat +messages-set-pin",
@@ -3632,6 +4037,36 @@ var generatedParamAliases = []ParamAliasEntry{
 		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "id", "message-ids", "msg-ids", "name", "open-conversation-ids", "open-message-ids", "open-task-id", "ref-msg-id", "resource-id", "source", "src-conversation-id", "src-msg-id", "target", "topic-id"},
 	},
 	{
+		CLIPath: "chat +messages-update-card",
+		Aliases: map[string]string{
+			"body":             "content",
+			"card-biz-id":      "biz-id",
+			"card-content":     "content",
+			"card-flow-status": "flow-status",
+			"text":             "content",
+		},
+		Blocked:   []string{"message-id", "name", "open-message-id", "open-task-id", "task-id", "title"},
+		Ambiguous: []string{"id", "status"},
+	},
+	{
+		CLIPath: "chat +my-groups",
+		Aliases: map[string]string{
+			"max-result":      "limit",
+			"max-results":     "limit",
+			"next-cursor":     "cursor",
+			"next-page-token": "cursor",
+			"next-token":      "cursor",
+			"page-size":       "limit",
+			"page-token":      "cursor",
+			"per-page":        "limit",
+			"size":            "limit",
+			"take":            "limit",
+			"top":             "limit",
+		},
+		Blocked:   []string{"count", "offset", "page"},
+		Ambiguous: []string{"group-type"},
+	},
+	{
 		CLIPath: "chat +search-msg",
 		Aliases: map[string]string{
 			"chat": "group",
@@ -3643,6 +4078,19 @@ var generatedParamAliases = []ParamAliasEntry{
 			"group-name": "group",
 		},
 		Blocked: []string{"chat-id", "conversation-id", "group-id", "id", "open-conversation-id"},
+	},
+	{
+		CLIPath: "chat +thread-replies",
+		Aliases: map[string]string{
+			"chat":                 "group",
+			"chat-id":              "group",
+			"conversation-id":      "group",
+			"msg-id":               "message-id",
+			"open-conversation-id": "group",
+			"open-message-id":      "message-id",
+		},
+		Blocked:   []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "message-ids", "msg-ids", "name", "offset", "open-conversation-ids", "open-message-ids", "open-task-id", "page", "ref-msg-id", "resource-id", "source", "src-conversation-id", "src-msg-id", "target", "thread-ids", "topic-ids"},
+		Ambiguous: []string{"id", "max-results", "next-cursor", "size", "status"},
 	},
 	{
 		CLIPath: "chat +unread-chats",
@@ -5209,6 +5657,15 @@ var generatedParamAliases = []ParamAliasEntry{
 		Blocked: []string{"agent-name", "app-id", "config", "confirm-name", "creator", "field-description", "file-id", "preview-media-id", "robot-name"},
 	},
 	{
+		CLIPath: "devapp +credentials-get",
+		Aliases: map[string]string{
+			"app-id":         "unified-app-id",
+			"application-id": "unified-app-id",
+		},
+		Blocked:   []string{"agent-id", "app-key", "app-secret", "bot-id", "robot-code"},
+		Ambiguous: []string{"application", "id"},
+	},
+	{
 		CLIPath: "devapp +delete",
 		Aliases: map[string]string{
 			"app-id":         "unified-app-id",
@@ -5254,6 +5711,16 @@ var generatedParamAliases = []ParamAliasEntry{
 			"top":             "page-size",
 		},
 		Blocked: []string{"agent-id", "app-key", "app-secret", "count", "name", "offset", "page", "subject", "text", "title"},
+	},
+	{
+		CLIPath: "devapp +event-subscribe",
+		Aliases: map[string]string{
+			"app-id":          "unified-app-id",
+			"application-id":  "unified-app-id",
+			"event-code-list": "event-codes",
+		},
+		Blocked:   []string{"agent-id", "app-key", "app-secret", "event-code", "keyword", "query", "scope-values", "user-ids"},
+		Ambiguous: []string{"code", "event", "id", "type"},
 	},
 	{
 		CLIPath: "devapp +get",
@@ -5354,6 +5821,45 @@ var generatedParamAliases = []ParamAliasEntry{
 		Ambiguous: []string{"permission-scope", "scope", "scope-filter", "status", "type"},
 	},
 	{
+		CLIPath: "devapp +robot-config",
+		Aliases: map[string]string{
+			"app-id":               "unified-app-id",
+			"application-id":       "unified-app-id",
+			"description":          "desc",
+			"description-text":     "desc",
+			"display-robot-name":   "name",
+			"event-hook-url":       "event-callback-url",
+			"event-url":            "event-callback-url",
+			"message-callback-url": "outgoing-url",
+			"message-hook-url":     "outgoing-url",
+			"robot-mode":           "mode",
+			"robot-name":           "name",
+			"short-description":    "brief",
+			"skill-list":           "skills",
+			"transport-mode":       "mode",
+		},
+		Blocked:   []string{"agent-id", "agent-name", "app-key", "app-name", "app-secret", "config", "confirm-name", "field-description", "file-id", "preview-media-id"},
+		Ambiguous: []string{"callback-url", "id", "skill-names", "summary", "url"},
+	},
+	{
+		CLIPath: "devapp +robot-disable",
+		Aliases: map[string]string{
+			"app-id":         "unified-app-id",
+			"application-id": "unified-app-id",
+		},
+		Blocked:   []string{"agent-id", "app-key", "app-secret", "bot-id", "robot-code"},
+		Ambiguous: []string{"application", "id", "robot"},
+	},
+	{
+		CLIPath: "devapp +robot-enable",
+		Aliases: map[string]string{
+			"app-id":         "unified-app-id",
+			"application-id": "unified-app-id",
+		},
+		Blocked:   []string{"agent-id", "app-key", "app-secret", "bot-id", "robot-code"},
+		Ambiguous: []string{"application", "id", "robot"},
+	},
+	{
 		CLIPath: "devapp +robot-get",
 		Aliases: map[string]string{
 			"app-id":         "unified-app-id",
@@ -5380,6 +5886,20 @@ var generatedParamAliases = []ParamAliasEntry{
 			"release-version-id": "version-id",
 		},
 		Blocked: []string{"agent-id", "app-key", "app-secret", "id", "task-id", "version"},
+	},
+	{
+		CLIPath: "devapp +version-create",
+		Aliases: map[string]string{
+			"app-id":           "unified-app-id",
+			"app-version-name": "version",
+			"application-id":   "unified-app-id",
+			"description":      "desc",
+			"description-text": "desc",
+			"release-label":    "version",
+			"version-label":    "version",
+		},
+		Blocked:   []string{"agent-id", "app-key", "app-secret", "config", "field-description", "release-version-id", "task-id", "version-id"},
+		Ambiguous: []string{"id", "release"},
 	},
 	{
 		CLIPath: "devapp +version-get",

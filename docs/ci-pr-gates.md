@@ -261,8 +261,11 @@ App-owned request through the synchronous PR merge endpoint. Immediately before
 each attempt it revalidates the App's ruleset boundary and PR intent, supplies
 the current head SHA, and treats server-declared not-ready or
 concurrent-revision responses as retriable. An exact behind-main state is also
-retriable before the merge request. If GitHub instead reports that same state
-as HTTP 403 `Resource not accessible by integration`, reconciliation recovers
+retriable before the merge request. The exact transient pair
+`mergeable=null` and `mergeable_state=unknown` is likewise deferred without a
+merge request; it is not treated as evidence that the PR is admissible. If
+GitHub instead reports a behind state as HTTP 403
+`Resource not accessible by integration`, reconciliation recovers
 only after a same-token read proves the unchanged open head, repository-owned
 `main` base, and exact behind mergeability; every other 403 remains a hard
 failure. The live preflight requires the

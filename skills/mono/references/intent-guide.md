@@ -44,6 +44,7 @@
 | "搜一下消息里的changefree链接" | 消息搜索 | `chat +search-msg` | `chat message search-advanced` | Shortcut 支持关键词、发送者、会话、消息类型、时间窗、全量翻页和批量富化 |
 | "按发送者搜索/指定多个群搜索/多维度搜消息" | 多维度搜索消息 | `chat +search-msg` | `chat message search-advanced` | 需要原子响应结构时才降级 |
 | "逐条列出这条话题的回复/撤回后具体还剩哪些回复" | 话题回复 | `chat thread list-replies` | `chat +thread-replies --page-all` | 已知父会话 ID 与 openConvThreadId 时直接查询；需要全量翻页、排序或资源下载再用 Shortcut |
+| "把群里这条已有消息转成 Thread/升级成群内话题" | 消息升级为 Thread | `chat thread promote` | `chat thread send` | promote 转换已有普通群消息；send 发布一条全新的 Thread |
 | "把这些消息里的附件下载下来" | 消息资源下载 | 查询 Shortcut 的 `--download-resources` | `resourceRefs.shortcut` 返回的下载命令 | 先用查询结果的 resourceRefs；单资源再执行返回的可运行参数 |
 | "消息发没发成功/查询消息发送状态" | 查询消息发送状态 | `chat message query-send-status` | — | 需要 send 返回的 openTaskId |
 | "编辑/撤回我刚发的消息" | 发后编辑/撤回 | `send` → `query-send-status` → `edit` / `recall` | 按消息内容反查 | 使用 send 返回的 openTaskId 直接获取两个后续 ID |
@@ -215,13 +216,14 @@ alidocs 链接表面长得一样（`https://alidocs.dingtalk.com/i/nodes/{id}`�
 - "把文件移到另一个文件夹" — 移动文件实体
 - "改一下文件名" — 重命名文件实体
 - "给张三加个编辑权限" — 权限管理
-- 用户提到"钉盘"、"网盘"、"上传"、"下载"、"搜文件"、"找文件"、"复制"、"移动"、"重命名"、"权限"
+- "给这个 PDF/附件加个评论" — 普通文件的文件级全局评论
+- 用户提到"钉盘"、"网盘"、"上传"、"下载"、"搜文件"、"找文件"、"复制"、"移动"、"重命名"、"权限"、"普通文件评论"
 
 **用 `doc`（内容层）的场景**：
 - "读一下这个文档的内容" — 读取文档 Markdown（仅 adoc 有意义）
 - "帮我写入一段话到文档里" — 编辑文档内容（仅 adoc 有意义）
 - "在第三段后面插入一个表格" — 块级编辑（仅 adoc 有意义）
-- "给这段内容加个评论" — 文档评论（仅 adoc 有意义）
+- "给这段内容加个评论" — 在线文档正文/划词评论（仅 adoc 有意义）
 - "把这个文档导出为 docx" — 文档导出（当前仅 adoc 支持）
 - 用户提到"读文档内容"、"写文档"、"编辑文档"、"块级编辑"、"文档评论"、"导出文档"
 

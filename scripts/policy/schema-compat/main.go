@@ -1858,6 +1858,26 @@ func normalizeSchemaCommandMigrations(
 		}
 		legacyPath := strings.TrimPrefix(migration.Legacy.Command, "dws ")
 		replacementPath := strings.TrimPrefix(migration.Replacement.Command, "dws ")
+		if migration.Kind == interfacesnapshot.CommandMigrationFlagExtraction &&
+			migration.State == interfacesnapshot.CommandMigrationConsumed {
+			_, historicalPublishesLegacy := oldTool.Parameters[migration.LegacyFlag.Name]
+			_, currentPublishesLegacy := newSource.Parameters[migration.LegacyFlag.Name]
+			historicalReplacement, historicalReplacementExists := oldProduct.Tools[migration.Schema.ReplacementToolID]
+			currentReplacement, currentReplacementExists := newProduct.Tools[migration.Schema.ReplacementToolID]
+			if oldTool.PrimaryCLIPath == legacyPath &&
+				newSource.PrimaryCLIPath == legacyPath &&
+				!historicalPublishesLegacy &&
+				!currentPublishesLegacy &&
+				historicalReplacementExists &&
+				historicalReplacement.PrimaryCLIPath == replacementPath &&
+				currentReplacementExists &&
+				currentReplacement.PrimaryCLIPath == replacementPath {
+				// The merge-base has already reached the extraction's after state.
+				// Retain the receipt for older stable baselines without replaying it
+				// against the already-extracted source tool.
+				continue
+			}
+		}
 		if oldTool.PrimaryCLIPath == replacementPath {
 			// A consumed receipt can still be needed for the stable baseline after
 			// main has already reached the after state.

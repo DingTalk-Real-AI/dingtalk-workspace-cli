@@ -62,6 +62,12 @@ func assertMarkdownLarkTasksRouteWithoutDuplicateShortcuts(t *testing.T, root *c
 	group := mustFindCommand(t, root, "markdown")
 	children := map[string]bool{}
 	for _, child := range group.Commands() {
+		if child.Name() == "comment" {
+			if !child.HasSubCommands() {
+				t.Fatal("markdown comment must remain a product-owned command group")
+			}
+			continue
+		}
 		children[child.Name()] = true
 	}
 	if len(children) != len(routes) {

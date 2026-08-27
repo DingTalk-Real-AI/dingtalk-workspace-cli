@@ -54,9 +54,11 @@ type importFlowConfig struct {
 	folderFlags          []string
 	workspaceFlags       []string
 	requireTarget        bool
+	exclusiveTarget      bool
+	defaultTargetSource  string
+	resolveDefaultTarget func(context.Context) (importTarget, error)
 	serverID             string
 	includeNodeID        bool
-	resolveDefaultTarget bool
 	verifyPlacement      bool
 	timeoutAsResult      bool
 	nextCommand          string
@@ -69,13 +71,19 @@ type importFlowConfig struct {
 }
 
 type preparedImportFile struct {
-	path      string
-	name      string
-	extension string
-	size      int64
+	path         string
+	name         string
+	extension    string
+	size         int64
+	folder       string
+	workspace    string
+	targetSource string
+}
+
+type importTarget struct {
 	folder    string
 	workspace string
-	target    string
+	source    string
 }
 
 func defaultImportPollPolicy() importPollPolicy {
@@ -105,8 +113,10 @@ func docImportFlowConfig() importFlowConfig {
 		supportedFormatsText: "docx, doc, xlsx, xls, md, txt, xmind, mark",
 		folderFlags:          []string{"folder", "folder-id"},
 		workspaceFlags:       []string{"workspace", "workspace-id"},
+		exclusiveTarget:      true,
+		defaultTargetSource:  "default_org_root",
+		resolveDefaultTarget: resolveDefaultDocImportTarget,
 		includeNodeID:        true,
-		resolveDefaultTarget: true,
 		verifyPlacement:      true,
 		nextCommand:          "dws doc import get --task-id %s",
 		poll:                 defaultImportPollPolicy(),
@@ -115,6 +125,82 @@ func docImportFlowConfig() importFlowConfig {
 		// 目标 flags（--folder/--workspace）与 import 同构，链路不中断。
 		uploadFallback: true,
 	}
+}
+
+func importTargetValidationError(message string, cause error) error {
+	options := []apperrors.Option{
+		apperrors.WithOperation("doc.import.resolve_target"),
+		apperrors.WithReason("import_target_unresolved"),
+		apperrors.WithExecutionStarted(false),
+		apperrors.WithRetryable(false),
+		apperrors.WithActions("显式提供 --folder <目标文件夹ID> 或 --workspace <目标知识库ID> 后重新执行"),
+	}
+	if cause != nil {
+		options = append(options, apperrors.WithCause(cause))
+	}
+	return apperrors.NewValidation(message, options...)
+}
+
+func parseDefaultDocImportTarget(text string) (importTarget, error) {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		return importTarget{}, importTargetValidationError("无法解析当前组织的默认文档根目录；请显式提供 --folder 或 --workspace", err)
+	}
+	if nextToken, exists := payload["nextToken"]; exists && nextToken != nil {
+		token, ok := nextToken.(string)
+		if !ok || strings.TrimSpace(token) != "" {
+			return importTarget{}, importTargetValidationError("当前组织空间列表仍有下一页，无法证明默认导入位置唯一；请显式提供 --folder 或 --workspace", nil)
+		}
+	}
+	if hasMore, exists := payload["hasMore"]; exists && hasMore != nil {
+		more, ok := hasMore.(bool)
+		if !ok || more {
+			return importTarget{}, importTargetValidationError("当前组织空间列表仍有下一页，无法证明默认导入位置唯一；请显式提供 --folder 或 --workspace", nil)
+		}
+	}
+	if result, ok := payload["result"].(map[string]any); ok {
+		payload = result
+	}
+	if nextToken, exists := payload["nextToken"]; exists && nextToken != nil {
+		token, ok := nextToken.(string)
+		if !ok || strings.TrimSpace(token) != "" {
+			return importTarget{}, importTargetValidationError("当前组织空间列表仍有下一页，无法证明默认导入位置唯一；请显式提供 --folder 或 --workspace", nil)
+		}
+	}
+	if hasMore, exists := payload["hasMore"]; exists && hasMore != nil {
+		more, ok := hasMore.(bool)
+		if !ok || more {
+			return importTarget{}, importTargetValidationError("当前组织空间列表仍有下一页，无法证明默认导入位置唯一；请显式提供 --folder 或 --workspace", nil)
+		}
+	}
+	items, ok := payload["items"].([]any)
+	if !ok {
+		return importTarget{}, importTargetValidationError("当前组织空间响应缺少 items，无法确定默认导入位置；请显式提供 --folder 或 --workspace", nil)
+	}
+	if len(items) != 1 {
+		return importTarget{}, importTargetValidationError(fmt.Sprintf("当前组织返回 %d 个 orgSpace，无法唯一确定默认导入位置；请显式提供 --folder 或 --workspace", len(items)), nil)
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		return importTarget{}, importTargetValidationError("当前组织唯一 orgSpace 的返回结构无效；请显式提供 --folder 或 --workspace", nil)
+	}
+	if spaceType, _ := item["spaceType"].(string); spaceType != "" && spaceType != "orgSpace" {
+		return importTarget{}, importTargetValidationError(fmt.Sprintf("默认空间类型为 %q，不是 orgSpace；请显式提供 --folder 或 --workspace", spaceType), nil)
+	}
+	rootFolderID, _ := item["rootFolderId"].(string)
+	rootFolderID = strings.TrimSpace(rootFolderID)
+	if rootFolderID == "" {
+		return importTarget{}, importTargetValidationError("当前组织唯一 orgSpace 未返回 rootFolderId；请显式提供 --folder 或 --workspace", nil)
+	}
+	return importTarget{folder: rootFolderID, source: "default_org_root"}, nil
+}
+
+func resolveDefaultDocImportTarget(ctx context.Context) (importTarget, error) {
+	text, err := callMCPToolReturnTextOnServer(ctx, "drive", "list_spaces", map[string]any{"spaceType": "orgSpace"})
+	if err != nil {
+		return importTarget{}, importTargetValidationError("无法读取当前组织的默认文档根目录；请显式提供 --folder 或 --workspace", err)
+	}
+	return parseDefaultDocImportTarget(text)
 }
 
 func sheetImportFlowConfig() importFlowConfig {
@@ -196,111 +282,45 @@ func prepareImportFile(cmd *cobra.Command, args []string, cfg importFlowConfig) 
 	}
 	folder := importFlagValue(cmd, cfg.folderFlags...)
 	workspace := importFlagValue(cmd, cfg.workspaceFlags...)
+	if cfg.exclusiveTarget && folder != "" && workspace != "" {
+		return preparedImportFile{}, importTargetValidationError("--folder 与 --workspace 不能同时提供；请选择一个明确的导入目标", nil)
+	}
 	if cfg.requireTarget && folder == "" && workspace == "" {
 		return preparedImportFile{}, fmt.Errorf("--folder-token 与 --workspace 至少需要提供一个（导入目标位置）")
 	}
-
-	target := ""
+	targetSource := ""
 	if folder != "" {
-		target = "folder_flag"
+		targetSource = "explicit_folder"
 	} else if workspace != "" {
-		target = "workspace_flag"
+		targetSource = "explicit_workspace"
 	}
 
 	return preparedImportFile{
-		path:      filePath,
-		name:      name,
-		extension: extension,
-		size:      fileInfo.Size(),
-		folder:    folder,
-		workspace: workspace,
-		target:    target,
+		path:         filePath,
+		name:         name,
+		extension:    extension,
+		size:         fileInfo.Size(),
+		folder:       folder,
+		workspace:    workspace,
+		targetSource: targetSource,
 	}, nil
 }
 
-func resolveDefaultDocImportTarget(ctx context.Context, file *preparedImportFile) error {
-	if file == nil || file.folder != "" || file.workspace != "" {
-		return nil
+func addImportTargetReceipt(result map[string]any, file preparedImportFile, deferredSource string) {
+	if file.folder != "" {
+		result["targetFolderId"] = file.folder
 	}
-	text, err := callMCPToolReturnTextOnServer(ctx, "wiki", "list_wikiSpaces", map[string]any{
-		"wikiSpaceType": "myWikiSpace",
-	})
-	if err != nil {
-		return docImportTargetResolutionError(err)
+	if file.workspace != "" {
+		result["workspaceId"] = file.workspace
 	}
-	workspaceID, err := parsePersonalDocWorkspaceID(text)
-	if err != nil {
-		return docImportTargetResolutionError(err)
+	if file.targetSource != "" {
+		result["targetSource"] = file.targetSource
+		return
 	}
-	file.workspace = workspaceID
-	file.target = "default_personal_workspace"
-	return nil
-}
-
-func parsePersonalDocWorkspaceID(text string) (string, error) {
-	var root any
-	if err := json.Unmarshal([]byte(text), &root); err != nil {
-		return "", fmt.Errorf("解析我的文档空间响应失败: %w", err)
+	if deferredSource != "" {
+		result["targetSource"] = deferredSource
+		result["targetResolution"] = "deferred"
 	}
-	spaces, ok := findImportObjectList(root, "wikiSpaces", "spaces")
-	if !ok || len(spaces) == 0 {
-		return "", fmt.Errorf("我的文档空间响应没有返回 wikiSpaces")
-	}
-	if len(spaces) != 1 {
-		return "", fmt.Errorf("我的文档空间响应返回 %d 个候选，无法安全选择", len(spaces))
-	}
-	workspaceID := importString(spaces[0], "workspaceId")
-	if workspaceID == "" {
-		return "", fmt.Errorf("我的文档空间响应缺少 workspaceId")
-	}
-	return workspaceID, nil
-}
-
-func findImportObjectList(value any, keys ...string) ([]map[string]any, bool) {
-	switch typed := value.(type) {
-	case map[string]any:
-		for _, key := range keys {
-			raw, exists := typed[key]
-			if !exists {
-				continue
-			}
-			items, ok := raw.([]any)
-			if !ok {
-				return nil, false
-			}
-			objects := make([]map[string]any, 0, len(items))
-			for _, item := range items {
-				object, ok := item.(map[string]any)
-				if !ok {
-					return nil, false
-				}
-				objects = append(objects, object)
-			}
-			return objects, true
-		}
-		for _, key := range []string{"result", "data"} {
-			if nested, exists := typed[key]; exists {
-				if objects, ok := findImportObjectList(nested, keys...); ok {
-					return objects, true
-				}
-			}
-		}
-	}
-	return nil, false
-}
-
-func docImportTargetResolutionError(cause error) error {
-	return apperrors.NewAPI(
-		"无法解析默认的“我的文档”目标，导入尚未开始",
-		apperrors.WithOperation("doc.import"),
-		apperrors.WithReason("doc_import_default_target_unavailable"),
-		apperrors.WithFailureStage("resolve_default_target"),
-		apperrors.WithExecutionStarted(false),
-		apperrors.WithRetryable(false),
-		apperrors.WithActions("检查是否可访问“我的文档”空间", "也可以显式传入 --folder 或 --workspace 后重试"),
-		apperrors.WithDetails(map[string]any{"status": "failed", "target": "myWikiSpace"}),
-		apperrors.WithCause(cause),
-	)
 }
 
 func importString(value map[string]any, keys ...string) string {
@@ -420,7 +440,7 @@ func compactImportedDocumentInfo(info map[string]any, nodeID string) map[string]
 }
 
 func importTargetSummary(file preparedImportFile) map[string]any {
-	result := map[string]any{"source": file.target}
+	result := map[string]any{"source": file.targetSource}
 	if file.folder != "" {
 		result["folderId"] = canonicalImportTargetID(file.folder)
 	}
@@ -514,7 +534,7 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 
 	if deps.Caller.DryRun() {
 		if jsonMode {
-			return deps.Out.PrintJSON(map[string]any{
+			result := map[string]any{
 				"dry_run":             true,
 				"executed":            false,
 				"preview_kind":        "plan",
@@ -526,7 +546,9 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 				"name":                uploadName,
 				"format":              file.extension,
 				"size":                file.size,
-			})
+			}
+			addImportTargetReceipt(result, file, cfg.defaultTargetSource)
+			return deps.Out.PrintJSON(result)
 		}
 		deps.Out.PrintKeyValue("操作", "上传文件到钉钉文档（doc import 回退）")
 		deps.Out.PrintKeyValue("文件", file.path)
@@ -574,6 +596,7 @@ func runImportUploadFallback(cmd *cobra.Command, cfg importFlowConfig, file prep
 		"dentry_id":           dentryID,
 		"result":              commit,
 	}
+	addImportTargetReceipt(result, file, "")
 	if cfg.verifyPlacement {
 		result["verified"] = true
 		result["target"] = importTargetSummary(file)
@@ -623,7 +646,7 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 			return runImportUploadFallback(cmd, cfg, file)
 		}
 		if jsonMode {
-			return deps.Out.PrintJSON(map[string]any{
+			result := map[string]any{
 				"dry_run":      true,
 				"executed":     false,
 				"preview_kind": "plan",
@@ -632,7 +655,9 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 				"name":         file.name,
 				"format":       file.extension,
 				"size":         file.size,
-			})
+			}
+			addImportTargetReceipt(result, file, cfg.defaultTargetSource)
+			return deps.Out.PrintJSON(result)
 		}
 		deps.Out.PrintKeyValue("操作", cfg.operation)
 		deps.Out.PrintKeyValue("文件", file.path)
@@ -646,13 +671,21 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if cfg.resolveDefaultTarget && file.folder == "" && file.workspace == "" {
-		if err := resolveDefaultDocImportTarget(ctx, &file); err != nil {
+	if file.folder == "" && file.workspace == "" && cfg.resolveDefaultTarget != nil {
+		target, err := cfg.resolveDefaultTarget(ctx)
+		if err != nil {
 			return err
 		}
+		if target.folder == "" && target.workspace == "" {
+			return importTargetValidationError("默认导入目标解析结果为空；请显式提供 --folder 或 --workspace", nil)
+		}
+		file.folder = target.folder
+		file.workspace = target.workspace
+		file.targetSource = target.source
 	}
-	// 实际执行时，白名单外格式也必须先完成与在线转换路径相同的目标解析，
-	// 再进入上传回退；这样无显式目标时仍落到“我的文档”，且可执行同一套回读验证。
+	// 非回退配置的白名单外文件已在 prepareImportFile 中按基线顺序拒绝。
+	// 回退上传与在线转换共享同一目标解析，避免仅因扩展名不同而绕过
+	// 默认 orgSpace 唯一性校验或落入服务端隐式位置。
 	if uploadFallback {
 		return runImportUploadFallback(cmd, cfg, file)
 	}
@@ -767,6 +800,7 @@ func runImportCommand(cmd *cobra.Command, args []string, cfg importFlowConfig) e
 		"documentName": documentName,
 		"documentType": documentType,
 	}
+	addImportTargetReceipt(finalResult, file, "")
 	if cfg.includeNodeID {
 		finalResult["nodeId"] = nodeID
 	}
@@ -805,9 +839,9 @@ func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
 		workspace: importFlagValue(cmd, cfg.workspaceFlags...),
 	}
 	if target.folder != "" {
-		target.target = "folder_flag"
+		target.targetSource = "explicit_folder"
 	} else if target.workspace != "" {
-		target.target = "workspace_flag"
+		target.targetSource = "explicit_workspace"
 	}
 	if deps.Caller.DryRun() {
 		if deps.Caller.Format() == "json" {

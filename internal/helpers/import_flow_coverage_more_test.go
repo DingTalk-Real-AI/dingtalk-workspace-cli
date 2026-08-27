@@ -64,7 +64,7 @@ func TestCrossPlatformCoverageImportFlowRemainingBranches(t *testing.T) {
 		t.Cleanup(func() { os.Args = oldArgs })
 
 		installScriptedCaller(t, &scriptedToolCaller{steps: []scriptedToolStep{
-			{text: `{"wikiSpaces":[{"workspaceId":"my-space"}]}`},
+			{text: `{"result":{"items":[{"rootFolderId":"root-folder-1","spaceType":"orgSpace"}]}}`},
 			{text: `{"sessionId":"session-1","uploadUrl":"https://upload.example.test/object"}`},
 			{text: `{"taskId":"task-1"}`},
 			{text: `{"status":"processing"}`},
@@ -77,7 +77,7 @@ func TestCrossPlatformCoverageImportFlowRemainingBranches(t *testing.T) {
 		cfg.poll.interval = func(int) time.Duration { return 0 }
 		cfg.poll.wait = func(context.Context, time.Duration) error { return nil }
 		err := runImportCommand(importCoverageCommand(t, writeImportFixture(t, "md")), nil, cfg)
-		if err == nil || !strings.Contains(err.Error(), "手动查询") || !strings.Contains(err.Error(), "--workspace my-space") {
+		if err == nil || !strings.Contains(err.Error(), "手动查询") || !strings.Contains(err.Error(), "--folder root-folder-1") {
 			t.Fatalf("runImportCommand() error = %v, want manual-query timeout", err)
 		}
 	})

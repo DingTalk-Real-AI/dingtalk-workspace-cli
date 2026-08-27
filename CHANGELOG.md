@@ -6,6 +6,79 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.60] - 2026-08-27
+
+This release promotes the sealed `v1.0.60-beta.3` contents to stable.
+
+### Changed
+
+- **Document, Drive, and Sheet workflows** — adds Drive quota, task polling,
+  export, permission, comment, public-link, history-version, revision, floating
+  image, and delegated-access workflows; hardens document import, large
+  Markdown writes, download handling, and readback verification.
+
+- **Collaboration and automation commands** — adds dedicated Chat Thread
+  commands, AITable datasource management, Agoal scorecard search, OA approval
+  attachment upload, and reviewed Whiteboard workflows.
+
+- **Agent-safe CLI contracts** (#1161) — publishes stricter pagination, result,
+  confirmation, routing, and error contracts across report, Sheet, Minutes,
+  AiSearch, Contact, Task, Wiki, and document commands, plus reviewed argument
+  aliases for Agoal, DevApp, AITable, and Chat shortcuts.
+
+- **DWS OpenAPI escape hatch** — supports file-backed parameters and request
+  bodies, multipart uploads, pagination, and bounded binary downloads while
+  tightening redirect, credential-pair, Keychain migration, and error-handling
+  behavior.
+
+- **Supported command surface** — removes the retired Education and College
+  vendor extensions and improves command typo guidance, fork admission, and
+  Reviewer Router merge recovery without weakening protected-main checks.
+
+### Changes since `v1.0.60-beta.3`
+
+### Added
+
+- **Drive local-file comments** (#1151) — adds the complete global comment
+  lifecycle for Drive files through the shared document comment service,
+  including `create-v2`, `list-v2`, reply, update, delete, batch query,
+  direct-reply listing, resolve, restore, and reaction replies. The existing
+  `create` and `list` leaves retain their legacy behavior and output contract
+  with deprecation guidance for an explicit migration.
+- **Markdown comment reads** (#1151) — adds comment listing for native Markdown
+  files with global, inline, resolution-status, and cursor filters, and exposes
+  direct-reply listing across the shared Doc and Sheet comment lifecycle.
+
+- **Chat Thread commands** — adds thirteen `chat thread` leaves for topic-circle creation, Thread publishing, reading, replying, forwarding, recall, emoji reactions, and text emotions. Parameters keep the original `chat group` / `chat message` names, including `--conversation-id`, `--topic-id`, and the existing forward flags.
+
+- **Doc-business delegation auth** — the `drive`, `doc`, `sheet`, `wiki`, and `markdown` command groups now accept a persistent `--principal-user-id` flag. When set, the first invocation of each doc-business tool key per node within a session is gated by a `check_capability` verification on behalf of the principal; granting the capability is an out-of-band action the principal completes on the server side, and the CLI never calls `grant_capability`. A denied check surfaces the server's denial message and blocks the original call.
+- **Dry-run consistency** — `checkCapability` now executes in dry-run mode as well, ensuring preview and execution behaviors are consistent. In dry-run, the check routes through the `ReadTool` channel (real network request) instead of `CallTool` (which would go through EchoRunner and always deny).
+- **Dry-run pre-check in helpers** — dry-run mode now invokes the delegation auth validator before rendering the preview, ensuring commands that would be denied at execution time are also blocked at preview time.
+- **Local rejection for node-less commands** — commands that lack a node identifier (e.g. search/list/create without nodeId) now return a clear client-side error (`DELEGATION_AUTH_NOT_SUPPORTED`, exit code 3) when `--principal-user-id` is set, instead of forwarding an incomplete request to the server.
+- **Concurrency safety** — the per-session `checked` map in the delegation auth decorator is now protected by a `sync.Mutex`, preventing data races under concurrent tool invocations.
+- **Markdown dry-run parity** — the `markdown` fetch/create/overwrite/patch/diff commands now run the same `check_capability` delegation gate on their dry-run previews as `doc`/`drive` do; a dry-run combined with `--principal-user-id` is verified against the command's real first delegated call before any preview is rendered, and a denied principal blocks the preview.
+
+### Changed
+
+- **Report latest lookup** — scans bounded, strictly advancing outbox pages, reconciles duplicate IDs, and reads back the uniquely newest report instead of failing on the first continuation page.
+- **Sheet create-with-data result** — returns the already probed `sheetId` at the top level while preserving legacy `.result.nodeId` and outer `requestId`, avoids repeating the sheet-list probe, keeps the main-compatible single readback check, and reports post-create partial/unknown state without unsafe whole-workflow retries.
+- **Sheet workflow routing** — distinguishes local analysis from Excel-to-online import, exposes template discovery and apply routes, and preserves the full data-validation tri-state contract.
+- **Received-report helper and routing** — restores same-profile sender resolution before inbox filtering, keeps Mono and Multi helpers identical, uses bounded complete pagination, renders epoch timestamps in the Shanghai timezone, fails closed instead of returning incomplete data, and keeps midnight query windows valid.
+
+### Fixed
+
+- **Minutes pagination results** (#1112) — publishes list, search, and transcript continuation and exhaustion evidence through the unified `meta.pagination` envelope, while keeping business-scope completeness separate from endpoint exhaustion.
+
+- **Chat Thread create result** — returns the created group's `openConversationId` and omits internal `openCid` / `cid` fields, matching `chat group create --thread`.
+
+- **Doc agent routing and import defaults** — aligns document and drive Skill
+  guidance with the executable CLI contract, preserves structured heading and
+  attachment routes, publishes required shortcut arguments, and resolves the
+  current profile's default document target before an import is submitted.
+
+- **Reviewer Router preflight** — defers App-owned merge attempts while GitHub reports transiently unknown mergeability, avoiding false reconciliation failures without weakening approval or required-check enforcement.
+
+
 ## [1.0.60-beta.3] - 2026-08-26
 
 ### Added

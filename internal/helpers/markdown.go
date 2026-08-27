@@ -37,7 +37,7 @@ func newMarkdownCommand() *cobra.Command {
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "markdown",
 		Selection: contract.ProductSelectionDecl{
-			AgentSummary: "跨钉盘与文档空间创建、获取、覆盖和局部修补原生 Markdown 文件",
+			AgentSummary: "跨钉盘与文档空间创建、获取、覆盖、局部修补和读取原生 Markdown 评论列表",
 			UseWhen: []string{
 				"目标是原生 .md 文件，并需要在 Drive/Doc 路由间安全处理内容时",
 			},
@@ -49,7 +49,7 @@ func newMarkdownCommand() *cobra.Command {
 	root := newGroupCommand(&cobra.Command{
 		Use:   "markdown",
 		Short: "Markdown 文件处理",
-		Long:  "创建、覆盖、修补、对比和获取钉盘或文档空间中的原生 Markdown 文件。",
+		Long:  "创建、覆盖、修补、对比、获取和读取钉盘或文档空间中的原生 Markdown 文件评论。",
 		RunE:  groupRunE,
 	})
 	installDocDelegationAuth(root)
@@ -59,6 +59,7 @@ func newMarkdownCommand() *cobra.Command {
 		newMarkdownDiffCmd(),
 		newMarkdownOverwriteCmd(),
 		newMarkdownPatchCmd(),
+		newMarkdownCommentCmd(),
 	)
 	return root
 }

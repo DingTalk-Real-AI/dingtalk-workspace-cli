@@ -11,11 +11,9 @@ metadata:
 
 # 长尾产品集合 Skill（dingtalk-misc）
 
-## 前置条件 — 执行操作前必读
+## 执行前路由
 
-> **CRITICAL — 执行任何 `dws` 操作前，MUST 先用 Read 工具完整读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)。**该轻量文件包含全局执行契约、安全底线及 shared references 的按需加载导航；不要预加载其全部 references。
-
-本 skill 打包低频长尾产品，命令前缀各不相同。**不要**把这份 SKILL.md 当作命令细节来源——它只负责路由；命中某个产品后，务必读取该产品的 `references/<product>.md` 获取 Usage / Example / Flags / 危险操作确认 / 跨产品协作等完整信息。
+本文件只负责产品路由。先由下表确定唯一产品：Report/Sheet 直接读取对应 reference（内含自动同步的最小执行契约）；其它产品先读取 [`dingtalk-shared`](../dingtalk-shared/SKILL.md)，再读取唯一产品 reference。仅在实际触发认证、profile、确认或错误恢复时补读一份精确 shared reference，不做冷启动预读。
 
 ## 产品索引表
 
@@ -35,14 +33,14 @@ metadata:
 | 招聘 / 职位 / JD / 在招职位 / 创建职位 / 职位详情 | 钉钉招聘职位的查询、详情与创建 | `dws recruit` | [recruit.md](references/recruit.md) |
 | 搜索技能 / 找技能 / 安装技能 / 技能市场 / 安装 DWS mono 或 multi skill | DWS 技能市场搜索、下载、安装与内置技能部署 | `dws skill` | [skill.md](references/skill.md) |
 | 人才池 / 储备干部池 / 员工档案 / 职业历程 / 绩效记录 / 员工标签 / 组织大脑 / 人才搜索 | 组织大脑：人才池、员工档案专项模块与结构化人才搜索 | `dws hrbrain` | [hrbrain.md](references/hrbrain.md) |
-| 原生 Markdown / `.md` 原文 / 覆盖 Markdown / 局部替换 Markdown | 原生 `.md` 文件读取、创建、全量覆盖与局部替换 | `dws markdown` | [markdown.md](references/markdown.md) |
+| 原生 Markdown / `.md` 原文 / 覆盖 Markdown / 局部替换 Markdown / Markdown 评论 | 原生 `.md` 文件读取、创建、对比、覆盖、局部替换与评论列表 | `dws markdown` | [markdown.md](references/markdown.md) |
 | PAT 授权 / 行为权限 / scope 授权 / 一次性授权 / 会话授权 / 永久授权 / 授权浏览器策略 | PAT 行为授权与本地浏览器策略 | `dws pat` | [pat.md](references/pat.md) |
 | 切换组织 / 换组织 / 跨组织 / 多组织 / profile / 看登录了哪些组织 | 多组织 / profile 管理与跨组织取数 | `dws profile` / `dws auth` / `--profile` | [profile.md](references/profile.md) |
 | 宜搭 / AI应用脚本 / 财务辅助脚本（未产品化） | **无**稳定命令面；仅仓库内辅助脚本 | （非默认路由） | [unsupported-scripts.md](references/unsupported-scripts.md) |
 
 ## 说明
 
-- 每个产品的意图表、危险操作确认、硬约束、跨产品协作和短流程均在其 `references/<product>.md` 内，命中产品后必须读取，不要只凭本表推测命令。
+- 命中产品后必须读取其 `references/<product>.md`，不要只凭索引推测命令。Report 只读 [report.md](references/report.md)；Sheet 常见闭环只读 [sheet.md](references/sheet.md)，复杂任务按进入阶段顺序加载子 reference，每阶段最多一份、常规任务最多三份，禁止批量预读或重复读取。
 - 产品自己的局部意图消歧文档命名为 `references/<product>-intent-guide.md`，不是共享的 `references/intent-guide.md`。
 - 各产品之间跨产品协作若指向本包内的其它产品，已在对应 `references/<product>.md` 里写成"见本包 references/X.md"，无需切换 skill；若指向 top10 独立产品（如 `chat`/`aisearch`/`doc`），仍按 `dingtalk-<product>` 切换 skill。
 - `scripts/` 下 yida / finance / `aiapp_create_and_poll.py` 等见 [unsupported-scripts.md](references/unsupported-scripts.md)；默认不要当正式能力调用。

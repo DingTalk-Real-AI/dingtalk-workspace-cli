@@ -53,6 +53,14 @@ func htmlFallbackCommand(t *testing.T, filePath string) *cobra.Command {
 	return cmd
 }
 
+func docImportFallbackTestConfig() importFlowConfig {
+	cfg := docImportFlowConfig()
+	cfg.resolveDefaultTarget = func(context.Context) (importTarget, error) {
+		return importTarget{folder: "test-default-root", source: "default_org_root"}, nil
+	}
+	return cfg
+}
+
 func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 	uploadSteps := []scriptedToolStep{
 		{text: `{"resourceUrl":"https://upload.example.test/object","uploadKey":"key-1"}`},
@@ -73,7 +81,7 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 		if err := cmd.Flags().Set("workspace", "ws-1"); err != nil {
 			t.Fatal(err)
 		}
-		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+		if err := runImportCommand(cmd, nil, docImportFallbackTestConfig()); err != nil {
 			t.Fatalf("runImportCommand() error = %v, want upload fallback success", err)
 		}
 		if caller.calls != 3 || caller.tool != "get_document_info" {
@@ -106,12 +114,12 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 		}
 	})
 
-	t.Run("fallback resolves and verifies the default personal workspace", func(t *testing.T) {
+	t.Run("fallback resolves and verifies the default organization root", func(t *testing.T) {
 		caller := &scriptedToolCaller{format: "json", steps: []scriptedToolStep{
-			{text: `{"wikiSpaces":[{"workspaceId":"my-space"}]}`},
+			{text: `{"result":{"items":[{"rootFolderId":"root-folder","spaceType":"orgSpace"}]}}`},
 			{text: `{"resourceUrl":"https://upload.example.test/object","uploadKey":"key-1"}`},
 			{text: `{"dentryUuid":"node-default","name":"sales.pdf"}`},
-			{text: `{"nodeId":"node-default","workspaceId":"my-space","name":"sales.pdf"}`},
+			{text: `{"nodeId":"node-default","folderId":"root-folder","name":"sales.pdf"}`},
 		}}
 		installScriptedCaller(t, caller)
 		var stdout bytes.Buffer
@@ -123,18 +131,18 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
 			t.Fatalf("runImportCommand() error = %v", err)
 		}
-		if strings.Join(caller.toolLog, ",") != "list_wikiSpaces,get_file_upload_info,commit_uploaded_file,get_document_info" {
+		if strings.Join(caller.toolLog, ",") != "list_spaces,get_file_upload_info,commit_uploaded_file,get_document_info" {
 			t.Fatalf("fallback calls = %#v", caller.toolLog)
 		}
-		if got := caller.argsLog[2]["workspaceId"]; got != "my-space" {
-			t.Fatalf("default commit workspaceId = %#v", got)
+		if got := caller.argsLog[2]["folderId"]; got != "root-folder" {
+			t.Fatalf("default commit folderId = %#v", got)
 		}
 		var payload map[string]any
 		if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
 			t.Fatal(err)
 		}
 		target, _ := payload["target"].(map[string]any)
-		if payload["verified"] != true || target["source"] != "default_personal_workspace" || target["workspaceId"] != "my-space" {
+		if payload["verified"] != true || target["source"] != "default_org_root" || target["folderId"] != "root-folder" {
 			t.Fatalf("fallback result = %#v", payload)
 		}
 	})
@@ -170,7 +178,7 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 		deps.Out.w = &stdout
 
 		cmd := htmlFallbackCommand(t, writeImportFixture(t, "html"))
-		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+		if err := runImportCommand(cmd, nil, docImportFallbackTestConfig()); err != nil {
 			t.Fatalf("runImportCommand() error = %v", err)
 		}
 		if caller.calls != 0 {
@@ -230,7 +238,7 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 		if err := cmd.Flags().Set("folder-id", "folder-abc"); err != nil {
 			t.Fatal(err)
 		}
-		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+		if err := runImportCommand(cmd, nil, docImportFallbackTestConfig()); err != nil {
 			t.Fatalf("runImportCommand() error = %v, want upload fallback success", err)
 		}
 		if got := caller.argsLog[1]["folderId"]; got != "folder-abc" {
@@ -274,7 +282,7 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 			t.Fatal(err)
 		}
 		cmd := htmlFallbackCommand(t, big)
-		err = runImportCommand(cmd, nil, docImportFlowConfig())
+		err = runImportCommand(cmd, nil, docImportFallbackTestConfig())
 		if err == nil || !strings.Contains(err.Error(), "exceeds 20MB limit") {
 			t.Fatalf("runImportCommand() error = %v, want 20MB limit rejection", err)
 		}
@@ -287,7 +295,7 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 			t.Fatal(err)
 		}
 		cmd := htmlFallbackCommand(t, empty)
-		err := runImportCommand(cmd, nil, docImportFlowConfig())
+		err := runImportCommand(cmd, nil, docImportFallbackTestConfig())
 		if err == nil || !strings.Contains(err.Error(), "file is empty") {
 			t.Fatalf("runImportCommand() error = %v, want empty-file rejection", err)
 		}
@@ -300,7 +308,7 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 		deps.Out.w = &stdout
 
 		cmd := htmlFallbackCommand(t, writeImportFixture(t, "md"))
-		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+		if err := runImportCommand(cmd, nil, docImportFallbackTestConfig()); err != nil {
 			t.Fatalf("runImportCommand() error = %v", err)
 		}
 		var payload map[string]any
@@ -318,7 +326,7 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 	t.Run("missing file falls through to the import required-flag error", func(t *testing.T) {
 		installScriptedCaller(t, &scriptedToolCaller{})
 		cmd := htmlFallbackCommand(t, "")
-		err := runImportCommand(cmd, nil, docImportFlowConfig())
+		err := runImportCommand(cmd, nil, docImportFallbackTestConfig())
 		if err == nil || !strings.Contains(err.Error(), "--file is required") {
 			t.Fatalf("runImportCommand() error = %v, want --file required", err)
 		}
@@ -331,7 +339,7 @@ func TestCrossPlatformCoverageDocImportHTMLUploadRedirect(t *testing.T) {
 		deps.Out.w = &stdout
 
 		cmd := htmlFallbackCommand(t, writeImportFixture(t, "html"))
-		if err := runImportCommand(cmd, nil, docImportFlowConfig()); err != nil {
+		if err := runImportCommand(cmd, nil, docImportFallbackTestConfig()); err != nil {
 			t.Fatalf("runImportCommand() error = %v", err)
 		}
 		if caller.calls != 0 {

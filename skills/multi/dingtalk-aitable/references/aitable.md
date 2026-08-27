@@ -1,113 +1,138 @@
-# AI 表格执行 Reference（兼容索引，非默认入口）
+# AITable 低频原子能力索引
 
-根 Skill 已包含高频 Golden Route 的准确参数，参数足够时直接执行，不读取本文件。本文件仅作兼容索引：只有根 Skill 与精确操作 Reference 都无法覆盖时，才可把它作为该 Case 唯一读取的 Reference；读取后不再加载第二个 Reference、`--help` 或产品级 Catalog。
+> 返回入口：[DingTalk AITable Skill](../SKILL.md)
 
-## 高频 Golden Route（准确 flags）
+本文件只用于根 Skill 和精确 task reference 都未覆盖的低频底层能力。Base/Table
+定位、建表、记录查询与写入、字段配置、视图编排、导入导出等常见任务必须回到根 Skill
+的 Golden Route 或对应 task reference，不在这里重新选路。
 
-```bash
-# 新建 Base 和整套表字段；tables 必须是非空数组
-dws aitable +base-bootstrap --name "项目管理" --tables '[{"name":"任务","fields":[{"fieldName":"标题","type":"text"}]}]'
+## 使用边界
 
-# 只新建空 Base；folder-id / template-id 均为可选
-dws aitable base create --name "项目管理"
-dws aitable base create --name "项目管理" --folder-id <FOLDER_NODE_ID>
-dws aitable base create --name "项目管理" --template-id <TEMPLATE_ID>
+1. 先确认任务确实需要 Shortcut 未发布的底层字段、原始响应或运维控制；
+2. 只读取精确原子 leaf Schema/Help，不加载产品级 Catalog 猜参数；
+3. URL、名称和自然目标仍须解析为唯一稳定 ID，禁止选第一项；
+4. 原子写 leaf 的 confirmation 若与对应 Golden Shortcut 不一致，停止并报告交付漂移；
+5. 后续 ID 只使用当前 profile 的真实返回，不跨组织复用；
+6. 完成后保留 verification、partial failure、checkpoint 和可继续编排的稳定 ID。
 
-# 已有 Base 新建一张完整表；超过 15 个字段由 shortcut 自动分片
-dws aitable +table-bootstrap --base-id <BASE_ID> --name "任务" --fields '[{"fieldName":"标题","type":"text"}]'
+## 高频任务返回表
 
-# 只补字段；单字段与批量字段二选一，单次最多 15 个
-dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> --name "状态" --type singleSelect --config '{"options":[{"name":"待办"},{"name":"完成"}]}'
-dws aitable field create --base-id <BASE_ID> --table-id <TABLE_ID> --fields '[{"fieldName":"状态","type":"singleSelect","config":{"options":[{"name":"待办"}]}}]'
+| 用户终点 | 返回入口 |
+|---|---|
+| URL/名称解析、Base 搜索、建 Base/Table、记录查询与 CRUD | 根 Skill Golden Route |
+| 记录值格式、批量写、历史、分享和统计 | [record-ops](aitable-record-ops.md) |
+| 筛选、排序和日期操作符 | [filter-sort](aitable/aitable-filter-sort.md) |
+| 字段类型、创建与复杂配置 | [field](aitable/aitable-field.md) |
+| 视图列顺序、筛选、排序、冻结和展示配置 | [view-config](aitable/aitable-view-config.md) |
+| 表单字段、题目与分享 | [form](aitable/aitable-form.md) |
+| Dashboard 与 Chart 配置 | [dashboard-chart](aitable/aitable-dashboard-chart.md) |
+| 导入、导出和异步任务恢复 | [export-import](aitable/aitable-export-import.md) |
+| 附件、工作流与高级权限 | 对应的 [attachment](aitable/aitable-attachment.md)、[workflow](aitable/aitable-workflow.md) 或 [advperm](aitable/aitable-advperm.md) |
+| 记录主键文档 | [primary-doc](aitable/aitable-primary-doc.md) |
+| Base 内 Section/节点编排 | [section](aitable-section.md) |
+| 相邻产品或低频意图仍需消歧 | [intent-guide](intent-guide.md) |
 
-# 创建视图；view-type 合法值：Grid/FormDesigner/Gantt/Calendar/Kanban/Gallery
-dws aitable view create --base-id <BASE_ID> --table-id <TABLE_ID> --view-type Grid --name "默认表格"
-# Gantt 必须再绑定日期字段，否则只是空壳
-dws aitable view update timebar --base-id <BASE_ID> --table-id <TABLE_ID> --view-id <VIEW_ID> --start-field <DATE_FIELD_ID>
+## Base、Table 与 Field 底层能力
 
-# 创建仪表盘和图表；chart 的 config/layout 都必填
-dws aitable dashboard create --base-id <BASE_ID> --name "运营看板"
-dws aitable chart create --base-id <BASE_ID> --dashboard-id <DASHBOARD_ID> --config '<WIDGET_CONFIG_JSON>' --layout '{"x":0,"y":0,"w":12,"h":4}'
+| 原子命令 | 仅用于 |
+|---|---|
+| `aitable base get` / `list` / `search` | Shortcut 未投影的 Base 原始详情、最近访问列表或原始搜索响应 |
+| `aitable base create` / `copy` / `update` / `delete` | Shortcut 未发布的底层创建、复制或变更字段；普通整套创建回根 Skill |
+| `aitable base get-primary-doc-id` | 需要 Base 视角的记录主键文档 ID |
+| `aitable table get` / `list` | 需要原始 Table 结构或目录响应 |
+| `aitable table create` / `update` / `delete` | Shortcut 未发布的底层 Table 字段；完整建表回根 Skill |
+| `aitable field get` / `list` / `search-options` | 字段原始配置、目录或选项搜索 |
+| `aitable field create` / `update` / `delete` | 精确字段原子写入，且字段配置已由 task reference 校验 |
+| `aitable template search` | 需要模板原始响应；普通模板检索使用 `+template-search` |
 
-# 查询记录；选择器按意图传一个，不猜 flag
-dws aitable +record-query --base-id <BASE_ID> --table-id <TABLE_ID>
-dws aitable +record-query --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids <RECORD_ID_1,RECORD_ID_2>
-dws aitable +record-query --base-id <BASE_ID> --table-id <TABLE_ID> --record-ids <RECORD_ID_1,RECORD_ID_2> --field-ids <FIELD_ID_1,FIELD_ID_2>
-dws aitable +record-query --base-id <BASE_ID> --table-id <TABLE_ID> --filters '<FILTER_JSON>'
-dws aitable +record-query --base-id <BASE_ID> --table-id <TABLE_ID> --query "关键词"
+`base list` 仅表示最近访问，不是组织内全量 Base。Table、Field 和记录 ID 均属于指定
+Base；同名对象零命中或多候选时停止，不能把名称、URL 末段或其他产品节点 ID 直接当稳定 ID。
 
-# 文件导入：先申请凭证并上传，再用真实 importId 导入
-dws aitable +import-upload --base-id <BASE_ID> --file-name data.xlsx --file-size <BYTES>
-curl -X PUT "<UPLOAD_URL>" -H "Content-Type:" --data-binary @data.xlsx
-dws aitable +import-data --import-id <IMPORT_ID>
-dws aitable +import-data --import-id <IMPORT_ID> --table-id <TABLE_ID>
-```
+## Record 底层能力
 
-写命令是否追加 `--yes` 只以 Runtime confirmation 为准，不把 `--yes` 固化进示例。字段对象统一使用 `fieldName` / `type` / 可选 `config`；不要改写成相似的 `field-name`、`field-type` 或 `table-name`。建表时第一个字段会成为主字段，应优先使用 `text`；传空字段数组时由服务自动补标题主字段。导入 OSS PUT 的 `Content-Type` 必须显式置空，否则可能返回 403。
+| 原子命令 | 仅用于 |
+|---|---|
+| `aitable record get` / `list` / `query` | Shortcut 未投影的原始记录响应、显式 continuation 或窄 ID 查询 |
+| `aitable record query-empty` | 查找未填写用户字段的空行 |
+| `aitable record history-list` | 已知 recordId 的原始变更历史 |
+| `aitable record share-url` | 已知记录的原始分享链接响应 |
+| `aitable record create` / `update` / `batch-update` / `upsert` | Shortcut 未发布的底层写参数；写前须有真实 fieldId 和字段类型 |
+| `aitable record delete` | 删除已唯一确认的记录，按最终 Runtime gate 执行 |
+| `aitable record primary-doc-get` / `primary-doc-create` | 取得或创建记录主键文档；正文编辑转交 Doc |
 
-## 错误恢复
+`cells` 使用真实 fieldId；公式、查找引用、创建人和修改时间等只读字段不得写入。批量结果
+必须检查 completed/failed/checkpoint，写入效果未知时先按稳定 ID 或业务唯一键回读，不盲目重放。
 
-- 结构化错误存在 `actions` / `available_flags` 时，`actions` 中的完整命令就是唯一下一步；不要试相似 ID 或 flag。
-- `partial_success`：保留 `knownSideEffects` 与 `checkpoint`，只执行返回的 `nextCommand` 检查或恢复，不重放已成功批次。
-- `unknown`：先按 `nextCommand` 或业务唯一名称确认远端效果；未确认前不得重试非幂等创建。
-- `retryable=false`：停止。目标文件夹无效时只用返回的 `dws drive +info --node <ID> --format json` 核对，不把其他类型 ID 轮流代入。
-- 验证成功必须看到 `verification.status=verified`；退出码为 0 或写接口空回包本身不构成成功。
+## View、Form 与可视化底层能力
 
-## 加载规则
+| 原子命令 | 用途 |
+|---|---|
+| `aitable view list` / `get` | 原始视图目录或完整配置 |
+| `aitable view create` / `duplicate` / `delete` / `lock` | Shortcut 未发布的视图生命周期与锁定字段 |
+| `aitable view get aggregate` / `card` / `field-widths` / `fill-color-rule` / `filter` / `frozen-cols` / `group` / `lock` / `row-height` / `sort` / `timebar` / `visible-fields` | 读取单个视图配置面 |
+| `aitable view update aggregate` / `card` / `field-widths` / `fill-color-rule` / `filter` / `frozen-cols` / `group` / `name` / `row-height` / `sort` / `timebar` / `visible-fields` | 更新一个已完整读取的视图配置面 |
+| `aitable form list` / `get` / `create` / `update` / `delete` | 表单视图原子生命周期 |
+| `aitable form field list` / `update` / `hide` | 表单字段顺序、展示和隐藏 |
+| `aitable form questions create` / `delete` | 表单题目原子写入 |
+| `aitable form share get` / `update` | 表单分享配置 |
+| `aitable dashboard get` / `create` / `update` / `delete` / `arrange` | 仪表盘原始配置和布局 |
+| `aitable dashboard share get` / `update` | 仪表盘分享配置 |
+| `aitable chart get` / `create` / `update` / `delete` | 图表原始配置和生命周期 |
+| `aitable chart share get` / `update` | 图表分享配置 |
 
-- 先根据用户意图定位下表中的唯一命令族，再读取至多一个对应 leaf reference。
-- 已知命令但参数不确定，只读一次该 leaf Schema；不要加载产品级 Schema 或完整 Catalog。
-- 命令清单只在本索引仍无法定位时用 `dws shortcut list --service aitable --format json` 回退。
-- 不使用 Python recipe 绕过已有 shortcut；不根据命令名猜 flag。
+视图更新是配置面写入，不是字段本体修改。调整可见列前读取完整有序 fieldId 数组并固定主字段；
+创建或更新图表前使用 `aitable chart widgets-example` 获取当前合法配置，不猜 config。
 
-## 目标与 ID
+## 导入导出、附件与自动化
 
-| 已有信息 | 最短入口 | 输出复用 |
-|---|---|---|
-| AI 表格 URL | `dws aitable +url-resolve --url <URL>` | 解析 URL 中已有的 baseId/tableId/viewId/recordId；不做远端名称搜索 |
-| 已知 Base/Table ID | 直接传给最终命令 | 不重复解析 |
-| Base 精确名称，且要唯一定位后操作 | `dws aitable +resolve-base --name <名称>` | 默认精确匹配；明确需要模糊匹配时加 `--fuzzy`，零/多候选均停止 |
-| 搜索 Base 候选、关键词查找或存在性检查 | `dws aitable +base-search --query <关键词>` | 直接检查返回候选，不先执行 `+resolve-base`；对象明确为 Base 时不得改走人员搜索 |
-| Base ID + Table 名称 | `dws aitable +resolve-table --base <B> --name <T>` | 默认精确匹配；明确需要模糊匹配时加 `--fuzzy` |
-| Base ID，只需目录 | `dws aitable +list-tables --base <B>` | 只投影 tableId/tableName，不额外读取字段 |
-| 需要字段或视图目录 | `dws aitable +field-get ...` / `dws aitable +view-get ...` | 只读取当前任务需要的目标范围 |
+| 原子命令 | 用途 |
+|---|---|
+| `aitable import upload` / `data` | 申请导入上传凭证并用真实 importId 发起导入 |
+| `aitable export data` | 发起或恢复底层导出任务 |
+| `aitable attachment upload` | 准备 AI 表格附件上传；不是 Drive 文件上传 |
+| `aitable workflow list` / `get` / `edit-example` | 工作流目录、详情与当前 DSL 示例 |
+| `aitable workflow create` / `update` | 校验完整 DSL 后创建或全量更新工作流 |
+| `aitable workflow enable` / `disable` | 启停已唯一确认的工作流 |
 
-`+record-query` 只接受真实 `base-id` / `table-id`，因此 URL 或名称须先按上表解析。`+base-list` 只表示最近访问，不是组织内全量 Base；`+base-search --query <Q>` 是单次搜索。唯一操作目标零命中或多候选时停止，不选第一项；“搜索候选/如果没有就创建”不要再串行调用 resolver 和 search。
+上传、导入、导出和工作流可能异步完成；accepted/pending 不等于成功。保留 taskId/importId、轮询状态、
+超时和真实 next command。非幂等创建在提交状态未知时只核对，不自动重试。
 
-## 低频命令族
+旧版 Runtime 缺少当前导出或分片建字段能力时，才分别使用
+[aitable_export_via_task.py](../scripts/aitable_export_via_task.py) 或
+[bulk_add_fields.py](../scripts/bulk_add_fields.py)；当前 Runtime 已有对应 Shortcut 时不得绕回脚本。
 
-| 意图 | 推荐 shortcut | 精确 reference |
-|---|---|---|
-| Base 新建整套结构 | `+base-bootstrap` | 使用本文上方准确 flags |
-| Base 查看、搜索、复制、改名、删除、快照 | `+base-get` / `+base-search` / `+base-copy` / `+base-update` / `+base-delete` / `+base-schema-snapshot` | 对应 leaf Schema |
-| Table 新建、查看、复制、改名、删除 | `+table-bootstrap` / `+table-get` / `+table-copy` / `+table-update` / `+table-delete` | 新建使用本文上方准确 flags；其余对应 leaf Schema |
-| Field 完整配置、修改、删除 | `+field-get` / `+field-update` / `+field-delete` | [field](aitable/aitable-field.md)；属性细节才读 [field-properties](aitable/aitable-field-properties.md) |
-| Record 历史、空行、分享、主键文档 | `+record-history-list` / `+record-query-empty` / `+record-share-*` / `+record-primary-doc-*` | [record-ops](aitable-record-ops.md) |
-| Record 统计、分组聚合和去重率 | `record stats` / `record group-stats` | [record-stats](aitable/aitable-record-stats.md) |
-| Filter、sort、日期操作符 | `+record-query` / `+record-bulk-patch` | [filter-sort](aitable/aitable-filter-sort.md) |
-| View 配置、复制、锁定、冻结列、行高、填色 | 对应 `+view-*` | [view-config](aitable/aitable-view-config.md)；冻结列/行高/填色才读 [view-extras](aitable/aitable-view-extras.md) |
-| Form 字段、分享、修改、删除 | 对应 `+form-*` | [form](aitable/aitable-form.md) |
-| Dashboard 与 Chart | 对应 `+dashboard-*` / `+chart-*` | [dashboard-chart](aitable/aitable-dashboard-chart.md) |
-| 导入、导出和任务恢复 | `+import-upload` / `+import-data` / `+export-data` | [export-import](aitable/aitable-export-import.md) |
-| 上传或移除附件 | `+attachment-put` / `+attachment-remove` | [attachment](aitable/aitable-attachment.md) |
-| 自动化工作流 | 对应 `+workflow-*` | [workflow](aitable/aitable-workflow.md) |
-| 普通角色和高级权限 | 对应 `+role-*` / `+advperm-*` | [advperm](aitable/aitable-advperm.md) |
-| AI 表格内部 Section/节点 | 对应 `+section-*` | [section](aitable-section.md) |
-| 模板检索 | `+template-search` | leaf Schema 足够，不再读其他 reference |
+## 权限与 Base 内节点
 
-## 写操作通用约束
+| 原子命令 | 用途 |
+|---|---|
+| `aitable advperm role-list` / `role-get` | 高级权限角色读取 |
+| `aitable advperm enable` / `disable` | Base 高级权限总开关 |
+| `aitable advperm role-create` / `role-update` / `role-delete` | 自定义角色原子管理 |
+| `aitable section list-nodes` / `list-empty` | Base 导航树和空 Section 读取 |
+| `aitable section create` / `rename` / `reorder` | Section 创建、重命名和排序 |
+| `aitable section move-node` | 在 Base 内移动 Table、Dashboard 等 nsheet 节点 |
+| `aitable section delete` | 删除已确认的 Section |
 
-- 创建/更新记录前只读取目标 Table 或目标 Field 的真实配置；`cells` key 优先使用 fieldId。
-- 只读字段（公式、查找引用、创建/修改信息等）不写入。
-- 删除 Base/Table/Field/Record、停用工作流、删除附件和关闭高级权限均按 Runtime confirmation 执行。
-- 批量操作检查 completed/failed/checkpoint/nextCommand；`partial_success` 不等于成功。
-- 写入效果未知时按返回的稳定 ID 或业务唯一键回读，不能整批盲目重放。
+高级权限角色 ID、Section ID 与 Drive 节点 ID 不可互换。整个 Base 在普通文件夹中的外层移动或重命名
+归 Drive；Base 内 Table、Dashboard、Section 的结构操作仍归 AITable。
 
-兼容包仍包含 `scripts/aitable_export_via_task.py` 与 `scripts/bulk_add_fields.py`；当前主路径分别是 `+export-data` 与 `+table-bootstrap` / `field create`，只有旧版运行时缺少对应命令时才使用脚本。
+## 稳定 ID 传递
 
-## 跨产品边界
+| 来源 | 只可用于 |
+|---|---|
+| `+url-resolve` / 唯一 Base 解析 | 当前 profile 下的 baseId，以及 URL 实际携带的 tableId/viewId/recordId |
+| Base/Table/Field 读取 | 同一 Base 下后续命令的 tableId、fieldId |
+| Record 查询或写入回执 | recordId、主键文档 nodeId、分享链接与历史查询 |
+| View/Form/Dashboard/Chart 创建或读取 | 对应对象自己的稳定 ID，不以名称或列表序号替代 |
+| 导入导出回执 | importId/taskId 及其 continuation；不能当 Base/Table ID |
+| Workflow/AdvPerm/Section 读取 | workflowId、roleId、sectionId，仅限原资源与 profile |
 
-- AI 表格记录、字段、视图和自动化留在 AITable。
-- Base 结构复制/删除与 Base 内 Table、Dashboard、Section 操作走 AITable；只有整个 Base 的普通文件夹位置移动或外层存储重命名走 Drive。
-- 记录主键文档正文拿到真实 nodeId 后走 Doc。
-- Excel 式单元格、区域和公式操作走 Sheet，而不是 AITable。
+## 故障处理
+
+- `unknown command` / `unknown flag`：读取精确 leaf Help，最多修正一次；
+- confirmation 或参数约束不清：读取精确 leaf Schema，以最终 Runtime gate 为准；
+- 自然目标零命中、多候选或类型不明：停止并展示候选，不选择第一项；
+- `partial_success`：保留已完成项、失败 ledger 和 checkpoint，只从真实 continuation 继续；
+- commit unknown：按稳定 ID 或业务唯一键核对远端效果，未确认前不重放写入；
+- 权限、认证或 profile：按 `dingtalk-shared` 对应 reference 分流；
+- 本索引仍无法定位命令时，才用 `dws shortcut list --service aitable --format json` 做最终回退。
