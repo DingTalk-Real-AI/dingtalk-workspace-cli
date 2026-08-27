@@ -123,15 +123,6 @@ func logHostOwnedPATDecisionOnce() {
 }
 
 func newCommandRunnerWithFlags(flags *GlobalFlags) executor.Runner {
-	// Ensure DWS_CLIENT_ID env is populated from persisted config before
-	// resolveIdentityHeaders reads it.  This covers fresh-process cold starts
-	// where no env var has been inherited from a parent process.
-	if os.Getenv("DWS_CLIENT_ID") == "" {
-		if cid := authpkg.ClientID(); cid != "" {
-			_ = os.Setenv("DWS_CLIENT_ID", cid)
-		}
-	}
-
 	var httpClient *http.Client
 	if flags != nil && flags.Timeout > 0 {
 		httpClient = &http.Client{Timeout: time.Duration(flags.Timeout) * time.Second}

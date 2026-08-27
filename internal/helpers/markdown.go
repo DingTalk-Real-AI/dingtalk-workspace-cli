@@ -52,6 +52,7 @@ func newMarkdownCommand() *cobra.Command {
 		Long:  "创建、覆盖、修补、对比和获取钉盘或文档空间中的原生 Markdown 文件。",
 		RunE:  groupRunE,
 	})
+	installDocDelegationAuth(root)
 	root.AddCommand(
 		newMarkdownFetchCmd(),
 		newMarkdownCreateCmd(),
@@ -139,6 +140,10 @@ func runMarkdownFetch(cmd *cobra.Command, _ []string) error {
 	}
 
 	if deps.Caller.DryRun() {
+		dServer, dTool, dArgs := markdownFetchRouteTarget(nodeID, spaceID, workspaceID)
+		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
+			return err
+		}
 		return printMarkdownDryRun(map[string]any{
 			"operation": "fetch",
 			"node_id":   nodeID,
@@ -354,6 +359,10 @@ func runMarkdownCreate(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("读取上传文件失败: %w", err)
 	}
 	if deps.Caller.DryRun() {
+		dServer, dTool, dArgs := markdownCreateDelegationTarget(nameFlag, info.Size(), folderID, spaceID, workspaceID)
+		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
+			return err
+		}
 		return printMarkdownDryRun(map[string]any{
 			"operation":    "create",
 			"file_name":    nameFlag,
@@ -471,6 +480,10 @@ func runMarkdownOverwrite(cmd *cobra.Command, _ []string) error {
 	workspaceID := flagOrFallback(cmd, "workspace", "workspace-id")
 
 	if deps.Caller.DryRun() || markdownGlobalDryRun(cmd) {
+		dServer, dTool, dArgs := markdownOverwriteRouteTarget(nodeID, workspaceID)
+		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
+			return err
+		}
 		return printMarkdownDryRun(map[string]any{
 			"operation":    "overwrite",
 			"node_id":      nodeID,
@@ -647,6 +660,10 @@ func runMarkdownPatch(cmd *cobra.Command, _ []string) error {
 	replacementSet := cmd.Flags().Changed("content") || cmd.Flags().Changed("markdown")
 
 	if deps.Caller.DryRun() || markdownGlobalDryRun(cmd) {
+		dServer, dTool, dArgs := markdownFetchRouteTarget(nodeID, spaceID, workspaceID)
+		if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
+			return err
+		}
 		return printMarkdownDryRun(map[string]any{
 			"operation":    "patch",
 			"node_id":      nodeID,
@@ -900,6 +917,99 @@ func appendMarkdownDiffHead(builder *strings.Builder, prefix string, lines []str
 		}
 		fmt.Fprintf(builder, "%s %s\n", prefix, line)
 	}
+}
+
+// markdownFetchRouteTarget mirrors the first delegated-domain call that
+// runMarkdownFetch and runMarkdownPatch issue on the non-dry-run path
+// (resolveMarkdownRoute -> fetchMarkdownContent); markdown diff also lands here
+// via the auto route (ensureMarkdownDiffType -> drive.get_file_info):
+//   - --space-id  -> drive.download_file {fileId, spaceId}
+//   - --workspace -> doc.download_file   {nodeId}
+//   - auto route  -> drive.get_file_info {fileId}   (resolveFileDomain probe)
+//
+// The node identifier is carried under the key extractNodeId expects so the
+// per-node check_capability is scoped to the same resource the real call hits.
+func markdownFetchRouteTarget(nodeID, spaceID, workspaceID string) (string, string, map[string]any) {
+	switch {
+	case spaceID != "":
+		return "drive", "download_file", map[string]any{"fileId": nodeID, "spaceId": spaceID}
+	case workspaceID != "":
+		return "doc", "download_file", map[string]any{"nodeId": nodeID}
+	default:
+		return "drive", "get_file_info", map[string]any{"fileId": nodeID}
+	}
+}
+
+// markdownOverwriteRouteTarget mirrors runMarkdownOverwrite's first delegated
+// call. Overwrite always calls resolveMarkdownRoute first; on the auto route
+// that issues drive.get_file_info{fileId}, and explicit routes then read the
+// node (auto name resolution) or upload on the resolved domain. The per-node
+// check_capability is scoped by the resolved domain's node-info read:
+//   - --workspace -> doc.get_document_info {nodeId}
+//   - otherwise   -> drive.get_file_info   {fileId}
+func markdownOverwriteRouteTarget(nodeID, workspaceID string) (string, string, map[string]any) {
+	if workspaceID != "" {
+		return "doc", "get_document_info", map[string]any{"nodeId": nodeID}
+	}
+	return "drive", "get_file_info", map[string]any{"fileId": nodeID}
+}
+
+// markdownCreateDelegationTarget mirrors runMarkdownCreate's first delegated
+// call - the upload step1 (uploadToDrive/uploadToDocSpace get_upload_info /
+// get_file_upload_info) - replicating its step1 args exactly so extractNodeId
+// resolves the same space/folder/workspace scope:
+//   - --space-id -> drive.get_upload_info    {fileName, fileSize, spaceId, mimeType, [parentId]}
+//   - otherwise  -> doc.get_file_upload_info {[workspaceId], [folderId]}
+//
+// A create with neither space/workspace/folder yields empty doc args, so
+// extractNodeId returns "" and the precheck reports DELEGATION_AUTH_NOT_SUPPORTED
+// - matching the non-dry-run path, where the same empty get_file_upload_info
+// call is gated identically.
+func markdownCreateDelegationTarget(fileName string, fileSize int64, folderID, spaceID, workspaceID string) (string, string, map[string]any) {
+	if spaceID != "" {
+		args := map[string]any{
+			"fileName": fileName,
+			"fileSize": float64(fileSize),
+			"spaceId":  spaceID,
+			"mimeType": "text/markdown",
+		}
+		if folderID != "" {
+			args["parentId"] = folderID
+		}
+		return "drive", "get_upload_info", args
+	}
+	args := map[string]any{}
+	if workspaceID != "" {
+		args["workspaceId"] = workspaceID
+	}
+	if folderID != "" {
+		args["folderId"] = folderID
+	}
+	return "doc", "get_file_upload_info", args
+}
+
+// markdownDryRunDelegationPrecheck runs the delegation-auth gate for markdown
+// leaf commands whose dry-run branches fast-return a preview before reaching
+// deps.Caller.CallTool/CallReadTool. Without it a markdown dry-run combined with
+// --principal-user-id would never trigger check_capability, diverging from
+// doc/drive where the decorator gates every business call. When
+// --principal-user-id is unset the caller is never decorated and principalID is
+// empty, so this returns nil for zero impact; otherwise it type-asserts
+// deps.Caller to the delegation-auth validator and runs ensureDelegationAuth
+// against the real first-call target (serverID/toolName/args), so a denied
+// principal reports the error and the preview is suppressed.
+func markdownDryRunDelegationPrecheck(cmd *cobra.Command, serverID, toolName string, args map[string]any) error {
+	principalID, _ := cmd.Flags().GetString(FlagPrincipalUserID)
+	if strings.TrimSpace(principalID) == "" {
+		return nil
+	}
+	validator, ok := deps.Caller.(dryRunValidator)
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return validator.ensureDelegationAuth(ctx, serverID, toolName, args)
 }
 
 func printMarkdownDryRun(details map[string]any, operation, target string) error {

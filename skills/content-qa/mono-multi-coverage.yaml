@@ -96,6 +96,10 @@ coverage:
     multi_skill: dingtalk-misc
     multi_refs:
       - references/oa.md
+  - mono: openapi-explorer
+    multi_skill: dingtalk-misc
+    multi_refs:
+      - references/openapi-explorer.md
   - mono: report
     multi_skill: dingtalk-misc
     multi_refs:

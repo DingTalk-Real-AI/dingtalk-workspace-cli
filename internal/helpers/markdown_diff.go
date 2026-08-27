@@ -262,6 +262,10 @@ func newMarkdownDiffCmd() *cobra.Command {
 			}
 
 			if deps.Caller.DryRun() {
+				dServer, dTool, dArgs := markdownFetchRouteTarget(nodeID, "", "")
+				if err := markdownDryRunDelegationPrecheck(cmd, dServer, dTool, dArgs); err != nil {
+					return err
+				}
 				deps.Out.PrintKeyValue("操作", "Markdown 内容 Diff")
 				deps.Out.PrintKeyValue("模式", mode)
 				deps.Out.PrintKeyValue("节点ID", nodeID)

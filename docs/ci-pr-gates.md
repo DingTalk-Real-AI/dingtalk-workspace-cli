@@ -188,20 +188,28 @@ checks. If `main` advances, strict checks rerun before merge. The
 reviewer routing job uses the built-in `GITHUB_TOKEN` to request reviewers with
 `Contents: read` and `Pull requests: write`. A separate base-owned cleanup job
 isolates the merge-authority permissions (`Contents: write` and `Pull
-requests: write`), revalidates the exact event base/head, and uses the built-in
-token only to disable an existing request owned by `github-actions[bot]` or one
-whose title or merge metadata requests that GitHub skip workflows; it never
-enables auto-merge. The job then mints a current-repository installation token
+requests: write`), checks out only the exact event base policy, and revalidates
+the live event base/head. Before reading App credentials, its built-in token
+normalizes every request that is not already owned by the reviewed App with the
+fixed headline/body, rejects workflow-skip metadata, and proves that the exact
+repository-owned `main-merge-writers` rule denies that token any bypass. It
+never enables auto-merge. A PR that changes `.github/workflows/**` is an
+explicit manual-only case: the trusted step skips App token minting and
+auto-merge enablement instead of granting the App `Workflows` permission, and
+reconciliation clears any older App-owned request rather than merging it. Any
+authority failure clears a remaining request and
+leaves the PR manual-only. The job then mints a current-repository installation token
 for the dedicated Reviewer Router GitHub App, proves its emitted slug matches
-the reviewed `REVIEWER_ROUTER_APP_SLUG`, replaces every non-App request, and
+the reviewed `REVIEWER_ROUTER_APP_SLUG`, rechecks the App-side ruleset boundary, and
 enables native auto-merge with fixed metadata. This
 identity boundary is required because GitHub suppresses
 most workflow events created by the built-in token; using it for auto-merge would
 silently skip the merge commit's protected-main CI and baseline-cache
 producer. Token minting or takeover fails closed without falling back to
-`GITHUB_TOKEN`: the unsafe request is cleared before credentials are read, and
-the required `Test` context live-verifies the exact `main-merge-writers` update
-rule. GitHub's read APIs may omit `parameters` for the strict
+`GITHUB_TOKEN`: every non-reviewed request is cleared before credentials are
+read. During the staged migration away from metadata-triggered full admission,
+the required `Test` context independently repeats the same built-in-identity
+check as a shadow assertion. GitHub's read APIs may omit `parameters` for the strict
 `update_allows_fetch_and_merge: false` value, so the gate accepts only that
 exact omission or a one-field `parameters` object containing explicit boolean
 `false`; every other present shape or value fails closed. The gate then binds
@@ -233,10 +241,12 @@ request after a short takeover grace period. Null is safe from the suppressed
 event path because the built-in Actions identity cannot update `main`; other
 permitted identities produce either a main push or the trusted closed-PR
 repair. Drafts skip the identity step, while `ready_for_review`, `edited`,
-`auto_merge_enabled`, and `auto_merge_disabled` explicitly start fresh admission
-for readiness, title, and merge-request changes. Router does not react to
-`auto_merge_disabled`, so a
-human can deliberately leave the PR manual-only for break-glass handling.
+and revision events explicitly start fresh admission for readiness, title, and
+code changes. `auto_merge_enabled` wakes only the lightweight base-owned
+Router; because it does not change the head SHA, it reuses the existing nine
+admission results instead of restarting the full graph. Neither CI nor Router
+reacts to `auto_merge_disabled`, so a human can deliberately leave the PR
+manual-only for break-glass handling.
 Reviewer routing remains available. The protected-main push that deploys the
 workflow automatically migrates every open, ready non-App request and repairs
 unsafe App metadata; it disables workflow-skipping requests for correction.
@@ -250,7 +260,12 @@ re-enumerates open `main` PRs through the API and attempts only an exact
 App-owned request through the synchronous PR merge endpoint. Immediately before
 each attempt it revalidates the App's ruleset boundary and PR intent, supplies
 the current head SHA, and treats server-declared not-ready or
-concurrent-revision responses as retriable. The live preflight requires the
+concurrent-revision responses as retriable. An exact behind-main state is also
+retriable before the merge request. If GitHub instead reports that same state
+as HTTP 403 `Resource not accessible by integration`, reconciliation recovers
+only after a same-token read proves the unchanged open head, repository-owned
+`main` base, and exact behind mergeability; every other 403 remains a hard
+failure. The live preflight requires the
 exact repository-owned approval ruleset and exact nine-check strict quality
 ruleset, with every context bound to the GitHub Actions App
 (`integration_id=15368`) and the Reviewer Router App unable to bypass either;

@@ -4129,20 +4129,6 @@ var generatedParamAliases = []ParamAliasEntry{
 		Ambiguous: []string{"chat", "chat-id", "conversation-id", "group", "id", "open-conversation-id"},
 	},
 	{
-		CLIPath: "chat message forward-topic",
-		Aliases: map[string]string{
-			"dest-open-conversation-id":   "dest-conversation-id",
-			"destination-conversation-id": "dest-conversation-id",
-			"source-conversation-id":      "src-conversation-id",
-			"source-message-id":           "src-msg-id",
-			"src-open-conversation-id":    "src-conversation-id",
-			"src-open-message-id":         "src-msg-id",
-			"target-conversation-id":      "dest-conversation-id",
-		},
-		Blocked:   []string{"group-id", "group-ids", "message-id", "msg-id", "open-message-id"},
-		Ambiguous: []string{"chat", "chat-id", "conversation-id", "group", "id", "open-conversation-id"},
-	},
-	{
 		CLIPath: "chat message list",
 		Aliases: map[string]string{
 			"max-result":  "limit",
@@ -4218,13 +4204,6 @@ var generatedParamAliases = []ParamAliasEntry{
 			"group":           "open-conversation-id",
 		},
 		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "id", "name", "open-conversation-ids", "source", "src-conversation-id", "target"},
-	},
-	{
-		CLIPath: "chat message list-topic-replies",
-		Aliases: map[string]string{
-			"chat-id": "conversation-id",
-		},
-		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "name", "open-conversation-ids", "source", "src-conversation-id", "target"},
 	},
 	{
 		CLIPath: "chat message list-unread-conversations",
@@ -4410,6 +4389,30 @@ var generatedParamAliases = []ParamAliasEntry{
 	},
 	{
 		CLIPath: "chat set-top",
+		Aliases: map[string]string{
+			"chat":                 "conversation-id",
+			"chat-id":              "conversation-id",
+			"group":                "conversation-id",
+			"open-conversation-id": "conversation-id",
+		},
+		Blocked: []string{"conversation-ids", "dest-conversation-id", "group-id", "group-ids", "group-name", "id", "name", "open-conversation-ids", "source", "src-conversation-id", "target"},
+	},
+	{
+		CLIPath: "chat thread forward",
+		Aliases: map[string]string{
+			"dest-open-conversation-id":   "dest-conversation-id",
+			"destination-conversation-id": "dest-conversation-id",
+			"source-conversation-id":      "src-conversation-id",
+			"source-message-id":           "src-msg-id",
+			"src-open-conversation-id":    "src-conversation-id",
+			"src-open-message-id":         "src-msg-id",
+			"target-conversation-id":      "dest-conversation-id",
+		},
+		Blocked:   []string{"group-id", "group-ids", "message-id", "msg-id", "open-message-id"},
+		Ambiguous: []string{"chat", "chat-id", "conversation-id", "group", "id", "open-conversation-id"},
+	},
+	{
+		CLIPath: "chat thread list-replies",
 		Aliases: map[string]string{
 			"chat":                 "conversation-id",
 			"chat-id":              "conversation-id",

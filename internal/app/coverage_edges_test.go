@@ -243,6 +243,7 @@ func TestCrossPlatformCoverageSmallAppRegistryAndRootCoverage(t *testing.T) {
 	}
 	configureOAuthProviderCompatibility(authpkg.NewOAuthProvider(t.TempDir(), nil), t.TempDir())
 	configureLegacyAuthManagerCompatibility(authpkg.NewManager(t.TempDir(), nil))
+	//lint:ignore SA1012 This regression test intentionally covers the nil-context guard.
 	if IsAuthRetrying(nil) || !IsAuthRetrying(context.WithValue(context.Background(), authRetryingKey, true)) {
 		t.Fatal("auth retry context mismatch")
 	}

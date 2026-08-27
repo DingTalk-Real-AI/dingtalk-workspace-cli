@@ -57,12 +57,10 @@ var (
 	oauthCheckStatus = func(p *OAuthProvider, ctx context.Context, token string) (*CLIAuthStatus, error) {
 		return p.CheckCLIAuthEnabled(ctx, token)
 	}
-	oauthGetAdmins     = GetSuperAdmins
-	oauthSendApply     = SendCliAuthApply
-	oauthSaveToken     = SaveTokenData
-	oauthHasAppConfig  = HasAppConfig
-	oauthSaveAppConfig = SaveAppConfig
-	oauthRefreshToken  = func(p *OAuthProvider, ctx context.Context, data *TokenData) (*TokenData, error) {
+	oauthGetAdmins    = GetSuperAdmins
+	oauthSendApply    = SendCliAuthApply
+	oauthSaveToken    = SaveTokenData
+	oauthRefreshToken = func(p *OAuthProvider, ctx context.Context, data *TokenData) (*TokenData, error) {
 		return p.refreshWithRefreshToken(ctx, data)
 	}
 	oauthSleep = time.Sleep
@@ -91,13 +89,15 @@ func oauthSendApplyForLoginRegion(ctx context.Context, accessToken, adminStaffID
 
 // OAuthProvider handles the DingTalk OAuth 2.0 authorization code flow.
 type OAuthProvider struct {
-	configDir    string
-	clientID     string
-	logger       *slog.Logger
-	Output       io.Writer
-	httpClient   *http.Client
-	NoBrowser    bool
-	TargetCorpID string
+	configDir     string
+	clientID      string
+	credentials   *AppCredentialPair
+	credentialErr error
+	logger        *slog.Logger
+	Output        io.Writer
+	httpClient    *http.Client
+	NoBrowser     bool
+	TargetCorpID  string
 	// IdentityEnricher resolves userId/userName/corpName while the freshly
 	// exchanged access token is still only in memory.
 	IdentityEnricher func(context.Context, *TokenData) error
@@ -106,12 +106,69 @@ type OAuthProvider struct {
 
 // NewOAuthProvider creates a new OAuth provider.
 func NewOAuthProvider(configDir string, logger *slog.Logger) *OAuthProvider {
-	return &OAuthProvider{
-		configDir:  configDir,
-		clientID:   ClientID(),
-		logger:     logger,
-		Output:     os.Stderr,
-		httpClient: oauthHTTPClient,
+	pair, err := resolveOAuthCredentialPair(configDir)
+	p := &OAuthProvider{
+		configDir:     configDir,
+		credentialErr: err,
+		logger:        logger,
+		Output:        os.Stderr,
+		httpClient:    oauthHTTPClient,
+	}
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
+	} else {
+		// Keep the legacy observable constructor value for callers that only
+		// inspect the provider. Login always resets this before managed MCP use.
+		p.clientID = ClientID()
+	}
+	return p
+}
+
+func resolveOAuthCredentialPair(configDir string) (*AppCredentialPair, error) {
+	if pair, selected, err := credentialPairFromValues(runtimeCredentialValues()); selected || err != nil {
+		if err != nil {
+			return nil, ErrFlagCredentialPairIncomplete
+		}
+		return &pair, nil
+	}
+	if pair, selected, err := credentialPairFromValues(os.Getenv(EnvClientID), os.Getenv(EnvClientSecret), string(CredentialSourceEnv), ErrEnvCredentialPairIncomplete); selected || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		clearMCPRuntimeCredentials()
+		return &pair, nil
+	}
+	pair, err := ResolveAppConfigCredentialPair(configDir)
+	if err == nil {
+		clearMCPRuntimeCredentials()
+		return &pair, nil
+	}
+	if errors.Is(err, ErrAppConfigMissing) || errors.Is(err, ErrClientIDEmpty) || errors.Is(err, ErrClientSecretEmpty) {
+		return nil, nil
+	}
+	return nil, err
+}
+
+func runtimeCredentialValues() (string, string, string, error) {
+	clientMu.RLock()
+	id, secret, fromMCP := runtimeClientID, runtimeClientSecret, clientIDFromMCP
+	clientMu.RUnlock()
+	if fromMCP {
+		return "", "", string(CredentialSourceFlag), ErrFlagCredentialPairIncomplete
+	}
+	return id, secret, string(CredentialSourceFlag), ErrFlagCredentialPairIncomplete
+}
+
+func (p *OAuthProvider) snapshotCredentialPair() {
+	pair, err := resolveOAuthCredentialPair(p.configDir)
+	p.credentials = nil
+	p.credentialErr = err
+	if pair != nil {
+		copy := *pair
+		p.credentials = &copy
+		p.clientID = copy.ClientID
 	}
 }
 
@@ -120,9 +177,8 @@ func NewOAuthProvider(configDir string, logger *slog.Logger) *OAuthProvider {
 // credentials. Complete runtime AppKey/AppSecret overrides skip this reset.
 func (p *OAuthProvider) resetCredentialState() {
 	p.clientID = ""
-	clientMu.Lock()
-	clientIDFromMCP = false
-	clientMu.Unlock()
+	p.credentials = nil
+	clearRuntimeCredentials()
 }
 
 func (p *OAuthProvider) output() io.Writer {
@@ -136,6 +192,10 @@ func (p *OAuthProvider) output() io.Writer {
 // 1. If force=false, try silent token refresh first (refresh_token)
 // 2. If all silent methods fail (or force=true), fall back to browser OAuth flow
 func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, error) {
+	p.snapshotCredentialPair()
+	if p.credentialErr != nil {
+		return nil, fmt.Errorf("应用凭证配置无效: %w", p.credentialErr)
+	}
 	// Smart degradation: try silent refresh before opening browser.
 	if !force {
 		data, err := oauthLoadToken(p.configDir)
@@ -154,10 +214,6 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				if p.logger != nil {
 					p.logger.Debug("access_token still valid, skipping login")
 				}
-				// Even on early return, persist custom app credentials if provided
-				// via --client-id/--client-secret flags. Without this, the flags
-				// are only in runtime globals and lost when the process exits.
-				p.persistAppConfigIfNeeded()
 				return data, nil
 			}
 			// Case 2: refresh using refresh_token (with lock to prevent concurrent refresh).
@@ -167,7 +223,6 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 				}
 				refreshed, rErr := p.lockedRefresh(ctx)
 				if rErr == nil {
-					p.persistAppConfigIfNeeded()
 					return refreshed, nil
 				}
 				if p.logger != nil {
@@ -181,11 +236,9 @@ func (p *OAuthProvider) Login(ctx context.Context, force bool) (*TokenData, erro
 	}
 
 	// Fall through: full browser OAuth flow.
-	if runtimeClientID, _, ok := getCompleteRuntimeCredentials(); ok {
-		p.clientID = runtimeClientID
-		clientMu.Lock()
-		clientIDFromMCP = false
-		clientMu.Unlock()
+	if p.credentials != nil {
+		p.clientID = p.credentials.ClientID
+		clearMCPRuntimeCredentials()
 	} else {
 		// Defensive reset: clear any stale credential state from previous login
 		// methods so we can re-fetch clientID from MCP. This ensures --force
@@ -659,18 +712,8 @@ continueLogin:
 		"user_name", strings.TrimSpace(tokenData.UserName),
 	)
 
-	// Persist app credentials (with secret) if using custom client credentials.
-	// MUST run BEFORE os.Setenv below to avoid env-matching short circuit.
+	// Persist the exact pair snapshotted before authorization began.
 	p.persistAppConfigIfNeeded()
-
-	// Always persist clientId to app.json so future process startups
-	// can load it via ResolveAppCredentials and populate DWS_CLIENT_ID env.
-	if p.clientID != "" {
-		_ = os.Setenv("DWS_CLIENT_ID", p.clientID)
-		if !oauthHasAppConfig(p.configDir) {
-			_ = oauthSaveAppConfig(p.configDir, &AppConfig{ClientID: p.clientID})
-		}
-	}
 
 	return tokenData, nil
 }
@@ -1029,11 +1072,13 @@ func (p *OAuthProvider) ExchangeAuthCode(ctx context.Context, authCode, uid stri
 		if err := p.persistKnownLoginToken(tokenData); err != nil {
 			return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 		}
+		p.persistAppConfigIfNeeded()
 		return tokenData, nil
 	}
 	if err := p.persistLoginToken(ctx, tokenData); err != nil {
 		return nil, fmt.Errorf("%s: %w", i18n.T("保存 token 失败"), err)
 	}
+	p.persistAppConfigIfNeeded()
 	return tokenData, nil
 }
 
@@ -1113,11 +1158,17 @@ func (p *OAuthProvider) Status() (*TokenData, error) {
 // persistAppConfigIfNeeded saves app credentials if custom ones were used.
 // This ensures the client secret is available for future token refreshes.
 func (p *OAuthProvider) persistAppConfigIfNeeded() {
-	// Check if custom credentials were provided via runtime flags
-	clientID, clientSecret := getRuntimeCredentials()
-	if clientID == "" || clientSecret == "" {
+	if p == nil {
 		return
 	}
+	if p.credentials == nil {
+		p.snapshotCredentialPair()
+	}
+	if p.credentialErr != nil || p.credentials == nil {
+		return
+	}
+	clientID := p.credentials.ClientID
+	clientSecret := p.credentials.ClientSecret
 
 	// Skip if using default placeholder credentials
 	if clientID == DefaultClientID {

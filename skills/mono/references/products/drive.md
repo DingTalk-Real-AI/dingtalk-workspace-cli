@@ -593,16 +593,19 @@ Flags:
 用户说"删除文件/删除文件夹/移到回收站" → `delete`（危险操作，需确认）
 用户说"回收站/查看回收站/回收站列表/回收站里有什么" → `recycle list`
 用户说"恢复文件/还原删除的文件/从回收站恢复/还原回收站文件" → `recycle restore`
-用户说"给文档授权/分享权限" → `permission add`
+用户说"给文档授权/分享权限" → `permission add`（协作者级授权；链接公开的访问密码/有效期走 `publish set`）
 用户说"授权并通知对方/加权限后告知他/通知一下被授权的人" → `permission add --members ... --notify`（未提通知需求时不传 `--notify`）
 用户说"权限设置/权限模式/分享范围/水印等策略配置" → `permission get-setting`
-用户说"公开文件/互联网公开/设置公开/让互联网所有人可访问" → `publish set`
+用户说"公开文件/互联网公开/设置公开/让互联网所有人可访问/设置访问密码/公开有效期/分享链接密码" → `publish set`
 用户说"关闭公开/取消公开/取消互联网访问" → `publish unset`
 用户说"查看公开状态/是否公开/发布状态" → `publish get`
 用户说"比较本地和云盘/看哪些文件变了/同步差异/diff" → `status`
 用户说"把钉盘文件夹拉到本地/下载整个文件夹/镜像/同步到本地/pull" → `pull`
 用户说"把本地文件夹传到钉盘/推送整个文件夹/上传目录/同步到云端/push" → `push`
 用户说"双向同步/两边同步/本地和云盘互相同步/让两边一致/sync" → `sync`（默认两侧都变更时跳过；要覆盖须显式给 `--on-conflict` 并加 `--yes`）
+用户说"存储容量/企业盘用量/剩余空间/用了多少空间" → `quota`（默认企业级；应用列表用 `quota apps`），完整规则见 [`drive-storage.md`](./drive/drive-storage.md)
+用户说"异步任务/任务状态/任务查询/导出结果查询" → `task get`（统一入口，`--type export|import|copy|move`），完整规则见 [`drive-task.md`](./drive/drive-task.md)
+用户说"导出为 xlsx/pptx"或不确定文档类型 → `export`（通用导出入口，自动识别类型），完整规则见 [`drive-export.md`](./drive/drive-export.md)
 
 关键区分: drive(文件管理) vs doc(文档内容读写) vs wiki(空间管理)
 
@@ -621,7 +624,7 @@ Flags:
 
 **创建在线文档/表格/脑图**: drive 不支持创建文件，需走 `wiki node create --type <type>`（创建空节点）或 `doc create`（创建并写入内容）。
 
-**导出文档/导出为Word**: 导出是内容层操作，走 `doc export`，不属于 drive。
+**导出文档/导出为Word**: 钉盘在线文档（存储在钉盘里的文档）的导出走 `drive export`；文档内容层操作走 `doc export`。
 
 把图片/文件发到群里一般直接用 `chat message send --msg-type file --file <本地路径>`（见 [chat.md](./chat.md)），无需先经 drive 上传。
 
@@ -702,6 +705,8 @@ Flags:
 
 > **字段选择**：`drive list` 返回中有 `dentryId`（数字格式）和 `fileId`（UUID 格式），**必须使用 `fileId`（UUID 格式）**作为 `--node` 和 `--folder` 参数值。
 
+> **异步任务自动轮询**：服务端返回 `taskId` 时，copy/move 会自动轮询直至终态（渐进式退避：2s×5 → 5s×5 → 10s×10 → 15s×10，上限 30 次约 5 分钟）。轮询可随时 Ctrl-C 中断，服务端任务不会中止；超时或中断后用 `dws drive task get --type copy|move --id <taskId>` 查询兜底，任务状态枚举与查询入口区分详见 [`drive/drive-task.md`](./drive/drive-task.md)。`PARTIAL_FAILED` 时同样可用该命令查明细。
+
 ### 创建文件夹（文档空间）
 
 drive 没有独立的文档空间建文件夹命令，在知识库/文档空间中创建文件夹走：
@@ -775,21 +780,24 @@ get-setting 返回字段说明：
 
 ```
 Usage:
-  dws drive publish set --node <fileId> [--permission READER|DOWNLOADER|EDITOR]
+  dws drive publish set --node <fileId> [--permission READER|DOWNLOADER|EDITOR] [--password Ab12] [--expire-days N]
   dws drive publish unset --node <fileId>
   dws drive publish get --node <fileId>
 Example:
   dws drive publish set --node <dentryUuid>
   dws drive publish set --node <dentryUuid> --permission READER
+  dws drive publish set --node <dentryUuid> --password Ab12 --expire-days 7
   dws drive publish get --node <dentryUuid>
   dws drive publish unset --node <dentryUuid>
 Flags:
       --node string         目标文件 ID (dentryUuid) 或 URL (必填)
       --permission string   公开后的权限: READER(仅可查看) / DOWNLOADER(可查看和下载，默认) / EDITOR(可编辑)，仅 set 有效
+      --password string     公开访问密码: 4 位字母或数字 (如 Ab12)，仅 set 有效；显式传空串清除密码保护
+      --expire-days int     公开有效期天数: 正整数=N 天后过期，0=永久有效，仅 set 有效
 ```
 
 子命令说明：
-- `publish set` — [危险] 设置文件为互联网公开，可选指定公开权限
+- `publish set` — [危险] 设置文件为互联网公开，可选指定公开权限、访问密码与有效期
 - `publish unset` — [危险] 关闭文件互联网公开
 - `publish get` — 查询文件当前的公开发布状态
 
@@ -799,7 +807,8 @@ Flags:
 - `pendingApproval` — true=已提交审批待生效，false/null=无需审批或已直接生效
 - `docUrl` — 文件访问链接
 
-> **注意**：`drive export` 不存在。导出仅对自研文档 (adoc) 有意义，属于内容层操作，应使用 `doc export`。
+> **注意**：导出钉盘在线文档到本地可使用 `dws drive export`（通用导出，支持 docx/xlsx/pptx/pdf/markdown），完整规则见 [`drive/drive-export.md`](./drive/drive-export.md)；`doc export` 与 `sheet export` 是分别针对在线文档与在线表格的产品级入口。
+> 导出/复制/移动的自动轮询过程可随时用 Ctrl-C 中断；已提交的服务端任务不会中止，之后可用 `dws drive task get` 查询任务状态。
 
 ### 目标位置参数规则
 

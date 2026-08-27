@@ -93,6 +93,8 @@ metadata:
 
 只在任务命中时读取一个精确 reference：
 
+[话题与话题圈](references/chat/thread.md)
+
 | 场景 | Reference |
 |---|---|
 | 需要跨步骤传递真实结果的消息/群组合流程 | [01-messaging.md](references/01-messaging.md) |
@@ -112,7 +114,7 @@ metadata:
 | 卡片公开 Schema 边界 | [card/schema.md](references/card/schema.md) |
 | 只有上述 reference 仍无法定位的原子能力 | [chat.md](references/chat.md) 的对应章节 |
 
-不要预加载这些 reference。完整 Shortcut Catalog 只在根路由和精确 reference 都无法定位低频能力时使用。
+不要预加载 reference。Shortcut Catalog 只在根路由和精确 reference 都无法定位低频能力时使用。
 
 ## 错误最短路径
 

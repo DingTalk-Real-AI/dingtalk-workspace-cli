@@ -77,6 +77,9 @@ it:
 
 - install it only on `DingTalk-Real-AI/dingtalk-workspace-cli`;
 - grant only `Contents: read and write` and `Pull requests: read and write`;
+- do not grant `Workflows: read and write`. A PR that changes
+  `.github/workflows/**` is deliberately left manual-only, because allowing the
+  merge App to update workflow files would broaden its release and CI authority;
 - set repository variable `REVIEWER_ROUTER_APP_CLIENT_ID` to its client ID;
 - set `REVIEWER_ROUTER_APP_SLUG` to its exact lowercase slug;
 - set repository secret `REVIEWER_ROUTER_APP_PRIVATE_KEY` to its private key;
@@ -100,19 +103,23 @@ The workflow limits each minted token to the current repository, requests the
 two permissions explicitly, and lets the token action revoke it at job end.
 It also requires the minted App slug to equal the reviewed repository variable;
 there is no `GITHUB_TOKEN` fallback. Before reading App credentials, the
-base-owned workflow revalidates the event's exact base/head and uses its
-built-in token only to disable an existing request owned by
-`github-actions[bot]` or one whose title or merge metadata requests that GitHub
-skip workflows. A mint or permission failure therefore leaves that PR
-manual-merge only. The built-in token's `Contents: write` permission is
-isolated to this trusted cleanup job and is never used to enable auto-merge;
-review routing keeps `Contents: read`. Existing requests owned by a human or
-another non-built-in identity are replaced with the exact dedicated-App
-request after token minting. Only an already App-owned request with the fixed
-headline/body is preserved. The required `Test` context reads the live
-repository settings and applied rulesets, verifies the exact writer-rule
-shape, and requires its own built-in Actions identity to report
-`current_user_can_bypass: never`. Before enabling or reconciling auto-merge,
+base-owned workflow checks out only the exact event base policy, revalidates the
+live event base/head, and uses its built-in token to clear every request that is
+not already owned by the reviewed App with the exact fixed headline/body. It
+also rejects workflow-skip metadata and verifies the exact writer-rule shape,
+including REST/GraphQL agreement and
+`current_user_can_bypass: never`, before reading the private key. Any authority
+failure clears a remaining request; a mint or permission failure therefore
+leaves that PR manual-only. The built-in token's `Contents: write` permission
+is isolated to this trusted normalization job and is never used to enable
+auto-merge. Before minting an App token, it lists the exact PR revision's files;
+when `.github/workflows/**` changes, it records an explicit manual-only notice
+and skips both token minting and auto-merge enablement. Reconciliation clears
+any older App request before leaving the PR manual-only, so scheduled recovery
+cannot re-enable or synchronously merge it. Review routing keeps `Contents:
+read`. During staged rollout, the
+required `Test` context independently repeats the built-in boundary and live
+request checks as a shadow assertion. Before enabling or reconciling auto-merge,
 the minted App independently requires `pull_requests_only` on that writer rule
 and `never` on every other active main ruleset. These identity-relative checks
 remain available to low-privilege tokens; GitHub deliberately hides the full
@@ -125,10 +132,12 @@ the built-in Actions identity cannot pass the writer rule; other permitted
 identities emit either a protected-main push or the trusted closed-PR repair.
 Draft PRs skip this identity check; the explicit `ready_for_review` trigger
 reruns admission when they become merge-eligible,
-while `edited` and `auto_merge_enabled` rerun both workflows when the PR title
-or merge request changes. A human `auto_merge_disabled` event reruns CI without
-silently re-enabling the request, leaving it available only to the designated
-break-glass identity. The required `Test` context rejects GitHub workflow-skip
+while `edited` reruns admission and Router when the PR title changes.
+`auto_merge_enabled` wakes only the lightweight base-owned Router; it does not
+restart full admission for the unchanged head SHA. A human
+`auto_merge_disabled` event starts neither workflow, so the request remains
+manual-only for the designated break-glass identity. The required `Test`
+context rejects GitHub workflow-skip
 directives in the PR title or an existing auto-merge request and verifies the
 repository's reviewed `MERGE_MESSAGE` title plus `PR_TITLE` or `BLANK` body
 defaults. GitHub does not expose those merge-related settings to the read-only
@@ -158,11 +167,17 @@ ruleset with one latest-head approval and exactly one repository-owned
 `never` on both and on every other non-writer ruleset. Every required context
 must be bound to the GitHub Actions App (`integration_id=15368`); a missing,
 different, or duplicate context/source entry fails closed together with
-deletion or weakening of either gate. HTTP 405 means the PR is not ready,
-while 409 means its revision
-changed; either remains open for the next event. Other failures make
-reconciliation red. A concurrent native merge is accepted only after the final
-PR state proves the exact head, App identity, and non-empty merge SHA.
+deletion or weakening of either gate. A final PR state that is explicitly
+`behind` remains open for the next event without calling the merge endpoint.
+HTTP 405 means the PR is not ready, while 409 means its revision changed; both
+remain retriable. GitHub can also return HTTP 403 with
+`Resource not accessible by integration` for this protected, behind-main merge
+denial. That response is retriable only when a same-token read proves the PR is
+still open at the exact expected head and repository-owned `main` base with
+`mergeable=true` and `mergeable_state=behind`. Every other 403 and all other
+failures make reconciliation red. A concurrent native merge is accepted only
+after the final PR state proves the exact head, App identity, and non-empty
+merge SHA.
 A staggered twice-hourly schedule provides eventual recovery if a webhook or
 workflow completion is delayed, and `workflow_dispatch` remains the on-demand
 repair path.
