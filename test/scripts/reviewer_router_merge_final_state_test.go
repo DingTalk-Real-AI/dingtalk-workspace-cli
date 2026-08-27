@@ -67,6 +67,7 @@ const successfulMergeResponseHelper = `function requireSuccessfulMergeResponse(m
 
 const mergeAttemptRecoveryHelper = `function classifyMergeAttemptRecovery(
   status,
+  errorMessage,
   latestPull,
   expectedHeadSha,
   expectedAppLogin,
@@ -99,6 +100,19 @@ const mergeAttemptRecoveryHelper = `function classifyMergeAttemptRecovery(
     );
   }
   if (status === 405 || status === 409) {
+    return {outcome: 'not_ready'};
+  }
+  const baseRepository =
+    latestPull.base?.repo?.full_name?.toLowerCase();
+  if (
+    status === 403 &&
+    errorMessage === 'Resource not accessible by integration' &&
+    latestPull.head.sha === expectedHeadSha &&
+    latestPull.base?.ref === 'main' &&
+    baseRepository === expectedBaseRepository &&
+    latestPull.mergeable === true &&
+    latestPull.mergeable_state === 'behind'
+  ) {
     return {outcome: 'not_ready'};
   }
   throw new Error(` + "`unsupported merge recovery status ${status}`" + `);
@@ -231,6 +245,7 @@ for (const response of [
 for (const status of [405, 409]) {
   const recovery = classifyMergeAttemptRecovery(
     status,
+    'not ready',
     {...valid, state: 'open', merged_at: null, merge_commit_sha: null},
     'head-sha',
     app,
@@ -241,9 +256,30 @@ for (const status of [405, 409]) {
     throw new Error(status + ' open PR did not remain retriable');
   }
 }
+const behind = {
+  ...valid,
+  state: 'open',
+  merged_at: null,
+  merge_commit_sha: null,
+  mergeable: true,
+  mergeable_state: 'behind',
+};
+const behindRecovery = classifyMergeAttemptRecovery(
+  403,
+  'Resource not accessible by integration',
+  behind,
+  'head-sha',
+  app,
+  repository,
+  undefined,
+);
+if (behindRecovery.outcome !== 'not_ready') {
+  throw new Error('exact 403 behind-main denial did not remain retriable');
+}
 for (const responseSha of [undefined, 'merge-sha']) {
   const recovery = classifyMergeAttemptRecovery(
     409,
+    'revision changed',
     valid,
     'head-sha',
     app,
@@ -254,9 +290,10 @@ for (const responseSha of [undefined, 'merge-sha']) {
     throw new Error('valid concurrent App merge was not accepted');
   }
 }
-for (const status of [404, 405, 409]) {
+for (const status of [403, 404, 405, 409]) {
   const recovery = classifyMergeAttemptRecovery(
     status,
+    status === 403 ? 'Resource not accessible by integration' : 'closed',
     {...valid, merged_at: null, merge_commit_sha: null},
     'head-sha',
     app,
@@ -267,16 +304,22 @@ for (const status of [404, 405, 409]) {
     throw new Error(status + ' closed-unmerged PR did not remain safely closed');
   }
 }
-for (const [name, status, pull, responseSha] of [
-  ['open 404', 404, {...valid, state: 'open', merged_at: null}, undefined],
-  ['unsupported status', 500, {...valid, state: 'open', merged_at: null}, undefined],
-  ['human concurrent merge', 409, {...valid, merged_by: {login: 'haofeng0705'}}, undefined],
-  ['mismatched successful response SHA', 404, valid, 'other-merge'],
+for (const [name, status, message, pull, responseSha] of [
+  ['open 404', 404, 'not found', {...valid, state: 'open', merged_at: null}, undefined],
+  ['unsupported status', 500, 'server error', {...valid, state: 'open', merged_at: null}, undefined],
+  ['human concurrent merge', 409, 'revision changed', {...valid, merged_by: {login: 'haofeng0705'}}, undefined],
+  ['mismatched successful response SHA', 404, 'not found', valid, 'other-merge'],
+  ['different 403 message', 403, 'API rate limit exceeded', behind, undefined],
+  ['clean 403 state', 403, 'Resource not accessible by integration', {...behind, mergeable_state: 'clean'}, undefined],
+  ['unknown 403 mergeability', 403, 'Resource not accessible by integration', {...behind, mergeable: null, mergeable_state: 'unknown'}, undefined],
+  ['changed 403 head', 403, 'Resource not accessible by integration', {...behind, head: {sha: 'other-head'}}, undefined],
+  ['wrong 403 base', 403, 'Resource not accessible by integration', {...behind, base: {...behind.base, ref: 'release'}}, undefined],
 ]) {
   let rejected = false;
   try {
     classifyMergeAttemptRecovery(
       status,
+      message,
       pull,
       'head-sha',
       app,

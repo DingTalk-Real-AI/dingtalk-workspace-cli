@@ -120,7 +120,6 @@ Favorite、消息 Pin、消息 Top 和会话 Top 是不同对象。写入或取�
 | `message list-by-sender` | 已有稳定发送者 ID 且需要底层原始响应 |
 | `message list-mentions` / `list-focused` | @我或特别关注的原始列表 |
 | `message search` / `search-advanced` | Shortcut 未发布的真实过滤字段 |
-| `message list-topic-replies` | 已知 conversation/thread 的原始话题回复 |
 | `message list-by-ids` | 已知消息 ID 的原始详情响应 |
 
 Typed `chat message` 自动翻页只由 `--page-all` 触发；只传 `--page-limit`、`--max-items`

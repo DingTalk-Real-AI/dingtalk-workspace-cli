@@ -119,6 +119,10 @@ func (c *paramAliasCaptureCaller) paramAliasResponseForTool(tool string) string 
 		return `{"deptList":[{"deptId":1,"name":"Fixture Dept"}]}`
 	case "search_groups":
 		return `{"result":{"items":[{"openConversationId":"fixture-conversation","title":"Fixture Group"}]}}`
+	case "list_messages_by_ids":
+		return `{"result":{"messages":[{"openMessageId":"message-1","openConversationId":"fixture-conversation","content":"fixture message"}]}}`
+	case "get_conversation_info":
+		return `{"result":{"openConversationId":"fixture-conversation","convThreadEnabled":false}}`
 	case "search_contact_by_key_word":
 		return `{"result":[{"name":"Fixture User","userId":"fixture-user","openDingTalkId":"D-fixture-user"}]}`
 	case "list_doc_versions":

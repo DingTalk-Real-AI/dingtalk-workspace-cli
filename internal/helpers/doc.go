@@ -1191,6 +1191,7 @@ func newDocCommand() *cobra.Command {
 文件管理（搜索/列表/上传/下载/复制/移动/重命名/删除/权限）已迁移到 dws drive。`,
 		RunE: groupRunE,
 	})
+	installDocDelegationAuth(root)
 
 	searchCmd := &cobra.Command{
 		Use:   "search",

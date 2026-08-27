@@ -557,7 +557,7 @@ Flags:
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
   - 翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
   - 处理引用回复时读取 quotedMessage，不要只看回复正文；合并转发与图片引用的原消息内容也在该上下文中
-  - 话题圈消息拉取流程：如果返回的会话消息中包含 openConvThreadId 字段，说明是话题类消息。要获取完整的话题内容，需要两步操作：(1) 先通过 dws chat message list 拉取话题主消息（即话题帖子本身）；(2) 再调用 dws chat message list-topic-replies --group <openConversationId> --topic-id <openConvThreadId> 分页拉取该话题下的所有回复消息。只有话题主消息 + 回复列表合在一起，才是一条话题的完整内容。
+  - 话题圈是群会话容器，使用 `openConversationId`；群内一条 Thread 使用 `openConvThreadId`。浏览主话题使用 `dws chat thread list --conversation-id <openConversationId>`；需要逐条查看回复正文或核实具体回复是否仍存在时，使用 `dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>`。
 ```
 
 #### 以当前用户身份发送消息 — --group 群聊 / --user 或 --open-dingtalk-id 单聊
@@ -825,21 +825,23 @@ Flags:
     2. 单个换行不产生换行效果，需用空行（`\n\n`）做段落分隔，或行尾两空格 + 换行/`<br>` 做硬换行
 ```
 
-#### 拉取群话题回复消息列表
+#### 拉取话题回复消息列表
 
-查询指定群聊中某条话题消息的全部回复。--group 指定群会话 ID，--topic-id 指定话题 ID（由 dws chat message list 返回）。
+分页查询指定话题的回复，每次返回一页。`conversation-id` 指定父会话，`topic-id` 指定 `openConvThreadId`；需要自动读取全部页面时使用现有的 `dws chat +thread-replies --page-all`。
+
+用户需要逐条查看、列出或概括具体回复内容时，使用本命令；只浏览话题主消息时使用 `thread list`。需要自动读取全部页面、排序或下载资源时，使用 `chat +thread-replies --page-all`。
 ```
 Usage:
-  dws chat message list-topic-replies [flags]
+  dws chat thread list-replies [flags]
 Example:
-  dws chat message list-topic-replies --group <openconversation_id> --topic-id <topicId>
-  dws chat message list-topic-replies --group <openconversation_id> --topic-id <topicId> --time "2025-03-01 00:00:00" --limit 20
+  dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>
+  dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId> --time "2025-03-01 00:00:00" --limit 20
 Flags:
-      --group string      群会话 openconversationId (必填)
-      --topic-id string   话题 ID，由 dws chat message list 返回 (必填)
-      --time string       开始时间，格式: yyyy-MM-dd HH:mm:ss（可选）
-      --limit int         返回数量（默认 50）
-      --direction string  时间方向: newer=从给定时间往现在拉，older=从给定时间往以前拉（推荐，默认 older）
+      --conversation-id string  父会话 openConversationId (必填)
+      --topic-id string         Thread openConvThreadId (必填)
+      --time string             开始时间，格式: yyyy-MM-dd HH:mm:ss（可选）
+      --limit int               返回数量（默认 50）
+      --direction string        时间方向: newer/older
 ```
 
 #### 拉取指定时间范围内当前用户的所有会话消息 — 分页拉取当前登录用户在指定时间范围内的所有会话消息
@@ -1395,14 +1397,14 @@ Flags:
 #### 转发话题消息 — 将一条话题消息转发到目标会话
 ```
 Usage:
-  dws chat message forward-topic [flags]
+  dws chat thread forward [flags]
 Example:
-  dws chat message forward-topic --src-conversation-id <srcOpenCid> --src-msg-id <openMessageId> --src-thread-id <convThreadId> --dest-conversation-id <destOpenCid>
+  dws chat thread forward --src-msg-id <openMessageId> --src-conversation-id <openConversationId> --src-thread-id <openConvThreadId> --dest-conversation-id <openConversationId>
 Flags:
-      --src-conversation-id string    源会话 openConversationId (必填，消息所在的会话)
-      --src-msg-id string             源消息 openMessageId (必填，要转发的消息)
-      --src-thread-id string          话题 ID (必填，格式: convThread + 加密后的 convThreadId，即 message list 返回的 openConvThreadId)
-      --dest-conversation-id string   目标会话 openConversationId (必填，转发到的会话)
+      --src-msg-id string             源 Thread 主消息 messageId (必填)
+      --src-conversation-id string    源父会话 openConversationId (必填)
+      --src-thread-id string          源 Thread openConvThreadId (必填)
+      --dest-conversation-id string   目标会话 openConversationId (必填)
 ```
 
 #### 置顶消息 — 将指定消息置顶到会话顶部
@@ -2112,7 +2114,7 @@ Flags:
 用户说"搜索消息里的关键词/包含XX的消息" → `chat message search-advanced --query "<关键词>"`（首选，严格超集）
 用户说"我和某人的共同群" → `chat search-common --nicks "<昵称1>,<昵称2>"`
 用户说"未读会话列表" → `chat message list-unread-conversations`
-用户说"群里某条话题的回复" → `chat message list-topic-replies --group <id> --topic-id <id>`
+用户说"群里某条话题的回复/逐条列出当前回复/撤回后看看具体还剩哪些回复" → `chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>`
 用户说"置顶会话/置顶消息" → `chat list-top-conversations` 列会话 → 再 `chat message list --group <id>` 拉消息（两步）
 
 用户说"建群/创建群聊" → `chat group create`
@@ -2140,7 +2142,8 @@ Flags:
 用户说"编辑/修改已发送消息" → `chat message edit`（`--text` / `--content` 二选一）
 用户说"撤回机器人发的消息/机器人撤回消息" → `chat message recall-by-bot`（通过机器人接口撤回机器人发出的消息，需要 robot-code + processQueryKey）
 用户说"Webhook 发消息/告警消息" → `chat message send-by-webhook`
-用户说"话题回复/群话题消息回复/拉取话题回复" → `chat message list-topic-replies`
+用户说"回复话题" → `chat thread reply --conversation-id <openConvThreadId>`
+用户说"查看话题回复/拉取话题回复/列出每条回复内容/核实某条回复是否还在" → `chat thread list-replies`
 用户说"所有消息/全部会话消息/拉取全部消息/时间范围内消息/我的消息/我今天的消息/查我的钉钉消息/最近的消息" → `chat message list-all`
 用户说"特别关注人的消息/关注的人的消息/星标联系人的消息" → `chat message list-focused`
 用户说"消息已读未读/谁看了消息/查读状态/消息读取状态" → `chat message read-status`
@@ -2202,7 +2205,7 @@ Flags:
 用户说"机器人引用回复/让机器人回复这条群消息" → `chat message send-by-bot --conversation-id <openConversationId> --reply <openMessageId> --ref-sender <senderOpenDingTalkId> --text <内容>`
 用户说"转发消息/转发一条消息/把消息转发到另一个群" → `chat message forward`
 用户说"合并转发/批量转发/合并转发多条消息" → `chat message combine-forward`
-用户说"转发话题/转发话题消息" → `chat message forward-topic`
+用户说"转发话题/转发话题消息" → `chat thread forward`
 用户说"置顶消息/把消息置顶" → `chat message set-top-msg`
 用户说"取消置顶消息/撤销消息置顶" → `chat message unset-top-msg`
 用户说"发送/上传本地图片或媒体到聊天" → `chat message send --msg-type file --file <本地路径>`
@@ -2231,7 +2234,7 @@ Flags:
 - `chat message list-unread-conversations` — 拉取当前用户存在未读消息的会话列表（可选 `--count`）
 - `chat message read-status` — 查询指定消息的已读/未读状态（仅消息发送者可查询自己发的消息，需指定 --group 和 --message-id，可选 --target-open-dingtalk-ids 查特定人）
 - `chat message list-all` — 拉取当前用户所有会话的消息，按时间范围 + cursor 分页。只要用户没有指定某个具体的会话（如某个群名、某个人名），即使提到"单聊消息""群聊消息"等笼统范围，也应路由到此命令
-- `chat message list-topic-replies` — 拉取群话题的回复消息列表
+- `chat thread list-replies` — 使用父会话 `openConversationId` 与 Thread `openConvThreadId` 拉取回复；只有需要按主消息自动解析、全量翻页、排序或下载资源时才使用现有的 `chat +thread-replies`
 - `chat message list-focused` — 拉取特别关注人的消息，cursor 分页
 - `chat list-top-conversations` — 拉取置顶会话列表（用户询问"置顶会话"或"置顶消息"时路由到此），cursor 分页
 - `chat message send` — 以当前用户身份发消息（群聊或单聊），正文可用 `--content` 或位置参数；本地图片/文件/音视频统一用 `--msg-type file --file`，其中图片显示为可下载附件而非内联图片；`--msg-type image --media-id` 只用于上游已经提供有效 mediaId 的场景，DWS CLI 不能从本地文件生成 mediaId

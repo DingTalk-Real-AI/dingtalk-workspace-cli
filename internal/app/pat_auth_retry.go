@@ -550,8 +550,7 @@ func handlePatAuthCheck(
 			// When both clientId and clientSecret are provided, use direct mode
 			// (DingTalk API) rather than MCP proxy — the MCP proxy does not hold
 			// the secret for this particular app.
-			authpkg.SetClientID(patData.Data.ClientID)
-			authpkg.SetClientSecret(patData.Data.ClientSecret)
+			authpkg.SetClientCredentials(patData.Data.ClientID, patData.Data.ClientSecret)
 		} else {
 			// No clientSecret — rely on MCP proxy to manage the secret server-side.
 			authpkg.SetClientIDFromMCP(patData.Data.ClientID)

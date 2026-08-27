@@ -772,6 +772,10 @@ Flags:
 > - `--notify` 仅在 `--members` 新格式下生效；旧格式 `--users` 下传了也不会生效，有通知需求必须改用 `--members`
 > - 仅 USER 和 CONVERSATION 类型成员会收到通知；被授权对象是 DEPT / TAG 时通知不会送达，**需主动向用户说明这一点**，不要默不作声
 
+用户说"设置分享链接密码/公开有效期/互联网公开":
+- **必须走 drive 的 `drive publish set`**（可带 `--password` 访问密码与 `--expire-days` 有效期）
+- `doc permission` 是协作者级权限，不含链接公开属性（访问密码/有效期）
+
 > **关键区分**：
 > - "把**某篇文档**授权给某人" → `doc permission add`（节点级，包括「我的文档」下的文档都支持）
 > - "把**某个知识库**整体授权给某人" → `wiki member add`（容器级，但**「我的文档」个人空间不支持**）
@@ -1132,6 +1136,8 @@ dws doc media upload --node <DOC_ID> --file ./icon.svg \
 `dws whiteboard query/update` 使用的 partId；`blockId` 只用于文档块定位/删除。
 media upload 返回的 `resourceId` / `resourceUrl` 只能用于同一 nodeId 下的白板
 Vector/SVG。完整协议见 [whiteboard.md](./whiteboard.md)。
+
+白板卡片插入、删除、回查流程详见 [doc/doc-whiteboard.md](./doc/doc-whiteboard.md)。
 
 ## 相关产品
 

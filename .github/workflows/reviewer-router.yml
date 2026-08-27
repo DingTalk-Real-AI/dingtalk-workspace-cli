@@ -284,14 +284,22 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: Check out trusted merge authority policy
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
       # Auto-merge must use a dedicated identity. GitHub suppresses most
       # workflow events created by the built-in GITHUB_TOKEN, including the
       # main push that produces post-merge admission and baseline caches.
-      # Clear the known-unsafe owner and any workflow-skipping merge request
-      # before touching App credentials. Missing credentials then fail closed
-      # with manual merge intact.
-      - name: Clear unsafe auto-merge request
+      # Normalize every non-reviewed request and prove that this built-in token
+      # cannot update main before touching App credentials. Missing credentials
+      # or authority drift then fail closed with manual merge intact.
+      - name: Verify and normalize merge authority
+        id: merge-authority
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          REVIEWER_ROUTER_APP_SLUG: ${{ vars.REVIEWER_ROUTER_APP_SLUG }}
         with:
           script: |
             const owner = context.repo.owner;
@@ -299,83 +307,162 @@ jobs:
             const pullNumber = context.payload.pull_request.number;
             const eventHeadSha = context.payload.pull_request.head.sha;
             const eventBaseSha = context.payload.pull_request.base.sha;
-            const unsafeOwner = 'github-actions[bot]';
-            const skipWorkflowPattern =
-              /\[(?:skip ci|ci skip|no ci|skip actions|actions skip)\]|\bskip-checks\s*:\s*true\b/i;
+            const {
+              classifyAutoMergeRequest,
+              hasWorkflowSkipDirective,
+              requiresManualWorkflowMerge,
+              reviewedAppSlug,
+              safeMergeMetadata,
+              verifyBuiltInWriterBoundary,
+            } = require('./.github/reviewer-merge-authority.js');
 
-            const {data: currentPull} = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: pullNumber,
-            });
-            if (
-              currentPull.head.sha !== eventHeadSha ||
-              currentPull.base.sha !== eventBaseSha ||
-              currentPull.state !== 'open' ||
-              currentPull.draft ||
-              currentPull.base.ref !== 'main'
-            ) {
-              core.info(
-                `PR #${pullNumber} state or revision no longer matches this ready-main event; unsafe-owner cleanup stopped.`,
+            core.setOutput('enable-app-auto-merge', 'false');
+
+            async function getExactPull(phase) {
+              const {data: currentPull} = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pullNumber,
+              });
+              if (
+                currentPull.head.sha !== eventHeadSha ||
+                currentPull.base.sha !== eventBaseSha ||
+                currentPull.state !== 'open' ||
+                currentPull.draft ||
+                currentPull.base.ref !== 'main'
+              ) {
+                core.info(
+                  `PR #${pullNumber} state or revision no longer matches this ready-main event during ${phase}; merge-authority verification stopped.`,
+                );
+                return null;
+              }
+              return currentPull;
+            }
+
+            async function disableAutoMerge(pullRequest, phase) {
+              await github.graphql(
+                `mutation DisableAutoMerge($pullRequestId: ID!) {
+                  disablePullRequestAutoMerge(
+                    input: {pullRequestId: $pullRequestId}
+                  ) {
+                    pullRequest { id }
+                  }
+                }`,
+                {pullRequestId: pullRequest.node_id},
               );
+              const cleanedPull = await getExactPull(`${phase} cleanup`);
+              if (cleanedPull?.auto_merge) {
+                throw new Error(
+                  `PR #${pullNumber} retained auto-merge owned by ${cleanedPull.auto_merge.enabled_by?.login || 'an unknown actor'} after ${phase}.`,
+                );
+              }
+              core.info(`Cleared PR #${pullNumber} auto-merge during ${phase}.`);
+              return cleanedPull;
+            }
+
+            let currentPull = await getExactPull('initial read');
+            if (!currentPull) {
               return;
             }
 
-            const enabledBy = currentPull.auto_merge?.enabled_by?.login?.toLowerCase();
-            const mergeTexts = [
-              currentPull.title,
-              currentPull.auto_merge?.commit_title,
-              currentPull.auto_merge?.commit_message,
-            ].filter(value => typeof value === 'string');
-            const skipRequested = mergeTexts.some(value =>
-              skipWorkflowPattern.test(value),
-            );
-            if (!currentPull.auto_merge || (enabledBy !== unsafeOwner && !skipRequested)) {
-              core.info(
-                currentPull.auto_merge
-                  ? `PR #${pullNumber} auto-merge is owned by ${enabledBy || 'an unknown actor'}; preserving it.`
-                  : `PR #${pullNumber} has no auto-merge request to clear.`,
+            try {
+              const appSlug = reviewedAppSlug(
+                process.env.REVIEWER_ROUTER_APP_SLUG,
               );
-              return;
-            }
-
-            await github.graphql(
-              `mutation DisableAutoMerge($pullRequestId: ID!) {
-                disablePullRequestAutoMerge(
-                  input: {pullRequestId: $pullRequestId}
-                ) {
-                  pullRequest {
-                    id
+              if (!appSlug) {
+                throw new Error(
+                  'Reviewer Router App slug repository variable is missing or unsafe.',
+                );
+              }
+              const expectedAppOwner = `${appSlug}[bot]`;
+              const {
+                headline: safeCommitHeadline,
+                body: safeCommitBody,
+              } = safeMergeMetadata(pullNumber);
+              const initialRequest = classifyAutoMergeRequest({
+                pullRequest: currentPull,
+                expectedAppOwner,
+                safeCommitHeadline,
+                safeCommitBody,
+              });
+              if (initialRequest === 'unsafe') {
+                currentPull = await disableAutoMerge(
+                  currentPull,
+                  'pre-credential normalization',
+                );
+                if (!currentPull) {
+                  return;
+                }
+              }
+              if (hasWorkflowSkipDirective(currentPull)) {
+                throw new Error(
+                  `PR #${pullNumber} title or merge metadata contains a GitHub workflow-skip directive.`,
+                );
+              }
+              const changedFiles = await github.paginate(
+                github.rest.pulls.listFiles,
+                {owner, repo, pull_number: pullNumber, per_page: 100},
+              );
+              if (requiresManualWorkflowMerge(changedFiles)) {
+                if (currentPull.auto_merge) {
+                  currentPull = await disableAutoMerge(
+                    currentPull,
+                    'workflow-change manual-only cleanup',
+                  );
+                  if (!currentPull) {
+                    return;
                   }
                 }
-              }`,
-              {pullRequestId: currentPull.node_id},
-            );
-            const {data: cleanedPull} = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: pullNumber,
-            });
-            const cleanedOwner = cleanedPull.auto_merge?.enabled_by?.login?.toLowerCase();
-            if (
-              cleanedPull.head.sha === eventHeadSha &&
-              cleanedPull.base.sha === eventBaseSha &&
-              cleanedPull.state === 'open' &&
-              !cleanedPull.draft &&
-              cleanedPull.base.ref === 'main' &&
-              cleanedPull.auto_merge
-            ) {
-              throw new Error(
-                `PR #${pullNumber} still has auto-merge owned by ${cleanedOwner || 'an unknown actor'} after unsafe-request cleanup.`,
+                core.notice(
+                  `PR #${pullNumber} changes .github/workflows/**; GitHub Apps without workflows permission cannot enable auto-merge, so this PR remains manual-only.`,
+                );
+                return;
+              }
+
+              const {mergeDefaultsProjection} =
+                await verifyBuiltInWriterBoundary({github, owner, repo});
+              if (mergeDefaultsProjection === 'omitted') {
+                core.info(
+                  'Built-in merge-authority verification cannot observe repository merge-message defaults; exact validation remains delegated to the dedicated App.',
+                );
+              }
+
+              currentPull = await getExactPull('final authority read');
+              if (!currentPull) {
+                return;
+              }
+              const finalRequest = classifyAutoMergeRequest({
+                pullRequest: currentPull,
+                expectedAppOwner,
+                safeCommitHeadline,
+                safeCommitBody,
+              });
+              if (finalRequest === 'unsafe') {
+                await disableAutoMerge(currentPull, 'final authority read');
+                throw new Error(
+                  `PR #${pullNumber} acquired an unsafe auto-merge request during merge-authority verification.`,
+                );
+              }
+              core.info(
+                `Verified built-in merge authority for PR #${pullNumber}; auto-merge=${finalRequest}.`,
               );
+              core.setOutput('enable-app-auto-merge', 'true');
+            } catch (error) {
+              const latestPull = await getExactPull('failure cleanup');
+              if (latestPull?.auto_merge) {
+                try {
+                  await disableAutoMerge(latestPull, 'fail-closed authority cleanup');
+                } catch (cleanupError) {
+                  throw new Error(
+                    `${error.message}; fail-closed cleanup also failed: ${cleanupError.message}`,
+                  );
+                }
+              }
+              throw error;
             }
-            core.info(
-              skipRequested
-                ? `Cleared workflow-skipping auto-merge metadata from PR #${pullNumber}.`
-                : `Cleared built-in GITHUB_TOKEN auto-merge ownership from PR #${pullNumber}.`,
-            );
       - name: Mint Reviewer Router GitHub App token
         id: reviewer-router-token
+        if: steps.merge-authority.outputs.enable-app-auto-merge == 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ vars.REVIEWER_ROUTER_APP_CLIENT_ID }}
@@ -385,6 +472,7 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
       - name: Enable auto-merge with dedicated App
+        if: steps.merge-authority.outputs.enable-app-auto-merge == 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           MINTED_REVIEWER_ROUTER_APP_SLUG: ${{ steps.reviewer-router-token.outputs.app-slug }}
@@ -1114,6 +1202,32 @@ jobs:
             await assertReviewerRouterRulesetBoundary();
             const skipWorkflowPattern =
               /\[(?:skip ci|ci skip|no ci|skip actions|actions skip)\]|\bskip-checks\s*:\s*true\b/i;
+            function requiresManualWorkflowMerge(files) {
+              if (!Array.isArray(files)) {
+                throw new Error('pull request files must be an array');
+              }
+              return files.some(file => {
+                if (
+                  file === null ||
+                  typeof file !== 'object' ||
+                  Array.isArray(file) ||
+                  typeof file.filename !== 'string' ||
+                  !file.filename
+                ) {
+                  throw new Error(
+                    'pull request file entry must contain a non-empty filename',
+                  );
+                }
+                return file.filename.startsWith('.github/workflows/');
+              });
+            }
+            async function pullRequiresManualWorkflowMerge(pullNumber) {
+              const files = await github.paginate(
+                github.rest.pulls.listFiles,
+                {owner, repo, pull_number: pullNumber, per_page: 100},
+              );
+              return requiresManualWorkflowMerge(files);
+            }
             const openPulls = await github.paginate(github.rest.pulls.list, {
               owner,
               repo,
@@ -1204,6 +1318,7 @@ jobs:
 
             function classifyMergeAttemptRecovery(
               status,
+              errorMessage,
               latestPull,
               expectedHeadSha,
               expectedAppLogin,
@@ -1236,6 +1351,19 @@ jobs:
                 );
               }
               if (status === 405 || status === 409) {
+                return {outcome: 'not_ready'};
+              }
+              const baseRepository =
+                latestPull.base?.repo?.full_name?.toLowerCase();
+              if (
+                status === 403 &&
+                errorMessage === 'Resource not accessible by integration' &&
+                latestPull.head.sha === expectedHeadSha &&
+                latestPull.base?.ref === 'main' &&
+                baseRepository === expectedBaseRepository &&
+                latestPull.mergeable === true &&
+                latestPull.mergeable_state === 'behind'
+              ) {
                 return {outcome: 'not_ready'};
               }
               throw new Error(`unsupported merge recovery status ${status}`);
@@ -1318,6 +1446,20 @@ jobs:
                 ) {
                   skipped += 1;
                   core.info(`PR #${candidate.number} changed before reconciliation; skipped.`);
+                  continue;
+                }
+
+                if (await pullRequiresManualWorkflowMerge(candidate.number)) {
+                  stage = 'workflow-change manual-only cleanup';
+                  await disableAutoMerge(
+                    candidate.number,
+                    currentPull.node_id,
+                    stage,
+                  );
+                  skipped += 1;
+                  core.notice(
+                    `PR #${candidate.number} changes .github/workflows/**; cleared auto-merge and left it manual-only.`,
+                  );
                   continue;
                 }
 
@@ -1514,6 +1656,20 @@ jobs:
                   continue;
                 }
 
+                if (await pullRequiresManualWorkflowMerge(candidate.number)) {
+                  stage = 'workflow-change synchronous-merge cleanup';
+                  await disableAutoMerge(
+                    candidate.number,
+                    currentPull.node_id,
+                    stage,
+                  );
+                  skipped += 1;
+                  core.notice(
+                    `PR #${candidate.number} changes .github/workflows/**; cleared the App request and left it manual-only.`,
+                  );
+                  continue;
+                }
+
                 stage = 'ruleset revalidation';
                 await assertReviewerRouterRulesetBoundary();
                 stage = 'final synchronous merge preflight';
@@ -1560,6 +1716,16 @@ jobs:
                   );
                   continue;
                 }
+                if (
+                  finalPull.mergeable === true &&
+                  finalPull.mergeable_state === 'behind'
+                ) {
+                  notReady += 1;
+                  core.info(
+                    `PR #${candidate.number} is behind main at final synchronous merge preflight; left open for the next event.`,
+                  );
+                  continue;
+                }
 
                 stage = 'synchronous merge';
                 let responseMergeSha;
@@ -1592,7 +1758,7 @@ jobs:
                   );
                 } catch (error) {
                   const status = Number(error.status);
-                  if (![404, 405, 409].includes(status)) {
+                  if (![403, 404, 405, 409].includes(status)) {
                     throw error;
                   }
                   const {data: latestPull} = await github.rest.pulls.get({
@@ -1602,6 +1768,7 @@ jobs:
                   });
                   const recovery = classifyMergeAttemptRecovery(
                     status,
+                    error.message,
                     latestPull,
                     expectedHeadSha,
                     expectedAppOwner,

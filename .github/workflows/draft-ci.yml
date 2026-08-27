@@ -63,8 +63,10 @@ jobs:
       - name: Check GitHub Actions workflows
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
-      - name: Test reviewer routing policy
-        run: node .github/reviewer-routing.test.js
+      - name: Test reviewer routing and merge authority policy
+        run: |
+          node .github/reviewer-routing.test.js
+          node .github/reviewer-merge-authority.test.js
 
       - name: Test npm installer smoke
         env:

@@ -120,6 +120,7 @@ func newSheetCommand() *cobra.Command {
   dws sheet template search                     搜索表格模板
   dws sheet template apply                      应用表格模板创建新表格文档`,
 	})
+	installDocDelegationAuth(root)
 
 	// ── Build commands via factory functions ──────────────────────────
 	workbookCmds := newWorkbookCmds()

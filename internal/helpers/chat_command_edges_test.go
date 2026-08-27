@@ -743,8 +743,23 @@ func TestCrossPlatformCoverageChatWebhookReplyConversationAndDownloadEdges(t *te
 	for _, step := range []scriptedToolStep{{text: `{}`}, {text: `not-json`}, {text: `{"errcode":1,"errmsg":"bad"}`}, {err: errors.New("webhook")}} {
 		_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{step}}, "message", "send-by-webhook", "--token=t", "--title=title", "--text=text")
 	}
-	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=D1", "--text=reply", "--ai-tag", "--uuid=u")
-	_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}, {text: `{}`}}}, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=u1", "--text=reply")
+	directReply := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
+		{text: `{"result":{"openConversationId":"cid","convThreadEnabled":false}}`},
+		{text: `{}`},
+	}}
+	if err := runChatCoverageCommand(t, directReply, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender", helperCurrentDOpenID, "--text=reply", "--ai-tag", "--uuid=u"); err != nil {
+		t.Fatal(err)
+	}
+	resolvedReply := &scriptedToolCaller{steps: []scriptedToolStep{
+		{text: `{"result":[{"openMessageId":"mid","openConversationId":"cid"}]}`},
+		{text: `{"result":{"openConversationId":"cid","convThreadEnabled":false}}`},
+		{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`},
+		{text: `{}`},
+	}}
+	if err := runChatCoverageCommand(t, resolvedReply, "message", "reply", "--conversation-id=cid", "--ref-msg-id=mid", "--ref-sender=u1", "--text=reply"); err != nil {
+		t.Fatal(err)
+	}
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "conversation-info", "--open-dingtalk-id=D1")
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{}, "conversation-info", "--user=D1")
 	_ = runChatCoverageCommand(t, &scriptedToolCaller{steps: []scriptedToolStep{{text: `{"result":[{"userId":"u1","openDingTalkId":"D1"}]}`}, {text: `{}`}}}, "conversation-info", "--user=u1")

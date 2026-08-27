@@ -499,15 +499,24 @@ func IsMigrationDone() bool {
 
 const clientSecretPrefix = "client-secret:"
 
+func legacyClientSecretAccountKey(clientID string) string {
+	return clientSecretPrefix + clientID
+}
+
 // SaveClientSecret stores the client secret for a specific client ID.
 // This is called during login to snapshot the credentials used.
 func SaveClientSecret(clientID, clientSecret string) error {
+	clientID = strings.TrimSpace(clientID)
+	clientSecret = strings.TrimSpace(clientSecret)
 	if clientID == "" || clientSecret == "" {
 		return nil // Nothing to save
 	}
-	account := clientSecretPrefix + clientID
+	account := secretAccountKey(clientID)
 	if err := authKeychainSet(keychain.Service, account, clientSecret); err != nil {
 		return fmt.Errorf("save client secret: %w", err)
+	}
+	if err := authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(clientID)); err != nil {
+		slog.Warn("auth: failed to remove legacy Client Secret slot after save", "client_id", clientID, "error", err)
 	}
 	return nil
 }
@@ -515,15 +524,40 @@ func SaveClientSecret(clientID, clientSecret string) error {
 // LoadClientSecret retrieves the stored client secret for a specific client ID.
 // Returns empty string if not found.
 func LoadClientSecret(clientID string) string {
-	if clientID == "" {
-		return ""
-	}
-	account := clientSecretPrefix + clientID
-	secret, err := authKeychainGet(keychain.Service, account)
-	if err != nil {
-		return ""
-	}
+	secret, _ := LoadClientSecretStrict(clientID)
 	return secret
+}
+
+// LoadClientSecretStrict retrieves the canonical secret, falls back to the
+// historical slot, and refuses to guess when both slots disagree.
+func LoadClientSecretStrict(clientID string) (string, error) {
+	if clientID == "" {
+		return "", nil
+	}
+	canonical, err := authKeychainGet(keychain.Service, secretAccountKey(clientID))
+	if err != nil {
+		return "", fmt.Errorf("load canonical client secret: %w", err)
+	}
+	legacy, err := authKeychainGet(keychain.Service, legacyClientSecretAccountKey(clientID))
+	if err != nil {
+		return "", fmt.Errorf("load legacy client secret: %w", err)
+	}
+	if canonical != "" && legacy != "" && canonical != legacy {
+		return "", ErrClientSecretConflict
+	}
+	if canonical != "" {
+		return canonical, nil
+	}
+	if legacy == "" {
+		return "", nil
+	}
+	if err := authKeychainSet(keychain.Service, secretAccountKey(clientID), legacy); err != nil {
+		return legacy, nil
+	}
+	if err := authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(clientID)); err != nil {
+		slog.Warn("auth: failed to remove legacy Client Secret slot after load migration", "client_id", clientID, "error", err)
+	}
+	return legacy, nil
 }
 
 // DeleteClientSecret removes the stored client secret for a specific client ID.
@@ -531,6 +565,8 @@ func DeleteClientSecret(clientID string) error {
 	if clientID == "" {
 		return nil
 	}
-	account := clientSecretPrefix + clientID
-	return authKeychainRemove(keychain.Service, account)
+	return errors.Join(
+		authKeychainRemove(keychain.Service, secretAccountKey(clientID)),
+		authKeychainRemove(keychain.Service, legacyClientSecretAccountKey(clientID)),
+	)
 }
