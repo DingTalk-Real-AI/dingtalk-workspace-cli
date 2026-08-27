@@ -38,6 +38,19 @@ Flags:
 - `--content` 中的换行必须是**真实换行符**（Unicode `U+000A`），不是字面量 `\n`；多行/表格/长文本优先 `--content-file` 或 `--content -`。
 - **写入后必须回读**——返回 `success=true` 不等于内容真的写入完整（详见 [`./style/doc-update-workflow.md` §6](./style/doc-update-workflow.md)）。
 
+## @人（markdown mention）
+
+在 `append` / `overwrite` 的 markdown 正文里通过该协议插入链接：
+
+```
+[@姓名](alidocs-mcp://doc/mention?openDingTalkId=<openDingTalkId>)
+```
+
+服务端会改写为指向该用户的钉钉个人资料链接。
+
+- `openDingTalkId` 取自 `dws aisearch +search-person --query "姓名"` 返回的 `openDingTalkId`（或 `dws contact +search-user`）。
+- `@` 与显示名由你写在方括号里；服务端只替换链接、保留显示文本。
+
 ## JSONML 格式写入
 
 使用 `--content-format jsonml` 可以 JSONML 结构直接写入文档，实现无损读写。当前仅支持 `--mode overwrite`。

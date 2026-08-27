@@ -47,6 +47,10 @@ dws doc +create --name "<文档名>" --content @body.json --doc-format jsonml --
 
 交付前检查标题是否重复、段落是否连贯、编号是否统一；只有真实行列数据才使用表格，富组件服务于理解而不是装饰。明确字数要求时应在写入前完成本地统计，不能凭模型估算宣称达标。
 
+## @人（markdown mention）
+
+markdown 里可写 `[@姓名](alidocs-mcp://doc/mention?openDingTalkId=<openDingTalkId>)`，服务端会改写为该用户的钉钉个人资料链接；`openDingTalkId` 取自 `dws aisearch +search-person` 的 `openDingTalkId`。完整说明见 doc-update.md 的「@人」小节。
+
 ## 高级通道
 
 只有 shortcut 未公开所需的底层参数或需要原始响应时，才读取精确 leaf Schema 后使用 `dws doc create`。不要因为熟悉旧参数就默认退回原子命令，也不要使用已删除的 Python 创建脚本。
