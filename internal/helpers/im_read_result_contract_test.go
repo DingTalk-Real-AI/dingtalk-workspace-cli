@@ -284,12 +284,10 @@ func TestCrossPlatformCoverageChatMessageListDecryptsEncryptedMessagesInBatch(t 
 	if err := json.Unmarshal([]byte(got), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result["decryptCandidateCount"] != float64(1) || result["decryptedCount"] != float64(1) {
-		t.Fatalf("decrypt ledger = %#v", result)
-	}
-	messages, _ := result["messages"].([]any)
+	body, _ := result["result"].(map[string]any)
+	messages, _ := body["messages"].([]any)
 	first, _ := messages[0].(map[string]any)
-	if first["text"] != "明文" || first["content"] != "明文" {
+	if first["text"] != "明文" || first["content"] != "明文" || first["contentDecrypted"] != true {
 		t.Fatalf("decrypted projection = %#v", first)
 	}
 }
@@ -325,8 +323,11 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 		if err := json.Unmarshal([]byte(got), &payload); err != nil {
 			t.Fatal(err)
 		}
-		if payload["decryptFailedCount"] != float64(1) || payload["partial"] != true {
-			t.Fatalf("payload = %#v", payload)
+		body, _ := payload["result"].(map[string]any)
+		messages, _ := body["messages"].([]any)
+		first, _ := messages[0].(map[string]any)
+		if first["content"] != encrypted || first["contentDecrypted"] == true {
+			t.Fatalf("degraded message = %#v", first)
 		}
 	})
 
@@ -359,8 +360,17 @@ func TestCrossPlatformCoverageChatMessageListDecryptFailureLedgerEdges(t *testin
 		if err := json.Unmarshal([]byte(got), &payload); err != nil {
 			t.Fatal(err)
 		}
-		if payload["decryptedCount"] != float64(1) || payload["decryptFailedCount"] != float64(2) || payload["partial"] != true {
-			t.Fatalf("payload = %#v", payload)
+		body, _ := payload["result"].(map[string]any)
+		messages, _ := body["messages"].([]any)
+		first, _ := messages[0].(map[string]any)
+		second, _ := messages[1].(map[string]any)
+		third, _ := messages[2].(map[string]any)
+		fourth, _ := messages[3].(map[string]any)
+		if first["content"] != "ok text" || first["contentDecrypted"] != true {
+			t.Fatalf("decrypted message = %#v", first)
+		}
+		if second["content"] != encrypted || third["content"] != encrypted || fourth["content"] != "safe-fail||2||1||1" {
+			t.Fatalf("degraded messages = %#v", messages)
 		}
 	})
 
