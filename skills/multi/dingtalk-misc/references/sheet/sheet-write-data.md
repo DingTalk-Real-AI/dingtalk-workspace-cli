@@ -46,6 +46,25 @@
 
 CSV 必须使用 ASCII 英文逗号 `,`；中文逗号 `，` 不会分列，会把整行写进一个单元格。目标区域含合并单元格时 csv-put 会打散合并并写入，这与 range update 的冲突失败语义不同；需要保留合并时先记录 mergedRanges，写完再恢复。csv-put 只承载值和公式，不承载样式、超链接、richText 或 dataValidation。
 
+### 自动类型转换与文本保真
+
+普通 CSV 写入沿用默认自动类型转换，示例省略该 flag：
+
+```bash
+dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 \
+    --csv 'name,score\nAlice,95\nBob,87'
+```
+
+用户明确要求“保留前导零 / 不要转日期 / 按文本原样导入 / 禁止类型推断”时才添加 `--auto-convert=false`：
+
+```bash
+dws sheet csv-put --node <NODE_ID> --sheet-id <SHEET_ID> --start-cell A1 \
+    --auto-convert=false \
+    --csv $'id,date,total\n001,2026/8/1,"=SUM(1,2)"'
+```
+
+`--auto-convert=false` 只关闭非公式字段的类型推断：`001`、`12.10`、`1E3`、`2026/8/1`、`85%`、`TRUE` 都按原始文本写入；RFC 4180 解码后首字符为 `=` 的字段仍是公式，`'=...` 则作为普通文本保留前置单引号。用户希望识别数字、日期、百分比或布尔时，省略 `--auto-convert`，使用默认 `true`；不要给所有 `csv-put` 无条件添加该参数。有明确列类型要求时改用 `table-put` 的 `dtypes` / `formats`。
+
 ## 结构化 table 写入
 
     dws sheet table-put --node <NODE_ID> --sheets '{"name":"订单","columns":["订单号","金额"],"data":[["9007199254740993",12.5]],"dtypes":{"订单号":"object","金额":"float64"},"formats":{"订单号":"@","金额":"0.00"}}' --format json

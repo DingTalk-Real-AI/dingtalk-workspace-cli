@@ -453,7 +453,7 @@ func errorInfoFromExecutionError(err error) *output.ErrorInfo {
 	if typed.Hint != "" {
 		info.Hint = typed.Hint
 	}
-	info.Actions = append([]string(nil), typed.Actions...)
+	info.Actions = apperrors.RecoveryActions(err)
 	info.Retryable = typed.RetryableSet && typed.Retryable
 	info.RetryAfterSeconds = typed.RetryAfterSeconds
 	if typed.RPCCode != 0 {

@@ -87,27 +87,52 @@ type reviewedCompatibilityException struct {
 
 // reviewedCompatibilityExceptions is intentionally exact: safety fixes may
 // need to tighten a historical contract, but that must not turn arbitrary
-// confirmation drift into a compatible change.
-var reviewedCompatibilityExceptions = map[string]reviewedCompatibilityException{
+// confirmation drift into a compatible change. Each tool may have multiple
+// field transitions (e.g. confirmation + risk + effect tightened together).
+var reviewedCompatibilityExceptions = map[string][]reviewedCompatibilityException{
 	// PR #1085: batch permission/member remove is destructive at container
 	// scope — one call can revoke access for up to 30 USER / DEPT /
 	// CONVERSATION / TAG members, and departments, chats, and role groups
 	// can indirectly affect many more users. The review therefore asked for
 	// the same user confirmation gate as other destructive removes.
 	"doc/doc.remove_permission": {
-		Field: "confirmation",
-		Old:   "not_required",
-		New:   "user_required",
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
 	},
 	"drive/drive.permission_remove": {
-		Field: "confirmation",
-		Old:   "not_required",
-		New:   "user_required",
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
 	},
 	"wiki/wiki.remove_member": {
-		Field: "confirmation",
-		Old:   "not_required",
-		New:   "user_required",
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+	},
+	// PR #1097 (issue #1096): 6 commands that affect other users and are
+	// irreversible were incorrectly marked not_required / medium. Tightened
+	// to user_required / high; calendar event delete and minutes replace-text
+	// additionally escalated to destructive effect.
+	"calendar/calendar.delete_calendar_event": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+		{Field: "effect", Old: "write", New: "destructive"},
+	},
+	"calendar/calendar.remove_calendar_participant": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"calendar/calendar.delete_meeting_room": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"chat/chat.remove_group_member": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+	},
+	"minutes/minutes.replace_minutes_text": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
+		{Field: "effect", Old: "write", New: "destructive"},
+	},
+	"doc/doc.update_permission": {
+		{Field: "confirmation", Old: "not_required", New: "user_required"},
+		{Field: "risk", Old: "medium", New: "high"},
 	},
 }
 
@@ -727,7 +752,7 @@ func checkCompatibility(baseline, current schemaContract) []string {
 
 func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []string {
 	var failures []string
-	for _, field := range []struct {
+	fields := []struct {
 		name string
 		old  string
 		new  string
@@ -739,8 +764,15 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 		{name: "risk", old: oldTool.Risk, new: newTool.Risk},
 		{name: "confirmation", old: oldTool.Confirmation, new: newTool.Confirmation},
 		{name: "idempotency", old: oldTool.Idempotency, new: newTool.Idempotency},
-	} {
-		if field.old != field.new && !isReviewedCompatibilityException(toolPath, field.name, field.old, field.new) {
+	}
+	var actual []toolTransition
+	for _, field := range fields {
+		if field.old != field.new {
+			actual = append(actual, toolTransition{field: field.name, old: field.old, new_: field.new})
+		}
+	}
+	for _, field := range fields {
+		if field.old != field.new && !isReviewedCompatibilityException(toolPath, field.name, field.old, field.new, actual) {
 			failures = append(failures, fmt.Sprintf("schema tool %q changed %s", toolPath, field.name))
 		}
 	}
@@ -776,9 +808,47 @@ func checkToolCompatibility(toolPath string, oldTool, newTool toolSchema) []stri
 	return failures
 }
 
-func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string) bool {
-	exception, ok := reviewedCompatibilityExceptions[toolPath]
-	return ok && exception.Field == field && exception.Old == oldValue && exception.New == newValue
+// toolTransition captures a single field's old→new change for atomic matching.
+type toolTransition struct {
+	field string
+	old   string
+	new_  string
+}
+
+// reviewedExceptionSetFullyMatched reports whether every registered exception
+// for toolPath is present in the actual transitions. The set is atomic: a
+// partial migration (e.g. only risk tightened, confirmation unchanged) must
+// not borrow individual exceptions from a reviewed complete hardening.
+func reviewedExceptionSetFullyMatched(toolPath string, actual []toolTransition) bool {
+	exceptions := reviewedCompatibilityExceptions[toolPath]
+	if len(exceptions) == 0 {
+		return true
+	}
+	for _, ex := range exceptions {
+		found := false
+		for _, tr := range actual {
+			if tr.field == ex.Field && tr.old == ex.Old && tr.new_ == ex.New {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func isReviewedCompatibilityException(toolPath, field, oldValue, newValue string, actual []toolTransition) bool {
+	if !reviewedExceptionSetFullyMatched(toolPath, actual) {
+		return false
+	}
+	for _, exception := range reviewedCompatibilityExceptions[toolPath] {
+		if exception.Field == field && exception.Old == oldValue && exception.New == newValue {
+			return true
+		}
+	}
+	return false
 }
 
 // reviewedInterfaceRefRedirect enumerates the exact, individually reviewed
@@ -820,6 +890,17 @@ var reviewedConstraintTransition = map[string]map[string]string{
 	// both groups makes the final Schema express the runtime's exact-one rule.
 	"sheet/sheet.create_float_image": {
 		"": `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`,
+	},
+	// PR #1042 publishes the Todo Shortcut constraints already enforced by
+	// runtime validation. The Reminder transition is intentionally limited to
+	// clear/base-time exactly-one; historically accepted extra time arguments
+	// remain compatible and are ignored by the runtime branch that does not use
+	// them.
+	"todo/todo.shortcut_update": {
+		"": `{"require_one_of":[["title","due","priority"]]}`,
+	},
+	"todo/todo.shortcut_reminder": {
+		"": `{"mutually_exclusive":[["clear","base-time"]],"require_one_of":[["clear","base-time"]]}`,
 	},
 }
 

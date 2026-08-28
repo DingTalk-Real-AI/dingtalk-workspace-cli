@@ -59,6 +59,9 @@ func TestCrossPlatformCoverageServerFailureClassifierBackendMetadataUnavailable(
 	if strings.Contains(strings.ToLower(typed.Hint), "parameter") || strings.Contains(typed.Hint, "认证") {
 		t.Fatalf("misleading hint = %q", typed.Hint)
 	}
+	if actions := apperrors.RecoveryActions(err); !strings.Contains(strings.Join(actions, "\n"), apperrors.DoctorCommand) {
+		t.Fatalf("backend dependency error has no doctor entry: %#v", actions)
+	}
 }
 
 func TestCrossPlatformCoverageServerFailureClassifierRequiredConversationID(t *testing.T) {
@@ -159,8 +162,8 @@ func TestCrossPlatformCoverageServerFailureClassifierUnknownFallsBack(t *testing
 	if typed.Reason != "business_error" || typed.Origin != "" || typed.FailureStage != "" || typed.ExecutionStarted != nil {
 		t.Fatalf("unexpected fallback classification: %#v", typed)
 	}
-	if len(typed.Actions) == 0 || !strings.Contains(typed.Actions[0], "dws doctor") {
-		t.Fatalf("fallback error has no stable troubleshooting entry: %#v", typed.Actions)
+	if len(typed.Actions) == 0 || strings.Contains(strings.Join(apperrors.RecoveryActions(err), "\n"), "dws doctor") {
+		t.Fatalf("fallback business error must keep service recovery without doctor: %#v", typed.Actions)
 	}
 }
 
@@ -211,6 +214,10 @@ func TestCrossPlatformCoverageMultiProfileErrorPayloadPreservesFailureSemantics(
 	}
 	if _, ok := payload["execution_started"]; ok {
 		t.Fatalf("payload must not invent execution_started: %#v", payload)
+	}
+	actions, _ := payload["actions"].([]string)
+	if !strings.Contains(strings.Join(actions, "\n"), apperrors.DoctorCommand) {
+		t.Fatalf("multi-profile backend failure has no doctor entry: %#v", payload["actions"])
 	}
 }
 

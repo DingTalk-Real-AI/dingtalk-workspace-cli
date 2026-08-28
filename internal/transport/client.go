@@ -906,7 +906,7 @@ func httpStatusError(method, endpoint string, statusCode int, snapshotPath, head
 	case statusCode == http.StatusForbidden:
 		opts = append(opts,
 			apperrors.WithHint(i18n.T("权限不足；请检查当前身份是否有权限访问该服务或工具。")),
-			apperrors.WithActions(authActions(snapshotPath)...),
+			apperrors.WithActions(permissionActions(snapshotPath)...),
 		)
 		return apperrors.NewAuth(message, opts...)
 	case statusCode >= http.StatusBadRequest && statusCode < http.StatusInternalServerError:
@@ -965,6 +965,15 @@ func jsonrpcEnvelopeError(method string, rpcErr *RPCError, snapshotPath, headerT
 		return apperrors.NewValidation(message, opts...)
 	}
 
+	if looksPermissionRPCError(rpcErr) {
+		opts = append(opts,
+			apperrors.WithReason("rpc_forbidden"),
+			apperrors.WithHint(i18n.T("调用被拒绝；请检查当前身份、资源权限或应用授权范围。")),
+			apperrors.WithActions(permissionActions(snapshotPath)...),
+		)
+		return apperrors.NewAuth(message, opts...)
+	}
+
 	if looksAuthRPCError(rpcErr) {
 		opts = append(opts,
 			apperrors.WithHint(i18n.T("调用被拒绝；请检查认证状态、租户身份或访问权限。")),
@@ -1003,6 +1012,22 @@ func looksAuthRPCError(rpcErr *RPCError) bool {
 		return true
 	}
 	return looksAuthRelated(rpcErr.Message)
+}
+
+func looksPermissionRPCError(rpcErr *RPCError) bool {
+	if rpcErr == nil {
+		return false
+	}
+	if rpcErr.Code == http.StatusForbidden {
+		return true
+	}
+	normalized := strings.ToLower(strings.TrimSpace(rpcErr.Message))
+	for _, marker := range []string{"forbidden", "permission", "insufficient_scope", "access denied"} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func jsonrpcCodeLabel(code int) string {
@@ -1064,6 +1089,16 @@ func authActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查登录状态后重试"),
 		i18n.T("运行 dws auth status 确认凭证有效，必要时重新登录"),
+		apperrors.DoctorCommand,
+	}
+	_ = snapshotPath
+	return actions
+}
+
+func permissionActions(snapshotPath string) []string {
+	actions := []string{
+		i18n.T("确认当前 profile 和身份是否正确"),
+		i18n.T("检查目标资源权限与应用授权范围后重试"),
 	}
 	_ = snapshotPath
 	return actions
@@ -1072,7 +1107,7 @@ func authActions(snapshotPath string) []string {
 func runtimeActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查认证、权限和参数后重试原命令"),
-		i18n.T("运行 dws doctor 检查登录态、网络和本地环境；持续失败时保留 Trace ID 和 Server Code"),
+		i18n.T("持续失败时保留 Trace ID 和 Server Code 联系服务端排查"),
 	}
 	_ = snapshotPath
 	return actions
@@ -1082,7 +1117,7 @@ func networkActions(snapshotPath string) []string {
 	actions := []string{
 		i18n.T("检查网络、代理和 DNS 配置后重试原命令"),
 		i18n.T("确认 MCP 服务可访问；若持续失败请稍后重试"),
-		i18n.T("运行 dws doctor 获取可共享的环境诊断结果"),
+		apperrors.DoctorCommand,
 	}
 	_ = snapshotPath
 	return actions
