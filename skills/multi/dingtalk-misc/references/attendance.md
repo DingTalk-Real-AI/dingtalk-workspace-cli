@@ -1,6 +1,6 @@
 # 考勤查询、规则与设置
 
-本 Reference 处理打卡流水/结果、个人详情、签到、审批记录与入口、班次定义、考勤组、考勤规则、个人/全局设置和管理员修正。
+本 Reference 处理打卡流水/结果、签到、审批记录与入口、班次定义、考勤组、考勤规则、个人/全局设置和管理员修正。
 
 以下场景不要先读本文件：
 
@@ -24,12 +24,9 @@
 
 | 用户意图 | 推荐入口 | 关键参数/边界 |
 |---|---|---|
-| 某人某天个人考勤详情 | `dws attendance record get` | `--user <userId> --date YYYY-MM-DD`；返回详情，不替代跨日统计 |
 | 原始打卡流水：实际时间、地点、定位方式 | `dws attendance +check-record` | `--users <ids> --start YYYY-MM-DD --end YYYY-MM-DD`；区间不超过 1 个月 |
 | 打卡判定：Normal/Late/Early/NotSigned/Absenteeism | `dws attendance +check-result` | 同上；最多 100 人；`--limit 1..1000 --offset >=0` |
 | 周/月摘要 | `dws attendance summary` | `--user <id> --date <日期> --stats-type week\|month` |
-| 当天适用考勤组、范围与规则 | `dws attendance rules` | `--date YYYY-MM-DD` 或 `YYYY-MM-DD HH:mm:ss` |
-| 未来 7 天内计划班次 | `dws attendance shift list` | `--users <ids> --start YYYY-MM-DD --end YYYY-MM-DD`；最多 50 人、最多 7 天 |
 | 已导入的排班记录 | `dws attendance schedule get` | `--users <ids> --start <日期> --end <日期>`；只查看/对照时直接用，不强制导出 Excel |
 | 签到/外勤签到记录 | `dws attendance checkin records` | `--operator-corp-id`、`--operator-staff-id`、`--staff-ids`、`--start/--end "YYYY-MM-DD HH:mm:ss"`；最多 100 人、最多 7 天 |
 
@@ -118,20 +115,12 @@
 | `dws attendance +search-overtime-rule` | read | 查询当前用户可管理的加班规则列表 |
 <!-- VISIBLE_SHORTCUTS_END -->
 
-## 复用脚本
-
-- [attendance_my_record.py](../scripts/attendance_my_record.py)：自动解析当前用户，查询今天或指定日期的本人考勤记录；适合“查我今天考勤”这类单人快捷查询。
-- [attendance_team_shift.py](../scripts/attendance_team_shift.py)：按明确的 userId 列表查询团队日期范围内的排班；默认本周一至周五，最多 50 人。
-
-脚本已覆盖身份解析、日期默认值或批量边界时直接运行；不要先手写同一批查询再让脚本重复调用。
-
 ## 日期、结果与聚合
 
 - 本周=周一到周日；本月=1 日到真实月末；用户给定范围时原样使用。按当前会话时区计算，禁止硬编码。
-- `check/approve/shift/schedule/vacation records` 使用 `YYYY-MM-DD`；`checkin/report` 使用 `YYYY-MM-DD HH:mm:ss`。不要混用。
+- `check/approve/schedule/vacation records` 使用 `YYYY-MM-DD`；`checkin/report` 使用 `YYYY-MM-DD HH:mm:ss`。不要混用。
 - 超过 3 条记录的求和、分组、计数、排序或跨字段核对使用本地脚本处理，保留原始单位；不要靠目测。仅当用户要求 Excel 时切换专项报表脚本。
 - 返回中没有某人/某日时标记“无记录”；`NotSigned`、`Absenteeism` 分别按真实结果展示；不把缺失数据补成 0 或 Normal。
-- 对“最近一个有记录的日期”，从实际返回的日期字段取最大值，再把这个日期传给后续 `rules`/`record get`/`shift list`；禁止用今天或区间结束日代替。
 
 ## 错误最短路径
 
