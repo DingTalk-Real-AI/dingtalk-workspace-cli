@@ -9,6 +9,7 @@ func StaticServers() []ServerInfo {
 		{ID: "aisearch", Name: "AI 搜问", Endpoint: "https://mcp-gw.dingtalk.com/server/ai-search", Prefixes: []string{"aisearch", "enterprise"}},
 		{ID: "aitable", Name: "AI 多维表", Endpoint: "https://mcp-gw.dingtalk.com/server/5f0d121611f14e878f7d42c3e32bf6c4a790d433066adae38c062a657c397047", Prefixes: []string{"table", "record", "field", "base", "attachment", "view", "dashboard", "chart", "export", "import"}},
 		{ID: "aitable-helper", Name: "AI 多维表(辅助)", Endpoint: "https://mcp-gw.dingtalk.com/server/bb2984ee6b10c1560b4fe943ca620f646bed31f215c551a53abf040b52591a95", Prefixes: []string{"form", "share_form"}},
+		{ID: "attendance", Name: "考勤打卡", Endpoint: "https://mcp-gw.dingtalk.com/server/72c8e63fa17cae0ea5bf507e2594d56c7b286122a747a9a28d4c30ac430cc774", Prefixes: []string{"attendance"}},
 		{ID: "attendance-wukong", Name: "考勤打卡-悟空侧", Endpoint: "https://mcp-gw.dingtalk.com/server/6108af5ad4a429685416e98148a1d25b52ab88ffb680b12a7b3782c25b1a1150"},
 		{ID: "bot", Name: "机器人消息", Endpoint: "https://mcp-gw.dingtalk.com/server/4717d5cbb92ecdebd89c174e4331dc17207208a97622e2004cac49c0fbedc9d1", Prefixes: []string{"bot", "robot"}},
 		{ID: "calendar", Name: "日历", Endpoint: "https://mcp-gw.dingtalk.com/server/3cb83d4ac411227c44c1abde4e4bfbae0ea2c172b83a78a33ffc3821d0d1be47", Prefixes: []string{"calendar", "event"}},
