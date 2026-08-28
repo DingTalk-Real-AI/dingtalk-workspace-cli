@@ -96,11 +96,11 @@ func TestCrossPlatformCoverageResolverPureShapeHelpers(t *testing.T) {
 	if list, found, err := findObjectList(map[string]any{"items": map[string]any{"items": []any{}}}, "items"); err != nil || !found || len(list) != 0 {
 		t.Fatalf("nested keyed list = %#v, %v, %v", list, found, err)
 	}
-	cursor, more, known := pagination(nil)
+	cursor, more, known := Pagination(nil)
 	if cursor != "" || more || known {
 		t.Fatalf("nil pagination = %q, %v, %v", cursor, more, known)
 	}
-	cursor, more, known = pagination(map[string]any{"cursor": "outer", "data": map[string]any{"nextCursor": "inner", "hasMore": true}})
+	cursor, more, known = Pagination(map[string]any{"cursor": "outer", "data": map[string]any{"nextCursor": "inner", "hasMore": true}})
 	if cursor != "outer" || !more || !known {
 		t.Fatalf("nested pagination = %q, %v, %v", cursor, more, known)
 	}

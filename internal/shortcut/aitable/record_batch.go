@@ -317,6 +317,10 @@ func executeRecordBatches(
 }
 
 func verifyUpdateBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batch []map[string]any, _ map[string]any) (map[string]any, error) {
+	return verifyUpdateBatchWithResolver(rt, baseID, tableID, batch, newRecordFieldTypeResolver(rt, baseID, tableID))
+}
+
+func verifyUpdateBatchWithResolver(rt *shortcut.RuntimeContext, baseID, tableID string, batch []map[string]any, resolver *recordFieldTypeResolver) (map[string]any, error) {
 	ids := recordIDs(batch)
 	actual, err := queryRecordsByIDs(rt, baseID, tableID, ids)
 	if err != nil {
@@ -332,7 +336,7 @@ func verifyUpdateBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 		if got == nil {
 			return nil, fmt.Errorf("read-back is missing updated record %s", id)
 		}
-		if err := verifyRecordCells(got, expected["cells"].(map[string]any)); err != nil {
+		if err := resolver.verify(got, expected["cells"].(map[string]any)); err != nil {
 			return nil, err
 		}
 	}
@@ -340,6 +344,7 @@ func verifyUpdateBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 }
 
 func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batch []map[string]any, writeData map[string]any) (map[string]any, error) {
+	resolver := newRecordFieldTypeResolver(rt, baseID, tableID)
 	updates := make([]map[string]any, 0)
 	creates := make([]map[string]any, 0)
 	for _, record := range batch {
@@ -351,7 +356,7 @@ func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 	}
 	verifiedIDs := make([]string, 0, len(batch))
 	if len(updates) > 0 {
-		verified, err := verifyUpdateBatch(rt, baseID, tableID, updates, writeData)
+		verified, err := verifyUpdateBatchWithResolver(rt, baseID, tableID, updates, resolver)
 		if err != nil {
 			return nil, err
 		}
@@ -366,7 +371,7 @@ func verifyUpsertBatch(rt *shortcut.RuntimeContext, baseID, tableID string, batc
 		if err != nil {
 			return nil, err
 		}
-		if err := matchCreatedCells(creates, actual); err != nil {
+		if err := matchCreatedCells(creates, actual, resolver); err != nil {
 			return nil, err
 		}
 		verifiedIDs = append(verifiedIDs, createdIDs...)
@@ -455,7 +460,7 @@ func createdRecordIDs(data map[string]any) []string {
 	return out
 }
 
-func matchCreatedCells(expected, actual []map[string]any) error {
+func matchCreatedCells(expected, actual []map[string]any, resolver *recordFieldTypeResolver) error {
 	if len(actual) != len(expected) {
 		return fmt.Errorf("read-back returned %d created records, want %d", len(actual), len(expected))
 	}
@@ -464,7 +469,16 @@ func matchCreatedCells(expected, actual []map[string]any) error {
 		wantCells := wantRecord["cells"].(map[string]any)
 		matched := false
 		for index, gotRecord := range actual {
-			if used[index] || verifyRecordCells(gotRecord, wantCells) != nil {
+			if used[index] {
+				continue
+			}
+			var verifyErr error
+			if resolver == nil {
+				verifyErr = verifyRecordCells(gotRecord, wantCells, nil)
+			} else {
+				verifyErr = resolver.verify(gotRecord, wantCells)
+			}
+			if verifyErr != nil {
 				continue
 			}
 			used[index] = true
