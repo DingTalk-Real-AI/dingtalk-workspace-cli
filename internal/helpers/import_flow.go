@@ -476,33 +476,6 @@ func docImportPlacementError(file preparedImportFile, taskID, nodeID string, obs
 	)
 }
 
-func docImportVerificationTargetRequiredError(taskID, documentURL string) error {
-	details := map[string]any{
-		"taskId":     taskID,
-		"taskStatus": "completed",
-		"verified":   false,
-	}
-	if documentURL != "" {
-		details["documentUrl"] = documentURL
-	}
-	if nodeID := extractNodeIDFromDocURL(documentURL); nodeID != "" {
-		details["nodeId"] = nodeID
-	}
-	return apperrors.NewAPI(
-		"导入任务已经完成，但未提供原导入目标，无法验证真实落点",
-		apperrors.WithOperation("doc.import"),
-		apperrors.WithReason("doc_import_verification_target_required"),
-		apperrors.WithFailureStage("verify_placement"),
-		apperrors.WithExecutionStarted(true),
-		apperrors.WithRetryable(false),
-		apperrors.WithActions(
-			"使用原 --folder 或 --workspace 重新执行当前 doc import get 查询",
-			"若无法确认原目标，请按 nodeId 检查文档位置，并避免重复导入",
-		),
-		apperrors.WithDetails(details),
-	)
-}
-
 func (cfg importFlowConfig) callTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	if cfg.serverID != "" {
 		return callMCPToolReturnTextOnServer(ctx, cfg.serverID, toolName, args)
@@ -879,19 +852,20 @@ func runImportGetCommand(cmd *cobra.Command, cfg importFlowConfig) error {
 	message, _ := result["message"].(string)
 	if strings.EqualFold(status, "completed") {
 		documentURL, _ := result["documentUrl"].(string)
-		if cfg.verifyPlacement && target.folder == "" && target.workspace == "" {
-			return docImportVerificationTargetRequiredError(taskID, documentURL)
-		}
 		nodeID := extractNodeIDFromDocURL(documentURL)
 		if cfg.verifyPlacement {
-			var verification map[string]any
-			nodeID, verification, err = verifyImportedDocumentPlacement(ctx, target, taskID, documentURL)
-			if err != nil {
-				return err
+			if target.folder == "" && target.workspace == "" {
+				result["verified"] = false
+			} else {
+				var verification map[string]any
+				nodeID, verification, err = verifyImportedDocumentPlacement(ctx, target, taskID, documentURL)
+				if err != nil {
+					return err
+				}
+				result["verified"] = true
+				result["target"] = importTargetSummary(target)
+				result["verification"] = verification
 			}
-			result["verified"] = true
-			result["target"] = importTargetSummary(target)
-			result["verification"] = verification
 		}
 		if cfg.includeNodeID {
 			result["nodeId"] = nodeID

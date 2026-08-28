@@ -347,23 +347,21 @@ func TestCrossPlatformCoverageDocImportGetCompletedWithoutTargetIsUnverified(t *
 		"query_import_task": {`{"status":"completed","documentUrl":"https://alidocs.dingtalk.com/i/nodes/node-2"}`},
 	}}
 	InitDeps(caller)
+	var output bytes.Buffer
+	deps.Out.w = &output
 	cmd := &cobra.Command{Use: "get"}
 	cmd.Flags().String("task-id", "task-2", "")
 	cmd.Flags().String("folder", "", "")
 	cmd.Flags().String("workspace", "", "")
-	err := runImportGetCommand(cmd, docImportFlowConfig())
-	if err == nil {
-		t.Fatal("completed task without verification target unexpectedly succeeded")
+	if err := runImportGetCommand(cmd, docImportFlowConfig()); err != nil {
+		t.Fatalf("completed task without verification target: %v", err)
 	}
-	var structured *apperrors.Error
-	if !errors.As(err, &structured) {
-		t.Fatalf("error type = %T, want *errors.Error", err)
+	var result map[string]any
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatalf("decode result: %v\n%s", err, output.String())
 	}
-	if structured.Reason != "doc_import_verification_target_required" || structured.Details["taskStatus"] != "completed" || structured.Details["verified"] != false || structured.Details["nodeId"] != "node-2" {
-		t.Fatalf("structured error = %#v", structured)
-	}
-	if structured.ExecutionStarted == nil || !*structured.ExecutionStarted {
-		t.Fatalf("ExecutionStarted = %#v, want true", structured.ExecutionStarted)
+	if result["status"] != "completed" || result["verified"] != false || result["nodeId"] != "node-2" {
+		t.Fatalf("completed result = %#v", result)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != "query_import_task" {
 		t.Fatalf("calls = %#v", caller.calls)
