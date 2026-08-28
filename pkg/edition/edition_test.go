@@ -104,6 +104,9 @@ func TestOpenVisibleProductsExcludesCompatibilityOnlyCommands(t *testing.T) {
 	if byID["drive-internal"] {
 		t.Fatal("drive-internal is helper-only and must not appear in VisibleProducts")
 	}
+	if byID["dingtalk-file"] {
+		t.Fatal("dingtalk-file is helper-only and must not appear in VisibleProducts")
+	}
 }
 
 func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
@@ -112,6 +115,7 @@ func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	foundWhiteboard := false
 	foundRecruit := false
 	foundDriveInternal := false
+	foundDingTalkFile := false
 	for _, server := range servers {
 		if server.ID == "recruit" {
 			foundRecruit = server.Endpoint == "https://mcp-gw.dingtalk.com/server/f69b54ada16c57b603c0e5e1c36f464ba73dcee28d64bb701ff2682c259c0cff" &&
@@ -127,6 +131,15 @@ func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 			}
 			if len(server.Prefixes) != 0 {
 				t.Fatal("drive-internal must remain helper-only without command prefixes")
+			}
+		}
+		if server.ID == "dingtalk-file" {
+			foundDingTalkFile = true
+			if server.Endpoint != "https://mcp-gw.dingtalk.com/server/d48b09ddafc89bf921b777ff428f8fc88b14805ccdd9680e02b7be318e7ed4b4" {
+				t.Fatalf("dingtalk-file endpoint = %q, want the registered file service endpoint", server.Endpoint)
+			}
+			if len(server.Prefixes) != 0 {
+				t.Fatal("dingtalk-file must remain helper-only without command prefixes")
 			}
 		}
 		if server.ID != "mcp-meta" {
@@ -151,6 +164,9 @@ func TestOpenSupplementServersIncludesMCPMeta(t *testing.T) {
 	}
 	if !foundDriveInternal {
 		t.Fatal("openSupplementServers() missing helper-only drive-internal endpoint")
+	}
+	if !foundDingTalkFile {
+		t.Fatal("openSupplementServers() missing helper-only dingtalk-file endpoint")
 	}
 }
 

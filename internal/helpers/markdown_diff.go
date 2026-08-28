@@ -210,17 +210,8 @@ func newMarkdownDiffCmd() *cobra.Command {
   - 单侧文件大小上限: 10 MB
   - 下载超时: 10 分钟
   - diff 计算超时: 30 秒`,
-		Example: `  # 比较两个历史版本
-  dws markdown diff --node <dentryUuid> --version 3 --version2 5
-
-  # 历史版本 vs 最新版本
-  dws markdown diff --node <dentryUuid> --version 3
-
-  # 最新版本 vs 本地文件
-  dws markdown diff --node <dentryUuid> --file ./draft.md
-
-  # 历史版本 vs 本地文件
-  dws markdown diff --node <dentryUuid> --version 3 --file ./draft.md`,
+		Example: `  dws markdown diff --node <dentryUuid> --version 3 --version2 5
+  dws markdown diff --node <dentryUuid> --file ./draft.md`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nodeID, err := mustFlagOrFallback(cmd, "node", "url", "id", "node-id", "doc-id", "file-id")
 			if err != nil {
@@ -391,10 +382,10 @@ func newMarkdownDiffCmd() *cobra.Command {
 	}
 
 	cmd.Flags().String("node", "", "文件 ID (dentryUuid) 或 URL (必填)")
-	cmd.Flags().Int("version", 0, "左侧历史版本号 (可选，不传=最新版本)")
-	cmd.Flags().Int("version2", 0, "右侧历史版本号 (可选，不传=最新版本；不能与 --file 同时使用)")
+	cmd.Flags().Int("version", 0, "左侧历史版本号（可选；显式传入时必须为正整数，不传=最新版本）")
+	cmd.Flags().Int("version2", 0, "右侧历史版本号（可选；显式传入时必须为正整数，不传=最新版本；不能与 --file 同时使用）")
 	cmd.Flags().String("file", "", "本地 .md 文件路径 (可选，指定后进入 remote_vs_local 模式)")
-	cmd.Flags().Int("context", 3, "diff 上下文行数 (默认 3)")
+	cmd.Flags().Int("context", 3, "diff 上下文行数（必须为非负整数，默认 3）")
 
 	// --node 隐藏别名（与 version/fetch 子命令一致）
 	cmd.Flags().String("url", "", "")

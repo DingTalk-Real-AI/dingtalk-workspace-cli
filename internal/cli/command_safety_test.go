@@ -60,15 +60,15 @@ func TestSafetyForCLIPathUnknownSkips(t *testing.T) {
 	}
 }
 
-func TestSafetyForCLIPathReadOnlyLowRiskSkips(t *testing.T) {
-	// 找一个 read/low 风险命令,ShouldRender 应 false。
-	// dev app list 是 read,默认 low risk。
+func TestSafetyForCLIPathReadOnlyLowRiskRenders(t *testing.T) {
+	// Agent-visible read/low commands also render the complete Safety tuple.
+	// dev app list is read/low/not_required.
 	s, ok := SafetyForCLIPath("dev app list")
 	if !ok {
 		t.Skip("dev app list not in catalog; skipping")
 	}
-	if s.ShouldRender() {
-		t.Errorf("ShouldRender() = true for effect=%s risk=%s; want false (read/low)", s.Effect, s.Risk)
+	if !s.ShouldRender() {
+		t.Errorf("ShouldRender() = false for effect=%s risk=%s; want true (read/low)", s.Effect, s.Risk)
 	}
 }
 

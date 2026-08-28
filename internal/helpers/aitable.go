@@ -1552,6 +1552,12 @@ func newAitableCommand() *cobra.Command {
 	// products.aitable). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "aitable",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-aitable"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("AI 表格深度指南", "dingtalk-aitable", "references/aitable.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理 AI 表格 Base、数据表、字段、记录、视图、表单、仪表盘、权限、导入导出与自动化工作流。",
 			UseWhen: []string{

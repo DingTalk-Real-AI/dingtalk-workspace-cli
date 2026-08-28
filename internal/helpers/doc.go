@@ -1157,6 +1157,12 @@ func newDocCommand() *cobra.Command {
 	// products.doc). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "doc",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-doc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("钉钉文档深度指南", "dingtalk-doc", "references/doc.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理钉钉在线文档的正文、块、评论、导入导出、模板与版本",
 			UseWhen: []string{
@@ -4325,8 +4331,8 @@ CLI 内部自动完成全部流程:
 通常不需要手动调用，dws doc import 会自动完成轮询。
 仅在导入命令超时或中断后，用于手动查询任务状态。建议直接复制导入结果
 中的完整 next_command；其中携带的原目标（--folder 或 --workspace）用于在
-completed 后回读验证真实落点。只传 taskId 仍可查询 processing/failed，
-但 completed 时会返回未验证错误，不会误报成功。
+completed 后回读验证真实落点。只传 taskId 也可查询全部状态；completed 时
+保留服务端成功终态和 nodeId，但返回 verified=false，表示未验证真实落点。
 
 任务状态:
   processing  转换中

@@ -8,7 +8,7 @@
 |------|------|
 | `markdown fetch` | 下载并读取远程 `.md` 原文 |
 | `markdown create` | 创建原生 `.md` 文件 |
-| `markdown diff` | 对比远程版本或远程与本地 Markdown 差异 |
+| `markdown diff` | 比较远程历史版本，或远程版本与本地草稿 |
 | `markdown overwrite` | 全量覆盖已有 `.md` 文件 |
 | `markdown patch` | 按字面量或 RE2 正则局部替换 |
 | `markdown comment list` | 读取 Markdown 文件的新体系全文和划词评论 |
@@ -53,12 +53,30 @@ Flags:
       --name string        文件名，必须以 .md 结尾；--content 模式必填
       --content string     字面内容、@file 或 -（stdin）；与 --file 互斥
       --file string        本地 .md 文件；与 --content 互斥
-      --folder string      父文件夹 ID（可选）
+      --folder string      父文件夹 ID；未指定空间参数时自动识别所在域
       --workspace string   文档空间/知识库 ID（与 --space-id 互斥）
       --space-id string    钉盘空间 ID（与 --workspace 互斥）
 ```
 
-`--content` 与 `--file` 必须且只能指定一个。默认创建到“我的文档”根目录；`--workspace` 指定知识库，`--space-id` 指定钉盘空间，`--folder` 指定对应域下的父文件夹。
+`--content` 与 `--file` 必须且只能指定一个。`--workspace` 显式指定文档空间/知识库，`--space-id` 显式指定钉盘空间；两者优先于自动探测。仅传 `--folder` 时，命令会先只读探测文件夹属于 Drive 还是 Doc，再选择对应上传链路；两域均不可访问、探测超时或无权限时停止，不会尝试上传。不传 `--folder`、`--workspace`、`--space-id` 时仍默认创建到“我的文档”根目录。
+
+## 比较 Markdown 差异
+
+```text
+Usage:
+  dws markdown diff [flags]
+Example:
+  dws markdown diff --node <fileId> --version 3 --version2 5
+  dws markdown diff --node <fileId> --file ./draft.md
+Flags:
+      --node string     文件 ID 或 URL (必填)
+      --version int     左侧历史版本号；显式传入时必须为正整数，不传时使用最新版本
+      --version2 int    右侧历史版本号；显式传入时必须为正整数，不传时使用最新版本
+      --file string     本地 .md 文件；指定后比较远程版本与本地草稿
+      --context int     unified diff 上下文行数，必须为非负整数（默认 3）
+```
+
+`--file` 与 `--version2` 互斥；`--file`、`--version`、`--version2` 至少指定一个。历史版本号先通过 `dws drive list --versions --node <fileId>` 获取。`diff` 只读取数据，在本地生成 unified diff；单侧内容上限 10 MB。版本列表、下载指定版本或回滚仍由 [`drive.md`](./drive.md) 负责。
 
 ## 全量覆盖 Markdown
 
@@ -69,8 +87,7 @@ Usage:
   dws markdown overwrite [flags]
 Example:
   dws markdown overwrite --node <fileId> --content "# 新标题" --dry-run
-  dws markdown overwrite --node <fileId> --file ./updated.md --yes
-  dws markdown overwrite --node <nodeId> --content @./updated.md --workspace <workspaceId> --yes
+  dws markdown overwrite --node <fileId> --file ./updated.md
 Flags:
       --node string       目标文件 ID (必填)
       --name string       文件名；省略时保留远程展示名
@@ -93,7 +110,7 @@ Usage:
   dws markdown patch [flags]
 Example:
   dws markdown patch --node <fileId> --pattern "旧标题" --content "新标题" --dry-run
-  dws markdown patch --node <fileId> --pattern 'v\d+' --content v2 --regex --yes
+  dws markdown patch --node <fileId> --pattern 'v\d+' --content v2 --regex
 Flags:
       --node string       目标文件 ID (必填)
       --pattern string    要匹配的文本或正则表达式 (必填)
@@ -134,7 +151,7 @@ Flags:
 
 用户说“读取/下载 Markdown 原文” → `markdown fetch`
 用户说“创建一个 .md 文件” → `markdown create`
-用户说“对比 Markdown 版本/与本地草稿比较” → `markdown diff`
+用户说“比较 Markdown 历史版本/远程内容与本地草稿” → `markdown diff`
 用户说“整体替换/覆盖远程 Markdown” → `markdown overwrite`
 用户说“只改 Markdown 中几处文字/正则替换” → `markdown patch`
 用户说“查看 Markdown 评论/.md 评论” → `markdown comment list`
@@ -143,5 +160,6 @@ Flags:
 
 - 原生 `.md` 内容读写用 `markdown`；在线富文本文档读取与块编辑用 `doc`。
 - 任意类型文件的一般上传/下载用 [`drive.md`](./drive.md)；明确需要 Markdown 文本语义时用 `markdown`。
+- Markdown 内容差异用 `markdown diff`；列版本、下载指定版本和回滚用 `drive`。
 - `create` 只创建新文件；覆盖已有文件用 `overwrite`。
 - `overwrite` 全量替换；`patch` 只替换命中片段。

@@ -6,6 +6,71 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.61-beta.2] - 2026-08-28
+
+### Added
+
+- **Chat emotion favorite local image** (#85955640) — `dws chat emotion favorite` now accepts `--file-path` for a local image (jpg/jpeg/png/gif/webp/bmp, up to 10MB) as an alternative to `--media-id`; the CLI validates the file locally, uploads it through `dingtalk-file/upload_media` (bizType=chat_emoticon), and reuses the existing favorite flow with the returned mediaId (mediaIdV1 preferred, falling back to mediaIdV2). `--media-id` behavior is unchanged.
+
+- **Contact label management** — adds `dws contact label update`, `dws contact label delete`, `dws contact label add-members`, `dws contact label remove-members`, and `dws contact label update-member-scope` to modify, delete, add/remove members, and adjust member scope for contact labels (roles). Also updates `dws contact label create` to require an explicit `--type role|group`: `--type role` requires `--parent-id` with a real label group ID; `--type group` creates a root-level label group and must omit `--parent-id` (the CLI passes `parentId=-1`).
+- **Contact custom field management** — adds `dws contact ext-field create`, `dws contact ext-field update`, and `dws contact ext-field delete` to manage organization custom employee fields (`add_org_ext_attrs`, `update_org_ext_attrs`, `remove_org_ext_attrs`).
+
+### Changed
+
+- **DingTalk task workflows** — adds strict write receipts and read-back verification,
+  executable parameter constraints, local dry-run plans for write shortcuts, bounded
+  list scripts, and per-item verification ledgers for batch creation.
+
+### Fixed
+
+- **Beta shortcut response contracts** (#1167) — fixes HRbrain talent-pool business-page parsing and Mail template draft-mode input, while keeping OA form listing and other incompletely proven operations fail-closed.
+
+- **Doc output compatibility** — preserves the empty pagination failure ledger and lets completed import recovery report an unverified result when the original target is unavailable.
+
+- **Markdown routing and diff guidance** — makes `markdown create --folder`
+  detect the Drive or Doc destination before upload, clarifies `markdown diff`
+  parameter validation, and improves mono/multi Agent routing.
+
+- **Chat message list result fields** — keeps `result.messages[]` aligned with the top-level `messages[]`, including the stable `messageId` used by edit and recall, while preserving legacy message fields.
+
+
+## [1.0.61-beta.1] - 2026-08-28
+
+### Added
+
+- **Chat Thread** — adds `chat thread promote` to upgrade an existing group message into a Thread root message.
+
+- **Sheet batch operations** — expands `sheet batch-update` from 16 to 39 CLI operations, adds strict validation for the new P0/P1 inputs, preserves server-generated create IDs in `results[].data`, and JSON-encodes translated operations locally so nested number/boolean values survive the MCP transport.
+- **Sheet batch dimension coordinates** — makes `delete-dimension` and `move-dimension` accept the same public coordinates as their standalone commands (1-based row numbers or column letters) and translates them locally to the batch API's 0-based indexes.
+
+- **Sheet CSV type control** — adds `sheet csv-put --auto-convert=false` (and the matching batch input) to preserve every non-formula CSV field as text while keeping fields beginning with `=` as formulas.
+
+### Changed
+
+- **Agent-friendly Help (Aone 85675069)** — adds a root Agent Quickstart and Safety model, renders complete Safety plus reviewed command-selection guidance on every Agent-visible leaf, and links service/leaf Help to the corresponding embedded DWS Skill and stable deep documentation.
+
+### Fixed
+
+- **Attendance schedule date ranges** (#1154) — sends `attendance schedule get`
+  date ranges as upstream datetime strings, expands date-only inputs to full-day
+  boundaries, and rejects reversed ranges before calling the service.
+
+- **Login with unreadable token slots** (#1172) — after a fresh OAuth, device, PAT, or `--token` login, legacy global, identity, and organization token slots whose ciphertext no longer decrypts with the current data-encryption key are removed so the new credential can be persisted instead of stranding a completed login at the write preflight.
+
+- **Windows Skill installation** (#1177) — stops the PowerShell installer from
+  rejecting a correct multi/mono Skill publication when the staged copy and the
+  destination carry different inherited Windows ACLs, and makes the transaction
+  record its published paths before verifying them so a failed publication is
+  rolled back instead of leaving the original Skill stranded in
+  `~/.dws/skill-backups`.
+
+- **Error-to-doctor recovery guidance** — links authentication and network
+  failures to the executable `dws doctor` human entry or `dws doctor --json`
+  Agent entry across legacy JSON, unified-envelope, shortcut, and multi-profile
+  errors, while keeping permission, validation, confirmation, and upstream
+  business errors on their more specific recovery paths.
+
+
 ## [1.0.60] - 2026-08-27
 
 This release promotes the sealed `v1.0.60-beta.3` contents to stable.

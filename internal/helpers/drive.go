@@ -366,6 +366,12 @@ func newDriveCommand() *cobra.Command {
 	// products.drive). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "drive",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-drive"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("钉盘深度指南", "dingtalk-drive", "references/drive.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理钉盘及文档空间中的文件、目录、上传下载、回收站与公开发布",
 			UseWhen: []string{

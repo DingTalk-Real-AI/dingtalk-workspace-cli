@@ -1265,12 +1265,15 @@ Usage:
 Example:
   dws chat emotion favorite --media-id <mediaId> --name "赞"
   dws chat emotion favorite --media-id <mediaId> --source-conversation-id <cid> --source-message-id <mid>
+  dws chat emotion favorite --file-path ./sticker.png --name "本地表情"
 Flags:
-      --media-id string                  待收藏 mediaId (必填)
+      --file-path string                 本地图片路径 (jpg/jpeg/png/gif/webp/bmp，≤10MB)；与 --media-id 二选一必填
+      --media-id string                  待收藏 mediaId；与 --file-path 二选一必填
       --name string                      表情名称
       --source-conversation-id string    来源会话 ID，需与 --source-message-id 成对指定
       --source-message-id string         来源消息 ID，需与 --source-conversation-id 成对指定
 ```
+`--media-id` 与 `--file-path` 二选一必填，同时传会被互斥拦截。传 `--file-path` 时 CLI 先做本地校验（文件存在、非目录、大小 ≤10MB、扩展名为 jpg/jpeg/png/gif/webp/bmp，大小写不敏感），再经 `dingtalk-file/upload_media`（bizType=chat_emoticon）上传取得 mediaId（优先 mediaIdV1，缺失时用 mediaIdV2）后走与 `--media-id` 完全相同的收藏链路；上传成功但收藏失败时会提示已上传的 mediaId，可用 `--media-id` 重试而无需重新上传。大图（接近 10MB）上传耗时较长，建议追加 `--timeout 120` 以上。
 
 ### list-top-conversations (置顶会话)
 
@@ -2193,7 +2196,7 @@ Flags:
 用户说"批量查消息回复/表情回复/文字回复/消息回应列表" → `chat message list-emotion-replies`
 用户说"查看个人收藏表情/列出我的收藏表情" → `chat emotion list`
 用户说"发送个人收藏表情/发表情包" → `chat emotion send`
-用户说"收藏表情/新增个人收藏表情" → `chat emotion favorite`
+用户说"收藏表情/新增个人收藏表情/把本地图片收藏为表情/上传图片做表情" → `chat emotion favorite`
 用户说"emoji回应/表情回应/给消息加表情" → `chat message add-emoji`
 用户说"取消emoji回应/移除表情回应" → `chat message remove-emoji`
 用户说"文字表情回应/添加文字表情" → `chat message add-text-emotion`

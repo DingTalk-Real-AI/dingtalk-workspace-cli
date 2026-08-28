@@ -18,6 +18,12 @@ func newMinutesCommand() *cobra.Command {
 	// products.minutes). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "minutes",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-minutes"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("AI 听记深度指南", "dingtalk-minutes", "references/minutes.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询和维护钉钉听记的转写、摘要、待办、权限、录音、标签、说话人总结、语音备忘及文件上传会话。",
 			UseWhen: []string{

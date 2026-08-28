@@ -544,6 +544,12 @@ func newAttendanceCommand() *cobra.Command {
 	// products.attendance). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "attendance",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("考勤深度指南", "dingtalk-misc", "references/attendance.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "查询考勤记录、排班、班次、考勤组、审批、报表、个人规则和假期，并执行经确认的考勤配置变更。",
 			UseWhen: []string{

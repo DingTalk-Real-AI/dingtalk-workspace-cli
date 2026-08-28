@@ -891,6 +891,13 @@ var reviewedConstraintTransition = map[string]map[string]string{
 	"sheet/sheet.create_float_image": {
 		"": `{"mutually_exclusive":[["file","src"]],"require_one_of":[["file","src"]]}`,
 	},
+	// #85955640 adds local --file-path as an alternative to the historically
+	// required --media-id input. Every historical --media-id invocation remains
+	// valid; publishing both groups makes the final Schema express the
+	// runtime's exact-one rule.
+	"chat/chat.favorite_personal_emotion": {
+		"": `{"mutually_exclusive":[["media-id","file-path"]],"require_one_of":[["media-id","file-path"]]}`,
+	},
 	// PR #1042 publishes the Todo Shortcut constraints already enforced by
 	// runtime validation. The Reminder transition is intentionally limited to
 	// clear/base-time exactly-one; historically accepted extra time arguments

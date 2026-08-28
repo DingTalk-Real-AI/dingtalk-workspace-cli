@@ -4,7 +4,9 @@
 package hrbrain
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"math"
@@ -57,6 +59,12 @@ func (*hrbrainParityCaller) JQ() string     { return "" }
 
 func runHRbrainCoverage(t *testing.T, declaration shortcut.Shortcut, caller edition.ToolCaller, args ...string) error {
 	t.Helper()
+	_, err := runHRbrainCoverageOutput(t, declaration, caller, args...)
+	return err
+}
+
+func runHRbrainCoverageOutput(t *testing.T, declaration shortcut.Shortcut, caller edition.ToolCaller, args ...string) (string, error) {
+	t.Helper()
 	helpers.InitDepsForTest(t, caller)
 	root := &cobra.Command{Use: "dws", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().Bool("yes", false, "")
@@ -65,12 +73,17 @@ func runHRbrainCoverage(t *testing.T, declaration shortcut.Shortcut, caller edit
 	service := &cobra.Command{Use: "hrbrain"}
 	service.AddCommand(corecmd.New(shortcut.FromShortcut(declaration)))
 	root.AddCommand(service)
-	root.SetOut(io.Discard)
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	ctx, _ := output.WithResultStore(context.Background())
 	root.SetContext(ctx)
 	root.SetArgs(append([]string{"hrbrain", declaration.Command}, args...))
-	return root.Execute()
+	executed, err := root.ExecuteC()
+	if err == nil {
+		_, _, err = output.EmitStoredResult(executed)
+	}
+	return stdout.String(), err
 }
 
 func TestCrossPlatformCoverageHRbrainDeclarationsStayUnavailableAndTyped(t *testing.T) {
@@ -91,6 +104,47 @@ func TestCrossPlatformCoverageHRbrainDeclarationsStayUnavailableAndTyped(t *test
 		if strings.TrimSpace(declaration.Safety.Effect) == "" || declaration.Contract.Interface == nil || declaration.Contract.Interface.Availability != "unavailable" {
 			t.Errorf("%s lacks unavailable interface and Safety", declaration.Command)
 		}
+	}
+}
+
+func TestCrossPlatformCoverageHRbrainListPoolsAcceptsReviewedLiveContentPage(t *testing.T) {
+	caller := &hrbrainParityCaller{response: `{"success":true,"result":null,"content":{"currentPage":1,"pageSize":20,"pools":[],"totalCount":0}}`}
+	stdout, err := runHRbrainCoverageOutput(t, ListPools, caller)
+	if err != nil {
+		t.Fatalf("list-pools live content page failed: %v", err)
+	}
+	if caller.calls != 1 || caller.server != "hrbrain" || caller.tool != "list_talent_pools" {
+		t.Fatalf("list-pools atomic route = calls:%d server:%q tool:%q", caller.calls, caller.server, caller.tool)
+	}
+	wantParams := map[string]any{"currentPage": 1, "pageSize": 20}
+	if !reflect.DeepEqual(caller.params, wantParams) {
+		t.Fatalf("list-pools atomic params = %#v, want %#v", caller.params, wantParams)
+	}
+	var envelope struct {
+		OK      bool   `json:"ok"`
+		Outcome string `json:"outcome"`
+		Data    struct {
+			Count       int           `json:"count"`
+			Items       []interface{} `json:"items"`
+			CurrentPage int           `json:"currentPage"`
+			PageSize    int           `json:"pageSize"`
+			TotalCount  int           `json:"totalCount"`
+			Complete    bool          `json:"complete"`
+		} `json:"data"`
+		Meta struct {
+			Pagination struct {
+				EndpointExhausted bool   `json:"endpoint_exhausted"`
+				NextToken         string `json:"next_token"`
+			} `json:"pagination"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &envelope); err != nil {
+		t.Fatalf("decode list-pools terminal receipt %q: %v", stdout, err)
+	}
+	if !envelope.OK || envelope.Outcome != "success" || envelope.Data.Count != 0 || len(envelope.Data.Items) != 0 ||
+		envelope.Data.CurrentPage != 1 || envelope.Data.PageSize != 20 || envelope.Data.TotalCount != 0 || !envelope.Data.Complete ||
+		!envelope.Meta.Pagination.EndpointExhausted || envelope.Meta.Pagination.NextToken != "" {
+		t.Fatalf("list-pools terminal receipt = %#v", envelope)
 	}
 }
 
@@ -115,13 +169,13 @@ func TestCrossPlatformCoverageHRbrainBlockersAreClassifiedWithoutShortcutDefects
 			t.Fatalf("%s has unknown blocker classification %q", command, reason)
 		}
 	}
-	if counts[hrbrainBlockerAdapterBusiness] != 9 || counts[hrbrainBlockerTenantFixture] != 2 {
+	if counts[hrbrainBlockerAdapterBusiness] != 8 || counts[hrbrainBlockerTenantFixture] != 3 {
 		t.Fatalf("blocker counts = %#v", counts)
 	}
 }
 
 func TestCrossPlatformCoverageHRbrainExactParameterProjectionForAllElevenShortcuts(t *testing.T) {
-	pageResponse := `{"success":true,"result":{"items":[{"poolCode":"pool"}],"currentPage":1,"pageSize":20,"totalCount":1,"hasMore":false}}`
+	pageResponse := `{"success":true,"result":null,"content":{"pools":[{"poolCode":"pool"}],"currentPage":1,"pageSize":20,"totalCount":1}}`
 	employeePageResponse := `{"success":true,"result":{"items":[{"workNo":"worker"}],"currentPage":1,"pageSize":20,"totalCount":1,"hasMore":false}}`
 	queryItems := []any{map[string]any{"modelCode": "model", "fields": []any{"field"}}}
 	structuredFields := []any{map[string]any{"label": "field", "value": "field"}}
@@ -204,6 +258,33 @@ func TestCrossPlatformCoverageHRbrainPaginationFailsClosed(t *testing.T) {
 			t.Errorf("broken page %d accepted: items=%#v evidence=%+v", index, got, evidence)
 		}
 	}
+
+	liveContent := map[string]any{"success": true, "result": nil, "content": map[string]any{
+		"pools": []any{}, "currentPage": float64(1), "pageSize": float64(20), "totalCount": float64(0),
+	}}
+	items, page, err = hrbrainProjectPoolsPage(liveContent, "hrbrain/list_talent_pools", 1, 20)
+	if err != nil || len(items) != 0 || page.HasMore || page.TotalCount != 0 {
+		t.Fatalf("live content page: items=%#v page=%+v err=%v", items, page, err)
+	}
+	items, page, err = hrbrainProjectPoolsPage(valid, "hrbrain/list_talent_pools", 1, 1)
+	if err != nil || len(items) != 1 || !page.HasMore {
+		t.Fatalf("legacy result page: items=%#v page=%+v err=%v", items, page, err)
+	}
+	brokenContent := []map[string]any{
+		{"result": nil, "content": map[string]any{"pools": []any{}}},
+		{"success": false, "result": nil, "content": map[string]any{"pools": []any{}}},
+		{"success": true, "result": nil},
+		{"success": true, "result": nil, "content": map[string]any{"currentPage": float64(1), "pageSize": float64(20), "totalCount": float64(0)}},
+		{"success": true, "result": nil, "content": map[string]any{"pools": "bad", "currentPage": float64(1), "pageSize": float64(20), "totalCount": float64(0)}},
+		{"success": true, "result": nil, "content": map[string]any{"pools": []any{map[string]any{}}, "currentPage": float64(1), "pageSize": float64(20), "totalCount": float64(1)}},
+		{"success": true, "result": nil, "content": map[string]any{"pools": []any{}, "currentPage": float64(2), "pageSize": float64(20), "totalCount": float64(0)}},
+		{"success": true, "result": nil, "content": map[string]any{"pools": []any{}, "currentPage": float64(1), "pageSize": float64(20), "totalCount": float64(-1)}},
+	}
+	for index, payload := range brokenContent {
+		if got, evidence, err := hrbrainProjectPoolsPage(payload, "hrbrain/list_talent_pools", 1, 20); err == nil {
+			t.Errorf("broken live content %d accepted: items=%#v evidence=%+v", index, got, evidence)
+		}
+	}
 }
 
 func TestCrossPlatformCoverageHRbrainStructuredInputsRejectBadShapes(t *testing.T) {
@@ -255,6 +336,7 @@ func TestCrossPlatformCoverageHRbrainExecutionFailuresAndContinuation(t *testing
 		"object wrong id":      {declaration: GetPool, args: []string{"--pool-code", "pool"}, response: `{"success":true,"result":{"poolCode":"other"}}`},
 		"collection transport": {declaration: ProfileLabels, args: []string{"--staff-ids", "worker"}, err: errors.New("transport")},
 		"collection malformed": {declaration: ProfileLabels, args: []string{"--staff-ids", "worker"}, response: `{"success":true,"result":null}`},
+		"pools transport":      {declaration: ListPools, err: errors.New("transport")},
 		"page transport":       {declaration: SearchEmployees, args: []string{"--keyword", "worker"}, err: errors.New("transport")},
 		"page malformed":       {declaration: SearchEmployees, args: []string{"--keyword", "worker"}, response: `{"success":true,"result":null}`},
 	} {
@@ -277,7 +359,7 @@ func TestCrossPlatformCoverageHRbrainExecutionFailuresAndContinuation(t *testing
 		t.Fatalf("continuing calls = %d", continuing.calls)
 	}
 
-	optionalPool := &hrbrainParityCaller{response: `{"success":true,"result":{"items":[{"poolCode":"pool"}],"currentPage":1,"pageSize":20,"totalCount":1,"hasMore":false}}`}
+	optionalPool := &hrbrainParityCaller{response: `{"success":true,"result":null,"content":{"pools":[{"poolCode":"pool"}],"currentPage":1,"pageSize":20,"totalCount":1}}`}
 	if err := runHRbrainCoverage(t, ListPools, optionalPool,
 		"--keyword", "pool", "--pool-type", "type", "--creator", "creator", "--labels", "one,two"); err != nil {
 		t.Fatal(err)

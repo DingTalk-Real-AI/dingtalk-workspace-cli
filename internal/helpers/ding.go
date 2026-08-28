@@ -32,6 +32,12 @@ func newDingCommand() *cobra.Command {
 	// products.ding). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "ding",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("DING 深度指南", "dingtalk-misc", "references/ding.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "以企业机器人发送或撤回应用内/短信/电话 DING",
 			UseWhen: []string{
