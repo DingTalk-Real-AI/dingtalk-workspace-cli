@@ -130,6 +130,70 @@
       "reason": "Preserve legacy argv compatibility while making the canonical flag the only visible parameter."
     },
     {
+      "command": "dws chat file upload",
+      "legacy": {
+        "name": "url",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local"
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "hidden": true,
+          "scope": "local",
+          "alias_of": "file"
+        }
+      },
+      "canonical": {
+        "name": "file",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local"
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local"
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 --url argv 兼容性，并将仅支持本地文件的 --file 设为唯一可见入口"
+    },
+    {
+      "command": "dws chat file upload",
+      "legacy": {
+        "name": "uuid",
+        "before": {
+          "present": true,
+          "type": "string",
+          "scope": "local"
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "hidden": true,
+          "scope": "local",
+          "alias_of": "idempotency-key"
+        }
+      },
+      "canonical": {
+        "name": "idempotency-key",
+        "before": {
+          "present": false
+        },
+        "after": {
+          "present": true,
+          "type": "string",
+          "scope": "local"
+        }
+      },
+      "state": "pending",
+      "reason": "保留旧 --uuid argv 兼容性，并将 --idempotency-key 设为唯一可见入口"
+    },
+    {
       "kind": "requiredness_change",
       "command": "dws report entry submit",
       "flag": {
