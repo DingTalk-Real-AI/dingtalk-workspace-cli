@@ -326,6 +326,18 @@ func TestCrossPlatformCoverageRecordBatchPureHelpers(t *testing.T) {
 	if minInt(1, 2) != 1 || minInt(2, 1) != 1 {
 		t.Fatal("minInt branch mismatch")
 	}
+	if selectionObjectMatchesScalar("not-an-object", "value") || selectionObjectMatchesScalar(map[string]any{"name": "value"}, 1) {
+		t.Fatal("selectionObjectMatchesScalar accepted incompatible values")
+	}
+	if selectionLikeList([]any{map[string]any{}}) || selectionLikeList([]any{1}) {
+		t.Fatal("selectionLikeList accepted unsupported values")
+	}
+	if recordCellValueEqual(
+		[]any{map[string]any{"id": "left"}},
+		[]any{map[string]any{"id": "right"}},
+	) {
+		t.Fatal("recordCellValueEqual matched different selection lists")
+	}
 }
 
 func TestCrossPlatformCoverageRecordBulkPatchValidationAndSelectorsE2E(t *testing.T) {

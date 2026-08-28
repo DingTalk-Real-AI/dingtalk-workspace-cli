@@ -108,6 +108,31 @@ func TestCrossPlatformCoverageBaseCopyRequiresNewIDAndExactReadBackE2E(t *testin
 		}
 	})
 
+	t.Run("verified copy accepts top-level baseId", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"data":{"nodeId":"folder","type":"FOLDER"}}`},
+			{text: `{"baseId":"new-base"}`},
+			{text: `{"data":{"baseId":"new-base","tables":[]}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
+		if err != nil || !strings.Contains(out, `"newBaseId": "new-base"`) || len(caller.calls) != 3 {
+			t.Fatalf("top-level baseId copy = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
+	t.Run("rename error recovered by exact read-back", func(t *testing.T) {
+		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+			{text: `{"data":{"nodeId":"folder","type":"FOLDER"}}`},
+			{text: `{"data":{"baseId":"new-base"}}`},
+			{err: errors.New("rename response lost")},
+			{text: `{"data":{"baseId":"new-base","baseName":"副本名称","tables":[]}}`},
+		}}
+		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--new-name", "副本名称", "--yes")
+		if err != nil || !strings.Contains(out, `"status": "recovered"`) || !strings.Contains(out, "rename response was an error") {
+			t.Fatalf("recovered rename = output:%q err:%v calls:%#v", out, err, caller.calls)
+		}
+	})
+
 	t.Run("missing new ID is unknown without read-back", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
 			{text: `{"data":{"fileId":"folder","type":"folder"}}`},
@@ -184,6 +209,16 @@ func TestCrossPlatformCoverageBaseCopyFailureAndDryRunEdgesE2E(t *testing.T) {
 		}
 	})
 
+	for _, newName := range []string{"", strings.Repeat("名", 51)} {
+		t.Run("invalid new name", func(t *testing.T) {
+			caller := &upsertByKeyCaller{}
+			out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--new-name="+newName, "--yes")
+			if err == nil || out != "" || len(caller.calls) != 0 {
+				t.Fatalf("invalid new name %q = output:%q err:%v calls:%#v", newName, out, err, caller.calls)
+			}
+		})
+	}
+
 	t.Run("target lookup error", func(t *testing.T) {
 		caller := &upsertByKeyCaller{steps: []upsertByKeyStep{{err: context.Canceled}}}
 		out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
@@ -221,6 +256,32 @@ func TestCrossPlatformCoverageBaseCopyFailureAndDryRunEdgesE2E(t *testing.T) {
 			out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--yes")
 			if err == nil || out != "" || len(caller.calls) != 3 {
 				t.Fatalf("readback %s = output:%q err:%v", tc.name, out, err)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name     string
+		readBack string
+	}{
+		{name: "missing copied name", readBack: `{"data":{"baseId":"new-base"}}`},
+		{name: "wrong copied name", readBack: `{"data":{"baseId":"new-base","baseName":"other"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caller := &upsertByKeyCaller{steps: []upsertByKeyStep{
+				{text: `{"data":{"fileId":"folder","type":"folder"}}`},
+				{text: `{"newBaseId":"new-base"}`},
+				{err: errors.New("rename failed")},
+				{text: tc.readBack},
+			}}
+			out, err := runAITableCompositeCLI(t, caller, "+base-copy", "--base-id", "source", "--target-folder-id", "folder", "--new-name", "expected", "--yes")
+			var typed *apperrors.Error
+			if err == nil || out != "" || len(caller.calls) != 4 || !errors.As(err, &typed) {
+				t.Fatalf("%s = output:%q err:%v calls:%#v", tc.name, out, err, caller.calls)
+			}
+			result, ok := typed.Details["result"].(compositeResult)
+			if !ok || len(result.Warnings) != 1 || !strings.Contains(result.Warnings[0], "rename call also returned an error") {
+				t.Fatalf("%s details = %#v", tc.name, typed.Details)
 			}
 		})
 	}

@@ -180,6 +180,25 @@ func TestCrossPlatformCoverageAitableViewConfigAndHelpers(t *testing.T) {
 	}); err == nil || !strings.Contains(err.Error(), `did you mean "ne"`) {
 		t.Fatalf("neq view filter hint = %v", err)
 	}
+	for _, tc := range []struct {
+		name   string
+		filter any
+	}{
+		{name: "not an array", filter: "invalid"},
+		{name: "non-object item", filter: []any{"invalid"}},
+		{name: "operands not array", filter: []any{map[string]any{"operator": "eq", "operands": "invalid"}}},
+		{name: "wrong operand count", filter: []any{map[string]any{"operator": "eq", "operands": []any{"f"}}}},
+		{name: "blank field id", filter: []any{map[string]any{"operator": "eq", "operands": []any{" ", "v"}}}},
+	} {
+		t.Run("view filter "+tc.name, func(t *testing.T) {
+			if err := validateViewConfigFilter(tc.filter); err == nil {
+				t.Fatalf("validateViewConfigFilter(%#v) returned nil", tc.filter)
+			}
+		})
+	}
+	if err := validateViewConfigFilter([]any{map[string]any{"operator": "exist", "operands": []any{"f"}}}); err != nil {
+		t.Fatalf("exist view filter: %v", err)
+	}
 	for _, bad := range []map[string]any{{"filter": 1}, {"sort": 1}, {"group": 1}} {
 		if err := normalizeViewConfigBlock(bad); err == nil {
 			t.Errorf("invalid view config %#v should fail", bad)
@@ -325,5 +344,28 @@ func TestCrossPlatformCoverageAitableToolResponseAndPaginationHelpers(t *testing
 	installAitableDeps(t, caller)
 	if err := recordQueryFetchAll(map[string]any{}, 1); err == nil {
 		t.Fatal("first-page pagination error should fail")
+	}
+
+	page, err := parseRecordQueryPage(`{"success":true,"status":"success","data":{}}`)
+	if err != nil || page.Records == nil || len(page.Records) != 0 {
+		t.Fatalf("explicit empty query page = %#v, %v", page, err)
+	}
+	for _, tc := range []struct {
+		name     string
+		response map[string]any
+		want     bool
+	}{
+		{name: "nil", response: nil},
+		{name: "data wrong type", response: map[string]any{"success": true, "status": "success", "data": []any{}}},
+		{name: "data not empty", response: map[string]any{"success": true, "status": "success", "data": map[string]any{"records": []any{}}}},
+		{name: "error wrong type", response: map[string]any{"success": true, "status": "success", "data": map[string]any{}, "error": "failed"}},
+		{name: "error not empty", response: map[string]any{"success": true, "status": "success", "data": map[string]any{}, "error": map[string]any{"code": 1}}},
+		{name: "empty error object", response: map[string]any{"success": true, "status": "success", "data": map[string]any{}, "error": map[string]any{}}, want: true},
+	} {
+		t.Run("empty query page "+tc.name, func(t *testing.T) {
+			if got := explicitEmptyRecordQueryPage(tc.response); got != tc.want {
+				t.Fatalf("explicitEmptyRecordQueryPage(%#v) = %v, want %v", tc.response, got, tc.want)
+			}
+		})
 	}
 }
