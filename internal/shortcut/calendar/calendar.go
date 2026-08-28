@@ -755,24 +755,31 @@ func busySearchProject(data map[string]any) ([]map[string]any, error) {
 	}
 	out := make([]map[string]any, 0)
 	for entryIndex, rawEntry := range entries {
-		entry := rawEntry.(map[string]any)
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			continue
+		}
 		rawItems, present := entry["scheduleItems"]
 		if !present {
-			return nil, calendarResponseError("calendar/query_busy_status", "missing_schedule_items", fmt.Sprintf("result[%d] 缺少 scheduleItems", entryIndex))
+			// Mirror the atomic command (callFilteredBusyStatus): an entry without
+			// scheduleItems carries no busy evidence and is skipped, not fatal.
+			continue
 		}
 		items, ok := rawItems.([]any)
 		if !ok {
 			return nil, calendarResponseError("calendar/query_busy_status", "malformed_schedule_items", fmt.Sprintf("result[%d].scheduleItems 不是数组", entryIndex))
 		}
-		if err := validateCalendarCollectionItems(items, "calendar/query_busy_status", "scheduleItems"); err != nil {
-			return nil, err
-		}
-		for itemIndex, rawItem := range items {
-			item := rawItem.(map[string]any)
+		for _, rawItem := range items {
+			item, ok := rawItem.(map[string]any)
+			if !ok {
+				continue
+			}
 			start := calendarBusyDateTime(item["start"])
 			end := calendarBusyDateTime(item["end"])
 			if calendarEmptyValue(start) || calendarEmptyValue(end) {
-				return nil, calendarResponseError("calendar/query_busy_status", "malformed_schedule_time", fmt.Sprintf("scheduleItems[%d] 缺少开始或结束时间", itemIndex))
+				// Mirror the atomic command's filtering: items without usable
+				// start/end are dropped instead of failing the whole read.
+				continue
 			}
 			out = append(out, map[string]any{"start": start, "end": end})
 		}

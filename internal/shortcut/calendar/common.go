@@ -209,38 +209,45 @@ func requireCalendarCollection(data map[string]any, operation string, keys ...st
 			if key == "events" {
 				items, _ = calendarcompat.NormalizeTerminalEmptyEvents(items, container)
 			}
-			if err := validateCalendarCollectionItems(items, operation, key); err != nil {
-				return nil, nil, err
-			}
-			return items, container, nil
+			return filterCalendarCollectionItems(items), container, nil
 		}
 	}
 	for _, wrapper := range []string{"result", "data"} {
 		if value, present := data[wrapper]; present {
 			if items, ok := value.([]any); ok {
-				if err := validateCalendarCollectionItems(items, operation, wrapper); err != nil {
-					return nil, nil, err
-				}
-				return items, data, nil
+				return filterCalendarCollectionItems(items), data, nil
 			}
 		}
 	}
 	return nil, nil, calendarResponseError(operation, "missing_collection", "响应缺少声明的业务数组；不能把缺字段、内部错误或协议漂移投影成空结果")
 }
 
-func validateCalendarCollectionItems(items []any, operation, key string) error {
-	for index, item := range items {
-		object, ok := item.(map[string]any)
-		if !ok || len(object) == 0 {
-			return calendarResponseError(operation, "malformed_collection_item", fmt.Sprintf("响应 %s[%d] 不是非空对象", key, index))
+// filterCalendarCollectionItems drops non-object and empty-object entries from
+// a declared business array, mirroring the atomic commands' defensive filtering
+// (callSortedCalendarEvents / callFilteredBusyStatus in internal/helpers).
+// Shape-level protocol drift — a missing array or a non-array field — still
+// fails closed in requireCalendarCollection; only item-level placeholders
+// (e.g. the service's terminal empty-page sentinel) are silently filtered so a
+// legitimately empty range projects to an empty collection instead of an error.
+func filterCalendarCollectionItems(items []any) []any {
+	filtered := make([]any, 0, len(items))
+	for _, item := range items {
+		if object, ok := item.(map[string]any); ok && len(object) > 0 {
+			filtered = append(filtered, object)
 		}
 	}
-	return nil
+	return filtered
 }
 
+// projectCalendarRows projects each item through the alias table. Rows without
+// any recognizable identity field (requiredAny) are dropped instead of failing
+// the whole read, mirroring the atomic command's filtering in
+// callSortedCalendarEvents: a terminal empty-page placeholder must project to
+// an empty list, not a response_validation error. Structure-level drift is
+// still rejected upstream in requireCalendarCollection.
 func projectCalendarRows(items []any, operation string, aliases map[string][]string, requiredAny ...string) ([]map[string]any, error) {
 	rows := make([]map[string]any, 0, len(items))
-	for index, item := range items {
+	for _, item := range items {
 		source := item.(map[string]any)
 		row := make(map[string]any)
 		for canonical, candidates := range aliases {
@@ -259,7 +266,7 @@ func projectCalendarRows(items []any, operation string, aliases map[string][]str
 			}
 		}
 		if !valid {
-			return nil, calendarResponseError(operation, "malformed_collection_item", fmt.Sprintf("业务数组第 %d 项缺少可识别的标识或时间字段", index))
+			continue
 		}
 		rows = append(rows, row)
 	}
