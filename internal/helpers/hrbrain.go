@@ -18,6 +18,12 @@ func newHrbrainCommand() *cobra.Command {
 	// products.hrbrain). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "hrbrain",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-misc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("组织大脑深度指南", "dingtalk-misc", "references/hrbrain.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "钉钉组织大脑：人才池管理、员工档案查询与人才搜索",
 			UseWhen: []string{

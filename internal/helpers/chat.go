@@ -29,6 +29,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func normalizeChatGroupCreateResponse(resp map[string]any) {
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		return
+	}
+	if openConversationID, exists := result["openCid"]; exists {
+		result["openConversationId"] = openConversationID
+		delete(result, "openCid")
+	}
+	delete(result, "cid")
+}
+
 func resolveChatGroupRoleSetUserRoleIDs(cmd *cobra.Command) ([]string, error) {
 	roleIDChanged := cmd.Flags().Changed("role-id")
 	roleIDsChanged := cmd.Flags().Changed("role-ids")
@@ -159,8 +171,15 @@ func projectChatMessagesPayloadWithLedger(data map[string]any, search bool, ledg
 		payload[key] = value
 	}
 	payload["messages"] = messages
-	for key, value := range ledger {
-		payload[key] = value
+	if result, ok := data["result"].(map[string]any); ok {
+		if _, exists := result["messages"]; exists {
+			projectedResult := make(map[string]any, len(result))
+			for key, value := range result {
+				projectedResult[key] = value
+			}
+			projectedResult["messages"] = messages
+			payload["result"] = projectedResult
+		}
 	}
 	return payload
 }
@@ -2579,6 +2598,12 @@ func newChatCommand() *cobra.Command {
 	// products.chat). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "chat",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-chat"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("聊天与消息深度指南", "dingtalk-chat", "references/chat.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理钉钉会话、群聊、群成员、机器人、消息检索与发送",
 			UseWhen: []string{
@@ -2819,13 +2844,7 @@ func newChatCommand() *cobra.Command {
 			}
 			var resp map[string]any
 			if json.Unmarshal([]byte(raw), &resp) == nil {
-				if result, ok := resp["result"].(map[string]any); ok {
-					if v, exists := result["openCid"]; exists {
-						result["openConversationId"] = v
-						delete(result, "openCid")
-					}
-					delete(result, "cid")
-				}
+				normalizeChatGroupCreateResponse(resp)
 				return deps.Out.PrintJSON(resp)
 			}
 			deps.Out.PrintRaw(raw)

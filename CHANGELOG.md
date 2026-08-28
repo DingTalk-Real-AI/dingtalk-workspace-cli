@@ -6,6 +6,144 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/) and th
 
 ## [Unreleased]
 
+## [1.0.61-beta.2] - 2026-08-28
+
+### Added
+
+- **Chat emotion favorite local image** (#85955640) — `dws chat emotion favorite` now accepts `--file-path` for a local image (jpg/jpeg/png/gif/webp/bmp, up to 10MB) as an alternative to `--media-id`; the CLI validates the file locally, uploads it through `dingtalk-file/upload_media` (bizType=chat_emoticon), and reuses the existing favorite flow with the returned mediaId (mediaIdV1 preferred, falling back to mediaIdV2). `--media-id` behavior is unchanged.
+
+- **Contact label management** — adds `dws contact label update`, `dws contact label delete`, `dws contact label add-members`, `dws contact label remove-members`, and `dws contact label update-member-scope` to modify, delete, add/remove members, and adjust member scope for contact labels (roles). Also updates `dws contact label create` to require an explicit `--type role|group`: `--type role` requires `--parent-id` with a real label group ID; `--type group` creates a root-level label group and must omit `--parent-id` (the CLI passes `parentId=-1`).
+- **Contact custom field management** — adds `dws contact ext-field create`, `dws contact ext-field update`, and `dws contact ext-field delete` to manage organization custom employee fields (`add_org_ext_attrs`, `update_org_ext_attrs`, `remove_org_ext_attrs`).
+
+### Changed
+
+- **DingTalk task workflows** — adds strict write receipts and read-back verification,
+  executable parameter constraints, local dry-run plans for write shortcuts, bounded
+  list scripts, and per-item verification ledgers for batch creation.
+
+### Fixed
+
+- **Beta shortcut response contracts** (#1167) — fixes HRbrain talent-pool business-page parsing and Mail template draft-mode input, while keeping OA form listing and other incompletely proven operations fail-closed.
+
+- **Doc output compatibility** — preserves the empty pagination failure ledger and lets completed import recovery report an unverified result when the original target is unavailable.
+
+- **Markdown routing and diff guidance** — makes `markdown create --folder`
+  detect the Drive or Doc destination before upload, clarifies `markdown diff`
+  parameter validation, and improves mono/multi Agent routing.
+
+- **Chat message list result fields** — keeps `result.messages[]` aligned with the top-level `messages[]`, including the stable `messageId` used by edit and recall, while preserving legacy message fields.
+
+
+## [1.0.61-beta.1] - 2026-08-28
+
+### Added
+
+- **Chat Thread** — adds `chat thread promote` to upgrade an existing group message into a Thread root message.
+
+- **Sheet batch operations** — expands `sheet batch-update` from 16 to 39 CLI operations, adds strict validation for the new P0/P1 inputs, preserves server-generated create IDs in `results[].data`, and JSON-encodes translated operations locally so nested number/boolean values survive the MCP transport.
+- **Sheet batch dimension coordinates** — makes `delete-dimension` and `move-dimension` accept the same public coordinates as their standalone commands (1-based row numbers or column letters) and translates them locally to the batch API's 0-based indexes.
+
+- **Sheet CSV type control** — adds `sheet csv-put --auto-convert=false` (and the matching batch input) to preserve every non-formula CSV field as text while keeping fields beginning with `=` as formulas.
+
+### Changed
+
+- **Agent-friendly Help (Aone 85675069)** — adds a root Agent Quickstart and Safety model, renders complete Safety plus reviewed command-selection guidance on every Agent-visible leaf, and links service/leaf Help to the corresponding embedded DWS Skill and stable deep documentation.
+
+### Fixed
+
+- **Attendance schedule date ranges** (#1154) — sends `attendance schedule get`
+  date ranges as upstream datetime strings, expands date-only inputs to full-day
+  boundaries, and rejects reversed ranges before calling the service.
+
+- **Login with unreadable token slots** (#1172) — after a fresh OAuth, device, PAT, or `--token` login, legacy global, identity, and organization token slots whose ciphertext no longer decrypts with the current data-encryption key are removed so the new credential can be persisted instead of stranding a completed login at the write preflight.
+
+- **Windows Skill installation** (#1177) — stops the PowerShell installer from
+  rejecting a correct multi/mono Skill publication when the staged copy and the
+  destination carry different inherited Windows ACLs, and makes the transaction
+  record its published paths before verifying them so a failed publication is
+  rolled back instead of leaving the original Skill stranded in
+  `~/.dws/skill-backups`.
+
+- **Error-to-doctor recovery guidance** — links authentication and network
+  failures to the executable `dws doctor` human entry or `dws doctor --json`
+  Agent entry across legacy JSON, unified-envelope, shortcut, and multi-profile
+  errors, while keeping permission, validation, confirmation, and upstream
+  business errors on their more specific recovery paths.
+
+
+## [1.0.60] - 2026-08-27
+
+This release promotes the sealed `v1.0.60-beta.3` contents to stable.
+
+### Changed
+
+- **Document, Drive, and Sheet workflows** — adds Drive quota, task polling,
+  export, permission, comment, public-link, history-version, revision, floating
+  image, and delegated-access workflows; hardens document import, large
+  Markdown writes, download handling, and readback verification.
+
+- **Collaboration and automation commands** — adds dedicated Chat Thread
+  commands, AITable datasource management, Agoal scorecard search, OA approval
+  attachment upload, and reviewed Whiteboard workflows.
+
+- **Agent-safe CLI contracts** (#1161) — publishes stricter pagination, result,
+  confirmation, routing, and error contracts across report, Sheet, Minutes,
+  AiSearch, Contact, Task, Wiki, and document commands, plus reviewed argument
+  aliases for Agoal, DevApp, AITable, and Chat shortcuts.
+
+- **DWS OpenAPI escape hatch** — supports file-backed parameters and request
+  bodies, multipart uploads, pagination, and bounded binary downloads while
+  tightening redirect, credential-pair, Keychain migration, and error-handling
+  behavior.
+
+- **Supported command surface** — removes the retired Education and College
+  vendor extensions and improves command typo guidance, fork admission, and
+  Reviewer Router merge recovery without weakening protected-main checks.
+
+### Changes since `v1.0.60-beta.3`
+
+### Added
+
+- **Drive local-file comments** (#1151) — adds the complete global comment
+  lifecycle for Drive files through the shared document comment service,
+  including `create-v2`, `list-v2`, reply, update, delete, batch query,
+  direct-reply listing, resolve, restore, and reaction replies. The existing
+  `create` and `list` leaves retain their legacy behavior and output contract
+  with deprecation guidance for an explicit migration.
+- **Markdown comment reads** (#1151) — adds comment listing for native Markdown
+  files with global, inline, resolution-status, and cursor filters, and exposes
+  direct-reply listing across the shared Doc and Sheet comment lifecycle.
+
+- **Chat Thread commands** — adds thirteen `chat thread` leaves for topic-circle creation, Thread publishing, reading, replying, forwarding, recall, emoji reactions, and text emotions. Parameters keep the original `chat group` / `chat message` names, including `--conversation-id`, `--topic-id`, and the existing forward flags.
+
+- **Doc-business delegation auth** — the `drive`, `doc`, `sheet`, `wiki`, and `markdown` command groups now accept a persistent `--principal-user-id` flag. When set, the first invocation of each doc-business tool key per node within a session is gated by a `check_capability` verification on behalf of the principal; granting the capability is an out-of-band action the principal completes on the server side, and the CLI never calls `grant_capability`. A denied check surfaces the server's denial message and blocks the original call.
+- **Dry-run consistency** — `checkCapability` now executes in dry-run mode as well, ensuring preview and execution behaviors are consistent. In dry-run, the check routes through the `ReadTool` channel (real network request) instead of `CallTool` (which would go through EchoRunner and always deny).
+- **Dry-run pre-check in helpers** — dry-run mode now invokes the delegation auth validator before rendering the preview, ensuring commands that would be denied at execution time are also blocked at preview time.
+- **Local rejection for node-less commands** — commands that lack a node identifier (e.g. search/list/create without nodeId) now return a clear client-side error (`DELEGATION_AUTH_NOT_SUPPORTED`, exit code 3) when `--principal-user-id` is set, instead of forwarding an incomplete request to the server.
+- **Concurrency safety** — the per-session `checked` map in the delegation auth decorator is now protected by a `sync.Mutex`, preventing data races under concurrent tool invocations.
+- **Markdown dry-run parity** — the `markdown` fetch/create/overwrite/patch/diff commands now run the same `check_capability` delegation gate on their dry-run previews as `doc`/`drive` do; a dry-run combined with `--principal-user-id` is verified against the command's real first delegated call before any preview is rendered, and a denied principal blocks the preview.
+
+### Changed
+
+- **Report latest lookup** — scans bounded, strictly advancing outbox pages, reconciles duplicate IDs, and reads back the uniquely newest report instead of failing on the first continuation page.
+- **Sheet create-with-data result** — returns the already probed `sheetId` at the top level while preserving legacy `.result.nodeId` and outer `requestId`, avoids repeating the sheet-list probe, keeps the main-compatible single readback check, and reports post-create partial/unknown state without unsafe whole-workflow retries.
+- **Sheet workflow routing** — distinguishes local analysis from Excel-to-online import, exposes template discovery and apply routes, and preserves the full data-validation tri-state contract.
+- **Received-report helper and routing** — restores same-profile sender resolution before inbox filtering, keeps Mono and Multi helpers identical, uses bounded complete pagination, renders epoch timestamps in the Shanghai timezone, fails closed instead of returning incomplete data, and keeps midnight query windows valid.
+
+### Fixed
+
+- **Minutes pagination results** (#1112) — publishes list, search, and transcript continuation and exhaustion evidence through the unified `meta.pagination` envelope, while keeping business-scope completeness separate from endpoint exhaustion.
+
+- **Chat Thread create result** — returns the created group's `openConversationId` and omits internal `openCid` / `cid` fields, matching `chat group create --thread`.
+
+- **Doc agent routing and import defaults** — aligns document and drive Skill
+  guidance with the executable CLI contract, preserves structured heading and
+  attachment routes, publishes required shortcut arguments, and resolves the
+  current profile's default document target before an import is submitted.
+
+- **Reviewer Router preflight** — defers App-owned merge attempts while GitHub reports transiently unknown mergeability, avoiding false reconciliation failures without weakening approval or required-check enforcement.
+
+
 ## [1.0.60-beta.3] - 2026-08-26
 
 ### Added

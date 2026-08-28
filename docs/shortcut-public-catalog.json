@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-08-24T20:14:49.172788",
-  "count": 437,
+  "generated_at": "2026-08-27T10:19:25.811119",
+  "count": 439,
   "results": [
     {
       "suite": "semantic",
@@ -3699,7 +3699,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "Reads the real personal hot-word set, computes deterministic add/delete differences, defaults to additive changes and verifies final state.",
+      "semantic_delta": "Reads the real personal hot-word set, adds only missing words and verifies final state without deleting existing words.",
       "availability": "available"
     },
     {
@@ -3815,6 +3815,16 @@
     {
       "suite": "semantic",
       "service": "minutes",
+      "command": "+sync-asr",
+      "risk": "high-risk-write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Computes an exact hot-word-set diff, explicitly deletes words outside the target set and verifies the destructive synchronization.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
       "command": "+transcript",
       "risk": "read",
       "status": "reviewed_available",
@@ -3826,7 +3836,7 @@
       "suite": "semantic",
       "service": "minutes",
       "command": "+unshare",
-      "risk": "write",
+      "risk": "high-risk-write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
       "semantic_delta": "Removes permission per stable member UID with stop/continue partial-write ledgers and explicit acknowledgements.",
@@ -3849,7 +3859,7 @@
       "risk": "write",
       "status": "reviewed_available",
       "disposition": "primary_smart",
-      "semantic_delta": "Owns local file validation, create-PUT-complete polling, pre-complete transfer cancellation compensation, unknown-completion recovery and final task read-back verification.",
+      "semantic_delta": "Owns local file validation, create-PUT-complete polling, cancellation compensation and final task read-back without sending an extra message card.",
       "availability": "available"
     },
     {
@@ -3860,6 +3870,16 @@
       "status": "reviewed_available",
       "disposition": "primary_smart",
       "semantic_delta": "Completes local upload with compensation, waits for validated artifacts, and optionally orchestrates mind map and speaker insights without re-upload recovery hazards.",
+      "availability": "available"
+    },
+    {
+      "suite": "semantic",
+      "service": "minutes",
+      "command": "+upload-and-notify",
+      "risk": "write",
+      "status": "reviewed_available",
+      "disposition": "primary_smart",
+      "semantic_delta": "Uses the same verified upload transaction but forces the separately confirmed enableMessageCard side effect.",
       "availability": "available"
     },
     {

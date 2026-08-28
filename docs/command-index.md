@@ -140,7 +140,7 @@ _Group chats, conversations, messages, and robot/webhook integrations._
 |---|---|---|
 | `dws chat bot search` | Search robots (bots) created by the current user by keyword. | When the agent needs to resolve one of its own bots by name to a robot code before sending bot messages. |
 | `dws chat conversation-info` | Retrieve basic metadata for a conversation (single chat or group chat) by conversation ID. | When the agent needs context about a conversation (name, type, member count) before operating on it. |
-| `dws chat emotion favorite` | Add a media ID to the current user's personal favorite emotions. | When the agent needs to save an available mediaId as a reusable personal emotion, optionally preserving source message context. |
+| `dws chat emotion favorite` | Add a media ID or a local image (jpg/jpeg/png/gif/webp/bmp, ≤10MB) to the current user's personal favorite emotions. | When the agent needs to save an available mediaId or a local image file as a reusable personal emotion; local images are uploaded through dingtalk-file/upload_media (bizType=chat_emoticon) first, optionally preserving source message context. |
 | `dws chat emotion list` | List the current user's personal favorite emotions. | When the agent needs to inspect available personal emotions or resolve an emotionId/mediaId before sending. |
 | `dws chat emotion send` | Send a personal favorite emotion to a group or direct chat as the authenticated user. | When the agent needs to send a known personal emotion mediaId to exactly one group, userId, or openDingTalkId target. |
 | `dws chat group create` | Create a new internal group chat with a set of initial members. | When the agent needs to spin up a dedicated group for a new project, incident, or discussion thread. |

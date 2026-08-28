@@ -1316,6 +1316,22 @@ jobs:
               return mergeResult.sha;
             }
 
+            function classifyMergePreflight(pullRequest) {
+              if (
+                pullRequest.mergeable === true &&
+                pullRequest.mergeable_state === 'behind'
+              ) {
+                return 'behind';
+              }
+              if (
+                pullRequest.mergeable === null &&
+                pullRequest.mergeable_state === 'unknown'
+              ) {
+                return 'unknown';
+              }
+              return 'attempt';
+            }
+
             function classifyMergeAttemptRecovery(
               status,
               errorMessage,
@@ -1716,13 +1732,18 @@ jobs:
                   );
                   continue;
                 }
-                if (
-                  finalPull.mergeable === true &&
-                  finalPull.mergeable_state === 'behind'
-                ) {
+                const mergePreflight = classifyMergePreflight(finalPull);
+                if (mergePreflight === 'behind') {
                   notReady += 1;
                   core.info(
                     `PR #${candidate.number} is behind main at final synchronous merge preflight; left open for the next event.`,
+                  );
+                  continue;
+                }
+                if (mergePreflight === 'unknown') {
+                  notReady += 1;
+                  core.info(
+                    `PR #${candidate.number} has unknown mergeability at final synchronous merge preflight; left open for the next event.`,
                   );
                   continue;
                 }

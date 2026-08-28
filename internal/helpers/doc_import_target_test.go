@@ -73,11 +73,11 @@ func executeDocImportCommand(t *testing.T, caller *sheetImportCaller, cfg import
 func TestCrossPlatformCoverageDocImportDefaultTargetIsResolvedAndVerified(t *testing.T) {
 	filePath := writeImportFixture(t, "md")
 	caller := &sheetImportCaller{responses: map[string][]string{
-		"list_wikiSpaces":       {`{"success":true,"result":{"wikiSpaces":[{"workspaceId":"my-space","name":"我的文档"}]}}`},
+		"list_spaces":           {`{"success":true,"result":{"items":[{"rootFolderId":"root-folder","spaceType":"orgSpace"}]}}`},
 		"create_import_session": {`{"sessionId":"session-1","uploadUrl":"https://upload.test/file"}`},
 		"confirm_import":        {`{"taskId":"task-1"}`},
 		"query_import_task":     {`{"status":"completed","documentUrl":"https://alidocs.dingtalk.com/i/nodes/node-1","documentName":"sales","documentType":"ALIDOC"}`},
-		"get_document_info":     {`{"result":{"nodeId":"node-1","workspaceId":"my-space","folderId":"root-folder","name":"sales","contentType":"ALIDOC"}}`},
+		"get_document_info":     {`{"result":{"nodeId":"node-1","folderId":"root-folder","name":"sales","contentType":"ALIDOC"}}`},
 	}}
 
 	output, err := executeDocImportCommand(t, caller, fastDocImportConfig(), "--file", filePath)
@@ -87,14 +87,14 @@ func TestCrossPlatformCoverageDocImportDefaultTargetIsResolvedAndVerified(t *tes
 	if len(caller.calls) != 5 {
 		t.Fatalf("calls = %#v, want 5", caller.calls)
 	}
-	wantTools := []string{"list_wikiSpaces", "create_import_session", "confirm_import", "query_import_task", "get_document_info"}
+	wantTools := []string{"list_spaces", "create_import_session", "confirm_import", "query_import_task", "get_document_info"}
 	for index, want := range wantTools {
 		if got := caller.calls[index].tool; got != want {
 			t.Fatalf("call[%d] tool = %q, want %q", index, got, want)
 		}
 	}
-	if got := caller.calls[1].args["workspaceId"]; got != "my-space" {
-		t.Fatalf("create_import_session workspaceId = %#v", got)
+	if got := caller.calls[1].args["targetFolderId"]; got != "root-folder" {
+		t.Fatalf("create_import_session targetFolderId = %#v", got)
 	}
 
 	var result map[string]any
@@ -105,7 +105,7 @@ func TestCrossPlatformCoverageDocImportDefaultTargetIsResolvedAndVerified(t *tes
 		t.Fatalf("result = %#v", result)
 	}
 	target, _ := result["target"].(map[string]any)
-	if target["source"] != "default_personal_workspace" || target["workspaceId"] != "my-space" {
+	if target["source"] != "default_org_root" || target["folderId"] != "root-folder" {
 		t.Fatalf("target = %#v", target)
 	}
 }
@@ -124,7 +124,7 @@ func TestDocImportExplicitFolderSkipsDefaultResolution(t *testing.T) {
 		t.Fatalf("doc import: %v\n%s", err, output)
 	}
 	for _, call := range caller.calls {
-		if call.tool == "list_wikiSpaces" {
+		if call.tool == "list_spaces" {
 			t.Fatalf("explicit target unexpectedly resolved default: %#v", caller.calls)
 		}
 	}
@@ -136,7 +136,7 @@ func TestDocImportExplicitFolderSkipsDefaultResolution(t *testing.T) {
 func TestDocImportDefaultResolutionFailureIsNotStarted(t *testing.T) {
 	filePath := writeImportFixture(t, "md")
 	caller := &sheetImportCaller{responses: map[string][]string{
-		"list_wikiSpaces": {`{"result":{"wikiSpaces":[]}}`},
+		"list_spaces": {`{"result":{"items":[]}}`},
 	}}
 
 	_, err := executeDocImportCommand(t, caller, fastDocImportConfig(), "--file", filePath)
@@ -147,13 +147,13 @@ func TestDocImportDefaultResolutionFailureIsNotStarted(t *testing.T) {
 	if !errors.As(err, &structured) {
 		t.Fatalf("error type = %T, want *errors.Error", err)
 	}
-	if structured.Reason != "doc_import_default_target_unavailable" || structured.FailureStage != "resolve_default_target" {
+	if structured.Reason != "import_target_unresolved" {
 		t.Fatalf("structured error = %#v", structured)
 	}
 	if structured.ExecutionStarted == nil || *structured.ExecutionStarted {
 		t.Fatalf("ExecutionStarted = %#v, want false", structured.ExecutionStarted)
 	}
-	if len(caller.calls) != 1 || caller.calls[0].tool != "list_wikiSpaces" {
+	if len(caller.calls) != 1 || caller.calls[0].tool != "list_spaces" {
 		t.Fatalf("calls = %#v", caller.calls)
 	}
 }
@@ -161,7 +161,7 @@ func TestDocImportDefaultResolutionFailureIsNotStarted(t *testing.T) {
 func TestCrossPlatformCoverageDocImportCancellationReturnsExecutableRecoveryCommand(t *testing.T) {
 	filePath := writeImportFixture(t, "md")
 	caller := &sheetImportCaller{responses: map[string][]string{
-		"list_wikiSpaces":       {`{"result":{"wikiSpaces":[{"workspaceId":"my-space","name":"我的文档"}]}}`},
+		"list_spaces":           {`{"result":{"items":[{"rootFolderId":"root-folder","spaceType":"orgSpace"}]}}`},
 		"create_import_session": {`{"sessionId":"session-1","uploadUrl":"https://upload.test/file"}`},
 		"confirm_import":        {`{"taskId":"task-1"}`},
 	}}
@@ -177,13 +177,13 @@ func TestCrossPlatformCoverageDocImportCancellationReturnsExecutableRecoveryComm
 	}
 	for _, want := range []string{
 		"导入轮询被取消",
-		"dws doc import get --task-id task-1 --workspace my-space",
+		"dws doc import get --task-id task-1 --folder root-folder",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("cancellation error = %q, want %q", err, want)
 		}
 	}
-	if len(caller.calls) != 3 || caller.calls[0].tool != "list_wikiSpaces" || caller.calls[2].tool != "confirm_import" {
+	if len(caller.calls) != 3 || caller.calls[0].tool != "list_spaces" || caller.calls[2].tool != "confirm_import" {
 		t.Fatalf("calls = %#v", caller.calls)
 	}
 }
@@ -213,31 +213,22 @@ func TestCrossPlatformCoverageDocImportPlacementMismatchIsPartialSuccess(t *test
 	}
 }
 
-func TestCrossPlatformCoverageParsePersonalDocWorkspaceIDRejectsAmbiguousResponse(t *testing.T) {
+func TestCrossPlatformCoverageParseDefaultDocImportTargetRejectsAmbiguousResponse(t *testing.T) {
 	for _, text := range []string{
 		`{`,
-		`{"wikiSpaces":[]}`,
-		`{"wikiSpaces":"not-a-list"}`,
-		`{"wikiSpaces":[1]}`,
-		`{"wikiSpaces":[{"workspaceId":"a"},{"workspaceId":"b"}]}`,
-		`{"wikiSpaces":[{"name":"我的文档"}]}`,
+		`{"items":[]}`,
+		`{"items":"not-a-list"}`,
+		`{"items":[1]}`,
+		`{"items":[{"rootFolderId":"a"},{"rootFolderId":"b"}]}`,
+		`{"items":[{"spaceType":"orgSpace"}]}`,
 	} {
-		if _, err := parsePersonalDocWorkspaceID(text); err == nil {
-			t.Fatalf("parsePersonalDocWorkspaceID(%s) unexpectedly succeeded", text)
+		if _, err := parseDefaultDocImportTarget(text); err == nil {
+			t.Fatalf("parseDefaultDocImportTarget(%s) unexpectedly succeeded", text)
 		}
 	}
 }
 
 func TestCrossPlatformCoverageDocImportTargetDefensiveBranches(t *testing.T) {
-	if err := resolveDefaultDocImportTarget(context.Background(), nil); err != nil {
-		t.Fatalf("nil import target: %v", err)
-	}
-	for _, file := range []*preparedImportFile{{folder: "folder-1"}, {workspace: "space-1"}} {
-		if err := resolveDefaultDocImportTarget(context.Background(), file); err != nil {
-			t.Fatalf("explicit import target: %v", err)
-		}
-	}
-
 	for _, text := range []string{`{`, `{}`, `[]`} {
 		if _, err := parseImportedDocumentInfo(text); err == nil {
 			t.Fatalf("parseImportedDocumentInfo(%q) unexpectedly succeeded", text)
@@ -320,7 +311,7 @@ func TestCrossPlatformCoverageDocImportGetVerifiesOriginalTarget(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 	target, _ := result["target"].(map[string]any)
-	if target["source"] != "workspace_flag" || target["workspaceId"] != "space-2" {
+	if target["source"] != "explicit_workspace" || target["workspaceId"] != "space-2" {
 		t.Fatalf("target = %#v", target)
 	}
 }
@@ -356,23 +347,21 @@ func TestCrossPlatformCoverageDocImportGetCompletedWithoutTargetIsUnverified(t *
 		"query_import_task": {`{"status":"completed","documentUrl":"https://alidocs.dingtalk.com/i/nodes/node-2"}`},
 	}}
 	InitDeps(caller)
+	var output bytes.Buffer
+	deps.Out.w = &output
 	cmd := &cobra.Command{Use: "get"}
 	cmd.Flags().String("task-id", "task-2", "")
 	cmd.Flags().String("folder", "", "")
 	cmd.Flags().String("workspace", "", "")
-	err := runImportGetCommand(cmd, docImportFlowConfig())
-	if err == nil {
-		t.Fatal("completed task without verification target unexpectedly succeeded")
+	if err := runImportGetCommand(cmd, docImportFlowConfig()); err != nil {
+		t.Fatalf("completed task without verification target: %v", err)
 	}
-	var structured *apperrors.Error
-	if !errors.As(err, &structured) {
-		t.Fatalf("error type = %T, want *errors.Error", err)
+	var result map[string]any
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatalf("decode result: %v\n%s", err, output.String())
 	}
-	if structured.Reason != "doc_import_verification_target_required" || structured.Details["taskStatus"] != "completed" || structured.Details["verified"] != false || structured.Details["nodeId"] != "node-2" {
-		t.Fatalf("structured error = %#v", structured)
-	}
-	if structured.ExecutionStarted == nil || !*structured.ExecutionStarted {
-		t.Fatalf("ExecutionStarted = %#v, want true", structured.ExecutionStarted)
+	if result["status"] != "completed" || result["verified"] != false || result["nodeId"] != "node-2" {
+		t.Fatalf("completed result = %#v", result)
 	}
 	if len(caller.calls) != 1 || caller.calls[0].tool != "query_import_task" {
 		t.Fatalf("calls = %#v", caller.calls)
@@ -436,7 +425,7 @@ func TestCrossPlatformCoverageDocImportGetDryRunIncludesTarget(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 	target, _ := result["target"].(map[string]any)
-	if target["source"] != "workspace_flag" || target["workspaceId"] != "space-2" {
+	if target["source"] != "explicit_workspace" || target["workspaceId"] != "space-2" {
 		t.Fatalf("target = %#v", target)
 	}
 }

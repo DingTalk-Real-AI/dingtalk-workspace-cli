@@ -168,7 +168,10 @@ ruleset with one latest-head approval and exactly one repository-owned
 must be bound to the GitHub Actions App (`integration_id=15368`); a missing,
 different, or duplicate context/source entry fails closed together with
 deletion or weakening of either gate. A final PR state that is explicitly
-`behind` remains open for the next event without calling the merge endpoint.
+`behind`, or the exact transient pair `mergeable=null` and
+`mergeable_state=unknown`, remains open for the next event without calling the
+merge endpoint. Unknown mergeability never grants merge eligibility; it only
+defers the attempt until GitHub finishes computing the state.
 HTTP 405 means the PR is not ready, while 409 means its revision changed; both
 remain retriable. GitHub can also return HTTP 403 with
 `Resource not accessible by integration` for this protected, behind-main merge

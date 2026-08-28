@@ -36,6 +36,12 @@ func NewMCPCommand() *cobra.Command {
 	// products.mcp). Schema assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "mcp",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-shared"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("Schema 与 MCP 使用指南", "dingtalk-shared", "references/schema-usage.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "解析和管理当前身份可用的 MCP 服务连接信息",
 			UseWhen: []string{

@@ -557,7 +557,7 @@ Flags:
   - --group 的别名: --id, --chat, --conversation-id (均可替代 --group)
   - 翻页：hasMore=true 时，用结果中的边界 createTime 作为下次 --time
   - 处理引用回复时读取 quotedMessage，不要只看回复正文；合并转发与图片引用的原消息内容也在该上下文中
-  - 话题圈是群会话容器，使用 `openConversationId`；群内一条 Thread 使用 `openConvThreadId`。浏览主话题使用 `dws chat thread list --conversation-id <openConversationId>`；需要逐条查看回复正文或核实具体回复是否仍存在时，使用 `dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>`。
+  - 话题圈是群会话容器，使用 `openConversationId`；群内一条 Thread 使用 `openConvThreadId`。把普通群已有消息升级为 Thread 使用 `dws chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>`；浏览主话题使用 `dws chat thread list --conversation-id <openConversationId>`；需要逐条查看回复正文或核实具体回复是否仍存在时，使用 `dws chat thread list-replies --conversation-id <openConversationId> --topic-id <openConvThreadId>`。
 ```
 
 #### 以当前用户身份发送消息 — --group 群聊 / --user 或 --open-dingtalk-id 单聊
@@ -823,6 +823,19 @@ Flags:
   - **换行符**：--content 按 Markdown 渲染，换行规则同 `chat message send`：
     1. 必须使用**真实换行符**（`U+000A`），而非字面量 `\n`，否则全部内容会渲染在同一行
     2. 单个换行不产生换行效果，需用空行（`\n\n`）做段落分隔，或行尾两空格 + 换行/`<br>` 做硬换行
+```
+
+#### 将普通群已有消息升级为 Thread
+
+将普通群中一条已经存在的消息升级为 Thread 根消息。会话和消息必须属于同一个普通群；单聊消息不支持。成功后返回新的 `openConvThreadId`。
+```
+Usage:
+  dws chat thread promote [flags]
+Example:
+  dws chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>
+Flags:
+      --conversation-id string  消息所属普通群的 openConversationId (必填)
+      --message-id string       待升级消息的 openMessageId (必填)
 ```
 
 #### 拉取话题回复消息列表
@@ -1252,12 +1265,15 @@ Usage:
 Example:
   dws chat emotion favorite --media-id <mediaId> --name "赞"
   dws chat emotion favorite --media-id <mediaId> --source-conversation-id <cid> --source-message-id <mid>
+  dws chat emotion favorite --file-path ./sticker.png --name "本地表情"
 Flags:
-      --media-id string                  待收藏 mediaId (必填)
+      --file-path string                 本地图片路径 (jpg/jpeg/png/gif/webp/bmp，≤10MB)；与 --media-id 二选一必填
+      --media-id string                  待收藏 mediaId；与 --file-path 二选一必填
       --name string                      表情名称
       --source-conversation-id string    来源会话 ID，需与 --source-message-id 成对指定
       --source-message-id string         来源消息 ID，需与 --source-conversation-id 成对指定
 ```
+`--media-id` 与 `--file-path` 二选一必填，同时传会被互斥拦截。传 `--file-path` 时 CLI 先做本地校验（文件存在、非目录、大小 ≤10MB、扩展名为 jpg/jpeg/png/gif/webp/bmp，大小写不敏感），再经 `dingtalk-file/upload_media`（bizType=chat_emoticon）上传取得 mediaId（优先 mediaIdV1，缺失时用 mediaIdV2）后走与 `--media-id` 完全相同的收藏链路；上传成功但收藏失败时会提示已上传的 mediaId，可用 `--media-id` 重试而无需重新上传。大图（接近 10MB）上传耗时较长，建议追加 `--timeout 120` 以上。
 
 ### list-top-conversations (置顶会话)
 
@@ -2143,6 +2159,7 @@ Flags:
 用户说"撤回机器人发的消息/机器人撤回消息" → `chat message recall-by-bot`（通过机器人接口撤回机器人发出的消息，需要 robot-code + processQueryKey）
 用户说"Webhook 发消息/告警消息" → `chat message send-by-webhook`
 用户说"回复话题" → `chat thread reply --conversation-id <openConvThreadId>`
+用户说"把普通群已有消息转成Thread/升级成群内话题" → `chat thread promote --conversation-id <openConversationId> --message-id <openMessageId>`
 用户说"查看话题回复/拉取话题回复/列出每条回复内容/核实某条回复是否还在" → `chat thread list-replies`
 用户说"所有消息/全部会话消息/拉取全部消息/时间范围内消息/我的消息/我今天的消息/查我的钉钉消息/最近的消息" → `chat message list-all`
 用户说"特别关注人的消息/关注的人的消息/星标联系人的消息" → `chat message list-focused`
@@ -2179,7 +2196,7 @@ Flags:
 用户说"批量查消息回复/表情回复/文字回复/消息回应列表" → `chat message list-emotion-replies`
 用户说"查看个人收藏表情/列出我的收藏表情" → `chat emotion list`
 用户说"发送个人收藏表情/发表情包" → `chat emotion send`
-用户说"收藏表情/新增个人收藏表情" → `chat emotion favorite`
+用户说"收藏表情/新增个人收藏表情/把本地图片收藏为表情/上传图片做表情" → `chat emotion favorite`
 用户说"emoji回应/表情回应/给消息加表情" → `chat message add-emoji`
 用户说"取消emoji回应/移除表情回应" → `chat message remove-emoji`
 用户说"文字表情回应/添加文字表情" → `chat message add-text-emotion`

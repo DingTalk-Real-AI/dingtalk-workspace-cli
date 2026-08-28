@@ -80,6 +80,12 @@ func newEventCommand(globalFlags ...*GlobalFlags) *cobra.Command {
 	// products.event). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "event",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-event"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("事件订阅深度指南", "dingtalk-event", "references/event-im.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "实时监听当前用户相关的个人 IM 与 OA 审批事件，并管理订阅生命周期",
 			UseWhen: []string{

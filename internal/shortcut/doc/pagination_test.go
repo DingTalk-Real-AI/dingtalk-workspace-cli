@@ -63,7 +63,11 @@ func TestCrossPlatformCoverageDocSearchPublishesExplicitStopReasons(t *testing.T
 			if captured["pagesRead"] != 1 {
 				t.Fatalf("page counters = %#v", captured)
 			}
-			for _, redundant := range []string{"pagesFetched", "paginationKnown", "truncatedByPageLimit", "truncatedByResultLimit", "resumeCursorReliable", "failures"} {
+			failures, ok := captured["failures"].([]map[string]any)
+			if !ok || len(failures) != 0 {
+				t.Fatalf("doc.list.v1 failures = %#v, want empty array", captured["failures"])
+			}
+			for _, redundant := range []string{"pagesFetched", "paginationKnown", "truncatedByPageLimit", "truncatedByResultLimit", "resumeCursorReliable"} {
 				if _, exists := captured[redundant]; exists {
 					t.Fatalf("redundant field %q remains in result: %#v", redundant, captured)
 				}

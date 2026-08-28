@@ -329,7 +329,7 @@ func TestDocImportConfigPreservesFormatsAndEnablesDefaultTargetVerification(t *t
 			t.Errorf("doc import no longer supports %s", ext)
 		}
 	}
-	if cfg.requireTarget || !cfg.includeNodeID || !cfg.resolveDefaultTarget || !cfg.verifyPlacement || cfg.timeoutAsResult {
+	if cfg.requireTarget || !cfg.includeNodeID || cfg.timeoutAsResult || !cfg.exclusiveTarget || cfg.resolveDefaultTarget == nil || cfg.defaultTargetSource != "default_org_root" || !cfg.verifyPlacement {
 		t.Fatalf("doc import compatibility changed: %#v", cfg)
 	}
 }

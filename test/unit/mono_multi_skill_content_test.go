@@ -59,6 +59,10 @@ type monoMultiQAContract struct {
 		Disposition string `yaml:"disposition"`
 		Reason      string `yaml:"reason"`
 	} `yaml:"orphan_scripts_allowlist"`
+	RetiredScripts []struct {
+		Path   string `yaml:"path"`
+		Reason string `yaml:"reason"`
+	} `yaml:"retired_scripts"`
 	SkillsWithoutReferencesAllowlist []string `yaml:"skills_without_references_allowlist"`
 }
 
@@ -361,6 +365,9 @@ func TestMonoMultiSkillContentG4Drift(t *testing.T) {
 			}
 			relSlash := filepath.ToSlash(rel)
 			base := filepath.Base(path)
+			if (strings.HasPrefix(base, "test_") || strings.HasSuffix(base, "_test.py")) && strings.HasSuffix(base, ".py") {
+				return nil
+			}
 			if strings.Contains(blob, base) || strings.Contains(blob, relSlash) {
 				return nil
 			}
@@ -378,6 +385,27 @@ func TestMonoMultiSkillContentG4Drift(t *testing.T) {
 		full := filepath.Join(multiRoot, filepath.FromSlash(path))
 		if _, err := os.Stat(full); err != nil {
 			t.Errorf("G4: orphan allowlist path missing on disk: %s", path)
+		}
+	}
+
+	retired := map[string]bool{}
+	for _, row := range c.RetiredScripts {
+		path := filepath.ToSlash(filepath.Clean(row.Path))
+		if row.Path == "" || strings.TrimSpace(row.Reason) == "" {
+			t.Fatalf("G4: retired_scripts requires path and reason: %+v", row)
+		}
+		if filepath.IsAbs(row.Path) || path == "." || path == ".." || strings.HasPrefix(path, "../") {
+			t.Fatalf("G4: invalid retired script path %q", row.Path)
+		}
+		if retired[path] {
+			t.Fatalf("G4: duplicate retired script path %q", path)
+		}
+		retired[path] = true
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if _, err := os.Stat(full); err == nil {
+			t.Errorf("G4: retired script was republished: %s", path)
+		} else if !os.IsNotExist(err) {
+			t.Errorf("G4: inspect retired script %s: %v", path, err)
 		}
 	}
 }

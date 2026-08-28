@@ -1104,6 +1104,9 @@ func (p *OAuthProvider) persistLoginToken(ctx context.Context, tokenData *TokenD
 		"user_id", strings.TrimSpace(tokenData.UserID),
 		"user_name", strings.TrimSpace(tokenData.UserName),
 	)
+	if err := repairLoginCiphertextMismatchTargets(p.configDir, tokenData); err != nil {
+		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
+	}
 	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
 		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
@@ -1138,6 +1141,10 @@ func (p *OAuthProvider) persistKnownLoginToken(tokenData *TokenData) error {
 	}
 	if strings.TrimSpace(tokenData.CorpID) != "" && strings.TrimSpace(tokenData.UserID) == "" {
 		return fmt.Errorf("resolve login identity: userId is required for corpId %q", tokenData.CorpID)
+	}
+	tokenData.FreshAuthorization = true
+	if err := repairLoginCiphertextMismatchTargets(p.configDir, tokenData); err != nil {
+		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)
 	}
 	if err := preflightTokenWritePersistence(p.configDir, tokenData); err != nil {
 		return fmt.Errorf("%s: %w", i18n.T("本地登录态无法安全更新"), err)

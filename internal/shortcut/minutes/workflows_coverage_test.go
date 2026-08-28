@@ -125,9 +125,13 @@ func TestCrossPlatformCoverageMinutesUploadAndAnalyzeBranchesE2E(t *testing.T) {
 			`{"success":true,"result":{"taskUuid":"u2","title":"uploaded"}}`,
 		},
 	}}
-	payload, _, err = runMinutesAlignmentCLI(t, upload, "minutes", "+upload-and-analyze", "--file", file, "--artifacts", "basic", "--yes")
+	payload, _, err = runMinutesAlignmentCLI(t, upload, "minutes", "+upload-and-analyze", "--file", file, "--artifacts", "basic", "--enable-message-card", "--yes")
 	if err != nil || payload["taskUuid"] != "u2" || payload["complete"] != true {
 		t.Fatalf("fresh upload payload=%#v err=%v", payload, err)
+	}
+	createArgs := upload.arguments["minutes/create_upload_session"][0]
+	if option, _ := createArgs["minutesOption"].(map[string]any); option["enableMessageCard"] != true {
+		t.Fatalf("legacy upload-and-analyze message flag args=%#v", createArgs)
 	}
 }
 
@@ -263,7 +267,7 @@ func TestCrossPlatformCoverageMinutesPrepareASRBranchesE2E(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"minutes", "+prepare-asr", "--words", "a", "--yes"}
 			if strings.HasPrefix(test.name, "delete") {
-				args = []string{"minutes", "+prepare-asr", "--words", "a", "--sync", "--yes"}
+				args = []string{"minutes", "+sync-asr", "--words", "a", "--yes"}
 				test.responses["minutes/add_personal_hot_word"] = []string{`{"success":true,"result":{}}`}
 			}
 			payload, output, err := runMinutesAlignmentCLI(t, &minutesE2ECaller{responses: test.responses, failAt: test.failAt}, args...)
@@ -297,7 +301,7 @@ func TestCrossPlatformCoverageMinutesPrepareASRBranchesE2E(t *testing.T) {
 	verifyMismatch := &minutesE2ECaller{responses: map[string][]string{"minutes/list_my_hotwords": {
 		`{"success":true,"result":{"hotWordList":["a","old"]}}`, `{"success":true,"result":{"hotWordList":["old"]}}`,
 	}, "minutes/delete_personal_hotword": {`{"success":true,"result":{}}`}}}
-	payload, output, err = runMinutesAlignmentCLI(t, verifyMismatch, "minutes", "+prepare-asr", "--words", "a", "--sync", "--yes")
+	payload, output, err = runMinutesAlignmentCLI(t, verifyMismatch, "minutes", "+sync-asr", "--words", "a", "--yes")
 	if err == nil || output == "" || payload["verified"] != false {
 		t.Fatalf("ASR mismatch payload=%#v err=%v", payload, err)
 	}
@@ -306,7 +310,7 @@ func TestCrossPlatformCoverageMinutesPrepareASRBranchesE2E(t *testing.T) {
 		"minutes/add_personal_hot_word":   {`{"success":true,"result":{}}`},
 		"minutes/delete_personal_hotword": {`{"success":true,"result":{}}`},
 	}}
-	payload, _, err = runMinutesAlignmentCLI(t, syncSuccess, "minutes", "+prepare-asr", "--words", "a", "--sync", "--yes")
+	payload, _, err = runMinutesAlignmentCLI(t, syncSuccess, "minutes", "+sync-asr", "--words", "a", "--yes")
 	if err != nil || payload["complete"] != true {
 		t.Fatalf("ASR sync payload=%#v err=%v", payload, err)
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd"
 	"github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/corecmd/contract"
 	apperrors "github.com/DingTalk-Real-AI/dingtalk-workspace-cli/internal/errors"
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
 
@@ -1156,6 +1157,12 @@ func newDocCommand() *cobra.Command {
 	// products.doc). Catalog assembly stamps provenance contract_final.
 	contract.RegisterProductDecl(contract.ProductDecl{
 		ID: "doc",
+		HelpReferences: contract.HelpReferences{
+			RelatedSkills: []string{"dingtalk-doc"},
+			Documentation: []contract.HelpDocumentation{
+				contract.SkillDocumentation("钉钉文档深度指南", "dingtalk-doc", "references/doc.md"),
+			},
+		},
 		Selection: contract.ProductSelectionDecl{
 			AgentSummary: "管理钉钉在线文档的正文、块、评论、导入导出、模板与版本",
 			UseWhen: []string{
@@ -2858,8 +2865,8 @@ WARNING: --mode overwrite 为破坏性写入，会清空原文档全部内容。
 		Long: `获取钉钉文档中指定附件的 OSS 临时下载链接。
 
 传入 nodeId（文档标识）和 resourceId（附件资源 ID），返回 downloadUrl。
-resourceId 需通过 dws doc block list 获取：查询目标文档的块列表，
-找到 blockType 为 attachment 的元素，取其 resourceId。`,
+resourceId 需通过 dws doc +media-list --node <DOC_ID> 获取（返回的 resourceId 字段）；
+也可用 dws doc block list 查块列表，找 blockType 为 attachment 的元素取其 resourceId。`,
 		Example: `  dws doc media download --node DOC_ID --resource-id RESOURCE_ID
   dws doc media download --node "https://alidocs.dingtalk.com/i/nodes/xxx" --resource-id RESOURCE_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -2870,9 +2877,13 @@ resourceId 需通过 dws doc block list 获取：查询目标文档的块列表�
 			if err := validateRequiredFlags(cmd, "resource-id"); err != nil {
 				return err
 			}
+			resourceID := mustGetFlag(cmd, "resource-id")
+			if _, err := uuid.Parse(strings.TrimSpace(resourceID)); err != nil {
+				return fmt.Errorf("--resource-id 应为 UUID 格式（来自 +media-list 返回的 resourceId 字段），不要从 OSS/URL 链接中提取；请先执行 dws doc +media-list --node <DOC_ID> --format json 获取")
+			}
 			return callMCPToolUnescaped("download_doc_attachment", map[string]any{
 				"nodeId":     nodeID,
-				"resourceId": mustGetFlag(cmd, "resource-id"),
+				"resourceId": resourceID,
 			})
 		},
 	}
@@ -4304,13 +4315,14 @@ CLI 内部自动完成全部流程:
 		},
 	}
 	importCmd.Flags().String("file", "", "本地文件路径 (必填)")
-	importCmd.Flags().String("folder", "", "目标文件夹 ID 或 URL (可选；folder/workspace 都不传时导入到默认根目录)")
-	importCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL (可选；folder/workspace 都不传时导入到默认根目录)")
+	importCmd.Flags().String("folder", "", "目标文件夹 ID 或 URL (可选；与 workspace 互斥；在线转换格式都不传时解析当前组织唯一 orgSpace 根目录)")
+	importCmd.Flags().String("workspace", "", "目标知识库 ID 或 URL (可选；与 folder 互斥；在线转换格式都不传时解析当前组织唯一 orgSpace 根目录)")
 	importCmd.Flags().StringP("name", "n", "", "导入后文档名称 (可选，默认取文件名)")
 	importCmd.Flags().String("folder-id", "", "")
 	_ = importCmd.Flags().MarkHidden("folder-id")
 	importCmd.Flags().String("workspace-id", "", "")
 	_ = importCmd.Flags().MarkHidden("workspace-id")
+	importCmd.MarkFlagsMutuallyExclusive("folder", "workspace")
 
 	importGetCmd := &cobra.Command{
 		Use:   "get",
@@ -4319,8 +4331,8 @@ CLI 内部自动完成全部流程:
 通常不需要手动调用，dws doc import 会自动完成轮询。
 仅在导入命令超时或中断后，用于手动查询任务状态。建议直接复制导入结果
 中的完整 next_command；其中携带的原目标（--folder 或 --workspace）用于在
-completed 后回读验证真实落点。只传 taskId 仍可查询 processing/failed，
-但 completed 时会返回未验证错误，不会误报成功。
+completed 后回读验证真实落点。只传 taskId 也可查询全部状态；completed 时
+保留服务端成功终态和 nodeId，但返回 verified=false，表示未验证真实落点。
 
 任务状态:
   processing  转换中

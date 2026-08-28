@@ -401,13 +401,41 @@ func TestCrossPlatformCoverageMediaFailuresKeepStableIDsAndForbidPathEscape(t *t
 	}
 
 	resolveFailure := &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}
-	err := runDocCoverage(t, MediaDownload, resolveFailure, "--node", "node-1", "--resource-id", "resource-1", "--output", "media.bin")
+	err := runDocCoverage(t, MediaDownload, resolveFailure, "--node", "node-1", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "media.bin")
 	var typed *apperrors.Error
-	if !errors.As(err, &typed) || typed.Reason != "doc_media_resolve_failed" || typed.Details["nodeId"] != "node-1" || typed.Details["resourceId"] != "resource-1" {
+	if !errors.As(err, &typed) || typed.Reason != "doc_media_resolve_failed" || typed.Details["nodeId"] != "node-1" || typed.Details["resourceId"] != "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e" {
 		t.Fatalf("media recovery error = %#v", err)
 	}
 	if !strings.Contains(strings.Join(typed.Actions, " "), "不要 curl/wget") {
 		t.Fatalf("media recovery actions = %#v", typed.Actions)
+	}
+}
+
+func TestCrossPlatformCoverageMediaResourceIDValidationIsPublished(t *testing.T) {
+	for _, declaration := range []shortcut.Shortcut{MediaDownload, MediaPreview} {
+		foundConstraint := false
+		for _, constraint := range declaration.Constraints {
+			if constraint.Kind == shortcut.ConstraintCustom &&
+				reflect.DeepEqual(constraint.Flags, []string{"resource-id"}) &&
+				strings.Contains(constraint.Description, "UUID") {
+				foundConstraint = true
+				break
+			}
+		}
+		if !foundConstraint {
+			t.Errorf("doc %s must publish resource-id UUID validation as a custom constraint", declaration.Command)
+		}
+
+		foundDescription := false
+		for _, flag := range declaration.Flags {
+			if flag.Name == "resource-id" && strings.Contains(flag.Desc, "--resource-id 必须是附件回执返回的 UUID") {
+				foundDescription = true
+				break
+			}
+		}
+		if !foundDescription {
+			t.Errorf("doc %s must publish resource-id UUID validation in the flag description", declaration.Command)
+		}
 	}
 }
 
@@ -1494,10 +1522,10 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 		{CommentCreate, []string{"--node", "n", "--content", "x", "--block-id", "block-1", "--start", "0", "--end", "1", "--selected-text", "a", "--mention", "u", "--yes"}},
 		{CommentCreate, []string{"--node", "n", "--content", "x", "--selection", "alpha", "--yes"}},
 		{MediaList, []string{"--node", "n"}},
-		{MediaPreview, []string{"--node", "n", "--resource-id", "r"}},
-		{MediaPreview, []string{"--node", "n", "--resource-id", "r", "--dry-run"}},
-		{MediaDownload, []string{"--node", "n", "--resource-id", "r", "--output", "m.bin"}},
-		{MediaDownload, []string{"--node", "n", "--resource-id", "r", "--output", "m.bin", "--dry-run"}},
+		{MediaPreview, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e"}},
+		{MediaPreview, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--dry-run"}},
+		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "m.bin"}},
+		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "m.bin", "--dry-run"}},
 		{ResourceDownload, []string{"--node", "n", "--output", "cover.png"}},
 		{ResourceDownload, []string{"--node", "n", "--output", "cover.png", "--dry-run"}},
 		{ResourceDelete, []string{"--node", "n", "--dry-run", "--yes"}},
@@ -1519,7 +1547,7 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 			"+create-from-template": {"--query", "q"},
 			"+review":               {"--node", "n"},
 			"+media-list":           {"--node", "n"},
-			"+media-download":       {"--node", "n", "--resource-id", "r", "--output", "m.bin"},
+			"+media-download":       {"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "m.bin"},
 			"+resource-download":    {"--node", "n", "--output", "cover.png"},
 		}[declaration.Command]
 		for failAt := 1; failAt <= 4; failAt++ {
@@ -1574,6 +1602,25 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 	if err := runDocCoverage(t, Import, &docCoverageCaller{dryRun: true, responses: map[string][]map[string]any{}}, "--file", "media.bin", "--dry-run"); err != nil {
 		t.Fatalf("import to default root failed: %v", err)
 	}
+	foundImportTargetExclusion := false
+	for _, constraint := range Import.Constraints {
+		if constraint.Kind == shortcut.ConstraintMutuallyExclusive && reflect.DeepEqual(constraint.Flags, []string{"folder", "workspace"}) {
+			foundImportTargetExclusion = true
+			break
+		}
+	}
+	if foundImportTargetExclusion {
+		t.Fatal("doc +import must not publish a new typed folder/workspace mutex before the base schema accepts it")
+	}
+	importTargetDescriptions := map[string]bool{"folder": false, "workspace": false}
+	for _, flag := range Import.Flags {
+		if _, ok := importTargetDescriptions[flag.Name]; ok && strings.Contains(flag.Desc, "互斥") {
+			importTargetDescriptions[flag.Name] = true
+		}
+	}
+	if !importTargetDescriptions["folder"] || !importTargetDescriptions["workspace"] {
+		t.Fatal("doc +import folder/workspace descriptions must continue to publish their runtime mutual exclusion")
+	}
 	if err := runDocCoverage(t, Export, &docCoverageCaller{dryRun: true, responses: map[string][]map[string]any{}}, "--node", "n", "--output", "out.docx", "--dry-run"); err != nil {
 		t.Fatalf("export default format failed: %v", err)
 	}
@@ -1599,13 +1646,13 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 	_ = runDocCoverage(t, ResourceDownload, emptyStyle, "--node", "n", "--output", "cover.png")
 	_ = runDocCoverage(t, ResourceDownload, &docCoverageCaller{failAt: 2, responses: map[string][]map[string]any{"get_document_style": {{"resourceId": "r"}}}}, "--node", "n", "--output", "cover.png")
 	_, _ = downloadResolvedResource(nil, map[string]any{}, ".", "x")
-	_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "r")
+	_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{failAt: 1, responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
 	_ = runDocCoverage(t, BackgroundUpdate, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--color", "bad")
 	_ = runDocCoverage(t, BackgroundUpdate, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--color", "#ABCDEG")
 
 	t.Run("preview mkdir failure", func(t *testing.T) {
 		testseam.Swap(t, &docMkdirTemp, func(string, string) (string, error) { return "", errors.New("mkdir") })
-		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "r")
+		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
 	})
 	t.Run("preview download cleanup", func(t *testing.T) {
 		removed := false
@@ -1613,7 +1660,7 @@ func TestCrossPlatformCoverageDocHistoryTemplateReviewAndMedia(t *testing.T) {
 			return localio.DownloadResult{}, errors.New("download")
 		})
 		testseam.Swap(t, &docRemoveAll, func(string) error { removed = true; return nil })
-		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "r")
+		_ = runDocCoverage(t, MediaPreview, &docCoverageCaller{responses: map[string][]map[string]any{}}, "--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e")
 		if !removed {
 			t.Fatal("preview failure did not clean temporary directory")
 		}
@@ -1677,7 +1724,7 @@ func TestCrossPlatformCoverageDocDownloadAndWorkingDirectoryErrors(t *testing.T)
 		args []string
 	}{
 		{Export, []string{"--node", "n", "--export-format", "docx", "--output", "out.docx"}},
-		{MediaDownload, []string{"--node", "n", "--resource-id", "r", "--output", "out.bin"}},
+		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out.bin"}},
 		{ResourceDownload, []string{"--node", "n", "--output", "out.png"}},
 	} {
 		if err := runDocCoverage(t, item.decl, &docCoverageCaller{responses: map[string][]map[string]any{}}, item.args...); err == nil {
@@ -1691,7 +1738,7 @@ func TestCrossPlatformCoverageDocDownloadAndWorkingDirectoryErrors(t *testing.T)
 		args []string
 	}{
 		{Export, []string{"--node", "n", "--export-format", "docx", "--output", "out.docx"}},
-		{MediaDownload, []string{"--node", "n", "--resource-id", "r", "--output", "out.bin"}},
+		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out.bin"}},
 		{ResourceDownload, []string{"--node", "n", "--output", "out.png"}},
 	} {
 		_ = runDocCoverage(t, item.decl, &docCoverageCaller{responses: map[string][]map[string]any{}}, item.args...)
@@ -1704,7 +1751,7 @@ func TestCrossPlatformCoverageDocDownloadsHaveNoOverwriteEscape(t *testing.T) {
 		args []string
 	}{
 		{Export, []string{"--node", "n", "--output", "out.docx"}},
-		{MediaDownload, []string{"--node", "n", "--resource-id", "r", "--output", "out.bin"}},
+		{MediaDownload, []string{"--node", "n", "--resource-id", "ca246787-99c8-4b8e-9d8f-3f6a2b1c0d4e", "--output", "out.bin"}},
 		{ResourceDownload, []string{"--node", "n", "--output", "out.png"}},
 	} {
 		t.Run(item.decl.Command, func(t *testing.T) {

@@ -92,6 +92,15 @@ func newReleaseTestRepo(t *testing.T) *releaseTestRepo {
 	remote := filepath.Join(base, "remote.git")
 	mustRun(t, base, "git", "init", "--bare", remote)
 	mustRun(t, base, "git", "init", "-b", "main", root)
+	// Git can detach automatic maintenance after a push. If that background
+	// process outlives the test, testing.TempDir may race with writes in the
+	// bare remote and fail cleanup with "directory not empty". These tiny test
+	// repositories never need automatic maintenance, so keep all Git work
+	// synchronous and bounded by the commands below.
+	for _, repo := range []string{remote, root} {
+		mustRun(t, repo, "git", "config", "maintenance.auto", "false")
+		mustRun(t, repo, "git", "config", "gc.auto", "0")
+	}
 	mustRun(t, root, "git", "config", "user.name", "Release Test")
 	mustRun(t, root, "git", "config", "user.email", "release-test@example.com")
 

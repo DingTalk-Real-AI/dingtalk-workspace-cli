@@ -124,8 +124,15 @@ func TestCrossPlatformCoverageRuntimeWriteDataRemainingBranches(t *testing.T) {
 	t.Cleanup(func() { helpers.InitDeps(old) })
 	helpers.InitDeps(caller)
 	rt := &RuntimeContext{}
-	if _, err := rt.callMCPWriteData("aitable", "update_records", nil); err == nil || !strings.Contains(err.Error(), "解析") {
-		t.Fatalf("invalid write JSON = %v", err)
+	if _, err := rt.callMCPWriteData("aitable", "update_records", nil); err == nil {
+		t.Fatal("invalid write JSON was accepted")
+	} else {
+		var typed *apperrors.Error
+		if !errors.As(err, &typed) || typed.Reason != "malformed_tool_response" ||
+			typed.ExecutionStarted == nil || !*typed.ExecutionStarted ||
+			!typed.RetryableSet || typed.Retryable || typed.Cause == nil {
+			t.Fatalf("invalid write JSON error = %#v", err)
+		}
 	}
 	if caller.args == nil {
 		t.Fatal("nil write parameters were not normalized")
@@ -140,7 +147,9 @@ func TestCrossPlatformCoverageRuntimeWriteDataRemainingBranches(t *testing.T) {
 		t.Fatal("strict empty acknowledgement was accepted")
 	} else {
 		var typed *apperrors.Error
-		if !errors.As(err, &typed) || typed.Reason != "empty_tool_response" || !typed.RetryableSet || typed.Retryable {
+		if !errors.As(err, &typed) || typed.Reason != "empty_tool_response" ||
+			typed.ExecutionStarted == nil || !*typed.ExecutionStarted ||
+			!typed.RetryableSet || typed.Retryable {
 			t.Fatalf("strict empty acknowledgement error = %#v", err)
 		}
 	}

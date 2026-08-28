@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -134,6 +135,14 @@ func WrapErrorWithOperation(err error, operation string) error {
 		return err
 	}
 	if _, ok := err.(*PATError); ok {
+		return err
+	}
+	// Framework-classified errors already carry stable category/reason/actions.
+	// Preserve that contract so helper shortcuts render the same recovery
+	// guidance as their underlying direct leaf commands instead of reclassifying
+	// typed failures from localized message text.
+	var typed *apperrors.Error
+	if errors.As(err, &typed) {
 		return err
 	}
 	// 框架确认门禁错误（deferred ConfirmSafety 从 CallTool 返回）必须原样透传：

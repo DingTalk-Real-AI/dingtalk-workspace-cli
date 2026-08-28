@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -66,24 +65,30 @@ func (*chatThreadCaller) Fields() string { return "" }
 func (*chatThreadCaller) JQ() string     { return "" }
 
 func executeAtomicThreadCommand(t *testing.T, caller *chatThreadCaller, args ...string) error {
+	_, err := executeAtomicThreadCommandOutput(t, caller, args...)
+	return err
+}
+
+func executeAtomicThreadCommandOutput(t *testing.T, caller *chatThreadCaller, args ...string) ([]byte, error) {
 	t.Helper()
 	testseam.Protect(t, &deps)
 	InitDeps(caller)
-	deps.Out.w = io.Discard
-	deps.Out.errW = io.Discard
+	var stdout, stderr bytes.Buffer
+	deps.Out.w = &stdout
+	deps.Out.errW = &stderr
 	root := newChatCommand()
 	root.SilenceErrors = true
 	root.SilenceUsage = true
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
 	root.SetArgs(args)
 	ctx, _ := output.WithResultStore(context.Background())
 	executed, err := root.ExecuteContextC(ctx)
 	if err != nil {
-		return err
+		return stdout.Bytes(), err
 	}
 	_, _, err = output.EmitStoredResult(executed)
-	return err
+	return stdout.Bytes(), err
 }
 
 func executeAtomicThreadDryRun(t *testing.T, caller *chatThreadCaller, args ...string) ([]byte, error) {
@@ -122,6 +127,7 @@ func TestCrossPlatformCoverageAtomicThreadDryRunStoresOneResult(t *testing.T) {
 	}{
 		{name: "create", args: []string{"thread", "create-group", "--name", "话题圈", "--users", "user-1"}},
 		{name: "send", args: []string{"thread", "send", "--conversation-id", "topic-1", "--text", "新话题"}},
+		{name: "promote", args: []string{"thread", "promote", "--conversation-id", "group-1", "--message-id", "message-1"}},
 		{name: "list", args: []string{"thread", "list", "--conversation-id", "topic-1"}},
 		{name: "reply", args: []string{"thread", "reply", "--conversation-id", "thread-1", "--text", "回复"}},
 		{name: "reply file", args: []string{"thread", "reply", "--conversation-id", "thread-1", "--msg-type", "file", "--file", filePath}},
@@ -148,6 +154,61 @@ func TestCrossPlatformCoverageAtomicThreadDryRunStoresOneResult(t *testing.T) {
 	}
 }
 
+func TestCrossPlatformCoverageAtomicThreadPromoteReturnsThreadIdentity(t *testing.T) {
+	caller := &chatThreadCaller{responses: map[string]string{
+		"im/convert_message_to_thread": `{"success":true,"result":{"openConversationId":" group-1 ","openMessageId":" message-1 ","openConvThreadId":" thread-1 "}}`,
+	}}
+	stdout, err := executeAtomicThreadDryRun(t, caller,
+		"thread", "promote", "--conversation-id", "group-1", "--message-id", "message-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantArgs := map[string]any{"openConversationId": "group-1", "openMessageId": "message-1"}
+	if len(caller.calls) != 1 || caller.calls[0].product != "im" ||
+		caller.calls[0].tool != "convert_message_to_thread" || !reflect.DeepEqual(caller.calls[0].args, wantArgs) {
+		t.Fatalf("calls = %#v, want im/convert_message_to_thread %#v", caller.calls, wantArgs)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := envelope["data"].(map[string]any)
+	if envelope["outcome"] != "success" || data["openConversationId"] != "group-1" ||
+		data["openMessageId"] != "message-1" || data["openConvThreadId"] != "thread-1" {
+		t.Fatalf("promote envelope = %#v", envelope)
+	}
+}
+
+func TestCrossPlatformCoverageAtomicThreadPromoteRejectsInvalidResponses(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		response string
+		want     string
+	}{
+		{name: "non object", response: `[]`, want: "响应不是 JSON 对象"},
+		{name: "missing result", response: `{}`, want: "响应缺少 result 对象"},
+		{name: "missing field", response: `{"result":{"openConversationId":"group-1","openMessageId":"message-1","openConvThreadId":""}}`, want: "result.openConvThreadId"},
+		{name: "identity mismatch", response: `{"result":{"openConversationId":"group-2","openMessageId":"message-1","openConvThreadId":"thread-1"}}`, want: "与请求不一致"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			caller := &chatThreadCaller{responses: map[string]string{"im/convert_message_to_thread": test.response}}
+			_, err := executeAtomicThreadDryRun(t, caller,
+				"thread", "promote", "--conversation-id", "group-1", "--message-id", "message-1")
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want containing %q", err, test.want)
+			}
+		})
+	}
+
+	want := errors.New("promote unavailable")
+	caller := &chatThreadCaller{errors: map[string]error{"im/convert_message_to_thread": want}}
+	_, err := executeAtomicThreadDryRun(t, caller,
+		"thread", "promote", "--conversation-id", "group-1", "--message-id", "message-1")
+	if err == nil || !strings.Contains(err.Error(), want.Error()) {
+		t.Fatalf("error = %v, want containing %q", err, want)
+	}
+}
+
 func TestCrossPlatformCoverageAtomicThreadCreatePropagatesBackendError(t *testing.T) {
 	want := errors.New("create unavailable")
 	caller := &chatThreadCaller{
@@ -160,6 +221,59 @@ func TestCrossPlatformCoverageAtomicThreadCreatePropagatesBackendError(t *testin
 		"thread", "create-group", "--name", "话题圈", "--users", "user-1")
 	if !errors.Is(err, want) {
 		t.Fatalf("error = %v, want %v", err, want)
+	}
+}
+
+func TestCrossPlatformCoverageAtomicThreadCreateNormalizesConversationID(t *testing.T) {
+	caller := &chatThreadCaller{responses: map[string]string{
+		"contact/get_current_user_profile": `{"result":{"userId":"owner-1"}}`,
+		"im/create_group_conversation":     `{"result":{"openCid":"topic-1","cid":"internal-cid","name":"话题圈"}}`,
+	}}
+	stdout, err := executeAtomicThreadCommandOutput(t, caller,
+		"thread", "create-group", "--name", "话题圈", "--users", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout, &envelope); err != nil {
+		t.Fatalf("decode output %q: %v", stdout, err)
+	}
+	data, ok := envelope["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data = %#v", envelope["data"])
+	}
+	result, ok := data["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("result = %#v", data["result"])
+	}
+	if result["openConversationId"] != "topic-1" {
+		t.Fatalf("openConversationId = %#v", result["openConversationId"])
+	}
+	if _, exists := result["openCid"]; exists {
+		t.Fatalf("openCid leaked in result: %#v", result)
+	}
+	if _, exists := result["cid"]; exists {
+		t.Fatalf("cid leaked in result: %#v", result)
+	}
+}
+
+func TestCrossPlatformCoverageAtomicThreadCreatePreservesOpaqueResult(t *testing.T) {
+	caller := &chatThreadCaller{responses: map[string]string{
+		"contact/get_current_user_profile": `{"result":{"userId":"owner-1"}}`,
+		"im/create_group_conversation":     `{"result":"accepted"}`,
+	}}
+	stdout, err := executeAtomicThreadCommandOutput(t, caller,
+		"thread", "create-group", "--name", "话题圈", "--users", "user-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(stdout, &envelope); err != nil {
+		t.Fatalf("decode output %q: %v", stdout, err)
+	}
+	data, ok := envelope["data"].(map[string]any)
+	if !ok || data["result"] != "accepted" {
+		t.Fatalf("data = %#v", envelope["data"])
 	}
 }
 
@@ -291,7 +405,7 @@ func TestCrossPlatformCoverageChatThreadSurfaceAndLegacyCompatibility(t *testing
 		}
 	}
 	want := map[string]bool{
-		"create-group": true, "send": true, "list": true, "reply": true, "list-replies": true, "forward": true,
+		"create-group": true, "send": true, "promote": true, "list": true, "reply": true, "list-replies": true, "forward": true,
 		"recall-message": true, "add-emoji": true, "remove-emoji": true,
 		"list-emotion-replies": true, "add-text-emotion": true, "remove-text-emotion": true, "update-text-emotion": true,
 	}
@@ -397,9 +511,10 @@ func TestCrossPlatformCoverageChatThreadHelpExplainsRoutingAndIdentifiers(t *tes
 		path []string
 		want []string
 	}{
-		{path: []string{"thread"}, want: []string{"普通群和话题圈", "create-group", "父群 openConversationId", "Thread 的 openConvThreadId", "list-replies"}},
+		{path: []string{"thread"}, want: []string{"普通群和话题圈", "create-group", "promote", "父群 openConversationId", "Thread 的 openConvThreadId", "list-replies"}},
 		{path: []string{"thread", "create-group"}, want: []string{"开启 Thread 模式", "当前登录用户会自动加入", "已有普通群或话题圈"}},
 		{path: []string{"thread", "send"}, want: []string{"普通群和话题圈", "父群 openConversationId", "openTaskId"}},
+		{path: []string{"thread", "promote"}, want: []string{"已有消息", "同一个普通群", "openConvThreadId", "幂等"}},
 		{path: []string{"thread", "reply"}, want: []string{"普通群和话题圈", "Thread 的 openConvThreadId", "不是父群 ID"}},
 		{path: []string{"thread", "list"}, want: []string{"Thread 主消息", "不返回某个 Thread 的逐条回复", "chat thread list-replies"}},
 		{path: []string{"thread", "list-replies"}, want: []string{"逐条回复", "父群 openConversationId", "chat +thread-replies --page-all"}},
@@ -460,6 +575,7 @@ func TestCrossPlatformCoverageChatThreadPublishesCanonicalParameters(t *testing.
 	wantByLeaf := map[string][]string{
 		"create-group":         {"name", "type", "users"},
 		"send":                 {"ai-tag", "at-all", "at-open-dingtalk-ids", "content", "conversation-id", "file", "idempotency-key", "media-id", "msg-type", "title"},
+		"promote":              {"conversation-id", "message-id"},
 		"list":                 {"conversation-id", "direction", "limit", "time"},
 		"reply":                {"ai-tag", "at-all", "at-open-dingtalk-ids", "content", "conversation-id", "file", "idempotency-key", "media-id", "msg-type", "title"},
 		"list-replies":         {"conversation-id", "direction", "limit", "time", "topic-id"},
